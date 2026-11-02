@@ -1,5 +1,6 @@
 import { usePreventRemove } from '@react-navigation/native';
 import { useNavigation, useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
 import { View } from 'react-native';
@@ -213,8 +214,7 @@ export function PlanbDraftPage({
   const leave = () => {
     if (leavingRef.current) return;
     leavingRef.current = true;
-    if (router.canGoBack()) router.back();
-    else router.replace(`/trips/${tripId}/live`);
+    goBackOr(router, `/trips/${tripId}/live`);
   };
 
   // data 없이 한 번이라도 실패했으면 재조회 중에도 오류 얼굴 — data 없는 재조회는 pending 으로 돌아가 isError 가
@@ -373,7 +373,7 @@ export function PlanbDraftPage({
         onBack={() => {
           if (busy) return;
           if (isDraft) setLeaveOpen(true);
-          else router.back();
+          else goBackOr(router, `/trips/${tripId}/live`);
         }}
         onManualEdit={() =>
           router.push({

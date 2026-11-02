@@ -1,6 +1,4 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
@@ -8,6 +6,12 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { SavedStay } from '@/shared/api/index.schemas';
 
 import { useStayAddresses } from './useStayAddresses';
+import {
+  createWrapper as wrapperFor,
+  newTestQueryClient,
+} from '@/test-support/queryRender';
+import { createWrapper } from '@/test-support/mswHookHarness';
+import { BASE } from '@/test-support/apiBase';
 
 /**
  * TRIP-1011(#036 · 01b Q1) — 저장 숙소 좌표마다 기존 `/stays/reverse-geocode`로 주소를 받아
@@ -36,8 +40,6 @@ jest.mock('@/shared/storage', () => ({
   clearTokens: jest.fn().mockResolvedValue(undefined),
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
-
-const BASE = 'http://localhost:8080/api/v1';
 
 function stay(over: Partial<SavedStay>): SavedStay {
   return {
@@ -111,19 +113,6 @@ afterEach(() => {
 });
 
 afterAll(() => server.close());
-
-function createWrapper() {
-  const client = new QueryClient({
-    // retry:false — 503 이 곧바로 실패로 떨어지게. gcTime:0 — 타이머가 프로세스를 붙잡지 않게(리포 관례).
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return Wrapper;
-}
 
 describe('U1 · 좌표마다 조회해 주소를 붙인다 (01b Q1)', () => {
   it('좌표가 있는 두 숙소 → 각자 그 좌표로 요청하고 known 주소를 돌려준다', async () => {
@@ -238,16 +227,6 @@ describe('U5 · 같은 좌표는 한 번만 요청한다 (중복 등록 #021 · 
  * 옵션 없이 부르는 것이 그 앵커다). 페이지가 "시트를 한 번이라도 열었나"를 이 손잡이로 넘긴다.
  */
 
-/** 이 파일 기본 래퍼와 같은 설정이지만, 두 번의 렌더가 **같은 캐시**를 보게 client 를 밖에서 받는다. */
-function wrapperFor(client: QueryClient) {
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return Wrapper;
-}
-
 /** 요청이 나갈 틈을 준다 — 0건 단언이 "아직 안 나갔을 뿐"으로 공짜 통과하지 않게(실시간 50ms). */
 async function settle(): Promise<void> {
   await act(async () => {
@@ -284,9 +263,7 @@ describe('TRIP-1028 H2 · 받은 주소는 세션 동안 기억한다 — 전역
   it('받은 뒤 언마운트하고 하루가 지나 다시 써도 같은 좌표는 다시 묻지 않고, 새 좌표만 묻는다', async () => {
     // 래퍼 기본값 gcTime:0 은 "캐시를 바로 지운다"는 뜻이다. 그런데도 살아남아야 한다 = 이 조회가
     // 자기 옵션으로 수명을 들고 있다(앱 전역 QueryClient 기본값에 기대지 않는다, AC-6).
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
 
     const first = renderHook(() => useStayAddresses([JW]), {
       wrapper: wrapperFor(client),

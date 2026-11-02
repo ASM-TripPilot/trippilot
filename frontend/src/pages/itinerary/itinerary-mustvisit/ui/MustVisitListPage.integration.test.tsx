@@ -1,6 +1,4 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -21,6 +19,8 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 
 import { MustVisitListPage } from './MustVisitListPage';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * h02(구 h05) 배선을 **실 HTTP 로** 태우는 심판(AC-1 · AC-2 · AC-3 · AC-8 · AC-M1 · D3).
@@ -48,32 +48,25 @@ import { MustVisitListPage } from './MustVisitListPage';
 
 // 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다 — 실물
 // 로드를 피하려면 목킹해야 한다(선례와 동형).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 // jest.mock 팩토리는 파일 맨 위로 끌어올려지므로 바깥 변수를 못 본다 — 이름이 `mock` 으로
 // 시작하는 변수만 예외다(리포 확립 규칙).
-const mockPush = jest.fn();
-const mockBack = jest.fn();
-const mockReplace = jest.fn();
+const {
+  push: mockPush,
+  back: mockBack,
+  replace: mockReplace,
+  dismissTo: mockDismissTo,
+} = routerSpies;
 // TRIP-1263 — 생성 화면 진입이 스택을 먼저 걷는다. 목에 없으면 "dismissTo is not a function" 거짓 red.
-const mockDismissTo = jest.fn();
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({
-    push: mockPush,
-    back: mockBack,
-    replace: mockReplace,
-    dismissTo: mockDismissTo,
-  }),
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back', 'dismissTo', 'canGoBack'],
+  })
+);
 
 // 지도를 관찰 마커로 바꾼다 — 이 파일의 관심사는 **좌표가 조회에서 지도까지 흐르는가**이지
 // 지도 자체가 아니다. 실물 지도를 태우는 심판은 `MustVisitPickerScreen.map.test.tsx`(AC-6)다.
@@ -206,20 +199,10 @@ afterAll(() => server.close());
  * 클라이언트를 **돌려주는** 이유: 재조회를 테스트가 직접 일으키기 위해서다(I4).
  */
 function renderPage(props?: { mode?: GenerateItineraryRequestGenerationMode }) {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
+  const client = newTestQueryClient({ gcTime: 0 });
   const utils = render(
     <MustVisitListPage tripId={TRIP_ID} mode={props?.mode} />,
-    { wrapper: Wrapper }
+    { wrapper: createWrapper(client) }
   );
   return { ...utils, client };
 }
@@ -530,6 +513,21 @@ describe('🔴 I13 · TRIP-454·TRIP-785 — listed 는 CTA 활성·건너뛰기
     // ④ 전진은 요청을 만들지 않는다 — 생성 POST 는 h09 가 마운트 시 소유한다(무회귀).
     expect(hitsFor('POST', '/must-visits')).toBe(0);
     expect(hitsFor('DELETE', '/must-visits')).toBe(0);
+  });
+
+  // TRIP-1690 FV-POLL-03 — 화면이 바뀌기 전 두 번째 탭이 생성 화면을 하나 더 열면 그 화면도 마운트 때 POST 를 쏜다
+  // (서버는 첫 세션을 닫고 새로 돌려 AI 하루 한도를 두 번 쓴다). 「다음」은 연타 창(guardPress)으로 한 번만 간다.
+  it('I13-c 「다음」을 같은 틱에 두 번 쳐도 생성 화면은 한 번만 열린다', async () => {
+    await openList();
+    const proceed = screen.getByTestId('itinerary-mustvisit-screen-proceed');
+    act(() => {
+      fireEvent.press(proceed);
+      fireEvent.press(proceed);
+    });
+    const toGenerating = mockPush.mock.calls.filter(([to]) =>
+      JSON.stringify(to).includes('generating')
+    );
+    expect(toGenerating).toHaveLength(1);
   });
 
   it('I13-b failed — 건너뛰기가 앱바에 뜨고 눌러 h09 로 나간다 (에러 탈출문)', async () => {

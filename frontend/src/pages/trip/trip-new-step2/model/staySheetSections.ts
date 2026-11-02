@@ -1,12 +1,14 @@
 import { addressInRegion } from '@/features/trip/index.view';
 
 /**
- * TRIP-1011 — g02 숙소 선택 시트의 섹션 분리(그 밤 지역 / 다른 지역).
+ * 거점 시트의 후보 거르기·섹션 분리. TRIP-1011 이 "숨기지 않는다(D8)"로 시작했으나 TRIP-1703(2026-11-02
+ * 사용자 결정)이 뒤집었다 — 주소가 확인돼 그 밤 지역 밖인 숙소는 거점으로 고를 수 없으므로 후보에서 뺀다.
+ * 주소를 모르는 숙소(조회 중·모름·항목 없음)는 여전히 남긴다(fail-open · INV-4 — 아직 밖이라 단정 못 한다).
  *
- * 숨기지 않는다(D8 fail-open · INV-4) — 주소가 확인돼 그 밤 지역에 속하는 숙소만 첫 섹션이고,
- * 나머지(다른 지역·주소 모름·조회 중)는 전부 두 번째 섹션이다. `null` = 평면 목록(전부 그 밤 지역·후보 0곳).
+ * `staySheetSections`: 첫 섹션 = 주소가 확인된 그 밤 지역 숙소, 둘째 섹션 = 위치 확인 안 된 나머지.
+ * `null` = 평면 목록. 입력에 지역 밖 숙소가 섞여 있어도 어느 섹션에도 담지 않는다(방어).
  *
- * TRIP-1273(B-14 · 결정 1) — 그 밤 지역이 0곳이면 전부를 "다른 지역" 한 섹션으로 묶는다. 단 조회 중
+ * TRIP-1273(B-14 · 결정 1) — 그 밤 지역이 0곳이면 나머지를 한 섹션으로 묶는다. 단 조회 중
  * (`loading`·맵에 항목 없음)이 섞이면 "없다"를 아직 단정할 수 없어 `null`(01b Q5).
  */
 
@@ -22,6 +24,25 @@ export interface StaySheetSection<T> {
   candidates: T[];
 }
 
+/** 주소가 확인돼 그 밤 지역 밖인 숙소. 조회 중·모름·항목 없음은 밖이라 단정할 수 없어 아니다. */
+function isOutside(
+  state: StayAddressState | undefined,
+  region: string
+): boolean {
+  return state?.status === 'known' && !addressInRegion(state.address, region);
+}
+
+/** 시트에 보여줄 후보 — 지역 밖으로 확인된 숙소만 뺀다. 입력 순서 보존. */
+export function staySheetCandidates<T extends { savedStayId: string }>(
+  stays: T[],
+  addresses: Record<string, StayAddressState>,
+  region: string
+): T[] {
+  return stays.filter(
+    (stay) => !isOutside(addresses[stay.savedStayId], region)
+  );
+}
+
 export function staySheetSections<T extends { savedStayId: string }>(
   stays: T[],
   addresses: Record<string, StayAddressState>,
@@ -29,22 +50,22 @@ export function staySheetSections<T extends { savedStayId: string }>(
 ): StaySheetSection<T>[] | null {
   const here: T[] = [];
   const other: T[] = [];
-  let unconfirmed = false;
+  let pending = false;
 
-  stays.forEach((stay) => {
+  staySheetCandidates(stays, addresses, region).forEach((stay) => {
     const state = addresses[stay.savedStayId];
-    if (state?.status === 'known' && addressInRegion(state.address, region)) {
+    if (state?.status === 'known') {
       here.push(stay);
       return;
     }
     other.push(stay);
-    if (state?.status !== 'known') unconfirmed = true;
+    if (state === undefined || state.status === 'loading') pending = true;
   });
 
   if (other.length === 0) return null;
   const otherSection: StaySheetSection<T> = {
     key: 'other',
-    title: unconfirmed ? '다른 지역 · 위치 확인 안 됨' : '다른 지역',
+    title: '위치 확인 안 됨',
     candidates: other,
   };
   if (here.length > 0) {
@@ -53,10 +74,6 @@ export function staySheetSections<T extends { savedStayId: string }>(
       otherSection,
     ];
   }
-  const pending = stays.some((stay) => {
-    const state = addresses[stay.savedStayId];
-    return state === undefined || state.status === 'loading';
-  });
   return pending ? null : [otherSection];
 }
 

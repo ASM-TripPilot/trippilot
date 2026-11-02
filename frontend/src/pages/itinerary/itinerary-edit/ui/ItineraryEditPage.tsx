@@ -4,6 +4,8 @@ import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
+import { guardPress } from '@/shared/lib/pressGuard';
 
 import { buildEditItineraryRequest } from '@/features/edit-itinerary';
 import { buildDraftPins, formatCoPickDayHeader } from '@/features/itinerary';
@@ -177,13 +179,9 @@ export function ItineraryEditPage({
     query: { enabled: activeDate !== '' },
   });
 
-  // 저장 뒤 복귀 — 히스토리가 없으면(딥링크) 얼굴별 목적지로 replace(h12 일정 탭 · i07 라이브 허브).
+  // 저장 뒤 복귀와 헤더 ‹ 공통 — 히스토리가 없으면(딥링크) 얼굴별 목적지로 replace(h12 일정 탭 · i07 라이브 허브).
   function leaveAfterSave(): void {
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
-    router.replace({
+    goBackOr(router, {
       pathname: inTrip ? '/trips/[tripId]/live' : '/trips/[tripId]/itinerary',
       params: { tripId },
     });
@@ -344,7 +342,7 @@ export function ItineraryEditPage({
         activeDate={activeDate}
         dateLabel={formatCoPickDayHeader(activeDate)}
         onSelectDay={setActiveDayIndex}
-        onBack={() => router.back()}
+        onBack={guardPress(leaveAfterSave)}
         onPressTimeChip={setEditingSlotKey}
         onPressAddPlace={() =>
           router.push({

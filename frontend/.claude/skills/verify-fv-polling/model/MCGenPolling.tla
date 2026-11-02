@@ -1,0 +1,3 @@
+---- MODULE MCGenPolling ----
+EXTENDS GenPolling
+====

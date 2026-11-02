@@ -10,6 +10,9 @@
  */
 import type { CompanionType } from './companionType';
 import type { TripDestination } from './tripDestination';
+import type { TripItineraryGenerationMode } from './tripItineraryGenerationMode';
+import type { TripItineraryGenerationState } from './tripItineraryGenerationState';
+import type { TripItineraryStatus } from './tripItineraryStatus';
 import type { TripPreferenceSnapshot } from './tripPreferenceSnapshot';
 import type { TripStatus } from './tripStatus';
 
@@ -35,6 +38,14 @@ export interface Trip {
   baseCount: number;
   /** 일정이 **있는 일수**. 0 = 아직 생성되지 않음. ⚠ 개수이지 시간이 아니다 — 소요시간은 어디에도 싣지 않는다(INV-3). */
   itineraryDayCount: number;
+  /** 현재 일정의 확정 상태 — `GET /trips/{tripId}/itinerary` 의 `status` 와 같은 값. 일정이 없으면 null. 목록 화면이 이 값을 알려고 여행마다 일정을 따로 부르지 않게 싣는다(10-14 개발 서버 429). 아래 세 칸도 같은 이유로 일정 조회 응답과 같은 값이다. */
+  itineraryStatus?: TripItineraryStatus;
+  /** 일정 조회의 `generationState` 와 같은 값. 일정이 없으면 null. */
+  itineraryGenerationState?: TripItineraryGenerationState;
+  /** 일정 조회의 `generationMode` 와 같은 값. 일정이 없으면 null. */
+  itineraryGenerationMode?: TripItineraryGenerationMode;
+  /** 진행 중 생성 세션이 있는가 — 일정 조회의 `generationSessionId != null` 과 같다. 다시 만들기 중에는 `itineraryGenerationState` 가 옛 일정의 COMPLETE 로 남아 있으니 폴링 판정은 이 값과 함께 본다. 일정이 아직 없는 첫 생성 중에는 false 다(일정 조회도 그때 404 다). */
+  itineraryGenerating?: boolean;
   /**
    * 여행이 끝난 **시점**(TRIP-826). 안 끝났으면 null.
    * **분기는 `status` 로, 표시는 이 값으로.** 둘은 만들어지는 방식이 다르다 — `status` 의 `ENDED` 는 날짜에서 **즉시 파생**되고, 이 값은 종료 스윕이 **10분 주기로** 채운다. 여행이 막 끝난 직후에는 `status=ENDED` 인데 이 값이 아직 null 인 창이 있다.

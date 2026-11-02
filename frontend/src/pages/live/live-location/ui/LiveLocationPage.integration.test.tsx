@@ -6,6 +6,7 @@ import { useGetStaysReverseGeocode } from '@/shared/api/index.hooks';
 import type { MapCenter } from '@/shared/map';
 
 import { LiveLocationPage } from './LiveLocationPage';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * TRIP-979 B · AC-B2·B3·B5 · Seed Q5~Q7 — 위치 입력 화면 **컨테이너** 배선판.
@@ -79,20 +80,19 @@ jest.mock('@/features/request-replan/model/useStartReplan', () => ({
   }),
 }));
 
-const mockPush = jest.fn();
-const mockReplace = jest.fn();
-const mockNavigate = jest.fn();
-const mockBack = jest.fn();
-jest.mock('expo-router', () => {
-  const routerMock = {
-    push: (...args: unknown[]) => mockPush(...args),
-    replace: (...args: unknown[]) => mockReplace(...args),
-    navigate: (...args: unknown[]) => mockNavigate(...args),
-    back: (...args: unknown[]) => mockBack(...args),
-    canGoBack: () => true,
-  };
-  return { useRouter: () => routerMock, router: routerMock };
-});
+const {
+  push: mockPush,
+  replace: mockReplace,
+  navigate: mockNavigate,
+  back: mockBack,
+} = routerSpies;
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back', 'navigate', 'canGoBack'],
+    router: ['push', 'replace', 'back', 'navigate', 'canGoBack'],
+  })
+);
 
 const TRIP_ID = 't1';
 const DAY1 = '2026-06-11';

@@ -11,7 +11,7 @@ import { pickPhotoAsset, type PhotoAssetMeta } from '@/shared/photo';
  *  - 못 골랐으면 `{ notice }` — 취소는 null(사용자 의도라 조용히), 나머지는 사용자에게 보일 안내 한 줄
  *    (INV-4 · US-REC-02 예외). 성공 전용 Toast 가 아니라 부르는 쪽이 트리거 옆에 그린다.
  *  - TRIP-1216 · 앱이 스스로 못 푸는 사유(권한 거부)는 `settings: true` 를 함께 준다 — 부르는 쪽이 안내 옆에
- *    [설정 열기](`Linking.openSettings`)를 그린다. 그 밖의 사유엔 키 자체가 없다.
+ *    [설정 열기](`openAppSettings`)를 그린다. 그 밖의 사유엔 키 자체가 없다.
  */
 
 export type PhotoPickOutcome =
@@ -26,6 +26,7 @@ const PICK_NOTICE = {
   'no-asset-id':
     '선택한 사진을 기록에 붙일 수 없어요. 다른 사진을 고르거나 설정에서 사진 접근 범위를 확인해 주세요',
   failed: '사진을 불러올 수 없어요',
+  unsupported: '사진 붙이기는 앱에서만 쓸 수 있어요',
 } as const;
 
 export async function pickPhotoForVisit(): Promise<PhotoPickOutcome> {

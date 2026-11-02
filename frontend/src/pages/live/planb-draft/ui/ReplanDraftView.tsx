@@ -25,7 +25,7 @@ import { SheetHeader } from '@/widgets/map-sheet-shell';
  * 문구 + [새 대안 보기], [적용하기] 잠금), 미포함 안내 한 줄(`includeMissingText`). 문구·자리는 정본 작도 스펙이다(G-SA-12).
  */
 
-// 확정 실패 안내 — PlanbDiffPage ERROR 와 같은 카피(BR-U4-32 "원 일정 유지"를 말로 알림, Q6).
+// 확정 실패 안내(BR-U4-32 "원 일정 유지"를 말로 알림, Q6).
 const APPLY_FAILED_NOTICE = {
   title: '변경을 반영하지 못했어요',
   description: '원래 일정은 그대로 있어요. 잠시 후 다시 시도해 주세요.',
@@ -176,7 +176,7 @@ export function ReplanDraftView({
     label: '직접 수정',
     variant: 'outline',
     onPress: onManualEdit,
-    // 교차 잠금(PlanbDiffPage 선례) — 확정 요청 중 편집으로 떠나면 밑에 남은 이 화면의 onSuccess 가
+    // 교차 잠금 — 확정 요청 중 편집으로 떠나면 밑에 남은 이 화면의 onSuccess 가
     // 맨 위(편집) 화면을 허브로 갈아 끼운다. 새 세션 시작 요청 중(내일 다시 짜기·[다시 시도]·[새 대안 보기])도
     // 같은 이유(solving 으로 갈아 끼움).
     disabled: applyPending || replanNextDayPending,

@@ -6,6 +6,8 @@ import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.itinerarygeneration.domain.GenerationMode
+import com.trippilot.itinerarygeneration.domain.GenerationSession
+import com.trippilot.itinerarygeneration.domain.GenerationSessionRepository
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryDay
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
@@ -46,6 +48,7 @@ class TripListCountsIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var accessTokenIssuer: AccessTokenIssuer
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var itineraries: ItineraryRepository
+    @Autowired private lateinit var sessions: GenerationSessionRepository
 
     private val json = ObjectMapper()
     private val now = Instant.parse("2026-07-26T00:00:00Z")
@@ -156,6 +159,43 @@ class TripListCountsIT : AbstractPostgresIntegrationTest() {
         giveItinerary(trip, "2026-08-01", "2026-08-02", "2026-08-03")
 
         tripCard(token, trip)["itineraryDayCount"].asInt() shouldBe 3
+    }
+
+    @Test
+    fun `일정 상태가 카드에 실린다 — 앱이 여행마다 일정을 따로 부르지 않게`() {
+        val token = newToken()
+        val none = tripCard(token, newTrip(token))
+        none["itineraryStatus"].isNull shouldBe true
+        none["itineraryGenerationState"].isNull shouldBe true
+        none["itineraryGenerationMode"].isNull shouldBe true
+        none["itineraryGenerating"].asBoolean() shouldBe false
+
+        val trip = newTrip(token)
+        giveItinerary(trip, "2026-08-01", "2026-08-02")
+        val card = tripCard(token, trip)
+        // 일정 조회(`GET /trips/{id}/itinerary`)와 같은 값이어야 한다 — 목록과 상세가 다른 상태를 말하면 안 된다
+        val (_, detail) = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token)
+        card["itineraryStatus"].asText() shouldBe detail["status"].asText()
+        card["itineraryGenerationState"].asText() shouldBe detail["generationState"].asText()
+        card["itineraryGenerationMode"].asText() shouldBe detail["generationMode"].asText()
+        card["itineraryGenerating"].asBoolean() shouldBe !detail["generationSessionId"].isNull
+    }
+
+    @Test
+    fun `진행 중 생성 세션이 있으면 카드가 생성 중이다 — 목록 전체를 한 번에 묻고 남의 세션은 섞이지 않는다`() {
+        val me = accounts.save(Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, now))
+        val token = accessTokenIssuer.issue(me.id.value.toString()).value
+        val busy = newTrip(token)
+        val idle = newTrip(token)
+        giveItinerary(busy, "2026-08-01")
+        giveItinerary(idle, "2026-08-01")
+        sessions.save(GenerationSession.start(me.id.value, UUID.fromString(busy), GenerationMode.FULLY_AI, now))
+
+        val cards = call(HttpMethod.GET, "/api/v1/trips", token).second.associateBy { it["tripId"].asText() }
+        cards.getValue(busy)["itineraryGenerating"].asBoolean() shouldBe true
+        cards.getValue(idle)["itineraryGenerating"].asBoolean() shouldBe false
+        // 상세 일정 조회와 같은 뜻이다
+        call(HttpMethod.GET, "/api/v1/trips/$busy/itinerary", token).second["generationSessionId"].isNull shouldBe false
     }
 
     @Test

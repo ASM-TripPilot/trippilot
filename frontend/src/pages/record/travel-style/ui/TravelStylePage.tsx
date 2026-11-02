@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 
 import { resolveStyleFace } from '@/entities/style-analysis';
 import { resolveStyleProgress } from '@/entities/style-analysis';
@@ -27,11 +28,9 @@ export function TravelStylePage(): ReactElement {
   const envelope = query.data;
 
   // 딥링크 직접 진입(히스토리 없음)이면 canGoBack()===false — 침묵 no-op(죽은 버튼) 대신
-  // records 탭으로 replace 한다(j05 는 records 도메인 화면, ItineraryPlanPage HOME_FALLBACK 선례
-  // 동형·INV-4 침묵 금지).
+  // 마이 탭으로 replace 한다(INV-4 침묵 금지).
   const handleBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)/my');
+    goBackOr(router, shellTabHref('my'));
   };
 
   if (envelope == null) {

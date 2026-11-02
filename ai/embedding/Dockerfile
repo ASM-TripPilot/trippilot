@@ -83,6 +83,15 @@ RUN if [ "${EMBEDDING_BAKE_ONNX}" = "1" ]; then \
         echo "비루트가 못 읽는 ONNX 산출물이 남았다:" >&2; find /models/onnx ! -perm -o+r >&2; exit 1; \
       fi ; \
     fi
+# 인젝션 그림자 분류기(int8 ONNX 268MB, ai/docs/security/injection-classifier-shadow.md). 굽기만 하고 켜기는 파드 env
+# INJECTION_GUARD_DIR(개발 차트만). onnxruntime 은 위 ONNX 단계가 남긴 것을 쓴다 — 그 단계를 끄면 이것도 안 굽는다.
+ARG INJECTION_GUARD_REPO=Horizon-Labs/prompt-injection-guard-small
+ARG INJECTION_GUARD_REVISION=1b7c40f4a5fdbf9622d20372ead279e65d4c7fc9
+RUN if [ "${EMBEDDING_BAKE_ONNX}" = "1" ]; then \
+      HF_HUB_OFFLINE=0 /app/.venv/bin/python -c "from huggingface_hub import snapshot_download as d; d('${INJECTION_GUARD_REPO}', revision='${INJECTION_GUARD_REVISION}', local_dir='/models/injection-guard', allow_patterns=['config.json', 'tokenizer.json', 'tokenizer_config.json', 'special_tokens_map.json', 'onnx/model_quantized.onnx'])" && \
+      rm -rf /models/injection-guard/.cache /models/hf && \
+      chmod -R a+rX /models/injection-guard ; \
+    fi
 ENV EMBEDDING_ONNX_DIR=/models/onnx
 
 COPY app.py ./

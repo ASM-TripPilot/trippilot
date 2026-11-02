@@ -139,3 +139,27 @@ describe('🔴 PR5 · j07 정합 — 72×72 placeholder 자리 + 사진/메모·
     expect(screen.getByText('2026.5.1–5.3')).toBeOnTheScreen();
   });
 });
+
+describe('🔴 PR6 · 행 접근성 라벨은 한 문자열 (TRIP-1697)', () => {
+  // 스크린리더는 라벨이 없는 Pressable 의 Text 조각을 쉼표로 이어 읽는다 — 부제 사이 「 · 」 가
+  // 따로 읽혀 「제목, 기간,  · , 1박 2일」 이 됐다. 행에 한 문자열 라벨을 주면 조각을 안 읽는다.
+  it('제목·기간·박수가 다 있으면 「제목, 기간 · 박수」 한 문자열이다', () => {
+    // 준비 → 실행
+    render(<PastTripRow vm={vm()} onPress={noop} testID={ROOT} />);
+    // 단언 — 빈 「 · ,」 조각 없이 한 줄
+    expect(screen.getByTestId(ROOT).props.accessibilityLabel).toBe(
+      '부산 여행, 2026.5.1–5.3 · 2박 3일'
+    );
+  });
+
+  it('부제가 없으면 제목만이고 끝에 쉼표가 남지 않는다', () => {
+    render(
+      <PastTripRow
+        vm={vm({ dateRangeLabel: null, nightsLabel: null })}
+        onPress={noop}
+        testID={ROOT}
+      />
+    );
+    expect(screen.getByTestId(ROOT).props.accessibilityLabel).toBe('부산 여행');
+  });
+});

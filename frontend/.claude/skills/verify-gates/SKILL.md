@@ -45,7 +45,7 @@ description: "TripPilot frontend 검증 게이트 실행 순서와 명령. '검�
 - 리포트는 `04_qa-verifier_report_{n}_{PASS|FAIL}.md`로 차수+판정을 파일명에 붙여 **누적 저장**(덮어쓰기 금지). 채번은 파일 개수가 아니라 **기존 최대 n + 1** (번호 구멍이 있어도 충돌하지 않는다).
 - 카운터의 정본은 `_workspace/{cycle-id}/04_*` 리포트 파일들 자체다 — 리포트 파일 수가 이전 확인보다 줄어 있으면 삭제로 간주하고 에스컬레이션한다.
 - 에스컬레이션: **같은 검사 3회 연속 FAIL 또는 사이클 누적 FAIL 리포트 5개**(`04_*` 파일 기준 — PASS 리포트는 세지 않는다) → 사용자 에스컬레이션 + 문제로그 기록. 실패 검사가 번갈아 나와도 누적 상한에 걸린다.
-- 에스컬레이션 보고는 학습노트 4계층의 축소판을 따른다(`<리포 루트>/frontend/.claude/skills/trippilot-dev-cycle/reference/learning-review.md`): 본문은 **서술형 실패 요약**(무엇이 몇 회 실패 → 원인 가설 → 사용자가 고를 선택지 2~3개), 로그 원문은 첨부/문제로그로. 학습 중인 사용자에게 로그 덤프는 판단 지원이 아니다.
+- 에스컬레이션 보고는 끝 보고의 결정 항목 형식을 따른다(`<리포 루트>/frontend/.claude/skills/trippilot-dev-cycle/reference/end-report.md`): 본문은 **서술형 실패 요약**(무엇이 몇 회 실패 → 원인 가설 → 사용자가 고를 선택지 2~3개와 각각 얻는 것·치르는 것), 로그 원문은 첨부/문제로그로. 로그 덤프는 판단 지원이 아니다.
 - **FAIL의 두 갈래**: 기계적 FAIL(포맷·lint·tsc·jest)은 implementer 수정 루프로 보낸다. 판단이 드는 이상(설계 의심·실기 결함·심판 사각)은 수정 루프가 아니라 리포트에 기재하고, 오케스트레이터가 문제로그 + 새 티켓으로 넘긴다 — 사이클은 전진 전용이다.
 
 ## 변경 집합 대조 + 경계면 QA (검사 4 통과 후)
@@ -72,6 +72,8 @@ description: "TripPilot frontend 검증 게이트 실행 순서와 명령. '검�
 | `metro.config.js` · `babel.config.js` · `app.config.ts` | 번들러 설정 |
 | `src/mocks/**` · `__mocks__/**` · `src/test-support/**` | 목 경계 (mock-seam) |
 | diff에 `import(` 추가·변경 | 동적 import — Metro가 원형을 남기지만 jest는 그 원형을 못 돌린다 |
+| `02_test-designer_map.md`에 `기능 지도로:` 줄이 있다 | jest가 원리적으로 못 보는 AC를 테스트 대신 실화면으로 넘겼다 — 안 돌리면 그 AC는 아무도 안 본다 |
+| `03c_blast-radius.md`에 `미증명` 사실이 있다 | 공용 모듈 변경의 안전 근거를 코드로 못 돌렸다 — 실화면이 마지막 증명 자리다 |
 
 걸리는 게 없으면 건너뛰고 04에 "스모크 미해당"을 적는다.
 
@@ -123,6 +125,7 @@ agent-device fill 'id="<입력 testID>"' "한글 입력"                    # �
 3. 예상 밖 네트워크 0건 (목 ON인데 실서버로 나가는 등)
 4. 대상 화면 도달
 5. **이번 사이클이 만든 주요 상호작용 1개 이상이 기대대로 반응** — agent-device `--settle` diff 또는 스냅샷으로 판정한다. 상호작용이 없는 변경(순수 표시)이면 N/A로 적는다.
+   - **02의 `기능 지도로:` 줄과 03c의 `미증명` 사실은 하나도 빼지 않고 각각 판정한다** — 줄마다 PASS/FAIL/도구 한계(사용자 몫)를 04b에 적는다. 하나라도 빠지면 이 항목은 FAIL이다(빈 칸은 통과가 아니다). 절차는 `trippilot-sim-qa` 스킬과 해당 기능 지도 파일.
 
 ### 한계 — 넘겨짚지 마라
 
@@ -142,7 +145,7 @@ agent-device fill 'id="<입력 testID>"' "한글 입력"                    # �
 
 **절차**:
 1. 프리뷰 캡처 — 키마다 `xcrun simctl terminate booted com.trippilot.travel` → `xcrun simctl openurl booted "trippilot://_dev/preview?state=<키>"` → 7초 대기 → `xcrun simctl io booted screenshot <리포 루트>/_workspace/preview-capture/<키>.png`. **키마다 재기동이 필수다** — 프리뷰는 진입 시 딥링크 상태를 1회만 읽는다(traps-shell). 상단 dev 오버레이(~156pt, @3x ≈ 470px)는 대조 시 무시하거나 잘라 본다. 시뮬 부팅·앱 설치·Metro(8081) 중 하나라도 없으면 실행 불가(FAIL 아님, §0 정신).
-2. 대응 Figma 프레임 id 를 `get_screenshot(nodeId, fileKey=1MTF3dtptIrbg8gld5IdO2, maxDimension 1600)` 로 내려 `<리포 루트>/_workspace/figma-cache/<id>.png` 에 캐시(curl). 프레임 id 는 티켓 본문 "■ Figma 프레임".
+2. 대응 Figma 프레임 id 를 `mcp__figma__get_screenshot(nodeId, fileKey=1MTF3dtptIrbg8gld5IdO2, maxDimension 1600)` 로 내려 `<리포 루트>/_workspace/figma-cache/<id>.png` 에 캐시(curl). 프레임 id 는 티켓 본문 "■ Figma 프레임".
 3. **비전 가능 서브에이전트**에 두 이미지 + 티켓 완료 조건을 주고 PASS/FAIL·차이 목록(요소·카피·색·간격)을 리포트로 쓰게 한다. 산출 `04b_smoke_{n}_{PASS|FAIL}.md`(실기 스모크와 같은 채번·자리).
 4. **FAIL → implementer 수정 루프 최대 2회.** 그래도 FAIL 이면 판단성 이상으로 새 티켓(전진 전용, 되돌리지 않음).
 

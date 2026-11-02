@@ -149,6 +149,32 @@ class SecretTests(unittest.TestCase):
                 self.assertIn(key, listed)
         self.assertLessEqual(listed, runtime_secrets.BACKEND_KEYS)
 
+    def test_web_client_keys_reach_both_the_allowlist_and_the_chart(self):
+        """웹 출시 백엔드 키 3종(TRIP-1657) ⊆ 허용목록 ∧ 차트가 파드에 싣는 목록. 허용목록에서 빠지면 시크릿에 넣어도
+        동기화에서 걸러지고, 차트에서 빠지면 값이 파드에 **조용히** 안 닿는다 — 웹 CORS·구글 웹 로그인이 꺼진 채 배포된다."""
+        chart = (Path(__file__).resolve().parents[1] / "chart" / "templates" / "backend.yaml").read_text()
+        line = next(text for text in chart.splitlines() if "range list" in text and '"GOOGLE_CLIENT_ID"' in text)
+        listed = set(re.findall(r'"([A-Z0-9_]+)"', line))
+        for key in ("GOOGLE_WEB_CLIENT_ID", "GOOGLE_WEB_CLIENT_SECRET", "CORS_ALLOWED_ORIGINS"):
+            with self.subTest(key=key):
+                self.assertIn(key, runtime_secrets.BACKEND_KEYS)
+                self.assertIn(key, listed)
+        # 공개(iOS) 클라이언트 시크릿을 싣지 않는 결정은 그대로다 — 웹 시크릿은 별개 키다.
+        self.assertNotIn("GOOGLE_CLIENT_SECRET", listed)
+
+    def test_web_client_keys_are_optional_and_wildcard_origin_is_refused(self):
+        """키가 없거나 비어도 배포는 통과한다(해당 기능만 꺼짐). 웹 시크릿은 값이 차 있어도 막지 않는다 — iOS 쪽
+        GOOGLE_CLIENT_SECRET 가드와 별개 키다. CORS 와일드카드는 백엔드가 기동을 거부하므로 배포 전에 막는다."""
+        base = {name: {} for name in runtime_secrets.GROUP_KEYS}
+        for ok in ({}, {"CORS_ALLOWED_ORIGINS": ""}, {"GOOGLE_WEB_CLIENT_ID": "", "GOOGLE_WEB_CLIENT_SECRET": ""},
+                   {"GOOGLE_WEB_CLIENT_ID": "web.apps.googleusercontent.com", "GOOGLE_WEB_CLIENT_SECRET": "GOCSPX-web",
+                    "CORS_ALLOWED_ORIGINS": "https://app.example.com,http://localhost:8081"}):
+            with self.subTest(ok=ok):
+                runtime_secrets.validate_groups({**base, "backend": ok})
+        for bad in ("*", "https://app.example.com,*", "https://*.example.com"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                runtime_secrets.validate_groups({**base, "backend": {"CORS_ALLOWED_ORIGINS": bad}})
+
     def test_sweep_without_real_weather_is_called_out_on_every_deploy(self):
         """스윕을 켰는데(dry-run·on) 날씨 모드가 kma 가 아니면 단기예보·특보·대기질 감지기가 꺼진 채 돈다(휴무만 본다).
         배포는 막지 않는다 — 장소 감지만으로 켜는 것도 정상 선택이라서다. 대신 배포마다 크게 말한다."""

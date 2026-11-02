@@ -37,6 +37,8 @@ import {
 import { clearTokens, getTokens, saveTokens } from '@/shared/storage';
 import { registerPushToken } from '@/shared/push';
 import { primeExpoToken, primeOsPermission } from '@/test-support/pushOsFake';
+import { routerSpies } from '@/test-support/expoRouterMock';
+import Constants from 'expo-constants';
 
 /**
  * l05 설정 — SettingsPage 배선 통합 테스트(msw 로 실제 나간 요청을 본다).
@@ -78,15 +80,13 @@ jest.mock('expo-secure-store', () => {
 
 // SettingsPage 는 누르는 순간 require('expo-router').router 를 읽는다(loadRouter) — 싱글턴 형태 목.
 // 옛 3개 목은 모두 push·replace·back 셋을 줬다(넓어지지 않음).
-const mockPush = jest.fn();
-const mockReplace = jest.fn();
-jest.mock('expo-router', () => ({
-  router: {
-    push: (...args: unknown[]) => mockPush(...args),
-    replace: (...args: unknown[]) => mockReplace(...args),
-    back: jest.fn(),
-  },
-}));
+const { push: mockPush, replace: mockReplace } = routerSpies;
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    router: ['push', 'replace', 'back', 'canGoBack'],
+  })
+);
 
 jest.mock('expo-linking', () => ({
   openURL: jest.fn().mockResolvedValue(true),
@@ -191,12 +191,13 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
   function installServer(opts: {
     legalConsent?: boolean;
     reason?: 'APPLIED' | 'CONSENT_MISSING' | 'NOT_ENOUGH_RECORDS';
+    status?: 'ACTIVE' | 'DELETION_PENDING';
   }): void {
     server.use(
       http.get(`${BASE}/me`, () =>
         HttpResponse.json({
           accountId: 'acc-1',
-          status: 'ACTIVE',
+          status: opts.status ?? 'ACTIVE',
           email: 'a@b.com',
           socialProviders: ['KAKAO'],
           onboardingCompleted: true,
@@ -296,6 +297,140 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
     queryClient.clear();
   });
 
+  // B안(2026-11-01) — 옛 `SettingsScreen.test.tsx`(뷰 단위)가 보던 화면 동작을 서버 응답만 바꿔 이 페이지 위에서 본다.
+  describe('화면 동작 — 그룹·행 분기·이동·버전·출처·유예 (옛 뷰 단위 흡수)', () => {
+    const SOURCE_TITLE = '데이터 출처';
+    const SOURCE_DATASETS = '한국관광공사 TourAPI · Overture Maps Foundation';
+    const SOURCE_OSM = '© OpenStreetMap contributors';
+    const GROUP_LABELS = [
+      '계정',
+      null, // 여행 취향 그룹은 머리글이 없다(행 testID 로 확인)
+      '위치정보',
+      '알림',
+      '제휴 안내',
+      '앱 정보',
+      '위험 영역',
+    ];
+    const TERMS_ROWS = [
+      ['TERMS_OF_SERVICE', '서비스 이용약관'],
+      ['PRIVACY_POLICY', '개인정보 처리방침'],
+      ['LOCATION_TERMS', '위치정보 이용약관'],
+    ] as const;
+
+    // jest 의 앱 설정엔 버전이 비어 있다 — 버전 케이스만 값을 넣고, 케이스마다 되돌린다.
+    const appConfig = Constants.expoConfig as { version?: string };
+    const savedVersion = appConfig.version;
+    afterEach(() => {
+      appConfig.version = savedVersion;
+    });
+
+    async function renderReady(opts: Parameters<typeof installServer>[0] = {}) {
+      installServer(opts);
+      renderPage();
+      await waitFor(
+        () => expect(screen.getByText('여행자123')).toBeOnTheScreen(),
+        { timeout: 5000 }
+      );
+    }
+
+    it('7그룹이 정본 순서로 서고, 헤더·닉네임 값·약관 3행·알림 행이 활성 네비 행이며 "준비 중"이 없다', async () => {
+      await renderReady();
+
+      expect(screen.getByText('설정')).toBeOnTheScreen();
+      const groups = screen.getAllByTestId('settings-group');
+      expect(groups).toHaveLength(7);
+      GROUP_LABELS.forEach((label, i) => {
+        if (label === null) {
+          expect(
+            within(groups[i]).getByTestId('settings-nav-preferences')
+          ).toBeOnTheScreen();
+        } else {
+          expect(within(groups[i]).getByText(label)).toBeOnTheScreen();
+        }
+      });
+      for (const [termsType, label] of TERMS_ROWS) {
+        const row = within(groups[5]).getByTestId(
+          `settings-nav-terms-${termsType}`
+        );
+        expect(row).not.toBeDisabled();
+        expect(within(row).getByText(label)).toBeOnTheScreen();
+      }
+      expect(
+        within(groups[3]).getByTestId('settings-nav-notifications')
+      ).not.toBeDisabled();
+      expect(screen.queryAllByText(/준비 중/)).toHaveLength(0);
+      expect(
+        screen.getByRole('switch', { name: '외부 이동 시 제휴 안내 다시 보기' })
+      ).toHaveProp('testID', 'settings-affiliate-toggle');
+    });
+
+    it('네비 행·뒤로를 누르면 그 행의 화면으로 1번씩 간다', async () => {
+      await renderReady();
+      const { back: mockBack } = routerSpies;
+      mockBack.mockReset();
+
+      fireEvent.press(screen.getByTestId('settings-nav-preferences'));
+      fireEvent.press(screen.getByTestId('settings-nav-personalization'));
+      fireEvent.press(screen.getByTestId('settings-nav-notifications'));
+      fireEvent.press(screen.getByTestId('settings-nav-terms-PRIVACY_POLICY'));
+      fireEvent.press(screen.getByTestId('settings-back'));
+
+      expect(mockPush.mock.calls).toEqual([
+        ['/settings/preferences'],
+        ['/settings/personalization'],
+        ['/settings/notifications'],
+        ['/terms/PRIVACY_POLICY'],
+      ]);
+      expect(mockBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('맨 아래 버전 줄 다음에 출처 세 줄이 오고, OSM 줄만 저작권 페이지를 연다', async () => {
+      appConfig.version = '1.0.0';
+      await renderReady();
+      const openURL = jest.requireMock<{ openURL: jest.Mock }>(
+        'expo-linking'
+      ).openURL;
+      openURL.mockClear();
+
+      expect(screen.getByText('TripPilot v1.0.0')).toBeOnTheScreen();
+      const block = within(screen.getByTestId('settings-data-attribution'));
+      fireEvent.press(block.getByText(SOURCE_TITLE));
+      fireEvent.press(block.getByText(SOURCE_DATASETS));
+      expect(openURL).not.toHaveBeenCalled();
+
+      fireEvent.press(block.getByText(SOURCE_OSM));
+      expect(openURL).toHaveBeenCalledTimes(1);
+      expect(openURL).toHaveBeenCalledWith(
+        'https://www.openstreetmap.org/copyright'
+      );
+    });
+
+    it('앱 버전을 모르면 버전 줄이 없다(출처 블록은 있다)', async () => {
+      appConfig.version = undefined;
+      await renderReady();
+
+      expect(screen.getByTestId('settings-data-attribution')).toBeOnTheScreen();
+      expect(screen.queryAllByText(/TripPilot v/)).toHaveLength(0);
+    });
+
+    it('계정 삭제 유예 중이면 유예 배너가 삭제 행을 대신하고, 로그아웃 행·출처 블록은 그대로다', async () => {
+      await renderReady({ status: 'DELETION_PENDING' });
+
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('settings-deletion-pending')
+        ).toBeOnTheScreen()
+      );
+      expect(screen.queryByTestId('settings-delete-account')).toBeNull();
+      expect(screen.getByTestId('settings-row-logout')).not.toBeDisabled();
+      expect(
+        within(screen.getByTestId('settings-data-attribution')).getByText(
+          SOURCE_OSM
+        )
+      ).toBeOnTheScreen();
+    });
+  });
+
   describe('TRIP-778 AC-4·5·6 · 서버 값이 행 값·칩으로 도착한다 (페이지 배선)', () => {
     it('W1 취향 한 행 "6/6 설정됨"·위치 동의 칩·개인화 사용 중', async () => {
       // 준비 — D5 픽스처(여섯 축 전부 설정 → 6/6).
@@ -353,6 +488,48 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
         'settings-nav-personalization'
       );
       expect(within(personalization).queryByText('사용 중')).toBeNull();
+    });
+  });
+
+  /**
+   * TRIP-1689 FV-CONSENT-03 — 위치 동의를 다시 받다 실패하면 캐시의 옛 값으로 칩을 그리지 않는다.
+   * l06 에서 저장한 뒤 다시 받기가 실패하면 l06 은 오류 얼굴인데, 스택 아래 l05 칩은 옛 「미동의」를 보였다
+   * (형식 검증 반례 R4 — 서버는 동의). 모를 때 말하지 않는다(D4).
+   */
+  describe('TRIP-1689 FV-CONSENT-03 · 위치 동의 다시 받기 실패면 칩을 숨긴다', () => {
+    it('W4 처음엔 "미동의" 칩 → 다시 받기 실패 → 칩이 사라지고 행은 남는다', async () => {
+      // 준비 — 첫 조회는 미동의.
+      installServer({ legalConsent: false, reason: 'APPLIED' });
+      renderPage();
+      await waitFor(() =>
+        expect(
+          within(
+            screen.getByTestId('settings-chip-location-consent')
+          ).getByText('미동의')
+        ).toBeOnTheScreen()
+      );
+
+      // 실행 — 서버가 조회에 실패하게 바꾸고, l06 저장 뒤처럼 위치 동의 조회를 무효화한다.
+      server.use(
+        http.get(`${BASE}/me/location-consent`, () =>
+          HttpResponse.json({ message: 'fail' }, { status: 500 })
+        )
+      );
+      await act(async () => {
+        await queryClient.invalidateQueries({
+          queryKey: ['/me/location-consent'],
+        });
+      });
+
+      // 단언 — 칩은 없고(옛 값 주장 금지) 행은 그대로 있다(긍정 앵커).
+      await waitFor(() =>
+        expect(
+          screen.queryByTestId('settings-chip-location-consent')
+        ).toBeNull()
+      );
+      expect(
+        screen.getByTestId('settings-nav-location-consent')
+      ).toBeOnTheScreen();
     });
   });
 
@@ -587,16 +764,17 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
   });
 
   /**
-   * TRIP-1017 (D) #092 — 위치정보 그룹 첫 행은 "GPS 이동경로 기록"(L3)을 가리키고, 칩도 L3 값을 읽는다.
+   * TRIP-1017 (D) #092 — 위치정보 그룹 첫 행은 "GPS 이동경로 기록"을 가리킨다.
+   * TRIP-1696 결정(2026-11-02 사용자) — 칩 값은 **legalConsent**(L2)를 읽는다. 허브(i01)·위치정보 화면(l06)과
+   *  같은 필드를 봐야 세 화면이 같은 말을 한다(옛 D2 는 L3 gpsRecordingOptIn 을 읽었다 — 뒤집혔다).
    *
    * 왜 두 값을 갈라 주나(02a ★10): 위 W1·W2 는 서버가 `legalConsent`(L2)와 `gpsRecordingOptIn`(L3)을 **같은 값**으로
-   *  준다 — 페이지가 어느 필드를 읽어도 green 이다. 온보딩 위치 약관(L2)은 동의했는데 GPS 기록(L3)은 안 한 계정이
-   *  #092 의 실제 모양이라, 둘을 갈라 줘야 "라벨과 값이 같은 것을 가리킨다"(01b Q6)가 잰다. 방향도 양쪽을 다 둔다 —
+   *  준다 — 페이지가 어느 필드를 읽어도 green 이다. 둘을 갈라 줘야 칩이 어느 필드를 읽는지 잰다. 방향도 양쪽을 다 둔다 —
    *  한쪽만 두면 "칩을 항상 미동의로" 같은 상수 구현이 통과한다.
    *
    * AC-D3 짝: 설정 화면은 위치 동의를 **읽기만** 한다 — 동의 저장소로 가는 GET 외 요청이 0건이다.
    */
-  describe('TRIP-1017 AC-D1·D2·D3 · "GPS 이동경로 기록" 행은 gpsRecordingOptIn 을 읽는다', () => {
+  describe('TRIP-1017 AC-D1·D3 · TRIP-1696 AC4 · "GPS 이동경로 기록" 행 칩은 legalConsent 를 읽는다', () => {
     let consentRequests: string[] = [];
 
     beforeAll(() => {
@@ -637,7 +815,7 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
     const locationChip = () =>
       within(locationRow()).getByTestId('settings-chip-location-consent');
 
-    it('🔴 D2-a 법정 동의(L2)는 했지만 GPS 기록(L3)은 안 했으면 행은 "GPS 이동경로 기록" · 칩은 "미동의"다', async () => {
+    it('🔴 D2-a 법정 동의(L2)는 했지만 GPS 기록(L3)은 안 했으면 행은 "GPS 이동경로 기록" · 칩은 "동의"다', async () => {
       // 준비 — #092 의 실제 계정 모양.
       installSplitConsent(true, false);
 
@@ -653,20 +831,20 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
       expect(
         within(locationRow()).queryByText('위치정보 수집 동의')
       ).toBeNull();
-      // 단언 — 칩이 L3 값을 읽는다(AC-D2).
-      expect(within(locationChip()).getByText('미동의')).toBeOnTheScreen();
-      expect(within(locationChip()).queryByText('동의')).toBeNull();
+      // 단언 — 칩이 L2(legalConsent) 값을 읽는다(TRIP-1696 AC4 — 허브·l06 과 같은 말).
+      expect(within(locationChip()).getByText('동의')).toBeOnTheScreen();
+      expect(within(locationChip()).queryByText('미동의')).toBeNull();
     });
 
-    it('🔴 D2-b 반대로 L2 미동의 · L3 동의면 칩은 "동의"다(짝)', async () => {
+    it('🔴 D2-b 반대로 L2 미동의 · L3 동의면 칩은 "미동의"다(짝)', async () => {
       installSplitConsent(false, true);
 
       renderPage();
 
       await waitFor(() => expect(locationChip()).toBeOnTheScreen());
       await settleNetwork();
-      expect(within(locationChip()).getByText('동의')).toBeOnTheScreen();
-      expect(within(locationChip()).queryByText('미동의')).toBeNull();
+      expect(within(locationChip()).getByText('미동의')).toBeOnTheScreen();
+      expect(within(locationChip()).queryByText('동의')).toBeNull();
     });
 
     it('🟢 D1 행을 누르면 여전히 위치 동의 화면(/settings/location)으로 1회 간다', async () => {
@@ -844,7 +1022,7 @@ describe('로그아웃 순서 · 게이트 대기 (옛 .logout)', () => {
     await clearTokens();
     await saveTokens({ accessToken: 'access-A', refreshToken: 'refresh-A' });
     setAccessToken('access-A');
-    queryClient = new QueryClient();
+    queryClient = newTestQueryClient();
     queryClient.setQueryData(CACHED_KEY, { nickname: '이전계정' });
 
     // 렌더가 역참조하는 조회 2훅만 프라임한다(nav.test 선례).
@@ -889,6 +1067,8 @@ describe('로그아웃 순서 · 게이트 대기 (옛 .logout)', () => {
       expect(mockReplace).toHaveBeenCalledWith('/login');
       expect(mockReplace).not.toHaveBeenCalledWith('/');
       expect(mockPush).not.toHaveBeenCalled();
+      // 확인 다이얼로그는 닫혔다(두 번 누를 자리 없음 — 옛 뷰 단위 S4 흡수).
+      expect(screen.queryByTestId('logout-confirm')).toBeNull();
 
       // 단언(순서 · 02a ★4): 이동하는 순간 이미 메모리 토큰·캐시·저장소가 비어 있었다.
       expect(atReplace?.accessToken).toBeNull();
@@ -1119,7 +1299,7 @@ describe('로그아웃 → 이 기기 푸시 토큰 해제 (옛 .pushLogout)', (
 
   function renderPage() {
     return render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={newTestQueryClient()}>
         <SettingsPage />
       </QueryClientProvider>
     );

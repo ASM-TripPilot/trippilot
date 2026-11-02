@@ -155,12 +155,17 @@ services:
       # 미설정이면 빈 값 → 소셜 로그인 시도 시에만 실패(기동 무영향). 값은 .env.example 참고.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      # 구글 웹 클라이언트(TRIP-1656) — 웹 redirect(CORS_ALLOWED_ORIGINS 출처 + /oauth/google)의 code 교환용.
+      GOOGLE_WEB_CLIENT_ID: ${GOOGLE_WEB_CLIENT_ID:-}
+      GOOGLE_WEB_CLIENT_SECRET: ${GOOGLE_WEB_CLIENT_SECRET:-}
       KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID:-}
       KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET:-}
       # 카카오 SDK 토큰의 발급 앱 대조(TRIP-1317). 비면 대조하지 않는다.
       KAKAO_APP_ID: ${KAKAO_APP_ID:-}
       NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
+      # 웹 클라이언트 허용 출처(CORS, TRIP-1655) — 쉼표 구분. 비면 CORS 응답 없음(웹 이전과 동일).
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
       # 제휴 아웃바운드(C5) — fallback = 웹검색(수수료 없음) · tripcom = 트립닷컴 딥링크(수수료 추적).
       # tripcom 은 세 값이 전부 있어야 기동한다. trip_sub3(AD_ID)가 **귀속의 열쇠**다(probe 실측
       # 2026-10-01) — 빠지면 사용자는 정상 이동하는데 수수료만 조용히 사라진다.
@@ -318,8 +323,11 @@ services:
       # 붙이고 .env 에는 **프로필 이름만** 적는다(AWS_PROFILE). 비어 있으면 boto3 가 자격을
       # 못 찾아 매 호출이 폴백으로 떨어진다(기동은 성공 — 위 FEATURE_MODELS 통로와 같은
       # 종류의 침묵). EKS 는 Pod Identity 가 대신하므로 여기(로컬 compose)만의 통로다.
+      # 자격 파일 이름은 AI_AWS_CREDENTIALS_FILE 로 고른다(기본 credentials). Innovation Sandbox 키 갱신은
+      # ~/.aws/credentials·config 를 **통째로** 새로 써서 거기 둔 Bedrock 프로필이 세 번 사라졌다(10-14·10-18·10-30)
+      # → 갱신이 건드리지 않는 별도 파일(예: trippilot-bedrock.credentials)에 두고 그 이름을 적는다.
       AWS_PROFILE: ${AWS_PROFILE:-}
-      AWS_SHARED_CREDENTIALS_FILE: /run/aws/credentials
+      AWS_SHARED_CREDENTIALS_FILE: /run/aws/${AI_AWS_CREDENTIALS_FILE:-credentials}
       AWS_CONFIG_FILE: /run/aws/config
       # LLM 요청당 비용 집계(#486)의 단가표 경로. **이 통로가 없어서** 컨테이너에서
       # 집계가 통째로 꺼져 있었다 — load_prices 가 None 을 돌려주면 llm_cost 로그 자체가

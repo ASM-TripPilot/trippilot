@@ -9,6 +9,16 @@ placement rules of its own. Not every product change earns a layer: a
 layer is earned by a stable responsibility that needs one home, not by a
 count of how many places use something.
 
+## 목차
+
+- Snapshot 0: two pages, three layers
+- Snapshot 1: a third page reuses product data, no layer appears
+- Snapshot 2: a rule diverges, `entities/product` appears
+- Snapshot 3: an action is reused, `features/add-to-cart` appears
+- What the walkthrough shows
+
+---
+
 ## Snapshot 0: two pages, three layers
 
 The shop has a home page with a product list and a product detail page.

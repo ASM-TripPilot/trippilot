@@ -3,6 +3,37 @@
 How to set up FSD within specific frameworks. Covers directory placement,
 routing integration, and framework-specific path alias configuration.
 
+## 목차
+
+- General principle
+- Next.js
+  - Projects on the previously recommended pattern
+  - App Router
+  - Pages Router
+  - Proxy and instrumentation
+  - Route Handlers (API routes)
+  - Database access
+  - Path aliases
+  - Server and client public APIs
+- Nuxt (v3-compatible layout)
+  - Directory structure
+  - nuxt.config.ts
+  - Wiring Nuxt routes to FSD pages
+- Vite + React
+  - Directory structure
+  - Path aliases
+- React Router (framework mode)
+  - Directory structure
+  - Wiring routes to FSD pages
+  - Path aliases
+- Astro
+  - Directory structure
+  - Wiring Astro routes to FSD pages
+  - Path aliases (tsconfig.json)
+  - Working with integrations
+
+---
+
 ## General principle
 
 Place FSD layers inside `src/` to avoid naming conflicts with framework

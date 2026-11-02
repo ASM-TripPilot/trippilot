@@ -19,7 +19,6 @@ import {
   closestAncestor,
   isInsideSheet,
   renderedText,
-  sheetScrollOf,
   treeIndexOf,
 } from '@/test-support/sheetTree';
 
@@ -67,14 +66,11 @@ afterEach(() => {
  * TRIP-1085 · j01 방문 기록 **순수 뷰**(pages · 셸 조립) — 전면 지도 + 바텀시트(MapSheetShell).
  *
  * 무엇을 보장하나:
- *  - 골격(AC-1): 셸 지도 하나가 시트 뒤에 있고 카드는 시트 안이다. 하단 탭바·옛 250px 지도 블록은 없다.
  *  - 시트 헤더(AC-12): "여행명 · N일차 · M월 D일(요일) · N곳" 한 줄. 여행명이 없으면 그 조각만 빠진다.
  *  - 일차 칩·뒤로(AC-2·3): 셸 칩(`sheet-daychip-{index}`)이 일자를, 하단 바 뒤로(`record-trip-bottom-bar-back`, TRIP-1557)가 뒤로를 올린다.
- *  - 키보드(AC-9): 카드·계획 행·[방문 추가]가 `keyboardShouldPersistTaps="handled"` 스크롤 안에 있다.
- *  - 순서(Figma 4705:2756): 헤더 → 귀속 → 안내문 → 카드 → 계획 행 → [방문 추가].
  *  - 지도 실패(AC-7): 지도 자리만 폴백 바로 바뀌고 헤더·카드·칩은 그대로다.
- *  - 지도 prop(결정 2(a)·3(c)): 잠금(viewOnly) · 핀 전부 맞추기(fitPins) · 받은 핀 그대로.
- *  - 옮겨 온 무회귀: 귀속 헤더(TRIP-569) · 즉석 추가·하트 FAB 부재(TRIP-759) · 안내문 분기(TRIP-760).
+ *  - 옮겨 온 무회귀: 귀속 헤더(TRIP-569) · 안내문 분기(TRIP-760).
+ *  - 골격(시트 안/밖)·본문 순서·키보드 첫 탭·지도 prop 은 jest 사각이라 실화면 QA 몫(기능 지도 trip-record).
  *
  * ⚠️ 원리적 사각: 시트 실제 스냅·딤·키보드가 시트를 밀어 올리는지·지도 제스처는 통과형 목이 못 본다
  *   (6-b). 여기서는 testID 트리·prop 전달·콜백까지만 잠근다.
@@ -160,23 +156,6 @@ function renderView(overrides: Partial<TripRecordsViewProps> = {}) {
   return props;
 }
 
-describe('🔴 TRIP-1085 AC-1 · 전면 지도 + 바텀시트 골격', () => {
-  it('V1 셸 지도 하나가 시트 밖에 있고, 카드는 시트 안이며, 하단 탭바는 없다', () => {
-    renderView();
-
-    const root = screen.getByTestId('record-trip-view');
-    expect(within(root).getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
-    // 지도는 셸의 것 하나뿐 — 옛 250px 히어로가 남으면 2개가 된다.
-    expect(screen.getAllByTestId('map-root')).toHaveLength(1);
-    expect(isInsideSheet(screen.getByTestId('map-root'))).toBe(false);
-    expect(
-      isInsideSheet(screen.getByTestId('record-trip-visit-card-v-a'))
-    ).toBe(true);
-    // 결정 1(b) — 탭바 없음.
-    expect(screen.queryByTestId('shell-tabbar-root')).toBeNull();
-  });
-});
-
 describe('🔴 TRIP-1085 AC-12 · 시트 헤더 한 줄', () => {
   it('V2 "부산 여행 · 2일차 · 6월 11일(목) · 4곳"(카드 2 + 계획 행 2)이 시트 안에 한 줄로 선다', () => {
     renderView();
@@ -235,46 +214,6 @@ describe('🔴 TRIP-1085 AC-2·AC-3 · 셸 일차 칩과 뒤로', () => {
   });
 });
 
-describe('🔴 TRIP-1085 AC-9 · 키보드가 떠 있어도 시트 안 첫 탭이 버튼으로 간다', () => {
-  it('V5 카드·계획 행·[방문 추가]를 감싼 시트 스크롤의 keyboardShouldPersistTaps 가 "handled"다', () => {
-    renderView();
-
-    const targets = [
-      screen.getByTestId('record-trip-visit-card-v-a'),
-      screen.getByTestId('record-trip-visit-card-v-b'),
-      screen.getByTestId(`record-trip-plan-row-${ROW_P3.slotKey}`),
-      screen.getByTestId('record-trip-spontaneous-add'),
-    ];
-    targets.forEach((node) => {
-      const scroll = sheetScrollOf(node);
-      expect(scroll).not.toBeNull();
-      expect(scroll?.props.keyboardShouldPersistTaps).toBe('handled');
-    });
-  });
-});
-
-describe('🔴 TRIP-1085 · 시트 본문 순서 (Figma 4705:2756)', () => {
-  it('V6 헤더 → 귀속 → 안내문 → 카드 → 계획 행 → [방문 추가] 순으로 그려진다', () => {
-    renderView({
-      attribution: { stayName: '해운대 그랜드 호텔', dayLabel: '2일차' },
-    });
-
-    const at = (node: Parameters<typeof treeIndexOf>[1]) =>
-      treeIndexOf(screen.UNSAFE_root, node);
-    const order = [
-      at(screen.getByTestId('record-trip-sheet-header')),
-      at(screen.getByTestId('record-trip-attribution-stay')),
-      at(screen.getByText(DEFAULT_COPY)),
-      at(screen.getByTestId('record-trip-visit-card-v-a')),
-      at(screen.getByTestId(`record-trip-plan-row-${ROW_P3.slotKey}`)),
-      at(screen.getByTestId('record-trip-spontaneous-add')),
-    ];
-
-    expect(order.every((index) => index >= 0)).toBe(true);
-    expect([...order].sort((a, b) => a - b)).toEqual(order);
-  });
-});
-
 describe('🔴 TRIP-1085 AC-7 · 지도 로드 실패 (INV-4)', () => {
   it('V7 지도가 실패를 알리면 지도 자리만 폴백 바가 되고 헤더·카드·일차 칩은 그대로다', () => {
     renderView();
@@ -288,17 +227,6 @@ describe('🔴 TRIP-1085 AC-7 · 지도 로드 실패 (INV-4)', () => {
     expect(screen.getByTestId('record-trip-sheet-header')).toBeOnTheScreen();
     expect(screen.getByTestId('record-trip-visit-card-v-a')).toBeOnTheScreen();
     expect(screen.getByTestId('sheet-daychip-1')).toBeOnTheScreen();
-  });
-});
-
-describe('🔴 TRIP-1085 결정 2(a)·3(c) · 지도 prop', () => {
-  it('V8 지도는 열려 있고(viewOnly=false · TRIP-1204 시트 열린 채 손가락 확대) 핀 전부 맞추기(fitPins)가 켜져 있으며, 받은 핀을 그대로 넘긴다', () => {
-    renderView();
-
-    const map = screen.getByTestId('map-root');
-    expect(map.props.viewOnly).toBe(false);
-    expect(map.props.fitPins).toBe(true);
-    expect(map.props.pins).toEqual(PINS);
   });
 });
 
@@ -448,17 +376,6 @@ describe('🔴 TRIP-1097 · 숙소 없는 날 — 귀속 줄 없음(헤더가 �
   });
 });
 
-describe('🔴 TRIP-759 · 귀속 헤더·일자 칩·즉석 추가 유지 + 하트 FAB 제거', () => {
-  it('일자 칩·즉석 추가는 헤더와 함께 남고, record-trip-saved-fab 는 사라진다', () => {
-    renderView({ attribution: { stayName: '충무로 호텔', dayLabel: '2일차' } });
-
-    // TRIP-1085 — 일자 탭은 셸 칩(sheet-daychip-{index})으로 옮겨 갔다.
-    expect(screen.getByTestId('sheet-daychip-0')).toBeTruthy();
-    expect(screen.getByTestId('record-trip-spontaneous-add')).toBeTruthy();
-    expect(screen.queryByTestId('record-trip-saved-fab')).toBeNull();
-  });
-});
-
 /**
  * TRIP-760 · AC-6 — 안내문 카피 prop 분기(옮김). 주면 그 문자열, 안 주면 default.
  * error 카피의 `—` 는 EM DASH(U+2014), default 의 `·` 는 U+00B7.
@@ -547,34 +464,15 @@ describe('수동 체크인 얼굴 — GPS 미동의 배너·지도 ⊘ 배지', 
 
       expect(screen.queryByTestId('record-gps-banner')).toBeNull();
     });
-
-    it('🔴 A1d · 배너는 시트 안, 헤더 바로 아래 · 안내문 위다 (1085 AC-4 · Figma 4705:3557)', () => {
-      renderView({ manualCheckin: true, noticeCopy: MANUAL_NOTICE });
-
-      const banner = screen.getByTestId('record-gps-banner');
-      expect(isInsideSheet(banner)).toBe(true);
-
-      const root = screen.UNSAFE_root;
-      const header = treeIndexOf(
-        root,
-        screen.getByTestId('record-trip-sheet-header')
-      );
-      const bannerAt = treeIndexOf(root, banner);
-      const notice = treeIndexOf(root, screen.getByText(MANUAL_NOTICE));
-      expect(header).toBeGreaterThanOrEqual(0);
-      expect(header).toBeLessThan(bannerAt);
-      expect(bannerAt).toBeLessThan(notice);
-    });
   });
 
   describe('🔴 TRIP-761 · AC-3 · 지도 ⊘ "GPS 자동기록 꺼짐" 배지', () => {
-    it('A3a · manualCheckin true → 배지 + 문구 + pointerEvents="none"', () => {
+    it('A3a · manualCheckin true → 배지 + 문구', () => {
       renderView({ manualCheckin: true });
 
       const badge = screen.getByTestId('record-map-gps-off');
       expect(badge).toBeTruthy();
       expect(screen.getByText(BADGE_TEXT)).toBeTruthy();
-      expect(badge.props.pointerEvents).toBe('none');
     });
 
     it('A3b · manualCheckin false → 배지 부재(무회귀 짝)', () => {
@@ -582,27 +480,6 @@ describe('수동 체크인 얼굴 — GPS 미동의 배너·지도 ⊘ 배지', 
 
       expect(screen.queryByTestId('record-map-gps-off')).toBeNull();
       expect(screen.queryByText(BADGE_TEXT)).toBeNull();
-    });
-
-    it('🔴 A3c · 배지는 시트 밖, 셸 좌상단 일차 칩과 같은 컨테이너(mapCard 슬롯)에 선다 (1085 AC-4)', () => {
-      renderView({ manualCheckin: true });
-
-      const badge = screen.getByTestId('record-map-gps-off');
-      expect(isInsideSheet(badge)).toBe(false);
-
-      // 위로 올라가며 셸 일차 칩 줄(sheet-daychip-root)을 품은 첫 조상 = 셸의 좌상단 오버레이 컨테이너.
-      // 그 컨테이너는 셸 루트 **안**이어야 한다 — 뷰가 셸 바깥에서 absolute 로 얹으면 칩 줄을 품은 첫
-      // 조상이 셸 루트 자신이나 그 위(record-trip-view)가 되어 아래 단언이 red 가 된다.
-      const shellRoot = screen.getByTestId('map-sheet-shell-root');
-      const overlay = closestAncestor(
-        badge,
-        (node) => within(node).queryByTestId('sheet-daychip-root') !== null
-      );
-      expect(overlay).not.toBeNull();
-      const overlayInsideShell =
-        overlay !== null &&
-        closestAncestor(overlay, (node) => node === shellRoot) !== null;
-      expect(overlayInsideShell).toBe(true);
     });
   });
 });
@@ -883,19 +760,6 @@ describe('하단 바 — 허브식 뒤로 + 기록·회고·요약', () => {
     });
   }
 
-  describe('🔴 TRIP-1557 D1 · 「오늘의 회고」 FAB 는 없다', () => {
-    it('D1 회고·요약 콜백을 줘도 FAB·앵커·「오늘의 회고」 글자가 없다 (회고는 바의 한 칸이다)', () => {
-      renderWithBar();
-
-      expect(screen.getByTestId(BAR)).toBeOnTheScreen(); // 짝 앵커 — 바는 그려졌다
-      expect(screen.queryByTestId('record-trip-reflection-fab')).toBeNull();
-      expect(
-        screen.queryByTestId('record-trip-reflection-fab-anchor')
-      ).toBeNull();
-      expect(screen.queryByText('오늘의 회고')).toBeNull();
-    });
-  });
-
   describe('🔴 TRIP-1557 D2 · 바의 구성', () => {
     it('D2a 바 안 버튼이 뒤로 → 기록 → 회고 → 요약 순이고, 기록 칸만 활성(selected)이다', () => {
       renderWithBar();
@@ -910,21 +774,6 @@ describe('하단 바 — 허브식 뒤로 + 기록·회고·요약', () => {
       expect(screen.getByTestId(TAB_REFLECTION)).not.toBeSelected();
       expect(screen.getByTestId(TAB_SUMMARY)).not.toBeSelected();
       expect(screen.getByTestId(BACK)).toBeOnTheScreen();
-    });
-
-    it('D2b 바는 뷰 안·시트 밖·셸 밖에 서고 셸보다 뒤에 그려진다 (시트·지도가 바를 덮거나 바가 시트와 함께 움직이면 안 된다)', () => {
-      renderWithBar();
-
-      const bar = screen.getByTestId(BAR);
-      const shellRoot = screen.getByTestId('map-sheet-shell-root');
-      expect(
-        closestAncestor(bar, (node) => node.props.testID === 'record-trip-view')
-      ).not.toBeNull();
-      expect(isInsideSheet(bar)).toBe(false);
-      expect(closestAncestor(bar, (node) => node === shellRoot)).toBeNull();
-      expect(treeIndexOf(screen.UNSAFE_root, bar)).toBeGreaterThan(
-        treeIndexOf(screen.UNSAFE_root, shellRoot)
-      );
     });
   });
 

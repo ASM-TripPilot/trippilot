@@ -28,6 +28,7 @@ import {
   wizardDraftData,
 } from '@/test-support/wizardDraftFixture';
 import { ExploreLandingPage } from '@/pages/explore/explore-landing';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * 탐색 d01 랜딩 page — 숙소·장소 조회를 물어 카드 VM 을 조립하고 항법 콜백을 순수 화면
@@ -38,13 +39,15 @@ import { ExploreLandingPage } from '@/pages/explore/explore-landing';
  * 단위라 목은 맨 위 한 벌이고 describe 마다 반환값만 바꾼다(팩토리가 읽는 변수는 `mock` 으로 시작).
  */
 
-const mockPush = jest.fn();
-const mockSetParams = jest.fn();
+const { push: mockPush, setParams: mockSetParams } = routerSpies;
 let mockParams: { region?: string } = {};
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, setParams: mockSetParams }),
-  useLocalSearchParams: () => ({ ...mockParams }),
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'setParams'],
+    params: () => ({ ...mockParams }),
+  })
+);
 
 let mockRegionsResult: {
   data: Region[] | undefined;
@@ -199,18 +202,6 @@ function enabledRegionlessPlacesCalls(from = 0): unknown[] {
         !(params as { region?: string } | undefined)?.region
     );
 }
-/** 장소 레인 = 서비스 지역 3곳(홈과 같은 순서·필터 없음 → 같은 쿼리 키), 지역 없는 조회 0. */
-function expectServiceRegionQuery(from = 0): void {
-  const calls = enabledMultiCalls(from);
-  expect(calls.length).toBeGreaterThan(0);
-  for (const [regions, filters] of calls) {
-    expect(regions).toEqual(SERVICE_REGION_NAMES);
-    expect(filters?.category ?? null).toBeNull();
-    expect(filters?.q ?? '').toBe('');
-  }
-  expect(enabledRegionlessPlacesCalls(from)).toHaveLength(0);
-}
-
 beforeEach(() => {
   // 모듈 싱글턴 — 앞 테스트가 연 400ms 연타 창이 이 테스트의 첫 press 를 먹지 않게.
   resetPressGuard();
@@ -399,13 +390,6 @@ describe('전국 d01 — 구획·검색·레인', () => {
     fireEvent.press(screen.getByTestId('explore-lane-place-retry'));
 
     expect(mockPlacesRefetch).toHaveBeenCalledTimes(1);
-  });
-
-  // TRIP-1432 — 전국 이름순 8곳은 서비스 지역 밖(밀양·대구…)이었다. 서울·부산·제주를 홈과 같은 인자로 묻는다.
-  it('장소 레인은 서울·부산·제주 3곳을 묻고, 지역 없는 전국 조회는 나가지 않는다', () => {
-    render(<ExploreLandingPage />);
-
-    expectServiceRegionQuery();
   });
 
   it('숙소 조회 대기 중이면 두 레인 로딩 스켈레톤을 그린다', () => {
@@ -1156,19 +1140,6 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       });
     });
 
-    it('로그인 사용자의 숙소·장소 하트는 서버 담기를 실제로 부른다', () => {
-      render(<ExploreLandingPage />);
-      expect(screen.getByTestId('explore-region-chip')).toBeOnTheScreen();
-
-      fireEvent.press(screen.getByTestId(`explore-stay-save-${STAY_KEY}`));
-      expect(saveStay).toHaveBeenCalledTimes(1);
-      expect(saveStay).toHaveBeenCalledWith(STAY);
-
-      fireEvent.press(screen.getByTestId(`explore-place-save-${PLACE.poiId}`));
-      expect(savePlace).toHaveBeenCalledTimes(1);
-      expect((savePlace.mock.calls[0][0] as Place).poiId).toBe(PLACE.poiId);
-    });
-
     it('＋ 여행 만들기는 직전 드래프트를 비우고 위저드로 1회 간다', () => {
       leavePreviousTripDraft();
       expect(wizardDraftData()).not.toEqual(freshWizardDraft());
@@ -1216,5 +1187,66 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(screen.getByText('미추홀구 숙소')).toBeOnTheScreen();
       expect(screen.queryByTestId('explore-saved-places-fab')).toBeNull();
     });
+  });
+});
+
+// B안(2026-11-01) — 뷰 단위 `ExploreLandingScreen.test.tsx` 를 지우며 페이지 테스트가 못 잡던 결함을 옮겼다.
+describe('화면 동작 — 레인 제목 · 담은 곳 메뉴 이름 · 로딩 얼굴', () => {
+  it('필터가 없으면 장소 레인 제목은 "장소"다("가볼 곳" 아님)', () => {
+    render(<ExploreLandingPage />);
+
+    const lane = screen.getByTestId('explore-lane-place');
+    expect(within(lane).getByText('장소')).toBeOnTheScreen();
+    expect(screen.queryByText('가볼 곳')).toBeNull();
+  });
+
+  // TRIP-1019 #024 · 01b Q5 — 열린 메뉴는 장소·숙소를 둘 다 담으므로 "담은 곳" 이 맞다.
+  it('메뉴를 펼치면 토글은 "담은 곳 메뉴 닫기", 미니 FAB 은 "담은 장소 N곳"·"저장한 숙소" 로 읽힌다', () => {
+    mockUseSavedPlaces.mockReturnValue({ savedPoiIds: ['p1', 'p2'] });
+    render(<ExploreLandingPage />);
+
+    fireEvent.press(screen.getByTestId('explore-saved-menu-toggle'));
+
+    expect(
+      screen.getByTestId('explore-saved-menu-toggle')
+    ).toHaveAccessibleName('담은 곳 메뉴 닫기');
+    expect(screen.getByTestId('explore-saved-places-fab')).toHaveAccessibleName(
+      '담은 장소 2곳'
+    );
+    expect(screen.getByTestId('explore-saved-stays-fab')).toHaveAccessibleName(
+      '저장한 숙소'
+    );
+  });
+
+  it('조회 대기 중이면 ♥·＋ FAB 둘 다 없다', () => {
+    mockUseStaySearch.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+    });
+    render(<ExploreLandingPage />);
+
+    expect(
+      screen.getByTestId('explore-landing-skeleton-stay-0')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('explore-saved-menu-toggle')).toBeNull();
+    expect(screen.queryByTestId('explore-create-trip-fab')).toBeNull();
+  });
+
+  // 숙소 실패 + 장소 대기가 겹치면 로딩 얼굴이 이긴다(삼항을 재배열하면 red).
+  it('숙소가 실패해도 장소가 아직 대기면 숙소 재시도가 아니라 스켈레톤이다', () => {
+    mockUseStaySearch.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+      refetch: mockStayRefetch,
+    });
+    multiResult = { ...MULTI_DISABLED };
+    render(<ExploreLandingPage />);
+
+    expect(
+      screen.getByTestId('explore-landing-skeleton-stay-0')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('explore-lane-stay-retry')).toBeNull();
   });
 });

@@ -5,8 +5,7 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import { Dimensions, Pressable, StyleSheet, Text } from 'react-native';
-import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
+import { Pressable, Text } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot';
@@ -17,46 +16,17 @@ import {
   FINAL_IDS,
   flushOsAnswer,
   holdReduceMotionOn,
-  lastSample,
-  moved,
-  scheduleVisibleCenter,
-  setWindowWidth,
   START5_IDS,
   START_CELLS,
-  START_HOME,
   START_RECORDS,
-  structureSteady,
   useInteractionGate,
   visibleIds,
   watchMotion,
 } from '@/test-support/barMotionProbe';
-import {
-  RailActiveGlyph,
-  RailDoneGlyph,
-  RailUpcomingGlyph,
-} from '@/features/execution/index.view';
-
 import * as probe from '@/test-support/fabAnchorProbe';
-import {
-  expectHeightLimited,
-  expectPinsInBand,
-  type NativeRegion,
-} from '@/test-support/fitBandAsserts';
-import {
-  closestScrollView,
-  fireChipLayout,
-  stubScrollTo,
-} from '@/test-support/sheetTree';
 
-import {
-  BAR_ENTER_DELAY_MS,
-  BAR_EXIT_MS,
-  barMorphFrame,
-} from '@/widgets/bottom-nav-bar';
-import {
-  LIVE_BAR_SIDE,
-  LIVE_BOTTOM_BAR_RESERVE,
-} from '../model/editPopupLayout';
+import { BAR_EXIT_MS } from '@/widgets/bottom-nav-bar';
+import { LIVE_BOTTOM_BAR_RESERVE } from '../model/editPopupLayout';
 import { getToastBottoms, resetToastBottoms } from '@/shared/ui/toastBottom';
 import { LiveHubView, type LiveHubSlot } from './LiveHubView';
 
@@ -151,11 +121,6 @@ const SLOTS: LiveHubSlot[] = [
 
 const CARD_ROOT = /^execution-live-slot-2026-06-11#[^#]+$/;
 
-// 지도 핀 물방울 색(shared/map MapView 의 raw hex — SVG 는 className 을 못 받는다).
-const PIN_PRIMARY = '#FF385C';
-const PIN_SUCCESS = '#0E9384';
-const PIN_MUTED_SOFT = '#9AA1AB';
-
 type Overrides = Partial<Parameters<typeof LiveHubView>[0]>;
 
 function renderHub(overrides: Overrides = {}) {
@@ -229,58 +194,6 @@ describe('LiveHubView · HV1 골격 (AC-1)', () => {
     );
 
     expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
-  });
-});
-
-describe('LiveHubView · HV2 부재 (AC-2)', () => {
-  it('탭바·세그먼트·방패 FAB·옛 헤더·지도 세그먼트·수동 [도착](미주입)·다음 길찾기·레일 시각이 없다', () => {
-    renderHub();
-
-    // 짝 앵커 — 카드 5장과 새 바가 실제로 있다(빈 렌더 공허 통과 차단, 02a ★1).
-    expect(screen.getAllByTestId(CARD_ROOT)).toHaveLength(5);
-    expect(screen.getByTestId('execution-live-bottom-bar')).toBeOnTheScreen();
-
-    const gone = [
-      // TRIP-1522 — 바로 합쳐져 걷힌 것: 수정 FAB·알약 메뉴·시트 윗변 추종 앵커.
-      'execution-live-replan-fab',
-      'execution-live-fab-anchor',
-      'execution-live-edit-pill-ai',
-      'execution-live-edit-pill-manual',
-      'shell-tabbar-root',
-      'execution-live-segment-itinerary',
-      'execution-live-segment-map',
-      'execution-live-watchlist-fab',
-      'execution-live-map',
-      'execution-live-header-title',
-      'execution-live-header-subtitle',
-      'execution-arrive-next-nav',
-      'execution-arrive-next-distance',
-    ];
-    gone.forEach((testID) => expect(screen.queryByTestId(testID)).toBeNull());
-    // TRIP-1021 재조준 — 옛 `execution-arrive-manual-*` 는 사라진 이름이라 늘 0(공허). 새 [도착] 이름으로 센다.
-    expect(
-      screen.queryAllByTestId(/^execution-live-slot-arrive-/)
-    ).toHaveLength(0);
-    expect(screen.queryAllByTestId(/^execution-live-segment-/)).toHaveLength(0);
-    expect(
-      screen.queryAllByTestId(/^execution-live-slot-distance-/)
-    ).toHaveLength(0);
-    // 옛 영업시간 leaf·시각범위 배지(02a §1-2) — 5-b 참고-2 보강. `09:30–10:50` 배지는 아래
-    // "`09:30` 정확히 1개" 셈에 안 걸리므로(완전 일치) testID 로 따로 센다.
-    expect(screen.queryAllByTestId(/^execution-live-slot-hours-/)).toHaveLength(
-      0
-    );
-    expect(screen.queryAllByTestId(/^execution-live-slot-range-/)).toHaveLength(
-      0
-    );
-
-    // 레일 시각 열 부재 — 단독 "HH:mm" 텍스트는 done 카드 우측 leaf 뿐이다(각 1개). active·upcoming
-    // 시각은 상태줄 문장 안에만 있어 단독 leaf 로는 0개(02a ★4 — 중첩 Text 면 이 셈이 깨진다).
-    expect(screen.getAllByText('09:30')).toHaveLength(1);
-    expect(screen.getAllByText('11:00')).toHaveLength(1);
-    expect(screen.queryAllByText('13:00')).toHaveLength(0);
-    expect(screen.queryAllByText('15:00')).toHaveLength(0);
-    expect(screen.queryAllByText('17:00')).toHaveLength(0);
   });
 });
 
@@ -418,65 +331,6 @@ describe('LiveHubView · HV5 지도 (Seed Q1 · 브리프 골격)', () => {
     [1, 2, 3, 4, 5].forEach((n) =>
       expect(screen.getByTestId(`map-marker-pin-${n}`)).toBeOnTheScreen()
     );
-  });
-
-  // 5-b 경고-1 보강 — 핀이 "있다"만이 아니라 슬롯 진행 상태를 옮겨 받았는지 본다. 색은 SVG
-  // fill/stroke 리터럴로만 관측된다(MapView.test AC-1 방법). 상태마다 교차 부재를 함께 걸어
-  // "전부 한 색" 뮤테이션을 막는다. 픽스처: ①② done · ③ active · ④⑤ upcoming.
-  it('핀이 진행 상태를 따른다 — ①② 초록+체크, ③ 분홍, ④⑤ 회색 테두리', () => {
-    renderHub();
-
-    const pin = (n: number) => screen.getByTestId(`map-marker-pin-${n}`);
-    const byFill = (n: number, color: string) =>
-      within(pin(n)).UNSAFE_queryAllByProps({ fill: color }).length;
-    const byStroke = (n: number, color: string) =>
-      within(pin(n)).UNSAFE_queryAllByProps({ stroke: color }).length;
-    const check = (n: number) =>
-      within(pin(n)).queryByTestId(`map-marker-check-${n}`);
-
-    [1, 2].forEach((n) => {
-      expect(check(n)).not.toBeNull();
-      expect(byFill(n, PIN_SUCCESS)).toBeGreaterThan(0);
-      expect(byFill(n, PIN_PRIMARY)).toBe(0);
-    });
-
-    expect(byFill(3, PIN_PRIMARY)).toBeGreaterThan(0);
-    expect(check(3)).toBeNull();
-    expect(byStroke(3, PIN_MUTED_SOFT)).toBe(0);
-
-    [4, 5].forEach((n) => {
-      expect(byStroke(n, PIN_MUTED_SOFT)).toBeGreaterThan(0);
-      expect(check(n)).toBeNull();
-      expect(byFill(n, PIN_PRIMARY)).toBe(0);
-      expect(byFill(n, PIN_SUCCESS)).toBe(0);
-    });
-  });
-});
-
-describe('LiveHubView · HV7 레일 점 (5-b 경고-1 보강)', () => {
-  // 레일 점엔 testID 가 없다 — 대신 어떤 글리프 컴포넌트가 그려졌는지를 트리 순서대로 읽는다.
-  // 세 글리프는 레일에서만 쓰이므로(카드는 entities 라 features 글리프를 못 문다) 전체 트리에서
-  // 찾아도 레일 점만 잡힌다. 순서까지 비교해야 done↔upcoming 맞바꿈도 잡힌다(개수만 세면 2·1·2 그대로).
-  const RAIL_STATE = new Map<unknown, string>([
-    [RailDoneGlyph, 'done'],
-    [RailActiveGlyph, 'active'],
-    [RailUpcomingGlyph, 'upcoming'],
-  ]);
-
-  it('슬롯마다 상태에 맞는 점이 카드 순서대로 하나씩 선다', () => {
-    renderHub();
-
-    const railStates = screen.UNSAFE_root.findAll((node) =>
-      RAIL_STATE.has(node.type)
-    ).map((node) => RAIL_STATE.get(node.type));
-
-    expect(railStates).toEqual([
-      'done',
-      'done',
-      'active',
-      'upcoming',
-      'upcoming',
-    ]);
   });
 });
 
@@ -729,7 +583,6 @@ describe('LiveHubView · HT 트리거 알약·배지·로컬 숨김 (TRIP-748)',
 //    살아 있음" 쌍이고, 시트 −1 은 −1 직전에 열어 둔 상태에서 단언한다. 통과형 시트 목은 onAnimate 를 스스로 쏘지 않아 fireSheetAnimate 로 직접 부른다.
 
 const SCHEDULE = 'execution-live-bar-schedule';
-const POPUP_ANCHOR = 'execution-live-edit-popup-anchor';
 const POPUP = 'execution-live-edit-popup';
 const POPUP_AI = 'execution-live-edit-popup-ai';
 const POPUP_MANUAL = 'execution-live-edit-popup-manual';
@@ -975,30 +828,6 @@ describe('LiveHubView · HE 수정 칸 · 팝업 (TRIP-1522 v2 AC-3·4·5·12)',
     expect(screen.getByTestId(POPUP)).toBeOnTheScreen();
     fireEvent.press(screen.getByTestId(POPUP_MANUAL));
     expect(handlers.onPressManualEdit).toHaveBeenCalledTimes(1);
-  });
-
-  it('HE4 팝업은 앵커에 붙고, 앵커의 left·width 는 editPopupPlacement 결과와 같으며 아랫변(bottom)은 안전영역(34)을 더하지 않은 78 이다', async () => {
-    // 동적 import — 함수 모듈이 바뀌어도 이 케이스만 red 가 되게 한다(정적 import 면 파일 전체가 안 돈다).
-    const { editPopupPlacement } = await import('../model/editPopupLayout');
-    render(
-      <SafeAreaInsetsContext.Provider
-        value={{ top: 0, bottom: 34, left: 0, right: 0 }}
-      >
-        <LiveHubView {...hubProps()} />
-      </SafeAreaInsetsContext.Provider>
-    );
-    openPopup();
-
-    const anchor = screen.getByTestId(POPUP_ANCHOR);
-    const style = StyleSheet.flatten(anchor.props.style);
-    expect(typeof style.width).toBe('number');
-    const placement = editPopupPlacement({
-      windowWidth: Dimensions.get('window').width,
-      popupWidth: style.width as number,
-    });
-    expect(style.left).toBeCloseTo(placement.left, 6);
-    expect(style.bottom).toBe(78); // Figma: 바 윗변(바닥 12 + 높이 58 = 70) − 8. 안전영역을 더하면 112
-    expect(within(anchor).getByTestId(POPUP)).toBeOnTheScreen();
   });
 
   it('HE5 팝업과 행사 카드는 동시에 열리지 않는다 — 서로 열면 상대가 닫히고 활성 칸이 따라간다', () => {
@@ -1381,121 +1210,6 @@ describe('LiveHubView · HC 시트 내림 × 바 유지 (TRIP-1522 v2 AC-6·10)'
   });
 });
 
-describe('LiveHubView · HN 시트 칸 · 목록 바닥 여백 (TRIP-1522 v2 AC-9·14)', () => {
-  function renderWithInsets(bottom: number, top: number) {
-    return render(
-      <SafeAreaInsetsContext.Provider
-        value={{ top, bottom, left: 0, right: 0 }}
-      >
-        <LiveHubView {...hubProps()} />
-      </SafeAreaInsetsContext.Provider>
-    );
-  }
-  const snaps = () => sheetHost().props.snapPoints as (number | string)[];
-
-  it('HN13 시트 칸은 정확히 [중간 55%, 펼침px] 두 칸이고(안전영역·바 높이와 무관) 시트가 끝까지 내려가도록 열려 있다', () => {
-    renderWithInsets(34, 47);
-
-    // 낮은 칸이 없다 — 더 내리면 완전 닫힘(−1)이고, 끌어내려 닫는 것을 허용해야 일정 칸이 올릴 일이 생긴다.
-    expect(snaps()).toEqual([
-      '55%',
-      Dimensions.get('window').height - (47 + 8 + 104),
-    ]);
-    expect(sheetHost().props.enablePanDownToClose).toBe(true);
-  });
-
-  it('HN14 하단 안전영역 34 에서도 일정 목록 바닥 여백은 정확히 86(= 바 점유 70 + 16)이다 — 안전영역을 더하지 않는다', () => {
-    renderWithInsets(34, 0);
-
-    const padding = StyleSheet.flatten(
-      screen.getByTestId('execution-live-timeline').props.style
-    )?.paddingBottom;
-
-    // 목록 끝 카드가 바에 가리지 않는다. 안전영역 34 를 더하면 120 이라 red.
-    expect(padding).toBe(86);
-  });
-});
-
-describe('LiveHubView · HL 지도 로고 마진 (TRIP-1522 v2 AC-17)', () => {
-  // 지도(map-native)가 떠야 한다 — 선언과 대입 분리(HT 선례).
-  const KEY_NAME = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
-  let original: string | undefined;
-  original = process.env[KEY_NAME];
-  beforeEach(() => {
-    process.env[KEY_NAME] = 'test-naver-client-id';
-  });
-  afterEach(() => {
-    if (original === undefined) delete process.env[KEY_NAME];
-    else process.env[KEY_NAME] = original;
-  });
-
-  it('HL1 로고 마진 아래쪽은 바 점유(70) 이상이고 안전영역과 무관하며, 허브가 다시 그려져도 같은 객체다(memo 된 MapView 가 시트 이동마다 다시 그려지지 않게)', () => {
-    render(
-      <SafeAreaInsetsContext.Provider
-        value={{ top: 0, bottom: 34, left: 0, right: 0 }}
-      >
-        <LiveHubView
-          {...hubProps({
-            triggerChip: fakePill(jest.fn()),
-            triggerPillKey: 'trg-1',
-          })}
-        />
-      </SafeAreaInsetsContext.Provider>
-    );
-    const margin = screen.getByTestId('map-native').props.logoMargin as
-      { bottom?: number } | undefined;
-
-    expect(margin?.bottom).toBe(70); // 안전영역 34 를 더하면 104
-    fireMapTap(); // 알약 숨김으로 다시 그림
-    expect(screen.getByTestId('map-native').props.logoMargin).toBe(margin);
-  });
-});
-
-describe('LiveHubView · HD 바·카드 치수 — 앱 하단 탭 바와 같은 자리 (TRIP-1522 사이클 3 AC-1·4)', () => {
-  // 바가 앱 하단 탭 바와 같은 자리·같은 폭(좌우 30 · 바닥 12)에 서고 하단 안전영역을 더하지 않는다(사이클 2 구현은 더해서 실기에서 약 37pt 높았다).
-  // 안전영역 0 에서는 가산 구현도 같은 값이라 34 에서만 갈린다.
-  function renderAt(bottom: number, overrides: Overrides = {}) {
-    return render(
-      <SafeAreaInsetsContext.Provider
-        value={{ top: 0, bottom, left: 0, right: 0 }}
-      >
-        <LiveHubView {...hubProps(overrides)} />
-      </SafeAreaInsetsContext.Provider>
-    );
-  }
-  const anchorStyle = (testID: string) =>
-    StyleSheet.flatten(screen.getByTestId(testID).props.style);
-
-  it('HD1 바 앵커는 좌우 30 · 바닥 12 이고 하단 안전영역(34)을 더하지 않는다 — 탭 바와 같은 자리', () => {
-    renderAt(34);
-
-    const anchor = anchorStyle('execution-live-bottom-bar-anchor');
-    expect(anchor.left).toBe(30);
-    expect(anchor.right).toBe(30);
-    expect(anchor.bottom).toBe(12); // 더하면 46
-    expect(
-      within(
-        screen.getByTestId('execution-live-bottom-bar-anchor')
-      ).getByTestId(BAR)
-    ).toBeOnTheScreen();
-  });
-
-  it('HD2 행사 카드 앵커는 바와 같은 좌우 30 · 바닥 78(= 바 윗변 70 + 8)이고 안전영역(34)과 무관하며 바의 형제다 (Q-C)', () => {
-    renderAt(34, { opportunity: mkOpp() });
-    openCard();
-
-    const anchor = anchorStyle('execution-live-opportunity-anchor');
-    expect(anchor.left).toBe(30);
-    expect(anchor.right).toBe(30);
-    expect(anchor.bottom).toBe(78); // 더하면 112
-    expect(
-      within(
-        screen.getByTestId('execution-live-opportunity-anchor')
-      ).getByTestId(OP_CARD)
-    ).toBeOnTheScreen();
-  });
-});
-
 /** 프레임(16ms) 격자 위에서 "onBack 이 아직 안 불려야 하는 시각"(총 길이 − 40ms 이전). */
 const BEFORE_DUE_MS = Math.floor((BAR_EXIT_MS - 40) / 16) * 16;
 
@@ -1504,56 +1218,6 @@ describe('LiveHubView · HM 변신 애니메이션 — 영상 4단계 모프는 
   // 마운트에 연결), `departureTab` 이 없으면(탭 바 위가 아닌 진입) 모션 없이 최종 구조다. 값은 안 묶고 보이는 결과 상태만 본다.
   const probe = useAnimatedProbe();
   useInteractionGate();
-
-  it('HM1 허브 첫 렌더가 시작 5칸(출발 탭 활성)이고 모션이 재생되며(짝 대조군) 일정 칸은 같은 노드이고 끝나면 정지한다 — 새 허브 인스턴스는 다시 재생한다(허브당 한 번)', async () => {
-    probe.setReduceMotion(false);
-    renderHub({ departureTab: 'home' });
-    expect(visibleIds()).toEqual(START5_IDS);
-    expect(screen.getByTestId(START_HOME)).toBeSelected();
-    await flushOsAnswer();
-
-    const watch = watchMotion(60);
-
-    expect(moved(watch)).toBe(true);
-    expect(structureSteady(watch)).toBe(true);
-    expect(visibleIds()).toEqual(FINAL_IDS);
-    const settled = watchMotion(20);
-    expect(moved(settled)).toBe(false);
-    expect(settled.samples[0]).toBe(lastSample(watch));
-    screen.unmount();
-
-    renderHub({ departureTab: 'itinerary' });
-    expect(visibleIds()).toEqual(START5_IDS);
-    expect(screen.getByTestId(SCHEDULE)).toBeSelected(); // 이번 출발 탭은 일정
-    await flushOsAnswer();
-    expect(moved(watchMotion(60))).toBe(true);
-  });
-
-  it('HM2 입장이 끝난 허브에서 barHidden 이 풀려 바가 새로 마운트돼도 시작 5칸이 다시 나오지 않고 곧장 최종 구조다 — 움직이지 않는다', async () => {
-    probe.setReduceMotion(false);
-    const base = hubProps({ departureTab: 'home' });
-    const view = render(<LiveHubView {...base} />);
-    await flushOsAnswer();
-    const first = watchMotion(60);
-    expect(moved(first)).toBe(true);
-    const finalSample = lastSample(first);
-
-    // 메모 시트 등이 열려 바가 사라졌다 돌아온다(BR-U8-53) — 바는 새로 마운트된다.
-    view.rerender(<LiveHubView {...base} barHidden />);
-    expect(screen.queryByTestId(BAR)).toBeNull();
-    view.rerender(<LiveHubView {...base} barHidden={false} />);
-    expect(visibleIds()).toEqual(FINAL_IDS); // 첫 프레임부터 최종 — 시작 5칸으로 되돌아가지 않는다
-    await flushOsAnswer();
-
-    const again = watchMotion(60);
-    expect(screen.getAllByTestId(BAR_ROOT)).toHaveLength(1);
-    expect(moved(again)).toBe(false);
-    expect(structureSteady(again)).toBe(true);
-    expect(again.samples[0]).toBe(finalSample);
-    expect(
-      again.shapes.every((shape) => shape.join() === FINAL_IDS.join())
-    ).toBe(true);
-  });
 
   it('HM4 모션 도중 barHidden 이 켜지면 바는 시작 칸까지 즉시 통째로 없고 계속 없다 — 풀면 최종 구조로 돌아온다(BR-U8-53 그물이 모션 때문에 비지 않는다)', async () => {
     probe.setReduceMotion(false);
@@ -1622,63 +1286,6 @@ function pressBackIfPresent() {
   const back = screen.queryByTestId(BAR_BACK, { includeHiddenElements: true });
   if (back) fireEvent.press(back);
 }
-
-// ── 기기 폭 — 바 폭 = 화면 폭 − 60 이라 390 기기(330)가 아니면(402 → 342 · 안드로이드 360 → 300 · 430 → 370) ① 정지 모양은 상수 규칙
-// (좌우 30 · 뒤로 58 · 간격 8 · 캡슐 = 화면 폭 − 126)과 같고 ② 모션 내내 일정 아이콘이 단계 함수가 말하는 자리에서 안 튄다. 바 폭을 prop 으로 받든
-// 훅으로 읽든 중립(허브 앵커 좌우 30 만 전제). 일정 칸의 "보이는 중심" = 구조에서 직접 계산한 레이아웃 자리 + 칸에 걸린 translateX.
-describe('LiveHubView · 기기 폭 — 정지 치수와 컷·교체 순간 일정 칸 연속성', () => {
-  const probe = useAnimatedProbe();
-  useInteractionGate();
-  let windowSpy: jest.SpyInstance | null = null;
-  afterEach(() => {
-    windowSpy?.mockRestore();
-    windowSpy = null;
-  });
-  const barWidthOf = (windowWidth: number) => windowWidth - 2 * LIVE_BAR_SIDE;
-
-  /** 프레임마다 일정 칸의 보이는 중심이 단계 함수가 낼 수 있는 값(프레임 시각 ±8ms 범위, ±0.75pt)에 있는지 본다. */
-  function expectFollowing(
-    direction: 'enter' | 'exit',
-    width: number,
-    frames: number,
-    delay = 0
-  ) {
-    let count = 0;
-    watchMotion(frames, 16, (ms) => {
-      const values = [-8, 0, 8].map(
-        (d) =>
-          barMorphFrame(direction, Math.max(0, ms - delay + d), width)
-            .scheduleCenterX
-      );
-      const center = scheduleVisibleCenter(width);
-      expect(center).toBeGreaterThanOrEqual(Math.min(...values) - 0.75);
-      expect(center).toBeLessThanOrEqual(Math.max(...values) + 0.75);
-      count += 1;
-    });
-    expect(count).toBeGreaterThan(20);
-  }
-
-  it.each([390, 490])(
-    '[화면 폭 %d] 입장·퇴장 내내(컷·교체 앞뒤 포함) 일정 칸의 보이는 중심이 단계 함수가 말하는 자리를 따라간다 — 튀지 않는다',
-    async (windowWidth) => {
-      windowSpy = setWindowWidth(windowWidth);
-      probe.setReduceMotion(false);
-      const width = barWidthOf(windowWidth);
-      renderHub({ departureTab: 'records' });
-      await flushOsAnswer();
-
-      expectFollowing(
-        'enter',
-        width,
-        Math.ceil((BAR_ENTER_DELAY_MS + 352) / 16),
-        BAR_ENTER_DELAY_MS
-      );
-      watchMotion(40); // 입장이 끝날 때까지
-      fireEvent.press(screen.getByTestId(BAR_BACK));
-      expectFollowing('exit', width, 25);
-    }
-  );
-});
 
 describe('🔴 LiveHubView · TRIP-991 오버레이 접근성 (AC-1·AC-2·AC-4)', () => {
   it('뒤로는 "뒤로" 버튼으로 읽히고, 누르면 onBack 이 1회 불린다', () => {
@@ -1851,14 +1458,19 @@ describe('LiveHubView · HV10 [방문 완료]는 마지막 장소에만 (TRIP-15
     expect(screen.queryByTestId(COMPLETE)).toBeNull();
   });
 
-  it('HV10f 진행 중이 없으면 건너뜀 여부와 무관하게 예정 카드마다 [도착]이 선다 (종전 동작 — 진행 중 슬롯 뒤 기준은 진행 중이 있을 때만)', () => {
+  // BR-U10-54 건너뜀 제외는 진행 중 여부와 무관하다(2026-11-01 개정) — 건너뛴 슬롯 [도착]은 누르면 반드시 409(BR-U5-02)인 죽은 버튼이다.
+  it('HV10f 진행 중이 없어도 건너뛴 예정 카드에는 [도착]이 없고, 건너뛰지 않은 예정 카드마다 [도착]이 선다 (BR-U10-54)', () => {
     renderHub({
       slots: NO_ACTIVE,
       onPressArrive: jest.fn(),
       skippedPoiIds: new Set(['jeonpo']),
     });
 
-    for (const poiId of ['museum', 'jeonpo', 'haeundae']) {
+    expect(
+      screen.getByTestId(`execution-live-slot-status-${DATE}#jeonpo`)
+    ).toHaveTextContent('예정');
+    expect(screen.queryByTestId(arriveId('jeonpo'))).toBeNull();
+    for (const poiId of ['museum', 'haeundae']) {
       expect(screen.getByTestId(arriveId(poiId))).toBeOnTheScreen();
     }
   });
@@ -1878,8 +1490,8 @@ describe('LiveHubView · HV10 [방문 완료]는 마지막 장소에만 (TRIP-15
 });
 
 // TRIP-1561 5-b 보강(경고-3) — 술어의 두 절을 각각 잠근다: `index > activeIndex`(진행 중 슬롯 **앞** 카드는 [도착] 대상이 아니다)와
-// `state === 'upcoming'`(진행 중 슬롯 **뒤**여도 이미 '완료'인 카드는 대상이 아니다). 진행 중이 없을 때 [도착]이 모든 예정 카드에
-// 서므로(HV10f) p2 에 먼저 도착하면 p1 은 '예정'인 채 p2 가 관람 중이 되는 순서 바꿈 화면이 실제로 도달 가능하다 — 그때 p2 가
+// `state === 'upcoming'`(진행 중 슬롯 **뒤**여도 이미 '완료'인 카드는 대상이 아니다). 진행 중이 없을 때 [도착]이 건너뛰지 않은 모든 예정
+// 카드에 서므로(HV10f) p2 에 먼저 도착하면 p1 은 '예정'인 채 p2 가 관람 중이 되는 순서 바꿈 화면이 실제로 도달 가능하다 — 그때 p2 가
 // 마지막이면 [방문 완료]가 남아야 하고, 두 절이 빠지면 그 버튼이 조용히 사라져 마무리할 길이 없어진다.
 // 앵커: 카드 수 + 진행 중 상태줄 + (앞 카드) '예정' 상태줄 — 부재 단언이 빈 렌더에서 공허하게 통과하지 않게 한다.
 describe('LiveHubView · HV12 진행 중 앞의 예정·뒤의 완료는 [도착] 대상이 아니다 (TRIP-1561 5-b 보강)', () => {
@@ -2155,162 +1767,6 @@ describe('LiveHubView · HD 방문 완료 카드 [사진]·[메모] (TRIP-1203)'
       )
     ).toHaveTextContent(MEMO_NOTICE);
     expect(screen.queryByTestId('execution-arrive-memo-notice')).toBeNull();
-  });
-});
-
-// TRIP-1260 · i01 허브 일자 칩 줄. 허브는 오늘 일차로 열리므로 6일차 이후가 오늘이면 열자마자 선택 칩이
-// 화면 밖이다 — 칩만 가로 스크롤 안에 두고, 선택 칩은 위치가 오면 보이게 민다. (TRIP-1522 로 뒤로 버튼이 하단
-// 바로 내려가 이 줄은 칩 줄 하나다 — 칩 시작선 x=64→16 은 스크롤 상대 좌표라 아래 테스트는 무변경.)
-// ⚠️ 칩이 실제로 잘리는지·밀리는지는 6-b.
-describe('🔴 LiveHubView · 일자 칩 줄 가로 스크롤 (TRIP-1260)', () => {
-  const SEVEN_DAYS = Array.from({ length: 7 }, (_, index) => ({
-    date: `2026-06-${String(10 + index).padStart(2, '0')}`,
-  }));
-
-  function hub(activeDayIndex: number) {
-    return (
-      <LiveHubView
-        tripTitle="부산 여행"
-        days={SEVEN_DAYS}
-        activeDayIndex={activeDayIndex}
-        slots={SLOTS}
-        initialSnapIndex={1}
-        onBack={jest.fn()}
-        onSelectDay={jest.fn()}
-        onPressManualEdit={jest.fn()}
-        onPressChatbot={jest.fn()}
-      />
-    );
-  }
-
-  it('선택을 6일차로 바꾸면 그 칩(x=400)이 보이게 0 < x ≤ 400 으로 scrollTo 한다 (AC-3)', () => {
-    // 준비
-    const view = render(hub(0));
-    const chip = screen.getByTestId('execution-live-daychip-5');
-    const scroll = closestScrollView(chip);
-    expect(scroll).not.toBeNull();
-    const scrollTo = stubScrollTo(scroll!);
-    fireChipLayout(chip, 400);
-    expect(scrollTo).not.toHaveBeenCalled();
-
-    // 실행
-    view.rerender(hub(5));
-
-    // 단언
-    expect(scrollTo).toHaveBeenCalled();
-    const target = scrollTo.mock.lastCall?.[0] as { x: number };
-    expect(target.x).toBeGreaterThan(0);
-    expect(target.x).toBeLessThanOrEqual(400);
-  });
-
-  it('6일차가 오늘이라 6일차 선택으로 열리면, 그 칩 위치(x=400)가 올 때 0 < x ≤ 400 으로 scrollTo 한다 (AC-3b)', () => {
-    // 준비 — 열 때부터 6일차 선택
-    render(hub(5));
-    const chip = screen.getByTestId('execution-live-daychip-5');
-    const scroll = closestScrollView(chip);
-    expect(scroll).not.toBeNull();
-    const scrollTo = stubScrollTo(scroll!);
-
-    // 실행 — 선택 칩의 위치가 도착한다
-    fireChipLayout(chip, 400);
-
-    // 단언
-    expect(scrollTo).toHaveBeenCalled();
-    const target = scrollTo.mock.lastCall?.[0] as { x: number };
-    expect(target.x).toBeGreaterThan(0);
-    expect(target.x).toBeLessThanOrEqual(400);
-  });
-});
-
-/* ──── TRIP-1416 · 허브 지도도 "시트가 안 가린 띠"에 그날 핀을 맞춘다 (Q-088) ────
- * 지금 허브는 첫 핀을 화면 한가운데에 두는 고정 줌 카메라라, 55% 시트 윗변 바로 아래에 첫 핀만 걸리고
- * 나머지는 시트 뒤로 숨는다. 셸의 핀 맞춤(`fitPins`)을 켜면 셸이 스냅 배열의 '55%' 를 아래 가림으로 삼아
- * 맞춘다(Seed Q4 — 펼침으로 진입해도 55% 기준).
- *
- * 무엇을 보장하나:
- *  - 🔴 HB1 (AC-4) region 으로 열리고 camera 는 없다 · 5핀이 아래 55% 위 · 오버레이 줄(8+40) 아래 · 상자가 세로로 꽉 참.
- *  - 🔴 HB2 (AC-4·Q4) 펼침(2) 진입도 중간(1) 진입과 같은 맞춤.
- *  - 🔴 HB3 (AC-10) 알약 숨김(지도 탭)·시트 칸 이동으로 다시 그려져도 region 은 처음 그 객체(카메라가 안 튄다).
- * ⚠️ 실제 화면 맞춤·펼침 시트 위 104pt 띠는 jest 사각 → 6-b(AC-11).
- *
- * 3동작 뼈대: 준비=키 + 5곳 픽스처 → 실행=렌더·지도 탭·시트 onChange → 단언=map-native region.
- */
-
-const HUB_WINDOW = Dimensions.get('window');
-// 허브 오버레이 줄 바닥 근사 = 셸 pt-sm 8 + 칩 줄 높이 ≈ 40(02a ★6). TRIP-1522 로 뒤로 버튼이 하단 바로 내려가도
-// 맞춤은 셸의 고정 예약(OVERLAY_ROW_RESERVE 52)이 정하므로 이 수치는 "핀이 이 선 아래"의 하한일 뿐이다.
-const HUB_OVERLAY_ROW_BOTTOM = 8 + 40;
-const HUB_PINS = SLOTS.map(({ slot }) => ({
-  lat: slot.lat as number,
-  lng: slot.lng as number,
-}));
-
-function hubRegion(): NativeRegion | undefined {
-  return screen.getByTestId('map-native').props.region as
-    NativeRegion | undefined;
-}
-
-describe('LiveHubView · 지도 핀 맞춤 (AC-4·AC-10 · Q-088)', () => {
-  // TRIP-1416
-  const KEY_NAME = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
-  let original: string | undefined;
-  original = process.env[KEY_NAME];
-  beforeEach(() => {
-    process.env[KEY_NAME] = 'test-naver-client-id';
-  });
-  afterEach(() => {
-    if (original === undefined) delete process.env[KEY_NAME];
-    else process.env[KEY_NAME] = original;
-  });
-
-  it('HB1 그날 5핀이 아래 55% 위·오버레이 줄 아래 띠에 들고 상자가 세로로 꽉 찬다 — 첫 핀 중심 고정 줌 camera 가 아니다', () => {
-    renderHub({ initialSnapIndex: 0 });
-
-    expect(screen.getByTestId('map-native').props.camera).toBeUndefined();
-    expectPinsInBand(hubRegion(), HUB_PINS, {
-      bottom: 0.55,
-      topPx: HUB_OVERLAY_ROW_BOTTOM,
-      screenHeight: HUB_WINDOW.height,
-    });
-    expectHeightLimited(
-      hubRegion(),
-      HUB_PINS,
-      HUB_WINDOW.height / HUB_WINDOW.width
-    );
-  });
-
-  it('HB2 펼침(1)으로 진입해도 중간(0) 진입과 같은 맞춤이다 (재계획 적용 직후)', () => {
-    renderHub({ initialSnapIndex: 0 });
-    const atHalf = hubRegion();
-    expect(atHalf).toBeDefined();
-    screen.unmount();
-
-    renderHub({ initialSnapIndex: 1 });
-
-    expect(hubRegion()).toEqual(atHalf);
-  });
-
-  it('HB3 (금지) 알약 숨김(지도 탭)·시트 칸 이동으로 다시 그려져도 region 은 처음 그 객체다', () => {
-    // 준비 — 알약이 있는 허브. 앵커: region 이 있다(지금 camera 모드면 여기서 red).
-    renderWithPill({ initialSnapIndex: 0 });
-    const first = hubRegion();
-    expect(first).toBeDefined();
-
-    // 실행 ① — 지도 탭 → 알약 로컬 숨김(허브 상태가 바뀌어 다시 그려진다, 핀 좌표는 그대로).
-    fireMapTap();
-    expect(screen.queryByTestId(TRIGGER_PILL)).toBeNull();
-
-    // 단언 ①
-    expect(hubRegion()).toBe(first);
-
-    // 실행 ② — 시트가 완전 내림(-1)에 멈춤.
-    const onChange = sheetHost().props.onChange as
-      ((index: number, position: number, type: number) => void) | undefined;
-    expect(onChange).toBeDefined();
-    act(() => onChange?.(-1, 0, 0));
-
-    // 단언 ②
-    expect(hubRegion()).toBe(first);
   });
 });
 

@@ -454,6 +454,36 @@ describe('S14 · 그 밤 지역 0곳 안내 문구 슬롯 (AC-B1·B2)', () => {
     }
   );
 
+  // TRIP-1703(AC5 · D6) — 지역 밖 known 숙소가 후보에서 빠지면 후보가 0건이 되는데, 저장 숙소가 없는 게 아니다.
+  // 안내(그 밤 지역에 없다)가 있으면 「저장한 숙소가 아직 없어요」는 거짓이라 그리지 않는다.
+  it('TRIP-1703 AC5 · 후보 0건 + regionNotice → 안내와 둘러보기만, 「저장한 숙소가 아직 없어요」·지정 CTA·카드는 없다', () => {
+    renderSheet({ candidates: [], regionNotice: NOTICE });
+
+    expect(
+      screen.getByTestId('trip-base-staysheet-region-empty')
+    ).toHaveTextContent(NOTICE);
+    expect(screen.queryByTestId('trip-base-staysheet-empty')).toBeNull();
+    expect(screen.queryByText(/저장한 숙소가 아직 없어요/)).toBeNull();
+    expect(screen.queryAllByTestId(CARD_ROOT)).toHaveLength(0);
+    expect(screen.queryByTestId('trip-base-staysheet-assign')).toBeNull();
+    expect(screen.getByTestId('trip-base-staysheet-browse')).toBeOnTheScreen();
+  });
+
+  it.each<[string, string | null | undefined]>([
+    ['없으면', undefined],
+    ['null 이면', null],
+  ])(
+    '짝 · 후보 0건이고 regionNotice 가 %s 기존 「저장한 숙소가 아직 없어요」를 그린다 (저장 숙소 0곳 얼굴 불변)',
+    (_, notice) => {
+      renderSheet({ candidates: [], regionNotice: notice });
+
+      expect(screen.getByTestId('trip-base-staysheet-empty')).toBeOnTheScreen();
+      expect(
+        screen.queryByTestId('trip-base-staysheet-region-empty')
+      ).toBeNull();
+    }
+  );
+
   it('AC-B2 · 안내가 있어도 다른 지역 카드는 고르고 지정할 수 있다 (막지 않음 · 확인 단계 없음)', () => {
     const props = renderSheet({
       sections: OTHER_ONLY,

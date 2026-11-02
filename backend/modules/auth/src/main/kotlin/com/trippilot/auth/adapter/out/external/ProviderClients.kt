@@ -17,11 +17,59 @@ class GoogleOAuthClient(
 ) : AbstractOAuth2Client(restClientBuilder) {
     override val provider = Provider.GOOGLE
     override fun config() = props.google
+
+    /** 웹 클라이언트로 교환해도 되는 redirectUri — 허용 웹 출처마다 정확히 `<출처>/oauth/google` 하나. */
+    private val webRedirectUris: Set<String> = webRedirectUris(props.googleWeb.redirectOrigins)
+
+    /**
+     * **redirectUri 로 클라이언트를 고른다**(TRIP-1656). 구글은 code 를 발급한 클라이언트로만 교환해 준다 — 웹에서 받은
+     * code 를 iOS 클라이언트 ID 로 교환하면 거절되고, 그 반대도 같다.
+     *
+     * - http(s) 가 아닌 redirect(앱의 커스텀 스킴) → 지금처럼 iOS 클라이언트([config]).
+     * - http(s) redirect 는 **허용 목록과 정확히 같을 때만** 웹 클라이언트. 목록 밖이면 교환하지 않고 401 이다 —
+     *   웹 클라이언트는 시크릿을 붙여 교환하므로, 아무 웹 주소나 받으면 남의 사이트가 연 인가 요청의 code 를 우리 시크릿으로
+     *   바꿔 주는 길이 된다(열린 redirect). 웹 이전에도 이 경우는 iOS 클라이언트로 보내 구글이 거절했으니(401) 결과는 같고
+     *   아웃바운드만 줄었다.
+     * - 웹 클라이언트 미설정은 401 로 둔다 — 티켓(TRIP-1656) 권고 "지금처럼 401". 미설정을 501 로 가르는 다른 제공자와 다른
+     *   이유: iOS 앱의 구글 로그인은 설정돼 있어 "구글 로그인이 준비 중"이라는 답이 사실이 아니다.
+     *
+     * 거절 사유는 로그에만 남기고 응답에 싣지 않는다(SECURITY-15). redirectUri 는 시크릿이 아니다.
+     */
+    override fun exchangeConfig(redirectUri: String): SocialProviderProperties.ProviderConfig {
+        val scheme = redirectUri.substringBefore("://", missingDelimiterValue = "").lowercase()
+        if (scheme != "http" && scheme != "https") return config()
+        if (redirectUri !in webRedirectUris) {
+            log.warn("구글 웹 redirectUri 가 허용 목록에 없어 교환하지 않습니다: {}", redirectUri)
+            throw AuthenticationRequired("소셜 인증에 실패했습니다.", ErrorCode.SOCIAL_AUTH_FAILED)
+        }
+        val web = props.googleWeb
+        if (web.clientId.isBlank()) {
+            log.warn("GOOGLE_WEB_CLIENT_ID 가 비어 구글 웹 로그인을 교환하지 않습니다.")
+            throw AuthenticationRequired("소셜 인증에 실패했습니다.", ErrorCode.SOCIAL_AUTH_FAILED)
+        }
+        return web
+    }
+
     override fun parseProfile(userInfo: JsonNode) = SocialProfile(
         provider = Provider.GOOGLE,
         providerSub = userInfo.text("sub") ?: error("google sub 없음"),
         email = userInfo.text("email"),
     )
+
+    internal companion object {
+        private val log = LoggerFactory.getLogger(GoogleOAuthClient::class.java)
+        private val LOOPBACK = Regex("""^http://(localhost|127\.0\.0\.1)(:\d+)?$""")
+
+        /**
+         * 허용 출처(쉼표 구분) → 웹 redirectUri 집합. https 출처만 받고, http 는 로컬 개발용 루프백(localhost·127.0.0.1)만
+         * 받는다 — 구글도 웹 클라이언트 redirect 에 http 는 localhost 만 허용한다. 끝 `/` 는 떼고 붙인다.
+         */
+        internal fun webRedirectUris(origins: String): Set<String> =
+            origins.split(',').map { it.trim().trimEnd('/') }
+                .filter { it.startsWith("https://") || LOOPBACK.matches(it) }
+                .map { "$it/oauth/google" }
+                .toSet()
+    }
 }
 
 /** Kakao OIDC — userinfo `{id, kakao_account:{email}}`. */

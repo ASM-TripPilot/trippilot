@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { Linking, Pressable, Text } from 'react-native';
+import { Pressable, Text } from 'react-native';
 import { useQueries } from '@tanstack/react-query';
 
+import { openAppSettings } from '@/shared/external-link';
 import { resolvePhotoUri } from '@/shared/photo';
 import { getInstallId } from '@/shared/storage';
 import { showToast } from '@/shared/ui/Toast';
@@ -172,7 +173,7 @@ export function VisitRecordCardContainer({
               testID="record-trip-photo-settings"
               accessibilityRole="button"
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              onPress={() => void Linking.openSettings()}
+              onPress={() => void openAppSettings()}
               className="self-start"
             >
               <Text className="font-noto-bold text-caption text-primary">

@@ -43,15 +43,8 @@ import {
  * refreshTokens 는 refresh 토큰을 저장소에서 읽고 회전 결과를 다시 저장하므로 secure-store 를 목킹한다.
  */
 
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 /** 경로 → 그 요청이 실었던 Authorization 헤더(없으면 null). 키의 존재 = 그 엔드포인트를 때렸다는 뜻. */
 const authByPath: Record<string, string | null> = {};

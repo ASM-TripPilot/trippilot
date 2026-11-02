@@ -18,6 +18,12 @@ on:
   schedule:
     - cron: '17 * * * *'   # 매시 17분
   workflow_dispatch:
+    inputs:
+      namespace:
+        description: 어느 서버 — trippilot(출시 앱이 보는 서버, 매시 감시) · trippilot-dev(개발 서버, 수동)
+        type: choice
+        options: [trippilot, trippilot-dev]
+        default: trippilot
 
 jobs:
   kick:
@@ -48,6 +54,7 @@ jobs:
       id-token: write        # AWS 역할 (EKS 파드 로그 읽기)
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      NAMESPACE: ${{ inputs.namespace || 'trippilot' }}   # 매시 kick 은 입력 없이 dispatch — 출시 서버
     steps:
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v5
@@ -60,5 +67,5 @@ jobs:
         run: |
           set -o pipefail
           aws eks update-kubeconfig --name trippilot-dev --region "$AWS_REGION" > /dev/null
-          kubectl -n trippilot logs -l app.kubernetes.io/component=ai -c ai --since=65m --tail=-1 \
+          kubectl -n "$NAMESPACE" logs -l app.kubernetes.io/component=ai -c ai --since=65m --tail=-1 \
             | python3 ai/scripts/mlops/llm_fallback_watch.py | tee -a "$GITHUB_STEP_SUMMARY"

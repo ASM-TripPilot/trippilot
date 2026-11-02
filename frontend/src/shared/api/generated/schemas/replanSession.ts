@@ -41,4 +41,8 @@ export interface ReplanSession {
   initiatedBy?: ReplanSessionInitiatedBy;
   /** 미리 짠 대안이 낡았는가(BR-SA-19) — 적용하면 409 EXPIRED·STALE 인 초안 · 대체돼 닫힌 선계산 · 2분 넘게 산출 중인 선계산. 사용자 세션은 늘 false. APPLIED 가 아니면 상태와 무관하게 '준비된 대안 없음'으로 읽는다 — 갈 곳은 BR-SA-23 */
   stale?: boolean;
+  /** 반영한 재계획을 되돌린 시각(TRIP-1412). 되돌려도 status 는 APPLIED 그대로다 */
+  revertedAt?: string | null;
+  /** [되돌리기]를 그릴 수 있는가 — 반영됐고, 아직 안 되돌렸고, 되돌리기 지점이 있다(이 기능 이전 반영분은 false). true 여도 누르면 409 일 수 있다 — 지난 날·되돌리면 빠지는 곳의 방문 기록·그 사이 바뀐 일정은 누르는 순간에만 판정한다 */
+  revertible?: boolean;
 }

@@ -38,8 +38,13 @@ abstract class AbstractOAuth2Client(
 
     protected abstract fun parseProfile(userInfo: JsonNode): SocialProfile
 
+    /**
+     * code 교환에 쓸 클라이언트 설정. 기본은 [config] 하나 — 구글만 redirectUri 로 웹/앱 클라이언트를 가른다(TRIP-1656).
+     */
+    protected open fun exchangeConfig(redirectUri: String): SocialProviderProperties.ProviderConfig = config()
+
     override fun fetchProfile(authorizationCode: String, codeVerifier: String, redirectUri: String): SocialProfile {
-        val cfg = requireConfigured()
+        val cfg = requireConfigured(exchangeConfig(redirectUri))
         val accessToken = requestAccessToken(cfg, authorizationCode, codeVerifier, redirectUri)
         return parseProfile(requestUserInfo(cfg, accessToken))
     }
@@ -75,8 +80,7 @@ abstract class AbstractOAuth2Client(
      * **교환 흐름에서만 부른다.** SDK 토큰 흐름은 `clientId` 를 쓰지 않으므로 여기서 막으면
      * 정상 경로를 막게 된다(기존 테스트가 그 사실을 이미 고정해 두고 있었다).
      */
-    private fun requireConfigured(): SocialProviderProperties.ProviderConfig {
-        val cfg = config()
+    private fun requireConfigured(cfg: SocialProviderProperties.ProviderConfig): SocialProviderProperties.ProviderConfig {
         if (cfg.clientId.isBlank()) {
             // 노출하는 것은 가용성뿐 — 왜 미지원인지(키 미발급 등)는 싣지 않는다(SECURITY-15).
             throw ProviderNotSupported("${provider.displayName} 로그인은 아직 준비 중이에요.")

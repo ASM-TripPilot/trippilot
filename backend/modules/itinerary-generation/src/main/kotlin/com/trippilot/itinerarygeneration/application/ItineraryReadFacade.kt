@@ -5,6 +5,7 @@ import com.trippilot.itinerarygeneration.api.ItineraryPlanFacade
 import com.trippilot.itinerarygeneration.api.PlannedPlaceView
 import com.trippilot.itinerarygeneration.api.PlannedSlotView
 import com.trippilot.itinerarygeneration.api.ItineraryRef
+import com.trippilot.itinerarygeneration.domain.GenerationSessionRepository
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.trip.api.TripFacade
 import org.springframework.stereotype.Service
@@ -22,6 +23,7 @@ class ItineraryReadFacade(
     private val itineraries: ItineraryRepository,
     // 이름 규칙(확정분은 동결본이 이긴다)을 다시 쓰지 않는다 — 이미 이 조립기가 소유한다.
     private val surfaces: SlotSurfaceAssembler,
+    private val sessions: GenerationSessionRepository,
 ) : ItineraryFacade, ItineraryPlanFacade {
 
     @Transactional(readOnly = true)
@@ -35,8 +37,14 @@ class ItineraryReadFacade(
             dates = itinerary.days.map { it.date },
             // 물리 키가 아니라 경계 키로 넘긴다 — 재계획으로 슬롯 행이 갈려도 참조가 끊기지 않는다(BR-U2-04).
             slotKeys = itinerary.days.flatMap { d -> d.slots.map { SlotKey.of(d.date, it.sourcePoiId) } },
+            generationMode = itinerary.generationMode.name,
         )
     }
+
+    /** 여행 목록용 일괄 조회 — 빈 목록이면 묻지 않는다. 계정으로 좁혀 남의 세션은 섞이지 않는다. */
+    @Transactional(readOnly = true)
+    override fun runningGenerationTripIds(accountId: UUID, tripIds: Collection<UUID>): Set<UUID> =
+        if (tripIds.isEmpty()) emptySet() else sessions.findRunningTripIds(accountId, tripIds)
 
     /**
      * 계획 슬롯 — 기록 화면(U5)이 실적과 견주는 왼쪽 열이다. 요약([findCurrent])이 슬롯 키만 주는 것과

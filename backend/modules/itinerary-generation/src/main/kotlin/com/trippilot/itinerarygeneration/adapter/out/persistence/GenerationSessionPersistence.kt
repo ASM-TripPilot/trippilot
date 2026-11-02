@@ -40,6 +40,12 @@ class GenerationSessionEntity(
 interface GenerationSessionJpaRepository : JpaRepository<GenerationSessionEntity, UUID> {
     fun findFirstByTripIdAndStatusIn(tripId: UUID, statuses: Collection<String>): GenerationSessionEntity?
 
+    fun findByAccountIdAndTripIdInAndStatusIn(
+        accountId: UUID,
+        tripIds: Collection<UUID>,
+        statuses: Collection<String>,
+    ): List<GenerationSessionEntity>
+
     /** 가장 최근 것 하나 — 제한 판정에는 "살아 있는 게 있는가"와 "어느 여행인가"만 필요하다. */
     fun findFirstByAccountIdAndStatusInOrderByStartedAtDesc(
         accountId: UUID,
@@ -89,6 +95,9 @@ class GenerationSessionPersistence(
 
     override fun findRunningByTrip(tripId: UUID): GenerationSession? =
         jpa.findFirstByTripIdAndStatusIn(tripId, RUNNING_STATUSES)?.toDomain()
+
+    override fun findRunningTripIds(accountId: UUID, tripIds: Collection<UUID>): Set<UUID> =
+        jpa.findByAccountIdAndTripIdInAndStatusIn(accountId, tripIds, RUNNING_STATUSES).mapTo(HashSet()) { it.tripId }
 
     override fun lockAccount(accountId: UUID) {
         // 두 int 로 나눠 거는 형태를 쓴다 — namespace 가 있어야 다른 용도의 권고 잠금과 안 겹친다.

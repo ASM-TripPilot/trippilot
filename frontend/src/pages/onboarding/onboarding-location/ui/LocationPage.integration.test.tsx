@@ -50,16 +50,13 @@ jest.mock('expo-linking', () => ({
 
 // 라우터 — replace/push/back 을 팩토리 클로저에 두고 router 로 함께 내보내 참조를 고정한다
 // (NicknamePage.integration.test.tsx 선례). useRouter() 는 매번 같은 replace 를 돌려준다.
-jest.mock('expo-router', () => {
-  const replace = jest.fn();
-  const push = jest.fn();
-  const back = jest.fn();
-  return {
-    __esModule: true,
-    useRouter: () => ({ replace, push, back }),
-    router: { replace, push, back },
-  };
-});
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+    router: ['push', 'replace', 'back'],
+  })
+);
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const routerMock = require('expo-router').router as {
@@ -309,6 +306,48 @@ describe('🔴 TRIP-1108 R6 · 즉시 넘어가는 버튼은 연타해도 1회',
     } finally {
       clock.mockRestore();
     }
+  });
+});
+
+/**
+ * TRIP-1688 FV-TAP-02 — 형식 검증(verify-fv-tap)이 찾은 반례: 이미 허용된 기기(OS 창 없음)에서 [허용]을 연타하면
+ * 권한 요청·푸시 안내 이동이 두 번 나갔다. 요청이 진행 중인 동안 [허용]은 잠겨 있어야 한다.
+ * 3동작: 준비=곧장 granted 를 주는 OS → 실행=[허용] 두 번 → 단언=요청 1회·replace 1회.
+ */
+describe('🔴 FV-TAP-02 · 권한 요청 중 [허용]을 다시 눌러도 1회', () => {
+  it('같은 프레임에 두 번 눌러도 권한 요청 1회 · 푸시 안내 replace 1회', async () => {
+    mockRequestForeground.mockResolvedValue(GRANTED);
+    render(<LocationPage />);
+    const allow = screen.getByTestId('onboarding-location-allow');
+
+    fireEvent.press(allow);
+    fireEvent.press(allow);
+
+    await waitFor(() =>
+      expect(routerMock.replace).toHaveBeenCalledWith(PUSH_ROUTE)
+    );
+    await flushAsync();
+    expect(mockRequestForeground).toHaveBeenCalledTimes(1);
+    expect(routerMock.replace).toHaveBeenCalledTimes(1);
+  });
+
+  it('응답이 늦어(400ms 넘게) 다시 눌러도 권한 요청 1회 · replace 1회', async () => {
+    const request = deferred<typeof GRANTED>();
+    mockRequestForeground.mockReturnValue(request.promise);
+    render(<LocationPage />);
+    const allow = screen.getByTestId('onboarding-location-allow');
+
+    fireEvent.press(allow);
+    resetPressGuard(); // 400ms 이상 흐른 것과 같다
+    fireEvent.press(allow);
+    request.resolve(GRANTED);
+
+    await waitFor(() =>
+      expect(routerMock.replace).toHaveBeenCalledWith(PUSH_ROUTE)
+    );
+    await flushAsync();
+    expect(mockRequestForeground).toHaveBeenCalledTimes(1);
+    expect(routerMock.replace).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -28,6 +28,7 @@ import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 import { router } from 'expo-router';
 
 import { DailyReflectionPage } from './DailyReflectionPage';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * j03 오늘의 회고 — 실제 페이지·훅 + msw(가짜 서버) + 실 QueryClient 로 보는 사용자 흐름. 관점마다 describe 하나:
@@ -64,14 +65,12 @@ jest.mock('../model/useReflectionPhotos', () => ({
   useReflectionPhotos: () => [],
 }));
 
-jest.mock('expo-router', () => ({
-  router: {
-    push: jest.fn(),
-    replace: jest.fn(),
-    canGoBack: jest.fn(() => true),
-    back: jest.fn(),
-  },
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    router: ['push', 'replace', 'back', 'canGoBack'],
+  })
+);
 
 const BASE = 'http://localhost:8080/api/v1';
 const DAY = '2026-09-24';
@@ -259,16 +258,11 @@ describe('생성 — 레코드가 없는 지난 날·오늘은 한 번 만들어
   });
 
   /**
-   * 쿼리 gcTime 은 기본(5분) 그대로 — 이탈 뒤에도 목록 캐시가 남아야 AC-3 을 가를 수 있다(02a ★2).
-   * 뮤테이션 gcTime 만 0 — `client.clear()` 는 뮤테이션 gc 타이머를 안 지워 jest 가 끝나지 않는다.
+   * gcTime 은 팩토리 기본(Infinity) — 이탈 뒤에도 목록 캐시가 남아야 AC-3 을 가를 수 있다(02a ★2).
+   * Infinity 라 뮤테이션 gc 타이머도 없다 — 옛 뮤테이션 gcTime 0 이 막던 "jest 가 끝나지 않는 것"을 같은 방식으로 막는다.
    */
   function newClient(): QueryClient {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false },
-        mutations: { retry: false, gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient();
     clients.push(client);
     return client;
   }
@@ -784,12 +778,7 @@ describe('저장 — 직접 쓴 회고를 저장한 뒤 같은 화면', () => {
   });
 
   function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     function Wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -1026,6 +1015,159 @@ describe('저장 — 직접 쓴 회고를 저장한 뒤 같은 화면', () => {
       expect(screen.queryByText(SAVE_FAILED)).toBeNull();
     });
   });
+
+  // B안(2026-11-01) — 옛 `DailyReflectionScreen.test.tsx`(뷰 단위)가 보던 화면 동작을 서버 응답·오늘 날짜만 바꿔 이 페이지 위에서 본다.
+  describe('화면 동작 — 얼굴별 표면·편집 검증·일차 칩·하단 바 (옛 뷰 단위 흡수)', () => {
+    const BAR = 'reflection-daily-bottom-bar';
+    const GUIDE =
+      '이 날은 기록된 방문이 없어요. 다녀온 곳을 남기면 회고가 채워져요.';
+    const SCENE = '광안리 바다를 오래 봤다';
+
+    function withScenes(item: Reflection, stats = {}): Reflection {
+      const card: ReflectionCard = {
+        ...RULE_CARD,
+        payload: JSON.stringify({
+          ...JSON.parse(RULE_CARD.payload),
+          scenes: [{ layout: 'TEXT', caption: SCENE }],
+        }),
+      };
+      return {
+        ...item,
+        card,
+        draftCard: card,
+        stats: { ...item.stats, ...stats },
+      };
+    }
+
+    function renderOn(today: string) {
+      const client = newTestQueryClient({ gcTime: 0 });
+      function Wrapper({ children }: { children: ReactNode }) {
+        return (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        );
+      }
+      render(
+        <DailyReflectionPage tripId={TRIP_ID} date={DAY} today={today} />,
+        { wrapper: Wrapper }
+      );
+    }
+
+    it('기본 얼굴 — 장면 블록이 있고 [직접 회고 작성]·위치 박스는 없으며, 하단 바는 회고 칸이 선택돼 있다', async () => {
+      serverItems = [withScenes(EXISTING)];
+      renderPage();
+      await waitForNarrative(EXISTING_TEXT);
+
+      expect(
+        within(screen.getByTestId('reflection-daily-scenes')).getByText(SCENE)
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId('reflection-daily-compose')).toBeNull();
+      expect(screen.queryByTestId('reflection-daily-map-notice')).toBeNull();
+      expect(screen.getByTestId(`${BAR}-tab-reflection`)).toBeSelected();
+      expect(screen.getByTestId(`${BAR}-tab-records`)).not.toBeSelected();
+    });
+
+    it('방문이 적은 날 — 위치 박스에 제목과 사유 줄(few-visits)이 따로 있고, 장면 블록도 그린다', async () => {
+      serverItems = [withScenes(EXISTING, { visitCount: 1 })];
+      renderPage();
+
+      const notice = await screen.findByTestId('reflection-daily-map-notice');
+      expect(
+        within(notice).getByTestId(
+          'reflection-daily-map-notice-reason-few-visits'
+        )
+      ).toBeOnTheScreen();
+      expect(within(notice).getAllByText(/\S/).length).toBeGreaterThanOrEqual(
+        2
+      );
+      expect(
+        within(screen.getByTestId('reflection-daily-scenes')).getByText(SCENE)
+      ).toBeOnTheScreen();
+    });
+
+    it('편집 — 상한 4000, 빈 글·공백·서버 안내문은 [저장]이 잠기고 PUT 이 없으며, 편집 중엔 하단 바가 빠졌다가 취소하면 돌아온다', async () => {
+      serverItems = [EXISTING];
+      renderPage();
+      await waitForNarrative(EXISTING_TEXT);
+
+      fireEvent.press(screen.getByTestId('reflection-daily-edit'));
+      const input = screen.getByTestId('reflection-daily-edit-input');
+      expect(input.props.maxLength).toBe(4000);
+      expect(screen.queryByTestId(BAR)).toBeNull();
+
+      for (const text of ['', '   ', GUIDE]) {
+        fireEvent.changeText(input, text);
+        expect(screen.getByTestId('reflection-daily-edit-save')).toBeDisabled();
+        fireEvent.press(screen.getByTestId('reflection-daily-edit-save'));
+      }
+      expect(putCount()).toBe(0);
+
+      fireEvent.changeText(input, WRITTEN);
+      expect(
+        screen.getByTestId('reflection-daily-edit-save')
+      ).not.toBeDisabled();
+
+      fireEvent.press(screen.getByTestId('reflection-daily-edit-cancel'));
+      expect(screen.getByTestId(BAR)).toBeOnTheScreen();
+    });
+
+    it('서버 표시본이 안내문(기록 없는 날)이면 [직접 회고 작성]을 열어도 입력칸이 비어 있다', async () => {
+      const guideCard: ReflectionCard = {
+        ...BASIC_DRAFT,
+        subtitle: GUIDE,
+      };
+      serverItems = [
+        {
+          ...EXISTING,
+          card: guideCard,
+          draftCard: guideCard,
+          stats: { ...EXISTING.stats, visitCount: 0, photoCount: 0 },
+        },
+      ];
+      renderPage();
+      await screen.findByTestId('reflection-daily-empty');
+
+      fireEvent.press(screen.getByTestId('reflection-daily-compose'));
+      expect(
+        screen.getByTestId('reflection-daily-edit-input').props.value
+      ).toBe('');
+    });
+
+    it('일차 칩 — 보는 날만 선택, 오늘 칩엔 "오늘 ·", 다른 날 칩을 누르면 그 날 회고로 바꿔 간다', async () => {
+      serverItems = [EXISTING];
+      renderOn('2026-09-25');
+      await waitForNarrative(EXISTING_TEXT);
+      (router.replace as jest.Mock).mockClear();
+
+      const day1 = screen.getByTestId('reflection-daily-day-tab-1');
+      const day2 = screen.getByTestId('reflection-daily-day-tab-2');
+      expect(day1).toBeSelected();
+      expect(day2).not.toBeSelected();
+      expect(within(day1).getByText('1일차')).toBeOnTheScreen();
+      expect(within(day2).getByText('오늘 · 2일차')).toBeOnTheScreen();
+
+      fireEvent.press(day2);
+      expect(router.replace).toHaveBeenCalledWith(
+        `/trips/${TRIP_ID}/records/reflection/2026-09-25`
+      );
+    });
+
+    it('일차 칩 — 아직 오지 않은 날은 누를 수 없다(오늘이 1일차)', async () => {
+      serverItems = [EXISTING];
+      renderOn(DAY);
+      await waitForNarrative(EXISTING_TEXT);
+      (router.replace as jest.Mock).mockClear();
+
+      expect(
+        within(screen.getByTestId('reflection-daily-day-tab-1')).getByText(
+          '오늘 · 1일차'
+        )
+      ).toBeOnTheScreen();
+      const day2 = screen.getByTestId('reflection-daily-day-tab-2');
+      expect(day2).toBeDisabled();
+      fireEvent.press(day2);
+      expect(router.replace).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려준다 (TRIP-828 · V2.63)', () => {
@@ -1143,12 +1285,7 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
   });
 
   function renderPage() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     function Wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>
@@ -1218,12 +1355,13 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
     expect(selected('sad')).toBe(false);
   });
 
+  // TRIP-1693 — "입력을 마침" 신호는 blur 다. react-native-web 은 onEndEditing 을 부르지 않아 웹에서 메모가 저장되지 않았다.
   it('한 줄은 입력을 마치면 PUT 바디 { shortMemo } 뿐으로 저장된다', async () => {
     renderPage();
     const input = await screen.findByTestId('reflection-daily-memo-input');
 
     fireEvent.changeText(input, '  바다가 좋았다  ');
-    fireEvent(input, 'endEditing');
+    fireEvent(input, 'blur');
 
     await waitFor(() => expect(putBodies).toHaveLength(1));
     expect(putBodies[0]).toEqual({ shortMemo: '바다가 좋았다' });
@@ -1234,9 +1372,9 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
     renderPage();
     const input = await screen.findByTestId('reflection-daily-memo-input');
 
-    fireEvent(input, 'endEditing');
+    fireEvent(input, 'blur');
     fireEvent.changeText(input, ' 바다가 좋았다 ');
-    fireEvent(input, 'endEditing');
+    fireEvent(input, 'blur');
 
     expect(putBodies).toHaveLength(0);
   });
@@ -1247,7 +1385,7 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
     const input = await screen.findByTestId('reflection-daily-memo-input');
 
     fireEvent.changeText(input, '   ');
-    fireEvent(input, 'endEditing');
+    fireEvent(input, 'blur');
 
     await waitFor(() => expect(putBodies).toHaveLength(1));
     expect(putBodies[0]).toEqual({ shortMemo: '' });
@@ -1280,7 +1418,7 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
 
       // 실행
       fireEvent.changeText(input, '바다가 좋았다');
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
 
       // 단언
       expect(
@@ -1301,11 +1439,11 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
       renderPage();
       const input = await screen.findByTestId('reflection-daily-memo-input');
       fireEvent.changeText(input, '바다가 좋았다');
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
       await waitFor(() => expect(putBodies).toHaveLength(1));
 
       // 실행 — 응답 전에 같은 글로 한 번 더 마침.
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
       });
@@ -1331,11 +1469,11 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
       renderPage();
       const input = await screen.findByTestId('reflection-daily-memo-input');
       fireEvent.changeText(input, 'A글');
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
       await waitFor(() => expect(putBodies).toHaveLength(1));
 
       fireEvent.changeText(input, 'A글 더');
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
       putGate = Promise.resolve();
       await act(async () => {
         releasePut();
@@ -1355,9 +1493,9 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
       const input = await screen.findByTestId('reflection-daily-memo-input');
 
       // 실행 ① — 그대로 마침 · 같은 글(앞뒤 공백만 다름)로 마침.
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
       fireEvent.changeText(input, ' 바다가 좋았다 ');
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
       // "안 바뀜"도 Promise 로 끝난다 — 한 바퀴 흘려야 잘못 건 안내가 보인다(02a ★11).
       await act(async () => {});
 
@@ -1368,7 +1506,7 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
       // 실행 ② — 짝: 다른 글(센티널).
       const again = screen.getByTestId('reflection-daily-memo-input');
       fireEvent.changeText(again, '노을도 좋았다');
-      fireEvent(again, 'endEditing');
+      fireEvent(again, 'blur');
 
       // 단언 ② — 이번엔 저장되고 안내가 뜬다.
       expect(
@@ -1385,7 +1523,7 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
 
       // 실행
       fireEvent.changeText(input, '바다가 좋았다');
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
       expect(await screen.findByText(FAILED)).toBeOnTheScreen();
       await act(async () => {});
 
@@ -1412,7 +1550,7 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
       // 실행 ② — 짝: 한 줄 저장.
       const input = screen.getByTestId('reflection-daily-memo-input');
       fireEvent.changeText(input, '바다가 좋았다');
-      fireEvent(input, 'endEditing');
+      fireEvent(input, 'blur');
 
       // 단언 ②
       expect(

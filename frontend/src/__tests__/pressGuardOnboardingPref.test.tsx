@@ -12,6 +12,7 @@ import {
 } from '@/features/auth/model/gateDestination';
 import { notifyBootstrapReeval } from '@/shared/lib/bootstrapReeval';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
+import { answerReduceMotionSynchronously } from '@/test-support/animatedProbe';
 import { PrefStep1Page } from '@/pages/onboarding/onboarding-pref1';
 import { PrefStep2Page } from '@/pages/onboarding/onboarding-pref2';
 import { OnboardingTourPage } from '@/pages/onboarding/onboarding-tour';
@@ -73,6 +74,8 @@ jest.mock('@/shared/api', () => ({
 // 모듈 싱글턴(연타 창·스토어·게이트 목적지)은 파일 최상위에서 리셋한다.
 beforeEach(() => {
   resetPressGuard();
+  // TRIP-1624 — "동작 줄이기" 답을 effect 안에서 동기로 받는다(비동기 답이 act 밖에서 상태를 바꾸는 경고 제거).
+  answerReduceMotionSynchronously(false);
   usePreferenceStore.getState().reset();
   routerMock.replace.mockClear();
   routerMock.push.mockClear();

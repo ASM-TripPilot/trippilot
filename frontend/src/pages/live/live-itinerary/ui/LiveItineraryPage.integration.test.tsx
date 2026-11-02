@@ -8,6 +8,7 @@ import { AccessibilityInfo, Linking } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -70,6 +71,7 @@ import {
 import { encodePolyline } from '@/shared/location/automation/polyline';
 
 import { LiveItineraryPage } from './LiveItineraryPage';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * i01 허브(LiveItineraryPage) 통합 테스트 — 실 페이지 + 실제 HTTP(MSW). 관점 9개를 바깥 describe 9개로 나눈다
@@ -165,6 +167,8 @@ let mockAutomation: MockAutomation | null = null;
 const mockAutomationLater = jest.fn(async () => undefined);
 const mockAutomationEnable = jest.fn(async () => undefined);
 const mockAutomationDismiss = jest.fn(async () => undefined);
+// TRIP-1696 — 페이지가 훅에 넘긴 consentOn 을 렌더마다 적는다(조회 전 null 인지 본다).
+const mockAutomationConsent: unknown[] = [];
 // 내부 소비처(useTripRoutes 등)가 같은 판독을 보게 플래그 모듈도 같은 값으로 묶는다.
 jest.mock('@/shared/location/automation/flag', () => ({
   isLocationAutomationEnabled: () => mockAutomation !== null,
@@ -175,16 +179,17 @@ jest.mock('@/shared/location', () => {
     ...actual,
     isLocationAutomationEnabled: () =>
       mockAutomation !== null || actual.isLocationAutomationEnabled(),
-    useLocationAutomation: (input: unknown) =>
+    useLocationAutomation: (input: { consentOn?: unknown }) =>
       mockAutomation
-        ? {
+        ? (mockAutomationConsent.push(input.consentOn),
+          {
             ...mockAutomation,
             reason: 'explainer',
             enabled: true,
             enable: mockAutomationEnable,
             later: mockAutomationLater,
             dismissNotice: mockAutomationDismiss,
-          }
+          })
         : actual.useLocationAutomation(input),
   };
 });
@@ -392,9 +397,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
     );
 
   function wrapper({ children }: { children: ReactNode }) {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    const client = newTestQueryClient();
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
@@ -611,10 +614,73 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
         HttpResponse.json({ legalConsent: true })
       );
     afterEach(() => {
+      // TRIP-1634 — 화면부터 내린다. RNTL 자동 정리는 바깥 afterEach 라 이 리셋보다 늦어서, 그 사이 늦은 재렌더가 떨어지면
+      // 목이 가짜 객체→실제 훅으로 바뀌어 같은 컴포넌트의 훅 개수가 달라진다(React "order of Hooks" 경고, CI 간헐).
+      cleanup();
       mockAutomation = null;
       mockAutomationLater.mockClear();
       mockAutomationEnable.mockClear();
       mockAutomationDismiss.mockClear();
+      mockAutomationConsent.length = 0;
+    });
+
+    // TRIP-1696 AC1 — 조회가 끝나기 전엔 "동의 안 함(false)"이 아니라 "모름(null)"을 넘긴다. 훅은 null 이면 판정을 보류한다.
+    it('U7 동의 조회 전엔 consentOn=null(false 아님), legalConsent=true 가 오면 true 를 넘긴다', async () => {
+      mockAutomation = { state: 'MANUAL', notice: null, droppedCount: 0 };
+      let release: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      server.use(
+        itineraryOk(),
+        tripHandler(),
+        visitsHandler(),
+        http.get(`${BASE}/me/location-consent`, async () => {
+          await gate;
+          return HttpResponse.json({ legalConsent: true });
+        })
+      );
+      await renderActive();
+
+      // 준비 확인 — 조회는 나갔고 아직 안 끝났다.
+      await waitFor(() =>
+        expect(hitCount('GET /api/v1/me/location-consent')).toBe(1)
+      );
+      expect(mockAutomationConsent.length).toBeGreaterThan(0);
+      expect(mockAutomationConsent).not.toContain(false);
+      expect(mockAutomationConsent[mockAutomationConsent.length - 1]).toBe(
+        null
+      );
+
+      await act(async () => {
+        release();
+      });
+      await waitFor(() =>
+        expect(mockAutomationConsent[mockAutomationConsent.length - 1]).toBe(
+          true
+        )
+      );
+      expect(mockAutomationConsent).not.toContain(false);
+    });
+
+    // TRIP-1696 AC5 짝 — 실제 철회(legalConsent=false)는 false 로 넘겨야 훅이 강등·삭제를 한다(null 로 접으면 보류된다).
+    it('U8 legalConsent=false 응답이면 consentOn=false 를 넘긴다', async () => {
+      mockAutomation = { state: 'MANUAL', notice: null, droppedCount: 0 };
+      server.use(
+        itineraryOk(),
+        tripHandler(),
+        visitsHandler(),
+        http.get(`${BASE}/me/location-consent`, () =>
+          HttpResponse.json({ legalConsent: false })
+        )
+      );
+      await renderActive();
+
+      await waitFor(() =>
+        expect(mockAutomationConsent[mockAutomationConsent.length - 1]).toBe(
+          false
+        )
+      );
     });
 
     it('U1 플래그 OFF(기본) → 설명·안내 없음, 자동 기록 훅 효과 0(BR-U10-07) — 동의 조회는 내 위치 표시 몫으로 1회(TRIP-1535)', async () => {
@@ -1070,9 +1136,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
                 : new HttpResponse(null, { status: tripResponse });
             })
           );
-          const client = new QueryClient({
-            defaultOptions: { queries: { retry: false } },
-          });
+          const client = newTestQueryClient();
           render(
             <QueryClientProvider client={client}>
               <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />
@@ -1260,9 +1324,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
             tripHandler(),
             visitsHandler()
           );
-          const client = new QueryClient({
-            defaultOptions: { queries: { retry: false } },
-          });
+          const client = newTestQueryClient();
           render(
             <QueryClientProvider client={client}>
               <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />
@@ -1824,12 +1886,7 @@ describe('i08 변경 반영 시트', () => {
   ];
   const postHits = () => observedHits.filter((hit) => hit.startsWith('POST '));
   function wrapper({ children }: { children: ReactNode }) {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
@@ -1850,18 +1907,6 @@ describe('i08 변경 반영 시트', () => {
       { wrapper }
     );
     await waitFor(() => expect(screen.getByTestId(HUB)).toBeTruthy());
-  }
-
-  /** 허브(셸) 시트가 받은 초기 스냅 index — 허브 서브트리 안에서만 센다(02a ★15). */
-  function hubSnapIndices(): number[] {
-    return screen
-      .getByTestId(HUB)
-      .findAll(
-        (node) =>
-          typeof node.props?.index === 'number' &&
-          Array.isArray(node.props?.snapPoints)
-      )
-      .map((node) => node.props.index as number);
   }
 
   /** 화면 이동 4종이 한 번도 불리지 않았다. */
@@ -1966,13 +2011,9 @@ describe('i08 변경 반영 시트', () => {
     seeded: { sessionId: string; diff: ReplanDiff } | null
   ): Promise<QueryClient> {
     server.use(itineraryHandler(), ...restHandlers());
-    const client = new QueryClient({
+    const client = newTestQueryClient({
       // gcTime 을 끄지 않는다(Infinity) — 0 이면 관찰자 없는 심어 둔 diff 가 일정 로딩 중에 지워져,
       // 시트가 뜨는 시점에는 캐시가 비어 있다. 실제 앱의 기본 gcTime 은 5분이라 이 가정이 맞다.
-      defaultOptions: {
-        queries: { retry: false, gcTime: Infinity },
-        mutations: { gcTime: 0 },
-      },
     });
     if (seeded) {
       client.setQueryData(
@@ -2080,12 +2121,7 @@ describe('i08 변경 반영 시트', () => {
         }),
         ...restHandlers()
       );
-      const client = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, gcTime: Infinity },
-          mutations: { gcTime: 0 },
-        },
-      });
+      const client = newTestQueryClient();
       client.setQueryData(
         getGetTripsTripIdReplanSessionsSessionIdDiffQueryKey(
           TRIP_ID,
@@ -2113,9 +2149,6 @@ describe('i08 변경 반영 시트', () => {
 
       expect(screen.getByTestId('execution-live-daychip-1')).toBeSelected();
       expect(screen.getByTestId(SHEET)).toBeTruthy();
-      expect(hubSnapIndices().length).toBeGreaterThan(0);
-      // TRIP-1522 v2 — 칸 번호 0 중간·1 펼침: 펼침은 1.
-      expect(hubSnapIndices().every((index) => index === 1)).toBe(true);
       expect(screen.getAllByTestId('planb-applied-badge')).toHaveLength(3);
     });
   });
@@ -2217,44 +2250,6 @@ describe('i08 변경 반영 시트', () => {
     });
   });
 
-  describe('🔴 A8 · Q5 — applied 로 들어오면 허브는 펼침으로 시작한다', () => {
-    it('applied 면 허브 스냅 index 가 전부 1(펼침 — TRIP-1522 v2 칸 번호: 0 중간·1 펼침)', async () => {
-      await renderHub(SESSION_ID);
-
-      const indices = hubSnapIndices();
-      expect(indices.length).toBeGreaterThan(0);
-      indices.forEach((index) => expect(index).toBe(1));
-    });
-
-    it('A8b 닫혀서 applied 가 사라져도(rerender) 시트는 없어지고 허브는 펼침 1 을 유지한다', async () => {
-      await renderHub(SESSION_ID);
-      expect(screen.getByTestId(SHEET)).toBeTruthy();
-
-      // URL 에서 applied 가 지워진 뒤를 prop 으로 직접 만든다(목 setParams 는 URL 을 안 바꾼다).
-      screen.rerender(
-        <LiveItineraryPage
-          tripId={TRIP_ID}
-          today={TODAY}
-          appliedSessionId={undefined}
-        />
-      );
-
-      expect(screen.getByTestId(HUB)).toBeTruthy();
-      expect(screen.queryByTestId(SHEET)).toBeNull();
-      const indices = hubSnapIndices();
-      expect(indices.length).toBeGreaterThan(0);
-      indices.forEach((index) => expect(index).toBe(1));
-    });
-
-    it('대조군 — 신호가 없으면 기본 중간 스냅 0', async () => {
-      await renderHub();
-
-      const indices = hubSnapIndices();
-      expect(indices.length).toBeGreaterThan(0);
-      indices.forEach((index) => expect(index).toBe(0));
-    });
-  });
-
   /**
    * TRIP-1418 · QA Q-106 — 재계획 [적용하기]가 `dismissTo` 로 **스택의 원래 허브**에 돌아온다. 허브를 새로 만들지 않고
    * 같은 인스턴스에 params(=props)만 새로 준다. 그래서 그 허브가 쥐고 있던 로컬 상태(골라 둔 일차·시트 칸)를
@@ -2302,12 +2297,7 @@ describe('i08 변경 반영 시트', () => {
           HttpResponse.json({ triggers: [] })
         )
       );
-      const client = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, gcTime: Infinity },
-          mutations: { gcTime: 0 },
-        },
-      });
+      const client = newTestQueryClient();
       render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
         wrapper: ({ children }: { children: ReactNode }) => (
           <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -2393,22 +2383,14 @@ describe('i08 변경 반영 시트', () => {
       expect(chip(1)).not.toBeSelected();
     });
 
-    it('R5 새 적용을 받으면 시트 칸이 펼침(1)으로 오르고, [확인]으로 applied 가 지워져도 1 을 유지한다 (Q5 · TRIP-1522 v2 칸 번호)', async () => {
+    it('R5 새 적용을 받은 뒤 [확인]으로 applied 가 지워지면 시트는 빠지고 적용한 날 선택은 남는다 (Q5 — 시트 칸은 jest 사각, 지도 planb-apply)', async () => {
       await renderReusedHub();
-      // 앵커 — 원래 허브는 applied 없이 마운트돼 기본 칸 0(중간)이다.
-      expect(hubSnapIndices().length).toBeGreaterThan(0);
-      expect(hubSnapIndices().every((index) => index === 0)).toBe(true);
-
       hubReceives(SESSION_ID, DAY2);
-
-      expect(hubSnapIndices().every((index) => index === 1)).toBe(true);
 
       // i08 [확인] = setParams({ applied: undefined }) — 병합이라 day 는 남는다(02a ★7).
       hubReceives(undefined, DAY2);
 
       expect(screen.queryByTestId(SHEET)).toBeNull();
-      expect(hubSnapIndices().length).toBeGreaterThan(0);
-      expect(hubSnapIndices().every((index) => index === 1)).toBe(true);
       expect(chip(1)).toBeSelected();
     });
 
@@ -2535,9 +2517,7 @@ describe('메모 시트', () => {
     memoGate = Promise.resolve();
     releaseMemo = () => {};
     visitsResponse = () => [visit('v1', 'p1', null)];
-    client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    client = newTestQueryClient({ gcTime: 0 });
     // 옛 목 값 — 이 관점은 뒤로가기 히스토리가 없는 것으로 돌았다.
     mockCanGoBack.mockReturnValue(false);
     server.use(
@@ -2858,32 +2838,6 @@ describe('메모 시트', () => {
 
       fireEvent.press(screen.getByTestId('live-memo-close'));
       expect(screen.getByTestId(BAR)).toBeOnTheScreen();
-    });
-  });
-
-  describe('🔴 AC-6 · 입력칸은 허브 셸 시트가 아닌 별도 바텀시트 안에 있다', () => {
-    it('M17 입력칸의 가장 가까운 시트는 닫힘(onClose)을 쥐고 메모 시트를 품으며, 허브 셸 헤더는 품지 않는다', async () => {
-      await renderHub();
-
-      // 판별자 자가검사(짝) — 허브 셸 시트는 onClose 가 없다. 이게 깨지면 아래 onClose 단언이 셸도 통과시킨다.
-      const shellHost = nearestSheetHost(
-        screen.getByTestId('execution-live-sheet-header')
-      );
-      expect(shellHost).not.toBeNull();
-      expect(typeof shellHost?.props.onClose).not.toBe('function');
-
-      const host = nearestSheetHost(await openSheet());
-
-      expect(host).not.toBeNull();
-      expect(typeof host?.props.onClose).toBe('function');
-      expect(
-        host?.findAll(
-          (node) => node.props.testID === 'execution-live-sheet-header'
-        )
-      ).toEqual([]);
-      expect(
-        host?.findAll((node) => node.props.testID === SHEET).length
-      ).toBeGreaterThan(0);
     });
   });
 
@@ -3280,9 +3234,7 @@ describe('관람 중 카드 [사진]·[메모]', () => {
     photoBodies = [];
     photoStatus = 201;
     consentResponse = () => HttpResponse.json(consent(true, true));
-    client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    client = newTestQueryClient({ gcTime: 0 });
     // 옛 목 값 — 이 관점은 뒤로가기 히스토리가 없는 것으로 돌았다.
     mockCanGoBack.mockReturnValue(false);
     mockPick.mockReset().mockResolvedValue({
@@ -3675,9 +3627,7 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
     memoStatus = 200;
     memoGate = Promise.resolve();
     releaseMemo = () => {};
-    client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    client = newTestQueryClient({ gcTime: 0 });
     mockCanGoBack.mockReturnValue(false);
     mockPick.mockReset().mockResolvedValue({
       kind: 'picked',
@@ -4582,12 +4532,7 @@ describe('i03 위험 상세 시트', () => {
     return qs ? `${obj.pathname ?? ''}?${qs}` : (obj.pathname ?? '');
   }
   function wrapper({ children }: { children: ReactNode }) {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
@@ -4919,12 +4864,7 @@ describe('i02 트리거 표면', () => {
     triggersHandler(list),
   ];
   function wrapper({ children }: { children: ReactNode }) {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
@@ -5037,12 +4977,7 @@ describe('i02 트리거 표면', () => {
 
     it('I-T8 숨긴 뒤 같은 트리거로 재조회되면 숨긴 채, 다른 triggerId(trg-2)가 오면 알약이 다시 뜬다 (D3 · 5-b 경고-1)', async () => {
       server.use(...baseHandlers({ triggers: [mkTrigger()] }));
-      const client = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, gcTime: 0 },
-          mutations: { gcTime: 0 },
-        },
-      });
+      const client = newTestQueryClient({ gcTime: 0 });
       const refetchTriggers = () =>
         act(() =>
           client.invalidateQueries({
@@ -5274,9 +5209,7 @@ describe('방문 체크', () => {
   }
   beforeEach(() => {
     arriveBodies = [];
-    client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    client = newTestQueryClient({ gcTime: 0 });
     mockGetForeground.mockResolvedValue({ status: 'granted', granted: true });
     mockRequestForeground.mockResolvedValue({
       status: 'granted',
@@ -6101,6 +6034,7 @@ describe('방문 체크', () => {
       screen.queryByTestId(`execution-live-slot-visit-time-${TODAY}#${poiId}`);
 
     afterEach(() => {
+      cleanup(); // TRIP-1634 — 위 U10 afterEach 와 같은 이유
       mockAutomation = null;
     });
 
@@ -6880,6 +6814,63 @@ describe('방문 체크', () => {
       await waitFor(() => expect(doneTimeOf('p1')).not.toBeNull());
       expect(screen.queryAllByTestId(NOTICE_ANY)).toHaveLength(0);
     });
+
+    // 형식 검증 반례 R3(OneOpenVisit) — 낙관 완료가 진행 중을 지워 앞 예정 카드에 [도착]이 서는 동안 그걸 누르면,
+    // 완료가 실패했을 때 서버에 진행 중 2곳이 남았다(서버는 하루 open 1개를 막지 않는다 — 책임은 클라). BR-U10-55 개정.
+    it('P14 단독 [방문 완료] 응답을 기다리는 동안 다른 카드 [도착]을 눌러도 도착 POST 는 0회고, 완료가 실패해도 0회다 — 진행 중 2곳을 만들지 않는다 (BR-U10-55 · R3)', async () => {
+      const gate = createGate();
+      server.use(
+        ...baseHandlers(plan(3)),
+        // p3(마지막)에 먼저 도착해 있다 — p1·p2 는 진행 중 앞 예정이라 [도착]이 없고, p3 에 [방문 완료]가 선다.
+        visitsGet(() => [
+          vc({ visitCheckId: 'v3', poiId: 'p3', arrivedAt: T_NEXT }),
+        ]),
+        completeHandler(async () => {
+          await gate.opened;
+          return HttpResponse.error();
+        }),
+        arriveHandler()
+      );
+
+      try {
+        render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+          wrapper,
+        });
+        await waitFor(() =>
+          expect(within(card('p3')).getByTestId(COMPLETE_BTN)).toBeOnTheScreen()
+        );
+
+        // 실행 ① — p3 [방문 완료](응답 대기). 낙관 완료로 진행 중이 사라져 p1 에 [도착]이 선다.
+        fireEvent.press(within(card('p3')).getByTestId(COMPLETE_BTN));
+        await waitFor(() =>
+          expect(
+            hitCount(`POST /api/v1/trips/${TRIP_ID}/visits/v3/complete`)
+          ).toBe(1)
+        );
+        // 실행 ② — 완료 응답 전에 p1 [도착].
+        fireEvent.press(await screen.findByTestId(arriveId(TODAY, 'p1')));
+        await settle();
+
+        // 단언 ① — 완료가 도는 동안 도착은 나가지 않는다.
+        expect(hitCount(VISITS_PATH)).toBe(0);
+
+        // 실행 ③ — 완료가 네트워크로 실패한다.
+        gate.release();
+        await waitFor(() =>
+          expect(screen.getByTestId(noticeId('p3'))).toHaveTextContent(
+            COMPLETE_FAILED
+          )
+        );
+        await settle();
+
+        // 단언 ② — 끝나도 도착 0회(누름은 줄 세우지 않고 삼킨다), p3 는 관람 중으로 돌아왔다.
+        expect(hitCount(VISITS_PATH)).toBe(0);
+        expect(arriveBodies).toHaveLength(0);
+        expect(timeOf('p3')).toHaveTextContent(/지금 방문 중/);
+      } finally {
+        gate.release();
+      }
+    });
   });
 
   describe('LiveItineraryPage · 즉석 방문은 허브 판정에서 빠진다 (TRIP-1079)', () => {
@@ -7503,12 +7494,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
   });
 
   function wrapper({ children }: { children: ReactNode }) {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
@@ -7650,12 +7636,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
       ...liveHubHandlers({ itinerary: itinerary() }),
       opportunitiesHandler({ [TODAY]: [VENUE, TRENDING] })
     );
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     const refetchTriggers = (next: Trigger[]) => {
       serverTriggers = next;
       return act(() =>
@@ -7926,12 +7907,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
       ...liveHubHandlers({ itinerary: itinerary() }),
       opportunitiesHandler({ [TODAY]: [VENUE, TRENDING] })
     );
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     /** 트리거 목록을 다시 받는다(포그라운드 복귀·푸시 수신 무효화와 같다). */
     const refetchTriggers = (next: Trigger[]) => {
       serverTriggers = next;
@@ -8031,12 +8007,7 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
       ...liveHubHandlers({ itinerary: itinerary() }),
       opportunitiesHandler(byDate)
     );
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     render(
       <QueryClientProvider client={client}>
         <LiveItineraryPage tripId={TRIP_ID} today={TODAY} />

@@ -36,6 +36,7 @@ import {
   GENERATION_FAILED_TOAST_ID,
 } from './generationWatch';
 import { useGenerationWatch } from './useGenerationWatch';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-1618 · 앱 셸 "생성 완료 감지" 훅 `useGenerationWatch(drawn, destination)` — 캐시에 "생성 중"으로 적힌 일정만 2초마다 다시 묻고,
@@ -69,13 +70,8 @@ jest.mock('expo-router', () => ({
 // 생성 클라이언트의 인증 계층이 @/shared/storage 를 정적으로 문다(MyTripsListPage.integration 과 같은 목).
 jest.mock('@/shared/storage', () => ({
   ...jest.requireActual('@/shared/storage'),
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  ...require('@/test-support/storageMock'),
 }));
 
 const POLL = DRAFT_POLL_INTERVAL_MS;
@@ -176,12 +172,7 @@ afterAll(() => server.close());
 
 /** 운영 전역과 같은 staleTime 30초 — 0 이면 관찰자가 붙는 순간 낡은 칸을 즉시 한 번 더 받아 요청 수가 흔들린다(02a ★2). */
 function newClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: Infinity, staleTime: 30_000 },
-      mutations: { retry: false, gcTime: Infinity },
-    },
-  });
+  return newTestQueryClient({ staleTime: 30_000 });
 }
 
 async function advance(ms: number): Promise<void> {

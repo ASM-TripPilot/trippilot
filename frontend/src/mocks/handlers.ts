@@ -468,4 +468,9 @@ export const handlers = [
   http.get(`${BASE}/trips/:tripId/opportunities`, () =>
     HttpResponse.json({ items: [] })
   ),
+  // TRIP-1624 — 같은 허브가 active 얼굴마다 트리거 목록도 묻는다(`useActiveTriggers`). 기본값이 없으면 허브를 렌더하는 테스트마다
+  // 미처리 요청 경고가 찍혔다(LiveItineraryPage.integration 176건). 기본은 빈 목록(트리거 없음) — 필요한 테스트는 `server.use(...)`로 덮는다.
+  http.get(`${BASE}/trips/:tripId/triggers`, () =>
+    HttpResponse.json({ triggers: [] })
+  ),
 ];

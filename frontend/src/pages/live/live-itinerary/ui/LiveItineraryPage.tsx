@@ -1,9 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 
 import { assistantHref } from '@/features/open-assistant';
-import { Linking, View } from 'react-native';
+import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { resolveLiveState } from '../model/liveState';
@@ -49,6 +50,7 @@ import {
   useGetTripsTripIdVisitsDaysDay,
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
+import { openAppSettings } from '@/shared/external-link';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { useDepartureTab } from '@/widgets/bottom-nav-bar';
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -113,7 +115,7 @@ const ARRIVE_FAILED = '도착을 기록하지 못했어요. 다시 눌러 주세
 const MEMO_SAVED_TOAST = '메모를 저장했어요';
 const PHOTO_SAVED_TOAST = '사진을 기록했어요';
 
-/** 뒤로 갈 히스토리가 없을 때(딥링크·푸시 직행)의 폴백 — ItineraryPlanPage 관례(INV-4 침묵 금지). */
+/** 뒤로 갈 히스토리가 없을 때(딥링크·푸시 직행)의 폴백(INV-4 침묵 금지) · notFound 얼굴 [홈으로] 목적지. */
 const HOME_FALLBACK = '/(tabs)';
 
 export function LiveItineraryPage({
@@ -187,6 +189,8 @@ export function LiveItineraryPage({
   // (conflict)는 여기까지 안 오므로, 훅이 돌려주는 failed 는 진짜 실패다.
   const arriveBusy = useRef(false);
   // 단독 [방문 완료] 연타 잠금 — 같은 틱 두 번째 누름은 둘째 complete POST(409)를 만들어 서버는 완료인데 거짓 실패 안내가 뜬다. 무시는 안내가 아니다.
+  // 이 잠금은 [도착]도 막는다(BR-U10-55 개정) — 단독 낙관 완료도 '진행 중 없음'을 만들어 다른 카드 [도착]을 세우고, 그 완료가
+  // 실패하면 서버에 진행 중 2곳이 남는다(서버는 하루 open 1개를 막지 않는다).
   const completeBusy = useRef(false);
   const [actionNotice, setActionNotice] = useState<{
     poiId: string;
@@ -323,7 +327,10 @@ export function LiveItineraryPage({
     })),
     visits:
       liveDate === today ? automationVisitRefs(visits.data?.visits ?? []) : [],
-    consentOn: locationConsent.data?.legalConsent === true,
+    // 조회 전·실패면 null(모름) — false 로 넘기면 훅이 철회로 판정해 강등·기록 삭제를 한다(TRIP-1696).
+    consentOn: locationConsent.data
+      ? locationConsent.data.legalConsent === true
+      : null,
     onHub: true,
   });
   // [켜기]·[나중에] 처리 중 연타 잠금 + 이 화면에서 한 번 닫은 설명은 판정이 늦게 따라와도 다시 그리지 않는다.
@@ -345,8 +352,7 @@ export function LiveItineraryPage({
 
   // 허브 ‹ 와 같은 규칙 — 딥링크 직행이라 돌아갈 곳이 없으면 홈으로(INV-4 침묵 금지).
   const goBackOrHome = (): void => {
-    if (router.canGoBack()) router.back();
-    else router.replace(HOME_FALLBACK);
+    goBackOr(router, HOME_FALLBACK);
   };
 
   // TRIP-1278 — 여행 자체가 없으면(trip 404) 일정 판정보다 먼저 가른다. 없는 여행은 일정도 404 라 notFound 가
@@ -547,7 +553,7 @@ export function LiveItineraryPage({
   // TRIP-1561 수동 [도착] — 진행 중 슬롯이 있으면 그 완료 → 도착 사슬, 없으면 평범한 도착. 실패는 침묵하지 않는다:
   // 완료 실패는 앞 장소 카드, 도착 실패는 도착을 시도한 카드에 안내한다(`ignored` 는 요청 0 이라 안내 없음).
   const pressArrive = async (poiId: string) => {
-    if (arriveBusy.current) return;
+    if (arriveBusy.current || completeBusy.current) return;
     arriveBusy.current = true;
     setActionNotice(null);
     const input = {
@@ -778,7 +784,7 @@ export function LiveItineraryPage({
         doneMediaPoiIds={new Set(Object.keys(doneVisitIds))}
         photoNotice={photoNotice}
         onPressPhotoSettings={
-          photoNotice?.settings ? () => void Linking.openSettings() : undefined
+          photoNotice?.settings ? () => void openAppSettings() : undefined
         }
         memoNotice={
           !memoSheetOpen && memoFailedPoiId !== undefined
@@ -843,7 +849,7 @@ export function LiveItineraryPage({
                 onPressSettings: automationCopy.settings
                   ? () => {
                       void automation.dismissNotice();
-                      void Linking.openSettings();
+                      void openAppSettings();
                     }
                   : undefined,
               }

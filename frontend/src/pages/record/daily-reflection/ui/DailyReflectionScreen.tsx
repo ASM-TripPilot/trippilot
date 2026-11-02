@@ -283,7 +283,7 @@ export function DailyReflectionScreen({
           testID="reflection-daily-memo-input"
           value={memoShown}
           onChangeText={(next) => setMemoDraft(toSingleLine(next))}
-          onEndEditing={() => void flushMemo()}
+          onBlur={() => void flushMemo()}
           maxLength={SHORT_MEMO_MAX}
           placeholder="오늘 하루를 한 줄로 남겨보세요"
           className="flex-1 font-noto text-body text-ink"

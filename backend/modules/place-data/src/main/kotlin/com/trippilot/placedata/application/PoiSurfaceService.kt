@@ -28,8 +28,9 @@ class PoiSurfaceService(
                 category = p.category.name,
                 categoryCode = p.category.boundaryCode,
                 openingHours = p.openingHours,
-                imageUrl = p.imageUrl,
+                imageUrl = p.displayImageUrl,
                 tags = PublicTags.of(p.tags),   // 인기·평점높음 은 내보내지 않는다 — PublicTags
+                regionCode = p.regionCode,
             )
         }
     }

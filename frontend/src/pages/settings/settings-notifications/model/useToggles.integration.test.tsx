@@ -42,15 +42,8 @@ import { useToggles, type ToggleOutcome } from './useToggles';
  */
 
 // authedClient(생성 클라이언트의 mutator 인증 계층)가 @/shared/storage 를 정적으로 문다.
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'a',
-    refreshToken: 'r',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 /** 토글 하나. 케이스가 push/inApp 만 바꾼다. */
 const tg = (

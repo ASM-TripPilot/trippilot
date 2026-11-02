@@ -55,7 +55,7 @@ const RESTRICTED_IMPORTS = 'no-restricted-imports';
 const RESTRICTED_SYNTAX = 'no-restricted-syntax';
 const NO_CONSOLE = 'no-console';
 
-const PROD_PROBE = 'src/features/home/__release_probe__.ts';
+const PROD_PROBE = 'src/features/settings/__release_probe__.ts';
 const PHOTO_PROBE = 'src/shared/photo/__release_probe__.ts';
 const REFLECTION_UI_PROBE =
   'src/features/share-trip-card/ui/__release_probe__.ts';
@@ -98,7 +98,7 @@ describe('msw·목은 앱 코드에 들어오지 않는다 (noMswInStaticGraph �
   it.each([
     [
       '통합 테스트 파일',
-      'src/features/home/__release_probe__.integration.test.ts',
+      'src/features/settings/__release_probe__.integration.test.ts',
     ],
     ['src/mocks 안', 'src/mocks/__release_probe__.ts'],
   ])(
@@ -531,5 +531,278 @@ describe('pages·app 은 아무것도 안 하는 핸들러를 넘기지 않는�
     const ruleIds = await lint(pressable(attr), PAGE_PROBE);
 
     expect(ruleIds).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP-1627 · worklet('worklet' 지시자 함수)의 기본 매개변수 금지 (TRIP-1522 재발 방지)
+//
+// 같은 `no-restricted-syntax` 룰에는 삭제 다이얼로그·빈 핸들러 셀렉터도 걸려 있어 룰 ID 만으로는 어느
+// 셀렉터가 울렸는지 모른다 — 이번 규칙 고유 메시지 태그(TRIP-1522)로 가른다(TRIP-1157 이름표와 같은 방식).
+// 파싱 실패는 "이번 규칙 0건" 으로 위장하므로 fatal 을 따로 돌려받아 먼저 본다.
+
+const WORKLET_TAG = 'TRIP-1522';
+const WORKLET_TSX_PROBE = 'src/features/auth/ui/__release_probe__.tsx';
+const APP_TS_PROBE = 'app/__release_probe__.ts';
+const TEST_FILE_PROBE = 'src/features/settings/__release_probe__.test.ts';
+
+async function lintWorklet(
+  code: string,
+  filePath: string
+): Promise<{ lines: number[]; fatal: string[] }> {
+  const [result] = await eslint.lintText(code, {
+    filePath: path.resolve(filePath),
+  });
+  return {
+    lines: result.messages
+      .filter(
+        (m) =>
+          m.severity === 2 &&
+          m.ruleId === RESTRICTED_SYNTAX &&
+          m.message.includes(WORKLET_TAG)
+      )
+      .map((m) => m.line),
+    fatal: result.messages.filter((m) => m.fatal).map((m) => m.message),
+  };
+}
+
+const WORKLET_DECL_WITH_CONST_DEFAULT =
+  "const K = 1;\nexport function f(a: number, w = K): number {\n  'worklet';\n  return a + w;\n}\n";
+
+describe('worklet 함수의 기본 매개변수는 error (TRIP-1522 — UI 스레드에서만 죽는다)', () => {
+  it.each([
+    [
+      '선언문 + 모듈 상수 기본값(TRIP-1522 원형)',
+      WORKLET_DECL_WITH_CONST_DEFAULT,
+    ],
+    [
+      '리터럴 기본값',
+      "export function f(a: number, w = 3): number {\n  'worklet';\n  return a + w;\n}\n",
+    ],
+    [
+      '화살표 함수(블록 본문)',
+      "export const f = (a: number, w = 3): number => {\n  'worklet';\n  return a + w;\n};\n",
+    ],
+    [
+      '함수 표현식',
+      "export const f = function (a: number, w = 3): number {\n  'worklet';\n  return a + w;\n};\n",
+    ],
+    [
+      '객체 메서드',
+      "export const o = {\n  f(a: number, w = 3): number {\n    'worklet';\n    return a + w;\n  },\n};\n",
+    ],
+    [
+      '객체 구조분해 매개변수',
+      "export function f({ a, w = 3 }: { a: number; w?: number }): number {\n  'worklet';\n  return a + w;\n}\n",
+    ],
+    [
+      '배열 구조분해 매개변수',
+      "export function f([a, w = 3]: number[]): number {\n  'worklet';\n  return a + w;\n}\n",
+    ],
+    [
+      '중첩 구조분해(객체 안 객체)',
+      "export function f({ p: { w = 3 } }: { p: { w?: number } }): number {\n  'worklet';\n  return w;\n}\n",
+    ],
+    [
+      '중첩 구조분해(객체 안 배열)',
+      "export function f({ p: [w = 3] }: { p: number[] }): number {\n  'worklet';\n  return w;\n}\n",
+    ],
+  ])('%s 는 error', async (_label, code) => {
+    const { lines, fatal } = await lintWorklet(code, PROD_PROBE);
+
+    expect(fatal).toEqual([]);
+    expect(lines.length).toBeGreaterThan(0);
+  });
+
+  // ★ 덮어쓰기 함정 — no-restricted-syntax 블록 3개(.ts / .tsx / pages·app .tsx)에 새 규칙을 모두 펼쳐야 한다.
+  // 한 블록에서 빠지면 그 파일군에서만 조용히 죽는다.
+  it.each([
+    ['src .ts (블록 1)', PROD_PROBE],
+    ['app .ts (블록 1)', APP_TS_PROBE],
+    ['src features .tsx, pages 밖 (블록 2)', WORKLET_TSX_PROBE],
+    ['src pages .tsx (블록 3)', PAGE_PROBE],
+    ['app 라우트 .tsx (블록 3)', ROUTE_PROBE],
+  ])('%s 에서도 error', async (_label, filePath) => {
+    const { lines, fatal } = await lintWorklet(
+      WORKLET_DECL_WITH_CONST_DEFAULT,
+      filePath
+    );
+
+    expect(fatal).toEqual([]);
+    expect(lines.length).toBeGreaterThan(0);
+  });
+});
+
+const WORKLET_NEGATIVES: [string, string][] = [
+  [
+    '정상 처방(w?: number + 본문 ?? 값)',
+    "export function f(a: number, w?: number): number {\n  'worklet';\n  return a + (w ?? 3);\n}\n",
+  ],
+  [
+    "'worklet' 없는 일반 함수·props 구조분해 기본값",
+    'export function f(a: number, w = 3): number {\n  return a + w;\n}\nexport const g = ({ a = 1 }: { a?: number }) => a;\n',
+  ],
+  [
+    'worklet 본문 안 구조분해 대입',
+    "export function f(a: { x?: number }): number {\n  'worklet';\n  const { x = 1 } = a;\n  return x;\n}\n",
+  ],
+  [
+    'worklet 본문 안 중첩 일반 함수의 기본값',
+    "export function f(a: number): number {\n  'worklet';\n  const h = (v = 1) => v;\n  const i = ({ v = 1 }: { v?: number }) => v;\n  return h(a) + i({});\n}\n",
+  ],
+  [
+    "첫 문장이 아닌 'worklet'",
+    "export function f(a: number, w = 3): number {\n  const z = 1;\n  'worklet';\n  return a + w + z;\n}\n",
+  ],
+  [
+    '화살표 식 본문(블록 본문 없음)',
+    'export const f = (a: number, w = 3) => a + w;\n',
+  ],
+  // 5-b W1 보강 — 셀렉터가 "구조분해 매개변수 전부" 로 넓어지면 제스처 콜백 모양이 오탐으로 걸린다.
+  [
+    '기본값 없는 객체 구조분해 worklet(제스처 콜백 모양)',
+    "declare function onUpdate(cb: (e: { translationX: number }) => void): void;\nonUpdate(({ translationX }) => {\n  'worklet';\n  const x = translationX;\n  return x;\n});\n",
+  ],
+  [
+    '기본값 없는 배열·중첩 구조분해 worklet',
+    "export function f([a, b]: number[], { p: { w } }: { p: { w: number } }): number {\n  'worklet';\n  return a + b + w;\n}\n",
+  ],
+  // 'use strict' 는 기본 매개변수와 함께 쓰면 SyntaxError 라 쓸 수 없다 — 파싱되는 다른 문자열 지시자를 쓴다.
+  [
+    "'worklet' 이 아닌 다른 지시자 + 기본값 함수",
+    "export function f(a: number, w = 3): number {\n  'use no memo';\n  return a + w;\n}\n",
+  ],
+  [
+    "'worklet' 이 아닌 다른 지시자 + 구조분해 기본값",
+    "export const f = ({ a, w = 3 }: { a: number; w?: number }) => {\n  'use no memo';\n  return a + w;\n};\n",
+  ],
+];
+
+describe('worklet 이 아니거나 매개변수가 아닌 기본값은 이번 규칙에 안 걸린다', () => {
+  it.each(WORKLET_NEGATIVES)('%s 는 error 0', async (_label, code) => {
+    const { lines, fatal } = await lintWorklet(code, PROD_PROBE);
+
+    expect(fatal).toEqual([]);
+    expect(lines).toEqual([]);
+  });
+
+  // TEST_IGNORES·app/_dev 는 운영 번들 밖이라 의도적으로 제외한다(결정 D3).
+  it.each([
+    ['*.test.ts', TEST_FILE_PROBE],
+    ['app/_dev 프리뷰', DEV_PREVIEW_PROBE],
+  ])('%s 는 worklet 기본값이 있어도 error 0', async (_label, filePath) => {
+    const { lines, fatal } = await lintWorklet(
+      WORKLET_DECL_WITH_CONST_DEFAULT,
+      filePath
+    );
+
+    expect(fatal).toEqual([]);
+    expect(lines).toEqual([]);
+  });
+});
+
+// 공허 통과 방지 앵커 — 음성 코드 전부와 양성 1줄을 한 파일에 이어붙여, 음성은 안 울리고 양성만 정확히
+// 그 줄에서 울리는지 본다(규칙이 아예 없으면 [] ≠ [줄] 로 red). 개수가 아니라 줄 번호로 비교한다.
+describe('음성 코드 묶음과 같은 파일에서 양성은 자기 줄에서만 울린다', () => {
+  it.each([
+    ['src .ts', PROD_PROBE],
+    ['src .tsx', WORKLET_TSX_PROBE],
+  ])('%s 에서 앵커 한 줄만 error', async (_label, filePath) => {
+    const negatives = WORKLET_NEGATIVES.map(([, code]) => code).join('');
+    const anchor =
+      "export function anchor(a: number, w = 3): number {\n  'worklet';\n  return a + w;\n}\n";
+    const anchorLine = negatives.split('\n').length;
+
+    const { lines, fatal } = await lintWorklet(negatives + anchor, filePath);
+
+    expect(fatal).toEqual([]);
+    expect(Array.from(new Set(lines))).toEqual([anchorLine]);
+  });
+});
+
+describe('누름 이동 연타 관통 (TRIP-1013) — 인라인 화살표의 router 이동만 error', () => {
+  // 얼린 기존 위반은 lintText 에 적용되지 않는다 — 규칙 발동과 오탐 제외(서버 응답 뒤 onSuccess)만 본다.
+  const page = (attr: string) =>
+    [
+      "import { useRouter } from 'expo-router';",
+      "import { Pressable } from 'react-native';",
+      'declare function save(o: { onSuccess: () => void }): void;',
+      'export function Probe() {',
+      '  const router = useRouter();',
+      `  return <Pressable onPress={${attr}} />;`,
+      '}',
+      '',
+    ].join('\n');
+  it('onPress={() => router.push(…)} 는 error, mutate onSuccess 안 이동은 error 0', async () => {
+    expect(await lint(page("() => router.push('/')"), PAGE_PROBE)).toContain(
+      RESTRICTED_SYNTAX
+    );
+    expect(
+      await lint(
+        page("() => save({ onSuccess: () => router.replace('/') })"),
+        PAGE_PROBE
+      )
+    ).toEqual([]);
+  });
+});
+
+describe('테스트 재팽창 방지 (2026-11-01 jest 축소 — README 판정 3~6)', () => {
+  // 기존 위반은 eslint-suppressions.json 에 얼려 있다(CLI 전용) — lintText 는 얼림을 적용하지 않아 규칙 발동만 본다.
+  const T = 'src/__tests__/zzRegrowthProbe.test.tsx';
+  it.each([
+    [
+      'UNSAFE 쿼리',
+      'screen.UNSAFE_getByType(View);',
+      'no-restricted-properties',
+    ],
+    [
+      'className 읽기',
+      'expect(el.props.className).toContain("x");',
+      'no-restricted-properties',
+    ],
+    [
+      'style 읽기',
+      'expect(el.props.style).toEqual({});',
+      'no-restricted-properties',
+    ],
+    [
+      'toHaveStyle',
+      'expect(el).toHaveStyle({ opacity: 1 });',
+      'no-restricted-syntax',
+    ],
+    [
+      '통과형 목 prop',
+      'expect(sheet.props.snapPoints).toEqual([]);',
+      'no-restricted-syntax',
+    ],
+    [
+      '손 조립 QueryClient',
+      'const qc = new QueryClient();',
+      'no-restricted-syntax',
+    ],
+    ['소스 스캔 import', "import fs from 'fs';", 'no-restricted-imports'],
+  ])('%s → error', async (_label, code, rule) => {
+    expect(await lint(code, T)).toContain(rule);
+  });
+  it('test-support 는 QueryClient 를 만들어도 error 0 (정의처)', async () => {
+    expect(
+      await lint('const qc = new QueryClient();', 'src/test-support/zzProbe.ts')
+    ).toEqual([]);
+  });
+  it('남은 출시·보안 스캔 파일은 fs 를 써도 error 0 (SCAN_ALLOW)', async () => {
+    expect(
+      await lint(
+        "import fs from 'fs';",
+        'src/__tests__/socialSdkSecrets.test.ts'
+      )
+    ).not.toContain('no-restricted-imports');
+  });
+  it('앱 코드에는 이 금지를 걸지 않는다 (props.style 을 쓰는 프로덕션 코드)', async () => {
+    expect(
+      await lint(
+        'export const s = (p: { style: unknown }) => p.style;',
+        'src/shared/ui/zzProbe.ts'
+      )
+    ).toEqual([]);
   });
 });

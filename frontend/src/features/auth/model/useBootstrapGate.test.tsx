@@ -20,6 +20,7 @@ import {
 } from './gateDestination';
 import { prefetchTrips } from './prefetchTrips';
 import { BOOTSTRAP_TIMEOUT_MS, useBootstrapGate } from './useBootstrapGate';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 // TRIP-1157: 훅은 tokenManager 를 @/shared/api(배럴)로 문다 — 팩토리가 실물 tokenManager 를 펼쳐 넣어야 토큰 함수가
 // 살아 있다(빠뜨리면 getAccessToken is not a function). 펼친 것은 테스트가 딥으로 import 하는 그 모듈 인스턴스다.
@@ -67,9 +68,7 @@ function bootstrap(
 }
 
 function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const client = newTestQueryClient();
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>

@@ -59,7 +59,7 @@ from tests.fakes.fake_llm import FakeLlm
 from tests.fakes.in_memory_poi import InMemoryPoi
 from tests.fakes.in_memory_trace import InMemoryTrace
 from tests.agents.schedule.test_schedule_agent import _scored, _solution, _task
-from tests.orchestrator.test_schedule_coordinator import (
+from tests.orchestrator.schedule.test_schedule_coordinator import (
     _ANCHOR,
     _C1CFG,
     _KST,

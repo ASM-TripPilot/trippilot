@@ -534,6 +534,7 @@ DialogueContext (frozen):
   pending: PendingFrame | None
   turn_index: int                  # ≥ 0, 백엔드가 증가시킨다
   clarify_count: int               # 이 보류 프레임에 대해 되물은 횟수 (상한 1 — BR-DLG-23)
+  shown: tuple[str, ...]           # [2026-10-30 추가] 이어 묻기 사슬에서 카드로 보인 poi_id, 최근 30개 (BR-AO-27)
 ```
 
 - `to_dict`/`from_dict` 왕복 강제(U5-P10) — 봉투 타입과 같은 규약.
@@ -543,6 +544,8 @@ DialogueContext (frozen):
   **그 결정 전에 AI 서비스가 발화를 들고 있으면 안 된다.**
 - `clarify_count` 를 컨텍스트에 두는 이유: AI 서비스가 무상태라 "이미 물었는지"를 스스로 알 수 없다.
   상한을 지키려면 그 수를 **경계로 되돌려 받아야** 한다.
+- `shown`(2026-10-30) 도 같은 까닭이다 — "더 알려줘"가 앞에서 카드로 보인 곳을 빼려면 그 id 를 되돌려 받아야 한다. 발화가
+  아니라 우리 장소 id 라 위 원칙(발화·턴 목록을 싣지 않는다) 밖이다. 비면 직렬형에 칸이 없다(종전 저장분과 같은 모양).
 
 ### 6.1 `NEED_MORE_INFO` 와 섞지 않는다
 

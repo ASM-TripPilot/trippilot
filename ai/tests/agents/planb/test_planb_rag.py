@@ -1346,3 +1346,13 @@ def test_retry_is_skipped_when_its_budget_is_below_the_call_floor() -> None:
     roomy = agent.run(_request(pool, deadline_ms=20_000))
     assert calls[-1]["retry_timeout_sec"] == pytest.approx(7.0)           # 종전 그대로
     assert not any("retry_skipped" in n for n in roomy.notes)
+
+
+def test_shortlist_keeps_rule_rank_order_so_kb5_fallback_goes_to_the_top_ranked() -> None:
+    """숏리스트는 규칙 랭킹 순서다(#1707 리뷰) — 풀 순서(인기·영업시간)면 KB-5 대체 문서가 상한까지 먼 곳부터 붙었다. 프롬프트는
+    워커가 poi_id 로 다시 정렬해 이 순서와 무관하다."""
+    far, mid, near = (_poi_at(n, PoiCategory.CULTURE, off) for n, off in (("far", 0.05), ("mid", 0.02), ("near", 0.005)))
+    from trippilot.agents.planb import rag as rag_mod
+
+    shortlist = rag_mod._shortlist(_request(_pool_at(far, mid, near), reason="none"), ())
+    assert [str(p.poi_id) for p in shortlist.pois] == ["near", "mid", "far"]

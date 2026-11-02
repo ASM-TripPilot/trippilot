@@ -186,7 +186,7 @@ TurnSnapshot (frozen):
 
 TurnInput (frozen):
   utterance: str                   # 1..500 (경계가 이미 검증)
-  context: DialogueContext         # 기존 타입 — pending·turn_index·clarify_count
+  context: DialogueContext         # 기존 타입 — pending·turn_index·clarify_count (+ shown — 2026-10-30, BR-AO-27)
   snapshot: TurnSnapshot
   session_id: str | None           # 메모리 키 — 없으면 메모리 단계 전체를 건너뛴다
   account_ref: str | None          # 불투명 문자열. 로그·프롬프트 금지 — 저장 칸과 "지난 여행 기억" 조회 키로만

@@ -6,7 +6,7 @@ import {
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import { useGetPlaces } from '@/shared/api/index.hooks';
-import { isNotFound } from '@/shared/api';
+import { isNotFound, isOfflineWaiting } from '@/shared/api';
 import { guardPress } from '@/shared/lib/pressGuard';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { formatNightsLabel } from '@/entities/trip';
@@ -163,6 +163,9 @@ export function HomePage() {
   // 실패면 발견 얼굴로 폴백하므로 3지역 조회를 켠다(끄면 스팟이 영원히 스켈레톤).
   // 훅 규칙상 둘 다 늘 부르고 켜짐으로만 고른다 — 꺼진 쪽은 isPending 이 계속 true 라 그 상태를 읽지 않는다.
   const tripsSettled = !trips.isPending;
+  // TRIP-1638 · 오프라인 콜드스타트(요청이 보류된 채 isPending) — tripsSettled 는 그대로 false 라 레인 쿼리는 꺼진 채 요청 0이다.
+  // 대신 레인 status 를 'ready'(카드 0장)로 덮어 섹션이 통째로 숨게 한다(스켈레톤도, 눌러도 무동작인 레인 오류 카드도 안 남긴다).
+  const tripsOffline = isOfflineWaiting(trips);
   const inTrip = Boolean(spotsRegion);
   const regionPlaces = useGetPlaces(
     { ...(spotsRegion ? { region: spotsRegion } : {}), limit: 200 },
@@ -198,7 +201,13 @@ export function HomePage() {
   });
   const openPlace = (poiId: string) => router.push(`/explore/places/${poiId}`);
   const spotsLane: HomeSpotsLane = {
-    status: places.isPending ? 'loading' : places.isError ? 'error' : 'ready',
+    status: tripsOffline
+      ? 'ready'
+      : places.isPending
+        ? 'loading'
+        : places.isError
+          ? 'error'
+          : 'ready',
     cards: trending.map((place) => ({
       poiId: place.poiId,
       title: place.nameKo,
@@ -213,7 +222,13 @@ export function HomePage() {
   };
 
   const collectionsLane: HomeCollectionsLane = {
-    status: places.isPending ? 'loading' : places.isError ? 'error' : 'ready',
+    status: tripsOffline
+      ? 'ready'
+      : places.isPending
+        ? 'loading'
+        : places.isError
+          ? 'error'
+          : 'ready',
     cards:
       collectionPlaces.length === COLLECTION_COUNT
         ? collectionPlaces.map((place) => ({
@@ -270,6 +285,11 @@ export function HomePage() {
     spotsLane,
     collectionsLane,
   };
+
+  // 오프라인 콜드스타트 — 로딩 분기보다 앞(그 뒤면 보류된 isPending 이 스켈레톤을 고른다). discovery 얼굴 + 안내(버튼 없음).
+  if (tripsOffline) {
+    return <HomeScreen {...HOME_DEFAULT_PROPS} tripsOffline {...nav} />;
+  }
 
   // 조회 진행 중 — 섹션만 로딩 스켈레톤, phase 미전달. no-trip(discovery)으로 확정하지 않는다(INV-4).
   if (trips.isPending) {

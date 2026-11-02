@@ -24,6 +24,7 @@
 - `app/(onboarding)/pref1.tsx`  →  (export 없음)
 - `app/(onboarding)/pref2.tsx`  →  (export 없음)
 - `app/(onboarding)/push.tsx`  →  (export 없음)
+- `app/(onboarding)/push.web.tsx`  →  (export 없음)
 - `app/(onboarding)/terms.tsx`  →  (export 없음)
 
 ## app/(tabs)/
@@ -38,6 +39,7 @@
 - `app/+not-found.tsx`  →  (export 없음)
 
 ## app/_dev/
+- `app/_dev/fault.tsx`  →  (export 없음)
 - `app/_dev/preview.tsx`  →  MUST_VISIT_THUMBNAILS · PREVIEW_STATES
 
 ## app/
@@ -61,16 +63,21 @@
 
 ## app/
 - `app/force-update.tsx`  →  (export 없음)
-- `app/magazine.tsx`  →  (export 없음)
 
 ## app/my/
 - `app/my/stays.tsx`  →  (export 없음)
 
 ## app/
 - `app/notifications.tsx`  →  (export 없음)
+
+## app/oauth/
+- `app/oauth/[provider].tsx`  →  (export 없음)
+
+## app/
 - `app/onboarding-tour.tsx`  →  (export 없음)
 - `app/permission-location.tsx`  →  (export 없음)
 - `app/permission-push.tsx`  →  (export 없음)
+- `app/permission-push.web.tsx`  →  (export 없음)
 - `app/reconsent.tsx`  →  (export 없음)
 
 ## app/records/
@@ -127,7 +134,6 @@
 - `app/trips/[tripId]/live/place/[poiId].tsx`  →  (export 없음)
 
 ## app/trips/[tripId]/planb/
-- `app/trips/[tripId]/planb/diff.tsx`  →  (export 없음)
 - `app/trips/[tripId]/planb/draft.tsx`  →  (export 없음)
 - `app/trips/[tripId]/planb/index.tsx`  →  (export 없음)
 - `app/trips/[tripId]/planb/manual.tsx`  →  (export 없음)
@@ -151,28 +157,23 @@
 
 ## src/__tests__/
 - `src/__tests__/affiliateNoticeOneTruth.integration.test.tsx`  →  (export 없음)
+- `src/__tests__/backFallback.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/copickHrefRoundTrip.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/deletionScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/destinationRedirectRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewReleaseGate.test.tsx`  →  (export 없음)
-- `src/__tests__/draftRouteDayPassthrough.test.tsx`  →  (export 없음)
 - `src/__tests__/eslintReleaseRules.test.ts`  →  (export 없음)
 - `src/__tests__/generatingEntryStack.integration.test.tsx`  →  (export 없음)
-- `src/__tests__/generatingRouteModePassthrough.test.tsx`  →  (export 없음)
 - `src/__tests__/itineraryEditAddPlaceFlow.integration.test.tsx`  →  (export 없음)
-- `src/__tests__/itineraryEditRoute.test.tsx`  →  (export 없음)
-- `src/__tests__/liveHubRoute.test.tsx`  →  (export 없음)
-- `src/__tests__/locationAutomationBuildConfig.test.ts`  →  (export 없음)
 - `src/__tests__/locationConsentPutBodyOwnership.test.ts`  →  (export 없음)
-- `src/__tests__/manualRouteFreshPassthrough.test.tsx`  →  (export 없음)
 - `src/__tests__/nicknameMyPageSync.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/notFoundRoute.integration.test.tsx`  →  (export 없음)
+- `src/__tests__/oauthRedirectRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingEntryGuard.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/openapiContract.test.ts`  →  (export 없음)
 - `src/__tests__/photoUploadGuard.test.ts`  →  (export 없음)
 - `src/__tests__/planbApplyStack.integration.test.tsx`  →  (export 없음)
-- `src/__tests__/planbManualRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/planbRequestRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/planbSessionRoutes.test.tsx`  →  (export 없음)
 - `src/__tests__/pressGuardMustVisit.integration.test.tsx`  →  (export 없음)
@@ -182,14 +183,16 @@
 - `src/__tests__/recordAddVisitFlow.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/recordBarStack.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/releaseBuildConfig.test.ts`  →  (export 없음)
+- `src/__tests__/routeParamMapping.test.tsx`  →  (export 없음)
 - `src/__tests__/shellTabDismiss.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/socialSdkSecrets.test.ts`  →  (export 없음)
 - `src/__tests__/tabsItineraryRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tabsShell.test.tsx`  →  (export 없음)
-- `src/__tests__/tripBasesRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/tripNightsPeriodOrder.test.tsx`  →  (export 없음)
 - `src/__tests__/tripWizardEntryReset.test.tsx`  →  (export 없음)
 - `src/__tests__/tripWizardLeaveSwipe.integration.test.tsx`  →  (export 없음)
+- `src/__tests__/webExternalOpenLadder.test.ts`  →  (export 없음)
+- `src/__tests__/webOnlyRoutes.test.tsx`  →  (export 없음)
 
 ## src/app/entrypoint/
 - `src/app/entrypoint/AppProviders.tsx`  →  AppProviders
@@ -444,18 +447,12 @@
 ## src/features/explore/ui/
 - `src/features/explore/ui/ExploreGlyphs.tsx`  →  CloseGlyph · PlusGlyph · BackChevronGlyph · ShareGlyph · SearchGlyph · MapPinGlyph · FilterSlidersGlyph · WarningTriangleGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · InfoGlyph · SuitcaseGlyph
 
-## src/features/home/
-- `src/features/home/index.ts`  →  BackChevronGlyph · BellGlyph · CloseGlyph · HeartFilledGlyph · HeartOutlineGlyph · LocationPinGlyph · MapPinGlyph · PlusGlyph · SearchGlyph · SparkleGlyph · SuitcaseGlyph
-
-## src/features/home/ui/
-- `src/features/home/ui/HomeGlyphs.tsx`  →  BellGlyph · SearchGlyph · BackChevronGlyph · SparkleGlyph · LocationPinGlyph · HeartOutlineGlyph · HeartFilledGlyph · PlusGlyph · MapPinGlyph · SuitcaseGlyph · CloseGlyph
-
 ## src/features/itinerary/config/
 - `src/features/itinerary/config/placeCategoryChips.ts`  →  PlaceCategoryChip · PLACE_CATEGORY_CHIPS
 
 ## src/features/itinerary/
 - `src/features/itinerary/index.ts`  →  isGenerationRunning · useGenerationBusy
-- `src/features/itinerary/index.view.ts`  →  countPickedCoPickSlots · firstCoPickSlotKey · nextCoPickSlotKey · ALL_IN_ITINERARY_HINT · ALL_IN_ITINERARY_TITLE · resolveSlotEmptyFace · DRAFT_POLL_INTERVAL_MS · buildDraftDayTabs · buildDraftPins · buildGenerationGauge · foldGenerationGauge · formatCoPickDayHeader · formatDraftDayHeader · pollIntervalMs · resolveDraftView · resolveFallbackNotice · resolveShortfallNotice · shouldKeepPollingDraft · MUST_VISIT_NAME_PLACEHOLDER · buildMustVisitPins · fixedTimeLabel · joinMustVisits · resolveMustVisitListView · buildPlanDayTabs · isConfirmLocked · itineraryDestinationHref · resolveItineraryDestination · resolvePlanState · resolvePlanMapCenter · placeAddSubtitle · resolveUnplacedNames · AlertCircleGlyph · BackChevronGlyph · CalendarGlyph · CheckCircleGlyph · CheckGlyph · ChevronDownGlyph · ChevronRightGlyph · ClockGlyph · CloseGlyph · CoPickGlyph · DashGlyph · DiamondGlyph · FullAiGlyph · InfoCircleGlyph · LinkChevronGlyph · LocationOffGlyph · LockGlyph · ManualGlyph · PencilGlyph · PlusGlyph · SortCheckGlyph · WarningTriangleGlyph · PlaceAddHeader · PlaceAddRow · UnplacedMustVisitNotice
+- `src/features/itinerary/index.view.ts`  →  countPickedCoPickSlots · firstCoPickSlotKey · nextCoPickSlotKey · ALL_IN_ITINERARY_HINT · ALL_IN_ITINERARY_TITLE · resolveSlotEmptyFace · DRAFT_POLL_INTERVAL_MS · buildDraftDayTabs · buildDraftPins · buildGenerationGauge · foldGenerationGauge · formatCoPickDayHeader · formatDraftDayHeader · pollIntervalMs · resolveDraftView · resolveFallbackNotice · resolveShortfallNotice · shouldKeepPollingDraft · MUST_VISIT_NAME_PLACEHOLDER · buildMustVisitPins · fixedTimeLabel · joinMustVisits · resolveMustVisitListView · buildPlanDayTabs · isConfirmLocked · itineraryDestinationHref · resolveItineraryDestination · resolvePlanState · resolvePlanMapCenter · isFixedStay · sheetMeta · sheetRowKeys · placeAddSubtitle · resolveUnplacedNames · AlertCircleGlyph · BackChevronGlyph · CalendarGlyph · CheckCircleGlyph · CheckGlyph · ChevronDownGlyph · ChevronRightGlyph · ClockGlyph · CloseGlyph · CoPickGlyph · DashGlyph · DiamondGlyph · FullAiGlyph · InfoCircleGlyph · LinkChevronGlyph · LocationOffGlyph · LockGlyph · ManualGlyph · PencilGlyph · PlusGlyph · SortCheckGlyph · WarningTriangleGlyph · PlaceAddHeader · PlaceAddRow · UnplacedMustVisitNotice
 
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey · countPickedCoPickSlots
@@ -464,6 +461,7 @@
 - `src/features/itinerary/model/placeAddSubtitle.ts`  →  PlaceAddSubtitleInput · PlaceAddSubtitle · placeAddSubtitle
 - `src/features/itinerary/model/planMapCenter.ts`  →  resolvePlanMapCenter
 - `src/features/itinerary/model/planState.ts`  →  PlanState · PlanDayTab · resolvePlanState · isConfirmLocked · ItineraryDestination · resolveItineraryDestination · ItineraryDestinationHref · itineraryDestinationHref · buildPlanDayTabs
+- `src/features/itinerary/model/sheetMeta.ts`  →  SheetCountRule · isFixedStay · sheetMeta · sheetRowKeys
 - `src/features/itinerary/model/slotEmptyFace.ts`  →  SlotEmptyFace · ALL_IN_ITINERARY_TITLE · ALL_IN_ITINERARY_HINT · resolveSlotEmptyFace
 - `src/features/itinerary/model/unplacedMustVisits.ts`  →  UnplacedMustVisitRow · resolveUnplacedNames
 - `src/features/itinerary/model/useGenerationBusy.ts`  →  isGenerationRunning · GenerationBusy · useGenerationBusy
@@ -582,6 +580,7 @@
 
 ## src/features/share-trip-card/model/
 - `src/features/share-trip-card/model/shareCapture.ts`  →  SaveShareCardResult · ShareShareCardResult · isShareCaptureArmed · saveShareCardImage · shareShareCardImage
+- `src/features/share-trip-card/model/shareCapture.web.ts`  →  isShareCaptureArmed · saveShareCardImage · shareShareCardImage
 - `src/features/share-trip-card/model/shareCaptureNative.ts`  →  captureRef · requestPermissionsAsync · saveToLibraryAsync · shareAsync
 
 ## src/features/stay-outbound/
@@ -673,8 +672,11 @@
 - `src/pages/auth/login/lib/appleAuthorize.tsx`  →  appleAuthorize · isAppleSignInAvailable · AppleSignInButton
 - `src/pages/auth/login/lib/isNaverLoginAvailable.ts`  →  isNaverLoginAvailable
 - `src/pages/auth/login/lib/kakaoAuthorize.ts`  →  kakaoAuthorize
+- `src/pages/auth/login/lib/kakaoAuthorize.web.ts`  →  kakaoAuthorize
 - `src/pages/auth/login/lib/makeAuthorize.ts`  →  makeAuthorize
 - `src/pages/auth/login/lib/naverAuthorize.ts`  →  naverAuthorize
+- `src/pages/auth/login/lib/naverAuthorize.web.ts`  →  naverAuthorize
+- `src/pages/auth/login/lib/oauthState.ts`  →  generateOAuthState · assertOAuthStateMatches
 - `src/pages/auth/login/lib/realAuthorize.ts`  →  realAuthorize
 
 ## src/pages/auth/login/model/__fixtures__/
@@ -687,6 +689,16 @@
 ## src/pages/auth/login/ui/
 - `src/pages/auth/login/ui/LoginPage.tsx`  →  LoginPage
 - `src/pages/auth/login/ui/SocialLoginScreen.tsx`  →  SocialLoginScreenProps · SocialLoginScreen
+
+## src/pages/auth/oauth-redirect/
+- `src/pages/auth/oauth-redirect/index.ts`  →  OAuthRedirectPage
+
+## src/pages/auth/oauth-redirect/lib/
+- `src/pages/auth/oauth-redirect/lib/completeAuthSession.ts`  →  completeAuthSession
+- `src/pages/auth/oauth-redirect/lib/completeAuthSession.web.ts`  →  completeAuthSession
+
+## src/pages/auth/oauth-redirect/ui/
+- `src/pages/auth/oauth-redirect/ui/OAuthRedirectPage.tsx`  →  OAuthRedirectPage
 
 ## src/pages/auth/reconsent/
 - `src/pages/auth/reconsent/index.ts`  →  ReconsentPage
@@ -770,6 +782,7 @@
 - `src/pages/home/model/homeTypes.ts`  →  HomeCollectionCard · HomeCollectionsLane · HomeSpotCard · HomeSpotsLane · HomeMagazineHero · HomeSections · TripHeroData · PastTrip · HomeSoftNote · HomePhase · HomeScreenProps
 
 ## src/pages/home/ui/
+- `src/pages/home/ui/HomeGlyphs.tsx`  →  BellGlyph · SearchGlyph · SparkleGlyph · LocationPinGlyph · HeartOutlineGlyph · HeartFilledGlyph · PlusGlyph · MapPinGlyph · SuitcaseGlyph · CloseGlyph
 - `src/pages/home/ui/HomePage.tsx`  →  HomePage
 - `src/pages/home/ui/HomeScreen.tsx`  →  HomeScreen
 
@@ -807,7 +820,6 @@
 - `src/pages/itinerary/itinerary-draft/ui/DraftPage.tsx`  →  DraftPage
 - `src/pages/itinerary/itinerary-draft/ui/DraftScreen.tsx`  →  DraftScreenProps · DraftScreen
 - `src/pages/itinerary/itinerary-draft/ui/GenerationFallbackScreen.tsx`  →  GenerationFallbackScreenProps · GenerationFallbackScreen
-- `src/pages/itinerary/itinerary-draft/ui/RevealItem.tsx`  →  RevealItem
 - `src/pages/itinerary/itinerary-draft/ui/SlotCandidatePanelContainer.tsx`  →  SlotCandidatePanelContainerProps · SlotCandidatePanelContainer
 - `src/pages/itinerary/itinerary-draft/ui/SlotCandidateSheet.tsx`  →  SlotCandidateSheetRow · SlotCandidateSheetProps · SlotCandidateSheet
 
@@ -938,15 +950,6 @@
 - `src/pages/live/live-place/ui/LivePlacePage.tsx`  →  LivePlacePageProps · LivePlacePage
 - `src/pages/live/live-place/ui/PlaceDetailScreen.tsx`  →  PlaceDetailScreenProps · PlaceDetailScreen
 
-## src/pages/live/planb-diff/
-- `src/pages/live/planb-diff/index.ts`  →  PlanbDiffPage
-
-## src/pages/live/planb-diff/model/
-- `src/pages/live/planb-diff/model/useCancelReplan.ts`  →  useCancelReplan
-
-## src/pages/live/planb-diff/ui/
-- `src/pages/live/planb-diff/ui/PlanbDiffPage.tsx`  →  PlanbDiffPageProps · PlanbDiffPage
-
 ## src/pages/live/planb-draft/
 - `src/pages/live/planb-draft/index.ts`  →  PlanbSolvingPage · PlanbDraftPage
 
@@ -983,17 +986,6 @@
 - `src/pages/live/planb-request/ui/PlanbEntryGate.tsx`  →  PlanbEntryGateProps · PlanbEntryGate
 - `src/pages/live/planb-request/ui/PlanbRequestPage.tsx`  →  PlanbRequestPageProps · PlanbRequestPage
 - `src/pages/live/planb-request/ui/ReplanRequestSheet.tsx`  →  ReplanDetectedChip · ReplanRequestSheetProps · ReplanRequestSheet
-
-## src/pages/magazine/
-- `src/pages/magazine/index.ts`  →  MagazinePage
-
-## src/pages/magazine/model/
-- `src/pages/magazine/model/magazineFixtures.ts`  →  MAGAZINE_DEFAULT_PROPS
-- `src/pages/magazine/model/magazineTypes.ts`  →  MagazineCard · MagazineEditorial · MagazineScreenProps
-
-## src/pages/magazine/ui/
-- `src/pages/magazine/ui/MagazinePage.tsx`  →  MagazinePage
-- `src/pages/magazine/ui/MagazineScreen.tsx`  →  MagazineScreen
 
 ## src/pages/onboarding/onboarding-entry/
 - `src/pages/onboarding/onboarding-entry/index.ts`  →  OnboardingEntryPage
@@ -1104,11 +1096,14 @@
 ## src/pages/record/records-calendar/ui/
 - `src/pages/record/records-calendar/ui/PastTripList.tsx`  →  PastTripListProps · PastTripList
 - `src/pages/record/records-calendar/ui/RecordsCalendarPage.tsx`  →  RecordsCalendarPage
-- `src/pages/record/records-calendar/ui/RecordsCalendarScreen.tsx`  →  RecordsCalendarScreenProps · RecordsCalendarScreen
+- `src/pages/record/records-calendar/ui/RecordsCalendarScreen.tsx`  →  RecordsCalendarScreenProps · RecordsCalendarOfflineFace · RecordsCalendarScreen
 - `src/pages/record/records-calendar/ui/TripCalendarMonth.tsx`  →  TripCalendarMonthProps · TripCalendarMonth
 
 ## src/pages/record/share-card/
 - `src/pages/record/share-card/index.ts`  →  ShareCardPage
+
+## src/pages/record/share-card/model/
+- `src/pages/record/share-card/model/useShareCardCopy.ts`  →  useShareCardCopy
 
 ## src/pages/record/share-card/ui/
 - `src/pages/record/share-card/ui/FormatSegment.tsx`  →  FormatSegmentProps · FormatSegment
@@ -1156,7 +1151,6 @@
 
 ## src/pages/record/trip-summary/ui/
 - `src/pages/record/trip-summary/ui/CountUpText.tsx`  →  COUNT_UP_DURATION_MS · CountUpText
-- `src/pages/record/trip-summary/ui/DayCardReveal.tsx`  →  DayCardReveal
 - `src/pages/record/trip-summary/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
 - `src/pages/record/trip-summary/ui/TripSummaryPage.tsx`  →  TripSummaryPageProps · TripSummaryPage
 - `src/pages/record/trip-summary/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayReflectionVM · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
@@ -1338,7 +1332,7 @@
 ## src/pages/trip/trip-new-step2/model/
 - `src/pages/trip/trip-new-step2/model/baseSections.ts`  →  BaseSection · toBaseSections · NightlyBaseCard · nightlyBaseCards
 - `src/pages/trip/trip-new-step2/model/basesChanged.ts`  →  basesChanged
-- `src/pages/trip/trip-new-step2/model/staySheetSections.ts`  →  StayAddressState · StaySheetSection · staySheetSections · staySheetRegionNotice
+- `src/pages/trip/trip-new-step2/model/staySheetSections.ts`  →  StayAddressState · StaySheetSection · staySheetCandidates · staySheetSections · staySheetRegionNotice
 - `src/pages/trip/trip-new-step2/model/useStayAddresses.ts`  →  useStayAddresses
 
 ## src/pages/trip/trip-new-step2/ui/
@@ -1370,7 +1364,7 @@
 - `src/shared/api/generated/profile/profile.ts`  →  getMeProfile · getGetMeProfileQueryKey · getGetMeProfileQueryOptions · GetMeProfileQueryResult · GetMeProfileQueryError · useGetMeProfile · patchMeProfileNickname · getPatchMeProfileNicknameMutationOptions · PatchMeProfileNicknameMutationResult · PatchMeProfileNicknameMutationBody · PatchMeProfileNicknameMutationError · usePatchMeProfileNickname · postNicknameSuggestions · getPostNicknameSuggestionsMutationOptions · PostNicknameSuggestionsMutationResult · PostNicknameSuggestionsMutationError · usePostNicknameSuggestions · postNicknameCheck · getPostNicknameCheckMutationOptions · PostNicknameCheckMutationResult · PostNicknameCheckMutationBody · PostNicknameCheckMutationError · usePostNicknameCheck · getMeSettings · getGetMeSettingsQueryKey · getGetMeSettingsQueryOptions · GetMeSettingsQueryResult · GetMeSettingsQueryError · useGetMeSettings · patchMeSettings · getPatchMeSettingsMutationOptions · PatchMeSettingsMutationResult · PatchMeSettingsMutationBody · PatchMeSettingsMutationError · usePatchMeSettings
 
 ## src/shared/api/generated/reflection/
-- `src/shared/api/generated/reflection/reflection.ts`  →  getMePersonalization · getGetMePersonalizationQueryKey · getGetMePersonalizationQueryOptions · GetMePersonalizationQueryResult · GetMePersonalizationQueryError · useGetMePersonalization · getMeStyle · getGetMeStyleQueryKey · getGetMeStyleQueryOptions · GetMeStyleQueryResult · GetMeStyleQueryError · useGetMeStyle · getTripsTripIdSummary · getGetTripsTripIdSummaryQueryKey · getGetTripsTripIdSummaryQueryOptions · GetTripsTripIdSummaryQueryResult · GetTripsTripIdSummaryQueryError · useGetTripsTripIdSummary · getTripsTripIdReflections · getGetTripsTripIdReflectionsQueryKey · getGetTripsTripIdReflectionsQueryOptions · GetTripsTripIdReflectionsQueryResult · GetTripsTripIdReflectionsQueryError · useGetTripsTripIdReflections · postTripsTripIdReflectionsDayDate · getPostTripsTripIdReflectionsDayDateMutationOptions · PostTripsTripIdReflectionsDayDateMutationResult · PostTripsTripIdReflectionsDayDateMutationError · usePostTripsTripIdReflectionsDayDate · putTripsTripIdReflectionsDayDate · getPutTripsTripIdReflectionsDayDateMutationOptions · PutTripsTripIdReflectionsDayDateMutationResult · PutTripsTripIdReflectionsDayDateMutationBody · PutTripsTripIdReflectionsDayDateMutationError · usePutTripsTripIdReflectionsDayDate
+- `src/shared/api/generated/reflection/reflection.ts`  →  getMePersonalization · getGetMePersonalizationQueryKey · getGetMePersonalizationQueryOptions · GetMePersonalizationQueryResult · GetMePersonalizationQueryError · useGetMePersonalization · getMeStyle · getGetMeStyleQueryKey · getGetMeStyleQueryOptions · GetMeStyleQueryResult · GetMeStyleQueryError · useGetMeStyle · getTripsTripIdSummary · getGetTripsTripIdSummaryQueryKey · getGetTripsTripIdSummaryQueryOptions · GetTripsTripIdSummaryQueryResult · GetTripsTripIdSummaryQueryError · useGetTripsTripIdSummary · postTripsTripIdShareCardCopy · getPostTripsTripIdShareCardCopyMutationOptions · PostTripsTripIdShareCardCopyMutationResult · PostTripsTripIdShareCardCopyMutationError · usePostTripsTripIdShareCardCopy · getTripsTripIdReflections · getGetTripsTripIdReflectionsQueryKey · getGetTripsTripIdReflectionsQueryOptions · GetTripsTripIdReflectionsQueryResult · GetTripsTripIdReflectionsQueryError · useGetTripsTripIdReflections · postTripsTripIdReflectionsDayDate · getPostTripsTripIdReflectionsDayDateMutationOptions · PostTripsTripIdReflectionsDayDateMutationResult · PostTripsTripIdReflectionsDayDateMutationError · usePostTripsTripIdReflectionsDayDate · putTripsTripIdReflectionsDayDate · getPutTripsTripIdReflectionsDayDateMutationOptions · PutTripsTripIdReflectionsDayDateMutationResult · PutTripsTripIdReflectionsDayDateMutationBody · PutTripsTripIdReflectionsDayDateMutationError · usePutTripsTripIdReflectionsDayDate
 
 ## src/shared/api/generated/replan/
 - `src/shared/api/generated/replan/replan.ts`  →  getTripsTripIdReplanSessionsSessionIdDiff · getGetTripsTripIdReplanSessionsSessionIdDiffQueryKey · getGetTripsTripIdReplanSessionsSessionIdDiffQueryOptions · GetTripsTripIdReplanSessionsSessionIdDiffQueryResult · GetTripsTripIdReplanSessionsSessionIdDiffQueryError · useGetTripsTripIdReplanSessionsSessionIdDiff
@@ -1463,6 +1457,7 @@
 - `src/shared/api/generated/schemas/itineraryDaysItemSlotsItemAlternativesItem.ts`  →  ItineraryDaysItemSlotsItemAlternativesItem
 - `src/shared/api/generated/schemas/itineraryGenerationMode.ts`  →  ItineraryGenerationMode
 - `src/shared/api/generated/schemas/itineraryGenerationState.ts`  →  ItineraryGenerationState
+- `src/shared/api/generated/schemas/itineraryScoringMode.ts`  →  ItineraryScoringMode
 - `src/shared/api/generated/schemas/itinerarySnapshot.ts`  →  ItinerarySnapshot
 - `src/shared/api/generated/schemas/itinerarySnapshotDaysItem.ts`  →  ItinerarySnapshotDaysItem
 - `src/shared/api/generated/schemas/itinerarySnapshotDaysItemSlotsItem.ts`  →  ItinerarySnapshotDaysItemSlotsItem
@@ -1566,10 +1561,13 @@
 - `src/shared/api/generated/schemas/savePlaceRequest.ts`  →  SavePlaceRequest
 - `src/shared/api/generated/schemas/savedPlace.ts`  →  SavedPlace
 - `src/shared/api/generated/schemas/savedStay.ts`  →  SavedStay
+- `src/shared/api/generated/schemas/shareCardCopy.ts`  →  ShareCardCopy
 - `src/shared/api/generated/schemas/slotCandidates.ts`  →  SlotCandidates
 - `src/shared/api/generated/schemas/slotCandidatesCandidatesItem.ts`  →  SlotCandidatesCandidatesItem
 - `src/shared/api/generated/schemas/slotCandidatesEmptyReason.ts`  →  SlotCandidatesEmptyReason
 - `src/shared/api/generated/schemas/slotCandidatesRequest.ts`  →  SlotCandidatesRequest
+- `src/shared/api/generated/schemas/slotCandidatesRequestCenter.ts`  →  SlotCandidatesRequestCenter
+- `src/shared/api/generated/schemas/slotCandidatesRequestCenterMode.ts`  →  SlotCandidatesRequestCenterMode
 - `src/shared/api/generated/schemas/startReplanRequest.ts`  →  StartReplanRequest
 - `src/shared/api/generated/schemas/startReplanRequestOriginKind.ts`  →  StartReplanRequestOriginKind
 - `src/shared/api/generated/schemas/startReplanRequestScope.ts`  →  StartReplanRequestScope
@@ -1597,6 +1595,9 @@
 - `src/shared/api/generated/schemas/triggerWatch.ts`  →  TriggerWatch
 - `src/shared/api/generated/schemas/trip.ts`  →  Trip
 - `src/shared/api/generated/schemas/tripDestination.ts`  →  TripDestination
+- `src/shared/api/generated/schemas/tripItineraryGenerationMode.ts`  →  TripItineraryGenerationMode
+- `src/shared/api/generated/schemas/tripItineraryGenerationState.ts`  →  TripItineraryGenerationState
+- `src/shared/api/generated/schemas/tripItineraryStatus.ts`  →  TripItineraryStatus
 - `src/shared/api/generated/schemas/tripPreferenceSnapshot.ts`  →  TripPreferenceSnapshot
 - `src/shared/api/generated/schemas/tripRecord.ts`  →  TripRecord
 - `src/shared/api/generated/schemas/tripRecordDay.ts`  →  TripRecordDay
@@ -1626,21 +1627,34 @@
 - `src/shared/api/generated/stays/stays.ts`  →  getStaysSearch · getGetStaysSearchQueryKey · getGetStaysSearchQueryOptions · GetStaysSearchQueryResult · GetStaysSearchQueryError · useGetStaysSearch · getStaysStayId · getGetStaysStayIdQueryKey · getGetStaysStayIdQueryOptions · GetStaysStayIdQueryResult · GetStaysStayIdQueryError · useGetStaysStayId · getStaysCurated · getGetStaysCuratedQueryKey · getGetStaysCuratedQueryOptions · GetStaysCuratedQueryResult · GetStaysCuratedQueryError · useGetStaysCurated · getStaysBrowseOutbound · getGetStaysBrowseOutboundQueryKey · getGetStaysBrowseOutboundQueryOptions · GetStaysBrowseOutboundQueryResult · GetStaysBrowseOutboundQueryError · useGetStaysBrowseOutbound · getStaysStayIdOutbound · getGetStaysStayIdOutboundQueryKey · getGetStaysStayIdOutboundQueryOptions · GetStaysStayIdOutboundQueryResult · GetStaysStayIdOutboundQueryError · useGetStaysStayIdOutbound · getStaysGeocode · getGetStaysGeocodeQueryKey · getGetStaysGeocodeQueryOptions · GetStaysGeocodeQueryResult · GetStaysGeocodeQueryError · useGetStaysGeocode · getStaysReverseGeocode · getGetStaysReverseGeocodeQueryKey · getGetStaysReverseGeocodeQueryOptions · GetStaysReverseGeocodeQueryResult · GetStaysReverseGeocodeQueryError · useGetStaysReverseGeocode
 
 ## src/shared/api/generated/trips/
-- `src/shared/api/generated/trips/trips.ts`  →  postTrips · getPostTripsMutationOptions · PostTripsMutationResult · PostTripsMutationBody · PostTripsMutationError · usePostTrips · getTrips · getGetTripsQueryKey · getGetTripsQueryOptions · GetTripsQueryResult · GetTripsQueryError · useGetTrips · getTripsTripId · getGetTripsTripIdQueryKey · getGetTripsTripIdQueryOptions · GetTripsTripIdQueryResult · GetTripsTripIdQueryError · useGetTripsTripId · patchTripsTripId · getPatchTripsTripIdMutationOptions · PatchTripsTripIdMutationResult · PatchTripsTripIdMutationBody · PatchTripsTripIdMutationError · usePatchTripsTripId · deleteTripsTripId · getDeleteTripsTripIdMutationOptions · DeleteTripsTripIdMutationResult · DeleteTripsTripIdMutationError · useDeleteTripsTripId · postTripsTripIdBases · getPostTripsTripIdBasesMutationOptions · PostTripsTripIdBasesMutationResult · PostTripsTripIdBasesMutationBody · PostTripsTripIdBasesMutationError · usePostTripsTripIdBases · getTripsTripIdBases · getGetTripsTripIdBasesQueryKey · getGetTripsTripIdBasesQueryOptions · GetTripsTripIdBasesQueryResult · GetTripsTripIdBasesQueryError · useGetTripsTripIdBases · deleteTripsTripIdBasesBaseAssignmentId · getDeleteTripsTripIdBasesBaseAssignmentIdMutationOptions · DeleteTripsTripIdBasesBaseAssignmentIdMutationResult · DeleteTripsTripIdBasesBaseAssignmentIdMutationError · useDeleteTripsTripIdBasesBaseAssignmentId · getTripsTripIdCoverage · getGetTripsTripIdCoverageQueryKey · getGetTripsTripIdCoverageQueryOptions · GetTripsTripIdCoverageQueryResult · GetTripsTripIdCoverageQueryError · useGetTripsTripIdCoverage · putTripsTripIdCoverageDaysDayDate · getPutTripsTripIdCoverageDaysDayDateMutationOptions · PutTripsTripIdCoverageDaysDayDateMutationResult · PutTripsTripIdCoverageDaysDayDateMutationBody · PutTripsTripIdCoverageDaysDayDateMutationError · usePutTripsTripIdCoverageDaysDayDate · postTripsTripIdMustVisits · getPostTripsTripIdMustVisitsMutationOptions · PostTripsTripIdMustVisitsMutationResult · PostTripsTripIdMustVisitsMutationBody · PostTripsTripIdMustVisitsMutationError · usePostTripsTripIdMustVisits · getTripsTripIdMustVisits · getGetTripsTripIdMustVisitsQueryKey · getGetTripsTripIdMustVisitsQueryOptions · GetTripsTripIdMustVisitsQueryResult · GetTripsTripIdMustVisitsQueryError · useGetTripsTripIdMustVisits · getTripsTripIdItinerary · getGetTripsTripIdItineraryQueryKey · getGetTripsTripIdItineraryQueryOptions · GetTripsTripIdItineraryQueryResult · GetTripsTripIdItineraryQueryError · useGetTripsTripIdItinerary · postTripsTripIdItinerary · getPostTripsTripIdItineraryMutationOptions · PostTripsTripIdItineraryMutationResult · PostTripsTripIdItineraryMutationBody · PostTripsTripIdItineraryMutationError · usePostTripsTripIdItinerary · putTripsTripIdItinerary · getPutTripsTripIdItineraryMutationOptions · PutTripsTripIdItineraryMutationResult · PutTripsTripIdItineraryMutationBody · PutTripsTripIdItineraryMutationError · usePutTripsTripIdItinerary · getTripsTripIdGenerationSessionsSessionId · getGetTripsTripIdGenerationSessionsSessionIdQueryKey · getGetTripsTripIdGenerationSessionsSessionIdQueryOptions · GetTripsTripIdGenerationSessionsSessionIdQueryResult · GetTripsTripIdGenerationSessionsSessionIdQueryError · useGetTripsTripIdGenerationSessionsSessionId · postTripsTripIdGenerationSessionsSessionIdCancel · getPostTripsTripIdGenerationSessionsSessionIdCancelMutationOptions · PostTripsTripIdGenerationSessionsSessionIdCancelMutationResult · PostTripsTripIdGenerationSessionsSessionIdCancelMutationError · usePostTripsTripIdGenerationSessionsSessionIdCancel · postTripsTripIdItinerarySlotCandidates · getPostTripsTripIdItinerarySlotCandidatesMutationOptions · PostTripsTripIdItinerarySlotCandidatesMutationResult · PostTripsTripIdItinerarySlotCandidatesMutationBody · PostTripsTripIdItinerarySlotCandidatesMutationError · usePostTripsTripIdItinerarySlotCandidates · postTripsTripIdVisits · getPostTripsTripIdVisitsMutationOptions · PostTripsTripIdVisitsMutationResult · PostTripsTripIdVisitsMutationBody · PostTripsTripIdVisitsMutationError · usePostTripsTripIdVisits · getTripsTripIdRoutes · getGetTripsTripIdRoutesQueryKey · getGetTripsTripIdRoutesQueryOptions · GetTripsTripIdRoutesQueryResult · GetTripsTripIdRoutesQueryError · useGetTripsTripIdRoutes · putTripsTripIdRoutesDate · getPutTripsTripIdRoutesDateMutationOptions · PutTripsTripIdRoutesDateMutationResult · PutTripsTripIdRoutesDateMutationBody · PutTripsTripIdRoutesDateMutationError · usePutTripsTripIdRoutesDate · postTripsTripIdLocationAutomationIntervals · getPostTripsTripIdLocationAutomationIntervalsMutationOptions · PostTripsTripIdLocationAutomationIntervalsMutationResult · PostTripsTripIdLocationAutomationIntervalsMutationBody · PostTripsTripIdLocationAutomationIntervalsMutationError · usePostTripsTripIdLocationAutomationIntervals · postTripsTripIdVisitsAutoEvents · getPostTripsTripIdVisitsAutoEventsMutationOptions · PostTripsTripIdVisitsAutoEventsMutationResult · PostTripsTripIdVisitsAutoEventsMutationBody · PostTripsTripIdVisitsAutoEventsMutationError · usePostTripsTripIdVisitsAutoEvents · postTripsTripIdVisitsVisitCheckIdRevertAuto · getPostTripsTripIdVisitsVisitCheckIdRevertAutoMutationOptions · PostTripsTripIdVisitsVisitCheckIdRevertAutoMutationResult · PostTripsTripIdVisitsVisitCheckIdRevertAutoMutationError · usePostTripsTripIdVisitsVisitCheckIdRevertAuto · getTripsTripIdVisitsDaysDay · getGetTripsTripIdVisitsDaysDayQueryKey · getGetTripsTripIdVisitsDaysDayQueryOptions · GetTripsTripIdVisitsDaysDayQueryResult · GetTripsTripIdVisitsDaysDayQueryError · useGetTripsTripIdVisitsDaysDay · patchTripsTripIdVisitsVisitCheckId · getPatchTripsTripIdVisitsVisitCheckIdMutationOptions · PatchTripsTripIdVisitsVisitCheckIdMutationResult · PatchTripsTripIdVisitsVisitCheckIdMutationBody · PatchTripsTripIdVisitsVisitCheckIdMutationError · usePatchTripsTripIdVisitsVisitCheckId · postTripsTripIdVisitsVisitCheckIdComplete · getPostTripsTripIdVisitsVisitCheckIdCompleteMutationOptions · PostTripsTripIdVisitsVisitCheckIdCompleteMutationResult · PostTripsTripIdVisitsVisitCheckIdCompleteMutationError · usePostTripsTripIdVisitsVisitCheckIdComplete · postTripsTripIdVisitsVisitCheckIdSkip · getPostTripsTripIdVisitsVisitCheckIdSkipMutationOptions · PostTripsTripIdVisitsVisitCheckIdSkipMutationResult · PostTripsTripIdVisitsVisitCheckIdSkipMutationError · usePostTripsTripIdVisitsVisitCheckIdSkip · postTripsTripIdVisitsVisitCheckIdPhotos · getPostTripsTripIdVisitsVisitCheckIdPhotosMutationOptions · PostTripsTripIdVisitsVisitCheckIdPhotosMutationResult · PostTripsTripIdVisitsVisitCheckIdPhotosMutationBody · PostTripsTripIdVisitsVisitCheckIdPhotosMutationError · usePostTripsTripIdVisitsVisitCheckIdPhotos · getTripsTripIdVisitsVisitCheckIdPhotos · getGetTripsTripIdVisitsVisitCheckIdPhotosQueryKey · getGetTripsTripIdVisitsVisitCheckIdPhotosQueryOptions · GetTripsTripIdVisitsVisitCheckIdPhotosQueryResult · GetTripsTripIdVisitsVisitCheckIdPhotosQueryError · useGetTripsTripIdVisitsVisitCheckIdPhotos · putTripsTripIdVisitsVisitCheckIdPhotosOrder · getPutTripsTripIdVisitsVisitCheckIdPhotosOrderMutationOptions · PutTripsTripIdVisitsVisitCheckIdPhotosOrderMutationResult · PutTripsTripIdVisitsVisitCheckIdPhotosOrderMutationBody · PutTripsTripIdVisitsVisitCheckIdPhotosOrderMutationError · usePutTripsTripIdVisitsVisitCheckIdPhotosOrder · deleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaId · getDeleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaIdMutationOptions · DeleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaIdMutationResult · DeleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaIdMutationError · useDeleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaId · getMeRecords · getGetMeRecordsQueryKey · getGetMeRecordsQueryOptions · GetMeRecordsQueryResult · GetMeRecordsQueryError · useGetMeRecords · getTripsTripIdRecords · getGetTripsTripIdRecordsQueryKey · getGetTripsTripIdRecordsQueryOptions · GetTripsTripIdRecordsQueryResult · GetTripsTripIdRecordsQueryError · useGetTripsTripIdRecords · putTripsTripIdVisitsVisitCheckIdMemo · getPutTripsTripIdVisitsVisitCheckIdMemoMutationOptions · PutTripsTripIdVisitsVisitCheckIdMemoMutationResult · PutTripsTripIdVisitsVisitCheckIdMemoMutationBody · PutTripsTripIdVisitsVisitCheckIdMemoMutationError · usePutTripsTripIdVisitsVisitCheckIdMemo · getTripsTripIdTriggers · getGetTripsTripIdTriggersQueryKey · getGetTripsTripIdTriggersQueryOptions · GetTripsTripIdTriggersQueryResult · GetTripsTripIdTriggersQueryError · useGetTripsTripIdTriggers · weatherCheck · getWeatherCheckMutationOptions · WeatherCheckMutationResult · WeatherCheckMutationError · useWeatherCheck · getTripsTripIdTriggersTriggerId · getGetTripsTripIdTriggersTriggerIdQueryKey · getGetTripsTripIdTriggersTriggerIdQueryOptions · GetTripsTripIdTriggersTriggerIdQueryResult · GetTripsTripIdTriggersTriggerIdQueryError · useGetTripsTripIdTriggersTriggerId · postTripsTripIdTriggersTriggerIdDismiss · getPostTripsTripIdTriggersTriggerIdDismissMutationOptions · PostTripsTripIdTriggersTriggerIdDismissMutationResult · PostTripsTripIdTriggersTriggerIdDismissMutationError · usePostTripsTripIdTriggersTriggerIdDismiss · getTripsTripIdOpportunities · getGetTripsTripIdOpportunitiesQueryKey · getGetTripsTripIdOpportunitiesQueryOptions · GetTripsTripIdOpportunitiesQueryResult · GetTripsTripIdOpportunitiesQueryError · useGetTripsTripIdOpportunities · postTripsTripIdStayRecommendations · getPostTripsTripIdStayRecommendationsMutationOptions · PostTripsTripIdStayRecommendationsMutationResult · PostTripsTripIdStayRecommendationsMutationBody · PostTripsTripIdStayRecommendationsMutationError · usePostTripsTripIdStayRecommendations · postTripsTripIdReplanSessions · getPostTripsTripIdReplanSessionsMutationOptions · PostTripsTripIdReplanSessionsMutationResult · PostTripsTripIdReplanSessionsMutationBody · PostTripsTripIdReplanSessionsMutationError · usePostTripsTripIdReplanSessions · getTripsTripIdReplanSessionsPrepared · getGetTripsTripIdReplanSessionsPreparedQueryKey · getGetTripsTripIdReplanSessionsPreparedQueryOptions · GetTripsTripIdReplanSessionsPreparedQueryResult · GetTripsTripIdReplanSessionsPreparedQueryError · useGetTripsTripIdReplanSessionsPrepared · getTripsTripIdReplanSessionsSessionId · getGetTripsTripIdReplanSessionsSessionIdQueryKey · getGetTripsTripIdReplanSessionsSessionIdQueryOptions · GetTripsTripIdReplanSessionsSessionIdQueryResult · GetTripsTripIdReplanSessionsSessionIdQueryError · useGetTripsTripIdReplanSessionsSessionId · postTripsTripIdReplanSessionsSessionIdApply · getPostTripsTripIdReplanSessionsSessionIdApplyMutationOptions · PostTripsTripIdReplanSessionsSessionIdApplyMutationResult · PostTripsTripIdReplanSessionsSessionIdApplyMutationError · usePostTripsTripIdReplanSessionsSessionIdApply · postTripsTripIdReplanSessionsSessionIdCancel · getPostTripsTripIdReplanSessionsSessionIdCancelMutationOptions · PostTripsTripIdReplanSessionsSessionIdCancelMutationResult · PostTripsTripIdReplanSessionsSessionIdCancelMutationError · usePostTripsTripIdReplanSessionsSessionIdCancel · getTripsTripIdItineraryRevisions · getGetTripsTripIdItineraryRevisionsQueryKey · getGetTripsTripIdItineraryRevisionsQueryOptions · GetTripsTripIdItineraryRevisionsQueryResult · GetTripsTripIdItineraryRevisionsQueryError · useGetTripsTripIdItineraryRevisions · postTripsTripIdItineraryRevisionsRevisionIdRestore · getPostTripsTripIdItineraryRevisionsRevisionIdRestoreMutationOptions · PostTripsTripIdItineraryRevisionsRevisionIdRestoreMutationResult · PostTripsTripIdItineraryRevisionsRevisionIdRestoreMutationError · usePostTripsTripIdItineraryRevisionsRevisionIdRestore · postTripsTripIdItineraryConfirm · getPostTripsTripIdItineraryConfirmMutationOptions · PostTripsTripIdItineraryConfirmMutationResult · PostTripsTripIdItineraryConfirmMutationError · usePostTripsTripIdItineraryConfirm · getTripsTripIdChangeLog · getGetTripsTripIdChangeLogQueryKey · getGetTripsTripIdChangeLogQueryOptions · GetTripsTripIdChangeLogQueryResult · GetTripsTripIdChangeLogQueryError · useGetTripsTripIdChangeLog · deleteTripsTripIdMustVisitsMustVisitId · getDeleteTripsTripIdMustVisitsMustVisitIdMutationOptions · DeleteTripsTripIdMustVisitsMustVisitIdMutationResult · DeleteTripsTripIdMustVisitsMustVisitIdMutationError · useDeleteTripsTripIdMustVisitsMustVisitId
+- `src/shared/api/generated/trips/trips.ts`  →  postTrips · getPostTripsMutationOptions · PostTripsMutationResult · PostTripsMutationBody · PostTripsMutationError · usePostTrips · getTrips · getGetTripsQueryKey · getGetTripsQueryOptions · GetTripsQueryResult · GetTripsQueryError · useGetTrips · getTripsTripId · getGetTripsTripIdQueryKey · getGetTripsTripIdQueryOptions · GetTripsTripIdQueryResult · GetTripsTripIdQueryError · useGetTripsTripId · patchTripsTripId · getPatchTripsTripIdMutationOptions · PatchTripsTripIdMutationResult · PatchTripsTripIdMutationBody · PatchTripsTripIdMutationError · usePatchTripsTripId · deleteTripsTripId · getDeleteTripsTripIdMutationOptions · DeleteTripsTripIdMutationResult · DeleteTripsTripIdMutationError · useDeleteTripsTripId · postTripsTripIdBases · getPostTripsTripIdBasesMutationOptions · PostTripsTripIdBasesMutationResult · PostTripsTripIdBasesMutationBody · PostTripsTripIdBasesMutationError · usePostTripsTripIdBases · getTripsTripIdBases · getGetTripsTripIdBasesQueryKey · getGetTripsTripIdBasesQueryOptions · GetTripsTripIdBasesQueryResult · GetTripsTripIdBasesQueryError · useGetTripsTripIdBases · deleteTripsTripIdBasesBaseAssignmentId · getDeleteTripsTripIdBasesBaseAssignmentIdMutationOptions · DeleteTripsTripIdBasesBaseAssignmentIdMutationResult · DeleteTripsTripIdBasesBaseAssignmentIdMutationError · useDeleteTripsTripIdBasesBaseAssignmentId · getTripsTripIdCoverage · getGetTripsTripIdCoverageQueryKey · getGetTripsTripIdCoverageQueryOptions · GetTripsTripIdCoverageQueryResult · GetTripsTripIdCoverageQueryError · useGetTripsTripIdCoverage · putTripsTripIdCoverageDaysDayDate · getPutTripsTripIdCoverageDaysDayDateMutationOptions · PutTripsTripIdCoverageDaysDayDateMutationResult · PutTripsTripIdCoverageDaysDayDateMutationBody · PutTripsTripIdCoverageDaysDayDateMutationError · usePutTripsTripIdCoverageDaysDayDate · postTripsTripIdMustVisits · getPostTripsTripIdMustVisitsMutationOptions · PostTripsTripIdMustVisitsMutationResult · PostTripsTripIdMustVisitsMutationBody · PostTripsTripIdMustVisitsMutationError · usePostTripsTripIdMustVisits · getTripsTripIdMustVisits · getGetTripsTripIdMustVisitsQueryKey · getGetTripsTripIdMustVisitsQueryOptions · GetTripsTripIdMustVisitsQueryResult · GetTripsTripIdMustVisitsQueryError · useGetTripsTripIdMustVisits · getTripsTripIdItinerary · getGetTripsTripIdItineraryQueryKey · getGetTripsTripIdItineraryQueryOptions · GetTripsTripIdItineraryQueryResult · GetTripsTripIdItineraryQueryError · useGetTripsTripIdItinerary · postTripsTripIdItinerary · getPostTripsTripIdItineraryMutationOptions · PostTripsTripIdItineraryMutationResult · PostTripsTripIdItineraryMutationBody · PostTripsTripIdItineraryMutationError · usePostTripsTripIdItinerary · putTripsTripIdItinerary · getPutTripsTripIdItineraryMutationOptions · PutTripsTripIdItineraryMutationResult · PutTripsTripIdItineraryMutationBody · PutTripsTripIdItineraryMutationError · usePutTripsTripIdItinerary · getTripsTripIdGenerationSessionsSessionId · getGetTripsTripIdGenerationSessionsSessionIdQueryKey · getGetTripsTripIdGenerationSessionsSessionIdQueryOptions · GetTripsTripIdGenerationSessionsSessionIdQueryResult · GetTripsTripIdGenerationSessionsSessionIdQueryError · useGetTripsTripIdGenerationSessionsSessionId · postTripsTripIdGenerationSessionsSessionIdCancel · getPostTripsTripIdGenerationSessionsSessionIdCancelMutationOptions · PostTripsTripIdGenerationSessionsSessionIdCancelMutationResult · PostTripsTripIdGenerationSessionsSessionIdCancelMutationError · usePostTripsTripIdGenerationSessionsSessionIdCancel · postTripsTripIdItinerarySlotCandidates · getPostTripsTripIdItinerarySlotCandidatesMutationOptions · PostTripsTripIdItinerarySlotCandidatesMutationResult · PostTripsTripIdItinerarySlotCandidatesMutationBody · PostTripsTripIdItinerarySlotCandidatesMutationError · usePostTripsTripIdItinerarySlotCandidates · postTripsTripIdVisits · getPostTripsTripIdVisitsMutationOptions · PostTripsTripIdVisitsMutationResult · PostTripsTripIdVisitsMutationBody · PostTripsTripIdVisitsMutationError · usePostTripsTripIdVisits · getTripsTripIdRoutes · getGetTripsTripIdRoutesQueryKey · getGetTripsTripIdRoutesQueryOptions · GetTripsTripIdRoutesQueryResult · GetTripsTripIdRoutesQueryError · useGetTripsTripIdRoutes · putTripsTripIdRoutesDate · getPutTripsTripIdRoutesDateMutationOptions · PutTripsTripIdRoutesDateMutationResult · PutTripsTripIdRoutesDateMutationBody · PutTripsTripIdRoutesDateMutationError · usePutTripsTripIdRoutesDate · postTripsTripIdLocationAutomationIntervals · getPostTripsTripIdLocationAutomationIntervalsMutationOptions · PostTripsTripIdLocationAutomationIntervalsMutationResult · PostTripsTripIdLocationAutomationIntervalsMutationBody · PostTripsTripIdLocationAutomationIntervalsMutationError · usePostTripsTripIdLocationAutomationIntervals · postTripsTripIdVisitsAutoEvents · getPostTripsTripIdVisitsAutoEventsMutationOptions · PostTripsTripIdVisitsAutoEventsMutationResult · PostTripsTripIdVisitsAutoEventsMutationBody · PostTripsTripIdVisitsAutoEventsMutationError · usePostTripsTripIdVisitsAutoEvents · postTripsTripIdVisitsVisitCheckIdRevertAuto · getPostTripsTripIdVisitsVisitCheckIdRevertAutoMutationOptions · PostTripsTripIdVisitsVisitCheckIdRevertAutoMutationResult · PostTripsTripIdVisitsVisitCheckIdRevertAutoMutationError · usePostTripsTripIdVisitsVisitCheckIdRevertAuto · getTripsTripIdVisitsDaysDay · getGetTripsTripIdVisitsDaysDayQueryKey · getGetTripsTripIdVisitsDaysDayQueryOptions · GetTripsTripIdVisitsDaysDayQueryResult · GetTripsTripIdVisitsDaysDayQueryError · useGetTripsTripIdVisitsDaysDay · patchTripsTripIdVisitsVisitCheckId · getPatchTripsTripIdVisitsVisitCheckIdMutationOptions · PatchTripsTripIdVisitsVisitCheckIdMutationResult · PatchTripsTripIdVisitsVisitCheckIdMutationBody · PatchTripsTripIdVisitsVisitCheckIdMutationError · usePatchTripsTripIdVisitsVisitCheckId · postTripsTripIdVisitsVisitCheckIdComplete · getPostTripsTripIdVisitsVisitCheckIdCompleteMutationOptions · PostTripsTripIdVisitsVisitCheckIdCompleteMutationResult · PostTripsTripIdVisitsVisitCheckIdCompleteMutationError · usePostTripsTripIdVisitsVisitCheckIdComplete · postTripsTripIdVisitsVisitCheckIdSkip · getPostTripsTripIdVisitsVisitCheckIdSkipMutationOptions · PostTripsTripIdVisitsVisitCheckIdSkipMutationResult · PostTripsTripIdVisitsVisitCheckIdSkipMutationError · usePostTripsTripIdVisitsVisitCheckIdSkip · postTripsTripIdVisitsVisitCheckIdPhotos · getPostTripsTripIdVisitsVisitCheckIdPhotosMutationOptions · PostTripsTripIdVisitsVisitCheckIdPhotosMutationResult · PostTripsTripIdVisitsVisitCheckIdPhotosMutationBody · PostTripsTripIdVisitsVisitCheckIdPhotosMutationError · usePostTripsTripIdVisitsVisitCheckIdPhotos · getTripsTripIdVisitsVisitCheckIdPhotos · getGetTripsTripIdVisitsVisitCheckIdPhotosQueryKey · getGetTripsTripIdVisitsVisitCheckIdPhotosQueryOptions · GetTripsTripIdVisitsVisitCheckIdPhotosQueryResult · GetTripsTripIdVisitsVisitCheckIdPhotosQueryError · useGetTripsTripIdVisitsVisitCheckIdPhotos · putTripsTripIdVisitsVisitCheckIdPhotosOrder · getPutTripsTripIdVisitsVisitCheckIdPhotosOrderMutationOptions · PutTripsTripIdVisitsVisitCheckIdPhotosOrderMutationResult · PutTripsTripIdVisitsVisitCheckIdPhotosOrderMutationBody · PutTripsTripIdVisitsVisitCheckIdPhotosOrderMutationError · usePutTripsTripIdVisitsVisitCheckIdPhotosOrder · deleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaId · getDeleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaIdMutationOptions · DeleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaIdMutationResult · DeleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaIdMutationError · useDeleteTripsTripIdVisitsVisitCheckIdPhotosVisitPhotoMetaId · getMeRecords · getGetMeRecordsQueryKey · getGetMeRecordsQueryOptions · GetMeRecordsQueryResult · GetMeRecordsQueryError · useGetMeRecords · getTripsTripIdRecords · getGetTripsTripIdRecordsQueryKey · getGetTripsTripIdRecordsQueryOptions · GetTripsTripIdRecordsQueryResult · GetTripsTripIdRecordsQueryError · useGetTripsTripIdRecords · putTripsTripIdVisitsVisitCheckIdMemo · getPutTripsTripIdVisitsVisitCheckIdMemoMutationOptions · PutTripsTripIdVisitsVisitCheckIdMemoMutationResult · PutTripsTripIdVisitsVisitCheckIdMemoMutationBody · PutTripsTripIdVisitsVisitCheckIdMemoMutationError · usePutTripsTripIdVisitsVisitCheckIdMemo · getTripsTripIdTriggers · getGetTripsTripIdTriggersQueryKey · getGetTripsTripIdTriggersQueryOptions · GetTripsTripIdTriggersQueryResult · GetTripsTripIdTriggersQueryError · useGetTripsTripIdTriggers · weatherCheck · getWeatherCheckMutationOptions · WeatherCheckMutationResult · WeatherCheckMutationError · useWeatherCheck · getTripsTripIdTriggersTriggerId · getGetTripsTripIdTriggersTriggerIdQueryKey · getGetTripsTripIdTriggersTriggerIdQueryOptions · GetTripsTripIdTriggersTriggerIdQueryResult · GetTripsTripIdTriggersTriggerIdQueryError · useGetTripsTripIdTriggersTriggerId · postTripsTripIdTriggersTriggerIdDismiss · getPostTripsTripIdTriggersTriggerIdDismissMutationOptions · PostTripsTripIdTriggersTriggerIdDismissMutationResult · PostTripsTripIdTriggersTriggerIdDismissMutationError · usePostTripsTripIdTriggersTriggerIdDismiss · getTripsTripIdOpportunities · getGetTripsTripIdOpportunitiesQueryKey · getGetTripsTripIdOpportunitiesQueryOptions · GetTripsTripIdOpportunitiesQueryResult · GetTripsTripIdOpportunitiesQueryError · useGetTripsTripIdOpportunities · postTripsTripIdStayRecommendations · getPostTripsTripIdStayRecommendationsMutationOptions · PostTripsTripIdStayRecommendationsMutationResult · PostTripsTripIdStayRecommendationsMutationBody · PostTripsTripIdStayRecommendationsMutationError · usePostTripsTripIdStayRecommendations · postTripsTripIdReplanSessions · getPostTripsTripIdReplanSessionsMutationOptions · PostTripsTripIdReplanSessionsMutationResult · PostTripsTripIdReplanSessionsMutationBody · PostTripsTripIdReplanSessionsMutationError · usePostTripsTripIdReplanSessions · getTripsTripIdReplanSessionsPrepared · getGetTripsTripIdReplanSessionsPreparedQueryKey · getGetTripsTripIdReplanSessionsPreparedQueryOptions · GetTripsTripIdReplanSessionsPreparedQueryResult · GetTripsTripIdReplanSessionsPreparedQueryError · useGetTripsTripIdReplanSessionsPrepared · getTripsTripIdReplanSessionsSessionId · getGetTripsTripIdReplanSessionsSessionIdQueryKey · getGetTripsTripIdReplanSessionsSessionIdQueryOptions · GetTripsTripIdReplanSessionsSessionIdQueryResult · GetTripsTripIdReplanSessionsSessionIdQueryError · useGetTripsTripIdReplanSessionsSessionId · postTripsTripIdReplanSessionsSessionIdApply · getPostTripsTripIdReplanSessionsSessionIdApplyMutationOptions · PostTripsTripIdReplanSessionsSessionIdApplyMutationResult · PostTripsTripIdReplanSessionsSessionIdApplyMutationError · usePostTripsTripIdReplanSessionsSessionIdApply · postTripsTripIdReplanSessionsSessionIdRevert · getPostTripsTripIdReplanSessionsSessionIdRevertMutationOptions · PostTripsTripIdReplanSessionsSessionIdRevertMutationResult · PostTripsTripIdReplanSessionsSessionIdRevertMutationError · usePostTripsTripIdReplanSessionsSessionIdRevert · postTripsTripIdReplanSessionsSessionIdCancel · getPostTripsTripIdReplanSessionsSessionIdCancelMutationOptions · PostTripsTripIdReplanSessionsSessionIdCancelMutationResult · PostTripsTripIdReplanSessionsSessionIdCancelMutationError · usePostTripsTripIdReplanSessionsSessionIdCancel · getTripsTripIdItineraryRevisions · getGetTripsTripIdItineraryRevisionsQueryKey · getGetTripsTripIdItineraryRevisionsQueryOptions · GetTripsTripIdItineraryRevisionsQueryResult · GetTripsTripIdItineraryRevisionsQueryError · useGetTripsTripIdItineraryRevisions · postTripsTripIdItineraryRevisionsRevisionIdRestore · getPostTripsTripIdItineraryRevisionsRevisionIdRestoreMutationOptions · PostTripsTripIdItineraryRevisionsRevisionIdRestoreMutationResult · PostTripsTripIdItineraryRevisionsRevisionIdRestoreMutationError · usePostTripsTripIdItineraryRevisionsRevisionIdRestore · postTripsTripIdItineraryConfirm · getPostTripsTripIdItineraryConfirmMutationOptions · PostTripsTripIdItineraryConfirmMutationResult · PostTripsTripIdItineraryConfirmMutationError · usePostTripsTripIdItineraryConfirm · getTripsTripIdChangeLog · getGetTripsTripIdChangeLogQueryKey · getGetTripsTripIdChangeLogQueryOptions · GetTripsTripIdChangeLogQueryResult · GetTripsTripIdChangeLogQueryError · useGetTripsTripIdChangeLog · deleteTripsTripIdMustVisitsMustVisitId · getDeleteTripsTripIdMustVisitsMustVisitIdMutationOptions · DeleteTripsTripIdMustVisitsMustVisitIdMutationResult · DeleteTripsTripIdMustVisitsMustVisitIdMutationError · useDeleteTripsTripIdMustVisitsMustVisitId
 
 ## src/shared/api/
 - `src/shared/api/generationInProgress.ts`  →  resolveGenerationInProgress · resolveGenerationRefused · cancelActiveGeneration
 - `src/shared/api/index.client.ts`  →  customInstance
 - `src/shared/api/index.hooks.ts`  →  cancelActiveGeneration · resolveGenerationInProgress · resolveGenerationRefused
 - `src/shared/api/index.schemas.ts`  →  (export 없음)
-- `src/shared/api/index.ts`  →  SocialProvider · BootstrapResponse · AgeConfirmation · SocialLoginBody · SocialTokenLoginBody · AccountSummary · TokenPair · NormalizedApiError · AuthedApiClientOptions · TermsVersion · ConsentAction · ConsentInput · ConsentState · NicknameCheckReason · NicknameCheckResult · createAuthedApiClient · API_BASE_URL · fetchBootstrap · postSocialLogin · postSocialTokenLogin · refreshTokens · logout · fetchTerms · fetchTermsByType · authedClient · fetchConsents · submitConsents · patchConsent · fetchNicknameSuggestions · checkNickname · updateNickname · completeOnboarding · isAlreadyRegistered · isNotFound · retryUnlessNotFound · isGenerationDailyLimit · isRateLimited · retryAfterSeconds · getAccessToken · hydrate · setAccessToken · subscribeAccessToken · useAccessToken · resolveVisitConflict
+- `src/shared/api/index.ts`  →  SocialProvider · BootstrapResponse · AgeConfirmation · SocialLoginBody · SocialTokenLoginBody · AccountSummary · TokenPair · NormalizedApiError · AuthedApiClientOptions · TermsVersion · ConsentAction · ConsentInput · ConsentState · NicknameCheckReason · NicknameCheckResult · createAuthedApiClient · API_BASE_URL · fetchBootstrap · postSocialLogin · postSocialTokenLogin · refreshTokens · logout · fetchTerms · fetchTermsByType · authedClient · fetchConsents · submitConsents · patchConsent · fetchNicknameSuggestions · checkNickname · updateNickname · completeOnboarding · isAlreadyRegistered · isNotFound · retryUnlessNotFound · isOfflineWaiting · isGenerationDailyLimit · isRateLimited · isShareCardDailyLimit · retryAfterSeconds · getAccessToken · hydrate · setAccessToken · subscribeAccessToken · useAccessToken · resolveVisitConflict
 - `src/shared/api/isAlreadyRegistered.ts`  →  isAlreadyRegistered
 - `src/shared/api/isNotFound.ts`  →  isNotFound · retryUnlessNotFound
-- `src/shared/api/isRateLimited.ts`  →  isRateLimited · retryAfterSeconds · isGenerationDailyLimit
+- `src/shared/api/isOfflineWaiting.ts`  →  isOfflineWaiting
+- `src/shared/api/isRateLimited.ts`  →  isRateLimited · retryAfterSeconds · isGenerationDailyLimit · isShareCardDailyLimit
 - `src/shared/api/mutator.ts`  →  customInstance
 - `src/shared/api/tokenManager.ts`  →  getAccessToken · setAccessToken · clearAccessToken · hydrate · subscribeAccessToken
 - `src/shared/api/useAccessToken.ts`  →  useAccessToken
 - `src/shared/api/visitConflict.ts`  →  VISIT_CONFLICT_CODES · VisitConflictKind · resolveVisitConflict
+
+## src/shared/dev-fault/
+- `src/shared/dev-fault/FaultInjectionBadge.tsx`  →  FaultInjectionBadge
+- `src/shared/dev-fault/index.ts`  →  FaultInjectionBadge · installFaultInjection · faultStore
+- `src/shared/dev-fault/interceptor.ts`  →  installFaultInjection
+- `src/shared/dev-fault/rules.ts`  →  FaultRule · FaultLinkAction · FaultLinkParams · matchesPath · findRule · isFaultRule · parseFaultLink · applyFaultAction · faultErrorBody
+- `src/shared/dev-fault/store.ts`  →  FaultStorage · createFaultStore · FaultStore · faultStore
+
+## src/shared/external-link/
+- `src/shared/external-link/index.ts`  →  openExternal · openAppSettings
+- `src/shared/external-link/openExternal.ts`  →  openExternal · openAppSettings
+- `src/shared/external-link/openExternal.web.ts`  →  openExternal · openAppSettings
 
 ## src/shared/lib/
 - `src/shared/lib/bootstrapReeval.ts`  →  subscribeBootstrapReeval · notifyBootstrapReeval
@@ -1648,6 +1662,7 @@
 - `src/shared/lib/countUp.ts`  →  easeOutCubic · countUpInt · isCountable · countUpText
 - `src/shared/lib/fontScale.ts`  →  isLargeText
 - `src/shared/lib/formatRelativeTime.ts`  →  formatRelativeTime
+- `src/shared/lib/goBackOr.ts`  →  BackRouter · goBackOr
 - `src/shared/lib/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
 - `src/shared/lib/nicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
 - `src/shared/lib/placeCover.ts`  →  fnv1a32 · placeCoverSource
@@ -1675,9 +1690,10 @@
 - `src/shared/location/automation/config.ts`  →  AUTOMATION_CONFIG · AutomationConfig
 - `src/shared/location/automation/deps.ts`  →  getEngineDeps · overrideEngineDeps
 - `src/shared/location/automation/distanceSource.ts`  →  DistanceSource · distanceSourceByDate
-- `src/shared/location/automation/engine.ts`  →  EngineDeps · EngineReason · EngineStatus · ArmingCallInput · setContext · evaluate · handleGeofence · handleLocations · handleWake · flushQueue · uploadPendingRoutes · markExplainerAsked · clearNotice · wipeAutomation
+- `src/shared/location/automation/engine.ts`  →  EngineDeps · EngineReason · EngineStatus · ArmingCallInput · noticeFor · setContext · evaluate · handleGeofence · handleLocations · handleWake · flushQueue · uploadPendingRoutes · markExplainerAsked · clearNotice · wipeAutomation
 - `src/shared/location/automation/expoFs.ts`  →  createExpoFs
 - `src/shared/location/automation/flag.ts`  →  isLocationAutomationEnabled
+- `src/shared/location/automation/flag.web.ts`  →  isLocationAutomationEnabled
 - `src/shared/location/automation/httpSink.ts`  →  createHttpAutomationSink
 - `src/shared/location/automation/native.ts`  →  GEOFENCE_TASK · ROUTE_TASK · NativeAdapters · nativeAdapters
 - `src/shared/location/automation/noticeCopy.ts`  →  AutomationNoticeCopy · automationNoticeCopy · tripDateRangeLabel
@@ -1709,19 +1725,31 @@
 ## src/shared/map/
 - `src/shared/map/CenterPinPicker.tsx`  →  CenterPinPickerProps · CenterPinPicker
 - `src/shared/map/DrawnPathOverlay.tsx`  →  DRAW_PATH_DURATION_MS · DrawnPathOverlay
+- `src/shared/map/MapFailure.tsx`  →  MapFailure
 - `src/shared/map/MapView.tsx`  →  MapCenter · MapPinState · MapPinKind · MapPin · MapViewProps · MapView
+- `src/shared/map/MapView.web.tsx`  →  MapView
 - `src/shared/map/fitRegion.ts`  →  FitBand · buildFitRegion · buildCircleRegion
 - `src/shared/map/index.ts`  →  MapView · CenterPinPicker · buildNaverPlaceAppUrl · buildNaverPlaceWebUrl · canOpenNaverPlace · openNaverPlace
+- `src/shared/map/naverMapsLoader.ts`  →  NaverLatLng · NaverPoint · NaverBounds · NaverOverlay · NaverMarker · NaverMap · NaverMapsApi · LoaderScript · LoaderDoc · LoaderWin · NaverMapsLoader · createNaverMapsLoader · getNaverMapsLoader
 - `src/shared/map/naverPlaceLink.ts`  →  NaverPlaceTarget · canOpenNaverPlace · buildNaverPlaceAppUrl · buildNaverPlaceWebUrl · openNaverPlace
+- `src/shared/map/pathLines.ts`  →  PathLines · buildPathLines
+- `src/shared/map/pinShapes.ts`  →  PIN_PRIMARY · PIN_SUCCESS · PIN_MUTED_SOFT · PIN_WHITE · TEARDROP_LARGE · TEARDROP_SMALL · DONE_CHECK · STAY_PIN · DROP_LARGE_SIZE · DROP_SMALL_SIZE · RECORD_DIMS
+- `src/shared/map/webMapController.ts`  →  WebMapInput · WebLocationPort · WebMapController · createWebMapController
+- `src/shared/map/webMapOptions.ts`  →  WEB_INITIAL_ZOOM · regionToCorners · buildMapOptions
+- `src/shared/map/webMarkerHtml.ts`  →  WebMarker · buildWebMarker
 
 ## src/shared/photo/
 - `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAsset · resolvePhotoUri
+- `src/shared/photo/index.web.ts`  →  pickPhotoAsset · resolvePhotoUri
 
 ## src/shared/push/
 - `src/shared/push/PushGlyphs.tsx`  →  PushBellHero
 - `src/shared/push/PushPreprompt.tsx`  →  PushPrepromptProps · PushPreprompt
+- `src/shared/push/index.support.ts`  →  isPushSupported
+- `src/shared/push/index.support.web.ts`  →  isPushSupported
 - `src/shared/push/index.ts`  →  getPushPermission · type PushPermissionStatus · requestPushPermission · registerPushToken · unregisterDeviceToken · toServerOsPermission · isDeviceNotRegistered · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken · installForegroundPresentation · onPushReceived · onPushTapped · takeLaunchPushTap · type PushEvent
 - `src/shared/push/index.view.ts`  →  PushPreprompt
+- `src/shared/push/index.web.ts`  →  getPushPermission · requestPushPermission · registerPushToken · unregisterDeviceToken · promptAndRegisterPush · registerPushIfGranted · unregisterStoredPushToken · toServerOsPermission · isDeviceNotRegistered · installForegroundPresentation · onPushReceived · onPushTapped · takeLaunchPushTap · PushPreprompt
 - `src/shared/push/permissions.ts`  →  PushPermissionStatus · getPushPermission
 - `src/shared/push/pushColors.ts`  →  PUSH_ICON_COLORS
 - `src/shared/push/receive.ts`  →  PushEvent · installForegroundPresentation · onPushReceived · onPushTapped · takeLaunchPushTap
@@ -1733,11 +1761,13 @@
 - `src/shared/storage/index.ts`  →  PUSH_REGISTERED_KEY · TokenBundle · saveTokens · getTokens · clearTokens · hasStoredToken · readIdSet · writeIdSet · getInstallId · readStringValue · writeStringValue · readInstallFlag · writeInstallFlag
 - `src/shared/storage/installFlag.ts`  →  readInstallFlag · writeInstallFlag
 - `src/shared/storage/installId.ts`  →  getInstallId
+- `src/shared/storage/secureKv.ts`  →  getSecureItem · setSecureItem · deleteSecureItem
+- `src/shared/storage/secureKv.web.ts`  →  getSecureItem · setSecureItem · deleteSecureItem
 - `src/shared/storage/stringValue.ts`  →  readStringValue · writeStringValue
 
 ## src/shared/ui/
 - `src/shared/ui/AppBar.tsx`  →  AppBarBack · AppBar
-- `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · TAB_BAR_TOP · BottomTabBarProps · ItineraryIconActive · ItineraryIconInactive · RecordsIconActive · RecordsIconInactive · TAB_CONFIG · BottomTabBar
+- `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · TAB_BAR_MIN_HEIGHT · TAB_BAR_PADDING_TOP · TAB_BAR_TOP · BottomTabBarProps · ItineraryIconActive · ItineraryIconInactive · RecordsIconActive · RecordsIconInactive · TAB_CONFIG · BottomTabBar
 - `src/shared/ui/CollageEmptyState.tsx`  →  CollageEmptyStateProps · CollageEmptyState
 - `src/shared/ui/ConfirmDialog.tsx`  →  ConfirmTone · ConfirmButton · ConfirmDialogProps · ConfirmDialog
 - `src/shared/ui/GlassSurface.tsx`  →  GlassSurfaceProps · GlassSurface
@@ -1748,6 +1778,7 @@
 - `src/shared/ui/NoticeBanner.tsx`  →  NoticeBannerNotice · NoticeBanner · DismissNotice
 - `src/shared/ui/OpenNaverMapButton.tsx`  →  OpenNaverMapButton
 - `src/shared/ui/PlacePhoto.tsx`  →  PlacePhoto
+- `src/shared/ui/RevealItem.tsx`  →  RevealItem
 - `src/shared/ui/SegmentedControl.tsx`  →  SegmentedOption · SegmentedControlProps · SegmentedControl
 - `src/shared/ui/SheetShell.tsx`  →  SheetApply · SheetShellProps · SheetShell
 - `src/shared/ui/Skeleton.tsx`  →  SkeletonProps · Skeleton
@@ -1782,22 +1813,26 @@
 - `src/shared/ui/useToastBottom.ts`  →  useToastBottom
 
 ## src/test-support/
-- `src/test-support/animatedProbe.ts`  →  AnimatedProbe · useAnimatedProbe · hostNodes
+- `src/test-support/animatedProbe.ts`  →  AnimatedProbe · useAnimatedProbe · hostNodes · answerReduceMotionSynchronously
 - `src/test-support/apiBase.ts`  →  BASE
 - `src/test-support/barMotionProbe.ts`  →  BAR_ROOT · SCHEDULE · START_HOME · START_EXPLORE · START_RECORDS · START_MY · START_CELLS · FINAL_IDS · START5_IDS · NEW_CELLS · BarIds · HUB_IDS · withBarIds · visibleIds · frameSample · MotionWatch · watchMotion · joinWatches · advance · moved · structureSteady · lastSample · firstSeen · firstGone · staysOnceSeen · staysOnceGone · deferOsAnswer · flushOsAnswer · holdReduceMotionOn · layoutStyle · hiddenSpacingClasses · RowReading · readRow · setWindowWidth · SlotEffect · slotEffect · rootScale · isMounted · scheduleVisibleCenter · InteractionGate · useInteractionGate
 - `src/test-support/basesFakeServer.ts`  →  basesStay · STAY_A · STAY_B · basesAssignment · basesTrip · NETWORK_WAIT · assignNight · sheetClosed · settle · BasesFakeInit · createBasesFakeServer
 - `src/test-support/editDragList.ts`  →  EDIT_LIST · editListData · moveItem · fireEditDragEnd · hoverOverDeleteZone · fireEditDropOnZone · fireEditDragBegin
 - `src/test-support/envSandbox.ts`  →  sandboxEnv
 - `src/test-support/expoAppleAuthenticationMock.tsx`  →  appleSignInAsyncSpy · appleIsAvailableAsyncSpy · expoAppleAuthenticationModule · resetExpoAppleAuthenticationMock
-- `src/test-support/expoAuthSessionMock.ts`  →  promptAsyncSpy · authRequestConstructorSpy · makeRedirectUriSpy · expoAuthSessionModule · expoWebBrowserModule · expoCryptoModule · setPromptResult · setCodeVerifier · resetExpoAuthSessionMock
+- `src/test-support/expoAuthSessionMock.ts`  →  MockPromptResult · promptAsyncSpy · authRequestConstructorSpy · makeRedirectUriSpy · expoAuthSessionModule · expoWebBrowserModule · expoCryptoModule · setPromptResult · setCodeVerifier · resetExpoAuthSessionMock
+- `src/test-support/expoRouterMock.ts`  →  RouterMember · routerSpies · createExpoRouterMock · useRouter · router · useLocalSearchParams
 - `src/test-support/expoRouterRedirectMock.tsx`  →  Redirect · Stack
 - `src/test-support/expoRouterStackMock.tsx`  →  Stack
 - `src/test-support/expoRouterTabsMock.tsx`  →  capturedTabsProps · Tabs · useRouter
 - `src/test-support/fabAnchorProbe.ts`  →  FRAME_MS · sheetHost · sheetPosition · flushFrames · moveSheet · layoutOverlay · anchorStyle · anchorTop
+- `src/test-support/fakeBrowserWindow.ts`  →  FakeBrowser · installFakeBrowser · removeFakeBrowser
 - `src/test-support/fakeExpoFileSystem.ts`  →  fakeExpoFileSystemModule · resetFakeFs · seedCacheFile · cacheFilesIn · cacheFileCount · failFileWrites · documentFileCount · failFileReads
+- `src/test-support/fakeLocalStorage.ts`  →  FakeStorage · createFakeStorage · defineLocalStorage · installFakeLocalStorage · removeLocalStorage
 - `src/test-support/fakePreventRemoveNavigator.tsx`  →  MockNavAction · MockPreventCallback · mockExits · mockRemove · mockNavigation · useNavigation · usePreventRemove · resetFakeNavigator
 - `src/test-support/fitBandAsserts.ts`  →  NativeRegion · LatLng · expectPinsInBand · expectHeightLimited
 - `src/test-support/flushNotifications.ts`  →  flushNotifications
+- `src/test-support/fontScale.ts`  →  FONT_SCALE_MATRIX · setFontScale · describeAtFontScales
 - `src/test-support/freezeDate.ts`  →  REAL_TIMER_APIS · freezeDate
 - `src/test-support/integrationSetup.ts`  →  (export 없음)
 - `src/test-support/itineraryFixtures.ts`  →  TRIP_ID · DAY1 · DAY2 · DAY3 · trip · slot · day · itinerary · daysOf · threeStopSlots · threeStopDays · oneStopDay · planTrip · twoDayItinerary · busanPoi · busanHotel · busanFourPois · busanTrip
@@ -1816,8 +1851,11 @@
 - `src/test-support/pushOsFake.ts`  →  OsPermission · primeOsPermission · primeExpoToken · fakePushNotification · fakePushResponse · lastPushTapListener · primeOsLastResponse · lastPushReceiveListener
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/queryRender.tsx`  →  newTestQueryClient · createWrapper · createGcZeroWrapper · renderWithQueryClient · settle
+- `src/test-support/queryTimersUnref.ts`  →  (export 없음)
+- `src/test-support/revealProbe.ts`  →  revealWrapper · RevealValues · revealValues
 - `src/test-support/settingsHandlers.ts`  →  API_BASE · SettingsBodies · settingsHandlers · createNetworkTracker
 - `src/test-support/sheetTree.ts`  →  closestAncestor · isInsideSheet · sheetScrollOf · treeIndexOf · renderedText · closestScrollView · stubScrollTo · fireChipLayout
+- `src/test-support/splashGateRoutes.tsx`  →  SPLASH_GATE_STUB_ROUTES
 - `src/test-support/storageMock.ts`  →  saveTokens · getTokens · clearTokens · hasStoredToken
 - `src/test-support/toastHarness.tsx`  →  WithToastHost · resetToast
 - `src/test-support/tripRecordsFixtures.ts`  →  DaySlotFixture · daySlot · daySlotAt · tripItinerary · completedVisitOn · actualVisit · tripRecord · recordsHandler · summaryHandler
@@ -1879,4 +1917,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1201개 파일
+합계 1239개 파일

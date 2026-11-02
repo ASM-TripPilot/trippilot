@@ -29,6 +29,7 @@ import {
 } from '../api/fakeAssistantAdapter';
 import { AssistantSheetPage } from './AssistantSheetPage';
 import * as sheetPublicApi from '../index';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-1322 — 시트 page 배선(가짜 서버 주입). 서버 HTTP 가 없어 MSW 대신 `setAssistantPort` 로
@@ -74,12 +75,7 @@ function renderPage(
 ) {
   fake = new FakeAssistantAdapter(options);
   restore = setAssistantPort(fake);
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { gcTime: Infinity, retry: false },
-      mutations: { gcTime: Infinity },
-    },
-  });
+  const client = newTestQueryClient();
   clients.push(client);
   function Wrapper({ children }: { children: ReactNode }) {
     return (

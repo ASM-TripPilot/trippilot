@@ -1,4 +1,4 @@
-import * as Linking from 'expo-linking';
+import { openExternal } from '@/shared/external-link';
 
 /**
  * "네이버 지도에서 보기" — 장소 하나를 네이버 지도(앱 → 웹)로 여는 순수 URL 조립 + 열기.
@@ -59,7 +59,7 @@ export async function openNaverPlace(
   const appUrl = buildNaverPlaceAppUrl(target);
   if (appUrl !== null) {
     try {
-      await Linking.openURL(appUrl);
+      await openExternal(appUrl);
       return 'app';
     } catch {
       // 네이버 지도 앱 없음/열기 실패 → 웹으로 강등.
@@ -68,7 +68,7 @@ export async function openNaverPlace(
   const webUrl = buildNaverPlaceWebUrl(target);
   if (webUrl !== null) {
     try {
-      await Linking.openURL(webUrl);
+      await openExternal(webUrl);
       return 'web';
     } catch {
       // 웹도 실패 → 아래 failed.

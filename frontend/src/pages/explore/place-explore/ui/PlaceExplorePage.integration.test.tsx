@@ -7,9 +7,13 @@ import {
   waitFor,
   within,
 } from '@testing-library/react-native';
-import { QueryClient } from '@tanstack/react-query';
 import { BASE } from '@/test-support/apiBase';
-import { createGcZeroWrapper, createWrapper } from '@/test-support/queryRender';
+import { createGate } from '@/test-support/mswHookHarness';
+import {
+  createGcZeroWrapper,
+  createWrapper,
+  newTestQueryClient,
+} from '@/test-support/queryRender';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -29,6 +33,7 @@ import {
 import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
 
 import { PlaceExplorePage } from './PlaceExplorePage';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * AC-3 · AC-4 · AC-5 · AC-6 · AC-7 · AC-8 (+ 01b Seed Q1·Q3·Q9) — d04 배선.
@@ -103,12 +108,14 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-const mockPush = jest.fn();
+const {
+  push: mockPush,
+  replace: mockReplace,
+  dismissTo: mockDismissTo,
+  back: mockBack,
+} = routerSpies;
 // TRIP-708: replace 도 같은 지연-참조 목으로 준다 — 탭바가 replace 를 쓰지 않음을 P-13 이 관찰한다.
-const mockReplace = jest.fn();
 // TRIP-1262: 복제 탭바는 replace 가 아니라 dismissTo 로 항법한다 — 같은 지연-참조 목(P-13 이 관찰).
-const mockDismissTo = jest.fn();
-const mockBack = jest.fn();
 // region 은 '더 담기'가 여행지 여러 곳을 같은 키로 반복해 실으면 배열이 된다(expo-router 규약) —
 // P-9(다지역)를 위해 배열도 허용한다(단일지역 케이스 P-2 는 string 그대로 유효).
 // TRIP-1026: 위저드 출처 파라미터(`wizardOriginParams()`)도 같은 창구로 싣는다 — 키 이름을 테스트가
@@ -117,27 +124,19 @@ let mockParams: Record<string, string | string[] | undefined> = {};
 
 // 정적 `router` 싱글턴과 `useRouter()` 훅을 **둘 다** 같은 목으로 준다 — 배선이 어느 쪽을
 // 쓰든 이 파일의 단언은 같다(리포에 두 선례가 공존한다: StaySearchPage vs TripNewStep1Page).
-// ★ `router.push` 는 화살표로 한 겹 감싸 **지연 참조**한다. `jest.mock` 팩토리는 hoist 되어
-// `const mockPush` 선언보다 먼저 도는데, `router: { push: mockPush }` 처럼 즉시 읽으면 그
-// 시점의 undefined 가 박혀 `router.push is not a function` 이 난다(실측). `useRouter` 쪽이
-// 멀쩡한 것은 호출 시점에야 읽기 때문이다 — 리포 선례가 전부 훅 형태라 이 함정이 숨어 있었다.
-jest.mock('expo-router', () => ({
-  router: {
-    push: (href: string) => mockPush(href),
-    replace: (href: string) => mockReplace(href),
-    dismissTo: (href: string) => mockDismissTo(href),
-    // TRIP-1026 AC-4 가 뒤로 버튼까지 누른다 — 없으면 `router.back is not a function` 으로 죽는다.
-    back: () => mockBack(),
-  },
-  // TRIP-1093: 위저드 출처 ♥ 가 뒤로 간다 — 구현이 훅 쪽 back 을 골라도 같은 mockBack 에 모인다.
-  useRouter: () => ({
-    push: mockPush,
-    replace: mockReplace,
-    dismissTo: mockDismissTo,
-    back: mockBack,
-  }),
-  useLocalSearchParams: () => ({ ...mockParams }),
-}));
+// ★ 훅·명령형 호출은 공용 목의 기록장(`routerSpies`)에 쌓인다 — `mockPush` 등은 그 별칭이다. 옛 인라인 목은
+// `router: { push: mockPush }` 처럼 팩토리가 즉시 읽으면 hoist 때문에 undefined 가 박혀 화살표로 감싸야 했지만(실측),
+// 이제 팩토리는 핸들을 읽지 않는다.
+// TRIP-1026 AC-4 가 뒤로 버튼까지 누른다 — 없으면 `router.back is not a function` 으로 죽는다.
+// TRIP-1093: 위저드 출처 ♥ 가 뒤로 간다 — 구현이 훅 쪽 back 을 골라도 같은 mockBack 에 모인다.
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back', 'dismissTo'],
+    router: ['push', 'replace', 'back', 'dismissTo', 'canGoBack'],
+    params: () => ({ ...mockParams }),
+  })
+);
 
 /** authWiring.integration.test.ts:59 와 같은 값(리포 관례). */
 
@@ -178,18 +177,6 @@ function savedRowOf(poiId: string): SavedPlace {
     savedAt: '2026-08-01T00:00:00Z',
     place: PLACES.find((place) => place.poiId === poiId) ?? PLACES[0],
   };
-}
-
-/**
- * 테스트가 풀어 줄 때까지 응답하지 않는 문(`savedPlaces.integration.test.tsx:101` 선례).
- * `delay(ms)` 로 재면 느린 CI 에서 흔들리고, "아직 안 왔다"를 결정론적으로 보장하지 못한다.
- */
-function createGate() {
-  let release!: () => void;
-  const opened = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  return { opened, release };
 }
 
 /** 서버가 실제로 들고 있는 담은 목록 — POST/DELETE 가 이 배열을 고친다(★ 겹②). */
@@ -1011,12 +998,7 @@ describe('P-17 · 진입마다 새 시드로 무작위 순서를 묻는다 (TRIP
       setAccessToken('valid-access');
       mockParams = routeParams;
       // 캐시를 오래 들고 stale 도 되지 않는 클라이언트 — gcTime 0 래퍼로는 "지난 캐시를 읽는 사고"가 안 보인다.
-      const client = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, gcTime: Infinity, staleTime: Infinity },
-          mutations: { retry: false, gcTime: Infinity },
-        },
-      });
+      const client = newTestQueryClient({ staleTime: Infinity });
       const wrapper = createWrapper(client);
 
       const firstEntry = render(<PlaceExplorePage />, { wrapper });
@@ -1597,6 +1579,15 @@ describe('상태·예외 배선 (S-1~S-12)', () => {
         4
       );
       expect(cardTestIdsOrNone()).toEqual([]);
+      // B안 — 뷰 단위에서 옮김: 라벨·검색 placeholder, 그리고 로딩 얼굴에도 ♥·＋ FAB·지역 칩이 남는다.
+      expect(screen.getByText('장소를 모으는 중')).toBeOnTheScreen();
+      expect(screen.getByPlaceholderText('장소 · 명소 · 맛집 검색')).toHaveProp(
+        'testID',
+        'explore-places-search'
+      );
+      expect(screen.getByTestId('explore-places-saved-fab')).toBeOnTheScreen();
+      expect(screen.getByTestId('explore-places-create-fab')).toBeOnTheScreen();
+      expect(screen.getByTestId('explore-places-region')).toBeOnTheScreen();
 
       placesGate.release();
 
@@ -1620,6 +1611,11 @@ describe('상태·예외 배선 (S-1~S-12)', () => {
       await waitFor(() =>
         expect(screen.getByTestId('explore-places-empty')).toBeOnTheScreen()
       );
+      expect(
+        within(screen.getByTestId('explore-places-empty')).getByText(
+          '담긴 장소가 없어요'
+        )
+      ).toBeOnTheScreen();
 
       fireEvent.press(screen.getByTestId('explore-places-empty-region'));
 
@@ -1699,6 +1695,19 @@ describe('상태·예외 배선 (S-1~S-12)', () => {
         ).toBeOnTheScreen()
       );
 
+      // 제목은 검색어를 지목하고, 부제가 함께 걸린 카테고리를, 지목 해제 버튼은 검색어를 가리킨다.
+      const notice = screen.getByTestId('explore-places-filterzero');
+      expect(
+        within(notice).getByText(
+          '‘카페’ 필터도 함께 걸려 있어요 · 조건을 해제하면 더 많은 장소를 볼 수 있어요'
+        )
+      ).toBeOnTheScreen();
+      expect(
+        within(screen.getByTestId('explore-places-filterzero-clear')).getByText(
+          '검색어 지우기'
+        )
+      ).toBeOnTheScreen();
+
       fireEvent.press(
         screen.getByTestId('explore-places-filterzero-clear-all')
       );
@@ -1718,6 +1727,46 @@ describe('상태·예외 배선 (S-1~S-12)', () => {
         q: null,
         category: null,
       });
+    });
+  });
+
+  // B안 — 뷰 단위에서 옮김. 카테고리만 0건을 만들면 카테고리를 지목하고, 공백 검색어는 조건이 아니다.
+  describe('S-13 · 카테고리가 0건을 만들면 카테고리를 지목한다', () => {
+    it('쇼핑 0건이면 "‘쇼핑’ 때문에 0건"·"‘쇼핑’ 필터 해제"이고, 공백만 쳐도 "조건 모두 해제" 는 없다', async () => {
+      setAccessToken('valid-access');
+      server.use(
+        http.get(`${BASE}/places`, ({ request }) => {
+          const category = new URL(request.url).searchParams.get('category');
+          const result = PLACES.filter(
+            (p) => !category || p.category === category
+          );
+          return HttpResponse.json({ items: result, nextCursor: null });
+        })
+      );
+
+      await renderPage();
+      fireEvent.press(screen.getByTestId('explore-places-category-shopping'));
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('explore-places-filterzero')
+        ).toBeOnTheScreen()
+      );
+
+      const notice = screen.getByTestId('explore-places-filterzero');
+      expect(
+        within(notice).getByText('‘쇼핑’ 때문에 0건이에요')
+      ).toBeOnTheScreen();
+      expect(
+        within(screen.getByTestId('explore-places-filterzero-clear')).getByText(
+          '‘쇼핑’ 필터 해제'
+        )
+      ).toBeOnTheScreen();
+
+      fireEvent.changeText(screen.getByTestId('explore-places-search'), '   ');
+      expect(screen.getByTestId('explore-places-filterzero')).toBeOnTheScreen();
+      expect(
+        screen.queryByTestId('explore-places-filterzero-clear-all')
+      ).toBeNull();
     });
   });
 
@@ -1744,6 +1793,14 @@ describe('상태·예외 배선 (S-1~S-12)', () => {
       // 빈 목록으로 위장하면 위반이다(INV-4). 배너(부분 실패)와도 섞이지 않는다.
       expect(cardTestIdsOrNone()).toEqual([]);
       expect(screen.queryByTestId('explore-places-partialfailure')).toBeNull();
+      expect(
+        within(screen.getByTestId('explore-places-error')).getByText(
+          '지금 장소 정보를 불러올 수 없어요'
+        )
+      ).toBeOnTheScreen();
+      // 오류 얼굴에도 ＋ FAB·지역 칩이 남는다(B안 — 뷰 단위에서 옮김).
+      expect(screen.getByTestId('explore-places-create-fab')).toBeOnTheScreen();
+      expect(screen.getByTestId('explore-places-region')).toBeOnTheScreen();
       // 앵커 — 실패한 파도는 지역별로 정확히 WAVE 건이었다(재시도 증분을 가르는 기준선).
       expect(hitsOf('GET', '/api/v1/places')).toHaveLength(WAVE);
 

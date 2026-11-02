@@ -206,6 +206,7 @@ class JsonEventStore:
                 "regions_covered": len(self._doc["coverage"])}
 
     def save(self) -> None:
-        self._path.write_text(
-            json.dumps(self._doc, ensure_ascii=False, indent=1), encoding="utf-8"
-        )
+        # 임시 파일에 다 쓴 뒤 교체 — 쓰다 죽어도 누적본은 그대로다(공식 축제 단계는 실패해도 영속 단계가 돈다)
+        tmp = self._path.with_suffix(self._path.suffix + ".tmp")
+        tmp.write_text(json.dumps(self._doc, ensure_ascii=False, indent=1), encoding="utf-8")
+        tmp.replace(self._path)

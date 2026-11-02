@@ -3,6 +3,10 @@ package com.trippilot.assistant.application
 import com.trippilot.assistant.domain.AssistantSurface
 import com.trippilot.assistant.domain.MessageKind
 import com.trippilot.placedata.api.PoiSurfaceView
+import com.trippilot.weathercontext.api.HourlyWeather
+import com.trippilot.weathercontext.api.PointForecast
+import com.trippilot.weathercontext.api.Precipitation
+import com.trippilot.weathercontext.api.Sky
 import com.trippilot.weathercontext.api.WeatherReading
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
@@ -10,6 +14,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotContain
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.util.UUID
 
 /**
@@ -43,7 +48,7 @@ class QueryCardsTest : StringSpec({
     @Suppress("UNCHECKED_CAST")
     fun problems(payload: Map<String, Any?>?) = payload!!["problems"] as List<Map<String, Any?>>
 
-    fun cards(data: FakeTripData) = QueryCards(data, data, data, data)
+    fun cards(data: FakeTripData) = QueryCards(data, data, data, data, data, data)
 
     "진행 검토 — 요약은 저장된 사실, 문제는 솔버가 표기한 위반과 빈 일자뿐이다" {
         val museum = plannedSlot(d2, 0, "14:00", "미술관", violation = "앞 장소에서 이동할 시간이 빠듯해요")
@@ -316,5 +321,40 @@ class QueryCardsTest : StringSpec({
             card.text shouldBe "지금 날씨를 확인할 수 없어요."
             card.payload shouldBe null
         }
+    }
+
+    /**
+     * 하늘·기온·강수 형태도 말한다(사용자 요구 2026-10-22 — AI 대화 답변은 #1548 로 이미 이렇게 말한다). 시간별 예보는 여행지
+     * 중심 격자로 묻고, 못 받으면 지어내지 않고 종전 카드 그대로다.
+     */
+    "날씨 — 시간별 예보가 있으면 하늘·기온·강수 형태를 앞에 더한다" {
+        fun hour(h: Int, sky: Sky?, tmp: Double?, pty: Precipitation? = Precipitation.NONE) =
+            LocalDateTime.of(d1.plusDays(1), java.time.LocalTime.of(h, 0)) to HourlyWeather(null, pty, sky, tmp, null)
+        val forecast = PointForecast(
+            "98,76", noonDay2,
+            mapOf(
+                hour(6, Sky.OVERCAST, 9.0), // 지난 시각 — 하늘은 안 세고 기온 범위엔 든다
+                hour(12, Sky.CLEAR, 17.0), hour(15, Sky.CLEAR, 19.0, Precipitation.SHOWER),
+                hour(18, Sky.MOSTLY_CLOUDY, 14.0), hour(21, Sky.CLEAR, null, null),
+                LocalDateTime.of(d1.plusDays(2), java.time.LocalTime.of(3, 0)) to HourlyWeather(null, Precipitation.SNOW, Sky.OVERCAST, -3.0, null),
+            ),
+        )
+        val data = FakeTripData(acc, reading = WeatherReading(70, "호우주의보", noonDay2, stale = false)).apply { this.forecast = forecast }
+        rows(cards(data).weather(ctx()).payload) shouldContainExactly listOf(
+            "하늘" to "맑음", "기온" to "9~19℃", "강수" to "소나기",
+            "오늘 최대 강수확률" to "70%", "특보" to "호우주의보",
+        )
+
+        val dry = FakeTripData(acc, reading = WeatherReading(10, null, noonDay2, stale = false)).apply {
+            this.forecast = PointForecast("98,76", noonDay2, mapOf(hour(13, Sky.OVERCAST, 11.0)))
+        }
+        rows(cards(dry).weather(ctx()).payload) shouldContainExactly
+            listOf("하늘" to "흐림", "기온" to "11℃", "오늘 최대 강수확률" to "10%")
+
+        val down = FakeTripData(acc, reading = WeatherReading(10, null, noonDay2, stale = false)).apply {
+            this.forecast = forecast
+            failForecast = true
+        }
+        rows(cards(down).weather(ctx()).payload) shouldContainExactly listOf("오늘 최대 강수확률" to "10%")
     }
 })

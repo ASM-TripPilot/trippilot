@@ -9,6 +9,7 @@ import {
   flushQueue,
   handleWake,
   markExplainerAsked,
+  noticeFor,
   setContext,
   uploadPendingRoutes,
   type EngineStatus,
@@ -31,7 +32,8 @@ export interface LocationAutomationInput {
   date: string;
   slots: AutomationSlotRef[];
   visits: AutomationVisitRef[];
-  consentOn: boolean;
+  /** 앱 위치 동의(legalConsent). `null` = 조회가 아직 안 끝남 — 판정을 보류한다("모름"을 철회로 읽지 않는다, TRIP-1696). */
+  consentOn: boolean | null;
   /** i01 허브에서 부르는가 — 설명(EXPLAINER)은 허브에서만 뜬다. */
   onHub: boolean;
 }
@@ -78,14 +80,16 @@ export function useLocationAutomation(
 
   const refresh = useCallback(
     async (foreground: boolean) => {
-      if (!flagOn || !ctx.tripId) return;
+      // 동의를 모르면 아무것도 하지 않는다 — false 로 판정하면 무장 중 기기가 강등·원시 표본 삭제를 당한다(BR-U10-42).
+      const { consentOn } = ctx;
+      if (!flagOn || !ctx.tripId || consentOn === null) return;
       const deps = getEngineDeps();
       await setContext(deps, {
         tripId: ctx.tripId,
         startDate: ctx.startDate,
         endDate: ctx.endDate,
         date: ctx.date,
-        consentOn: ctx.consentOn,
+        consentOn,
         slots: ctx.slots,
         visits: ctx.visits,
       });
@@ -108,7 +112,7 @@ export function useLocationAutomation(
         const { state } = deps.store.load();
         next = {
           ...next,
-          notice: state.notice,
+          notice: noticeFor(state),
           droppedCount: state.droppedCount,
         };
       }

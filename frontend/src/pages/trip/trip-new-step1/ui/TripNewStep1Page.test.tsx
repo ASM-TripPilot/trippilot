@@ -6,7 +6,6 @@ import {
   act,
 } from '@testing-library/react-native';
 
-import type { TripWizardStep1ScreenProps } from '@/pages/trip/trip-new-step1/ui/TripWizardStep1Screen';
 import type {
   SavedPlace,
   PreferenceView,
@@ -28,8 +27,6 @@ import { TripNewStep1Page } from './TripNewStep1Page';
  * 옛 3파일(본 · `.mustVisit` · `.loading`)을 하나로 합쳤다. 옛 파일 하나 = 바깥 describe 하나다.
  *
  * 공유 목 — jest.mock 은 파일 전체에 걸리므로 갈래가 갈리면 팩토리 안에서 `mock` 변수를 읽는다:
- *  - 화면(`TripWizardStep1Screen`): `mockStubScreen` 이 true 일 때만 props 를 붙잡고 null 을 낸다(옛 `.loading`
- *    props-캡처 목). false(기본)면 실물 화면을 그린다. `isLoading 파생` describe 만 켠다.
  *  - 조회 훅: prefill 은 `mockPreference`·`mockPrefillPending`, 담은목록은 `mockSavedPlaces` 하나로 갈아 끼운다.
  *  - 로그인: tokenManager 는 실물이다. 로그인 describe 가 beforeEach 에서 setAccessToken 을 부르고,
  *    최상위 afterEach 가 clearAccessToken 으로 되돌린다(모듈 전역이라 안 지우면 다음 describe 로 샌다).
@@ -99,26 +96,6 @@ jest.mock('@/features/save-place/model/savedPlaces', () => ({
   useSavedPlaces: () => mockSavedPlaces,
 }));
 
-/** true 면 화면을 props-캡처 목으로 바꾼다(null 반환 — NativeWind interop 함정 회피). */
-let mockStubScreen = false;
-const mockScreenProps: { props?: { isLoading?: boolean } } = {};
-
-jest.mock('@/pages/trip/trip-new-step1/ui/TripWizardStep1Screen', () => {
-  const actual = jest.requireActual(
-    '@/pages/trip/trip-new-step1/ui/TripWizardStep1Screen'
-  );
-  return {
-    ...actual,
-    // 실물은 상태 훅 없는 함수 컴포넌트라 그대로 불러 그린다(팩토리 안 JSX·createElement 는 NativeWind
-    // babel 이 바깥 변수로 바꿔 jest.mock 호이스트 검사에 걸린다).
-    TripWizardStep1Screen: (props: TripWizardStep1ScreenProps) => {
-      if (!mockStubScreen) return actual.TripWizardStep1Screen(props);
-      mockScreenProps.props = props;
-      return null;
-    },
-  };
-});
-
 function loaded(places: SavedPlace[]) {
   return {
     savedPlaces: places,
@@ -153,14 +130,12 @@ beforeEach(() => {
   mockRefetch.mockClear();
   mockRemove.mockClear();
   mockSavedPlaces = loaded([]);
-  mockStubScreen = false;
-  mockScreenProps.props = undefined;
 });
 
 afterEach(() => {
   clearAccessToken();
-  mockStubScreen = false;
-  useTripWizardStore.getState().reset();
+  // TRIP-1624 — 화면이 아직 마운트돼 있는 때(RNTL 정리는 이 훅 뒤)라 reset 이 구독자를 갱신한다 → act 로 감싼다.
+  act(() => useTripWizardStore.getState().reset());
 });
 
 /**
@@ -214,7 +189,7 @@ describe('스토어 → 요약 행 도출 배선', () => {
   });
 
   afterEach(() => {
-    useTripWizardStore.getState().reset();
+    act(() => useTripWizardStore.getState().reset());
   });
 
   describe('진입 직후 — 빈 스토어면 플레이스홀더 + 게이트 닫힘 (맹점①)', () => {
@@ -357,11 +332,6 @@ describe('스토어 → 요약 행 도출 배선', () => {
   //  - "불일치 안내 한 줄이 없다"(TRIP-1010 표면 제거)는 부재 단언이라 지웠다(README 판정 3).
   // 기간 행은 main + sub 가 이어 붙으므로 정규식으로 잰다(02a ★10).
 
-  function storeDates(): [string | undefined, string | undefined] {
-    const { startDate, endDate } = useTripWizardStore.getState();
-    return [startDate, endDate];
-  }
-
   function periodRow() {
     return screen.getByTestId('trip-wizard-summary-period');
   }
@@ -371,6 +341,8 @@ describe('스토어 → 요약 행 도출 배선', () => {
   // 결정 1: 달력은 오늘의 달 + 24 까지만 간다. 결정 2: 올해가 아닌 날짜면 기간 행·시트 요약에 연도를 붙인다.
   // 페이지가 '오늘'(baseDate → resolvedToday)을 셀렉터와 시트에 제대로 넘기는지(배선)를 본다. 문자열 바이트는
   // tripSummary.test.ts 가 잠그고, 여기선 "연도가 붙었나/안 붙었나"만 본다(02a ★5).
+  // 시트 요약 연도·7달 넘겨 고르기→적용 it 은 지웠다(jest-cut A): 시트 요약은 `PeriodEditSheet.test` 「요약줄」,
+  // 적용 커밋은 `.integration` 「기간 편집 시트」 W-3~W-5, 행의 today 배선은 아래 AC-7·짝이 같은 뮤테이션을 잡는다.
   //
   // 기간 행은 라벨·main·sub 가 한 문자열로 이어져(구분자 없음) 행 전체 완전 일치는 못 쓴다 — main Text 노드만
   // `within(row).getByText(정확한 문자열)` 로 잡는다(02a ★6).
@@ -413,37 +385,6 @@ describe('스토어 → 요약 행 도출 배선', () => {
       expect(
         within(periodRow()).getByText('5월 15일(화) – 17일(목)')
       ).toBeOnTheScreen();
-    });
-
-    it('시트에서 7달 넘겨 2027-05-15 를 고르면 시트 요약·행 모두 "2027년 5월 15일(토) – 17일(월)" (AC-7·AC-8)', () => {
-      // 준비 — 부산 2박이라 끝은 시작 + 2.
-      useTripWizardStore.getState().addDestination('부산광역시', 2);
-      render(<TripNewStep1Page baseDate="2026-10-08" />);
-      expect(within(periodRow()).getByText('기간 선택')).toBeOnTheScreen();
-
-      // 실행 ① — 시트를 열고 2026-10 → 2027-05 로 7번 넘긴다.
-      fireEvent.press(periodRow());
-      expect(monthHeader()).toHaveTextContent('2026년 10월');
-      for (let i = 0; i < 7; i += 1) fireEvent.press(nextMonthButton());
-      expect(monthHeader()).toHaveTextContent('2027년 5월');
-
-      // 실행 ② — 5/15 를 시작으로 고른다.
-      fireEvent.press(screen.getByTestId('trip-wizard-period-cell-2027-05-15'));
-
-      // 단언 ① — 시트 요약에 연도.
-      expect(
-        screen.getByTestId('trip-wizard-period-summary')
-      ).toHaveTextContent('2027년 5월 15일(토) – 17일(월)');
-
-      // 실행 ③ — 적용.
-      fireEvent.press(screen.getByTestId('trip-wizard-period-apply'));
-
-      // 단언 ② — 스토어와 행.
-      expect(storeDates()).toEqual(['2027-05-15', '2027-05-17']);
-      expect(
-        within(periodRow()).getByText('2027년 5월 15일(토) – 17일(월)')
-      ).toBeOnTheScreen();
-      expect(within(periodRow()).getByText('2박 3일')).toBeOnTheScreen();
     });
 
     it('다음 달을 24번 누르면 2028년 10월에서 멈추고, 25번째는 눌리지 않는다 (AC-5)', () => {
@@ -715,9 +656,8 @@ describe('담은목록 게이트 + 더 담기 목적지 (로그인 기본)', () 
  * combined). **둘 중 하나만 pending 이어도** 화면 isLoading=true, **둘 다 도착하면** false. 뮤턴트
  * (항상 false / 한쪽만 봄)가 각각 red 로 걸린다.
  *
- * 왜 props 캡처인가: 시드 심판이 "화면 isLoading true **전달**"이다. `TripWizardStep1Screen` 을 props-캡처
- * 목(null 반환, `MyStaysPage.integration` 선례)으로 치환하고 두 조회 훅의 `isPending` 을 독립 제어해
- * 페이지의 파생 한 줄만 격리해 잰다(스켈레톤 실렌더는 `TripWizardStep1Screen.test.tsx` 「두 상태 얼굴」 몫).
+ * 실물 화면을 그리고 두 조회 훅의 `isPending` 을 독립 제어해, 요약 첫 칸 스켈레톤(`trip-wizard-summary-skeleton-1`)
+ * 이 뜨는지로 본다(옛 화면 props-캡처 목은 지웠다 — 같은 slice 화면을 갈아 끼우면 리팩터를 막는다, README 판정 6).
  *
  * ⚠️ isAuthed 게이트 우회(02a §4-★9): 현행 페이지는 `savedPlacesLoading = isAuthed && savedPlaces.isPending`.
  * 이 describe 의 beforeEach 가 실물 토큰을 심어 isAuthed=true 로 돌린다 — 구현이 `savedPlaces.isPending` 을 raw 로
@@ -725,26 +665,24 @@ describe('담은목록 게이트 + 더 담기 목적지 (로그인 기본)', () 
  *
  * ⚠️ `jest.mock` 팩토리는 최상단으로 끌어올려진다. 바깥 변수는 이름이 `mock` 으로 시작해야 참조 예외다.
  *
- * 화면 props-캡처 목은 최상위 `mockStubScreen` 스위치다 — 이 describe 의 beforeEach 만 켠다. 옛 tokenManager 목 대신 실물 setAccessToken.
+ * 옛 tokenManager 목 대신 실물 setAccessToken.
  */
-describe('isLoading 파생 (화면 props 캡처)', () => {
+describe('isLoading 파생 (요약 스켈레톤)', () => {
   const BASE = '2026-06-10';
 
   beforeEach(() => {
     useTripWizardStore.getState().reset();
     mockPrefillPending = false;
     mockSavedPlaces = loaded([]);
-    mockScreenProps.props = undefined;
-    mockStubScreen = true;
     // isAuthed=true — savedPlaces.isPending 이 그대로 게이트에 반영되게(★9). 실물 토큰을 심는다.
     setAccessToken('test-token');
   });
 
   afterEach(() => clearAccessToken());
 
-  function renderAndCapture(): boolean | undefined {
+  function renderAndCapture(): boolean {
     render(<TripNewStep1Page baseDate={BASE} />);
-    return mockScreenProps.props?.isLoading;
+    return screen.queryByTestId('trip-wizard-summary-skeleton-1') !== null;
   }
 
   describe('W · isLoading 파생 = prefill.isPending || savedPlaces.isPending (combined)', () => {

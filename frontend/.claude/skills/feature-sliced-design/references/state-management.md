@@ -5,6 +5,26 @@ FSD structure. Authentication, type, and API request patterns are in
 `references/auth-and-api.md`. Code samples are React; the placement
 rules are framework-agnostic.
 
+## 목차
+
+- State management: Redux
+  - Where a Redux slice belongs
+  - Business-entity slice in entities
+  - User-action slice in features
+  - Registering slices in app
+- State management: TanStack Query (React Query)
+  - Where to store query keys
+  - Where to store mutations
+  - Query factory pattern
+  - Infinite scroll
+  - Suspense mode
+  - Reading mutation state with useMutationState
+  - QueryProvider in the app layer
+  - Code generation
+  - Custom API client
+
+---
+
 ## State management: Redux
 
 FSD has no Redux guide of its own. The placement rule below is Step 6 of

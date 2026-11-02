@@ -144,7 +144,7 @@ def main(argv: list[str]) -> int:
                     stat["나이트라이프 제외(유흥·골프·라운지 오탐)"] += 1
                     continue
                 tags = got
-            if (why := non_travel_reason(name)):
+            if (why := non_travel_reason(name, poi["category"])):
                 stat[f"비여행지:{why}"] += 1
                 continue
             addr = resolve_address(prov.get("address"), regions, abbrev=abbrev,

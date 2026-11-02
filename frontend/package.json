@@ -3,10 +3,12 @@
   "version": "0.1.0",
   "main": "index.ts",
   "private": true,
+  "packageManager": "pnpm@11.13.1",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
+    "web": "expo start --web",
     "lint": "eslint . --cache --cache-location .eslintcache --cache-strategy content",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -16,6 +18,7 @@
     "test:integration": "jest --config jest.integration.config.js",
     "codegen": "orval --config ./orval.config.ts && prettier --write \"src/shared/api/generated/**/*.ts\"",
     "fsd": "steiger ./src --fail-on-warnings",
+    "structure:drift": "node .claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs --write && git diff --exit-code docs/structure.generated.md",
     "bundle:report": "node scripts/bundle-report.cjs"
   },
   "dependencies": {

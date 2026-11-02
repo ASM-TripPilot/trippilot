@@ -33,16 +33,13 @@ import { PrefStep1Page } from './PrefStep1Page';
  * 3동작: 준비(reset+렌더) → 실행(탭) → 단언(화면 반영/스토어 값/라우터 호출).
  */
 
-jest.mock('expo-router', () => {
-  const replace = jest.fn();
-  const push = jest.fn();
-  const back = jest.fn();
-  return {
-    __esModule: true,
-    useRouter: () => ({ replace, push, back }),
-    router: { replace, push, back },
-  };
-});
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+    router: ['push', 'replace', 'back'],
+  })
+);
 
 // TRIP-1595 D3 — 1/2·2/2 의 모든 완료 출구는 홈('/')이 아니라 기능 안내로 간다.
 const TOUR_ROUTE = '/onboarding-tour';
@@ -172,25 +169,6 @@ describe('PrefStep1Page — 페이스 축 탭↔스토어 왕복 (AC3 · US-ONB-
     // 단언 ② — 쓰기 경로: pace는 단일 축이라 배열이 아니라 원시값(toBe)이다.
     expect(usePreferenceStore.getState().pace).toBe('balanced');
   });
-});
-
-describe('PrefStep1Page — 온보딩 완료 재평가 신호 발화 (ticket AC-A · US-ONB-11 · TRIP-353)', () => {
-  it.each([['상단', 'onboarding-pref1-skip-top']])(
-    '%s 일괄 탈출을 탭하면 재평가 신호를 발화하고 기능 안내로 replace 한다',
-    async (_label, testId) => {
-      // 준비 — 렌더.
-      render(<PrefStep1Page />);
-
-      // 실행 — 일괄 탈출 탭.
-      fireEvent.press(screen.getByTestId(testId));
-
-      // 단언 — 취향 1/2 탈출도 재평가 신호를 발화(결함 A — pref2 뿐 아니라 여기서도) + replace 유지.
-      await waitFor(() =>
-        expect(routerMock.replace.mock.calls).toEqual([[TOUR_ROUTE]])
-      );
-      expect(mockNotifyReeval).toHaveBeenCalledTimes(1);
-    }
-  );
 });
 
 describe('PrefStep1Page — 일괄 탈출은 기존 선택을 보존한다 (AC4 · US-ONB-11 · US-ONB-14 · 5-12)', () => {

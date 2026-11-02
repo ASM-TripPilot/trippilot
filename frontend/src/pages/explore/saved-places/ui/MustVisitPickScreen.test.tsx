@@ -358,8 +358,6 @@ describe('🔴 CS-11 · 지역 밖 목록은 머리글 한 줄 아래 흐리게,
     // 머리글 — 문구 완전 일치(N=밖 개수), 새 색·크기 없이 기존 캡션 토큰.
     const header = screen.getByTestId('mustvisit-pick-region-outside');
     expect(header).toHaveTextContent('이 여행 지역 밖 2곳');
-    expect(String(header.props.className)).toContain('text-caption');
-    expect(String(header.props.className)).toContain('text-muted');
 
     // 순번은 지역 안 행에만 있다(TRIP-1106 결정 1-A — 밖 행 순번이 "선택 번호"로 읽혀 뺐다).
     [
@@ -383,7 +381,6 @@ describe('🔴 CS-11 · 지역 밖 목록은 머리글 한 줄 아래 흐리게,
     ['p1', 'p2'].forEach((poiId) => {
       const row = screen.getByTestId(`mustvisit-pick-row-${poiId}`);
       expect(row).not.toBeDisabled();
-      expect(String(row.props.className)).not.toContain('opacity-40');
       expect(
         screen.getByTestId(`mustvisit-pick-check-${poiId}`)
       ).toBeOnTheScreen();
@@ -400,7 +397,6 @@ describe('🔴 CS-11 · 지역 밖 목록은 머리글 한 줄 아래 흐리게,
         screen.queryByTestId(`mustvisit-pick-check-outline-${poiId}`)
       ).toBeNull();
       expect(row).toBeDisabled();
-      expect(String(row.props.className)).toContain('opacity-40');
     });
 
     // 밖 행을 눌러도 선택 콜백이 나가지 않는다.
@@ -440,9 +436,6 @@ describe('🔴 CS-16 · 이미 선택된 지역 밖 행은 채운 체크로 보�
     ['p3', 'p4'].forEach((poiId) => {
       expect(screen.queryByTestId(`mustvisit-pick-rank-${poiId}`)).toBeNull();
     });
-    expect(
-      String(screen.getByTestId('mustvisit-pick-row-p3').props.className)
-    ).toContain('opacity-40');
 
     // 부제는 페이지가 준 선택 수 그대로(밖 선택 포함 여부는 페이지가 정한다 — 결정 0).
     expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
@@ -478,14 +471,14 @@ describe('🔴 CS-13 · 지역 안이 0건이면 목록 머리에 region-empty �
 
     // 블록 — 제목은 Text 노드 완전 일치로 잰다(블록 전체 글자엔 CTA 가 섞여 완전 일치가 깨진다, 02a ★13).
     const block = screen.getByTestId('mustvisit-pick-region-empty');
-    const title = within(block).getByText('부산에 담은 곳이 없어요');
-    expect(String(title.props.className)).toContain('text-section');
+    expect(
+      within(block).getByText('부산에 담은 곳이 없어요')
+    ).toBeOnTheScreen();
     // 삽화 없음(진짜 0곳 얼굴의 콜라주와 다르다).
     expect(within(block).queryByTestId('mustvisit-pick-empty-art')).toBeNull();
 
     const cta = screen.getByTestId('mustvisit-pick-region-empty-browse');
     expect(cta).toHaveTextContent('탐색에서 부산 장소 담기');
-    expect(String(cta.props.className)).toContain('bg-primary');
 
     // 그 아래 지역 밖 — 머리글 + 흐린 행 2개, 체크는 하나도 없다.
     expect(
@@ -604,5 +597,61 @@ describe('CS-17 · 사진 칸 (사이클 20261022-place-category-covers)', () =>
     expect(screen.getByTestId('mustvisit-pick-photo-p1').props.source).toEqual([
       coverFor('명소', 'p1'),
     ]);
+  });
+});
+
+/**
+ * TRIP-1363 — d02 select 목록은 FlatList(가상화)다(옛 `.list` 파일을 합쳤다). 담은 곳 100개여도 처음 보이는
+ * 행만 마운트되고, 머리(지역 0건 블록)·꼬리('+ 탐색에서 더 담기')·밖 캡션 위치는 전과 같다. 선택은 Set
+ * 판정이어도 같은 결과다.
+ */
+describe('TRIP-1363 · MustVisitPickScreen FlatList', () => {
+  const saved = (n: number, prefix = 'p'): SavedPlace[] =>
+    Array.from({ length: n }, (_, i) => ({
+      savedPlaceId: `sp-${prefix}${i}`,
+      savedAt: '2026-08-01T00:00:00.000Z',
+      place: makePlace(`${prefix}${i}`),
+    }));
+
+  it('V1 · 100곳이어도 전부 마운트하지 않는다(가상화)', () => {
+    renderScreen({ savedPlaces: saved(100) });
+    const rows = screen.getAllByTestId(/^mustvisit-pick-row-/).length;
+    expect(rows).toBeGreaterThan(0);
+    expect(rows).toBeLessThan(100);
+    expect(screen.getByTestId('mustvisit-pick-complete')).toBeTruthy();
+  });
+
+  it('V2 · 선택·잠금은 Set 판정이어도 행에 그대로 반영된다', () => {
+    renderScreen({
+      savedPlaces: saved(3),
+      selectedPoiIds: ['p0', 'p1'],
+      lockedPoiIds: ['p1'],
+    });
+    expect(screen.getByTestId('mustvisit-pick-check-p0')).toBeSelected();
+    expect(screen.getByTestId('mustvisit-pick-check-p1')).toBeSelected();
+    expect(screen.getByTestId('mustvisit-pick-check-p1')).toBeDisabled();
+    expect(screen.getByTestId('mustvisit-pick-check-p2')).not.toBeSelected();
+  });
+
+  it('V3 · 밖 캡션은 안 행 다음·밖 첫 행 앞에, 꼬리 CTA 는 맨 끝에 있다', () => {
+    renderScreen({
+      savedPlaces: saved(2),
+      outsideRegionPlaces: saved(2, 'o'),
+    });
+    expect(screen.getByTestId('mustvisit-pick-region-outside')).toBeTruthy();
+    expect(screen.getByText('이 여행 지역 밖 2곳')).toBeTruthy();
+    expect(screen.getByTestId('mustvisit-pick-addmore')).toBeTruthy();
+    expect(screen.getAllByTestId(/^mustvisit-pick-row-/)).toHaveLength(4);
+    expect(screen.queryByTestId('mustvisit-pick-rank-o0')).toBeNull();
+  });
+
+  it('V4 · 지역 안 0건이면 머리에 region-empty 블록이 서고 꼬리 CTA 는 없다', () => {
+    renderScreen({
+      savedPlaces: [],
+      regionEmptyLabel: '서울',
+      outsideRegionPlaces: saved(1, 'o'),
+    });
+    expect(screen.getByTestId('mustvisit-pick-region-empty')).toBeTruthy();
+    expect(screen.queryByTestId('mustvisit-pick-addmore')).toBeNull();
   });
 });

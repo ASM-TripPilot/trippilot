@@ -37,7 +37,12 @@ import { usePushRouting } from './usePushRouting';
  * 3동작 뼈대: 준비 = 게이트 상태로 훅을 띄우고 캐시를 심는다 → 실행 = 탭·수신·게이트 전환 → 단언 = 이동 기록·캐시 상태.
  */
 
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    router: ['push'],
+  })
+);
 
 const mockPush = router.push as jest.Mock;
 const getLast = Notifications.getLastNotificationResponseAsync as jest.Mock;

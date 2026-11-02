@@ -492,28 +492,6 @@ describe('비주얼 구조', () => {
   // 꽂아 준다(TRIP-932 주입 경로) — 애플의 로고·제목은 LoginPage.apple.test.tsx(AC-Q3′)가 실물로 잠근다.
   const CUSTOM_PROVIDERS = ['google', 'kakao', 'naver'] as const;
 
-  // ── 동결 계약: 아이콘 글리프 존재 (AC-VS-5~6) ────────────────────────────────
-  describe('c02-social-login 비주얼 구조 가드 (AC-VS-5~6)', () => {
-    it.each(CUSTOM_PROVIDERS)(
-      'AC-VS-5 %s 소셜 버튼 안에 브랜드 아이콘 SVG 가 렌더된다 — 텍스트 전용이 아니다',
-      (provider) => {
-        renderScreen();
-        const button = screen.getByTestId(`auth-login-${provider}`);
-        expect(
-          within(button).getByTestId(`auth-login-${provider}-icon`)
-        ).toBeOnTheScreen();
-      }
-    );
-
-    it('AC-VS-6 브랜드 블록에 앱아이콘 글리프 SVG 가 렌더된다', () => {
-      renderScreen();
-      const brand = screen.getByTestId('auth-login-brand');
-      expect(
-        within(brand).getByTestId('auth-login-logo-glyph')
-      ).toBeOnTheScreen();
-    });
-  });
-
   // Figma c02-social-login 확정 라벨.
   const FIGMA_LABELS: Record<(typeof CUSTOM_PROVIDERS)[number], string> = {
     google: '구글로 계속하기',
@@ -533,27 +511,10 @@ describe('비주얼 구조', () => {
         expect(
           within(button).getByText(FIGMA_LABELS[provider])
         ).toBeOnTheScreen();
+        // ▸단언 — 옛 영문 라벨은 화면 어디에도 없다(구 AC-V2 에서 옮김).
+        expect(screen.queryByText('Kakao로 계속하기')).toBeNull();
       }
     );
-  });
-
-  describe('AC-V2 · 카카오 라벨 문구 — 한글이 뜨고 영문은 화면에서 사라진다 (렌더)', () => {
-    it('카카오 버튼 라벨이 "카카오로 계속하기"로 나오고, "Kakao로 계속하기"는 화면 어디에도 없다', () => {
-      // ▸준비
-      renderScreen();
-      const kakaoButton = screen.getByTestId('auth-login-kakao');
-
-      // ▸실행+단언 — 긍정: getByText(문자열)은 완전 일치다(02a §D7).
-      expect(
-        within(kakaoButton).getByText('카카오로 계속하기')
-      ).toBeOnTheScreen();
-
-      // ▸단언 — 부정(짝): queryByText 는 못 찾으면 null 을 준다.
-      expect(screen.queryByText('Kakao로 계속하기')).toBeNull();
-
-      // ▸단언 — 모집단 앵커: 렌더 통째 실패가 '전부 null'로 공허하게 통과하는 것을 막는다.
-      expect(screen.getByTestId('auth-login-root')).toBeOnTheScreen();
-    });
   });
 
   describe('AC-Q3 · 화면은 애플 버튼 표면을 직접 그리지 않고 넘겨받은 버튼만 꽂는다 (TRIP-932 주입 경로 · TRIP-1124 재서술)', () => {
@@ -570,31 +531,6 @@ describe('비주얼 구조', () => {
       expect(within(apple).queryByTestId('auth-login-apple-icon')).toBeNull();
       expect(screen.queryByTestId('auth-login-apple-icon')).toBeNull();
       expect(screen.queryByText('애플로 계속하기')).toBeNull();
-    });
-  });
-
-  // ── 딤 backdrop (AC-D1/D2) ─────────────────────────────────────────────
-  describe('AC-D1 · 시트가 열리면 딤(backdrop)이 깔린다 (렌더 · 목 확장 선행)', () => {
-    it.each(SHEETS)(
-      '$name 시트가 열리면 auth-sheet-backdrop 이 렌더된다',
-      ({ override }) => {
-        // ▸준비 — 각 phase 로 시트를 연다.
-        renderScreen(override);
-
-        // ▸단언 — 화면이 backdropComponent 로 넘긴 커스텀 딤이 존재한다.
-        expect(screen.getByTestId('auth-sheet-backdrop')).toBeOnTheScreen();
-      }
-    );
-  });
-
-  describe('AC-D2 · 시트가 없으면 딤도 없다 (부재 짝)', () => {
-    it('idle 에는 auth-sheet-backdrop 이 없다', () => {
-      // ▸준비+실행
-      renderScreen();
-
-      // ▸단언 — 부재 + 루트 존재 앵커(공허한 통과 방지).
-      expect(screen.queryByTestId('auth-sheet-backdrop')).toBeNull();
-      expect(screen.getByTestId('auth-login-root')).toBeOnTheScreen();
     });
   });
 

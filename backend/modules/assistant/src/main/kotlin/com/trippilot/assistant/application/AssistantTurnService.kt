@@ -397,10 +397,10 @@ class AssistantTurnService(
             log.warn("도우미 해석 실패 — 폴백으로 답합니다. sessionId={} type={}", session.sessionId, e.javaClass.simpleName)
             return Reply(AssistantTemplates.fallback(FallbackCause.AI_UNAVAILABLE).copy(traceId = traceId), streak = Streak.KEEP)
         }
-        return answer(interpretation, session, surface, utterance, startedAt).let { it.copy(message = it.message.copy(traceId = traceId)) }
+        return answer(interpretation, session, surface, utterance, startedAt, turn.user.seq).let { it.copy(message = it.message.copy(traceId = traceId)) }
     }
 
-    private fun answer(result: Interpretation, session: AssistantSession, surface: AssistantSurface, utterance: String, startedAt: Instant): Reply {
+    private fun answer(result: Interpretation, session: AssistantSession, surface: AssistantSurface, utterance: String, startedAt: Instant, userSeq: Long): Reply {
         val hasTrip = session.tripId != null
         // 해석이 끝난 뒤에 무엇이 잘못돼도 **맥락과 LLM 사용은 남긴다** — 버리면 쓴 LLM 턴이 안 세어지고 보류 중인 되묻기가 사라진다.
         // 처리기가 상대를 한 번 더 불렀으면(발화 편집) 그것도 더한다.
@@ -436,7 +436,11 @@ class AssistantTurnService(
                     reply(AssistantTemplates.clarify(clarify.argument, clarify.question, clarify.options).copy(intent = frame.intent.name))
                 }
                 // 상대가 돌려준 인자에서 **서버 발급 전용 키는 걸러 낸다** — 지어낸 슬롯·장소로 교체를 시키지 못하게(SEC-U8-03).
-                else -> reply(dispatched(frame.intent, frame.matchRoute, session, surface, startedAt, frame.arguments - SERVER_ISSUED_ARGUMENTS, utterance).message)
+                else -> {
+                    // 되묻기의 답으로 온 편집은 답('2일차')에 무엇을 바꿀지가 없다 — 그 되묻기를 낳은 말과 함께 보낸다
+                    val said = if (frame.intent == Intent.EDIT_SCHEDULE && frame.matchRoute == CLARIFY_ANSWER) clarifiedUtterance(session, userSeq, utterance) else utterance
+                    reply(dispatched(frame.intent, frame.matchRoute, session, surface, startedAt, frame.arguments - SERVER_ISSUED_ARGUMENTS, said).message)
+                }
             }
         }.getOrElse { e ->
             log.warn("도우미 응답 조립 실패 — 폴백으로 답합니다. sessionId={} type={}", session.sessionId, e.javaClass.simpleName)
@@ -498,6 +502,30 @@ class AssistantTurnService(
             quickReplies = quickReplies, footnote = answer.footnote,
             intent = frame?.intent?.name, matchRoute = frame?.matchRoute ?: "NONE", outcome = "ANSWER",
         )
+    }
+
+    /**
+     * 되묻기의 답 턴에 편집에 보낼 말. 상대 보류 프레임에는 원문 칸이 없어(SEC-U8-06 — 원문을 상대에 두지 않는다) 답 턴의 말은 답('2일차')뿐이고,
+     * 그것만 편집에 가면 번역기가 무엇을 바꿀지 몰라 "알아듣지 못했어요"로 끝난다. 그래서 그 되묻기를 낳은 말을 우리 대화 기록에서 **읽기만** 해
+     * 붙인다 — 해석에는 여전히 답만 간다. 보기가 완결 명령문인 되묻기(날마다 동네)는 보류를 남기지 않아 상대가 `CLARIFY_ANSWER` 로 읽지 않으니
+     * 여기 오지 않는다.
+     *
+     * **맨 답일 때만 붙인다** — 그 되묻기의 보기 그대로이거나 날 한마디([BARE_DAY_ANSWER])일 때다. 상대는 문장 어디서든 날을 주워 새 명령
+     * ("아니 2일차 경복궁 빼줘"·"2일차 박물관 추가")도 이 되묻기의 답으로 읽는다 — 거기에 옛 말을 붙이면 서로 다른 두 편집이 한 말로 가고
+     * '아니'로 물린 요청까지 되살아난다. 맨 답이 아니면 답 그대로다(새 명령은 그것만으로 편집이 읽는다).
+     *
+     * 바로 앞 두 줄이 [직접 한 말 → 되묻기] 일 때만 붙인다. 되묻기 뒤에 다른 턴이 끼었거나 원 요청이 버튼이었으면(사용자 행만으로는 그 버튼이
+     * [다시 시도]로 옛 말을 태웠는지 보기 라벨을 태웠는지 모른다) 답만 보낸다 — 엉뚱한 옛 말을 붙이지 않는다(INV-4). 붙이면 발화 상한을
+     * 넘어도 답 그대로다.
+     */
+    private fun clarifiedUtterance(session: AssistantSession, beforeSeq: Long, answer: String): String {
+        val (asked, clarify) = messages.findPage(session.sessionId, beforeSeq, 2).takeIf { it.size == 2 } ?: return answer
+        if (clarify.kind != MessageKind.CLARIFY) return answer
+        if (answer !in (clarify.payload?.get("options") as? List<*>).orEmpty() && !BARE_DAY_ANSWER.matches(answer)) return answer
+        // [다시 시도]와 같은 조회 — 가려진 입력·버튼 행을 건너뛴 직전의 직접 한 말이 바로 앞 행의 말이어야 그 말이 되묻기를 낳았다
+        val original = messages.lastUserText(session.sessionId, beforeSeq = clarify.seq)?.takeIf { it == asked.text } ?: return answer
+        // 답을 앞에 둔다 — 묻는 것이 날이라 "2일차 카페 하나 빼줘"처럼 날이 먼저 오는 한 문장이 번역기가 읽는 말 순서다
+        return "$answer $original".takeIf { it.length <= MAX_UTTERANCE_LENGTH } ?: answer
     }
 
     /** 단기 기억(BR-AO-11) — 이번 발화 앞의 메시지 중 원문이 있는 것만(가려진 입력은 원문이 없다), 오래된 것부터, 300자까지([clip]). 상대는 저장하지 않는다. */
@@ -605,6 +633,19 @@ class AssistantTurnService(
         /** 버튼 라벨 상한 — 상대(AI) `NextAction.label` 과 같은 값(30자). 정본 이름으로 덮을 때 넘기지 않게 자른다. */
         private const val NEXT_ACTION_LABEL_MAX = 30
         private val SERVER_ISSUED_ARGUMENTS = setOf(ProposalCards.ARG_SLOT_KEY, ProposalCards.ARG_POI_ID)
+
+        /** 상대가 보류 되묻기의 답으로 읽은 프레임의 `match_route`(ai `dialogue_interpreter.answer_pending`). */
+        private const val CLARIFY_ANSWER = "CLARIFY_ANSWER"
+
+        /**
+         * 날 되묻기의 맨 답 — 날 한마디(N일차·첫째 날·두 번째 날·첫날·마지막 날·오늘·내일·모레·M월 D일·요일)에 '일정'·'거'와 조사·끝맺음만 붙은 말.
+         * 날을 읽는 것은 상대다(ai `orchestrator/arguments.py`) — 여기는 **날 말고 다른 말이 섞였는지**만 본다. 표에 없는 꼴은 맨 답으로 치지 않고
+         * 답 그대로 보낸다 — 못 붙이면 종전처럼 "알아듣지 못했어요"로 끝날 뿐이지만, 잘못 붙이면 다른 편집이 된다.
+         */
+        private val BARE_DAY_ANSWER = Regex(
+            """(?:\d{1,2}\s*일\s*[차째]|(?:첫|둘|셋|넷|다섯|여섯|일곱)\s*째\s*날|(?:첫|두|세|네|다섯|여섯|일곱)\s*번\s*째\s*날|첫\s*날|마지막\s*날""" +
+                """|오늘|내일|모레|\d{1,2}월\s*\d{1,2}일|[월화수목금토일]요일)(?:\s*(?:일정|거))?(?:이에요|예요|에요|이요|요|로|에)?[\s.!~?]*""",
+        )
         private const val POLL_MS = 200L
         internal const val MAX_WAITERS_PER_TURN = 2
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")

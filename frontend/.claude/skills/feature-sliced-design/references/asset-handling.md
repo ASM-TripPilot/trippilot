@@ -9,6 +9,20 @@ file type or by how many places use them.
 > files is **not recommended**. It violates the FSD principles of high
 > cohesion and locality of changes. Place assets where they are used.
 
+## 목차
+
+- Decision tree
+- Slice-specific assets
+  - Non-UI assets
+- Shared assets
+- Global assets
+- Public folder
+- Summary table
+- Anti-patterns
+- See also
+
+---
+
 ## Decision tree
 
 1. **Owned by one slice?** Keep it in that slice, next to the segment that

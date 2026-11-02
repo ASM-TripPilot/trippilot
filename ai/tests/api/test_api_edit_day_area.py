@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from fastapi.testclient import TestClient
 
@@ -136,6 +137,17 @@ def test_one_day_only() -> None:
     assert body["status"] == "APPLIED"
     assert _within(_day(body, D2), GANGNAM) and _day(body, D1) == _DAY1
     assert body["command"]["params"] == {D2: "강남구"}
+
+
+def test_rebuilt_days_carry_their_distances() -> None:
+    """다시 짠 날들의 구간 거리 — BE 카드 diff 가 그린다(종전엔 전부 null). 첫 슬롯(출발점 모름)과 손 안 댄 날은 null, 거리만(INV-3)."""
+    body = _post(_body())
+    assert body["status"] == "APPLIED", body
+    for day in (D1, D2):
+        first, *rest = _day(body, day)
+        assert first["distance_range"] is None and rest
+        assert all(re.fullmatch(r"약 \d+\.\dkm · (도보|대중교통) 추정", s["distance_range"] or "") for s in rest), rest
+    assert [s["distance_range"] for s in _day(body, D3)] == [None]
 
 
 def test_reservation_keeps_its_time_even_outside_the_area() -> None:

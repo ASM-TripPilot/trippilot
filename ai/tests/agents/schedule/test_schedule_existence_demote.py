@@ -98,7 +98,7 @@ from tests.api.test_e2e_boundary import _explanations_json as _e2e_explanations
 from tests.api.test_e2e_boundary import _request as _e2e_request
 from tests.api.test_e2e_boundary import _scores_json as _e2e_scores
 from tests.agents.schedule.test_schedule_agent import _existence_case, _task
-from tests.orchestrator.test_schedule_coordinator import (
+from tests.orchestrator.schedule.test_schedule_coordinator import (
     _C1CFG,
     _KST,
     _NOW,

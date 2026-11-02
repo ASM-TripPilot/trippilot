@@ -138,6 +138,24 @@ class VisitCheckServiceTest : StringSpec({
         svc.getVisitedSlots(tripId) shouldContainExactlyInAnyOrder listOf(slot, doneSlot)
     }
 
+    // U4 BR-U4-17 개정(2026-11-01) — 재계획이 그날 건너뛴 곳을 다시 넣으면 같은 슬롯 키의 건너뜀 기록과 부딪혀 도착이 영원히 409 다.
+    "그날 건너뛴 POI — 도착 전·도착 후 건너뜀 둘 다, 완료·도착만·다른 날 건너뜀은 빠진다" {
+        val visits = Visits()
+        val svc = service(visits)
+        val skippedBefore = UUID.randomUUID()
+        svc.skipPlanned(acc, tripId, "$day#$skippedBefore", skippedBefore)
+        val skippedAfter = UUID.randomUUID()
+        svc.skip(acc, tripId, svc.arrive(acc, tripId, "$day#$skippedAfter", skippedAfter, CheckSource.MANUAL).visitCheckId)
+        svc.arrive(acc, tripId, slot, poi, CheckSource.MANUAL)
+        val done = UUID.randomUUID()
+        svc.complete(acc, tripId, svc.arrive(acc, tripId, "$day#$done", done, CheckSource.MANUAL).visitCheckId)
+        val otherDay = UUID.randomUUID()
+        svc.skipPlanned(acc, tripId, "${day.plusDays(1)}#$otherDay", otherDay)
+
+        svc.getSkippedPois(tripId, day) shouldContainExactlyInAnyOrder listOf(skippedBefore, skippedAfter)
+        svc.getSkippedPois(tripId, day.plusDays(1)) shouldContainExactlyInAnyOrder listOf(otherDay)
+    }
+
     "마지막 완료 방문지는 완료 시각이 가장 늦은 것 — 기준점 사다리 3단 입력" {
         val visits = Visits()
         val svc = service(visits, clockAt("2026-08-11T03:00:00Z"))

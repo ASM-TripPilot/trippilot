@@ -1,0 +1,75 @@
+diff --git a/src/hooks/useScrollEventsHandlersDefault.ts b/src/hooks/useScrollEventsHandlersDefault.ts
+index 7b84480e8b002f843d349d4f47d4b4f9f66c17bb..9f5f8a5c0b2b14b87f16eb4a822b0eb28eb2e35e 100644
+--- a/src/hooks/useScrollEventsHandlersDefault.ts
++++ b/src/hooks/useScrollEventsHandlersDefault.ts
+@@ -11,6 +11,7 @@ import { useBottomSheetInternal } from './useBottomSheetInternal';
+ export type ScrollEventContextType = {
+   initialContentOffsetY: number;
+   shouldLockInitialPosition: boolean;
++  isLockingScroll?: boolean;
+ };
+ 
+ export const useScrollEventsHandlersDefault: ScrollEventsHandlersHookType = (
+@@ -55,8 +56,18 @@ export const useScrollEventsHandlersDefault: ScrollEventsHandlersHookType = (
+           const lockPosition = context.shouldLockInitialPosition
+             ? (context.initialContentOffsetY ?? 0)
+             : 0;
+-          // @ts-expect-error
+-          scrollTo(scrollableRef, 0, lockPosition, false);
++          // TRIP-1681: on Fabric, scrollTo dispatches a synchronous scroll event that
++          // re-enters this handler before scrollTo returns; without this guard the lock
++          // recursed until "Maximum call stack size exceeded" (gorhom #2619).
++          if (!context.isLockingScroll) {
++            context.isLockingScroll = true;
++            try {
++              // @ts-expect-error
++              scrollTo(scrollableRef, 0, lockPosition, false);
++            } finally {
++              context.isLockingScroll = false;
++            }
++          }
+           scrollableContentOffsetY.value = lockPosition;
+           return;
+         }
+@@ -104,8 +115,18 @@ export const useScrollEventsHandlersDefault: ScrollEventsHandlersHookType = (
+           const lockPosition = context.shouldLockInitialPosition
+             ? (context.initialContentOffsetY ?? 0)
+             : 0;
+-          // @ts-expect-error
+-          scrollTo(scrollableRef, 0, lockPosition, false);
++          // TRIP-1681: on Fabric, scrollTo dispatches a synchronous scroll event that
++          // re-enters this handler before scrollTo returns; without this guard the lock
++          // recursed until "Maximum call stack size exceeded" (gorhom #2619).
++          if (!context.isLockingScroll) {
++            context.isLockingScroll = true;
++            try {
++              // @ts-expect-error
++              scrollTo(scrollableRef, 0, lockPosition, false);
++            } finally {
++              context.isLockingScroll = false;
++            }
++          }
+           scrollableContentOffsetY.value = lockPosition;
+           return;
+         }
+@@ -134,8 +155,18 @@ export const useScrollEventsHandlersDefault: ScrollEventsHandlersHookType = (
+           const lockPosition = context.shouldLockInitialPosition
+             ? (context.initialContentOffsetY ?? 0)
+             : 0;
+-          // @ts-expect-error
+-          scrollTo(scrollableRef, 0, lockPosition, false);
++          // TRIP-1681: on Fabric, scrollTo dispatches a synchronous scroll event that
++          // re-enters this handler before scrollTo returns; without this guard the lock
++          // recursed until "Maximum call stack size exceeded" (gorhom #2619).
++          if (!context.isLockingScroll) {
++            context.isLockingScroll = true;
++            try {
++              // @ts-expect-error
++              scrollTo(scrollableRef, 0, lockPosition, false);
++            } finally {
++              context.isLockingScroll = false;
++            }
++          }
+           scrollableContentOffsetY.value = 0;
+           return;
+         }

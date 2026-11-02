@@ -1,6 +1,6 @@
 import type * as PreferencesModel from '../model/usePreferences';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
   fireEvent,
   render,
@@ -8,12 +8,16 @@ import {
   waitFor,
   within,
 } from '@testing-library/react-native';
-import { createGcZeroWrapper } from '@/test-support/queryRender';
+import {
+  createGcZeroWrapper,
+  newTestQueryClient,
+} from '@/test-support/queryRender';
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { PreferenceView } from '@/shared/api/index.schemas';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 import { SettingsPreferencesPage } from './SettingsPreferencesPage';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * l05 취향 전체 수정 — SettingsPreferencesPage(스스로 조회·저장하는 컨테이너) 통합 테스트.
@@ -26,12 +30,14 @@ import { SettingsPreferencesPage } from './SettingsPreferencesPage';
  *  - 옛 `.baseline` 은 QueryClientProvider 없이 그린다 — 스위치가 켜져 있어야만 유효한 전제다.
  */
 
-const mockBack = jest.fn();
-const mockPush = jest.fn();
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ back: mockBack, push: mockPush }),
-  router: { back: mockBack, push: mockPush },
-}));
+const { back: mockBack, push: mockPush } = routerSpies;
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'back', 'replace', 'canGoBack'],
+    router: ['push', 'back'],
+  })
+);
 
 // 팩토리가 참조하려면 이름이 `mock` 으로 시작해야 한다(호이스팅 예외).
 let mockFakePreferences = false;
@@ -320,12 +326,7 @@ describe('GET 초기값 → 타일 → PUT 저장·400 (옛 .integration)', () =
    */
   describe('🔴 S2 · 취향 저장 성공 토스트 + 뒤로 (#030)', () => {
     function renderWithToast() {
-      const client = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, gcTime: 0 },
-          mutations: { retry: false },
-        },
-      });
+      const client = newTestQueryClient({ gcTime: 0 });
       render(
         <QueryClientProvider client={client}>
           <WithToastHost>

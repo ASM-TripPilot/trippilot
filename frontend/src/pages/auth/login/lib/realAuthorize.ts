@@ -4,6 +4,7 @@ import type { SocialProvider } from '@/shared/api';
 
 import type { AuthorizeResult } from '../model/useSocialLogin';
 import type { OAuthProviderConfig } from '../config/oauthConfig';
+import { assertOAuthStateMatches, generateOAuthState } from './oauthState';
 
 /**
  * 실 소셜 OAuth 인가(명령형 PKCE). makeAuthorize 가 토글 off + clientId 존재일 때 `await import` 로만
@@ -15,13 +16,20 @@ import type { OAuthProviderConfig } from '../config/oauthConfig';
  * TRIP-172 결함 C), promptAsync 가 로그인 창을 띄워 authorizationCode 를 받는다. config.requiresState
  * 인 provider(naver)는 state 를 직접 생성해 싣는다 — 실 라이브러리는 state 를 안 주면 스스로
  * 만들지만(PKCE.generateRandom), 그 자동 생성에 기대지 않고 명시 전달해 CSRF 방어가 항상
- * 켜져 있음을 보장한다. 서버 교환에 필요한 3필드(authorizationCode·codeVerifier·redirectUri)만
+ * 켜져 있음을 보장한다(웹 구글·카카오도 requiresState — TRIP-1649). 돌아온 state 는 라이브러리 검사와
+ * 별개로 직접 대조해 불일치·부재면 success-code 를 내지 않고 던진다. 서버 교환에 필요한 3필드(authorizationCode·codeVerifier·redirectUri)만
  * 정규화해 넘기고 어떤 client secret 도 담지 않는다(SEC-AUTH). PKCE 가 꺼진 provider 는 실 라이브러리가
  * codeVerifier 를 만들지 않으므로(usePKCE:false 면 ensureCodeIsSetupAsync 를 건너뜀), 빈 문자열
  * 대신 별도 불투명 토큰으로 채운다 — 백엔드 SocialLoginRequest.codeVerifier 가 @NotBlank 라 빈
  * 문자열을 보내면 400 으로 즉사한다(결함 C). redirectUri 는 env 값을 우선 쓰고, 미설정 시 앱
  * 스킴에서 파생한다(D1). 사용자 취소/닫힘은 cancel/dismiss 로, 그 외 실패는 조용히 넘기지 않고
  * throw 한다(INV-4).
+ *
+ * config.responseType 이 'token'(웹 네이버 implicit, TRIP-1650)이면 인가 코드 대신 access_token 을 받아
+ * `success-token` 으로 정규화한다. PKCE 가 없어 state 가 유일한 CSRF 방어이므로 requiresState 설정과
+ * 무관하게 항상 싣고 대조한다. 라이브러리가 `error` 로 분류한 결과(state 불일치 포함)는 params 에 토큰이
+ * 들어 있어도 쓰지 않는다 — 예외는 동의 거부(access_denied)를 취소로 돌려주는 것뿐이다.
+ * 거절 메시지에는 params·토큰·돌려받은 state 를 싣지 않는다(콘솔·오류 수집으로 흐른다).
  */
 export async function realAuthorize(
   provider: SocialProvider,
@@ -31,19 +39,34 @@ export async function realAuthorize(
     config.redirectUri ||
     makeRedirectUri({ scheme: 'trippilot', path: `oauth/${provider}` });
 
+  const isToken = config.responseType === 'token';
+  const state =
+    config.requiresState || isToken ? generateOAuthState() : undefined;
   const request = new AuthRequest({
     clientId: config.clientId,
     scopes: config.scopes,
     redirectUri,
-    responseType: ResponseType.Code,
+    responseType: isToken ? ResponseType.Token : ResponseType.Code,
     usePKCE: config.usePKCE ?? true,
-    ...(config.requiresState ? { state: generateOpaqueToken() } : {}),
+    ...(state ? { state } : {}),
   });
 
   const result = await request.promptAsync(config.discovery);
 
   switch (result.type) {
     case 'success':
+      if (state) {
+        assertOAuthStateMatches(state, result.params.state);
+      }
+      if (isToken) {
+        const accessToken = result.params.access_token;
+        if (!accessToken) {
+          throw new Error(
+            '소셜 로그인 인가 실패: 응답에 access_token 이 없습니다.'
+          );
+        }
+        return { type: 'success-token', accessToken };
+      }
       return {
         type: 'success-code',
         authorizationCode: result.params.code,
@@ -54,6 +77,13 @@ export async function realAuthorize(
       return { type: 'dismiss' };
     case 'cancel':
       return { type: 'cancel' };
+    case 'error':
+      if (isToken && result.params?.error === 'access_denied') {
+        return { type: 'cancel' };
+      }
+      throw new Error(
+        "소셜 로그인 인가 실패: promptAsync 가 'error' 를 반환했습니다."
+      );
     default:
       throw new Error(
         `소셜 로그인 인가 실패: promptAsync 가 '${result.type}' 를 반환했습니다.`
@@ -61,7 +91,7 @@ export async function realAuthorize(
   }
 }
 
-/** CSRF state 값 · PKCE 미사용 provider 의 codeVerifier 대체값으로 쓰는 불투명 랜덤 토큰. */
+/** PKCE 미사용 provider 의 codeVerifier 대체값으로 쓰는 불투명 랜덤 토큰(state 는 oauthState.ts). */
 function generateOpaqueToken(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
 }

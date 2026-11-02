@@ -17,6 +17,11 @@ module.exports = {
   // 테스트 하나의 상한은 비동기 대기 상한(5초)보다 커야 한다 — 같으면 대기 한 번만 늘어져도 jest 기본 5초에 먼저 걸려
   // "Exceeded timeout of 5000 ms for a test" 로 끊긴다(CI 실측: MyTripsListPage·LiveItineraryPage, 로컬은 통과).
   testTimeout: 20000,
+  // base 의 reporters 는 bucket:'node' 라 반드시 덮어쓴다(안 덮으면 통합 버킷이 node 예산으로 판정된다).
+  reporters: [
+    'default',
+    ['<rootDir>/scripts/noise-reporter.cjs', { bucket: 'integration' }],
+  ],
   setupFilesAfterEnv: [
     ...(base.setupFilesAfterEnv ?? []),
     '<rootDir>/src/test-support/integrationSetup.ts',

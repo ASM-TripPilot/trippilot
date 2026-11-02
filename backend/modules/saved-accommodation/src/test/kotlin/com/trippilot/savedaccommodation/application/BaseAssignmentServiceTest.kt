@@ -1,13 +1,21 @@
 package com.trippilot.savedaccommodation.application
 
+import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.core.error.UpstreamUnavailable
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.savedaccommodation.domain.BaseAssignment
 import com.trippilot.savedaccommodation.domain.BaseAssignmentRepository
 import com.trippilot.savedaccommodation.domain.CoverageStatus
+import com.trippilot.savedaccommodation.domain.GeocodeCandidate
+import com.trippilot.savedaccommodation.domain.PlaceSearchPort
 import com.trippilot.savedaccommodation.domain.RegisterRoute
 import com.trippilot.savedaccommodation.domain.SavedStay
 import com.trippilot.savedaccommodation.domain.SavedStayRepository
+import com.trippilot.placedata.api.RegionCenter
+import com.trippilot.placedata.api.RegionLookupFacade
+import com.trippilot.trip.api.TripDestinationRef
 import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripPeriod
@@ -46,11 +54,41 @@ private class FakeStays : SavedStayRepository {
         error("이 테스트는 중복 선검사를 쓰지 않는다")
 }
 
-/** (acc,tripId) → period 를 등록해두면 소유로 간주. 미등록은 null(404). */
+/** (acc,tripId) → period 를 등록해두면 소유로 간주. 미등록은 null(404). [destinationCodes] = 목적지 코드(null 이면 목적지 없음). */
 private class FakeTrips : TripFacade {
     val periods = mutableMapOf<Pair<UUID, UUID>, TripPeriod>()
+    var destinationCodes: List<String?>? = null
     override fun findPeriod(accountId: UUID, tripId: UUID) = periods[accountId to tripId]
-    override fun findGenerationContext(accountId: UUID, tripId: UUID): TripGenerationContext? = null // 거점 배정 테스트 미사용
+    override fun findGenerationContext(accountId: UUID, tripId: UUID): TripGenerationContext? {
+        val p = periods[accountId to tripId] ?: return null
+        val codes = destinationCodes ?: return null
+        return TripGenerationContext(
+            p.startDate, p.endDate, codes.map { TripDestinationRef("목적지", it, 3) }, null, null, emptyList(),
+        )
+    }
+}
+
+/** 좌표 → 주소. [down] 이면 벤더 장애. 위도 35 근처 = 부산, 그 밖 = 서울로 둔다. */
+private class FakePlaceSearch : PlaceSearchPort {
+    var down = false
+    override fun geocode(query: String): List<GeocodeCandidate> = emptyList()
+    override fun reverseGeocode(lat: Double, lng: Double): String? {
+        if (down) throw UpstreamUnavailable(source = "kakao", fallbackApplied = false)
+        return if (lat < 36.0) "부산광역시 동구 초량동" else "서울특별시 종로구 세종로"
+    }
+}
+
+/** 주소 첫 토큰 → 시도 코드(부산 26 · 서울 11). 그 밖은 null(판정 불가). */
+private class FakeRegions : RegionLookupFacade {
+    override fun codesOf(regionName: String) = emptyList<String>()
+    override fun isSelectableCode(regionCode: String) = true
+    override fun centerOf(regionName: String): RegionCenter? = null
+    override fun centerOfCode(regionCode: String): RegionCenter? = null
+    override fun codeOfAddress(address: String): String? = when (address.substringBefore(' ')) {
+        "부산광역시" -> "26"
+        "서울특별시" -> "11"
+        else -> null
+    }
 }
 
 class BaseAssignmentServiceTest : StringSpec({
@@ -61,14 +99,25 @@ class BaseAssignmentServiceTest : StringSpec({
     val start = LocalDate.parse("2026-08-01")
     val end = LocalDate.parse("2026-08-04")
 
+    val trips = FakeTrips()
+    val placeSearch = FakePlaceSearch()
+
     fun fixture(): Triple<BaseAssignmentService, FakeStays, Pair<UUID, UUID>> {
         val stays = FakeStays()
-        val trips = FakeTrips()
         val tripId = UUID.randomUUID()
         trips.periods[acc to tripId] = TripPeriod(start, end)
-        val svc = BaseAssignmentService(FakeBases(), stays, trips, FakeTripBaseDays(), CapturingEvents(), clock)
+        trips.destinationCodes = null
+        placeSearch.down = false
+        val svc = BaseAssignmentService(
+            FakeBases(), stays, trips, FakeTripBaseDays(), CapturingEvents(), clock, placeSearch, FakeRegions(),
+        )
         return Triple(svc, stays, acc to tripId)
     }
+
+    fun stayAt(stays: FakeStays, lat: Double, lng: Double): UUID =
+        stays.save(
+            SavedStay.register(acc, "숙소", lat, lng, true, null, null, null, null, RegisterRoute.PIN, null, clock.instant()),
+        ).savedStayId
 
     fun stay(stays: FakeStays, owner: UUID): UUID =
         stays.save(
@@ -171,5 +220,43 @@ class BaseAssignmentServiceTest : StringSpec({
         val s = stay(stays, acc)
         svc.assign(acc, t.second, cmd(s))
         shouldThrow<ResourceNotFound> { svc.remove(acc, t.second, UUID.randomUUID()) }
+    }
+
+    // TRIP-1703 — 서울 1박 여행에 부산 숙소를 거점으로 붙이면 1일차가 부산에서 돌았다(872km).
+    "서울 여행에 부산 숙소를 거점으로 붙이면 409 STAY_OUTSIDE_TRIP_REGION — 앱이 이 코드로 안내한다" {
+        val (svc, stays, t) = fixture()
+        trips.destinationCodes = listOf("11110") // 서울 종로구
+        val busan = stayAt(stays, 35.11, 129.04)
+
+        val thrown = shouldThrow<ConflictDetected> { svc.assign(acc, t.second, cmd(busan)) }
+
+        thrown.errorCode shouldBe ErrorCode.STAY_OUTSIDE_TRIP_REGION
+        svc.list(acc, t.second).size shouldBe 0
+    }
+
+    "목적지가 구(5자리)여도 같은 시도 숙소 코드(2자리)는 지역 안이다 — 양방향 접두사(INV-U1-21)" {
+        val (svc, stays, t) = fixture()
+        trips.destinationCodes = listOf("11110")
+        svc.assign(acc, t.second, cmd(stayAt(stays, 37.57, 126.97)))
+        svc.list(acc, t.second).size shouldBe 1
+    }
+
+    "다목적지 여행은 목적지 하나에라도 들면 지역 안이다" {
+        val (svc, stays, t) = fixture()
+        trips.destinationCodes = listOf("11", "26")
+        svc.assign(acc, t.second, cmd(stayAt(stays, 35.11, 129.04)))
+        svc.list(acc, t.second).size shouldBe 1
+    }
+
+    "판정할 수 없으면 막지 않는다 — 목적지 코드 누락·주소 조회 장애(fail-open, INV-U1-21)" {
+        val (svc, stays, t) = fixture()
+        trips.destinationCodes = listOf("11", null)
+        svc.assign(acc, t.second, cmd(stayAt(stays, 35.11, 129.04)))
+
+        trips.destinationCodes = listOf("11")
+        placeSearch.down = true
+        svc.assign(acc, t.second, cmd(stayAt(stays, 35.11, 129.04)))
+
+        svc.list(acc, t.second).size shouldBe 2
     }
 })

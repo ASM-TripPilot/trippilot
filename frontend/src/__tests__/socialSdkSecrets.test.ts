@@ -73,7 +73,8 @@ function trackedFiles(): string[] {
     cwd: process.cwd(),
     encoding: 'utf8',
   });
-  return raw.split('\0').filter((f) => f.length > 0);
+  // 작업트리에서 rm 만 하고 git rm 안 한 파일은 건너뛴다 — 내용은 HEAD 그대로라 이미 검사됐고, 열면 ENOENT 로 스캔 전체가 죽는다(실측 4회).
+  return raw.split('\0').filter((f) => f.length > 0 && fs.existsSync(f));
 }
 
 /** auth/lib 안의 프로덕션 파일(테스트 제외)을 raw·stripped 두 벌로 읽는다. */

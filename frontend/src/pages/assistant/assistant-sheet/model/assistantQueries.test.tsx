@@ -29,6 +29,7 @@ import {
   useMessageFeedback,
   useSendTurn,
 } from './assistantQueries';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-1319 — 훅은 `AssistantPort` 만 안다(교체 지점 1곳): 어댑터를 아무 구현으로 바꿔 끼워도
@@ -63,12 +64,7 @@ let restore: (() => void) | undefined;
 const clients: QueryClient[] = [];
 function newClient(): QueryClient {
   // gcTime Infinity — 기본 5분 gc 타이머가 테스트 뒤에도 남아 jest 가 끝나지 않는다.
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { gcTime: Infinity },
-      mutations: { gcTime: Infinity },
-    },
-  });
+  const client = newTestQueryClient();
   clients.push(client);
   return client;
 }

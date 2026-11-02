@@ -26,9 +26,11 @@ import type {
 
 import type {
   EditReflectionRequest,
+  ErrorResponse,
   PersonalizationInfo,
   Reflection,
   ReflectionList,
+  ShareCardCopy,
   StyleAnalysisEnvelope,
   TripSummaryEnvelope,
 } from '../schemas';
@@ -499,6 +501,95 @@ export function useGetTripsTripIdSummary<
 }
 
 /**
+ * 카드 **이미지는 기기가 그린다**(BR-U5-46) — 이 경로는 그 아래 붙는 캡션 한 문단과 해시태그만 준다(TRIP-1411). 부를 때마다 새로 짓고 저장하지 않는다(AI 호출). 요청 본문은 없다 — 재료(방문·취향·기간·지역)는 서버가 모은다.
+ *
+ * AI 를 못 부르거나, 상대가 자기 폴백으로 답하거나, 계약(캡션 1~150자)을 넘거나, 건너뛴 장소를 말하면 규칙 조립이 `isFallback=true` 로 나간다 — **캡션은 빈 문자열**(앱이 문장 시드를 걷어냈다, TRIP-766)이고 해시태그는 목적지마다 `#{지역}여행` 이다. 캡션 길이는 앱 `validateCaption` 과 같은 단위(UTF-16 코드 유닛)로 재고, 넘는 AI 캡션은 자르지 않고 규칙 조립으로 간다 — 잘린 문장이 내려오지 않는다.
+ *
+ * **계정당 하루 상한**이 있다(기본 30회, KST 자정에 풀린다). AI 까지 가는 호출만 센다 — AI 가 꺼져 있거나 간 곳이 없어 규칙 조립으로 바로 가는 호출, 404·409, 아래 동시 요청 거절은 세지 않는다. AI 가 실패해도 센다(호출은 나갔다). 한 계정의 문구는 **한 번에 하나**만 짓는다 — 짓는 동안 온 같은 계정의 요청은 429 `RATE_LIMITED` 다.
+ * @summary 공유 카드 문구(j06) — 캡션·해시태그
+ */
+export const postTripsTripIdShareCardCopy = (
+  tripId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<ShareCardCopy>({
+    url: `/trips/${tripId}/share-card/copy`,
+    method: 'POST',
+    signal,
+  });
+};
+
+export const getPostTripsTripIdShareCardCopyMutationOptions = <
+  TError = void | ErrorResponse,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdShareCardCopy>>,
+    TError,
+    { tripId: string },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdShareCardCopy>>,
+  TError,
+  { tripId: string },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdShareCardCopy'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdShareCardCopy>>,
+    { tripId: string }
+  > = (props) => {
+    const { tripId } = props ?? {};
+
+    return postTripsTripIdShareCardCopy(tripId);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdShareCardCopyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postTripsTripIdShareCardCopy>>
+>;
+
+export type PostTripsTripIdShareCardCopyMutationError = void | ErrorResponse;
+
+/**
+ * @summary 공유 카드 문구(j06) — 캡션·해시태그
+ */
+export const usePostTripsTripIdShareCardCopy = <
+  TError = void | ErrorResponse,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdShareCardCopy>>,
+      TError,
+      { tripId: string },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdShareCardCopy>>,
+  TError,
+  { tripId: string },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdShareCardCopyMutationOptions(options),
+    queryClient
+  );
+};
+/**
  * @summary 여행의 하루 회고 목록(j03)
  */
 export const getTripsTripIdReflections = (
@@ -667,7 +758,7 @@ export function useGetTripsTripIdReflections<
  *
  * 하루 한 장이라 다시 부르면 **덮어쓴다**(BR-U5-35). 사용자가 고친 카드(`editedCard`)는 재생성해도 남는다 — 초안만 갈린다.
  *
- * ⚠ 현재 `source` 는 `RULE` 또는 `BASIC` 이다. `AI` 단은 아직 배선 전이다 — 상대 경계는 실재하고(`POST /ai/v1/reflection/generate`) O-U5-6 이 `http` 로 확정됐다. 규칙 카드로 먼저 열고 `source` 로 품질을 관측한 뒤 켠다(BR-U5-33).
+ * `source` 는 `AI`·`RULE`·`BASIC` 중 하나다. 배포(개발·운영)는 AI 단을 부른다(`POST /ai/v1/reflection/generate`, O-U5-6 = `http`) — AI 가 실패하거나 안 간 곳을 말하면 규칙 카드로 내려간다(BR-U5-32·33).
  * @summary 하루 회고 생성·재생성
  */
 export const postTripsTripIdReflectionsDayDate = (

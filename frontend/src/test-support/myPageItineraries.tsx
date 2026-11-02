@@ -24,6 +24,8 @@ export function itin(status: Itinerary['status']): Itinerary {
     solveMode: 'FULL_AI',
     generationMode: 'FULLY_AI',
     isFallback: false,
+    scoringMode: null,
+    degradations: [],
     generationState: 'COMPLETE',
     days: [],
   };

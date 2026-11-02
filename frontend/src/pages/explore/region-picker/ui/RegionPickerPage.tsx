@@ -1,6 +1,8 @@
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 import type { Region } from '@/shared/api/index.schemas';
 import { filterRegions, useRegions } from '@/features/explore/index.view';
@@ -54,7 +56,7 @@ export function RegionPickerPage(): ReactElement {
       // code 를 이름 자리에 넘기면 화면에 코드가 뜬다). 코드는 따로 싣는다(TRIP-1042 AC-12 — 꼭 갈 곳
       // 지역 판정). 옛 `/explore/destination/{code}` 이탈(d03)은 담기 배선을 잃은 결함이었다.
       addDestination(region.name, 1, region.regionCode);
-      router.back();
+      goBackOr(router, shellTabHref('explore'));
       return;
     }
     if (purpose === 'explore') {
@@ -98,7 +100,7 @@ export function RegionPickerPage(): ReactElement {
       onChangeQuery={setQuery}
       onSelectRegion={handleSelectRegion}
       onRetry={() => void regions.refetch()}
-      onBack={() => router.back()}
+      onBack={() => goBackOr(router, shellTabHref('explore'))}
     />
   );
 }

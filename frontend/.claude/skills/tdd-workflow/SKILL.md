@@ -7,7 +7,7 @@ description: "TripPilot TDD 규칙. 테스트 작성, 테스트부터 뽑기, AC
 
 ## 사이클
 
-red(실패 테스트) → green(최소 구현) → 적대적 리뷰 → **refactor** → verify-gates → 🧑 학습 검토(아티팩트+퀴즈, 1회)
+red(실패 테스트) → green(최소 구현) → 적대적 리뷰 → **refactor** → verify-gates → 🧑 끝 보고(결정 항목, 1회)
 
 **refactor가 verify-gates *앞*에 있는 이유**: 전체 검증을 뒤에서 한 번에 하므로 리팩토링마다 검증이 따라붙지 않는다. 대신 refactor는 **테스트 파일을 한 줄도 못 고친다**(기계 기준은 테스트 파일 diff 0) — 그 선 아래만 다루고, 전체 검증은 뒤의 verify-gates가 한 번에 한다. 사용자 승인 게이트는 없다 — 검증에서 판단이 드는 이상이 나오면 되돌리지 않고 새 티켓·새 사이클로 전진한다.
 

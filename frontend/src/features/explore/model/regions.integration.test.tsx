@@ -6,7 +6,11 @@ import { http, HttpResponse } from 'msw';
 import { server } from '@/mocks/server';
 import { BASE } from '@/test-support/apiBase';
 import { createGate } from '@/test-support/mswHookHarness';
-import { createGcZeroWrapper, createWrapper } from '@/test-support/queryRender';
+import {
+  createGcZeroWrapper,
+  createWrapper,
+  newTestQueryClient,
+} from '@/test-support/queryRender';
 import { clearAccessToken } from '@/shared/api/tokenManager';
 import * as placesApi from '@/shared/api/generated/places/places';
 import type { Place } from '@/shared/api/index.schemas';
@@ -45,10 +49,8 @@ afterAll(() => server.close());
 
 describe('useRegions · staleTime', () => {
   it('피커·랜딩·d02 가 차례로 마운트돼도 GET /regions 는 1건이다', async () => {
-    // gcTime 은 기본(5분) 그대로 — 언마운트 뒤에도 캐시가 남는 실제 앱과 같다. staleTime 은 기본 0.
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    // gcTime 은 팩토리 기본(Infinity) — 언마운트 뒤에도 캐시가 남는다(실제 앱 기본 5분 안에서는 같다). staleTime 은 기본 0.
+    const client = newTestQueryClient();
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
@@ -123,11 +125,7 @@ describe('useMultiRegionPlaces · seed (TRIP-1563)', () => {
 
   /** 캐시를 오래 들고 stale 도 되지 않는 클라이언트 — 재마운트가 캐시를 읽었는지 서버에 다시 물었는지 가른다. */
   function keepAliveClient(): QueryClient {
-    return new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: Infinity, staleTime: Infinity },
-      },
-    });
+    return newTestQueryClient({ staleTime: Infinity });
   }
   const idsOf = (items: Place[]) => items.map((item) => item.poiId);
 

@@ -12,15 +12,12 @@ import { TravelStylePage } from './TravelStylePage';
  * 지나간 화면을 되살린다(QA F3).
  */
 
-jest.mock('expo-router', () => ({
-  router: {
-    push: jest.fn(),
-    replace: jest.fn(),
-    dismissTo: jest.fn(),
-    back: jest.fn(),
-    canGoBack: jest.fn(() => true),
-  },
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    router: ['push', 'replace', 'back', 'dismissTo', 'canGoBack'],
+  })
+);
 
 jest.mock('../model/useStyleAnalysis', () => ({
   useStyleAnalysis: jest.fn(),

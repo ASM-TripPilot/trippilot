@@ -160,11 +160,15 @@ export function StaySelectSheet({
 
       {/* body — 후보 목록 또는 0건 안내(둘은 상호배타) */}
       {empty ? (
-        <View testID="trip-base-staysheet-empty" className="py-xl">
-          <Text className="font-noto text-body text-muted">
-            {EMPTY_MESSAGE}
-          </Text>
-        </View>
+        // TRIP-1703 — 지역 안내가 이미 "후보가 없는 이유"를 말하면 "저장한 숙소가 아직 없어요"를 겹쳐 그리지 않는다
+        // (지역 밖 숙소는 후보에서 빠져 저장 숙소가 있는데도 0건일 수 있다).
+        regionNotice ? null : (
+          <View testID="trip-base-staysheet-empty" className="py-xl">
+            <Text className="font-noto text-body text-muted">
+              {EMPTY_MESSAGE}
+            </Text>
+          </View>
+        )
       ) : sections !== undefined ? (
         // TRIP-1011 — 섹션이 오면 섹션마다 헤더 + 그 섹션 카드. `candidates` 는 다시 그리지 않는다.
         <View className="gap-lg">

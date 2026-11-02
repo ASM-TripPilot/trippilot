@@ -1,3 +1,4 @@
+import { newTestQueryClient } from '@/test-support/queryRender';
 // 손수 API 계층을 통째로 목한다 — 열람 페이지가 부르는 것은 단건 조회 하나뿐이다(02a ★3). 실 함수 본체
 // (URL `/terms/{termsType}`, 무인증 baseClient)는 MSW 오라클(옛 handlers.integration.test.ts — TRIP-1350 에서 삭제)이 따로 잠갔다.
 jest.mock('@/shared/api', () => ({
@@ -6,18 +7,15 @@ jest.mock('@/shared/api', () => ({
 
 // 라우터 — useRouter()·router 싱글턴 두 형태가 **같은 fn** 을 공유한다(02a ★1: 구현 선택 자유).
 // ⚠️ useLocalSearchParams 는 일부러 넣지 않는다(02a ★2) — termsType 은 라우트가 읽어 prop 으로 내린다.
-jest.mock('expo-router', () => {
-  const push = jest.fn();
-  const replace = jest.fn();
-  const back = jest.fn();
-  return {
-    __esModule: true,
-    useRouter: () => ({ push, replace, back }),
-    router: { push, replace, back },
-  };
-});
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back', 'canGoBack'],
+    router: ['push', 'replace', 'back'],
+  })
+);
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
   fireEvent,
   render,
@@ -85,9 +83,7 @@ const TERMS: Record<string, TermsVersion> = {
 };
 
 function renderViewer(termsType: string) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const client = newTestQueryClient();
   return render(
     <QueryClientProvider client={client}>
       <TermsViewerPage termsType={termsType} />

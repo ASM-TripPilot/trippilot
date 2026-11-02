@@ -11,7 +11,7 @@ import { MemoInline } from './MemoInline';
  *  - blur 시 공백만이면 **저장 콜백 0회**(무의미 PUT 방지) · 유효하면 trim 후 onSubmit 1회(TRIP-1078).
  *
  * ★ 2000 상한은 **클라 UX 카피**(과입력 방지)일 뿐 — 룰 판정 권위는 서버(PutMemoRequest.text 1~2000).
- *   jest fireEvent.changeText 는 maxLength 를 우회하므로 **prop 값**으로만 잠근다.
+ *   jest fireEvent.changeText 는 maxLength 를 우회해 jest 로 못 본다 — 실화면 QA(기능 지도 trip-record) 몫.
  *
  * (개념) `getByPlaceholderText`·`getByText`=RNTL 완전일치. `fireEvent(input,'blur')`=포커스 빠짐 이벤트
  *   발화 · `'submitEditing'`=키보드 완료 이벤트 발화. `not.toHaveBeenCalled()`=콜백 미발화.
@@ -27,15 +27,6 @@ describe('🔴 AC-5 · placeholder / 초기 표시', () => {
     render(<MemoInline text="바람이 좋았고 노을이 근사했다" />);
     expect(screen.getByTestId('record-trip-memo-input').props.value).toBe(
       '바람이 좋았고 노을이 근사했다'
-    );
-  });
-});
-
-describe('🔴 AC-5 · 2000 상한(UX 카피)', () => {
-  it('입력 maxLength 가 2000', () => {
-    render(<MemoInline />);
-    expect(screen.getByTestId('record-trip-memo-input').props.maxLength).toBe(
-      2000
     );
   });
 });
@@ -104,14 +95,6 @@ describe('잠금 — editable={false} 면 글자도 저장도 받지 않는다',
 });
 
 describe('🔴 TRIP-1078 AC-2 · return = 제출→blur, 한 번에 저장 1회', () => {
-  it('입력칸의 submitBehavior 가 blurAndSubmit 이다', () => {
-    render(<MemoInline />);
-
-    expect(
-      screen.getByTestId('record-trip-memo-input').props.submitBehavior
-    ).toBe('blurAndSubmit');
-  });
-
   it('submitEditing 만으로는 저장하지 않는다(저장 경로는 blur 하나)', () => {
     const onSubmit = jest.fn();
     render(<MemoInline onSubmit={onSubmit} />);

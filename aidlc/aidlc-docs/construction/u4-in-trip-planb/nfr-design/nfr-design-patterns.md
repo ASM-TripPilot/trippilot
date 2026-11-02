@@ -95,6 +95,8 @@ U0·U1의 `stale-if-error`(P-RES-U1-3)는 "실패 시 마지막 값을 보여준
 
 > **[개정 · 2026-10-12]** `planbApplyStructure.test.ts` 구조 가드는 없다(TRIP-1145 스캔 정리). 확정 쓰기는 seam `features/apply-replan/model/useApplyReplan.ts` 하나를 통과하지만, **호출 화면은 1곳이 아니다** — TRIP-751로 재계획안 화면(`src/pages/live/planb-draft/ui/PlanbDraftPage.tsx`, [적용하기] 바로 확정)과 비교 화면(`src/pages/live/planb-diff/ui/PlanbDiffPage.tsx`) 둘이 소비한다. "비교 화면 1곳에서만"은 낡은 서술이다.
 
+> **[개정 · 2026-11-01]** 비교 화면(`planb-diff`)은 삭제됐다. 지금 `useApplyReplan` 을 부르는 화면은 재계획안 `src/pages/live/planb-draft/ui/PlanbDraftPage.tsx`([적용하기])와 일정 다시 짜기 생성 화면 `src/pages/itinerary/itinerary-generating/ui/GeneratingPage.tsx`(DRAFT 도착 시 세션당 1회 자동 적용) 둘이다. 쓰기 seam 은 여전히 `features/apply-replan` 하나다.
+
 - 낙관적 잠금: 확정 시 기준 `itinerary` 버전을 함께 보내 **그 사이 일정이 바뀌었으면 거부**한다(부분 반영 금지 — BR-U4-32).
 
 ## 4. 성능 패턴 (P-PERF-U4)

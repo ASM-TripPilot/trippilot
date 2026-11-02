@@ -120,6 +120,30 @@ def test_store_roundtrip_and_period_query(tmp_path) -> None:
     assert reloaded.coverage("부산") is not None and reloaded.coverage("서울") is None
 
 
+def test_failed_save_leaves_the_previous_store_intact(tmp_path, monkeypatch) -> None:
+    """임시 파일에 쓰다 죽어도 누적본은 그대로 — 제자리 덮어쓰기는 반쯤 쓴 JSON 을 남겼다(2026-10-30 Codex 리뷰)."""
+    from pathlib import Path
+
+    path = tmp_path / "events.json"
+    store = JsonEventStore(path)
+    store.upsert("부산", (_event("불꽃축제", _TODAY, _TODAY + timedelta(days=2)),), _NOW)
+    store.save()
+    before = path.read_text(encoding="utf-8")
+
+    real = Path.write_text
+
+    def boom(self, data, *args, **kwargs):  # 반쯤 쓰고 죽는다
+        real(self, data[: len(data) // 2], *args, **kwargs)
+        raise OSError("disk full")
+
+    store.pointer = 7
+    monkeypatch.setattr(Path, "write_text", boom)
+    with pytest.raises(OSError):
+        store.save()
+    monkeypatch.undo()
+    assert path.read_text(encoding="utf-8") == before and JsonEventStore(path).pointer != 7
+
+
 def test_store_dedup_by_normalized_name_and_period(tmp_path) -> None:
     store = JsonEventStore(tmp_path / "events.json")
     store.upsert("부산", (_event("부산 불꽃축제", _TODAY, _TODAY),), _NOW)
@@ -186,6 +210,44 @@ def test_collect_region_glue(tmp_path) -> None:
                      "fallback": False, "error": None}
     found, _ = store.search_events(_TODAY, _TODAY)
     assert found[0].coord == GeoPoint(35.1532, 129.1186)  # 지역 검색 좌표 부여됨
+
+
+@pytest.mark.parametrize("fail_all", [False, True])
+def test_collect_region_skips_a_failing_query_but_stops_when_all_fail(tmp_path, fail_all: bool) -> None:
+    """검색 하나의 일시 오류(타임아웃)는 그 쿼리만 건너뛴다 — 그날 배치 전체가 죽고 앞 지역 추출분까지 버려지던 것(2026-10-30
+    Codex 리뷰). 전부 실패면 일시 오류가 아니므로 종전처럼 올린다."""
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
+    from collect_events import collect_region
+
+    class _FlakyHttp:
+        failed = 0
+
+        def get_json(self, url, headers, params):
+            if url.endswith("/local"):
+                return {"items": []}
+            if fail_all or not self.failed:
+                self.failed += 1
+                raise TimeoutError("read timed out")
+            return {"items": [{"title": "부산 불꽃축제 개최", "description": "8월 22일 광안리"}]}
+
+    class _FakeWorker:
+        def extract(self, region, period_start, period_end, snippets, trace_id, now, *, timeout_sec=None):
+            class _R:
+                value = ()
+                is_fallback = False
+                error = None
+            return _R()
+
+    client = NaverSearchClient(_FlakyHttp(), "i", "s", max_calls=30)
+    run = lambda: collect_region("부산", client=client, worker=_FakeWorker(),
+                                 store=JsonEventStore(tmp_path / "events.json"), today=_TODAY, now=_NOW)
+    if fail_all:
+        with pytest.raises(TimeoutError):
+            run()
+    else:
+        assert run()["snippets"] == 1
 
 
 def test_collect_region_geocodes_via_address_fallback(tmp_path) -> None:

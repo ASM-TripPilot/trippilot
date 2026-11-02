@@ -19,6 +19,12 @@ interface ConsentRecordRepository {
     fun append(record: ConsentRecord)
 
     fun findByAccount(accountId: AccountId): List<ConsentRecord>
+
+    /**
+     * 계정 단위로 증적 쓰기를 줄 세운다(TRIP-1689) — 호출측 트랜잭션 끝까지 유지. "최신과 다를 때만 추가"의
+     * 읽기 전에 걸어야 두 기기 동시 요청이 둘 다 "다르다"고 보고 두 줄을 남기지 않는다.
+     */
+    fun lockAccount(accountId: AccountId)
 }
 
 /** 마케팅 동의 현재값 포트(계정당 1행 upsert). */

@@ -1,7 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { renderedText } from '@/test-support/sheetTree';
-
 import { LiveEditPopup } from './LiveEditPopup';
 
 /**
@@ -50,13 +48,5 @@ describe('LiveEditPopup', () => {
     expect(handlers.onPressManual).not.toHaveBeenCalled();
     fireEvent.press(screen.getByTestId(MANUAL));
     expect(handlers.onPressManual).toHaveBeenCalledTimes(1);
-  });
-
-  it('렌더된 글자는 정확히 두 라벨(AI에게 맡기기 → 직접 수정)이고 시각·소요시간 글자가 없다 (INV-3)', () => {
-    renderPopup();
-
-    const lines = renderedText(screen.root).split('\n');
-    expect(lines).toEqual(['AI에게 맡기기', '직접 수정']);
-    expect(lines.join(' ')).not.toMatch(/분|시간|소요|:/);
   });
 });

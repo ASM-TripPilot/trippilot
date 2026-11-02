@@ -1,10 +1,4 @@
-import {
-  fireEvent,
-  render,
-  screen,
-  within,
-} from '@testing-library/react-native';
-import Svg from 'react-native-svg';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { sampleActionLogs } from '../api/assistantSamples';
 import { HistoryView, type HistoryViewProps } from './HistoryView';
@@ -86,14 +80,13 @@ describe('HistoryView (TRIP-1325)', () => {
     );
   });
 
-  // TRIP-1529 — 안내 문장은 말풍선·✦ 아바타 없이 평문. 부재는 testID 로 못 잡으니 "안내 블록 루트 안 Svg 0개"로 잰다.
-  it('안내 문장은 평문 블록이고 그 안에 ✦ 아바타(Svg)가 없다', () => {
+  // TRIP-1529 — 안내 문장은 말풍선·✦ 아바타 없이 평문(아바타 부재는 생김새라 실화면 몫).
+  it('안내 문장이 안내 블록에 그려진다', () => {
     renderView();
     const intro = screen.getByTestId('assistant-history-intro');
     expect(intro).toHaveTextContent(
       '이번 여행에서 도우미와 한 대화·변경이에요.'
     );
-    expect(within(intro).UNSAFE_queryAllByType(Svg)).toHaveLength(0);
   });
 
   it('칩 줄은 [대화 이어서]·[이력 지우기]·[닫기] 세 개이고 입력 카드·quick reply 는 없다', () => {

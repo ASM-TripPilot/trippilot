@@ -7,6 +7,7 @@ import com.trippilot.security.ServiceAuthenticationToken
 import com.trippilot.security.ServiceTokenAuthFilter
 import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -17,6 +18,8 @@ import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.firewall.RequestRejectedHandler
+import org.springframework.web.cors.CorsConfiguration
+import org.springframework.web.cors.CorsConfigurationSource
 
 /**
  * 무상태 리소스 서버 — R6 인증 게이트. 공개 화이트리스트 외 모든 요청은 Bearer JWT 필요.
@@ -29,8 +32,16 @@ import org.springframework.security.web.firewall.RequestRejectedHandler
 class SecurityConfig {
 
     @Bean
-    fun securityFilterChain(http: HttpSecurity, serviceAuth: ServiceAuthProperties): SecurityFilterChain {
+    fun securityFilterChain(
+        http: HttpSecurity,
+        serviceAuth: ServiceAuthProperties,
+        @Value("\${trippilot.web.cors-allowed-origins:}") corsAllowedOrigins: String,
+    ): SecurityFilterChain {
         ServiceTokenAuthFilter.announce(serviceAuth.token, serviceAuth.requireToken)
+        // 웹 클라이언트 CORS(TRIP-1655). 목록이 비면 CORS 를 아예 걸지 않는다 — 웹 이전과 같은 체인이다.
+        // CorsFilter 는 인증 필터보다 앞에 서고, 허용 출처의 프리플라이트(OPTIONS)는 거기서 응답을 끝내
+        // 인가 규칙(anyRequest().authenticated())까지 가지 않는다.
+        corsSource(corsAllowedOrigins)?.let { source -> http.cors { it.configurationSource(source) } }
         http
             .csrf { it.disable() }
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
@@ -85,7 +96,50 @@ class SecurityConfig {
         mapper.writeValue(response.outputStream, requestRejectedBody())
     }
 
-    private companion object {
+    internal companion object {
         private val log = LoggerFactory.getLogger(SecurityConfig::class.java)
+
+        /**
+         * 웹 클라이언트가 실어 보내는 요청 헤더. 앱의 API 클라이언트(`frontend/src/shared/api`)가 붙이는 것은
+         * 이 둘뿐이다(Accept 는 CORS 안전 목록이라 따로 안 적는다). 새 커스텀 헤더를 붙이면 여기도 넣는다 —
+         * 빠지면 브라우저가 프리플라이트에서 요청을 막고, 모바일 앱은 그대로 돌아 웹에서만 깨진다.
+         */
+        private val ALLOWED_HEADERS = listOf("Authorization", "Content-Type")
+
+        /** 웹이 응답에서 읽는 헤더 — 429 의 `Retry-After`(`isRateLimited.ts`). 노출 목록에 없으면 브라우저가 가린다. */
+        private val EXPOSED_HEADERS = listOf("Retry-After")
+
+        /**
+         * `CORS_ALLOWED_ORIGINS`(쉼표 구분) → CORS 설정. 비면 null(CORS 미적용).
+         *
+         * **목록에 없는 출처에는 설정을 돌려주지 않는다**(null) — CorsFilter 가 그 요청을 손대지 않고 넘겨
+         * 본 요청은 지금과 똑같이 처리된다(ACAO 헤더 없음 → 브라우저가 응답을 못 읽는다). 단 그 출처의 프리플라이트는
+         * CorsFilter 가 설정 유무와 무관하게 거기서 끝내므로 401 이 아니라 헤더 없는 200 이다 — 브라우저는 ACAO 가 없어
+         * 본 요청을 보내지 않는다. 거절(403)로 바꾸지 않는 이유:
+         * 같은 출처 판정은 서버가 보는 scheme·host·port 로 한다 — 앞단이 forwarded 헤더를 넘기지 않는 환경(배포 차트는
+         * `SERVER_FORWARD_HEADERS_STRATEGY=native` 로 넘긴다, 로컬 프록시 등은 아닐 수 있다)에서는 Swagger UI 같은 같은 출처
+         * 요청도 교차 출처로 읽힌다. 거절로 가면 목록 밖 출처가 아니라 **같은 출처 화면**이 403 으로 깨진다.
+         * Origin 헤더가 없는 모바일 앱 요청은 애초에 CORS 처리 대상이 아니다.
+         *
+         * credentials 는 끈다 — 토큰은 Authorization 헤더로 오고 쿠키를 쓰지 않는다.
+         */
+        internal fun corsSource(raw: String): CorsConfigurationSource? {
+            val origins = raw.split(',').map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }.distinct()
+            if (origins.isEmpty()) return null
+            // `*` 는 조용히 무시하지 않고 기동을 막는다 — 넣은 사람은 "열었다"고 믿는다(INV-4 취지).
+            check(origins.none { it.contains('*') }) { "CORS_ALLOWED_ORIGINS 에 와일드카드(*)를 쓸 수 없습니다 — 출처를 하나씩 적으세요." }
+            val config = CorsConfiguration().apply {
+                allowedOrigins = origins
+                allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+                allowedHeaders = ALLOWED_HEADERS
+                exposedHeaders = EXPOSED_HEADERS
+                allowCredentials = false
+                maxAge = 3600
+            }
+            log.info("CORS 허용 출처 {}개: {}", origins.size, origins)
+            return CorsConfigurationSource { request ->
+                request.getHeader("Origin")?.takeIf { it in origins }?.let { config }
+            }
+        }
     }
 }

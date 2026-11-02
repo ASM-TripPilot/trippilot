@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { Share } from 'react-native';
 import * as Linking from 'expo-linking';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -19,6 +19,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 
 import { LivePlacePage } from './LivePlacePage';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-398 · LivePlacePage(i05) 배선을 실 HTTP로 태우는 심판.
@@ -153,9 +154,7 @@ function itineraryInSequence(responses: (() => Response)[]): () => number {
 }
 
 function wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const client = newTestQueryClient();
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
@@ -441,9 +440,7 @@ describe('LivePlacePage', () => {
       () => HttpResponse.json(itinerary()),
       () => new HttpResponse(null, { status: 404 }),
     ]);
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    const client = newTestQueryClient();
     render(
       <QueryClientProvider client={client}>
         <LivePlacePage tripId={TRIP_ID} poiId="p1" />

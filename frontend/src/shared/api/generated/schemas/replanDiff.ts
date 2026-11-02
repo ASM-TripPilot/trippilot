@@ -19,9 +19,9 @@ export interface ReplanDiff {
   status: ReplanDiffStatus;
   /** 재계획 대상 날짜. 비교는 이 하루만 본다 */
   date?: string | null;
-  /** 원 일정(그 날짜분). */
+  /** 원 일정(그 날짜분). `APPLIED` 면 반영 순간 떠 둔 반영 직전 모습이다(TRIP-1412). */
   before: ReplanDiffSlot[];
-  /** 초안. **확정 전까지 원 일정에 반영되지 않는다**(INV-U4-05). */
+  /** 초안. `DRAFT` 면 **확정 전까지 원 일정에 반영되지 않는다**(INV-U4-05). `APPLIED` 면 반영된 그 초안이다 — 되돌렸으면(`ReplanSession.revertedAt`) 지금 일정에는 없다. */
   after: ReplanDiffSlot[];
   entries: ReplanDiffEntry[];
   impact?: ReplanImpact | null;

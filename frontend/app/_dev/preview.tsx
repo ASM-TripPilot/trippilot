@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ComponentProps, ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 import {
   Image,
@@ -34,7 +34,10 @@ import { TriggerChip } from '@/pages/live/live-itinerary/ui/TriggerChip';
 import { MemoInline } from '@/features/attach-visit-media/index.view';
 import { MemoSheet } from '@/pages/live/live-itinerary/ui/MemoSheet';
 import { PhotoThumbStrip } from '@/pages/record/trip-records/ui/PhotoThumbStrip';
-import { RecordsCalendarScreen } from '@/pages/record/records-calendar/ui/RecordsCalendarScreen';
+import {
+  RecordsCalendarOfflineFace,
+  RecordsCalendarScreen,
+} from '@/pages/record/records-calendar/ui/RecordsCalendarScreen';
 import { VisitRecordCard } from '@/pages/record/trip-records/ui/VisitRecordCard';
 import { VisitTimeSheet } from '@/pages/record/trip-records/ui/VisitTimeSheet';
 import { missingParts } from '@/pages/record/daily-reflection/model/missingParts';
@@ -71,8 +74,6 @@ import {
   type AssistantScenario,
   type SheetState,
 } from '@/pages/assistant/assistant-sheet/index.view';
-import { MAGAZINE_DEFAULT_PROPS } from '@/pages/magazine/model/magazineFixtures';
-import { MagazineScreen } from '@/pages/magazine/ui/MagazineScreen';
 import {
   buildDraftPins,
   buildGenerationGauge,
@@ -288,6 +289,23 @@ try {
 
 // 프리뷰는 보기 전용이라 화면이 요구하는 콜백을 전부 빈 함수로 채운다.
 const noop = () => {};
+
+/** j06 서버 문구 프리뷰 3키가 공유하는 카드 VM(TRIP-1605). */
+const SHARE_CARD_COPY_PREVIEW: ComponentProps<typeof ShareCardScreen>['card'] =
+  {
+    title: '사흘의 기록',
+    periodText: '2026.06.10 ~ 06.12',
+    regionText: '부산',
+    statsCells: { totalVisits: 12, distanceText: '38km', totalPhotos: 24 },
+    distanceSourceLabel: '근사',
+    orderedVisits: [
+      { order: 1, dayLabel: 'Day1', place: '광안리 해변' },
+      { order: 2, dayLabel: 'Day1', place: '감천문화마을' },
+    ],
+    mode: 'default',
+    watermark: 'TripPilot',
+    aspectRatio: 9 / 16,
+  };
 // TRIP-1584 j03·j04 하단 바(기록·회고·요약) — 프리뷰라 칸 이동은 no-op. 바는 이 묶음이 있을 때만 그려진다.
 const PREVIEW_RECORD_BAR = {
   onBack: noop,
@@ -3692,6 +3710,24 @@ export const PREVIEW_STATES: PreviewState[] = [
         />
       ),
   },
+  // TRIP-1638 — 오프라인으로 처음 켠 홈: 오류 배너 자리에 버튼 없는 안내, 히어로 스켈레톤 없음. 실제 HomePage 는 레인 status 를
+  // 'ready'+카드 0장으로 덮어 두 레인을 숨기므로 같은 빈 레인을 넘긴다(안 넘기면 픽스처 카드가 보인다). Figma 프레임 없음 — 코드 선례.
+  {
+    key: 'home-trips-offline',
+    band: 'a',
+    label:
+      'a01 · 오프라인 콜드스타트(TRIP-1638, Figma 프레임 없음 — 코드 선례)',
+    login: null,
+    render: () =>
+      withShellTabBar(
+        <HomeScreen
+          {...HOME_DEFAULT_PROPS}
+          tripsOffline
+          spotsLane={{ status: 'ready', cards: [], onRetry: noop }}
+          collectionsLane={{ status: 'ready', cards: [], onRetry: noop }}
+        />
+      ),
+  },
   // ── 홈 여행 단계 얼굴 2종(TRIP-317; collecting·upcoming은 TRIP-701 제거) — 실기 판정 전용 진입점 ──
   {
     key: 'home-planning',
@@ -3773,17 +3809,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         />
       ),
   },
-  // ── a02 매거진 목록(TRIP-700) — 홈에서 push 로 진입하는 별 화면. 순수 뷰라 콜백 없이 렌더
-  //    (프리뷰는 시각 대조 전용, 칩 토글·항법은 실앱/컨테이너 몫). withShellTabBar 는 Figma 탭바
-  //    문맥 재현(실앱은 (tabs) 밖이라 탭바 없음 — 01b Q1). 매서너리 불균등·핑크 알약은 6-b 육안. ──
-  {
-    key: 'magazine-default',
-    band: 'a',
-    label: 'a02 · 여행지 둘러보기',
-    login: null,
-    render: () =>
-      withShellTabBar(<MagazineScreen {...MAGAZINE_DEFAULT_PROPS} />),
-  },
   // 지도 계층 선행(TRIP-197 D9) — 층 C(실기) 진입점. 키/로드 실패 분기는 렌더 안 해봐야
   // 알 수 없어 여기서는 해피패스 1키만 둔다(env 키는 빌드 시 번들에 인라인되므로 preview가
   // 런타임에 비울 수 없다 — 실패 분기는 MapView.test.tsx가, C-2는 .env를 실제로 비우고
@@ -3800,6 +3825,20 @@ export const PREVIEW_STATES: PreviewState[] = [
       <MapView
         center={{ lat: 37.5665, lng: 126.978 }}
         pins={MAP_STATE_PREVIEW_PINS}
+      />
+    ),
+  },
+  {
+    key: 'map-default-mylocation',
+    band: '기타',
+    label: '기타 · 지도 내 위치(map-default 변형)',
+    login: null,
+    // TRIP-1652 — 웹 지도 내 위치 점(권한이 이미 허용된 브라우저에서만 뜬다 — 묻지 않는다, BR-U10-53). 육안용.
+    render: () => (
+      <MapView
+        center={{ lat: 37.5665, lng: 126.978 }}
+        pins={MAP_STATE_PREVIEW_PINS}
+        showMyLocation
       />
     ),
   },
@@ -4652,6 +4691,55 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // j06 서버 문구 3키(TRIP-1605) — 같은 순수 뷰에 문구 prop 만 얹는다. AI 문구가 도착한 모양 · 캡션 자리 Skeleton(문구 대기
+  // 중) · 하루 상한 한 줄 안내. 대기 중에도 카드와 온디바이스 해시태그는 먼저 보인다. Skeleton 박자·한 줄 안내 위치는 육안 몫.
+  {
+    key: 'share-card-ai-copy',
+    band: 'j',
+    label: 'j06 · 공유 카드 서버 문구',
+    login: null,
+    render: () => (
+      <ShareCardScreen
+        card={SHARE_CARD_COPY_PREVIEW}
+        formats={SHARE_FORMATS}
+        caption="광안리에서 노을을 보고 감천문화마을 골목을 걸었어요"
+        hashtagText="#광안리노을 #감천문화마을"
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'share-card-copy-pending',
+    band: 'j',
+    label: 'j06 · 공유 카드 문구 대기',
+    login: null,
+    render: () => (
+      <ShareCardScreen
+        card={SHARE_CARD_COPY_PREVIEW}
+        formats={SHARE_FORMATS}
+        caption=""
+        hashtagText="#부산여행"
+        copyPending
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'share-card-copy-limit',
+    band: 'j',
+    label: 'j06 · 공유 카드 문구 하루 상한',
+    login: null,
+    render: () => (
+      <ShareCardScreen
+        card={SHARE_CARD_COPY_PREVIEW}
+        formats={SHARE_FORMATS}
+        caption=""
+        hashtagText="#부산여행"
+        copyLimitReached
+        onBack={noop}
+      />
+    ),
+  },
   // j05 여행 스타일 2키(TRIP-573·TRIP-765) — 순수 뷰(`TravelStyleScreen`)를 격리 렌더한다(네트워크
   // 계층 import 0 이라 프리뷰 지뢰 목 통과 — shared/ui/BottomTabBar 만 프레젠테이션으로 문다). 지도는
   // 좌표 계약 공백이라 그리지 않는다(TRIP-939 — 자리표시 제거, 근거 링크도 목적지 없어 미렌더). StatTile 2톤·진행 병합·아래 행 계산값·칩
@@ -4713,7 +4801,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'd04 · 장소 탐색 default',
     login: null,
     // TRIP-708 완료 조건: d04 는 (tabs) 밖 라우트라 복제 탭바가 프리뷰에도 보여야 한다. 탭바는
-    // page 소유(화면 순수성)라 순수 화면만 태우면 안 보이므로, magazine 선례처럼 withShellTabBar
+    // page 소유(화면 순수성)라 순수 화면만 태우면 안 보이므로, withShellTabBar
     // 로 감싸 셸 탭바(탐색 활성)를 얹는다(실 라우트는 PlaceExplorePage 가 동일 탭바를 그린다).
     render: () =>
       withShellTabBar(
@@ -5544,7 +5632,7 @@ export const PREVIEW_STATES: PreviewState[] = [
             { key: 'here', title: '서울특별시 숙소', candidates: [jw] },
             {
               key: 'other',
-              title: '다른 지역 · 위치 확인 안 됨',
+              title: '위치 확인 안 됨',
               candidates: others,
             },
           ]}
@@ -5557,7 +5645,7 @@ export const PREVIEW_STATES: PreviewState[] = [
       );
     },
   },
-  // g02 숙소 선택 시트 그 밤 지역 0곳(TRIP-1273 B-14) — QA 재현: 부산 밤에 서울 숙소만 2곳. 안내 문구는
+  // g02 숙소 선택 시트 그 밤 지역 0곳(TRIP-1273 B-14) — QA 재현: 부산 밤에 서울 숙소만 2곳(지금은 후보에서 빠져 0건 + 안내만). 안내 문구는
   // Figma 노드가 없는 발명 문구(01b Q2)라 6-b 육안이 "섹션 위에서 튀지 않나·시트 안에 보이나"를 보는 자리.
   {
     key: 'trip-new-step2-staysheet-region-empty',
@@ -5565,30 +5653,12 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'g02 · 숙소 선택 시트 region-empty',
     login: null,
     render: () => {
-      const stay = (
-        savedStayId: string,
-        name: string
-      ): StaySelectCandidate => ({
-        savedStayId,
-        name,
-        coordConfirmed: true,
-        linkedTripIds: [],
-        checkIn: null,
-        checkOut: null,
-        registerRoute: 'MAP_SEARCH',
-        createdAt: '2026-08-01T00:00:00Z',
-        updatedAt: '2026-08-01T00:00:00Z',
-      });
-      const seoul = [
-        stay('jongno', '종로 인 호텔'),
-        stay('jw', 'JW 메리어트 동대문'),
-      ];
+      // TRIP-1703 — 전부 지역 밖이면 후보가 0건으로 빠지고 안내만 남는다(「저장한 숙소가 아직 없어요」 없음).
       return (
         <StaySelectSheet
           title="2번째 밤 · 부산광역시"
           dateLabel="9/27(일)"
-          candidates={seoul}
-          sections={[{ key: 'other', title: '다른 지역', candidates: seoul }]}
+          candidates={[]}
           regionNotice="부산광역시에 저장한 숙소가 없어요"
           selectedSavedStayId={null}
           onSelect={noop}
@@ -6468,6 +6538,15 @@ export const PREVIEW_STATES: PreviewState[] = [
       <MyTripsListScreen mode="error" onPressCreateTrip={noop} onRetry={noop} />
     ),
   },
+  // TRIP-1638 — 오프라인으로 처음 켠 일정 탭(버튼 없음). 보류 요청에 다시 시도는 무동작이라 두지 않는다.
+  {
+    key: 'h06-my-trips-offline',
+    band: 'h',
+    label:
+      'h06 · 내 여행 오프라인 콜드스타트(TRIP-1638, Figma 프레임 없음 — 코드 선례)',
+    login: null,
+    render: () => <MyTripsListScreen mode="offline" onPressCreateTrip={noop} />,
+  },
   // h06 삭제 메뉴·삭제 확인(TRIP-1055, Figma 4682:2573·4682:3206) — Figma 와 같은 작성중(부산)+완성 2카드.
   // 작성중 카드만 ⋯ 를 받는다. 메뉴 위치·그림자·딤 덮임·중앙 정렬은 jest 사각(6-b 대조 자리).
   {
@@ -6629,6 +6708,23 @@ export const PREVIEW_STATES: PreviewState[] = [
         rows={[]}
         isEmpty
         onConfirmBaseToggle={noop}
+        onPressExplore={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // l04 조회 실패(TRIP-1637) — Figma 프레임 없음, 알림함·내 여행 오류 얼굴 선례. 재시도 중 비활성은 retrying.
+  {
+    key: 'my-stays-error',
+    band: 'l',
+    label: 'l04 · 등록 숙소 조회 실패(TRIP-1637, Figma 프레임 없음 — 선례)',
+    login: null,
+    render: () => (
+      <MyStaysScreen
+        rows={[]}
+        isEmpty={false}
+        loadFailed
+        onRetry={noop}
         onPressExplore={noop}
         onPressBack={noop}
       />
@@ -8456,6 +8552,15 @@ export const PREVIEW_STATES: PreviewState[] = [
         onRetry={noop}
       />
     ),
+  },
+  // TRIP-1638 — 오프라인으로 처음 켠 기록 탭(버튼 없음).
+  {
+    key: 'records-calendar-offline',
+    band: 'j',
+    label:
+      'j07 · 기록 탭 오프라인 콜드스타트(TRIP-1638, Figma 프레임 없음 — 코드 선례)',
+    login: null,
+    render: () => <RecordsCalendarOfflineFace />,
   },
   // j07 기록 탭 허브 default 키(TRIP-575·767) — 순수 뷰(`RecordsCalendarScreen`)를 격리 렌더한다
   // (`@/shared/api`·`@/features/*` 값 import 0 이라 프리뷰 지뢰 목 통과). 커스텀 월 그리드·코랄 pill 마킹

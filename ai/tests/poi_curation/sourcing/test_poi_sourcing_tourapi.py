@@ -1,0 +1,680 @@
+"""U6-05 — TourApiAdapter 파싱 + 카테고리·영업시간 매핑 (TRIP-246). 실 호출 0."""
+
+from __future__ import annotations
+
+import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
+from trippilot.poi_curation.sourcing.mapping import _parse_rest_days, map_category, parse_open_hours
+from trippilot.poi_curation.sourcing.tourapi import TourApiAdapter
+from trippilot.domain.poi import OpenHour, PoiCategory
+from trippilot.ports.poi_sourcing_port import SourcingError
+
+from tests.fakes.fake_tourapi_http import (
+    FakeTourApiHttp,
+    envelope,
+    error_envelope,
+    intro_item,
+    list_item,
+)
+
+
+def _adapter(http: FakeTourApiHttp) -> TourApiAdapter:
+    return TourApiAdapter(http, "test-key")
+
+
+# ── 어댑터: 목록 파싱 ─────────────────────────────────────────
+def test_fetch_page_parses_records_and_coords() -> None:
+    http = FakeTourApiHttp(pages={("12", 1): envelope(
+        [list_item("100", "성산일출봉", mapx="126.9425", mapy="33.4620",
+                   firstimage="http://img/100.jpg")], total_count=1)})
+    page = _adapter(http).fetch_page("39", "12", 1, 100)
+    assert page.total_count == 1
+    (r,) = page.records
+    assert r.source_ref == "100" and r.name == "성산일출봉"
+    assert r.lat == pytest.approx(33.4620)   # mapy = 위도
+    assert r.lng == pytest.approx(126.9425)  # mapx = 경도
+    assert r.category_codes == ("A01", "A0101", "A01010400")
+    assert r.image_url == "https://img/100.jpg"  # 평문 HTTP 는 iOS ATS 가 조용히 막는다 — 스킴을 올린다
+
+
+# ── 어댑터: 이미지 URL 스킴 ───────────────────────────────────
+def _image_url_of(firstimage: str) -> str | None:
+    http = FakeTourApiHttp(pages={("12", 1): envelope(
+        [list_item("100", "성산일출봉", mapx="126.9425", mapy="33.4620",
+                   firstimage=firstimage)], total_count=1)})
+    (r,) = _adapter(http).fetch_page("39", "12", 1, 100).records
+    return r.image_url
+
+
+def test_image_url_http_is_upgraded_to_https() -> None:
+    """TourAPI 는 이미지를 전 건 `http://` 로 준다. iOS ATS 가 에러 없이 차단해 회색 자리만 남으므로
+    스킴을 올린다 — 호스트·경로는 그대로다(같은 URL 이 https 로도 200).
+    """
+    assert _image_url_of("http://tong.visitkorea.or.kr/cms/resource/72/3477972_image2_1.jpg") == (
+        "https://tong.visitkorea.or.kr/cms/resource/72/3477972_image2_1.jpg"
+    )
+
+
+def test_image_url_https_is_left_alone() -> None:
+    assert _image_url_of("https://img/already.jpg") == "https://img/already.jpg"
+
+
+def test_image_url_missing_stays_none() -> None:
+    assert _image_url_of("") is None
+
+
+def test_fetch_page_empty_items_string_variant() -> None:
+    """빈 목록에서 items가 "" 로 오는 실 API 변주 — 방어적으로 빈 페이지."""
+    http = FakeTourApiHttp(pages={("12", 1): envelope([], total_count=0)})
+    page = _adapter(http).fetch_page("39", "12", 1, 100)
+    assert page.records == () and page.total_count == 0
+
+
+def _bare(body: dict) -> dict:
+    return {"response": {"header": {"resultCode": "0000", "resultMsg": "OK"}, "body": body}}
+
+
+@pytest.mark.parametrize("body", [{}, {"items": None, "totalCount": 0}, {"items": "", "totalCount": None}])
+def test_fetch_page_malformed_items_or_count_is_a_failure_not_an_empty_success(body: dict) -> None:
+    """items·totalCount 가 형식 밖인 성공 응답을 빈 페이지로 읽으면 그 종류가 완주로 적힌다 — 실패로 올려 커서를 남긴다
+    (2026-10-30 Codex 리뷰)."""
+    with pytest.raises(SourcingError):
+        _adapter(FakeTourApiHttp(pages={("12", 1): _bare(body)})).fetch_page("39", "12", 1, 100)
+
+
+def test_fetch_page_numeric_string_count_is_read() -> None:
+    page = _adapter(FakeTourApiHttp(pages={("12", 1): _bare({"items": "", "totalCount": "0"})})).fetch_page("39", "12", 1, 100)
+    assert page.records == () and page.total_count == 0
+
+
+def test_fetch_detail_without_items_is_a_failure_so_it_is_asked_again() -> None:
+    """상세가 빈 성공이면 영업시간 빈칸이 기제안 색인에 굳는다 — 실패면 색인을 미뤄 다음 실행이 다시 묻는다."""
+    with pytest.raises(SourcingError):
+        _adapter(FakeTourApiHttp(intros={"7": _bare({})})).fetch_detail("7", "12")
+
+
+def test_fetch_page_error_code_raises_sourcing_error() -> None:
+    http = FakeTourApiHttp(pages={("12", 1): error_envelope()})
+    with pytest.raises(SourcingError):
+        _adapter(http).fetch_page("39", "12", 1, 100)
+
+
+def test_fetch_page_sends_common_params_once_per_call() -> None:
+    http = FakeTourApiHttp(pages={("39", 2): envelope([], 0, page_no=2)})
+    _adapter(http).fetch_page("39", "39", 2, 50)
+    assert len(http.calls) == 1  # 메서드 1회 = HTTP 1건 (호출 예산 계약)
+    _, params = http.calls[0]
+    assert params["serviceKey"] == "test-key"
+    assert params["MobileOS"] == "ETC" and params["MobileApp"] == "TripPilot"
+    assert params["_type"] == "json"
+    # 법정동 코드로 부른다 — areaCode 로 거르면 일부만 온다(10-18 실측, `LDONG_BY_AREA`)
+    assert params["lDongRegnCd"] == "50" and "areaCode" not in params and params["contentTypeId"] == "39"
+    assert params["numOfRows"] == "50" and params["pageNo"] == "2"
+
+
+# ── 어댑터: 상세(영업시간) ────────────────────────────────────
+def test_상시_개방은_24시간으로_읽는다() -> None:
+    """"시각을 모른다"가 아니라 "항상 열려 있다" — 지어내기가 아니라 원문 그대로다.
+
+    수집 8,043건 중 파싱 실패 3,475건의 절반(1,771건)이 이 한 문구였다.
+    공원·해변·자연관광지가 대부분이라 NATURE 영업시간 보유율이 3%까지 떨어졌다.
+    """
+    hours = parse_open_hours("상시 개방", None)
+    assert len(hours) == 7                                    # 요일 전부
+    assert {(h.open_min, h.close_min) for h in hours} == {(0, 1440)}
+
+
+def test_상시_개방은_해석_안되는_휴무_문구에_지지_않는다() -> None:
+    """원문(상시 개방)이 이미 휴무 없음을 말한다 — 읽히지 않는 휴무 문구(동절기 휴장)에 통째로 지지 않는다."""
+    assert len(parse_open_hours("상시 개방", "동절기 휴장")) == 7
+
+
+def test_상시_개방이라도_읽히는_휴무는_존중한다() -> None:
+    assert len(parse_open_hours("상시개방", "매주 월요일")) == 6
+
+
+@pytest.mark.parametrize("kind", ["12", "14", "39"])
+def test_fetch_detail_reads_type_specific_fields(kind: str) -> None:
+    http = FakeTourApiHttp(intros={
+        "7": envelope([intro_item("7", kind, "10:00~18:00", "매주 월요일")], 1)})
+    hours = _adapter(http).fetch_detail("7", kind)
+    assert hours.hours_raw == "10:00~18:00"
+    assert hours.rest_raw == "매주 월요일"
+
+
+def test_fetch_detail_unknown_kind_returns_empty_without_call() -> None:
+    """필드 매핑 없는 타입은 지어내지 않고 빈 원문 — HTTP 호출도 하지 않는다."""
+    http = FakeTourApiHttp()
+    hours = _adapter(http).fetch_detail("7", "25")
+    assert hours.hours_raw is None and hours.rest_raw is None
+    assert http.calls == []
+
+
+# ── 상세 표시용 원문 (TRIP-683 2단계) — 같은 응답, HTTP 추가 0 ─────────
+
+def test_fetch_detail_carries_whitelisted_display_fields_raw() -> None:
+    """채택 목록의 필드만, 벤더 필드명 그대로, 비어 있으면 키 없음."""
+    http = FakeTourApiHttp(intros={"7": envelope([intro_item(
+        "7", "39", "11:00~21:00", "매주 월요일",
+        firstmenu="고기국수", treatmenu="고기국수, 비빔국수", packing="",
+        chkpet="불가")], 1)})
+    d = _adapter(http).fetch_detail("7", "39")
+    assert d.detail_raw == {"firstmenu": "고기국수", "treatmenu": "고기국수, 비빔국수"}
+    assert len(http.calls) == 1
+
+
+@pytest.mark.parametrize("kind", ["12", "14", "38", "39"])
+def test_fetch_detail_never_carries_spendtime(kind: str) -> None:
+    """소요시간은 채워져 와도 싣지 않는다 — INV-3(소요시간 미표시)의 수집 단 방어."""
+    http = FakeTourApiHttp(intros={"7": envelope([intro_item(
+        "7", kind, "09:00~18:00", "연중무휴",
+        spendtime="약 2시간", spendtimeresting="1시간", usefee="무료", parking="가능")], 1)})
+    d = _adapter(http).fetch_detail("7", kind)
+    assert "spendtime" not in d.detail_raw and "spendtimeresting" not in d.detail_raw
+
+
+def test_fetch_detail_kind_28_carries_nothing() -> None:
+    """레포츠는 실측에서 상세가 비어 왔다 — 목록이 없으니 무엇이 와도 싣지 않는다."""
+    http = FakeTourApiHttp(intros={"7": envelope([intro_item(
+        "7", "28", "09:00~18:00", "", parkingleports="가능")], 1)})
+    assert _adapter(http).fetch_detail("7", "28").detail_raw == {}
+
+
+# ── 카테고리 매핑표 (8종 중 NIGHT_VIEW 제외 7종 도달 + 불가 드롭) ──
+@pytest.mark.parametrize(
+    ("kind", "cats", "expected"),
+    [
+        ("39", ("A05", "A0502", "A05020100"), PoiCategory.FOOD),
+        ("39", ("A05", "A0502", "A05020900"), PoiCategory.CAFE),
+        ("14", ("A02", "A0206", "A02060100"), PoiCategory.CULTURE),
+        ("28", ("A03", "A0302", "A03021200"), PoiCategory.ACTIVITY),
+        ("38", ("A04", "A0401", "A04010200"), PoiCategory.SHOPPING),
+        ("12", ("A01", "A0101", "A01010400"), PoiCategory.NATURE),
+        ("12", ("A02", "A0201", "A02010100"), PoiCategory.SIGHT),
+        ("12", ("A02", "A0206", "A02060300"), PoiCategory.CULTURE),
+        ("12", ("A02", "A0203", "A02030100"), PoiCategory.ACTIVITY),
+        ("12", ("A03", "A0302", "A03021200"), PoiCategory.ACTIVITY),
+        ("28", ("A03", "A0302", "A03021700"), None),  # 야영장,오토캠핑장 — 1박 숙영지(32 숙박과 같은 길)
+        ("12", ("A03", "A0302", "A03021700"), None),  # 관광지로 와도 같다
+        ("25", ("C01", "C0112", "C01120001"), None),  # 여행코스 — 매핑 불가
+        ("32", ("B02", "B0201", "B02010100"), None),  # 숙박 — 경계 8종 밖(STAY는 내부 전용)
+        ("12", (), None),                              # 분류 코드 부재
+    ],
+)
+def test_category_mapping_table(kind, cats, expected) -> None:
+    assert map_category(kind, cats) is expected
+
+
+# ── 영업시간 파싱 — 파싱 가능한 것만, 지어내기 금지 ──────────────
+def test_parse_open_hours_full_week() -> None:
+    hours = parse_open_hours("10:00~22:00", "연중무휴")
+    assert hours == tuple(OpenHour(d, 600, 1320) for d in range(7))
+
+
+def test_parse_open_hours_weekly_rest_day_excluded() -> None:
+    hours = parse_open_hours("09:30~18:00", "매주 월요일 휴무")
+    assert {h.day_of_week for h in hours} == {1, 2, 3, 4, 5, 6}
+    assert all(h.open_min == 570 and h.close_min == 1080 for h in hours)
+
+
+def test_parse_open_hours_past_midnight() -> None:
+    hours = parse_open_hours("18:00~02:00", None)
+    assert hours[0].open_min == 1080 and hours[0].close_min == 26 * 60
+
+
+# ── 숙박 입실·퇴실 시각은 영업 창이 아니다 — 시각 2회 경로 (공유본 985곳이 창으로 읽혔다) ──
+@pytest.mark.parametrize(
+    "hours_raw",
+    [
+        "- 입실 13:00- 퇴실 12:00",                     # 가반나야영장 — 13:00~익일 12:00 영업으로 읽혔다
+        "입실 오후 3:00 ~ 퇴실 오후 12:00",              # 더헤븐 리조트
+        "[숙박]<br>\n- 입실14:00<br>\n- 퇴실 11:00",
+        "[숙박시설]- 입실시간 15:00- 퇴실시간 11:00",
+        "- 입실(토요일) 15:00- 퇴실(일요일) 11:00",      # 학생해양수련원
+        "- 입실 09:00- 퇴실 15:00",                     # 따봉캠핑장 — 같은 날 창이어도 영업시간이 아니다
+    ],
+)
+def test_parse_open_hours_check_in_out_times_are_not_a_window(hours_raw) -> None:
+    assert parse_open_hours(hours_raw, "연중무휴") == ()
+
+
+def test_parse_open_hours_detached_check_in_label_keeps_window() -> None:
+    """라벨이 시각의 이름일 때만 포기한다 — 함허동천야영장 원문의 당일사용 꼬리."""
+    hours = parse_open_hours("07:00~18:00※ 당일사용은 당일 입실 후 당일 퇴실", "연중무휴")
+    assert hours == tuple(OpenHour(d, 420, 1080) for d in range(7))
+
+
+@pytest.mark.parametrize(
+    "hours_raw",
+    [
+        "입실 안내는 홈페이지를 참고 09:00~18:00",   # 라벨이 시각 앞 10자 넘게 떨어졌다
+        "당일 입실 불가\n09:00~18:00",              # 라벨과 시각 사이에서 줄이 바뀐다
+    ],
+)
+def test_parse_open_hours_check_in_label_before_but_not_naming_the_time_keeps_window(hours_raw) -> None:
+    """라벨이 시각 **앞**에 있어도 10자 안·같은 줄이 아니면 그 시각의 이름이 아니다 — 만든 예(공유본엔 이 꼴 0건)."""
+    assert parse_open_hours(hours_raw, "연중무휴") == tuple(OpenHour(d, 540, 1080) for d in range(7))
+
+
+def test_parse_open_hours_always_open_park_ignores_campsite_section() -> None:
+    """`상시 개방` 갈래는 시각을 읽지 않는다 — 공원 안 야영장 구역의 입실 시각이 공원 창을 지우지 않는다(평사리공원)."""
+    hours = parse_open_hours("[공원]- 상시 개방[야영장]- 입실 14:00- 퇴실 11:00", "연중무휴")
+    assert hours == tuple(OpenHour(d, 0, 1440) for d in range(7))
+
+
+_HHMM = st.builds("{}:{:02d}".format, st.integers(0, 23), st.integers(0, 59))
+_CHECK_GAP = st.sampled_from(["", " ", "시간 ", "시간 : ", " 오후 ", "(토요일) "])   # 실물에 나온 라벨~시각 간격
+_REST_OK = st.sampled_from([None, "연중무휴", "매주 월요일"])
+
+
+@settings(deadline=None)
+@given(a=_HHMM, b=_HHMM, gap=_CHECK_GAP, label=st.sampled_from(["입실", "퇴실"]),
+       both=st.booleans(), rest=_REST_OK)
+def test_pbt_labelled_check_in_out_time_never_becomes_a_window(a, b, gap, label, both, rest) -> None:
+    """시각 2회 중 하나라도 입실·퇴실 라벨이 바로 앞에 붙으면 어떤 시각·휴무로도 창을 만들지 않는다."""
+    raw = f"- 입실{gap}{a}- 퇴실{gap}{b}" if both else f"{a}~ {label}{gap}{b}"
+    assert parse_open_hours(raw, rest) == ()
+
+
+@settings(deadline=None)
+@given(a=_HHMM, b=_HHMM, label=st.sampled_from(["입실", "퇴실"]), sep=st.sampled_from(["<br>", "※ ", " / "]),
+       rest=_REST_OK)
+def test_pbt_detached_check_in_out_label_changes_nothing(a, b, label, sep, rest) -> None:
+    """시각에 붙지 않은 라벨은 판정을 바꾸지 않는다 — 같은 두 시각을 라벨 없이 읽은 것과 같다."""
+    plain = f"{a}~{b}"
+    assert parse_open_hours(f"{plain}{sep}당일 {label} 안내", rest) == parse_open_hours(plain, rest)
+
+
+@pytest.mark.parametrize(
+    ("hours_raw", "rest_raw"),
+    [
+        (None, None),                                  # 정보 없음
+        ("", ""),
+        ("[3~10월] 09:00~19:00 [11~2월] 09:00~18:00", ""),  # 계절별 — 확정 불가
+        ("09:00~18:00", "동절기 휴장"),                  # 요일 아님 — 확신 없음
+        ("09:00~18:00", "공연 별로 상이함"),             # 프로그램이 있어야 여는 곳 — 어느 날 닫는지 모른다
+        ("09:00~18:00", "점포별 상이 / 동절기 휴장"),     # 점포별 상이라도 모르는 글이 섞이면 모른다
+        ("09:00~18:00", "※ 자세한 사항은 전화문의 요망"),  # 전화 문의 안내뿐 — 비고를 읽어도 모른다
+        # 점포별 상이는 절 전체가 그 문구일 때만 — 다른 말이 붙거나 프로그램별 상이면 모른다
+        ("09:00~18:00", "점포별 상이·동절기 휴장"),
+        ("09:00~18:00", "공연 및 매장별 상이"),
+        ("09:00~18:00", "체험별로 상이함"),
+        ("09:00~18:00", "공연 및 전시 별로 상이함"),
+        ("09:00~18:00", "※ 시설마다 상이하므로 전화문의 요망"),
+        ("09:00~18:00", "※ 행사별 상이하므로 홈페이지 참고"),
+        ("09:00~18:00", "※ 연중무휴 ※ 동절기 휴장"),       # 한 줄의 두 비고 — 비고는 점포별 상이만 받는다
+        ("09:00~18:00", "※ 공사로 인해 임시 휴관"),
+        ("09:00~18:00", "매년 3월~10월"),                # 계절 — 요일 아님
+        ("09:00~18:00", "장날이외의 날"),
+        ("09:00~18:00", "1월 1일 / 동절기 휴장"),          # 비정기 휴일에 모르는 글이 섞였다
+        ("09:00~18:00", "연중무휴 / 동절기(12~2월) 휴장"),  # 무휴라도 모르는 글이 섞이면 모른다
+        ("09:00~18:00", "11월 1일 ~ 3월 31일 휴장"),        # 날짜가 있어도 기간이면 장기 휴장이다
+        ("09:00~18:00", "당일 사정에 따라 휴무"),          # '당일' 은 절 전체일 때만 명절 꼬리다
+        ("09:00~18:00", "주말만 운영"),                     # 이 주말은 여는 날이다
+        # 구역이 둘 — 어느 구역의 휴무인지 모른다
+        ("09:00~18:00", "[경매] 매주 일요일 / 1월 1일 / 설·추석 연휴<br>[판매(도소매)] 연중무휴"),
+    ],
+)
+def test_parse_open_hours_unparseable_is_empty_not_fabricated(hours_raw, rest_raw) -> None:
+    assert parse_open_hours(hours_raw, rest_raw) == ()
+
+
+# ── 휴무 원문 — 실물 표본(TourAPI 상세 584건, 2026-10-04)으로 정한 규칙 (TRIP-1230) ──
+# 종전엔 명절·공휴일·"첫째 주"가 섞이면 통째로 포기해 표본의 38.5% 가 영업시간 창까지 잃었다.
+def _closed(rest_raw: str) -> set[int]:
+    hours = parse_open_hours("09:00~18:00", rest_raw)
+    assert all((h.open_min, h.close_min) == (540, 1080) for h in hours)   # 창은 그대로
+    return set(range(7)) - {h.day_of_week for h in hours}
+
+
+@pytest.mark.parametrize(("rest_raw", "closed"), [
+    ("매주 월요일 / 1월 1일 / 설·추석 당일", {0}),          # 박물관 전형 — 연 단위 휴일은 무시
+    ("매주 월요일, 1월 1일, 설날 및 추석 당일", {0}),
+    ("매주 금요일 / 설·추석 연휴 / 대체공휴일 / 12월 31일 / 1월 1일", {4}),
+    # 괄호 단서의 요일은 휴무가 아니다 — 읽으면 토·일까지 닫힌다
+    ("매주 월요일 / 법정공휴일 (토요일·일요일과 겹치는 경우는 휴관)", {0}),
+    ("매주 월요일 (단, 월요일이 공휴일일 경우 그 다음 평일 휴관) / 1월 1일 / 설·추석 당일", {0}),
+    ("매주 월요일~목요일 / 연휴 마지막 날", {0, 1, 2, 3}),  # 범위 — 종전엔 양끝(월·목)만 읽었다
+    ("매주 토요일~일요일 / 법정공휴일", {5, 6}),
+    ("매주 주말", {5, 6}),
+    ("매달 둘째·넷째 일요일", {6}),                          # 월 단위 요일 — 매주로 넓힌다
+    ("매주 일요일 / 매월 둘째, 넷째 월요일", {0, 6}),
+    ("- 매주 월요일, 화요일※ 매월 첫째주 수요일 단축영업", {0, 1}),   # ※ 비고는 읽지 않는다
+    ("매주 일요일 ※ 우천 시 휴장<br>매주 월요일 휴무", {0, 6}),  # 비고는 그 줄까지만 — 다음 줄은 본문
+    ("-<br>", set()),
+    # 요일이 괄호·비고에만 있으면 원문 전체에서 읽는다 — 종전 파서가 읽던 요일을 놓치지 않는다
+    ("연중무휴 (단 매주 월요일 휴무)", {0}),
+    ("휴관일(매주 월요일)", {0}),
+    ("1월 1일 ※ 매주 월요일 휴관", {0}),
+    ("월요일∼수요일", {0, 1, 2}),                            # 물결표 변형
+    # 앞끝 `요일` 생략 — 종전엔 뒤끝(목요일)만 닫혔다(실물 구룡포 피어라계단)
+    ("매주 월~목요일", {0, 1, 2, 3}),
+    ("매주 토~일요일 / 공휴일", {5, 6}),
+    ("3월~5월 매주 화요일", {1}),                            # 달 이름의 월은 범위 끝이 아니다
+    ("설·추석 연휴", set()),                                # 비정기 휴일뿐 — 매주 쉬는 날 없음
+    ("1월 1일 / 부처님 오신날 / 성탄절 / 설·추석 연휴", set()),
+    ("월 1회 정기휴무 (자세한 내용은 홈페이지 참조)", set()),
+    ("1월 1일 / 설·추석 연휴 /근로자의 날", set()),          # 되감기 첫 배치 실물
+    ("설·추석 전날, 당일", set()),                            # 홀로 떨어진 '당일' — 앞 절 명절의 꼬리
+    ("연중무휴<br>※ 변동 가능성이 있으므로 전화문의 요망", set()),
+    ("연중무휴 (점포별 상이)", set()),
+    # 가게마다 다르다 — 시장·쇼핑몰은 열고 휴무는 개별 점포 몫이다(2026-10-05 결정, 쇼핑 표본의 절반 68/135)
+    ("점포 별로 상이함", set()),
+    ("매장 별 상이", set()),
+    ("상점별 상이", set()),
+    ("※ 점포 별로 상이함", set()),                          # 비고뿐이면 비고의 점포별 상이를 읽는다
+    ("※ 점포마다 상이함", set()),
+    ("점포별 상이 / 설·추석 연휴", set()),
+    ("-", set()),                                           # 자리표시자
+])
+def test_휴무_원문은_매주_쉬는_요일만_뺀다(rest_raw: str, closed: set[int]) -> None:
+    assert _closed(rest_raw) == closed
+
+
+_DAY_NAMES = "월화수목금토일"
+
+
+@settings(max_examples=100, deadline=None)
+@given(
+    days=st.sets(st.integers(0, 6), min_size=1, max_size=6),
+    irregular=st.lists(st.sampled_from(
+        ["1월 1일", "설·추석 당일", "법정공휴일", "개관기념일 (4월 10일)", "기타 관장이 지정한 날"]),
+        max_size=3),
+    note=st.sampled_from(
+        ["", " (단, 일요일이 공휴일이면 다음 평일 휴관)", " (토요일·일요일과 겹치면 휴관)"]),
+)
+def test_pbt_매주_휴무_요일은_비정기_휴일과_괄호_단서에_흔들리지_않는다(
+    days: set[int], irregular: list[str], note: str,
+) -> None:
+    head = "매주 " + ", ".join(f"{_DAY_NAMES[d]}요일" for d in sorted(days)) + note
+    assert _closed(" / ".join([head, *irregular])) == days
+
+
+@settings(max_examples=60, deadline=None)
+@given(a=st.integers(0, 6), b=st.integers(0, 6))
+def test_pbt_요일_범위는_사이_요일까지_읽는다(a: int, b: int) -> None:
+    """`월요일~수요일` 은 월·화·수다 — 종전엔 양끝만 읽어 화요일에 일정이 들어갔다. 주를 넘는 범위도.
+
+    파서를 직접 본다 — 7일 전부인 범위는 영업시간으로 보면 `()` 라 "모름"과 구별되지 않는다."""
+    expected = {(a + k) % 7 for k in range((b - a) % 7 + 1)}
+    assert _parse_rest_days(f"매주 {_DAY_NAMES[a]}요일~{_DAY_NAMES[b]}요일") == frozenset(expected)
+
+
+# ── 시각 3회 이상 — 종전엔 통째로 포기하던 것 (2026-09-26) ──────────────
+# 실측: 공유본 결측 13,367건 중 4,764건이 원문에 시각을 갖고 있었다.
+# 아래는 전부 **실 수집분에서 뽑은 원문**이다 — 지어낸 입력이 아니다.
+
+@pytest.mark.parametrize("raw,want", [
+    # 부가 안내가 뒤에 붙는 가장 흔한 모양 — 첫 범위가 답이다
+    ("09:00~17:50 (입장 마감 17:00)", (9 * 60, 17 * 60 + 50)),
+    ("- 09:00~17:00<br>- 휴게시간 12:00~13:00<br>- 입장 마감 16:30", (9 * 60, 17 * 60)),
+    ("11:00~17:00 (마지막 주문 16:00)", (11 * 60, 17 * 60)),
+    # 요일별 — 첫 범위(평일)를 쓴다
+    ("- 평일 12:00~20:00<br>- 주말 12:00~21:00", (12 * 60, 20 * 60)),
+    # 계절별 — 같은 개점의 **이른 폐점**을 쓴다 (넓게 잡으면 닫힌 시간에 배치된다)
+    ("- 하절기 08:40~18:00<br>- 동절기 08:40~17:30", (8 * 60 + 40, 17 * 60 + 30)),
+])
+def test_시각_3회_이상도_읽는다(raw: str, want: tuple[int, int]) -> None:
+    hours = parse_open_hours(raw, None)
+    assert hours, f"못 읽음: {raw!r}"
+    assert (hours[0].open_min, hours[0].close_min) == want
+
+
+def test_준비시간을_영업시간으로_읽지_않는다() -> None:
+    """**실데이터 라벨 1위가 `준비시간`(1,100건)이다.** 감으로 만든 목록에서 빠져
+    `10:00~18:00 (준비시간 12:00~13:00)` 이 12~13시로 읽혔다."""
+    hours = parse_open_hours("10:00~18:00 (준비시간 12:00~13:00)", None)
+    assert (hours[0].open_min, hours[0].close_min) == (10 * 60, 18 * 60)
+    # 띄어쓰기 변형도 같아야 한다 — 실물에 둘 다 있다
+    hours = parse_open_hours("11:30~23:00 (준비 시간 15:00~17:00)", None)
+    assert (hours[0].open_min, hours[0].close_min) == (11 * 60 + 30, 23 * 60)
+
+
+@pytest.mark.parametrize("raw", [
+    # 구역이 여럿 — 어느 것이 장소 전체인지 모른다
+    "[사우나] 06:00~21:00<br>[아쿠아나]<br>- 실내 10:00~18:00<br>- 야외 12:00~17:00",
+    # 회차 — 영업시간이 아니라 출발 시각이다
+    "- 1회 10:00~11:30<br>- 2회 13:00~14:30<br>- 3회 14:30~16:00",
+    # 교육 세션 — 창이 너무 좁으면 영업시간이 아니다
+    "[교육시간]<br>- 평일 10:00~12:00 / 14:00~16:00",
+])
+def test_확신할_수_없으면_지어내지_않는다(raw: str) -> None:
+    assert parse_open_hours(raw, None) == ()
+
+
+def test_무관한_시설과_겹쳐_좁아지지_않는다() -> None:
+    """교집합 규칙이 실패하던 실물 — 야시장(18~22시)과 겹쳐 18~19시로 좁아졌다.
+
+    두 규칙을 실데이터 4,764건으로 비교해 첫 범위를 골랐다(의심 120건 → 4건).
+    """
+    raw = "09:00~19:00(입장 마감 18:00)<br>※ 수목원야시장, LED공원 18:00~22:00"
+    hours = parse_open_hours(raw, None)
+    assert (hours[0].open_min, hours[0].close_min) == (9 * 60, 19 * 60)
+
+
+# ── 줄바꿈 없는 글머리표 영업 원문 — 되감기 첫 배치(2026-10-05) 실물 ─────────────
+# 벤더가 `<br>` 을 빼고 한 줄로 고쳐 쓴 원문이 늘었다. 비영업 줄(마지막 주문·준비시간)이 대표 시간과 한
+# 덩어리로 남으면 라벨 검사가 그 덩어리를 통째로 버려 대표 시간까지 사라졌다(1,691건 중 27건이 창을 잃음).
+@pytest.mark.parametrize(("hours_raw", "window"), [
+    ("- 09:00~20:50- 마지막 주문 20:30", (540, 1250)),
+    ("- 11:00~21:00 - 준비시간 15:30~17:30 - 마지막 주문 20:00", (660, 1260)),
+    ("09:00~18:00- 마지막 주문 17:30", (540, 1080)),
+    ("- 10:00~18:00- 휴게시간 12:00~13:00- 입장 마감 17:30※ 사전 예약 후 방문 요망", (600, 1080)),
+    ("09:30~21:00 / 휴식시간 15:00~17:00 / 마지막 주문 접수 20:30", (570, 1260)),
+    ("09:00-18:00 (입장마감 17:00)", (540, 1080)),           # 숫자 앞 `-` 는 범위다 — 끊지 않는다
+    ("09:00 - 18:00 (입장마감 17:00)", (540, 1080)),
+])
+def test_줄바꿈_없는_글머리표도_비영업_줄을_떼고_대표_시간을_읽는다(hours_raw: str, window: tuple[int, int]) -> None:
+    hours = parse_open_hours(hours_raw, None)
+    assert len(hours) == 7 and {(h.open_min, h.close_min) for h in hours} == {window}
+
+
+# ── 요일별 구간 — 한 구간의 폐점이 다른 요일을 덮던 것 (2026-10-12 검증 중 발견) ─────────
+# 실물(바캉스커피): `- 평일 12:00~21:30<br>- 토요일 12:00~19:00` 이 7일 전부 12:00~19:00 으로
+# 읽혔다 — 같은 개점의 이른 폐점(계절 보정)이 요일 구분을 계절 변형으로 오인해 평일 마감을 잘랐다.
+# 원문이 말하지 않은 요일은 **닫지 않는다**(누락 ≠ 휴무) — 종전 창 그대로다.
+_MON_FRI = range(5)
+
+
+@pytest.mark.parametrize(("raw", "want"), [
+    # 일요일은 원문에 없다 → 종전 창(첫 범위·이른 폐점) 그대로
+    ("- 평일 12:00~21:30<br>- 토요일 12:00~19:00",
+     {**{d: (720, 1290) for d in _MON_FRI}, 5: (720, 1140), 6: (720, 1140)}),
+    ("- 평일 12:00~20:00<br>- 주말 12:00~21:00",
+     {**{d: (720, 1200) for d in _MON_FRI}, 5: (720, 1260), 6: (720, 1260)}),
+    # 실물(귤향기 감귤체험농장) — 주를 넘는 범위 + 줄바꿈 없는 글머리표 + ※ 비고
+    ("- 토요일~목요일 09:00~17:30- 금요일 09:00~11:30※ 3월~7월 체험은 단체 예약제로 운영됨",
+     {**{d: (540, 1050) for d in (5, 6, 0, 1, 2, 3)}, 4: (540, 690)}),
+    # 요일 생략 범위 + 휴게시간 줄(요일 구간이 아니다)
+    ("- 월~금 10:00~22:00<br>- 토요일 10:00~18:00<br>- 휴게시간 15:00~17:00",
+     {**{d: (600, 1320) for d in _MON_FRI}, 5: (600, 1080), 6: (600, 1080)}),
+    # 한정자 없는 구간이 나머지 요일의 창이다
+    ("- 평일 10:00~20:00<br>- 09:00~17:00",
+     {**{d: (600, 1200) for d in _MON_FRI}, 5: (540, 1020), 6: (540, 1020)}),
+    # 영업 원문 안의 명시 휴무 절만 닫는다
+    ("- 평일 10:00~20:00<br>- 토요일 10:00~15:00<br>- 일요일 휴무",
+     {**{d: (600, 1200) for d in _MON_FRI}, 5: (600, 900)}),
+])
+def test_요일별_구간은_요일마다_읽고_말하지_않은_요일은_닫지_않는다(
+        raw: str, want: dict[int, tuple[int, int]]) -> None:
+    hours = parse_open_hours(raw, None)
+    assert {h.day_of_week: (h.open_min, h.close_min) for h in hours} == want
+
+
+def test_요일별_구간도_휴무_원문의_요일은_닫는다() -> None:
+    """실물 그대로 — 휴무 원문 `매주 일요일` 이 일요일을 닫는다(추론이 아니라 명시)."""
+    hours = parse_open_hours("- 평일 12:00~21:30<br>- 토요일 12:00~19:00", "매주 일요일 / 설·추석 당일")
+    assert {h.day_of_week: (h.open_min, h.close_min) for h in hours} == {
+        **{d: (720, 1290) for d in _MON_FRI}, 5: (720, 1140)}
+
+
+@pytest.mark.parametrize("raw", [
+    # 같은 요일이 두 번 — 어느 쪽이 그 요일의 시간인지 모른다 → 종전 규칙(첫 범위·이른 폐점)
+    "- 평일 09:00~18:00<br>- 금요일 09:00~21:00",
+    # 머리 전체가 한정자가 아니다 — 계절 변형은 종전 규칙이 맡는다
+    "- 하절기 평일 09:00~18:00<br>- 동절기 평일 09:00~17:00",
+    # 달 이름의 `월` 은 요일이 아니다
+    "- 하절기(3월~10월) 09:00~18:00<br>- 동절기(11월~2월) 09:00~17:00",
+    # 본문의 날짜 기간은 그 장소의 시간이다 — ※ 비고만 기간 한정으로 뺀다
+    "3월 1일 ~ 10월 31일 09:00~18:00<br>11월 1일 ~ 2월 28일 09:00~17:00",
+])
+def test_요일별로_확정할_수_없으면_종전_규칙(raw: str) -> None:
+    hours = parse_open_hours(raw, None)
+    assert len(hours) == 7 and len({(h.open_min, h.close_min) for h in hours}) == 1
+
+
+@pytest.mark.parametrize(("raw", "weekday"), [
+    # 오타 라벨이 `<br>` 로 갈려 한정자 없는 구간이 ≤2h 로 기각되는 모양(#1054 리뷰 재현)
+    ("- 평일 10:00~17:30<br>- 휴계시간 12:30~13:30", (600, 1050)),
+    ("- 평일 10:00~20:00<br>- 09:00~10:30", (600, 1200)),
+    ("- 평일 10:00~20:00<br>- 점심 12:00~13:00", (600, 1200)),
+    ("- 평일 10:00~20:00<br>- 체험 14:00~15:30", (600, 1200)),
+])
+def test_한정자_없는_구간이_기각돼도_영업시간을_통째로_잃지_않는다(
+        raw: str, weekday: tuple[int, int]) -> None:
+    hours = parse_open_hours(raw, None)
+    assert len(hours) == 7, hours
+    assert {(h.open_min, h.close_min) for h in hours if h.day_of_week in _MON_FRI} == {weekday}
+
+
+# 요일 머리 세 모양(#1054 리뷰 후속, 실물). 종전엔 구간 분할이 `·`·`/`·`-` 에서 요일 목록을 먼저 잘라 마지막
+# 토큰만 한정자가 됐고, 한 구간의 둘째 한정자는 부가 안내로 버려졌다 — 떨어진 요일이 다른 요일의 시간을 받았다.
+@pytest.mark.parametrize(("hours_raw", "rest_raw", "want"), [
+    ("- 화요일~수요일·금요일~일요일 09:30~20:00<br>- 월요일·목요일 11:00~17:00", "연중무휴",
+     {"화수금토일": (570, 1200), "월목": (660, 1020)}),
+    # 월요일은 원문에 없다 → 종전 창
+    ("- 화요일 / 목요일~금요일 09:00~18:00<br>- 수요일 09:00~20:00<br>- 토요일~일요일 09:00~17:00", None,
+     {"화목금": (540, 1080), "수": (540, 1200), "월토일": (540, 1020)}),
+    ("금,토,일 11:00~21:00, 월,화,수,목 11:00~20:00", "연중무휴",
+     {"금토일": (660, 1260), "월화수목": (660, 1200)}),
+    ("평일 10:30~19:00주말 10:30~19:30", None, {"월화수목금": (630, 1140), "토일": (630, 1170)}),
+    # 한정자 없는 범위 뒤의 한정자 — 앞 범위가 나머지 요일의 창이다
+    ("10:00~21:00, 월 10:00~19:00", None, {"월": (600, 1140), "화수목금토일": (600, 1260)}),
+    # ASCII 하이픈 범위 + 맨 요일(`토`)
+    ("월-금 07:30 - 20:30 / 토 07:30 - 18:00", "매주 일요일 정기휴무",
+     {"월화수목금": (450, 1230), "토": (450, 1080)}),
+])
+def test_요일_목록과_둘째_한정자와_하이픈_범위도_요일마다_읽는다(
+        hours_raw: str, rest_raw: str | None, want: dict[str, tuple[int, int]]) -> None:
+    hours = parse_open_hours(hours_raw, rest_raw)
+    assert {h.day_of_week: (h.open_min, h.close_min) for h in hours} == {
+        "월화수목금토일".index(c): w for days, w in want.items() for c in days}
+
+
+def test_날짜가_든_비고의_범위는_평소_창이_되지_않는다() -> None:
+    """실물(우리 놀이터 마루달) — 지난 여름 기간 한정 비고의 20:00 마감이 화~일 평소 창이 됐다(#1054 리뷰 후속)."""
+    hours = parse_open_hours(
+        "- 10:00~18:00 입장 마감 19:30<br>\n- 휴게시간 12:00~13:00<br>\n- 목요일 10:00~17:00<br>\n"
+        "※ 2025년 07월 22일~2025년 08월~31일 10:00~20:00 (입장 마감 19:30)", "매주 월요일")
+    assert {h.day_of_week for h in hours} == {1, 2, 3, 4, 5, 6}
+    assert max(h.close_min for h in hours) < 20 * 60
+
+
+# 영업 원문 안의 명시 휴무 절은 줄째 휴무 원문 규칙으로 읽는다(#1054 리뷰 후속). 종전엔 괄호·`/` 조각마다
+# 요일을 주워 조건 단서가 매주 휴무가 됐고, 시각 2회 원문에서는 아예 읽지 않았다.
+@pytest.mark.parametrize(("hours_raw", "rest_raw", "want"), [
+    # 실물(어깨동무스토리움) — 시각 2회 + 휴무 원문 `연중무휴`. 종전엔 월요일이 열렸다
+    ("10:00 ~ 17:00<br>\n매주 월요일 휴관 (월요일이 공휴일인 경우 다음날 휴관), 설날·추석 당일 휴관", "연중무휴",
+     {"화수목금토일": (600, 1020)}),
+    # 괄호 조건 단서의 요일(일·월)은 매주 휴무가 아니다
+    ("- 평일 10:00~20:00<br>- 주말 10:00~18:00<br>- 매주 화요일 휴무 (일요일이 공휴일인 경우 월요일 휴무)", None,
+     {"월수목금": (600, 1200), "토일": (600, 1080)}),
+    # 낱말과 요일이 괄호로 갈린 절
+    ("- 평일 10:00~20:00<br>- 주말 10:00~18:00<br>- 휴관일(매주 월요일)", None,
+     {"화수목금": (600, 1200), "토일": (600, 1080)}),
+    # 못 읽는 휴무 절은 무시한다 — 그 줄 때문에 영업시간을 버리지 않는다
+    ("10:00~18:00<br>동절기 휴관", None, {"월화수목금토일": (600, 1080)}),
+])
+def test_영업_원문_안_휴무_절은_줄째_휴무_원문_규칙으로_읽는다(
+        hours_raw: str, rest_raw: str | None, want: dict[str, tuple[int, int]]) -> None:
+    hours = parse_open_hours(hours_raw, rest_raw)
+    assert {h.day_of_week: (h.open_min, h.close_min) for h in hours} == {
+        "월화수목금토일".index(c): w for days, w in want.items() for c in days}
+
+
+# 대괄호 요일 머리(#1054 리뷰 후속, 실물). 구역 머리가 둘 이상이면 "어느 구역이 장소 전체인지 모른다"로 통째로
+# 포기했는데, 머리가 전부 요일이면 머리가 곧 한정자다(공유본 미해석 386건이 이 모양이었다).
+@pytest.mark.parametrize(("hours_raw", "rest_raw", "want"), [
+    ("[평일]<BR>- 09:00~17:30<br>- 마지막 주문 17:00<br>[토요일]<BR>- 09:00~21:00<BR>- 마지막 주문 20:30<BR>"
+     "[일요일]<BR>- 10:00~18:00", "연중무휴",
+     {"월화수목금": (540, 1050), "토": (540, 1260), "일": (600, 1080)}),
+    # 머리 안 요일 목록 + 줄바꿈 없는 한 줄 + 구역 안 비영업 줄
+    ("[화요일~목요일, 일요일]- 11:00~18:00 - 입장 마감 17:00[금요일~토요일]- 11:00~19:00 - 입장 마감 18:00",
+     "매주 월요일", {"화수목일": (660, 1080), "금토": (660, 1140)}),
+    ("[월요일~토요일]<br>- 06:00~19:00<br>- 준비시간 14:00~16:30<br>[일요일]<br>- 06:00~15:00", "연중무휴",
+     {"월화수목금토": (360, 1140), "일": (360, 900)}),
+    # 공휴일 토큰은 무시한다
+    ("[평일]- 09:00~21:00[주말/공휴일]- 08:00~21:00", "설·추석 연휴",
+     {"월화수목금": (540, 1260), "토일": (480, 1260)}),
+    # 요일 머리 하나 + 머리 앞 본문 — 본문이 나머지 요일의 창이다(실물, 머리 오타 `[평일[` 그대로)
+    ("[평일[<BR>- 09:00~21:00<BR>- 마지막 주문 20:30<BR>[일요일]<BR>- 10:00~19:00<BR>- 마지막 주문 18:30",
+     "매주 토요일", {"월화수목금": (540, 1260), "일": (600, 1140)}),
+])
+def test_대괄호_요일_머리는_구역마다_그_요일의_창이다(
+        hours_raw: str, rest_raw: str | None, want: dict[str, tuple[int, int]]) -> None:
+    hours = parse_open_hours(hours_raw, rest_raw)
+    assert {h.day_of_week: (h.open_min, h.close_min) for h in hours} == {
+        "월화수목금토일".index(c): w for days, w in want.items() for c in days}
+
+
+@pytest.mark.parametrize("hours_raw", [
+    # 머리 하나라도 시설 이름이면 어느 구역이 장소 전체인지 모른다
+    "[카페]<br>- 평일 10:00~20:00<br>[브런치]<br>- 주말 09:30~20:00<br>- 평일 10:00~15:00",
+    # 같은 요일이 두 머리에 — 어느 쪽이 그 요일의 시간인지 모른다(실물 경방식당)
+    "[평일]<BR>- 11:30~23:00<BR>[금요일]<BR>- 12:00~24:00<BR>[주말]<BR>- 12:00~24:00",
+    # 구역 창을 못 읽는다 — 회차 시각뿐(실물 한국궁중꽃박물관)
+    "[수요일~금요일]- 10:00 / 11:00 / 13:30 / 14:30[주말/공휴일]- 10:00 / 11:00 / 13:30 / 14:30 / 15:30",
+])
+def test_대괄호_요일_머리로_확정할_수_없으면_포기한다(hours_raw: str) -> None:
+    assert parse_open_hours(hours_raw, "연중무휴") == ()
+
+
+# 비영업 라벨 **앞**의 범위는 영업시간이다(#1054 리뷰 후속, 실물). 종전엔 라벨이 든 구간을 통째로 버려
+# 그 장소의 시간을 잃거나(다이도) 토요일 줄이 사라졌다(돗가비).
+@pytest.mark.parametrize(("hours_raw", "rest_raw", "want"), [
+    ("11:00~22:00준비시간 14:30~16:30- 마지막 주문20:30", "매주 일요일", {"월화수목금토": (660, 1320)}),
+    ("11:00~21:00 (15:00~17:00 브레이크타임)<br>20:30 라스트오더<br>토요일 11:00~14:00 13:30 라스트오더", "매주 일요일",
+     {"월화수목금": (660, 1260), "토": (660, 840)}),
+])
+def test_비영업_라벨_앞의_범위는_남긴다(
+        hours_raw: str, rest_raw: str | None, want: dict[str, tuple[int, int]]) -> None:
+    hours = parse_open_hours(hours_raw, rest_raw)
+    assert {h.day_of_week: (h.open_min, h.close_min) for h in hours} == {
+        "월화수목금토일".index(c): w for days, w in want.items() for c in days}
+
+
+# ── 새 분류 체계(lclsSystm) — 옛 cat 이 빈 항목 (2026-10-19 실측 코드) ─────────
+@pytest.mark.parametrize("codes,expected", [
+    (("HS", "HS01", "HS010100"), PoiCategory.SIGHT),      # 경복궁
+    (("NA", "NA02", "NA020900"), PoiCategory.NATURE),     # 해운대·광안리해수욕장
+    (("NA", "NA01", "NA010300"), PoiCategory.NATURE),     # 천지연폭포
+    (("VE", "VE01", "VE010200"), PoiCategory.SIGHT),      # 남산서울타워(랜드마크)
+    (("VE", "VE07", "VE070300"), PoiCategory.CULTURE),    # 전시시설 ≈ 옛 A0206 문화시설
+    (("VE", "VE10"), PoiCategory.ACTIVITY),               # 레저스포츠시설
+    (("EX", "EX06"), PoiCategory.SIGHT),                  # 산업관광 ≈ 옛 A0204 → SIGHT
+    (("EX", "EX01"), PoiCategory.ACTIVITY),               # 체험 ≈ 옛 A0203
+    (("EV", "EV01"), PoiCategory.CULTURE),
+    (("AC", "AC01"), None),                               # 숙박 — 옛 체계처럼 매핑하지 않는다
+])
+def test_옛_분류가_빈_관광지는_새_분류로_카테고리를_정한다(codes, expected) -> None:
+    assert map_category("12", codes) is expected
+
+
+def test_옛_분류가_있으면_옛_판정이_이긴다_그리고_카페는_새_코드로도() -> None:
+    assert map_category("12", ("A01", "A0101", "A01010400", "HS", "HS01")) is PoiCategory.NATURE
+    assert map_category("39", ("FD", "FD05", "FD050100")) is PoiCategory.CAFE
+    assert map_category("39", ("FD", "FD01")) is PoiCategory.FOOD
+
+
+def test_목록_항목의_새_분류_칸이_실리고_태그는_옛_것이_우선이다() -> None:
+    from trippilot.poi_curation.sourcing.mapping import category_tags
+    http = FakeTourApiHttp(pages={("12", 1): envelope([
+        list_item("126508", "경복궁", cat1="", cat2="", cat3="",
+                  lcls1="HS", lcls2="HS01", lcls3="HS010100")], 1)})
+    record, = _adapter(http).fetch_page("1", "12", 1, 10).records
+    assert record.category_codes == ("HS", "HS01", "HS010100")
+    assert map_category(record.kind, record.category_codes) is PoiCategory.SIGHT
+    assert category_tags(record.category_codes) == ("역사유적지",)
+    assert category_tags(("A01", "A0101", "NA", "NA02")) == ("자연관광지",)   # 겹친 태그를 만들지 않는다

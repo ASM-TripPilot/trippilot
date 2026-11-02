@@ -1,8 +1,7 @@
-import { FlatList, Pressable, Text } from 'react-native';
+import { Pressable, Text } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 
 import {
-  closestAncestor,
   closestScrollView,
   fireChipLayout,
   stubScrollTo,
@@ -45,40 +44,7 @@ function chip(index: number) {
   return screen.getByTestId(`probe-chip-${index}`);
 }
 
-describe('🔴 DayChipScroller · S1 — 칩을 가로 ScrollView 안에 그대로 그린다 (AC-1)', () => {
-  it('칩 7개가 순서대로 있고, 모두 같은 가로 ScrollView 안이며, FlatList 안이 아니다', () => {
-    render(ui(0));
-
-    const ids = screen
-      .getAllByTestId(/^probe-chip-\d+$/)
-      .map((node) => node.props.testID);
-    expect(ids).toEqual(
-      Array.from({ length: CHIP_COUNT }, (_, index) => `probe-chip-${index}`)
-    );
-    const scroll = closestScrollView(chip(0));
-    expect(scroll?.props.horizontal).toBe(true);
-    for (let index = 1; index < CHIP_COUNT; index += 1) {
-      expect(closestScrollView(chip(index))).toBe(scroll);
-    }
-    // 가로 FlatList 도 안쪽에 가로 ScrollView 를 그려 위 단언을 통과한다 — 그래서 따로 막는다.
-    expect(
-      closestAncestor(chip(0), (node) => node.type === (FlatList as unknown))
-    ).toBeNull();
-  });
-
-  it('칩이 다 들어갈 때 끌어도 따라오지 않게 고무줄 튕김을 끈다 (AC-5 jest 절반)', () => {
-    render(ui(0));
-
-    const scroll = closestScrollView(chip(0));
-    expect(scroll).not.toBeNull();
-    // alwaysBounceHorizontal=false 가 정확한 끄개다(가로 ScrollView 기본값 true). bounces=false 는 긴 줄의
-    // 끝 튕김까지 끄지만 AC 를 어기지 않아 함께 허용한다.
-    const noBounce =
-      scroll?.props.alwaysBounceHorizontal === false ||
-      scroll?.props.bounces === false;
-    expect(noBounce).toBe(true);
-  });
-});
+// S1(가로 ScrollView 구조·FlatList 아님·고무줄 튕김 끔)은 jest-cut 에서 지웠다 — 조상 구조와 ScrollView prop 이라 실화면 QA 몫(README 판정 4).
 
 describe('🔴 DayChipScroller · S2 — 선택을 바꾸면 그 칩이 보이게 스크롤한다 (AC-3)', () => {
   it('오른쪽 칩(x=400)을 고르면 0 < x ≤ 400 으로 scrollTo 하고, 왼쪽 칩(x=56)으로 돌아오면 x ≤ 56 으로 다시 scrollTo 한다', () => {

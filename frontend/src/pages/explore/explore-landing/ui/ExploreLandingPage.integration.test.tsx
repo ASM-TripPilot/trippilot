@@ -8,6 +8,7 @@ import {
   within,
 } from '@testing-library/react-native';
 import { BASE } from '@/test-support/apiBase';
+import { createGate } from '@/test-support/mswHookHarness';
 import { createGcZeroWrapper } from '@/test-support/queryRender';
 
 import { server } from '@/mocks/server';
@@ -23,6 +24,7 @@ import { stayKey } from '@/features/save-stay';
 import { useStaySearch } from '@/features/stay';
 import { SAVE_FAILURE_NOTICE } from '@/features/save-place';
 import { ExploreLandingPage } from '@/pages/explore/explore-landing';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * 탐색 d01 page 의 담기 하트 — 실제 담기 훅 + msw 로 나간 요청을 센다.
@@ -45,13 +47,16 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-const mockPush = jest.fn();
+const { push: mockPush } = routerSpies;
 // 지역 필터(TRIP-1580 인기 숙소 레인)만 region 을 싣는다 — 나머지 describe 는 빈 params 그대로.
 let mockParams: { region?: string } = {};
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush }),
-  useLocalSearchParams: () => mockParams,
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push'],
+    params: () => mockParams,
+  })
+);
 
 jest.mock('@/features/stay/model/useStaySearch', () => ({
   useStaySearch: jest.fn(),
@@ -62,14 +67,6 @@ const mockUseStaySearch = useStaySearch as jest.MockedFunction<
 
 /** 네트워크 도착을 기다리는 한도 — 로컬 기본 1000ms 의 CI 러너(약 4배 느림) 환산. */
 const WAIT = { timeout: 4000 };
-
-function createGate() {
-  let release!: () => void;
-  const opened = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  return { opened, release };
-}
 
 let observedHits: string[] = [];
 function hitCount(needle: string): number {
@@ -264,6 +261,10 @@ describe('장소 하트 — 담기·해제', () => {
       screen.getByTestId(`explore-place-heart-outline-${POI_A}`)
     ).toBeOnTheScreen();
     expect(screen.getByTestId(heartA)).not.toBeSelected();
+
+    // 배너를 누르면 닫힌다(B안 — 뷰 단위에서 옮김).
+    fireEvent.press(banner);
+    expect(screen.queryByTestId('explore-place-save-error')).toBeNull();
   });
 
   // 잠긴 하트 press 는 부모 카드로 샌다 — 카드가 대기를 보고 막아야 한다.
@@ -701,6 +702,41 @@ describe('TRIP-1580 · 지역 필터 숙소 레인 → 인기 숙소', () => {
     await act(async () => {});
     expect(screen.queryByTestId('curated-stays-row')).toBeNull();
     expect(screen.queryByText('인기 숙소')).toBeNull();
+  });
+
+  // B안 — 뷰 단위에서 옮김: 지금 숙소 레인 조회 상태와 인기 숙소 슬롯이 겹칠 때 무엇이 이기나.
+  it('지금 숙소 조회가 실패해도 인기 숙소가 오면 재시도 대신 인기 숙소 카드다', async () => {
+    mockParams = { region: 'busan' };
+    mockUseStaySearch.mockReturnValue({
+      data: undefined,
+      isError: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useStaySearch>);
+    serve([CURATED]);
+    renderPage();
+
+    expect(
+      await screen.findByTestId('curated-stay-card-123', {}, WAIT)
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('explore-lane-stay-retry')).toBeNull();
+  });
+
+  it('지금 숙소 조회가 대기 중이면 인기 숙소가 와도 스켈레톤이다', async () => {
+    mockParams = { region: 'busan' };
+    mockUseStaySearch.mockReturnValue({
+      data: undefined,
+      isError: false,
+      isPending: true,
+    } as unknown as ReturnType<typeof useStaySearch>);
+    serve([CURATED]);
+    renderPage();
+
+    await waitFor(() => expect(curatedQueries).toHaveLength(1), WAIT);
+    await act(async () => {});
+    expect(
+      screen.getByTestId('explore-landing-skeleton-stay-0')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('curated-stay-card-123')).toBeNull();
   });
 
   it('지역 필터가 없으면(전국) 인기 숙소를 묻지 않고 지금의 레인 그대로다', async () => {

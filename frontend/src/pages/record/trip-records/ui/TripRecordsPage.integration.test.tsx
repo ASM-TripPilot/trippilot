@@ -55,6 +55,7 @@ import {
 import { tripRecordsTrip } from '@/test-support/tripRecordsTrip';
 
 import { TripRecordsPage } from './TripRecordsPage';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * j01 방문 기록 페이지 — 실 페이지 + 실제 HTTP(msw) 로 본 사용자 관측 결과. 관점마다 describe 하나(옛 파일 하나).
@@ -143,9 +144,7 @@ jest.mock('@/shared/storage/installId', () => {
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = 't1';
 function wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
+  const client = newTestQueryClient({ gcTime: 0 });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 // 위치 권한 seam — 기본은 값 없음(undefined). 권한을 정하는 묶음이 beforeEach 에서 mockResolvedValue 로 정하고, 최상위 afterEach 가 되돌린다.
@@ -665,7 +664,7 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
   });
 
   describe('🔴 TRIP-1085 AC-10·AC-11 · 방문 기준 핀 (결정 3(c))', () => {
-    it('MS4 도착 2곳은 체크 핀, 미방문은 번호 핀(제자리 번호), 즉석 방문은 핀 없음 · fitPins · 잠금', async () => {
+    it('MS4 도착 2곳은 체크 핀, 미방문은 번호 핀(제자리 번호), 즉석 방문은 핀 없음', async () => {
       render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
 
       await screen.findByTestId('record-trip-visit-card-v-sp');
@@ -676,9 +675,6 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
           { number: 3, ...P3, state: 'upcoming' },
         ])
       );
-      const map = screen.getByTestId('map-root');
-      expect(map.props.fitPins).toBe(true);
-      expect(map.props.viewOnly).toBe(false);
     });
 
     it.each([
@@ -944,7 +940,7 @@ describe('시각·건너뛰기·메모 정비 — 서울 시계(기기 LA)', () 
    *    (AC-12·AC-13·AC-15). 건너뛴 카드는 라벨만 있다(AC-14). TRIP-1070 — 도착한 카드의 사진 추가 `+` 는
    *    배선된 버튼이라 폴백 집계에서 뺀다(도착 카드에만 있고 건너뛴 카드엔 없다).
    *  - 건너뛰기는 확인을 거친다 — 확정 전 요청 0회, 실패는 다이얼로그 안에 알린다(AC-16~18).
-   *  - 시트·다이얼로그 어디에도 체류 시간이 없다(AC-25 · INV-3).
+   *  - 시트 어디에도 체류 시간이 없다(AC-25 · INV-3).
    *
    * 왜 이렇게 테스트하나:
    *  - 기기 시간대를 **LA 로 바꿔** 돈다. LA 기기에서 13:42Z 는 문자열 자르기=13:42, 기기 시계=06:42,
@@ -1705,8 +1701,8 @@ describe('시각·건너뛰기·메모 정비 — 서울 시계(기기 LA)', () 
     });
   });
 
-  describe('AC-25 · INV-3 — 시트·다이얼로그 어디에도 체류 시간이 없다', () => {
-    it('시트를 연 화면과 건너뛰기 다이얼로그를 연 화면 모두 N분·N시간·소요·체류 0건', async () => {
+  describe('AC-25 · INV-3 — 시트 어디에도 체류 시간이 없다', () => {
+    it('시트를 연 화면에 N분·N시간·소요·체류 0건', async () => {
       serverVisits = [V_DONE(), V_IN(), V_SKIPPED()];
 
       renderPage();
@@ -1716,14 +1712,7 @@ describe('시각·건너뛰기·메모 정비 — 서울 시계(기기 LA)', () 
       const withSheet = renderedText(screen.UNSAFE_root);
       expect(withSheet).toContain('부산시립미술관');
       expect(DURATION_TEXT.test(withSheet)).toBe(false);
-
-      fireEvent.press(screen.getByTestId('record-trip-visit-time-cancel'));
-      fireEvent.press(
-        within(cardOf('v-in')).getByTestId('record-visit-skip-v-in')
-      );
-      await screen.findByTestId('record-visit-skip-dialog');
-      const withDialog = renderedText(screen.UNSAFE_root);
-      expect(DURATION_TEXT.test(withDialog)).toBe(false);
+      // 건너뛰기 다이얼로그 스캔은 지웠다 — 시간·거리 재료를 안 받는 확인 대화상자다(README 판정 4 끝 항).
     });
   });
 
@@ -2484,9 +2473,7 @@ describe('메모 저장 실패 안내·세션 캐시 시드', () => {
   let memoBodies: unknown[] = [];
 
   function newClient() {
-    return new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    return newTestQueryClient({ gcTime: 0 });
   }
 
   // TRIP-1426 — 루트 토스트 호스트를 함께 그린다(없으면 저장 안내 부재 단언이 공짜 green).
@@ -3555,9 +3542,7 @@ describe('하단 바 배선 — 회고 칸(j03)·요약 칸(j04)', () => {
 
   /** 요약 조회 결과를 캐시에서 읽으려고 클라이언트를 직접 쥔다(요약 칸은 비활성 ↔ 활성만 보여, 실패가 가라앉았는지 화면으론 못 가린다). */
   function renderWithClient(today: string) {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     function Wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>

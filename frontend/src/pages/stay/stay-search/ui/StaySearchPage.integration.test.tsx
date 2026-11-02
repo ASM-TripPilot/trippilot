@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
   render,
   screen,
@@ -8,7 +8,11 @@ import {
   within,
 } from '@testing-library/react-native';
 import { BASE } from '@/test-support/apiBase';
-import { createGcZeroWrapper } from '@/test-support/queryRender';
+import { createGate, createHitLog } from '@/test-support/mswHookHarness';
+import {
+  createGcZeroWrapper,
+  newTestQueryClient,
+} from '@/test-support/queryRender';
 import { server } from '@/mocks/server';
 import { StaySearchPage } from './StaySearchPage';
 import type {
@@ -25,6 +29,7 @@ import {
 } from '@/shared/api/tokenManager';
 import { PRICE_BUCKETS, type PriceBucketId } from '../model/priceRangeFilter';
 import * as Linking from 'expo-linking';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * e02 숙소 검색 — StaySearchPage 배선 통합 테스트(msw 로 실제 나간 요청을 본다).
@@ -62,22 +67,21 @@ let mockSearchParams: {
   amenity?: string | string[];
   stayType?: string | string[];
 } = {};
-const mockPush = jest.fn();
-const mockReplace = jest.fn();
-const mockDismissTo = jest.fn();
-const mockBack = jest.fn();
-const mockSetParams = jest.fn();
+const {
+  push: mockPush,
+  replace: mockReplace,
+  dismissTo: mockDismissTo,
+  back: mockBack,
+  setParams: mockSetParams,
+} = routerSpies;
 
-jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({ ...mockSearchParams }),
-  router: {
-    push: (...args: unknown[]) => mockPush(...args),
-    replace: (...args: unknown[]) => mockReplace(...args),
-    dismissTo: (...args: unknown[]) => mockDismissTo(...args),
-    back: (...args: unknown[]) => mockBack(...args),
-    setParams: (...args: unknown[]) => mockSetParams(...args),
-  },
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    router: ['push', 'replace', 'back', 'dismissTo', 'setParams', 'canGoBack'],
+    params: () => ({ ...mockSearchParams }),
+  })
+);
 
 // TRIP-1581 — 인기 숙소·전체 보기는 제휴 시트를 거쳐 브라우저로 연다(실제 열기는 목).
 jest.mock('expo-linking', () => ({
@@ -1119,6 +1123,28 @@ describe('가격대 필터 (옛 .priceFilter)', () => {
       expect(screen.queryByTestId(`stay-card-${KEY_CHEAP}`)).toBeNull();
     });
   });
+
+  // B안(2026-11-01) — 지운 StaySearchScreen.test.tsx 의 이름 0건 + 가격대만 걸린 조합(TRIP-935)을 조작으로 만든다.
+  it('가격대만 건 채 이름 검색이 0곳을 만들면 [필터 초기화]도 보인다 (TRIP-935)', async () => {
+    // 준비
+    render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
+    await waitFor(() =>
+      expect(screen.getByTestId(`stay-card-${KEY_LUX}`)).toBeOnTheScreen()
+    );
+    applyPrice('over-200k');
+
+    // 실행 — 남은 카드(오션 스위트)에 없는 이름
+    fireEvent.changeText(
+      screen.getByTestId('stay-search-name-input'),
+      '없는숙소'
+    );
+
+    // 단언
+    expect(screen.getByTestId('stay-search-name-empty')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('stay-search-name-empty-reset')
+    ).toBeOnTheScreen();
+  });
 });
 
 // 옛 StaySearchPage.save — TRIP-417
@@ -1206,34 +1232,17 @@ describe('저장 하트 (옛 .save)', () => {
     };
   }
 
-  function createGate() {
-    let release!: () => void;
-    const opened = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    return { opened, release };
-  }
-
-  let observedHits: string[] = [];
+  const hitLog = createHitLog(server);
   let postedBodies: unknown[] = [];
 
   function hitCount(needle: string): number {
-    return observedHits.filter((hit) => hit === needle).length;
+    return hitLog.count(needle);
   }
 
-  function onRequestStart({ request }: { request: Request }): void {
-    observedHits.push(`${request.method} ${new URL(request.url).pathname}`);
-  }
-
-  beforeAll(() => {
-    server.events.on('request:start', onRequestStart);
-  });
-  afterAll(() => {
-    server.events.removeListener('request:start', onRequestStart);
-  });
+  beforeAll(() => hitLog.attach());
 
   beforeEach(() => {
-    observedHits = [];
+    hitLog.reset();
     postedBodies = [];
     mockSearchParams = { region: '부산' };
     mockPush.mockClear();
@@ -1751,9 +1760,7 @@ describe('🔴 TRIP-1262 · 복제 탭바는 dismissTo 로 탭에 간다 (QA F3)
       ),
       http.get(`${BASE}/saved-stays`, () => HttpResponse.json([]))
     );
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
 
     render(
       <QueryClientProvider client={client}>
@@ -1823,9 +1830,7 @@ describe('동명 구 · URL 의 시도로 다른 시도 숙소를 거른다 (F3 
   });
 
   function renderPage(): void {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     render(
       <QueryClientProvider client={client}>
         <StaySearchPage />
@@ -1925,9 +1930,7 @@ describe('연타 관통 — 한 페이지 안에서 드러난 요소', () => {
   });
 
   async function renderSettled(): Promise<void> {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     render(
       <QueryClientProvider client={client}>
         <StaySearchPage />
@@ -2112,5 +2115,218 @@ describe('인기 숙소 줄 · 전체 보기 (TRIP-1581)', () => {
     expect(screen.getByTestId('curated-stay-browse-all')).toBeOnTheScreen();
     expect(curatedQueries).toHaveLength(0);
     expect(screen.queryByTestId('curated-stay-card-123')).toBeNull();
+  });
+});
+
+// B안(2026-11-01) — 지운 StaySearchScreen.test.tsx(+ `.separator`)가 props 로 만들던 얼굴을 응답 모양으로 만든다.
+// 옮기지 않은 것: 콜백·prop 미지정 무회귀(페이지가 늘 넘긴다) · 세퍼레이터 참조 동일성(구현 결합 — 판정 6).
+describe('화면 얼굴 — 응답 모양마다 무엇을 그리나', () => {
+  // 이름에 지역 글자가 없게 골라 "지역으로도 좁힌다"가 이름 일치로 공짜 통과하지 않게 한다.
+  // 배열 순서(s3 → s1 → s2)는 이름·id·가격 어느 정렬과도 다르다(서버 순서 보존 BR-U1-15).
+  const ITEMS: StayItem[] = [
+    {
+      externalSource: 'NAVER',
+      externalId: 's3',
+      name: '그랜드 호텔',
+      lat: 35.1587,
+      lng: 129.1604,
+      region: '해운대',
+      amenities: [],
+      stayType: 'HOTEL',
+      price: { amount: 30000, currency: 'KRW' },
+    },
+    {
+      externalSource: 'NAVER',
+      externalId: 's1',
+      name: '시티 호텔',
+      lat: 35.1577,
+      lng: 129.0594,
+      region: '서면',
+      amenities: [],
+      stayType: 'HOTEL',
+      price: { amount: 10000, currency: 'KRW' },
+    },
+    {
+      externalSource: 'NAVER',
+      externalId: 's2',
+      name: '오션뷰',
+      lat: 35.1531,
+      lng: 129.1186,
+      region: '광안리',
+      amenities: [],
+      stayType: 'HOTEL',
+      price: { amount: 20000, currency: 'KRW' },
+    },
+  ];
+
+  type Reply =
+    { items: StayItem[]; filterZeroReasons?: string[] } | 500 | 'hold';
+  let reply: Reply = { items: ITEMS };
+  let release: () => void = () => {};
+
+  beforeEach(() => {
+    mockSearchParams = { region: '부산' };
+    reply = { items: ITEMS };
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get(`${BASE}/stays/search`, async () => {
+        if (reply === 500) {
+          return HttpResponse.json(
+            { error: { code: 'INTERNAL', message: 'x' } },
+            { status: 500 }
+          );
+        }
+        if (reply === 'hold') {
+          await gate;
+          return HttpResponse.json({
+            items: ITEMS,
+            degraded: false,
+            filterZeroReasons: [],
+          });
+        }
+        return HttpResponse.json({
+          items: reply.items,
+          degraded: false,
+          filterZeroReasons: reply.filterZeroReasons ?? [],
+        });
+      }),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([]))
+    );
+  });
+  afterEach(() => release());
+
+  const cardIds = () =>
+    screen
+      .queryAllByTestId(/^stay-card-(?!save-|photo-)/)
+      .map((node) => String(node.props.testID));
+
+  it('결과 얼굴 — 제목·건수·서버 순서·카드 지역·검색창 안내·FAB 이름을 그리고 옛 알약 FAB 은 없다', async () => {
+    // 준비 + 실행
+    render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
+    await waitFor(() => expect(cardIds()).toHaveLength(3));
+
+    // 단언
+    expect(
+      within(screen.getByTestId('stay-search-appbar')).getByText(
+        '숙소 검색 결과'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-search-header')).toHaveTextContent(
+      '부산 · 3곳'
+    );
+    expect(cardIds()).toEqual([
+      'stay-card-NAVER:s3',
+      'stay-card-NAVER:s1',
+      'stay-card-NAVER:s2',
+    ]);
+    ITEMS.forEach((item) => {
+      expect(
+        within(
+          screen.getByTestId(
+            `stay-card-${item.externalSource}:${item.externalId}`
+          )
+        ).getByText(item.region)
+      ).toBeOnTheScreen();
+    });
+    expect(
+      screen.getByPlaceholderText('지역·숙소 이름 검색')
+    ).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: '저장한 숙소' })).toHaveProp(
+      'testID',
+      'stay-search-fab-saved'
+    );
+    expect(screen.getByRole('button', { name: '숙소 등록' })).toHaveProp(
+      'testID',
+      'stay-search-fab-register'
+    );
+    expect(screen.queryByTestId('stay-search-fab')).toBeNull();
+    expect(screen.queryByText(/여행 만들기/)).toBeNull();
+  });
+
+  it('지역 이름으로도 좁힌다 — 이름에 없는 지역 글자로 그 지역 숙소만 남는다 (TRIP-469)', async () => {
+    // 준비
+    render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
+    await waitFor(() => expect(cardIds()).toHaveLength(3));
+
+    // 실행
+    fireEvent.changeText(screen.getByTestId('stay-search-name-input'), '서면');
+
+    // 단언
+    expect(cardIds()).toEqual(['stay-card-NAVER:s1']);
+  });
+
+  it('응답 전 로딩 얼굴의 머리글엔 건수가 없다', async () => {
+    // 준비
+    reply = 'hold';
+
+    // 실행
+    render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
+
+    // 단언
+    expect(await screen.findByTestId('stay-search-loading')).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-search-header')).toHaveTextContent('부산');
+    expect(cardIds()).toEqual([]);
+
+    release();
+    await waitFor(() => expect(cardIds()).toHaveLength(3));
+  });
+
+  it('오류 얼굴 — 머리글 건수 없음 · 안내 제목 · [숙소 직접 등록]은 등록 화면으로 간다', async () => {
+    // 준비
+    reply = 500;
+    render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
+    const face = await screen.findByTestId('stay-search-error');
+
+    // 단언 ①
+    expect(screen.getByTestId('stay-search-header')).toHaveTextContent('부산');
+    expect(
+      within(face).getByText('지금 숙소 정보를 불러올 수 없어요')
+    ).toBeOnTheScreen();
+
+    // 실행
+    fireEvent.press(screen.getByTestId('stay-search-error-register'));
+
+    // 단언 ②
+    expect(mockPush).toHaveBeenCalledWith('/stays/register');
+  });
+
+  it('0곳(원인 없음) — 점선 안내 제목 · 필터가 없으니 [필터 완화] 잠김 · 등록 유도 카드는 등록 화면으로 간다', async () => {
+    // 준비
+    reply = { items: [] };
+    render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
+    const empty = await screen.findByTestId('stay-search-empty');
+
+    // 단언 ①
+    expect(
+      within(empty).getByText('조건에 맞는 숙소가 없어요')
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-search-empty-filter')).toBeDisabled();
+    expect(screen.getByTestId('stay-search-empty-region')).not.toBeDisabled();
+
+    // 실행
+    fireEvent.press(screen.getByTestId('stay-search-register'));
+
+    // 단언 ②
+    expect(mockPush).toHaveBeenCalledWith('/stays/register');
+  });
+
+  it('필터 0건 — 원인 코드를 사람 말 필터명으로 바꿔 곡선 따옴표로 말한다 (TRIP-416)', async () => {
+    // 준비
+    mockSearchParams = { region: '부산', amenity: '오션뷰' };
+    reply = { items: [], filterZeroReasons: ['amenity:오션뷰'] };
+
+    // 실행
+    render(<StaySearchPage />, { wrapper: createGcZeroWrapper() });
+    const face = await screen.findByTestId('stay-search-filterzero');
+
+    // 단언
+    expect(
+      within(face).getByText('\u2018오션뷰\u2019 필터가 0건을 만들었어요')
+    ).toBeOnTheScreen();
+    expect(
+      within(face).getByText('\u2018오션뷰\u2019 필터 해제')
+    ).toBeOnTheScreen();
   });
 });

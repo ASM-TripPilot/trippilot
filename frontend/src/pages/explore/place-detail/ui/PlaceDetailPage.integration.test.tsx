@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Share } from 'react-native';
 import * as Linking from 'expo-linking';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
   fireEvent,
   render,
@@ -19,6 +19,7 @@ import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 
 import { PlaceDetailPage } from './PlaceDetailPage';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-1372(TRIP-824 단건 조회) · d06 장소 상세 배선(페이지 층).
@@ -144,12 +145,7 @@ afterAll(() => server.close());
 
 // 빈 QueryClient 로 그린다 — 앞 화면 캐시가 없는 딥링크 진입 그대로.
 function renderDetail(poiId: string): void {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
-  });
+  const client = newTestQueryClient({ gcTime: 0 });
   function wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -284,7 +280,8 @@ describe('D6 · 뒤로가기 딥링크 탈출', () => {
     renderDetail('p1');
     const backs = await screen.findAllByTestId('explore-place-back');
     fireEvent.press(backs[backs.length - 1]);
-    expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+    // TRIP-1685 — 폴백이 홈(/(tabs))에서 탐색 탭으로 바뀌었다(장소 상세의 입구는 탐색).
+    expect(mockReplace).toHaveBeenCalledWith('/explore');
     expect(mockBack).not.toHaveBeenCalled();
   });
 });
@@ -426,7 +423,7 @@ describe('D8·D9·D10 · 얼굴 판정', () => {
 
     fireEvent.press(screen.getByTestId('explore-place-error-back'));
 
-    expect(mockReplace.mock.calls).toEqual([['/(tabs)']]);
+    expect(mockReplace.mock.calls).toEqual([['/explore']]);
     expect(mockBack).not.toHaveBeenCalled();
   });
 });
@@ -496,7 +493,55 @@ describe('🔴 1015-D · d06 장소 없음 얼굴의 뒤로 (explore-place-notfo
 
     fireEvent.press(screen.getByTestId('explore-place-notfound-back'));
 
-    expect(mockReplace.mock.calls).toEqual([['/(tabs)']]);
+    expect(mockReplace.mock.calls).toEqual([['/explore']]);
     expect(mockBack).not.toHaveBeenCalled();
+  });
+});
+
+// B안(2026-11-01) — 뷰 단위 `PlaceDetailScreen.test.tsx` 를 지우며 통합이 못 잡던 결함을 옮겼다.
+describe('화면 동작 — 부제 · 영업시간 줄바꿈 · 원 버튼 이름', () => {
+  it('부제는 [카테고리 · 지역] 을 잇는다', async () => {
+    renderDetail('p1');
+
+    expect(await screen.findByText('문화 · 부산 부산진구')).toBeOnTheScreen();
+  });
+
+  // TRIP-988 A — 원문 `<br>` 은 줄바꿈으로. 기본 정규화는 줄바꿈을 공백으로 접어 항등 normalizer 로 잰다.
+  it('영업시간 원문 `<br>` 은 태그 자리에서 두 줄로 나뉜다', async () => {
+    detailReply = makePlace({
+      openingHours: '월요일~토요일 12:00~22:30<br>- 일요일 12:00~21:30',
+    });
+    renderDetail('p1');
+
+    const hours = await screen.findByTestId('explore-place-openhours');
+    expect(hours).toHaveTextContent(
+      '월요일~토요일 12:00~22:30\n- 일요일 12:00~21:30',
+      { normalizer: (text: string) => text }
+    );
+  });
+
+  // TRIP-1302 · TRIP-1281 — 라벨이 없으면 iOS 가 testID 를 읽는다. 하트 이름은 담김과 무관하다.
+  it('뒤로·공유·하트가 사람 말 이름으로 읽히고, 하트 이름은 담은 뒤에도 같다', async () => {
+    renderDetail('p1');
+    await screen.findByTestId('explore-place-detail');
+
+    expect(screen.getByRole('button', { name: '뒤로' })).toHaveProp(
+      'testID',
+      'explore-place-back'
+    );
+    expect(screen.getByRole('button', { name: '공유' })).toHaveProp(
+      'testID',
+      'explore-place-share'
+    );
+    fireEvent.press(
+      screen.getByRole('button', { name: '부산시립미술관 저장' })
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-place-save')).toBeSelected()
+    );
+    expect(screen.getByTestId('explore-place-save')).toHaveAccessibleName(
+      '부산시립미술관 저장'
+    );
   });
 });

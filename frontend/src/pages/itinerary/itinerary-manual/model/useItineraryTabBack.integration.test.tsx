@@ -21,7 +21,8 @@ import { useItineraryTabBack } from './useItineraryTabBack';
  * "ManualPlanPage 가 훅을 부르는가"를 보지 않는다 — 그건 `ManualPlanPage.integration.test.tsx` 「뒤로 제스처·하드웨어 뒤로도 일정 탭으로」 몫이다.
  *
  * 스와이프·하드웨어 뒤로가 보내는 액션은 각각 `router.dismiss()`(POP)·`router.back()`(GO_BACK)으로 흉내 낸다.
- * 실제 손가락 제스처의 모양은 jest 가 못 본다(6-b).
+ * 실제 손가락 제스처의 모양은 jest 가 못 본다(6-b). 네이티브 스와이프 취소 신호(`preventNativeDismiss`) 전달 단언(옛 D1)과
+ * 픽스처 자가검사(옛 RT-0)는 2026-11-01 지웠다 — 스와이프는 실화면 QA 몫(manual-plan.md `manual-back`).
  *
  * 통합 버킷인 이유: 실물 expo-router 는 node 버킷(`--experimental-vm-modules`)에서 로드가 실패한다.
  * ManualPlanPage 의 통합 파일에 붙이지 않은 이유: 그 파일은 expo-router 를 파일 전체에서 목으로 바꾼다.
@@ -105,24 +106,6 @@ function expectLandedOnItineraryTab(result: RouterResult): void {
   // 가려진 화면은 기본 쿼리에 안 잡힌다 — 잡히면 지금 보이는 화면이다(02a ★10).
   expect(screen.getByTestId('tab-itinerary-root')).toBeOnTheScreen();
 }
-
-describe('RT-0 · 탐지기 자가검사 — 이 픽스처는 "방식 선택으로 돌아가는" 버그를 볼 수 있다', () => {
-  it('훅이 없는 편집기에서 뒤로 가면 방식 선택이 나온다 (선제 green)', () => {
-    // 준비 — 편집기 자리에 훅 없는 가짜 화면.
-    const result = openManualFromMethod({
-      ...BASE_ROUTES,
-      'trips/[tripId]/itinerary/manual/index': stub('plain-manual-root'),
-    });
-
-    // 실행
-    act(() => {
-      router.back();
-    });
-
-    // 단언 — 고치기 전의 증상(QA F2)이 이 픽스처에서 재현된다.
-    expect(result.getPathname()).toBe(METHOD);
-  });
-});
 
 describe('🔴 AC-1r·AC-2 · 스와이프·하드웨어 뒤로도 일정 탭에 닿고, 방식 선택이 스택에 남지 않는다', () => {
   // 하드웨어 뒤로 = GO_BACK(`router.back`) · iOS 스와이프 취소 뒤 native-stack 이 보내는 것 = POP(`router.dismiss`).
@@ -263,27 +246,5 @@ describe('🔴 AC-8 · 장소 추가(push)는 가로채지 않는다', () => {
       router.back();
     });
     expectLandedOnItineraryTab(result);
-  });
-});
-
-describe('🔴 D1 · 네이티브 스와이프 취소 신호가 편집기 화면에 실린다 (raw beforeRemove 기각)', () => {
-  /** 그 요소의 조상 중 `preventNativeDismiss` prop 을 가진 첫 host(RNSScreen)의 값. */
-  function preventNativeDismissOf(testID: string): unknown {
-    let node: { props: Record<string, unknown>; parent: unknown } | null =
-      screen.getByTestId(testID, { includeHiddenElements: true });
-    while (node !== null && node.props.preventNativeDismiss === undefined) {
-      node = node.parent as typeof node;
-    }
-    return node?.props.preventNativeDismiss;
-  }
-
-  it('편집기 화면은 preventNativeDismiss=true, 아래 깔린 방식 선택은 아니다', () => {
-    // 준비 · 실행 — 쌓기만 한다(iOS 는 이 값이 true 여야 스와이프를 네이티브에서 취소한다).
-    openManualFromMethod();
-
-    // 단언
-    expect(preventNativeDismissOf('probe-back')).toBe(true);
-    // 짝 — 탐지기가 아무 화면에나 true 를 돌려주는 게 아니다.
-    expect(preventNativeDismissOf('method-root')).not.toBe(true);
   });
 });

@@ -102,6 +102,9 @@ def _print_summary(json_path: str) -> int:
     # TRIP-1226 — 런타임은 원문 칸만 다시 읽는다. 과거 산출 JSON에는 없다(— 표시)
     print(f"| 휴무 해석 불가로 영업시간 포기 | {stats.get('rest_unparsed', '—')} |")
     print(f"| 원문 칸 재파싱 ≠ 수집 판정 | {stats.get('raw_reparse_mismatch', '—')} |")
+    # 야영장을 수집에서 거를 새 분류 코드를 찾는 계측(`CollectStats.leports_lcls`) — 과거 산출 JSON에는 없다
+    leports = sorted((stats.get("leports_lcls") or {}).items(), key=lambda kv: (-kv[1], kv[0]))
+    print(f"| 레포츠 옛 분류 빈 항목의 새 분류 | {' · '.join(f'{k} {v}' for k, v in leports) or '—'} |")
     per_area = stats.get("per_area") or {}
     if per_area:
         print()

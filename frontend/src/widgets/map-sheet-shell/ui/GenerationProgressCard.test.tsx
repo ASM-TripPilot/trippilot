@@ -32,12 +32,6 @@ const CELLS = [
   { status: 'waiting' as const, label: '3일차 대기' },
 ];
 
-// className 토큰 포함 여부 — 부분 문자열 오탐을 피해 공백 분할 후 정확 토큰으로 본다
-// (TimelineScreen.placeholder PH1 선례, className 은 jest 렌더 트리에 평문 prop 으로 남는다).
-function classTokens(testID: string): string[] {
-  return String(screen.getByTestId(testID).props.className).split(/\s+/);
-}
-
 describe('🔴 GenerationProgressCard · GP1 — 조립·셀·라벨 (AC-7)', () => {
   it('카드·3셀(상태별 testID)·주입 라벨이 그려진다', () => {
     render(<GenerationProgressCard cells={CELLS} onBack={jest.fn()} />);
@@ -60,23 +54,7 @@ describe('🔴 GenerationProgressCard · GP1 — 조립·셀·라벨 (AC-7)', ()
   });
 });
 
-describe('🔴 GenerationProgressCard · GP2 — 3톤 트랙 (className)', () => {
-  it('done 트랙은 bg-primary, active·waiting 트랙은 bg-surface-strong 이다', () => {
-    render(<GenerationProgressCard cells={CELLS} onBack={jest.fn()} />);
-
-    // done = 브랜드 채움.
-    expect(classTokens('generation-gauge-track-1')).toContain('bg-primary');
-    // active·waiting = 회색 트랙(부분채움·라벨색은 6-b 육안 · 02a §7).
-    expect(classTokens('generation-gauge-track-2')).toContain(
-      'bg-surface-strong'
-    );
-    expect(classTokens('generation-gauge-track-3')).toContain(
-      'bg-surface-strong'
-    );
-    // done 과 구분 — active 트랙에 primary 채움이 새면 "전부 완성" 가짜 진척이 된다.
-    expect(classTokens('generation-gauge-track-2')).not.toContain('bg-primary');
-  });
-});
+// GP2(done/active/waiting 트랙 3톤 className)는 jest-cut 에서 지웠다 — 색 토큰이라 실화면 QA 몫(ai-generate.md).
 
 describe('🔴 GenerationProgressCard · GP3 — onBack 콜백', () => {
   it('back 을 누르면 onBack 이 정확히 한 번 불린다', () => {

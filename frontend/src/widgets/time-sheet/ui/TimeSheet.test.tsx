@@ -460,11 +460,6 @@ function hExpectOpen(): void {
   expect(screen.getByTestId(hid('apply'))).not.toBeDisabled();
 }
 
-function classTokens(node: ReactTestInstance): string[] {
-  const className: unknown = node.props?.className;
-  return typeof className === 'string' ? className.trim().split(/\s+/) : [];
-}
-
 function pinkPills(node: ReactTestInstance): ReactTestInstance[] {
   return node.findAll(
     (n) =>
@@ -555,16 +550,8 @@ describe('🔴 widgets/time-sheet · 편집기 형태(title+placeSummary) — �
     expect(screen.queryByTestId(hid('cancel'))).toBeNull();
   });
 
-  it('CH6 · INV-3 — 분 열은 bare 숫자, 소요시간 표기 0건 (AC-INV3)', () => {
-    renderH04(FIXTURE);
-
-    // 양성 앵커 — h04 분 휠 셀이 실재(h04 분기 전엔 부재라 이 줄이 red 를 만든다, 02a ★5).
-    expect(screen.getByTestId(hid('wheel-m-00'))).toBeOnTheScreen();
-
-    // 음성 — 렌더 텍스트 어디에도 소요시간 표기 0건(분 셀을 "0분"으로 그리면 여기서 걸린다).
-    const texts = renderedTexts();
-    expect(texts.filter((t) => DURATION_TEXT.test(t))).toEqual([]);
-  });
+  // CH6(h04 분 열 bare 숫자 · 소요시간 0건)는 jest-cut 에서 위 describe.each 의 INV-3 로 합쳤다 — h04 접두(itinerary-edit-time)가
+  // 이미 CONFIGS 행이고, 분 셀 "분" 접미 뮤테이션을 그 행이 잡는다.
 });
 
 /**
@@ -822,38 +809,5 @@ describe('🔴 시트 안 종료<시작 막기 — 문구·disabled 가 휠을 �
     hpress('apply');
     expect(appliedPatch()).toStrictEqual(applied);
   });
-
-  it('T4 · 막히면 [적용] 채움이 회색 토큰으로 바뀌고, 문구는 오류 색 토큰 · raw hex 0 · 소요시간 표기 0', () => {
-    renderH04();
-    // 허용 상태 — [적용]은 primary 채움(className 은 Pressable 자신에 있다, 02a ★2).
-    expect(classTokens(screen.getByTestId(hid('apply')))).toContain(
-      'bg-primary'
-    );
-    expect(classTokens(screen.getByTestId(hid('apply')))).not.toContain(
-      'bg-hairline-strong'
-    );
-
-    hpress('seg-end', 'wheel-h-02');
-
-    const apply = screen.getByTestId(hid('apply'));
-    expect(classTokens(apply)).toContain('bg-hairline-strong');
-    expect(classTokens(apply)).not.toContain('bg-primary');
-    expect(classTokens(screen.getByTestId(hid('error')))).toContain(
-      'text-primary-text'
-    );
-
-    // raw hex — testID 몇 개가 아니라 시트 서브트리 전 노드(버튼 안쪽 Text 포함)의 className 을 본다.
-    const classNames = screen
-      .getByTestId(hid('sheet'))
-      .findAll(() => true)
-      .map((node) => node.props?.className as unknown)
-      .filter((value): value is string => typeof value === 'string');
-    // 모집단 앵커 — 수집이 문구 Text 까지 닿았다.
-    expect(classNames.some((c) => c.includes('text-primary-text'))).toBe(true);
-    expect(classNames.filter((c) => c.includes('#'))).toEqual([]);
-
-    const texts = textsIn(screen.root);
-    expect(texts).toContain(RANGE_ERROR);
-    expect(texts.filter((t) => DURATION_TEXT.test(t))).toEqual([]);
-  });
+  // T4(막힘 때 [적용]·문구 색 토큰·raw hex)는 jest-cut 에서 지웠다 — 색 토큰이라 실화면 QA 몫. 막힘 자체는 T1·T2, 소요시간 0건은 INV-3 가 본다.
 });

@@ -212,6 +212,8 @@
 
 **`next_action`은 화면 이동 의도이지 실행이 아니다.** 앱이 라우트로 옮기고, 그 화면의 기존 확인·확정 절차가 그대로 돈다(재계획 확정은 여전히 `planb/diff`의 [확정]).
 
+> **[개정 · 2026-11-01]** 위 문장의 「재계획 확정은 여전히 `planb/diff`의 [확정]」은 낡았다 — 비교 화면(`planb/diff`)은 사용자 결정으로 삭제됐고, 재계획 확정은 재계획안 화면 `planb/draft` 의 [적용하기]다. `next_action` 이 실행이 아니라 이동 의도라는 원칙은 그대로다(원문 보존).
+
 **바꾼 조건 요약**(PRD 02-2 "예산 ↓ · 도보 10분 이내로"): 넘기기 행은 `frames[0].arguments`를 사람이 읽는 칩으로 바꿔 메시지에 싣는다. **목적 화면의 입력값으로 미리 채우는 것은 1차 밖**(G-U8-7) — 대화 ↔ 화면 상태 일관 AC는 일정 편집(제안 적용)에서만 성립한다.
 
 > **[개정 · 2026-10-17 · assistant-orchestrator FD] 표의 1차 처리자가 둘로 갈린다.** 오케스트레이터 on 이면 **AI 가 `ANSWER` 로 끝내는 의도**: `SHOW_SCHEDULE`(스냅샷 계산 → TEXT 요약) · `GET_NEXT_SLOT`(INFO NEXT_SLOT + "다른 곳 추천" quick reply) · `GET_WEATHER`(PoiInfo 좌표 → WeatherProvider → INFO WEATHER) · `GET_DISTANCE`(TransitProvider, 거리만 — INV-3) · `GET_POI_INFO`(신규 `PoiInfoProvider` = `/internal/pois/batch-get`, INFO PLACE) · `SUGGEST_ALTERNATIVE`(PlanBAgent `use_llm=False` 인프로세스 → CANDIDATES ≤5, PICK_CANDIDATE 는 종전 backend ReplaceSlot 제안 경로로) · 넘기기 행(REPLAN·REGENERATE·GENERATE_SCHEDULE·회고 3종 = TEXT 한 줄 + 종전 `next_action`). **`FRAME` 유지**: `EDIT_SCHEDULE`(1단계 — `ProposalCards` `/edit` 경로 그대로, 2단계에 EditAgent 인프로세스 + PROPOSAL). **backend 그대로**: `OUT_OF_SCOPE`(LLM 문장 없음 — SCOPE 카드·거절 스트릭) · ACTION 턴 · `REVIEW` 검토 카드 · [적용]. "보이는 값은 검증값만"(INV-2)과 "저장은 [적용]만" 원칙은 변하지 않는다. 왜: 저장이 없는 조회·대안은 AI 가 병렬 수집해 한 턴에 조합하는 편이 9,000ms 안에 들고, 저장이 있는 변경은 backend 수명주기(제안·지문·적용)를 그대로 타야 한다. 상세 `ai/aidlc-docs/construction/assistant-orchestrator/functional-design/`.

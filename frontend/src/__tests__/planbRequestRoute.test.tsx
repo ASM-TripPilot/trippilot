@@ -10,7 +10,7 @@ import PlanbRequestRoute from '@routes/trips/[tripId]/planb/index';
  * 3초 초과 때 게이트가 그 값으로 기존 i04 를 연다. 시드(`seedReasons`·`seedDirectives`·`seedExcludedPoiIds`)가 오면
  * 트리거가 있어도 게이트 대신 i04 를 그 시드·트리거로 연다(i06 대안 없음 [조건 바꿔 다시 짜기]).
  *
- * ★ 슬라이스 공개 API 를 스파이 컴포넌트로 바꿔 실 화면 렌더를 막고 위임만 본다(`liveHubRoute.test` 선례).
+ * ★ 슬라이스 공개 API 를 스파이 컴포넌트로 바꿔 실 화면 렌더를 막고 위임만 본다(`routeParamMapping.test` 선례).
  * 3동작: 준비(params 목 + 스파이) → 실행(라우트 렌더) → 단언(어느 것이 어떤 props 로 그려졌나).
  */
 

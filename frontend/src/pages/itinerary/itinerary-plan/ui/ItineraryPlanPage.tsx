@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { violationNotice } from '@/entities/itinerary-slot';
@@ -14,8 +16,9 @@ import {
   buildDraftDayTabs,
   buildDraftPins,
   formatDraftDayHeader,
+  sheetMeta,
+  sheetRowKeys,
 } from '@/features/itinerary';
-import { legDistance } from '@/entities/place';
 import {
   isConfirmLocked,
   resolvePlanMapCenter,
@@ -59,13 +62,9 @@ import { NoBaseNoticeCard } from './NoBaseNoticeCard';
  *     쿼리는 리렌더에 다시 나가지 않는다. Zustand 는 pages 층 금지라 로컬 상태로 든다.
  *  4. **탈출구는 얼굴 전부에 있다**(TRIP-402) — 삭제된 여행(TRIP-1075)·loading·notFound·failed·listed 어디에 착지해도
  *     `handleBack` 을 공유하는 뒤로가기가 있고, 뒤로 갈 히스토리가 없으면(딥링크로 직접 진입)
- *     조용히 무동작하지 않고 홈(`/(tabs)`)으로 간다(침묵 no-op 금지 · INV-4). 빈 얼굴(notFound)은
+ *     조용히 무동작하지 않고 일정 탭(`/itinerary`)으로 간다(침묵 no-op 금지 · INV-4). 빈 얼굴(notFound)은
  *     나갈 길 대신 "일정 만들기" 다음 행동도 준다.
  */
-
-/** 딥링크로 뒤로 갈 히스토리 없이 열렸을 때의 홈 폴백 목적지(홈 탭). 확정 얼굴의 [돌아가기]만 일정 탭
- * 목록(`/(tabs)/itinerary`)으로 간다(`handleBack`). */
-const HOME_FALLBACK = '/(tabs)';
 
 /** 탈출구 앱바 — loading·notFound·failed 얼굴 위에 얹는 뒤로가기 한 줄. `TimelineScreen`(listed)
  * 앱바와 같은 형태·같은 `itinerary-view-back` testID 를 쓴다 — 얼굴은 상호 배타라 한 번에 하나만
@@ -151,20 +150,16 @@ export function ItineraryPlanPage({
 
   // 4얼굴 공통 뒤로가기. `router.canGoBack()` 은 expo-router 가 주는, 뒤로 갈 히스토리 유무를
   // boolean 으로 답하는 함수다 — 있으면 이전 화면으로, 없으면(딥링크로 직접 진입) 조용히
-  // 무동작하지 않고 홈으로 `replace`(현재 화면을 히스토리에 안 남김) 한다(침묵 no-op 금지 · INV-4).
+  // 무동작하지 않고 일정 탭으로 `replace`(현재 화면을 히스토리에 안 남김) 한다(침묵 no-op 금지 · INV-4).
   function handleBack(): void {
     // 확정(CONFIRMED) 얼굴은 생성/확정 흐름 스택으로 되돌아가지 않고 내 여행 목록으로 간다
     // (TRIP-505 AC-1). `/(tabs)/itinerary` 는 `GeneratingPage.tsx` 가 이미 쓰는 typedRoutes 통과
-    // 목적지다. 그 외 얼굴은 기존 딥링크 폴백(`canGoBack()?back():replace(HOME_FALLBACK)`) 그대로.
+    // 목적지다. 그 외 얼굴은 `goBackOr` 로 뒤로 가거나 일정 탭으로 간다.
     if (itinerary.data?.status === 'CONFIRMED' && !fromNotification) {
       router.dismissTo('/(tabs)/itinerary'); // TRIP-1243 — replace 면 생성·확정 화면이 스택에 남는다
       return;
     }
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace(HOME_FALLBACK);
-    }
+    goBackOr(router, shellTabHref('itinerary'));
   }
 
   // 빈 얼굴(notFound)의 "일정 만들기" 다음 행동 — 방식 선택(h04)으로 push. 리포 동적 라우트 push
@@ -336,27 +331,22 @@ export function ItineraryPlanPage({
   });
 
   // meta = "[확정됨 · ]N곳[ · X.Xkm]". N 은 **선택일 슬롯 중 고정 숙소를 뺀 수**(01b D3 —
-  // totalPlaces·coPickProgress 재사용 금지). 숙소 판정은 아래 `hasBase` 와 같다 — 서버가 꼭 갈 곳을
-  // `isFixed` 로 내려도 카드 수와 맞는다(TRIP-1234 R3-03). km 은 커넥터가 그리는 leg(`slots.slice(1)`)의
-  // `legDistance` 합에서 "이동 " 접두를 뗀 값, 그중 한 구간이라도 거리를 모르면(거리 계산 중·교체 직후)
-  // 곳 수만 그린다(01b D3·D5 · h08 선례 · TRIP-1110 INV-4). 확정(h16)이면 앞에 "확정됨 · " 접두를
-  // 단다(TRIP-801 AC-3).
-  const nonFixedCount = slots.filter(
-    (slot) => !(slot.isFixed && slot.category === '숙소')
-  ).length;
-  const legLabel = legDistance(
-    slots.slice(1).map((slot) => slot.distanceRange)
-  );
-  const kmPart = legLabel === null ? null : legLabel.replace('이동 ', '');
-  const metaBody =
-    kmPart === null ? `${nonFixedCount}곳` : `${nonFixedCount}곳 · ${kmPart}`;
-  const meta = isConfirmed ? `확정됨 · ${metaBody}` : metaBody;
+  // totalPlaces·coPickProgress 재사용 금지 · 숙소 판정은 아래 `hasBase` 의 슬롯 항과 같다, TRIP-1234 R3-03).
+  // km·접힘 규칙은 `sheetMeta`(01b D3·D5 · TRIP-1110 INV-4), 확정(h16)이면 "확정됨 · " 접두(TRIP-801 AC-3).
+  const meta = sheetMeta(slots, {
+    count: 'excludeFixedStay',
+    km: true,
+    confirmed: isConfirmed,
+  });
 
-  // 거점 없음 판정 = 선택일 슬롯에 고정 숙소 부재(클라 휴리스틱 · 01b D4 — itinerary 응답에
-  // baseAssignment 필드가 없어 슬롯만으로 유추한다).
-  const hasBase = slots.some(
-    (slot) => slot.isFixed && slot.category === '숙소'
-  );
+  // 거점 없음 판정(01b D4) — 선택일 슬롯의 고정 숙소 **또는** 그날 밤을 덮는 거점 배정(TRIP-1704: j01 방문 기록
+  // `deriveStayAttribution` 과 같은 근거·같은 구간 dateFrom ≤ D < dateTo — 체크아웃일은 덮지 않는다, 종전처럼 그날 밤
+  // 숙소가 없으면 안내가 뜬다). 거점 조회 대기·실패면 슬롯 판정만 남는다(종전 동작).
+  const hasBase =
+    slots.some((slot) => slot.isFixed && slot.category === '숙소') ||
+    (bases.data ?? []).some(
+      (base) => base.dateFrom <= selectedDate && selectedDate < base.dateTo
+    );
 
   return (
     <MapSheetShell
@@ -403,7 +393,11 @@ export function ItineraryPlanPage({
                 variant: 'primary',
                 // TRIP-1013 #057 — '일정 저장하기'가 창을 열고, 창 안의 '일정 수정'(위 두 갈래)은 무시된다.
                 onPress: guardPress(handleConfirm),
-                disabled: isConfirmLocked(itinerary.data?.generationState),
+                // TRIP-1688 FV-TAP-01 — 요청 중엔 잠근다. 확정 응답이 창(400ms)보다 늦으면 가드만으로는 다시 누른 탭이
+                // POST 를 또 보내고, 그 409 가 확정된 화면에 실패 안내를 남긴다. 창 안(첫 렌더 전)은 가드가, 그 뒤는 이 비활성이 막는다.
+                disabled:
+                  isConfirmLocked(itinerary.data?.generationState) ||
+                  confirm.isPending,
               },
             ]
       }
@@ -429,15 +423,15 @@ export function ItineraryPlanPage({
           const items: ReactElement[] = [
             <SlotStopCard
               // 순번을 섞는다 — 같은 날 같은 장소 2회(BR-U2-04 위반 데이터, TRIP-1296)면 poiId 만으론 겹친다. 끌어 옮기지 않는 목록이라 순번 key 가 안전하다.
-              key={`card-${index}-${slot.poiId}`}
+              key={sheetRowKeys(index, slot.poiId).card}
               slot={slot}
               date={selectedDate}
               index={index}
               timeLabel={timeLabel}
               fixed={slot.isFixed}
               subtitle={
-                // "…· 숙소 · 변경 불가" 부제는 **고정 숙소**에만(거점없음 판정 hasBase 와 같은
-                // isFixed&&숙소 정의). 시각 고정 must-visit(비숙소)까지 붙이면 미술관을 "숙소"로
+                // "…· 숙소 · 변경 불가" 부제는 **고정 숙소**에만(거점없음 판정 hasBase 의 슬롯 항과
+                // 같은 isFixed&&숙소 정의). 시각 고정 must-visit(비숙소)까지 붙이면 미술관을 "숙소"로
                 // 오표기한다(5-b 경고-1). 고정 비숙소는 부제 없음(정본 카피 부재).
                 slot.isFixed && slot.category === '숙소'
                   ? fixedSlotSubtitle(slot.startAt)
@@ -458,7 +452,7 @@ export function ItineraryPlanPage({
             const nextSlot = slots[index + 1];
             items.push(
               <DistanceConnector
-                key={`conn-${index}-${slot.poiId}`}
+                key={sheetRowKeys(index, slot.poiId).conn}
                 slotKey={buildSlotKey(selectedDate, slot.poiId)}
                 distanceRange={nextSlot.distanceRange}
               />

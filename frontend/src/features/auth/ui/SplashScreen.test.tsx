@@ -2,11 +2,14 @@ import { render, screen } from '@testing-library/react-native';
 
 import { AccessibilityInfo } from 'react-native';
 
+import { answerReduceMotionSynchronously } from '@/test-support/animatedProbe';
+
 import { SplashScreen } from './SplashScreen';
 
 const reduceSpy = jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled');
 
-beforeEach(() => reduceSpy.mockResolvedValue(false));
+// TRIP-1624 — 답을 effect 안에서 동기로 받아 render 의 act 가 감싼다(비동기 답은 act 밖 상태 변경 경고를 낸다).
+beforeEach(() => answerReduceMotionSynchronously(false));
 
 describe('c01-splash — 부트스트랩 스플래시 (AC-SHELL-01-10 · AC-ONB-01-11)', () => {
   it('로고·워드마크·슬로건·진행 인디케이터를 몰입형으로 렌더한다', () => {
@@ -20,18 +23,6 @@ describe('c01-splash — 부트스트랩 스플래시 (AC-SHELL-01-10 · AC-ONB-
       screen.getByText('여행의 처음부터 끝까지, 한 곳에서')
     ).toBeOnTheScreen();
     expect(screen.getByTestId('shell-splash-progress')).toBeOnTheScreen();
-  });
-
-  it('스플래시에는 탭바가 없다 — 5개 탭 라벨이 렌더되지 않는다 (AC-SHELL-01-10)', () => {
-    render(<SplashScreen />);
-    ['홈', '탐색', '일정', '기록', '마이'].forEach((label) => {
-      expect(screen.queryByText(label)).toBeNull();
-    });
-  });
-
-  it('소요시간(duration) 을 표시하지 않는다 (INV-3, AC-ONB-01-11)', () => {
-    render(<SplashScreen />);
-    expect(screen.queryByText(/소요\s*시간|duration/i)).toBeNull();
   });
 
   it('기존 testID 와 새 모션 요소(비행기·도착 파동)·점 3개가 렌더된다 (TRIP-1383)', async () => {

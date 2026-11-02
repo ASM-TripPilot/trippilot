@@ -296,7 +296,7 @@ describe('S9 · 취소 — onCancel 만, onSave 는 안 부른다', () => {
  * TRIP-1080 · W — 셀 컬럼을 공용 휠(`shared/ui/WheelPicker`) 4열로 바꾼 뒤의 계약.
  *
  * 무엇을 보장하나:
- *  - W1 시트를 열면 네 휠이 **현재 서울 시각 위치**에서 시작한다(00 부터가 아니라).
+ *  - W1 시트를 열면 네 휠의 **현재 서울 시각** 셀이 선택돼 있다(00 이 아니라 — 시작 스크롤 위치 자체는 6-b).
  *  - W2·W3 스크롤이 멈춘 값이 곧 선택이고 저장에 실린다(TRIP-990 D21 — 굴린 값이 버려지지 않는다, INV-4).
  *  - W5 딤 탭 등으로 시트가 닫히면 `onCancel` 을 불러 페이지의 편집 상태를 푼다(다시 열 수 있게).
  *  - W6·W7 원본 완료가 없으면 완료 휠 대신 자리 표시만 있다(TRIP-1437 — 옛 "닫힌 휠", TRIP-1069 D1) —
@@ -335,22 +335,10 @@ describe('🔴 W · TRIP-1080 — 공용 휠 4열 시트', () => {
     });
   }
 
-  it('W1 · AC-1 — 열면 네 휠이 21·42·22·30 위치에서 시작하고 그 셀이 선택돼 있다', () => {
+  it('W1 · AC-1 — 열면 네 휠의 21·42·22·30 셀이 선택돼 있다', () => {
     renderSheet(LATE);
 
-    expect(
-      screen.getByTestId(wheel('arrived', 'h')).props.contentOffset?.y
-    ).toBe(21 * WHEEL_CELL_HEIGHT);
-    expect(
-      screen.getByTestId(wheel('arrived', 'm')).props.contentOffset?.y
-    ).toBe(42 * WHEEL_CELL_HEIGHT);
-    expect(
-      screen.getByTestId(wheel('completed', 'h')).props.contentOffset?.y
-    ).toBe(22 * WHEEL_CELL_HEIGHT);
-    expect(
-      screen.getByTestId(wheel('completed', 'm')).props.contentOffset?.y
-    ).toBe(30 * WHEEL_CELL_HEIGHT);
-
+    // 휠의 시작 스크롤 위치(contentOffset)는 jest 사각 — 실화면 QA(지도 trip-record tr-time-edit). 선택 셀만 본다.
     expect(screen.getByTestId(cell('arrived', 'h', '21'))).toBeSelected();
     expect(screen.getByTestId(cell('arrived', 'm', '42'))).toBeSelected();
     expect(screen.getByTestId(cell('completed', 'h', '22'))).toBeSelected();

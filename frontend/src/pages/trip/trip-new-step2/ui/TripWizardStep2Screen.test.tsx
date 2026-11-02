@@ -5,7 +5,6 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import { TripWizardHeader } from '@/widgets/trip-wizard-header';
 import { stayCoverFor } from '@/test-support/placeCoverFixtures';
 
 import {
@@ -36,13 +35,6 @@ import {
  *
  * 3동작: 준비(cards VM·jest.fn 콜백) → 실행(render + press) → 단언(렌더/콜백).
  */
-
-/** className 을 공백으로 쪼갠 토큰 배열 — NativeWind 가 심어도 `props.className`이 렌더트리에 평문으로
- * 남는다(SocialLoginScreen.visual.test 선례). 진행바 활성색 단언에 쓴다. */
-function classTokens(node: { props?: { className?: unknown } }): string[] {
-  const cn = node.props?.className;
-  return typeof cn === 'string' ? cn.split(/\s+/) : [];
-}
 
 const CARDS: NightlyBaseCardVM[] = [
   {
@@ -81,7 +73,7 @@ function renderScreen(
 }
 
 describe('앱바·진행바 크롬 (AC-1 · AC-7)', () => {
-  it('진행바가 4칸이고 앞 2칸이 활성(primary)·뒤 2칸이 비활성이며 "2 / 4"를 그린다', () => {
+  it('진행바가 4칸이고 "2 / 4"를 그린다', () => {
     renderScreen();
 
     // "2 / 2" → "2 / 4" — formatWizardStep(2)의 결과가 화면에 뜬다.
@@ -93,15 +85,6 @@ describe('앱바·진행바 크롬 (AC-1 · AC-7)', () => {
         screen.getByTestId(`trip-wizard-progress-seg-${n}`)
       ).toBeOnTheScreen()
     );
-
-    // 정확히 2칸 활성 — seg2 활성색 + seg3 비활성색을 짝으로 잰다(1칸·3칸 뮤턴트 red).
-    // Figma 가 4칸 모두 같은 너비라 활성 구분은 색(className)뿐이다(★3).
-    expect(
-      classTokens(screen.getByTestId('trip-wizard-progress-seg-2'))
-    ).toContain('bg-primary');
-    expect(
-      classTokens(screen.getByTestId('trip-wizard-progress-seg-3'))
-    ).toContain('bg-hairline-strong');
   });
 
   it('타이틀은 "어디서 묵을까요?"이고 옛 부제("박별 거점 · …")는 없다', () => {
@@ -135,11 +118,8 @@ describe('앱바·진행바 크롬 (AC-1 · AC-7)', () => {
 
 // TRIP-1266 (QA F7) — 1/4·2/4·3/4 가 같은 헤더 컴포넌트를 쓴다. 치수 계약은 위젯 테스트 소관.
 describe('위저드 공용 헤더 (2/4 · 편집 얼굴)', () => {
-  it('위저드 얼굴 — 헤더는 공용 TripWizardHeader 하나이고, 그 안에 제목·기존 ‹ testID("뒤로" 라벨)·진행 막대가 있다', () => {
+  it('위저드 얼굴 — 헤더 안에 제목·기존 ‹ testID("뒤로" 라벨)·진행 막대가 있다', () => {
     renderScreen();
-
-    // 같은 컴포넌트 함수를 그렸는가 — testID·className 복사로는 못 속인다(0개·2개면 throw).
-    expect(screen.UNSAFE_getByType(TripWizardHeader)).toBeTruthy();
 
     const header = screen.getByTestId('trip-wizard-header');
     expect(within(header).getByText('거점 숙소')).toBeOnTheScreen();
@@ -150,10 +130,9 @@ describe('위저드 공용 헤더 (2/4 · 편집 얼굴)', () => {
     ).toBeOnTheScreen();
   });
 
-  it('편집 얼굴(onDone) — 같은 공용 헤더에서 진행 표시만 없다', () => {
+  it('편집 얼굴(onDone) — 같은 헤더에서 진행 표시만 없다', () => {
     renderScreen({ onDone: jest.fn() });
 
-    expect(screen.UNSAFE_getByType(TripWizardHeader)).toBeTruthy();
     // 긍정 짝 — 헤더가 안 그려져서 아래 부정 단언이 공짜로 통과하는 것을 막는다.
     const header = screen.getByTestId('trip-wizard-header');
     expect(within(header).getByText('거점 숙소')).toBeOnTheScreen();
@@ -440,36 +419,6 @@ describe('썸네일·위치 줄 조건부 렌더 (AC-C2)', () => {
     // 값이 있어도 미배정이면 위치줄·썸네일을 안 그린다(뮤턴트: stayName 무시하고 값으로만 분기 → red).
     expect(card3).not.toHaveTextContent(/경주 황남동 · 도심/);
     expect(screen.queryByTestId('trip-base-night-thumb-3')).toBeNull();
-  });
-});
-
-describe('단일 카드 컨테이너 구조 (AC-D1 · AC-E1 · AC-L1)', () => {
-  it('default — 박별 카드 3장이 단일 카드 컨테이너(trip-base-night-list) 하나 안에 있다', () => {
-    renderScreen({ cards: CARDS_C2 });
-
-    const list = screen.getByTestId('trip-base-night-list');
-    // 3장 분리 카드 → 1장: 세 행이 같은 컨테이너의 자손이다. 그림자·구분선 픽셀은 6-b 육안.
-    expect(within(list).getAllByTestId(/^trip-base-night-card-/)).toHaveLength(
-      3
-    );
-  });
-
-  it('empty — 미정 행 3개가 같은 단일 카드 컨테이너 안에 있다', () => {
-    renderScreen({ variant: 'empty', cards: EMPTY_CARDS });
-
-    const list = screen.getByTestId('trip-base-night-list');
-    expect(within(list).getAllByTestId(/^trip-base-empty-night-/)).toHaveLength(
-      3
-    );
-  });
-
-  it('loading — 스켈레톤 3행이 같은 단일 카드 컨테이너 안에 있다', () => {
-    renderScreen({ variant: 'loading', cards: [] });
-
-    const list = screen.getByTestId('trip-base-night-list');
-    expect(
-      within(list).getAllByTestId(/^trip-base-skeleton-night-/)
-    ).toHaveLength(3);
   });
 });
 

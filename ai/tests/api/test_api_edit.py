@@ -16,16 +16,27 @@
   ⑪ 풀 밖 현재 슬롯(다른 조건으로 생성된 원 일정)도 자연어로 편집된다 — 422 아님,
      정상 편집이면 APPLIED·해석 실패면 TRANSLATION_FAILED. 버튼·말 두 진입이 같은
      입력에 같은 판정 (TRIP-527 / TRIP-431 수렴 결정)
+  ⑫ APPLIED 응답은 편집한 날의 구간 거리를 싣는다(BE 제안 카드 diff) — 손 안 댄 날은 재지
+     않고, 시한이 없으면 실경로 없이 추정, 렌더가 터지면 거리 없이 사유를 남긴다. 거절·확인 요청은 그대로
 """
 
 from __future__ import annotations
+
+import json
+import logging
 
 import pytest
 from fastapi.testclient import TestClient
 
 from trippilot.api.app import create_app
 from trippilot.api.wiring import DEMO_ANCHOR, build_dev_app, demo_poi_seed
+from trippilot.assembly_engine.adapters.chained_travel import ChainedTravelAdapter
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.travel import TravelEstimator
+from trippilot.domain.observability import FallbackEvent
+from trippilot.ports.travel_time_port import MeasuredTravel
 from tests.fakes.fake_llm import FakeLlm
+from tests.fakes.in_memory_trace import InMemoryTrace
 
 _SEED = {p.name: str(p.poi_id) for p in demo_poi_seed()}
 # 앵커(제주 중간점) 반경 10km 안 시드 = 흑돼지거리·한라산 (wiring DEMO_ANCHOR 주석)
@@ -406,3 +417,113 @@ def test_unwired_app_fails_loudly() -> None:
         response = _post(client, _body(command={
             "op": "CLEAR_DAY", "params": {}, "affected_slots": []}))
     assert response.status_code == 503
+
+
+# ── ⑫ APPLIED 응답의 구간 거리 — 편집한 날만 (생성·repair 와 같은 렌더) ─────────
+
+_SEONGSAN = _SEED["성산일출봉"]
+_MOVE = {"op": "MOVE_SLOT", "params": {"beforePoiId": _PORK}, "affected_slots": [_HALLASAN]}
+
+
+class _Route:
+    """실경로 자리의 가짜 TravelTimePort(외부 호출 0) — 잰 구간을 센다. 체인에 끼우면 조립 뒤 거리 시한 경로를 탄다."""
+
+    def __init__(self) -> None:
+        self.legs: list = []
+
+    def measure(self, a, b, mode):  # noqa: ANN001 — TravelTimePort 구조 계약
+        self.legs.append((a, b, mode))
+        return MeasuredTravel(real_minutes=10.0, distance_km=1.234, source="fake_route", approximated=False)
+
+
+class _BrokenPort:
+    """부르면 터지는 TravelPort — 체인이 아니라(`fallback` 없음) 렌더가 예외를 그대로 받는다."""
+
+    def estimate(self, from_, to, mode):  # noqa: ANN001
+        raise RuntimeError("route down: https://route.example/?key=SECRET")
+
+
+def _routed(port) -> TestClient:  # noqa: ANN001
+    return TestClient(build_dev_app(travel_port=port), raise_server_exceptions=False)
+
+
+def _chain(route: _Route) -> ChainedTravelAdapter:
+    return ChainedTravelAdapter(route, TravelEstimator(AssemblyConfig()))
+
+
+def test_applied_fills_distance_on_the_edited_day_only() -> None:
+    """BE 제안 카드 diff 가 그리는 거리(ProposalSlotFace.distanceRange) — 종전엔 APPLIED 일정의 거리가 전부 null 이었다.
+
+    편집한 날만 생성과 같은 렌더로 잰다(실경로는 남은 시한 안에서만). 손 안 댄 날은 재지 않는다 — 실경로 일일 한도(ODsay)를
+    쓰지 않는다. 각 날 첫 슬롯은 출발점을 몰라 null 이다(편집 요청의 anchor 는 후보 풀 중심). 거리만, 소요 시간 0(INV-3)."""
+    route = _Route()
+    body = _body(command=_MOVE)
+    body["itinerary"]["days"].append({"date": "2026-09-02", "slots": [
+        _slot(_SEONGSAN, "09:00:00", "10:00:00"), _slot(_WOLJEONG, "12:00:00", "13:00:00")]})
+    with _routed(_chain(route)) as client:
+        response = _post(client, body)
+    data = response.json()
+    assert data["status"] == "APPLIED", data
+    edited, untouched = data["itinerary"]["days"]
+    assert [s["poi_id"] for s in edited["slots"]] == [_HALLASAN, _PORK]
+    assert [s["distance_range"] for s in edited["slots"]] == [None, "약 1.2km · 대중교통"]
+    assert [s["distance_range"] for s in untouched["slots"]] == [None, None]
+    assert len(route.legs) == 1  # 편집한 날의 구간 하나만 쟀다
+    assert "duration" not in response.text.lower() and "분" not in edited["slots"][1]["distance_range"]
+
+
+@pytest.mark.parametrize(("transport_mode", "label", "mode"), [
+    ("대중교통", "대중교통", "PUBLIC"), ("렌터카", "자가용", "CAR"),
+])
+def test_edited_day_distance_follows_the_requested_transport(transport_mode, label, mode) -> None:  # noqa: ANN001
+    """화면 거리도 요청 수단으로 잰다 — repair 가 늘 '대중교통' 이름표를 내던 회귀(#983)와 같은 길을 막는다."""
+    route = _Route()
+    body = _body(command=_MOVE)
+    body["transport_mode"] = transport_mode
+    with _routed(_chain(route)) as client:
+        data = _post(client, body).json()
+    assert data["status"] == "APPLIED", data
+    assert data["itinerary"]["days"][0]["slots"][1]["distance_range"] == f"약 1.2km · {label}"
+    assert [leg[2].name for leg in route.legs] == [mode]
+
+
+def test_no_budget_left_skips_the_route_api_and_says_so() -> None:
+    """편집 시한 안에서만 잰다 — 남은 예산이 없으면 실경로를 부르지 않고 추정으로 채운다(생성과 같은 규칙). 사유는 FallbackEvent."""
+    route, trace = _Route(), InMemoryTrace()
+    body = _body(command=_MOVE)
+    body["request_meta"]["deadline_ms"] = 300  # 응답 여유(300ms)뿐 — 실경로 예산 0
+    with TestClient(build_dev_app(travel_port=_chain(route), trace=trace), raise_server_exceptions=False) as client:
+        data = _post(client, body).json()
+    assert data["status"] == "APPLIED", data
+    first, second = data["itinerary"]["days"][0]["slots"]
+    assert first["distance_range"] is None and second["distance_range"].endswith("· 대중교통 추정")
+    assert route.legs == []
+    [event] = [e for e in trace.of_type(FallbackEvent) if e.stage == "distance"]
+    assert "budget=1/1" in event.reason
+
+
+def test_distance_render_failure_keeps_null_and_logs_why(caplog) -> None:
+    """렌더가 터져도 편집은 그대로 나간다 — 거리는 null 로 두고 사유를 남긴다(INV-4). 예외 문장은 싣지 않는다(요청 주소·키가 섞일 수 있다)."""
+    caplog.set_level(logging.WARNING)
+    with _routed(_BrokenPort()) as client:
+        data = _post(client, _body(command=_MOVE)).json()
+    assert data["status"] == "APPLIED", data
+    assert [s["distance_range"] for s in data["itinerary"]["days"][0]["slots"]] == [None, None]
+    (line,) = [r.getMessage() for r in caplog.records if r.getMessage().startswith("edit_distance ")]
+    assert json.loads(line.removeprefix("edit_distance ")) == {
+        "trace_id": "edit431", "outcome": "omitted", "reason": "render_error: RuntimeError"}
+
+
+@pytest.mark.parametrize("command, status", [
+    ({"op": "ADD_SLOT", "params": {"targetPoiId": _UNKNOWN}, "affected_slots": []}, "REJECTED"),
+    ({"op": "REMOVE_SLOT", "params": {}, "affected_slots": [_PORK]}, "CONFIRM_REQUIRED"),
+], ids=["rejected", "confirm_required"])
+def test_not_applied_responses_stay_as_before_and_measure_nothing(command: dict, status: str) -> None:
+    """거리는 APPLIED 일정에만 — 거절·확인 요청은 응답이 그대로고(일정 없음) 실경로를 한 번도 부르지 않는다."""
+    route = _Route()
+    with _routed(_chain(route)) as client:
+        routed = _post(client, _body(command=command)).json()
+    with _client() as client:
+        plain = _post(client, _body(command=command)).json()
+    assert routed["status"] == status and routed["itinerary"] is None
+    assert routed == plain and route.legs == []

@@ -308,7 +308,7 @@ describe('PlaceDetailScreen (i10)', () => {
     expect(labels).toEqual(['영업시간', '주소']);
   });
 
-  describe('S12 지도 — 현재 장소 1핀 · 잠금 · 스케일바 (AC-9 · Q5)', () => {
+  describe('S12 지도 — 좌표가 없으면 지도 카드가 없다 (AC-9 · Q5 — 핀·잠금은 실화면 QA)', () => {
     // 실 MapView 는 env 키가 있어야 map-native 를 그린다(없으면 map-failure 로 접힘, 02a ★6).
     const CLIENT_ID_KEY = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
     const ORIGINAL_CLIENT_ID = process.env.EXPO_PUBLIC_NAVER_MAP_CLIENT_ID;
@@ -325,21 +325,16 @@ describe('PlaceDetailScreen (i10)', () => {
       }
     });
 
-    it('좌표가 있으면 카드 안에 실지도를 그리고, 핀 1개가 그 좌표에 찍힌다', () => {
-      // 준비·실행
+    it('좌표가 없으면 지도 카드를 그리지 않는다 — 대조군: 좌표가 있으면 카드가 선다', () => {
+      // 대조군 — 좌표가 있으면 카드 안에 지도가 뜬다(핀 좌표·잠금 prop 은 통과형 지도 목이라 실화면 QA 몫).
       render(<PlaceDetailScreen view={view({ lat: 35.15, lng: 129.11 })} />);
-      const map = screen.getByTestId('execution-place-map');
-      expect(within(map).getByTestId('map-native')).toBeTruthy();
+      expect(
+        within(screen.getByTestId('execution-place-map')).getByTestId(
+          'map-native'
+        )
+      ).toBeTruthy();
+      screen.unmount();
 
-      // 단언 — 핀 1개, 좌표 일치(lat↔lng 스왑 방지 — 둘이 다른 값), 경로선 없음.
-      const markers = within(map).getAllByTestId('map-marker');
-      expect(markers).toHaveLength(1);
-      expect(markers[0].props.latitude).toBe(35.15);
-      expect(markers[0].props.longitude).toBe(129.11);
-      expect(within(map).queryAllByTestId('map-path')).toHaveLength(0);
-    });
-
-    it('좌표가 없으면 지도 카드를 그리지 않는다', () => {
       // 준비·실행
       render(<PlaceDetailScreen view={view({ lat: null, lng: null })} />);
 

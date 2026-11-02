@@ -644,6 +644,31 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         server.verify()
     }
 
+    "validate — 여행 수단을 repair 와 같은 transport_modes 로 싣는다(목록 그대로 — 상대가 아는 첫 값을 고른다)" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
+            .andExpect(jsonPath("$.transport_modes.length()").value(2))
+            .andExpect(jsonPath("$.transport_modes[0]").value("택시"))
+            .andExpect(jsonPath("$.transport_modes[1]").value("렌터카"))
+            .andRespond(withSuccess("""{"violations":[]}""", MediaType.APPLICATION_JSON))
+
+        adapter.validateWithUnverified(dummyOutput(), listOf("택시", "렌터카"))
+        server.verify()
+    }
+
+    "validate — 수단이 없으면 키를 싣지 않는다(상대 종전 동작 — 대중교통. 수단 칸을 모르는 옛 상대도 422 를 내지 않는다)" {
+        val (adapter, server) = fixture()
+        repeat(2) {
+            server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
+                .andExpect(jsonPath("$.transport_modes").doesNotExist())
+                .andRespond(withSuccess("""{"violations":[]}""", MediaType.APPLICATION_JSON))
+        }
+
+        adapter.validate(dummyOutput())
+        adapter.validateWithUnverified(dummyOutput())
+        server.verify()
+    }
+
     "미판정 목록을 모르는 옛 와이어도 HOURS_UNKNOWN 이 실린 응답을 읽는다 — 경계 매퍼는 모르는 키를 무시한다(배포 순서: AI 먼저)" {
         val old = ScheduleAgentConfiguration.boundaryMapper().readValue(
             """{"violations":[],"unverified_slots":[{"poi_id":"$poi","reason_code":"HOURS_UNKNOWN","detail":""}]}""",
@@ -1020,6 +1045,18 @@ class HttpScheduleAgentAdapterTest : StringSpec({
 
         out.candidates shouldBe emptyList()
         out.emptyReason shouldBe SlotCandidatesEmptyReason.ALL_IN_ITINERARY
+    }
+
+    "AI 파이프라인 장애(pipeline_error)는 '주변에 없다'가 아니다 — 미도달처럼 로컬 후보풀로 폴백한다" {
+        val (adapter, server) = fixture(poolOf(place(nearPoi, 33.46, 126.56)))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/alternatives"))
+            .andRespond(withSuccess(altBody(2, "", emptyReason = "pipeline_error"), MediaType.APPLICATION_JSON))
+
+        val out = adapter.proposeSlotCandidates(candidatesInput())
+
+        out.candidates.map { it.poiId } shouldBe listOf(nearPoi)
+        out.freshness.degraded shouldBe true
+        out.emptyReason shouldBe null
     }
 
     "반경 컷으로 0건이 되면 10km 로 한 번 넓혀 재컷한다 — 실사용 반경을 그대로 알린다" {

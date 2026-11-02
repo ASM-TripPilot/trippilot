@@ -57,6 +57,15 @@ interface RegionLookupFacade {
      * 기본 구현은 빈 집합이다 — 지역 대역을 쓰는 테스트들이 구현하지 않아도 되게(빈 집합 = 종전 동작).
      */
     fun districtCodesOf(regionCode: String): Set<String> = emptySet()
+
+    /**
+     * 주소 → 행정구역 코드(시군구 5자리 또는 시도 2자리) — POI 에 코드를 붙이는 규칙(`RegionResolver`) 그대로다(TRIP-1703 거점 지역 판정).
+     * 못 정하면 null — 가까운 지역으로 밀어 넣지 않는다. 기본 구현 null = 판정 불가(지역 대역 테스트용, 소비측은 fail-open).
+     */
+    fun codeOfAddress(address: String): String? = null
+
+    /** 코드 → 사람이 읽는 이름(시도 `부산광역시` · 시군구 `부산광역시 동구`). 카탈로그에 없으면 null(TRIP-1706 회고 서술 지역). */
+    fun displayNameOfCode(regionCode: String): String? = null
 }
 
 /** 지역 대표 좌표(api-safe). */

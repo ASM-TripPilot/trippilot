@@ -6,8 +6,9 @@ import {
   useState,
 } from 'react';
 import { AppState } from 'react-native';
-import * as Linking from 'expo-linking';
+import { openAppSettings } from '@/shared/external-link';
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 
 import {
   type PushPermission,
@@ -97,7 +98,7 @@ export function NotificationSettingsPage(): ReactElement {
       }}
       onOpenSettings={() => {
         if (permission !== 'UNDETERMINED') {
-          void Linking.openSettings();
+          void openAppSettings();
           return;
         }
         // 한 번도 안 물은 앱은 iOS 설정에 알림 항목이 없을 수 있어 OS 창을 먼저 띄운다(결정 1=B).
@@ -110,7 +111,7 @@ export function NotificationSettingsPage(): ReactElement {
           await readPermission();
         })();
       }}
-      onPressBack={() => router.back()}
+      onPressBack={() => goBackOr(router, '/settings')}
     />
   );
 }

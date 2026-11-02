@@ -32,6 +32,8 @@ import {
   userMessage,
 } from '../api/assistantSamples';
 import { AssistantSheetPage } from './AssistantSheetPage';
+import { newTestQueryClient } from '@/test-support/queryRender';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * TRIP-1514 · 도우미 시트 — **기본 어댑터(HttpAssistantAdapter) + MSW** 통합 테스트(U8 FD frontend-components R19).
@@ -55,27 +57,16 @@ import { AssistantSheetPage } from './AssistantSheetPage';
 jest.setTimeout(20000);
 
 // 생성 클라이언트의 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다(선례 동형).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
-const mockBack = jest.fn();
-const mockReplace = jest.fn();
-const mockPush = jest.fn();
-jest.mock('expo-router', () => ({
-  useRouter: () => ({
-    back: mockBack,
-    replace: mockReplace,
-    push: mockPush,
-    canGoBack: () => true,
-  }),
-}));
+const { back: mockBack, replace: mockReplace, push: mockPush } = routerSpies;
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back', 'canGoBack'],
+  })
+);
 
 // 턴 id 는 호출마다 달라야 "같은 id 재시도 / 새 id" 를 가를 수 있다.
 let mockUuid = 0;
@@ -438,7 +429,7 @@ describe('도우미 시트 · 이력 (TRIP-1514 AC-2)', () => {
         }
       )
     );
-    client = new QueryClient();
+    client = newTestQueryClient();
 
     const page = await assistantPort().getMessages(SESSION.id, {
       before: 'cursor-1',

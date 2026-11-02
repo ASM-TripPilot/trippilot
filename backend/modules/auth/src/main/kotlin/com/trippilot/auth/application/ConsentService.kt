@@ -57,7 +57,7 @@ class ConsentService(
         }
         submissions.forEach { s ->
             requireCurrentVersion(s.termsType, s.termsVersion, now)
-            records.append(ConsentRecord.of(accountId, s.termsType, s.termsVersion, s.action, ConsentChannel.ONBOARDING, now))
+            appendIfChanged(ConsentRecord.of(accountId, s.termsType, s.termsVersion, s.action, ConsentChannel.ONBOARDING, now))
         }
     }
 
@@ -70,7 +70,7 @@ class ConsentService(
         val now = clock.instant()
         val current = requireCurrentVersion(termsType, termsVersion, now)
         val channel = inferChannel(accountId, current, action)
-        records.append(ConsentRecord.of(accountId, termsType, termsVersion, action, channel, now))
+        appendIfChanged(ConsentRecord.of(accountId, termsType, termsVersion, action, channel, now))
     }
 
     /** 마케팅 수신 토글 — opt_in 갱신과 증적 추가를 동일 트랜잭션으로(INV-M1). */
@@ -82,7 +82,7 @@ class ConsentService(
         val existing = marketing.find(accountId)
         marketing.save(existing?.changeTo(optIn, now) ?: MarketingConsent.of(accountId, optIn, now))
         val action = if (optIn) ConsentAction.GRANT else ConsentAction.REVOKE
-        records.append(ConsentRecord.of(accountId, TermsType.MARKETING, current.version, action, ConsentChannel.SETTINGS, now))
+        appendIfChanged(ConsentRecord.of(accountId, TermsType.MARKETING, current.version, action, ConsentChannel.SETTINGS, now))
     }
 
     /**
@@ -111,6 +111,18 @@ class ConsentService(
                 consent == null || !consent.isGrant || consent.termsVersion != term.version
             }
             .map { it.termsType }
+    }
+
+    /**
+     * 최신 증적과 같은 동작(같은 약관 버전의 같은 GRANT/REVOKE)이면 남기지 않는다(TRIP-1689) — 연타·두 기기 동시 요청이
+     * 같은 법적 증적을 두 줄로 만들지 않게. 응답은 그대로 200 이다(위치 `update` 의 "실제 값이 바뀔 때만" 선례 —
+     * 앱 개인화 훅은 오류 응답을 처리하지 않아 409 면 재조회도 못 한다). 잠금은 **읽기 전에** 건다.
+     */
+    private fun appendIfChanged(record: ConsentRecord) {
+        records.lockAccount(record.accountId)
+        val latest = ConsentFold.latestPerType(records.findByAccount(record.accountId))[record.termsType]
+        if (latest?.action == record.action && latest.termsVersion == record.termsVersion) return
+        records.append(record)
     }
 
     private fun inferChannel(accountId: AccountId, term: TermsVersion, action: ConsentAction): ConsentChannel {

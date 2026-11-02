@@ -17,6 +17,8 @@
 import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 import type { GeocodeCandidate } from '@/shared/api/index.schemas';
 import {
@@ -230,7 +232,7 @@ export function StayRegisterPage(): ReactElement {
     try {
       await postSavedStays.mutateAsync({ data: request });
       // 들어온 곳으로 돌아간 뒤 토스트(TRIP-990 D22 — 루트 호스트라 돌아간 화면 위에 보인다).
-      router.back();
+      goBackOr(router, shellTabHref('explore'));
       showToast({ message: STAY_SAVED_TOAST, testID: 'stay-register-saved' });
     } catch {
       setSubmitStatus('error');
@@ -240,7 +242,7 @@ export function StayRegisterPage(): ReactElement {
   return (
     <StayRegisterScreen
       flow={flow}
-      onBack={() => router.back()}
+      onBack={() => goBackOr(router, shellTabHref('explore'))}
       onSelectTab={setActiveTab}
       onChangeQuery={setQuery}
       onChangeName={setName}

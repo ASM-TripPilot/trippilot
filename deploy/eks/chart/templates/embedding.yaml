@@ -53,6 +53,11 @@ spec:
               value: "2"
             - name: MKL_NUM_THREADS
               value: "2"
+            {{- if .Values.embedding.injectionGuard }}
+            # 도우미 입구 인젝션 그림자 분류기 — 이미지에 구운 int8 ONNX 를 읽는다(없으면 404 로 꺼진 것과 같다)
+            - name: INJECTION_GUARD_DIR
+              value: /models/injection-guard
+            {{- end }}
           # 기동·준비는 `/ready`(모델이 실제로 올라왔는지), 생존은 `/health`(프로세스)다.
           # 셋 다 `/health` 였을 때는 **모델 없는 파드가 정상으로 보였다** — `/health` 가
           # 설계상 모델을 기다리지 않아 첫 프로브에서 바로 200 이고, 아래 180(15분) 여유도

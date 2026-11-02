@@ -100,7 +100,7 @@ describe('Figma 정합 · 목록 높이 상한 (옛 .l05parity)', () => {
    *
    * 무엇을 보장하나:
    *  - AC-4: 1단 불릿 한 줄 = `•` 글리프 + 항목.
-   *  - AC-5: 불릿 간격 6 · 9항목(228)이 목록 높이 상한에 잘리지 않음(출시 게이트 — BR-U6-25). 버튼 라벨 문구.
+   *  - AC-5: 불릿 간격 6 · 전 항목(DELETION_SCOPE)이 목록 높이 상한에 잘리지 않음(출시 게이트 — BR-U6-25). 버튼 라벨 문구.
    *  (색·버튼 치수·버튼 줄 간격은 TRIP-1367 로 지웠다 — 생김새는 실화면 몫.)
    *
    * 2단 게이트(AC-12)와 문안(Q7)은 `DeleteAccountDialog.test.tsx`·`SettingsPage.test.tsx`(무수정)가 잠근다.
@@ -111,7 +111,7 @@ describe('Figma 정합 · 목록 높이 상한 (옛 .l05parity)', () => {
   const BULLET_GAP = 6;
   const LIST_HEIGHT =
     DELETION_SCOPE.length * LINE_HEIGHT +
-    (DELETION_SCOPE.length - 1) * BULLET_GAP; // 228
+    (DELETION_SCOPE.length - 1) * BULLET_GAP; // n×20 + (n−1)×6
 
   function renderDialog() {
     render(
@@ -205,7 +205,7 @@ describe('Figma 정합 · 목록 높이 상한 (옛 .l05parity)', () => {
       expect(tokens(list)).not.toContain('gap-xs');
     });
 
-    it(`9항목 전체 높이(${LIST_HEIGHT})가 목록 높이 상한에 잘리지 않는다`, () => {
+    it(`전 항목 전체 높이(${LIST_HEIGHT})가 목록 높이 상한에 잘리지 않는다`, () => {
       renderDialog();
 
       const caps = heightCapsAbove(

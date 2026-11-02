@@ -9,6 +9,22 @@ An entity is not where every reusable business concept goes. It is a
 stable, low-level domain boundary that several consumers genuinely have
 to share.
 
+## 목차
+
+- Why this matters
+- How to keep entities clean
+  - 0\. Consider having no entities layer
+  - 1\. Avoid preemptive slicing
+  - 2\. Avoid unnecessary entities
+  - 3\. Exclude CRUD operations from entities
+  - 4\. Store authentication data in shared
+  - 5\. Minimize cross-imports
+- Decision tree for AI agents
+- Anti-patterns
+- See also
+
+---
+
 ## Why this matters
 
 The `entities` layer is one of the lower layers and is widely accessible.

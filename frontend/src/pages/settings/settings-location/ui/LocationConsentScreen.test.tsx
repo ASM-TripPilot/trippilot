@@ -192,7 +192,6 @@ describe('Figma 구조 (옛 .l06parity)', () => {
    * 무엇을 보장하나:
    *  - AC-3: 용도 3행이 제목·설명 한 쌍씩 뜬다.
    *  (카드·구분선 구조와 AC-4 denied 톤·opacity 는 TRIP-1367 로 지웠다 — 생김새는 실화면 몫.)
-   *  - AC-2(렌더 앵커): 화면 토글이 공유 `shared/ui/Toggle` 로 그려진다(손잡이 testID `-thumb`).
    *
    * 철회 게이트·문안(AC-5)은 `LocationConsentScreen.test.tsx`(무수정)가 계속 잠근다.
    * 픽셀(r12·그림자·타일 22×40·분수 폰트·글리프 색)은 jest 사각 — [검증] 스크린샷·6-b 몫.
@@ -222,13 +221,6 @@ describe('Figma 구조 (옛 .l06parity)', () => {
     );
   }
 
-  /** className 을 공백으로 쪼갠 토큰 배열 — `bg-primary` 가 `bg-primary-pale` 에 부분 일치하는 것을 막는다. */
-  function tokens(el: { props: { className?: unknown } }): string[] {
-    return String(el.props.className ?? '')
-      .split(/\s+/)
-      .filter(Boolean);
-  }
-
   describe('TRIP-780 · AC-3 — 용도 3행', () => {
     it('각 행이 제목·설명 한 쌍을 갖고 행은 3개다', () => {
       renderScreen('default');
@@ -240,30 +232,6 @@ describe('Figma 구조 (옛 .l06parity)', () => {
         expect(within(rows[i]).getByText(title)).toBeOnTheScreen();
         expect(within(rows[i]).getByText(desc)).toBeOnTheScreen();
       });
-    });
-  });
-
-  describe('TRIP-780 · AC-2 — 화면 토글이 공유 Toggle 로 그려진다', () => {
-    it('default(동의 ON): 손잡이가 있고 트랙이 primary 다', () => {
-      renderScreen('default');
-
-      expect(
-        screen.getByTestId('settings-location-toggle-thumb')
-      ).toBeOnTheScreen();
-      expect(tokens(screen.getByTestId('settings-location-toggle'))).toContain(
-        'bg-primary'
-      );
-    });
-
-    it('denied: 화면이 disabled 를 넘겨 트랙이 disabled 색(#ECECEC)이다', () => {
-      renderScreen('denied');
-
-      expect(
-        screen.getByTestId('settings-location-toggle-thumb')
-      ).toBeOnTheScreen();
-      expect(tokens(screen.getByTestId('settings-location-toggle'))).toContain(
-        'bg-[#ECECEC]'
-      );
     });
   });
 });

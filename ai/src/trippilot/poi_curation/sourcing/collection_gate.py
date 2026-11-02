@@ -184,7 +184,7 @@ class CollectionGate:
             # 거칠어(Overture `shopping` 에 편의점, `landmark_and_historical_building`
             # 에 아파트) 카테고리 화이트리스트를 통과한 뒤에도 남는 것을 이름으로
             # 잡는다. 규칙은 오탐 0 을 실측한 것만이다 — mapping._NON_TRAVEL 참조.
-            reason = non_travel_reason(c.name)
+            reason = non_travel_reason(c.name, c.category)
             if reason is not None:
                 drop(f"{DROP_POLICY_NON_TRAVEL}:{reason}")
                 continue

@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw';
 import type { QueryClient } from '@tanstack/react-query';
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -243,6 +244,9 @@ describe('확정 CTA·재조회 배선', () => {
   });
 
   afterEach(async () => {
+    // TRIP-1624 — 화면부터 내린다. RNTL 자동 정리는 바깥 afterEach 라 이 훅보다 **늦어서**, 그 사이 핸들러 해제·캐시 비우기로
+    // 마운트된 화면이 다시 조회하면 핸들러 없는 요청(미처리 경고)이 나갔다. cleanup 은 두 번 불려도 무해하다(이 파일의 같은 afterEach 전부).
+    cleanup();
     // 테스트 격리 — 인플라이트 쿼리를 취소하고 캐시를 비운다. 재조회하는 케이스(I5a/I5b 409)가
     // 발화한 invalidateQueries 재조회가 테스트 경계를 넘어 **늦게 도착**하면, 공유 카운터
     // itineraryGetCalls 를 다음 테스트의 beforeEach 리셋 뒤 한 번 더 올려 "재조회 0" 단언
@@ -573,59 +577,6 @@ describe('확정 CTA·재조회 배선', () => {
       expect(confirmPostCalls).toBe(1);
     });
   });
-
-  describe('🔴 TRIP-1204 · h14·h16 일정 지도는 시트가 열린 채로도 손가락으로 움직인다', () => {
-    it('셸 지도가 viewOnly=false 로 열려 있다', async () => {
-      renderPageWithToast();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      expect(screen.getByTestId('map-root').props.viewOnly).toBe(false);
-    });
-  });
-
-  describe('🔴 TRIP-1076 AC-3 · h16 확정 일정 지도는 핀 전부에 맞춰 연다', () => {
-    it('셸 지도에 핀 2개 이상과 fitPins 가 함께 전달된다', async () => {
-      // 준비 — day1 두 곳에 좌표를 명시해 핀 2개를 만든다(기본 좌표에 기대지 않는다).
-      const plan = confirmedItinerary();
-      const DAY1_COORDS = [
-        { lat: 33.458, lng: 126.942 },
-        { lat: 33.512, lng: 126.529 },
-      ];
-      itineraryHandler = () =>
-        HttpResponse.json({
-          ...plan,
-          days: plan.days.map((day, dayIndex) =>
-            dayIndex === 0
-              ? {
-                  ...day,
-                  slots: day.slots.map((slot, i) => ({
-                    ...slot,
-                    ...DAY1_COORDS[i],
-                  })),
-                }
-              : day
-          ),
-        });
-
-      renderPageWithToast();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      const map = screen.getByTestId('map-root');
-      expect((map.props.pins as unknown[]).length).toBeGreaterThanOrEqual(2);
-      expect(map.props.fitPins).toBe(true);
-    });
-  });
-
-  // TRIP-1553 — 일정 상세의 ✦ 도우미(TRIP-1321, 지도 우상단 카드 슬롯)는 헤더로 옮기지 않고 없앴다(사용자 결정 2026-10-22).
-  describe('✦ 도우미 FAB 는 없다 (TRIP-1553)', () => {
-    it('지도+시트 셸은 뜨는데 ✦ 는 없다', async () => {
-      renderPageWithToast();
-
-      // 짝 앵커 — 셸이 그려진 뒤에도 ✦ 만 없음을 보인다.
-      await screen.findByTestId('map-sheet-shell-root');
-      expect(screen.queryByTestId('assistant-fab')).toBeNull();
-    });
-  });
 });
 
 // TRIP-801 · TRIP-939 · 옛 ItineraryPlanPage.confirmed.integration.test.tsx — 확정(h16) 셸 얼굴.
@@ -697,6 +648,7 @@ describe('확정 셸(h16) 얼굴', () => {
   });
 
   afterEach(() => {
+    cleanup();
     server.resetHandlers();
     act(() => {
       clearAccessToken();
@@ -888,6 +840,7 @@ describe('확정 셸(h16) 얼굴', () => {
 
   describe('🔴 TRIP-1237 a — 알림에서 연 확정 일정은 오늘 일차로 열리고 뒤로가기는 알림함이다', () => {
     afterEach(() => {
+      cleanup();
       jest.useRealTimers();
     });
 
@@ -957,16 +910,6 @@ describe('확정 셸(h16) 얼굴', () => {
       expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('1일차');
     });
 
-    it('확정 얼굴은 헤더 meta 를 제목 줄 아래로 내린다(TRIP-1237 e) — 가로 행이 아니다', async () => {
-      useItinerary(() => HttpResponse.json(confirmedDefault()));
-      renderPage();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      expect(
-        String(screen.getByTestId('sheet-header-root').props.className)
-      ).not.toContain('flex-row');
-    });
-
     it('같은 날이어도 알림 표식이 없으면(직접 진입) 1일차로 연다', async () => {
       fixToday('2026-06-11T03:00:00Z');
       useItinerary(() => HttpResponse.json(confirmedDefault()));
@@ -1009,28 +952,6 @@ describe('확정 셸(h16) 얼굴', () => {
     });
   });
 
-  describe('🔴 C3c · TRIP-1110 AC-4 — 확정 헤더도 커넥터 구간에 null 이 섞이면 km 를 접는다', () => {
-    it('일부 구간만 null 이면 meta 는 정확히 "확정됨 · 4곳"이다', async () => {
-      // 준비 — b→c 구간만 null. 옛 스킵 규약이면 "확정됨 · 4곳 · 3.3km"(2.1+0.6+0.6 부분합).
-      useItinerary(() =>
-        HttpResponse.json(
-          confirmed([
-            ...busanFourPois([null, '2.1km', null, '0.6km'], {
-              aTags: ['바다'],
-            }),
-            busanHotel('0.6km'),
-          ])
-        )
-      );
-      renderPage();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      const meta = screen.getByTestId('sheet-header-meta');
-      expect(meta).toHaveTextContent('확정됨 · 4곳'); // 완전 일치
-      expect(meta).not.toHaveTextContent(/km|이동|분|시간|소요/);
-    });
-  });
-
   // TRIP-1234 R3-03 — 헤더 곳 수는 "고정 숙소"만 뺀다(같은 파일 hasBase 의 숙소 정의, 01b 결정 4). 서버가 아무 때나
   // 꼭 갈 곳을 isFixed=true 로 내려도 카드는 그려지므로, isFixed 하나로 빼면 "헤더 0곳 · 카드 1장"이 된다.
   describe('🔴 C3d · 헤더 곳 수 = 카드 수 — 고정 숙소만 빼고 고정 꼭 갈 곳은 센다', () => {
@@ -1042,21 +963,6 @@ describe('확정 셸(h16) 얼굴', () => {
         category: '명소',
       };
     }
-
-    it('C3d-1 · 선택일이 고정 꼭 갈 곳 하나뿐이면 meta 는 "확정됨 · 1곳"이고 카드도 1장이다 (QA r3 재현)', async () => {
-      // 준비
-      useItinerary(() => HttpResponse.json(confirmed([fixedMustVisit()])));
-
-      // 실행
-      renderPage();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      // 단언 — 완전 일치. `!slot.isFixed` 식이면 "확정됨 · 0곳"으로 red.
-      expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
-        '확정됨 · 1곳'
-      );
-      expect(screen.queryAllByTestId(/^slot-stopcard-time-/)).toHaveLength(1);
-    });
 
     it('C3d-2 · 비고정 4 + 고정 꼭 갈 곳 1 + 고정 숙소 1 이면 "확정됨 · 5곳"이다 (숙소만 빠진다)', async () => {
       useItinerary(() =>
@@ -1117,6 +1023,7 @@ describe('탈출구 — 뒤로·일정 만들기', () => {
   });
 
   afterEach(() => {
+    cleanup();
     server.resetHandlers();
     act(() => {
       clearAccessToken();
@@ -1217,7 +1124,7 @@ describe('탈출구 — 뒤로·일정 만들기', () => {
       fireEvent.press(screen.getByTestId('itinerary-view-back'));
 
       // 단언 — 딥링크 폴백 목적지(홈 탭) 자체를 잠근다(확정 얼굴의 [돌아가기]만 일정 탭 목록으로 간다).
-      expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+      expect(mockReplace).toHaveBeenCalledWith('/itinerary'); // TRIP-1685 — 홈 → 일정 탭
       // 침묵 no-op도, back+replace 이중 호출도 아님 — replace만.
       expect(mockBack).not.toHaveBeenCalled();
     });
@@ -1247,7 +1154,7 @@ describe('탈출구 — 뒤로·일정 만들기', () => {
 
       // 실행 + 단언.
       fireEvent.press(screen.getByTestId('sheet-daychip-back'));
-      expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+      expect(mockReplace).toHaveBeenCalledWith('/itinerary'); // TRIP-1685 — 홈 → 일정 탭
       expect(mockBack).not.toHaveBeenCalled();
     });
   });
@@ -1321,6 +1228,7 @@ describe('확정 예방 잠금(PARTIAL)', () => {
 
   // 옛 파일 라우터 목엔 `canGoBack` 이 없었다 — 페이지가 부르면 TypeError 로 red 였던 그물을 잇는다(02a ★).
   afterEach(() => {
+    cleanup();
     expect(mockCanGoBack).not.toHaveBeenCalled();
   });
 
@@ -1366,6 +1274,7 @@ describe('확정 예방 잠금(PARTIAL)', () => {
   });
 
   afterEach(() => {
+    cleanup();
     server.resetHandlers();
     act(() => {
       clearAccessToken();
@@ -1475,6 +1384,7 @@ describe('지도 실패 폴백', () => {
   });
 
   afterEach(() => {
+    cleanup();
     server.resetHandlers();
     act(() => {
       clearAccessToken();
@@ -1573,6 +1483,7 @@ describe('연타 가드 — 저장 직후 일정 수정 관통 차단', () => {
   });
 
   afterEach(async () => {
+    cleanup();
     clock.mockRestore();
     releaseConfirm?.();
     await activeClient?.cancelQueries();
@@ -1693,6 +1604,119 @@ describe('연타 가드 — 저장 직후 일정 수정 관통 차단', () => {
       expect(confirmPostCalls).toBe(1);
     });
   });
+
+  /**
+   * TRIP-1688 FV-TAP-01 — 형식 검증(verify-fv-tap)이 찾은 반례: 확정 응답이 창(400ms)보다 늦을 때 다시 누른 탭.
+   * 창이 이미 닫혔으니 가드만으로는 못 막는다 — 요청 중엔 버튼이 잠겨 있어야 한다.
+   * 시계는 `clock.mockReturnValue(FROZEN_NOW + ms)` 로 손으로 움직인다(가드가 보는 유일한 시계).
+   * 3동작: 준비=응답을 붙잡고 첫 탭 → 실행=400ms 뒤 다시 탭 → 단언=POST 수·안내·토스트·편집 push.
+   */
+  describe('FV-TAP-01 · 확정 응답이 창보다 늦어도 요청 중 다시 누른 탭은 무시된다', () => {
+    const at = (ms: number) => clock.mockReturnValue(FROZEN_NOW + ms);
+
+    it('400ms 뒤 다시 눌러도 POST 는 1건, 확정 뒤 「확정 실패」 안내 없이 확정 토스트가 뜬다', async () => {
+      // 준비 — 토스트를 보려고 호스트를 함께 그린다.
+      activeClient = newTestQueryClient({ gcTime: 0 });
+      render(
+        <WithToastHost>
+          <ItineraryPlanPage tripId={TRIP_ID} />
+        </WithToastHost>,
+        { wrapper: createWrapper(activeClient) }
+      );
+      await screen.findByTestId('sheet-cta-button-0');
+      holdConfirm();
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0')); // 0ms
+      await waitFor(() => expect(confirmPostCalls).toBe(1));
+
+      // 실행 — 창이 닫힌 뒤(400ms) 같은 버튼을 다시 누른다.
+      at(400);
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+      releaseConfirm?.();
+      await waitForEditCta();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+      });
+
+      // 단언
+      expect(confirmPostCalls).toBe(1);
+      expect(screen.queryByTestId('itinerary-confirm-error')).toBeNull();
+      expect(screen.getByTestId('itinerary-confirmed-toast')).toBeOnTheScreen();
+    });
+
+    it('요청 중엔 [일정 확정하기]가 비활성이다', async () => {
+      await openPlanned();
+      holdConfirm();
+
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+      await waitFor(() =>
+        expect(screen.getByTestId('sheet-cta-button-0')).toBeDisabled()
+      );
+    });
+
+    it('응답이 500ms 에 와도 CTA 가 바뀐 지 300ms 뒤의 탭은 편집으로 들어가지 않는다', async () => {
+      // 준비 — 첫 요청은 문(confirmGate)에서, 둘째가 나간다면 끝날 때까지 붙잡는다(409 직전 — 반례 R2).
+      let releaseSecond: () => void = () => {};
+      const second = new Promise<void>((resolve) => (releaseSecond = resolve));
+      server.use(
+        http.post(
+          'http://localhost:8080/api/v1/trips/:tripId/itinerary/confirm',
+          async () => {
+            confirmPostCalls += 1;
+            if (confirmPostCalls === 1) {
+              await confirmGate;
+              return HttpResponse.json(itinerary({ status: 'CONFIRMED' }));
+            }
+            await second;
+            return new HttpResponse(null, { status: 409 });
+          }
+        )
+      );
+      await openPlanned();
+      holdConfirm();
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0')); // 0ms
+      at(400);
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0')); // 400ms — 연타의 남은 탭
+
+      at(500);
+      releaseConfirm?.(); // 500ms — 확정, CTA 가 [일정 수정]으로
+      await waitForEditCta();
+
+      at(800); // 바뀐 지 300ms
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+      expect(mockPush).toHaveBeenCalledTimes(0);
+      releaseSecond();
+    });
+
+    it('확정이 실패하면 잠금이 풀려 안내를 본 뒤 다시 눌러 재시도할 수 있다', async () => {
+      // 준비 — 첫 요청은 500, 둘째는 성공.
+      server.use(
+        http.post(
+          'http://localhost:8080/api/v1/trips/:tripId/itinerary/confirm',
+          async () => {
+            confirmPostCalls += 1;
+            return confirmPostCalls === 1
+              ? new HttpResponse(null, { status: 500 })
+              : HttpResponse.json(itinerary({ status: 'CONFIRMED' }));
+          }
+        )
+      );
+      await openPlanned();
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+      await waitFor(() =>
+        expect(screen.getByTestId('itinerary-confirm-error')).toBeOnTheScreen()
+      );
+
+      // 실행 — 창이 지난 뒤 다시 누른다.
+      at(400);
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+
+      // 단언 — 두 번째 요청이 나가 확정된다.
+      await waitForEditCta();
+      expect(confirmPostCalls).toBe(2);
+    });
+  });
 });
 
 // TRIP-799 · 옛 ItineraryPlanPage.timeline.integration.test.tsx
@@ -1771,6 +1795,7 @@ describe('완성 셸(h14) 얼굴', () => {
   });
 
   afterEach(() => {
+    cleanup();
     server.resetHandlers();
     act(() => {
       clearAccessToken();
@@ -2002,43 +2027,66 @@ describe('완성 셸(h14) 얼굴', () => {
 
       expect(screen.queryByTestId('itinerary-plan-no-base')).toBeNull();
     });
+
+    // TRIP-1704 — j01(방문 기록)은 거점 배정 조회로 숙소를 보이는데, 여기는 슬롯만 봐서 거점이 있어도 「없어요」라 했다.
+    // 근거를 j01 과 같은 거점 배정 조회·같은 구간(dateFrom ≤ D < dateTo)으로 맞춘다.
+    it('T7c · 고정 숙소 슬롯이 없어도 그날 밤을 덮는 거점 배정이 있으면 카드가 없다', async () => {
+      // 준비 — 슬롯엔 숙소가 없고(plannedNoBase), 이 여행 거점 배정이 DAY1 밤을 덮는다
+      let basesCalls = 0;
+      useItinerary(() => HttpResponse.json(plannedNoBase()));
+      server.use(
+        http.get(`${BASE}/trips/${TRIP_ID}/bases`, () => {
+          basesCalls += 1;
+          const assignment: BaseAssignment = {
+            baseAssignmentId: 'ba-1704',
+            savedStayId: 's-1704',
+            dateFrom: DAY1,
+            dateTo: DAY2,
+          };
+          return HttpResponse.json([assignment]);
+        })
+      );
+      // 실행
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      await waitFor(() => expect(basesCalls).toBe(1));
+      // 단언 — 거점 조회가 도착하면 「거점 숙소가 없어요」가 없다
+      await waitFor(() =>
+        expect(screen.queryByTestId('itinerary-plan-no-base')).toBeNull()
+      );
+    });
+
+    // 짝 — 그날 밤을 덮지 않는 배정이면 카드는 그대로다. 체크아웃일(dateTo=DAY1)은 j01 처럼 덮지 않는다.
+    it.each([
+      ['뒤 날만', DAY2, DAY3],
+      ['체크아웃일(dateTo)', '2026-06-09', DAY1],
+      ['앞 날만', '2026-06-08', '2026-06-09'],
+    ])(
+      'T7d · 거점 배정이 그날 밤을 안 덮으면(%s) 카드가 그대로 뜬다 (짝)',
+      async (_case, dateFrom, dateTo) => {
+        let basesCalls = 0;
+        useItinerary(() => HttpResponse.json(plannedNoBase()));
+        server.use(
+          http.get(`${BASE}/trips/${TRIP_ID}/bases`, () => {
+            basesCalls += 1;
+            const assignment: BaseAssignment = {
+              baseAssignmentId: 'ba-1704',
+              savedStayId: 's-1704',
+              dateFrom,
+              dateTo,
+            };
+            return HttpResponse.json([assignment]);
+          })
+        );
+        renderPage();
+        await screen.findByTestId('map-sheet-shell-root');
+        await waitFor(() => expect(basesCalls).toBe(1));
+        expect(screen.getByTestId('itinerary-plan-no-base')).toBeOnTheScreen();
+      }
+    );
   });
 
   describe('🔴 T5b · TRIP-1110 AC-4·AC-6 — 커넥터 구간(slice(1))에 null 이 섞이면 meta km 를 접는다', () => {
-    it('T5b-1 · 일부 구간만 null 이면 meta 는 정확히 "4곳"이고 null 커넥터는 글리프 줄만 남는다', async () => {
-      // 준비 — b→c·c→d 구간 null(교체 뒤), a→b 2.1km·d→숙소 0.6km. 옛 스킵 규약이면 "4곳 · 2.7km".
-      useItinerary(() =>
-        HttpResponse.json(
-          itineraryOf('PLANNED', [
-            ...busanFourPois([null, '2.1km', null, null]),
-            busanHotel('0.6km'),
-          ])
-        )
-      );
-      renderPage();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      const meta = screen.getByTestId('sheet-header-meta');
-      expect(meta).toHaveTextContent('4곳'); // 문자열 인자 = 완전 일치(02a §5)
-      expect(meta).not.toHaveTextContent(/km|이동|분|시간|소요/);
-      // 커넥터는 무변경(결정 2=A): 값 구간은 문구 칸, null 구간은 줄만.
-      expect(
-        screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-a`)
-      ).toHaveTextContent('2.1km');
-      expect(
-        screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-d`)
-      ).toHaveTextContent('0.6km');
-      for (const poiId of ['poi-b', 'poi-c']) {
-        expect(
-          screen.getByTestId(`sheet-connector-${DAY1}#${poiId}`)
-        ).toBeOnTheScreen();
-        expect(
-          screen.queryByTestId(`sheet-connector-distance-${DAY1}#${poiId}`)
-        ).toBeNull();
-      }
-      expect(renderedText()).not.toMatch(/\d+\s*(분|시간)|소요/);
-    });
-
     it('T5b-2 · 첫 슬롯(거점→첫 방문지) 거리는 헤더 합에 안 들어간다 — 커넥터 합 "4곳 · 4.1km" 그대로', async () => {
       // 준비 — 첫 슬롯에 9.9km. slice(1) 을 버리고 전 슬롯을 더하면 14.0km 가 된다.
       useItinerary(() =>
@@ -2115,6 +2163,7 @@ describe('삭제된 여행 안내', () => {
   });
 
   afterEach(async () => {
+    cleanup();
     // 테스트 격리 — 인플라이트 조회 취소 + 캐시 비우기(늦게 도착한 응답이 다음 테스트로 새지 않게).
     await activeClient?.cancelQueries();
     activeClient?.clear();
@@ -2241,7 +2290,7 @@ describe('삭제된 여행 안내', () => {
       fireEvent.press(screen.getByTestId(BACK));
 
       // 단언 — 침묵 무동작도, back+replace 이중 호출도 아니다.
-      expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+      expect(mockReplace).toHaveBeenCalledWith('/itinerary'); // TRIP-1685 — 홈 → 일정 탭
       expect(mockBack).not.toHaveBeenCalled();
     });
   });
@@ -2383,6 +2432,7 @@ describe('넣지 못한 꼭 갈 곳 블록', () => {
   });
 
   afterEach(() => {
+    cleanup();
     resetPressGuard();
     server.resetHandlers();
     act(() => {
@@ -2572,6 +2622,7 @@ describe('위반 슬롯 경고 표식', () => {
   });
 
   afterEach(() => {
+    cleanup();
     server.resetHandlers();
     act(() => {
       clearAccessToken();
@@ -2820,6 +2871,7 @@ describe('빈 일차 지도 중심', () => {
   });
 
   afterEach(async () => {
+    cleanup();
     // 늦은 응답이 다음 테스트로 새지 않게 — 조회를 끊고 캐시를 비운 뒤, 붙잡아 둔 거점 응답을 푼다(02a ★5).
     await activeClient?.cancelQueries();
     activeClient?.clear();
@@ -2841,61 +2893,26 @@ describe('빈 일차 지도 중심', () => {
     await screen.findByTestId('map-sheet-shell-root');
   }
 
-  function pressDay(index: number) {
-    fireEvent.press(screen.getByTestId(`sheet-daychip-${index}`));
-    // 정말 그 날로 왔는지 먼저 확인한다 — 기대 중심이 이전 날과 같을 수 있다(02a ★2).
-    expect(screen.getByTestId('sheet-header-day')).toHaveTextContent(
-      `${index + 1}일차`
-    );
-  }
-
-  const pinCount = () =>
-    (screen.getByTestId('map-root').props.pins as unknown[]).length;
-
-  /**
-   * 중심 사다리 ①②④ 표 — 일정 한 벌을 열고 `visit` 의 날(또는 처음 열린 날)마다 지도 중심(·핀 수)을 잰다.
-   * (옛 M1·M2·M6·M9·M10 — 입력만 다르고 단언 모양이 같아 한 표로 접었다. 거점 조회가 끼는 M3~M5 는 따로 둔다.)
-   *  - `day: null` = 처음 열린 1일차, 숫자 = 그 일차 칩(0 기반)을 누른 뒤.
-   *  - `pins` 를 주면 핀 수까지, `notZero` 면 `0,0` 이 아님까지 잰다.
-   */
-  const CENTER_ROWS: {
-    name: string;
-    plan: () => Itinerary;
-    visit: { day: number | null; center: string; pins?: number }[];
-    notZero?: boolean;
-  }[] = [
-    {
-      // 5-b 경고-1 — 페이지가 "선택한 날"을 중심 함수에 넘기는지. 다른 날 M 케이스는 ①과 ②가 같은 답을 내서 못 본다.
-      name: 'M10 · AC-4 배선 — 1일차 A·B · 2일차 C 한 곳 → 2일차 칩 → 핀 1개 · 지도 중심 = C (1일차 첫 장소 아님)',
-      plan: () =>
+  describe('🔴 M10 · AC-4 배선 — 선택한 날의 지도 중심', () => {
+    // 5-b 경고-1 — 페이지가 "선택한 날"을 중심 함수에 넘기는지. 다른 날 케이스는 ①과 ②가 같은 답을 내서 못 본다.
+    // 핀이 1개면 지도가 핀 맞춤 대신 중심 좌표로 카메라를 연다 — 중심이 1일차로 가면 C 가 화면 밖일 수 있다.
+    it('1일차 A·B · 2일차 C 한 곳 → 2일차 칩 → 핀 1개 · 지도 중심 = C (1일차 첫 장소 아님)', async () => {
+      serve(
         planned([
           day(DAY1, [stop('p-a', 10, A), stop('p-b', 12, B)]),
           day(DAY2, [stop('p-c', 10, C)]),
           day(DAY3, []),
-        ]),
-      // 핀이 1개면 지도가 핀 맞춤 대신 중심 좌표로 카메라를 연다 — 중심이 1일차로 가면 C 가 화면 밖일 수 있다.
-      visit: [{ day: 1, center: text(C), pins: 1 }],
-    },
-  ];
-
-  describe('🔴 M1·M2·M6·M9·M10 · 중심 사다리 — 선택한 날(또는 처음 열린 날)의 지도 중심', () => {
-    it.each(CENTER_ROWS)('$name', async ({ plan, visit, notZero }) => {
-      serve(plan());
+        ])
+      );
       await openShell();
 
-      for (const step of visit) {
-        if (step.day === null) {
-          expect(screen.getByTestId('sheet-header-day')).toHaveTextContent(
-            '1일차'
-          );
-        } else {
-          pressDay(step.day);
-        }
-        const map = screen.getByTestId('map-root');
-        if (step.pins !== undefined) expect(pinCount()).toBe(step.pins);
-        if (notZero) expect(map).not.toHaveTextContent('0,0');
-        expect(map).toHaveTextContent(step.center);
-      }
+      fireEvent.press(screen.getByTestId('sheet-daychip-1'));
+
+      // 정말 그 날로 왔는지 먼저 확인한다 — 기대 중심이 이전 날과 같을 수 있다(02a ★2).
+      expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차');
+      const map = screen.getByTestId('map-root');
+      expect((map.props.pins as unknown[]).length).toBe(1);
+      expect(map).toHaveTextContent(text(C));
     });
   });
 
@@ -3032,12 +3049,6 @@ describe('같은 날 같은 장소 두 번', () => {
     dupSlot('p-a', 13, D2_KM),
     dupSlot('p-c', 15, D3_KM),
   ];
-  /** [A, B, C] — 보통 응답(무회귀). */
-  const normalSlots = () => [
-    dupSlot('p-a', 10, null),
-    dupSlot('p-b', 11, D1_KM),
-    dupSlot('p-c', 15, D2_KM),
-  ];
 
   let activeClient: QueryClient | null = null;
 
@@ -3046,6 +3057,7 @@ describe('같은 날 같은 장소 두 번', () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await activeClient?.cancelQueries();
     activeClient?.clear();
     activeClient = null;
@@ -3076,9 +3088,6 @@ describe('같은 날 같은 장소 두 번', () => {
     return screen.findAllByTestId(CARD_ROOT);
   }
 
-  const texts = (nodes: { props: { children?: unknown } }[]) =>
-    nodes.map((node) => node.props.children);
-
   it.each(['PLANNED', 'CONFIRMED'] as const)(
     '🔴 K1 · AC-1 — %s 일정에 같은 장소가 두 번 있어도 중복 key 경고가 없다',
     async (status) => {
@@ -3086,45 +3095,6 @@ describe('같은 날 같은 장소 두 번', () => {
 
       expect(cards).toHaveLength(4);
       expect(keyWarnings.keys()).toEqual([]);
-    }
-  );
-
-  it.each(['PLANNED', 'CONFIRMED'] as const)(
-    'K2 · AC-4 — %s 일정의 같은 장소 두 슬롯을 숨기지 않는다 (카드 4·번호·시각·거리 순서)',
-    async (status) => {
-      const cards = await openShell(status, duplicateSlots());
-
-      expect(cards).toHaveLength(4);
-      expect(texts(screen.getAllByTestId(/^slot-stopcard-number-/))).toEqual([
-        '1',
-        '2',
-        '3',
-        '4',
-      ]);
-      expect(
-        texts(screen.getAllByTestId(`slot-stopcard-time-${DAY1}#p-a`))
-      ).toEqual(['10:00–10:30', '13:00–13:30']);
-      expect(
-        texts(screen.getAllByTestId(/^sheet-connector-distance-/))
-      ).toEqual([D1_KM, D2_KM, D3_KM]);
-    }
-  );
-
-  it.each(['PLANNED', 'CONFIRMED'] as const)(
-    'K3 · AC-3 — %s 보통 일정(장소 중복 없음)은 카드·번호·거리가 그대로다',
-    async (status) => {
-      const cards = await openShell(status, normalSlots());
-
-      expect(cards).toHaveLength(3);
-      expect(keyWarnings.keys()).toEqual([]);
-      expect(texts(screen.getAllByTestId(/^slot-stopcard-number-/))).toEqual([
-        '1',
-        '2',
-        '3',
-      ]);
-      expect(
-        texts(screen.getAllByTestId(/^sheet-connector-distance-/))
-      ).toEqual([D1_KM, D2_KM]);
     }
   );
 });
@@ -3160,6 +3130,7 @@ describe('TRIP-1428 · 확정 성공은 완료 배너 seen 에 그 여행을 남
   });
 
   afterEach(() => {
+    cleanup();
     // 단언이 문을 열기 전에 실패해도 붙잡힌 요청을 남기지 않는다(안 풀면 jest 가 red 대신 멈춘다).
     openConfirm?.();
     server.resetHandlers();

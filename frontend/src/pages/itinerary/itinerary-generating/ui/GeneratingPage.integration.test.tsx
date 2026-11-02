@@ -1,10 +1,6 @@
 import type { ReactNode, ReactElement } from 'react';
-import { http, HttpResponse } from 'msw';
-import {
-  focusManager,
-  QueryClient,
-  QueryClientProvider,
-} from '@tanstack/react-query';
+import { delay, http, HttpResponse } from 'msw';
+import { focusManager, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -16,7 +12,10 @@ import {
 import { Text } from 'react-native';
 
 import { server } from '@/mocks/server';
-import { useGetTripsTripIdItinerary } from '@/shared/api/index.hooks';
+import {
+  getGetTripsTripIdItineraryQueryKey,
+  useGetTripsTripIdItinerary,
+} from '@/shared/api/index.hooks';
 import type {
   GenerateItineraryRequestGenerationMode,
   GenerationSession,
@@ -30,6 +29,13 @@ import { resolveItineraryDestination } from '@/features/itinerary';
 import { isNotFound } from '@/shared/api';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
+import {
+  itinerary as baseItinerary,
+  trip as baseTrip,
+  TRIP_ID,
+} from '@/test-support/itineraryFixtures';
+import { BASE, serveItinerary } from '@/test-support/mswItinerary';
 
 import { GeneratingPage } from './GeneratingPage';
 
@@ -79,6 +85,7 @@ const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockDismissTo = jest.fn();
 const mockBack = jest.fn();
+const mockSetParams = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: mockPush,
@@ -86,6 +93,7 @@ jest.mock('expo-router', () => ({
     dismissTo: mockDismissTo,
     back: mockBack,
     navigate: jest.fn(),
+    setParams: mockSetParams,
   }),
 }));
 
@@ -96,6 +104,7 @@ beforeEach(() => {
   mockReplace.mockClear();
   mockDismissTo.mockClear();
   mockBack.mockClear();
+  mockSetParams.mockClear();
 });
 
 // 토스트는 모듈 싱글턴이다 — 진행 중에 화면이 빠지는 케이스(홈 캐시 H1)가 띄운 토스트·타이머가
@@ -130,9 +139,7 @@ describe('다른 여행 생성 중(409) 안내', () => {
    * 3동작: 준비 = 가짜 서버 응답 차례 → 실행 = 화면을 열고 안내 버튼을 누른다 → 단언 = 얼굴·요청 순서·이동.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   /** 지금 만들려는 여행(T1)과 이미 생성 중인 다른 여행(T2), 그 생성 세션(S2). */
-  const TRIP_ID = '11111111-1111-1111-1111-111111111111';
   const ACTIVE_TRIP_ID = '22222222-2222-2222-2222-222222222222';
   const SESSION_ID = '33333333-3333-3333-3333-333333333333';
 
@@ -148,15 +155,11 @@ describe('다른 여행 생성 중(409) 안내', () => {
     tripId: string,
     generationSessionId: string | null
   ): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: `itin-${tripId}`,
       tripId,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
       generationState: 'PARTIAL',
       generationSessionId,
-      isFallback: false,
       days: [
         {
           date: '2026-06-10',
@@ -174,7 +177,7 @@ describe('다른 여행 생성 중(409) 안내', () => {
           ],
         },
       ],
-    };
+    });
   }
 
   /** 409 GENERATION_IN_PROGRESS — openapi ErrorResponse 봉투 그대로(activeTripId 는 이 code 에만 실린다). */
@@ -270,17 +273,7 @@ describe('다른 여행 생성 중(409) 안내', () => {
       targetDate?: string;
     } = {}
   ) {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
+    const client = newTestQueryClient({ gcTime: 0 });
     return render(
       <GeneratingPage
         tripId={TRIP_ID}
@@ -288,7 +281,7 @@ describe('다른 여행 생성 중(409) 안내', () => {
         successRoute={props.successRoute}
         targetDate={props.targetDate}
       />,
-      { wrapper: Wrapper }
+      { wrapper: createWrapper(client) }
     );
   }
 
@@ -326,6 +319,98 @@ describe('다른 여행 생성 중(409) 안내', () => {
       await screen.findByTestId('itinerary-generation-busy-cancel-retry')
     );
   }
+
+  // 옛 GeneratingScreen.test.tsx(뷰 단위)를 B안으로 옮겼다 — 진행 얼굴 골격·숫자 어휘 없음·펄스 원·장식 그림.
+  describe('진행 얼굴 — 골격 · 숫자 어휘 없음 · 펄스 원 · 장식 그림', () => {
+    const PULSE = /^itinerary-generating-pulse-/;
+    const ILLUSTRATION = 'itinerary-generating-illustration';
+
+    it('생성 응답 전에는 앱바·진행 바·체크리스트 3행(행마다 펄스 원 1개)·숨김 장식 그림이 서고, 퍼센트·초·소요시간이 없다', async () => {
+      // 응답이 영영 안 오는 생성 POST — 바깥 핸들러보다 앞에 끼운다(server.use). 진행 얼굴에 머문다.
+      server.use(
+        http.post(`${BASE}/trips/:tripId/itinerary`, async () => {
+          await delay('infinite');
+          return HttpResponse.json({});
+        })
+      );
+
+      renderPage();
+
+      expect(
+        await screen.findByTestId('itinerary-generating-progress')
+      ).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('itinerary-generating-appbar')
+      ).toBeOnTheScreen();
+      expect(
+        screen.queryAllByTestId(/^itinerary-generating-step-/)
+      ).toHaveLength(3);
+      ['장소 수집', '동선 계산', '시간 배치'].forEach((label) =>
+        expect(screen.getByText(label)).toBeOnTheScreen()
+      );
+      [1, 2, 3].forEach((n) => {
+        const dots = within(
+          screen.getByTestId(`itinerary-generating-step-${n}`)
+        ).getAllByTestId(PULSE);
+        expect(dots.map((dot) => dot.props.testID)).toEqual([
+          `itinerary-generating-pulse-${n}`,
+        ]);
+      });
+
+      // 장식 그림 — 카드 3장, 글자 0, 스크린리더에서 숨김(기본 질의엔 안 잡힌다).
+      const illustration = screen.getByTestId(ILLUSTRATION, {
+        includeHiddenElements: true,
+      });
+      expect(
+        within(illustration).queryAllByTestId(
+          /^itinerary-generating-illustration-card-/,
+          { includeHiddenElements: true }
+        )
+      ).toHaveLength(3);
+      expect(
+        within(illustration).queryAllByText(/.*/, {
+          includeHiddenElements: true,
+        })
+      ).toHaveLength(0);
+      expect(illustration.props.accessibilityElementsHidden).toBe(true);
+      expect(illustration.props.importantForAccessibility).toBe(
+        'no-hide-descendants'
+      );
+      expect(screen.queryByTestId(ILLUSTRATION)).toBeNull();
+
+      // 숫자 어휘 — 자리 앵커 `\d` 필수(`시간 배치` 라벨은 통과해야 한다).
+      const text = renderedText();
+      expect(text).not.toMatch(/\d\s*%/);
+      expect(text).not.toMatch(/\d\s*초/);
+      expect(text).not.toMatch(/\d\s*분|\d\s*시간/);
+      expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
+    });
+
+    it('실패 얼굴·409 안내에는 펄스 원·장식 그림이 없다', async () => {
+      postQueue = [
+        () =>
+          HttpResponse.json(
+            { error: { code: 'INTERNAL_ERROR', message: '서버 오류' } },
+            { status: 500 }
+          ),
+      ];
+      const { unmount } = renderPage();
+      await screen.findByTestId('itinerary-generating-failed');
+      expect(screen.queryAllByTestId(PULSE)).toHaveLength(0);
+      expect(
+        screen.queryByTestId(ILLUSTRATION, { includeHiddenElements: true })
+      ).toBeNull();
+      unmount();
+
+      postQueue = [busy];
+      renderPage();
+      await screen.findByTestId('itinerary-generation-busy');
+      expect(screen.queryAllByTestId(PULSE)).toHaveLength(0);
+      expect(
+        screen.queryByTestId(ILLUSTRATION, { includeHiddenElements: true })
+      ).toBeNull();
+    });
+  });
 
   describe('🔴 G1 · AC-1·AC-5·AC-10 — 다른 여행 생성 중(409)이면 일반 실패가 아니라 안내가 뜬다', () => {
     it('안내 얼굴·제목·두 버튼이 뜨고, 뜨기만 해서는 조회·취소가 0이다', async () => {
@@ -431,10 +516,19 @@ describe('다른 여행 생성 중(409) 안내', () => {
 
       const notice = await screen.findByTestId('ai-limit-notice');
       expect(
+        within(notice).getByText('오늘 AI 일정 만들기를 모두 썼어요')
+      ).toBeOnTheScreen();
+      expect(
         within(notice).getByText(/내일 00:00 이후에 다시 쓸 수 있어요/)
       ).toBeOnTheScreen();
-      expect(screen.getByTestId('ai-limit-manual-cta')).toBeOnTheScreen();
-      expect(screen.getByTestId('ai-limit-close')).toBeOnTheScreen();
+      expect(
+        within(screen.getByTestId('ai-limit-manual-cta')).getByText(
+          '직접 짜기 이어가기'
+        )
+      ).toBeOnTheScreen();
+      expect(
+        within(screen.getByTestId('ai-limit-close')).getByText('닫기')
+      ).toBeOnTheScreen();
       // 부정 — 일반 실패·409 안내·다시 시도는 없다.
       expect(screen.queryByTestId('itinerary-generating-failed')).toBeNull();
       expect(screen.queryByTestId('itinerary-generation-busy')).toBeNull();
@@ -539,20 +633,20 @@ describe('다른 여행 생성 중(409) 안내', () => {
       );
     function tripHandler(startDate: string, endDate: string) {
       return http.get(`${BASE}/trips/:tripId`, () =>
-        HttpResponse.json({
-          tripId: TRIP_ID,
-          title: '부산',
-          startDate,
-          endDate,
-          party: 1,
-          preferenceSnapshot: {},
-          destinations: [],
-          status: 'ACTIVE',
-          createdAt: '2026-10-01T00:00:00Z',
-          updatedAt: '2026-10-01T00:00:00Z',
-          baseCount: 0,
-          itineraryDayCount: 2,
-        })
+        HttpResponse.json(
+          baseTrip({
+            tripId: TRIP_ID,
+            title: '부산',
+            startDate,
+            endDate,
+            party: 1,
+            destinations: [],
+            status: 'ACTIVE',
+            createdAt: '2026-10-01T00:00:00Z',
+            updatedAt: '2026-10-01T00:00:00Z',
+            itineraryDayCount: 2,
+          })
+        )
       );
     }
 
@@ -844,19 +938,14 @@ describe('생성 성공 → 홈 일정 캐시', () => {
    * 단언 = 홈 대역이 본 목적지·이동 횟수.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   const TRIP_ID = '55555555-5555-5555-5555-555555555555';
 
   /** 생성 응답(201) = 1일차가 도착한 일정(PARTIAL). openapi `Itinerary` 필수 필드를 채운다. */
   function generatedItinerary(): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: 'itin-home-cache',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
       generationState: 'PARTIAL',
-      isFallback: false,
       days: [
         {
           date: '2026-06-10',
@@ -874,7 +963,7 @@ describe('생성 성공 → 홈 일정 캐시', () => {
           ],
         },
       ],
-    };
+    });
   }
 
   /** 케이스가 손으로 풀어 주는 생성 POST — 풀기 전까지 응답이 오지 않는다("수 분 걸리는 생성"). */
@@ -947,18 +1036,8 @@ describe('생성 성공 → 홈 일정 캐시', () => {
   }
 
   function renderHost() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return render(<Host showGenerating />, { wrapper: Wrapper });
+    const client = newTestQueryClient({ gcTime: 0 });
+    return render(<Host showGenerating />, { wrapper: createWrapper(client) });
   }
 
   /** 준비 공통 — 홈 대역이 404 로 정착('method')하고 생성 POST 가 서버에 닿을 때까지 기다린다. */
@@ -1040,18 +1119,13 @@ describe('관찰 모드(mode 없음)', () => {
    * 3동작: 준비 = 가짜 서버 응답 → 실행 = mode 없이 화면을 연다(필요하면 다시 시도) → 단언 = 이동·요청 수.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   const TRIP_ID = '44444444-4444-4444-4444-444444444444';
 
   function itinerary(generationState: ItineraryGenerationState): Itinerary {
-    return {
+    return baseItinerary({
       itineraryId: 'itin-observe',
       tripId: TRIP_ID,
-      status: 'PLANNED',
-      solveMode: 'FULL_AI',
-      generationMode: 'FULLY_AI',
       generationState,
-      isFallback: false,
       days: [
         {
           date: '2026-06-10',
@@ -1069,7 +1143,7 @@ describe('관찰 모드(mode 없음)', () => {
           ],
         },
       ],
-    };
+    });
   }
 
   /** 케이스가 바꿔 끼우는 일정 GET 응답(핸들러가 요청 시점에 읽는다). */
@@ -1086,11 +1160,13 @@ describe('관찰 모드(mode 없음)', () => {
     setAccessToken('valid-access');
     itineraryHandler = () => HttpResponse.json(itinerary('PARTIAL'));
 
-    server.use(
-      http.get(`${BASE}/trips/:tripId/itinerary`, () => {
+    serveItinerary(server, {
+      itinerary: () => {
         getCalls += 1;
         return itineraryHandler();
-      }),
+      },
+    });
+    server.use(
       // 생성 POST — 나가면 안 된다. 핸들러를 두는 이유는 "나갔다"를 세기 위해서다(없으면 요청이
       // 미처리 오류로 사라져 수를 못 센다).
       http.post(`${BASE}/trips/:tripId/itinerary`, () => {
@@ -1106,19 +1182,11 @@ describe('관찰 모드(mode 없음)', () => {
   });
 
   function renderObserver() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
+    const client = newTestQueryClient({ gcTime: 0 });
     // mode 를 **주지 않는다** — 이것이 관찰 모드의 신호다.
-    return render(<GeneratingPage tripId={TRIP_ID} />, { wrapper: Wrapper });
+    return render(<GeneratingPage tripId={TRIP_ID} />, {
+      wrapper: createWrapper(client),
+    });
   }
 
   /** "안 나갔다"는 나갈 시간을 준 뒤에야 의미가 있다(02a ★4). */
@@ -1261,7 +1329,6 @@ describe('재계획 모드(replan)', () => {
    * 3동작: 준비 = 가짜 서버(시작·세션 차례·apply) → 실행 = replan 으로 화면을 연다(필요하면 버튼) → 단언 = 본문·요청 수·이동·얼굴.
    */
 
-  const BASE = 'http://localhost:8080/api/v1';
   const TRIP_ID = '55555555-5555-5555-5555-555555555555';
   const SESSION_ID = '66666666-6666-6666-6666-666666666666';
   const SESSION_ID_2 = '77777777-7777-7777-7777-777777777777';
@@ -1368,12 +1435,7 @@ describe('재계획 모드(replan)', () => {
   });
 
   function renderReplan(targetDate?: string) {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     // 토스트 호스트를 곁에 둔다 — ‹ 토스트(RB)를 "보였다"로 잰다(TRIP-990 하네스).
     function Wrapper({ children }: { children: ReactNode }) {
       return (
@@ -1753,3 +1815,157 @@ describe('재계획 모드(replan)', () => {
 });
 
 // TRIP-1268 · AI 일정 생성 일일 한도 — 클라이언트 임시 장치(BE 일일 한도 + 429 처리 FE 칸이 배포되면 지운다).
+
+/**
+ * TRIP-1690 형식 검증 반례(verify-fv-polling R1·R1b·R3·R4) — 생성 POST 와 일정 GET 이 섞이는 순서.
+ * 가짜 서버는 백엔드 규칙만 흉내 낸다: POST 를 받으면 세션을 새로 열고(A1), 1일차를 저장하면 행이 PARTIAL(A2).
+ * 3동작: 준비 = 서버 행·지연 → 실행 = 생성 화면 렌더·이탈·연타·재마운트 → 단언 = 캐시·요청 수·주소 정리.
+ */
+describe('FV-POLL — 생성 POST 와 일정 조회 순서 (TRIP-1690)', () => {
+  const OLD: Itinerary = baseItinerary({
+    itineraryId: 'itin-old',
+    generationState: 'COMPLETE',
+    generationSessionId: null,
+  });
+  const partial = (session: string | null): Itinerary =>
+    baseItinerary({
+      itineraryId: 'itin-new',
+      generationState: 'PARTIAL',
+      generationSessionId: session,
+    });
+  let row: Itinerary;
+  let running: string | null;
+  let gets: number;
+  let posts: number;
+  let getDelay: (n: number) => number;
+  let postReply: (n: number) => Promise<Response>;
+
+  beforeEach(() => {
+    row = OLD;
+    running = null;
+    gets = 0;
+    posts = 0;
+    getDelay = () => 0;
+    postReply = async (n) => {
+      await delay(50);
+      row = partial(`sess-${n}`);
+      return HttpResponse.json(row, { status: 201 });
+    };
+    setAccessToken('valid-access');
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, async () => {
+        gets += 1;
+        const snap = { ...row, generationSessionId: running };
+        await delay(getDelay(gets));
+        return HttpResponse.json(snap);
+      }),
+      http.post(`${BASE}/trips/:tripId/itinerary`, () => {
+        posts += 1;
+        running = `sess-${posts}`;
+        return postReply(posts);
+      })
+    );
+  });
+  afterEach(() => {
+    server.resetHandlers();
+    clearAccessToken();
+  });
+
+  const sleep = (ms: number) =>
+    act(() => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const KEY = getGetTripsTripIdItineraryQueryKey(TRIP_ID);
+  const holder: { refetch: (() => Promise<unknown>) | null } = {
+    refetch: null,
+  };
+  /** 생성 화면 밑에 깔린 홈 탭의 일정 관찰자 — 포커스 복귀 재조회를 테스트가 직접 일으킨다. */
+  function HomeObserver(): null {
+    holder.refetch = useGetTripsTripIdItinerary(TRIP_ID).refetch;
+    return null;
+  }
+
+  it('R1 POST 응답 전에 나간 늦은 GET 이 1일차(PARTIAL)를 예전 완성본으로 덮지 않는다', async () => {
+    const client = newTestQueryClient({ staleTime: 30_000 });
+    client.setQueryData(KEY, OLD);
+    getDelay = (n) => (n === 1 ? 400 : 0);
+    render(<HomeObserver />, { wrapper: createWrapper(client) });
+    void act(() => void holder.refetch?.());
+    await waitFor(() => expect(gets).toBe(1));
+
+    const gen = render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />, {
+      wrapper: createWrapper(client),
+    });
+    await waitFor(() =>
+      expect(JSON.stringify(mockReplace.mock.calls)).toContain(
+        '/itinerary/draft'
+      )
+    );
+    gen.unmount();
+    await sleep(500);
+
+    expect(client.getQueryData<Itinerary>(KEY)?.itineraryId).toBe('itin-new');
+    expect(client.getQueryData<Itinerary>(KEY)?.generationState).toBe(
+      'PARTIAL'
+    );
+  }, 20000);
+
+  it('R1b 화면을 떠난 뒤 POST 가 네트워크로 끊기면 일정을 다시 물어 서버의 새 1일차를 본다', async () => {
+    const client = newTestQueryClient({ staleTime: 30_000 });
+    client.setQueryData(KEY, OLD);
+    let finishPost!: () => void;
+    postReply = async () => {
+      await new Promise<void>((resolve) => (finishPost = resolve));
+      row = partial(running);
+      return HttpResponse.error();
+    };
+    render(<HomeObserver />, { wrapper: createWrapper(client) });
+    const gen = render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />, {
+      wrapper: createWrapper(client),
+    });
+    await waitFor(() => expect(posts).toBe(1));
+    gen.unmount();
+    expect(gets).toBe(0); // 앵커 — 캐시가 신선해 아무도 아직 안 묻는다
+
+    await act(async () => finishPost());
+    await waitFor(() => expect(gets).toBe(1));
+    await waitFor(() =>
+      expect(client.getQueryData<Itinerary>(KEY)?.itineraryId).toBe('itin-new')
+    );
+  }, 20000);
+
+  it('R3 실패 얼굴 [다시 시도]를 다시 그려지기 전에 두 번 쳐도 POST 는 한 건만 더 나간다', async () => {
+    postReply = async (n) =>
+      n === 1
+        ? HttpResponse.json({}, { status: 500 })
+        : new Promise<Response>(() => undefined);
+    render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />, {
+      wrapper: createWrapper(newTestQueryClient()),
+    });
+    const retry = await screen.findByTestId('itinerary-generating-retry');
+    act(() => {
+      fireEvent.press(retry);
+      fireEvent.press(retry);
+    });
+    await waitFor(() => expect(posts).toBe(2));
+    await sleep(100);
+    expect(posts).toBe(2);
+  }, 20000);
+
+  it('R4 생성을 쏜 뒤 주소에서 mode 를 지운다 — 새로고침하면 관찰 모드로 뜬다 · 주소가 바뀌어도 이 화면은 생성 화면 그대로다', async () => {
+    postReply = () => new Promise<Response>(() => undefined);
+    const view = render(<GeneratingPage tripId={TRIP_ID} mode="FULLY_AI" />, {
+      wrapper: createWrapper(newTestQueryClient()),
+    });
+    await waitFor(() => expect(posts).toBe(1));
+    expect(mockSetParams).toHaveBeenCalledTimes(1);
+    expect(mockSetParams).toHaveBeenCalledWith({ mode: undefined });
+
+    // 주소 정리로 라우트가 mode 없이 다시 그린다 — 이 화면은 관찰 모드(GET)로 바뀌지 않는다.
+    view.rerender(<GeneratingPage tripId={TRIP_ID} mode={undefined} />);
+    await sleep(100);
+    expect(
+      screen.getByTestId('itinerary-generating-progress')
+    ).toBeOnTheScreen();
+    expect(gets).toBe(0);
+    expect(posts).toBe(1);
+  }, 20000);
+});

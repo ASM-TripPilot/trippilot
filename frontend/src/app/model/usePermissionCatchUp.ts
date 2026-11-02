@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as Location from 'expo-location';
+import { Platform } from 'react-native';
 import { router, useNavigationContainerRef } from 'expo-router';
 
 import type { BootstrapDestination } from '@/features/auth/index.view';
@@ -29,6 +30,8 @@ async function isUndetermined(read: () => Promise<boolean>): Promise<boolean> {
  * "봤음" 표식을 읽다 실패하면 이미 본 것으로 접는다(알 수 없으면 안내하지 않는다). 절대 reject 하지 않는다.
  */
 async function lookUp(): Promise<Undetermined> {
+  // TRIP-1648 · 웹엔 OS 권한 안내가 없다 — 위치·푸시·표식을 읽지 않고 "안내 없음". 모듈 로드 때가 아니라 호출 때 읽는다(테스트가 바꾼다).
+  if (Platform.OS === 'web') return NOTHING;
   const [location, push, seen] = await Promise.all([
     isUndetermined(
       async () =>

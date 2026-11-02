@@ -45,21 +45,18 @@ import type { StayDetail } from '@/shared/api/index.schemas';
  * 시작한 요청 전부를 기다리므로 [예약하기]를 누를 땐 상세 조회도 끝나 있다.
  */
 
-const mockPush = jest.fn();
-const mockBack = jest.fn();
 let mockSearchParams: { stayId?: string; item?: string } = {};
 
 // SettingsPage 는 press 시점에 require('expo-router').router 를, StayDetailPage 는 useRouter·
 // useLocalSearchParams 를 쓴다 — 두 모양을 함께 준다.
-jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({ ...mockSearchParams }),
-  useRouter: () => ({ push: mockPush, back: mockBack, replace: jest.fn() }),
-  router: {
-    push: (...args: unknown[]) => mockPush(...args),
-    back: (...args: unknown[]) => mockBack(...args),
-    replace: jest.fn(),
-  },
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+    router: ['push', 'replace', 'back'],
+    params: () => ({ ...mockSearchParams }),
+  })
+);
 
 jest.mock('expo-linking', () => ({
   openURL: jest.fn().mockResolvedValue(true),

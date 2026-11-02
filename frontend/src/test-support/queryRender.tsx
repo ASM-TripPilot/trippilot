@@ -11,13 +11,19 @@ import { act, render } from '@testing-library/react-native';
  */
 
 /** 재시도 0 · 캐시 유지(기본 `Infinity`) 테스트용 클라이언트. 언마운트 직후 캐시를 비워야 하면 `gcTime: 0` —
- * mutations 에도 같이 걸린다(mutation 기본 gcTime 5분 타이머가 테스트 종료 뒤 Node 를 붙잡는다, TRIP-1355). */
+ * mutations 에도 같이 걸린다(mutation 기본 gcTime 5분 타이머가 테스트 종료 뒤 Node 를 붙잡는다, TRIP-1355).
+ * `staleTime` 은 조회에만 걸리고 안 주면 키 자체를 넣지 않는다(라이브러리 기본 0). */
 export function newTestQueryClient({
   gcTime = Infinity,
-}: { gcTime?: number } = {}): QueryClient {
+  staleTime,
+}: { gcTime?: number; staleTime?: number } = {}): QueryClient {
   return new QueryClient({
     defaultOptions: {
-      queries: { retry: false, gcTime },
+      queries: {
+        retry: false,
+        gcTime,
+        ...(staleTime !== undefined ? { staleTime } : {}),
+      },
       mutations: { retry: false, gcTime },
     },
   });

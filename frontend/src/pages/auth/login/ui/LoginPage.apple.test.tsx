@@ -53,17 +53,15 @@ jest.mock('@/shared/api', () => ({
   postSocialLogin: jest.fn(),
   postSocialTokenLogin: jest.fn(),
 }));
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-}));
-jest.mock('expo-router', () => {
-  const replace = jest.fn();
-  return {
-    __esModule: true,
-    useRouter: () => ({ replace, push: jest.fn(), back: jest.fn() }),
-    router: { replace, push: jest.fn(), back: jest.fn() },
-  };
-});
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+    router: ['push', 'replace', 'back'],
+  })
+);
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const mockReplace = require('expo-router').router.replace as jest.Mock;

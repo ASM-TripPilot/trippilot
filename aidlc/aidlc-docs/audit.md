@@ -1903,3 +1903,85 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **Context**: CONSTRUCTION — situation-awareness NFR Requirements 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
 
 ---
+
+## Functional Design·NFR Requirements 사후 개정 — situation-awareness 정본 기록 정리 (BLM §9·§10 · BR §11 · NFR §7)
+**Timestamp**: 2026-10-30T12:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문) "지적받은것중에 처리 안한거 있는지 다 확인해봐바!! 모든 세션들에게 다 뒤져보라고해!"
+**AI Response**: 정본 전수 대조(origin/develop 1f5600380). 블록 4개를 덧붙였다(원문·기존 블록 삭제·수정 0줄).
+- `functional-design/business-logic-model.md` §9: 코드로 닫혔는데 해소 줄이 없던 G-SA-1·2·3·4·6·9·10·13·14
+- `functional-design/business-logic-model.md` §10: O-SA-2~15 확정 기록 · 남은 O-SA-13·14
+- `functional-design/business-rules.md` §11: 같은 기록을 가리키는 줄
+- `nfr-requirements/nfr-requirements.md` §7: 켜는 순서 판독값(코드 밖 사실)
+코드 변경 없음(TRIP-1660).
+**Context**: CONSTRUCTION — situation-awareness Functional Design·NFR Requirements 사후 개정(기록 정리), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — U5 공유 카드 서버 AI 문구 경로 (frontend-components §7)
+**Timestamp**: 2026-10-30T12:21:09+09:00 (작업 시점)
+**User Input**: (사용자 원문) "정본 반영 해줘" — 같은 사이클(앱 세션, 공유 카드 서버 문구 구현) 설계 단계 3-a 에서 사용자가 고른 정본 반영 항목 ④-1 의 승인이다.
+**AI Response**: `construction/u5-records-reflection/functional-design/frontend-components.md` §7 폼 검증 표 바로 아래에 `[개정 · 2026-10-30]` 블록 1개를 덧붙였다(원문 표·기존 줄 삭제·수정 0줄). 내용: 공유 카드 얼굴이 처음 그려질 때 `POST /trips/{tripId}/share-card/copy` 를 1회 호출 · 응답 처리(`isFallback`·빈 해시태그 대체) · 429 두 갈래(`SHARE_CARD_DAILY_LIMIT` 재시도 없음 / `RATE_LIMITED` `Retry-After` 뒤 1회) · 그 밖 실패의 조용한 대체 · 고친 해시태그 보존. 근거를 외부 사실(openapi `ShareCardCopy`)과 우리가 정한 구현 결정(호출 시점·재시도 규칙·고친 값 보존·한도 안내 문구)으로 갈라 적었다. 코드 변경 없음(구현은 별도 PR #1685).
+**Context**: CONSTRUCTION — U5 Functional Design 사후 개정(구현 반영). 사용자 승인("정본 반영 해줘") 뒤 같은 PR 머지로 확정(#1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — situation-awareness 판단 기록 (BR-SA-07·08 · BLM §4.3·§10)
+**Timestamp**: 2026-10-30T14:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문) "뭐를 하라고?? 결정이 필요한것들은 웬만해서는 다 진행하는 방향으로 하자"
+**AI Response**: 열려 있던 판단을 추천안으로 닫고 블록 4개를 덧붙였다(원문·기존 블록 삭제·수정 0줄) — `functional-design/business-rules.md` BR-SA-07(만료 기준을 코드의 '끝 시각'에 맞춤) · BR-SA-08(폐업 승격은 제자리 갱신만 — 시도했다가 블로킹 PBT T-D1-P1·P4 약화가 필요해 두었다) · `functional-design/business-logic-model.md` §4.3(만료 기준 정정) · §10(O-SA-6 유지·O-SA-13 관찰·FE-A 잔상 수용·작은 후속 보류 기록). `TriggerLifecycleTest` 에 현재 동작을 고정하는 시험 2건을 더했다. 운영 코드 변경은 없다. 또 #1689 가 NFR §7 판독 기록에 쓴 요일 표기('평일 12:00~19:00')를 실제 값(화~토, `day_of_week` 월=0)으로 정정했다. TRIP-1675.
+**Context**: CONSTRUCTION — situation-awareness Functional Design 사후 개정(판단 기록), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design·NFR Design 사후 개정 — 매거진·재계획 비교 화면 삭제 반영 (U1·U4·U8)
+**Timestamp**: 2026-11-01T22:10:00+09:00 (작업 시점)
+**User Input**: (사용자 원문) "1742 머지 -> aidlc 정리 -> 버그 원인만 파악 -> …" · "7 2 12 10 11 실수 방지하고 1742 머지하고 계속 ㄱ" — 같은 날 화면 삭제 결정("매거진 화면, 재계획 비교(planb/diff)")의 정본 반영이다.
+**AI Response**: 지운 화면을 가리키던 정본 5곳에 `[개정 · 2026-11-01]` 블록을 덧붙였다(원문·기존 블록 삭제·수정 0줄).
+- `construction/u1-accommodation-trip/functional-design/frontend-components.md` — `magazine.tsx` 삭제
+- `construction/u4-in-trip-planb/functional-design/frontend-components.md` §1·§2 — `planb/diff`(i18·i19) 삭제, 실재 슬라이스 5개, 확정은 `planb-draft` [적용하기] 하나
+- `construction/u4-in-trip-planb/functional-design/business-logic-model.md` — 흐름도의 「i18 비교 → 확정 → i19」 화면 없음, i13 [이대로 적용]이 확정
+- `construction/u4-in-trip-planb/nfr-design/nfr-design-patterns.md` — `useApplyReplan` 호출 화면(PlanbDraftPage·GeneratingPage)
+- `construction/u8-conversational-assistant/functional-design/business-logic-model.md` — 「재계획 확정은 `planb/diff`」 낡음
+코드 변경은 같은 PR(#1743)의 화면 삭제다.
+**Context**: CONSTRUCTION — U1·U4·U8 설계 문서 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — U4 재계획에서 그날 건너뛴 곳 제외 (BR-U4-17)
+**Timestamp**: 2026-11-01T23:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문) "버그 3건 고쳐라" — 같은 날 버그 원인 리포트(P2: 재계획이 그날 이미 건너뛴 곳을 다시 넣는다)를 서버에서 고치기로 한 결정의 정본 반영이다.
+**AI Response**: `construction/u4-in-trip-planb/functional-design/business-rules.md` §3 표(BR-U4-17~27) 바로 아래에 `[개정 · 2026-11-01]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 대상 일자에 건너뛴 POI 는 서버가 산출 시점에 실적(`ArchiveFacade.getSkippedPois`)을 읽어 `excludedPoiIds` 에 앱 값과 합집합으로 싣는다 · 다른 날 건너뜀은 빼지 않는다 · 잠금 규칙(BR-U4-18·INV-U4-04)은 그대로 · §3.1 `excludedPoiIds` 의 뜻은 유지하고 채우는 주체에 서버 실적 수집이 더해진다 · AI 가 제외를 원 일정 슬롯보다 우선함을 확인했다. 코드 변경은 같은 브랜치의 `fix(be)` 커밋이다.
+**Context**: CONSTRUCTION — U4 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — U10 수동 허브 [도착] 술어·완료 중 잠금 (BR-U10-54·55)
+**Timestamp**: 2026-11-01T23:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문) "버그 3건 고쳐라" — 방문 체크 결함 원인 확인(P1·P2·P3) 뒤 앱 2건(P1·P3)은 앱에서 고친다는 결정이다.
+**AI Response**: `construction/u10-gps-location-automation/functional-design/business-rules.md` TRIP-1561 개정 블록 뒤에 `[개정 · 2026-11-01 · 방문 체크 결함 수정]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: BR-U10-54 건너뜀 제외는 진행 중 여부와 무관(FM-L4-01) · BR-U10-55 단독 [방문 완료]가 도는 동안에도 [도착] 잠금(이중 진행 중). 코드 변경은 같은 브랜치(`fix/FE-visit-flow-bugs`)의 `LiveHubView.tsx` `canArriveAt` · `LiveItineraryPage.tsx` `pressArrive` 수정이다. P2(재계획이 건너뛴 곳을 다시 넣음)는 서버 몫이라 여기서 다루지 않았다.
+**Context**: CONSTRUCTION — U10 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+---
+
+## Functional Design 사후 개정 — U0 동의 증적 멱등 (BR-U0-12)
+**Timestamp**: 2026-11-02T03:00:00+09:00 (작업 시점)
+**User Input**: (사용자 원문) "ㄱㄱ" — 같은 날 형식 검증 리포트(FV-CONSENT-01: 개인화 연타·두 기기 동시 요청이 같은 동의 증적을 2줄 남긴다)의 서버 수정 승인이다.
+**AI Response**: `construction/u0-foundation/functional-design/business-rules.md` 동의·약관 표(BR-U0-10~14) 바로 아래에 `[개정 · 2026-11-02 · TRIP-1689]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 최신 증적과 같은 버전·같은 동작이면 기록하지 않음(200 무기록, 위치 `update` 선례) · 적용 경로 3곳(온보딩·개별 변경·마케팅 토글) · 동시 요청은 계정 단위 권고 잠금 뒤 판정 · 행 잠금·유니크 제약을 쓰지 않은 이유. 코드 변경은 같은 브랜치(`fix/BE-TRIP-1689-consent-dedupe`)의 `fix(be)` 커밋이다. 참고: 이 파일 바로 앞 줄의 `||||||| 99b4b7492` 는 #1748 에서 섞여 들어온 병합 잔재로, append-only 규칙에 따라 지우지 않았다.
+**Context**: CONSTRUCTION — U0 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — U1 거점 숙소 여행 지역 제한 (TRIP-1703)
+**Timestamp**: 2026-11-02T22:00:00+09:00 (작업 시점)
+**User Input**: (사용자 결정 2026-11-02) "지역 밖 숙소를 거점으로 고르는 것은 막는다" — 11-01 웹 QA S-01(서울 여행 + 부산 거점 → 872km) 수정 결정이다.
+**AI Response**: `construction/u1-accommodation-trip/functional-design/business-rules.md` 저장·등록·거점 절의 TRIP-1052 원문 보존 인용 바로 아래에 `[개정 · 2026-11-02, TRIP-1703]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 거점은 여행 지역 안 숙소만(INV-U1-21 코드 양방향 접두사, 목적지 하나에라도 들면 안) · 판정 불가는 막지 않음(fail-open) · 서버 409 `STAY_OUTSIDE_TRIP_REGION` 이 정본, 시트 후보 제외는 UX 사본 · FE TRIP-1011 D8 "숨기지 않는다"를 뒤집음 · 기존 배정 소급 삭제 없음. 코드 변경은 같은 브랜치(`fix/TRIP-1691-BE-batch`)의 `fix(be)` 커밋이다. 이 항목 위의 develop 판 병합 정리(#1758)를 그대로 받아 그 끝에 덧붙였다.
+
+---
+
+## Functional Design 사후 개정 — U1 거점 숙소는 그 밤 여행 지역 안만 (TRIP-1703)
+**Timestamp**: 2026-11-02T04:17:00+09:00 (작업 시점)
+**User Input**: (사용자 원문, 2026-11-02 결정) "지역 밖 숙소를 거점으로 고르는 것은 막는다" — 11-01 웹 QA(서울 1박 여행에 부산 숙소를 거점으로 지정 → 1일차가 부산 장소·일과 밖 시각) 결함 수정 결정이다. TRIP-1011 D8 「숨기지 않는다」를 뒤집는다.
+**AI Response**: `construction/u1-accommodation-trip/functional-design/business-rules.md` 「저장·등록·거점 (BR-U1-19~28 · 59)」 절 끝(제휴 링크 절 바로 앞)에 `[개정 · 2026-11-02 · TRIP-1703]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 거점 시트(g02) 후보는 그 밤 지역 안으로 확인된 저장 숙소 · 지역 밖으로 확인된 숙소는 후보에서 뺀다(흐림 아님) · 주소 모름·조회 중은 「위치 확인 안 됨」으로 보이고 서버가 최종 판정 · [지정] 직전 가드 · 지역 안 0곳이면 지역 안내 + 둘러보기 · 서버 거부는 같은 결정의 BE 칸 몫 · 동명 시군구 한계. BR 번호는 붙이지 않았다(같은 결정의 BE 칸이 따로 정본을 고칠 수 있어 번호 충돌을 피함). 코드 변경은 같은 브랜치(`fix/TRIP-1691-FE-misc`)의 `fix(fe)` 커밋(TRIP-1703)이다. 이 파일은 develop(#1758 병합 잔재 정리 뒤) 판에 맞춘 뒤 덧붙였다.
+**Context**: CONSTRUCTION — U1 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.

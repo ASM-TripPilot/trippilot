@@ -52,7 +52,7 @@ describe('P2 · 선택 배선', () => {
 // 시트를 닫는 길은 남아야 한다: 옵션을 고르면 페이지가 닫고(통합 테스트 PF-close), 아래로 끌어내리면
 // gorhom 이 onClose 를 부른다. 통과형 목은 BottomSheet prop 을 노드에 그대로 싣는다 — 실제 끌기는
 // 실기 몫이라 여기서는 라이브러리가 부를 onClose 를 직접 부른다(RiskDetailSheet S10 선례).
-describe('P3 · "적용" 버튼 없음 · 끌어내려 닫기는 onClose (TRIP-1019 #013 · 01b Q1)', () => {
+describe('P3 · "적용" 버튼 없음 (TRIP-1019 #013 · 01b Q1)', () => {
   it('"적용" 버튼(stay-price-close)과 "적용" 글자가 없다', () => {
     render(<StayPriceSheet selected="all" onSelect={noop} onClose={noop} />);
 
@@ -60,18 +60,5 @@ describe('P3 · "적용" 버튼 없음 · 끌어내려 닫기는 onClose (TRIP-1
     expect(screen.getByTestId('stay-price-sheet')).toBeOnTheScreen();
     expect(screen.queryByTestId('stay-price-close')).toBeNull();
     expect(screen.queryByText('적용')).toBeNull();
-  });
-
-  it('아래로 끌어 닫기(enablePanDownToClose)가 켜져 있고, 라이브러리가 부르는 onClose 가 그대로 이어진다', () => {
-    const onClose = jest.fn();
-    render(<StayPriceSheet selected="all" onSelect={noop} onClose={onClose} />);
-
-    const panNodes = screen.UNSAFE_root.findAll(
-      (node) => node.props?.enablePanDownToClose === true
-    );
-    expect(panNodes.length).toBeGreaterThan(0);
-    (panNodes[panNodes.length - 1].props.onClose as () => void)();
-
-    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

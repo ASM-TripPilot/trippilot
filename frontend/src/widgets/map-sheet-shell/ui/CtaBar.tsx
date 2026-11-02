@@ -28,7 +28,7 @@ export interface CtaBarProps {
 
 // CTA 바 높이 — pt-md(12) + 버튼 52 + pb-lg(16) + 윗선 ≈ 81.3pt(TRIP-1112 실기 실측)를 올림.
 // 바가 시트 위에 떠 있으므로, 스크롤 끝 내용이 바 뒤에 숨지 않게 본문 하단 여백으로 쓴다(셸·편집기).
-// 출처: 아래 바 className `pt-md`·`pb-lg` + 버튼 `h-[52px]`(토스트 바닥도 이 값 위로 뜬다 — TRIP-1559).
+// 출처: 아래 바 className `pt-md`·`pb-lg` + 버튼 `min-h-[52px]`(토스트 바닥도 이 값 위로 뜬다 — TRIP-1559).
 // jest 는 값을 잠그지 않으니 그 className 을 바꾸면 이 값도 맞추고 실화면(6-b)으로 확인.
 export const CTA_BAR_HEIGHT = 82;
 
@@ -60,7 +60,7 @@ export function CtaBar({ buttons }: CtaBarProps): ReactElement {
             accessibilityRole="button"
             onPress={button.onPress}
             disabled={disabled}
-            className={`h-[52px] items-center justify-center rounded-card ${shape}`}
+            className={`min-h-[52px] items-center justify-center rounded-card ${shape}`}
           >
             <Text
               className={`font-noto-bold text-[16px] font-bold ${primary ? 'text-on-primary' : 'text-ink'}`}

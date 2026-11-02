@@ -33,7 +33,7 @@ from tests.agents.schedule.test_schedule_agent import _scored, _solution
 from tests.fakes.fake_clock import FakeClock
 from tests.fakes.fake_llm import FakeLlm
 from tests.fakes.in_memory_trace import InMemoryTrace
-from tests.orchestrator.test_schedule_coordinator import (
+from tests.orchestrator.schedule.test_schedule_coordinator import (
     _C1CFG,
     _DAY1,
     _KST,

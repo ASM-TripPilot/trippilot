@@ -171,3 +171,30 @@ def test_장소_지식_검색이_죽으면_폴백_이벤트가_남는다() -> No
     rag = [e for e in trace.of_type(FallbackEvent) if e.component == "planb.rag"]
     assert {e.reason.split(":")[0] for e in rag} >= {"retrieve_situation_error", "place_knowledge_unavailable"}, rag
     assert all(e.trace_id == "kb5-wire" for e in rag)
+
+
+def test_대체_문서는_진짜_문서와_따로_세어_응답까지_간다(monkeypatch) -> None:
+    """KB-5 대체 문서(2026-10-23) — 경계에서 응답 `retrieved` 까지 줄 전체. 어느 고리가 `PlaceKnowledge` 를 `dict(...)` 로
+    감싸면 대체 문서 수가 사라져 POI_DESC 에 섞인다(KB-5 담당 세션 리뷰 ①) — 그러면 여기가 빨개진다."""
+    from trippilot.poi_curation import place_fallback
+
+    seed = demo_poi_seed()
+    real, rest = seed[: len(seed) // 2], seed[len(seed) // 2:]
+    embedding, store = FakeEmbedding(dim=32), InMemoryVectorStore()
+    index_documents(tuple(make_doc("overview", str(p.source_ref), _doc_text(p.name)) for p in real), embedding, store)
+    cards = {str(p.source_ref): f"대표메뉴 {p.name} 정식. 주차 가능." for p in rest}
+    monkeypatch.setenv(place_fallback.SWITCH, "on")
+    monkeypatch.setattr(place_fallback, "fallback_docs", lambda: cards)
+    spy = _PromptSpy()
+    client = TestClient(build_dev_app(llm=spy, model_id="test-model", vector_store=store, embedding=embedding),
+                        raise_server_exceptions=False)
+    with client:
+        response = client.post("/ai/v1/planb/alternatives", json=_body())
+
+    assert response.status_code == 200, response.text
+    docs = [line[2:].split(" | ")[3] for line in _candidate_lines(spy.prompts[0]) if line.count(" | ") == 3]
+    want_fallback = sum(d.startswith("대표메뉴") for d in docs)
+    assert want_fallback, "대체 문서가 후보 줄에 안 실렸다"
+    retrieved = response.json()["retrieved"]
+    assert retrieved["POI_DESC"] == len(docs) - want_fallback
+    assert retrieved["POI_DESC_FALLBACK"] == want_fallback

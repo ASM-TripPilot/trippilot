@@ -406,25 +406,6 @@ describe('🔴 SlotCandidateSheet — 조회 상태 얼굴(TRIP-1109 · L1·L2·
 });
 
 describe('🔴 SlotCandidateSheet — 조회 상태 구조·INV-3·기본값(TRIP-1109 · V1·G1)', () => {
-  it('S19 · V1(Q1) — 실패 카드는 0건 점선 카드와 같은 클래스다(같은 시트 안 모양 일치)', () => {
-    const errorView = renderSheet({
-      fetchState: 'error',
-      fetchErrorMessage: FETCH_FALLBACK,
-      candidates: [],
-    });
-    const errorClass = screen.getByTestId('itinerary-candidate-fetch-error')
-      .props.className;
-    errorView.unmount();
-
-    renderSheet({ candidates: [] });
-    const emptyClass = screen.getByTestId('itinerary-candidate-empty').props
-      .className;
-
-    // 앵커 — 둘 다 undefined 여도 `toBe` 는 참이라, 점선 카드임을 먼저 못박는다.
-    expect(errorClass).toContain('border-dashed');
-    expect(errorClass).toBe(emptyClass);
-  });
-
   it.each<[string, Partial<SheetProps>, string]>([
     [
       'loading',

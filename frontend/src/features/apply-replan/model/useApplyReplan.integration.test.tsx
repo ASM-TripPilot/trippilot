@@ -12,7 +12,11 @@ import type { Trigger, TriggerList } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { BASE } from '@/test-support/apiBase';
 import { createGate } from '@/test-support/mswHookHarness';
-import { createWrapper, settle } from '@/test-support/queryRender';
+import {
+  createWrapper,
+  settle,
+  newTestQueryClient,
+} from '@/test-support/queryRender';
 
 import { useApplyReplan } from './useApplyReplan';
 
@@ -24,7 +28,7 @@ import { useApplyReplan } from './useApplyReplan';
  * 소비(CONSUMED)는 릴레이(2초 주기)가 배달한 뒤 `ReplanAppliedSubscriber` 가 한다. 그래서 적용 직후 다시 받은 목록엔 그
  * 트리거가 아직 있다 — 가짜 서버가 그 상태(소비 전)를 그대로 돌려준다. 무효화만 하면 그 목록이 새것으로 남아 알약이 그대로다.
  *
- * 왜 따로 두나: 페이지 테스트(`PlanbDraftPage`·`PlanbDiffPage` 통합)는 이 seam 을 통째로 목으로 바꿔 끼워, 확정 뒤 캐시에
+ * 왜 따로 두나: 페이지 테스트(`PlanbDraftPage` 통합)는 이 seam 을 통째로 목으로 바꿔 끼워, 확정 뒤 캐시에
  * 무엇이 남는지는 거기서 안 보인다. 여기서 가짜 서버(MSW)로 실제 apply 왕복을 태우고, 허브가 그리는 재료 — 생성 훅
  * `useGetTripsTripIdTriggers`(허브·i04 의 `useActiveTriggers` 가 감싼 그것)의 data — 를 읽는다. 알약 렌더 자체는 허브 몫이다.
  *
@@ -34,14 +38,8 @@ import { useApplyReplan } from './useApplyReplan';
  */
 
 // authedClient(인증 계층)가 @/shared/storage 를 정적으로 문다(useReplanDiff.integration 선례).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest
-    .fn()
-    .mockResolvedValue({ accessToken: 'a', refreshToken: 'r' }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 const TRIP = 'trip-1';
 const APPLY_URL = `${BASE}/trips/${TRIP}/replan-sessions/s9/apply`;
@@ -85,12 +83,7 @@ let triggerGets: number;
 let client: QueryClient;
 
 function appLikeClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: Infinity, staleTime: 30_000 },
-      mutations: { retry: false, gcTime: Infinity },
-    },
-  });
+  return newTestQueryClient({ staleTime: 30_000 });
 }
 
 function ids(list: TriggerList | undefined): string[] | undefined {

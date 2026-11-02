@@ -7,3 +7,5 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@react-native-seoul/kakao-login@6.0.3'
   - '@react-native-seoul/naver-login@5.0.1'
+patchedDependencies:
+  '@gorhom/bottom-sheet@5.2.14': patches/@gorhom__bottom-sheet@5.2.14.patch

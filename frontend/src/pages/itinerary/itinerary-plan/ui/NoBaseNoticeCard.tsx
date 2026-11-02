@@ -4,8 +4,8 @@ import { Text, View } from 'react-native';
 import { InfoCircleGlyph } from '@/features/itinerary/index.view';
 
 /**
- * TRIP-799 · h14 거점 없음 안내 카드(D4) — 선택일에 고정 숙소 슬롯이 없을 때 시트 children 말미에
- * 뜨는 hairline 카드.
+ * TRIP-799 · h14 거점 없음 안내 카드(D4) — 선택일에 고정 숙소 슬롯도, 그날을 덮는 거점 배정도 없을 때(TRIP-1704)
+ * 시트 children 말미에 뜨는 hairline 카드.
  *
  * TRIP-1428 · Figma 의 "동선 기준 추천 보기 ›" 링크는 숨긴다 — h15 숙소 추천(US-SCHED-11)이 서버에 배선되지
  * 않아 눌러도 안 되는 화면으로 갔다(INV-4). 배선 칸이 서면 링크를 되살린다(git 이력 참고). 안내 줄은 남긴다(BR-U1-40).

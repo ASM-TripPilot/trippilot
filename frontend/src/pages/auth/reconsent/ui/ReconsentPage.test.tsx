@@ -65,9 +65,11 @@ import { ReconsentPage } from '..';
  *  어느 쪽이 먼저 불렸는지 알 수 있다.
  * (개념) `act(async () => {})` — 대기 중인 Promise 후속 처리(마이크로태스크)를 비우고 화면 갱신까지 반영한다.
  *
- * ⚠️ jest 사각(6-b 실기 전용): replace('/') 뒤 `Stack.Protected` 문이 실제로 바뀌어 홈에 도착하는지는
- *  못 본다 — 여기선 "신호 1회 + replace 1회 + 순서" 까지다(01 맹점 ①). "보기" 중첩 Pressable 에서
- *  부모 토글이 함께 도는지도 jest 로는 안 보인다(02a ★12).
+ * ⚠️ 이 파일의 사각: 라우터가 목이라 replace('/') 가 실제로 어디에 도착하는지는 못 본다 — 여기선 "신호 1회 + replace 1회 + 순서" 까지다
+ *  (01 맹점 ①). 도착은 `SplashGate.integration.test.tsx` 의 "루트 '/' 해석은 진짜 라우터에서 가드를 따른다 (TRIP-1628)" 가
+ *  진짜 라우터로 본다 — 재동의 중 replace('/') 는 무시되고, 게이트가 HOME 으로 뒤집히면 가드 전환이 홈으로 옮긴다.
+ *  서버 왕복으로 게이트가 실제 뒤집히는 부분은 `useBootstrapGate.test` 몫이다. "보기" 중첩 Pressable 에서
+ *  부모 토글이 함께 도는지는 jest 로는 안 보인다(6-b 실기 전용, 02a ★12).
  */
 
 const mockFetchBootstrap = fetchBootstrap as jest.Mock;

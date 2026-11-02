@@ -322,6 +322,108 @@ const DEAD_HANDLER = [
   },
 ];
 
+// worklet 기본 매개변수 금지(TRIP-1522·1627) — 첫 문장이 'worklet' 지시자인 함수의 매개변수 기본값은 UI 스레드에서
+// 기본값 평가가 클로저 복원보다 먼저라 ReferenceError 로 죽는다. jest 는 JS 스레드라 못 잡고 실기에서만 터진다.
+// 매개변수 직속 기본값(`w = 1`)과 구조분해 매개변수 안 기본값(`{ w = 1 }`)을 둘 다 본다. 본문 안 중첩 함수는 안 본다.
+const WORKLET_DEFAULT_PARAM_MESSAGE =
+  'worklet 함수의 매개변수 기본값 금지(TRIP-1522) — UI 스레드에서 ReferenceError. `x?: T` 로 받고 본문에서 `x ?? 값` 으로 채운다.';
+const WORKLET_DEFAULT_PARAM_GATE = [
+  {
+    selector:
+      ":function[body.body.0.directive='worklet'] > AssignmentPattern.params",
+    message: WORKLET_DEFAULT_PARAM_MESSAGE,
+  },
+  {
+    selector:
+      ":function[body.body.0.directive='worklet'] > :matches(ObjectPattern, ArrayPattern).params AssignmentPattern",
+    message: WORKLET_DEFAULT_PARAM_MESSAGE,
+  },
+];
+
+// 누름 이동 연타 관통 금지(TRIP-1013 · 2026-11-01) — `on*` JSX 핸들러와 `onPress*` 객체 속성의 **인라인 화살표 안**
+// `router.push|navigate|replace|dismissTo|back` 을 막는다. `guardPress(() => router.…)` 로 감싸면 화살표가 컨테이너의
+// 직속 자식이 아니라 걸리지 않는다. 핸들러 안 **중첩 함수**(mutate 의 `onSuccess` 등 서버 응답 뒤 프로그램 이동)는
+// `:not(...)` 으로 뺀다 — 단 중첩 함수가 그 자체로 JSX 핸들러·속성 화살표면(renderItem 안 `onPress`) 여전히 잡는다.
+// 기존 위반은 eslint-suppressions.json 에 얼렸다(늘어날 때만 실패). router 전역 가드는 두지 않는다(400ms 창이
+// 서버 응답 뒤 replace 를 삼킨다).
+const PRESS_NAV_MESSAGE =
+  '누름 이동은 `guardPress(() => router.…)`로 감싼다(TRIP-1013) — 인라인 화살표의 router 이동은 연타 시 화면이 두 번 쌓인다.';
+// TRIP-1685: `goBackOr(router, …)` 는 router.back 을 감싼 이동이라 같이 잡는다(안 잡으면 교체만으로 그물이 뚫린다).
+const ROUTER_NAV =
+  ":matches(CallExpression[callee.object.name='router'][callee.property.name=/^(push|navigate|replace|dismissTo|back)$/], CallExpression[callee.name='goBackOr'])";
+const HANDLER_ARROW =
+  'JSXExpressionContainer > ArrowFunctionExpression, Property[key.name=/^onPress/] > ArrowFunctionExpression';
+const PRESS_NAV_GATE = [
+  {
+    selector: `JSXAttribute[name.name=/^on[A-Z]/] > JSXExpressionContainer > ArrowFunctionExpression ${ROUTER_NAV}:not(JSXExpressionContainer > ArrowFunctionExpression :function:not(${HANDLER_ARROW}) CallExpression)`,
+    message: PRESS_NAV_MESSAGE,
+  },
+  {
+    selector: `Property[key.name=/^onPress/] > ArrowFunctionExpression ${ROUTER_NAV}:not(Property[key.name=/^onPress/] > ArrowFunctionExpression :function:not(${HANDLER_ARROW}) CallExpression)`,
+    message: PRESS_NAV_MESSAGE,
+  },
+];
+
+// ── 테스트 재팽창 방지 재료(아래 테스트 블록에서 쓴다) ──────────────────────────────────────
+const TEST_FILES = [
+  'src/**/*.test.{ts,tsx}',
+  'src/**/__tests__/**/*.{ts,tsx}',
+  'src/test-support/**/*.{ts,tsx}',
+];
+// README 판정 3 "남은 출시·보안 스캔"의 정본 — README 는 이 목록을 가리킨다.
+const SCAN_ALLOW = [
+  'src/__tests__/socialSdkSecrets.test.ts',
+  'src/__tests__/releaseBuildConfig.test.ts',
+  'src/__tests__/openapiContract.test.ts',
+  'src/__tests__/devPreviewReleaseGate.test.tsx',
+  'src/__tests__/photoUploadGuard.test.ts',
+  'src/__tests__/locationConsentPutBodyOwnership.test.ts',
+  'src/__tests__/deletionScopeStructure.test.ts',
+  'src/__tests__/eslintReleaseRules.test.ts',
+];
+const LOOK =
+  '생김새·prop 전달은 jest 가 아니라 실화면 QA(trippilot-sim-qa·6-b)가 본다 — README 판정 4·5. 상태는 role·accessibilityState·텍스트로 단언하고, 못 보는 동작은 02 에 `기능 지도로:` 줄로 넘긴다.';
+const UNSAFE_QUERIES = [
+  'UNSAFE_getByType',
+  'UNSAFE_getAllByType',
+  'UNSAFE_queryByType',
+  'UNSAFE_queryAllByType',
+  'UNSAFE_getByProps',
+  'UNSAFE_getAllByProps',
+  'UNSAFE_queryByProps',
+  'UNSAFE_queryAllByProps',
+  'UNSAFE_root',
+].map((property) => ({
+  property,
+  message: `컴포넌트 타입·prop 으로 찾지 않는다 — getByRole/getByTestId/getByText. ${LOOK}`,
+}));
+const LOOK_PROPS = [
+  { property: 'className', message: `className 토큰 단언 금지. ${LOOK}` },
+  { property: 'style', message: `style 값 단언 금지. ${LOOK}` },
+];
+const MOCK_PROPS =
+  'snapPoints|enableContentPanningGesture|enablePanDownToClose|keyboardBehavior|keyboardBlurBehavior|topInset|bottomInset|logoMargin|isScrollGesturesEnabled|isZoomGesturesEnabled|isRotateGesturesEnabled|isTiltGesturesEnabled|animationConfigs|backdropComponent|handleComponent';
+const TEST_LOOK_SYNTAX = [
+  {
+    selector: "CallExpression[callee.property.name='toHaveStyle']",
+    message: `toHaveStyle 금지. ${LOOK}`,
+  },
+  {
+    selector:
+      "CallExpression[callee.property.name='toHaveProp'][arguments.0.value=/^(className|style)$/]",
+    message: `toHaveProp(className|style) 금지. ${LOOK}`,
+  },
+  {
+    selector: `MemberExpression[object.property.name='props'][property.name=/^(${MOCK_PROPS})$/]`,
+    message: `통과형 목(gorhom·지도)은 어떤 prop 을 줘도 같게 그린다 — prop 전달 단언은 동작을 못 지킨다. ${LOOK}`,
+  },
+];
+const NO_HAND_QUERYCLIENT = {
+  selector: "NewExpression[callee.name='QueryClient']",
+  message:
+    'page·훅 렌더는 @/test-support/queryRender(renderWithQueryClient·newTestQueryClient)로 — 손 조립 Provider 는 page 가 새 훅을 물면 형제 테스트를 죽인다(TRIP-1120).',
+};
+
 module.exports = defineConfig([
   expoConfig,
   {
@@ -443,19 +545,39 @@ module.exports = defineConfig([
     // JSX 가 없는 .ts 는 태그 검사가 필요 없고 별칭(import·재수출)만 막으면 된다.
     files: ['src/**/*.ts', 'app/**/*.ts'],
     ignores: [...TEST_IGNORES, ROUTE_DEV],
-    rules: { 'no-restricted-syntax': ['error', ...DELETE_DIALOG_ALIAS_GATE] },
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...DELETE_DIALOG_ALIAS_GATE,
+        ...WORKLET_DEFAULT_PARAM_GATE,
+        ...PRESS_NAV_GATE,
+      ],
+    },
   },
   {
     files: ['src/**/*.tsx', 'app/**/*.tsx'],
     ignores: [...TEST_IGNORES, ROUTE_DEV],
-    rules: { 'no-restricted-syntax': ['error', ...DELETE_DIALOG_GATE] },
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...DELETE_DIALOG_GATE,
+        ...WORKLET_DEFAULT_PARAM_GATE,
+        ...PRESS_NAV_GATE,
+      ],
+    },
   },
   {
     // 빈 핸들러 금지는 pages·라우트만(원 스캔 범위). 같은 규칙이라 삭제 게이트를 펼쳐 함께 선언한다(위 ⚠️).
     files: ['src/pages/**/*.tsx', 'app/**/*.tsx'],
     ignores: [...TEST_IGNORES, ROUTE_DEV],
     rules: {
-      'no-restricted-syntax': ['error', ...DELETE_DIALOG_GATE, ...DEAD_HANDLER],
+      'no-restricted-syntax': [
+        'error',
+        ...DELETE_DIALOG_GATE,
+        ...DEAD_HANDLER,
+        ...WORKLET_DEFAULT_PARAM_GATE,
+        ...PRESS_NAV_GATE,
+      ],
     },
   },
   {
@@ -464,6 +586,50 @@ module.exports = defineConfig([
     files: ['**/*.test.{ts,tsx}', '**/__tests__/**/*.{ts,tsx}'],
     rules: {
       'import/no-named-as-default-member': 'off',
+    },
+  },
+  // ── 테스트 재팽창 방지(2026-11-01 jest 축소 · README §테스트 전략 판정 3~6) ───────────────
+  // 기존 위반은 eslint-suppressions.json 에 얼려 두고 "늘어날 때만" 실패한다(ESLint bulk suppressions).
+  // 테스트를 지워 위반이 줄면 `pnpm exec eslint . --prune-suppressions` 를 같은 커밋에 싣는다(파일 손편집 금지).
+  // 출시 게이트 생김새 5건(README 판정 3)은 그 줄에 `// eslint-disable-next-line <규칙> -- 출시 게이트 ②` 처럼 사유를 단다.
+  {
+    files: TEST_FILES,
+    rules: {
+      'no-restricted-properties': ['error', ...UNSAFE_QUERIES, ...LOOK_PROPS],
+      'no-restricted-syntax': [
+        'error',
+        ...TEST_LOOK_SYNTAX,
+        NO_HAND_QUERYCLIENT,
+      ],
+    },
+  },
+  {
+    // QueryClient 정의처 — 손 조립 금지만 뺀다(생김새 금지는 프로브 헬퍼에도 걸어 뒷문을 막는다).
+    files: ['src/test-support/**/*.{ts,tsx}'],
+    rules: { 'no-restricted-syntax': ['error', ...TEST_LOOK_SYNTAX] },
+  },
+  {
+    // 소스 스캔 금지(판정 3·TRIP-1145) — 남은 출시·보안 스캔은 SCAN_ALLOW 가 정본이다.
+    files: TEST_FILES,
+    ignores: SCAN_ALLOW,
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            'fs',
+            'node:fs',
+            'fs/promises',
+            'node:fs/promises',
+            'child_process',
+            'node:child_process',
+          ].map((name) => ({
+            name,
+            message:
+              '소스 스캔 금지(README 판정 3·TRIP-1145) — 렌더 단언이나 ESLint 규칙으로. 출시·보안 계약이면 eslint.config.js SCAN_ALLOW 에 사유와 함께 올린다.',
+          })),
+        },
+      ],
     },
   },
   {

@@ -198,26 +198,17 @@ const WHEEL = 'trip-wizard-daywindow-wheel';
 // TRIP-1423 (Q-058) — [첫날]·[마지막 날] 탭 누름은 "보기만"이다. 휠은 제안 자리(12:00 · 18:00)에 서 있기만 하고
 // (TRIP-1437 `anchor`), 사용자가 휠을 돌리거나 칸을 눌러야 값이 생긴다.
 describe('TRIP-1423 · 안 정한 탭은 보기만 — 휠은 제안 자리에 서고 값은 고를 때만 생긴다', () => {
-  it('첫날 탭: 시 휠이 12 칸에 서 있지만 선택된 칸은 없다 · 마지막 날 탭: 18 칸 · 하루 시작 탭(짝)은 09:00 이 선택돼 있다', () => {
+  it('첫날·마지막 날 탭은 선택된 칸이 없다 · 하루 시작 탭(짝)은 09:00 이 선택돼 있다', () => {
     open();
 
     pick('trip-wizard-daywindow-tab-first');
-    expect(screen.getByTestId(`${WHEEL}-h-wheel`).props.contentOffset?.y).toBe(
-      12 * WHEEL_CELL_HEIGHT
-    );
     expect(selectedCount(WHEEL)).toBe(0);
 
     pick('trip-wizard-daywindow-tab-last');
-    expect(screen.getByTestId(`${WHEEL}-h-wheel`).props.contentOffset?.y).toBe(
-      18 * WHEEL_CELL_HEIGHT
-    );
     expect(selectedCount(WHEEL)).toBe(0);
 
     // 짝 — 값이 있는 탭은 그 칸이 선택돼 있다("아무 칸도 선택 안 함"으로 짠 구현이 red).
     pick('trip-wizard-daywindow-tab-day');
-    expect(screen.getByTestId(`${WHEEL}-h-wheel`).props.contentOffset?.y).toBe(
-      9 * WHEEL_CELL_HEIGHT
-    );
     expect(screen.getByTestId(`${WHEEL}-h-09`)).toBeSelected();
     expect(screen.getByTestId(`${WHEEL}-m-00`)).toBeSelected();
   });

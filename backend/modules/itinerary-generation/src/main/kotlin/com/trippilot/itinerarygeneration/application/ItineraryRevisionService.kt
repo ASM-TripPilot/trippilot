@@ -47,6 +47,8 @@ class ItineraryRevisionService(
     private val scheduleAgent: ScheduleAgentPort,
     transactionManager: PlatformTransactionManager,
     private val clock: Clock,
+    /** 되돌리기 재검증의 수단 — 편집과 같은 출처([RepairContexts.transportModes]). */
+    private val repairContexts: RepairContexts,
 ) {
     private val tx = TransactionTemplate(transactionManager)
 
@@ -104,7 +106,9 @@ class ItineraryRevisionService(
         // 위반을 표시한다 — 검증 안 된 시각을 hasViolation=false 로 내보내면 INV-2 를 우회하는 셈이다.
         val draftDays = target.snapshot.toDays(fixedFrom = preview)
         // AI 가 죽어도 되돌리기는 막지 않는다 — 다만 판정을 못 했으면 "위반 없음"이라 말하지 않는다(Revalidation 참고).
-        val verdict = Revalidation.attempt(scheduleAgent, draftDays.toOutput(preview, clock.instant()), tripId)
+        val verdict = Revalidation.attempt(
+            scheduleAgent, draftDays.toOutput(preview, clock.instant()), tripId, repairContexts.transportModes(accountId, tripId),
+        )
 
         return tx.execute {
             // 가드를 **트랜잭션 안에서 다시** 본다 — 위 검증(외부 호출) 동안 확정이 커밋됐으면 그 확정을 되돌리게 된다.

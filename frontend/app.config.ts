@@ -1,5 +1,5 @@
 import type { ExpoConfig } from 'expo/config';
-import { withEntitlementsPlist, withInfoPlist } from 'expo/config-plugins';
+import { withInfoPlist } from 'expo/config-plugins';
 
 // 소셜/지도 SDK 키는 사용자 프로비저닝 시 주입한다(스캐폴드는 placeholder).
 // 소셜(카카오/네이버)·지도 SDK config plugin 은 실 네이티브 키가 필요하므로 auth·map 유닛에서 배선한다.
@@ -111,6 +111,16 @@ const config: ExpoConfig = {
         }
       : {}),
   },
+  // TRIP-1646 — 웹(react-native-web) 출시. output 'single' = index.html 하나짜리 정적 SPA — CloudFront 가 모든 경로를
+  // index.html 로 돌려주므로 경로별 HTML(static)이 필요 없다. 뷰포트·PC 폭 고정(가운데 최대 480)은 public/index.html
+  // 템플릿이 웹에서만 건다(iOS 번들은 이 파일을 읽지 않는다). 제목은 name, 파비콘은 앱 아이콘에서 Expo 가 만든다.
+  web: {
+    bundler: 'metro',
+    output: 'single',
+    favicon: './assets/icon.png',
+    name: 'TripPilot',
+    lang: 'ko',
+  },
   plugins: [
     // TRIP-935 R3 — 개발용 라우트 목록(/_sitemap)을 운영 빌드에서 끈다. 네이티브 설정이라 재빌드 필요.
     // TRIP-1161 — 라우트 루트를 루트 app/ 로 고정한다. Expo CLI 는 src/app 이 **있으면 무조건** 그것을 라우트 루트로
@@ -220,10 +230,6 @@ const config: ExpoConfig = {
   },
 };
 
-// 푸시 entitlement(aps-environment)를 뺀다 — 서버 푸시가 꺼져 있고 번들 ID 에 Push 권한이 아직 없어
-// 프로비저닝 프로파일이 Xcode 서명에서 거부된다(TRIP-935 심사 빌드). expo-notifications 는 prebuild 가
-// 설치만 돼 있어도 자동으로 붙여서 plugins 에서 빼도 소용없다 — 결과에서 지운다.
-// 푸시를 켤 때는 ASC 에서 번들 ID 의 Push 권한을 먼저 켜고 이 래핑을 걷는다.
 // TRIP-1337 — expo-task-manager 는 설치만 돼 있어도 prebuild 가 레거시 자동 플러그인으로 붙여 UIBackgroundModes 에
 // 'fetch' 를 넣는다(우리는 백그라운드 fetch 를 쓰지 않는다). 플래그 OFF 빌드의 권한 표면을 TRIP-936 과 같게 두려고
 // 결과에서 지운다 — ON 빌드는 expo-location 플러그인이 넣는 'location' 만 남는다.
@@ -238,9 +244,8 @@ const withoutBackgroundFetch = (input: ExpoConfig): ExpoConfig =>
     return mod;
   });
 
-export default withoutBackgroundFetch(
-  withEntitlementsPlist(config, (mod) => {
-    delete mod.modResults['aps-environment'];
-    return mod;
-  })
-);
+// 푸시 entitlement(aps-environment)는 expo-notifications 플러그인이 넣는 그대로 둔다 — 1.0 은 번들 ID 에 Push 권한이
+// 없어 서명이 거부돼 지웠고(TRIP-935), 2026-10-30 번들 ID 에 Push 권한·APNs 키가 켜져 걷는다(TRIP-1668). 다시 지우면
+// 빌드·심사는 통과하고 알림만 조용히 안 온다. 새 EAS 빌드 전에 프로비저닝 프로파일이 Push 를 켠 뒤 재발급됐는지 본다
+// (옛 프로파일이면 "doesn't support the Push Notifications capability" 로 서명이 실패한다 — #1598).
+export default withoutBackgroundFetch(config);

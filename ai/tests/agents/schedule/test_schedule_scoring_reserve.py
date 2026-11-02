@@ -17,7 +17,7 @@ from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
 from tests.fakes.fake_clock import FakeClock
 from tests.fakes.in_memory_trace import InMemoryTrace
 from tests.agents.schedule.test_schedule_agent import _pool, _task
-from tests.orchestrator.test_schedule_coordinator import (
+from tests.orchestrator.schedule.test_schedule_coordinator import (
     _C1CFG, _AssemblyProvider, _RecordingLlm, _Renderer, _Sink, _scores_json,
 )
 

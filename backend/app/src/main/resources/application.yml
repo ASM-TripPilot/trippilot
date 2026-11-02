@@ -59,6 +59,11 @@ spring:
 # dev=application-local.yml(gitignore), prod=Secrets Manager→env. token/user-info-uri 는 비밀 아님(제공자 고정값).
 # 값 미주입 시 빈 문자열 → 해당 제공자 로그인 시도 시에만 실패(기동엔 영향 없음).
 trippilot:
+  # 웹 클라이언트(브라우저) 허용 출처 — CORS(TRIP-1655). 쉼표 구분, 출처 그대로(`https://host`, 끝 `/` 없이).
+  # 비면 CORS 응답을 내지 않는다(웹 이전과 동일). `*` 는 기동 거부 — 허용 출처를 열어 두지 않는다(SECURITY 기준선).
+  # 같은 값을 구글 웹 로그인 redirect 허용 목록으로도 쓴다(`social.google-web.redirect-origins`, TRIP-1656).
+  web:
+    cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:}
   # 아웃박스 배달 경로(TRIP-1469). none = 폴링이 구독자에게 직접 배달(종전·운영 기본). kafka = 폴링은 브로커로 넘기고
   # 소비자가 배달한다(로컬 `docker compose --profile kafka` 전용 — 배포에는 브로커가 없다).
   # ⚠ kafka → none 으로 되돌리면 토픽에 남은 미소비 이벤트는 배달되지 않는다(행은 송신 때 발행 표시). 되돌리기 전에
@@ -71,6 +76,16 @@ trippilot:
       client-secret: ${GOOGLE_CLIENT_SECRET:}
       token-uri: https://oauth2.googleapis.com/token
       user-info-uri: https://openidconnect.googleapis.com/v1/userinfo
+    # 구글 **웹** 클라이언트(웹 애플리케이션 유형 — TRIP-1656). 위 google 은 iOS 공개 클라이언트라 시크릿이 없고, 웹에서
+    # 발급된 code 를 그 ID 로 교환하면 구글이 거절한다. redirectUri 가 아래 허용 웹 출처 + `/oauth/google` 과 정확히
+    # 같을 때만 이 클라이언트로 교환한다(열린 redirect 금지). 허용 출처는 CORS 목록과 같은 env 를 쓴다(웹 출처는 하나다).
+    # 비면 웹 교환은 401 로 실패한다(기동 무영향).
+    google-web:
+      client-id: ${GOOGLE_WEB_CLIENT_ID:}
+      client-secret: ${GOOGLE_WEB_CLIENT_SECRET:}   # 시크릿 — 평문 커밋 금지(SECURITY-12)
+      token-uri: https://oauth2.googleapis.com/token
+      user-info-uri: https://openidconnect.googleapis.com/v1/userinfo
+      redirect-origins: ${CORS_ALLOWED_ORIGINS:}
     kakao:
       client-id: ${KAKAO_CLIENT_ID:}
       client-secret: ${KAKAO_CLIENT_SECRET:}

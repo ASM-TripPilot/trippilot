@@ -86,9 +86,12 @@ internal class FakeArchive(
     private val lastCompletedPoi: UUID? = null,
     /** 다녀온(도착·완료) 슬롯 — 주지 않으면 완료분과 같다(완료는 도착을 거친다). */
     private val visitedSlots: Set<String> = completedSlots,
+    /** 날짜별로 건너뛴 POI — 날짜 가름(슬롯 키의 날짜)은 archive 스펙이 보고, 여기서는 "어느 날짜로 물었나"만 드러낸다. */
+    private val skippedPois: Map<LocalDate, Set<UUID>> = emptyMap(),
 ) : ArchiveFacade {
     override fun getCompletedSlots(tripId: UUID) = completedSlots
     override fun getVisitedSlots(tripId: UUID) = visitedSlots
+    override fun getSkippedPois(tripId: UUID, date: LocalDate) = skippedPois[date].orEmpty()
     override fun findLastCompletedPoi(tripId: UUID) = lastCompletedPoi
     override fun isAutomationArmed(tripId: UUID, at: java.time.Instant) = false
 }

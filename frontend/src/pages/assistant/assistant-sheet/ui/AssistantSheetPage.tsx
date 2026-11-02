@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { Pressable } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { isNotFound } from '@/shared/api';
@@ -116,8 +118,7 @@ export function AssistantSheetPage({
   function handleClose(): void {
     if (closingRef.current) return;
     closingRef.current = true;
-    if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)' as Href);
+    goBackOr(router, shellTabHref('home'));
   }
 
   // 401 — 열 수 없는 사람에게 빈 시트를 남기지 않는다.

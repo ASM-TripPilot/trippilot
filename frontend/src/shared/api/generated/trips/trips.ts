@@ -602,6 +602,7 @@ export const useDeleteTripsTripId = <TError = void, TContext = unknown>(
 /**
  * 여행 기간을 벗어나는 구간은 **거부한다**(400) — 서버가 여행 기간을 늘려 주지 않는다. 기간이 바뀌면 일정·커버리지·필수 방문지가 모두 영향을 받으므로, 늘릴지는 사용자가 정한다. US-TRIP-03 의 "여행 기간 자동 확장 여부를 묻는다"는 **클라이언트 2단계**로 만족한다 — 400 을 받아 확인을 띄우고, `PATCH /trips/{tripId}` 로 기간을 고친 뒤 다시 배정한다.
  * 그래서 400 의 `error.fields` 는 **어느 칸이 왜 틀렸는지**를 담는다: 시작일이 앞서면 `dateFrom`, 종료일이 넘으면 `dateTo` 이며 reason 에 여행 시작일·종료일이 들어간다 (화면이 "여행은 8/4까지예요, 늘릴까요?"를 그릴 근거). 양쪽 다 벗어나면 둘 다 담는다.
+ * **여행 지역 밖 숙소는 거부한다**(409 `STAY_OUTSIDE_TRIP_REGION`, TRIP-1703). 숙소 좌표의 주소를 행정구역 코드로 바꿔 목적지 코드와 양방향 접두사로 비교한다(INV-U1-21, 다목적지는 하나에라도 들면 안). 판정할 수 없으면(목적지 코드 누락 · 주소 없음 · 주소 조회 장애) 막지 않는다. 400 과 코드를 나눈 이유: 400 은 "기간을 늘릴까요?" 확인으로 읽힌다.
  * @summary 구간 거점 배정(등록 숙소를 [dateFrom, dateTo) 거점으로 · 여행 기간 내 INV-U1-15)
  */
 export const postTripsTripIdBases = (
@@ -5323,7 +5324,7 @@ export function useGetTripsTripIdReplanSessionsSessionId<
 }
 
 /**
- * **일정이 바뀌는 유일한 지점**이다(INV-U4-05) — 그 전까지 `itinerary`·`visit_slot` 은 진입 전과 같다. 대상 일자만 교체하고 나머지 일자는 손대지 않으며, 되돌릴 지점을 먼저 남긴다(BR-U3-19). 완료·시각 고정 슬롯은 산출 단계에서 이미 잠겨 있어 그대로 남는다(INV-U4-04). 반영 후 세션은 `APPLIED` 로 닫히고 `ItineraryRecalculated` 가 나간다.
+ * **일정이 바뀌는 유일한 지점**이다(INV-U4-05) — 그 전까지 `itinerary`·`visit_slot` 은 진입 전과 같다. 대상 일자만 교체하고 나머지 일자는 손대지 않으며, 되돌릴 지점을 먼저 남긴다(BR-U3-19). 완료·시각 고정 슬롯은 산출 단계에서 이미 잠겨 있어 그대로 남는다(INV-U4-04). 반영 후 세션은 `APPLIED` 로 닫히고 `ItineraryRecalculated` 가 나간다. 반영 순간 그 날의 직전 모습을 세션에 떠 둔다 — 반영 뒤 비교(`…/diff`)와 되돌리기(`…/revert`)가 그것을 쓴다(TRIP-1412).
  * @summary 재계획 확정(i18) — 초안을 일정에 반영한다
  */
 export const postTripsTripIdReplanSessionsSessionIdApply = (
@@ -5406,6 +5407,93 @@ export const usePostTripsTripIdReplanSessionsSessionIdApply = <
 > => {
   return useMutation(
     getPostTripsTripIdReplanSessionsSessionIdApplyMutationOptions(options),
+    queryClient
+  );
+};
+/**
+ * 원탭 [다시 짜기]가 반영한 그 날을 **반영 직전 모습으로** 돌린다. **확정(`CONFIRMED`) 일정에서도** 된다 — 상태는 그대로이고 확정 동결(poi_snapshot)은 반영 직전 참조를 다시 단다. 범용 되돌리기 (`/itinerary/revisions/{revisionId}/restore`)는 확정 일정을 409 로 막는다 — 그 대신 이 재계획 하나만 되돌리는 경로다. 다른 날은 손대지 않는다. 한 번만 된다 — 세션은 `APPLIED` 그대로이고 `revertedAt` 이 찍힌다. 변경 이력 1행(`MANUAL`, 사유 `재계획 되돌림 · …`)과 일정 리비전이 남는다.
+ * @summary 반영한 재계획 되돌리기 — 그 날을 반영 직전으로(TRIP-1412)
+ */
+export const postTripsTripIdReplanSessionsSessionIdRevert = (
+  tripId: string,
+  sessionId: string,
+  signal?: AbortSignal
+) => {
+  return customInstance<ReplanSession>({
+    url: `/trips/${tripId}/replan-sessions/${sessionId}/revert`,
+    method: 'POST',
+    signal,
+  });
+};
+
+export const getPostTripsTripIdReplanSessionsSessionIdRevertMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdRevert>>,
+    TError,
+    { tripId: string; sessionId: string },
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdRevert>>,
+  TError,
+  { tripId: string; sessionId: string },
+  TContext
+> => {
+  const mutationKey = ['postTripsTripIdReplanSessionsSessionIdRevert'];
+  const { mutation: mutationOptions } = options
+    ? options.mutation &&
+      'mutationKey' in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdRevert>>,
+    { tripId: string; sessionId: string }
+  > = (props) => {
+    const { tripId, sessionId } = props ?? {};
+
+    return postTripsTripIdReplanSessionsSessionIdRevert(tripId, sessionId);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostTripsTripIdReplanSessionsSessionIdRevertMutationResult =
+  NonNullable<
+    Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdRevert>>
+  >;
+
+export type PostTripsTripIdReplanSessionsSessionIdRevertMutationError = void;
+
+/**
+ * @summary 반영한 재계획 되돌리기 — 그 날을 반영 직전으로(TRIP-1412)
+ */
+export const usePostTripsTripIdReplanSessionsSessionIdRevert = <
+  TError = void,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdRevert>>,
+      TError,
+      { tripId: string; sessionId: string },
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof postTripsTripIdReplanSessionsSessionIdRevert>>,
+  TError,
+  { tripId: string; sessionId: string },
+  TContext
+> => {
+  return useMutation(
+    getPostTripsTripIdReplanSessionsSessionIdRevertMutationOptions(options),
     queryClient
   );
 };

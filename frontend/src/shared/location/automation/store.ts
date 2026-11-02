@@ -51,6 +51,8 @@ export interface OpenInterval {
 export interface AutomationNotice {
   kind: 'degraded' | 'route-expired';
   reason: string;
+  /** 안내가 생긴 여행 — 그 여행 허브에서만 보인다(TRIP-1696). 옛 저장본엔 없다(= 어느 허브에도 안 보임). */
+  tripId?: string;
 }
 
 export interface AutomationState {

@@ -15,7 +15,7 @@ from concurrent.futures import Future
 from datetime import datetime
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.region_centers import region_center, region_pair
+from trippilot.domain.region_centers import region_center, region_mentions, region_pair
 from trippilot.orchestrator.intent_router import normalize
 from trippilot.llm_gateway.workers.dialogue_sql import DialogueSqlWorker
 from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql, PlaceRow
@@ -48,9 +48,13 @@ def asks_for_places(text: str) -> bool:
 def looks_like_place_query(utterance: str) -> bool:
     """지역 표 이름 + 장소 찾기 말 — 분류를 기다리지 않고 SQL 작성을 미리 시작할 만한가. 탐색 핸들러도 지역을 말했을 때만 SQL 을 쓴다.
     두 곳 사이("홍대와 이태원 사이")는 SQL 을 쓰지 않으니(위치가 아니라 이름을 읽는다 — 너무 먼 짝도 답하지 않는다) 미리 쓰지 않는다.
-    짝 판정은 핸들러와 같게 정규화한 글로 본다."""
-    return (region_center(utterance) is not None and region_pair(normalize(utterance)) is None
-            and asks_for_places(utterance))
+    단 짝 밖의 지역을 말했으면("홍대 이태원 사이 말고 성수 쪽 카페") 그 지역으로 SQL 을 쓸 수 있어 미리 받는다 — 안 쓰이면 한 번 버린다
+    (BR-AO-07). 짝 판정은 핸들러와 같게 정규화한 글로 본다."""
+    if region_center(utterance) is None or not asks_for_places(utterance):
+        return False
+    text = normalize(utterance)
+    pair = region_pair(text)
+    return pair is None or any(name not in (pair[0][0], pair[1][0]) for _, name in region_mentions(text))
 
 
 class PlaceSqlLookup:

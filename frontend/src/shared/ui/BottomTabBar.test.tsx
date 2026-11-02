@@ -1,6 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { BottomTabBar, TAB_BAR_TOP } from './BottomTabBar';
+import {
+  BottomTabBar,
+  TAB_BAR_MIN_HEIGHT,
+  TAB_BAR_PADDING_TOP,
+  TAB_BAR_TOP,
+} from './BottomTabBar';
 import { getToastBottoms, resetToastBottoms } from './toastBottom';
 
 /**
@@ -117,4 +122,77 @@ describe('BottomTabBar — 토스트 바닥 신고 (TRIP-1559 T4·T5)', () => {
 
     expect(getToastBottoms()).toEqual([TAB_BAR_TOP]);
   });
+});
+
+// TRIP-1642 — 띠 실측 높이로 토스트 바닥을 따라간다. jest 는 레이아웃을 계산하지 않으므로
+// 띠(`shell-tabbar-root`)에 "이 높이로 확정됐다"는 layout 이벤트를 직접 쏴서 배선만 본다.
+describe('BottomTabBar — 측정한 띠 높이를 토스트 바닥으로 신고 (TRIP-1642 AC1·AC2)', () => {
+  const measureBand = (height: number) =>
+    fireEvent(screen.getByTestId('shell-tabbar-root'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 390, height } },
+    });
+
+  it('상수 관계: 측정 전 기본값(TAB_BAR_TOP)은 띠 최소 높이에서 위 패딩을 뺀 값이다', () => {
+    expect(TAB_BAR_MIN_HEIGHT - TAB_BAR_PADDING_TOP).toBe(TAB_BAR_TOP);
+  });
+
+  it('띠가 커지면 신고값이 늘어난 만큼 따라가고, 여러 번 바뀌어도 신고는 하나이며, 언마운트로 해제된다', () => {
+    // 준비 — 첫 레이아웃 전에는 기본값 하나(앵커).
+    const view = render(
+      <BottomTabBar activeKey="home" onPressTab={jest.fn()} />
+    );
+    expect(getToastBottoms()).toEqual([TAB_BAR_TOP]);
+
+    // 실행·단언 — 띠가 40 커졌다 → 신고값도 40 커진다(교체, 추가 아님).
+    measureBand(TAB_BAR_MIN_HEIGHT + 40);
+    expect(getToastBottoms()).toEqual([TAB_BAR_TOP + 40]);
+
+    // 실행·단언 — 더 커지면 다시 교체. 신고가 둘로 불어나지 않는다.
+    measureBand(TAB_BAR_MIN_HEIGHT + 90);
+    expect(getToastBottoms()).toEqual([TAB_BAR_TOP + 90]);
+
+    // 단언 — 측정값이 쌓인 뒤 언마운트하면 하나도 남지 않는다(옛 항목 누수 없음).
+    view.unmount();
+    expect(getToastBottoms()).toEqual([]);
+  });
+
+  it('활성 탭이 바뀌어 다시 그려도 측정값이 유지된다', () => {
+    const view = render(
+      <BottomTabBar activeKey="home" onPressTab={jest.fn()} />
+    );
+    measureBand(TAB_BAR_MIN_HEIGHT + 40);
+
+    view.rerender(<BottomTabBar activeKey="records" onPressTab={jest.fn()} />);
+
+    expect(getToastBottoms()).toEqual([TAB_BAR_TOP + 40]);
+  });
+
+  it('기본 높이(TAB_BAR_MIN_HEIGHT)를 재면 값이 그대로이고, 커졌다 기본으로 돌아오면 기본값으로 돌아온다', () => {
+    render(<BottomTabBar activeKey="home" onPressTab={jest.fn()} />);
+
+    // 실행·단언 — 기본 배율 화면: 측정이 와도 값이 안 바뀐다(AC2).
+    measureBand(TAB_BAR_MIN_HEIGHT);
+    expect(getToastBottoms()).toEqual([TAB_BAR_TOP]);
+
+    // 실행·단언 — 글자를 키워 띠가 커졌다가, 다시 기본으로 줄면 따라 줄어든다.
+    measureBand(TAB_BAR_MIN_HEIGHT + 40);
+    expect(getToastBottoms()).toEqual([TAB_BAR_TOP + 40]);
+    measureBand(TAB_BAR_MIN_HEIGHT);
+    expect(getToastBottoms()).toEqual([TAB_BAR_TOP]);
+  });
+
+  it.each([
+    ['0(비정상 측정)', 0],
+    ['위 패딩과 같은 높이', TAB_BAR_PADDING_TOP],
+    ['기본보다 조금 작은 높이', TAB_BAR_MIN_HEIGHT - 10],
+  ])(
+    '측정이 기본보다 작아도(%s) 신고값은 TAB_BAR_TOP 아래로 내려가지 않는다',
+    (_label, height) => {
+      render(<BottomTabBar activeKey="home" onPressTab={jest.fn()} />);
+
+      measureBand(height);
+
+      expect(getToastBottoms()).toEqual([TAB_BAR_TOP]);
+    }
+  );
 });

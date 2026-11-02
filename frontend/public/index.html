@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <!-- TRIP-1646 — 확대 금지(입력 포커스 자동 확대·핀치 확대로 앱 레이아웃이 깨지지 않게) + 노치 영역까지 그린다(safe-area). -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <title>%WEB_TITLE%</title>
+    <!-- react-native-web 권장 리셋(Expo 기본 템플릿과 같다) + PC 폭 고정. -->
+    <style id="expo-reset">
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        overflow: hidden;
+        /* PC 에서 앱 영역 양옆에 보이는 바탕색. */
+        background-color: #f2f2f2;
+      }
+      /* 앱 영역은 가운데 최대 480 — 모바일 폭(≤480)에서는 화면을 꽉 채운다. */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+        width: 100%;
+        max-width: 480px;
+        margin: 0 auto;
+        background-color: #ffffff;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>TripPilot 을 쓰려면 JavaScript 를 켜 주세요.</noscript>
+    <div id="root"></div>
+  </body>
+</html>

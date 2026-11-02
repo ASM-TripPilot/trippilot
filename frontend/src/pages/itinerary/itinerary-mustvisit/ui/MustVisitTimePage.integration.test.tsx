@@ -1,6 +1,4 @@
-import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -22,6 +20,8 @@ import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { coverFor } from '@/test-support/placeCoverFixtures';
 
 import { MustVisitTimePage } from './MustVisitTimePage';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * h07 배선을 **실 HTTP 로** 태우는 심판 — 이 칸의 급소다(AC-4 · AC-5 · AC-6 · AC-7 · D1 · D8).
@@ -46,22 +46,17 @@ import { MustVisitTimePage } from './MustVisitTimePage';
  * 3동작 뼈대: 준비=가짜 서버 응답 지정 → 실행=날짜·시각을 고르고 저장 → 단언=나간 요청·본문·화면.
  */
 
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
-const mockPush = jest.fn();
-const mockBack = jest.fn();
+const { push: mockPush, back: mockBack } = routerSpies;
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: mockBack, replace: jest.fn() }),
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back', 'canGoBack'],
+  })
+);
 
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = '11111111-1111-1111-1111-111111111111';
@@ -190,19 +185,9 @@ afterEach(() => {
 afterAll(() => server.close());
 
 function renderPage() {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
+  const client = newTestQueryClient({ gcTime: 0 });
   return render(<MustVisitTimePage tripId={TRIP_ID} sourcePoiId={POI_ID} />, {
-    wrapper: Wrapper,
+    wrapper: createWrapper(client),
   });
 }
 
@@ -866,5 +851,164 @@ describe('장소 요약 사진 칸 — 담은 장소의 category·poiId 가 배�
         screen.getByTestId('itinerary-mustvisit-time-photo').props.source
       ).toEqual([coverFor('명소', POI_ID)])
     );
+  });
+});
+
+// 옛 MustVisitTimeScreen.test.tsx(뷰 단위)를 B안으로 옮겼다 — 화면 글자·선택 상태·시트·잠금·실패 갈래.
+describe('h07 화면 얼굴 — 장소 카드 · 칩 · 시트 · 잠금 · 실패 갈래', () => {
+  const DATE_CHIP = (date: string): string =>
+    `itinerary-mustvisit-time-date-${date}`;
+  const SHEET = 'itinerary-mustvisit-time-start-sheet';
+  const FIELD = 'itinerary-mustvisit-time-start-field';
+  const MINUTE_CELL = (mm: string): string =>
+    `itinerary-mustvisit-time-start-option-m-${mm}`;
+
+  it('장소 카드는 이름·`{region} · 꼭 갈 곳`, 날짜 칩은 기간 날짜 라벨, 체류는 분 숫자 없는 세 단계다', async () => {
+    renderPage();
+    await ready();
+
+    expect(await screen.findByText('부산시립미술관')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-subtitle')
+    ).toHaveTextContent('부산진구 · 꼭 갈 곳');
+    expect(screen.getByTestId(DATE_CHIP('2026-06-11'))).toHaveTextContent(
+      '6.11 (목)'
+    );
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-dwell-SHORT')
+    ).toHaveTextContent('짧게');
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-dwell-LONG')
+    ).toHaveTextContent('여유');
+    expect(
+      screen
+        .queryAllByText(/(\d+\s*분|\d+\s*시간|소요)/)
+        .map((n) => n.props.children)
+    ).toEqual([]);
+    // 스위치는 화면에 하나이고 그것이 토글 행이다.
+    const switches = screen.getAllByRole('switch');
+    expect(switches.length).toBe(1);
+    expect(switches[0]).toBe(
+      screen.getByTestId('itinerary-mustvisit-time-toggle')
+    );
+  });
+
+  it('지역을 모르는 장소면 보조행에 구분자가 남지 않는다', async () => {
+    server.use(
+      http.get(`${BASE}/saved-places`, () =>
+        HttpResponse.json([
+          {
+            ...SAVED[0],
+            place: { ...SAVED[0].place, region: null },
+          },
+        ])
+      )
+    );
+    renderPage();
+    await ready();
+    await screen.findByText('부산시립미술관');
+
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-subtitle')
+    ).toHaveTextContent('꼭 갈 곳');
+  });
+
+  it('서버 사진이 있으면 그 URL 이 사진 칸 source 다', async () => {
+    server.use(
+      http.get(`${BASE}/saved-places`, () =>
+        HttpResponse.json([
+          {
+            ...SAVED[0],
+            place: {
+              ...SAVED[0].place,
+              imageUrl: 'https://img.example.com/a.jpg',
+            },
+          },
+        ])
+      )
+    );
+    renderPage();
+    await ready();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('itinerary-mustvisit-time-photo').props.source
+      ).toEqual([{ uri: 'https://img.example.com/a.jpg' }])
+    );
+  });
+
+  it('켜면 "고정" 배지가 서고 끄면 없다 · 시트는 처음엔 닫혀 있고 칸을 눌러야 열린다', async () => {
+    renderPage();
+    await ready();
+    ensureFixed(false);
+    expect(
+      screen.queryByTestId('itinerary-mustvisit-time-fixed-badge')
+    ).toBeNull();
+    expect(screen.queryAllByText('고정').length).toBe(0);
+
+    ensureFixed(true);
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-fixed-badge')
+    ).toHaveTextContent('고정');
+    expect(screen.queryByTestId(SHEET)).not.toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId(FIELD));
+    expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
+  });
+
+  it('값이 비면 저장이 잠기고, 체류를 누르면 그 칸이 선택된다 · 13:00 을 고르면 시 13·분 00 이 선택이다', async () => {
+    renderPage();
+    await ready();
+    ensureFixed(true);
+
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-submit')
+    ).toBeDisabled();
+
+    fireEvent.press(screen.getByTestId('itinerary-mustvisit-time-dwell-LONG'));
+    expect(
+      screen.getByTestId('itinerary-mustvisit-time-dwell-LONG')
+    ).toBeSelected();
+
+    pickDateAndStart();
+    const selected = screen
+      .queryAllByTestId(/^itinerary-mustvisit-time-start-option-/)
+      .filter((node) => node.props.accessibilityState?.selected === true)
+      .map((node) => String(node.props.testID));
+    expect(selected).toEqual([START_HOUR_CELL('13'), MINUTE_CELL('00')]);
+  });
+
+  it('시트가 딤·끌기로 닫혀도(onClose) 칸을 다시 누르면 새로 뜬다', async () => {
+    renderPage();
+    await ready();
+    ensureFixed(true);
+    fireEvent.press(screen.getByTestId(FIELD));
+
+    fireEvent(screen.getByTestId(SHEET), 'close');
+    expect(screen.queryByTestId(SHEET)).not.toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId(FIELD));
+    expect(screen.getAllByTestId(SHEET).length).toBe(1);
+  });
+
+  it('DELETE 가 실패하면(항목 그대로) 사유는 보이되 다시 시도는 세우지 않는다', async () => {
+    server.use(
+      http.delete(
+        `${BASE}/trips/:tripId/must-visits/:mustVisitId`,
+        () => new HttpResponse(null, { status: 500 })
+      )
+    );
+    renderPage();
+    await ready();
+    ensureFixed(true);
+    pickDateAndStart();
+
+    submit();
+
+    const error = await screen.findByTestId('itinerary-mustvisit-time-error');
+    expect(error).not.toHaveTextContent('');
+    expect(
+      screen.queryAllByTestId('itinerary-mustvisit-time-retry').length
+    ).toBe(0);
   });
 });

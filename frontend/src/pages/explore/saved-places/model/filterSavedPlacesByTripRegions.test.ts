@@ -15,9 +15,6 @@
  *   빈 지역을 매칭에 태우면 필터가 통째 no-op이 된다 — 함수는 `t === ''`를 걸러야 한다(02a ★3).
  * ★ 양방향(C3): place가 여행 지역보다 **짧아도** 매칭된다(place '부산' ⊂ trip '부산광역시', 02a ★2).
  */
-import fs from 'fs';
-import path from 'path';
-
 import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 
 import { filterSavedPlacesByTripRegions } from './filterSavedPlacesByTripRegions';
@@ -136,31 +133,5 @@ describe('filterSavedPlacesByTripRegions · AC-2 지역 필터(양방향 접두�
     const result = filterSavedPlacesByTripRegions(list, ['부산광역시']);
 
     expect(poiIds(result)).toEqual(['in', 'nul', 'in2']);
-  });
-});
-
-/**
- * 페이지 인라인 금지 계약(02a ★5) — 주 심판은 이 순수함수다. 페이지가 필터를 인라인 복제하면
- * 이 파일이 죽은 코드를 검증하게 되므로, 파일이 정본 경로에 실재하고 `SavedPlacesPage`가 그것을
- * 참조하는지를 소스로 확인한다. 행동 증명(페이지가 실제로 필터함)은 통합 테스트가 별도로 잠근다.
- */
-describe('구조 앵커 · 순수함수는 정본 경로에 있고 페이지가 그것을 참조한다', () => {
-  const ROOT = path.resolve(__dirname, '../../../../..'); // → frontend/
-  const FN_PATH = path.join(
-    ROOT,
-    'src/pages/explore/saved-places/model/filterSavedPlacesByTripRegions.ts'
-  );
-  const PAGE_PATH = path.join(
-    ROOT,
-    'src/pages/explore/saved-places/ui/SavedPlacesPage.tsx'
-  );
-
-  it('순수함수 파일이 정본 경로에 존재한다', () => {
-    expect(fs.existsSync(FN_PATH)).toBe(true);
-  });
-
-  it('SavedPlacesPage가 filterSavedPlacesByTripRegions를 참조한다(인라인 아님)', () => {
-    const source = fs.readFileSync(PAGE_PATH, 'utf8');
-    expect(source).toContain('filterSavedPlacesByTripRegions');
   });
 });

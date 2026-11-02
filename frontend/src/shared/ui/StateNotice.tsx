@@ -60,7 +60,7 @@ function ActionButton({ action }: { action: StateNoticeAction }): ReactElement {
       accessibilityRole="button"
       onPress={action.onPress}
       disabled={action.disabled}
-      className={`h-12 w-[200px] items-center justify-center rounded-button ${
+      className={`min-h-12 w-[200px] items-center justify-center rounded-button ${
         filled ? 'bg-primary' : 'border border-hairline-strong bg-canvas'
       }${dimmed}`}
     >

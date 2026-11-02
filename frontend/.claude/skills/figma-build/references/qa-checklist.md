@@ -1,6 +1,6 @@
 # Figma 화면 QA 체크리스트
 
-> 화면마다 `get_screenshot`을 **실제로 보고** assertion PASS/FAIL. FAIL은 근거(무엇이·어디서) + 수정안 1줄. 기준 값은 `design-kit.md`(값의 정본은 코드 `tailwind.config.js`). 산출·재호출 규칙은 `figma-build/SKILL.md`.
+> 화면마다 `mcp__figma__get_screenshot`을 **실제로 보고** assertion PASS/FAIL. FAIL은 근거(무엇이·어디서) + 수정안 1줄. 기준 값은 `design-kit.md`(값의 정본은 코드 `tailwind.config.js`). 산출·재호출 규칙은 `figma-build/SKILL.md`.
 
 ## A. 색 (킷 §2)
 - [ ] 사용 색이 코드 25토큰뿐인가 — 임의 회색·비토큰 hex 없음.

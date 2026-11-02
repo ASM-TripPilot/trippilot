@@ -37,6 +37,14 @@ import {
 } from '@/test-support/wizardDraftFixture';
 
 import { SavedPlacesPage } from './SavedPlacesPage';
+import {
+  createGcZeroWrapper,
+  newTestQueryClient,
+} from '@/test-support/queryRender';
+import { createGate } from '@/test-support/mswHookHarness';
+import { BASE } from '@/test-support/apiBase';
+import { makePlace as fixturePlace } from '@/test-support/mustVisitFixtures';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * d02 담은 장소 페이지(`SavedPlacesPage`)의 **배선** 통합 테스트 — 진짜 react-query + msw 가짜 서버.
@@ -68,26 +76,20 @@ jest.mock('@/shared/storage', () => ({
 }));
 
 // jest.mock 팩토리는 파일 맨 위로 끌어올려져 바깥 변수를 못 본다 — `mock` 접두 변수만 예외다.
-// push·back 은 화살표로 감싸 **호출 시점에** 목을 찾는다(즉시 읽으면 hoist 시점의 undefined 가 박힌다,
-// TRIP-221 ★16). 구현이 `router` 객체를 쓰든 `useRouter()` 를 쓰든 같은 목에 모인다.
-const mockPush = jest.fn();
-const mockBack = jest.fn();
+// push·back 은 공용 목 기록장(`routerSpies`)의 별칭이다 — 구현이 `router` 객체를 쓰든 `useRouter()` 를 쓰든
+// 같은 함수에 모인다(옛 인라인 목의 화살표 감싸기 — TRIP-221 ★16 — 는 필요 없어졌다).
+const { push: mockPush, back: mockBack } = routerSpies;
 // 주소 파라미터 창구 — 테스트가 갈아 끼우고, 목은 호출 시점에 읽는다(최상위 afterEach 가 비운다).
 let mockParams: Record<string, string | string[] | undefined> = {};
 
-jest.mock('expo-router', () => ({
-  router: {
-    push: (href: unknown) => mockPush(href),
-    back: () => mockBack(),
-  },
-  useRouter: () => ({
-    push: (href: unknown) => mockPush(href),
-    back: () => mockBack(),
-  }),
-  useLocalSearchParams: () => ({ ...mockParams }),
-}));
-
-const BASE = 'http://localhost:8080/api/v1';
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'back'],
+    router: ['push', 'back', 'replace', 'canGoBack'],
+    params: () => ({ ...mockParams }),
+  })
+);
 
 /* ── 공용 관찰·렌더 도구 ───────────────────────────────────────────────────── */
 
@@ -100,25 +102,8 @@ function hitsOf(method: string, pathname: string) {
   );
 }
 
-function createWrapper() {
-  const client = new QueryClient({
-    defaultOptions: {
-      // gcTime: 0 — 기본값이 만드는 타이머가 테스트 종료 후에도 살아남아 Node 프로세스를
-      // 붙잡는다. **mutations 쪽도 반드시 0** 이다(빼면 이 버킷이 300초 매달린다, 리포 실측).
-      queries: { retry: false, gcTime: 0 },
-      mutations: { gcTime: 0 },
-    },
-  });
-  function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-  }
-  return Wrapper;
-}
-
 function renderPage() {
-  return render(<SavedPlacesPage />, { wrapper: createWrapper() });
+  return render(<SavedPlacesPage />, { wrapper: createGcZeroWrapper() });
 }
 
 function itemTestIds(): string[] {
@@ -255,16 +240,6 @@ describe('save', () => {
    * 는 페이지가 **스냅숏의 원 savedAt(08-01T11)으로 정렬 키를 덮어써야만** 성립한다(02a ★3, 블라인드
    * 스팟 #1 — 낙관 표식 맨끝 규칙을 실제로 잠근다). */
   const RESTORE_SAVED_AT = '2026-08-09T00:00:00.000Z';
-
-  /** 테스트가 풀어 줄 때까지 응답하지 않는 문(리포 선례). `delay(ms)` 로 재면 느린 CI 에서
-   * 흔들리고 "아직 안 왔다"를 결정론적으로 보장하지 못한다. */
-  function createGate() {
-    let release!: () => void;
-    const opened = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    return { opened, release };
-  }
 
   let savedRows: SavedPlace[] = [];
   let listGate = createGate();
@@ -853,7 +828,6 @@ describe('save', () => {
   });
 
   // TRIP-1287 — 해제 행의 "해제됨" 글자·흐림이 실제 해제·재담기·실패 원복·재방문을 따라 붙고 떨어진다.
-  // 흐림은 순번 칸 하나를 대리 신호로 잰다(어느 칸까지 흐리고 무엇을 또렷이 두는지는 화면 단위 테스트 몫).
   describe('해제됨 글자·흐림 왕복', () => {
     let gate = createGate();
     // 문 뒤에 세운 요청이 단언 실패로 매달린 채 남지 않게 항상 연다(케이스 지역 상태라 여기서 건다).
@@ -866,23 +840,6 @@ describe('save', () => {
       expect(
         screen.getByTestId(`explore-saved-released-${savedPlaceId}`)
       ).toHaveTextContent('해제됨');
-    }
-    /** 순번 칸에서 행까지 올라가며 `opacity-40` 이 있는지 — 흐림은 자식에 곱해진다. */
-    function rankDimmed(savedPlaceId: string): boolean {
-      const rowId = `explore-saved-item-${savedPlaceId}`;
-      let cur: ReturnType<typeof screen.getByTestId> | null =
-        screen.getByTestId(`explore-saved-rank-${savedPlaceId}`);
-      while (cur) {
-        if (
-          String(cur.props.className ?? '')
-            .split(/\s+/)
-            .includes('opacity-40')
-        )
-          return true;
-        if (cur.props.testID === rowId) return false;
-        cur = cur.parent;
-      }
-      throw new Error(`${rowId} 행 밖의 노드다`);
     }
     function subtitle(text: string) {
       return within(screen.getByTestId('explore-saved-subtitle')).getByText(
@@ -900,7 +857,6 @@ describe('save', () => {
       fireEvent.press(heart('sp-b'));
       await waitFor(() => expect(deletedIds()).toEqual(['sp-b']));
       await waitFor(() => expectReleasedText('sp-b'));
-      expect(rankDimmed('sp-b')).toBe(true);
       expect(subtitle('3곳 · 담은 순서대로')).toBeOnTheScreen();
 
       fireEvent.press(heart('sp-b'));
@@ -910,7 +866,6 @@ describe('save', () => {
       );
       await waitFor(() => expect(heart('sp-b')).toBeSelected());
       expect(released('sp-b')).toBeNull();
-      expect(rankDimmed('sp-b')).toBe(false);
       await waitFor(() => expectOrder(SORTED));
       await waitFor(() =>
         expect(subtitle('4곳 · 담은 순서대로')).toBeOnTheScreen()
@@ -982,7 +937,6 @@ describe('save', () => {
       fireEvent.press(heart('sp-b'));
       // 문이 닫힌 동안 — 서버 답 전에 해제 표시가 먼저 선다.
       await waitFor(() => expectReleasedText('sp-b'));
-      expect(rankDimmed('sp-b')).toBe(true);
 
       gate.release();
 
@@ -995,7 +949,6 @@ describe('save', () => {
       );
       await waitFor(() => expect(heart('sp-b')).toBeSelected());
       expect(released('sp-b')).toBeNull();
-      expect(rankDimmed('sp-b')).toBe(false);
     });
 
     it('재담기가 실패하면 빠졌던 글자·흐림이 빈 하트 원복과 함께 다시 붙는다 (INV-4 대칭)', async () => {
@@ -1029,7 +982,6 @@ describe('save', () => {
       );
       await waitFor(() => expect(heart('sp-b')).not.toBeSelected());
       expectReleasedText('sp-b');
-      expect(rankDimmed('sp-b')).toBe(true);
     });
 
     it('네트워크 실패 뒤 [다시 시도]가 성공하면 그 행에 "해제됨" 이 붙는다', async () => {
@@ -1061,7 +1013,6 @@ describe('save', () => {
 
       await waitFor(() => expect(deletedIds()).toEqual(['sp-b', 'sp-b']));
       await waitFor(() => expectReleasedText('sp-b'));
-      expect(rankDimmed('sp-b')).toBe(true);
       expect(screen.queryByTestId('explore-saved-removeerror')).toBeNull();
     });
   });
@@ -1228,28 +1179,12 @@ describe('save › 지역 필터', () => {
  * 최종 poiId 는 msw 목록에서 나온 실데이터라야 의미가 있다(`SavedPlacesPage.integration` 선례).
  */
 describe('save › 행 탭', () => {
-  function makePlace(poiId: string, nameKo: string): Place {
-    return {
-      poiId,
-      nameKo,
-      category: '명소',
-      lat: 35.1,
-      lng: 129.1,
-      region: '부산',
-      openingHours: null,
-      imageUrl: null,
-      tags: [],
-      savedCount: 3,
-      dataStatus: 'ACTIVE',
-    };
-  }
-
   // ★ savedPlaceId('saved-x') ≠ place.poiId('p9') — push 는 place.poiId 여야 한다.
   const ROWS: SavedPlace[] = [
     {
       savedPlaceId: 'saved-x',
       savedAt: '2026-08-01T00:00:00Z',
-      place: makePlace('p9', '감천문화마을'),
+      place: fixturePlace('p9', '감천문화마을'),
     },
   ];
   beforeEach(() => {
@@ -1568,12 +1503,7 @@ describe('select › 위저드', () => {
   async function arrangeFallbackLiftedWithHiddenPicks(): Promise<void> {
     let rows: SavedPlace[] = SEOUL_QA;
     server.use(http.get(`${BASE}/saved-places`, () => HttpResponse.json(rows)));
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     mockParams.mode = 'select';
     mockParams.region = ['서울특별시'];
     setAccessToken('valid-access');
@@ -1776,12 +1706,7 @@ describe('select › 위저드', () => {
       server.use(
         http.get(`${BASE}/saved-places`, () => HttpResponse.json(rows))
       );
-      const client = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, gcTime: 0 },
-          mutations: { gcTime: 0 },
-        },
-      });
+      const client = newTestQueryClient({ gcTime: 0 });
       mockParams.mode = 'select';
       setAccessToken('valid-access');
       render(
@@ -2872,12 +2797,7 @@ describe('select › 여행', () => {
     mockParams.mode = 'select';
     mockParams.tripId = TRIP_ID;
     setAccessToken('valid-access');
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0 },
-        mutations: { gcTime: 0 },
-      },
-    });
+    const client = newTestQueryClient({ gcTime: 0 });
     function Wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>

@@ -79,6 +79,8 @@ export function itinerary(over: Partial<Itinerary> = {}): Itinerary {
     generationMode: 'FULLY_AI',
     generationState: 'COMPLETE',
     isFallback: false,
+    scoringMode: null,
+    degradations: [],
     days: [
       day(DAY1, [
         slot('poi-a'),

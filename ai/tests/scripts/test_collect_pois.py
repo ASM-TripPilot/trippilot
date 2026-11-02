@@ -14,7 +14,7 @@ from pathlib import Path
 # scripts/ 는 패키지가 아니다 — 스크립트와 같은 방식(동일 디렉토리 경로)으로 import
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "collect"))
 
-from collect_pois import write_seen_refs  # noqa: E402
+from collect_pois import _print_summary, write_seen_refs  # noqa: E402
 
 _NOW = datetime(2026, 10, 5, 19, 0, tzinfo=UTC)
 
@@ -35,3 +35,19 @@ def test_본_것이_없어도_파일은_쓴다(tmp_path) -> None:
     assert write_seen_refs(path, frozenset(), run_at=_NOW,
                            area_codes=["1"], content_types=["12"]) == 0
     assert json.loads(path.read_text(encoding="utf-8"))["seen"] == []
+
+
+def test_서머리는_옛_분류가_빈_레포츠_항목의_새_분류를_많은_순으로_찍는다(tmp_path, capsys) -> None:
+    """야영장을 수집에서 거를 코드를 찾는 계측(`CollectStats.leports_lcls`) — 다음 일일 수집의 잡 서머리에서 본다.
+    과거 산출 문서엔 그 칸이 없다(— 표시)."""
+    stats = {"http_calls": 2, "listed": 3, "passed": 3, "category_unmapped": 0, "merged": 0,
+             "page_failures": 0, "detail_failures": 0, "budget_exhausted": False, "gate_drops": {}}
+    doc = {"area_codes": ["1"], "content_types": ["28"], "collected_at": "2026-10-30T00:00:00+00:00",
+           "stats": {**stats, "leports_lcls": {"LS/LS01": 1, "AC/AC01": 2}}}
+    path = tmp_path / "doc.json"
+    path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    assert _print_summary(str(path)) == 0
+    assert "| 레포츠 옛 분류 빈 항목의 새 분류 | AC/AC01 2 · LS/LS01 1 |" in capsys.readouterr().out
+    path.write_text(json.dumps({**doc, "stats": stats}, ensure_ascii=False), encoding="utf-8")
+    assert _print_summary(str(path)) == 0
+    assert "| 레포츠 옛 분류 빈 항목의 새 분류 | — |" in capsys.readouterr().out

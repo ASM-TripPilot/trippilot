@@ -19,6 +19,7 @@ import type {
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
+import { answerReduceMotionSynchronously } from '@/test-support/animatedProbe';
 import {
   flushOsAnswer,
   holdReduceMotionOn,
@@ -166,6 +167,8 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => {
   setAccessToken('a');
   mockShareArmed.value = false;
+  // TRIP-1624 — 카운트업 숫자가 실제 타이머로 돌며 틱마다 act 밖에서 상태를 바꾸지 않게 "동작 줄이기 켜짐"을 동기로 답한다.
+  answerReduceMotionSynchronously(true);
 });
 // 칸 이동은 연타 가드(모듈 전역 400ms 창)를 지난다 — 앞 테스트의 누름이 뒤 테스트를 막지 않게 파일 최상위에서 닫는다.
 afterEach(() => {
@@ -432,5 +435,70 @@ describe('🔴 TRIP-1584 · 하단 바 — 5칸 복제 탭바(옛 TRIP-1262 dism
     expect(mockDismissTo.mock.calls).toEqual([[shellTabHref('records')]]);
     expect(router.back).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
+
+// B안(2026-11-01) — 옛 `TripSummaryScreen.test.tsx`(뷰 단위)가 보던 화면 동작을 요약 응답만 바꿔 이 페이지 위에서 본다.
+// 모션(카운트업·등장 순서)은 가짜 타이머로 화면을 직접 재는 게 맞아 `TripSummaryScreen.test.tsx` 에 남겼다.
+describe('화면 동작 — 통계 세 칸·거리 출처·요약 문장·일차 카드·방문 목록 (옛 뷰 단위 흡수)', () => {
+  const withStats = (
+    base: TripSummary,
+    over: Partial<TripSummary>
+  ): TripSummaryEnvelope => ({
+    ready: true,
+    summary: { ...base, ...over, stats: { ...base.stats, ...over.stats } },
+  });
+
+  it('지도 얼굴 — 통계 세 칸이 서버 값이고 거리 칸에 출처 라벨이 붙으며, 일차 카드는 "1일차"·"· N곳"', async () => {
+    const base = summary(true, ['코엑스', '봉은사']);
+    server.use(
+      tripOk(),
+      summaryHandler(
+        withStats(base, {
+          stats: { ...base.stats, totalDistanceKm: 3, totalPhotos: 5 },
+        })
+      )
+    );
+    renderPage();
+    await waitSummary();
+
+    const stats = within(screen.getByTestId('reflection-summary-stats'));
+    expect(stats.getByText('2')).toBeOnTheScreen();
+    expect(stats.getByText('5')).toBeOnTheScreen();
+    expect(stats.getByText('근사')).toBeOnTheScreen();
+    const card = within(screen.getByTestId('reflection-summary-day-card'));
+    expect(card.getByText('1일차')).toBeOnTheScreen();
+    expect(card.getByText('· 2곳')).toBeOnTheScreen();
+  });
+
+  it('요약 문장이 공백뿐이면 문장 카드를 그리지 않는다 — 일차 카드는 있다', async () => {
+    const base = summary(true, ['코엑스']);
+    server.use(tripOk(), summaryHandler(withStats(base, { narrative: '   ' })));
+    renderPage();
+    await waitSummary();
+
+    expect(screen.queryByTestId('reflection-summary-narrative')).toBeNull();
+    expect(screen.getByTestId('reflection-summary-day-card')).toBeOnTheScreen();
+  });
+
+  it('방문 목록 얼굴 — 방문마다 한 줄씩 "N일차"·장소명이 서고, 측정 못 한 거리엔 출처 라벨이 없다', async () => {
+    server.use(
+      tripOk(),
+      summaryHandler({
+        ready: true,
+        summary: summary(false, ['코엑스', '봉은사']),
+      })
+    );
+    renderPage();
+    await waitSummary();
+
+    const rows = screen.getAllByTestId('reflection-summary-visit-item');
+    expect(rows).toHaveLength(2);
+    expect(within(rows[0]).getByText('1일차')).toBeOnTheScreen();
+    expect(within(rows[0]).getByText('코엑스')).toBeOnTheScreen();
+    expect(within(rows[1]).getByText('봉은사')).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('reflection-summary-stats')).queryByText('근사')
+    ).toBeNull();
   });
 });

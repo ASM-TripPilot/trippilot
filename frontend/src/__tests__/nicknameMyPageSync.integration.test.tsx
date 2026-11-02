@@ -46,17 +46,14 @@ import { WithToastHost, resetToast } from '@/test-support/toastHarness';
  * ⚠️ jest 사각: 실제 탭 전환(설정 → 뒤로 → 마이 탭)은 못 본다 — 6-b 몫.
  */
 
-const mockPush = jest.fn();
-
 // SettingsPage 는 press 시점에 require('expo-router').router 를, MyPage 는 useRouter 를 쓴다 — 두 모양을 함께 준다.
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn() }),
-  router: {
-    push: (...args: unknown[]) => mockPush(...args),
-    back: jest.fn(),
-    replace: jest.fn(),
-  },
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back'],
+    router: ['push', 'replace', 'back'],
+  })
+);
 
 jest.mock('expo-linking', () => ({
   openURL: jest.fn().mockResolvedValue(true),

@@ -63,3 +63,22 @@ export function hostNodes(node: ReactTestInstance): ReactTestInstance[] {
   );
   return [...own, ...kids.flatMap(hostNodes)];
 }
+
+/**
+ * `AccessibilityInfo.isReduceMotionEnabled()` 가 **그 자리에서** 답하게 한다(TRIP-1624). `beforeEach` 에서 부른다.
+ *
+ * 왜: `useReduceMotion` 은 Promise 답으로 `setReduce` 를 부르는데, 동기 테스트에선 그 답이 render 의 act 밖(다음 마이크로태스크)에 와서
+ * "not wrapped in act" 경고가 찍힌다. 답이 effect 안에서 동기로 오면 render 의 act 가 감싼다. 렌더 헬퍼를 전부 async 로 바꿀 필요가 없다.
+ * ⚠️ "답이 오기 전(reduce===null)"을 일부러 보는 테스트에서는 쓰지 마라 — 그 상태가 사라진다.
+ * 반환값은 `then` 하나만 가진 thenable 이다(소비처가 `.then` 만 쓴다 — `grep isReduceMotionEnabled src`).
+ */
+export function answerReduceMotionSynchronously(reduce: boolean): void {
+  jest.mocked(AccessibilityInfo.isReduceMotionEnabled).mockImplementation(
+    () =>
+      ({
+        then: (onAnswer: (value: boolean) => void) => {
+          onAnswer(reduce);
+        },
+      }) as unknown as Promise<boolean>
+  );
+}

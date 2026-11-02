@@ -8,11 +8,13 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import * as Linking from 'expo-linking';
+import { http, HttpResponse } from 'msw';
 
 import { buildAppNavUrl, buildWebNavUrl } from '@/features/execution';
 import { server } from '@/mocks/server';
 import type { VisitCheck } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { BASE } from '@/test-support/apiBase';
 import {
   liveHubHandlers,
   liveItinerary,
@@ -101,7 +103,11 @@ function seed(slots: unknown[], visits: VisitCheck[] = []) {
     ...liveHubHandlers({
       itinerary: liveItinerary([{ date: TODAY, slots }]),
       visits,
-    })
+    }),
+    // TRIP-1624 — 허브는 내 위치 표시 때문에 위치 동의를 조회한다(TRIP-1535). 이 파일은 길찾기만 보므로 동의 없음 한 줄이면 된다.
+    http.get(`${BASE}/me/location-consent`, () =>
+      HttpResponse.json({ legalConsent: false })
+    )
   );
 }
 

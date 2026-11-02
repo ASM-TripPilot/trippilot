@@ -45,13 +45,14 @@ def list_item(
     lcls1: str = "",   # 새 분류 체계 — 실물은 둘 다 오고, 수정된 항목은 cat 이 비고 lcls 만 온다
     lcls2: str = "",
     lcls3: str = "",
+    cpyrht: str = "",   # 공공누리 유형 — 실물은 `Type1`·`Type3` 등
 ) -> dict:
     return {
         "contentid": contentid, "contenttypeid": contenttypeid, "title": title,
         "addr1": addr1, "mapx": mapx, "mapy": mapy,
         "cat1": cat1, "cat2": cat2, "cat3": cat3,
         "lclsSystm1": lcls1, "lclsSystm2": lcls2, "lclsSystm3": lcls3,
-        "firstimage": firstimage, "modifiedtime": modifiedtime,
+        "firstimage": firstimage, "modifiedtime": modifiedtime, "cpyrhtDivCd": cpyrht,
     }
 
 

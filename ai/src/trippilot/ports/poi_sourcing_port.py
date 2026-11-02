@@ -33,6 +33,7 @@ class SourcedPlaceRecord:
     category_codes: tuple[str, ...]  # 벤더 카테고리 코드 (TourAPI cat1~cat3)
     image_url: str | None
     modified_at: str | None    # 벤더 표기 그대로 (provenance 용도)
+    cpyrht: str | None = None  # 공공누리 유형 (TourAPI cpyrhtDivCd, `Type1`·`Type3` 원문 그대로)
 
 
 @dataclass(frozen=True, slots=True)

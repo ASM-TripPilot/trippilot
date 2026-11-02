@@ -57,6 +57,7 @@ import { savedPlace } from '@/test-support/mustVisitFixtures';
 import { resetToast } from '@/test-support/toastHarness';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { freezeDate } from '@/test-support/freezeDate';
+import { revealValues } from '@/test-support/revealProbe';
 import {
   createWrapper,
   newTestQueryClient,
@@ -171,6 +172,22 @@ function renderPage(tripId: string = TRIP_ID) {
   return renderWithQueryClient(
     <DraftPage tripId={tripId} />,
     newTestQueryClient({ gcTime: 0 })
+  );
+}
+
+/**
+ * Href 두 모양을 도착 경로 글자로 편다 — 문자열(`/trips/t1/itinerary`) 또는 `{ pathname: '/trips/[tripId]/itinerary',
+ * params: { tripId } }`. (개념: Href = expo-router 가 받는 이동 목적지. 대괄호 자리 `[tripId]` 는 params 로 채운다.)
+ */
+function hrefPath(href: unknown): string {
+  if (typeof href === 'string') return href;
+  const { pathname, params } = href as {
+    pathname: string;
+    params?: Record<string, string>;
+  };
+  return pathname.replace(
+    /\[(\w+)\]/g,
+    (_match, key: string) => params?.[key] ?? ''
   );
 }
 
@@ -478,19 +495,24 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       expect(screen.queryByTestId('itinerary-draft-empty')).toBeNull();
     });
 
-    it('COMPLETE 인데 세션 id 가 남아 있어도(폴링이 안 도는 조합) 로딩이 고착되지 않고 빈 안내다', async () => {
-      itineraryScript = () =>
+    // TRIP-1690 FV-POLL-01 로 뒤집혔다 — COMPLETE + 세션은 재생성 1차(서버가 옛 행에 새 세션 id 를 붙임)라 이제 묻기를
+    // 잇는다(옛 서술 "폴링이 안 도는 조합"은 낡았다). 고착 방지 취지는 그대로: 세션이 닫히면 빈 안내로 넘어간다.
+    it('COMPLETE 인데 세션 id 가 있으면 로딩 얼굴로 묻기를 잇고, 세션이 닫히면 고착 없이 빈 안내다', async () => {
+      itineraryScript = (call) =>
         itinerary({
           generationState: 'COMPLETE',
           days: [],
-          generationSessionId: 'session-1',
+          generationSessionId: call <= 1 ? 'session-1' : null,
         });
 
       renderPage();
 
-      await screen.findByTestId('itinerary-draft-empty');
+      await screen.findByTestId('itinerary-draft-loading');
+      await screen.findByTestId('itinerary-draft-empty', undefined, {
+        timeout: DRAFT_POLL_INTERVAL_MS * 3,
+      });
       expect(screen.queryByTestId('itinerary-draft-loading')).toBeNull();
-    });
+    }, 20000);
 
     it('COMPLETE + 일자 없음 + 세션 없음(진짜 0곳) → 빈 안내 그대로', async () => {
       itineraryScript = () =>
@@ -1145,9 +1167,12 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
 
         fireEvent.press(screen.getByTestId(backTestId));
 
-        // 홈 목적지 자체를 잠근다 — `/(tabs)/itinerary` 는 trips[0] 리다이렉트 함정이라 금지
-        // (`ItineraryPlanPage.escape` AC-4 동형). 침묵 no-op 도, back+replace 이중호출도 아님.
-        expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+        // TRIP-1685 — 폴백이 홈(/(tabs))에서 "그 여행의 일정 보기"로 바뀌었다. 침묵 no-op 도, back+replace
+        // 이중호출도 아님. Href 모양(문자열 / `{pathname, params}`)은 구현이 고르므로 도착 경로 글자로 비교한다.
+        expect(mockReplace).toHaveBeenCalledTimes(1);
+        expect(hrefPath(mockReplace.mock.calls[0]?.[0])).toBe(
+          `/trips/${TRIP_ID}/itinerary`
+        );
         expect(mockBack).not.toHaveBeenCalled();
       }
     );
@@ -1170,6 +1195,65 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
         expect(mockReplace).not.toHaveBeenCalled();
       }
     );
+  });
+
+  // 옛 DraftScreen.test.tsx(뷰 단위)를 B안으로 옮겼다 — 남는 얼굴(loading·empty)의 일차 탭·다시 만들기 잠금·진행 표시.
+  describe('DraftScreen 얼굴 — 일차 탭 · 확정 일정 잠금 · 진행 표시', () => {
+    it('3일 여행에 1일차만 도착(0곳)하면 탭 3개가 서고, 안 온 날은 비활성이다 (AC-4)', async () => {
+      itineraryScript = () =>
+        itinerary({ generationState: 'COMPLETE', days: [day(DAY1, [])] });
+
+      renderPage();
+      await screen.findByTestId('itinerary-draft-empty');
+
+      expect(screen.queryAllByTestId(/^itinerary-draft-day-/)).toHaveLength(3);
+      expect(screen.getByTestId('itinerary-draft-day-1')).toBeEnabled();
+      expect(screen.getByTestId('itinerary-draft-day-2')).toBeDisabled();
+      expect(screen.getByTestId('itinerary-draft-day-3')).toBeDisabled();
+    });
+
+    it('확정(CONFIRMED) 일정에서는 다시 만들기가 비활성이고 눌러도 POST·이동이 0이다 (01b D8) — 짝: PLANNED 면 활성', async () => {
+      itineraryScript = () =>
+        itinerary({
+          status: 'CONFIRMED',
+          generationState: 'COMPLETE',
+          days: [],
+        });
+
+      const { unmount } = renderPage();
+      await screen.findByTestId('itinerary-draft-empty');
+
+      const retry = screen.getByTestId('itinerary-draft-retry');
+      expect(retry).toBeDisabled();
+      fireEvent.press(retry);
+      await sleep(300);
+      expect(log.hitsFor('POST', '/itinerary')).toBe(0);
+      expect(generatingMoves()).toBe(0);
+
+      unmount();
+      itineraryScript = () =>
+        itinerary({ generationState: 'COMPLETE', days: [] });
+      renderPage();
+      await screen.findByTestId('itinerary-draft-empty');
+      expect(screen.getByTestId('itinerary-draft-retry')).toBeEnabled();
+    });
+
+    it('진행 표시는 평범한 것 하나뿐 — 단계·진행률·백그라운드·취소 글자가 없다 (C14)', async () => {
+      itineraryScript = () =>
+        itinerary({
+          generationState: 'PARTIAL',
+          days: [],
+          generationSessionId: 'session-1',
+        });
+
+      renderPage();
+      await screen.findByTestId('itinerary-draft-loading');
+
+      const texts = renderedText();
+      ['백그라운드', '취소', '%'].forEach((forbidden) =>
+        expect(texts).not.toContain(forbidden)
+      );
+    });
   });
 });
 
@@ -1352,6 +1436,151 @@ describe('폴링 상한 기준점', () => {
         client.setQueryData(ITINERARY_KEY, emptyPartial());
       });
       expect(screen.queryByTestId('itinerary-draft-failed')).not.toBeNull();
+    }, 20000);
+  });
+
+  /**
+   * TRIP-1690 형식 검증 반례(FV-POLL-02 · P2 NoStuckProgress) — 상한·조회 오류로 폴링이 멈췄는데 PARTIAL 이면
+   * 진행 카드만 남아 「만드는 중」에 갇혔다. 이제 시트 맨 위에 실패 안내 + [다시 시도](일정 GET 1회)가 선다.
+   * 3동작: 준비 = PARTIAL 을 상한까지 쌓는다 → 실행 = [다시 시도] → 단언 = 안내·GET·서버가 닫은 FAILED 얼굴.
+   */
+  describe('🔴 C4·C5 · FV-POLL-02 — 생성 중(PARTIAL) 셸도 실패(상한·조회 오류)를 말하고 다시 묻는다', () => {
+    it('C4 상한 뒤 PARTIAL 이면 안내 + [다시 시도] — 누르면 GET 1회, 서버가 FAILED 로 닫았으면 h08 셸 + 안내', async () => {
+      const client = newTestQueryClient();
+      renderDraft(client);
+      await screen.findByTestId('generation-progress-card');
+      await waitFor(() => expect(getCalls).toBeGreaterThanOrEqual(1));
+      expect(screen.queryByTestId('itinerary-draft-partial-retry')).toBeNull(); // 앵커 — 상한 전엔 없다
+
+      act(() => {
+        for (let i = 0; i < 30; i += 1) {
+          client.setQueryData(ITINERARY_KEY, itineraryFor('PARTIAL'));
+        }
+      });
+      expect(screen.getByTestId('generation-progress-card')).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('itinerary-draft-stale-failed')
+      ).toBeOnTheScreen();
+      const before = getCalls;
+
+      stateForCall = () => 'FAILED';
+      fireEvent.press(screen.getByTestId('itinerary-draft-partial-retry'));
+      await waitFor(() => expect(getCalls).toBe(before + 1));
+      await screen.findByTestId('sheet-cta-root');
+      expect(screen.queryByTestId('generation-progress-card')).toBeNull();
+      expect(
+        screen.getByTestId('itinerary-draft-stale-failed')
+      ).toBeOnTheScreen();
+    }, 20000);
+
+    it('C5 PARTIAL 폴링 중 조회가 실패하면 진행 카드 곁에 안내가 선다(조회 오류를 숨기지 않는다 · INV-4)', async () => {
+      const client = newTestQueryClient();
+      renderDraft(client);
+      await screen.findByTestId('generation-progress-card');
+      await waitFor(() => expect(getCalls).toBeGreaterThanOrEqual(1));
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+          HttpResponse.json({}, { status: 500 })
+        )
+      );
+      await screen.findByTestId('itinerary-draft-stale-failed', undefined, {
+        timeout: DRAFT_POLL_INTERVAL_MS * 3,
+      });
+      expect(screen.getByTestId('generation-progress-card')).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('itinerary-draft-partial-retry')
+      ).toBeOnTheScreen();
+    }, 20000);
+  });
+
+  /**
+   * TRIP-1690 형식 검증 반례(FV-POLL-01 · P1 ResultOnlyAfterComplete) — 재생성 1차(AI) 동안 서버는 옛 COMPLETE 행에
+   * 새 세션 id 를 붙여 준다. 초안이 세션을 안 봐 예전 일정을 완성본으로 그리고 폴링을 멈췄다. 이제 세션이 돌면
+   * 묻기를 이어 가고, 그동안은 로딩 얼굴이다(예전 일정을 완성본으로 보이지 않는다).
+   */
+  describe('🔴 C6 · FV-POLL-01 — 세션이 돌고 있으면 COMPLETE 로 보여도 묻기를 잇는다', () => {
+    it('옛 COMPLETE + 진행 중 세션이면 확정 CTA 없이 로딩 얼굴로 묻다가, 1일차(PARTIAL)가 오면 진행 카드로 넘어간다', async () => {
+      serveItinerary(server, {
+        trip: () => BUSAN_TRIP,
+        itinerary: () => {
+          getCalls += 1;
+          return getCalls <= 1
+            ? { ...itineraryFor('COMPLETE'), generationSessionId: 'sess-2' }
+            : { ...itineraryFor('PARTIAL'), generationSessionId: 'sess-2' };
+        },
+      });
+      renderDraft(newTestQueryClient());
+      await screen.findByTestId('itinerary-draft-loading');
+      expect(screen.queryByTestId('sheet-cta-root')).toBeNull();
+      await screen.findByTestId('generation-progress-card', undefined, {
+        timeout: DRAFT_POLL_INTERVAL_MS * 3,
+      });
+      expect(getCalls).toBeGreaterThanOrEqual(2);
+    }, 20000);
+
+    // 5-b W-1 — 옛 행이 폴백 일정이어도 재생성 중이면 지난 생성의 폴백 인터스티셜을 띄우지 않는다.
+    it('C7 옛 행이 폴백(isFallback)이어도 세션이 돌면 인터스티셜이 아니라 로딩 얼굴이다', async () => {
+      serveItinerary(server, {
+        trip: () => BUSAN_TRIP,
+        itinerary: () => {
+          getCalls += 1;
+          return {
+            ...itineraryFor('COMPLETE'),
+            isFallback: true,
+            solveMode: 'MINIMAL',
+            generationSessionId: 'sess-2',
+          };
+        },
+      });
+      renderDraft(newTestQueryClient());
+      await screen.findByTestId('itinerary-draft-loading');
+      expect(screen.queryByTestId('itinerary-fallback-root')).toBeNull();
+    }, 20000);
+
+    // 5-b W-2 — 로딩 덮기의 두 탈출 조건. 하나라도 빠지면 상한·조회 오류 뒤에도 로딩에 갇힌다.
+    it('C8 세션이 도는 옛 행도 상한에 닿으면 로딩을 끝내고 옛 목록 + 실패 안내로 말한다', async () => {
+      const client = newTestQueryClient();
+      const running = () => ({
+        ...itineraryFor('COMPLETE'),
+        generationSessionId: 'sess-2',
+      });
+      serveItinerary(server, {
+        trip: () => BUSAN_TRIP,
+        itinerary: () => {
+          getCalls += 1;
+          return running();
+        },
+      });
+      renderDraft(client);
+      await screen.findByTestId('itinerary-draft-loading');
+      act(() => {
+        for (let i = 0; i < 30; i += 1)
+          client.setQueryData(ITINERARY_KEY, running());
+      });
+      expect(screen.queryByTestId('itinerary-draft-loading')).toBeNull();
+      expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('itinerary-draft-stale-failed')
+      ).toBeOnTheScreen();
+    }, 20000);
+
+    it('C9 세션이 도는 옛 행에서 조회가 실패하면 로딩을 끝내고 옛 목록 + 실패 안내로 말한다', async () => {
+      serveItinerary(server, {
+        trip: () => BUSAN_TRIP,
+        itinerary: () => {
+          getCalls += 1;
+          return getCalls <= 1
+            ? { ...itineraryFor('COMPLETE'), generationSessionId: 'sess-2' }
+            : HttpResponse.json({}, { status: 500 });
+        },
+      });
+      renderDraft(newTestQueryClient());
+      await screen.findByTestId('itinerary-draft-loading');
+      await screen.findByTestId('itinerary-draft-stale-failed', undefined, {
+        timeout: DRAFT_POLL_INTERVAL_MS * 3,
+      });
+      expect(screen.queryByTestId('itinerary-draft-loading')).toBeNull();
+      expect(screen.getByTestId('sheet-cta-root')).toBeOnTheScreen();
     }, 20000);
   });
 });
@@ -1912,32 +2141,6 @@ describe('h08 셸 기본 얼굴', () => {
   });
 
   describe('🔴 A5b · TRIP-1110 AC-5·AC-6 — h08 헤더 meta 는 커넥터 구간(slice(1))만 보고, 하나라도 비면 km 를 접는다', () => {
-    it('A5b-1 · 커넥터 구간에 null 이 섞이면 meta 는 정확히 "3곳"이고 null 커넥터는 거리 칸 대신 "거리 정보 없음"이다', async () => {
-      // 준비 — a→b 구간 2.1km, b→c 구간 null(교체 뒤 재산출 전). 옛 스킵 규약이면 "3곳 · 2.1km"(부분합).
-      itineraryHandler = () =>
-        HttpResponse.json(completeWithRanges([null, '2.1km', null]));
-
-      renderPage();
-      await screen.findByTestId('map-sheet-shell-root');
-
-      const meta = screen.getByTestId('sheet-header-meta');
-      expect(meta).toHaveTextContent('3곳'); // 문자열 인자 = 완전 일치(02a §5)
-      expect(meta).not.toHaveTextContent(/km|이동|분|시간|소요/);
-      // 값 있는 구간은 서버 문자열 그대로, null 구간은 거리 칸이 없고 모름 칸이 있다(TRIP-1274 — 옛 "줄만").
-      expect(
-        screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-a`)
-      ).toHaveTextContent('2.1km');
-      expect(
-        screen.getByTestId(`sheet-connector-${DAY1}#poi-b`)
-      ).toBeOnTheScreen();
-      expect(
-        screen.queryByTestId(`sheet-connector-distance-${DAY1}#poi-b`)
-      ).toBeNull();
-      expect(
-        screen.getByTestId(`sheet-connector-unknown-${DAY1}#poi-b`)
-      ).toHaveTextContent('거리 정보 없음');
-    });
-
     it('A5b-2 · 첫 슬롯(거점→첫 방문지) 거리는 커넥터가 없으니 헤더 합에도 안 들어간다 — "3곳 · 3.5km"', async () => {
       // 준비 — 거점 있는 날: 첫 슬롯에도 0.9km. 전 슬롯을 더하면 4.4km 가 된다(옛 Draft 모집단).
       itineraryHandler = () =>
@@ -3894,28 +4097,6 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
   });
 
   describe('🔴 A8-4 · TRIP-1110 AC-5·AC-6 — h07 헤더 meta 는 커넥터 구간(slice(1))만 보고, 하나라도 비면 km 를 접는다', () => {
-    it('A8-4a · 커넥터 구간에 null 이 섞이면 meta 는 정확히 "3곳"이고 null 커넥터는 글리프 줄만 남는다', async () => {
-      // 준비 — a→b 구간 2.1km, b→c 구간 null. 옛 스킵 규약이면 "3곳 · 2.1km"(부분합).
-      itineraryHandler = () =>
-        HttpResponse.json(partialWithRanges([null, '2.1km', null]));
-
-      renderPage();
-      await screen.findByTestId('generation-progress-card');
-
-      const meta = screen.getByTestId('sheet-header-meta');
-      expect(meta).toHaveTextContent('3곳'); // 문자열 인자 = 완전 일치(02a §5)
-      expect(meta).not.toHaveTextContent(/km|이동|분|시간|소요/);
-      expect(
-        screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-a`)
-      ).toHaveTextContent('2.1km');
-      expect(
-        screen.getByTestId(`sheet-connector-${DAY1}#poi-b`)
-      ).toBeOnTheScreen();
-      expect(
-        screen.queryByTestId(`sheet-connector-distance-${DAY1}#poi-b`)
-      ).toBeNull();
-    });
-
     it('A8-4b · 첫 슬롯(거점→첫 방문지) 거리는 헤더 합에 안 들어간다 — "3곳 · 3.5km"', async () => {
       // 준비 — 첫 슬롯에도 0.9km. 전 슬롯을 더하면 4.4km(옛 PARTIAL 모집단).
       itineraryHandler = () =>
@@ -3927,6 +4108,13 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
       expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
         '3곳 · 3.5km'
       );
+      // h07 커넥터는 다음 슬롯의 거리를 그린다(첫 슬롯 0.9km 는 어느 커넥터에도 없다) — 옛 A8-4a·K2·K3 에서 옮긴 단언.
+      expect(
+        screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-a`)
+      ).toHaveTextContent('2.1km');
+      expect(
+        screen.getByTestId(`sheet-connector-distance-${DAY1}#poi-b`)
+      ).toHaveTextContent('1.4km');
     });
   });
 
@@ -4822,12 +5010,6 @@ describe('같은 날 같은 장소 두 번', () => {
     dupSlot('p-a', 13, D2_KM),
     dupSlot('p-c', 15, D3_KM),
   ];
-  /** [A, B, C] — 보통 응답(무회귀). */
-  const normalSlots = () => [
-    dupSlot('p-a', 10, null),
-    dupSlot('p-b', 11, D1_KM),
-    dupSlot('p-c', 15, D2_KM),
-  ];
 
   function faceItinerary(
     face: Face,
@@ -4881,9 +5063,6 @@ describe('같은 날 같은 장소 두 번', () => {
     return screen.findAllByTestId(CARD_ROOT);
   }
 
-  const texts = (nodes: { props: { children?: unknown } }[]) =>
-    nodes.map((node) => node.props.children);
-
   it.each(FACES)(
     '🔴 K1 · AC-2 — %s · 같은 장소가 두 번 있어도 중복 key 경고가 없다',
     async (_name, face) => {
@@ -4893,50 +5072,15 @@ describe('같은 날 같은 장소 두 번', () => {
       expect(keyWarnings.keys()).toEqual([]);
     }
   );
-
-  it.each(FACES)(
-    'K2 · AC-4 — %s · 같은 장소 두 슬롯을 숨기지 않는다 (카드 4·번호·시각·거리 순서)',
-    async (_name, face) => {
-      const cards = await openDraft(face, duplicateSlots());
-
-      expect(cards).toHaveLength(4);
-      expect(texts(screen.getAllByTestId(/^slot-stopcard-number-/))).toEqual([
-        '1',
-        '2',
-        '3',
-        '4',
-      ]);
-      expect(
-        texts(screen.getAllByTestId(`slot-stopcard-time-${DAY1}#p-a`))
-      ).toEqual(['10:00–10:30', '13:00–13:30']);
-      expect(
-        texts(screen.getAllByTestId(/^sheet-connector-distance-/))
-      ).toEqual([D1_KM, D2_KM, D3_KM]);
-    }
-  );
-
-  it.each(FACES)(
-    'K3 · AC-3 — %s · 보통 초안(장소 중복 없음)은 카드·번호·거리가 그대로다',
-    async (_name, face) => {
-      const cards = await openDraft(face, normalSlots());
-
-      expect(cards).toHaveLength(3);
-      expect(keyWarnings.keys()).toEqual([]);
-      expect(texts(screen.getAllByTestId(/^slot-stopcard-number-/))).toEqual([
-        '1',
-        '2',
-        '3',
-      ]);
-      expect(
-        texts(screen.getAllByTestId(/^sheet-connector-distance-/))
-      ).toEqual([D1_KM, D2_KM]);
-    }
-  );
 });
 
 // TRIP-1385 · 완성 일정 공개 — 생성 직후 첫 진입에만 경로 그려지기 옵션과 카드 등장이 걸린다.
+// TRIP-1641 · 등장 래퍼가 항상 같은 요소(RevealItem)라 "등장이 걸렸나"를 `entering` 개수가 아니라 카드·커넥터 래퍼의 투명도로 잰다
+// (등장 대기 = 0 · 이미 보임 = 1). 곡선·지연 상수는 `shared/ui/RevealItem.test`, 여기는 이 화면이 언제 켜고 안 켜는지만 본다.
 describe('TRIP-1385 · 완성 일정 공개(reveal)', () => {
   const reduceMotionMock = jest.mocked(AccessibilityInfo.isReduceMotionEnabled);
+  /** 등장 래퍼 안에 있는 카드 루트·거리 커넥터 루트(`…-<날짜>#<poiId>`). 안쪽 필드 testID(`-time-`·`-distance-` 등)는 날짜로 시작하지 않아 걸리지 않는다. */
+  const REVEALED = /^(slot-stopcard|sheet-connector)-\d{4}-\d{2}-\d{2}#/;
 
   function renderRevealPage(reveal: boolean) {
     return renderWithQueryClient(
@@ -4945,9 +5089,11 @@ describe('TRIP-1385 · 완성 일정 공개(reveal)', () => {
     );
   }
 
-  /** `entering`(reanimated 등장 애니메이션)이 걸린 노드 수 — 카드 + 거리 커넥터 묶음. */
-  function enteringCount(): number {
-    return screen.root.findAll((node) => node.props?.entering != null).length;
+  /** 화면에 있는 카드·커넥터 래퍼의 투명도 — 비어 있으면 공허하므로 최소 1개를 요구한다. */
+  function revealOpacities(): number[] {
+    const nodes = screen.getAllByTestId(REVEALED);
+    expect(nodes.length).toBeGreaterThan(0);
+    return nodes.map((node) => revealValues(node).opacity);
   }
 
   beforeEach(() => {
@@ -4973,32 +5119,38 @@ describe('TRIP-1385 · 완성 일정 공개(reveal)', () => {
     });
   });
 
-  it('생성 직후 첫 진입이면 지도에 그려지기 옵션이 켜지고 카드에 등장 애니메이션이 걸린다', async () => {
+  it('생성 직후 첫 진입이면 지도에 그려지기 옵션이 켜지고 카드·커넥터가 투명하게 대기한다(등장 전)', async () => {
     renderRevealPage(true);
 
     await screen.findAllByTestId(/^slot-stopcard-time-/);
-    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+    // 첫 카드 지연이 500ms 라 지금은 전부 아직 안 보인다.
+    expect(revealOpacities().every((opacity) => opacity === 0)).toBe(true);
     expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(true);
   });
 
-  it('다른 진입(목록·재진입)이면 옵션도 등장도 없다', async () => {
+  it('다른 진입(목록·재진입)이면 옵션도 등장도 없이 카드가 처음부터 보인다', async () => {
     renderRevealPage(false);
 
     await screen.findAllByTestId(/^slot-stopcard-time-/);
-    expect(enteringCount()).toBe(0);
+    expect(revealOpacities().every((opacity) => opacity === 1)).toBe(true);
     expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(false);
   });
 
-  it('이미 재생된 뒤 일차 칩을 바꾸면 다시 재생하지 않는다', async () => {
+  it('이미 재생된 뒤 일차 칩을 바꾸면 새로 보이는 날의 카드는 다시 재생하지 않고 처음부터 보인다', async () => {
     renderRevealPage(true);
-    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+    await screen.findAllByTestId(/^slot-stopcard-time-/);
+    // 앵커 — 처음엔 대기 중(0)이었다.
+    expect(revealOpacities().every((opacity) => opacity === 0)).toBe(true);
 
     fireEvent.press(screen.getByTestId('sheet-daychip-1'));
 
     await waitFor(() =>
       expect(screen.getByTestId('sheet-header-day')).toHaveTextContent('2일차')
     );
-    expect(enteringCount()).toBe(0);
+    expect(
+      screen.getAllByTestId(new RegExp(`^slot-stopcard-${DAY2}#`)).length
+    ).toBeGreaterThan(0);
+    expect(revealOpacities().every((opacity) => opacity === 1)).toBe(true);
     expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(false);
   });
 
@@ -5006,44 +5158,54 @@ describe('TRIP-1385 · 완성 일정 공개(reveal)', () => {
   // [취소] 뒤 셸이 처음부터 다시 그려지며 경로 그려지기·카드 등장이 한 번 더 재생될 수 있다 — 그걸 막는다.
   it('🔴 RG6 [다시 짜기] 확인을 열었다가 [취소]로 돌아와도 경로 그려지기·카드 등장을 다시 재생하지 않는다', async () => {
     renderRevealPage(true);
-    // 앵커 — 처음엔 재생 중이었다.
-    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+    // 앵커 — 처음엔 재생 대기 중(0)이었다.
+    await screen.findAllByTestId(/^slot-stopcard-time-/);
+    expect(revealOpacities().every((opacity) => opacity === 0)).toBe(true);
     expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(true);
 
     fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
     fireEvent.press(screen.getByTestId(REGEN_CANCEL));
     await screen.findByTestId('map-sheet-shell-root');
 
-    // ★ 동작 줄이기 답(비동기)이 오기 전엔 등장 껍데기가 비어 있어 "0"이 공허하다 — 한 틱 흘린 뒤에 잰다(02a ★7).
+    // 새로 마운트된 카드는 동작 줄이기 답(비동기)이 오기 전부터 보여야 한다 — 답이 오는 한 틱을 act 로 흘린 뒤 잰다(act 경고 방지).
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
-    expect(enteringCount()).toBe(0);
+    expect(revealOpacities().every((opacity) => opacity === 1)).toBe(true);
     expect(screen.getByTestId('map-root').props.drawPathOnMount).toBe(false);
   });
 
-  it('동작 줄이기가 켜져 있으면 카드는 등장 애니메이션 없이 곧장 보인다', async () => {
+  it('동작 줄이기가 켜져 있으면 카드는 등장 없이 곧장 보인다', async () => {
     reduceMotionMock.mockResolvedValue(true);
     renderRevealPage(true);
 
-    const times = await screen.findAllByTestId(/^slot-stopcard-time-/);
+    await screen.findAllByTestId(/^slot-stopcard-time-/);
     await act(async () => {});
-    expect(times.length).toBeGreaterThan(0);
-    expect(enteringCount()).toBe(0);
+    // 등장이 걸렸다면 첫 카드 기준 1초 가까이 걸려야 보인다 — 짧은 창(300ms) 안에 전부 1 이면 곧장 보인 것이다.
+    await waitFor(
+      () =>
+        expect(revealOpacities().every((opacity) => opacity === 1)).toBe(true),
+      { timeout: 300 }
+    );
   });
 
   it('애니메이션이 걸린 카드의 시간 텍스트는 서버 값 그대로다(INV-2·INV-3)', async () => {
     renderRevealPage(true);
 
     await screen.findAllByTestId(/^slot-stopcard-time-/);
-    await waitFor(() => expect(enteringCount()).toBeGreaterThan(0));
+    expect(revealOpacities().every((opacity) => opacity === 0)).toBe(true); // 등장이 걸려 있다
     const read = (): string[] =>
       screen
         .getAllByTestId(/^slot-stopcard-time-/)
         .map((node) => String(node.props.children ?? ''));
     const first = read();
     expect(first).toHaveLength(2);
-    await act(async () => {});
+    // 등장이 끝날 때까지(마지막 커넥터 지연 650ms + 450ms) 기다려 모든 카드가 결국 보이게 되는지, 그동안 값이 안 변하는지 본다.
+    await waitFor(
+      () =>
+        expect(revealOpacities().every((opacity) => opacity === 1)).toBe(true),
+      { timeout: 4000 }
+    );
     expect(read()).toEqual(first);
     first.forEach((text) => expect(text).toMatch(/^\d{2}:\d{2}.\d{2}:\d{2}$/));
   });

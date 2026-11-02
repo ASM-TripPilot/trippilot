@@ -114,6 +114,15 @@ data class TripResponse(
     /** 일정이 있는 **일수**. 0 = 아직 생성되지 않음. 개수이지 시간이 아니다(INV-3). */
     val itineraryDayCount: Int,
     /**
+     * 일정 조회(`GET /trips/{id}/itinerary`)의 `status`·`generationState`·`generationMode` 와 같은 값 — 일정이 없으면 null.
+     * 목록 화면이 이 넷을 알려고 여행마다 일정을 따로 부르지 않게 싣는다(10-14 개발 서버 429).
+     */
+    val itineraryStatus: String?,
+    val itineraryGenerationState: String?,
+    val itineraryGenerationMode: String?,
+    /** 진행 중 생성 세션이 있는가 — 일정 조회의 `generationSessionId != null` 과 같다. */
+    val itineraryGenerating: Boolean,
+    /**
      * 여행이 끝난 **시점**(TRIP-826). 안 끝났으면 null.
      *
      * **분기는 [status] 로, 표시는 이 값으로.** 둘은 만들어지는 방식이 다르다 —
@@ -148,6 +157,8 @@ data class TripResponse(
             preferenceSnapshot = t.preferenceSnapshot, destinations = t.destinations.map { DestinationDto.from(it) },
             status = t.statusAt(today), createdAt = t.createdAt, updatedAt = t.updatedAt,
             baseCount = counts.baseCount, itineraryDayCount = counts.itineraryDayCount,
+            itineraryStatus = counts.itineraryStatus, itineraryGenerationState = counts.itineraryGenerationState,
+            itineraryGenerationMode = counts.itineraryGenerationMode, itineraryGenerating = counts.itineraryGenerating,
             endedAt = t.endedAt,
             dayStartAt = t.dayWindow.dayStartAt,
             firstDayStartAt = t.dayWindow.firstDayStartAt,

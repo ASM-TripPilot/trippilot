@@ -37,7 +37,15 @@ class JpaConsentRecordRepository(
 
     override fun findByAccount(accountId: AccountId): List<ConsentRecord> =
         jpa.findByAccountIdOrderByOccurredAtDesc(accountId.value).map { it.toDomain() }
+
+    // 행 잠금(`FOR UPDATE`)은 쓸 수 없다 — 앱 롤은 consent_record 에 UPDATE 권한이 없고(INV-C1) 첫 증적 전엔 잠글 행도 없다.
+    // UUID 를 int 로 접어 다른 계정과 키가 겹칠 수 있지만 잠깐 줄을 설 뿐 정확성엔 영향이 없다.
+    override fun lockAccount(accountId: AccountId) {
+        jpa.advisoryXactLock(CONSENT_WRITE_LOCK, accountId.value.hashCode())
+    }
 }
+
+private const val CONSENT_WRITE_LOCK = 1689
 
 /** MarketingConsentRepository 포트의 JPA 구현(계정당 1행 upsert). */
 @Repository

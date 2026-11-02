@@ -8,18 +8,9 @@ import { Toggle } from './Toggle';
  * 무엇을 보장하나:
  *  - 루트는 role switch + checked/disabled 접근성 상태 + **real `disabled`** 라서, 비활성이면 눌러도
  *    onPress 가 안 나간다(accessibilityState 만 있는 "가짜 disabled"는 press 가 샌다 — 609 선례).
- *  - ON / OFF / disabled 세 모양이 트랙·손잡이 클래스로 갈린다. disabled 는 checked 보다 우선한다
- *    (OS 권한 거부인데 켜진 색이 보이면 거짓 표시다).
  *
- * 트랙 색(상태→색 1 it)만 className 토큰으로 본다. 크기·여백·반경·실제 픽셀은 실화면 QA 몫.
+ * 트랙 색·크기·여백·반경·실제 픽셀은 실화면 QA 몫(disabled 는 checked 보다 우선해 회색이어야 한다).
  */
-
-/** className 을 공백으로 쪼갠 토큰 배열 — `bg-primary` 가 다른 토큰에 부분 일치하는 것을 막는다. */
-function tokens(el: { props: { className?: unknown } }): string[] {
-  return String(el.props.className ?? '')
-    .split(/\s+/)
-    .filter(Boolean);
-}
 
 function renderToggle(props: { checked: boolean; disabled?: boolean }) {
   const onPress = jest.fn();
@@ -77,24 +68,7 @@ describe('TRIP-780 · Toggle — 동작(AC-1)', () => {
   });
 });
 
-describe('TRIP-780 · Toggle — 모양(AC-1 · Q2 46×28 · Q6 disabled 색)', () => {
-  // 상태→색 1 it — 트랙 색이 checked/disabled 상태의 관찰 수단이다(disabled 는 checked 보다 우선).
-  it.each([
-    ['ON', { checked: true }, 'bg-primary', 'bg-hairline-strong'],
-    ['OFF', { checked: false }, 'bg-hairline-strong', 'bg-primary'],
-    [
-      'disabled+checked',
-      { checked: true, disabled: true },
-      'bg-[#ECECEC]',
-      'bg-primary',
-    ],
-  ] as const)('%s: 트랙 색이 상태를 따른다', (_label, props, on, off) => {
-    const { track } = renderToggle(props);
-
-    expect(tokens(track)).toContain(on);
-    expect(tokens(track)).not.toContain(off);
-  });
-});
+// 「모양」(ON/OFF/disabled 트랙 색 토큰)은 jest-cut 에서 지웠다 — 색 토큰이라 실화면 QA 몫. 상태 전달은 위 접근성·press 절과 TRIP-991 이 본다.
 
 describe('🔴 TRIP-991 · Toggle — 스위치 이름(AC-3)', () => {
   it.each([true, false])(

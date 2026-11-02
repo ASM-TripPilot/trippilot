@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { useReflectionPhotos } from './useReflectionPhotos';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 const mockVisits = jest.fn();
 const mockPhotos = jest.fn();
@@ -45,7 +46,7 @@ it('그 날 방문의 내 기기 사진만, 앨범에서 찾은 것만 주소로
         ? [photo('a', 'me'), photo('x', 'other')]
         : [photo('gone', 'me')],
   }));
-  const client = new QueryClient();
+  const client = newTestQueryClient();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );

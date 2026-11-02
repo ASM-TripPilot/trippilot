@@ -174,6 +174,12 @@ class VisitCheckService(
     override fun getVisitedSlots(tripId: UUID): Set<String> =
         checks.findByTrip(tripId).filter { (it.arrivedAt != null || it.isCompleted) && it.skippedAt == null }.mapNotNull { it.slotKey }.toSet()
 
+    /** 그 날짜에 건너뛴 POI([ArchiveFacade.getSkippedPois]). 즉석 방문은 슬롯 키가 없어 빠진다 — 슬롯 충돌이 없다. */
+    @Transactional(readOnly = true)
+    override fun getSkippedPois(tripId: UUID, date: LocalDate): Set<UUID> =
+        checks.findByTrip(tripId).filter { it.skippedAt != null && it.slotKey?.substringBefore('#') == date.toString() }
+            .map { it.poiId }.toSet()
+
     /** 기준점 사다리의 **마지막 완료 방문지**(BR-U4-19). 좌표는 호출 측이 POI 정본에서 얻는다. */
     @Transactional(readOnly = true)
     override fun findLastCompletedPoi(tripId: UUID): UUID? =

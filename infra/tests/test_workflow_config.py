@@ -15,7 +15,8 @@ class WorkflowConfigTests(unittest.TestCase):
             'AWS_ACCOUNT_ID': '123456789012', 'AWS_REGION': 'ap-northeast-2',
             'AWS_ROLE_ARN': 'arn:aws:iam::123456789012:role/trippilot-dev-github-deploy',
             'GITHUB_REF': 'refs/heads/main', 'DEPLOY_APPLICATION': 'true',
-            'EMBEDDING_ENABLED': 'false', 'DEPLOY_TARGET': 'prod', **overrides,
+            'EMBEDDING_ENABLED': 'false', 'DEPLOY_TARGET': 'prod',
+            'DEPLOY_KIND': 'release', 'DEPLOY_REF': 'app-1.2.0', **overrides,
         }
 
     def test_plan_does_not_require_certificate(self):
@@ -131,6 +132,69 @@ class WorkflowConfigTests(unittest.TestCase):
                       'DIALOGUE_INTENT=gpt-5.6-luna,', 'DIALOGUE_INTENT=a b', 'DIALOGUE_INTENT=gpt;rm'):
             with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'LLM_FEATURE_MODELS_INPUT'):
                 config.settings(self.dev(LLM_FEATURE_MODELS_INPUT=value))
+
+    # ── 운영 배포 규칙(TRIP-1659): 열차·핫픽스 선언 ──
+    def prod_apply(self, **overrides):
+        return self.settings(DEPLOY_MODE='apply', PROD_ACM_CERTIFICATE_ARN=self.PROD_CERT,
+                             PROD_API_HOSTNAME='api-dev.example.com', **overrides)
+
+    def test_prod_apply_needs_a_declaration(self):
+        """운영 서버는 열차와 핫픽스 때만 만진다 — 선언 없는 apply 는 AWS 자격 증명 전에 거절한다."""
+        for kind in ('', 'none', 'deploy', 'release;hotfix'):
+            with self.subTest(kind=kind), self.assertRaisesRegex(ValueError, 'DEPLOY_KIND'):
+                config.settings(self.prod_apply(DEPLOY_KIND=kind))
+
+    def test_infra_only_prod_apply_is_also_a_prod_change(self):
+        with self.assertRaisesRegex(ValueError, 'DEPLOY_KIND'):
+            config.settings(self.prod_apply(DEPLOY_APPLICATION='false', DEPLOY_KIND=''))
+        self.assertEqual(config.settings(self.prod_apply(DEPLOY_APPLICATION='false'))['deploy_kind'], 'release')
+
+    def test_plan_and_dev_target_need_no_declaration(self):
+        self.assertEqual(config.settings(self.settings(DEPLOY_KIND=''))['deploy_kind'], 'none')
+        dev = config.settings(self.dev(DEPLOY_KIND='', DEPLOY_REF=''))
+        self.assertEqual((dev['deploy_kind'], dev['deploy_ref'], dev['deploy_reason']), ('none', '', ''))
+
+    def test_release_needs_a_name(self):
+        ok = config.settings(self.prod_apply(DEPLOY_KIND='release', DEPLOY_REF='app-1.4.0'))
+        self.assertEqual((ok['deploy_kind'], ok['deploy_ref'], ok['deploy_reason']), ('release', 'app-1.4.0', ''))
+        for ref in ('', 'a b', '../x', 'x;rm', 'x' * 41, '-lead', 'a\nb=c'):
+            with self.subTest(ref=ref), self.assertRaisesRegex(ValueError, 'DEPLOY_REF'):
+                config.settings(self.prod_apply(DEPLOY_KIND='release', DEPLOY_REF=ref))
+
+    def test_hotfix_needs_a_jira_key_and_a_reason(self):
+        ok = config.settings(self.prod_apply(DEPLOY_KIND='hotfix', DEPLOY_REF='TRIP-1631', DEPLOY_REASON='  LLM 키 401 — 일정 AI 가 꺼졌다  '))
+        self.assertEqual((ok['deploy_kind'], ok['deploy_ref'], ok['deploy_reason']), ('hotfix', 'TRIP-1631', 'LLM 키 401 — 일정 AI 가 꺼졌다'))
+        for ref in ('', 'trip-1', 'TRIP-', 'TRIP-1;x', 'app-1.4.0'):
+            with self.subTest(ref=ref), self.assertRaisesRegex(ValueError, 'DEPLOY_REF'):
+                config.settings(self.prod_apply(DEPLOY_KIND='hotfix', DEPLOY_REF=ref, DEPLOY_REASON='사유가 있다'))
+        # 사유는 GITHUB_OUTPUT 한 줄로 나간다 — 줄바꿈·제어 문자가 끼면 뒤 스텝 출력을 위조한다
+        for reason in ('', '  ', 'ab', 'x' * 201, '사유\nDEPLOY_KIND=release', 'a\rb', 'tab\there'):
+            with self.subTest(reason=reason), self.assertRaisesRegex(ValueError, 'DEPLOY_REASON'):
+                config.settings(self.prod_apply(DEPLOY_KIND='hotfix', DEPLOY_REF='TRIP-1', DEPLOY_REASON=reason))
+
+    def test_dev_sleep_applies_only_to_a_dev_app_deploy(self):
+        self.assertTrue(config.settings(self.dev(DEV_SLEEP_AFTER='true'))['dev_sleep'])
+        for value in ('false', ''):
+            self.assertFalse(config.settings(self.dev(DEV_SLEEP_AFTER=value))['dev_sleep'])
+        self.assertFalse(config.settings(self.dev())['dev_sleep'])  # 입력이 없으면 끈 것으로 — 켜 두는 쪽이 비용이 새는 쪽
+        self.assertFalse(config.settings(self.dev(DEV_SLEEP_AFTER='true', DEPLOY_APPLICATION='false'))['dev_sleep'])
+        self.assertFalse(config.settings(self.prod_apply(DEV_SLEEP_AFTER='true'))['dev_sleep'])  # 운영은 절대 재우지 않는다
+        with self.assertRaisesRegex(ValueError, 'DEV_SLEEP_AFTER'):
+            config.settings(self.dev(DEV_SLEEP_AFTER='maybe'))
+
+    def test_main_writes_the_declaration_outputs(self):
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            out, env = Path(tmp, 'output'), Path(tmp, 'env')
+            out.touch(); env.touch()
+            values = {**self.prod_apply(DEPLOY_KIND='hotfix', DEPLOY_REF='TRIP-9', DEPLOY_REASON='로그인 불가'),
+                      'GITHUB_OUTPUT': str(out), 'GITHUB_ENV': str(env)}
+            with patch.dict(config.os.environ, values, clear=True):
+                config.main()
+            lines = out.read_text(encoding='utf-8').splitlines()
+        for expected in ('deploy_kind=hotfix', 'deploy_ref=TRIP-9', 'deploy_reason=로그인 불가', 'dev_sleep=false'):
+            self.assertIn(expected, lines)
 
     def test_dev_target_refuses_real_push_and_other_stacks(self):
         with self.assertRaisesRegex(ValueError, 'push'):

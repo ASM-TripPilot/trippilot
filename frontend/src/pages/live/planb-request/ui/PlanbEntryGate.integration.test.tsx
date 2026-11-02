@@ -23,6 +23,8 @@ import { createGate } from '@/test-support/mswHookHarness';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 
 import { PlanbEntryGate } from './PlanbEntryGate';
+import { newTestQueryClient } from '@/test-support/queryRender';
+import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
  * 상황 감지 FE-B · frontend-components §3.2·§6·§9·§11 · BR-SA-23 — 진입 게이트 통합(실 HTTP = MSW).
@@ -51,19 +53,18 @@ jest.mock('@/shared/storage', () => ({
   hasStoredToken: jest.fn().mockResolvedValue(true),
 }));
 
-const mockReplace = jest.fn();
-const mockDismissTo = jest.fn();
-const mockPush = jest.fn();
-const mockBack = jest.fn();
-jest.mock('expo-router', () => ({
-  useRouter: () => ({
-    replace: (...args: unknown[]) => mockReplace(...args),
-    dismissTo: (...args: unknown[]) => mockDismissTo(...args),
-    push: (...args: unknown[]) => mockPush(...args),
-    back: (...args: unknown[]) => mockBack(...args),
-    canGoBack: () => true,
-  }),
-}));
+const {
+  replace: mockReplace,
+  dismissTo: mockDismissTo,
+  push: mockPush,
+  back: mockBack,
+} = routerSpies;
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    useRouter: ['push', 'replace', 'back', 'dismissTo', 'canGoBack'],
+  })
+);
 
 jest.mock('../model/useReplanGpsOrigin', () => ({
   useReplanGpsOrigin: () => () => Promise.resolve(undefined),
@@ -214,12 +215,7 @@ beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });
 });
 beforeEach(() => {
-  client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { retry: false, gcTime: 0 },
-    },
-  });
+  client = newTestQueryClient({ gcTime: 0 });
   mockReplace.mockClear();
   mockDismissTo.mockClear();
   mockPush.mockClear();
@@ -766,11 +762,7 @@ describe('🔴 PlanbEntryGate · 다음 진입은 지난 진입의 캐시로 판
   it('G16 앱 기본 캐시(30초 신선·10분 보관)에서도 — DRAFT 로 i06 에 간 뒤 APPLIED 가 되면 다음 진입은 허브다', async () => {
     // 이 파일의 기본 클라이언트는 전역 gcTime 0 이라 훅의 gcTime 0 을 재지 못한다 — 앱과 같은 기본값으로 바꾼다
     // (AppProviders.tsx — staleTime 30_000 · gcTime 10분).
-    client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, staleTime: 30_000, gcTime: 10 * 60_000 },
-      },
-    });
+    client = newTestQueryClient({ staleTime: 30_000 });
     let status: ReplanSession['status'] = 'DRAFT';
     server.use(
       ...baseHandlers({

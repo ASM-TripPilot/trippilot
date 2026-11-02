@@ -5,6 +5,7 @@
  * 어댑터·탭바를 직접 그리는 pages 의 책임이다(경계는 그쪽에 둔다 — 이 컴포넌트가 shared/ui에 있는
  * 이유는 탭바가 특정 도메인 feature가 아니라서다). 이 파일이 아는 것은 탭 key → 경로 문자열
  * 대응(`shellTabHref`)까지다 — 경로를 계산만 하고 이동은 호출부가 한다.
+ * 토스트 바닥은 띠를 onLayout 으로 실측해 신고한다(글자 배율이 커져 띠가 자라도 알약을 안 가린다 — TRIP-1642).
  *
  * 비주얼은 Figma 마스터 `1236:1177`(SWT PRO · 화면 페이지)의 실물에 정합한다 — **투명**
  * 96px 밴드(오버레이: 이 탭바 루트가 `absolute bottom-0`이라 화면 위에 떠서 씬이 탭바 높이만큼
@@ -20,7 +21,7 @@
  * ⚠️ BlurView는 네이티브 모듈이라 코드 머지 후 `pnpm expo prebuild` + 재빌드해야 실기에 뜬다.
  */
 import { BlurView } from 'expo-blur';
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
@@ -39,11 +40,15 @@ export function shellTabHref(
   return key === 'home' ? '/(tabs)' : `/${key}`;
 }
 
+// 띠 최소 높이·위 패딩 — 아래 띠 className `min-h-[96px]`·`pt-[26px]` 와 짝이다(NativeWind 는 리터럴만 읽어 상수를 못 꽂는다). 한쪽을 바꾸면 다른 쪽도 맞추고 실화면(6-b)으로 확인.
+export const TAB_BAR_MIN_HEIGHT = 96;
+export const TAB_BAR_PADDING_TOP = 26;
+
 /**
- * 눈에 보이는 알약 윗변(띠 min-h 96 − pt 26) — 토스트가 피할 높이(TRIP-1559).
- * 출처: 이 파일 띠 className `min-h-[96px]`·`pt-[26px]`. jest 는 값을 잠그지 않으니 그 className 을 바꾸면 이 값도 맞추고 실화면(6-b)으로 확인.
+ * 눈에 보이는 알약 윗변(띠 최소 높이 − 위 패딩) — 토스트가 피할 첫 레이아웃 전 기본값(TRIP-1559).
+ * 큰 글자로 띠가 96을 넘으면 `BottomTabBar` 가 실측 높이(onLayout)로 `max(이 값, 실측 − 위 패딩)` 을 신고한다(TRIP-1642).
  */
-export const TAB_BAR_TOP = 70;
+export const TAB_BAR_TOP = TAB_BAR_MIN_HEIGHT - TAB_BAR_PADDING_TOP;
 
 export interface BottomTabBarProps {
   activeKey: ShellTabKey;
@@ -288,10 +293,13 @@ export function BottomTabBar({
   activeKey,
   onPressTab,
 }: BottomTabBarProps): ReactElement {
-  useToastBottom(TAB_BAR_TOP);
+  // 띠 실측 높이 — 첫 레이아웃 전엔 최소 높이로 시작해 신고값이 TAB_BAR_TOP 이다. 글자 배율이 커지면 알약이 자라 띠가 96을 넘는다(TRIP-1642).
+  const [bandHeight, setBandHeight] = useState(TAB_BAR_MIN_HEIGHT);
+  useToastBottom(Math.max(TAB_BAR_TOP, bandHeight - TAB_BAR_PADDING_TOP));
   return (
     <View
       testID="shell-tabbar-root"
+      onLayout={(e) => setBandHeight(e.nativeEvent.layout.height)}
       // 밴드는 투명 오버레이라 콘텐츠 위 96px를 덮는다. box-none으로 밴드 자신은 터치를
       // 삼키지 않고(투명 여백 아래 스크롤·탭이 그대로 통과) 자식(알약)만 터치를 받는다
       // (code-critic N1 — RN 순수 View는 투명해도 터치를 흡수한다).

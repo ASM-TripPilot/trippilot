@@ -5,6 +5,7 @@ import { act, renderHook } from '@testing-library/react-native';
 
 import { readIdSet, writeIdSet } from '@/shared/storage';
 import { useConfirmItinerary } from './useConfirmItinerary';
+import { newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * TRIP-1357 · 확정 POST 의 공통 부수효과(응답 → 조회 캐시 쓰기 · 409 만 재조회)를 한 곳에 둔 훅.
@@ -52,7 +53,7 @@ const httpError = (status: number) => {
 };
 
 beforeEach(() => {
-  client = new QueryClient();
+  client = newTestQueryClient();
   captured = undefined;
   mockSeen = [];
   (readIdSet as jest.Mock)

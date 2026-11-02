@@ -197,8 +197,8 @@ class UnknownHandlingAgent:
 
     def _lookup(self, task: UnknownTask) -> None:
         try:
-            # retry_timeout_sec=LOOKUP_TIMEOUT_S — 1차(GPT)가 벤더 장애·unsupported·timeout 으로
-            # 죽으면 같은 예산으로 2차(Claude, `C1Config.retry_models[PLACE_FACT_LOOKUP]`)를 한 번
+            # retry_timeout_sec=LOOKUP_TIMEOUT_S — 1차(sonnet)가 벤더 장애·unsupported·timeout 으로
+            # 죽으면 같은 예산으로 2차(opus, `C1Config.retry_models[PLACE_FACT_LOOKUP]`)를 한 번
             # 더 부른다(뒤에서 도는 조회라 두 번 합쳐 길어져도 턴을 막지 않는다). 2차도 없으면(미설정)
             # 게이트웨이가 종전처럼 1회만 시도한다.
             result = self._worker.lookup(task.place, task.fields, task.on, task.trace_id, task.now,

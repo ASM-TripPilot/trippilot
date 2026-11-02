@@ -33,3 +33,14 @@ export function isGenerationDailyLimit(error: unknown): boolean {
     { error?: { code?: unknown } } | null | undefined;
   return data?.error?.code === 'GENERATION_DAILY_LIMIT';
 }
+
+/**
+ * 공유 카드 문구 POST 의 하루 상한 = 429 + `error.code === 'SHARE_CARD_DAILY_LIMIT'`(TRIP-1605). 같은 429 인
+ * `RATE_LIMITED`(같은 계정이 지금 문구를 짓는 중 — 몇 초 뒤 풀림)와 코드로만 갈린다. 코드 없음·바디 파싱 불가는 false.
+ */
+export function isShareCardDailyLimit(error: unknown): boolean {
+  if (!isRateLimited(error) || !isAxiosError(error)) return false;
+  const data = error.response?.data as
+    { error?: { code?: unknown } } | null | undefined;
+  return data?.error?.code === 'SHARE_CARD_DAILY_LIMIT';
+}

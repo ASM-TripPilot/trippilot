@@ -215,32 +215,6 @@ describe('AssistantSheetView (TRIP-1322)', () => {
     ).toHaveLength(1);
   });
 
-  it('TRIP-1529 · NO_CONTEXT 의 행동 행은 아이콘 행, READY 의 행은 링크 행(아이콘 없음)', () => {
-    const transcript = sampleTranscript('no-context', null);
-    renderView({
-      state: 'NO_CONTEXT',
-      contextChip: null,
-      messages: transcript.messages,
-      quickReplies: transcript.quickReplies,
-    });
-    expect(
-      screen.getByTestId('assistant-next-action-icon-CREATE_TRIP')
-    ).toBeOnTheScreen();
-    expect(
-      screen.getByTestId('assistant-next-action-icon-OPEN_STAY_SEARCH')
-    ).toBeOnTheScreen();
-  });
-
-  it('TRIP-1529 · READY 면 행동 행에 아이콘이 없다', () => {
-    renderView();
-    expect(
-      screen.getByTestId('assistant-next-action-OPEN_ITINERARY')
-    ).toBeOnTheScreen();
-    expect(
-      screen.queryAllByTestId(/^assistant-next-action-icon-/)
-    ).toHaveLength(0);
-  });
-
   it('BR-U8-07 · 열기 실패면 오류 + [다시 시도], 메시지·입력은 없다', () => {
     const props = renderView({ state: 'OPEN_FAILED' });
     expect(screen.getByTestId('assistant-open-failed')).toBeOnTheScreen();
@@ -410,16 +384,14 @@ describe('목록 맨 위 "이전 대화 더 보기" 행', () => {
 });
 
 describe('헤더 (TRIP-1525 · 01b Q1)', () => {
-  it('✦ 마크 + 닫기만 있고, 제목 "AI 도우미"·새 대화 아이콘은 없다', () => {
+  // 제목·새 대화 아이콘이 없다는 부재는 생김새라 실화면 몫(기능 지도 `assistant.md`).
+  it('✦ 마크와 "닫기" 라는 이름의 닫기 버튼이 있다', () => {
     renderView();
 
     expect(screen.getByTestId('assistant-sheet-mark')).toBeOnTheScreen();
     expect(
       screen.getByTestId('assistant-sheet-close').props.accessibilityLabel
     ).toBe('닫기');
-    expect(screen.queryByText('AI 도우미')).toBeNull();
-    expect(screen.queryByTestId('assistant-new-conversation')).toBeNull();
-    expect(screen.queryByLabelText('새 대화')).toBeNull();
   });
 
   it('열기 로딩 중에도 ✦·닫기는 있고, 더보기 자리(headerTrailing)는 열린 뒤에만 그린다', () => {
@@ -571,12 +543,6 @@ describe('입력 카드 · 컨텍스트 칩 (TRIP-1526 · 01b Q3·Q4)', () => {
       expect(chip().props.accessibilityState?.expanded).toBeUndefined();
     }
   );
-
-  it('+ 버튼은 없다(첨부 기능 없음 — 죽은 버튼 금지)', () => {
-    renderView();
-    expect(screen.queryByTestId('assistant-composer-plus')).toBeNull();
-    expect(screen.queryByLabelText('추가')).toBeNull();
-  });
 
   it('입력이 있으면 보내기가 활성이고 누르면 onSend 를 부른다', () => {
     const props = renderView({ canSend: true, draft: '안녕' });

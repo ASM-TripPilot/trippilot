@@ -1,12 +1,9 @@
-import {
-  fireEvent,
-  render,
-  screen,
-  within,
-} from '@testing-library/react-native';
+import { fireEvent, screen, within } from '@testing-library/react-native';
 import { router } from 'expo-router';
 
 import type { Trip, TripSummary } from '@/shared/api/index.schemas';
+import { customInstance } from '@/shared/api/mutator';
+import { renderWithQueryClient } from '@/test-support/queryRender';
 
 import { useTripSummary } from '@/features/reflection';
 import { ShareCardScreen } from './ShareCardScreen';
@@ -27,9 +24,12 @@ import { ShareCardPage } from './ShareCardPage';
  * 3동작: 준비(요약·여행 조회 결과 주입) → 실행(페이지 렌더·버튼 press) → 단언(안내/화면·라우터 호출).
  */
 
-jest.mock('expo-router', () => ({
-  router: { push: jest.fn(), canGoBack: jest.fn(() => true), back: jest.fn() },
-}));
+jest.mock('expo-router', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/expoRouterMock').createExpoRouterMock({
+    router: ['push', 'back', 'canGoBack', 'replace'],
+  })
+);
 
 jest.mock('@/features/reflection/model/useTripSummary', () => ({
   useTripSummary: jest.fn(),
@@ -42,6 +42,14 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
 jest.mock('./ShareCardScreen', () => ({
   ShareCardScreen: jest.fn(() => null),
 }));
+
+// TRIP-1605 — 카드 얼굴이 서버 문구(POST …/share-card/copy)를 부른다. 생성 클라이언트가 모두 지나는 `customInstance` 한 곳만
+// 목으로 막아 네트워크 0 으로 둔다(끝나지 않는 Promise = 문구 대기 중). "언제·몇 번 부르나"는 MSW 로 보는
+// ShareCardPage.integration AC-1 이 맡는다(같은 네 경우 — 2026-11-01 jest 축소에서 이 파일 사본을 지웠다).
+jest.mock('@/shared/api/mutator', () => ({
+  customInstance: jest.fn(),
+}));
+const customInstanceMock = customInstance as jest.Mock;
 
 const NOT_READY_TITLE = '여행이 끝나면 만들 수 있어요';
 
@@ -102,6 +110,7 @@ const screenMock = ShareCardScreen as unknown as jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  customInstanceMock.mockImplementation(() => new Promise(() => undefined));
 });
 
 describe('🔴 TRIP-1071 AC-12 · 요약 미준비(ready:false) → 카드 대신 안내 (결정 4c)', () => {
@@ -111,7 +120,7 @@ describe('🔴 TRIP-1071 AC-12 · 요약 미준비(ready:false) → 카드 대�
     givenSummary(false);
 
     // 실행
-    render(<ShareCardPage tripId="trip-1" />);
+    renderWithQueryClient(<ShareCardPage tripId="trip-1" />);
 
     // 단언
     const notice = screen.getByTestId('reflection-share-not-ready');
@@ -122,7 +131,7 @@ describe('🔴 TRIP-1071 AC-12 · 요약 미준비(ready:false) → 카드 대�
   it('[돌아가기] press → router.back 1회(막다른 화면이 아니다, Q4)', () => {
     givenTrip();
     givenSummary(false);
-    render(<ShareCardPage tripId="trip-1" />);
+    renderWithQueryClient(<ShareCardPage tripId="trip-1" />);
 
     const back = screen.getByTestId('reflection-share-not-ready-back');
     expect(within(back).getByText('돌아가기')).toBeOnTheScreen();
@@ -135,7 +144,7 @@ describe('🔴 TRIP-1071 AC-12 · 요약 미준비(ready:false) → 카드 대�
     givenTrip();
     givenSummary(true);
 
-    render(<ShareCardPage tripId="trip-1" />);
+    renderWithQueryClient(<ShareCardPage tripId="trip-1" />);
 
     expect(screenMock).toHaveBeenCalled();
     expect(screenMock.mock.calls[0][0].hashtagText).toBe('#부산여행');
@@ -157,7 +166,7 @@ describe('🔴 TRIP-1071 AC-12 · 요약 미준비(ready:false) → 카드 대�
       refetch: jest.fn(),
     });
 
-    render(<ShareCardPage tripId="trip-1" />);
+    renderWithQueryClient(<ShareCardPage tripId="trip-1" />);
 
     expect(screen.getByTestId('reflection-share-pending')).toBeOnTheScreen();
     expect(screen.queryByTestId('reflection-share-not-ready')).toBeNull();
@@ -180,7 +189,7 @@ describe('🔴 TRIP-1071 5-b 경고-1 · 요약 조회 오류는 "미준비"로 
     });
 
     // 실행: 렌더 후 [다시 시도]를 누른다.
-    render(<ShareCardPage tripId="trip-1" />);
+    renderWithQueryClient(<ShareCardPage tripId="trip-1" />);
     const retry = screen.getByTestId('reflection-share-retry');
     fireEvent.press(retry);
 

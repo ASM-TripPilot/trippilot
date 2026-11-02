@@ -22,15 +22,8 @@ import { resolveGenerationInProgress } from './generationInProgress';
  */
 
 // 인증 계층이 `@/shared/storage`(expo-secure-store)를 정적으로 문다(리포 통합 테스트 관례).
-jest.mock('@/shared/storage', () => ({
-  saveTokens: jest.fn().mockResolvedValue(undefined),
-  getTokens: jest.fn().mockResolvedValue({
-    accessToken: 'old-access',
-    refreshToken: 'old-refresh',
-  }),
-  clearTokens: jest.fn().mockResolvedValue(undefined),
-  hasStoredToken: jest.fn().mockResolvedValue(true),
-}));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = '11111111-1111-1111-1111-111111111111';

@@ -7,8 +7,9 @@ name: frontend-web-deploy
 # develop 머지마다 운영 웹이 바뀌면 운영 서버에 아직 없는 API 를 부르는 번들이 먼저 나간다(server-split: develop=dev-api,
 # main=api-dev). 개발 서버 확인용 웹 배포는 따로 두지 않는다(필요해지면 별도 버킷·변수로 연다).
 on:
-  # main 사본(2026-11-02): push 트리거는 뺐다 — 이 파일만 main 에 먼저 올리면 main(10-29) 프론트가 운영 웹에 나간다.
-  # develop→main 승격 때 develop 판(push 트리거 포함)이 이 사본을 덮는다. 실행은 --ref develop.
+  push:
+    branches: [main]
+    paths: ['frontend/**', '.github/workflows/frontend-web-deploy.yml']
   workflow_dispatch:
 
 permissions:
@@ -40,6 +41,8 @@ jobs:
     steps:
       # 변수가 비면 조용히 빈 값으로 굽지 않는다 — API 주소가 빠진 번들은 뜨기만 하고 모든 요청이 실패한다(INV-4 취지).
       - name: require web build variables
+        # checkout 전이라 잡 기본 working-directory(frontend)가 아직 없다 — 이 스텝만 작업 공간 루트에서 돈다.
+        working-directory: .
         run: |
           missing=()
           for name in EXPO_PUBLIC_API_BASE_URL EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID EXPO_PUBLIC_KAKAO_CLIENT_ID \

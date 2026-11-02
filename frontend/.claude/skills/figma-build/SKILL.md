@@ -9,15 +9,15 @@ description: "TripPilot 화면을 Figma 정본 파일에 그리거나 고치는 
 
 | 파일 | 역할 | 읽는 자리 |
 |---|---|---|
-| 라이브 캔버스 `1MTF3dtptIrbg8gld5IdO2` 페이지 `1228:1045` | **무엇이 있나**의 유일 정본 | 오케(`get_metadata`→jq), 빌더, QA |
+| 라이브 캔버스 `1MTF3dtptIrbg8gld5IdO2` 페이지 `1228:1045` | **무엇이 있나**의 유일 정본 | 오케(`mcp__figma__get_metadata`→jq), 빌더, QA |
 | `frontend/tailwind.config.js` | **값**(색 25·반경 6·간격 7·폰트 8단)의 정본 — 단 **반경은 예외**: 킷 §3(2026-09-11 사용자 결정)이 정본이고 코드는 동기화 전 | 킷이 미러(반경 제외) |
 | `references/design-kit.md` | Figma 변수명·헬퍼·아이콘·사진 해시·레시피·§9 이 파일 고유 함정·**§10 설계 결정** | 빌더 전문 / QA §2·§4·§6·§7 / 오케 §10(스펙 게이트) |
 | `references/qa-checklist.md` | 판정 기준 A~G(값) + H(슬롭) | 오케·QA |
 | `../spec-perception/reference/figma-structure.md` | 밴드 맵·세대 판정 | 오케·spec-analyst |
-| `figma:figma-use` (공식 플러그인, `Skill()`로 로드) | `use_figma` 기계 규칙 — **빌더·QA 필수 로드** | 빌더·QA |
+| `figma:figma-use` (공식 플러그인, `Skill()`로 로드) | `mcp__figma__use_figma` 기계 규칙 — **빌더·QA 필수 로드** | 빌더·QA |
 | `frontend-design` (공식, `Skill()`로 로드) | 제네릭 기본값 대조·카피 규칙 | 오케(스펙 게이트 5번 쓰기 전)·QA H |
 
-오케는 킷 전문을 읽지 않는다 — 킷은 빌더·QA 몫. 페이지 메타는 1.4MB라 `get_metadata` 결과를 jq/python으로 걸러 top-level 프레임(id·이름·x·y)만 본다.
+오케는 킷 전문을 읽지 않는다 — 킷은 빌더·QA 몫. 페이지 메타는 1.4MB라 `mcp__figma__get_metadata` 결과를 jq/python으로 걸러 top-level 프레임(id·이름·x·y)만 본다.
 
 ## 두 종류의 작업 — 어디에 그리는가가 규칙이다
 
@@ -30,7 +30,7 @@ description: "TripPilot 화면을 Figma 정본 파일에 그리거나 고치는 
 
 ## 절차
 
-1. **컨텍스트** — `whoami`로 SWT pro 연결 확인(starter 팀은 6회/월). 라이브 top-level 프레임 목록에서 대상 화면 node id·자매 화면(같은 밴드 신세대)·max y를 얻는다. 옛 id·옛 화면 코드를 받았으면 `rules/figma-traps.md`의 해당 항목대로 라이브 이름·내용으로 다시 찾는다. `get_screenshot`으로 대상·자매를 `<스크래치패드>/{cycle-id}/before-{node}.png`에 저장(QA 입력).
+1. **컨텍스트** — `mcp__figma__whoami`로 SWT pro 연결 확인(starter 팀은 6회/월). 라이브 top-level 프레임 목록에서 대상 화면 node id·자매 화면(같은 밴드 신세대)·max y를 얻는다. 옛 id·옛 화면 코드를 받았으면 `rules/figma-traps.md`의 해당 항목대로 라이브 이름·내용으로 다시 찾는다. `mcp__figma__get_screenshot`으로 대상·자매를 `<스크래치패드>/{cycle-id}/before-{node}.png`에 저장(QA 입력).
 2. **스펙 게이트** — 먼저 `Skill(frontend-design)`을 로드한다(5번의 대조 절차와 카피 규칙). 아래 5줄이 다 있어야 빌더를 부른다. 하나라도 비면 사용자 질문(자율 실행이면 그 화면은 보류로 브리핑에).
    1. 이 화면이 사용자에게 시키는 **한 가지 일**.
    2. **실제 카피**(부산 데이터·실제 상태 문구). 플레이스홀더 금지.
@@ -48,7 +48,7 @@ dev-cycle 1단계 [인지]에서 spec-analyst가 "Figma에 이 화면 없음/불
 
 ## 하지 말 것
 - 코드 토큰 밖 hex·크기·간격. 대괄호 플레이스홀더, 회색 빈 박스, 가짜 상태바.
-- 페이지를 이름으로 잡기. 실패 시 부분 실행을 복구하기 어려운 크기의 `use_figma` 한 방(분할 기준은 `figma:figma-use`).
+- 페이지를 이름으로 잡기. 실패 시 부분 실행을 복구하기 어려운 크기의 `mcp__figma__use_figma` 한 방(분할 기준은 `figma:figma-use`).
 - 밴드 중간 삽입(뒤 전부 리플로우). 간격 값을 외워 붙이기(밴드마다 470/450 — 이웃 실측).
 - 탐색과 삭제를 한 호출에(`figma-traps`). 이름만 보고 삭제(공백 이름 함정).
 - `ALT-`/`COMBO-`/`DREAM-`/`V-`/`BS-`/`u.`/`v.` 노드 찾기·복원 — 정본 승격·삭제됨(2026-07, 상세는 하네스 변경이력).

@@ -41,6 +41,7 @@ private class FakeConsentRecords : ConsentRecordRepository {
     val appended = mutableListOf<ConsentRecord>()
     override fun append(record: ConsentRecord) { appended.add(record) }
     override fun findByAccount(accountId: AccountId) = appended.filter { it.accountId == accountId }
+    override fun lockAccount(accountId: AccountId) {}
 }
 
 private class FakeTerms : TermsVersionRepository {

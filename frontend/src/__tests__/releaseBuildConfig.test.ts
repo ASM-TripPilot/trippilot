@@ -105,9 +105,11 @@ const SAVE_PHOTOS_COPY =
   'TripPilot이 여행 공유 카드를 사진 앨범에 저장하기 위해 사진 추가 권한을 사용합니다.';
 
 let infoPlist: Record<string, unknown> = {};
+let entitlements: Record<string, unknown> = {};
 let introspectedExtra: Record<string, unknown> = {};
 
-beforeAll(() => {
+/** `expo config --type introspect` 1회. `env` 로 빌드 환경 변수를 더 얹는다(위치 자동화 ON 은 아래 TRIP-1337 이 따로 부른다). */
+function introspect(env: Record<string, string> = {}) {
   const stdout = execFileSync(
     path.join(ROOT, 'node_modules', '.bin', 'expo'),
     ['config', '--type', 'introspect', '--json'],
@@ -120,11 +122,17 @@ beforeAll(() => {
         CI: '1',
         EXPO_OFFLINE: '1',
         EXPO_NO_TELEMETRY: '1',
+        ...env,
       },
     }
   );
-  const introspected = JSON.parse(stdout);
+  return JSON.parse(stdout);
+}
+
+beforeAll(() => {
+  const introspected = introspect();
   infoPlist = introspected._internal.modResults.ios.infoPlist;
+  entitlements = introspected._internal.modResults.ios.entitlements ?? {};
   introspectedExtra = introspected.extra ?? {};
 }, 60_000);
 
@@ -253,6 +261,17 @@ describe('AC-5 privacy manifest', () => {
   });
 });
 
+describe('TRIP-1668 푸시 켬 · aps-environment', () => {
+  // 1.0 은 번들 ID 에 Push 권한이 없어 이 entitlement 를 지웠다(TRIP-935). 지운 채 나가면 빌드·심사는
+  // 통과하는데 푸시 토큰이 안 나와 알림만 조용히 안 온다(운영 기기 토큰 iOS 2개, 2026-10-30) — 그래서 해석 결과로 굳힌다.
+  // 값은 development|production 둘 다 받는다: 스토어 빌드가 production 으로 나가는지는 서명된 앱의 entitlements 로만 확인된다.
+  it('해석된 iOS entitlements 에 aps-environment 가 있다', () => {
+    expect(entitlements['aps-environment']).toMatch(
+      /^(development|production)$/
+    );
+  });
+});
+
 describe('TRIP-1370 Sentry 운영 켬', () => {
   it('production 은 Sentry 자동 업로드를 켜고(소스맵·dSYM), preview 는 문자열 "true"로 끈 채이며, Sentry 플러그인 등록은 그대로다', () => {
     const eas = JSON.parse(
@@ -318,6 +337,33 @@ describe('TRIP-935 AC-2 · expo-router 사이트맵 끔', () => {
 
     expect(router).toBeDefined();
     expect(router?.sitemap).toBe(false);
+  });
+});
+
+// TRIP-1646 — 웹 출시본 설정. 'single' 이 아니면(static) export 가 경로마다 HTML 을 만들어 CloudFront 의 "모든 경로 →
+// index.html" 규칙과 어긋나고, 템플릿이 Expo 치환 자리를 잃으면 제목·언어가 기본값(Expo App·en)으로 조용히 바뀐다.
+// 빌드는 둘 다 성공한다. PC 폭 고정·확대 금지 같은 생김새는 웹 육안 몫이라 여기서 굳히지 않는다.
+describe('TRIP-1646 · 웹 export 설정', () => {
+  it('웹은 metro 번들러로 index.html 하나짜리 SPA(output single)를 만들고, 파비콘 원본 파일이 실재한다', () => {
+    expect(config.web?.bundler).toBe('metro');
+    expect(config.web?.output).toBe('single');
+    const favicon = config.web?.favicon;
+    expect(favicon).toBeDefined();
+    expect(fs.existsSync(path.join(ROOT, favicon ?? ''))).toBe(true);
+  });
+
+  it('package.json 에 웹 개발 서버 스크립트가 있고, 웹 템플릿(public/index.html)이 Expo 치환 자리(제목·언어)와 #root 를 갖는다', () => {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')
+    ) as { scripts: Record<string, string> };
+    expect(pkg.scripts.web).toBe('expo start --web');
+
+    // Expo 는 public/index.html 이 있으면 기본 템플릿 대신 이것을 쓰고, %WEB_TITLE%·%LANG_ISO_CODE% 를 설정값으로 바꾼다.
+    const html = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
+    expect(html).toContain('%WEB_TITLE%');
+    expect(html).toContain('%LANG_ISO_CODE%');
+    expect(html).toContain('<div id="root"></div>');
+    expect(config.web?.lang).toBe('ko');
   });
 });
 
@@ -645,5 +691,108 @@ describe('TRIP-1361 · 폰트 네이티브 임베드 — 폰트명 계약', () =
     files.forEach((f) =>
       expect(postScriptName(f)).toBe(path.basename(f, '.ttf'))
     );
+  });
+});
+
+/**
+ * TRIP-1337 · U10 위치 자동화 빌드 플래그 게이트 (BR-U10-07 · NFR 델타 3 · MOBILE-U10-08). 옛 `locationAutomationBuildConfig` 합본.
+ *
+ * 플래그 원천은 빌드 환경 변수 `TRIPPILOT_LOCATION_AUTOMATION` 하나(EXPO_PUBLIC_* 아님).
+ * OFF(기본) = 위 출시 빌드와 같은 권한 표면, ON = always 문구·백그라운드 모드·Android 3권한·extra.
+ * OFF 의 해석된 Info.plist 는 파일 맨 위 introspect 결과를 같이 쓴다(OFF 항상 문구 부재는 위 AC-3 이 본다).
+ * ⚠️ 실제 prebuild 산출물(Info.plist·AndroidManifest) 비교는 6-b #1 — introspect 는 플러그인이 넣는 키만 믿을 수 있다.
+ */
+describe('TRIP-1337 · 위치 자동화 빌드 플래그', () => {
+  const FLAG = 'TRIPPILOT_LOCATION_AUTOMATION';
+  const BG_ANDROID = [
+    'ACCESS_BACKGROUND_LOCATION',
+    'FOREGROUND_SERVICE',
+    'FOREGROUND_SERVICE_LOCATION',
+  ];
+
+  /** 플래그를 주고 app.config.ts 를 새로 읽는다(모듈 캐시 우회). env 는 원래 값으로 되돌린다. */
+  function loadConfig(flag: string | undefined): typeof config {
+    const previous = process.env.TRIPPILOT_LOCATION_AUTOMATION;
+    if (flag === undefined) delete process.env.TRIPPILOT_LOCATION_AUTOMATION;
+    else process.env.TRIPPILOT_LOCATION_AUTOMATION = flag;
+    let loaded: typeof config | undefined;
+    try {
+      jest.isolateModules(() => {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        loaded = require('../../app.config').default as typeof config;
+      });
+    } finally {
+      if (previous === undefined)
+        delete process.env.TRIPPILOT_LOCATION_AUTOMATION;
+      else process.env.TRIPPILOT_LOCATION_AUTOMATION = previous;
+    }
+    return loaded as typeof config;
+  }
+
+  function locationOptions(flag: string | undefined): Record<string, unknown> {
+    return (
+      optionsOf(
+        'expo-location',
+        (loadConfig(flag).plugins ?? []) as PluginEntry[]
+      ) ?? {}
+    );
+  }
+
+  it('OFF1 expo-location 옵션은 always 계열 false, 백그라운드 옵션 없음', () => {
+    for (const flag of [undefined, '', '0', 'true']) {
+      const opts = locationOptions(flag);
+      expect(opts.locationAlwaysPermission).toBe(false);
+      expect(opts.locationAlwaysAndWhenInUsePermission).toBe(false);
+      expect(opts.isIosBackgroundLocationEnabled).toBeUndefined();
+      expect(opts.isAndroidBackgroundLocationEnabled).toBeUndefined();
+      expect(opts.isAndroidForegroundServiceEnabled).toBeUndefined();
+    }
+  });
+
+  it('OFF2 Android 권한·extra.locationAutomation 을 더하지 않는다', () => {
+    const off = loadConfig(undefined);
+    expect(off.android?.permissions).toBeUndefined();
+    expect(
+      (off.extra as Record<string, unknown>).locationAutomation
+    ).toBeUndefined();
+  });
+
+  it('OFF3 해석된 Info.plist 에 UIBackgroundModes 가 없고 extra.locationAutomation 도 없다', () => {
+    // TRIP-936 이후 출시 빌드에는 UIBackgroundModes 자체가 없다(expo-task-manager 자동 플러그인의 'fetch' 도 지운다).
+    expect(infoPlist.UIBackgroundModes).toBeUndefined();
+    expect(introspectedExtra.locationAutomation).toBeUndefined();
+  });
+
+  it('ON1 expo-location: always 한국어 문구 + 백그라운드 3옵션 true', () => {
+    const opts = locationOptions('1');
+    expect(typeof opts.locationAlwaysAndWhenInUsePermission).toBe('string');
+    expect(String(opts.locationAlwaysAndWhenInUsePermission)).toMatch(
+      /TripPilot/
+    );
+    expect(opts.isIosBackgroundLocationEnabled).toBe(true);
+    expect(opts.isAndroidBackgroundLocationEnabled).toBe(true);
+    expect(opts.isAndroidForegroundServiceEnabled).toBe(true);
+  });
+
+  it('ON2 Android 3권한 · extra.locationAutomation=true', () => {
+    const on = loadConfig('1');
+    for (const p of BG_ANDROID) expect(on.android?.permissions).toContain(p);
+    expect((on.extra as Record<string, unknown>).locationAutomation).toBe(true);
+  });
+
+  it('ON3 해석된 Info.plist 에 UIBackgroundModes location · always 문구가 있다', () => {
+    const introspected = introspect({ [FLAG]: '1' });
+    const onPlist = introspected._internal.modResults.ios.infoPlist;
+    expect(onPlist.UIBackgroundModes).toEqual(['location']);
+    expect(
+      String(onPlist.NSLocationAlwaysAndWhenInUseUsageDescription)
+    ).toMatch(/TripPilot/);
+    expect(introspected.extra?.locationAutomation).toBe(true);
+  }, 60_000);
+
+  it('ON4 always 문구에 소요시간·속도·걸음 수 표현이 없다(INV-3)', () => {
+    expect(
+      String(locationOptions('1').locationAlwaysAndWhenInUsePermission)
+    ).not.toMatch(/소요|이동 시간|속도|걸음|체류/);
   });
 });

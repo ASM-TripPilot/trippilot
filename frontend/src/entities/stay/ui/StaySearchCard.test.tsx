@@ -183,8 +183,8 @@ describe('🔴 SC6 · rail variant (d01) — save 미지정 시 하트 없음', 
   });
 });
 
-describe('🔴 SC8 · full variant 결측 가격 — "가격 미확인" muted regular (AC-3)', () => {
-  it('단일 노드로 muted·regular·14 로 그린다(현행 bold ink 16 → muted 14)', () => {
+describe('🔴 SC8 · full variant 결측 가격 — "가격 미확인" (AC-3)', () => {
+  it('단일 노드로 그리고 2톤 접미 "~" 는 없다 (글자 색·크기는 실화면 QA 몫)', () => {
     render(
       <StaySearchCard
         testID="stay-card-NAVER:s1"

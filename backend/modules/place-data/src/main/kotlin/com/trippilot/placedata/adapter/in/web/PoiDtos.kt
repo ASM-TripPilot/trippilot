@@ -38,7 +38,7 @@ data class PlaceResponse(
     companion object {
         fun from(p: Poi) = PlaceResponse(
             poiId = p.poiId, nameKo = p.nameKo, category = p.category, lat = p.lat, lng = p.lng,
-            region = p.region, regionCode = p.regionCode, address = p.address, openingHours = p.openingHours, imageUrl = p.imageUrl, tags = PublicTags.of(p.tags),
+            region = p.region, regionCode = p.regionCode, address = p.address, openingHours = p.openingHours, imageUrl = p.displayImageUrl, tags = PublicTags.of(p.tags),
             savedCount = p.savedCount, dataStatus = p.dataStatus,
         )
     }

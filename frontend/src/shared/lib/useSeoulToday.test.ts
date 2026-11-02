@@ -67,6 +67,22 @@ describe('useSeoulToday', () => {
     spy.mockRestore();
   });
 
+  it('같은 날 안에서 시간이 흐르면 다시 그리지 않는다 (TRIP-1639 AC2)', () => {
+    // 렌더 횟수를 센다 — 같은 날이면 상태가 같은 문자열이라 React 가 다시 그리지 않아야 한다.
+    let renders = 0;
+    jest.setSystemTime(Date.parse('2026-10-13T03:00:00Z')); // KST 12:00 — 자정까지 12시간
+    const { result } = renderHook(() => {
+      renders += 1;
+      return useSeoulToday();
+    });
+    const afterMount = renders;
+    act(() => {
+      jest.advanceTimersByTime(11 * 60 * 60 * 1000); // KST 23:00 — 아직 같은 날
+    });
+    expect(result.current).toBe('2026-10-13');
+    expect(renders).toBe(afterMount);
+  });
+
   it('언마운트하면 타이머가 남지 않는다', () => {
     const { unmount } = renderHook(() => useSeoulToday());
     unmount();

@@ -73,6 +73,7 @@ private class EmptyTerms : TermsVersionRepository {
 private class NoopConsentRecords : ConsentRecordRepository {
     override fun append(record: ConsentRecord) {}
     override fun findByAccount(accountId: AccountId) = emptyList<ConsentRecord>()
+    override fun lockAccount(accountId: AccountId) {}
 }
 
 private class CapturingPublisher : DomainEventPublisher {
