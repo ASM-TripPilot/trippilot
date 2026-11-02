@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 import { act, render, screen } from '@testing-library/react-native';
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, type QueryKey } from '@tanstack/react-query';
 import { AxiosError } from 'axios';
 import * as Notifications from 'expo-notifications';
 
@@ -146,6 +146,69 @@ describe('🔴 TRIP-986 · 앱 전역 QueryClient 재시도 기본값 = 404 무�
     expect(retryFn(1, httpError(429))).toBe(false);
     // 짝 — 429 만 뺀 것이지 전부 끈 것이 아니다.
     expect(retryFn(0, httpError(500))).toBe(true);
+  });
+});
+
+// TRIP-1714 — 앱이 쓰는 클라이언트의 "복귀(포그라운드) 때 낡은 쿼리를 다시 받을까" 기본값. 키마다 다르게 답해야 하므로 함수다.
+// 거부 목록 키(카탈로그·본인 편집이 직접 무효화하는 키)는 false, 그 밖 전부는 기본 true. 기대값은 경로 문자열을 손으로 적는다 —
+// 구현의 상수를 import 하면 구현이 틀려도 같이 틀려 항상 green 이 된다. 판정은 키 이름이 정확히 같을 때만이다
+// (`/places` 를 끈다고 `/places/p1`·`/me` 를 끈다고 `/me/settings` 까지 꺼지면 안 된다 — 접두 일치 오답 차단).
+describe('🔴 TRIP-1714 · 앱 전역 QueryClient 복귀 재조회 정책 (AC2 · AC6)', () => {
+  /** 부팅된 앱의 기본값으로 "이 키가 복귀 때 다시 받아지나"를 묻는다. 기본값을 안 건드렸으면(undefined) 라이브러리 기본 true. */
+  function refetchesOnFocus(queryKey: QueryKey): boolean | 'always' {
+    render(<RootLayout />);
+    const client = getObservedQueryClient();
+    const option = client?.getDefaultOptions().queries?.refetchOnWindowFocus;
+    if (client === null || client === undefined) {
+      throw new Error('프로브가 QueryClient 를 못 받았다');
+    }
+    if (option === undefined) return true;
+    if (typeof option !== 'function') return option;
+    // 실제 Query 객체를 캐시에서 만들어 함수에 넘긴다(가짜 모양 객체가 아니라 라이브러리가 쓰는 그것).
+    return option(client.getQueryCache().build(client, { queryKey }));
+  }
+
+  it.each<[string, QueryKey]>([
+    ['/me', ['/me']],
+    ['/me/profile', ['/me/profile']],
+    ['/me/style', ['/me/style']],
+    ['/me/records', ['/me/records']],
+    ['/saved-places', ['/saved-places']],
+    ['/saved-stays', ['/saved-stays']],
+    ['/stays/search (파라미터 있어도)', ['/stays/search', { q: '해운대' }]],
+    ['/regions', ['/regions']],
+    ['/places (객체 파라미터 키)', ['/places', { region: '부산', limit: 200 }]],
+    [
+      '/places/multi (지역 배열 키)',
+      ['/places/multi', ['서울', '부산', '제주'], null, '', null],
+    ],
+  ])('복귀 때 다시 받지 않는다 — %s', (_name, queryKey) => {
+    expect(refetchesOnFocus(queryKey)).toBe(false);
+  });
+
+  it('staleTime 30초 · gcTime 10분 · 재연결 재조회는 건드리지 않았다 (선제 green)', () => {
+    render(<RootLayout />);
+    const queries = getObservedQueryClient()?.getDefaultOptions().queries;
+
+    expect(queries?.staleTime).toBe(30_000);
+    expect(queries?.gcTime).toBe(10 * 60_000);
+    // 라이브러리 기본(true)을 쓰려면 지정하지 않는다 — 이 칸은 reconnect 를 바꾸지 않는다(관측만).
+    expect(queries?.refetchOnReconnect).toBeUndefined();
+  });
+
+  it.each<[string, QueryKey]>([
+    ['/trips (여행 목록)', ['/trips']],
+    [
+      '일정 /trips/{id}/itinerary (생성 감시·진행 중 여행)',
+      ['/trips/t1/itinerary'],
+    ],
+    ['/trips/{id} (탭 위 스택 화면 — 범위 밖 무변경)', ['/trips/t1']],
+    ['/places/{id} (d06 단건 — /places 접두 오답 차단)', ['/places/p1']],
+    ['/saved-stays/{id} (/saved-stays 접두 오답 차단)', ['/saved-stays/s1']],
+    ['/me/settings (/me 접두 오답 차단)', ['/me/settings']],
+    ['목록에 없는 임의 키', ['/unlisted-probe']],
+  ])('복귀 때 기본대로 다시 받는다 (선제 green) — %s', (_name, queryKey) => {
+    expect(refetchesOnFocus(queryKey)).toBe(true);
   });
 });
 

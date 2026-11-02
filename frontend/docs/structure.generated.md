@@ -163,6 +163,7 @@
 - `src/__tests__/destinationRedirectRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/devPreviewReleaseGate.test.tsx`  →  (export 없음)
 - `src/__tests__/eslintReleaseRules.test.ts`  →  (export 없음)
+- `src/__tests__/foregroundFanout.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/generatingEntryStack.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/itineraryEditAddPlaceFlow.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/locationConsentPutBodyOwnership.test.ts`  →  (export 없음)
@@ -197,6 +198,7 @@
 ## src/app/entrypoint/
 - `src/app/entrypoint/AppProviders.tsx`  →  AppProviders
 - `src/app/entrypoint/initSentry.ts`  →  initSentry
+- `src/app/entrypoint/queryClient.ts`  →  createAppQueryClient
 - `src/app/entrypoint/registerBackgroundTasks.ts`  →  registerBackgroundTasks
 
 ## src/app/
@@ -1651,8 +1653,10 @@
 
 ## src/shared/dev-fault/
 - `src/shared/dev-fault/FaultInjectionBadge.tsx`  →  FaultInjectionBadge
-- `src/shared/dev-fault/index.ts`  →  FaultInjectionBadge · installFaultInjection · faultStore
+- `src/shared/dev-fault/RequestCountBadge.tsx`  →  RequestCountBadge
+- `src/shared/dev-fault/index.ts`  →  FaultInjectionBadge · installFaultInjection · RequestCountBadge · requestCount · faultStore
 - `src/shared/dev-fault/interceptor.ts`  →  installFaultInjection
+- `src/shared/dev-fault/requestCount.ts`  →  RequestCountSnapshot · createRequestCount · requestCount
 - `src/shared/dev-fault/rules.ts`  →  FaultRule · FaultLinkAction · FaultLinkParams · matchesPath · findRule · isFaultRule · parseFaultLink · applyFaultAction · faultErrorBody
 - `src/shared/dev-fault/store.ts`  →  FaultStorage · createFaultStore · FaultStore · faultStore
 
@@ -1923,4 +1927,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1245개 파일
+합계 1249개 파일

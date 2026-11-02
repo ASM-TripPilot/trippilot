@@ -4,5 +4,7 @@
  */
 export { FaultInjectionBadge } from './FaultInjectionBadge';
 export { installFaultInjection } from './interceptor';
+export { RequestCountBadge } from './RequestCountBadge';
+export { requestCount } from './requestCount';
 export { faultStore } from './store';
 export type { FaultLinkAction, FaultLinkParams, FaultRule } from './rules';
