@@ -21,6 +21,8 @@ from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG
 
 ROW_CAP = 20  # 핸들러는 ≤5 를 쓴다 — 표시 불가 이름·나이트라이프를 거르고도 남게 넉넉히
 STATEMENT_TIMEOUT_MS = 1500  # 팬아웃 작업 예산(≤3s) 안에서 LLM(~1.5s) 뒤에 남는 몫
+# 관광 종류 — 같은 이름이 여럿일 때 관광지와 그 이름을 딴 식당·가게(궁궐 "경복궁" ↔ 울산 식당 "경복궁", 속초항 ↔ 횟집)를 가른다
+_SIGHT_CATEGORIES = frozenset({"명소", "자연", "문화", "미술", "야경"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +56,8 @@ class PgPlaceSql:
         여러 곳이면(체인점) 여행 지역(`area` — 지역 표 이름: "서울"·"제주"·"강릉")으로 좁힌다. 행의 시·도나 구·군이 그 이름으로 시작하면
         같은 지역이다("강릉"→강릉시, 도 아래 시군 여행도 걸린다). 그 안에서 정보가 충실한 곳(rich — 사진·영업시간)이 하나뿐이면 그곳이다
         ("경복궁"은 서울에만 9곳 — 같은 이름의 식당·업소 사업자 등록 사이에서 관광지 한 곳만 사진·영업시간을 갖췄다, 2026-10-21 로컬 적재).
-        그래도 둘 이상이면 None — 하나를 골라 다른 곳의 영업시간을 말하면
+        그래도 둘 이상이면 그중 관광 종류(`_SIGHT_CATEGORIES`)가 하나뿐일 때 그곳이다 — 여행이 없으면 지역으로 못 좁히는데 개발 DB 의
+        "경복궁" 11곳 중 rich 가 궁궐(종로)과 울산 식당 둘이었다(2026-11-02). 그래도 둘 이상이면 None — 하나를 골라 다른 곳의 영업시간을 말하면
         "못 찾았어요"보다 나쁘다. 별칭·부분 일치("남산타워"↔"N서울타워")는 같은 이유로 하지 않는다. 2자 미만은 찾지 않는다.
         한 곳만 맞으면 지역이 달라도 돌려준다 — 대신 호출측이 그 위치(시·도·구군)를 카드에 싣는다(다른 지역의 같은 이름이면 드러나게)."""
         key = "".join(name.split())
@@ -67,7 +70,7 @@ class PgPlaceSql:
                     cur.execute(f"SET LOCAL statement_timeout = {STATEMENT_TIMEOUT_MS}")
                     cur.execute(
                         f"SELECT {_ROW_COLUMNS} FROM poi_public WHERE replace(name, ' ', '') = %(key)s "
-                        "ORDER BY (sido LIKE %(area)s OR sigungu LIKE %(area)s) DESC, rich DESC, poi_id LIMIT 5",
+                        f"ORDER BY (sido LIKE %(area)s OR sigungu LIKE %(area)s) DESC, rich DESC, poi_id LIMIT {ROW_CAP}",
                         {"key": key, "area": f"{area}%" if area else "%"},
                     )
                     hits = [_row(r) for r in cur.fetchall()]
@@ -79,7 +82,10 @@ class PgPlaceSql:
         if len(local) == 1:
             return local[0]
         rich = [h for h in (local or hits) if h.rich]  # 지역 안(없으면 전체)에서 정보 충실한 곳이 하나뿐인가 — 정렬이 rich 를 앞에 둔다
-        return rich[0] if len(rich) == 1 else None
+        if len(rich) == 1:
+            return rich[0]
+        sights = [h for h in (rich or local or hits) if h.category in _SIGHT_CATEGORIES]
+        return sights[0] if len(sights) == 1 else None
 
     def run(self, sql: str) -> list[PlaceRow]:
         """검사를 통과한 SELECT → 그 순서의 `PlaceRow` (≤ `ROW_CAP`). DB 오류·시한은 예외로 올라간다."""

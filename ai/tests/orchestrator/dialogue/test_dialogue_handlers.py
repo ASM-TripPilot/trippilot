@@ -447,6 +447,8 @@ def test_without_trip_a_named_place_region_or_two_ends_is_still_looked_up(intent
     facts = HANDLERS[intent].assemble(_ctx(_snapshot((), trip=None, status=None), args), {})
     assert not facts.needs_trip and facts != need_trip_facts(intent)
     assert not {"OPEN_ITINERARY", "OPEN_ITINERARY_METHOD"} & set(_types(facts))  # 일정 화면은 갈 곳이 없다 — 여행 만들기로
+    # 못 찾았을 때도 '일정에서 못 찾음'을 싣지 않는다 — "일정에 추가하면 알려 드릴게요"가 됐다(2026-11-02 개발)
+    assert all("일정에서" not in note for note in facts.notes)
 
 def test_style_analysis_answers_without_a_trip() -> None:
     facts = _run(HANDLERS[Intent.STYLE_ANALYSIS], _ctx(_snapshot((), trip=None, status=None)))
