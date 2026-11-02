@@ -8,6 +8,10 @@ import '@/app/entrypoint/AppProviders';
 import type { ComponentType } from 'react';
 
 import { AppProviders, SplashGate } from '@/app';
+import { mark } from '@/shared/lib/startupMarks';
+
+// TRIP-1717 P2 — import 평가가 끝나 루트 레이아웃 모듈 본문에 닿은 시점.
+mark('rootLayout');
 
 // 개발 빌드 전용 「실패 주입 켜짐」·「요청 카운터」 표시 — 운영 변환은 `__DEV__` 를 false 로 접어 이 require 를 그래프에서 지운다
 // (남으면 metro 운영 blockList 가 export 를 깨뜨린다, `src/shared/dev-fault`). 카운터 배지는 jest 에서 렌더하지 않는다

@@ -20,6 +20,7 @@
     "fsd": "steiger ./src --fail-on-warnings",
     "structure:drift": "node .claude/skills/trippilot-dev-cycle/scripts/structure-index.cjs --write && git diff --exit-code docs/structure.generated.md",
     "bundle:report": "node scripts/bundle-report.cjs",
+    "bench:startup": "node scripts/startup-bench.cjs",
     "knip": "knip --dependencies"
   },
   "dependencies": {

@@ -6,6 +6,7 @@ import { Stack } from 'expo-router';
 
 import { usePermissionCatchUp } from '@/app/model/usePermissionCatchUp';
 import { useBootstrapGate } from '@/features/auth';
+import { flushMarks, mark } from '@/shared/lib/startupMarks';
 import {
   promptAndRegisterPush,
   registerPushIfGranted,
@@ -76,6 +77,12 @@ jest.mock('./bootClock', () => ({
   },
 }));
 
+// 시작 마크(TRIP-1717)는 부르는 시점·순서만 본다 — 실제 기록·파일 쓰기는 startupMarks.test 가 본다. 호출 기록은 beforeEach 의 clearAllMocks 가 비운다.
+jest.mock('@/shared/lib/startupMarks', () => ({
+  mark: jest.fn(),
+  flushMarks: jest.fn(),
+}));
+
 // 배럴을 통째로 갈지 않는다 — 실물을 먼저 펼쳐야 재수출이 늘어도(수신 입구 등) 형제 export 가 undefined 가 안 된다.
 jest.mock('@/shared/push', () => ({
   ...jest.requireActual('@/shared/push'),
@@ -89,6 +96,8 @@ const mockUseBootstrapGate = useBootstrapGate as jest.MockedFunction<
 >;
 const mockRegisterIfGranted = registerPushIfGranted as jest.Mock;
 const mockCatchUp = usePermissionCatchUp as jest.Mock;
+const mockMark = mark as jest.Mock;
+const mockFlush = flushMarks as jest.Mock;
 
 type GateState = ReturnType<typeof useBootstrapGate>;
 
@@ -523,4 +532,147 @@ describe('SplashGate · 권한 안내 라우트 선언·스플래시 유지 (TRI
       }
     }
   );
+});
+
+/**
+ * TRIP-1717 · 콜드스타트 시작 마크 배선 — 6구간(P3~P6 + 보조 floorElapsed)이 정해진 시점에 정해진 순서로 한 번씩 찍힌다.
+ *
+ * 무엇을 보장하나: rootMounted(첫 마운트) → bootstrapResolved(phase 가 loading 을 벗어난 첫 순간, 목적지·잠정 여부를 detail 로)
+ * → floorElapsed(하한 타이머 콜백 — 하한 전엔 없다) → splashReleased(스택이 처음 그려진 커밋 — 권한 안내 hold 중엔 없다)
+ * → firstFrame + flushMarks(그 뒤 requestAnimationFrame 콜백에서, 1회). 같은 상태로 다시 그려도 마크가 늘지 않는다.
+ * 무엇을 안 보나: 마크 값·파일 내용(startupMarks.test), index.ts·_layout 모듈 본문 마크(02a §1 — 측정이 잠근다), 실제로 프레임이 그려졌는지.
+ * (개념) rAF = requestAnimationFrame, 다음 화면 갱신 직전에 한 번 불리는 콜백. 가짜 타이머가 16ms 틱으로 흘려 준다.
+ */
+describe('SplashGate · 시작 마크 배선 (TRIP-1717)', () => {
+  const names = (): string[] => mockMark.mock.calls.map((call) => call[0]);
+  const countOf = (name: string): number =>
+    names().filter((n) => n === name).length;
+  const orderOf = (name: string): number =>
+    mockMark.mock.invocationCallOrder[names().indexOf(name)];
+  const passFrame = (): void => {
+    act(() => {
+      jest.advanceTimersByTime(16);
+    });
+  };
+
+  it('W1 정상 흐름 — 마운트 직후 rootMounted·bootstrapResolved, 하한 뒤 floorElapsed·splashReleased, 프레임 뒤 firstFrame·flush 1회', () => {
+    // 준비
+    mockUseBootstrapGate.mockReturnValue(
+      gate({ destination: 'HOME', isProvisional: false })
+    );
+
+    // 실행 1 — 마운트
+    render(<SplashGate />);
+
+    // 단언 1 — 앵커: 스플래시 중이라 뒤 점은 아직 없다
+    expect(names()).toEqual(['rootMounted', 'bootstrapResolved']);
+    expect(mockMark).toHaveBeenCalledWith('bootstrapResolved', {
+      destination: 'HOME',
+      isProvisional: false,
+    });
+    expect(mockFlush).not.toHaveBeenCalled();
+
+    // 실행 2 — 하한 직전
+    act(() => {
+      jest.advanceTimersByTime(SPLASH_MIN_VISIBLE_MS - 1);
+    });
+    expect(names()).toEqual(['rootMounted', 'bootstrapResolved']);
+
+    // 실행 3 — 하한 도달
+    act(() => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(names()).toEqual([
+      'rootMounted',
+      'bootstrapResolved',
+      'floorElapsed',
+      'splashReleased',
+    ]);
+    expect(orderOf('floorElapsed')).toBeLessThan(orderOf('splashReleased'));
+    expect(mockFlush).not.toHaveBeenCalled(); // 아직 프레임 전
+
+    // 실행 4 — 다음 프레임
+    passFrame();
+
+    // 단언 4
+    expect(names()).toEqual([
+      'rootMounted',
+      'bootstrapResolved',
+      'floorElapsed',
+      'splashReleased',
+      'firstFrame',
+    ]);
+    expect(mockFlush).toHaveBeenCalledTimes(1);
+    expect(mockFlush.mock.invocationCallOrder[0]).toBeGreaterThan(
+      orderOf('firstFrame')
+    );
+  });
+
+  it('W2 부트스트랩 확정 — loading 동안엔 bootstrapResolved 가 없고, 확정되면 목적지·잠정 여부와 함께 정확히 1회', () => {
+    // 준비
+    mockUseBootstrapGate.mockReturnValue(
+      gate({ phase: 'loading', destination: null })
+    );
+    const { rerender } = render(<SplashGate />);
+    expect(names()).toEqual(['rootMounted']);
+
+    // 실행 — 3초 타임아웃 잠정 분기로 확정
+    mockUseBootstrapGate.mockReturnValue(
+      gate({ destination: 'HOME', isProvisional: true })
+    );
+    rerender(<SplashGate />);
+
+    // 단언
+    expect(countOf('bootstrapResolved')).toBe(1);
+    expect(mockMark).toHaveBeenCalledWith('bootstrapResolved', {
+      destination: 'HOME',
+      isProvisional: true,
+    });
+    expect(orderOf('rootMounted')).toBeLessThan(orderOf('bootstrapResolved'));
+  });
+
+  it('W3 권한 안내가 스플래시를 붙잡는 동안엔 splashReleased·firstFrame·flush 가 없다 — 풀린 뒤에야 찍힌다', () => {
+    // 준비 — 부트스트랩 확정 + 하한 지남, 그러나 권한 안내가 붙잡음
+    mockCatchUp.mockReturnValue(true);
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
+    const { rerender } = render(<SplashGate />);
+    passFloor();
+    passFrame();
+
+    // 단언 1 — 앵커: 하한은 지났고(floorElapsed 있음) 아직 안 그려졌다
+    expect(countOf('floorElapsed')).toBe(1);
+    expect(countOf('splashReleased')).toBe(0);
+    expect(countOf('firstFrame')).toBe(0);
+    expect(mockFlush).not.toHaveBeenCalled();
+
+    // 실행 — 붙잡기 해제
+    mockCatchUp.mockReturnValue(false);
+    rerender(<SplashGate />);
+    passFrame();
+
+    // 단언 2
+    expect(countOf('splashReleased')).toBe(1);
+    expect(countOf('firstFrame')).toBe(1);
+    expect(mockFlush).toHaveBeenCalledTimes(1);
+  });
+
+  it('W4 같은 상태로 다시 그리고 타이머를 더 흘려도 마크·flush 가 늘지 않는다', () => {
+    // 준비 — W1 이 끝난 상태
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
+    const { rerender } = render(<SplashGate />);
+    passFloor();
+    passFrame();
+    const before = names();
+    expect(before).toHaveLength(5); // 앵커: 다섯 마크가 다 찍힌 상태
+
+    // 실행
+    rerender(<SplashGate />);
+    act(() => {
+      jest.advanceTimersByTime(5000);
+    });
+
+    // 단언
+    expect(names()).toEqual(before);
+    expect(mockFlush).toHaveBeenCalledTimes(1);
+  });
 });
