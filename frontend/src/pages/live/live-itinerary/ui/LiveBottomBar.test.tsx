@@ -14,6 +14,7 @@ import {
   moved,
   NEW_CELLS,
   rootScale,
+  slotEffect,
   START5_IDS,
   START_CELLS,
   START_EXPLORE,
@@ -33,8 +34,15 @@ import {
   BAR_ENTER_DELAY_MS,
   BAR_ENTER_MS,
   BAR_EXIT_MS,
+  barMorphFrame,
 } from '@/widgets/bottom-nav-bar';
 import { LiveBottomBar, type LiveBottomBarProps } from './LiveBottomBar';
+
+// TRIP-1738 — 단계 함수 호출 수를 센다(BM-C). 실물을 감싼 스파이라 다른 묶음의 모양·타이밍은 같다.
+jest.mock('@/widgets/bottom-nav-bar/model/barMorph', () => {
+  const actual = jest.requireActual('@/widgets/bottom-nav-bar/model/barMorph');
+  return { ...actual, barMorphFrame: jest.fn(actual.barMorphFrame) };
+});
 
 /**
  * 여행 중 허브 하단 내비 바(props 만 받는 순수 프레젠테이션): 뒤로 + 4칸 캡슐 [일정·수정·챗봇·행사]. 한 칸을 누르면 그 칸의 콜백만 1회,
@@ -481,5 +489,64 @@ describe('LiveBottomBar · 모프 (BM)', () => {
     gate.finish();
     expect(errors).not.toHaveBeenCalled(); // 언마운트 뒤 상태 갱신·act 경고 없음
     errors.mockRestore();
+  });
+
+  // TRIP-1738 — 예전엔 스타일 8~9개가 프레임마다 각자 단계 함수를 불렀다. 이제 프레임 값 하나를 모두가 읽는다.
+  // jest 의 reanimated 는 16ms 를 흘리면 애니메이션을 1ms 마다 진행한다(실측 — 바꾸기 전 16ms 당 144회, 뒤 16회) → "경과 ms 이하"가 곧 "틱당 1회 이하"다.
+  it('BM-C 입장 모프 1회 동안 단계 함수는 애니메이션 틱마다 많아야 1번 불린다 (M-43 측정)', async () => {
+    // 준비: 모션 켬, 출발 탭 + 입장 신호로 그리고 OS 답·시작 지연을 흘린다.
+    probe.setReduceMotion(false);
+    renderBar({ departureTab: 'home', entrance: true });
+    await flushOsAnswer();
+    advance(BAR_ENTER_DELAY_MS + 16);
+    const calls = barMorphFrame as unknown as jest.Mock;
+    const before = calls.mock.calls.length;
+    // 실행: 입장 모프 전 구간을 흘린다.
+    const watch = watchMotion(Math.ceil(BAR_ENTER_MS / 16) + 2);
+    // 단언: 모프가 실제로 돌았고(공허 통과 방지) 끝 모양이 최종 구조이며, 호출 수는 흘린 ms 이하다.
+    expect(moved(watch)).toBe(true);
+    expect(visibleIds()).toEqual(FINAL_IDS);
+    const elapsed = watch.at[watch.at.length - 1];
+    const during = calls.mock.calls.length - before;
+    expect(during).toBeGreaterThan(0);
+    expect(during).toBeLessThanOrEqual(elapsed);
+  });
+
+  // TRIP-1738 03b 경고-1 — 모양 값을 읽는 자리(칸 불투명도·확대, 새 칸 시차, 바 확대, 뒤로 원 크기)를 엉뚱한 값으로 바꿔도 green 이던 구멍.
+  // 값 자체(곡선·숫자)는 barMorph.test 가 맡고, 여기선 "그 값이 실제로 칸에 걸린다"를 관계로만 본다 — 커졌다/덜 보였다/차례.
+  it('BM-V 입장 모프 동안 바가 잠깐 커지고, 뒤로 원은 작은 데서 자라며, 새 칸은 덜 보이는 데서 왼→오 차례로 나타난다 — 끝은 전부 제 모습', async () => {
+    // 준비: 모션 켬, 출발 탭 + 입장 신호.
+    probe.setReduceMotion(false);
+    renderBar({ departureTab: 'home', entrance: true });
+    await flushOsAnswer();
+    const rootScales: number[] = [];
+    const backScales: number[] = [];
+    const editOpacity: number[] = [];
+    const eventOpacity: number[] = [];
+    const mounted = (id: string) =>
+      screen.queryByTestId(id, { includeHiddenElements: true }) !== null;
+    // 실행: 지연 + 입장 전 구간을 프레임마다 읽는다(뒤로·새 칸은 컷 뒤에야 마운트된다).
+    watchMotion(
+      Math.ceil((BAR_ENTER_DELAY_MS + BAR_ENTER_MS + 64) / 16),
+      16,
+      () => {
+        rootScales.push(rootScale());
+        if (mounted(BACK)) backScales.push(slotEffect(BACK).scale);
+        if (mounted(EDIT) && mounted(EVENT)) {
+          editOpacity.push(slotEffect(EDIT).opacity);
+          eventOpacity.push(slotEffect(EVENT).opacity);
+        }
+      }
+    );
+    // 단언: ① 바 확대가 1 보다 컸던 프레임이 있다 ② 뒤로 원이 1보다 작았던 프레임이 있다 ③ 수정 칸이 덜 보였던 프레임이 있다
+    // ④ 같은 프레임에 수정(왼)이 행사(오)보다 더 보였던 적이 있다(차례) ⑤ 끝은 전부 1.
+    expect(Math.max(...rootScales)).toBeGreaterThan(1);
+    expect(backScales.some((scale) => scale > 0 && scale < 1)).toBe(true);
+    expect(editOpacity.some((o) => o > 0 && o < 1)).toBe(true);
+    expect(editOpacity.some((o, i) => o > eventOpacity[i])).toBe(true);
+    expect(rootScales[rootScales.length - 1]).toBeCloseTo(1, 6);
+    expect(backScales[backScales.length - 1]).toBeCloseTo(1, 6);
+    expect(editOpacity[editOpacity.length - 1]).toBeCloseTo(1, 6);
+    expect(eventOpacity[eventOpacity.length - 1]).toBeCloseTo(1, 6);
   });
 });
