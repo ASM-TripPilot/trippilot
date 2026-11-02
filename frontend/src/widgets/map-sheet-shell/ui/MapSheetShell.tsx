@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useWindowDimensions, View } from 'react-native';
+import { Platform, useWindowDimensions, View } from 'react-native';
 import type { LayoutChangeEvent, ListRenderItem } from 'react-native';
 import {
   SafeAreaInsetsContext,
@@ -320,10 +320,13 @@ export function MapSheetShell<T = unknown>({
     [bottomInset]
   );
   const sheetSnapPoints = snapPoints ?? defaultSnapPoints;
-  // TRIP-1694 — 루트 높이 0 이면 숨김. 숨김→보임 전이에서만 숨기기 전 칸으로 snapToIndex 1회(−1·범위 밖이면 안 함).
-  // ponytail: 복원이 gorhom 의 레이아웃 재계산(isLayoutCalculated)보다 먼저 와 웹에서 무시될 수 있다(미검증 — 6-b).
-  // 무시돼도 CTA 는 남는다(숨김 중 도착을 걸러서). 막히면 아래 snapToIndex 를 requestAnimationFrame 으로 한 틱 미룬다.
+  // TRIP-1694 — 루트 높이 0 이면 숨김. 숨김→보임 전이에서 시트를 숨기기 전 칸으로 **새로 마운트**한다(key 교체).
+  // snapToIndex 로는 못 고친다(웹 6-b 실측): gorhom 이 높이 0 동안 위치를 다시 계산해 칸 기억을 잃고, 보임 직후의
+  // 복원 요청은 그 뒤에 오는 자기 레이아웃 재계산에 덮여 시트가 화면 밖에 남았다. 새 마운트는 보이는 높이로 처음부터 잰다.
+  // 웹에서만 — 네이티브 스택은 뒤 화면을 숨기지 않아 이 전이가 없고, 있더라도 시트 재마운트(본문 스크롤 초기화)를 피한다.
+  const [sheetMount, setSheetMount] = useState({ key: 0, index: startIndex });
   const handleRootLayout = (e: LayoutChangeEvent) => {
+    if (Platform.OS !== 'web') return;
     if (e.nativeEvent.layout.height === 0) {
       rootHiddenRef.current = true;
       return;
@@ -331,9 +334,7 @@ export function MapSheetShell<T = unknown>({
     if (!rootHiddenRef.current) return;
     rootHiddenRef.current = false;
     const index = arrivedIndexRef.current;
-    if (index >= 0 && index < sheetSnapPoints.length) {
-      sheetRef.current?.snapToIndex(index);
-    }
+    setSheetMount((m) => ({ key: m.key + 1, index }));
   };
   // TRIP-1416 · 핀 맞춤의 보이는 띠. 아래 가림 = 배열의 첫 '%' 칸(진입 칸·지금 멈춘 칸이 아니다 — 시트를 끌 때마다
   // 카메라가 튀지 않게, 허브가 펼침으로 진입해도 중간 칸 기준). gorhom '%' 는 (화면 − topInset) 기준이라 실제 가림은
@@ -422,11 +423,12 @@ export function MapSheetShell<T = unknown>({
           onEndReached)를 VirtualizedList-in-ScrollView 충돌 없이 담는다 — header·children 은 리스트의
           ListHeaderComponent 한 자리에 얹힌다(TRIP-798 묶음 C). 미전달이면 현행 스크롤 경로(6 소비처 무변경). */}
       <BottomSheet
+        key={sheetMount.key}
         ref={sheetRef}
         // gorhom 기본값 accessible=true + 라벨 'Bottom Sheet' 는 시트 본문을 접근성 요소 하나로 묶는다 — 안쪽 텍스트
         // 카드(번호·이름·시각)가 VoiceOver·접근성 트리에서 사라진다(TRIP-1430 Q-081). 본문이 제각각 읽히게 끈다.
         accessible={false}
-        index={startIndex}
+        index={sheetMount.index}
         snapPoints={sheetSnapPoints}
         // v5 기본 true 는 콘텐츠 높이 칸을 배열에 몰래 끼워 index·onChange 번호가 어긋난다(03b 경고-1).
         enableDynamicSizing={false}

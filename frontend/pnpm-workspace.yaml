@@ -9,3 +9,4 @@ minimumReleaseAgeExclude:
   - '@react-native-seoul/naver-login@5.0.1'
 patchedDependencies:
   '@gorhom/bottom-sheet@5.2.14': patches/@gorhom__bottom-sheet@5.2.14.patch
+  react-native-draggable-flatlist@4.0.3: patches/react-native-draggable-flatlist@4.0.3.patch
