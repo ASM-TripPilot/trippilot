@@ -42,6 +42,7 @@ type Summary = {
     invalid: number;
   };
   segments: Record<SegmentName, Stat>;
+  extras: { homeTrips?: Stat };
 };
 type Lib = {
   segmentsOf: (record: StartupRecord | null, launchEpoch: number) => Verdict;
@@ -404,5 +405,48 @@ describe('summarize — 집계', () => {
         expect(lib.summarize(toRuns(order))).toEqual(summary);
       })
     );
+  });
+});
+
+describe('summarize — 보조 지표 homeTrips (TRIP-1719)', () => {
+  /** 정상 회 n 개 — 홈 여행 데이터 점을 부트스트랩 확정 뒤 i*10 ms 에 둔다(i=1..n). */
+  const withHomeTrips = (n: number): Run[] =>
+    Array.from({ length: n }, (_, i) => {
+      const r = build();
+      r.marks.homeTrips = {
+        perfNow: r.marks.bootstrapResolved.perfNow + (i + 1) * 10,
+        epoch: 5,
+      };
+      return run(r);
+    });
+
+  it('유효 회 전부에 homeTrips 가 있으면 "부트스트랩 확정 → 홈 여행 데이터" 분포를 낸다', () => {
+    // 준비 — 예열 1(극단값) + 정상 10
+    const warm = withHomeTrips(1)[0];
+    warm.record!.marks.homeTrips.perfNow += 99_999;
+    const runs = [warm, ...withHomeTrips(10)];
+
+    // 실행
+    const summary = lib.summarize(runs);
+
+    // 단언 — 10..100 → p50 5번째(50) · p90 9번째(90), 예열은 안 섞인다
+    expect(summary.extras.homeTrips).toEqual({
+      p50: 50,
+      p90: 90,
+      min: 10,
+      max: 100,
+    });
+  });
+
+  it('유효 회 중 하나라도 homeTrips 가 없으면 보조 지표를 내지 않는다(일부만 모인 숫자 금지)', () => {
+    // 준비 — 정상 10 중 마지막 회만 점이 없다
+    const runs = [run(build()), ...withHomeTrips(9), run(build())];
+
+    // 실행
+    const summary = lib.summarize(runs);
+
+    // 단언 — 6구간은 그대로 나오고(앵커) 보조 지표만 없다
+    expect(summary.counts.ok).toBe(10);
+    expect(summary.extras.homeTrips).toBeUndefined();
   });
 });

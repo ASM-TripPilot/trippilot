@@ -11,7 +11,7 @@ import {
  * 무엇을 보장하나:
  *  - 같은 이름은 첫 기록만 남는다(HomePage 재마운트 같은 되풀이가 값을 덮지 못한다).
  *  - 측정 플래그(`EXPO_PUBLIC_STARTUP_MARKS === '1'`)가 꺼져 있으면 — `__DEV__` 가 true 여도 — console·fetch·파일 쓰기가 0 이다.
- *  - 켜져 있으면 `flushMarks()` 가 문서 폴더의 `startup-marks.json` 을 **딱 한 번** 쓴다. 내용은 buildKind·marks·rnStartupTiming 세 키.
+ *  - 켜져 있으면 `flushMarks()` 가 문서 폴더의 `startup-marks.json` 을 쓴다 — 부를 때마다 그때까지 모인 마크로 덮어쓴다(TRIP-1719). 내용은 buildKind·marks·rnStartupTiming 세 키.
  * 구간 계산·집계는 `scripts/startupBench.test.ts`, SplashGate 가 언제 부르는지는 `SplashGate.test.tsx` 가 본다.
  *
  * (개념) `jest.isolateModules` = 그 안에서 require 한 모듈을 캐시 없이 새로 읽는다. 플래그를 모듈 상수로 읽는 구현이라
@@ -206,19 +206,21 @@ describe('startupMarks · 켜짐(EXPO_PUBLIC_STARTUP_MARKS=1)', () => {
     });
   });
 
-  it('A4 flush 는 한 번만 쓴다 — 두 번째 호출과 그 사이에 늘어난 마크는 파일에 반영되지 않는다', () => {
-    // 준비
+  it('A4 flush 를 다시 부르면 그 사이 늘어난 마크까지 담아 파일을 덮어쓴다 — 앞 마크 값은 그대로다(TRIP-1719)', () => {
+    // 준비 — 첫 화면(firstFrame) 뒤에 홈 데이터 점(homeTrips)이 늦게 오는 순서
     const { mark, flushMarks } = load({ flag: '1' });
     mark('a');
     flushMarks();
+    const first = readOut().marks.a;
     mark('b');
 
     // 실행
     flushMarks();
 
     // 단언
-    expect(writeSpy).toHaveBeenCalledTimes(1);
-    expect(Object.keys(readOut().marks)).toEqual(['a']);
+    expect(writeSpy).toHaveBeenCalledTimes(2);
+    expect(Object.keys(readOut().marks)).toEqual(['a', 'b']);
+    expect(readOut().marks.a).toEqual(first);
   });
 
   it('A5 앞 실행이 남긴 파일이 있어도 던지지 않고 새 내용으로 덮어쓴다', () => {
