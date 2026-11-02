@@ -145,19 +145,32 @@ def _openai_llm_and_model() -> tuple[object, str]:
     return adapter, _env("OPENAI_MODEL") or "gpt-5.6-terra"
 
 
+_ANTHROPIC_NUMBERED_KEYS = range(2, 10)  # ANTHROPIC_API_KEY_2 .. _9
+
+
+def _anthropic_api_keys() -> list[str]:
+    """Claude 키 목록 — 번갈아 쓸 순서대로, 같은 값은 한 번만.
+
+    ① `ANTHROPIC_API_KEY`(기존 단일 키) → ② `ANTHROPIC_API_KEY_2`…`_9` → ③ `ANTHROPIC_API_KEYS`(쉼표 목록).
+    셋을 합친다 — 운영 시크릿은 번호 칸으로 키를 늘리고, 쉼표 목록은 한 칸에 몰아 넣고 싶을 때 쓴다.
+    같은 값이 두 칸에 있어도(키를 옮기다 생기는 중복) 한 번만 센다 — 같은 키를 번갈아 써 봐야 한도는 그대로다.
+    값은 어디에도 찍지 않는다.
+    """
+    raw = [_env("ANTHROPIC_API_KEY"), *(_env(f"ANTHROPIC_API_KEY_{n}") for n in _ANTHROPIC_NUMBERED_KEYS)]
+    raw += (_env("ANTHROPIC_API_KEYS") or "").split(",")
+    return list(dict.fromkeys(k.strip() for k in raw if k and k.strip()))
+
+
 def _anthropic_llm_and_model() -> tuple[object, str]:
     """`TRIPPILOT_LLM_PROVIDER=anthropic` 실배선 조립 (AI-D06 — Claude 직접 호출).
 
     smoke_llm._build_adapter의 anthropic 분기와 동형 — SDK 지연 import,
     max_retries=0(재시도 무익 정책, TRIP-381). 키 누락은 즉시 기동 실패.
     """
-    # 키는 여러 개를 쉼표로 줄 수 있다(`ANTHROPIC_API_KEYS`) — 번갈아 쓰고 키 문제면 다음 키로(어댑터).
-    # 없으면 종전 단일 키(`ANTHROPIC_API_KEY`). 값은 어디에도 찍지 않는다.
-    raw = _env("ANTHROPIC_API_KEYS") or _env("ANTHROPIC_API_KEY")
-    api_keys = [k.strip() for k in (raw or "").split(",") if k.strip()]
+    api_keys = _anthropic_api_keys()
     if not api_keys:
         raise RuntimeError(
-            "TRIPPILOT_LLM_PROVIDER=anthropic 인데 ANTHROPIC_API_KEY(S) 미설정 — "
+            "TRIPPILOT_LLM_PROVIDER=anthropic 인데 ANTHROPIC_API_KEY(_N/S) 미설정 — "
             "실 LLM 조립 불가(빈 문자열도 미설정). silent fallback 금지: 기동 실패."
         )
     import anthropic
