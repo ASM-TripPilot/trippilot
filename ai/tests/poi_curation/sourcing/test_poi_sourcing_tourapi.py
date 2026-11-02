@@ -8,7 +8,7 @@ from hypothesis import strategies as st
 
 from trippilot.poi_curation.sourcing.mapping import _parse_rest_days, map_category, parse_open_hours
 from trippilot.poi_curation.sourcing.tourapi import TourApiAdapter
-from trippilot.domain.poi import OpenHour, PoiCategory
+from trippilot.domain.poi.poi import OpenHour, PoiCategory
 from trippilot.ports.poi_sourcing_port import SourcingError
 
 from tests.fakes.fake_tourapi_http import (

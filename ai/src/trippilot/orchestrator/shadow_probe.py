@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.intent import IntentMatch
+from trippilot.domain.dialogue.intent import IntentMatch
 from trippilot.orchestrator.intent_eval import is_refusal
 from trippilot.orchestrator.intent_router import IntentRouter, normalize
 from trippilot.ports.llm_port import LlmPort, LlmRequest, LlmResponse

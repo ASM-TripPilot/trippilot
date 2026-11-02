@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from trippilot.domain.delegation import AgentResult, AgentStatus, TaskError, TaskMetrics
+from trippilot.domain.dialogue.delegation import AgentResult, AgentStatus, TaskError, TaskMetrics
 
 _TASK, _TRACE = "task-1", "trace-1"
 _METRICS = TaskMetrics(elapsed_ms=12, llm_calls=1, tokens_in=10, tokens_out=5,

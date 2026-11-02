@@ -31,7 +31,7 @@ from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.domain.common import TraceId
-from trippilot.domain.intent import (
+from trippilot.domain.dialogue.intent import (
     ROUTABLE_INTENTS,
     ROUTING_TABLE,
     Intent,
@@ -39,7 +39,7 @@ from trippilot.domain.intent import (
     MatchRoute,
     RoutingMode,
 )
-from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.orchestrator.intent_router import (
     IntentRouter,
     IntentRouterConfig,

@@ -21,10 +21,10 @@ from trippilot.agents.schedule.agent import ScheduleAgent, ScheduleTask, pick_sl
 from trippilot.agents.schedule.budget import OrchestratorConfig, allocate
 from trippilot.agents.schedule.outcome import candidates_report
 from trippilot.domain.common import PoiId
-from trippilot.domain.itinerary import FixedBlock, TimeWindow
-from trippilot.domain.llm import CandidatePool
+from trippilot.domain.itinerary.itinerary import FixedBlock, TimeWindow
+from trippilot.domain.llm.llm import CandidatePool
 from trippilot.domain.observability import FallbackEvent
-from trippilot.domain.poi import PoiCategory
+from trippilot.domain.poi.poi import PoiCategory
 from trippilot.llm_gateway.gates.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker

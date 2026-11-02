@@ -17,9 +17,9 @@ from datetime import date, datetime
 
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.itinerary import VisitSlot
-from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi import NIGHTLIFE_TAG, HolidayCalendar, Poi, PoiCategory, hours_label, open_windows_on  # noqa: F401 — hours_label 은 재export(미결 #16)
+from trippilot.domain.itinerary.itinerary import VisitSlot
+from trippilot.domain.llm.llm import CandidatePool
+from trippilot.domain.poi.poi import NIGHTLIFE_TAG, HolidayCalendar, Poi, PoiCategory, hours_label, open_windows_on  # noqa: F401 — hours_label 은 재export(미결 #16)
 
 # 카테고리마다 점수 상위 몇 곳을 후보로 줄까 — 맛집·카페·명소가 고루 보여야 식사창을 채운다.
 PER_CATEGORY = 6

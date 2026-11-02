@@ -42,10 +42,10 @@ from trippilot.agents.schedule.family import (
     same_place,
 )
 from trippilot.domain.common import GeoPoint, PoiId, Rejection, RejectionKind
-from trippilot.domain.itinerary import FixedBlock, TimeWindow
+from trippilot.domain.itinerary.itinerary import FixedBlock, TimeWindow
 from trippilot.domain.observability import FallbackEvent
-from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
-from trippilot.domain.poi_curation import CandidatePoolRequest
+from trippilot.domain.poi.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi_curation import CandidatePoolRequest
 from trippilot.llm_gateway.gates.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker

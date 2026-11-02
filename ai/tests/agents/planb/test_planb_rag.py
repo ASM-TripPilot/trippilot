@@ -17,7 +17,7 @@ import json
 from dataclasses import replace
 from types import SimpleNamespace
 
-from trippilot.domain.llm import AlternativePick
+from trippilot.domain.llm.llm import AlternativePick
 import math
 from datetime import date, datetime, timezone
 
@@ -54,10 +54,10 @@ from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionWorker
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TraceId
 from trippilot.domain.kb import KbDocument, KbHit, KbKind
-from trippilot.domain.llm import CandidatePool, ModelTier, ScoredPoi
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.domain.prompt import PromptRef
-from trippilot.domain.trigger import TriggerKind, TriggerParams
+from trippilot.domain.llm.llm import CandidatePool, ModelTier, ScoredPoi
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.llm.prompt import PromptRef
+from trippilot.domain.dialogue.trigger import TriggerKind, TriggerParams
 from trippilot.assembly_engine.config import RAIN_OUTDOOR
 from trippilot.assembly_engine.travel import haversine_km
 

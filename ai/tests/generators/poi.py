@@ -13,8 +13,8 @@ from datetime import timedelta, timezone
 from hypothesis import strategies as st
 
 from trippilot.domain.common import PoiId
-from trippilot.domain.llm import CandidatePool, ScoredPoi
-from trippilot.domain.poi import (
+from trippilot.domain.llm.llm import CandidatePool, ScoredPoi
+from trippilot.domain.poi.poi import (
     DataQuality,
     OpenHour,
     Poi,

@@ -20,9 +20,9 @@ from typing import Protocol
 from trippilot.llm_gateway.config import C1Config, UNMAPPED_FALLBACK_MODES
 from trippilot.llm_gateway.gates.base import ExitGate
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import CandidatePool, LlmFeature, ScoredPoi, TypedResult
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature, ScoredPoi, TypedResult
 from trippilot.domain.observability import FallbackEvent, LlmCallRecord
-from trippilot.domain.prompt import PromptRef
+from trippilot.domain.llm.prompt import PromptRef
 from trippilot.ports.llm_port import (
     LlmImagePart,
     LlmPort,

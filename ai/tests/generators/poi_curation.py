@@ -20,8 +20,8 @@ from datetime import date, timedelta
 from hypothesis import strategies as st
 
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, TransportMode
-from trippilot.domain.poi_curation import CandidatePoolRequest
-from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi_curation import CandidatePoolRequest
+from trippilot.domain.poi.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 from trippilot.poi_curation.sourcing.osm import _SHOP_TRAVEL
 from trippilot.ports.place_existence_port import ExistenceQuery
 

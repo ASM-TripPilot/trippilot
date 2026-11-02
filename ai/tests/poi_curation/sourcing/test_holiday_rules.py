@@ -22,7 +22,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.poi_curation.sourcing.holiday_rules import parse_holiday_rules
 
 SEOL = frozenset({"SEOLLAL_EVE", "SEOLLAL_DAY", "SEOLLAL_NEXT"})

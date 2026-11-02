@@ -16,7 +16,7 @@ from trippilot.api.wiring import _render_distance
 from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.travel import TravelEstimator, WalkFirst
 from trippilot.domain.common import GeoPoint, TransportMode
-from trippilot.domain.travel import TravelEstimate
+from trippilot.domain.itinerary.travel import TravelEstimate
 
 W, P = TransportMode.WALK, TransportMode.PUBLIC
 _CFG = AssemblyConfig()

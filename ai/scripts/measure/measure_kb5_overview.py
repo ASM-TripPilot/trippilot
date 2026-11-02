@@ -59,9 +59,9 @@ from trippilot.poi_curation import place_fallback  # noqa: E402
 from trippilot.assembly_engine.travel import haversine_km  # noqa: E402
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TraceId  # noqa: E402
 from trippilot.domain.kb import KbKind  # noqa: E402
-from trippilot.domain.llm import CandidatePool, LlmFeature  # noqa: E402
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory  # noqa: E402
-from trippilot.domain.trigger import TriggerKind, TriggerParams  # noqa: E402
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature  # noqa: E402
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory  # noqa: E402
+from trippilot.domain.dialogue.trigger import TriggerKind, TriggerParams  # noqa: E402
 from trippilot.poi_curation.pool_builder import restrict_pool_to_target_role  # noqa: E402
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate  # noqa: E402
 from trippilot.llm_gateway.workers.alternative_selection import (  # noqa: E402

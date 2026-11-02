@@ -19,9 +19,9 @@ from datetime import datetime, timezone
 import pytest
 from hypothesis import given
 
-from trippilot.domain.llm import TypedResult
+from trippilot.domain.llm.llm import TypedResult
 from trippilot.domain.observability import FallbackEvent, LlmCallRecord
-from trippilot.domain.prompt import PromptRef
+from trippilot.domain.llm.prompt import PromptRef
 from trippilot.ports.llm_port import LlmPort, LlmRequest
 
 from tests.fakes.fake_llm import FailingLlm, FakeLlm, SlowLlm

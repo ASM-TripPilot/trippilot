@@ -49,15 +49,15 @@ from trippilot.domain.common import (
     TraceId,
     TransportMode,
 )
-from trippilot.domain.dialogue import ArgumentKind
-from trippilot.domain.event import EventInfo, EventType
-from trippilot.domain.intent import DIALOGUE_INTENTS, Intent
-from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory, counts_as_food, reputation_bonus
-from trippilot.domain.theme_tags import themes_in
-from trippilot.domain.poi_curation import CandidatePoolRequest
-from trippilot.domain.region_centers import bare_region, plain_region, region_area, region_center, region_mentions, region_pair
-from trippilot.domain.transit import TransitPurpose
-from trippilot.domain.trigger import TriggerKind, TriggerParams
+from trippilot.domain.dialogue.dialogue import ArgumentKind
+from trippilot.domain.itinerary.event import EventInfo, EventType
+from trippilot.domain.dialogue.intent import DIALOGUE_INTENTS, Intent
+from trippilot.domain.poi.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory, counts_as_food, reputation_bonus
+from trippilot.domain.poi.theme_tags import themes_in
+from trippilot.domain.poi.poi_curation import CandidatePoolRequest
+from trippilot.domain.poi.region_centers import bare_region, plain_region, region_area, region_center, region_mentions, region_pair
+from trippilot.domain.itinerary.transit import TransitPurpose
+from trippilot.domain.dialogue.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_FOOTNOTE, _MAX_LENGTH, _violates, clock_times
 from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT, REGION_ASK_TASTE_TEXT, fallback_answer_text
 from trippilot.orchestrator.arguments import extract_kind

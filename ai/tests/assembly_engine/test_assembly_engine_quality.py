@@ -21,7 +21,7 @@ from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.quality import compute_quality, constraint_satisfaction
 from trippilot.assembly_engine.travel import TravelEstimator
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     FixedBlock,
     ItinerarySolution,
     QualityScore,

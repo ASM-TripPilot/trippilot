@@ -32,7 +32,7 @@ from typing import Sequence
 
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import PoiId
-from trippilot.domain.poi import EATERY_NAME, Poi, PoiCategory
+from trippilot.domain.poi.poi import EATERY_NAME, Poi, PoiCategory
 
 _SAME_COORD_KM = 0.005
 _CONTAIN_KM = 1.5

@@ -18,9 +18,9 @@ import datetime as dt
 import pytest
 
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
-from trippilot.domain.llm import CandidatePool, ScoredPoi, TypedResult
+from trippilot.domain.llm.llm import CandidatePool, ScoredPoi, TypedResult
 from trippilot.domain.persona import BudgetLevel, CompanionType, PersonaSummary
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
 
 _NOW = dt.datetime(2026, 8, 21, 9, 0, tzinfo=dt.timezone.utc)
@@ -190,7 +190,7 @@ def test_lru_evicts_oldest_beyond_max_entries() -> None:
 
 def test_build_orchestrator_wraps_scoring_with_cache() -> None:
     from trippilot.api import wiring
-    from trippilot.domain.llm import ModelTier
+    from trippilot.domain.llm.llm import ModelTier
     from trippilot.llm_gateway.config import C1Config
 
     orchestrator = wiring.build_orchestrator(

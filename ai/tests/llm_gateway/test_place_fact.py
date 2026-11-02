@@ -14,8 +14,8 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature, ModelTier
-from trippilot.domain.prompt import PromptRef
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
+from trippilot.domain.llm.prompt import PromptRef
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.gates.place_fact import PlaceFactGate, pick_source

@@ -45,7 +45,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.llm import CandidatePool, LlmFeature
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature
 from trippilot.llm_gateway.gates.base import GateOutcome, has_contact_like
 from trippilot.llm_gateway.gates.explanation import ExplanationGate
 from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR

@@ -27,7 +27,7 @@ from datetime import datetime
 from typing import Generic, TypeVar
 
 from trippilot.domain.common import GeoPoint
-from trippilot.domain.poi import PoiCategory
+from trippilot.domain.poi.poi import PoiCategory
 from trippilot.poi_curation.sourcing.collection_gate import (
     CollectionGate,
     GatePass,

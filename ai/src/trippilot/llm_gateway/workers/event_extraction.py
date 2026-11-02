@@ -17,7 +17,7 @@ from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gates.event_extraction import EventExtractionContext
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature, TypedResult
+from trippilot.domain.llm.llm import LlmFeature, TypedResult
 
 
 def build_event_extraction_vars(

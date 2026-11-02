@@ -26,10 +26,10 @@ from enum import Enum
 
 from trippilot.domain.common import BudgetLevel, TransportMode
 from trippilot.domain.edit import EditOp
-from trippilot.domain.intent import ROUTABLE_INTENTS, Intent
+from trippilot.domain.dialogue.intent import ROUTABLE_INTENTS, Intent
 from trippilot.domain.persona import CompanionType
-from trippilot.domain.poi import PoiCategory
-from trippilot.domain.trigger import ReplanScope
+from trippilot.domain.poi.poi import PoiCategory
+from trippilot.domain.dialogue.trigger import ReplanScope
 
 
 class ArgumentKind(Enum):

@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 from trippilot.agents.schedule.outcome import GenerationOutcome, GenerationStatus
-from trippilot.domain.delegation import AgentResult, TaskError, TaskMetrics
+from trippilot.domain.dialogue.delegation import AgentResult, TaskError, TaskMetrics
 from trippilot.domain.freshness import FreshnessMeta
 
 _FAILED_CODE = "SCHEDULE_NO_SOLUTION"

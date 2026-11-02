@@ -14,11 +14,11 @@ from pathlib import Path
 
 from trippilot.api.wiring import LoggingTrace
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.base import GateOutcome
 from trippilot.llm_gateway.gateway import GatewayFacade
-from trippilot.domain.prompt import PromptRef
+from trippilot.domain.llm.prompt import PromptRef
 from tests.fakes.fake_llm import FakeLlm, TimeoutForModelsLlm
 
 _spec = importlib.util.spec_from_file_location(

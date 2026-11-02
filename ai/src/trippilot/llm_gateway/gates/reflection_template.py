@@ -39,7 +39,7 @@ from datetime import date, datetime
 from trippilot.llm_gateway.gates.base import GateOutcome, _load_json_object
 from trippilot.llm_gateway.gates.reminder_copy import _NUM
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.llm.llm import LlmFeature
 from trippilot.domain.observability import GateDropEvent
 from trippilot.domain.reflection import (
     PLACEHOLDER_VOCAB,

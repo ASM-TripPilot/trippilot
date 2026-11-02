@@ -13,7 +13,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from trippilot.domain.common import BudgetLevel, TransportMode
-from trippilot.domain.dialogue import (
+from trippilot.domain.dialogue.dialogue import (
     ARGUMENT_TABLE,
     ArgumentKind,
     ArgumentSpec,
@@ -24,9 +24,9 @@ from trippilot.domain.dialogue import (
     tool_specs_json,
 )
 from trippilot.domain.edit import EditOp
-from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent
+from trippilot.domain.dialogue.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent
 from trippilot.domain.persona import CompanionType
-from trippilot.domain.trigger import ReplanScope
+from trippilot.domain.dialogue.trigger import ReplanScope
 
 
 def test_table_covers_every_routable_intent_and_nothing_else() -> None:

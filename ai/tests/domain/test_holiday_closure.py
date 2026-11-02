@@ -20,7 +20,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.poi import (
+from trippilot.domain.poi.poi import (
     HOLIDAY_TAGS,
     DataQuality,
     OpenHour,

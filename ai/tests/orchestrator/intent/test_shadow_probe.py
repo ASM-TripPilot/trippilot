@@ -31,10 +31,10 @@ from tests.fakes.fake_llm import FailingLlm, FakeLlm
 from tests.fakes.in_memory_trace import InMemoryTrace
 from tests.fakes.in_memory_vector_store import InMemoryVectorStore
 from trippilot.domain.common import TraceId
-from trippilot.domain.intent import Intent, IntentMatch, MatchRoute
-from trippilot.domain.llm import ModelTier
+from trippilot.domain.dialogue.intent import Intent, IntentMatch, MatchRoute
+from trippilot.domain.llm.llm import ModelTier
 from trippilot.domain.observability import FallbackEvent, GateDropEvent, LlmCallRecord
-from trippilot.domain.prompt import PromptRef
+from trippilot.domain.llm.prompt import PromptRef
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.intent import IntentGate
 from trippilot.llm_gateway.gateway import GatewayFacade

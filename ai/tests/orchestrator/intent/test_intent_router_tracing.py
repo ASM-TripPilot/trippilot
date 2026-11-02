@@ -26,8 +26,8 @@ from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.domain.common import TraceId
-from trippilot.domain.intent import Intent, MatchRoute
-from trippilot.domain.llm import ModelTier
+from trippilot.domain.dialogue.intent import Intent, MatchRoute
+from trippilot.domain.llm.llm import ModelTier
 from trippilot.orchestrator.intent_router import IntentRouter, IntentRouterConfig
 from trippilot.orchestrator.question_bank import BANK_COLLECTION
 from tests.fakes.fake_embedding import FakeEmbedding

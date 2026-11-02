@@ -19,9 +19,9 @@ from collections.abc import Iterable, Mapping
 
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, PoiId, TransportMode
-from trippilot.domain.event import EventInfo, EventType
+from trippilot.domain.itinerary.event import EventInfo, EventType
 from trippilot.domain.persona import TasteTag
-from trippilot.domain.poi import Poi
+from trippilot.domain.poi.poi import Poi
 
 # 꺼내기 실효 반경 = 이동수단 기본 × 취향 계수, clamp [3, 40]km
 _TRANSPORT_BASE_KM: Mapping[TransportMode, float] = {

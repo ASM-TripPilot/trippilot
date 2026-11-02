@@ -33,7 +33,7 @@ import re
 from datetime import datetime
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import CandidatePool, LlmFeature
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature
 from trippilot.domain.observability import GateDropEvent
 from trippilot.llm_gateway.gates.base import (
     GateOutcome,

@@ -17,10 +17,10 @@ import pytest
 import yaml
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.intent import Intent, IntentDraft
-from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.dialogue.intent import Intent, IntentDraft
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent
-from trippilot.domain.plan_tools import PLAN_GAPS, PLAN_TOOLS, plan_tool_specs_json
+from trippilot.domain.dialogue.plan_tools import PLAN_GAPS, PLAN_TOOLS, plan_tool_specs_json
 from trippilot.llm_gateway.config import (
     C1Config,
     default_fallback_modes,

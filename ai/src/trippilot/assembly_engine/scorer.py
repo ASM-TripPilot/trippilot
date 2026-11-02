@@ -15,7 +15,7 @@ import zlib
 
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import BudgetLevel, GeoPoint
-from trippilot.domain.poi import TRENDING_TAG, Poi, PoiCategory, reputation_bonus
+from trippilot.domain.poi.poi import TRENDING_TAG, Poi, PoiCategory, reputation_bonus
 
 # 축은 "그 카테고리가 일정의 주 목적지가 되는 정도" — 명소 최상, 식음은 중간,
 # 쇼핑은 보조, STAY는 앵커라 0(선택 대상 아님). PoiCategory 전 값 커버 필수(직접 조회).

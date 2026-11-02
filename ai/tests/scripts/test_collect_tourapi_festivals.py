@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "collec
 
 from collect_tourapi_festivals import region_of, to_event  # noqa: E402
 
-from trippilot.domain.event import EventType  # noqa: E402
+from trippilot.domain.itinerary.event import EventType  # noqa: E402
 from trippilot.poi_curation.sourcing.tourapi import TourApiAdapter  # noqa: E402
 
 _TODAY = dt.date(2026, 10, 18)

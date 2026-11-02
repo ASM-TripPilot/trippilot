@@ -14,9 +14,9 @@ from dataclasses import replace
 from datetime import datetime
 
 from trippilot.domain.common import PoiId, TransportMode
-from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi_curation import CandidatePoolRequest
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, counts_as_food, reputation_bonus
+from trippilot.domain.llm.llm import CandidatePool
+from trippilot.domain.poi.poi_curation import CandidatePoolRequest
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, counts_as_food, reputation_bonus
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.sourcing.collection_gate import _haversine_m
 

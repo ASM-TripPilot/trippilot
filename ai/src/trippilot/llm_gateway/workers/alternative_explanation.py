@@ -19,7 +19,7 @@ from typing import Sequence
 # 줄바꿈이 남으면 우리 프롬프트 골격을 위조한다 (inline() docstring 에 실측).
 from trippilot.llm_gateway.prompts import inline
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.llm import CandidatePool, LlmFeature, TypedResult
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature, TypedResult
 from trippilot.domain.persona import PersonaSummary
 from trippilot.llm_gateway.gateway import GatewayFacade
 

@@ -23,7 +23,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 
 from trippilot.domain.common import GeoPoint
-from trippilot.domain.poi import PoiCategory
+from trippilot.domain.poi.poi import PoiCategory
 from trippilot.poi_curation.sourcing.collection_gate import SourcingCandidate
 from trippilot.poi_curation.sourcing.localdata import (
     PICK_RADIUS_KM,

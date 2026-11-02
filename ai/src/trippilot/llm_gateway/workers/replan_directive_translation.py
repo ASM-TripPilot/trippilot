@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature, TypedResult
+from trippilot.domain.llm.llm import LlmFeature, TypedResult
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gates.replan_directive_translation import DirectiveContext

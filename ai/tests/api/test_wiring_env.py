@@ -22,7 +22,7 @@ from fastapi import FastAPI
 import main
 from trippilot.api import wiring
 from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter
-from trippilot.domain.poi import PoiCategory
+from trippilot.domain.poi.poi import PoiCategory
 
 # 정본: backend/app/src/main/resources/db/migration/R__seed_stub_pois.sql
 # (카테고리는 boundaryCode 한→영: 자연=NATURE·맛집=FOOD·카페=CAFE)
@@ -329,7 +329,7 @@ def test_feature_model_override_beats_tier(monkeypatch):
     """TRIP-513 — feature_models 오버라이드가 tier 해석보다 우선."""
     from trippilot.llm_gateway.config import C1Config
     from trippilot.llm_gateway.gateway import TierRouter
-    from trippilot.domain.llm import LlmFeature, ModelTier
+    from trippilot.domain.llm.llm import LlmFeature, ModelTier
 
     cfg = C1Config(
         model_ids={ModelTier.LIGHT: "gpt-l", ModelTier.HEAVY: "gpt-h"},
@@ -344,7 +344,7 @@ def test_routing_llm_dispatches_by_model_prefix():
     """TRIP-513 — claude* 모델은 Anthropic 어댑터로, 그 외는 기본으로."""
     from trippilot.llm_gateway.adapters.routing import RoutingLlm
     from trippilot.ports.llm_port import LlmRequest
-    from trippilot.domain.prompt import PromptRef
+    from trippilot.domain.llm.prompt import PromptRef
 
     class _Port:
         def __init__(self, tag): self.tag, self.got = tag, []
@@ -367,7 +367,7 @@ def test_feature_models_env_parsing(monkeypatch):
     """TRIP-513 — 콤마 목록 파싱, 미지 feature 는 기동 실패 (조용한 기본화 금지)."""
     import main as main_mod
     import pytest as _pytest
-    from trippilot.domain.llm import LlmFeature
+    from trippilot.domain.llm.llm import LlmFeature
 
     monkeypatch.setenv("TRIPPILOT_LLM_FEATURE_MODELS",
                        "EXPLANATION=claude-sonnet-4-5, reflection_nudge=claude-haiku-4-5")

@@ -30,8 +30,8 @@ from hypothesis import strategies as st
 
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.event import EventInfo, EventType
-from trippilot.domain.poi import (
+from trippilot.domain.itinerary.event import EventInfo, EventType
+from trippilot.domain.poi.poi import (
     NIGHTLIFE_TAG,
     TRENDING_TAG,
     DataQuality,

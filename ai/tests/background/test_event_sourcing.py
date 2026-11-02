@@ -28,7 +28,7 @@ from trippilot.background.naver_search import (
     strip_tags,
 )
 from trippilot.domain.common import GeoPoint
-from trippilot.domain.event import EventInfo, EventType
+from trippilot.domain.itinerary.event import EventInfo, EventType
 
 _NOW = datetime(2026, 8, 20, 4, 40, tzinfo=timezone(timedelta(hours=9)))
 _TODAY = _NOW.date()

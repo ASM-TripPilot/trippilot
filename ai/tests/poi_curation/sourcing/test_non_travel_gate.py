@@ -32,7 +32,7 @@ import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
-from trippilot.domain.poi import OpenHour, PoiCategory
+from trippilot.domain.poi.poi import OpenHour, PoiCategory
 from trippilot.poi_curation.sourcing.collection_gate import (
     DROP_EXISTENCE,
     DROP_EXISTENCE_CLOSED,

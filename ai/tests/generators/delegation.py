@@ -10,7 +10,7 @@ from datetime import timedelta, timezone
 
 from hypothesis import strategies as st
 
-from trippilot.domain.delegation import (
+from trippilot.domain.dialogue.delegation import (
     AgentResult,
     AgentStatus,
     AgentTask,

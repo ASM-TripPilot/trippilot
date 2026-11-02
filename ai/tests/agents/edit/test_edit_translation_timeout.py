@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime as dt
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import CandidatePool, TypedResult
+from trippilot.domain.llm.llm import CandidatePool, TypedResult
 from trippilot.llm_gateway.workers.edit_translation import (
     EditTranslationInput,
     EditTranslationWorker,

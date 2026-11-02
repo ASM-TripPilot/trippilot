@@ -8,7 +8,7 @@ from tests.fakes.in_memory_vector_store import InMemoryVectorStore
 from trippilot.agents.planb.kb_retrieval import index_documents
 from trippilot.agents.planb.place_knowledge import MAX_DOC_CHARS, fetch_place_knowledge
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.poi_curation import chunking as c
 
 _S = "성산일출봉은 제주도 동쪽 끝의 화산이다."

@@ -63,13 +63,13 @@ from trippilot.agents.schedule.outcome import (
 )
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.context import PermissionDeniedError, Principal, ResourceRef
-from trippilot.domain.event import EventInfo
+from trippilot.domain.itinerary.event import EventInfo
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
-from trippilot.domain.intent import Intent
-from trippilot.domain.llm import CandidatePool
+from trippilot.domain.dialogue.intent import Intent
+from trippilot.domain.llm.llm import CandidatePool
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.persona import PersonaSummary
-from trippilot.domain.poi_curation import CandidatePoolRequest
+from trippilot.domain.poi.poi_curation import CandidatePoolRequest
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.pool_builder import base_radius_km, widened_radius_km
 from trippilot.orchestrator.event_affinity import event_bonus_map

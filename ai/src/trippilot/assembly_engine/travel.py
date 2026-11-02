@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 
 from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.domain.common import GeoPoint, TransportMode
-from trippilot.domain.travel import TravelEstimate
+from trippilot.domain.itinerary.travel import TravelEstimate
 
 if TYPE_CHECKING:
     from trippilot.assembly_engine.parking import ParkingPlan

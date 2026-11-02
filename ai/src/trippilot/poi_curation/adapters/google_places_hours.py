@@ -33,7 +33,7 @@ import threading
 from collections.abc import Callable, Mapping
 from typing import Protocol
 
-from trippilot.domain.poi import OpenHour
+from trippilot.domain.poi.poi import OpenHour
 from trippilot.ports.place_hours_port import HoursQuery, HoursVerdict, PlaceHoursPort
 
 _ENDPOINT = "https://places.googleapis.com/v1/places/"

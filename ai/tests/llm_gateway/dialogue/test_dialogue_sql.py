@@ -18,7 +18,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.llm.llm import LlmFeature
 from trippilot.llm_gateway.gates.dialogue_sql import MAX_LIMIT, DialogueSqlGate, check_select
 from trippilot.llm_gateway.workers.dialogue_sql import build_dialogue_sql_vars
 from trippilot.poi_curation.adapters.pg_place_sql import ROW_CAP, STATEMENT_TIMEOUT_MS, PgPlaceSql

@@ -25,7 +25,7 @@ from trippilot.api.wiring import _distance_ranges
 from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TransportMode
-from trippilot.domain.itinerary import DaySolution, ItinerarySolution, SolveMode, VisitSlot
+from trippilot.domain.itinerary.itinerary import DaySolution, ItinerarySolution, SolveMode, VisitSlot
 
 from tests.api.test_e2e_boundary import (
     _ANCHOR,

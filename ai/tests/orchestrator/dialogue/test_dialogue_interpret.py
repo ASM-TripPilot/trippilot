@@ -28,9 +28,9 @@ from tests.fakes.in_memory_trace import InMemoryTrace
 from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore
 from trippilot.api.wiring import build_dev_app
 from trippilot.domain.common import TraceId
-from trippilot.domain.dialogue import CLARIFY_QUESTIONS, specs_of
-from trippilot.domain.intent import ROUTABLE_INTENTS, Intent
-from trippilot.domain.llm import ModelTier
+from trippilot.domain.dialogue.dialogue import CLARIFY_QUESTIONS, specs_of
+from trippilot.domain.dialogue.intent import ROUTABLE_INTENTS, Intent
+from trippilot.domain.llm.llm import ModelTier
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.intent import IntentGate
 from trippilot.llm_gateway.gateway import GatewayFacade

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import TypedResult
+from trippilot.domain.llm.llm import TypedResult
 from trippilot.orchestrator import place_sql as ps
 from trippilot.orchestrator.place_sql import PlaceSqlLookup
 from trippilot.poi_curation.adapters.pg_place_sql import PlaceRow

@@ -12,9 +12,9 @@ from datetime import date, datetime, timedelta, timezone
 from hypothesis import strategies as st
 
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, ScheduleId, TransportMode
-from trippilot.domain.itinerary import FixedBlock, ItineraryProblem, TimeWindow
-from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.itinerary.itinerary import FixedBlock, ItineraryProblem, TimeWindow
+from trippilot.domain.llm.llm import ScoredPoi
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 _KST = timezone(timedelta(hours=9))
 _ANCHOR = GeoPoint(37.751, 128.876)

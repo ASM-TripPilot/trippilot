@@ -28,8 +28,8 @@ from trippilot.agents.planb.directives import load_directive_file
 from trippilot.api.app import create_app
 from trippilot.api.wiring import DEMO_ANCHOR, StaticPoiDb, build_dev_app, build_orchestrator
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId
-from trippilot.domain.itinerary import DaySolution, ItinerarySolution, SolveMode, VisitSlot
-from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.itinerary.itinerary import DaySolution, ItinerarySolution, SolveMode, VisitSlot
+from trippilot.domain.poi.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 from trippilot.ports.holiday_calendar_port import HolidaySource
 
 from tests.agents.schedule.test_schedule_fixed_poi_index import _ANCHOR, _request

@@ -11,8 +11,8 @@ import json
 from datetime import datetime, timezone
 
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
-from trippilot.domain.llm import CandidatePool, LlmFeature
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.persona import PersonaSummary
 from trippilot.domain.common import BudgetLevel
 from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate, NumberedSelectionGate, numbered

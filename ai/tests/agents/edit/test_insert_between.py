@@ -30,8 +30,8 @@ from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.travel import TravelEstimator, haversine_km
 from trippilot.domain.common import GeoPoint, PoiId, TransportMode
 from trippilot.domain.edit import EditCommand, EditOp
-from trippilot.domain.itinerary import DaySolution, VisitSlot
-from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.itinerary.itinerary import DaySolution, VisitSlot
+from trippilot.domain.poi.poi import NIGHTLIFE_TAG, TRENDING_TAG, DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 
 KST = timezone(timedelta(hours=9))
 D = date(2026, 10, 21)  # 수요일

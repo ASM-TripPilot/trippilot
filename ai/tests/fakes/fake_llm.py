@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.llm.llm import LlmFeature
 from trippilot.ports.llm_port import LlmRequest, LlmResponse, LlmUnsupportedError, LlmTimeoutError
 
 

@@ -22,9 +22,9 @@ from trippilot.assembly_engine.constraints import check_all, check_hc2
 from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TraceId, TransportMode
 from trippilot.domain.edit import EditCommand, EditOp
-from trippilot.domain.itinerary import DaySolution, FixedBlock, ItinerarySolution, SolveMode, TimeWindow, VisitSlot
-from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.itinerary.itinerary import DaySolution, FixedBlock, ItinerarySolution, SolveMode, TimeWindow, VisitSlot
+from trippilot.domain.llm.llm import CandidatePool
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 KST = timezone(timedelta(hours=9))
 D, NEXT = date(2026, 10, 21), date(2026, 10, 22)

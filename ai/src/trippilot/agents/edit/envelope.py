@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from trippilot.agents.edit.agent import EditOutcome
 from trippilot.agents.edit.commands import EditStatus
-from trippilot.domain.delegation import AgentResult, AgentStatus, TaskError, TaskMetrics
+from trippilot.domain.dialogue.delegation import AgentResult, AgentStatus, TaskError, TaskMetrics
 from trippilot.domain.freshness import FreshnessMeta
 
 _CODES = {

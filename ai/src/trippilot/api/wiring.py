@@ -144,8 +144,8 @@ from trippilot.domain.common import (
 )
 from trippilot.domain.context import PermissionDeniedError, Principal, ResourceRef
 from trippilot.domain.freshness import FreshnessMeta
-from trippilot.domain.intent import Intent
-from trippilot.domain.itinerary import (
+from trippilot.domain.dialogue.intent import Intent
+from trippilot.domain.itinerary.itinerary import (
     DaySolution,
     FixedBlock,
     ItineraryProblem,
@@ -156,12 +156,12 @@ from trippilot.domain.itinerary import (
     Violation,
     VisitSlot,
 )
-from trippilot.domain.llm import CandidatePool, ModelTier, PoiExplanation
+from trippilot.domain.llm.llm import CandidatePool, ModelTier, PoiExplanation
 from trippilot.domain.persona import PersonaSummary
-from trippilot.domain.poi import (
+from trippilot.domain.poi.poi import (
     NIGHTLIFE_TAG, DataQuality, Poi, PoiCategory, PoiSource, counts_as_food, open_windows_on,
 )
-from trippilot.domain.travel import TravelEstimate
+from trippilot.domain.itinerary.travel import TravelEstimate
 from trippilot.agents.edit.agent import EditAgent, EditOutcome, EditTask, RebuiltDays
 from trippilot.agents.edit.day_area import DayArea
 from trippilot.agents.edit.commands import EditStatus
@@ -200,8 +200,8 @@ from trippilot.llm_gateway.workers.replan_composition import (
     ReplanCompositionWorker,
     ScheduleLine,
 )
-from trippilot.domain.poi_curation import CandidatePoolRequest
-from trippilot.domain.trigger import TriggerKind, TriggerParams
+from trippilot.domain.poi.poi_curation import CandidatePoolRequest
+from trippilot.domain.dialogue.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
 from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate, NumberedSelectionGate
 from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker

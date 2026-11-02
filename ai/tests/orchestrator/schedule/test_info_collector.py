@@ -20,7 +20,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from trippilot.domain.common import GeoPoint
 from trippilot.domain.freshness import FreshnessMeta, InfoPacket, ProviderKind, ProviderStatus
-from trippilot.domain.intent import ROUTABLE_INTENTS, Intent
+from trippilot.domain.dialogue.intent import ROUTABLE_INTENTS, Intent
 from trippilot.orchestrator.info_collector import (
     INFO_REQUIREMENTS,
     InfoCollector,
@@ -209,7 +209,7 @@ import pytest
 from trippilot.domain.common import BudgetLevel, TransportMode
 from trippilot.domain.context import PermissionDeniedError, Principal, ResourceRef
 from trippilot.domain.persona import CompanionType, PersonaSummary
-from trippilot.domain.poi_curation import CandidatePoolRequest
+from trippilot.domain.poi.poi_curation import CandidatePoolRequest
 from trippilot.providers.persona import PersonaProvider
 from trippilot.providers.place import PlaceProvider
 

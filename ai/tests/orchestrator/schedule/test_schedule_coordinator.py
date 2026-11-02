@@ -46,13 +46,13 @@ from trippilot.domain.common import (
     TransportMode,
 )
 from trippilot.domain.context import Principal, ResourceRef
-from trippilot.domain.itinerary import FixedBlock, SolveMode, TimeWindow
-from trippilot.domain.llm import ModelTier, ScoredPoi
+from trippilot.domain.itinerary.itinerary import FixedBlock, SolveMode, TimeWindow
+from trippilot.domain.llm.llm import ModelTier, ScoredPoi
 from trippilot.domain.observability import FallbackEvent, ScoreChunkEvent
 from trippilot.ports.llm_port import LlmRequest, LlmResponse
 from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.domain.prompt import PromptRef
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.llm.prompt import PromptRef
 from trippilot.domain.freshness import ProviderKind
 from trippilot.orchestrator.info_collector import InfoCollector
 from trippilot.poi_curation.config import M7Config

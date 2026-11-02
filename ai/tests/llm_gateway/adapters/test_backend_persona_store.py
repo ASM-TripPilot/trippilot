@@ -126,7 +126,7 @@ def test_fetched_every_call_no_caching() -> None:
 # ── 소비처가 미설정을 견디는가 ───────────────────────────────────────────────
 
 def test_prompt_context_renders_unset_companion_as_misseol() -> None:
-    from trippilot.domain.llm import CandidatePool
+    from trippilot.domain.llm.llm import CandidatePool
     from trippilot.llm_gateway.workers.preference import build_prompt_vars
 
     persona = PersonaSummary(taste_tags=(), companion=None, budget=BudgetLevel.MID)
@@ -220,7 +220,7 @@ def test_unset_renders_as_misseol_in_the_prompt() -> None:
     """빈 문자열이면 LLM 이 앞 줄과 이어 붙여 읽는다."""
     import datetime as _dt
 
-    from trippilot.domain.llm import CandidatePool
+    from trippilot.domain.llm.llm import CandidatePool
     from trippilot.llm_gateway.workers.preference import build_prompt_vars
 
     persona = PersonaSummary(taste_tags=(), companion=None, budget=BudgetLevel.MID)

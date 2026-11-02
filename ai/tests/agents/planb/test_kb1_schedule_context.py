@@ -27,7 +27,7 @@ from trippilot.agents.planb.rag import (
 )
 from trippilot.domain.common import PoiId
 from trippilot.domain.kb import KbKind
-from trippilot.domain.llm import TypedResult
+from trippilot.domain.llm.llm import TypedResult
 from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
 
 from tests.fakes.fake_embedding import FakeEmbedding

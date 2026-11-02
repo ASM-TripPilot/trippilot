@@ -40,9 +40,9 @@ from datetime import datetime
 
 from trippilot.llm_gateway.gates.base import GateOutcome, strip_code_fence
 from trippilot.domain.common import TraceId
-from trippilot.domain.dialogue import asked_argument_names, asked_specs_of
-from trippilot.domain.intent import Intent, IntentDraft
-from trippilot.domain.llm import CandidatePool, LlmFeature
+from trippilot.domain.dialogue.dialogue import asked_argument_names, asked_specs_of
+from trippilot.domain.dialogue.intent import Intent, IntentDraft
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature
 from trippilot.domain.observability import GateDropEvent
 
 _SCALAR = (str, int, float, bool)

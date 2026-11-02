@@ -56,9 +56,9 @@ from trippilot.agents.schedule.agent import Clock
 from trippilot.agents.unknown_handling.agent import KnowledgeTask
 from trippilot.domain.common import TraceId
 from trippilot.domain.context import PermissionDeniedError
-from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent, IntentDraft, IntentMatch, MatchRoute
+from trippilot.domain.dialogue.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent, IntentDraft, IntentMatch, MatchRoute
 from trippilot.domain.observability import FallbackEvent
-from trippilot.domain.region_centers import region_mentions
+from trippilot.domain.poi.region_centers import region_mentions
 from trippilot.llm_gateway.gates.base import has_injection_like
 
 

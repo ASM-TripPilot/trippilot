@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from merge_pois_docs import dumps_doc  # noqa: E402
-from trippilot.domain.poi import OpenHour  # noqa: E402
+from trippilot.domain.poi.poi import OpenHour  # noqa: E402
 from trippilot.poi_curation.sourcing.mapping import (  # noqa: E402
     join_opening_hours_raw,
     parse_opening_hours_raw,

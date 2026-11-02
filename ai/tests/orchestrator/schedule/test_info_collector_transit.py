@@ -14,8 +14,8 @@ from datetime import datetime, timezone
 from tests.fakes.fake_travel import FakeTravel
 from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
-from trippilot.domain.intent import Intent
-from trippilot.domain.transit import TransitInfo, TransitRequest
+from trippilot.domain.dialogue.intent import Intent
+from trippilot.domain.itinerary.transit import TransitInfo, TransitRequest
 from trippilot.orchestrator.info_collector import InfoCollector
 from trippilot.providers.transit import TransitProvider
 

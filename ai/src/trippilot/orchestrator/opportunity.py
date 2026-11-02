@@ -27,8 +27,8 @@ from trippilot.agents.planb.composition import hours_label
 from trippilot.agents.planb.request_verification import normalize
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.event import EventInfo, EventType
-from trippilot.domain.poi import NIGHTLIFE_TAG, TRENDING_TAG, HolidayCalendar, Poi, PoiCategory
+from trippilot.domain.itinerary.event import EventInfo, EventType
+from trippilot.domain.poi.poi import NIGHTLIFE_TAG, TRENDING_TAG, HolidayCalendar, Poi, PoiCategory
 from trippilot.llm_gateway.gates.base import has_contact_like
 from trippilot.orchestrator.event_affinity import ATTACH_RADIUS_KM
 

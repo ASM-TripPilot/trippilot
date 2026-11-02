@@ -13,8 +13,8 @@ import pytest
 from trippilot.agents.edit.commands import EditRejected, apply_command, validate_command
 from trippilot.domain.common import PoiId
 from trippilot.domain.edit import EditCommand, EditOp
-from trippilot.domain.itinerary import DaySolution, VisitSlot
-from trippilot.domain.llm import CandidatePool
+from trippilot.domain.itinerary.itinerary import DaySolution, VisitSlot
+from trippilot.domain.llm.llm import CandidatePool
 
 _KST = timezone(timedelta(hours=9))
 _DAY = date(2026, 8, 5)

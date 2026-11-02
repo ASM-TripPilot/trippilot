@@ -44,8 +44,8 @@ from tests.fakes.replay_fixtures import (
     unpack_vector,
 )
 from trippilot.domain.common import TraceId
-from trippilot.domain.intent import Intent, MatchRoute
-from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.dialogue.intent import Intent, MatchRoute
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.gates.intent import IntentGate
 from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate

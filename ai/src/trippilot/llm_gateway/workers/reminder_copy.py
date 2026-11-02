@@ -24,7 +24,7 @@ from datetime import datetime
 # 줄바꿈이 남으면 우리 프롬프트 골격을 위조한다 (inline() docstring 에 실측).
 from trippilot.llm_gateway.prompts import inline
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.llm.llm import LlmFeature
 from trippilot.llm_gateway.gates.reminder_copy import ReminderCopyContext, ReminderCopyDraft
 
 # 이보다 적은 예산으로는 호출하지 않는다 — 확정 타임아웃을 지불할 이유가 없다.

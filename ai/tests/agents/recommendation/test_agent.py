@@ -8,7 +8,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.agents.recommendation.agent import PLACES, REGIONS, RecommendationAgent, RecommendOutcome, RecommendTask
-from trippilot.domain.region_recommend import preference_weights, recommend_regions
+from trippilot.domain.poi.region_recommend import preference_weights, recommend_regions
 
 _AGENT = RecommendationAgent()
 _RADIUS = ({"name": "반경 A", "reason": None}, {"name": "반경 B", "reason": "요즘 인기"})

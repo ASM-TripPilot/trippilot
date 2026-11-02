@@ -17,7 +17,7 @@ from datetime import datetime
 
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature, TypedResult
+from trippilot.domain.llm.llm import LlmFeature, TypedResult
 
 # INV-4 — LLM 폴백 시 호출측이 그대로 쓸 결정론 기본 문구.
 # 게이트 규칙(60자 이내·금지 토큰 없음·비어 있지 않음)을 스스로 만족한다 (테스트가 고정).

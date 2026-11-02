@@ -29,7 +29,7 @@ from trippilot.assembly_engine.scorer import (
     directive_fit,
 )
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 import pathlib
 

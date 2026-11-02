@@ -27,7 +27,7 @@ from trippilot.domain.common import (
 from trippilot.domain.serialization import from_iso, to_iso
 
 if TYPE_CHECKING:
-    from trippilot.domain.llm import ScoredPoi
+    from trippilot.domain.llm.llm import ScoredPoi
     from trippilot.domain.observability import AssemblyRunRecord
 
 
@@ -415,7 +415,7 @@ class ItineraryProblem:
 
     @classmethod
     def from_dict(cls, d: dict) -> "ItineraryProblem":
-        from trippilot.domain.llm import ScoredPoi  # 지역 import (순환 방지)
+        from trippilot.domain.llm.llm import ScoredPoi  # 지역 import (순환 방지)
 
         return cls(
             schedule_id=ScheduleId(d["schedule_id"]),

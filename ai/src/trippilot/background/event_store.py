@@ -25,7 +25,7 @@ from typing import Iterable
 import re
 from typing import Callable
 
-from trippilot.domain.event import EventInfo
+from trippilot.domain.itinerary.event import EventInfo
 from trippilot.domain.serialization import to_iso
 
 # 이름 정규화 — 실측 변형 중복(2026-08-21: "세종한글축제"/"2026 세종한글축제",

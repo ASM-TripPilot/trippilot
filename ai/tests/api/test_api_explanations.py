@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 from trippilot.api import wiring
 from trippilot.api.app import create_app
 from trippilot.api.wiring import build_dev_app, demo_poi_seed
-from trippilot.domain.llm import PoiExplanation, TypedResult
+from trippilot.domain.llm.llm import PoiExplanation, TypedResult
 from trippilot.domain.common import PoiId
 
 _SEED = demo_poi_seed()
@@ -540,7 +540,7 @@ def test_explain_days_carries_request_context_into_pool_threads() -> None:
     from datetime import datetime, timezone
 
     from trippilot.domain.common import TraceId
-    from trippilot.domain.llm import CandidatePool
+    from trippilot.domain.llm.llm import CandidatePool
     from trippilot.domain.persona import BudgetLevel, PersonaSummary
 
     marker: contextvars.ContextVar[str | None] = contextvars.ContextVar("explain_day_marker", default=None)

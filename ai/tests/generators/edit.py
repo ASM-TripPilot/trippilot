@@ -8,9 +8,9 @@ from hypothesis import strategies as st
 
 from trippilot.domain.common import PoiId, ScheduleId, TraceId
 from trippilot.domain.edit import ApplyMode, Dispatch, EditCommand, EditOp
-from trippilot.domain.evals import EvalCase, EvalRun, EvalScore
+from trippilot.domain.llm.evals import EvalCase, EvalRun, EvalScore
 from trippilot.domain.execution import AgentCall, AgentKind, ExecutionPlan, ExecutionStep
-from trippilot.domain.trigger import (
+from trippilot.domain.dialogue.trigger import (
     ReplanScope,
     TriggerEvalResult,
     TriggerKind,

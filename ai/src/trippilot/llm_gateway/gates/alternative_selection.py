@@ -17,7 +17,7 @@ from trippilot.llm_gateway.gates.reflection_template import _TIME_EXPR
 # `_TIME_EXPR` 는 `HH:MM` 을 일부러 통과시킨다 — 시계 시각 판정은 도우미 장소 소개와 같은 것을 쓴다.
 from trippilot.llm_gateway.gates.dialogue_answer import clock_times
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.llm import AlternativePick, CandidatePool, LlmFeature
+from trippilot.domain.llm.llm import AlternativePick, CandidatePool, LlmFeature
 from trippilot.domain.observability import GateDropEvent
 
 

@@ -17,7 +17,7 @@ from hypothesis import strategies as st
 from tests.generators.poi import candidate_pools
 from tests.api.test_api_alternatives import _post
 from trippilot.api.wiring import build_dev_app, demo_poi_seed, restrict_pool_to_categories
-from trippilot.domain.poi import PoiCategory
+from trippilot.domain.poi.poi import PoiCategory
 
 _SEED_CATEGORY = {str(p.poi_id): p.category.value for p in demo_poi_seed()}
 

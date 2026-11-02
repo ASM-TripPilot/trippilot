@@ -12,7 +12,7 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature, TypedResult
+from trippilot.domain.llm.llm import LlmFeature, TypedResult
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.workers.dialogue_intent import NO_TRIP, NONE, render_history

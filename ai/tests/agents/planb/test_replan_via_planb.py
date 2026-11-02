@@ -34,9 +34,9 @@ from trippilot.agents.schedule.agent import (
 from trippilot.agents.schedule.budget import OrchestratorConfig
 from trippilot.agents.schedule.outcome import GenerationStatus
 from trippilot.domain.common import PoiId
-from trippilot.domain.itinerary import TimeWindow
-from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi_curation import CandidatePoolRequest
+from trippilot.domain.itinerary.itinerary import TimeWindow
+from trippilot.domain.llm.llm import ScoredPoi
+from trippilot.domain.poi.poi_curation import CandidatePoolRequest
 from trippilot.llm_gateway.gates.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
@@ -242,7 +242,7 @@ from trippilot.api.wiring import (  # noqa: E402
     _replan_rag_request,
 )
 from trippilot.domain.common import TraceId  # noqa: E402
-from trippilot.domain.trigger import TriggerKind  # noqa: E402
+from trippilot.domain.dialogue.trigger import TriggerKind  # noqa: E402
 from tests.api.test_api_replan_wired import _DIRECTIVES, _body  # noqa: E402
 
 

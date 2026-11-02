@@ -78,8 +78,8 @@ from tests.fakes.replay_fixtures import (  # noqa: E402
     write_fixtures,
 )
 from trippilot.domain.common import TraceId  # noqa: E402
-from trippilot.domain.intent import Intent  # noqa: E402
-from trippilot.domain.llm import LlmFeature, ModelTier  # noqa: E402
+from trippilot.domain.dialogue.intent import Intent  # noqa: E402
+from trippilot.domain.llm.llm import LlmFeature, ModelTier  # noqa: E402
 from trippilot.domain.observability import LlmCallRecord  # noqa: E402
 from trippilot.llm_gateway.config import C1Config  # noqa: E402
 from trippilot.llm_gateway.feature_model_env import ENV_VAR, feature_models_from_env  # noqa: E402
