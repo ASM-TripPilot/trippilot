@@ -128,6 +128,11 @@ describe('생성 — 레코드가 없는 지난 날·오늘은 한 번 만들어
     updatedAt: '2026-09-20T00:00:00Z',
     baseCount: 0,
     itineraryDayCount: 0,
+    // 일정이 없는 여행 — 목록이 싣는 일정 상태 네 칸(TRIP-1677).
+    itineraryStatus: null,
+    itineraryGenerationState: null,
+    itineraryGenerationMode: null,
+    itineraryGenerating: false,
   };
 
   const RULE_TEXT = '광안리해수욕장·부산시립미술관 을(를) 다녀왔어요.';
@@ -594,6 +599,11 @@ describe('저장 — 직접 쓴 회고를 저장한 뒤 같은 화면', () => {
     updatedAt: '2026-09-20T00:00:00Z',
     baseCount: 0,
     itineraryDayCount: 0,
+    // 일정이 없는 여행 — 목록이 싣는 일정 상태 네 칸(TRIP-1677).
+    itineraryStatus: null,
+    itineraryGenerationState: null,
+    itineraryGenerationMode: null,
+    itineraryGenerating: false,
   };
 
   /** 서버가 PUT 때 함께 만드는 BASIC 초안(기록 없는 날) — stats 0 이라 저장 뒤 얼굴은 data-insufficient. */
@@ -1198,6 +1208,11 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
     updatedAt: '2026-09-20T00:00:00Z',
     baseCount: 0,
     itineraryDayCount: 0,
+    // 일정이 없는 여행 — 목록이 싣는 일정 상태 네 칸(TRIP-1677).
+    itineraryStatus: null,
+    itineraryGenerationState: null,
+    itineraryGenerationMode: null,
+    itineraryGenerating: false,
   };
 
   const CARD: ReflectionCard = {

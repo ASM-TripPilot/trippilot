@@ -1,13 +1,18 @@
-import type { Itinerary, Trip } from '@/shared/api/index.schemas';
+import type { Trip } from '@/shared/api/index.schemas';
+import {
+  NO_ITINERARY,
+  itineraryCols,
+  type ItineraryCols,
+} from '@/test-support/tripItineraryCols';
 
 /**
- * TRIP-1123 · l03 마이페이지 테스트 공용 — 페이지가 여행마다 부르는 일정 조회(`useQueries` +
- * `getGetTripsTripIdItineraryQueryOptions`)를 대본으로 돌린다. h06 목록의 「여행 중 여행 맨 위 고정」(옛 `.ongoing.test` → `MyTripsListPage.hookMock.test` — 그 파일은 TRIP-1352 에서 MSW 통합으로 옮기고 지웠다) 장치를 옮겼다.
+ * TRIP-1123 · l03 마이페이지·j07 기록 캘린더 테스트 공용 — 여행 한 건(`Trip`) 만들기.
  *
- * 쓰는 법: 테스트 파일의 trips 목 팩토리에 `getGetTripsTripIdItineraryQueryOptions: jest.fn()` 을 두고,
- * 그 목을 `scriptItineraryOptions` 에 넘긴다. 목 옵션 함수의 `queryFn` 이 진짜로 돈다 — 실 `QueryClient` 필요.
+ * TRIP-1677 부터 일정 상태는 여행 목록(`GET /trips`)의 네 칸(`itinerary*`)에 실려 오므로, 예전의 "여행별 일정 조회 대본"
+ * (`itin`·`ItinScript`·`scriptItineraryOptions`)은 걷었다. 여행이 어떤 일정 상태인지는 `myPageTrip(...)` 의 `over` 에
+ * `CONFIRMED_COLS`/`PLANNED_COLS` 를 펼쳐 넣어 정한다. 기본값은 일정 없음(`NO_ITINERARY` — 옛 404).
  *
- * `renderWithQueryClient`·`settle`·`newTestQueryClient` 는 `@/test-support/queryRender` 로 일반화해 옮겼다(TRIP-1350).
+ * `renderWithQueryClient`·`settle`·`newTestQueryClient` 는 `@/test-support/queryRender` 에 있다(TRIP-1350).
  *
  * 시계는 흉내 내지 않는다: 기간 안 = 2020~2099, 과거 = 2026-06, 미래 = 2099-06(실제 오늘이 그 사이인 한 결정론).
  */
@@ -16,65 +21,24 @@ export const DURING = { startDate: '2020-01-01', endDate: '2099-12-31' };
 export const PAST = { startDate: '2026-06-10', endDate: '2026-06-13' };
 export const FUTURE = { startDate: '2099-06-10', endDate: '2099-06-13' };
 
-export function itin(status: Itinerary['status']): Itinerary {
-  return {
-    itineraryId: 'itin-1',
-    tripId: 'x',
-    status,
-    solveMode: 'FULL_AI',
-    generationMode: 'FULLY_AI',
-    isFallback: false,
-    scoringMode: null,
-    degradations: [],
-    generationState: 'COMPLETE',
-    days: [],
-  };
-}
+const BASE_ITINERARY = {
+  generationState: 'COMPLETE',
+  generationMode: 'FULLY_AI',
+  generationSessionId: null,
+} as const;
 
-export const CONFIRMED = itin('CONFIRMED');
-export const PLANNED = itin('PLANNED');
-export const AXIOS_404 = { isAxiosError: true, response: { status: 404 } };
-export const AXIOS_500 = { isAxiosError: true, response: { status: 500 } };
+/** 확정 일정이 있는 여행의 네 칸(`CONFIRMED` · 완료 · 세션 없음). */
+export const CONFIRMED_COLS: ItineraryCols = itineraryCols({
+  ...BASE_ITINERARY,
+  status: 'CONFIRMED',
+});
+/** 확정 전 초안 일정이 있는 여행의 네 칸(`PLANNED` · 완료 · 세션 없음). */
+export const PLANNED_COLS: ItineraryCols = itineraryCols({
+  ...BASE_ITINERARY,
+  status: 'PLANNED',
+});
 
-/** 여행별 일정 대본 — 성공 · 404 · 500 · 영영 미도착 · 손으로 푸는 약속. */
-export type ItinScript =
-  Itinerary | 'notFound' | 'serverError' | 'never' | Promise<Itinerary>;
-
-function fetchFor(s: ItinScript | undefined): Promise<Itinerary> {
-  if (s === undefined) {
-    return Promise.reject(new Error('대본에 없는 여행의 일정 조회'));
-  }
-  if (s instanceof Promise) return s;
-  if (s === 'never') return new Promise(() => {});
-  if (s === 'notFound') return Promise.reject(AXIOS_404);
-  if (s === 'serverError') return Promise.reject(AXIOS_500);
-  return Promise.resolve(s);
-}
-
-/** 목 옵션 함수가 여행 id 별 대본대로 `queryKey`·`queryFn` 을 돌려주게 한다(실앱과 같은 키 모양). */
-export function scriptItineraryOptions(
-  mockOptions: jest.Mock,
-  itins: Record<string, ItinScript>
-): void {
-  mockOptions.mockImplementation((tripId: string) => ({
-    queryKey: [`/trips/${tripId}/itinerary`],
-    queryFn: () => fetchFor(itins[tripId]),
-  }));
-}
-
-/** 손으로 푸는 약속 — "모름이 풀리면 숫자가 나온다"를 한 테스트 안에서 본다. */
-export function deferred<T>(): {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-} {
-  let resolve: (value: T) => void = () => {};
-  const promise = new Promise<T>((r) => {
-    resolve = r;
-  });
-  return { promise, resolve };
-}
-
-/** 최소 Trip — 서버 `status` 는 일부러 받아 둔다: 판정이 그 값을 쓰면 테스트가 잡도록. */
+/** 최소 Trip — 서버 `status` 는 일부러 받아 둔다: 판정이 그 값을 쓰면 테스트가 잡도록. 일정 네 칸 기본 = 일정 없음. */
 export function myPageTrip(
   tripId: string,
   period: { startDate: string; endDate: string },
@@ -92,6 +56,7 @@ export function myPageTrip(
     updatedAt: '2026-05-01T00:00:00.000Z',
     baseCount: 0,
     itineraryDayCount: 0,
+    ...NO_ITINERARY,
     ...over,
   };
 }

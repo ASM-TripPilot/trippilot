@@ -73,12 +73,15 @@ describe('404 만 "아직 없다" 로 읽는다 (TRIP-297)', () => {
 /**
  * TRIP-986 5-c(03b 경고-1) — 404 는 다시 물어도 답이 같다. 이 함수가 TanStack Query `retry` 자리에
  * 들어가 **앱 전역 기본값**(`app/_layout.tsx`)과 방식 선택(h04)이 함께 쓴다.
+ * TRIP-1677 · 429(요청 한도)도 뺀다 — 한도에 걸린 요청을 1초·2초·4초 간격으로 세 번 더 보내면 한도를 더 태워 풀리는 시점이
+ * 늦어진다(개발 서버 429 폭주 재발). 한 번의 429 는 곧바로 error 상태가 되고, 다시 묻는 것은 사용자·폴링 간격의 몫이다.
  *
  * *(개념)* `retry(failureCount, error)` — 요청이 실패할 때마다 TanStack 이 부르는 함수다.
  *   `failureCount` 는 "이미 몇 번 다시 물었나"(첫 실패 뒤엔 0), true 를 내면 한 번 더 묻는다.
- *   TanStack 기본값은 3회(`failureCount < 3`)라, 404 만 빼고 기본과 똑같아야 한다.
+ *   TanStack 기본값은 3회(`failureCount < 3`)라, 404·429 만 빼고 기본과 똑같아야 한다.
+ *   (함수 이름은 그대로다 — 소비처 4곳을 건드리지 않는다, D4.)
  */
-describe('retryUnlessNotFound — 404 만 다시 묻지 않고, 나머지는 기본(3회)과 같다 (TRIP-986)', () => {
+describe('retryUnlessNotFound — 404·429 만 다시 묻지 않고, 나머지는 기본(3회)과 같다 (TRIP-986 · TRIP-1677)', () => {
   it('🔴 404 는 첫 실패(0회차)부터 다시 묻지 않는다', () => {
     // 준비 — 서버가 "없다"고 분명히 답한 오류.
     const notFound = httpError(404);
@@ -87,6 +90,16 @@ describe('retryUnlessNotFound — 404 만 다시 묻지 않고, 나머지는 기
     expect(retryUnlessNotFound(0, notFound)).toBe(false);
     expect(retryUnlessNotFound(1, notFound)).toBe(false);
     expect(retryUnlessNotFound(2, notFound)).toBe(false);
+  });
+
+  it('🔴 429 는 첫 실패(0회차)부터 다시 묻지 않는다 — 한도에 걸린 요청을 또 보내지 않는다 (AC-8)', () => {
+    // 준비 — 서버가 "요청 한도 초과"라고 답한 오류.
+    const rateLimited = httpError(429);
+
+    // 실행·단언 — 몇 회차든 false. 0회차가 핵심이다(여기서 true 면 1초 뒤 한 번 더 보낸다).
+    expect(retryUnlessNotFound(0, rateLimited)).toBe(false);
+    expect(retryUnlessNotFound(1, rateLimited)).toBe(false);
+    expect(retryUnlessNotFound(2, rateLimited)).toBe(false);
   });
 
   it('🔴 500 은 기본처럼 0·1·2회차엔 다시 묻고 3회차에 멈춘다 (retry:false 오답 차단)', () => {

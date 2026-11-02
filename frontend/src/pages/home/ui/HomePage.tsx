@@ -1,23 +1,30 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 
-import {
-  useGetTrips,
-  useGetTripsTripIdItinerary,
-} from '@/shared/api/index.hooks';
-import { useGetPlaces } from '@/shared/api/index.hooks';
-import { isNotFound, isOfflineWaiting } from '@/shared/api';
+import type { Trip } from '@/shared/api/index.schemas';
+import { useGetTrips } from '@/shared/api/index.trips';
+import { useGetPlaces } from '@/shared/api/index.places';
+import { isOfflineWaiting } from '@/shared/api';
 import { guardPress } from '@/shared/lib/pressGuard';
+import { showToast } from '@/shared/ui/Toast';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { formatNightsLabel } from '@/entities/trip';
-import { formatTripRange } from '@/entities/trip';
+import { formatTripRange, tripItinerarySummary } from '@/entities/trip';
 import { SERVICE_REGIONS } from '@/entities/trip';
 import { orderLanePlaces, pickTrendingPlaces } from '@/entities/place';
 import { usePlaceSaveToggle } from '@/features/save-place';
 import { useSavedPlaces } from '@/features/save-place';
-import { regionPickerHref, useMultiRegionPlaces } from '@/features/explore';
+import {
+  PLACE_LANE_STALE_TIME,
+  regionPickerHref,
+  useMultiRegionPlaces,
+} from '@/features/explore';
 import { useSavedStays } from '@/features/save-stay';
 import {
+  ITINERARY_OPEN_FAILED_MESSAGE,
+  ITINERARY_OPEN_FAILED_TOAST_ID,
+  fetchTripItineraryHref,
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary';
@@ -57,57 +64,57 @@ const COLLECTION_COUNT = 3;
 const SERVICE_REGION_NAMES = SERVICE_REGIONS.map((r) => r.name);
 const NO_REGIONS: string[] = [];
 
-// 지배 planning 여행이 있을 때만 마운트되는 자식 — 여기서만 지배 여행의 itinerary GET 을 문다.
-// 지배 여행이 없는 렌더(discovery·빈 목록·로딩·오류)는 이 자식을 안 그려 훅이 아예 호출되지
-// 않는다 → 이 훅을 목하지 않는 렌더(tabsShell 빈 목록)도 크래시하지 않는다(조건부-자식, 02a §7).
+// 지배 planning 여행이 있을 때만 마운트되는 자식 — 지배 여행의 일정 상태(목록 칸)로 CTA 목적지·라벨을 정한다.
+// 지배 여행이 없는 렌더(discovery·빈 목록·로딩·오류)는 이 자식을 안 그린다.
 function PlanningHome({
-  dominantTripId,
+  trip,
   phase,
   nav,
 }: {
-  dominantTripId: string;
+  trip: Trip;
   phase: Extract<HomePhase, { kind: 'planning' }>;
   nav: HomeNav;
 }) {
   const router = useRouter();
-  const itinerary = useGetTripsTripIdItinerary(dominantTripId);
+  const queryClient = useQueryClient();
+  // 슬롯 채우기(copick) 목적지가 일정 응답을 기다리는 동안의 잠금 — 같은 틱 두 번째 누름을 막는다.
+  const openingRef = useRef(false);
 
   // 지배 여행 일정 상태 → 목적지. 홈 카드 CTA 가 그 화면으로 push 하고(일정 탭과 같은
   // resolveItineraryDestination 규칙 공유), 라벨·부제도 같은 목적지로 덮어쓴다(TRIP-986 D1 — 한 판정).
-  // itinerary GET 이 미정착(로딩·비-404 오류)이면 목적지를 모르므로 push 하지 않고 라벨도 여행 상태
-  // 폴백 그대로 둔다 — 정착 전 오이동 금지(형제 itinerary.tsx 의 INV-4 처리와 대칭, Q2).
-  const notFound = isNotFound(itinerary.error);
-  const settled = !itinerary.isPending && (!itinerary.isError || notFound);
-  const destination = settled
-    ? resolveItineraryDestination({
-        notFound,
-        generationState: itinerary.data?.generationState,
-        status: itinerary.data?.status,
-        generationMode: itinerary.data?.generationMode,
-      })
-    : null;
+  // TRIP-1677 · 일정 상태가 목록(`GET /trips`)에 실려 와 여행별 일정 조회가 없다 — 목적지가 첫 프레임부터 정해진다.
+  // 같이 짜기(copick) 생성 중일 때만 누르는 순간 일정을 한 번 받아 첫 비고정 슬롯으로 간다.
+  const destination = resolveItineraryDestination(tripItinerarySummary(trip));
 
   // TRIP-1282 — 위저드 이탈 다이얼로그 버튼의 창 안이면 무시(연타 관통 표적, 카드 본문·알약 공용).
-  // TRIP-1306 — 목적지 모름(조회 중)은 가드 *바깥*에서 거른다. 안쪽에 두면 아무것도 안 한 누름이 창을 열어
-  // 응답 직후 누름·"더 보기"까지 400ms 동안 먹힌다(창은 모듈 전역 하나).
-  const pushDestination = guardPress(
-    (target: NonNullable<typeof destination>) => {
+  const onPressTripHeroCta = guardPress(() => {
+    if (destination !== 'copick') {
       router.push(
-        itineraryDestinationHref(dominantTripId, target, itinerary.data?.days)
+        itineraryDestinationHref(trip.tripId, destination, undefined)
       );
+      return;
     }
-  );
-  const onPressTripHeroCta = () => {
-    if (destination === null) return;
-    pushDestination(destination);
-  };
+    if (openingRef.current) return;
+    openingRef.current = true;
+    fetchTripItineraryHref(queryClient, trip.tripId)
+      .then(
+        (href) => router.push(href),
+        () =>
+          showToast({
+            message: ITINERARY_OPEN_FAILED_MESSAGE,
+            testID: ITINERARY_OPEN_FAILED_TOAST_ID,
+            tone: 'error',
+          })
+      )
+      .finally(() => {
+        openingRef.current = false;
+      });
+  });
 
   return (
     <HomeScreen
       {...HOME_DEFAULT_PROPS}
-      phase={
-        destination === null ? phase : applyItineraryTarget(phase, destination)
-      }
+      phase={applyItineraryTarget(phase, destination)}
       onPressTripHeroCta={onPressTripHeroCta}
       {...nav}
     />
@@ -167,12 +174,21 @@ export function HomePage() {
   // 대신 레인 status 를 'ready'(카드 0장)로 덮어 섹션이 통째로 숨게 한다(스켈레톤도, 눌러도 무동작인 레인 오류 카드도 안 남긴다).
   const tripsOffline = isOfflineWaiting(trips);
   const inTrip = Boolean(spotsRegion);
+  // TRIP-1713 · 두 조회 모두 신선 시간 10분 — 10분 안의 재마운트는 다시 받지 않는다(여행 중 1지역 키만 하트 담기 낡음 표시로 재조회).
+  // 여행 중 얼굴(지역 1곳 키)과 여행 없음 얼굴(3지역 키)은 캐시 키가 달라 서로의 응답을 쓰지 않는다.
   const regionPlaces = useGetPlaces(
     { ...(spotsRegion ? { region: spotsRegion } : {}), limit: 200 },
-    { query: { enabled: tripsSettled && inTrip } }
+    {
+      query: {
+        enabled: tripsSettled && inTrip,
+        staleTime: PLACE_LANE_STALE_TIME,
+      },
+    }
   );
   const servicePlaces = useMultiRegionPlaces(
-    tripsSettled && !inTrip ? SERVICE_REGION_NAMES : NO_REGIONS
+    tripsSettled && !inTrip ? SERVICE_REGION_NAMES : NO_REGIONS,
+    undefined,
+    { staleTime: PLACE_LANE_STALE_TIME }
   );
   // 3지역은 한 곳만 실패해도 받은 곳으로 채운다(degraded) — 셋 다 실패해야 오류다(훅이 판정).
   const places = inTrip
@@ -318,16 +334,13 @@ export function HomePage() {
     );
   }
 
-  // planning 이면 지배 여행 일정을 물어 카드 CTA 목적지를 정하는 자식으로 그린다(조건부-자식 —
-  // 위 로딩·오류·빈 목록 렌더는 이 itinerary 훅을 아예 호출하지 않는다).
-  if (phase?.kind === 'planning' && phase.dominantTripId !== undefined) {
-    return (
-      <PlanningHome
-        dominantTripId={phase.dominantTripId}
-        phase={phase}
-        nav={nav}
-      />
-    );
+  // planning 이면 지배 여행의 일정 상태(목록 칸)로 카드 CTA 목적지를 정하는 자식으로 그린다.
+  const dominantTrip =
+    phase?.kind === 'planning'
+      ? trips.data?.find((t) => t.tripId === phase.dominantTripId)
+      : undefined;
+  if (phase?.kind === 'planning' && dominantTrip !== undefined) {
+    return <PlanningHome trip={dominantTrip} phase={phase} nav={nav} />;
   }
 
   // 여행 후 — 종료 여행 일정은 다시 묻지 않는다(PlanningHome 을 안 태운다). 회고 CTA 는 그 여행의 기록 화면.

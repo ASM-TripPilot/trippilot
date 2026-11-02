@@ -14,6 +14,7 @@ export {
 export type { SlotEmptyFace } from './model/slotEmptyFace';
 export {
   DRAFT_POLL_INTERVAL_MS,
+  DRAFT_POLL_SLOW_INTERVAL_MS,
   buildDraftDayTabs,
   buildDraftPins,
   buildGenerationGauge,

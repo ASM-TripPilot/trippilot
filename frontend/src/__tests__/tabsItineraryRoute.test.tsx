@@ -1,11 +1,8 @@
 import { fireEvent, screen } from '@testing-library/react-native';
 
-import type {
-  Itinerary,
-  ItineraryDaysItemSlotsItem,
-  Trip,
-} from '@/shared/api/index.schemas';
+import type { Itinerary, Trip } from '@/shared/api/index.schemas';
 import {
+  getGetTripsTripIdItineraryQueryOptions,
   useGetTrips,
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
@@ -20,6 +17,7 @@ import {
   wizardDraftData,
 } from '@/test-support/wizardDraftFixture';
 import { renderWithQueryClient } from '@/test-support/queryRender';
+import { NO_ITINERARY, itineraryCols } from '@/test-support/tripItineraryCols';
 
 /**
  * (tabs)/일정 진입 라우트 — TRIP-468로 "첫 여행 리다이렉트 문지기"를 **내 여행 목록 뷰**(h37)로
@@ -30,19 +28,18 @@ import { renderWithQueryClient } from '@/test-support/queryRender';
  *    영영 접근 불가였던 **핵심 결함**을 잠근다.
  *  - 🔴 **AC-2** 빈 배열이면 empty + [여행 만들기]→step1(리다이렉트 없음).
  *  - 🔴 **AC-3** trips.isPending 이면 스켈레톤 카드 2장(리다이렉트도 empty도 아님).
- *  - 🔴 **AC-5** 배지·상태문을 **카드별 itinerary GET**에서 파생(완성→"일정 확정" · 일정 없음(404)→
- *    "아직 일정이 없어요" — TRIP-986 Seed D2 로 구 "추천안이 준비됐어요"·404 의 "추천안 준비 중" 교체 ·
- *    미도착→배지 미정 degrade).
+ *  - 🔴 **AC-5** 배지·상태문을 **목록(`GET /trips`)이 싣는 일정 상태 네 칸**에서 파생(완성→"일정 확정" ·
+ *    일정 없음(칸이 null)→"아직 일정이 없어요" — TRIP-986 Seed D2). TRIP-1677 로 카드별 일정 GET 과 그 "미도착→배지 미정"
+ *    degrade 는 사라졌다(일정 상태가 목록에 실려 한꺼번에 온다). 카드는 일정 조회를 만들지 않는다.
  *  - 🔴 **AC-6** 카드 탭은 **눌린 카드의 tripId** 목적지로 간다(`[0]` 고정 검출) · 확정(CONFIRMED)이면
  *    날짜와 무관하게 live(2026-09-23 제품 규칙 변경) · 여행 기간 중이어도 미확정 초안은 draft(TRIP-986
  *    Seed D3 — 구 "오늘이 구간이면 무조건 live" 특례 제거).
  *  - 🔴 **AC-7** 최신순(updatedAt desc) 정렬 + "최신순" 라벨.
  *
  * 왜 이렇게 테스트하나: 라우트는 `pages/itinerary/itinerary-list`(페이지→컨테이너→화면→카드)를 그리고
- * 데이터는 두 훅 seam(`useGetTrips`·`useGetTripsTripIdItinerary`)으로 주입한다. **N+1 훅-per-카드**를
- * 훅 목으로 재현 — `useGetTripsTripIdItinerary` 를 tripId별 대본으로 갈아끼운다(react-query 미구동 →
- * QueryClientProvider 불필요, 02a ★5 — TRIP-928 로 페이지가 `useQueries`
- * 를 물면서 Provider 를 두르게 됐다: `renderTab()`). 목록 뷰는 리다이렉트하지 않지만 `Redirect` 를 **일부러
+ * 데이터는 훅 seam `useGetTrips` 한 곳으로 주입한다 — 여행 한 벌이 일정 상태 네 칸을 함께 싣는다. 일정 단건 조회 훅·옵션 함수는
+ * `jest.fn()` 으로 남겨 두고 **한 번도 불리지 않음**을 앵커로 단언한다(AC-1 의 훅 목 파일 몫 — 요청 수로 세는 쪽은
+ * `MyTripsListPage.integration` 이 진다). 완료 배너 판정의 SecureStore 읽기 등은 아래 목이 영영 안 끝나게 막는다. 목록 뷰는 리다이렉트하지 않지만 `Redirect` 를 **일부러
  * 목으로 남겨** `redirect-href` 마커가 뜨면 "리다이렉트로 회귀"를 잡는 트립와이어로 쓴다(★4).
  *
  * *(개념)* `getAllByTestId(/정규식/)` = **트리 순서(pre-order)** 배열(리포 선례 stayImport §5-5) —
@@ -70,17 +67,14 @@ jest.mock('expo-router', () => ({
   },
 }));
 
-// TRIP-928 준비부 확장(단언 무변경) — 페이지가 완료 배너 판정을 위해 여행별 일정을 `useQueries` +
-// 옵션 함수로 함께 구독하고, 본 여행 id 를 SecureStore 에서 읽는다. 이 파일은 카드 계약 전용이라
-// 두 비동기를 영영 안 끝나게 막아 배너 판정을 늘 "보류"로 둔다(배너 동작은
+// TRIP-928 준비부 확장(단언 무변경) — 페이지가 본 여행 id 를 SecureStore 에서 읽는다. 이 파일은 카드 계약 전용이라
+// 그 비동기를 영영 안 끝나게 막아 배너 판정을 늘 "보류"로 둔다(배너 동작은
 // `pages/itinerary/itinerary-list/ui/MyTripsListPage.integration.test.tsx` 소관). 팩토리는 바깥 변수를 안 쓴다(호이스팅).
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTrips: jest.fn(),
+  // TRIP-1677 — 일정 단건 조회는 이 화면이 부르지 않는다. 불리면 AC-1 앵커가 잡는다.
   useGetTripsTripIdItinerary: jest.fn(),
-  getGetTripsTripIdItineraryQueryOptions: (tripId: string) => ({
-    queryKey: [`/trips/${tripId}/itinerary`],
-    queryFn: () => new Promise(() => {}),
-  }),
+  getGetTripsTripIdItineraryQueryOptions: jest.fn(),
   // TRIP-1055 준비부 확장(단언 무변경) — 페이지가 여행 삭제 mutation 을 문다. 무해 스텁이 없으면
   // `useDeleteTripsTripId is not a function` 으로 이 파일 전체가 죽는다(삭제 흐름은 MyTripsListPage.delete 소관).
   getGetTripsQueryKey: () => ['/trips'],
@@ -110,8 +104,6 @@ const mockUseItinerary = useGetTripsTripIdItinerary as jest.MockedFunction<
   typeof useGetTripsTripIdItinerary
 >;
 
-type ItineraryHookResult = ReturnType<typeof useGetTripsTripIdItinerary>;
-
 /** 여행 한 벌 — 케이스마다 tripId·날짜·updatedAt 만 덮어쓴다. */
 function trip(over: Partial<Trip> = {}): Trip {
   return {
@@ -127,6 +119,11 @@ function trip(over: Partial<Trip> = {}): Trip {
     updatedAt: '2026-08-01T10:00:00.000Z',
     baseCount: 0,
     itineraryDayCount: 0,
+    // 일정이 없는 여행 — 목록이 싣는 일정 상태 네 칸(TRIP-1677).
+    itineraryStatus: null,
+    itineraryGenerationState: null,
+    itineraryGenerationMode: null,
+    itineraryGenerating: false,
     ...over,
   };
 }
@@ -146,65 +143,26 @@ const tripsPending = {
   isError: false,
 } as unknown as ReturnType<typeof useGetTrips>;
 
-/** 슬롯 n개(내용 무관 — 컨테이너는 개수만 센다). */
-function slots(n: number): ItineraryDaysItemSlotsItem[] {
-  return Array.from({ length: n }, () => ({}) as ItineraryDaysItemSlotsItem);
-}
-
-/** 일정 한 벌 — 목적지·배지 판정에 쓰는 축(generationState·status)과 슬롯 합계만 신경. */
+/**
+ * 일정 상태 네 칸 한 벌 — 목적지·배지 판정에 쓰는 축(generationState·status)만 신경 쓴다. 서버가 일정 조회 응답에서 옮겨 담는 규칙과
+ * 같게 `itineraryCols` 로 만든다(생성 모드는 완전 AI, 세션 없음).
+ */
 function itin(
   generationState: Itinerary['generationState'],
-  status: Itinerary['status'],
-  slotCounts: number[] = [0]
-): Itinerary {
-  return {
-    itineraryId: 'itin-1',
-    tripId: 'trip-a',
+  status: Itinerary['status']
+): Pick<
+  Trip,
+  | 'itineraryStatus'
+  | 'itineraryGenerationState'
+  | 'itineraryGenerationMode'
+  | 'itineraryGenerating'
+> {
+  return itineraryCols({
     status,
-    solveMode: 'FULL_AI',
-    generationMode: 'FULLY_AI',
-    isFallback: false,
-    scoringMode: null,
-    degradations: [],
     generationState,
-    days: slotCounts.map((count, i) => ({
-      date: `2026-06-1${i}`,
-      slots: slots(count),
-    })),
-  };
-}
-
-function itinOk(data: Itinerary): ItineraryHookResult {
-  return {
-    data,
-    error: null,
-    isPending: false,
-    isError: false,
-  } as unknown as ItineraryHookResult;
-}
-
-/** axios 상태코드 오류(404·500 등) — isNotFound 가 실제로 판정한다. */
-function itinHttpError(statusCode: number): ItineraryHookResult {
-  return {
-    data: undefined,
-    error: { isAxiosError: true, response: { status: statusCode } },
-    isPending: false,
-    isError: true,
-  } as unknown as ItineraryHookResult;
-}
-
-const itinPending = {
-  data: undefined,
-  error: null,
-  isPending: true,
-  isError: false,
-} as unknown as ItineraryHookResult;
-
-/** tripId별로 다른 itinerary 를 준다(N+1 목). 대본에 없는 tripId 는 pending. */
-function scriptItinerary(map: Record<string, ItineraryHookResult>) {
-  mockUseItinerary.mockImplementation(
-    (tripId: string) => map[tripId] ?? itinPending
-  );
+    generationMode: 'FULLY_AI',
+    generationSessionId: null,
+  });
 }
 
 beforeEach(() => {
@@ -213,6 +171,7 @@ beforeEach(() => {
   mockNavigate.mockClear();
   mockUseGetTrips.mockReset();
   mockUseItinerary.mockReset();
+  (getGetTripsTripIdItineraryQueryOptions as jest.Mock).mockReset();
 });
 // 연타 가드 창은 모듈 싱글턴 — 카드 탭이 가드로 감싸져(TRIP-1282) 앞 테스트의 창이 다음 테스트 카드 탭을 먹지 않게 닫는다.
 afterEach(() => resetPressGuard());
@@ -220,12 +179,11 @@ afterEach(() => resetPressGuard());
 describe('🔴 AC-1 · 여행 2건+ → 모두 카드 렌더 (리다이렉트 없음, 핵심 결함 수정)', () => {
   it('두 여행이 각각 카드로 뜨고, 아무 데로도 리다이렉트하지 않는다', () => {
     mockUseGetTrips.mockReturnValue(
-      tripsData([trip({ tripId: 'trip-a' }), trip({ tripId: 'trip-b' })])
+      tripsData([
+        trip({ tripId: 'trip-a', ...itin('COMPLETE', 'CONFIRMED') }),
+        trip({ tripId: 'trip-b', ...NO_ITINERARY }),
+      ])
     );
-    scriptItinerary({
-      'trip-a': itinOk(itin('COMPLETE', 'CONFIRMED')),
-      'trip-b': itinHttpError(404),
-    });
 
     renderTab();
 
@@ -234,6 +192,9 @@ describe('🔴 AC-1 · 여행 2건+ → 모두 카드 렌더 (리다이렉트 �
     expect(screen.getByTestId('my-trip-card-trip-b')).toBeOnTheScreen();
     // 짝 — 아무 데로도 리다이렉트하지 않는다(Redirect 목이 마커를 안 남긴다).
     expect(screen.queryByTestId('redirect-href')).toBeNull();
+    // TRIP-1677 AC-1 — 여행이 둘이어도 일정 단건 조회는 한 번도 만들지 않는다(목록 칸으로 읽는다).
+    expect(getGetTripsTripIdItineraryQueryOptions).not.toHaveBeenCalled();
+    expect(useGetTripsTripIdItinerary).not.toHaveBeenCalled();
   });
 });
 
@@ -272,14 +233,18 @@ describe('🔴 AC-7 · 최신순(updatedAt desc) 정렬 + "최신순" 라벨', (
     // 준비 — A 가 최신(2026-08-20), B 가 옛것(2026-08-10). 입력은 일부러 [B, A] 역순.
     mockUseGetTrips.mockReturnValue(
       tripsData([
-        trip({ tripId: 'trip-b', updatedAt: '2026-08-10T00:00:00.000Z' }),
-        trip({ tripId: 'trip-a', updatedAt: '2026-08-20T00:00:00.000Z' }),
+        trip({
+          tripId: 'trip-b',
+          updatedAt: '2026-08-10T00:00:00.000Z',
+          ...itin('COMPLETE', 'CONFIRMED'),
+        }),
+        trip({
+          tripId: 'trip-a',
+          updatedAt: '2026-08-20T00:00:00.000Z',
+          ...itin('COMPLETE', 'CONFIRMED'),
+        }),
       ])
     );
-    scriptItinerary({
-      'trip-a': itinOk(itin('COMPLETE', 'CONFIRMED')),
-      'trip-b': itinOk(itin('COMPLETE', 'CONFIRMED')),
-    });
 
     renderTab();
 
@@ -299,18 +264,22 @@ describe('🔴 AC-6 · 카드 탭은 눌린 카드의 tripId 목적지로 간다
   function renderTwoTrips() {
     mockUseGetTrips.mockReturnValue(
       tripsData([
-        trip({ tripId: 'trip-a', updatedAt: '2026-08-20T00:00:00.000Z' }),
-        trip({ tripId: 'trip-b', updatedAt: '2026-08-10T00:00:00.000Z' }),
+        trip({
+          tripId: 'trip-a',
+          updatedAt: '2026-08-20T00:00:00.000Z',
+          ...itin('COMPLETE', 'CONFIRMED'),
+        }),
+        trip({
+          tripId: 'trip-b',
+          updatedAt: '2026-08-10T00:00:00.000Z',
+          ...NO_ITINERARY,
+        }),
       ])
     );
-    scriptItinerary({
-      'trip-a': itinOk(itin('COMPLETE', 'CONFIRMED')),
-      'trip-b': itinHttpError(404),
-    });
     renderTab();
   }
 
-  it('둘째 카드(B, 404)를 누르면 그 여행의 method 화면으로 간다', () => {
+  it('둘째 카드(B, 일정 없음)를 누르면 그 여행의 method 화면으로 간다', () => {
     renderTwoTrips();
 
     fireEvent.press(screen.getByTestId('my-trip-card-trip-b'));
@@ -342,12 +311,10 @@ describe('🔴 AC-3 · 확정(CONFIRMED) 카드는 여행 전이어도 live 로'
           tripId: 'trip-future',
           startDate: '2099-06-10',
           endDate: '2099-06-13',
+          ...itin('COMPLETE', 'CONFIRMED'),
         }),
       ])
     );
-    scriptItinerary({
-      'trip-future': itinOk(itin('COMPLETE', 'CONFIRMED')),
-    });
 
     renderTab();
     fireEvent.press(screen.getByTestId('my-trip-card-trip-future'));
@@ -368,13 +335,11 @@ describe('🔴 AC-6b · 여행 기간 중이어도 미확정 초안은 초안 �
           tripId: 'trip-live',
           startDate: '2020-01-01',
           endDate: '2099-12-31',
+          // 확정이 아닌 초안이어야 날짜 특례를 따로 잰다 — CONFIRMED 는 특례가 있든 없든 live 다.
+          ...itin('COMPLETE', 'PLANNED'),
         }),
       ])
     );
-    // 확정이 아닌 초안이어야 날짜 특례를 따로 잰다 — CONFIRMED 는 특례가 있든 없든 live 다.
-    scriptItinerary({
-      'trip-live': itinOk(itin('COMPLETE', 'PLANNED')),
-    });
 
     renderTab();
     fireEvent.press(screen.getByTestId('my-trip-card-trip-live'));
@@ -388,21 +353,15 @@ describe('🔴 AC-6b · 여행 기간 중이어도 미확정 초안은 초안 �
   });
 });
 
-describe('🔴 AC-5 · 배지·상태문은 카드별 itinerary 에서 파생된다 (로딩 degrade 포함)', () => {
-  it('완성→"일정 확정" · 일정 없음(404)→"작성중"+"아직 일정이 없어요" · 미도착→배지 미정 (TRIP-986 Seed D2)', () => {
+describe('🔴 AC-5 · 배지·상태문은 목록의 일정 상태 네 칸에서 파생된다', () => {
+  it('완성→"일정 확정" · 일정 없음→"작성중"+"아직 일정이 없어요" (TRIP-986 Seed D2 · TRIP-1677)', () => {
     mockUseGetTrips.mockReturnValue(
       tripsData([
-        trip({ tripId: 'trip-done' }),
-        trip({ tripId: 'trip-draft' }),
-        trip({ tripId: 'trip-load' }),
+        // 완성(CONFIRMED) — 슬롯 수는 이제 안 그린다(Figma 문구로 대체, 01b Q2).
+        trip({ tripId: 'trip-done', ...itin('COMPLETE', 'CONFIRMED') }),
+        trip({ tripId: 'trip-draft', ...NO_ITINERARY }),
       ])
     );
-    scriptItinerary({
-      // 완성(CONFIRMED) — 슬롯 수는 이제 안 그린다(Figma 문구로 대체, 01b Q2).
-      'trip-done': itinOk(itin('COMPLETE', 'CONFIRMED', [2, 1])),
-      'trip-draft': itinHttpError(404),
-      'trip-load': itinPending,
-    });
 
     renderTab();
 
@@ -414,17 +373,13 @@ describe('🔴 AC-5 · 배지·상태문은 카드별 itinerary 에서 파생된
       '일정 확정'
     );
 
-    // 일정 없음(404) — "작성중" 배지(Q3) + "아직 일정이 없어요"(구 "추천안 준비 중" 교체, #017).
+    // 일정 없음 — "작성중" 배지(Q3) + "아직 일정이 없어요"(구 "추천안 준비 중" 교체, #017).
     expect(screen.getByTestId('my-trip-badge-trip-draft')).toHaveTextContent(
       '작성중'
     );
     expect(screen.getByTestId('my-trip-extra-trip-draft')).toHaveTextContent(
       '아직 일정이 없어요'
     );
-
-    // 미도착(degrade) — 배지 미정(부재) + 짝: 카드 자체는 뜬다.
-    expect(screen.queryByTestId('my-trip-badge-trip-load')).toBeNull();
-    expect(screen.getByTestId('my-trip-card-trip-load')).toBeOnTheScreen();
   });
 });
 

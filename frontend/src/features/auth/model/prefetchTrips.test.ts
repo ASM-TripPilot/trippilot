@@ -1,12 +1,13 @@
 import { QueryClient } from '@tanstack/react-query';
 
-import { getGetTripsQueryOptions } from '@/shared/api/index.hooks';
+import { getGetTripsQueryOptions } from '@/shared/api/generated/trips/trips';
 
 import { prefetchTrips } from './prefetchTrips';
 import { newTestQueryClient } from '@/test-support/queryRender';
 
 // 생성 API 계층(axios)을 안 타도록 옵션 팩토리만 목으로 — 키는 실물과 같은 모양(['/trips'])으로 둔다.
-jest.mock('@/shared/api/index.hooks', () => ({
+// 목은 정의 모듈을 겨눈다(README §import 경계 「테스트」) — prefetchTrips 가 어느 공개 입구로 받아도 같은 모듈이다(TRIP-1716).
+jest.mock('@/shared/api/generated/trips/trips', () => ({
   getGetTripsQueryOptions: jest.fn(),
 }));
 

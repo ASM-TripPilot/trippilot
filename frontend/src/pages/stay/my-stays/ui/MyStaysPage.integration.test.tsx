@@ -495,6 +495,11 @@ describe('실 화면 + msw — 거점 변경·출처 칩 (옛 .release)', () => 
     updatedAt: '2026-08-01T00:00:00.000Z',
     baseCount: 1,
     itineraryDayCount: 3,
+    // 일정 3일이 있는 완료 초안 — 목록이 싣는 일정 상태 네 칸(TRIP-1677).
+    itineraryStatus: 'PLANNED',
+    itineraryGenerationState: 'COMPLETE',
+    itineraryGenerationMode: 'FULLY_AI',
+    itineraryGenerating: false,
   } as unknown as Trip;
 
   const BASE_ROW: BaseAssignment = {

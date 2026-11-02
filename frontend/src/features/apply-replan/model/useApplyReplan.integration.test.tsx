@@ -12,6 +12,7 @@ import type { Trigger, TriggerList } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { BASE } from '@/test-support/apiBase';
 import { createGate } from '@/test-support/mswHookHarness';
+import { watchTripsList } from '@/test-support/tripItineraryCols';
 import {
   createWrapper,
   settle,
@@ -174,6 +175,40 @@ describe('확정(apply) 뒤 일정 캐시', () => {
     expect(isInvalidated(ITINERARY_TRIP_1)).toBe(true);
     expect(isInvalidated(TRIGGERS_TRIP_2)).toBe(false);
     expect(ids(client.getQueryData(TRIGGERS_TRIP_2))).toEqual(['trg-other']);
+  });
+});
+
+// TRIP-1677 I5 — 여행 목록(`GET /trips`)이 일정 상태 네 칸을 싣게 되어, 재계획이 일정을 바꾸면 목록도 낡은 값이 된다.
+// BE 가 적용이 네 칸을 바꾸는지 확정하지 못해 "안전책 한 줄"로 둔 지점이라 여기서 잠근다(요청 1건의 비용).
+describe('I5 · 확정(apply) 뒤 여행 목록(GET /trips) 재조회', () => {
+  it('목록 화면이 켜져 있으면 적용 성공 뒤 목록을 정확히 한 번 다시 받는다 (적용 전엔 추가 요청 없음)', async () => {
+    // 준비 — 목록을 보는 화면(관찰자)이 있고, 첫 조회가 끝난 상태. 서버 요청 수는 핸들러 안 카운터로 센다.
+    let tripsGets = 0;
+    server.use(
+      http.get(`${BASE}/trips`, () => {
+        tripsGets += 1;
+        return HttpResponse.json([]);
+      })
+    );
+    serveApply(USED.affectedDate);
+    const unwatch = watchTripsList(client);
+    await waitFor(() => expect(tripsGets).toBe(1));
+    await settle();
+    const { result } = mountApply();
+    // 앵커 — 적용 전엔 더 묻지 않았다.
+    expect(tripsGets).toBe(1);
+
+    // 실행 — 확정
+    act(() => {
+      result.current.mutate({ tripId: TRIP, sessionId: 's9' });
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    // 단언 — 무효화가 실제 재조회로 이어졌다(+1 이지 +2 가 아니다).
+    await waitFor(() => expect(tripsGets).toBe(2));
+    await settle();
+    expect(tripsGets).toBe(2);
+    unwatch();
   });
 });
 

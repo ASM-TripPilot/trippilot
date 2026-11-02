@@ -94,6 +94,11 @@ const TRIP_FIXTURE: Trip = {
   updatedAt: '2026-08-02T00:00:00Z',
   baseCount: 0,
   itineraryDayCount: 0,
+  // 일정이 없는 여행 — 목록이 싣는 일정 상태 네 칸(TRIP-1677).
+  itineraryStatus: null,
+  itineraryGenerationState: null,
+  itineraryGenerationMode: null,
+  itineraryGenerating: false,
 };
 
 /** 예산 러프값이 실제로 있는 취향. `companionTypes`에 `커플`이 들어 있는 것이 정상이다 —
