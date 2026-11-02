@@ -581,6 +581,23 @@ module.exports = defineConfig([
     },
   },
   {
+    // 동작 줄이기 답은 공용 게이트(shared/lib/reduceMotion.ts)로만 묻는다(TRIP-1734). 테스트·목은 이 이름을 목으로 쓰므로 뺀다.
+    // 이 규칙을 소스 블록에 거는 건 여기뿐이다 — 테스트 블록(TEST_FILES)의 같은 규칙과 files 가 겹치지 않게 ignores 를 유지한다.
+    files: ['src/**/*.{ts,tsx}', 'app/**/*.{ts,tsx}'],
+    ignores: [...TEST_IGNORES, ROUTE_DEV, 'src/shared/lib/reduceMotion.ts'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'AccessibilityInfo',
+          property: 'isReduceMotionEnabled',
+          message:
+            '동작 줄이기는 @/shared/lib/reduceMotion 의 게이트(startUnlessReduceMotion·useReduceMotion·onReduceMotionAnswer)로 묻는다(TRIP-1734).',
+        },
+      ],
+    },
+  },
+  {
     // 테스트 라이브러리(fast-check)의 표준 default import(`import fc from 'fast-check'`)는
     // `fc.property`/`fc.assert` 형태가 문서화된 API 다 — namespace 경고를 끈다.
     files: ['**/*.test.{ts,tsx}', '**/__tests__/**/*.{ts,tsx}'],
