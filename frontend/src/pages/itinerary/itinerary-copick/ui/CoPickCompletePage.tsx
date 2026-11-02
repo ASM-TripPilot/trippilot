@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 
 import {
   buildDraftDayTabs,
@@ -128,7 +129,7 @@ export function CoPickCompletePage({
       days={dayChips}
       selectedDayIndex={selectedDayIndex < 0 ? 0 : selectedDayIndex}
       onSelectDay={(index) => setPickedDate(tabs[index]?.date ?? null)}
-      onBack={() => router.back()}
+      onBack={() => goBackOr(router, `/trips/${tripId}/itinerary`)}
       header={
         <SheetHeader
           title={trip.data.title}

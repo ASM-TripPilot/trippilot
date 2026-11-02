@@ -139,6 +139,13 @@ paths:
 | `src/shared/lib/pressGuard.ts` | `guardPress(fn)`(모듈 전역 400ms 창이 열려 있으면 무시) · `openPressGuardWindow()`(서버 응답으로 표면이 바뀌는 순간 창만 연다) · `resetPressGuard()`(테스트 전용). 훅이 아니고 `setTimeout` 대신 `Date.now()` 비교(테스트가 `Date.now`를 멈춰 판정 고정 — 옛 "pages 층 타이머 금지"는 실재 가드 없음). **음수 경과(시계 역행)는 창 밖**으로 처리 — 없으면 가드 걸린 버튼이 전부 먹통이 된다. 전역 창이라 스택 아래 화면의 재오픈이 앞 화면 버튼을 1회 먹일 수 있다. **감싼 핸들러만 무시한다** — 연타 관통은 트리거(창을 여는 쪽)와 둘째 탭이 떨어지는 표적(창을 확인하는 쪽) **둘 다** 감싸야 막힌다(TRIP-1282: 트리거만 감싸면 안 막힌다). 응답 뒤에 화면이 바뀌는 경로(삭제 등)는 이동 직전 `openPressGuardWindow()`. 테스트는 `Date.now`를 한 값으로 고정하고(가짜 타이머는 창이 저절로 닫힌다) 파일마다 `afterEach(resetPressGuard)`를 둔다 |
 | `src/shared/lib/pressGuard.test.ts` | 경계 399/400ms·무시된 누름 비연장·인자 전달·리셋·시계 역행 |
 
+### `src/shared/lib/goBackOr.ts` — 공용 뒤로 헬퍼
+
+| 파일 | 역할 |
+|---|---|
+| `src/shared/lib/goBackOr.ts` | `goBackOr(router, fallback)`(TRIP-1685) — `router.canGoBack()` 이면 `back()`, 아니면 `replace(fallback)`. 딥링크 콜드 진입·웹 새로고침은 스택이 1장이라 `back()` 이 "처리 안 됨"으로 조용히 무동작이 되는 것을 막는다. 앱 화면의 ‹·완료 뒤 복귀 37화면 50곳이 쓴다(옛 `canGoBack ? back : replace` 인라인 16곳 흡수). `import type` 만 써서 shared 에 expo-router 런타임 의존이 없고, `BackRouter = Pick<Router,'canGoBack'\|'back'\|'replace'>` 라 `useRouter()`·정적 `router`·`loadRouter()` 결과 모두 넘긴다. **동기 함수**라 `goBackOr(…); router.push(method)` 순서가 보존된다. **홈 폴백은 `'/'` 가 아니라 `shellTabHref('home')`(= `/(tabs)`)** — `'/'` 는 닫힌 온보딩 그룹으로 풀려 replace 가 조용히 버려진다. 폴백은 누른 시점 값으로 만든다(약관은 `getGateDestination()` 별 `TERMS_FALLBACK`). **함정**: 폴백 값은 통합 테스트(`src/__tests__/backFallback.integration.test.tsx`)가 대표 9화면만 지킨다 — 나머지는 `'/'` 로 바꿔도 jest green(03b 경고-2). 이동을 감싼 헬퍼라 연타 린트 `PRESS_NAV_GATE` 의 `ROUTER_NAV` 셀렉터에 이름을 올려 뒀다(`eslint.config.js`) — 새 이동 헬퍼를 만들면 거기에도 더한다 |
+| `src/shared/lib/goBackOr.test.ts` | 스택 있음→`back()` 1회(인자 없음)·없음→`replace(폴백)` 1회·객체형 Href 그대로 전달·동기 반환·누른 시점 폴백·PBT(back/replace 중 정확히 하나) |
+
 ### `src/shared/lib/useKeyboardVisible.ts` — 키보드 떠 있음 감지
 
 | 파일 | 역할 |

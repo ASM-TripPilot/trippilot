@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 
 import { assistantHref } from '@/features/open-assistant';
 import { View } from 'react-native';
@@ -114,7 +115,7 @@ const ARRIVE_FAILED = '도착을 기록하지 못했어요. 다시 눌러 주세
 const MEMO_SAVED_TOAST = '메모를 저장했어요';
 const PHOTO_SAVED_TOAST = '사진을 기록했어요';
 
-/** 뒤로 갈 히스토리가 없을 때(딥링크·푸시 직행)의 폴백 — ItineraryPlanPage 관례(INV-4 침묵 금지). */
+/** 뒤로 갈 히스토리가 없을 때(딥링크·푸시 직행)의 폴백(INV-4 침묵 금지) · notFound 얼굴 [홈으로] 목적지. */
 const HOME_FALLBACK = '/(tabs)';
 
 export function LiveItineraryPage({
@@ -351,8 +352,7 @@ export function LiveItineraryPage({
 
   // 허브 ‹ 와 같은 규칙 — 딥링크 직행이라 돌아갈 곳이 없으면 홈으로(INV-4 침묵 금지).
   const goBackOrHome = (): void => {
-    if (router.canGoBack()) router.back();
-    else router.replace(HOME_FALLBACK);
+    goBackOr(router, HOME_FALLBACK);
   };
 
   // TRIP-1278 — 여행 자체가 없으면(trip 404) 일정 판정보다 먼저 가른다. 없는 여행은 일정도 404 라 notFound 가

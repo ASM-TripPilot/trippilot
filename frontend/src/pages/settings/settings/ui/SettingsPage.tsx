@@ -44,6 +44,9 @@ import {
 import { isPushSupported } from '@/shared/push/index.support';
 import { showToast } from '@/shared/ui/Toast';
 import { validateNicknameFormat } from '@/shared/lib/nicknameFormat';
+import { goBackOr } from '@/shared/lib/goBackOr';
+import { guardPress } from '@/shared/lib/pressGuard';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 const NICKNAME_SAVED_TOAST = '닉네임을 바꿨어요';
 
@@ -297,7 +300,10 @@ export function SettingsPage(): ReactElement {
       cancelDeletionError={cancelDeletionError}
       deleteRequestError={deleteRequestError}
       exportError={exportError}
-      onPressBack={() => loadRouter()?.back()}
+      onPressBack={guardPress(() => {
+        const router = loadRouter();
+        if (router) goBackOr(router, shellTabHref('my'));
+      })}
       onSubmitNickname={submitNickname}
       onNicknameDraftChange={() => setNicknameError(null)}
       nicknameSaving={patchNickname.isPending}

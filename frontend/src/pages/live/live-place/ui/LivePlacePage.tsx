@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { router } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 import { Pressable, Share, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -52,11 +53,7 @@ export function LivePlacePage({ tripId, poiId }: LivePlacePageProps) {
   const [openNaverError, setOpenNaverError] = useState<string | null>(null);
 
   function handleBack(): void {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace(`/trips/${tripId}/live`);
-    }
+    goBackOr(router, `/trips/${tripId}/live`);
   }
 
   if (query.isPending) {

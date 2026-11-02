@@ -19,6 +19,8 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import { openExternal } from '@/shared/external-link';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { Share } from 'react-native';
 
 import { isNotFound } from '@/shared/api';
@@ -112,7 +114,7 @@ export function StayDetailPage(): ReactElement {
         pending={pending}
         onToggleSave={() => void handleToggleSave()}
         onPressBook={handlePressBook}
-        onPressBack={() => router.back()}
+        onPressBack={() => goBackOr(router, shellTabHref('explore'))}
         // 전화 앱이 없으면(시뮬레이터 등) 열기가 실패한다 — 부가 동선이라 삼킨다(TRIP-940 Q5).
         onPressPhone={() => {
           if (item?.phone != null) {

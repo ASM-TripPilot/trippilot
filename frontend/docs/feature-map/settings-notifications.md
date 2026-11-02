@@ -21,6 +21,7 @@ routes:
 - `notif-open-settings` 배너 → 미결정이면 OS 권한 창, 이미 거부면 iOS 설정 앱.
 - `notif-return` 설정 앱에서 돌아오면 권한을 다시 읽어 얼굴을 바꾸고, 처음 허용을 읽으면 기기 토큰을 등록한다.
 - `notif-hidden-kinds` 커뮤니티·시스템 종류는 서버가 줘도 표에 없다.
+- `notif-cold-back` 알림 설정을 링크·푸시로 바로 열어 스택에 이 화면 하나뿐이어도 ‹ 가 살아 있다 — 설정으로, 설정의 ‹ 는 마이 탭으로 간다(FM-L6-01 해소 확인). *(TRIP-1685 · 실화면 미검증 — 오케 실기 몫)*
 
 ## How to get to it (user POV)
 

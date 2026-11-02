@@ -48,7 +48,12 @@ jest.mock('@/shared/storage', () =>
 );
 
 jest.mock('expo-router', () => ({
-  router: { push: jest.fn(), canGoBack: jest.fn(() => true), back: jest.fn() },
+  router: {
+    push: jest.fn(),
+    canGoBack: jest.fn(() => true),
+    back: jest.fn(),
+    replace: jest.fn(),
+  },
 }));
 
 jest.mock('expo-linking', () => ({ openSettings: jest.fn() }));

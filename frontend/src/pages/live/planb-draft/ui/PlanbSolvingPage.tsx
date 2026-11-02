@@ -1,6 +1,7 @@
 import { usePreventRemove } from '@react-navigation/native';
 import type { Href } from 'expo-router';
 import { useNavigation, useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
@@ -255,8 +256,7 @@ function PlanbSolvingBody({
   const leaveWithoutServer = () => {
     if (leavingRef.current) return;
     leavingRef.current = true;
-    if (router.canGoBack()) router.back();
-    else router.replace(`/trips/${tripId}/live`);
+    goBackOr(router, `/trips/${tripId}/live`);
   };
 
   if (errorFace) {

@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 
 import { useSavedPlaces } from '@/features/save-place';
 import {
@@ -142,7 +143,7 @@ export function MustVisitTimePage({
       setLeaveWarned(true);
       return;
     }
-    router.back();
+    goBackOr(router, `/trips/${tripId}/itinerary`);
   }
 
   async function sendPost(request: AddMustVisitRequest): Promise<void> {
@@ -171,7 +172,7 @@ export function MustVisitTimePage({
     if (duplicated) return;
     // TRIP-1013 #042 — 목록으로 돌아가는 순간 창을 다시 연다(응답이 400ms보다 늦어도 관통 차단).
     openPressGuardWindow();
-    router.back();
+    goBackOr(router, `/trips/${tripId}/itinerary`);
   }
 
   async function submit(): Promise<void> {

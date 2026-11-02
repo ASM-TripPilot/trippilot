@@ -2,6 +2,7 @@ import { useState, type ReactElement } from 'react';
 import { View } from 'react-native';
 import { openAppSettings } from '@/shared/external-link';
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 
 import { LocationConsentScreen } from './LocationConsentScreen';
 import { revokeImpact } from '@/shared/location';
@@ -43,7 +44,7 @@ export function LocationConsentPage(): ReactElement {
         onOpenSettings={() => {
           void openAppSettings();
         }}
-        onPressBack={() => router.back()}
+        onPressBack={() => goBackOr(router, '/settings')}
         automation={automation.view}
         onPressAutomationEnable={() => setExplainerOpen(true)}
         onPressAutomationSettings={() => {

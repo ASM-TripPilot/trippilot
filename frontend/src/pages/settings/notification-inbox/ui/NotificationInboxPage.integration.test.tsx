@@ -61,7 +61,7 @@ jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
 jest.mock('expo-router', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('@/test-support/expoRouterMock').createExpoRouterMock({
-    router: ['push', 'back'],
+    router: ['push', 'back', 'replace', 'canGoBack'],
   })
 );
 

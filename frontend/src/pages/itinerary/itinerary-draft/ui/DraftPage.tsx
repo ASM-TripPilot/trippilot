@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 
 import { useSavedPlaces } from '@/features/save-place';
 import {
@@ -405,15 +406,9 @@ export function DraftPage({
   }, [redirectToManual, router, tripId]);
 
   // 두 뒤로가기(h35 후보 0건 · h11 초안) 공통. 딥링크로 콜드 오픈돼 히스토리가 없으면
-  // (`canGoBack()===false`) 침묵 no-op 이 아니라 홈으로 replace 한다(INV-4). `/(tabs)/itinerary`
-  // 는 trips[0] 리다이렉트 함정이라 접미 없는 `/(tabs)` 로 간다. `ItineraryPlanPage.handleBack`
-  // 을 이 페이지에 지역 복제한 것이다(shared 승격 아님 — pages 간 import 금지 · YAGNI).
+  // (`canGoBack()===false`) 침묵 no-op 이 아니라 그 여행의 일정 보기로 replace 한다(INV-4).
   function handleBack(): void {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/(tabs)');
-    }
+    goBackOr(router, `/trips/${tripId}/itinerary`);
   }
 
   // TRIP-1032 B — 이 여행이 생성 중일 때 재생성 확인(새 오버레이 없이 인라인 얼굴 — jest 로 심판된다).

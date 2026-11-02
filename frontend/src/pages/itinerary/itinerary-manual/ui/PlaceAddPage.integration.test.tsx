@@ -113,7 +113,12 @@ const mockPush = jest.fn();
 let mockParams: Record<string, string> = { tripId: 't1' };
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ back: mockBack, push: mockPush }),
+  useRouter: () => ({
+    back: mockBack,
+    push: mockPush,
+    replace: jest.fn(),
+    canGoBack: () => true,
+  }),
   router: { back: mockBack, push: mockPush },
   useLocalSearchParams: () => mockParams,
 }));

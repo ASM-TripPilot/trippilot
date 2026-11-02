@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 import { isAxiosError } from 'axios';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 
@@ -292,8 +293,7 @@ export function PlanbRequestPage(props: PlanbRequestPageProps): ReactElement {
   function handleClose(): void {
     if (closingRef.current) return;
     closingRef.current = true;
-    if (router.canGoBack()) router.back();
-    else router.replace(`/trips/${tripId}/live`);
+    goBackOr(router, `/trips/${tripId}/live`);
   }
 
   return (

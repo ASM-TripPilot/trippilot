@@ -1,5 +1,7 @@
 import { type ReactElement, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
+import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 import type { BaseAssignment, SavedStay } from '@/shared/api/index.schemas';
 import { useGetSavedStays } from '@/shared/api/index.hooks';
@@ -159,7 +161,7 @@ export function MyStaysPage(): ReactElement {
         isEmpty={isEmpty}
         onPressChangeBase={handleChangeBase}
         onPressExplore={() => router.push('/stays')}
-        onPressBack={() => router.back()}
+        onPressBack={() => goBackOr(router, shellTabHref('my'))}
         loadFailed={loadFailed}
         retrying={retrying}
         onRetry={handleRetry}

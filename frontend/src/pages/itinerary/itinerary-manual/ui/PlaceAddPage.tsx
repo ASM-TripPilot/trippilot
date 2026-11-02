@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBackOr } from '@/shared/lib/goBackOr';
 import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Text, View } from 'react-native';
@@ -273,7 +274,7 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
       <MapSheetShell
         center={center}
         pins={pins}
-        onBack={() => router.back()}
+        onBack={() => goBackOr(router, `/trips/${tripId}/itinerary`)}
         // TRIP-1204 — 시트가 열린 채로도 손가락 확대·이동(셸 기본은 열림=잠금). 6-b 실기 전용.
         mapViewOnly={false}
         header={
