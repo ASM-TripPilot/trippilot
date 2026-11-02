@@ -93,13 +93,13 @@ from trippilot.llm_gateway.workers.preference import (  # noqa: E402
 )
 from trippilot.llm_gateway.workers.replan_composition import (  # noqa: E402
     ComposeDayInput, ReplanCompositionWorker, ScheduleLine)
-from trippilot.orchestrator import dialogue_orchestrator as orch  # noqa: E402
-from trippilot.orchestrator import dialogue_plan as dplan  # noqa: E402
+from trippilot.orchestrator.dialogue import dialogue_orchestrator as orch  # noqa: E402
+from trippilot.orchestrator.dialogue import dialogue_plan as dplan  # noqa: E402
 from trippilot.domain.observability import GateDropEvent  # noqa: E402
 from trippilot.domain.dialogue.plan_tools import plan_tool_specs_json  # noqa: E402
 from trippilot.llm_gateway.gates.base import has_contact_like  # noqa: E402
 from trippilot.llm_gateway.gates.dialogue_answer import clock_times  # noqa: E402
-from trippilot.orchestrator.dialogue_handlers import HandlerPorts  # noqa: E402
+from trippilot.orchestrator.dialogue.dialogue_handlers import HandlerPorts  # noqa: E402
 
 MODEL = os.environ.get("EVAL_MODEL", "gpt-5.6-luna")
 INTENT_TIMEOUT = float(os.environ.get("EVAL_INTENT_TIMEOUT", "4.0"))

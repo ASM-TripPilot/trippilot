@@ -26,7 +26,7 @@ from tests.orchestrator.schedule.test_schedule_coordinator import (
     _build,
     _request,
 )
-from trippilot.orchestrator.schedule_coordinator import GenerationStatus
+from trippilot.orchestrator.schedule.schedule_coordinator import GenerationStatus
 
 _OTHER_DAY = date(2026, 8, 20)  # 요청 날짜 밖
 

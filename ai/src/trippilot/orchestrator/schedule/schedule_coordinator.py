@@ -73,7 +73,7 @@ from trippilot.domain.poi.poi_curation import CandidatePoolRequest
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.pool_builder import base_radius_km, widened_radius_km
 from trippilot.orchestrator.event_affinity import event_bonus_map
-from trippilot.orchestrator.info_collector import InfoCollector
+from trippilot.orchestrator.schedule.info_collector import InfoCollector
 from trippilot.ports.trace_port import TracePort
 
 __all__ = [

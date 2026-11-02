@@ -80,7 +80,7 @@ from trippilot.domain.dialogue.intent import (
     MatchRoute,
 )
 from trippilot.domain.llm.llm import LlmFeature
-from trippilot.orchestrator.question_bank import BANK_COLLECTION
+from trippilot.orchestrator.intent.question_bank import BANK_COLLECTION
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort
 

@@ -29,8 +29,8 @@ from trippilot.domain.dialogue.dialogue import specs_of, tool_specs, tool_specs_
 from trippilot.domain.dialogue.intent import ROUTABLE_INTENTS, Intent, IntentDraft, MatchRoute
 from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent, GateDropEvent, LlmCallRecord
-from trippilot.orchestrator.intent_router import IntentRouter
-from trippilot.orchestrator.question_bank import BANK_COLLECTION
+from trippilot.orchestrator.intent.intent_router import IntentRouter
+from trippilot.orchestrator.intent.question_bank import BANK_COLLECTION
 from tests.fakes.fake_llm import FakeLlm
 from tests.fakes.in_memory_trace import InMemoryTrace
 from tests.fakes.in_memory_vector_store import InMemoryVectorStore

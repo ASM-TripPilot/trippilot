@@ -45,7 +45,7 @@ _AI = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_AI / "src"))
 
 from trippilot.llm_gateway.gates.base import has_contact_like, has_injection_like  # noqa: E402
-from trippilot.orchestrator.place_intro import clean_intro  # noqa: E402
+from trippilot.orchestrator.dialogue.place_intro import clean_intro  # noqa: E402
 from trippilot.poi_curation.place_fallback import WEB_FACTS_PER_DOC as MAX_FACTS  # noqa: E402
 
 _POIS = _AI / "data" / "collected_pois.json"

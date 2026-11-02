@@ -42,9 +42,9 @@ from trippilot.llm_gateway.workers.dialogue_answer import (
     fallback_answer_text,
 )
 from trippilot.poi_curation.adapters.pg_place_sql import PlaceRow
-from trippilot.orchestrator import dialogue_handlers as dh
+from trippilot.orchestrator.dialogue import dialogue_handlers as dh
 from trippilot.agents.planb.rag import _REASON_KO
-from trippilot.orchestrator.dialogue_handlers import (
+from trippilot.orchestrator.dialogue.dialogue_handlers import (
     _REASON_WORDS,
     _planb_reason,
     CANDIDATE_REASON,

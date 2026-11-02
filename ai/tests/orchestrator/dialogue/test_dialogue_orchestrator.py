@@ -63,7 +63,7 @@ from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.dialogue_answer import NEED_TRIP_TEXT, DialogueAnswerWorker
 from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker
 from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
-from trippilot.orchestrator.dialogue_handlers import (
+from trippilot.orchestrator.dialogue.dialogue_handlers import (
     HANDLERS,
     NEXT_ACTION_TYPES,
     AnswerKind,
@@ -74,15 +74,15 @@ from trippilot.orchestrator.dialogue_handlers import (
     TripInfo,
     TurnSnapshot,
 )
-from trippilot.orchestrator.dialogue_interpreter import (
+from trippilot.orchestrator.dialogue.dialogue_interpreter import (
     Clarify,
     CountingLlm,
     DialogueContext,
     Frame,
     PendingFrame,
 )
-from trippilot.orchestrator.dialogue_memory import MEMORY_TTL_DAYS, DialogueMemory, expires_at_for
-from trippilot.orchestrator.dialogue_orchestrator import (
+from trippilot.orchestrator.dialogue.dialogue_memory import MEMORY_TTL_DAYS, DialogueMemory, expires_at_for
+from trippilot.orchestrator.dialogue.dialogue_orchestrator import (
     ACK_TEXT,
     LAUGH_TEXT,
     RETRY_TEXT,
@@ -104,9 +104,9 @@ from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent
 from trippilot.llm_gateway.gates.dialogue_knowledge import DialogueKnowledgeGate
 from trippilot.llm_gateway.workers.dialogue_knowledge import DialogueKnowledgeWorker
 from trippilot.domain.dialogue.plan_tools import plan_tool_specs_json
-from trippilot.orchestrator.dialogue_plan import plan_tools
-from trippilot.orchestrator.intent_eval import is_refusal
-from trippilot.orchestrator.shadow_probe import ShadowCountingLlm, ShadowIntentProbe
+from trippilot.orchestrator.dialogue.dialogue_plan import plan_tools
+from trippilot.orchestrator.intent.intent_eval import is_refusal
+from trippilot.orchestrator.intent.shadow_probe import ShadowCountingLlm, ShadowIntentProbe
 from trippilot.ports.llm_port import LlmRequest
 
 _KST = timezone(timedelta(hours=9))
@@ -610,7 +610,7 @@ def test_unclassifiable_outputs_converge_to_refused_out_of_scope(raw: str, utter
 def test_injection_like_utterance_is_refused_before_any_llm(utterance: str, caplog: pytest.LogCaptureFixture) -> None:
     """요약 차례(turn_index 10)에도 LLM 0회 — 거절한 발화가 기억 요약 재료로 새지 않는다."""
     b = _build(_canned(Intent.GET_NEXT_SLOT))
-    with caplog.at_level(logging.INFO, logger="trippilot.orchestrator.dialogue_orchestrator"):
+    with caplog.at_level(logging.INFO, logger="trippilot.orchestrator.dialogue.dialogue_orchestrator"):
         out = b.orch.turn(_input(utterance, context=_asked_distance(turn_index=10)))
     assert out.outcome == "OUT_OF_SCOPE" and out.answer is None and out.reason == INJECTION_REASON
     assert is_refusal(_as_match(out.reason))  # 장애가 아니라 판단한 거절로 읽히는 사유
@@ -1359,7 +1359,7 @@ def test_the_classifier_sees_this_conversations_decisions_so_back_references_res
 
 def test_this_conversations_relevant_line_is_not_crowded_out_by_older_trips() -> None:
     """계정 전체를 한 번에 세우면 지난 여행의 무관 줄(점수 높음)이 이 대화의 관련 줄을 칸 밖으로 밀었다(리뷰 재현) — 이 대화 먼저 채운다."""
-    from trippilot.orchestrator.dialogue_orchestrator import _recalled_lines
+    from trippilot.orchestrator.dialogue.dialogue_orchestrator import _recalled_lines
     from trippilot.ports.memory_store_port import MemoryHit
 
     current = DialogueMemory("s-1", _ACCOUNT, "trip-1", ("요약: 부산", "제약: 해산물 알레르기가 있다"), 3, _NOW, expires_at_for(_NOW))
@@ -1373,7 +1373,7 @@ def test_this_conversations_relevant_line_is_not_crowded_out_by_older_trips() ->
 def test_recall_keeps_the_floor_caps_at_six_and_drops_repeats_and_injections() -> None:
     """하한은 점수 ≥0.45(KURE-v1 실측 — 무관 줄 중앙 0.44 바로 위), 사실 줄은 합쳐 ≤6, 같은 줄은 한 번("요약" 줄·다른 세션의 같은 줄),
     지시 주입 꼴은 버린다 — 해시 대역은 무관 점수가 ≈0 이라 하한의 자리를 못 잰다(2026-10-23 리뷰)."""
-    from trippilot.orchestrator.dialogue_orchestrator import OTHER_SESSIONS_HEADER, _recalled_lines
+    from trippilot.orchestrator.dialogue.dialogue_orchestrator import OTHER_SESSIONS_HEADER, _recalled_lines
     from trippilot.ports.memory_store_port import MemoryHit
 
     current = DialogueMemory("s-1", _ACCOUNT, "trip-1", ("요약: 부산",), 3, _NOW, expires_at_for(_NOW))
@@ -1410,7 +1410,7 @@ def test_smalltalk_gets_the_recalled_facts_too(path: str) -> None:
 def test_old_unlabeled_lines_are_shown_as_before_until_resummarized() -> None:
     """0.2.0 이전 꼴(표지 없음) 줄은 벡터가 없어 꺼내기에 안 걸린다 — 다시 요약될 때까지 종전처럼 싣는다(이 대화 전부·지난 여행 최신 2).
     옛 압축의 원문 조각은 싣지 않는다."""
-    from trippilot.orchestrator.dialogue_orchestrator import _recalled_lines
+    from trippilot.orchestrator.dialogue.dialogue_orchestrator import _recalled_lines
 
     current = DialogueMemory("s-1", _ACCOUNT, "trip-1", ("사용자는 카페를 선호한다", "- 사용자: 안녕"), 10, _NOW, expires_at_for(_NOW))
     old = DialogueMemory("s-0", _ACCOUNT, "trip-0", ("지난 여행은 부산이었다",), 20, _NOW, expires_at_for(_NOW))
@@ -1419,7 +1419,7 @@ def test_old_unlabeled_lines_are_shown_as_before_until_resummarized() -> None:
 
 def test_memory_without_recall_also_drops_old_turn_fragments() -> None:
     """꺼내기가 없거나 실패한 폴백도 옛 압축의 원문 조각을 싣지 않는다 — 꺼내기 경로와 같은 규칙(2026-10-30 Codex 리뷰)."""
-    from trippilot.orchestrator.dialogue_orchestrator import _memory_lines
+    from trippilot.orchestrator.dialogue.dialogue_orchestrator import _memory_lines
 
     current = DialogueMemory("s-1", _ACCOUNT, "trip-1", ("사용자는 카페를 선호한다", "- 사용자: 안녕"), 10, _NOW, expires_at_for(_NOW))
     old = DialogueMemory("s-0", _ACCOUNT, "trip-0", ("- 도우미: 부산 어때요", "지난 여행은 부산이었다"), 20, _NOW, expires_at_for(_NOW))
@@ -1696,7 +1696,7 @@ def test_empty_summary_keeps_previous_lines_and_stores_no_fragments(previous, ke
         store.put(DialogueMemory("s-1", _ACCOUNT, "trip-1", previous, 10, earlier, earlier + timedelta(days=90)))
     b = _build(_canned(Intent.GET_WEATHER, memory='{"lines": []}'), store=store)
     turns = (RecentTurn("USER", "비 와?"), RecentTurn("ASSISTANT", "예보예요."))
-    with caplog.at_level(logging.INFO, logger="trippilot.orchestrator.dialogue_orchestrator"):
+    with caplog.at_level(logging.INFO, logger="trippilot.orchestrator.dialogue.dialogue_orchestrator"):
         out = b.orch.turn(_input(turn_index=turn, recent_turns=turns))
     assert out.outcome == "ANSWER"
     mem = store.get("s-1")
@@ -1922,7 +1922,7 @@ def test_explore_turn_is_not_submitted_to_the_shadow_router() -> None:
        josa=st.sampled_from(["", "에", "에서", "과", "은", "에도", "으로"]))
 def test_foreign_place_flags_unknown_place_shaped_words_and_never_known_names(word: str, suffix: str, josa: str) -> None:
     """INV-1 문장 검사 — 아는 이름(+조사)은 절대 걸리지 않고, 아는 이름과 겹치지 않는 "이름+장소 접미" 꼴은 걸린다."""
-    from trippilot.orchestrator.dialogue_orchestrator import _foreign_place
+    from trippilot.orchestrator.dialogue.dialogue_orchestrator import _foreign_place
 
     name = word + suffix
     assert not _foreign_place(f"{name}{josa} 좋아요", (name,))
@@ -1931,7 +1931,7 @@ def test_foreign_place_flags_unknown_place_shaped_words_and_never_known_names(wo
 
 
 def test_names_in_a_kb5_intro_count_as_known_so_the_answer_may_say_them() -> None:
-    from trippilot.orchestrator.dialogue_orchestrator import _prompt_names
+    from trippilot.orchestrator.dialogue.dialogue_orchestrator import _prompt_names
 
     names = _prompt_names({"places": [{"name": "경복궁"}], "target": "경복궁", "intro": "경복궁에는 근정전과 경회루가 있고 광화문이 정문이다. 창덕궁과 함께 꼽힌다."})
     assert "창덕궁" in names and "경복궁" in names
@@ -1939,7 +1939,7 @@ def test_names_in_a_kb5_intro_count_as_known_so_the_answer_may_say_them() -> Non
 
 def test_event_names_and_places_in_the_facts_are_known_names() -> None:
     """행사 주제 탐색 답(TEXT) — 행사 이름·장소 주소도 사실 칸에 글자 그대로 있는 이름이다(닫힌 답의 장소 검사가 막지 않게)."""
-    from trippilot.orchestrator.dialogue_orchestrator import _foreign_place, _prompt_names, _squash
+    from trippilot.orchestrator.dialogue.dialogue_orchestrator import _foreign_place, _prompt_names, _squash
 
     facts = {"anchor": "서울", "events": [{"name": "서울세계불꽃축제", "period": "10월 24일", "place": "여의도한강공원"}]}
     assert _prompt_names(facts) == ["서울", "서울세계불꽃축제", "여의도한강공원"]
@@ -1950,7 +1950,7 @@ def test_event_names_and_places_in_the_facts_are_known_names() -> None:
 def test_last_entry_next_to_the_place_name_is_that_places_time() -> None:
     """웹 확인 입장 마감(17:00)이 장소 이름 곁에 와도 그 장소의 시각이다 — hours_label 에 실리므로 짝 검사가 받는다(2026-10-22
     테스트 화면: "경복궁의 입장 마감은 17:00"이 time_not_in_facts 로 떨어지던 것)."""
-    from trippilot.orchestrator import dialogue_orchestrator as dlg
+    from trippilot.orchestrator.dialogue import dialogue_orchestrator as dlg
 
     pairs = dlg._hours_pairs({"places": [{"name": "경복궁", "hours_label": "09:00~18:00, 입장 마감 17:00"}]})
     assert not dlg._misplaced_time("경복궁의 영업시간은 09:00~18:00이고 경복궁 입장 마감은 17:00이에요.", pairs)
@@ -1962,7 +1962,7 @@ def test_last_entry_next_to_the_place_name_is_that_places_time() -> None:
 def test_meal_list_hours_are_read_from_the_whole_sentence_before_cutting_segments(text: str) -> None:
     """짝·순서 검사는 쉼표·가운뎃점으로 구획을 먼저 잘라 시각을 읽었다 — 잘린 "저녁 11:30"은 나열 부호를 잃고 23:30 이 돼 맞는 답이
     템플릿으로 떨어졌다(#1713 재리뷰). 시각은 원문 전체로 읽고 구획은 이름 귀속에만 쓴다."""
-    from trippilot.orchestrator import dialogue_orchestrator as dlg
+    from trippilot.orchestrator.dialogue import dialogue_orchestrator as dlg
 
     assert not dlg._misplaced_time(text, dlg._hours_pairs({"places": [{"name": "해녀의집", "hours_label": "11:30~21:00"}]}))
     assert dlg._out_of_order("점심·저녁 11:30 다음에 09:00 이에요.", (("우도", "09:00"), ("해녀의집", "11:30")))  # 같은 까닭으로 놓쳤다
@@ -1971,7 +1971,7 @@ def test_meal_list_hours_are_read_from_the_whole_sentence_before_cutting_segment
 def test_a_deterministic_answer_does_not_repeat_the_last_assistant_line_word_for_word() -> None:
     """같은 넘기기·감사 문장이 연달아 나가면 같은 뜻의 다른 말로 — 버튼은 그대로(2026-10-22 "계속 같은 말만")."""
     from trippilot.llm_gateway.workers.dialogue_answer import _ANSWER_TEXT, unrepeated
-    from trippilot.orchestrator.dialogue_orchestrator import THANKS_TEXT, _CLOSER_VARIANTS
+    from trippilot.orchestrator.dialogue.dialogue_orchestrator import THANKS_TEXT, _CLOSER_VARIANTS
     from trippilot.domain.dialogue.intent import Intent
 
     style = _ANSWER_TEXT[Intent.STYLE_ANALYSIS]
