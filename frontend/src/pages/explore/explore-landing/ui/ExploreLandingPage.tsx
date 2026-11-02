@@ -12,7 +12,11 @@ import { stayKey } from '@/features/save-stay';
 import { useSavedStays } from '@/features/save-stay';
 import { useStaySearch } from '@/features/stay';
 import { usePlaceSaveToggle } from '@/features/save-place';
-import { useMultiRegionPlaces, useRegions } from '@/features/explore';
+import {
+  PLACE_LANE_STALE_TIME,
+  useMultiRegionPlaces,
+  useRegions,
+} from '@/features/explore';
 import { useSavedPlaces } from '@/features/save-place';
 import { regionPickerHref } from '@/features/explore';
 import { useGetPlaces } from '@/shared/api/index.hooks';
@@ -83,7 +87,8 @@ type LandingBase = Pick<
 // 단일 출처. 전국 갈래는 서비스 지역 3곳을 지역당 200곳 받아(홈과 같은 쿼리 키) 이만큼 골라 그린다(TRIP-1432).
 const PLACE_LANE_LIMIT = 8;
 
-// 홈 장소 레인과 같은 배열·순서 — 같은 쿼리 키라 홈에서 받은 응답을 그대로 쓴다(TRIP-1432).
+// 홈 장소 레인과 같은 배열·순서 — 홈이 여행 없음 얼굴일 때 같은 쿼리 키라 홈에서 받은 응답을 그대로 쓴다(TRIP-1432).
+// 홈이 여행 중 얼굴이면 키가 달라 공유하지 않는다(TRIP-1713).
 const SERVICE_REGION_NAMES = SERVICE_REGIONS.map((r) => r.name);
 
 /** 주소가 서비스 지역(서울·부산·제주) 안인가 — 주소를 모르면 밖으로 본다(fail-closed, 지역 필터의 fail-open 과 반대). */
@@ -130,7 +135,9 @@ export function ExploreLandingPage(): ReactElement {
  */
 function NationwideExplore(): ReactElement {
   const stay = useStaySearch();
-  const places = useMultiRegionPlaces(SERVICE_REGION_NAMES);
+  const places = useMultiRegionPlaces(SERVICE_REGION_NAMES, undefined, {
+    staleTime: PLACE_LANE_STALE_TIME,
+  });
   return (
     <ExploreLanding
       stay={{

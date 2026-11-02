@@ -15,7 +15,11 @@ import { SERVICE_REGIONS } from '@/entities/trip';
 import { orderLanePlaces, pickTrendingPlaces } from '@/entities/place';
 import { usePlaceSaveToggle } from '@/features/save-place';
 import { useSavedPlaces } from '@/features/save-place';
-import { regionPickerHref, useMultiRegionPlaces } from '@/features/explore';
+import {
+  PLACE_LANE_STALE_TIME,
+  regionPickerHref,
+  useMultiRegionPlaces,
+} from '@/features/explore';
 import { useSavedStays } from '@/features/save-stay';
 import {
   ITINERARY_OPEN_FAILED_MESSAGE,
@@ -170,12 +174,21 @@ export function HomePage() {
   // 대신 레인 status 를 'ready'(카드 0장)로 덮어 섹션이 통째로 숨게 한다(스켈레톤도, 눌러도 무동작인 레인 오류 카드도 안 남긴다).
   const tripsOffline = isOfflineWaiting(trips);
   const inTrip = Boolean(spotsRegion);
+  // TRIP-1713 · 두 조회 모두 신선 시간 10분 — 10분 안의 재마운트는 다시 받지 않는다(여행 중 1지역 키만 하트 담기 낡음 표시로 재조회).
+  // 여행 중 얼굴(지역 1곳 키)과 여행 없음 얼굴(3지역 키)은 캐시 키가 달라 서로의 응답을 쓰지 않는다.
   const regionPlaces = useGetPlaces(
     { ...(spotsRegion ? { region: spotsRegion } : {}), limit: 200 },
-    { query: { enabled: tripsSettled && inTrip } }
+    {
+      query: {
+        enabled: tripsSettled && inTrip,
+        staleTime: PLACE_LANE_STALE_TIME,
+      },
+    }
   );
   const servicePlaces = useMultiRegionPlaces(
-    tripsSettled && !inTrip ? SERVICE_REGION_NAMES : NO_REGIONS
+    tripsSettled && !inTrip ? SERVICE_REGION_NAMES : NO_REGIONS,
+    undefined,
+    { staleTime: PLACE_LANE_STALE_TIME }
   );
   // 3지역은 한 곳만 실패해도 받은 곳으로 채운다(degraded) — 셋 다 실패해야 오류다(훅이 판정).
   const places = inTrip
