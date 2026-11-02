@@ -83,6 +83,9 @@
 > **[개정 · 2026-10-23 — 사용자 지시]** BR-U3-28 — 위 개정(여행 전날 첫날 반영 예외)을 승인한 것으로 보고 지평 `pre-trip` 을 켠다. 사용자 원문 "꺼둔거 다 켜. 다 잘 돌아가게끔 만들란 말이야!!!"(다른 세션 경유).
 > → [situation-awareness BLM §0.4 2026-10-23 블록](../../situation-awareness/functional-design/business-logic-model.md)
 
+> **[개정 · 2026-11-02 — 사용자 결정 반영 · situation-awareness FD]** BR-U3-28 — 확정 잠금의 예외 범위가 '여행 전날 첫날'에서 '**시작 N일 전부터의 첫날**'(트리거 진입 ∧ `FULL_DAY` ∧ 사용자 [적용])로 넓어진다(사용자 지시 2026-10-30: 7일 — `PLANB_SITUATION_PRE_TRIP_DAYS`, 기본 1, 상한 7). 예외의 모양(알림 트리거로 들어온 첫날 하루 전체 · 사용자 [적용]만 · 확정 일정은 복원 불가)은 그대로이고 **창의 크기만** 바뀐다. 사용자가 직접 눌러 들어오는 여행 전 재계획은 예외에 들지 않는다.
+> → [BR-SA-20 · DEC-SA-7](../../situation-awareness/functional-design/business-rules.md) (2026-11-02 블록)
+
 ## 7. 편집 이력 (DEC-U3-1)
 
 | ID | 규칙 |

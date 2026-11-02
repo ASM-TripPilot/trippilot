@@ -111,10 +111,10 @@ class PlaceDetectorTest : StringSpec({
         d.kind shouldBe TriggerKind.CLOSURE
     }
 
-    "아침의 오늘 · 저녁의 내일만 본다 — AI 검증이라 하루 두 번으로 묶는다(BR-SA-01)" {
+    "아침의 오늘 · 저녁의 내일 이후만 본다 — AI 검증이라 하루 두 번으로 묶는다(BR-SA-01). 저녁의 내일 이후는 시작 전 여행의 첫날(pre-trip 창)을 담는다" {
         val d = detector(FakeDays(null))
-        val wanted = SweepPhase.entries.flatMap { phase -> (0..2).filter { d.wants(phase, it) }.map { phase to it } }
-        wanted shouldContainExactly listOf(SweepPhase.MORNING to 0, SweepPhase.EVENING to 1)
+        val wanted = SweepPhase.entries.flatMap { phase -> (0..7).filter { d.wants(phase, it) }.map { phase to it } }
+        wanted shouldContainExactly listOf(SweepPhase.MORNING to 0) + (1..7).map { SweepPhase.EVENING to it }
     }
 
     "늘 산다 — AI 스케줄 모드가 http 가 아니어도 폐업은 본다(영업시간 모름은 하루 점검이 낸다 · tech-stack 델타 6 · BLM §6.2)" {

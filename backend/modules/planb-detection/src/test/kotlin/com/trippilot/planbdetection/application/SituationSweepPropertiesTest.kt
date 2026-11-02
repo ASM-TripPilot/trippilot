@@ -79,6 +79,14 @@ class SituationSweepPropertiesTest : StringSpec({
         shouldThrow<BindException> { bind("account-ids" to "$a,") }
     }
 
+    "여행 전 창(pre-trip-days)은 1~7 이다 — 기본 1(내일 시작 여행만, 현행) · 0·8 은 기동을 막는다" {
+        bind().preTripDays shouldBe 1
+        bind("pre-trip-days" to "1").preTripDays shouldBe 1
+        bind("pre-trip-days" to "7").preTripDays shouldBe 7
+        shouldThrow<BindException> { bind("pre-trip-days" to "0") }
+        shouldThrow<BindException> { bind("pre-trip-days" to "8") }
+    }
+
     "병렬 1 미만·예산 0 이하는 기동하지 않는다 — 회차가 아무것도 못 보고 끝난다" {
         shouldThrow<BindException> { bind("parallelism" to "0") }
         shouldThrow<BindException> { bind("budget" to "PT0S") }

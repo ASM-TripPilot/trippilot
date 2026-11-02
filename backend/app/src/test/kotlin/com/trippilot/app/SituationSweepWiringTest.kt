@@ -33,6 +33,7 @@ class SituationSweepWiringTest : StringSpec({
         val env = mapOf(
             "PLANB_SITUATION_SWEEP" to "dry-run",
             "PLANB_SITUATION_HORIZON" to "pre-trip",
+            "PLANB_SITUATION_PRE_TRIP_DAYS" to "7",
             "PLANB_SITUATION_SWEEP_ACCOUNT_IDS" to "0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46",
             "PLANB_PREPARED_REPLAN" to "on",
         )
@@ -40,6 +41,8 @@ class SituationSweepWiringTest : StringSpec({
         resolve("trippilot.planb.situation-sweep.horizon", env) shouldBe "pre-trip"
         // 저녁 점검과 전날 진입 창이 따로 켜지면 알림 탭이 막다른 길(409)이 된다 — 같은 키 하나다(CD12).
         resolve("trippilot.replan.horizon", env) shouldBe "pre-trip"
+        // 여행 전 창(N일)도 같은 길이다 — 재계획 쪽 키는 그 변경이 더한다(둘이 같은 값을 읽기 전에는 N>1 을 켜지 않는다 · BR-SA-20).
+        resolve("trippilot.planb.situation-sweep.pre-trip-days", env) shouldBe "7"
         resolve("trippilot.planb.situation-sweep.account-ids", env) shouldBe "0d7f17ab-5c4b-4d6d-a7f7-484ba11dda46"
         resolve("trippilot.replan.prepared.mode", env) shouldBe "on"
     }
@@ -48,6 +51,7 @@ class SituationSweepWiringTest : StringSpec({
         resolve("trippilot.planb.situation-sweep.mode", emptyMap()) shouldBe "off"
         resolve("trippilot.planb.situation-sweep.horizon", emptyMap()) shouldBe "today"
         resolve("trippilot.replan.horizon", emptyMap()) shouldBe "today"
+        resolve("trippilot.planb.situation-sweep.pre-trip-days", emptyMap()) shouldBe "1"
         resolve("trippilot.planb.situation-sweep.account-ids", emptyMap()) shouldBe ""
         resolve("trippilot.replan.prepared.mode", emptyMap()) shouldBe "off"
     }
