@@ -1,5 +1,7 @@
 import fc from 'fast-check';
 
+import { NO_ITINERARY } from '@/test-support/tripItineraryCols';
+
 import type { ItineraryStatus, Trip } from '@/shared/api/index.schemas';
 
 import type { DoneBarEntry } from './doneBar';
@@ -49,6 +51,7 @@ function trip(
     updatedAt,
     baseCount: 0,
     itineraryDayCount: 0,
+    ...NO_ITINERARY, // 이 모델은 일정 상태를 trip 이 아니라 entry.itinerary 로 받는다 — 네 칸은 자리만 채운다.
   };
 }
 
@@ -294,6 +297,7 @@ describe('정렬 기준 세 가지와 저장값 해석', () => {
       updatedAt: fields.updatedAt ?? '2026-09-01T00:00:00.000Z',
       baseCount: 0,
       itineraryDayCount: 0,
+      ...NO_ITINERARY,
     };
   }
 

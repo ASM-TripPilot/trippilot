@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 
 import {
+  getGetTripsQueryKey,
   getGetTripsTripIdItineraryQueryKey,
   getGetTripsTripIdTriggersQueryKey,
   usePostTripsTripIdReplanSessionsSessionIdApply,
@@ -52,6 +53,8 @@ export function useApplyReplan(): ReturnType<
         queryClient.invalidateQueries({
           queryKey: getGetTripsTripIdItineraryQueryKey(variables.tripId),
         });
+        // TRIP-1677 — 목록 칸의 일정 상태 네 칸도 한 줄로 다시 받는다(서버가 적용으로 네 칸을 바꾸는지는 미확인 — 안전책).
+        queryClient.invalidateQueries({ queryKey: getGetTripsQueryKey() });
         // 적용이 트리거를 소비한다(BR-SA-14, 상황 감지 FE-A) — 다만 서버는 적용 응답 **뒤에** 아웃박스 릴레이(2초 주기)로
         // 닫아서, 지금 다시 받은 목록엔 그 트리거가 아직 있다. 그래서 다시 받되(바뀐 일정에 맞춘 나머지는 서버 그대로),
         // 그 트리거는 받기 전·후 모두 캐시에서 뺀다. 뺀 목록은 새것이라 곧 열릴 허브가 소비 전 목록을 다시 받지 않는다.

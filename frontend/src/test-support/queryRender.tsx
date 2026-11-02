@@ -65,3 +65,25 @@ export async function settle(): Promise<void> {
     });
   }
 }
+
+/**
+ * 시계를 앞으로 감는 스파이(TRIP-1713) — `Date.now()` 만 `advance(ms)` 만큼 밀린다.
+ * react-query 의 "낡았나?" 판정은 `dataUpdatedAt`(응답 받은 시각)과 `Date.now()` 의 차이라 이것만으로 시간 경과를 흉내 낸다.
+ * 가짜 타이머를 안 쓰므로 MSW 응답·`settle()` 이 그대로 돈다. 테스트 끝(`afterEach`)에 `restore()` 를 꼭 부른다.
+ */
+export function createClockSkew(): {
+  advance: (ms: number) => void;
+  restore: () => void;
+} {
+  const realNow = Date.now.bind(Date);
+  let offset = 0;
+  const spy = jest
+    .spyOn(Date, 'now')
+    .mockImplementation(() => realNow() + offset);
+  return {
+    advance: (ms) => {
+      offset += ms;
+    },
+    restore: () => spy.mockRestore(),
+  };
+}

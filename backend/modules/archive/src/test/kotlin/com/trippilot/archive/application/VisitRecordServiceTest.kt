@@ -67,6 +67,9 @@ class VisitRecordServiceTest : StringSpec({
         override fun save(photo: VisitPhotoMeta) = photo.also {
             stored.removeAll { p -> p.visitPhotoMetaId == photo.visitPhotoMetaId }; stored += it
         }
+        override fun insertIfAbsent(photo: VisitPhotoMeta) =
+            stored.firstOrNull { it.visitCheckId == photo.visitCheckId && it.deviceId == photo.deviceId && it.localAssetId == photo.localAssetId }
+                ?: save(photo)
         override fun findByVisit(visitCheckId: UUID) =
             stored.filter { it.visitCheckId == visitCheckId }.sortedWith(compareBy({ it.sortOrder }, { it.visitPhotoMetaId }))
         override fun findById(visitPhotoMetaId: UUID) = stored.firstOrNull { it.visitPhotoMetaId == visitPhotoMetaId }
@@ -271,6 +274,17 @@ class VisitRecordServiceTest : StringSpec({
         val saved = f.svc.addPhoto(acc, tripId, f.visitCheckId, photo())
 
         f.legalLogs.collected.single() shouldBe Triple(acc, LocationCollectionSource.PHOTO_EXIF, saved.visitPhotoMetaId)
+    }
+
+    /** 재시도는 멱등이다(TRIP-1721) — 같은 사진을 돌려주고 수집 기록을 또 남기지 않는다. */
+    "같은 자산을 다시 붙이면 기존 사진을 돌려주고 수집 기록은 한 번이다" {
+        val f = fixture(gpsOptIn = true)
+        val first = f.svc.addPhoto(acc, tripId, f.visitCheckId, photo())
+
+        f.svc.addPhoto(acc, tripId, f.visitCheckId, photo()).visitPhotoMetaId shouldBe first.visitPhotoMetaId
+
+        f.photos.stored.size shouldBe 1
+        f.legalLogs.collected.size shouldBe 1
     }
 
     /** 동의가 없으면 좌표를 버리므로 **수집이 아니다** — 확인자료가 모은 적 없는 위치를 말하면 안 된다. */

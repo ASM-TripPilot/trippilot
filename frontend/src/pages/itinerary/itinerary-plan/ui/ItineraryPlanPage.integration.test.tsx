@@ -241,6 +241,9 @@ describe('확정 CTA·재조회 배선', () => {
         return confirmHandler();
       },
     });
+    // TRIP-1677 — 확정 성공·409 가 여행 목록을 무효화한다. 이 화면 트리엔 목록 관찰자가 없어 요청이 나가지 않지만, 나가더라도(탭이 함께 마운트된 앱처럼)
+    // 미처리 요청 오류로 번지지 않게 빈 목록을 준다 — 이 파일의 GET 카운터(itineraryGetCalls)는 일정 경로만 센다.
+    server.use(http.get(`${BASE}/trips`, () => HttpResponse.json([])));
   });
 
   afterEach(async () => {

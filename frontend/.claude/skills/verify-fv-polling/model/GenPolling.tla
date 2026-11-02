@@ -73,12 +73,12 @@ DraftFace ==
     [] cache.st = "Failed"  -> "resultFailed"   \* listed + staleFailed(h08 셸)
     [] OTHER                -> IF err THEN "resultFailed" ELSE "result"
 
-\* app/model/useGenerationWatch.ts — isInFlight(PARTIAL 이거나 세션 있음) ∧ 조회 오류 아님,
-\*   그리고 그 여행의 생성 화면(generating·draft — isGenerationScreenOf)을 보고 있으면 양보한다.
-ShellPollDue ==
-  /\ scr \notin {"Gen", "Obs", "Draft"}
-  /\ cache.st = "Partial" \/ cache.run
-  /\ ~err
+\* app/model/generationWatch.ts tripsRefetchInterval — 셸은 GET /trips 한 칸의 유일한 폴링 관찰자다(TRIP-1677).
+\*   목록의 그 여행이 생성 중(itineraryGenerationState = PARTIAL 이거나 itineraryGenerating)이면 폴링한다.
+\*   진행 화면에 양보하지 않고(목록 1건/간격), 조회 오류여도 멈추지 않는다(느린 간격으로 계속 — 429 재시도 제거 뒤 고착 방지).
+\*   목록 칸 네 값은 서버가 일정 GET 과 같은 규칙으로 싣는다(BE TripDtos) — 모델은 목록 GET 을 같은 서버 상태를 읽는
+\*   `StartGet` 하나로 본다(가정: 클라이언트 — 쿼리 키 하나로 추상화).
+ShellPollDue == cache.st = "Partial" \/ cache.run
 
 \* pages/itinerary/itinerary-generating/ui/GeneratingPage.tsx — 화면이 트리에 있으면 mutate 의
 \*   호출별 onSuccess 가 router.replace(초안)를 부른다. 훅 옵션 onSuccess 는 화면이 떠나도 같은 JS 실행이면
