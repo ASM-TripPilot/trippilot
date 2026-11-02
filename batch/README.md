@@ -77,7 +77,9 @@ docker compose --profile batch down
 | `poi_collect_live` | collect(develop 복제·collect-state 복원·`collect_pois.py`·`merge_pois_docs.py --state`) → validate(축소 가드 + `check_pois`) → publish(롤링 PR·**머지 확인**·backend-ci 디스패치) → persist_cursor(collect-state). 곁가지: collect → novelty(`collect_novelty.py --fail-if-stalled`, 비차단) |
 | `event_collect_live` | collect(복원·`collect_events.py`·팝업·축제) → validate(`check_event_store` — 모양·그날 유효 건수) → publish(collect-state 영속) → freshness(`check_event_freshness`, 영속 뒤 경보) |
 
-두 DAG 모두 마지막에 cleanup(all_done)이 실행 폴더를 지운다 — 검증에 실패한 실행만 원인 보라고 남긴다(`KEEP`).
+두 DAG 모두 마지막에 cleanup(**teardown** — 실행 성패에 세지 않는다)이 실행 폴더를 지운다. collect·validate·publish·영속이 실패한
+실행은 남긴다(`KEEP`) — 원인을 보고, 실패한 태스크만 지우고 다시 돌리면 그 복제본에서 이어 간다. 남긴 실행은 다음 실행이 시작할 때
+최근 3개(`pipeline.KEPT_RUNS`)만 두고 지운다(복제본 수백 MB × 매일 실패 → emptyDir 10Gi 축출 방지).
 
 - **기본은 그림자다**(`BATCH_LIVE` 미설정): 실 API 를 부르지 않고, Actions 가 게시한 것(develop 공유본·collect-state 행사
   저장소)을 검증만 한다. 게시·영속은 건너뛴다. 생성 시 paused. 실 수집은 Actions 스케줄을 끈 뒤 `BATCH_LIVE=1` 로만 —

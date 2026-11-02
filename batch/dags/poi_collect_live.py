@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from airflow.sdk import Param, dag, get_current_context, task
+from airflow.sdk import Param, dag, get_current_context, task, teardown
 from airflow.sdk.exceptions import AirflowFailException, AirflowSkipException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -48,14 +48,16 @@ def poi_collect_live():
     @task
     def collect() -> str:
         run = run_path()
-        repo = live.checkout(run / "repo")
-        if live.live():
-            live.require_key("TOUR_API_KEY")
-            if live.restore(repo, "collect_state.json"):
-                # 신규율은 **이번 실행 전** 색인과 비교한다 — 수집기가 상태를 제자리에 덮어쓴다.
-                (repo / "ai/collect_state.prev.json").write_bytes((repo / "ai/collect_state.json").read_bytes())
-            live.collect(repo, "collect_pois.py")
-            (run / "merge.json").write_text(json.dumps(live.merge_pois(repo)), encoding="utf-8")
+        pipeline.prune_runs(DAG_ID, run)
+        with pipeline.keep_on_failure(run):
+            repo = live.checkout(run / "repo")
+            if live.live():
+                live.require_key("TOUR_API_KEY")
+                if live.restore(repo, "collect_state.json"):
+                    # 신규율은 **이번 실행 전** 색인과 비교한다 — 수집기가 상태를 제자리에 덮어쓴다.
+                    (repo / "ai/collect_state.prev.json").write_bytes((repo / "ai/collect_state.json").read_bytes())
+                live.collect(repo, "collect_pois.py")
+                (run / "merge.json").write_text(json.dumps(live.merge_pois(repo)), encoding="utf-8")
         return str(repo)
 
     @task
@@ -84,13 +86,18 @@ def poi_collect_live():
     def publish(repo: str) -> str:
         if not live.live():
             raise AirflowSkipException("그림자 모드 — 게시·커서 저장을 하지 않는다")
-        return live.publish_pois(Path(repo), json.loads((Path(repo).parent / "merge.json").read_text(encoding="utf-8")))
+        # 실패하면 복제본을 남긴다 — 이 태스크만 지우고 다시 돌리면(clear) 그 복제본에서 push·머지 확인을 다시 한다.
+        with pipeline.keep_on_failure(Path(repo).parent):
+            return live.publish_pois(Path(repo), json.loads((Path(repo).parent / "merge.json").read_text(encoding="utf-8")))
 
     @task
     def persist_cursor(repo: str, published: str) -> str:
-        return live.persist(Path(repo), "collect_state.json", f"chore(ai): 수집 상태 갱신 — airflow {DAG_ID} (TRIP-348)")
+        with pipeline.keep_on_failure(Path(repo).parent):
+            return live.persist(Path(repo), "collect_state.json", f"chore(ai): 수집 상태 갱신 — airflow {DAG_ID} (TRIP-348)")
 
-    @task(trigger_rule="all_done")
+    # teardown — 앞이 어떻게 끝났든 돌고, 실행의 성패에는 세지 않는다. 보통 태스크(all_done)로 두면 유일한 잎이라
+    # 어떤 실패도 실행을 success 로 덮는다.
+    @teardown
     def cleanup() -> None:
         pipeline.finish_run(run_path())
 

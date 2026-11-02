@@ -6,6 +6,7 @@ import logging
 import os
 import shutil
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -80,14 +81,40 @@ def run_day(context: dict, tz) -> datetime:
 
 
 def keep_run(run: Path, reason: str) -> None:
-    """검증에 실패한 실행의 폴더를 원인 보라고 남긴다 — 실 수집 DAG 의 마지막 정리 태스크(`finish_run`)가 이 표시를 본다."""
+    """실패한 실행의 폴더를 남긴다 — 원인을 보고, 실패한 태스크부터 다시 돌릴 수 있게(게시 재시도는 그 복제본을 쓴다).
+    실 수집 DAG 의 마지막 정리(`finish_run`)가 이 표시를 본다."""
     (run / "KEEP").write_text(reason, encoding="utf-8")
 
 
+@contextmanager
+def keep_on_failure(run: Path):
+    """이 블록이 예외로 끝나면 실행 폴더를 남긴다(collect·validate·publish·persist — 재시도에 복제본이 필요한 태스크)."""
+    try:
+        yield
+    except BaseException as exc:
+        keep_run(run, f"{type(exc).__name__}: {exc}")
+        raise
+
+
 def finish_run(run: Path) -> None:
-    """실 수집 DAG 의 마지막 정리 — 앞 태스크가 어떻게 끝났든 돈다. 검증 실패 표시가 있으면 남기고, 아니면 지운다
+    """실 수집 DAG 의 마지막 정리(teardown) — 앞 태스크가 어떻게 끝났든 돈다. 실패 표시가 있으면 남기고, 아니면 지운다
     (복제본이 실행마다 수백 MB 다)."""
     if (run / "KEEP").is_file():
-        log.warning("검증에 실패한 실행 — 폴더를 남긴다: %s", run)
+        log.warning("실패한 실행 — 폴더를 남긴다: %s", run)
         return
     clear_run(run)
+
+
+# ponytail: 남긴 실패 실행은 최근 KEPT_RUNS 개만 — 복제본이 수백 MB 라 매일 실패하면 emptyDir(10Gi)를 넘어 파드가 축출된다.
+# 더 오래 봐야 하면 실패 원인을 태스크 로그로 남기고(이미 남는다) 이 수를 올리기보다 볼륨을 PVC 로 바꾼다.
+KEPT_RUNS = 3
+
+
+def prune_runs(dag_id: str, current: Path) -> None:
+    """새 실행을 시작할 때 같은 DAG 의 지난 실행 폴더를 정리한다. max_active_runs=1 이라 다른 실행이 쓰고 있지 않다.
+    표시 없는 폴더(정리 전에 파드가 죽은 실행)는 지우고, 실패 실행은 최근 `KEPT_RUNS` 개만 남긴다."""
+    root = (OUT / "runs" / dag_id).resolve()
+    others = [d for d in root.iterdir() if d.is_dir() and d.resolve() != current.resolve()] if root.is_dir() else []
+    kept = sorted((d for d in others if (d / "KEEP").is_file()), key=lambda d: (d / "KEEP").stat().st_mtime, reverse=True)
+    for d in [d for d in others if d not in kept[:KEPT_RUNS]]:
+        clear_run(d)

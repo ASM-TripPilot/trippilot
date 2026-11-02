@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from airflow.sdk import Param, dag, get_current_context, task
+from airflow.sdk import Param, dag, get_current_context, task, teardown
 from airflow.sdk.exceptions import AirflowFailException, AirflowSkipException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -55,17 +55,20 @@ def run_path() -> Path:
 def event_collect_live():
     @task
     def collect() -> str:
-        repo = live.checkout(run_path() / "repo")
-        live.restore(repo, STORE)
-        if live.live():
-            live.require_key("NAVER_SEARCH_CLIENT_ID")
-            store = {"EVENTS_STORE": STORE}
-            live.collect(repo, "collect_events.py", env=store)
-            live.collect(repo, "collect_curated_popups.py", "--store", STORE, env=store)
-            try:   # Actions 판처럼 축제 실패는 위 수집분의 게시를 막지 않는다(continue-on-error)
-                live.collect(repo, "collect_tourapi_festivals.py", "--store", STORE, env=store)
-            except subprocess.CalledProcessError as exc:
-                log.warning("TourAPI 축제 수집 실패 — 나머지 수집분은 그대로 검증·게시한다: %s", exc)
+        run = run_path()
+        pipeline.prune_runs(DAG_ID, run)
+        with pipeline.keep_on_failure(run):
+            repo = live.checkout(run / "repo")
+            live.restore(repo, STORE)
+            if live.live():
+                live.require_key("NAVER_SEARCH_CLIENT_ID")
+                store = {"EVENTS_STORE": STORE}
+                live.collect(repo, "collect_events.py", env=store)
+                live.collect(repo, "collect_curated_popups.py", "--store", STORE, env=store)
+                try:   # Actions 판처럼 축제 실패는 위 수집분의 게시를 막지 않는다(continue-on-error)
+                    live.collect(repo, "collect_tourapi_festivals.py", "--store", STORE, env=store)
+                except subprocess.CalledProcessError as exc:
+                    log.warning("TourAPI 축제 수집 실패 — 나머지 수집분은 그대로 검증·게시한다: %s", exc)
         return str(repo)
 
     def store_doc(repo: str) -> dict:
@@ -85,7 +88,8 @@ def event_collect_live():
     def publish(repo: str) -> str:
         if not live.live():
             raise AirflowSkipException("그림자 모드 — 영속하지 않는다")
-        return live.persist(Path(repo), STORE, f"chore(ai): 행사 저장소 갱신 — airflow {DAG_ID} (TRIP-421)")
+        with pipeline.keep_on_failure(Path(repo).parent):   # 실패하면 남긴다 — publish 만 다시 돌리면 같은 저장소를 영속한다
+            return live.persist(Path(repo), STORE, f"chore(ai): 행사 저장소 갱신 — airflow {DAG_ID} (TRIP-421)")
 
     @task(trigger_rule="none_failed")   # 그림자(publish 건너뜀)에서도 돈다. 영속이 실패하면 돌 이유가 없다
     def freshness(repo: str) -> None:
@@ -93,9 +97,10 @@ def event_collect_live():
         failures = checks.check_event_freshness(store_doc(repo), pipeline.run_day(context, SEOUL).date(),
                                                 context["params"]["max_age_days"], checks.event_regions())
         if failures:
-            raise AirflowFailException("행사 수집 정체 경보(저장소는 이미 영속했다) — " + " / ".join(failures))
+            where = "저장소는 이미 영속했다" if live.live() else "그림자 — Actions 가 영속한 저장소"
+            raise AirflowFailException(f"행사 수집 정체 경보({where}) — " + " / ".join(failures))
 
-    @task(trigger_rule="all_done")
+    @teardown   # 실행의 성패에 세지 않는다 — 보통 태스크로 두면 유일한 잎이라 경보 실패를 success 로 덮는다
     def cleanup() -> None:
         pipeline.finish_run(run_path())
 
