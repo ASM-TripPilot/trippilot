@@ -105,8 +105,12 @@ class ReplanFacadeService(
                 budgetLevel = prefs.budgetTier,
                 preferenceProfile = profile,
                 // 원 일정 슬롯 — KB-1 컨텍스트이자 후보 풀 합류 대상(§4). 대상 일자만.
+                // 건너뛴 곳은 고정 표시를 걷는다 — AI 는 `is_fixed` 도 고정 블록으로 읽어 제외보다 먼저 되살린다(TRIP-1711).
                 currentSlots = current.days.firstOrNull { it.date == command.targetDate }?.slots.orEmpty().map {
-                    ReplanCurrentSlot(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay, it.placementReason)
+                    ReplanCurrentSlot(
+                        it.sourcePoiId, it.startAt, it.endAt, it.isFixed && it.sourcePoiId !in command.skippedPoiIds,
+                        it.endsNextDay, it.placementReason,
+                    )
                 },
                 savedPlaces = this.savedPlaces.findSaved(command.accountId).map { SavedPlaceRef(it.poiId, it.nameKo) },
                 // 거절 이력(TRIP-964). '다시 짜줘' 직후의 재계획이 정확히 이 이력의 소비처다 —
@@ -203,6 +207,10 @@ class ReplanFacadeService(
      * 끝난 것으로 보지 않는다.
      *
      * 잠금을 빠뜨리면 이미 다녀온 곳이 일정에서 사라지거나 예약 시각이 밀린다.
+     *
+     * **그날 건너뛴 곳은 시각 고정이어도 잠그지 않는다**(TRIP-1711 · BR-U4-17 개정 2026-11-02). 잠그면 AI 가 고정 블록으로
+     * 되살려 제외를 빠져나가고, 같은 슬롯 키의 건너뜀 기록과 부딪혀 [도착]이 영원히 409 다(BR-U5-02). 시각상 끝난 슬롯·완료는
+     * 종전대로 잠긴다 — 원 자리 그대로라 새 충돌이 아니다.
      */
     private fun lockedBlocks(current: Itinerary, command: ReplanCommand): List<FixedBlock> =
         // 시각을 함께 싣는다 — 시각 없는 고정 블록은 상대가 거부한다(계약 M1).
@@ -215,7 +223,7 @@ class ReplanFacadeService(
         val now = LocalTime.ofInstant(command.fromInstant, TRAVEL_ZONE)
         val completed = command.completedSlotKeys.toSet()
         return day.slots.filter {
-            it.isFixed ||
+            (it.isFixed && it.sourcePoiId !in command.skippedPoiIds) ||
                 (!command.fullDay && !it.endsNextDay && it.endAt <= now) ||
                 "${command.targetDate}#${it.sourcePoiId}" in completed
         }

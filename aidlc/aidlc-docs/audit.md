@@ -1993,3 +1993,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **User Input**: (사용자 결정 2026-10-30, 재계획 창 티켓 본문 인용) "여행 시작 며칠 전부터도 열기 → 7일 전부터" — 재계획 창을 시작 7일 전으로 넓히는 결정이다. 이어 "결정이 필요한것들은 웬만해서는 다 진행하는 방향으로 하자"(2026-10-30)에 따라 미결은 가장 좁은 안(알림 트리거 진입만 · 첫날만 · FULL_DAY 만 · 사용자 [적용]만)으로 정해 두었다. 그 창을 닫으려던 세션의 종료 인계(2026-11-02)로 점검 쪽을 상황 감지 세션이 이었다.
 **AI Response**: situation-awareness `business-logic-model.md` DEC-SA-7 뒤(§2.1 앞)·§7 끝·§8 끝에, `business-rules.md` BR-SA-01·BR-SA-20 뒤에, `nfr-requirements/tech-stack-decisions.md` 델타 6 뒤에 `[개정 · 2026-11-02 — 사용자 결정 반영]` 블록을 덧붙이고, U3 `business-rules.md` BR-U3-28 · `domain-entities.md` INV-U3-04 에 같은 날 블록을 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 새 스위치 `PLANB_SITUATION_PRE_TRIP_DAYS`(1~7, 기본 1 = 현행) · 지평 `pre-trip` = 오늘 + N일 안에 시작하는 여행의 첫날(첫날만) · 늘어나는 것은 장소 알림뿐(예보는 어댑터가 오늘·내일만 읽어 D-1 까지) · 재계획 쪽 창(별도 변경)이 같은 값을 읽기 전에는 N>1 을 켜지 않는다(점검만 넓으면 D-N 알림 탭과 선계산이 409) · 사용자 직접 진입은 이번 결정에 없다. 코드는 같은 PR 의 점검 쪽(`SweepScope`·`PlaceDetector.wants`·`KmaForecastDetector.wants`·설정)이다. 코드 밖 사실로 남는 것: 재계획 쪽 변경과 배포 배선(허용목록·차트)은 아직 없다.
 **Context**: CONSTRUCTION — situation-awareness Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — U4 재계획이 그날 건너뛴 꼭 갈 곳(고정)도 뺀다 (BR-U4-17 · TRIP-1711)
+**Timestamp**: 2026-11-02T23:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 발췌) "TRIP-1711 을 처리해라. … 요지: 그날 건너뛴 장소가 꼭 갈 곳(고정, isFixed)이면 재계획 결과에 다시 들어온다(웹 재QA 실측: 쩡이네포차 · 고정). … 서버에서 그날 건너뛴 POI 를 고정 슬롯에서도 빼는 쪽을 우선으로 고친다 … BR-U4-17 개정 블록에 고정 포함을 명시. … 정본 개정은 append-only 블록 + aidlc/aidlc-docs/audit.md 기록."
+**AI Response**: `construction/u4-in-trip-planb/functional-design/business-rules.md` 의 `[개정 · 2026-11-01] BR-U4-17` 블록 바로 뒤에 `[개정 · 2026-11-02 · TRIP-1711]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 건너뛴 곳은 시각 고정이어도 잠그지 않고 원 일정에 고정 표시 없이 싣는다(11-01 블록의 "잠금이 제외를 이긴다"를 건너뛴 곳에 한해 뒤집음) · 앱·트리거가 보낸 제외는 종전대로 고정이 이긴다(`ReplanCommand.skippedPoiIds` 를 따로 둔 이유) · 대상 일자만 · 완료·PARTIAL 의 지난 슬롯 잠금은 그대로. 코드 변경은 같은 브랜치(`fix/TRIP-1711-BE-replan-skip-fixed`)의 `fix(be)` 커밋(`ReplanSolver`·`ReplanFacadeService`)이다. AI 는 고치지 않았다(받은 고정을 지키는 것이 계약).
+**Context**: CONSTRUCTION — U4 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
