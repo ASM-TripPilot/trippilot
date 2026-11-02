@@ -211,10 +211,18 @@ def main(argv: list[str]) -> int:
     passed: list = []
     merged = 0
     drops: Counter[str] = Counter()
-    for night in (False, True):
-        part = [c for c in cands if (c.kind in _NIGHT_KIND) is night]
+    # 야경(NIGHT_VIEW)은 야경 행하고만 비교한다 — 낮 명소와 다른 축이라 같은 건물의 낮 명소 행(`남산서울타워`
+    # SIGHT)에 주소 키로 병합되면 야경 후보가 사라진다(2026-11-02, 좌표 틀린 Overture `N서울타워` 를 뺀 뒤 실측).
+    night_view = [p for p in others if p["poi"]["category"] == "NIGHT_VIEW"]
+    groups = (
+        (lambda c: c.kind not in _NIGHT_KIND and c.kind != "NIGHT_VIEW", others),
+        (lambda c: c.kind in _NIGHT_KIND, no_food),
+        (lambda c: c.kind == "NIGHT_VIEW", night_view),
+    )
+    for picks, base in groups:
+        part = [c for c in cands if picks(c)]
         o = gate_against_tourapi(
-            shared_tourapi_candidates({**shared_doc, "proposals": no_food if night else others}),
+            shared_tourapi_candidates({**shared_doc, "proposals": base}),
             part, keep_source=SOURCE_NAME.lower())
         passed += o.passed
         merged += o.merged

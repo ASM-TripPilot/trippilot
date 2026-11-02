@@ -968,3 +968,29 @@ def test_병합은_실행의_공공누리_유형을_기존_행에도_붙이고_�
     assert prov["1"]["cpyrht_div_cd"] == "Type3"
     assert "cpyrht_div_cd" not in prov["2"]
     assert "999" not in prov and "cpyrht_by_ref" not in out   # 공유본 머리에는 싣지 않는다
+
+
+# ── Overture 중복 — 관광공사·카카오와 같은 이름·같은 시도 (TRIP-1700, 2026-11-02) ──────
+def _row(source: str, name: str, cat: str, addr: str, tags: list[str] | None = None) -> dict:
+    return {"source": source, "tags": tags or [],
+            "poi": {"name": name, "category": cat, "coord": {"lat": 37.5, "lng": 127.0}},
+            "provenance": {"content_id": f"{source}-{name}-{addr}", "address": addr}}
+
+
+def test_Overture_비식당_행이_관광공사와_같은_이름이면_뺀다_야경·식당·다른_시도는_남긴다() -> None:
+    props = [
+        _row("TOURAPI", "경복궁", "SIGHT", "서울특별시 종로구 사직로 161"),
+        _row("OVERTURE", "경복궁", "SIGHT", "서울특별시 용산구 서빙고동 199-5"),      # 6km 밖 낡은 좌표 — 뺀다
+        _row("OVERTURE", "경 복 궁", "NATURE", "서울특별시 종로구 삼청동 62-10"),      # 띄어쓰기만 다른 같은 곳 — 뺀다
+        _row("OVERTURE", "경복궁", "NIGHT_VIEW", "서울특별시 종로구 사직로 161"),     # 야경 축 — 남긴다
+        _row("OVERTURE", "경복궁", "SIGHT", "부산광역시 중구 어딘가 1"),              # 다른 시도 — 남긴다
+        _row("OVERTURE", "광안리클럽", "ACTIVITY", "부산광역시 수영구 1", [M.NIGHTLIFE_TAG, "클럽"]),
+        _row("TOURAPI", "광안리클럽", "ACTIVITY", "부산광역시 수영구 2"),
+        _row("LOCALDATA", "경복궁", "FOOD", "서울특별시 종로구 종로 65"),              # 식당 — 남긴다
+        _row("OVERTURE", "하늘공원", "NATURE", "서울특별시 강남구 대치동 936-15"),
+        _row("KAKAO_LOCAL", "하늘공원", "NATURE", "서울특별시 마포구 하늘공원로 95"),
+    ]
+    assert M.drop_overture_dupes(props) == 3
+    left = {(p["source"], p["poi"]["name"], p["poi"]["category"]) for p in props}
+    assert ("OVERTURE", "경복궁", "NIGHT_VIEW") in left and ("OVERTURE", "광안리클럽", "ACTIVITY") in left
+    assert sum(p["source"] == "OVERTURE" for p in props) == 3
