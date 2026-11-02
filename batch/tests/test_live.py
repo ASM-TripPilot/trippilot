@@ -16,6 +16,7 @@ import textwrap
 import unittest
 from datetime import date, datetime, time
 from pathlib import Path
+from time import time as time_now
 from unittest import mock
 from zoneinfo import ZoneInfo
 
@@ -143,10 +144,55 @@ class Sandbox(unittest.TestCase):
 class RestorePersistTest(Sandbox):
     """Airflow 없이 — 복원·영속의 판정."""
 
-    def clone(self) -> Path:
-        dest = self.root / "run" / "repo"
+    def clone(self, run: str = "run") -> Path:
+        dest = self.root / run / "repo"
         dest.parent.mkdir(parents=True)
         return live.checkout(dest)
+
+    def test_낡은_실행의_재시도는_더_새_영속을_덮지_않는다(self):
+        # A 가 복원한 뒤 B(다음 날의 실행·전환기의 Actions)가 먼저 영속했다 — A 의 영속을 다시 돌리면 B 의 저장소가 사라진다.
+        origin = self.origin()
+        a, b = self.clone("A"), self.clone("B")
+        for repo, events in ((a, ["A"]), (b, ["A", "B"])):
+            live.restore(repo, "collected_events.json")
+            (repo / "ai/collected_events.json").write_text(json.dumps({"events": events}))
+        live.persist(b, "collected_events.json", "B")
+        with self.assertRaisesRegex(RuntimeError, "다른 실행이 먼저 영속"):
+            live.persist(a, "collected_events.json", "A 재시도")
+        self.assertEqual(json.loads(origin.show("collect-state:collected_events.json"))["events"], ["A", "B"])
+
+    def test_이미_자기_내용이_영속돼_있으면_재시도는_성공한다(self):
+        # 앞 시도가 push 는 했는데 왕복 확인 전에 죽은 경우 — tip 이 이미 이 실행의 내용이다.
+        origin = self.origin()
+        repo = self.clone()
+        live.restore(repo, "collect_state.json")
+        (repo / "ai/collect_state.json").write_text('{"cursor": "new"}')
+        first = live.persist(repo, "collect_state.json", "갱신")
+        self.assertEqual(live.persist(repo, "collect_state.json", "재시도"), first)
+        self.assertEqual(git(origin.bare, "rev-list", "--count", "collect-state"), "2")   # 커밋을 더 쌓지 않았다
+
+    def test_복원_기록_없이는_영속하지_않는다(self):
+        self.origin()
+        repo = self.clone()
+        (repo / "ai/collect_state.json").write_text('{"cursor": "new"}')
+        with self.assertRaisesRegex(RuntimeError, "복원한 기록이 없다"):
+            live.persist(repo, "collect_state.json", "갱신")
+
+    def test_그사이_develop_공유본이_바뀌었으면_게시하지_않는다(self):
+        # 이 실행이 복제한 뒤 다른 실행이 공유본을 게시했다 — 낡은 실행이 롤링 브랜치를 force-push 하면 그 행을 덮는다.
+        origin = self.origin()
+        repo = self.clone("A")
+        other = self.clone("B")
+        for r, name in ((repo, "mine"), (other, "theirs")):
+            doc = json.loads((r / live.SHARED).read_text())
+            doc["proposals"].append({"poi": {"name": name}, "provenance": {"address": SEOUL_ADDRESS}})
+            (r / live.SHARED).write_text(json.dumps(doc, ensure_ascii=False))
+        git(other, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "다른 실행의 게시")
+        git(other, "push", "-q", "origin", "HEAD:develop")
+        with self.assertRaisesRegex(RuntimeError, "다른 실행이 먼저 게시"):
+            live.publish_pois(repo, {"before": 600, "after": 601, "dropped": 0})
+        self.assertFalse(origin.has(live.SYNC_BRANCH))
+        self.assertNotIn("gh ", self.calls())
 
     def test_복원은_collect_state_의_파일을_ai_아래에_놓는다(self):
         self.origin()
@@ -178,6 +224,7 @@ class RestorePersistTest(Sandbox):
     def test_영속은_자기_파일만_바꾸고_남의_파일은_남긴다(self):
         origin = self.origin()
         repo = self.clone()
+        live.restore(repo, "collect_state.json")
         (repo / "ai/collect_state.json").write_text('{"cursor": "new"}')
         live.persist(repo, "collect_state.json", "갱신")
         self.assertEqual(json.loads(origin.show("collect-state:collect_state.json")), {"cursor": "new"})
@@ -236,11 +283,13 @@ class RestorePersistTest(Sandbox):
                 pipeline.keep_run(run, "실패")
                 os.utime(run / "KEEP", (1_000_000 + i, 1_000_000 + i))
                 runs.append(run)
-            orphan = pipeline.run_dir("poi_collect_live", "orphan")   # 정리 전에 파드가 죽은 실행
+            orphan = pipeline.run_dir("poi_collect_live", "orphan")   # 정리 전에 파드가 죽은 실행 — 이틀 전
+            os.utime(orphan, (time_now() - 2 * 86400,) * 2)
+            running = pipeline.run_dir("poi_collect_live", "running")   # 표시 없이 지금 도는 실행(dags test 는 동시 실행을 허용)
             current = pipeline.run_dir("poi_collect_live", "now")
             pipeline.prune_runs("poi_collect_live", current)
             left = sorted(d.name for d in (self.root / "out/runs/poi_collect_live").iterdir())
-        self.assertEqual(left, sorted(["now", *(r.name for r in runs[-pipeline.KEPT_RUNS:])]))
+        self.assertEqual(left, sorted(["now", "running", *(r.name for r in runs[-pipeline.KEPT_RUNS:])]))
         self.assertFalse(orphan.exists())
 
     def test_축소_가드(self):
@@ -336,8 +385,12 @@ class LiveDagTest(Sandbox):
         os.environ["FAKE_PR_STATE"] = "MERGED"
         mod = sys.modules["live"]
         self.assertEqual(mod.publish_pois(repo, json.loads((repo.parent / "merge.json").read_text())), "77")
-        mod.persist(repo, "collect_state.json", "재시도")
+        pipe = sys.modules["pipeline"]
+        with pipe.keep_on_failure(repo.parent):   # 다시 돌린 persist_cursor — 들어올 때 지난 실패 표시를 지운다
+            mod.persist(repo, "collect_state.json", "재시도")
         self.assertEqual(json.loads(origin.show("collect-state:collect_state.json")), {"cursor": "new"})
+        pipe.finish_run(repo.parent)   # 다시 돈 정리 — 재시도가 성공했으니 폴더를 지운다
+        self.assertFalse(repo.parent.exists())
 
     def test_POI_검증에_실패하면_게시도_커서도_없다_1427(self):
         origin = self.origin()

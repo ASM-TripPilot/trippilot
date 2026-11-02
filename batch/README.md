@@ -78,8 +78,14 @@ docker compose --profile batch down
 | `event_collect_live` | collect(복원·`collect_events.py`·팝업·축제) → validate(`check_event_store` — 모양·그날 유효 건수) → publish(collect-state 영속) → freshness(`check_event_freshness`, 영속 뒤 경보) |
 
 두 DAG 모두 마지막에 cleanup(**teardown** — 실행 성패에 세지 않는다)이 실행 폴더를 지운다. collect·validate·publish·영속이 실패한
-실행은 남긴다(`KEEP`) — 원인을 보고, 실패한 태스크만 지우고 다시 돌리면 그 복제본에서 이어 간다. 남긴 실행은 다음 실행이 시작할 때
-최근 3개(`pipeline.KEPT_RUNS`)만 두고 지운다(복제본 수백 MB × 매일 실패 → emptyDir 10Gi 축출 방지).
+실행은 남긴다(`KEEP`) — 원인을 보고, 실패한 태스크를 **하류(Downstream)와 함께** 지워(clear) 다시 돌리면 그 복제본에서 이어 간다.
+남긴 실행은 다음 실행이 시작할 때 최근 3개(`pipeline.KEPT_RUNS`)만 두고 지운다(복제본 수백 MB × 매일 실패 → emptyDir 10Gi 축출
+방지). 표시 없는 폴더는 하루 넘은 것만 지운다.
+- **낡은 실행의 재시도는 더 새 게시를 덮지 않는다.** 복원 때 본 collect-state 의 blob, 복제 때 본 develop 공유본의 blob 을 실행
+  폴더에 적어 두고, 영속·게시 직전에 지금 값과 다르면(그사이 다른 실행이 먼저 영속·게시했다) 실패한다 — collect 부터 다시 돈다.
+  지금 값이 이미 이 실행의 내용이면(앞 시도가 영속하고 죽었다) 성공이다. 전환기에 Actions 와 함께 실 수집해도 같은 검사로 한쪽이 멈춘다.
+- **운영 파드에서 `airflow dags test` 를 돌리지 말 것** — max_active_runs 를 따지지 않아 정기 실행과 같은 실행 폴더·collect-state 를
+  동시에 만진다. 수동 실행은 UI 의 Trigger 로.
 
 - **기본은 그림자다**(`BATCH_LIVE` 미설정): 실 API 를 부르지 않고, Actions 가 게시한 것(develop 공유본·collect-state 행사
   저장소)을 검증만 한다. 게시·영속은 건너뛴다. 생성 시 paused. 실 수집은 Actions 스케줄을 끈 뒤 `BATCH_LIVE=1` 로만 —

@@ -6,6 +6,7 @@ import logging
 import os
 import shutil
 import tempfile
+import time
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -88,7 +89,9 @@ def keep_run(run: Path, reason: str) -> None:
 
 @contextmanager
 def keep_on_failure(run: Path):
-    """이 블록이 예외로 끝나면 실행 폴더를 남긴다(collect·validate·publish·persist — 재시도에 복제본이 필요한 태스크)."""
+    """이 블록이 예외로 끝나면 실행 폴더를 남긴다(collect·validate·publish·persist — 재시도에 복제본이 필요한 태스크).
+    들어올 때 지난 표시를 지운다 — 실패했던 태스크를 다시 돌려 성공하면, 정리(teardown)가 폴더를 지워야 한다."""
+    (run / "KEEP").unlink(missing_ok=True)
     try:
         yield
     except BaseException as exc:
@@ -108,13 +111,16 @@ def finish_run(run: Path) -> None:
 # ponytail: 남긴 실패 실행은 최근 KEPT_RUNS 개만 — 복제본이 수백 MB 라 매일 실패하면 emptyDir(10Gi)를 넘어 파드가 축출된다.
 # 더 오래 봐야 하면 실패 원인을 태스크 로그로 남기고(이미 남는다) 이 수를 올리기보다 볼륨을 PVC 로 바꾼다.
 KEPT_RUNS = 3
+ORPHAN_AGE_S = 86400
 
 
 def prune_runs(dag_id: str, current: Path) -> None:
     """새 실행을 시작할 때 같은 DAG 의 지난 실행 폴더를 정리한다. max_active_runs=1 이라 다른 실행이 쓰고 있지 않다.
-    표시 없는 폴더(정리 전에 파드가 죽은 실행)는 지우고, 실패 실행은 최근 `KEPT_RUNS` 개만 남긴다."""
+    실패 실행은 최근 `KEPT_RUNS` 개만 남긴다. 표시 없는 폴더(정리 전에 파드가 죽은 실행)는 **하루 넘게 손대지 않은 것만**
+    지운다 — `airflow dags test` 는 max_active_runs 를 따지지 않아, 방금 표시 없이 돌고 있는 실행일 수 있다."""
     root = (OUT / "runs" / dag_id).resolve()
     others = [d for d in root.iterdir() if d.is_dir() and d.resolve() != current.resolve()] if root.is_dir() else []
     kept = sorted((d for d in others if (d / "KEEP").is_file()), key=lambda d: (d / "KEEP").stat().st_mtime, reverse=True)
-    for d in [d for d in others if d not in kept[:KEPT_RUNS]]:
+    stale = time.time() - ORPHAN_AGE_S
+    for d in kept[KEPT_RUNS:] + [d for d in others if d not in kept and d.stat().st_mtime < stale]:
         clear_run(d)

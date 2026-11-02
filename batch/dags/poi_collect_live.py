@@ -62,15 +62,15 @@ def poi_collect_live():
 
     @task
     def validate(repo: str) -> str:
-        failures = []
-        merge = Path(repo).parent / "merge.json"
-        if merge.is_file():
-            failures += [f for f in [live.shrink_failure(json.loads(merge.read_text(encoding="utf-8")))] if f]
-        doc = json.loads(pipeline.require_candidate(Path(repo) / "ai/data/collected_pois.json").read_text(encoding="utf-8"))
-        failures += checks.check_pois(doc, checks.sido_names(), get_current_context()["params"]["min_count"])
-        if failures:
-            pipeline.keep_run(Path(repo).parent, " / ".join(failures))
-            raise AirflowFailException("게시 중단 — " + " / ".join(failures))
+        with pipeline.keep_on_failure(Path(repo).parent):
+            failures = []
+            merge = Path(repo).parent / "merge.json"
+            if merge.is_file():
+                failures += [f for f in [live.shrink_failure(json.loads(merge.read_text(encoding="utf-8")))] if f]
+            doc = json.loads(pipeline.require_candidate(Path(repo) / "ai/data/collected_pois.json").read_text(encoding="utf-8"))
+            failures += checks.check_pois(doc, checks.sido_names(), get_current_context()["params"]["min_count"])
+            if failures:
+                raise AirflowFailException("게시 중단 — " + " / ".join(failures))
         return repo
 
     @task

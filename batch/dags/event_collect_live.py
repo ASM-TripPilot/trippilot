@@ -76,12 +76,12 @@ def event_collect_live():
 
     @task
     def validate(repo: str) -> str:
-        context = get_current_context()
-        failures = checks.check_event_store(store_doc(repo), pipeline.run_day(context, SEOUL).date(),
-                                            context["params"]["min_valid_today"])
-        if failures:
-            pipeline.keep_run(Path(repo).parent, " / ".join(failures))
-            raise AirflowFailException("게시 중단 — " + " / ".join(failures))
+        with pipeline.keep_on_failure(Path(repo).parent):
+            context = get_current_context()
+            failures = checks.check_event_store(store_doc(repo), pipeline.run_day(context, SEOUL).date(),
+                                                context["params"]["min_valid_today"])
+            if failures:
+                raise AirflowFailException("게시 중단 — " + " / ".join(failures))
         return repo
 
     @task

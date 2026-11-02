@@ -26,6 +26,7 @@ log = logging.getLogger(__name__)
 
 STATE_BRANCH = "collect-state"
 SYNC_BRANCH = "chore/poi-data-sync"
+SHARED = "ai/data/collected_pois.json"
 BOT = ("github-actions[bot]", "41898282+github-actions[bot]@users.noreply.github.com")   # Actions 판과 같은 작성자
 
 
@@ -60,7 +61,20 @@ def checkout(dest: Path) -> Path:
     shutil.rmtree(dest, ignore_errors=True)   # 같은 실행의 재시도가 반쯤 받은 복제를 남겼을 수 있다
     sh(["git", "clone", "--depth", "1", "--branch", "develop", "--single-branch", url, str(dest)], dest.parent)
     sh(["uv", "sync", "--locked"], dest / "ai")
+    # 복제 때 develop 공유본 — 게시 재시도가 "그사이 develop 이 다른 실행으로 바뀌었는가"를 이것과 비교한다.
+    (dest.parent / "develop.base").write_text(blob_at(dest, f"HEAD:{SHARED}"), encoding="utf-8")
     return dest
+
+
+def blob_at(repo: Path, rev_path: str) -> str:
+    """`<rev>:<path>` 의 blob sha — 없으면 빈 문자열."""
+    found = sh(["git", "rev-parse", "--verify", "-q", rev_path], repo, check=False, capture_output=True)
+    return found.stdout.strip() if found.returncode == 0 else ""
+
+
+def base_file(repo: Path, name: str) -> Path:
+    """restore 가 본 collect-state 의 `name` blob — 영속이 "그사이 다른 실행이 먼저 영속했는가"를 이것과 비교한다."""
+    return repo.parent / f"{name}.base"
 
 
 def restore(repo: Path, name: str) -> bool:
@@ -74,10 +88,12 @@ def restore(repo: Path, name: str) -> bool:
                capture_output=True)
     if found.returncode == 2:
         log.info("collect-state 브랜치 없음 — 처음부터")
+        base_file(repo, name).write_text("", encoding="utf-8")
         return False
     if found.returncode != 0:
         raise RuntimeError(f"collect-state 조회 실패(종료 {found.returncode}) — 처음부터 돌지 않는다: {found.stderr.strip()}")
     sh(["git", "fetch", "--quiet", "origin", STATE_BRANCH], repo)
+    base_file(repo, name).write_text(blob_at(repo, f"FETCH_HEAD:{name}"), encoding="utf-8")
     shown = sh(["git", "show", f"FETCH_HEAD:{name}"], repo, check=False, capture_output=True)
     if shown.returncode == 0:
         target.write_text(shown.stdout, encoding="utf-8")
@@ -139,11 +155,16 @@ def publish_pois(repo: Path, numbers: dict, wait_s: float = 5) -> str:
     #   "변화 없음"이 되어 머지 확인 없이 커서를 저장한다.
     # - 복제 때의 origin/develop 에 고정하면, 앞 시도의 PR 이 확인 뒤에 머지됐을 때 재시도가 같은 내용으로 빈 PR 을 연다.
     #   지금 develop 이 같은 내용이면 공유본이 이미 들어간 것이다 — 그때만 "변화 없음"(→ 커서 저장)이다.
+    # - 지금 develop 이 복제 때와도 다르고 이 실행의 내용과도 다르면, 그사이 **다른 실행**(다음 날의 실행·전환기의 Actions)이
+    #   공유본을 바꿨다. 낡은 이 실행이 롤링 브랜치를 force-push 하면 그 행들을 덮는다 — collect 부터 다시 돌린다.
     sh(["git", "fetch", "--quiet", "--depth", "1", "origin", "develop"], repo)
-    if sh(["git", "diff", "--quiet", "origin/develop", "--", "ai/data/collected_pois.json"], repo,
-          check=False).returncode == 0:
+    now = blob_at(repo, f"origin/develop:{SHARED}")
+    mine = out(["git", "hash-object", SHARED], repo)
+    if now == mine:
         log.info("공유본 변화 없음(develop 과 같다) — PR 생략")
         return "unchanged"
+    if now != (repo.parent / "develop.base").read_text(encoding="utf-8"):
+        raise RuntimeError("develop 공유본이 이 실행의 복제 뒤로 바뀌었다(다른 실행이 먼저 게시) — collect 부터 다시 돌린다")
     sh(["git", "checkout", "-B", SYNC_BRANCH], repo)
     sh(["git", "add", "ai/data/collected_pois.json"], repo)
     if sh(["git", "diff", "--cached", "--quiet"], repo, check=False).returncode != 0:   # 재시도면 이미 커밋돼 있다
@@ -183,7 +204,11 @@ def persist(repo: Path, name: str, message: str) -> str:
     source = repo / "ai" / name
     if not source.is_file():
         raise FileNotFoundError(f"영속할 {name} 이 없다: {source}")
-    parent, base = [], ""
+    recorded = base_file(repo, name)
+    if not recorded.is_file():
+        raise RuntimeError(f"{name} 을 복원한 기록이 없다 — restore 없이 영속하지 않는다")
+    blob = out(["git", "hash-object", "-w", str(source)], repo)
+    parent, rest = [], ""
     found = sh(["git", "ls-remote", "--exit-code", "--heads", "origin", STATE_BRANCH], repo, check=False,
                capture_output=True)
     if found.returncode not in (0, 2):
@@ -191,10 +216,17 @@ def persist(repo: Path, name: str, message: str) -> str:
     if found.returncode == 0:
         sh(["git", "fetch", "--quiet", "origin", STATE_BRANCH], repo)
         parent = ["-p", "FETCH_HEAD"]
-        base = "".join(f"{line}\n" for line in out(["git", "ls-tree", "--full-tree", "FETCH_HEAD"], repo).splitlines()
+        rest = "".join(f"{line}\n" for line in out(["git", "ls-tree", "--full-tree", "FETCH_HEAD"], repo).splitlines()
                        if not line.endswith(f"\t{name}"))
-    blob = out(["git", "hash-object", "-w", str(source)], repo)
-    tree = out(["git", "mktree"], repo, input=f"{base}100644 blob {blob}\t{name}\n")
+    tip = blob_at(repo, f"FETCH_HEAD:{name}") if found.returncode == 0 else ""
+    if tip == blob:
+        log.info("collect-state 의 %s 가 이미 이 내용이다(앞 시도가 영속했다) — 그대로 성공", name)
+        return out(["git", "rev-parse", "FETCH_HEAD"], repo)
+    if tip != recorded.read_text(encoding="utf-8"):
+        # 이 실행이 복원한 뒤 다른 실행(다음 날의 실행·전환기의 Actions)이 먼저 영속했다 — 낡은 실행의 재시도가 덮으면
+        # 그 실행의 커서·저장소가 사라진다. 동시에 영속하려는 경합은 아래 push 가 fast-forward 아님으로 막는다.
+        raise RuntimeError(f"collect-state 의 {name} 이 복원 뒤로 바뀌었다(다른 실행이 먼저 영속) — collect 부터 다시 돌린다")
+    tree = out(["git", "mktree"], repo, input=f"{rest}100644 blob {blob}\t{name}\n")
     commit = out(["git", "commit-tree", tree, *parent, "-m", message], repo)
     sh(["git", "push", "origin", f"{commit}:refs/heads/{STATE_BRANCH}"], repo)
     sh(["git", "fetch", "--quiet", "origin", STATE_BRANCH], repo)
