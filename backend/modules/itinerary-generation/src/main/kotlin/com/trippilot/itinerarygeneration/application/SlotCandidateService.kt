@@ -388,7 +388,10 @@ class SlotCandidateService(
         if (fit.isEmpty()) {
             val original = out.copy(candidates = out.candidates.take(limit))
             val rest = current.copy(days = current.days.map { d -> d.copy(slots = d.slots.filterIndexed { i, _ -> i != index }) })
-            if (calls >= MAX_REPAIR_CALLS) return original
+            if (calls >= MAX_REPAIR_CALLS) {
+                log.warn("처음 후보 판정만으로 판정 상한({}회)에 닿아 더 찾지 않습니다 — 원래 목록을 그대로 줍니다. tripId={} slotKey={}", MAX_REPAIR_CALLS, tripId, slotKey)
+                return original
+            }
             val restFits = if (rest.days.all { it.slots.isEmpty() }) true else repairable(rest)
             if (restFits == false) {
                 log.warn("대상 칸을 빼도 그 날이 수리 불가입니다 — 더 찾지 않고 원래 목록을 그대로 줍니다. tripId={} slotKey={}", tripId, slotKey)

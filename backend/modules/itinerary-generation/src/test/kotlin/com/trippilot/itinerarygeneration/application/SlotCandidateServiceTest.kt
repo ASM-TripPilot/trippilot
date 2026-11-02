@@ -815,6 +815,25 @@ class SlotCandidateServiceTest : StringSpec({
         pool.radii shouldBe emptyList()
     }
 
+    "그 날에 대상 칸 하나뿐이면 그 날 판정 없이 바로 이어 찾는다 — 칸을 빼면 빈 날이라 물을 게 없다" {
+        val solo = Itinerary.create(
+            tripId, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(ItineraryDay.of(d1, 0, listOf(slot(target, 0, "11:00")))),
+            now,
+        )
+        val (a, b) = ids(2)
+        val p = UUID(6, 0)
+        val pool = RadiusPool(listOf(near(p, 100.0)))
+        val agent = FitAgent(proposed = listOf(a, b), misfit = setOf(a, b))
+
+        val out = fitSvc(agent, stored = solo, candidates = pool).propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null))
+
+        out.candidates.map { it.poiId } shouldContainExactly listOf(p)
+        agent.repaired.size shouldBe 3 // 후보 2 + p — 그 날 판정(빈 날) 없음
+        agent.repaired.none { (sent, _) -> sent.days.all { it.slots.isEmpty() } } shouldBe true
+        pool.radii shouldBe listOf(3_000.0)
+    }
+
     "처음 후보가 하나라도 맞으면 이어 판정하지 않는다 — 대다수 요청에 판정을 더 얹지 않는다" {
         val (a, b) = ids(2)
         val pool = RadiusPool(listOf(near(UUID.randomUUID(), 100.0)))
