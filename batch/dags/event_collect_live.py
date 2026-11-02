@@ -59,7 +59,10 @@ def event_collect_live():
         pipeline.prune_runs(DAG_ID, run)
         with pipeline.keep_on_failure(run):
             repo = live.checkout(run / "repo")
-            live.restore(repo, STORE)
+            restored = live.restore(repo, STORE)
+            if not live.live() and not restored:
+                # 그림자는 Actions 가 영속한 저장소를 검증한다 — 없으면 validate 의 "후보가 없다(collect 부터)"가 엉뚱한 처방이다.
+                raise AirflowFailException("collect-state 에 행사 저장소가 없다 — 그림자 모드라 검증할 게 없다")
             if live.live():
                 live.require_key("NAVER_SEARCH_CLIENT_ID")
                 store = {"EVENTS_STORE": STORE}

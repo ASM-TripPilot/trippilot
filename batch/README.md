@@ -74,7 +74,7 @@ docker compose --profile batch down
 
 | DAG | 태스크 |
 |---|---|
-| `poi_collect_live` | collect(develop 복제·collect-state 복원·`collect_pois.py`·`merge_pois_docs.py --state`) → validate(축소 가드 + `check_pois`) → publish(롤링 PR·**머지 확인**·backend-ci 디스패치) → persist_cursor(collect-state). 곁가지: collect → novelty(`collect_novelty.py --fail-if-stalled`, 비차단) |
+| `poi_collect_live` | collect(develop 복제·collect-state 복원·`collect_pois.py`·`merge_pois_docs.py --state`) → validate(축소 가드 + `check_pois`) → publish(롤링 PR·**머지 확인**) → persist_cursor(collect-state). 곁가지: collect → novelty(`collect_novelty.py --fail-if-stalled`, 비차단) |
 | `event_collect_live` | collect(복원·`collect_events.py`·팝업·축제) → validate(`check_event_store` — 모양·그날 유효 건수) → publish(collect-state 영속) → freshness(`check_event_freshness`, 영속 뒤 경보) |
 
 두 DAG 모두 마지막에 cleanup(**teardown** — 실행 성패에 세지 않는다)이 실행 폴더를 지운다. collect·validate·publish·영속이 실패한
@@ -92,6 +92,8 @@ docker compose --profile batch down
   둘이 함께 실 수집하면 일일 한도를 두 번 쓰고 collect-state 를 서로 덮는다.
 - 커서는 게시가 머지를 **확인한 뒤에만** 저장한다(TRIP-1475). 앞 태스크가 실패하면 저장하지 않는다 — 다음 실행이 같은
   자리부터 다시 받는다.
+- 머지 뒤 backend-ci 를 디스패치하지 않는다 — Actions 판은 GITHUB_TOKEN 이라 머지 push 가 런을 만들지 않아 디스패치가 필요하고,
+  Airflow 판의 GH_TOKEN 은 PAT·App 토큰이라 머지 push 가 backend-ci push 필터(공유본 경로)로 저절로 돈다.
 - Actions 판과 다른 점: 러너 IP 재시도 잡이 없고(고정 IP — EKS NAT 3.36.199.183 에서 TourAPI 도달 확인 2026-11-03),
   행사도 영속 앞에서 저장소 모양·유효 건수를 검증하고, 실 모드에 키가 없거나 collect-state 조회가 실패하면 초록불로 넘기지 않고 실패한다.
 - 행사 신선도는 영속을 **막지 않는다**(영속 뒤 경보). 막으면 폴백이 이어지는 동안 포인터·coverage 도 영속되지 않아, 원인이

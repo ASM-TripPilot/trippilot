@@ -60,7 +60,7 @@ def checkout(dest: Path) -> Path:
     url = os.environ.get("BATCH_REPO_URL", "https://github.com/ASM-TripPilot/trippilot.git")
     shutil.rmtree(dest, ignore_errors=True)   # 같은 실행의 재시도가 반쯤 받은 복제를 남겼을 수 있다
     sh(["git", "clone", "--depth", "1", "--branch", "develop", "--single-branch", url, str(dest)], dest.parent)
-    sh(["uv", "sync", "--locked"], dest / "ai", env=plain_env())
+    sh(["uv", "sync", "--locked"], dest / "ai", env=install_env())
     # 복제 때 develop 공유본 — 게시 재시도가 "그사이 develop 이 다른 실행으로 바뀌었는가"를 이것과 비교한다.
     (dest.parent / "develop.base").write_text(blob_at(dest, f"HEAD:{SHARED}"), encoding="utf-8")
     return dest
@@ -110,9 +110,20 @@ def collect(repo: Path, script: str, *args: str, env: dict[str, str] | None = No
 
 
 def plain_env() -> dict[str, str]:
-    """uv(의존성 설치·수집기)에 주는 환경 — 토큰·git 헤더를 뺀다. 둘 다 GitHub 을 부르지 않는다(Actions 판도 GH_TOKEN 을
-    이 스텝들에 주지 않는다). 의존성 설치는 서드파티 패키지 빌드 스크립트를 돌린다 — 쓰기 토큰을 볼 이유가 없다."""
+    """**수집기**(`uv run python scripts/collect/…`)에 주는 환경 — 파드 환경에서 GH_TOKEN 만 뺀다. 수집기는 API 키·상한
+    (TOUR_API_KEY·NAVER_*·OPENAI_* …)이 필요해 나머지는 그대로 넘긴다. 메타 DB 접속 문자열 같은 Airflow 설정도 남는다 —
+    수집기는 리포 코드라 믿는 범위다. 의존성 설치는 `install_env()`(허용 목록)를 쓴다."""
     return {k: v for k, v in os.environ.items() if k != "GH_TOKEN"}
+
+
+INSTALL_ENV = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE",
+               "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy")
+
+
+def install_env() -> dict[str, str]:
+    """`uv sync` 에 주는 환경 — **허용 목록**(PATH·HOME·로캘·임시 폴더·인증서·프록시·`UV_*`)만. 의존성 설치는 서드파티
+    패키지의 빌드 스크립트를 돌린다 — 메타 DB 접속 문자열·fernet 키·API 키·GH_TOKEN 이 거기에 닿을 이유가 없다."""
+    return {k: v for k, v in os.environ.items() if k in INSTALL_ENV or k.startswith("UV_")}
 
 
 def require_key(name: str) -> None:
@@ -179,7 +190,7 @@ def publish_pois(repo: Path, numbers: dict, wait_s: float = 5) -> str:
           repo).stdout.strip() == "0":
         gh(["pr", "create", "--base", "develop", "--head", SYNC_BRANCH, "--title", "chore(ai): 수집 공유본 자동 갱신 (TRIP-392)",
             "--body", ("Airflow `poi_collect_live` 가 병합한 공유본 자동 PR(축소 가드·시도 게이트·검증 통과 뒤). "
-                       "ai-poi-collect 의 같은 PR 과 규칙이 같다 — 자동 머지되고, 머지 뒤 backend-ci 를 develop 으로 띄운다.")],
+                       "ai-poi-collect 의 같은 PR 과 규칙이 같다 — 자동 머지되고, 머지 push 가 backend-ci(실문서 계약 IT)를 건다.")],
            repo, check=False)
     pr = gh(["pr", "list", "--head", SYNC_BRANCH, "--state", "open", "--json", "number", "--jq", ".[0].number // empty"],
             repo).stdout.strip()
@@ -196,11 +207,8 @@ def publish_pois(repo: Path, numbers: dict, wait_s: float = 5) -> str:
         time.sleep(wait_s)
     if state != "MERGED":
         raise RuntimeError(f"공유본 PR #{pr} 이 머지되지 않았다(상태 {state or '?'}) — 상태를 영속하지 않는다")
-    # 봇 머지 push 로는 backend-ci 런이 안 생긴다 — 공유본을 읽는 실문서 계약 IT 를 직접 띄운다.
-    # 이것은 GITHUB_TOKEN 에만 해당한다(그 토큰의 push 는 런을 만들지 않는다). 여기 GH_TOKEN 이 PAT·GitHub App 토큰이면 머지
-    # push 가 backend-ci 의 push 필터로 저절로 돌아 이 디스패치와 **중복**된다 — 2단계에서 토큰 종류를 정할 때 이 줄을 정리한다.
-    if gh(["workflow", "run", "backend-ci.yml", "--ref", "develop"], repo, check=False).returncode != 0:
-        log.warning("backend-ci 디스패치 실패 — Actions 에서 backend-ci 를 develop 으로 수동 실행할 것")
+    # backend-ci 를 디스패치하지 않는다 — Actions 판이 띄우는 이유는 GITHUB_TOKEN 의 push 가 런을 만들지 않아서다. 여기 GH_TOKEN 은
+    # PAT·GitHub App 토큰이라 머지 push 가 backend-ci 의 push 필터(ai/data/collected_pois.json)로 저절로 돈다 — 띄우면 중복이다.
     return pr
 
 

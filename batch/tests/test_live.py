@@ -41,8 +41,10 @@ FAKE_UV = textwrap.dedent("""\
     #!/usr/bin/env python3
     import json, os, sys
     args = sys.argv[1:]
-    with open(os.environ["FAKE_LOG"], "a", encoding="utf-8") as f:
-        f.write("uv " + " ".join(args) + (" [GH_TOKEN]" if "GH_TOKEN" in os.environ else "") + "\\n")
+    # uv sync 은 허용 목록 환경만 받아 FAKE_LOG 가 없다 — 로그는 이 스크립트 옆(<root>/bin/..)의 calls.log 다.
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "calls.log"), "a", encoding="utf-8") as f:
+        leaked = [k for k in ("GH_TOKEN", "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN", "TOUR_API_KEY") if k in os.environ]
+        f.write("uv " + " ".join(args) + "".join(f" [{k}]" for k in leaked) + "\\n")
     if args[0] == "sync":
         sys.exit(0)
     name = os.path.basename(args[2])
@@ -249,6 +251,18 @@ class RestorePersistTest(Sandbox):
         self.assertNotIn("ghs_", (repo / ".git/config").read_text())
         self.assertIn("uv sync --locked", self.calls())
         self.assertNotIn("[GH_TOKEN]", self.calls())   # 의존성 설치(서드파티 빌드 스크립트)는 쓰기 토큰을 못 본다
+
+    def test_의존성_설치는_허용_목록_환경만_받는다(self):
+        self.origin()
+        os.environ.update({"GH_TOKEN": "ghs_비밀", "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN": "postgresql://a:비밀@db/airflow",
+                           "TOUR_API_KEY": "비밀", "UV_CACHE_DIR": str(self.root / "uvcache")})
+        self.clone()
+        sync = next(line for line in self.calls().splitlines() if line.startswith("uv sync"))
+        self.assertEqual(sync, "uv sync --locked")   # 비밀 셋 다 안 갔다
+        self.assertIn("UV_CACHE_DIR", live.install_env())
+        self.assertNotIn("TOUR_API_KEY", live.install_env())
+        self.assertIn("TOUR_API_KEY", live.plain_env())   # 수집기는 키가 필요하다 — GH_TOKEN 만 뺀다
+        self.assertNotIn("GH_TOKEN", live.plain_env())
         self.assertIn("AUTHORIZATION: basic", live.git_env()["GIT_CONFIG_VALUE_0"])
 
     def test_게시를_다시_돌려도_머지_확인_전에는_unchanged_로_넘어가지_않는다_1475(self):
@@ -375,8 +389,9 @@ class LiveDagTest(Sandbox):
         self.assertEqual(run.state, "success")
         self.assertEqual(set(self.states(run).values()), {"success"})
         calls = self.calls()
-        order = [calls.index(s) for s in ("collect_pois.py", "merge_pois_docs.py", "gh pr merge 77", "gh workflow run")]
+        order = [calls.index(s) for s in ("collect_pois.py", "merge_pois_docs.py", "gh pr merge 77")]
         self.assertEqual(order, sorted(order))
+        self.assertNotIn("gh workflow run", calls)   # PAT·App 토큰의 머지 push 가 backend-ci 를 건다 — 디스패치는 중복
         self.assertIn("--state collect_state.json", calls)   # 시도 게이트를 켠 병합
         self.assertEqual(len(json.loads(origin.show("chore/poi-data-sync:ai/data/collected_pois.json"))["proposals"]), 601)
         self.assertEqual(json.loads(origin.show("collect-state:collect_state.json")), {"cursor": "new"})
@@ -480,6 +495,15 @@ class LiveDagTest(Sandbox):
         self.assertEqual((run.state, self.states(run)["publish"]), ("success", "success"))
         self.assertEqual(len(json.loads(origin.show("collect-state:collected_events.json"))["events"]), 40)
         self.assertEqual(origin.show("collect-state:collect_state.json"), '{"cursor": "old"}')
+
+    def test_행사_그림자에_저장소가_없으면_collect_에서_바로_실패한다(self):
+        self.origin(state_branch=False)
+        mod = self.load("event_collect_live")
+        run = mod.event_collect_live().test(logical_date=datetime.combine(self.DAY, time(4, 40), tzinfo=ZoneInfo("Asia/Seoul")))
+        states = self.states(run)
+        self.assertEqual((run.state, states["collect"], states["validate"]), ("failed", "failed", "upstream_failed"))
+        kept = list((self.root / "out/runs/event_collect_live").glob("*/KEEP"))
+        self.assertIn("행사 저장소가 없다 — 그림자 모드라 검증할 게 없다", kept[0].read_text(encoding="utf-8"))
 
     def test_행사_신선도가_낡아도_저장소는_영속하고_경보만_빨개진다(self):
         # 폴백이 이어져 coverage 가 안 찍혀도 포인터는 전진해야 한다 — 영속을 막으면 원인이 풀려도 같은 낡은 저장소로 돌아간다.
