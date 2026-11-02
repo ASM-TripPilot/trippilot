@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "collec
 from collect_curated_popups import region_of, to_events  # noqa: E402
 
 from trippilot.background.event_store import JsonEventStore  # noqa: E402
-from trippilot.domain.event import EventType  # noqa: E402
+from trippilot.domain.itinerary.event import EventType  # noqa: E402
 from trippilot.domain.persona import TasteTag  # noqa: E402
 from trippilot.orchestrator.event_affinity import event_affinity  # noqa: E402
 

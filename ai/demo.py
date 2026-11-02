@@ -12,10 +12,10 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
-from trippilot.domain.llm import CandidatePool
+from trippilot.domain.llm.llm import CandidatePool
 from trippilot.domain.observability import FallbackEvent
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.domain.travel import TravelEstimate
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.itinerary.travel import TravelEstimate
 
 _NOW = datetime.now(timezone.utc)
 
@@ -106,7 +106,7 @@ from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.preference import build_prompt_vars
 from trippilot.domain.common import BudgetLevel
-from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import GateDropEvent
 from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
 from trippilot.ports.llm_port import LlmResponse

@@ -15,8 +15,8 @@ from string import Template
 
 import yaml
 
-from trippilot.domain.llm import LlmFeature
-from trippilot.domain.prompt import PromptRef
+from trippilot.domain.llm.llm import LlmFeature
+from trippilot.domain.llm.prompt import PromptRef
 
 
 def inline(text: str) -> str:

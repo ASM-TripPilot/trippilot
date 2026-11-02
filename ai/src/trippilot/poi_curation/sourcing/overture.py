@@ -34,8 +34,8 @@ import re
 import unicodedata
 from collections.abc import Mapping
 
-from trippilot.domain.poi import NIGHTLIFE_TAG as _DOMAIN_NIGHTLIFE_TAG
-from trippilot.domain.poi import PoiCategory
+from trippilot.domain.poi.poi import NIGHTLIFE_TAG as _DOMAIN_NIGHTLIFE_TAG
+from trippilot.domain.poi.poi import PoiCategory
 
 SOURCE_NAME = "OVERTURE"
 

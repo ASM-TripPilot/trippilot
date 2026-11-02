@@ -28,9 +28,9 @@ from datetime import date, datetime, timezone
 from trippilot.domain.common import GeoPoint, PoiId, TransportMode
 from trippilot.domain.context import PermissionDeniedError
 from trippilot.domain.freshness import InfoPacket, ProviderKind, ProviderStatus
-from trippilot.domain.intent import Intent
-from trippilot.domain.llm import CandidatePool
-from trippilot.domain.transit import TransitPurpose, TransitRequest
+from trippilot.domain.dialogue.intent import Intent
+from trippilot.domain.llm.llm import CandidatePool
+from trippilot.domain.itinerary.transit import TransitPurpose, TransitRequest
 from trippilot.providers.base import Provider
 
 _log = logging.getLogger(__name__)

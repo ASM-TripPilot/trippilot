@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 from hypothesis import strategies as st
 
 from trippilot.domain.common import BudgetLevel, PoiId, ScheduleId, TransportMode
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     DaySolution,
     FixedBlock,
     ItineraryProblem,
@@ -21,7 +21,7 @@ from trippilot.domain.itinerary import (
     Violation,
     VisitSlot,
 )
-from trippilot.domain.llm import ScoredPoi
+from trippilot.domain.llm.llm import ScoredPoi
 
 from tests.generators.geo import geo_points
 from tests.generators.observability import assembly_run_records

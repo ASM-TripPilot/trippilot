@@ -14,7 +14,7 @@ from datetime import datetime
 from urllib.parse import urlsplit
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.llm.llm import LlmFeature
 from trippilot.domain.observability import GateDropEvent
 from trippilot.llm_gateway.gates.base import GateOutcome, has_contact_like, has_injection_like, strip_code_fence
 from trippilot.ports.place_fact_store_port import FIELDS, PlaceFacts

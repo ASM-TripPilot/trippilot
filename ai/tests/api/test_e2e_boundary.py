@@ -39,9 +39,9 @@ from trippilot.llm_gateway.config import C1Config
 from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import BudgetLevel, GeoPoint, TransportMode
-from trippilot.domain.llm import ModelTier
+from trippilot.domain.llm.llm import ModelTier
 from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
-from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 from trippilot.poi_curation.adapters.backend_poi_db import BackendPoiDb
 from trippilot.ports.llm_port import LlmRequest, LlmResponse
 

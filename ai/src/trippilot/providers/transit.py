@@ -15,7 +15,7 @@ TTL: 실시간 요청 10분 / 매트릭스 캐시 24h.
 from __future__ import annotations
 
 from trippilot.domain.freshness import FreshnessMeta, InfoPacket, ProviderKind, ProviderStatus
-from trippilot.domain.transit import (
+from trippilot.domain.itinerary.transit import (
     Confidence,
     DelayTrigger,
     TransitInfo,

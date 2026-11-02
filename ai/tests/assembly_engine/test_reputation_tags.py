@@ -11,7 +11,7 @@ from hypothesis import strategies as st
 
 from trippilot.assembly_engine.scorer import build_rule_score
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.poi import (
+from trippilot.domain.poi.poi import (
     HIGH_RATING_TAG,
     NIGHTLIFE_TAG,
     DataQuality,

@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from collect_localdata import _MIGRATION, load_regions, load_stays, region_centers, region_check  # noqa: E402
 
 from trippilot.domain.common import GeoPoint  # noqa: E402
-from trippilot.domain.poi import PoiCategory  # noqa: E402
+from trippilot.domain.poi.poi import PoiCategory  # noqa: E402
 from trippilot.poi_curation.sourcing.collection_gate import _haversine_m  # noqa: E402
 from trippilot.poi_curation.sourcing.localcafe import (  # noqa: E402
     PER_ANCHOR,

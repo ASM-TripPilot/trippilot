@@ -9,7 +9,7 @@ import math
 from datetime import date
 
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.poi import OpenHour, Poi, PoiCategory
+from trippilot.domain.poi.poi import OpenHour, Poi, PoiCategory
 from trippilot.ports.poi_db_port import PoiLookup, lookup_from
 
 _EARTH_KM = 6371.0088

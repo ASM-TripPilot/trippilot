@@ -32,8 +32,8 @@ from pathlib import Path
 import pytest
 
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.llm.llm import CandidatePool
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.workers.alternative_selection import (
     AlternativeSelectionInput,

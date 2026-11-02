@@ -14,8 +14,8 @@ from datetime import date
 
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi import Poi
+from trippilot.domain.llm.llm import ScoredPoi
+from trippilot.domain.poi.poi import Poi
 
 TOP_K = 150        # 동네를 고를 때 보는 상위 후보 수(점수순)
 MASS_KM = 1.5      # 한 점 둘레의 점수 합을 잴 반경 — "몰린 정도"

@@ -3,7 +3,7 @@
 from trippilot.domain.common import GeoPoint
 import pytest
 
-from trippilot.domain.region_centers import region_center, region_mentions, region_pair
+from trippilot.domain.poi.region_centers import region_center, region_mentions, region_pair
 
 
 def test_most_specific_name_wins_and_unknown_is_none() -> None:
@@ -61,7 +61,7 @@ def test_route_pair_with_a_departure_marker_is_a_pair(text: str) -> None:
 
 
 def test_plain_region_is_a_table_name_plus_particles_only() -> None:
-    from trippilot.domain.region_centers import plain_region
+    from trippilot.domain.poi.region_centers import plain_region
 
     assert plain_region("홍대에") == "홍대" and plain_region("이태원") == "이태원" and plain_region("제주도") == "제주"  # '도'는 조사로도 읽힌다 — 지역 낱말이긴 하다
     assert plain_region("서울역") is None and plain_region("해운대해수욕장") is None and plain_region("서울숲") is None

@@ -25,7 +25,7 @@ from trippilot.api.wiring import build_dev_app
 from trippilot.assembly_engine.constraints import check_all, free_visit_cap
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
-from trippilot.domain.itinerary import FixedBlock, ItineraryProblem, RequiredVisit, TimeWindow
+from trippilot.domain.itinerary.itinerary import FixedBlock, ItineraryProblem, RequiredVisit, TimeWindow
 
 from tests.api.test_api_replan_wired import _DIRECTIVES, _body
 from tests.assembly_engine.test_assembly_engine_travel_weight import _CFG, _DAY, _EST, _KST, _pool

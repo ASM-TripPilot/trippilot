@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from collect_localdata import _MIGRATION, load_regions  # noqa: E402  (같은 디렉토리)
 from collect_pois import load_closed_refs  # noqa: E402  (같은 디렉토리)
-from trippilot.domain.poi import TRENDING_TAG  # noqa: E402
+from trippilot.domain.poi.poi import TRENDING_TAG  # noqa: E402
 from trippilot.poi_curation.sourcing.mapping import (  # noqa: E402
     _JOINED,
     non_travel_reason,

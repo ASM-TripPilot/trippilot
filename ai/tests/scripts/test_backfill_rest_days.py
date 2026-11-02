@@ -16,7 +16,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from trippilot.domain.poi import OpenHour
+from trippilot.domain.poi.poi import OpenHour
 from trippilot.poi_curation.sourcing.mapping import (
     OPENING_HOURS_MAX,
     parse_open_hours,

@@ -23,7 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
-from trippilot.domain.region_centers import _CENTERS  # noqa: E402 — 표 이름·좌표의 정본
+from trippilot.domain.poi.region_centers import _CENTERS  # noqa: E402 — 표 이름·좌표의 정본
 
 SRC, OUT = ROOT / "data/collected_pois.json", ROOT / "data/region_profiles.json"
 _PRIOR = 200  # 베이즈 축소 강도 — 지역 n 이 이만큼이면 관측과 전국 평균을 반씩 믿는다

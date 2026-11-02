@@ -8,7 +8,7 @@
 
 import pytest
 
-from trippilot.domain.poi import EATERY_NAME, _NAME_NOISE
+from trippilot.domain.poi.poi import EATERY_NAME, _NAME_NOISE
 
 
 def _hit(name: str) -> bool:

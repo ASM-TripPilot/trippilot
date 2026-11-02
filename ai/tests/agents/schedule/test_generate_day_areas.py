@@ -10,7 +10,7 @@ from datetime import date
 
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint
-from trippilot.domain.poi import PoiCategory
+from trippilot.domain.poi.poi import PoiCategory
 
 from tests.agents.schedule.test_schedule_fixed_poi_index import _ANCHOR, _client, _poi, _request
 from tests.fakes.in_memory_poi import InMemoryPoi

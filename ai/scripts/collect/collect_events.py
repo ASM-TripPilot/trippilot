@@ -43,7 +43,7 @@ from trippilot.background.naver_search import (
     strip_tags,
 )
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import ModelTier
+from trippilot.domain.llm.llm import ModelTier
 
 KST = dt.timezone(dt.timedelta(hours=9))
 # 스니펫에 날짜가 언급됐는지 — "8월 15일", "2026-09-01", "9/1~9/3" 류를 넓게 잡는다.

@@ -31,7 +31,7 @@ from trippilot.assembly_engine.facade import AssemblyConflictError, HybridAssemb
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TransportMode
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     DaySolution,
     FixedBlock,
     ItinerarySolution,
@@ -39,7 +39,7 @@ from trippilot.domain.itinerary import (
     TimeWindow,
     VisitSlot,
 )
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 from tests.fakes.fake_clock import FakeClock
 from tests.fakes.fake_llm import FailingLlm
@@ -387,7 +387,7 @@ def test_영업시간_밖에_핀된_고정_블록은_풀_안팎_모두_빠지고
     종전엔 핀이 HC1 에 걸려 두 단계 다 실패 → 409 → BE 가 그 단계를 통째로 최소 일정으로 바꿨다.
     이제 영업시간이 **증명**하는 핀만 빼고(정보 없음은 둔다 — ① 의 핀이 그대로 놓이는 것이 그 증거)
     나머지 하루는 그대로 나가며, 빠진 핀은 `unplaced_must_visits` 와 강등으로 보인다."""
-    from trippilot.domain.poi import OpenHour
+    from trippilot.domain.poi.poi import OpenHour
 
     hours = (tuple(OpenHour(d, 10 * 60, 22 * 60) for d in range(7)) if closed_how == "opens_later"
              else tuple(OpenHour(d, 9 * 60, 22 * 60) for d in range(7) if d != _D1.weekday()))
@@ -433,7 +433,7 @@ class _LeakyStage:
 
 
 def _problem():
-    from trippilot.domain.itinerary import ItineraryProblem
+    from trippilot.domain.itinerary.itinerary import ItineraryProblem
     from trippilot.domain.common import BudgetLevel
 
     s = datetime(_D1.year, _D1.month, _D1.day, 9, 0, tzinfo=_KST)
@@ -465,7 +465,7 @@ def test_공용_validate_는_정보_없음을_막지_않는다() -> None:
 
 
 def test_그리디는_좌표_미상_슬롯_뒤에_붙이지_않는다() -> None:
-    from trippilot.domain.llm import ScoredPoi
+    from trippilot.domain.llm.llm import ScoredPoi
 
     problem = replace(_problem(), candidates=tuple(
         ScoredPoi(p.poi_id, 0.5, False) for p in _NEAR))

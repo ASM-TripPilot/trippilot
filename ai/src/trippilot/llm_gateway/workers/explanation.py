@@ -13,7 +13,7 @@ from datetime import datetime
 from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.llm import CandidatePool, LlmFeature, TypedResult
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature, TypedResult
 from trippilot.domain.persona import PersonaSummary
 
 

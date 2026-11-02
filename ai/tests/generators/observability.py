@@ -11,7 +11,7 @@ from hypothesis import strategies as st
 
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.execution import AgentKind
-from trippilot.domain.itinerary import SolveMode
+from trippilot.domain.itinerary.itinerary import SolveMode
 from trippilot.domain.observability import (
     FallbackEvent,
     GateDropEvent,
@@ -19,7 +19,7 @@ from trippilot.domain.observability import (
     ScoreChunkEvent,
     AssemblyRunRecord,
 )
-from trippilot.domain.prompt import PromptRef
+from trippilot.domain.llm.prompt import PromptRef
 
 _KST = timezone(timedelta(hours=9))
 

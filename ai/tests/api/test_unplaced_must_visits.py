@@ -35,7 +35,7 @@ from trippilot.api.wiring import (
     judge_unplaced_must_visits,
 )
 from trippilot.domain.common import PoiId, ScheduleId
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     DaySolution,
     ItinerarySolution,
     SolveMode,

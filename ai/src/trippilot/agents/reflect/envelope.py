@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from trippilot.domain.delegation import AgentResult, TaskMetrics
+from trippilot.domain.dialogue.delegation import AgentResult, TaskMetrics
 from trippilot.domain.freshness import FreshnessMeta
 from trippilot.domain.reflection import ReflectionTemplate
 

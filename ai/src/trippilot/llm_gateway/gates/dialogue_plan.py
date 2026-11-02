@@ -36,11 +36,11 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.dialogue import missing_arguments
-from trippilot.domain.intent import Intent, IntentDraft
-from trippilot.domain.llm import CandidatePool, LlmFeature
+from trippilot.domain.dialogue.dialogue import missing_arguments
+from trippilot.domain.dialogue.intent import Intent, IntentDraft
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature
 from trippilot.domain.observability import GateDropEvent
-from trippilot.domain.plan_tools import MAX_ARG_CHARS, MAX_PLAN_CALLS, PLAN_GAPS, PLAN_TOOLS, plan_argument_names
+from trippilot.domain.dialogue.plan_tools import MAX_ARG_CHARS, MAX_PLAN_CALLS, PLAN_GAPS, PLAN_TOOLS, plan_argument_names
 from trippilot.llm_gateway.gates.base import GateOutcome, empty_result_error, strip_code_fence
 from trippilot.llm_gateway.gates.dialogue_answer import _violates, clock_times
 from trippilot.llm_gateway.gates.intent import IntentGate

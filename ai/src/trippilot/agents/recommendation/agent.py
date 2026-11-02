@@ -23,7 +23,7 @@ import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from trippilot.domain.region_recommend import RegionPick, preference_weights, recommend_regions
+from trippilot.domain.poi.region_recommend import RegionPick, preference_weights, recommend_regions
 
 log = logging.getLogger(__name__)
 

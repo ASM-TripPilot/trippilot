@@ -22,7 +22,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.llm_gateway.adapters.openai_adapter import _responses_input
-from trippilot.domain.prompt import PromptRef
+from trippilot.domain.llm.prompt import PromptRef
 from trippilot.domain.reflection import (
     PhotoConsent,
     PhotoId,
@@ -152,7 +152,7 @@ def _facade(llm, gate=None):
     from trippilot.llm_gateway.config import C1Config
     from trippilot.llm_gateway.gateway import GatewayFacade
     from trippilot.llm_gateway.prompts import PromptRegistry
-    from trippilot.domain.llm import ModelTier
+    from trippilot.domain.llm.llm import ModelTier
     from pathlib import Path
 
     from tests.fakes.in_memory_trace import InMemoryTrace
@@ -188,7 +188,7 @@ def _vision_call_args():
 def test_gateway_refuses_images_without_consent_ref() -> None:
     """이미지가 벤더로 나가는 **유일한 통로**에서 동의 증빙을 요구한다 —
     워커의 타입 강제를 우회해도 여기서 막힌다. 폴백이 아니라 호출 버그(ValueError)."""
-    from trippilot.domain.llm import LlmFeature
+    from trippilot.domain.llm.llm import LlmFeature
     from trippilot.domain.common import TraceId
 
     facade, _ = _facade(VisionSpyLlm(canned="{}"))
@@ -206,7 +206,7 @@ def test_gateway_refuses_images_without_consent_ref() -> None:
 def test_consent_ref_reaches_the_call_record() -> None:
     """법무 감사가 "이 전송은 어느 동의 근거였나"를 물으면 트레이스가 답해야 한다 —
     성공·실패(폴백) 어느 경로든 기록에 남는다 (BR-U6R-09 후반부)."""
-    from trippilot.domain.llm import LlmFeature
+    from trippilot.domain.llm.llm import LlmFeature
     from trippilot.domain.common import TraceId
     from trippilot.domain.observability import LlmCallRecord
 
@@ -226,7 +226,7 @@ def test_consent_ref_reaches_the_call_record() -> None:
 
 def test_text_calls_leave_consent_ref_empty() -> None:
     """이미지 없는 기존 호출은 None — 기록에 없던 값이 지어내지지 않는다."""
-    from trippilot.domain.llm import LlmFeature
+    from trippilot.domain.llm.llm import LlmFeature
     from trippilot.domain.common import TraceId
     from trippilot.domain.observability import LlmCallRecord
 

@@ -12,9 +12,9 @@ from trippilot.agents.edit.commands import EditStatus
 from trippilot.api.wiring import _problem_for
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TraceId, TransportMode
 from trippilot.domain.edit import EditCommand, EditOp
-from trippilot.domain.itinerary import DaySolution, ItinerarySolution, SolveMode, Violation, VisitSlot
-from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.itinerary.itinerary import DaySolution, ItinerarySolution, SolveMode, Violation, VisitSlot
+from trippilot.domain.llm.llm import CandidatePool
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 _KST = timezone(timedelta(hours=9))
 _DAY = date(2026, 8, 5)

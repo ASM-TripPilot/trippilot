@@ -20,9 +20,9 @@ from collections.abc import Iterable
 from datetime import datetime
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.dialogue import tool_specs_json
-from trippilot.domain.intent import DIALOGUE_INTENTS
-from trippilot.domain.llm import LlmFeature, TypedResult
+from trippilot.domain.dialogue.dialogue import tool_specs_json
+from trippilot.domain.dialogue.intent import DIALOGUE_INTENTS
+from trippilot.domain.llm.llm import LlmFeature, TypedResult
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import inline
 

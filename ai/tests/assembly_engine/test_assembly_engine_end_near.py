@@ -25,7 +25,7 @@ from trippilot.assembly_engine.config import END_NEAR_WEIGHT
 from trippilot.assembly_engine.constraints import check_all
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.domain.common import GeoPoint
-from trippilot.domain.itinerary import ItineraryProblem
+from trippilot.domain.itinerary.itinerary import ItineraryProblem
 
 from tests.assembly_engine.test_assembly_engine_travel_weight import _CFG, _EST, _or, _pool
 

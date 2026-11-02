@@ -10,9 +10,9 @@ from typing import Protocol
 
 from trippilot.llm_gateway.gates.base import GateOutcome, _load_json_object
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
-from trippilot.domain.llm import CandidatePool, LlmFeature
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature
 from trippilot.domain.observability import GateDropEvent
-from trippilot.domain.poi import ExtractedPlace
+from trippilot.domain.poi.poi import ExtractedPlace
 
 
 class PlaceExtractionGate:

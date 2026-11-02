@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from typing import Mapping
 
 from trippilot.domain.common import PoiId
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     CLOSED_DAY,
     HOLIDAY,
     OUT_OF_HOURS,
@@ -24,7 +24,7 @@ from trippilot.domain.itinerary import (
     ItinerarySolution,
     Violation,
 )
-from trippilot.domain.poi import HOLIDAY_TAGS, UNREAD_CALENDAR, HolidayCalendar, Poi, closed_by_holiday, open_windows_on
+from trippilot.domain.poi.poi import HOLIDAY_TAGS, UNREAD_CALENDAR, HolidayCalendar, Poi, closed_by_holiday, open_windows_on
 
 
 def _min_of_day(dt) -> int:

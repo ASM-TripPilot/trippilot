@@ -21,7 +21,7 @@ from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
-from trippilot.domain.intent import Intent, IntentMatch, MatchRoute
+from trippilot.domain.dialogue.intent import Intent, IntentMatch, MatchRoute
 from trippilot.orchestrator.intent_eval import Sample, format_report, score
 from trippilot.orchestrator.shadow_probe import ShadowRecord, ShadowSide
 

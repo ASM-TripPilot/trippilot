@@ -43,7 +43,7 @@ from trippilot.llm_gateway.workers.share_card_copy import (
     fallback_share_card_copy,
 )
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent, GateDropEvent
 from trippilot.domain.reflection import (
     PLACEHOLDER_VOCAB,

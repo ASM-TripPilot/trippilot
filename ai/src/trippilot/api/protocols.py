@@ -34,7 +34,7 @@ from trippilot.api.schemas import (
     ValidateItineraryRequest,
 )
 from trippilot.domain.freshness import FreshnessMeta
-from trippilot.domain.itinerary import ItinerarySolution, Violation
+from trippilot.domain.itinerary.itinerary import ItinerarySolution, Violation
 
 
 class CandidatesSummaryLike(Protocol):

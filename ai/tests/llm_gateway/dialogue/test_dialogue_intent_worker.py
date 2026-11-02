@@ -23,11 +23,11 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.domain.common import TraceId
-from trippilot.domain.dialogue import tool_specs_json
-from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent, IntentDraft
-from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.dialogue.dialogue import tool_specs_json
+from trippilot.domain.dialogue.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent, IntentDraft
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent
-from trippilot.domain.prompt import PromptRef
+from trippilot.domain.llm.prompt import PromptRef
 from trippilot.llm_gateway.config import (
     C1Config,
     default_fallback_modes,

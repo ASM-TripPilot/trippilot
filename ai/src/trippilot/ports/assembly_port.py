@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from trippilot.domain.itinerary import ItineraryProblem, ItinerarySolution
+from trippilot.domain.itinerary.itinerary import ItineraryProblem, ItinerarySolution
 
 
 class AssemblyPort(Protocol):

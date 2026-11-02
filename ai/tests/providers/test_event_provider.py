@@ -30,12 +30,12 @@ from trippilot.domain.common import (
     ScheduleId,
     TransportMode,
 )
-from trippilot.domain.event import EventInfo, EventType
+from trippilot.domain.itinerary.event import EventInfo, EventType
 from trippilot.domain.freshness import ProviderStatus
-from trippilot.domain.itinerary import ItineraryProblem, TimeWindow
-from trippilot.domain.llm import ScoredPoi
+from trippilot.domain.itinerary.itinerary import ItineraryProblem, TimeWindow
+from trippilot.domain.llm.llm import ScoredPoi
 from trippilot.domain.persona import TasteTag
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.orchestrator.event_affinity import (
     ATTACH_RADIUS_KM,
     event_affinity,

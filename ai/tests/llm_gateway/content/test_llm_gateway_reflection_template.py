@@ -42,7 +42,7 @@ from trippilot.llm_gateway.workers.reflection_template import (
     build_reflection_template_vars,
 )
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.llm import LlmFeature, ModelTier
+from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.domain.reflection import (
     Cover,
     PhotoSlot,

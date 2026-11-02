@@ -64,13 +64,13 @@ from trippilot.agents.edit.insert_between import (
 )
 from trippilot.domain.common import GeoPoint, PoiId, TraceId, TransportMode
 from trippilot.domain.edit import ApplyMode, EditCommand, EditOp, resolve_apply_mode
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     ItineraryProblem,
     ItinerarySolution,
     Violation,
 )
-from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi import Poi
+from trippilot.domain.llm.llm import CandidatePool
+from trippilot.domain.poi.poi import Poi
 from trippilot.llm_gateway.gates.edit_translation import is_anchor_param_key
 from trippilot.llm_gateway.workers.edit_translation import (
     EditTranslationInput,

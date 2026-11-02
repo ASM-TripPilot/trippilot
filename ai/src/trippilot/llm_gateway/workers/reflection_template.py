@@ -21,7 +21,7 @@ from trippilot.llm_gateway.prompts import inline
 from trippilot.llm_gateway.gates.reflection_template import ReflectionTemplateContext
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import LlmFeature, TypedResult
+from trippilot.domain.llm.llm import LlmFeature, TypedResult
 from collections.abc import Mapping
 
 from trippilot.domain.reflection import PhotoId, ReflectionRequest, VisionInput

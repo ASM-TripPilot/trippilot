@@ -27,7 +27,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from trippilot.domain.common import PoiId, TraceId
-from trippilot.domain.llm import CandidatePool, ScoredPoi, TypedResult
+from trippilot.domain.llm.llm import CandidatePool, ScoredPoi, TypedResult
 from trippilot.domain.persona import PersonaSummary
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
 

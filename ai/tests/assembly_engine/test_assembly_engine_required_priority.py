@@ -15,7 +15,7 @@ from dataclasses import replace
 from trippilot.assembly_engine.constraints import check_all
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.domain.common import GeoPoint, PoiId
-from trippilot.domain.itinerary import RequiredVisit
+from trippilot.domain.itinerary.itinerary import RequiredVisit
 
 from tests.assembly_engine.test_assembly_engine_travel_weight import _ANCHOR, _CFG, _DAY, _EST, _or, _pool
 

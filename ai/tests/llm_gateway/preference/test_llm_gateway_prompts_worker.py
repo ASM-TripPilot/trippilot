@@ -22,7 +22,7 @@ from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker, build_prompt_vars
 from trippilot.domain.common import BudgetLevel, TraceId
 from trippilot.domain.context import PermissionDeniedError, Principal, ResourceRef
-from trippilot.domain.llm import CandidatePool, LlmFeature, ModelTier
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature, ModelTier
 from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
 from tests.fakes.fake_llm import FailingLlm, FakeLlm
 from tests.fakes.in_memory_trace import InMemoryTrace

@@ -34,7 +34,7 @@ from trippilot.domain.common import (
     ScheduleId,
     TransportMode,
 )
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     DaySolution,
     FixedBlock,
     ItineraryProblem,
@@ -44,10 +44,10 @@ from trippilot.domain.itinerary import (
     TimeWindow,
     VisitSlot,
 )
-from trippilot.domain.llm import ScoredPoi
+from trippilot.domain.llm.llm import ScoredPoi
 from trippilot.domain.observability import FallbackEvent, AssemblyRunRecord
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.domain.prompt import PromptRef
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.llm.prompt import PromptRef
 
 from tests.fakes.fake_clock import FakeClock
 from tests.fakes.fake_llm import FakeLlm

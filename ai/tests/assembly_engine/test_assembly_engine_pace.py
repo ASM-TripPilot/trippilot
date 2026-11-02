@@ -36,9 +36,9 @@ from trippilot.domain.common import (
     ScheduleId,
     TransportMode,
 )
-from trippilot.domain.itinerary import FixedBlock, ItineraryProblem, TimeWindow
-from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.itinerary.itinerary import FixedBlock, ItineraryProblem, TimeWindow
+from trippilot.domain.llm.llm import ScoredPoi
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 _KST = timezone(timedelta(hours=9))
 _DAY = date(2026, 9, 1)

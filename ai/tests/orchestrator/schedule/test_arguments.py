@@ -14,9 +14,9 @@ from __future__ import annotations
 import pytest
 
 from trippilot.domain.common import BudgetLevel, TransportMode
-from trippilot.domain.dialogue import ARGUMENT_TABLE, ArgumentKind, specs_of
+from trippilot.domain.dialogue.dialogue import ARGUMENT_TABLE, ArgumentKind, specs_of
 from trippilot.domain.edit import EditOp
-from trippilot.domain.intent import Intent
+from trippilot.domain.dialogue.intent import Intent
 from trippilot.orchestrator.arguments import (
     NEEDS_LLM,
     extract_argument,

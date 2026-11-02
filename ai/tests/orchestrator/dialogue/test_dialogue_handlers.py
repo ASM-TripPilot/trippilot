@@ -27,13 +27,13 @@ from hypothesis import strategies as st
 from trippilot.agents.planb.rag import Alternative, PlanBRagRequest, PlanBRagResult
 from trippilot.agents.unknown_handling.agent import KnowledgeTask, UnknownOutcome
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
-from trippilot.domain.event import EventInfo, EventType
+from trippilot.domain.itinerary.event import EventInfo, EventType
 from trippilot.domain.freshness import FreshnessMeta, InfoPacket, ProviderKind, ProviderStatus
-from trippilot.domain.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent
-from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.domain.region_centers import region_center
-from trippilot.domain.trigger import TriggerKind
+from trippilot.domain.dialogue.intent import DIALOGUE_INTENTS, ROUTABLE_INTENTS, Intent
+from trippilot.domain.llm.llm import CandidatePool
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.region_centers import region_center
+from trippilot.domain.dialogue.trigger import TriggerKind
 from trippilot.llm_gateway.gates.dialogue_answer import _MAX_LENGTH, _violates
 from trippilot.llm_gateway.workers.dialogue_answer import (
     EXPLORE_ASK_REGION_TEXT,
@@ -813,7 +813,7 @@ def _free_distance(arguments: dict, found=None) -> tuple[Facts, _Transit, _Place
 
 
 def test_distance_between_two_named_areas_uses_region_centers_and_says_so() -> None:
-    from trippilot.domain.region_centers import region_center
+    from trippilot.domain.poi.region_centers import region_center
 
     facts, transit, _ = _free_distance({"origin": "강남역", "destination": "홍대 쪽"})
     (call,) = transit.calls
@@ -1398,7 +1398,7 @@ def _names_of(facts: Facts) -> list[str]:
 
 
 def test_explore_region_anchor_ranks_trending_first_and_keeps_out_stays_and_nightlife() -> None:
-    from trippilot.domain.region_centers import region_center
+    from trippilot.domain.poi.region_centers import region_center
 
     facts, builder = _explore({"region": "부산 해운대", "theme": "요즘 핫한"})
     (request, _), = builder.requests
@@ -1547,7 +1547,7 @@ def test_explore_without_region_uses_the_next_itinerary_slot_with_distance() -> 
 
 
 def test_explore_without_region_or_slots_uses_the_trip_destination() -> None:
-    from trippilot.domain.region_centers import region_center
+    from trippilot.domain.poi.region_centers import region_center
 
     facts, builder = _explore({}, snapshot=_snapshot((), trip=_TRIP))
     assert builder.requests[0][0].anchor == region_center("제주")[1]
@@ -2635,7 +2635,7 @@ def _region(arguments: dict, tastes=None) -> Facts:
 
 
 def test_region_recommendation_from_saved_tastes_names_table_regions_with_reasons_and_explore_chips() -> None:
-    from trippilot.domain.region_centers import region_center
+    from trippilot.domain.poi.region_centers import region_center
 
     facts = _region({"count": "2"}, tastes=(("자연",), ("테마파크",)))
     assert facts.intent is Intent.RECOMMEND_REGION and facts.status is FactStatus.OK and facts.kind is AnswerKind.TEXT

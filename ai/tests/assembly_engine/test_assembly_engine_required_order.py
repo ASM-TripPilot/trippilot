@@ -16,9 +16,9 @@ from hypothesis import strategies as st
 
 from trippilot.assembly_engine.constraints import check_all
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
-from trippilot.domain.itinerary import FixedBlock, ItineraryProblem, RequiredVisit, TimeWindow
+from trippilot.domain.itinerary.itinerary import FixedBlock, ItineraryProblem, RequiredVisit, TimeWindow
 from trippilot.domain.common import GeoPoint
-from trippilot.domain.poi import PoiCategory
+from trippilot.domain.poi.poi import PoiCategory
 
 from tests.assembly_engine.test_assembly_engine_travel_weight import _ANCHOR, _CFG, _DAY, _EST, _KST, _or, _pool
 

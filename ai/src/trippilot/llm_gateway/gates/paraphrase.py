@@ -27,7 +27,7 @@ from trippilot.llm_gateway.gates.base import (
     empty_result_error,
 )
 from trippilot.domain.common import TraceId
-from trippilot.domain.llm import CandidatePool, LlmFeature
+from trippilot.domain.llm.llm import CandidatePool, LlmFeature
 from trippilot.domain.observability import GateDropEvent
 
 # 라우터 기본 N=3의 여유배 — 상한 자체는 게이트가 알 수 있는 유일한 방어선이다

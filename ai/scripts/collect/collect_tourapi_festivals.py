@@ -27,7 +27,7 @@ sys.path.insert(0, str(_AI / "src"))
 
 from trippilot.background.event_store import JsonEventStore  # noqa: E402
 from trippilot.domain.common import GeoPoint  # noqa: E402
-from trippilot.domain.event import EventInfo, EventType  # noqa: E402
+from trippilot.domain.itinerary.event import EventInfo, EventType  # noqa: E402
 from trippilot.poi_curation.sourcing.tourapi import TourApiAdapter, UrllibHttpClient  # noqa: E402
 from trippilot.ports.poi_sourcing_port import SourcingError  # noqa: E402
 

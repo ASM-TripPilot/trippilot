@@ -63,7 +63,7 @@ from trippilot.llm_gateway.gateway import GatewayFacade  # noqa: E402
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker  # noqa: E402
 from trippilot.poi_curation.config import M7Config  # noqa: E402
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder  # noqa: E402
-from trippilot.domain.poi_curation import CandidatePoolRequest  # noqa: E402
+from trippilot.domain.poi.poi_curation import CandidatePoolRequest  # noqa: E402
 
 from tests.fakes.fake_clock import FakeClock  # noqa: E402
 from tests.fakes.fake_llm import FakeLlm  # noqa: E402

@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
-_PROFILES = Path(__file__).resolve().parents[3] / "data/region_profiles.json"
+_PROFILES = Path(__file__).resolve().parents[4] / "data/region_profiles.json"
 
 # 동네·권역(시 안의 한 곳)은 "가볼 지역" 후보가 아니다 — 그 도시(서울·부산·제주)가 후보다. 동네는 장소 탐색의 앵커로만 쓴다
 NEIGHBORHOODS: frozenset[str] = frozenset({

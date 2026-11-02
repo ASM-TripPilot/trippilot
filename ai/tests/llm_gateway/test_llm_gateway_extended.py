@@ -28,14 +28,14 @@ from trippilot.llm_gateway.workers.explanation import ExplanationWorker
 from trippilot.llm_gateway.workers.place_extraction import PlaceExtractionWorker
 from trippilot.domain.common import BudgetLevel, PoiId, TraceId
 from trippilot.domain.context import Principal, ResourceRef
-from trippilot.domain.llm import (
+from trippilot.domain.llm.llm import (
     CandidatePool,
     LlmFeature,
     ModelTier,
     PoiExplanation,
 )
 from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
-from trippilot.domain.poi import ExtractedPlace
+from trippilot.domain.poi.poi import ExtractedPlace
 from tests.fakes.fake_llm import FailingLlm, FakeLlm
 from tests.fakes.in_memory_trace import InMemoryTrace
 from tests.generators.poi import candidate_pools
@@ -195,7 +195,7 @@ def test_extracted_place_roundtrip() -> None:
 
 def _tiny_pool() -> CandidatePool:
     from trippilot.domain.common import GeoPoint, PoiId  # noqa: PLC0415
-    from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource  # noqa: PLC0415
+    from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource  # noqa: PLC0415
 
     p1 = Poi(poi_id=PoiId("p1"), name="성심당", category=PoiCategory.FOOD,
              coord=GeoPoint(36.3, 127.4), open_hours=(), avg_cost=None, rating=None,

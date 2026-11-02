@@ -44,7 +44,7 @@ sys.path.insert(0, str(_AI))
 sys.path.insert(0, str(_AI / "src"))
 sys.path.insert(0, str(_AI / "scripts" / "smoke"))  # smoke_llm
 
-from trippilot.domain.prompt import PromptRef  # noqa: E402
+from trippilot.domain.llm.prompt import PromptRef  # noqa: E402
 from trippilot.ports.llm_port import LlmRequest  # noqa: E402
 
 _OUT = _AI / "data" / "overture_nonfood_verdicts.json"

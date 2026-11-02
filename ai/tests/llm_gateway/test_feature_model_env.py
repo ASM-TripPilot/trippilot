@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from trippilot.domain.llm import LlmFeature
+from trippilot.domain.llm.llm import LlmFeature
 from trippilot.llm_gateway.feature_model_env import ENV_VAR, feature_models_from_env
 
 

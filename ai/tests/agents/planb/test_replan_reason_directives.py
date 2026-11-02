@@ -28,9 +28,9 @@ from trippilot.agents.schedule.agent import ScheduleAgent
 from trippilot.api import schemas
 from trippilot.api.wiring import _REASON_IMPLIED_DIRECTIVES, _route_weight, build_dev_app
 from trippilot.domain.common import GeoPoint, Pace, TraceId
-from trippilot.domain.itinerary import TimeWindow
-from trippilot.domain.poi import PoiCategory
-from trippilot.domain.poi_curation import CandidatePoolRequest
+from trippilot.domain.itinerary.itinerary import TimeWindow
+from trippilot.domain.poi.poi import PoiCategory
+from trippilot.domain.poi.poi_curation import CandidatePoolRequest
 from trippilot.llm_gateway.gates.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker

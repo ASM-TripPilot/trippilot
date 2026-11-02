@@ -23,7 +23,7 @@ import pytest
 from trippilot.api.wiring import UnwiredLlm
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, TransportMode
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 
 # scripts/ 는 패키지가 아니다 — 스크립트와 같은 방식(동일 디렉토리 경로)으로 import
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "smoke"))
@@ -276,7 +276,7 @@ def test_rehearsal_rejects_empty_days():
     selection = select_rehearsal_pois(entries, "2026-08-14")
     # deadline이 아니라 선택 집합 바깥 검증을 직접 깨긴 어렵다 — 슬롯 0건 경로는
     # 앵커에서 8km 안이지만 전 POI가 심야에만 여는 극단 데이터로 유도한다.
-    from trippilot.domain.poi import OpenHour
+    from trippilot.domain.poi.poi import OpenHour
 
     closed = tuple(
         Poi(
@@ -505,7 +505,7 @@ def test_rehearsal_records_injected_weather():
 def test_rehearsal_accepts_event_store(tmp_path):
     """TRIP-421 — 행사 저장소 주입 관통 (실 호출 0, fake만). 결과 스키마 무변."""
     from trippilot.background.event_store import JsonEventStore
-    from trippilot.domain.event import EventInfo, EventType
+    from trippilot.domain.itinerary.event import EventInfo, EventType
 
     entries = _entries(_TWO_REGIONS)
     smoke_date = dt.date(2026, 8, 14)
@@ -657,7 +657,7 @@ def _call(model_id: str, input_tokens: int, output_tokens: int):
 
     from trippilot.domain.common import TraceId
     from trippilot.domain.observability import LlmCallRecord
-    from trippilot.domain.prompt import PromptRef
+    from trippilot.domain.llm.prompt import PromptRef
 
     return LlmCallRecord(
         trace_id=TraceId("t-1"),

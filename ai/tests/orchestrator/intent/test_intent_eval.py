@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from trippilot.domain.intent import Intent, IntentMatch, MatchRoute
+from trippilot.domain.dialogue.intent import Intent, IntentMatch, MatchRoute
 from trippilot.orchestrator.intent_eval import Sample, format_report, score
 
 
@@ -89,7 +89,7 @@ def test_refusal_markers_match_real_router_fallback_reasons() -> None:
     from trippilot.llm_gateway.gateway import GatewayFacade
     from trippilot.llm_gateway.prompts import PromptRegistry
     from trippilot.domain.common import TraceId
-    from trippilot.domain.llm import ModelTier
+    from trippilot.domain.llm.llm import ModelTier
     from trippilot.orchestrator.intent_router import IntentRouter
     from tests.fakes.fake_embedding import FakeEmbedding
     from tests.fakes.fake_llm import FakeLlm

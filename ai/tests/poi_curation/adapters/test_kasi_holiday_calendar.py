@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-from trippilot.domain.poi import UNREAD_CALENDAR
+from trippilot.domain.poi.poi import UNREAD_CALENDAR
 from trippilot.poi_curation.adapters.kasi_holiday_calendar import KasiHolidayCalendarAdapter
 from trippilot.ports.holiday_calendar_port import HolidaySource
 

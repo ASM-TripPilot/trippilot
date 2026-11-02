@@ -29,10 +29,10 @@ from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.ortools_assembler import OrToolsAssembler
 from trippilot.assembly_engine.travel import TravelEstimator
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, ScheduleId, TransportMode
-from trippilot.domain.itinerary import (FixedBlock, ItineraryProblem, RequiredVisit,
+from trippilot.domain.itinerary.itinerary import (FixedBlock, ItineraryProblem, RequiredVisit,
                                         TimeWindow)
-from trippilot.domain.llm import ScoredPoi
-from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory as C, PoiSource
+from trippilot.domain.llm.llm import ScoredPoi
+from trippilot.domain.poi.poi import DataQuality, OpenHour, Poi, PoiCategory as C, PoiSource
 
 _KST = timezone(timedelta(hours=9))
 _DAY = date(2026, 8, 5)

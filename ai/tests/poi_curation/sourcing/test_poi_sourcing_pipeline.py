@@ -32,7 +32,7 @@ from trippilot.poi_curation.sourcing.pipeline import (
     to_output_document,
 )
 from trippilot.poi_curation.sourcing.tourapi import TourApiAdapter
-from trippilot.domain.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 from trippilot.ports.poi_sourcing_port import SourcedDetail
 
 from tests.fakes.fake_tourapi_http import (
@@ -565,7 +565,7 @@ def test_zero_coordinate_record_is_dropped_as_schema_not_existence() -> None:
     rec = TourApiAdapter._to_record(item, "12")  # noqa: SLF001
     assert rec.lat is None and rec.lng is None
 
-    from trippilot.domain.poi import PoiCategory
+    from trippilot.domain.poi.poi import PoiCategory
     from trippilot.poi_curation.sourcing.collection_gate import SourcingCandidate
 
     c = SourcingCandidate(source_ref="1", kind="12", name="좌표없는곳",

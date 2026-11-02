@@ -35,10 +35,10 @@ from trippilot.agents.planb.kb_retrieval import index_documents
 from trippilot.agents.planb.rag import PlanBRagRequest
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TraceId
 from trippilot.domain.kb import KbKind
-from trippilot.domain.llm import CandidatePool
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.domain.prompt import PromptRef
-from trippilot.domain.trigger import TriggerKind, TriggerParams
+from trippilot.domain.llm.llm import CandidatePool
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.llm.prompt import PromptRef
+from trippilot.domain.dialogue.trigger import TriggerKind, TriggerParams
 from trippilot.ports.llm_port import LlmRequest
 
 from tests.fakes.in_memory_vector_store import InMemoryVectorStore

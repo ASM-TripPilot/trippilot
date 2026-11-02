@@ -15,8 +15,8 @@ import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
-from trippilot.domain.intent import Intent, IntentDraft
-from trippilot.domain.plan_tools import PLAN_TOOLS, PlanTool
+from trippilot.domain.dialogue.intent import Intent, IntentDraft
+from trippilot.domain.dialogue.plan_tools import PLAN_TOOLS, PlanTool
 from trippilot.orchestrator import dialogue_plan as dp
 from trippilot.orchestrator.dialogue_handlers import (
     HANDLERS,
@@ -217,7 +217,7 @@ from dataclasses import replace as _replace  # noqa: E402
 from tests.fakes.fake_clock import FakeClock  # noqa: E402
 from tests.orchestrator.dialogue import test_dialogue_orchestrator as to  # noqa: E402
 from trippilot.domain.context import PermissionDeniedError  # noqa: E402
-from trippilot.domain.llm import LlmFeature  # noqa: E402
+from trippilot.domain.llm.llm import LlmFeature  # noqa: E402
 from trippilot.domain.observability import FallbackEvent, GateDropEvent, LlmCallRecord  # noqa: E402
 from trippilot.llm_gateway.gates.intent import NULL_INTENT  # noqa: E402
 from trippilot.orchestrator import dialogue_orchestrator as orch_mod  # noqa: E402
@@ -256,7 +256,7 @@ def test_plan_path_follow_up_keeps_the_previous_area_not_the_itinerary() -> None
     """분류가 "더알려줘"를 계획으로 보내면(실 스택에서 그랬다) 계획 경로에도 최근 대화가 가야 앞 요청(홍대·이태원 사이)을 잇는다 —
     안 가면 일정(제주) 근처가 나왔다. 보인 곳은 뺀다(2026-10-22)."""
     from trippilot.domain.common import GeoPoint
-    from trippilot.domain.region_centers import region_center
+    from trippilot.domain.poi.region_centers import region_center
 
     class _Recording(to._ExplorePool):
         def __init__(self) -> None:
@@ -279,7 +279,7 @@ def test_plan_path_follow_up_keeps_the_previous_area_not_the_itinerary() -> None
 def test_plan_path_pair_in_the_utterance_steers_only_a_single_tool() -> None:
     """"홍대 맛집이랑 거기서 이태원 가는 길에 들를 카페" 가 도구 둘로 나뉘면 홍대 맛집 몫은 홍대 앵커여야 한다 — 발화의 짝을 모든
     도구에 주면 홍대 맛집도 홍대·이태원 사이가 됐다(2026-10-22 검증)."""
-    from trippilot.domain.region_centers import region_center
+    from trippilot.domain.poi.region_centers import region_center
 
     class _Recording(to._ExplorePool):
         def __init__(self) -> None:
@@ -382,7 +382,7 @@ def test_names_from_the_other_parts_are_known_names() -> None:
 
 
 def CandidatePool_empty():  # noqa: N802 — 빈 풀(조회는 됐는데 등록 장소 없음 → 탐색 EMPTY)
-    from trippilot.domain.llm import CandidatePool
+    from trippilot.domain.llm.llm import CandidatePool
     return CandidatePool(poi_ids=frozenset(), pois=(), generated_at=to._NOW)
 
 

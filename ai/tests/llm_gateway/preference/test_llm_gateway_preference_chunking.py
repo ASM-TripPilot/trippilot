@@ -42,10 +42,10 @@ from trippilot.llm_gateway.workers.preference import (
 )
 from trippilot.domain.common import BudgetLevel, GeoPoint, PoiId, TraceId
 from trippilot.domain.context import Principal, ResourceRef
-from trippilot.domain.llm import CandidatePool, ModelTier
+from trippilot.domain.llm.llm import CandidatePool, ModelTier
 from trippilot.domain.observability import FallbackEvent, ScoreChunkEvent
 from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
-from trippilot.domain.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.ports.llm_port import LlmRequest, LlmResponse
 from tests.fakes.fake_llm import FailingLlm
 from tests.fakes.in_memory_trace import InMemoryTrace

@@ -16,7 +16,7 @@ import pytest
 from hypothesis import given
 
 from trippilot.domain.common import BudgetLevel, PoiId, ScheduleId, TransportMode
-from trippilot.domain.itinerary import (
+from trippilot.domain.itinerary.itinerary import (
     DaySolution,
     FixedBlock,
     ItineraryProblem,

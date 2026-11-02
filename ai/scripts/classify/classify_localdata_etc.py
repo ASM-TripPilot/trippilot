@@ -56,8 +56,8 @@ sys.path.insert(0, str(_AI / "scripts" / "collect"))  # collect_localdata
 sys.path.insert(0, str(_AI / "scripts" / "smoke"))  # smoke_llm
 
 from trippilot.domain.common import GeoPoint  # noqa: E402
-from trippilot.domain.poi import PoiCategory  # noqa: E402
-from trippilot.domain.prompt import PromptRef  # noqa: E402
+from trippilot.domain.poi.poi import PoiCategory  # noqa: E402
+from trippilot.domain.llm.prompt import PromptRef  # noqa: E402
 from trippilot.ports.llm_port import LlmRequest  # noqa: E402
 from trippilot.poi_curation.sourcing.localdata import (  # noqa: E402
     PER_ANCHOR,
