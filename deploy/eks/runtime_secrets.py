@@ -129,7 +129,7 @@ def validate_rsa_key(value):
 # 섀도 분류 측정 비율은 사용자 결정(2026-10-17)이 개발 1.0 · 운영 0.2 다. AI 기본값이 1.0 이라 운영만 여기서 내린다.
 AI_TARGET_DEFAULTS = {"prod": {"TRIPPILOT_DIALOGUE_SHADOW_RATE": "0.2"}}
 # 같은 커밋 AI 의 기능 enum. 배포 러너는 AI 패키지를 설치하지 않으므로 소스를 읽는다(runtime_pois 의 SCRIPT 와 같은 방식).
-FEATURE_SOURCE = Path(__file__).resolve().parents[2] / "ai" / "src" / "trippilot" / "domain" / "llm.py"
+FEATURE_SOURCE = Path(__file__).resolve().parents[2] / "ai" / "src" / "trippilot" / "domain" / "llm" / "llm.py"
 _MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/@+-]*")
 
 
@@ -145,7 +145,7 @@ def known_llm_features(source=FEATURE_SOURCE):
                      and isinstance(stmt.value.value, str))
 
 
-_RUNNING_FEATURES = "from trippilot.domain.llm import LlmFeature; print(' '.join(f.value for f in LlmFeature))"
+_RUNNING_FEATURES = "from trippilot.domain.llm.llm import LlmFeature; print(' '.join(f.value for f in LlmFeature))"
 
 
 def running_llm_features(namespace, shell):
