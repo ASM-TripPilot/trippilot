@@ -13,7 +13,7 @@ tickets: [TRIP-973, TRIP-974, TRIP-961]
 session_name: 리마인드 문구 학생 모델·Bedrock 서빙·서빙 판정기 + 도우미 잡담 LLM·입구 인젝션 그림자 (trippilot-31)
 handed_to:
   - "trippilot-f7 (배포·MLOps 서빙) — 1~4"
-  - "trippilot-3b (도우미 에이전트) — 5~6"
+  - "trippilot-3b (도우미 에이전트) — 5 (6 은 종료 직전 해결)"
 ---
 # 리마인드 학생 모델 서빙·판정기·도우미 잡담·인젝션 그림자 — 코드는 다 머지, 남은 것은 #1781 머지·배포와 관찰
 
@@ -39,7 +39,7 @@ REMINDER_COPY(일정 알림 문구)를 파인튜닝한 학생 모델(Qwen3-4B Lo
 3. **(f7) 인젝션 그림자 임베딩 쪽** — 개발 임베딩 파드 메모리 실측 3.28GiB(운영 2.83) / 한도 6Gi. 임베딩 이미지를 다시 구울 때 분류기(int8 ONNX 268MB)도 구워진다(빌드 `check_ready.py` 가 판정까지 확인).
 4. **(f7) 로컬 자격** — 로컬 Bedrock 프로필은 `~/.aws/trippilot-bedrock.credentials`(샌드박스 갱신이 config·credentials 를 통째로 덮어 세 번 사라졌다). 로컬 `trippilot-ai` 컨테이너는 `wt-fe-sim` 작업트리의 옛 compose 로 떠 있어 `~/.aws/credentials` 사본 블록으로 버틴다 → 다음 샌드박스 갱신 뒤 재시작하면 Bedrock 이 끊긴다. wt-fe-sim 을 develop 으로 올리고 그 `.env` 에 `AI_AWS_CREDENTIALS_FILE=trippilot-bedrock.credentials`.
 5. **(3b) 인젝션 그림자 관찰** — 개발 로그 `dialogue_injection_shadow` 의 `flagged` 비율 = 오탐 상한. 10-30~11-02 실트래픽 16턴: 울림 0·오류 0·p50 72ms. **1~2주 뒤 1% 미만이면** 입구 거름(0′ 정규식)에 OR 로 올릴지 정한다 — 그때는 응답 경로 안이라 지연 예산과 "시한 초과 시 통과"가 조건. 근거 `ai/docs/security/injection-classifier-shadow.md`.
-6. **(3b) 잡담 LLM 이 Claude 로 바뀐 뒤 실제로 도는지** — 대화 기능이 GPT→Claude(opus·haiku)로 옮겨진 뒤 3일간 `DIALOGUE_SMALLTALK` 호출이 개발·운영 모두 0건(인사가 없었을 수도). 어댑터가 effort `none`→`low`+사고 끔으로 바꾸므로 설정은 맞다. 로컬 `.env` 의 Claude 키는 잔액 없음(400)이라 확인 못 했다 → 개발 앱에서 "안녕" 한 번 보내 `llm_cost … DIALOGUE_SMALLTALK … success: true` 인지 본다.
+6. ~~(3b) 잡담 LLM 이 Claude 로 바뀐 뒤 실제로 도는지~~ — **해결(11-02, 세션 종료 직전)**. 로컬 키를 서버와 같은 새 운영 키로 바꾼 뒤 운영 프롬프트·실 게이트로 haiku-5-5(개발)·opus-5-5(운영) 각 4건 = 8/8 통과, 0.9~2.5초, 거듭 인사엔 "또 인사해 주시네요". 3일 호출 0건은 인사가 없었던 것으로 본다.
 
 ## 함정 / 주의
 - **학습 데이터 약관**: Claude·GPT 출력으로 어떤 모델도 학습 금지(팀 결정 09-08) — 교사는 오픈 웨이트(Qwen3-235B)만, Sonnet 은 평가 전용.
