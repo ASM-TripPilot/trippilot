@@ -1,6 +1,10 @@
 import type { ReactNode, ReactElement } from 'react';
 import { delay, http, HttpResponse } from 'msw';
-import { focusManager, QueryClientProvider } from '@tanstack/react-query';
+import {
+  focusManager,
+  QueryClientProvider,
+  type QueryClient,
+} from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -29,6 +33,7 @@ import { resolveItineraryDestination } from '@/features/itinerary';
 import { isNotFound } from '@/shared/api';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
+import { watchTripsList } from '@/test-support/tripItineraryCols';
 import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
 import {
   itinerary as baseItinerary,
@@ -257,7 +262,12 @@ describe('다른 여행 생성 중(409) 안내', () => {
           log.push(`CANCEL ${label(params.tripId)}/${label(params.sessionId)}`);
           return cancelHandler();
         }
-      )
+      ),
+      // TRIP-1677 — 목록(`GET /trips`). 목록 화면이 켜진 테스트(I1·I6)에서만 불린다(관찰자가 없으면 요청이 없다).
+      http.get(`${BASE}/trips`, () => {
+        log.push('LIST');
+        return HttpResponse.json([]);
+      })
     );
   });
 
@@ -271,9 +281,11 @@ describe('다른 여행 생성 중(409) 안내', () => {
       mode?: GenerateItineraryRequestGenerationMode;
       successRoute?: '/trips/[tripId]/itinerary/copick/[slotKey]';
       targetDate?: string;
+      /** 테스트가 목록 관찰자(`watchTripsList`)를 붙일 수 있게 밖에서 만든 클라이언트. */
+      client?: QueryClient;
     } = {}
   ) {
-    const client = newTestQueryClient({ gcTime: 0 });
+    const client = props.client ?? newTestQueryClient({ gcTime: 0 });
     return render(
       <GeneratingPage
         tripId={TRIP_ID}
@@ -904,6 +916,73 @@ describe('다른 여행 생성 중(409) 안내', () => {
 
       await settle();
       expect(log).toEqual(['POST T1']);
+    });
+  });
+
+  // TRIP-1677 I1·I6 — 목록(`GET /trips`)이 일정 상태 네 칸(생성 중 여부 포함)을 싣게 되어, 생성 POST 가 끝나면 목록도 낡은 값이 된다.
+  // 무효화 지점은 구현 자유(훅 옵션 onSuccess/onError/onSettled)이므로 "목록 요청이 실제로 나갔다"로만 본다. 목록 요청은 `log` 에 'LIST'.
+  describe('🔴 I1·I6 · AC-7 — 생성 POST 가 끝나면 목록을 다시 받는다 (다른 여행 취소 뒤에는 취소 반영 후 목록)', () => {
+    const lists = (): number => count('LIST');
+
+    it('I1 성공(201): 목록을 정확히 한 번 더 받고, 생성 POST 는 1번 그대로다 (P3)', async () => {
+      // 준비 — 목록 화면이 켜져 있다(첫 조회 1번).
+      const client = newTestQueryClient({ gcTime: 0 });
+      const unwatch = watchTripsList(client);
+      await waitFor(() => expect(lists()).toBe(1));
+
+      // 실행 — 생성 화면이 열려 POST 가 201 로 끝난다.
+      renderPage({ client });
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+
+      // 단언 — 목록 +1 (무효화가 재조회로 이어졌다), 무효화가 POST 를 늘리지 않았다.
+      await waitFor(() => expect(lists()).toBe(2));
+      await settle();
+      expect(lists()).toBe(2);
+      expect(count('POST')).toBe(1);
+      unwatch();
+    });
+
+    it('I1 실패(500): 서버가 일정을 이미 만들었을 수 있어 목록도 다시 받는다', async () => {
+      postQueue = [
+        () =>
+          HttpResponse.json(
+            { error: { code: 'INTERNAL_ERROR', message: '서버 오류' } },
+            { status: 500 }
+          ),
+      ];
+      const client = newTestQueryClient({ gcTime: 0 });
+      const unwatch = watchTripsList(client);
+      await waitFor(() => expect(lists()).toBe(1));
+
+      renderPage({ client });
+      await screen.findByTestId('itinerary-generating-failed');
+
+      await waitFor(() => expect(lists()).toBe(2));
+      await settle();
+      expect(lists()).toBe(2);
+      expect(count('POST')).toBe(1);
+      unwatch();
+    });
+
+    it('I6 다른 여행 생성 취소 흐름: 목록 요청이 cancel 뒤에 나간다 (취소 전 목록이면 옛 "생성 중"이 남는다)', async () => {
+      postQueue = [busy, created];
+      const client = newTestQueryClient({ gcTime: 0 });
+      const unwatch = watchTripsList(client);
+      await waitFor(() => expect(lists()).toBe(1));
+
+      renderPage({ client });
+      await pressCancelAndRetry();
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      await settle();
+
+      // 단언 — 흐름은 그대로(POST 2번), 마지막 목록 요청이 cancel 보다 뒤이고 로그 맨 끝이다.
+      expect(count('POST')).toBe(2);
+      expect(count('CANCEL')).toBe(1);
+      expect(log.lastIndexOf('LIST')).toBeGreaterThan(
+        log.indexOf('CANCEL T2/S2')
+      );
+      expect(log[log.length - 1]).toBe('LIST');
+      unwatch();
     });
   });
 });

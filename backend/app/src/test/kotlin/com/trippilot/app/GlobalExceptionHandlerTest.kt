@@ -17,7 +17,16 @@ import org.junit.jupiter.api.AfterEach
 import java.util.UUID
 import org.springframework.http.HttpStatus
 import org.junit.jupiter.api.Test
+import org.slf4j.LoggerFactory
 import org.slf4j.MDC
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
+import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.nulls.shouldBeNull
+import java.io.IOException
 
 class GlobalExceptionHandlerTest {
 
@@ -73,7 +82,7 @@ class GlobalExceptionHandlerTest {
 
     @Test
     fun `미처리 예외는 INTERNAL 봉투로 침묵없이 반환하고 내부정보를 숨긴다`() {
-        val res = handler.handleUnexpected(RuntimeException("boom-secret-detail"))
+        val res = handler.handleUnexpected(RuntimeException("boom-secret-detail"))!!
 
         res.statusCode.value() shouldBe 500
         res.body!!.error.code shouldBe "INTERNAL"
@@ -174,4 +183,46 @@ class GlobalExceptionHandlerTest {
         res.body!!.error.activeTripId shouldBe null
     }
 
+    // ── TRIP-1722 · 앱이 먼저 끊은 연결은 서버 오류가 아니다 ──
+
+    @Test
+    fun `응답을 쓰다 클라이언트가 끊으면 본문을 쓰지 않고 ERROR 로 남기지 않는다`() {
+        val ex = AsyncRequestNotUsableException("ServletOutputStream failed to write: java.io.IOException: Broken pipe", IOException("Broken pipe"))
+        val (res, logs) = captured { handler.handleUnexpected(ex) }
+
+        res.shouldBeNull()
+        logs.filter { it.level.isGreaterOrEqual(Level.WARN) }.shouldBeEmpty()
+    }
+
+    @Test
+    fun `Tomcat 의 ClientAbortException 이 원인으로 감싸여 와도 끊김으로 본다`() {
+        val ex = RuntimeException("wrapped", ClientAbortException(IOException("Connection reset by peer")))
+        val (res, logs) = captured { handler.handleUnexpected(ex) }
+
+        res.shouldBeNull()
+        logs.filter { it.level.isGreaterOrEqual(Level.WARN) }.shouldBeEmpty()
+    }
+
+    /** 문구만 같은 IOException 은 서버 쪽 소켓(DB·외부 호출)일 수 있다 — 끊김으로 숨기지 않는다. */
+    @Test
+    fun `Broken pipe 문구만 있는 IOException 은 그대로 미처리 예외 ERROR 다`() {
+        val (res, logs) = captured { handler.handleUnexpected(IOException("Broken pipe")) }
+
+        res!!.statusCode.value() shouldBe 500
+        logs.single { it.level == Level.ERROR }.formattedMessage shouldBe "미처리 예외"
+    }
+
+    private fun <T> captured(block: () -> T): Pair<T, List<ILoggingEvent>> {
+        val logger = LoggerFactory.getLogger(GlobalExceptionHandler::class.java) as Logger
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        logger.addAppender(appender)
+        try {
+            return block() to appender.list.toList()
+        } finally {
+            logger.detachAppender(appender)
+        }
+    }
+
+    /** Tomcat 의 실제 클래스 대신 같은 단순 이름 — 판정이 이름으로 하므로 이것으로 충분하다. */
+    private class ClientAbortException(cause: Throwable) : IOException(cause)
 }

@@ -1,22 +1,16 @@
 import type { ReactElement } from 'react';
 import { guardPress } from '@/shared/lib/pressGuard';
 import { useRouter, type Href } from 'expo-router';
-import { useQueries, type UseQueryResult } from '@tanstack/react-query';
 
-import type { Itinerary, Trip } from '@/shared/api/index.schemas';
+import type { Trip } from '@/shared/api/index.schemas';
 import { useGetMe } from '@/shared/api/index.hooks';
 import { useGetMeProfile } from '@/shared/api/index.hooks';
 import { useGetMeStyle } from '@/shared/api/index.hooks';
-import {
-  getGetTripsTripIdItineraryQueryOptions,
-  useGetMeRecords,
-  useGetTrips,
-} from '@/shared/api/index.hooks';
-import { isNotFound } from '@/shared/api';
+import { useGetMeRecords, useGetTrips } from '@/shared/api/index.hooks';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { formatTripDateRange } from '@/entities/trip';
-import { classifyTripPhase, type TripPhase } from '@/entities/trip';
+import { classifyTripPhase, tripItinerarySummary } from '@/entities/trip';
 import { ChevronRightGlyph } from '@/entities/trip';
 import { PastTripRow } from '@/entities/trip';
 import { pickRegionCover } from '@/entities/trip';
@@ -31,8 +25,9 @@ import { StyleSummaryCard } from './StyleSummaryCard';
  * `features/settings`(화면)·`features/settings`(순수 함수)·orval 훅을 여기서 잇는다.
  *
  * TRIP-1123: 숫자 3칸은 **일정이 확정된 여행만** 센다(`classifyTripPhase` — 서버 `Trip.status` 는 초안도
- * ACTIVE 라 안 본다). 여행마다 일정을 `useQueries` 로 받고, 하나라도 모르면 세 칸 모두 `–`. 칸을 누르면
- * 탭으로 replace 한다(예정·진행 중 → 일정, 종료 → 기록). 목록·세그먼트·[새 여행 만들기]는 일정 탭 몫이라 뺐다.
+ * ACTIVE 라 안 본다). 일정 확정 여부는 목록(`GET /trips`)이 여행마다 싣는 `itineraryStatus` 에서 읽고(TRIP-1677 ·
+ * 예전엔 여행마다 일정을 따로 받았다), 목록을 못 받았으면 세 칸 모두 `–`. 폴링 틱 하나가 실패해도 받아 둔 목록이 있으면
+ * 숫자는 그대로다(오류 얼굴은 데이터가 없을 때만). 칸을 누르면 탭으로 replace 한다(예정·진행 중 → 일정, 종료 → 기록). 목록·세그먼트·[새 여행 만들기]는 일정 탭 몫이라 뺐다.
  *
  * 종료 여행은 "지난 여행" 섹션에 산다 — 섹션은 **예정 여행이 0건일 때만** 연다(TRIP-775 §F-3 A안, Figma
  * default 에 없음). 지난 여행 = 확정 && 종료(숫자 종료 칸과 같은 판정), 모르면 섹션도 닫는다.
@@ -44,8 +39,8 @@ import { StyleSummaryCard } from './StyleSummaryCard';
  *
  * 정렬(Seed Q4, 순수 함수 밖): 지난 여행 endDate 내림차순(최근순).
  *
- * TRIP-776(Figma 1603:2414): "지난 여행" 카드는 썸네일형 `PastTripRow`(compact)다 — 카드마다 bases·itinerary 를
- * 조회하는 `TripCardContainer` 를 태우지 않는다(두 값이 이 카드에 없다). "사진 N" 은 `GET /me/records` 한 번을
+ * TRIP-776(Figma 1603:2414): "지난 여행" 카드는 썸네일형 `PastTripRow`(compact)다 — 여행 카드
+ * 컨테이너(`TripCardContainer`)를 태우지 않는다(그 카드의 배지·상태문이 이 카드에 없다). "사진 N" 은 `GET /me/records` 한 번을
  * **tripId 로** 조인한다(Seed Q2=A). 응답 전·실패·목록에 없음·0장이면 라벨을 안 만든다(가짜 숫자 금지, INV-4).
  * "캘린더 ›"는 `/records`(j07 캘린더, US-REC-14).
  */
@@ -53,24 +48,6 @@ import { StyleSummaryCard } from './StyleSummaryCard';
 /** 종료 — 종료일 내림차순(최근 끝난 것부터). */
 function byEndDesc(a: Trip, b: Trip): number {
   return b.endDate.localeCompare(a.endDate);
-}
-
-/**
- * 여행 한 건의 단계. 404 만 "일정 없음(초안)"이고, 대기·그 밖의 실패는 모름 — 재조회가 실패하면
- * TanStack 이 옛 `data` 를 남기므로 `isError` 를 `data` 보다 먼저 본다.
- */
-function phaseOf(
-  trip: Trip,
-  itinerary: UseQueryResult<Itinerary, unknown>,
-  today: string
-): TripPhase | 'unknown' {
-  if (itinerary.isPending) return 'unknown';
-  if (itinerary.isError) {
-    return isNotFound(itinerary.error)
-      ? classifyTripPhase(trip, undefined, today)
-      : 'unknown';
-  }
-  return classifyTripPhase(trip, itinerary.data.status, today);
 }
 
 /** 숫자 칸 → 탭. 종료만 기록 탭(j07), 예정·진행 중은 일정 탭(h06). */
@@ -88,23 +65,21 @@ export function MyPage(): ReactElement {
   const style = useGetMeStyle();
 
   const list = trips.data ?? [];
-  // h06 과 같은 캐시 키 — 일정 탭에서 이미 받은 일정은 다시 받지 않는다.
-  const itineraries = useQueries({
-    queries: list.map((trip) =>
-      getGetTripsTripIdItineraryQueryOptions(trip.tripId)
-    ),
-  });
   // 오늘(KST) — 상태로 들어 자정을 넘기면 바뀐다(TRIP-1639 · TRIP-1364 선례). 렌더 중 `seoulDate(new Date())` 는 마운트에 굳는다.
   const today = useSeoulToday();
 
-  // 여행 목록이나 일정 하나라도 모르면 null — 세 칸 모두 `–`(일부만 센 숫자는 거짓, INV-4).
+  // 여행 목록이 없으면 null — 세 칸 모두 `–`(INV-4). 받아 둔 목록이 있으면 재조회가 실패해도 그대로 센다.
   const buckets =
-    trips.isPending || trips.isError
+    trips.data === undefined
       ? null
       : bucketTrips(
-          list.map((trip, i) => ({
+          list.map((trip) => ({
             trip,
-            phase: phaseOf(trip, itineraries[i], today),
+            phase: classifyTripPhase(
+              trip,
+              tripItinerarySummary(trip).status,
+              today
+            ),
           }))
         );
   const counts = buckets

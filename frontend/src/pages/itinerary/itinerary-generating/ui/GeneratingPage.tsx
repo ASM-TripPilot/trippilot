@@ -14,6 +14,7 @@ import type {
   Itinerary,
 } from '@/shared/api/index.schemas';
 import {
+  getGetTripsQueryKey,
   getGetTripsTripIdItineraryQueryKey,
   resolveGenerationRefused,
   useGetTripsTripId,
@@ -127,12 +128,20 @@ export function GeneratingPage({
         // 먼저 취소한다. 취소의 되돌림은 비동기라 기다린 뒤에 쓴다(안 기다리면 되돌림이 방금 쓴 값을 덮는다).
         await context.client.cancelQueries({ queryKey });
         context.client.setQueryData(queryKey, data);
+        // TRIP-1677 — 목록 칸(`itineraryGenerating` 등)을 서버 값으로 다시 받는다. 첫 생성은 일정 행이 없어 목록이 아직
+        // "생성 중 아님"이므로, 이 재조회가 셸 목록 폴링을 시작시키는 유일한 계기다(훅 옵션 자리라 화면을 떠나도 돈다).
+        void context.client.invalidateQueries({
+          queryKey: getGetTripsQueryKey(),
+        });
       },
       // TRIP-1690 FV-POLL-01 — POST 가 실패(네트워크 끊김 포함)하면 서버가 이미 1일차를 만들었을 수 있다. 캐시의 예전
       // 일정을 믿지 않고 다시 묻게 한다 — 화면을 떠난 뒤에도 돈다(훅 옵션 자리).
       onError: (_error, vars, _onMutateResult, context) => {
         void context.client.invalidateQueries({
           queryKey: getGetTripsTripIdItineraryQueryKey(vars.tripId),
+        });
+        void context.client.invalidateQueries({
+          queryKey: getGetTripsQueryKey(),
         });
       },
       onSettled: () => {

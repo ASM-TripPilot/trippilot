@@ -58,8 +58,8 @@ data class EditSlot(
 
 /**
  * 일정 편집 + 재검증(C8 · US-SCHED-06·07). 편집은 **비차단** — solver.validate(HC1-4)로 위반을 찾아
- * has_violation 으로 표시하되 저장은 허용한다(변경 차단 아님, ADR-0011). CONFIRMED 는 **여행 시작 전**만
- * 409 다(TRIP-999 결정 (a) · BR-U3-28 개정) — 여행 중에는 확정 일정도 이 경로로 고친다.
+ * has_violation 으로 표시하되 저장은 허용한다(변경 차단 아님, ADR-0011). CONFIRMED 도 막지 않는다 —
+ * 여행 중(TRIP-999 결정 (a))에 이어 여행 시작 전까지 확정 잠금을 풀었다(TRIP-1710 · BR-U3-28 2026-11-02 개정).
  * 위반 **내용**(type/detail) 실판정은 실 AI(TRIP-229); 현재 Fake validate 는 빈 목록 → 위반 없음으로 흐름 검증.
  */
 @Service
@@ -114,12 +114,8 @@ class EditItineraryService(
         val reason = edit.reason?.takeIf { it.isNotBlank() }
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         val current = itineraries.findByTrip(tripId).firstOrNull() ?: throw ResourceNotFound("생성된 일정이 없습니다.")
-        // 확정 잠금은 **여행 시작 전**만이다(TRIP-999 결정 (a) · BR-U3-28 개정). 여행이 시작되면
-        // 이 편집이 확정 일정을 직접 고치는 유일한 수단이라, 여기서 막으면 여행 중 일정 변경 수단이
-        // 0 이 된다(QA #066 — FE 허브는 CONFIRMED 일정만 live 로 보낸다).
-        if (current.status == ItineraryStatus.CONFIRMED && today() < period.startDate) {
-            throw ConflictDetected(message = "확정된 일정은 수정할 수 없습니다.")
-        }
+        // 확정(CONFIRMED) 잠금은 없다 — 여행 중(TRIP-999 결정 (a))에 이어 시작 전도 풀었다(TRIP-1710, BR-U3-28
+        // 2026-11-02 개정). 상태는 아래 reshape 가 보존하고 동결은 ConfirmedSnapshots 가 잇는다.
         // 생성 중(PARTIAL) 편집은 **이미 만들어진 일자에 한해** 허용한다(TRIP-1000 — day1 조기 노출의
         // 취지가 "보고 고칠 수 있다"다, BR-U3-06). 유실 걱정("2차가 편집을 덮어쓴다")은 병합이
         // 트랜잭션 안 재읽기 + 조건부 쓰기라 성립하지 않는다 — 2차는 최신 상태에 나머지 일자를
