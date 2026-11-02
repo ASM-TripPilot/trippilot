@@ -15,15 +15,18 @@ import type { Trip } from '@/shared/api/index.schemas';
 import { BASE } from '@/test-support/apiBase';
 import { routerSpies } from '@/test-support/expoRouterMock';
 import { freezeDate } from '@/test-support/freezeDate';
-import {
-  itinerary as itineraryFixture,
-  trip as tripFixture,
-} from '@/test-support/itineraryFixtures';
+import { trip as tripFixture } from '@/test-support/itineraryFixtures';
+import { CONFIRMED_COLS } from '@/test-support/myPageItineraries';
 import {
   newTestQueryClient,
   renderWithQueryClient,
   settle,
 } from '@/test-support/queryRender';
+import {
+  NO_ITINERARY,
+  itineraryHits,
+  listHits,
+} from '@/test-support/tripItineraryCols';
 
 import { RecordsCalendarPage } from './RecordsCalendarPage';
 
@@ -75,6 +78,7 @@ const TRIP_T1 = {
   preferenceSnapshot: {},
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
+  ...NO_ITINERARY,
 } as unknown as Trip;
 
 /** 나간 요청 `METHOD /경로` 누적. */
@@ -111,7 +115,8 @@ beforeEach(() => {
       }
       return HttpResponse.json([TRIP_T1]);
     }),
-    // 페이지가 여행마다 일정을 묻는다 — 일정 없음(404)으로 둔다.
+    // TRIP-1677 · 페이지는 여행마다 일정을 묻지 않는다(목록 칸만 읽는다). 혹시 묻는 구현이 있어도 죽지 않게 404 로 받고,
+    // 요청 수(`itineraryHits`)를 단언으로 잡는다.
     http.get(`${BASE}/trips/:tripId/itinerary`, () =>
       HttpResponse.json(
         { error: { code: 'NOT_FOUND', message: '일정이 없어요' } },
@@ -281,6 +286,7 @@ describe('화면 동작 — 캘린더·legend·진행 중 카드·지난 여행�
     endDate: '2026-06-16',
     status: 'ACTIVE',
     itineraryDayCount: 3,
+    ...CONFIRMED_COLS,
   });
   const FUT = tripFixture({
     tripId: 'fut',
@@ -297,15 +303,12 @@ describe('화면 동작 — 캘린더·legend·진행 중 카드·지난 여행�
   function serveTrips(trips: Trip[]) {
     server.use(
       http.get(`${BASE}/trips`, () => HttpResponse.json(trips)),
-      http.get(`${BASE}/trips/:tripId/itinerary`, ({ params }) =>
-        params.tripId === 'now'
-          ? HttpResponse.json(
-              itineraryFixture({ tripId: 'now', status: 'CONFIRMED' })
-            )
-          : HttpResponse.json(
-              { error: { code: 'NOT_FOUND', message: '일정이 없어요' } },
-              { status: 404 }
-            )
+      // 일정 단건은 안 묻는 게 맞다 — 묻는 구현이 있어도 죽지 않게 404 로 받고 `itineraryHits` 로 잡는다.
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(
+          { error: { code: 'NOT_FOUND', message: '일정이 없어요' } },
+          { status: 404 }
+        )
       )
     );
   }
@@ -422,6 +425,8 @@ describe('화면 동작 — 캘린더·legend·진행 중 카드·지난 여행�
     await renderReady();
 
     const card = await screen.findByTestId('record-calendar-ongoing');
+    // TRIP-1677 AC-1 — 진행 중 판정은 목록 칸에서 했다: 일정 단건 요청 0.
+    expect(itineraryHits(hits)).toBe(0);
     expect(within(card).getByText('서울 여행')).toBeOnTheScreen();
     expect(within(card).getByText('여행 중')).toBeOnTheScreen();
     expect(within(card).getByText('2026.6.14–6.16 · 2일차')).toBeOnTheScreen();
@@ -474,5 +479,109 @@ describe('화면 동작 — 캘린더·legend·진행 중 카드·지난 여행�
     expect(screen.queryByTestId('record-calendar-month')).toBeNull();
     fireEvent.press(screen.getByTestId('record-calendar-empty-create'));
     expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+  });
+});
+
+// TRIP-1677 · 일정 상태를 목록(`GET /trips`)의 네 칸에서 읽는다 — 진입 요청 수와 폴링 틱 실패.
+describe('🔴 TRIP-1677 · 기록 캘린더는 여행별 일정을 묻지 않고, 폴링 틱이 실패해도 받아 둔 목록을 유지한다', () => {
+  const NOW = tripFixture({
+    tripId: 'now',
+    title: '서울 여행',
+    startDate: '2026-06-14',
+    endDate: '2026-06-16',
+    status: 'ACTIVE',
+    itineraryDayCount: 3,
+    ...CONFIRMED_COLS,
+  });
+  const PAST = tripFixture({
+    tripId: 'past',
+    title: '부산 여행',
+    startDate: '2026-06-01',
+    endDate: '2026-06-03',
+    status: 'ENDED',
+    itineraryDayCount: 2,
+    ...CONFIRMED_COLS,
+  });
+  const DRAFT = tripFixture({
+    tripId: 'draft',
+    title: '초안 여행',
+    startDate: '2026-06-14',
+    endDate: '2026-06-16',
+    status: 'ACTIVE',
+  });
+
+  beforeEach(() => {
+    freezeDate('2026-06-15T03:00:00Z');
+    mockPush.mockClear();
+  });
+  afterEach(() => jest.useRealTimers());
+
+  const { push: mockPush } = routerSpies;
+
+  /** 서버가 지금 내려 주는 목록. `failNext` 가 켜져 있으면 다음 한 번만 500 이다. */
+  let failNext = false;
+  function serveTrips(trips: Trip[]): void {
+    failNext = false;
+    server.use(
+      http.get(`${BASE}/trips`, () => {
+        if (failNext) {
+          failNext = false;
+          return HttpResponse.json(
+            { error: { code: 'INTERNAL', message: '서버 오류' } },
+            { status: 500 }
+          );
+        }
+        return HttpResponse.json(trips);
+      })
+    );
+  }
+
+  it('C1 진입하면 목록 GET 1 · 일정 GET 0 — 진행 중 카드는 확정 여행(목록 칸)만 뜬다', async () => {
+    // 준비 — 확정 진행 중 · 확정 지난 · 오늘이 기간 안인 일정 없는 여행.
+    serveTrips([NOW, PAST, DRAFT]);
+
+    // 실행
+    renderPage();
+    await settle();
+
+    // 단언 — 앵커: 카드가 떴다(= 목록 칸을 읽었다). 그리고 요청은 목록 1번뿐이다.
+    const card = screen.getByTestId('record-calendar-ongoing');
+    expect(within(card).getByText('서울 여행')).toBeOnTheScreen();
+    expect(listHits(hits)).toBe(1);
+    expect(itineraryHits(hits)).toBe(0);
+  });
+
+  it('C2 [일정 허브로]는 여행 중 허브로 가고, 누르는 순간에도 일정 GET 은 0 이다', async () => {
+    serveTrips([NOW, PAST]);
+    renderPage();
+    await settle();
+
+    fireEvent.press(screen.getByTestId('record-calendar-ongoing-hub'));
+
+    expect(mockPush.mock.calls).toEqual([['/trips/now/live']]);
+    expect(itineraryHits(hits)).toBe(0);
+  });
+
+  it('C3 첫 응답 뒤 재조회(폴링 틱)가 500 이어도 캘린더·진행 중 카드를 그대로 둔다 — 오류 얼굴로 뒤집지 않는다', async () => {
+    // 준비 — 첫 목록은 정상.
+    serveTrips([NOW, PAST]);
+    const { client } = renderPage();
+    await settle();
+    expect(screen.getByTestId('record-calendar-ongoing')).toBeOnTheScreen();
+    expect(screen.queryByTestId('record-calendar-error')).toBeNull();
+
+    // 실행 — 다음 목록 요청은 500(셸의 폴링 틱이 실패한 상황을 같은 쿼리를 다시 받아 흉내 낸다).
+    failNext = true;
+    await act(async () => {
+      await client.refetchQueries({ queryKey: getGetTripsQueryKey() });
+    });
+    await settle();
+
+    // 단언 — 앵커: 실패 요청이 실제로 나갔다(목록 GET 2). 그래도 받아 둔 목록으로 계속 그린다.
+    expect(listHits(hits)).toBe(2);
+    expect(client.getQueryState(getGetTripsQueryKey())?.status).toBe('error');
+    expect(screen.queryByTestId('record-calendar-error')).toBeNull();
+    expect(screen.getByTestId('record-calendar-month')).toBeOnTheScreen();
+    expect(screen.getByTestId('record-calendar-ongoing')).toBeOnTheScreen();
   });
 });

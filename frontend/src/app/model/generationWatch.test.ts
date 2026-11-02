@@ -1,12 +1,12 @@
 import {
-  getGetTripsQueryKey,
-  getGetTripsTripIdBasesQueryKey,
-  getGetTripsTripIdItineraryQueryKey,
-  getGetTripsTripIdQueryKey,
-  getGetTripsTripIdRoutesQueryKey,
-  getGetTripsTripIdTriggersQueryKey,
-} from '@/shared/api/index.hooks';
-import type { ItineraryGenerationState } from '@/shared/api/index.schemas';
+  DRAFT_POLL_INTERVAL_MS,
+  DRAFT_POLL_SLOW_INTERVAL_MS,
+} from '@/features/itinerary/model/draftView';
+import type {
+  ItineraryGenerationState,
+  Trip,
+} from '@/shared/api/index.schemas';
+import { NO_ITINERARY } from '@/test-support/tripItineraryCols';
 
 import {
   GENERATION_COMPLETE_MESSAGE,
@@ -16,18 +16,18 @@ import {
   detectGenerationTransition,
   isGenerationScreenOf,
   shouldSkipToast,
-  tripIdFromItineraryKey,
+  tripsRefetchInterval,
 } from './generationWatch';
 
 /**
- * TRIP-1618 — 앱 셸 "생성 완료 감지"의 순수 판정(캐시 키 읽기 · 직전→지금 전이 · 현재 경로가 그 여행의 진행 화면인가).
+ * TRIP-1618 — 앱 셸 "생성 완료 감지"의 순수 판정(직전→지금 전이 · 현재 경로가 그 여행의 진행 화면인가).
+ * TRIP-1677 — 감시 대상이 일정 캐시 칸에서 `GET /trips` 목록 한 칸으로 바뀌었다: 옛 W2(일정 키 읽기)는 지우고 W2′(`tripsRefetchInterval`)를 둔다.
  *
  * *(개념)* 전이 감지(edge detection) = "지금 값"이 아니라 "직전 값 → 지금 값"의 변화만 본다. 같은 응답이 반복돼도 알림이 한 번뿐인 이유다.
  *
  * 무엇을 보장하나:
  *  - W1 토스트 두 문구는 확정값이고 소요시간 표현이 없다(INV-3, AC5).
- *  - W2 캐시 칸이 일정 칸인지 읽는 규칙이 코드젠 키 함수의 실제 출력과 맞물려 있다 — 코드젠이 키 모양을 바꾸면 여기서 빨개진다
- *    (안 그러면 셸이 조용히 0건을 감시한다).
+ *  - W2 목록 폴링 간격 규칙(`tripsRefetchInterval`): 생성 중 여행이 목록에 없으면 안 묻고, 있으면 2초→5초 곡선, 오류 틱에도 멈추지 않고 5초.
  *  - W3 알리는 전이는 `PARTIAL → COMPLETE|FAILED` 둘뿐이다.
  *  - W4·W5 "그 여행의 진행 화면"이면 셸이 폴링을 양보하고 토스트도 생략한다 / 일정 탭이면 토스트만 생략한다.
  *
@@ -57,31 +57,114 @@ describe('W1 · 문구 상수는 확정값이고 소요시간 표현이 없다 (
   });
 });
 
-describe('W2 · 일정 캐시 칸 읽기 — 코드젠 키 함수의 출력과 맞물린다', () => {
-  it('일정 키에서는 tripId 를 돌려준다', () => {
-    expect(
-      tripIdFromItineraryKey(getGetTripsTripIdItineraryQueryKey('trip-x'))
-    ).toBe('trip-x');
-    expect(
-      tripIdFromItineraryKey(
-        getGetTripsTripIdItineraryQueryKey(
-          'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
-        )
-      )
-    ).toBe('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+/** 목록의 여행 한 건 — 네 칸만 의미가 있고 나머지는 자리 채움. */
+function tripOf(over: Partial<Trip> = {}): Trip {
+  return {
+    tripId: 'trip-x',
+    title: '제주',
+    startDate: '2099-06-10',
+    endDate: '2099-06-13',
+    party: 2,
+    preferenceSnapshot: {},
+    destinations: [{ seq: 1, region: '제주', nights: 3 }],
+    status: 'PLANNED',
+    createdAt: '2026-08-01T00:00:00Z',
+    updatedAt: '2026-08-01T00:00:00Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
+    ...NO_ITINERARY,
+    ...over,
+  };
+}
+
+const RUNNING = tripOf({
+  itineraryStatus: 'PLANNED',
+  itineraryGenerationState: 'PARTIAL',
+  itineraryGenerationMode: 'FULLY_AI',
+  itineraryGenerating: true,
+});
+/** 세션이 없는 PARTIAL(멈춘 생성) — 서버가 11분 뒤 FAILED 로 닫을 때까지 PARTIAL 로 남는다. */
+const STALLED_PARTIAL = tripOf({
+  itineraryStatus: 'PLANNED',
+  itineraryGenerationState: 'PARTIAL',
+  itineraryGenerationMode: 'FULLY_AI',
+});
+/** 재생성 1차 — 옛 COMPLETE 인 채 세션만 돈다. */
+const REGENERATING = tripOf({
+  itineraryStatus: 'PLANNED',
+  itineraryGenerationState: 'COMPLETE',
+  itineraryGenerationMode: 'FULLY_AI',
+  itineraryGenerating: true,
+});
+const DRAFT = tripOf({
+  itineraryStatus: 'PLANNED',
+  itineraryGenerationState: 'COMPLETE',
+  itineraryGenerationMode: 'FULLY_AI',
+});
+const FAILED = tripOf({
+  itineraryStatus: 'PLANNED',
+  itineraryGenerationState: 'FAILED',
+  itineraryGenerationMode: 'FULLY_AI',
+});
+const CONFIRMED = tripOf({
+  itineraryStatus: 'CONFIRMED',
+  itineraryGenerationState: 'COMPLETE',
+  itineraryGenerationMode: 'FULLY_AI',
+});
+
+/**
+ * 관찰자 없이 규칙만 시험하려고 `query` 모양의 평범한 객체를 넘긴다 — 함수가 읽는 건 `state` 셋뿐이다.
+ * *(개념)* `refetchInterval` 이 함수면 TanStack 이 "다음 재조회까지 몇 ms"(또는 false=그만)를 이 함수에 묻는다.
+ */
+function intervalOf(
+  data: Trip[] | undefined,
+  status: 'pending' | 'success' | 'error' = 'success',
+  dataUpdateCount = 1
+): number | false {
+  return tripsRefetchInterval({
+    state: { status, data, dataUpdateCount },
+  } as never);
+}
+
+describe('W2′ · 목록 폴링 간격 — 생성 중 여행이 있을 때만 묻고, 오류에도 멈추지 않는다 (AC-6 · D3)', () => {
+  it.each<[string, Trip[] | undefined]>([
+    ['목록을 아직 못 받았다(data 없음)', undefined],
+    ['빈 목록', []],
+    ['일정 없음만', [tripOf()]],
+    ['완료 초안만', [DRAFT]],
+    ['실패 초안만', [FAILED]],
+    ['확정만', [CONFIRMED]],
+  ])('생성 중 여행이 없으면(%s) false — 요청 0', (_label, data) => {
+    expect(intervalOf(data)).toBe(false);
   });
 
-  it.each<[string, readonly unknown[]]>([
-    ['여행 목록', getGetTripsQueryKey()],
-    ['여행 단건', getGetTripsTripIdQueryKey('trip-x')],
-    ['기점', getGetTripsTripIdBasesQueryKey('trip-x')],
-    ['경로', getGetTripsTripIdRoutesQueryKey('trip-x')],
-    ['트리거', getGetTripsTripIdTriggersQueryKey('trip-x')],
-    ['빈 키', []],
-    ['문자열이 아닌 요소', [{ id: 'trip-x' }]],
-    ['일정 키 뒤에 요소가 더 붙은 키', [`/trips/trip-x/itinerary`, 'extra']],
-  ])('일정 칸이 아니면(%s) null', (_label, key) => {
-    expect(tripIdFromItineraryKey(key)).toBeNull();
+  it.each<[string, Trip]>([
+    ['세션이 도는 PARTIAL', RUNNING],
+    ['세션 없는 PARTIAL(멈춘 생성)', STALLED_PARTIAL],
+    ['재생성 중(COMPLETE + generating)', REGENERATING],
+  ])('%s 이 하나라도 있으면 빠른 구간 2초', (_label, running) => {
+    // 다른 여행이 섞여 있어도 하나면 된다(앵커: 완료 초안 + 확정이 앞에 있다).
+    expect(intervalOf([DRAFT, CONFIRMED, running])).toBe(
+      DRAFT_POLL_INTERVAL_MS
+    );
+  });
+
+  it('간격 곡선: 갱신 횟수 14까지 2초, 15부터 5초(pollIntervalMs 와 같은 곡선)', () => {
+    expect(intervalOf([RUNNING], 'success', 1)).toBe(DRAFT_POLL_INTERVAL_MS);
+    expect(intervalOf([RUNNING], 'success', 14)).toBe(DRAFT_POLL_INTERVAL_MS);
+    expect(intervalOf([RUNNING], 'success', 15)).toBe(
+      DRAFT_POLL_SLOW_INTERVAL_MS
+    );
+  });
+
+  it('오류 틱: 옛 data 가 생성 중이면 멈추지 않고 느린 간격 5초 — 횟수와 무관 (D3 · 옛 "오류면 멈춘다"의 뒤집기)', () => {
+    expect(intervalOf([RUNNING], 'error', 1)).toBe(DRAFT_POLL_SLOW_INTERVAL_MS);
+    expect(intervalOf([RUNNING], 'error', 3)).toBe(DRAFT_POLL_SLOW_INTERVAL_MS);
+  });
+
+  it('오류 틱이지만 옛 data 에 생성 중이 없거나 data 자체가 없으면 false', () => {
+    expect(intervalOf([DRAFT], 'error', 1)).toBe(false);
+    expect(intervalOf(undefined, 'error', 0)).toBe(false);
   });
 });
 
