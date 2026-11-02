@@ -73,7 +73,7 @@ class ItineraryController(
     fun confirm(principal: Principal, @PathVariable tripId: UUID): ItineraryResponse =
         respond(confirmService.confirm(principal.accountId(), tripId))
 
-    /** 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정된 일정은 409. */
+    /** 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정 일정도 받는다(TRIP-999 · TRIP-1710). */
     @PutMapping
     fun edit(principal: Principal, @PathVariable tripId: UUID, @Valid @RequestBody request: EditItineraryRequest): ItineraryResponse =
         respond(editService.edit(principal.accountId(), tripId, request.toCommand()))

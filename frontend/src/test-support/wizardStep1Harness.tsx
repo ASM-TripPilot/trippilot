@@ -57,6 +57,11 @@ export const TRIP: Trip = {
   updatedAt: '2026-08-02T00:00:00Z',
   baseCount: 0,
   itineraryDayCount: 0,
+  // 일정이 없는 여행 — 목록이 싣는 일정 상태 네 칸(TRIP-1677).
+  itineraryStatus: null,
+  itineraryGenerationState: null,
+  itineraryGenerationMode: null,
+  itineraryGenerating: false,
 };
 
 /** 기본 프리필에서 일부 축만 바꾼다. */

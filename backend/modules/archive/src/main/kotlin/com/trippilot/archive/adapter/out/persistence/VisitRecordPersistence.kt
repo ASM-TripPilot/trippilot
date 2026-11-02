@@ -31,6 +31,8 @@ class VisitPhotoMetaEntity(
 interface VisitPhotoMetaJpaRepository : JpaRepository<VisitPhotoMetaEntity, UUID> {
     // sort_order 동률은 id 로 갈라 순서를 결정론적으로 — 같은 순서로 두 장이 붙을 수 있다.
     fun findByVisitCheckIdOrderBySortOrderAscVisitPhotoMetaIdAsc(visitCheckId: UUID): List<VisitPhotoMetaEntity>
+
+    fun findByVisitCheckIdAndDeviceIdAndLocalAssetId(visitCheckId: UUID, deviceId: String, localAssetId: String): VisitPhotoMetaEntity?
 }
 
 /** visit_memo 매핑(V2.34). PK 가 `visit_check_id` 라 한 방문에 한 개가 물리적으로 보장된다. */
@@ -49,6 +51,26 @@ class VisitPhotoMetaRepositoryAdapter(
 ) : VisitPhotoMetaRepository {
 
     override fun save(photo: VisitPhotoMeta): VisitPhotoMeta = jpa.save(photo.toEntity()).toDomain()
+
+    /**
+     * `ON CONFLICT DO NOTHING` 이 경합을 DB 에서 끝낸다 — 먼저 넣은 트랜잭션이 커밋 전이면 여기서 기다렸다가
+     * 아무것도 넣지 않는다. 그 뒤의 조회는 새 문장이라(READ COMMITTED) 상대가 커밋한 행을 본다.
+     */
+    override fun insertIfAbsent(photo: VisitPhotoMeta): VisitPhotoMeta {
+        jdbc.update(
+            """
+            INSERT INTO visit_photo_meta
+              (visit_photo_meta_id, visit_check_id, local_asset_id, device_id, taken_at, exif_lat, exif_lng, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT ON CONSTRAINT ux_visit_photo_meta_asset DO NOTHING
+            """.trimIndent(),
+            photo.visitPhotoMetaId, photo.visitCheckId, photo.localAssetId, photo.deviceId,
+            photo.takenAt?.let { java.sql.Timestamp.from(it) }, photo.exifLat, photo.exifLng, photo.sortOrder,
+        )
+        return checkNotNull(jpa.findByVisitCheckIdAndDeviceIdAndLocalAssetId(photo.visitCheckId, photo.deviceId, photo.localAssetId)) {
+            "넣었거나 이미 있어야 할 사진 메타가 없습니다 — visitCheckId=${photo.visitCheckId}"
+        }.toDomain()
+    }
 
     override fun findByVisit(visitCheckId: UUID): List<VisitPhotoMeta> =
         jpa.findByVisitCheckIdOrderBySortOrderAscVisitPhotoMetaIdAsc(visitCheckId).map { it.toDomain() }

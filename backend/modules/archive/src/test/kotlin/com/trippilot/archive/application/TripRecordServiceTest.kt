@@ -65,6 +65,7 @@ class TripRecordServiceTest : StringSpec({
         override fun clearExifCoordinates(tripIds: Collection<UUID>): Int = 0
 
         override fun save(photo: VisitPhotoMeta) = photo
+        override fun insertIfAbsent(photo: VisitPhotoMeta) = photo
         override fun findByVisit(visitCheckId: UUID) = emptyList<VisitPhotoMeta>()
         override fun findById(visitPhotoMetaId: UUID): VisitPhotoMeta? = null
         override fun delete(visitPhotoMetaId: UUID) = false

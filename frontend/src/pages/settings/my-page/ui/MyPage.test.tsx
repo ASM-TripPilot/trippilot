@@ -1,7 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 import type {
-  Itinerary,
   Trip,
   TripRecordList,
   TripRecordSummary,
@@ -18,21 +17,14 @@ import {
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import {
-  CONFIRMED,
+  CONFIRMED_COLS,
   DURING,
   FUTURE,
   PAST,
-  PLANNED,
-  deferred,
+  PLANNED_COLS,
   myPageTrip,
-  scriptItineraryOptions,
-  type ItinScript,
 } from '@/test-support/myPageItineraries';
-import {
-  newTestQueryClient,
-  renderWithQueryClient,
-  settle,
-} from '@/test-support/queryRender';
+import { renderWithQueryClient, settle } from '@/test-support/queryRender';
 import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
 import { MyPage } from './MyPage';
 import { ChevronRightGlyph as TripChevronGlyph } from '@/entities/trip';
@@ -42,6 +34,7 @@ import {
   HeartGlyph,
 } from '@/features/settings/ui/SettingsGlyphs';
 import { routerSpies } from '@/test-support/expoRouterMock';
+import { NO_ITINERARY } from '@/test-support/tripItineraryCols';
 
 /**
  * l03 마이 — MyPage 배선을 생성 훅 목으로 보는 node 버킷 테스트(msw 없음).
@@ -141,23 +134,25 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
    *
    * 규칙(01b 확정 결정): 숫자는 **일정이 확정된 여행만** 센다 — 서울 오늘 기준 시작 전 = 예정, 기간 안 = 진행 중,
    * 끝난 뒤 = 종료. 초안(미확정·일정 없음 404)은 어느 칸에도 안 센다. 서버 `Trip.status`(날짜 파생, 초안도 ACTIVE)는
-   * 보지 않는다. 일정 조회를 기다리는 중이거나 404 가 아닌 실패면 판정할 수 없으니 **세 칸 모두 `–`**(INV-4).
+   * 보지 않는다. 일정 상태는 `GET /trips` 목록의 네 칸(`itineraryStatus` 등)에서 읽는다(TRIP-1677 — 여행별 일정 조회 없음).
+   * 목록을 기다리는 중이거나 받아 둔 목록이 없는데 실패했으면 판정할 수 없으니 **세 칸 모두 `–`**(INV-4).
    *
    * 무엇을 보장하나:
    *  - AC-1·AC-2 세그·여행 카드·[새 여행 만들기]·빈 문구가 없다(여행이 있든 없든). 지난 여행 섹션은 남는다(결정 2(b)).
    *  - AC-3 QA 재현: 기간 안 4건(확정 1·미확정 1·404 2) → 진행 중 1(4 아님).
    *  - AC-4 확정 미래·기간 안·과거 1건씩 + 같은 날짜의 초안 1건씩 → 1 · 1 · 1.
-   *  - AC-5 모름(일정 대기·500·옛 데이터가 있는데 다시 받다 500·여행 목록 대기·실패·옛 목록이 있는데 다시 받다 실패) → 세 칸 모두 `–`.
-   *    대기가 풀리면 정상 숫자가 뜬다.
+   *  - AC-1(TRIP-1677) 진입에서 여행별 일정 조회 옵션을 만들지 않는다(= 일정 GET 0회).
+   *  - AC-5 모름(여행 목록 대기 · 받아 둔 목록 없이 실패) → 세 칸 모두 `–`. **받아 둔 목록이 있는데 다시 받다(폴링 틱) 실패하면 숫자를 그대로 둔다**
+   *    (옛 "다시 받다 실패하면 –" 는 뒤집혔다 — 오류는 data 가 없을 때만 오류).
    *  - AC-6 예정·진행 중 칸 → `router.replace('/itinerary')`, 종료 칸 → `router.replace('/records')`, 각 1회, push 0.
    *    모름(`–`)이어도 똑같이 이동한다.
    *  - AC-8 지난 여행 = 확정 && 종료, 예정 0건일 때만. 날짜 지난 초안 카드는 없고 카드 수 = 종료 숫자.
    *    모르면 섹션도 없고 `/me/records` 조회도 꺼 둔다. 캘린더 › 는 여전히 push('/records').
    *
-   * 왜 이렇게 테스트하나: 조회 훅(계정·프로필·스타일·여행 목록·사진 수)은 목, 여행별 일정은 페이지 `useQueries` 가
-   * 목 옵션 함수의 `queryFn` 을 **진짜로** 돈다(h06 선례, 실 QueryClient). 그래서 한 테스트 안에서 "모름 → 앎"을 본다.
+   * 왜 이렇게 테스트하나: 조회 훅(계정·프로필·스타일·여행 목록·사진 수)은 목이고, 목록의 `Trip` 이 일정 네 칸을 직접 들고 있다.
    * 시계는 흉내 내지 않는다 — 기간 안 2020~2099 · 과거 2026-06 · 미래 2099-06.
-   * 카드별 일정 훅(`useGetTripsTripIdItinerary`)은 목으로 두고 **안 불린다**를 본다 — 페이지는 옵션 함수만 쓴다.
+   * 일정 단건 조회(`useGetTripsTripIdItinerary`·`getGetTripsTripIdItineraryQueryOptions`)는 목으로 두고 **안 불린다**를 본다(훅 목 파일이라
+   * 요청 로그로는 못 센다 — 호출 0 이 앵커다).
    *
    * 탭 루트에서 부르는 replace 의 실제 탭 전환·hitSlop 효과는 jest 사각 — 6-b 몫.
    */
@@ -180,13 +175,21 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
   const EN_DASH = '–';
   const BUCKETS = ['upcoming', 'active', 'ended'] as const;
 
-  /** 여행 목록 + 여행별 일정 대본을 한 번에 건다. */
-  function script(trips: Trip[], itins: Record<string, ItinScript>): void {
+  /** 여행 목록을 건다 — 일정 상태는 각 `Trip` 의 네 칸(`CONFIRMED_COLS`/`PLANNED_COLS`/기본 없음)이 말한다. */
+  function script(trips: Trip[]): void {
     mockUseTrips.mockReturnValue(
       asQuery(trips) as ReturnType<typeof useGetTrips>
     );
-    scriptItineraryOptions(mockQueryOptions, itins);
   }
+  /** 확정 일정이 있는 여행 / 확정 전 초안 일정이 있는 여행 / 일정 없음(기본). */
+  const withConfirmed = (over: Partial<Trip> = {}): Partial<Trip> => ({
+    ...CONFIRMED_COLS,
+    ...over,
+  });
+  const withDraft = (over: Partial<Trip> = {}): Partial<Trip> => ({
+    ...PLANNED_COLS,
+    ...over,
+  });
 
   /** 세 칸 숫자 자리 글자 — [예정, 진행 중, 종료]. */
   function values(): string[] {
@@ -230,7 +233,7 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
     mockUseRecords.mockReturnValue(
       asQuery(undefined) as ReturnType<typeof useGetMeRecords>
     );
-    script([], {});
+    script([]);
   });
 
   // ── AC-1·AC-2 제거 ─────────────────────────────────────────────────────
@@ -238,10 +241,10 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
   describe('🔴 AC-1 · 여행이 있어도 세그·여행 카드·CTA 가 없다', () => {
     it('확정 미래 여행 2건 → 세그 0 · 여행 카드 0 · [새 여행 만들기] 없음, 숫자는 예정 2', async () => {
       // 준비
-      script([myPageTrip('u1', FUTURE), myPageTrip('u2', FUTURE)], {
-        u1: CONFIRMED,
-        u2: CONFIRMED,
-      });
+      script([
+        myPageTrip('u1', FUTURE, withConfirmed()),
+        myPageTrip('u2', FUTURE, withConfirmed()),
+      ]);
 
       // 실행
       renderPage();
@@ -256,11 +259,29 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
       // 단언(존재 짝) — 숫자는 실제로 셌다.
       expect(values()).toEqual(['2', '0', '0']);
     });
+
+    it('🔴 TRIP-1677 AC-1 · 진입해도 여행별 일정 조회를 만들지 않는다(여행 3건, 일정 단건 옵션·훅 호출 0)', async () => {
+      // 준비 — 상태가 다른 여행 셋. 일정 상태는 목록의 네 칸에 이미 실려 있다.
+      script([
+        myPageTrip('u1', FUTURE, withConfirmed()),
+        myPageTrip('d1', DURING, withDraft()),
+        myPageTrip('n1', PAST),
+      ]);
+
+      // 실행
+      renderPage();
+      await settle();
+
+      // 단언 — 앵커: 숫자는 목록 칸만으로 셌다(예정 1 · 진행 0 · 종료 0). 그리고 일정 단건 조회는 한 번도 안 만들었다.
+      expect(values()).toEqual(['1', '0', '0']);
+      expect(mockQueryOptions).not.toHaveBeenCalled();
+      expect(mockUseCardItinerary).not.toHaveBeenCalled();
+    });
   });
 
   describe('🔴 AC-2 · 여행 0건이어도 CTA·빈 문구가 없고 지난 여행 안내는 남는다', () => {
     it('여행 0건 → CTA·"예정된 여행이 없어요" 없음, "지난 여행" + "아직 종료된 여행이 없어요"는 있다', async () => {
-      script([], {});
+      script([]);
 
       renderPage();
       await settle();
@@ -278,15 +299,12 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
   describe('🔴 AC-3 · QA 재현 — 초안은 진행 중에 안 센다', () => {
     it('기간 안 4건(확정 1 · 미확정 1 · 404 2) → 예정 0 · 진행 중 1 · 종료 0 (4 아님)', async () => {
       // 준비 — 서버 status 는 넷 다 ACTIVE(날짜 파생). 옛 사영이면 진행 중 4.
-      script(
-        [
-          myPageTrip('a', DURING, { status: 'ACTIVE' }),
-          myPageTrip('b', DURING, { status: 'ACTIVE' }),
-          myPageTrip('c', DURING, { status: 'ACTIVE' }),
-          myPageTrip('d', DURING, { status: 'ACTIVE' }),
-        ],
-        { a: CONFIRMED, b: PLANNED, c: 'notFound', d: 'notFound' }
-      );
+      script([
+        myPageTrip('a', DURING, withConfirmed({ status: 'ACTIVE' })),
+        myPageTrip('b', DURING, withDraft({ status: 'ACTIVE' })),
+        myPageTrip('c', DURING, { status: 'ACTIVE' }),
+        myPageTrip('d', DURING, { status: 'ACTIVE' }),
+      ]);
 
       // 실행
       renderPage();
@@ -300,100 +318,31 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
   describe('🔴 AC-4 · 세 칸 — 확정만, 서버 status 무시', () => {
     it('확정 미래·기간 안·과거 1건씩 + 같은 날짜 초안 1건씩 → 1 · 1 · 1', async () => {
       // 준비 — 초안의 서버 status 는 날짜대로(PLANNED·ACTIVE·ENDED) 둔다: status 로 세면 2 · 2 · 2.
-      script(
-        [
-          myPageTrip('cf', FUTURE, { status: 'CONFIRMED' }),
-          myPageTrip('cd', DURING, { status: 'ACTIVE' }),
-          myPageTrip('cp', PAST, { status: 'ENDED' }),
-          myPageTrip('df', FUTURE, { status: 'PLANNED' }),
-          myPageTrip('dd', DURING, { status: 'ACTIVE' }),
-          myPageTrip('dp', PAST, { status: 'ENDED' }),
-        ],
-        {
-          cf: CONFIRMED,
-          cd: CONFIRMED,
-          cp: CONFIRMED,
-          df: PLANNED,
-          dd: 'notFound',
-          dp: PLANNED,
-        }
-      );
+      script([
+        myPageTrip('cf', FUTURE, withConfirmed({ status: 'CONFIRMED' })),
+        myPageTrip('cd', DURING, withConfirmed({ status: 'ACTIVE' })),
+        myPageTrip('cp', PAST, withConfirmed({ status: 'ENDED' })),
+        myPageTrip('df', FUTURE, withDraft({ status: 'PLANNED' })),
+        myPageTrip('dd', DURING, { status: 'ACTIVE' }), // 일정 없음(옛 404)
+        myPageTrip('dp', PAST, withDraft({ status: 'ENDED' })),
+      ]);
 
       renderPage();
       await settle();
 
       expect(values()).toEqual(['1', '1', '1']);
-      // 페이지는 카드별 훅을 부르지 않는다(옵션 함수 + useQueries 만).
+      // 페이지는 카드별 훅도, 일정 단건 조회도 만들지 않는다(목록 칸만 읽는다).
       expect(mockUseCardItinerary).not.toHaveBeenCalled();
       expect(mockUseBases).not.toHaveBeenCalled();
-      expect(mockQueryOptions).toHaveBeenCalled();
+      expect(mockQueryOptions).not.toHaveBeenCalled();
     });
   });
 
   // ── AC-5 모름 ──────────────────────────────────────────────────────────
 
-  describe('🔴 AC-5 · 모르면 세 칸 모두 – (INV-4)', () => {
-    it('ⓐ 한 여행의 일정이 아직 안 왔으면 – · – · – (확정 1건을 0 으로 빼지 않는다)', async () => {
-      script([myPageTrip('ok', DURING), myPageTrip('wait', PAST)], {
-        ok: CONFIRMED,
-        wait: 'never',
-      });
-
-      renderPage();
-      await settle();
-
-      expect(values()).toEqual([EN_DASH, EN_DASH, EN_DASH]);
-    });
-
-    it('ⓐ 풀림 — 대기하던 일정이 도착하면 그 순간 정상 숫자가 뜬다', async () => {
-      // 준비 — 손으로 푸는 약속.
-      const late = deferred<Itinerary>();
-      script([myPageTrip('ok', DURING), myPageTrip('late', PAST)], {
-        ok: CONFIRMED,
-        late: late.promise,
-      });
-
-      // 실행 ① — 아직 모름
-      renderPage();
-      await settle();
-      expect(values()).toEqual([EN_DASH, EN_DASH, EN_DASH]);
-
-      // 실행 ② — 도착
-      late.resolve(CONFIRMED);
-      await settle();
-
-      // 단언 — 진행 중 1 · 종료 1
-      expect(values()).toEqual(['0', '1', '1']);
-    });
-
-    it('ⓑ 한 여행의 일정 조회가 500 이면 – · – · – (404 가 아니면 "없음"이 아니라 "모름")', async () => {
-      script([myPageTrip('ok', FUTURE), myPageTrip('bad', DURING)], {
-        ok: CONFIRMED,
-        bad: 'serverError',
-      });
-
-      renderPage();
-      await settle();
-
-      expect(values()).toEqual([EN_DASH, EN_DASH, EN_DASH]);
-    });
-
-    it("ⓑ' 받아 둔 확정 일정이 있어도 다시 받다 500 이면 – (남은 데이터를 믿지 않는다)", async () => {
-      // 준비 — 캐시에 확정 일정을 넣어 두고(같은 키), 다시 받기는 500 으로 실패하게 한다.
-      script([myPageTrip('stale', DURING)], { stale: 'serverError' });
-      const client = newTestQueryClient();
-      client.setQueryData(['/trips/stale/itinerary'], CONFIRMED);
-
-      // 실행 — 마운트하면 오래된 캐시를 다시 받는다(staleTime 0).
-      renderWithQueryClient(<MyPage />, client);
-      await settle();
-
-      // 단언 — 실패가 확정됐고 데이터는 남아 있어도 모름.
-      expect(client.getQueryState(['/trips/stale/itinerary'])?.status).toBe(
-        'error'
-      );
-      expect(values()).toEqual([EN_DASH, EN_DASH, EN_DASH]);
-    });
+  describe('🔴 AC-5 · 모르면 세 칸 모두 – (INV-4) — 모름은 "목록 자체를 모름" 하나다', () => {
+    // 일정 상태가 목록에 실려 한꺼번에 오므로 옛 "여행별 일정 대기·500" 모름(ⓐ ⓑ)은 사라졌다 — 삭제한 케이스 4개:
+    // 일정 대기 / 대기 풀림 / 일정 500 / 받아 둔 일정이 있는데 다시 받다 500.
 
     it('ⓒ 여행 목록(GET /trips)이 아직 안 왔으면 – · – · – (0 · 0 · 0 아님)', async () => {
       mockUseTrips.mockReturnValue({
@@ -408,7 +357,7 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
       expect(values()).toEqual([EN_DASH, EN_DASH, EN_DASH]);
     });
 
-    it("ⓒ' 여행 목록 조회가 실패했으면 – · – · –", async () => {
+    it("ⓒ' 받아 둔 목록 없이 조회가 실패했으면 – · – · –", async () => {
       mockUseTrips.mockReturnValue({
         data: undefined,
         isPending: false,
@@ -422,26 +371,25 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
       expect(values()).toEqual([EN_DASH, EN_DASH, EN_DASH]);
     });
 
-    it("ⓒ'' 여행 목록을 다시 받다 실패하면 옛 목록이 남아 있어도 – · – · –", async () => {
-      // 준비 — 옛 목록(확정 미래 1)이 남은 채 다시 받기가 실패했다. 그 여행의 일정은 확정으로 받는다.
-      scriptItineraryOptions(mockQueryOptions, { u1: CONFIRMED });
+    it("🔴 ⓒ'' 폴링 틱 오류 — 받아 둔 목록이 있는데 다시 받다 실패해도 숫자를 그대로 둔다 (오류는 data 가 없을 때만)", async () => {
+      // 준비 — 옛 목록(확정 미래 1 · 확정 종료 1)이 남은 채 다시 받기가 500 으로 실패했다(셸의 목록 폴링 틱이 실패한 상황).
+      // 개념: TanStack 은 재조회가 실패해도 마지막 성공 data 를 남긴 채 isError=true 로 알린다.
       mockUseTrips.mockReturnValue({
-        data: [myPageTrip('u1', FUTURE)],
+        data: [
+          myPageTrip('u1', FUTURE, withConfirmed()),
+          myPageTrip('e1', PAST, withConfirmed()),
+        ],
         isPending: false,
         isError: true,
         error: { isAxiosError: true, response: { status: 500 } },
       } as unknown as ReturnType<typeof useGetTrips>);
-      const client = newTestQueryClient();
 
       // 실행
-      renderWithQueryClient(<MyPage />, client);
+      renderPage();
       await settle();
 
-      // 단언 — 일정은 받았다(앵커). 그래도 목록이 실패했으니 옛 목록으로 세지 않는다('1' · '0' · '0' 아님).
-      expect(client.getQueryState(['/trips/u1/itinerary'])?.status).toBe(
-        'success'
-      );
-      expect(values()).toEqual([EN_DASH, EN_DASH, EN_DASH]);
+      // 단언 — 세 칸이 `–` 로 뒤집히지 않는다(예정 1 · 진행 0 · 종료 1).
+      expect(values()).toEqual(['1', '0', '1']);
     });
   });
 
@@ -456,7 +404,7 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
       '%s 칸을 누르면 router.replace(%p) 정확히 1회, push 0회',
       async (bucket, href) => {
         // 준비 — 숫자를 아는 상태(확정 미래 1).
-        script([myPageTrip('u1', FUTURE)], { u1: CONFIRMED });
+        script([myPageTrip('u1', FUTURE, withConfirmed())]);
         renderPage();
         await settle();
 
@@ -511,7 +459,7 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
     }
 
     it('"예정" 칸을 누르면 일정 탭으로 1회 replace 하고, 창이 열려 다음 화면의 가드 버튼은 무시된다', async () => {
-      script([myPageTrip('u1', FUTURE)], { u1: CONFIRMED });
+      script([myPageTrip('u1', FUTURE, withConfirmed())]);
       renderPage();
       await settle();
       clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
@@ -533,10 +481,10 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
 
   describe('🔴 AC-8 · 지난 여행 = 확정 && 종료, 예정 0건일 때만', () => {
     it('ⓐ 확정 미래 여행이 1건이면 지난 여행 섹션이 없다(확정 종료가 있어도)', async () => {
-      script([myPageTrip('u1', FUTURE), myPageTrip('e1', PAST)], {
-        u1: CONFIRMED,
-        e1: CONFIRMED,
-      });
+      script([
+        myPageTrip('u1', FUTURE, withConfirmed()),
+        myPageTrip('e1', PAST, withConfirmed()),
+      ]);
 
       renderPage();
       await settle();
@@ -551,20 +499,15 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
 
     it('ⓑ 예정 0 · 확정 종료 2 · 날짜 지난 초안 1 → 카드 2장(종료일 최근순), 초안 카드 없음, 종료 숫자와 같다', async () => {
       // 준비 — 초안의 서버 status 는 ENDED(날짜 파생). 옛 기준이면 카드 3장.
-      script(
-        [
-          myPageTrip(
-            'old',
-            { startDate: '2025-10-03', endDate: '2025-10-05' },
-            {
-              status: 'ENDED',
-            }
-          ),
-          myPageTrip('draft', PAST, { status: 'ENDED' }),
-          myPageTrip('recent', PAST, { status: 'ENDED' }),
-        ],
-        { old: CONFIRMED, draft: PLANNED, recent: CONFIRMED }
-      );
+      script([
+        myPageTrip(
+          'old',
+          { startDate: '2025-10-03', endDate: '2025-10-05' },
+          withConfirmed({ status: 'ENDED' })
+        ),
+        myPageTrip('draft', PAST, withDraft({ status: 'ENDED' })),
+        myPageTrip('recent', PAST, withConfirmed({ status: 'ENDED' })),
+      ]);
 
       renderPage();
       await settle();
@@ -581,10 +524,10 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
     });
 
     it("ⓑ' 미래 초안(미확정)만 있으면 예정 0 이라 지난 여행 섹션이 열린다", async () => {
-      script([myPageTrip('df', FUTURE), myPageTrip('e1', PAST)], {
-        df: PLANNED,
-        e1: CONFIRMED,
-      });
+      script([
+        myPageTrip('df', FUTURE, withDraft()),
+        myPageTrip('e1', PAST, withConfirmed()),
+      ]);
 
       renderPage();
       await settle();
@@ -593,11 +536,13 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
       expect(pastCardRoots()).toHaveLength(1);
     });
 
-    it('ⓒ 모름이면 섹션이 없고 /me/records 조회도 꺼져 있다', async () => {
-      script([myPageTrip('e1', PAST), myPageTrip('wait', FUTURE)], {
-        e1: CONFIRMED,
-        wait: 'never',
-      });
+    it('ⓒ 모름(여행 목록 대기)이면 섹션이 없고 /me/records 조회도 꺼져 있다', async () => {
+      // 준비 — 목록이 아직 안 왔다(여행별 일정 대기는 사라졌고, 모름은 목록 대기·받아 둔 목록 없는 실패뿐이다).
+      mockUseTrips.mockReturnValue({
+        data: undefined,
+        isPending: true,
+        isError: false,
+      } as unknown as ReturnType<typeof useGetTrips>);
 
       renderPage();
       await settle();
@@ -609,7 +554,7 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
     });
 
     it('캘린더 › 는 여전히 push("/records") 1회, 회고 카드는 /trips/{id}/records (기존 계약)', async () => {
-      script([myPageTrip('e1', PAST)], { e1: CONFIRMED });
+      script([myPageTrip('e1', PAST, withConfirmed())]);
       renderPage();
       await settle();
 
@@ -634,34 +579,25 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
       });
     }
 
-    it('10-13 23:59 에 진행 중 1이던 확정 여행이 61초 뒤(10-14)엔 종료 1이 되고, 지난 여행 섹션이 열리며, 일정은 다시 받지 않는다', async () => {
+    it('10-13 23:59 에 진행 중 1이던 확정 여행이 61초 뒤(10-14)엔 종료 1이 되고, 지난 여행 섹션이 열린다', async () => {
       // 준비 — KST 2026-10-13 23:59:00 (= UTC 14:59). 확정 여행 하나가 오늘(10-13)까지 진행 중.
       jest.useFakeTimers({ now: new Date('2026-10-13T14:59:00Z') });
       try {
-        let fetched = 0;
         mockUseTrips.mockReturnValue(
           asQuery([
-            myPageTrip('night', {
-              startDate: '2026-10-11',
-              endDate: '2026-10-13',
-            }),
+            myPageTrip(
+              'night',
+              { startDate: '2026-10-11', endDate: '2026-10-13' },
+              withConfirmed()
+            ),
           ]) as ReturnType<typeof useGetTrips>
         );
-        mockQueryOptions.mockImplementation((tripId: string) => ({
-          queryKey: [`/trips/${tripId}/itinerary`],
-          queryFn: () => {
-            fetched += 1;
-            return Promise.resolve(CONFIRMED);
-          },
-        }));
         renderPage();
         await advance(100);
 
         // 앵커 — 자정 전: [예정, 진행 중, 종료] = 0·1·0 이고 지난 여행 섹션은 닫혀 있다.
         expect(values()).toEqual(['0', '1', '0']);
         expect(pastCardRoots()).toHaveLength(0);
-        const fetchedBeforeMidnight = fetched;
-        expect(fetchedBeforeMidnight).toBe(1);
 
         // 실행 — 자정을 넘긴다.
         await advance(61_000);
@@ -672,8 +608,8 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
         expect(pastCardRoots().map((n) => String(n.props.testID))).toEqual([
           'my-trip-reflection-night',
         ]);
-        // 단언 ③ AC2 — 오늘이 바뀌어도 일정 조회 키는 오늘과 무관해 다시 받지 않는다.
-        expect(fetched).toBe(fetchedBeforeMidnight);
+        // 단언 ③ — 오늘이 바뀌어도 일정 단건 조회는 만들어지지 않는다(목록 칸만 읽는다).
+        expect(mockQueryOptions).not.toHaveBeenCalled();
       } finally {
         jest.useRealTimers();
       }
@@ -694,15 +630,14 @@ describe('지난 여행 카드 (옛 .l03empty)', () => {
    *    그 여행이 목록에 없음·0장이면 사진 글자 없이 날짜만 보인다(가짜 숫자 0, INV-4).
    *  - AC-4 카드 전체가 회고 진입 버튼(`my-trip-reflection-{id}`)이고 누르면 `/trips/{id}/records` 로 1회.
    *  - AC-5 지난 여행 카드는 카드마다 숙소·일정 **카드 훅**을 부르지 않는다(썸네일 카드엔 두 값이 없다).
-   *    TRIP-1123 부터 페이지가 집계용으로 여행별 일정을 한 번씩 조회하지만(`useQueries`), 그건 카드 훅이 아니다.
+   *    (TRIP-1677 부터는 집계용 여행별 일정 조회도 없다 — 목록 칸만 읽는다.)
    *  - (옛 Q3=A '종료' 탭 목록과 1012-B1 [새 여행 만들기]는 TRIP-1123 에서 세그·CTA 가 사라져 지웠다 —
    *    부재는 `MyPage.counts.test.tsx` AC-1·AC-2 가 잰다.)
    *
    * 왜 이렇게 테스트하나: 조회 훅만 목으로 응답을 넣고 모델·화면·카드는 실물이 돈다(775 l03parity 와 같은
    * 장치). `jest.mock` 팩토리는 파일 맨 위로 끌어올려져 먼저 실행되므로 바깥 변수를 못 쓴다 — 이름이
    * `mock` 으로 시작하는 `mockPush` 만 예외로 허용된다.
-   * TRIP-1123: 지난 여행 = **일정 확정** && 종료라, 픽스처 여행마다 확정 일정을 대본으로 준다(`myPageItineraries`).
-   * 페이지 `useQueries` 가 목 옵션 함수의 queryFn 을 실제로 돌므로 실 QueryClient 아래에서 그리고 `settle()` 로 기다린다.
+   * TRIP-1123: 지난 여행 = **일정 확정** && 종료라, 픽스처 여행마다 확정 일정 네 칸을 싣는다(`setTrips` 가 `CONFIRMED_COLS` 를 펼친다).
    *
    * ⚠️ `useGetMeRecords` 목은 **가공 전 응답**(`TripRecordList`)을 그대로 돌려준다. 훅 옵션 `select` 로
    *    모양을 바꾸는 구현은 목에서 `select` 가 안 돌아 깨진다 — 페이지가 `data.items` 를 직접 읽어야 한다.
@@ -725,8 +660,6 @@ describe('지난 여행 카드 (옛 .l03empty)', () => {
   const mockUseRecords = useGetMeRecords as jest.MockedFunction<
     typeof useGetMeRecords
   >;
-  const mockQueryOptions = getGetTripsTripIdItineraryQueryOptions as jest.Mock;
-
   type RecordsResult = ReturnType<typeof useGetMeRecords>;
 
   /** 소요시간 탐지기(TripCardContainer.test 와 같은 식) — 일수·거리는 안 걸리고 "분·시간·소요"만 걸린다. */
@@ -746,6 +679,7 @@ describe('지난 여행 카드 (옛 .l03empty)', () => {
       updatedAt: '2026-05-04T00:00:00.000Z',
       baseCount: 0,
       itineraryDayCount: 0,
+      ...NO_ITINERARY,
       ...over,
     };
   }
@@ -774,14 +708,12 @@ describe('지난 여행 카드 (옛 .l03empty)', () => {
     };
   }
 
-  /** 여행 목록 + 여행마다 **확정** 일정(지난 여행 기준 = 확정 && 종료, TRIP-1123). */
+  /** 여행 목록 + 여행마다 **확정** 일정 네 칸(지난 여행 기준 = 확정 && 종료, TRIP-1123). */
   function setTrips(data: Trip[]): void {
     mockUseTrips.mockReturnValue(
-      asQuery(data) as ReturnType<typeof useGetTrips>
-    );
-    scriptItineraryOptions(
-      mockQueryOptions,
-      Object.fromEntries(data.map((trip) => [trip.tripId, CONFIRMED]))
+      asQuery(
+        data.map((trip) => ({ ...trip, ...CONFIRMED_COLS }))
+      ) as ReturnType<typeof useGetTrips>
     );
   }
 

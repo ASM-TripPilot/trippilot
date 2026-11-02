@@ -49,6 +49,11 @@ function trip(tripId: string, title: string): Trip {
     updatedAt: '2026-08-01T00:00:00.000Z',
     baseCount: 0,
     itineraryDayCount: 0,
+    // 일정이 없는 여행 — 목록이 싣는 일정 상태 네 칸(TRIP-1677).
+    itineraryStatus: null,
+    itineraryGenerationState: null,
+    itineraryGenerationMode: null,
+    itineraryGenerating: false,
   };
 }
 

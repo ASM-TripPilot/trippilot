@@ -134,6 +134,19 @@ describe('🔴 TRIP-986 · 앱 전역 QueryClient 재시도 기본값 = 404 무�
     expect(retryFn(2, httpError(500))).toBe(true);
     expect(retryFn(3, httpError(500))).toBe(false);
   });
+
+  // TRIP-1677 AC-8 — 429(요청 한도)는 다시 물으면 한도를 더 소진해 N+1 이 N 배가 된다. 앱 전역 기본값이 429 도 첫 실패부터 멈춘다.
+  // (jest 클라이언트는 retry:false 라 실제 재시도 간격은 못 본다 — 전역 함수의 답까지만 잠그고 실동작은 6-b.)
+  it('🔴 TRIP-1677 · 429 는 첫 실패부터 다시 묻지 않는다 (500 은 그대로 묻는다)', () => {
+    render(<RootLayout />);
+    const retryFn = getObservedQueryClient()?.getDefaultOptions().queries
+      ?.retry as (failureCount: number, error: unknown) => boolean;
+
+    expect(retryFn(0, httpError(429))).toBe(false);
+    expect(retryFn(1, httpError(429))).toBe(false);
+    // 짝 — 429 만 뺀 것이지 전부 끈 것이 아니다.
+    expect(retryFn(0, httpError(500))).toBe(true);
+  });
 });
 
 // TRIP-1714 — 앱이 쓰는 클라이언트의 "복귀(포그라운드) 때 낡은 쿼리를 다시 받을까" 기본값. 키마다 다르게 답해야 하므로 함수다.

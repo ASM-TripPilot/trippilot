@@ -1,6 +1,5 @@
 package com.trippilot.itinerarygeneration.application
 
-import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
@@ -18,7 +17,6 @@ import com.trippilot.itinerarygeneration.domain.EditProposalStatus
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.Itinerary
 import com.trippilot.itinerarygeneration.domain.ItineraryRepository
-import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
@@ -29,7 +27,6 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.time.Clock
 import java.time.LocalDate
-import java.time.ZoneId
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
@@ -54,13 +51,10 @@ class EditProposalService(
 ) : ItineraryEditProposalFacade {
 
     override fun propose(accountId: UUID, tripId: UUID, targetDate: LocalDate, request: EditProposalRequest, deadlineMs: Long): EditProposal {
-        val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
+        trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
         val current = itineraries.findByTrip(tripId).firstOrNull() ?: throw ResourceNotFound("생성된 일정이 없습니다.")
-        // 저장 경로와 **같은 잠금**이다(EditItineraryService — 여행 시작 전 확정 일정). 여기서 안 막으면 LLM 을 쓰고
-        // [적용]이 반드시 409 인 카드를 만든다. 생성 중(PARTIAL)은 막지 않는다 — 이미 있는 날은 저장도 받는다.
-        if (current.status == ItineraryStatus.CONFIRMED && LocalDate.ofInstant(clock.instant(), TRAVEL_ZONE) < period.startDate) {
-            throw ConflictDetected(message = "확정된 일정은 수정할 수 없습니다.")
-        }
+        // 저장 경로(EditItineraryService)와 같은 규칙 — 확정 일정도 막지 않는다(TRIP-1710 확정 잠금 해제).
+        // 생성 중(PARTIAL)도 막지 않는다 — 이미 있는 날은 저장도 받는다.
         val day = current.days.firstOrNull { it.date == targetDate }
             ?: throw ValidationFailed(listOf(FieldError("targetDate", "일정에 없는 날짜입니다.")))
 
@@ -220,7 +214,6 @@ class EditProposalService(
 
         /** 상대의 계산 예산에서 빼 두는 왕복·직렬화 여유. 어댑터의 read 여유(`readTimeoutMarginMs`)와 같은 취지다. */
         const val ROUND_TRIP_MARGIN_MS = 500L
-        private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
         private val EXECUTOR = Executors.newVirtualThreadPerTaskExecutor()
         private val log = LoggerFactory.getLogger(EditProposalService::class.java)
     }

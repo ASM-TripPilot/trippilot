@@ -32,7 +32,7 @@ import { createClockSkew, settle } from '@/test-support/queryRender';
  *
  * 무엇을 보장하나 (같은 대본으로 두 열을 돈다):
  *  - 후(`createAppQueryClient()` 가 만든 앱 기본값 그대로): 거부 목록 키(카탈로그·본인 편집이 직접 무효화하는 키)는 낡아도 복귀 때 0건,
- *    `/trips`·일정은 키당 정확히 1건(관찰자가 여러 탭이어도), 전부 30초 안이면 0건.
+ *    `/trips` 는 정확히 1건(관찰자가 여러 탭이어도), 전부 30초 안이면 0건.
  *  - 전(같은 클라이언트에 `setDefaultOptions` 로 `refetchOnWindowFocus: true` 를 덮어 1714 이전 동작을 재현): 같은 대본이 거부 목록 경로를
  *    실제로 부른다 — "0건" 단언이 하네스가 귀먹어서 나온 거짓 green 이 아님을 보이는 양성 짝이자 PR 의 전/후 표 값이다.
  *  - 범위 밖(목록에 없는 키)은 지금 동작 그대로 낡았으면 복귀 때 1건(AC6).
@@ -78,7 +78,7 @@ jest.mock('expo-router', () => {
 
 const MIN = 60_000;
 /** 부팅→홈 요청 수 상한 — 하네스 1회 실측값(AC9) — 여행 없음 7 = /bootstrap 1 + /trips 1 + /saved-places 1 + /saved-stays 1 + /places 3, 여행 중 6 = /places 1 + 지배 여행 일정 1. */
-const BOOT_BUDGET = { noTrip: 7, inTrip: 6 };
+const BOOT_BUDGET = { noTrip: 7, inTrip: 5 };
 const log = createHitLog(server);
 
 const trip = (over: Partial<Trip> & Pick<Trip, 'tripId'>): Trip =>
@@ -280,8 +280,8 @@ async function runReturn(
   return back;
 }
 
-// 일정 id 는 `:id` 로 접어 센다. 후 열은 어느 얼굴·나이에서도 `/trips` 1 + 일정 3(= 여행 수 N) 뿐이다.
-const REFRESHED = { 'GET /trips': 1, 'GET /trips/:id/itinerary': 3 };
+// 후 열은 어느 얼굴·나이에서도 `/trips` 1 뿐이다 — TRIP-1677 부터 탭들은 일정 상태를 목록 칸에서 읽어 여행별 일정 GET 이 없다.
+const REFRESHED = { 'GET /trips': 1 };
 // 거부 목록 경로 — "전" 열에서는 30초만 지나도 1건씩 나간다(`/places` 는 레인 신선 시간이 10분이라 11분 뒤부터).
 const DENIED_AT_5M = {
   'GET /saved-places': 1,

@@ -50,7 +50,7 @@ routes:
 Preconditions:
 
 - 로그인 완료 계정(가드 HOME). 얼굴을 고르려면 계정 여행 상태를 맞춘다: 발견 = 비-ENDED 여행 0건 ∧ 최근 종료가 8일 이상 전(또는 여행 0건) / 계획 중 = 시작일이 미래인 비-ENDED 여행 / 여행 중 = 오늘(KST)이 시작~종료일 안 / 여행 후 = 비-ENDED 0건 ∧ 최근 종료일이 오늘로부터 0~7일. 얼굴은 가장 이른 시작일의 비-ENDED 여행 하나로만 정해진다.
-- 여행 카드 CTA 목적지는 지배 여행 일정(`GET /trips/{id}/itinerary`) 응답이 정착한 뒤에만 정해진다.
+- 여행 카드 CTA 목적지는 목록(`GET /trips`)의 지배 여행 일정 상태 칸으로 첫 프레임부터 정해진다(TRIP-1677). 같이 짜기 생성 중일 때만 누르는 순간 일정 조회가 한 번 나간다.
 - 장소 레인은 서버 장소가 있어야 그려진다(발견·계획 중·여행 후 = 서울·부산·제주 3지역 각 200곳, 여행 중 = 여행 첫 목적지 지역 200곳).
 - 서버를 못 맞추는 얼굴(여행 후·조회 실패·로딩)은 프리뷰 `trippilot:///_dev/preview?state=home-post-trip`·`home-trips-error`·`home-trips-offline`·`home-loading`·`home-planning`·`home-traveling`·`home-saved-menu` 로 본다 — 실서버 증명과 섞지 않는다.
 
