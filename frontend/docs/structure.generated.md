@@ -1176,7 +1176,8 @@
 - `src/pages/settings/my-page/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 
 ## src/pages/settings/notification-inbox/
-- `src/pages/settings/notification-inbox/index.ts`  →  NotificationInboxPage · notificationAction
+- `src/pages/settings/notification-inbox/index.action.ts`  →  notificationAction
+- `src/pages/settings/notification-inbox/index.ts`  →  NotificationInboxPage
 
 ## src/pages/settings/notification-inbox/model/
 - `src/pages/settings/notification-inbox/model/groupByDay.ts`  →  NotificationGroups · groupByDay
@@ -1638,8 +1639,12 @@
 ## src/shared/api/
 - `src/shared/api/generationInProgress.ts`  →  resolveGenerationInProgress · resolveGenerationRefused · cancelActiveGeneration
 - `src/shared/api/index.client.ts`  →  customInstance
-- `src/shared/api/index.hooks.ts`  →  cancelActiveGeneration · resolveGenerationInProgress · resolveGenerationRefused
+- `src/shared/api/index.hooks.ts`  →  (export 없음)
+- `src/shared/api/index.notification.ts`  →  (export 없음)
+- `src/shared/api/index.places.ts`  →  (export 없음)
+- `src/shared/api/index.saved-stays.ts`  →  (export 없음)
 - `src/shared/api/index.schemas.ts`  →  (export 없음)
+- `src/shared/api/index.trips.ts`  →  cancelActiveGeneration · resolveGenerationInProgress · resolveGenerationRefused
 - `src/shared/api/index.ts`  →  SocialProvider · BootstrapResponse · AgeConfirmation · SocialLoginBody · SocialTokenLoginBody · AccountSummary · TokenPair · NormalizedApiError · AuthedApiClientOptions · TermsVersion · ConsentAction · ConsentInput · ConsentState · NicknameCheckReason · NicknameCheckResult · createAuthedApiClient · API_BASE_URL · fetchBootstrap · postSocialLogin · postSocialTokenLogin · refreshTokens · logout · fetchTerms · fetchTermsByType · authedClient · fetchConsents · submitConsents · patchConsent · fetchNicknameSuggestions · checkNickname · updateNickname · completeOnboarding · isAlreadyRegistered · isNotFound · retryUnlessNotFound · isOfflineWaiting · isGenerationDailyLimit · isRateLimited · isShareCardDailyLimit · retryAfterSeconds · getAccessToken · hydrate · setAccessToken · subscribeAccessToken · useAccessToken · resolveVisitConflict
 - `src/shared/api/isAlreadyRegistered.ts`  →  isAlreadyRegistered
 - `src/shared/api/isNotFound.ts`  →  isNotFound · retryUnlessNotFound
@@ -1927,4 +1932,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1249개 파일
+합계 1254개 파일

@@ -3,8 +3,8 @@ import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
 import type { Trip } from '@/shared/api/index.schemas';
-import { useGetTrips } from '@/shared/api/index.hooks';
-import { useGetPlaces } from '@/shared/api/index.hooks';
+import { useGetTrips } from '@/shared/api/index.trips';
+import { useGetPlaces } from '@/shared/api/index.places';
 import { isOfflineWaiting } from '@/shared/api';
 import { guardPress } from '@/shared/lib/pressGuard';
 import { showToast } from '@/shared/ui/Toast';

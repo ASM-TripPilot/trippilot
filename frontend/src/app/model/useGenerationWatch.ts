@@ -11,7 +11,7 @@ import {
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary';
-import { getGetTripsQueryKey, useGetTrips } from '@/shared/api/index.hooks';
+import { getGetTripsQueryKey, useGetTrips } from '@/shared/api/index.trips';
 import type {
   ItineraryGenerationState,
   Trip,
