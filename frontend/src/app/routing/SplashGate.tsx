@@ -16,8 +16,8 @@ import { BOOT_MODULE_LOADED_AT } from './bootClock';
 /**
  * 스플래시 최소 노출 하한(ms). 정본 근거 없는 발명값 — 비행 모션 1.3초(SPLASH_FLIGHT_MS)가 끝까지 보이게 맞춘다(TRIP-1383).
  * TRIP-1720 실측(Release 시뮬·dev-api·10회, `pnpm bench:startup` — 실기기 절대값은 다르다): 부트스트랩은 JS 진입 후 p50 488ms
- * (p90 570)에 끝나고 하한이 그 뒤 p50 882ms(p90 978)를 더 붙잡는다 — 콜드스타트 합계를 정하는 값이 이것이다. 줄일지는 브랜드 노출 판단이라
- * 사용자 결정 대기(값 유지). 줄이면 비행 모션도 같이 줄여야 하고(M-52), 가려져 있던 prefetch·inlineRequires 차이가 드러난다.
+ * (p90 570)에 끝나고 하한이 그 뒤 p50 882ms(p90 978)를 더 붙잡는다 — 콜드스타트 합계를 정하는 값이 이것이다. 브랜드 노출 판단으로
+ * 1300 유지 결정(사용자, 2026-11-03). 줄이면 비행 모션도 같이 줄여야 하고(M-52), 가려져 있던 prefetch·inlineRequires 차이가 드러난다.
  */
 export const SPLASH_MIN_VISIBLE_MS = 1300;
 
