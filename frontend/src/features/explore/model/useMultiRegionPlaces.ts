@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { getPlaces } from '@/shared/api/index.hooks';
+import { getPlaces } from '@/shared/api/index.places';
 import type { PoiCategory } from '@/shared/api/index.schemas';
 
 import { interleavePlacesByRegion, mergePlacesByPoiId } from './mergePlaces';

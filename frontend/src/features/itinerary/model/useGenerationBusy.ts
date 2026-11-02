@@ -4,7 +4,7 @@ import type { Itinerary } from '@/shared/api/index.schemas';
 import {
   cancelActiveGeneration,
   resolveGenerationInProgress,
-} from '@/shared/api/index.hooks';
+} from '@/shared/api/index.trips';
 
 /**
  * TRIP-1032 B — "이 여행이 생성 중" = 세션 id 가 있다. 서버는 이 id 를 지금 도는 세션에서만 채운다

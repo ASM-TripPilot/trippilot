@@ -11,9 +11,4 @@ export * from './generated/reflection/reflection';
 export * from './generated/replan/replan';
 export * from './generated/saved-stays/saved-stays';
 export * from './generated/stays/stays';
-export * from './generated/trips/trips';
-export {
-  cancelActiveGeneration,
-  resolveGenerationInProgress,
-  resolveGenerationRefused,
-} from './generationInProgress';
+export * from './index.trips';

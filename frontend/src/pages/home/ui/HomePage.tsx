@@ -4,8 +4,8 @@ import { useRouter } from 'expo-router';
 import {
   useGetTrips,
   useGetTripsTripIdItinerary,
-} from '@/shared/api/index.hooks';
-import { useGetPlaces } from '@/shared/api/index.hooks';
+} from '@/shared/api/index.trips';
+import { useGetPlaces } from '@/shared/api/index.places';
 import { isNotFound, isOfflineWaiting } from '@/shared/api';
 import { guardPress } from '@/shared/lib/pressGuard';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';

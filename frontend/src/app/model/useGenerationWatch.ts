@@ -16,7 +16,7 @@ import {
 import {
   getGetTripsTripIdItineraryQueryKey,
   getGetTripsTripIdItineraryQueryOptions,
-} from '@/shared/api/index.hooks';
+} from '@/shared/api/index.trips';
 import type {
   Itinerary,
   ItineraryGenerationState,
