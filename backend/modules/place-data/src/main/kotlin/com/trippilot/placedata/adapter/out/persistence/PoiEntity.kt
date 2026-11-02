@@ -180,8 +180,11 @@ class PoiRepositoryAdapter(
      * (로컬·CI 의 alpine 은 musl 이라 로케일이 사실상 C 로 동작해 **이 차이가 안 드러난다** —
      * glibc 이미지나 관리형 DB 에서만 갈린다. 그래서 테스트로 잡히지 않는 종류다.)
      *
-     * 한 이름이 가리키는 코드들은 같은 층이라 길이가 같다(`동구` → 26170·27140). 그래도 길이로 묶어
-     * 두는 이유는, 섞이면 `substring` 길이가 어긋나 **조용히 다른 지역을 잡기** 때문이다.
+     * 한 이름이 가리키는 코드는 대개 같은 층이다(`동구` → 26170·27140). 하지만 **층이 섞이는 이름이 있다** —
+     * `제주` 는 시도 별칭(50)이자 제주시 별칭(50110)이라 둘 다 온다(운영 14일 1,412회, TRIP-1723).
+     * 50110 은 접두 50 안에 이미 들어 있으므로 [dropCoveredCodes] 로 빼면 한 쿼리가 되고, 정렬·커서도
+     * DB 한 곳에 남는다. 덮이지 않는 혼합(다른 시도의 시군구 + 시도)만 아래 병합 경로로 간다.
+     * 길이로 묶는 이유는, 섞이면 `substring` 길이가 어긋나 **조용히 다른 지역을 잡기** 때문이다.
      */
     override fun findActive(
         regionCodes: List<String>,
@@ -200,13 +203,14 @@ class PoiRepositoryAdapter(
         if (regionCodes.isEmpty()) {
             return jpa.findActive(category?.name, query, rank, key, id, limit, s).map { it.toDomain() }
         }
-        val byLength = regionCodes.groupBy { it.length }
+        val byLength = dropCoveredCodes(regionCodes).groupBy { it.length }
         if (byLength.size == 1) {
             val (len, codes) = byLength.entries.single()
             return jpa.findActiveByRegionPrefixes(len, codes, category?.name, query, rank, key, id, limit, s)
                 .map { it.toDomain() }
         }
-        // 층이 섞이는 이름은 현재 카탈로그에 없다. 생기면 병합 정렬을 앱이 맡는다(도메인과 같은 식) — 로그로 드러낸다.
+        // 덮이지 않는 혼합만 남았다 — 현재 카탈로그에는 없다. 생기면 병합 정렬을 앱이 맡는다(도메인과 같은 식, 위 KDoc 의
+        // 콜레이션 차이가 커서를 어긋낼 수 있다) — 로그로 드러낸다.
         log.warn("지역 코드 길이가 섞였습니다 — 병합 정렬을 앱에서 수행합니다. codes={}", regionCodes)
         return byLength.entries
             .flatMap { (len, codes) -> jpa.findActiveByRegionPrefixes(len, codes, category?.name, query, rank, key, id, limit, s) }
@@ -265,4 +269,13 @@ class PoiRepositoryAdapter(
         private const val IN_CHUNK = 1_000
     }
 
+}
+
+/**
+ * 더 짧은 코드가 접두로 덮는 코드를 뺀다(TRIP-1723). 조회가 `substring(region_code, 1, len) in (codes)` —
+ * 곧 "region_code 가 그 코드로 시작한다"라서, `50110` 으로 잡히는 행은 전부 `50` 으로도 잡힌다. 빼도 합집합이 같다.
+ */
+internal fun dropCoveredCodes(codes: List<String>): List<String> {
+    val distinct = codes.distinct()
+    return distinct.filterNot { c -> distinct.any { it.length < c.length && c.startsWith(it) } }
 }
