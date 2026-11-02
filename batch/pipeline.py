@@ -77,3 +77,17 @@ def run_day(context: dict, tz) -> datetime:
     """실행의 기준 날짜 — 날짜 없이 수동 트리거하면 Airflow 3 는 logical_date 를 context 에 넣지 않는다(실측)."""
     when = context.get("logical_date") or context["dag_run"].run_after
     return when.astimezone(tz)
+
+
+def keep_run(run: Path, reason: str) -> None:
+    """검증에 실패한 실행의 폴더를 원인 보라고 남긴다 — 실 수집 DAG 의 마지막 정리 태스크(`finish_run`)가 이 표시를 본다."""
+    (run / "KEEP").write_text(reason, encoding="utf-8")
+
+
+def finish_run(run: Path) -> None:
+    """실 수집 DAG 의 마지막 정리 — 앞 태스크가 어떻게 끝났든 돈다. 검증 실패 표시가 있으면 남기고, 아니면 지운다
+    (복제본이 실행마다 수백 MB 다)."""
+    if (run / "KEEP").is_file():
+        log.warning("검증에 실패한 실행 — 폴더를 남긴다: %s", run)
+        return
+    clear_run(run)

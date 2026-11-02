@@ -74,8 +74,10 @@ docker compose --profile batch down
 
 | DAG | 태스크 |
 |---|---|
-| `poi_collect_live` | collect(develop 복제·collect-state 복원·`collect_pois.py`·`merge_pois_docs.py --state`) → validate(축소 가드 + `check_pois`) → publish(롤링 PR·**머지 확인**·backend-ci 디스패치) → persist_cursor(collect-state) |
-| `event_collect_live` | collect(복원·`collect_events.py`·팝업·축제) → validate(`check_events`) → publish(collect-state 영속) |
+| `poi_collect_live` | collect(develop 복제·collect-state 복원·`collect_pois.py`·`merge_pois_docs.py --state`) → validate(축소 가드 + `check_pois`) → publish(롤링 PR·**머지 확인**·backend-ci 디스패치) → persist_cursor(collect-state). 곁가지: collect → novelty(`collect_novelty.py --fail-if-stalled`, 비차단) |
+| `event_collect_live` | collect(복원·`collect_events.py`·팝업·축제) → validate(`check_event_store` — 모양·그날 유효 건수) → publish(collect-state 영속) → freshness(`check_event_freshness`, 영속 뒤 경보) |
+
+두 DAG 모두 마지막에 cleanup(all_done)이 실행 폴더를 지운다 — 검증에 실패한 실행만 원인 보라고 남긴다(`KEEP`).
 
 - **기본은 그림자다**(`BATCH_LIVE` 미설정): 실 API 를 부르지 않고, Actions 가 게시한 것(develop 공유본·collect-state 행사
   저장소)을 검증만 한다. 게시·영속은 건너뛴다. 생성 시 paused. 실 수집은 Actions 스케줄을 끈 뒤 `BATCH_LIVE=1` 로만 —
@@ -83,8 +85,10 @@ docker compose --profile batch down
 - 커서는 게시가 머지를 **확인한 뒤에만** 저장한다(TRIP-1475). 앞 태스크가 실패하면 저장하지 않는다 — 다음 실행이 같은
   자리부터 다시 받는다.
 - Actions 판과 다른 점: 러너 IP 재시도 잡이 없고(고정 IP — EKS NAT 3.36.199.183 에서 TourAPI 도달 확인 2026-11-03),
-  행사도 영속 앞에서 검증하고, 실 모드에 키가 없거나 collect-state 조회가 실패하면 초록불로 넘기지 않고 실패한다.
-- 신규율 진단(`collect_novelty.py`)은 옮기지 않았다 — Actions 판에서도 병합을 막지 않는 진단이다.
+  행사도 영속 앞에서 저장소 모양·유효 건수를 검증하고, 실 모드에 키가 없거나 collect-state 조회가 실패하면 초록불로 넘기지 않고 실패한다.
+- 행사 신선도는 영속을 **막지 않는다**(영속 뒤 경보). 막으면 폴백이 이어지는 동안 포인터·coverage 도 영속되지 않아, 원인이
+  풀려도 같은 낡은 저장소로 돌아가 신선도가 회복되지 않는다. 영속을 막는 것은 저장소가 깨졌을 때(모양·유효 건수)뿐이다.
+- 신규율 정체 경보는 Actions 판처럼 병합을 막지 않는다 — 곁가지 태스크라 빨개져도 게시·커서 저장은 기다리지 않는다.
 - 배포 초안은 `deploy/airflow/values.yaml`(적용 전 결정 목록이 그 머리에 있다).
 
 ## 한계

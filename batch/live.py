@@ -134,13 +134,17 @@ def publish_pois(repo: Path, numbers: dict, wait_s: float = 5) -> str:
     """공유본을 롤링 PR 로 develop 에 넣고 **머지됐는지 확인한다** — ai-poi-collect 의 sync 스텝 뒷부분.
     머지를 확인하지 못하면 예외 → 상태를 영속하지 않는다(TRIP-1475: 공유본에 못 들어간 행이 색인에 찍히면 영영 안 온다).
     반환: "unchanged"(변화 없음 — 잃을 것이 없어 영속해도 된다) 또는 머지된 PR 번호."""
-    if sh(["git", "diff", "--quiet", "--", "ai/data/collected_pois.json"], repo, check=False).returncode == 0:
-        log.info("공유본 변화 없음 — PR 생략")
+    # 비교 기준은 워킹트리가 아니라 **develop**(origin/develop)이다 — 앞 시도가 커밋·push 뒤 머지 확인에서 실패하고
+    # 태스크를 다시 돌리면 워킹트리는 깨끗하다. 워킹트리로 보면 "변화 없음"이 되어 머지 확인 없이 커서를 저장한다.
+    if sh(["git", "diff", "--quiet", "origin/develop", "--", "ai/data/collected_pois.json"], repo,
+          check=False).returncode == 0:
+        log.info("공유본 변화 없음(develop 과 같다) — PR 생략")
         return "unchanged"
     sh(["git", "checkout", "-B", SYNC_BRANCH], repo)
     sh(["git", "add", "ai/data/collected_pois.json"], repo)
-    sh(["git", "commit", "-q", "-m",
-        f"chore(ai): 수집 공유본 병합 갱신 — {numbers['before']}→{numbers['after']}건 (TRIP-392)"], repo)
+    if sh(["git", "diff", "--cached", "--quiet"], repo, check=False).returncode != 0:   # 재시도면 이미 커밋돼 있다
+        sh(["git", "commit", "-q", "-m",
+            f"chore(ai): 수집 공유본 병합 갱신 — {numbers['before']}→{numbers['after']}건 (TRIP-392)"], repo)
     sh(["git", "push", "-f", "origin", SYNC_BRANCH], repo)
     if gh(["pr", "list", "--head", SYNC_BRANCH, "--state", "open", "--json", "number", "--jq", "length"],
           repo).stdout.strip() == "0":

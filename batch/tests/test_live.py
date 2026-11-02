@@ -58,6 +58,8 @@ FAKE_UV = textwrap.dedent("""\
         dump(out, {"proposals": [p for d in docs for p in d["proposals"]], "stats": {}})
     elif name == "collect_events.py":
         dump(os.environ["EVENTS_STORE"], json.loads(os.environ["FAKE_EVENTS"]))
+    elif name == "collect_novelty.py":
+        sys.exit(int(os.environ.get("FAKE_NOVELTY_EXIT", "0")))
     elif name == "collect_tourapi_festivals.py":
         sys.exit(int(os.environ.get("FAKE_FESTIVAL_EXIT", "0")))
 """ % SEOUL_ADDRESS)
@@ -188,6 +190,24 @@ class RestorePersistTest(Sandbox):
         self.assertNotIn("ghs_", (repo / ".git/config").read_text())
         self.assertIn("AUTHORIZATION: basic", live.git_env()["GIT_CONFIG_VALUE_0"])
 
+    def test_게시를_다시_돌려도_머지_확인_전에는_unchanged_로_넘어가지_않는다_1475(self):
+        # 첫 시도가 커밋·push 뒤 머지 확인에서 실패하면 공유본은 이미 커밋돼 워킹트리가 깨끗하다. 워킹트리 기준으로 비교하면
+        # 재시도가 "변화 없음"으로 보고 커서를 저장한다 — develop 기준으로 비교해야 한다.
+        self.origin()
+        repo = self.clone()
+        shared = repo / "ai/data/collected_pois.json"
+        doc = json.loads(shared.read_text())
+        doc["proposals"].append({"poi": {"name": "new"}, "provenance": {"address": SEOUL_ADDRESS}})
+        shared.write_text(json.dumps(doc, ensure_ascii=False))
+        numbers = {"before": 600, "after": 601, "dropped": 0}
+        os.environ["FAKE_PR_STATE"] = "OPEN"
+        with mock.patch.object(live.time, "sleep"):
+            for _ in range(2):
+                with self.assertRaisesRegex(RuntimeError, "머지되지 않았다"):
+                    live.publish_pois(repo, numbers)
+            os.environ["FAKE_PR_STATE"] = "MERGED"
+            self.assertEqual(live.publish_pois(repo, numbers), "77")   # 세 번째 시도는 머지를 확인하고 끝난다
+
     def test_축소_가드(self):
         self.assertIsNone(live.shrink_failure({"before": 10, "after": 8, "dropped": 2}))
         self.assertIn("축소 덮어쓰기 차단", live.shrink_failure({"before": 10, "after": 8, "dropped": 1}))
@@ -220,16 +240,21 @@ class LiveDagTest(Sandbox):
         self.assertEqual(poi.get_task("publish").upstream_task_ids, {"validate"})
         self.assertEqual(poi.get_task("persist_cursor").upstream_task_ids, {"validate", "publish"})
         self.assertEqual(poi.get_task("persist_cursor").trigger_rule, "all_success")
+        self.assertEqual(poi.get_task("novelty").upstream_task_ids, {"collect"})   # 곁가지 — 커서 저장이 기다리지 않는다
+        self.assertEqual(poi.get_task("cleanup").upstream_task_ids, {"persist_cursor", "novelty"})
         event = bag.get_dag("event_collect_live")
         self.assertEqual(event.get_task("publish").upstream_task_ids, {"validate"})
+        self.assertEqual(event.get_task("freshness").upstream_task_ids, {"validate", "publish"})   # 신선도는 영속 뒤
+        for dag in (poi, event):
+            self.assertEqual(dag.get_task("cleanup").trigger_rule, "all_done", dag.dag_id)
         for dag in (poi, event):   # 켜는 것은 사람이다 — 올라가자마자 Actions 와 함께 실 수집하면 안 된다
             self.assertTrue(dag.is_paused_upon_creation, dag.dag_id)
 
     def test_POI_그림자는_실_API_도_게시도_커서도_건드리지_않는다(self):
         origin = self.origin()
         run = self.load("poi_collect_live").poi_collect_live().test()
-        self.assertEqual(self.states(run), {"collect": "success", "validate": "success",
-                                            "publish": "skipped", "persist_cursor": "skipped"})
+        self.assertEqual(self.states(run), {"collect": "success", "validate": "success", "novelty": "skipped",
+                                            "publish": "skipped", "persist_cursor": "skipped", "cleanup": "success"})
         self.assertNotIn("collect_pois.py", self.calls())
         self.assertNotIn("gh ", self.calls())
         self.assertEqual(origin.show("collect-state:collect_state.json"), '{"cursor": "old"}')
@@ -250,6 +275,14 @@ class LiveDagTest(Sandbox):
         self.assertEqual(len(json.loads(origin.show("chore/poi-data-sync:ai/data/collected_pois.json"))["proposals"]), 601)
         self.assertEqual(json.loads(origin.show("collect-state:collect_state.json")), {"cursor": "new"})
 
+    def test_POI_신규율_정체_경보가_빨개져도_커서는_저장한다(self):
+        origin = self.origin()
+        states = self.states(self.live_poi(FAKE_NOVELTY_EXIT="1"))
+        self.assertEqual((states["novelty"], states["persist_cursor"]), ("failed", "success"))
+        self.assertIn("--fail-if-stalled", self.calls())
+        self.assertIn("--prev-state collect_state.prev.json", self.calls())   # 이번 실행 전 색인과 비교한다
+        self.assertEqual(json.loads(origin.show("collect-state:collect_state.json")), {"cursor": "new"})
+
     def test_POI_머지를_확인하지_못하면_커서를_저장하지_않는다_1475(self):
         origin = self.origin()
         run = self.live_poi(FAKE_PR_STATE="OPEN")
@@ -265,6 +298,9 @@ class LiveDagTest(Sandbox):
                          ("failed", "upstream_failed", "upstream_failed"))
         self.assertFalse(origin.has("chore/poi-data-sync"))
         self.assertEqual(origin.show("collect-state:collect_state.json"), '{"cursor": "old"}')
+        kept = list((self.root / "out/runs/poi_collect_live").glob("*/KEEP"))
+        self.assertEqual(len(kept), 1)   # 검증에 실패한 실행은 원인 보라고 남긴다
+        self.assertIn("시도를 정할 수 없는 주소 1건", kept[0].read_text(encoding="utf-8"))
 
     def test_POI_실_모드에_키가_없으면_실패한다(self):
         self.origin()
@@ -275,8 +311,7 @@ class LiveDagTest(Sandbox):
 
     DAY = date(2026, 11, 3)
 
-    def events(self, valid: int) -> dict:
-        stamp = "2026-11-03T04:40:00+09:00"
+    def events(self, valid: int, stamp: str = "2026-11-03T04:40:00+09:00") -> dict:
         return {"events": [{"start": "2026-11-01", "end": "2026-11-30"}] * valid,
                 "coverage": {r: stamp for r in checks.event_regions()}}
 
@@ -293,6 +328,23 @@ class LiveDagTest(Sandbox):
         self.assertEqual(len(json.loads(origin.show("collect-state:collected_events.json"))["events"]), 40)
         self.assertEqual(origin.show("collect-state:rehearsal_log.jsonl"), "{}")
 
+    def test_행사_신선도가_낡아도_저장소는_영속하고_경보만_빨개진다(self):
+        # 폴백이 이어져 coverage 가 안 찍혀도 포인터는 전진해야 한다 — 영속을 막으면 원인이 풀려도 같은 낡은 저장소로 돌아간다.
+        origin = self.origin()
+        run = self.run_events(self.events(40, stamp="2026-10-24T07:34:15+09:00"))
+        states = self.states(run)
+        self.assertEqual((states["publish"], states["freshness"]), ("success", "failed"))
+        self.assertEqual(len(json.loads(origin.show("collect-state:collected_events.json"))["events"]), 40)
+
+    def test_행사_문서_모양이_깨지면_영속하지_않는다(self):
+        origin = self.origin()
+        run = self.run_events({"items": []})
+        states = self.states(run)
+        self.assertEqual((states["validate"], states["publish"], states["freshness"]),
+                         ("failed", "upstream_failed", "upstream_failed"))
+        self.assertEqual(json.loads(origin.show("collect-state:collected_events.json"))["events"], [])
+        self.assertEqual(len(list((self.root / "out/runs/event_collect_live").glob("*/KEEP"))), 1)
+
     def test_행사_그날_유효_건수가_하한_아래면_영속하지_않는다(self):
         origin = self.origin()
         run = self.run_events(self.events(3))
@@ -303,7 +355,9 @@ class LiveDagTest(Sandbox):
         origin = self.origin(events=self.events(40))
         mod = self.load("event_collect_live")
         run = mod.event_collect_live().test(logical_date=datetime.combine(self.DAY, time(4, 40), tzinfo=ZoneInfo("Asia/Seoul")))
-        self.assertEqual(self.states(run), {"collect": "success", "validate": "success", "publish": "skipped"})
+        self.assertEqual(self.states(run), {"collect": "success", "validate": "success", "publish": "skipped",
+                                            "freshness": "success", "cleanup": "success"})
+        self.assertEqual(list((self.root / "out/runs/event_collect_live").iterdir()), [])
         self.assertNotIn("collect_events.py", self.calls())
         self.assertEqual(git(origin.bare, "rev-list", "--count", "collect-state"), "1")   # 영속하지 않았다
 

@@ -12,9 +12,10 @@
 #
 # 시크릿(값은 여기 두지 않는다 — 클러스터에 사람이 만든다):
 #   airflow-metadata   connection=postgresql://airflow:<pw>@<rds-endpoint>:5432/airflow
-#   batch-collect      GH_TOKEN · TOUR_API_KEY(2·3) · NAVER_SEARCH_CLIENT_ID/SECRET · KAKAO_REST_API_KEY · OPENAI_API_KEY
+#   batch-collect      GH_TOKEN · TOUR_API_KEY·TOUR_API_KEY2·TOUR_API_KEY3 · NAVER_SEARCH_CLIENT_ID·NAVER_SEARCH_CLIENT_SECRET ·
+#                      KAKAO_REST_API_KEY(← secrets.KAKAO_REST_API_KEY_AI) · OPENAI_API_KEY(← secrets.AZUREAPIKEY)
 
-executor: LocalExecutor   # 하루 DAG 2개·태스크 7개 — 스케줄러 한 파드 안에서 돈다. 태스크 사이 파일(복제본)도 같은 디스크에 있다.
+executor: LocalExecutor   # 하루 DAG 2개·태스크 11개 — 스케줄러 한 파드 안에서 돈다. 태스크 사이 파일(복제본)도 같은 디스크에 있다.
 
 # 이미지: 공식 이미지 + git·gh·uv. 수집기(ai/)는 실행마다 develop 을 복제해 `uv sync --locked` 로 깐다.
 images:
@@ -48,15 +49,20 @@ env:
   # 그림자(기본) → 실 수집 전환 스위치. Actions 스케줄을 끈 뒤 "1" 로.
   - name: BATCH_LIVE
     value: "0"
-  # 비밀 아닌 수집 설정 — ai-poi-collect·ai-event-collect 가 Repository Variables 로 주던 값(2026-10-20 `gh variable list`).
+  # 비밀 아닌 수집 설정 — ai-poi-collect·ai-event-collect 가 Repository Variables 로 주는 값과 같게(`gh variable list` 2026-11-03).
+  # 리포 변수가 바뀌면 여기도. 리포에 없는 변수는 넣지 않는다 — 수집기 기본값이 Actions 와 같은 값이 된다:
+  #   TOURAPI_AREA_CODES·TOURAPI_AREA_CODE 미설정(→ 광역 17개 전부 공평 순회), EVENT_REGIONS 미설정(→ 17개 로테이션).
   - name: TOURAPI_MAX_CALLS
     value: "1000"
+  - name: TOURAPI_CONTENT_TYPES
+    value: "12,14,28,38,39"
   - name: NAVER_MAX_CALLS
     value: "1000"
   - name: EVENT_REGIONS_PER_RUN
     value: "17"
   - name: KAKAO_MAX_CALLS
-    value: "300"
+    value: "80000"
+  # LLM 추출 — ai-event-collect 의 고정값(LLM_PROVIDER·OPENAI_MODEL·OPENAI_API)과 vars.AZURE_OPENAI_ENDPOINT.
   - name: LLM_PROVIDER
     value: openai
   - name: OPENAI_MODEL
@@ -64,7 +70,7 @@ env:
   - name: OPENAI_API
     value: responses
   - name: OPENAI_BASE_URL
-    value: ""   # vars.AZURE_OPENAI_ENDPOINT 값 — 적용 때 채운다
+    value: https://fastpopo-ai-poc2.services.ai.azure.com/openai/v1
 extraEnvFrom: |
   - secretRef:
       name: batch-collect
