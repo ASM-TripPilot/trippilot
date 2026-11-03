@@ -391,6 +391,9 @@ class ChartTests(unittest.TestCase):
             env = {item["name"]: item for item in ai["spec"]["template"]["spec"]["containers"][0]["env"]}
             self.assertEqual(env["HOLIDAY_CLOSURE_MODE"]["valueFrom"]["secretKeyRef"],
                              {"name": "trippilot-ai", "key": "HOLIDAY_CLOSURE_MODE", "optional": True})
+            # KB-5 대체 문서를 끄는 길 — 시크릿의 off 가 파드에 닿지 않으면 끈 줄 알고 켜진 채로 돈다(앱 기본이 켜짐이라 더 나쁘다)
+            self.assertEqual(env["TRIPPILOT_KB5_FALLBACK"]["valueFrom"]["secretKeyRef"],
+                             {"name": "trippilot-ai", "key": "TRIPPILOT_KB5_FALLBACK", "optional": True})
 
 
 class RequestSizingTests(unittest.TestCase):

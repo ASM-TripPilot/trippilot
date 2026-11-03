@@ -32,7 +32,7 @@ TRIPPILOT_LOCAL_LLM_BASE_URL TRIPPILOT_LOCAL_LLM_API_KEY WEATHER_API WEATHER_API
 EXISTENCE_MAX_CALLS TMAP_API_KEY ODSAY_API_KEY TRIPPILOT_EMBEDDING_TIMEOUT_SEC TRIPPILOT_EMBEDDING_MODEL
 TRIPPILOT_BEDROCK_MODEL_ARN TRIPPILOT_BEDROCK_REGION
 TRIPPILOT_DIALOGUE_ORCHESTRATOR TRIPPILOT_DIALOGUE_SHADOW_RATE PUBLIC_DATA_API_KEY
-HOLIDAY_CLOSURE_MODE
+HOLIDAY_CLOSURE_MODE TRIPPILOT_KB5_FALLBACK
 """.split())
 GROUP_KEYS = {
     "backend": BACKEND_KEYS, "ai": AI_KEYS,
@@ -51,7 +51,7 @@ BACKEND_DEFAULTS = {
 # 배포 입력 `runtime_switches` 로 쓸 수 있는 키 → 그룹(상황 감지 스위치). 값 검증은 validate_groups 가 이미 한다.
 RUNTIME_SWITCHES = {"PLANB_SITUATION_SWEEP": "backend", "PLANB_SITUATION_HORIZON": "backend",
                     "PLANB_SITUATION_SWEEP_ACCOUNT_IDS": "backend", "PLANB_PREPARED_REPLAN": "backend",
-                    "HOLIDAY_CLOSURE_MODE": "ai"}
+                    "HOLIDAY_CLOSURE_MODE": "ai", "TRIPPILOT_KB5_FALLBACK": "ai"}
 
 
 def get_secret(shell, region, arn, *, strings_only=True):
@@ -317,6 +317,9 @@ def validate_groups(groups):
     # 공휴일 휴무(상황 감지 H1). 없으면 off = 공휴일 규칙 없음. 오타는 AI 가 기동에서 거부하므로(main.py) 같은 두 값만 받는다.
     if ai.get("HOLIDAY_CLOSURE_MODE", "") not in ("", "on", "off"):
         raise ValueError("Unsupported HOLIDAY_CLOSURE_MODE in ai secret; use on or off")
+    # KB-5 대체 문서(장소 카드·웹 확인 사실). 앱 기본은 on(2026-11-03) — 이 키는 끄는 길이다(off). 없으면 앱 기본.
+    if ai.get("TRIPPILOT_KB5_FALLBACK", "") not in ("", "on", "off"):
+        raise ValueError("Unsupported TRIPPILOT_KB5_FALLBACK in ai secret; use on or off")
     # 섀도 분류 측정의 샘플링 비율 0~1(없으면 1.0 — DEV 전부 · 운영 0.2 권고). 범위 밖·숫자 아님은 기동 실패다.
     rate = ai.get("TRIPPILOT_DIALOGUE_SHADOW_RATE", "")
     if rate:
