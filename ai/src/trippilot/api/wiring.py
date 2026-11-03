@@ -2010,6 +2010,7 @@ class WiredItineraryOrchestrator:
         trace: TracePort,
         schedule_agent: "ScheduleAgent",
         directives: tuple[DirectiveSpec, ...] = (),
+        situation_docs: tuple[composition.SituationDoc, ...] = (),
         embedding: EmbeddingPort | None = None,
         vector_store: VectorStorePort | None = None,
         diversity_jitter: float = 0.0,
@@ -2057,6 +2058,8 @@ class WiredItineraryOrchestrator:
         self._schedule_agent = schedule_agent
         # KB-4 지시 사전. 비어 있으면 칩·자유입력이 해석되지 않고 그 사실이 노트로 나간다.
         self._directives = directives
+        # KB-3 상황 대처 원칙(본문, 사유들) — 다시 짜기 구성 프롬프트 [상황 대처 원칙]. 비면 "(없음)"(종전과 같은 정보량).
+        self._situation_docs = situation_docs
         self._embedding = embedding
         self._vector_store = vector_store
         # U8 도우미 대화 해석(G-U8-4). 미주입이면 경계가 503(미배선)이다.
@@ -3408,6 +3411,7 @@ class WiredItineraryOrchestrator:
                 for s in slots
             ),
             planb_picks=tuple(index[p].name for p in planb_rank if p in index)[:5],
+            situation=composition.situation_lines(self._situation_docs, tuple(request.reasons)),
             persona=_persona_line(persona),
             max_visits=limit,
             recent_changes=composition.recent_change_lines(
@@ -4657,6 +4661,7 @@ def build_orchestrator(
     embedding: object | None = None,
     tz: timezone = KST,
     directives: tuple[DirectiveSpec, ...] = (),
+    situation_docs: tuple[composition.SituationDoc, ...] = (),
     bank: tuple[BankEntry, ...] = (),
     bank_embedding: EmbeddingPort | None = None,
     bank_vectors: BankVectors | None = None,
@@ -4886,6 +4891,7 @@ def build_orchestrator(
         # 읽는 쪽은 `src/` 밖이다(main.py·테스트). 비어 있으면 칩·자유입력이 해석되지
         # 않고 그 사실이 응답 노트(`directive_dictionary_absent`)로 나간다.
         directives=directives,
+        situation_docs=situation_docs,
         embedding=embedding,
         vector_store=vector_store,
         holidays=holidays,
@@ -5047,6 +5053,7 @@ def build_dev_app(
     trace: TracePort | None = None,
     context_store: object | None = None,
     directives: tuple[DirectiveSpec, ...] = (),
+    situation_docs: tuple[composition.SituationDoc, ...] = (),
     bank: tuple[BankEntry, ...] = (),
     bank_embedding: EmbeddingPort | None = None,
     bank_vectors: BankVectors | None = None,
@@ -5110,6 +5117,7 @@ def build_dev_app(
         embedding=embedding,
         trace=trace,
         directives=directives,
+        situation_docs=situation_docs,
         bank=bank,
         bank_embedding=bank_embedding,
         bank_vectors=bank_vectors,
