@@ -116,6 +116,12 @@ class NotificationMetrics(
         /** 발송기가 미발송 모드라 아무 데도 안 간 것 — 성공으로 기록되지만 전달은 아니다. */
         const val DELIVERY_NONE = "none"
 
+        /** NO_DEVICE 의 원인 — 활성 토큰이 하나도 없다(앱이 등록을 못 했다: 빌드·APNs/FCM 설정). */
+        const val REASON_NO_TOKEN = "NO_TOKEN"
+
+        /** NO_DEVICE 의 원인 — 활성 토큰은 있는데 OS 알림 권한이 허용이 아니다(사용자 설정·권한 요청 흐름). */
+        const val REASON_NOT_GRANTED = "NOT_GRANTED"
+
         private const val NONE = "none"
         private const val OTHER = "OTHER"
         private const val PUSH_ERROR_PREFIX = "PUSH_ERROR"
@@ -128,7 +134,13 @@ class NotificationMetrics(
          * 있어 운영의 죽은 토큰이 전부 `OTHER` 로 세어졌다. 죽은 토큰은 `reasonOf` 가 표기 하나로 접어 상태 이름은
          * 여기까지 오지 않는다. `FAILED`·`UNKNOWN` 은 벤더 사유가 없는 실패의 상태·기본값이다.
          */
-        private val KNOWN_REASONS = setOf("DeviceNotRegistered", "MessageRateExceeded", "FAILED", "UNKNOWN")
+        private val KNOWN_REASONS = setOf(
+            "DeviceNotRegistered", "MessageRateExceeded", "FAILED", "UNKNOWN",
+            // 기기 없음의 두 원인(NO_DEVICE) — 토큰 자체가 없는가, 있는데 OS 알림 권한이 허용이 아닌가.
+            REASON_NO_TOKEN, REASON_NOT_GRANTED,
+            // 프로젝트 자격(APNs .p8 · FCM)·발신자·크기 오류 — 지금껏 OTHER 로 접혀, 가장 가능성 높은 원인(자격 누락)이 가장 안 보였다.
+            "InvalidCredentials", "MismatchSenderId", "MessageTooBig",
+        )
     }
 }
 

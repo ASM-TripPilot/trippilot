@@ -267,15 +267,34 @@ class PushDispatchPropertyTest : StringSpec({
         logger.addAppender(appender)
         try {
             serviceOf(Tokens(), Sender(), Notifications()).dispatch(notification())
+            serviceOf(Tokens(listOf(token(deliverable = false))), Sender(), Notifications()).dispatch(notification())
             serviceOf(Tokens(listOf(token(deliverable = true))), Sender(), Notifications()).dispatch(notification())
         } finally {
             logger.detachAppender(appender)
         }
 
+        // "기기 없음"은 원인이 갈려 찍힌다 — 토큰 자체가 없다(NO_TOKEN) / 토큰은 있는데 OS 권한이 허용이 아니다(NOT_GRANTED).
         appender.list.map { it.formattedMessage }.filter { it.startsWith("push.dispatch ") } shouldContainExactly listOf(
-            "push.dispatch outcome=NO_DEVICE kind=TRIP_DAY reason=- real=true",
+            "push.dispatch outcome=NO_DEVICE kind=TRIP_DAY reason=NO_TOKEN real=true",
+            "push.dispatch outcome=NO_DEVICE kind=TRIP_DAY reason=NOT_GRANTED real=true",
             "push.dispatch outcome=SENT kind=TRIP_DAY reason=- real=true",
         )
+    }
+
+    /** **죽은 토큰만 있는 계정도 `NO_TOKEN`** — 활성 토큰이 없다는 뜻이다(무효화는 `findActive` 가 이미 뺀다). */
+    "활성 토큰이 하나도 없으면(무효화된 것만 있어도) NO_TOKEN 이다" {
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        val logger = LoggerFactory.getLogger(PushDispatchService::class.java) as Logger
+        logger.addAppender(appender)
+        try {
+            serviceOf(Tokens(listOf(token(deliverable = true, invalidated = true))), Sender(), Notifications())
+                .dispatch(notification())
+        } finally {
+            logger.detachAppender(appender)
+        }
+
+        appender.list.map { it.formattedMessage }.single { it.startsWith("push.dispatch ") } shouldBe
+            "push.dispatch outcome=NO_DEVICE kind=TRIP_DAY reason=NO_TOKEN real=true"
     }
 
     /**
