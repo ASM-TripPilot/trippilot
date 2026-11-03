@@ -28,6 +28,7 @@ import { useIncludedPlaceName } from '../model/useIncludedPlaceName';
 import { useReplanDiff } from '../model/useReplanDiff';
 import { useReplanSession } from '../model/useReplanSession';
 import type { ReplanDiff } from '@/shared/api/index.schemas';
+import { isNotFound } from '@/shared/api';
 
 import { seoulDate } from '@/shared/lib/seoulDate';
 import type { MapCenter, MapPin } from '@/shared/map';
@@ -254,6 +255,18 @@ export function PlanbDraftPage({
     state.kind === 'noSolution' &&
     data.targetDate === seoulDate(now) &&
     days.some((day) => day.date === tomorrow);
+  // TRIP-1753 — 위 판정은 일정이 있어야 선다. 오늘 대안 없음인데 일정 조회가 404 아닌 이유로 실패했으면 내일이 있는지
+  // 모른다 — 버튼을 거짓으로 띄우지 않고 사유 + [다시 시도]. 데이터 없는 재조회 중엔 v5 가 isError 를 풀어
+  // errorUpdateCount 로 잇는다(깜빡임 방지). 404(일정 없음)는 지금 동작 그대로.
+  const itineraryFailed =
+    itinerary.data === undefined &&
+    (itinerary.isError
+      ? !isNotFound(itinerary.error)
+      : itinerary.errorUpdateCount > 0);
+  const showItineraryError =
+    state.kind === 'noSolution' &&
+    data.targetDate === seoulDate(now) &&
+    itineraryFailed;
   // 세션이 다시 짜던 날 — 대안 없음·실패 얼굴엔 초안(diff)이 없어 draftDate 대신 세션에서 읽는다.
   const sessionDate = data.targetDate ?? readFromInstant(data.fromInstant).date;
   const draft = diff.data?.ready === true ? diff.data : undefined;
@@ -325,6 +338,14 @@ export function PlanbDraftPage({
             : NO_SOLUTION_DESCRIPTION
         }
         replanNextDayPending={startReplan.isPending}
+        itineraryError={
+          showItineraryError
+            ? {
+                onRetry: () => void itinerary.refetch(),
+                retrying: itinerary.isFetching,
+              }
+            : null
+        }
         onReplanNextDay={
           canReplanNextDay
             ? () =>

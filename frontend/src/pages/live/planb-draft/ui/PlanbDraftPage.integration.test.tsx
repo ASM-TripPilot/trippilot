@@ -143,13 +143,41 @@ jest.mock('@/features/request-replan/model/useStartReplan', () => ({
 // TRIP-979 B — 출발 좌표 없는 세션의 지도 중심을 일정에서 고르려고 페이지가 일정을 읽는다.
 // 기본은 미도착(undefined) — 기존 케이스는 세션 좌표가 있어 일정과 무관하다.
 let mockItinerary: Itinerary | undefined;
-jest.mock('@/features/execution/model/useLiveItinerary', () => ({
-  useLiveItinerary: () => ({
-    data: mockItinerary,
-    isPending: mockItinerary === undefined,
-    isError: false,
-  }),
-}));
+// TRIP-1753 — 일정 조회 실패(상태 코드)와 [다시 시도] 재조회. 기본은 실패 없음.
+// `refetching` = 실패 뒤 재조회가 도는 중(TanStack v5: data 없으면 isError 가 풀리고 errorUpdateCount 만 남는다).
+// `pastFailures` = 지금은 실패가 아니어도 남은 실패 이력 — v5 는 재조회가 성공해도 errorUpdateCount 를 되돌리지 않는다(5-b W1).
+const mockItineraryFail: {
+  status: number | null;
+  refetching: boolean;
+  pastFailures: number;
+} = {
+  status: null,
+  refetching: false,
+  pastFailures: 0,
+};
+const mockItineraryRefetch = jest.fn();
+jest.mock('@/features/execution/model/useLiveItinerary', () => {
+  const { AxiosError } = jest.requireActual('axios');
+  return {
+    useLiveItinerary: () => {
+      const failed = mockItineraryFail.status !== null;
+      const settledError = failed && !mockItineraryFail.refetching;
+      return {
+        data: mockItinerary,
+        isPending: mockItinerary === undefined && !settledError,
+        isError: settledError,
+        error: settledError
+          ? new AxiosError('x', 'ERR', undefined, undefined, {
+              status: mockItineraryFail.status,
+            })
+          : null,
+        errorUpdateCount: failed ? 1 : mockItineraryFail.pastFailures,
+        isFetching: mockItineraryFail.refetching,
+        refetch: mockItineraryRefetch,
+      };
+    },
+  };
+});
 
 // TRIP-1007 — 서버 초안 조회 seam. 기본은 "초안 도착"(beforeEach) — 적용·잠금 회귀 테스트가 활성
 // [적용하기]를 전제로 하기 때문이다(02a ★8).
@@ -418,6 +446,10 @@ beforeEach(() => {
   mockStart.error = null;
   mockSession.data = undefined;
   mockItinerary = undefined;
+  mockItineraryFail.status = null;
+  mockItineraryFail.refetching = false;
+  mockItineraryFail.pastFailures = 0;
+  mockItineraryRefetch.mockClear();
   mockDiff.state = 'ok';
   mockDiff.data = READY_DIFF;
   mockDiff.calls = [];
@@ -1287,6 +1319,101 @@ describe('🔴 N · 오늘 대안 없음 → [내일 일정 다시 짜기] (targ
     );
     fireEvent.press(screen.getByTestId(NEXT_DAY_TESTID));
     expect(mockStartMutate).toHaveBeenCalledTimes(1);
+  });
+});
+
+// TRIP-1753 — 일정 조회가 404 아닌 이유로 실패하면 [내일 일정 다시 짜기]를 띄울지 알 수 없다(내일이 일정에 있는지 모른다).
+// 버튼을 거짓으로 띄우지 않고, 사유 한 줄 + [다시 시도]로 말한다(INV-4). 사유 없이 버튼만 사라지면 위반.
+const ITINERARY_ERROR = 'planb-draft-itinerary-error';
+const ITINERARY_RETRY = 'planb-draft-itinerary-retry';
+
+describe('🔴 TRIP-1753 · 대안 없음 얼굴 — 일정 조회 실패를 "내일 없음"으로 접지 않는다', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('I1 오늘 세션 · 대안 없음 · 일정 GET 500 — 사유·[다시 시도]가 보이고 [내일 일정 다시 짜기]는 없다', () => {
+    // 준비
+    jest.useFakeTimers({ now: TONIGHT });
+    mockItineraryFail.status = 500;
+    mockSession.data = session('NO_SOLUTION', TONIGHT_REQUEST);
+    // 실행
+    renderPage();
+    // 단언: 안내 얼굴(앵커)은 그대로, 사유 줄 + 버튼, 거짓 버튼 없음.
+    expect(screen.getByTestId('planb-draft-notice-title')).toBeOnTheScreen();
+    expect(screen.getByTestId(ITINERARY_ERROR)).toHaveTextContent(
+      '일정을 불러오지 못해 내일 일정 다시 짜기를 확인하지 못했어요'
+    );
+    expect(screen.getByTestId(ITINERARY_RETRY)).toHaveTextContent('다시 시도');
+    expect(screen.queryByTestId(NEXT_DAY_TESTID)).toBeNull();
+  });
+
+  it('I2 [다시 시도]는 일정만 다시 묻는다(세션 시작 0)', () => {
+    jest.useFakeTimers({ now: TONIGHT });
+    mockItineraryFail.status = 500;
+    mockSession.data = session('NO_SOLUTION', TONIGHT_REQUEST);
+    renderPage();
+
+    fireEvent.press(screen.getByTestId(ITINERARY_RETRY));
+
+    expect(mockItineraryRefetch).toHaveBeenCalledTimes(1);
+    expect(mockStartMutate).not.toHaveBeenCalled();
+  });
+
+  it('I3 재조회가 도는 동안에도 사유가 남고 [다시 시도]는 잠긴다(errorUpdateCount 판정 — 깜빡임 없음)', () => {
+    jest.useFakeTimers({ now: TONIGHT });
+    mockItineraryFail.status = 500;
+    mockItineraryFail.refetching = true;
+    mockSession.data = session('NO_SOLUTION', TONIGHT_REQUEST);
+    renderPage();
+
+    const retry = screen.getByTestId(ITINERARY_RETRY);
+    expect(screen.getByTestId(ITINERARY_ERROR)).toBeOnTheScreen();
+    expect(retry).toBeDisabled();
+    fireEvent.press(retry);
+    expect(mockItineraryRefetch).not.toHaveBeenCalled();
+  });
+
+  it('I4 다시 시도 뒤 200(내일 있음 · 오늘 세션) — 사유가 사라지고 [내일 일정 다시 짜기]가 보인다', () => {
+    jest.useFakeTimers({ now: TONIGHT });
+    mockItineraryFail.status = 500;
+    mockSession.data = session('NO_SOLUTION', TONIGHT_REQUEST);
+    renderPage();
+    expect(screen.getByTestId(ITINERARY_ERROR)).toBeOnTheScreen();
+
+    // 재조회 성공 — 같은 화면이 새 값으로 다시 그려진다. 실패 이력(errorUpdateCount 1)은 실물처럼 남긴다 —
+    // 그래도 data 가 왔으면 실패가 아니다(`data === undefined` 가드의 심판).
+    mockItineraryFail.status = null;
+    mockItineraryFail.pastFailures = 1;
+    mockItinerary = itineraryOf(['2026-06-11', '2026-06-12']);
+    screen.rerender(<PlanbDraftPage tripId={TRIP_ID} sessionId={SESSION_ID} />);
+
+    expect(screen.queryByTestId(ITINERARY_ERROR)).toBeNull();
+    expect(screen.getByTestId(NEXT_DAY_TESTID)).toBeOnTheScreen();
+  });
+
+  it.each([
+    [
+      '일정 404(지금 동작 유지)',
+      404,
+      'NO_SOLUTION',
+      TONIGHT_REQUEST.targetDate,
+    ],
+    [
+      '대안 없음이 아니라 실패(FAILED)',
+      500,
+      'FAILED',
+      TONIGHT_REQUEST.targetDate,
+    ],
+    ['오늘이 아닌 날 세션(내일 버튼과 무관)', 500, 'NO_SOLUTION', '2026-06-12'],
+  ])('I5 %s 이면 사유 줄이 없다', (_label, code, status, targetDate) => {
+    jest.useFakeTimers({ now: TONIGHT });
+    mockItineraryFail.status = code;
+    mockSession.data = session(status, { ...TONIGHT_REQUEST, targetDate });
+    renderPage();
+
+    expect(screen.getByTestId('planb-draft-notice-title')).toBeOnTheScreen();
+    expect(screen.queryByTestId(ITINERARY_ERROR)).toBeNull();
   });
 });
 

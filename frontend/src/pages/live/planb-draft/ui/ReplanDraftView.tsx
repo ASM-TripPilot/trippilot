@@ -35,6 +35,9 @@ const FAILED_NOTICE = {
   description: '잠시 후 다시 시도하거나 직접 고쳐 주세요',
 };
 const NO_SOLUTION_TITLE = '대안을 찾지 못했어요';
+// TRIP-1753 — 내일이 일정에 있는지 모를 때(일정 조회 실패) [내일 일정 다시 짜기] 대신 보이는 사유.
+const ITINERARY_ERROR_TEXT =
+  '일정을 불러오지 못해 내일 일정 다시 짜기를 확인하지 못했어요';
 const TITLE = 'AI 재계획안';
 // 상황 감지 FE-B(frontend-components §3.6) — 문구는 정본 그대로. 재요청 실패는 i04 시작 실패와 같은 문장이다
 // (낡음 얼굴 [새 대안 보기] · 실패 얼굴 [다시 시도] 공용).
@@ -99,6 +102,11 @@ export interface ReplanDraftViewProps {
    * [다시 시도])·[직접 수정]을 잠근다 — 이중 POST 차단 · 교차 잠금(성공하면 이 화면이 solving 으로 갈아 끼워진다).
    */
   replanNextDayPending?: boolean;
+  /**
+   * TRIP-1753 — 일정 조회가 404 아닌 이유로 실패해 [내일 일정 다시 짜기]를 띄울지 모른다 — 안내 아래 사유 한 줄 +
+   * [다시 시도](INV-4). 판정·재조회는 페이지 몫. `retrying` 이면 버튼만 잠근다.
+   */
+  itineraryError?: { onRetry: () => void; retrying: boolean } | null;
   /** 상황 감지 FE-B — 서버가 미리 짠 대안(SYSTEM 세션)이면 머리에 `미리 준비한 대안` 표식. */
   prepared?: boolean;
   /** 적용이 409 EXPIRED·STALE 로 거절됐다 — 낡음 얼굴(안내 + [새 대안 보기]) · [적용하기] 잠금. */
@@ -142,6 +150,7 @@ export function ReplanDraftView({
   applyFailed,
   onReplanNextDay,
   replanNextDayPending,
+  itineraryError = null,
   prepared = false,
   stale = false,
   onRetryStale,
@@ -282,6 +291,28 @@ export function ReplanDraftView({
                     내일 일정 다시 짜기
                   </Text>
                 </Pressable>
+              ) : null}
+              {itineraryError ? (
+                <View className="mt-xs gap-xs">
+                  <Text
+                    testID="planb-draft-itinerary-error"
+                    className="font-noto text-label text-muted"
+                  >
+                    {ITINERARY_ERROR_TEXT}
+                  </Text>
+                  <Pressable
+                    testID="planb-draft-itinerary-retry"
+                    accessibilityRole="button"
+                    onPress={itineraryError.onRetry}
+                    disabled={itineraryError.retrying}
+                    accessibilityState={{ disabled: itineraryError.retrying }}
+                    className="self-start rounded-pill border border-hairline-strong bg-canvas px-lg py-sm"
+                  >
+                    <Text className="font-noto-bold text-label font-bold text-ink">
+                      다시 시도
+                    </Text>
+                  </Pressable>
+                </View>
               ) : null}
             </View>
           ) : null}
