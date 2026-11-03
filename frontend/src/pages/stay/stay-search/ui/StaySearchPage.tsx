@@ -10,7 +10,7 @@
  * 화면 루트 형제다(gorhom 시트는 부모를 채운다). 목록 상태와 독립이다.
  */
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import type { StayItem } from '@/shared/api/index.schemas';
@@ -18,6 +18,8 @@ import { getAccessToken } from '@/shared/api';
 import { guardPress } from '@/shared/lib/pressGuard';
 import { shellTabHref, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { goBackOr } from '@/shared/lib/goBackOr';
+import { SAVED_LIST_LOAD_FAILED_TOAST } from '@/shared/ui/savedListLoadToast';
+import { showToast } from '@/shared/ui/Toast';
 
 import { regionPickerHref } from '@/features/explore';
 import {
@@ -98,7 +100,13 @@ export function StaySearchPage(): ReactElement {
   // 제3 상태가 안 생긴다). 담김 목록·토글은 useSavedStays 한 곳이 소유하고, 응답 대기 키만
   // 페이지 로컬 상태로 들어 화면이 그 하트를 disabled로 만들게 한다(연타 중복 요청 차단, AC-8).
   const isAuthed = getAccessToken() !== null;
-  const { isSaved, save, remove, savedKeys } = useSavedStays({ isAuthed });
+  const { isSaved, save, remove, savedKeys, loadFailureConfirmed } =
+    useSavedStays({ isAuthed });
+  // TRIP-1754 — 저장 목록 확정 실패가 켜지는 순간 토스트 1회(하트는 그대로 눌린다).
+  const savedListFailed = Boolean(loadFailureConfirmed);
+  useEffect(() => {
+    if (savedListFailed) showToast(SAVED_LIST_LOAD_FAILED_TOAST);
+  }, [savedListFailed]);
   const [pendingKeys, setPendingKeys] = useState<string[]>([]);
 
   // 이름·지역 검색어(TRIP-469) — 화면이 결과를 클라 부분일치로 좁힌다. 상태만 여기서 소유하고

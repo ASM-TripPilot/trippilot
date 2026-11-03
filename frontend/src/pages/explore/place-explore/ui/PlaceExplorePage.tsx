@@ -32,6 +32,8 @@ import {
   useDebouncedValue,
 } from '@/shared/lib/useDebouncedValue';
 import { BottomTabBar, shellTabHref } from '@/shared/ui/BottomTabBar';
+import { SAVED_LIST_LOAD_FAILED_TOAST } from '@/shared/ui/savedListLoadToast';
+import { showToast } from '@/shared/ui/Toast';
 import { goBackOr } from '@/shared/lib/goBackOr';
 
 import { resolvePlaceListState } from '@/features/explore';
@@ -110,7 +112,13 @@ export function PlaceExplorePage(): ReactElement {
     hasNextPage,
     isFetchingNextPage,
   } = isMultiRegion ? multi : infinite;
-  const { isSaved, save, remove, savedPoiIds } = useSavedPlaces({ isAuthed });
+  const { isSaved, save, remove, savedPoiIds, loadFailureConfirmed } =
+    useSavedPlaces({ isAuthed });
+  // TRIP-1754 — 담은 목록 확정 실패가 켜지는 순간 토스트 1회(하트는 그대로 눌린다).
+  const savedListFailed = Boolean(loadFailureConfirmed);
+  useEffect(() => {
+    if (savedListFailed) showToast(SAVED_LIST_LOAD_FAILED_TOAST);
+  }, [savedListFailed]);
 
   const listState = resolvePlaceListState({
     isPending,

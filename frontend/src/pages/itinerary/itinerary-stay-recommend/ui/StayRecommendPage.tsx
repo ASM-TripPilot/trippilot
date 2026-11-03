@@ -1,4 +1,4 @@
-import { type ReactElement, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -8,7 +8,9 @@ import type { StayRecommendView as StayRecommendViewModel } from '../model/stayR
 import { LocationOffGlyph } from '@/features/itinerary';
 import { useAssignBase } from '@/features/assign-trip-base';
 import { useGetTripsTripId } from '@/shared/api/index.hooks';
+import { SAVED_LIST_LOAD_FAILED_TOAST } from '@/shared/ui/savedListLoadToast';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { showToast } from '@/shared/ui/Toast';
 import {
   CuratedStaysSection,
   CuratedStaysSheet,
@@ -73,6 +75,14 @@ export function StayRecommendPage({
     testIDPrefix: 'stay-recommend-curated',
   });
   const assignBase = useAssignBase();
+
+  // TRIP-1754 — 인기 숙소 하트가 그려지는 얼굴(추천 없음 + 줄 있음 — 추천이 있으면 curated.hidden 이 이미 true)에서만, 저장 목록 확정 실패가 켜지는 순간 토스트 1회.
+  // 조기 return 보다 앞(Rules of Hooks).
+  const heartsShown = !curated.hidden;
+  const savedListFailed = heartsShown && curated.savedListFailureConfirmed;
+  useEffect(() => {
+    if (savedListFailed) showToast(SAVED_LIST_LOAD_FAILED_TOAST);
+  }, [savedListFailed]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [assignFailed, setAssignFailed] = useState(false);

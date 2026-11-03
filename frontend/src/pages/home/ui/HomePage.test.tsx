@@ -32,6 +32,7 @@ import {
 import { HomePage } from '@/pages/home';
 import { routerSpies } from '@/test-support/expoRouterMock';
 import { createWrapper } from '@/test-support/queryRender';
+import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 import { NO_ITINERARY } from '@/test-support/tripItineraryCols';
 
 /**
@@ -359,6 +360,8 @@ beforeEach(() => {
 afterEach(resetWizardDraft);
 // 연타 가드 창도 모듈 싱글턴이다 — 앞 테스트가 연 창이 다음 테스트의 첫 누름을 먹지 않게 닫는다(TRIP-1282).
 afterEach(() => resetPressGuard());
+// TRIP-1754 — 토스트 슬롯은 모듈 싱글턴이라 앞 테스트가 띄운 토스트가 샌다. 파일 최상위에서 비운다(describe 안이면 샌다).
+afterEach(resetToast);
 
 // TRIP-371 실데이터 판정 · TRIP-699 로딩 히어로 · TRIP-935 AC-5
 describe('얼굴 판정 — 여행 목록으로 discovery·planning·로딩을 가른다', () => {
@@ -1749,5 +1752,136 @@ describe('화면 동작 — 인사·문구·이름 · 담은 곳 메뉴 · 얼�
     fireEvent.press(screen.getByTestId('home-spot-save-p4'));
     fireEvent.press(await screen.findByTestId('home-spot-save-error'));
     expect(screen.queryByTestId('home-spot-save-error')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1754 · 담은 장소·저장 숙소 **조회 실패**가 "개수 0"·"배지 없음"으로 접히던 문제 — 훅이 내려 준 표식을 홈이 어떻게 읽나.
+ * (훅 자체는 `savedPlaces.savedList`·`savedStays` 통합 테스트가, 실제 500 응답 연결은 `HomePage.integration` 이 본다.)
+ *
+ * 무엇을 보장하나(3동작 = 준비: 훅 목이 돌려줄 값 → 실행: 그리기·펼치기 → 단언: 배지 글자·토스트):
+ *  - **HN1** `loadFailed` 인 쪽 배지는 `–`(U+2013)이고, 다른 쪽 배지는 제 숫자 그대로다(서로 독립).
+ *  - **HN2** `loadFailureConfirmed` 가 **켜지는 순간** 토스트 1개(문구·오류 아이콘). 같은 값으로 다시 그려져도 다시 안 쏜다.
+ *  - **HN3** 새 필드가 **없는**(옛) 훅 목은 "실패 아님"으로 읽는다 — 훅 목이 새 필드를 안 주는 다른 테스트들이 안 깨지는 계약.
+ */
+describe('TRIP-1754 · 저장 목록 실패 표식 — 배지 `–` · 토스트', () => {
+  const TOAST = 'saved-list-load-error';
+  const TOAST_TEXT = '저장 목록을 불러오지 못했어요';
+
+  function placesFailed(confirmed: boolean): void {
+    mockUseSavedPlaces.mockReturnValue({
+      savedPoiIds: [],
+      isSaved: () => false,
+      save: mockSave,
+      remove: mockRemove,
+      loadFailed: true,
+      loadFailureConfirmed: confirmed,
+    });
+  }
+  function staysFailed(confirmed: boolean): void {
+    mockUseSavedStays.mockReturnValue({
+      savedCount: 0,
+      loadFailed: true,
+      loadFailureConfirmed: confirmed,
+    });
+  }
+  // 같은 JSX 참조를 rerender 에 넘기면 React 가 건너뛴다 — 매번 새 엘리먼트를 만든다.
+  const tree = () => (
+    <WithToastHost>
+      <HomePage />
+    </WithToastHost>
+  );
+  function renderHome() {
+    return { ...render(tree()), tree };
+  }
+  function openSavedMenu(): void {
+    fireEvent.press(screen.getByTestId('home-saved-menu-toggle'));
+  }
+
+  it('HN1 장소 목록이 실패면 장소 배지는 `–`, 숙소 배지는 제 숫자(5)다', () => {
+    // 준비
+    placesFailed(false);
+    mockUseSavedStays.mockReturnValue({ savedCount: 5 });
+
+    // 실행
+    renderHome();
+    openSavedMenu();
+
+    // 단언 — toHaveTextContent(문자열) = 완전 일치(U+2013 en dash).
+    expect(screen.getByTestId('home-saved-places-badge')).toHaveTextContent(
+      '–'
+    );
+    expect(screen.getByTestId('home-saved-stays-badge')).toHaveTextContent('5');
+  });
+
+  it('HN1 숙소 목록이 실패면 숙소 배지는 `–`, 장소 배지는 제 숫자(2)다', () => {
+    // 준비
+    savedPlacesReturns(['p1', 'p2']);
+    staysFailed(false);
+
+    // 실행
+    renderHome();
+    openSavedMenu();
+
+    // 단언
+    expect(screen.getByTestId('home-saved-stays-badge')).toHaveTextContent('–');
+    expect(screen.getByTestId('home-saved-places-badge')).toHaveTextContent(
+      '2'
+    );
+  });
+
+  it('HN2 확정 실패가 켜지는 순간 토스트 1개가 뜨고, 같은 값으로 다시 그려도 다시 안 뜬다', () => {
+    // 준비 — 앵커: 앞 테스트의 토스트가 안 샜고(파일 최상위 리셋), "실패지만 아직 확정 아님"이면 안 뜬다.
+    // (screen 은 render 뒤에만 쓸 수 있어 앵커는 그린 직후에 둔다.)
+    placesFailed(false);
+    const { rerender, tree } = renderHome();
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+
+    // 실행 ① — 확정 실패로 바뀐다.
+    placesFailed(true);
+    rerender(tree());
+
+    // 단언 ①
+    const toast = screen.getByTestId(TOAST);
+    expect(within(toast).getByText(TOAST_TEXT)).toBeOnTheScreen();
+    expect(screen.getByTestId(`${TOAST}-error-icon`)).toBeOnTheScreen();
+
+    // 실행 ② — 슬롯을 비우고(슬롯이 1개라 "보임 1개"로는 1회를 못 잰다) 같은 값으로 다시 그린다.
+    resetToast();
+    rerender(tree());
+
+    // 단언 ②
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+  });
+
+  it('HN2 숙소 목록의 확정 실패도 같은 토스트다', () => {
+    // 준비
+    staysFailed(true);
+
+    // 실행
+    renderHome();
+
+    // 단언
+    expect(
+      within(screen.getByTestId(TOAST)).getByText(TOAST_TEXT)
+    ).toBeOnTheScreen();
+  });
+
+  it('HN3 새 필드가 없는 옛 훅 목은 실패로 읽지 않는다 — 배지 숫자 그대로 · `–` 없음 · 토스트 없음 (계약 잠금)', () => {
+    // 준비 — 기존 목 모양 그대로(loadFailed·loadFailureConfirmed 없음).
+    savedPlacesReturns(['p1', 'p2']);
+    mockUseSavedStays.mockReturnValue({ savedCount: 5 });
+
+    // 실행
+    renderHome();
+    openSavedMenu();
+
+    // 단언
+    expect(screen.getByTestId('home-saved-places-badge')).toHaveTextContent(
+      '2'
+    );
+    expect(screen.getByTestId('home-saved-stays-badge')).toHaveTextContent('5');
+    expect(screen.queryByText('–')).toBeNull();
+    expect(screen.queryByTestId(TOAST)).toBeNull();
   });
 });

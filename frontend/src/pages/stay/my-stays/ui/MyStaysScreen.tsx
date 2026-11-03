@@ -59,6 +59,12 @@ export interface MyStaysScreenProps {
   onRetry?: () => void;
   /** 다시 시도 진행 중 — [다시 시도] 비활성. */
   retrying?: boolean;
+  /** TRIP-1754 — 일부 여행의 거점 조회가 실패했다(페이지가 판정). 목록 위 한 줄. `loadFailed` 면 안 그린다. */
+  linksFailed?: boolean;
+  /** 한 줄의 [다시 시도] — 실패한 거점 조회만 다시 받는다. */
+  onRetryLinks?: () => void;
+  /** 한 줄의 다시 시도 진행 중 — 버튼 비활성(한 줄은 유지). */
+  retryingLinks?: boolean;
 }
 
 /** 채움/아웃라인 칩 — 날짜·출처·메모 상태를 한 형태로. `filled` 는 채움(surface-strong·body 글자),
@@ -172,6 +178,9 @@ export function MyStaysScreen({
   loadFailed = false,
   onRetry,
   retrying = false,
+  linksFailed = false,
+  onRetryLinks,
+  retryingLinks = false,
 }: MyStaysScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -239,6 +248,30 @@ export function MyStaysScreen({
           <FlatList
             contentContainerClassName="gap-lg px-lg pb-2xl pt-lg"
             data={rows}
+            ListHeaderComponent={
+              linksFailed ? (
+                // TRIP-1754 — 거점 조회가 실패한 여행의 숙소가 「연결된 여행 없음」으로 거짓 표시되는 사유를 밝힌다(INV-4).
+                <View
+                  testID="my-stays-links-error"
+                  className="flex-row items-center gap-sm rounded-button border border-hairline bg-surface-soft px-md py-sm"
+                >
+                  <WarningTriangleGlyph size={20} color="primary" />
+                  <Text className="flex-1 font-noto text-label text-body">
+                    일부 여행의 연결 정보를 불러오지 못했어요
+                  </Text>
+                  <Pressable
+                    testID="my-stays-links-retry"
+                    accessibilityRole="button"
+                    disabled={retryingLinks}
+                    onPress={onRetryLinks}
+                  >
+                    <Text className="font-noto text-label text-primary">
+                      다시 시도
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null
+            }
             keyExtractor={keyOfRow}
             renderItem={({ item }) => (
               <MyStayRow

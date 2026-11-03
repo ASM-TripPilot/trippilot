@@ -945,8 +945,19 @@ function CountBadge({
   count,
 }: {
   testID: string;
-  count?: number;
+  count?: number | null;
 }): ReactElement | null {
+  // null = 목록을 못 받은 "모름"(TRIP-1754) — 0 으로 접어 배지를 지우지 않고 `–`(U+2013)를 그린다.
+  if (count === null) {
+    return (
+      <View
+        testID={testID}
+        className="absolute right-0 top-0 h-[20px] w-[20px] items-center justify-center rounded-full border-2 border-canvas bg-primary"
+      >
+        <Text className="text-[12px] font-bold text-on-primary">–</Text>
+      </View>
+    );
+  }
   if ((count ?? 0) < 1) return null;
   const label = formatCountBadge(count ?? 0);
   // TRIP-890 — 1~2자리(1~99)는 정원 20px 그대로, 3자리('99+')만 내용 맞춤 알약으로 가로 확장
@@ -981,8 +992,8 @@ function SavedMenuFab({
   onToggle?: () => void;
   onPressSavedPlaces?: () => void;
   onPressSavedStays?: () => void;
-  savedPlacesCount?: number;
-  savedStaysCount?: number;
+  savedPlacesCount?: number | null;
+  savedStaysCount?: number | null;
 }): ReactElement {
   return (
     <View className="absolute bottom-[152px] right-lg flex-row items-center gap-md">

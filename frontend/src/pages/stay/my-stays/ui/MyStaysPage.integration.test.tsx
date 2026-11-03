@@ -18,6 +18,7 @@ import type {
 import {
   getGetSavedStaysQueryKey,
   getGetTripsQueryKey,
+  getGetTripsTripIdBasesQueryKey,
   useGetSavedStays,
   useGetTrips,
 } from '@/shared/api/index.hooks';
@@ -1094,6 +1095,417 @@ describe('실 화면 + msw — 거점 변경·출처 칩 (옛 .release)', () => 
 
       // 단언
       expect(mockBack).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // TRIP-1754 · 여행별 거점 조회(N+1 프로브) **일부가 실패**하면 「연결된 여행 없음」(+「거점 변경」 버튼 사라짐)으로 거짓 표시되던 문제(INV-4).
+  // 결정: 목록 위에 사유 한 줄 + [다시 시도](실패한 거점 조회만 다시). 404 는 지금처럼 "연결 없음"이고 배너 대상이 아니다.
+  // 테스트 클라이언트는 재시도 0 이라 실패 응답 1개 = 확정 실패 1회다(앱 전역은 ≈7초 뒤 — jest 사각, 6-b).
+  // *(개념 — 응답 큐)* 요청마다 줄 맨 앞 응답을 꺼내 돌려주고, 줄이 비면 평소 응답. 'hold' 는 열쇠가 풀릴 때까지 답을 미룬다.
+  //
+  // 무엇을 보장하나(3동작 = 준비: 여행 2개의 거점 응답 큐 → 실행: 그리기·다시 시도 → 단언: 배너·행·요청 수):
+  //  - C1 한 여행의 거점 500 → 배너+버튼, 전체 실패 얼굴 없음, 정상 여행의 연결은 그대로.
+  //  - C2 [다시 시도] → **실패한 여행의 거점 요청만** +1(저장 숙소·여행 목록·성공한 여행은 그대로). 200 이면 배너 사라지고 「거점 변경」 복구, 또 500 이면 유지.
+  //  - C3 404 는 배너 없이 「연결된 여행 없음」. 404 와 500 이 섞이면 500 쪽만 배너·재시도.
+  //  - C4 전부 성공이면 배너 없음. C5 저장 숙소·여행 목록 실패면 기존 큰 얼굴만(배너 안 뜸).
+  //  - C6 재시도 중엔 버튼 `disabled`·배너 유지·연타해도 요청 +1. C7 지워진 여행의 실패가 배너를 붙잡지 않는다.
+  describe('TRIP-1754 · 거점 조회 부분 실패 — 목록 위 한 줄 + 다시 시도', () => {
+    const LINKS_ERROR = 'my-stays-links-error';
+    const LINKS_RETRY = 'my-stays-links-retry';
+    const FULL_ERROR = 'my-stays-error';
+
+    const STAY_2: SavedStay = {
+      ...STAY,
+      savedStayId: 's2',
+      name: '광안리 호텔',
+      externalId: 'L-0002',
+      linkedTripIds: ['t2'],
+    };
+    const TRIP_2 = { ...TRIP, tripId: 't2', title: '제주 여행' } as Trip;
+    const BASE_ROW_2: BaseAssignment = {
+      baseAssignmentId: 'ba2',
+      savedStayId: 's2',
+      dateFrom: '2026-06-10',
+      dateTo: '2026-06-13',
+    };
+
+    type Reply = 'ok' | 500 | 404 | 'hold';
+    let basesReplies: Record<'t1' | 't2', Reply[]> = { t1: [], t2: [] };
+    let savedReply: 'ok' | 500 = 'ok';
+    let tripsReply: 'ok' | 500 = 'ok';
+    let hits = { saved: 0, trips: 0, t1: 0, t2: 0 };
+    let release: () => void = () => {};
+    let gate: Promise<void> = Promise.resolve();
+
+    function failure(status: 500 | 404): Response {
+      return HttpResponse.json(
+        {
+          error: {
+            code: status === 404 ? 'NOT_FOUND' : 'INTERNAL',
+            message: 'x',
+          },
+        },
+        { status }
+      );
+    }
+    async function answerBases(
+      key: 't1' | 't2',
+      rows: BaseAssignment[]
+    ): Promise<Response> {
+      hits[key] += 1;
+      const reply = basesReplies[key].shift() ?? 'ok';
+      if (reply === 'hold') await gate;
+      if (reply === 500 || reply === 404) return failure(reply);
+      return HttpResponse.json(rows);
+    }
+
+    beforeEach(() => {
+      basesReplies = { t1: [], t2: [] };
+      savedReply = 'ok';
+      tripsReply = 'ok';
+      hits = { saved: 0, trips: 0, t1: 0, t2: 0 };
+      gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      server.use(
+        http.get(`${BASE}/saved-stays`, () => {
+          hits.saved += 1;
+          return savedReply === 500
+            ? failure(500)
+            : HttpResponse.json([STAY, STAY_2]);
+        }),
+        http.get(`${BASE}/trips`, () => {
+          hits.trips += 1;
+          return tripsReply === 500
+            ? failure(500)
+            : HttpResponse.json([TRIP, TRIP_2]);
+        }),
+        http.get(`${BASE}/trips/t1/bases`, () => answerBases('t1', [BASE_ROW])),
+        http.get(`${BASE}/trips/t2/bases`, () =>
+          answerBases('t2', [BASE_ROW_2])
+        )
+      );
+    });
+
+    // 실패해 중간에 죽은 케이스가 보류 요청을 남기지 않게.
+    afterEach(() => {
+      release();
+    });
+
+    async function pause(ms = 50): Promise<void> {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, ms));
+      });
+    }
+    const rowOf = (id: string) => screen.getByTestId(`my-stays-row-${id}`);
+
+    /** s1(t1 거점 성공)이 연결 행으로 그려지고 두 거점 요청이 한 번씩 다녀온 상태까지 기다린다. */
+    async function waitFirstRound(): Promise<void> {
+      await waitFor(() =>
+        expect(
+          within(rowOf('s1')).getByText('연결 여행 · 부산 여행')
+        ).toBeOnTheScreen()
+      );
+      await waitFor(() => {
+        expect(hits.t1).toBe(1);
+        expect(hits.t2).toBe(1);
+      });
+      await settleNetwork();
+    }
+
+    it('C1 한 여행의 거점이 500 이면 목록 위 한 줄과 다시 시도가 뜨고, 전체 실패 얼굴은 없으며 정상 여행의 연결은 그대로다', async () => {
+      // 준비
+      basesReplies.t2 = [500];
+
+      // 실행
+      renderPage();
+      await waitFirstRound();
+
+      // 단언
+      expect(await screen.findByTestId(LINKS_ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(LINKS_RETRY)).toBeOnTheScreen();
+      expect(screen.queryByTestId(FULL_ERROR)).toBeNull();
+      // 정상 여행(t1)의 연결·「거점 변경」은 그대로, 실패 여행(t2)의 숙소는 지금처럼 「연결된 여행 없음」.
+      expect(screen.getByTestId('my-stays-base-toggle-s1')).toBeOnTheScreen();
+      expect(
+        within(rowOf('s2')).getByText('연결된 여행 없음')
+      ).toBeOnTheScreen();
+    });
+
+    it('C2 다시 시도는 실패한 여행의 거점만 다시 받고, 200 이면 한 줄이 사라지고 「거점 변경」이 생긴다', async () => {
+      // 준비 — t2 만 첫 응답 500, 다시 시도에서 성공.
+      basesReplies.t2 = [500, 'ok'];
+      renderPage();
+      await waitFirstRound();
+      await screen.findByTestId(LINKS_ERROR);
+
+      // 실행
+      fireEvent.press(screen.getByTestId(LINKS_RETRY));
+
+      // 단언 — 한 줄이 사라지고 s2 가 연결 행이 된다.
+      await waitFor(() => expect(screen.queryByTestId(LINKS_ERROR)).toBeNull());
+      expect(
+        await screen.findByTestId('my-stays-base-toggle-s2')
+      ).toBeOnTheScreen();
+      expect(
+        within(rowOf('s2')).getByText('연결 여행 · 제주 여행')
+      ).toBeOnTheScreen();
+      await settleNetwork();
+      // 요청 수 — 실패한 t2 만 +1. 저장 숙소·여행 목록·성공한 t1 은 그대로다(다시 안 부른다).
+      expect(hits).toEqual({ saved: 1, trips: 1, t1: 1, t2: 2 });
+    });
+
+    it('C2 다시 시도도 500 이면 한 줄이 유지되고 버튼이 다시 눌린다', async () => {
+      // 준비
+      basesReplies.t2 = [500, 500];
+      renderPage();
+      await waitFirstRound();
+      await screen.findByTestId(LINKS_ERROR);
+
+      // 실행 — 누르고, 두 번째 요청이 도착해 끝날 때까지 기다린다(누른 직후엔 옛 한 줄이 그대로라 바로 단언하면 공허하다).
+      fireEvent.press(screen.getByTestId(LINKS_RETRY));
+      await waitFor(() => expect(hits.t2).toBe(2));
+      await settleNetwork();
+      await pause();
+
+      // 단언
+      expect(screen.getByTestId(LINKS_ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(LINKS_RETRY)).not.toBeDisabled();
+      expect(screen.queryByTestId('my-stays-base-toggle-s2')).toBeNull();
+    });
+
+    it('C3 거점 404 는 배너 없이 「연결된 여행 없음」이다 (지금 동작 그대로)', async () => {
+      // 준비
+      basesReplies.t2 = [404];
+
+      // 실행
+      renderPage();
+      await waitFirstRound();
+      await pause();
+
+      // 단언 — 긍정 앵커(s2 가 「연결된 여행 없음」으로 그려졌다)와 함께 배너 없음.
+      expect(
+        within(rowOf('s2')).getByText('연결된 여행 없음')
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId(LINKS_ERROR)).toBeNull();
+      expect(screen.queryByTestId(LINKS_RETRY)).toBeNull();
+      expect(screen.queryByTestId(FULL_ERROR)).toBeNull();
+    });
+
+    it('C3 404 와 500 이 섞이면 500 쪽만 배너이고, 다시 시도는 500 쪽만 다시 받는다(404 는 안 다시 부른다)', async () => {
+      // 준비 — t1 은 404(연결 없음), t2 는 500.
+      basesReplies.t1 = [404];
+      basesReplies.t2 = [500];
+      renderPage();
+      await waitFor(() => {
+        expect(hits.t1).toBe(1);
+        expect(hits.t2).toBe(1);
+      });
+      await settleNetwork();
+      await screen.findByTestId(LINKS_ERROR);
+
+      // 실행
+      fireEvent.press(screen.getByTestId(LINKS_RETRY));
+      await waitFor(() => expect(hits.t2).toBe(2));
+      await settleNetwork();
+      await pause();
+
+      // 단언 — 404 였던 t1 은 다시 부르지 않았다. t2 는 성공해 한 줄이 사라졌다.
+      expect(hits.t1).toBe(1);
+      expect(screen.queryByTestId(LINKS_ERROR)).toBeNull();
+    });
+
+    it('C4 거점이 전부 성공이면 배너가 없다 (선제 green)', async () => {
+      // 실행
+      renderPage();
+      await waitFirstRound();
+      await waitFor(() =>
+        expect(
+          within(rowOf('s2')).getByText('연결 여행 · 제주 여행')
+        ).toBeOnTheScreen()
+      );
+      await pause();
+
+      // 단언
+      expect(screen.queryByTestId(LINKS_ERROR)).toBeNull();
+      expect(screen.queryByTestId(LINKS_RETRY)).toBeNull();
+    });
+
+    it('C5 저장 숙소·여행 목록이 실패하면 기존 큰 얼굴만 뜨고 한 줄은 안 뜬다 (회귀)', async () => {
+      // 준비 — 저장 숙소 실패(여행 쪽 거점도 실패해 있지만 큰 얼굴이 이긴다).
+      savedReply = 500;
+      basesReplies.t2 = [500];
+
+      // 실행
+      const first = renderPage();
+      expect(await screen.findByTestId(FULL_ERROR)).toBeOnTheScreen();
+      await settleNetwork();
+      await pause();
+
+      // 단언
+      expect(screen.queryByTestId(LINKS_ERROR)).toBeNull();
+      first.unmount();
+
+      // 준비·실행 — 여행 목록 실패: 여행이 없으니 거점 조회(프로브)도 없다.
+      savedReply = 'ok';
+      tripsReply = 500;
+      queryClient = newClient();
+      renderPage();
+      expect(await screen.findByTestId(FULL_ERROR)).toBeOnTheScreen();
+      await settleNetwork();
+      await pause();
+
+      // 단언
+      expect(screen.queryByTestId(LINKS_ERROR)).toBeNull();
+    });
+
+    it('C6 다시 시도 중엔 버튼이 비활성이고 한 줄이 유지되며, 연타해도 요청은 늘지 않는다', async () => {
+      // 준비 — 두 번째 응답을 붙들어 둔다.
+      basesReplies.t2 = [500, 'hold'];
+      renderPage();
+      await waitFirstRound();
+      await screen.findByTestId(LINKS_ERROR);
+
+      // 실행 ① — 누르고, 재조회 요청이 서버에 도착한 뒤 화면에 반영될 시간을 준다.
+      fireEvent.press(screen.getByTestId(LINKS_RETRY));
+      await waitFor(() => expect(hits.t2).toBe(2));
+      await pause();
+
+      // 단언 ① — 보류 중: 한 줄 유지(데이터 없는 쿼리가 재조회하면 v5 가 pending 으로 돌아가도 꺼지지 않는다) · 버튼 비활성.
+      expect(screen.getByTestId(LINKS_ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(LINKS_RETRY)).toBeDisabled();
+
+      // 실행 ② — 연타.
+      fireEvent.press(screen.getByTestId(LINKS_RETRY));
+      fireEvent.press(screen.getByTestId(LINKS_RETRY));
+      await pause();
+
+      // 단언 ②
+      expect(hits.t2).toBe(2);
+
+      // 열쇠를 풀면 응답이 오고 한 줄이 사라진다.
+      release();
+      await waitFor(() => expect(screen.queryByTestId(LINKS_ERROR)).toBeNull());
+      await settleNetwork();
+    });
+
+    it('C7 지워진 여행의 실패 기록은 한 줄을 붙잡지 않는다', async () => {
+      // 준비 — t2 거점 실패로 한 줄이 떠 있다.
+      basesReplies.t2 = [500];
+      renderPage();
+      await waitFirstRound();
+      await screen.findByTestId(LINKS_ERROR);
+
+      // 실행 — 여행 목록에서 t2 가 사라진다(삭제). 그 프로브가 언마운트된다.
+      await act(async () => {
+        queryClient.setQueryData(getGetTripsQueryKey(), [TRIP]);
+      });
+
+      // 단언
+      await waitFor(() => expect(screen.queryByTestId(LINKS_ERROR)).toBeNull());
+      expect(screen.queryByTestId(LINKS_RETRY)).toBeNull();
+    });
+
+    // ── 5-b 후 심판 보강(03b W3·W4) — 아래 셋은 위 C1~C7 이 안 닿던 "지워도 green" 구멍을 문다. ──
+
+    /**
+     * `fireEvent.press` 는 호출마다 act 로 감싸 두 번 누르는 사이 리렌더가 끝나 버튼이 이미 `disabled` 가 된다. 그래서 C6 의 연타는
+     * `disabled` 만으로 통과한다(ref 가드를 지워도 green). 실기에서 두 터치가 한 프레임에 들어오는 경우는 리렌더 전이라
+     * 그걸 막는 것은 ref 뿐이다 → 버튼의 실제 `onPress` 를 꺼내 **한 act 안에서** 두 번 부른다(StayRecommend I5b 선례).
+     * *(개념 — 호스트 노드와 합성 노드)* `getByTestId` 는 화면에 그려지는 호스트 노드를 주는데 거기엔 `onPress` 가 없어, 위로 올라가 가진 조상을 쓴다.
+     */
+    function retryOnPress(): () => void {
+      let node: { props: Record<string, unknown>; parent: unknown } | null =
+        screen.getByTestId(LINKS_RETRY) as unknown as {
+          props: Record<string, unknown>;
+          parent: unknown;
+        };
+      while (node && typeof node.props.onPress !== 'function') {
+        node = node.parent as typeof node;
+      }
+      if (!node) throw new Error('다시 시도 onPress 를 찾지 못했다');
+      return node.props.onPress as () => void;
+    }
+
+    it('C8 같은 틱에 다시 시도를 두 번 눌러도(리렌더 전) 거점 요청은 한 번만 더 나간다', async () => {
+      // 준비 — t2 첫 응답 500, 다시 시도 응답은 붙들어 둔다(끝나기 전 상태를 오래 본다).
+      basesReplies.t2 = [500, 'hold'];
+      renderPage();
+      await waitFirstRound();
+      await screen.findByTestId(LINKS_ERROR);
+      const onPress = retryOnPress();
+
+      // 실행 — 한 act 안에서 두 번. 사이에 리렌더가 없어 두 호출이 같은 렌더의 핸들러·ref 를 본다.
+      act(() => {
+        onPress();
+        onPress();
+      });
+      await waitFor(() => expect(hits.t2).toBe(2));
+      await pause();
+
+      // 단언 — 재요청은 1번(합계 2). 가드가 없으면 진행 중 요청을 취소하고 다시 보내 3이 된다.
+      expect(hits.t2).toBe(2);
+      expect(hits.t1).toBe(1);
+      release();
+      await waitFor(() => expect(screen.queryByTestId(LINKS_ERROR)).toBeNull());
+      await settleNetwork();
+    });
+
+    it('C9 다시 시도가 또 실패한 뒤에도 버튼은 다시 눌리고(응답 없이 return 하지 않고), 두 번째 시도가 성공하면 한 줄이 사라진다', async () => {
+      // 준비 — t2: 처음 500 → 다시 시도 500 → 두 번째 다시 시도 200.
+      basesReplies.t2 = [500, 500, 'ok'];
+      renderPage();
+      await waitFirstRound();
+      await screen.findByTestId(LINKS_ERROR);
+
+      // 실행 ① — 첫 다시 시도(또 500). 두 번째 요청이 끝날 때까지 기다린다.
+      fireEvent.press(screen.getByTestId(LINKS_RETRY));
+      await waitFor(() => expect(hits.t2).toBe(2));
+      await settleNetwork();
+      await pause();
+      // 앵커 — 아직 실패 상태이고 버튼은 눌릴 수 있다(재시도 중 잠금이 풀렸다).
+      expect(screen.getByTestId(LINKS_ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(LINKS_RETRY)).not.toBeDisabled();
+
+      // 실행 ② — 한 번 더 누른다.
+      fireEvent.press(screen.getByTestId(LINKS_RETRY));
+
+      // 단언 ② — 정말 세 번째 요청이 나가고(무반응 아님) 성공해 한 줄이 사라지며 s2 가 연결 행이 된다.
+      await waitFor(() => expect(hits.t2).toBe(3));
+      await waitFor(() => expect(screen.queryByTestId(LINKS_ERROR)).toBeNull());
+      expect(
+        await screen.findByTestId('my-stays-base-toggle-s2')
+      ).toBeOnTheScreen();
+      expect(hits.t1).toBe(1);
+    });
+
+    it('C10 거점을 이미 받아 둔 여행이 재조회만 실패하면 한 줄을 띄우지 않는다(옛 거점이 화면에 있다)', async () => {
+      // 준비 — t2 는 처음 200(s2 가 연결 행), 그 뒤 재조회는 500.
+      basesReplies.t2 = ['ok', 500];
+      renderPage();
+      await waitFirstRound();
+      await waitFor(() =>
+        expect(
+          within(rowOf('s2')).getByText('연결 여행 · 제주 여행')
+        ).toBeOnTheScreen()
+      );
+
+      // 실행 — t2 거점 쿼리를 무효화해 재조회(500)를 일으킨다(데이터는 남고 error 가 함께 생긴다).
+      await act(async () => {
+        await queryClient.invalidateQueries({
+          queryKey: getGetTripsTripIdBasesQueryKey('t2'),
+        });
+      });
+      await waitFor(() => expect(hits.t2).toBe(2));
+      await settleNetwork();
+      await pause();
+
+      // 단언 — 재조회가 실제로 실패했는데도(앵커: 요청 2회) 연결 정보는 그대로고 한 줄은 없다.
+      expect(
+        within(rowOf('s2')).getByText('연결 여행 · 제주 여행')
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId(LINKS_ERROR)).toBeNull();
+      expect(screen.queryByTestId(LINKS_RETRY)).toBeNull();
     });
   });
 });
