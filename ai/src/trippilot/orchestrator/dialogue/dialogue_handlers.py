@@ -37,6 +37,7 @@ from datetime import date, datetime, time, timedelta, tzinfo
 from enum import Enum
 
 from trippilot.agents.edit.insert_between import SlotRef, parse_insert_place, resolve_gap
+from trippilot.agents.planb.place_search import PlaceSearch
 from trippilot.agents.planb.rag import _REASON_KO, PlanBAgent, PlanBRagRequest
 from trippilot.agents.recommendation.agent import PLACES, REGIONS, RecommendationAgent, RecommendTask
 from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent, UnknownTask
@@ -70,7 +71,7 @@ from trippilot.orchestrator.dialogue.opportunity import _displayable, shown_even
 from trippilot.orchestrator.dialogue.place_intro import PlaceIntro, clean_intro
 from trippilot.ports.place_fact_store_port import PlaceFacts
 from trippilot.orchestrator.dialogue.place_sql import PlaceSqlLookup, asks_for_places
-from trippilot.poi_curation import place_fallback
+from trippilot.poi_curation import hybrid_rank, place_fallback
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, restrict_pool_to_target_role
 from trippilot.providers.base import Provider
 from trippilot.providers.transit import _format_distance_range
@@ -225,6 +226,8 @@ class HandlerPorts:
     planb: PlanBAgent | None = None
     place_sql: PlaceSqlLookup | None = None  # 장소 탐색 NL2SQL — DIALOGUE_SQL 배정 + 장소 DB DSN 이 있을 때만
     place_intro: PlaceIntro | None = None  # 장소 소개 한 조각(KB-5) — 벡터 스토어가 배선됐을 때만
+    # 장소 탐색 열린 검색(KB-5 문서 순위를 규칙 순서에 섞는다) — 벡터 스토어가 있고 TRIPPILOT_KB5_OPEN_SEARCH 가 켜졌을 때만
+    place_search: PlaceSearch | None = None
     events: Provider | None = None  # EventProvider.fetch({anchor, days, now}) — 행사 저장소가 배선됐을 때만(장소 탐색의 행사 주제)
     unknown: UnknownHandlingAgent | None = None  # 미확인 칸 웹 확인(뒤에서) — PLACE_FACT_LOOKUP 배정이 있을 때만
     # 추천의 고르기 판단(장소 몇 곳·가볼 지역) — 재료가 전부 과제로 오는 LLM 0 에이전트라 늘 있다(2026-10-23 사용자 결정)
@@ -1717,9 +1720,11 @@ def _said_night(category: str | None, theme: str | None, utterance: str) -> bool
 
 
 def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None, utterance: str = "", *,
-                  ahead: Callable[[Poi], bool] | None = None) -> list[Poi]:
+                  ahead: Callable[[Poi], bool] | None = None,
+                  fuse: Callable[[list[Poi]], list[Poi]] | None = None) -> list[Poi]:
     """결정론 정렬 — `ahead`(두 곳 사이의 가운데) → 주제 맞음(밤·야경 주제면 야경·나이트라이프) → 주제 낱말이 태그·이름에 든 수 →
-    '요즘 인기' 태그 → 저장 수 → 별점 → 영업시간 보유 → poi_id. 숙소·표시 불가 이름은 뺀다."""
+    '요즘 인기' 태그 → 저장 수 → 별점 → 영업시간 보유 → poi_id. 숙소·표시 불가 이름은 뺀다. `fuse`(열린 검색)가 있으면 정렬 결과에
+    한 번 적용한 뒤(순열 — 장소를 더하거나 빼지 않는다) 종류 상한·다섯 곳 자르기를 그대로 탄다."""
     night = _said_night(category, theme, utterance)
     # 지역 이름 + 조사("홍대에 있다가 이태원 넘어가는길에")는 앵커지 이름 적중이 아니다 — 이태원 이름이 든 곳만 위로 왔다(2026-10-22).
     # "서울역"·"해운대해수욕장"처럼 접미가 붙은 말은 그 이름의 장소를 가리키니 남긴다
@@ -1743,7 +1748,8 @@ def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None, 
 
     picked: list[Poi] = []
     per: dict[PoiCategory, int] = {}
-    for p in sorted(filter(fits, pois), key=key):
+    ranked = sorted(filter(fits, pois), key=key)
+    for p in (ranked if fuse is None else fuse(ranked)):
         if category is None and per.get(p.category, 0) >= _PER_CATEGORY:
             continue
         picked.append(p)
@@ -2108,8 +2114,14 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     sql += (events,) if events is not None else ()
     if anchor is None or builder is None:
         return sql
+    searcher = ctx.ports.place_search
+    query = _open_query(ctx, anchor, category, theme) if searcher is not None else None
 
     def fn() -> dict:
+        doc: dict[str, str] = {}
+        if query is not None:  # 질의 임베딩을 풀 조립과 겹쳐 돌린다 — 시한은 이 시각부터 센다
+            started_ms = ctx.remaining_ms()
+            searcher.warm(query)
         center = center_of() if center_of is not None else _anchor_center(ctx, anchor)
         if center is None:
             return {"status": "UNAVAILABLE", "reason": "anchor_coord_unknown"}
@@ -2122,17 +2134,47 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
         shown, (on_the_way, inner) = _shown_before(ctx), _on_the_way(anchor)
         at = {p.poi_id: on_the_way(p.coord) for p in pool.pois}
         # 두 곳 사이면 가운데가 먼저, 양 끝은 모자랄 때만 — 한 번에 순위를 매겨 종류 상한(_PER_CATEGORY)이 전체에 걸리게
+        fuse = _doc_fuse(ctx, searcher, query, started_ms, doc) if query is not None else None
         ranked = _explore_rank((p for p in pool.pois if not shown(p.name, p.poi_id) and at[p.poi_id] is not None), category, theme,
-                               _night_heard(ctx), ahead=lambda p: inner(at[p.poi_id]))
+                               _night_heard(ctx), ahead=lambda p: inner(at[p.poi_id]), fuse=fuse)
         candidates = [{
             "poi_id": str(p.poi_id), "name": p.name, "category": _CATEGORY_KO.get(p.category.value),
             # 지역 중심에서의 거리는 사용자에게 뜻이 없다 — 일정 근처일 때만 그 일정에서의 거리를 싣는다(INV-3 거리만)
             "distance_range": _km_label(haversine_km(center, p.coord)) if anchor.kind == "itinerary" else None,
             "reason": "요즘 인기" if TRENDING_TAG in p.tags else (_CATEGORY_KO.get(p.category.value) or "가 볼 만한 곳"),
         } for p in ranked]
-        return {"status": "OK", "candidates": candidates}
+        return {"status": "OK", "candidates": candidates, **doc}  # doc = 열린 검색 상태(관측용 — 조립은 읽지 않는다, Facts 밖)
 
     return (HandlerTask("explore", fn), *sql)
+
+
+# 열린 검색(KB-5 문서 순위, `place_search`) — 시한은 팬아웃 몫 min(2.8s, 잔여×0.4)에서 풀 조립·정렬에 쓴 시간과 여유 0.35s 를 뺀
+# 만큼만 기다리고, 0.5s 가 안 남으면 건너뛴다. 검색이 OK 가 아니면 규칙 순서 그대로 — 문서 단계 때문에 탐색이 TIMEOUT 이 되지 않게(INV-4)
+_DOC_CAP_S, _DOC_MARGIN_S, _DOC_MIN_S = 2.8, 0.35, 0.5
+
+
+def _open_query(ctx: TurnContext, anchor: _Anchor, category: str | None, theme: str | None) -> hybrid_rank.OpenQuery | None:
+    """열린 검색을 돌릴 탐색인가 — 주제 게이트가 열리고, 앵커가 지역·일정 근처이고(두 곳 사이·먼 짝 제외 — 가운데 순서가 먼저다),
+    밤 말이 아니고(야경·나이트라이프 순서가 먼저다), 이어 묻기가 아닐 때만. 돌 때 그 질의, 아니면 None."""
+    if anchor.kind not in ("region", "itinerary") or _said_night(category, theme, _night_heard(ctx)) or _follow_up(ctx) is not None:
+        return None
+    return hybrid_rank.open_query(theme, _CATEGORY_KO.get(category or ""), generic=_GENERIC_WORDS)
+
+
+def _doc_fuse(ctx: TurnContext, searcher: PlaceSearch, query: hybrid_rank.OpenQuery, started_ms: int,
+              doc: dict[str, str]) -> Callable[[list[Poi]], list[Poi]]:
+    """규칙 정렬 결과 → 범위(규칙 순서의 장소 키)를 넘겨 문서 순위를 받고 RRF 로 섞는다. 상태는 `doc["doc"]` 에 남긴다."""
+    budget_s = min(_DOC_CAP_S, started_ms * 0.4 / 1000)
+
+    def fuse(ranked: list[Poi]) -> list[Poi]:
+        wait_s = budget_s - (started_ms - ctx.remaining_ms()) / 1000 - _DOC_MARGIN_S
+        if wait_s < _DOC_MIN_S:
+            doc["doc"] = "BUDGET"
+            return ranked
+        status, ranks = searcher.search(query, [p.source_ref for p in ranked if p.source_ref], wait_s, trace=str(ctx.trace_id))
+        doc["doc"] = status
+        return hybrid_rank.fuse(ranked, ranks) if status == "OK" else ranked
+    return fuse
 
 
 def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:

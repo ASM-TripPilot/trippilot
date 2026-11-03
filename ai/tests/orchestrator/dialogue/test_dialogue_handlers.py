@@ -2862,3 +2862,143 @@ def test_schedule_anchor_coordinate_is_looked_up_once_for_events_and_places() ->
     _run(_EXPLORE, replace(_ctx(_SNAP, {"theme": "축제"}, ports=ports), utterance="근처에 축제 있어?"))
     anchor_lookups = [c for c in poi_info.calls if len(c["poi_ids"]) == 1]
     assert len(anchor_lookups) == 1, poi_info.calls
+
+
+# ── 장소 탐색 열린 검색(KB-5 문서 순위, 기본 꺼짐) — 규칙 순서에 섞을 뿐 장소를 더하거나 빼지 않는다 ──
+
+import threading  # noqa: E402
+import time as _wall  # noqa: E402 — 모듈의 `time` 은 datetime.time 이다
+
+from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore  # noqa: E402
+from trippilot.agents.planb.kb_retrieval import collection_for  # noqa: E402
+from trippilot.agents.planb.place_search import PlaceSearch  # noqa: E402
+from trippilot.domain.kb import KbKind  # noqa: E402
+
+
+class _DocEmbedding:
+    dim, model_id = 3, "fake-emb"
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def embed(self, text: str):
+        self.calls.append(text)
+        return (1.0, 0.0, 0.0)
+
+    def embed_batch(self, texts):
+        return tuple(self.embed(t) for t in texts)
+
+
+class _DocStore(InMemoryVectorStore):
+    """InMemoryVectorStore + 호출 기록 · 지연(시한 시험) — 지연은 `release` 로 풀어 뒤에 남은 일꾼이 시험 뒤까지 붙잡히지 않게."""
+
+    def __init__(self, delay: float = 0.0) -> None:
+        super().__init__()
+        self.calls: list[frozenset | None] = []
+        self.delay, self.release = delay, threading.Event()
+
+    def search(self, collection, vector, top_k, *, item_ids=None):
+        self.calls.append(item_ids)
+        if self.delay:
+            self.release.wait(self.delay)
+        return super().search(collection, vector, top_k, item_ids=item_ids)
+
+
+def _cafe(name: str, ref: str, *, saved: int = 0, tags: tuple[str, ...] = ()) -> Poi:
+    return replace(_xpoi(name, PoiCategory.CAFE, tags=tags, saved=saved), source_ref=ref)
+
+
+# 규칙 순서: 인기(태그) → 저장 수. 맨 뒤 '책방 카페'만 "조용한 북카페" 근거가 있다 — 이름·태그에는 그 말이 없다(규칙 정렬이 못 읽는다)
+_DOC_CAFES = (_cafe("인기 카페", "c1", tags=("요즘 인기",)), _cafe("저장 카페", "c2", saved=9), _cafe("둘째 카페", "c3", saved=5),
+              _cafe("셋째 카페", "c4", saved=3), _cafe("책방 카페", "c5"))
+_DOC_TEXTS = {"c1": "넓은 테라스와 바다 전망", "c3": "라이브 공연이 열리는 시끌벅적한 곳", "c5": "조용한 북카페로 책을 읽으며 쉬기 좋다"}
+
+
+def _doc_search(texts: Mapping[str, str] = _DOC_TEXTS, *, delay: float = 0.0) -> tuple[PlaceSearch, _DocStore, _DocEmbedding]:
+    embedding, store = _DocEmbedding(), _DocStore(delay)
+    coll = collection_for(KbKind.POI_DESC, embedding.model_id)
+    index: dict[str, tuple[str, ...]] = {}
+    for n, (ref, text) in enumerate(texts.items()):
+        doc_id = f"overview:{ref}#0"
+        store.upsert(coll, doc_id, (1.0, 0.1 * n, 0.0), {"kb": "POI_DESC", "text": text, "poi_ref": ref, "metadata": {}})
+        index[ref] = (doc_id,)
+    return PlaceSearch(embedding, store, index=lambda: index), store, embedding
+
+
+def _run_doc(arguments: dict, searcher: PlaceSearch | None, *, pool: CandidatePool | None = None, handler=None,
+             remaining_ms: int = 7000, utterance: str = "", earlier: tuple = ()) -> tuple[Facts, dict[str, TaskResult]]:
+    ports = HandlerPorts(poi_info=_PoiInfo(), pool_builder=_PoolBuilder(pool or _pool(*_DOC_CAFES)), place_search=searcher)
+    ctx = replace(_ctx(_EMPTY_SNAP, arguments, ports=ports, remaining_ms=remaining_ms), utterance=utterance, earlier=earlier)
+    handler = handler or _EXPLORE
+    results = {t.name: TaskResult.ok(t.name, t.fn()) for t in handler.plan(ctx)}
+    return handler.assemble(ctx, results), results
+
+
+_QUIET = {"region": "부산", "category": "CAFE", "theme": "조용한 북카페"}
+
+
+def test_open_search_absent_or_idle_keeps_the_tasks_and_facts_unchanged() -> None:
+    base, base_results = _run_doc(_QUIET, None)
+    assert set(base_results) == {"explore"} and set(base_results["explore"].value) == {"status", "candidates"}  # 종전 모양
+    # 근거 없음(NO_EVIDENCE)·게이트 닫힘(대조군) — 검색기가 있어도 Facts 는 바이트까지 같다
+    idle, idle_results = _run_doc(_QUIET, _doc_search({"c1": "넓은 테라스와 바다 전망"})[0])
+    assert idle == base and idle_results["explore"].value["doc"] == "NO_EVIDENCE"
+    assert idle_results["explore"].value["candidates"] == base_results["explore"].value["candidates"]
+    control = {"region": "부산", "category": "CAFE", "theme": "카페 추천"}
+    searcher, store, embedding = _doc_search()
+    closed, closed_results = _run_doc(control, searcher)
+    assert closed == _run_doc(control, None)[0] and closed_results["explore"].value.keys() == {"status", "candidates"}
+    assert store.calls == [] and embedding.calls == []
+
+
+def test_open_search_only_reorders_the_ranked_pool() -> None:
+    base, _ = _run_doc(_QUIET, None)
+    searcher, store, _ = _doc_search()
+    facts, results = _run_doc(_QUIET, searcher)
+    assert results["explore"].value["doc"] == "OK" and facts.status is FactStatus.OK
+    assert _names_of(base) == ["인기 카페", "저장 카페", "둘째 카페", "셋째 카페", "책방 카페"]  # 전제 — 규칙 순서
+    assert _names_of(facts)[0] == "책방 카페" and set(_names_of(facts)) == set(_names_of(base))  # 순서만 바뀐다
+    assert [p.name for p in facts.places] == _names_of(facts) and _types(facts) == ["OPEN_PLACE"] * 5  # 카드·문장 재료·버튼이 한 벌
+    (ids,) = store.calls
+    assert ids == {"overview:c1#0", "overview:c3#0", "overview:c5#0"}  # 범위의 실재 조각만(풀 밖·문서 없는 곳 제외)
+    pool = _pool(*_DOC_CAFES, _cafe("넷째 카페", "c6", saved=2), _cafe("다섯째 카페", "c7", saved=1))
+    wide, _ = _run_doc(_QUIET, _doc_search()[0], pool=pool)
+    assert _ids_of(wide) <= {str(p.poi_id) for p in pool.pois} and len(_names_of(wide)) == dh.MAX_CANDIDATES  # 후보 ⊆ 풀 (INV-1)
+    assert "책방 카페" in _names_of(wide) and "책방 카페" not in _names_of(_run_doc(_QUIET, None, pool=pool)[0])
+
+
+def test_a_slow_or_late_document_step_leaves_explore_ok_in_rule_order() -> None:
+    base, _ = _run_doc(_QUIET, None)
+    searcher, store, _ = _doc_search(delay=5.0)
+    try:
+        t0 = _wall.monotonic()
+        facts, results = _run_doc(_QUIET, searcher, remaining_ms=2500)  # 몫 min(2.8, 1.0) − 여유 0.35 = 0.65s 만 기다린다
+        assert _wall.monotonic() - t0 < 2.0
+        assert results["explore"].value["doc"] == "TIMEOUT" and results["explore"].status == "OK" and facts == base
+    finally:
+        store.release.set()
+    searcher, store, _ = _doc_search()
+    facts, results = _run_doc(_QUIET, searcher, remaining_ms=1500)  # 몫 0.6 − 여유 0.35 < 0.5 — 묻지도 않는다
+    assert results["explore"].value["doc"] == "BUDGET" and store.calls == [] and facts == base
+
+
+def test_recommend_keeps_its_count_cut_with_open_search() -> None:
+    args = {**_QUIET, "count": "2"}
+    facts, _ = _run_doc(args, _doc_search()[0], handler=_RECOMMEND)
+    assert facts.intent is Intent.RECOMMEND_PLACES and _names_of(facts) == ["책방 카페", "인기 카페"]
+    assert facts.detail["pick_count"] == 2 and _types(facts) == ["OPEN_PLACE"] * 2
+
+
+@pytest.mark.parametrize(("arguments", "utterance", "earlier"), [
+    ({"region": "홍대와 이태원 사이", "theme": "조용한 북카페"}, "", ()),  # 두 곳 사이 — 가운데 순서가 먼저다
+    ({"region": "부산", "theme": "조용한 바"}, "", ()),  # 밤 말 — 야경·나이트라이프 순서가 먼저다
+    ({"region": "부산", "theme": "조용한"}, "부산 조용한 바 추천해줘", ()),  # 밤 말은 발화에서도 읽는다
+    ({"region": "서울", "theme": "가볼 만한"}, "", ()),  # 대조군 셋
+    ({"region": "부산", "category": "FOOD", "theme": "맛집"}, "", ()),
+    ({"region": "제주", "category": "CAFE", "theme": "카페 추천"}, "", ()),
+    ({"region": "부산", "theme": "조용한 북카페"}, "더 알려줘", (("USER", "부산 조용한 북카페 알려줘"), ("ASSISTANT", "책방 카페가 있어요."))),
+])
+def test_open_search_does_not_run_between_two_places_at_night_for_controls_or_follow_ups(arguments, utterance, earlier) -> None:
+    searcher, store, embedding = _doc_search()
+    _, results = _run_doc(arguments, searcher, utterance=utterance, earlier=earlier)
+    assert store.calls == [] and embedding.calls == [] and "doc" not in results["explore"].value
