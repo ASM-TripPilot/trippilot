@@ -690,8 +690,21 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
     });
   });
 
-  describe('🔴 M4 · AC-9 — ⌄ 시각칩 → 시각 시트 → 적용값이 저장 PUT 에 실린다', () => {
-    it('c 를 14:00–15:30 으로 바꿔 저장하면 PUT 의 c 시각이 바뀌고 a 는 그대로다', async () => {
+  // TRIP-1674 — h19 도 같은 편집 뷰·스토어라 꼭 갈 곳(고정, 숙소 아님)의 칩이 눌리고(A5), 이웃(b 14:30)을 넘으면
+  // 시각 순으로 재정렬돼 isFixed:true 로 저장된다(B1·C7). 마운트를 늘리지 않으려고 새 `it` 대신 M4 의 c 를 고정으로,
+  // 시각을 [a 09:00 · b 14:30 · c 16:00–17:30] 으로 바꿨다 — c 를 14시로 옮기면 b 를 넘는다. 기존 단언(c 14:00–15:30,
+  // a 09:00)은 그대로이고, 비고정 c 의 칩·시트는 M4b·M4c·MX·MC1 이 계속 잰다. 서버 422·repair 는 jest 사각(6-b).
+  describe('🔴 M4 · AC-9 + TRIP-1674 — ⌄ 시각칩 → 시각 시트 → 적용값(고정 꼭 갈 곳 포함)이 시각 순으로 저장 PUT 에 실린다', () => {
+    it('고정 c 를 14:00–15:30 으로 바꿔 저장하면 PUT 의 c 시각이 바뀌고 a 는 그대로이며, 이웃 b 를 넘어 [a,c,b] · c 는 isFixed true 다', async () => {
+      daySlots = [
+        slot('a', '09:00:00', '10:00:00'),
+        slot('b', '14:30:00', '15:00:00'),
+        {
+          ...slot('c', '16:00:00', '17:30:00'),
+          isFixed: true,
+          category: '명소',
+        },
+      ];
       renderPage();
       await ready();
 
@@ -712,6 +725,9 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       expect(c?.startAt).toBe('14:00:00');
       expect(c?.endAt).toBe('15:30:00');
       expect(a?.startAt).toBe('09:00:00');
+      // TRIP-1674 — 이웃 b(14:30)를 넘었으니 시각 순, 고정은 그대로 고정.
+      expect(ids(body)).toEqual(['a', 'c', 'b']);
+      expect(c).toMatchObject({ isFixed: true, endsNextDay: false });
     });
   });
 
