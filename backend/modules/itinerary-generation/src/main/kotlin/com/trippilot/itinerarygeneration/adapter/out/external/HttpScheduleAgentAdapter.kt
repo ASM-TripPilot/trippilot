@@ -230,6 +230,7 @@ class HttpScheduleAgentAdapter(
             savedPlaces = input.savedPlaces.map { AiSavedPlace(it.poiId.toString(), it.name) },
             rejections = input.rejections,
             excludedPoiIds = input.excludedPoiIds,
+            transportMode = input.transportMode,
             changeLog = input.changeLog.map {
                 AiChangeLogEntry(
                     it.source, it.reason, it.at,

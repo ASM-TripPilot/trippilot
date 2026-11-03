@@ -45,8 +45,9 @@ _AI = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_AI / "src"))
 
 from trippilot.llm_gateway.gates.base import has_contact_like, has_injection_like  # noqa: E402
-from trippilot.orchestrator.place_intro import clean_intro  # noqa: E402
+from trippilot.orchestrator.dialogue.place_intro import clean_intro  # noqa: E402
 from trippilot.poi_curation.place_fallback import WEB_FACTS_PER_DOC as MAX_FACTS  # noqa: E402
+from trippilot.poi_curation.place_fallback import fallback_docs  # noqa: E402
 
 _POIS = _AI / "data" / "collected_pois.json"
 _HAS_DOC = (_AI / "data" / "place_corpus_overview.jsonl.gz", _AI / "data" / "place_corpus_wiki.jsonl.gz")
@@ -63,6 +64,7 @@ PRICE_IN, PRICE_OUT, PRICE_SEARCH = (float(os.environ.get(f"WEB_FACTS_PRICE_{k}"
 # 20260209 이상은 동적 필터링(모델이 코드로 결과를 걸러 필요한 것만 넣는다 — 코드 실행은 따로 과금하지 않는다, 절감률은 미공개)
 SEARCH_TOOL = os.environ.get("WEB_FACTS_SEARCH_TOOL", "web_search_20250305")
 MAX_SEARCHES = 1  # claude — 한 곳에 검색 1회(검색을 늘리면 결과 본문만큼 입력도 같이 는다)
+THINKING = os.environ.get("WEB_FACTS_THINKING", "low")  # low(effort low 로 켠다 — 기본) · off(haiku-5 만 끈다)
 MAX_PAUSES = 2  # 동적 필터링 턴이 `pause_turn` 으로 멈추면 받은 그대로 되돌려 잇는 횟수
 MAX_FACT_CHARS, MAX_TRANSIENT, MAX_RATE_LIMITED, MAX_ERRORS_IN_ROW = 60, 6, 8, 20
 _CAT_KO = {"SIGHT": "명소", "NATURE": "자연", "CULTURE": "문화", "FOOD": "음식점", "CAFE": "카페", "SHOPPING": "쇼핑",
@@ -88,8 +90,8 @@ FINAL = ("found", "closed", "not_found", "refused")  # 이 상태면 다시 묻�
 PROMPT = """당신은 여행 앱의 장소 정보 정리 담당입니다. 웹 검색으로 아래 [장소]를 찾아, 웹 페이지에 적힌 사실만 JSON 하나로 답하세요.
 
 규칙:
-- 반드시 웹 검색으로 본 페이지에 적힌 사실만 쓰세요. 기억으로 짐작하지 마세요
-- [장소]의 주소와 맞는 곳만 보세요. 같은 이름의 다른 지점·다른 지역 가게는 섞지 마세요. 그 장소를 찾지 못하면 found 를 false 로 두세요
+- 반드시 웹 검색으로 본 페이지가 직접 말한 사실만 쓰세요. 기억·짐작·일반화는 쓰지 마세요. 태그·해시태그·검색어·'근처 지역' 목록에만 나오는 말, '~로 보인다' 같은 추측, 예약 필요·옛 상호·위치 관계 같은 짐작은 사실이 아닙니다. 글끼리 어긋나는 내용은 쓰지 마세요
+- [장소]의 주소와 맞는 곳만 보세요. 같은 이름의 다른 지점·다른 지역 가게는 섞지 마세요. 한 페이지에 여러 가게가 나열돼 있으면 [장소] 항목에 적힌 것만 쓰고 옆 가게의 메뉴·시설은 섞지 마세요. 그 장소를 찾지 못하면 found 를 false 로 두세요
 - 공식 누리집·관광공사·지자체·언론을 먼저 보고, 그다음 방문 후기를 보세요. 2020년 이전 글은 근거로 쓰지 마세요. 협찬·체험단 글에서는 메뉴·시설 같은 사실만 가져오세요
 - facts 는 여행자가 고를 때 도움이 되는 사실 최대 5개입니다: 무엇을 하는 곳 · 대표 메뉴나 상품 · 체험 내용 · 공간·시설 특징(좌석·전망·층·실내/야외) · 주차·아이 동반 같은 이용 조건
 - 한 항목에 사실 하나, 40자 이내로 쓰세요. 평가·감상(맛있다·친절하다·분위기 좋다)은 쓰지 마세요
@@ -134,9 +136,11 @@ def records(files: list[Path]):
                 yield rec
 
 
-def targets(proposals: list[dict], has_doc: set[str]) -> list[dict]:
-    """문서 없는 곳 먼저, 그 안에서는 관광지가 많은 시군구 먼저(후보 숏리스트에 자주 오르는 곳 — 며칠 걸리는 배치라 순서가 곧 효과다),
-    같은 시군구 안에서는 해시 순. 이미 개요·위키가 있는 곳은 맨 뒤 — 진짜 문서가 있으니 웹 사실은 보탤 뿐이다."""
+def targets(proposals: list[dict], has_doc: set[str], has_card: frozenset[str] | set[str] = frozenset()) -> list[dict]:
+    """다른 데서 채워지지 않는 곳부터 — ① 문서도 카드도 없고 다른 출처가 없는 곳(LOCALDATA·Overture·카카오: 이 배치뿐이다) ② 관광공사
+    곳(개요 수집이 날마다 채워 간다) ③ 카드만 있는 곳 ④ 이미 개요·위키가 있는 곳(진짜 문서가 있으니 웹 사실은 보탤 뿐이다).
+    같은 단계 안에서는 관광지가 많은 시군구 먼저(후보 숏리스트에 자주 오르는 곳 — 며칠 걸리는 배치라 순서가 곧 효과다), 같은 시군구
+    안에서는 해시 순."""
     def where(p: dict) -> tuple[str, str]:  # (시·도, 시군구) — 시군구 이름만이면 여러 도시의 중구·동구·고성군이 합쳐진다(#1707 리뷰)
         words = str((p.get("provenance") or {}).get("address") or "").split()
         return (words[0] if words else "", p.get("region") or "")
@@ -152,7 +156,7 @@ def targets(proposals: list[dict], has_doc: set[str]) -> list[dict]:
         if not ref or ref in seen or poi.get("category") == "STAY":
             continue
         seen.add(ref)
-        tier = 1 if ref in has_doc else 0
+        tier = 3 if ref in has_doc else 2 if ref in has_card else 1 if p.get("source") == "TOURAPI" else 0
         out.append({"ref": ref, "source": p.get("source"), "name": _one_line(poi.get("name")),
                     "kind": _CAT_KO.get(poi.get("category"), "장소"), "address": _one_line((p.get("provenance") or {}).get("address")),
                     "tier": tier, "dense": density.get(where(p), 0), "h": hashlib.sha1(ref.encode()).hexdigest()})
@@ -204,9 +208,10 @@ def ask_claude(client, prompt: str) -> tuple[str, list[str], int, int, int]:
     수는 이은 응답을 모두 더하고 인용도 모두에서 모은다. haiku-5 는 effort 없이 부르면 깊은 적응형 사고로 돌아 끈다(운영 어댑터
     `_THINKING_OFF` 와 같은 판단 — sonnet-5-5 는 끄기를 400 으로 거부해 그대로 둔다). 상한 4,000 은 코드를 쓸 몫이다."""
     messages, tokens_in, tokens_out, searches, cites = [{"role": "user", "content": prompt}], 0, 0, 0, []
-    extra = {"thinking": {"type": "disabled"}} if MODEL.startswith("claude-haiku-5") else {}
+    extra = ({"output_config": {"effort": "low"}} if THINKING == "low"
+             else {"thinking": {"type": "disabled"}} if MODEL.startswith("claude-haiku-5") else {})
     for _ in range(MAX_PAUSES + 1):
-        resp = client.messages.create(model=MODEL, max_tokens=4000, timeout=120, messages=messages, **extra,
+        resp = client.messages.create(model=MODEL, max_tokens=8000 if THINKING == "low" else 4000, timeout=120, messages=messages, **extra,
                                       tools=[{"type": SEARCH_TOOL, "name": "web_search", "max_uses": MAX_SEARCHES}])
         tokens_in, tokens_out = tokens_in + resp.usage.input_tokens, tokens_out + resp.usage.output_tokens
         searches += getattr(getattr(resp.usage, "server_tool_use", None), "web_search_requests", 0) or 0
@@ -335,7 +340,7 @@ def run(state: Path, limit: int | None, workers: int, only: set[str] | None = No
     proposals = json.loads(_POIS.read_text(encoding="utf-8"))["proposals"]
     has_doc = {r["poi_ref"] for p in _HAS_DOC if p.exists() for r in _rows(p) if r.get("sections")}
     done = {rec["ref"] for rec in records(state_files(state)) if rec.get("status") in FINAL}
-    todo = [t for t in targets(proposals, has_doc) if t["ref"] not in done and (only is None or t["ref"] in only)]
+    todo = [t for t in targets(proposals, has_doc, set(fallback_docs())) if t["ref"] not in done and (only is None or t["ref"] in only)]
     todo = todo[:limit] if limit is not None else todo
     tool = f" {SEARCH_TOOL}" if VENDOR == "claude" else ""
     print(f"대상 {len(todo)} (이미 받음 {len(done)}) · {VENDOR} {MODEL}{tool} · 일꾼 {workers} · 분당 {rpm} · 상한 {budget_usd} 달러",

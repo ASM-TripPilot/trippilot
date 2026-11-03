@@ -20,8 +20,8 @@ from trippilot.domain.dialogue.dialogue import asked_argument_names, asked_specs
 from trippilot.domain.dialogue.intent import Intent, IntentDraft
 from trippilot.domain.llm.llm import LlmFeature
 from trippilot.domain.dialogue.plan_tools import MAX_ARG_CHARS, MAX_PLAN_CALLS, PLAN_GAPS, PLAN_TOOLS, plan_argument_names
-from trippilot.llm_gateway.gates.dialogue_answer import _violates, clock_times
-from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanDraft, DialoguePlanGate
+from trippilot.llm_gateway.gates.dialogue.dialogue_answer import _violates, clock_times
+from trippilot.llm_gateway.gates.dialogue.dialogue_plan import DialoguePlanDraft, DialoguePlanGate
 
 _NOW = datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc)
 _TID = TraceId("t-dialogue-plan-gate")

@@ -673,17 +673,18 @@ fun `차선책이 저장·조회·확정을 관통한다(TRIP-873)`() {
     }
 
     @Test
-    fun `확정 일정 편집 — 여행 시작 전엔 409, 여행 중엔 200(TRIP-999)`() {
+    fun `확정 일정 편집 — 여행 시작 전에도 여행 중에도 200, 확정은 유지(TRIP-999 · TRIP-1710)`() {
         val token = newToken()
 
-        // 여행 전 — 확정 잠금이 산다(BR-U3-28 개정 후에도 남는 절반).
+        // 여행 전 — 확정 잠금이 풀렸다(TRIP-1710). 종전엔 409 라 [직접 수정] 저장이 막다른 길이었다.
         val future = newFutureTrip(token)
         call(HttpMethod.POST, "/api/v1/trips/$future/itinerary", token).first shouldBe 201
         awaitComplete(future, token)
         call(HttpMethod.POST, "/api/v1/trips/$future/itinerary/confirm", token).first shouldBe 200
         val futureStart = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).plusDays(30)
-        call(HttpMethod.PUT, "/api/v1/trips/$future/itinerary", token, """{"days":[{"date":"$futureStart","slots":[]}]}""")
-            .first shouldBe 409
+        val (preRc, preBody) = call(HttpMethod.PUT, "/api/v1/trips/$future/itinerary", token, """{"days":[{"date":"$futureStart","slots":[]}]}""")
+        preRc shouldBe 200
+        preBody["status"].asText() shouldBe "CONFIRMED"
 
         // 여행 중(시작일이 지났다) — 확정 일정도 편집이 열린다(QA #066 회귀 잠금).
         val trip = newTrip(token) // 2026-08-01 시작 — 서버 실 시계 기준 이미 시작됨

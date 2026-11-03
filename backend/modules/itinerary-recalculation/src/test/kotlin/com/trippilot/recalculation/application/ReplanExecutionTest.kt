@@ -158,6 +158,8 @@ class ReplanExecutionTest : StringSpec({
         f.start(scope = ReplanScope.FULL_DAY, targetDate = tomorrow)
 
         f.replans.commands.single().excludedPoiIds shouldContainExactly listOf(skippedTomorrow)
+        // 고정 잠금을 풀 대상도 같은 날짜로만 가른다 — 오늘 건너뛴 고정이 내일 일정에서 풀리면 안 된다(TRIP-1711).
+        f.replans.commands.single().skippedPoiIds shouldContainExactly listOf(skippedTomorrow)
     }
 
     // 단위 테스트엔 Spring 프록시가 없어 @Async 가 안 걸린다 → 산출이 그 자리에서 끝난다(결정론).

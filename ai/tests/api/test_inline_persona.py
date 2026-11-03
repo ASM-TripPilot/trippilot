@@ -25,7 +25,7 @@ from trippilot.ports.llm_port import LlmRequest, LlmResponse
 
 from tests.api.test_api_replan_wired import _body as _replan_body
 from tests.llm_gateway.preference.test_preference_cache import FakeInner, _pool, _NOW, _TRACE
-from trippilot.llm_gateway.workers.preference_cache import CachingScoringWorker
+from trippilot.llm_gateway.workers.preference.preference_cache import CachingScoringWorker
 
 _IDS = tuple(str(p.poi_id) for p in demo_poi_seed())
 _DAY = "2026-09-21"

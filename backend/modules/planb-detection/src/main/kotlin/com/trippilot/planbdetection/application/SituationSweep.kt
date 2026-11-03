@@ -146,7 +146,8 @@ class SituationSweep(
         val live = detectors.filter { it.source in props.sources && it.isLive() }.map { it.source }
         // 대상 = 운영 카나리 적용 여부(켜기 4단계: 내부 계정 → 비움). 개수만 싣는다 — 계정 id 는 로그에 싣지 않는다(SEC-SA-05).
         val target = if (props.accountIds.isEmpty()) "전원" else "계정 ${props.accountIds.size}개"
-        return "상황 감시 = $state · 지평=${props.horizon.label} · 대상=$target · 감지기 live=${live.listed()} · " +
+        val horizon = props.horizon.label + if (props.horizon == SweepHorizon.PRE_TRIP && props.preTripDays > 1) "(${props.preTripDays}일 전부터)" else ""
+        return "상황 감시 = $state · 지평=$horizon · 대상=$target · 감지기 live=${live.listed()} · " +
             "관찰 전용=${props.observeOnly.listed()}"
     }
 
@@ -156,7 +157,7 @@ class SituationSweep(
      */
     fun sweep(now: Instant): SweepSummary {
         if (props.mode == SweepMode.OFF) return SweepSummary(props.mode, null)
-        val scope = scopeAt(now, props.horizon) ?: return SweepSummary(props.mode, null)
+        val scope = scopeAt(now, props.horizon, props.preTripDays) ?: return SweepSummary(props.mode, null)
         val round = Round(scope, now, clock.instant(), detectors.filter { it.source in props.sources && it.isLive() })
         val order = roundOrder(trips, scope.today, scope.queryTo, pivotFor(now), PAGE_SIZE).filter { covers(it.accountId) }
         val seq = AtomicInteger()
@@ -485,24 +486,28 @@ private val WatchedTrip.period: TripPeriod get() = TripPeriod(startDate, endDate
  * 밤(21:00~06:59)에는 회차가 없고([scopeAt] 이 null), 회차 안에서도 [writeCut](20:58) 이후에는 쓰지 않는다(INV-SA-5) —
  * 아웃박스 발행·푸시가 21시를 넘지 않게 하는 여유다.
  */
-data class SweepScope(val phase: SweepPhase, val today: LocalDate, val horizon: SweepHorizon) {
+data class SweepScope(val phase: SweepPhase, val today: LocalDate, val horizon: SweepHorizon, val preTripDays: Int = 1) {
 
     /** 쓰기 마감 — 그 날 20:58(KST). */
     val writeCut: Instant = today.atTime(WRITE_CUT).atZone(TriggerLifecycle.TRAVEL_ZONE).toInstant()
 
-    /** 감시 대상 조회의 끝 날짜 — 내일 시작 여행(D-1)을 보는 저녁 pre-trip 회차만 내일까지 묻는다. */
-    val queryTo: LocalDate get() = if (phase == SweepPhase.EVENING && horizon == SweepHorizon.PRE_TRIP) today.plusDays(1) else today
+    /** 감시 대상 조회의 끝 날짜 — 시작 전 여행의 첫날을 보는 저녁 pre-trip 회차만 오늘 + [preTripDays] 까지 묻는다(1 = 내일, D-1). */
+    val queryTo: LocalDate get() = if (phase == SweepPhase.EVENING && horizon == SweepHorizon.PRE_TRIP) today.plusDays(preTripDays.toLong()) else today
 
     /**
      * 그 여행에서 이번 회차가 볼 날짜 — 오늘(구간 안이면) + 저녁 회차의 내일(지평이 열 때만).
-     * 진행 중 여행의 내일은 지평 tomorrow 이상, 내일 시작하는 여행의 첫날은 pre-trip 일 때만이다.
+     * 진행 중 여행의 내일은 지평 tomorrow 이상, 시작 전 여행의 첫날은 pre-trip ∧ 시작이 오늘 + [preTripDays] 안일 때만이다
+     * (시작 전 여행은 첫날만 — 다시 짜기 창이 받는 날이 첫날뿐이다, BR-SA-20).
      */
     fun datesOf(start: LocalDate, end: LocalDate): List<LocalDate> = buildList {
         if (today in start..end) add(today)
+        if (phase != SweepPhase.EVENING) return@buildList
+        if (start > today) {
+            if (horizon == SweepHorizon.PRE_TRIP && start <= today.plusDays(preTripDays.toLong())) add(start)
+            return@buildList
+        }
         val tomorrow = today.plusDays(1)
-        if (phase != SweepPhase.EVENING || tomorrow !in start..end) return@buildList
-        val opened = if (start == tomorrow) horizon == SweepHorizon.PRE_TRIP else horizon != SweepHorizon.TODAY
-        if (opened) add(tomorrow)
+        if (horizon != SweepHorizon.TODAY && tomorrow <= end) add(tomorrow)
     }
 
     /** 이 시각에 쓰기·발행을 해도 되는가. */
@@ -514,7 +519,7 @@ data class SweepScope(val phase: SweepPhase, val today: LocalDate, val horizon: 
 }
 
 /** [now] 의 회차 범위 — 07시 아침 · 08~19시 낮 · 20시 저녁, 그 밖(21:00~06:59 KST)은 null(회차 없음). */
-fun scopeAt(now: Instant, horizon: SweepHorizon): SweepScope? {
+fun scopeAt(now: Instant, horizon: SweepHorizon, preTripDays: Int = 1): SweepScope? {
     val local = LocalDateTime.ofInstant(now, TriggerLifecycle.TRAVEL_ZONE)
     val phase = when (local.hour) {
         7 -> SweepPhase.MORNING
@@ -522,7 +527,7 @@ fun scopeAt(now: Instant, horizon: SweepHorizon): SweepScope? {
         20 -> SweepPhase.EVENING
         else -> return null
     }
-    return SweepScope(phase, local.toLocalDate(), horizon)
+    return SweepScope(phase, local.toLocalDate(), horizon, preTripDays)
 }
 
 /**

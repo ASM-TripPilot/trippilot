@@ -26,7 +26,8 @@ iOS 는 내부(PostScript) 이름으로, Android 는 파일명으로 찾기 때�
 #    extract_chars.py <src경로> 가 src 쪽을 뽑는다. glyphs.txt 가 2026-10-13 시점의 결과(2,524자).
 python3 extract_chars.py ../../src            # 한글이 glyphs.txt 에 없으면 목록에 추가해 다시 서브셋
 
-# 2) 서브셋 (원본: node_modules/@expo-google-fonts/noto-sans-kr/<굵기>/NotoSansKR_<굵기>.ttf)
+# 2) 서브셋 (원본: `npm pack @expo-google-fonts/noto-sans-kr@0.4.3` 을 풀어 나온 package/<굵기>/NotoSansKR_<굵기>.ttf
+#    — 앱은 이 패키지를 안 쓰므로 의존성에서 뺐다(TRIP-1715). Inter 원본도 같은 방법: @expo-google-fonts/inter@0.4.2)
 pyftsubset NotoSansKR_700Bold.ttf --text-file=glyphs.txt --layout-features='*' --no-hinting \
   --output-file=NotoSansKR_700Bold.subset.ttf
 

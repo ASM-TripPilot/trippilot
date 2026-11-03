@@ -1,10 +1,8 @@
 import { useState, type ReactElement } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useQueries } from '@tanstack/react-query';
 
-import { getGetTripsTripIdItineraryQueryOptions } from '@/shared/api/index.hooks';
-import { isNotFound } from '@/shared/api';
+import { tripItinerarySummary } from '@/entities/trip';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
@@ -41,20 +39,12 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  *
  * legend 파생은 순수 함수 `buildMonthLegends`(TRIP-1084)가 맡고, 페이지 배선은 `RecordsCalendarPage.test` 가 잠근다.
  *
- * TRIP-1120 · 진행 중 카드 — 여행마다 일정을 조회해(h06 과 같은 캐시 키) 확정·없음(404)·모름으로 접고
- * `pickOngoingTrip` 이 한 장을 고른다. 404 아닌 실패는 옛 data 가 남아 있어도 모름이다(남은 값을 믿지
- * 않는다). legend `›` 와 legend 누름은 같은 `openableTripIds` 집합을 본다.
+ * TRIP-1120 · 진행 중 카드 — 목록의 일정 상태 칸(`itineraryStatus`)으로 확정·없음을 접고 `pickOngoingTrip` 이 한 장을 고른다
+ * (TRIP-1677 · 예전엔 여행마다 일정을 조회했다). legend `›` 와 legend 누름은 같은 `openableTripIds` 집합을 본다.
  */
 export function RecordsCalendarPage(): ReactElement {
   const { trips, isPending, isError, isOffline } = useRecordsCalendar();
   const router = useRouter();
-  // 훅 호출 순서 규칙 — 아래 일찍 return 들보다 위.
-  const itineraries = useQueries({
-    queries: trips.map((trip) =>
-      getGetTripsTripIdItineraryQueryOptions(trip.tripId)
-    ),
-  });
-
   // 오늘(KST) — 상태로 들어 자정을 넘기면 바뀐다(TRIP-1639 · TRIP-1364 선례). 렌더 중 `seoulDate(new Date())` 는 마운트에 굳는다.
   const today = useSeoulToday();
   // 보고 있는 달은 사용자 탐색 상태라 첫 렌더의 오늘에서만 정한다 — 자정을 넘겨도 넘기지 않는다(TRIP-1639 D3).
@@ -101,17 +91,10 @@ export function RecordsCalendarPage(): ReactElement {
   const openable = openableTripIds(trips, today);
 
   const ongoingTrip = pickOngoingTrip(
-    trips.map((trip, i) => {
-      const query = itineraries[i];
-      if (query.isError) {
-        return {
-          trip,
-          itinerary: isNotFound(query.error) ? undefined : 'unknown',
-        };
-      }
-      if (query.isPending) return { trip, itinerary: 'unknown' };
-      return { trip, itinerary: query.data.status };
-    }),
+    trips.map((trip) => ({
+      trip,
+      itinerary: tripItinerarySummary(trip).status,
+    })),
     today
   );
 
@@ -140,18 +123,17 @@ export function RecordsCalendarPage(): ReactElement {
         router.push(`/trips/${tripId}/records`)
       }
       onPressOngoingHub={(tripId) => {
-        const data =
-          itineraries[trips.findIndex((t) => t.tripId === tripId)]?.data;
+        // 진행 중 카드는 확정 여행이라 목적지가 live — 슬롯 키(days)가 필요한 copick 이 아니다.
+        const trip = trips.find((t) => t.tripId === tripId);
         router.push(
           itineraryDestinationHref(
             tripId,
-            resolveItineraryDestination({
-              notFound: false,
-              status: data?.status,
-              generationState: data?.generationState,
-              generationMode: data?.generationMode,
-            }),
-            data?.days
+            resolveItineraryDestination(
+              trip === undefined
+                ? { notFound: false }
+                : tripItinerarySummary(trip)
+            ),
+            undefined
           )
         );
       }}

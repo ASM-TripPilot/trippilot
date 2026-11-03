@@ -73,7 +73,7 @@ class ItineraryController(
     fun confirm(principal: Principal, @PathVariable tripId: UUID): ItineraryResponse =
         respond(confirmService.confirm(principal.accountId(), tripId))
 
-    /** 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정된 일정은 409. */
+    /** 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정 일정도 받는다(TRIP-999 · TRIP-1710). */
     @PutMapping
     fun edit(principal: Principal, @PathVariable tripId: UUID, @Valid @RequestBody request: EditItineraryRequest): ItineraryResponse =
         respond(editService.edit(principal.accountId(), tripId, request.toCommand()))
@@ -173,6 +173,8 @@ data class SlotAlternativeResponse(
     val category: String?,
     val tags: List<String>,
     val imageUrl: String?,
+    /** [imageUrl] 사진의 공공누리 유형 `TYPE1`·`TYPE3` — TYPE3 이면 화면이 자르지 않고 전체를 보인다. 모르면 null. */
+    val imageLicense: String?,
     /**
      * 후보 핀 좌표 — `SlotCandidateResponse.lat/lng` 와 같은 뜻이다(TRIP-1063 이 온디맨드 후보에만
      * 더해 **두 응답의 모양이 갈려 있었다**). 차선책도 같은 카드·같은 지도에 올라가므로 함께 싣는다.
@@ -190,6 +192,7 @@ data class SlotAlternativeResponse(
             category = surface?.category,
             tags = surface?.tags.orEmpty(),
             imageUrl = surface?.imageUrl,
+            imageLicense = surface?.imageLicense,
             lat = surface?.lat,
             lng = surface?.lng,
         )
@@ -235,6 +238,8 @@ data class SlotResponse(
     val openingHours: String?,
     val openingHoursKnown: Boolean?,
     val imageUrl: String?,
+    /** [imageUrl] 사진의 공공누리 유형 `TYPE1`·`TYPE3` — TYPE3 이면 화면이 자르지 않고 전체를 보인다. 모르면 null. */
+    val imageLicense: String?,
     val tags: List<String>,
     /**
      * 생성 시점에 AI 가 같이 준 **다른 선택지**(TRIP-873) — 슬롯당 ≤2건, 없으면 빈 목록.
@@ -270,6 +275,7 @@ data class SlotResponse(
             openingHoursKnown = if (status == ItineraryStatus.CONFIRMED) null else (surface?.openingHoursKnown ?: false),
             alternatives = s.alternatives.map { SlotAlternativeResponse.of(it, surfaces[it.poiId]) },
             imageUrl = surface?.imageUrl,
+            imageLicense = surface?.imageLicense,
             tags = surface?.tags.orEmpty(),
         )
     }

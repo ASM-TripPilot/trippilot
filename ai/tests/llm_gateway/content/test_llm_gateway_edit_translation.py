@@ -24,13 +24,13 @@ from hypothesis import assume, given
 from hypothesis import strategies as st
 
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.edit_translation import (
+from trippilot.llm_gateway.gates.content.edit_translation import (
     EditTranslationContext,
     EditTranslationGate,
 )
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.edit_translation import (
+from trippilot.llm_gateway.workers.content.edit_translation import (
     EditTranslationInput,
     EditTranslationWorker,
     build_edit_translation_vars,
@@ -382,7 +382,7 @@ def test_prompt_states_no_intent_reinterpretation_and_injects_op_closed_set() ->
 
 def test_op_guide_covers_every_op_and_prompt_maps_kind_only_requests() -> None:
     """종류만 말한 추가·교체가 ADD_SLOT·REPLACE_SLOT 으로 이어지게 뜻·자리를 싣는다."""
-    from trippilot.llm_gateway.workers.edit_translation import _OP_GUIDE
+    from trippilot.llm_gateway.workers.content.edit_translation import _OP_GUIDE
 
     assert set(_OP_GUIDE) == set(TRANSLATABLE_OPS)
     prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars(_pool()))
@@ -404,7 +404,7 @@ def _cat_pool(per_cat: int) -> CandidatePool:
 
 def test_candidates_under_cap_render_unchanged() -> None:
     """결과 동일성 — 상한 이하 풀은 상한 도입 전 렌더(전원·poi_id 정렬) 그대로."""
-    from trippilot.llm_gateway.workers.edit_translation import _CANDIDATES_PER_CATEGORY
+    from trippilot.llm_gateway.workers.content.edit_translation import _CANDIDATES_PER_CATEGORY
 
     pool = _cat_pool(_CANDIDATES_PER_CATEGORY)
     inp = EditTranslationInput(utterance="u", target_date="d",
@@ -419,7 +419,7 @@ def test_candidates_under_cap_render_unchanged() -> None:
 
 def test_candidates_capped_per_category_by_pool_rank() -> None:
     """큰 풀은 카테고리마다 풀 순위 앞쪽만 — 실린 후보는 항상 풀 안(INV-1)."""
-    from trippilot.llm_gateway.workers.edit_translation import _CANDIDATES_PER_CATEGORY
+    from trippilot.llm_gateway.workers.content.edit_translation import _CANDIDATES_PER_CATEGORY
 
     base = _cat_pool(_CANDIDATES_PER_CATEGORY * 3)
     # 풀 순서(순위)를 poi_id 역순으로 — "poi_id 로 정렬 후 자르기" 오구현을 잡는다
@@ -466,7 +466,7 @@ def _candidate_lines(pool: CandidatePool, utterance: str, current: tuple[str, ..
 def test_named_candidate_beyond_cap_is_rendered() -> None:
     """이름으로 콕 집은 곳은 상한 밖이어도 실린다 — 상한만 두던 동안 "효창공원을 경리단길 끝나고"는 그곳이 상한
     밖이면 번역 불가였다. 상한 밖 나머지(41~50번째)는 그대로 빠진다."""
-    from trippilot.llm_gateway.workers.edit_translation import _CANDIDATES_PER_CATEGORY
+    from trippilot.llm_gateway.workers.content.edit_translation import _CANDIDATES_PER_CATEGORY
 
     assert _CANDIDATES_PER_CATEGORY == 40  # 전제 — 45번째가 상한 밖이다
     names = list(_PARKS)
@@ -602,7 +602,7 @@ def test_erased_slot_name_does_not_open_a_new_word_start() -> None:
 
 def test_named_extras_are_capped_in_pool_rank_order() -> None:
     """따로 싣는 수에도 상한 — 같은 이름이 여럿이어도 프롬프트가 불지 않는다. 풀 순위 앞부터."""
-    from trippilot.llm_gateway.workers.edit_translation import _NAMED_EXTRA
+    from trippilot.llm_gateway.workers.content.edit_translation import _NAMED_EXTRA
 
     assert _NAMED_EXTRA == 5
     names = [*_PARKS[:40], *["중앙공원"] * 10]
@@ -626,7 +626,7 @@ def test_named_extra_takes_its_place_in_the_poi_id_order() -> None:
 def test_pbt_named_extras_are_pool_members_named_in_the_utterance(picks: list[int], tail: str) -> None:
     """실린 후보는 늘 풀 안(INV-1)이고 상한 렌더는 그대로 남는다. 더해지는 것은 발화에 이름이 든 상한 밖 곳뿐 —
     풀 순위 앞 `_NAMED_EXTRA` 곳까지."""
-    from trippilot.llm_gateway.workers.edit_translation import _NAMED_EXTRA
+    from trippilot.llm_gateway.workers.content.edit_translation import _NAMED_EXTRA
 
     pool = _ranked_pool(_PARKS)
     lines = _candidate_lines(pool, " ".join(_PARKS[i] for i in picks) + tail)

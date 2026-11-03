@@ -7,8 +7,14 @@
 # 코드 쪽 상한(`--budget-usd`)은 두 번째 방어선이다.
 #
 # 공개 리포라 지출 권한 있는 시크릿을 PR 코드가 읽지 못하게 **workflow_dispatch 만** 둔다(pull_request 금지).
-# 규모를 정하기 전에는 schedule 도 두지 않는다. 첫 실행은 **시험**(pilot, 기본값) — 네 갈래(sonnet·haiku × 기본 검색·동적 필터링)가
-# 아직 안 물은 같은 N곳을 물어 곳당 실비·찾은 비율·문서가 된 비율을 나란히 잰다. 시험 뒤 이긴 갈래를 기본값으로 바꾼다.
+# 규모를 정하기 전에는 schedule 도 두지 않는다. 시험(pilot)은 네 갈래(sonnet·haiku × 기본 검색·동적 필터링)가 아직 안 물은 같은
+# N곳을 물어 곳당 실비·찾은 비율·문서가 된 비율을 나란히 잰다.
+#
+# **2026-11-02 시험 결과 → 기본값 = haiku-5-5 × 기본 검색(20250305) × 사고 low.** 제주 관광공사 곳 20곳 / 제주 식당·카페 40곳:
+# haiku 곳당 0.011달러·찾음 70~80% · sonnet 곳당 0.047달러·찾음 75~90%(문서당 0.014 대 0.053달러). 동적 필터링(20260318)은 졌다 —
+# sonnet 은 입력이 곳당 15만 토큰(0.33달러), haiku 는 검색을 안 하고 못 찾음 70%. 인용 원문 대조(WebFetch, 확인된 사실 기준):
+# haiku 첫 지시문은 근거 없음·엉뚱한 가게 10%(sonnet 0%) → 지시문을 조이고 사고 low 로 4%·지원 90%. 열 수 없는 페이지가 40~50% 라
+# 나머지는 확인하지 못했다.
 #
 # 누적 상태는 `web-facts-state` 전용 브랜치(orphan 커밋 하나)에 둔다 — ai-overview-collect 와 같은 패턴. 실행 시작에 복원,
 # 끝에 갱신. 복원이 실패하면 멈춘다(빈 상태로 덮어쓰지 않게). 결과 문서(place_web_facts.jsonl.gz)는 artifact 로 남기고,
@@ -19,9 +25,9 @@ on:
   workflow_dispatch:
     inputs:
       pilot:
-        description: '시험 — 네 갈래가 같은 N곳을 물어 나란히 잰다(아래 model·search_tool 은 무시)'
+        description: '시험 — 네 갈래가 같은 N곳을 물어 나란히 잰다(아래 model·search_tool 은 무시). 시험은 끝났다(2026-11-02) — 기본 꺼짐'
         required: false
-        default: true
+        default: false
         type: boolean
       max_places:
         description: '이번 실행에서 물을 장소 수 상한 (시험이면 갈래마다)'
@@ -41,9 +47,9 @@ on:
       model:
         description: '모델 (시험이 아닐 때)'
         required: false
-        default: claude-sonnet-5-5
+        default: claude-haiku-5-5
         type: choice
-        options: [claude-sonnet-5-5, claude-haiku-5-5]
+        options: [claude-haiku-5-5, claude-sonnet-5-5]
       search_tool:
         description: '검색 도구 판 (시험이 아닐 때) — 20260318 은 동적 필터링'
         required: false
@@ -102,7 +108,7 @@ jobs:
           [ -n "$WEB_FACTS_API_KEY" ] || { echo "::error::ANTHROPIC_COLLECT_API_KEY 미등록 — 수집 전용 워크스페이스 키가 필요하다"; exit 1; }
           collect() {  # $1 모델 · $2 검색 판 · $3 상태 파일(그 폴더의 jsonl 전부가 '이미 받은 곳')
             WEB_FACTS_MODEL="$1" WEB_FACTS_SEARCH_TOOL="$2" uv run python scripts/collect/collect_place_web_facts.py run --state "$3" \
-              --max "$MAX_PLACES" --budget-usd "$BUDGET_USD" --rpm "$RPM" --workers 2 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+              --max "$MAX_PLACES" --budget-usd "$BUDGET_USD" --rpm "$RPM" --workers 4 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
           }
           if [ "$PILOT" = "true" ]; then
             # 갈래마다 복원본의 사본만 '이미 받은 곳'으로 본다 — 앞 갈래가 받은 곳을 뒤 갈래가 건너뛰면 같은 곳을 비교하지 못한다

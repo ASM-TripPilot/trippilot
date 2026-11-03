@@ -1,7 +1,9 @@
 package com.trippilot.placedata.application
 
 import com.trippilot.placedata.InMemoryPoiRepository
+import com.trippilot.placedata.adapter.`in`.web.PlaceResponse
 import com.trippilot.placedata.domain.DataStatus
+import com.trippilot.placedata.domain.ImageLicense
 import com.trippilot.placedata.domain.Poi
 import com.trippilot.placedata.domain.PoiCategory
 import com.trippilot.placedata.domain.PoiSnapshot
@@ -61,6 +63,18 @@ class PoiSurfaceServiceTest : StringSpec({
         val urls = stored.map { svc.findSurfaces(listOf(it.poiId)).values.single().imageUrl }
 
         urls shouldBe listOf("https://img.example.net/a.webp", "https://tong.visitkorea.or.kr/a.jpg")
+    }
+
+    "사진의 공공누리 유형을 사진과 함께 싣는다 — 장소 API 와 일정 화면 두 출구 모두, 모르면 null" {
+        fun withLicense(license: ImageLicense?) = Poi.reconstitute(
+            UUID.randomUUID(), "경복궁", 37.58, 126.97, PoiCategory.명소, "종로구", null,
+            DataStatus.ACTIVE, PoiSource.TOURAPI, 0, clock.instant(), clock.instant(),
+            imageUrl = "https://tong.visitkorea.or.kr/a.jpg", imageLicense = license,
+        )
+        val (svc, stored) = service(withLicense(ImageLicense.TYPE3), withLicense(ImageLicense.TYPE1), withLicense(null))
+
+        stored.map { svc.findSurfaces(listOf(it.poiId)).values.single().imageLicense } shouldBe listOf("TYPE3", "TYPE1", null)
+        stored.map { PlaceResponse.from(it).imageLicense } shouldBe listOf(ImageLicense.TYPE3, ImageLicense.TYPE1, null)
     }
 
     /**

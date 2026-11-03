@@ -108,6 +108,8 @@ describe('🔴 G2 · 사진 바이너리 업로드 심볼 0 + 메타 실참조 (
     'pages/record/trip-records',
     'pages/record/records-calendar',
     'pages/record/daily-reflection',
+    // TRIP-1665 · j03 매거진 부품(표지·장면 사진을 그리는 뷰·VM)이 이 폴더로 올라왔다 — 사진이 기기 밖으로 나가는 심볼이 없는지 같은 금칙어로 훑는다.
+    'features/reflection',
     'features/check-visit',
     'features/attach-visit-media',
   ];

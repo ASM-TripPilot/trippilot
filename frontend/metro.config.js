@@ -32,6 +32,10 @@ if (process.env.NODE_ENV === 'production') {
 // 켜기: `EXPO_INLINE_REQUIRES=1 pnpm expo export …` 또는 Metro 를 `EXPO_INLINE_REQUIRES=1 pnpm start --clear` 로 띄운다
 // (변환 캐시가 옵션을 키로 삼지만 의심되면 `--clear`). 최상위 부작용(preventAutoHideAsync·initSentry)은 app/_layout.tsx 의
 // 부작용 import 로 고정해 지연 평가에서 뺀다.
+// TRIP-1718 측정(Release 시뮬, 쪽당 10회 A·B·A·B, `pnpm bench:startup`): 실행→첫 프레임 p50 2338→2329ms 로 변동 폭(20ms) 안 →
+// 기본값 꺼짐 유지. JS 진입→마운트는 100→68ms 로 줄지만(루트 레이아웃→마운트는 27→35ms 로 늘고) 줄어든 시간은 스플래시
+// 하한(SplashGate SPLASH_MIN_VISIBLE_MS) 대기에 흡수된다. ⚠️ 켜면 하한 기준점 bootClock 의 평가가 SplashGate 마운트 뒤로
+// 밀려(하한 끝−마운트: 꺼짐 1273–1290 / 켜짐 1300–1309ms) 하한이 사실상 마운트부터 센다. 하한을 내리면(M-9) 다시 잰다.
 if (process.env.EXPO_INLINE_REQUIRES === '1') {
   const prevGetTransformOptions = config.transformer.getTransformOptions;
   config.transformer.getTransformOptions = async (...args) => {

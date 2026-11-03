@@ -27,12 +27,12 @@ from hypothesis import strategies as st
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver
 from trippilot.llm_gateway.gates.base import GateOutcome
-from trippilot.llm_gateway.gates.explanation import ExplanationGate
-from trippilot.llm_gateway.gates.numbered_selection import NumberedScoringGate
+from trippilot.llm_gateway.gates.replan.explanation import ExplanationGate
+from trippilot.llm_gateway.gates.preference.numbered_selection import NumberedScoringGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.explanation import ExplanationWorker
-from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.llm_gateway.workers.replan.explanation import ExplanationWorker
+from trippilot.llm_gateway.workers.preference.preference import PreferenceScoringWorker
 from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.facade import HybridAssemblyFacade
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
@@ -54,7 +54,7 @@ from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.llm.prompt import PromptRef
 from trippilot.domain.freshness import ProviderKind
-from trippilot.orchestrator.info_collector import InfoCollector
+from trippilot.orchestrator.schedule.info_collector import InfoCollector
 from trippilot.poi_curation.config import M7Config
 from trippilot.providers.event import EventProvider
 from trippilot.providers.persona import PersonaProvider
@@ -62,7 +62,7 @@ from trippilot.providers.place import PlaceProvider
 from trippilot.providers.weather import WeatherProvider
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.agents.schedule.agent import ScheduleAgent
-from trippilot.orchestrator.schedule_coordinator import (
+from trippilot.orchestrator.schedule.schedule_coordinator import (
     GenerateItineraryRequest,
     GenerationOutcome,
     GenerationStatus,

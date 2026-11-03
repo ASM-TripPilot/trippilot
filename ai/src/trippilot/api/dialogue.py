@@ -28,33 +28,33 @@ from trippilot.domain.dialogue.intent import Intent
 from trippilot.domain.llm.llm import LlmFeature
 from trippilot.domain.dialogue.plan_tools import PLAN_TOOLS, plan_tool_specs_json
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.dialogue_answer import DialogueAnswerGate
-from trippilot.llm_gateway.gates.dialogue_knowledge import DialogueKnowledgeGate
-from trippilot.llm_gateway.gates.dialogue_memory import DialogueMemoryGate
-from trippilot.llm_gateway.gates.dialogue_plan import DialoguePlanGate
-from trippilot.llm_gateway.gates.dialogue_sql import DialogueSqlGate
+from trippilot.llm_gateway.gates.dialogue.dialogue_answer import DialogueAnswerGate
+from trippilot.llm_gateway.gates.dialogue.dialogue_knowledge import DialogueKnowledgeGate
+from trippilot.llm_gateway.gates.dialogue.dialogue_memory import DialogueMemoryGate
+from trippilot.llm_gateway.gates.dialogue.dialogue_plan import DialoguePlanGate
+from trippilot.llm_gateway.gates.dialogue.dialogue_sql import DialogueSqlGate
 from trippilot.llm_gateway.gates.place_fact import PlaceFactGate
-from trippilot.llm_gateway.gates.intent import IntentGate
-from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
+from trippilot.llm_gateway.gates.dialogue.intent import IntentGate
+from trippilot.llm_gateway.gates.dialogue.paraphrase import ParaphraseGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.dialogue_answer import DialogueAnswerWorker
-from trippilot.llm_gateway.workers.dialogue_intent import DialogueIntentWorker
-from trippilot.llm_gateway.workers.dialogue_knowledge import DialogueKnowledgeWorker
-from trippilot.llm_gateway.workers.dialogue_memory import DialogueMemoryWorker
-from trippilot.llm_gateway.workers.dialogue_plan import DialoguePlanWorker
-from trippilot.llm_gateway.workers.dialogue_smalltalk import DialogueSmalltalkWorker
-from trippilot.llm_gateway.workers.dialogue_sql import DialogueSqlWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_answer import DialogueAnswerWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_intent import DialogueIntentWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_knowledge import DialogueKnowledgeWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_memory import DialogueMemoryWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_plan import DialoguePlanWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_smalltalk import DialogueSmalltalkWorker
+from trippilot.llm_gateway.workers.dialogue.dialogue_sql import DialogueSqlWorker
 from trippilot.llm_gateway.workers.place_fact_lookup import PlaceFactLookupWorker
-from trippilot.orchestrator.dialogue_handlers import DayView, HandlerPorts, SlotView, TripInfo, TurnSnapshot
-from trippilot.orchestrator.dialogue_interpreter import (
+from trippilot.orchestrator.dialogue.dialogue_handlers import DayView, HandlerPorts, SlotView, TripInfo, TurnSnapshot
+from trippilot.orchestrator.dialogue.dialogue_interpreter import (
     Clarify,
     DialogueContext,
     DialogueInterpreter,
     Frame,
     TripView,
 )
-from trippilot.orchestrator.dialogue_orchestrator import (
+from trippilot.orchestrator.dialogue.dialogue_orchestrator import (
     DEFAULT_DEADLINE_MS,
     DialogueAnswer,
     DialogueOrchestrator,
@@ -62,13 +62,13 @@ from trippilot.orchestrator.dialogue_orchestrator import (
     RecentTurn,
     TurnInput,
 )
-from trippilot.orchestrator.dialogue_plan import plan_tools
-from trippilot.orchestrator.intent_router import IntentRouter, IntentRouterConfig
-from trippilot.orchestrator.place_intro import PlaceIntro
-from trippilot.orchestrator.place_sql import PlaceSqlLookup
-from trippilot.orchestrator.question_bank import BankEntry, bank_fingerprint
+from trippilot.orchestrator.dialogue.dialogue_plan import plan_tools
+from trippilot.orchestrator.intent.intent_router import IntentRouter, IntentRouterConfig
+from trippilot.orchestrator.dialogue.place_intro import PlaceIntro
+from trippilot.orchestrator.dialogue.place_sql import PlaceSqlLookup
+from trippilot.orchestrator.intent.question_bank import BankEntry, bank_fingerprint
 from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql
-from trippilot.orchestrator.shadow_probe import ShadowCountingLlm, ShadowIntentProbe, TaggedTrace
+from trippilot.orchestrator.intent.shadow_probe import ShadowCountingLlm, ShadowIntentProbe, TaggedTrace
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.llm_port import LlmPort

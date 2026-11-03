@@ -23,7 +23,7 @@ _AI_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_AI_ROOT / "scripts"))
 
 from local_embedding import build_local_embedding  # noqa: E402 — 라우터와 같은 임베딩 규칙
-from trippilot.orchestrator.question_bank import load_bank_file  # noqa: E402
+from trippilot.orchestrator.intent.question_bank import load_bank_file  # noqa: E402
 
 _BANK = _AI_ROOT / "data" / "intent_question_bank.yaml"
 _DUP = 0.90  # §3.3 위반선

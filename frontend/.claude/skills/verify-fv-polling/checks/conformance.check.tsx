@@ -1,7 +1,7 @@
 /**
  * 적합성 — 모델(model/GenPolling.tla)의 CODE MIRROR 식이 실제 코드와 같은 판정을 하는지 **조합 전수**로 대조한다.
  *   DraftFace·DraftPollDue  ↔ 실제 DraftPage 렌더(얼굴 testID) + 그 관찰자의 refetchInterval(query) — TRIP-1690 부터 세션(run) 축 포함
- *   ShellPollDue            ↔ 실제 useGenerationWatch 가 붙인 관찰자의 refetchInterval(query)
+ *   ShellPollDue            ↔ 실제 useGenerationWatch 가 GET /trips 칸에 붙인 관찰자의 refetchInterval(query) — TRIP-1677 부터 목록 기반
  * 입력 공간이 작아(초안 24, 셸 48) 생성 입력 대신 전부 돈다. 아래 model* 함수는 TLA 의 같은 이름 식을 글자 그대로 옮긴 것 —
  * 모델을 고치면 여기도 함께 고친다.
  */
@@ -11,7 +11,11 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import { server } from '@/mocks/server';
 import type { Itinerary, ItineraryGenerationState } from '@/shared/api/index.schemas';
-import { getGetTripsTripIdItineraryQueryKey, getGetTripsTripIdQueryKey } from '@/shared/api/index.hooks';
+import {
+  getGetTripsQueryKey,
+  getGetTripsTripIdItineraryQueryKey,
+  getGetTripsTripIdQueryKey,
+} from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { DRAFT_POLL_MAX_COUNT } from '@/features/itinerary/model/draftView';
 import { createWrapper, newTestQueryClient, settle } from '@/test-support/queryRender';
@@ -47,8 +51,9 @@ const modelDraftFace = (st: St, run: boolean, err: boolean, capped: boolean) =>
     : run
       ? !err && !capped ? 'loading' : 'resultFailed'
       : st === 'Failed' ? 'resultFailed' : err ? 'resultFailed' : 'result';
-const modelShellPollDue = (scr: Scr, st: St, run: boolean, err: boolean) =>
-  !['Gen', 'Obs', 'Draft'].includes(scr) && (st === 'Partial' || run) && !err;
+// 셸은 화면(scr)·조회 오류(err)를 보지 않는다 — 인자는 조합 전수를 돌리려고 받는다(TRIP-1677).
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const modelShellPollDue = (scr: Scr, st: St, run: boolean, err: boolean) => st === 'Partial' || run;
 
 type Scr = 'Entry' | 'Gen' | 'Obs' | 'Draft' | 'Away';
 const PATH: Record<Scr, string> = {
@@ -63,17 +68,17 @@ const data = (st: St, run: boolean): Itinerary =>
   itinerary({ generationState: CODE_STATE[st], generationSessionId: run ? 'sess-1' : null });
 
 /** 이 키에 붙은 관찰자 중 refetchInterval 이 함수인 것의 판정(없으면 false). */
-function pollDue(client: QueryClient): boolean {
-  const query = client.getQueryCache().find({ queryKey: KEY });
+function pollDue(client: QueryClient, key: readonly unknown[] = KEY): boolean {
+  const query = client.getQueryCache().find({ queryKey: key });
   if (!query) return false;
   return query.observers.some((o) => {
     const ri = o.options.refetchInterval;
     return typeof ri === 'function' && ri(query as never) !== false;
   });
 }
-function markError(client: QueryClient): void {
+function markError(client: QueryClient, key: readonly unknown[] = KEY): void {
   act(() => {
-    client.getQueryCache().find({ queryKey: KEY })!.setState({ status: 'error', error: new Error('x') });
+    client.getQueryCache().find({ queryKey: key })!.setState({ status: 'error', error: new Error('x') });
   });
 }
 
@@ -83,7 +88,8 @@ beforeEach(() => {
   server.use(
     http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
     // 대조 중엔 응답이 상태를 바꾸지 않게 오래 붙잡는다(판정은 요청 전 상태로 한다).
-    http.get(`${BASE}/trips/:tripId/itinerary`, () => new Promise<Response>(() => undefined))
+    http.get(`${BASE}/trips/:tripId/itinerary`, () => new Promise<Response>(() => undefined)),
+    http.get(`${BASE}/trips`, () => new Promise<Response>(() => undefined))
   );
 });
 afterEach(() => {
@@ -141,10 +147,13 @@ describe('ShellPollDue == useGenerationWatch', () => {
   it.each(cases)('%o', async ({ scr, st, run, err }) => {
     mockPathname = PATH[scr];
     const client = newTestQueryClient({ staleTime: Infinity });
-    client.setQueryData(KEY, data(st, run));
-    if (err) markError(client);
+    const LIST = getGetTripsQueryKey();
+    client.setQueryData(LIST, [
+      trip({ itineraryStatus: 'PLANNED', itineraryGenerationState: CODE_STATE[st], itineraryGenerating: run }),
+    ]);
+    if (err) markError(client, LIST);
     render(<Shell />, { wrapper: createWrapper(client) });
     await settle(); // react-query 알림은 setTimeout(0) 뒤에 온다 — 여러 틱 흘린다
-    expect(pollDue(client)).toBe(modelShellPollDue(scr, st, run, err));
+    expect(pollDue(client, LIST)).toBe(modelShellPollDue(scr, st, run, err));
   });
 });

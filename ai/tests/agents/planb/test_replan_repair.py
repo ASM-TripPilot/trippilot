@@ -20,7 +20,7 @@ from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.itinerary.itinerary import SolveMode
 from trippilot.domain.poi.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
-from trippilot.llm_gateway.gates.replan_request_extraction import ExtractedPlace, ExtractedRequest
+from trippilot.llm_gateway.gates.replan.replan_request_extraction import ExtractedPlace, ExtractedRequest
 from trippilot.ports.llm_port import LlmRequest, LlmResponse
 
 from tests.agents.planb.test_replan_composition import _DIRECTIVES, _body, _post
@@ -196,7 +196,7 @@ def test_수리할_것이_없으면_1차_프롬프트는_0_9_0_과_같다(monkey
 
     import yaml
 
-    from trippilot.llm_gateway.workers import replan_composition as worker
+    from trippilot.llm_gateway.workers.replan import replan_composition as worker
 
     root = pathlib.Path(__file__).resolve().parents[3]
     template = yaml.safe_load((root / "prompts" / "replan_composition.yaml").read_text(encoding="utf-8"))["template"]

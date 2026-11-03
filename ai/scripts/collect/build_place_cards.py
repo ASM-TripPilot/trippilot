@@ -15,7 +15,7 @@ from pathlib import Path
 _AI = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_AI / "src"))
 
-from trippilot.orchestrator.place_intro import clean_intro  # noqa: E402
+from trippilot.orchestrator.dialogue.place_intro import clean_intro  # noqa: E402
 from trippilot.poi_curation.place_cards import card_text  # noqa: E402
 from trippilot.poi_curation.place_docs import MIN_DOC_CHARS  # noqa: E402
 

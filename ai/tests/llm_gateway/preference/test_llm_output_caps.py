@@ -33,9 +33,9 @@ from trippilot.domain.llm.prompt import PromptRef
 from trippilot.llm_gateway.adapters.anthropic_adapter import AnthropicAdapter
 from trippilot.llm_gateway.adapters.openai_adapter import OpenAIAdapter
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+from trippilot.llm_gateway.gates.preference.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
-from trippilot.llm_gateway.workers.preference import (
+from trippilot.llm_gateway.workers.preference.preference import (
     PreferenceScoringWorker,
     plan_chunks,
     SCORE_TOKENS_PER_ITEM,
@@ -194,7 +194,7 @@ def test_effort_survives_timeout_retry() -> None:
 
 def test_default_chunk_cap_fits_scoring_output_budget() -> None:
     """기본 설정에서 청크 상한 × 건당 추정 + 사고 몫 ≤ PREFERENCE_SCORING 출력 상한 — 잘려서 폐기되는 구간 밖."""
-    from trippilot.llm_gateway.workers.preference import SCORE_THINKING_RESERVE_TOKENS
+    from trippilot.llm_gateway.workers.preference.preference import SCORE_THINKING_RESERVE_TOKENS
     cap = score_chunk_cap(_CFG)
     assert cap * SCORE_TOKENS_PER_ITEM + SCORE_THINKING_RESERVE_TOKENS <= _CFG.max_tokens_for(LlmFeature.PREFERENCE_SCORING)
     assert cap >= _CFG.score_chunk_min
@@ -203,7 +203,7 @@ def test_default_chunk_cap_fits_scoring_output_budget() -> None:
 def test_scoring_cap_leaves_room_for_thinking_without_growing_the_chunk() -> None:
     """출력 상한을 올린 이유는 사고 토큰(fable)이지 청크를 키우려는 게 아니다 — 2026-10-13 DEV 45회 중 3회가
     정확히 1024 에서 잘렸다. 번호 출력(0.4.0)은 건당 16 이라 역산 64 — 상한은 chunk_max 40 이 정한다."""
-    from trippilot.llm_gateway.workers.preference import SCORE_THINKING_RESERVE_TOKENS
+    from trippilot.llm_gateway.workers.preference.preference import SCORE_THINKING_RESERVE_TOKENS
     cap_tokens = _CFG.max_tokens_for(LlmFeature.PREFERENCE_SCORING)
     assert score_chunk_cap(_CFG) == _CFG.score_chunk_max
     assert score_chunk_cap(_CFG) * SCORE_TOKENS_PER_ITEM + SCORE_THINKING_RESERVE_TOKENS <= cap_tokens

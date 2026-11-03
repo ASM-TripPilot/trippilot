@@ -1,5 +1,7 @@
 # application-design — 컴포넌트·서비스 설계
 
+> **AI 아키텍처 정본은 [`ai/ARCHITECTURE.md`](../../../ARCHITECTURE.md) 하나다 (2026-11-02).** 이 폴더의 개요·구조 문서는 이력이고, 아래의 "정본"·"최신" 표시는 그 이전 기준이다. 어긋나면 ARCHITECTURE.md(와 코드)가 이긴다.
+
 > English version: ./claude.md
 
 이 폴더는 코드 구현 직전 수준의 상세 설계를 담습니다.

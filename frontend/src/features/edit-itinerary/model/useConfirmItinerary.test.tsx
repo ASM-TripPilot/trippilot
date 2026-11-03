@@ -1,6 +1,10 @@
 import type { ReactNode } from 'react';
 import { AxiosError } from 'axios';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  QueryClient,
+  QueryClientProvider,
+  QueryObserver,
+} from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
 import { readIdSet, writeIdSet } from '@/shared/storage';
@@ -27,6 +31,8 @@ type Options = {
 };
 let captured: Options | undefined;
 jest.mock('@/shared/api/index.hooks', () => ({
+  // TRIP-1677 — 목록 키. 훅이 `getGetTripsQueryKey()` 로 목록을 낡게 하므로 목에도 있어야 한다(없으면 호출이 TypeError).
+  getGetTripsQueryKey: () => ['trips'],
   getGetTripsTripIdItineraryQueryKey: (tripId: string) => ['itinerary', tripId],
   usePostTripsTripIdItineraryConfirm: (options: Options) => {
     captured = options;
@@ -96,6 +102,62 @@ describe('useConfirmItinerary (TRIP-1357)', () => {
 
     captured?.mutation.onError(httpError(409));
     expect(spy).toHaveBeenCalledWith({ queryKey: ['itinerary', 't1'] });
+  });
+});
+
+// TRIP-1677 I4 — 목록(`GET /trips`)이 일정 상태 네 칸(확정 여부 포함)을 싣게 되어, 확정이 서버 상태를 바꾸면 목록 카드도 낡은 값이 된다.
+describe('I4 · 확정 뒤 여행 목록 재조회 (TRIP-1677)', () => {
+  /**
+   * 무엇을 보장하나: 성공과 409(서버 진실이 이미 확정일 수 있다)면 **목록을 실제로 다시 받는다**. 그 밖의 오류(500)는 서버 상태가
+   * 안 바뀌었으니 다시 받지 않는다.
+   *
+   * 어떻게: `invalidateQueries` 를 엿보지 않고 목록 키에 관찰자(화면 대역)를 붙여 `queryFn` 호출 수를 센다. 무효화(= 낡음 표시)는
+   * 관찰자가 있는 쿼리에서만 곧바로 재조회로 이어진다 — 그 재조회가 사용자에게 보이는 동작이다. 생성 훅을 목으로 바꾼 파일이라 요청 대신
+   * 이 호출 수가 "재조회" 대용 지표다(MSW 요청 수는 GeneratingPage 등 통합 파일이 본다).
+   * 3동작: 준비(관찰자 + 첫 조회) → 실행(콜백) → 단언(호출 수 +1 / +0).
+   */
+  async function watchList() {
+    const queryFn = jest.fn().mockResolvedValue([]);
+    const observer = new QueryObserver(client, {
+      queryKey: ['trips'],
+      queryFn,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    return { queryFn, unsubscribe };
+  }
+  async function flush(): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  it('성공하면 목록을 정확히 한 번 다시 받는다', async () => {
+    const { queryFn, unsubscribe } = await watchList();
+    renderHook(() => useConfirmItinerary('t1'), { wrapper });
+    expect(queryFn).toHaveBeenCalledTimes(1); // 앵커 — 첫 조회뿐.
+
+    captured?.mutation.onSuccess({ status: 'CONFIRMED' });
+    await flush();
+
+    expect(queryFn).toHaveBeenCalledTimes(2);
+    unsubscribe();
+  });
+
+  it('409 면 목록도 다시 받고, 500 은 받지 않는다', async () => {
+    const { queryFn, unsubscribe } = await watchList();
+    renderHook(() => useConfirmItinerary('t1'), { wrapper });
+
+    captured?.mutation.onError(httpError(500));
+    await flush();
+    expect(queryFn).toHaveBeenCalledTimes(1);
+
+    captured?.mutation.onError(httpError(409));
+    await flush();
+    expect(queryFn).toHaveBeenCalledTimes(2);
+    unsubscribe();
   });
 });
 

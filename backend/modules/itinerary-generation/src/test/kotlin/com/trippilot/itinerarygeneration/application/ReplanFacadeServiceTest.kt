@@ -43,6 +43,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import java.time.Clock
@@ -199,6 +200,7 @@ class ReplanFacadeServiceTest : StringSpec({
         accountId = acc, tripId = trip, targetDate = today, fromInstant = now, fullDay = fullDay,
         completedSlotKeys = completed, originLat = 33.45, originLng = 126.56,
         reasons = listOf("비가 와요"), directives = listOf("실내로"), freeText = null, excludedPoiIds = emptyList(),
+        skippedPoiIds = emptyList(),
     )
 
     /**
@@ -234,6 +236,27 @@ class ReplanFacadeServiceTest : StringSpec({
         sent.styles shouldBe listOf("힐링")         // 계정(미식) 아님
         sent.activities shouldBe emptyList()        // 비운 축은 비운 채로
         sent.transportModes shouldBe listOf("렌터카") // 여행이 안 정한 축은 계정
+    }
+
+    // TRIP-1709 F7 — 상대는 이 한 값으로 후보 풀 반경·이동 시간을 정한다. 비우면 도보 여행도 대중교통으로 다시 짜고, 뒤이은 편집
+    // 수리(여행 수단으로 잰다)가 그 날을 다시 민다. 고르는 규칙은 생성과 같다 — 상대가 아는 첫 값.
+    "재계획이 그 여행의 수단 중 상대가 아는 첫 값 하나를 싣는다 — 아는 값이 없으면 비운다(상대 기본 대중교통)" {
+        fun tripModes(vararg modes: String) = object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(today, today.plusDays(1))
+            override fun findGenerationContext(accountId: UUID, tripId: UUID) = TripGenerationContext(
+                today, today.plusDays(1), refs("제주"), "친구", 500_000, emptyList(),
+                preferenceSnapshot = mapOf("transportModes" to modes.toList()),
+            )
+        }
+        fun sentMode(trips: TripFacade): String? {
+            val agent = Agent(proposal(replacement))
+            fixture(agent, trips = trips).svc.propose(command())
+            return agent.inputs.single().transportMode
+        }
+
+        sentMode(replanTrips) shouldBe "렌터카"             // 여행이 안 정한 축은 계정 값
+        sentMode(tripModes("택시", "도보")) shouldBe "도보" // 여행 값이 이기고, 상대가 모르는 택시는 건너뛴다
+        sentMode(tripModes("택시")).shouldBeNull()          // 아는 값이 없다
     }
 
     // ───── 숙소 근처에서 끝내기의 끝점 ─────────────────────────────────────
@@ -413,6 +436,42 @@ class ReplanFacadeServiceTest : StringSpec({
         svc.propose(command(fullDay = true, completed = listOf("$today#$evening")))
 
         agent.inputs.single().lockedBlocks.map { it.poiId } shouldContainExactly listOf(fixedNoon, evening)
+    }
+
+    // TRIP-1711 — 건너뛴 곳이 시각 고정이면 잠금(HC3)으로 실려 AI 가 제외보다 먼저 되살렸다(웹 재QA: 「10:00 쩡이네포차 · 고정」).
+    // 다시 들어오면 같은 슬롯 키의 건너뜀 기록과 부딪혀 [도착]이 영원히 409 다(BR-U5-02).
+    "그날 건너뛴 고정 슬롯은 잠그지 않고 원 일정에도 고정 표시 없이 싣는다 — 제외가 먹는다" {
+        // 오늘 전체(15:00) · 지금 이후만(11:00 — 12:00 고정이 아직 앞에 있다) 둘 다.
+        listOf(command(fullDay = true), command().copy(fromInstant = Instant.parse("2026-08-11T02:00:00Z"))).forEach { base ->
+            val agent = Agent(proposal(replacement))
+
+            fixture(agent).svc.propose(base.copy(excludedPoiIds = listOf(fixedNoon), skippedPoiIds = listOf(fixedNoon)))
+
+            val sent = agent.inputs.single()
+            sent.lockedBlocks.map { it.poiId } shouldNotContain fixedNoon
+            sent.currentSlots.first { it.poiId == fixedNoon }.isFixed shouldBe false
+            sent.excludedPoiIds shouldContainExactly listOf(fixedNoon)
+        }
+    }
+
+    // 지난 슬롯 잠금은 '하루의 이력'이다(BR-U4-17 개정 잠금 절) — 원 자리 그대로라 건너뜀 기록과 새로 부딪히지 않는다.
+    "지금 이후만 — 이미 지난 건너뛴 고정은 지난 슬롯으로 잠긴 채 원 자리에 남는다" {
+        val agent = Agent(proposal(replacement))
+
+        fixture(agent).svc.propose(command().copy(excludedPoiIds = listOf(fixedNoon), skippedPoiIds = listOf(fixedNoon)))
+
+        agent.inputs.single().lockedBlocks.map { it.poiId } shouldContainExactly listOf(morning, fixedNoon)
+    }
+
+    "건너뛰지 않은 고정은 그대로 잠긴다 — 앱이 보낸 제외만으로는 고정을 풀지 않는다" {
+        val agent = Agent(proposal(replacement))
+
+        // 다른 날 건너뛴 고정은 C10 이 대상 일자로만 물어 skippedPoiIds 에 안 실린다 — 이 모양이 그 경우다.
+        fixture(agent).svc.propose(command(fullDay = true).copy(excludedPoiIds = listOf(fixedNoon)))
+
+        val sent = agent.inputs.single()
+        sent.lockedBlocks.map { it.poiId } shouldContainExactly listOf(fixedNoon)
+        sent.currentSlots.first { it.poiId == fixedNoon }.isFixed shouldBe true
     }
 
     "산출은 일정에 손대지 않는다(INV-U4-05)" {

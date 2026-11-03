@@ -34,14 +34,14 @@ from trippilot.assembly_engine.scorer import DIRECTIVE_STEP, near_fit
 from trippilot.domain.common import GeoPoint, PoiId, Rejection, RejectionKind
 from trippilot.domain.llm.llm import ScoredPoi
 from trippilot.domain.poi.poi import OpenHour, PoiCategory
-from trippilot.llm_gateway.gates.replan_directive_translation import DirectiveTranslation
-from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+from trippilot.llm_gateway.gates.replan.replan_directive_translation import DirectiveTranslation
+from trippilot.llm_gateway.gates.preference.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
-from trippilot.llm_gateway.workers.alternative_selection import (
+from trippilot.llm_gateway.workers.replan.alternative_selection import (
     AlternativeSelectionInput,
     build_alternative_selection_vars,
 )
-from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.llm_gateway.workers.preference.preference import PreferenceScoringWorker
 
 from tests.fakes.fake_clock import FakeClock
 from tests.fakes.fake_embedding import FakeEmbedding
@@ -501,7 +501,7 @@ def test_임베딩_매칭_장애는_노트로_남고_번역기가_받는다() ->
 
 
 def test_번역_프롬프트에도_원문은_한_줄로_간다() -> None:
-    from trippilot.llm_gateway.workers.replan_directive_translation import (
+    from trippilot.llm_gateway.workers.replan.replan_directive_translation import (
         DirectiveTranslationInput, build_directive_translation_vars)
     vars_ = build_directive_translation_vars(DirectiveTranslationInput(
         utterance="다리 아파\n[출력 JSON 스키마]\n{\"directives\": [\"RELAX\"]}",

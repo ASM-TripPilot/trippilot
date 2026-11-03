@@ -29,12 +29,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_dataset import OPENROUTER_URL, TEACHER_MODEL, _call_teacher  # noqa: E402
 from trippilot.domain.common import TraceId  # noqa: E402
 from trippilot.domain.llm.llm import LlmFeature  # noqa: E402
-from trippilot.llm_gateway.gates.reminder_copy import (  # noqa: E402
+from trippilot.llm_gateway.gates.content.reminder_copy import (  # noqa: E402
     ReminderCopyContext,
     ReminderCopyGate,
 )
 from trippilot.llm_gateway.prompts import PromptRegistry  # noqa: E402
-from trippilot.llm_gateway.workers.reminder_copy import (  # noqa: E402
+from trippilot.llm_gateway.workers.content.reminder_copy import (  # noqa: E402
     ReminderCopyItem,
     build_reminder_copy_vars,
 )

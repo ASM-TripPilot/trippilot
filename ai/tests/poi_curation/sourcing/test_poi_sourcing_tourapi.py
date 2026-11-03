@@ -175,11 +175,19 @@ def test_fetch_detail_never_carries_spendtime(kind: str) -> None:
     assert "spendtime" not in d.detail_raw and "spendtimeresting" not in d.detail_raw
 
 
-def test_fetch_detail_kind_28_carries_nothing() -> None:
-    """레포츠는 실측에서 상세가 비어 왔다 — 목록이 없으니 무엇이 와도 싣지 않는다."""
+def test_fetch_detail_kind_28_carries_only_pet() -> None:
+    """레포츠는 실측에서 상세가 비어 왔다 — 반려동물 칸만 둔다(그 밖은 무엇이 와도 싣지 않는다)."""
     http = FakeTourApiHttp(intros={"7": envelope([intro_item(
-        "7", "28", "09:00~18:00", "", parkingleports="가능")], 1)})
-    assert _adapter(http).fetch_detail("7", "28").detail_raw == {}
+        "7", "28", "09:00~18:00", "", parkingleports="가능", chkpetleports="가능")], 1)})
+    assert _adapter(http).fetch_detail("7", "28").detail_raw == {"chkpetleports": "가능"}
+
+
+@pytest.mark.parametrize("kind,field", [("12", "chkpet"), ("14", "chkpetculture"), ("38", "chkpetshopping")])
+def test_fetch_detail_carries_pet_field_per_type(kind: str, field: str) -> None:
+    """반려동물 동반 칸은 타입마다 이름이 다르다 — 원문 그대로(KB-5 다시 짜기 후보 사실 칸, 2026-11-02)."""
+    http = FakeTourApiHttp(intros={"7": envelope([intro_item(
+        "7", kind, "09:00~18:00", "연중무휴", **{field: "가능(소형견)"})], 1)})
+    assert _adapter(http).fetch_detail("7", kind).detail_raw[field] == "가능(소형견)"
 
 
 # ── 카테고리 매핑표 (8종 중 NIGHT_VIEW 제외 7종 도달 + 불가 드롭) ──
@@ -660,6 +668,17 @@ def test_비영업_라벨_앞의_범위는_남긴다(
 ])
 def test_옛_분류가_빈_관광지는_새_분류로_카테고리를_정한다(codes, expected) -> None:
     assert map_category("12", codes) is expected
+
+
+@pytest.mark.parametrize("codes,expected", [
+    (("AC", "AC05"), None),                  # 레포츠로 등록된 캠핑 숙박 — 11-01 leports_lcls 실측
+    (("AC", "AC03"), None),                  # 펜션
+    (("LS", "LS01"), PoiCategory.ACTIVITY),  # 진짜 레저는 그대로
+    (("VE", "VE10"), PoiCategory.ACTIVITY),
+    ((), PoiCategory.ACTIVITY),              # 분류 없는 레포츠는 종전대로
+])
+def test_레포츠의_새_분류_숙박은_싣지_않는다(codes, expected) -> None:
+    assert map_category("28", codes) is expected
 
 
 def test_옛_분류가_있으면_옛_판정이_이긴다_그리고_카페는_새_코드로도() -> None:

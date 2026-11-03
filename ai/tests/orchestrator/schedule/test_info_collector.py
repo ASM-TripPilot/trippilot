@@ -21,7 +21,7 @@ from datetime import date, datetime, timedelta, timezone
 from trippilot.domain.common import GeoPoint
 from trippilot.domain.freshness import FreshnessMeta, InfoPacket, ProviderKind, ProviderStatus
 from trippilot.domain.dialogue.intent import ROUTABLE_INTENTS, Intent
-from trippilot.orchestrator.info_collector import (
+from trippilot.orchestrator.schedule.info_collector import (
     INFO_REQUIREMENTS,
     InfoCollector,
     UnknownIntentError,
@@ -451,7 +451,7 @@ def test_leaked_exception_in_one_provider_keeps_the_others() -> None:
 
 
 def test_collector_logs_one_timing_line_per_provider(caplog) -> None:
-    with caplog.at_level("INFO", logger="trippilot.orchestrator.info_collector"):
+    with caplog.at_level("INFO", logger="trippilot.orchestrator.schedule.info_collector"):
         _slow_collector(0.0).collect(Intent.GENERATE_SCHEDULE, _PARAMS)
 
     lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("provider_timing")]

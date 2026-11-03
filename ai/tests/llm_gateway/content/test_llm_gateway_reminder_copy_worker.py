@@ -17,12 +17,12 @@ from datetime import datetime, timezone
 
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm.llm import LlmFeature, TypedResult
-from trippilot.llm_gateway.gates.reminder_copy import (
+from trippilot.llm_gateway.gates.content.reminder_copy import (
     ReminderCopyContext,
     ReminderCopyDraft,
     ReminderCopyGate,
 )
-from trippilot.llm_gateway.workers.reminder_copy import (
+from trippilot.llm_gateway.workers.content.reminder_copy import (
     ReminderCopyInput,
     ReminderCopyItem,
     ReminderCopyWorker,

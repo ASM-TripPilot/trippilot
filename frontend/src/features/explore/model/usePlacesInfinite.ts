@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 
-import { getPlaces, getGetPlacesQueryKey } from '@/shared/api/index.hooks';
+import { getPlaces, getGetPlacesQueryKey } from '@/shared/api/index.places';
 import type { GetPlacesParams, Place } from '@/shared/api/index.schemas';
 
 /**

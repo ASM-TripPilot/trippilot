@@ -17,8 +17,8 @@ from hypothesis import strategies as st
 
 from trippilot.domain.dialogue.intent import Intent, IntentDraft
 from trippilot.domain.dialogue.plan_tools import PLAN_TOOLS, PlanTool
-from trippilot.orchestrator import dialogue_plan as dp
-from trippilot.orchestrator.dialogue_handlers import (
+from trippilot.orchestrator.dialogue import dialogue_plan as dp
+from trippilot.orchestrator.dialogue.dialogue_handlers import (
     HANDLERS,
     AnswerKind,
     Facts,
@@ -219,10 +219,10 @@ from tests.orchestrator.dialogue import test_dialogue_orchestrator as to  # noqa
 from trippilot.domain.context import PermissionDeniedError  # noqa: E402
 from trippilot.domain.llm.llm import LlmFeature  # noqa: E402
 from trippilot.domain.observability import FallbackEvent, GateDropEvent, LlmCallRecord  # noqa: E402
-from trippilot.llm_gateway.gates.intent import NULL_INTENT  # noqa: E402
-from trippilot.orchestrator import dialogue_orchestrator as orch_mod  # noqa: E402
-from trippilot.orchestrator.dialogue_interpreter import DialogueContext  # noqa: E402
-from trippilot.orchestrator.dialogue_handlers import NEXT_ACTION_TYPES  # noqa: E402
+from trippilot.llm_gateway.gates.dialogue.intent import NULL_INTENT  # noqa: E402
+from trippilot.orchestrator.dialogue import dialogue_orchestrator as orch_mod  # noqa: E402
+from trippilot.orchestrator.dialogue.dialogue_interpreter import DialogueContext  # noqa: E402
+from trippilot.orchestrator.dialogue.dialogue_handlers import NEXT_ACTION_TYPES  # noqa: E402
 from trippilot.ports.llm_port import LlmResponse  # noqa: E402
 
 _PLAN_PORTS = HandlerPorts(poi_info=to._PoiInfo(), weather=to._Weather(), pool_builder=to._ExplorePool())
@@ -1094,7 +1094,7 @@ def test_any_knowledge_output_is_a_safe_answer_or_the_scope_card(raw: str) -> No
     assert "orchestrator_error" not in (out.reason or "")
     assert not any(e.from_mode == "dialogue_orchestrator" for e in to._fallbacks(b.trace))
     if out.outcome == "ANSWER":
-        from trippilot.llm_gateway.gates.dialogue_knowledge import has_specific_value
+        from trippilot.llm_gateway.gates.dialogue.dialogue_knowledge import has_specific_value
         text = out.answer.text
         assert out.answer.footnote == orch_mod.KNOWLEDGE_FOOTNOTE and not has_specific_value(text)
         assert to._TIME_EXPR.search(text) is None and not to.has_contact_like(text)

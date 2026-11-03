@@ -8,6 +8,7 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { ImageLicense } from './imageLicense';
 import type { ItineraryDaysItemSlotsItemAlternativesItem } from './itineraryDaysItemSlotsItemAlternativesItem';
 
 export type ItineraryDaysItemSlotsItem = {
@@ -36,6 +37,7 @@ export type ItineraryDaysItemSlotsItem = {
   openingHoursKnown?: boolean | null;
   /** NULL = 미확보. 기본 이미지를 지어내지 않는다(TRIP-219) */
   imageUrl?: string | null;
+  imageLicense?: ImageLicense | null;
   /** 미확보 시 빈 배열 */
   tags: string[];
   /**

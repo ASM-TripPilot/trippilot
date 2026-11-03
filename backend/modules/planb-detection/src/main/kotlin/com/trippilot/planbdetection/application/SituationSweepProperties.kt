@@ -8,12 +8,15 @@ import java.time.Duration
 import java.util.Objects
 import java.util.UUID
 
+/** 여행 전 창의 상한(일) — 첫날 일정을 다시 짜는 창이라 한 주를 넘기지 않는다(재계획 쪽도 같은 값). */
+const val MAX_PRE_TRIP_DAYS = 7
+
 /** 스윕 모드(`PLANB_SITUATION_SWEEP`) — off · dry-run(판정·요약 로그만, 쓰기 0) · on. */
 enum class SweepMode(val label: String) { OFF("off"), DRY_RUN("dry-run"), ON("on") }
 
 /**
  * 지평(`PLANB_SITUATION_HORIZON`) — 저녁 회차가 어디까지 보나. today = 오늘만 · tomorrow = 진행 중 여행의 내일까지 ·
- * pre-trip = 내일 시작하는 여행의 첫날(D-1)까지.
+ * pre-trip = 시작 전 여행의 첫날까지(오늘 + [SituationSweepProperties.preTripDays] 일 안 — 기본 1 = 내일 시작, D-1).
  */
 enum class SweepHorizon(val label: String) { TODAY("today"), TOMORROW("tomorrow"), PRE_TRIP("pre-trip") }
 
@@ -36,11 +39,17 @@ data class SituationSweepProperties(
     val observeOnly: Set<String> = setOf(SweepSource.KMA_WARNING, SweepSource.AIRKOREA),
     val parallelism: Int = 2,
     val budget: Duration = Duration.ofMinutes(20),
+    /**
+     * 지평 pre-trip 일 때 저녁 회차가 보는 시작 전 여행의 창(`PLANB_SITUATION_PRE_TRIP_DAYS`, 일). 1 = 내일 시작 여행(D-1)만 — 현행.
+     * 재계획 쪽 창과 **같은 값**이어야 한다 — 점검이 먼저 넓어지면 D-N 알림 탭이 막다른 길(409)이 된다(DEC-SA-7).
+     */
+    val preTripDays: Int = 1,
 ) {
     init {
         // 0 이면 회차가 아무것도 못 보고 끝난다 — 끄려는 뜻이면 mode=off 다.
         require(parallelism >= 1) { "상황 스윕 병렬도($parallelism)는 1 이상이어야 합니다." }
         require(budget > Duration.ZERO) { "상황 스윕 예산($budget)은 0 보다 커야 합니다." }
+        require(preTripDays in 1..MAX_PRE_TRIP_DAYS) { "상황 스윕 여행 전 창($preTripDays 일)은 1~${MAX_PRE_TRIP_DAYS} 이어야 합니다." }
         // 출처는 닫힌 집합이다. 관찰 전용 목록의 오타는 그 출처를 실측 전에 쓰기·푸시 대상으로 만든다(fail-unsafe — BR-SA-04).
         val unknown = (sources + observeOnly).filterNot { it in SweepSource.ALL }
         require(unknown.isEmpty()) { "모르는 감지기 출처입니다: $unknown — 출처는 ${SweepSource.ALL} 중 하나입니다." }

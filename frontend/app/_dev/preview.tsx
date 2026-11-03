@@ -41,7 +41,11 @@ import {
 import { VisitRecordCard } from '@/pages/record/trip-records/ui/VisitRecordCard';
 import { VisitTimeSheet } from '@/pages/record/trip-records/ui/VisitTimeSheet';
 import { missingParts } from '@/pages/record/daily-reflection/model/missingParts';
-import { SHARE_FORMATS } from '@/features/reflection/index.view';
+import {
+  SHARE_FORMATS,
+  buildMagazineVM,
+  type MagazineInput,
+} from '@/features/reflection/index.view';
 import { DailyReflectionScreen } from '@/pages/record/daily-reflection/ui/DailyReflectionScreen';
 import { ShareCardScreen } from '@/pages/record/share-card/ui/ShareCardScreen';
 import { TravelStyleScreen } from '@/pages/record/travel-style/ui/TravelStyleScreen';
@@ -91,6 +95,7 @@ import { MustVisitPickerScreen } from '@/pages/itinerary/itinerary-mustvisit/ui/
 import { MustVisitTimeScreen } from '@/pages/itinerary/itinerary-mustvisit/ui/MustVisitTimeScreen';
 import { PlaceAddHeader, PlaceAddRow } from '@/features/itinerary/index.view';
 import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/pages/itinerary/itinerary-draft/ui/SlotCandidateSheet';
+import { CenterPointPicker } from '@/pages/itinerary/itinerary-copick/ui/CenterPointPicker';
 import { SlotFillScreen } from '@/pages/itinerary/itinerary-copick/ui/SlotFillScreen';
 import {
   AlertCircleGlyph,
@@ -306,6 +311,83 @@ const SHARE_CARD_COPY_PREVIEW: ComponentProps<typeof ShareCardScreen>['card'] =
     watermark: 'TripPilot',
     aspectRatio: 9 / 16,
   };
+// TRIP-1665 j03 회고 매거진 — 운영과 같은 빌더(`buildMagazineVM`)를 네트워크 없이 쓴다. 픽스처는 VM 이 아니라 원재료(payload 문자열·방문·슬롯)라
+// 팔레트·번호·좌우·띠 규칙이 프리뷰에서도 운영과 같은 코드로 나온다. 사진 파일은 없어 카테고리 그림이 대신 선다(기기 사진 자리 육안은 6-b 실기).
+const MAGAZINE_DATE = '2026-09-24';
+const MAGAZINE_STATS = {
+  visitCount: 4,
+  distanceKm: 12,
+  distanceSource: 'VISIT_LINE' as const,
+  photoCount: 6,
+};
+const magazineVisit = (poiId: string, hour: number) => ({
+  poiId,
+  arrivedAt: `2026-09-24T0${hour}:00:00Z`,
+});
+const magazineSlot = (poiId: string, nameKo: string, category: string) => ({
+  poiId,
+  nameKo,
+  category,
+});
+const magazinePhotoScene = (poiId: string, caption: string) => ({
+  layout: 'PHOTO_CAPTION',
+  caption,
+  photo_slot: { visit_ref: { date: MAGAZINE_DATE, poi_id: poiId } },
+});
+const magazinePayload = (
+  scenes: object[],
+  coverPoiId: string,
+  hashtags: string[] = ['부산여행', '혼자만의하루']
+) =>
+  JSON.stringify({
+    cover: {
+      title: '부산을 천천히 훑은 하루',
+      subtitle: '바다를 보며, 혼자만의 하루',
+      photo_slot: { visit_ref: { date: MAGAZINE_DATE, poi_id: coverPoiId } },
+    },
+    hashtags,
+    scenes,
+  });
+const PREVIEW_MAGAZINE_BASE: MagazineInput = {
+  date: MAGAZINE_DATE,
+  isToday: true,
+  title: '부산을 천천히 훑은 하루',
+  region: '부산',
+  narrative: '시장과 카페, 골목의 식사로 이어진 혼자만의 하루',
+  stats: MAGAZINE_STATS,
+  distanceDash: false,
+  payload: undefined,
+  visits: [],
+  slots: [],
+  spontaneousNames: {},
+  photos: [],
+};
+const magazineDay = (over: Partial<MagazineInput> = {}) =>
+  buildMagazineVM({ ...PREVIEW_MAGAZINE_BASE, ...over });
+// 맛집 하루(광안리 → 시장 → 카페 → 해운대 야시장 식사)
+const FOOD_DAY: Partial<MagazineInput> = {
+  visits: [
+    magazineVisit('p1', 1),
+    magazineVisit('p2', 2),
+    magazineVisit('p3', 3),
+    magazineVisit('p4', 4),
+  ],
+  slots: [
+    magazineSlot('p1', '광안리 해변', '명소'),
+    magazineSlot('p2', '부평깡통시장', '맛집'),
+    magazineSlot('p3', '카페 어니언', '카페'),
+    magazineSlot('p4', '해운대 노가리골목', '맛집'),
+  ],
+  payload: magazinePayload(
+    [
+      magazinePhotoScene('p2', '시장의 활기 속에서 먹거리를 둘러봤다.'),
+      magazinePhotoScene('p3', '커피로 잠시 쉬어 갔다.'),
+      magazinePhotoScene('p4', '골목에서 식사하며 하루를 돌이켰다.'),
+      { layout: 'STATS', caption: '네 곳을 둘러보고 여섯 장을 남겼다.' },
+    ],
+    'p2'
+  ),
+};
 // TRIP-1584 j03·j04 하단 바(기록·회고·요약) — 프리뷰라 칸 이동은 no-op. 바는 이 묶음이 있을 때만 그려진다.
 const PREVIEW_RECORD_BAR = {
   onBack: noop,
@@ -4377,7 +4459,10 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <DailyReflectionScreen
         face="default"
-        narrative="오늘은 광안리와 미술관 등 4곳을 방문했어요. 12km를 이동했고 사진 6장을 남겼어요."
+        magazine={magazineDay({
+          narrative:
+            '오늘은 광안리와 미술관 등 4곳을 방문했어요. 12km를 이동했고 사진 6장을 남겼어요.',
+        })}
         editableText="오늘은 광안리와 미술관 등 4곳을 방문했어요. 12km를 이동했고 사진 6장을 남겼어요."
         stats={{
           visitCount: 4,
@@ -4423,7 +4508,12 @@ export const PREVIEW_STATES: PreviewState[] = [
       return (
         <DailyReflectionScreen
           face="data-insufficient"
-          narrative="메모를 기반으로 오늘 기록을 정리했어요. 위치·사진 정보가 부족해 일부 항목은 제외했어요."
+          magazine={magazineDay({
+            narrative:
+              '메모를 기반으로 오늘 기록을 정리했어요. 위치·사진 정보가 부족해 일부 항목은 제외했어요.',
+            stats,
+            distanceDash: parts.distanceDash,
+          })}
           editableText="메모를 기반으로 오늘 기록을 정리했어요."
           stats={stats}
           distanceDash={parts.distanceDash}
@@ -4455,7 +4545,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <DailyReflectionScreen
         face="empty"
-        narrative="방문 0곳 · 이동 0km · 사진 0장의 하루였어요."
+        magazine={magazineDay()}
         editableText=""
         stats={{
           visitCount: 0,
@@ -4486,7 +4576,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <DailyReflectionScreen
         face="error"
-        narrative="방문 4곳 · 이동 12km · 사진 6장의 하루였어요."
+        magazine={magazineDay()}
         editableText=""
         stats={{
           visitCount: 4,
@@ -4518,7 +4608,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => (
       <DailyReflectionScreen
         face="pending"
-        narrative=""
+        magazine={magazineDay()}
         editableText=""
         stats={{
           visitCount: 0,
@@ -4529,6 +4619,257 @@ export const PREVIEW_STATES: PreviewState[] = [
         distanceDash
         mapNotice={null}
         hidePhotoGrid
+        photos={[]}
+        dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+        activeDay={2}
+        onSelectDay={noop}
+        recordBar={PREVIEW_RECORD_BAR}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
+      />
+    ),
+  },
+  // j03 회고 매거진 6키(TRIP-1665) — 운영과 같은 빌더로 카테고리별 표지·팔레트·번호·좌우·띠·동선·숫자를 육안 대조한다.
+  // jest 는 글자·순서·존재만 잠그고 색·움직임(등장·카운트업·켄번스·형광펜)·동작 줄이기 정지는 못 본다 → 이 6키가 6-b 실기의 진입점이다.
+  {
+    key: 'reflection-magazine-food',
+    band: 'j',
+    label: 'j03 · 회고 매거진 · 맛집 하루',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="default"
+        magazine={magazineDay(FOOD_DAY)}
+        editableText="오늘의 회고"
+        stats={{
+          visitCount: 4,
+          distanceKm: 12,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 6,
+        }}
+        distanceDash={false}
+        mapNotice={null}
+        hidePhotoGrid={false}
+        photos={[]}
+        dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+        activeDay={2}
+        onSelectDay={noop}
+        recordBar={PREVIEW_RECORD_BAR}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
+      />
+    ),
+  },
+  {
+    key: 'reflection-magazine-culture',
+    band: 'j',
+    label: 'j03 · 회고 매거진 · 문화 하루',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="default"
+        magazine={magazineDay({
+          narrative: '전시와 서점, 골목 카페로 이어진 조용한 하루',
+          visits: [
+            magazineVisit('c1', 1),
+            magazineVisit('c2', 2),
+            magazineVisit('c3', 3),
+          ],
+          slots: [
+            magazineSlot('c1', '국립현대미술관', '문화'),
+            magazineSlot('c2', '북촌 서점', '미술'),
+            magazineSlot('c3', '삼청동 찻집', '카페'),
+          ],
+          payload: magazinePayload(
+            [
+              magazinePhotoScene('c1', '전시를 보며 오래 머물렀다.'),
+              magazinePhotoScene('c2', '책 사이를 천천히 걸었다.'),
+            ],
+            'c1',
+            ['전시', '서점']
+          ),
+        })}
+        editableText="오늘의 회고"
+        stats={{
+          visitCount: 4,
+          distanceKm: 12,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 6,
+        }}
+        distanceDash={false}
+        mapNotice={null}
+        hidePhotoGrid={false}
+        photos={[]}
+        dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+        activeDay={2}
+        onSelectDay={noop}
+        recordBar={PREVIEW_RECORD_BAR}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
+      />
+    ),
+  },
+  {
+    key: 'reflection-magazine-plan-b',
+    band: 'j',
+    label: 'j03 · 회고 매거진 · 일정 변경(PLAN_B) 하루',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="default"
+        magazine={magazineDay({
+          ...FOOD_DAY,
+          payload: magazinePayload(
+            [
+              magazinePhotoScene('p2', '시장의 활기 속에서 먹거리를 둘러봤다.'),
+              {
+                layout: 'EVENT',
+                caption: '비가 와서 야외 일정을 실내로 바꿨어요.',
+                source_event: 'PLAN_B',
+              },
+              magazinePhotoScene('p3', '커피로 잠시 쉬어 갔다.'),
+            ],
+            'p2'
+          ),
+        })}
+        editableText="오늘의 회고"
+        stats={{
+          visitCount: 4,
+          distanceKm: 12,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 6,
+        }}
+        distanceDash={false}
+        mapNotice={null}
+        hidePhotoGrid={false}
+        photos={[]}
+        dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+        activeDay={2}
+        onSelectDay={noop}
+        recordBar={PREVIEW_RECORD_BAR}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
+      />
+    ),
+  },
+  {
+    key: 'reflection-magazine-night',
+    band: 'j',
+    label: 'j03 · 회고 매거진 · 야경 하루',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="default"
+        magazine={magazineDay({
+          narrative: '노을이 지고 불빛이 켜지는 시간까지 걸은 하루',
+          visits: [magazineVisit('n1', 1), magazineVisit('n2', 2)],
+          slots: [
+            magazineSlot('n1', '광안대교 전망대', '야경'),
+            magazineSlot('n2', '수변공원 포차거리', '술집'),
+          ],
+          payload: magazinePayload(
+            [
+              magazinePhotoScene('n1', '다리에 불이 들어오는 걸 한참 봤다.'),
+              magazinePhotoScene('n2', '밤바람을 맞으며 하루를 마무리했다.'),
+            ],
+            'n1',
+            ['야경', '광안대교']
+          ),
+        })}
+        editableText="오늘의 회고"
+        stats={{
+          visitCount: 4,
+          distanceKm: 12,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 6,
+        }}
+        distanceDash={false}
+        mapNotice={null}
+        hidePhotoGrid={false}
+        photos={[]}
+        dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+        activeDay={2}
+        onSelectDay={noop}
+        recordBar={PREVIEW_RECORD_BAR}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
+      />
+    ),
+  },
+  {
+    key: 'reflection-magazine-no-photo',
+    band: 'j',
+    label: 'j03 · 회고 매거진 · 사진 없음',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="data-insufficient"
+        magazine={magazineDay({
+          ...FOOD_DAY,
+          stats: { ...MAGAZINE_STATS, photoCount: 0 },
+        })}
+        editableText="오늘의 회고"
+        stats={{
+          visitCount: 4,
+          distanceKm: 12,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 0,
+        }}
+        distanceDash={false}
+        mapNotice={null}
+        hidePhotoGrid={true}
+        photos={[]}
+        dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+        activeDay={2}
+        onSelectDay={noop}
+        recordBar={PREVIEW_RECORD_BAR}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
+      />
+    ),
+  },
+  {
+    key: 'reflection-magazine-rule-card',
+    band: 'j',
+    label: 'j03 · 회고 매거진 · 규칙 카드(TEXT 장면)',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="data-insufficient"
+        magazine={magazineDay({
+          narrative: '광안리 해변·부평깡통시장 을(를) 다녀왔어요.',
+          visits: [magazineVisit('p1', 1), magazineVisit('p2', 2)],
+          slots: [
+            magazineSlot('p1', '광안리 해변', '명소'),
+            magazineSlot('p2', '부평깡통시장', '맛집'),
+          ],
+          payload: JSON.stringify({
+            cover: {
+              title: '부산 첫날',
+              subtitle: '광안리 해변·부평깡통시장 을(를) 다녀왔어요.',
+            },
+            scenes: [
+              { layout: 'TEXT', caption: '광안리 바다를 오래 봤다' },
+              { layout: 'TEXT', caption: '시장에서 간식을 먹었다' },
+            ],
+          }),
+        })}
+        editableText="오늘의 회고"
+        stats={{
+          visitCount: 2,
+          distanceKm: 3,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 0,
+        }}
+        distanceDash={false}
+        mapNotice={null}
+        hidePhotoGrid={true}
         photos={[]}
         dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
         activeDay={2}
@@ -7227,6 +7568,58 @@ export const PREVIEW_STATES: PreviewState[] = [
         onChangeConcept={noop}
         onBack={noop}
       />
+    ),
+  },
+  // TRIP-1669 — 같이 짜기 '찾는 중심' 영역(Figma 프레임 없음 — 문구·치수는 발명값, 6-b 실화면에서 확정).
+  // 펼친 상태 + 되돌림 안내 + 지역 중심 선택 얼굴(원·기준 핀 없음 — 서버가 좌표를 정한다). 접힌 기본 얼굴은
+  // 위 h10-copick-candidates 에 영역만 더하면 되므로 따로 두지 않았다. 펼침 모양·칩 간격은 jest 사각.
+  {
+    key: 'h10-copick-center-expanded',
+    band: 'h',
+    label: 'h10 · 후보 선택 찾는 중심 펼침·안내',
+    login: null,
+    render: () => (
+      <SlotFillScreen
+        concept="전시"
+        progress={H10_PROGRESS}
+        stepperSlot={H10_STEPPER}
+        mapView={{ center: H10_CENTER, pins: [] }}
+        candidates={H10_DEFAULT_CANDIDATES.slice(0, 2)}
+        candidateViews={H10_DEFAULT_VIEWS}
+        radiusSteps={H10_RADIUS_STEPS}
+        selectedRadiusKey="mid"
+        candidateCountLabel="후보 2곳"
+        selectedPoiId="A1"
+        canExpandRadius
+        isPending={false}
+        errorMessage={null}
+        centerChoice={{
+          selected: 'region',
+          expanded: true,
+          stayAvailable: true,
+          notice: '이 날은 등록한 숙소가 없어서 자동 추천으로 돌아왔어요',
+          onToggleExpanded: noop,
+          onSelect: noop,
+        }}
+        onSelectRadius={noop}
+        onSelectRadio={noop}
+        onConfirm={noop}
+        onExpandRadius={noop}
+        onShrinkRadius={noop}
+        onChangeConcept={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  // TRIP-1669 — '지도에서 찍기' 선택 화면(후보 화면 위에 덮는 absolute 오버레이를 단독으로 본다). 지도는 네이티브라
+  // 사람 재빌드 전엔 미표시. 덮임·터치 차단·핀 정렬은 jest 사각이라 이 키가 육안 그물이다.
+  {
+    key: 'h10-copick-center-point',
+    band: 'h',
+    label: 'h10 · 찾는 중심 지도에서 찍기',
+    login: null,
+    render: () => (
+      <CenterPointPicker center={H10_CENTER} onConfirm={noop} onCancel={noop} />
     ),
   },
   // TRIP-1251 — 후보 응답 전(0건 + 조회 중) 스켈레톤 카드 3장. Figma h10 엔 로딩 변형이 없어 같은 밴드

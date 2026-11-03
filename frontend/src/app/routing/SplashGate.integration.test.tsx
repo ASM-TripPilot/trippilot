@@ -32,7 +32,9 @@ import {
 } from '@/app/model/usePermissionCatchUp';
 import { useGenerationWatch } from '@/app/model/useGenerationWatch';
 import { OnboardingTourPage } from '@/pages/onboarding/onboarding-tour';
-import { getGetTripsTripIdItineraryQueryKey } from '@/shared/api/index.hooks';
+import { getGetTripsQueryKey } from '@/shared/api/index.hooks';
+import type { Trip } from '@/shared/api/index.schemas';
+import { itineraryCols } from '@/test-support/tripItineraryCols';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { promptAndRegisterPush } from '@/shared/push';
 import * as ToastModule from '@/shared/ui/Toast';
@@ -1246,13 +1248,27 @@ describe('SplashGate → 생성 완료 감지 배선 (TRIP-1618)', () => {
   const realGenerationWatch = jest.requireActual(
     '@/app/model/useGenerationWatch'
   ).useGenerationWatch as typeof useGenerationWatch;
-  const key = getGetTripsTripIdItineraryQueryKey('trip-a');
-  const running = itinerary({ tripId: 'trip-a', generationState: 'PARTIAL' });
-  const complete = itinerary({
+  // TRIP-1677 — 감시 대상은 일정 캐시 칸이 아니라 여행 목록(`GET /trips`) 한 칸이다. 여행 A 한 건의 일정 네 칸이 PARTIAL → COMPLETE 로 바뀐다.
+  const key = getGetTripsQueryKey();
+  const tripA = (over: Parameters<typeof itinerary>[0]): Trip => ({
     tripId: 'trip-a',
-    generationState: 'COMPLETE',
-    generationSessionId: null,
+    title: 'A 여행',
+    startDate: '2099-06-10',
+    endDate: '2099-06-13',
+    party: 2,
+    preferenceSnapshot: {},
+    destinations: [{ seq: 1, region: '제주', nights: 3 }],
+    status: 'PLANNED',
+    createdAt: '2026-08-01T00:00:00Z',
+    updatedAt: '2026-08-01T00:00:00Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
+    ...itineraryCols(itinerary({ tripId: 'trip-a', ...over })),
   });
+  const running = [tripA({ generationState: 'PARTIAL' })];
+  const complete = [
+    tripA({ generationState: 'COMPLETE', generationSessionId: null }),
+  ];
 
   let toast: jest.SpyInstance;
 
@@ -1262,7 +1278,7 @@ describe('SplashGate → 생성 완료 감지 배선 (TRIP-1618)', () => {
   });
 
   it('G 하한 전·권한 안내가 붙잡는 동안의 완료는 알리지 않고, 그려진 뒤의 완료는 한 번 알린다', () => {
-    // 준비 — 캐시에 생성 중 칸 하나. 요청이 나가지 않게 캐시를 신선하게 둔다. 권한 안내는 붙잡은 상태로 시작한다.
+    // 준비 — 캐시(여행 목록)에 생성 중 여행 하나. 요청이 나가지 않게 캐시를 신선하게 둔다. 권한 안내는 붙잡은 상태로 시작한다.
     (useGenerationWatch as jest.Mock).mockImplementation(realGenerationWatch);
     toast = jest.spyOn(ToastModule, 'showToast').mockImplementation(() => {});
     queryClient.setDefaultOptions({ queries: { staleTime: Infinity } });

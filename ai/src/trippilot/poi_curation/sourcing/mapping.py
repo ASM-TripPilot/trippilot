@@ -92,6 +92,10 @@ def map_category(kind: str, category_codes: tuple[str, ...]) -> PoiCategory | No
     if _CAMPING_CAT3 in category_codes:
         return None   # 야영장·오토캠핑장 — 위 상수 주석
     lcls1, lcls2 = _lcls(category_codes)
+    if lcls1 == "AC":
+        # 새 분류의 숙박(AC) — 레포츠(28)로 등록된 펜션·캠핑 숙박이 ACTIVITY 로 들어오고 있었다
+        # (수집 통계 `leports_lcls` 11-01: AC/AC05 14). 32 숙박·야영장과 같은 길로 드롭한다.
+        return None
     if kind == "39":
         cafe = _CAFE_CAT3 in category_codes or lcls2 == _CAFE_LCLS2
         return PoiCategory.CAFE if cafe else PoiCategory.FOOD
