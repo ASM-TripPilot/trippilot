@@ -46,6 +46,23 @@ def _apply(payload: dict, ctx: ReminderCopyContext = CTX):
     )
 
 
+@pytest.mark.parametrize("name", ["24시간 해장국", "오분자기 식당", "이십사시간 순대국"])
+def test_allowed_place_name_that_looks_like_a_duration_is_not_dropped(name: str) -> None:
+    # 실제 상호가 소요시간 꼴이면("24시간 해장국"·"오분자기 식당") 모델은 이름을 피할 수 없다. 시각 검사처럼 소요시간 검사도
+    # 허용 장소명을 지운 글을 봐야 그 날 문구가 매번 드롭돼 상수로 굳지 않는다(운영 48시간 게이트 전량 탈락 16건 중 일부).
+    ctx = ReminderCopyContext(allowed=(name,), forbidden=())
+    # 이름이 글머리에 오게 한다 — 앞 글자가 한글이면 `_DURATION` 의 앞 한글 배제가 우연히 지나쳐 수정 전에도 통과한다.
+    out = _apply({"title": f"{name} 가는 날", "body": f"{name}에서 든든하게 시작해요", "places": [name]}, ctx)
+    assert out.value is not None and out.drop_event is None
+
+
+def test_real_duration_outside_the_place_name_is_still_dropped() -> None:
+    # 이름을 지우는 것이 소요시간 표시(INV-3)를 풀어 주면 안 된다 — 이름 밖의 "30분"은 그대로 잡는다.
+    ctx = ReminderCopyContext(allowed=("24시간 해장국",), forbidden=())
+    out = _apply({"title": "오늘의 일정", "body": "24시간 해장국까지 30분 걸려요", "places": ["24시간 해장국"]}, ctx)
+    assert out.value is None and out.drop_event is not None
+
+
 def test_forbidden_place_in_title_is_dropped() -> None:
     # Codex 리뷰(10-20): 다른 날 장소 대조가 본문만 봐서 제목으로 새던 구멍
     out = _apply({"title": "한라산 가는 날", "body": "성산일출봉에서 시작하는 하루예요", "places": ["성산일출봉"]})
