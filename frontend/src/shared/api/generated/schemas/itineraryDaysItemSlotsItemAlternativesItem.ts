@@ -8,6 +8,7 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { ImageLicense } from './imageLicense';
 
 export type ItineraryDaysItemSlotsItemAlternativesItem = {
   poiId: string;
@@ -19,6 +20,7 @@ export type ItineraryDaysItemSlotsItemAlternativesItem = {
   category?: string | null;
   tags?: string[];
   imageUrl?: string | null;
+  imageLicense?: ImageLicense | null;
   lat?: number | null;
   lng?: number | null;
 };

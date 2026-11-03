@@ -28,6 +28,7 @@ import {
   watchMotion,
 } from '@/test-support/barMotionProbe';
 
+import { resetReduceMotionForTests } from '@/shared/lib/reduceMotion';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 import {
@@ -301,6 +302,8 @@ describe('LiveBottomBar · 모프 (BM)', () => {
     expect(visibleIds()).toEqual(FINAL_IDS);
     screen.unmount();
 
+    // 답은 모듈 캐시라(TRIP-1735) 한 테스트 안에서 "아직 답 없음"·다른 답을 보려면 캐시를 비운다.
+    resetReduceMotionForTests();
     deferOsAnswer();
     const waiting = renderBar({ departureTab: 'home' });
     fireEvent.press(screen.getByTestId(BACK));
@@ -310,6 +313,7 @@ describe('LiveBottomBar · 모프 (BM)', () => {
     expect(waiting.onBack).toHaveBeenCalledTimes(1); // OS 답이 끝내 안 와도 이동한다
     screen.unmount();
 
+    resetReduceMotionForTests();
     probe.setReduceMotion(false);
     const noTab = renderBar({});
     await flushOsAnswer();

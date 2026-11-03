@@ -9,7 +9,7 @@ INV-1 화이트리스트의 정본은 backend C7 후보풀 — 본 빌더는 AI�
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import datetime
 
@@ -72,22 +72,24 @@ class CandidatePoolBuilder:
         """반경 규칙을 같은 설정으로 읽어야 하는 쪽(빈 풀 1회 확대)에 내준다 — 기본값을 따로 만들지 않게."""
         return self._cfg
 
+    def admit(self, pois: Iterable[Poi], request: CandidatePoolRequest) -> list[Poi]:
+        """②~④ 자격(예산·영업일·품질)만 — 반경·정렬·절단 없음, 순서 그대로. `build` 와, 풀 밖에서 따로 모은 등록 POI(편집 번역의
+        이름 조회, F9)가 같은 자격을 지난다 — 이름으로 집었다고 풀이 빼는 곳(MINIMAL·여행일 내내 휴무)이 후보가 되지 않는다."""
+        # ② 예산 — avg_cost None=통과 (미확인=배제 안 함), HIGH=무제한
+        limit = self._cfg.budget_limit[request.budget]
+        # ③ 영업일 — 정보 없으면 통과, 여행일 중 하루라도 영업 요일이면 통과
+        travel_dows = {d.weekday() for d in request.dates}
+        # ④ 품질 — MINIMAL 제외
+        return [p for p in pois
+                if (limit is None or p.avg_cost is None or p.avg_cost <= limit)
+                and self._open_on_any(p, travel_dows)
+                and p.quality in _ALLOWED_QUALITY]
+
     def build(self, request: CandidatePoolRequest, now: datetime) -> CandidatePool:
         # ① 반경 (다일 여행 ×0.7) — 규칙은 `base_radius_km` 한 곳
         radius = base_radius_km(request, self._cfg)
-        pois = list(self._db.find_by_radius(request.anchor, radius))
-
-        # ② 예산 — avg_cost None=통과 (미확인=배제 안 함), HIGH=무제한
-        limit = self._cfg.budget_limit[request.budget]
-        if limit is not None:
-            pois = [p for p in pois if p.avg_cost is None or p.avg_cost <= limit]
-
-        # ③ 영업일 — 정보 없으면 통과, 여행일 중 하루라도 영업 요일이면 통과
-        travel_dows = {d.weekday() for d in request.dates}
-        pois = [p for p in pois if self._open_on_any(p, travel_dows)]
-
-        # ④ 품질 — MINIMAL 제외
-        pois = [p for p in pois if p.quality in _ALLOWED_QUALITY]
+        # ②~④ 자격 — 규칙은 `admit` 한 곳
+        pois = self.admit(self._db.find_by_radius(request.anchor, radius), request)
 
         # ④′ 고른 구 안 먼저 (시군구를 골랐을 때만 — 시도·코드 없음은 종전)
         if request.region_codes:

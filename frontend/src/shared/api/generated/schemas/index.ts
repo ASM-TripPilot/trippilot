@@ -80,6 +80,7 @@ export * from './getTripsTripIdItineraryRevisionsParams';
 export * from './getTripsTripIdOpportunitiesParams';
 export * from './getTripsTripIdRecordsParams';
 export * from './getTripsTripIdReplanSessionsPreparedParams';
+export * from './imageLicense';
 export * from './intervalReportRequest';
 export * from './intervalReportRequestEndReason';
 export * from './intervalReportRequestKind';

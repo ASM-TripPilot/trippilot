@@ -238,6 +238,27 @@ class ReplanFacadeServiceTest : StringSpec({
         sent.transportModes shouldBe listOf("렌터카") // 여행이 안 정한 축은 계정
     }
 
+    // TRIP-1709 F7 — 상대는 이 한 값으로 후보 풀 반경·이동 시간을 정한다. 비우면 도보 여행도 대중교통으로 다시 짜고, 뒤이은 편집
+    // 수리(여행 수단으로 잰다)가 그 날을 다시 민다. 고르는 규칙은 생성과 같다 — 상대가 아는 첫 값.
+    "재계획이 그 여행의 수단 중 상대가 아는 첫 값 하나를 싣는다 — 아는 값이 없으면 비운다(상대 기본 대중교통)" {
+        fun tripModes(vararg modes: String) = object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(today, today.plusDays(1))
+            override fun findGenerationContext(accountId: UUID, tripId: UUID) = TripGenerationContext(
+                today, today.plusDays(1), refs("제주"), "친구", 500_000, emptyList(),
+                preferenceSnapshot = mapOf("transportModes" to modes.toList()),
+            )
+        }
+        fun sentMode(trips: TripFacade): String? {
+            val agent = Agent(proposal(replacement))
+            fixture(agent, trips = trips).svc.propose(command())
+            return agent.inputs.single().transportMode
+        }
+
+        sentMode(replanTrips) shouldBe "렌터카"             // 여행이 안 정한 축은 계정 값
+        sentMode(tripModes("택시", "도보")) shouldBe "도보" // 여행 값이 이기고, 상대가 모르는 택시는 건너뛴다
+        sentMode(tripModes("택시")).shouldBeNull()          // 아는 값이 없다
+    }
+
     // ───── 숙소 근처에서 끝내기의 끝점 ─────────────────────────────────────
 
     fun anchorsOn(vararg days: Pair<LocalDate, Double>) = object : BaseAnchorFacade {

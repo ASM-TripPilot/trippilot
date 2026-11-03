@@ -24,8 +24,10 @@ from trippilot.assembly_engine.constraints import open_hours_ok
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.itinerary.itinerary import (
     DaySolution,
+    FixedBlock,
     ItineraryProblem,
     ItinerarySolution,
+    TimeWindow,
     VisitSlot,
 )
 from trippilot.domain.poi.poi import Poi
@@ -121,3 +123,36 @@ def repair(solution: ItinerarySolution, problem: ItineraryProblem,
     # 조용히 떨어뜨렸다 — score(QualityScore) 소실이 실제 사례 (TRIP-329).
     repaired = replace(solution, days=tuple(new_days))
     return RepairResult(repaired=repaired, changes=tuple(changes))
+
+
+def hold_started(solution: ItinerarySolution, problem: ItineraryProblem, now: datetime | None,
+                 ) -> tuple[ItinerarySolution, ItineraryProblem, dict[date, tuple[VisitSlot, ...]]]:
+    """지금(현지·분 올림) 전에 시작한 슬롯을 수리 밖으로 — (줄인 해, 줄인 문제, 날짜별 뺀 슬롯). `now` 가 없으면 그대로.
+
+    오늘의 가장 최근에 시작한 곳(지금 있는 곳)은 남기되 그 시각에 핀한다 — 다음 일정은 거기서 떠나 닿는 시각 이후여야 하고(HC2),
+    이미 시작한 곳을 앵커 출발 하한이 밀면 안 된다. 그보다 먼저 시작한 곳(지난 날 전부 포함)은 빼서 지금 추정기로 다시 재지 않는다 —
+    핀으로만 두면 재검증 HC2 가 지난 간격을 잡아 통째로 수리 불가다(같은 질문을 쓰는 슬롯 후보 적합 판정도 전부 부적합). 편집 ⑤ 와 같은 태도.
+    뺀 곳의 고정 블록도 문제에서 뺀다(HC3 가 빠진 슬롯을 미준수로 잡지 않게).
+    """
+    if now is None:
+        return solution, problem, {}
+    here = next((s for d in solution.days if d.date == now.date()
+                 for s in reversed(d.slots) if s.start_at < now), None)
+    held = {d.date: tuple(s for s in d.slots if s.start_at < now and s is not here) for d in solution.days}
+    held = {day: slots for day, slots in held.items() if slots}
+    if not held and here is None:
+        return solution, problem, {}
+    gone = {(s.poi_id, s.start_at) for slots in held.values() for s in slots}
+    blocks = tuple(fb for fb in problem.fixed_blocks if (fb.poi_id, fb.window.start) not in gone)
+    if here is not None and all((fb.poi_id, fb.window.start) != (here.poi_id, here.start_at) for fb in blocks):
+        blocks += (FixedBlock(here.poi_id, TimeWindow(here.start_at, here.end_at), "started"),)
+    reduced = replace(solution, days=tuple(
+        replace(d, slots=tuple(s for s in d.slots if s not in held.get(d.date, ()))) for d in solution.days))
+    return reduced, replace(problem, fixed_blocks=blocks), held
+
+
+def reattach_started(solution: ItinerarySolution, held: Mapping[date, tuple[VisitSlot, ...]]) -> ItinerarySolution:
+    """뺀 지난 슬롯을 원 시각 그대로 그 날 앞에 되붙인다 — 남은 곳보다 먼저 시작했으므로 정렬이 그대로다."""
+    if not held:
+        return solution
+    return replace(solution, days=tuple(replace(d, slots=held.get(d.date, ()) + d.slots) for d in solution.days))

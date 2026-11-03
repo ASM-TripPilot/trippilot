@@ -175,11 +175,19 @@ def test_fetch_detail_never_carries_spendtime(kind: str) -> None:
     assert "spendtime" not in d.detail_raw and "spendtimeresting" not in d.detail_raw
 
 
-def test_fetch_detail_kind_28_carries_nothing() -> None:
-    """레포츠는 실측에서 상세가 비어 왔다 — 목록이 없으니 무엇이 와도 싣지 않는다."""
+def test_fetch_detail_kind_28_carries_only_pet() -> None:
+    """레포츠는 실측에서 상세가 비어 왔다 — 반려동물 칸만 둔다(그 밖은 무엇이 와도 싣지 않는다)."""
     http = FakeTourApiHttp(intros={"7": envelope([intro_item(
-        "7", "28", "09:00~18:00", "", parkingleports="가능")], 1)})
-    assert _adapter(http).fetch_detail("7", "28").detail_raw == {}
+        "7", "28", "09:00~18:00", "", parkingleports="가능", chkpetleports="가능")], 1)})
+    assert _adapter(http).fetch_detail("7", "28").detail_raw == {"chkpetleports": "가능"}
+
+
+@pytest.mark.parametrize("kind,field", [("12", "chkpet"), ("14", "chkpetculture"), ("38", "chkpetshopping")])
+def test_fetch_detail_carries_pet_field_per_type(kind: str, field: str) -> None:
+    """반려동물 동반 칸은 타입마다 이름이 다르다 — 원문 그대로(KB-5 다시 짜기 후보 사실 칸, 2026-11-02)."""
+    http = FakeTourApiHttp(intros={"7": envelope([intro_item(
+        "7", kind, "09:00~18:00", "연중무휴", **{field: "가능(소형견)"})], 1)})
+    assert _adapter(http).fetch_detail("7", kind).detail_raw[field] == "가능(소형견)"
 
 
 # ── 카테고리 매핑표 (8종 중 NIGHT_VIEW 제외 7종 도달 + 불가 드롭) ──
