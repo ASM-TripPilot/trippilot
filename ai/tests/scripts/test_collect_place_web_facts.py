@@ -53,8 +53,15 @@ def test_targets_fill_what_nothing_else_covers_first() -> None:
 
 
 def test_facility_facts_that_only_look_like_hours_or_praise_survive() -> None:
-    ok = ["무료 주차장이 있다", "오픈 주방 구조", "추천 메뉴는 보말칼국수"]
+    ok = ["오픈 주방 구조", "추천 메뉴는 보말칼국수", "창가 좌석이 있다"]
     assert [f["text"] for f in c.clean_facts(_rec(*[(t, "u1", None) for t in ok]))] == ok
+
+
+def test_parking_facts_are_dropped_because_web_pages_get_them_wrong() -> None:
+    """11-03 인용 원문 대조: 주차 4/25 가 근거 없음·다른 말(그 밖 5%) — 웹 사실에서만 뺀다."""
+    bad = ["무료 주차장이 있다", "매장 앞에 주차공간이 있음", "전용 주차장 1대와 인근 골목 주차 이용 가능"]
+    assert c.clean_facts(_rec(*[(t, "u1", None) for t in bad], ("바 좌석이 있음", "u1", None))) == \
+        [{"text": "바 좌석이 있음", "url": "u1", "host": "", }]
 
 
 def test_citation_match_ignores_percent_encoding_and_trailing_slash() -> None:
