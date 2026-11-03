@@ -2,23 +2,37 @@ import { useEffect, useState } from 'react';
 import { AccessibilityInfo, type Animated } from 'react-native';
 
 /**
+ * 기기 "동작 줄이기" 답을 받는 원시 함수(TRIP-1734). OS 답이 오면 `onAnswer(reduce)` 를 한 번 부른다. 답은 Promise 라
+ * 늦게 오므로, 그 전에 반환 함수(정리)가 불리면 답을 버린다. 이 파일만 OS 에 직접 묻는다(eslint 잠금) — 애니메이션
+ * 객체가 아니라 답 그 자체가 필요한 자리(하단 바 모프)가 쓴다.
+ */
+export function onReduceMotionAnswer(
+  onAnswer: (reduce: boolean) => void
+): () => void {
+  let active = true;
+  void AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
+    if (active) onAnswer(reduce);
+  });
+  return () => {
+    active = false;
+  };
+}
+
+/**
  * 기기 "동작 줄이기" 공용 게이트(TRIP-1125). 켜져 있으면 `animation` 을 시작하지 않고 `onReduce` 만
- * 부른다(정지 모양을 보이는 자리에 둘 때). 답은 Promise 라 늦게 오므로, 그 전에 반환 함수(정리)가
- * 불리면 시작하지 않는다. 답을 모듈에 캐시하지 않는다 — 부를 때마다 새로 묻는다. 설정을 켜고 끄는
- * 순간의 실시간 반영(구독)은 범위 밖이다.
+ * 부른다(정지 모양을 보이는 자리에 둘 때). 답이 오기 전에 반환 함수(정리)가 불리면 시작하지 않는다. 답을 모듈에
+ * 캐시하지 않는다 — 부를 때마다 새로 묻는다. 설정을 켜고 끄는 순간의 실시간 반영(구독)은 범위 밖이다.
  */
 export function startUnlessReduceMotion(
   animation: Animated.CompositeAnimation,
   onReduce?: () => void
 ): () => void {
-  let active = true;
-  void AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
-    if (!active) return;
+  const cancel = onReduceMotionAnswer((reduce) => {
     if (reduce) onReduce?.();
     else animation.start();
   });
   return () => {
-    active = false;
+    cancel();
     animation.stop();
   };
 }
@@ -30,14 +44,6 @@ export function startUnlessReduceMotion(
  */
 export function useReduceMotion(): boolean | null {
   const [reduce, setReduce] = useState<boolean | null>(null);
-  useEffect(() => {
-    let active = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((v) => {
-      if (active) setReduce(v);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
+  useEffect(() => onReduceMotionAnswer(setReduce), []);
   return reduce;
 }
