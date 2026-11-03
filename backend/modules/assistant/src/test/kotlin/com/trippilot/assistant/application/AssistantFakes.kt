@@ -355,11 +355,13 @@ internal class CapturingEvents : com.trippilot.core.event.DomainEventPublisher {
 internal class FakeLocation(var consent: Boolean = false) :
     com.trippilot.auth.api.LocationConsentFacade, com.trippilot.auth.api.LocationLegalLogFacade {
     var failRecord = false
+    var onRecord: () -> Unit = {} // 기록에 드는 시간을 흉내 낸다(시계를 민다)
     val uses = mutableListOf<Triple<UUID, com.trippilot.auth.api.LocationUsePurpose, UUID>>()
     override fun hasGpsRecordingOptIn(accountId: UUID) = false
     override fun hasLocationLegalConsent(accountId: UUID) = consent
     override fun recordUse(accountId: UUID, purpose: com.trippilot.auth.api.LocationUsePurpose, subjectId: UUID) {
         check(!failRecord) { "legal log down" }
+        onRecord()
         uses += Triple(accountId, purpose, subjectId)
     }
     override fun recordCollection(accountId: UUID, source: com.trippilot.auth.api.LocationCollectionSource, subjectId: UUID, pointCount: Int?) =
