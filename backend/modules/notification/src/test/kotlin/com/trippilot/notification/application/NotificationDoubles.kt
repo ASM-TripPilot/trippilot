@@ -152,10 +152,10 @@ internal class FakeSchedules : NotificationScheduleRepository {
         stored.filter { it.tripId == tripId && it.firedAt == null && it.canceledAt == null }.sortedBy { it.fireAt }
 
     /** 조건부 쓰기 — 문구가 이미 있는 행·발화/취소된 행·지워진 행은 바뀌지 않는다(실 DB 의 WHERE 절과 같은 조건). */
-    override fun attachCopy(scheduleId: UUID, title: String, body: String): Boolean {
+    override fun attachCopy(scheduleId: UUID, title: String, body: String, copyBasis: String): Boolean {
         val i = stored.indexOfFirst { it.scheduleId == scheduleId && it.firedAt == null && it.canceledAt == null && !it.hasCopy }
         if (i < 0) return false
-        stored[i] = stored[i].copy(title = title, body = body)
+        stored[i] = stored[i].copy(title = title, body = body, copyBasis = copyBasis)
         return true
     }
 

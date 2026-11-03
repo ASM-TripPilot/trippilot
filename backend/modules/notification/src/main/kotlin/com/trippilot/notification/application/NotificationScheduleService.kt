@@ -1,5 +1,6 @@
 package com.trippilot.notification.application
 
+import com.trippilot.notification.domain.CopyBasis
 import com.trippilot.notification.domain.NotificationKind
 import com.trippilot.notification.domain.NotificationSchedule
 import com.trippilot.notification.domain.NotificationScheduleRepository
@@ -106,7 +107,10 @@ class NotificationScheduleService(
         }
         // 우리 행 id 로만 찾는다 — 상대가 보낸 적 없는 키를 돌려줘도 엉뚱한 행에 붙지 않는다.
         val attached = lacking.count { row ->
-            received[row.scheduleId.toString()]?.let { schedules.attachCopy(row.scheduleId, it.title, it.body) } == true
+            // 지문은 **물을 때 실은 재료**로 만든다 — 그 사이 일정이 바뀌었으면 발화가 어긋남을 알아본다.
+            received[row.scheduleId.toString()]?.let {
+                schedules.attachCopy(row.scheduleId, it.title, it.body, basisOf(row, placesByDate))
+            } == true
         }
         val remaining = lacking.size - attached
         log.info(
@@ -148,10 +152,11 @@ class NotificationScheduleService(
         planned: List<NotificationSchedule>,
     ): List<NotificationSchedule> {
         if (!copies.enabled || planned.isEmpty()) return planned
+        // 한 번만 묻는다 — 예약마다 부르면 여행 일수만큼 조회가 늘고, 그 사이 일정이 바뀌면
+        // 같은 적재 안에서 날짜별로 다른 일정을 말하게 된다.
+        var placesByDate: Map<LocalDate, List<PlannedPlaceView>> = emptyMap()
         val received = runCatching {
-            // 한 번만 묻는다 — 예약마다 부르면 여행 일수만큼 조회가 늘고, 그 사이 일정이 바뀌면
-            // 같은 적재 안에서 날짜별로 다른 일정을 말하게 된다.
-            val placesByDate = plans.findPlannedPlaces(trip.accountId, tripId)
+            placesByDate = plans.findPlannedPlaces(trip.accountId, tripId)
             // 여행 제목은 trip.api 가 아직 안 준다 — 상대는 선택 필드로 받는다
             copies.copiesFor(tripTitle = null, items = planned.map { requestOf(it, placesByDate) })
         }.onFailure { log.warn("리마인드 문구를 받지 못했습니다 — 상수 문구로 갑니다.", it) }
@@ -160,10 +165,15 @@ class NotificationScheduleService(
         if (received.isEmpty()) return planned
         return planned.map { row ->
             received[row.scheduleId.toString()]
-                ?.let { row.copy(title = it.title, body = it.body) }
+                // 문구를 만들 때 본 그날 장소 목록의 지문을 같이 남긴다 — 발화가 지금 일정과 대조해 낡은 이름이 나가지 않게 한다.
+                ?.let { row.copy(title = it.title, body = it.body, copyBasis = basisOf(row, placesByDate)) }
                 ?: row
         }
     }
+
+    /** 그날 장소 이름 목록의 지문 — 문구에 실리는 순서 그대로(요청의 slots 와 같은 소스다). */
+    private fun basisOf(row: NotificationSchedule, placesByDate: Map<LocalDate, List<PlannedPlaceView>>): String =
+        CopyBasis.of(placesByDate[row.subjectDate()].orEmpty().map { it.nameKo })
 
     private fun requestOf(row: NotificationSchedule, placesByDate: Map<LocalDate, List<PlannedPlaceView>>): ReminderCopyRequest {
         val subject = subjectDate(row)
@@ -180,10 +190,7 @@ class NotificationScheduleService(
      * 말하므로 여행 첫날을 가리킨다. 발화일을 그대로 넘기면 아직 시작도 안 한 날의 일정을 묻게 되고,
      * 그 날은 슬롯이 없어 **재료가 비어 문구가 통째로 안 나온다**(어댑터가 빈 재료를 거른다).
      */
-    private fun subjectDate(row: NotificationSchedule): LocalDate {
-        val fired = row.fireAt.atZone(TRAVEL_ZONE).toLocalDate()
-        return if (row.kind == NotificationKind.TRIP_PRE) fired.plusDays(1) else fired
-    }
+    private fun subjectDate(row: NotificationSchedule): LocalDate = row.subjectDate()
 
     private fun fireAt(date: LocalDate): Instant = date.atTime(REMIND_TIME).atZone(TRAVEL_ZONE).toInstant()
 
@@ -191,7 +198,7 @@ class NotificationScheduleService(
         private val log = LoggerFactory.getLogger(NotificationScheduleService::class.java)
 
         /** 여행지 기준 시각. 사용자의 기기 시간대가 아니라 여행이 벌어지는 곳의 아침이어야 한다. */
-        private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
+        private val TRAVEL_ZONE: ZoneId = NotificationSchedule.TRAVEL_ZONE
 
         /**
          * BR-U6-04 는 `TRIP_DAY` 를 "당일 오전 기본 8시"로 못박고 `TRIP_PRE` 는 "D-1" 까지만 정한다.
