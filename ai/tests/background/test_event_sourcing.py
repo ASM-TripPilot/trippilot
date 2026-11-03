@@ -667,3 +667,28 @@ def test_권위_없는_입력은_종전대로_선입_우선이다(tmp_path) -> N
     store.upsert("부산", (_ev("evx-2", "부산불꽃축제"),), _NOW)
     (only,) = store.search_events(_TODAY, _TODAY)[0]
     assert only.event_id == "evx-1"
+
+
+# ── 실행 판정 — 전 지역 LLM 폴백은 잡 실패 (10-24~ 401 전멸이 초록으로 지나간 것) ──────────
+
+
+@pytest.mark.parametrize(("fallbacks", "expected"), [
+    ((True, True, True), 1),     # 전멸 — 키·엔드포인트 고장
+    ((True, False, True), 0),    # 일부 폴백 — 경고만
+    ((False, False, False), 0),
+    ((), 0),                     # 하드캡 조기 종료로 지역 0 — LLM 실패 아님
+])
+def test_check_extraction_fails_only_when_every_region_fell_back(
+    fallbacks: tuple[bool, ...], expected: int, capsys,
+) -> None:
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
+    from collect_events import check_extraction
+
+    run = {"regions": [{"region": f"r{i}", "fallback": f, "error": "401" if f else None}
+                       for i, f in enumerate(fallbacks)]}
+    assert check_extraction(run) == expected
+    out = capsys.readouterr().out
+    assert ("::error::" in out) == (expected == 1)
+    assert ("::warning::" in out) == (expected == 0 and any(fallbacks))

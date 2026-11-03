@@ -143,3 +143,7 @@ jobs:
             ai/collected_events.json
             ai/collect_events_run.json
           retention-days: 30
+      # 마지막에 둔다 — 전멸이어도 위의 축제·팝업·만료 청소는 영속된 뒤에 빨갛게 한다.
+      - name: LLM 추출 판정 (전 지역 폴백이면 실패)
+        if: steps.collect.outputs.skipped != 'true'
+        run: uv run python scripts/collect/collect_events.py --check collect_events_run.json
