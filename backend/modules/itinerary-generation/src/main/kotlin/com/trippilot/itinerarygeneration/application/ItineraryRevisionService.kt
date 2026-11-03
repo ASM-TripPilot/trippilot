@@ -107,7 +107,7 @@ class ItineraryRevisionService(
         val draftDays = target.snapshot.toDays(fixedFrom = preview)
         // AI 가 죽어도 되돌리기는 막지 않는다 — 다만 판정을 못 했으면 "위반 없음"이라 말하지 않는다(Revalidation 참고).
         val verdict = Revalidation.attempt(
-            scheduleAgent, draftDays.toOutput(preview, clock.instant()), tripId, repairContexts.transportModes(accountId, tripId),
+            scheduleAgent, draftDays.toOutput(preview, clock.instant()), tripId, repairContexts.forRevalidation(accountId, tripId),
         )
 
         return tx.execute {

@@ -1,5 +1,7 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.PersonalizationPort
+import com.trippilot.itinerarygeneration.domain.PersonalizationHints
 import com.trippilot.placedata.api.RegionCenter
 import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.profile.api.PreferenceFacade
@@ -28,5 +30,8 @@ internal fun modesOnlyRepairContexts(trips: TripFacade, modes: List<String> = em
     object : PreferenceFacade {
         override fun findPreferences(accountId: UUID) =
             PreferenceSnapshot(emptyList(), emptyList(), emptyList(), modes, null, emptyList(), false, null)
+    },
+    object : PersonalizationPort {
+        override fun hintsFor(accountId: UUID) = PersonalizationHints.NONE
     },
 )
