@@ -89,11 +89,13 @@ _INTRO_FIELDS: Mapping[str, tuple[str, str]] = {
 # `usefee`·`parkingfee` 는 가격 캐싱(D13/G195)이 아니라 POI 속성이다(팀 결정) —
 # `avg_cost` 로 흐르지 않고 provenance 에만 남는다. `heritage1~3` 은 "0"/"1" 플래그로,
 # 문자열이 아니어도 원문 그대로다(해석은 소비처 몫).
-# 28(레포츠)은 실측에서 응답 자체가 비어 있어 목록이 없다 — 원천 결손, 지어내지 않는다.
+# 28(레포츠)은 실측에서 응답이 비어 있어 반려동물 칸만 둔다(빈 값은 키가 안 생긴다 — 원천 결손, 지어내지 않는다).
+# 반려동물 동반(`chkpet*` — 타입마다 이름이 다르다)은 다시 짜기 후보 고르기의 사실 칸이다(KB-5 요청, 2026-11-02).
 _DETAIL_FIELDS: Mapping[str, tuple[str, ...]] = {
-    "12": ("parking", "heritage1", "heritage2", "heritage3", "chkbabycarriage"),
-    "14": ("usefee", "parkingfee"),
-    "38": ("saleitem", "fairday"),
+    "12": ("parking", "heritage1", "heritage2", "heritage3", "chkbabycarriage", "chkpet"),
+    "14": ("usefee", "parkingfee", "chkpetculture"),
+    "28": ("chkpetleports",),
+    "38": ("saleitem", "fairday", "chkpetshopping"),
     "39": ("firstmenu", "treatmenu", "reservationfood", "parkingfood",
            "kidsfacility", "packing"),
 }
@@ -304,6 +306,21 @@ class TourApiAdapter:
         items = self._items(body)
         first = items[0] if items and isinstance(items[0], dict) else {}
         return self._opt_str(first.get("overview"))
+
+    def fetch_course(self, content_id: str) -> tuple[tuple[str, str, int | None], ...]:
+        """여행코스(25) 구성 — `detailInfo2` 의 (subcontentid, subname, subnum), subnum 순. HTTP 1건.
+
+        번호 없는 칸은 뺀다(공유본에 이을 수 없다). subnum 이 숫자가 아니면 None 으로 맨 뒤 — 순서를 지어내지 않는다.
+        """
+        body = self._call("detailInfo2", {**self._common_params(), "contentId": content_id,
+                                          "contentTypeId": "25"})
+        out: list[tuple[str, str, int | None]] = []
+        for item in self._items(body):
+            if not isinstance(item, dict) or not (sub := self._opt_str(item.get("subcontentid"))):
+                continue
+            num = self._opt_str(item.get("subnum"))
+            out.append((sub, self._opt_str(item.get("subname")) or "", int(num) if num and num.isdigit() else None))
+        return tuple(sorted(out, key=lambda m: (m[2] is None, m[2] or 0)))
 
     # ── 내부 ─────────────────────────────────────────
     def _call(self, endpoint: str, params: Mapping[str, str]) -> dict:
