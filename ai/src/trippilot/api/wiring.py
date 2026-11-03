@@ -171,7 +171,7 @@ from trippilot.agents.planb.place_knowledge import kb5_counts
 from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest, SavedPlace
 from trippilot.agents.schedule.agent import ScheduleAgent, trim_planb_rank_for_add_one
 from trippilot.agents.schedule.family import normalize_name, same_place
-from trippilot.agents.schedule.outcome import _wanted_categories
+from trippilot.agents.schedule.outcome import _wanted_categories, activity_walk_cap
 from trippilot.agents.planb.directives import (
     DirectiveSpec,
     index_of,
@@ -209,7 +209,7 @@ from trippilot.llm_gateway.workers.preference.preference_cache import CachingSco
 from trippilot.poi_curation import place_fallback
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.place_fees import load_fee_table
-from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql
+from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql, pick_said
 from trippilot.poi_curation.pool_builder import (
     CandidatePoolBuilder, base_radius_km, restrict_pool_to_target_role, widened_radius_km)
 from trippilot.orchestrator.schedule import schedule_coordinator as core
@@ -219,6 +219,7 @@ from trippilot.llm_gateway.gates.dialogue.intent import IntentGate
 from trippilot.llm_gateway.gates.dialogue.paraphrase import ParaphraseGate
 from trippilot.orchestrator.dialogue.dialogue_interpreter import BankIndex, CountingLlm, DialogueInterpreter
 from trippilot.orchestrator.dialogue.dialogue_orchestrator import DialogueOrchestrator
+from trippilot.orchestrator.dialogue.place_sql import PlaceSqlLookup
 from trippilot.orchestrator.intent.intent_router import IntentRouter
 from trippilot.orchestrator.intent.question_bank import BankEntry, BankVectors
 from trippilot.providers.poi_info import PoiInfoProvider
@@ -321,6 +322,14 @@ def _deadline_budget(meta: schemas.RequestMetaSchema) -> int:
 
 def _tz_aware(value: datetime, tz: timezone) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=tz)
+
+
+def _local_minute_ceil(value: datetime, tz: timezone) -> datetime:
+    """요청 시각 → 현지 '지금'(분 올림). 편집 `EditAgent._floor`·조립 `not_before_floor` 와 같은 규칙 —
+    백엔드는 UTC(…Z)로 보내므로 현지로 옮기지 않으면 날짜·시각이 9시간 어긋난다(#1724 의 13:10→04:10)."""
+    local = _tz_aware(value, tz).astimezone(tz)
+    minute = local.replace(second=0, microsecond=0)
+    return minute if minute == local else minute + timedelta(minutes=1)
 
 
 def _domain_reflection_request(
@@ -493,11 +502,7 @@ def _domain_generate_request(
     days = tuple(sorted({w.date for w in request.time_windows}))
     # 창은 일자마다 다르다(도착일 15시부터·출발일 12시까지, TRIP-1389) — 일자별로 넘긴다.
     # `day_window`(공용)는 첫 일자의 창 — 일자별 창이 없는 날·시간대 기준으로만 쓰인다.
-    day_windows = {
-        w.date: TimeWindow(start=datetime.combine(w.date, w.start, tzinfo=tz),
-                           end=datetime.combine(w.date + timedelta(days=w.overnight), w.end, tzinfo=tz))
-        for w in request.time_windows
-    }
+    day_windows = _day_windows(request.time_windows, tz)
     day_window = day_windows[days[0]]
     # 와이어에 사용자 식별자가 없다 — trip_id 파생 principal로 소유자 검사(D31)를
     # 자기 참조로 통과시키고, 페르소나 실체는 주입된 ContextStore가 공급한다.
@@ -786,30 +791,32 @@ _EXPLAIN_DAY_WORKERS = 8
 
 
 def _explain_days(
-    explainer: ExplanationWorker,
+    explainer: ExplanationWorker | AlternativeExplanationWorker,
     pool: CandidatePool,
-    chunks: Sequence[tuple[PoiId, ...]],
+    chunks: Sequence[tuple],  # 날마다 워커가 받는 그대로 — 슬롯 POI 들 | (슬롯, 선택지) 쌍들
     persona: PersonaSummary,
     trace_id: TraceId,
     now: datetime,
     *,
     budget_ms: int,
+    fallback_prefix: str = "explanation_fallback",
 ) -> list[tuple[PoiExplanation, ...] | str]:
-    """날 묶음마다 설명 — 묶음 순서대로 (설명 | 실패 사유). 사유 어휘는 종전 한 번 호출 그대로다.
+    """날 묶음마다 설명 — 묶음 순서대로 (설명 | 실패 사유). 사유 어휘는 종전 한 번 호출 그대로다(폴백 사유의
+    머리가 `fallback_prefix` — 차선책 문장은 `alternative_explanation_fallback`, TRIP-1709).
 
     하루짜리는 이 스레드에서 한 번 부른다(종전 그대로). 여러 날은 풀에서 나란히 돌고 묶음마다 같은 예산을
     받으므로 시한은 합이 아니라 최댓값이다 — 줄 서서 늦게 시작한 날이 그 시한을 넘기지 않게 기다림도 같은
     예산에서 끊는다(못 끝난 날은 `deadline:` 사유, 줄 선 것은 취소하고 도는 것은 결과를 버린다 —
     `route_budget.measure_within` 선례).
     """
-    def one(chunk: tuple[PoiId, ...]) -> tuple[PoiExplanation, ...] | str:
+    def one(chunk: tuple) -> tuple[PoiExplanation, ...] | str:
         try:
             result = explainer.explain(
                 pool, chunk, persona, trace_id, now, timeout_sec=budget_ms / 1000.0)
         except Exception as e:  # 설정 버그 등 — 그 묶음은 설명 없음으로 정직 보고
             return f"explain_error: {type(e).__name__}: {e}"
         if result.is_fallback or not result.value:
-            return f"explanation_fallback: {result.error}"
+            return f"{fallback_prefix}: {result.error}"
         return result.value
 
     if len(chunks) == 1:
@@ -1945,6 +1952,24 @@ def _inline_persona(
     return persona
 
 
+def _plan_less_walk_cap(persona: PersonaSummary | None, transport: TransportMode) -> float | None:
+    """계획 없는 추정(편집 ④⑤·validate·repair)의 도보 상한 — 액티비티 취향 **대중교통** 여행이면 생성과 같은 1.0km, 아니면 None(설정 기본 700m).
+
+    판정은 생성(`ScheduleAgent` ④)과 같은 함수(`activity_walk_cap`)다 — 둘이 갈리면 생성이 걸어서 잡은 구간을 재검증이 HC2 로 친다.
+    자차는 걸지 않는다: 생성의 자차는 주차 계획으로 재는데, 계획 없는 자차가 1.0km 까지 걸으면 거점 사이를 운전한 0.83~1.0km 구간을
+    더 길게(걷기로) 요구해 손 안 댄 구간이 HC2 가 된다(`TravelEstimator` 의 '계획 없는 자차는 더 요구하지 않는다'). 도보 여행은 상한을 읽지 않는다."""
+    if transport is not TransportMode.PUBLIC:
+        return None
+    return activity_walk_cap(persona)
+
+
+def _day_windows(windows: Sequence[schemas.TimeWindowSchema], tz: timezone) -> dict[date, TimeWindow]:
+    """와이어 날마다 창 → 도메인 창(자정을 넘는 끝은 다음 날 — `TimeWindowSchema.overnight`). generate·edit 가 같은 변환을 쓴다."""
+    return {w.date: TimeWindow(start=datetime.combine(w.date, w.start, tzinfo=tz),
+                               end=datetime.combine(w.date + timedelta(days=w.overnight), w.end, tzinfo=tz))
+            for w in windows}
+
+
 def _persona_gap(
     profile: schemas.PreferenceProfileSchema | None, inline: PersonaSummary | None,
 ) -> str | None:
@@ -1996,8 +2021,11 @@ class WiredItineraryOrchestrator:
         memory_store: MemoryStorePort | None = None,
         dialogue_orchestrator: DialogueOrchestrator | None = None,
         holidays: HolidaySource | None = None,
+        place_names: PlaceSqlLookup | None = None,
     ) -> None:
         self._orchestrator = orchestrator
+        # 등록 장소 이름 조회(poi_public, LLM 0) — 편집 번역의 풀 밖 이름 장소(F9). None = 장소 DB 미배선(받은 풀만 — 종전)
+        self._place_names = place_names
         # 공휴일 휴무(상황 감지 H1) — 진입점이 요청당 1회 부른다. 미주입 = off(None, 조회 0회).
         self._holidays = holidays if holidays is not None else HolidaySource()
         # generate 와이어 변환에만 싣는 지터 폭 (TRIP-1180) — 설정의 상한 관계를 통과한 값.
@@ -2291,7 +2319,9 @@ class WiredItineraryOrchestrator:
         )
         # 수단은 선택 필드(2026-10-30) — repair 와 같은 칸·규칙. 없으면 종전(PUBLIC).
         problem = replace(problem, transport=_transport_of(request.transport_modes))
-        facade = self._assembly_provider.for_pool(poi_index)
+        # 취향도 선택 필드(2026-11-03) — 액티비티 취향 대중교통 여행이면 생성과 같은 도보 상한으로 HC2 를 잰다. 없으면 종전(700m)
+        walk_cap = _plan_less_walk_cap(_inline_persona(request.preference_profile, None), problem.transport)
+        facade = self._assembly_provider.for_pool(poi_index, walk_max_km=walk_cap)
         return WiredValidateOutcome(
             violations=tuple(facade.validate(
                 solution, problem, _deadline_budget(request.request_meta),
@@ -2313,17 +2343,21 @@ class WiredItineraryOrchestrator:
             w.date: (anchors[w.date], datetime.combine(w.date, w.start, tzinfo=self._tz))
             for w in request.time_windows if w.date in anchors
         }
-        facade = self._assembly_provider.for_pool(poi_index)
+        # validate 와 같은 도보 상한(2026-11-03) — 수리는 모자란 간격만 앞으로 미므로, 다른 상한으로 재면 생성이 걸어서 잡은 구간을 민다
+        walk_cap = _plan_less_walk_cap(_inline_persona(request.preference_profile, None), problem.transport)
+        facade = self._assembly_provider.for_pool(poi_index, walk_max_km=walk_cap)
+        # 지금 = 요청 시각(백엔드가 부르는 순간의 시계, 편집 경계 `now` 와 같은 값) — 그보다 먼저 시작한 곳은 수리·재검증 밖(TRIP-1709 F1)
         result = facade.repair(
             solution, problem, _deadline_budget(request.request_meta),
             TraceId(request.request_meta.request_id), departures=departures,
+            now=_local_minute_ceil(request.request_meta.requested_at, self._tz),
         )
         repaired = result.repaired
         if repaired is not None:
             # 편집(장소 교체) 뒤 바뀐 구간의 거리 — generate 와 같은 렌더·시한 회계다. 앵커가
             # 없는 날의 첫 슬롯은 null, 수단은 수리가 시각 계산에 쓴 것(problem.transport).
             coords = {pid: poi.coord for pid, poi in poi_index.items()}
-            walk = self._walk_first(None)
+            walk = self._walk_first(walk_cap)  # 수리가 시각에 쓴 것과 같은 상한 — 시각과 '도보·대중교통' 이름표가 어긋나지 않게
             (distance_ranges,), _ = self._render_distances(
                 lambda port: (_distance_ranges(repaired, anchors, coords, walk(port), problem.transport),),
                 request.request_meta, entered_ms,
@@ -4065,30 +4099,43 @@ class WiredItineraryOrchestrator:
 
         선택지가 풀(정본) 밖이면 설명하지 않는다(INV-1 — 지어내지 않는다). 확정 슬롯 POI 는
         컨텍스트일 뿐이라 미등록이어도 쌍을 버리지 않는다. 잔여가 하한(에이전트 ⑤·⑥′ 와
-        같은 `explanation_min_ms`) 미만이면 부르지 않는다(DL-2).
+        같은 `explanation_min_ms`) 미만이면 부르지 않는다(DL-2). 여러 날이면 날마다 나란히 부른다(`_explain_days`,
+        잔여 예산을 날마다 같이) — 일부 날만 실패하면 성공한 날 문장 + `alternative_explanation_partial` 사유다.
         """
         if not pairs:
             return {}, None
         if self._alt_explainer is None:
             return {}, "alternative_explainer_absent"  # 기능 부재 — 백엔드는 템플릿을 쓴다
-        usable = tuple(
-            (PoiId(s), PoiId(a)) for _, s, a in pairs if pool.contains(PoiId(a))
-        )
-        if not usable:
+        # 날 단위 묶음 — 배치 설명의 날 묶음과 같은 이유다(TRIP-1709: 여행 전체 쌍을 한 번에 보내면 출력이 상한 4096 을
+        # 넘어 잘리고 그 여행 문장이 0건 — 개발 서버 sonnet-5-5 14회 중 2회). 같은 선택지는 처음 나온 날 묶음에서 한 번 —
+        # 문장은 선택지당 하나라 다른 날 키에도 같은 문장이 붙는다(워커의 "같은 선택지는 첫 쌍만"과 같은 결과).
+        seen: set[PoiId] = set()
+        by_day: dict[str, list[tuple[PoiId, PoiId]]] = {}
+        for d, s, a in pairs:
+            if pool.contains(PoiId(a)) and not (PoiId(a) in seen or seen.add(PoiId(a))):
+                by_day.setdefault(d, []).append((PoiId(s), PoiId(a)))
+        if not by_day:
             return {}, "no_registered_alternatives"
         if remaining_ms < core.OrchestratorConfig().explanation_min_ms:
             return {}, f"deadline:remaining={remaining_ms}ms"
-        try:
-            result = self._alt_explainer.explain(
-                pool, usable, persona, trace_id, now, timeout_sec=remaining_ms / 1000.0)
-        except Exception as e:  # 설정 버그 등 — 문장 없음으로 정직 보고
-            return {}, f"explain_error: {type(e).__name__}: {e}"
-        if result.is_fallback or not result.value:
-            return {}, f"alternative_explanation_fallback: {result.error}"
-        texts = {x.poi_id: x.text for x in result.value if pool.contains(x.poi_id)}
+        outcomes = _explain_days(
+            self._alt_explainer, pool, [tuple(c) for c in by_day.values()], persona, trace_id, now,
+            budget_ms=remaining_ms, fallback_prefix="alternative_explanation_fallback")
+        failed = [o for o in outcomes if isinstance(o, str)]
+        if failed and len(outcomes) > 1:  # 부분 실패·시한에 끊긴 날도 로그로 남긴다(`explanation_partial` 과 같은 모양)
+            _logger.info("alternative_explanation_partial %s", json.dumps({
+                "trace_id": str(trace_id), "failed": len(failed), "days": len(outcomes), "first": failed[0],
+            }, ensure_ascii=False))
+        if len(failed) == len(outcomes):  # 전부 실패 — 빈 맵 + 사유(하루짜리는 사유도 종전 문자열 그대로)
+            return {}, (failed[0] if len(failed) == 1
+                        else f"alternative_explanation_fallback: 실패 {len(failed)}/{len(outcomes)} — {failed[0]}")
+        texts = {x.poi_id: x.text for o in outcomes if not isinstance(o, str)
+                 for x in o if pool.contains(x.poi_id)}
         keyed = {
             f"{d}#{a}": texts[PoiId(a)] for d, _, a in pairs if PoiId(a) in texts
         }
+        if failed:  # 일부 날만 실패 — 성공한 날 문장은 싣고 실패는 사유로(INV-4 침묵 금지). 실패한 날은 템플릿 그대로
+            return keyed, f"alternative_explanation_partial: 실패 {len(failed)}/{len(outcomes)} — {failed[0]}"
         return keyed, (None if keyed else "alternative_explanation_empty")
 
     def edit(
@@ -4110,6 +4157,11 @@ class WiredItineraryOrchestrator:
         )
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
+        # 여행 컨텍스트(2026-11-03, 선택) — 취향은 규칙에만(①a 순위·①b 규칙 점수), 도보 상한은 생성과 같은 판정, 창은 빈 날 시작만.
+        # 셋 다 없으면 종전과 같다(취향 없음·700m·빈 날 10:00·'N일차'는 받은 일정의 첫 날부터)
+        persona = _inline_persona(request.preference_profile, None)
+        walk_cap = _plan_less_walk_cap(persona, transport)
+        windows = _day_windows(request.time_windows, self._tz)
         # 수집은 요구표 경유 (2026-09-16) — EDIT 행은 Place 하나뿐이지만, 풀 빌더
         # 직행 대신 PlaceProvider 를 거치면서 FreshnessMeta·ProviderStatus 가 붙는다.
         # 조회 실패가 예외로 튀지 않고 상태값으로 수렴한다(INV-4).
@@ -4159,13 +4211,38 @@ class WiredItineraryOrchestrator:
             utterance=request.utterance,
             command=command,
             confirm=request.confirm,
+            excluded=frozenset(PoiId(x) for x in request.excluded_poi_ids),  # "다른 데는?" — 앞서 보인 곳(spec 003 FR-015)
             # 사이 넣기 구간 풀 — 같은 요구표·공급자로 그 날만 한 번 더 모은다(INV-1). 에이전트가 자리를 코드로 풀었을 때만 부른다
             segment_pool=lambda center, km: self._pool_from(self._info.collect(Intent.EDIT_SCHEDULE, {"pool_request": replace(
                 pool_request, anchor=center, radius_override_km=km, dates=(request.target_date,)), "now": now}), now),
             # 날마다 동네 — 그 날들을 동네 풀로 ScheduleAgent 가 다시 푼다(spec 004). 에이전트가 날·동네를 확인했을 때만 부른다
-            rebuild_days=lambda pairs: self._rebuild_days(request, solution, pool, poi_index, pool_request, transport, now, t0, pairs),
+            rebuild_days=lambda pairs: self._rebuild_days(request, solution, pool, poi_index, pool_request, transport, now, t0, pairs,
+                                                          persona=persona, windows=windows),
+            # 풀 밖 이름 장소(F9) — 말이 이름으로 집은 등록 장소. 에이전트가 말을 번역기로 보낼 때만 부른다. 장소 DB 미배선이면 None(종전)
+            named_places=(lambda words, spans: self._named_places(words, spans, pool_request, TraceId(meta.request_id)))
+            if self._place_names is not None else None,
+            taste=frozenset(_wanted_categories(persona)),
+            walk_max_km=walk_cap,
+            day_starts={d: w.start for d, w in windows.items()},
+            trip_start=request.trip_start_date,
         ))
-        return self._edit_response(outcome, self._edit_distances(request, outcome, transport, t0))
+        return self._edit_response(outcome, self._edit_distances(request, outcome, transport, t0, walk_cap))
+
+    def _named_places(
+        self, words: tuple[str, ...], spans: tuple[str, ...], pool_request: CandidatePoolRequest, trace_id: TraceId,
+    ) -> tuple[Poi, ...]:
+        """편집 번역의 풀 밖 이름 장소(F9) — 등록 장소 이름 조회(`poi_public`, 지역 접두·지점 접미 꼴까지) → 정본 일괄 조회(좌표·영업시간 —
+        이 뷰에는 좌표가 없다) → 여행지 반경(이름 대조와 같은 50km)·풀과 같은 자격(`admit` ②~④) → 말마다 한 곳(`pick_said`, 같은 이름
+        여럿이면 도우미 이름 찾기와 같은 규칙, 지점 여럿이면 안 고른다). 후보 자격은 등록 POI 에서만 생긴다(INV-1). DB 오류는 빈 목록으로
+        접히고(`PlaceSqlLookup.find_said`), 정본 조회 오류는 에이전트가 받아 로그를 남긴다(받은 풀로 번역 — INV-4)."""
+        assert self._place_names is not None  # 미배선이면 콘센트를 넘기지 않는다(`edit`)
+        rows = self._place_names.find_said(words, spans, trace_id)
+        if not rows:
+            return ()
+        found = self._poi_db.find_by_ids(frozenset(PoiId(r.poi_id) for r in rows))
+        near = [p for p in found if haversine_km(pool_request.anchor, p.coord) <= nl_verify.NAME_SEARCH_RADIUS_KM]
+        usable = {p.poi_id: p for p in self._pool_builder.admit(near, pool_request)}
+        return tuple(usable[PoiId(pid)] for pid in pick_said(rows, {str(pid) for pid in usable}, words, spans))
 
     def _edit_response(
         self, outcome: EditOutcome, distance_ranges: Mapping[str, str] | None = None
@@ -4205,6 +4282,7 @@ class WiredItineraryOrchestrator:
 
     def _edit_distances(
         self, request: schemas.EditItineraryRequest, outcome: EditOutcome, transport: TransportMode, started_ms: int,
+        walk_max_km: float | None = None,
     ) -> dict[str, str] | None:
         """APPLIED 일정의 **바뀐 날** 구간 거리 — 생성·repair 와 같은 렌더·시한 회계(`_render_distances`·`_walk_first`). 그 밖 상태는 None.
 
@@ -4222,7 +4300,7 @@ class WiredItineraryOrchestrator:
             # 손 안 댄 날은 재지 않고 비워 둔다 — BE 제안 카드 diff 는 바뀐 슬롯만 그리고, 다시 재면 실경로 일일 한도(ODsay)만 쓴다
             edited = replace(outcome.solution, days=tuple(d for d in outcome.solution.days if d.date in days))
             coords = {pid: p.coord for pid, p in outcome.pois.items()}
-            walk = self._walk_first(None)  # 편집 재타이밍·⑤ 검증과 같은 공용 추정기(기본 도보 상한·주차 계획 없음)
+            walk = self._walk_first(walk_max_km)  # 편집 재타이밍·⑤ 검증과 같은 상한(요청별 — 없으면 기본)·주차 계획 없음
             (ranges,), _ = self._render_distances(
                 lambda port: (_distance_ranges(edited, {}, coords, walk(port), transport),),
                 request.request_meta, started_ms,
@@ -4237,7 +4315,8 @@ class WiredItineraryOrchestrator:
     def _rebuild_days(
         self, request: schemas.EditItineraryRequest, solution: ItinerarySolution, pool: CandidatePool,
         poi_index: Mapping[PoiId, Poi], pool_request: CandidatePoolRequest, transport: TransportMode, now: datetime,
-        t0: int, pairs: tuple[DayArea, ...],
+        t0: int, pairs: tuple[DayArea, ...], *, persona: PersonaSummary | None = None,
+        windows: Mapping[date, TimeWindow] | None = None,
     ) -> RebuiltDays | str:
         """날마다 동네 재구성 콘센트(spec 004 FR-005) — (날, 동네) → 그 날들만 다시 푼 전체 해, 아니면 사유.
 
@@ -4257,8 +4336,11 @@ class WiredItineraryOrchestrator:
             centers[pair.day], names[pair.day] = hit
         by_day = {d.date: d for d in solution.days}
         changed = sorted(centers)
-        # 손 안 댄 날의 장소는 후보에서 뺀다 — 같은 곳을 두 번 가게 하지 않는다
-        others = frozenset(s.poi_id for d in solution.days if d.date not in centers for s in d.slots)
+        # 손 안 댄 날의 장소는 후보에서 뺀다 — 같은 곳을 두 번 가게 하지 않는다. 편집 요청의 뺄 곳(앞서 보인 곳, spec 003 FR-015)도 새로
+        # 들이지 않는다 — 이미 일정에 있는 곳은 빼지 않는다(동네 안 원 슬롯은 남는다)
+        planned = frozenset(s.poi_id for d in solution.days for s in d.slots)
+        others = frozenset(s.poi_id for d in solution.days if d.date not in centers for s in d.slots) | (
+            frozenset(PoiId(x) for x in request.excluded_poi_ids) - planned)
         found: dict[PoiId, Poi] = {p.poi_id: p for p in pool.pois if p.poi_id not in others}
 
         def near(day: date) -> list[Poi]:
@@ -4297,8 +4379,12 @@ class WiredItineraryOrchestrator:
                                             reason="edit_started"))
                     pinned.add(s.poi_id)
             live = [s for s in slots if s.poi_id not in gone_ids]
-            start = min((s.start_at for s in live), default=datetime.combine(day, clock_time(10), tzinfo=self._tz))
-            end = max((s.end_at for s in slots), default=datetime.combine(day, clock_time(18), tzinfo=self._tz))
+            # 빈 날은 그 날 창(편집 요청 `time_windows`), 창이 안 왔으면 10:00~18:00 — 슬롯이 있는 날은 종전대로 원 슬롯 범위
+            window = (windows or {}).get(day)
+            start = min((s.start_at for s in live),
+                        default=window.start if window else datetime.combine(day, clock_time(10), tzinfo=self._tz))
+            end = max((s.end_at for s in slots),
+                      default=window.end if window else datetime.combine(day, clock_time(18), tzinfo=self._tz))
             if today:  # 지금부터 쓴다 — 다음 원 슬롯까지 비워 두지 않는다(저녁 예약 하나 남은 날이 빈 날로 거절됐다)
                 start = min([floor, *(s.start_at for s in current)])
             if end - max(start, floor if today else start) < timedelta(minutes=60):
@@ -4327,11 +4413,12 @@ class WiredItineraryOrchestrator:
             holidays=self._holidays.between(changed[0], changed[-1]),  # 편집 ⑤ 검증과 같은 달력 — 풀이와 검증이 같은 날 창을 본다
         )
         left = max(0, deadline - (self._clock.monotonic_ms() - t0))
+        # 취향이 실리면 규칙 점수(`taste_fit`)로만 — 편집 시한에 점수 LLM 은 못 든다(`rule_only`). 없으면 종전(persona_unavailable → 규칙)
         outcome = self._schedule_agent.run(core.ScheduleTask(
-            request=domain_request, pool=area_pool, persona=None, daily_rain=None, event_bonus=None,
-            candidates_summary=core.candidates_report(area_pool, days=len(changed), persona=None),
+            request=domain_request, pool=area_pool, persona=persona, daily_rain=None, event_bonus=None,
+            candidates_summary=core.candidates_report(area_pool, days=len(changed), persona=persona),
             budget=core.allocate(left, core.OrchestratorConfig()), started_ms=self._clock.monotonic_ms(),
-            trace_id=TraceId(request.request_meta.request_id), now=now,
+            trace_id=TraceId(request.request_meta.request_id), now=now, rule_only=persona is not None,
         ))
         if outcome.solution is None:
             return f"solve_failed({outcome.error})"
@@ -4363,7 +4450,7 @@ class WiredItineraryOrchestrator:
         return RebuiltDays(solution=merged, areas=names, pois={**area_pois, **{s.poi_id: poi_index[s.poi_id]
                                                                               for h in history.values() for s in h
                                                                               if s.poi_id in poi_index}}, notes=notes,
-                           history=frozenset(gone))
+                           history=frozenset(gone), walk_max_km=outcome.walk_max_km, parking=outcome.parking)
 
     @staticmethod
     def _day_area_center(area: str, registered: Sequence[Poi], anchor: GeoPoint) -> tuple[GeoPoint, str] | str:
@@ -4781,6 +4868,8 @@ def build_orchestrator(
         existence=existence,
         context_resolver=resolver,
         edit_agent=edit_agent,
+        # 편집 번역의 풀 밖 이름 장소(F9) — 도우미와 같은 장소 DB 실행기의 이름 찾기만(NL2SQL 워커 없음, LLM 0). DSN 이 없으면 None(종전)
+        place_names=PlaceSqlLookup(None, place_sql) if place_sql is not None else None,
         reflect_agent=reflect_agent,
         nudge_worker=nudge_worker,
         reminder_copy_worker=reminder_copy_worker,

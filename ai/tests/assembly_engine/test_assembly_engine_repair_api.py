@@ -21,6 +21,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.constraints import check_all
 from trippilot.assembly_engine.facade import HybridAssemblyFacade
 from trippilot.assembly_engine.fallback_assembler import RuleFallbackAssembler
 from trippilot.assembly_engine.llm_assembler import LlmAssembler
@@ -393,3 +394,41 @@ def test_repair_without_departures_leaves_first_slot() -> None:
     first = _slot("a", 9, 0, 10, 0)
     result = repair_engine(_sol(first), problem, index, _EST)
     assert result.repaired.days[0].slots[0].start_at == first.start_at
+
+
+# ── 여행 당일 수리 — 지금 전에 시작한 곳은 수리·재검증 밖 (TRIP-1709 F1) ─────────────
+
+
+@settings(max_examples=120, deadline=None)
+@given(gaps=st.lists(st.integers(min_value=0, max_value=40), min_size=2, max_size=6),
+       now_min=st.integers(min_value=9 * 60, max_value=18 * 60), fixed_first=st.booleans())
+def test_repair_with_now_never_moves_started_slots(gaps: list[int], now_min: int, fixed_first: bool) -> None:
+    """속성: `now` 가 오면 그보다 먼저 시작한 슬롯은 (POI·시작·끝)과 순서가 입력 그대로다. 수리됐으면 지금 있는 곳부터의
+    나머지는 HC 를 통과한다(지난 간격은 재검증 대상이 아니다 — 핀으로만 두면 지난 HC2 로 통째 수리 불가였다)."""
+    pois = [_poi(f"q{i}", 37.75 + 0.004 * i, 128.87 + 0.004 * i) for i in range(len(gaps))]
+    index = {p.poi_id: p for p in pois}
+    t = datetime(2026, 8, 5, 9, 0, tzinfo=_KST)
+    slots = []
+    for p, g in zip(pois, gaps):
+        slots.append(VisitSlot(p.poi_id, t, t + timedelta(minutes=50), 50, 0.0, False))
+        t = t + timedelta(minutes=50 + g)
+    blocks = ((FixedBlock(slots[0].poi_id, TimeWindow(slots[0].start_at, slots[0].end_at), "wire_fixed"),)
+              if fixed_first else ())
+    sol = ItinerarySolution(ScheduleId("s"), (DaySolution(_DAY, tuple(slots), blocks),), False, SolveMode.OR_TOOLS, None)
+    problem = ItineraryProblem(ScheduleId("s"), (_DAY,), (), blocks, BudgetLevel.MID, TransportMode.PUBLIC,
+                               TimeWindow(datetime(2026, 8, 5, 0, 0, tzinfo=_KST), datetime(2026, 8, 5, 23, 59, tzinfo=_KST)), 0)
+    now = datetime(2026, 8, 5, now_min // 60, now_min % 60, tzinfo=_KST)
+
+    result = _facade(index).repair(sol, problem, deadline_ms=1000, now=now)
+
+    if result.repaired is None:
+        return
+    out = result.repaired.days[0].slots
+    assert [s.poi_id for s in out] == [s.poi_id for s in slots]
+    started = [s for s in slots if s.start_at < now]
+    assert [(s.start_at, s.end_at) for s in out[:len(started)]] == [(s.start_at, s.end_at) for s in started]
+    rest_from = max(len(started) - 1, 0)
+    rest = replace(result.repaired, days=(replace(result.repaired.days[0], slots=out[rest_from:]),))
+    kept_blocks = tuple(b for b in blocks if b.window.start >= out[rest_from].start_at)
+    assert check_all(rest, replace(problem, fixed_blocks=kept_blocks), index, _EST) == []
+

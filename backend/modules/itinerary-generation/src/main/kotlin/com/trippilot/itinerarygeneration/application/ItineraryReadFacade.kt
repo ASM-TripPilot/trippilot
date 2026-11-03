@@ -73,6 +73,7 @@ class ItineraryReadFacade(
                     nameKo = s?.nameKo,
                     category = s?.category,
                     imageUrl = s?.imageUrl,
+                    imageLicense = s?.imageLicense,
                     lat = s?.lat,
                     lng = s?.lng,
                     violationReason = it.violationReason,

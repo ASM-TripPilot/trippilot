@@ -49,6 +49,7 @@ from trippilot.orchestrator.dialogue.dialogue_handlers import (
     _planb_reason,
     CANDIDATE_REASON,
     HANDLERS,
+    INTRO_WEB_TEXT,
     NEXT_ACTION_TYPES,
     AnswerKind,
     DayView,
@@ -859,9 +860,17 @@ def test_a_place_name_containing_a_region_name_is_looked_up_not_taken_as_that_re
     assert transit.calls[0]["destination"] == _COORD["천지연폭포"]
 
 
-def test_distance_with_an_unknown_end_stays_empty_and_never_calls_transit() -> None:
-    facts, transit, _ = _free_distance({"origin": "우도", "destination": "롯데월드"}, [])
+@pytest.mark.parametrize("arguments, note", [
+    ({"origin": "우도", "destination": "롯데월드"}, "못 찾은 쪽: 목적지 — 출발지는 '우도'(으)로 찾았다."),
+    ({"origin": "롯데월드", "destination": "우도"}, "못 찾은 쪽: 출발지 — 목적지는 '우도'(으)로 찾았다."),
+    ({"origin": "롯데월드", "destination": "에버랜드"}, "못 찾은 쪽: 출발지·목적지"),
+])
+def test_distance_with_an_unknown_end_stays_empty_and_never_calls_transit(arguments: dict, note: str) -> None:
+    facts, transit, finder = _free_distance(arguments, [])
     assert transit.calls == [] and facts.status is FactStatus.EMPTY
+    # 두 끝을 다 찾아 보고 찾은 쪽을 밝힌다 — "서울역과 경복궁을 찾지 못했어요"(경복궁은 찾힌다, 2026-11-03 개발)
+    assert any(n.startswith(note) for n in facts.notes)
+    assert len(finder.calls) == sum(1 for v in arguments.values() if v in ("롯데월드", "에버랜드"))  # 지역 끝은 찾지 않는다
 
 
 def test_leap_day_looks_at_next_year_when_this_year_has_none() -> None:
@@ -1562,6 +1571,21 @@ def test_poi_info_about_a_place_carries_a_kb5_intro_for_the_answer_only() -> Non
     assert intro.calls == [("ref-우도", "어떤 곳")]
     assert facts.detail == {"target": "우도", "intro": "우도는 제주 동쪽의 섬이다."}
     assert "섬" not in str(facts.payload)  # 카드(payload)에는 싣지 않는다 — 위키 원문 출처 표기
+
+
+def test_poi_info_footnotes_an_intro_that_carries_web_facts_but_not_a_card_only_one(monkeypatch) -> None:
+    from trippilot.poi_curation import place_fallback
+
+    monkeypatch.setattr(place_fallback, "web_facts", lambda: {"ref-우도": ("땅콩 아이스크림을 판다",)})
+    web = replace(_ctx(arguments={"place": "우도", "aspect": "어떤 곳"},
+                       ports=HandlerPorts(poi_info=_RefPoiInfo(), place_intro=_Intro("우도는 제주 동쪽의 섬이다. 웹 확인: 땅콩 아이스크림을 판다.")),
+                       remaining_ms=3000), utterance="우도 어떤 곳이야?")
+    facts = _run(HANDLERS[Intent.GET_POI_INFO], web)
+    assert facts.footnote == INTRO_WEB_TEXT and any("웹 확인:" in n for n in facts.notes)
+    card_only, _ = _intro_run({"place": "우도", "aspect": "어떤 곳"}, "우도 어떤 곳이야?")  # 기본 소개 문장에는 웹 사실이 없다
+    assert card_only.footnote is None
+    monkeypatch.setenv(place_fallback.SWITCH, "off")  # 꺼져 있으면 대체 문서가 안 쓰인다
+    assert _run(HANDLERS[Intent.GET_POI_INFO], web).footnote is None
 
 
 def test_poi_info_hours_or_fee_question_does_not_fetch_an_intro() -> None:

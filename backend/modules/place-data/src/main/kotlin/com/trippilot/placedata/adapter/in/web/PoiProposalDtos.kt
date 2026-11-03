@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.trippilot.placedata.application.PoiCloseMissingResult
 import com.trippilot.placedata.application.PoiIngestResult
 import com.trippilot.placedata.application.PoiProposal
+import com.trippilot.placedata.domain.ImageLicense
 import com.trippilot.placedata.domain.PoiCategory
 
 /**
@@ -62,6 +63,11 @@ data class ProposalProvenance(
      * 이름뿐이라 `동구` 가 6개 시도에 걸쳐 겹친다(수집본 실측 118건). 첫 토큰이 시도명이라 그 모호함이 사라진다.
      */
     val address: String? = null,
+    /**
+     * TourAPI 대표 사진의 공공누리 유형 원문(`Type1`·`Type3`, #1716). 사진이 없는 행·관광공사 외 출처에는 키가 없다.
+     * 앱이 3유형(변경금지) 사진을 자르지 않으려면 이 값이 필요하다(2026-11-02 B안).
+     */
+    @param:JsonProperty("cpyrht_div_cd") val cpyrhtDivCd: String? = null,
 )
 
 /** 수신 결과 — 탈락은 **사유별**로 나간다(총계만 주면 무엇을 고쳐야 할지 알 수 없다). */
@@ -126,4 +132,5 @@ fun ProposalItem.toCommand() = PoiProposal(
     sourceRef = provenance?.contentId,
     tags = tags,
     imageUrl = provenance?.imageUrl?.takeIf { it.isNotBlank() },
+    imageLicense = ImageLicense.fromCpyrhtDivCd(provenance?.cpyrhtDivCd),
 )

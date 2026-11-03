@@ -106,6 +106,8 @@ class EditProposalService(
             utterance = utterance,
             command = command,
             requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), aiBudgetMs),
+            // "다른 데는?" — 앞서 보인 곳은 상대가 새로 들이지 않는다(후보 풀을 좁힐 뿐, INV-1). 구조화 교체는 새 장소를 이미 정했다
+            excludedPoiIds = (request as? EditProposalRequest.Utterance)?.excludedPoiIds.orEmpty().toList(),
         )
         val output = within(deadlineMs, tripId) { scheduleAgent.proposeEdit(input) } ?: return EditProposal.Unavailable
         return output.toApi(current, replacement?.let { it to targetDate }, tripId)

@@ -42,8 +42,8 @@ class RepairContexts(
     /**
      * 재검증(validate)에 실을 수단(2026-10-30) — [of] 와 **같은 출처**의 취향 `transport_modes` 를, 상대가 **자차로 풀 때만**(아는 첫 값이
      * 렌터카) 목록 그대로 싣는다. 앵커는 안 싣는다(상대 HC2 는 앵커→첫 슬롯 구간을 재지 않는다).
-     * 도보·대중교통 여행은 비운다 = 종전 재검증(상대 기본 대중교통). 도보로 재면 오탐이 새로 생긴다 — 재계획은 수단을 싣지 않아
-     * 상대가 대중교통으로 짜고(손 안 댄 재계획 날의 1.5km 미만 구간이 대개 HC2 가 된다), 상대 도보 추정은 걷는 구간에도 여유 15분을
+     * 도보·대중교통 여행은 비운다 = 종전 재검증(상대 기본 대중교통). 도보로 재면 오탐이 새로 생긴다 — 재계획이 수단을 싣기 전(TRIP-1709 F7,
+     * 2026-11-03)에 다시 짠 날은 대중교통으로 짜였고(손 안 댄 그 날의 1.5km 미만 구간이 대개 HC2 가 된다), 상대 도보 추정은 걷는 구간에도 여유 15분을
      * 더해 대중교통의 걷기(도로 700m 이하, 여유 없음)보다 길다. 자차(계획 없는 추정)는 어느 구간도 대중교통보다 더 요구하지 않는다.
      * 조회가 깨지면 빈 목록 = 종전 재검증으로 내려간다 — 수리 컨텍스트처럼 보탬이라, 우리 쪽 조회 장애를 재검증 실패(판정 보류)로 바꾸지 않는다.
      */
@@ -51,7 +51,7 @@ class RepairContexts(
         runCatching { of(accountId, tripId, emptySet()).transportModes }.getOrElse { e ->
             log.warn("재검증 수단 조회 실패 — 수단 없이(대중교통) 재검증합니다. tripId={}", tripId, e)
             emptyList()
-        }.takeIf { modes -> modes.firstOrNull { it in AI_TRANSPORT_MODES } == "렌터카" }.orEmpty()
+        }.takeIf { modes -> firstAiTransport(modes) == "렌터카" }.orEmpty()
 
     /**
      * 편집 제안(U8)에 실을 컨텍스트 — 수리와 **같은 출처**에서 그 날 하나만 뽑는다. 상대는 이 앵커에 후보 풀을
@@ -65,7 +65,7 @@ class RepairContexts(
         val prefs = preferences.findPreferences(accountId).overriddenBy(ctx.preferenceSnapshot)
         // 생성은 목록을 보내고 상대가 **아는 첫 값**을 고른다. 여기서 그냥 첫 값을 보내면 `["택시","렌터카"]` 가 생성에서는
         // 자가용, 편집에서는 모르는 값(→ 대중교통)이 되어 같은 여행의 이동 시간 기준이 갈린다.
-        return EditProposalContext(anchor, prefs.transportModes.firstOrNull { it in AI_TRANSPORT_MODES }, prefs.budgetTier)
+        return EditProposalContext(anchor, firstAiTransport(prefs.transportModes), prefs.budgetTier)
     }
 
     /**
@@ -91,11 +91,18 @@ class RepairContexts(
     }
 
     private companion object {
-        /** 상대 `_TRANSPORT_TOKENS` 가 아는 값 중 우리 취향 어휘에 있는 것(택시·자전거는 상대가 모른다). */
-        val AI_TRANSPORT_MODES = setOf("도보", "대중교통", "렌터카")
         val log = LoggerFactory.getLogger(RepairContexts::class.java)
     }
 }
+
+/**
+ * 수단 목록 → 상대가 **아는 첫 값**(없으면 null = 상대 기본 대중교통). 한 값만 받는 경계(편집 제안·재계획)가 생성(목록을 보내면
+ * 상대가 첫 인식 값을 고른다)과 같은 수단으로 돌게 하는 단일 지점이다.
+ */
+internal fun firstAiTransport(modes: List<String>): String? = modes.firstOrNull { it in AI_TRANSPORT_MODES }
+
+/** 상대 `_TRANSPORT_TOKENS` 가 아는 값 중 우리 취향 어휘에 있는 것(택시·자전거는 상대가 모른다). */
+private val AI_TRANSPORT_MODES = setOf("도보", "대중교통", "렌터카")
 
 /**
  * [budgetTier] 는 생성 경로가 `budget_level` 로 보내는 그 값이다(취향의 예산 등급 — 여행 총예산이 아니다).

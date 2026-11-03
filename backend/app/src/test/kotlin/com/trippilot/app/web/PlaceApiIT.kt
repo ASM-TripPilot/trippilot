@@ -384,7 +384,9 @@ class PlaceApiIT : AbstractPostgresIntegrationTest() {
             item.fieldNames().asSequence().toSet() shouldBe setOf(
                 "poiId", "nameKo", "category", "lat", "lng", "region", "regionCode",
                 "address", // TRIP-1062 · 1003 F — 수집 주소 표면(null=미확보)
-                "openingHours", "imageUrl", "tags", "savedCount", "dataStatus",
+                "openingHours", "imageUrl",
+                "imageLicense", // V2.88 — 사진의 공공누리 유형(null=모름). TYPE3 이면 앱이 자르지 않는다
+                "tags", "savedCount", "dataStatus",
             )
         } finally {
             cleanupJdbc.update("DELETE FROM poi WHERE poi_id = ?", id)

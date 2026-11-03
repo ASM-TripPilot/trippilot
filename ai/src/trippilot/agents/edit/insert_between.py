@@ -376,11 +376,15 @@ def rank_on_segment(
     pois: Iterable[Poi], a: GeoPoint | None, b: GeoPoint | None, *, slack_km: float,
     exclude: Collection[PoiId], taken_names: Collection[str], kind: PoiCategory | None,
     not_kinds: Collection[PoiCategory], night: bool, day: date, holidays: HolidayCalendar | None,
+    taste: Collection[PoiCategory] = (),
 ) -> tuple[tuple[Poi, float], ...]:
     """우회 ≤ slack 인 등록 POI 를 결정론 순서로. 종류를 안 정했으면 먹는 곳은 다른 게 없을 때만.
 
     `taken_names` 는 일정에 이미 있는 곳의 이름 — 이름이 서로 들어가는 곳(경의선숲길 ↔ 경의선숲길공원)은 같은 곳이라 뺀다
-    (2026-10-22 실측: 우회 0.06km 로 1등이 된 것이 바로 다음 슬롯의 옆 입구였다)."""
+    (2026-10-22 실측: 우회 0.06km 로 1등이 된 것이 바로 다음 슬롯의 옆 입구였다).
+    `taste` = 그 여행의 취향 카테고리(생성 `_wanted_categories` — 편집 요청 `preference_profile`). 길 모양·밤 말 다음, '요즘 인기'
+    앞에서 취향 카테고리를 먼저 둔다 — 생성 규칙 점수(`taste_fit`)가 취향을 인기·평판 위에 두는 것과 같은 서열이다. 말한 종류가
+    있으면(카페 하나) 후보가 다 그 종류라 이 키는 아무것도 바꾸지 않는다(사용자가 말한 것이 취향을 이긴다)."""
     taken = [n for n in (_norm(x) for x in taken_names) if len(n) >= 3]
     keep: list[tuple[Poi, float]] = []
     for p in pois:
@@ -415,7 +419,8 @@ def rank_on_segment(
         else:
             near_end, spread = False, round(d, 1)
         nightish = NIGHTLIFE_TAG in p.tags or p.category in (PoiCategory.BAR, PoiCategory.NIGHT_VIEW)
-        return (d > slack_km / 2, near_end, night and kind is None and not nightish, TRENDING_TAG not in p.tags,
-                -reputation_bonus(p.tags), 0 if p.open_hours else 1, -p.saved_count, spread, round(d, 2), str(p.poi_id))
+        return (d > slack_km / 2, near_end, night and kind is None and not nightish, p.category not in taste,
+                TRENDING_TAG not in p.tags, -reputation_bonus(p.tags), 0 if p.open_hours else 1, -p.saved_count, spread,
+                round(d, 2), str(p.poi_id))
 
     return tuple(sorted(keep, key=key))
