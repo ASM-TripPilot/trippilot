@@ -360,6 +360,44 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
      * 미발화분 유일 제약이 없어 DB 가 못 막고, 사용자는 같은 날 리마인드를 두 번 받는다. 앞 트랜잭션이 커밋 전에
      * 머무는 동안 뒤 트랜잭션이 들어오게 해 경합을 결정적으로 만든다(잠금을 빼면 8행이 된다).
      */
+    /**
+     * 재시작으로 사라진 문구 채움 대기열을 되살리는 입력 질의의 SQL — 대역은 같은 조건을 **흉내**낼 뿐이라, 실 DB 에서
+     * (1) 시각 범위 (from, until], (2) 제목·본문 둘 중 하나라도 비면 문구 없음, (3) 발화·취소된 행 제외를 한 번 본다.
+     * 같은 컨테이너를 공유하는 다른 테스트의 행이 섞이므로 **이 테스트의 여행**만 포함·제외로 단정한다.
+     */
+    @Test
+    fun `문구 없는 미발화 예약이 범위 안에 있는 여행만 찾는다 — 문구가 붙으면 빠진다`() {
+        val accountId = newAccount()
+        val lacking = newTrip(accountId)
+        val filled = newTrip(accountId)
+        val half = newTrip(accountId)
+        scheduleService.reload(lacking)
+        scheduleService.reload(filled)
+        scheduleService.reload(half)
+        val from = Instant.parse("2036-08-01T00:00:00Z")
+        val until = Instant.parse("2036-08-31T00:00:00Z")
+
+        // 모든 행에 문구를 붙이면 그 여행은 빠진다. 한 행이라도 비면 남는다(여행은 한 번만 나온다).
+        schedules.findPendingByTrip(filled).forEach { schedules.attachCopy(it.scheduleId, "제목", "본문", "basis") }
+        schedules.findPendingByTrip(half).first().let { schedules.attachCopy(it.scheduleId, "제목", "본문", "basis") }
+
+        val found = schedules.findTripsLackingCopy(from, until, 1000)
+        (lacking in found) shouldBe true
+        (filled in found) shouldBe false
+        (half in found) shouldBe true          // 네 행 중 한 행(TRIP_PRE)만 채웠다
+        found.count { it == lacking } shouldBe 1
+
+        // 범위 (from, until] — 경계 밖은 안 나온다.
+        (lacking in schedules.findTripsLackingCopy(Instant.parse("2037-01-01T00:00:00Z"), Instant.parse("2037-02-01T00:00:00Z"), 1000)) shouldBe false
+        (lacking in schedules.findTripsLackingCopy(from, Instant.parse("2036-08-08T00:00:00Z"), 1000)) shouldBe false
+
+        // 발화·취소된 행은 대상이 아니다.
+        schedules.findPendingByTrip(lacking).forEachIndexed { i, row ->
+            if (i % 2 == 0) schedules.markFired(row.scheduleId, now) else schedules.markCanceled(row.scheduleId, now)
+        }
+        (lacking in schedules.findTripsLackingCopy(from, until, 1000)) shouldBe false
+    }
+
     @Test
     fun `같은 여행의 적재가 겹쳐도 미발화 예약은 한 벌이다 — 여행 단위 잠금`() {
         val accountId = newAccount()

@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -79,6 +80,13 @@ class NotificationScheduleService(
     /** 계정 삭제 요청 — 이 계정의 미발화 예약을 전부 취소한다(유예 30일 동안 리마인드가 계속 가지 않게). */
     @Transactional
     fun cancelAll(accountId: UUID): Int = schedules.cancelPendingOf(accountId, clock.instant())
+
+    /**
+     * 가까운 시일([horizon] 안)에 울릴 예약 중 문구가 아직 없는 것이 있는 여행들 — 재시작으로 사라진 채움 대기열을 되살릴 입력.
+     * 기능이 꺼져 있으면 채울 수 없으므로 비어 있다.
+     */
+    fun tripsLackingCopy(now: Instant, horizon: Duration, limit: Int): List<UUID> =
+        if (copies.enabled) schedules.findTripsLackingCopy(now, now.plus(horizon), limit) else emptyList()
 
     /**
      * 문구가 **아직 없는** 미발화 예약만 골라 제자리에서 채운다 — 재시도 전용(TRIP-836 후속).

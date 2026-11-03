@@ -92,6 +92,12 @@ interface NotificationScheduleRepository {
     fun findPendingByTrip(tripId: UUID): List<NotificationSchedule>
 
     /**
+     * 문구가 **아직 없는** 미발화·미취소 예약이 [from] 초과 [until] 이하에 울릴 여행들 — 파드 재시작으로 사라진 문구 채움 대기열을 되살리는 입력이다
+     * ([ReminderCopyRetryPoller.rehydrate]). 한 여행이 여러 행이어도 한 번만 나온다. 문구 없음의 기준은 [attachCopy] 와 같다(제목·본문 둘 다 있어야 있음).
+     */
+    fun findTripsLackingCopy(from: Instant, until: Instant, limit: Int): List<UUID>
+
+    /**
      * 문구가 **아직 없는** 미발화·미취소 예약에만 문구를 붙인다 — 제자리 채우기용.
      *
      * 조건부 쓰기라서 (1) 그 사이 재적재([replacePending])가 행을 지웠으면(id 가 사라짐) 아무것도 안 바뀌고, (2) 이미 문구가

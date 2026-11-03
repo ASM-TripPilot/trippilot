@@ -2,9 +2,12 @@ package com.trippilot.notification.application
 
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.context.event.ApplicationReadyEvent
+import org.springframework.context.event.EventListener
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -25,8 +28,10 @@ import java.util.concurrent.ConcurrentHashMap
  * 모델을 늘 깨워 두는 길은 5분 창마다 과금이라 택하지 않았다. 실패한 호출은 과금되지 않고(모델이 아직 안 떴다), 성공한 호출만
  * 5분 창을 연다 — 재시도를 늘려도 비용은 **문구를 실제로 만든 만큼**만 는다.
  *
- * ponytail: 대기열이 메모리에만 있다 — 그 사이 파드가 재시작되면 그 여행의 남은 재시도는 사라지고 상수 문구로 남는다
- * (다음 재적재가 오면 다시 시작한다). 그게 문제가 되면 DB 에서 "문구 없는 미발화 예약이 있는 여행"을 훑는 주기 작업을 둔다.
+ * 대기열은 메모리에만 있다 — 파드가 재시작되면(배포·장애) 진행 중이던 재시도 사슬이 사라진다. 그래서 **기동할 때 한 번** DB 에서
+ * "곧 울릴 문구 없는 예약이 있는 여행"을 훑어 처음부터 다시 건다([ReminderCopyRetryPoller.rehydrate]). 주기 훑기를 택하지 않은 이유는
+ * 비용이다 — 끝내 못 채우는 행(게이트 탈락·상대 장애)을 시간마다 다시 물으면 성공한 호출마다 5분 창이 과금된다. 기동 시 복원은
+ * 재시작 횟수만큼만 늘고, 매번 처음부터 5번까지로 상한이 있다.
  */
 @Component
 class ReminderCopyRetries(
@@ -77,6 +82,21 @@ class ReminderCopyRetryPoller(
     private val schedules: NotificationScheduleService,
     private val clock: Clock,
 ) {
+    /**
+     * 재시작으로 사라진 대기열을 DB 에서 되살린다 — [REHYDRATE_HORIZON] 안에 울릴 문구 없는 예약이 있는 여행을 처음부터 다시 건다.
+     * 기동을 막지 않는다: 어떤 실패도 한 줄 남기고 넘어간다(문구는 상수로 가면 그만이고, 다음 재적재가 오면 다시 시작한다).
+     * 파드가 둘이면 둘 다 건다 — 채우기는 조건부 쓰기라 먼저 붙은 문구가 이기고, 이미 채워진 행은 다음 회차에 물을 것이 없다.
+     */
+    @EventListener(ApplicationReadyEvent::class)
+    fun rehydrate() {
+        runCatching {
+            val now = clock.instant()
+            val trips = schedules.tripsLackingCopy(now, REHYDRATE_HORIZON, REHYDRATE_LIMIT)
+            trips.forEach { retries.later(it, now, attempt = 0) }
+            if (trips.isNotEmpty()) log.info("재시작으로 사라진 리마인드 문구 채움 대기열을 되살렸습니다 — 여행 {}건", trips.size)
+        }.onFailure { log.warn("리마인드 문구 채움 대기열을 되살리지 못했습니다 — 다음 재적재 때 다시 시작합니다.", it) }
+    }
+
     @Scheduled(fixedDelayString = "\${trippilot.notification.copy-retry-poll-ms:30000}",
         initialDelayString = "\${trippilot.notification.copy-retry-poll-initial-delay-ms:30000}")
     fun retryDue() {
@@ -99,6 +119,12 @@ class ReminderCopyRetryPoller(
 
     private companion object {
         private val log = LoggerFactory.getLogger(ReminderCopyRetryPoller::class.java)
+
+        /** 되살릴 범위 — 이 안에 울릴 예약만. 먼 예약까지 깨우면 쓸모없이 묻고, 가까운 것이 다음 재적재·재시작 전에 놓치면 곤란하다. */
+        private val REHYDRATE_HORIZON: Duration = Duration.ofHours(48)
+
+        /** 한 번에 되살릴 여행 수 상한 — 시각이 가까운 것부터 자른다. */
+        private const val REHYDRATE_LIMIT = 200
 
         /** 채움이 예외로 끝나 남은 수를 모를 때. */
         private const val UNKNOWN_REMAINING = -1
