@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -83,6 +83,27 @@ jest.mock('expo-router', () => ({
 // 지도(네이버 네이티브)는 jest 에서 못 뜬다 — 관찰 목으로 map-root 를 노출한다.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/map', () => require('@/test-support/mapViewMock'));
+
+/**
+ * TRIP-1748 — 그 날 방문 기록 조회가 응답하기 전엔 저장이 막힌다(완료 여부를 모름, 결정 2). 카드가 뜨는 렌더와 방문 조회
+ * 시작은 같은 렌더라, 카드를 찾자마자 저장하면 방문 응답과 경합한다(실측 1/4 회 E7 red). 각 케이스의 첫 저장 누름 앞에서
+ * 방문 조회가 끝나기를 기다린다 — 같은 틱 연타 케이스의 두 누름 사이에는 넣지 않는다(연타 재현 유지).
+ */
+let lastClient: QueryClient | undefined;
+async function visitsSettled(): Promise<void> {
+  await waitFor(() => {
+    const visits = (lastClient?.getQueryCache().getAll() ?? []).filter(
+      // 지금 화면이 보는 쿼리만 — 날짜가 정해지기 전의 꺼진 쿼리(키 끝 `/days/`)는 영원히 pending 이다.
+      (query) =>
+        String(query.queryKey[0]).includes('/visits/days/') &&
+        query.getObserversCount() > 0
+    );
+    expect(visits.length).toBeGreaterThan(0);
+    expect(visits.every((query) => query.state.status !== 'pending')).toBe(
+      true
+    );
+  });
+}
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
@@ -283,6 +304,7 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
 
   function renderPage() {
     const client = newTestQueryClient({ gcTime: 0 });
+    lastClient = client;
     return render(<ItineraryEditPage tripId={TRIP_ID} />, {
       wrapper: createWrapper(client),
     });
@@ -303,7 +325,13 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
   });
 
   describe('🔴 R2 · AC1·AC2·AC5 — 저장: 편집 스토어 전체를 5필드로 조립해 PUT, 성공은 재조회 0', () => {
-    it('[b,a] 로 끌어 바꾼 뒤 저장하면 PUT 에 두 일자·그 순서·전체 정밀도·endsNextDay 가 실리고 재조회는 없다', async () => {
+    it('[b,a] 로 끌어 바꾼 뒤 저장하면 PUT 에 두 일자·그 순서·전체 정밀도·endsNextDay 가 실리고 재조회는 없다 · 방문 기록 404 는 빈 목록이라 저장을 막지 않는다 (TRIP-1748)', async () => {
+      // TRIP-1748 — 404 는 "그 날 기록 없음"이라 지금처럼 빈 목록(잠금 없음)으로 저장한다. 막는 것은 404 아닌 실패뿐이다.
+      server.use(
+        http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
+          HttpResponse.json({}, { status: 404 })
+        )
+      );
       renderPage();
       await screen.findByTestId(cardId('poi-a'));
       await waitFor(() => expect(itineraryGetCalls).toBe(1));
@@ -312,6 +340,7 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       // 스토어 액션 직접 호출 대신 리스트 onDragEnd 로 태운다(2026-11-01 — E1 과 같은 사용자 경로).
       fireEditDragEnd(1, 0);
 
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
 
@@ -344,6 +373,7 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       renderPage();
       await screen.findByTestId(cardId('poi-a'));
 
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
 
       // 위반을 이유로 저장을 막지 않는다 — PUT 전엔 아무것도 묻지 않고 곧장 보낸다.
@@ -405,6 +435,7 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       putHandler = () => new HttpResponse(null, { status: 409 });
       getHandler = () => HttpResponse.json(confirmedItinerary());
 
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
 
@@ -427,6 +458,7 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       putHandler = () => new HttpResponse(null, { status: 409 });
       getHandler = () => HttpResponse.json(partialItinerary());
 
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
 
@@ -446,6 +478,7 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       renderPage();
       await screen.findByTestId(cardId('poi-a'));
 
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
 
       // INV-4 침묵 금지 — 원인 단정 없이라도 안내가 뜬다(404·409만 태우면 5xx 가 조용히 사라진다).
@@ -465,6 +498,7 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       renderPage();
       await screen.findByTestId(cardId('poi-a'));
 
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
 
       // 응답을 못 받아도(네트워크 오류) 침묵하지 않는다(INV-4).
@@ -506,6 +540,7 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
 
     function renderWith(initialDate?: string) {
       const client = newTestQueryClient({ gcTime: 0 });
+      lastClient = client;
       return render(
         <ItineraryEditPage tripId={TRIP_ID} initialDate={initialDate} />,
         { wrapper: createWrapper(client) }
@@ -734,6 +769,7 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       await screen.findByTestId(cardId('poi-a'));
 
       expect(screen.getByTestId(SAVE)).toHaveTextContent('일정 저장하기');
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
       // 확정이 따라 나갔다면 여기까지 흘려 보낸 뒤 잡힌다(요청은 비동기).
@@ -868,14 +904,79 @@ describe('완료 슬롯 잠금 실연동', () => {
 
   function renderPage() {
     const client = newTestQueryClient({ gcTime: 0 });
+    lastClient = client;
     return render(<ItineraryEditPage tripId={TRIP_ID} />, {
       wrapper: createWrapper(client),
     });
   }
 
-  describe('🔴 CL1 · AC-11 · A3 — 방문 완료 슬롯은 고정 꼭 갈 곳이어도 잠기고 미완료 슬롯은 편집 가능하다', () => {
-    it('완료 poi-a(고정 꼭 갈 곳)는 잠금 표식+편집칩 부재, 미완료 poi-b 는 편집칩 present+잠금 부재', async () => {
+  describe('🔴 CL1 · AC-11 · A3 — 방문 완료 슬롯은 고정 꼭 갈 곳이어도 잠기고 미완료 슬롯은 편집 가능하다 · 완료 여부를 모르면 저장을 막는다 (TRIP-1748)', () => {
+    it('방문 조회 응답 전·네트워크 실패·500 이면 저장 PUT 0 · 실패면 안내+다시 시도 → 다시 시도 200 이면 완료 poi-a(고정 꼭 갈 곳)는 잠금 표식+편집칩 부재, 미완료 poi-b 는 편집칩 present+잠금 부재 · 저장 PUT 1', async () => {
+      // TRIP-1748 (AC-11 · INV-4) — 서버 PUT 에는 완료 방문 가드가 없다(전체 교체). 그 날 방문 기록을 모르면 잠금이 비어
+      // 완료 카드를 옮기거나 지운 채 저장된다 → 응답 전(결정 2)·404 아닌 실패는 저장을 막고, 실패면 안내+[다시 시도].
+      // 편집기를 한 번 더 그리면 reanimated 소음 예산(174, 여유 0)이 넘어 새 `it` 대신 이 케이스 앞에 단계를 끼웠다.
+      const VISITS_ERROR = 'itinerary-edit-visits-error';
+      const VISITS_RETRY = 'itinerary-edit-visits-retry';
+      const SAVE = 'sheet-cta-button-0';
+      let visitsReply: 'held' | 'network' | 'status500' | 'ok' = 'held';
+      let openVisits: () => void = () => {};
+      let visitsGets = 0;
+      let putCalls = 0;
+      server.use(
+        http.get(`${BASE}/trips/:tripId/visits/days/:day`, async () => {
+          visitsGets += 1;
+          if (visitsReply === 'held')
+            await new Promise<void>((resolve) => {
+              openVisits = resolve;
+            });
+          if (visitsReply === 'network') return HttpResponse.error();
+          if (visitsReply === 'status500')
+            return new HttpResponse(null, { status: 500 });
+          return HttpResponse.json(visitsWithCompleted());
+        }),
+        http.put(`${BASE}/trips/:tripId/itinerary`, () => {
+          putCalls += 1;
+          return HttpResponse.json(itinerary());
+        })
+      );
+      const settle = async (): Promise<void> => {
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        });
+      };
       renderPage();
+
+      // 1) 응답 전 — 잠금이 아직 없다(완료 여부를 모름). 저장을 눌러도 PUT 0(결정 2).
+      await screen.findByTestId(`slot-stopcard-timechip-${openKey}`);
+      await waitFor(() => expect(visitsGets).toBe(1));
+      // 응답 전엔 실패 안내를 띄우지 않는다(아직 실패가 아니다).
+      expect(screen.queryByTestId(VISITS_ERROR)).toBeNull();
+      fireEvent.press(screen.getByTestId(SAVE));
+      await settle();
+      expect(putCalls).toBe(0);
+
+      // 2) 응답 없음(네트워크 끊김) — 안내+다시 시도, 저장 PUT 0.
+      visitsReply = 'network';
+      await act(async () => {
+        openVisits();
+      });
+      expect(await screen.findByTestId(VISITS_ERROR)).toBeOnTheScreen();
+      fireEvent.press(screen.getByTestId(SAVE));
+      await settle();
+      expect(putCalls).toBe(0);
+
+      // 3) 다시 시도 → 500 — 여전히 안내, 저장 PUT 0.
+      visitsReply = 'status500';
+      fireEvent.press(screen.getByTestId(VISITS_RETRY));
+      await waitFor(() => expect(visitsGets).toBe(2));
+      expect(await screen.findByTestId(VISITS_ERROR)).toBeOnTheScreen();
+      fireEvent.press(screen.getByTestId(SAVE));
+      await settle();
+      expect(putCalls).toBe(0);
+
+      // 4) 다시 시도 → 200(완료 poi-a). 아래 잠금 단언 뒤 저장이 다시 된다.
+      visitsReply = 'ok';
+      fireEvent.press(screen.getByTestId(VISITS_RETRY));
 
       // 완료 슬롯 — 잠금 표식이 뜨고 편집 어포던스(누름 시각칩)는 사라진다.
       await screen.findByTestId(`slot-stopcard-locked-${lockedKey}`);
@@ -890,6 +991,11 @@ describe('완료 슬롯 잠금 실연동', () => {
       expect(
         screen.queryByTestId(`slot-stopcard-locked-${openKey}`)
       ).toBeNull();
+
+      // TRIP-1748 — 회복하면 안내가 사라지고 저장이 다시 나간다.
+      expect(screen.queryByTestId(VISITS_ERROR)).toBeNull();
+      fireEvent.press(screen.getByTestId(SAVE));
+      await waitFor(() => expect(putCalls).toBe(1));
     });
   });
 
@@ -928,8 +1034,14 @@ describe('완료 슬롯 잠금 실연동', () => {
     });
   });
 
-  describe('🔴 CL3 · TRIP-1079 5-c 경고-2 — 2일차 탭의 완료 슬롯은 2일차 날짜로 세어 잠긴다', () => {
-    it('2일차 탭으로 옮기면 2일차에 완료한 poi-c 는 잠기고, 같은 날 미완료 poi-d 는 편집 가능하다', async () => {
+  describe('🔴 CL3 · TRIP-1079 5-c 경고-2 — 2일차 탭의 완료 슬롯은 2일차 날짜로 세어 잠긴다 · 모르는 날이 남으면 다른 날에서도 저장을 막는다 (TRIP-1748)', () => {
+    it('1일차 방문 조회 500 → 2일차 탭으로 옮기면 2일차에 완료한 poi-c 는 잠기고 미완료 poi-d 는 편집 가능하다 → 저장하면 PUT 0 · 1일차로 돌아가 안내 → 다시 시도 200 → 저장 PUT 1', async () => {
+      // TRIP-1748 (03b W1) — 1일차의 완료 여부를 모르는 채 그 날 초안을 든 채 2일차로 옮겨도, PUT 은 모든 날을 싣는다.
+      // 저장은 모르는 날이 하나라도 있으면 막고 그 날로 옮겨 이유를 보인다. 소음 예산(174, 여유 0) 때문에 새 `it` 대신 여기에 얹었다.
+      const VISITS_ERROR = 'itinerary-edit-visits-error';
+      const SAVE = 'sheet-cta-button-0';
+      let day1Fails = true;
+      let putCalls = 0;
       const DAY2 = '2026-06-11';
       const day2LockedKey = buildSlotKey(DAY2, 'poi-c');
       const day2OpenKey = buildSlotKey(DAY2, 'poi-d');
@@ -952,29 +1064,38 @@ describe('완료 슬롯 잠금 실연동', () => {
         }),
       });
       server.use(
-        // 날짜마다 그 날의 기록만 준다 — 2일차 기록의 slotKey 는 2일차 날짜다.
+        // 날짜마다 그 날의 기록만 준다 — 2일차 기록의 slotKey 는 2일차 날짜다. 1일차는 처음엔 실패(TRIP-1748).
+        http.put(`${BASE}/trips/:tripId/itinerary`, () => {
+          putCalls += 1;
+          return HttpResponse.json(base);
+        }),
         http.get(`${BASE}/trips/:tripId/visits/days/:day`, ({ params }) =>
-          HttpResponse.json(
-            params.day === DAY2
-              ? {
-                  visits: [
-                    {
-                      ...plannedDone,
-                      visitCheckId: 'vc-c',
-                      slotKey: day2LockedKey,
-                      poiId: 'poi-c',
-                    },
-                  ],
-                }
-              : visitsWithCompleted()
-          )
+          params.day !== DAY2 && day1Fails
+            ? new HttpResponse(null, { status: 500 })
+            : HttpResponse.json(
+                params.day === DAY2
+                  ? {
+                      visits: [
+                        {
+                          ...plannedDone,
+                          visitCheckId: 'vc-c',
+                          slotKey: day2LockedKey,
+                          poiId: 'poi-c',
+                        },
+                      ],
+                    }
+                  : visitsWithCompleted()
+              )
         )
       );
 
       renderPage();
 
-      // 앵커 — 1일차 탭의 poi-a 잠금 = 페이지·방문 기록이 다 떴다.
-      await screen.findByTestId(`slot-stopcard-locked-${lockedKey}`);
+      // 앵커 — 1일차는 방문 기록을 못 받아 안내가 뜨고 잠금이 없다.
+      expect(await screen.findByTestId(VISITS_ERROR)).toBeOnTheScreen();
+      expect(
+        screen.queryByTestId(`slot-stopcard-locked-${lockedKey}`)
+      ).toBeNull();
 
       // 실행 — 2일차 탭.
       fireEvent.press(screen.getByTestId('itinerary-edit-day-2'));
@@ -990,6 +1111,21 @@ describe('완료 슬롯 잠금 실연동', () => {
       expect(
         screen.queryByTestId(`slot-stopcard-locked-${day2OpenKey}`)
       ).toBeNull();
+
+      // TRIP-1748 — 2일차는 알지만 1일차를 모른다. 저장하면 PUT 0 이고 1일차로 돌아가 다시 안내한다.
+      expect(screen.queryByTestId(VISITS_ERROR)).toBeNull();
+      fireEvent.press(screen.getByTestId(SAVE));
+      expect(await screen.findByTestId(VISITS_ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(`slot-stopcard-${openKey}`)).toBeOnTheScreen();
+      expect(putCalls).toBe(0);
+
+      // 다시 시도 → 1일차 200 — poi-a 가 잠기고 안내가 사라지며, 이제 저장이 나간다.
+      day1Fails = false;
+      fireEvent.press(screen.getByTestId('itinerary-edit-visits-retry'));
+      await screen.findByTestId(`slot-stopcard-locked-${lockedKey}`);
+      expect(screen.queryByTestId(VISITS_ERROR)).toBeNull();
+      fireEvent.press(screen.getByTestId(SAVE));
+      await waitFor(() => expect(putCalls).toBe(1));
     });
   });
 });
@@ -1104,6 +1240,7 @@ describe('드래그 실배선', () => {
 
   function renderPage() {
     const client = newTestQueryClient({ gcTime: 0 });
+    lastClient = client;
     return render(<ItineraryEditPage tripId={TRIP_ID} />, {
       wrapper: createWrapper(client),
     });
@@ -1115,6 +1252,7 @@ describe('드래그 실배선', () => {
   }
 
   async function saveAndReadOrder(): Promise<string[]> {
+    await visitsSettled();
     fireEvent.press(screen.getByTestId(SAVE));
     await waitFor(() => expect(putCalls).toBe(1));
     return (putBody as EditItineraryRequest).days[0].slots.map((s) => s.poiId);
@@ -1328,6 +1466,7 @@ describe('여행 중 직접 수정(i07)', () => {
 
   function renderPage() {
     const client = newTestQueryClient({ gcTime: 0 });
+    lastClient = client;
     return render(<ItineraryEditPage tripId={TRIP_ID} inTrip />, {
       wrapper: createWrapper(client),
     });
@@ -1457,6 +1596,7 @@ describe('여행 중 직접 수정(i07)', () => {
           ],
         });
       const client = newTestQueryClient({ gcTime: 0 });
+      lastClient = client;
       render(<ItineraryEditPage tripId={TRIP_ID} inTrip initialDate={DAY2} />, {
         wrapper: createWrapper(client),
       });
@@ -1504,6 +1644,7 @@ describe('여행 중 직접 수정(i07)', () => {
         screen.getByTestId(`slot-stopcard-time-${k('p3')}`)
       ).toHaveTextContent('14:00–15:30');
 
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
 
@@ -1536,6 +1677,7 @@ describe('여행 중 직접 수정(i07)', () => {
 
       fireEvent(screen.getByTestId(SHEET), 'close');
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
 
@@ -1556,6 +1698,7 @@ describe('여행 중 직접 수정(i07)', () => {
       // 한 번의 끌기로 나올 수 있는 배열만 쓴다(옛 임의 순열은 실경로에서 안 나온다, 02 기존 테스트 변경).
       fireEditDragEnd(4, 0);
 
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
 
@@ -1572,6 +1715,7 @@ describe('여행 중 직접 수정(i07)', () => {
       renderPage();
       await waitForLocked();
 
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
 
@@ -1705,6 +1849,7 @@ describe('저장 뒤 위반 요약 게이트', () => {
 
   function renderPage(inTrip?: boolean) {
     const client = newTestQueryClient({ gcTime: 0 });
+    lastClient = client;
     function Wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>
@@ -1727,6 +1872,7 @@ describe('저장 뒤 위반 요약 게이트', () => {
   async function openAndSave(inTrip?: boolean) {
     renderPage(inTrip);
     await screen.findByTestId(cardId('poi-a'));
+    await visitsSettled();
     fireEvent.press(screen.getByTestId(SAVE));
     await waitFor(() => expect(putCalls).toBe(1));
   }
@@ -1949,6 +2095,7 @@ describe('저장 뒤 위반 요약 게이트', () => {
       fireEvent.press(screen.getByTestId(ASIS));
       await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
 
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
       await settle();
 
@@ -1962,6 +2109,7 @@ describe('저장 뒤 위반 요약 게이트', () => {
       await saveUntilGate();
 
       // ★ jest 의 press 는 딤 뒤 CTA 에도 닿는다 — 막는 것은 코드 가드여야 한다(02a ★3).
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
       fireEvent.press(screen.getByTestId(SAVE));
       await settle();
@@ -2084,6 +2232,7 @@ describe('저장 성공 뒤 토스트·복귀', () => {
 
   function renderPage(inTrip?: boolean) {
     const client = newTestQueryClient({ gcTime: 0 });
+    lastClient = client;
     function Wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>
@@ -2106,6 +2255,7 @@ describe('저장 성공 뒤 토스트·복귀', () => {
   async function openAndSave(inTrip?: boolean) {
     renderPage(inTrip);
     await screen.findByTestId(cardId('poi-a'));
+    await visitsSettled();
     fireEvent.press(screen.getByTestId(SAVE));
     await waitFor(() => expect(putCalls).toBe(1));
   }
@@ -2216,6 +2366,7 @@ describe('저장 성공 뒤 토스트·복귀', () => {
       await saveThenFix();
       await screen.findByTestId(SAVED);
 
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(2));
     });
@@ -2287,6 +2438,7 @@ describe('저장 성공 뒤 토스트·복귀', () => {
       await screen.findByTestId(cardId('poi-a'));
 
       // ★ 바깥 act 하나로 묶어야 두 누름이 리렌더 전 같은 화면을 본다(따로 누르면 연타 재현이 안 된다).
+      await visitsSettled();
       await act(async () => {
         fireEvent.press(screen.getByTestId(SAVE));
         fireEvent.press(screen.getByTestId(SAVE));
@@ -2311,6 +2463,7 @@ describe('저장 성공 뒤 토스트·복귀', () => {
 
       renderPage();
       await screen.findByTestId(cardId('poi-a'));
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
       fireEvent.press(screen.getByTestId(SAVE));
@@ -2335,6 +2488,7 @@ describe('저장 성공 뒤 토스트·복귀', () => {
       expect(mockBack).not.toHaveBeenCalled();
       expect(mockReplace).not.toHaveBeenCalled();
 
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(2));
     });
@@ -2352,6 +2506,7 @@ describe('저장 성공 뒤 토스트·복귀', () => {
       expect(mockBack).not.toHaveBeenCalled();
       expect(mockReplace).not.toHaveBeenCalled();
 
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(2));
     });
@@ -2543,6 +2698,7 @@ describe('시각 조정 시트', () => {
 
   function renderPage() {
     const client = newTestQueryClient({ gcTime: 0 });
+    lastClient = client;
     return render(<ItineraryEditPage tripId={TRIP_ID} />, {
       wrapper: createWrapper(client),
     });
@@ -2568,6 +2724,7 @@ describe('시각 조정 시트', () => {
   }
 
   async function saveAndGetSlot(poiId: string) {
+    await visitsSettled();
     fireEvent.press(screen.getByTestId(SAVE));
     await waitFor(() => expect(putCalls).toBe(1));
     const body = putBody as EditItineraryRequest;
@@ -2986,6 +3143,7 @@ describe('미지정 슬롯 저장 제외 안내', () => {
 
   function renderPage() {
     const client = newTestQueryClient({ gcTime: 0 });
+    lastClient = client;
     function Wrapper({ children }: { children: ReactNode }) {
       return (
         <QueryClientProvider client={client}>
@@ -3004,6 +3162,7 @@ describe('미지정 슬롯 저장 제외 안내', () => {
       // 미지정 슬롯은 "시간대 설정" 칩으로 뜬다(AC-6).
       expect(screen.getByText('시간대 설정')).toBeOnTheScreen();
 
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
 
@@ -3029,6 +3188,7 @@ describe('미지정 슬롯 저장 제외 안내', () => {
       renderPage();
       await screen.findByTestId(`slot-stopcard-${buildSlotKey(DAY1, 'poi-a')}`);
 
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
 
@@ -3052,6 +3212,7 @@ describe('미지정 슬롯 저장 제외 안내', () => {
       renderPage();
       await screen.findByTestId(`slot-stopcard-${buildSlotKey(DAY1, 'poi-a')}`);
 
+      await visitsSettled();
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
 
