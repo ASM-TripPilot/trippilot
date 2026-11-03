@@ -4,7 +4,7 @@ area: root
 cwd: .
 branches_seen: [develop]
 current_branch: develop (작업은 전부 /Users/juna/dev/trippilot/wt-* worktree 에서)
-span_kst: "10-18 21:46 → 11-04 07:00 (이어짐)"
+span_kst: "10-18 21:46 → 11-04 08:30 (이어짐)"
 ended_by: —
 status: 진행중
 resume_local: "claude --resume 1b098b1e-561c-4b1a-bd3b-4e4fb038d0b9"
@@ -31,14 +31,16 @@ tickets: [TRIP-1446, TRIP-1668, TRIP-1707, TRIP-1758, TRIP-1759, TRIP-1760]
 | 계정 | #1879 삭제 요청 시 리마인드 중단·철회 시 복원(TRIP-1760) → **#1901 이 이벤트 순서가 아니라 처리 시점의 계정 상태(`auth.api.AccountStatusFacade`)를 따르게 고침** — 푸시 토큰은 지우지 않고 발송 지점이 유예 계정에 MUTED |
 | 독립 리뷰가 찾은 결함 | #1899 발화 때 일정 읽기 실패 → rollback-only 로 같은 푸시 매분 재발송(#1873 의 잠복 결함, 11-04 06:38 수리 배포) · #1901 삭제 요청·철회 순서 의존 · #1902 낮은 심각도 정리 · #1905 안티패턴 3건 |
 
-## 운영 반영 상태(11-04 07:00 기준)
+## 운영 반영 상태(11-04 08:30 기준)
 - **알림 갈래 PR 은 전부 운영에 있다.** 2차 승급 #1878(11건)은 03:28, 나머지 후속은 승급 #1906 + #1914 로 06:38(run 41721357956)에 배포됐다. #1906 의 첫 배포는 terraform apply 에서 `outbox_abandon` 필터(#1885)가 CloudWatch **로그 그룹당 regex 패턴 5개** 한도에 걸려 중단됐고, 와일드카드로 고친 #1913 을 실은 #1914 로 다시 배포해 통과했다(알람 이름이 `trippilot-dev-…` 인 것은 이 AWS 스택 이름이 dev 인 탓 — 운영 네임스페이스만 센다).
 - 운영 로그로 확인(06:3x): 새 백엔드 파드 2대 — 스키마 v2.90 그대로(마이그레이션 없음) · `push=expo reminder=http` · 기동 때 문구 채움 대기열 복원 14건(#1884) · `push.alert`·`outbox.abandon`·ERROR 0건.
-- **학생 모델 문구 — 수리 뒤 첫 실측**: 배포 직후 1회차(06:38 KST)는 모델 콜드스타트라 AI 호출 56건이 전부 `ModelNotReadyException` 이었다(정상 — 못 받은 행은 상수 문구로 남는다). 2회차(06:44, 시작 +8분)에서 28건이 전부 성공(지연 p50 1.1초)해 **재시도 대상 32행 중 28행(88%)에 AI 문구가 붙었다.** 남은 4행은 그날 일정에 장소가 없어 물을 재료가 없는 행(`askable` 이 슬롯 있는 행만 받는다)이라 상수 문구가 맞다. 종전 15%(45/295)와 견줄 수 있지만 표본은 48시간 안 14개 여행뿐 — 실제 발화 비율은 `reminder.fire … copy=` 로 센다.
+- **학생 모델 문구 — 수리 뒤 첫 실측**: 배포 직후 1회차(06:38 KST)는 모델 콜드스타트라 AI 호출 56건이 전부 `ModelNotReadyException` 이었다(정상 — 못 받은 행은 상수 문구로 남는다). 2회차(06:44, 시작 +8분)에서 28건이 전부 성공(지연 p50 1.1초)해 **재시도 대상 32행 중 28행(88%)에 AI 문구가 붙었다.** 남은 4행은 그날 일정에 장소가 없어 물을 재료가 없는 행(`askable` 이 슬롯 있는 행만 받는다)이라 상수 문구가 맞다. 종전 15%(45/295)와 견줄 수 있지만 표본은 48시간 안 14개 여행뿐이었다.
+- **실제 발화 실측(11-04 08:00:08 KST, 08:22 점검)**: `reminder.fire` 21건 — **AI 19 · CONSTANT 2 · STALE 0 = 90%.** CONSTANT 2건은 사다리 끝에 `재료 없음` 으로 남은 행에 속한다(재료가 있는 예약은 19건 전부 AI 문구). 푸시는 여전히 0 — `push.dispatch` 는 `NO_DEVICE reason=NO_TOKEN` 20 · `MUTED` 1(사유 로그 없음: 푸시 토글 끔 또는 삭제 유예) · `SENT` 0, `push.token.register` 줄 0. `push.alert`·`outbox.abandon`·새 ERROR 종류 0.
+- 알아 둘 것: 사다리 마지막 회차(시작 +50분)마다 `리마인드 문구를 끝내 못 채웠습니다 … 재료 없음 N건` WARN 이 남는다. `재료 없음` 이 남은 행 수와 같으면 평소 상태다 — 일정이 뒤늦게 생기는 날을 위해 재료 없는 행도 끝까지 재시도하고 포기 때 한 줄 남기는 설계(INV-4)인데, 남은 행이 전부 재료 없음일 때도 WARN 이다(두 파드가 각자 복원해 줄이 2배). 거슬리면 그 경우만 INFO 로 내리는 작은 수정이면 된다.
 - **순서**: (서버는 끝남) → (사용자) Expo APNs .p8 업로드·프로비저닝 프로파일 확인 → 새 iOS 빌드 → 팀 TestFlight → 사용자 릴리스.
 
 ## 다음에 이어서 할 일
-1. 첫 08:00(KST) 발화 뒤(11-04 23:00Z 이후) 운영 로그의 `reminder.fire kind=… copy=AI|CONSTANT|STALE` 로 AI 문구가 몇 % 나갔는지 센다(종전 15%) — 문구 채움 수리의 실측이다. 같이 `push.alert`·`outbox.abandon` 이 0 · `push.token.register … tokenFormat=` 이 `expo` · `push.dispatch` 가 아직 전부 `NO_DEVICE`(토큰 0)인지. 로그는 `.github/workflows/aws-dev-logs.yml` 을 **`--ref develop`** 으로 디스패치(main 판에는 `namespace` 입력이 없다 → 422).
+1. 날마다 운영 로그의 `reminder.fire kind=… copy=AI|CONSTANT|STALE` 로 AI 문구 비율을 센다(첫 08:00 실측은 위 90%, 종전 15%). 같이 `push.alert`·`outbox.abandon` 이 0 · `push.token.register … tokenFormat=` 이 `expo` · `push.dispatch` 가 아직 전부 `NO_DEVICE`(토큰 0)인지. 로그는 `.github/workflows/aws-dev-logs.yml` 을 **`--ref develop`** 으로 디스패치(main 판에는 `namespace` 입력이 없다 → 422).
 2. 첫 실기기 시험이 나오면 로그 순서: `push.token.register platform=… tokenFormat=expo` → `push.dispatch outcome=SENT` → 15분 뒤 `push.receipt outcome=…`. `tokenFormat=other` 면 앱이 Expo 토큰이 아닌 값을 보낸 것(앱 담당). `push.alert stage=ticket|receipt` 는 자격 문제 — .p8·`PUSH_EXPO_ACCESS_TOKEN`.
 3. 매일 08:22 크론(`77b35d3d`, 세션 한정·7일)이 `scratchpad/t6tools/daily_check.py` 로 요약한다 — 이 스크립트는 로컬 scratchpad 에만 있다(리포 밖). 클라우드 세션은 못 돌린다.
 4. 사람·제품 결정이 필요한 것(「내가 할 일」 페이지 https://claude.ai/artifact/A8MsxLJ6hP9evGhyd4CUfB 에 올라 있다): Expo .p8 업로드·프로파일 확인 · 스토어 빌드 요청 · SLOT_PRE(일정 시작 전 알림) 구현 여부 — 설정 행과 온보딩 문구가 약속하는데 생산자가 없다 · 인앱 알림 OFF 가 푸시까지 막는 계약 불일치 · 회고 푸시(TRIP-1759, 회고 담당) · 안드로이드 FCM·채널(출시 전).
