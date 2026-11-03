@@ -9,6 +9,7 @@ import com.trippilot.notification.domain.NotificationKind
 import com.trippilot.notification.domain.NotificationRepository
 import com.trippilot.notification.domain.PushTicket
 import com.trippilot.notification.domain.PushTicketRepository
+import com.trippilot.notification.domain.ReceiptStatus
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
@@ -103,5 +104,72 @@ class PushTicketIT : AbstractPostgresIntegrationTest() {
         jdbc.update(
             "UPDATE push_ticket SET checked_at = now(), receipt_status = 'OK' WHERE ticket_id = ?", id,
         ) shouldBe 1
+    }
+
+    // ── 영수증 폴러가 쓰는 질의(V2.89) ──────────────────────────────────────
+
+    private fun ticketAt(id: String, notificationId: UUID, sentAt: Instant) =
+        PushTicket(id, notificationId, "ExponentPushToken[$id]", DevicePlatform.IOS, sentAt)
+
+    @Test
+    fun `폴러가 묻는 대상은 판정 전이고 기준보다 먼저 보낸 티켓이며 오래된 순이다`() {
+        val notificationId = newNotification()
+        val prefix = "T-${UUID.randomUUID()}"
+        val old = ticketAt("$prefix-old", notificationId, now.minusSeconds(7_200))
+        val mid = ticketAt("$prefix-mid", notificationId, now.minusSeconds(3_600))
+        val fresh = ticketAt("$prefix-fresh", notificationId, now)           // 기준(now-15분)보다 나중에 보냈다
+        val done = ticketAt("$prefix-done", notificationId, now.minusSeconds(5_000))
+        tickets.record(listOf(mid, old, fresh, done))
+        tickets.settle(done.ticketId, ReceiptStatus.OK, null, now) shouldBe true
+
+        val due = tickets.findDue(now.minusSeconds(900), 1_000).filter { it.ticketId.startsWith(prefix) }
+
+        due.map { it.ticketId } shouldBe listOf(old.ticketId, mid.ticketId)     // 판정된 것·너무 최근 것은 빠지고 오래된 순
+        due.first().platform shouldBe DevicePlatform.IOS
+    }
+
+    @Test
+    fun `판정은 조건부다 — 두 번째는 false 이고 처음 값이 남는다`() {
+        val notificationId = newNotification()
+        val t = ticketAt("T-${UUID.randomUUID()}", notificationId, now.minusSeconds(3_600))
+        tickets.record(listOf(t))
+
+        tickets.settle(t.ticketId, ReceiptStatus.ERROR, "DeviceNotRegistered", now) shouldBe true
+        tickets.settle(t.ticketId, ReceiptStatus.OK, null, now.plusSeconds(60)) shouldBe false     // 다른 인스턴스가 먼저 판정했다
+
+        jdbc.queryForObject(
+            "SELECT receipt_status || ':' || receipt_error FROM push_ticket WHERE ticket_id = ?", String::class.java, t.ticketId,
+        ) shouldBe "ERROR:DeviceNotRegistered"
+        tickets.settle("없는-티켓", ReceiptStatus.OK, null, now) shouldBe false
+    }
+
+    @Test
+    fun `보존 기간이 지난 판정 끝난 기록만 지우고 미판정은 남긴다`() {
+        val notificationId = newNotification()
+        val prefix = "T-${UUID.randomUUID()}"
+        val oldDone = ticketAt("$prefix-olddone", notificationId, now.minusSeconds(9 * 86_400))
+        val oldPending = ticketAt("$prefix-oldpending", notificationId, now.minusSeconds(9 * 86_400))
+        val recentDone = ticketAt("$prefix-recentdone", notificationId, now.minusSeconds(86_400))
+        tickets.record(listOf(oldDone, oldPending, recentDone))
+        tickets.settle(oldDone.ticketId, ReceiptStatus.OK, null, now)
+        tickets.settle(recentDone.ticketId, ReceiptStatus.OK, null, now)
+
+        tickets.purgeSettledBefore(now.minusSeconds(7 * 86_400))
+
+        count(oldDone.ticketId) shouldBe 0            // 판정 끝났고 오래됨 → 삭제
+        count(oldPending.ticketId) shouldBe 1         // 미판정은 오래돼도 남긴다(곧 EXPIRED 로 닫힌다)
+        count(recentDone.ticketId) shouldBe 1         // 판정은 끝났지만 최근 → 남긴다
+    }
+
+    @Test
+    fun `미판정 건수는 판정하면 줄어든다`() {
+        val notificationId = newNotification()
+        val t = ticketAt("T-${UUID.randomUUID()}", notificationId, now)
+        val before = tickets.countPending()
+        tickets.record(listOf(t))
+
+        tickets.countPending() shouldBe before + 1
+        tickets.settle(t.ticketId, ReceiptStatus.OK, null, now)
+        tickets.countPending() shouldBe before
     }
 }

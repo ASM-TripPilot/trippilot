@@ -61,6 +61,13 @@ class PushDispatchPropertyTest : StringSpec({
             invalidated += token
             return true
         }
+        override fun invalidateIfNotSeenSince(token: String, notSeenAfter: Instant, at: Instant): Boolean {
+            val i = rows.indexOfFirst { it.token == token && it.invalidatedAt == null && !it.lastSeenAt.isAfter(notSeenAfter) }
+            if (i < 0) return false
+            rows[i] = rows[i].copy(invalidatedAt = at)
+            invalidated += token
+            return true
+        }
         override fun remove(accountId: UUID, token: String) = rows.removeIf { it.token == token }
     }
 

@@ -5,8 +5,10 @@ import com.trippilot.notification.domain.PushMessage
 import com.trippilot.notification.domain.PushPort
 import com.trippilot.notification.domain.PushRateLimited
 import com.trippilot.notification.domain.PushReceipt
+import com.trippilot.notification.domain.PushReceiptPort
 import com.trippilot.notification.domain.PushStatus
 import com.trippilot.notification.domain.PushUrgency
+import com.trippilot.notification.domain.TicketReceipt
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
@@ -39,7 +41,7 @@ import java.time.Duration
 class ExpoPushAdapter(
     @param:Value("\${trippilot.push.expo.access-token:}") private val accessToken: String,
     @param:Qualifier(ExpoPushClientConfiguration.BEAN_NAME) private val client: RestClient,
-) : PushPort {
+) : PushPort, PushReceiptPort {
 
     /** 실제 Expo Push Service 로 나간다. */
     override val deliversExternally = true
@@ -77,6 +79,25 @@ class ExpoPushAdapter(
             return tokens.map { PushReceipt(it, PushStatus.FAILED, "TICKET_COUNT_MISMATCH") }
         }
         return tokens.zip(tickets) { token, ticket -> ticket.toReceipt(token) }
+    }
+
+    /**
+     * 영수증 조회(`getReceipts`) — 발송 약 15분 뒤부터 24시간 동안 티켓 id 로 APNs·FCM 단계의 결과를 볼 수 있다(Expo 푸시 계약 — 지식 기반).
+     * 응답은 `{"data": {"<티켓 id>": {"status": "ok"|"error", "message"?, "details"?: {"error"}}}}` 이고 **토큰이 없다**. 아직 안
+     * 만들어졌거나 24시간이 지난 id 는 맵에서 빠진다. 한도(429)·자격(401·403)·네트워크 오류는 그대로 올라간다 — 호출 쪽(폴러)이 상태를 안
+     * 바꾸고 다음 회차로 넘긴다. 발송과 같은 인증 헤더 규칙이다(enhanced security 를 켠 프로젝트만 토큰이 필요하다).
+     */
+    override fun fetch(ticketIds: List<String>): Map<String, TicketReceipt> {
+        if (ticketIds.isEmpty()) return emptyMap()
+        val response = client.post()
+            .uri("/--/api/v2/push/getReceipts")
+            .headers { h -> if (accessToken.isNotBlank()) h.setBearerAuth(accessToken) }
+            .body(ExpoReceiptsRequest(ticketIds))
+            .retrieve()
+            .body(ExpoReceiptsResponse::class.java)
+        return response?.data.orEmpty().mapValues { (_, r) ->
+            TicketReceipt(ok = r.status == "ok", error = r.details?.error, message = r.message)
+        }
     }
 
     private fun ExpoPushTicket.toReceipt(token: String): PushReceipt = when {
@@ -158,6 +179,18 @@ internal data class ExpoPushRequest(
     val sound: String? = null,
     /** 초. 꺼진 기기에 메시지를 붙들어 두는 시간 — 안 싣으면 제공자 기본(FCM 4주). */
     val ttl: Int? = null,
+)
+
+/** 영수증 조회 요청 — 티켓 id 목록. */
+internal data class ExpoReceiptsRequest(val ids: List<String>)
+
+/** 영수증 응답 — 티켓 id → 영수증. 판정에 쓰는 것만 받는다. */
+internal data class ExpoReceiptsResponse(val data: Map<String, ExpoReceipt> = emptyMap())
+
+internal data class ExpoReceipt(
+    val status: String? = null,
+    val message: String? = null,
+    val details: ExpoPushTicketDetails? = null,
 )
 
 /** Expo 응답 — 판정에 쓰는 것만 받는다. */

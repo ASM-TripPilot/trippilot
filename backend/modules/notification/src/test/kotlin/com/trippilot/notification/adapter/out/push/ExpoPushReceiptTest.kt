@@ -91,6 +91,54 @@ class ExpoPushReceiptTest : StringSpec({
         )
     }
 
+    // ── 영수증 조회(getReceipts) ──────────────────────────────────────────
+
+    fun fetch(ids: List<String>, response: String, accessToken: String = ""): Map<String, com.trippilot.notification.domain.TicketReceipt> {
+        val builder = RestClient.builder().baseUrl("http://expo.test")
+        val server = MockRestServiceServer.bindTo(builder).build()
+        val call = server.expect(requestTo("http://expo.test/--/api/v2/push/getReceipts"))
+            .andExpect(jsonPath("$.ids.length()").value(ids.size))
+        ids.forEachIndexed { i, id -> call.andExpect(jsonPath("$.ids[$i]").value(id)) }
+        if (accessToken.isBlank()) call.andExpect(headerDoesNotExist(HttpHeaders.AUTHORIZATION))
+        else call.andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer $accessToken"))
+        call.andRespond(withSuccess(response, MediaType.APPLICATION_JSON))
+        val out = ExpoPushAdapter(accessToken, builder.build()).fetch(ids)
+        server.verify()
+        return out
+    }
+
+    /**
+     * **영수증은 티켓 id → 결과 맵으로 온다**(토큰이 없다). ok 와 오류(코드는 `details.error`)를 갈라 읽고, 응답에 없는 id(아직 안
+     * 만들어졌거나 24시간이 지나 사라짐)는 맵에서 빠진다 — 호출 쪽이 그 둘을 '아직 없음'으로 다룬다.
+     */
+    "영수증 응답을 티켓 id 별로 읽는다 — ok·오류 코드·없는 id" {
+        val out = fetch(
+            listOf("T1", "T2", "T3"),
+            """{"data":{
+                "T1":{"status":"ok"},
+                "T2":{"status":"error","message":"The device cannot receive push notifications anymore","details":{"error":"DeviceNotRegistered"}}
+            }}""",
+        )
+
+        out["T1"] shouldBe com.trippilot.notification.domain.TicketReceipt(true, null, null)
+        out["T2"] shouldBe com.trippilot.notification.domain.TicketReceipt(false, "DeviceNotRegistered", "The device cannot receive push notifications anymore")
+        out.containsKey("T3") shouldBe false
+    }
+
+    "영수증 조회에도 액세스 토큰이 있으면 같은 Bearer 규칙으로 싣는다" {
+        fetch(listOf("T1"), """{"data":{"T1":{"status":"ok"}}}""", accessToken = "tok") shouldBe
+            mapOf("T1" to com.trippilot.notification.domain.TicketReceipt(true, null, null))
+    }
+
+    "조회할 id 가 없으면 호출하지 않는다" {
+        val builder = RestClient.builder().baseUrl("http://expo.test")
+        val server = MockRestServiceServer.bindTo(builder).build()   // 기대가 없다 — 호출이 나가면 실패한다
+
+        ExpoPushAdapter("", builder.build()).fetch(emptyList()) shouldBe emptyMap()
+
+        server.verify()
+    }
+
     "티켓 수가 토큰 수와 다르면 대응을 잃었으므로 전부 FAILED — 어느 토큰도 무효화하지 않는다" {
         val receipts = send(
             listOf("t1", "t2"),
