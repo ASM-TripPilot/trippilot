@@ -28,11 +28,6 @@
   },
   {
    "source": "OVERTURE",
-   "content_id": "d711c9bd-84ba-4be3-bfc8-1458e38b6a13",
-   "query": "경복궁"
-  },
-  {
-   "source": "OVERTURE",
    "content_id": "ee9e19ce-b49d-49d1-9a6a-805c3cc51708",
    "query": "낙산공원"
   },
@@ -85,6 +80,11 @@
    "source": "TOURAPI",
    "content_id": "126498",
    "query": "롯데월드 어드벤처"
+  },
+  {
+   "source": "TOURAPI",
+   "content_id": "126508",
+   "query": "경복궁"
   },
   {
    "source": "TOURAPI",

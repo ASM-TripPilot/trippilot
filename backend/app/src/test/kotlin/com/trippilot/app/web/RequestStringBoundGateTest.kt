@@ -194,6 +194,7 @@ class RequestStringBoundGateTest {
             "$REFLECTION.EditReflectionRequest.shortMemo" to "도메인이 60자(코드 포인트)를 판정한다(400)",
             "$TRIP.DestinationDto.regionCode" to "선택 가능한 지역 코드인지 카탈로그와 대조한다(아니면 400)",
             "$PLACE.ProposalPoi.category" to "8종 어휘 판정(밖이면 unknown_category 로 탈락)",
+            "$PLACE.ProposalProvenance.cpyrhtDivCd" to "ImageLicense 어휘 판정(Type1·Type3 밖이면 null) — 원문은 저장하지 않는다",
             // 길이 제한 없는 열에 들어간다
             "$ARCHIVE.RouteDayUploadRequest.segments" to "길이 제한 없는 열 — actual_route_day.segments 는 text[]",
             "$REPLAN.StartReplanRequest.reasons" to "길이 제한 없는 열 — replan_session.reasons 는 text[](@Size 는 원소 수 10)",

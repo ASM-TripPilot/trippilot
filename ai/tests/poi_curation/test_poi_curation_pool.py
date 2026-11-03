@@ -86,6 +86,23 @@ def test_pool_excludes_never_open(pois, request) -> None:
             assert any(oh.day_of_week in travel_dows for oh in p.open_hours)
 
 
+# F9 — `admit` 이 곧 풀 자격(②~④). 풀 밖에서 따로 모은 등록 POI(편집 번역의 이름 조회)가 풀과 같은 자격을 지난다 — 이름으로
+# 집었다고 풀이 빼는 곳(MINIMAL·여행일 내내 휴무·예산 초과)이 후보가 되지 않는다
+@settings(max_examples=40)
+@given(pois=st.lists(pois_with_attrs(), max_size=15, unique_by=lambda p: p.poi_id),
+       request=pool_requests())
+def test_admit_is_exactly_the_pool_eligibility(pois, request) -> None:
+    from trippilot.poi_curation.pool_builder import base_radius_km
+
+    db = InMemoryPoi(seed=tuple(pois))
+    builder = CandidatePoolBuilder(db, _CFG)
+    in_radius = list(db.find_by_radius(request.anchor, base_radius_km(request, _CFG)))
+    admitted = builder.admit(in_radius, request)
+    assert {p.poi_id for p in admitted} == builder.build(request, _NOW).poi_ids  # 상한 아래 — 절단 없음, 반경 뒤 자격이 전부
+    assert admitted == [p for p in in_radius if p in admitted]  # 거르기만 — 순서 그대로
+    assert builder.admit([], request) == []
+
+
 # 직렬화 왕복 (U5-P10 승계)
 @given(request=pool_requests())
 def test_pool_request_roundtrip(request: CandidatePoolRequest) -> None:

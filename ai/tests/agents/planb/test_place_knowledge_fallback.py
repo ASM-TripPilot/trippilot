@@ -80,11 +80,24 @@ def test_fallback_documents_are_clipped_like_real_ones() -> None:
     assert len(got["r1"]) == MAX_DOC_CHARS
 
 
-def test_switch_is_off_by_default(monkeypatch) -> None:
+def test_switch_is_on_by_default_and_off_turns_it_off(monkeypatch) -> None:
     monkeypatch.delenv(place_fallback.SWITCH)
+    assert place_fallback.enabled()
     embedding, store = _store()
     got, _ = fetch_place_knowledge([_poi("p1", "r1")], "우천", embedding, store, fallback={"r1": "대표메뉴 국밥."})
+    assert got == {"r1": "대표메뉴 국밥."}
+    monkeypatch.setenv(place_fallback.SWITCH, "off")
+    assert not place_fallback.enabled()
+    got, _ = fetch_place_knowledge([_poi("p1", "r1")], "우천", embedding, store, fallback={"r1": "대표메뉴 국밥."})
     assert got == {} and kb5_counts(got) == {"POI_DESC": 0}
+
+
+def test_web_in_tells_web_sourced_intros_from_card_only_ones(monkeypatch) -> None:
+    monkeypatch.setattr(place_fallback, "web_facts", lambda: {"r1": ("땅콩 아이스크림을 판다",)})
+    assert place_fallback.web_in("r1", "동네: 우도. 웹 확인: 땅콩 아이스크림을 판다.")
+    assert not place_fallback.web_in("r1", "동네: 우도. 주차 가능.")  # 장소 카드(관광공사 상세)만 — 1차 출처
+    assert not place_fallback.web_in("r2", "땅콩 아이스크림을 판다")  # 웹 사실이 없는 장소
+    assert not place_fallback.web_in("r1", "")
 
 
 def test_store_failure_still_gives_the_fallback_and_says_so() -> None:

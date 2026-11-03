@@ -527,11 +527,14 @@
 
 ## src/features/reflection/
 - `src/features/reflection/index.ts`  →  useTripSummary · useRecordBarNav
-- `src/features/reflection/index.view.ts`  →  formatKm · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · SHARE_FORMATS · buildShareCard · formatShareCardStats · validateCaption · validateHashtags · pickReflectionDate · summaryStats · daySubtitle · distanceSourceLabel · resolveSummaryView · shareEnabled · toOrderedVisitList · BackArrowGlyph · EmptyCircleGlyph · LocationOffGlyph · PhotoOffGlyph · RetryGlyph
+- `src/features/reflection/index.view.ts`  →  formatKm · buildMagazineVM · ReflectionMagazine · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · SHARE_FORMATS · buildShareCard · formatShareCardStats · validateCaption · validateHashtags · pickReflectionDate · summaryStats · daySubtitle · distanceSourceLabel · resolveSummaryView · shareEnabled · toOrderedVisitList · BackArrowGlyph · EmptyCircleGlyph · LocationOffGlyph · PhotoOffGlyph · RetryGlyph
 
 ## src/features/reflection/model/
+- `src/features/reflection/model/categoryPalette.ts`  →  PaletteKey · CategoryPalette · CATEGORY_PALETTES · MAGAZINE_TONES · paletteKeyForCategory
 - `src/features/reflection/model/formatKm.ts`  →  formatKm
+- `src/features/reflection/model/magazineVM.ts`  →  MagazineVisit · MagazineSlot · MagazineInput · MagazinePicture · MagazineVM · splitHighlight · buildMagazineVM
 - `src/features/reflection/model/recordBarNav.ts`  →  RecordBarNav · pickReflectionDate
+- `src/features/reflection/model/reflectionPayload.ts`  →  ReflectionScene · ReflectionPayload · SceneKind · parseReflectionPayload · sceneKind · devicePhotoUri · slotUri
 - `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · formatShareCardStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags
 - `src/features/reflection/model/summaryStats.ts`  →  SummaryStatCells · summaryStats
 - `src/features/reflection/model/summaryView.ts`  →  OrderedVisit · shareEnabled · resolveSummaryView · toOrderedVisitList · distanceSourceLabel · daySubtitle
@@ -539,7 +542,10 @@
 - `src/features/reflection/model/useTripSummary.ts`  →  UseTripSummaryResult · useTripSummary
 
 ## src/features/reflection/ui/
+- `src/features/reflection/ui/MagazineMotion.tsx`  →  KenBurns · StickerPop · Highlight
+- `src/features/reflection/ui/MagazineParts.tsx`  →  MagazineCover · MagazineQuote · MagazineSceneCard · MagazinePlanChange · MagazineRoute · MagazineStats · MagazineHashtags
 - `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph · BackArrowGlyph
+- `src/features/reflection/ui/ReflectionMagazine.tsx`  →  ReflectionMagazineProps · ReflectionMagazine
 
 ## src/features/request-replan/
 - `src/features/request-replan/index.ts`  →  useStartReplan
@@ -800,9 +806,11 @@
 
 ## src/pages/itinerary/itinerary-copick/model/
 - `src/pages/itinerary/itinerary-copick/model/candidateSelection.ts`  →  resolveCandidateSelection
+- `src/pages/itinerary/itinerary-copick/model/centerChoice.ts`  →  CenterChoiceKey · CenterSel · AUTO_CENTER · buildCenter · POINT_UNAVAILABLE_NOTICE · centerRejectionNotice
 - `src/pages/itinerary/itinerary-copick/model/radiusUsedLabel.ts`  →  formatRadiusUsed
 
 ## src/pages/itinerary/itinerary-copick/ui/
+- `src/pages/itinerary/itinerary-copick/ui/CenterPointPicker.tsx`  →  CenterPointPicker
 - `src/pages/itinerary/itinerary-copick/ui/CoPickCompletePage.tsx`  →  CoPickCompletePageProps · CoPickCompletePage
 - `src/pages/itinerary/itinerary-copick/ui/CoPickLeaveDialog.tsx`  →  CoPickLeaveDialog
 - `src/pages/itinerary/itinerary-copick/ui/CoPickStepper.tsx`  →  CoPickStep · CoPickStepperProps · CoPickStepper
@@ -810,7 +818,7 @@
 - `src/pages/itinerary/itinerary-copick/ui/ConceptPickerScreen.tsx`  →  ConceptProgress · ConceptPickerScreenProps · ConceptPickerScreen
 - `src/pages/itinerary/itinerary-copick/ui/SlotCandidateCard.tsx`  →  SlotCandidateCardProps · SlotCandidateCard
 - `src/pages/itinerary/itinerary-copick/ui/SlotFillPage.tsx`  →  SlotFillPageProps · SlotFillPage
-- `src/pages/itinerary/itinerary-copick/ui/SlotFillScreen.tsx`  →  SlotFillScreenProps · SlotFillScreen
+- `src/pages/itinerary/itinerary-copick/ui/SlotFillScreen.tsx`  →  CenterChoiceProps · SlotFillScreenProps · SlotFillScreen
 
 ## src/pages/itinerary/itinerary-draft/config/
 - `src/pages/itinerary/itinerary-draft/config/generationFallback.ts`  →  GENERATION_FALLBACK_PROGRESS · GENERATION_FALLBACK_TITLE · GENERATION_FALLBACK_MAP_PILL · GENERATION_FALLBACK_MESSAGE_TITLE · GENERATION_FALLBACK_MESSAGE_BODY · GENERATION_FALLBACK_CHECK_ROUTE · GENERATION_FALLBACK_CHECK_SKIPPED · GENERATION_FALLBACK_CHECK_DONE · GENERATION_FALLBACK_VIEW_PLAN · GENERATION_FALLBACK_MANUAL · GENERATION_FALLBACK_FAILED_TITLE · GENERATION_FALLBACK_FAILED_NOTE · GENERATION_FALLBACK_RETRY
@@ -1072,18 +1080,16 @@
 - `src/pages/record/daily-reflection/model/fillTemplate.ts`  →  TemplateContext · GUIDE_TEXTS · isGuideText · isTemplateOnly · fillTemplate
 - `src/pages/record/daily-reflection/model/missingParts.ts`  →  LocationPermissionState · MapNoticeReason · MapNotice · MissingParts · missingParts
 - `src/pages/record/daily-reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative · basicNarrative
-- `src/pages/record/daily-reflection/model/reflectionScenes.ts`  →  ReflectionScene · parseScenes · slotUri
 - `src/pages/record/daily-reflection/model/statsCard.ts`  →  statsCard
 - `src/pages/record/daily-reflection/model/useDailyReflection.ts`  →  UseDailyReflectionResult · useDailyReflection
+- `src/pages/record/daily-reflection/model/useMagazineSources.ts`  →  useMagazineSources
 - `src/pages/record/daily-reflection/model/useReflectionPhotos.ts`  →  useReflectionPhotos
 
 ## src/pages/record/daily-reflection/ui/
 - `src/pages/record/daily-reflection/ui/ChangeSummaryRow.tsx`  →  ChangeSummaryRowProps · ChangeSummaryRow
 - `src/pages/record/daily-reflection/ui/DailyReflectionPage.tsx`  →  DailyReflectionPageProps · DailyReflectionPage
 - `src/pages/record/daily-reflection/ui/DailyReflectionScreen.tsx`  →  ReflectionFace · ReflectionDayTab · DailyReflectionScreenProps · DailyReflectionScreen
-- `src/pages/record/daily-reflection/ui/NarrativeBlock.tsx`  →  NarrativeBlockProps · NarrativeBlock
 - `src/pages/record/daily-reflection/ui/ReflectionPhotoGrid.tsx`  →  ReflectionPhotoGridProps · ReflectionPhotoGrid
-- `src/pages/record/daily-reflection/ui/ReflectionScenes.tsx`  →  ReflectionScenesProps · ReflectionScenes
 - `src/pages/record/daily-reflection/ui/ReflectionStatsRow.tsx`  →  ReflectionStatsRowProps · ReflectionStatsRow
 
 ## src/pages/record/record-add-visit/
@@ -1156,7 +1162,6 @@
 - `src/pages/record/trip-summary/index.ts`  →  TripSummaryPage
 
 ## src/pages/record/trip-summary/ui/
-- `src/pages/record/trip-summary/ui/CountUpText.tsx`  →  COUNT_UP_DURATION_MS · CountUpText
 - `src/pages/record/trip-summary/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
 - `src/pages/record/trip-summary/ui/TripSummaryPage.tsx`  →  TripSummaryPageProps · TripSummaryPage
 - `src/pages/record/trip-summary/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayReflectionVM · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
@@ -1452,6 +1457,7 @@
 - `src/shared/api/generated/schemas/getTripsTripIdOpportunitiesParams.ts`  →  GetTripsTripIdOpportunitiesParams
 - `src/shared/api/generated/schemas/getTripsTripIdRecordsParams.ts`  →  GetTripsTripIdRecordsParams
 - `src/shared/api/generated/schemas/getTripsTripIdReplanSessionsPreparedParams.ts`  →  GetTripsTripIdReplanSessionsPreparedParams
+- `src/shared/api/generated/schemas/imageLicense.ts`  →  ImageLicense
 - `src/shared/api/generated/schemas/index.ts`  →  (export 없음)
 - `src/shared/api/generated/schemas/intervalReportRequest.ts`  →  IntervalReportRequest
 - `src/shared/api/generated/schemas/intervalReportRequestEndReason.ts`  →  IntervalReportRequestEndReason
@@ -1681,7 +1687,7 @@
 - `src/shared/lib/nicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
 - `src/shared/lib/placeCover.ts`  →  fnv1a32 · placeCoverSource
 - `src/shared/lib/pressGuard.ts`  →  guardPress · openPressGuardWindow · resetPressGuard
-- `src/shared/lib/reduceMotion.ts`  →  onReduceMotionAnswer · startUnlessReduceMotion · useReduceMotion
+- `src/shared/lib/reduceMotion.ts`  →  onReduceMotionAnswer · startUnlessReduceMotion · useReduceMotion · resetReduceMotionForTests
 - `src/shared/lib/seoulDate.ts`  →  seoulDate · seoulTime · seoulInstant
 - `src/shared/lib/sheetHandle.ts`  →  SHEET_HANDLE_INDICATOR_STYLE
 - `src/shared/lib/startupMarks.ts`  →  StartupMarkDetail · mark · flushMarks
@@ -1785,6 +1791,7 @@
 - `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · TAB_BAR_MIN_HEIGHT · TAB_BAR_PADDING_TOP · TAB_BAR_TOP · BottomTabBarProps · ItineraryIconActive · ItineraryIconInactive · RecordsIconActive · RecordsIconInactive · TAB_CONFIG · BottomTabBar
 - `src/shared/ui/CollageEmptyState.tsx`  →  CollageEmptyStateProps · CollageEmptyState
 - `src/shared/ui/ConfirmDialog.tsx`  →  ConfirmTone · ConfirmButton · ConfirmDialogProps · ConfirmDialog
+- `src/shared/ui/CountUpText.tsx`  →  COUNT_UP_DURATION_MS · CountUpText
 - `src/shared/ui/GlassSurface.tsx`  →  GlassSurfaceProps · GlassSurface
 - `src/shared/ui/HeartButton.tsx`  →  HeartButtonProps · heartSaveLabel · HeartButton
 - `src/shared/ui/HeartGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
@@ -1828,7 +1835,7 @@
 - `src/shared/ui/useToastBottom.ts`  →  useToastBottom
 
 ## src/test-support/
-- `src/test-support/animatedProbe.ts`  →  AnimatedProbe · useAnimatedProbe · hostNodes · answerReduceMotionSynchronously
+- `src/test-support/animatedProbe.ts`  →  AnimatedProbe · useAnimatedProbe · hostNodes · answerReduceMotionSynchronously · emitReduceMotionChange
 - `src/test-support/apiBase.ts`  →  BASE
 - `src/test-support/barMotionProbe.ts`  →  BAR_ROOT · SCHEDULE · START_HOME · START_EXPLORE · START_RECORDS · START_MY · START_CELLS · FINAL_IDS · START5_IDS · NEW_CELLS · BarIds · HUB_IDS · withBarIds · visibleIds · frameSample · MotionWatch · watchMotion · joinWatches · advance · moved · structureSteady · lastSample · firstSeen · firstGone · staysOnceSeen · staysOnceGone · deferOsAnswer · flushOsAnswer · holdReduceMotionOn · layoutStyle · hiddenSpacingClasses · RowReading · readRow · setWindowWidth · SlotEffect · slotEffect · rootScale · isMounted · scheduleVisibleCenter · InteractionGate · useInteractionGate
 - `src/test-support/basesFakeServer.ts`  →  basesStay · STAY_A · STAY_B · basesAssignment · basesTrip · NETWORK_WAIT · assignNight · sheetClosed · settle · BasesFakeInit · createBasesFakeServer
@@ -1867,6 +1874,7 @@
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
 - `src/test-support/queryRender.tsx`  →  newTestQueryClient · createWrapper · createGcZeroWrapper · renderWithQueryClient · settle · createClockSkew
 - `src/test-support/queryTimersUnref.ts`  →  (export 없음)
+- `src/test-support/reduceMotionReset.ts`  →  (export 없음)
 - `src/test-support/revealProbe.ts`  →  revealWrapper · RevealValues · revealValues
 - `src/test-support/settingsHandlers.ts`  →  API_BASE · SettingsBodies · settingsHandlers · createNetworkTracker
 - `src/test-support/sheetTree.ts`  →  closestAncestor · isInsideSheet · sheetScrollOf · treeIndexOf · renderedText · closestScrollView · stubScrollTo · fireChipLayout
@@ -1933,4 +1941,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1255개 파일
+합계 1263개 파일

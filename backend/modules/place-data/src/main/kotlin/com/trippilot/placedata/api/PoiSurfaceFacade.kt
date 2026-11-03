@@ -43,6 +43,11 @@ data class PoiSurfaceView(
     val tags: List<String>,
     /** 행정구역 코드(시군구 5자리 또는 시도 2자리, 모르면 null) — 회고가 "어디서" 를 실제 방문 지역으로 쓴다(TRIP-1706). */
     val regionCode: String? = null,
+    /**
+     * [imageUrl] 사진의 공공누리 유형 `TYPE1`·`TYPE3`(V2.88) — 화면이 TYPE3 사진을 자르지 않으려고 쓴다. 모르면 null.
+     * 기본값 인자라 **맨 뒤에** 둔다(위치 인자로 조립하는 호출이 많다).
+     */
+    val imageLicense: String? = null,
 )
 
 /** 동결 표면 — 확정 일정이 원본 변화에 흔들리지 않게 하는 값(INV-U1-03). */

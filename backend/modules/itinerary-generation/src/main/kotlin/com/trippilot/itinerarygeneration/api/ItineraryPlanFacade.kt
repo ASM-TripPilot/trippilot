@@ -75,6 +75,8 @@ data class PlannedSlotView(
     val nameKo: String? = null,
     val category: String? = null,
     val imageUrl: String? = null,
+    /** [imageUrl] 사진의 공공누리 유형 `TYPE1`·`TYPE3` — TYPE3 이면 화면이 자르지 않는다. 모르면 null. */
+    val imageLicense: String? = null,
     val lat: Double? = null,
     val lng: Double? = null,
     /**

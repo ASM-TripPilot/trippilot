@@ -637,6 +637,92 @@ def test_pbt_named_extras_are_pool_members_named_in_the_utterance(picks: list[in
     assert ids[40:] == [f"N-{i:03d}" for i in beyond[:_NAMED_EXTRA]]
 
 
+# ── 이름 조회가 찾은 곳(F9) — 풀 밖·상한 밖·지역 접두/지점 접미 꼴 ──────────────
+
+
+def _named_input(utterance: str, named: tuple[Poi, ...], current: tuple[str, ...] = ()) -> EditTranslationInput:
+    return EditTranslationInput(utterance=utterance, target_date="2026-10-22",
+                                current_slots=tuple(PoiId(x) for x in current), named=named)
+
+
+def test_looked_up_place_beyond_the_cap_is_rendered_even_in_a_cut_form() -> None:
+    """등록 이름이 지역 접두("서귀포 하논분화구")라 말("하논분화구")의 꼴과 달라 상한 밖 이름 대조(#1731)는 못 싣는다 — 이름 조회가
+    찾아 `named` 로 넘기면 상한과 무관하게 실린다. 상한 렌더는 그대로다."""
+    names = list(_PARKS)
+    names[45] = "서귀포 하논분화구"
+    pool = _ranked_pool(names)
+    poi = next(p for p in pool.pois if p.name == "서귀포 하논분화구")
+    assert _candidate_lines(pool, "하논분화구 넣어줘") == _CAPPED  # 종전 — 꼴이 달라 못 싣는다
+    rendered = build_edit_translation_vars(pool, _named_input("하논분화구 넣어줘", (poi,)))["candidates"]
+    assert rendered.splitlines() == [*_CAPPED, "- N-045 | NATURE | 서귀포 하논분화구"]
+
+
+def test_looked_up_place_outside_the_pool_is_not_rendered() -> None:
+    """`named` 는 호출측이 풀에도 합친 곳이어야 실린다 — 풀 밖이면 싣지 않는다(실린 후보 ⊆ 게이트 대조 집합, INV-1)."""
+    pool = _ranked_pool(_PARKS)
+    stray = replace(pool.pois[0], poi_id=PoiId("X-1"), name="효창공원")
+    assert build_edit_translation_vars(pool, _named_input("효창공원 넣어줘", (stray,)))["candidates"].splitlines() == _CAPPED
+
+
+def test_looked_up_place_already_shown_or_a_current_slot_is_not_repeated() -> None:
+    names = list(_PARKS)
+    names[44] = "효창공원"  # 상한 밖 — 말에 이름 그대로 들어 #1731 이 이미 싣는다
+    pool = _ranked_pool(names)
+    hyochang, first = pool.pois[44], pool.pois[0]
+    lines = build_edit_translation_vars(
+        pool, _named_input("효창공원 넣어줘", (hyochang, first, hyochang), current=("N-000",)))["candidates"].splitlines()
+    assert lines.count("- N-044 | NATURE | 효창공원") == 1
+    assert not any(line.startswith("- N-000 |") for line in lines)  # 지금 슬롯은 후보가 아니다
+
+
+def test_said_name_keys_follow_the_word_start_rule() -> None:
+    """한 낱말 말은 공백 뗀 이름과, 여러 낱말 말은 그 띄어쓰기 그대로의 이름과 맞춘다 — "내일 카페"는 '내일카페'를 찾지 않는다.
+    끝 낱말은 조사를 뗀 꼴과 안 뗀 꼴 둘 다(뗀 것이 이름 끝일 수 있다 — '거제도'), 세 글자 미만은 말이 아니다."""
+    from trippilot.llm_gateway.workers.content.edit_translation import said_name_keys
+
+    words, spans = said_name_keys("내일 카페 하나 넣어줘", ())
+    assert "내일카페" not in words and "내일 카페" in spans and "카페" not in words
+    words, _ = said_name_keys("효창공원을 거제도에서 넣어줘", ())
+    assert {"효창공원을", "효창공원", "거제도에서", "거제도"} <= set(words)
+    _, spans = said_name_keys("고집돌우럭 중문점 넣어줘", ())
+    assert "고집돌우럭 중문점" in spans
+
+
+def test_said_name_keys_erase_the_current_slot_names_and_their_cut_forms() -> None:
+    """지금 슬롯을 가리킨 말에서 이름 말을 뽑지 않는다 — 이름 그대로·공백만 다른 꼴·지역 접두/지점 접미를 뗀 꼴까지. 그 말이 같은 이름의
+    다른 곳을 후보로 부르면 번역이 그 id 를 집어 게이트가 명령을 버린다. 슬롯 이름으로 시작하는 더 긴 이름은 싣는다(#1731 과 같다)."""
+    from trippilot.llm_gateway.workers.content.edit_translation import said_name_keys
+
+    words, spans = said_name_keys("경리단길 빼줘", ("경리단길",))
+    assert words == () and all(s.startswith("경리단길 ") for s in spans)  # 슬롯으로 시작하는 더 긴 꼴만(아래 '경동시장 평양냉면')
+    assert said_name_keys("여의도 한강공원 빼줘", ("여의도한강공원",)) == ((), ())
+    assert said_name_keys("하논분화구 빼줘", ("서귀포 하논분화구",)) == ((), ())
+    assert said_name_keys("고집돌우럭 빼줘", ("고집돌우럭 중문점",)) == ((), ())
+    words, spans = said_name_keys("경동시장 평양냉면 넣어줘", ("경동시장",))
+    assert "경동시장" not in words and "경동시장 평양냉면" in spans
+
+
+_SYLLABLES = st.sampled_from(list("효창공원경리단길성산일출봉카페내일하나"))
+_TOKENS = st.lists(_SYLLABLES, min_size=1, max_size=6).map("".join).flatmap(
+    lambda w: st.sampled_from((w, w + "을", w + "에서", w + "도")))
+
+
+@given(st.lists(_TOKENS, min_size=1, max_size=8), st.lists(st.lists(_SYLLABLES, min_size=1, max_size=5).map("".join),
+                                                            max_size=2))
+def test_pbt_said_name_keys_start_at_a_word_and_never_bridge_a_space(tokens: list[str], slots: list[str]) -> None:
+    """모든 말은 발화의 낱말 처음에서 시작하는 그대로의 조각이다(한 낱말 말은 공백이 없고, 여러 낱말 말의 공백은 발화의 공백) —
+    조사를 뗀 끝만 다르다. 지금 슬롯 이름(공백을 뗀 꼴)과 같은 말은 없다."""
+    from trippilot.llm_gateway.workers.content.edit_translation import _norm, said_name_keys
+
+    utterance = " ".join(tokens)
+    words, spans = said_name_keys(utterance, slots)
+    spoken = " " + utterance + " "
+    for key in (*words, *spans):
+        assert (" " in key) == (key in spans)
+        assert len(_norm(key)) >= 3 and _norm(key) not in {_norm(s) for s in slots}
+        assert f" {key}" in spoken  # 낱말 처음에서 시작 — 조사를 뗀 끝은 낱말 안에서 끝날 수 있다
+
+
 def test_build_vars_renders_slot_outside_pool_from_caller_info() -> None:
     """풀 밖 현재 슬롯은 raise 대상이 아니다 (TRIP-527) — 호출측 정보로 렌더한다.
 

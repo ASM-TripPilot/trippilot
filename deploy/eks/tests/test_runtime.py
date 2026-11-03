@@ -301,6 +301,20 @@ class SecretTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 runtime_secrets.validate_groups({**base, "ai": {"HOLIDAY_CLOSURE_MODE": bad}})
 
+    def test_kb5_fallback_switch_is_allowlisted_validated_and_a_runtime_switch(self):
+        """KB-5 대체 문서는 앱 기본이 켜짐이다 — 문제가 보이면 코드 되돌리기 없이 배포 입력으로 끈다(`TRIPPILOT_KB5_FALLBACK=off`).
+        허용 목록에 없으면 시크릿에 넣는 순간 배포 전체가 거부되고, 값이 틀리면 조용히 기본(켜짐)으로 돈다 — 여기서 먼저 막는다."""
+        self.assertIn("TRIPPILOT_KB5_FALLBACK", runtime_secrets.AI_KEYS)
+        self.assertEqual(runtime_secrets.RUNTIME_SWITCHES["TRIPPILOT_KB5_FALLBACK"], "ai")
+        base = {name: {} for name in runtime_secrets.GROUP_KEYS}
+        for ok in ("on", "off", ""):
+            with self.subTest(ok=ok):
+                runtime_secrets.validate_groups({**base, "ai": {"TRIPPILOT_KB5_FALLBACK": ok}})
+        for bad in ("true", "ON", "yes", "0", "disabled"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                runtime_secrets.validate_groups({**base, "ai": {"TRIPPILOT_KB5_FALLBACK": bad}})
+        self.assertEqual(runtime_secrets.parse_runtime_switches("TRIPPILOT_KB5_FALLBACK=off"), {"TRIPPILOT_KB5_FALLBACK": "off"})
+
     def test_runtime_switches_parse_pairs_and_refuse_anything_else(self):
         """배포 입력 `runtime_switches`(KEY=VALUE;…) — 쌍 구분이 `;` 인 것은 카나리 계정 목록 값에 쉼표가 들어 있어서다.
         허용 밖 키·형식 오류·같은 키 두 번은 버리지 않고 배포를 멈춘다 — 조용히 버리면 켠 줄 알고 넘어간다."""
@@ -315,7 +329,7 @@ class SecretTests(unittest.TestCase):
         self.assertEqual(parse("PLANB_PREPARED_REPLAN= "), {"PLANB_PREPARED_REPLAN": ""})  # 빈 값 = 지운다
         self.assertEqual(set(runtime_secrets.RUNTIME_SWITCHES), {
             "PLANB_SITUATION_SWEEP", "PLANB_SITUATION_HORIZON", "PLANB_SITUATION_SWEEP_ACCOUNT_IDS", "PLANB_PREPARED_REPLAN",
-            "HOLIDAY_CLOSURE_MODE"})
+            "HOLIDAY_CLOSURE_MODE", "TRIPPILOT_KB5_FALLBACK"})
         for key, group in runtime_secrets.RUNTIME_SWITCHES.items():  # 스위치는 제 그룹 허용목록 안이어야 쓸 수 있다
             self.assertIn(key, runtime_secrets.GROUP_KEYS[group])
         bads = ("PUSH_MODE=expo", "OPENAI_API_KEY=sk-x", "planb_situation_sweep=on",  # 허용 밖 — 다른 키는 이 길로 못 쓴다

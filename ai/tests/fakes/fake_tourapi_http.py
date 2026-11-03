@@ -83,6 +83,8 @@ def area_of(params: Mapping[str, str]) -> str:
     from trippilot.poi_curation.sourcing.tourapi import LDONG_BY_AREA
     if "areaCode" in params:
         return params["areaCode"]
+    if "lDongRegnCd" not in params:
+        return ""   # 전국 조회(여행코스)
     return next(a for a, l in LDONG_BY_AREA.items() if l == params["lDongRegnCd"])
 
 class HttpStatusError(Exception):
@@ -113,10 +115,12 @@ class FakeTourApiHttp:
         intros: Mapping[str, dict] | None = None,
         dead_keys: Mapping[str, int | str] | None = None,
         commons: Mapping[str, dict] | None = None,
+        infos: Mapping[str, dict] | None = None,
     ) -> None:
         self._pages = dict(pages or {})
         self._intros = dict(intros or {})
         self._commons = dict(commons or {})  # content_id → detailCommon2 봉투
+        self._infos = dict(infos or {})  # content_id → detailInfo2 봉투(여행코스 구성)
         self._dead_keys = dict(dead_keys or {})
         self.calls: list[tuple[str, dict]] = []
 
@@ -135,6 +139,8 @@ class FakeTourApiHttp:
             return self._pages.get(key, envelope([], 0))
         if url.endswith("/detailIntro2"):
             return self._intros.get(params["contentId"], envelope([], 0))
+        if url.endswith("/detailInfo2"):
+            return self._infos.get(params["contentId"], envelope([], 0))
         if url.endswith("/detailCommon2"):
             return self._commons.get(params["contentId"], envelope([], 0))
         raise AssertionError(f"예상 밖 URL: {url}")

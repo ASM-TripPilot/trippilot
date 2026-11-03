@@ -8,6 +8,7 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { ImageLicense } from './imageLicense';
 
 export type SlotCandidatesCandidatesItem = {
   poiId: string;
@@ -22,6 +23,7 @@ export type SlotCandidatesCandidatesItem = {
   tags?: string[];
   /** NULL = 미확보. 대표 1장 */
   imageUrl?: string | null;
+  imageLicense?: ImageLicense | null;
   lat?: number | null;
   lng?: number | null;
 };

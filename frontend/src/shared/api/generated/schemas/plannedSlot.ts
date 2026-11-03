@@ -8,6 +8,7 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { ImageLicense } from './imageLicense';
 
 export interface PlannedSlot {
   /** 경계 키 "{date}#{poiId}" — 실적과 견주는 연결 고리 */
@@ -26,6 +27,7 @@ export interface PlannedSlot {
   nameKo?: string | null;
   category?: string | null;
   imageUrl?: string | null;
+  imageLicense?: ImageLicense | null;
   lat?: number | null;
   lng?: number | null;
   /** 위반 사유 문구. 없으면 null */
