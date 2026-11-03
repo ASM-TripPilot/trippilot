@@ -34,6 +34,7 @@ object PoiCollectionGate {
             address = place.address,
             tags = place.tags,
             imageUrl = place.imageUrl,
+            imageLicense = place.imageLicense,
         )
     }
 }

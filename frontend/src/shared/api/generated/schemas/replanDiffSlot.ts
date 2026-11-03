@@ -8,6 +8,7 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { ImageLicense } from './imageLicense';
 
 /**
  * **소요시간이 없다**(INV-3) — 시각과 순서만.
@@ -24,6 +25,7 @@ export interface ReplanDiffSlot {
   category?: string | null;
   /** NULL = 미확보. 대표 1장 */
   imageUrl?: string | null;
+  imageLicense?: ImageLicense | null;
   lat?: number | null;
   lng?: number | null;
   /** 자정 넘김(HC4). true 면 `endAt` 이 `startAt` 보다 이르다 — 익일 시각이라는 뜻이고, 복귀 시각 비교도 이 값을 반영해 계산한다. */

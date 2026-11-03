@@ -44,13 +44,14 @@ class SlotCandidatesResponseTest : StringSpec({
     "표면이 있으면 이름·카테고리·태그·사진이 그대로 실린다(TRIP-851 · TRIP-1005)" {
         val o = output(degraded = false)
         val poiId = o.candidates.single().poiId
-        val surface = PoiSurfaceView(poiId, "희와제과", 35.1, 129.0, "카페", "CAFE", "부산", "https://img/1.jpg", listOf("빵", "디저트"))
+        val surface = PoiSurfaceView(poiId, "희와제과", 35.1, 129.0, "카페", "CAFE", "부산", "https://img/1.jpg", listOf("빵", "디저트"), imageLicense = "TYPE3")
         val c = SlotCandidatesResponse.from(o, mapOf(poiId to surface)).candidates.single()
 
         c.nameKo shouldBe "희와제과"
         c.category shouldBe "카페"
         c.tags shouldBe listOf("빵", "디저트")
         c.imageUrl shouldBe "https://img/1.jpg"
+        c.imageLicense shouldBe "TYPE3"   // 사진과 한 쌍 — TYPE3 이면 앱이 자르지 않는다(V2.88)
         // 지도 핀 좌표(TRIP-1063 · QA #044) — 정본 좌표 그대로.
         c.lat shouldBe 35.1
         c.lng shouldBe 129.0
@@ -63,6 +64,7 @@ class SlotCandidatesResponseTest : StringSpec({
         c.category shouldBe null
         c.tags shouldBe emptyList<String>()
         c.imageUrl shouldBe null
+        c.imageLicense shouldBe null
         // 좌표도 지어내지 않는다 — 반경 중심 대체 금지(TRIP-1063 금지 AC).
         c.lat shouldBe null
         c.lng shouldBe null

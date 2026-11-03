@@ -1223,18 +1223,21 @@ describe('진행 줄 여행지 접두·지도', () => {
     });
   });
 
-  describe('B1b · 둘째 슬롯을 채울 때 지도 중심은 그 슬롯 (5-b W1 보강)', () => {
-    it('슬롯 b(국립현대미술관) — 중심·원 중심·기준 핀이 b 좌표다(그날 첫 슬롯 a 가 아니다)', async () => {
-      // 준비 — 좌표가 a 와 다른 둘째 슬롯으로 연다. 실행 — 컨셉 고르고 후보 화면. 단언 — 기준점이 b.
-      const SLOT_B = { lat: 37.5786, lng: 126.98 };
+  // TRIP-1669 개정 — 옛 제목은 "그 슬롯(b 자신)". 후보 요청이 coPick:true 가 되면서 서버의 탐색 중심이 직전 슬롯이
+  // 됐고(AC-14), 원·지도 중심·기준 핀은 서버가 쓰는 중심을 그려야 하므로 b 를 채우면 a 좌표다. 첫 슬롯 a 를 채우는
+  // 위 B1·B2·P 계열은 직전이 없어 자기 자신이라 그대로다.
+  describe('B1b · 둘째 슬롯을 채울 때 지도 중심은 직전 슬롯 (TRIP-1669 AC-14)', () => {
+    it('슬롯 b(국립현대미술관) — 중심·원 중심·기준 핀이 직전 슬롯 a 좌표다(b 자신이 아니다)', async () => {
+      // 준비 — 좌표가 a 와 다른 둘째 슬롯으로 연다. 실행 — 컨셉 고르고 후보 화면. 단언 — 기준점이 a.
       renderPage(buildSlotKey(DAY1, 'b'));
       await pickConcept();
       await screen.findByTestId('itinerary-candidate-radio-X');
 
       const map = mapInCard();
-      expect(map.props.radiusCircle.center).toEqual(SLOT_B);
+      expect(map.props.radiusCircle.center).toEqual(SLOT_A);
+      expect(map).toHaveTextContent(`${SLOT_A.lat},${SLOT_A.lng}`);
       const pins = map.props.pins as { lat: number; lng: number }[];
-      expect({ lat: pins[0].lat, lng: pins[0].lng }).toEqual(SLOT_B);
+      expect({ lat: pins[0].lat, lng: pins[0].lng }).toEqual(SLOT_A);
     });
   });
 
@@ -3305,6 +3308,1305 @@ describe('PARTIAL 폴링·확정 잠금·조회 실패', () => {
       await waitFor(() => expect(day).toHaveTextContent(/^1일차 · /));
       expect(day).not.toHaveTextContent(/\//);
       expect(conceptCells()).toBe(0);
+    });
+  });
+});
+
+// TRIP-1669 · 같이 짜기 후보 화면의 "찾는 중심" 고르기 (이 describe 의 명세는 _workspace/20261030-trip1669-copick-center/02a)
+describe('찾는 중심 고르기', () => {
+  /**
+   * 후보를 어느 지점 주변에서 찾을지(center) 고르는 영역 + 후보 요청 바디(`coPick`·`center`) + 지도 원 중심.
+   *
+   * 무엇을 보장하나:
+   *  - AC-1 자동이면 바디는 `coPick:true` 이고 `center` 키가 아예 없다(null 도 아님). 컨셉 탭·건너뛰기·반경 세그먼트·넓히기·
+   *    좁히기·0건 얼굴 버튼 어느 입구든 같다.
+   *  - AC-2·3·4 방금 고른 곳·지역 중심·숙소 근처는 `{mode}` 만, 지도에서 찍기는 확정 버튼을 눌러야 `{mode:'POINT', lat, lng}`.
+   *    반경 선택은 중심을 바꿔도 그대로.
+   *  - AC-5 고른 중심은 다섯 입구(반경·넓히기/좁히기·0건 버튼·컨셉 변경·생성 중 잠금 해제 재발사) 모두의 바디에 실리고,
+   *    자동으로 되돌린 뒤엔 어느 입구에도 옛 중심이 남지 않는다.
+   *  - AC-6~9 펼침은 요청이 아니다 · 기본 '자동 추천' · 숙소 없는 여행엔 '숙소 근처' 없음 · '방금 고른 곳'은 첫 칸에서도 보인다.
+   *  - AC-10~13 REGION·STAY 409 / POINT 400 → 안내 + 자동 되돌림 + 자동 요청 딱 1회(루프 0). 중심 없는 요청의 409 는 종전 그대로.
+   *  - AC-14 지도 원 중심 = 서버가 실제 쓰는 중심(직전 슬롯 · 찍은 점). 지역·숙소는 좌표를 모르니 원도 기준 핀도 없다.
+   *  - AC-15 새 문구에 시간 표현 0 · AC-17 칸마다 자동으로 시작.
+   *
+   * 3동작: 준비 = 가짜 서버(일정·여행·후보 대본) → 실행 = 컨셉·중심·반경 press → 단언 = 서버가 받은 바디 · 보이는 것 · 지도 props.
+   */
+
+  const BASE = 'http://localhost:8080/api/v1';
+  const TRIP_ID = '66666666-6666-6666-6666-666666666666';
+  const DAY1 = '2026-06-10';
+  const DAY2 = '2026-06-11';
+  const POLL_TEST_TIMEOUT = 30000;
+  const POLL_WAIT_MS = DRAFT_POLL_INTERVAL_MS * 5;
+  const LOCKED_TEXT = '나머지 일정을 만드는 중이에요';
+  // resolveSlotSwapError 폴백 문구(slotSwapError.ts MESSAGE.fallback) — 코드가 `CONFLICT` 인 409 는 여기로 떨어진다.
+  const FALLBACK_TEXT = '지금은 바꿀 수 없어요. 잠시 후 다시 시도해 주세요';
+  // 서버가 중심 재료 없음에 돌려주는 문장(브리프 §4 실측) — 화면은 이 문장을 그대로 내보이지 않는다(FE 가 정한 안내).
+  const SERVER_STAY_MESSAGE =
+    '이 날은 숙소가 없습니다. 다른 기준을 골라 주세요.';
+  const SERVER_REGION_MESSAGE =
+    '고른 지역의 중심을 찾을 수 없습니다. 다른 기준을 골라 주세요.';
+  const SERVER_SENTENCE_FRAGMENT = /다른 기준을 골라 주세요/;
+  const DURATION_TEXT = /(\d+\s*분|\d+\s*시간|소요)/;
+
+  // 좌표는 전부 서로 다르다 — 원 중심을 엉뚱한 슬롯으로 잡는 뮤턴트와 구별한다.
+  const COORD_H = { lat: 37.57, lng: 126.976 }; // 고정 숙소(day1 첫 칸)
+  const COORD_A = { lat: 37.5796, lng: 126.977 };
+  const COORD_B = { lat: 37.5786, lng: 126.98 };
+  const COORD_C = { lat: 37.56, lng: 126.99 }; // day2 첫 칸
+  const COORD_D = { lat: 37.561, lng: 126.991 };
+
+  function slot(
+    overrides: Partial<ItineraryDaysItemSlotsItem> &
+      Pick<ItineraryDaysItemSlotsItem, 'poiId' | 'startAt' | 'endAt'>
+  ): ItineraryDaysItemSlotsItem {
+    return {
+      isFixed: false,
+      endsNextDay: false,
+      hasViolation: false,
+      alternatives: [],
+      tags: [],
+      ...overrides,
+    };
+  }
+
+  // day1 [h 고정 숙소, a, b] · day2 [c, d]. PARTIAL 은 day1 만 담긴다(openapi POST 201).
+  let aHasCoords: boolean;
+  // 켜면 모든 슬롯의 좌표가 null(W-3: 지도를 열 시작 좌표가 하나도 없는 일정).
+  let noCoords: boolean;
+  let lastClient: QueryClient;
+  function itinerary(state: ItineraryGenerationState): Itinerary {
+    const day1: ItineraryDaysItem = {
+      date: DAY1,
+      slots: [
+        slot({
+          poiId: 'h',
+          nameKo: '호텔',
+          category: '숙소',
+          isFixed: true,
+          startAt: '08:00:00',
+          endAt: '09:00:00',
+          ...COORD_H,
+        }),
+        slot({
+          poiId: 'a',
+          nameKo: '경복궁',
+          startAt: '09:30:00',
+          endAt: '11:00:00',
+          ...(aHasCoords ? COORD_A : { lat: null, lng: null }),
+        }),
+        slot({
+          poiId: 'b',
+          nameKo: '국립현대미술관',
+          startAt: '13:00:00',
+          endAt: '14:00:00',
+          ...COORD_B,
+        }),
+      ],
+    };
+    const day2: ItineraryDaysItem = {
+      date: DAY2,
+      slots: [
+        slot({
+          poiId: 'c',
+          nameKo: '북촌',
+          startAt: '10:00:00',
+          endAt: '11:00:00',
+          ...COORD_C,
+        }),
+        slot({
+          poiId: 'd',
+          nameKo: '인사동',
+          startAt: '12:00:00',
+          endAt: '13:00:00',
+          ...COORD_D,
+        }),
+      ],
+    };
+    return {
+      itineraryId: 'itin-1669',
+      tripId: TRIP_ID,
+      status: 'PLANNED',
+      solveMode: 'FULL_AI',
+      generationMode: 'CO_PLAN',
+      generationState: state,
+      isFallback: false,
+      scoringMode: null,
+      degradations: [],
+      days: (state === 'COMPLETE' ? [day1, day2] : [day1]).map((day) => ({
+        ...day,
+        slots: day.slots.map((entry) =>
+          noCoords ? { ...entry, lat: null, lng: null } : entry
+        ),
+      })),
+    };
+  }
+
+  // baseCount 가 기본 0 이라 '숙소 근처'가 안 그려진다(AC-8) — STAY 케이스는 1 로 올려 쓴다.
+  let baseCount: number;
+  function trip(): Trip {
+    return baseTrip({
+      tripId: TRIP_ID,
+      title: '중심 테스트 여행',
+      startDate: DAY1,
+      endDate: DAY2,
+      party: 1,
+      destinations: [],
+      createdAt: '2026-06-01T00:00:00Z',
+      updatedAt: '2026-06-01T00:00:00Z',
+      baseCount,
+      itineraryDayCount: 2,
+    });
+  }
+
+  const NORMAL = {
+    candidates: [
+      { poiId: 'X', distanceRange: '420m', rationale: '가장 가까운 실내 전시' },
+      { poiId: 'Y', distanceRange: '770m', rationale: '조용한 카페' },
+    ],
+  };
+
+  // 테스트별로 바꿔 끼우는 대본 — call 은 0부터 센 후보 POST 차수, body 는 그 요청 바디.
+  let itineraryScript: (call: number) => Itinerary;
+  let candidatesScript: (
+    call: number,
+    body: SlotCandidatesRequest
+  ) => Response | Promise<Response>;
+  let emptyNext: boolean;
+  let getCalls: number;
+  let postBodies: SlotCandidatesRequest[];
+  let putCalls: number;
+
+  function ok(body: SlotCandidatesRequest): Response {
+    if (emptyNext) {
+      emptyNext = false;
+      return HttpResponse.json({
+        candidates: [],
+        radiusMUsed: body.radiusM ?? 11300,
+        degraded: false,
+      });
+    }
+    return HttpResponse.json({
+      ...NORMAL,
+      radiusMUsed: body.radiusM ?? 11300,
+      degraded: false,
+    });
+  }
+  function conflict(message = '일정 생성이 진행 중입니다.'): Response {
+    return HttpResponse.json(
+      { error: { code: 'CONFLICT', message } },
+      { status: 409 }
+    );
+  }
+  function badRequest(): Response {
+    return HttpResponse.json(
+      {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'center.lat must be between -90 and 90',
+        },
+      },
+      { status: 400 }
+    );
+  }
+
+  function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  beforeEach(() => {
+    aHasCoords = true;
+    noCoords = false;
+    baseCount = 0;
+    emptyNext = false;
+    getCalls = 0;
+    postBodies = [];
+    putCalls = 0;
+    itineraryScript = () => itinerary('COMPLETE');
+    candidatesScript = (_call, body) => ok(body);
+    setAccessToken('valid-access');
+
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(trip())),
+      http.get(`${BASE}/trips/:tripId/itinerary`, () => {
+        const call = getCalls;
+        getCalls += 1;
+        return HttpResponse.json(itineraryScript(call));
+      }),
+      http.post(
+        `${BASE}/trips/:tripId/itinerary/slot-candidates`,
+        async ({ request }) => {
+          const body = (await request.json()) as SlotCandidatesRequest;
+          const call = postBodies.length;
+          postBodies.push(body);
+          return candidatesScript(call, body);
+        }
+      ),
+      http.put(`${BASE}/trips/:tripId/itinerary`, () => {
+        putCalls += 1;
+        return HttpResponse.json(itinerary('COMPLETE'));
+      })
+    );
+  });
+
+  afterEach(() => {
+    server.resetHandlers();
+    clearAccessToken();
+  });
+
+  function renderPage(slotKey: string = buildSlotKey(DAY1, 'b')) {
+    const client = newTestQueryClient({ gcTime: 0 });
+    lastClient = client;
+    return render(<SlotFillPage tripId={TRIP_ID} slotKey={slotKey} />, {
+      wrapper: createWrapper(client),
+    });
+  }
+
+  // 일정 GET 이 도착해야 컨셉·지도 문맥이 생긴다 — 컨셉 버튼은 일정 도착과 무관하게 뜨므로 첫 후보까지 기다린다.
+  async function openCandidates(
+    slotKey: string = buildSlotKey(DAY1, 'b'),
+    concept = 'culture'
+  ) {
+    const view = renderPage(slotKey);
+    fireEvent.press(
+      await screen.findByTestId(`itinerary-copick-concept-${concept}`)
+    );
+    await screen.findByTestId('itinerary-candidate-radio-X');
+    return view;
+  }
+
+  const OPT = (key: string) => `itinerary-copick-center-opt-${key}`;
+  const TOGGLE = 'itinerary-copick-center-toggle';
+  const NOTICE = 'itinerary-copick-center-notice';
+  const PICKER = 'center-pin-picker';
+
+  async function waitPosts(count: number) {
+    await waitFor(() => expect(postBodies).toHaveLength(count));
+  }
+
+  /** 새 후보 POST 가 나갔고 그 응답(후보 X)이 화면에 도착할 때까지. */
+  async function waitPostsAndCandidates(count: number) {
+    await waitPosts(count);
+    await screen.findByTestId('itinerary-candidate-radio-X');
+  }
+
+  /** '다른 기준 보기'를 펼친다(이미 펼쳐져 있으면 그대로). */
+  async function expandCenters() {
+    if (screen.queryByTestId(OPT('region')) === null) {
+      fireEvent.press(screen.getByTestId(TOGGLE));
+    }
+    await screen.findByTestId(OPT('region'));
+  }
+
+  /** 중심 선택지를 누른다 — 보조 선택지는 펼친 뒤에만 있으므로 먼저 펼친다. */
+  async function chooseCenter(key: string) {
+    if (key !== 'auto') await expandCenters();
+    fireEvent.press(screen.getByTestId(OPT(key)));
+  }
+
+  function isSelected(key: string): boolean {
+    return screen.getByTestId(OPT(key)).props.accessibilityState?.selected;
+  }
+
+  function lastBody(): SlotCandidatesRequest {
+    return postBodies[postBodies.length - 1];
+  }
+
+  /**
+   * 중심을 안 쓴 요청 바디의 모양 — coPick 은 있고 center 는 키 자체가 없다.
+   * (`toStrictEqual` 이 아니라 `toEqual`: MSW 가 파싱한 바디는 jest 가상머신 밖 realm 의 객체라 strict 는
+   * 내용이 같아도 prototype 비교에서 실패한다. 서버가 받은 JSON 에는 undefined 키가 없어서 `toEqual` 도 여분 키
+   * — `center: null` 포함 — 는 잡는다.)
+   */
+  function expectAutoBody(
+    body: SlotCandidatesRequest,
+    expected: { slotKey: string; radiusM: number | null; concept?: string }
+  ) {
+    expect(body).toEqual({
+      slotKey: expected.slotKey,
+      radiusM: expected.radiusM,
+      ...(expected.concept === undefined ? {} : { concept: expected.concept }),
+      coPick: true,
+    });
+    expect('center' in body).toBe(false);
+  }
+
+  const SLOT_B = buildSlotKey(DAY1, 'b');
+  const CULTURE = '전시·문화';
+
+  function mapInCard() {
+    const card = screen.getByTestId('itinerary-copick-slotfill-map');
+    return within(card).getByTestId('map-root');
+  }
+
+  type Pin = { number: number; lat: number; lng: number; label?: string };
+
+  // ---------------------------------------------------------------------------------------------
+  describe('🔴 AC-1 · 자동이면 coPick:true 이고 center 키는 없다 (입구 여섯)', () => {
+    type EntranceRow = {
+      label: string;
+      radiusM: number | null;
+      concept: string | undefined;
+      prepare?: () => Promise<void>;
+      go: () => Promise<void>;
+    };
+
+    // 입구마다 "마지막에 나가는 요청"을 만든다. 준비 동작이 만든 요청은 세지 않는다(go 앞의 길이를 잰다).
+    const ENTRANCES: EntranceRow[] = [
+      {
+        label: '컨셉 탭',
+        radiusM: 1100,
+        concept: CULTURE,
+        go: async () => {
+          fireEvent.press(
+            await screen.findByTestId('itinerary-copick-concept-culture')
+          );
+        },
+      },
+      {
+        label: '건너뛰기',
+        radiusM: 1100,
+        concept: undefined,
+        go: async () => {
+          fireEvent.press(
+            await screen.findByTestId('itinerary-copick-concept-skip')
+          );
+        },
+      },
+      {
+        label: '반경 세그먼트',
+        radiusM: 700,
+        concept: CULTURE,
+        prepare: async () => {
+          fireEvent.press(
+            await screen.findByTestId('itinerary-copick-concept-culture')
+          );
+          await screen.findByTestId('itinerary-candidate-radio-X');
+        },
+        go: async () => {
+          fireEvent.press(
+            screen.getByTestId('itinerary-copick-radius-seg-near')
+          );
+        },
+      },
+      {
+        label: '하단바 반경 넓히기',
+        radiusM: null,
+        concept: CULTURE,
+        prepare: async () => {
+          fireEvent.press(
+            await screen.findByTestId('itinerary-copick-concept-culture')
+          );
+          await screen.findByTestId('itinerary-candidate-radio-X');
+        },
+        go: async () => {
+          fireEvent.press(
+            screen.getByTestId('itinerary-copick-slotfill-radius')
+          );
+        },
+      },
+      {
+        label: '하단바 반경 좁히기',
+        radiusM: 1100,
+        concept: CULTURE,
+        prepare: async () => {
+          fireEvent.press(
+            await screen.findByTestId('itinerary-copick-concept-culture')
+          );
+          await screen.findByTestId('itinerary-candidate-radio-X');
+          fireEvent.press(
+            screen.getByTestId('itinerary-copick-radius-seg-max')
+          );
+          await waitFor(() => expect(postBodies).toHaveLength(2));
+          await screen.findByTestId('itinerary-candidate-radio-X');
+        },
+        go: async () => {
+          fireEvent.press(
+            screen.getByTestId('itinerary-copick-slotfill-radius')
+          );
+        },
+      },
+      {
+        label: '0건 얼굴 반경 넓히기',
+        radiusM: 1100,
+        concept: CULTURE,
+        prepare: async () => {
+          fireEvent.press(
+            await screen.findByTestId('itinerary-copick-concept-culture')
+          );
+          await screen.findByTestId('itinerary-candidate-radio-X');
+          emptyNext = true;
+          fireEvent.press(
+            screen.getByTestId('itinerary-copick-radius-seg-near')
+          );
+          await screen.findByTestId('itinerary-copick-zero');
+        },
+        go: async () => {
+          fireEvent.press(screen.getByTestId('itinerary-copick-zero-radius'));
+        },
+      },
+    ];
+
+    it.each(ENTRANCES)('$label', async (row) => {
+      // 준비 — 입구 앞 상태까지 간다. 실행 — 그 입구를 누른다. 단언 — 나간 바디.
+      renderPage();
+      await row.prepare?.();
+      const before = postBodies.length;
+      await row.go();
+      await waitPosts(before + 1);
+
+      expectAutoBody(lastBody(), {
+        slotKey: SLOT_B,
+        radiusM: row.radiusM,
+        concept: row.concept,
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  describe('🔴 AC-2 · 방금 고른 곳·지역 중심·숙소 근처 → center 는 {mode} 만', () => {
+    it.each([
+      ['previous', 'PREVIOUS'],
+      ['region', 'REGION'],
+      ['stay', 'STAY'],
+    ] as const)(
+      '%s → {mode:%s}, lat·lng 키 없음, 나머지 필드는 직전 요청 그대로',
+      async (key, mode) => {
+        baseCount = 1; // '숙소 근처'가 그려지게
+        await openCandidates();
+        const first = lastBody();
+        await chooseCenter(key);
+        await waitPostsAndCandidates(2);
+
+        expect(lastBody()).toEqual({
+          ...first,
+          coPick: true,
+          center: { mode },
+        });
+        expect(Object.keys(lastBody().center ?? {})).toEqual(['mode']);
+        expect(isSelected(key)).toBe(true);
+        expect(isSelected('auto')).toBe(false);
+      }
+    );
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  describe('🔴 AC-3 · 지도에서 찍기는 확정 버튼을 눌러야 POINT 요청이 나간다', () => {
+    const PICKED_1 = { lat: 37.5, lng: 127.03 };
+    const PICKED_2 = { lat: 37.5123456, lng: 127.0987654 };
+
+    function firePick(coords: { lat: number; lng: number }) {
+      const picker = screen.getByTestId(PICKER);
+      act(() => {
+        picker.props.onPick(coords);
+      });
+    }
+
+    it('CC3a · 선택 화면을 열고 좌표를 여러 번 바꿔도 POST 는 0건 → 확정하면 마지막 좌표 그대로 POINT 1건', async () => {
+      await openCandidates();
+      await chooseCenter('point');
+      await screen.findByTestId(PICKER);
+      firePick(PICKED_1);
+      firePick(PICKED_2);
+      await sleep(250);
+      expect(postBodies).toHaveLength(1); // 앵커 — 첫 조회뿐
+
+      fireEvent.press(
+        screen.getByTestId('itinerary-copick-center-point-confirm')
+      );
+      await waitPostsAndCandidates(2);
+
+      expect(lastBody().center).toEqual({ mode: 'POINT', ...PICKED_2 });
+      expect(typeof lastBody().center?.lat).toBe('number');
+      expect(lastBody().coPick).toBe(true);
+      expect(screen.queryByTestId(PICKER)).toBeNull(); // 확정하면 선택 화면은 닫힌다
+      expect(isSelected('point')).toBe(true);
+    });
+
+    it('CC3b · 취소하면 요청 0건 · 선택 화면은 닫히고 직전 선택이 그대로다', async () => {
+      await openCandidates();
+      await chooseCenter('region');
+      await waitPostsAndCandidates(2);
+
+      fireEvent.press(screen.getByTestId(OPT('point')));
+      await screen.findByTestId(PICKER);
+      firePick(PICKED_1);
+      fireEvent.press(
+        screen.getByTestId('itinerary-copick-center-point-cancel')
+      );
+      await sleep(250);
+
+      expect(postBodies).toHaveLength(2);
+      expect(screen.queryByTestId(PICKER)).toBeNull();
+      expect(isSelected('region')).toBe(true);
+      expect(isSelected('point')).toBe(false);
+    });
+
+    it('CC3c · 한 번도 안 움직이고 확정하면 선택 화면이 처음 보여 준 중심이 POINT 로 나간다', async () => {
+      await openCandidates();
+      await chooseCenter('point');
+      const shown = (await screen.findByTestId(PICKER)).props.center;
+      expect(shown).toEqual(COORD_A); // 앵커 — 처음 위치 = 지금 원의 중심(b 의 직전 슬롯 a)
+
+      fireEvent.press(
+        screen.getByTestId('itinerary-copick-center-point-confirm')
+      );
+      await waitPosts(2);
+
+      expect(lastBody().center).toEqual({ mode: 'POINT', ...shown });
+    });
+
+    it('CC3d · 지도를 열 시작 좌표가 하나도 없으면 (0,0) 으로 열지 않고, POINT 요청도 (0,0) 으로 안 나간다', async () => {
+      // 준비 — 모든 슬롯 좌표가 null 인 일정(지도 카드도 없다). 후보 화면까지 간다.
+      noCoords = true;
+      await openCandidates();
+      expect(screen.queryByTestId('map-root')).toBeNull(); // 앵커 — 좌표가 정말 없다
+
+      // 실행 — 지도에서 찍기를 누르고, 선택 화면이 열렸다면 움직이지 않은 채 확정한다.
+      await chooseCenter('point');
+      const picker = screen.queryByTestId(PICKER);
+      if (picker !== null) {
+        expect(picker.props.center).not.toEqual({ lat: 0, lng: 0 });
+        fireEvent.press(
+          screen.getByTestId('itinerary-copick-center-point-confirm')
+        );
+      }
+      await sleep(250);
+
+      // 단언 — (0,0) 짜리 POINT 요청이 서버에 가지 않았다.
+      const falsePoint = postBodies.filter(
+        (body) =>
+          body.center?.mode === 'POINT' &&
+          body.center.lat === 0 &&
+          body.center.lng === 0
+      );
+      expect(falsePoint).toEqual([]);
+    });
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  describe('🔴 AC-4 · 중심을 바꿔도 반경 선택은 유지된다', () => {
+    it.each([
+      ['near', 700],
+      ['max', null],
+    ] as const)(
+      '반경 %s(%s) 선택 뒤 중심을 지역으로 바꿔도 radiusM 그대로',
+      async (segKey, radiusM) => {
+        await openCandidates();
+        fireEvent.press(
+          screen.getByTestId(`itinerary-copick-radius-seg-${segKey}`)
+        );
+        await waitPostsAndCandidates(2);
+
+        await chooseCenter('region');
+        await waitPostsAndCandidates(3);
+
+        expect(lastBody().radiusM).toBe(radiusM);
+        expect(lastBody().center).toEqual({ mode: 'REGION' });
+        expect(
+          screen.getByTestId(`itinerary-copick-radius-seg-${segKey}`).props
+            .accessibilityState?.selected
+        ).toBe(true);
+      }
+    );
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  describe('🔴 AC-5 · 고른 중심은 모든 입구에 실리고, 자동으로 되돌리면 어느 입구에도 안 남는다', () => {
+    type Entrance = {
+      label: string;
+      radiusM: number | null;
+      concept: string | undefined;
+      prepare?: () => Promise<void>;
+      go: () => Promise<void>;
+    };
+
+    async function settleAfterPost(count: number) {
+      await waitPosts(count);
+      await screen.findByTestId('itinerary-candidate-radio-X');
+    }
+
+    const ENTRANCES: Entrance[] = [
+      {
+        label: '반경 세그먼트',
+        radiusM: 700,
+        concept: CULTURE,
+        go: async () => {
+          fireEvent.press(
+            screen.getByTestId('itinerary-copick-radius-seg-near')
+          );
+        },
+      },
+      {
+        label: '하단바 반경 넓히기',
+        radiusM: null,
+        concept: CULTURE,
+        go: async () => {
+          fireEvent.press(
+            screen.getByTestId('itinerary-copick-slotfill-radius')
+          );
+        },
+      },
+      {
+        label: '하단바 반경 좁히기',
+        radiusM: 1100,
+        concept: CULTURE,
+        prepare: async () => {
+          const expected = postBodies.length + 1;
+          fireEvent.press(
+            screen.getByTestId('itinerary-copick-radius-seg-max')
+          );
+          await settleAfterPost(expected);
+        },
+        go: async () => {
+          fireEvent.press(
+            screen.getByTestId('itinerary-copick-slotfill-radius')
+          );
+        },
+      },
+      {
+        label: '0건 얼굴 반경 넓히기',
+        radiusM: 1100,
+        concept: CULTURE,
+        prepare: async () => {
+          emptyNext = true;
+          fireEvent.press(
+            screen.getByTestId('itinerary-copick-radius-seg-near')
+          );
+          await screen.findByTestId('itinerary-copick-zero');
+        },
+        go: async () => {
+          fireEvent.press(screen.getByTestId('itinerary-copick-zero-radius'));
+        },
+      },
+      {
+        label: '컨셉 변경 뒤 다른 컨셉',
+        radiusM: 1100,
+        concept: '카페',
+        go: async () => {
+          fireEvent.press(screen.getByTestId('itinerary-copick-slotfill-back'));
+          fireEvent.press(
+            await screen.findByTestId('itinerary-copick-concept-cafe')
+          );
+        },
+      },
+      {
+        label: '컨셉 변경 뒤 건너뛰기',
+        radiusM: 1100,
+        concept: undefined,
+        go: async () => {
+          fireEvent.press(screen.getByTestId('itinerary-copick-slotfill-back'));
+          fireEvent.press(
+            await screen.findByTestId('itinerary-copick-concept-skip')
+          );
+        },
+      },
+    ];
+
+    it.each(ENTRANCES)(
+      'CC5a · 지역 중심을 고른 뒤 $label → 새 바디에 {mode:REGION}',
+      async (row) => {
+        await openCandidates();
+        await chooseCenter('region');
+        await settleAfterPost(2);
+        await row.prepare?.();
+        const before = postBodies.length;
+        await row.go();
+        await waitPosts(before + 1);
+
+        expect(lastBody()).toEqual({
+          slotKey: SLOT_B,
+          radiusM: row.radiusM,
+          ...(row.concept === undefined ? {} : { concept: row.concept }),
+          coPick: true,
+          center: { mode: 'REGION' },
+        });
+      }
+    );
+
+    it.each(ENTRANCES)(
+      'CC5b · 지역 중심 → 자동 추천으로 되돌린 뒤 $label → center 키가 없다(옛 중심 잔류 0)',
+      async (row) => {
+        await openCandidates();
+        await chooseCenter('region');
+        await settleAfterPost(2);
+        await chooseCenter('auto');
+        await settleAfterPost(3);
+        expect('center' in lastBody()).toBe(false); // 앵커 — 되돌림 요청 자체가 이미 center 없음
+        await row.prepare?.();
+        const before = postBodies.length;
+        await row.go();
+        await waitPosts(before + 1);
+
+        expectAutoBody(lastBody(), {
+          slotKey: SLOT_B,
+          radiusM: row.radiusM,
+          concept: row.concept,
+        });
+        expect(isSelected('auto')).toBe(true);
+      }
+    );
+
+    describe('생성 중 잠금이 풀릴 때의 재발사 (candidatesVariables)', () => {
+      // PARTIAL 로 시작해 한 번 폴링하면 COMPLETE. 잠긴 동안의 409 는 "생성 중" 문구가 이기고(AC-12) 중심 안내·되돌림은 없다.
+      beforeEach(() => {
+        itineraryScript = (call) =>
+          call === 0 ? itinerary('PARTIAL') : itinerary('COMPLETE');
+      });
+
+      it(
+        'CC5c · 지역 중심으로 막힌 채 잠금이 풀리면 재발사 바디에도 {mode:REGION} 이 실린다',
+        async () => {
+          candidatesScript = (call, body) =>
+            call <= 1 ? conflict() : ok(body);
+          renderPage(buildSlotKey(DAY1, 'a'));
+          fireEvent.press(
+            await screen.findByTestId('itinerary-copick-concept-culture')
+          );
+          await screen.findByTestId('itinerary-copick-candidates-error');
+          await chooseCenter('region');
+          await waitPosts(2);
+          const error = await screen.findByTestId(
+            'itinerary-copick-candidates-error'
+          );
+          expect(error).toHaveTextContent(LOCKED_TEXT);
+          // 잠긴 409 는 중심 탓이 아니다 — 되돌리지도 안내하지도 다시 묻지도 않는다.
+          expect(screen.queryByTestId(NOTICE)).toBeNull();
+          expect(isSelected('region')).toBe(true);
+
+          await screen.findByTestId(
+            'itinerary-candidate-radio-X',
+            {},
+            { timeout: POLL_WAIT_MS }
+          );
+          expect(postBodies).toHaveLength(3);
+          expect(lastBody()).toEqual({
+            slotKey: buildSlotKey(DAY1, 'a'),
+            radiusM: 1100,
+            concept: CULTURE,
+            coPick: true,
+            center: { mode: 'REGION' },
+          });
+        },
+        POLL_TEST_TIMEOUT
+      );
+
+      it(
+        'CC5d · 지역 중심 → 자동 추천으로 되돌린 뒤 잠금이 풀리면 재발사 바디에 center 가 없다',
+        async () => {
+          candidatesScript = (call, body) =>
+            call <= 2 ? conflict() : ok(body);
+          renderPage(buildSlotKey(DAY1, 'a'));
+          fireEvent.press(
+            await screen.findByTestId('itinerary-copick-concept-culture')
+          );
+          await screen.findByTestId('itinerary-copick-candidates-error');
+          await chooseCenter('region');
+          await waitPosts(2);
+          await chooseCenter('auto');
+          await waitPosts(3);
+          expect(isSelected('auto')).toBe(true);
+
+          await screen.findByTestId(
+            'itinerary-candidate-radio-X',
+            {},
+            { timeout: POLL_WAIT_MS }
+          );
+          expect(postBodies).toHaveLength(4);
+          expectAutoBody(lastBody(), {
+            slotKey: buildSlotKey(DAY1, 'a'),
+            radiusM: 1100,
+            concept: CULTURE,
+          });
+        },
+        POLL_TEST_TIMEOUT
+      );
+
+      it(
+        'CC5e · 잠금이 풀려 재발사된 지역 중심 요청이 진짜 409 를 맞으면 되돌림 경로를 탄다(오류 얼굴에 갇히지 않는다)',
+        async () => {
+          // 준비 — 자동 409(잠금) → 지역 409(잠금) → 풀린 뒤 재발사된 지역 409(이번엔 진짜) → 되돌림의 자동 재요청 200.
+          candidatesScript = (call, body) =>
+            call <= 1
+              ? conflict()
+              : call === 2
+                ? conflict(SERVER_REGION_MESSAGE)
+                : ok(body);
+          renderPage(buildSlotKey(DAY1, 'a'));
+          fireEvent.press(
+            await screen.findByTestId('itinerary-copick-concept-culture')
+          );
+          await screen.findByTestId('itinerary-copick-candidates-error');
+          await chooseCenter('region');
+          await waitPosts(2);
+
+          // 실행 — 폴링으로 잠금이 풀리길 기다린다(재발사 → 거절 → 되돌림).
+          await screen.findByTestId(NOTICE, {}, { timeout: POLL_WAIT_MS });
+          await screen.findByTestId('itinerary-candidate-radio-X');
+
+          // 단언 — 지역은 풀리고 자동 추천이 선택됐으며 center 없는 요청이 딱 1회(총 4건), 오류 얼굴은 없다.
+          expect(postBodies).toHaveLength(4);
+          expect(postBodies[2].center).toEqual({ mode: 'REGION' });
+          expectAutoBody(postBodies[3], {
+            slotKey: buildSlotKey(DAY1, 'a'),
+            radiusM: 1100,
+            concept: CULTURE,
+          });
+          expect(isSelected('auto')).toBe(true);
+          expect(screen.getByTestId(NOTICE)).toHaveTextContent(/\S/);
+          expect(
+            screen.queryByTestId('itinerary-copick-candidates-error')
+          ).toBeNull();
+        },
+        POLL_TEST_TIMEOUT
+      );
+
+      it(
+        'CC5f · 재발사(시스템)가 성공해도 되돌림 안내는 남는다(사용자 요청의 성공만 안내를 지운다)',
+        async () => {
+          // 준비 — 지역 409 → 안내 + 자동 재요청이 500 으로 실패(오류 얼굴, 안내는 남음). 일정 조회 대본: 처음 COMPLETE, 다시 받으면 PARTIAL, 그 뒤 COMPLETE.
+          itineraryScript = (call) =>
+            call === 1 ? itinerary('PARTIAL') : itinerary('COMPLETE');
+          candidatesScript = (call, body) =>
+            call === 1
+              ? conflict(SERVER_REGION_MESSAGE)
+              : call === 2
+                ? HttpResponse.json(
+                    { error: { code: 'INTERNAL', message: 'boom' } },
+                    { status: 500 }
+                  )
+                : ok(body);
+          renderPage(buildSlotKey(DAY1, 'a'));
+          fireEvent.press(
+            await screen.findByTestId('itinerary-copick-concept-culture')
+          );
+          await screen.findByTestId('itinerary-candidate-radio-X');
+          await chooseCenter('region');
+          await screen.findByTestId('itinerary-copick-candidates-error');
+          expect(screen.getByTestId(NOTICE)).toBeTruthy();
+          expect(postBodies).toHaveLength(3);
+
+          // 실행 — 일정을 다시 받게 해 PARTIAL(잠금) → 폴링 COMPLETE(해제)를 만든다 → 재발사가 나가 성공한다.
+          await act(async () => {
+            await lastClient.invalidateQueries({
+              queryKey: getGetTripsTripIdItineraryQueryKey(TRIP_ID),
+            });
+          });
+          await screen.findByTestId(
+            'itinerary-candidate-radio-X',
+            {},
+            { timeout: POLL_WAIT_MS }
+          );
+
+          // 단언 — 재발사 바디는 자동(center 없음)이고, 후보가 다시 떠도 안내는 그대로다.
+          expect(postBodies).toHaveLength(4);
+          expectAutoBody(lastBody(), {
+            slotKey: buildSlotKey(DAY1, 'a'),
+            radiusM: 1100,
+            concept: CULTURE,
+          });
+          expect(screen.getByTestId(NOTICE)).toBeTruthy();
+        },
+        POLL_TEST_TIMEOUT
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  describe('🔴 AC-6·7·8·9 · 영역의 모양 — 기본 선택·펼침·숙소 없음·첫 칸', () => {
+    it('CC6 · 기본은 자동 추천이 선택, 접힌 동안 보조 넷은 트리에 없고 펼침/접기는 POST 를 만들지 않는다', async () => {
+      // 글자는 6-b 에서 확정할 발명값이라 이 상수에만 둔다(바뀌면 이 한 줄 + 02a §0-1).
+      const LABEL = {
+        title: '찾는 중심',
+        auto: '자동 추천',
+        open: '다른 기준 보기',
+        close: '접기',
+        previous: '방금 고른 곳',
+        region: '지역 중심',
+        stay: '숙소 근처',
+        point: '지도에서 찍기',
+      } as const;
+      const SECONDARY = ['previous', 'region', 'stay', 'point'] as const;
+      baseCount = 1;
+      await openCandidates();
+
+      const root = screen.getByTestId('itinerary-copick-center-root');
+      expect(within(root).getByText(LABEL.title)).toBeTruthy();
+      expect(
+        within(screen.getByTestId(OPT('auto'))).getByText(LABEL.auto)
+      ).toBeTruthy();
+      expect(isSelected('auto')).toBe(true);
+      const toggle = screen.getByTestId(TOGGLE);
+      expect(within(toggle).getByText(LABEL.open)).toBeTruthy();
+      expect(toggle.props.accessibilityState?.expanded).toBe(false);
+      for (const key of SECONDARY) {
+        expect(screen.queryByTestId(OPT(key))).toBeNull();
+      }
+
+      fireEvent.press(toggle);
+      for (const key of SECONDARY) {
+        expect(
+          within(screen.getByTestId(OPT(key))).getByText(LABEL[key])
+        ).toBeTruthy();
+        expect(isSelected(key)).toBe(false);
+      }
+      expect(within(toggle).getByText(LABEL.close)).toBeTruthy();
+      expect(toggle.props.accessibilityState?.expanded).toBe(true);
+      fireEvent.press(toggle);
+      expect(screen.queryByTestId(OPT('region'))).toBeNull();
+      await sleep(250);
+
+      expect(postBodies).toHaveLength(1); // AC-6 — 펼치고 접는 동안 요청 추가 0
+    });
+
+    it.each([
+      [0, false],
+      [1, true],
+    ] as const)(
+      'CC8 · 등록 숙소 수 %i → 숙소 근처 선택지 있음=%s (나머지 셋은 늘 있다)',
+      async (count, shown) => {
+        baseCount = count;
+        await openCandidates();
+        await expandCenters();
+
+        expect(screen.queryByTestId(OPT('stay')) !== null).toBe(shown);
+        for (const key of ['previous', 'region', 'point']) {
+          expect(screen.getByTestId(OPT(key))).toBeTruthy();
+        }
+      }
+    );
+
+    it.each([
+      ['그날 첫 칸(day2 의 c)', buildSlotKey(DAY2, 'c')],
+      ['고정 숙소 다음 칸(day1 의 a)', buildSlotKey(DAY1, 'a')],
+    ] as const)(
+      'CC9 · %s 에서도 방금 고른 곳이 보인다',
+      async (_label, slotKey) => {
+        await openCandidates(slotKey);
+        await expandCenters();
+
+        expect(screen.getByTestId(OPT('previous'))).toBeTruthy();
+      }
+    );
+
+    it('CC9z · 0건 얼굴에도 영역이 있어 거기서 중심을 바꿀 수 있다', async () => {
+      emptyNext = true;
+      renderPage();
+      fireEvent.press(
+        await screen.findByTestId('itinerary-copick-concept-culture')
+      );
+      await screen.findByTestId('itinerary-copick-zero');
+
+      expect(screen.getByTestId('itinerary-copick-center-root')).toBeTruthy();
+      await chooseCenter('region');
+      await waitPosts(2);
+      expect(lastBody().center).toEqual({ mode: 'REGION' });
+    });
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  describe('🔴 AC-10·11·12·13 · 중심 때문에 막히면 안내하고 자동으로 돌아간다', () => {
+    /** 중심을 고르면 서버가 거절하고, 자동 요청은 통과하는 대본. 반환: 안내가 뜬 뒤 후보까지 다시 뜬 상태. */
+    async function revertedAfter(key: string, rejection: () => Response) {
+      candidatesScript = (call, body) => (call === 1 ? rejection() : ok(body));
+      await openCandidates();
+      await chooseCenter(key);
+      await screen.findByTestId(NOTICE);
+      await waitPostsAndCandidates(3);
+    }
+
+    it.each([
+      ['region', SERVER_REGION_MESSAGE],
+      ['stay', SERVER_STAY_MESSAGE],
+    ] as const)(
+      'CC10 · %s 요청이 409 → FE 안내 한 줄 + 자동 추천으로 복귀 + center 없는 요청 딱 1회 + 후보 재표시',
+      async (key, serverMessage) => {
+        baseCount = 1;
+        await revertedAfter(key, () => conflict(serverMessage));
+
+        const notice = screen.getByTestId(NOTICE);
+        expect(notice).toHaveTextContent(/\S/); // 비어 있지 않다
+        expect(notice).not.toHaveTextContent(SERVER_SENTENCE_FRAGMENT); // 서버 문장 그대로가 아니다(FE 가 정한 안내)
+        expect(
+          screen.queryByTestId('itinerary-copick-candidates-error')
+        ).toBeNull();
+        expect(isSelected('auto')).toBe(true);
+        await expandCenters();
+        expect(isSelected(key)).toBe(false);
+        expect(postBodies[1].center).toEqual({ mode: key.toUpperCase() });
+        expectAutoBody(postBodies[2], {
+          slotKey: SLOT_B,
+          radiusM: 1100,
+          concept: CULTURE,
+        });
+        // 루프 0 — 안내가 떠 있어도 더는 묻지 않는다.
+        await sleep(400);
+        expect(postBodies).toHaveLength(3);
+      }
+    );
+
+    it('CC10b · 자동 요청마저 409 면 더 되돌리지 않고 기존 오류 문구로 간다(루프 0)', async () => {
+      candidatesScript = (call, body) =>
+        call === 0 ? ok(body) : conflict(SERVER_REGION_MESSAGE);
+      await openCandidates();
+      await chooseCenter('region');
+      await waitPosts(3);
+
+      const error = await screen.findByTestId(
+        'itinerary-copick-candidates-error'
+      );
+      expect(error).toHaveTextContent(FALLBACK_TEXT);
+      expect(isSelected('auto')).toBe(true);
+      await sleep(400);
+      expect(postBodies).toHaveLength(3); // 지역 → 자동 → 끝. 넷째 요청 없음
+    });
+
+    it('CC11 · 찍은 위치가 400 → 안내 + 자동 추천으로 복귀 + center 없는 요청 1회', async () => {
+      candidatesScript = (call, body) => (call === 1 ? badRequest() : ok(body));
+      await openCandidates();
+      await chooseCenter('point');
+      await screen.findByTestId(PICKER);
+      act(() => {
+        screen.getByTestId(PICKER).props.onPick({ lat: 37.5, lng: 127.03 });
+      });
+      fireEvent.press(
+        screen.getByTestId('itinerary-copick-center-point-confirm')
+      );
+      await screen.findByTestId(NOTICE);
+      await waitPostsAndCandidates(3);
+
+      expect(screen.getByTestId(NOTICE)).toHaveTextContent(/\S/);
+      expect(postBodies[1].center).toEqual({
+        mode: 'POINT',
+        lat: 37.5,
+        lng: 127.03,
+      });
+      expectAutoBody(postBodies[2], {
+        slotKey: SLOT_B,
+        radiusM: 1100,
+        concept: CULTURE,
+      });
+      expect(isSelected('auto')).toBe(true);
+      expect(screen.queryByTestId(PICKER)).toBeNull();
+      await sleep(400);
+      expect(postBodies).toHaveLength(3);
+    });
+
+    it.each([
+      ['자동 추천(반경 세그먼트)', null],
+      ['방금 고른 곳', 'previous'],
+    ] as const)(
+      'CC12 · 중심을 안 쓴 요청 %s 의 409 는 종전 문구 그대로 — 안내·되돌림·자동 재요청 없음',
+      async (_label, key) => {
+        candidatesScript = (call, body) => (call === 0 ? ok(body) : conflict());
+        await openCandidates();
+        if (key === null) {
+          fireEvent.press(
+            screen.getByTestId('itinerary-copick-radius-seg-near')
+          );
+        } else {
+          await chooseCenter(key);
+        }
+        const error = await screen.findByTestId(
+          'itinerary-copick-candidates-error'
+        );
+        await sleep(400);
+
+        expect(error).toHaveTextContent(FALLBACK_TEXT);
+        expect(screen.queryByTestId(NOTICE)).toBeNull();
+        expect(postBodies).toHaveLength(2);
+        if (key === null) expect(isSelected('auto')).toBe(true);
+        else expect(isSelected(key)).toBe(true); // 되돌아가지 않는다
+      }
+    );
+
+    it('CC13a · 안내는 자동 재요청의 성공으로는 안 사라지고, 다음 반경 변경의 성공에서 사라진다', async () => {
+      await revertedAfter('region', () => conflict(SERVER_REGION_MESSAGE));
+      expect(screen.getByTestId(NOTICE)).toBeTruthy(); // 앵커 — 후보가 다시 떠도 안내는 남아 있다
+
+      fireEvent.press(screen.getByTestId('itinerary-copick-radius-seg-near'));
+      await waitPostsAndCandidates(4);
+
+      expect(screen.queryByTestId(NOTICE)).toBeNull();
+    });
+
+    it('CC13b · 안내는 다음 중심 변경에서 — 그 요청의 응답을 기다리지 않고 — 사라진다', async () => {
+      await revertedAfter('region', () => conflict(SERVER_REGION_MESSAGE));
+      expect(screen.getByTestId(NOTICE)).toBeTruthy();
+
+      // 다음 요청의 응답을 붙잡아 둔다 — 성공 응답이 지운 것이 아니라 "중심 변경" 자체가 지웠음을 가른다.
+      candidatesScript = async (_call, body) => {
+        await delay('infinite');
+        return ok(body);
+      };
+      await chooseCenter('previous');
+      await waitPosts(4);
+
+      expect(lastBody().center).toEqual({ mode: 'PREVIOUS' });
+      expect(screen.queryByTestId(NOTICE)).toBeNull();
+    });
+
+    it('CC13c · 안내는 지도에서 찍기를 확정하는 순간(응답 전) 사라진다', async () => {
+      await revertedAfter('region', () => conflict(SERVER_REGION_MESSAGE));
+      expect(screen.getByTestId(NOTICE)).toBeTruthy();
+
+      candidatesScript = async (_call, body) => {
+        await delay('infinite');
+        return ok(body);
+      };
+      await chooseCenter('point');
+      await screen.findByTestId(PICKER);
+      fireEvent.press(
+        screen.getByTestId('itinerary-copick-center-point-confirm')
+      );
+      await waitPosts(4);
+
+      expect(lastBody().center?.mode).toBe('POINT');
+      expect(screen.queryByTestId(NOTICE)).toBeNull();
+    });
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  describe('🔴 AC-14 · 지도 원은 서버가 실제로 쓰는 중심을 그린다', () => {
+    const SLOT_A_KEY = buildSlotKey(DAY1, 'a');
+    const SLOT_C_KEY = buildSlotKey(DAY2, 'c');
+
+    async function expectCircleAt(center: { lat: number; lng: number }) {
+      await waitFor(() =>
+        expect(mapInCard().props.radiusCircle).toEqual({
+          center,
+          radiusM: 1100,
+        })
+      );
+      expect(mapInCard()).toHaveTextContent(`${center.lat},${center.lng}`);
+      const pins = mapInCard().props.pins as Pin[];
+      expect({ lat: pins[0].lat, lng: pins[0].lng }).toEqual(center);
+    }
+
+    it('CC14a · 자동 + 둘째 칸(b) → 원·지도 중심·기준 핀 모두 직전 슬롯 a (b 자신이 아니다)', async () => {
+      await openCandidates(SLOT_B);
+
+      await expectCircleAt(COORD_A);
+    });
+
+    it('CC14b · 직전이 고정 숙소여도 그날 전체 배열의 index-1 이다 — a 를 채우면 원은 숙소 h', async () => {
+      await openCandidates(SLOT_A_KEY);
+
+      await expectCircleAt(COORD_H);
+    });
+
+    it('CC14c · 그날 첫 칸(c)은 직전이 없어 교체 대상 자신', async () => {
+      await openCandidates(SLOT_C_KEY);
+
+      await expectCircleAt(COORD_C);
+    });
+
+    it('CC14d · 방금 고른 곳 선택 뒤에도 같은 직전 슬롯', async () => {
+      await openCandidates(SLOT_B);
+      await chooseCenter('previous');
+      await waitPostsAndCandidates(2);
+
+      await expectCircleAt(COORD_A);
+    });
+
+    it('CC14e · 지도에서 찍은 점을 확정하면 원·지도 중심·기준 핀이 그 점으로 간다', async () => {
+      const picked = { lat: 37.5001, lng: 127.0302 };
+      await openCandidates(SLOT_B);
+      await chooseCenter('point');
+      await screen.findByTestId(PICKER);
+      act(() => {
+        screen.getByTestId(PICKER).props.onPick(picked);
+      });
+      fireEvent.press(
+        screen.getByTestId('itinerary-copick-center-point-confirm')
+      );
+      await waitPostsAndCandidates(2);
+
+      await expectCircleAt(picked);
+    });
+
+    it.each([
+      ['region', 0],
+      ['stay', 1],
+    ] as const)(
+      'CC14f · %s 는 좌표를 모르니 원도 기준 핀도 없고 지도 카드는 남는다 — 자동으로 돌아오면 원이 돌아온다',
+      async (key, count) => {
+        baseCount = count;
+        await openCandidates(SLOT_B);
+        await expectCircleAt(COORD_A); // 긍정 앵커
+
+        await chooseCenter(key);
+        await waitPostsAndCandidates(2);
+
+        await waitFor(() =>
+          expect(mapInCard().props.radiusCircle).toBeUndefined()
+        );
+        const pins = (mapInCard().props.pins ?? []) as Pin[];
+        expect(pins.filter((pin) => pin.label === '')).toEqual([]); // 기준 핀(label '') 없음
+
+        await chooseCenter('auto');
+        await waitPostsAndCandidates(3);
+        await expectCircleAt(COORD_A);
+      }
+    );
+
+    it('CC14g · 직전 슬롯에 좌표가 없으면 교체 대상 좌표로 대신 그리지 않는다(거짓 원 금지)', async () => {
+      aHasCoords = false; // b 의 직전 = a
+      await openCandidates(SLOT_B);
+
+      expect(
+        screen.queryByTestId('map-root')?.props.radiusCircle
+      ).toBeUndefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  describe('🔴 AC-15 · 새 문구에 시간 표현이 없다 (INV-3)', () => {
+    it('CC15 · 펼친 선택지 전부와 안내가 떠 있는 화면에 분·시간·소요가 한 글자도 없다', async () => {
+      baseCount = 1;
+      candidatesScript = (call, body) =>
+        call === 1 ? conflict(SERVER_REGION_MESSAGE) : ok(body);
+      await openCandidates();
+      await chooseCenter('region');
+      await screen.findByTestId(NOTICE);
+      await waitPostsAndCandidates(3);
+      await expandCenters();
+
+      // 긍정 앵커 — 검사 대상(펼친 다섯 선택지 + 안내)이 실제로 떠 있다.
+      expect(screen.getByTestId(OPT('stay'))).toBeTruthy();
+      expect(screen.getByTestId(NOTICE)).toBeTruthy();
+      expect(screen.queryAllByText(DURATION_TEXT)).toEqual([]);
+    });
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  describe('🔴 AC-17 · 칸마다 자동으로 시작한다', () => {
+    it('CC17 · 지역 중심으로 한 칸을 확정해 다음 칸으로 가면 새 칸은 자동 추천이고 요청에 center 가 없다', async () => {
+      const first = await openCandidates(buildSlotKey(DAY1, 'a'));
+      await chooseCenter('region');
+      await waitPostsAndCandidates(2);
+      fireEvent.press(screen.getByTestId('itinerary-copick-slotfill-confirm'));
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+      expect(putCalls).toBe(1);
+      const next = mockReplace.mock.calls[0][0].params.slotKey as string;
+      expect(next).toBe(buildSlotKey(DAY1, 'b'));
+
+      // 라우터가 다음 칸 화면을 새로 연다(실제 재마운트 여부는 6-b) — 새 마운트가 지난 칸의 선택을 물려받지 않는다.
+      first.unmount();
+      renderPage(next);
+      fireEvent.press(
+        await screen.findByTestId('itinerary-copick-concept-culture')
+      );
+      await waitPostsAndCandidates(3);
+
+      expectAutoBody(lastBody(), {
+        slotKey: next,
+        radiusM: 1100,
+        concept: CULTURE,
+      });
+      expect(isSelected('auto')).toBe(true);
     });
   });
 });

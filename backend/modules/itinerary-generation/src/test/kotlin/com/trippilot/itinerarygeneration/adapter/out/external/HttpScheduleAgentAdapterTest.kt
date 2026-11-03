@@ -269,6 +269,30 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         server.verify()
     }
 
+    // TRIP-1709 F7 — 상대는 이 한 값으로 후보 풀 반경·조립 이동 시간·거리 표기를 정한다. 안 실으면 도보 여행도 대중교통으로 다시 짠다.
+    "재계획이 그 여행의 수단 하나를 transport_mode 로 싣는다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andExpect(jsonPath("$.transport_mode").value("도보"))
+            .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
+
+        adapter.replan(replanInput().copy(transportMode = "도보"))
+
+        server.verify()
+    }
+
+    "재계획 수단이 없으면 transport_mode 가 null 이다 — 상대 기본(대중교통)으로 짠다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            // 없는 키가 아니라 null 로 나간다(경계 매퍼는 null 을 싣는다) — 상대는 null 을 미지정으로 읽는다.
+            .andExpect(jsonPath("$.transport_mode").value(nullValue()))
+            .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
+
+        adapter.replan(replanInput().copy(transportMode = null))
+
+        server.verify()
+    }
+
     // 오늘을 밤에 다시 짜면 창 끝(21:00)이 막아 "대안 없음"이 됐다 — 생성과 같은 규칙(TodayWindow)으로 끝만 늘린다.
     // 시작은 하루 전체 그대로(09:00) — 좁히면 오전에 잠긴 고정 블록이 창 밖이 되어 상대가 409 로 거부한다.
     "오늘을 밤 9시 반에 다시 짜면 창 끝이 23:59 다 — 야경 한두 곳이 들어갈 자리" {
@@ -669,6 +693,22 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         server.verify()
     }
 
+    "validate — 여행 취향을 싣는다(2026-11-03) — 없으면 키를 싣지 않는다(취향 칸을 모르는 옛 상대도 422 를 내지 않는다)" {
+        val (adapter, server) = fixture()
+        val active = PreferenceProfile(emptyList(), listOf("테마파크"), emptyList(), listOf("대중교통"), null, emptyList(), false, null)
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
+            .andExpect(jsonPath("$.preference_profile.activities[0]").value("테마파크"))
+            .andExpect(jsonPath("$.transport_modes").doesNotExist())
+            .andRespond(withSuccess("""{"violations":[]}""", MediaType.APPLICATION_JSON))
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
+            .andExpect(jsonPath("$.preference_profile").doesNotExist())
+            .andRespond(withSuccess("""{"violations":[]}""", MediaType.APPLICATION_JSON))
+
+        adapter.validateWithUnverified(dummyOutput(), emptyList(), active)
+        adapter.validateWithUnverified(dummyOutput(), listOf("렌터카"))
+        server.verify()
+    }
+
     "미판정 목록을 모르는 옛 와이어도 HOURS_UNKNOWN 이 실린 응답을 읽는다 — 경계 매퍼는 모르는 키를 무시한다(배포 순서: AI 먼저)" {
         val old = ScheduleAgentConfiguration.boundaryMapper().readValue(
             """{"violations":[],"unverified_slots":[{"poi_id":"$poi","reason_code":"HOURS_UNKNOWN","detail":""}]}""",
@@ -746,6 +786,29 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             EditCommand("SET_DAY_AREAS", mapOf("2026-08-01" to "종로", "2026-08-02" to "강남구"), listOf(poi))
     }
 
+    "편집 제안 — 여행 컨텍스트(취향·날마다 창·여행 첫날)를 싣고, 없으면 세 키를 싣지 않는다(옛 상대와도 맞는다)" {
+        val (adapter, server) = fixture(groundingPool(newPoi))
+        val profile = PreferenceProfile(listOf("자연"), listOf("테마파크"), emptyList(), listOf("대중교통"), null, emptyList(), false, null)
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit"))
+            .andExpect(jsonPath("$.preference_profile.activities[0]").value("테마파크"))
+            .andExpect(jsonPath("$.time_windows[0].date").value("2026-08-01"))
+            .andExpect(jsonPath("$.time_windows[0].start").value("15:00:00"))
+            .andExpect(jsonPath("$.trip_start_date").value("2026-07-31"))
+            .andRespond(withSuccess(appliedBody(newPoi), MediaType.APPLICATION_JSON))
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit"))
+            .andExpect(jsonPath("$.preference_profile").doesNotExist())
+            .andExpect(jsonPath("$.time_windows").doesNotExist())
+            .andExpect(jsonPath("$.trip_start_date").doesNotExist())
+            .andRespond(withSuccess(appliedBody(newPoi), MediaType.APPLICATION_JSON))
+
+        adapter.proposeEdit(editInput(utterance = "카페 하나 더").copy(
+            preferenceProfile = profile, timeWindows = listOf(TimeWindow(d1, LocalTime.of(15, 0), LocalTime.of(21, 0))),
+            tripStartDate = LocalDate.parse("2026-07-31"),
+        ))
+        adapter.proposeEdit(editInput(utterance = "카페 하나 더"))
+        server.verify()
+    }
+
     "편집 제안 — 구조화 교체는 command 로 싣는다(발화 없음)" {
         val (adapter, server) = fixture(groundingPool(newPoi))
         server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit"))
@@ -756,6 +819,26 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             .andRespond(withSuccess(appliedBody(newPoi), MediaType.APPLICATION_JSON))
 
         adapter.proposeEdit(editInput(command = EditCommand.replaceSlot(poi, newPoi))).status shouldBe EditProposalStatus.PROPOSED
+        server.verify()
+    }
+
+    /**
+     * "다른 데는?" — 앞서 보인 곳을 `excluded_poi_ids` 로 싣는다. **비면 키째로 뺀다** — 이 칸을 모르는 상대(배포 순서가 어긋난 동안)는
+     * 모르는 키를 422 로 거절해, 싣고 나가면 다시 묻기가 아닌 편집까지 전부 "지금은 제안할 수 없다"가 된다.
+     */
+    "편집 제안 — 앞서 보인 곳은 excluded_poi_ids 로 싣고, 없으면 그 키를 싣지 않는다" {
+        val (adapter, server) = fixture(groundingPool(newPoi))
+        val shown = UUID.randomUUID()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit"))
+            .andExpect(jsonPath("$.excluded_poi_ids.length()").value(1))
+            .andExpect(jsonPath("$.excluded_poi_ids[0]").value(shown.toString()))
+            .andRespond(withSuccess(appliedBody(newPoi), MediaType.APPLICATION_JSON))
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit"))
+            .andExpect(jsonPath("$.excluded_poi_ids").doesNotExist())
+            .andRespond(withSuccess(appliedBody(newPoi), MediaType.APPLICATION_JSON))
+
+        adapter.proposeEdit(editInput(utterance = "이태원에서 홍대로 넘어갈 때 한 군데 더").copy(excludedPoiIds = listOf(shown)))
+        adapter.proposeEdit(editInput(utterance = "이태원에서 홍대로 넘어갈 때 한 군데 더"))
         server.verify()
     }
 
@@ -874,6 +957,21 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             dummyOutput(), emptyList(),
             RepairContext(listOf(DayAnchor(java.time.LocalDate.parse("2026-08-02"), 33.5, 126.5)), listOf("렌터카")),
         )
+        server.verify()
+    }
+
+    "repair — 컨텍스트의 취향을 싣는다(상대가 액티비티 도보 상한을 생성과 같게 건다) — 없으면 키째 뺀다" {
+        val (adapter, server) = fixture()
+        val active = PreferenceProfile(emptyList(), listOf("테마파크"), emptyList(), listOf("대중교통"), null, emptyList(), false, null)
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/repair"))
+            .andExpect(jsonPath("$.preference_profile.activities[0]").value("테마파크"))
+            .andRespond(withSuccess("""{"repaired":null,"changes":[]}""", MediaType.APPLICATION_JSON))
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/repair"))
+            .andExpect(jsonPath("$.preference_profile").doesNotExist())
+            .andRespond(withSuccess("""{"repaired":null,"changes":[]}""", MediaType.APPLICATION_JSON))
+
+        adapter.repair(dummyOutput(), emptyList(), RepairContext(emptyList(), listOf("대중교통"), active))
+        adapter.repair(dummyOutput(), emptyList(), RepairContext.NONE)
         server.verify()
     }
 
@@ -1186,5 +1284,6 @@ private fun replanInput() = ReplanInput(
     currentSlots = emptyList(),
     savedPlaces = emptyList(),
                 rejections = emptyList(),
+    transportMode = null,
     requestMeta = RequestMeta("replan-1", Instant.parse("2026-08-07T00:00:00Z"), 25_000),
 )

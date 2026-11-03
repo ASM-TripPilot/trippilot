@@ -82,3 +82,22 @@ export function answerReduceMotionSynchronously(reduce: boolean): void {
       }) as unknown as Promise<boolean>
   );
 }
+
+/**
+ * OS 가 "동작 줄이기 설정이 바뀌었다"(`reduceMotionChanged`)고 알린 것처럼 한다(TRIP-1735). RN jest 목은 이벤트를 스스로 쏘지
+ * 않으므로, `addEventListener` 목이 받은 핸들러 중 **마지막** 것을 꺼내 직접 부른다 — 리셋 뒤 다시 건 구독이 마지막이고, 목의
+ * `remove` 는 아무것도 안 해 옛 핸들러가 기록에 남아 있다. 구독이 아직 없으면(첫 질문 전) 공허 통과 대신 던진다.
+ */
+export function emitReduceMotionChange(reduce: boolean): void {
+  const handler = (
+    jest.mocked(AccessibilityInfo.addEventListener).mock.calls as unknown[][]
+  )
+    .filter(([event]) => event === 'reduceMotionChanged')
+    .at(-1)?.[1] as ((value: boolean) => void) | undefined;
+  if (!handler) {
+    throw new Error(
+      'reduceMotionChanged 구독이 없다 — 동작 줄이기를 한 번 물은 뒤에 부른다'
+    );
+  }
+  handler(reduce);
+}

@@ -24,9 +24,7 @@
   그대로 둔 채 그 앞뒤로 커서를 흘린다. 앞 슬롯이 못 도착하면 밀지 않고 HC2가 거부.
 - 여행 당일엔 지금 전에 시작한 슬롯(진행 중·끝남)도 닻이다 — 편집 대상(빼기·교체)은 될 수 있고, 재타이밍은
   예약과 같다. 다시 흘리는 곳·새로 넣는 곳은 지금보다 앞에 두지 않는다(`RetimeContext.not_before`).
-
-# ponytail: 빈 날에 추가할 때의 시작 시각은 10:00 고정 — 요청에 창이 없다.
-# 편집 요청에 day_window가 실리면 그 값으로 올린다.
+- 빈 날에 추가할 때의 시작은 그 날 창의 시작(`RetimeContext.day_start` — 편집 요청 `time_windows`)이고, 창이 안 왔으면 10:00 이다.
 """
 
 from __future__ import annotations
@@ -46,7 +44,7 @@ from trippilot.llm_gateway.gates.content.edit_translation import (
 )
 
 _DEFAULT_STAY_MIN = 60          # 그 날 기존 슬롯이 없을 때의 체류 기본값
-_EMPTY_DAY_START = time(10, 0)  # 빈 날 시작 시각 (ponytail — docstring 참조)
+_EMPTY_DAY_START = time(10, 0)  # 빈 날 시작 시각 — 그 날 창(`RetimeContext.day_start`)이 안 왔을 때만
 
 
 class EditStatus(Enum):
@@ -193,6 +191,8 @@ class RetimeContext:
     transport: TransportMode
     # 여행 당일 지금(현지·분 올림) — 이보다 먼저 시작한 슬롯은 닻(그 시각 그대로), 다시 흘리는 곳·새로 넣는 곳은 이보다 앞에 두지 않는다
     not_before: datetime | None = None
+    # 그 날 창의 시작(편집 요청 `time_windows`) — 빈 날에 넣는 첫 곳의 시작. 슬롯이 있는 날은 첫 슬롯 시각을 그대로 쓴다(사용자의 하루 시작)
+    day_start: datetime | None = None
 
 
 def retime_day(
@@ -201,7 +201,7 @@ def retime_day(
 ) -> DaySolution:
     """새 순서 → 결정론 재타이밍. 체류시간 보존, 이동은 추정 걷기.
 
-    시작점 = 기존 첫 슬롯 시각(사용자의 하루 시작 보존), 빈 날이었으면 10:00.
+    시작점 = 기존 첫 슬롯 시각(사용자의 하루 시작 보존), 빈 날이었으면 그 날 창의 시작(`ctx.day_start`, 없으면 10:00).
     예약(day.fixed_blocks)은 닻(TRIP-526) — 커서로 찍지 않고 원 window 그대로 두며
     커서만 window.end로 옮긴다. 커서가 예약보다 이르면 그 사이는 대기(빈 시간),
     늦어도 예약을 밀지 않는다 — HC2가 "이동 N분 필요, 간격 M분"으로 거부(INV-2).
@@ -220,7 +220,7 @@ def retime_day(
     if day.slots:
         cursor = day.slots[0].start_at
     else:
-        cursor = datetime.combine(day.date, _EMPTY_DAY_START, tzinfo=tz)
+        cursor = ctx.day_start or datetime.combine(day.date, _EMPTY_DAY_START, tzinfo=tz)
     default_stay = int(median(ctx.stay_min.values())) if ctx.stay_min else _DEFAULT_STAY_MIN
     old_by_id = {s.poi_id: s for s in day.slots}
     fixed_by_id = {fb.poi_id: fb.window for fb in day.fixed_blocks}

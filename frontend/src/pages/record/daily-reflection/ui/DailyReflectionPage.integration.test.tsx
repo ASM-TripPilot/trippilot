@@ -21,6 +21,7 @@ import type {
   ReflectionCard,
   ReflectionList,
   Trip,
+  VisitCheck,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { WithToastHost, resetToast } from '@/test-support/toastHarness';
@@ -28,7 +29,10 @@ import { WithToastHost, resetToast } from '@/test-support/toastHarness';
 import { router } from 'expo-router';
 
 import { DailyReflectionPage } from './DailyReflectionPage';
-import { newTestQueryClient } from '@/test-support/queryRender';
+import { rememberSpontaneousName } from '@/features/check-visit';
+import { answerReduceMotionSynchronously } from '@/test-support/animatedProbe';
+import { day, itinerary, slot } from '@/test-support/itineraryFixtures';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * j03 오늘의 회고 — 실제 페이지·훅 + msw(가짜 서버) + 실 QueryClient 로 보는 사용자 흐름. 관점마다 describe 하나:
@@ -83,6 +87,21 @@ afterAll(() => server.close());
 
 // TRIP-1425 — 토스트 스토어는 모듈 싱글턴이라 describe 안이 아니라 파일 최상위에서 비운다(toastHarness).
 afterEach(() => resetToast());
+
+// TRIP-1665 — 매거진이 새로 부르는 그날 방문 조회(`useMagazineSources`). `useReflectionPhotos` 가 위에서 목이라 이 요청은 오직 새 훅에서
+// 나오고, 통합은 `onUnhandledRequest:'error'` 라 안 받으면 전 describe 가 빨개진다. 각 describe 의 `server.resetHandlers()` 가 런타임 핸들러를
+// 매번 지우므로 파일 최상위 beforeEach 로 건다(방문 0 → 일정 조회는 안 나간다). 새 describe 는 자기 beforeEach 에서 다시 `use` 해 이긴다(나중 것이 앞).
+beforeEach(() => {
+  server.use(
+    http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
+      HttpResponse.json({ visits: [] })
+    )
+  );
+});
+
+// TRIP-1665 — 동작 줄이기 `true` 를 동기로 답한다(j04 통합 선례). 카운트업이 첫 렌더부터 끝값이고, 등장 래퍼가 바로 보이며,
+// 동작 줄이기 답이 늦게 와서 생기는 act 경고(소음 예산)도 없다. 기존 it 본문은 그대로다.
+beforeEach(() => answerReduceMotionSynchronously(true));
 
 describe('생성 — 레코드가 없는 지난 날·오늘은 한 번 만들어 보여준다', () => {
   // TRIP-1068 (옛 DailyReflectionPage.generate.integration.test.tsx)
@@ -1038,7 +1057,8 @@ describe('저장 — 직접 쓴 회고를 저장한 뒤 같은 화면', () => {
         ...RULE_CARD,
         payload: JSON.stringify({
           ...JSON.parse(RULE_CARD.payload),
-          scenes: [{ layout: 'TEXT', caption: SCENE }],
+          // TRIP-1665 · TEXT 장면은 이제 장면 카드가 아니라 동선으로 접힌다(Q10) — 장면 블록이 그려진다는 원뜻은 사진 장면 layout 으로 지킨다.
+          scenes: [{ layout: 'PHOTO_CAPTION', caption: SCENE }],
         }),
       };
       return {
@@ -1572,5 +1592,401 @@ describe('TRIP-1372 · 기분·한 줄 메모 저장 — 서버가 받고 돌려
         await screen.findByTestId(TOAST, {}, TOAST_WAIT)
       ).toHaveTextContent(COPY);
     });
+  });
+});
+
+describe('TRIP-1665 · 회고 매거진 — 표지·인용문·장면·동선·숫자·해시태그', () => {
+  /**
+   * j03 default·data-insufficient 얼굴이 매거진으로 그려지는 흐름(실제 페이지·훅 + msw + 실 QueryClient).
+   * 초심자용: 서버 응답(회고·그날 방문·여행 일정)만 바꿔 화면 상태를 만든다 — 색·방향·모양은 여기서 읽지 않는다(VM 단위가 본다).
+   *
+   * 무엇을 보장하나(AC-8~11):
+   *  - AC-8 AI 카드 하루: 표지 제목·인용문(표시본과 완전 일치)·번호 달린 장면 카드(장소 이름)·일정 변경 띠·동선(도착 순서)·
+   *    숫자 타일 3개·해시태그 칩이 보인다.
+   *  - AC-9 규칙 카드(TEXT 장면): 장면 카드 0개, 동선에 방문 이름, 해시태그·일정 변경 띠 없음.
+   *  - AC-10 일정 조회 실패: 매거진은 그대로, 동선 이름은 "N번째 장소"(지어내지 않음), 오류 얼굴로 안 떨어진다.
+   *  - 일정이 오기 전엔 동선 박스를 안 그리고(깜빡임 없음), 방문이 없으면 일정을 요청하지 않는다.
+   *  - AC-11 empty·error 얼굴은 매거진을 그리지 않는다. 미치환 템플릿 제목은 중괄호로 새지 않는다.
+   *
+   * 장치: 서버는 방문·일정 요청 횟수를 센다. 일정 응답은 게이트로 붙잡을 수 있고 afterEach 에서 연다.
+   * 방문은 일부러 도착 시각을 섞어 응답한다 — 화면 순서는 서버 순서가 아니라 도착 시각이 만든다.
+   * 동작 줄이기 true 는 파일 최상위 beforeEach 가 답한다. 즉석 이름은 테스트마다 새 QueryClient 에만 심는다(앞 테스트로 새지 않게).
+   */
+
+  const TRIP_ID = 'trip-1665';
+  const TODAY = '2026-09-26';
+  const P = 'reflection-daily';
+  const NARRATIVE = '맛있는 국물에 마음까지 따뜻해진, 혼자만의 하루';
+  const DURATION_TEXT = /(소요|\d+\s*분|\d+\s*시간)/;
+
+  const TRIP: Trip = {
+    tripId: TRIP_ID,
+    title: '부산 여행',
+    startDate: '2026-09-24',
+    endDate: '2026-09-25',
+    party: 1,
+    preferenceSnapshot: {},
+    destinations: [],
+    status: 'PLANNED',
+    createdAt: '2026-09-20T00:00:00Z',
+    updatedAt: '2026-09-20T00:00:00Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
+    // 목록이 싣는 일정 상태 네 칸(TRIP-1677) — 일정이 없으면 null/false.
+    itineraryStatus: null,
+    itineraryGenerationState: null,
+    itineraryGenerationMode: null,
+    itineraryGenerating: false,
+  };
+
+  const at = (hour: number) => `2026-09-24T0${hour}:00:00Z`;
+  const visitOf = (
+    id: string,
+    poiId: string,
+    hour: number,
+    spontaneous = false
+  ): VisitCheck => ({
+    visitCheckId: id,
+    poiId,
+    slotKey: spontaneous ? null : `slot-${poiId}`,
+    arrivedAt: at(hour),
+    source: 'MANUAL',
+    spontaneous,
+    updatedAt: '2026-09-24T12:00:00Z',
+  });
+
+  const ITINERARY = itinerary({
+    tripId: TRIP_ID,
+    days: [
+      day(DAY, [
+        slot('poi-1', { nameKo: '광안리해수욕장', category: '명소' }),
+        slot('poi-2', { nameKo: '해운대시장', category: '맛집' }),
+      ]),
+    ],
+  });
+
+  function aiCard(title = '부산 첫날'): ReflectionCard {
+    return {
+      templateId: 'ai.daily.v1',
+      format: 'CARD',
+      title,
+      subtitle: NARRATIVE,
+      payload: JSON.stringify({
+        template_id: 'ai.daily.v1',
+        format: 'CARD',
+        cover: {
+          title,
+          subtitle: NARRATIVE,
+          photo_slot: { visit_ref: { date: DAY, poi_id: 'poi-1' } },
+        },
+        hashtags: ['#부산', '맛집'],
+        scenes: [
+          {
+            layout: 'PHOTO_CAPTION',
+            caption: '짭짤한 국물이 좋았다',
+            photo_slot: { visit_ref: { date: DAY, poi_id: 'poi-1' } },
+          },
+          {
+            layout: 'EVENT',
+            caption: '비 때문에 실내로 바꿨어요',
+            source_event: 'PLAN_B',
+          },
+          {
+            layout: 'PHOTO_FULL',
+            caption: '시장 골목을 걸었다',
+            photo_slot: { visit_ref: { date: DAY, poi_id: 'poi-2' } },
+          },
+          { layout: 'STATS', caption: '네 곳을 둘러봤다' },
+        ],
+      }),
+    };
+  }
+
+  const RULE_TEXT = '광안리해수욕장·해운대시장 을(를) 다녀왔어요.';
+  function ruleCard(): ReflectionCard {
+    return {
+      templateId: 'backend.rule.daily.v1',
+      format: 'CARD',
+      title: '부산 첫날',
+      subtitle: RULE_TEXT,
+      payload: JSON.stringify({
+        template_id: 'backend.rule.daily.v1',
+        format: 'CARD',
+        cover: { title: '부산 첫날', subtitle: RULE_TEXT },
+        scenes: [
+          { layout: 'TEXT', caption: '광안리 바다를 오래 봤다' },
+          { layout: 'TEXT', caption: '시장에서 간식을 먹었다' },
+        ],
+      }),
+    };
+  }
+
+  function reflectionOf(
+    card: ReflectionCard,
+    stats: { visitCount: number; photoCount: number }
+  ): Reflection {
+    return {
+      dayDate: DAY,
+      card,
+      draftCard: card,
+      editedCard: null,
+      source: 'AI',
+      stats: { distanceKm: 4.2, distanceSource: 'VISIT_LINE', ...stats },
+      generatedAt: '2026-09-24T12:00:00Z',
+      updatedAt: '2026-09-24T12:00:00Z',
+    };
+  }
+
+  interface Gate {
+    promise: Promise<void>;
+    open: () => void;
+  }
+  function makeGate(): Gate {
+    let open = () => {};
+    const promise = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    return { promise, open };
+  }
+
+  let serverItems: Reflection[];
+  let listStatus: 200 | 500;
+  let visitsBody: VisitCheck[];
+  let itineraryStatus: 200 | 404 | 500;
+  let itineraryGate: Gate | null;
+  let visitHits: number;
+  let itineraryHits: number;
+
+  beforeEach(() => {
+    serverItems = [];
+    listStatus = 200;
+    visitsBody = [];
+    itineraryStatus = 200;
+    itineraryGate = null;
+    visitHits = 0;
+    itineraryHits = 0;
+    setAccessToken('a');
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () => HttpResponse.json(TRIP)),
+      http.get(`${BASE}/trips/:tripId/reflections`, () =>
+        listStatus === 200
+          ? HttpResponse.json({ items: serverItems })
+          : HttpResponse.json(
+              { error: { code: 'INTERNAL_ERROR', message: '실패' } },
+              { status: 500 }
+            )
+      ),
+      http.get(`${BASE}/trips/:tripId/visits/days/:day`, () => {
+        visitHits += 1;
+        return HttpResponse.json({ visits: visitsBody });
+      }),
+      http.get(`${BASE}/trips/:tripId/itinerary`, async () => {
+        itineraryHits += 1;
+        if (itineraryGate) await itineraryGate.promise;
+        if (itineraryStatus !== 200)
+          return HttpResponse.json(
+            { error: { code: 'ERR', message: '실패' } },
+            { status: itineraryStatus }
+          );
+        return HttpResponse.json(ITINERARY);
+      })
+    );
+  });
+
+  afterEach(() => {
+    // 붙잡아 둔 일정 응답을 풀어 다음 테스트로 새지 않게 한다.
+    itineraryGate?.open();
+    server.resetHandlers();
+    clearAccessToken();
+  });
+
+  function renderPage(spontaneous: Record<string, string> = {}) {
+    const client = newTestQueryClient({ gcTime: 0 });
+    for (const [poiId, name] of Object.entries(spontaneous))
+      rememberSpontaneousName(client, TRIP_ID, poiId, name);
+    render(<DailyReflectionPage tripId={TRIP_ID} date={DAY} today={TODAY} />, {
+      wrapper: createWrapper(client),
+    });
+  }
+
+  async function settle() {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+  }
+
+  it('AI 카드 하루 — 표지·인용문·번호 장면·일정 변경 띠·동선(도착 순서)·숫자·해시태그가 보인다 (AC-8)', async () => {
+    serverItems = [reflectionOf(aiCard(), { visitCount: 4, photoCount: 2 })];
+    // 일부러 섞어 응답한다 — 화면 순서는 도착 시각이 만든다.
+    visitsBody = [
+      visitOf('v3', 'poi-spont', 3, true),
+      visitOf('v1', 'poi-1', 1),
+      visitOf('v4', 'poi-ghost', 4),
+      visitOf('v2', 'poi-2', 2),
+    ];
+    renderPage({ 'poi-spont': '즉석 카페' });
+
+    expect(await screen.findByTestId(`${P}-cover`)).toHaveTextContent(
+      /부산 첫날/
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId(`${P}-narrative`)).toHaveTextContent(NARRATIVE)
+    );
+
+    // 동선 — 일정이 도착한 뒤 이름이 붙는다.
+    await waitFor(() =>
+      expect(screen.getByTestId(`${P}-route-stop-1`)).toHaveTextContent(
+        /광안리해수욕장/
+      )
+    );
+    expect(screen.getByTestId(`${P}-route-stop-2`)).toHaveTextContent(
+      /해운대시장/
+    );
+    expect(screen.getByTestId(`${P}-route-stop-3`)).toHaveTextContent(
+      /즉석 카페/
+    );
+    expect(screen.getByTestId(`${P}-route-stop-4`)).toHaveTextContent(
+      /4번째 장소/
+    );
+
+    // 장면 카드 — 일정 변경 띠는 번호를 먹지 않아 카드는 01·02·03 뿐이다.
+    const first = within(screen.getByTestId(`${P}-scene-01`));
+    expect(first.getByText('01')).toBeOnTheScreen();
+    expect(first.getByText('짭짤한 국물이 좋았다')).toBeOnTheScreen();
+    expect(first.getByText('광안리해수욕장')).toBeOnTheScreen();
+    const second = within(screen.getByTestId(`${P}-scene-02`));
+    expect(second.getByText('시장 골목을 걸었다')).toBeOnTheScreen();
+    expect(second.getByText('해운대시장')).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId(`${P}-scene-03`)).getByText('네 곳을 둘러봤다')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId(`${P}-scene-04`)).toBeNull();
+
+    const bands = screen.getAllByTestId(`${P}-plan-change`);
+    expect(bands).toHaveLength(1);
+    expect(bands[0]).toHaveTextContent(/비 때문에 실내로 바꿨어요/);
+
+    const stats = within(screen.getByTestId(`${P}-stats`));
+    expect(stats.getByText('4')).toBeOnTheScreen();
+    expect(stats.getByText('4.2km')).toBeOnTheScreen();
+    expect(stats.getByText('근사')).toBeOnTheScreen();
+    expect(stats.getByText('2')).toBeOnTheScreen();
+
+    const tags = within(screen.getByTestId(`${P}-hashtags`));
+    expect(tags.getByText('#부산')).toBeOnTheScreen();
+    expect(tags.getByText('#맛집')).toBeOnTheScreen();
+
+    // 기존 동작 보존 — 서술 수정 진입과 "내 기록"(기분·한 줄 메모).
+    expect(screen.getByTestId(`${P}-narrative-edit`)).toBeOnTheScreen();
+    expect(screen.getByTestId(`${P}-extras`)).toBeOnTheScreen();
+    expect(screen.queryByText(DURATION_TEXT)).toBeNull();
+  });
+
+  it('규칙 카드(TEXT 장면) — 장면 카드는 0개이고 방문 이름이 동선에 서며 해시태그·일정 변경 띠는 없다 (AC-9)', async () => {
+    serverItems = [reflectionOf(ruleCard(), { visitCount: 2, photoCount: 0 })];
+    visitsBody = [visitOf('v1', 'poi-1', 1), visitOf('v2', 'poi-2', 2)];
+    renderPage();
+
+    await screen.findByTestId(`${P}-cover`);
+    await waitFor(() =>
+      expect(screen.getByTestId(`${P}-route-stop-1`)).toHaveTextContent(
+        /광안리해수욕장/
+      )
+    );
+    expect(screen.getByTestId(`${P}-route-stop-2`)).toHaveTextContent(
+      /해운대시장/
+    );
+    expect(screen.queryByTestId(`${P}-scenes`)).toBeNull();
+    expect(screen.queryByTestId(`${P}-scene-01`)).toBeNull();
+    expect(screen.queryByText('광안리 바다를 오래 봤다')).toBeNull();
+    expect(screen.queryByTestId(`${P}-hashtags`)).toBeNull();
+    expect(screen.queryByTestId(`${P}-plan-change`)).toBeNull();
+    // 방문 2·사진 0 → data-insufficient: 본문은 있고 "수정" 링크는 없다(기존 계약).
+    expect(screen.getByTestId(`${P}-narrative`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(`${P}-narrative-edit`)).toBeNull();
+  });
+
+  it.each([404, 500] as const)(
+    '일정 조회가 %i 로 실패해도 매거진은 그대로이고 동선 이름은 "N번째 장소"다 — 이름을 지어내지 않는다 (AC-10)',
+    async (status) => {
+      itineraryStatus = status;
+      serverItems = [reflectionOf(aiCard(), { visitCount: 2, photoCount: 1 })];
+      visitsBody = [visitOf('v1', 'poi-1', 1), visitOf('v2', 'poi-2', 2)];
+      renderPage();
+
+      await screen.findByTestId(`${P}-cover`);
+      await waitFor(() =>
+        expect(screen.getByTestId(`${P}-route-stop-1`)).toHaveTextContent(
+          /1번째 장소/
+        )
+      );
+      expect(screen.getByTestId(`${P}-route-stop-2`)).toHaveTextContent(
+        /2번째 장소/
+      );
+      expect(itineraryHits).toBe(1);
+      expect(screen.queryByText('광안리해수욕장')).toBeNull();
+      expect(screen.queryByTestId(`${P}-error`)).toBeNull();
+      expect(screen.getByTestId(`${P}-narrative`)).toHaveTextContent(NARRATIVE);
+    }
+  );
+
+  it('일정이 오기 전에는 동선 박스를 그리지 않고, 도착하면 이름이 붙은 채 나타난다 (깜빡임 없음)', async () => {
+    itineraryGate = makeGate();
+    serverItems = [reflectionOf(aiCard(), { visitCount: 2, photoCount: 1 })];
+    visitsBody = [visitOf('v1', 'poi-1', 1), visitOf('v2', 'poi-2', 2)];
+    renderPage();
+
+    await screen.findByTestId(`${P}-cover`);
+    await waitFor(() => expect(itineraryHits).toBe(1));
+    expect(screen.queryByTestId(`${P}-route`)).toBeNull();
+    expect(screen.queryByTestId(`${P}-route-stop-1`)).toBeNull();
+
+    itineraryGate.open();
+    expect(await screen.findByTestId(`${P}-route-stop-1`)).toHaveTextContent(
+      /광안리해수욕장/
+    );
+  });
+
+  it('그날 방문이 없으면 동선 박스도 없고 일정을 요청하지도 않는다', async () => {
+    serverItems = [reflectionOf(aiCard(), { visitCount: 0, photoCount: 1 })];
+    visitsBody = [];
+    renderPage();
+
+    await screen.findByTestId(`${P}-cover`);
+    await waitFor(() => expect(visitHits).toBeGreaterThanOrEqual(1));
+    await settle();
+    expect(screen.queryByTestId(`${P}-route`)).toBeNull();
+    expect(itineraryHits).toBe(0);
+  });
+
+  it('empty 얼굴은 매거진을 그리지 않는다 (AC-11)', async () => {
+    serverItems = [reflectionOf(ruleCard(), { visitCount: 0, photoCount: 0 })];
+    renderPage();
+
+    await screen.findByTestId(`${P}-empty`);
+    expect(screen.queryByTestId(`${P}-cover`)).toBeNull();
+    expect(screen.queryByTestId(`${P}-narrative`)).toBeNull();
+  });
+
+  it('error 얼굴(목록 조회 실패)은 매거진을 그리지 않는다 (AC-11)', async () => {
+    listStatus = 500;
+    renderPage();
+
+    await screen.findByTestId(`${P}-error`);
+    expect(screen.queryByTestId(`${P}-cover`)).toBeNull();
+    expect(screen.queryByTestId(`${P}-narrative`)).toBeNull();
+  });
+
+  it('미치환 템플릿 제목은 중괄호로 새지 않는다 — 표지는 그대로 선다 (AC-13)', async () => {
+    serverItems = [
+      reflectionOf(aiCard('{region} · {start_date}~{end_date}'), {
+        visitCount: 2,
+        photoCount: 1,
+      }),
+    ];
+    renderPage();
+
+    const cover = await screen.findByTestId(`${P}-cover`);
+    expect(cover).not.toHaveTextContent(/[{}]/);
   });
 });

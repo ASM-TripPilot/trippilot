@@ -34,6 +34,8 @@ data class NormalizedPlace(
      * 화면(d06 상세·탐색 목록)이 주소를 보여야 해서 승격분에도 싣는다. 미확보면 null.
      */
     val address: String? = null,
+    /** [imageUrl] 사진의 공공누리 유형. 모르면 null — 게이트 판정에는 쓰지 않는다. */
+    val imageLicense: ImageLicense? = null,
 )
 
 /** 조회 지역 범위. 반경/bounding-box 프리필터는 후보풀(CandidatePoolPort, TRIP-213)에서. */

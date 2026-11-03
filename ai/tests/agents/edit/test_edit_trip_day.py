@@ -74,7 +74,7 @@ class _Provider:
     def __init__(self, checks: bool = False) -> None:
         self.facade = _Facade(checks)
 
-    def for_pool(self, poi_index):
+    def for_pool(self, poi_index, walk_max_km=None, parking=None):
         return self.facade
 
 

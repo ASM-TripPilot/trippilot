@@ -126,6 +126,15 @@ def test_rebuilds_each_day_around_its_area_without_llm(caplog) -> None:
     assert "종로" not in json.dumps(log, ensure_ascii=False)  # 발화·동네 이름은 로그에 싣지 않는다
 
 
+def test_excluded_places_are_not_rebuilt_into_the_days() -> None:
+    """편집 요청의 뺄 곳(spec 003 FR-015)은 날마다 동네도 본다 — 받은 풀·더 모은 동네 풀 어디서 와도 그 날에 들이지 않는다."""
+    gone = [str(JONGNO_SIDE[0].poi_id), str(JONGNO_SIDE[2].poi_id)]  # 빼지 않으면 1일차에 들어오는 곳(기준 실측)
+    body = _post({**_body(), "excluded_poi_ids": gone})
+    assert body["status"] == "APPLIED", body
+    assert not set(gone) & {s["poi_id"] for s in _day(body, D1)}
+    assert _within(_day(body, D1), JONGNO)
+
+
 def test_target_date_does_not_limit_the_days_said() -> None:
     """BE 의 targetDate 는 분류가 실은 날 하나다 — 말이 두 날을 정했으면 두 날 다(spec 004 비판 ③)."""
     body = _post(_body(target=D2))
