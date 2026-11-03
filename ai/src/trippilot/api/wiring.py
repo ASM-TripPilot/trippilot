@@ -4361,7 +4361,7 @@ class WiredItineraryOrchestrator:
         floor = (local_now + timedelta(minutes=1)).replace(second=0, microsecond=0)
         fixed: list[FixedBlock] = []
         keep: list[RequiredVisit] = []
-        windows: dict[date, TimeWindow] = {}
+        day_windows: dict[date, TimeWindow] = {}  # 풀이 창 — 인자 `windows`(요청 창)와 이름이 같으면 요청 창이 가려진다
         # 여행 당일 — 지난 곳은 기록이다. 가장 최근의 곳(진행 중이면 그곳, 아니면 마지막으로 끝난 곳)만 그 시각에 고정해 풀이에 넣는다:
         # 사용자가 지금 있는 곳이라 '거기 → 첫 새 방문' 이동을 조립이 재고 ⑤ 도 잰다(빼면 갈 수 없는 첫 방문이 나갔다, 2026-10-23 2차 리뷰).
         # 그보다 앞선 곳은 풀이 밖에 두고 그 시각 그대로 되싣는다(지난 간격을 지금 추정으로 다시 재면 다녀온 하루가 통째로 실패한다)
@@ -4393,7 +4393,7 @@ class WiredItineraryOrchestrator:
                 start = min([floor, *(s.start_at for s in current)])
             if end - max(start, floor if today else start) < timedelta(minutes=60):
                 return f"no_time_left({names[day]})"
-            windows[day] = TimeWindow(start=start, end=end)
+            day_windows[day] = TimeWindow(start=start, end=end)
             for s in live:  # 동네 안 원 슬롯은 남긴다 — 시각은 조립이 다시 정한다
                 p = poi_index.get(s.poi_id) or found.get(s.poi_id)
                 if s.poi_id not in pinned and p is not None and haversine_km(p.coord, centers[day]) <= _AREA_POOL_KM:
@@ -4407,7 +4407,7 @@ class WiredItineraryOrchestrator:
         area_pool = CandidatePool(poi_ids=frozenset(area_pois), pois=tuple(area_pois.values()), generated_at=now)
         domain_request = core.GenerateItineraryRequest(
             schedule_id=ScheduleId(request.trip_id), anchor=pool_request.anchor, days=tuple(changed),
-            day_window=windows[changed[0]], day_windows=windows, budget=pool_request.budget, transport=transport,
+            day_window=day_windows[changed[0]], day_windows=day_windows, budget=pool_request.budget, transport=transport,
             persona_ref=ResourceRef(kind="persona", ref_id=request.trip_id, owner_id=request.trip_id),
             principal=Principal(user_id=request.trip_id), seed=_seed_from(request.trip_id),
             fixed_blocks=tuple(fixed), required_visits=tuple(keep), excluded_poi_ids=others | gone,

@@ -121,7 +121,10 @@ def _key_scoped(e: Exception) -> bool:
     """
     if isinstance(e, (anthropic.RateLimitError, anthropic.AuthenticationError, anthropic.PermissionDeniedError)):
         return True
-    return isinstance(e, anthropic.BadRequestError) and "credit balance" in str(e).lower()
+    if isinstance(e, anthropic.APIStatusError) and e.status_code == 402:  # billing_error — SDK 전용 클래스 없음
+        return True
+    msg = str(e).lower()
+    return isinstance(e, anthropic.BadRequestError) and ("credit balance" in msg or "usage limit" in msg)
 
 
 class AnthropicAdapter:
@@ -151,7 +154,8 @@ class AnthropicAdapter:
                 if not _key_scoped(e) or i == n - 1:
                     raise
                 last = e
-                _logger.warning("anthropic key #%d/%d %s — 다음 키로", idx + 1, n, type(e).__name__)
+                # 사유를 같이 남긴다 — 다음 키가 살리면 FallbackEvent 가 없어 감시(llm_fallback_watch)가 이 줄로만 소진을 본다
+                _logger.warning("anthropic key #%d/%d %s — 다음 키로: %s", idx + 1, n, type(e).__name__, str(e)[:200])
         raise last  # type: ignore[misc]  # 도달 불가(n>=1 이면 위에서 반환 또는 raise)
 
     def invoke(self, request: LlmRequest) -> LlmResponse:

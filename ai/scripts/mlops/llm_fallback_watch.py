@@ -42,6 +42,8 @@ def judge(lines) -> tuple[bool, str]:
             reason = line.split("reason=", 1)[-1].strip()
             if _QUOTA.search(reason):
                 quota.append(reason[:300])
+        elif "— 다음 키로" in line and _QUOTA.search(line):  # 다른 키가 살린 소진 — 대체는 없지만 그 키는 막혔다
+            quota.append(line[-300:])
     failed = sum(fallbacks.values())
     total = ok + failed
     ratio = failed / total if total else 0.0

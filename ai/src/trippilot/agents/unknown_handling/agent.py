@@ -207,7 +207,13 @@ class UnknownHandlingAgent:
                 log.info("unknown_handling lookup_failed trace=%s reason=%s", task.trace_id, result.error)
                 return
             facts = result.value if isinstance(result.value, PlaceFacts) and result.value.any() else None
-            self._store.put(FactRecord(task.poi_id, facts, task.now, task.now + (FOUND_TTL if facts else MISS_TTL), task.fields))
+            # 전에 찾은 칸을 이번 조회가 잃었으면(게이트가 그 칸만 버림 등) "찾아봤다"에서 뺀다 — 덮인 기록이 그 칸을 7일간
+            # 미확인으로 굳히지 않고 다음 물음에 다시 찾는다(두 조회의 값을 한 기록에 섞지는 않는다)
+            prev = self._known(task.poi_id, task.now)
+            lost = {f for f in FIELDS if prev is not None and prev.facts is not None and getattr(prev.facts, f)
+                    and not (facts is not None and getattr(facts, f))}
+            searched = tuple(f for f in task.fields if f not in lost)
+            self._store.put(FactRecord(task.poi_id, facts, task.now, task.now + (FOUND_TTL if facts else MISS_TTL), searched))
             log.info("unknown_handling lookup_done trace=%s found=%s source=%s", task.trace_id, facts is not None,
                      facts.source_host if facts else "-")
         except Exception as e:  # noqa: BLE001 — 뒤에서 도는 일이라 위로 던질 곳이 없다. 사유만 남긴다

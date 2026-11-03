@@ -294,3 +294,14 @@ def test_a_date_check_failure_is_observed_without_names(caplog) -> None:
     _post(_body(utterance="1일차는 종로로 바꿔줘", at="2026-10-25T09:00:00+09:00"))
     log = _log(caplog)
     assert (log["outcome"], log["reason"]) == ("REJECTED", "day_area: past_day")
+
+
+def test_empty_day_is_rebuilt_inside_the_requested_time_window() -> None:
+    """빈 날은 편집 요청 `time_windows` 의 그 날 창으로 짠다 — 풀이 창 변수가 인자 이름을 가려 요청 창이 버려지고 10:00~18:00 으로 짰다."""
+    body = _body(utterance="2일차 일정을 강남구 쪽으로 바꿔줘", target=D2)
+    body["itinerary"]["days"][1]["slots"] = []  # `day2 or _DAY2` 는 빈 목록을 삼킨다
+    body["time_windows"] = [{"date": D2, "start": "13:00:00", "end": "21:00:00"}]
+    out = _post(body)
+    assert out["status"] == "APPLIED", out
+    slots = _day(out, D2)
+    assert slots and all("13:00:00" <= s["start_at"] and s["end_at"] <= "21:00:00" for s in slots)

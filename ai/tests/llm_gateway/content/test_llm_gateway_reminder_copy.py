@@ -56,6 +56,14 @@ def test_allowed_place_name_that_looks_like_a_duration_is_not_dropped(name: str)
     assert out.value is not None and out.drop_event is None
 
 
+@pytest.mark.parametrize(("name", "body"), [("한라산", "한라산이 분명 반겨줄 거예요"), ("동문시장", "동문시장이 시간 가는 줄 몰라요")])
+def test_particle_after_masked_name_is_not_read_as_a_number(name: str, body: str) -> None:
+    # 이름을 공백으로 지우면 뒤 조사 '이'가 글머리가 돼 수사(二)로 읽히고 "이 분"·"이 시간"이 소요시간에 걸렸다.
+    ctx = ReminderCopyContext(allowed=(name,), forbidden=())
+    out = _apply({"title": "오늘의 일정", "body": body, "places": [name]}, ctx)
+    assert out.value is not None and out.drop_event is None
+
+
 def test_real_duration_outside_the_place_name_is_still_dropped() -> None:
     # 이름을 지우는 것이 소요시간 표시(INV-3)를 풀어 주면 안 된다 — 이름 밖의 "30분"은 그대로 잡는다.
     ctx = ReminderCopyContext(allowed=("24시간 해장국",), forbidden=())

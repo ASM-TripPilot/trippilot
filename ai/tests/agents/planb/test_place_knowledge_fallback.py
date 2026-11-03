@@ -147,14 +147,15 @@ def test_place_intro_falls_back_to_the_local_document_when_the_store_is_slow(mon
 def test_warm_reads_the_table_in_the_background_only_when_switched_on(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(place_fallback, "fallback_docs", lambda: calls.append(1) or {})
+    monkeypatch.setattr(place_fallback, "web_facts", lambda: calls.append(2) or {})  # 각주 판정 표도 같이 — 첫 소개 턴이 떠안지 않게
     place_fallback.warm()
     for t in threading.enumerate():
         if t.name == "kb5-fallback":
             t.join(2)
-    assert calls == [1]
+    assert calls == [1, 2]
     monkeypatch.setenv(place_fallback.SWITCH, "off")
     place_fallback.warm()
-    assert calls == [1]
+    assert calls == [1, 2]
 
 
 def test_real_and_fallback_share_one_cap_and_left_out_fallbacks_are_noted(monkeypatch) -> None:

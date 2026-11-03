@@ -82,7 +82,8 @@ def _without_names(text: str, names: set[str]) -> str:
     """허용 장소명(표시형 포함)을 지운 글 — 이름 속 "24시"·"자정"이 시각 검사에 걸리지 않게. 긴 이름부터 지운다."""
     for name in sorted(names, key=len, reverse=True):
         if name:
-            text = text.replace(name, " ")
+            # 한글로 메운다 — 공백이면 "한라산이 분명"의 조사 '이'가 수사(二)로 읽혀 "이 분"이 소요시간에 걸린다
+            text = text.replace(name, "곳")
     return text
 
 
