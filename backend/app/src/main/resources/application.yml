@@ -1,3 +1,10 @@
+server:
+  tomcat:
+    # 푸시 토큰 해제(`DELETE /api/v1/me/push-tokens/{token}`)는 경로에 Expo 토큰을 싣는데, `ExponentPushToken[…]` 의 대괄호를
+    # 앱이 인코딩 없이 보내면 Tomcat 기본 설정은 400 으로 거절한다(로컬 실측: 날것 400 · 퍼센트 인코딩 204). 해제가 실패하면
+    # 로그아웃한 기기에 이전 계정의 알림이 계속 간다 — 그래서 이 두 문자만 경로에 허용한다.
+    relaxed-path-chars: "[,]"
+
 spring:
   application:
     name: trippilot-backend
