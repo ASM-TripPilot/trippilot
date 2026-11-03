@@ -19,11 +19,12 @@ import { ToastHost } from '@/shared/ui/Toast';
 
 import { initSentry } from './initSentry';
 import { createAppQueryClient } from './queryClient';
+import { createQueryFailureReporter } from './reportQueryFailure';
 import { SentryRoot } from './SentryRoot';
 
 // 서버 상태(TanStack Query)의 앱 전역 캐시 저장소 — 모듈 스코프에서 한 번만 만들어 리렌더마다 다시 만들지 않는다.
-// 기본 옵션(retry·staleTime·복귀 재조회 정책)의 근거는 `./queryClient`.
-const queryClient = createAppQueryClient();
+// 기본 옵션(retry·staleTime·복귀 재조회 정책)의 근거는 `./queryClient`. 최종 실패 보고는 Sentry 가 꺼져 있어도(DSN 없음) 그대로 건다 — 클라이언트가 없으면 Sentry 쪽이 no-op 이다.
+const queryClient = createAppQueryClient(createQueryFailureReporter());
 
 // 스택·탭 화면 배경은 React Navigation 테마 색(기본 #F2F2F2)이 깔린다 — 화면 루트 SafeAreaView 에 배경이 없으면
 // 상태바·홈 인디케이터 영역에 그 회색이 비친다(TRIP-1434 Q-002). 앱 테마 배경을 canvas(tailwind.config.js)로

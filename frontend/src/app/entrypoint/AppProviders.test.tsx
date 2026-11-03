@@ -1,6 +1,10 @@
 import type { ComponentType } from 'react';
 import { act, render, screen, within } from '@testing-library/react-native';
-import { QueryClient, type QueryKey } from '@tanstack/react-query';
+import {
+  MutationObserver,
+  QueryClient,
+  type QueryKey,
+} from '@tanstack/react-query';
 import { AxiosError } from 'axios';
 import * as Notifications from 'expo-notifications';
 import * as Sentry from '@sentry/react-native';
@@ -10,6 +14,10 @@ import {
   getObservedQueryClient,
   resetObservedQueryClient,
 } from '@/test-support/queryClientProbe';
+import {
+  capturedEvents,
+  resetSentryReportMock,
+} from '@/test-support/sentryReactNativeMock';
 
 /**
  * 루트 레이아웃(`app/_layout.tsx` = `AppProviders` > `SplashGate`) 부팅 골격 — 옛 `rootLayout`·
@@ -100,6 +108,7 @@ beforeEach(() => {
 
 afterEach(() => {
   act(() => Toast.hideToast());
+  resetSentryReportMock();
 });
 
 function httpError(status: number): AxiosError {
@@ -298,5 +307,62 @@ describe('🔴 TRIP-1743 · 루트 레이아웃 — Sentry 추적 배선', () =>
     expect(register.mock.calls[0][0]).toBe(
       (useNavigationContainerRef as jest.Mock)()
     );
+  });
+});
+
+/**
+ * TRIP-1744 — 앱이 쥔 QueryClient 에 조회·변경 요청의 최종 실패 보고가 꽂혀 있다.
+ * 무엇을 보장하나: AppProviders 가 `createAppQueryClient` 에 보고 함수를 넘기는 한 줄이 빠지거나 한쪽(조회/변경)만 넘기면 보고 단위 테스트가
+ * 전부 green 인 채로 운영에서는 아무것도 안 올라간다 — 그 연결고리를 부팅된 앱의 클라이언트로 잠근다. 추적(sentryTracing) 상태와 무관하게
+ * 보고된다는 것(DSN·웹 게이트 없음)은 `AppProviders.noDsn.test` 가 본다. 커버하지 않는 것: 보고 내용(reportQueryFailure.test)·실제 Sentry 수신(6-b).
+ * 이벤트 창(5분)은 앱 모듈 전체가 공유하므로 이 describe 의 두 케이스는 서로 다른 지문(다른 API)을 쓴다.
+ */
+describe('루트 레이아웃 — 서버 요청 실패 보고 배선', () => {
+  it('앱의 조회가 재시도 끝에 실패하면 breadcrumb 과 이벤트가 Sentry 로 간다', async () => {
+    render(<RootLayout />);
+    const client = getObservedQueryClient()!;
+    let calls = 0;
+
+    await client
+      .fetchQuery({
+        queryKey: ['/trips/t-wiring-1744/itinerary'],
+        retryDelay: 0,
+        queryFn: async () => {
+          calls += 1;
+          throw httpError(500);
+        },
+      })
+      .catch(() => undefined);
+
+    expect(calls).toBe(4);
+    expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
+    expect(
+      (Sentry.addBreadcrumb as jest.Mock).mock.calls[0][0].data
+    ).toMatchObject({
+      kind: 'query',
+      key: '/trips/:id/itinerary',
+      status: 500,
+    });
+    expect(capturedEvents()).toHaveLength(1);
+  });
+
+  it('앱의 변경 요청이 실패해도 보고된다 (조회와 따로 배선됐는지)', async () => {
+    render(<RootLayout />);
+    const client = getObservedQueryClient()!;
+
+    await new MutationObserver(client, {
+      mutationKey: ['putMePreferences'],
+      mutationFn: async (_variables: { any: string }) => {
+        throw httpError(500);
+      },
+    })
+      .mutate({ any: 'thing' })
+      .catch(() => undefined);
+
+    expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
+    expect(
+      (Sentry.addBreadcrumb as jest.Mock).mock.calls[0][0].data
+    ).toMatchObject({ kind: 'mutation', key: 'putMePreferences', status: 500 });
+    expect(capturedEvents()).toHaveLength(1);
   });
 });
