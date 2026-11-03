@@ -1452,6 +1452,7 @@
 - `src/shared/api/generated/schemas/getTripsTripIdOpportunitiesParams.ts`  →  GetTripsTripIdOpportunitiesParams
 - `src/shared/api/generated/schemas/getTripsTripIdRecordsParams.ts`  →  GetTripsTripIdRecordsParams
 - `src/shared/api/generated/schemas/getTripsTripIdReplanSessionsPreparedParams.ts`  →  GetTripsTripIdReplanSessionsPreparedParams
+- `src/shared/api/generated/schemas/imageLicense.ts`  →  ImageLicense
 - `src/shared/api/generated/schemas/index.ts`  →  (export 없음)
 - `src/shared/api/generated/schemas/intervalReportRequest.ts`  →  IntervalReportRequest
 - `src/shared/api/generated/schemas/intervalReportRequestEndReason.ts`  →  IntervalReportRequestEndReason
@@ -1933,4 +1934,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1255개 파일
+합계 1256개 파일
