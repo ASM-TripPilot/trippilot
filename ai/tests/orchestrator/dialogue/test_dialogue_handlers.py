@@ -860,15 +860,17 @@ def test_a_place_name_containing_a_region_name_is_looked_up_not_taken_as_that_re
     assert transit.calls[0]["destination"] == _COORD["천지연폭포"]
 
 
-@pytest.mark.parametrize("arguments, side", [
-    ({"origin": "우도", "destination": "롯데월드"}, "목적지"),
-    ({"origin": "롯데월드", "destination": "우도"}, "출발지"),
+@pytest.mark.parametrize("arguments, note", [
+    ({"origin": "우도", "destination": "롯데월드"}, "못 찾은 쪽: 목적지 — 출발지는 '우도'(으)로 찾았다."),
+    ({"origin": "롯데월드", "destination": "우도"}, "못 찾은 쪽: 출발지 — 목적지는 '우도'(으)로 찾았다."),
+    ({"origin": "롯데월드", "destination": "에버랜드"}, "못 찾은 쪽: 출발지·목적지"),
 ])
-def test_distance_with_an_unknown_end_stays_empty_and_never_calls_transit(arguments: dict, side: str) -> None:
-    facts, transit, _ = _free_distance(arguments, [])
+def test_distance_with_an_unknown_end_stays_empty_and_never_calls_transit(arguments: dict, note: str) -> None:
+    facts, transit, finder = _free_distance(arguments, [])
     assert transit.calls == [] and facts.status is FactStatus.EMPTY
-    # 못 찾은 쪽만 밝힌다 — "서울역과 경복궁은 찾을 수 없어서"(경복궁은 찾았다, 2026-11-03 개발)
-    assert any(f"못 찾은 쪽은 {side}" in n for n in facts.notes)
+    # 두 끝을 다 찾아 보고 찾은 쪽을 밝힌다 — "서울역과 경복궁을 찾지 못했어요"(경복궁은 찾힌다, 2026-11-03 개발)
+    assert any(n.startswith(note) for n in facts.notes)
+    assert len(finder.calls) == sum(1 for v in arguments.values() if v in ("롯데월드", "에버랜드"))  # 지역 끝은 찾지 않는다
 
 
 def test_leap_day_looks_at_next_year_when_this_year_has_none() -> None:
