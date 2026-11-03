@@ -138,8 +138,9 @@ class EditItineraryService(
         val verdict = when (repair) {
             is RepairAttempt.Used -> Revalidation.Judged(emptyList()) // 상대가 재검증을 통과시킨 값만 온다(INV-2)
             RepairAttempt.Failed -> Revalidation.Withheld // AI 불통 — 같은 상대를 validate 로 한 번 더 기다리지 않는다
-            // 수리와 같은 출처의 수단으로 잰다 — 비우면 대중교통이라 자차 여행의 시각만 바꾼 편집·[적용]이 HC2 로 표시됐다
-            RepairAttempt.Skipped, RepairAttempt.Rejected -> Revalidation.attempt(scheduleAgent, output, tripId, repairContexts.transportModes(accountId, tripId))
+            // 수리와 같은 출처의 수단·취향으로 잰다 — 비우면 대중교통이라 자차 여행의 시각만 바꾼 편집·[적용]이 HC2 로 표시됐고,
+            // 기본 도보 상한(700m)이라 액티비티 취향 여행의 걸어서 잡은 0.7~0.9km 구간이 '맞지 않는 곳'으로 표시됐다
+            RepairAttempt.Skipped, RepairAttempt.Rejected -> Revalidation.attempt(scheduleAgent, output, tripId, repairContexts.forRevalidation(accountId, tripId))
         }
         val flagged = reshape(current, edit, verdict, (repair as? RepairAttempt.Used)?.days)
         ViolationText.warnUnattached(verdict.violations(), flagged.days, tripId)

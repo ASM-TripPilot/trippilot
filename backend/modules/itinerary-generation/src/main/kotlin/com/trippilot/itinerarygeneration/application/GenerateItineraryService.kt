@@ -324,10 +324,7 @@ class GenerateItineraryService(
      * 당일치기는 첫날이자 마지막날이라 둘 다 걸린다(도메인이 first < last 를 검증한다).
      */
     private fun dayWindowOf(date: LocalDate, ctx: TripGenerationContext, cutDay: LocalDate?): Pair<LocalTime, LocalTime> {
-        val start = (if (date == ctx.startDate) ctx.firstDayStartAt else null)
-            ?: ctx.dayStartAt
-            ?: DEFAULT_START
-        val end = (if (date == ctx.endDate) ctx.lastDayEndAt else null) ?: DEFAULT_END
+        val (start, end) = ctx.baseDayWindow(date) // 편집 제안과 같은 규칙(TripDayWindows)
         // 사용자가 적은 값끼리 모순이면(예: 하루 시작 23:00) 창이 뒤집힌다. 그대로 보내면 조립기가
         // 그 날을 "해 없음"으로 접고 증상은 "AI 가 일정을 못 만든다"로만 보인다 — 여기서 드러낸다.
         if (!start.isBefore(end)) {
@@ -543,8 +540,6 @@ class GenerateItineraryService(
 
     companion object {
         private val log = LoggerFactory.getLogger(GenerateItineraryService::class.java)
-        private val DEFAULT_START = LocalTime.of(9, 0)
-        private val DEFAULT_END = LocalTime.of(21, 0)
 
         /** 오늘 창을 지금에서 얼마나 띄울까 — 화면에서 일정을 보고 첫 장소로 출발할 여유. */
 
