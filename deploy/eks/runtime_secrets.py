@@ -145,7 +145,13 @@ def known_llm_features(source=FEATURE_SOURCE):
                      and isinstance(stmt.value.value, str))
 
 
-_RUNNING_FEATURES = "from trippilot.domain.llm.llm import LlmFeature; print(' '.join(f.value for f in LlmFeature))"
+# 떠 있는 이미지는 이 커밋보다 옛것일 수 있다 — domain 재배치(#1772) 전 이미지는 `trippilot/domain/llm.py`(모듈)라 새 경로가 없다.
+# 새 경로를 먼저 보고 없으면 옛 경로로 읽는다(운영 배포 run 41399316488 이 옛 이미지에 새 경로를 exec 해 멈췄다).
+_RUNNING_FEATURES = (
+    "try:\n    from trippilot.domain.llm.llm import LlmFeature\n"
+    "except ImportError:\n    from trippilot.domain.llm import LlmFeature\n"
+    "print(' '.join(f.value for f in LlmFeature))"
+)
 
 
 def running_llm_features(namespace, shell):

@@ -1479,5 +1479,33 @@ class RefreshEventsTests(unittest.TestCase):
         self.assertIn(f"EXPIRE_GRACE_DAYS = {refresh_events.EXPIRE_GRACE_DAYS}", source)
 
 
+class RunningFeaturesScriptTests(unittest.TestCase):
+    """떠 있는 AI 파드에 exec 하는 기능 목록 스크립트는 domain 재배치(#1772) 앞뒤 이미지 둘 다에서 돌아야 한다 —
+    운영 배포(run 41399316488)가 옛 이미지에 새 경로만 exec 해 시크릿 동기화에서 멈췄다."""
+
+    ENUM = "import enum\nclass LlmFeature(enum.Enum):\n    INTENT = 'INTENT'\n    PARAPHRASE = 'PARAPHRASE'\n"
+
+    def _run(self, layout):
+        import subprocess
+        with tempfile.TemporaryDirectory() as root:
+            for rel, text in layout.items():
+                path = Path(root, rel)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text)
+            done = subprocess.run([sys.executable, "-c", runtime_secrets._RUNNING_FEATURES],
+                                  env={**os.environ, "PYTHONPATH": root}, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout.split()
+
+    def test_reads_features_from_image_before_domain_regroup(self):
+        old = {"trippilot/__init__.py": "", "trippilot/domain/__init__.py": "", "trippilot/domain/llm.py": self.ENUM}
+        self.assertEqual(self._run(old), ["INTENT", "PARAPHRASE"])
+
+    def test_reads_features_from_image_after_domain_regroup(self):
+        new = {"trippilot/__init__.py": "", "trippilot/domain/__init__.py": "",
+               "trippilot/domain/llm/__init__.py": "", "trippilot/domain/llm/llm.py": self.ENUM}
+        self.assertEqual(self._run(new), ["INTENT", "PARAPHRASE"])
+
+
 if __name__ == "__main__":
     unittest.main()
