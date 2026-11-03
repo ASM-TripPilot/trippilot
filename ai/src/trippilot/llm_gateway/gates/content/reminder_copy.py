@@ -212,15 +212,18 @@ class ReminderCopyGate:
         # 늘수록 는다). 표시형은 원본에서 파생되므로 **없는 장소를 새로 허용하지
         # 않는다** — 완화의 범위가 거기서 닫힌다.
         allowed = {n for name in ctx.allowed for n in _name_variants(name)}
-        lowered = (title + body).lower()
+        # 허용 장소명을 지운 글로 소요시간·시각을 **둘 다** 본다. 시각 검사만 이름을 지우던 때, 실제 상호가 소요시간
+        # 꼴인 날("24시간 해장국"·"오분자기 식당" — `24시간`·`오분` 이 `_DURATION` 에 걸린다)은 모델이 이름을 피할 수 없어
+        # 문구가 매번 드롭되고 상수로 굳었다(재시도에서도 같은 입력이라 재현된다). 장소명 밖의 "30분 걸려요"는 그대로 잡힌다.
+        masked = _without_names(title + " " + body, allowed)
 
         dropped = (
             not title
             or not body
             or len(title) > _MAX_TITLE
             or len(body) > _MAX_BODY
-            or _DURATION.search(lowered) is not None  # INV-3
-            or _CLOCK.search(_without_names(title + " " + body, allowed)) is not None  # INV-2 — 지어낸 시각
+            or _DURATION.search(masked.lower()) is not None  # INV-3
+            or _CLOCK.search(masked) is not None  # INV-2 — 지어낸 시각
             or any(name not in allowed for name in declared)  # INV-1
             or any(
                 not any(v in body for v in _name_variants(name)) for name in declared
