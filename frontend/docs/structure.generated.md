@@ -531,7 +531,7 @@
 
 ## src/features/reflection/
 - `src/features/reflection/index.ts`  →  useTripSummary · useRecordBarNav
-- `src/features/reflection/index.view.ts`  →  formatKm · buildMagazineVM · splitHighlight · CATEGORY_PALETTES · MAGAZINE_TONES · dominantPaletteKey · ReflectionMagazine · MagazineCover · MagazineQuote · MagazineRoute · MagazineStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · SHARE_FORMATS · buildShareCard · formatShareCardStats · validateCaption · validateHashtags · pickReflectionDate · summaryStats · daySubtitle · distanceSourceLabel · resolveSummaryView · shareEnabled · toOrderedVisitList · BackArrowGlyph · EmptyCircleGlyph · LocationOffGlyph · PhotoOffGlyph · RetryGlyph
+- `src/features/reflection/index.view.ts`  →  formatKm · buildMagazineVM · splitHighlight · CATEGORY_PALETTES · MAGAZINE_TONES · dominantPaletteKey · ReflectionMagazine · MagazineCover · MagazineQuote · MagazineRoute · MagazineStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · SHARE_FORMATS · buildShareCard · formatShareCardStats · validateCaption · validateHashtags · pickReflectionDate · buildSummaryMagazineVM · summaryStats · daySubtitle · distanceSourceLabel · resolveSummaryView · shareEnabled · toOrderedVisitList · BackArrowGlyph · EmptyCircleGlyph · LocationOffGlyph · PhotoOffGlyph · RetryGlyph
 
 ## src/features/reflection/model/
 - `src/features/reflection/model/categoryPalette.ts`  →  PaletteKey · CategoryPalette · CATEGORY_PALETTES · MAGAZINE_TONES · paletteKeyForCategory · dominantPaletteKey
@@ -540,6 +540,7 @@
 - `src/features/reflection/model/recordBarNav.ts`  →  RecordBarNav · pickReflectionDate
 - `src/features/reflection/model/reflectionPayload.ts`  →  ReflectionScene · ReflectionPayload · SceneKind · parseReflectionPayload · sceneKind · devicePhotoUri · slotUri
 - `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · formatShareCardStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags
+- `src/features/reflection/model/summaryMagazineVM.ts`  →  SummaryMagazineInput · SummaryDayCardVM · SummaryMagazineVM · buildSummaryMagazineVM
 - `src/features/reflection/model/summaryStats.ts`  →  SummaryStatCells · summaryStats
 - `src/features/reflection/model/summaryView.ts`  →  OrderedVisit · shareEnabled · resolveSummaryView · toOrderedVisitList · distanceSourceLabel · daySubtitle
 - `src/features/reflection/model/useRecordBarNav.ts`  →  useRecordBarNav
@@ -1119,7 +1120,10 @@
 - `src/pages/record/share-card/index.ts`  →  ShareCardPage
 
 ## src/pages/record/share-card/model/
+- `src/pages/record/share-card/model/shareStory.ts`  →  STORY_DAY_LIMIT · SHARE_ROUTE_LIMIT · StorySlide · buildStorySlides · resolveShareText
+- `src/pages/record/share-card/model/storyDeck.ts`  →  SLIDE_MS · HOLD_DELAY_MS · DeckState · DeckEvent · initDeck · isRunning · deckReducer · segmentState
 - `src/pages/record/share-card/model/useShareCardCopy.ts`  →  useShareCardCopy
+- `src/pages/record/share-card/model/useStoryDeck.ts`  →  useStoryDeck
 
 ## src/pages/record/share-card/ui/
 - `src/pages/record/share-card/ui/FormatSegment.tsx`  →  FormatSegmentProps · FormatSegment
@@ -1127,6 +1131,9 @@
 - `src/pages/record/share-card/ui/ShareCardPage.tsx`  →  ShareCardPageProps · ShareCardPage
 - `src/pages/record/share-card/ui/ShareCardPreview.tsx`  →  ShareCardPreviewProps · ShareCardPreview
 - `src/pages/record/share-card/ui/ShareCardScreen.tsx`  →  ShareCardScreenProps · ShareCardScreen
+- `src/pages/record/share-card/ui/StoryDeck.tsx`  →  StoryDeckProps · StoryDeck
+- `src/pages/record/share-card/ui/StoryDeckView.tsx`  →  StoryDeckViewProps · StoryDeckView
+- `src/pages/record/share-card/ui/StorySlides.tsx`  →  slidePalette · StorySlideView
 
 ## src/pages/record/travel-style/
 - `src/pages/record/travel-style/index.ts`  →  TravelStylePage
@@ -1164,9 +1171,6 @@
 
 ## src/pages/record/trip-summary/
 - `src/pages/record/trip-summary/index.ts`  →  TripSummaryPage
-
-## src/pages/record/trip-summary/model/
-- `src/pages/record/trip-summary/model/summaryMagazineVM.ts`  →  SummaryMagazineInput · SummaryDayCardVM · SummaryMagazineVM · buildSummaryMagazineVM
 
 ## src/pages/record/trip-summary/ui/
 - `src/pages/record/trip-summary/ui/DayHighlightCard.tsx`  →  DayHighlightCard
@@ -1949,4 +1953,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1269개 파일
+합계 1275개 파일

@@ -4,12 +4,12 @@ import { router } from 'expo-router';
 
 import { isShareCaptureArmed } from '@/features/share-trip-card';
 import { resolveSummaryView, shareEnabled } from '@/features/reflection';
+import { buildSummaryMagazineVM } from '@/features/reflection/index.view';
 import {
   pickReflectionDate,
   useRecordBarNav,
   useTripSummary,
 } from '@/features/reflection';
-import { buildSummaryMagazineVM } from '../model/summaryMagazineVM';
 import { TripSummaryScreen } from './TripSummaryScreen';
 import { tripDayChips } from '@/features/add-must-visit';
 import { formatDayLabel } from '@/entities/trip';

@@ -37,6 +37,12 @@ export {
 export type { ShareCardVM, ShareFormat } from './model/shareCard';
 export { pickReflectionDate } from './model/recordBarNav';
 export type { RecordBarNav } from './model/recordBarNav';
+export { buildSummaryMagazineVM } from './model/summaryMagazineVM';
+export type {
+  SummaryDayCardVM,
+  SummaryMagazineInput,
+  SummaryMagazineVM,
+} from './model/summaryMagazineVM';
 export { summaryStats } from './model/summaryStats';
 export type { SummaryStatCells } from './model/summaryStats';
 export {

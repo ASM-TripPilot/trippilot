@@ -232,12 +232,18 @@ resource "aws_cloudwatch_metric_alarm" "push_alert" {
 # 안 만들어지고, 알림 사건이면 알림함 행이 안 생긴다 — 사용자에게도 5xx 에도 신호가 없다(로그 ERROR 한 줄이 유일한 흔적이었다).
 # 백엔드가 `outbox.abandon eventId=… type=…` 로 시작하는 줄을 남긴다(OutboxRelayIT 가 접두를 지킨다 — 푸시 경보처럼 존재하지 않는 줄을 세지 않게).
 # 운영 네임스페이스·backend 컨테이너만. 로그 줄은 영어 접두라 필터 패턴에 한글이 없다.
+# **regex 금지** — 이 로그 그룹엔 이미 regex 패턴 필터 5개(gateway_5xx·refresh_reuse·llm_call_failed·
+# push_dispatch_failed·push_alert)가 있고, CloudWatch Logs 는 로그 그룹당 regex 패턴 필터를 5개로 막는다
+# (PutMetricFilter 문서, Service Quotas 에는 안 뜨는 하드 한도 — 6번째를 만들면 apply 가
+# "LimitExceededException: Resource limit exceeded" 로 깨진다, 11-04 운영 배포 실패로 발견). 와일드카드
+# `*…*` 는 regex 로 안 센다 — 실제 로그 줄이 항상 `outbox.abandon eventId=` 로 공백이 뒤따르므로 와일드카드로도
+# `\W` 와 같은 구분력을 낸다(aws logs test-metric-filter 로 양성 1·음성 ×2 확인).
 resource "aws_cloudwatch_log_metric_filter" "outbox_abandon" {
   count = local.alerts_count
 
   name           = "${local.name}-outbox-abandon"
   log_group_name = aws_cloudwatch_log_group.container_insights["application"].name
-  pattern        = "{ ($.kubernetes.namespace_name = \"trippilot\") && ($.kubernetes.container_name = \"backend\") && ($.log = %outbox\\.abandon\\W%) }"
+  pattern        = "{ ($.kubernetes.namespace_name = \"trippilot\") && ($.kubernetes.container_name = \"backend\") && ($.log = \"*outbox.abandon *\") }"
 
   metric_transformation {
     name      = "OutboxAbandon"
