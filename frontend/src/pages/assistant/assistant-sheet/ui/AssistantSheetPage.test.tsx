@@ -62,6 +62,13 @@ jest.mock('expo-crypto', () => ({
   },
 }));
 
+// O-U8-5 — 턴 흐름이 위치 동의(생성 훅)를 조회한다. 이 버킷엔 MSW 가 없어 그대로 두면 진짜 HTTP 가 나간다 —
+// "조회 중"(= 꺼짐, 위치를 안 읽는다)으로 고정한다. 위치 배선은 `.integration` 파일이 본다.
+jest.mock('@/shared/api/generated/location/location', () => ({
+  ...jest.requireActual('@/shared/api/generated/location/location'),
+  useGetMeLocationConsent: () => ({ data: undefined }),
+}));
+
 let restore: (() => void) | undefined;
 let fake: FakeAssistantAdapter;
 const clients: QueryClient[] = [];
