@@ -9,7 +9,7 @@ import {
 } from '@/test-support/animatedProbe';
 import { revealValues } from '@/test-support/revealProbe';
 
-import { COUNT_UP_DURATION_MS, CountUpText } from './CountUpText';
+import { COUNT_UP_DURATION_MS, CountUpText } from '@/shared/ui/CountUpText';
 import {
   TripSummaryScreen,
   type TripSummaryScreenProps,
