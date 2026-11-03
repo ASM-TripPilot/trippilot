@@ -58,7 +58,7 @@ class _Facade:
 
 
 class _Provider:
-    def for_pool(self, poi_index):
+    def for_pool(self, poi_index, walk_max_km=None, parking=None):
         return _Facade()
 
 

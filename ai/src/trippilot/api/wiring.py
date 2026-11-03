@@ -171,7 +171,7 @@ from trippilot.agents.planb.place_knowledge import kb5_counts
 from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest, SavedPlace
 from trippilot.agents.schedule.agent import ScheduleAgent, trim_planb_rank_for_add_one
 from trippilot.agents.schedule.family import normalize_name, same_place
-from trippilot.agents.schedule.outcome import _wanted_categories
+from trippilot.agents.schedule.outcome import _wanted_categories, activity_walk_cap
 from trippilot.agents.planb.directives import (
     DirectiveSpec,
     index_of,
@@ -502,11 +502,7 @@ def _domain_generate_request(
     days = tuple(sorted({w.date for w in request.time_windows}))
     # 창은 일자마다 다르다(도착일 15시부터·출발일 12시까지, TRIP-1389) — 일자별로 넘긴다.
     # `day_window`(공용)는 첫 일자의 창 — 일자별 창이 없는 날·시간대 기준으로만 쓰인다.
-    day_windows = {
-        w.date: TimeWindow(start=datetime.combine(w.date, w.start, tzinfo=tz),
-                           end=datetime.combine(w.date + timedelta(days=w.overnight), w.end, tzinfo=tz))
-        for w in request.time_windows
-    }
+    day_windows = _day_windows(request.time_windows, tz)
     day_window = day_windows[days[0]]
     # 와이어에 사용자 식별자가 없다 — trip_id 파생 principal로 소유자 검사(D31)를
     # 자기 참조로 통과시키고, 페르소나 실체는 주입된 ContextStore가 공급한다.
@@ -1956,6 +1952,24 @@ def _inline_persona(
     return persona
 
 
+def _plan_less_walk_cap(persona: PersonaSummary | None, transport: TransportMode) -> float | None:
+    """계획 없는 추정(편집 ④⑤·validate·repair)의 도보 상한 — 액티비티 취향 **대중교통** 여행이면 생성과 같은 1.0km, 아니면 None(설정 기본 700m).
+
+    판정은 생성(`ScheduleAgent` ④)과 같은 함수(`activity_walk_cap`)다 — 둘이 갈리면 생성이 걸어서 잡은 구간을 재검증이 HC2 로 친다.
+    자차는 걸지 않는다: 생성의 자차는 주차 계획으로 재는데, 계획 없는 자차가 1.0km 까지 걸으면 거점 사이를 운전한 0.83~1.0km 구간을
+    더 길게(걷기로) 요구해 손 안 댄 구간이 HC2 가 된다(`TravelEstimator` 의 '계획 없는 자차는 더 요구하지 않는다'). 도보 여행은 상한을 읽지 않는다."""
+    if transport is not TransportMode.PUBLIC:
+        return None
+    return activity_walk_cap(persona)
+
+
+def _day_windows(windows: Sequence[schemas.TimeWindowSchema], tz: timezone) -> dict[date, TimeWindow]:
+    """와이어 날마다 창 → 도메인 창(자정을 넘는 끝은 다음 날 — `TimeWindowSchema.overnight`). generate·edit 가 같은 변환을 쓴다."""
+    return {w.date: TimeWindow(start=datetime.combine(w.date, w.start, tzinfo=tz),
+                               end=datetime.combine(w.date + timedelta(days=w.overnight), w.end, tzinfo=tz))
+            for w in windows}
+
+
 def _persona_gap(
     profile: schemas.PreferenceProfileSchema | None, inline: PersonaSummary | None,
 ) -> str | None:
@@ -2305,7 +2319,9 @@ class WiredItineraryOrchestrator:
         )
         # 수단은 선택 필드(2026-10-30) — repair 와 같은 칸·규칙. 없으면 종전(PUBLIC).
         problem = replace(problem, transport=_transport_of(request.transport_modes))
-        facade = self._assembly_provider.for_pool(poi_index)
+        # 취향도 선택 필드(2026-11-03) — 액티비티 취향 대중교통 여행이면 생성과 같은 도보 상한으로 HC2 를 잰다. 없으면 종전(700m)
+        walk_cap = _plan_less_walk_cap(_inline_persona(request.preference_profile, None), problem.transport)
+        facade = self._assembly_provider.for_pool(poi_index, walk_max_km=walk_cap)
         return WiredValidateOutcome(
             violations=tuple(facade.validate(
                 solution, problem, _deadline_budget(request.request_meta),
@@ -2327,7 +2343,9 @@ class WiredItineraryOrchestrator:
             w.date: (anchors[w.date], datetime.combine(w.date, w.start, tzinfo=self._tz))
             for w in request.time_windows if w.date in anchors
         }
-        facade = self._assembly_provider.for_pool(poi_index)
+        # validate 와 같은 도보 상한(2026-11-03) — 수리는 모자란 간격만 앞으로 미므로, 다른 상한으로 재면 생성이 걸어서 잡은 구간을 민다
+        walk_cap = _plan_less_walk_cap(_inline_persona(request.preference_profile, None), problem.transport)
+        facade = self._assembly_provider.for_pool(poi_index, walk_max_km=walk_cap)
         # 지금 = 요청 시각(백엔드가 부르는 순간의 시계, 편집 경계 `now` 와 같은 값) — 그보다 먼저 시작한 곳은 수리·재검증 밖(TRIP-1709 F1)
         result = facade.repair(
             solution, problem, _deadline_budget(request.request_meta),
@@ -2339,7 +2357,7 @@ class WiredItineraryOrchestrator:
             # 편집(장소 교체) 뒤 바뀐 구간의 거리 — generate 와 같은 렌더·시한 회계다. 앵커가
             # 없는 날의 첫 슬롯은 null, 수단은 수리가 시각 계산에 쓴 것(problem.transport).
             coords = {pid: poi.coord for pid, poi in poi_index.items()}
-            walk = self._walk_first(None)
+            walk = self._walk_first(walk_cap)  # 수리가 시각에 쓴 것과 같은 상한 — 시각과 '도보·대중교통' 이름표가 어긋나지 않게
             (distance_ranges,), _ = self._render_distances(
                 lambda port: (_distance_ranges(repaired, anchors, coords, walk(port), problem.transport),),
                 request.request_meta, entered_ms,
@@ -4139,6 +4157,11 @@ class WiredItineraryOrchestrator:
         )
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
+        # 여행 컨텍스트(2026-11-03, 선택) — 취향은 규칙에만(①a 순위·①b 규칙 점수), 도보 상한은 생성과 같은 판정, 창은 빈 날 시작만.
+        # 셋 다 없으면 종전과 같다(취향 없음·700m·빈 날 10:00·'N일차'는 받은 일정의 첫 날부터)
+        persona = _inline_persona(request.preference_profile, None)
+        walk_cap = _plan_less_walk_cap(persona, transport)
+        windows = _day_windows(request.time_windows, self._tz)
         # 수집은 요구표 경유 (2026-09-16) — EDIT 행은 Place 하나뿐이지만, 풀 빌더
         # 직행 대신 PlaceProvider 를 거치면서 FreshnessMeta·ProviderStatus 가 붙는다.
         # 조회 실패가 예외로 튀지 않고 상태값으로 수렴한다(INV-4).
@@ -4193,12 +4216,17 @@ class WiredItineraryOrchestrator:
             segment_pool=lambda center, km: self._pool_from(self._info.collect(Intent.EDIT_SCHEDULE, {"pool_request": replace(
                 pool_request, anchor=center, radius_override_km=km, dates=(request.target_date,)), "now": now}), now),
             # 날마다 동네 — 그 날들을 동네 풀로 ScheduleAgent 가 다시 푼다(spec 004). 에이전트가 날·동네를 확인했을 때만 부른다
-            rebuild_days=lambda pairs: self._rebuild_days(request, solution, pool, poi_index, pool_request, transport, now, t0, pairs),
+            rebuild_days=lambda pairs: self._rebuild_days(request, solution, pool, poi_index, pool_request, transport, now, t0, pairs,
+                                                          persona=persona, windows=windows),
             # 풀 밖 이름 장소(F9) — 말이 이름으로 집은 등록 장소. 에이전트가 말을 번역기로 보낼 때만 부른다. 장소 DB 미배선이면 None(종전)
             named_places=(lambda words, spans: self._named_places(words, spans, pool_request, TraceId(meta.request_id)))
             if self._place_names is not None else None,
+            taste=frozenset(_wanted_categories(persona)),
+            walk_max_km=walk_cap,
+            day_starts={d: w.start for d, w in windows.items()},
+            trip_start=request.trip_start_date,
         ))
-        return self._edit_response(outcome, self._edit_distances(request, outcome, transport, t0))
+        return self._edit_response(outcome, self._edit_distances(request, outcome, transport, t0, walk_cap))
 
     def _named_places(
         self, words: tuple[str, ...], spans: tuple[str, ...], pool_request: CandidatePoolRequest, trace_id: TraceId,
@@ -4254,6 +4282,7 @@ class WiredItineraryOrchestrator:
 
     def _edit_distances(
         self, request: schemas.EditItineraryRequest, outcome: EditOutcome, transport: TransportMode, started_ms: int,
+        walk_max_km: float | None = None,
     ) -> dict[str, str] | None:
         """APPLIED 일정의 **바뀐 날** 구간 거리 — 생성·repair 와 같은 렌더·시한 회계(`_render_distances`·`_walk_first`). 그 밖 상태는 None.
 
@@ -4271,7 +4300,7 @@ class WiredItineraryOrchestrator:
             # 손 안 댄 날은 재지 않고 비워 둔다 — BE 제안 카드 diff 는 바뀐 슬롯만 그리고, 다시 재면 실경로 일일 한도(ODsay)만 쓴다
             edited = replace(outcome.solution, days=tuple(d for d in outcome.solution.days if d.date in days))
             coords = {pid: p.coord for pid, p in outcome.pois.items()}
-            walk = self._walk_first(None)  # 편집 재타이밍·⑤ 검증과 같은 공용 추정기(기본 도보 상한·주차 계획 없음)
+            walk = self._walk_first(walk_max_km)  # 편집 재타이밍·⑤ 검증과 같은 상한(요청별 — 없으면 기본)·주차 계획 없음
             (ranges,), _ = self._render_distances(
                 lambda port: (_distance_ranges(edited, {}, coords, walk(port), transport),),
                 request.request_meta, started_ms,
@@ -4286,7 +4315,8 @@ class WiredItineraryOrchestrator:
     def _rebuild_days(
         self, request: schemas.EditItineraryRequest, solution: ItinerarySolution, pool: CandidatePool,
         poi_index: Mapping[PoiId, Poi], pool_request: CandidatePoolRequest, transport: TransportMode, now: datetime,
-        t0: int, pairs: tuple[DayArea, ...],
+        t0: int, pairs: tuple[DayArea, ...], *, persona: PersonaSummary | None = None,
+        windows: Mapping[date, TimeWindow] | None = None,
     ) -> RebuiltDays | str:
         """날마다 동네 재구성 콘센트(spec 004 FR-005) — (날, 동네) → 그 날들만 다시 푼 전체 해, 아니면 사유.
 
@@ -4349,8 +4379,12 @@ class WiredItineraryOrchestrator:
                                             reason="edit_started"))
                     pinned.add(s.poi_id)
             live = [s for s in slots if s.poi_id not in gone_ids]
-            start = min((s.start_at for s in live), default=datetime.combine(day, clock_time(10), tzinfo=self._tz))
-            end = max((s.end_at for s in slots), default=datetime.combine(day, clock_time(18), tzinfo=self._tz))
+            # 빈 날은 그 날 창(편집 요청 `time_windows`), 창이 안 왔으면 10:00~18:00 — 슬롯이 있는 날은 종전대로 원 슬롯 범위
+            window = (windows or {}).get(day)
+            start = min((s.start_at for s in live),
+                        default=window.start if window else datetime.combine(day, clock_time(10), tzinfo=self._tz))
+            end = max((s.end_at for s in slots),
+                      default=window.end if window else datetime.combine(day, clock_time(18), tzinfo=self._tz))
             if today:  # 지금부터 쓴다 — 다음 원 슬롯까지 비워 두지 않는다(저녁 예약 하나 남은 날이 빈 날로 거절됐다)
                 start = min([floor, *(s.start_at for s in current)])
             if end - max(start, floor if today else start) < timedelta(minutes=60):
@@ -4379,11 +4413,12 @@ class WiredItineraryOrchestrator:
             holidays=self._holidays.between(changed[0], changed[-1]),  # 편집 ⑤ 검증과 같은 달력 — 풀이와 검증이 같은 날 창을 본다
         )
         left = max(0, deadline - (self._clock.monotonic_ms() - t0))
+        # 취향이 실리면 규칙 점수(`taste_fit`)로만 — 편집 시한에 점수 LLM 은 못 든다(`rule_only`). 없으면 종전(persona_unavailable → 규칙)
         outcome = self._schedule_agent.run(core.ScheduleTask(
-            request=domain_request, pool=area_pool, persona=None, daily_rain=None, event_bonus=None,
-            candidates_summary=core.candidates_report(area_pool, days=len(changed), persona=None),
+            request=domain_request, pool=area_pool, persona=persona, daily_rain=None, event_bonus=None,
+            candidates_summary=core.candidates_report(area_pool, days=len(changed), persona=persona),
             budget=core.allocate(left, core.OrchestratorConfig()), started_ms=self._clock.monotonic_ms(),
-            trace_id=TraceId(request.request_meta.request_id), now=now,
+            trace_id=TraceId(request.request_meta.request_id), now=now, rule_only=persona is not None,
         ))
         if outcome.solution is None:
             return f"solve_failed({outcome.error})"
@@ -4415,7 +4450,7 @@ class WiredItineraryOrchestrator:
         return RebuiltDays(solution=merged, areas=names, pois={**area_pois, **{s.poi_id: poi_index[s.poi_id]
                                                                               for h in history.values() for s in h
                                                                               if s.poi_id in poi_index}}, notes=notes,
-                           history=frozenset(gone))
+                           history=frozenset(gone), walk_max_km=outcome.walk_max_km, parking=outcome.parking)
 
     @staticmethod
     def _day_area_center(area: str, registered: Sequence[Poi], anchor: GeoPoint) -> tuple[GeoPoint, str] | str:
