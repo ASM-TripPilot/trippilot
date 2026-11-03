@@ -989,11 +989,11 @@ def _plan_free_distance(ctx: TurnContext) -> tuple[HandlerTask, ...]:
 
     def fn() -> dict:
         ends: list[_End] = []
-        for text, end in zip(said, known):
+        for side, text, end in zip(("origin", "destination"), said, known):
             if end is None:
                 found = finder.find_place(text, sido, ctx.trace_id)
                 if found is None:  # 없거나 여럿 — 고르지 않는다
-                    return {"status": "EMPTY", "reason": "place_not_found"}
+                    return {"status": "EMPTY", "reason": "place_not_found", "unfound": side}
                 end = _End(found.name, found.poi_id)
             ends.append(end)
         ids = tuple(e.poi_id for e in ends if e.center is None and e.poi_id)
@@ -1042,8 +1042,12 @@ def _assemble_free_distance(ctx: TurnContext, results: Mapping[str, TaskResult])
     value = _value(results, "transit")
     ends = value.get("ends") if isinstance(value, Mapping) else None
     if not (isinstance(ends, list) and len(ends) == 2):
-        note = _UNRESOLVED_LEG if ctx.snapshot.trip is not None else _UNFOUND_NO_TRIP
-        return _text_facts(intent, FactStatus.EMPTY, (_action("OPEN_ITINERARY"),), notes=(note,))
+        notes = (_UNRESOLVED_LEG if ctx.snapshot.trip is not None else _UNFOUND_NO_TRIP,)
+        # 어느 쪽을 못 찾았는지 — 없으면 "서울역과 경복궁은 찾을 수 없어서"처럼 찾은 쪽까지 못 찾았다고 했다(2026-11-03 개발)
+        side = {"origin": "출발지", "destination": "목적지"}.get(value.get("unfound")) if isinstance(value, Mapping) else None
+        if side:
+            notes += (f"못 찾은 쪽은 {side}다 — 다른 쪽까지 못 찾았다고 말하지 않는다",)
+        return _text_facts(intent, FactStatus.EMPTY, (_action("OPEN_ITINERARY"),), notes=notes)
     origin, dest = ends
     mode, assumed = _transport_mode(ctx)
     notes = (f"이동 수단 가정: {mode}",) if assumed else ()
