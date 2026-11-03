@@ -27,7 +27,7 @@ while [ $# -gt 0 ]; do
 done
 
 # ── 동기화 기록(SKILL.md 「동기화」와 같은 값) ─────────────────────────────────
-SYNC=e752601a317a104cbe43a40fcf5e3a66786d9887
+SYNC=9fb72b1aa90f8b0d9e9bc7bd048af5645fb99964
 COVERED="src/pages/itinerary/itinerary-generating/ui/GeneratingPage.tsx
 src/pages/itinerary/itinerary-generating/ui/GeneratingScreen.tsx
 src/pages/itinerary/itinerary-draft/ui/DraftPage.tsx
@@ -36,6 +36,7 @@ src/features/itinerary/model/useGenerationBusy.ts
 src/app/model/useGenerationWatch.ts
 src/app/model/generationWatch.ts
 src/app/entrypoint/AppProviders.tsx
+src/app/entrypoint/queryClient.ts
 src/shared/api/mutator.ts
 src/pages/itinerary/itinerary-mustvisit/ui/MustVisitListPage.tsx
 src/pages/trip/trip-new-step2/ui/TripBasesPage.tsx

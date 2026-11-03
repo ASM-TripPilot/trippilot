@@ -243,8 +243,9 @@ export function openableTripIds(
 }
 
 /**
- * 페이지가 여행별 일정 조회를 접은 값 — 확정 여부(`'CONFIRMED'` 등) · 404 = `undefined`(일정 없음,
- * 아는 값) · `'unknown'`(대기·404 아닌 실패 — 모름).
+ * 여행 한 장과 그 일정 상태 — 확정 여부(`'CONFIRMED'` 등) · `undefined`(일정 없음, 아는 값) · `'unknown'`(모름).
+ * 페이지는 목록(`GET /trips`)의 `itineraryStatus` 칸으로 채우므로 `'unknown'` 을 넣지 않는다(TRIP-1677 — 옛 여행별
+ * 일정 조회의 대기·실패 값). `pickOngoingTrip` 의 「모르면 그리지 않는다」 갈래는 그 계약으로 남아 있다.
  */
 export interface OngoingTripEntry {
   trip: Trip;
