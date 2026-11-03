@@ -211,7 +211,11 @@ export function MustVisitTimePage({
     void sendPost(failure.request);
   }
 
-  const loadFailed = trip.isError || mustVisits.isError;
+  // 저장 목록 실패는 이름 자리표시가 거짓 "없음"으로 읽히는 경우(이름을 못 찾음)에만 알린다 — 이름이 이미 보이면 거짓이 없다.
+  const loadFailed =
+    trip.isError ||
+    mustVisits.isError ||
+    (savedPlaces.isError && place === undefined);
   const errorText =
     failure?.kind === 'lost'
       ? LOST_MESSAGE

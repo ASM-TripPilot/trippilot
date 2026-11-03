@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   act,
@@ -12,7 +12,10 @@ import {
 import { router } from 'expo-router';
 
 import { server } from '@/mocks/server';
-import { getGetTripsTripIdItineraryQueryKey } from '@/shared/api/index.hooks';
+import {
+  getGetTripsTripIdItineraryQueryKey,
+  getGetTripsTripIdQueryKey,
+} from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { Place } from '@/shared/api/index.schemas';
 import { RecordAddVisitPage } from '@/pages/record/record-add-visit';
@@ -434,6 +437,8 @@ describe('🔴 AC-5 · 후보는 GET /places 결과만, 여행 목적지로 좁�
     expect(await screen.findByTestId(rowId('g1'))).toBeOnTheScreen();
     // 정확값 — region 없는 조회가 정확히 1건(TRIP-1617: 관측해 잠갔다).
     expect(regionsOf(placeHits())).toEqual([null]);
+    // TRIP-1756 — 404(없음)·목적지 0곳은 지금처럼 안내 없이 연다(여행 조회는 gating 이라 이미 끝난 뒤다).
+    expect(screen.queryByTestId('record-add-visit-region-notice')).toBeNull();
   });
 
   it('P5-d: 행은 서버가 준 후보 그대로이고, 각 행에 장소 이름이 있다', async () => {
@@ -1062,5 +1067,277 @@ describe('방문 추가 피커 행 부제 — 같은 이름 장소를 지역·�
     expect(postBodies).toEqual([
       { slotKey: null, poiId: 'k2', source: 'MANUAL' },
     ]);
+  });
+});
+
+// TRIP-1756 · 조회 실패를 빈 화면·거짓 "전국 목록"으로 접지 않는다(INV-4). 404 는 지금처럼 안내 없음.
+// 준비=실패 응답 → 실행=피커 열기(+다시 시도) → 단언=실패 얼굴 testID·글자·나간 요청 수. 로컬 변수 없이 server.use 로만 갈아 끼운다.
+describe('🔴 TRIP-1756 · /places 후보 조회가 실패하면 실패 얼굴과 다시 시도가 뜬다', () => {
+  const LOAD_ERROR = 'record-add-visit-load-error';
+  const LOAD_RETRY = 'record-add-visit-load-retry';
+  const FAILURES: [string, () => Response][] = [
+    ['500', () => new HttpResponse(null, { status: 500 })],
+    ['네트워크', () => HttpResponse.error()],
+  ];
+
+  function renderBare() {
+    render(<RecordAddVisitPage tripId={TRIP_ID} day={DAY} />, {
+      wrapper: wrapperFor(makeClient()),
+    });
+  }
+
+  it.each(FAILURES)(
+    'F1: 여행 1곳에서 /places 가 %s 로 실패하면 0건 안내가 아니라 실패 얼굴이 뜨고 후보 행은 없다',
+    async (_label, fail) => {
+      server.use(http.get(`${BASE}/places`, () => fail()));
+
+      renderBare();
+
+      const face = await screen.findByTestId(LOAD_ERROR);
+      expect(
+        within(face).getByText('지금 장소 정보를 불러올 수 없어요')
+      ).toBeOnTheScreen();
+      expect(screen.getByTestId(LOAD_RETRY)).toHaveTextContent('다시 시도');
+      // 0건 안내로 위장하지 않는다 · 후보 행 없음 · 여행 조회 안내와 다른 얼굴이다.
+      expect(screen.queryByTestId('record-add-visit-empty')).toBeNull();
+      expect(screen.queryByTestId(rowId('p1'))).toBeNull();
+      expect(screen.queryByTestId('record-add-visit-region-notice')).toBeNull();
+    }
+  );
+
+  it('F1r: 서버가 돌아온 뒤 [다시 시도] → 후보가 뜨고 얼굴이 사라지며 /places 는 정확히 +1회, 쿼리 키(문자열)는 그대로다', async () => {
+    server.use(
+      http.get(`${BASE}/places`, () => new HttpResponse(null, { status: 500 }))
+    );
+    renderBare();
+    await screen.findByTestId(LOAD_ERROR);
+    expect(placeHits()).toHaveLength(1);
+
+    server.use(placesHandler());
+    fireEvent.press(screen.getByTestId(LOAD_RETRY));
+
+    expect(await screen.findByTestId(rowId('p1'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(LOAD_ERROR)).toBeNull();
+    expect(placeHits()).toHaveLength(2);
+    expect(new URL(placeHits()[1].url).search).toBe(
+      new URL(placeHits()[0].url).search
+    );
+  });
+
+  const TWO_REGIONS_TRIP = () =>
+    HttpResponse.json(
+      tripJson([
+        { seq: 1, region: '부산', nights: 1 },
+        { seq: 2, region: '경주', nights: 1 },
+      ])
+    );
+
+  it('F2: 여행 2곳에서 모든 지역 /places 가 실패하면 같은 실패 얼굴이 뜨고, [다시 시도]는 지역마다 다시 묻는다(+2)', async () => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, TWO_REGIONS_TRIP),
+      http.get(`${BASE}/places`, () => new HttpResponse(null, { status: 500 }))
+    );
+    renderBare();
+    await screen.findByTestId(LOAD_ERROR);
+    expect(screen.getByTestId(LOAD_RETRY)).toHaveTextContent('다시 시도');
+    expect(screen.queryByTestId('record-add-visit-empty')).toBeNull();
+    expect([...regionsOf(placeHits())].sort()).toEqual(['경주', '부산']);
+
+    server.use(placesHandler());
+    fireEvent.press(screen.getByTestId(LOAD_RETRY));
+
+    expect(await screen.findByTestId(rowId('p1'))).toBeOnTheScreen();
+    expect(await screen.findByTestId(rowId('g1'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(LOAD_ERROR)).toBeNull();
+    expect([...regionsOf(placeHits())].sort()).toEqual([
+      '경주',
+      '경주',
+      '부산',
+      '부산',
+    ]);
+  });
+
+  it('F2p: 한 지역만 실패하면(부분 실패) 실패 얼굴이 아니라 성공한 지역 후보가 뜬다 (무회귀 · 선제 green)', async () => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, TWO_REGIONS_TRIP),
+      http.get(`${BASE}/places`, ({ request }) =>
+        new URL(request.url).searchParams.get('region') === '경주'
+          ? new HttpResponse(null, { status: 500 })
+          : HttpResponse.json({
+              items: PLACES.filter((p) => p.region === '부산'),
+              nextCursor: null,
+            })
+      )
+    );
+    renderBare();
+
+    expect(await screen.findByTestId(rowId('p1'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(LOAD_ERROR)).toBeNull();
+    expect(screen.queryByTestId(rowId('g1'))).toBeNull();
+  });
+
+  it('F3: 조회가 성공했는데 0건이면 실패 얼굴이 아니라 0건 안내만 뜬다 (무회귀 · 선제 green)', async () => {
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: [], nextCursor: null })
+      )
+    );
+    renderBare();
+
+    expect(
+      await screen.findByTestId('record-add-visit-empty')
+    ).toHaveTextContent(EMPTY_COPY);
+    expect(screen.queryByTestId(LOAD_ERROR)).toBeNull();
+  });
+});
+
+describe('🔴 TRIP-1756 · 여행 조회가 404 아닌 이유로 실패하면 "여행지 기준이 아니다"를 알린다 (결정 1 = a)', () => {
+  const REGION_NOTICE = 'record-add-visit-region-notice';
+  const REGION_RETRY = 'record-add-visit-region-retry';
+  const TRIP_FAILURES: [string, () => Response][] = [
+    ['500', () => new HttpResponse(null, { status: 500 })],
+    ['네트워크', () => HttpResponse.error()],
+  ];
+
+  function renderBare() {
+    render(<RecordAddVisitPage tripId={TRIP_ID} day={DAY} />, {
+      wrapper: wrapperFor(makeClient()),
+    });
+  }
+
+  it.each(TRIP_FAILURES)(
+    'R1: 여행 조회가 %s 로 실패하면 전국 후보는 그대로 보이고 그 위에 안내와 [다시 시도]가 뜬다',
+    async (_label, fail) => {
+      server.use(http.get(`${BASE}/trips/:tripId`, () => fail()));
+
+      renderBare();
+
+      // 목록을 막지 않는다 — 경주 장소(g1)까지 전국이 보인다.
+      expect(await screen.findByTestId(rowId('g1'))).toBeOnTheScreen();
+      expect(screen.getByTestId(rowId('p1'))).toBeOnTheScreen();
+      expect(await screen.findByTestId(REGION_NOTICE)).toHaveTextContent(/\S/);
+      expect(screen.getByTestId(REGION_RETRY)).toHaveTextContent(/다시 시도/);
+      // 후보 조회 얼굴이 아니다.
+      expect(screen.queryByTestId('record-add-visit-load-error')).toBeNull();
+    }
+  );
+
+  it('R1r: 여행 조회가 돌아온 뒤 [다시 시도] → 여행 GET +1, 안내가 사라지고 목록이 그 여행지(부산)로 좁혀진다', async () => {
+    server.use(
+      http.get(
+        `${BASE}/trips/:tripId`,
+        () => new HttpResponse(null, { status: 500 })
+      )
+    );
+    renderBare();
+    await screen.findByTestId(REGION_NOTICE);
+    await screen.findByTestId(rowId('g1'));
+    const tripBefore = hitsOf('GET', `/api/v1/trips/${TRIP_ID}`).length;
+
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () =>
+        HttpResponse.json(tripJson([{ seq: 1, region: '부산', nights: 2 }]))
+      )
+    );
+    fireEvent.press(screen.getByTestId(REGION_RETRY));
+
+    await waitFor(() => expect(screen.queryByTestId(REGION_NOTICE)).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId(rowId('g1'))).toBeNull());
+    // 키(region)가 바뀐 새 조회 응답 전엔 한 틱 목록이 빈다 — 동기 getBy 가 아니라 기다려 찾는다.
+    expect(await screen.findByTestId(rowId('p1'))).toBeOnTheScreen();
+    expect(hitsOf('GET', `/api/v1/trips/${TRIP_ID}`)).toHaveLength(
+      tripBefore + 1
+    );
+    expect(regionsOf(placeHits()).at(-1)).toBe('부산');
+  });
+
+  // 5-c 심판 보강(W1) — 안내 줄의 두 조건(로딩이 아님 · 이미 받은 데이터가 없음)을 각각 문다.
+  it('RW1: 여행 응답이 아직 안 왔으면(로딩) 안내 줄이 서지 않는다 — 로딩은 실패가 아니다 (선제 green)', async () => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, async () => {
+        await delay('infinite');
+        return HttpResponse.json(
+          tripJson([{ seq: 1, region: '부산', nights: 2 }])
+        );
+      })
+    );
+    renderBare();
+    await waitFor(() =>
+      expect(
+        hitsOf('GET', `/api/v1/trips/${TRIP_ID}`).length
+      ).toBeGreaterThanOrEqual(1)
+    );
+    await flush(50);
+
+    expect(screen.queryByTestId(REGION_NOTICE)).toBeNull();
+  });
+
+  it('RW2: 여행을 이미 받아 목록이 부산으로 좁혀진 뒤 여행 재조회만 실패하면 안내 줄이 서지 않는다 — 데이터가 있으면 실패가 아니다 (선제 green)', async () => {
+    const client = makeClient();
+    render(<RecordAddVisitPage tripId={TRIP_ID} day={DAY} />, {
+      wrapper: wrapperFor(client),
+    });
+    expect(await screen.findByTestId(rowId('p1'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(rowId('g1'))).toBeNull();
+    const tripBefore = hitsOf('GET', `/api/v1/trips/${TRIP_ID}`).length;
+
+    server.use(
+      http.get(
+        `${BASE}/trips/:tripId`,
+        () => new HttpResponse(null, { status: 500 })
+      )
+    );
+    await act(async () => {
+      await client.invalidateQueries({
+        queryKey: getGetTripsTripIdQueryKey(TRIP_ID),
+      });
+    });
+    await flush(50);
+
+    // 재조회가 실제로 나가 실패했다(앵커) — 그래도 화면은 그대로.
+    expect(hitsOf('GET', `/api/v1/trips/${TRIP_ID}`)).toHaveLength(
+      tripBefore + 1
+    );
+    expect(screen.queryByTestId(REGION_NOTICE)).toBeNull();
+    expect(screen.getByTestId(rowId('p1'))).toBeOnTheScreen();
+  });
+
+  it('R3: 여행 조회와 /places 가 둘 다 실패하면 두 얼굴이 함께 뜬다 (서로 가리지 않는다)', async () => {
+    server.use(
+      http.get(
+        `${BASE}/trips/:tripId`,
+        () => new HttpResponse(null, { status: 500 })
+      ),
+      http.get(`${BASE}/places`, () => new HttpResponse(null, { status: 500 }))
+    );
+    renderBare();
+
+    expect(await screen.findByTestId(REGION_NOTICE)).toBeOnTheScreen();
+    expect(
+      await screen.findByTestId('record-add-visit-load-error')
+    ).toBeOnTheScreen();
+  });
+
+  it('R4: 여행 안내가 떠 있어도 고르기 실패 안내(record-add-visit-error)는 별개로 함께 뜬다', async () => {
+    server.use(
+      http.get(
+        `${BASE}/trips/:tripId`,
+        () => new HttpResponse(null, { status: 500 })
+      )
+    );
+    respondPost = () =>
+      HttpResponse.json(
+        { error: { code: 'TRIP_NOT_FOUND', message: 'gone' } },
+        { status: 404 }
+      );
+    renderBare();
+    await screen.findByTestId(REGION_NOTICE);
+
+    fireEvent.press(await screen.findByTestId(pickId('p2')));
+
+    expect(
+      await screen.findByTestId('record-add-visit-error')
+    ).toHaveTextContent(ERROR_COPY);
+    expect(screen.getByTestId(REGION_NOTICE)).toBeOnTheScreen();
   });
 });

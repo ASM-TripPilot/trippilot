@@ -14,6 +14,7 @@ import type {
   SavedPlace,
   Trip,
 } from '@/shared/api/index.schemas';
+import { getGetSavedPlacesQueryKey } from '@/shared/api/index.places';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
@@ -1015,5 +1016,80 @@ describe('h07 화면 얼굴 — 장소 카드 · 칩 · 시트 · 잠금 · 실�
     expect(
       screen.queryAllByTestId('itinerary-mustvisit-time-retry').length
     ).toBe(0);
+  });
+});
+
+// TRIP-1756 · 담은 장소 목록(saved-places) 조회가 실패하면 장소 이름이 자리표시로만 남는데 안내가 없었다(INV-4).
+// 준비=saved-places 응답 지정(+토큰 유무) → 실행=화면 열기 → 단언=오류 줄 글자·저장 목록 요청 수. 안내는 기존 오류 줄을 쓴다(새 testID 0).
+describe('🔴 TRIP-1756 · 담은 장소 조회가 실패하면 이름이 비어 보이는 이유를 말한다', () => {
+  const ERROR = 'itinerary-mustvisit-time-error';
+  const LOAD_FAILED = '여행 정보를 불러오지 못했어요';
+  const savedHits = (): string[] =>
+    observedHits.filter((hit) => hit.includes('/saved-places'));
+
+  async function settle(): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+  }
+
+  it('H1: 로그인한 채 saved-places 500(여행·꼭 갈 곳은 정상) → 오류 줄에 「여행 정보를 불러오지 못했어요」가 뜨고 장소 이름은 없다', async () => {
+    server.use(
+      http.get(
+        `${BASE}/saved-places`,
+        () => new HttpResponse(null, { status: 500 })
+      )
+    );
+
+    renderPage();
+    await ready();
+
+    expect(await screen.findByTestId(ERROR)).toHaveTextContent(LOAD_FAILED);
+    expect(screen.queryByText('부산시립미술관')).toBeNull();
+  });
+
+  it('H2: 게스트(토큰 없음)는 saved-places 를 묻지 않고 오류 줄도 없다 (무회귀 · 선제 green)', async () => {
+    clearAccessToken();
+
+    renderPage();
+    await ready();
+    await settle();
+
+    expect(savedHits()).toHaveLength(0);
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+  });
+
+  it('H3: 이름이 이미 보이는 상태에서 저장 목록 재조회가 실패해도 이름은 남고 오류 줄은 없다 — 이름이 보이면 거짓 표시가 아니다 (선제 green)', async () => {
+    const client = newTestQueryClient({ gcTime: 0 });
+    render(<MustVisitTimePage tripId={TRIP_ID} sourcePoiId={POI_ID} />, {
+      wrapper: createWrapper(client),
+    });
+    await ready();
+    expect(await screen.findByText('부산시립미술관')).toBeOnTheScreen();
+    expect(savedHits()).toHaveLength(1);
+
+    server.use(
+      http.get(
+        `${BASE}/saved-places`,
+        () => new HttpResponse(null, { status: 500 })
+      )
+    );
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: getGetSavedPlacesQueryKey() });
+    });
+    await settle();
+
+    // 재조회가 실제로 나가 실패했다(앵커) — 그래도 화면은 그대로.
+    expect(savedHits()).toHaveLength(2);
+    expect(screen.getByText('부산시립미술관')).toBeOnTheScreen();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+  });
+
+  it('H4: 세 조회가 모두 정상이면 이름이 보이고 오류 줄은 없다 (짝 · 선제 green)', async () => {
+    renderPage();
+    await ready();
+
+    expect(await screen.findByText('부산시립미술관')).toBeOnTheScreen();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
   });
 });

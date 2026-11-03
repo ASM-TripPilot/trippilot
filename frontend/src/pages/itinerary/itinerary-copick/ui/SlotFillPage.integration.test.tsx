@@ -380,6 +380,10 @@ describe('컨셉·후보·확정 순회 배선', () => {
       // 가드가 막았으니 어느 이동도 없다(전진 replace 도, 구 back 도 0).
       expect(mockReplace).toHaveBeenCalledTimes(0);
       expect(mockBack).toHaveBeenCalledTimes(0);
+      // TRIP-1756 — 로딩(응답 전)은 실패가 아니다: 안내 없이 지금처럼 무반응.
+      expect(
+        screen.queryByTestId('itinerary-copick-slotfill-error')
+      ).toBeNull();
     });
 
     it('C14 · TRIP-601 가드 b — generationState=PARTIAL 이면 확정 PUT 0(생성 중 전체교체 차단)', async () => {
@@ -459,6 +463,143 @@ describe('컨셉·후보·확정 순회 배선', () => {
     });
 
     // 옛 SlotFillScreen.test.tsx(뷰 단위)를 B안으로 옮겼다 — 앱바 제목·라디오 역할·저장 중 잠금·0건 갈래.
+    // TRIP-1756 · 일정 GET 이 5xx·네트워크로 실패한 채 [확정]을 누르면 조용히 무시하지 않고 사유를 말하고 다시 묻는다.
+    // 준비=일정 GET 첫 응답 실패(이후 정상) → 실행=컨셉·후보 고르고 [확정] → 단언=안내 글자·PUT 0·일정 GET +1·이동 0.
+    describe('🔴 TRIP-1756 · 일정 조회가 실패한 채 [확정]을 누르면 말하고 일정을 다시 묻는다 (INV-4)', () => {
+      const ERROR = 'itinerary-copick-slotfill-error';
+      let itineraryGets = 0;
+
+      beforeEach(() => {
+        itineraryGets = 0;
+      });
+
+      async function settle(): Promise<void> {
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        });
+      }
+
+      /** 첫 일정 GET 은 500, 그다음부터 정상 — 재조회가 성공하는 모습. */
+      function serveItineraryFailingOnce(): void {
+        serveItinerary(server, {
+          itinerary: () => {
+            itineraryGets += 1;
+            return itineraryGets === 1
+              ? new HttpResponse(null, { status: 500 })
+              : itinerary();
+          },
+        });
+      }
+
+      /** 후보 X 까지 골라 둔 채 일정 GET 이 한 번 실패한 상태. */
+      async function readyWithFailedItinerary(): Promise<void> {
+        renderPage();
+        await pickConcept('culture');
+        await screen.findByTestId('itinerary-candidate-radio-X');
+        await waitFor(() => expect(itineraryGets).toBe(1));
+        await settle();
+        fireEvent.press(screen.getByTestId('itinerary-candidate-radio-X'));
+      }
+
+      it('S1: 일정 GET 500 → [확정] → 안내 글자가 뜨고 PUT 0 · 이동 0, 일정 GET 은 정확히 +1회(총 2건)다', async () => {
+        serveItineraryFailingOnce();
+        await readyWithFailedItinerary();
+
+        fireEvent.press(
+          screen.getByTestId('itinerary-copick-slotfill-confirm')
+        );
+
+        expect(await screen.findByTestId(ERROR)).toHaveTextContent(/\S/);
+        await waitFor(() => expect(itineraryGets).toBe(2));
+        await settle();
+        expect(itineraryGets).toBe(2);
+        expect(putCalls).toBe(0);
+        expect(mockReplace).toHaveBeenCalledTimes(0);
+        expect(mockBack).toHaveBeenCalledTimes(0);
+      });
+
+      it('S1r: 다시 물은 일정이 도착한 뒤 [확정] → PUT 1건·다음 슬롯으로 replace, 안내는 사라진다 (한 번 실패해도 [확정]이 영구 잠기지 않는다)', async () => {
+        serveItineraryFailingOnce();
+        await readyWithFailedItinerary();
+        fireEvent.press(
+          screen.getByTestId('itinerary-copick-slotfill-confirm')
+        );
+        await screen.findByTestId(ERROR);
+        await waitFor(() => expect(itineraryGets).toBe(2));
+        await settle();
+
+        fireEvent.press(
+          screen.getByTestId('itinerary-copick-slotfill-confirm')
+        );
+
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+        expect(putCalls).toBe(1);
+        expect(screen.queryByTestId(ERROR)).toBeNull();
+      });
+
+      it('S2: 일정 GET 404(일정이 아직 없음)면 [확정]은 안내도 다시 묻기도 PUT 도 없다 — 404 는 없음이다 (선제 green)', async () => {
+        serveItinerary(server, {
+          itinerary: () => {
+            itineraryGets += 1;
+            return new HttpResponse(null, { status: 404 });
+          },
+        });
+        await readyWithFailedItinerary();
+
+        fireEvent.press(
+          screen.getByTestId('itinerary-copick-slotfill-confirm')
+        );
+        await settle();
+
+        expect(screen.queryByTestId(ERROR)).toBeNull();
+        expect(itineraryGets).toBe(1);
+        expect(putCalls).toBe(0);
+        expect(mockReplace).toHaveBeenCalledTimes(0);
+      });
+
+      // 5-c 심판 보강(W1) — 일정을 이미 받아 둔 뒤 재조회만 실패해도 실패가 아니다(데이터가 있으니 [확정]은 정상 PUT).
+      it('S3: 일정이 이미 도착한 뒤 재조회만 500 이어도 [확정]은 안내 없이 PUT 1건으로 이어진다 — 데이터가 있으면 실패가 아니다 (선제 green)', async () => {
+        serveItinerary(server, {
+          itinerary: () => {
+            itineraryGets += 1;
+            return itineraryGets <= 1
+              ? itinerary()
+              : new HttpResponse(null, { status: 500 });
+          },
+        });
+        const client = newTestQueryClient({ gcTime: 0 });
+        render(<SlotFillPage tripId={TRIP_ID} slotKey={SLOT_KEY} />, {
+          wrapper: createWrapper(client),
+        });
+        await pickConcept('culture');
+        await screen.findByTestId('itinerary-candidate-radio-X');
+        await waitFor(() => expect(itineraryGets).toBe(1));
+        await settle();
+
+        await act(async () => {
+          await client.invalidateQueries({
+            queryKey: getGetTripsTripIdItineraryQueryKey(TRIP_ID),
+          });
+        });
+        await settle();
+        // 재조회가 실제로 나가 실패했다(앵커).
+        expect(itineraryGets).toBe(2);
+        // 후보를 눌러 화면을 한 번 다시 그린다 — 백그라운드 실패만으로는 화면이 안 다시 그려져(react-query 는 쓴 값만
+        // 추적한다) [확정] 핸들러가 실패 직전의 낡은 값을 쥐고 있을 수 있다. 실패 상태를 본 새 핸들러로 눌러야 조건이 시험된다.
+        fireEvent.press(screen.getByTestId('itinerary-candidate-radio-X'));
+
+        fireEvent.press(
+          screen.getByTestId('itinerary-copick-slotfill-confirm')
+        );
+
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+        expect(putCalls).toBe(1);
+        expect(screen.queryByTestId(ERROR)).toBeNull();
+        // 확정이 일정을 다시 묻지 않았다(새 분기에 안 들어갔다).
+        expect(itineraryGets).toBe(2);
+      });
+    });
+
     it('B-TITLE · 컨셉을 고르면 앱바가 "{컨셉} 후보 고르기"이고 후보 행은 라디오 역할이다', async () => {
       renderPage();
       await pickConcept('culture');
