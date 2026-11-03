@@ -269,7 +269,7 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         server.verify()
     }
 
-    // TRIP-1709 — 상대는 이 한 값으로 후보 풀 반경·조립 이동 시간·거리 표기를 정한다. 안 실으면 도보 여행도 대중교통으로 다시 짠다.
+    // TRIP-1709 F7 — 상대는 이 한 값으로 후보 풀 반경·조립 이동 시간·거리 표기를 정한다. 안 실으면 도보 여행도 대중교통으로 다시 짠다.
     "재계획이 그 여행의 수단 하나를 transport_mode 로 싣는다" {
         val (adapter, server) = fixture()
         server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))

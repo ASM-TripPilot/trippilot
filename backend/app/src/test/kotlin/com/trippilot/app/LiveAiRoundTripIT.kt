@@ -229,7 +229,7 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
                 // 거절 이력(TRIP-964) — 실물이 받아 rejection_demoted 로그를 남기는지는 AI 쪽 몫이고,
                 // 여기서는 계약 수용(422 아님)만 본다.
                 rejections = listOf(RejectedPoi(UUID.randomUUID(), RejectedPoi.Kind.SWAPPED_OUT, 1)),
-                // 취향 수단(렌터카)에서 서비스가 고르는 값 그대로(TRIP-1709) — 실물이 이 칸을 받는지도 같이 본다.
+                // 취향 수단(렌터카)에서 서비스가 고르는 값 그대로(TRIP-1709 F7) — 실물이 이 칸을 받는지도 같이 본다.
                 transportMode = "렌터카",
                 requestMeta = RequestMeta(UUID.randomUUID().toString(), Instant.now(), 25_000L),
             ),

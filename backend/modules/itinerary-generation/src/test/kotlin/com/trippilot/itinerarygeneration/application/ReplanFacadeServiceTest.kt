@@ -238,7 +238,7 @@ class ReplanFacadeServiceTest : StringSpec({
         sent.transportModes shouldBe listOf("렌터카") // 여행이 안 정한 축은 계정
     }
 
-    // TRIP-1709 — 상대는 이 한 값으로 후보 풀 반경·이동 시간을 정한다. 비우면 도보 여행도 대중교통으로 다시 짜고, 뒤이은 편집
+    // TRIP-1709 F7 — 상대는 이 한 값으로 후보 풀 반경·이동 시간을 정한다. 비우면 도보 여행도 대중교통으로 다시 짜고, 뒤이은 편집
     // 수리(여행 수단으로 잰다)가 그 날을 다시 민다. 고르는 규칙은 생성과 같다 — 상대가 아는 첫 값.
     "재계획이 그 여행의 수단 중 상대가 아는 첫 값 하나를 싣는다 — 아는 값이 없으면 비운다(상대 기본 대중교통)" {
         fun tripModes(vararg modes: String) = object : TripFacade {

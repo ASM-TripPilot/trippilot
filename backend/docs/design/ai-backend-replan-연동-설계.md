@@ -159,7 +159,7 @@ class ReplanSlotSchema(BoundaryModel):
 
 **`scope` 와 `locked_blocks` 는 중복이 아니다.** `FULL_DAY` 여도 방문 완료한 곳은 잠긴다(i05 "방문한 3곳 그대로"). `locked_blocks` = 못 건드리는 것, `scope` = 안 간 곳 중 어디까지 건드리나. 둘이 어긋나면 AI 가 잡을 수 있고 프롬프트 문구도 갈린다.
 
-⚠️ **`transport_mode` 누락은 조용히 틀린다** (2026-09-16 추가) **→ [해소 · 2026-11-03] 백엔드가 싣는다** — 그 여행 취향 수단(여행 스냅숏 우선·없으면 계정) 중 상대가 아는 첫 값(`도보`·`대중교통`·`렌터카`), 없으면 null(상대 기본 대중교통)(TRIP-1709). `pool_builder` 가 `radius_km[transport]` 로 후보 반경을 잡는데 **도보 2km · 대중교통 10km · 자차 20km** 다(`poi_curation/config.py`). 이 값이 안 오면 배선이 기본값(대중교통)으로 메우고, 도보 여행자에게 **10km 밖 후보**가 간다 — 오류도 로그도 없이 "제안은 나왔는데 갈 수 없는 곳"이 된다. 초판 스키마에서 빠져 있었고 `alternatives` 에는 있던 필드다. 어휘는 `alternatives` 와 같다("도보"·"대중교통"·"자차"). 예산 등급은 `trip_context.budget_level` 이 이미 갖고 있다.
+⚠️ **`transport_mode` 누락은 조용히 틀린다** (2026-09-16 추가) **→ [해소 · 2026-11-03] 백엔드가 싣는다** — 그 여행 취향 수단(여행 스냅숏 우선·없으면 계정) 중 상대가 아는 첫 값(`도보`·`대중교통`·`렌터카`), 없으면 null(상대 기본 대중교통)(TRIP-1709 F7). `pool_builder` 가 `radius_km[transport]` 로 후보 반경을 잡는데 **도보 2km · 대중교통 10km · 자차 20km** 다(`poi_curation/config.py`). 이 값이 안 오면 배선이 기본값(대중교통)으로 메우고, 도보 여행자에게 **10km 밖 후보**가 간다 — 오류도 로그도 없이 "제안은 나왔는데 갈 수 없는 곳"이 된다. 초판 스키마에서 빠져 있었고 `alternatives` 에는 있던 필드다. 어휘는 `alternatives` 와 같다("도보"·"대중교통"·"자차"). 예산 등급은 `trip_context.budget_level` 이 이미 갖고 있다.
 
 **`free_text` 상한 500 은 DB 와 같은 값이다**(`replan_session.free_text varchar(500)`). 계약이 DB 보다 좁으면 저장된 값이 경계에서 잘린다.
 
