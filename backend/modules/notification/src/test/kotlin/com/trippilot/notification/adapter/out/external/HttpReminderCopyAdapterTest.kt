@@ -208,17 +208,36 @@ class HttpReminderCopyAdapterTest : StringSpec({
             .single { "모르는 알림 종류" in it } shouldContain "1건"
     }
 
-    /** 계약 `maxItems: 30` — 넘기면 한 건도 못 받는다. 나눠 보내고 합친다. */
-    "30건을 넘기면 나눠 보낸다" {
+    /**
+     * **작게 쪼개 보낸다.** 계약 `maxItems: 30` 은 넘기면 한 건도 못 받는 하드 한계지만, 그보다 훨씬 전에 상대의 항목당 예산(마감 ÷
+     * 항목 수)이 학생 모델의 지연보다 짧아진다 — 그래서 상한이 아니라 "마감 안에 끝낼 크기"(`chunkSize`)로 나눈다. 31건이면 3건씩 11번이다.
+     */
+    "묶음을 작게 쪼개 보낸다 — 상한(30)이 아니라 마감 안에 끝낼 크기로" {
         val many = (1..31).map {
             ReminderCopyRequest("키-$it", NotificationKind.TRIP_DAY, LocalDate.parse("2026-08-10"), listOf(ReminderSlot("곳-$it")))
         }
         withCapturingServer(body()) { url, sent ->
             adapterAt(url).copiesFor(null, many)
 
-            sent.size shouldBe 2
-            // 앞 묶음은 상한을 꽉 채운다 — 계약 게이트가 대조하는 값(`maxItems()`)이 실제로 나누는 값이어야 한다.
-            sent.map { Regex("\"schedule_key\"").findAll(it).count() } shouldBe listOf(HttpReminderCopyAdapter.maxItems(), 1)
+            val sizes = sent.map { Regex("\"schedule_key\"").findAll(it).count() }
+            sizes shouldBe List(10) { ReminderCopyProperties().chunkSize } + 1
+            // 쪼갠 크기는 늘 계약 상한 안이다 — 계약 게이트가 대조하는 값(`maxItems()`)이 실제 한계여야 한다.
+            (sizes.max() <= HttpReminderCopyAdapter.maxItems()) shouldBe true
+        }
+    }
+
+    /**
+     * **한 번의 적재가 상대를 오래 붙들지 않는다.** 적재는 릴레이 스레드·DB 트랜잭션 안에서 도므로, 시간 예산을 넘기면 남은 묶음은
+     * 건너뛴다 — 첫 묶음은 늘 보낸다. 건너뛴 행은 제자리 채우기가 나중에 메운다.
+     */
+    "시간 예산을 넘기면 남은 묶음은 건너뛴다 — 첫 묶음은 늘 보낸다" {
+        val seven = (1..7).map {
+            ReminderCopyRequest("키-$it", NotificationKind.TRIP_DAY, LocalDate.parse("2026-08-10"), listOf(ReminderSlot("곳-$it")))
+        }
+        withCapturingServer(body()) { url, sent ->
+            adapterAt(url, ReminderCopyProperties(mode = "http", baseUrl = url, totalBudgetMs = 0)).copiesFor(null, seven)
+
+            sent.size shouldBe 1
         }
     }
 

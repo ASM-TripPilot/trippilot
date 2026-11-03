@@ -362,4 +362,38 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
 
         schedules.findPendingByTrip(tripId).size shouldBe 4
     }
+
+    /**
+     * **제자리 채우기 쓰기(`attachCopy`)의 조건이 SQL 에서 지켜지는가.** 대역으로는 못 본다 — WHERE 절이 느슨하면
+     * 먼저 붙은 문구를 덮거나, 이미 발화한 행을 고치거나, 그 사이 재적재가 새로 만든 행에 옛 문구를 붙인다.
+     * "문구 없음"의 기준은 도메인(`hasCopy` — 제목·본문 둘 다 비어 있지 않음)과 같아서, 한쪽만 있던 행은 채운다.
+     */
+    @Test
+    fun `제자리 채우기는 문구 없는 미발화 행에만 붙는다 — 이미 붙은 문구·발화한 행·없는 행은 건드리지 않는다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        fun row(kind: NotificationKind, plusSec: Long) = NotificationSchedule.pending(accountId, tripId, kind, now.plusSeconds(plusSec))
+        val lacking = row(NotificationKind.TRIP_DAY, 3600)
+        val halfFilled = row(NotificationKind.TRIP_DAY, 7200).copy(title = "제목만", body = null)
+        val filled = row(NotificationKind.TRIP_PRE, 10800).copy(title = "먼저 붙은 제목", body = "먼저 붙은 본문")
+        val fired = row(NotificationKind.TRIP_DAY, 14400)
+        schedules.replacePending(tripId, listOf(lacking, halfFilled, filled, fired))
+        schedules.markFired(fired.scheduleId, now) shouldBe true
+
+        schedules.attachCopy(lacking.scheduleId, "새 제목", "새 본문") shouldBe true
+        schedules.attachCopy(halfFilled.scheduleId, "새 제목2", "새 본문2") shouldBe true   // 한쪽만 있던 행도 채운다
+        schedules.attachCopy(filled.scheduleId, "덮는 제목", "덮는 본문") shouldBe false       // 먼저 붙은 문구가 이긴다
+        schedules.attachCopy(fired.scheduleId, "x", "y") shouldBe false                       // 이미 발화한 행
+        schedules.attachCopy(UUID.randomUUID(), "x", "y") shouldBe false                      // 없는 행(그 사이 재적재가 지웠다)
+
+        val rows = schedules.findPendingByTrip(tripId).associateBy { it.scheduleId }
+        rows.getValue(lacking.scheduleId).let { it.title to it.body } shouldBe ("새 제목" to "새 본문")
+        rows.getValue(halfFilled.scheduleId).let { it.title to it.body } shouldBe ("새 제목2" to "새 본문2")
+        rows.getValue(filled.scheduleId).let { it.title to it.body } shouldBe ("먼저 붙은 제목" to "먼저 붙은 본문")
+        // 발화한 행은 문구가 안 붙은 채 남는다 — 이미 나간 알림을 고치지 않는다.
+        jdbc.queryForObject(
+            "SELECT title IS NULL AND body IS NULL FROM notification_schedule WHERE schedule_id = ?",
+            Boolean::class.java, fired.scheduleId,
+        ) shouldBe true
+    }
 }

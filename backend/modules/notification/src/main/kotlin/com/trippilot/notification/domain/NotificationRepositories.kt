@@ -90,6 +90,15 @@ interface NotificationScheduleRepository {
     fun markCanceled(scheduleId: UUID, at: Instant): Boolean
 
     fun findPendingByTrip(tripId: UUID): List<NotificationSchedule>
+
+    /**
+     * 문구가 **아직 없는** 미발화·미취소 예약에만 문구를 붙인다 — 제자리 채우기용.
+     *
+     * 조건부 쓰기라서 (1) 그 사이 재적재([replacePending])가 행을 지웠으면(id 가 사라짐) 아무것도 안 바뀌고, (2) 이미 문구가
+     * 붙은 행은 덮지 않는다 — 재시도 둘이나 다른 파드가 같은 행을 채워도 **먼저 붙은 문구가 이긴다**. 붙였으면 true.
+     * 재적재와 달리 행을 지우고 다시 만들지 않으므로, 앞서 받은 문구를 잃지 않고 빠진 행만 메울 수 있다.
+     */
+    fun attachCopy(scheduleId: UUID, title: String, body: String): Boolean
 }
 
 /** 최근 두 창의 실제 발송 건수(COST-U6-01). */
