@@ -692,3 +692,17 @@ def test_check_extraction_fails_only_when_every_region_fell_back(
     out = capsys.readouterr().out
     assert ("::error::" in out) == (expected == 1)
     assert ("::warning::" in out) == (expected == 0 and any(fallbacks))
+
+
+def test_check_cli_reads_run_file_and_returns_exit_code(tmp_path, monkeypatch) -> None:
+    import json
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
+    import collect_events
+
+    run_file = tmp_path / "run.json"
+    run_file.write_text(json.dumps({"regions": [{"region": "서울", "fallback": True, "error": "401"}]}),
+                        encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["collect_events.py", "--check", str(run_file)])
+    assert collect_events.main() == 1
