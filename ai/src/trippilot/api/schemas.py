@@ -684,6 +684,8 @@ class ExplanationsResponse(BoundaryModel):
     배치 슬롯 설명 **다음의 두 번째 호출**(잔여 예산만 씀)이라 이 맵이 비어도 `explanations`
     는 영향이 없다. 비면 `alternatives_reason` 이 사유를 싣는다(배치 설명이 실패해 시도조차
     못 했으면 `slot_explanations_unavailable`) — 백엔드는 AI 템플릿 rationale 을 그대로 쓴다.
+    차선책도 날마다 따로 불러, 일부 날만 실패하면 성공한 날 문장 +
+    `alternatives_reason="alternative_explanation_partial: …"` 이다(실패한 날은 템플릿 그대로).
     **전제**: 요청 payload 의 `slots[].alternatives[]` 가 채워져 와야 한다 — 백엔드가 저장한
     차선책을 되돌려 보내기 전(현재 `toWire()` 는 빈 배열)에는 항상 빈 맵 + `null` 이다.
     """
