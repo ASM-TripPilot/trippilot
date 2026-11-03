@@ -452,6 +452,11 @@ internal data class AiReplanRequest(
      */
     val savedPlaces: List<AiSavedPlace> = emptyList(),
     val excludedPoiIds: List<UUID> = emptyList(),
+    /**
+     * 그 여행의 이동수단 하나(상대가 아는 첫 값, TRIP-1709) — 상대가 후보 풀 반경(도보 2km·대중교통 10km·자차 20km)·조립 이동 시간·
+     * 거리 표기를 이것으로 정한다. null 은 null 로 싣는다 = 상대 기본(대중교통). 상대 계약에 이미 있는 칸이라 배포 순서가 걸리지 않는다.
+     */
+    val transportMode: String? = null,
     /** 이 날짜를 건드린 변경 이력(TRIP-975) — 상대 `ChangeLogEntrySchema`. 비면 종전과 같다. */
     val changeLog: List<AiChangeLogEntry> = emptyList(),
 )

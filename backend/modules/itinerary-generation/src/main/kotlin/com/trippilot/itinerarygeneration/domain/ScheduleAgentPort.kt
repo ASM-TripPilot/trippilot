@@ -219,6 +219,12 @@ data class ReplanInput(
      * 기억한 것이 가장 필요한 순간에 안 쓰인다.
      */
     val rejections: List<RejectedPoi>,
+    /**
+     * 그 여행의 이동수단 하나 — 취향 `transport_modes` 중 **상대가 아는 첫 값**(TRIP-1709). 상대는 이 값으로 후보 풀 반경·
+     * 조립 이동 시간·거리 표기를 정한다. null 이면 상대 기본(대중교통) — 비워 두던 동안 도보 여행의 다시 짠 날이 대중교통으로
+     * 짜여, 뒤이은 편집 수리(여행 수단으로 잰다)가 그 날을 다시 밀었다. 기본값을 두지 않는다(이 타입의 규약).
+     */
+    val transportMode: String?,
     val requestMeta: RequestMeta,
     /**
      * 이 날짜를 건드린 변경 이력, 최신순 (TRIP-975) — AI 가 "방금 뺀 곳을 다시 넣지 않게" 쓴다.

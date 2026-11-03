@@ -116,6 +116,8 @@ class ReplanFacadeService(
                 // 거절 이력(TRIP-964). '다시 짜줘' 직후의 재계획이 정확히 이 이력의 소비처다 —
                 // 방금 밀어낸 곳을 다시 제안하지 않게 하는 것이 저장의 목적이다.
                 rejections = rejectionStore.findByTrip(command.tripId),
+                // 수단은 위 취향과 같은 출처에서 상대가 아는 첫 값 하나 — 생성(목록 → 상대가 첫 인식 값)과 같은 수단으로 다시 짠다.
+                transportMode = firstAiTransport(prefs.transportModes),
                 requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), REPLAN_DEADLINE_MS),
                 // 변경 이력(TRIP-975) — 이 날짜를 건드린 것만, diff 로. 조회 실패는 재계획을 막지 않는다:
                 // 이력은 "같은 제안 반복 방지"의 보조 재료라 없으면 종전과 같다.

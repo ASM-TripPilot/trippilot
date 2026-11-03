@@ -293,15 +293,15 @@ class AiBoundaryOpenApiTest : StringSpec({
     // ───────────────────────── 재계획 전용 경계(TRIP-854) ─────────────────────────
 
     /**
-     * **우리가 안 보내는 것을 눈에 보이게 둔다.** 계약에는 `transport_mode`·`trigger` 가 있지만
-     * 지금 보내지 않는다 — 이동수단은 재계획 세션이 모르고(생성 경로도 안 보낸다), 트리거는
-     * planb-detection(C9) 소유라 세션에 구조화된 채로 남아 있지 않다. 사유는 `reasons` 가 나른다.
+     * **우리가 안 보내는 것을 눈에 보이게 둔다.** 계약에는 `trigger` 가 있지만 지금 보내지 않는다 —
+     * 트리거는 planb-detection(C9) 소유라 세션에 구조화된 채로 남아 있지 않다. 사유는 `reasons` 가 나른다.
+     * `transport_mode` 는 2026-11-03 부터 싣는다(TRIP-1709 — 그 여행 취향 수단 중 상대가 아는 첫 값).
      *
      * 제외 목록을 **더해서** 정확히 일치를 요구하는 것이 핵심이다 — 상대가 필드를 하나 더 만들면
      * 여기가 깨진다. 느슨하게 두면 새 필드가 생긴 것을 영원히 모른다.
      */
-    "replan 요청 키가 계약과 일치한다 — 안 보내는 둘은 명시적으로 뺀다" {
-        val notSent = listOf("transport_mode", "trigger")
+    "replan 요청 키가 계약과 일치한다 — 안 보내는 trigger 는 명시적으로 뺀다" {
+        val notSent = listOf("trigger")
         (wireKeys(sampleReplanRequest) + notSent).sorted() shouldContainExactly props("ReplanRequest")
     }
 
@@ -518,6 +518,7 @@ private val sampleReplanRequest = AiReplanRequest(
     ),
     savedPlaces = listOf(AiSavedPlace(UUID.randomUUID().toString(), "담아 둔 카페")),
     excludedPoiIds = listOf(UUID.randomUUID()),
+    transportMode = "렌터카",
     changeLog = listOf(
         AiChangeLogEntry(
             "PLAN_B", "비 예보", Instant.parse("2026-08-01T04:00:00Z"),
