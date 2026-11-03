@@ -1,5 +1,9 @@
 package com.trippilot.notification.adapter.out.external
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.sun.net.httpserver.HttpServer
 import com.trippilot.notification.domain.NotificationKind
 import com.trippilot.notification.domain.ReminderCopy
@@ -9,6 +13,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.maps.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import org.slf4j.LoggerFactory
 import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter
 import org.springframework.web.client.RestClient
@@ -165,6 +170,22 @@ class HttpReminderCopyAdapterTest : StringSpec({
         }
     }
 
+    /**
+     * **경고는 '모르는 종류'만 센다.** 재료가 빈 예약도 보내는 목록에서는 빠지지만 그 사유는 위의 INFO 가 말한다 —
+     * 둘을 한 경고로 세면 "계약 enum 밖"이라는 거짓 경고가 재료 없는 여행마다 뜬다(운영 48시간 51건이 그랬다).
+     */
+    "재료가 빈 예약은 '모르는 알림 종류' 경고를 내지 않고, 모르는 종류만 센다" {
+        val starved = ReminderCopyRequest("키-s", NotificationKind.TRIP_DAY, LocalDate.parse("2026-08-10"))
+        val other = NotificationKind.entries.first { it.name !in HttpReminderCopyAdapter.aiKinds() }
+        val unknown = ReminderCopyRequest("키-u", other, LocalDate.parse("2026-08-10"), listOf(ReminderSlot("우도")))
+
+        warnsFrom { it.copiesFor(null, listOf(starved)) }.none { "모르는 알림 종류" in it } shouldBe true
+
+        // 둘이 섞여도 한 건(모르는 종류)만 센다 — 재료 빈 예약은 세지 않는다.
+        warnsFrom { it.copiesFor(null, listOf(starved, unknown)) }
+            .single { "모르는 알림 종류" in it } shouldContain "1건"
+    }
+
     /** 계약 `maxItems: 30` — 넘기면 한 건도 못 받는다. 나눠 보내고 합친다. */
     "30건을 넘기면 나눠 보낸다" {
         val many = (1..31).map {
@@ -219,6 +240,19 @@ class HttpReminderCopyAdapterTest : StringSpec({
         }
     }
 })
+
+/** 어댑터 로거의 WARN 줄을 모은다. 보낼 항목이 없는 입력으로만 쓴다 — 호출이 나가지 않아 주소는 아무 값이어도 된다. */
+private fun warnsFrom(block: (HttpReminderCopyAdapter) -> Unit): List<String> {
+    val appender = ListAppender<ILoggingEvent>().apply { start() }
+    val logger = LoggerFactory.getLogger(HttpReminderCopyAdapter::class.java) as Logger
+    logger.addAppender(appender)
+    try {
+        block(adapterAt("http://127.0.0.1:1"))
+    } finally {
+        logger.detachAppender(appender)
+    }
+    return appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
+}
 
 private fun body(copies: String = "", degraded: Boolean = false) =
     """{"copies":[$copies],"degraded":$degraded,"fallback_mode":null}"""

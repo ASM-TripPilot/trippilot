@@ -37,8 +37,10 @@ class HttpReminderCopyAdapter(
             // 슬롯 이름을 실으면 그 이름을 쓴 정상 문구가 온다 — 재료가 답의 진위를 가른다(TRIP-883).
             log.info("재료(slots)가 빈 예약 {}건은 묻지 않습니다 — 빈 입력에는 상대가 '일정 없음'을 지어냅니다.", starved)
         }
-        if (sendable.size != items.size) {
-            log.warn("상대가 모르는 알림 종류 {}건을 뺐습니다 — 계약 enum 은 {} 뿐입니다.", items.size - sendable.size, AI_KINDS)
+        // 종류만 센다 — `sendable` 은 재료가 빈 항목도 빼므로 그 차이를 세면 '모르는 종류'가 아닌 것까지 경고가 된다.
+        val unknownKinds = items.count { it.kind.name !in AI_KINDS }
+        if (unknownKinds > 0) {
+            log.warn("상대가 모르는 알림 종류 {}건을 뺐습니다 — 계약 enum 은 {} 뿐입니다.", unknownKinds, AI_KINDS)
         }
         if (sendable.isEmpty()) return emptyMap()
 
