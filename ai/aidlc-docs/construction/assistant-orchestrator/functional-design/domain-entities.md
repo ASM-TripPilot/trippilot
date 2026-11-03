@@ -19,7 +19,7 @@
 > (§5 라우팅 표·DL-1~5) · `agent-structure-v2.md`(Provider LLM 0회) · `ai-prompt-design.md` §3.3(프롬프트 레이아웃·semver) ·
 > `ai/README.md` §4대 불변식.
 >
-> 범위: **1단계(이 PR)** — 조회·대안·안내 의도를 AI 안에서 `ANSWER` 로 끝내고, `EDIT_SCHEDULE` 은 `FRAME` 으로 두어
+> 범위: **1단계(이 PR)** — 조회·대안·안내 의도를 AI 안에서 `ANSWER` 로 끝내고, `EDIT_SCHEDULE` 은 `FRAME` 으로 두어(2026-11-03 BR-AO-35: 일정 검토 말도 `FRAME(SHOW_SCHEDULE)` — BE 진행 검토 카드)
 > 백엔드 제안 경로를 그대로 쓴다. 2단계(EDIT 인프로세스·`PROPOSAL`)는 §9 에 예고만 한다.
 
 ---
@@ -218,7 +218,7 @@ TurnOutcome (frozen):
 | 조건 | 강제 |
 |---|---|
 | `outcome = ANSWER` | `answer ≠ None` ∧ `len(frames) ≤ 1` — 분류를 거친 턴은 1(분류 프레임이 백엔드 관측 칸 `intent`·`match_route` 의 원천), 0단계 리터럴 능력 안내와 2″ 맞장구·인사 답(BR-AO-26)은 0(BE 는 `frames.firstOrNull()` 로 읽어 `intent null`·`match_route "NONE"` 저장 — 미결 #19 A) ∧ `clarify = None` **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 프레임 0 의 출처가 셋 — 0단계 능력 안내·2″ 맞장구·**2‴ 계획 답**(BR-AO-28). |
-| `outcome = FRAME` | `answer = None` ∧ `len(frames) = 1` ∧ 그 프레임 `executable` — 1단계에서는 **`EDIT_SCHEDULE` 만** 여기로 온다 |
+| `outcome = FRAME` | `answer = None` ∧ `len(frames) = 1` ∧ 그 프레임 `executable` — 1단계에서는 **`EDIT_SCHEDULE` 만** 여기로 온다 — 2026-11-03 부터 일정 검토 말의 `SHOW_SCHEDULE` 도(BR-AO-35) |
 | `outcome = ARGUMENT_CLARIFY` | `clarify ≠ None` ∧ `len(frames) = 1` ∧ `clarify.argument ∈ frames[0].missing` ∧ `answer = None` |
 | `outcome = OUT_OF_SCOPE` | `frames` 비어 있음 ∧ `answer = None` ∧ `reason ≠ None`(거절 표지 또는 실패 사유) — **문장 없음**(BE SCOPE 카드) |
 | 공통 | `llm_calls ≥ 0`; `len(frames) ≤ 1`(프레임 2개 이상인 인스턴스는 생성 불가) |
