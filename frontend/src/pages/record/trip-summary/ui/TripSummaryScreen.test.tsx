@@ -12,7 +12,7 @@ import { revealValues } from '@/test-support/revealProbe';
 import { COUNT_UP_DURATION_MS, CountUpText } from '@/shared/ui/CountUpText';
 import type { DayHighlight, TripSummary } from '@/shared/api/index.schemas';
 
-import { buildSummaryMagazineVM } from '../model/summaryMagazineVM';
+import { buildSummaryMagazineVM } from '@/features/reflection/index.view';
 import {
   TripSummaryScreen,
   type TripSummaryScreenProps,

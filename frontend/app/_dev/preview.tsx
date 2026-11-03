@@ -44,15 +44,16 @@ import { missingParts } from '@/pages/record/daily-reflection/model/missingParts
 import {
   SHARE_FORMATS,
   buildMagazineVM,
+  buildShareCard,
+  buildSummaryMagazineVM,
   type MagazineInput,
+  type SummaryMagazineInput,
 } from '@/features/reflection/index.view';
 import { DailyReflectionScreen } from '@/pages/record/daily-reflection/ui/DailyReflectionScreen';
+import { buildStorySlides } from '@/pages/record/share-card/model/shareStory';
 import { ShareCardScreen } from '@/pages/record/share-card/ui/ShareCardScreen';
+import { StoryDeck } from '@/pages/record/share-card/ui/StoryDeck';
 import { TravelStyleScreen } from '@/pages/record/travel-style/ui/TravelStyleScreen';
-import {
-  buildSummaryMagazineVM,
-  type SummaryMagazineInput,
-} from '@/pages/record/trip-summary/model/summaryMagazineVM';
 import { TripSummaryScreen } from '@/pages/record/trip-summary/ui/TripSummaryScreen';
 import { MustVisitOutsideConfirmDialog } from '@/pages/explore/saved-places/ui/MustVisitOutsideConfirmDialog';
 import { MustVisitPickScreen } from '@/pages/explore/saved-places/ui/MustVisitPickScreen';
@@ -223,6 +224,7 @@ import type { PreferenceSelection } from '@/features/edit-preferences';
 import { PreferencesEditView } from '@/pages/settings/settings-preferences/ui/PreferencesEditView';
 import type {
   DayHighlight,
+  Trip,
   ItineraryDaysItemSlotsItem,
   Opportunity,
   ReflectionStats,
@@ -317,6 +319,19 @@ const SHARE_CARD_COPY_PREVIEW: ComponentProps<typeof ShareCardScreen>['card'] =
     watermark: 'TripPilot',
     aspectRatio: 9 / 16,
   };
+/**
+ * j06 내보내기 화면 프리뷰 래퍼(TRIP-1667) — 화면이 고친 해시태그를 들고 있지 않고 페이지가 쥐므로(controlled), 프리뷰에서도
+ * 작은 상태 하나로 [편집]→[완료]가 보이게 한다. `hashtagText` 는 처음 값이다.
+ */
+function ShareCardScreenPreview({
+  hashtagText,
+  ...props
+}: Omit<ComponentProps<typeof ShareCardScreen>, 'onCommitHashtags'>) {
+  const [tags, setTags] = useState(hashtagText);
+  return (
+    <ShareCardScreen {...props} hashtagText={tags} onCommitHashtags={setTags} />
+  );
+}
 // TRIP-1665 j03 회고 매거진 — 운영과 같은 빌더(`buildMagazineVM`)를 네트워크 없이 쓴다. 픽스처는 VM 이 아니라 원재료(payload 문자열·방문·슬롯)라
 // 팔레트·번호·좌우·띠 규칙이 프리뷰에서도 운영과 같은 코드로 나온다. 사진 파일은 없어 카테고리 그림이 대신 선다(기기 사진 자리 육안은 6-b 실기).
 const MAGAZINE_DATE = '2026-09-24';
@@ -2476,6 +2491,43 @@ const SUMMARY_PREVIEW_BRIGHT_PLAN = [
   ]),
   summaryPlanDay('2026-06-13', [['감천문화마을', '쇼핑']]),
 ];
+
+// j06 스토리 덱(TRIP-1667) — 운영과 같은 빌더 두 개(j04 매거진 VM + 대표 카드 → 장 목록)를 네트워크 없이 쓴다. 장 번호·시간은 덱 훅이 정한다
+// (동작 줄이기 OS 설정이 켜져 있으면 자동 넘김 없이 탭만 된다 — 프리뷰 전용 키 없음). 진행 바 칠하기·장 등장 연출·탭/길게 누르기는 여기서 눈으로 본다.
+function renderShareDeckPreview(
+  highlights: DayHighlight[],
+  itineraryDays: SummaryMagazineInput['itineraryDays'],
+  caption: string
+): ReactElement {
+  // 방문 0곳 키는 숫자 장도 0곳이어야 한다(고정 픽스처 12곳이 그대로 찍히던 것 — 6-b 관찰).
+  const summary = summaryOf(
+    highlights,
+    highlights.length === 0 ? { totalVisits: 0 } : {}
+  );
+  const trip = SUMMARY_PREVIEW_TRIP as Trip;
+  const slides = buildStorySlides(
+    buildSummaryMagazineVM({ summary, trip, itineraryDays }),
+    buildShareCard({ summary, trip, format: SHARE_FORMATS[0] })
+  );
+  return (
+    <StoryDeck
+      slides={slides}
+      caption={caption}
+      hashtagText="#부산여행 #광안리노을"
+      onClose={noop}
+      onMake={noop}
+    />
+  );
+}
+const SHARE_DECK_PREVIEW_CAPTION =
+  '광안리에서 노을을 보고 감천문화마을 골목을 걸었어요';
+// 긴 여행(7일) — 일차 장면은 앞 5장으로 끊기고 동선은 6줄 상한, 진행 바 8칸.
+const SHARE_DECK_LONG_HIGHLIGHTS = Array.from({ length: 7 }, (_, i) =>
+  summaryHighlight(`2026-06-${11 + i}`, i + 1, [
+    `장소 ${i + 1}-1`,
+    `장소 ${i + 1}-2`,
+  ])
+);
 
 // i01 기록 없음(TRIP-747, Figma 4076:2452) — 같은 5곳에서 done 2장의 사진·후기만 뺀다.
 const LIVE_HUB_PREVIEW_SLOTS_NO_RECORDS: LiveHubSlot[] =
@@ -5093,7 +5145,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'j06 · 공유 카드 default',
     login: null,
     render: () => (
-      <ShareCardScreen
+      <ShareCardScreenPreview
         card={{
           title: '사흘의 기록',
           periodText: '2026.06.10 ~ 06.12',
@@ -5127,7 +5179,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'j06 · 공유 카드 no-photo',
     login: null,
     render: () => (
-      <ShareCardScreen
+      <ShareCardScreenPreview
         card={{
           title: '부산 여행',
           periodText: '2박 3일 · 2026.06.01 – 06.03',
@@ -5158,7 +5210,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'j06 · 공유 카드 서버 문구',
     login: null,
     render: () => (
-      <ShareCardScreen
+      <ShareCardScreenPreview
         card={SHARE_CARD_COPY_PREVIEW}
         formats={SHARE_FORMATS}
         caption="광안리에서 노을을 보고 감천문화마을 골목을 걸었어요"
@@ -5173,7 +5225,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'j06 · 공유 카드 문구 대기',
     login: null,
     render: () => (
-      <ShareCardScreen
+      <ShareCardScreenPreview
         card={SHARE_CARD_COPY_PREVIEW}
         formats={SHARE_FORMATS}
         caption=""
@@ -5189,7 +5241,7 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'j06 · 공유 카드 문구 하루 상한',
     login: null,
     render: () => (
-      <ShareCardScreen
+      <ShareCardScreenPreview
         card={SHARE_CARD_COPY_PREVIEW}
         formats={SHARE_FORMATS}
         caption=""
@@ -5198,6 +5250,39 @@ export const PREVIEW_STATES: PreviewState[] = [
         onBack={noop}
       />
     ),
+  },
+  // j06 스토리 덱 3키(TRIP-1667) — 첫 얼굴. 기본(맛집 최빈 주황 표지·일차 3장·동선·숫자) · 방문 0곳(표지 → 숫자 두 장) · 7일(진행 바 8칸).
+  // [공유 카드 만들기]·× 는 빈 함수라 눌러도 이동하지 않는다(내보내기 전환은 페이지 몫 — 위 share-card-default 키로 내보내기 모양을 본다).
+  {
+    key: 'share-card-deck',
+    band: 'j',
+    label: 'j06 · 공유 스토리 덱',
+    login: null,
+    render: () =>
+      renderShareDeckPreview(
+        SUMMARY_PREVIEW_HIGHLIGHTS,
+        SUMMARY_PREVIEW_PLAN,
+        SHARE_DECK_PREVIEW_CAPTION
+      ),
+  },
+  {
+    key: 'share-card-deck-no-visit',
+    band: 'j',
+    label: 'j06 · 공유 스토리 덱 방문 0곳',
+    login: null,
+    render: () => renderShareDeckPreview([], undefined, ''),
+  },
+  {
+    key: 'share-card-deck-long',
+    band: 'j',
+    label: 'j06 · 공유 스토리 덱 7일',
+    login: null,
+    render: () =>
+      renderShareDeckPreview(
+        SHARE_DECK_LONG_HIGHLIGHTS,
+        undefined,
+        SHARE_DECK_PREVIEW_CAPTION
+      ),
   },
   // j05 여행 스타일 2키(TRIP-573·TRIP-765) — 순수 뷰(`TravelStyleScreen`)를 격리 렌더한다(네트워크
   // 계층 import 0 이라 프리뷰 지뢰 목 통과 — shared/ui/BottomTabBar 만 프레젠테이션으로 문다). 지도는

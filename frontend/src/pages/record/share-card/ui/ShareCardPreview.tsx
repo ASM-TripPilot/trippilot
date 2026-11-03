@@ -6,6 +6,7 @@ import {
   SHARE_FORMATS,
   type ShareCardVM,
 } from '@/features/reflection/index.view';
+import { SHARE_ROUTE_LIMIT } from '../model/shareStory';
 import { WatermarkLogoGlyph } from './ShareCardGlyphs';
 
 /**
@@ -67,7 +68,7 @@ export function ShareCardPreview({
           testID="reflection-share-visit-order"
           className="mx-lg mt-md flex-1 justify-center gap-sm rounded-card bg-surface-soft p-md"
         >
-          {card.orderedVisits.slice(0, 6).map((visit) => (
+          {card.orderedVisits.slice(0, SHARE_ROUTE_LIMIT).map((visit) => (
             <View key={visit.order} className="flex-row items-center gap-sm">
               <View className="h-[22px] w-[22px] items-center justify-center rounded-full bg-primary">
                 <Text className="font-inter-bold text-caption text-on-primary">
