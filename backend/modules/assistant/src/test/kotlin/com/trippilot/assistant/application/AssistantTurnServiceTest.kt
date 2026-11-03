@@ -1354,6 +1354,108 @@ class AssistantTurnServiceTest : StringSpec({
     }
 
     /**
+     * 사이 넣기 대역 — 오늘 저녁 카페 모카 뒤에 한 곳을 넣은 안. 넣을 곳은 [picks] 중 요청이 뺀 곳(앞서 보인 곳)을 건너뛴 첫 곳이고,
+     * 다 빠졌으면 위반 없는 거절이다(상대 `insert_between: no_candidates`).
+     */
+    fun World.offerInsert(vararg picks: UUID) {
+        val moca = data.slots.single()
+        data.surfaces = picks.withIndex().associate { (i, id) -> id to surface(id, listOf("효창공원", "공덕 카페", "마포 식당")[i]) }
+        editing.proposal = {
+            val excluded = (editing.proposed.last().request as EditProposalRequest.Utterance).excludedPoiIds
+            picks.firstOrNull { it !in excluded }?.let { next ->
+                EditProposal.Proposed(
+                    listOf(ProposedDay(today, listOf(proposedSlot(moca.poiId, "18:00", "840m")))),
+                    listOf(ProposedDay(today, listOf(proposedSlot(moca.poiId, "18:00", "840m"), proposedSlot(next, "19:30")))), "AUTO_APPLY",
+                )
+            } ?: EditProposal.Rejected(emptyList())
+        }
+    }
+
+    val insertAsk = "카페 모카 다음에 갈 만한 곳 하나 추가해줘"
+    fun editFrames() = Interpreter { r -> Interpretation(InterpretOutcome.FRAME, listOf(IntentFrame(Intent.EDIT_SCHEDULE, mapOf("day" to "$today"), "LLM_DIRECT")), null, r.dialogueContext, 1) }
+
+    /**
+     * "다른 데는?" — 바로 앞 카드가 한 곳을 더한 제안이면 그 카드를 낳은 말을 **앞서 보인 곳을 빼고** 다시 편집에 태운다. 분류는 거치지 않는다
+     * (이 말을 장소 찾기·대체 후보로도 읽고, 앞서 보인 곳은 우리 기록에만 있다). 거듭 물으면 사슬의 카드가 보인 곳을 전부 뺀다 — 상대 순위는
+     * 결정론이라 마지막 것만 빼면 그 전 것이 되돌아온다. 편집 한 번은 센다(COST-U8-02).
+     */
+    "다른 데는? — 한 곳을 더한 카드 뒤면 그 말을 앞서 보인 곳을 빼고 다시 태운다(분류 없이)" {
+        val w = world(interpreter = editFrames())
+        val s = w.session()
+        val (first, second) = UUID.randomUUID() to UUID.randomUUID()
+        w.offerInsert(first, second)
+
+        w.say(s, insertAsk).messages[1].text shouldBe "카페 모카 다음에 효창공원을 넣은 안이에요. 적용하면 다시 검증한 뒤 반영해요."
+        val again = w.say(s, "다른 데는?")
+        val none = w.say(s, "또 다른 곳은 없어?")
+
+        again.messages[1].proposal!!.diff.single { it.change == "ADDED" }.slotKey shouldBe "$today#$second"
+        none.messages[1].text shouldBe "넣을 만한 다른 곳을 찾지 못했어요. 편집 화면에서 직접 고를 수 있어요."
+        w.editing.proposed.map { it.date to it.request } shouldContainExactly listOf(
+            today to EditProposalRequest.Utterance(insertAsk),
+            today to EditProposalRequest.Utterance(insertAsk, setOf(first)),
+            today to EditProposalRequest.Utterance(insertAsk, setOf(first, second)),
+        )
+        w.interpreter!!.requests.map { it.utterance } shouldContainExactly listOf(insertAsk)
+        w.row(4).saved.let { (it.intent to it.matchRoute) to it.llmCalls } shouldBe (("EDIT_SCHEDULE" to "REASK") to 1)
+        w.usage.llm[acc to today] shouldBe 3
+        w.editing.edits shouldBe emptyList() // 제안일 뿐이다(BR-U8-30)
+    }
+
+    /** 맨 말의 범위 — 묻기·부탁 꼬리까지는 다시 묻기이고, 종류·날·이름·자리·다른 행위가 섞이면(새 요청일 수 있다) 종전처럼 해석으로 간다. */
+    "다른 데는? 맨 말 — 꼬리까지는 다시 묻기, 다른 말이 섞이면 해석으로 간다" {
+        val reasks = listOf(
+            "다른 데는?", "다른 곳은?", "딴 데", "다른데는?", "다른 곳으로", "다른 걸로 바꿔줘", "다른 데 없어?", "다른 곳 추천해 주세요",
+            "또 다른 데는?", "그럼 다른 데는요?", "거기 말고 다른 곳", "다른 장소 보여줘",
+        )
+        val others = listOf("다른데", "다른 카페는?", "다른 날은?", "효창공원 말고 다른 데", "다른 곳에 넣어줘", "다른 데로 옮겨줘", "다른 데 가고 싶어", "다른 일정 보여줘")
+        val w = world(interpreter = editFrames())
+        val s = w.session()
+        w.offerInsert(UUID.randomUUID(), UUID.randomUUID())
+
+        (reasks + others).forEach { said ->
+            w.clock.now = w.clock.now.plusSeconds(10) // 분당 20턴(BR-U8-24) 안으로
+            w.say(s, insertAsk)
+            w.clock.now = w.clock.now.plusSeconds(10)
+            w.say(s, said)
+        }
+
+        w.interpreter!!.requests.map { it.utterance } shouldContainExactly reasks.map { insertAsk } + others.flatMap { listOf(insertAsk, it) }
+    }
+
+    /** 넘겨짚지 않는다 — 맨 말이 아니거나(종류·날·이름이 바뀐 새 요청일 수 있다), 바로 앞이 한 곳을 더한 카드가 아니면 종전처럼 해석으로 간다. */
+    "다른 데는? — 맨 말이 아니거나 바로 앞이 한 곳을 더한 카드가 아니면 해석으로 간다" {
+        val w = world(interpreter = editFrames())
+        val s = w.session()
+        w.offerInsert(UUID.randomUUID())
+
+        w.say(s, "다른 데는?") // 앞선 카드가 없다
+        w.say(s, insertAsk)
+        w.say(s, "다른 카페는?") // 종류를 바꾼 새 요청일 수 있다
+        w.offerBookCafe()
+        w.say(s, "카페 바꿔줘") // 바꾼 안 — 한 곳을 더한 안이 아니다
+        w.say(s, "다른 데는?")
+
+        w.interpreter!!.requests.map { it.utterance } shouldContainExactly listOf("다른 데는?", insertAsk, "다른 카페는?", "카페 바꿔줘", "다른 데는?")
+        w.editing.proposed.map { it.request } shouldContainExactly
+            listOf("다른 데는?", insertAsk, "다른 카페는?", "카페 바꿔줘", "다른 데는?").map { EditProposalRequest.Utterance(it) }
+    }
+
+    /** 원 요청이 되묻기의 답('1일차')이면 편집에 붙여 보낸 말을 여기서 알 수 없다 — 다시 태우지 않고 해석으로 간다(넘겨짚지 않는다). */
+    "다른 데는? — 카드를 낳은 말이 되묻기의 답이면 다시 태우지 않는다" {
+        val w = world(interpreter = askingDay(asks = setOf(insertAsk)))
+        val s = w.session()
+        w.offerInsert(UUID.randomUUID(), UUID.randomUUID())
+
+        w.say(s, insertAsk).messages[1].kind shouldBe MessageKind.CLARIFY
+        w.say(s, "1일차").messages[1].kind shouldBe MessageKind.PROPOSAL
+        w.say(s, "다른 데는?")
+
+        w.interpreter!!.requests.map { it.utterance } shouldContainExactly listOf(insertAsk, "1일차", "다른 데는?")
+        w.editing.proposed.none { (it.request as EditProposalRequest.Utterance).excludedPoiIds.isNotEmpty() } shouldBe true
+    }
+
+    /**
      * PBT-U8-1 ★ — **단독 확정 없음.** 말·버튼·상대의 답(`AUTO_APPLY` 포함)이 어떻게 섞여도, [적용]을 누르지 않는 한
      * 일정 저장은 0번이다. 턴 서비스에는 저장으로 가는 길이 아예 없어야 한다.
      */

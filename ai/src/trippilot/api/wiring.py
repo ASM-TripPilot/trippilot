@@ -4188,6 +4188,7 @@ class WiredItineraryOrchestrator:
             utterance=request.utterance,
             command=command,
             confirm=request.confirm,
+            excluded=frozenset(PoiId(x) for x in request.excluded_poi_ids),  # "다른 데는?" — 앞서 보인 곳(spec 003 FR-015)
             # 사이 넣기 구간 풀 — 같은 요구표·공급자로 그 날만 한 번 더 모은다(INV-1). 에이전트가 자리를 코드로 풀었을 때만 부른다
             segment_pool=lambda center, km: self._pool_from(self._info.collect(Intent.EDIT_SCHEDULE, {"pool_request": replace(
                 pool_request, anchor=center, radius_override_km=km, dates=(request.target_date,)), "now": now}), now),
@@ -4305,8 +4306,11 @@ class WiredItineraryOrchestrator:
             centers[pair.day], names[pair.day] = hit
         by_day = {d.date: d for d in solution.days}
         changed = sorted(centers)
-        # 손 안 댄 날의 장소는 후보에서 뺀다 — 같은 곳을 두 번 가게 하지 않는다
-        others = frozenset(s.poi_id for d in solution.days if d.date not in centers for s in d.slots)
+        # 손 안 댄 날의 장소는 후보에서 뺀다 — 같은 곳을 두 번 가게 하지 않는다. 편집 요청의 뺄 곳(앞서 보인 곳, spec 003 FR-015)도 새로
+        # 들이지 않는다 — 이미 일정에 있는 곳은 빼지 않는다(동네 안 원 슬롯은 남는다)
+        planned = frozenset(s.poi_id for d in solution.days for s in d.slots)
+        others = frozenset(s.poi_id for d in solution.days if d.date not in centers for s in d.slots) | (
+            frozenset(PoiId(x) for x in request.excluded_poi_ids) - planned)
         found: dict[PoiId, Poi] = {p.poi_id: p for p in pool.pois if p.poi_id not in others}
 
         def near(day: date) -> list[Poi]:

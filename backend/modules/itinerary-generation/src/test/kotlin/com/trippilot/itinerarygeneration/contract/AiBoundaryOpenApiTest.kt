@@ -479,6 +479,7 @@ private val sampleEditRequest = AiEditRequest(
     utterance = "둘째 날 카페를 조용한 곳으로 바꿔줘",
     confirm = true,
     requestMeta = sampleRequestMeta,
+    excludedPoiIds = listOf(UUID.randomUUID().toString()), // 비면 키째로 빠진다 — 표본은 채운다
 )
 
 private val sampleEditResponse = AiEditResponse(

@@ -784,6 +784,26 @@ class HttpScheduleAgentAdapterTest : StringSpec({
     }
 
     /**
+     * "다른 데는?" — 앞서 보인 곳을 `excluded_poi_ids` 로 싣는다. **비면 키째로 뺀다** — 이 칸을 모르는 상대(배포 순서가 어긋난 동안)는
+     * 모르는 키를 422 로 거절해, 싣고 나가면 다시 묻기가 아닌 편집까지 전부 "지금은 제안할 수 없다"가 된다.
+     */
+    "편집 제안 — 앞서 보인 곳은 excluded_poi_ids 로 싣고, 없으면 그 키를 싣지 않는다" {
+        val (adapter, server) = fixture(groundingPool(newPoi))
+        val shown = UUID.randomUUID()
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit"))
+            .andExpect(jsonPath("$.excluded_poi_ids.length()").value(1))
+            .andExpect(jsonPath("$.excluded_poi_ids[0]").value(shown.toString()))
+            .andRespond(withSuccess(appliedBody(newPoi), MediaType.APPLICATION_JSON))
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit"))
+            .andExpect(jsonPath("$.excluded_poi_ids").doesNotExist())
+            .andRespond(withSuccess(appliedBody(newPoi), MediaType.APPLICATION_JSON))
+
+        adapter.proposeEdit(editInput(utterance = "이태원에서 홍대로 넘어갈 때 한 군데 더").copy(excludedPoiIds = listOf(shown)))
+        adapter.proposeEdit(editInput(utterance = "이태원에서 홍대로 넘어갈 때 한 군데 더"))
+        server.verify()
+    }
+
+    /**
      * 편집 저장 경로에는 POI 실재 검사가 없다 — 여기서 안 막으면 상대가 지어낸 장소가 제안 카드를 거쳐 저장된다(INV-1).
      * 그 슬롯만 빼지 않는다: 하나를 빼면 나머지 시각이 더는 상대가 검증한 값이 아니다.
      */

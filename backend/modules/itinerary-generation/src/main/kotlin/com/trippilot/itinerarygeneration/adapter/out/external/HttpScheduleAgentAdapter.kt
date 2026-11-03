@@ -303,6 +303,7 @@ class HttpScheduleAgentAdapter(
                 utterance = input.utterance,
                 confirm = true,
                 requestMeta = AiRequestMeta(input.requestMeta.requestId, input.requestMeta.requestedAt, input.requestMeta.deadlineMs),
+                excludedPoiIds = input.excludedPoiIds.map(UUID::toString),
             ),
             AiEditResponse::class.java,
             scheduleAgentBoundedRestClient,
