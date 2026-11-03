@@ -32,7 +32,7 @@ routes:
 - `home-trips-offline` 오프라인 콜드스타트(받은 여행 없음) — 「인터넷에 연결되어 있지 않아요」/「연결되면 자동으로 불러올게요」(버튼 없음), 장소 레인은 숨는다. 연결되면 저절로 얼굴이 정해진다.
 - `home-lane-error` 장소 조회 실패 — 섹션 자리에 「장소를 불러오지 못했어요 · 다시 시도」(누르면 재조회).
 - `home-spot-save-error` ♥ 실패 — 섹션 위 안내 행(누르면 닫힘).
-- `home-fab-scroll-hide` 세로 스크롤 중 FAB 묶음이 투명·터치 불가가 되고 멈춘 뒤 250ms에 돌아온다(메뉴가 열려 있으면 유지).
+- `home-fab-scroll-hide` 세로 스크롤 중 FAB 묶음이 투명·터치 불가가 되고 멈춘 뒤 250ms에 돌아온다(메뉴가 열려 있으면 유지). 가로로 도시 카드 캐러셀을 밀 때는 안 숨고(컬렉션 가로 줄은 미확인), 스크롤하는 동안·멈춘 뒤 앱이 죽지 않는다. *(2026-11-03 실화면 pass — TRIP-1733 스크롤 처리 이관 뒤)*
 - `home-look` 스팟·컬렉션 카드 사진 칸은 서버 사진(없으면 카테고리 생성 그림), 여행 카드 배경은 그 여행 지역 그림(없으면 도시 그림을 대신 깔지 않는다), 카드 위엔 장식 하트가 없고, 토스트는 FAB 묶음 위에 떠서 가려지지 않는다. *(2026-11-01 B안으로 실화면 전용)*
 - `home-lane-fresh-10min` 홈 장소 레인을 본 뒤 30초~10분 안에 탐색 탭을 처음 열어도 `GET /places` 가 안 나간다(TRIP-1713, 여행 없음 얼굴 — 3지역 키 공유). 실기 미검증: TRIP-1714 6-b 계정이 여행 중 얼굴이라 못 봤다.
 
@@ -89,7 +89,8 @@ Preconditions:
 - 홈에서 다른 화면으로 돌아오는 진입(위저드 이탈·회고 완료 등) 목록은 확인 필요.
 - **[실화면] 2026-10-31 딥링크는 `com.trippilot.travel://…` 스킴으로만 화면이 바뀐다** — `simctl openurl "trippilot:///…"` 는 앱만 앞으로 오고 라우팅되지 않았다(이 dev build Info.plist 에 `trippilot` 스킴이 네이버 로그인 urlScheme 으로 한 번 더 등록돼 있다, [결함 의심 FM-L1-04]).
 - [실화면] 2026-10-31 도달 불가 — `home-discovery`·`home-planning`·`home-post-trip`·`home-past-trips-more`: 계정에 여행 중(제주 10/30–31) 여행이 있어 얼굴이 여행 중으로 고정되고, 그 여행은 삭제·수정 금지.
-- [실화면] 2026-10-31 도달 불가 — `home-loading`(순간 상태, 캡처 지연보다 짧음)·`home-trips-error`·`home-lane-error`·`home-spot-save-error`(시뮬 네트워크 차단 수단 없음)·`home-fab-scroll-hide`(250ms 창이 agent-device 조작 지연보다 짧음).
+- [실화면] 2026-10-31 도달 불가 — `home-loading`(순간 상태, 캡처 지연보다 짧음)·`home-trips-error`·`home-lane-error`·`home-spot-save-error`(시뮬 네트워크 차단 수단 없음)·`home-fab-scroll-hide`(250ms 창이 agent-device 조작 지연보다 짧음 — 2026-11-03 아래 방법으로 열림).
 - [실화면] 2026-10-31 여행 중 얼굴의 「지금 뜨는 장소」·「요즘 사람들이 담는 곳」은 제주 장소로 찬다. 여행 카드 CTA 는 확정 일정이라 「여행 일정 보기」 → 여행 중 허브(지도+시트)로 간다.
 - [결함 의심 FM-L1-05] ♥ 메뉴를 펼치면 딤이 본문·＋ FAB 은 덮지만 하단 탭바는 밝게 남고 눌린다(탐색 탭 ♥ 메뉴도 같음, 증거 `home/saved-menu-open.png`).
+- [실화면] 2026-11-03 `home-fab-scroll-hide` 열림 — 한 번 끌고 캡처하면 250ms 안에 FAB 이 돌아와 못 잡는다. 끌기를 쉬지 않고 잇고(`agent-device swipe <x1> <y1> <x2> <y2> --count 8 --pause-ms 60 --pattern ping-pong`) 그동안 다른 셸에서 `xcrun simctl io booted screenshot` 을 짧은 루프로 찍으면 "끄는 중 FAB 없음 → 멈춘 뒤 FAB 있음"이 잡힌다. 가로 레인 비영향도 같은 방법(가로 좌표).
 - [실화면] 2026-11-02 실패 주입(sim-qa §2 `_dev/fault`)으로 열림 — `home-loading`(`/trips` 지연)·`home-trips-error`(`/trips` 500)·`home-lane-error`(`/places` 500, 「장소를 불러오지 못했어요 · 다시 시도」).
