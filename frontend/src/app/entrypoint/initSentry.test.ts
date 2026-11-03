@@ -1,12 +1,32 @@
+import { Platform } from 'react-native';
 import * as Sentry from '@sentry/react-native';
+
+import { sandboxEnv } from '@/test-support/envSandbox';
 
 import { initSentry } from './initSentry';
 
-jest.mock('@sentry/react-native', () => ({ init: jest.fn() }));
+// TRIP-1743 — init 만 있던 인라인 목으로는 새 호출(reactNavigationIntegration·reactNativeTracingIntegration)이 TypeError 라 공용 대역으로 바꿨다.
+jest.mock('@sentry/react-native', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/sentryReactNativeMock')
+);
 
 const original = process.env.EXPO_PUBLIC_SENTRY_DSN;
+const SAMPLE_RATE_KEY = 'EXPO_PUBLIC_SENTRY_TRACES_SAMPLE_RATE';
+
+// 샘플링 env 는 테스트마다 비우고 되돌린다(파일 최상위 — 개발자 셸에 값이 있어도 새지 않게).
+sandboxEnv([SAMPLE_RATE_KEY], { clearBefore: true });
+
+// 플랫폼은 읽는 쪽이 "호출 때" 봐야 바꿀 수 있다(모듈 로드 때 굳히면 웹 케이스가 red). jest-expo 기본은 ios(실측)라 네이티브 케이스는 그대로 두고,
+// 웹 케이스만 `asWeb()` 으로 바꾼다. 이미 바꾼 속성을 또 바꾸지 않도록 핸들은 하나만 쥔다.
+let replacedPlatform: { restore: () => void } | null = null;
+function asWeb(): void {
+  replacedPlatform = jest.replaceProperty(Platform, 'OS', 'web');
+}
 
 afterEach(() => {
+  replacedPlatform?.restore();
+  replacedPlatform = null;
   jest.clearAllMocks();
   if (original === undefined) delete process.env.EXPO_PUBLIC_SENTRY_DSN;
   else process.env.EXPO_PUBLIC_SENTRY_DSN = original;
@@ -25,16 +45,37 @@ describe('initSentry', () => {
     expect(Sentry.init).not.toHaveBeenCalled();
   });
 
-  it('DSN 이 있으면 개인정보 전송 없이 init 한다', () => {
+  // TRIP-1743 개정 — 옛 단언은 3키 정확 일치(dsn·sendDefaultPii·beforeSend)였다. 네이티브는 추적 키가 늘어난 새 집합으로 다시 정확 일치시키고,
+  // 옛 3키는 웹 케이스(아래 「웹」 describe)가 그대로 이어받는다. 완화(objectContaining)하지 않는다 — 키가 몰래 늘면 여기서 red.
+  it('DSN 이 있으면 개인정보 전송 없이 init 한다 (네이티브: 추적 키까지 정확 일치)', () => {
+    expect(Platform.OS).toBe('ios'); // 앵커 — 기본 플랫폼이 네이티브가 아니면 아래가 웹 분기를 본 것이다.
     process.env.EXPO_PUBLIC_SENTRY_DSN = 'https://key@example.invalid/1';
     initSentry();
     expect(Sentry.init).toHaveBeenCalledTimes(1);
     // 옵션 키 집합을 고정한다(TRIP-1650 5-b 보강) — 추적·리플레이 옵션이 몰래 켜지면 그 이벤트는 beforeSend 를 거치지 않아
     // URL 스크럽 밖으로 나간다. 옵션을 늘리려면 이 단언을 함께 고쳐 스크럽 범위를 다시 판단하게 한다.
-    expect(Sentry.init).toHaveBeenCalledWith({
+    const options = (Sentry.init as jest.Mock).mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
+    // toHaveBeenCalledWith 는 값이 undefined 인 여분 키를 같다고 보므로(실측) 키 목록을 따로 정확 비교한다.
+    expect(Object.keys(options).sort()).toEqual([
+      'beforeSend',
+      'beforeSendTransaction',
+      'dsn',
+      'integrations',
+      'sendDefaultPii',
+      'tracePropagationTargets',
+      'tracesSampleRate',
+    ]);
+    expect(options).toEqual({
       dsn: 'https://key@example.invalid/1',
       sendDefaultPii: false,
       beforeSend: expect.any(Function),
+      beforeSendTransaction: expect.any(Function),
+      tracesSampleRate: 0.2,
+      tracePropagationTargets: [],
+      integrations: expect.any(Array),
     });
   });
 });
@@ -403,5 +444,317 @@ describe('initSentry — beforeSend 토큰·PII 스크러빙 (TRIP-1742)', () =>
     const out = await scrub<{ request: { url: string } }>({ request: { url } });
 
     expect(out.request.url).toBe(url);
+  });
+});
+
+/**
+ * TRIP-1743 · M-2 — 성능 추적(앱 시작·화면 이동·프레임)은 네이티브에서 DSN 이 있을 때만 켜지고, 켜졌어도 네트워크 요청·헤더는 건드리지 않는다.
+ *
+ * (개념) 트랜잭션 = Sentry 가 "화면 하나 이동" 같은 한 동작의 시작~끝을 재서 보내는 묶음, 스팬 = 그 안의 단계. 오류 이벤트와 달리
+ *   `beforeSend` 를 거치지 않고 `beforeSendTransaction` 을 거친다. 통합(integration) = init 에 끼우는 SDK 부품 — 화면 이동 트랜잭션은
+ *   `reactNavigationIntegration` 을 직접 끼워야 생긴다.
+ *
+ * 무엇을 보장하나: ① DSN 이 없으면 init 도 통합 생성도 없다(null 을 돌려준다) ② 웹은 지금처럼 3키 + null ③ 네이티브는 네비게이션 통합(첫 화면 표시
+ *   시간 켬)과 XHR·fetch 를 끈 추적 통합을 만들어 init 에 싣고 네비게이션 통합을 돌려준다 ④ 샘플링 비율은 env 가 0~1 숫자일 때만 따르고 아니면 0.2.
+ * 커버하지 않는 것: 실제 트랜잭션이 나가는지·이름·프레임 값·앱 시작이 첫 화면 트랜잭션에 얹히는지(6-b 시뮬 + Sentry 조회), 부팅 비용(bench).
+ * 3동작: 준비(DSN·플랫폼·env) → 실행(initSentry) → 단언(init 옵션·통합 호출·반환값).
+ */
+describe('initSentry — 추적 (TRIP-1743)', () => {
+  const DSN = 'https://key@example.invalid/1';
+  type Options = Record<string, unknown>;
+
+  const initOptions = () =>
+    (Sentry.init as jest.Mock).mock.calls[0][0] as Options;
+
+  describe('B3 · DSN 이 없으면 아무것도 만들지 않는다', () => {
+    it.each<[string, string | undefined]>([
+      ['없음', undefined],
+      ['빈 문자열', ''],
+    ])(
+      'DSN %s → init·네비게이션 통합·추적 통합·wrap 0회, null 반환',
+      (_label, dsn) => {
+        if (dsn === undefined) delete process.env.EXPO_PUBLIC_SENTRY_DSN;
+        else process.env.EXPO_PUBLIC_SENTRY_DSN = dsn;
+
+        const result = initSentry();
+
+        expect(result).toBeNull();
+        expect(Sentry.init).not.toHaveBeenCalled();
+        // 통합 생성 자체가 부작용이라(첫 화면 표시 추적이면 네이티브 호출) DSN 없이 만들어지면 안 된다.
+        expect(Sentry.reactNavigationIntegration).not.toHaveBeenCalled();
+        expect(Sentry.reactNativeTracingIntegration).not.toHaveBeenCalled();
+        expect(Sentry.wrap).not.toHaveBeenCalled();
+      }
+    );
+  });
+
+  describe('B1w · 웹은 오류 수집만 — 옵션은 TRIP-1742 그대로', () => {
+    it('DSN 이 있어도 웹이면 3키(dsn·sendDefaultPii·beforeSend)만 싣고 추적 통합을 만들지 않으며 null 을 돌려준다', () => {
+      asWeb();
+      process.env.EXPO_PUBLIC_SENTRY_DSN = DSN;
+
+      const result = initSentry();
+
+      expect(result).toBeNull();
+      expect(Sentry.init).toHaveBeenCalledTimes(1);
+      const options = initOptions();
+      expect(Object.keys(options).sort()).toEqual([
+        'beforeSend',
+        'dsn',
+        'sendDefaultPii',
+      ]);
+      expect(options).toEqual({
+        dsn: DSN,
+        sendDefaultPii: false,
+        beforeSend: expect.any(Function),
+      });
+      expect(Sentry.reactNavigationIntegration).not.toHaveBeenCalled();
+      expect(Sentry.reactNativeTracingIntegration).not.toHaveBeenCalled();
+      expect(Sentry.wrap).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('B1 · 네이티브 통합 구성', () => {
+    it('네비게이션 통합(첫 화면 표시 시간 켬)과 XHR·fetch 를 끈 추적 통합을 한 번씩 만들어 init 에 싣고, 네비게이션 통합을 돌려준다', () => {
+      process.env.EXPO_PUBLIC_SENTRY_DSN = DSN;
+
+      const result = initSentry();
+
+      // 인자는 개인정보·헤더에 걸린 값만 고정한다(objectContaining) — 6-b 에서 시작 시각 튜닝 키(routeChangeTimeoutMs 등)가 더해질 수 있다.
+      expect(Sentry.reactNavigationIntegration).toHaveBeenCalledTimes(1);
+      expect(Sentry.reactNavigationIntegration).toHaveBeenCalledWith(
+        expect.objectContaining({ enableTimeToInitialDisplay: true })
+      );
+      // XHR·fetch 스팬을 켜면 스팬 설명에 경로 id 가 실리고 모든 요청에 추적 헤더가 붙는다(브리프 맹점 3·4).
+      expect(Sentry.reactNativeTracingIntegration).toHaveBeenCalledTimes(1);
+      expect(Sentry.reactNativeTracingIntegration).toHaveBeenCalledWith(
+        expect.objectContaining({ traceXHR: false, traceFetch: false })
+      );
+
+      const navigation = (Sentry.reactNavigationIntegration as jest.Mock).mock
+        .results[0].value;
+      const tracing = (Sentry.reactNativeTracingIntegration as jest.Mock).mock
+        .results[0].value;
+      const integrations = initOptions().integrations as unknown[];
+      // 순서·개수는 계약이 아니다 — 두 객체가 (참조 그대로) 들어 있기만 하면 된다. 6-b 의 D4 수정 루프가 앱 시작 통합(`appStartIntegration`)을
+      // 같은 배열에 더해도 이 테스트는 그대로 green 이어야 한다(키 집합 정확 일치는 위 TRIP-935 케이스가 지킨다).
+      expect(integrations).toContain(navigation);
+      expect(integrations).toContain(tracing);
+
+      expect(result).not.toBeNull();
+      expect(result?.navigation).toBe(navigation);
+      expect(Object.keys(result as object)).toEqual(['navigation']);
+    });
+
+    it('init 은 한 번만 부르고, wrap 은 부르지 않는다 (wrap 은 렌더 쪽 SentryRoot 몫)', () => {
+      process.env.EXPO_PUBLIC_SENTRY_DSN = DSN;
+
+      initSentry();
+
+      expect(Sentry.init).toHaveBeenCalledTimes(1);
+      expect(Sentry.wrap).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('B4 · 샘플링 비율 env (EXPO_PUBLIC_SENTRY_TRACES_SAMPLE_RATE)', () => {
+    // '' 와 ' ' 는 Number() 가 0 으로 읽는 함정(실측) — 0 이 아니라 기본값이어야 한다.
+    it.each<[string | undefined, number]>([
+      [undefined, 0.2],
+      ['1', 1],
+      ['0.05', 0.05],
+      ['0', 0],
+      ['0.5', 0.5],
+      ['2', 0.2],
+      ['1.5', 0.2],
+      ['-0.1', 0.2],
+      ['abc', 0.2],
+      ['', 0.2],
+      [' ', 0.2], // 5-b W1 — 공백만 있는 값도 0(추적 꺼짐)이 아니라 기본값
+      ['NaN', 0.2],
+      ['Infinity', 0.2],
+    ])('env=%j → tracesSampleRate %p', (raw, expected) => {
+      process.env.EXPO_PUBLIC_SENTRY_DSN = DSN;
+      if (raw !== undefined) process.env[SAMPLE_RATE_KEY] = raw;
+
+      initSentry();
+
+      expect(initOptions().tracesSampleRate).toBe(expected);
+    });
+  });
+});
+
+/**
+ * TRIP-1743 · B2 — 성능 이벤트(트랜잭션)도 오류와 같은 스크러버를 거친다.
+ *
+ * (개념) 트랜잭션 이벤트의 `transaction`(이름)·`spans[].description`/`data`(단계 설명·부가 값)·`contexts.trace.data` 에도 주소·이메일·좌표가
+ *   실릴 수 있다. 오류용 `beforeSend` 는 트랜잭션을 거치지 않으므로 `beforeSendTransaction` 에 같은 스크러버를 건다.
+ *
+ * 무엇을 보장하나: 위 칸들의 토큰·이메일·좌표가 `[Filtered]` 로 바뀌고, 민감하지 않은 값(라우트 이름·op·id·시각·측정값)은 그대로이며,
+ *   이벤트는 버리지 않고(null 금지 — 성능 수집이 끊기면 안 된다) 모양이 이상해도 던지지 않는다.
+ * 커버하지 않는 것: 실 SDK 가 이 칸들을 어떻게 채우는지(6-b 에서 실제로 나간 트랜잭션을 조회해 확인).
+ * 3동작: 준비(DSN·트랜잭션 픽스처) → 실행(init 옵션의 beforeSendTransaction 호출) → 단언(반환 이벤트).
+ */
+describe('initSentry — beforeSendTransaction 스크러빙 (TRIP-1743 B2)', () => {
+  // 테스트용 가짜 값 — 실제 토큰·이메일·좌표 아님.
+  const TOKEN = 'SECRET-TOKEN-7Q2X';
+  const EMAIL = 'traveler@example.com';
+  const LAT = 37.5665;
+
+  type Hook = (event: unknown, hint: unknown) => unknown;
+  type Dirty = {
+    transaction: string;
+    spans: {
+      description?: string;
+      data?: Record<string, unknown>;
+      [k: string]: unknown;
+    }[];
+    contexts: { trace: { data: Record<string, unknown>; op: string } };
+    measurements: unknown;
+  };
+
+  function hooks(): { beforeSend: Hook; beforeSendTransaction: Hook } {
+    process.env.EXPO_PUBLIC_SENTRY_DSN = 'https://key@example.invalid/1';
+    initSentry();
+    const options = (Sentry.init as jest.Mock).mock.calls[0][0] as {
+      beforeSend?: Hook;
+      beforeSendTransaction?: Hook;
+    };
+    // 앵커 — 훅이 없으면 아래 단언이 헛 통과하지 않도록 먼저 실패시킨다.
+    expect(typeof options.beforeSendTransaction).toBe('function');
+    return {
+      beforeSend: options.beforeSend!,
+      beforeSendTransaction: options.beforeSendTransaction!,
+    };
+  }
+
+  async function scrubTransaction(event: unknown): Promise<unknown> {
+    return await hooks().beforeSendTransaction(event, {});
+  }
+
+  it('T1 · 이름·스팬 설명·스팬 데이터·trace 컨텍스트의 토큰·이메일·좌표를 지우고 나머지는 남긴다', async () => {
+    const out = (await scrubTransaction({
+      type: 'transaction',
+      transaction: `/share/${EMAIL}?access_token=${TOKEN}`,
+      spans: [
+        {
+          op: 'http.client',
+          span_id: 'a1',
+          start_timestamp: 1,
+          timestamp: 2,
+          description: `GET https://api.example/places?lat=${LAT}&lng=127.0&access_token=${TOKEN}&limit=20`,
+          data: {
+            'http.query': `?code=${TOKEN}&limit=20`,
+            url: `https://api.example/cb#access_token=${TOKEN}`,
+            email: EMAIL,
+            lat: LAT,
+            'route.name': 'places/[placeId]',
+          },
+        },
+        { op: 'ui.load', description: 'app start', data: { 'frames.slow': 3 } },
+      ],
+      contexts: {
+        trace: {
+          op: 'navigation',
+          data: { email: EMAIL, lat: LAT, 'route.name': 'x' },
+        },
+      },
+      measurements: { frames_slow: { value: 3, unit: 'none' } },
+    })) as Dirty | null;
+
+    expect(out).not.toBeNull();
+    const event = out as Dirty;
+    const text = JSON.stringify(event);
+    expect(text).not.toContain(TOKEN);
+    expect(text).not.toContain(EMAIL);
+    expect(text).not.toContain(String(LAT));
+
+    expect(event.transaction).toBe('/share/[Filtered]?access_token=[Filtered]');
+    const [http, load] = event.spans;
+    expect(http.description).toBe(
+      'GET https://api.example/places?lat=[Filtered]&lng=[Filtered]&access_token=[Filtered]&limit=20'
+    );
+    expect(http.data).toMatchObject({
+      'http.query': '?code=[Filtered]&limit=20',
+      email: '[Filtered]',
+      lat: '[Filtered]',
+      'route.name': 'places/[placeId]',
+    });
+    // 주소 fragment 는 통째로 떼든 값만 지우든 구현 몫 — 토큰이 없고 앞 경로가 남았는지만 본다.
+    expect(String(http.data?.url)).toMatch(/^https:\/\/api\.example\/cb/);
+    // 안 민감한 필드·다른 스팬은 그대로.
+    expect(http).toMatchObject({
+      op: 'http.client',
+      span_id: 'a1',
+      start_timestamp: 1,
+      timestamp: 2,
+    });
+    expect(load).toEqual({
+      op: 'ui.load',
+      description: 'app start',
+      data: { 'frames.slow': 3 },
+    });
+    expect(event.contexts.trace).toEqual({
+      op: 'navigation',
+      data: { email: '[Filtered]', lat: '[Filtered]', 'route.name': 'x' },
+    });
+    expect(event.measurements).toEqual({
+      frames_slow: { value: 3, unit: 'none' },
+    });
+  });
+
+  it('T2 · 지울 게 없는 트랜잭션은 같은 내용 그대로 돌려준다 (null 로 버리지 않는다)', async () => {
+    const event = {
+      type: 'transaction',
+      transaction: '(tabs)/trips/[tripId]/itinerary',
+      spans: [
+        {
+          op: 'ui.load',
+          description: 'Cold App Start',
+          span_id: 'b1',
+          data: { 'frames.slow': 0 },
+        },
+      ],
+      contexts: { trace: { op: 'navigation', data: { 'route.name': 'x' } } },
+      measurements: { frames_total: { value: 120, unit: 'none' } },
+    };
+
+    const out = await scrubTransaction(JSON.parse(JSON.stringify(event)));
+
+    expect(out).toEqual(event);
+  });
+
+  it('T3 · spans 모양이 이상해도 던지지 않고, 뒤 칸(contexts)의 토큰은 지운다', async () => {
+    const out = (await scrubTransaction({
+      type: 'transaction',
+      transaction: 'x',
+      spans: 'oops',
+      contexts: { trace: { data: { access_token: TOKEN } } },
+    })) as { contexts: { trace: { data: { access_token: string } } } } | null;
+
+    expect(out).not.toBeNull();
+    expect(out?.contexts.trace.data.access_token).toBe('[Filtered]');
+    // spans 가 아예 없거나 비어 있어도 던지지 않는다.
+    await expect(
+      scrubTransaction({ type: 'transaction', transaction: 'y' })
+    ).resolves.toEqual({ type: 'transaction', transaction: 'y' });
+    await expect(
+      scrubTransaction({ type: 'transaction', transaction: 'z', spans: [] })
+    ).resolves.toEqual({ type: 'transaction', transaction: 'z', spans: [] });
+  });
+
+  it('T4 · 오류용 beforeSend 와 같은 스크러버다 — 같은 입력이 두 길에서 같게 지워진다', async () => {
+    const make = () => ({
+      extra: { token: TOKEN, note: `mail ${EMAIL} Bearer abc.def` },
+      contexts: { app: { email: EMAIL, status: 500 } },
+    });
+    const { beforeSend, beforeSendTransaction } = hooks();
+
+    const asError = await beforeSend(make(), {});
+    const asTransaction = await beforeSendTransaction(make(), {});
+
+    expect(asTransaction).toEqual(asError);
+    // 앵커 — 둘 다 아무것도 안 지운 채 같아지는 헛 통과 차단.
+    expect(JSON.stringify(asTransaction)).not.toContain(TOKEN);
+    expect(JSON.stringify(asTransaction)).not.toContain(EMAIL);
   });
 });

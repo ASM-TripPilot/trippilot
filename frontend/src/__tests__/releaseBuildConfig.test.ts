@@ -316,6 +316,19 @@ describe('TRIP-1370 Sentry 운영 켬', () => {
     );
     expect(init).toContain('process.env.EXPO_PUBLIC_SENTRY_DSN');
   });
+
+  // TRIP-1743 B6 — 성능 추적 샘플링 비율 키. 같은 이유로 키 이름만 박아 둔다. 읽는 쪽은 `process.env.EXPO_PUBLIC_…` 점 표기 그대로여야 한다 —
+  // Expo 가 번들 시점에 인라인하는 것은 이 정적 모양뿐이라 `process.env[KEY]` 로 바꾸면 빌드에서 조용히 항상 기본값 0.2 가 된다(tsc·jest 둘 다 못 본다).
+  it('샘플링 키 이름이 .env.example 에 값 없이 있고, initSentry 가 같은 이름을 점 표기로 읽는다', () => {
+    const example = fs.readFileSync(path.join(ROOT, '.env.example'), 'utf8');
+    expect(example).toMatch(/^EXPO_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=$/m);
+
+    const init = fs.readFileSync(
+      path.join(ROOT, 'src/app/entrypoint/initSentry.ts'),
+      'utf8'
+    );
+    expect(init).toContain('process.env.EXPO_PUBLIC_SENTRY_TRACES_SAMPLE_RATE');
+  });
 });
 
 describe('TRIP-935 AC-2 · expo-router 사이트맵 끔', () => {

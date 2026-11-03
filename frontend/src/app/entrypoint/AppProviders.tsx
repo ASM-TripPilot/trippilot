@@ -19,6 +19,7 @@ import { ToastHost } from '@/shared/ui/Toast';
 
 import { initSentry } from './initSentry';
 import { createAppQueryClient } from './queryClient';
+import { SentryRoot } from './SentryRoot';
 
 // 서버 상태(TanStack Query)의 앱 전역 캐시 저장소 — 모듈 스코프에서 한 번만 만들어 리렌더마다 다시 만들지 않는다.
 // 기본 옵션(retry·staleTime·복귀 재조회 정책)의 근거는 `./queryClient`.
@@ -56,15 +57,15 @@ onlineManager.setEventListener((setOnline) =>
 // 네이티브 스플래시가 먼저 내려가지 않는다. 컴포넌트·지연 import 로 옮기면 jest 는 못 잡는다(TRIP-1161).
 SplashScreen.preventAutoHideAsync();
 
-// 크래시 수집은 번들 로드 시점에 한 번 켠다(DSN 없으면 no-op — initSentry 참고).
-initSentry();
+// 크래시 수집은 번들 로드 시점에 한 번 켠다(DSN 없으면 no-op — initSentry 참고). 돌려준 값(추적 통합, 꺼졌으면 null)은 SentryRoot 가 쓴다.
+const sentryTracing = initSentry();
 
 // 앱이 켜져 있어도 푸시를 배너·알림 목록에 보인다(상황 감지 FE-A) — 설치 전에 온 푸시는 안 보이므로 번들 로드 시점에 한 번.
 installForegroundPresentation();
 
 /**
  * 앱 전역 프로바이더(FSD app 층). 라우트 루트 레이아웃(`app/_layout.tsx`)이 `SplashGate` 를 감싸 조립한다.
- * 배치 계약: 제스처 루트 > SafeArea > (QueryClient > children) + ToastHost — QueryClient 는 SplashGate 바깥,
+ * 배치 계약: SentryRoot(가장 바깥) > 제스처 루트 > SafeArea > (QueryClient > children) + ToastHost — QueryClient 는 SplashGate 바깥,
  * ToastHost 는 Stack(SplashGate) 바깥. 폰트는 `app.config.ts` 의 expo-font 플러그인이 네이티브 번들에 넣으므로
  * JS 가 로드를 기다리지 않는다 — 첫 렌더에 곧바로 그린다(TRIP-1361, 폰트명 계약은 `assets/fonts/README.md`).
  */
@@ -75,27 +76,29 @@ export function AppProviders({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      {/* D4 — SafeAreaProvider 를 제스처 루트 안쪽에 둔다. initialMetrics 에 null 대비 기본값을
+    <SentryRoot tracing={sentryTracing}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        {/* D4 — SafeAreaProvider 를 제스처 루트 안쪽에 둔다. initialMetrics 에 null 대비 기본값을
           함께 주지 않으면 jest(레이아웃 패스 없음)·initialWindowMetrics=null 환경에서 자식이
           렌더되지 않아 부팅 골격 테스트가 깨진다(AC E3 실측). */}
-      <SafeAreaProvider
-        initialMetrics={
-          initialWindowMetrics ?? {
-            frame: { x: 0, y: 0, width: 0, height: 0 },
-            insets: { top: 0, left: 0, right: 0, bottom: 0 },
+        <SafeAreaProvider
+          initialMetrics={
+            initialWindowMetrics ?? {
+              frame: { x: 0, y: 0, width: 0, height: 0 },
+              insets: { top: 0, left: 0, right: 0, bottom: 0 },
+            }
           }
-        }
-      >
-        {/* D4 — SplashGate 바깥. SplashGate 안에 두면 그 훅이 나중에 useQuery로 바뀔 때
+        >
+          {/* D4 — SplashGate 바깥. SplashGate 안에 두면 그 훅이 나중에 useQuery로 바뀔 때
             Provider가 자기보다 아래에 있게 되어 깨진다(AppProviders.test.tsx가
             SplashGate를 목으로 갈아끼운 상태에서 이 배치를 간접적으로 강제한다). */}
-        <QueryClientProvider client={queryClient}>
-          <ThemeProvider value={APP_THEME}>{children}</ThemeProvider>
-        </QueryClientProvider>
-        {/* TRIP-990 — 토스트 호스트는 Stack(SplashGate) 바깥에 한 번. 화면이 back 으로 떠나도 남는다. */}
-        <ToastHost />
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+          <QueryClientProvider client={queryClient}>
+            <ThemeProvider value={APP_THEME}>{children}</ThemeProvider>
+          </QueryClientProvider>
+          {/* TRIP-990 — 토스트 호스트는 Stack(SplashGate) 바깥에 한 번. 화면이 back 으로 떠나도 남는다. */}
+          <ToastHost />
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </SentryRoot>
   );
 }

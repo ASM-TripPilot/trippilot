@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import * as Sentry from '@sentry/react-native';
 
 const FILTERED = '[Filtered]';
@@ -218,6 +219,19 @@ function scrubEvent<T extends Sentry.Event>(event: T): T {
       if (breadcrumb.data) scrubBreadcrumbData(breadcrumb.data);
     }
   });
+  // 성능 이벤트(M-2) 칸 — 오류 이벤트에는 없어 그때는 그냥 지나간다. `contexts.trace.data` 는 아래 contexts 칸이 이미 훑는다.
+  safely(() => {
+    if (typeof event.transaction === 'string')
+      event.transaction = scrubText(event.transaction);
+  });
+  safely(() => {
+    for (const span of event.spans ?? []) {
+      if (typeof span.description === 'string') {
+        span.description = scrubText(span.description);
+      }
+      scrubValue(span.data);
+    }
+  });
   safely(() => {
     scrubValue(event.extra);
   });
@@ -227,13 +241,52 @@ function scrubEvent<T extends Sentry.Event>(event: T): T {
   return event;
 }
 
+const DEFAULT_TRACES_SAMPLE_RATE = 0.2;
+
+/** 성능 추적 샘플링 비율 — env 가 0~1 숫자일 때만 따른다. `Number('')` 은 0 이라 빈 값을 따로 거른다. 점 표기여야 Expo 가 번들에 값을 인라인한다. */
+function readTracesSampleRate(): number {
+  const raw = process.env.EXPO_PUBLIC_SENTRY_TRACES_SAMPLE_RATE;
+  if (!raw?.trim()) return DEFAULT_TRACES_SAMPLE_RATE;
+  const rate = Number(raw);
+  return rate >= 0 && rate <= 1 ? rate : DEFAULT_TRACES_SAMPLE_RATE;
+}
+
+/** 추적이 켜졌을 때 `SentryRoot` 가 받는 값 — 화면 이동 추적에 expo-router 컨테이너를 연결할 때 쓰는 통합. */
+export type SentryTracing = {
+  navigation: ReturnType<typeof Sentry.reactNavigationIntegration>;
+};
+
 /**
- * 크래시 수집 초기화(TRIP-935). DSN(`EXPO_PUBLIC_SENTRY_DSN`)이 있을 때만 init 한다.
+ * 크래시 수집 초기화(TRIP-935) + 성능 추적(TRIP-1743 M-2). DSN(`EXPO_PUBLIC_SENTRY_DSN`)이 있을 때만 init 한다.
  * DSN 이 없으면 init 하지 않는다 — 개발/CI 에서 조용히 비활성되는 것은 의도다(EAS env 에 등록한 빌드만 수집).
  * `sendDefaultPii` 는 켜지 않는다 — 위치·토큰 같은 개인정보를 이벤트에 싣지 않는다. 나가기 직전 `beforeSend` 로 한 번 더 지운다.
+ * 성능 추적은 네이티브에서만 켠다(웹은 오류 수집만, null 반환). XHR/fetch 스팬은 끄고 `tracePropagationTargets: []` 로 추적 헤더를 어디에도 붙이지 않는다 —
+ * 스팬 설명에 경로 id 가 실리고 모든 요청 헤더가 바뀌는 것을 막는다. 돌려준 값을 `SentryRoot` 에 넘겨야 화면 이동이 추적된다.
  */
-export function initSentry(): void {
+export function initSentry(): SentryTracing | null {
   const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
-  if (!dsn) return;
-  Sentry.init({ dsn, sendDefaultPii: false, beforeSend: scrubEvent });
+  if (!dsn) return null;
+  if (Platform.OS === 'web') {
+    Sentry.init({ dsn, sendDefaultPii: false, beforeSend: scrubEvent });
+    return null;
+  }
+  const navigation = Sentry.reactNavigationIntegration({
+    enableTimeToInitialDisplay: true,
+  });
+  Sentry.init({
+    dsn,
+    sendDefaultPii: false,
+    beforeSend: scrubEvent,
+    beforeSendTransaction: scrubEvent,
+    tracesSampleRate: readTracesSampleRate(),
+    tracePropagationTargets: [],
+    integrations: [
+      navigation,
+      Sentry.reactNativeTracingIntegration({
+        traceXHR: false,
+        traceFetch: false,
+      }),
+    ],
+  });
+  return { navigation };
 }
