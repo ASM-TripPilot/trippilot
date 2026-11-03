@@ -97,7 +97,13 @@ class QueryCards(
             else -> filled
         }
         return AssistantTemplates.review(
-            text = if (partial) "일부 정보를 확인할 수 없어 확인된 범위만 정리했어요." else "지금까지 진행 상태를 정리했어요.",
+            text = when {
+                partial -> "일부 정보를 확인할 수 없어 확인된 범위만 정리했어요."
+                // "무리한 곳 있어?"에 요약만 내면 답하지 않은 것이다(TRIP-1705). '확인된' — 문제는 솔버가 표기한 위반·구조적 사실뿐이라(BR-U8-14)
+                // 표기 전인 슬롯까지 문제없다고 단정하지 않는다. 만드는 중이면 뒤 일자를 아직 못 봤다
+                problems.isEmpty() && !generating -> "지금 일정에서 확인된 문제는 없어요."
+                else -> "지금까지 진행 상태를 정리했어요."
+            },
             summary = listOf("여행" to trip.span(), "숙소" to (trip.baseStayName?.let { "$it (등록됨)" } ?: "미등록"), "일정" to schedule),
             problems = problems,
             next = if (current != null && itinerary == null) makeItinerary else viewItinerary,

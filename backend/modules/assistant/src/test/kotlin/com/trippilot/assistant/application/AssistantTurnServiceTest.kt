@@ -149,9 +149,10 @@ class AssistantTurnServiceTest : StringSpec({
         moderation: TextModerationFacade = clean,
         properties: AssistantProperties = AssistantProperties(),
         store: AssistantMessageRepository = messages,
+        baseStays: TripBaseStayFacade = stays,
     ) = AssistantTurnService(
         sessions, store, usage, AccountTurnLock { }, moderation, provider(interpreter), dispatcher(data, editing, properties),
-        TripContextReader(trips, stays), ContextSnapshotBuilder(TripContextReader(trips, stays), data, data, properties), data, data, memory, properties, json, clock, NOOP_TX,
+        TripContextReader(trips, baseStays), ContextSnapshotBuilder(TripContextReader(trips, baseStays), data, data, properties), data, data, memory, properties, json, clock, NOOP_TX,
     ).also { it.pause = { ms -> clock.now = clock.now.plusMillis(ms); onPause() } } // 기다림은 시계를 민다
 
     fun World.session(withTrip: Boolean = true): AssistantSession =
@@ -704,6 +705,25 @@ class AssistantTurnServiceTest : StringSpec({
         w.row(6).saved.intent shouldBe "GET_NEXT_SLOT"
         w.interpreter.requests shouldBe emptyList()
         w.usage.llm[acc to today] shouldBe null
+    }
+
+    /** TRIP-1705 · DEC-U8-14 — 말로 한 검토 질문은 상대가 FRAME(SHOW_SCHEDULE, LLM_DIRECT)으로 넘기고, 버튼 검토와 같은 진행 검토 카드가 답한다. */
+    "말로 한 일정 검토 질문은 진행 검토 카드로 답한다 — 확인된 문제가 없으면 없다고 말한다" {
+        val w = world(interpreter = Interpreter { r ->
+            Interpretation(InterpretOutcome.FRAME, listOf(IntentFrame(Intent.SHOW_SCHEDULE, emptyMap(), "LLM_DIRECT")), null, r.dialogueContext, 1)
+        })
+        w.data.slots = listOf(plannedSlot(today, 0, "18:00", "카페 모카"), plannedSlot(today.plusDays(1), 0, "10:00", "해변"))
+        val registered = object : TripBaseStayFacade {
+            override fun findBaseStays(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = listOf(DayBaseStayView(startDate, UUID.randomUUID(), "서면 호텔"))
+        }
+        val s = w.session()
+
+        val card = w.say(s, "내일 일정에서 무리한 부분 있어?", service = w.service(baseStays = registered)).messages[1]
+
+        card.kind shouldBe MessageKind.REVIEW
+        card.text shouldBe "지금 일정에서 확인된 문제는 없어요."
+        w.row(2).saved.intent shouldBe "SHOW_SCHEDULE"
+        w.row(2).saved.matchRoute shouldBe "LLM_DIRECT"
     }
 
     "[다시 시도]는 직전에 못 알아들은 그 말을 다시 태운다 — 연달아 눌러도 '다시 시도'를 해석하지 않는다" {

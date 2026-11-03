@@ -159,6 +159,7 @@ BE AssistantTurnService ──POST /ai/v1/dialogue/interpret──▶ api/dialog
       │   └ 2″ null·범위 밖 라벨 ∧ 발화가 맞장구·인사 낱말뿐(BR-AO-26, 2026-10-19) ─▶ 받아 주는 한마디 ANSWER(TEXT, 프레임 없음)  → 6
       │   └ 2‴ 판단해서 닫은 말(null·범위 밖·목록 밖 라벨) ∧ 계획 워커 ∧ 잔여 ≥4.6s ─▶ DIALOGUE_PLAN(LLM 1) → 도구 ≤2 → 팬아웃 1회 → merge_facts → 5(closed) → 프레임 없는 ANSWER · 도구 없음·거절·실패 → OUT_OF_SCOPE  → 6
       └ IntentMatch(LLM_DIRECT) ─▶ ShadowIntentProbe.submit(utterance, trace_id, now, service=match, ms, llm_calls, turn_index)  ※ 기다리지 않는다
+ 2⁗′ [2026-11-03 · BR-AO-35] 여행 있음 ∧ 일정 검토 말(`asks_review`, LLM 0) ∧ (판단해서 닫음(2‴ 입구) ∨ SHOW_SCHEDULE) ─▶ FRAME(SHOW_SCHEDULE) — 2″·2‴ 보다 먼저, BE 진행 검토 카드  → 6
  3  from_match(기존) — 필수 인자 비면 ARGUMENT_CLARIFY(CLARIFY_QUESTIONS 고정 문안, clarify_count ≤1)                           → 6
       └ EDIT_SCHEDULE 이면 FRAME(executable) — 1단계                                                                           → 6
  4  HANDLERS[intent].plan(ctx) → 파 ≤2 → 공유 풀 팬아웃(§6: submit 전 마감 → wait → cancel → TaskResult) → assemble(ctx, results) -> Facts
@@ -172,7 +173,7 @@ BE AssistantTurnService ──POST /ai/v1/dialogue/interpret──▶ api/dialog
  7  TurnOutcome(outcome, frames ≤1, clarify, answer, context, llm_calls=서비스 호출 수, reason) → 사영 → 응답
                                                                 ▼
 BE answer(): ANSWER → 검증(text ≤2000 · TYPES · kind · quick reply 서버 id qr-ai-{8자}-{i} 발급 · CANDIDATES poiId 정본 대조) → NewMessage 저장
-             FRAME → 기존 IntentDispatcher(EDIT 1단계) · ARGUMENT_CLARIFY → CLARIFY 카드 · OUT_OF_SCOPE → SCOPE 카드 + 거절 스트릭
+             FRAME → 기존 IntentDispatcher(EDIT 1단계 · 일정 검토 SHOW_SCHEDULE → 진행 검토 카드, BR-AO-35) · ARGUMENT_CLARIFY → CLARIFY 카드 · OUT_OF_SCOPE → SCOPE 카드 + 거절 스트릭
 ```
 
 | 단계 | 하는 일 | LLM | 실패·시한 시 | DE |
@@ -183,6 +184,7 @@ BE answer(): ANSWER → 검증(text ≤2000 · TYPES · kind · quick reply 서�
 | 2 | `$utterance`·`$intents`(=`tool_specs_json()`)·`$history`·`$memory`·`$trip` 로 분류 1회. 산출을 `IntentMatch(match_route=LLM_DIRECT, confidence=draft.confidence or 0.5)` 로 조립 | 1 | 게이트가 산출을 받아들이지 못한 전부(`{"intent": null}` — 불확실·주입·역할변경·유해 —, closed-set 밖 라벨, 깨진 JSON, 슬롯 모양, 절단) → **OUT_OF_SCOPE + `not_classifiable` 표지**(intent_eval 이 거절로 센다); 시한·벤더 예외·비지원은 인프라 실패라 **표지 없이** OUT_OF_SCOPE(장애를 거절로 세면 정확도가 부풀려진다 — `_refusal_reason`). **[개정 · 2026-10-19]** 분류가 null·범위 밖 라벨로 닫았고(깨진 출력·절단은 아니다) 발화가 맞장구·인사 낱말뿐이면 범위 밖 카드 대신 결정론 ANSWER(BR-AO-26) | §2.2 |
 | 2′ | 분류 결과를 알게 된 직후 `ShadowIntentProbe.submit` — 샘플링(rng) 통과 ∧ in-flight <4 일 때만 스레드에 넘기고 **응답 경로는 계속 간다** | 0(서비스) | 포화·샘플 밖은 `intent_shadow_skipped` 1줄. 섀도 실패는 응답에 영향 0 | §2.7 |
 | 2‴ | **[개정 · 2026-10-19 · 도구 계획(DIALOGUE_PLAN)]** 분류가 판단해서 닫은 말(BR-AO-28 진입 조건)에 `$tools`(노출 도구 — 배포마다 고정)·`$history`(최근 4건)·`$trip`·`$utterance` 로 계획 1회 → `DialoguePlanGate` → `HANDLERS[도구].plan` 을 팬아웃 1회(호출 2건이면 작업 이름 `{i}.` 접두) → 핸들러별 `assemble` → `merge_facts` → 5단계(목록 밖 장소 검사 강제·병합 답은 시각을 문장마다 그 문장의 이름에 귀속). `$memory` 는 싣지 않는다 | 1 | 잔여 <4.6s·워커 예외 → OUT_OF_SCOPE + 오케스트레이터 이벤트 · 시한·벤더·깨진 출력·전량 드롭 → OUT_OF_SCOPE + 게이트웨이 이벤트 · 도구 없음·거절 → OUT_OF_SCOPE(이벤트 없음) | §2.11 |
+| 2⁗′ | **[신설 · 2026-11-03 · 일정 검토 말 · BR-AO-35]** 분류 직후(2⁗ 날마다 동네 다음, 2″·2‴ 보다 먼저) 여행이 있는 턴의 일정 검토 말(`asks_review` — 검토 표지 ∧ 일정 표지 ∧ 바꿔 달라는 말 없음)을 분류가 SHOW_SCHEDULE 로 골랐거나 판단해서 닫았으면(`_plannable` — 2‴ 와 같은 입구) `FRAME(SHOW_SCHEDULE)`(분류 인자 또는 `{}`, LLM_DIRECT). BE 진행 검토 카드(`QueryCards.review`)가 솔버 표기·구조적 사실로 답한다(DEC-U8-14 · BR-U8-14) — 스냅샷에 위반 표기가 없어 AI 가 답하면 판정을 지어낸다 | 0 | 시한·벤더 실패 → 종전 다시 시도 · 깨진 출력 → 종전 범위 밖 · 여행 없음·다른 의도(REPLAN·EDIT 포함) → 종전 길 | §2.2 |
 | 3 | 기존 `from_match` — `missing` 계산, 비면 `ArgumentClarify`(고정 문안). EDIT_SCHEDULE 은 인자 해소(day/target)만 하고 `FRAME` | 0 | `clarify_count ≥1` 이면 되묻지 않고 결정론 폴백(BR-DLG-33) | §2.2 |
 | 4 | `plan` → 팬아웃 → `assemble`. 여행이 없는데 여행이 필요한 의도면 플랜 없이 `needTrip` Facts | 0 | Provider/PlanB 실패·TIMEOUT 은 `TaskResult.status` 로 들어오고 `assemble` 이 `notes`·`FactStatus.PARTIAL` 로 적는다 — 있는 것만 조립 | §2.4·§2.5 |
 | 5 | `$facts`(JSON inline)·`$style` 로 문장 1회 → 게이트(≤400자·줄 ≤6·`_TIME_EXPR`·연락처) | ≤1 | 실패·잔여 <1.5s → `Facts.template_text`(BE 템플릿 이식). **kind·payload·next_actions·quick_replies 는 LLM 결과와 무관하게 Facts 값** | §2.3·§2.5 |
@@ -246,7 +248,7 @@ BE 쪽: `interpret-stage-max-ms` 5000→9000 · 해석 read timeout = interpret 
 
 | 의도 | plan — 1파 ∥ → 2파 | kind · payload | next_action | quick reply | 결정론 템플릿(폴백) | 비고 |
 |---|---|---|---|---|---|---|
-| SHOW_SCHEDULE | COMPUTE 스냅샷(scope: 오늘 남은/전체/N일차 — `scope` 인자·DATE·ORDINAL) | TEXT | OPEN_ITINERARY | () | OK: 결정론 요약 `"{날짜 라벨} {N}곳, … 일정이 있어요."`(`dialogue_handlers._assemble_show_schedule` 조립 — 길이 게이트를 넘으면 "일정은 일정 화면에서 확인할 수 있어요."★) / EMPTY "아직 일정에 장소가 없어요." | 문장이 길어지는 자리 — ≤400자·줄 ≤6 게이트에 가장 자주 걸린다 |
+| SHOW_SCHEDULE | COMPUTE 스냅샷(scope: 오늘 남은/전체/N일차 — `scope` 인자·DATE·ORDINAL) | TEXT | OPEN_ITINERARY | () | OK: 결정론 요약 `"{날짜 라벨} {N}곳, … 일정이 있어요."`(`dialogue_handlers._assemble_show_schedule` 조립 — 길이 게이트를 넘으면 "일정은 일정 화면에서 확인할 수 있어요."★) / EMPTY "아직 일정에 장소가 없어요." | 문장이 길어지는 자리 — ≤400자·줄 ≤6 게이트에 가장 자주 걸린다 **[개정 · 2026-11-03 · BR-AO-35]** 일정 검토 말("내일 일정에서 무리한 부분 있어?"·"둘째 날 동선 빠듯하지 않아?"·"일정 검토해줘" — `asks_review`)은 이 행으로 답하지 않고 `FRAME(SHOW_SCHEDULE)` 으로 BE 진행 검토 카드에 넘긴다(§3 2⁗′) — 이 핸들러의 재료(스냅샷)엔 위반 표기가 없어 '무리'를 판정할 수 없다(BR-U8-14). "일정 보여줘"는 종전 그대로 |
 | GET_NEXT_SLOT | COMPUTE 스냅샷(now 이후 첫 슬롯) | INFO NEXT_SLOT rows[날짜·계획 시각] | OPEN_LIVE(IN_TRIP) / OPEN_ITINERARY | "다른 곳 추천"(SEND_TEXT, params intent=SUGGEST_ALTERNATIVE·slotKey) | OK "다음 장소예요." / EMPTY "남은 일정이 없어요." | 계획 시각은 스냅샷 `start_at` 그대로(INV-2). **params.intent 가 있는 quick reply 는 BE 가 해석 없이 `dispatched` 로 처리**(BE ACTION 규칙) → BE `ProposalCards.alternatives` 경로 — 미결 #6 |
 | GET_WEATHER | 1파 POI_INFO(대상 슬롯 또는 당일 첫 슬롯 poi) → 2파 WEATHER(anchor=좌표, days=[date]) | INFO WEATHER rows[하늘(SKY·PTY) → 기온(TMN/TMX) → 오늘 최대 강수확률 — 상세는 `DailyWeatherDetailPort` 선택 능력, 없으면 강수확률 한 줄(2026-10-22)] — BE 카드의 "특보" 행은 없다: AI `WeatherProvider` 패킷에 특보 칸이 없고 `triggers` 는 강수 임계를 넘긴 **날짜** 목록이라 특보가 아니다(2026-10-18 리뷰) | OPEN_ITINERARY | () | OK "오늘 예보예요." / EMPTY "지금 날씨를 확인할 수 없어요." | WEATHER_UNKNOWN·좌표 없음 → 템플릿. 일정이 없으면 좌표를 얻을 길이 없다 → 템플릿 + OPEN_ITINERARY_METHOD |
 | GET_DISTANCE | 1파 POI_INFO(dest=`resolve_slot`, origin=직전 슬롯) → 2파 TRANSIT(purpose INFO_DISPLAY, mode 인자 또는 PUBLIC) | INFO DISTANCE rows[직전 구간] | OPEN_ITINERARY | () | OK "일정에 적힌 거리예요." / EMPTY "구간 거리는 일정에서 확인할 수 있어요." | **거리만**(`to_public_dict` — INV-3). 해소 실패·TRANSIT UNAVAILABLE → 템플릿 **[개정 · 2026-10-19 · E2E]** 경로 API 가 빠져 Provider 가 하버사인×우회계수(`confidence` LOW)를 내면 거리 뒤에 "(추정)"을 붙이고 메모("직선 거리로 어림한 값")를 싣는다 — 경로 거리처럼 보이면 "약 3.1km"(실제 5.8km)가 됐다 |
