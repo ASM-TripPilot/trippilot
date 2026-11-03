@@ -73,7 +73,9 @@ class QueryCardsTest : StringSpec({
     /** BR-U8-14 — 위반 표기가 없으면 문제도 없다. 도우미가 "빠듯해 보여요"를 스스로 말하지 않는다. */
     "진행 검토 — 위반 표기가 없으면 문제 행이 없다. 사유 없는 위반은 사유를 짓지 않는다" {
         val full = listOf(plannedSlot(d1, 0, "10:00", "해변"), plannedSlot(d2, 0, "10:00", "미술관"), plannedSlot(d3, 0, "10:00", "카페"))
-        problems(cards(FakeTripData(acc, slots = full)).review(ctx()).payload) shouldBe emptyList()
+        val clean = cards(FakeTripData(acc, slots = full)).review(ctx())
+        problems(clean.payload) shouldBe emptyList()
+        clean.text shouldBe "지금 일정에서 확인된 문제는 없어요." // "무리한 곳 있어?"의 답 — 요약만으로 끝내지 않는다(TRIP-1705)
 
         val unexplained = full.take(2) + plannedSlot(d3, 0, "10:00", null, hasViolation = true)
         problems(cards(FakeTripData(acc, slots = unexplained)).review(ctx()).payload).single()["reason"] shouldBe
@@ -118,6 +120,7 @@ class QueryCardsTest : StringSpec({
         val card = cards(data).review(ctx())
 
         problems(card.payload) shouldBe emptyList()
+        card.text shouldBe "지금까지 진행 상태를 정리했어요." // 뒤 일자를 아직 못 봤다 — 문제없다고 하지 않는다
         rows(card.payload, "summary").last() shouldBe ("일정" to "만드는 중 (3일 중 1일 채움)")
         // 다음 장소도 같다 — 첫 날이 지났다고 "남은 일정이 없다"고 하지 않는다
         cards(data).nextSlot(ctx()).text shouldBe "일정을 만드는 중이에요."

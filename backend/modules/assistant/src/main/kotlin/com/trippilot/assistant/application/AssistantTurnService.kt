@@ -367,6 +367,16 @@ class AssistantTurnService(
             return Reply(AssistantTemplates.buttonMode(hasTrip), streak = Streak.KEEP)
         }
 
+        // "다른 데는?" — 바로 앞 카드가 한 곳을 더한 제안이면 그 카드를 낳은 말을 앞서 보인 곳을 빼고 다시 편집에 태운다. 해석은 부르지 않는다:
+        // 분류는 이 말을 장소 찾기·대체 후보로도 읽고, 앞서 보인 곳은 우리 기록에만 있다. 편집 한 번은 센다(COST-U8-02)
+        reask(session, turn.user.seq, utterance)?.let { again ->
+            val reply = dispatched(
+                Intent.EDIT_SCHEDULE, REASK_ROUTE, session, surface, startedAt, mapOf(ProposalCards.ARG_DAY to again.date.toString()), again.utterance,
+                again.excluded,
+            )
+            return reply.copy(llm = (reply.message.llmCalls ?: 0) >= 1)
+        }
+
         // 컨텍스트를 먼저 읽는다 — 그 시간도 턴 예산에서 나가고, 여기서 실패한 것은 상대가 아니라 우리 원천이다.
         val snapshot = runCatching { snapshots.build(session.accountId, session.tripId, surface, today(startedAt)) }.getOrElse { e ->
             log.warn("도우미 컨텍스트를 읽지 못했습니다 — 폴백으로 답합니다. sessionId={} type={}", session.sessionId, e.javaClass.simpleName)
@@ -528,6 +538,44 @@ class AssistantTurnService(
         return "$answer $original".takeIf { it.length <= MAX_UTTERANCE_LENGTH } ?: answer
     }
 
+    /** "다른 데는?"로 다시 태울 것 — 그 카드를 낳은 말, 그 날, 사슬의 카드가 앞서 보인 곳 전부. */
+    private data class Reask(val utterance: String, val date: LocalDate, val excluded: Set<UUID>)
+
+    /**
+     * "다른 데는?" 다시 묻기(ai spec 003 FR-015) — **맨 말**([REASK])이고 바로 앞 도우미 말이 한 곳을 더한 제안 카드([ProposalCards.addedPlace])일 때만.
+     * 그 카드를 낳은 말을 우리 대화 기록에서 **읽기만** 해 다시 태운다 — 되묻기의 답([clarifiedUtterance])과 같은 태도다(상대에 원문을 두지 않는다).
+     * 거듭 물으면 [카드 ← 다른 데는?] 사슬을 거슬러 올라가 사슬의 카드가 보인 곳을 **전부** 뺀다 — 상대 순위는 결정론이라 마지막 것만 빼면 그 전
+     * 것이 되돌아온다. 날은 지난 카드의 날이다(그 말을 처음 옮긴 날).
+     *
+     * 넘겨짚지 않는다(INV-4) — 사슬이 [REASK_PAGE] 를 넘거나, 원 요청이 버튼·가려진 입력이거나 되묻기의 답이면(붙인 말을 모른다) null 이고
+     * 종전처럼 해석으로 간다. 카드 상태는 보지 않는다 — [닫기]한 카드 뒤에도 묻는 뜻은 같고, [적용]하면 적용 기록이 카드 뒤에 붙어 여기 오지 않는다.
+     */
+    private fun reask(session: AssistantSession, beforeSeq: Long, utterance: String): Reask? {
+        if (session.tripId == null || !REASK.matches(utterance.trim())) return null
+        val page = messages.findPage(session.sessionId, beforeSeq, REASK_PAGE + 1) // 원 요청 앞 한 줄까지 — 되묻기의 답인지 본다
+        val excluded = linkedSetOf<UUID>()
+        var date: LocalDate? = null
+        var i = page.lastIndex
+        while (i >= 1) {
+            val card = page[i].takeIf { it.role == MessageRole.ASSISTANT && it.kind == MessageKind.PROPOSAL } ?: return null
+            val (day, poiId) = card.proposal?.diff?.let { ProposalCards.addedPlace(it) } ?: return null
+            excluded += poiId
+            if (date == null) date = day
+            val asked = page[i - 1].takeIf { it.role == MessageRole.USER }?.text ?: return null
+            if (REASK.matches(asked.trim())) {
+                i -= 2
+                continue
+            }
+            // 원 요청 — 직접 한 말이어야 하고([다시 시도]와 같은 조회 — 버튼 라벨이 아니다), 되묻기의 답이면 편집에 붙여 보낸 말을 여기서 모른다.
+            // 그 앞 줄이 쪽 밖이면(사슬이 [REASK_PAGE] 를 채웠다) 확인할 수 없어 하지 않는다
+            val prior = page.getOrNull(i - 2)
+            if (prior?.kind == MessageKind.CLARIFY || (prior == null && page.size > REASK_PAGE)) return null
+            if (messages.lastUserText(session.sessionId, beforeSeq = card.seq) != asked) return null
+            return Reask(asked, date ?: day, excluded)
+        }
+        return null
+    }
+
     /** 단기 기억(BR-AO-11) — 이번 발화 앞의 메시지 중 원문이 있는 것만(가려진 입력은 원문이 없다), 오래된 것부터, 300자까지([clip]). 상대는 저장하지 않는다. */
     private fun recentTurns(session: AssistantSession, beforeSeq: Long): List<RecentTurn> =
         messages.findPage(session.sessionId, beforeSeq, RECENT_TURNS).mapNotNull { m ->
@@ -536,13 +584,15 @@ class AssistantTurnService(
 
     private fun dispatched(
         intent: Intent, matchRoute: String?, session: AssistantSession, surface: AssistantSurface, startedAt: Instant,
-        arguments: Map<String, String> = emptyMap(), utterance: String? = null,
+        arguments: Map<String, String> = emptyMap(), utterance: String? = null, excludedPoiIds: Set<UUID> = emptySet(),
     ) = Reply(
-        dispatcher.dispatch(intent, context(session, surface, startedAt, arguments, utterance)).copy(intent = intent.name, matchRoute = matchRoute ?: "ACTION"),
+        dispatcher.dispatch(intent, context(session, surface, startedAt, arguments, utterance, excludedPoiIds))
+            .copy(intent = intent.name, matchRoute = matchRoute ?: "ACTION"),
     )
 
     private fun context(
         session: AssistantSession, surface: AssistantSurface, startedAt: Instant, arguments: Map<String, String> = emptyMap(), utterance: String? = null,
+        excludedPoiIds: Set<UUID> = emptySet(),
     ): DispatchContext {
         val now = clock.instant()
         val trip = session.tripId?.let { tripContexts.read(session.accountId, it) }
@@ -554,6 +604,7 @@ class AssistantTurnService(
             utterance = utterance,
             // 남은 턴 예산에서 왕복 여유를 뺀 만큼만(해석과 같은 셈). 0 이하면 처리기가 부르지 않고 폴백한다.
             deadlineMs = minOf(properties.editStageMaxMs, properties.turnBudgetMs - Duration.between(startedAt, now).toMillis() - properties.readMarginMs),
+            excludedPoiIds = excludedPoiIds,
         )
     }
 
@@ -636,6 +687,25 @@ class AssistantTurnService(
 
         /** 상대가 보류 되묻기의 답으로 읽은 프레임의 `match_route`(ai `dialogue_interpreter.answer_pending`). */
         private const val CLARIFY_ANSWER = "CLARIFY_ANSWER"
+
+        /** "다른 데는?" 다시 묻기로 낸 답의 관측 칸(`match_route`) — 해석을 부르지 않았다. */
+        private const val REASK_ROUTE = "REASK"
+
+        /** 다시 묻기 사슬을 거슬러 볼 메시지 수 — 원 요청 + 카드에 [다른 데는? + 카드] 다섯 번까지. 넘으면 해석으로 간다. */
+        private const val REASK_PAGE = 12
+
+        /**
+         * "다른 데는?" 맨 말 — 다른·딴 + 데·곳·거·장소(조사), 그 뒤엔 묻기·부탁 꼬리("없어?"·"추천해 줘"·"보여 주세요")만, 앞엔 "그럼"·"또"·
+         * "거기 말고"까지. 다른 낱말이 섞이면("다른 카페는?"·"다른 날은?"·"효창공원 말고 다른 데"·"다른 곳에 넣어줘") 다시 묻기로 치지 않는다 —
+         * 종류·날·이름·자리가 바뀐 새 요청일 수 있다. 붙여 쓴 "다른데" 하나뿐인 말은 "(그건) 다른데"(아니라는 말)일 수 있어 뺀다.
+         * 오탐보다 미탐이다(못 잡으면 종전처럼 해석으로 간다).
+         */
+        private val REASK = Regex(
+            """(?!다른데[\s.!~?？]*$)(?:(?:그럼|그러면|음|흠|아)\s*)?(?:(?:거기|여기|저기|이거|그거|저거|이곳|그곳|저곳|이건|그건)\s*말고\s*)?(?:또\s*)?""" +
+                """(?:다른|딴)\s*(?:데|곳|거|걸|건|장소)(?:는|은|도|로|으로|를|을|가|이|요)?""" +
+                """(?:\s*(?:없어|없나|없을까|없니|있어|있나|있을까|있니|어때|추천|추천해|보여|넣어|해|바꿔|골라|찾아|알려)?\s*(?:줘|주세요|줄래|줄래요|주라|요)?)?""" +
+                """[\s.!~?？]*""",
+        )
 
         /**
          * 날 되묻기의 맨 답 — 날 한마디(N일차·첫째 날·두 번째 날·첫날·마지막 날·오늘·내일·모레·M월 D일·요일)에 '일정'·'거'와 조사·끝맺음만 붙은 말.

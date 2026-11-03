@@ -1,5 +1,6 @@
 package com.trippilot.placedata.application
 
+import com.trippilot.placedata.domain.ImageLicense
 import com.trippilot.placedata.domain.NormalizedPlace
 import com.trippilot.placedata.domain.Poi
 import com.trippilot.placedata.domain.PoiCategory
@@ -35,6 +36,8 @@ data class PoiProposal(
      * 기본값이 있는 인자는 **맨 뒤에** 둔다 — 가운데 끼우면 위치 인자로 조립하는 호출이 조용히 어긋난다.
      */
     val address: String? = null,
+    /** [imageUrl] 사진의 공공누리 유형. 모르면 null. */
+    val imageLicense: ImageLicense? = null,
 )
 
 /**
@@ -113,6 +116,7 @@ class PoiProposalIngestService(
                 sourceRef = ref,
                 tags = proposal.tags,
                 imageUrl = toHttps(proposal.imageUrl),
+                imageLicense = proposal.imageLicense,
             )
             // 게이트 판정은 여기 한 번뿐이다 — 통과 못 하면 신규든 갱신이든 손대지 않는다.
             if (!PoiCollectionGate.qualifies(place)) {
@@ -130,6 +134,7 @@ class PoiProposalIngestService(
                     region = place.region, regionCode = place.regionCode,
                     openingHours = place.openingHours, now = now,
                     tags = place.tags, imageUrl = place.imageUrl, address = place.address,
+                    imageLicense = place.imageLicense,
                 )
                 updated++
             }

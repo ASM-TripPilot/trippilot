@@ -15,8 +15,11 @@ routes:
 
 - `rf-auto-create` 레코드가 없고 날짜 ≤ 오늘이면 마운트당 1회 생성 POST. 도착 전까지 `회고를 준비하고 있어요`.
 - `rf-pending` 조회 중·생성 중 얼굴 `회고를 준비하고 있어요` / `잠시만 기다려 주세요`.
-- `rf-default` 방문 2곳 이상·사진 1장 이상: 통계(`방문`·`이동`·`사진`), `오늘의 기록` 서술 카드 + `수정`, AI 장면, 사진 격자, 기분·한 줄 메모.
-- `rf-insufficient` 방문 < 2 또는 사진 0: 통계(방문 < 2 면 이동 `—`), 지도 자리 안내(사유 3종), 서술, 장면, 사진 없음이면 `사진 없음`, 기분·한 줄 메모.
+- `rf-default` 방문 2곳 이상·사진 1장 이상: 매거진(`rf-magazine`) + 그 아래 `내 기록`(기분·한 줄 메모, 사진 격자). 인용문 옆 `수정`.
+- `rf-insufficient` 방문 < 2 또는 사진 0: 매거진(숫자 타일의 이동 `—`, `수정` 없음) + 지도 자리 안내(사유 3종) + `내 기록`(기분·한 줄 메모, 사진 없음이면 `사진 없음`).
+- `rf-magazine` 매거진 섹션 순서: 표지(제목·지역·날짜 칩·`오늘의 회고`/`하루 회고` 스티커·`N곳 · 사진 N장`) → 인용문(`오늘을 한 줄로`, 마지막 쉼표 뒤 구가 형광펜) → 번호 장면 카드(`01`부터, 사진이 좌우로 번갈아) → 일정 변경 띠(`PLAN B · 일정 변경`/`건너뜀`) → `오늘의 동선`(번호 목록, 이름을 모르면 `N번째 장소`, 방문 0이면 박스 없음) → 숫자 타일(방문·사진·이동 — 이동엔 `근사`/`경로`) → 해시태그 칩. 규칙 카드(TEXT 장면)는 장면 카드 없이 동선만.
+- `rf-magazine-motion` 화면이 열릴 때 한 번: 인용문·장면 카드·동선 정류장·숫자·해시태그가 위에서부터 차례로 올라오고, 표지 스티커가 팝, 숫자가 0 에서 끝값까지 올라가며, 표지·장면 사진이 천천히 확대되고 인용문 형광펜이 켜진다. 기기 `동작 줄이기`가 켜져 있으면 전부 움직임 없이 끝 모습으로 바로 보인다.
+- `rf-magazine-palette` 카테고리별 색(맛집·문화·카페·야경·자연·명소·쇼핑·액티비티, 일정 변경=남색, 건너뜀=회색, 그 밖=검정)이 표지·장면 카드·동선 박스에 구분돼 보이고 글자가 읽힌다. 표지 색은 일정 변경 하루면 남색, 아니면 가장 많이 간 카테고리. 사진이 없으면 카테고리 그림이 대신 선다. (프리뷰 `reflection-magazine-{food,culture,plan-b,night,no-photo,rule-card}` 로 육안)
 - `rf-map-notice` 지도 자리 사유: 방문 < 2 → `동선 없음`/`방문 기록이 2곳 미만이에요`, 위치 권한 거부 → `위치 권한 꺼짐`, 그 외 → `동선 지도 없음`/`실제 이동 경로 지도는 아직 지원하지 않아요`.
 - `rf-empty` 방문 0·사진 0이고 직접 쓴 수정본이 없으면 `오늘 기록된 활동이 없습니다`(오늘이 아니면 `이 날 기록된 활동이 없습니다`) + 하단 `직접 회고 작성`. 미래 날짜도 생성 없이 이 얼굴.
 - `rf-error` 조회 실패 또는 생성 실패: 통계 + `회고를 불러오지 못했어요` / `직접 회고를 작성할 수 있어요` + `다시 시도`(생성 실패면 POST 재발사, 조회 실패면 재조회) + 하단 `직접 회고 작성`.
@@ -52,7 +55,7 @@ Preconditions:
 - 조작 절차·셀렉터 함정은 `trippilot-sim-qa` 스킬 §2·§4.
 
 - **자동 생성.** 레코드 없는 오늘 날짜로 j01 하단 바 testID: `record-trip-bottom-bar{-tab-reflection}` 을 누른다. 먼저 testID: `reflection-daily-pending`(`회고를 준비하고 있어요`)이 보이고, 생성 응답 뒤 통계 testID: `reflection-daily-stats`(`방문`·`이동`·`사진`)가 나타난다. 빈 얼굴이 중간에 비치지 않아야 한다.
-- **기본 얼굴.** 서술 카드 `오늘의 기록` 의 본문 testID: `reflection-daily-narrative`, AI 장면이 있으면 testID: `reflection-daily-scenes`, 사진 격자 testID: `reflection-daily-photo-grid`, 기분·메모 블록 testID: `reflection-daily-extras`(`오늘 어땠어요?`)가 보인다. 이 얼굴엔 지도 자리 안내가 없다.
+- **기본 얼굴.** 매거진 인용문(`오늘을 한 줄로`) 본문 testID: `reflection-daily-narrative`, 표지 testID: `reflection-daily-cover`, AI 장면이 있으면 testID: `reflection-daily-scenes`, 사진 격자 testID: `reflection-daily-photo-grid`, 기분·메모 블록 testID: `reflection-daily-extras`(`오늘 어땠어요?`)가 보인다. 이 얼굴엔 지도 자리 안내가 없다.
 - **부족 얼굴.** 방문 1곳 날짜를 연다. 통계 `이동` 이 `—` 이고, 지도 자리 testID: `reflection-daily-map-notice` 안에 `동선 없음` 과 testID: `reflection-daily-map-notice-reason-{few-visits}`(`방문 기록이 2곳 미만이에요`). 사진 0이면 testID: `reflection-daily-photo-empty`(`사진 없음`). 위치 권한을 끄고 방문 2곳 날을 열면 사유 testID 가 `reflection-daily-map-notice-reason-{permission}`, 권한 허용·미결정이면 `reflection-daily-map-notice-reason-{no-route}`.
 - **빈 얼굴.** 활동 없는 날짜를 연다. testID: `reflection-daily-empty`(`오늘 기록된 활동이 없습니다` 또는 `이 날 기록된 활동이 없습니다`)와 하단 testID: `reflection-daily-compose`(`직접 회고 작성`).
 - **오류 얼굴·재시도.** 네트워크를 끊고 레코드 없는 날짜를 연다. testID: `reflection-daily-error`(`회고를 불러오지 못했어요`) → 네트워크 복구 → testID: `reflection-daily-retry`(`다시 시도`)를 누르면 pending 을 거쳐 통계가 뜬다. 자동 재시도는 없다.

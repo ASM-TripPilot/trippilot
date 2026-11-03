@@ -6,7 +6,6 @@ import {
   type ReactNode,
 } from 'react';
 import {
-  AccessibilityInfo,
   InteractionManager,
   Text,
   useWindowDimensions,
@@ -20,6 +19,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 
+import { onReduceMotionAnswer } from '@/shared/lib/reduceMotion';
 import { TAB_CONFIG, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
 import {
@@ -258,7 +258,6 @@ export function MorphNavBar({
     return () => pending.current.forEach(clearTimeout);
   }, []);
   useEffect(() => {
-    let alive = true;
     // 입장은 화면 첫 렌더가 끝난 뒤에 시작한다(시트 마운트·지도·목록 첫 렌더와 겹치면 프레임이 끊긴다): ① OS 답 false ② interactions 완료
     // ③ 마운트 후 `BAR_ENTER_DELAY_MS` 경과 — 셋 중 가장 늦은 순간. 그 전까지 시작 5칸을 그대로 보인다.
     const ready = { answer: false, interactions: false, delay: false };
@@ -285,8 +284,7 @@ export function MorphNavBar({
         ready.delay = true;
         tryStart();
       }, BAR_ENTER_DELAY_MS);
-    void AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
-      if (!alive) return;
+    const stopAnswer = onReduceMotionAnswer((reduce) => {
       reduceRef.current = reduce;
       // 뒤로를 이미 눌렀다면(퇴장 중) 늦게 온 답이 아무것도 바꾸지 못한다. 입장은 답이 확인된 뒤에만 시작한다.
       if (leaving.current || !playEntrance) return;
@@ -299,7 +297,7 @@ export function MorphNavBar({
       tryStart();
     });
     return () => {
-      alive = false;
+      stopAnswer();
       interactions?.cancel();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 때 한 번(입장 신호도 마운트 순간 값)

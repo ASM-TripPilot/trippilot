@@ -30,8 +30,13 @@ interface ItineraryEditProposalFacade {
 }
 
 sealed interface EditProposalRequest {
-    /** 자연어 — 상대가 LLM 으로 편집 명령으로 옮긴다. 1~500자(상대 계약 상한). */
-    data class Utterance(val text: String) : EditProposalRequest
+    /**
+     * 자연어 — 상대가 LLM 으로 편집 명령으로 옮긴다. 1~500자(상대 계약 상한).
+     *
+     * @property excludedPoiIds 앞서 제안했던 곳("다른 데는?") — 상대가 이번 안에 **새로 들이지 않는다**. 후보 풀을 좁힐 뿐이라 이미
+     *   일정에 있는 곳의 편집에는 영향이 없다. 보통은 빈다.
+     */
+    data class Utterance(val text: String, val excludedPoiIds: Set<UUID> = emptySet()) : EditProposalRequest
 
     /** [slotKey](`"{date}#{poiId}"`) 슬롯의 장소를 [newPoiId] 로 바꾼다 — LLM 을 쓰지 않는다. */
     data class ReplaceSlot(val slotKey: String, val newPoiId: UUID) : EditProposalRequest

@@ -25,7 +25,7 @@ class AppliedBeforeCodecTest : StringSpec({
         val view = ReplanDiff.SlotView(
             slotKey = "2026-08-11#b5f1", startAt = LocalTime.parse("23:00"), endAt = LocalTime.parse("00:30"),
             isFixed = true, endsNextDay = true, distanceM = 1200,
-            nameKo = "야시장", category = "야경", imageUrl = "https://img/x.jpg", lat = 33.4996, lng = 126.5312,
+            nameKo = "야시장", category = "야경", imageUrl = "https://img/x.jpg", imageLicense = "TYPE3", lat = 33.4996, lng = 126.5312,
         )
 
         throughJsonb(view) shouldBe view

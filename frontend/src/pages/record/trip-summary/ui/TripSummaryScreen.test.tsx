@@ -1,4 +1,7 @@
+import { Profiler } from 'react';
 import { act, render, screen, within } from '@testing-library/react-native';
+
+import { countUpText } from '@/shared/lib/countUp';
 
 import {
   answerReduceMotionSynchronously,
@@ -6,6 +9,7 @@ import {
 } from '@/test-support/animatedProbe';
 import { revealValues } from '@/test-support/revealProbe';
 
+import { COUNT_UP_DURATION_MS, CountUpText } from '@/shared/ui/CountUpText';
 import {
   TripSummaryScreen,
   type TripSummaryScreenProps,
@@ -144,5 +148,93 @@ describe('TRIP-1386 · 모션', () => {
 
     await advance(770); // 1900ms — 마지막 카드(1350+450)까지 끝
     expect(opacities()).toEqual([1, 1, 1]);
+  });
+});
+
+// TRIP-1736 · 카운트업 시계를 reanimated(UI 스레드)로 옮기고 표시 문자열이 바뀔 때만 다시 그린다(01b Q1=B).
+// 이징은 지금 화면 그대로(Q2) — 시계 `Easing.out(Easing.cubic)` 위에 `countUpText` 안 easeOutCubic 이 한 번 더 걸린 곡선.
+// jest 프레임은 1ms 라 1ms 마다 act 를 끊어 커밋을 센다. 이관 전 실측(같은 장치): `38km` 커밋 900 · 표시 문자열 39종.
+describe('TRIP-1736 · CountUpText — 문자열이 바뀔 때만 다시 그린다', () => {
+  const probe = useAnimatedProbe();
+
+  function shownNow(): string {
+    const root = screen.toJSON() as { children: unknown[] | null } | null;
+    return String(root?.children?.[0]);
+  }
+
+  async function play(value: string, ms = COUNT_UP_DURATION_MS + 100) {
+    let commits = 0;
+    const view = render(
+      <Profiler id="count" onRender={() => (commits += 1)}>
+        <CountUpText value={value} />
+      </Profiler>
+    );
+    await act(async () => {});
+    const mounted = commits;
+    const shown = [shownNow()];
+    for (let t = 1; t <= ms; t += 1) {
+      await act(async () => {
+        jest.advanceTimersByTime(1);
+      });
+      shown.push(shownNow());
+    }
+    const changes = shown.filter((text, i) => i > 0 && text !== shown[i - 1]);
+    return {
+      view,
+      shown,
+      changes: changes.length,
+      frameCommits: commits - mounted,
+    };
+  }
+
+  it.each(['38km', '12', '1.9km'])(
+    '%s — 재생 중 커밋은 표시 문자열 변경 수 이하, 끝은 입력 그대로',
+    async (value) => {
+      probe.setReduceMotion(false);
+      const { shown, changes, frameCommits } = await play(value);
+
+      expect(shown[0]).not.toBe(value); // 앵커 — 실제로 카운트업이 돌았다
+      expect(changes).toBeGreaterThan(0);
+      expect(frameCommits).toBeLessThanOrEqual(changes);
+      expect(shown.at(-1)).toBe(value);
+    }
+  );
+
+  it('도중 숫자는 지금 화면 곡선과 같다(시계 ease-out cubic × countUpText)', async () => {
+    probe.setReduceMotion(false);
+    const { shown } = await play('38km', 700);
+    const clock = (ms: number) =>
+      1 - (1 - Math.min(1, Math.max(0, ms / COUNT_UP_DURATION_MS))) ** 3;
+    // 프레임 반올림으로 앞뒤 몇 ms 어긋나도 되게 ±3ms 창 안의 값 중 하나면 통과. 단일 이징이면 100ms 에 11km 라 걸린다.
+    for (const t of [50, 100, 200, 300, 600]) {
+      const allowed = [-3, -2, -1, 0, 1, 2, 3].map((d) =>
+        countUpText('38km', clock(t + d))
+      );
+      expect(allowed).toContain(shown[t]);
+    }
+  });
+
+  it('목표 문자열이 바뀌면 0 부터 다시 재생한다', async () => {
+    probe.setReduceMotion(false);
+    const { view } = await play('12');
+    expect(shownNow()).toBe('12');
+
+    // play() 와 같은 <Profiler> 로 감싸야 같은 인스턴스 갱신이다 — 감싸지 않으면 리마운트라 "다시 재생"을 못 본다(03b 차단 #1).
+    view.rerender(
+      <Profiler id="count" onRender={() => {}}>
+        <CountUpText value="38km" />
+      </Profiler>
+    );
+    await act(async () => {
+      jest.advanceTimersByTime(50);
+    });
+    const restarted = Number.parseInt(shownNow(), 10);
+    expect(shownNow()).toMatch(/^\d+km$/);
+    expect(restarted).toBeLessThan(38);
+
+    await act(async () => {
+      jest.advanceTimersByTime(COUNT_UP_DURATION_MS + 100);
+    });
+    expect(shownNow()).toBe('38km');
   });
 });

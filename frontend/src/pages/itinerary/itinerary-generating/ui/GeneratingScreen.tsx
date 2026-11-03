@@ -1,7 +1,6 @@
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
-  AccessibilityInfo,
   Animated,
   Easing,
   Pressable,
@@ -136,7 +135,6 @@ function useStepPulse(count: number): Animated.Value[] {
   );
 
   useEffect(() => {
-    let active = true;
     const pulse = Animated.stagger(
       300,
       values.map((value) =>
@@ -158,13 +156,7 @@ function useStepPulse(count: number): Animated.Value[] {
         )
       )
     );
-    void AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
-      if (active && !reduce) pulse.start();
-    });
-    return () => {
-      active = false;
-      pulse.stop();
-    };
+    return startUnlessReduceMotion(pulse);
   }, [values]);
 
   return values;

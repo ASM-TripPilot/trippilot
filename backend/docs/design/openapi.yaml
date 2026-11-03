@@ -2432,6 +2432,7 @@ components:
           type: string
           nullable: true
           description: 대표 사진. NULL=미확보 — 서버가 기본 이미지를 지어내지 않는다. 클라는 NULL·빈 문자열·공백·로드 실패면 카테고리 일러스트(번들 에셋 — 실사진이 아님)로 칸을 채운다
+        imageLicense: { nullable: true, allOf: [{ $ref: '#/components/schemas/ImageLicense' }] }
         tags:
           type: array
           items: { type: string }
@@ -2441,6 +2442,14 @@ components:
           type: string
           enum: [ACTIVE, UNVERIFIED, LOST, CLOSED]
           description: 탐색 목록은 항상 ACTIVE. 단건은 폐업(CLOSED)·유실(LOST)도, 담기 목록은 미검증(UNVERIFIED)까지 포함 — 클라 뱃지
+
+    # `imageUrl` 이 나가는 모든 POI 표면(Place·일정 슬롯·차선책·슬롯 후보·재계획 비교·기록 계획 슬롯)이 같은 자리에 싣는다(V2.88).
+    ImageLicense:
+      type: string
+      enum: [TYPE1, TYPE3]
+      description: >
+        `imageUrl` 사진의 공공누리 유형. TYPE3 = 공공누리 3유형(변경금지) — 앱은 자르지 않고 전체를 보인다.
+        TYPE1 = 1유형. null = 모름(관광공사 사진이 아니거나 아직 수집 전)
 
     SavePlaceRequest:
       type: object
@@ -3377,6 +3386,7 @@ components:
         nameKo: { type: string, nullable: true }
         category: { type: string, nullable: true, description: 한글 정본(맛집·카페 …) — 일정 슬롯과 같은 값 }
         imageUrl: { type: string, nullable: true, description: NULL = 미확보. 대표 1장 }
+        imageLicense: { nullable: true, allOf: [{ $ref: '#/components/schemas/ImageLicense' }] }
         lat: { type: number, format: double, nullable: true }
         lng: { type: number, format: double, nullable: true }
         endsNextDay:
@@ -3551,6 +3561,7 @@ components:
               category: { type: string, nullable: true, description: 한글 정본(명소·맛집·카페·야경·자연·쇼핑·문화·액티비티·미술·술집) — 일정 슬롯과 같은 값. 클라가 이 값으로 사진 없는 칸의 카테고리 일러스트를 고른다 }
               tags: { type: array, items: { type: string }, description: 미확보 시 빈 배열 }
               imageUrl: { type: string, nullable: true, description: NULL = 미확보. 대표 1장 }
+              imageLicense: { nullable: true, allOf: [{ $ref: '#/components/schemas/ImageLicense' }] }
               # 후보 핀 좌표(TRIP-1063 · QA #044) — '후보 고르기' 지도에 A/B/C 핀을 찍는 값.
               # 표면과 같은 정본 조회에서 온다. 표면이 없으면 null — 지어내지 않는다(BR-U1-06).
               lat: { type: number, format: double, nullable: true }
@@ -3773,6 +3784,7 @@ components:
                       type: string
                       nullable: true
                       description: NULL = 미확보. 기본 이미지를 지어내지 않는다(TRIP-219)
+                    imageLicense: { nullable: true, allOf: [{ $ref: '#/components/schemas/ImageLicense' }] }
                     tags: { type: array, items: { type: string }, description: 미확보 시 빈 배열 }
                     alternatives:
                       type: array
@@ -3810,6 +3822,7 @@ components:
                           category: { type: string, nullable: true }
                           tags: { type: array, items: { type: string } }
                           imageUrl: { type: string, nullable: true }
+                          imageLicense: { nullable: true, allOf: [{ $ref: '#/components/schemas/ImageLicense' }] }
                           # 후보 핀 좌표 — SlotCandidate.lat/lng 와 같은 뜻이다. TRIP-1063 이 온디맨드
                           # 후보에만 더해 두 응답의 모양이 갈려 있었다(같은 카드를 재사용하는데).
                           # 표면이 없으면 null — 반경 중심 등으로 지어내지 않는다(BR-U1-06).
@@ -4546,6 +4559,7 @@ components:
         nameKo: { type: string, nullable: true }
         category: { type: string, nullable: true }
         imageUrl: { type: string, nullable: true }
+        imageLicense: { nullable: true, allOf: [{ $ref: '#/components/schemas/ImageLicense' }] }
         lat: { type: number, format: double, nullable: true }
         lng: { type: number, format: double, nullable: true }
         violationReason: { type: string, nullable: true, description: '위반 사유 문구. 없으면 null' }

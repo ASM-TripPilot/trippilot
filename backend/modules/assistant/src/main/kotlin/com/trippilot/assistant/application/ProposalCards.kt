@@ -69,7 +69,7 @@ class ProposalCards(
                 (dateOf(slotKey) ?: return byHand(CANNOT)) to EditProposalRequest.ReplaceSlot(slotKey, newPoiId)
             ctx.utterance != null ->
                 (targetDate(ctx) ?: return byHand("어느 날 일정을 바꿀지 알 수 없었어요. 편집 화면에서 직접 바꿀 수 있어요.")) to
-                    EditProposalRequest.Utterance(ctx.utterance)
+                    EditProposalRequest.Utterance(ctx.utterance, ctx.excludedPoiIds)
             else -> return byHand("일정은 편집 화면에서 바꿀 수 있어요.")
         }
         val result = try {
@@ -84,7 +84,8 @@ class ProposalCards(
         val message = when (result) {
             is EditProposal.Proposed -> proposed(ctx, tripId, result)
             is EditProposal.Rejected -> rejected(ctx, tripId, result)
-            EditProposal.NotUnderstood -> byHand("어떻게 바꿀지 알아듣지 못했어요. 편집 화면에서 직접 바꿀 수 있어요.")
+            // "다른 데는?"를 못 옮겼다 — 같은 말이 처음에는 옮겨졌으니 앞서 보인 곳을 빼고 나니 고를 곳이 없다는 뜻이다
+            EditProposal.NotUnderstood -> byHand(if (ctx.excludedPoiIds.isEmpty()) "어떻게 바꿀지 알아듣지 못했어요. 편집 화면에서 직접 바꿀 수 있어요." else NO_OTHER)
             // 버튼을 눌러 온 턴에는 [다시 시도]를 주지 않는다 — 다시 태울 "말"이 없다.
             EditProposal.Unavailable -> AssistantTemplates.fallback(FallbackCause.AI_UNAVAILABLE, retryable = ctx.utterance != null)
         }
@@ -99,7 +100,7 @@ class ProposalCards(
         if (diff.isEmpty()) return AssistantTemplates.handoff("바꿀 것이 없어요. 일정이 이미 그렇게 되어 있어요.", viewItinerary)
         return NewMessage(
             role = MessageRole.ASSISTANT, kind = MessageKind.PROPOSAL,
-            text = "${start?.let { areas(result.dayAreas, it) } ?: "이렇게 바꾸면 돼요."} 적용하면 다시 검증한 뒤 반영해요.",
+            text = "${start?.let { areas(result.dayAreas, it) } ?: inserted(diff, result.days, names::get) ?: "이렇게 바꾸면 돼요."} 적용하면 다시 검증한 뒤 반영해요.",
             nextActions = listOf(viewItinerary), outcome = "FRAME",
             footnote = "* 적용 전까지 일정은 그대로 · 최종 시각·이동은 검증값",
             proposal = NewProposal(
@@ -121,7 +122,8 @@ class ProposalCards(
      * 상대는 위반인 안의 일정을 주지 않으므로 전후 비교는 비고, 적용할 내용도 없다.
      */
     private fun rejected(ctx: DispatchContext, tripId: UUID, result: EditProposal.Rejected): NewMessage {
-        if (result.violations.isEmpty()) return byHand(CANNOT)
+        // 위반 없는 거절 — "다른 데는?"면 앞서 보인 곳을 빼고 나니 넣을 곳이 없다는 뜻이다(상대 `insert_between: no_candidates·all_rejected`)
+        if (result.violations.isEmpty()) return byHand(if (ctx.excludedPoiIds.isEmpty()) CANNOT else NO_OTHER)
         return NewMessage(
             role = MessageRole.ASSISTANT, kind = MessageKind.PROPOSAL,
             text = "그렇게 바꾸면 일정이 맞지 않아요.",
@@ -229,11 +231,12 @@ class ProposalCards(
         const val ARG_SLOT_KEY = "slotKey"
         const val ARG_POI_ID = "poiId"
 
-        /** 상대 인자표의 이름(`ai/src/trippilot/domain/dialogue.py` ARGUMENT_TABLE). */
-        private const val ARG_DAY = "day"
+        /** 상대 인자표의 이름(`ai/src/trippilot/domain/dialogue.py` ARGUMENT_TABLE). [ARG_DAY] 는 "다른 데는?" 다시 묻기도 싣는다(지난 카드의 날). */
+        internal const val ARG_DAY = "day"
         private const val ARG_TARGET = "target"
 
         private const val CANNOT = "그렇게는 바꿀 수 없어요. 편집 화면에서 직접 바꿀 수 있어요."
+        private const val NO_OTHER = "넣을 만한 다른 곳을 찾지 못했어요. 편집 화면에서 직접 고를 수 있어요."
         private const val LOCKED = "지금은 이 일정을 여기서 바꿀 수 없어요."
         private const val UNNAMED = "이름 미확인 장소"
 
@@ -257,6 +260,49 @@ class ProposalCards(
         )
 
         private fun dateOf(slotKey: String): LocalDate? = runCatching { LocalDate.parse(slotKey.substringBefore('#')) }.getOrNull()
+
+        /**
+         * 한 곳만 더한 안(사이 넣기·끝에 하나 더)이면 들어온 그 곳(날, 장소) — 한 곳이 들어오고 나머지는 시각만 밀렸을 때만(빠짐·교체·순서
+         * 바뀜이 있으면 다른 편집이다). 카드 문장([inserted])과 "다른 데는?" 다시 묻기([AssistantTurnService])가 같은 판정을 쓴다.
+         */
+        internal fun addedPlace(diff: List<ProposalDiffItem>): Pair<LocalDate, UUID>? {
+            if (diff.any { it.change != "ADDED" && it.change != "RETIMED" }) return null
+            val key = diff.singleOrNull { it.change == "ADDED" }?.slotKey ?: return null
+            val poiId = runCatching { UUID.fromString(key.substringAfter('#')) }.getOrNull() ?: return null
+            return dateOf(key)?.let { it to poiId }
+        }
+
+        /**
+         * 한 곳을 더한 안을 **평서문**으로 되읽는다 — "경리단길과 연남동 사이에 효창공원을 넣은 안이에요." 묻는 꼴("넣을까요?")로 쓰지 않는다:
+         * 사용자가 [적용] 대신 "응"을 치면 분류의 짧은 수락(상대 dialogue_intent 0.2.2 — 제안·되묻기로 끝난 말 뒤의 "응")이 그 "응"을 편집 말로
+         * 보내 "알아듣지 못했어요"가 된다. 저장은 [적용]뿐이다(BR-U8-30). 이웃은 그 날 순서의 바로 앞·뒤이고 이름을 모르면 말하지 않는다.
+         * 넣은 곳의 이름을 모르면 null(종전 문장 — 지어내지 않는다).
+         */
+        private fun inserted(diff: List<ProposalDiffItem>, days: List<ProposedDay>, name: (UUID) -> String?): String? {
+            val (date, poiId) = addedPlace(diff) ?: return null
+            val slots = days.firstOrNull { it.date == date }?.slots.orEmpty()
+            val at = slots.indexOfFirst { it.poiId == poiId }.takeIf { it >= 0 } ?: return null
+            val place = name(poiId) ?: return null
+            val before = slots.getOrNull(at - 1)?.let { name(it.poiId) }
+            val after = slots.getOrNull(at + 1)?.let { name(it.poiId) }
+            val where = when {
+                before != null && after != null -> "$before${particle(before, "과", "와")} $after 사이에 "
+                before != null -> "$before 다음에 "
+                after != null -> "$after 가기 전에 "
+                else -> ""
+            }
+            return "$where$place${particle(place, "을", "를")} 넣은 안이에요."
+        }
+
+        /** 받침이 있으면 [closed], 없으면 [open]. 한글로 끝나지 않으면 읽는 법을 몰라 둘 다 적는다(planb `ClosureRules.topicOf` 와 같은 규칙). */
+        private fun particle(word: String, closed: String, open: String): String {
+            val last = word.trimEnd().lastOrNull()
+            if (last == null || last !in '가'..'힣') return "$closed($open)"
+            return if ((last - '가') % JONGSEONG_COUNT == 0) open else closed
+        }
+
+        /** 한글 음절의 종성 경우의 수(받침 없음 포함) — 음절 코드 = 0xAC00 + (초성 × 21 + 중성) × 28 + 종성. */
+        private const val JONGSEONG_COUNT = 28
 
         /** 여행 시작일이 1일차다. */
         private fun dayNumber(start: LocalDate, date: LocalDate) = ChronoUnit.DAYS.between(start, date) + 1

@@ -13,7 +13,7 @@ context_refs 재조회(D31)는 봉투 프로토콜상 EditAgent가 이미 수행
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -27,6 +27,7 @@ from trippilot.domain.common import PoiId, TraceId
 from trippilot.domain.edit import TRANSLATABLE_OPS, EditOp
 from trippilot.domain.llm.llm import CandidatePool, LlmFeature, TypedResult
 from trippilot.domain.poi.poi import Poi
+from trippilot.domain.poi.region_centers import bare_region
 
 # op 별 뜻과 채울 자리. 이름만 주입하던 동안(0.1.0) 모델은 "카페 하나 추가해줘" 를
 # ADD_SLOT 으로 잇지 못하고 전 모델이 번역 불가를 냈다(2026-10-14 실측 12발화 중
@@ -55,9 +56,9 @@ _CANDIDATES_PER_CATEGORY = 40
 # 무변경)고, 그런 이름이 없으면 렌더는 바이트까지 같다(테스트 고정). 따로 싣는 수는 풀 순위 앞 이만큼 — 한 말이
 # 집는 곳은 한두 곳인데 같은 이름이 한 시군구에 여럿이라(공유본 최대 4곳 '돌하르방식당', 2026-10-30 측정) 그 묶음은
 # 담고, 줄당 ≈57자(위 74k자/1,300곳)라 5줄이 ≈290자다.
-# ponytail: 풀 밖(기본 풀 5,000곳 절단)은 여전히 못 싣는다 — 등록 장소 이름 조회(대화의
-# `PlaceSqlLookup.find_place` 와 같은 길)나 구간 풀(`EditTask.segment_pool`) 합류가 필요하고, 그때는
-# validate_command 의 풀 소속 검사(INV-1)도 합친 풀로 봐야 한다.
+# 풀 밖(기본 풀 5,000곳 절단·반경 밖)과 지역 접두·지점 접미 꼴("서귀포 하논분화구"·"고집돌우럭 중문점")은 호출측
+# (EditAgent)이 등록 장소 이름 조회로 찾아 `EditTranslationInput.named` 로 넘기고 같은 곳을 풀에도 합친다(F9) — 그 말은
+# 아래 `said_name_keys` 가 이 대조와 같은 규칙으로 뽑는다. 게이트·validate_command 는 합친 풀로 본다(닫힌 집합 그대로).
 _NAMED_EXTRA = 5
 # 이름 대조 — planb `request_verification.normalize`·편집 `insert_between._norm` 과 같은 꼴(하위 계층이라 agents 를
 # import 못 한다 L-1 — 고치면 셋 다). 이름은 표시형(괄호 부기·뒤 로마자를 뗀 것, 알림 게이트와 같은 규칙)으로 본다 —
@@ -105,6 +106,69 @@ def _named_beyond_cap(over: list[Poi], utterance: str, slot_names: list[str]) ->
             ][:_NAMED_EXTRA]
 
 
+# 이름 조회 말(F9) — 끝 낱말의 조사. 뗀 꼴과 안 뗀 꼴을 둘 다 싣는다(뗀 것이 이름 끝일 수 있다 — '거제도'·'우도')
+_KEY_JOSA = re.compile(r"(?:에서|으로|까지|부터|이랑|하고|에는|에도|은|는|이|가|을|를|에|도|로|랑|와|과|만|의)$")
+_KEY_SPAN_WORDS = 4  # 이름 낱말 수 상한("제주 성읍마을 고창환 고택")
+_KEY_WORDS = 30  # 긴 말은 앞 낱말까지 — 매개변수 배열이 불지 않게(BE 발화 상한 500자)
+
+
+def _cores(name: str) -> tuple[str, ...]:
+    """이름에서 지역 접두·지점 접미를 뗀 꼴("서귀포 하논분화구" → "하논분화구", "고집돌우럭 중문점" → "고집돌우럭") — 표시형 기준."""
+    words = _display_form(name).split()
+    if len(words) < 2:
+        return ()
+    cores = [" ".join(words[1:])] if bare_region(words[0]) else []
+    return (*cores, " ".join(words[:-1])) if len(words[-1]) >= 2 and words[-1].endswith("점") else tuple(cores)
+
+
+def _keys(words: list[str]) -> list[tuple[str, bool]]:
+    """낱말 줄 → (말, 한 낱말인가). 구간은 `\\0`(지운 슬롯 이름) 낱말에서 끊긴다. 끝 낱말은 조사를 뗀 꼴도."""
+    runs: list[list[str]] = [[]]
+    for w in words[:_KEY_WORDS]:
+        if "\0" in w:
+            runs.append([])
+        else:
+            runs[-1].append(w)
+    out: list[tuple[str, bool]] = []
+    for run in runs:
+        for i in range(len(run)):
+            for j in range(i + 1, min(i + _KEY_SPAN_WORDS, len(run)) + 1):
+                for last in dict.fromkeys((run[j - 1], _KEY_JOSA.sub("", run[j - 1]))):
+                    if last:
+                        out.append((" ".join([*run[i:j - 1], last]), j == i + 1))
+    return out
+
+
+def said_name_keys(utterance: str, slot_names: Iterable[str]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """발화에서 장소 이름일 수 있는 말 — (붙여 쓴 한 낱말들, 띄어 쓴 2~4 낱말들), 소문자. 편집 번역의 풀 밖 이름 조회(F9)가 이 말로
+    등록 장소를 찾는다(`PgPlaceSql.find_said`).
+
+    `_named_beyond_cap` 과 같은 대조다 — 낱말 처음에서 시작하고, 이름에 없는 띄어쓰기를 건너 붙이지 않는다(한 낱말 말만 공백 뗀 이름과
+    맞춘다: "내일 카페"는 '내일카페'를 찾지 않는다). 지금 슬롯 이름은 먼저 지운다 — 지역 접두·지점 접미를 뗀 꼴까지("서귀포 하논분화구"
+    슬롯을 "하논분화구 빼줘"로 가리킨 말이 같은 이름의 다른 곳을 후보로 부르면 번역이 그 id 를 집어 게이트가 명령을 버린다). 슬롯 이름으로
+    시작하는 더 긴 말("경동시장 평양냉면")은 원래 발화에서 싣는다. 공백만 다른 쌍둥이·세 글자 미만은 싣지 않는다."""
+    names = list(slot_names)
+    spoken = _spoken(utterance)
+    slot_forms = {f for name in names for f in _forms(name)}
+    erase = slot_forms | {f for name in names for core in _cores(name) for f in _forms(core)}
+    said = spoken
+    for f in sorted(erase, key=len, reverse=True):
+        said = said.replace(f, " \0")
+    taken = {_norm(x) for name in names for x in (_display_form(name), *_cores(name))}
+    words = said.split()
+    for i in range(len(words)):  # 공백만 다른 슬롯 이름("여의도 한강공원" ↔ 슬롯 '여의도한강공원')도 지운다 — 그 조각('한강공원')이 말이 되지 않게
+        for j in range(min(i + _KEY_SPAN_WORDS, len(words)), i + 1, -1):
+            if {_norm("".join(words[i:j])), _norm("".join(words[i:j - 1]) + _KEY_JOSA.sub("", words[j - 1]))} & taken:
+                words[i:j] = ["\0"] * (j - i)
+                break
+    found = _keys(words) + [
+        (k, one) for k, one in _keys(spoken.split())
+        if any((" " + k).startswith(s) and " " + k != s for s in slot_forms)]
+    keep = [(k, one) for k, one in found if len(_norm(k)) >= _MIN_NAME_CHARS and _norm(k) not in taken]
+    return (tuple(dict.fromkeys(k for k, one in keep if one)),
+            tuple(dict.fromkeys(k for k, one in keep if not one)))
+
+
 @dataclass(frozen=True, slots=True)
 class EditTranslationInput:
     """번역 입력 — 발화는 뉘앙스 참고 전용(재해석 금지, DL-3)."""
@@ -116,6 +180,9 @@ class EditTranslationInput:
     # 풀에서 찾지 않는 이유는 TRIP-527: 풀은 요청마다 잘리는 조각이라 현재 슬롯이
     # 풀 밖일 수 있다. 없는 슬롯은 이름을 지어내지 않고 "(정보 없음)"으로 남는다.
     slot_pois: Mapping[PoiId, Poi] = field(default_factory=dict)
+    # 등록 장소 이름 조회가 찾은 곳(F9) — 발화가 이름으로 집었는데 상한 렌더에 안 실릴 수 있는 곳(풀 밖·상한 밖·지역 접두/지점 접미 꼴).
+    # 상한과 무관하게 싣는다. 호출측이 같은 곳을 풀(게이트 대조 집합)에도 합쳐 넘긴다 — 풀에 없는 것은 싣지 않는다(INV-1)
+    named: tuple[Poi, ...] = ()
 
 
 def build_edit_translation_vars(
@@ -152,6 +219,11 @@ def build_edit_translation_vars(
         else:
             over.append(p)
     kept += _named_beyond_cap(over, inp.utterance, [by_id[pid].name for pid in inp.current_slots if pid in by_id])
+    shown = {p.poi_id for p in kept} | in_use
+    for p in inp.named:  # 이름 조회가 찾은 곳(F9) — 풀 안인 것만, 이미 실린 곳·현재 슬롯은 다시 싣지 않는다
+        if pool.contains(p.poi_id) and p.poi_id not in shown:
+            shown.add(p.poi_id)
+            kept.append(p)
     candidate_lines = [
         f"- {p.poi_id} | {p.category.value} | {inline(p.name)}"
         for p in sorted(kept, key=lambda p: str(p.poi_id))

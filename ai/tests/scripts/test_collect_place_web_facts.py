@@ -42,6 +42,16 @@ def test_targets_put_places_without_documents_first_and_skip_stays() -> None:
     assert [t["ref"] for t in got] == ["2", "1"]
 
 
+def test_targets_fill_what_nothing_else_covers_first() -> None:
+    def prop(ref: str, source: str) -> dict:
+        return {"source": source, "region": "제주시", "poi": {"name": ref, "category": "FOOD"}, "provenance": {"content_id": ref}}
+
+    props = [prop("real", "TOURAPI"), prop("card", "TOURAPI"), prop("tour", "TOURAPI"), prop("local", "LOCALDATA"), prop("map", "OVERTURE")]
+    got = c.targets(props, has_doc={"real"}, has_card={"card"})
+    # 다른 출처가 없는 곳 → 관광공사 곳(개요 수집이 채운다) → 카드만 있는 곳 → 진짜 문서가 있는 곳
+    assert [t["ref"] for t in got][2:] == ["tour", "card", "real"] and {t["ref"] for t in got[:2]} == {"local", "map"}
+
+
 def test_facility_facts_that_only_look_like_hours_or_praise_survive() -> None:
     ok = ["무료 주차장이 있다", "오픈 주방 구조", "추천 메뉴는 보말칼국수"]
     assert [f["text"] for f in c.clean_facts(_rec(*[(t, "u1", None) for t in ok]))] == ok
@@ -201,6 +211,7 @@ def test_claude_turn_paused_by_dynamic_filtering_is_continued_and_counted_whole(
             return self.replies[len(self.calls) - 1]
 
     monkeypatch.setattr(c, "MODEL", "claude-haiku-5-5")
+    monkeypatch.setattr(c, "THINKING", "off")
     client = _Client()
     text, cites, tokens_in, tokens_out, searches = c.ask_claude(client, "질문")
     assert (text, tokens_in, tokens_out, searches) == ('{"found": false}', 200, 20, 2)  # 본문은 끝 응답, 셈은 둘 다
@@ -212,3 +223,19 @@ def test_claude_turn_paused_by_dynamic_filtering_is_continued_and_counted_whole(
     client.replies[0] = client.replies[1]
     c.ask_claude(client, "질문")
     assert len(client.calls) == 1 and "thinking" not in client.calls[0]  # sonnet-5-5 는 끄기를 400 으로 거부한다
+
+
+def test_thinking_low_is_the_default_and_raises_the_output_cap(monkeypatch) -> None:
+    from types import SimpleNamespace as N
+
+    seen = []
+
+    class _Client:
+        messages = N(create=lambda **kw: seen.append(kw) or N(
+            stop_reason="end_turn", usage=N(input_tokens=1, output_tokens=1, server_tool_use=N(web_search_requests=1)),
+            content=[N(type="text", text="{}", citations=[])]))
+
+    monkeypatch.setattr(c, "MODEL", "claude-haiku-5-5")
+    assert c.THINKING == "low"  # 11-02 시험: 지시문을 조이고 effort low — 근거 없음 4%·지원 90%(사고 끔은 지원 81%)
+    c.ask_claude(_Client(), "질문")
+    assert seen[0]["output_config"] == {"effort": "low"} and "thinking" not in seen[0] and seen[0]["max_tokens"] == 8000
