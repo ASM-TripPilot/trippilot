@@ -99,6 +99,14 @@ interface NotificationScheduleRepository {
      * 재적재와 달리 행을 지우고 다시 만들지 않으므로, 앞서 받은 문구를 잃지 않고 빠진 행만 메울 수 있다.
      */
     fun attachCopy(scheduleId: UUID, title: String, body: String, copyBasis: String): Boolean
+
+    /**
+     * 이 계정의 **미발화·미취소** 예약을 전부 취소한다 — 계정 삭제 요청. 취소한 수를 돌려준다.
+     *
+     * 지우지 않고 `canceled_at` 을 찍는다. 이미 발화한 행은 지난 사실이라 건드리지 않고, 철회(복원)하면
+     * 여행마다 [replacePending] 이 새로 만들므로 여기서 지운 것을 되살릴 필요가 없다.
+     */
+    fun cancelPendingOf(accountId: UUID, at: Instant): Int
 }
 
 /** 최근 두 창의 실제 발송 건수(COST-U6-01). */

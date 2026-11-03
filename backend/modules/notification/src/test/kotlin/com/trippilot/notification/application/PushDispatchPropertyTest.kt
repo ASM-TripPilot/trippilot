@@ -69,6 +69,7 @@ class PushDispatchPropertyTest : StringSpec({
             return true
         }
         override fun remove(accountId: UUID, token: String) = rows.removeIf { it.token == token }
+        override fun removeAll(accountId: UUID): Int = rows.count { it.accountId == accountId }.also { rows.removeIf { r -> r.accountId == accountId } }
     }
 
     class Notifications : NotificationRepository {

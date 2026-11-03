@@ -71,6 +71,7 @@ class PlanBTriggeredSubscriberTest : StringSpec({
         override fun invalidate(token: String, at: Instant) = false
         override fun invalidateIfNotSeenSince(token: String, notSeenAfter: Instant, at: Instant) = false
         override fun remove(accountId: UUID, token: String) = false
+        override fun removeAll(accountId: UUID) = 0
     }
 
     /** 나간 메시지를 붙든다 — 기기에 무엇이 떴는지(제목·탭 목적지)는 메시지를 봐야 안다. */

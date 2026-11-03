@@ -90,4 +90,7 @@ interface PushTokenRepository {
 
     /** 로그아웃·기기 해제. 남의 토큰이면 false. */
     fun remove(accountId: UUID, token: String): Boolean
+
+    /** 이 계정의 토큰을 **전부** 지운다(무효 포함) — 계정 삭제 요청. 지운 수를 돌려준다. */
+    fun removeAll(accountId: UUID): Int
 }
