@@ -61,12 +61,12 @@ frontend/.claude/skills/verify-fv-polling/scripts/run.sh [--frontend <node_modul
 | `src/app/model/useGenerationWatch.ts` · `generationWatch.ts` | GET /trips 의 유일한 폴링 관찰자 `tripsRefetchInterval`(목록의 그 여행이 PARTIAL 이거나 `itineraryGenerating`) · 조회 오류여도 느린 간격으로 계속 · 진행 화면 양보 없음(TRIP-1677) | `ShellPollDue`(적합성) |
 | `src/pages/itinerary/itinerary-mustvisit/ui/MustVisitListPage.tsx` · `src/pages/trip/trip-new-step2/ui/TripBasesPage.tsx` | `guardPress(goToGenerating)` · `regenerate = guardPress(...)` | `PressStart`·`EchoTap`(`EntryGuarded = TRUE`, 재현 R5 는 MustVisitListPage) |
 | `app/trips/[tripId]/itinerary/generating.tsx` | `mode` 를 주소 파라미터로 받는다 | `Reload`(웹) |
-| `src/app/entrypoint/AppProviders.tsx` · `src/shared/api/mutator.ts` | staleTime 30초·retry · 생성 POST timeout 0 | 가정(아래). GET 재시도는 `GetFail` 한 덩어리 |
+| `src/app/entrypoint/AppProviders.tsx` · `queryClient.ts` · `src/shared/api/mutator.ts` | staleTime 30초·retry(`queryClient.ts`) · 생성 POST timeout 0 | 가정(아래). GET 재시도는 `GetFail` 한 덩어리 |
 | `../backend/.../itinerary-generation/application/{GenerateItineraryService,GenerationSessionService,SecondPhaseGenerator,StalePartialSweeper}.kt` | 서버 규칙 — 가정 A1~A5 · 1차 저장의 세션 확인 없음(`ServerChecksSession = FALSE`) | 가정. 바뀌면 `GenPolling.tla` ASSUMPTION 주석·상수와 재현 테스트의 가짜 서버를 함께 고친다 — 서버가 세션을 확인하게 되면 cfg 를 TRUE 로 |
 
 ## 동기화
 
-- **sync 커밋: `e752601a317a104cbe43a40fcf5e3a66786d9887`** (TRIP-1690 결함 수정, 2026-11-02). 이 커밋에서 위 표의 코드와 모델이 같다는 것을 적합성·재현·읽기로 확인했다. 폴백 인터스티셜 가드(`!regenLoading`)는 모델 밖이다(폴백 축을 모델링하지 않는다 — `DraftPage.integration` C7 이 지킨다). 처음 sync 는 `f153fe245`(결함 발견 시점).
+- **sync 커밋: `9fb72b1aa90f8b0d9e9bc7bd048af5645fb99964`** (develop, 2026-11-03 — TRIP-1677 셸 단독 폴링 반영 `4cfc810b6` 이후 덮는 파일 변경 3건을 읽어 모델 무영향 확인: 쿼리 기본값을 `queryClient.ts` 로 옮김(retry·staleTime 그대로, 복귀 재조회 정책만 추가) · `useGenerationWatch` import 경로 · `GeneratingScreen` 동작 줄이기 공용 게이트). 이 커밋에서 위 표의 코드와 모델이 같다는 것을 적합성·재현·읽기로 확인했다. 폴백 인터스티셜 가드(`!regenLoading`)는 모델 밖이다(폴백 축을 모델링하지 않는다 — `DraftPage.integration` C7 이 지킨다). 처음 sync 는 `f153fe245`(결함 발견 시점), 그다음 `e752601a3`(TRIP-1690 결함 수정).
 - sync 커밋은 **위 표의 코드를 새 커밋에서 다시 읽어 모델이 그 코드를 그대로 기술한다고 확인한 뒤에만** 앞으로 옮긴다(이 파일과 `scripts/run.sh` 의 `SYNC=` 두 곳). 스크립트가 exit 0 이라는 것만으로 옮기지 마라 — 적합성은 CODE MIRROR 구역만 기계로 보고, 요청·잠금·화면 이동 단계는 읽어서 맞춰야 한다.
 
 ## 결과 읽기 — 실제 버그인가, 모델 오류인가
