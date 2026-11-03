@@ -79,6 +79,27 @@ def test_review_route_leaves_change_requests_trip_less_turns_and_failures_alone(
     assert broken.outcome == "OUT_OF_SCOPE"  # 깨진 출력은 판단이 아니다 — 2‴ 와 같은 입구라 종전 범위 밖
 
 
+def test_review_question_the_classifier_sent_to_replan_is_framed_when_no_situation_is_said() -> None:
+    """분류가 다시 짜기로 고른 검토 말 — 상황(날씨·늦음·휴무·몸 상태)이 없으면 검토 카드다(개발 재현 "내일 일정 너무 빡빡하지 않아?" →
+    REPLAN 0.4 → 다시 짜기 안내). 다시 짜기의 칸은 일정 보기 인자로 넘기지 않는다. 상황이 있으면 다시 짜기 그대로다."""
+    b = _build(_canned(Intent.REPLAN, day="내일"))
+    out = b.orch.turn(_input("내일 일정 너무 빡빡하지 않아?"))
+    assert out.outcome == "FRAME" and out.frames[0].intent is Intent.SHOW_SCHEDULE
+    assert dict(out.frames[0].arguments) == {} and b.llm.features() == ["DIALOGUE_INTENT"]
+    for said in ("비 와서 오늘 일정 무리일까?", "늦게 일어나서 오늘 일정 빡빡하지 않아?"):
+        kept = _build(_canned(Intent.REPLAN)).orch.turn(_input(said))
+        assert kept.outcome != "FRAME" and kept.frames[0].intent is Intent.REPLAN, said
+
+
+def test_knowledge_prompt_does_not_carry_the_itinerary_counts() -> None:
+    """지식 즉답은 일정 날·곳 수를 받지 않는다 — 그 수로 "하루 7곳이라 꽤 빡빡한 편이에요"처럼 내 일정을 판정했다(BR-U8-14). 지역·기간은
+    '거기'·'그때'를 읽는 데 그대로 싣는다."""
+    b = _null_build()
+    b.orch.turn(_input("제주는 언제 가면 좋아?"))
+    (req,) = [r for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_KNOWLEDGE"]
+    assert "여행 제주" in req.prompt and "곳 · 화면" not in req.prompt and "일정 " not in req.prompt.split("여행 제주", 1)[1].split("\n", 1)[0]
+
+
 def test_review_question_without_a_trip_is_framed_so_the_backend_says_why(caplog) -> None:
     """검토할 일정이 없으면 이유가 있는 안내다(AC2·INV-4) — FRAME 을 넘기면 BE 가 여행 없는 일정 보기에 "먼저 여행을 만들거나…"로 답한다.
     종전엔 지식 즉답이 일반론으로 판정했다. 넘긴 턴은 로그로 센다(BE 저장 칸은 일정 보기와 같아 따로는 못 센다)."""
