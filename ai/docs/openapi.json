@@ -2228,7 +2228,7 @@
       },
       "RepairItineraryRequest": {
         "additionalProperties": false,
-        "description": "`POST /ai/v1/itinerary/repair` — 백엔드 포트 `repair(solution, violations)` 대응 + IO-1.",
+        "description": "`POST /ai/v1/itinerary/repair` — 백엔드 포트 `repair(solution, violations)` 대응 + IO-1.\n\n`request_meta.requested_at` 은 '지금'이다 — 그보다 먼저 시작한 곳은 수리·재검증 밖에 두고 원 시각 그대로\n돌려준다(오늘 가장 최근에 시작한 곳만 다음 일정의 출발점으로 남는다, TRIP-1709).",
         "properties": {
           "anchors": {
             "items": {

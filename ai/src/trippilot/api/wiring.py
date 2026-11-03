@@ -323,6 +323,14 @@ def _tz_aware(value: datetime, tz: timezone) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=tz)
 
 
+def _local_minute_ceil(value: datetime, tz: timezone) -> datetime:
+    """요청 시각 → 현지 '지금'(분 올림). 편집 `EditAgent._floor`·조립 `not_before_floor` 와 같은 규칙 —
+    백엔드는 UTC(…Z)로 보내므로 현지로 옮기지 않으면 날짜·시각이 9시간 어긋난다(#1724 의 13:10→04:10)."""
+    local = _tz_aware(value, tz).astimezone(tz)
+    minute = local.replace(second=0, microsecond=0)
+    return minute if minute == local else minute + timedelta(minutes=1)
+
+
 def _domain_reflection_request(
     request: schemas.ReflectionGenerateRequest,
 ) -> ReflectionRequest:
@@ -2316,9 +2324,11 @@ class WiredItineraryOrchestrator:
             for w in request.time_windows if w.date in anchors
         }
         facade = self._assembly_provider.for_pool(poi_index)
+        # 지금 = 요청 시각(백엔드가 부르는 순간의 시계, 편집 경계 `now` 와 같은 값) — 그보다 먼저 시작한 곳은 수리·재검증 밖(TRIP-1709 F1)
         result = facade.repair(
             solution, problem, _deadline_budget(request.request_meta),
             TraceId(request.request_meta.request_id), departures=departures,
+            now=_local_minute_ceil(request.request_meta.requested_at, self._tz),
         )
         repaired = result.repaired
         if repaired is not None:
