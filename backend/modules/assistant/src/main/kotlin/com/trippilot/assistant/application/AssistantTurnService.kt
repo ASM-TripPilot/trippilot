@@ -10,6 +10,7 @@ import com.trippilot.assistant.domain.AssistantSession
 import com.trippilot.assistant.domain.AssistantSessionRepository
 import com.trippilot.assistant.domain.AssistantSurface
 import com.trippilot.assistant.domain.AssistantUsageRepository
+import com.trippilot.assistant.domain.ContextSnapshot
 import com.trippilot.assistant.domain.DialogueInterpretPort
 import com.trippilot.assistant.domain.DialogueMemoryPort
 import com.trippilot.assistant.domain.Intent
@@ -25,6 +26,9 @@ import com.trippilot.assistant.domain.QuickReply
 import com.trippilot.assistant.domain.QuickReplyAction
 import com.trippilot.assistant.domain.RecentTurn
 import com.trippilot.assistant.domain.RecordedTurn
+import com.trippilot.auth.api.LocationConsentFacade
+import com.trippilot.auth.api.LocationLegalLogFacade
+import com.trippilot.auth.api.LocationUsePurpose
 import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.RateLimited
@@ -99,6 +103,8 @@ class AssistantTurnService(
     private val poiSurfaces: PoiSurfaceFacade,
     /** 답하는 사이 지워진 대화의 상대 기억을 한 번 더 지우는 데만 쓴다 — 아래 `send` 의 "대화가 없다" 갈래. */
     private val memory: DialogueMemoryPort,
+    private val locationConsents: LocationConsentFacade,
+    private val legalLogs: LocationLegalLogFacade,
     private val properties: AssistantProperties,
     private val mapper: ObjectMapper,
     private val clock: Clock,
@@ -106,7 +112,10 @@ class AssistantTurnService(
 ) {
     private val tx = TransactionTemplate(transactionManager)
 
-    fun send(accountId: UUID, sessionId: UUID, clientTurnId: UUID, input: TurnInput, surface: AssistantSurface): TurnResult {
+    fun send(
+        accountId: UUID, sessionId: UUID, clientTurnId: UUID, input: TurnInput, surface: AssistantSurface,
+        here: ContextSnapshot.Here? = null,
+    ): TurnResult {
         val startedAt = clock.instant()
         val verdict = inspect(input, sessionId)
         val accepted = when (val first = tx.execute { accept(accountId, sessionId, clientTurnId, input, verdict, startedAt) }!!) {
@@ -115,7 +124,7 @@ class AssistantTurnService(
             // 같은 턴이 이미 들어와 있다 — 앞선 처리가 답을 남기기를 기다린다. 못 남기고 죽었으면 넘겨받는다.
             is Accepted.Pending -> awaitAdmitted(first, sessionId, clientTurnId)?.let { return it } ?: first.resumed
         }
-        val reply = runCatching { respond(accepted, surface, startedAt) }.getOrElse { e ->
+        val reply = runCatching { respond(accepted, surface, startedAt, here) }.getOrElse { e ->
             // 처리기·조회의 예상 못 한 실패도 턴을 죽이지 않는다 — 사용자 행은 이미 남았다.
             log.warn("도우미 턴 처리 실패 — 폴백으로 답합니다. sessionId={} type={}", sessionId, e.javaClass.simpleName)
             // 버튼을 눌러 온 턴에는 [다시 시도]를 주지 않는다 — 다시 태울 "말"이 없어 엉뚱한 옛 문장이 나간다.
@@ -320,7 +329,7 @@ class AssistantTurnService(
         val llm: Boolean = false,
     )
 
-    private fun respond(turn: Accepted.New, surface: AssistantSurface, startedAt: Instant): Reply {
+    private fun respond(turn: Accepted.New, surface: AssistantSurface, startedAt: Instant, here: ContextSnapshot.Here? = null): Reply {
         val session = turn.session
         val hasTrip = session.tripId != null
         when (turn.verdict) {
@@ -391,11 +400,12 @@ class AssistantTurnService(
         // 도우미 행에도 적어, 평가를 상대 로그(프롬프트 판본·모델·폴백)와 잇는다. 해석이 실패해도 적는다 — 상대가 요청을 받았다면
         // 그 호출의 기록(오류·시한 초과·폴백)이 이 번호로 남아 있다. 해석을 부르지 않는 갈래(위의 반환들)는 번호가 없다.
         val traceId = UUID.randomUUID().toString()
+        val context = snapshot.copy(here = usedHere(session.accountId, here, turn.user.messageId))
         val interpretation = runCatching {
             port.interpret(
                 InterpretRequest(
                     utterance = utterance, surface = surface,
-                    context = snapshot,
+                    context = context,
                     dialogueContext = bumpTurnIndex(session.dialogueContext),
                     requestedAt = startedAt, deadlineMs = deadlineMs,
                     sessionId = session.sessionId, accountRef = session.accountId.toString(),
@@ -409,6 +419,21 @@ class AssistantTurnService(
         }
         return answer(interpretation, session, surface, utterance, startedAt, turn.user.seq).let { it.copy(message = it.message.copy(traceId = traceId)) }
     }
+
+    /**
+     * 앱이 보낸 현재 위치를 상대에 실을지(O-U8-5). 위치 동의(L2)가 켜진 계정만 — 앱은 동의가 꺼지면 보내지 않지만, 앱 판정을 믿지 않고
+     * 서버 정본으로 다시 가른다(BR-U8-02 와 같은 원칙). 실으면 그것이 곧 위치 **이용**이라 사실을 먼저 남긴다(위치정보법 이용 사실
+     * 확인자료) — 남기지 못하면 싣지 않는다. 동의를 못 읽어도 싣지 않는다. 어느 쪽이든 위치 없이 답은 나간다.
+     */
+    private fun usedHere(accountId: UUID, here: ContextSnapshot.Here?, userMessageId: UUID): ContextSnapshot.Here? =
+        here?.takeIf {
+            runCatching {
+                if (!locationConsents.hasLocationLegalConsent(accountId)) return@runCatching false
+                legalLogs.recordUse(accountId, LocationUsePurpose.ASSISTANT_TURN, userMessageId)
+                true
+            }.onFailure { e -> log.warn("현재 위치를 싣지 않습니다 — 동의·이용 기록 실패. type={}", e.javaClass.simpleName) }
+                .getOrDefault(false)
+        }
 
     private fun answer(result: Interpretation, session: AssistantSession, surface: AssistantSurface, utterance: String, startedAt: Instant, userSeq: Long): Reply {
         val hasTrip = session.tripId != null

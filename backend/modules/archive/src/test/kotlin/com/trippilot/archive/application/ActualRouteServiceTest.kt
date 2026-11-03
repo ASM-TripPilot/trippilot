@@ -75,6 +75,7 @@ class ActualRouteServiceTest : StringSpec({
             stored += subjectId to pointCount
         }
         override fun recordPurge(accountId: UUID, scope: LocationPurgeScope, purgedCount: Int) { purged += scope to purgedCount }
+        override fun recordUse(accountId: UUID, purpose: LocationUsePurpose, subjectId: UUID) = error("경로는 1회 이용 로그를 쓰지 않는다")
         override fun recordUseInterval(
             accountId: UUID, purpose: LocationUsePurpose, intervalId: UUID, tripId: UUID,
             phase: LocationIntervalPhase, at: Instant, endReason: String?, regionCount: Int?,

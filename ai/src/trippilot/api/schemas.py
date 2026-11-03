@@ -981,6 +981,9 @@ class DialogueContextSnapshot(BoundaryModel):
     # 계정 취향(선택, 하위호환) — generate 의 `preference_profile` 과 같은 스키마·어휘. 지역 추천(RECOMMEND_REGION)만 읽는다.
     # AI 가 먼저 배포되고 백엔드가 뒤따라 싣는다(`extra=forbid` — 구 백엔드 요청은 그대로 통과).
     preference_profile: PreferenceProfileSchema | None = None
+    # 앱의 포그라운드 현재 위치(선택, O-U8-5 — 2026-10-20 사용자 결정). 백엔드가 **위치 동의가 켜진 턴에만** 싣고 이용 사실을
+    # 법정 로그에 남긴다. AI 는 저장·로그·프롬프트에 옮기지 않고 날씨 앵커 좌표로만 쓴다. null = 모름(동의 없음·측위 실패).
+    device_location: CoordSchema | None = None
 
 
 class DialogueTurnSchema(BoundaryModel):

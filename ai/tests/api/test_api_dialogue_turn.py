@@ -189,6 +189,24 @@ def test_weather_turn_fans_out_to_poi_info_then_weather_port(caplog: pytest.LogC
     assert days == (_D2,)
 
 
+def test_weather_turn_without_a_trip_asks_at_the_device_location() -> None:
+    """O-U8-5 — 여행 없는 도우미에 "오늘 날씨": 백엔드가 실은 현재 위치(`context.device_location`)로 묻는다.
+    종전엔 "먼저 여행을 만들어"로 끝났다(운영 2026-11-03 16:20, 날씨 조회 0회)."""
+    weather = _Weather()
+    client = _client({_INTENT: _intent_json("GET_WEATHER"),
+                      _ANSWER: _answer_json("오늘 서울은 비 올 확률이 80%예요. 우산을 챙기면 좋겠어요.")}, weather=weather)
+    body = _body("오늘 날씨 어때")
+    body["context"] = {"surface": "HOME", "trip": None, "base_stays": [], "itinerary": None,
+                       "device_location": {"lat": 37.57, "lng": 126.982}}
+    res = client.post(URL, json=body)
+    assert res.status_code == 200, res.text
+    answer = _assert_answer_shape(res.json(), "GET_WEATHER", "INFO")
+    assert answer["payload"]["title"] == "서울 날씨"
+    ((coord, _days),) = weather.calls
+    assert (coord.lat, coord.lng) == (37.57, 126.982)
+    assert "37.57" not in json.dumps(res.json())  # 좌표를 응답(→ 저장되는 도우미 행)으로 되돌려 싣지 않는다
+
+
 def test_alternative_turn_returns_candidates_only_from_the_in_memory_pool() -> None:
     client = _client({_INTENT: _intent_json("SUGGEST_ALTERNATIVE", target="우도"),
                       _ANSWER: _answer_json("우도 대신 갈 만한 곳을 골라 봤어요. 마음에 드는 곳을 눌러 바꿀 수 있어요.")})

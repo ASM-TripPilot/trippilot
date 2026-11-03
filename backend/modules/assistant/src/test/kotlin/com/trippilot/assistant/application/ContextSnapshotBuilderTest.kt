@@ -68,6 +68,7 @@ class ContextSnapshotBuilderTest : StringSpec({
         "status", "days", "date", "slots", // itinerary
         "slotKey", "name", "startAt", "category", // slot
         "tastes", "styles", "activities", // 계정 취향 — 지역 추천이 쓰는 두 축만
+        "here", // 현재 위치(O-U8-5) — 빌더는 **늘 비워 둔다**. 위치 동의를 확인한 서비스만 채운다(그래서 아래 "lat"·"lng" 부재가 그대로 선다)
     )
 
     fun prefs(owner: UUID, styles: List<String>, activities: List<String>) = object : PreferenceFacade {
@@ -106,6 +107,7 @@ class ContextSnapshotBuilderTest : StringSpec({
         // 위반 사유·거리·좌표·예산·동행은 실을 자리가 없다
         val wire = json.writeValueAsString(snapshot)
         listOf("영업시간과", "840m", "900000", "친구", "lat", "lng", "hasViolation").forEach { wire shouldNotContain it }
+        snapshot.here shouldBe null // 현재 위치는 빌더가 아니라 동의를 확인한 서비스가 채운다
         (keys(json.readTree(wire)) - whitelist) shouldBe emptySet()
     }
 

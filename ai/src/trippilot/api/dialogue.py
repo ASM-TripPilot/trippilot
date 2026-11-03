@@ -22,7 +22,7 @@ from trippilot.agents.planb.rag import PlanBAgent
 from trippilot.agents.schedule.agent import Clock
 from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent
 from trippilot.api import schemas
-from trippilot.domain.common import TraceId
+from trippilot.domain.common import GeoPoint, TraceId
 from trippilot.domain.freshness import ProviderKind
 from trippilot.domain.dialogue.intent import Intent
 from trippilot.domain.llm.llm import LlmFeature
@@ -98,7 +98,7 @@ def _trip_view(snapshot: schemas.DialogueContextSnapshot) -> TripView:
 
 
 def _snapshot(wire: schemas.DialogueContextSnapshot) -> TurnSnapshot:
-    """와이어 스냅샷 → `TurnSnapshot` (DE §2.1). 값은 백엔드 화이트리스트 그대로 — 좌표·가격 칸이 없다."""
+    """와이어 스냅샷 → `TurnSnapshot` (DE §2.1). 값은 백엔드 화이트리스트 그대로 — 가격 칸은 없고 좌표는 현재 위치 하나뿐(O-U8-5)."""
     trip = wire.trip
     itinerary = wire.itinerary
     return TurnSnapshot(
@@ -113,6 +113,7 @@ def _snapshot(wire: schemas.DialogueContextSnapshot) -> TurnSnapshot:
         ),
         tastes=(tuple(wire.preference_profile.styles), tuple(wire.preference_profile.activities))
         if wire.preference_profile is not None else None,
+        here=GeoPoint(wire.device_location.lat, wire.device_location.lng) if wire.device_location is not None else None,
     )
 
 
