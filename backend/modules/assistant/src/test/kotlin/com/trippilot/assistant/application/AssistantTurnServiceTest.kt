@@ -806,6 +806,24 @@ class AssistantTurnServiceTest : StringSpec({
         broken.interpreter!!.requests.single().context.here shouldBe null // 이용 사실을 못 남기면 싣지 않는다
     }
 
+    "위치 이용 기록에 쓴 시간도 해석 시한에서 뺀다 — 기록 뒤 남은 예산이 없으면 해석을 부르지 않는다" {
+        val here = ContextSnapshot.Here(37.57, 126.982)
+        fun World.ask(recordMs: Long) = location.run {
+            consent = true
+            onRecord = { clock.now = clock.now.plusMillis(recordMs) } // 느린 법정 로그 쓰기
+            service().send(acc, session(withTrip = false).sessionId, UUID.randomUUID(), TurnInput.Text("오늘 날씨"), AssistantSurface.HOME, here)
+        }
+
+        val slow = world()
+        slow.ask(9_000)
+        // 13초 예산 − 기록 9초 − 왕복 여유 1초 — 기록 전에 잰 단계 상한(5초)을 그대로 주면 턴 예산을 넘겼다
+        slow.interpreter!!.requests.single().deadlineMs shouldBe 3_000
+
+        val late = world()
+        late.ask(12_500).messages[1].kind shouldBe MessageKind.FALLBACK
+        late.interpreter!!.requests shouldBe emptyList()
+    }
+
     /** 버튼에는 다시 태울 "말"이 없다 — [다시 시도]를 주면 엉뚱한 옛 문장이 나간다. */
     "버튼을 눌러 온 턴이 실패하면 다시 시도를 주지 않는다 — 말로 온 턴에는 준다" {
         val w = world()
