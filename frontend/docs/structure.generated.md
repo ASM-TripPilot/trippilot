@@ -527,11 +527,14 @@
 
 ## src/features/reflection/
 - `src/features/reflection/index.ts`  →  useTripSummary · useRecordBarNav
-- `src/features/reflection/index.view.ts`  →  formatKm · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · SHARE_FORMATS · buildShareCard · formatShareCardStats · validateCaption · validateHashtags · pickReflectionDate · summaryStats · daySubtitle · distanceSourceLabel · resolveSummaryView · shareEnabled · toOrderedVisitList · BackArrowGlyph · EmptyCircleGlyph · LocationOffGlyph · PhotoOffGlyph · RetryGlyph
+- `src/features/reflection/index.view.ts`  →  formatKm · buildMagazineVM · ReflectionMagazine · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · SHARE_FORMATS · buildShareCard · formatShareCardStats · validateCaption · validateHashtags · pickReflectionDate · summaryStats · daySubtitle · distanceSourceLabel · resolveSummaryView · shareEnabled · toOrderedVisitList · BackArrowGlyph · EmptyCircleGlyph · LocationOffGlyph · PhotoOffGlyph · RetryGlyph
 
 ## src/features/reflection/model/
+- `src/features/reflection/model/categoryPalette.ts`  →  PaletteKey · CategoryPalette · CATEGORY_PALETTES · MAGAZINE_TONES · paletteKeyForCategory
 - `src/features/reflection/model/formatKm.ts`  →  formatKm
+- `src/features/reflection/model/magazineVM.ts`  →  MagazineVisit · MagazineSlot · MagazineInput · MagazinePicture · MagazineVM · splitHighlight · buildMagazineVM
 - `src/features/reflection/model/recordBarNav.ts`  →  RecordBarNav · pickReflectionDate
+- `src/features/reflection/model/reflectionPayload.ts`  →  ReflectionScene · ReflectionPayload · SceneKind · parseReflectionPayload · sceneKind · devicePhotoUri · slotUri
 - `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · formatShareCardStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags
 - `src/features/reflection/model/summaryStats.ts`  →  SummaryStatCells · summaryStats
 - `src/features/reflection/model/summaryView.ts`  →  OrderedVisit · shareEnabled · resolveSummaryView · toOrderedVisitList · distanceSourceLabel · daySubtitle
@@ -539,7 +542,10 @@
 - `src/features/reflection/model/useTripSummary.ts`  →  UseTripSummaryResult · useTripSummary
 
 ## src/features/reflection/ui/
+- `src/features/reflection/ui/MagazineMotion.tsx`  →  KenBurns · StickerPop · Highlight
+- `src/features/reflection/ui/MagazineParts.tsx`  →  MagazineCover · MagazineQuote · MagazineSceneCard · MagazinePlanChange · MagazineRoute · MagazineStats · MagazineHashtags
 - `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  LocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · RetryGlyph · BackArrowGlyph
+- `src/features/reflection/ui/ReflectionMagazine.tsx`  →  ReflectionMagazineProps · ReflectionMagazine
 
 ## src/features/request-replan/
 - `src/features/request-replan/index.ts`  →  useStartReplan
@@ -1072,18 +1078,16 @@
 - `src/pages/record/daily-reflection/model/fillTemplate.ts`  →  TemplateContext · GUIDE_TEXTS · isGuideText · isTemplateOnly · fillTemplate
 - `src/pages/record/daily-reflection/model/missingParts.ts`  →  LocationPermissionState · MapNoticeReason · MapNotice · MissingParts · missingParts
 - `src/pages/record/daily-reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative · basicNarrative
-- `src/pages/record/daily-reflection/model/reflectionScenes.ts`  →  ReflectionScene · parseScenes · slotUri
 - `src/pages/record/daily-reflection/model/statsCard.ts`  →  statsCard
 - `src/pages/record/daily-reflection/model/useDailyReflection.ts`  →  UseDailyReflectionResult · useDailyReflection
+- `src/pages/record/daily-reflection/model/useMagazineSources.ts`  →  useMagazineSources
 - `src/pages/record/daily-reflection/model/useReflectionPhotos.ts`  →  useReflectionPhotos
 
 ## src/pages/record/daily-reflection/ui/
 - `src/pages/record/daily-reflection/ui/ChangeSummaryRow.tsx`  →  ChangeSummaryRowProps · ChangeSummaryRow
 - `src/pages/record/daily-reflection/ui/DailyReflectionPage.tsx`  →  DailyReflectionPageProps · DailyReflectionPage
 - `src/pages/record/daily-reflection/ui/DailyReflectionScreen.tsx`  →  ReflectionFace · ReflectionDayTab · DailyReflectionScreenProps · DailyReflectionScreen
-- `src/pages/record/daily-reflection/ui/NarrativeBlock.tsx`  →  NarrativeBlockProps · NarrativeBlock
 - `src/pages/record/daily-reflection/ui/ReflectionPhotoGrid.tsx`  →  ReflectionPhotoGridProps · ReflectionPhotoGrid
-- `src/pages/record/daily-reflection/ui/ReflectionScenes.tsx`  →  ReflectionScenesProps · ReflectionScenes
 - `src/pages/record/daily-reflection/ui/ReflectionStatsRow.tsx`  →  ReflectionStatsRowProps · ReflectionStatsRow
 
 ## src/pages/record/record-add-visit/
@@ -1156,7 +1160,6 @@
 - `src/pages/record/trip-summary/index.ts`  →  TripSummaryPage
 
 ## src/pages/record/trip-summary/ui/
-- `src/pages/record/trip-summary/ui/CountUpText.tsx`  →  COUNT_UP_DURATION_MS · CountUpText
 - `src/pages/record/trip-summary/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
 - `src/pages/record/trip-summary/ui/TripSummaryPage.tsx`  →  TripSummaryPageProps · TripSummaryPage
 - `src/pages/record/trip-summary/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayReflectionVM · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
@@ -1786,6 +1789,7 @@
 - `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · TAB_BAR_MIN_HEIGHT · TAB_BAR_PADDING_TOP · TAB_BAR_TOP · BottomTabBarProps · ItineraryIconActive · ItineraryIconInactive · RecordsIconActive · RecordsIconInactive · TAB_CONFIG · BottomTabBar
 - `src/shared/ui/CollageEmptyState.tsx`  →  CollageEmptyStateProps · CollageEmptyState
 - `src/shared/ui/ConfirmDialog.tsx`  →  ConfirmTone · ConfirmButton · ConfirmDialogProps · ConfirmDialog
+- `src/shared/ui/CountUpText.tsx`  →  COUNT_UP_DURATION_MS · CountUpText
 - `src/shared/ui/GlassSurface.tsx`  →  GlassSurfaceProps · GlassSurface
 - `src/shared/ui/HeartButton.tsx`  →  HeartButtonProps · heartSaveLabel · HeartButton
 - `src/shared/ui/HeartGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
@@ -1934,4 +1938,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1256개 파일
+합계 1260개 파일

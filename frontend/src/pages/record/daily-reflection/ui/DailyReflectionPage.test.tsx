@@ -20,6 +20,7 @@ import { useGetTripsTripId } from '@/shared/api/index.hooks';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
+import { answerReduceMotionSynchronously } from '@/test-support/animatedProbe';
 import {
   flushOsAnswer,
   holdReduceMotionOn,
@@ -54,6 +55,12 @@ jest.mock('../model/useDailyReflection', () => ({
 
 jest.mock('../model/useReflectionPhotos', () => ({
   useReflectionPhotos: jest.fn(() => []),
+}));
+
+// TRIP-1665 — 매거진이 그날 방문·일정 조회(`useMagazineSources`)를 읽는다. 이 파일은 `generated/trips/trips` 를 `useGetTripsTripId` 하나로 바꿔
+// 끼우고 QueryClient 도 없어 실제 훅이 죽는다 → 스텁("조회 끝난 빈 하루": 방문 0 · 일정 [] )으로 막는다. 매거진 동작은 통합 파일이 본다.
+jest.mock('../model/useMagazineSources', () => ({
+  useMagazineSources: () => ({ visits: [], slots: [], spontaneousNames: {} }),
 }));
 
 // TRIP-1584 — 하단 바가 `useTripSummary` 를 읽는다. 이 파일엔 QueryClient 가 없어 스텁(조회 중)으로 막는다.
@@ -95,6 +102,10 @@ function card(subtitle: string): ReflectionCard {
 // jest 는 팩토리 밖 변수를 `mock*` 이름일 때만 허용하므로 지연 래퍼로 참조한다.
 const mockGetForeground = jest.fn();
 const mockRequestForeground = jest.fn();
+
+// 매거진의 등장·카운트업이 동작 줄이기를 비동기로 물어 act 경고가 난다 — 답을 render 의 act 안에서 동기로 준다(TRIP-1665).
+// 바 모션 describe 는 자기 beforeEach(holdReduceMotionOn)가 뒤에 돌아 덮는다.
+beforeEach(() => answerReduceMotionSynchronously(true));
 
 afterEach(() => {
   (router.canGoBack as jest.Mock).mockReset().mockReturnValue(true);
