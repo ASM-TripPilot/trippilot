@@ -268,7 +268,7 @@ data class ReplanDiffResponse(
 
 private fun com.trippilot.recalculation.domain.ReplanDiff.SlotView.toSlotResponse() = ReplanDiffSlotResponse(
     slotKey, startAt, endAt, isFixed, endsNextDay,
-    nameKo = nameKo, category = category, imageUrl = imageUrl, lat = lat, lng = lng,
+    nameKo = nameKo, category = category, imageUrl = imageUrl, imageLicense = imageLicense, lat = lat, lng = lng,
 )
 
 /**
@@ -291,6 +291,8 @@ data class ReplanDiffSlotResponse(
     val nameKo: String? = null,
     val category: String? = null,
     val imageUrl: String? = null,
+    /** [imageUrl] 사진의 공공누리 유형 `TYPE1`·`TYPE3` — TYPE3 이면 화면이 자르지 않고 전체를 보인다. 모르면 null. */
+    val imageLicense: String? = null,
     val lat: Double? = null,
     val lng: Double? = null,
 )

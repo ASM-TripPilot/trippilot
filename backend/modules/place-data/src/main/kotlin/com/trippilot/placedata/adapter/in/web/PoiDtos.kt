@@ -1,6 +1,7 @@
 package com.trippilot.placedata.adapter.`in`.web
 
 import com.trippilot.placedata.domain.DataStatus
+import com.trippilot.placedata.domain.ImageLicense
 import com.trippilot.placedata.domain.Poi
 import com.trippilot.placedata.domain.PoiCategory
 import com.trippilot.placedata.domain.PublicTags
@@ -31,6 +32,8 @@ data class PlaceResponse(
     val address: String?,
     val openingHours: String?,
     val imageUrl: String?,
+    /** [imageUrl] 사진의 공공누리 유형 — TYPE3 이면 앱이 자르지 않고 전체를 보인다. 모르면 null. */
+    val imageLicense: ImageLicense?,
     val tags: List<String>,
     val savedCount: Long,
     val dataStatus: DataStatus,
@@ -38,7 +41,8 @@ data class PlaceResponse(
     companion object {
         fun from(p: Poi) = PlaceResponse(
             poiId = p.poiId, nameKo = p.nameKo, category = p.category, lat = p.lat, lng = p.lng,
-            region = p.region, regionCode = p.regionCode, address = p.address, openingHours = p.openingHours, imageUrl = p.displayImageUrl, tags = PublicTags.of(p.tags),
+            region = p.region, regionCode = p.regionCode, address = p.address, openingHours = p.openingHours, imageUrl = p.displayImageUrl,
+            imageLicense = p.imageLicense, tags = PublicTags.of(p.tags),
             savedCount = p.savedCount, dataStatus = p.dataStatus,
         )
     }

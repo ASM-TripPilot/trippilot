@@ -10,6 +10,8 @@
 0  리터럴 "내가 할 수 있는 것 보기" → 결정론 능력 안내 ANSWER (LLM 0, BR-AO-18)
 1  보류 되묻기가 있으면 그 답으로 먼저 읽는다 (`dialogue_interpreter.answer_pending` 재사용, LLM 0)
 2  `DIALOGUE_INTENT` 1회 → `IntentGate` closed-set → `IntentMatch(LLM_DIRECT)`; 실패는 전부 OUT_OF_SCOPE + 사유 (BR-AO-02)
+2⁗′ 일정 검토 말(`asks_review` — 여행이 없어도, BE 가 이유를 말한다)은 분류가 일정 보기로 골랐거나 판단해서 닫았으면(2‴ 와 같은 입구) 2″·2‴ 보다 먼저
+   `FRAME(SHOW_SCHEDULE)` — BE 진행 검토 카드가 솔버 표기로 답한다(DEC-U8-14 · BR-U8-14, BR-AO-35)
 2″ 분류가 할 일 없음으로 닫았고(null·범위 밖 라벨) 발화가 맞장구·인사 낱말뿐이면 받아 주는 한마디 ANSWER — 범위 밖 카드 대신 (BR-AO-26)
 2‴ 그 밖에 분류가 판단해서 닫은 말(null·범위 밖 라벨·목록 밖 라벨)은 계획 워커가 있으면 `DIALOGUE_PLAN` 1회 → 닫힌 조회 도구(정보
    핸들러) ≤2 → 팬아웃 1회 → `merge_facts` → 5단계 답변(목록 밖 장소 검사 강제) → 프레임 없는 ANSWER. 도구 없음·거절·실패·시한
@@ -593,6 +595,55 @@ def _routed(call: IntentDraft, heard: str, *, seasonal_weather_is_knowledge: boo
     return _region_named(call, heard)
 
 
+# 일정 검토(US-ASSIST-03) — "내일 일정에서 무리한 부분 있어?"·"둘째 날 동선 빠듯하지 않아?"·"일정 검토해줘". 답은 BE 진행 검토 카드
+# (`QueryCards.review`)다(DEC-U8-14: 진행 검토 = SHOW_SCHEDULE 의 BE 처리기) — 문제는 솔버가 표기한 위반·구조적 사실뿐이고(BR-U8-14) AI 스냅샷엔
+# 위반 표기 칸이 없다. 오케스트레이터가 SHOW_SCHEDULE 을 일정 목록 ANSWER 로 끝내면서 말로 한 검토 요청은 카드에 닿지 못했다(TRIP-1705 — 분류
+# null → 계획 gap OTHER → 지식 즉답이 "하루 7곳이라 빡빡"을 지어내거나 범위 밖 카드). 낱말 안에 든 것('마무리'·'코스모스'·'힘들지만')은 표지가 아니다.
+# 강한 표지는 묻거나 부탁하는 꼴이면 혼자로 충분하다("무리한 곳 있어?"·"검토해줘" — "오늘 무리했더니 피곤해"는 아니다). 약한 표지는 일정 표지가 같이
+# 있어야 하고 주제 낱말이 붙으면 그 주제 질문이다("일정 중에 주차 문제는 없어?"). 일반 질문 표지가 있으면 둘 다 아니다 — 여행 일반 지식(BR-AO-34).
+# 반박 리뷰 재현(2026-11-03): '짠 거'(짠 음식)·"일정에 문제가 생겼어"·"계획 없이 가도 괜찮을까?"가 검토 카드로 갔다
+_STRONG_REVIEW = re.compile(r"(?<!마)무리|빠듯|빡빡|빡세|촘촘|검토|점검")
+_ASKING = re.compile(r"[?？]|줘|주세요|봐|(?:있|없|않)(?:어|나|니|을까|아|냐)|아니야|아냐|(?:나|까|니|냐)\s*$")
+_WEAK_REVIEW = re.compile(
+    r"괜찮은\s?(?:지|거야|건가)|괜찮을지|(?<!도)(?<!도\s)괜찮(?:을까|나|니|아요?\s?[?？]|겠)|문제점|문제\s?(?:는|가)?\s?(?:없|있)"
+    r"|체크(?!\s?인|\s?아웃)|힘들(?:지(?!만)|까|겠)")
+_SCHEDULE_CUE = re.compile(
+    r"일정|코스(?!모스)|동선|스케줄|계획|루트|\d{1,2}\s?일\s?차|첫\s?(?:째\s?)?날|(?:둘|셋|넷)째\s?날|마지막\s?날")
+_TOPIC_CUE = re.compile(r"주차|날씨|비\s?(?:와|오)|교통|입장|예약|영업|휴무|쉬는|비용|예산|돈")
+_GENERAL_CUE = re.compile(r"짤\s?때|짜는\s?법|보통|하루에|몇\s?(?:군데|곳)|\d+\s?곳|\d+\s?박|며칠|처음|혼자\s?여행|계획\s?없이")
+# 바꿔 달라는 말·만들어 달라는 말은 그 의도(REPLAN·EDIT·REGENERATE·생성)의 몫이다 — 검토로 가로채지 않는다. '빼곡'은 빼 달라는 말이 아니다
+_CHANGE_CUE = re.compile(
+    r"다시|바꿔|바꾸|바꿀|빼\s?(?:줘|고|자|줄)|넣어|넣고|추가|옮겨|옮기|줄여|줄이|늘려|조정|짜\s?(?:줘|줄|자)|만들어|고쳐|취소|세워"
+    r"|부탁|않게|않도록")
+
+
+# 다시 짜기로 고른 말 가운데 상황(날씨·늦음·휴무·몸 상태)이 있으면 그 의도 몫이다 — 진짜 다시 짜기 요청은 상황 낱말이나 바꿔 달라는 말을 싣는다
+# (질문뱅크·평가셋·증강 452문장 중 `asks_review` 에 걸린 것 0, 2026-11-03). "내일 일정 너무 빡빡하지 않아?"는 REPLAN 0.4 로 다시 짜기 안내가 됐다
+_SITUATION_CUE = re.compile(
+    r"비\s?(?:와|오|온|올|내)|눈\s?(?:와|오|온|올)|폭우|태풍|강풍|날씨|더워|덥|추워|춥|아파|아프|피곤|지쳐|늦(?:어|었|게)|막혀|밀렸|휴무|휴관"
+    r"|문\s?닫|취소")
+
+
+def asks_review(text: str) -> bool:
+    """저장된 일정에 무리·문제가 없는지 묻는 말인가(LLM 0). `text` 는 정리(`normalize`)한 말 — 일반 질문·바꿔 달라는 말이면 아니고,
+    강한 표지(묻는 꼴) 하나로, 약한 표지는 일정 표지와 함께(주제 낱말 없이)."""
+    if _CHANGE_CUE.search(text) or _GENERAL_CUE.search(text):
+        return False
+    if _STRONG_REVIEW.search(text) and _ASKING.search(text):
+        return True
+    return bool(_WEAK_REVIEW.search(text) and _SCHEDULE_CUE.search(text) and not _TOPIC_CUE.search(text))
+
+
+def _review_outcome(match: IntentMatch | None, cleared: DialogueContext, reason: str | None) -> TurnOutcome:
+    """일정 검토 → FRAME(SHOW_SCHEDULE) — BE 가 진행 검토 카드로 답한다(위반 표기·빈 일자·숙소·일정 없음·못 읽음 안내, BR-U8-14~16).
+    분류가 일정 보기로 골랐으면 그 인자·신뢰도를, 판단해서 닫았으면 빈 인자로(날마다 동네 `_day_area_outcome` 과 같은 0.9)."""
+    shown = match if match is not None and match.intent is Intent.SHOW_SCHEDULE else None  # 다시 짜기의 칸은 일정 보기 인자가 아니다
+    slots = {k: str(v) for k, v in (shown.slots if shown is not None else {}).items()}
+    frame = Frame(Intent.SHOW_SCHEDULE, slots, (), shown.confidence if shown is not None else 0.9, MatchRoute.LLM_DIRECT.value)
+    return TurnOutcome("FRAME", (frame,), None, None, cleared, 0,
+                       "review_routed" + ("" if shown is not None else f":{reason or match.intent.value}"))
+
+
 def _plannable(reason: str) -> bool:
     """2‴ 진입 — 분류가 판단은 했다: null·범위 밖 라벨(`_judged_nothing`) 또는 목록 밖 라벨을 지어냈다(절단 아님).
     2″ 맞장구는 목록 밖 라벨을 판단으로 보지 않는다(실패에 "알겠어요"로 답하면 수락을 삼킨다, BR-AO-26). 계획은 삼킬 것이 없고 같은
@@ -640,6 +691,12 @@ def _trip_summary(snapshot: TurnSnapshot, today: date) -> str:
         f"여행 {' '.join(trip.regions) or '-'} {trip.start_date.isoformat()}~{trip.end_date.isoformat()} ({trip.phase})"
         f" · 오늘 {today.isoformat()} · 일정 {len(snapshot.days)}일 {slots}곳 · 화면 {snapshot.surface}"
     )
+
+
+def _knowledge_trip(summary: str) -> str:
+    """지식 즉답의 `$trip` — 일정 날·곳 수(와 화면)는 뺀다. 지식 LLM 이 그 수로 "하루 7곳이라 꽤 빡빡한 편이에요"처럼 내 일정을
+    판정했다(TRIP-1705 개발 재현 — 그날은 5곳, BR-U8-14: 문제 판정은 솔버 표기뿐). 지역·기간·오늘은 '거기'·'그때'를 읽는 데 남긴다."""
+    return summary.split(" · 일정 ", 1)[0]
 
 
 def _memory_lines(current: DialogueMemory | None, others: Sequence[DialogueMemory]) -> tuple[str, ...]:
@@ -1029,6 +1086,15 @@ class DialogueOrchestrator:
             match, reason = self._classify(inp, text, memory_lines, trip_summary, counter)
             if area_turn is not None and _takes_day_areas(area_turn, match):  # 2⁗ — 분류가 칸을 뭉개도(12/12) 확인한 해석으로 넘긴다
                 return _day_area_outcome(area_turn, match, cleared)
+            # 2⁗′ — 일정 검토는 BE 진행 검토 카드로(DEC-U8-14). 분류가 일정 보기로 골랐거나 판단해서 닫은 말만(2‴ 와 같은 입구) — 바꾸는 의도는
+            # 그대로, 시한·벤더 실패는 종전 다시 시도. 여행이 없어도 넘긴다 — BE 가 "먼저 여행을 만들거나…"로 이유를 말한다(AC2·INV-4)
+            if asks_review(text) and (_plannable(reason or "") if match is None else match.intent is Intent.SHOW_SCHEDULE
+                                      or match.intent is Intent.REPLAN and not _SITUATION_CUE.search(text)):
+                log.info("dialogue_review_routed %s", json.dumps({  # 오탐을 운영에서 셀 수 있게(BE 저장 칸은 일정 보기와 같다)
+                    "event": "dialogue_review_routed", "trace_id": inp.trace_id,
+                    "classified": match.intent.value if match is not None else None, "trip": inp.snapshot.trip is not None,
+                }, ensure_ascii=False))
+                return _review_outcome(match, cleared, reason)
             if match is not None and (match.intent is Intent.RECOMMEND_REGION and _not_region_choice(text) or match.intent in (
                     Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES) and _when_not_where(text)):
                 # 시기·철을 묻거나 지역을 이미 말했다 — 지역 고르기는 엉뚱한 지역 목록이나 취향 되묻기를, 장소 찾기는 '언제'에 장소 목록을
@@ -1427,7 +1493,7 @@ class DialogueOrchestrator:
             self._fallback(inp, "llm", *_KNOWLEDGE_MODES, f"budget_exhausted(remaining_ms={remaining})")
             return None
         memory_lines = tuple(memory())
-        task = KnowledgeTask(inp.utterance, inp.recent_turns, memory_lines, trip_summary, inp.trace_id, inp.now,
+        task = KnowledgeTask(inp.utterance, inp.recent_turns, memory_lines, _knowledge_trip(trip_summary), inp.trace_id, inp.now,
                              timeout_sec=min(_ANSWER_CAP_MS, self._remaining(inp) - _ANSWER_RESERVE_MS) / 1000)
         outcome = agent.run(task)
         if outcome.error is not None:  # 게이트웨이에 닿기 전 워커 예외 — 게이트웨이가 보고하지 못했다

@@ -72,6 +72,7 @@ class ReplanDiffService(
                 nameKo = s?.nameKo,
                 category = s?.category,
                 imageUrl = s?.imageUrl,
+                imageLicense = s?.imageLicense,
                 lat = s?.lat,
                 lng = s?.lng,
             )
@@ -118,6 +119,7 @@ internal fun ItineraryPlanFacade.beforeOf(accountId: UUID, tripId: UUID, date: L
                 nameKo = it.nameKo,
                 category = it.category,
                 imageUrl = it.imageUrl,
+                imageLicense = it.imageLicense,
                 lat = it.lat,
                 lng = it.lng,
             )

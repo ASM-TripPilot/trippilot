@@ -2,7 +2,7 @@
 # (`ai/scripts/measure/measure_kb5_overview.py ab`). 기본은 '진짜 문서만'(full) 대 '대체 문서 추가'(fallback) — 대체 문서
 # (`TRIPPILOT_KB5_FALLBACK`, #1707)를 켜는 조건이다(KB-5 담당 세션 합의 10-30: 같은 입력끼리 흔들림 ≈12:7 보다 확실히 이길 것).
 #
-# 유료다 — 24상황 × 반복 × (선택 2 + 판정 1). 기본(opus 선택·sonnet 판정·반복 2)이 셈으로 ≈6달러. 키는 운영과 다른 워크스페이스의
+# 유료다 — 상황 × 반복 × (선택 2 + 판정 1). 기본(식사 칸 서울·제주 8상황 × 반복 4 = 32판, opus 선택·sonnet 판정)이 셈으로 ≈3.5달러. 키는 운영과 다른 워크스페이스의
 # `ANTHROPIC_COLLECT_API_KEY`(월 한도 하드 캡)만 쓴다 — 운영 키를 측정에 쓰면 크레딧을 나눠 운영이 멈출 수 있다(10-14 사고).
 # 공개 리포라 workflow_dispatch 만 둔다(pull_request 금지). 질의 임베딩은 개발과 같은 임베딩 이미지를 서비스로 띄운다 —
 # 장소 설명 벡터는 리포의 미리 계산본이고 질의만 서버가 임베딩한다(운영 조회 `fetch_place_knowledge` 그대로).
@@ -20,7 +20,18 @@ on:
       repeat:
         description: '상황마다 반복 수'
         required: false
-        default: '2'
+        default: '4'
+        type: string
+      target:
+        description: '바꿀 칸 — food(식사 칸: 서울·제주는 진짜 문서가 0곳이라 대체 문서가 40곳 더해진다) · sight(명소 칸: 대체 문서가 서울 +1·부산 +7·제주 +3 뿐)'
+        required: false
+        default: food
+        type: choice
+        options: [food, sight]
+      cities:
+        description: '상황 도시(쉼표) — 비우면 여섯 곳 모두. 대체 문서가 더해지지 않는 도시는 두 팔 입력이 같아 잡음만 보탠다'
+        required: false
+        default: '서울 광화문,제주시청'
         type: string
       select_model:
         description: '고르는 모델 — 운영 ALTERNATIVE_SELECTION 과 같게(#1692 기준 opus)'
@@ -81,6 +92,8 @@ jobs:
           # 입력은 env 로만 — run 본문에 `${{ inputs.* }}` 를 바로 넣으면 셸 주입 경로가 된다
           ARMS: ${{ inputs.arms }}
           REPEAT: ${{ inputs.repeat }}
+          EVAL_TARGET: ${{ inputs.target }}
+          EVAL_CITIES: ${{ inputs.cities }}
         run: |
           set -o pipefail
           [ -n "$ANTHROPIC_API_KEY" ] || { echo "::error::ANTHROPIC_COLLECT_API_KEY 미등록 — 수집 전용 워크스페이스 키가 필요하다"; exit 1; }

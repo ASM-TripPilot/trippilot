@@ -141,6 +141,8 @@ data class SlotCandidateResponse(
     val category: String?,
     val tags: List<String>,
     val imageUrl: String?,
+    /** [imageUrl] 사진의 공공누리 유형 `TYPE1`·`TYPE3` — TYPE3 이면 화면이 자르지 않고 전체를 보인다. 모르면 null. */
+    val imageLicense: String?,
     /**
      * 후보 핀 좌표(TRIP-1063 · QA #044) — '후보 고르기' 지도에 A/B/C 핀을 찍는 값.
      * 표면과 같은 정본 조회에서 온다. 표면이 없으면 null — 반경 중심 등으로 **지어내지 않는다**(BR-U1-06).
@@ -157,6 +159,7 @@ data class SlotCandidateResponse(
             category = surface?.category,
             tags = surface?.tags.orEmpty(),
             imageUrl = surface?.imageUrl,
+            imageLicense = surface?.imageLicense,
             lat = surface?.lat,
             lng = surface?.lng,
         )

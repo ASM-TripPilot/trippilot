@@ -61,8 +61,10 @@ class ProposalCardsTest : StringSpec({
         inTrip: Boolean = true,
         now: Instant = noonDay2,
         deadlineMs: Long = 7_000,
+        excluded: Set<UUID> = emptySet(),
     ) = DispatchContext(
         acc, tripId, TripContext(listOf("부산"), 2, "서면 호텔", d1, d1.plusDays(2)), inTrip, AssistantSurface.ITINERARY, arguments, now, utterance, deadlineMs,
+        excluded,
     )
 
     fun cards(data: FakeTripData, editing: FakeEditing) = ProposalCards(editing, editing, data, data, AssistantProperties())
@@ -114,6 +116,62 @@ class ProposalCardsTest : StringSpec({
 
         plain.text shouldBe "이렇게 바꾸면 돼요. 적용하면 다시 검증한 뒤 반영해요."
         plain.proposal!!.diff.single().dayLabel shouldBe "2일차 · 11월 2일"
+    }
+
+    /**
+     * 한 곳을 더한 안(사이 넣기·끝에 하나 더)은 그 자리를 **평서문**으로 되읽는다. 묻는 꼴("넣을까요?")이면 사용자가 [적용] 대신 "응"을 치고,
+     * 분류의 짧은 수락이 그 "응"을 편집 말로 보내 "알아듣지 못했어요"가 된다 — 저장은 [적용]뿐이다(BR-U8-30). 조사는 받침으로 고르고, 한글로
+     * 끝나지 않으면 둘 다 적는다. 넣은 곳 이름을 모르면 종전 문장이다(지어내지 않는다).
+     */
+    "한 곳을 더한 안은 그 자리를 평서문으로 되읽는다 — 묻지 않는다" {
+        val (gyeongni, yeonnam, hyochang, cgv) = List(4) { UUID.randomUUID() }
+        val named = FakeTripData(
+            acc,
+            slots = listOf(plannedSlot(d2, 0, "11:00", "경리단길", poiId = gyeongni), plannedSlot(d2, 1, "15:00", "연남동", poiId = yeonnam)),
+            surfaces = mapOf(hyochang to surface(hyochang, "효창공원"), book to surface(book, "책방카페"), cgv to surface(cgv, "CGV")),
+        )
+        val day = listOf(proposedSlot(gyeongni, "11:00"), proposedSlot(yeonnam, "15:00"))
+        fun textOf(data: FakeTripData, base: List<ProposedDay>, after: List<ProposedDay>) =
+            cards(data, FakeEditing().apply { proposal = { EditProposal.Proposed(base, after, "AUTO_APPLY") } })
+                .edit(ctx(mapOf("day" to "2"), utterance = "한 군데 더 넣어줘")).text!!
+        fun insert(at: Int, poiId: UUID) = listOf(ProposedDay(d2, day.toMutableList().apply { add(at, proposedSlot(poiId, "13:00")) }))
+        val base = listOf(ProposedDay(d2, day))
+
+        val texts = listOf(
+            textOf(named, base, insert(1, hyochang)),
+            textOf(named, base, insert(2, book)),
+            textOf(named, base, insert(0, cgv)),
+            textOf(data(), base(), listOf(ProposedDay(d1, emptyList()), ProposedDay(d2, listOf(proposedSlot(moca, "14:00"), proposedSlot(beach, "16:00"), proposedSlot(UUID.randomUUID(), "18:00"))))),
+            textOf(named, base, listOf(ProposedDay(d2, listOf(proposedSlot(yeonnam, "11:00"), proposedSlot(hyochang, "13:00"), proposedSlot(gyeongni, "15:00"))))),
+        )
+
+        texts shouldContainExactly listOf(
+            "경리단길과 연남동 사이에 효창공원을 넣은 안이에요. 적용하면 다시 검증한 뒤 반영해요.",
+            "연남동 다음에 책방카페를 넣은 안이에요. 적용하면 다시 검증한 뒤 반영해요.",
+            "경리단길 가기 전에 CGV을(를) 넣은 안이에요. 적용하면 다시 검증한 뒤 반영해요.",
+            "이렇게 바꾸면 돼요. 적용하면 다시 검증한 뒤 반영해요.", // 넣은 곳 이름을 모른다
+            "이렇게 바꾸면 돼요. 적용하면 다시 검증한 뒤 반영해요.", // 넣으면서 순서도 바꿨다 — 한 곳을 더한 안이 아니다
+        )
+        texts.forEach { ('?' in it || "까요" in it) shouldBe false }
+    }
+
+    "다른 데는? — 앞서 보인 곳을 상대에 넘기고, 빼고 나니 넣을 곳이 없으면 그렇게 말한다" {
+        val editing = FakeEditing().apply { proposal = { EditProposal.Rejected(emptyList()) } }
+        val said = "해변 다음에 갈 만한 곳 하나 추가해줘"
+
+        val none = cards(data(), editing).edit(ctx(mapOf("day" to "2"), utterance = said, excluded = setOf(book)))
+        editing.proposal = { EditProposal.NotUnderstood }
+        val lost = cards(data(), editing).edit(ctx(mapOf("day" to "2"), utterance = said, excluded = setOf(book)))
+
+        editing.proposed.map { it.date to it.request } shouldContainExactly List(2) { d2 to EditProposalRequest.Utterance(said, setOf(book)) }
+        listOf(none, lost).forEach {
+            it.text shouldBe "넣을 만한 다른 곳을 찾지 못했어요. 편집 화면에서 직접 고를 수 있어요."
+            it.nextActions.single().type shouldBe "OPEN_ITINERARY_EDIT"
+            it.llmCalls shouldBe 1
+        }
+        // 처음 묻는 말이면 종전 문장 그대로다
+        editing.proposal = { EditProposal.Rejected(emptyList()) }
+        cards(data(), editing).edit(ctx(mapOf("day" to "2"), utterance = said)).text shouldBe "그렇게는 바꿀 수 없어요. 편집 화면에서 직접 바꿀 수 있어요."
     }
 
     "고칠 날 — 상대가 뽑은 날짜·N일차·가리킨 장소 순이고, 받은 날을 못 읽으면 넘겨짚지 않는다" {
