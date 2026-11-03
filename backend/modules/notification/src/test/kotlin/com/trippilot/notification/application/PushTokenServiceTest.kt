@@ -33,9 +33,20 @@ class PushTokenServiceTest : StringSpec({
         }
 
         lines shouldContainExactly listOf(
-            "push.token.register platform=IOS osPermission=GRANTED deliverable=true",
-            "push.token.register platform=ANDROID osPermission=DENIED deliverable=false",
+            "push.token.register platform=IOS osPermission=GRANTED deliverable=true tokenFormat=expo",
+            "push.token.register platform=ANDROID osPermission=DENIED deliverable=false tokenFormat=expo",
         )
+    }
+
+    "Expo 토큰 모양이 아니면 tokenFormat=other 로 가른다 — 구형·신형 접두는 expo, APNs·FCM 기기 토큰이나 빈 괄호는 other" {
+        val lines = registerLines {
+            service.register(account, "ExpoPushToken[new-style]", null, DevicePlatform.IOS, OsPermission.GRANTED)
+            service.register(account, "ExponentPushToken[old-style]", null, DevicePlatform.IOS, OsPermission.GRANTED)
+            service.register(account, "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6", null, DevicePlatform.IOS, OsPermission.GRANTED)   // APNs 기기 토큰 모양
+            service.register(account, "ExponentPushToken[]", null, DevicePlatform.IOS, OsPermission.GRANTED)
+        }
+
+        lines.map { it.substringAfter("tokenFormat=") } shouldContainExactly listOf("expo", "expo", "other", "other")
     }
 
     "줄에 토큰 값을 싣지 않는다" {
