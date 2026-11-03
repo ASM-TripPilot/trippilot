@@ -143,6 +143,9 @@ class EditTask:
     # 찾고 풀과 같은 자격(②~④)·여행지 반경으로 거른다. 에이전트는 말이 번역기로 갈 때만 한 번 부르고, 찾은 곳을 번역 후보와 INV-1 풀에
     # 합친다. None = 미배선(받은 풀만 — 종전)
     named_places: Callable[[tuple[str, ...], tuple[str, ...]], tuple[Poi, ...]] | None = None
+    # 앞서 제안했던 곳("다른 데는?", spec 003 FR-015) — 이번 편집이 **새로 들이지 않는다**. 받은 풀·구간 풀을 좁힐 뿐이라 INV-1 그대로다.
+    # 일정에 이미 있는 곳은 풀이 아니라 현재 일정으로 판정하므로(빼기·기준점) 영향이 없다. 날마다 동네 콘센트는 경계가 같은 칸을 본다
+    excluded: frozenset[PoiId] = frozenset()
 
     def __post_init__(self) -> None:
         if (self.utterance is None) == (self.command is None):
@@ -225,6 +228,12 @@ def _anchors(day, gap: Gap) -> dict[str, str]:
             if i is not None}
 
 
+def _without(pool: CandidatePool, ids: frozenset[PoiId]) -> CandidatePool:
+    """[ids] 를 뺀 풀 — 좁히기만 한다(INV-1). 인덱스와 목록을 함께 고친다(`CandidatePool` 불변식)."""
+    kept = tuple(p for p in pool.pois if p.poi_id not in ids)
+    return replace(pool, poi_ids=frozenset(p.poi_id for p in kept), pois=kept)
+
+
 class EditAgent:
     def __init__(
         self,
@@ -248,6 +257,8 @@ class EditAgent:
 
     def run(self, task: EditTask) -> EditOutcome:
         """재료 → 편집 결과. 예외를 던지지 않는다 (INV-4 · DL-5)."""
+        if task.excluded:  # 앞서 보인 곳은 후보가 아니다 — 번역·② 검증·①a 가 같은 좁힌 닫힌 집합을 본다(INV-1)
+            task = replace(task, pool=_without(task.pool, task.excluded))
         # ①b 날마다 동네 — 말(결정론 해석)이나 구조화 명령이 날·동네를 정했으면 그 날들을 다시 짠다. 아니면 종전 길
         areas = self._day_areas(task)
         if isinstance(areas, str):
@@ -496,8 +507,9 @@ class EditAgent:
         problem = self._problem_for(task.solution)  # 사이 넣기는 날짜·예약을 안 바꾼다 — 후보마다 다시 묻지 않는다(달력 I/O)
         current = frozenset(s.poi_id for d in task.solution.days for s in d.slots)
         taken = [p.name for pid in current if (p := task.poi_index.get(pid)) is not None]
-        ranked = rank_on_segment(pool.pois, a, b, slack_km=slack, exclude=current, taken_names=taken, kind=ask.kind,
-                                 not_kinds=ask.not_kinds, night=ask.night, day=task.target_date,
+        # 앞서 보인 곳도 뺀다 — 기본 풀은 run() 이 이미 좁혔고, 구간 풀은 경계가 새로 모은 것이라 여기서 뺀다
+        ranked = rank_on_segment(pool.pois, a, b, slack_km=slack, exclude=current | task.excluded, taken_names=taken,
+                                 kind=ask.kind, not_kinds=ask.not_kinds, night=ask.night, day=task.target_date,
                                  holidays=problem.holidays)
         log.update(pool=len(pool.pois), within=len(ranked))
         if not ranked:
@@ -543,7 +555,8 @@ class EditAgent:
         # 발화·이름은 싣지 않는다 — 모양·해소 경로·개수만(운영에서 이 줄로 within·tried 를 센다)
         _log.info("edit_insert %s", json.dumps({
             "event": "edit_insert", "trace_id": str(task.trace_id), "outcome": outcome, "shape": ask.shape.value,
-            "kind": ask.kind.value if ask.kind is not None else None, **fields}, ensure_ascii=False))
+            "kind": ask.kind.value if ask.kind is not None else None, "excluded": len(task.excluded), **fields},
+            ensure_ascii=False))
 
     # ── ① 자연어 번역 ───────────────────────────────────────────────
 

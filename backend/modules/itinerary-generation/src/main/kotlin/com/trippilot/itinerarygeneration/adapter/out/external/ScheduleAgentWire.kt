@@ -534,6 +534,9 @@ internal data class AiCoord(val lat: Double, val lng: Double)
 /**
  * `POST /ai/v1/itinerary/edit` 요청(U8 G-U8-2). `command` 와 `utterance` 는 **정확히 하나** — 둘 다거나 둘 다 없으면 422 다.
  * `confirm` 은 늘 true 로 보낸다(DEC-U8-3) — false 면 상대가 파괴적 편집의 해를 숨기고 확인을 요구한다.
+ * [excludedPoiIds] — 상대 선택 필드(spec 003 FR-015): 앞서 제안했던 곳("다른 데는?")이라 이번 안에 새로 들이지 않는다.
+ * **비면 키째로 뺀다**(`AiValidateRequest.transportModes` 와 같은 이유) — 상대는 모르는 키를 422 로 거절하고, 배포는 AI·BE 를 한 번에
+ * 굴려 순서를 보장하지 않는다. 빼면 다시 묻기가 아닌 편집(거의 전부)은 이 칸을 모르는 상대와도 그대로 맞는다.
  */
 internal data class AiEditRequest(
     val tripId: String,
@@ -546,6 +549,8 @@ internal data class AiEditRequest(
     val utterance: String?,
     val confirm: Boolean,
     val requestMeta: AiRequestMeta,
+    @param:JsonInclude(JsonInclude.Include.NON_EMPTY)
+    val excludedPoiIds: List<String> = emptyList(),
 )
 
 /** 계약 `EditCommandSchema`. `affected_slots` 는 이름과 달리 **POI id** 목록이다(상대 도메인 `EditCommand.affected_slots: PoiId`). */

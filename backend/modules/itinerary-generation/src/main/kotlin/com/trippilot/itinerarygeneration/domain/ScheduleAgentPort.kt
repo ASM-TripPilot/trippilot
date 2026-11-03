@@ -110,6 +110,8 @@ data class EditProposalInput(
     val utterance: String?,
     val command: EditCommand?,
     val requestMeta: RequestMeta,
+    /** 앞서 제안했던 곳 — 상대가 이번 안에 새로 들이지 않는다(후보 풀을 좁힐 뿐, INV-1). 보통은 빈다. */
+    val excludedPoiIds: List<UUID> = emptyList(),
 ) {
     init {
         require((utterance == null) != (command == null)) { "utterance 와 command 중 정확히 하나만 준다." }

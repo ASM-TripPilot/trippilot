@@ -368,6 +368,46 @@ def test_neighbourhood_station_resolves_to_its_neighbourhood() -> None:
     assert body["status"] == "APPLIED" and _ids(body)[2] == str(GONGDEOK_CAFE.poi_id), body
 
 
+# ── "다른 데는?" — 앞서 보인 곳은 다시 내지 않는다 (FR-015) ─────────────────────
+
+
+def test_excluded_places_are_skipped_until_none_is_left(caplog) -> None:
+    """BE 가 같은 말에 앞서 보인 곳을 실어 다시 부른다. 순위는 결정론이라 빼지 않으면 같은 곳이 또 1등이다. 다 빼면 지어내지 않고
+    사유 있는 거부다(INV-4) — 끝에 붙이지도, 뺀 곳을 되살리지도 않는다. 구간 풀(같은 공급 경로로 다시 모은 풀)에서도 빠진다."""
+    caplog.set_level(logging.INFO)
+    shown: list[str] = []
+    for expected in (GONGDEOK_CAFE, HYOCHANG, MAPO_FOOD):  # 먹는 곳은 다른 게 없을 때만 — 마지막에 나온다
+        body = _post({**_body(utterance=_SAID), "excluded_poi_ids": shown})
+        assert body["status"] == "APPLIED" and _ids(body)[2] == str(expected.poi_id), (shown, body)
+        shown = [*shown, str(expected.poi_id)]
+    caplog.clear()
+    done = _post({**_body(utterance=_SAID), "excluded_poi_ids": shown})
+    assert (done["status"], done["reason"], done["violations"]) == ("REJECTED", "insert_between: no_candidates", [])
+    log = _insert_log(caplog)
+    assert (log["excluded"], log["pool_source"]) == (3, "segment")
+
+
+def test_excluded_place_is_outside_the_closed_pool_on_every_entry() -> None:
+    """번역기(이름 지목)·버튼 진입도 같은 닫힌 집합을 본다 — 뺀 곳을 번역이 골라 와도, 버튼이 실어 와도 풀 밖이라 넣지 않는다(INV-1)."""
+    params = {"targetPoiId": str(HYOCHANG.poi_id), "afterPoiId": str(GYEONGNI.poi_id)}
+    canned = json.dumps({"editCommand": {"op": "ADD_SLOT", "params": params, "affectedSlots": []}})
+    excluded = {"excluded_poi_ids": [str(HYOCHANG.poi_id)]}
+    said = _post({**_body(utterance="효창공원을 경리단길 끝나고 넣어줘"), **excluded}, llm=FakeLlm(canned=canned))
+    button = _post({**_body(command={"op": "ADD_SLOT", "params": params, "affected_slots": []}), **excluded})
+    assert said["status"] == "TRANSLATION_FAILED", said
+    assert button["status"] == "REJECTED" and "후보 풀 밖" in button["reason"], button
+
+
+def test_excluding_planned_places_does_not_block_editing_them() -> None:
+    """빼는 것은 새로 들일 후보뿐이다 — 이미 일정에 있는 곳(빼기·기준점)은 풀이 아니라 현재 일정으로 판정한다."""
+    planned = {"excluded_poi_ids": [str(GYEONGNI.poi_id), str(YEONNAM.poi_id)]}
+    remove = {"op": "REMOVE_SLOT", "params": {}, "affected_slots": [str(YEONNAM.poi_id)]}
+    assert _post({**_body(command=remove), **planned})["status"] == "APPLIED"
+    insert = _post({**_body(utterance=_SAID), **planned})
+    assert insert["status"] == "APPLIED", insert
+    assert _ids(insert)[1:4] == [str(p.poi_id) for p in (GYEONGNI, GONGDEOK_CAFE, YEONNAM)]
+
+
 # ── 여행 당일 편집 — 지난 곳은 그 시각 그대로 ─────────────────────────────
 
 

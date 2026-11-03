@@ -732,6 +732,9 @@ class EditItineraryRequest(BoundaryModel):
     # 먼저 막으면 임베딩·LLM 을 쓰기 전에 422 로 끊긴다. 값의 근거는 그쪽 주석 참조.
     utterance: str | None = Field(default=None, min_length=1, max_length=500)
     confirm: bool = False
+    # 앞서 제안했던 곳("다른 데는?" — spec 003 FR-015) — 이번 편집이 새로 들이지 않는다. 후보 풀을 좁힐 뿐이다(INV-1) — 이미 일정에
+    # 있는 곳을 빼거나 기준점으로 삼는 데는 영향이 없다. 선택 필드(하위호환): BE 는 비면 키째로 뺀다
+    excluded_poi_ids: list[str] = Field(default_factory=list)
     request_meta: RequestMetaSchema
 
     @model_validator(mode="after")
