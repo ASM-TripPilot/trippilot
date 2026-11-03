@@ -71,7 +71,7 @@ from trippilot.domain.itinerary.itinerary import (
     Violation,
 )
 from trippilot.domain.llm.llm import CandidatePool
-from trippilot.domain.poi.poi import Poi
+from trippilot.domain.poi.poi import Poi, PoiCategory
 from trippilot.llm_gateway.gates.content.edit_translation import is_anchor_param_key
 from trippilot.llm_gateway.workers.content.edit_translation import (
     EditTranslationInput,
@@ -96,9 +96,15 @@ class AssemblyFacade(Protocol):
 
 
 class AssemblyProvider(Protocol):
-    """풀이 요청마다 다르므로 `poi_index` 도 요청 스코프 (ScheduleAgent 와 같은 콘센트)."""
+    """풀이 요청마다 다르므로 `poi_index` 도 요청 스코프 (ScheduleAgent 와 같은 콘센트).
 
-    def for_pool(self, poi_index: Mapping[PoiId, Poi]) -> AssemblyFacade: ...
+    `walk_max_km`·`parking` = 요청별 도보 상한·주차 계획(없으면 공용 추정기) — 생성과 같은 추정기로 재고 검증한다.
+    `walker` 는 같은 상한의 추정기 하나 — ④ 재타이밍이 ⑤ 검증과 같은 값으로 이동을 잰다."""
+
+    def for_pool(self, poi_index: Mapping[PoiId, Poi], walk_max_km: float | None = None,
+                 parking: object | None = None) -> AssemblyFacade: ...
+
+    def walker(self, walk_max_km: float | None, parking: object | None = None) -> object: ...
 
 
 class ProblemBuilder(Protocol):
@@ -146,6 +152,15 @@ class EditTask:
     # 앞서 제안했던 곳("다른 데는?", spec 003 FR-015) — 이번 편집이 **새로 들이지 않는다**. 받은 풀·구간 풀을 좁힐 뿐이라 INV-1 그대로다.
     # 일정에 이미 있는 곳은 풀이 아니라 현재 일정으로 판정하므로(빼기·기준점) 영향이 없다. 날마다 동네 콘센트는 경계가 같은 칸을 본다
     excluded: frozenset[PoiId] = frozenset()
+    # ── 여행 컨텍스트(편집 요청 `preference_profile`·`time_windows`·`trip_start_date`, 2026-11-03) — 없으면 종전 동작 ──
+    # 취향 카테고리(생성 `_wanted_categories`) — ①a 순위에 쓴다(①b 는 콘센트가 같은 취향으로 규칙 점수를 매긴다)
+    taste: frozenset[PoiCategory] = frozenset()
+    # 요청별 도보 상한(액티비티 취향 대중교통 여행 = 생성과 같은 1.0km) — ④ 재타이밍과 ⑤ 검증이 같은 추정기를 쓴다. None = 공용(700m)
+    walk_max_km: float | None = None
+    # 날마다 창의 시작 — 빈 날에 넣는 첫 곳의 시작(없는 날은 10:00)
+    day_starts: Mapping[date, datetime] = field(default_factory=dict)
+    # 여행 첫날 — 'N일차' 셈의 기준(대화와 같은 셈). None = 받은 일정의 첫 날
+    trip_start: date | None = None
 
     def __post_init__(self) -> None:
         if (self.utterance is None) == (self.command is None):
@@ -162,6 +177,10 @@ class RebuiltDays:
     notes: tuple[str, ...] = ()  # 관측 코드(풀이 모드·강등·동네 풀 추가 수집) — 이름은 싣지 않는다
     # 풀이 밖에 두고 그 시각 그대로 되실은 지난 곳(여행 당일, 지금 있는 곳보다 앞선 곳) — ⑤ 는 이것을 재지 않는다
     history: frozenset[PoiId] = frozenset()
+    # 풀이가 쓴 추정기(도보 상한·주차 계획 — `GenerationOutcome` 그대로) — ⑤ 가 같은 추정기로 잰다. 취향이 실리면 액티비티 취향의
+    # 풀이는 1.0km 까지 걷는데, 공용 추정기(700m)로 재면 그 걷기 구간이 HC2 로 떨어진다
+    walk_max_km: float | None = None
+    parking: object | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -343,9 +362,12 @@ class EditAgent:
             ctx = RetimeContext(
                 coords={pid: p.coord for pid, p in merged_index.items()},
                 stay_min={**{s.poi_id: s.stay_min for s in target_day_slots}, **dict(stay or {})},
-                estimator=self._estimator,
+                # 요청별 도보 상한이 있으면 그 추정기(⑤ 와 같다) — 액티비티 취향 여행의 0.7~1.0km 걷기를 대중교통으로 다시 잡지 않는다
+                estimator=(self._estimator if task.walk_max_km is None
+                           else self._assembly_provider.walker(task.walk_max_km)),
                 transport=task.transport,
                 not_before=floor,
+                day_start=task.day_starts.get(task.target_date),
             )
             mutated = edited_solution(
                 task.solution, task.target_date, command, ctx, self._tz)
@@ -359,7 +381,8 @@ class EditAgent:
         #    편집 요청엔 수단이 있다. 안 맞추면 자차 여행은 재타이밍(자차)이 잡은 간격을 검증(대중교통)이 늘 HC2 로 떨어뜨린다(2026-10-22 리뷰 재현)
         #    검증은 고친 날만 — 다른 날 시각은 이 편집이 만든 것이 아니다. 생성이 다른 추정기(액티비티 취향 걷기 1.0km 등)로 잡은 날을
         #    기본 추정기로 다시 재면 손 안 댄 날의 HC2 가 모든 편집을 막았다(develop 부터, 2026-10-22 2차 리뷰 재현). HC1~4 는 날 단위다
-        facade = self._assembly_provider.for_pool(merged_index)
+        #    추정기 = ④ 와 같은 요청별 도보 상한(`task.walk_max_km`)
+        facade = self._assembly_provider.for_pool(merged_index, walk_max_km=task.walk_max_km)
         checked = replace(problem or self._problem_for(mutated), transport=task.transport, days=(task.target_date,))
         edited_day = replace(mutated, days=tuple(d for d in mutated.days if d.date == task.target_date))
         if floor is not None:
@@ -407,7 +430,8 @@ class EditAgent:
         clauses = parse_day_areas(task.utterance or "", self._known_areas)
         if clauses is None:
             return None
-        got = resolve_day_areas(clauses, days, today)
+        # 'N일차'는 여행 첫날부터 센다(요청 `trip_start_date` — 대화와 같은 셈). 고칠 수 있는 날은 여전히 받은 일정의 날뿐이다
+        got = resolve_day_areas(clauses, days, today, first=task.trip_start)
         return f"day_area: {got.code}({got.said})" if isinstance(got, DayAreaIssue) else got
 
     def _rebuild(self, task: EditTask, pairs: tuple[DayArea, ...]) -> EditOutcome:
@@ -445,7 +469,9 @@ class EditAgent:
         edited = replace(got.solution, days=tuple(replace(d, slots=tuple(s for s in d.slots if s.poi_id not in done),
                                                           fixed_blocks=tuple(fb for fb in d.fixed_blocks if fb.poi_id not in done))
                                                   for d in got.solution.days if d.date in changed))
-        violations = tuple(self._assembly_provider.for_pool(index).validate(edited, checked, task.deadline_ms, task.trace_id))
+        # 풀이가 쓴 추정기로 잰다(`RebuiltDays.walk_max_km`·`parking`) — 다른 추정기로 재면 풀이가 맞게 둔 걷기·주차 구간이 HC2 가 된다
+        facade = self._assembly_provider.for_pool(index, walk_max_km=got.walk_max_km, parking=got.parking)
+        violations = tuple(facade.validate(edited, checked, task.deadline_ms, task.trace_id))
         if violations:
             out = EditOutcome(status=EditStatus.REJECTED, command=command, apply_mode=apply_mode, violations=violations,
                               reason="편집 결과가 하드 제약을 위반 — 반영하지 않음")
@@ -510,7 +536,7 @@ class EditAgent:
         # 앞서 보인 곳도 뺀다 — 기본 풀은 run() 이 이미 좁혔고, 구간 풀은 경계가 새로 모은 것이라 여기서 뺀다
         ranked = rank_on_segment(pool.pois, a, b, slack_km=slack, exclude=current | task.excluded, taken_names=taken,
                                  kind=ask.kind, not_kinds=ask.not_kinds, night=ask.night, day=task.target_date,
-                                 holidays=problem.holidays)
+                                 holidays=problem.holidays, taste=task.taste)
         log.update(pool=len(pool.pois), within=len(ranked))
         if not ranked:
             return self._rejected(task, ask, "no_candidates", log)

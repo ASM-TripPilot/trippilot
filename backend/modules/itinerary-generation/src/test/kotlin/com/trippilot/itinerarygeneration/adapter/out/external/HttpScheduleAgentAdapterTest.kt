@@ -693,6 +693,22 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         server.verify()
     }
 
+    "validate — 여행 취향을 싣는다(2026-11-03) — 없으면 키를 싣지 않는다(취향 칸을 모르는 옛 상대도 422 를 내지 않는다)" {
+        val (adapter, server) = fixture()
+        val active = PreferenceProfile(emptyList(), listOf("테마파크"), emptyList(), listOf("대중교통"), null, emptyList(), false, null)
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
+            .andExpect(jsonPath("$.preference_profile.activities[0]").value("테마파크"))
+            .andExpect(jsonPath("$.transport_modes").doesNotExist())
+            .andRespond(withSuccess("""{"violations":[]}""", MediaType.APPLICATION_JSON))
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/validate"))
+            .andExpect(jsonPath("$.preference_profile").doesNotExist())
+            .andRespond(withSuccess("""{"violations":[]}""", MediaType.APPLICATION_JSON))
+
+        adapter.validateWithUnverified(dummyOutput(), emptyList(), active)
+        adapter.validateWithUnverified(dummyOutput(), listOf("렌터카"))
+        server.verify()
+    }
+
     "미판정 목록을 모르는 옛 와이어도 HOURS_UNKNOWN 이 실린 응답을 읽는다 — 경계 매퍼는 모르는 키를 무시한다(배포 순서: AI 먼저)" {
         val old = ScheduleAgentConfiguration.boundaryMapper().readValue(
             """{"violations":[],"unverified_slots":[{"poi_id":"$poi","reason_code":"HOURS_UNKNOWN","detail":""}]}""",
@@ -768,6 +784,29 @@ class HttpScheduleAgentAdapterTest : StringSpec({
 
         adapter.proposeEdit(editInput(utterance = "1일차는 종로 2일차는 강남구쪽으로 바꿔줘")).command shouldBe
             EditCommand("SET_DAY_AREAS", mapOf("2026-08-01" to "종로", "2026-08-02" to "강남구"), listOf(poi))
+    }
+
+    "편집 제안 — 여행 컨텍스트(취향·날마다 창·여행 첫날)를 싣고, 없으면 세 키를 싣지 않는다(옛 상대와도 맞는다)" {
+        val (adapter, server) = fixture(groundingPool(newPoi))
+        val profile = PreferenceProfile(listOf("자연"), listOf("테마파크"), emptyList(), listOf("대중교통"), null, emptyList(), false, null)
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit"))
+            .andExpect(jsonPath("$.preference_profile.activities[0]").value("테마파크"))
+            .andExpect(jsonPath("$.time_windows[0].date").value("2026-08-01"))
+            .andExpect(jsonPath("$.time_windows[0].start").value("15:00:00"))
+            .andExpect(jsonPath("$.trip_start_date").value("2026-07-31"))
+            .andRespond(withSuccess(appliedBody(newPoi), MediaType.APPLICATION_JSON))
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/edit"))
+            .andExpect(jsonPath("$.preference_profile").doesNotExist())
+            .andExpect(jsonPath("$.time_windows").doesNotExist())
+            .andExpect(jsonPath("$.trip_start_date").doesNotExist())
+            .andRespond(withSuccess(appliedBody(newPoi), MediaType.APPLICATION_JSON))
+
+        adapter.proposeEdit(editInput(utterance = "카페 하나 더").copy(
+            preferenceProfile = profile, timeWindows = listOf(TimeWindow(d1, LocalTime.of(15, 0), LocalTime.of(21, 0))),
+            tripStartDate = LocalDate.parse("2026-07-31"),
+        ))
+        adapter.proposeEdit(editInput(utterance = "카페 하나 더"))
+        server.verify()
     }
 
     "편집 제안 — 구조화 교체는 command 로 싣는다(발화 없음)" {
@@ -918,6 +957,21 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             dummyOutput(), emptyList(),
             RepairContext(listOf(DayAnchor(java.time.LocalDate.parse("2026-08-02"), 33.5, 126.5)), listOf("렌터카")),
         )
+        server.verify()
+    }
+
+    "repair — 컨텍스트의 취향을 싣는다(상대가 액티비티 도보 상한을 생성과 같게 건다) — 없으면 키째 뺀다" {
+        val (adapter, server) = fixture()
+        val active = PreferenceProfile(emptyList(), listOf("테마파크"), emptyList(), listOf("대중교통"), null, emptyList(), false, null)
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/repair"))
+            .andExpect(jsonPath("$.preference_profile.activities[0]").value("테마파크"))
+            .andRespond(withSuccess("""{"repaired":null,"changes":[]}""", MediaType.APPLICATION_JSON))
+        server.expect(requestTo("http://ai.test/ai/v1/itinerary/repair"))
+            .andExpect(jsonPath("$.preference_profile").doesNotExist())
+            .andRespond(withSuccess("""{"repaired":null,"changes":[]}""", MediaType.APPLICATION_JSON))
+
+        adapter.repair(dummyOutput(), emptyList(), RepairContext(emptyList(), listOf("대중교통"), active))
+        adapter.repair(dummyOutput(), emptyList(), RepairContext.NONE)
         server.verify()
     }
 
