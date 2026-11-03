@@ -4,6 +4,7 @@ import { isAxiosError } from 'axios';
 import {
   deleteTripsTripIdBasesBaseAssignmentId,
   getGetTripsTripIdBasesQueryKey,
+  getGetTripsTripIdBasesQueryOptions,
   getGetTripsTripIdCoverageQueryKey,
   postTripsTripIdBases,
   useGetTripsTripIdBases,
@@ -73,10 +74,11 @@ function useInvalidateBases(): (tripId: string) => Promise<void> {
  * 배정을 지우고(DELETE) 자투리를 다시 붙인 뒤 새 배정을 붙인다(`planBaseAssign`). 호출 모양
  * `mutate({tripId, data})` 는 그대로라 두 페이지(위저드 2/4·여행 단위)가 같은 교체를 쓴다.
  *
- *  - "지금 배정 목록"은 **캐시에서 읽는다** — 여기서 GET 을 새로 쏘면 재조회 횟수가 흔들린다.
- *    캐시가 비었으면 교체 없이 POST 만 나간다. 이 캐시 칸은 마이 탭 여행 카드·기록 탭·MyStaysPage 도
- *    같은 키로 채우므로, h15 처럼 bases 조회를 안 켠 화면에서는 결과가 앞서 들른 화면에 따라 갈린다
- *    (ponytail: 캐시 운 — BE 원자 교체 엔드포인트가 생기면 그쪽으로, 1011 5-b 경고-1).
+ *  - "지금 배정 목록"은 **캐시에서 읽는다** — 캐시가 있으면 GET 을 새로 쏘지 않는다(재조회 횟수 무회귀).
+ *    캐시가 비거나 무효화됐으면(h15 처럼 bases 조회를 안 켠 화면) **받아 와서** 계획한다(TRIP-1749) — 비운 채 계획하면 DELETE
+ *    없이 POST 만 나가 같은 밤에 배정이 둘이 된다. 받아 오기가 404 아닌 실패면 POST 전에 실패로 끝낸다(INV-4).
+ *    404(여행 없음)는 빈 목록으로 두고 지금처럼 POST 가 404 로 끝난다.
+ *    (ponytail: 캐시가 있지만 낡은 경우(다른 기기에서 바뀜)는 못 막는다 — BE 원자 교체 엔드포인트가 생기면 그쪽으로, 1011 5-b 경고-1).
  *  - DELETE 를 **다 끝낸 뒤** POST 한다 — 섞어 보내면 서버에서 잠깐 겹침이 생긴다.
  *  - 두 요청 이상이라 원자적이지 않다. 그래서 **실패해도** 재조회한다(INV-4 — 중간에 끊기면 서버
  *    상태가 이미 바뀌었을 수 있다).
@@ -85,15 +87,28 @@ export function useAssignBase() {
   const queryClient = useQueryClient();
   const invalidate = useInvalidateBases();
 
+  async function fetchCurrentBases(tripId: string): Promise<BaseAssignment[]> {
+    try {
+      return await queryClient.fetchQuery(
+        getGetTripsTripIdBasesQueryOptions(tripId)
+      );
+    } catch (error) {
+      if (isNotFound(error)) return [];
+      throw error;
+    }
+  }
+
   return useMutation({
     mutationFn: async (variables: {
       tripId: string;
       data: AssignBaseRequest;
     }) => {
-      const current =
-        queryClient.getQueryData<BaseAssignment[]>(
-          getGetTripsTripIdBasesQueryKey(variables.tripId)
-        ) ?? [];
+      // 무효화 표시가 붙은 캐시(직전 지정 뒤 — 관찰자 없는 화면은 다시 받지 않는다)는 믿지 않는다(03b 경고-1).
+      const key = getGetTripsTripIdBasesQueryKey(variables.tripId);
+      const cached = queryClient.getQueryState(key)?.isInvalidated
+        ? undefined
+        : queryClient.getQueryData<BaseAssignment[]>(key);
+      const current = cached ?? (await fetchCurrentBases(variables.tripId));
       const plan = planBaseAssign(current, variables.data);
 
       for (const id of plan.deleteIds) {
