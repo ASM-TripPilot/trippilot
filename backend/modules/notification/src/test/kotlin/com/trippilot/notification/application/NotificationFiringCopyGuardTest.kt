@@ -12,6 +12,9 @@ import com.trippilot.notification.domain.NotificationSchedule
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import org.slf4j.LoggerFactory
+import org.springframework.transaction.support.SimpleTransactionStatus
+import org.springframework.transaction.support.TransactionCallback
+import org.springframework.transaction.support.TransactionOperations
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -40,7 +43,7 @@ class NotificationFiringCopyGuardTest : StringSpec({
         val notifications = FakeNotifications()
         val toggles = NotificationToggleService(FakeToggles(), clock)
         val svc = NotificationFiringService(
-            FakeSchedules().apply { stored += schedule }, notifications, toggles, noPush(clock, notifications, toggles), plans, clock,
+            FakeSchedules().apply { stored += schedule }, notifications, toggles, noPush(clock, notifications, toggles), plans, clock, TransactionOperations.withoutTransaction(),
         )
         svc.fire(schedule) shouldBe FireOutcome.FIRED
         return notifications.stored.single().title
@@ -103,6 +106,44 @@ class NotificationFiringCopyGuardTest : StringSpec({
         fireTitle(copied(CopyBasis.of(listOf("성산일출봉"))), failing) shouldBe "오늘의 일정"
     }
 
+    /**
+     * 일정 퍼사드는 `@Transactional(readOnly = true)` 라 발화 트랜잭션 **안**에서 읽다 던지면 그 트랜잭션이 rollback-only 가 된다 —
+     * 위 "읽다 실패하면" 단위 테스트는 트랜잭션이 없는 대역이라 이를 못 본다(거울이 실물과 달랐다). 그래서 **읽는 시점이 트랜잭션 밖인가**를
+     * 직접 잰다. 안에서 읽도록 되돌리면 이 테스트가 빨개진다. 실 트랜잭션으로 증상(UnexpectedRollbackException)을 재는 것은 NotificationFireTxIT.
+     */
+    "문구 대조의 일정 읽기는 발화 트랜잭션 밖에서 돈다" {
+        var inTx = false
+        val recordingTx = object : TransactionOperations {
+            override fun <T> execute(action: TransactionCallback<T>): T {
+                inTx = true
+                try {
+                    return action.doInTransaction(SimpleTransactionStatus())
+                } finally {
+                    inTx = false
+                }
+            }
+        }
+        val readsInsideTx = mutableListOf<Boolean>()
+        val real = FakePlans(mapOf(day to listOf(place("성산일출봉"))))
+        val recording = object : ItineraryPlanFacade by real {
+            override fun findPlannedPlaces(accountId: UUID, tripId: UUID): Map<LocalDate, List<PlannedPlaceView>> {
+                readsInsideTx += inTx
+                return real.findPlannedPlaces(accountId, tripId)
+            }
+        }
+        val schedule = copied(CopyBasis.of(listOf("성산일출봉")))
+        val notifications = FakeNotifications()
+        val toggles = NotificationToggleService(FakeToggles(), clock)
+        val svc = NotificationFiringService(
+            FakeSchedules().apply { stored += schedule }, notifications, toggles, noPush(clock, notifications, toggles), recording, clock, recordingTx,
+        )
+
+        svc.fire(schedule) shouldBe FireOutcome.FIRED
+
+        readsInsideTx shouldBe listOf(false)
+        notifications.stored.single().title shouldBe "AI 제목"
+    }
+
     "문구가 없는 예약은 일정을 읽지도 않는다" {
         var reads = 0
         val counting = object : ItineraryPlanFacade {
@@ -123,7 +164,7 @@ class NotificationFiringCopyGuardTest : StringSpec({
         val toggles = NotificationToggleService(FakeToggles(), c)
         val svc = NotificationFiringService(
             FakeSchedules().apply { stored += pre }, notifications, toggles, noPush(c, notifications, toggles),
-            FakePlans(mapOf(day to listOf(place("성산일출봉")))), c,
+            FakePlans(mapOf(day to listOf(place("성산일출봉")))), c, TransactionOperations.withoutTransaction(),
         )
 
         svc.fire(pre) shouldBe FireOutcome.FIRED
