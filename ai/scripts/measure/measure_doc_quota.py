@@ -10,6 +10,13 @@ r"""다시 짜기 '문서 몫' 효과 측정 — 구성 후보(규칙 40곳)에 
   라멘집·갈빗집이 뽑혔다. 질의를 사용자 말·사유의 필요로만 바꿔도(`EVAL_DOC_QUERY=need`) 비슷했다. KURE 유사도가 "실내"
   같은 속성을 장소 설명에서 가르지 못한다 — 후보 선정에는 글 검색보다 장소별 사실 칸(실내외·유모차·반려·여행코스)이 맞다.
 
+**2026-11-03 여행코스 가산(`EVAL_ARM=course`)도 효과 없음 → 넣지 않았다.** 남은 일정과 같은 관광공사 여행코스(#1827)에 든 곳에
+규칙 점수 +0.3. 코스 동료가 풀에 있는 4도시 16상황(제주·전주는 남은 일정이 코스에 없어 두 팔이 같다): **코스 5 · 기존 3 · 같음 8 / 16**,
+바뀐 후보(평균 2.5곳 — 조계사·국립민속박물관·동궁과 월지·선교장 등) 채택 **3/59(5%)**.
+- 두 실험의 공통 결론: 구성 LLM 은 원 일정·PlanB 상위와 이름난 가까운 곳을 고르고, 40곳의 **가장자리 교체는 결과를 거의 안 바꾼다**.
+  후보 선정 단계의 손잡이는 지렛대가 작다 — 지렛대는 LLM 이 읽는 것(장소 설명 커버리지, 2026-10-22 위키+개요 37:4)에 있었다.
+- 반려동물 칸(`provenance.detail.chkpet*`)은 상세 재조회로 차는 중이라 아직 비어 이번엔 재지 않았다(취향 `pet_friendly` 와 이을 자리).
+
 실행(ai/ 에서 — 로컬 서빙 임베딩 + 운영 모델 키, 실 API 를 부른다):
     TRIPPILOT_EMBEDDING_BASE_URL=http://localhost:8100 ANTHROPIC_API_KEY=… \
         uv run python scripts/measure/measure_doc_quota.py [반복=1]
@@ -27,6 +34,7 @@ r"""다시 짜기 '문서 몫' 효과 측정 — 구성 후보(규칙 40곳)에 
 
 from __future__ import annotations
 
+import gzip
 import json
 import os
 import statistics
@@ -66,6 +74,10 @@ QUOTA = int(os.environ.get("EVAL_DOC_QUOTA", "8"))
 TIMEOUT = float(os.environ.get("EVAL_COMPOSE_TIMEOUT", "18.0"))
 # 문서 몫 질의 — `situation`(운영 `_situation_query`: "트리거 사유 상황 + 말") · `need`(말이 있으면 말만, 없으면 사유의 필요)
 QUERY = os.environ.get("EVAL_DOC_QUERY", "situation")
+# 비교할 팔 — `quota`(문서 몫 +8, 기본) · `course`(남은 일정과 같은 관광공사 여행코스에 든 곳에 규칙 점수 +`COURSE_STEP`,
+# `data/tour_courses.jsonl.gz` #1827). 코스 팔은 두 팔 후보가 같은 상황(코스 동료가 이미 다 후보거나 없는 곳)을 판정하지 않는다.
+ARM = os.environ.get("EVAL_ARM", "quota")
+COURSE_STEP = float(os.environ.get("EVAL_COURSE_STEP", "0.3"))  # 지시 한 단(`scorer.DIRECTIVE_STEP`)과 같은 크기
 _NEED = {"weather": "비를 피해 실내에서 보내기 좋은 곳", "fatigue": "많이 걷지 않고 앉아서 쉬어 갈 수 있는 곳"}
 _DAY = date(2026, 11, 4)  # 수요일
 _NOW = datetime(2026, 11, 4, 4, 0, tzinfo=timezone.utc)  # 13:00 KST
@@ -111,8 +123,20 @@ def _store(kn: _Knowledge, refs: set[str]) -> InMemoryVectorStore:
     return store
 
 
+def _course_mates() -> dict[str, set[str]]:
+    """content_id → 같은 코스에 든 다른 content_id 들."""
+    rows = [json.loads(line) for line in gzip.open(_AI / "data/tour_courses.jsonl.gz", "rt", encoding="utf-8") if line.strip()]
+    mates: dict[str, set[str]] = {}
+    for r in rows:
+        ids = {m["content_id"] for m in r["members"]}
+        for i in ids:
+            mates.setdefault(i, set()).update(ids - {i})
+    return mates
+
+
 def _cases(kn: _Knowledge) -> list[dict]:
     pois = [p for p in _pois() if p.category is not PoiCategory.STAY]
+    mates = _course_mates() if ARM == "course" else {}
     seed = zlib.crc32(b"doc-quota")
     out = []
     for city, anchor in ANCHORS.items():
@@ -136,11 +160,22 @@ def _cases(kn: _Knowledge) -> list[dict]:
             query = rag._situation_query(req)
             pick_query = (said or _NEED.get(reason, query)) if QUERY == "need" else query
             store = _store(kn, {p.source_ref for p in (*short.pois, *tier) if p.source_ref})
-            refs = _rank_by_knowledge(tier, pick_query, kn.emb, store, QUOTA)
-            by_ref = {p.source_ref: p for p in tier}
-            extra = tuple(by_ref[r] for r in refs if r in by_ref)
+            if ARM == "course":
+                near_slots = set().union(*(mates.get(s.source_ref or "", set()) for s in slots))
+
+                def course_score(p, score=score, near_slots=near_slots):
+                    return score(p) + (COURSE_STEP if p.source_ref in near_slots else 0.0)
+
+                other = composition.shortlist(pool, keep=keep, excluded=(), day=_DAY, score=course_score).pois
+                store = _store(kn, {p.source_ref for p in (*short.pois, *other) if p.source_ref})
+                extra = tuple(p for p in other if p.poi_id not in short.poi_ids)
+            else:
+                refs = _rank_by_knowledge(tier, pick_query, kn.emb, store, QUOTA)
+                by_ref = {p.source_ref: p for p in tier}
+                extra = tuple(by_ref[r] for r in refs if r in by_ref)
+                other = (*short.pois, *extra)
             arms = {}
-            for arm, pois_ in (("base", short.pois), ("quota", (*short.pois, *extra))):
+            for arm, pois_ in (("base", short.pois), ("quota", other)):
                 cand = CandidatePool(poi_ids=frozenset(p.poi_id for p in pois_), pois=tuple(pois_),
                                      generated_at=_NOW, anchor=anchor, radius_km=_RADIUS_KM)
                 knowledge, _ = fetch_place_knowledge(cand.pois, query, kn.emb, store, fallback={})
