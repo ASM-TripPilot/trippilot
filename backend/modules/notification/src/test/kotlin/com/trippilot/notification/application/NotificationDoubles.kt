@@ -179,6 +179,14 @@ internal class FakeSchedules : NotificationScheduleRepository {
     override fun findPendingByTrip(tripId: UUID) =
         stored.filter { it.tripId == tripId && it.firedAt == null && it.canceledAt == null }.sortedBy { it.fireAt }
 
+    /** 실 DB 질의와 같은 조건 — 미발화·미취소, 시각 범위 (from, until], 문구 없음. 가까운 여행부터, 한 여행은 한 번. */
+    override fun findTripsLackingCopy(from: Instant, until: Instant, limit: Int): List<UUID> =
+        stored.filter { it.firedAt == null && it.canceledAt == null && it.fireAt.isAfter(from) && !it.fireAt.isAfter(until) && !it.hasCopy }
+            .groupBy { it.tripId }
+            .entries.sortedBy { (_, rows) -> rows.minOf { it.fireAt } }
+            .map { it.key }
+            .take(limit)
+
     /** 조건부 쓰기 — 문구가 이미 있는 행·발화/취소된 행·지워진 행은 바뀌지 않는다(실 DB 의 WHERE 절과 같은 조건). */
     override fun attachCopy(scheduleId: UUID, title: String, body: String, copyBasis: String): Boolean {
         val i = stored.indexOfFirst { it.scheduleId == scheduleId && it.firedAt == null && it.canceledAt == null && !it.hasCopy }
