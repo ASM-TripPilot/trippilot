@@ -93,6 +93,7 @@ internal fun noPush(clock: java.time.Clock, notifications: NotificationRepositor
             override fun invalidate(token: String, at: Instant) = false
             override fun invalidateIfNotSeenSince(token: String, notSeenAfter: Instant, at: Instant) = false
             override fun remove(accountId: UUID, token: String) = false
+            override fun removeAll(accountId: UUID) = 0
         },
         notifications = notifications,
         toggles = toggles,
@@ -184,6 +185,19 @@ internal class FakeSchedules : NotificationScheduleRepository {
         if (i < 0) return false
         stored[i] = stored[i].copy(title = title, body = body, copyBasis = copyBasis)
         return true
+    }
+
+    /** 조건부 쓰기 — 발화·취소된 행은 바뀌지 않는다(실 DB 의 WHERE 절과 같은 조건). */
+    override fun cancelPendingOf(accountId: UUID, at: Instant): Int {
+        var n = 0
+        stored.indices.forEach { i ->
+            val row = stored[i]
+            if (row.accountId == accountId && row.firedAt == null && row.canceledAt == null) {
+                stored[i] = row.copy(canceledAt = at)
+                n++
+            }
+        }
+        return n
     }
 
     /** 조건부 쓰기 — 이미 발화·취소된 행은 바뀌지 않는다(실 DB 의 WHERE 절과 같은 조건). */

@@ -109,6 +109,13 @@ class NotificationScheduleRepositoryAdapter(
             title, body, copyBasis, scheduleId,
         ) == 1
 
+    // 조건부 쓰기 — 발화·취소된 행은 그대로 둔다. 계정 한 칸으로 훑으므로 여행을 하나씩 열지 않는다(삭제된 여행의 예약도 닿는다).
+    override fun cancelPendingOf(accountId: UUID, at: Instant): Int =
+        jdbc.update(
+            "UPDATE notification_schedule SET canceled_at = ? WHERE account_id = ? AND fired_at IS NULL AND canceled_at IS NULL",
+            java.sql.Timestamp.from(at), accountId,
+        )
+
     private fun NotificationSchedule.toEntity() = NotificationScheduleEntity(
         scheduleId = scheduleId,
         accountId = accountId,

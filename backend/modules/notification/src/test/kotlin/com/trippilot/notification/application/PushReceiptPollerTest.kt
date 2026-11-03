@@ -74,6 +74,7 @@ class PushReceiptPollerTest : StringSpec({
             return true
         }
         override fun remove(accountId: UUID, token: String) = false
+        override fun removeAll(accountId: UUID) = 0
         fun isInvalidated(token: String) = rows.single { it.token == token }.invalidatedAt != null
     }
 

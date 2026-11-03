@@ -120,4 +120,5 @@ private class OwnedTokens(private val rows: List<PushToken>) : PushTokenReposito
     override fun invalidate(token: String, at: Instant) = false
     override fun invalidateIfNotSeenSince(token: String, notSeenAfter: Instant, at: Instant) = false
     override fun remove(accountId: UUID, token: String) = false
+    override fun removeAll(accountId: UUID) = 0
 }

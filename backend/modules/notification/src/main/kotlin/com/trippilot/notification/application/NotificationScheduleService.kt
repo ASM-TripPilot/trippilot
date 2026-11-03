@@ -76,6 +76,10 @@ class NotificationScheduleService(
         }
     }
 
+    /** 계정 삭제 요청 — 이 계정의 미발화 예약을 전부 취소한다(유예 30일 동안 리마인드가 계속 가지 않게). */
+    @Transactional
+    fun cancelAll(accountId: UUID): Int = schedules.cancelPendingOf(accountId, clock.instant())
+
     /**
      * 문구가 **아직 없는** 미발화 예약만 골라 제자리에서 채운다 — 재시도 전용(TRIP-836 후속).
      *
