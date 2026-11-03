@@ -1,3 +1,4 @@
+nodeLinker: hoisted
 allowBuilds:
   '@sentry/cli': true
   dooboolab-welcome: false
