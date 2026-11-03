@@ -11,6 +11,7 @@ import importlib.util
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from trippilot.api.wiring import LoggingTrace
 from trippilot.domain.common import TraceId
@@ -72,6 +73,34 @@ def _lines(caplog, *llms) -> list[str]:
 
 def test_credit_rejection_alarms_on_first_occurrence(caplog) -> None:
     alarm, report = watch.judge(_lines(caplog, _Raise(_CREDIT)))
+    assert alarm and "과금 거절 1" in report and "credit balance" in report
+
+
+def test_credit_rejection_rescued_by_another_key_still_alarms(caplog) -> None:
+    """다음 키가 살리면 FallbackEvent 가 없다 — 그 키가 막힌 건 어댑터의 키 넘김 줄로만 보인다."""
+    import anthropic
+    import httpx
+
+    from trippilot.llm_gateway.adapters.anthropic_adapter import AnthropicAdapter
+    from trippilot.ports.llm_port import LlmRequest
+
+    req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+
+    def fail(**_):
+        raise anthropic.BadRequestError(_CREDIT, response=httpx.Response(400, request=req), body=None)
+
+    def ok(**_):  # 둘째 키 — 실패 예외 대신 다른 예외로 멈춰 응답 파싱을 건너뛴다
+        raise RuntimeError("stop")
+
+    keys = [SimpleNamespace(messages=SimpleNamespace(create=f)) for f in (fail, ok)]
+    caplog.set_level(logging.WARNING, logger="trippilot.llm_gateway.adapters.anthropic_adapter")
+    request = LlmRequest(model_id="m", prompt="p", prompt_ref=PromptRef(prompt_id="p", version="0", feature="X"),
+                         max_tokens=8, timeout_sec=1.0)
+    try:
+        AnthropicAdapter(keys).invoke(request)  # 첫 순번 = 소진 키
+    except RuntimeError:
+        pass
+    alarm, report = watch.judge([r.getMessage() for r in caplog.records])
     assert alarm and "과금 거절 1" in report and "credit balance" in report
 
 

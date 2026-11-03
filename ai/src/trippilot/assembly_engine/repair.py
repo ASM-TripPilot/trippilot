@@ -78,9 +78,13 @@ def repair(solution: ItinerarySolution, problem: ItineraryProblem,
             # 같은 POI 를 하루 두 번 고정할 수 있다 — 시각이 맞는 창이 그 슬롯의 창이다. (날, POI)
             # 하나로 접으면 09:00 슬롯이 15:00 창으로 끌려가 수리 불가가 된다. 어긋난 슬롯은 창이
             # 하나일 때만 끌어온다 — 둘 이상이면 어느 창인지 모른다(지어내지 않는다 → HC3 가 거부).
+            # 창이 하나여도 그 시각에 같은 POI 의 다른 슬롯이 있으면 그 슬롯의 창이다 — 13:00 진행 중을 닻으로 묶은 날 16:00 의
+            # 같은 곳이 13:00 으로 끌려가 수리 불가가 됐다
             pins = pinned.get((day.date, slot.poi_id), [])
-            pin = next((p for p in pins if p[0] == slot.start_at),
-                       pins[0] if len(pins) == 1 else None)
+            pin = next((p for p in pins if p[0] == slot.start_at), None)
+            if pin is None and len(pins) == 1 and not any(
+                    s.poi_id == slot.poi_id and s.start_at == pins[0][0] for s in day.slots):
+                pin = pins[0]
             if pin is not None:
                 start, end = pin  # 고정 블록 — 이동 금지 (HC3)
             else:

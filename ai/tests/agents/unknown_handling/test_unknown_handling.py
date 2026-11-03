@@ -140,6 +140,21 @@ def test_a_miss_holds_back_only_the_fields_it_looked_up() -> None:
     assert agent.run(_task(fields=("fee",), trace="t4")).facts.fee is None and later.jobs == []
 
 
+def test_a_field_lost_by_the_next_lookup_is_looked_up_again() -> None:
+    """입장료를 물어 다시 찾은 조회가 전에 찾은 영업시간을 잃으면(게이트가 그 칸만 버림 등) 덮인 기록이 영업시간을 일주일 "미확인"으로
+    굳혔다 — 잃은 칸은 찾아본 칸에서 빠져 다음 물음에 다시 찾는다."""
+    worker = _AskedOnly(hours="09:00~18:00")
+    agent, later = _asking(worker)
+    agent.run(_task())
+    later.run()
+    worker.values = {"fee": "3,000원"}  # 이번 조회는 영업시간을 못 건졌다
+    soon = _NOW + timedelta(minutes=1)
+    agent.run(_task(fields=("fee",), now=soon))
+    later.run()
+    assert agent.run(_task(fields=("fee",), now=soon)).facts.fee == "3,000원"
+    assert agent.run(_task(now=soon)) == UnknownOutcome(pending=True)
+
+
 def test_an_old_record_without_looked_up_fields_counts_only_its_values() -> None:
     store = InMemoryPlaceFactStore()
     store.put(FactRecord("p1", replace(_FACTS, fee=None), _NOW, _NOW + uh.FOUND_TTL))  # 2026-10-30 전 행 — searched 없음

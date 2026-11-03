@@ -178,13 +178,8 @@ def _anthropic_llm_and_model() -> tuple[object, str]:
     from trippilot.llm_gateway.adapters.anthropic_adapter import AnthropicAdapter
     from trippilot.llm_gateway.adapters.deadline_http import DeadlineTransport
 
-    clients = [
-        anthropic.Anthropic(
-            api_key=key, max_retries=0,
-            http_client=anthropic.DefaultHttpxClient(transport=DeadlineTransport()),  # 총시간 시한
-        )
-        for key in api_keys
-    ]
+    http_client = anthropic.DefaultHttpxClient(transport=DeadlineTransport())  # 총시간 시한 — 키끼리 연결 풀 공유
+    clients = [anthropic.Anthropic(api_key=key, max_retries=0, http_client=http_client) for key in api_keys]
     client = clients if len(clients) > 1 else clients[0]
     return AnthropicAdapter(client), _env("ANTHROPIC_MODEL") or "claude-haiku-4-5"
 

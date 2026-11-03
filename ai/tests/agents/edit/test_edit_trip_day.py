@@ -196,6 +196,15 @@ def test_editing_another_day_ignores_the_clock(command: EditCommand) -> None:
 # ── 지난 슬롯 자체를 고치는 요청 — 지금 동작 고정 ──────────────────────────
 
 
+def test_after_midnight_inside_a_late_slot_it_is_still_that_day() -> None:
+    """자정을 넘겨 끝나는 곳(23:00~01:00)에 있는 00:20 에 그 날을 고쳐도 지난 곳은 그 시각 그대로다 — 날짜만 보면 당일이 아니라
+    그 날을 처음부터 다시 흘려 이미 다녀온 12:00 을 09:00 으로 옮겼다."""
+    day = _day(D, [60, 60, 120], [120, 600, 0])  # 09:00 · 12:00 · 23:00~01:00(다음 날)
+    out, _ = _run(_solution(day), _remove(0), datetime(2026, 10, 22, 0, 20, tzinfo=KST))
+    assert out.status is EditStatus.APPLIED, out.reason
+    assert out.solution.days[0].slots == day.slots[1:]
+
+
 def test_removing_a_visited_slot_is_still_applied() -> None:
     """지난 슬롯 빼기는 막지 않는다(새 거절 규칙 없음). 남은 지난 곳은 그 시각 그대로, 뒤는 지금부터 다시 흘린다."""
     day = _day(D, [60, 60, 60, 60], [30, 30, 30, 30])  # 09:00 · 10:30 · 12:00~13:00 · 13:30

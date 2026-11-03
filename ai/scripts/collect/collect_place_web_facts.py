@@ -309,11 +309,11 @@ def lookup(client, t: dict, backoff: _Backoff, ask=ask_openai) -> dict:
         except Exception as e:  # noqa: BLE001 — 수집 배치: 사유를 남기고 이어 간다
             # 인증 거절·크레딧 바닥은 다음 곳도 똑같다 — 멈춘다(크레딧은 운영과 같을 수 있어 더 부르면 안 된다)
             if getattr(e, "status_code", None) in (401, 403) or "credit balance" in str(e).lower():
-                return {"status": "error", "fatal": True, "error": f"{type(e).__name__}: {str(e)[:160]}"}
+                return {"status": "error", "fatal": True, "error": f"{type(e).__name__}: {str(e)[:160]}", "cost": round(spent, 5)}
             if _transient(e):
                 backoff.hit(_retry_after(e), rate_limited=getattr(e, "status_code", None) == 429)
                 continue
-            return {"status": "error", "error": f"{type(e).__name__}: {str(e)[:160]}"}
+            return {"status": "error", "error": f"{type(e).__name__}: {str(e)[:160]}", "cost": round(spent, 5)}
         backoff.ok()
         spent += cost_usd(tokens_in, tokens_out, searches)
         try:
@@ -335,7 +335,8 @@ def lookup(client, t: dict, backoff: _Backoff, ask=ask_openai) -> dict:
                     "tokens": [tokens_in, tokens_out], "searches": searches, "cost": round(spent, 5)}
         except Exception as e:  # noqa: BLE001 — 응답 모양이 다를 때(facts 가 문자열 등) 그곳만 오류로
             return {"status": "error", "error": f"parse: {type(e).__name__}: {str(e)[:120]}", "cost": round(spent, 5)}
-    return {"status": "error", "transient": True, "error": f"transient: {MAX_TRANSIENT}회 물러났다 다시 해도 실패"}
+    return {"status": "error", "transient": True, "error": f"transient: {MAX_TRANSIENT}회 물러났다 다시 해도 실패",
+            "cost": round(spent, 5)}  # 앞서 거절로 다시 물었으면 그 호출은 이미 냈다 — 예산에 센다
 
 
 def run(state: Path, limit: int | None, workers: int, only: set[str] | None = None, rpm: float = 6.0,

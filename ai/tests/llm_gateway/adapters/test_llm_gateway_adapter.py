@@ -302,6 +302,16 @@ def test_credit_exhausted_400_falls_over_but_other_400_does_not() -> None:
     assert other.calls == 0  # 요청 자체가 틀린 400 은 다른 키로 보내도 같다
 
 
+@pytest.mark.parametrize("err", [
+    _status_error(anthropic.APIStatusError, 402, "billing_error"),  # SDK 에 402 전용 클래스가 없다
+    _status_error(anthropic.BadRequestError, 400, "You have reached your specified API usage limits"),
+])
+def test_billing_402_and_usage_limit_400_fall_over(err: Exception) -> None:
+    ok = _KeyClient()
+    AnthropicAdapter([_KeyClient(fail=err), ok]).invoke(_REQUEST)
+    assert ok.calls == 1
+
+
 def test_all_keys_failing_raises_the_last_error() -> None:
     adapter = AnthropicAdapter([
         _KeyClient(fail=_status_error(anthropic.AuthenticationError, 401)),

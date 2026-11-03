@@ -214,7 +214,7 @@ class KmaWeatherAdapter:
         """
         nx, ny = latlon_to_grid(coord.lat, coord.lng)
         base_date, base_time = base_datetime_for(self._now())
-        key = (coord.lat, coord.lng, base_date, base_time)
+        key = (nx, ny, base_date, base_time)  # 응답은 격자로 정해진다 — 위경도로 잡으면 기기 위치처럼 턴마다 조금씩 다른 좌표가 매번 부른다
         if self._last is not None and self._last[0] == key:
             return self._last[1]
         # `03 NO_DATA` 는 같은 요청을 다시 보내면 풀리는 일이 많다 — 발표 후 75분이 지난

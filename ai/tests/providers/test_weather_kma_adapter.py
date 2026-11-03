@@ -287,6 +287,17 @@ def test_daily_and_hourly_together_stay_one_call() -> None:
     assert len(http.calls) == 1
 
 
+def test_nearby_coordinates_in_the_same_grid_cell_share_the_call() -> None:
+    """응답은 격자(nx, ny)로 정해진다 — 기기 위치처럼 턴마다 몇 미터씩 다른 좌표도 같은 칸이면 다시 부르지 않는다."""
+    near = GeoPoint(_COORD.lat + 0.0001, _COORD.lng + 0.0001)
+    assert latlon_to_grid(near.lat, near.lng) == latlon_to_grid(_COORD.lat, _COORD.lng)
+    http = _FakeHttp(_body({"item": []}))
+    adapter = _adapter(http)
+    adapter.daily_forecast(_COORD, (_D1,))
+    adapter.hourly_forecast(near, (_D1,))
+    assert len(http.calls) == 1
+
+
 def test_a_new_publication_slot_refetches() -> None:
     """기억은 발표분까지 키다 — 경계를 넘으면 다시 부른다.
 
