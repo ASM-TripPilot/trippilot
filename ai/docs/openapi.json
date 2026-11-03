@@ -559,6 +559,16 @@
             "title": "Base Stays",
             "type": "array"
           },
+          "device_location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CoordSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "itinerary": {
             "anyOf": [
               {

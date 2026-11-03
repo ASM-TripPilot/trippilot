@@ -20,6 +20,7 @@ import com.trippilot.assistant.domain.DialogueInterpretPort
 import com.trippilot.assistant.domain.Intent
 import com.trippilot.assistant.domain.IntentFrame
 import com.trippilot.assistant.domain.InterpretOutcome
+import com.trippilot.assistant.domain.ContextSnapshot
 import com.trippilot.assistant.domain.InterpretRequest
 import com.trippilot.assistant.domain.Interpretation
 import com.trippilot.assistant.domain.InterpretedAnswer
@@ -29,6 +30,7 @@ import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.assistant.domain.NewMessage
 import com.trippilot.assistant.domain.NextAction
 import com.trippilot.assistant.domain.QuickReplyAction
+import com.trippilot.auth.api.LocationUsePurpose
 import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.RateLimited
 import com.trippilot.itinerarygeneration.api.EditProposal
@@ -53,6 +55,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.Codepoint
 import io.kotest.property.arbitrary.alphanumeric
@@ -131,6 +134,7 @@ class AssistantTurnServiceTest : StringSpec({
         val interpreter: Interpreter?,
         val data: FakeTripData,
         val editing: FakeEditing = FakeEditing(),
+        val location: FakeLocation = FakeLocation(),
     ) {
         /** 같은 턴의 앞선 처리를 기다리는 동안 일어날 일 — 테스트가 "그 사이 앞선 처리가 끝났다"를 심는다. */
         var onPause: () -> Unit = {}
@@ -152,7 +156,8 @@ class AssistantTurnServiceTest : StringSpec({
         baseStays: TripBaseStayFacade = stays,
     ) = AssistantTurnService(
         sessions, store, usage, AccountTurnLock { }, moderation, provider(interpreter), dispatcher(data, editing, properties),
-        TripContextReader(trips, baseStays), ContextSnapshotBuilder(TripContextReader(trips, baseStays), data, data, properties), data, data, memory, properties, json, clock, NOOP_TX,
+        TripContextReader(trips, baseStays), ContextSnapshotBuilder(TripContextReader(trips, baseStays), data, data, properties), data, data, memory,
+        location, location, properties, json, clock, NOOP_TX,
     ).also { it.pause = { ms -> clock.now = clock.now.plusMillis(ms); onPause() } } // 기다림은 시계를 민다
 
     fun World.session(withTrip: Boolean = true): AssistantSession =
@@ -778,6 +783,29 @@ class AssistantTurnServiceTest : StringSpec({
         card.payload!!["title"] shouldBe "카페 모카" // 말한 "모카"가 아니라 저장된 이름
     }
 
+    /**
+     * O-U8-5(2026-10-20 사용자 결정) — 앱이 보낸 현재 위치는 **위치 동의가 켜진 계정만** 해석에 싣고, 실은 턴마다 이용 사실을 남긴다.
+     * 운영 2026-11-03: 여행 없이 "오늘 날씨" → 상대가 앵커를 못 잡아 "먼저 여행을 만들어". 사용자: "위치추적해서 날씨 찾으면 되잖아".
+     */
+    "현재 위치는 위치 동의가 켜진 계정만 해석에 싣고, 실은 턴의 이용 사실을 남긴다" {
+        val here = ContextSnapshot.Here(37.57, 126.982)
+        fun World.ask() = service().send(acc, session(withTrip = false).sessionId, UUID.randomUUID(), TurnInput.Text("오늘 날씨"), AssistantSurface.HOME, here)
+
+        val off = world()
+        off.ask()
+        off.interpreter!!.requests.single().context.here shouldBe null // 동의 꺼짐 — 버린다
+        off.location.uses shouldBe emptyList()
+
+        val on = world().apply { location.consent = true }
+        val result = on.ask()
+        on.interpreter!!.requests.single().context.here shouldBe here
+        on.location.uses shouldContainExactly listOf(Triple(acc, LocationUsePurpose.ASSISTANT_TURN, result.messages[0].messageId))
+
+        val broken = world().apply { location.consent = true; location.failRecord = true }
+        broken.ask().messages[1].kind shouldNotBe MessageKind.FALLBACK // 답은 위치 없이 그대로 나간다
+        broken.interpreter!!.requests.single().context.here shouldBe null // 이용 사실을 못 남기면 싣지 않는다
+    }
+
     /** 버튼에는 다시 태울 "말"이 없다 — [다시 시도]를 주면 엉뚱한 옛 문장이 나간다. */
     "버튼을 눌러 온 턴이 실패하면 다시 시도를 주지 않는다 — 말로 온 턴에는 준다" {
         val w = world()
@@ -790,7 +818,7 @@ class AssistantTurnServiceTest : StringSpec({
         val service = AssistantTurnService(
             w.sessions, w.messages, w.usage, AccountTurnLock { }, clean, provider(w.interpreter), throwing,
             TripContextReader(brokenTrips, stays), ContextSnapshotBuilder(TripContextReader(trips, stays), w.data, w.data, AssistantProperties()),
-            w.data, w.data, w.memory, AssistantProperties(), json, w.clock, NOOP_TX,
+            w.data, w.data, w.memory, w.location, w.location, AssistantProperties(), json, w.clock, NOOP_TX,
         )
 
         val pressed = service.send(acc, s.sessionId, UUID.randomUUID(), TurnInput.Action("qr-review"), AssistantSurface.ITINERARY)

@@ -63,6 +63,11 @@ class PushTokenRepositoryAdapter(private val jdbc: JdbcTemplate) : PushTokenRepo
         java.sql.Timestamp.from(at), token,
     ) == 1
 
+    override fun invalidateIfNotSeenSince(token: String, notSeenAfter: Instant, at: Instant): Boolean = jdbc.update(
+        "UPDATE push_token SET invalidated_at = ? WHERE token = ? AND invalidated_at IS NULL AND last_seen_at <= ?",
+        java.sql.Timestamp.from(at), token, java.sql.Timestamp.from(notSeenAfter),
+    ) == 1
+
     override fun remove(accountId: UUID, token: String): Boolean =
         jdbc.update("DELETE FROM push_token WHERE token = ? AND account_id = ?", token, accountId) == 1
 

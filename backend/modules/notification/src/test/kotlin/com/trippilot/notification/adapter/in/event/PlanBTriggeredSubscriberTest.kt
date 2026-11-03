@@ -7,6 +7,7 @@ import ch.qos.logback.core.read.ListAppender
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.core.event.EventEnvelope
 import com.trippilot.notification.application.FakeNotifications
+import com.trippilot.notification.application.FakeTickets
 import com.trippilot.notification.application.FakeToggles
 import com.trippilot.notification.application.FakeTripOwner
 import com.trippilot.notification.application.NotificationMetrics
@@ -68,6 +69,7 @@ class PlanBTriggeredSubscriberTest : StringSpec({
             ),
         )
         override fun invalidate(token: String, at: Instant) = false
+        override fun invalidateIfNotSeenSince(token: String, notSeenAfter: Instant, at: Instant) = false
         override fun remove(accountId: UUID, token: String) = false
     }
 
@@ -99,7 +101,7 @@ class PlanBTriggeredSubscriberTest : StringSpec({
         val registry = SimpleMeterRegistry()
         val metrics = NotificationMetrics(registry, notifications)
         val sender = RecordingSender()
-        val dispatch = PushDispatchService(OneDevice(), notifications, toggles, sender, metrics, PushRateLimits(), clock)
+        val dispatch = PushDispatchService(OneDevice(), notifications, toggles, sender, metrics, PushRateLimits(), clock, FakeTickets())
         val service = NotificationRaiseService(notifications, toggles, dispatch, FakeTripOwner(), metrics, clock)
         return Fixture(clock, notifications, sender, registry, PlanBTriggeredSubscriber(service, mapper))
     }

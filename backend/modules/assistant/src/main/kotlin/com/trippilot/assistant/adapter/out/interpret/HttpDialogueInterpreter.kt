@@ -134,12 +134,16 @@ internal data class WireTrip(val tripId: UUID, val regions: List<String>, val st
 
 internal data class WirePreference(val styles: List<String>, val activities: List<String>)
 
+internal data class WireCoord(val lat: Double, val lng: Double)
+
 internal data class WireContext(
     val surface: String,
     val trip: WireTrip?,
     val baseStays: List<String>,
     val itinerary: WireItinerary?,
     val preferenceProfile: WirePreference? = null,
+    /** 현재 위치(O-U8-5) — 위치 동의가 켜진 턴에만 실린다. 상대는 날씨 앵커로만 쓴다. */
+    val deviceLocation: WireCoord? = null,
 )
 
 internal data class WireTurn(val role: String, val text: String)
@@ -219,6 +223,7 @@ internal fun ContextSnapshot.toWire() = WireContext(
         WireItinerary(it.status, it.days.map { d -> WireDay(d.date, d.slots.map { s -> WireSlot(s.slotKey, s.name, s.startAt, s.category) }) })
     },
     preferenceProfile = tastes?.let { WirePreference(it.styles, it.activities) },
+    deviceLocation = here?.let { WireCoord(it.lat, it.lng) },
 )
 
 internal fun WireResponse.toDomain(mapper: JsonMapper): Interpretation {

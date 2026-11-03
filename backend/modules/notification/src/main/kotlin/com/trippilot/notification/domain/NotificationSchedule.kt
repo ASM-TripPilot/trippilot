@@ -2,6 +2,8 @@ package com.trippilot.notification.domain
 
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 
 /**
@@ -26,6 +28,11 @@ data class NotificationSchedule(
      */
     val title: String? = null,
     val body: String? = null,
+    /**
+     * 문구를 만들 때 본 **그날 장소 이름 목록의 지문**([CopyBasis]). 발화가 지금 일정과 대조해, 그 사이 일정이 바뀌었으면 문구를 쓰지
+     * 않는다. null = 이 칸이 생기기 전에 붙은 문구(대조할 근거가 없다).
+     */
+    val copyBasis: String? = null,
 ) {
     init {
         require(kind in NotificationKind.REMINDERS) { "시각으로 발화하지 않는 종류는 예약할 수 없습니다: $kind" }
@@ -49,8 +56,8 @@ data class NotificationSchedule(
         kind = kind,
         // **받은 문구가 있으면 그것을 쓴다.** 둘 중 하나만 온 경우는 섞지 않는다 —
         // AI 제목에 상수 본문이 붙으면 문장이 따로 놀아 오히려 어색하다.
-        title = if (hasCopy()) title!! else defaultTitle(),
-        body = if (hasCopy()) body!! else defaultBody(),
+        title = if (hasCopy) title!! else defaultTitle(),
+        body = if (hasCopy) body!! else defaultBody(),
         occurredAt = now,
         // 알림에서 그 여행의 일정으로 들어간다. 진입이 없으면 사용자가 알림을 읽고도 갈 곳이 없다.
         actionType = NotificationAction.TRIP_ITINERARY,
@@ -61,8 +68,23 @@ data class NotificationSchedule(
         dedupKey = "$kind#$tripId#$fireAt",
     )
 
-    /** 제목·본문이 **둘 다** 있어야 AI 문구로 친다. 한쪽만 쓰면 문장이 따로 논다. */
-    private fun hasCopy(): Boolean = !title.isNullOrBlank() && !body.isNullOrBlank()
+    /**
+     * 문구가 말하는 날. 발화일과 다를 수 있다 — `TRIP_PRE` 는 D-1 에 울리면서 *"내일은 …"* 을 말하므로 여행 첫날을 가리킨다.
+     * 발화일을 그대로 쓰면 아직 시작도 안 한 날을 묻거나 대조하게 된다.
+     */
+    fun subjectDate(): LocalDate {
+        val fired = fireAt.atZone(TRAVEL_ZONE).toLocalDate()
+        return if (kind == NotificationKind.TRIP_PRE) fired.plusDays(1) else fired
+    }
+
+    /** 같은 예약의 문구를 비운 사본 — 발화가 상수 문구를 쓰게 한다. */
+    fun withoutCopy(): NotificationSchedule = copy(title = null, body = null, copyBasis = null)
+
+    /**
+     * 제목·본문이 **둘 다** 있어야 AI 문구로 친다. 한쪽만 쓰면 문장이 따로 논다.
+     * 제자리 채우기(`NotificationScheduleService.fillMissing`)가 "아직 문구가 없는 행"을 고르는 기준이기도 하다.
+     */
+    val hasCopy: Boolean get() = !title.isNullOrBlank() && !body.isNullOrBlank()
 
     private fun defaultTitle(): String = when (kind) {
         NotificationKind.TRIP_PRE -> "내일 여행이 시작돼요"
@@ -77,6 +99,8 @@ data class NotificationSchedule(
     }
 
     companion object {
+        /** 여행지 기준 시각. 사용자의 기기 시간대가 아니라 여행이 벌어지는 곳의 아침이어야 한다. */
+        val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
 
         /** 아직 발화도 취소도 되지 않은 예약 — 재계산·폴링의 대상이 정확히 이 집합이다. */
         fun pending(

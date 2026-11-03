@@ -44,14 +44,26 @@ class HttpReminderCopyAdapter(
         }
         if (sendable.isEmpty()) return emptyMap()
 
-        // 계약 상한(`maxItems: 30`)을 넘기면 **한 건도 못 받는다.** 긴 여행은 하루 1건씩 쌓여
-        // 한 달이면 넘는다 — 나눠 보내고 결과를 합친다. 한 묶음이 실패해도 나머지는 산다.
-        return sendable.chunked(MAX_ITEMS).fold(emptyMap()) { acc, chunk ->
-            acc + runCatching { call(tripTitle, chunk) }
+        // **작게 쪼개 보낸다**(`chunkSize`). 계약 상한(`maxItems: 30`)은 넘기면 한 건도 못 받는 하드 한계이고, 그보다 훨씬 전에
+        // 상대의 항목당 예산(마감 ÷ 항목 수)이 학생 모델의 지연보다 짧아진다 — 그래서 상한이 아니라 "마감 안에 끝낼 크기"로 나눈다.
+        // 한 묶음이 실패해도 나머지는 산다.
+        val result = HashMap<String, ReminderCopy>()
+        val startedAt = System.nanoTime()
+        for ((index, chunk) in sendable.chunked(properties.chunkSize).withIndex()) {
+            // 시간 예산을 넘겼으면 남은 묶음은 건너뛴다 — 적재가 릴레이 스레드·트랜잭션 안에서 돌아 오래 붙들면 안 된다.
+            // 첫 묶음은 늘 보낸다. 건너뛴 행은 제자리 채우기(`fillMissing`)가 나중에 메운다.
+            if (index > 0 && elapsedMs(startedAt) >= properties.totalBudgetMs) {
+                log.info("리마인드 문구 시간 예산({}ms)을 넘겨 남은 묶음은 건너뜁니다 — 나중에 다시 채웁니다.", properties.totalBudgetMs)
+                break
+            }
+            result += runCatching { call(tripTitle, chunk) }
                 .onFailure { log.warn("리마인드 문구 호출 실패 — 그 묶음은 상수 문구로 갑니다. base={}", properties.baseUrl, it) }
                 .getOrDefault(emptyMap())
         }
+        return result
     }
+
+    private fun elapsedMs(startedAtNanos: Long): Long = (System.nanoTime() - startedAtNanos) / 1_000_000
 
     private fun call(tripTitle: String?, items: List<ReminderCopyRequest>): Map<String, ReminderCopy> {
         val body = AiReminderCopyRequest(

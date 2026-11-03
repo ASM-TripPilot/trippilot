@@ -52,6 +52,7 @@ class LocationAutomationServiceTest : StringSpec({
         val rows = mutableListOf<Logged>()
         override fun recordCollection(accountId: UUID, source: LocationCollectionSource, subjectId: UUID, pointCount: Int?) = Unit
         override fun recordPurge(accountId: UUID, scope: LocationPurgeScope, purgedCount: Int) = Unit
+        override fun recordUse(accountId: UUID, purpose: LocationUsePurpose, subjectId: UUID) = error("자동화는 1회 이용 로그를 쓰지 않는다")
         override fun recordUseInterval(
             accountId: UUID, purpose: LocationUsePurpose, intervalId: UUID, tripId: UUID,
             phase: LocationIntervalPhase, at: Instant, endReason: String?, regionCount: Int?,

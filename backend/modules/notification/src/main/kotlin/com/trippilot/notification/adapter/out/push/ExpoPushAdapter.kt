@@ -1,11 +1,14 @@
 package com.trippilot.notification.adapter.out.push
 
+import com.fasterxml.jackson.annotation.JsonInclude
 import com.trippilot.notification.domain.PushMessage
 import com.trippilot.notification.domain.PushPort
 import com.trippilot.notification.domain.PushRateLimited
 import com.trippilot.notification.domain.PushReceipt
+import com.trippilot.notification.domain.PushReceiptPort
 import com.trippilot.notification.domain.PushStatus
 import com.trippilot.notification.domain.PushUrgency
+import com.trippilot.notification.domain.TicketReceipt
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
@@ -38,7 +41,7 @@ import java.time.Duration
 class ExpoPushAdapter(
     @param:Value("\${trippilot.push.expo.access-token:}") private val accessToken: String,
     @param:Qualifier(ExpoPushClientConfiguration.BEAN_NAME) private val client: RestClient,
-) : PushPort {
+) : PushPort, PushReceiptPort {
 
     /** 실제 Expo Push Service 로 나간다. */
     override val deliversExternally = true
@@ -49,6 +52,8 @@ class ExpoPushAdapter(
                 to = it, title = message.title, body = message.body, data = message.data,
                 interruptionLevel = message.urgency.expoInterruptionLevel(),
                 priority = message.urgency.expoPriority(),
+                sound = message.urgency.expoSound(),
+                ttl = message.urgency.expoTtlSeconds(),
             )
         }
         val response = try {
@@ -76,8 +81,28 @@ class ExpoPushAdapter(
         return tokens.zip(tickets) { token, ticket -> ticket.toReceipt(token) }
     }
 
+    /**
+     * 영수증 조회(`getReceipts`) — 발송 약 15분 뒤부터 24시간 동안 티켓 id 로 APNs·FCM 단계의 결과를 볼 수 있다(Expo 푸시 계약 — 지식 기반).
+     * 응답은 `{"data": {"<티켓 id>": {"status": "ok"|"error", "message"?, "details"?: {"error"}}}}` 이고 **토큰이 없다**. 아직 안
+     * 만들어졌거나 24시간이 지난 id 는 맵에서 빠진다. 한도(429)·자격(401·403)·네트워크 오류는 그대로 올라간다 — 호출 쪽(폴러)이 상태를 안
+     * 바꾸고 다음 회차로 넘긴다. 발송과 같은 인증 헤더 규칙이다(enhanced security 를 켠 프로젝트만 토큰이 필요하다).
+     */
+    override fun fetch(ticketIds: List<String>): Map<String, TicketReceipt> {
+        if (ticketIds.isEmpty()) return emptyMap()
+        val response = client.post()
+            .uri("/--/api/v2/push/getReceipts")
+            .headers { h -> if (accessToken.isNotBlank()) h.setBearerAuth(accessToken) }
+            .body(ExpoReceiptsRequest(ticketIds))
+            .retrieve()
+            .body(ExpoReceiptsResponse::class.java)
+        return response?.data.orEmpty().mapValues { (_, r) ->
+            TicketReceipt(ok = r.status == "ok", error = r.details?.error, message = r.message)
+        }
+    }
+
     private fun ExpoPushTicket.toReceipt(token: String): PushReceipt = when {
-        status == "ok" -> PushReceipt(token, PushStatus.SENT)
+        // 접수. 티켓 id 는 영수증 조회의 열쇠라 같이 돌려준다 — id 가 없는 ok 는 접수는 됐지만 도착을 추적할 수 없다.
+        status == "ok" -> PushReceipt(token, PushStatus.SENT, ticketId = id?.takeIf { it.isNotBlank() })
         details?.error == DEVICE_NOT_REGISTERED -> PushReceipt(token, PushStatus.DEVICE_NOT_REGISTERED, DEVICE_NOT_REGISTERED)
         else -> PushReceipt(token, PushStatus.FAILED, details?.error ?: message ?: "UNKNOWN")
     }
@@ -108,7 +133,30 @@ class ExpoPushAdapter(
         PushUrgency.PASSIVE -> "normal"
     }
 
+    /**
+     * iOS 소리. Expo 는 `sound` 를 싣지 않으면 **소리 없이 배너만** 올린다(Expo 푸시 계약 — 지식 기반) — "도착은 했는데 아무도
+     * 모르는" 리마인드가 된다. 긴급도가 보통 이상이면 기본 소리를 내고, 조용한 등급(회고·커뮤니티)은 싣지 않는다.
+     * Android 의 소리는 채널이 정한다(이 필드는 iOS 전용).
+     */
+    private fun PushUrgency.expoSound(): String? = when (this) {
+        PushUrgency.PASSIVE -> null
+        PushUrgency.ACTIVE, PushUrgency.TIME_SENSITIVE -> "default"
+    }
+
+    /**
+     * 기기가 꺼져 있을 때 메시지를 **얼마나 붙들어 둘지**(초). 안 싣으면 제공자 기본을 따른다 — APNs 는 0(즉시 못 가면 버림),
+     * FCM 은 4주라서 안드로이드에서는 꺼 둔 기기가 켜질 때 *며칠 전의* "오늘의 일정"·Plan-B 가 도착할 수 있다(지식 기반).
+     * 시각이 의미인 알림일수록 짧게 둔다. iOS 도 값을 주면 그 시간 안에는 기기가 다시 켜질 때 한 번 전달된다.
+     */
+    private fun PushUrgency.expoTtlSeconds(): Int = when (this) {
+        PushUrgency.TIME_SENSITIVE -> 2 * HOUR   // Plan-B·일정 시작 전 — 두 시간이 지나면 이미 지난 일이다
+        PushUrgency.ACTIVE -> 6 * HOUR           // 오늘의 일정·여행 전날 — 그날 안
+        PushUrgency.PASSIVE -> 24 * HOUR         // 회고·요약 — 하루
+    }
+
     private companion object {
+        private const val HOUR = 3_600
+
         /** Expo 가 죽은 토큰에 주는 코드. 이 문자열이 INV-U6-07 의 방아쇠다. */
         private const val DEVICE_NOT_REGISTERED = "DeviceNotRegistered"
 
@@ -116,7 +164,8 @@ class ExpoPushAdapter(
     }
 }
 
-/** Expo 로 보내는 메시지 한 건. 필드명은 Expo 와이어 그대로다. */
+/** Expo 로 보내는 메시지 한 건. 필드명은 Expo 와이어 그대로다. 값이 없는 필드는 키째로 뺀다(`null` 을 실으면 Expo 가 거절할 수 있다). */
+@JsonInclude(JsonInclude.Include.NON_NULL)
 internal data class ExpoPushRequest(
     val to: String,
     val title: String,
@@ -126,12 +175,30 @@ internal data class ExpoPushRequest(
     val interruptionLevel: String,
     /** `default | normal | high`. Android 에서 잠든 기기를 깨울지가 여기서 갈린다. */
     val priority: String,
+    /** iOS 소리. `"default"` 를 싣지 않으면 소리 없는 배너다. */
+    val sound: String? = null,
+    /** 초. 꺼진 기기에 메시지를 붙들어 두는 시간 — 안 싣으면 제공자 기본(FCM 4주). */
+    val ttl: Int? = null,
+)
+
+/** 영수증 조회 요청 — 티켓 id 목록. */
+internal data class ExpoReceiptsRequest(val ids: List<String>)
+
+/** 영수증 응답 — 티켓 id → 영수증. 판정에 쓰는 것만 받는다. */
+internal data class ExpoReceiptsResponse(val data: Map<String, ExpoReceipt> = emptyMap())
+
+internal data class ExpoReceipt(
+    val status: String? = null,
+    val message: String? = null,
+    val details: ExpoPushTicketDetails? = null,
 )
 
 /** Expo 응답 — 판정에 쓰는 것만 받는다. */
 internal data class ExpoPushResponse(val data: List<ExpoPushTicket> = emptyList())
 
 internal data class ExpoPushTicket(
+    /** `status=ok` 에만 온다. 영수증 응답(`getReceipts`)이 이 id 를 키로 돌아온다. */
+    val id: String? = null,
     val status: String? = null,
     val message: String? = null,
     val details: ExpoPushTicketDetails? = null,

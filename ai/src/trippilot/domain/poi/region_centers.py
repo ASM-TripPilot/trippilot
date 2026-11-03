@@ -8,6 +8,7 @@ ponytail: 대도시·주요 관광 권역 수십 곳의 손 좌표(시청·번�
 
 from __future__ import annotations
 
+import math
 import re
 
 from trippilot.domain.common import GeoPoint
@@ -39,6 +40,20 @@ _CENTERS: dict[str, tuple[float, float, float]] = {
     "담양": (35.3211, 126.9882, 5.0), "보령": (36.3334, 126.6129, 6.0), "창원": (35.2280, 128.6811, 6.0),
     "청주": (36.6424, 127.4890, 5.0), "천안": (36.8151, 127.1139, 5.0),
 }
+
+
+def covering_region(point: GeoPoint) -> str | None:
+    """좌표 → 그 점을 반경 안에 둔 표 지역 중 **가장 넓은** 이름(시청 근처면 종로·명동이 아니라 서울). 없으면 None.
+
+    현재 위치 날씨의 제목용(O-U8-5) — 날씨는 동네보다 도시 단위로 말한다. 거리는 평면 근사(반경 수 km 라 충분하다).
+    """
+    def km(lat: float, lng: float) -> float:
+        dy = (point.lat - lat) * 111.0
+        dx = (point.lng - lng) * 111.0 * math.cos(math.radians(lat))
+        return math.hypot(dx, dy)
+
+    inside = [(r, name) for name, (lat, lng, r) in _CENTERS.items() if km(lat, lng) <= r]
+    return max(inside)[1] if inside else None
 
 
 def region_center(text: str) -> tuple[str, GeoPoint, float] | None:

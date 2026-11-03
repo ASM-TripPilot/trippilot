@@ -44,7 +44,16 @@ data class PushMessage(
 )
 
 /** 토큰 한 건의 결과. */
-data class PushReceipt(val token: String, val status: PushStatus, val reason: String? = null)
+data class PushReceipt(
+    val token: String,
+    val status: PushStatus,
+    val reason: String? = null,
+    /**
+     * 발송기가 접수하며 준 **티켓 id**(Expo 는 `status=ok` 에만 준다). 나중에 영수증을 조회하는 열쇠다 — 접수(SENT)와 도착은
+     * 다르고, 도착 실패는 이 id 로만 알 수 있다. 발송기가 티켓을 안 주는 모드(기록만 하는 기본 발송기)는 null.
+     */
+    val ticketId: String? = null,
+)
 
 enum class PushStatus {
     SENT,

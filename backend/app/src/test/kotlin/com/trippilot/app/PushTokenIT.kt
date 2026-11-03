@@ -87,6 +87,28 @@ class PushTokenIT : AbstractPostgresIntegrationTest() {
         rows(second) shouldBe 1
     }
 
+    /**
+     * 영수증은 발송 15분 이상 뒤에 오는데 그 사이 앱이 같은 토큰을 재등록(되살림)했을 수 있다 — 앱은 같은 서명이면 다시 POST 하지 않아
+     * 한 번 잘못 무효화하면 로그아웃·401 전까지 못 살린다. 그래서 **그 발송 뒤에 다시 보인 토큰은 무효화하지 않는다**(`last_seen_at` ≤ 기준).
+     */
+    @Test
+    fun `영수증 무효화는 발송 뒤에 다시 보인 토큰을 남긴다`() {
+        val accountId = newAccount()
+        val token = newToken()
+        service.register(accountId, token, null, DevicePlatform.IOS, OsPermission.GRANTED)   // last_seen_at = 지금(실시계)
+        val longAgo = Instant.parse("2020-01-01T00:00:00Z")
+
+        // 발송 시각(기준)이 마지막으로 보인 때보다 앞이다 = 발송 뒤에 다시 보였다 → 남긴다.
+        tokens.invalidateIfNotSeenSince(token, longAgo, now) shouldBe false
+        tokens.findActive(accountId).size shouldBe 1
+
+        // 기준이 마지막으로 보인 때 이후다 = 그 뒤로 재등록이 없었다 → 무효화한다. 두 번째는 이미 무효라 false.
+        val afterSeen = Instant.now().plusSeconds(60)
+        tokens.invalidateIfNotSeenSince(token, afterSeen, now) shouldBe true
+        tokens.invalidateIfNotSeenSince(token, afterSeen, now) shouldBe false
+        tokens.findActive(accountId) shouldBe emptyList()
+    }
+
     @Test
     fun `무효화는 한 번만 성공한다 — 죽은 시각이 나중 시도로 밀리지 않는다(INV-U6-07)`() {
         val accountId = newAccount()

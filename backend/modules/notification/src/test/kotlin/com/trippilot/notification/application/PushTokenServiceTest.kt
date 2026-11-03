@@ -72,6 +72,7 @@ private class FakeTokens : PushTokenRepository {
         byToken.values.filter { it.accountId == accountId && it.invalidatedAt == null }
 
     override fun invalidate(token: String, at: Instant): Boolean = false
+    override fun invalidateIfNotSeenSince(token: String, notSeenAfter: Instant, at: Instant) = false
 
     override fun remove(accountId: UUID, token: String): Boolean = false
 }
