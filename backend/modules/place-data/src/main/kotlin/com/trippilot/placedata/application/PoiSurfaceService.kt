@@ -31,6 +31,7 @@ class PoiSurfaceService(
                 imageUrl = p.displayImageUrl,
                 tags = PublicTags.of(p.tags),   // 인기·평점높음 은 내보내지 않는다 — PublicTags
                 regionCode = p.regionCode,
+                imageLicense = p.imageLicense?.name,
             )
         }
     }
