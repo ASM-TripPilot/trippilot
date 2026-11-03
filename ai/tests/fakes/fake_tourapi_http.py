@@ -83,6 +83,8 @@ def area_of(params: Mapping[str, str]) -> str:
     from trippilot.poi_curation.sourcing.tourapi import LDONG_BY_AREA
     if "areaCode" in params:
         return params["areaCode"]
+    if "lDongRegnCd" not in params:
+        return ""   # 전국 조회(여행코스)
     return next(a for a, l in LDONG_BY_AREA.items() if l == params["lDongRegnCd"])
 
 class HttpStatusError(Exception):

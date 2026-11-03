@@ -214,8 +214,9 @@ class TourApiAdapter:
         self, area_code: str, kind: str, page_no: int, rows: int
     ) -> SourcedPage:
         # 조회는 법정동 코드로 — 사유는 `LDONG_BY_AREA`. 표에 없는 코드는 옛 areaCode 로(하위호환).
+        # 빈 지역 코드는 전국 — 여행코스(25)는 지역 칸이 대부분 비어 지역을 걸면 1,068개 중 수십 개만 온다(11-03 실측).
         ldong = LDONG_BY_AREA.get(area_code, "")
-        region = {"lDongRegnCd": ldong} if ldong else {"areaCode": area_code}
+        region = {"lDongRegnCd": ldong} if ldong else {"areaCode": area_code} if area_code else {}
         body = self._call(
             "areaBasedList2",
             {
