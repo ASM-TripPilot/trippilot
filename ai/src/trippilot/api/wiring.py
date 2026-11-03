@@ -209,7 +209,7 @@ from trippilot.llm_gateway.workers.preference.preference_cache import CachingSco
 from trippilot.poi_curation import place_fallback
 from trippilot.poi_curation.config import M7Config
 from trippilot.poi_curation.place_fees import load_fee_table
-from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql
+from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql, pick_said
 from trippilot.poi_curation.pool_builder import (
     CandidatePoolBuilder, base_radius_km, restrict_pool_to_target_role, widened_radius_km)
 from trippilot.orchestrator.schedule import schedule_coordinator as core
@@ -219,6 +219,7 @@ from trippilot.llm_gateway.gates.dialogue.intent import IntentGate
 from trippilot.llm_gateway.gates.dialogue.paraphrase import ParaphraseGate
 from trippilot.orchestrator.dialogue.dialogue_interpreter import BankIndex, CountingLlm, DialogueInterpreter
 from trippilot.orchestrator.dialogue.dialogue_orchestrator import DialogueOrchestrator
+from trippilot.orchestrator.dialogue.place_sql import PlaceSqlLookup
 from trippilot.orchestrator.intent.intent_router import IntentRouter
 from trippilot.orchestrator.intent.question_bank import BankEntry, BankVectors
 from trippilot.providers.poi_info import PoiInfoProvider
@@ -2006,8 +2007,11 @@ class WiredItineraryOrchestrator:
         memory_store: MemoryStorePort | None = None,
         dialogue_orchestrator: DialogueOrchestrator | None = None,
         holidays: HolidaySource | None = None,
+        place_names: PlaceSqlLookup | None = None,
     ) -> None:
         self._orchestrator = orchestrator
+        # 등록 장소 이름 조회(poi_public, LLM 0) — 편집 번역의 풀 밖 이름 장소(F9). None = 장소 DB 미배선(받은 풀만 — 종전)
+        self._place_names = place_names
         # 공휴일 휴무(상황 감지 H1) — 진입점이 요청당 1회 부른다. 미주입 = off(None, 조회 0회).
         self._holidays = holidays if holidays is not None else HolidaySource()
         # generate 와이어 변환에만 싣는 지터 폭 (TRIP-1180) — 설정의 상한 관계를 통과한 값.
@@ -4189,8 +4193,27 @@ class WiredItineraryOrchestrator:
                 pool_request, anchor=center, radius_override_km=km, dates=(request.target_date,)), "now": now}), now),
             # 날마다 동네 — 그 날들을 동네 풀로 ScheduleAgent 가 다시 푼다(spec 004). 에이전트가 날·동네를 확인했을 때만 부른다
             rebuild_days=lambda pairs: self._rebuild_days(request, solution, pool, poi_index, pool_request, transport, now, t0, pairs),
+            # 풀 밖 이름 장소(F9) — 말이 이름으로 집은 등록 장소. 에이전트가 말을 번역기로 보낼 때만 부른다. 장소 DB 미배선이면 None(종전)
+            named_places=(lambda words, spans: self._named_places(words, spans, pool_request, TraceId(meta.request_id)))
+            if self._place_names is not None else None,
         ))
         return self._edit_response(outcome, self._edit_distances(request, outcome, transport, t0))
+
+    def _named_places(
+        self, words: tuple[str, ...], spans: tuple[str, ...], pool_request: CandidatePoolRequest, trace_id: TraceId,
+    ) -> tuple[Poi, ...]:
+        """편집 번역의 풀 밖 이름 장소(F9) — 등록 장소 이름 조회(`poi_public`, 지역 접두·지점 접미 꼴까지) → 정본 일괄 조회(좌표·영업시간 —
+        이 뷰에는 좌표가 없다) → 여행지 반경(이름 대조와 같은 50km)·풀과 같은 자격(`admit` ②~④) → 말마다 한 곳(`pick_said`, 같은 이름
+        여럿이면 도우미 이름 찾기와 같은 규칙, 지점 여럿이면 안 고른다). 후보 자격은 등록 POI 에서만 생긴다(INV-1). DB 오류는 빈 목록으로
+        접히고(`PlaceSqlLookup.find_said`), 정본 조회 오류는 에이전트가 받아 로그를 남긴다(받은 풀로 번역 — INV-4)."""
+        assert self._place_names is not None  # 미배선이면 콘센트를 넘기지 않는다(`edit`)
+        rows = self._place_names.find_said(words, spans, trace_id)
+        if not rows:
+            return ()
+        found = self._poi_db.find_by_ids(frozenset(PoiId(r.poi_id) for r in rows))
+        near = [p for p in found if haversine_km(pool_request.anchor, p.coord) <= nl_verify.NAME_SEARCH_RADIUS_KM]
+        usable = {p.poi_id: p for p in self._pool_builder.admit(near, pool_request)}
+        return tuple(usable[PoiId(pid)] for pid in pick_said(rows, {str(pid) for pid in usable}, words, spans))
 
     def _edit_response(
         self, outcome: EditOutcome, distance_ranges: Mapping[str, str] | None = None
@@ -4806,6 +4829,8 @@ def build_orchestrator(
         existence=existence,
         context_resolver=resolver,
         edit_agent=edit_agent,
+        # 편집 번역의 풀 밖 이름 장소(F9) — 도우미와 같은 장소 DB 실행기의 이름 찾기만(NL2SQL 워커 없음, LLM 0). DSN 이 없으면 None(종전)
+        place_names=PlaceSqlLookup(None, place_sql) if place_sql is not None else None,
         reflect_agent=reflect_agent,
         nudge_worker=nudge_worker,
         reminder_copy_worker=reminder_copy_worker,

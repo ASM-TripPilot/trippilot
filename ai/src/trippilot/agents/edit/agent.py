@@ -7,7 +7,8 @@
 ```
 EditTask ─▶ ①b 날마다 동네  "1일차는 종로 2일차는 강남으로" — 그 날들을 그 동네로 다시 짠다(LLM 0회, day_area.py · 재구성 콘센트)
          ─▶ ①a 사이 넣기   "A에서 B로 갈 때 한 군데 더" — 자리·후보를 코드가 고른다(LLM 0회, insert_between.py)
-         ─▶ ① 명령 확보    자연어 → 번역 워커(게이트 검증 포함) / 구조화 → 그대로
+         ─▶ ① 명령 확보    자연어 → (이름 장소 콘센트: 말이 이름으로 집은 등록 POI 를 풀에 합친다, F9) → 번역 워커(게이트 검증 포함)
+                           / 구조화 → 그대로
          ─▶ ② 동등 검증    validate_command (INV-1 — 게이트와 같은 규칙)
          ─▶ ③ 확인 게이트  파괴적 편집은 confirm 전에는 반영하지 않는다
          ─▶ ④ 재타이밍     결정론 (체류 보존 + 이동 추정)
@@ -75,6 +76,7 @@ from trippilot.llm_gateway.gates.content.edit_translation import is_anchor_param
 from trippilot.llm_gateway.workers.content.edit_translation import (
     EditTranslationInput,
     EditTranslationWorker,
+    said_name_keys,
 )
 
 
@@ -137,6 +139,10 @@ class EditTask:
     # 날마다 동네 재구성 콘센트(spec 004 FR-005) — (날, 동네) 짝 → 바뀐 날만 갈아 끼운 해 또는 사유. 경계가 같은 요구표·PlaceProvider 로
     # 동네 풀을 모으고 ScheduleAgent 로 그 날들을 한 번에 푼다(INV-1·2). 에이전트는 말·명령을 확인했을 때만 한 번 부른다. None = 미배선
     rebuild_days: Callable[[tuple[DayArea, ...]], RebuiltDays | str] | None = None
+    # 이름 장소 콘센트(F9) — (붙여 쓴 말, 띄어 쓴 말) → 그 이름의 등록 POI(말마다 한 곳). 경계가 등록 장소 이름 조회(LLM 0)·정본 일괄 조회로
+    # 찾고 풀과 같은 자격(②~④)·여행지 반경으로 거른다. 에이전트는 말이 번역기로 갈 때만 한 번 부르고, 찾은 곳을 번역 후보와 INV-1 풀에
+    # 합친다. None = 미배선(받은 풀만 — 종전)
+    named_places: Callable[[tuple[str, ...], tuple[str, ...]], tuple[Poi, ...]] | None = None
 
     def __post_init__(self) -> None:
         if (self.utterance is None) == (self.command is None):
@@ -195,6 +201,10 @@ _INSERT_STAY_CAP_MIN = 60
 # 이보다 적은 시한이면 구간 풀을 부르지 않는다(받은 기본 풀만) — 반경 조회 한 번이 시한을 넘기지 않게.
 # ponytail: 정적 예산 기준이다(경과 시간 아님) — 재계획 지역 풀(#1454)처럼 시한 없는 2차 수집. 느려지면 남은 시한으로 가른다
 _SEGMENT_FETCH_MIN_MS = 2_000
+# 이름 장소 조회(F9)도 같은 문턱 — 조회(DB 문장 시한 1.5s + 정본 일괄 조회)가 번역 몫을 다 먹지 않게. 쓴 시간은 번역 시한에서 뺀다
+_NAMED_FETCH_MIN_MS = 2_000
+# 이름 조회로 더하는 곳 상한 — 워커의 상한 밖 이름 지목(`_NAMED_EXTRA`)과 같은 몫(말마다 한 곳이라 보통 1~2곳)
+_NAMED_MAX = 5
 
 
 def _anchored(command: EditCommand) -> bool:
@@ -254,7 +264,9 @@ class EditAgent:
             unresolved = gap
         # ① 명령 확보 — 자연어는 번역 워커(게이트 검증 포함), 구조화는 그대로
         if task.utterance is not None:
-            translated = self._translate(task, task.utterance)
+            # 풀 밖 이름 장소(F9) — 말이 이름으로 집은 등록 장소를 번역 후보와 INV-1 풀(게이트·② validate_command)에 합친다
+            task, named, spent_ms = self._with_named(task)
+            translated = self._translate(task, task.utterance, named=named, spent_ms=spent_ms)
             if isinstance(translated, EditOutcome):  # TRANSLATION_FAILED
                 if unresolved is not None:
                     return replace(translated, reason=f"{translated.reason} / insert_between: {unresolved}")
@@ -535,8 +547,38 @@ class EditAgent:
 
     # ── ① 자연어 번역 ───────────────────────────────────────────────
 
+    def _with_named(self, task: EditTask) -> tuple[EditTask, tuple[Poi, ...], int]:
+        """풀 밖 이름 장소(F9) — 말의 이름 말(`said_name_keys`, 워커의 상한 밖 이름 대조와 같은 규칙)로 콘센트를 한 번 불러 찾은 등록 POI 를
+        풀에 합친 재료·번역에 따로 실을 곳·쓴 시간(ms). 미배선·시한 부족·말 없음·콘센트 오류면 받은 재료 그대로(종전 — INV-4, 사유는 로그).
+
+        합친 풀이 곧 닫힌 집합이다 — 번역 게이트와 ② `validate_command` 가 같은 풀을 본다. 넣는 것은 경계가 등록 장소에서 찾아 풀과 같은
+        자격으로 거른 곳뿐이고, LLM 출력이 이 집합을 넓히는 길은 없다(조회는 번역 **전**, 말과 서버 자료로만)."""
+        if task.named_places is None or task.deadline_ms < _NAMED_FETCH_MIN_MS or task.utterance is None:
+            return task, (), 0
+        day = next((d for d in task.solution.days if d.date == task.target_date), None)
+        slots = tuple(s.poi_id for s in day.slots) if day is not None else ()
+        words, spans = said_name_keys(task.utterance, [p.name for pid in slots if (p := task.poi_index.get(pid))])
+        if not words and not spans:
+            return task, (), 0
+        started = time.monotonic()
+        log: dict = {"keys": len(words) + len(spans)}
+        try:
+            found = tuple(task.named_places(words, spans))
+        except Exception as e:  # 콘센트 결함도 경계 밖으로 던지지 않는다(DL-5) — 받은 풀로 번역한다
+            found, log["error"] = (), type(e).__name__
+        spent = round((time.monotonic() - started) * 1000)
+        named = tuple({p.poi_id: p for p in found if p.poi_id not in slots}.values())[:_NAMED_MAX]
+        added = tuple(p for p in named if not task.pool.contains(p.poi_id))
+        _log.info("edit_named %s", json.dumps({  # 말·이름은 싣지 않는다 — 개수·시간만
+            "trace_id": str(task.trace_id), **log, "found": len(found), "named": len(named), "added": len(added),
+            "ms": spent}, ensure_ascii=False))
+        if not added:
+            return task, named, spent
+        pool = replace(task.pool, poi_ids=task.pool.poi_ids | {p.poi_id for p in added}, pois=(*task.pool.pois, *added))
+        return replace(task, pool=pool), named, spent
+
     def _translate(
-        self, task: EditTask, utterance: str
+        self, task: EditTask, utterance: str, *, named: tuple[Poi, ...] = (), spent_ms: int = 0,
     ) -> tuple[EditCommand, ApplyMode] | EditOutcome:
         """번역 성공이면 (명령, 적용모드), 실패면 TRANSLATION_FAILED 결과."""
         target_day_ids = tuple(
@@ -554,9 +596,11 @@ class EditAgent:
                     # 경계가 이미 받아온 등록 POI 재사용 (추가 I/O 없음) — 풀 밖
                     # 슬롯의 이름·카테고리는 여기서만 온다 (TRIP-527)
                     slot_pois=dict(task.poi_index),
+                    named=named,  # 이름 조회가 찾은 곳(F9) — 풀(task.pool)에 이미 합쳐져 있다
                 ),
                 task.trace_id, task.now,
-                timeout_sec=task.deadline_ms / 1000.0,
+                # 이름 조회에 쓴 시간은 뺀다 — 둘의 합이 시한을 넘지 않게(조회가 없으면 종전 그대로)
+                timeout_sec=max(1, task.deadline_ms - spent_ms) / 1000.0,
             )
         except Exception as e:  # 설정 버그 등 — explanations()와 같은 정직 보고.
             # 4xx 로 내보내면 백엔드가 MinimalItineraryFallback 을 켜 편집 한 번이
