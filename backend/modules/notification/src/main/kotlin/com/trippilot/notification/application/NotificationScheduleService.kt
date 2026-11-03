@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -75,6 +76,13 @@ class NotificationScheduleService(
             log.info("문구 없는 리마인드 예약이 남았습니다 — 잠시 뒤 빠진 행만 다시 채웁니다. tripId={}", tripId)
         }
     }
+
+    /**
+     * 가까운 시일([horizon] 안)에 울릴 예약 중 문구가 아직 없는 것이 있는 여행들 — 재시작으로 사라진 채움 대기열을 되살릴 입력.
+     * 기능이 꺼져 있으면 채울 수 없으므로 비어 있다.
+     */
+    fun tripsLackingCopy(now: Instant, horizon: Duration, limit: Int): List<UUID> =
+        if (copies.enabled) schedules.findTripsLackingCopy(now, now.plus(horizon), limit) else emptyList()
 
     /**
      * 문구가 **아직 없는** 미발화 예약만 골라 제자리에서 채운다 — 재시도 전용(TRIP-836 후속).
