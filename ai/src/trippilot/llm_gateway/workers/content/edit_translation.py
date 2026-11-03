@@ -33,7 +33,10 @@ from trippilot.domain.poi.region_centers import bare_region
 # ADD_SLOT 으로 잇지 못하고 전 모델이 번역 불가를 냈다(2026-10-14 실측 12발화 중
 # 추가·종류 교체 4건이 4개 조합 전부). 표가 EditOp 전원을 덮는지는 테스트가 고정한다.
 _OP_GUIDE: dict[EditOp, str] = {
-    EditOp.ADD_SLOT: "후보 1곳을 그 날에 추가 — params.targetPoiId=후보 poiId, affectedSlots=[]",
+    EditOp.ADD_SLOT: (
+        "후보 1곳을 그 날에 추가 — params.targetPoiId=후보 poiId, affectedSlots=[]. 넣을 자리를 말했으면 "
+        "params.afterPoiId=바로 앞에 올 현재 슬롯 poiId·params.beforePoiId=바로 뒤에 올 현재 슬롯 poiId 중 하나"
+        "(사이면 둘 다), 말하지 않았으면 적지 않는다(맨 끝)"),
     EditOp.REMOVE_SLOT: "기존 슬롯 삭제 — affectedSlots=[뺄 슬롯 poiId]",
     EditOp.MOVE_SLOT: (
         "기존 슬롯 1곳의 순서 이동 — affectedSlots=[옮길 슬롯 poiId], 그리고 "

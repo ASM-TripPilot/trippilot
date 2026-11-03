@@ -594,6 +594,14 @@ def test_hashtags_from_spaced_names_and_bound_tokens_are_not_out() -> None:
     assert out == ["hashtags[4]: 지역·방문지·브랜드 파생 아님 (#먹방)"]
 
 
+def test_hashtags_take_the_short_form_of_a_catalog_region() -> None:
+    """회고도 같은 대조 — 카탈로그 지역('부산광역시')의 #부산여행 이 위반으로 잡히면 위반 0 조기 종료가 깨진다(공유 카드와 같은 원인)."""
+    ctx = replace(_SPACED_CTX, region="부산광역시")
+    outcome = _apply(_raw(_body(hashtags=["#부산여행", "#부산광역시여행", "#먹방"])), ctx)
+    out = [v.detail for v in outcome.value.violations if v.code is ViolationCode.HASHTAG_OUT]
+    assert out == ["hashtags[2]: 지역·방문지·브랜드 파생 아님 (#먹방)"]
+
+
 def test_caption_length_is_measured_after_binding() -> None:
     """원문 길이로 재면 계약 예시 STATS 캡션(52자)이 위반이고, 긴 장소명은 토큰(12자)에 숨는다."""
     long_name = replace(_SPACED_CTX, poi_names=("가" * 35, "해운대"))
