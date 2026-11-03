@@ -17,6 +17,12 @@ r"""다시 짜기 '문서 몫' 효과 측정 — 구성 후보(규칙 40곳)에 
   후보 선정 단계의 손잡이는 지렛대가 작다 — 지렛대는 LLM 이 읽는 것(장소 설명 커버리지, 2026-10-22 위키+개요 37:4)에 있었다.
 - 반려동물 칸(`provenance.detail.chkpet*`)은 상세 재조회로 차는 중이라 아직 비어 이번엔 재지 않았다(취향 `pet_friendly` 와 이을 자리).
 
+**2026-11-03 KB-3 상황 대처 원칙을 구성 LLM 에 싣기(`EVAL_ARM=kb3`)도 효과 없음 → 넣지 않았다.** 재계획 세션에서 넘겨받은 보류 항목
+(PlanB 가 다시 짜기마다 KB-3 를 찾고도 읽는 LLM 이 없다). 구성 프롬프트에 [상황 대처 원칙] 칸(0.10.0 실험판, 사유가 같은 KB-3 앞 4건)을
+더한 팔 대 develop 0.9.0, 두 팔 후보·설명 같음, 24상황: **KB-3 4 · 기존 6 · 같음 14 / 24**, 지연 p50 7.8 → 7.9s. 구성 LLM 은 이미
+"비가 오면 실내 위주" 같은 규칙 줄과 사유를 받고 있어 같은 내용의 일반 지침이 판단을 바꾸지 않는다. KB-3 는 대체지 선택(`/alternatives`
+선택 LLM 의 situation_context)에서만 쓰인다.
+
 실행(ai/ 에서 — 로컬 서빙 임베딩 + 운영 모델 키, 실 API 를 부른다):
     TRIPPILOT_EMBEDDING_BASE_URL=http://localhost:8100 ANTHROPIC_API_KEY=… \
         uv run python scripts/measure/measure_doc_quota.py [반복=1]
@@ -77,6 +83,10 @@ QUERY = os.environ.get("EVAL_DOC_QUERY", "situation")
 # 비교할 팔 — `quota`(문서 몫 +8, 기본) · `course`(남은 일정과 같은 관광공사 여행코스에 든 곳에 규칙 점수 +`COURSE_STEP`,
 # `data/tour_courses.jsonl.gz` #1827). 코스 팔은 두 팔 후보가 같은 상황(코스 동료가 이미 다 후보거나 없는 곳)을 판정하지 않는다.
 ARM = os.environ.get("EVAL_ARM", "quota")
+# `kb3` 팔: 두 팔 후보·설명이 같고, 한쪽만 KB-3 상황 대처 원칙을 싣는다(구성 프롬프트 0.10.0). 기준 팔은 `EVAL_BASE_PROMPTS`
+# (develop 의 0.9.0 프롬프트 디렉토리 — `git archive origin/develop ai/prompts`)로 렌더한다. 상황 문서는 운영 검색 대신 사유가 같은
+# KB-3 문서 앞 4건(선택 러너 `measure_prompt_ab.SELECT_CASES` 와 같은 근사).
+BASE_PROMPTS = Path(os.environ["EVAL_BASE_PROMPTS"]) if os.environ.get("EVAL_BASE_PROMPTS") else _AI / "prompts"
 COURSE_STEP = float(os.environ.get("EVAL_COURSE_STEP", "0.3"))  # 지시 한 단(`scorer.DIRECTIVE_STEP`)과 같은 크기
 _NEED = {"weather": "비를 피해 실내에서 보내기 좋은 곳", "fatigue": "많이 걷지 않고 앉아서 쉬어 갈 수 있는 곳"}
 _DAY = date(2026, 11, 4)  # 수요일
@@ -160,7 +170,9 @@ def _cases(kn: _Knowledge) -> list[dict]:
             query = rag._situation_query(req)
             pick_query = (said or _NEED.get(reason, query)) if QUERY == "need" else query
             store = _store(kn, {p.source_ref for p in (*short.pois, *tier) if p.source_ref})
-            if ARM == "course":
+            if ARM == "kb3":
+                other, extra = short.pois, ()
+            elif ARM == "course":
                 near_slots = set().union(*(mates.get(s.source_ref or "", set()) for s in slots))
 
                 def course_score(p, score=score, near_slots=near_slots):
@@ -185,9 +197,17 @@ def _cases(kn: _Knowledge) -> list[dict]:
     return out
 
 
-def _input(case: dict, cand: CandidatePool, knowledge) -> ComposeDayInput:
+def _kb3(reason: str) -> tuple[str, ...]:
+    import yaml
+
+    docs = yaml.safe_load((_AI / "data/planb_situation_kb.yaml").read_text(encoding="utf-8"))["documents"]
+    return tuple(d["text"] for d in docs if reason in (d.get("metadata") or {}).get("reasons", ()))[:4]
+
+
+def _input(case: dict, cand: CandidatePool, knowledge, situation: tuple[str, ...] = ()) -> ComposeDayInput:
     anchor = case["anchor"]
-    return ComposeDayInput(
+    extra = {"situation": situation} if situation else {}
+    return ComposeDayInput(**extra,
         date=composition.date_label(_NOW.astimezone()), window="13:00~21:00", weather="정보 없음",
         reasons=tuple(composition.REASON_LABELS.get(r, r) for r in (case["reason"],) if r != "none"),
         directives=(), user_request=case["said"],
@@ -234,17 +254,21 @@ def main(repeat: int) -> None:
     cases = _cases(kn)
     worker = ReplanCompositionWorker(_gateway(_AI / "prompts", LlmFeature.REPLAN_COMPOSITION, NumberedSelectionGate(),
                                               COMPOSE_MODEL))
+    base_worker = ReplanCompositionWorker(_gateway(BASE_PROMPTS, LlmFeature.REPLAN_COMPOSITION, NumberedSelectionGate(),
+                                                   COMPOSE_MODEL)) if ARM == "kb3" else worker
     judge = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
     def one(item):
         i, case = item
-        if not case["extra"]:
+        if not case["extra"] and ARM != "kb3":
             return dict(name=case["name"], winner="입력 같음", extra=0, adopted=0)
         picks, rows = {}, {}
         for arm, (cand, knowledge) in case["arms"].items():
             t0 = time.monotonic()
-            r = worker.compose(cand, _input(case, cand, knowledge), TraceId(f"dq-{i}-{arm}"),
-                               datetime.now(timezone.utc), timeout_sec=TIMEOUT)
+            w, situation = (worker, _kb3(case["reason"])) if (ARM == "kb3" and arm == "quota") else \
+                (base_worker if ARM == "kb3" else worker, ())
+            r = w.compose(cand, _input(case, cand, knowledge, situation), TraceId(f"dq-{i}-{arm}"),
+                          datetime.now(timezone.utc), timeout_sec=TIMEOUT)
             idx = {p.poi_id: p for p in cand.pois}
             picks[arm] = [] if (r.is_fallback or r.value is None) else [(idx[v.poi_id], v.reason) for v in r.value]
             rows[arm] = dict(wall=int((time.monotonic() - t0) * 1000), err=r.error, **_usage(r))
