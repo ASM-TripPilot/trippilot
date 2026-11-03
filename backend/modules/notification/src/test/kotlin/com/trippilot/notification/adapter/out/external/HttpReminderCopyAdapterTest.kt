@@ -52,14 +52,36 @@ class HttpReminderCopyAdapterTest : StringSpec({
     }
 
     /**
-     * **`degraded` 면 하나도 안 쓴다.** 상대가 규칙 문구로 내려간 것이라 우리 상수 문구와 다를 바
-     * 없는데, 저장하면 품질 관측이 거짓이 된다(회고 `source` 선례).
+     * **`degraded` 여도 온 문구는 쓴다.** 계약은 "빠진 항목은 백엔드가 상수로 채운다 — degraded 가 그 증빙"이고,
+     * 상대는 실패·게이트 탈락 항목만 빼고 통과한 문구는 그대로 준다(`fallback_mode=backend_constant`).
+     * 종전엔 degraded 면 전부 버렸다 — 한 항목만 떨어져도 그 묶음의 멀쩡한 문구가 모두 상수가 됐다(운영 48시간 31건).
      */
-    "degraded 응답은 문구가 와도 버린다" {
+    "degraded 응답이라도 온 문구는 쓴다 — 빠진 항목만 상수로 간다" {
         val b = """{"copies":[{"schedule_key":"키-1","title":"제목","body":"본문"}],
-            "degraded":true,"fallback_mode":"rule"}"""
+            "degraded":true,"fallback_mode":"backend_constant"}"""
         withServer(b) { url ->
+            val out = adapterAt(url).copiesFor(null, items)
+
+            out.keys shouldBe setOf("키-1")          // 키-2 는 상대가 빼 먹었다 — 문구 없이 남는다
+            out["키-1"] shouldBe ReminderCopy("제목", "본문")
+        }
+    }
+
+    "degraded 이고 온 문구가 없으면 빈 맵이다 — 전부 상수로 간다" {
+        withServer(body(degraded = true)) { url ->
             adapterAt(url).copiesFor(null, items).shouldBeEmpty()
+        }
+    }
+
+    /** degraded 여도 거르기 규칙은 그대로다 — 보낸 적 없는 키·빈 문구·긴 문구는 안 받는다. */
+    "degraded 응답에서도 남의 키·빈 문구는 버린다" {
+        val b = """{"copies":[
+            {"schedule_key":"남의-키","title":"제목","body":"본문"},
+            {"schedule_key":"키-1","title":"","body":"본문"},
+            {"schedule_key":"키-2","title":"제목","body":"본문"}],
+            "degraded":true,"fallback_mode":"backend_constant"}"""
+        withServer(b) { url ->
+            adapterAt(url).copiesFor(null, items).keys shouldBe setOf("키-2")
         }
     }
 
