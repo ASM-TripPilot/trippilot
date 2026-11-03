@@ -37,7 +37,8 @@ routes:
 - `place-detail-minimap` 미니맵은 그 장소 위치에 핀 하나를 찍고 손으로 움직이지 않는다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
 - `places-toast-above-fab` FAB 가 있는 화면에서 토스트는 FAB 묶음 위에 떠서 가려지지 않는다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
 - `places-chip-follow` 카테고리 칩을 고르면 칩 줄이 그 칩이 보이도록 가로로 따라간다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
-- `places-fab-scroll-hide` 목록을 세로로 스크롤하는 동안 ♥·＋ 묶음이 투명·터치 불가가 되고, 멈춘 뒤 250ms 에 돌아온다(위저드 출처라 ♥ 만 있어도 같다). *(2026-11-01 B안으로 실화면 전용)*
+- `places-fab-scroll-hide` 목록을 세로로 스크롤하는 동안 ♥·＋ 묶음이 투명·터치 불가가 되고, 멈춘 뒤 250ms 에 돌아온다(위저드 출처라 ♥ 만 있어도 같다). *(2026-11-01 B안으로 실화면 전용 · 2026-11-03 실화면 pass — TRIP-1733)*
+- `places-grid-deep` 그리드를 깊게 내려도 2열이 유지되고 여백이 그대로다. *(2026-11-03 실화면 pass — 30번 끌기, TRIP-1733 목록 교체 뒤)*
 
 ## How to get to it (user POV)
 
@@ -105,5 +106,6 @@ Preconditions:
 - [실화면] 2026-10-31 도달 불가 — `places-loading`(순간 상태)·`places-error`·`places-partial-failure`·`places-save`의 실패 배너·`place-detail-loading` 정지 화면(네트워크 차단 수단 없음), `places-empty`(조건 없이 0건인 지역을 못 찾음), `places-load-more`(접근성 트리가 보이는 카드만 내줘 개수 증가를 증명 못 함), 상태 배지(CLOSED/UNVERIFIED poiId 미확보).
 - [실화면] 2026-10-31 공유 시트를 닫은 직후 「네이버 지도에서 보기」 첫 탭은 씹혔고, 다시 누르면 Safari 가 map.naver.com 검색을 연다.
 - [실화면] 2026-10-31 검색어 입력 중 0건 안내 버튼이 키보드 예측 막대 높이(y≈566)에 걸려 첫 탭이 예측 단어에 들어갔다 — 키보드를 return 으로 내린 뒤 누른다.
+- [실화면] 2026-11-03 「전체 지역」으로 30번 끌어 바닥까지 내려도 다음 장 이어 받기는 안 일어났다(그 경로는 지역마다 한 장씩만 받는다) — `places-load-more` 는 여전히 미증명이다. 이어 받기를 보려면 한 지역 칩을 골라 끝까지 내린다(미확인).
 - [실화면] 2026-11-02 담기 하트는 토스트를 띄우지 않는다 — FAB 위 토스트는 `nav.mjs --eval` 로 `showToast` 를 불러 봤다(위저드 출처라 ♥ 하나 위). 장소 상세 미니맵 핀에는 번호 「1」이 들어 있다.
 - [실화면] 2026-11-02 실패 주입(sim-qa §2 `_dev/fault`)으로 열림 — `places-loading`·`places-error`(`/places`)·`place-detail-loading`·장소 상세 오류(`/places/*` 500, 「장소를 불러오지 못했어요」). `places-partial-failure` 는 지역별 요청을 가를 수 없어 못 엶.

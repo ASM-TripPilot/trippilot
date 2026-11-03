@@ -1031,7 +1031,7 @@ describe('키보드 모드 (TRIP-1526 · 01b Q6)', () => {
     }
   );
 
-  it('TRIP-1527 · 줄어든(shrunk) 패널에서도 위로 올리면 ↓ 버튼이 나타난다', () => {
+  it('TRIP-1527 · 줄어든(shrunk) 패널에서도 위로 올리면 ↓ 버튼이 나타난다', async () => {
     renderView({ messages: review() });
     emitKeyboard('keyboardDidShow');
     expect(modeIds()).toEqual(['assistant-sheet-mode-shrunk']);
@@ -1044,6 +1044,8 @@ describe('키보드 모드 (TRIP-1526 · 01b Q6)', () => {
         layoutMeasurement: { width: 390, height: 400 },
       },
     });
+    // TRIP-1733 — worklet 핸들러의 runOnJS 상태 변경(마이크로태스크)을 act 안에서 비운다.
+    await act(async () => {});
 
     expect(screen.getByTestId('assistant-scroll-down')).toBeOnTheScreen();
   });

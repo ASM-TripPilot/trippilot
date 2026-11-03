@@ -1,5 +1,6 @@
 import { Image, View } from 'react-native';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -178,7 +179,8 @@ describe('MessageList · 범위 밖 카드 (TRIP-1528 · 01b Q5)', () => {
 describe('MessageList · 아래로 가기(↓) 버튼 (TRIP-1527 · 01b Q3)', () => {
   const DOWN = 'assistant-scroll-down';
   // 반드시 contentSize·layoutMeasurement 까지 싣는다 — contentOffset 만 있으면 VirtualizedList 가 던진다(02a ★3)
-  const scrollTo = (y: number) =>
+  // TRIP-1733 — worklet 핸들러는 runOnJS 로 상태 변경을 마이크로태스크에 미룬다 → act 안에서 비운 뒤 단언한다.
+  const scrollTo = async (y: number) => {
     fireEvent.scroll(screen.getByTestId('assistant-message-list'), {
       nativeEvent: {
         contentOffset: { x: 0, y },
@@ -186,31 +188,33 @@ describe('MessageList · 아래로 가기(↓) 버튼 (TRIP-1527 · 01b Q3)', ()
         layoutMeasurement: { width: 390, height: 600 },
       },
     });
+    await act(async () => {});
+  };
   const three = () => [
     userMessage('u1', '일정 검토해줘'),
     assistantSample('review', { id: 'a1' }),
     userMessage('u2', '다음 장소는?'),
   ];
 
-  it('맨 아래(offset 0)에서는 없고, 위로 올리면 나타나고, 다시 맨 아래로 오면 사라진다', () => {
+  it('맨 아래(offset 0)에서는 없고, 위로 올리면 나타나고, 다시 맨 아래로 오면 사라진다', async () => {
     renderList({ messages: three() });
     expect(screen.queryByTestId(DOWN)).toBeNull();
 
-    scrollTo(10); // ≈40px 임계값 안쪽 — 아직 "맨 아래 근처"
+    await scrollTo(10); // ≈40px 임계값 안쪽 — 아직 "맨 아래 근처"
     expect(screen.queryByTestId(DOWN)).toBeNull();
 
-    scrollTo(300);
+    await scrollTo(300);
     expect(screen.getByTestId(DOWN)).toBeOnTheScreen();
 
-    scrollTo(0);
+    await scrollTo(0);
     expect(screen.queryByTestId(DOWN)).toBeNull();
   });
 
   // 누르면 맨 아래로 내려가는지·새 답이 와도 자동으로 안 내리는지는 실제 스크롤 위치라 jest 사각 — 기능 지도
   // `assistant.md` 몫(실화면 QA).
-  it('↓ 는 "맨 아래로" 라는 이름의 버튼이다 (심판 W3)', () => {
+  it('↓ 는 "맨 아래로" 라는 이름의 버튼이다 (심판 W3)', async () => {
     renderList({ messages: three() });
-    scrollTo(300);
+    await scrollTo(300);
 
     expect(screen.getByRole('button', { name: '맨 아래로' })).toBe(
       screen.getByTestId(DOWN)
