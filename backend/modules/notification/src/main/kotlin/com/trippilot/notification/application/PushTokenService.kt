@@ -34,7 +34,12 @@ class PushTokenService(
         // 앱은 포그라운드 복귀마다 같은 토큰을 다시 보낸다 — 줄은 **처음 보는 토큰**일 때만 남긴다(저장소가 기존 행의 id 를 돌려주면 갱신).
         // 새 빌드가 푸시 토큰을 만들기 시작했는지 DB 접근 없이 로그로 센다. 토큰·계정 값은 싣지 않는다.
         if (saved.pushTokenId == incoming.pushTokenId) {
-            log.info("push.token.register platform={} osPermission={} deliverable={}", saved.platform, saved.osPermission, saved.deliverable)
+            // 토큰 모양도 센다 — Expo 푸시 서비스는 `ExponentPushToken[…]`/`ExpoPushToken[…]` 만 받는다. 앱이 APNs·FCM 기기 토큰을 보내면
+            // 등록은 되지만 첫 발송에서 `DeviceNotRegistered` 로 보여 죽은 토큰과 구분이 안 된다 — 등록 줄에서 바로 갈라 둔다. 값은 싣지 않는다.
+            log.info(
+                "push.token.register platform={} osPermission={} deliverable={} tokenFormat={}",
+                saved.platform, saved.osPermission, saved.deliverable, if (EXPO_TOKEN.matches(saved.token)) "expo" else "other",
+            )
         }
         return saved
     }
@@ -53,5 +58,8 @@ class PushTokenService(
 
     private companion object {
         private val log = LoggerFactory.getLogger(PushTokenService::class.java)
+
+        /** Expo 푸시 토큰의 모양(`ExponentPushToken[…]` 구형·`ExpoPushToken[…]` 신형). */
+        private val EXPO_TOKEN = Regex("^Expo(nent)?PushToken\\[[^\\]\\s]+]$")
     }
 }
