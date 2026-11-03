@@ -63,6 +63,35 @@ def test_real_duration_outside_the_place_name_is_still_dropped() -> None:
     assert out.value is None and out.drop_event is not None
 
 
+def test_drop_logs_which_rules_were_violated(caplog: pytest.LogCaptureFixture) -> None:
+    # 드롭 사유 라벨(`gate_dropped_all`)은 규칙을 가르지 못한다 — 운영에서 전량 탈락이 왜인지 로그로 알 수 있게 규칙 이름을 남긴다.
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="trippilot.llm_gateway.gates.content.reminder_copy"):
+        out = _apply({"title": "오늘의 일정", "body": "오후 3시에 성산일출봉을 둘러보세요", "places": ["성산일출봉"]})
+    assert out.value is None and out.drop_event is not None
+    assert any("reminder_copy.gate_drop rules=" in r.getMessage() and "clock" in r.getMessage() for r in caplog.records)
+
+
+def test_drop_log_does_not_carry_the_copy_text(caplog: pytest.LogCaptureFixture) -> None:
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="trippilot.llm_gateway.gates.content.reminder_copy"):
+        _apply({"title": "한라산 가는 날", "body": "성산일출봉에서 시작하는 하루예요", "places": ["성산일출봉"]})
+    messages = " ".join(r.getMessage() for r in caplog.records)
+    assert "other_day_place" in messages
+    assert "한라산" not in messages and "성산일출봉" not in messages   # 규칙 이름만 — 문구·장소명은 안 싣는다
+
+
+def test_passing_copy_logs_nothing(caplog: pytest.LogCaptureFixture) -> None:
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="trippilot.llm_gateway.gates.content.reminder_copy"):
+        out = _apply({"title": "오늘의 일정", "body": "성산일출봉에서 시작하는 하루예요", "places": ["성산일출봉"]})
+    assert out.value is not None
+    assert not [r for r in caplog.records if "gate_drop" in r.getMessage()]
+
+
 def test_forbidden_place_in_title_is_dropped() -> None:
     # Codex 리뷰(10-20): 다른 날 장소 대조가 본문만 봐서 제목으로 새던 구멍
     out = _apply({"title": "한라산 가는 날", "body": "성산일출봉에서 시작하는 하루예요", "places": ["성산일출봉"]})
