@@ -43,7 +43,6 @@ src/pages/live/live-itinerary/ui/LiveHubView.automation.test.tsx
 src/pages/live/live-itinerary/ui/LiveItineraryPage.directions.integration.test.tsx
 src/pages/record/trip-records/ui/TripRecordsView.route.test.tsx
 src/pages/record/trip-records/ui/VisitRecordCard.checkPop.test.tsx
-src/pages/record/trip-summary/ui/DayHighlightCard.distanceSource.test.tsx
 src/pages/settings/my-page/model/styleCardModel.face.test.ts
 src/pages/settings/my-page/model/styleCardModel.progress.test.ts
 src/pages/settings/settings-location/ui/LocationConsentScreen.automation.test.tsx
