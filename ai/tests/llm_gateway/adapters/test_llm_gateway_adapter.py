@@ -248,3 +248,72 @@ def test_web_search_text_blocks_without_citations_still_join() -> None:
     response = AnthropicAdapter(client).invoke(replace(_REQUEST, web_search=True))
 
     assert response.raw_text == "{}" and response.citations == ()
+
+
+# ── 키 여러 개 번갈아 쓰기 (2026-11-02) ────────────────────────────────
+
+
+class _KeyClient(RecordingClient):
+    """호출 수를 세고, 정해 둔 예외를 던질 수 있는 fake — 키 하나에 해당."""
+
+    def __init__(self, fail: Exception | None = None) -> None:
+        super().__init__()
+        self.calls = 0
+        self._fail = fail
+
+    def _create(self, **kwargs):
+        self.calls += 1
+        if self._fail is not None:
+            raise self._fail
+        return super()._create(**kwargs)
+
+
+def _status_error(cls, status: int, message: str = "x"):
+    return cls(message, response=httpx.Response(status, request=_HTTPX_REQ), body=None)
+
+
+def test_keys_take_turns() -> None:
+    a, b, c = _KeyClient(), _KeyClient(), _KeyClient()
+    adapter = AnthropicAdapter([a, b, c])
+    for _ in range(6):
+        adapter.invoke(_REQUEST)
+    assert (a.calls, b.calls, c.calls) == (2, 2, 2)
+
+
+def test_rate_limited_key_falls_over_to_the_next_key() -> None:
+    limited = _KeyClient(fail=_status_error(anthropic.RateLimitError, 429))
+    ok = _KeyClient()
+    adapter = AnthropicAdapter([limited, ok])
+    for _ in range(4):
+        assert adapter.invoke(_REQUEST).raw_text  # 어느 순번에서 시작하든 성공한다
+    assert ok.calls == 4 and limited.calls == 2
+
+
+def test_credit_exhausted_400_falls_over_but_other_400_does_not() -> None:
+    credit = _status_error(anthropic.BadRequestError, 400, "Your credit balance is too low")
+    ok = _KeyClient()
+    AnthropicAdapter([_KeyClient(fail=credit), ok]).invoke(_REQUEST)
+    assert ok.calls == 1
+
+    rejected = _KeyClient(fail=_status_error(anthropic.BadRequestError, 400, "temperature is deprecated"))
+    other = _KeyClient()
+    with pytest.raises(anthropic.BadRequestError):
+        AnthropicAdapter([rejected, other]).invoke(_REQUEST)  # 첫 순번이 거부 키
+    assert other.calls == 0  # 요청 자체가 틀린 400 은 다른 키로 보내도 같다
+
+
+def test_all_keys_failing_raises_the_last_error() -> None:
+    adapter = AnthropicAdapter([
+        _KeyClient(fail=_status_error(anthropic.AuthenticationError, 401)),
+        _KeyClient(fail=_status_error(anthropic.RateLimitError, 429)),
+    ])
+    with pytest.raises((anthropic.AuthenticationError, anthropic.RateLimitError)):
+        adapter.invoke(_REQUEST)
+
+
+def test_timeout_does_not_fall_over() -> None:
+    slow = _KeyClient(fail=anthropic.APITimeoutError(request=_HTTPX_REQ))
+    other = _KeyClient()
+    with pytest.raises(LlmTimeoutError):
+        AnthropicAdapter([slow, other]).invoke(_REQUEST)
+    assert other.calls == 0  # 시한은 키 탓이 아니고, 시한 안에서 재시도하지 않는다(TRIP-381)
