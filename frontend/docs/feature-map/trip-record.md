@@ -31,7 +31,11 @@ routes:
 - `tr-bar` 하단 바: `회고` 칸(선택 일차가 오늘 이전·당일일 때만 켜짐)·`요약` 칸(서버 요약 ready 일 때만 켜짐, 아니면 값 `요약 준비 중`)·활성 `기록` 칸(시트가 내려가 있으면 중간 칸으로 되올림)·뒤로. 바는 시트·지도에 덮이지 않고 시트와 함께 움직이지 않는다.
 - `sum-pending` 요약 조회 중·`ready:false`·본문 없음이면 `여행 요약을 준비하고 있어요` + `방문 기록 보기`.
 - `sum-error` 요약 조회 실패면 `요약을 불러오지 못했어요` + `다시 시도`.
-- `sum-default` 요약 준비됨: 여행 제목·총 방문/총 거리(+출처 `근사`/`경로`, 미측정이면 `—`)/총 사진, 이야기 카드(`이번 여행`), 일차 하이라이트 카드.
+- `sum-default` 요약 준비됨(매거진형): 표지(여행 제목 — 여행 조회가 안 되면 `이번 여행`, 지역·기간 칩은 여행을 알 때만, `여행 회고` 스티커, `N곳 · 사진 N장`) → 인용문(머리말 `이번 여행`, 마지막 쉼표 뒤 구가 형광펜) → 일차 카드(`N일차` · `· M곳` · 방문지 칩, 서버 거리가 있고 방문 2곳 이상인 날만 `1.9km · 근사|경로` 각주) → 숫자 타일(방문·사진·이동 — 이동 미측정이면 `—`, 출처 `근사`/`경로`) → 동선 박스(`여행 동선`, 일차를 넘어 번호가 이어지고 이름 오른쪽에 `N일차`) → 일차 회고 칩. 위치 기록이 없는 얼굴에도 일차 카드·동선은 그대로 선다.
+- `sum-magazine-palette` 표지·일차 카드·동선 박스가 카테고리 색으로 칠해진다 — 표지·동선 박스 색은 여행 전체에서 가장 많이 간 카테고리, 일차 카드 색은 그 날 일정에서 방문지와 이름이 같은 곳의 최빈 카테고리. 일정을 모르거나 못 맞추면 검정(중립). 사진 없는 표지는 그림이 아니라 이 색으로 선다. (프리뷰 `trip-summary-{default,bright,neutral}` 로 육안)
+- `sum-cover-chips` 밝은 바탕(명소 노랑·카페 베이지·쇼핑 분홍) 위 표지의 지역·기간 칩 글자가 읽힌다. *(프리뷰 `trip-summary-bright` — 실화면 확인 전)*
+- `sum-magazine-motion` 화면이 열릴 때 한 번: 인용문·일차 카드·동선 정류장이 경로 그리기가 끝난 뒤 위에서부터 차례로 올라오고, 표지 스티커가 팝, 숫자가 0 에서 끝값까지 올라가며 인용문 형광펜이 켜진다. 기기 `동작 줄이기`가 켜져 있으면 전부 움직임 없이 끝 모습으로 바로 보인다.
+- `sum-day-color-late` 일정 응답이 늦으면 일차 카드가 검정으로 먼저 그려졌다가 카테고리 색으로 바뀐다. 일정 조회가 실패(없음·서버 오류)해도 카드·동선은 검정으로 그대로 서고 오류 얼굴로 떨어지지 않는다.
 - `sum-visit-list` 위치 데이터가 하나도 없으면 지도 대신 `위치 기록이 없어 지도를 표시할 수 없어요` + 순서 방문 목록(방문 0곳이면 `기록된 방문 장소가 없어요`).
 - `sum-day-reflection` 여행 기간 일차마다 `N일차 회고` 칩 → j03.
 - `sum-share` 헤더 `공유` → j06 공유 카드. 캡처 네이티브 모듈이 없는 빌드면 버튼 자체가 없다.
@@ -91,8 +95,8 @@ Preconditions:
 - **하단 바.** testID: `record-trip-bottom-bar{-tab-reflection}`(`회고`)을 누르면 그 일차의 j03 이 열린다(미래 일차면 비활성). testID: `record-trip-bottom-bar{-tab-summary}`(`요약`)는 요약 ready 전엔 비활성·값 `요약 준비 중`. 시트를 끝까지 내린 뒤 testID: `record-trip-bottom-bar{-tab-records}` 를 누르면 시트가 중간 칸으로 되올라온다. testID: `record-trip-bottom-bar{-back}` 은 탭 위에서 열렸으면 기록 탭으로 돌아간다.
 - **j04 준비 중.** 요약이 없는 여행을 j04 로 연다. testID: `reflection-summary-pending`(`여행 요약을 준비하고 있어요`) → testID: `reflection-summary-pending-records`(`방문 기록 보기`)를 누르면 j01 이 열린다. 하단 바 `요약` 칸이 활성 상태로 그대로 있다.
 - **j04 오류.** 네트워크를 끊고 j04 를 연다. testID: `reflection-summary-error`(`요약을 불러오지 못했어요`) → testID: `reflection-summary-retry`(`다시 시도`).
-- **j04 요약.** 끝난 여행으로 연다. 헤더 `여행 요약`, 제목 testID: `reflection-summary-trip-title`, 통계 testID: `reflection-summary-stats` 에 `총 방문`·`총 거리`·`총 사진`. 이야기가 있으면 testID: `reflection-summary-narrative`(`이번 여행`), 일차 카드 testID: `reflection-summary-day-card` 가 일차 수만큼(`N일차`·`N곳`). 위치 자동화 플래그가 켜진 빌드면 일차별 출처 testID: `summary-day-distance-source-{YYYY-MM-DD}`(`· 거리 근사`/`· 거리 경로`).
-- **j04 위치 없음.** 위치 없는 여행이면 `위치 기록이 없어 지도를 표시할 수 없어요`, 방문이 있으면 `대신 방문 장소를 순서대로 보여드릴게요` + testID: `reflection-summary-visit-item` 줄들, 없으면 testID: `reflection-summary-visit-empty`(`기록된 방문 장소가 없어요`).
+- **j04 요약.** 끝난 여행으로 연다. 헤더 `여행 요약`, 표지 testID: `reflection-summary-cover`(여행 제목을 알면 제목 testID: `reflection-summary-trip-title`), 인용문 testID: `reflection-summary-narrative`(머리말 `이번 여행`), 일차 카드 testID: `reflection-summary-day-card` 가 일차 수만큼(`N일차`·`· M곳`·거리 각주), 숫자 타일 testID: `reflection-summary-stats` 에 `방문`·`이동`·`사진`, 동선 박스 testID: `reflection-summary-route`(`여행 동선`).
+- **j04 위치 없음.** 위치 없는 여행이면 `위치 기록이 없어 지도를 표시할 수 없어요`, 방문이 있으면 `대신 방문 장소를 순서대로 보여드릴게요` + 동선 박스의 testID: `reflection-summary-visit-item` 줄들(지도 얼굴과 같은 박스), 없으면 testID: `reflection-summary-visit-empty`(`기록된 방문 장소가 없어요`).
 - **j04 → 일차 회고.** testID: `reflection-summary-day-reflection-{N}`(N=1)(`1일차 회고`)을 누르면 1일차 j03 이 열린다.
 - **j04 → 공유.** testID: `reflection-summary-share`(`공유`)를 누르면 j06 이 열린다 (`share-card`). 하단 바 testID: `reflection-summary-bottom-bar{-tab-reflection}` 은 여행 중이면 오늘, 끝났으면 마지막 일차 j03 으로 간다.
 - **교차 확인.** j01 에서 완료·사진·메모를 바꾼 뒤 j03 회고(그날)와 j04 요약의 방문 수·사진 수를 다시 읽어 맞는지 본다.

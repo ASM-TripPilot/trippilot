@@ -529,12 +529,12 @@
 
 ## src/features/reflection/
 - `src/features/reflection/index.ts`  →  useTripSummary · useRecordBarNav
-- `src/features/reflection/index.view.ts`  →  formatKm · buildMagazineVM · ReflectionMagazine · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · SHARE_FORMATS · buildShareCard · formatShareCardStats · validateCaption · validateHashtags · pickReflectionDate · summaryStats · daySubtitle · distanceSourceLabel · resolveSummaryView · shareEnabled · toOrderedVisitList · BackArrowGlyph · EmptyCircleGlyph · LocationOffGlyph · PhotoOffGlyph · RetryGlyph
+- `src/features/reflection/index.view.ts`  →  formatKm · buildMagazineVM · splitHighlight · CATEGORY_PALETTES · MAGAZINE_TONES · dominantPaletteKey · ReflectionMagazine · MagazineCover · MagazineQuote · MagazineRoute · MagazineStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · SHARE_FORMATS · buildShareCard · formatShareCardStats · validateCaption · validateHashtags · pickReflectionDate · summaryStats · daySubtitle · distanceSourceLabel · resolveSummaryView · shareEnabled · toOrderedVisitList · BackArrowGlyph · EmptyCircleGlyph · LocationOffGlyph · PhotoOffGlyph · RetryGlyph
 
 ## src/features/reflection/model/
-- `src/features/reflection/model/categoryPalette.ts`  →  PaletteKey · CategoryPalette · CATEGORY_PALETTES · MAGAZINE_TONES · paletteKeyForCategory
+- `src/features/reflection/model/categoryPalette.ts`  →  PaletteKey · CategoryPalette · CATEGORY_PALETTES · MAGAZINE_TONES · paletteKeyForCategory · dominantPaletteKey
 - `src/features/reflection/model/formatKm.ts`  →  formatKm
-- `src/features/reflection/model/magazineVM.ts`  →  MagazineVisit · MagazineSlot · MagazineInput · MagazinePicture · MagazineVM · splitHighlight · buildMagazineVM
+- `src/features/reflection/model/magazineVM.ts`  →  MagazineVisit · MagazineSlot · MagazineInput · MagazinePicture · MagazineCoverVM · MagazineQuoteVM · MagazineStatTile · MagazineRouteStop · MagazineVM · splitHighlight · buildMagazineVM
 - `src/features/reflection/model/recordBarNav.ts`  →  RecordBarNav · pickReflectionDate
 - `src/features/reflection/model/reflectionPayload.ts`  →  ReflectionScene · ReflectionPayload · SceneKind · parseReflectionPayload · sceneKind · devicePhotoUri · slotUri
 - `src/features/reflection/model/shareCard.ts`  →  ShareFormat · SHARE_FORMATS · ShareCardMode · ShareCardVM · BuildShareCardInput · buildShareCard · formatShareCardStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · validateCaption · validateHashtags
@@ -1163,10 +1163,13 @@
 ## src/pages/record/trip-summary/
 - `src/pages/record/trip-summary/index.ts`  →  TripSummaryPage
 
+## src/pages/record/trip-summary/model/
+- `src/pages/record/trip-summary/model/summaryMagazineVM.ts`  →  SummaryMagazineInput · SummaryDayCardVM · SummaryMagazineVM · buildSummaryMagazineVM
+
 ## src/pages/record/trip-summary/ui/
-- `src/pages/record/trip-summary/ui/DayHighlightCard.tsx`  →  DayHighlightCardProps · DayHighlightCard
+- `src/pages/record/trip-summary/ui/DayHighlightCard.tsx`  →  DayHighlightCard
 - `src/pages/record/trip-summary/ui/TripSummaryPage.tsx`  →  TripSummaryPageProps · TripSummaryPage
-- `src/pages/record/trip-summary/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayReflectionVM · DayCardVM · TripSummaryScreenProps · TripSummaryScreen
+- `src/pages/record/trip-summary/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayReflectionVM · TripSummaryScreenProps · TripSummaryScreen
 
 ## src/pages/settings/my-page/
 - `src/pages/settings/my-page/index.ts`  →  MyPage
@@ -1943,4 +1946,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1265개 파일
+합계 1266개 파일

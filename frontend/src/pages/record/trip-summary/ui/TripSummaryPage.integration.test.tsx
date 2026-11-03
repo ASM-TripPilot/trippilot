@@ -20,6 +20,8 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { answerReduceMotionSynchronously } from '@/test-support/animatedProbe';
+import { day, itinerary, slot } from '@/test-support/itineraryFixtures';
+import { createRequestLog, serveItinerary } from '@/test-support/mswItinerary';
 import {
   flushOsAnswer,
   holdReduceMotionOn,
@@ -40,6 +42,8 @@ import { TripSummaryPage } from './TripSummaryPage';
  *  - B-7 여행 조회 실패 → 이름·일차 회고는 숨기고 요약 본문은 남는다(Seed Q3).
  *  - B-8 요약 대기(ready:false) 얼굴에도 '방문 기록 보기'(`reflection-summary-pending-records`, Q4).
  *  - B-9 요약 날짜 카드는 여전히 누를 수 없다(카드 일차 번호 ≠ 여행 일차 — Seed Q2).
+ *  - TRIP-1666 매거진형: 표지 → 인용문 → 일차 카드 → 숫자 → 동선 순서, 일차 거리 줄, 일정 조회 실패에도 카드 유지, 목록 얼굴에도 카드,
+ *    요약 대기·오류 얼굴은 일정 조회를 안 보낸다(데이터 얼굴은 1번). 색·생김새는 단언하지 않는다 — 팔레트 키는 `summaryMagazineVM.test.ts`.
  *
  * 왜 통합 버킷인가: 요약(`GET /trips/{id}/summary`)과 여행(`GET /trips/{id}`) 두 조회가 따로 도착하는
  * 조합에서 얼굴이 갈린다 — 훅을 목킹하면 그 조합이 테스트의 가정이 된다(LiveItineraryPage 선례).
@@ -163,8 +167,32 @@ function isTouchable(node: ReactTestInstance): boolean {
   );
 }
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+// TRIP-1666 — 일정 조회 횟수를 센다(요약 대기·오류 얼굴에서 0번, 데이터 얼굴에서 1번).
+const requests = createRequestLog(server);
+const ITINERARY_HIT = `GET /api/v1/trips/${TRIP_ID}/itinerary`;
+const hits = (path: string) =>
+  requests.all().filter((hit) => hit === path).length;
+
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: 'error' });
+  requests.attach();
+});
 beforeEach(() => {
+  requests.reset();
+  // TRIP-1666 — 데이터 얼굴이 일정 조회(`GET /trips/:id/itinerary`)를 1번 보낸다. 통합은 `onUnhandledRequest:'error'` 이고 각 테스트 뒤 `resetHandlers`
+  // 가 it 안 `server.use` 를 지우므로 기본 핸들러는 describe 안이 아니라 **파일 최상위** beforeEach 여야 한다(나중에 `use` 한 핸들러가 이긴다).
+  serveItinerary(server, {
+    itinerary: () =>
+      itinerary({
+        tripId: TRIP_ID,
+        days: [
+          day('2026-09-24', [
+            slot('p1', { nameKo: '코엑스', category: '맛집' }),
+            slot('p2', { nameKo: '봉은사', category: '문화' }),
+          ]),
+        ],
+      }),
+  });
   setAccessToken('a');
   mockShareArmed.value = false;
   // TRIP-1624 — 카운트업 숫자가 실제 타이머로 돌며 틱마다 act 밖에서 상태를 바꾸지 않게 "동작 줄이기 켜짐"을 동기로 답한다.
@@ -500,5 +528,287 @@ describe('화면 동작 — 통계 세 칸·거리 출처·요약 문장·일차
     expect(
       within(screen.getByTestId('reflection-summary-stats')).queryByText('근사')
     ).toBeNull();
+  });
+});
+
+// ───────────────────────── TRIP-1666 · j04 매거진형 ─────────────────────────
+// 준비(요약·여행·일정 응답) → 실행(페이지 렌더) → 단언(testID·텍스트·순서·요청 횟수). 색(팔레트 키)·배치 수치는 VM 단위 테스트와 실화면 QA 몫이다.
+describe('TRIP-1666 · 매거진형 j04', () => {
+  const MAGAZINE: TripSummary = {
+    ...summary(true, ['코엑스', '봉은사', '롯데월드']),
+    narrative: '바다를 보며, 혼자만의 하루',
+    highlights: [
+      {
+        date: '2026-09-24',
+        dayOrder: 1,
+        visitCount: 2,
+        places: ['코엑스', '봉은사'],
+        distanceKm: 1.929,
+        distanceSource: 'VISIT_LINE',
+      },
+      {
+        date: '2026-09-25',
+        dayOrder: 2,
+        visitCount: 1,
+        places: ['롯데월드'],
+        distanceKm: 0,
+        distanceSource: 'VISIT_LINE',
+      },
+    ],
+    stats: {
+      totalVisits: 3,
+      totalDistanceKm: 3,
+      distanceSource: 'VISIT_LINE',
+      totalPhotos: 5,
+      hasLocationData: true,
+    },
+  };
+
+  async function renderMagazine(data: TripSummary = MAGAZINE) {
+    server.use(summaryHandler({ ready: true, summary: data }), tripOk());
+    const client = renderPage();
+    await waitSummary();
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('reflection-summary-trip-title')
+      ).toBeOnTheScreen()
+    );
+    return client;
+  }
+  /** 화면에 그려진 testID 를 위에서 아래(트리 순서)로 모은다. */
+  function testIdsInOrder(): string[] {
+    const out: string[] = [];
+    const walk = (node: unknown): void => {
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (!node || typeof node !== 'object') return;
+      const n = node as { props?: { testID?: unknown }; children?: unknown };
+      if (typeof n.props?.testID === 'string') out.push(n.props.testID);
+      walk(n.children);
+    };
+    walk(screen.toJSON());
+    return out;
+  }
+  /** 여행 조회가 실패로 정착할 때까지(로딩 중 부재로 공허 통과하지 않게). */
+  const waitSettledError = (client: QueryClient) =>
+    waitFor(() =>
+      expect(
+        client
+          .getQueryCache()
+          .getAll()
+          .some((query) => query.state.status === 'error')
+      ).toBe(true)
+    );
+
+  it('AC-12 표지·인용문 — 제목·지역·기간·"N곳 · 사진 M장"이 표지에 서고, 인용문은 서버 문장 그대로이며 머리말이 `이번 여행`', async () => {
+    await renderMagazine();
+
+    const cover = within(screen.getByTestId('reflection-summary-cover'));
+    expect(
+      screen.getByTestId('reflection-summary-trip-title')
+    ).toHaveTextContent('강남구 여행');
+    expect(cover.getByText('강남구')).toBeOnTheScreen();
+    expect(cover.getByText('2026.09.24 ~ 09.25')).toBeOnTheScreen();
+    expect(cover.getByText('3곳 · 사진 5장')).toBeOnTheScreen();
+
+    // 형광펜으로 나뉜 두 중첩 Text 의 합이 서버 문장과 완전히 같다(toHaveTextContent 는 완전 일치 — 부분 포함이 아니다).
+    expect(
+      screen.getByTestId('reflection-summary-narrative')
+    ).toHaveTextContent('바다를 보며, 혼자만의 하루');
+    expect(screen.getByText('이번 여행')).toBeOnTheScreen();
+  });
+
+  it('AC-12·AC-8 일차 카드 — 카드마다 `N일차`·`· M곳`·방문지 칩이 서고, 거리는 서버 km 가 있고 방문 2곳 이상인 날에만 `1.9km · 근사` 로 선다', async () => {
+    await renderMagazine();
+
+    const cards = screen.getAllByTestId('reflection-summary-day-card');
+    expect(cards).toHaveLength(2);
+    const [first, second] = cards.map((card) => within(card));
+    expect(first.getByText('1일차')).toBeOnTheScreen();
+    expect(first.getByText('· 2곳')).toBeOnTheScreen();
+    expect(first.getByText('코엑스')).toBeOnTheScreen();
+    expect(first.getByText('봉은사')).toBeOnTheScreen();
+    expect(first.getByText('1.9km · 근사')).toBeOnTheScreen(); // 긍정 짝
+    expect(second.getByText('2일차')).toBeOnTheScreen();
+    expect(second.getByText('· 1곳')).toBeOnTheScreen();
+    expect(second.getByText('롯데월드')).toBeOnTheScreen();
+    expect(second.queryByText(/km/)).toBeNull(); // 방문 1곳이면 서버 값 0 이어도 거리 줄 없음
+  });
+
+  it('AC-8 경로 출처 — 서버가 `ROUTE` 로 준 날은 `경로` 라벨이다', async () => {
+    await renderMagazine({
+      ...MAGAZINE,
+      highlights: [
+        { ...MAGAZINE.highlights[0], distanceKm: 12, distanceSource: 'ROUTE' },
+      ],
+    });
+    expect(
+      within(screen.getByTestId('reflection-summary-day-card')).getByText(
+        '12km · 경로'
+      )
+    ).toBeOnTheScreen();
+  });
+
+  it('AC-9·AC-10 숫자 타일과 동선 — 방문·사진·이동 값이 서버 통계이고, 동선은 일차를 넘어 번호가 이어지며 `여행 동선` 머리말', async () => {
+    await renderMagazine();
+
+    const stats = within(screen.getByTestId('reflection-summary-stats'));
+    expect(stats.getByText('3')).toBeOnTheScreen();
+    expect(stats.getByText('5')).toBeOnTheScreen();
+    expect(stats.getByText('3km')).toBeOnTheScreen();
+    expect(stats.getByText('근사')).toBeOnTheScreen();
+
+    expect(screen.getByText('여행 동선')).toBeOnTheScreen();
+    const stops = screen.getAllByTestId('reflection-summary-visit-item');
+    expect(stops).toHaveLength(3);
+    expect(within(stops[0]).getByText('1')).toBeOnTheScreen();
+    expect(within(stops[0]).getByText('1일차')).toBeOnTheScreen();
+    expect(within(stops[0]).getByText('코엑스')).toBeOnTheScreen();
+    expect(within(stops[2]).getByText('3')).toBeOnTheScreen();
+    expect(within(stops[2]).getByText('2일차')).toBeOnTheScreen();
+    expect(within(stops[2]).getByText('롯데월드')).toBeOnTheScreen();
+  });
+
+  it('배치 순서 — 표지 → 인용문 → 일차 카드 → 숫자 → 동선 → 일차 회고 칩', async () => {
+    await renderMagazine();
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('reflection-summary-day-reflection-1')
+      ).toBeOnTheScreen()
+    );
+
+    const ids = testIdsInOrder();
+    const at = (id: string) => ids.indexOf(id);
+    const order = [
+      'reflection-summary-cover',
+      'reflection-summary-narrative',
+      'reflection-summary-day-card',
+      'reflection-summary-stats',
+      'reflection-summary-route',
+      'reflection-summary-day-reflection-1',
+    ];
+    for (const id of order) expect(at(id)).toBeGreaterThanOrEqual(0); // 모집단이 비어 공허 통과하지 않게
+    expect(order.map(at)).toEqual([...order.map(at)].sort((a, b) => a - b));
+  });
+
+  it('여행 조회가 실패하면 표지는 `이번 여행` 폴백이고 제목 testID·지역·기간은 없다 — 요약 본문(인용문 머리말·카드·동선)은 남는다', async () => {
+    server.use(summaryHandler({ ready: true, summary: MAGAZINE }), tripFails());
+    const client = renderPage();
+    await waitSummary();
+    await waitSettledError(client);
+
+    const cover = within(screen.getByTestId('reflection-summary-cover'));
+    expect(cover.getByText('이번 여행')).toBeOnTheScreen();
+    expect(cover.queryByText('강남구')).toBeNull();
+    expect(cover.queryByText(/2026\./)).toBeNull();
+    expect(screen.queryByTestId('reflection-summary-trip-title')).toBeNull();
+    // 같은 글자가 인용문 머리말에도 있다(표지 + 머리말 = 2) — 범위를 좁히지 않고 센다.
+    expect(screen.getAllByText('이번 여행')).toHaveLength(2);
+    expect(screen.getAllByTestId('reflection-summary-day-card')).toHaveLength(
+      2
+    );
+  });
+
+  it.each([
+    ['일정 없음(404)', 404],
+    ['서버 오류(500)', 500],
+  ])(
+    'AC-13 일정 조회가 %s 여도 오류 얼굴로 떨어지지 않고 일차 카드·동선은 그대로 선다 (색은 중립 — VM 단위가 지킨다)',
+    async (_label, status) => {
+      server.use(
+        http.get(
+          `${BASE}/trips/:tripId/itinerary`,
+          () => new HttpResponse(null, { status })
+        )
+      );
+      const client = await renderMagazine();
+      await waitSettledError(client);
+
+      expect(hits(ITINERARY_HIT)).toBe(1); // 실제로 물었고 실패했다 — 안 물어서 통과한 게 아니다
+      expect(screen.queryByTestId('reflection-summary-error')).toBeNull();
+      expect(screen.getAllByTestId('reflection-summary-day-card')).toHaveLength(
+        2
+      );
+      expect(
+        screen.getAllByTestId('reflection-summary-visit-item')
+      ).toHaveLength(3);
+    }
+  );
+
+  it('AC-14·(a) 방문 목록 얼굴(위치 기록 없음)에도 일차 카드가 서고 동선 행이 이어진다 — 점선 안내는 그대로', async () => {
+    server.use(
+      summaryHandler({
+        ready: true,
+        summary: {
+          ...MAGAZINE,
+          stats: { ...MAGAZINE.stats, hasLocationData: false },
+        },
+      }),
+      tripOk()
+    );
+    renderPage();
+    await waitSummary();
+
+    expect(
+      screen.getByText('위치 기록이 없어 지도를 표시할 수 없어요')
+    ).toBeOnTheScreen();
+    expect(screen.getAllByTestId('reflection-summary-day-card')).toHaveLength(
+      2
+    );
+    expect(screen.getAllByTestId('reflection-summary-visit-item')).toHaveLength(
+      3
+    );
+    expect(screen.queryByTestId('reflection-summary-visit-empty')).toBeNull();
+  });
+
+  it('방문 0곳이면 동선 박스는 없고 빈 문구가 대신 선다(B-4 의 짝)', async () => {
+    server.use(
+      summaryHandler({ ready: true, summary: summary(false, []) }),
+      tripOk()
+    );
+    renderPage();
+    await waitSummary();
+
+    expect(
+      screen.getByTestId('reflection-summary-visit-empty')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId('reflection-summary-route')).toBeNull();
+    expect(
+      screen.queryAllByTestId('reflection-summary-visit-item')
+    ).toHaveLength(0);
+    // TRIP-1666 5-b W1 · 칠할 일차 카드가 없으면 일정을 묻지 않는다(데이터 얼굴 1번은 「AC-15⒜」 짝이 잰다).
+    expect(hits(ITINERARY_HIT)).toBe(0);
+  });
+
+  describe('AC-15⒜ · 요약 대기·오류 얼굴은 매거진도 일정 조회도 없다', () => {
+    it.each([
+      [
+        '요약 준비 중(ready:false)',
+        summaryHandler({ ready: false }),
+        'reflection-summary-pending',
+      ],
+      [
+        '요약 조회 실패(500)',
+        http.get(
+          `${BASE}/trips/:tripId/summary`,
+          () => new HttpResponse(null, { status: 500 })
+        ),
+        'reflection-summary-error',
+      ],
+    ])('%s', async (_label, handler, faceId) => {
+      server.use(handler, tripOk());
+      renderPage();
+      await screen.findByTestId(faceId);
+      // 여행 조회가 끝날 때까지 기다린 뒤에도 일정 요청이 없어야 "아직 안 보낸 것"이 아니라 "보내지 않는 것"이다.
+      await waitFor(() => expect(hits(`GET /api/v1/trips/${TRIP_ID}`)).toBe(1));
+
+      expect(screen.queryByTestId('reflection-summary-cover')).toBeNull();
+      expect(hits(ITINERARY_HIT)).toBe(0);
+    });
+
+    it('긍정 짝 — 데이터 얼굴은 같은 파일에서 일정을 정확히 1번 묻고 표지가 선다', async () => {
+      await renderMagazine();
+      await waitFor(() => expect(hits(ITINERARY_HIT)).toBe(1));
+      expect(screen.getByTestId('reflection-summary-cover')).toBeOnTheScreen();
+    });
   });
 });
