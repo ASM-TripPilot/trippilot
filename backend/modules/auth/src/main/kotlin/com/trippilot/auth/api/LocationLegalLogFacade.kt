@@ -53,6 +53,14 @@ interface LocationLegalLogFacade {
     )
 
     /**
+     * 위치 **1회 이용**(U8 도우미 턴, O-U8-5) — `USE` 1건. 좌표는 저장하지 않고 그 턴의 답(현재 위치 날씨)에만 쓴다.
+     * 호출 지점은 좌표를 **실제로 해석 요청에 실은 턴**이다 — 동의가 없어 버린 좌표는 부르지 않는다(이용이 아니다).
+     *
+     * @param subjectId 그 턴의 사용자 메시지 id. **원시 좌표는 넘기지 않는다**([recordCollection] 과 같은 규약).
+     */
+    fun recordUse(accountId: UUID, purpose: LocationUsePurpose, subjectId: UUID)
+
+    /**
      * 기기 안에서의 위치 **수집** 구간(U10 경로 기록 세션)의 시작·끝 — `COLLECTION` 1건(`scope=DEVICE`). 표본은 기기에만
      * 있고, 서버에 실제로 저장한 순간은 [recordCollection] 이 따로 남긴다.
      */
@@ -66,6 +74,9 @@ interface LocationLegalLogFacade {
 enum class LocationUsePurpose {
     /** 지오펜스로 일정 장소 도착·이탈을 판정해 방문 실적을 자동으로 남긴다. */
     GEOFENCE_AUTO_VISIT,
+
+    /** 도우미 한 턴의 답에 현재 위치를 쓴다 — 여행·지역 없이 묻는 "오늘 날씨"(U8 O-U8-5). */
+    ASSISTANT_TURN,
 }
 
 /** 구간 보고의 단계. */
@@ -85,8 +96,9 @@ enum class LocationPurgeScope {
 
 /**
  * 이 파사드가 덮는 것은 **수집(`COLLECTION`)과 이용(`USE`)이다.** `USE` 는 U10 지오펜스 무장 구간과 함께 열었다
- * ([LocationLegalLogFacade.recordUseInterval]). `PROVISION`(외부 제공)은 **아직 해당하는 동작이 없다** — 좌표가
- * 외부(AI 등)로 나가는 경로는 없다(2026-09-14 실측). 생기면 **그 기능과 같은 PR 에서** 대응 메서드를 연다.
+ * ([LocationLegalLogFacade.recordUseInterval]), 한 번짜리 이용은 U8 도우미 턴과 함께 열었다([LocationLegalLogFacade.recordUse]).
+ * 도우미 턴의 좌표는 우리 AI 서비스(같은 서비스의 내부 경계)로 가서 그 턴의 답에만 쓰인다 — 제3자 **제공**이 아니라 이용으로
+ * 남긴다(2026-11-04 판단). `PROVISION`(제3자 제공)은 **아직 해당하는 동작이 없다**. 생기면 **그 기능과 같은 PR 에서** 대응 메서드를 연다.
  */
 
 /** 위치를 모은 경로. 닫힌 집합이라 로그 조회가 문자열 매칭에 기대지 않는다. */

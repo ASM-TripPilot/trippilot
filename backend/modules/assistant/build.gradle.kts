@@ -15,6 +15,7 @@ dependencies {
     implementation(project(":modules:place-data"))            // R1: 장소 표면(영업시간) — PoiSurfaceFacade
     implementation(project(":modules:weather-context"))       // R1: 표시용 날씨 — ContextFacade
     implementation(project(":modules:profile"))               // R1: 계정 취향(지역 추천 재료) — PreferenceFacade
+    implementation(project(":modules:auth"))                  // R1: 현재 위치(O-U8-5) — 위치 동의 확인·이용 법정 로그(LocationConsentFacade · LocationLegalLogFacade)
     implementation(libs.spring.boot.starter.jdbc)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)

@@ -69,8 +69,8 @@ data class Interpretation(
 
 /**
  * 해석에 보내는 컨텍스트(FD §5) — **이 타입에 있는 칸이 보내는 것의 전부다**(화이트리스트, BR-U8-22).
- * 가격·제휴 정보·리비전·후보 풀·점수·취향·위치는 칸이 없다. "보여 주지 마"를 프롬프트에 부탁하지 않고,
- * 실을 자리를 두지 않는다(PRD 02-6).
+ * 가격·제휴 정보·리비전·후보 풀·점수는 칸이 없다. "보여 주지 마"를 프롬프트에 부탁하지 않고,
+ * 실을 자리를 두지 않는다(PRD 02-6). 위치는 [here] 하나뿐이다 — 위치 동의가 켜진 턴에만 채운다(O-U8-5).
  */
 data class ContextSnapshot(
     val surface: AssistantSurface,
@@ -80,8 +80,12 @@ data class ContextSnapshot(
     val itinerary: ItineraryBlock?,
     /** 계정 취향 — 지역 추천(RECOMMEND_REGION) 재료. 고른 축이 하나도 없으면 null. 상대가 쓰는 두 축(styles·activities)만 싣는다(SEC-U8-08). */
     val tastes: Tastes? = null,
+    /** 앱의 포그라운드 현재 위치(O-U8-5). 서비스가 위치 동의를 확인한 뒤에만 채우고, 그때 이용 사실을 법정 로그에 남긴다. 저장하지 않는다. */
+    val here: Here? = null,
 ) {
     data class Tastes(val styles: List<String>, val activities: List<String>)
+
+    data class Here(val lat: Double, val lng: Double)
 
     /** @property phase `PLANNING`|`IN_TRIP`|`ENDED` */
     data class TripBlock(val tripId: UUID, val regions: List<String>, val startDate: LocalDate, val endDate: LocalDate, val phase: String)

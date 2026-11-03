@@ -55,7 +55,9 @@ from trippilot.domain.dialogue.intent import DIALOGUE_INTENTS, Intent
 from trippilot.domain.poi.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory, counts_as_food, reputation_bonus
 from trippilot.domain.poi.theme_tags import themes_in
 from trippilot.domain.poi.poi_curation import CandidatePoolRequest
-from trippilot.domain.poi.region_centers import bare_region, plain_region, region_area, region_center, region_mentions, region_pair
+from trippilot.domain.poi.region_centers import (
+    bare_region, covering_region, plain_region, region_area, region_center, region_mentions, region_pair,
+)
 from trippilot.domain.itinerary.transit import TransitPurpose
 from trippilot.domain.dialogue.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.dialogue.dialogue_answer import _MAX_FOOTNOTE, _MAX_LENGTH, _violates, clock_times
@@ -191,6 +193,9 @@ class TurnSnapshot:
     days: tuple[DayView, ...]
     # 계정 취향 (styles, activities) — 백엔드가 대화 문맥에 실을 때만. 지역 추천(RECOMMEND_REGION)만 읽는다. None = 모름
     tastes: tuple[tuple[str, ...], tuple[str, ...]] | None = None
+    # 앱의 포그라운드 현재 위치(O-U8-5) — 백엔드가 위치 동의가 켜진 턴에만 싣는다. None = 모름(동의 없음·측위 실패).
+    # 로그·프롬프트·기억에 좌표를 옮기지 않는다 — 날씨 앵커 좌표로만 쓴다.
+    here: GeoPoint | None = None
 
     def slots(self) -> tuple[tuple[date, SlotView], ...]:
         """(날짜, 슬롯) 를 날짜순·슬롯은 스냅샷 순서대로 — 순서는 스냅샷 것이다 (INV-2)."""
@@ -808,8 +813,12 @@ def _weather_default_day(snap: TurnSnapshot, today: date) -> date:
     return trip.start_date if trip is not None and trip.start_date > today else today
 
 
+_HERE_LABEL = "현재 위치"  # 현재 위치가 표의 어느 지역 반경에도 안 들 때의 제목
+
+
 def _weather_anchor(ctx: TurnContext) -> _WeatherAnchor | None:
-    """① 말한 지역(`region`)의 중심 → ② 그 날(또는 오늘 이후 첫) 슬롯 → ③ 여행 지역 중심. 셋 다 없으면 None(EMPTY).
+    """① 말한 지역(`region`)의 중심 → ② 그 날(또는 오늘 이후 첫) 슬롯 → ③′ 오늘이면 현재 위치 → ③ 여행 지역 중심.
+    넷 다 없으면 None(EMPTY).
 
     ②만 있던 동안 일정이 없거나 오늘이 여행일이 아니면 "지금 날씨를 확인할 수 없어요" 만 나갔다 — 좌표는 지역 중심표
     (`region_centers`)로 충분하다. 표에 없는 지역은 지어내지 않는다 — 말한 지역이 표 밖이면 일정 지역으로 바꿔 답하지
@@ -833,6 +842,9 @@ def _weather_anchor(ctx: TurnContext) -> _WeatherAnchor | None:
             return _WeatherAnchor(found[0], found[1].name or "여행지", slot=found[1])
     trip = snap.trip
     fallback_day = on if on is not None else _weather_default_day(snap, today)
+    if snap.here is not None and fallback_day == today:
+        # ③′ 오늘 여기 — 현재 위치는 '오늘'만 대신한다(여행 전 "오늘 날씨" 는 서울에 있는데 제주 값을 냈다, O-U8-5)
+        return _WeatherAnchor(today, covering_region(snap.here) or _HERE_LABEL, coord=snap.here)
     for region in (trip.regions if trip is not None else ()):
         anchor = region_weather_anchor(region, fallback_day)
         if anchor is not None:
@@ -2381,7 +2393,8 @@ HANDLERS: Mapping[Intent, Handler] = {
     Intent.SHOW_SCHEDULE: _handler(Intent.SHOW_SCHEDULE, _assemble_show_schedule),
     Intent.GET_NEXT_SLOT: _handler(Intent.GET_NEXT_SLOT, _assemble_next_slot),
     Intent.GET_WEATHER: _handler(Intent.GET_WEATHER, _assemble_weather, _plan_weather,
-                                 free_when=lambda ctx: bool(ctx.arguments.get("region"))),
+                                 # 현재 위치도 여행 없이 묻는 갈래다 — 없으면 "오늘 날씨" 가 "먼저 여행을 만들어"로 끝났다(운영 11-03)
+                                 free_when=lambda ctx: bool(ctx.arguments.get("region")) or ctx.snapshot.here is not None),
     Intent.GET_DISTANCE: _handler(Intent.GET_DISTANCE, _assemble_distance, _plan_distance,
                                   free_when=lambda ctx: bool(ctx.arguments.get("origin") and ctx.arguments.get("destination"))),
     Intent.GET_POI_INFO: _handler(Intent.GET_POI_INFO, _assemble_poi_info, _plan_poi_info,

@@ -764,6 +764,56 @@ def test_weather_unknown_region_and_no_slot_stays_empty() -> None:
     assert facts.status is FactStatus.EMPTY and _types(facts) == ["OPEN_ITINERARY_METHOD"]
 
 
+# ── 현재 위치(O-U8-5 — 2026-10-20 사용자 결정 "포그라운드 현재 위치를 턴 컨텍스트에 싣는다") ──────────────
+# 운영 2026-11-03 16:20: 여행·지역 없이 "오늘 날씨" → 앵커가 없어 날씨를 묻지도 않고 "확인할 수 없어요". 사용자: "위치추적해서
+# 날씨 찾으면 되잖아". 백엔드는 위치 동의가 켜진 턴에만 좌표를 싣는다 — 여기 오는 `here` 는 이미 동의를 거쳤다.
+_HERE_SEOUL = GeoPoint(37.5700, 126.9820)  # 서울 시청 근처
+_HERE_SEA = GeoPoint(36.5, 131.5)  # 동해 한가운데 — 표의 어느 지역과도 멀다
+
+
+def test_weather_without_a_trip_asks_at_the_device_location() -> None:
+    snap = replace(_snapshot((), trip=None, status=None), here=_HERE_SEOUL)
+    weather = _Weather(pop=30)
+    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(snap, ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)))
+    assert weather.calls == [{"anchor": _HERE_SEOUL, "days": (_D2,), "now": _NOW}]
+    assert facts.status is FactStatus.OK and facts.payload["title"] == "서울 날씨"  # 제목은 가장 가까운 표 지역
+    assert facts.detail == {"date": _D2.isoformat(), "anchor": "서울"}
+
+
+def test_weather_device_location_far_from_any_region_is_called_current_location() -> None:
+    snap = replace(_snapshot((), trip=None, status=None), here=_HERE_SEA)
+    weather = _Weather(pop=10)
+    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(snap, ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)))
+    assert weather.calls[0]["anchor"] == _HERE_SEA
+    assert facts.payload["title"] == "현재 위치 날씨" and facts.detail["anchor"] == "현재 위치"
+
+
+def test_weather_today_before_the_trip_asks_where_the_user_is_not_the_trip_region() -> None:
+    """여행 전(제주 여행, 지금 서울)에 "오늘 날씨" — 오늘 있는 곳은 제주가 아니다. 현재 위치가 없으면 종전처럼 여행 지역."""
+    before = datetime(2026, 10, 10, 9, 0, tzinfo=_KST)
+    weather = _Weather(pop=20)
+    snap = replace(_snapshot(()), here=_HERE_SEOUL)
+    _run(HANDLERS[Intent.GET_WEATHER], _ctx(snap, arguments={"date": "오늘"}, now=before,
+                                            ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)))
+    assert weather.calls[0]["anchor"] == _HERE_SEOUL and weather.calls[0]["days"] == (date(2026, 10, 10),)
+
+
+def test_weather_device_location_yields_to_a_said_region_a_slot_and_a_trip_day() -> None:
+    """말한 지역 · 그 날 일정 장소 · 오늘이 아닌 날(여행 첫날)은 현재 위치보다 먼저다 — 현재 위치는 '오늘 여기'만 대신한다."""
+    said = _Weather(pop=70)
+    _run(HANDLERS[Intent.GET_WEATHER], _ctx(replace(_SNAP, here=_HERE_SEOUL), arguments={"region": "부산"},
+                                            ports=HandlerPorts(poi_info=_PoiInfo(), weather=said)))
+    assert said.calls[0]["anchor"] == region_center("부산")[1]
+    slot = _Weather(pop=70)
+    _run(HANDLERS[Intent.GET_WEATHER], _ctx(replace(_SNAP, here=_HERE_SEOUL), ports=HandlerPorts(poi_info=_PoiInfo(), weather=slot)))
+    assert slot.calls[0]["anchor"] == _COORD["우도"]
+    first_day = _Weather(pop=10)
+    before = datetime(2026, 10, 10, 9, 0, tzinfo=_KST)
+    _run(HANDLERS[Intent.GET_WEATHER], _ctx(replace(_snapshot((), status=None), here=_HERE_SEOUL), now=before,
+                                            ports=HandlerPorts(poi_info=_PoiInfo(), weather=first_day)))
+    assert first_day.calls[0]["anchor"] == region_center("제주")[1] and first_day.calls[0]["days"] == (_D1,)
+
+
 def test_distance_uses_previous_slot_as_origin_and_keeps_only_distance_strings() -> None:
     poi_info, transit = _PoiInfo(), _Transit()
     ctx = _ctx(arguments={"destination": "해녀의집"}, ports=HandlerPorts(poi_info=poi_info, transit=transit))
