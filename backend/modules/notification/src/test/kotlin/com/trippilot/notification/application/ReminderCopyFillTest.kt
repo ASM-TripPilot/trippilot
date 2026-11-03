@@ -56,7 +56,7 @@ class ReminderCopyFillTest : StringSpec({
     fun serviceWith(
         port: ReminderCopyPort,
         names: Map<LocalDate, List<PlannedPlaceView>> = plannedNames,
-        retries: ReminderCopyRetries = ReminderCopyRetries(RETRY_DELAY_MS),
+        retries: ReminderCopyRetries = ReminderCopyRetries(RETRY_DELAYS_MS),
     ): Pair<NotificationScheduleService, FakeSchedules> {
         val schedules = FakeSchedules()
         val trips = FakeTripOwner().apply {
@@ -210,10 +210,10 @@ class ReminderCopyFillTest : StringSpec({
 
     /**
      * **콜드스타트 재시도.** 학생 모델(Bedrock)은 5분 무호출이면 내려가 첫 호출이 곧바로 실패한다.
-     * 하나도 못 받은 적재는 몇 분 뒤 한 번 더 묻고, 그때 받은 문구가 예약에 붙어야 한다 — 안 그러면
+     * 하나도 못 받은 적재는 잠시 뒤 **제자리에서** 다시 묻고, 그때 받은 문구가 예약에 붙어야 한다 — 안 그러면
      * 트래픽이 드문 환경에서 문구가 거의 늘 상수로 굳는다.
      */
-    "하나도 못 받으면 잠시 뒤 한 번 더 묻고, 그때 받은 문구가 붙는다" {
+    "하나도 못 받으면 잠시 뒤 제자리에서 다시 묻고, 그때 받은 문구가 붙는다" {
         val coldThenWarm = object : ReminderCopyPort {
             override val enabled = true
             var calls = 0
@@ -222,21 +222,95 @@ class ReminderCopyFillTest : StringSpec({
                 return if (calls == 1) emptyMap() else items.associate { it.scheduleKey to ReminderCopy("AI 제목", "AI 본문") }
             }
         }
-        val retries = ReminderCopyRetries(RETRY_DELAY_MS)
+        val retries = ReminderCopyRetries(RETRY_DELAYS_MS)
         val (svc, schedules) = serviceWith(coldThenWarm, retries = retries)
 
         svc.reload(tripId)
         schedules.findPendingByTrip(tripId).shouldSurviveWithoutCopy()
+        val idsBefore = schedules.findPendingByTrip(tripId).map { it.scheduleId }
 
         // 때가 되기 전에는 꺼내지 않는다 — 모델이 올라오기 전에 다시 두드리면 또 실패한다.
-        retries.takeDue(clock.instant().plusMillis(RETRY_DELAY_MS - 1)) shouldBe emptyList()
-        ReminderCopyRetryPoller(retries, svc, Clock.offset(clock, Duration.ofMillis(RETRY_DELAY_MS))).retryDue()
+        retries.takeDue(clock.instant().plusMillis(RETRY_DELAYS_MS[0] - 1)) shouldBe emptyList()
+        pollerAt(retries, svc, RETRY_DELAYS_MS[0]).retryDue()
 
         coldThenWarm.calls shouldBe 2
         schedules.findPendingByTrip(tripId).forEach { it.title shouldBe "AI 제목" }
+        // **제자리**다 — 행을 지우고 다시 만들지 않았다(같은 id).
+        schedules.findPendingByTrip(tripId).map { it.scheduleId } shouldBe idsBefore
     }
 
-    "재시도도 못 받으면 더 묻지 않는다 — 상수 문구로 둔다" {
+    /**
+     * **일부만 받아도 이어 채운다.** 종전엔 일부를 받으면 재시도가 없어 빠진 행이 영영 상수였고, 하나도 못 받은 적재의 재시도는
+     * 행을 통째로 다시 만들어 앞서 받은 문구를 잃을 수 있었다. 제자리 채우기는 **빠진 행만** 묻고, 이미 붙은 문구는 건드리지 않는다.
+     */
+    "일부만 받았으면 빠진 행만 다시 묻고, 이미 받은 문구는 그대로 둔다" {
+        val onlyFirstThenAll = object : ReminderCopyPort {
+            override val enabled = true
+            val asked = mutableListOf<List<String>>()
+            override fun copiesFor(tripTitle: String?, items: List<ReminderCopyRequest>): Map<String, ReminderCopy> {
+                asked += items.map { it.scheduleKey }
+                return if (asked.size == 1) {
+                    items.take(1).associate { it.scheduleKey to ReminderCopy("첫 제목", "첫 본문") }
+                } else {
+                    items.associate { it.scheduleKey to ReminderCopy("나중 제목", "나중 본문") }
+                }
+            }
+        }
+        val retries = ReminderCopyRetries(RETRY_DELAYS_MS)
+        val (svc, schedules) = serviceWith(onlyFirstThenAll, retries = retries)
+
+        svc.reload(tripId)
+        val first = schedules.findPendingByTrip(tripId)
+        first.count { it.hasCopy } shouldBe 1
+        val firstCopied = first.single { it.hasCopy }
+
+        pollerAt(retries, svc, RETRY_DELAYS_MS[0]).retryDue()
+
+        val after = schedules.findPendingByTrip(tripId)
+        after.all { it.hasCopy } shouldBe true
+        // 이미 받은 문구는 바뀌지 않았고, 두 번째 호출은 **빠진 행만** 물었다(이미 붙은 행의 키가 없다).
+        after.single { it.scheduleId == firstCopied.scheduleId }.title shouldBe "첫 제목"
+        onlyFirstThenAll.asked[1].toSet() shouldBe (first.map { it.scheduleId.toString() }.toSet() - firstCopied.scheduleId.toString())
+    }
+
+    /**
+     * **다일 여행은 1차 저장(첫날만) 직후에 적재가 돈다** — 그때 2일차 이후는 일정이 없어 재료가 비고(어댑터가 안 묻는다),
+     * 첫날 문구만 받으면 종전엔 재시도도 없어 나머지가 영구 상수였다. 이제 재료가 뒤늦게 생긴 날도 재시도가 메운다.
+     */
+    "적재 때 일정이 없던 날도 나중에 일정이 생기면 채운다" {
+        val day1Only = mutableMapOf(LocalDate.parse("2026-08-10") to listOf(place("성산일출봉", "SIGHT")))
+        // 실 어댑터처럼 **재료가 빈 항목은 건너뛰고** 나머지에만 문구를 단다(어댑터가 빈 재료를 거른다).
+        val echo = object : ReminderCopyPort {
+            override val enabled = true
+            var seen: List<ReminderCopyRequest> = emptyList()
+            override fun copiesFor(tripTitle: String?, items: List<ReminderCopyRequest>): Map<String, ReminderCopy> {
+                seen = items
+                return items.filter { it.slots.isNotEmpty() }.associate { it.scheduleKey to ReminderCopy("AI 제목", "AI 본문") }
+            }
+        }
+        val retries = ReminderCopyRetries(RETRY_DELAYS_MS)
+        val (svc, schedules) = serviceWith(echo, names = day1Only, retries = retries)
+
+        svc.reload(tripId)
+        // 첫날·여행 전날(첫날을 말한다)만 문구가 있고 2·3일차는 재료가 없어 비어 있다.
+        schedules.findPendingByTrip(tripId).count { it.hasCopy } shouldBe 2
+        schedules.findPendingByTrip(tripId).count { !it.hasCopy } shouldBe 2
+
+        // 2차 생성이 끝났다 — 2·3일차 일정이 생겼다.
+        day1Only[LocalDate.parse("2026-08-11")] = listOf(place("우도", "NATURE"))
+        day1Only[LocalDate.parse("2026-08-12")] = listOf(place("카페 이름", "CAFE"))
+        pollerAt(retries, svc, RETRY_DELAYS_MS[0]).retryDue()
+
+        schedules.findPendingByTrip(tripId).all { it.hasCopy } shouldBe true
+        // 다시 물은 것은 **빠졌던 두 날뿐**이다 — 이미 받은 날은 안 묻는다.
+        echo.seen.map { it.date }.toSet() shouldBe setOf(LocalDate.parse("2026-08-11"), LocalDate.parse("2026-08-12"))
+    }
+
+    /**
+     * **재시도는 횟수가 정해져 있다.** 상대가 아예 죽었을 때 계속 두드리지 않는다 — 다 쓰면 포기하고 **한 줄 남긴다**
+     * (조용한 포기 금지, INV-4). 남은 행은 상수 문구로 발화한다.
+     */
+    "횟수를 다 쓰면 포기하고 한 줄 남긴다 — 더는 묻지 않는다" {
         val alwaysCold = object : ReminderCopyPort {
             override val enabled = true
             var calls = 0
@@ -245,31 +319,118 @@ class ReminderCopyFillTest : StringSpec({
                 return emptyMap()
             }
         }
-        val retries = ReminderCopyRetries(RETRY_DELAY_MS)
+        val retries = ReminderCopyRetries(RETRY_DELAYS_MS)
         val (svc, schedules) = serviceWith(alwaysCold, retries = retries)
 
-        svc.reload(tripId)
-        ReminderCopyRetryPoller(retries, svc, Clock.offset(clock, Duration.ofMillis(RETRY_DELAY_MS))).retryDue()
-        ReminderCopyRetryPoller(retries, svc, Clock.offset(clock, Duration.ofMillis(RETRY_DELAY_MS * 10))).retryDue()
-
-        // 상대가 아예 죽었을 때 계속 두드리지 않는다 — 처음 1번 + 재시도 1번이 전부다.
-        alwaysCold.calls shouldBe 2
-        schedules.findPendingByTrip(tripId).shouldSurviveWithoutCopy()
-    }
-
-    "받았거나 물을 재료가 없었으면 다시 묻지 않는다" {
-        val retries = ReminderCopyRetries(RETRY_DELAY_MS)
-        val nothing = object : ReminderCopyPort {
-            override val enabled = true
-            override fun copiesFor(tripTitle: String?, items: List<ReminderCopyRequest>) =
-                emptyMap<String, ReminderCopy>()
+        val warns = warnsFrom(ReminderCopyRetryPoller::class.java) {
+            svc.reload(tripId)
+            // 시간을 충분히 흘려 보내며 폴러를 여러 번 돌린다 — 매번 때가 된 것만 처리된다.
+            repeat(RETRY_DELAYS_MS.size + 3) { i ->
+                pollerAt(retries, svc, RETRY_DELAYS_MS.sum() * (i + 1)).retryDue()
+            }
         }
 
-        serviceWith(Echo(), retries = retries).first.reload(tripId)
-        // 재료가 없으면 어댑터가 애초에 안 묻는다 — 못 받은 것이 아니니 재시도할 이유도 없다.
-        serviceWith(nothing, names = emptyMap(), retries = retries).first.reload(tripId)
+        // 처음 1번 + 재시도 횟수만큼이 전부다 — 그 뒤로는 안 묻는다.
+        alwaysCold.calls shouldBe 1 + RETRY_DELAYS_MS.size
+        schedules.findPendingByTrip(tripId).shouldSurviveWithoutCopy()
+        warns.count { "끝내 못 채웠습니다" in it } shouldBe 1
+    }
 
-        retries.takeDue(clock.instant().plusMillis(RETRY_DELAY_MS * 10)) shouldBe emptyList()
+    /** 채움이 예외로 끝나도 사슬이 끊기지 않는다 — 다음 기회에 다시 한다(일시적인 조회 실패가 문구를 영구히 포기시키지 않는다). */
+    "채움이 터져도 다음 기회에 다시 한다" {
+        var failNext = true
+        val plans = object : com.trippilot.itinerarygeneration.api.ItineraryPlanFacade {
+            override fun findPlanSlots(accountId: UUID, tripId: UUID) = emptyList<com.trippilot.itinerarygeneration.api.PlannedSlotView>()
+            override fun findPlannedPlaces(accountId: UUID, tripId: UUID): Map<LocalDate, List<PlannedPlaceView>> {
+                if (failNext) { failNext = false; error("일시적인 조회 실패") }
+                return plannedNames
+            }
+        }
+        val cold = object : ReminderCopyPort {
+            override val enabled = true
+            override fun copiesFor(tripTitle: String?, items: List<ReminderCopyRequest>) = emptyMap<String, ReminderCopy>()
+        }
+        val schedules = FakeSchedules()
+        val trips = FakeTripOwner().apply { put(tripId, acc, LocalDate.parse("2026-08-10"), LocalDate.parse("2026-08-12")) }
+        val retries = ReminderCopyRetries(RETRY_DELAYS_MS)
+        val svc = NotificationScheduleService(trips, schedules, cold, plans, clock, retries)
+
+        // reload 의 첫 문구 호출이 조회 실패로 끝나도 예약은 적재되고, 재시도가 걸린다.
+        svc.reload(tripId)
+        schedules.findPendingByTrip(tripId).shouldSurviveWithoutCopy()
+
+        pollerAt(retries, svc, RETRY_DELAYS_MS[0]).retryDue()      // 조회는 이제 성공하고, 상대는 여전히 못 준다
+        // 다음 시도가 걸려 있다 — 사슬이 이어졌다.
+        retries.takeDue(clock.instant().plusMillis(RETRY_DELAYS_MS.sum())).map { it.attempt } shouldBe listOf(1)
+    }
+
+    /**
+     * **채우는 사이 재적재가 행을 바꿔도** 옛 id 의 문구가 새 행에 붙지 않는다 — 조건부 쓰기가 지워진 행엔 아무 일도 안 한다.
+     * (붙으면 "다른 날 이야기"가 되고 원인을 되짚기 가장 어렵다.)
+     */
+    "채우는 사이 재적재가 행을 새로 만들었으면 옛 문구는 어디에도 붙지 않는다" {
+        val schedulesHolder = FakeSchedules()
+        val replacing = object : ReminderCopyPort {
+            override val enabled = true
+            var calls = 0
+            override fun copiesFor(tripTitle: String?, items: List<ReminderCopyRequest>): Map<String, ReminderCopy> {
+                calls++
+                if (calls == 1) return emptyMap()   // 첫 적재는 못 받는다 → 재시도가 걸린다
+                // 재시도 중(AI 호출 도중)에 다른 적재가 같은 여행의 행을 새로 만들었다.
+                schedulesHolder.replacePending(tripId, schedulesHolder.findPendingByTrip(tripId).map { it.copy(scheduleId = UUID.randomUUID()) })
+                return items.associate { it.scheduleKey to ReminderCopy("옛 제목", "옛 본문") }
+            }
+        }
+        val trips = FakeTripOwner().apply { put(tripId, acc, LocalDate.parse("2026-08-10"), LocalDate.parse("2026-08-12")) }
+        val retries = ReminderCopyRetries(RETRY_DELAYS_MS)
+        val svc = NotificationScheduleService(trips, schedulesHolder, replacing, FakePlans(plannedNames), clock, retries)
+
+        svc.reload(tripId)
+        val countBefore = schedulesHolder.findPendingByTrip(tripId).size
+        pollerAt(retries, svc, RETRY_DELAYS_MS[0]).retryDue()
+
+        schedulesHolder.findPendingByTrip(tripId).size shouldBe countBefore
+        schedulesHolder.findPendingByTrip(tripId).shouldSurviveWithoutCopy()   // 옛 문구는 새 행에 안 붙었다
+    }
+
+    /** 시각이 이미 지난 행은 채우지 않는다 — 발화기가 곧 집는다(그리고 늦으면 취소한다). */
+    "발화 시각이 지난 행은 채우지 않는다" {
+        val echo = Echo()
+        val (svc, schedules) = serviceWith(echo)
+        svc.reload(tripId)
+        // 모든 행이 이미 시각이 지났다고 가정하고(시계를 크게 앞당김) 제자리 채우기를 직접 부른다.
+        val late = NotificationScheduleService(
+            FakeTripOwner().apply { put(tripId, acc, LocalDate.parse("2026-08-10"), LocalDate.parse("2026-08-12")) },
+            schedules, echo, FakePlans(plannedNames), Clock.offset(clock, Duration.ofDays(30)), ReminderCopyRetries(RETRY_DELAYS_MS),
+        )
+        echo.seen = emptyList()
+        schedules.stored.replaceAll { it.copy(title = null, body = null) }
+
+        late.fillMissing(tripId) shouldBe FillOutcome.Done
+        echo.seen shouldBe emptyList()
+    }
+
+    "받았거나 물을 재료가 없었으면 AI 를 다시 부르지 않는다" {
+        val retries = ReminderCopyRetries(RETRY_DELAYS_MS)
+        var calls = 0
+        val nothing = object : ReminderCopyPort {
+            override val enabled = true
+            override fun copiesFor(tripTitle: String?, items: List<ReminderCopyRequest>): Map<String, ReminderCopy> {
+                calls++
+                return emptyMap()
+            }
+        }
+
+        // 전부 받았다 — 채울 것이 없어 재시도 자체가 안 걸린다.
+        serviceWith(Echo(), retries = retries).first.reload(tripId)
+        retries.takeDue(clock.instant().plusMillis(RETRY_DELAYS_MS.sum())) shouldBe emptyList()
+
+        // 재료가 없다 — 재시도는 걸리지만(일정이 뒤늦게 생길 수 있다) 비어 있는 동안은 **AI 를 부르지 않는다**.
+        val (svc, _) = serviceWith(nothing, names = emptyMap(), retries = retries)
+        svc.reload(tripId)
+        val callsAfterReload = calls
+        pollerAt(retries, svc, RETRY_DELAYS_MS[0]).retryDue()
+        calls shouldBe callsAfterReload
     }
 
 })
@@ -283,4 +444,21 @@ private fun List<com.trippilot.notification.domain.NotificationSchedule>.shouldS
     forEach { it.title.shouldBeNull() }
 }
 
-private const val RETRY_DELAY_MS = 180_000L
+private val RETRY_DELAYS_MS = listOf(180_000L, 300_000L, 480_000L)
+
+/** 시각 기준 [offsetMs] 뒤에 도는 재시도 폴러. */
+private fun pollerAt(retries: ReminderCopyRetries, svc: NotificationScheduleService, offsetMs: Long) =
+    ReminderCopyRetryPoller(retries, svc, Clock.offset(Clock.fixed(Instant.parse("2026-08-01T00:00:00Z"), ZoneOffset.UTC), Duration.ofMillis(offsetMs)))
+
+/** [loggerClass] 의 WARN 줄을 모은다. */
+private fun warnsFrom(loggerClass: Class<*>, block: () -> Unit): List<String> {
+    val appender = ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>().apply { start() }
+    val logger = org.slf4j.LoggerFactory.getLogger(loggerClass) as ch.qos.logback.classic.Logger
+    logger.addAppender(appender)
+    try {
+        block()
+    } finally {
+        logger.detachAppender(appender)
+    }
+    return appender.list.filter { it.level == ch.qos.logback.classic.Level.WARN }.map { it.formattedMessage }
+}

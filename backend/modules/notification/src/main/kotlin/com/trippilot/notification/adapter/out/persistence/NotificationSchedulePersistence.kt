@@ -95,6 +95,18 @@ class NotificationScheduleRepositoryAdapter(
     override fun findPendingByTrip(tripId: UUID): List<NotificationSchedule> =
         jpa.findByTripIdAndFiredAtIsNullAndCanceledAtIsNullOrderByFireAt(tripId).map { it.toDomain() }
 
+    // 조건부 쓰기 — 문구가 이미 있는 행·발화/취소된 행·그 사이 지워진 행은 건드리지 않는다. 문구 없음의 기준은
+    // 도메인(`NotificationSchedule.hasCopy` — 제목·본문 둘 다 비어 있지 않음)과 같다.
+    override fun attachCopy(scheduleId: UUID, title: String, body: String): Boolean =
+        jdbc.update(
+            """
+            UPDATE notification_schedule SET title = ?, body = ?
+             WHERE schedule_id = ? AND fired_at IS NULL AND canceled_at IS NULL
+               AND (COALESCE(btrim(title), '') = '' OR COALESCE(btrim(body), '') = '')
+            """.trimIndent(),
+            title, body, scheduleId,
+        ) == 1
+
     private fun NotificationSchedule.toEntity() = NotificationScheduleEntity(
         scheduleId = scheduleId,
         accountId = accountId,

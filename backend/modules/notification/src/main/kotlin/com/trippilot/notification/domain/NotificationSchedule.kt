@@ -49,8 +49,8 @@ data class NotificationSchedule(
         kind = kind,
         // **받은 문구가 있으면 그것을 쓴다.** 둘 중 하나만 온 경우는 섞지 않는다 —
         // AI 제목에 상수 본문이 붙으면 문장이 따로 놀아 오히려 어색하다.
-        title = if (hasCopy()) title!! else defaultTitle(),
-        body = if (hasCopy()) body!! else defaultBody(),
+        title = if (hasCopy) title!! else defaultTitle(),
+        body = if (hasCopy) body!! else defaultBody(),
         occurredAt = now,
         // 알림에서 그 여행의 일정으로 들어간다. 진입이 없으면 사용자가 알림을 읽고도 갈 곳이 없다.
         actionType = NotificationAction.TRIP_ITINERARY,
@@ -61,8 +61,11 @@ data class NotificationSchedule(
         dedupKey = "$kind#$tripId#$fireAt",
     )
 
-    /** 제목·본문이 **둘 다** 있어야 AI 문구로 친다. 한쪽만 쓰면 문장이 따로 논다. */
-    private fun hasCopy(): Boolean = !title.isNullOrBlank() && !body.isNullOrBlank()
+    /**
+     * 제목·본문이 **둘 다** 있어야 AI 문구로 친다. 한쪽만 쓰면 문장이 따로 논다.
+     * 제자리 채우기(`NotificationScheduleService.fillMissing`)가 "아직 문구가 없는 행"을 고르는 기준이기도 하다.
+     */
+    val hasCopy: Boolean get() = !title.isNullOrBlank() && !body.isNullOrBlank()
 
     private fun defaultTitle(): String = when (kind) {
         NotificationKind.TRIP_PRE -> "내일 여행이 시작돼요"
