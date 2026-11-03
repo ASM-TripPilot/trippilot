@@ -482,6 +482,36 @@ def drop_camping(proposals: list[dict]) -> int:
     return n
 
 
+_FOOD_CATS = ("FOOD", "CAFE")
+
+
+def _name_sido(p: dict) -> tuple[str, str]:
+    addr = (p.get("provenance") or {}).get("address") or ""
+    return (p["poi"].get("name") or "").replace(" ", ""), addr.split(" ", 1)[0]
+
+
+def drop_overture_dupes(proposals: list[dict]) -> int:
+    """관광공사·카카오에 **같은 이름이 같은 시도에** 있는 Overture 비식당 행을 뺀다. 지운 건수를 돌려준다.
+
+    게이트 3단은 같은 이름 50m 안만 병합한다. Overture 는 좌표가 낡거나 틀린 행이 있어 50m 밖에서 같은 곳이
+    두 번 실렸다 — 공유본 2026-11-02 실측 147곳(`경복궁` 용산구 서빙고동 6.3km · `하늘공원` 대치동 16.7km ·
+    `제주양떼목장` 17.6km). 앱은 사진·영업시간 없는 쪽을 틀린 자리에 그린다(TRIP-1700). 관광공사·카카오 행이
+    정본이다. 야경(NIGHT_VIEW)·나이트라이프는 축이 달라 남긴다 — 같은 이름의 관광공사 행은 낮 명소로 실린다.
+    """
+    canon: set[tuple[str, str]] = set()
+    for p in proposals:
+        if p.get("source") in ("TOURAPI", "KAKAO_LOCAL") and p["poi"].get("category") not in _FOOD_CATS:
+            name, sido = _name_sido(p)
+            if name and sido:
+                canon.add((name, sido))
+    kept = [p for p in proposals
+            if not (p.get("source") == "OVERTURE" and p["poi"].get("category") not in (*_FOOD_CATS, "NIGHT_VIEW")
+                    and NIGHTLIFE_TAG not in (p.get("tags") or []) and _name_sido(p) in canon)]
+    n = len(proposals) - len(kept)
+    proposals[:] = kept
+    return n
+
+
 def drop_closed(proposals: list[dict], closed_refs: frozenset[tuple[str, str]]) -> int:
     """폐업 확인된 제안을 뺀다. 지운 건수를 돌려준다.
 
@@ -555,6 +585,11 @@ def retro_drops(out: dict, ref_by_id: dict[int, tuple[str, str]] | None = None,
         print(f"[merge] 레포츠 캠핑장·숙영지 제거 — {camping}건", file=sys.stderr)
         out["stats"]["unique_proposals"] = len(out["proposals"])
         out["stats"]["camping_dropped"] = out["stats"].get("camping_dropped", 0) + camping
+    # Overture 중복(관광공사·카카오와 같은 이름·같은 시도) — 같은 규약.
+    if (dupes := drop_overture_dupes(out["proposals"])):
+        print(f"[merge] Overture 중복(관광공사·카카오와 같은 이름) 제거 — {dupes}건", file=sys.stderr)
+        out["stats"]["unique_proposals"] = len(out["proposals"])
+        out["stats"]["overture_dupes_dropped"] = out["stats"].get("overture_dupes_dropped", 0) + dupes
     # LLM 판정 소급 — 기준을 조이면(프롬프트 판본 상승) 적재된 행에도 소급된다.
     if (rejected := drop_rejected_verdicts(out["proposals"])):
         print(f"[merge] 판정 reject 제거 — {rejected}건", file=sys.stderr)
