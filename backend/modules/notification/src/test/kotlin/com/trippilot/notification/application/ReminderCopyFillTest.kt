@@ -76,6 +76,33 @@ class ReminderCopyFillTest : StringSpec({
         rows.first().toNotification(clock.instant()).title shouldBe "AI 제목"
     }
 
+    /**
+     * **문구에는 그것을 만들 때 본 일정의 지문이 같이 붙는다.** 발화가 지금 일정과 대조해 편집으로 어긋난 문구를 거르는 근거다 —
+     * 지문 없이 문구만 저장하면 그 대조가 불가능하다. 적재 때도, 재시도(제자리 채우기)로 뒤늦게 붙을 때도 마찬가지다.
+     */
+    "붙은 문구에는 그 날 장소 목록의 지문이 같이 붙는다 — 적재 때도 제자리 채우기 때도" {
+        val coldThenWarm = object : ReminderCopyPort {
+            override val enabled = true
+            var calls = 0
+            override fun copiesFor(tripTitle: String?, items: List<ReminderCopyRequest>): Map<String, ReminderCopy> {
+                calls++
+                return if (calls == 1) items.take(1).associate { it.scheduleKey to ReminderCopy("첫 제목", "첫 본문") }
+                else items.associate { it.scheduleKey to ReminderCopy("나중 제목", "나중 본문") }
+            }
+        }
+        val retries = ReminderCopyRetries(RETRY_DELAYS_MS)
+        val (svc, schedules) = serviceWith(coldThenWarm, retries = retries)
+
+        svc.reload(tripId)
+        pollerAt(retries, svc, RETRY_DELAYS_MS[0]).retryDue()
+
+        val rows = schedules.findPendingByTrip(tripId)
+        rows.all { it.hasCopy } shouldBe true
+        rows.forEach { row ->
+            row.copyBasis shouldBe com.trippilot.notification.domain.CopyBasis.of(plannedNames.getValue(row.subjectDate()).map { it.nameKo })
+        }
+    }
+
     "요청 키는 예약을 가리킨다 — 상대가 돌려줄 키가 우리 행과 맞물린다" {
         val echo = Echo()
         val (svc, schedules) = serviceWith(echo)

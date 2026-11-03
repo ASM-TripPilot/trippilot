@@ -98,7 +98,7 @@ interface NotificationScheduleRepository {
      * 붙은 행은 덮지 않는다 — 재시도 둘이나 다른 파드가 같은 행을 채워도 **먼저 붙은 문구가 이긴다**. 붙였으면 true.
      * 재적재와 달리 행을 지우고 다시 만들지 않으므로, 앞서 받은 문구를 잃지 않고 빠진 행만 메울 수 있다.
      */
-    fun attachCopy(scheduleId: UUID, title: String, body: String): Boolean
+    fun attachCopy(scheduleId: UUID, title: String, body: String, copyBasis: String): Boolean
 }
 
 /** 최근 두 창의 실제 발송 건수(COST-U6-01). */
