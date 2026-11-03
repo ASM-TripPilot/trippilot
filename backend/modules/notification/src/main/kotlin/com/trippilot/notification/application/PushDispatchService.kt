@@ -81,8 +81,15 @@ class PushDispatchService(
         // 종류 토글 × OS 권한 = 채널 판정. `SYSTEM` 은 토글을 타지 않는다(INV-U6-03).
         if (!toggles.allowsPush(notification.accountId, notification.kind)) return PushOutcome.MUTED
         // 권한이 없는 기기는 쏴도 닿지 않는다 — 시도 자체를 하지 않는다(레이트리밋을 아낀다).
-        val deliverable = tokens.findActive(notification.accountId).filter { it.deliverable }
-        if (deliverable.isEmpty()) return PushOutcome.NO_DEVICE
+        val active = tokens.findActive(notification.accountId)
+        val deliverable = active.filter { it.deliverable }
+        if (deliverable.isEmpty()) {
+            // "기기 없음"을 둘로 가른다 — 활성 토큰이 아예 없는가(앱이 등록을 못 했다: 빌드·APNs/FCM 설정), 토큰은 있는데
+            // OS 알림 권한이 허용이 아닌가(사용자 설정·권한 요청 흐름). 운영 첫 집계(37건 전부 NO_DEVICE)는 로그만으로
+            // 이 둘을 못 갈랐다 — 새 빌드가 나온 뒤에도 NO_DEVICE 가 남으면 어느 쪽인지가 곧 다음 할 일이다.
+            onReason(if (active.isEmpty()) NotificationMetrics.REASON_NO_TOKEN else NotificationMetrics.REASON_NOT_GRANTED)
+            return PushOutcome.NO_DEVICE
+        }
 
         // 발송량 소프트 상한(COST-U6-01). **여기서 막는 이유**: Expo 무료 티어는 레이트리밋이
         // 계정 단위라, 버그 하나로 한 사용자가 폭주하면 그 계정 전체 발송이 죽는다.
