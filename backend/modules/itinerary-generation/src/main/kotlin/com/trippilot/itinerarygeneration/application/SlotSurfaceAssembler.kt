@@ -44,6 +44,7 @@ class SlotSurfaceAssembler(private val poiSurfaces: PoiSurfaceFacade) {
                 categoryCode = f?.categoryCode ?: l!!.categoryCode,
                 openingHours = l?.openingHours,   // 동결 대상 아님
                 imageUrl = l?.imageUrl,           // 동결 대상 아님. NULL=미확보(지어내지 않는다)
+                imageLicense = l?.imageLicense,   // 사진과 한 쌍 — 같은 출처(정본)에서 함께 가져온다
                 tags = l?.tags.orEmpty(),
             )
         }.toMap()
@@ -66,6 +67,8 @@ data class SlotSurface(
     val categoryCode: String,
     val openingHours: String?,
     val imageUrl: String?,
+    /** [imageUrl] 사진의 공공누리 유형 `TYPE1`·`TYPE3`. 모르면 null. */
+    val imageLicense: String?,
     val tags: List<String>,
 ) {
     val openingHoursKnown: Boolean get() = openingHours != null

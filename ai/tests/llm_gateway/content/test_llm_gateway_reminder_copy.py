@@ -20,7 +20,7 @@ from hypothesis import strategies as st
 
 from trippilot.domain.common import TraceId
 from trippilot.domain.llm.llm import LlmFeature
-from trippilot.llm_gateway.gates.reminder_copy import (
+from trippilot.llm_gateway.gates.content.reminder_copy import (
     _DURATION,
     _name_variants,
     _MAX_BODY,

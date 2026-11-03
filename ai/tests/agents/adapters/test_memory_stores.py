@@ -23,7 +23,7 @@ from hypothesis import strategies as st
 
 from trippilot.agents.adapters.memory_memory_store import InMemoryDialogueMemoryStore
 from trippilot.agents.adapters.pg_memory_store import PgDialogueMemoryStore
-from trippilot.orchestrator.dialogue_memory import expires_at_for
+from trippilot.orchestrator.dialogue.dialogue_memory import expires_at_for
 from trippilot.ports.memory_store_port import DialogueMemory, MemoryHit
 
 _KST = timezone(timedelta(hours=9))

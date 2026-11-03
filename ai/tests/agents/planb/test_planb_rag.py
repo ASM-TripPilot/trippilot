@@ -48,10 +48,10 @@ from trippilot.agents.planb.rag import (
     closed_set_filter,
 )
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate
+from trippilot.llm_gateway.gates.replan.alternative_selection import AlternativeSelectionGate
 from trippilot.llm_gateway.gates.base import GateOutcome
 from trippilot.llm_gateway.gateway import GatewayFacade
-from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionWorker
+from trippilot.llm_gateway.workers.replan.alternative_selection import AlternativeSelectionWorker
 from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TraceId
 from trippilot.domain.kb import KbDocument, KbHit, KbKind
 from trippilot.domain.llm.llm import CandidatePool, ModelTier, ScoredPoi
@@ -1031,7 +1031,7 @@ def test_alternative_worker_accepts_timeout() -> None:
     """워커 7종이 이미 갖고 있던 통로가 alternative_selection 에만 없었다."""
     import inspect
 
-    from trippilot.llm_gateway.workers.alternative_selection import AlternativeSelectionWorker
+    from trippilot.llm_gateway.workers.replan.alternative_selection import AlternativeSelectionWorker
 
     assert "timeout_sec" in inspect.signature(AlternativeSelectionWorker.select).parameters
 

@@ -25,9 +25,9 @@ from trippilot.domain.itinerary.itinerary import FixedBlock, TimeWindow
 from trippilot.domain.llm.llm import CandidatePool
 from trippilot.domain.observability import FallbackEvent
 from trippilot.domain.poi.poi import PoiCategory
-from trippilot.llm_gateway.gates.scoring import ClosedSetGate
+from trippilot.llm_gateway.gates.preference.scoring import ClosedSetGate
 from trippilot.llm_gateway.gateway import GatewayFacade
-from trippilot.llm_gateway.workers.preference import PreferenceScoringWorker
+from trippilot.llm_gateway.workers.preference.preference import PreferenceScoringWorker
 
 from tests.agents.schedule.test_schedule_agent import _scored, _solution
 from tests.fakes.fake_clock import FakeClock

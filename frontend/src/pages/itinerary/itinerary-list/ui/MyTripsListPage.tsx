@@ -7,13 +7,11 @@ import {
 } from 'react';
 import { useWindowDimensions, View } from 'react-native';
 import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
-import { useQueries, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 
 import type { Trip } from '@/shared/api/index.schemas';
 import {
   getGetTripsQueryKey,
-  getGetTripsTripIdItineraryQueryKey,
-  getGetTripsTripIdItineraryQueryOptions,
   useDeleteTripsTripId,
   useGetTrips,
 } from '@/shared/api/index.hooks';
@@ -21,7 +19,11 @@ import { isNotFound, isOfflineWaiting } from '@/shared/api';
 import { isLargeText } from '@/shared/lib/fontScale';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { readStringValue, writeStringValue } from '@/shared/storage';
-import { readDoneBarSeen, writeDoneBarSeen } from '@/entities/trip';
+import {
+  readDoneBarSeen,
+  tripItinerarySummary,
+  writeDoneBarSeen,
+} from '@/entities/trip';
 import { pickDoneBar, type DoneBarEntry } from '../model/doneBar';
 import {
   byLatest,
@@ -62,10 +64,12 @@ import { TripCardContainer } from './TripCardContainer';
  * TRIP-1122 · 정렬 기준(최신순·출발일순·이름순)과 정렬 시트 열림을 페이지가 쥔다 — 시트는 열릴 때만 그린다.
  * 고른 기준은 기기에 한 줄 남기고(`itinerary.myTrips.sort`), 마운트 때 한 번 읽는다: 읽기 전엔 최신순, 오면 그
  * 기준, 읽기 실패·모르는 값은 최신순(INV-4). 사용자가 먼저 고르면 늦게 온 저장값은 무시한다. TRIP-1121 · 여행 중
- * (확정 + 오늘이 기간 안)은 어느 기준에서도 맨 위(`orderMyTrips`). 오늘을 여기서 한 번 만들어 정렬과 카드에 같은 값을 넘긴다
- * — 일정이 도착하기 전엔 판정할 수 없어, 도착하는 순간 여행 중 카드가 위로 올라간다(INV-4).
+ * (확정 + 오늘이 기간 안)은 어느 기준에서도 맨 위(`orderMyTrips`). 오늘을 여기서 한 번 만들어 정렬과 카드에 같은 값을 넘긴다.
  *
- * TRIP-928 · 완료 도킹 배너 — 여행별 일정(카드 훅과 같은 캐시 키)과 기기에 저장한 "배너로 알린 여행
+ * TRIP-1677 · 일정 상태(확정 여부·생성 상태)는 목록(`GET /trips`)이 여행마다 싣는 네 칸에서 읽는다 — 예전엔 여행마다 일정을
+ * 따로 물어(N+1) 도착 전엔 정렬·배너를 보류했다. 이제 목록이 오면 한꺼번에 판정한다. 생성 중 여행의 폴링은 앱 셸이 한다.
+ *
+ * TRIP-928 · 완료 도킹 배너 — 목록의 일정 상태 칸과 기기에 저장한 "배너로 알린 여행
  * id"(seen)를 모두 읽은 뒤에만 `pickDoneBar` 로 판정한다. 처음 띄울 때 seen 을 한 번 쓰고, 그
  * 포커스 동안은 띄운 여행을 붙잡아 둔다(저장 뒤 사라지지 않게). seen 읽기 실패 = 배너 없음.
  * TRIP-1286 · 탭 화면은 탭을 옮겨도 언마운트되지 않으므로 판정·쓰기는 목록이 보일 때(포커스)만 한다 —
@@ -88,17 +92,9 @@ export function MyTripsListPage(): ReactElement {
   const list = trips.data ?? [];
 
   // 새 훅은 전부 아래 일찍 return 들보다 위(훅 호출 순서 규칙).
-  // TRIP-1618 · 생성 중 일정의 폴링은 이 페이지가 아니라 앱 셸(`useGenerationWatch`)이 한다 — 아래 `useQueries` 는 그 칸을
-  // 읽기만 한다(셸이 같은 캐시 칸을 갱신하면 카드·배너가 저절로 바뀐다). 예전엔 여기서 2초 간격으로 물었다(TRIP-1271) —
-  // 탭 화면은 내려가지 않아 다시 물을 계기가 없었기 때문이고, TRIP-1614 가 보일 때만 묻도록 줄였다.
-  // `focused` 는 폴링이 아니라 완료 배너 판정(TRIP-1286)이 계속 쓴다 — 목록이 보이는 동안만 판정, 첫 렌더는 안 보임으로 시작해
-  // 포커스 effect 가 켠다.
+  // TRIP-1618 · 생성 중 여행의 폴링은 이 페이지가 아니라 앱 셸(`useGenerationWatch`)이 한다 — 이 페이지는 목록 칸을 읽기만 한다.
+  // `focused` 는 완료 배너 판정(TRIP-1286)이 쓴다 — 목록이 보이는 동안만 판정, 첫 렌더는 안 보임으로 시작해 포커스 effect 가 켠다.
   const [focused, setFocused] = useState(false);
-  const itineraries = useQueries({
-    queries: list.map((trip) =>
-      getGetTripsTripIdItineraryQueryOptions(trip.tripId)
-    ),
-  });
   const [seen, setSeen] = useState<readonly string[] | null>(null);
   const [shown, setShown] = useState<Trip | null>(null);
   // TRIP-1241 — 닫음. shown 을 비우면 seen state 가 옛 값이라 pick 이 다시 계산돼 재표시되므로 별도 플래그로 든다.
@@ -132,8 +128,9 @@ export function MyTripsListPage(): ReactElement {
   // TRIP-1055 · 삭제 — 대상·실패 표시·요청을 페이지가 쥔다(다이얼로그는 카드·스크롤 밖 형제).
   const queryClient = useQueryClient();
 
-  // TRIP-1271 · 탭 복귀 재조회 — 폴링하지 않는 여행이 다른 화면에서 바뀐 것을 따라잡는다(일정 키만). 첫
-  // 포커스(=첫 마운트)는 첫 조회가 이미 나가 있으므로 건너뛴다. 콜백 정체가 바뀌면 다시 불리므로 고정한다.
+  // TRIP-1271 · 탭 복귀 재조회 — 다른 화면에서 바뀐 것을 따라잡는다. 첫 포커스(=첫 마운트)는 첫 조회가 이미 나가 있으므로
+  // 건너뛴다. 콜백 정체가 바뀌면 다시 불리므로 고정한다. 낡은 것만 다시 묻는다(TRIP-1348) — type 'active' 는 관찰자가 있는
+  // 쿼리만. TRIP-1677 · 일정 상태가 목록 칸이라 목록 한 건이면 된다(예전엔 여행 수만큼).
   const focusedRef = useRef(false);
   useFocusEffect(
     useCallback(() => {
@@ -141,18 +138,11 @@ export function MyTripsListPage(): ReactElement {
         focusedRef.current = true;
         return;
       }
-      const cached =
-        queryClient.getQueryData<Trip[]>(getGetTripsQueryKey()) ?? [];
-      // 낡은 것만 다시 묻는다(TRIP-1348) — 방금 받은 일정까지 N건 무조건 재요청하던 것을 줄인다.
-      // type 'active' 는 종전 invalidate 의 범위(관찰자가 있는 쿼리)를 지킨다 — 기본값 'all' 이면
-      // 지금 안 보는 쿼리까지 새로 받는다.
-      cached.forEach((trip) =>
-        queryClient.refetchQueries({
-          queryKey: getGetTripsTripIdItineraryQueryKey(trip.tripId),
-          type: 'active',
-          stale: true,
-        })
-      );
+      queryClient.refetchQueries({
+        queryKey: getGetTripsQueryKey(),
+        type: 'active',
+        stale: true,
+      });
     }, [queryClient])
   );
   const deleteTrip = useDeleteTripsTripId();
@@ -188,16 +178,11 @@ export function MyTripsListPage(): ReactElement {
     );
   }, []);
 
-  // 여행별 일정 응답(카드 훅과 같은 캐시 키) — 완료 배너와 여행 중 고정이 같이 읽는다.
-  const entries: DoneBarEntry[] = list.map((trip, i) => ({
-    trip,
-    itinerary: itineraries[i].isPending
-      ? 'pending'
-      : {
-          status: itineraries[i].data?.status,
-          generationState: itineraries[i].data?.generationState,
-        },
-  }));
+  // 목록 칸의 일정 상태 — 완료 배너와 여행 중 고정이 같이 읽는다.
+  const entries: DoneBarEntry[] = list.map((trip) => {
+    const { status, generationState } = tripItinerarySummary(trip);
+    return { trip, itinerary: { status, generationState } };
+  });
   // 오늘(KST) — 상태로 들어 자정을 넘기면 바뀐다(TRIP-1639 · TRIP-1364 선례). 렌더 중 `seoulDate(new Date())` 는 마운트에 굳는다.
   const today = useSeoulToday();
 
@@ -251,14 +236,8 @@ export function MyTripsListPage(): ReactElement {
     );
   }
 
-  // 정렬만 404 아닌 조회 실패(다시 받기 실패로 직전 data 가 남은 경우 포함)를 "모름"으로 접는다 — 카드의
-  // degrade(배지 없음)와 같은 해석이라 배지 없는 카드가 고정되지 않는다(D3). 배너 입력(entries)은 그대로.
   const sorted = orderMyTrips(
-    entries.map((entry, i) =>
-      itineraries[i].isError && !isNotFound(itineraries[i].error)
-        ? { trip: entry.trip, itinerary: 'pending' as const }
-        : entry
-    ),
+    entries,
     today,
     sortKey === 'start'
       ? byStart(today)
@@ -308,18 +287,13 @@ export function MyTripsListPage(): ReactElement {
 
   const onPressView = (): void => {
     if (!doneTrip) return;
-    const query =
-      itineraries[list.findIndex((t) => t.tripId === doneTrip.tripId)];
+    // 배너가 붙잡은 스냅샷이 아니라 지금 목록의 값으로 목적지를 정한다.
+    const live = list.find((t) => t.tripId === doneTrip.tripId) ?? doneTrip;
     router.push(
       itineraryDestinationHref(
         doneTrip.tripId,
-        resolveItineraryDestination({
-          notFound: isNotFound(query?.error),
-          generationState: query?.data?.generationState,
-          status: query?.data?.status,
-          generationMode: query?.data?.generationMode,
-        }),
-        query?.data?.days
+        resolveItineraryDestination(tripItinerarySummary(live)),
+        undefined
       )
     );
   };
@@ -359,8 +333,8 @@ export function MyTripsListPage(): ReactElement {
         <TripDeleteDialog
           failed={deleteFailedId === deleteTargetId}
           confirmed={
-            itineraries[list.findIndex((t) => t.tripId === deleteTargetId)]
-              ?.data?.status === 'CONFIRMED'
+            list.find((t) => t.tripId === deleteTargetId)?.itineraryStatus ===
+            'CONFIRMED'
           }
           onCancel={() => setDeleteTargetId(null)}
           onConfirm={onConfirmDelete}

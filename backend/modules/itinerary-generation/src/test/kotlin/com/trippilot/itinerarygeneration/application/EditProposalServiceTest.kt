@@ -1,6 +1,5 @@
 package com.trippilot.itinerarygeneration.application
 
-import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.itinerarygeneration.api.EditProposal
@@ -231,18 +230,17 @@ class EditProposalServiceTest : StringSpec({
         agent.inputs shouldBe emptyList()
     }
 
-    /** 저장 경로와 같은 잠금이다 — 안 막으면 LLM 을 쓰고 [적용]이 반드시 409 인 카드를 만든다. */
-    "여행 시작 전 확정 일정은 제안하지 않는다(409) — 여행이 시작되면 제안한다" {
+    /** 저장 경로와 같은 규칙이다 — 확정 잠금이 풀렸으니(TRIP-1710) 시작 전 확정 일정에도 제안한다. */
+    "확정 일정도 여행 시작 전후 모두 제안한다" {
         val confirmed = Itinerary.reconstitute(
             stored.itineraryId, tripId, ItineraryStatus.CONFIRMED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
             GenerationState.COMPLETE, stored.days, now, now, null, emptyList(), ScoringSignal.UNKNOWN,
         )
         val agent = Agent(replacing(a, fresh))
 
-        shouldThrow<ConflictDetected> { service(agent, repo = CountingRepo(confirmed)).propose(acc, tripId, d1, utter, 5_000) }
-        agent.inputs shouldBe emptyList()
+        service(agent, repo = CountingRepo(confirmed)).propose(acc, tripId, d1, utter, 5_000)
+            .shouldBeInstanceOf<EditProposal.Proposed>()
 
-        // 시작일 새벽 1시(KST) — UTC 로는 아직 전날이다. 여행지 시간대로 재지 않으면 이 시각에 잠긴다.
         val duringTrip = Clock.fixed(Instant.parse("2026-08-09T16:00:00Z"), ZoneOffset.UTC)
         service(agent, repo = CountingRepo(confirmed), at = duringTrip).propose(acc, tripId, d1, utter, 5_000)
             .shouldBeInstanceOf<EditProposal.Proposed>()

@@ -1,5 +1,7 @@
 import { isAxiosError } from 'axios';
 
+import { isRateLimited } from './isRateLimited';
+
 /**
  * 404 = "그 자원이 아직 없다". `isAlreadyRegistered`(409)와 같은 자리·같은 형태다 —
  * 승격의 값은 사용처 개수가 아니라 **판정이 한 군데에만 있다**는 것이다(README §승격 규칙).
@@ -17,12 +19,13 @@ export function isNotFound(error: unknown): boolean {
 }
 
 /**
- * TanStack `retry` 옵션 — 404 는 다시 물어도 답이 같으니 재시도하지 않고, 그 밖의 실패
- * (500·네트워크)는 라이브러리 기본과 같이 3회까지 다시 묻는다(TRIP-986 #063).
+ * TanStack `retry` 옵션 — 404 는 다시 물어도 답이 같으니 재시도하지 않고, 429(요청 한도)는 재시도가 한도를 더 태워
+ * 풀리는 시점만 늦추므로(TRIP-1677) 재시도하지 않는다. 그 밖의 실패(500·네트워크)는 라이브러리 기본과 같이 3회까지
+ * 다시 묻는다(TRIP-986 #063). 이름은 404 전용이던 때 그대로다(소비처 개명은 하지 않는다).
  */
 export function retryUnlessNotFound(
   failureCount: number,
   error: unknown
 ): boolean {
-  return failureCount < 3 && !isNotFound(error);
+  return failureCount < 3 && !isNotFound(error) && !isRateLimited(error);
 }

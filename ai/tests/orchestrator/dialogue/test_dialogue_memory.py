@@ -19,8 +19,8 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from trippilot.llm_gateway.workers.dialogue_intent import PROMPT_TURNS, history_lines, last_turns
-from trippilot.orchestrator.dialogue_memory import (
+from trippilot.llm_gateway.workers.dialogue.dialogue_intent import PROMPT_TURNS, history_lines, last_turns
+from trippilot.orchestrator.dialogue.dialogue_memory import (
     MEMORY_TTL_DAYS,
     SUMMARY_EVERY_TURNS,
     SUMMARY_MAX_LINES,

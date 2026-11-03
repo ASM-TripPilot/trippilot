@@ -2,6 +2,7 @@ import fc from 'fast-check';
 
 import type { TripPhase } from '@/entities/trip';
 import type { Trip, TripStatus } from '@/shared/api/index.schemas';
+import { NO_ITINERARY } from '@/test-support/tripItineraryCols';
 
 import { bucketTrips, phaseBucket, type TripBucket } from './tripBuckets';
 
@@ -60,6 +61,7 @@ function makeTrip(tripId: string, status: TripStatus): Trip {
     updatedAt: '2026-08-01T00:00:00.000Z',
     baseCount: 0,
     itineraryDayCount: 0,
+    ...NO_ITINERARY,
   };
 }
 

@@ -34,21 +34,22 @@ from trippilot.domain.llm.llm import CandidatePool
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.poi.region_centers import region_center
 from trippilot.domain.dialogue.trigger import TriggerKind
-from trippilot.llm_gateway.gates.dialogue_answer import _MAX_LENGTH, _violates
-from trippilot.llm_gateway.workers.dialogue_answer import (
+from trippilot.llm_gateway.gates.dialogue.dialogue_answer import _MAX_LENGTH, _violates
+from trippilot.llm_gateway.workers.dialogue.dialogue_answer import (
     EXPLORE_ASK_REGION_TEXT,
     NEED_TRIP_TEXT,
     REGION_ASK_TASTE_TEXT,
     fallback_answer_text,
 )
 from trippilot.poi_curation.adapters.pg_place_sql import PlaceRow
-from trippilot.orchestrator import dialogue_handlers as dh
+from trippilot.orchestrator.dialogue import dialogue_handlers as dh
 from trippilot.agents.planb.rag import _REASON_KO
-from trippilot.orchestrator.dialogue_handlers import (
+from trippilot.orchestrator.dialogue.dialogue_handlers import (
     _REASON_WORDS,
     _planb_reason,
     CANDIDATE_REASON,
     HANDLERS,
+    INTRO_WEB_TEXT,
     NEXT_ACTION_TYPES,
     AnswerKind,
     DayView,
@@ -371,6 +372,17 @@ def test_resolve_day_reads_a_weekday_only_when_the_trip_has_exactly_one() -> Non
     long_trip = _snapshot((), trip=replace(_TRIP, start_date=date(2026, 10, 18), end_date=date(2026, 10, 26)))
     assert resolve_day("일요일", long_trip, _D2) is None  # 10-18·10-25 — 어느 일요일인지 모른다
     assert resolve_day("수요일", long_trip, _D2) == date(2026, 10, 21)
+
+
+def test_resolve_day_reads_a_month_day_inside_a_year_crossing_trip() -> None:
+    """연도 없는 날은 여행 기간 안의 그 날짜가 먼저다 — 12-31 에 "1월 1일"을 올해(지난 1월 1일, 목요일)로 읽어 다른 요일의 영업시간을
+    말했다(리뷰 재현). 여행 밖 날짜는 종전처럼 올해, 두 자리 연도는 서기 2000년대다."""
+    new_year = _snapshot((), trip=replace(_TRIP, start_date=date(2026, 12, 30), end_date=date(2027, 1, 2)))
+    eve = date(2026, 12, 31)
+    assert resolve_day("1월 1일", new_year, eve) == resolve_day("1/1", new_year, eve) == date(2027, 1, 1)
+    assert resolve_day("12월 30일", new_year, eve) == date(2026, 12, 30)
+    assert resolve_day("3월 1일", new_year, eve) == date(2026, 3, 1)  # 여행 밖 — 넘겨짚지 않는다
+    assert resolve_day("26년 11월 3일", _SNAP, _D2) == date(2026, 11, 3)
 
 
 def _wd_slot(on: date, name: str, hhmm: str, category: str) -> SlotView:
@@ -838,18 +850,25 @@ def test_distance_to_a_registered_place_outside_the_itinerary_finds_it_by_exact_
     assert transit.calls[0]["destination"] == _COORD["천지연폭포"] and facts.detail["destination"] == "천지연폭포"
 
 
-@pytest.mark.parametrize("name", ["세종문화회관", "인천공항", "서울대공원"])
+@pytest.mark.parametrize("name", ["세종문화회관", "인천공항", "서울대공원", "서울역", "부산 역"])
 def test_a_place_name_containing_a_region_name_is_looked_up_not_taken_as_that_region(name: str) -> None:
-    """표 이름 뒤에 다른 낱말이 붙으면 지역이 아니다 — "세종문화회관"이 세종시 중심(124km 밖)이 되던 것(2026-10-30 Codex 리뷰)."""
+    """표 이름 뒤에 다른 낱말이 붙으면 지역이 아니다 — "세종문화회관"이 세종시 중심(124km 밖)이 되던 것(2026-10-30 Codex 리뷰).
+    시·군 이름의 역도 — "서울역→경복궁"이 서울 중심에서 재 약 1.2km(실제 직선 2.8km, 2026-11-02 개발). 동네 역은 위 강남역처럼 중심."""
     found = [PlaceRow(_U["천지연폭포"], name, "문화", "서울특별시", "종로구", False, False)]
     facts, transit, finder = _free_distance({"origin": "우도", "destination": name}, found)
     assert finder.calls == [("find", name, "제주")] and facts.detail["destination"] == name
     assert transit.calls[0]["destination"] == _COORD["천지연폭포"]
 
 
-def test_distance_with_an_unknown_end_stays_empty_and_never_calls_transit() -> None:
-    facts, transit, _ = _free_distance({"origin": "우도", "destination": "롯데월드"}, [])
+@pytest.mark.parametrize("arguments, side", [
+    ({"origin": "우도", "destination": "롯데월드"}, "목적지"),
+    ({"origin": "롯데월드", "destination": "우도"}, "출발지"),
+])
+def test_distance_with_an_unknown_end_stays_empty_and_never_calls_transit(arguments: dict, side: str) -> None:
+    facts, transit, _ = _free_distance(arguments, [])
     assert transit.calls == [] and facts.status is FactStatus.EMPTY
+    # 못 찾은 쪽만 밝힌다 — "서울역과 경복궁은 찾을 수 없어서"(경복궁은 찾았다, 2026-11-03 개발)
+    assert any(f"못 찾은 쪽은 {side}" in n for n in facts.notes)
 
 
 def test_leap_day_looks_at_next_year_when_this_year_has_none() -> None:
@@ -1359,6 +1378,39 @@ def test_poi_info_on_another_day_names_the_day() -> None:
     assert facts.payload["rows"][0] == {"label": "날짜", "value": "10월 18일"}
 
 
+class _ClosedPoiInfo(_PoiInfo):
+    """그 요일 휴무가 증명된 행 — `providers.poi_info.hours_label` 이 None 을 싣는다."""
+
+    def fetch(self, params: dict) -> InfoPacket:
+        packet = super().fetch(params)
+        pois = [{**p, "hours_label": None} for p in packet.data["pois"]]
+        return InfoPacket(packet.provider, packet.status, {**packet.data, "pois": pois}, packet.freshness)
+
+
+@pytest.mark.parametrize(("place", "when"), [("해녀의집", "오늘(10월 19일 월요일)이"), ("제주민속촌", "10월 20일 화요일이"),
+                                             ("성산", None)])  # 성산일출봉은 지난날(10-18) — 물을 일이 아니다
+def test_poi_info_closed_weekday_names_the_day_for_the_answer(place, when) -> None:
+    """"휴무일 수 있음" 행만 두면 답변 LLM 이 "운영 시간은 확인되지 않았어요"로 읽었다(2026-11-02 개발 haiku-5-5 창경궁 월요일
+    8/8) — 그날(오늘이면 오늘)이 등록 휴무 요일로 읽혔다는 노트를 싣는다. 단정하지 않는 행 문구는 그대로다."""
+    facts = _run(HANDLERS[Intent.GET_POI_INFO], _ctx(arguments={"place": place}, ports=HandlerPorts(poi_info=_ClosedPoiInfo())))
+    assert {r["label"]: r["value"] for r in facts.payload["rows"]}["영업시간"] == "휴무일 수 있음"
+    notes = [n for n in facts.notes if "휴무 요일" in n]
+    assert [when in n and ("오늘" in n) == when.startswith("오늘") for n in notes] == ([True] if when else [])
+
+
+def test_poi_info_closed_weekday_leaves_the_day_to_a_stored_web_closed_value() -> None:
+    """웹 휴무일 칸이 있으면 그쪽이 정확하다 — DB 파서는 '매월 둘째·넷째 월요일'을 매주로 넓혀 읽어, 노트가 "오늘 쉴 수 있다"로 밀면
+    첫째 월요일에 웹 칸과 엇갈렸다(리뷰 재현)."""
+    web = PlaceFacts(hours=None, last_entry=None, closed="매월 둘째·넷째 월요일", fee=None,
+                     source_url="https://example.org/haenyeo", source_host="example.org")
+    agent = _Unknown(FactRecord(_U["해녀의집"], web, _NOW, _NOW + timedelta(days=7), ("closed",)))
+    ctx = replace(_ctx(arguments={"place": "해녀의집"}, ports=HandlerPorts(poi_info=_ClosedPoiInfo(), unknown=agent)),
+                  utterance="해녀의집 쉬는 날 언제야?")
+    facts = _run(HANDLERS[Intent.GET_POI_INFO], ctx)
+    assert {r["label"]: r["value"] for r in facts.payload["rows"]}["휴무일"] == "매월 둘째·넷째 월요일"
+    assert not any("휴무 요일" in n for n in facts.notes)
+
+
 def test_next_slot_without_any_itinerary_offers_to_make_one() -> None:
     """일정 자체가 없는데 "남은 일정이 없어요"·[일정 보기]로 답하면 틀린다 — 사실이 비어 템플릿 직행이라(BR-AO-25) LLM 이
     고쳐 말해 주지도 않는다(셀프 리뷰). 만들기로 보낸다(BE QueryCards.noItinerary)."""
@@ -1519,6 +1571,21 @@ def test_poi_info_about_a_place_carries_a_kb5_intro_for_the_answer_only() -> Non
     assert "섬" not in str(facts.payload)  # 카드(payload)에는 싣지 않는다 — 위키 원문 출처 표기
 
 
+def test_poi_info_footnotes_an_intro_that_carries_web_facts_but_not_a_card_only_one(monkeypatch) -> None:
+    from trippilot.poi_curation import place_fallback
+
+    monkeypatch.setattr(place_fallback, "web_facts", lambda: {"ref-우도": ("땅콩 아이스크림을 판다",)})
+    web = replace(_ctx(arguments={"place": "우도", "aspect": "어떤 곳"},
+                       ports=HandlerPorts(poi_info=_RefPoiInfo(), place_intro=_Intro("우도는 제주 동쪽의 섬이다. 웹 확인: 땅콩 아이스크림을 판다.")),
+                       remaining_ms=3000), utterance="우도 어떤 곳이야?")
+    facts = _run(HANDLERS[Intent.GET_POI_INFO], web)
+    assert facts.footnote == INTRO_WEB_TEXT and any("웹 확인:" in n for n in facts.notes)
+    card_only, _ = _intro_run({"place": "우도", "aspect": "어떤 곳"}, "우도 어떤 곳이야?")  # 기본 소개 문장에는 웹 사실이 없다
+    assert card_only.footnote is None
+    monkeypatch.setenv(place_fallback.SWITCH, "off")  # 꺼져 있으면 대체 문서가 안 쓰인다
+    assert _run(HANDLERS[Intent.GET_POI_INFO], web).footnote is None
+
+
 def test_poi_info_hours_or_fee_question_does_not_fetch_an_intro() -> None:
     facts, intro = _intro_run({"place": "우도"}, "우도 몇 시까지 해?")
     assert intro.calls == [] and "intro" not in facts.detail
@@ -1555,7 +1622,7 @@ def test_explore_without_region_or_slots_uses_the_trip_destination() -> None:
 
 
 def test_explore_without_any_anchor_asks_for_a_region_without_calling_anything() -> None:
-    from trippilot.llm_gateway.workers.dialogue_answer import EXPLORE_ASK_REGION_TEXT
+    from trippilot.llm_gateway.workers.dialogue.dialogue_answer import EXPLORE_ASK_REGION_TEXT
 
     facts, builder = _explore({}, snapshot=_snapshot((), trip=None, status=None))
     assert builder.requests == [] and facts.template_text == EXPLORE_ASK_REGION_TEXT and not facts.needs_trip

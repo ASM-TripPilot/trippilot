@@ -83,6 +83,16 @@
 > **[개정 · 2026-10-23 — 사용자 지시]** BR-U3-28 — 위 개정(여행 전날 첫날 반영 예외)을 승인한 것으로 보고 지평 `pre-trip` 을 켠다. 사용자 원문 "꺼둔거 다 켜. 다 잘 돌아가게끔 만들란 말이야!!!"(다른 세션 경유).
 > → [situation-awareness BLM §0.4 2026-10-23 블록](../../situation-awareness/functional-design/business-logic-model.md)
 
+> **[개정 · 2026-11-02 — 사용자 결정 반영 · situation-awareness FD]** BR-U3-28 — 확정 잠금의 예외 범위가 '여행 전날 첫날'에서 '**시작 N일 전부터의 첫날**'(트리거 진입 ∧ `FULL_DAY` ∧ 사용자 [적용])로 넓어진다(사용자 지시 2026-10-30: 7일 — `PLANB_SITUATION_PRE_TRIP_DAYS`, 기본 1, 상한 7). 예외의 모양(알림 트리거로 들어온 첫날 하루 전체 · 사용자 [적용]만 · 확정 일정은 복원 불가)은 그대로이고 **창의 크기만** 바뀐다. 사용자가 직접 눌러 들어오는 여행 전 재계획은 예외에 들지 않는다.
+> → [BR-SA-20 · DEC-SA-7](../../situation-awareness/functional-design/business-rules.md) (2026-11-02 블록)
+
+> **[개정 · 2026-11-02 — 사용자 결정 반영 · TRIP-1710]** BR-U3-28 — **확정 잠금을 푼다.** 여행 시작 전에도 사용자가 `CONFIRMED` 일정을 직접 고칠 수 있다 — 편집 저장(`PUT /trips/{tripId}/itinerary`)·도우미 편집 제안·슬롯 후보가 시작 전 확정 일정을 더 이상 409 로 막지 않는다. 근거: 앱·웹은 허브 [수정] → [직접 수정]으로 들여보내는데 저장이 409 「확정된 일정은 수정할 수 없습니다」로 막히고 화면은 일반 실패 문구만 띄워 이유를 알 수 없는 막다른 길이었다(2026-11-02 웹 재QA, traceId `8f6253d5-2bf4-44c1-8a2d-16c7204db811`).
+> - **방식은 여행 중 편집(TRIP-999)과 같다** — 상태는 `CONFIRMED` 를 유지한다(BR-U3-29 역전은 여전히 채택 안 함). 확정 동결은 승계하고 새로 들어온 장소는 저장 시점에 동결한다(INV-U1-03). 변경 이력(BR-U4-30 MANUAL)은 여행 중 편집만이고 시작 전 편집은 리비전(DEC-U3-1)이 남긴다.
+> - **바뀌지 않는 것** — ① 범용 리비전 복원(`/itinerary/revisions/{revisionId}/restore`)은 확정 일정에서 계속 409 다. 이 잠금은 '여행 시작 전' 규칙이 아니라 상태 규칙이고(여행 중에도 409), 복원은 상태를 `PLANNED` 로 쓰고 동결을 잇지 않아 여는 것은 별도 설계다. ② 재계획(Plan-B) 진입 창과 여행 전 반영 가드(BR-SA-20)는 그대로다 — 이번 결정은 사용자 직접 수정만 연다. ③ 생성 중(`PARTIAL`) 편집 규칙(아직 없는 일자 409)과 소유 검사(404 은닉).
+> - 위 2026-10-19 · 10-23 · 11-02(situation-awareness) 블록의 '예외'는 이제 직접 수정에는 해당하지 않는다 — 재계획 경로의 창 규칙으로만 읽는다.
+> - BR-U3-30 의 '확정의 의미(최종본 잠금)' 문구는 화면(FE) 몫이라 이 개정에서 고치지 않았다 — 확정 화면 문구 정리는 후속이다.
+> → [INV-U3-04](domain-entities.md) TRIP-1710 블록 · [BR-SA-20](../../situation-awareness/functional-design/business-rules.md) · [DEC-SA-7](../../situation-awareness/functional-design/business-logic-model.md) TRIP-1710 블록
+
 ## 7. 편집 이력 (DEC-U3-1)
 
 | ID | 규칙 |

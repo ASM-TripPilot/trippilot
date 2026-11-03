@@ -25,7 +25,7 @@ from trippilot.domain.dialogue.plan_tools import (
     plan_tool_specs_json,
     validate_plan_tools,
 )
-from trippilot.orchestrator.dialogue_handlers import HandlerPorts
+from trippilot.orchestrator.dialogue.dialogue_handlers import HandlerPorts
 
 _INFO_HANDLERS = frozenset({
     Intent.SHOW_SCHEDULE, Intent.GET_NEXT_SLOT, Intent.GET_WEATHER, Intent.GET_DISTANCE, Intent.GET_POI_INFO,

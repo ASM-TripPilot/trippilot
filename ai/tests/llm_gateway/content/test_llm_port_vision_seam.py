@@ -157,7 +157,7 @@ def _facade(llm, gate=None):
 
     from tests.fakes.in_memory_trace import InMemoryTrace
 
-    from trippilot.llm_gateway.gates.photo_highlight import PhotoHighlightGate
+    from trippilot.llm_gateway.gates.content.photo_highlight import PhotoHighlightGate
 
     trace = InMemoryTrace()
     facade = GatewayFacade(
@@ -172,8 +172,8 @@ def _facade(llm, gate=None):
 
 def _vision_call_args():
     """게이트웨이 호출용 (vars, context) — 프롬프트 변수 누락으로 죽지 않게 실제 빌더 사용."""
-    from trippilot.llm_gateway.gates.photo_highlight import PhotoHighlightContext
-    from trippilot.llm_gateway.workers.photo_highlight import (
+    from trippilot.llm_gateway.gates.content.photo_highlight import PhotoHighlightContext
+    from trippilot.llm_gateway.workers.content.photo_highlight import (
         build_photo_highlight_vars,
     )
 

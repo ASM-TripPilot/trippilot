@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 from trippilot.agents.adapters.memory_memory_store import InMemoryDialogueMemoryStore
 from trippilot.api.app import create_app
 from trippilot.api.wiring import build_dev_app
-from trippilot.orchestrator.dialogue_memory import expires_at_for
+from trippilot.orchestrator.dialogue.dialogue_memory import expires_at_for
 from trippilot.ports.memory_store_port import DialogueMemory
 
 URL = "/ai/v1/dialogue/memory"

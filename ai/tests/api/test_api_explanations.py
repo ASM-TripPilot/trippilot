@@ -567,6 +567,174 @@ def test_explain_days_carries_request_context_into_pool_threads() -> None:
     assert all(name.startswith("explain-day") and value == "request-1" for name, value in seen)
 
 
+# ── ⑨ 차선책 문장도 날 묶음마다 나란히 (TRIP-1709) ──────────────────────
+#
+# ⑧ 과 같은 이유 — ALTERNATIVE_EXPLANATION 도 여행 전체 쌍을 한 번에 보내 개발 서버(claude-sonnet-5-5, 상한 4096)에서
+# 14회 중 2회가 잘렸고, 잘린 JSON 은 통째로 버려져 그 여행 차선책 문장이 0건이었다. 날로 나누면 한 날이 실패해도
+# 나머지 날 문장은 남고, 실패한 날은 템플릿 rationale 그대로다(백엔드).
+
+
+class AltDaySpy:
+    """차선책 날 묶음 대역 — `DaySpy` 와 같은 규칙. 받은 (슬롯, 선택지) 묶음·시한을 기록하고 `fail_on` 선택지가
+    든 묶음만 실패시킨다(폴백 또는 예외). `barrier`·`block_on`/`release` 도 `DaySpy` 와 같다."""
+
+    def __init__(self, *, fail_on: tuple[str, ...] = (), raises: bool = False,
+                 barrier: threading.Barrier | None = None,
+                 block_on: tuple[str, ...] = (), release: threading.Event | None = None) -> None:
+        self.chunks: list[tuple[tuple[str, str], ...]] = []
+        self.timeouts: list[float | None] = []
+        self.fail_on = frozenset(fail_on)
+        self.raises = raises
+        self.barrier = barrier
+        self.block_on = frozenset(block_on)
+        self.release = release
+
+    def explain(self, pool, pairs, persona, trace_id, now, *, timeout_sec=None):
+        chunk = tuple((str(s), str(a)) for s, a in pairs)
+        alts = {a for _, a in chunk}
+        self.chunks.append(chunk)
+        self.timeouts.append(timeout_sec)
+        if self.barrier is not None:
+            self.barrier.wait()
+        if self.release is not None and self.block_on & alts:
+            self.release.wait(10)
+        if self.fail_on & alts:
+            if self.raises:
+                raise RuntimeError("설정 버그 (fake)")
+            return TypedResult(value=None, is_fallback=True, error=_TRUNCATED, call_record=None)
+        return TypedResult(
+            value=tuple(PoiExplanation(poi_id=PoiId(a), text=f"{a} 대신 골라도 좋은 이유") for _, a in chunk),
+            is_fallback=False, error=None, call_record=None,
+        )
+
+
+def _install_alt(monkeypatch: pytest.MonkeyPatch, spy: AltDaySpy) -> AltDaySpy:
+    monkeypatch.setattr(wiring, "AlternativeExplanationWorker", lambda gateway: spy)
+    return spy
+
+
+class _Spent:
+    """읽을 때마다 7초가 흐르는 시계 — 배치 설명(첫 호출) 전후 차이가 7000ms 라 잔여 예산을 정확히 단언한다(⑦ `_Burning`)."""
+
+    def __init__(self) -> None:
+        self.t = 0
+
+    def monotonic_ms(self) -> int:
+        self.t += 7_000
+        return self.t
+
+
+def _alt_days_body(*days: dict[str, tuple[str, ...]], deadline_ms: int | None = None) -> dict:
+    """여러 날 payload — 날마다 {슬롯 POI: 그 슬롯의 차선책들}, 09시부터 한 시간씩."""
+    body = _explanations_body()
+    body["itinerary"]["days"] = [
+        {"date": d, "slots": [_slot(p, f"{9 + i:02d}:00:00", f"{10 + i:02d}:00:00", alts)
+                              for i, (p, alts) in enumerate(slots.items())]}
+        for d, slots in zip(_DAYS, days)
+    ]
+    if deadline_ms is not None:
+        body["request_meta"]["deadline_ms"] = deadline_ms
+    return body
+
+
+def _alt(day: int, poi: str) -> tuple[str, str]:
+    return _key(day, poi), f"{poi} 대신 골라도 좋은 이유"
+
+
+_THREE_DAYS = ({_A: (_B,)}, {_B: (_C,)}, {_C: (_D,)})  # 날마다 선택지 하나씩 — 시드가 4곳뿐이라 슬롯·선택지를 돌려 쓴다
+
+
+def test_alternative_explanations_multi_day_calls_each_day_in_parallel_and_merges(
+    spy: SpyExplainer, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 세 묶음이 동시에 들어와야 장벽을 넘는다 — 여행 전체 한 번(종전)이면 장벽이 5초 뒤 깨져 문장이 0건이다
+    alt = _install_alt(monkeypatch, AltDaySpy(barrier=threading.Barrier(3, timeout=5)))
+    monkeypatch.setattr(wiring, "MonotonicClock", _Spent)
+    out = _post(_alt_days_body(*_THREE_DAYS, deadline_ms=20_000))
+
+    assert sorted(alt.chunks) == sorted([((_A, _B),), ((_B, _C),), ((_C, _D),)])  # 날마다 한 번
+    # 묶음마다 같은 **잔여** 예산(20s − 첫 호출 7s) — 나란히 도니 시한은 합이 아니라 최댓값(DL-2)
+    assert alt.timeouts == [13.0] * 3
+    assert out["alternatives_reason"] is None
+    assert out["alternative_explanations"] == dict([_alt(0, _B), _alt(1, _C), _alt(2, _D)])
+    assert out["is_fallback"] is False and out["reason"] is None  # 배치 슬롯 설명은 영향 없음
+
+
+def test_alternative_explanations_single_day_is_one_call_with_same_input(
+    spy: SpyExplainer, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """하루짜리는 종전 그대로 — 호출 1회, 정본 밖 선택지는 빼고 일정 순서대로, 잔여 예산 전부."""
+    alt = _install_alt(monkeypatch, AltDaySpy())
+    monkeypatch.setattr(wiring, "MonotonicClock", _Spent)
+    ghost = "00000000-0000-4000-8000-999999999999"
+    out = _post(_alt_days_body({_A: (_C, ghost), _B: (_D,)}))
+
+    assert alt.chunks == [((_A, _C), (_B, _D))]
+    assert alt.timeouts == [(wiring.UNBOUNDED_DEADLINE_MS - 7_000) / 1000.0]  # deadline 미지정 = 무제한 대입값 − 첫 호출
+    assert out["alternatives_reason"] is None
+    assert out["alternative_explanations"] == dict([_alt(0, _C), _alt(0, _D)])
+
+
+@pytest.mark.parametrize(
+    ("raises", "why"),
+    [(False, f"alternative_explanation_fallback: {_TRUNCATED}"),
+     (True, "explain_error: RuntimeError: 설정 버그 (fake)")],
+    ids=["fallback", "exception"],
+)
+def test_alternative_explanations_one_day_failure_keeps_other_days_with_partial_reason(
+    spy: SpyExplainer, monkeypatch: pytest.MonkeyPatch, raises: bool, why: str,
+) -> None:
+    alt = _install_alt(monkeypatch, AltDaySpy(fail_on=(_C,), raises=raises))
+    out = _post(_alt_days_body(*_THREE_DAYS))
+
+    assert len(alt.chunks) == 3
+    # 전부 아니면 전무가 아니다 — 성공한 날 문장은 싣고 실패는 사유로 남긴다(INV-4)
+    assert out["alternative_explanations"] == dict([_alt(0, _B), _alt(2, _D)])
+    assert out["alternatives_reason"] == f"alternative_explanation_partial: 실패 1/3 — {why}"
+    assert out["is_fallback"] is False and out["reason"] is None  # 배치 슬롯 설명은 영향 없음
+
+
+def test_alternative_explanations_all_days_failing_is_empty_with_count(
+    spy: SpyExplainer, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    alt = _install_alt(monkeypatch, AltDaySpy(fail_on=(_B, _C, _D)))
+    out = _post(_alt_days_body(*_THREE_DAYS))
+
+    assert len(alt.chunks) == 3
+    assert out["alternative_explanations"] == {}
+    assert out["alternatives_reason"] == (
+        f"alternative_explanation_fallback: 실패 3/3 — alternative_explanation_fallback: {_TRUNCATED}")
+    assert set(out["explanations"]) == {_key(0, _A), _key(1, _B), _key(2, _C)}  # 배치 슬롯 설명은 영향 없음
+
+
+def test_alternative_explanations_same_alt_on_two_days_is_explained_once(
+    spy: SpyExplainer, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """같은 선택지는 처음 나온 날 묶음에서 한 번 — 문장은 선택지당 하나라 그 선택지가 있는 날 키마다 같은 문장(종전 그대로)."""
+    alt = _install_alt(monkeypatch, AltDaySpy())
+    out = _post(_alt_days_body({_A: (_C,)}, {_B: (_C, _D)}))
+
+    assert sorted(alt.chunks) == sorted([((_A, _C),), ((_B, _D),)])
+    assert out["alternative_explanations"] == dict([_alt(0, _C), _alt(1, _C), _alt(1, _D)])
+    assert out["alternatives_reason"] is None
+
+
+def test_alternative_explanations_day_past_deadline_counts_as_failed(
+    spy: SpyExplainer, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """잔여 예산 안에 못 끝난 날은 기다리지 않는다 — 실패로 세고 나머지 날 문장으로 응답한다(두 호출 합 ≤ deadline, DL-2)."""
+    release = threading.Event()
+    _install_alt(monkeypatch, AltDaySpy(block_on=(_C,), release=release))
+    monkeypatch.setattr(wiring, "MonotonicClock", _Spent)  # 잔여 = 9s − 7s = 2s(하한 explanation_min_ms 1.5s 위)
+    try:
+        out = _post(_alt_days_body(*_THREE_DAYS, deadline_ms=9_000))
+    finally:
+        release.set()  # 붙잡힌 풀 스레드를 놓아 준다
+
+    assert out["alternative_explanations"] == dict([_alt(0, _B), _alt(2, _D)])
+    assert out["alternatives_reason"] == "alternative_explanation_partial: 실패 1/3 — deadline:budget=2000ms"
+
+
 # ── ⑥ 미주입 앱 ─────────────────────────────────────────────────────
 
 

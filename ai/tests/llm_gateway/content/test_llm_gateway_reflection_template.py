@@ -28,7 +28,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.reflection_template import (
+from trippilot.llm_gateway.gates.content.reflection_template import (
     _CAPTION_MAX,
     _SCENE_MIN,
     _TIME_EXPR,
@@ -37,7 +37,7 @@ from trippilot.llm_gateway.gates.reflection_template import (
 )
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.reflection_template import (
+from trippilot.llm_gateway.workers.content.reflection_template import (
     ReflectionTemplateWorker,
     build_reflection_template_vars,
 )

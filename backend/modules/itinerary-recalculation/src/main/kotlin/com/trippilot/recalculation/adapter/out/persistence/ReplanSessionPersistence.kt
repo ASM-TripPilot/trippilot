@@ -212,6 +212,7 @@ internal fun ReplanDiff.SlotView.toJsonMap(): Map<String, Any> = buildMap {
     nameKo?.let { put("nameKo", it) }
     category?.let { put("category", it) }
     imageUrl?.let { put("imageUrl", it) }
+    imageLicense?.let { put("imageLicense", it) }
     lat?.let { put("lat", it) }
     lng?.let { put("lng", it) }
 }
@@ -227,6 +228,7 @@ internal fun Map<String, Any>.toSlotView() = ReplanDiff.SlotView(
     nameKo = get("nameKo") as? String,
     category = get("category") as? String,
     imageUrl = get("imageUrl") as? String,
+    imageLicense = get("imageLicense") as? String,
     lat = (get("lat") as? Number)?.toDouble(),
     lng = (get("lng") as? Number)?.toDouble(),
 )

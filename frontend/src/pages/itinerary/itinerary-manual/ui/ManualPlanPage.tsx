@@ -23,6 +23,7 @@ import { useSavedStays } from '@/features/trip';
 import { useTripBases } from '@/features/assign-trip-base';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import {
+  getGetTripsQueryKey,
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
   usePostTripsTripIdItinerary,
@@ -82,7 +83,17 @@ export function ManualPlanPage({
   const router = useRouter();
   const goItineraryTab = useItineraryTabBack();
   const queryClient = useQueryClient();
-  const generate = usePostTripsTripIdItinerary();
+  // TRIP-1677 — 목록 칸(일정 상태 네 칸)은 성공·실패 모두 다시 받는다(실패해도 서버가 이미 만들었을 수 있다). 훅 옵션 자리라
+  // 응답 전에 화면을 떠나도 불린다(`mutate(…, {onSuccess})` 호출별 콜백은 언마운트되면 불리지 않는다).
+  const generate = usePostTripsTripIdItinerary({
+    mutation: {
+      onSettled: (_data, _error, _vars, _onMutateResult, context) => {
+        void context.client.invalidateQueries({
+          queryKey: getGetTripsQueryKey(),
+        });
+      },
+    },
+  });
   const itinerary = useGetTripsTripIdItinerary(tripId);
   const save = usePutTripsTripIdItinerary<unknown>();
   // 캐시 쓰기·409 재조회는 공통 훅이 훅 옵션에 둔다 — 확정 대기 중 화면을 떠나도 불린다(traps-itinerary

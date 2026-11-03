@@ -54,7 +54,7 @@ from trippilot.domain.dialogue.intent import Intent  # noqa: E402
 from trippilot.domain.llm.llm import LlmFeature, ModelTier  # noqa: E402
 from trippilot.llm_gateway.config import C1Config  # noqa: E402
 from trippilot.llm_gateway.feature_model_env import ENV_VAR, feature_models_from_env  # noqa: E402
-from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate  # noqa: E402
+from trippilot.llm_gateway.gates.dialogue.paraphrase import ParaphraseGate  # noqa: E402
 from trippilot.llm_gateway.gateway import GatewayFacade  # noqa: E402
 from trippilot.llm_gateway.prompts import PromptRegistry  # noqa: E402
 

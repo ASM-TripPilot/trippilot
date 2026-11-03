@@ -37,9 +37,9 @@ from trippilot.api.wiring import build_dev_app
 from trippilot.domain.common import GeoPoint
 from trippilot.domain.llm.llm import LlmFeature
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.orchestrator.dialogue_orchestrator import TurnOutcome, capabilities_answer
-from trippilot.orchestrator.dialogue_interpreter import DialogueContext
-from trippilot.orchestrator.dialogue_memory import DialogueMemory, expires_at_for
+from trippilot.orchestrator.dialogue.dialogue_orchestrator import TurnOutcome, capabilities_answer
+from trippilot.orchestrator.dialogue.dialogue_interpreter import DialogueContext
+from trippilot.orchestrator.dialogue.dialogue_memory import DialogueMemory, expires_at_for
 
 URL = "/ai/v1/dialogue/interpret"
 _KST = timezone(timedelta(hours=9))

@@ -20,10 +20,10 @@ from trippilot.domain.llm.llm import CandidatePool, LlmFeature, ModelTier, PoiEx
 from trippilot.domain.persona import CompanionType, PersonaSummary, TasteTag
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.explanation import ExplanationGate
+from trippilot.llm_gateway.gates.replan.explanation import ExplanationGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.alternative_explanation import (
+from trippilot.llm_gateway.workers.replan.alternative_explanation import (
     AlternativeExplanationWorker,
     build_alternative_explanation_vars,
 )

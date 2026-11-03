@@ -585,7 +585,7 @@ def test_방문_수는_남은_시간과_상한으로_정한다() -> None:
 from dataclasses import replace as _replace
 from datetime import time as _time
 
-from trippilot.llm_gateway.gates.replan_request_extraction import ExtractedPlace, ExtractedRequest
+from trippilot.llm_gateway.gates.replan.replan_request_extraction import ExtractedPlace, ExtractedRequest
 
 from tests.agents.planb.test_replan_nl_request import _StubExtractor
 from tests.fakes.fake_existence import FakeExistence

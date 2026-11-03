@@ -71,8 +71,8 @@ from trippilot.domain.itinerary.itinerary import (
 )
 from trippilot.domain.llm.llm import CandidatePool
 from trippilot.domain.poi.poi import Poi
-from trippilot.llm_gateway.gates.edit_translation import is_anchor_param_key
-from trippilot.llm_gateway.workers.edit_translation import (
+from trippilot.llm_gateway.gates.content.edit_translation import is_anchor_param_key
+from trippilot.llm_gateway.workers.content.edit_translation import (
     EditTranslationInput,
     EditTranslationWorker,
 )

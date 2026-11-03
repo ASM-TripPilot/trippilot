@@ -315,9 +315,63 @@ def test_env_anthropic_provider_assembles(monkeypatch):
     assert calls == {"api_key": "k-test", "max_retries": 0}  # 재시도 무익 정책 (TRIP-381)
 
 
+def test_env_anthropic_keys_are_merged_in_order_and_deduped(monkeypatch):
+    """단일 키 → 번호 칸(_2…) → 쉼표 목록 순으로 합치고, 같은 값은 한 번만 — 키마다 client 하나."""
+    import sys
+    import types
+
+    keys: list[str] = []
+
+    class _FakeAnthropicClient:
+        def __init__(self, **kwargs):
+            keys.append(kwargs["api_key"])
+
+    fake_sdk = types.ModuleType("anthropic")
+    fake_sdk.Anthropic = _FakeAnthropicClient
+    fake_sdk.DefaultHttpxClient = lambda **kwargs: kwargs["transport"]
+    monkeypatch.setitem(sys.modules, "anthropic", fake_sdk)
+    monkeypatch.setenv("TRIPPILOT_LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "k-a")
+    monkeypatch.setenv("ANTHROPIC_API_KEY_2", "k-b")
+    monkeypatch.setenv("ANTHROPIC_API_KEY_3", "k-a")  # 중복 — 한 번만
+    monkeypatch.setenv("ANTHROPIC_API_KEYS", " k-c ,k-b,")
+
+    import main as main_mod
+    llm, _ = main_mod._anthropic_llm_and_model()
+
+    assert keys == ["k-a", "k-b", "k-c"]
+    assert len(llm._clients) == 3
+
+
+def test_env_anthropic_single_key_stays_a_single_client(monkeypatch):
+    import sys
+    import types
+
+    class _FakeAnthropicClient:
+        def __init__(self, **kwargs):
+            pass
+
+    fake_sdk = types.ModuleType("anthropic")
+    fake_sdk.Anthropic = _FakeAnthropicClient
+    fake_sdk.DefaultHttpxClient = lambda **kwargs: kwargs["transport"]
+    monkeypatch.setitem(sys.modules, "anthropic", fake_sdk)
+    monkeypatch.setenv("TRIPPILOT_LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "k-only")
+    for n in range(2, 10):
+        monkeypatch.delenv(f"ANTHROPIC_API_KEY_{n}", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEYS", raising=False)
+
+    import main as main_mod
+    llm, _ = main_mod._anthropic_llm_and_model()
+    assert len(llm._clients) == 1
+
+
 def test_env_anthropic_without_key_fails_fast(monkeypatch):
     monkeypatch.setenv("TRIPPILOT_LLM_PROVIDER", "anthropic")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEYS", raising=False)
+    for n in range(2, 10):
+        monkeypatch.delenv(f"ANTHROPIC_API_KEY_{n}", raising=False)
 
     import main as main_mod
     import pytest as _pytest

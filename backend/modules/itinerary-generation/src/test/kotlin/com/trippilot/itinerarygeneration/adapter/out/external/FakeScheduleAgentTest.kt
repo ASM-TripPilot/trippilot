@@ -136,6 +136,7 @@ class FakeScheduleAgentTest : StringSpec({
                 preferenceProfile = PreferenceProfile(emptyList(), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null),
                 currentSlots = emptyList(), savedPlaces = emptyList(),
                 rejections = emptyList(),
+                transportMode = null,
                 requestMeta = RequestMeta("r", lateClock.instant(), 10_000),
             ),
         )
@@ -164,6 +165,7 @@ class FakeScheduleAgentTest : StringSpec({
                 preferenceProfile = PreferenceProfile(emptyList(), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null),
                 currentSlots = emptyList(), savedPlaces = emptyList(),
                 rejections = emptyList(),
+                transportMode = null,
                 requestMeta = RequestMeta("r", noonClock.instant(), 10_000),
             ),
         )

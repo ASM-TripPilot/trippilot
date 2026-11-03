@@ -60,6 +60,9 @@ interface ReplanFacade {
  *   나머지 잠금(시각 고정 슬롯 · 시각상 끝난 슬롯)은 **C8 이 스스로 계산한다** — 슬롯 시각·고정 여부가 여기 있고,
  *   그 값을 계약에 실어 내보내면 잠금 규칙이 두 모듈에 흩어진다.
  * @property fullDay 오늘 전체를 다시 짜는가(false = 지금 이후만). ai `ReplanScope` 두 값에 대응한다.
+ * @property skippedPoiIds 대상 일자에 **건너뛴** 곳(실적 — C10 이 안다). [excludedPoiIds] 에도 이미 들어 있다.
+ *   따로 받는 이유는 잠금 하나다: C8 은 시각 고정 슬롯을 잠그는데, 건너뛴 곳까지 잠그면 AI 가 고정 블록으로 되살려
+ *   제외를 빠져나간다(TRIP-1711). 앱·트리거가 보낸 제외는 종전대로 고정이 이긴다 — 그래서 합집합으로는 못 가른다.
  */
 @Suppress("LongParameterList")
 data class ReplanCommand(
@@ -75,6 +78,7 @@ data class ReplanCommand(
     val directives: List<String>,
     val freeText: String?,
     val excludedPoiIds: List<UUID>,
+    val skippedPoiIds: List<UUID>,
 )
 
 /**

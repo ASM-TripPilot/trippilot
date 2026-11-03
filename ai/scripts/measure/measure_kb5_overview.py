@@ -6,6 +6,8 @@ r"""KB-5 관광공사 개요 효과 측정 — '다른 후보'(`/planb/alternati
     … measure_kb5_overview.py ab wiki full [반복=2]          # 위키만 vs 위키+개요
     … measure_kb5_overview.py ab full <변형> [반복=2]          # 개선 변형 비교(아래 `VARIANTS`)
     … measure_kb5_overview.py ab full fallback [반복=2]      # 진짜 문서만 vs 대체 문서 추가 — `place_fallback` 켜기 조건
+    EVAL_TARGET=food EVAL_CITIES="서울 광화문,제주시청" … ab full fallback 4   # 식사 칸 — 명소 칸은 위키·개요가 이미 붙어 대체 문서가
+    #   거의 안 더해진다(서울 +1·부산 +7·제주 +3, 나머지 0 — `coverage` 로 본다). 식사 칸은 서울·제주가 0 → 40곳이다
     (Claude 로 재려면 EVAL_SELECT_MODEL·EVAL_JUDGE_MODEL 에 claude-* 를 주고 ANTHROPIC_API_KEY 를 넘긴다)
 
 **상황**은 백엔드가 실제로 부르는 꼴이다 — 트리거 `MANUAL` 고정·사용자 말 없음·사유는 FE 키(날씨·피로·휴무·교체), 바꿀
@@ -29,6 +31,14 @@ r"""KB-5 관광공사 개요 효과 측정 — '다른 후보'(`/planb/alternati
     나빠졌다** — 근거를 쓰라 하자 설명에 없는 말이 섞였다(휴무 1:9).
   · `cap60`(설명 상한 40 → 60, 상한이 걸리는 서울·경주만 `EVAL_CITIES`) 9:19 / 32 — 늘어나는 설명이 평균 6곳뿐이고 이득 없음.
     지연 p50 3.8 → 4.0s · 입력 8.7k → 9.7k 토큰.
+
+**2026-11-02 실측 — 대체 문서 `ab full fallback 4`** (선택 claude-opus-5-5 · 판정 claude-sonnet-5-5 · 로컬 임베딩):
+- 식사 칸(`EVAL_TARGET=food`, 서울 광화문·제주시청 — 진짜 문서 0곳, 대체 문서 40곳): **대체 문서 32 · 진짜만 0 · 같음 0 / 32**
+  (판정 실패 0). 지연 p50 3.3 → 3.6s · 입력 4.2k → 7.7k 토큰. 문서 없는 쪽은 자료에 없는 말(설렁탕·아이 동반)을 지어냈다.
+- 명소 칸(부산·제주·서울, 대체 문서가 +7·+3·+1곳): 15 : 8 : 1 / 24 — 입력이 거의 같은 서울도 6:2 로 갈려 이 차이는 잡음 범위다.
+  선택 실패는 두 팔 모두 0.
+- 판정이 Claude 일 때 `max_tokens=400` 이면 사고가 상한을 먹어 본문이 비었다(1차 실행 32판 전부 '파싱 실패' → 전부 '같음').
+  effort low + 2000 으로 고쳤고 파싱 실패는 `judge_fail` 로 따로 센다 — 0 이 아니면 승패로 읽지 말 것.
 """
 
 from __future__ import annotations
@@ -63,8 +73,8 @@ from trippilot.domain.llm.llm import CandidatePool, LlmFeature  # noqa: E402
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory  # noqa: E402
 from trippilot.domain.dialogue.trigger import TriggerKind, TriggerParams  # noqa: E402
 from trippilot.poi_curation.pool_builder import restrict_pool_to_target_role  # noqa: E402
-from trippilot.llm_gateway.gates.alternative_selection import AlternativeSelectionGate  # noqa: E402
-from trippilot.llm_gateway.workers.alternative_selection import (  # noqa: E402
+from trippilot.llm_gateway.gates.replan.alternative_selection import AlternativeSelectionGate  # noqa: E402
+from trippilot.llm_gateway.workers.replan.alternative_selection import (  # noqa: E402
     AlternativeSelectionInput, AlternativeSelectionWorker,
 )
 from trippilot.poi_curation.chunking import chunk_corpus, load_chunk_vectors, vectors_path  # noqa: E402
@@ -81,6 +91,9 @@ ANCHORS = {  # 관광공사 개요가 모인 대표 관광지 둘레
 }
 REASONS = ("weather", "fatigue", "closed", "none")
 _SIGHTS = {PoiCategory.SIGHT, PoiCategory.CULTURE, PoiCategory.NATURE}
+# `EVAL_TARGET` — 바꿀 칸의 종류. sight(기본: 명소 칸 — 후보 대부분에 위키·개요가 이미 있다) · food(식사 칸: 풀이 식당 후보만으로
+#   좁혀지고 진짜 문서가 거의 없어, 대체 문서가 가장 많이 더해지는 자리다)
+_TARGET_CATS = {"sight": _SIGHTS, "food": {PoiCategory.FOOD}}[os.environ.get("EVAL_TARGET", "sight")]
 _CORPORA = {"wiki": ("place_corpus_wiki.jsonl.gz",),
             "full": ("place_corpus_wiki.jsonl.gz", "place_corpus_overview.jsonl.gz")}
 # 개선 변형 — 장소 설명을 고르는 질의(KB-5 조각 선택)·프롬프트 디렉토리를 바꾼다. 측정이 끝나면 이긴 것만 코드로 옮긴다.
@@ -139,7 +152,7 @@ def _cases(pois: list[Poi]) -> list[dict]:
     cases = []
     for city, anchor in ANCHORS.items():
         near = [p for p in pois if haversine_km(anchor, p.coord) <= 10.0]  # 대중교통 반경(BE 는 transport_mode null)
-        target = min((p for p in near if p.category in _SIGHTS), key=lambda p: haversine_km(anchor, p.coord))
+        target = min((p for p in near if p.category in _TARGET_CATS), key=lambda p: haversine_km(anchor, p.coord))
         full = CandidatePool(poi_ids=frozenset(p.poi_id for p in near), pois=tuple(near),
                              generated_at=_NOW, anchor=anchor, radius_km=10.0)
         # 운영 배선과 같다(`wiring.alternatives`) — 대상 칸의 역할로 좁히고(명소 칸이면 같은 분류 먼저), 대상은 제외로만 뺀다
@@ -239,7 +252,9 @@ def _judge(client, case: dict, a: list[tuple[Poi, str]], b: list[tuple[Poi, str]
         '답은 JSON 한 줄: {"winner": "A" 또는 "B" 또는 "같음", "why": "한 문장"}'
     )
     if JUDGE.startswith("claude"):
-        out = client.messages.create(model=JUDGE, max_tokens=400, messages=[{"role": "user", "content": prompt}])
+        # opus·sonnet 5.5 는 사고를 끌 수 없다 — effort low + 넉넉한 상한(운영 어댑터와 같은 값). 400 으로 두면 사고가 상한을 먹어 본문이 비었다
+        out = client.messages.create(model=JUDGE, max_tokens=2000, output_config={"effort": "low"},
+                                     messages=[{"role": "user", "content": prompt}])
         text = "".join(b.text for b in out.content if getattr(b, "type", None) == "text").strip()
     else:
         out = client.chat.completions.create(model=JUDGE, messages=[{"role": "user", "content": prompt}])
@@ -247,7 +262,7 @@ def _judge(client, case: dict, a: list[tuple[Poi, str]], b: list[tuple[Poi, str]
     try:
         got = json.loads(text[text.index("{"): text.rindex("}") + 1])
     except ValueError:
-        got = {"winner": "같음", "why": f"판정 파싱 실패: {text[:80]}"}
+        got = {"winner": "같음", "why": f"판정 파싱 실패: {text[:80]}", "fail": True}
     return got
 
 
@@ -259,8 +274,9 @@ def run_coverage() -> None:
         shortlist = rag._shortlist(_request(case), ())
         q = rag._situation_query(_request(case))
         w, f = (kn.fetch(shortlist.pois, q, c) for c in ("wiki", "full"))
+        fb = kn.fetch(shortlist.pois, q, "full", fallback=True)
         print(f"{case['name']:<16} 풀 {len(case['pool'].pois):>5} · 숏리스트 {len(shortlist.pois)} · "
-              f"설명 붙음 위키 {len(w):>2} → 위키+개요 {len(f):>2}")
+              f"설명 붙음 위키 {len(w):>2} → 위키+개요 {len(f):>2} → +대체 {len(fb):>2}(대체 {fb.fallback})")
 
 
 def run_ab(left: str, right: str, repeat: int) -> None:
@@ -295,7 +311,7 @@ def run_ab(left: str, right: str, repeat: int) -> None:
         verdict = _judge(judge_client, case, res[a]["picks"], res[b]["picks"], kn)
         w = verdict.get("winner", "같음")
         winner = a if w == "A" else b if w == "B" else "="
-        return dict(name=case["name"], winner=winner, why=verdict.get("why", ""), res=res,
+        return dict(name=case["name"], winner=winner, why=verdict.get("why", ""), res=res, fail=bool(verdict.get("fail")),
                     docs={n: len(case["knowledge"][n]) for n in (left, right)},
                     fallback={n: getattr(case["knowledge"][n], "fallback", 0) for n in (left, right)})
 
@@ -310,6 +326,7 @@ def run_ab(left: str, right: str, repeat: int) -> None:
     tally = {left: sum(r["winner"] == left for r in rows), right: sum(r["winner"] == right for r in rows),
              "=": sum(r["winner"] == "=" for r in rows)}
     print(json.dumps(dict(model=MODEL, judge=JUDGE, n=n, win={k: f"{v}/{n}" for k, v in tally.items()},
+                          judge_fail=sum(r["fail"] for r in rows),  # 0 이 아니면 '같음' 에 파싱 실패가 섞였다 — 승패로 읽지 말 것
                           docs_mean={x: round(sum(r["docs"][x] for r in rows) / n, 1) for x in (left, right)},
                           fallback_mean={x: round(sum(r["fallback"][x] for r in rows) / n, 1) for x in (left, right)},
                           errors={x: sum(1 for r in rows if r["res"][x]["err"]) for x in (left, right)},
@@ -321,7 +338,8 @@ def run_ab(left: str, right: str, repeat: int) -> None:
         mark = {left: "<", right: ">", "=": "="}[r["winner"]]
         print(f" {mark} {r['name']:<16} docs {r['docs'][left]}/{r['docs'][right]} — {r['why']}")
         for x in (left, right):
-            print(f"     {x}: " + " / ".join(f"{p.name}: {why}" for p, why in r["res"][x]["picks"]))
+            print(f"     {x}: " + " / ".join(f"{p.name}: {why}" for p, why in r["res"][x]["picks"])
+                  + (f"  [선택 실패: {r['res'][x]['err']}]" if r["res"][x]["err"] else ""))
 
 
 if __name__ == "__main__":

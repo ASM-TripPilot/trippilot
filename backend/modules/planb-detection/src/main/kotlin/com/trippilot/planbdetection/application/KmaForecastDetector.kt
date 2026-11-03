@@ -52,6 +52,12 @@ class KmaForecastDetector(private val forecasts: HourlyForecastFacade) : Situati
 
     override val kind: TriggerKind = TriggerKind.WEATHER
 
+    /**
+     * 오늘·내일만 — 어댑터가 시간별은 오늘·내일(자정을 넘긴 슬롯 몫으로 모레 0시)만 읽는다. 그 밖의 날짜는 예보 자체가 없어
+     * '모름'이 회차마다 쌓이므로(여행 전 창이 넓을 때), 모름이 아니라 부르지 않는다.
+     */
+    override fun wants(phase: SweepPhase, dayOffset: Int): Boolean = dayOffset <= 1
+
     /** 회차 범위 기억 — 회차 키([SweepTarget.round])가 바뀌면 버린다(저장 없음). */
     private val memo = AtomicReference(RoundMemo(Instant.EPOCH))
 

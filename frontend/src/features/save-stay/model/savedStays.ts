@@ -7,7 +7,7 @@ import {
   getGetSavedStaysQueryKey,
   postSavedStays,
   useGetSavedStays,
-} from '@/shared/api/index.hooks';
+} from '@/shared/api/index.saved-stays';
 import type { SavedStay } from '@/shared/api/index.schemas';
 
 import {

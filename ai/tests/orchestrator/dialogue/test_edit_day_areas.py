@@ -10,8 +10,8 @@ from datetime import date, time, timedelta
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from trippilot.orchestrator.dialogue_handlers import DayView, SlotView, TripInfo, TurnSnapshot
-from trippilot.orchestrator.edit_day_areas import MAX_LABEL, check_day_areas
+from trippilot.orchestrator.dialogue.dialogue_handlers import DayView, SlotView, TripInfo, TurnSnapshot
+from trippilot.orchestrator.dialogue.edit_day_areas import MAX_LABEL, check_day_areas
 
 D1, D2 = date(2026, 10, 24), date(2026, 10, 25)
 BEFORE = date(2026, 10, 22)

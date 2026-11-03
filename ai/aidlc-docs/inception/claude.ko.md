@@ -1,5 +1,7 @@
 # inception — INCEPTION Phase 산출물
 
+> **AI 아키텍처 정본은 [`ai/ARCHITECTURE.md`](../../ARCHITECTURE.md) 하나다 (2026-11-02).** 이 폴더의 개요·구조 문서는 이력이고, 아래의 "정본"·"최신" 표시는 그 이전 기준이다. 어긋나면 ARCHITECTURE.md(와 코드)가 이긴다.
+
 > English version: ./claude.md
 
 INCEPTION Phase에서 생성된 모든 문서가 여기 있습니다.

@@ -22,6 +22,8 @@ paths:
 
 - **`ExploreLandingScreen`을 렌더하는 node-버킷 테스트는 `useGetPlaces`도 목해야 크래시 안 남** → `ExploreLandingPage`(`pages/explore/explore-landing`)가 가볼 곳 레인용으로 `useGetPlaces()`(react-query)를 문다. `QueryClientProvider` 없는 node 버킷에서 이 page(또는 그것을 꽂은 라우트 래퍼)를 렌더하는 새 테스트 파일은 지역 카탈로그의 `useRegions` 함정(위 절)과 동형으로 이 목이 필요하다는 걸 기계가 강제하지 않는다. 지역 필터 갈래(`region` 파라미터)는 인기 숙소 컨트롤러 `useCuratedStaysController`(`widgets/curated-stays`, react-query 셋)도 물어 같은 이유로 목이 필요하다(TRIP-1580 — `ExploreLandingPage.test.tsx`는 숨김 값으로 목한다).
 
+- **홈·탐색 전국 레인만 10분 신선 시간을 쓰고, d04(`PlaceExplorePage`)·기록 방문추가(`RecordAddVisitPage`)가 그 옵션을 새로 받지 않는다는 것을 지키는 심판이 없다**(TRIP-1713) → 훅 기본값(30초)은 `regions.integration.test.tsx` HK2 가 잠그지만, 호출부가 `{ staleTime: PLACE_LANE_STALE_TIME }` 를 넘기도록 바뀌어도 화면 테스트는 전부 green 이다(뮤테이션 M11·M12 실측). 레인 옵션을 다른 호출부로 퍼뜨리기 전에 `grep -rn "useMultiRegionPlaces(" src` 로 호출부 4곳(HomePage·ExploreLandingPage 만 옵션을 넘긴다)을 직접 본다.
+
 ## 하트 글리프 정본
 
 - **하트 저장 글리프(Outline·Filled) 정본은 `shared/ui/HeartGlyphs.tsx`다** — place·stay 검색 카드가 공유한다. 옛 경로(`entities/place/ui/PlaceGlyphs`·`features/explore/ui/ExploreGlyphs`의 동명 함수)는 삭제됐다. 새 하트 소비처가 feature 로컬 글리프에 하트를 다시 그리면 조용히 두 벌로 되돌아간다(`traps-glyphs.md`의 `LocationOffGlyph` 세 벌과 동형, 실측 2건) — raw-hex·fill 스캔은 `*Glyphs.tsx` 제외 관례라 기계가 못 잡는다.
@@ -38,3 +40,4 @@ paths:
 
 - **d06 상세는 `GET /places/{poiId}` 단건이다(TRIP-1372) — 캐시 전용이 아니다.** 404(없음·UNVERIFIED)만 notFound, 그 밖의 실패는 오류 얼굴(`explore-place-error`·`-retry`)이다. 단건은 CLOSED·LOST 도 주므로 `dataStatus` 배지(`explore-place-status-badge`)를 화면이 그린다 — `SAVED_PLACE_BADGE`(d02)와 같은 문구표가 두 군데 따로 있다. `imageUrls`·`admissionFee`·`description` 은 서버에 아직 없어 그리지 않는다(TRIP-824 잔여).
 - **d06 하트 해제(un-save) 경로에 회귀 심판이 없다** → `PlaceDetailPage.tsx`의 `remove(poiId)` 분기(이미 담긴 하트 press)를 누르는 통합테스트가 0이라(목 서버에 DELETE 핸들러는 있다), `remove` 인자를 잘못 바꾸거나 조건을 반전해도 green. 코드는 현재 옳다(`remove(poiId)`가 내부에서 `findSavedPlaceId`로 역인덱스, d02와 같은 함수).
+- **앱 복귀 때 다시 받지 않을 키는 `src/app/entrypoint/queryClient.ts` 의 비공개 거부 목록(`NO_FOCUS_REFETCH`)에 한 줄씩 직접 넣어야 한다**(TRIP-1714) → 목록 밖 키는 기본 `true` 라 새 탐색 카탈로그 쿼리를 추가해도 복귀 때마다 조용히 1건씩 더 나가고, 이를 알려 주는 테스트는 없다(`AppProviders.test` 는 손으로 적은 키 진리표, 통합 하네스는 5탭 기본 경로만 부른다). 지금 빠진 줄: 탐색 인기 숙소 `/stays/curated`(지역 필터를 바꾼 키마다 복귀 1건 — 03b W1, 거부 여부는 사용자 재결정 대기). 정책은 **키 단위**라 탭 밖 화면(숙소 검색·장소 무한 목록)이 같은 키를 읽어도 함께 꺼진다.

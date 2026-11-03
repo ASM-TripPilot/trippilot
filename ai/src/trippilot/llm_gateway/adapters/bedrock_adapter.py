@@ -42,6 +42,25 @@ from trippilot.ports.llm_port import (
     LlmUnsupportedError,
 )
 
+# ## 쉬는 동안 끊긴 재사용 연결 — 즉시 한 번만 다시 보낸다 (2026-11-02)
+#
+# 리마인드는 몇 분~몇 시간 간격의 배치라, 배치 사이에 서버가 keep-alive 연결을 닫는다. botocore 연결 풀은 그걸 모르고 다음
+# 배치 **첫 요청**을 그 연결로 보내 "Connection was closed before we received a valid response"(ConnectionClosedError)로
+# 1~2ms 만에 실패한다 — 실측 3일 운영 46건·개발 10건, 전부 배치 첫 항목. 그 항목은 기본 상수 문구로 떨어지고, 같은 배치의
+# 나머지는 문구를 받으므로 백엔드 재채움(문구가 하나도 없을 때만, TRIP-974)도 돌지 않는다 → 매 배치 첫 알림이 조용히 상수.
+# 재시도는 꺼 두었지만(09-29 504 — 재시도 4회가 예산을 먹었다) 이건 **서버까지 안 간** 실패라 새 연결로 한 번만 다시 보낸다.
+# 늦게 실패한 것(요청이 서버에 닿았을 수 있는 것)은 다시 보내지 않는다 — 예산을 두 번 쓰지 않게.
+# 같은 꼴로 끊긴 TLS 가 `SSLError: UNEXPECTED_EOF_WHILE_READING` 으로 1건 났다(운영) — 같이 받는다.
+_STALE_CONNECTION_ERRORS = ("ConnectionClosedError", "SSLError")
+_STALE_RETRY_WITHIN_MS = 500
+
+
+def _stale_connection(error: Exception, elapsed_ms: float) -> bool:
+    name = type(error).__name__
+    if name not in _STALE_CONNECTION_ERRORS or elapsed_ms >= _STALE_RETRY_WITHIN_MS:
+        return False
+    return name != "SSLError" or "EOF" in str(error)
+
 
 class BedrockAdapter:
     """LlmPort Protocol 만족. `client` 는 boto3 `bedrock-runtime` 호환."""
@@ -89,14 +108,24 @@ class BedrockAdapter:
             }
         )
 
-        started = time.monotonic()
-        try:
-            response = self._client_for(request.timeout_sec).invoke_model(
+        client = self._client_for(request.timeout_sec)
+
+        def call():
+            return client.invoke_model(
                 modelId=self._model_arn,
                 body=body,
                 accept="application/json",
                 contentType="application/json",
             )
+
+        started = time.monotonic()
+        try:
+            try:
+                response = call()
+            except Exception as e:  # noqa: BLE001 — 끊긴 재사용 연결만 골라 한 번 더(위 註)
+                if not _stale_connection(e, (time.monotonic() - started) * 1000):
+                    raise
+                response = call()
         except Exception as e:  # noqa: BLE001 — 벤더 예외 계층을 여기서 좁힌다
             # botocore 는 타임아웃을 ReadTimeoutError·ConnectTimeoutError 로 낸다.
             # 이름으로 판정한다 — botocore 를 import 하면 벤더 격리가 깨진다.

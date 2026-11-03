@@ -26,8 +26,8 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.intent import IntentGate
-from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
+from trippilot.llm_gateway.gates.dialogue.intent import IntentGate
+from trippilot.llm_gateway.gates.dialogue.paraphrase import ParaphraseGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.domain.common import TraceId
@@ -40,12 +40,12 @@ from trippilot.domain.dialogue.intent import (
     RoutingMode,
 )
 from trippilot.domain.llm.llm import LlmFeature, ModelTier
-from trippilot.orchestrator.intent_router import (
+from trippilot.orchestrator.intent.intent_router import (
     IntentRouter,
     IntentRouterConfig,
     normalize,
 )
-from trippilot.orchestrator.question_bank import (
+from trippilot.orchestrator.intent.question_bank import (
     BANK_COLLECTION,
     BankLoadError,
     UnreviewedBankError,

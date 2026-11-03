@@ -195,7 +195,9 @@ beforeEach(() => {
     http.post(`${BASE}/trips/:tripId/replan-sessions/:sessionId/apply`, () => {
       applyPosts += 1;
       return HttpResponse.json(replanSession('APPLIED'));
-    })
+    }),
+    // TRIP-1677 — 적용 성공이 여행 목록을 무효화한다. 이 스택엔 목록 관찰자가 없어 요청이 안 나가지만, 나가도 미처리 오류가 되지 않게 둔다.
+    http.get(`${BASE}/trips`, () => HttpResponse.json([]))
   );
 });
 

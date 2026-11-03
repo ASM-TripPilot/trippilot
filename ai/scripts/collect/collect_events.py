@@ -30,10 +30,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "smoke"))  # smoke_llm(scripts/smoke) import
 
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.event_extraction import EventExtractionGate
+from trippilot.llm_gateway.gates.content.event_extraction import EventExtractionGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.event_extraction import EventExtractionWorker
+from trippilot.llm_gateway.workers.content.event_extraction import EventExtractionWorker
 from trippilot.background.event_store import JsonEventStore
 from trippilot.background.naver_search import (
     CallBudgetExceeded,

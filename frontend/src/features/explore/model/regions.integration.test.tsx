@@ -7,13 +7,17 @@ import { server } from '@/mocks/server';
 import { BASE } from '@/test-support/apiBase';
 import { createGate } from '@/test-support/mswHookHarness';
 import {
+  createClockSkew,
   createGcZeroWrapper,
   createWrapper,
   newTestQueryClient,
+  settle,
 } from '@/test-support/queryRender';
 import { clearAccessToken } from '@/shared/api/tokenManager';
 import * as placesApi from '@/shared/api/generated/places/places';
 import type { Place } from '@/shared/api/index.schemas';
+
+import { PLACE_LANE_STALE_TIME } from '@/features/explore';
 
 import { useRegions } from './regions';
 import { useMultiRegionPlaces } from './useMultiRegionPlaces';
@@ -345,4 +349,73 @@ describe('useMultiRegionPlaces · 키가 바뀌면 이전 요청을 끊는다 (T
       'ab-서울',
     ]);
   });
+});
+
+/**
+ * TRIP-1713 · `useMultiRegionPlaces` 캐시 정책 — 레인(홈·탐색 전국)만 10분, 나머지 호출부는 전역 30초 그대로.
+ *
+ * 무엇을 보장하나: ① 레인이 쓰는 상수 `PLACE_LANE_STALE_TIME` 이 10분으로 공개돼 있다, ② staleTime 옵션을 안 넘기는 호출 —
+ * d04(`{seed}`)·기록 방문추가(`{q}`) 모양 — 은 30초가 지나면 다시 마운트할 때 다시 받는다(범위 밖 불변, D2).
+ * 레인이 그 옵션을 실제로 넘기는지는 화면 통합 테스트(HomePage·ExploreLandingPage)가 잠근다.
+ * 개념: staleTime 은 "받은 데이터를 신선하다고 보는 시간"이다. 시계는 `Date.now` 만 감는다(02a ★3).
+ */
+describe('useMultiRegionPlaces · 캐시 정책 (TRIP-1713)', () => {
+  const REGIONS = ['서울', '부산'];
+  let placeHits = 0;
+  let clock: ReturnType<typeof createClockSkew>;
+
+  beforeAll(() => {
+    server.events.on('request:start', ({ request }) => {
+      if (new URL(request.url).pathname === '/api/v1/places') placeHits += 1;
+    });
+  });
+  beforeEach(() => {
+    placeHits = 0;
+    clock = createClockSkew();
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: [], nextCursor: null })
+      )
+    );
+  });
+  afterEach(() => clock.restore());
+
+  it('HK1 PLACE_LANE_STALE_TIME 은 10분이다', () => {
+    expect(PLACE_LANE_STALE_TIME).toBe(10 * 60_000);
+  });
+
+  it.each([
+    ['d04 (seed)', { seed: 'seed-1' }],
+    ['기록 방문추가 (q)', { q: '해변' }],
+  ])(
+    'HK2 (선제 green) staleTime 옵션 없는 호출 — %s — 은 29초엔 그대로고 31초가 지나면 다시 마운트할 때 다시 받는다',
+    async (_label, filters) => {
+      // 준비 — 전역 30초(앱과 같음)·캐시 유지 클라이언트로 한 번 받아 둔다.
+      const client = newTestQueryClient({ staleTime: 30_000 });
+      const wrapper = createWrapper(client);
+      const mountOnce = async () => {
+        const { unmount } = renderHook(
+          () => useMultiRegionPlaces(REGIONS, filters),
+          { wrapper }
+        );
+        await settle();
+        unmount();
+      };
+      await mountOnce();
+      expect(placeHits).toBe(REGIONS.length);
+
+      // 실행·단언 ① — 29초 뒤: 아직 신선하다(앵커).
+      placeHits = 0;
+      clock.advance(29_000);
+      await mountOnce();
+      expect(placeHits).toBe(0);
+
+      // 실행·단언 ② — 총 31초: 낡았다 → 지역 수만큼 다시 받는다.
+      clock.advance(2000);
+      await mountOnce();
+      expect(placeHits).toBe(REGIONS.length);
+
+      client.clear();
+    }
+  );
 });

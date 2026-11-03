@@ -9,7 +9,13 @@ import {
 } from '@testing-library/react-native';
 import { BASE } from '@/test-support/apiBase';
 import { createGate } from '@/test-support/mswHookHarness';
-import { createGcZeroWrapper } from '@/test-support/queryRender';
+import {
+  createClockSkew,
+  createGcZeroWrapper,
+  createWrapper,
+  newTestQueryClient,
+  settle,
+} from '@/test-support/queryRender';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -616,6 +622,102 @@ describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
       WAIT
     );
     expect(screen.queryByTestId('explore-lane-place-empty')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1713 · 탐색 전국 장소 레인 캐시 정책 — 레인 8장을 고르려고 받는 `GET /places` 3건을 10분 동안 재사용한다.
+ *
+ * 무엇을 보장하나: 전국 탐색을 다시 열었을 때(지역 필터 ✕ 로 돌아오거나, 홈이 받아 둔 같은 캐시 위에 처음 열 때) ① 30초는 넘고
+ * 10분은 안 넘었으면 다시 받지 않고 카드 8장을 캐시로 그린다, ② 10분을 넘기면 다시 받는다(무한 캐시 아님).
+ * 개념: **재마운트** = 화면을 닫았다가 같은 캐시 저장소로 다시 여는 것. 새로 붙는 화면의 staleTime(신선 유지 시간)이 "다시 받을지"를
+ * 정한다 — 홈에서 먼저 받았든 탐색 자신이 받았든 새 관찰자 쪽 옵션이 심판이라 탐색 자신의 재마운트로 잠근다(02a ★1).
+ * 전역 기본 30초는 앱과 같게 클라이언트에 심는다(02a ★2). 시계는 `Date.now` 만 감는다(02a ★3).
+ */
+describe('TRIP-1713 · 탐색 전국 장소 레인 캐시 정책', () => {
+  const MIN = 60_000;
+  const PLACES_GET = 'GET /api/v1/places';
+  // 카드 루트만 센다(사진 testID `explore-place-card-image-…` 제외).
+  const LANE_CARDS = /^explore-place-card-(?!image-)/;
+  let clock: ReturnType<typeof createClockSkew>;
+
+  beforeEach(() => {
+    clock = createClockSkew();
+    mockUseStaySearch.mockReturnValue(stayResults([]));
+    server.use(
+      http.get(`${BASE}/saved-places`, () => HttpResponse.json([])),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
+      // 서비스 지역 3곳 × 3곳 = 9곳 — 레인은 8장만 그린다.
+      http.get(`${BASE}/places`, ({ request }) => {
+        const region = new URL(request.url).searchParams.get('region') ?? '';
+        const items: Place[] = [0, 1, 2].map((i) => ({
+          poiId: `${region}-${i}`,
+          nameKo: `${region}-${i}`,
+          category: '명소',
+          lat: 37.5,
+          lng: 127.0,
+          region: null,
+          regionCode: '11110',
+          openingHours: null,
+          imageUrl: null,
+          tags: [],
+          savedCount: 0,
+          dataStatus: 'ACTIVE',
+        }));
+        return HttpResponse.json({ items, nextCursor: null });
+      })
+    );
+  });
+  afterEach(() => clock.restore());
+
+  async function openAndClose(client: ReturnType<typeof newTestQueryClient>) {
+    const view = render(<ExploreLandingPage />, {
+      wrapper: createWrapper(client),
+    });
+    await waitFor(
+      () => expect(screen.getAllByTestId(LANE_CARDS)).toHaveLength(8),
+      WAIT
+    );
+    await settle();
+    view.unmount();
+  }
+  async function reopen(client: ReturnType<typeof newTestQueryClient>) {
+    observedHits = [];
+    render(<ExploreLandingPage />, { wrapper: createWrapper(client) });
+    await waitFor(
+      () => expect(screen.getAllByTestId(LANE_CARDS)).toHaveLength(8),
+      WAIT
+    );
+    await settle();
+  }
+  // AppProviders.tsx 의 전역 staleTime 30초와 같다.
+  const newClient = () => newTestQueryClient({ staleTime: 30_000 });
+
+  it('EC1 30초는 넘고 10분 안에 전국 탐색을 다시 열면 GET /places 를 다시 받지 않고 카드 8장을 캐시로 그린다', async () => {
+    // 준비 — 처음 열어 3지역을 받아 둔다(앵커: 3건).
+    const client = newClient();
+    await openAndClose(client);
+    expect(hitCount(PLACES_GET)).toBe(3);
+
+    // 실행 — 5분 뒤 다시 연다.
+    clock.advance(5 * MIN);
+    await reopen(client);
+
+    // 단언 — 새 요청 0건, 카드 8장은 그대로(reopen 이 8장을 기다렸다).
+    expect(hitCount(PLACES_GET)).toBe(0);
+  });
+
+  it('EC2 (선제 green) 10분을 넘기고 다시 열면 3지역을 다시 받는다 — 무한 캐시가 아니다', async () => {
+    // 준비
+    const client = newClient();
+    await openAndClose(client);
+
+    // 실행
+    clock.advance(10 * MIN + 1000);
+    await reopen(client);
+
+    // 단언
+    expect(hitCount(PLACES_GET)).toBe(3);
   });
 });
 

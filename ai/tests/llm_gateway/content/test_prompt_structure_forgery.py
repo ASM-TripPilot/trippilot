@@ -35,11 +35,11 @@ from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.llm.llm import CandidatePool
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.llm_gateway.prompts import inline
-from trippilot.llm_gateway.workers.alternative_selection import (
+from trippilot.llm_gateway.workers.replan.alternative_selection import (
     AlternativeSelectionInput,
     build_alternative_selection_vars,
 )
-from trippilot.llm_gateway.workers.event_extraction import build_event_extraction_vars
+from trippilot.llm_gateway.workers.content.event_extraction import build_event_extraction_vars
 
 _WORKERS = Path(__file__).resolve().parents[3] / "src/trippilot/llm_gateway/workers"
 

@@ -40,7 +40,7 @@ from trippilot.domain.common import PoiId, TransportMode
 from trippilot.domain.edit import EditCommand, EditOp
 from trippilot.domain.itinerary.itinerary import DaySolution, ItinerarySolution, TimeWindow, VisitSlot
 from trippilot.domain.llm.llm import CandidatePool
-from trippilot.llm_gateway.gates.edit_translation import (
+from trippilot.llm_gateway.gates.content.edit_translation import (
     is_anchor_param_key,
     is_time_param_key,
 )

@@ -23,7 +23,7 @@ from trippilot.api.wiring import build_dev_app, demo_poi_seed
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.llm.llm import CandidatePool
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
-from trippilot.llm_gateway.workers.replan_composition import ComposeDayInput, build_compose_vars
+from trippilot.llm_gateway.workers.replan.replan_composition import ComposeDayInput, build_compose_vars
 from trippilot.poi_curation.place_docs import make_doc
 
 _DOC = "제주 흑돼지거리는 흑돼지 구이집들이 모인 골목이다."

@@ -2,11 +2,13 @@
 paths:
   - "src/features/reflection/**"
 ---
-# `src/features/reflection/` — j03 오늘의 회고 · j04 여행 요약 · j05 여행 스타일 · j06 공유 카드 (model·글리프)
+# `src/features/reflection/` — j03 오늘의 회고 · j04 여행 요약 · j05 여행 스타일 · j06 공유 카드 (model·글리프·매거진 연출 부품)
 
 화면 계약은 backend openapi `Reflection`(`ai/docs/openapi.json`의 `/ai/v1/reflection/generate`와는 무관). load-bearing 계약은 두 축 — **"어떤 응답이 와도 빈 화면을 안 그린다"(폴백 3단, PBT-U5-F1)** 와 **"표시본 결정을 한 곳에서만 한다"(AC-8)**. 판정은 순수 함수 단일 출처, 화면은 무상태 프레젠테이션.
 
-**화면 뷰는 여기 없다** — j03·j04·j05·j06 Screen과 그 전용 부품(+`styleThreshold`)은 TRIP-1153으로 각 page 슬라이스(`pages/{daily-reflection,trip-summary,share-card,travel-style}`)로 이사했다(`layer-pages.md`). 여기 남은 것은 page와 Screen이 함께 쓰거나 두 page 이상이 쓰는 model, page 하나만 쓰지만 Screen 전용이 아니라 이번에 옮기지 않은 model(`useDailyReflection`·`useStyleAnalysis`·`reflectionFallback`·`statsCard`·`editCard` — TRIP-1155 재평가 몫), 그리고 `ReflectionGlyphs`다. TRIP-1155로 그 5개(+`missingParts`)는 `pages/record/daily-reflection`·`pages/record/travel-style`로, 캡처 어댑터(`shareCapture`·`shareCaptureNative`)는 `features/share-trip-card`로 이사했다.
+**화면 뷰(Screen)는 여기 없다** — j03·j04·j05·j06 Screen과 그 전용 부품(+`styleThreshold`)은 TRIP-1153으로 각 page 슬라이스(`pages/{daily-reflection,trip-summary,share-card,travel-style}`)로 이사했다(`layer-pages.md`). 여기 남은 것은 page와 Screen이 함께 쓰거나 두 page 이상이 쓰는 model, page 하나만 쓰지만 Screen 전용이 아니라 이번에 옮기지 않은 model(`useDailyReflection`·`useStyleAnalysis`·`reflectionFallback`·`statsCard`·`editCard` — TRIP-1155 재평가 몫), 그리고 `ReflectionGlyphs`다. TRIP-1155로 그 5개(+`missingParts`)는 `pages/record/daily-reflection`·`pages/record/travel-style`로, 캡처 어댑터(`shareCapture`·`shareCaptureNative`)는 `features/share-trip-card`로 이사했다.
+
+**예외 — 매거진 연출 부품(TRIP-1665)**: `ui/ReflectionMagazine`·`ui/MagazineParts`·`ui/MagazineMotion`은 j03 전용 Screen이 아니라 j04(TRIP-1666)·j06(TRIP-1667)이 재사용할 무상태 부품이라 여기 둔다(`index.view`로 나가 프리뷰도 네트워크 없이 읽는다). ⚠️ `index.ts`가 `index.view`를 `export *` 하므로 **`@/features/reflection`을 import하는 모든 화면**(j01·j04·j05·j06·프리뷰)이 쓰든 안 쓰든 매거진 모듈(reanimated 포함)을 함께 로드한다 — 번들 크기 영향은 미측정(03c R2, CI `bundle-report` 몫).
 
 **경계**: 다른 `features/*`(특히 `record`)를 import할 수 없다 — eslint 층 zone이 막는다.
 
@@ -15,6 +17,12 @@ paths:
 | 파일 | 역할 |
 |---|---|
 | `ui/ReflectionGlyphs.tsx` | 공용 SVG(뒤로·위치없음·사진없음·빈원·다시시도·기분 3종) — j03·j04·j05·j06 Screen이 각자 다른 page로 흩어져 여기 남았다 |
+| `model/categoryPalette.ts` | (TRIP-1665) 카드 팔레트 표. `CATEGORY_PALETTES`(11키 = 한글 카테고리 8 + `PLAN_B`·`SKIPPED`·`STATS`, 값 `bg`·`fg`·`accent`) · `paletteKeyForCategory`(한글 10종 + 영문 코드 8종 → 키, 미술→문화·술집→야경, 모르는 값·null·`'toString'`·사건 키는 중립 `STATS` — `Map` 조회라 프로토타입 이름에 안전) · `MAGAZINE_TONES`(종이·잉크·형광펜·사진 위 글자 — 카테고리 무관 고정색). 글자색은 바탕과 대비 ≥ 4.5 로 골랐다(액티비티 `#1E90FF` 위 흰 글자는 3.24 라 `#0A1A2E`, 테스트가 계산). **VM 은 hex 가 아니라 `PaletteKey` 만 들고 다니고 뷰가 이 표에서 색을 찾는다.** ⚠️ 영문 코드 8종 표는 `src/features/itinerary/model/draftView.ts` 의 비공개 표와 같은 값의 복제다(형제 feature 라 import 불가) — 카테고리 코드가 늘면 둘 다 고친다(기계 강제 없음) |
+| `model/reflectionPayload.ts` | (TRIP-1665, `pages/record/daily-reflection/model/reflectionScenes.ts` 에서 `git mv` 후 확장) `parseReflectionPayload(payload) → {cover, hashtags, scenes}` — 깨진 JSON·null·타입 오류에도 던지지 않고 빈 결과(PBT). 해시태그는 trim·앞 `#` 전부 제거·중복 제거, 장면은 `sourceEvent`(PLAN_B·SKIPPED)를 읽는다. TEXT·모르는 layout 은 버리지 않고 `sceneKind`(`PHOTO`·`STATS`·`MAP`·`EVENT`·`TEXT`·`UNKNOWN`)만 붙인다(INV-4). `devicePhotoUri` = 그날·그 장소의 이 기기 사진(표지·장면 공통 규칙). 서버는 `payload` 를 `cover` 밖에선 해석하지 않는 불투명 JSON 문자열로 취급하므로 장면 파싱은 클라 몫이다. ⚠️ `slotUri` 는 매거진 이후 프로덕션 소비처가 0 인 고아 export 다(옛 단언이 아직 부른다 — 03b N3, 지우려면 그 단언을 `devicePhotoUri` 로 옮겨야 한다) |
+| `model/magazineVM.ts` | (TRIP-1665) `buildMagazineVM(input) → MagazineVM` 순수 함수 — 매거진의 규칙(동선·표지 색·장면 분류·사진 선택·숫자 타일)이 전부 여기 산다. 서버 API 는 `import type` 만(값으로 물면 프리뷰 지뢰 `devPreviewReleaseGate` red). 동선: 건너뜀 제외·도착 시각순·이름은 슬롯→즉석→`N번째 장소`(지어내지 않음, BR-U5-31), `slots===undefined` 는 "아직 모름"이라 `route=null`(동선 박스만 안 그림). 표지 색: PLAN_B 띠 → 방문 카테고리 최빈(동률은 먼저 간 곳) → 중립. 장면: TEXT 는 카드에서 빼고, EVENT+PLAN_B/SKIPPED 는 띠, 나머지(모르는 layout 포함)는 번호 카드(`01`.., 사진 좌우 번갈아). `splitHighlight`(마지막 쉼표 뒤 구가 형광펜). ⚠️ **표지 사진 자리(`cover.picture`)가 `null` 이 아니면 기기 사진이 없어도 `PlacePhoto` 가 카테고리 "그림"을 깐다** — 티켓은 "없으면 카테고리 색"이라 어긋난다(TRIP-1665 D1, TRIP-1666 에서 고칠 예정). jest 는 색·생김새 단언 금지(README 판정 4)라 못 잡고 실기 스모크가 잡았다. ⚠️ 일정이 늦게 오면 표지·장면 카드가 중립색·이름 없음으로 먼저 그려졌다가 도착 후 카테고리 색으로 바뀐다 — 의도이고 VM 테스트가 굳혔지만 화면에서 전이는 6-b 미확인 |
+| `ui/ReflectionMagazine.tsx` | (TRIP-1665) 조립 — props `vm`·`testIDPrefix`(필수, j04·j06 이 재사용해도 testID 가 안 섞인다)·`onEditNarrative?`(있을 때만 인용문 옆 `수정`). 표지는 바로 그리고, 인용문 → 장면 → 띠 → 동선 → 숫자 → 해시태그를 `RevealItem` 순번(150ms 간격, 첫 300ms)으로 등장시킨다(동선 박스는 가만히 있고 정류장이 한 곳씩). ⚠️ 풀폭 종이색 바탕이라 `-mx-lg` 로 **부모의 좌우 `px-lg` 패딩을 되받는다** — 패딩 없는 부모에 얹으면 화면 밖으로 삐져나간다. ⚠️ 뷰가 VM 의 `route`·`scenes` 순서를 뒤집어도 통합이 green 이다(03b W1 — 순서는 VM 단위가 지키고 화면 순서는 6-b 육안 몫) |
+| `ui/MagazineParts.tsx` | (TRIP-1665) 표지·인용문·장면 카드·일정 변경 띠·동선·숫자 타일·해시태그 — 조회·계산 0 인 무상태 뷰. 색은 VM 키 → `CATEGORY_PALETTES` → `style`(동적 hex 는 className 이 못 받는다), 숫자는 `shared/ui/CountUpText`. 표지 스티커는 두 줄 `<Text>`(`오늘의`/`회고`)다 — 한 줄이면 헤더 `하루 회고` 와 글자가 겹쳐 `getByText('하루 회고')` 가 깨진다. 규칙 카드(TEXT 장면)는 장면 카드 없이 동선 박스만 그린다 |
+| `ui/MagazineMotion.tsx` | (TRIP-1665) `KenBurns`(1.02→1.14, 10초)·`StickerPop`·`Highlight`(900ms 타이머로 중첩 `<Text>` 배경색을 켬, 페이드 없음). 셋 다 `useReduceMotion()` 3상태 — true=끝 모습 정지, null=답 오기 전 시작 전(번쩍임 방지), false=마운트 시 1회. worklet(`useAnimatedStyle` 콜백) 안에서 모듈 상수·기본 매개변수를 쓰지 않는다(UI 스레드 사망). ⚠️ 재생·3상태·"끝 모습"(켄번스 1.14 배 정지 = 사진이 약간 크롭)은 jest 사각이다 — 통합은 동작 줄이기 `true` 만 본다(03b N1), `docs/feature-map/reflection.md` `rf-magazine-motion` + 실기 몫 |
 
 ## j04 여행 요약
 

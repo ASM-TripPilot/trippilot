@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 
 import type { Trip } from '@/shared/api/index.schemas';
+import { NO_ITINERARY } from '@/test-support/tripItineraryCols';
 
 import { formatDday, resolveHomePhase } from './homePhase';
 
@@ -49,6 +50,7 @@ function trip(overrides: Partial<Trip>): Trip {
     updatedAt: '2026-01-01T00:00:00.000Z',
     baseCount: 0,
     itineraryDayCount: 0,
+    ...NO_ITINERARY,
     ...overrides,
   };
 }

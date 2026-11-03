@@ -1,7 +1,7 @@
 # TripPilot AI 헌법
 
 > 이 문서는 spec-kit(`/speckit-*`)과 서브에이전트가 매 단계 읽는 **규칙 요약본**이다.
-> 정본은 리포에 있다 — 충돌하면 `README.md`·`aidlc-docs/`·루트 `CLAUDE.md`·
+> 정본은 리포에 있다 — 충돌하면 `ARCHITECTURE.md`(AI 구조 단일 정본, 2026-11-02)·`aidlc-docs/`·루트 `CLAUDE.md`·
 > `docs/conventions/anti-patterns.md` 가 이긴다. 여기엔 "무엇을 어기면 재설계인가"만 적는다.
 
 ## Core Principles
@@ -13,7 +13,7 @@
 - **INV-4** AI 실패 시 결정론 폴백. 조용한 실패(silent except·FallbackEvent 없는 폴백) 금지.
 
 ### II. 정본 먼저, 코드로 확인
-- 착수 전 읽는 순서: 유닛 FD(`aidlc-docs/construction/<유닛>/functional-design/`) → inception 설계 → `README.md`. 둘이 다르면 construction FD 가 최신.
+- 착수 전 읽는 순서: `ARCHITECTURE.md`(구조) → 유닛 FD(`aidlc-docs/construction/<유닛>/functional-design/`, 규칙·세부) → 그 기능의 `specs/`. inception 설계·README 구조 절은 이력이다. 코드가 늘 이긴다.
 - 와이어 정본은 `docs/openapi.json` — 손으로 고치지 않고 `scripts/export_openapi.py` 로 재생성.
 - 사실 확인은 언제나 코드다. 문서·노트·기억은 배경이다. 부재 주장("없다")은 `origin/develop` 기준으로 확인한 뒤에만.
 

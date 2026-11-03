@@ -47,13 +47,13 @@ from trippilot.domain.common import TraceId
 from trippilot.domain.dialogue.intent import Intent, MatchRoute
 from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.llm_gateway.config import C1Config
-from trippilot.llm_gateway.gates.intent import IntentGate
-from trippilot.llm_gateway.gates.paraphrase import ParaphraseGate
+from trippilot.llm_gateway.gates.dialogue.intent import IntentGate
+from trippilot.llm_gateway.gates.dialogue.paraphrase import ParaphraseGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.orchestrator.intent_eval import Sample, score
-from trippilot.orchestrator.intent_router import IntentRouter, IntentRouterConfig
-from trippilot.orchestrator.question_bank import index_bank, load_bank_file
+from trippilot.orchestrator.intent.intent_eval import Sample, score
+from trippilot.orchestrator.intent.intent_router import IntentRouter, IntentRouterConfig
+from trippilot.orchestrator.intent.question_bank import index_bank, load_bank_file
 
 _AI_ROOT = Path(__file__).resolve().parents[3]
 _FIXTURES = _AI_ROOT / "tests" / "fixtures" / "intent_gate"

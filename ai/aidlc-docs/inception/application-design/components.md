@@ -1,5 +1,7 @@
 # Application Design — Components
 
+> **대체됨 (2026-11-02)** — AI 아키텍처 개요는 [`ai/ARCHITECTURE.md`](../../../ARCHITECTURE.md) 한 곳으로 합쳤다. 이 문서는 이력·세부 참고용이며, 어긋나면 ARCHITECTURE.md(와 코드)가 이긴다.
+
 > TripPilot Python AI 서비스의 내부 컴포넌트 분해.
 > 각 컴포넌트의 책임, 내부 모듈 구성, 협력 관계를 정의한다.
 

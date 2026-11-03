@@ -8,14 +8,25 @@ import { usePermissionCatchUp } from '@/app/model/usePermissionCatchUp';
 import { usePushRouting } from '@/app/model/usePushRouting';
 import { useBootstrapGate } from '@/features/auth';
 import { SplashScreen } from '@/features/auth';
+import { flushMarks, mark } from '@/shared/lib/startupMarks';
 import { registerPushIfGranted } from '@/shared/push';
 
 import { BOOT_MODULE_LOADED_AT } from './bootClock';
 
-/** 스플래시 최소 노출 하한(ms). 정본 근거 없는 발명값 — 비행 모션 1.3초(SPLASH_FLIGHT_MS)가 끝까지 보이게 맞춘다(TRIP-1383). 실기 체감으로 조정. */
+/**
+ * 스플래시 최소 노출 하한(ms). 정본 근거 없는 발명값 — 비행 모션 1.3초(SPLASH_FLIGHT_MS)가 끝까지 보이게 맞춘다(TRIP-1383).
+ * TRIP-1720 실측(Release 시뮬·dev-api·10회, `pnpm bench:startup` — 실기기 절대값은 다르다): 부트스트랩은 JS 진입 후 p50 488ms
+ * (p90 570)에 끝나고 하한이 그 뒤 p50 882ms(p90 978)를 더 붙잡는다 — 콜드스타트 합계를 정하는 값이 이것이다. 브랜드 노출 판단으로
+ * 1300 유지 결정(사용자, 2026-11-03). 줄이면 비행 모션도 같이 줄여야 하고(M-52), 가려져 있던 prefetch·inlineRequires 차이가 드러난다.
+ */
 export const SPLASH_MIN_VISIBLE_MS = 1300;
 
-/** HOME 진입 뒤 푸시 토큰 재등록까지 미루는 시간(ms) — exp.host 외부 호출이 홈 첫 요청들과 경쟁하지 않게 한다(TRIP-1362). */
+/**
+ * HOME 진입 뒤 푸시 토큰 재등록까지 미루는 시간(ms) — exp.host 외부 호출이 홈 첫 요청들과 경쟁하지 않게 한다(TRIP-1362).
+ * TRIP-1720 실측: 등록 출발이 첫 프레임 뒤 p50 1562ms(최소 1467) — 홈 여행 데이터(첫 프레임과 같은 커밋)와는 겹치지 않는다.
+ * 홈의 나머지 첫 요청이 끝나는 시각은 재지 않았다. 줄여도 사용자에게 보이는 이득이 없어(백그라운드 등록) 유지.
+ * 실제 네트워크는 OS 알림 권한이 GRANTED 일 때만 나간다(registerPushIfGranted).
+ */
 export const PUSH_REGISTER_DELAY_MS = 2500;
 
 /**
@@ -53,14 +64,29 @@ const NO_SWIPE_ROUTES: ReadonlySet<string> = new Set([
  * 토큰으로 즉시 resolve 돼도 첫 화면이 한 프레임은 보이고, 그 뒤의 목적지 교정은 지연시키지 않는다.
  */
 export function SplashGate() {
-  const { phase, destination } = useBootstrapGate();
+  const { phase, destination, isProvisional } = useBootstrapGate();
   const [floorElapsed, setFloorElapsed] = useState(false);
+
+  // 시작 마크(TRIP-1717) — effect·타이머 콜백에서만 찍는다(렌더 본문 금지). effect 는 선언 순서로 돌아 P3 가 P4 보다 앞서야 한다.
+  useEffect(() => {
+    mark('rootMounted');
+  }, []);
+
+  useEffect(() => {
+    if (phase === 'loading') return;
+    mark('bootstrapResolved', { destination, isProvisional });
+    // 첫 확정 순간만 남는다 — destination 교정 같은 이후 변화는 mark 가 첫 기록 우선이라 무시된다.
+    // deps 억제 주석을 쓰지 않는다: 있으면 React Compiler 가 이 컴포넌트 최적화를 조용히 건너뛴다(03b W1).
+  }, [phase, destination, isProvisional]);
 
   useEffect(() => {
     // 이미 흐른 시간만큼 덜어 낸다. 시계가 뒤로 가도(음수 경과) 하한을 넘겨 기다리지 않게 SPLASH_MIN_VISIBLE_MS 로 막는다.
     const elapsed = Date.now() - BOOT_MODULE_LOADED_AT;
     const timer = setTimeout(
-      () => setFloorElapsed(true),
+      () => {
+        mark('floorElapsed');
+        setFloorElapsed(true);
+      },
       Math.min(
         SPLASH_MIN_VISIBLE_MS,
         Math.max(0, SPLASH_MIN_VISIBLE_MS - elapsed)
@@ -77,6 +103,9 @@ export function SplashGate() {
     let task: { cancel: () => void } | null = null;
     const timer = setTimeout(() => {
       task = InteractionManager.runAfterInteractions(() => {
+        // 시작 마크(TRIP-1720) — 지연 등록이 실제로 출발한 순간. 첫 화면 요청과 겹치는지 재는 점이다.
+        mark('pushRegister');
+        flushMarks();
         void registerPushIfGranted();
       });
     }, PUSH_REGISTER_DELAY_MS);
@@ -91,6 +120,16 @@ export function SplashGate() {
   // 기존 계정 HOME 진입 전 미결정 권한 안내(TRIP-1601) — 조회가 안 끝났으면 첫 화면만 최대 1초 더 스플래시를 붙잡는다.
   const holdSplash = usePermissionCatchUp(ready, destination);
   const drawn = ready && !holdSplash;
+
+  // 스플래시가 풀려 스택이 처음 그려지는 커밋 — 다음 프레임에 firstFrame 을 찍고 파일로 내린다(TRIP-1717).
+  useEffect(() => {
+    if (!drawn) return;
+    mark('splashReleased');
+    requestAnimationFrame(() => {
+      mark('firstFrame');
+      flushMarks();
+    });
+  }, [drawn]);
   useAccountBoundaryReset(drawn, destination);
   usePushRouting(drawn, destination);
   useGenerationWatch(drawn, destination);

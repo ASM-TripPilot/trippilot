@@ -1,5 +1,7 @@
 # TripPilot AI 구현 설계
 
+> **대체됨 (2026-11-02)** — AI 아키텍처 개요는 [`ai/ARCHITECTURE.md`](../../../ARCHITECTURE.md) 한 곳으로 합쳤다. 이 문서는 이력·세부 참고용이며, 어긋나면 ARCHITECTURE.md(와 코드)가 이긴다.
+
 > 짝 문서: [ai-architecture.md](./ai-architecture.md)(전략·원칙). 본 문서는 그 위의 **구현 설계(HOW)** 다 — 인터페이스 계약·시퀀스·알고리즘·테스트 DoD.
 > 출처: TripPilot 기획 정본(../aidlc/aidlc-docs/inception/application-design/component-methods.md·components.md·services.md, construction/u3-ai-itinerary)에서 2026-07-07 종합. (구 표기 `construction/u5-itinerary` 는 유닛 재번호 이전 경로 — 현재 존재하지 않는다)
 > 표기: `[정본]` = TripPilot 문서에 명시된 계약 · `[설계권고]` = 문서에 없어 본 문서가 제안하는 구현 방식(착수 시 확정 대상).

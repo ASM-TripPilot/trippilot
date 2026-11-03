@@ -38,9 +38,12 @@ class PlaceDetector(
     override val source: String = SweepSource.PLACE
     override val kind: TriggerKind = TriggerKind.CLOSURE
 
-    /** 아침의 오늘 · 저녁의 내일만 — AI 검증(실측 20.1s)이라 매시 보지 않고 하루 두 번으로 묶는다(BR-SA-01). */
+    /**
+     * 아침의 오늘 · 저녁의 내일 이후만 — AI 검증(실측 20.1s)이라 매시 보지 않고 하루 두 번으로 묶는다(BR-SA-01).
+     * 저녁의 내일 이후는 시작 전 여행의 첫날(지평 pre-trip 의 N일 창)을 포함한다 — 휴무·영업시간은 며칠 앞서도 정해져 있다.
+     */
     override fun wants(phase: SweepPhase, dayOffset: Int): Boolean =
-        (phase == SweepPhase.MORNING && dayOffset == 0) || (phase == SweepPhase.EVENING && dayOffset == 1)
+        (phase == SweepPhase.MORNING && dayOffset == 0) || (phase == SweepPhase.EVENING && dayOffset >= 1)
 
     override fun isLive(): Boolean = true
 

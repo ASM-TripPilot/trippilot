@@ -16,7 +16,7 @@ from hypothesis import given
 
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver
-from trippilot.llm_gateway.gates.explanation import (
+from trippilot.llm_gateway.gates.replan.explanation import (
     HASHTAG_COUNT,
     HASHTAG_MAX_LEN,
     ExplanationGate,
@@ -24,7 +24,7 @@ from trippilot.llm_gateway.gates.explanation import (
 from trippilot.llm_gateway.gates.place_extraction import PlaceExtractionGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
-from trippilot.llm_gateway.workers.explanation import ExplanationWorker
+from trippilot.llm_gateway.workers.replan.explanation import ExplanationWorker
 from trippilot.llm_gateway.workers.place_extraction import PlaceExtractionWorker
 from trippilot.domain.common import BudgetLevel, PoiId, TraceId
 from trippilot.domain.context import Principal, ResourceRef
