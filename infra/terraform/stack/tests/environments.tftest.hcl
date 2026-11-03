@@ -89,7 +89,7 @@ run "dev_is_private_and_cost_conscious" {
 
   # 로그 지표는 운영 네임스페이스만 센다 — 같은 클러스터·같은 로그 그룹의 개발 서버(trippilot-dev)가 운영 알람을 울리면 안 된다.
   assert {
-    condition = alltrue([for filter in [aws_cloudwatch_log_metric_filter.gateway_5xx[0], aws_cloudwatch_log_metric_filter.refresh_reuse[0]] :
+    condition = alltrue([for filter in [aws_cloudwatch_log_metric_filter.gateway_5xx[0], aws_cloudwatch_log_metric_filter.refresh_reuse[0], aws_cloudwatch_log_metric_filter.push_dispatch_failed[0], aws_cloudwatch_log_metric_filter.push_alert[0]] :
     startswith(filter.pattern, "{ ($.kubernetes.namespace_name = \"trippilot\") && ")])
     error_message = "Log metric filters must count only the production namespace, never the dev target sharing the log group."
   }
@@ -99,7 +99,7 @@ run "dev_is_private_and_cost_conscious" {
     condition = (
       length(aws_cloudwatch_metric_alarm.pod_restarts) == 3 && length(aws_cloudwatch_metric_alarm.database) == 3 &&
       alltrue([for alarm in concat(
-        [aws_cloudwatch_metric_alarm.gateway_5xx[0], aws_cloudwatch_metric_alarm.refresh_reuse[0], aws_cloudwatch_metric_alarm.failed_nodes[0]],
+        [aws_cloudwatch_metric_alarm.gateway_5xx[0], aws_cloudwatch_metric_alarm.refresh_reuse[0], aws_cloudwatch_metric_alarm.failed_nodes[0], aws_cloudwatch_metric_alarm.push_dispatch_failed[0], aws_cloudwatch_metric_alarm.push_alert[0]],
         values(aws_cloudwatch_metric_alarm.pod_restarts), values(aws_cloudwatch_metric_alarm.database),
       ) : alarm.alarm_actions == toset([aws_sns_topic.alerts[0].arn]) && startswith(alarm.alarm_name, "trippilot-dev-")]) &&
       aws_chatbot_slack_channel_configuration.alerts[0].sns_topic_arns == toset([aws_sns_topic.alerts[0].arn])
