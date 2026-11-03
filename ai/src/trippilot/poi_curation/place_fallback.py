@@ -9,8 +9,9 @@
 진짜 문서를 **점수로 밀어내지 않는다** — 짧은 글은 상황 질의 점수에서 긴 개요 조각을 86~95% 이긴다(2026-10-23 실측). 그래서 벡터에
 넣지 않고, 진짜 문서가 없는 자리에만 키로 바로 붙인다(공개 리포에 벡터 수백 MB 를 쌓지 않는 것도 같은 이유다).
 
-켜기: `TRIPPILOT_KB5_FALLBACK=on` — **기본 꺼짐.** 켜기 전에 KB-5 담당 세션의 조건(2026-10-30)을 채운다:
+**기본 켜짐**(2026-11-03). 끄기: `TRIPPILOT_KB5_FALLBACK=off`. 켜는 조건은 KB-5 담당 세션과 합의한 것(2026-10-30)이었다 —
 `measure_kb5_overview.py` ab 로 '진짜 문서만' 대 '대체 문서 추가'를 재서 같은 입력끼리의 흔들림(≈12:7)보다 확실히 이길 것.
+2026-11-02 실측(선택 opus-5-5 · 판정 sonnet-5-5): 식사 칸 서울·제주(진짜 0곳 → 대체 40곳) **32 : 0**, 명소 칸 15 : 8 : 1(잡음 범위, 해 없음).
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ WEB_FACTS_PER_DOC = 4
 
 
 def enabled() -> bool:
-    return os.environ.get(SWITCH, "off").strip().lower() in ("on", "1", "true", "yes")
+    return os.environ.get(SWITCH, "on").strip().lower() in ("on", "1", "true", "yes")
 
 
 def compose(card: str, facts: list[str]) -> str:

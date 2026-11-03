@@ -80,9 +80,14 @@ def test_fallback_documents_are_clipped_like_real_ones() -> None:
     assert len(got["r1"]) == MAX_DOC_CHARS
 
 
-def test_switch_is_off_by_default(monkeypatch) -> None:
+def test_switch_is_on_by_default_and_off_turns_it_off(monkeypatch) -> None:
     monkeypatch.delenv(place_fallback.SWITCH)
+    assert place_fallback.enabled()
     embedding, store = _store()
+    got, _ = fetch_place_knowledge([_poi("p1", "r1")], "우천", embedding, store, fallback={"r1": "대표메뉴 국밥."})
+    assert got == {"r1": "대표메뉴 국밥."}
+    monkeypatch.setenv(place_fallback.SWITCH, "off")
+    assert not place_fallback.enabled()
     got, _ = fetch_place_knowledge([_poi("p1", "r1")], "우천", embedding, store, fallback={"r1": "대표메뉴 국밥."})
     assert got == {} and kb5_counts(got) == {"POI_DESC": 0}
 
