@@ -617,6 +617,13 @@ _CHANGE_CUE = re.compile(
     r"|부탁|않게|않도록")
 
 
+# 다시 짜기로 고른 말 가운데 상황(날씨·늦음·휴무·몸 상태)이 있으면 그 의도 몫이다 — 진짜 다시 짜기 요청은 상황 낱말이나 바꿔 달라는 말을 싣는다
+# (질문뱅크·평가셋·증강 452문장 중 `asks_review` 에 걸린 것 0, 2026-11-03). "내일 일정 너무 빡빡하지 않아?"는 REPLAN 0.4 로 다시 짜기 안내가 됐다
+_SITUATION_CUE = re.compile(
+    r"비\s?(?:와|오|온|올|내)|눈\s?(?:와|오|온|올)|폭우|태풍|강풍|날씨|더워|덥|추워|춥|아파|아프|피곤|지쳐|늦(?:어|었|게)|막혀|밀렸|휴무|휴관"
+    r"|문\s?닫|취소")
+
+
 def asks_review(text: str) -> bool:
     """저장된 일정에 무리·문제가 없는지 묻는 말인가(LLM 0). `text` 는 정리(`normalize`)한 말 — 일반 질문·바꿔 달라는 말이면 아니고,
     강한 표지(묻는 꼴) 하나로, 약한 표지는 일정 표지와 함께(주제 낱말 없이)."""
@@ -630,10 +637,11 @@ def asks_review(text: str) -> bool:
 def _review_outcome(match: IntentMatch | None, cleared: DialogueContext, reason: str | None) -> TurnOutcome:
     """일정 검토 → FRAME(SHOW_SCHEDULE) — BE 가 진행 검토 카드로 답한다(위반 표기·빈 일자·숙소·일정 없음·못 읽음 안내, BR-U8-14~16).
     분류가 일정 보기로 골랐으면 그 인자·신뢰도를, 판단해서 닫았으면 빈 인자로(날마다 동네 `_day_area_outcome` 과 같은 0.9)."""
-    slots = {k: str(v) for k, v in (match.slots if match is not None else {}).items()}
-    frame = Frame(Intent.SHOW_SCHEDULE, slots, (), match.confidence if match is not None else 0.9, MatchRoute.LLM_DIRECT.value)
+    shown = match if match is not None and match.intent is Intent.SHOW_SCHEDULE else None  # 다시 짜기의 칸은 일정 보기 인자가 아니다
+    slots = {k: str(v) for k, v in (shown.slots if shown is not None else {}).items()}
+    frame = Frame(Intent.SHOW_SCHEDULE, slots, (), shown.confidence if shown is not None else 0.9, MatchRoute.LLM_DIRECT.value)
     return TurnOutcome("FRAME", (frame,), None, None, cleared, 0,
-                       "review_routed" + ("" if match is not None else f":{reason}"))
+                       "review_routed" + ("" if shown is not None else f":{reason or match.intent.value}"))
 
 
 def _plannable(reason: str) -> bool:
@@ -683,6 +691,12 @@ def _trip_summary(snapshot: TurnSnapshot, today: date) -> str:
         f"여행 {' '.join(trip.regions) or '-'} {trip.start_date.isoformat()}~{trip.end_date.isoformat()} ({trip.phase})"
         f" · 오늘 {today.isoformat()} · 일정 {len(snapshot.days)}일 {slots}곳 · 화면 {snapshot.surface}"
     )
+
+
+def _knowledge_trip(summary: str) -> str:
+    """지식 즉답의 `$trip` — 일정 날·곳 수(와 화면)는 뺀다. 지식 LLM 이 그 수로 "하루 7곳이라 꽤 빡빡한 편이에요"처럼 내 일정을
+    판정했다(TRIP-1705 개발 재현 — 그날은 5곳, BR-U8-14: 문제 판정은 솔버 표기뿐). 지역·기간·오늘은 '거기'·'그때'를 읽는 데 남긴다."""
+    return summary.split(" · 일정 ", 1)[0]
 
 
 def _memory_lines(current: DialogueMemory | None, others: Sequence[DialogueMemory]) -> tuple[str, ...]:
@@ -1074,8 +1088,8 @@ class DialogueOrchestrator:
                 return _day_area_outcome(area_turn, match, cleared)
             # 2⁗′ — 일정 검토는 BE 진행 검토 카드로(DEC-U8-14). 분류가 일정 보기로 골랐거나 판단해서 닫은 말만(2‴ 와 같은 입구) — 바꾸는 의도는
             # 그대로, 시한·벤더 실패는 종전 다시 시도. 여행이 없어도 넘긴다 — BE 가 "먼저 여행을 만들거나…"로 이유를 말한다(AC2·INV-4)
-            if asks_review(text) and (
-                    match.intent is Intent.SHOW_SCHEDULE if match is not None else _plannable(reason or "")):
+            if asks_review(text) and (_plannable(reason or "") if match is None else match.intent is Intent.SHOW_SCHEDULE
+                                      or match.intent is Intent.REPLAN and not _SITUATION_CUE.search(text)):
                 log.info("dialogue_review_routed %s", json.dumps({  # 오탐을 운영에서 셀 수 있게(BE 저장 칸은 일정 보기와 같다)
                     "event": "dialogue_review_routed", "trace_id": inp.trace_id,
                     "classified": match.intent.value if match is not None else None, "trip": inp.snapshot.trip is not None,
@@ -1479,7 +1493,7 @@ class DialogueOrchestrator:
             self._fallback(inp, "llm", *_KNOWLEDGE_MODES, f"budget_exhausted(remaining_ms={remaining})")
             return None
         memory_lines = tuple(memory())
-        task = KnowledgeTask(inp.utterance, inp.recent_turns, memory_lines, trip_summary, inp.trace_id, inp.now,
+        task = KnowledgeTask(inp.utterance, inp.recent_turns, memory_lines, _knowledge_trip(trip_summary), inp.trace_id, inp.now,
                              timeout_sec=min(_ANSWER_CAP_MS, self._remaining(inp) - _ANSWER_RESERVE_MS) / 1000)
         outcome = agent.run(task)
         if outcome.error is not None:  # 게이트웨이에 닿기 전 워커 예외 — 게이트웨이가 보고하지 못했다
