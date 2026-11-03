@@ -95,6 +95,7 @@ import { MustVisitPickerScreen } from '@/pages/itinerary/itinerary-mustvisit/ui/
 import { MustVisitTimeScreen } from '@/pages/itinerary/itinerary-mustvisit/ui/MustVisitTimeScreen';
 import { PlaceAddHeader, PlaceAddRow } from '@/features/itinerary/index.view';
 import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/pages/itinerary/itinerary-draft/ui/SlotCandidateSheet';
+import { CenterPointPicker } from '@/pages/itinerary/itinerary-copick/ui/CenterPointPicker';
 import { SlotFillScreen } from '@/pages/itinerary/itinerary-copick/ui/SlotFillScreen';
 import {
   AlertCircleGlyph,
@@ -7567,6 +7568,58 @@ export const PREVIEW_STATES: PreviewState[] = [
         onChangeConcept={noop}
         onBack={noop}
       />
+    ),
+  },
+  // TRIP-1669 — 같이 짜기 '찾는 중심' 영역(Figma 프레임 없음 — 문구·치수는 발명값, 6-b 실화면에서 확정).
+  // 펼친 상태 + 되돌림 안내 + 지역 중심 선택 얼굴(원·기준 핀 없음 — 서버가 좌표를 정한다). 접힌 기본 얼굴은
+  // 위 h10-copick-candidates 에 영역만 더하면 되므로 따로 두지 않았다. 펼침 모양·칩 간격은 jest 사각.
+  {
+    key: 'h10-copick-center-expanded',
+    band: 'h',
+    label: 'h10 · 후보 선택 찾는 중심 펼침·안내',
+    login: null,
+    render: () => (
+      <SlotFillScreen
+        concept="전시"
+        progress={H10_PROGRESS}
+        stepperSlot={H10_STEPPER}
+        mapView={{ center: H10_CENTER, pins: [] }}
+        candidates={H10_DEFAULT_CANDIDATES.slice(0, 2)}
+        candidateViews={H10_DEFAULT_VIEWS}
+        radiusSteps={H10_RADIUS_STEPS}
+        selectedRadiusKey="mid"
+        candidateCountLabel="후보 2곳"
+        selectedPoiId="A1"
+        canExpandRadius
+        isPending={false}
+        errorMessage={null}
+        centerChoice={{
+          selected: 'region',
+          expanded: true,
+          stayAvailable: true,
+          notice: '이 날은 등록한 숙소가 없어서 자동 추천으로 돌아왔어요',
+          onToggleExpanded: noop,
+          onSelect: noop,
+        }}
+        onSelectRadius={noop}
+        onSelectRadio={noop}
+        onConfirm={noop}
+        onExpandRadius={noop}
+        onShrinkRadius={noop}
+        onChangeConcept={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  // TRIP-1669 — '지도에서 찍기' 선택 화면(후보 화면 위에 덮는 absolute 오버레이를 단독으로 본다). 지도는 네이티브라
+  // 사람 재빌드 전엔 미표시. 덮임·터치 차단·핀 정렬은 jest 사각이라 이 키가 육안 그물이다.
+  {
+    key: 'h10-copick-center-point',
+    band: 'h',
+    label: 'h10 · 찾는 중심 지도에서 찍기',
+    login: null,
+    render: () => (
+      <CenterPointPicker center={H10_CENTER} onConfirm={noop} onCancel={noop} />
     ),
   },
   // TRIP-1251 — 후보 응답 전(0건 + 조회 중) 스켈레톤 카드 3장. Figma h10 엔 로딩 변형이 없어 같은 밴드

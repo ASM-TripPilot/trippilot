@@ -806,9 +806,11 @@
 
 ## src/pages/itinerary/itinerary-copick/model/
 - `src/pages/itinerary/itinerary-copick/model/candidateSelection.ts`  →  resolveCandidateSelection
+- `src/pages/itinerary/itinerary-copick/model/centerChoice.ts`  →  CenterChoiceKey · CenterSel · AUTO_CENTER · buildCenter · POINT_UNAVAILABLE_NOTICE · centerRejectionNotice
 - `src/pages/itinerary/itinerary-copick/model/radiusUsedLabel.ts`  →  formatRadiusUsed
 
 ## src/pages/itinerary/itinerary-copick/ui/
+- `src/pages/itinerary/itinerary-copick/ui/CenterPointPicker.tsx`  →  CenterPointPicker
 - `src/pages/itinerary/itinerary-copick/ui/CoPickCompletePage.tsx`  →  CoPickCompletePageProps · CoPickCompletePage
 - `src/pages/itinerary/itinerary-copick/ui/CoPickLeaveDialog.tsx`  →  CoPickLeaveDialog
 - `src/pages/itinerary/itinerary-copick/ui/CoPickStepper.tsx`  →  CoPickStep · CoPickStepperProps · CoPickStepper
@@ -816,7 +818,7 @@
 - `src/pages/itinerary/itinerary-copick/ui/ConceptPickerScreen.tsx`  →  ConceptProgress · ConceptPickerScreenProps · ConceptPickerScreen
 - `src/pages/itinerary/itinerary-copick/ui/SlotCandidateCard.tsx`  →  SlotCandidateCardProps · SlotCandidateCard
 - `src/pages/itinerary/itinerary-copick/ui/SlotFillPage.tsx`  →  SlotFillPageProps · SlotFillPage
-- `src/pages/itinerary/itinerary-copick/ui/SlotFillScreen.tsx`  →  SlotFillScreenProps · SlotFillScreen
+- `src/pages/itinerary/itinerary-copick/ui/SlotFillScreen.tsx`  →  CenterChoiceProps · SlotFillScreenProps · SlotFillScreen
 
 ## src/pages/itinerary/itinerary-draft/config/
 - `src/pages/itinerary/itinerary-draft/config/generationFallback.ts`  →  GENERATION_FALLBACK_PROGRESS · GENERATION_FALLBACK_TITLE · GENERATION_FALLBACK_MAP_PILL · GENERATION_FALLBACK_MESSAGE_TITLE · GENERATION_FALLBACK_MESSAGE_BODY · GENERATION_FALLBACK_CHECK_ROUTE · GENERATION_FALLBACK_CHECK_SKIPPED · GENERATION_FALLBACK_CHECK_DONE · GENERATION_FALLBACK_VIEW_PLAN · GENERATION_FALLBACK_MANUAL · GENERATION_FALLBACK_FAILED_TITLE · GENERATION_FALLBACK_FAILED_NOTE · GENERATION_FALLBACK_RETRY
@@ -1938,4 +1940,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1260개 파일
+합계 1262개 파일
