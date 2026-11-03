@@ -16,8 +16,37 @@ import java.util.UUID
 @Component
 class PushTicketRepositoryAdapter(private val jdbc: JdbcTemplate) : PushTicketRepository {
 
+    /**
+     * 기록은 **세이브포인트 안에서** 쓴다. 이 INSERT 는 발송 트랜잭션 안이고, Postgres 는 문 하나가 실패하면 그 트랜잭션의 이후 문을 전부
+     * 거절한다(25P02) — 호출측이 예외를 삼켜도 바로 뒤 `markPushResult` 가 터져 발화가 롤백되고, 푸시는 이미 나갔는데 다음 폴링이 같은
+     * 예약을 다시 집어 유예(10분) 동안 매분 재발송한다. `ON CONFLICT`·폭 필터로 흔한 실패는 막았지만 권한·락 시한·연결 같은 나머지는
+     * 막을 수 없다 — 세이브포인트가 그 오류를 여기서 끊는다.
+     *
+     * JDBC 세이브포인트를 직접 쓴다 — 이 앱의 트랜잭션 관리자는 중첩 트랜잭션을 허용하지 않아(`PROPAGATION_NESTED` 가
+     * `NestedTransactionNotSupportedException`) 설정을 바꾸지 않고는 선언적으로 못 건다. 전역 설정을 건드리면 다른 모듈의 전파 동작이 바뀐다.
+     * 바깥 트랜잭션이 없으면 자동 커밋 연결이라 세이브포인트를 못 만든다 — 그때는 문 하나가 곧 한 트랜잭션이라 그냥 쓴다.
+     */
     override fun record(tickets: List<PushTicket>) {
         if (tickets.isEmpty()) return
+        jdbc.execute { conn: java.sql.Connection ->
+            if (conn.autoCommit) {
+                insert(tickets)
+            } else {
+                val savepoint = conn.setSavepoint()
+                try {
+                    insert(tickets)
+                    conn.releaseSavepoint(savepoint)
+                } catch (e: Exception) {
+                    // 이 문만 되돌린다 — 바깥 트랜잭션은 계속 쓸 수 있다. 예외는 호출측(recordTickets)이 로그로 남긴다.
+                    conn.rollback(savepoint)
+                    throw e
+                }
+            }
+            null
+        }
+    }
+
+    private fun insert(tickets: List<PushTicket>) {
         jdbc.batchUpdate(
             """
             INSERT INTO push_ticket (ticket_id, notification_id, token, platform, sent_at)
