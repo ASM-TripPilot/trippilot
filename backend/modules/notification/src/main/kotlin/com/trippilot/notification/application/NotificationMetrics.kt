@@ -62,6 +62,19 @@ class NotificationMetrics(
     }
 
     /**
+     * 영수증 판정 결과(TRIP-1707). 발송 시점의 티켓(`SENT`)이 아니라 **15분 뒤 영수증**이 말하는 결과다 — `receipt{OK}` / 발송 `SENT`
+     * 가 접수에서 도착으로 가는 깔때기다. [reason] 은 오류일 때만 의미가 있고 닫힌 집합으로 접힌다. [platform] 은 기기 종류(IOS·ANDROID).
+     */
+    fun pushReceipt(status: String, reason: String?, platform: String) {
+        registry.counter(
+            PUSH_RECEIPT,
+            "outcome", status,
+            "reason", normalizeReason(reason),
+            "platform", platform,
+        ).increment()
+    }
+
+    /**
      * 푸시가 **생략된** 수(OBS-U6-03). 발송 실패와 다른 축이다 — 이쪽은 우리가 일부러 안 보낸 것이고,
      * 그 빈도가 곧 조용시간·상한 정책을 조정할 근거가 된다.
      *
@@ -107,6 +120,7 @@ class NotificationMetrics(
 
     companion object {
         const val PUSH_DISPATCH = "trippilot.push.dispatch"
+        const val PUSH_RECEIPT = "trippilot.push.receipt"
         const val SUPPRESSED = "trippilot.notification.suppressed"
         const val UNREAD_BACKLOG = "trippilot.notification.unread"
 

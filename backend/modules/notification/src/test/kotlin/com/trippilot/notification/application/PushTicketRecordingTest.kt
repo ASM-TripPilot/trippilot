@@ -118,5 +118,6 @@ private class OwnedTokens(private val rows: List<PushToken>) : PushTokenReposito
     override fun register(token: PushToken) = token
     override fun findActive(accountId: UUID) = rows.filter { it.accountId == accountId && it.invalidatedAt == null }
     override fun invalidate(token: String, at: Instant) = false
+    override fun invalidateIfNotSeenSince(token: String, notSeenAfter: Instant, at: Instant) = false
     override fun remove(accountId: UUID, token: String) = false
 }

@@ -91,6 +91,7 @@ internal fun noPush(clock: java.time.Clock, notifications: NotificationRepositor
             override fun register(token: com.trippilot.notification.domain.PushToken) = token
             override fun findActive(accountId: UUID) = emptyList<com.trippilot.notification.domain.PushToken>()
             override fun invalidate(token: String, at: Instant) = false
+            override fun invalidateIfNotSeenSince(token: String, notSeenAfter: Instant, at: Instant) = false
             override fun remove(accountId: UUID, token: String) = false
         },
         notifications = notifications,
@@ -113,15 +114,41 @@ internal fun noPush(clock: java.time.Clock, notifications: NotificationRepositor
 internal fun testMetrics(notifications: NotificationRepository = FakeNotifications()) =
     NotificationMetrics(io.micrometer.core.instrument.simple.SimpleMeterRegistry(), notifications)
 
-/** 푸시 티켓 대역 — 기록된 것을 남기고, [failWith] 를 주면 기록이 터지는 저장소를 흉내 낸다. */
+/**
+ * 푸시 티켓 대역 — 기록된 것을 남기고, [failWith] 를 주면 기록이 터지는 저장소를 흉내 낸다. 판정은 실 DB 와 같은 조건부 쓰기다
+ * (이미 판정된 티켓은 false — 다중 인스턴스 중복 방지의 전부).
+ */
 internal class FakeTickets : com.trippilot.notification.domain.PushTicketRepository {
     val recorded = mutableListOf<com.trippilot.notification.domain.PushTicket>()
     var failWith: Throwable? = null
+
+    /** 판정 결과: 티켓 id → (상태, 오류). */
+    val settled = linkedMapOf<String, Pair<com.trippilot.notification.domain.ReceiptStatus, String?>>()
+    var purged = 0
 
     override fun record(tickets: List<com.trippilot.notification.domain.PushTicket>) {
         failWith?.let { throw it }
         recorded += tickets
     }
+
+    override fun findDue(sentBefore: Instant, limit: Int) =
+        recorded.filter { it.ticketId !in settled && !it.sentAt.isAfter(sentBefore) }.sortedBy { it.sentAt }.take(limit)
+
+    override fun settle(ticketId: String, status: com.trippilot.notification.domain.ReceiptStatus, error: String?, at: Instant): Boolean {
+        if (ticketId in settled || recorded.none { it.ticketId == ticketId }) return false
+        settled[ticketId] = status to error
+        return true
+    }
+
+    override fun purgeSettledBefore(sentBefore: Instant): Int {
+        val old = recorded.filter { it.ticketId in settled && it.sentAt.isBefore(sentBefore) }
+        recorded.removeAll(old.toSet())
+        old.forEach { settled.remove(it.ticketId) }
+        purged += old.size
+        return old.size
+    }
+
+    override fun countPending(): Long = recorded.count { it.ticketId !in settled }.toLong()
 }
 
 internal class FakeSchedules : NotificationScheduleRepository {

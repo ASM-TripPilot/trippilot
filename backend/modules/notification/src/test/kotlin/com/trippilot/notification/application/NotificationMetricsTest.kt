@@ -90,6 +90,21 @@ class NotificationMetricsTest : StringSpec({
         }
     }
 
+    /** 영수증 지표도 같은 닫힌 집합이다 — 벤더 자유 문자열이 태그가 되면 시계열이 무한히 갈라진다. 자격 오류는 OTHER 로 접히지 않는다. */
+    "영수증 지표의 사유도 닫힌 집합이다 — 자격 오류는 그대로, 모르는 값은 OTHER" {
+        val (metrics, registry) = fixture()
+        metrics.pushReceipt("ERROR", "InvalidCredentials", "IOS")
+        metrics.pushReceipt("ERROR", "SomethingNew", "ANDROID")
+        metrics.pushReceipt("OK", null, "IOS")
+
+        fun count(outcome: String, reason: String, platform: String) =
+            registry.find(NotificationMetrics.PUSH_RECEIPT).tag("outcome", outcome).tag("reason", reason).tag("platform", platform).counter()!!.count()
+
+        count("ERROR", "InvalidCredentials", "IOS") shouldBe 1.0
+        count("ERROR", "OTHER", "ANDROID") shouldBe 1.0
+        count("OK", "none", "IOS") shouldBe 1.0
+    }
+
     /**
      * 닫힌 집합 안에 있는 것만으로는 부족하다 — **어느 칸으로 접히는지**가 맞아야 한다. 발송기 예외가
      * `OTHER` 로 접히거나 아는 사유가 `PUSH_ERROR` 로 읽히면 대시보드가 원인을 거꾸로 가리킨다.

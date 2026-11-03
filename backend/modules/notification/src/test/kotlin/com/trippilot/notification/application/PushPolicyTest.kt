@@ -61,6 +61,7 @@ class PushPolicyTest : StringSpec({
             ),
         )
         override fun invalidate(token: String, at: Instant) = false
+        override fun invalidateIfNotSeenSince(token: String, notSeenAfter: Instant, at: Instant) = false
         override fun remove(accountId: UUID, token: String) = false
     }
 

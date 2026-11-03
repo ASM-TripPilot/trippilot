@@ -81,6 +81,13 @@ interface PushTokenRepository {
      */
     fun invalidate(token: String, at: Instant): Boolean
 
+    /**
+     * 영수증이 죽은 토큰이라 할 때의 무효화 — **그 발송 뒤에 다시 보인 토큰은 남긴다**(`last_seen_at` ≤ [notSeenAfter] 일 때만).
+     * 영수증은 발송 15분 이상 뒤에 오는데 그 사이 앱이 같은 토큰을 재등록(되살림)했을 수 있고, 앱은 같은 서명이면 다시 POST 하지
+     * 않아 한 번 잘못 무효화하면 로그아웃·401 전까지 되살아나지 못한다. 이미 무효면 false(INV-U6-07).
+     */
+    fun invalidateIfNotSeenSince(token: String, notSeenAfter: Instant, at: Instant): Boolean
+
     /** 로그아웃·기기 해제. 남의 토큰이면 false. */
     fun remove(accountId: UUID, token: String): Boolean
 }
