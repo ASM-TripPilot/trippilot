@@ -27,7 +27,7 @@ import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
-from trippilot.llm_gateway.config import C1Config
+from trippilot.llm_gateway.config import C1Config, default_feature_effort
 from trippilot.llm_gateway.gates.content.share_card_copy import (
     CAPTION_MAX_LENGTH,
     _display_length,
@@ -340,7 +340,7 @@ def test_prompt_renders_deterministically() -> None:
     p1, ref = reg.render(_FEAT, build_share_card_copy_vars(_request()))
     p2, _ = reg.render(_FEAT, build_share_card_copy_vars(_request()))
     assert p1 == p2  # 결정론
-    assert ref.prompt_id == "prompts/share_card_copy.yaml" and ref.version == "0.1.1"
+    assert ref.prompt_id == "prompts/share_card_copy.yaml" and ref.version == "0.1.2"
     assert ref.feature == "SHARE_CARD_COPY"
     assert "부산" in p1 and "2026-08-01 ~ 2026-08-02" in p1
     assert "감천문화마을" in p1 and "해운대" in p1
@@ -372,8 +372,16 @@ def test_prompt_carries_every_rule_the_gate_checks() -> None:
     #    나왔다가 전량 드롭됐다 — 프롬프트-게이트 괴리의 실제 모양이다.
     assert "공백만 뺀 채 그대로 포함해서" in prompt
     assert "축약한 태그는 거부됩니다" in prompt
+    #    "포함해서 만드세요"만 있던 동안(0.1.1) 성향·날씨 태그(#느긋한여행·#바람부는날) 하나로 카드째 떨어졌다 — **모든** 태그라는 사실까지
+    assert "**모든** 해시태그에 지역명이나 방문한 장소명이 들어가야" in prompt
     # 해시태그도 캡션과 같은 시간·자리표시자 검사를 받는다는 사실
     assert "캡션과 같은 규칙입니다" in prompt
+
+
+def test_share_card_copy_is_in_the_effort_table() -> None:
+    """표에 둔다 — 표에 없으면 haiku-5 는 사고가 꺼지고(어댑터 `_THINKING_OFF`), 끄면 규칙 밖 해시태그로 카드째 정적 문구가 됐다
+    (2026-11-04 실경로 3여행×3: 끔 0.1.1 7/9·0.1.2 5/9 폴백 → low 0/9)."""
+    assert default_feature_effort()[_FEAT] == "low"
 
 
 def test_build_vars_stringifies_everything_and_omits_coordinates() -> None:

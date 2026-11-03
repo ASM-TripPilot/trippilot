@@ -212,6 +212,15 @@ def test_position_cue_catches_what_the_parser_cannot_place() -> None:
     assert not position_cue("다음 날 카페 하나 추가해줘") and not position_cue("카페 하나 추가해줘")
 
 
+def test_front_of_day_is_a_position_cue_but_the_end_is_not() -> None:
+    """'맨 앞에'·'첫 번째로'가 빠져 있던 동안 번역이 기준점을 뺀 추가가 맨 끝에 붙고 '반영됨'으로 나갔다(2026-11-04 실 번역 A/B).
+    '마지막에'는 단서가 아니다 — 기준점 없는 추가가 그 자리다."""
+    for said in ("창경궁을 맨 앞에 넣어줘", "첫 번째로 효창공원 넣어줘", "제일 먼저 카페 하나 넣어줘"):
+        assert position_cue(said), said
+    for said in ("마지막에 효창공원 추가해줘", "처음 가 보는 카페 하나 추가해줘", "맨 앞으로 옮겨줘"):
+        assert not position_cue(said), said
+
+
 def test_two_matching_pairs_are_ambiguous_not_the_first() -> None:
     twice = [SlotRef(PoiId(f"s{i}"), name, None) for i, name in enumerate(("이태원 거리", "홍대 앞", "이태원 시장", "홍대 놀이터"))]
     assert resolve_gap(twice, parse_insert_ask("이태원에서 홍대로 넘어갈 때 한 군데 더 넣어줘")) == "ambiguous_gap"

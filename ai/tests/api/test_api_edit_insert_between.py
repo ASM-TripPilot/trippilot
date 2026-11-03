@@ -363,6 +363,14 @@ def test_unreadable_position_with_a_cue_is_not_appended() -> None:
     assert body["status"] == "TRANSLATION_FAILED" and "position_unread" in body["reason"], body
 
 
+def test_front_of_day_add_without_an_anchor_is_not_appended() -> None:
+    """맨 앞에 넣으라는 말에 번역이 기준점을 빼면 맨 끝에 붙이지 않는다 — 실 번역 A/B 에서 '반영됨'으로 끝에 붙었다(2026-11-04)."""
+    canned = json.dumps({"editCommand": {"op": "ADD_SLOT", "params": {"targetPoiId": str(HYOCHANG.poi_id)},
+                                         "affectedSlots": []}})
+    body = _post(_body(utterance="효창공원을 맨 앞에 넣어줘"), llm=FakeLlm(canned=canned))
+    assert body["status"] == "TRANSLATION_FAILED" and "position_unread" in body["reason"], body
+
+
 def test_neighbourhood_station_resolves_to_its_neighbourhood() -> None:
     body = _post(_body(utterance="홍대입구역 가기 전에 카페 하나 넣어줘"))
     assert body["status"] == "APPLIED" and _ids(body)[2] == str(GONGDEOK_CAFE.poi_id), body

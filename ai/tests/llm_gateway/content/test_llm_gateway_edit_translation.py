@@ -23,7 +23,7 @@ import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st
 
-from trippilot.llm_gateway.config import C1Config
+from trippilot.llm_gateway.config import C1Config, default_feature_effort
 from trippilot.llm_gateway.gates.content.edit_translation import (
     EditTranslationContext,
     EditTranslationGate,
@@ -363,7 +363,7 @@ def test_prompt_renders_deterministically_without_coordinates() -> None:
     p1, ref = reg.render(_FEAT, _vars(pool))
     p2, _ = reg.render(_FEAT, _vars(pool))
     assert p1 == p2  # 결정론
-    assert ref.prompt_id == "prompts/edit_translation.yaml" and ref.version == "0.3.0"
+    assert ref.prompt_id == "prompts/edit_translation.yaml" and ref.version == "0.4.0"
     assert ref.feature == "EDIT_TRANSLATION"
     for poi in pool.pois:
         assert str(poi.poi_id) in p1  # 슬롯·후보 전원 포함
@@ -388,6 +388,24 @@ def test_op_guide_covers_every_op_and_prompt_maps_kind_only_requests() -> None:
     prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars(_pool()))
     assert "카페 하나 추가해줘" in prompt and "후보 목록 안에서 고르는 것은 지어내기가 아닙니다" in prompt
     assert "- ADD_SLOT: 후보 1곳을 그 날에 추가" in prompt
+
+
+def test_prompt_lets_an_add_carry_the_position_it_was_told() -> None:
+    """자리를 말한 추가("창경궁을 덕수궁 다음에 넣어줘")는 ADD_SLOT 에 기준점을 싣는다 — 스키마가 기준점을 'MOVE 만'으로 적던 동안(0.3.0)
+    번역은 그 말을 번역 불가로 거절하거나 자리를 버렸다(2026-11-04 실경로 haiku-5-5: 자리 말한 추가 3종×2 — 0.3.0 은 사고를 켜도 2/6,
+    0.4.0 6/6). 코드는 이미 ADD 의 기준점을 받는다(`commands._insert_at`, spec 003 FR-007)."""
+    from trippilot.llm_gateway.workers.content.edit_translation import _OP_GUIDE
+
+    prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars(_pool()))
+    assert "MOVE 만" not in prompt and prompt.count("MOVE·ADD 의 자리") == 2
+    assert "추가(ADD_SLOT)하면서 넣을 자리를 말했으면" in prompt
+    assert "넣을 자리를 말했으면" in _OP_GUIDE[EditOp.ADD_SLOT] and "afterPoiId" in _OP_GUIDE[EditOp.ADD_SLOT]
+
+
+def test_translation_is_in_the_effort_table() -> None:
+    """표에 둔다 — 표에 없으면 haiku-5 는 사고가 꺼지고(어댑터 `_THINKING_OFF`), 그러면 판단이 필요한 말에서 추론을 답 앞에 글로 써
+    JSON 이 깨졌다(2026-11-04 실경로: 끔 0.3.0 6/24·0.4.0 2/24 깨짐 → low 0/48)."""
+    assert default_feature_effort()[_FEAT] == "low"
 
 
 def _cat_pool(per_cat: int) -> CandidatePool:
