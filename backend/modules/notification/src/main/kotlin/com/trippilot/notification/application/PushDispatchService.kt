@@ -6,6 +6,9 @@ import com.trippilot.notification.domain.PushMessage
 import com.trippilot.notification.domain.PushPort
 import com.trippilot.notification.domain.PushRateLimited
 import com.trippilot.notification.domain.PushStatus
+import com.trippilot.notification.domain.PushTicket
+import com.trippilot.notification.domain.PushTicketRepository
+import com.trippilot.notification.domain.PushToken
 import com.trippilot.notification.domain.PushTokenRepository
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -59,6 +62,8 @@ class PushDispatchService(
     private val metrics: NotificationMetrics,
     private val limits: PushRateLimits,
     private val clock: Clock,
+    // 접수된 티켓 id 를 남긴다 — 15분 뒤 영수증으로 도착 실패를 알기 위한 열쇠(TRIP-1707).
+    private val tickets: PushTicketRepository,
 ) {
     /**
      * 발송 결과를 **한 자리에서** 센다(OBS-U6-02). 반환 지점이 다섯이라 각 자리에서 세면 하나를
@@ -124,6 +129,8 @@ class PushDispatchService(
             if (tokens.invalidate(it.token, now)) log.info("죽은 푸시 토큰을 무효화했습니다.")
         }
 
+        recordTickets(notification, deliverable, receipts, now)
+
         val sent = receipts.count { it.status == PushStatus.SENT }
         return if (sent > 0) {
             record(notification.notificationId, sentAt = now, reason = null)
@@ -135,6 +142,32 @@ class PushDispatchService(
             onReason(failure)
             PushOutcome.FAILED
         }
+    }
+
+    /**
+     * 접수된 티켓(`SENT` + 티켓 id)을 남긴다 — 영수증 조회의 열쇠다. **절대 발송을 깨지 않는다**: 이 호출은 발송 트랜잭션 안이라
+     * 여기서 터지면 발화가 롤백돼 다음 폴링이 같은 예약을 다시 집는다. 그래서 (1) 저장소는 `ON CONFLICT DO NOTHING` 이고 토큰에
+     * FK 가 없으며, (2) 컬럼 폭을 넘는 값은 여기서 걸러 INSERT 가 터질 일을 없애고, (3) 그래도 예외가 나면 삼키고 한 줄 남긴다.
+     * 티켓을 못 남기면 그 발송은 영수증 확인 대상에서 빠질 뿐 — 알림은 이미 알림함에 있고 푸시는 나갔다.
+     */
+    private fun recordTickets(
+        notification: Notification,
+        sentTo: List<com.trippilot.notification.domain.PushToken>,
+        receipts: List<com.trippilot.notification.domain.PushReceipt>,
+        now: java.time.Instant,
+    ) {
+        val platformByToken = sentTo.associate { it.token to it.platform }
+        val rows = receipts.mapNotNull { r ->
+            val ticketId = r.ticketId ?: return@mapNotNull null
+            val platform = platformByToken[r.token] ?: return@mapNotNull null
+            if (r.status != PushStatus.SENT || ticketId.length > PushTicket.TICKET_ID_MAX || r.token.length > PushToken.TOKEN_MAX) {
+                return@mapNotNull null
+            }
+            PushTicket(ticketId, notification.notificationId, r.token, platform, now)
+        }
+        if (rows.isEmpty()) return
+        runCatching { tickets.record(rows) }
+            .onFailure { log.warn("푸시 티켓을 기록하지 못했습니다 — 이 발송은 영수증 확인에서 빠집니다. notificationId={}", notification.notificationId, it) }
     }
 
     /**

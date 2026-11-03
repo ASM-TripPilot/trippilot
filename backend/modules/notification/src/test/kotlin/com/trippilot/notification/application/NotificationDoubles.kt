@@ -103,6 +103,7 @@ internal fun noPush(clock: java.time.Clock, notifications: NotificationRepositor
         metrics = testMetrics(notifications),
         limits = PushRateLimits(),
         clock = clock,
+        tickets = FakeTickets(),
     )
 
 /**
@@ -111,6 +112,17 @@ internal fun noPush(clock: java.time.Clock, notifications: NotificationRepositor
  */
 internal fun testMetrics(notifications: NotificationRepository = FakeNotifications()) =
     NotificationMetrics(io.micrometer.core.instrument.simple.SimpleMeterRegistry(), notifications)
+
+/** 푸시 티켓 대역 — 기록된 것을 남기고, [failWith] 를 주면 기록이 터지는 저장소를 흉내 낸다. */
+internal class FakeTickets : com.trippilot.notification.domain.PushTicketRepository {
+    val recorded = mutableListOf<com.trippilot.notification.domain.PushTicket>()
+    var failWith: Throwable? = null
+
+    override fun record(tickets: List<com.trippilot.notification.domain.PushTicket>) {
+        failWith?.let { throw it }
+        recorded += tickets
+    }
+}
 
 internal class FakeSchedules : NotificationScheduleRepository {
     val stored = mutableListOf<NotificationSchedule>()

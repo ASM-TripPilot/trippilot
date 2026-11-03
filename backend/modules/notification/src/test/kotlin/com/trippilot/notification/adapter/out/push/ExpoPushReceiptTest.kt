@@ -69,6 +69,28 @@ class ExpoPushReceiptTest : StringSpec({
         )
     }
 
+    /**
+     * **ok 티켓의 id 가 영수증으로 이어진다.** 접수(SENT)와 도착은 다르고, 도착 실패(자격 누락·영수증으로만 드러나는 죽은 토큰)는
+     * 이 id 로 15분 뒤 영수증을 조회해야 안다. id 가 파싱에서 사라지면 그 길이 막힌다. 실패 티켓에는 id 가 없다(Expo 계약).
+     */
+    "ok 티켓의 id 를 영수증에 싣고, 실패 티켓·id 없는 ok 는 id 가 없다" {
+        val receipts = send(
+            listOf("t1", "t2", "t3", "t4"),
+            """{"data":[
+                {"status":"ok","id":"ticket-1"},
+                {"status":"error","message":"gone","details":{"error":"DeviceNotRegistered"}},
+                {"status":"ok"},
+                {"status":"ok","id":"  "}
+            ]}""",
+        )
+        receipts shouldBe listOf(
+            PushReceipt("t1", PushStatus.SENT, ticketId = "ticket-1"),
+            PushReceipt("t2", PushStatus.DEVICE_NOT_REGISTERED, "DeviceNotRegistered"),
+            PushReceipt("t3", PushStatus.SENT),      // 접수는 됐지만 추적할 id 가 없다
+            PushReceipt("t4", PushStatus.SENT),      // 빈 id 는 id 가 아니다
+        )
+    }
+
     "티켓 수가 토큰 수와 다르면 대응을 잃었으므로 전부 FAILED — 어느 토큰도 무효화하지 않는다" {
         val receipts = send(
             listOf("t1", "t2"),

@@ -105,7 +105,7 @@ class NotificationRaiseServiceTest : StringSpec({
         val toggleService = NotificationToggleService(toggles, clock)
         return NotificationRaiseService(
             notifications, toggleService,
-            PushDispatchService(Tokens(), notifications, toggleService, sender, testMetrics(notifications), PushRateLimits(), clock),
+            PushDispatchService(Tokens(), notifications, toggleService, sender, testMetrics(notifications), PushRateLimits(), clock, FakeTickets()),
             trips, metrics ?: testMetrics(notifications), clock,
         )
     }
@@ -154,7 +154,7 @@ class NotificationRaiseServiceTest : StringSpec({
         val toggleService = NotificationToggleService(off, clock)
         val svc = NotificationRaiseService(
             notifications, toggleService,
-            PushDispatchService(Tokens(), notifications, toggleService, sender, testMetrics(notifications), PushRateLimits(), clock),
+            PushDispatchService(Tokens(), notifications, toggleService, sender, testMetrics(notifications), PushRateLimits(), clock, FakeTickets()),
             trips, NotificationMetrics(registry, notifications), clock,
         )
 
@@ -174,7 +174,7 @@ class NotificationRaiseServiceTest : StringSpec({
         val toggleService = NotificationToggleService(toggles, clock)
         val svc = NotificationRaiseService(
             notifications, toggleService,
-            PushDispatchService(Tokens(), notifications, toggleService, Sender(), testMetrics(notifications), PushRateLimits(), clock),
+            PushDispatchService(Tokens(), notifications, toggleService, Sender(), testMetrics(notifications), PushRateLimits(), clock, FakeTickets()),
             deleted, testMetrics(notifications), clock,
         )
 

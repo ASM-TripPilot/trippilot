@@ -133,8 +133,8 @@ class PushDispatchPropertyTest : StringSpec({
         Notification.raise(acc, kind, "제목", "본문", clock.instant())
 
 
-    fun serviceOf(tokens: Tokens, sender: PushPort, notifications: Notifications, pushOn: Boolean = true) =
-        PushDispatchService(tokens, notifications, NotificationToggleService(Toggles(pushOn), clock), sender, testMetrics(notifications), PushRateLimits(), clock)
+    fun serviceOf(tokens: Tokens, sender: PushPort, notifications: Notifications, pushOn: Boolean = true, tickets: FakeTickets = FakeTickets()) =
+        PushDispatchService(tokens, notifications, NotificationToggleService(Toggles(pushOn), clock), sender, testMetrics(notifications), PushRateLimits(), clock, tickets)
 
     /**
      * **"보냈다"와 "보낸 척했다"를 지표가 가른다**(TRIP-834).
@@ -154,7 +154,7 @@ class PushDispatchPropertyTest : StringSpec({
         val svc = PushDispatchService(
             Tokens(listOf(token(deliverable = true))), notifications,
             NotificationToggleService(Toggles(true), clock), notSending,
-            NotificationMetrics(registry, notifications), PushRateLimits(), clock,
+            NotificationMetrics(registry, notifications), PushRateLimits(), clock, FakeTickets(),
         )
 
         svc.dispatch(notification()) shouldBe PushOutcome.SENT
@@ -247,7 +247,7 @@ class PushDispatchPropertyTest : StringSpec({
                 override fun send(tokens: List<String>, message: com.trippilot.notification.domain.PushMessage) =
                     emptyList<com.trippilot.notification.domain.PushReceipt>()
             },
-            NotificationMetrics(registry, notifications), PushRateLimits(), clock,
+            NotificationMetrics(registry, notifications), PushRateLimits(), clock, FakeTickets(),
         )
 
         svc.dispatch(notification())
@@ -456,7 +456,7 @@ class PushDispatchPropertyTest : StringSpec({
             }
             val outcome = PushDispatchService(
                 Tokens(listOf(token(deliverable = true))), notifications, NotificationToggleService(Toggles(true), clock), broken,
-                NotificationMetrics(registry, notifications), PushRateLimits(), clock,
+                NotificationMetrics(registry, notifications), PushRateLimits(), clock, FakeTickets(),
             ).dispatch(notification())
             val tag = registry.find(NotificationMetrics.PUSH_DISPATCH).counters().single().id.getTag("reason")
             return Triple(outcome, notifications.pushResults.single().third, tag)
