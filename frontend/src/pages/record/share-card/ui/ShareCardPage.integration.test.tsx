@@ -6,23 +6,30 @@ import {
   fireEvent,
   render,
   screen,
+  userEvent,
   waitFor,
   within,
 } from '@testing-library/react-native';
 
+import { formatShareCardPeriod } from '@/entities/trip';
 import { server } from '@/mocks/server';
 import { retryUnlessNotFound } from '@/shared/api';
 import type {
+  DayHighlight,
   ShareCardCopy,
   Trip,
   TripSummary,
+  TripSummaryStats,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
+import { answerReduceMotionSynchronously } from '@/test-support/animatedProbe';
 import { BASE } from '@/test-support/apiBase';
 import { freezeDate } from '@/test-support/freezeDate';
-import { answerReduceMotionSynchronously } from '@/test-support/animatedProbe';
 import { flushNotifications } from '@/test-support/flushNotifications';
+import { day, itinerary, slot } from '@/test-support/itineraryFixtures';
 import { createGate, createHitLog } from '@/test-support/mswHookHarness';
+import { createRequestLog, serveItinerary } from '@/test-support/mswItinerary';
 import { createWrapper } from '@/test-support/queryRender';
 
 import { ShareCardPage } from './ShareCardPage';
@@ -35,6 +42,11 @@ import { ShareCardPage } from './ShareCardPage';
  * 바뀔 수 있는데, 화면을 "받은 props 만 기록하는 가짜"로 바꾸는 `ShareCardPage.test` 는 이를 원리적으로 못 본다.
  * 요청 횟수·실패 갈래·429 재시도도 진짜 react-query 아래서만 의미가 있다(msw 가 서버 역할).
  * 구현 방식(useQuery/useMutation, 상태를 화면에 두나 페이지에 두나)은 묶지 않는다 — testID·글자·요청 횟수만 본다.
+ *
+ * TRIP-1667 — 첫 얼굴이 스토리 덱으로 바뀌었다. 내보내기 얼굴(포맷·대표 카드·캡션/해시태그 편집·저장/공유)은 덱 마지막 장의
+ * [공유 카드 만들기]를 눌러야 서므로 `openExport()` 한 줄이 내보내기를 보는 모든 it 앞에 붙는다. 덱 안의 시간(자동 넘김·누름 멈춤)은
+ * 가짜 타이머가 MSW 응답을 멈추기 때문에 여기서 재지 않는다 — 동작 줄이기 true 로 자동 넘김을 끄고 탭(`fireEvent`)으로만 넘긴다.
+ * 시간 규칙은 `storyDeck.test`(리듀서)·`useStoryDeck.test`(훅)·`StoryDeck.test`(배선)가 잰다.
  *
  * 3동작: 준비(여행·요약·복사 응답 정하기) → 실행(페이지 렌더·누르기·시간 흘리기) → 단언(보이는 글·요청 횟수).
  *
@@ -159,6 +171,12 @@ function serveCopy(...responders: Responder[]): void {
 const hitLog = createHitLog(server);
 const copyHits = () => hitLog.count(COPY_KEY);
 
+// TRIP-1667 — 일차 카드 색을 위한 일정 조회(`GET /trips/:id/itinerary`) 횟수. 요약 ready ∧ 방문 ≥ 1 일 때만 나가야 한다(AC-13).
+const requests = createRequestLog(server);
+const ITINERARY_HIT = `GET ${new URL(BASE).pathname}/trips/${TRIP_ID}/itinerary`;
+const itineraryHits = () =>
+  requests.all().filter((hit) => hit === ITINERARY_HIT).length;
+
 /** 운영(`AppProviders`)과 같은 기본값 — 재시도 간격만 짧게. 캐시는 테스트 끝까지 유지. */
 function productionLikeClient(): QueryClient {
   return new QueryClient({
@@ -205,6 +223,23 @@ async function waitForHits(atLeast: number, timeout = 5000): Promise<void> {
 }
 
 const frame = () => screen.findByTestId('reflection-share-preview-frame');
+const deck = () => screen.findByTestId('reflection-share-deck');
+const deckId = (suffix: string) => `reflection-share-deck-${suffix}`;
+
+/**
+ * 덱의 오른쪽 탭 영역을 [공유 카드 만들기]가 보일 때까지 누른 뒤(최대 장 수만큼) 만들기를 눌러 내보내기 얼굴의 프레임을 기다린다.
+ * 탭은 `fireEvent.press`(= onPress 핸들러, 접근성 클릭과 같은 경로) — 시간이 아니라 손으로 넘긴다. 연타 가드(400ms 창)가 걸려 있었다면
+ * 이 연속 누름이 막혀 실패한다. 만들기 직후 창을 닫아(`resetPressGuard`) 뒤따르는 헤더 뒤로 등이 앞 누름에 막히지 않게 한다.
+ */
+async function openExport() {
+  await deck();
+  for (let i = 0; i < 12 && !screen.queryByTestId(deckId('make')); i += 1) {
+    fireEvent.press(screen.getByTestId(deckId('next')));
+  }
+  fireEvent.press(screen.getByTestId(deckId('make')));
+  resetPressGuard();
+  return frame();
+}
 const captionLine = () => screen.getByTestId('reflection-share-caption-text');
 const hashtagLine = () => screen.getByTestId('reflection-share-hashtags');
 
@@ -220,14 +255,33 @@ function expectOnDeviceCard(): void {
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });
   hitLog.attach();
+  requests.attach();
 });
 beforeEach(() => {
   setAccessToken('a');
   hitLog.reset();
+  requests.reset();
   requestBodies.length = 0;
+  // 덱의 자동 넘김을 끈다(동작 줄이기 true) — 시간이 아니라 탭으로만 장을 넘긴다. 카운트업·등장 연출은 끝값 그대로 보이고 act 소음도 없다.
+  answerReduceMotionSynchronously(true);
+  resetPressGuard();
   mockShareArmed.value = true;
   mockSave.mockReset().mockResolvedValue({ status: 'saved' });
   mockShare.mockReset().mockResolvedValue({ status: 'shared' });
+  // 일정 조회 기본 핸들러 — 통합은 `onUnhandledRequest:'error'` 이고 각 describe 의 `afterEach(resetHandlers)` 가 describe 안 `server.use` 를
+  // 지우므로 기본 핸들러는 describe 안이 아니라 **파일 최상위** beforeEach 여야 한다(나중에 `use` 한 핸들러가 앞에 끼어 이긴다).
+  serveItinerary(server, {
+    itinerary: () =>
+      itinerary({
+        tripId: TRIP_ID,
+        days: [
+          day('2026-06-11', [
+            slot('p1', { nameKo: '광안리 해변', category: '맛집' }),
+            slot('p2', { nameKo: '감천문화마을', category: '문화' }),
+          ]),
+        ],
+      }),
+  });
   server.use(tripOk(), summaryReady());
 });
 // 모듈 싱글턴(msw 핸들러·토큰·포커스 관리자·가짜 시계)은 앞 케이스가 남긴 상태가 새지 않게 파일 최상위에서 되돌린다.
@@ -240,22 +294,23 @@ afterEach(() => {
 afterAll(() => server.close());
 
 describe('🔴 TRIP-1605 AC-1 · 요약 ready 로 카드 얼굴이 그려질 때 정확히 1회', () => {
-  it('카드가 뜨면 POST …/share-card/copy 가 1건(본문 없음)만 나간다', async () => {
+  it('덱(첫 얼굴)이 뜨면 POST …/share-card/copy 가 1건(본문 없음)만 나간다 — 내보내기를 열기 전에 이미 1건', async () => {
     // 준비
     serveCopy(copyOk(AI_COPY));
 
-    // 실행
+    // 실행: 덱만 띄운다(내보내기 얼굴은 아직 안 열었다)
     renderPage();
-    await frame();
+    await deck();
     await waitForHits(1);
     await quiet();
 
     // 단언: "N 이상 대기 → 조용한 구간 → 정확히 N"
     expect(copyHits()).toBe(1);
     expect(requestBodies).toEqual(['']);
+    expect(screen.queryByTestId('reflection-share-preview-frame')).toBeNull();
   });
 
-  it('여행 조회가 늦으면 카드가 그려지기 전엔 부르지 않고, 도착해 카드가 뜨면 1회 부른다', async () => {
+  it('여행 조회가 늦으면 덱이 그려지기 전엔 부르지 않고, 도착해 덱이 뜨면 1회 부른다', async () => {
     // 준비: 요약은 ready 인데 여행 응답은 문(gate)으로 붙잡는다.
     const tripGate = createGate();
     server.use(
@@ -272,9 +327,9 @@ describe('🔴 TRIP-1605 AC-1 · 요약 ready 로 카드 얼굴이 그려질 때
     await quiet();
     expect(copyHits()).toBe(0);
 
-    // 실행 2: 여행이 도착해 카드가 뜬다
+    // 실행 2: 여행이 도착해 덱이 뜬다
     tripGate.release();
-    await frame();
+    await deck();
     await waitForHits(1);
     await quiet();
 
@@ -296,6 +351,7 @@ describe('🔴 TRIP-1605 AC-1 · 요약 ready 로 카드 얼굴이 그려질 때
     await quiet();
 
     expect(copyHits()).toBe(0);
+    expect(screen.queryByTestId('reflection-share-deck')).toBeNull();
   });
 
   it('요약 미준비(ready:false) 얼굴에서는 부르지 않는다 (짝 — 선제 green)', async () => {
@@ -311,6 +367,7 @@ describe('🔴 TRIP-1605 AC-1 · 요약 ready 로 카드 얼굴이 그려질 때
     await quiet();
 
     expect(copyHits()).toBe(0);
+    expect(screen.queryByTestId('reflection-share-deck')).toBeNull();
   });
 });
 
@@ -319,7 +376,7 @@ describe('🔴 TRIP-1605 AC-2·3·10 · 받은 문구를 그대로 그린다', (
     serveCopy(copyOk(AI_COPY));
 
     renderPage();
-    await frame();
+    await openExport();
 
     await waitFor(() =>
       expect(hashtagLine()).toHaveTextContent(AI_HASHTAG_LINE)
@@ -336,7 +393,7 @@ describe('🔴 TRIP-1605 AC-2·3·10 · 받은 문구를 그대로 그린다', (
     );
 
     renderPage();
-    await frame();
+    await openExport();
     await waitForHits(1);
     await quiet();
 
@@ -347,7 +404,7 @@ describe('🔴 TRIP-1605 AC-2·3·10 · 받은 문구를 그대로 그린다', (
     serveCopy(copyOk({ isFallback: true, caption: '', hashtags: [] }));
 
     renderPage();
-    await frame();
+    await openExport();
     await waitForHits(1);
     await quiet();
 
@@ -362,7 +419,7 @@ describe('🔴 TRIP-1605 AC-2·3·10 · 받은 문구를 그대로 그린다', (
     );
 
     renderPage();
-    await frame();
+    await openExport();
 
     await waitFor(() =>
       expect(hashtagLine()).toHaveTextContent(tags.slice(0, 10).join(' '))
@@ -372,16 +429,21 @@ describe('🔴 TRIP-1605 AC-2·3·10 · 받은 문구를 그대로 그린다', (
 });
 
 describe('🔴 TRIP-1605 AC-4 · 화면에 머무는 동안 다시 부르지 않는다', () => {
-  it('포맷 전환·[편집]→[완료]·[이미지 저장]·[공유하기]·리렌더에도 요청은 1건 그대로, 문구도 유지', async () => {
+  it('덱↔내보내기 왕복·포맷 전환·[편집]→[완료]·[이미지 저장]·[공유하기]·리렌더에도 요청은 1건 그대로, 문구도 유지', async () => {
     serveCopy(copyOk(AI_COPY));
     const view = renderPage();
+    await openExport();
     await waitFor(() =>
       expect(hashtagLine()).toHaveTextContent(AI_HASHTAG_LINE)
     );
     await quiet();
     expect(copyHits()).toBe(1);
 
-    // 실행: 화면 안에서 할 수 있는 조작을 전부 한 번씩
+    // 실행: 화면 안에서 할 수 있는 조작을 전부 한 번씩 — 내보내기 → 덱 마지막 장 → 내보내기 다시
+    fireEvent.press(screen.getByTestId('reflection-share-back'));
+    await deck();
+    fireEvent.press(screen.getByTestId(deckId('make')));
+    await frame();
     fireEvent.press(screen.getByTestId('reflection-share-format-square'));
     fireEvent.press(screen.getByTestId('reflection-share-format-feed'));
     fireEvent.press(screen.getByTestId('reflection-share-format-story'));
@@ -409,6 +471,7 @@ describe('🔴 TRIP-1605 AC-4 · 화면에 머무는 동안 다시 부르지 않
     freezeDate('2026-10-23T09:00:00Z');
     serveCopy(copyOk(AI_COPY));
     renderPage();
+    await openExport();
     await waitFor(() =>
       expect(hashtagLine()).toHaveTextContent(AI_HASHTAG_LINE)
     );
@@ -439,7 +502,7 @@ describe('🔴 TRIP-1605 AC-5 · 문구가 나중에 도착해도 화면이 바�
 
     // 실행 1: 도착 전
     renderPage();
-    await frame();
+    await openExport();
     await waitForHits(1);
     await quiet();
     // 앵커(실행 전 "아직 없다"): 전체 대기 얼굴이 카드를 붙잡지 않고, AI 글도 아직 없다.
@@ -465,7 +528,7 @@ describe('🔴 TRIP-1605 AC-5 · 문구가 나중에 도착해도 화면이 바�
       return HttpResponse.json(AI_COPY);
     });
     renderPage();
-    await frame();
+    await openExport();
     await waitForHits(1);
 
     // 실행 1: 도착 전에 [편집] 해서 내 태그를 적는다
@@ -502,7 +565,7 @@ describe('🔴 TRIP-1605 AC-5 · 문구가 나중에 도착해도 화면이 바�
       return HttpResponse.json(AI_COPY);
     });
     renderPage();
-    await frame();
+    await openExport();
     await waitForHits(1);
 
     fireEvent.press(screen.getByTestId('reflection-share-caption-edit'));
@@ -529,7 +592,7 @@ describe('🔴 TRIP-1605 AC-6·9 · 못 받으면 카드는 그대로, 온디바
     serveCopy(copyError(409, 'TRIP_NOT_ENDED'));
 
     renderPage();
-    await frame();
+    await openExport();
     await waitForHits(1);
     await quiet();
 
@@ -547,7 +610,7 @@ describe('🔴 TRIP-1605 AC-6·9 · 못 받으면 카드는 그대로, 온디바
       serveCopy(responder);
 
       renderPage();
-      await frame();
+      await openExport();
       await waitForHits(1);
       await quiet();
 
@@ -562,7 +625,7 @@ describe('🔴 TRIP-1605 AC-7 · 429 SHARE_CARD_DAILY_LIMIT — 한 줄 안내, 
     serveCopy(copyError(429, 'SHARE_CARD_DAILY_LIMIT', { 'Retry-After': '1' }));
 
     renderPage();
-    await frame();
+    await openExport();
     await waitFor(() =>
       expect(
         screen.getByTestId('reflection-share-copy-limit')
@@ -607,7 +670,7 @@ describe('🔴 TRIP-1605 AC-8 · 429 RATE_LIMITED — Retry-After 뒤 정확히 
     );
 
     renderPage();
-    await frame();
+    await openExport();
     await waitForHits(1);
     await quiet(2500);
 
@@ -631,7 +694,7 @@ describe('🔴 TRIP-1605 AC-8 · 429 RATE_LIMITED — Retry-After 뒤 정확히 
     serveCopy(copyError(429, 'RATE_LIMITED', { 'Retry-After': '1' }));
 
     renderPage();
-    await frame();
+    await openExport();
     await waitForHits(2, 6000);
     await quiet(1500);
 
@@ -643,7 +706,7 @@ describe('🔴 TRIP-1605 AC-8 · 429 RATE_LIMITED — Retry-After 뒤 정확히 
     serveCopy(copyError(429, 'RATE_LIMITED'));
 
     renderPage();
-    await frame();
+    await openExport();
     await waitForHits(1);
     await quiet(1500);
 
@@ -685,9 +748,9 @@ describe('화면 동작 — 포맷·사진 없음·통계·편집 한도·저장
 
   beforeEach(() => serveCopy(copyOk(AI_COPY)));
 
-  it('헤더·제목이 서고, 포맷은 스토리부터 선택돼 있으며 누른 포맷으로 선택이 옮겨 간다 · 뒤로는 router.back', async () => {
+  it('헤더·제목이 서고, 포맷은 스토리부터 선택돼 있으며 누른 포맷으로 선택이 옮겨 간다', async () => {
     renderPage();
-    await frame();
+    await openExport();
 
     expect(screen.getByText('공유 카드')).toBeOnTheScreen();
     expect(screen.getByText('부산 여행')).toBeOnTheScreen();
@@ -697,17 +760,40 @@ describe('화면 동작 — 포맷·사진 없음·통계·편집 한도·저장
     expect(
       screen.getByTestId('reflection-share-format-story')
     ).not.toBeSelected();
+  });
 
-    fireEvent.press(screen.getByTestId('reflection-share-back'));
+  it('내보내기 헤더 뒤로 → 화면을 나가지 않고 덱 마지막 장으로 돌아온다 · 덱 ×(닫기)가 화면을 나간다(router.back 1회) · 문구 요청은 1건 그대로', async () => {
     const { router } = jest.requireMock<{ router: { back: jest.Mock } }>(
       'expo-router'
     );
-    expect(router.back).toHaveBeenCalled();
+    router.back.mockClear();
+    renderPage();
+    await openExport();
+    await waitForHits(1);
+
+    // 실행 1: 내보내기 헤더 뒤로
+    fireEvent.press(screen.getByTestId('reflection-share-back'));
+
+    // 단언 1: 덱의 마지막 장(숫자 장 — [공유 카드 만들기])이고 내보내기 얼굴은 사라졌다. 화면 이탈 없음.
+    await deck();
+    expect(screen.getByTestId(deckId('slide-stats'))).toBeOnTheScreen();
+    expect(screen.getByTestId(deckId('make'))).toBeOnTheScreen();
+    expect(screen.queryByTestId('reflection-share-preview-frame')).toBeNull();
+    expect(router.back).not.toHaveBeenCalled();
+
+    // 실행 2: 덱 ×
+    resetPressGuard();
+    fireEvent.press(screen.getByTestId(deckId('close')));
+
+    // 단언 2
+    expect(router.back).toHaveBeenCalledTimes(1);
+    await quiet();
+    expect(copyHits()).toBe(1);
   });
 
   it('사진이 있으면 기본 카드 — 사진 없음 안내가 없고, 통계 줄은 "N곳 · 거리 · 사진 N장"(위치 없음이라 거리는 —), 방문 순서 박스가 있다', async () => {
     renderPage();
-    await frame();
+    await openExport();
 
     expect(screen.queryByTestId('reflection-share-no-photo-notice')).toBeNull();
     expect(screen.getByText('12곳 · — · 사진 24장')).toBeOnTheScreen();
@@ -721,7 +807,7 @@ describe('화면 동작 — 포맷·사진 없음·통계·편집 한도·저장
   it('사진 0장 + 방문 있음 → 방문 순서 안내, 통계 줄은 "방문 N · 이동 · 사진 N", 방문 순서 박스가 있다', async () => {
     serveSummary({}, { totalPhotos: 0 });
     renderPage();
-    await frame();
+    await openExport();
 
     expect(
       within(screen.getByTestId('reflection-share-no-photo-notice')).getByText(
@@ -738,7 +824,7 @@ describe('화면 동작 — 포맷·사진 없음·통계·편집 한도·저장
   it('사진 0장 + 방문 0곳 → 여행 정보 안내, 방문 순서 박스는 없고 카드 프레임·제목은 남는다', async () => {
     serveSummary({ highlights: [] }, { totalPhotos: 0 });
     renderPage();
-    await frame();
+    await openExport();
 
     expect(screen.getByText(NO_VISIT_NOTICE)).toBeOnTheScreen();
     expect(screen.queryByText(VISIT_ORDER_NOTICE)).toBeNull();
@@ -749,7 +835,7 @@ describe('화면 동작 — 포맷·사진 없음·통계·편집 한도·저장
   it('사진 있음 + 방문 0곳 → 방문 순서 박스가 없다(박스 판정은 사진이 아니라 방문)', async () => {
     serveSummary({ highlights: [] });
     renderPage();
-    await frame();
+    await openExport();
 
     expect(screen.queryByTestId('reflection-share-visit-order')).toBeNull();
     expect(screen.queryByTestId('reflection-share-no-photo-notice')).toBeNull();
@@ -757,7 +843,7 @@ describe('화면 동작 — 포맷·사진 없음·통계·편집 한도·저장
 
   it(`해시태그 11개·151자는 [완료]가 안 되고 안내가 뜨며, 두 칸 간격 10개·"#" 없는 단어는 그대로 확정된다`, async () => {
     renderPage();
-    await frame();
+    await openExport();
     const input = await openEditor();
 
     fireEvent.changeText(
@@ -795,7 +881,7 @@ describe('화면 동작 — 포맷·사진 없음·통계·편집 한도·저장
 
   it('[이미지 저장] → 프리뷰 프레임을 담은 ref 로 저장 1회 · 성공 안내, [공유하기] → 같은 프레임으로 공유 1회 · 안내 없음', async () => {
     renderPage();
-    await frame();
+    await openExport();
 
     fireEvent.press(screen.getByTestId('reflection-share-save'));
     expect(await screen.findByText('사진 앨범에 저장했어요')).toBeOnTheScreen();
@@ -820,7 +906,7 @@ describe('화면 동작 — 포맷·사진 없음·통계·편집 한도·저장
     openSettings.mockClear();
     mockSave.mockResolvedValueOnce({ status: 'permission-denied' });
     renderPage();
-    await frame();
+    await openExport();
 
     fireEvent.press(screen.getByTestId('reflection-share-save'));
     expect(
@@ -847,7 +933,7 @@ describe('화면 동작 — 포맷·사진 없음·통계·편집 한도·저장
   it('캡처가 장전되지 않은 빌드면 [이미지 저장]·[공유하기]가 없다 — [편집]은 있다', async () => {
     mockShareArmed.value = false;
     renderPage();
-    await frame();
+    await openExport();
 
     expect(screen.queryByTestId('reflection-share-save')).toBeNull();
     expect(screen.queryByTestId('reflection-share-export')).toBeNull();
@@ -871,7 +957,7 @@ describe('개발 검사 모드(StrictMode)에서도 서버 문구가 화면에 �
 
     // 실행
     renderPageStrict();
-    await frame();
+    await openExport();
     await waitForHits(1);
     await quiet();
 
@@ -892,7 +978,7 @@ describe('개발 검사 모드(StrictMode)에서도 서버 문구가 화면에 �
 
     // 실행
     renderPageStrict();
-    await frame();
+    await openExport();
     await waitForHits(1);
     await waitFor(() =>
       expect(
@@ -922,7 +1008,7 @@ describe('재시도 대기 중 화면을 나가면 서버를 더 부르지 않�
 
     // 실행: 첫 요청이 막 나간 시점에 화면을 나가고, Retry-After 를 넘겨 기다린다
     const view = renderPage();
-    await frame();
+    await deck();
     await waitForHits(1);
     view.unmount();
     await quiet(1500);
@@ -931,4 +1017,598 @@ describe('재시도 대기 중 화면을 나가면 서버를 더 부르지 않�
     expect(view.toJSON()).toBeNull();
     expect(copyHits()).toBe(1);
   }, 15000);
+});
+
+// ── TRIP-1667 · 스토리 덱 ────────────────────────────────────────────────────────────────────────────
+// 초심자용: "덱" = 9:16 로 한 장씩 넘기는 카드 묶음(인스타 스토리). 장 = 표지 · 일차 장면 · 동선 · 숫자(+ [공유 카드 만들기]).
+// 여기서는 서버 응답(요약·여행·일정·문구)이 덱에 어떻게 실리는지와 페이지 흐름만 본다. 장을 손으로 넘기는 건 `fireEvent.press`(탭 핸들러 —
+// 접근성 클릭과 같은 경로)이고, 시간은 흘리지 않는다(동작 줄이기 true). 색·글자 크기·배치·애니메이션 재생은 단언하지 않는다 — 실화면 몫.
+describe('🔴 TRIP-1667 · 스토리 덱 — 장 구성·진행 바·탭 이동·내용', () => {
+  const hl = (
+    n: number,
+    places: string[],
+    over: Partial<DayHighlight> = {}
+  ): DayHighlight => ({
+    date: `2026-06-${10 + n}`,
+    dayOrder: n,
+    visitCount: places.length,
+    places,
+    ...over,
+  });
+  function serveSummaryWith(
+    highlights: DayHighlight[],
+    stats: Partial<TripSummaryStats> = {}
+  ) {
+    server.use(
+      http.get(`${BASE}/trips/:tripId/summary`, () =>
+        HttpResponse.json({
+          ready: true,
+          summary: {
+            ...SUMMARY,
+            highlights,
+            stats: { ...SUMMARY.stats, ...stats },
+          },
+        })
+      )
+    );
+  }
+
+  const SLIDE_KEYS = [
+    'cover',
+    'day-1',
+    'day-2',
+    'day-3',
+    'day-4',
+    'day-5',
+    'day-6',
+    'day-7',
+    'route',
+    'stats',
+  ];
+  /** 지금 서 있는 장들(정상이면 정확히 하나). day-6·7 도 훑어 "상한을 넘는 장"이 생기면 잡는다. */
+  const shownSlides = () =>
+    SLIDE_KEYS.filter(
+      (key) => screen.queryByTestId(deckId(`slide-${key}`)) !== null
+    );
+  const next = () => fireEvent.press(screen.getByTestId(deckId('next')));
+  const prev = () => fireEvent.press(screen.getByTestId(deckId('prev')));
+  const slideEl = (key: string) => screen.getByTestId(deckId(`slide-${key}`));
+  const goTo = (key: string) => {
+    for (let i = 0; i < 12 && shownSlides()[0] !== key; i += 1) next();
+    expect(shownSlides()).toEqual([key]);
+    return within(slideEl(key));
+  };
+  /** 오른쪽 탭으로 끝까지 가며 거친 장 키를 모은다. 장마다 한 장만 서 있고, INV-3(소요시간 문구 없음)을 매 장 확인한다. */
+  function walk(): string[] {
+    const seen: string[] = [];
+    for (let i = 0; i < 12; i += 1) {
+      const shown = shownSlides();
+      expect(shown).toHaveLength(1);
+      expect(screen.queryByText(/소요|시간|\d+\s*분/)).toBeNull();
+      if (seen.at(-1) === shown[0]) break;
+      seen.push(shown[0]);
+      next();
+    }
+    return seen;
+  }
+  function expectSegments(texts: string[]) {
+    texts.forEach((text, i) =>
+      expect(screen.getByTestId(deckId(`seg-${i}`))).toHaveAccessibilityValue({
+        text,
+      })
+    );
+    expect(screen.queryByTestId(deckId(`seg-${texts.length}`))).toBeNull();
+  }
+
+  beforeEach(() => serveCopy(copyOk(AI_COPY)));
+
+  it('ID-1 · AC-1 장 구성: 표지 → 1일차 → 동선 → 숫자(4장), 진행 바 구간 수 = 장 수, [공유 카드 만들기]는 마지막 장에만', async () => {
+    renderPage();
+    await deck();
+
+    expect(screen.getByTestId(deckId('progress'))).toHaveAccessibilityValue({
+      min: 1,
+      max: 4,
+      now: 1,
+    });
+    expect(screen.queryByTestId(deckId('make'))).toBeNull(); // 표지에는 버튼이 없다(짝)
+    expect(walk()).toEqual(['cover', 'day-1', 'route', 'stats']);
+    expect(screen.getByTestId(deckId('progress'))).toHaveAccessibilityValue({
+      now: 4,
+    });
+    expect(
+      within(screen.getByTestId(deckId('make'))).getByText('공유 카드 만들기')
+    ).toBeOnTheScreen();
+  });
+
+  it('ID-2 · AC-1 방문 0곳: 장면·동선 장이 없고 표지 → 숫자 두 장', async () => {
+    serveSummaryWith([]);
+    renderPage();
+    await deck();
+
+    expect(screen.getByTestId(deckId('progress'))).toHaveAccessibilityValue({
+      min: 1,
+      max: 2,
+      now: 1,
+    });
+    expect(walk()).toEqual(['cover', 'stats']);
+  });
+
+  it('ID-3 · AC-1·Q7 일차가 7개여도 장면은 앞 5장, 동선 정지점은 6줄', async () => {
+    serveSummaryWith(
+      Array.from({ length: 7 }, (_, i) => hl(i + 1, [`장소${i + 1}`]))
+    );
+    renderPage();
+    await deck();
+
+    expect(screen.getByTestId(deckId('progress'))).toHaveAccessibilityValue({
+      max: 8,
+    });
+    expect(walk()).toEqual([
+      'cover',
+      'day-1',
+      'day-2',
+      'day-3',
+      'day-4',
+      'day-5',
+      'route',
+      'stats',
+    ]); // day-6·day-7 장은 한 번도 안 선다
+    prev();
+    const route = within(slideEl('route'));
+    expect(route.getAllByTestId(deckId('route-stop'))).toHaveLength(6);
+    expect(route.queryByText(/장소7/)).toBeNull();
+    expect(route.getByText(/장소6/)).toBeOnTheScreen();
+  });
+
+  it('ID-4 · AC-2 진행 바 구간: 지난 장 · 지금 장 · 다음 장을 접근성 값으로 읽는다(색·폭은 보지 않는다)', async () => {
+    renderPage();
+    await deck();
+
+    expectSegments(['지금', '남음', '남음', '남음']);
+    next();
+    expectSegments(['지남', '지금', '남음', '남음']);
+    next();
+    next();
+    expectSegments(['지남', '지남', '지남', '지금']);
+    prev();
+    expectSegments(['지남', '지남', '지금', '남음']);
+  });
+
+  it('ID-5 · AC-4 탭 이동: 오른쪽 다음 · 왼쪽 이전, 첫 장의 왼쪽·마지막 장의 오른쪽은 무동작(화면도 안 나간다), 연달아 눌러도 둘 다 먹는다', async () => {
+    const { router } = jest.requireMock<{ router: { back: jest.Mock } }>(
+      'expo-router'
+    );
+    router.back.mockClear();
+    renderPage();
+    await deck();
+
+    prev();
+    expect(shownSlides()).toEqual(['cover']);
+    next();
+    next(); // 같은 틱 연타 — 연타 가드(400ms 창)를 탭 영역에 걸면 둘째가 삼켜진다
+    expect(shownSlides()).toEqual(['route']);
+    prev();
+    expect(shownSlides()).toEqual(['day-1']);
+    next();
+    next();
+    next(); // 마지막 장의 오른쪽
+    expect(shownSlides()).toEqual(['stats']);
+    expect(screen.getByTestId(deckId('make'))).toBeOnTheScreen();
+    expect(router.back).not.toHaveBeenCalled();
+  });
+
+  it('ID-6 · AC-5 길게 누른 끝의 뗌은 탭으로 읽히지 않는다(실제 긴 누름, 진짜 타이머) — 같은 영역의 짧은 누름은 이동한다(짝)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await deck();
+
+    await user.longPress(screen.getByTestId(deckId('next')), { duration: 600 });
+    expect(shownSlides()).toEqual(['cover']);
+
+    await user.press(screen.getByTestId(deckId('next')));
+    expect(shownSlides()).toEqual(['day-1']);
+  }, 15000);
+
+  it('ID-7 · AC-7 지금 장만 서 있다: 넘기면 이전 장은 사라지고, 돌아오면 새로 선다(등장 연출이 처음부터 다시 재생되는 조건)', async () => {
+    renderPage();
+    await deck();
+    expect(screen.getByTestId(deckId('slide-cover'))).toBeOnTheScreen();
+
+    next();
+    expect(screen.queryByTestId(deckId('slide-cover'))).toBeNull();
+    expect(screen.getByTestId(deckId('slide-day-1'))).toBeOnTheScreen();
+
+    prev();
+    expect(screen.queryByTestId(deckId('slide-day-1'))).toBeNull();
+    expect(screen.getByTestId(deckId('slide-cover'))).toBeOnTheScreen();
+  });
+
+  it('ID-8 · AC-9 표지: 제목·지역·기간, 서버 문장은 도착하면 표지에 머무는 중에도 채워지고(자리는 늘 있다), 150자까지만', async () => {
+    const gate = createGate();
+    serveCopy(async () => {
+      await gate.opened;
+      return HttpResponse.json({ ...AI_COPY, caption: '가'.repeat(151) });
+    });
+    renderPage();
+    await deck();
+    await waitForHits(1);
+
+    const cover = within(screen.getByTestId(deckId('slide-cover')));
+    expect(screen.getByTestId(deckId('cover-title'))).toHaveTextContent(
+      '부산 여행'
+    );
+    expect(cover.getByText('부산')).toBeOnTheScreen();
+    expect(
+      cover.getByText(formatShareCardPeriod('2026-06-10', '2026-06-12'))
+    ).toBeOnTheScreen();
+    // 도착 전: 문장 줄은 없고 자리만 있다
+    expect(screen.getByTestId(deckId('cover-caption-slot'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(deckId('cover-caption'))).toBeNull();
+
+    gate.release();
+    await waitFor(() =>
+      expect(screen.getByTestId(deckId('cover-caption'))).toHaveTextContent(
+        '가'.repeat(150)
+      )
+    );
+    expect(shownSlides()).toEqual(['cover']); // 문장이 와도 장은 그대로
+    expect(screen.getByTestId(deckId('cover-caption-slot'))).toBeOnTheScreen();
+  });
+
+  it.each([
+    ['409(여행 안 끝남)', copyError(409, 'TRIP_NOT_ENDED')],
+    [
+      '폴백 응답(캡션 빈 문자열)',
+      copyOk({ isFallback: true, caption: '', hashtags: [] }),
+    ],
+  ] as [string, Responder][])(
+    'ID-9 · AC-9 표지: 문장을 못 받으면(%s) 문장 줄이 없고 자리만 있다 — 표지는 멀쩡히 선다',
+    async (_label, responder) => {
+      serveCopy(responder);
+      renderPage();
+      await deck();
+      await waitForHits(1);
+      await quiet();
+
+      expect(screen.getByTestId(deckId('cover-title'))).toHaveTextContent(
+        '부산 여행'
+      );
+      expect(
+        screen.getByTestId(deckId('cover-caption-slot'))
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId(deckId('cover-caption'))).toBeNull();
+    }
+  );
+
+  it('ID-10 · AC-9 여행 제목이 비어 있으면 표지 제목은 "이번 여행"', async () => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () =>
+        HttpResponse.json({ ...TRIP, title: '' })
+      )
+    );
+    renderPage();
+    await deck();
+
+    expect(screen.getByTestId(deckId('cover-title'))).toHaveTextContent(
+      '이번 여행'
+    );
+  });
+
+  it('ID-11 · AC-10 일차 장면: 일차 라벨·N곳·방문지(순서대로)·거리는 서버 km 가 있고 방문 2곳 이상일 때만', async () => {
+    serveSummaryWith([
+      hl(1, ['광안리 해변', '감천문화마을'], {
+        distanceKm: 1.9,
+        distanceSource: 'VISIT_LINE',
+      }),
+      hl(2, ['자갈치시장'], { distanceKm: 5, distanceSource: 'VISIT_LINE' }), // 방문 1곳 → 거리 줄 없음
+      hl(3, ['송정', '기장']), // km 없음 → 거리 줄 없음
+    ]);
+    renderPage();
+    await deck();
+
+    const day1 = goTo('day-1');
+    expect(day1.getByTestId(deckId('day-label'))).toHaveTextContent('1일차');
+    expect(day1.getByTestId(deckId('day-count'))).toHaveTextContent('2곳');
+    const places = day1.getAllByTestId(deckId('day-place'));
+    expect(places).toHaveLength(2);
+    expect(places[0]).toHaveTextContent('광안리 해변');
+    expect(places[1]).toHaveTextContent('감천문화마을');
+    expect(day1.getByTestId(deckId('day-distance'))).toHaveTextContent(
+      '1.9km · 근사'
+    );
+
+    const day2 = goTo('day-2');
+    expect(day2.getByTestId(deckId('day-label'))).toHaveTextContent('2일차');
+    expect(day2.getByTestId(deckId('day-count'))).toHaveTextContent('1곳');
+    expect(day2.queryByTestId(deckId('day-distance'))).toBeNull();
+
+    const day3 = goTo('day-3');
+    expect(day3.getAllByTestId(deckId('day-place'))).toHaveLength(2);
+    expect(day3.queryByTestId(deckId('day-distance'))).toBeNull();
+  });
+
+  it('ID-12 · AC-11 동선 장: 방문 순서대로 이름과 일차 라벨을 함께 보인다', async () => {
+    serveSummaryWith([
+      hl(1, ['광안리 해변', '감천문화마을']),
+      hl(2, ['자갈치시장']),
+    ]);
+    renderPage();
+    await deck();
+
+    const stops = goTo('route').getAllByTestId(deckId('route-stop'));
+
+    expect(stops).toHaveLength(3);
+    expect(stops[0]).toHaveTextContent(/광안리 해변/);
+    expect(stops[0]).toHaveTextContent(/1일차/);
+    expect(stops[1]).toHaveTextContent(/감천문화마을/);
+    expect(stops[2]).toHaveTextContent(/자갈치시장/);
+    expect(stops[2]).toHaveTextContent(/2일차/);
+  });
+
+  it('ID-13 · AC-12·14 숫자 장의 숫자는 내보내기 대표 카드의 숫자와 같다 · 동작 줄이기면 끝값이 바로 보인다', async () => {
+    serveSummaryWith([hl(1, ['광안리 해변'])], {
+      totalVisits: 7,
+      totalPhotos: 3,
+      totalDistanceKm: 12.3,
+      hasLocationData: true,
+    });
+    renderPage();
+    await deck();
+
+    const stats = goTo('stats');
+    expect(stats.getByText('7')).toBeOnTheScreen();
+    expect(stats.getByText('3')).toBeOnTheScreen();
+    expect(stats.getByText('12.3km')).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId(deckId('make')));
+    await frame();
+    expect(screen.getByText('7곳 · 12.3km · 사진 3장')).toBeOnTheScreen();
+  });
+
+  it('ID-14 · AC-12 해시태그 우선순위: 온디바이스 → 서버 문구가 오면 서버 → 사용자가 내보내기에서 고친 값은 서버 문구가 늦게 와도 덮이지 않는다', async () => {
+    const gate = createGate();
+    serveCopy(async () => {
+      await gate.opened;
+      return HttpResponse.json(AI_COPY);
+    });
+    renderPage();
+    await deck();
+    await waitForHits(1);
+
+    // 1) 도착 전: 온디바이스 #{지역}여행
+    expect(goTo('stats').getByTestId(deckId('hashtags'))).toHaveTextContent(
+      ON_DEVICE_HASHTAGS
+    );
+
+    // 2) 내보내기에서 고친다(문구는 아직 안 왔다)
+    fireEvent.press(screen.getByTestId(deckId('make')));
+    await frame();
+    fireEvent.press(screen.getByTestId('reflection-share-caption-edit'));
+    fireEvent.changeText(
+      screen.getByTestId('reflection-share-caption-input'),
+      '#내태그'
+    );
+    fireEvent.press(screen.getByTestId('reflection-share-caption-save'));
+
+    // 3) 서버 문구 도착 → 캡션만 서버 값, 해시태그는 내 값
+    gate.release();
+    await waitFor(() =>
+      expect(captionLine()).toHaveTextContent(AI_COPY.caption)
+    );
+    expect(hashtagLine()).toHaveTextContent('#내태그');
+
+    // 4) 덱으로 돌아가도, 다시 열어도 내 값 — 표지 문장은 서버 값
+    fireEvent.press(screen.getByTestId('reflection-share-back'));
+    await deck();
+    expect(screen.getByTestId(deckId('hashtags'))).toHaveTextContent('#내태그');
+    prev();
+    prev();
+    prev();
+    expect(screen.getByTestId(deckId('cover-caption'))).toHaveTextContent(
+      AI_COPY.caption
+    );
+    goTo('stats');
+    fireEvent.press(screen.getByTestId(deckId('make')));
+    await frame();
+    expect(hashtagLine()).toHaveTextContent('#내태그');
+    await quiet();
+    expect(copyHits()).toBe(1);
+  });
+
+  it('ID-15 · AC-12 서버 문구가 오면 숫자 장 해시태그가 서버 값으로 바뀐다(온디바이스 값은 사라진다)', async () => {
+    const gate = createGate();
+    serveCopy(async () => {
+      await gate.opened;
+      return HttpResponse.json(AI_COPY);
+    });
+    renderPage();
+    await deck();
+    await waitForHits(1);
+    goTo('stats');
+    expect(screen.getByTestId(deckId('hashtags'))).toHaveTextContent(
+      ON_DEVICE_HASHTAGS
+    );
+
+    gate.release();
+
+    await waitFor(() =>
+      expect(screen.getByTestId(deckId('hashtags'))).toHaveTextContent(
+        AI_HASHTAG_LINE
+      )
+    );
+    expect(screen.queryByText(ON_DEVICE_HASHTAGS)).toBeNull();
+  });
+});
+
+describe('🔴 TRIP-1667 AC-13 · 일정 조회는 일차 카드 색용 — 요약 ready ∧ 방문 ≥ 1 일 때만, 실패해도 덱은 선다', () => {
+  const settled = async () => {
+    await quiet(500);
+  };
+
+  it('데이터 얼굴(방문 있음) → 일정 GET 정확히 1회', async () => {
+    serveCopy(copyOk(AI_COPY));
+    renderPage();
+    await deck();
+    await waitFor(() => expect(itineraryHits()).toBe(1));
+    await settled();
+
+    expect(itineraryHits()).toBe(1);
+  });
+
+  it.each([
+    [
+      '요약 조회 오류(500)',
+      () =>
+        http.get(
+          `${BASE}/trips/:tripId/summary`,
+          () => new HttpResponse(null, { status: 500 })
+        ),
+      'reflection-share-error',
+    ],
+    [
+      '요약 미준비(ready:false)',
+      () =>
+        http.get(`${BASE}/trips/:tripId/summary`, () =>
+          HttpResponse.json({ ready: false })
+        ),
+      'reflection-share-not-ready',
+    ],
+  ] as [string, () => ReturnType<typeof http.get>, string][])(
+    '%s 얼굴에서는 일정을 묻지 않는다 (0회 — 실제로 얼굴이 떴고 조용한 구간을 지났다)',
+    async (_label, handler, faceId) => {
+      server.use(handler());
+      serveCopy(copyOk(AI_COPY));
+      renderPage();
+      await screen.findByTestId(faceId);
+      await settled();
+
+      expect(itineraryHits()).toBe(0);
+    }
+  );
+
+  it.each([
+    ['stats 가 없다', 'stats'],
+    ['highlights 가 없다', 'highlights'],
+  ] as const)(
+    'ready:true 인데 %s(계약 위반 응답) → 미준비 얼굴이고 덱·문구 POST·일정 GET 은 0, 같은 서버가 온전한 요약을 주면 덱이 선다(짝)',
+    async (_label, missing) => {
+      // 준비: 봉투는 ready:true 인데 summary 안의 한 칸이 빠져 있다(구조 분해로 한 칸을 뺀다).
+      const { [missing]: _dropped, ...broken } = SUMMARY;
+      server.use(
+        http.get(`${BASE}/trips/:tripId/summary`, () =>
+          HttpResponse.json({ ready: true, summary: broken })
+        )
+      );
+      serveCopy(copyOk(AI_COPY));
+
+      // 실행: 렌더 후 얼굴이 뜰 때까지, 그리고 조용한 구간까지 기다린다.
+      const first = renderPage();
+      await screen.findByTestId('reflection-share-not-ready');
+      await settled();
+
+      // 단언: 크래시 없이 미준비 안내 · 덱 없음 · 문구 POST 0 · 일정 GET 0
+      expect(screen.queryByTestId('reflection-share-deck')).toBeNull();
+      expect(copyHits()).toBe(0);
+      expect(itineraryHits()).toBe(0);
+      first.unmount();
+
+      // 짝(앵커): 같은 화면이 온전한 요약이면 덱이 서고 일정을 1회 묻는다 — 위 0 이 "아무것도 안 일어나는 상태"가 아님을 보인다.
+      server.use(summaryReady());
+      renderPage();
+      await deck();
+      await waitFor(() => expect(itineraryHits()).toBe(1));
+    }
+  );
+
+  it('요약 조회 중에는 묻지 않고, 요약이 도착해 덱이 서면 1회 묻는다', async () => {
+    const gate = createGate();
+    server.use(
+      http.get(`${BASE}/trips/:tripId/summary`, async () => {
+        await gate.opened;
+        return HttpResponse.json({ ready: true, summary: SUMMARY });
+      })
+    );
+    serveCopy(copyOk(AI_COPY));
+    renderPage();
+    await screen.findByTestId('reflection-share-pending');
+    await settled();
+    expect(itineraryHits()).toBe(0);
+
+    gate.release();
+    await deck();
+
+    await waitFor(() => expect(itineraryHits()).toBe(1));
+  });
+
+  it.each([
+    ['일차 목록이 비었다', []],
+    [
+      '일차는 있지만 방문지가 없다',
+      [{ date: '2026-06-11', dayOrder: 1, visitCount: 0, places: [] }],
+    ],
+  ] as [string, DayHighlight[]][])(
+    '방문 0곳(%s)이면 덱은 서되 일정은 묻지 않는다',
+    async (_label, highlights) => {
+      server.use(
+        http.get(`${BASE}/trips/:tripId/summary`, () =>
+          HttpResponse.json({
+            ready: true,
+            summary: { ...SUMMARY, highlights },
+          })
+        )
+      );
+      serveCopy(copyOk(AI_COPY));
+      renderPage();
+      await deck();
+      await settled();
+
+      expect(itineraryHits()).toBe(0);
+    }
+  );
+
+  it.each([
+    ['일정 없음(404)', 404],
+    ['서버 오류(500)', 500],
+  ])(
+    '일정 조회가 %s 여도 덱은 오류 얼굴로 떨어지지 않고 일차 장면까지 그대로 선다(색은 중립 — 빌더 단위가 지킨다)',
+    async (_label, status) => {
+      serveCopy(copyOk(AI_COPY));
+      server.use(
+        http.get(
+          `${BASE}/trips/:tripId/itinerary`,
+          () => new HttpResponse(null, { status })
+        )
+      );
+      renderPage();
+      await deck();
+      await waitFor(() => expect(itineraryHits()).toBeGreaterThanOrEqual(1)); // 실제로 물었다
+      await settled(); // 재시도까지 끝난 뒤
+
+      expect(screen.queryByTestId('reflection-share-error')).toBeNull();
+      expect(screen.getByTestId(deckId('slide-cover'))).toBeOnTheScreen();
+      fireEvent.press(screen.getByTestId(deckId('next')));
+      expect(screen.getByTestId(deckId('slide-day-1'))).toBeOnTheScreen();
+    }
+  );
+
+  it('일정 응답이 늦어도 덱은 기다리지 않는다(INV-4 — 색을 위한 조회가 얼굴을 막지 않는다)', async () => {
+    const gate = createGate();
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, async () => {
+        await gate.opened;
+        return HttpResponse.json(itinerary({ tripId: TRIP_ID }));
+      })
+    );
+    serveCopy(copyOk(AI_COPY));
+    renderPage();
+
+    await deck();
+    await waitFor(() => expect(itineraryHits()).toBe(1)); // 요청은 나갔고 아직 답이 없다
+    expect(screen.getByTestId(deckId('slide-cover'))).toBeOnTheScreen();
+
+    gate.release();
+    await settled();
+    expect(screen.getByTestId(deckId('slide-cover'))).toBeOnTheScreen();
+  });
 });

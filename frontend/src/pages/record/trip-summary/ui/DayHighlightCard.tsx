@@ -1,9 +1,10 @@
 import type { ReactElement } from 'react';
 import { Text, View } from 'react-native';
 
-import { CATEGORY_PALETTES } from '@/features/reflection/index.view';
-
-import type { SummaryDayCardVM } from '../model/summaryMagazineVM';
+import {
+  CATEGORY_PALETTES,
+  type SummaryDayCardVM,
+} from '@/features/reflection/index.view';
 
 /**
  * TRIP-1666 · j04 일차 카드(매거진형) — 그 날의 주 카테고리 색 바탕에 큰 `1일차`, `· M곳`, 방문지 칩, 거리 각주.

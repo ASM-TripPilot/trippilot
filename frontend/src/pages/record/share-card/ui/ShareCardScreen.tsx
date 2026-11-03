@@ -58,7 +58,10 @@ export interface ShareCardScreenProps {
   card: ShareCardVM;
   formats: ShareFormat[];
   caption: string;
+  /** 보여 줄 해시태그 한 줄 — 고친 값·서버·온디바이스 중 무엇을 보일지는 페이지가 `resolveShareText` 로 정해 내린다(이 화면은 고친 값을 들고 있지 않는다). */
   hashtagText: string;
+  /** [완료]로 고친 해시태그 한 줄을 페이지로 올린다(서버 저장 없음). */
+  onCommitHashtags: (text: string) => void;
   /** 서버 문구를 기다리는 중 — 캡션 자리에 Skeleton(TRIP-1605). 생략하면 기다리지 않는 것. */
   copyPending?: boolean;
   /** 서버 문구의 하루 상한에 닿았다 — 캡션 자리에 한 줄 안내. 생략하면 없음. */
@@ -71,6 +74,7 @@ export function ShareCardScreen({
   formats,
   caption,
   hashtagText,
+  onCommitHashtags,
   copyPending = false,
   copyLimitReached = false,
   onBack,
@@ -78,9 +82,6 @@ export function ShareCardScreen({
   const [selectedFormatId, setSelectedFormatId] = useState<ShareFormat['id']>(
     formats[0]?.id ?? 'story'
   );
-  // 사용자가 [완료]로 고친 값. null 이면 prop 을 그대로 보인다(서버 문구가 늦게 도착해도 따라간다 — useState 초기값은 첫 렌더에만 읽힌다).
-  const [editedHashtags, setEditedHashtags] = useState<string | null>(null);
-  const hashtags = editedHashtags ?? hashtagText;
   const [draft, setDraft] = useState<string | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [result, setResult] = useState<ShareResult | null>(null);
@@ -105,7 +106,7 @@ export function ShareCardScreen({
   };
 
   const openEditor = () => {
-    setDraft(hashtags);
+    setDraft(hashtagText);
     setDraftError(null);
   };
   // 공백으로 나눠 빈 토큰을 버린 개수 · 줄 전체 길이로 검사한다. `#` 는 붙이지 않고 입력 그대로 둔다.
@@ -120,7 +121,7 @@ export function ShareCardScreen({
       setDraftError(HASHTAG_LENGTH_ERROR);
       return;
     }
-    setEditedHashtags(draft);
+    onCommitHashtags(draft);
     setDraft(null);
     setDraftError(null);
   };
@@ -223,7 +224,7 @@ export function ShareCardScreen({
               testID="reflection-share-hashtags"
               className="font-noto text-body text-link"
             >
-              {hashtags}
+              {hashtagText}
             </Text>
           ) : (
             <View className="gap-sm">

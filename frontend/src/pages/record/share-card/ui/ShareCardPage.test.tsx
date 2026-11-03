@@ -1,4 +1,12 @@
-import { fireEvent, screen, within } from '@testing-library/react-native';
+import { createElement } from 'react';
+import { View } from 'react-native';
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react-native';
 import { router } from 'expo-router';
 
 import type { Trip, TripSummary } from '@/shared/api/index.schemas';
@@ -7,10 +15,18 @@ import { renderWithQueryClient } from '@/test-support/queryRender';
 
 import { useTripSummary } from '@/features/reflection';
 import { ShareCardScreen } from './ShareCardScreen';
-import { useGetTripsTripId } from '@/shared/api/index.hooks';
+import { StoryDeck } from './StoryDeck';
+import {
+  useGetTripsTripId,
+  useGetTripsTripIdItinerary,
+} from '@/shared/api/index.hooks';
 import { ShareCardPage } from './ShareCardPage';
 
 /**
+ * TRIP-1667 · 이 파일의 「스토리 덱 ↔ 내보내기 전환」 describe 는 페이지가 두 얼굴(덱 → 내보내기 → 덱 마지막 장)을 한 곳에서
+ * 잇는 배선(어느 화면이 서는가 · 어떤 값이 어느 쪽으로 내려가는가 · 뒤로/닫기가 어디로 가는가)을 목 화면 위에서 본다.
+ * 덱 안의 장 내용·시간·탭은 `StoryDeck.test`/`storyDeck.test`/`useStoryDeck.test`, 서버를 낀 전체 흐름은 `ShareCardPage.integration` 이 맡는다.
+ *
  * TRIP-1071 결정 4(c) · j06 공유 카드 페이지 — 요약 미준비면 카드 대신 안내.
  *
  * h16(확정 일정, 여행 전)에서도 [공유하기]로 j06 에 들어올 수 있게 됐다(결정 4c). 여행이 끝나 요약이
@@ -35,12 +51,18 @@ jest.mock('@/features/reflection/model/useTripSummary', () => ({
   useTripSummary: jest.fn(),
 }));
 
+// 일정 조회(TRIP-1667 — 일차 카드 색용)도 이 모듈에서 온다. 빠지면 페이지가 TypeError 로 죽는다.
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTripsTripId: jest.fn(),
+  useGetTripsTripIdItinerary: jest.fn(),
 }));
 
+// 화면·덱은 "받은 props 만 기록하는" 가짜다 — 서 있는지는 testID 마커로 본다(JSX 대신 createElement: NativeWind 주입 참조 함정 회피).
 jest.mock('./ShareCardScreen', () => ({
   ShareCardScreen: jest.fn(() => null),
+}));
+jest.mock('./StoryDeck', () => ({
+  StoryDeck: jest.fn(() => null),
 }));
 
 // TRIP-1605 — 카드 얼굴이 서버 문구(POST …/share-card/copy)를 부른다. 생성 클라이언트가 모두 지나는 `customInstance` 한 곳만
@@ -107,10 +129,25 @@ function givenSummary(ready: boolean) {
 }
 
 const screenMock = ShareCardScreen as unknown as jest.Mock;
+const deckMock = StoryDeck as unknown as jest.Mock;
+const lastProps = (mock: jest.Mock) => mock.mock.calls.at(-1)?.[0];
 
 beforeEach(() => {
   jest.clearAllMocks();
   customInstanceMock.mockImplementation(() => new Promise(() => undefined));
+  // 일정 조회는 색에만 쓰인다 — 이 파일에선 "아직 안 옴"(데이터 없음)으로 둔다. 몇 번·언제 부르는지는 통합이 MSW 로 센다.
+  (useGetTripsTripIdItinerary as jest.Mock).mockReturnValue({
+    data: undefined,
+    isPending: false,
+    isError: false,
+  });
+  // 마커: 지금 어느 얼굴이 서 있는지 testID 로 읽는다.
+  screenMock.mockImplementation(() =>
+    createElement(View, { testID: 'mock-export-face' })
+  );
+  deckMock.mockImplementation(() =>
+    createElement(View, { testID: 'mock-story-deck' })
+  );
 });
 
 describe('🔴 TRIP-1071 AC-12 · 요약 미준비(ready:false) → 카드 대신 안내 (결정 4c)', () => {
@@ -126,6 +163,7 @@ describe('🔴 TRIP-1071 AC-12 · 요약 미준비(ready:false) → 카드 대�
     const notice = screen.getByTestId('reflection-share-not-ready');
     expect(within(notice).getByText(NOT_READY_TITLE)).toBeOnTheScreen();
     expect(screenMock).not.toHaveBeenCalled();
+    expect(deckMock).not.toHaveBeenCalled(); // 덱도 없다 — 서버 문구 호출은 덱이 서야 시작되므로 이 얼굴에선 0
   });
 
   it('[돌아가기] press → router.back 1회(막다른 화면이 아니다, Q4)', () => {
@@ -140,15 +178,28 @@ describe('🔴 TRIP-1071 AC-12 · 요약 미준비(ready:false) → 카드 대�
     expect(router.back).toHaveBeenCalledTimes(1);
   });
 
-  it('ready:true → 카드 화면을 그리고 안내는 없다(짝 앵커)', () => {
+  it('ready:true → 스토리 덱이 첫 얼굴로 서고(내보내기 화면은 아직 아님), 안내는 없다(짝 앵커)', async () => {
     givenTrip();
     givenSummary(true);
 
     renderWithQueryClient(<ShareCardPage tripId="trip-1" />);
+    // 서버 문구 뮤테이션이 시작될 때까지 기다린다 — 덱이 첫 얼굴일 때 이미 1회 나간다(안 기다리면 시작 갱신이 act 밖으로 샌다)
+    await waitFor(() => expect(customInstanceMock).toHaveBeenCalledTimes(1));
 
-    expect(screenMock).toHaveBeenCalled();
-    expect(screenMock.mock.calls[0][0].hashtagText).toBe('#부산여행');
+    expect(screen.getByTestId('mock-story-deck')).toBeOnTheScreen();
+    expect(screenMock).not.toHaveBeenCalled();
     expect(screen.queryByTestId('reflection-share-not-ready')).toBeNull();
+    // 덱이 받는 값: 장 목록(표지·1일차·동선·숫자 = 4장), 서버 문구 전(캡션 ''), 온디바이스 해시태그, 처음 장에서 시작
+    const props = lastProps(deckMock);
+    expect(props.slides.map((slide: { key: string }) => slide.key)).toEqual([
+      'cover',
+      'day-1',
+      'route',
+      'stats',
+    ]);
+    expect(props.caption).toBe('');
+    expect(props.hashtagText).toBe('#부산여행');
+    expect(props.startAt ?? 'first').toBe('first');
   });
 
   it('조회 중이면 기존 준비 중 안내 그대로 — 미준비 안내와 섞이지 않는다(회귀 앵커)', () => {
@@ -171,6 +222,7 @@ describe('🔴 TRIP-1071 AC-12 · 요약 미준비(ready:false) → 카드 대�
     expect(screen.getByTestId('reflection-share-pending')).toBeOnTheScreen();
     expect(screen.queryByTestId('reflection-share-not-ready')).toBeNull();
     expect(screenMock).not.toHaveBeenCalled();
+    expect(deckMock).not.toHaveBeenCalled();
   });
 });
 
@@ -201,7 +253,89 @@ describe('🔴 TRIP-1071 5-b 경고-1 · 요약 조회 오류는 "미준비"로 
     expect(screen.queryByTestId('reflection-share-not-ready')).toBeNull();
     expect(screen.queryByText(NOT_READY_TITLE)).toBeNull();
     expect(screenMock).not.toHaveBeenCalled();
+    expect(deckMock).not.toHaveBeenCalled();
     expect(screen.queryByTestId('reflection-share-save')).toBeNull();
     expect(screen.queryByTestId('reflection-share-export')).toBeNull();
+  });
+});
+
+describe('🔴 TRIP-1667 · 스토리 덱 ↔ 내보내기 전환 (같은 얼굴 아래의 상태 전환)', () => {
+  // 서버 문구 뮤테이션은 마운트 직후 비동기로 시작해 상태를 바꾼다 — 시작(customInstance 1회)까지 기다려 act 밖 갱신 경고를 막는다.
+  const mount = async () => {
+    givenTrip();
+    givenSummary(true);
+    const view = renderWithQueryClient(<ShareCardPage tripId="trip-1" />);
+    await waitFor(() => expect(customInstanceMock).toHaveBeenCalledTimes(1));
+    return view;
+  };
+  /** 덱의 [공유 카드 만들기] 를 누른 것처럼 `onMake` 를 부른다. */
+  const make = () => act(() => lastProps(deckMock).onMake());
+  /** 내보내기 화면의 뒤로를 누른 것처럼 `onBack` 을 부른다. */
+  const exportBack = () => act(() => lastProps(screenMock).onBack());
+
+  it('PU-1 · [공유 카드 만들기] → 덱이 사라지고 내보내기 화면이 선다, 헤더 뒤로 → 덱 "마지막 장"으로 돌아온다(화면 이탈 아님)', async () => {
+    await mount();
+    expect(screen.queryByTestId('mock-export-face')).toBeNull(); // 실행 전 "아직 없다" 앵커
+
+    make();
+    expect(screen.getByTestId('mock-export-face')).toBeOnTheScreen();
+    expect(screen.queryByTestId('mock-story-deck')).toBeNull();
+
+    exportBack();
+    expect(screen.getByTestId('mock-story-deck')).toBeOnTheScreen();
+    expect(screen.queryByTestId('mock-export-face')).toBeNull();
+    expect(lastProps(deckMock).startAt).toBe('last');
+    expect(router.back).not.toHaveBeenCalled();
+  });
+
+  it('PU-2 · 덱의 ×(onClose)는 화면을 나간다(router.back 1회) — 내보내기 화면의 뒤로는 나가지 않는다(PU-1)', async () => {
+    await mount();
+
+    act(() => lastProps(deckMock).onClose());
+
+    expect(router.back).toHaveBeenCalledTimes(1);
+  });
+
+  it('PU-3 · 덱 → 내보내기 → 덱 → 내보내기를 오가도 서버 문구 호출은 1회 그대로다(얼굴을 다시 마운트하지 않는다)', async () => {
+    await mount();
+    // 덱이 첫 얼굴일 때 이미 1회
+    await waitFor(() => expect(customInstanceMock).toHaveBeenCalledTimes(1));
+
+    make();
+    exportBack();
+    make();
+    exportBack();
+    await act(async () => {});
+
+    expect(customInstanceMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('PU-4 · 해시태그는 한 곳에서 정한다: 내보내기에서 고친 값(onCommitHashtags)이 내보내기 화면·덱 양쪽에 내려가고 다시 열어도 유지된다', async () => {
+    await mount();
+    make();
+    // 내보내기 화면은 보여 줄 값(hashtagText)을 받아 그리고, 고친 값은 위로 올린다(controlled)
+    expect(lastProps(screenMock).hashtagText).toBe('#부산여행');
+    expect(typeof lastProps(screenMock).onCommitHashtags).toBe('function');
+
+    act(() => lastProps(screenMock).onCommitHashtags('#내태그'));
+    expect(lastProps(screenMock).hashtagText).toBe('#내태그');
+
+    exportBack();
+    expect(lastProps(deckMock).hashtagText).toBe('#내태그');
+
+    make();
+    expect(lastProps(screenMock).hashtagText).toBe('#내태그');
+  });
+
+  it('PU-5 · 내보내기 화면이 받는 나머지 값: 대표 카드·포맷 3종·서버 문구 대기 표시(copyPending)가 그대로 내려간다', async () => {
+    await mount();
+    make();
+
+    const props = lastProps(screenMock);
+    expect(props.card.title).toBe('부산 여행');
+    expect(props.formats).toHaveLength(3);
+    expect(props.copyPending).toBe(true); // customInstance 가 끝나지 않는 Promise = 문구 대기 중
+    expect(props.copyLimitReached).toBe(false);
+    expect(props.caption).toBe('');
   });
 });

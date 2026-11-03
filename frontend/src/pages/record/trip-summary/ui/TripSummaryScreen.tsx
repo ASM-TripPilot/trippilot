@@ -14,8 +14,8 @@ import {
   MagazineRoute,
   MagazineStats,
   type RecordBarNav,
+  type SummaryMagazineVM,
 } from '@/features/reflection/index.view';
-import type { SummaryMagazineVM } from '../model/summaryMagazineVM';
 import { DayHighlightCard } from './DayHighlightCard';
 
 /**

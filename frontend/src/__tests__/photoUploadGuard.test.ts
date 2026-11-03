@@ -166,6 +166,16 @@ describe('🔴 G2 · 공유 카드 서버 이미지 생성·저장 심볼 0 + �
     'pages/record/share-card/ui/ShareCardPreview.tsx',
     'pages/record/share-card/ui/FormatSegment.tsx',
     'pages/record/share-card/ui/ShareCardPage.tsx',
+    // TRIP-1667 스토리 덱 — 덱 코드의 변수명·주석 밖 문자열에 금칙어(storageKey·base64·FormData 등)가 들어오면 의미와 무관하게 red.
+    // 왜 tsc·ESLint·렌더로 못 잡나: 금칙어는 식별자·문자열 어디에 있어도 타입·린트·렌더가 모른다(고정 목록 밖 새 파일은 스캔을 안 받는다).
+    // j04 와 공용으로 features 로 올라온 빌더도 j06 에서 쓰이는 그래프라 함께 건다.
+    'pages/record/share-card/model/shareStory.ts',
+    'pages/record/share-card/model/storyDeck.ts',
+    'pages/record/share-card/model/useStoryDeck.ts',
+    'pages/record/share-card/ui/StoryDeck.tsx',
+    'pages/record/share-card/ui/StoryDeckView.tsx',
+    'pages/record/share-card/ui/StorySlides.tsx',
+    'features/reflection/model/summaryMagazineVM.ts',
   ];
   const CAPTURE_REL = 'features/share-trip-card/model/shareCapture.ts';
 

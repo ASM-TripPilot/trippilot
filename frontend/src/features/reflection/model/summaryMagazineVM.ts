@@ -1,17 +1,16 @@
 import { formatDayLabel, formatShareCardPeriod } from '@/entities/trip';
-import {
-  dominantPaletteKey,
-  distanceSourceLabel,
-  formatKm,
-  splitHighlight,
-  summaryStats,
-  toOrderedVisitList,
-  type MagazineCoverVM,
-  type MagazineQuoteVM,
-  type MagazineRouteStop,
-  type MagazineStatTile,
-  type PaletteKey,
-} from '@/features/reflection/index.view';
+import { dominantPaletteKey } from './categoryPalette';
+import { formatKm } from './formatKm';
+import type {
+  MagazineCoverVM,
+  MagazineQuoteVM,
+  MagazineRouteStop,
+  MagazineStatTile,
+} from './magazineVM';
+import { splitHighlight } from './magazineVM';
+import { summaryStats } from './summaryStats';
+import { distanceSourceLabel, toOrderedVisitList } from './summaryView';
+import type { PaletteKey } from './categoryPalette';
 import type {
   ItineraryDaysItem,
   Trip,
