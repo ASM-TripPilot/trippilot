@@ -13,6 +13,7 @@ import {
   createGcZeroWrapper,
   createWrapper,
   newTestQueryClient,
+  settle,
 } from '@/test-support/queryRender';
 
 import { server } from '@/mocks/server';
@@ -2155,5 +2156,42 @@ describe('카드 → 상세 push', () => {
 
       expect(mockPush.mock.calls).toEqual([['/explore/places/p2']]);
     });
+  });
+});
+
+// TRIP-1733 — onScroll 을 worklet 으로 옮겨도 장소 그리드 스크롤이 FAB 묶음을 잠깐 숨기는 배선은 그대로다.
+// 정확한 250ms 경계는 `useScrollHide.test.tsx` 몫(실타이머 — MSW 와 가짜 시계를 섞지 않는다).
+describe('스크롤 중 FAB 숨김 배선', () => {
+  it('목록을 스크롤하면 FAB 묶음이 터치를 안 받고, 스크롤이 멈추면 다시 받는다', async () => {
+    // 준비 — 카드가 그려진 상태(파일의 renderPage)까지.
+    await renderPage();
+    await settle();
+    expect(screen.getByTestId('explore-places-fab-stack')).toHaveProp(
+      'pointerEvents',
+      'box-none'
+    );
+
+    // 실행 — FlatList 는 layoutMeasurement 가 없으면 던진다 — 세 필드를 다 싣는다.
+    fireEvent.scroll(screen.getByTestId('explore-places-grid'), {
+      nativeEvent: {
+        contentOffset: { x: 0, y: 200 },
+        contentSize: { width: 390, height: 3000 },
+        layoutMeasurement: { width: 390, height: 800 },
+      },
+    });
+    // runOnJS 가 미룬 상태 변경(마이크로태스크)을 act 안에서 비운다.
+    await act(async () => {});
+
+    // 단언
+    expect(screen.getByTestId('explore-places-fab-stack')).toHaveProp(
+      'pointerEvents',
+      'none'
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-places-fab-stack')).toHaveProp(
+        'pointerEvents',
+        'box-none'
+      )
+    );
   });
 });

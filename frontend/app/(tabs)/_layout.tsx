@@ -36,6 +36,10 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        // TRIP-1731 — 안 보이는 탭은 얼린다(react-native-screens `Freeze`): 다른 탭에 있는 동안 홈 쿼리가 갱신돼도
+        // 다시 그리지 않고, 돌아올 때 최신 값으로 한 번 그린다. 쿼리 구독은 그대로라 재조회 요청 수는 안 바뀐다.
+        // 탭 밖에서 반응해야 하는 감시(생성·푸시·계정 경계)는 탭 위 SplashGate 에 있어 안 얼는다.
+        freezeOnBlur: true,
         // AC-O2(동결 계약)가 이 옵션의 존재를 요구한다. 단 react-navigation 은 커스텀 `tabBar`
         // 렌더프롭을 쓸 때 `tabBarStyle` 을 적용하지 않으므로 이 값은 **무효**다(BottomTabView.js
         // 실측 — position 분기 없음). 실제 오버레이는 `BottomTabBar` 루트의 `absolute bottom-0`

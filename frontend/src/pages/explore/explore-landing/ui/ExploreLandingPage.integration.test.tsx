@@ -851,3 +851,52 @@ describe('TRIP-1580 · 지역 필터 숙소 레인 → 인기 숙소', () => {
     expect(screen.queryByTestId('curated-stay-card-123')).toBeNull();
   });
 });
+
+// TRIP-1733 — onScroll 을 worklet 으로 옮겨도 탐색 랜딩 세로 스크롤이 FAB 묶음을 잠깐 숨기는 배선은 그대로다.
+// 정확한 250ms 경계는 `useScrollHide.test.tsx` 몫(실타이머 — MSW 와 가짜 시계를 섞지 않는다). 가로 레인 비영향은 6-b.
+describe('스크롤 중 FAB 숨김 배선', () => {
+  beforeEach(() => {
+    mockUseStaySearch.mockReturnValue(stayResults([]));
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: [], nextCursor: null })
+      ),
+      http.get(`${BASE}/saved-places`, () => HttpResponse.json([])),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([]))
+    );
+  });
+
+  it('세로로 스크롤하면 FAB 묶음이 터치를 안 받고, 스크롤이 멈추면 다시 받는다', async () => {
+    // 준비 — 로딩이 끝나야 FAB 묶음이 그려진다.
+    renderPage();
+    await screen.findByTestId('explore-fab-stack', {}, WAIT);
+    await settle();
+    expect(screen.getByTestId('explore-fab-stack')).toHaveProp(
+      'pointerEvents',
+      'box-none'
+    );
+
+    // 실행 — 세 필드를 다 싣는다.
+    fireEvent.scroll(screen.getByTestId('explore-landing-scroll'), {
+      nativeEvent: {
+        contentOffset: { x: 0, y: 200 },
+        contentSize: { width: 390, height: 3000 },
+        layoutMeasurement: { width: 390, height: 800 },
+      },
+    });
+    // runOnJS 가 미룬 상태 변경(마이크로태스크)을 act 안에서 비운다.
+    await act(async () => {});
+
+    // 단언
+    expect(screen.getByTestId('explore-fab-stack')).toHaveProp(
+      'pointerEvents',
+      'none'
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-fab-stack')).toHaveProp(
+        'pointerEvents',
+        'box-none'
+      )
+    );
+  });
+});

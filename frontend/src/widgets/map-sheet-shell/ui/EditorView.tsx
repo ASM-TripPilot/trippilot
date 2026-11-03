@@ -131,7 +131,7 @@ export function EditorView({
   // CTA 바가 하단 안전 영역 위에 얹히므로 여백에 그 높이를 더한다. Provider 없으면(jest) 0 — 셸과 같은 읽기.
   const bottomInset = useContext(SafeAreaInsetsContext)?.bottom ?? 0;
 
-  // 고정·방문 완료 슬롯 — 끌기·드롭 삭제·시각 편집 전부 막는다(INV-U3-03 · TRIP-753 AC-11).
+  // 고정·방문 완료 슬롯 — 끌기·드롭 삭제를 막는다(INV-U3-03 · TRIP-753 AC-11). 시각 편집은 `canEditTime` 이 따로 가른다.
   const isLocked = (slot: EditorViewSlot): boolean =>
     completedSlotKeys?.includes(buildSlotKey(activeDate, slot.poiId)) === true;
   const isPinned = (slot: EditorViewSlot): boolean =>
@@ -167,8 +167,11 @@ export function EditorView({
     const slotKey = buildSlotKey(activeDate, item.poiId);
     const locked = isLocked(item);
     const fixed = item.isFixed === true;
-    // 고정·완료 슬롯은 시각 편집 어포던스를 안 붙인다(INV-U3-03 · AC-11).
-    const canEditTime = !fixed && !locked;
+    // 시각 편집: 숙소(고정)는 변경 불가(BR-U3-07), 꼭 갈 곳 고정은 사용자가 시각을 고친다(INV-U3-03
+    // 2026-10-30 개정, TRIP-1674), 방문 완료는 잠금. category 가 없는 고정 슬롯은 편집 허용(fail-open, 수용).
+    // ponytail: `isFixedStay`(features/itinerary/model/sheetMeta.ts)와 같은 판정이나 widgets 는 features 를
+    // 안 물어 인라인 사본 — 세 번째 사본이 생기면 shared 로 올린다.
+    const canEditTime = !(fixed && item.category === '숙소') && !locked;
     const timeLabel =
       item.startAt === null
         ? null

@@ -178,19 +178,82 @@ describe('🔴 EditorView · B4-4 — day-chip 다일자(AC-4)', () => {
   });
 });
 
+// TRIP-1674 — 시각 편집 허용 규칙: 숙소가 아닌 고정(꼭 갈 곳)도 누른다. 고정 숙소(BR-U3-07)·방문 완료만 잠긴다.
+// 칩 모양(⌄)은 생김새라 단언하지 않는다 — 칩의 존재와 누름 → 콜백만 본다.
 describe('🔴 EditorView · B4-5 — 시각칩 → 시트 콜백(AC-5 · INV-U3-03)', () => {
-  it('비고정 카드 시각칩 press 는 slotKey 로 콜백, 고정 카드는 누름 칩이 없다', () => {
-    const keyA = buildSlotKey(DATE, 'a');
-    const keyFix = buildSlotKey(DATE, 'fix');
+  const chip = (poiId: string): string =>
+    `slot-stopcard-timechip-${buildSlotKey(DATE, poiId)}`;
+
+  it('비고정 카드 시각칩 press 는 slotKey 로 콜백한다 — 비고정 숙소도 눌린다', () => {
     const cb = renderView({
-      slots: [slot('a'), slot('fix', { isFixed: true })],
+      slots: [slot('a'), slot('stay', { category: '숙소' })],
     });
 
-    fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${keyA}`));
-    expect(cb.onPressTimeChip).toHaveBeenCalledWith(keyA);
+    fireEvent.press(screen.getByTestId(chip('a')));
+    expect(cb.onPressTimeChip).toHaveBeenLastCalledWith(
+      buildSlotKey(DATE, 'a')
+    );
+    // 막는 조건은 "고정 + 숙소"의 곱이다 — 숙소라는 이유만으로 막으면 여기서 red.
+    fireEvent.press(screen.getByTestId(chip('stay')));
+    expect(cb.onPressTimeChip).toHaveBeenLastCalledWith(
+      buildSlotKey(DATE, 'stay')
+    );
+  });
 
-    // 고정 슬롯은 시각 불변(INV-U3-03) — 편집 어포던스 미부착.
-    expect(screen.queryByTestId(`slot-stopcard-timechip-${keyFix}`)).toBeNull();
+  it('고정 비숙소(꼭 갈 곳) 카드도 시각칩 press 가 slotKey 로 콜백한다', () => {
+    const cb = renderView({
+      slots: [slot('must', { isFixed: true, category: '명소' })],
+    });
+
+    fireEvent.press(screen.getByTestId(chip('must')));
+
+    expect(cb.onPressTimeChip).toHaveBeenCalledTimes(1);
+    expect(cb.onPressTimeChip).toHaveBeenCalledWith(buildSlotKey(DATE, 'must'));
+  });
+
+  it('category 가 없는 고정 슬롯도 눌린다 — 숙소임을 알 수 없으면 막지 않는다(3-a ⑤ fail-open 수용)', () => {
+    const cb = renderView({ slots: [slot('fix', { isFixed: true })] });
+
+    fireEvent.press(screen.getByTestId(chip('fix')));
+
+    expect(cb.onPressTimeChip).toHaveBeenCalledWith(buildSlotKey(DATE, 'fix'));
+  });
+
+  it('고정 숙소 카드는 누름 시각칩이 없다 — 시각은 읽기 전용으로 보이고, 같은 화면의 꼭 갈 곳은 눌린다', () => {
+    const stayKey = buildSlotKey(DATE, 'stay');
+    const cb = renderView({
+      slots: [
+        slot('stay', { isFixed: true, category: '숙소' }),
+        slot('must', { isFixed: true, category: '명소' }),
+      ],
+    });
+
+    expect(screen.queryByTestId(chip('stay'))).toBeNull();
+    // 짝 — 숙소 카드는 시각을 숨기지 않고 평평한 알약으로 보인다 / 꼭 갈 곳은 칩이 있다(공허 통과 방지).
+    expect(
+      screen.getByTestId(`slot-stopcard-time-${stayKey}`)
+    ).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId(chip('must')));
+    expect(cb.onPressTimeChip).toHaveBeenCalledTimes(1);
+    expect(cb.onPressTimeChip).not.toHaveBeenCalledWith(stayKey);
+  });
+
+  it('방문 완료 슬롯은 고정 비숙소여도 잠긴다 — 칩이 없고 잠금 표식만 있다 (i07)', () => {
+    const doneKey = buildSlotKey(DATE, 'done');
+    renderView({
+      slots: [
+        slot('done', { isFixed: true, category: '명소' }),
+        slot('open', { isFixed: true, category: '명소' }),
+      ],
+      completedSlotKeys: [doneKey],
+    });
+
+    expect(
+      screen.getByTestId(`slot-stopcard-locked-${doneKey}`)
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId(chip('done'))).toBeNull();
+    // 짝 — 완료가 아닌 고정 비숙소는 눌린다.
+    expect(screen.getByTestId(chip('open'))).toBeOnTheScreen();
   });
 });
 
