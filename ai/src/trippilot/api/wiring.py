@@ -786,30 +786,32 @@ _EXPLAIN_DAY_WORKERS = 8
 
 
 def _explain_days(
-    explainer: ExplanationWorker,
+    explainer: ExplanationWorker | AlternativeExplanationWorker,
     pool: CandidatePool,
-    chunks: Sequence[tuple[PoiId, ...]],
+    chunks: Sequence[tuple],  # 날마다 워커가 받는 그대로 — 슬롯 POI 들 | (슬롯, 선택지) 쌍들
     persona: PersonaSummary,
     trace_id: TraceId,
     now: datetime,
     *,
     budget_ms: int,
+    fallback_prefix: str = "explanation_fallback",
 ) -> list[tuple[PoiExplanation, ...] | str]:
-    """날 묶음마다 설명 — 묶음 순서대로 (설명 | 실패 사유). 사유 어휘는 종전 한 번 호출 그대로다.
+    """날 묶음마다 설명 — 묶음 순서대로 (설명 | 실패 사유). 사유 어휘는 종전 한 번 호출 그대로다(폴백 사유의
+    머리가 `fallback_prefix` — 차선책 문장은 `alternative_explanation_fallback`, TRIP-1709).
 
     하루짜리는 이 스레드에서 한 번 부른다(종전 그대로). 여러 날은 풀에서 나란히 돌고 묶음마다 같은 예산을
     받으므로 시한은 합이 아니라 최댓값이다 — 줄 서서 늦게 시작한 날이 그 시한을 넘기지 않게 기다림도 같은
     예산에서 끊는다(못 끝난 날은 `deadline:` 사유, 줄 선 것은 취소하고 도는 것은 결과를 버린다 —
     `route_budget.measure_within` 선례).
     """
-    def one(chunk: tuple[PoiId, ...]) -> tuple[PoiExplanation, ...] | str:
+    def one(chunk: tuple) -> tuple[PoiExplanation, ...] | str:
         try:
             result = explainer.explain(
                 pool, chunk, persona, trace_id, now, timeout_sec=budget_ms / 1000.0)
         except Exception as e:  # 설정 버그 등 — 그 묶음은 설명 없음으로 정직 보고
             return f"explain_error: {type(e).__name__}: {e}"
         if result.is_fallback or not result.value:
-            return f"explanation_fallback: {result.error}"
+            return f"{fallback_prefix}: {result.error}"
         return result.value
 
     if len(chunks) == 1:
@@ -4065,30 +4067,43 @@ class WiredItineraryOrchestrator:
 
         선택지가 풀(정본) 밖이면 설명하지 않는다(INV-1 — 지어내지 않는다). 확정 슬롯 POI 는
         컨텍스트일 뿐이라 미등록이어도 쌍을 버리지 않는다. 잔여가 하한(에이전트 ⑤·⑥′ 와
-        같은 `explanation_min_ms`) 미만이면 부르지 않는다(DL-2).
+        같은 `explanation_min_ms`) 미만이면 부르지 않는다(DL-2). 여러 날이면 날마다 나란히 부른다(`_explain_days`,
+        잔여 예산을 날마다 같이) — 일부 날만 실패하면 성공한 날 문장 + `alternative_explanation_partial` 사유다.
         """
         if not pairs:
             return {}, None
         if self._alt_explainer is None:
             return {}, "alternative_explainer_absent"  # 기능 부재 — 백엔드는 템플릿을 쓴다
-        usable = tuple(
-            (PoiId(s), PoiId(a)) for _, s, a in pairs if pool.contains(PoiId(a))
-        )
-        if not usable:
+        # 날 단위 묶음 — 배치 설명의 날 묶음과 같은 이유다(TRIP-1709: 여행 전체 쌍을 한 번에 보내면 출력이 상한 4096 을
+        # 넘어 잘리고 그 여행 문장이 0건 — 개발 서버 sonnet-5-5 14회 중 2회). 같은 선택지는 처음 나온 날 묶음에서 한 번 —
+        # 문장은 선택지당 하나라 다른 날 키에도 같은 문장이 붙는다(워커의 "같은 선택지는 첫 쌍만"과 같은 결과).
+        seen: set[PoiId] = set()
+        by_day: dict[str, list[tuple[PoiId, PoiId]]] = {}
+        for d, s, a in pairs:
+            if pool.contains(PoiId(a)) and not (PoiId(a) in seen or seen.add(PoiId(a))):
+                by_day.setdefault(d, []).append((PoiId(s), PoiId(a)))
+        if not by_day:
             return {}, "no_registered_alternatives"
         if remaining_ms < core.OrchestratorConfig().explanation_min_ms:
             return {}, f"deadline:remaining={remaining_ms}ms"
-        try:
-            result = self._alt_explainer.explain(
-                pool, usable, persona, trace_id, now, timeout_sec=remaining_ms / 1000.0)
-        except Exception as e:  # 설정 버그 등 — 문장 없음으로 정직 보고
-            return {}, f"explain_error: {type(e).__name__}: {e}"
-        if result.is_fallback or not result.value:
-            return {}, f"alternative_explanation_fallback: {result.error}"
-        texts = {x.poi_id: x.text for x in result.value if pool.contains(x.poi_id)}
+        outcomes = _explain_days(
+            self._alt_explainer, pool, [tuple(c) for c in by_day.values()], persona, trace_id, now,
+            budget_ms=remaining_ms, fallback_prefix="alternative_explanation_fallback")
+        failed = [o for o in outcomes if isinstance(o, str)]
+        if failed and len(outcomes) > 1:  # 부분 실패·시한에 끊긴 날도 로그로 남긴다(`explanation_partial` 과 같은 모양)
+            _logger.info("alternative_explanation_partial %s", json.dumps({
+                "trace_id": str(trace_id), "failed": len(failed), "days": len(outcomes), "first": failed[0],
+            }, ensure_ascii=False))
+        if len(failed) == len(outcomes):  # 전부 실패 — 빈 맵 + 사유(하루짜리는 사유도 종전 문자열 그대로)
+            return {}, (failed[0] if len(failed) == 1
+                        else f"alternative_explanation_fallback: 실패 {len(failed)}/{len(outcomes)} — {failed[0]}")
+        texts = {x.poi_id: x.text for o in outcomes if not isinstance(o, str)
+                 for x in o if pool.contains(x.poi_id)}
         keyed = {
             f"{d}#{a}": texts[PoiId(a)] for d, _, a in pairs if PoiId(a) in texts
         }
+        if failed:  # 일부 날만 실패 — 성공한 날 문장은 싣고 실패는 사유로(INV-4 침묵 금지). 실패한 날은 템플릿 그대로
+            return keyed, f"alternative_explanation_partial: 실패 {len(failed)}/{len(outcomes)} — {failed[0]}"
         return keyed, (None if keyed else "alternative_explanation_empty")
 
     def edit(
