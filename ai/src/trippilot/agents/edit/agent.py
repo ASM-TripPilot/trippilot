@@ -580,7 +580,8 @@ class EditAgent:
         except Exception as e:  # 콘센트 결함도 경계 밖으로 던지지 않는다(DL-5) — 받은 풀로 번역한다
             found, log["error"] = (), type(e).__name__
         spent = round((time.monotonic() - started) * 1000)
-        named = tuple({p.poi_id: p for p in found if p.poi_id not in slots}.values())[:_NAMED_MAX]
+        # "다른 데는?"으로 뺀 곳(FR-015)은 이름으로 집어도 되돌리지 않는다 — 원 요청을 그대로 다시 태우므로 같은 곳이 또 나온다
+        named = tuple({p.poi_id: p for p in found if p.poi_id not in slots and p.poi_id not in task.excluded}.values())[:_NAMED_MAX]
         added = tuple(p for p in named if not task.pool.contains(p.poi_id))
         _log.info("edit_named %s", json.dumps({  # 말·이름은 싣지 않는다 — 개수·시간만
             "trace_id": str(task.trace_id), **log, "found": len(found), "named": len(named), "added": len(added),

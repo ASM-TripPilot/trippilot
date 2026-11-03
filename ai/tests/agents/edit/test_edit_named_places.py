@@ -100,7 +100,7 @@ def _solution() -> ItinerarySolution:
 
 
 def _run(utterance: str | None, socket: _Socket | None, *, canned: str = _add("x1"), deadline_ms: int = 20_000,
-         command: EditCommand | None = None):
+         command: EditCommand | None = None, excluded: frozenset = frozenset()):
     llm = _RecordingLlm(canned)
     worker = EditTranslationWorker(GatewayFacade(llm, PromptRegistry(_PROMPTS), EditTranslationGate(), _CFG, InMemoryTrace()))
     agent = EditAgent(worker, _Provider(), _EST, lambda s: _problem_for(s, KST), tz=KST)
@@ -108,7 +108,7 @@ def _run(utterance: str | None, socket: _Socket | None, *, canned: str = _add("x
     out = agent.run(EditTask(
         solution=_solution(), target_date=D, pool=pool, poi_index={p.poi_id: p for p in (GYEONGNI, YEONNAM)},
         transport=TransportMode.PUBLIC, trace_id=TraceId("t-named"), now=_NOW, deadline_ms=deadline_ms,
-        utterance=utterance, command=command, confirm=True, named_places=socket))
+        utterance=utterance, command=command, confirm=True, named_places=socket, excluded=excluded))
     return out, llm
 
 
@@ -134,6 +134,14 @@ def test_named_place_outside_the_pool_is_translated_and_applied_in_place() -> No
     (words, _), = socket.calls
     assert "효창공원" in words and "경리단길" not in words  # 지금 슬롯 이름은 말이 아니다
     assert out.pois[FAR.poi_id] == FAR  # ⑤ 검증·응답 거리가 같은 좌표를 본다
+
+
+def test_a_place_excluded_by_a_reask_is_not_brought_back_by_its_name() -> None:
+    """"다른 데는?"(spec 003 FR-015)으로 뺀 곳은 말이 이름으로 집어도 다시 들이지 않는다 — BE 가 원 요청을 그대로 다시 태우므로, 이름
+    조회가 그 곳을 풀에 되돌리면 같은 곳이 또 나왔다. 게이트가 떨궈 정직한 실패다(BE 가 "넣을 만한 다른 곳을 찾지 못했어요")."""
+    out, llm = _run("효창공원을 경리단길 끝나고 넣어줘", _Socket((FAR,)), excluded=frozenset({FAR.poi_id}))
+    assert out.status is EditStatus.TRANSLATION_FAILED, out.status
+    assert not any("효창공원" in line for line in _candidates(llm))
 
 
 def test_without_the_socket_the_same_utterance_still_fails_the_closed_set() -> None:
