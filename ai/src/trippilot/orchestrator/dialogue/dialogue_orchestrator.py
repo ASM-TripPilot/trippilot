@@ -168,6 +168,10 @@ _FANOUT_CAP_MS, _FANOUT_SHARE = 3_000, 0.40  # 팬아웃 예산
 _ANSWER_CAP_MS = 3_500  # 같은 실측 p50 1.6s·p90 2.4s, 2.5s 에서 17턴 중 2턴이 템플릿으로 떨어졌다
 _ANSWER_RESERVE_MS = 400  # 게이트·사영·직렬화 몫
 _ANSWER_MIN_REMAINING_MS = 1_500  # 미만이면 답변 LLM 을 부르지 않고 템플릿 (> _ANSWER_RESERVE_MS — 아니면 시한이 0 이하)
+# 지식 즉답(2‴ gap KNOWLEDGE): min(cap, 잔여−0.4s) — 시한에 걸리면 답변처럼 템플릿이 아니라 범위 밖 카드다. haiku-5-5 지연은 말에 묶인다
+# (2026-11-04 개발 파드, 시한 없이 여행 일반 질문 15종 96회): 14종은 p50 1.5s·최대 2.5s 인데 "제주 동쪽이랑 서쪽 중에 어디에 숙소 잡는 게
+# 나아?" 하나만 12회 1.9~5.0s(5회가 3.5s 초과, 출력 길이는 같다). 잔여에 묶이므로 턴 9s 는 그대로다(비율 사슬 무변경).
+_KNOWLEDGE_CAP_MS = 6_000
 # 2‴ 계획 LLM(BR-AO-28): min(cap, 잔여×share). 잔여 < 4.6s 면 부르지 않는다 — 계획이 몫(0.45R)을 다 쓰고 팬아웃이 남은 것의
 # 0.40 을 다 써도 답변 앞 잔여 ≥1.5s(답변 시도선)이려면 R ≥ 4,542ms(정수 내림 산술: 4,542 → 계획 2,043 → 2,499 → 팬아웃 999
 # → 1,500). 4,500 이면 1,485 라 늘 템플릿이다(정정본 C1). 상한 3.5s(초판 3.0s) — 2026-10-20 luna·effort none 실측에서 3.0s 는
@@ -1516,7 +1520,7 @@ class DialogueOrchestrator:
             return None
         memory_lines = tuple(memory())
         task = KnowledgeTask(inp.utterance, inp.recent_turns, memory_lines, _knowledge_trip(trip_summary), inp.trace_id, inp.now,
-                             timeout_sec=min(_ANSWER_CAP_MS, self._remaining(inp) - _ANSWER_RESERVE_MS) / 1000)
+                             timeout_sec=min(_KNOWLEDGE_CAP_MS, self._remaining(inp) - _ANSWER_RESERVE_MS) / 1000)
         outcome = agent.run(task)
         if outcome.error is not None:  # 게이트웨이에 닿기 전 워커 예외 — 게이트웨이가 보고하지 못했다
             self._fallback(inp, "llm", *_KNOWLEDGE_MODES, f"knowledge_error: {outcome.error}")
