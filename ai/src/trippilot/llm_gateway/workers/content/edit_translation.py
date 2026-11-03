@@ -36,7 +36,7 @@ _OP_GUIDE: dict[EditOp, str] = {
     EditOp.ADD_SLOT: (
         "후보 1곳을 그 날에 추가 — params.targetPoiId=후보 poiId, affectedSlots=[]. 넣을 자리를 말했으면 "
         "params.afterPoiId=바로 앞에 올 현재 슬롯 poiId·params.beforePoiId=바로 뒤에 올 현재 슬롯 poiId 중 하나"
-        "(사이면 둘 다), 말하지 않았으면 비운다(맨 끝)"),
+        "(사이면 둘 다), 말하지 않았으면 적지 않는다(맨 끝)"),
     EditOp.REMOVE_SLOT: "기존 슬롯 삭제 — affectedSlots=[뺄 슬롯 poiId]",
     EditOp.MOVE_SLOT: (
         "기존 슬롯 1곳의 순서 이동 — affectedSlots=[옮길 슬롯 poiId], 그리고 "

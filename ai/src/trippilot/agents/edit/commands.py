@@ -287,7 +287,9 @@ def edited_solution(
             new_order = apply_command(day, command)
             # 기준점 있는 추가만 — 끝 추가(기준 없음)는 종전대로 하루를 다시 흘린다(저녁 늦게 HC1·HC4 거부가 늘지 않게). 여행 당일은
             # 어느 편집이든 지금 전에 시작한 곳은 닻이고 그 뒤만 지금 이후로 흘린다(`retime_day`)
-            anchored_add = command.op is EditOp.ADD_SLOT and any(is_anchor_param_key(k) for k in command.params)
+            # 새 곳이 맨 끝이면(마지막 슬롯 뒤 기준점) 끝 추가와 같다 — 번역이 "마지막에"를 afterPoiId 로 적어도 같은 하루가 나온다(2026-11-04 리뷰)
+            anchored_add = (command.op is EditOp.ADD_SLOT and any(is_anchor_param_key(k) for k in command.params)
+                            and new_order[-1] != _target_poi(command))
             new_day = retime_day(day, new_order, ctx, tz, keep_earlier=anchored_add)
             days = solution.days[:i] + (new_day,) + solution.days[i + 1:]
             return replace(solution, days=days)

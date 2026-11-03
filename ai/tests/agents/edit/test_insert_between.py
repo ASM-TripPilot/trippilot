@@ -14,7 +14,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from trippilot.agents.edit.commands import EditRejected, RetimeContext, apply_command, retime_day
+from trippilot.agents.edit.commands import EditRejected, RetimeContext, apply_command, edited_solution, retime_day
 from trippilot.agents.edit.insert_between import (
     Shape,
     SlotRef,
@@ -28,9 +28,9 @@ from trippilot.agents.edit.insert_between import (
 )
 from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.travel import TravelEstimator, haversine_km
-from trippilot.domain.common import GeoPoint, PoiId, TransportMode
+from trippilot.domain.common import GeoPoint, PoiId, ScheduleId, TransportMode
 from trippilot.domain.edit import EditCommand, EditOp
-from trippilot.domain.itinerary.itinerary import DaySolution, VisitSlot
+from trippilot.domain.itinerary.itinerary import DaySolution, ItinerarySolution, SolveMode, VisitSlot
 from trippilot.domain.poi.poi import NIGHTLIFE_TAG, TRENDING_TAG, DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 
 KST = timezone(timedelta(hours=9))
@@ -214,10 +214,12 @@ def test_position_cue_catches_what_the_parser_cannot_place() -> None:
 
 def test_front_of_day_is_a_position_cue_but_the_end_is_not() -> None:
     """'맨 앞에'·'첫 번째로'가 빠져 있던 동안 번역이 기준점을 뺀 추가가 맨 끝에 붙고 '반영됨'으로 나갔다(2026-11-04 실 번역 A/B).
-    '마지막에'는 단서가 아니다 — 기준점 없는 추가가 그 자리다."""
-    for said in ("창경궁을 맨 앞에 넣어줘", "첫 번째로 효창공원 넣어줘", "제일 먼저 카페 하나 넣어줘"):
+    조사가 붙은 꼴만 본다 — 날 서수·명사 꾸밈까지 잡으면 끝에 붙어야 할 추가가 실패한다(2026-11-04 리뷰). '마지막에'는 단서가 아니다."""
+    for said in ("창경궁을 맨 앞에 넣어줘", "첫 번째로 효창공원 넣어줘", "제일 앞쪽에 카페 하나 넣어줘", "가장 처음으로 경복궁 넣어줘"):
         assert position_cue(said), said
-    for said in ("마지막에 효창공원 추가해줘", "처음 가 보는 카페 하나 추가해줘", "맨 앞으로 옮겨줘"):
+    for said in ("마지막에 효창공원 추가해줘", "처음 가 보는 카페 하나 추가해줘", "맨 앞으로 옮겨줘",
+                 "첫 번째 날에 카페 하나 추가해줘", "가장 먼저 문 여는 카페 하나 넣어줘", "제일 처음 가 봤던 그 카페 추가해줘",
+                 "첫 코스로 먹었던 데 말고 다른 맛집 추가해줘"):
         assert not position_cue(said), said
 
 
@@ -396,6 +398,18 @@ def test_keep_earlier_never_pulls_existing_slots_forward(n: int, gaps: list, dat
     before = {s.poi_id: s.start_at for s in day.slots}
     assert all(s.start_at >= before[s.poi_id] for s in out.slots if s.poi_id in before)
     assert all(a.end_at <= b.start_at for a, b in zip(out.slots, out.slots[1:]))  # 시간순·겹침 없음
+
+
+@given(st.integers(1, 6), st.lists(st.integers(0, 120), min_size=1, max_size=6))
+@settings(max_examples=40)
+def test_add_after_the_last_slot_is_the_same_day_as_an_end_add(n: int, gaps: list) -> None:
+    """'마지막에'를 번역이 마지막 슬롯 뒤 기준점으로 적어도 끝 추가와 같은 하루다 — 기준점이 있다고 있던 슬롯을 붙잡는 재타이밍
+    (keep_earlier)을 타면 같은 말이 번역의 선택에 따라 다른 하루가 되거나 저녁 늦게 거부됐다(2026-11-04 리뷰)."""
+    day = _day(n, gaps)
+    sol = ItinerarySolution(ScheduleId("s"), (day,), False, SolveMode.OR_TOOLS, None)
+    order = tuple(s.poi_id for s in day.slots) + (PoiId("x"),)
+    end = edited_solution(sol, D, _add(), _ctx(order, day), KST)
+    assert edited_solution(sol, D, _add(afterPoiId=f"s{n - 1}"), _ctx(order, day), KST).days == end.days
 
 
 def test_not_before_floors_only_the_new_slot() -> None:
