@@ -96,7 +96,7 @@ def test_review_question_the_classifier_sent_to_replan_is_framed_when_no_situati
     ("오늘 일정 빡빡해서 힘든데 어떻게 해?", False), ("내일 너무 빡빡한데 좀 느슨하게 해줘", False),
     ("오늘 일정 빡세다 좀 덜어줘", False), ("오늘 남은 일정 너무 빡빡해 좀 널널하게 해 줘", False),
     ("내일 일정에서 무리한 부분 있어?", True), ("둘째 날 동선 빠듯하지 않아?", True), ("일정 빡빡한지 봐줘", True),
-    ("빡빡한 곳 있으면 알려줘", True), ("일정 빡빡한지 확인해줘", True),
+    ("빡빡한 곳 있으면 알려줘", True), ("일정 빡빡한지 확인해줘", True), ("내일 일정 체크해줘", True),
 ])
 def test_replan_request_to_loosen_the_day_stays_a_replan(said: str, review: bool) -> None:
     """다시 짜기로 분류된 부탁("빡빡한데 여유 있게 해 줘")·몸 상태("힘든데")는 다시 짜기 몫이다 — 상황 낱말만 보면 검토 카드가 가로챘다

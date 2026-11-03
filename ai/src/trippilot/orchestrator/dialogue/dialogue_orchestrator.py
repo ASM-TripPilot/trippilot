@@ -630,7 +630,7 @@ _SITUATION_CUE = re.compile(
     r"|문\s?닫|취소|힘든|힘들(?:어|었|고|던|다)|힘드")
 # 다시 짜기로 고른 말이 부탁하는 꼴이면 다시 짜기 몫이다("빡빡한데 여유 있게 해 줘") — 살펴봐·알려 달라는 부탁만 검토다
 _REQUEST = re.compile(r"줘|주세요|줄래|주실")
-_REVIEW_REQUEST = re.compile(r"검토|점검|확인|알려|봐\s?(?:줘|주세요|줄래)")
+_REVIEW_REQUEST = re.compile(r"검토|점검|체크|확인|알려|봐\s?(?:줘|주세요|줄래)")
 
 
 def _replan_asks_review(text: str) -> bool:
@@ -1100,9 +1100,8 @@ class DialogueOrchestrator:
             interp = answer_pending(inp.utterance, inp.context, trip_view, self._confident_intent)
             classified[0] = interp is not None  # 보류의 답 — 의도가 정해졌다
         if interp is None:
-            # 2 — LLM 직접 분류 (+ 2′ 섀도 submit)
-            match, reason = self._classify(inp, text, memory_lines, trip_summary, counter)
-            classified[0] = True  # 분류를 지났다 — LLM 호출 수로 재면 0″ 미리 부른 SQL 작성 LLM 도 분류로 셌다
+            # 2 — LLM 직접 분류 (+ 2′ 섀도 submit). 분류 LLM 을 부르면 `classified` 를 세운다
+            match, reason = self._classify(inp, text, memory_lines, trip_summary, counter, classified)
             if area_turn is not None and _takes_day_areas(area_turn, match):  # 2⁗ — 분류가 칸을 뭉개도(12/12) 확인한 해석으로 넘긴다
                 return _day_area_outcome(area_turn, match, cleared)
             # 2⁗′ — 일정 검토는 BE 진행 검토 카드로(DEC-U8-14). 분류가 일정 보기로 골랐거나 판단해서 닫은 말만(2‴ 와 같은 입구) — 바꾸는 의도는
@@ -1175,6 +1174,7 @@ class DialogueOrchestrator:
 
     def _classify(
         self, inp: TurnInput, text: str, memory_lines: Sequence[str], trip_summary: str, counter: list[int],
+        classified: list[bool],
     ) -> tuple[IntentMatch | None, str | None]:
         """`DIALOGUE_INTENT` 1회 → (매치, None) 또는 (None, 사유). 결과를 알게 된 직후 섀도에 넘긴다.
 
@@ -1200,6 +1200,8 @@ class DialogueOrchestrator:
                 result = None
                 reason = f"intent_error: {type(e).__name__}: {e}"
                 self._fallback(inp, "llm", *_INTENT_MODES, reason)
+            # 분류를 불렀다 — 이 뒤(모양 변환·처리)의 버그는 다시 시도. LLM 호출 수로 재면 0″ 미리 부른 SQL 작성 LLM 도 분류로 셌다
+            classified[0] = True
             if result is not None:
                 draft = result.value
                 if result.is_fallback or not isinstance(draft, IntentDraft):
