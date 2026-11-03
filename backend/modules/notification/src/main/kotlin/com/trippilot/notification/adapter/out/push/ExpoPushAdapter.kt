@@ -80,7 +80,8 @@ class ExpoPushAdapter(
     }
 
     private fun ExpoPushTicket.toReceipt(token: String): PushReceipt = when {
-        status == "ok" -> PushReceipt(token, PushStatus.SENT)
+        // 접수. 티켓 id 는 영수증 조회의 열쇠라 같이 돌려준다 — id 가 없는 ok 는 접수는 됐지만 도착을 추적할 수 없다.
+        status == "ok" -> PushReceipt(token, PushStatus.SENT, ticketId = id?.takeIf { it.isNotBlank() })
         details?.error == DEVICE_NOT_REGISTERED -> PushReceipt(token, PushStatus.DEVICE_NOT_REGISTERED, DEVICE_NOT_REGISTERED)
         else -> PushReceipt(token, PushStatus.FAILED, details?.error ?: message ?: "UNKNOWN")
     }
@@ -163,6 +164,8 @@ internal data class ExpoPushRequest(
 internal data class ExpoPushResponse(val data: List<ExpoPushTicket> = emptyList())
 
 internal data class ExpoPushTicket(
+    /** `status=ok` 에만 온다. 영수증 응답(`getReceipts`)이 이 id 를 키로 돌아온다. */
+    val id: String? = null,
     val status: String? = null,
     val message: String? = null,
     val details: ExpoPushTicketDetails? = null,
