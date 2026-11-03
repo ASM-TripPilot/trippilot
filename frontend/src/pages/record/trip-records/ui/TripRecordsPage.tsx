@@ -38,7 +38,7 @@ import type { MapCenter } from '@/shared/map';
 import { seoulDate, seoulTime } from '@/shared/lib/seoulDate';
 import { guardPress } from '@/shared/lib/pressGuard';
 import { useKeyboardVisible } from '@/shared/lib/useKeyboardVisible';
-import { NAV_BAR_RESERVE } from '@/widgets/bottom-nav-bar';
+import { NAV_BAR_RESERVE } from '@/shared/ui/navBarLayout';
 
 import { TripRecordsView, type RecordPlanRowVM } from './TripRecordsView';
 

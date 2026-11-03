@@ -24,6 +24,11 @@ import type {
 } from '@/shared/api/index.schemas';
 import type { MapCenter } from '@/shared/map';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
+import {
+  NAV_BAR_BOTTOM_GAP,
+  NAV_BAR_RESERVE,
+  NAV_BAR_SIDE,
+} from '@/shared/ui/navBarLayout';
 import { useToastBottom } from '@/shared/ui/useToastBottom';
 import { DayChipScroller, MapSheetShell } from '@/widgets/map-sheet-shell';
 import { formatCoPickDayHeader } from '@/features/itinerary/index.view';
@@ -45,14 +50,9 @@ import {
 
 import {
   LIVE_BAR_FLOAT_GAP,
-  LIVE_BAR_SIDE,
   editPopupPlacement,
 } from '../model/editPopupLayout';
-import {
-  LIVE_BOTTOM_BAR_BOTTOM_GAP,
-  LIVE_BOTTOM_BAR_RESERVE,
-  LiveBottomBar,
-} from './LiveBottomBar';
+import { LiveBottomBar } from './LiveBottomBar';
 import { LiveEditPopup } from './LiveEditPopup';
 import { OpportunityCard } from './OpportunityCard';
 
@@ -87,7 +87,7 @@ const EXPANDED_GAP_BELOW_OVERLAY_ROW = 104;
 const EDIT_POPUP_WIDTH = 139;
 // 지도 로고(네이버 출처 표기)가 바 위로 비키게 하는 아래 여백 — 안전영역과 무관한 상수 하나라 같은 객체를 계속 넘긴다(memo 된
 // MapView 가 시트가 움직일 때마다 다시 그려지지 않게).
-const MAP_LOGO_MARGIN = { bottom: LIVE_BOTTOM_BAR_RESERVE } as const;
+const MAP_LOGO_MARGIN = { bottom: NAV_BAR_RESERVE } as const;
 // 목록 끝 카드와 바 사이 여백(Figma 시트 하단 패딩 86 = 바 점유 70 + 16) — 토큰 lg(16)과 같은 값.
 const LIST_BOTTOM_GAP = 16;
 // 좌표 있는 슬롯이 하나도 없을 때의 결정론적 지도 중심(서울 시청, 옛 LiveMapScreen 값 계승).
@@ -243,7 +243,7 @@ export function LiveHubView({
   automationArmed = false,
   actionNotice,
 }: LiveHubViewProps): ReactElement {
-  useToastBottom(LIVE_BOTTOM_BAR_RESERVE); // 토스트가 하단 내비 바 위로 뜬다(TRIP-1559)
+  useToastBottom(NAV_BAR_RESERVE); // 토스트가 하단 내비 바 위로 뜬다(TRIP-1559)
   // Provider 없는 렌더(jest)에서는 null — useSafeAreaInsets 는 throw 하므로 컨텍스트를 직접 읽는다.
   const insets = useContext(SafeAreaInsetsContext);
   const safeTop = insets?.top ?? 0;
@@ -550,7 +550,7 @@ export function LiveHubView({
           }}
           // 목록 끝 카드가 하단 바에 가리지 않게 — 바 점유(바 + 바닥 여백 = 70) + 16 = 86(Figma 시트 하단 패딩). 안전영역은 안 더한다(바도 안 더한다).
           style={{
-            paddingBottom: LIVE_BOTTOM_BAR_RESERVE + LIST_BOTTOM_GAP,
+            paddingBottom: NAV_BAR_RESERVE + LIST_BOTTOM_GAP,
           }}
           className="gap-[22px] px-[20px] pt-xl"
         >
@@ -653,9 +653,9 @@ export function LiveHubView({
           pointerEvents="box-none"
           style={{
             position: 'absolute',
-            left: LIVE_BAR_SIDE,
-            right: LIVE_BAR_SIDE,
-            bottom: LIVE_BOTTOM_BAR_RESERVE + LIVE_BAR_FLOAT_GAP,
+            left: NAV_BAR_SIDE,
+            right: NAV_BAR_SIDE,
+            bottom: NAV_BAR_RESERVE + LIVE_BAR_FLOAT_GAP,
           }}
         >
           <OpportunityCard
@@ -695,9 +695,9 @@ export function LiveHubView({
           pointerEvents="box-none"
           style={{
             position: 'absolute',
-            left: LIVE_BAR_SIDE,
-            right: LIVE_BAR_SIDE,
-            bottom: LIVE_BOTTOM_BAR_BOTTOM_GAP,
+            left: NAV_BAR_SIDE,
+            right: NAV_BAR_SIDE,
+            bottom: NAV_BAR_BOTTOM_GAP,
           }}
         >
           <LiveBottomBar

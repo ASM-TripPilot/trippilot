@@ -5,12 +5,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
-import {
-  InteractionManager,
-  Text,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { InteractionManager, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -21,14 +16,19 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { onReduceMotionAnswer } from '@/shared/lib/reduceMotion';
-import { TAB_CONFIG, type ShellTabKey } from '@/shared/ui/BottomTabBar';
-
+import {
+  NavBarLabel,
+  TAB_CONFIG,
+  type ShellTabKey,
+} from '@/shared/ui/BottomTabBar';
 import {
   NAV_BAR_CAPSULE_PADDING_X,
+  NAV_BAR_CELL_GAP,
   NAV_BAR_CELL_HEIGHT,
   NAV_BAR_HEIGHT,
   NAV_BAR_SIDE,
-} from '../config/navBarLayout';
+} from '@/shared/ui/navBarLayout';
+
 import {
   BAR_ENTER_CUT_MS,
   BAR_ENTER_DELAY_MS,
@@ -177,21 +177,11 @@ function StartCell({
       accessibilityRole="tab"
       accessibilityLabel={tab.label}
       accessibilityState={{ selected }}
-      style={{ height: NAV_BAR_CELL_HEIGHT }}
-      className="items-center justify-center gap-[3px]"
+      style={{ height: NAV_BAR_CELL_HEIGHT, gap: NAV_BAR_CELL_GAP }}
+      className="items-center justify-center"
     >
-      <Icon size={27} />
-      <Text
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        className={
-          selected
-            ? 'font-noto-bold text-micro font-bold text-primary'
-            : 'font-noto text-micro text-muted'
-        }
-      >
-        {tab.label}
-      </Text>
+      <Icon />
+      <NavBarLabel label={tab.label} selected={selected} />
     </View>
   );
 }

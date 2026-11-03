@@ -27,7 +27,7 @@ import {
 import * as probe from '@/test-support/fabAnchorProbe';
 
 import { BAR_EXIT_MS } from '@/widgets/bottom-nav-bar';
-import { LIVE_BOTTOM_BAR_RESERVE } from '../model/editPopupLayout';
+import { NAV_BAR_RESERVE } from '@/shared/ui/navBarLayout';
 import { getToastBottoms, resetToastBottoms } from '@/shared/ui/toastBottom';
 import { LiveHubView, type LiveHubSlot } from './LiveHubView';
 
@@ -2048,11 +2048,11 @@ describe('LiveHubView · HP 카드 번호와 핀 탭 (TRIP-1558)', () => {
 afterEach(() => resetToastBottoms());
 
 describe('LiveHubView · 토스트 바닥 신고: 하단 내비 바 (TRIP-1559 이음새 ④)', () => {
-  it('허브가 그려지는 동안 하단 내비 바가 차지하는 높이(LIVE_BOTTOM_BAR_RESERVE)를 신고하고 unmount 로 해제한다', () => {
+  it('허브가 그려지는 동안 하단 내비 바가 차지하는 높이(NAV_BAR_RESERVE)를 신고하고 unmount 로 해제한다', () => {
     expect(getToastBottoms()).toEqual([]);
 
     renderHub();
-    expect(getToastBottoms()).toEqual([LIVE_BOTTOM_BAR_RESERVE]);
+    expect(getToastBottoms()).toEqual([NAV_BAR_RESERVE]);
 
     screen.unmount();
     expect(getToastBottoms()).toEqual([]);

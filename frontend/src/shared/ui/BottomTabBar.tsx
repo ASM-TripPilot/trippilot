@@ -10,21 +10,23 @@
  * 비주얼은 Figma 마스터 `1236:1177`(SWT PRO · 화면 페이지)의 실물에 정합한다 — **투명**
  * 96px 밴드(오버레이: 이 탭바 루트가 `absolute bottom-0`이라 화면 위에 떠서 씬이 탭바 높이만큼
  * 줄지 않고 밴드는 배경을 안 진다 — react-navigation 은 커스텀 `tabBar` 렌더프롭에 `tabBarStyle`
- * 을 적용하지 않으므로 `_layout` 옵션이 아니라 탭바 자신이 오버레이를 져야 한다) 위에 좌우 30px
- * 여백(px-[30px])의 프로스티드 글래스 알약(`expo-blur` BlurView · tint light · 반경 rounded-pill)이
- * 떠 있다. 알약 배경은 Figma 실측 rgba(255,255,255,0.68)+backdrop-blur-14 를 실 블러로 재현한다
- * (이전엔 raw 68% 흰색을 프로덕션 렌더 실측 #F7F7F7 불투명으로 되정정했으나, 탭바가 오버레이가
- * 되며 아래 콘텐츠가 비쳐야 하므로 실 블러가 정본에 맞다). 아이콘 좌표계·렌더 크기 모두 27x27,
- * 탭 폭은 flex-1(≈62), 라벨은 활성 primary·비활성 muted. 그림자는 BlurView overflow-hidden 밖
- * 래퍼가, 테두리(50% 반투명 흰색 raw)는 BlurView 안쪽이 진다 — RN엔 CSS box-shadow가 없어 style
- * 프로퍼티로 넘긴다(HomeScreen.tsx 그림자 관례와 동일). 하단 SafeArea 인셋은 합산하지 않는다.
- * ⚠️ BlurView는 네이티브 모듈이라 코드 머지 후 `pnpm expo prebuild` + 재빌드해야 실기에 뜬다.
+ * 을 적용하지 않으므로 `_layout` 옵션이 아니라 탭바 자신이 오버레이를 져야 한다) 위에 좌우
+ * `NAV_BAR_SIDE` 여백의 유리 알약(`GlassSurface` — 허브·기록 바와 같은 값 한 벌)이 떠 있다.
+ * 아이콘 좌표계·렌더 크기 모두 27x27, 탭 폭은 flex-1(≈62), 라벨은 `NavBarLabel`(활성 primary·비활성 muted).
+ * 치수는 `navBarLayout` 이 정본이다(TRIP-1739). 하단 SafeArea 인셋은 합산하지 않는다.
  */
-import { BlurView } from 'expo-blur';
 import { useState, type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
+import { GlassSurface } from './GlassSurface';
+import {
+  NAV_BAR_CAPSULE_PADDING_X,
+  NAV_BAR_CAPSULE_PADDING_Y,
+  NAV_BAR_CELL_GAP,
+  NAV_BAR_ICON_SIZE,
+  NAV_BAR_SIDE,
+} from './navBarLayout';
 import { useToastBottom } from './useToastBottom';
 
 export type ShellTabKey = 'home' | 'explore' | 'itinerary' | 'records' | 'my';
@@ -59,27 +61,9 @@ export interface BottomTabBarProps {
 const PRIMARY = '#FF385C';
 const MUTED = '#6A6A6A';
 
-// 알약 그림자 — 바깥 래퍼가 진다(BlurView는 overflow-hidden으로 블러를 알약 모양에 맞춰
-// 잘라내야 하는데, overflow-hidden이 그림자까지 자르므로 그림자는 클리핑 밖 래퍼가 맡는다).
-// shadow-* 스타일 프로퍼티는 HomeScreen.tsx heroCardShadow와 같은 이 리포 확립 패턴.
-const PILL_SHADOW_STYLE = {
-  shadowColor: '#000000',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.1,
-  shadowRadius: 14,
-  elevation: 4,
-} as const;
-
-// 알약 테두리 — 50% 반투명 흰색(Figma 실측, Q3: 알파값은 토큰이 아니라 raw). BlurView 안쪽에
-// 두어야 클리핑된 알약 모양을 따라 테두리가 그려진다.
-const PILL_BORDER_STYLE = {
-  borderWidth: 1,
-  borderColor: 'rgba(255,255,255,0.5)',
-} as const;
-
 type TabIconProps = { size?: number };
 
-function HomeIconActive({ size = 27 }: TabIconProps) {
+function HomeIconActive({ size = NAV_BAR_ICON_SIZE }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -89,7 +73,7 @@ function HomeIconActive({ size = 27 }: TabIconProps) {
     </Svg>
   );
 }
-function HomeIconInactive({ size = 27 }: TabIconProps) {
+function HomeIconInactive({ size = NAV_BAR_ICON_SIZE }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -110,7 +94,7 @@ function HomeIconInactive({ size = 27 }: TabIconProps) {
   );
 }
 
-function ExploreIconActive({ size = 27 }: TabIconProps) {
+function ExploreIconActive({ size = NAV_BAR_ICON_SIZE }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -124,7 +108,7 @@ function ExploreIconActive({ size = 27 }: TabIconProps) {
     </Svg>
   );
 }
-function ExploreIconInactive({ size = 27 }: TabIconProps) {
+function ExploreIconInactive({ size = NAV_BAR_ICON_SIZE }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -145,7 +129,9 @@ function ExploreIconInactive({ size = 27 }: TabIconProps) {
   );
 }
 
-export function ItineraryIconActive({ size = 27 }: TabIconProps) {
+export function ItineraryIconActive({
+  size = NAV_BAR_ICON_SIZE,
+}: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -156,7 +142,9 @@ export function ItineraryIconActive({ size = 27 }: TabIconProps) {
     </Svg>
   );
 }
-export function ItineraryIconInactive({ size = 27 }: TabIconProps) {
+export function ItineraryIconInactive({
+  size = NAV_BAR_ICON_SIZE,
+}: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -191,7 +179,7 @@ export function ItineraryIconInactive({ size = 27 }: TabIconProps) {
   );
 }
 
-export function RecordsIconActive({ size = 27 }: TabIconProps) {
+export function RecordsIconActive({ size = NAV_BAR_ICON_SIZE }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -201,7 +189,9 @@ export function RecordsIconActive({ size = 27 }: TabIconProps) {
     </Svg>
   );
 }
-export function RecordsIconInactive({ size = 27 }: TabIconProps) {
+export function RecordsIconInactive({
+  size = NAV_BAR_ICON_SIZE,
+}: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -215,7 +205,7 @@ export function RecordsIconInactive({ size = 27 }: TabIconProps) {
   );
 }
 
-function MyIconActive({ size = 27 }: TabIconProps) {
+function MyIconActive({ size = NAV_BAR_ICON_SIZE }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -229,7 +219,7 @@ function MyIconActive({ size = 27 }: TabIconProps) {
     </Svg>
   );
 }
-function MyIconInactive({ size = 27 }: TabIconProps) {
+function MyIconInactive({ size = NAV_BAR_ICON_SIZE }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 27 27" fill="none">
       <Path
@@ -289,6 +279,37 @@ export const TAB_CONFIG: {
   },
 ];
 
+/** 하단 바 칸 라벨 — 탭 바·허브/기록 바 칸이 같이 쓴다(TRIP-1739). 큰 글자에서도 한 줄에 맞춰 줄인다. */
+export function NavBarLabel({
+  label,
+  selected,
+}: {
+  label: string;
+  selected: boolean;
+}): ReactElement {
+  return (
+    <Text
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      className={
+        selected
+          ? 'font-noto-bold text-micro font-bold text-primary'
+          : 'font-noto text-micro text-muted'
+      }
+    >
+      {label}
+    </Text>
+  );
+}
+
+// 알약 안 패딩 — 허브·기록 바 캡슐과 같은 값(className 에 같은 패딩을 또 두지 않는다 — 이중 간격).
+const PILL_CONTENT_STYLE = {
+  paddingHorizontal: NAV_BAR_CAPSULE_PADDING_X,
+  paddingVertical: NAV_BAR_CAPSULE_PADDING_Y,
+} as const;
+// 탭 칸은 간격만 style 로 준다 — 높이를 고정하면 큰 글자에서 알약이 안 자란다(TRIP-1642).
+const TAB_CELL_STYLE = { gap: NAV_BAR_CELL_GAP } as const;
+
 export function BottomTabBar({
   activeKey,
   onPressTab,
@@ -304,60 +325,39 @@ export function BottomTabBar({
       // 삼키지 않고(투명 여백 아래 스크롤·탭이 그대로 통과) 자식(알약)만 터치를 받는다
       // (code-critic N1 — RN 순수 View는 투명해도 터치를 흡수한다).
       pointerEvents="box-none"
-      className="absolute inset-x-0 bottom-0 min-h-[96px] px-[30px] pt-[26px]"
+      className="absolute inset-x-0 bottom-0 min-h-[96px] pt-[26px]"
+      style={{ paddingHorizontal: NAV_BAR_SIDE }}
     >
-      {/* 그림자 래퍼 — BlurView의 overflow-hidden 바깥에 둬야 그림자가 안 잘린다. */}
-      <View className="rounded-pill" style={PILL_SHADOW_STYLE}>
-        <BlurView
-          // intensity 70(TRIP-1104) — 24 는 사진 카드가 알약 뒤로 지날 때 회색 라벨이 무늬에
-          // 묻혔다(QA 5회차). 사용자 합의 범위 60~80 의 중앙이다. 부족해 흰 68% 레이어를 더했다(TRIP-1436).
-          intensity={70}
-          tint="light"
-          experimentalBlurMethod="dimezisBlurView"
-          className="flex-row items-center overflow-hidden rounded-pill px-[10px] py-[2px]"
-          style={PILL_BORDER_STYLE}
-        >
-          {/* TRIP-1436 Q-025 — 흰 68% 레이어(TRIP-1104 합의): 사진 위에서도 회색 라벨이 흰 배경 위처럼 읽히게. 라벨·아이콘 아래에 깐다. */}
-          <View
-            pointerEvents="none"
-            className="absolute inset-0 bg-canvas/[0.68]"
-          />
-          {TAB_CONFIG.map(({ key, label, ActiveIcon, InactiveIcon }) => {
-            const selected = key === activeKey;
-            return (
-              <Pressable
-                key={key}
-                testID={`shell-tabbar-tab-${key}`}
-                accessibilityRole="tab"
-                accessibilityState={{ selected }}
-                onPress={() => onPressTab(key)}
-                className="flex-1 items-center gap-[3px] py-[6px]"
-              >
-                {selected ? (
-                  <View testID={`shell-tabbar-icon-${key}-active`}>
-                    <ActiveIcon size={27} />
-                  </View>
-                ) : (
-                  <View testID={`shell-tabbar-icon-${key}-inactive`}>
-                    <InactiveIcon size={27} />
-                  </View>
-                )}
-                <Text
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  className={
-                    selected
-                      ? 'font-noto-bold text-micro font-bold text-primary'
-                      : 'font-noto text-micro text-muted'
-                  }
-                >
-                  {label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </BlurView>
-      </View>
+      <GlassSurface
+        contentClassName="flex-row items-center"
+        contentStyle={PILL_CONTENT_STYLE}
+      >
+        {TAB_CONFIG.map(({ key, label, ActiveIcon, InactiveIcon }) => {
+          const selected = key === activeKey;
+          return (
+            <Pressable
+              key={key}
+              testID={`shell-tabbar-tab-${key}`}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              onPress={() => onPressTab(key)}
+              className="flex-1 items-center py-[6px]"
+              style={TAB_CELL_STYLE}
+            >
+              {selected ? (
+                <View testID={`shell-tabbar-icon-${key}-active`}>
+                  <ActiveIcon />
+                </View>
+              ) : (
+                <View testID={`shell-tabbar-icon-${key}-inactive`}>
+                  <InactiveIcon />
+                </View>
+              )}
+              <NavBarLabel label={label} selected={selected} />
+            </Pressable>
+          );
+        })}
+      </GlassSurface>
     </View>
   );
 }

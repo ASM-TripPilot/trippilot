@@ -16,7 +16,8 @@ import {
 } from './VisitRecordCard';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { StateNotice } from '@/shared/ui/StateNotice';
-import { NAV_BAR_RESERVE, RecordNavBar } from '@/widgets/bottom-nav-bar';
+import { NAV_BAR_RESERVE } from '@/shared/ui/navBarLayout';
+import { RecordNavBar } from '@/widgets/bottom-nav-bar';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 
 /**
