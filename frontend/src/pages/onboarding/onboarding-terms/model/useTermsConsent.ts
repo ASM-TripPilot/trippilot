@@ -33,6 +33,10 @@ export interface UseTermsConsent {
   canProceed: boolean;
   missingRequiredLabels: string[];
   errorMessage: string | null;
+  /** 약관 목록 조회 실패(TRIP-1752) — 못 받으면 필수 동의를 할 수 없어 [다음]이 영구히 막힌다. */
+  loadError: boolean;
+  /** 목록을 다시 받는다. */
+  retryLoad: () => void;
   toggle: (termsType: string) => void;
   toggleAll: () => void;
   /** 성공(true)일 때만 컨테이너가 다음 단계로 이동한다. */
@@ -42,29 +46,44 @@ export interface UseTermsConsent {
 export function useTermsConsent(): UseTermsConsent {
   const [items, setItems] = useState<TermsItemView[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
-  useEffect(() => {
-    void (async () => {
+  // 실패를 상태로 잡는다 — 잡지 않으면 빈 목록 + 꺼진 [다음]만 남는 막다른 화면이 되고, 거부가 처리되지 않은 채 샌다(INV-4).
+  async function loadTerms(): Promise<void> {
+    setLoadError(false);
+    try {
       const terms = await fetchTerms();
       const byType = new Map(terms.map((term) => [term.termsType, term]));
       // 서버 응답 순서와 무관하게 노출 순서를 고정하고, 서버에 실재하는 종만 그린다.
-      setItems(
-        ONBOARDING_TERMS_TYPES.flatMap((type) => {
-          const term = byType.get(type);
-          return term
-            ? [
-                {
-                  termsType: term.termsType,
-                  version: term.version,
-                  label: TERMS_LABELS[type] ?? term.termsType,
-                  required: true,
-                  checked: false,
-                },
-              ]
-            : [];
-        })
-      );
-    })();
+      const shown = ONBOARDING_TERMS_TYPES.flatMap((type) => {
+        const term = byType.get(type);
+        return term
+          ? [
+              {
+                termsType: term.termsType,
+                version: term.version,
+                label: TERMS_LABELS[type] ?? term.termsType,
+                required: true,
+                checked: false,
+              },
+            ]
+          : [];
+      });
+      // 필수 종이 하나라도 빠지면 전부 동의할 수 없어 [다음]이 영구히 막힌다 — 받기 실패와 같이 알린다(03b 경고-1).
+      if (shown.length < ONBOARDING_TERMS_TYPES.length) {
+        setItems([]);
+        setLoadError(true);
+        return;
+      }
+      setItems(shown);
+    } catch {
+      setLoadError(true);
+    }
+  }
+
+  useEffect(() => {
+    void loadTerms();
+    // 마운트 1회 — loadTerms 는 상태 setter 만 쓴다.
   }, []);
 
   const requiredItems = items.filter((item) => item.required);
@@ -115,6 +134,8 @@ export function useTermsConsent(): UseTermsConsent {
     canProceed,
     missingRequiredLabels,
     errorMessage,
+    loadError,
+    retryLoad: () => void loadTerms(),
     toggle,
     toggleAll,
     submit,
