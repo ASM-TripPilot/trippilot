@@ -69,6 +69,12 @@ flowchart LR
 | `api` | FastAPI 경계. `routes` 는 검증·위임·투영만 한다. `wiring.py` 는 전부를 조립하는 루트이면서, `WiredItineraryOrchestrator` 가 **다시 짜기·다른 후보·편집·검증·설명을 직접 조율**하고 구성·추출·지시 번역·설명 워커를 에이전트 없이 부른다(`orchestrator` 패키지를 거치는 것은 생성과 도우미뿐) | `create_app`, `routes`, `WiredItineraryOrchestrator`, `schemas`(`extra=forbid`), `errors`, `middleware`(서비스 토큰·본문 상한·속도 제한·시한 백스톱) |
 | `background` | 오프라인 배치용 도우미(네이버 검색·카카오 지오코더·행사 저장소). 런타임은 저장소를 읽기만 | `JsonEventStore` |
 
+**하위 폴더**: 파일이 몰렸던 세 패키지만 기능 묶음으로 나눴다(2026-11-02, import 경로만 바뀜). 층·의존 규칙은 그대로다.
+
+- `domain/` — 공용 타입(`common`·`context`·`edit`·`persona` 등)은 바로 아래에 둔다. 묶음은 `dialogue`(`Intent`·위임·계획 도구), `itinerary`(해·문제·이동), `llm`(`LlmFeature`·`CandidatePool`·프롬프트 참조·평가), `poi`(`Poi`·지역 중심·테마 태그)다.
+- `orchestrator/` — `intent`(의도 라우터·질문뱅크), `dialogue`(`DialogueOrchestrator`·핸들러·계획·기억·장소 SQL), `schedule`(생성 조율·정보 수집).
+- `llm_gateway/{gates,workers}/` — 같은 기능의 게이트와 워커는 같은 이름 폴더에 있다. 묶음은 `content`(편집 번역·리마인드·공유 카드·회고 문구), `dialogue`, `preference`(점수·번호 고르기), `replan`(대안 고르기·설명·지시 번역)이다.
+
 **의존 규칙**은 `ai/tests/test_architecture.py` 가 빌드에서 강제한다. 요지:
 
 - 안쪽 층(`domain`·`ports`·`llm_gateway`·`assembly_engine`·`poi_curation`)은 바깥(`agents`·`orchestrator`·`providers`·`background`)을 import 하지 않는다(L-1).

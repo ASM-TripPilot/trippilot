@@ -140,6 +140,14 @@ def test_a_refusal_is_asked_twice_before_it_counts_as_the_answer() -> None:
     assert res["status"] == "refused" and calls == 2
 
 
+@pytest.mark.parametrize("then", [_Err(None), _Err(401), _Err(503)], ids=["error", "fatal", "transient"])
+def test_a_paid_refusal_is_charged_even_when_the_retry_fails(then) -> None:
+    """거절로 다시 물은 뒤 오류로 끝나도 첫 호출은 이미 냈다 — 결과에 비용이 없으면 예산(`--budget-usd`)이 덜 센다."""
+    after = [then] * (c.MAX_TRANSIENT - 1) if then.status_code == 503 else [then]
+    res, _ = _lookup("I'm sorry", *after)
+    assert res["status"] == "error" and res["cost"] > 0
+
+
 def test_transient_errors_are_retried_then_marked_transient() -> None:
     res, calls = _lookup(*[_Err(503)] * c.MAX_TRANSIENT)
     assert res["status"] == "error" and res["transient"] and calls == c.MAX_TRANSIENT

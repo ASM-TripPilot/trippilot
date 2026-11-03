@@ -91,6 +91,22 @@ def test_review_question_the_classifier_sent_to_replan_is_framed_when_no_situati
         assert kept.outcome != "FRAME" and kept.frames[0].intent is Intent.REPLAN, said
 
 
+@pytest.mark.parametrize("said,review", [
+    ("오늘 일정 너무 빡빡한데 좀 여유 있게 해 줘", False), ("일정이 빠듯하니 조절 좀 해 줄래?", False),
+    ("오늘 일정 빡빡해서 힘든데 어떻게 해?", False), ("내일 너무 빡빡한데 좀 느슨하게 해줘", False),
+    ("오늘 일정 빡세다 좀 덜어줘", False), ("오늘 남은 일정 너무 빡빡해 좀 널널하게 해 줘", False),
+    ("내일 일정에서 무리한 부분 있어?", True), ("둘째 날 동선 빠듯하지 않아?", True), ("일정 빡빡한지 봐줘", True),
+    ("빡빡한 곳 있으면 알려줘", True), ("일정 빡빡한지 확인해줘", True), ("내일 일정 체크해줘", True),
+])
+def test_replan_request_to_loosen_the_day_stays_a_replan(said: str, review: bool) -> None:
+    """다시 짜기로 분류된 부탁("빡빡한데 여유 있게 해 줘")·몸 상태("힘든데")는 다시 짜기 몫이다 — 상황 낱말만 보면 검토 카드가 가로챘다
+    (2026-11-04 리뷰 재현). 살펴봐·알려·확인해 달라는 부탁은 그대로 검토다."""
+    out = _build(_canned(Intent.REPLAN)).orch.turn(_input(said))
+    assert (out.outcome == "FRAME" and out.frames[0].intent is Intent.SHOW_SCHEDULE) is review, said
+    if not review:
+        assert out.frames[0].intent is Intent.REPLAN
+
+
 def test_knowledge_prompt_does_not_carry_the_itinerary_counts() -> None:
     """지식 즉답은 일정 날·곳 수를 받지 않는다 — 그 수로 "하루 7곳이라 꽤 빡빡한 편이에요"처럼 내 일정을 판정했다(BR-U8-14). 지역·기간은
     '거기'·'그때'를 읽는 데 그대로 싣는다."""
@@ -128,6 +144,12 @@ def test_review_question_without_a_trip_is_framed_so_the_backend_says_why(caplog
     ("점심에 짠 거 먹어도 괜찮을까?", False), ("일정 중에 주차 문제는 없어?", False), ("일정에 문제가 생겼어", False),
     ("오늘 무리했더니 피곤해", False), ("제주 3박4일 일정 빡빡하지 않아?", False),
     ("아이 동반 여행인데 빡빡하지 않게 일정 부탁해요", False),
+    # 코드 리뷰 재현(2026-11-04) — 강한 표지만 있고 일정을 가리키지 않는 말은 지식 즉답 몫, 일정·날·'곳'·말머리면 그대로 검토
+    ("부모님이랑 한라산 등반 무리야?", False), ("아이랑 성산일출봉 오르기 무리야?", False), ("한라산 당일치기 빡세?", False),
+    ("렌터카 없이 제주 동쪽 돌아보는 거 무리일까?", False), ("70대 부모님이 한라산 등반 무리야?", False),
+    ("너무 무리한 거 아니야?", True), ("빡빡하지 않아?", True), ("동선 빠듯하지 않아?", True),
+    ("빡빡한 곳 있으면 알려줘", True), ("무리한 데 있는지 알려줘", True), ("일정 빡빡한지 확인해줘", True),
+    ("오늘 일정 너무 빡빡한데 좀 여유 있게 해 줘", False), ("내일 너무 빡빡한데 좀 느슨하게 해줘", False),
 ])
 def test_asks_review_needs_a_review_cue_a_schedule_cue_and_no_change_request(text: str, want: bool) -> None:
     assert dialogue_orchestrator.asks_review(normalize(text)) is want  # `_core` 처럼 정리한 말로 묻는다(전각 '？'도 NFKC 로 같다)

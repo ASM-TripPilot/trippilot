@@ -105,6 +105,7 @@ internal fun noPush(clock: java.time.Clock, notifications: NotificationRepositor
         limits = PushRateLimits(),
         clock = clock,
         tickets = FakeTickets(),
+        accounts = NoDeletionPending,
     )
 
 /**
@@ -151,6 +152,15 @@ internal class FakeTickets : com.trippilot.notification.domain.PushTicketReposit
     override fun countPending(): Long = recorded.count { it.ticketId !in settled }.toLong()
 }
 
+/** 삭제 유예 중인 계정이 없는 세계 — 알림 단위 테스트의 기본 상태. 유예 계정이 필요한 테스트는 [PendingDeletion] 을 쓴다. */
+internal val NoDeletionPending = com.trippilot.auth.api.AccountStatusFacade { false }
+
+/** 주어진 계정만 삭제 유예 중인 세계 — 처리 시점의 상태를 테스트가 바꿔 가며 확인할 수 있다. */
+internal class PendingDeletion(vararg initial: UUID) : com.trippilot.auth.api.AccountStatusFacade {
+    val pending = initial.toMutableSet()
+    override fun isDeletionPending(accountId: UUID) = accountId in pending
+}
+
 internal class FakeSchedules : NotificationScheduleRepository {
     val stored = mutableListOf<NotificationSchedule>()
 
@@ -178,12 +188,38 @@ internal class FakeSchedules : NotificationScheduleRepository {
     override fun findPendingByTrip(tripId: UUID) =
         stored.filter { it.tripId == tripId && it.firedAt == null && it.canceledAt == null }.sortedBy { it.fireAt }
 
+    /** 실 DB 질의와 같은 조건 — 미발화·미취소, 시각 범위 (from, until], 문구 없음. 가까운 여행부터, 한 여행은 한 번. */
+    override fun findTripsLackingCopy(from: Instant, until: Instant, limit: Int): List<UUID> =
+        stored.filter { it.firedAt == null && it.canceledAt == null && it.fireAt.isAfter(from) && !it.fireAt.isAfter(until) && !it.hasCopy }
+            .groupBy { it.tripId }
+            .entries.sortedBy { (_, rows) -> rows.minOf { it.fireAt } }
+            .map { it.key }
+            .take(limit)
+
     /** 조건부 쓰기 — 문구가 이미 있는 행·발화/취소된 행·지워진 행은 바뀌지 않는다(실 DB 의 WHERE 절과 같은 조건). */
     override fun attachCopy(scheduleId: UUID, title: String, body: String, copyBasis: String): Boolean {
         val i = stored.indexOfFirst { it.scheduleId == scheduleId && it.firedAt == null && it.canceledAt == null && !it.hasCopy }
         if (i < 0) return false
         stored[i] = stored[i].copy(title = title, body = body, copyBasis = copyBasis)
         return true
+    }
+
+    /** 실 DB 질의와 같은 조건 — 이 계정의 미발화·취소된 행 중 [after] 이후에 울릴 것이 있는 여행(한 여행은 한 번). */
+    override fun findTripIdsWithCanceledFuture(accountId: UUID, after: Instant): List<UUID> =
+        stored.filter { it.accountId == accountId && it.firedAt == null && it.canceledAt != null && it.fireAt.isAfter(after) }
+            .map { it.tripId }.distinct()
+
+    /** 조건부 쓰기 — 발화·취소된 행은 바뀌지 않는다(실 DB 의 WHERE 절과 같은 조건). */
+    override fun cancelPendingOf(accountId: UUID, at: Instant): Int {
+        var n = 0
+        stored.indices.forEach { i ->
+            val row = stored[i]
+            if (row.accountId == accountId && row.firedAt == null && row.canceledAt == null) {
+                stored[i] = row.copy(canceledAt = at)
+                n++
+            }
+        }
+        return n
     }
 
     /** 조건부 쓰기 — 이미 발화·취소된 행은 바뀌지 않는다(실 DB 의 WHERE 절과 같은 조건). */

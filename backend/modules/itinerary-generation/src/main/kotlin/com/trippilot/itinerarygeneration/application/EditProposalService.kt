@@ -89,7 +89,7 @@ class EditProposalService(
         }
 
         // 컨텍스트 조회 실패도 "지금은 제안할 수 없다"다 — 예외로 올리면 대화 턴이 500 으로 끝난다.
-        val dayContext = runCatching { contexts.forEditProposal(accountId, tripId, targetDate) }
+        val dayContext = runCatching { contexts.forEditProposal(accountId, tripId, targetDate, current.days.map { it.date }) }
             .onFailure { log.warn("편집 제안 컨텍스트(앵커·취향) 조회 실패. tripId={}", tripId, it) }
             .getOrNull()
             ?: return EditProposal.Unavailable.also { log.warn("편집 제안 불가 — 그 날의 앵커를 정하지 못했습니다. tripId={} date={}", tripId, targetDate) }
@@ -108,6 +108,10 @@ class EditProposalService(
             requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), aiBudgetMs),
             // "다른 데는?" — 앞서 보인 곳은 상대가 새로 들이지 않는다(후보 풀을 좁힐 뿐, INV-1). 구조화 교체는 새 장소를 이미 정했다
             excludedPoiIds = (request as? EditProposalRequest.Utterance)?.excludedPoiIds.orEmpty().toList(),
+            // 여행 컨텍스트(2026-11-03) — 생성과 같은 출처의 취향·기본 일과 창·여행 첫날
+            preferenceProfile = context.preferenceProfile,
+            timeWindows = context.timeWindows,
+            tripStartDate = context.tripStartDate,
         )
         val output = within(deadlineMs, tripId) { scheduleAgent.proposeEdit(input) } ?: return EditProposal.Unavailable
         return output.toApi(current, replacement?.let { it to targetDate }, tripId)

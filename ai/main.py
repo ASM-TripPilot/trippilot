@@ -178,13 +178,8 @@ def _anthropic_llm_and_model() -> tuple[object, str]:
     from trippilot.llm_gateway.adapters.anthropic_adapter import AnthropicAdapter
     from trippilot.llm_gateway.adapters.deadline_http import DeadlineTransport
 
-    clients = [
-        anthropic.Anthropic(
-            api_key=key, max_retries=0,
-            http_client=anthropic.DefaultHttpxClient(transport=DeadlineTransport()),  # 총시간 시한
-        )
-        for key in api_keys
-    ]
+    http_client = anthropic.DefaultHttpxClient(transport=DeadlineTransport())  # 총시간 시한 — 키끼리 연결 풀 공유
+    clients = [anthropic.Anthropic(api_key=key, max_retries=0, http_client=http_client) for key in api_keys]
     client = clients if len(clients) > 1 else clients[0]
     return AnthropicAdapter(client), _env("ANTHROPIC_MODEL") or "claude-haiku-4-5"
 
@@ -802,6 +797,24 @@ def _replan_directives() -> tuple:
         return ()
 
 
+_SITUATION_PATH = pathlib.Path(__file__).resolve().parent / "data" / "planb_situation_kb.yaml"
+
+
+def _situation_docs() -> tuple:
+    """KB-3 상황 대처 원칙 (본문, 사유들) — 다시 짜기 구성 프롬프트 [상황 대처 원칙](0.10.0). `_replan_directives` 와 같은
+    이유로 여기서 읽는다(yaml 은 src/ 밖). 없거나 깨지면 빈 튜플 — 그 칸이 "(없음)"인 0.9.0 과 같은 정보로 짠다."""
+    try:
+        import yaml
+
+        from trippilot.agents.planb.kb_retrieval import load_kb_file
+
+        return tuple((d.text, tuple(d.metadata.get("reasons") or ())) for d in load_kb_file(_SITUATION_PATH, yaml.safe_load))
+    except Exception as e:  # 파일 부재·형식 위반 — 원칙 없이도 다시 짜기는 된다
+        logging.getLogger("trippilot.main").warning(
+            "planb_situation_kb 로드 실패 %s: %s — 상황 대처 원칙 없이 기동", type(e).__name__, e)
+        return ()
+
+
 def _warn_unwired(*, weather, embedding, feature_models: Mapping | None, memory=None) -> None:
     """기동은 되고 품질만 조용히 떨어지는 외부 배선 공백을 1회씩 WARN.
 
@@ -938,6 +951,7 @@ def build_app_from_env() -> FastAPI:
                          # 0·음수는 C1Config 검증이 기동 시점에 거부한다.
                          score_max_parallel=int(_env("TRIPPILOT_SCORE_MAX_PARALLEL") or "10"),
                          directives=_replan_directives(),
+                         situation_docs=_situation_docs(),
                          bank=_intent_bank(), bank_embedding=_bank_embedding(),
                          bank_vectors=_bank_vectors(),
                          memory_store=memory_store, place_sql=place_sql, place_fact_store=place_fact_store,

@@ -432,3 +432,17 @@ def test_repair_with_now_never_moves_started_slots(gaps: list[int], now_min: int
     kept_blocks = tuple(b for b in blocks if b.window.start >= out[rest_from].start_at)
     assert check_all(rest, replace(problem, fixed_blocks=kept_blocks), index, _EST) == []
 
+
+
+def test_repair_with_now_keeps_a_place_visited_twice_apart() -> None:
+    """같은 곳을 하루 두 번(13:00 지금 있는 곳 · 16:00 다시) — 13:00 을 닻으로 묶은 창 하나가 16:00 슬롯까지 끌어와 수리 불가였다."""
+    p, q = _poi("p", 37.75, 128.87), _poi("q", 37.752, 128.872)
+    slots = (_slot("p", 13, 0, 14, 0), _slot("q", 14, 30, 15, 30), _slot("p", 16, 0, 17, 0))
+    sol = ItinerarySolution(ScheduleId("s"), (DaySolution(_DAY, slots, ()),), False, SolveMode.OR_TOOLS, None)
+    problem = ItineraryProblem(ScheduleId("s"), (_DAY,), (), (), BudgetLevel.MID, TransportMode.PUBLIC,
+                               TimeWindow(datetime(2026, 8, 5, 0, 0, tzinfo=_KST), datetime(2026, 8, 5, 23, 59, tzinfo=_KST)), 0)
+
+    result = _facade({p.poi_id: p, q.poi_id: q}).repair(sol, problem, deadline_ms=1000,
+                                                       now=datetime(2026, 8, 5, 13, 30, tzinfo=_KST))
+
+    assert result.repaired is not None and result.repaired.days[0].slots == slots

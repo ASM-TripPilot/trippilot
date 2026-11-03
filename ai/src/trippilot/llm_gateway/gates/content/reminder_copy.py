@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -30,6 +31,8 @@ from trippilot.llm_gateway.gates.base import (
     has_contact_like,
     strip_code_fence,
 )
+
+_log = logging.getLogger(__name__)
 
 # 푸시 제목·본문 상한 (프롬프트의 "20자/60자"와 같은 값 — 테스트가 고정한다)
 _MAX_TITLE = 20
@@ -79,7 +82,8 @@ def _without_names(text: str, names: set[str]) -> str:
     """허용 장소명(표시형 포함)을 지운 글 — 이름 속 "24시"·"자정"이 시각 검사에 걸리지 않게. 긴 이름부터 지운다."""
     for name in sorted(names, key=len, reverse=True):
         if name:
-            text = text.replace(name, " ")
+            # 한글로 메운다 — 공백이면 "한라산이 분명"의 조사 '이'가 수사(二)로 읽혀 "이 분"이 소요시간에 걸린다
+            text = text.replace(name, "곳")
     return text
 
 
@@ -217,25 +221,37 @@ class ReminderCopyGate:
         # 문구가 매번 드롭되고 상수로 굳었다(재시도에서도 같은 입력이라 재현된다). 장소명 밖의 "30분 걸려요"는 그대로 잡힌다.
         masked = _without_names(title + " " + body, allowed)
 
-        dropped = (
-            not title
-            or not body
-            or len(title) > _MAX_TITLE
-            or len(body) > _MAX_BODY
-            or _DURATION.search(masked.lower()) is not None  # INV-3
-            or _CLOCK.search(masked) is not None  # INV-2 — 지어낸 시각
-            or any(name not in allowed for name in declared)  # INV-1
-            or any(
-                not any(v in body for v in _name_variants(name)) for name in declared
-            )  # 선언 정직성 — 표시형·토큰 축약도 인정
-            or any(name and name in title + " " + body for name in ctx.forbidden)  # 선언 회피 차단 — 제목도 화면에 뜬다
-            # 링크·연락처 꼴 — 넛지 게이트와 같은 이유(잠금화면 · 수집 장소명이
-            # 프롬프트에 실린다). 여기는 대조 집합이 있어도 못 막는다: `allowed` 는
-            # 장소를 **말해도 되는가**만 보고, 문구에 낯선 도메인이 붙는 것은
-            # 어느 규칙에도 걸리지 않는다.
-            or has_contact_like(title + " " + body)
-        )
+        # 어느 규칙이 걸렸는지 **이름으로** 모은다 — 판정(하나라도 걸리면 드롭)은 같고, 이름은 로그용이다. 드롭 사유 라벨(`gate_dropped_all`)은
+        # 규칙을 가르지 못해 운영에서 "문구 호출 166건 중 16건 전량 탈락"이 왜인지 로그로는 알 수 없었다(2026-11-04 점검).
+        violations = [
+            name
+            for name, hit in (
+                ("empty", not title or not body),
+                ("title_too_long", len(title) > _MAX_TITLE),
+                ("body_too_long", len(body) > _MAX_BODY),
+                ("duration", _DURATION.search(masked.lower()) is not None),  # INV-3
+                ("clock", _CLOCK.search(masked) is not None),  # INV-2 — 지어낸 시각
+                ("place_not_allowed", any(name not in allowed for name in declared)),  # INV-1
+                (
+                    "declaration_not_in_body",  # 선언 정직성 — 표시형·토큰 축약도 인정
+                    any(not any(v in body for v in _name_variants(name)) for name in declared),
+                ),
+                (
+                    "other_day_place",  # 선언 회피 차단 — 제목도 화면에 뜬다
+                    any(name and name in title + " " + body for name in ctx.forbidden),
+                ),
+                # 링크·연락처 꼴 — 넛지 게이트와 같은 이유(잠금화면 · 수집 장소명이
+                # 프롬프트에 실린다). 여기는 대조 집합이 있어도 못 막는다: `allowed` 는
+                # 장소를 **말해도 되는가**만 보고, 문구에 낯선 도메인이 붙는 것은
+                # 어느 규칙에도 걸리지 않는다.
+                ("contact_like", has_contact_like(title + " " + body)),
+            )
+            if hit
+        ]
+        dropped = bool(violations)
         if dropped:
+            # 문구 원문·장소 이름은 싣지 않는다 — 규칙 이름만.
+            _log.info("reminder_copy.gate_drop rules=%s", ",".join(violations))
             drop_event = GateDropEvent(
                 trace_id=trace_id,
                 occurred_at=now,

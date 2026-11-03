@@ -116,12 +116,16 @@ def test_prompt_renders_deterministically_with_the_rules() -> None:
     variables = build_dialogue_knowledge_vars("부산은 언제 가?", (_Turn("USER", "안녕"),), ("제약: 아이 동반",), "여행 부산")
     p1, ref = reg.render(_FEAT, variables)
     assert p1 == reg.render(_FEAT, variables)[0]
-    assert ref.prompt_id == "prompts/dialogue_knowledge.yaml" and ref.version == "0.1.2"
+    assert ref.prompt_id == "prompts/dialogue_knowledge.yaml" and ref.version == "0.1.3"
     for rule in ("특정 날짜(○월 ○일)·연도·가격", "고유 이름은 쓰지 마세요", '{"text": null}', "해요체", "번역",
                  "무언가를 대신 해 달라는 요청(예약·결제·표 끊기·택시 호출)", "노선 번호·출구 번호",
                  "널리 알려진 명소 이름은 확실히 아는 것만", "앞 대화를 이어받으면",
-                 "사람 수·시간 길이를 우리말 수로 쓰지 마세요", '("두 분이"·"이 분께"·"이 시간에는"·"한 시간")'):
+                 "사람 수·시간 길이를 우리말 수로 쓰지 마세요", '("두 분이"·"이 분께"·"이 시간에는"·"한 시간")',
+                 '"이동 시간"·"대기 시간"·"시간이 걸려요"처럼 시간이 드는 말은 수가 없어도 쓰지 마세요',
+                 '[여행 요약]의 여행 날짜도 그대로 옮기지 말고'):
         # ↑ 마지막 둘 — 답변 게이트의 시간 표현 함정("두 분이"가 소요시간으로 읽혀 답이 지워진다), 답변·잡담 프롬프트와 같은 줄
+        # ↑ 그 아래 둘(0.1.3) — 수 없는 '이동 시간이 줄어서'도 같은 함정이고(개발 재현 3번 중 2번 범위 밖 카드), 여행 요약의 날짜를
+        #   '2026년 11월 5일'로 옮기면 날짜 규칙에 걸린다(2026-11-04 실측 10질문×3: 드롭 6 → 1)
         assert rule in p1
     assert "- 사용자: 안녕" in p1 and "- 제약: 아이 동반" in p1 and "부산은 언제 가?" in p1
 

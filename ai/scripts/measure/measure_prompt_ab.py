@@ -10,14 +10,17 @@ CI 밖 수동 실행 전용(실 API 를 부른다). few-shot·판단 순서(CoT)
     uv run --env-file ../.env python scripts/measure/measure_prompt_ab.py intent prompts 2
 
 종류:
-- `intent`  DIALOGUE_INTENT — `data/intent_eval_set.yaml`(사람 검수 87문장) + 지시어 사례 6건 + 짧은 수락 사례 8건 + 장소 탐색 6건 + 두 질문 5건(정답 null — 계획 단계로) + 하나로 남을 음성 5건 + 행사 2건(정답 null). OUT_OF_SCOPE 의
+- `intent`  DIALOGUE_INTENT — `data/intent_eval_set.yaml`(사람 검수 87문장) + 지시어 사례 6건 + 짧은 수락 사례 13건(행사 제안 수락·사양 5건 포함) + 장소 탐색 6건 + 두 질문 5건(정답 null — 계획 단계로) + 하나로 남을 음성 5건 + 행사 2건(정답 null). OUT_OF_SCOPE 의
   정답은 판단해서 닫은 거절({"intent": null} 등 — 운영이 그 턴을 받는 술어: 맞장구 말은 2″ `_judged_nothing`, 나머지는 2‴
   `_plannable`)이다. 시한·벤더 실패는 계획 단계로도 못 가니 오답으로 센다. `late_null` 은 정답 null 이지만 4.4s 를 넘겨 운영에서는
   계획 단계로 못 갔을 수. 평가셋 문장을 프롬프트 예시로 옮기면 이 숫자가 무의미해진다(leak).
 - `directive`  REPLAN_DIRECTIVE_TRANSLATION(sol) — 라벨은 `measure_directive_match.POSITIVES/NEGATIVES` + 부정·혼합
   6건. 완전 일치(겹쳐 고른 지시도 오답)와 허용(정답 포함·금지 지시 없음)을 같이 낸다. 시한 3.75s(DEV 실측 시한).
 - `answer`  DIALOGUE_ANSWER — Facts 11종 + 계획 병합 3종 + 장소 탐색 5종(서울·일정 없음 4 · 일정 근처 1) + 장소 소개 3종 + 행사 3종 × 반복. 게이트 통과율·시각-장소 짝 위반(오케스트레이터 INV-2 검사와
-  같은 함수)·지연. 문장은 끝에 전부 찍는다 — 지어낸 사실은 사람이 읽어서 본다.
+  같은 함수)·지연. 문장은 끝에 전부 찍는다 — 지어낸 사실은 사람이 읽어서 본다. `closing` 은 마지막 문장의 제안 꼴(근처 탐색·영업시간 더·거리)을
+  사례별로 센다 — 의도가 그 제안을 하는 자리가 아닌 곳으로 번졌는지 본다.
+  2026-11-04 실측(haiku-5-5, 216건 × 사례당 40회 드롭 조사): 0.3.10(탐색·행사 예시 둘 + 의도 표지) 은 일정 근처 탐색 답(평문이라 JSON 파싱 실패)의 폴백 7/40 → 0/40,
+  목표 여섯 말의 폴백 15/240 → 4/240, 게이트 통과 96.8 → 97.7%. 대가: 입력 +642토큰, 마무리 "근처 탐색"이 거리 답으로 0 → 4/8 번졌다.
 - `scoring` PREFERENCE_SCORING — `data/collected_pois.json` 해운대구 실데이터 52곳(부산광안대교는 2026-10 공유본에서 수영구 "광안대교"가 돼 빠졌다) × 페르소나 3종. 세 번째 인자는
   반복이 아니라 **청크 구성 수**다: 구성마다 poiId(uuid5)의 소금만 바꿔 워커의 `plan_chunks`(poi_id 정렬 균등 분할)가
   다른 묶음을 만들게 한다. 청크는 서로를 못 보고 따로 채점되므로, 같은 장소가 묶음에 따라 점수가 흔들리는지(POI별
@@ -47,6 +50,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import statistics
 import sys
 import time
@@ -195,6 +199,11 @@ def _offer(user: str, assistant: str) -> list:
 
 
 _WEATHER_OFFER = _offer("다음 일정 뭐야?", "다음은 15:30 국립경주박물관이에요. 가시기 전에 그쪽 날씨도 확인해 볼까요?")
+# 행사 답의 마무리(answer 0.3.6) — 수락하면 그 지역 장소 탐색이다. 지역은 이어 묻기 사슬이 앞 질문("서울 축제")에서 잇는다
+_EVENT_OFFER = _offer("이번 주말 서울 축제 있어?", "이번 주말엔 서울빛초롱축제(10월 20일~11월 8일)와 서울세계불꽃축제(10월 24일)가 열려요. "
+                      "근처에 가 볼 만한 곳도 찾아 드릴까요?")
+_EVENT_OFFER_BUSAN = _offer("다음 주에 부산에서 하는 전시 있어?", "다음 주 부산에서는 부산국제아트페어(10월 28일~11월 1일)가 열려요. "
+                            "그 근처에서 가 볼 만한 곳을 찾아 드릴까요?")
 ACCEPT_CASES = [
     ("GET_WEATHER", "좋아", _WEATHER_OFFER),
     ("SUGGEST_ALTERNATIVE", "그래 찾아줘",
@@ -209,6 +218,11 @@ ACCEPT_CASES = [
      _offer("지금 뭐 하는 시간이야?", "지금은 동궁과월지를 둘러보는 일정이에요. 그다음 일정도 알려 드릴까요?")),
     ("OUT_OF_SCOPE", "응", _HISTORY),
     ("OUT_OF_SCOPE", "아니 괜찮아", _WEATHER_OFFER),
+    ("EXPLORE_PLACES", "응", _EVENT_OFFER),
+    ("EXPLORE_PLACES", "좋아 찾아줘", _EVENT_OFFER),
+    ("EXPLORE_PLACES", "ㅇㅇ", _EVENT_OFFER_BUSAN),
+    ("EXPLORE_PLACES", "네 부탁해요", _EVENT_OFFER_BUSAN),
+    ("OUT_OF_SCOPE", "아니 됐어", _EVENT_OFFER),
 ]
 
 
@@ -485,6 +499,18 @@ ANSWER_CASES += [
         places=[_place("국립중앙박물관", "문화", reason="문화"), _place("서울숲", "자연", reason="요즘 인기")]), _SEOUL_TRIP),
 ]
 
+_CLOSE_KINDS = {  # 마무리(마지막 문장) 꼴 — 의도가 그 제안을 하는 자리가 아니면 번진 것이다
+    "탐색": re.compile(r"(근처|주변).{0,14}(가\s?볼\s?만한|찾아)|눌러서|자세히 볼까요"),
+    "영업시간 더": re.compile(r"(영업|운영)\s?시간.{0,12}(확인|알아).{0,5}(드릴까요|볼까요)|(더|다시)\s?확인해 (드릴까요|볼까요)"),
+    "거리": re.compile(r"거리.{0,12}(확인|알려).{0,6}(드릴까요|볼까요)"),
+}
+
+
+def _closings(text: str) -> list[str]:
+    last = [t for t in re.split(r"(?<=[.!?])\s+", text.strip()) if t][-1:] or [""]
+    return [name for name, rx in _CLOSE_KINDS.items() if rx.search(last[0])]
+
+
 def run_answer(prompts: Path, repeat: int) -> None:
     worker = DialogueAnswerWorker(_gateway(prompts, LlmFeature.DIALOGUE_ANSWER, DialogueAnswerGate()))
 
@@ -502,12 +528,18 @@ def run_answer(prompts: Path, repeat: int) -> None:
         known = tuple(orch._squash(n) for n in orch._prompt_names(facts))
         bad_pair = bool(text) and (orch._misplaced_time(text, pairs)
                                    or "also" in facts and orch._unpaired_time(text, known, pairs))
-        return dict(intent=intent, utt=utt, text=text, bad_pair=bad_pair, err=r.error, wall=wall, **_usage(r))
+        return dict(intent=intent, utt=utt, text=text, bad_pair=bad_pair, err=r.error, wall=wall,
+                    closing=_closings(r.value.text) if text else [], **_usage(r))
 
     rows = _run(one, ANSWER_CASES * repeat)
+    by_case: dict[str, list] = {}
+    for r in rows:
+        by_case.setdefault(f"{r['intent']} · {r['utt']}", []).append(r)
+    closing = {k: {kind: sum(kind in r["closing"] for r in v) for kind in _CLOSE_KINDS if any(kind in r["closing"] for r in v)} | {"n": len(v)}
+               for k, v in by_case.items() if any(r["closing"] for r in v)}
     print(json.dumps(dict(prompts=str(prompts), model=MODEL, n=len(rows),
                           gate_pass=round(sum(1 for r in rows if r["text"]) / len(rows), 4),
-                          pair_violation=sum(r["bad_pair"] for r in rows), **_timing(rows)), ensure_ascii=False))
+                          pair_violation=sum(r["bad_pair"] for r in rows), closing=closing, **_timing(rows)), ensure_ascii=False))
     for r in rows:
         mark = "✗" if not r["text"] or r["bad_pair"] else " "
         print(f" {mark} [{r['intent']}] {r['utt']} → {r['text'] or r['err']}")

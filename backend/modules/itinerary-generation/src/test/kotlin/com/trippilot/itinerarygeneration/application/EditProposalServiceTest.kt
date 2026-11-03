@@ -1,5 +1,8 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.TimeWindow
+import com.trippilot.itinerarygeneration.domain.PersonalizationPort
+import com.trippilot.itinerarygeneration.domain.PersonalizationHints
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.itinerarygeneration.api.EditProposal
@@ -98,8 +101,12 @@ class EditProposalServiceTest : StringSpec({
             override fun findGenerationContext(accountId: UUID, tripId: UUID) = ctx
         }
 
+    val noHints = object : PersonalizationPort {
+        override fun hintsFor(accountId: UUID) = PersonalizationHints.NONE
+    }
+
     /** 숙소 앵커가 두 날 다 있다 — [anchored] 를 끄면 그 날의 앵커를 정할 수 없는 여행이 된다. */
-    fun contexts(anchored: Boolean = true, trips: TripFacade = trips()) = RepairContexts(
+    fun contexts(anchored: Boolean = true, trips: TripFacade = trips(), hints: PersonalizationPort = noHints) = RepairContexts(
         trips,
         object : BaseAnchorFacade {
             override fun findStayNightAnchors(tripId: UUID, startDate: LocalDate, endDate: LocalDate) =
@@ -115,6 +122,7 @@ class EditProposalServiceTest : StringSpec({
             override fun findPreferences(accountId: UUID) =
                 PreferenceSnapshot(emptyList(), emptyList(), emptyList(), listOf("택시", "렌터카", "도보"), null, emptyList(), false, "고급")
         },
+        hints,
     )
 
     /** 새 장소([fresh])의 좌표만 아는 정본 — 숙소 앵커(33.45, 126.56)와 다른 곳이다. */
@@ -197,6 +205,51 @@ class EditProposalServiceTest : StringSpec({
         service(agent).propose(acc, tripId, d1, utter, 5_000)
 
         agent.inputs.map { it.excludedPoiIds.toSet() } shouldContainExactly listOf(setOf(c, fresh), emptySet())
+    }
+
+    /**
+     * 여행 컨텍스트(2026-11-03) — 상대가 취향을 규칙에 쓰고(사이 넣기 순위·날 재구성 규칙 점수·액티비티 도보 상한), 빈 날의 시작을 그 날
+     * 창으로 잡고, 'N일차'를 여행 첫날부터 센다. 취향은 생성과 **같은 프로필**이다(기록 기반 개인화 포함) — 다르면 생성이 걸어서 잡은 구간을
+     * 편집이 다른 상한으로 잰다.
+     */
+    "여행 컨텍스트 — 생성과 같은 취향 프로필·일정 날의 기본 일과 창·여행 첫날을 싣는다" {
+        val windowed = trips(ctx = TripGenerationContext(
+            d1, d2, emptyList(), "친구", null, emptyList(),
+            dayStartAt = LocalTime.of(10, 0), firstDayStartAt = LocalTime.of(15, 0), lastDayEndAt = LocalTime.of(12, 0),
+        ))
+        val hinted = object : PersonalizationPort {
+            override fun hintsFor(accountId: UUID) = PersonalizationHints(listOf("테마파크"), null)
+        }
+        val agent = Agent(replacing(a, fresh))
+
+        service(agent, trips = windowed, contexts = contexts(trips = windowed, hints = hinted)).propose(acc, tripId, d1, utter, 8_000)
+            .shouldBeInstanceOf<EditProposal.Proposed>()
+
+        val sent = agent.inputs.single()
+        val profile = requireNotNull(sent.preferenceProfile)
+        profile.activities shouldContainExactly listOf("테마파크") // 개인화가 보탠 값까지 — 생성과 같은 함수(toProfile)
+        profile.transportModes shouldContainExactly listOf("택시", "렌터카", "도보")
+        profile.budgetTier shouldBe "고급"
+        sent.timeWindows shouldContainExactly listOf(
+            TimeWindow(d1, LocalTime.of(15, 0), LocalTime.of(21, 0)), // 첫날 = 도착 뒤부터
+            TimeWindow(d2, LocalTime.of(10, 0), LocalTime.of(12, 0)), // 마지막 날 = 매일 시작 ~ 귀가
+        )
+        sent.tripStartDate shouldBe d1
+    }
+
+    "여행 컨텍스트 — 개인화 조회가 깨져도 제안한다(개인화 없이) · 설정이 모순인 날은 창을 싣지 않는다" {
+        val broken = object : PersonalizationPort {
+            override fun hintsFor(accountId: UUID): PersonalizationHints = throw IllegalStateException("history down")
+        }
+        val odd = trips(ctx = TripGenerationContext(d1, d2, emptyList(), "친구", null, emptyList(), dayStartAt = LocalTime.of(22, 0)))
+        val agent = Agent(replacing(a, fresh))
+
+        service(agent, trips = odd, contexts = contexts(trips = odd, hints = broken)).propose(acc, tripId, d1, utter, 8_000)
+            .shouldBeInstanceOf<EditProposal.Proposed>()
+
+        val sent = agent.inputs.single()
+        requireNotNull(sent.preferenceProfile).activities shouldBe emptyList()
+        sent.timeWindows shouldBe emptyList() // 22:00 시작 ≥ 21:00 끝 — 생성은 400 으로 드러내고, 편집은 창 없이(상대 종전 기본값)
     }
 
     "앵커는 고치려는 그 날의 것이다 — 다른 날 숙소에 후보 풀을 매달지 않는다" {

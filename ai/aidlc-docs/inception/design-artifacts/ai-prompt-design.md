@@ -10,6 +10,8 @@
 > `llm_gateway/gates/`·`workers/` 동명 모듈이며, 구현이 이미 계약을 고정했으므로 `[정본]`으로 표기한다.
 > §2 도입부의 워커 범위도 §2.1~2.3 → §2.1~2.3·2.5~2.7로 갱신.
 
+> **개정 (2026-11-04)** — §2.9(도우미 오케스트레이터 프롬프트 7종) 추가. 프롬프트 파일 머리 주석이 "ai-prompt-design.md 반영은 후속 docs 티켓"이라 적고 미뤄 둔 것을 지도 한 장으로 채웠다. §2 도입부의 워커 범위도 2.5~2.9 로, §2.4 머리에 §2.9 역참조를 더했다.
+
 ---
 
 ## 1. 프롬프트 설계 원칙
@@ -38,7 +40,7 @@ LLM에 넘기는 필드는 **목적에 필요한 것만**. 서버가 ResourceRef
 
 ## 2. feature별 프롬프트 스펙
 
-> **라우터 vs 워커 (AI-D02)**: `INTENT`(§2.4)는 자연어 진입의 **라우터**로, 의도를 분류해 워커를 고르고 편집 명령·반영 모드를 정한다. 나머지 feature(§2.1~2.3·2.5~2.7)는 **워커**로 각자 판단·생성만 한다. 어떤 feature도 시각·순서를 확정하지 않는다(확정은 어셈블리).
+> **라우터 vs 워커 (AI-D02)**: `INTENT`(§2.4)는 자연어 진입의 **라우터**로, 의도를 분류해 워커를 고르고 편집 명령·반영 모드를 정한다. 나머지 feature(§2.1~2.3·2.5~2.9)는 **워커**로 각자 판단·생성만 한다. 어떤 feature도 시각·순서를 확정하지 않는다(확정은 어셈블리).
 
 ### 2.1 PreferenceScoring — 워커 (경량 티어) `[설계권고]`
 
@@ -199,6 +201,8 @@ if not validated:
 ---
 
 ### 2.4 INTENT — 라우터 (경량 티어) `[설계권고]` — AI 도우미(M16 / AI-D02)
+
+> **현재 서비스 경로는 §2.9** — 2026-10-17 부터 도우미의 의도 분류는 `DIALOGUE_INTENT`(LLM 직접 분류)이고, 이 절의 3단 라우터는 섀도 측정으로만 돈다(1차 뱅크 매칭 `confident_intent` 는 보류 되묻기의 답 판정에 남아 있다).
 
 **목적**: 자연어 요청의 **의도를 분류**하고 슬롯을 추출해 **어느 워커를 부를지** + **편집 명령·반영 모드**를 결정. AI 도우미 전용(자연어 진입에서만 동작).
 
@@ -409,6 +413,30 @@ if not validated:
 **호출 지점 2곳**: ① `ScheduleAgent` ⑥′ — `include_explanations=true` 일 때 설명(⑤) 다음 잔여 예산으로 1회, 문장이 있으면 `alternatives[].rationale` 을 교체 · ② `POST /ai/v1/itinerary/explanations` — payload 의 `slots[].alternatives[]` 에 대해 배치 슬롯 설명 **다음의 두 번째 호출**(잔여 예산만, DL-2), 응답 `alternative_explanations` (키 `"{date}#{alt_poi_id}"`). 백엔드는 generate 를 설명 없이 부르므로 실서비스 경로는 ② — **단, 백엔드가 저장한 차선책을 `/explanations` 요청에 되돌려 보내야 도달한다**(2026-09-17 현재 `ScheduleAgentOutput.toWire()` 는 빈 배열 — 백엔드 TRIP-873 범위; 그 전까지는 항상 빈 맵 + `alternatives_reason=null`).
 
 **폴백**: 실패·드롭 시 TRIP-871 의 템플릿 rationale("같은 카페 후보")이 그대로 남는다 — FallbackEvent `llm_explain_alternatives → template_rationale`. ②에서는 빈 맵 + `alternatives_reason`(침묵 금지), 배치 슬롯 설명은 영향 없음.
+
+---
+
+### 2.9 도우미 오케스트레이터 프롬프트 7종 — LLM 직접 분류·계획·답변·기억 `[정본]` (assistant-orchestrator, 2026-10-17~)
+
+**목적**: AI 도우미 한 턴(`POST /ai/v1/dialogue/interpret`, `orchestrator/dialogue/dialogue_orchestrator.py`)을 이루는 LLM 호출 일곱 개. §2.4(INTENT 라우터)는 **서비스 경로에서 내려왔다** — 의도는 `DIALOGUE_INTENT` 가 직접 분류하고, 3단 라우터(뱅크→투표→LLM)는 섀도로만 돈다(`ShadowIntentProbe`, 일치율만 잰다). 라우터의 1차 뱅크 매칭(`IntentRouter.confident_intent`, LLM 0회)만 서비스 경로에 남아 보류 되묻기의 답이 다른 요청인지 가른다. 사실(시각·거리·장소·날씨)은 전부 코드가 모은 `Facts` 이고 LLM 은 **고르고 문장만 쓴다** — INV-1~4 는 그대로다(시각·순서는 어셈블리·핸들러 값, 목록 밖 장소·시각-장소 짝 위반은 오케스트레이터가 걸러 템플릿으로).
+
+| feature | 프롬프트(현 판) | 하는 일 | 출력 | 출구 게이트 | 폴백 |
+|---|---|---|---|---|---|
+| `DIALOGUE_INTENT` | `dialogue_intent.yaml` 0.2.8 | 말 한 마디를 의도(닫힌 집합)와 인자로 분류. 직전 도우미 말이 제안으로 끝났으면 짧은 수락("응")은 그 제안의 의도 | `{intent, slots, …}` | `IntentGate` — 닫힌 의도·인자표 밖 이름 거름 | 판단해서 닫은 말(null·범위 밖·목록 밖 라벨): 인사·맞장구 낱말뿐이면 고정 한마디, 아니면 계획 단계로(배정이 있으면) · 시한·벤더 실패: "다시 시도" 카드(`RETRY_TURN`) · 깨진 출력·절단: 범위 밖 카드 |
+| `DIALOGUE_PLAN` | `dialogue_plan.yaml` 0.1.7 | 분류가 "정해진 의도 없음"으로 닫은 말에 읽기 전용 조회 도구 ≤2 를 고른다(BR-AO-28) | 도구 이름·인자 | `DialoguePlanGate` — 노출 도구 집합·인자 키 | 시한·벤더 실패·남은 시간 부족·계획 예외: "다시 시도" 카드 · 깨진 JSON·전량 드롭·거절·도구 없음: 범위 밖 카드(잡담은 고정 한마디, 일반 지식은 아래 KNOWLEDGE) |
+| `DIALOGUE_ANSWER` | `dialogue_answer.yaml` 0.3.10 | `[확인된 사실]` 로 친근한 해요체 2~4문장 + 선택 각주. 사실에 없는 값은 지어내지 않는다 | `{text, footnote}` | `DialogueAnswerGate` 400자·6줄·INV-3·연락처·주입 + 오케스트레이터 시각-장소 짝(INV-2)·목록 밖 장소(INV-1) | 결정론 템플릿(`workers.dialogue.dialogue_answer.fallback_answer_text`) |
+| `DIALOGUE_SMALLTALK` | `dialogue_smalltalk.yaml` 0.1.2 | 인사·잡담 한마디(사실 없음) — 답변 프롬프트와 갈랐다("사실이 비면 확인할 수 없다고 말하라"가 잡담을 막는다) | `{text, footnote}` | `DialogueAnswerGate` 재사용 + 스냅샷 밖 장소 | 고정 문장 |
+| `DIALOGUE_KNOWLEDGE` | `dialogue_knowledge.yaml` 0.1.2 | 계획이 조회 도구 없이 닫은 정보성 말(gap KNOWLEDGE·LODGING·BOOKING·TRANSPORT·OTHER)과, 계획이 고른 도구가 전부 일반 지식으로 돌려진 시기·계절 질문에 여행 일반 지식 즉답(웹 검색 없음, BR-AO-32). 각주 "일반적인 여행 정보라…" | `{text, footnote}` | `DialogueKnowledgeGate` — 답변 게이트 위에 가격·특정 날짜·연도·거리·노선·출구 번호가 섞이면 드롭. 등록되지 않은 장소 이름·새로 만든 시각은 오케스트레이터가 스냅샷·장소 DB 와 대조해 막는다 | 범위 밖 카드(`{"text": null}` — 대신 해 달라는 일·실시간 값 — 도 같다) |
+| `DIALOGUE_MEMORY` | `dialogue_memory.yaml` 0.2.0 | 이전 요약 + 아직 기억에 안 넣은 대화를 ≤20줄로 갱신(BR-AO-09). 발화 원문은 저장하지 않는다(SEC-U8-06) | 요약 줄들 | `DialogueMemoryGate` | 그 갱신을 건너뛰고 이전 기억을 그대로 둠(`llm_dialogue_memory → kept_previous`, 다음 턴에 다시 요약, 응답 영향 없음) |
+| `DIALOGUE_SQL` | `dialogue_sql.yaml` 0.2.2 | 장소 탐색·추천(EXPLORE_PLACES·RECOMMEND_PLACES, 지역을 말한 말)을 뷰 `poi_public` 의 SELECT 한 문장으로(NL2SQL) | SQL 한 문장 | `DialogueSqlGate` — 허용 열·키워드(프롬프트·DB 뷰·게이트 세 곳이 같아야 한다) | 반경 탐색 결과(실패·0건이면, INV-4) |
+
+**시한**(모듈 상수, `dialogue_orchestrator.py` — 바뀌지 않는 값은 env 로 노출하지 않는다, BR-AO-13): 분류 min(4.0s, 남은 시간 45%) · 계획 min(3.5s, 45%)(남은 시간 4.6s 미만이면 계획을 부르지 않고 "다시 시도" 카드) · 답변 min(3.5s, 남은 − 예비)(남은 1.5s 미만이면 LLM 없이 템플릿) · 팬아웃 min(3.0s, 40%). 요청 전체 `deadline_ms` 는 백엔드가 보낸다(기본 9s).
+
+**모델·사고**: 배정은 `.env.example` `AI_LLM_FEATURE_MODELS`·배포 시크릿이 정본이다(템플릿에서는 분류·답변·기억·계획·잡담·지식 여섯 종이 `claude-haiku-5-5` 이고, `DIALOGUE_SQL` 은 템플릿에 없이 배포 시크릿에만 배정된다). haiku-5 는 effort 없이 부르면 적응형 사고가 출력 상한을 먹으므로 effort `none` 이면 사고를 끈다(`anthropic_adapter._THINKING_OFF`) — 분류·답변·계획·SQL·잡담·지식은 `none`, 기억만 `low`(턴 밖 요약이라 사고가 켜져 있다).
+
+**판 번호의 정본은 각 프롬프트 파일의 `version:` 줄**이고, 판마다 바꾼 이유와 `scripts/measure/measure_prompt_ab.py` 실측 수치는 파일 머리 주석에 쌓인다(1행 제목의 `vX.Y.Z` 는 처음 설계한 판 표지라 현재 판이 아니다). 이 절은 지도일 뿐이라 표의 판 번호가 낡으면 파일을 본다. 측정 러너는 `intent`(분류 — 평가셋·수락·탐색·행사) · `answer`(답변 — 게이트 통과·시각-장소 짝·마무리 꼴) · `plan` 셋뿐이다(잡담·지식·기억·SQL 은 러너가 없다. `selection` 은 §2.6 의 AlternativeSelection 이다).
+
+**설계 정본**: `aidlc-docs/construction/assistant-orchestrator/functional-design/`(business-rules BR-AO-xx · domain-entities §2.3·§2.10·§6 · business-logic-model §3~§9). 단계의 뜻·업무 규칙은 그쪽이 맞고, 이 절의 판 번호·시한·폴백은 구현(`prompts/*.yaml` 의 `version:`·`dialogue_orchestrator.py`·`llm_gateway/config.py`)을 옮긴 것이라 어긋나면 코드가 맞다.
 
 ---
 

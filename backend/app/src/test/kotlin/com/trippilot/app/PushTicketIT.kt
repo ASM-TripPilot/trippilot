@@ -18,6 +18,8 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.util.UUID
 
@@ -37,6 +39,7 @@ class PushTicketIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var notifications: NotificationRepository
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var jdbc: JdbcTemplate
+    @Autowired private lateinit var txManager: PlatformTransactionManager
 
     private val now = Instant.parse("2026-11-04T00:00:00Z")
 
@@ -67,6 +70,28 @@ class PushTicketIT : AbstractPostgresIntegrationTest() {
         jdbc.queryForObject(
             "SELECT checked_at IS NULL AND receipt_status IS NULL FROM push_ticket WHERE ticket_id = ?", Boolean::class.java, id,
         ) shouldBe true
+    }
+
+    /**
+     * 기록이 **DB 오류로 실패해도 바깥(발송) 트랜잭션은 살아 있어야 한다.** Postgres 는 문 하나가 실패하면 그 트랜잭션의 이후 문을
+     * 전부 25P02 로 거절한다 — 호출측이 예외를 삼켜도(`recordTickets` 의 runCatching) 바로 뒤 `markPushResult` 가 터져 발화가
+     * 롤백되고, 푸시는 이미 나갔는데 다음 폴링이 같은 예약을 다시 집어 유예(10분) 동안 매분 재발송한다. 세이브포인트가 이 오류를
+     * 거기서 끊는다. 알림 행이 없는 id 로 FK 위반(23503)을 일부러 낸다.
+     */
+    @Test
+    fun `기록이 DB 오류로 실패해도 바깥 트랜잭션은 계속 쓸 수 있다 — 세이브포인트가 오류를 끊는다`() {
+        val notificationId = newNotification()
+        val okId = "T-${UUID.randomUUID()}"
+
+        TransactionTemplate(txManager).executeWithoutResult {
+            shouldThrow<DataIntegrityViolationException> {
+                tickets.record(listOf(ticket("T-orphan-${UUID.randomUUID()}", UUID.randomUUID())))   // 없는 알림 → FK 위반
+            }
+            // 같은 트랜잭션의 다음 문 — 세이브포인트가 없으면 25P02(current transaction is aborted)로 여기서 터진다.
+            tickets.record(listOf(ticket(okId, notificationId)))
+        }
+
+        count(okId) shouldBe 1
     }
 
     @Test

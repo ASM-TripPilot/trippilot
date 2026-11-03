@@ -97,6 +97,21 @@ class NotificationScheduleRepositoryAdapter(
     override fun findPendingByTrip(tripId: UUID): List<NotificationSchedule> =
         jpa.findByTripIdAndFiredAtIsNullAndCanceledAtIsNullOrderByFireAt(tripId).map { it.toDomain() }
 
+    // 부분 인덱스(ix_notification_schedule_pending, fire_at)로 시각 범위를 좁힌 뒤 문구 없음만 거른다. 가까운 것부터 — 상한에 걸려도 곧 울릴 여행이 먼저다.
+    override fun findTripsLackingCopy(from: Instant, until: Instant, limit: Int): List<UUID> = jdbc.queryForList(
+        """
+        SELECT trip_id
+          FROM notification_schedule
+         WHERE fired_at IS NULL AND canceled_at IS NULL AND fire_at > ? AND fire_at <= ?
+           AND (COALESCE(btrim(title), '') = '' OR COALESCE(btrim(body), '') = '')
+         GROUP BY trip_id
+         ORDER BY min(fire_at)
+         LIMIT ?
+        """.trimIndent(),
+        UUID::class.java,
+        java.sql.Timestamp.from(from), java.sql.Timestamp.from(until), limit,
+    )
+
     // 조건부 쓰기 — 문구가 이미 있는 행·발화/취소된 행·그 사이 지워진 행은 건드리지 않는다. 문구 없음의 기준은
     // 도메인(`NotificationSchedule.hasCopy` — 제목·본문 둘 다 비어 있지 않음)과 같다.
     override fun attachCopy(scheduleId: UUID, title: String, body: String, copyBasis: String): Boolean =
@@ -108,6 +123,23 @@ class NotificationScheduleRepositoryAdapter(
             """.trimIndent(),
             title, body, copyBasis, scheduleId,
         ) == 1
+
+    // 조건부 쓰기 — 발화·취소된 행은 그대로 둔다. 계정 한 칸으로 훑으므로 여행을 하나씩 열지 않는다(삭제된 여행의 예약도 닿는다).
+    override fun cancelPendingOf(accountId: UUID, at: Instant): Int =
+        jdbc.update(
+            "UPDATE notification_schedule SET canceled_at = ? WHERE account_id = ? AND fired_at IS NULL AND canceled_at IS NULL",
+            java.sql.Timestamp.from(at), accountId,
+        )
+
+    override fun findTripIdsWithCanceledFuture(accountId: UUID, after: Instant): List<UUID> = jdbc.queryForList(
+        """
+        SELECT DISTINCT trip_id
+          FROM notification_schedule
+         WHERE account_id = ? AND fired_at IS NULL AND canceled_at IS NOT NULL AND fire_at > ?
+        """.trimIndent(),
+        UUID::class.java,
+        accountId, java.sql.Timestamp.from(after),
+    )
 
     private fun NotificationSchedule.toEntity() = NotificationScheduleEntity(
         scheduleId = scheduleId,

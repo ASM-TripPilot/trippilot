@@ -93,9 +93,10 @@ def web_in(source_ref: str, text: str) -> bool:
 
 
 def warm() -> None:
-    """켜져 있으면 기동 때 백그라운드로 표를 읽어 둔다 — 첫 요청이 파일 읽기(약 0.15초)를 떠안지 않게. 꺼져 있으면 읽지 않는다."""
+    """켜져 있으면 기동 때 백그라운드로 표를 읽어 둔다 — 첫 요청이 파일 읽기(약 0.15초)를 떠안지 않게. 꺼져 있으면 읽지 않는다.
+    웹 사실 표(`web_facts`, 각주 판정)도 같이 — 빠지면 첫 소개 턴이 그 파일 파싱을 떠안는다."""
     if enabled():
-        threading.Thread(target=fallback_docs, name="kb5-fallback", daemon=True).start()
+        threading.Thread(target=lambda: (fallback_docs(), web_facts()), name="kb5-fallback", daemon=True).start()
 
 
 def doc(source_ref: str) -> str:

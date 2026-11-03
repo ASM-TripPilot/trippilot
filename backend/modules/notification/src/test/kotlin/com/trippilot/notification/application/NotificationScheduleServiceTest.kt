@@ -40,7 +40,7 @@ class NotificationScheduleServiceTest : StringSpec({
     fun fixture(now: String, start: String, end: String): Triple<NotificationScheduleService, FakeSchedules, FakeTripOwner> {
         val schedules = FakeSchedules()
         val trips = FakeTripOwner().apply { put(tripId, acc, LocalDate.parse(start), LocalDate.parse(end)) }
-        return Triple(NotificationScheduleService(trips, schedules, NoCopies(), FakePlans(), clockAt(now), ReminderCopyRetries(listOf(180_000L))), schedules, trips)
+        return Triple(NotificationScheduleService(trips, schedules, NoCopies(), FakePlans(), clockAt(now), ReminderCopyRetries(listOf(180_000L)), NoDeletionPending), schedules, trips)
     }
 
     /**
@@ -65,7 +65,7 @@ class NotificationScheduleServiceTest : StringSpec({
             }
         }
         val svc = NotificationScheduleService(
-            trips, ordered, NoCopies(), FakePlans(), clockAt("2026-08-01T00:00:00Z"), ReminderCopyRetries(listOf(180_000L)),
+            trips, ordered, NoCopies(), FakePlans(), clockAt("2026-08-01T00:00:00Z"), ReminderCopyRetries(listOf(180_000L)), NoDeletionPending,
         )
 
         svc.reload(tripId)
@@ -127,6 +127,30 @@ class NotificationScheduleServiceTest : StringSpec({
         svc.reload(tripId)
 
         schedules.findPendingByTrip(tripId).map { it.fireAt } shouldContainExactly first
+    }
+
+    /**
+     * 삭제를 요청한 계정은 요청 **뒤에** 도착한 일정 생성·재계산 이벤트가 예약을 다시 세우면 안 된다(요청 구독자가 취소한 예약이 되살아난다).
+     * 철회하면 되살림 구독자가 다시 적재한다 — 여기는 "유예 중에는 만들지 않는다"만 본다.
+     */
+    "삭제 유예 중인 계정의 여행은 예약을 만들지 않고 이미 있던 미발화분도 비운다" {
+        val schedules = FakeSchedules()
+        val trips = FakeTripOwner().apply { put(tripId, acc, LocalDate.parse("2026-08-10"), LocalDate.parse("2026-08-12")) }
+        val state = PendingDeletion()
+        val svc = NotificationScheduleService(
+            trips, schedules, NoCopies(), FakePlans(), clockAt("2026-08-01T00:00:00Z"), ReminderCopyRetries(listOf(180_000L)), state,
+        )
+        svc.reload(tripId)
+        schedules.findPendingByTrip(tripId).size shouldBe 4
+
+        state.pending += acc
+        svc.reload(tripId)
+        schedules.findPendingByTrip(tripId) shouldBe emptyList()
+
+        // 철회하면 같은 호출이 다시 만든다.
+        state.pending.clear()
+        svc.reload(tripId)
+        schedules.findPendingByTrip(tripId).size shouldBe 4
     }
 
     "여행이 사라지면 미발화 예약을 비운다 — 없어진 여행의 알림이 울리지 않게" {

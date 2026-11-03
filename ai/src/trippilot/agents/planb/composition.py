@@ -193,3 +193,27 @@ def shortlist(
         poi_ids=frozenset(chosen), pois=pois, generated_at=pool.generated_at,
         anchor=pool.anchor, radius_km=pool.radius_km,
     )
+
+
+# KB-3 상황 대처 원칙 — (본문, 사유들) 쌍. 진입점(main.py)이 `data/planb_situation_kb.yaml` 을 읽어 넘긴다(yaml 은 src/ 밖에서만).
+SituationDoc = tuple[str, tuple[str, ...]]
+SITUATION_LINES = 4
+
+
+def situation_lines(docs: Sequence[SituationDoc], reasons: Sequence[str], k: int = SITUATION_LINES) -> tuple[str, ...]:
+    """구성 프롬프트 [상황 대처 원칙] — 이번 사유와 같은 KB-3 문서를 파일 순서로 앞 `k`건(사유 순서대로, 중복 제외).
+
+    사유가 없거나 "none" 뿐이면 "none" 문서(수동 교체 원칙)를 쓴다. **임베딩 검색이 아니다** — 운영 KB-3 검색
+    (`retrieve_situation`)은 이 문서들을 못 고른다(2026-11-04 실측: 비 1/4·"조용한 북카페" 0/3 겹침). 측정이 이긴 것은
+    '사유가 같은 앞 4건'이라 그대로 쓴다(46 : 20, p=0.002 — `scripts/measure/measure_doc_quota.py`).
+    """
+    wanted = [r for r in reasons if r and r != "none"] or ["none"]
+    out: list[str] = []
+    for r in wanted:
+        for text, tags in docs:
+            if r in tags and text not in out:
+                out.append(text)
+            if len(out) >= k:
+                return tuple(out)
+    return tuple(out)
+

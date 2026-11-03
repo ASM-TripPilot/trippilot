@@ -23,6 +23,16 @@ r"""다시 짜기 '문서 몫' 효과 측정 — 구성 후보(규칙 40곳)에 
 "비가 오면 실내 위주" 같은 규칙 줄과 사유를 받고 있어 같은 내용의 일반 지침이 판단을 바꾸지 않는다. KB-3 는 대체지 선택(`/alternatives`
 선택 LLM 의 situation_context)에서만 쓰인다.
 
+**⚠️ 2026-11-04 정정 — 위 세 결론(문서 몫·코스·KB-3)은 판정 결함 위에서 냈다.** `_judge` 가 max_tokens 400 이라 Claude 판정
+JSON 이 잘렸고, 못 읽으면 '같음'으로 삼켰다(종전 '같음' 12·8·14건 대부분이 실제로는 판정 실패). 고친 판정(2000·실패 따로 셈)으로 다시 쟀다
+— 판정 실패 0:
+- A/A 대조(`EVAL_ARM=aa`, 두 팔 입력 같음): **12 : 10 · 같음 2 / 24** — 이 판정의 잡음 기준선.
+- 문서 몫 +8: 1회 17 : 6 : 1 → 2회 **11 : 11 : 2** (합 28 : 17, 부호 검정 양측 p=0.14). 1회 차이는 재현되지 않았고 채택도 9/192 → **효과 없음 유지.**
+- 코스 가산: 9 : 5 : 2 / 16 (p≈0.42) → **효과 없음 유지.**
+- KB-3 를 구성 LLM 에(사유가 같은 KB-3 앞 4건): 15 : 8 · 14 : 8 · 17 : 4 (합 **46 : 20, p=0.002**), 지연 차이 없음(±0.1s), 입력 +340토큰 →
+  **효과 있음 — 운영에 넣는다.** 운영 KB-3 임베딩 검색(`retrieve_situation`)은 이 문서들을 못 고른다(비 1/4 · "조용한 북카페" 0/3 겹침) —
+  그래서 넣을 때도 측정과 같은 '사유가 같은 문서' 방식이다.
+
 실행(ai/ 에서 — 로컬 서빙 임베딩 + 운영 모델 키, 실 API 를 부른다):
     TRIPPILOT_EMBEDDING_BASE_URL=http://localhost:8100 ANTHROPIC_API_KEY=… \
         uv run python scripts/measure/measure_doc_quota.py [반복=1]
@@ -170,7 +180,7 @@ def _cases(kn: _Knowledge) -> list[dict]:
             query = rag._situation_query(req)
             pick_query = (said or _NEED.get(reason, query)) if QUERY == "need" else query
             store = _store(kn, {p.source_ref for p in (*short.pois, *tier) if p.source_ref})
-            if ARM == "kb3":
+            if ARM in ("kb3", "aa"):  # aa = 두 팔 입력이 완전히 같다 — 판정 잡음(A/A) 기준선
                 other, extra = short.pois, ()
             elif ARM == "course":
                 near_slots = set().union(*(mates.get(s.source_ref or "", set()) for s in slots))
@@ -239,12 +249,15 @@ def _judge(client, case: dict, a, b, kn: _Knowledge) -> str:
         "② 이유가 참고 설명과 맞고 그 장소만의 특징을 짚는가 ③ 사실과 다른 말이 없는가. 길이·문체는 보지 마세요.\n"
         '답은 JSON 한 줄: {"winner": "A" 또는 "B" 또는 "같음", "why": "한 문장"}'
     )
-    out = client.messages.create(model=JUDGE, max_tokens=400, messages=[{"role": "user", "content": prompt}])
+    # max_tokens 2000 — 400 이면 Claude 판정이 생각에 토큰을 다 써 JSON 이 잘린다(ai-4e 1차 32판 전부 실패). 못 읽으면 '같음'으로
+    # 삼키지 않고 '판정 실패'로 따로 센다(11-04 고침 — 그 전 세 측정은 실패가 '같음'에 섞였을 수 있어 다시 쟀다).
+    out = client.messages.create(model=JUDGE, max_tokens=2000, messages=[{"role": "user", "content": prompt}])
     text = "".join(x.text for x in out.content if getattr(x, "type", None) == "text").strip()
     try:
-        return json.loads(text[text.index("{"): text.rindex("}") + 1]).get("winner", "같음")
+        got = json.loads(text[text.index("{"): text.rindex("}") + 1]).get("winner")
     except ValueError:
-        return "같음"
+        return "판정 실패"
+    return got if got in ("A", "B", "같음") else "판정 실패"
 
 
 def main(repeat: int) -> None:
@@ -260,7 +273,7 @@ def main(repeat: int) -> None:
 
     def one(item):
         i, case = item
-        if not case["extra"] and ARM != "kb3":
+        if not case["extra"] and ARM not in ("kb3", "aa"):
             return dict(name=case["name"], winner="입력 같음", extra=0, adopted=0)
         picks, rows = {}, {}
         for arm, (cand, knowledge) in case["arms"].items():
@@ -275,7 +288,7 @@ def main(repeat: int) -> None:
         flip = i % 2 == 1  # A/B 자리를 번갈아 — 위치 편향을 상쇄한다
         a, b = (picks["quota"], picks["base"]) if flip else (picks["base"], picks["quota"])
         got = _judge(judge, case, a, b, kn)
-        winner = {"A": "quota" if flip else "base", "B": "base" if flip else "quota"}.get(got, "같음")
+        winner = {"A": "quota" if flip else "base", "B": "base" if flip else "quota"}.get(got, got)
         extra_ids = {p.poi_id for p in case["extra"]}
         return dict(name=case["name"], winner=winner, extra=len(case["extra"]),
                     adopted=sum(1 for p, _ in picks["quota"] if p.poi_id in extra_ids),
@@ -284,7 +297,7 @@ def main(repeat: int) -> None:
 
     rows = _run(one, cases * repeat)
     judged = [r for r in rows if r["winner"] != "입력 같음"]
-    tally = {w: sum(r["winner"] == w for r in judged) for w in ("quota", "base", "같음")}
+    tally = {w: sum(r["winner"] == w for r in judged) for w in ("quota", "base", "같음", "판정 실패")}
 
     def p50(key):
         vals = [r[key] for r in judged if r.get(key)]

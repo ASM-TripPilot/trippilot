@@ -62,7 +62,7 @@ class ReminderCopyFillTest : StringSpec({
         val trips = FakeTripOwner().apply {
             put(tripId, acc, LocalDate.parse("2026-08-10"), LocalDate.parse("2026-08-12"))
         }
-        return NotificationScheduleService(trips, schedules, port, FakePlans(names), clock, retries) to schedules
+        return NotificationScheduleService(trips, schedules, port, FakePlans(names), clock, retries, NoDeletionPending) to schedules
     }
 
     "받은 문구가 예약에 붙고, 발화가 그것을 쓴다" {
@@ -380,7 +380,7 @@ class ReminderCopyFillTest : StringSpec({
         val schedules = FakeSchedules()
         val trips = FakeTripOwner().apply { put(tripId, acc, LocalDate.parse("2026-08-10"), LocalDate.parse("2026-08-12")) }
         val retries = ReminderCopyRetries(RETRY_DELAYS_MS)
-        val svc = NotificationScheduleService(trips, schedules, cold, plans, clock, retries)
+        val svc = NotificationScheduleService(trips, schedules, cold, plans, clock, retries, NoDeletionPending)
 
         // reload 의 첫 문구 호출이 조회 실패로 끝나도 예약은 적재되고, 재시도가 걸린다.
         svc.reload(tripId)
@@ -410,7 +410,7 @@ class ReminderCopyFillTest : StringSpec({
         }
         val trips = FakeTripOwner().apply { put(tripId, acc, LocalDate.parse("2026-08-10"), LocalDate.parse("2026-08-12")) }
         val retries = ReminderCopyRetries(RETRY_DELAYS_MS)
-        val svc = NotificationScheduleService(trips, schedulesHolder, replacing, FakePlans(plannedNames), clock, retries)
+        val svc = NotificationScheduleService(trips, schedulesHolder, replacing, FakePlans(plannedNames), clock, retries, NoDeletionPending)
 
         svc.reload(tripId)
         val countBefore = schedulesHolder.findPendingByTrip(tripId).size
@@ -428,7 +428,7 @@ class ReminderCopyFillTest : StringSpec({
         // 모든 행이 이미 시각이 지났다고 가정하고(시계를 크게 앞당김) 제자리 채우기를 직접 부른다.
         val late = NotificationScheduleService(
             FakeTripOwner().apply { put(tripId, acc, LocalDate.parse("2026-08-10"), LocalDate.parse("2026-08-12")) },
-            schedules, echo, FakePlans(plannedNames), Clock.offset(clock, Duration.ofDays(30)), ReminderCopyRetries(RETRY_DELAYS_MS),
+            schedules, echo, FakePlans(plannedNames), Clock.offset(clock, Duration.ofDays(30)), ReminderCopyRetries(RETRY_DELAYS_MS), NoDeletionPending,
         )
         echo.seen = emptyList()
         schedules.stored.replaceAll { it.copy(title = null, body = null) }
