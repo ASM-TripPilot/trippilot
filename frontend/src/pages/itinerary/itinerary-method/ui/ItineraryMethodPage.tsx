@@ -10,7 +10,7 @@ import {
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
-import { retryUnlessNotFound } from '@/shared/api';
+import { isNotFound, retryUnlessNotFound } from '@/shared/api';
 
 /**
  * h04 시작 방법 배선(TRIP-303 → TRIP-305 → TRIP-504). 방식을 고른다.
@@ -58,7 +58,10 @@ export function ItineraryMethodPage({
   // `data?.days.length ?? 0` 만 보면 이때 false 로 접혀 확인 없이 copick 가 진행돼 기존 일정을 침묵
   // 덮어쓴다(BR-U3-18 위반). 그래서 로딩 창에선 "덮어쓸 수 있다"고 보고 확인을 여는 쪽으로 fail-safe
   // 한다. 404(일정 없음)는 `isPending=false`+`data undefined` 라 이 값이 false → 확인 없이 진행(AC-2).
-  const mustConfirmRegenerate = itinerary.isPending || hasExistingItinerary;
+  // 404 아닌 실패(500·네트워크, 재시도 끝)도 "모름"이라 로딩 창과 같이 확인을 연다(TRIP-1747).
+  const unknown =
+    itinerary.isPending || (itinerary.isError && !isNotFound(itinerary.error));
+  const mustConfirmRegenerate = unknown || hasExistingItinerary;
 
   function goToFullAiMustVisits(): void {
     router.push({
@@ -79,10 +82,10 @@ export function ItineraryMethodPage({
   return (
     <MethodPickerScreen
       onBack={() => goBackOr(router, `/trips/${tripId}/itinerary`)}
-      // TRIP-1032: 생성 중이거나 아직 모르면(로딩 — copick 와 같은 fail-safe) 확인부터. 그 밖엔 확인 없이
-      // 곧장 h05 — 완성 일정 덮어쓰기 확인은 원래 완전 AI 에 없다(브리프 맹점 7, 이번 범위 밖).
+      // TRIP-1032: 생성 중이거나 아직 모르면(로딩·404 아닌 실패 — copick 와 같은 fail-safe) 확인부터. 그 밖엔
+      // 확인 없이 곧장 h05 — 완성 일정 덮어쓰기 확인은 원래 완전 AI 에 없다(브리프 맹점 7, 이번 범위 밖).
       onPressFullAi={() => {
-        if (itinerary.isPending || inProgress) {
+        if (unknown || inProgress) {
           setConfirmFor('fullAi');
           return;
         }
