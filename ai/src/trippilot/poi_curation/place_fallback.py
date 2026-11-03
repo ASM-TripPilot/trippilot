@@ -73,6 +73,25 @@ def fallback_docs() -> Mapping[str, str]:
     return out
 
 
+@lru_cache(maxsize=1)
+def web_facts() -> Mapping[str, tuple[str, ...]]:
+    """{source_ref: 웹 확인 사실들} — 대체 문서 안에서 어느 문장이 웹 페이지에서 온 것인지 알아 소개에 출처 각주를 다는 데 쓴다."""
+    out: dict[str, tuple[str, ...]] = {}
+    try:
+        for r in _rows(WEB_PATH):
+            facts = tuple(f["text"] for f in r.get("facts") or () if f.get("text"))[:WEB_FACTS_PER_DOC]
+            if facts:
+                out[r["poi_ref"]] = facts
+    except Exception as e:  # noqa: BLE001 — 각주를 못 달 뿐 소개는 나간다
+        log.warning("kb5 web facts index unavailable: %s: %s", type(e).__name__, e)
+    return out
+
+
+def web_in(source_ref: str, text: str) -> bool:
+    """소개 `text` 가 그 장소의 웹 확인 사실을 담았는가 — 장소 카드(관광공사 상세)만 쓴 소개는 1차 출처라 False. 꺼져 있으면 False."""
+    return bool(enabled() and text and any(f in text for f in web_facts().get(source_ref, ())))
+
+
 def warm() -> None:
     """켜져 있으면 기동 때 백그라운드로 표를 읽어 둔다 — 첫 요청이 파일 읽기(약 0.15초)를 떠안지 않게. 꺼져 있으면 읽지 않는다."""
     if enabled():
