@@ -401,13 +401,17 @@ class AssistantTurnService(
         // 그 호출의 기록(오류·시한 초과·폴백)이 이 번호로 남아 있다. 해석을 부르지 않는 갈래(위의 반환들)는 번호가 없다.
         val traceId = UUID.randomUUID().toString()
         val context = snapshot.copy(here = usedHere(session.accountId, here, turn.user.messageId))
+        // 동의 확인·이용 기록(DB 왕복)도 턴 예산에서 나간다 — 앞서 잰 시한을 그대로 넘기면 그만큼 턴 예산을 넘긴다. 위 검사는 그대로 먼저 둔다
+        // (기록 전에 시한으로 끝나는 턴은 이용 기록을 남기지 않는다)
+        val interpretMs = minOf(deadlineMs, properties.turnBudgetMs - Duration.between(startedAt, clock.instant()).toMillis() - properties.readMarginMs)
+        if (interpretMs <= 0) return Reply(AssistantTemplates.fallback(FallbackCause.AI_UNAVAILABLE), streak = Streak.KEEP)
         val interpretation = runCatching {
             port.interpret(
                 InterpretRequest(
                     utterance = utterance, surface = surface,
                     context = context,
                     dialogueContext = bumpTurnIndex(session.dialogueContext),
-                    requestedAt = startedAt, deadlineMs = deadlineMs,
+                    requestedAt = startedAt, deadlineMs = interpretMs,
                     sessionId = session.sessionId, accountRef = session.accountId.toString(),
                     recentTurns = recentTurns(session, beforeSeq = turn.user.seq),
                     traceId = traceId,

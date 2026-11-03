@@ -1,5 +1,7 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.PersonalizationPort
+import com.trippilot.itinerarygeneration.domain.PersonalizationHints
 import io.kotest.matchers.collections.shouldBeEmpty
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.core.error.ConflictDetected
@@ -146,6 +148,12 @@ private fun prefsWith(modes: List<String>) = object : PreferenceFacade {
 private val NO_ANCHORS = stayAnchors(emptyList())
 private val NO_REGIONS = regions(null)
 private val NO_PREFS = prefsWith(emptyList())
+private val NO_HINTS = object : PersonalizationPort {
+    override fun hintsFor(accountId: UUID) = PersonalizationHints.NONE
+}
+
+/** 그 여행의 취향 프로필 — 생성과 같은 함수(`toProfile`)가 수단만 있는 취향에서 만드는 값. 수리 컨텍스트에 함께 실린다(2026-11-03). */
+private fun profileWith(modes: List<String>) = PreferenceProfile(emptyList(), emptyList(), emptyList(), modes, null, emptyList(), false, null)
 
 private fun repairContexts(
     ctx: TripGenerationContext?,
@@ -157,7 +165,7 @@ private fun repairContexts(
         override fun findPeriod(accountId: UUID, tripId: UUID): TripPeriod? = null
         override fun findGenerationContext(accountId: UUID, tripId: UUID) = ctx
     },
-    stayAnchors(stays), regions(center), prefsWith(modes),
+    stayAnchors(stays), regions(center), prefsWith(modes), NO_HINTS,
 )
 
 private val NO_CONTEXTS = repairContexts(null)
@@ -1061,7 +1069,7 @@ class EditItineraryServiceTest : StringSpec({
         EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, contexts)
             .edit(acc, tripId, editDays(listOf(x, b), listOf(c, y))) // 1일차 첫 장소 교체, 2일차는 둘째만
 
-        agent.lastContext shouldBe RepairContext(listOf(DayAnchor(day, 33.25, 126.41)), listOf("택시", "렌터카"))
+        agent.lastContext shouldBe RepairContext(listOf(DayAnchor(day, 33.25, 126.41)), listOf("택시", "렌터카"), profileWith(listOf("택시", "렌터카")))
     }
 
     "숙소도 목적지 좌표도 없는 날은 앵커를 생략한다 — 수단은 그대로 싣는다" {
@@ -1072,7 +1080,7 @@ class EditItineraryServiceTest : StringSpec({
         EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, contexts)
             .edit(acc, tripId, editDays(listOf(b, a), listOf(d, c)))
 
-        agent.lastContext shouldBe RepairContext(emptyList(), listOf("도보"))
+        agent.lastContext shouldBe RepairContext(emptyList(), listOf("도보"), profileWith(listOf("도보")))
     }
 
     "컨텍스트 조회가 깨지면 컨텍스트 없이 수리한다 — AI 불통(판정 보류)으로 섞지 않는다" {
@@ -1084,7 +1092,7 @@ class EditItineraryServiceTest : StringSpec({
                 override fun findPeriod(accountId: UUID, tripId: UUID): TripPeriod? = null
                 override fun findGenerationContext(accountId: UUID, tripId: UUID): TripGenerationContext? = throw IllegalStateException("db down")
             },
-            NO_ANCHORS, NO_REGIONS, NO_PREFS,
+            NO_ANCHORS, NO_REGIONS, NO_PREFS, NO_HINTS,
         )
         val saved = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, broken)
             .edit(acc, tripId, editDays(listOf(b, a), listOf(c, d)))
@@ -1151,10 +1159,18 @@ class EditItineraryServiceTest : StringSpec({
     "도보·대중교통 여행은 재검증에 수단을 싣지 않는다 — 상대가 자차로 풀 때만 싣는다(도보로 재면 대중교통으로 짠 재계획 날·짧게 붙인 간격이 새로 HC2 다)" {
         val trip = tripCtx(TripDestinationRef("제주", null, 1))
         for (modes in listOf(listOf("도보"), listOf("도보", "대중교통"), listOf("도보", "렌터카"), listOf("대중교통", "렌터카"), listOf("택시", "자전거"))) {
-            withClue(modes) { repairContexts(trip, modes = modes).transportModes(acc, tripId) shouldBe emptyList() }
+            withClue(modes) { repairContexts(trip, modes = modes).forRevalidation(acc, tripId).transportModes shouldBe emptyList() }
         }
         // 아는 첫 값이 렌터카면 목록 그대로 — 뒤에 도보가 있어도 상대는 자차로 푼다
-        repairContexts(trip, modes = listOf("택시", "렌터카", "도보")).transportModes(acc, tripId) shouldBe listOf("택시", "렌터카", "도보")
+        repairContexts(trip, modes = listOf("택시", "렌터카", "도보")).forRevalidation(acc, tripId).transportModes shouldBe listOf("택시", "렌터카", "도보")
+    }
+
+    "재검증 컨텍스트에 생성과 같은 취향이 실린다 — 수단과 무관하게(상대가 대중교통일 때만 액티비티 도보 상한을 건다, 2026-11-03)" {
+        val trip = tripCtx(TripDestinationRef("제주", null, 1))
+        val ctx = repairContexts(trip, modes = listOf("대중교통")).forRevalidation(acc, tripId)
+        ctx.transportModes shouldBe emptyList() // 수단은 종전 규칙 그대로(자차만)
+        ctx.preferenceProfile shouldBe profileWith(listOf("대중교통"))
+        repairContexts(null).forRevalidation(acc, tripId) shouldBe RepairContext.NONE // 여행 컨텍스트가 없으면 종전(빈 컨텍스트)
     }
 
     "재검증 수단 조회가 깨지면 수단 없이(대중교통) 재검증한다 — 판정 보류로 섞지 않는다" {
@@ -1166,7 +1182,7 @@ class EditItineraryServiceTest : StringSpec({
                 override fun findPeriod(accountId: UUID, tripId: UUID): TripPeriod? = null
                 override fun findGenerationContext(accountId: UUID, tripId: UUID): TripGenerationContext? = throw IllegalStateException("db down")
             },
-            NO_ANCHORS, NO_REGIONS, NO_PREFS,
+            NO_ANCHORS, NO_REGIONS, NO_PREFS, NO_HINTS,
         )
         val saved = EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, broken)
             .edit(acc, tripId, editDays(listOf(a, b), listOf(c, d)))

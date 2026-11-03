@@ -1503,6 +1503,28 @@ def test_unexpected_internal_error_converges_to_out_of_scope_not_an_exception() 
     assert any(e.stage == "orchestrator" for e in _fallbacks(b.trace))  # 침묵하지 않는다 (INV-4)
 
 
+def test_a_bug_before_classification_is_out_of_scope_even_after_a_prefetch_llm_call(monkeypatch) -> None:
+    """분류 전 단계의 버그는 범위 밖이다 — 0″ 미리 부른 장소 SQL 작성 LLM 이 호출 수를 올려 "분류를 지났다"로 읽혀 다시 시도가 나갔다
+    (2026-11-04 리뷰 재현). 분류를 지난 뒤의 버그만 다시 시도다(`test_a_failed_recommendation_choice_is_reported_as_a_turn_failure`)."""
+    from trippilot.orchestrator.dialogue import dialogue_interpreter, dialogue_orchestrator
+
+    class _PrefetchingSql:  # PlaceSqlLookup.prefetch 꼴 — 풀에 낸 일 안의 서비스 LLM 이 카운터를 올린다
+        def prefetch(self, utterance, trace_id, now, submit):
+            def write():
+                with dialogue_interpreter._llm_calls_lock:
+                    dialogue_interpreter._llm_calls.get()[0] += 1
+            submit(write)
+
+    def boom(*_a, **_k):
+        raise KeyError("pre-classification bug")
+
+    monkeypatch.setattr(dialogue_orchestrator, "check_day_areas", boom)
+    b = _build(_canned(Intent.EXPLORE_PLACES, region="제주"), ports=replace(_PORTS, place_sql=_PrefetchingSql()),
+               pool=_InlineExecutor())
+    out = b.orch.turn(_input("제주 카페 추천해줘"))
+    assert out.outcome == "OUT_OF_SCOPE" and out.reason.startswith("orchestrator_error: KeyError")
+
+
 def _frame(intent: Intent = Intent.GET_WEATHER, missing: tuple[str, ...] = ()) -> Frame:
     return Frame(intent, {}, missing, 0.9, "LLM_DIRECT")
 
@@ -2040,3 +2062,18 @@ def test_acceptance_emoji_is_not_the_answer_to_a_pending_question() -> None:
     turns = (RecentTurn("ASSISTANT", "어디까지 거리를 알려 드릴까요?"),)
     out = b.orch.turn(_input("👍", context=_asked_distance(), recent_turns=turns))
     assert out.frames == () and out.answer.text == LAUGH_TEXT and out.llm_calls == 0
+
+
+@pytest.mark.parametrize("answer,footnoted", [(json.dumps({"text": "우도는 제주 동쪽의 섬이에요."}, ensure_ascii=False), True),
+                                              (RuntimeError("vendor down"), False)])
+def test_intro_web_footnote_rides_only_on_an_llm_answer(monkeypatch, answer, footnoted: bool) -> None:
+    """소개(KB-5)의 웹 확인 각주는 소개를 쓴 답변 LLM 답에만 — 템플릿 답에 달면 보이지 않는 소개를 가리켰다(2026-11-04 리뷰 재현)."""
+    from tests.orchestrator.dialogue.test_dialogue_handlers import _Intro, _RefPoiInfo
+    from trippilot.orchestrator.dialogue.dialogue_handlers import INTRO_WEB_TEXT
+    from trippilot.poi_curation import place_fallback
+
+    monkeypatch.setattr(place_fallback, "web_facts", lambda: {"ref-우도": ("땅콩 아이스크림을 판다",)})
+    ports = HandlerPorts(poi_info=_RefPoiInfo(), place_intro=_Intro("우도는 제주 동쪽의 섬이다. 웹 확인: 땅콩 아이스크림을 판다."))
+    b = _build(_canned(Intent.GET_POI_INFO, place="우도", aspect="어떤 곳", answer=answer), ports=ports)
+    out = b.orch.turn(_input("우도 어떤 곳이야?"))
+    assert out.outcome == "ANSWER" and (out.answer.footnote == INTRO_WEB_TEXT) is footnoted

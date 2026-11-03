@@ -567,7 +567,11 @@ class EditAgent:
         BE 는 requested_at 을 UTC(…Z)로 보낸다 — 그 객체를 그대로 하한으로 쓰면 슬롯 시각이 UTC 벽시계로 사영되고 HC1·HC4 도 그 시·분으로
         판정한다(2026-10-22 리뷰 재현: 13:10 이 04:10 으로). 분 올림은 조립 `not_before_floor`·재계획 하한과 같은 규칙이다."""
         local = task.now.astimezone(self._tz)
-        if local.date() != task.target_date:
+        # 자정을 넘겨 끝나는 슬롯(바·클럽)이 아직 진행 중이면 다음 날 새벽도 그 날의 "당일"이다 — None 이면 이미 한 곳까지 다시 흘린다
+        day = next((d for d in task.solution.days if d.date == task.target_date), None)
+        inside = (day is not None and bool(day.slots) and local.date() > task.target_date
+                  and local < max(s.end_at for s in day.slots))
+        if local.date() != task.target_date and not inside:
             return None
         minute = local.replace(second=0, microsecond=0)
         return minute if minute == local else minute + timedelta(minutes=1)
@@ -613,7 +617,9 @@ class EditAgent:
         spent = round((time.monotonic() - started) * 1000)
         # "다른 데는?"으로 뺀 곳(FR-015)은 이름으로 집어도 되돌리지 않는다 — 원 요청을 그대로 다시 태우므로 같은 곳이 또 나온다
         named = tuple({p.poi_id: p for p in found if p.poi_id not in slots and p.poi_id not in task.excluded}.values())[:_NAMED_MAX]
-        added = tuple(p for p in named if not task.pool.contains(p.poi_id))
+        # 풀 안에 같은 이름이 있으면 풀 밖 동명 장소는 합치지 않는다 — 후보에 같은 이름 두 줄이 서고 LLM 이 먼 쪽을 고를 수 있다
+        in_pool = {"".join(q.name.split()) for q in task.pool.pois}
+        added = tuple(p for p in named if not task.pool.contains(p.poi_id) and "".join(p.name.split()) not in in_pool)
         _log.info("edit_named %s", json.dumps({  # 말·이름은 싣지 않는다 — 개수·시간만
             "trace_id": str(task.trace_id), **log, "found": len(found), "named": len(named), "added": len(added),
             "ms": spent}, ensure_ascii=False))

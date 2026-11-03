@@ -1,5 +1,6 @@
 package com.trippilot.itinerarygeneration.application
 
+import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.api.SlotCandidateFacade
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.itinerarygeneration.domain.PersonalizationHints
@@ -141,6 +142,7 @@ class SlotCandidateServiceTest : StringSpec({
         },
         regions,
         prefs,
+        NoHints,
     )
 
     class CapturingAgent(
@@ -996,12 +998,13 @@ class SlotCandidateServiceTest : StringSpec({
         val first = FitAgent(proposed = listOf(a, b))
         fitSvc(first, tripFacade = rentalTrip, repairContexts = withContext)
             .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, neighborBefore), null, null, null)) // index 0
-        first.contexts shouldContainExactly List(2) { RepairContext(listOf(DayAnchor(d1, 35.15, 129.05)), listOf("렌터카")) }
+        val rentalProfile = PreferenceProfile(emptyList(), emptyList(), emptyList(), listOf("렌터카"), null, emptyList(), false, null) // 생성과 같은 프로필
+        first.contexts shouldContainExactly List(2) { RepairContext(listOf(DayAnchor(d1, 35.15, 129.05)), listOf("렌터카"), rentalProfile) }
 
         val middle = FitAgent(proposed = listOf(a, b))
         fitSvc(middle, tripFacade = rentalTrip, repairContexts = withContext)
             .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, target), null, null, null)) // index 1
-        middle.contexts shouldContainExactly List(2) { RepairContext(emptyList(), listOf("렌터카")) }
+        middle.contexts shouldContainExactly List(2) { RepairContext(emptyList(), listOf("렌터카"), rentalProfile) }
     }
 
     "컨텍스트 조회가 깨지면 컨텍스트 없이 판정한다 — 저장 경로와 같은 물러섬" {

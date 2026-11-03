@@ -372,6 +372,8 @@ def test_resolve_day_reads_a_weekday_only_when_the_trip_has_exactly_one() -> Non
     long_trip = _snapshot((), trip=replace(_TRIP, start_date=date(2026, 10, 18), end_date=date(2026, 10, 26)))
     assert resolve_day("일요일", long_trip, _D2) is None  # 10-18·10-25 — 어느 일요일인지 모른다
     assert resolve_day("수요일", long_trip, _D2) == date(2026, 10, 21)
+    for said in ("다음 주 월요일에 쉬어?", "지난주 월요일", "담주 월요일"):  # 여행 안의 그 요일이 아니다 — 넘겨짚지 않는다
+        assert resolve_day(said, _SNAP, _D2) is None, said
 
 
 def test_resolve_day_reads_a_month_day_inside_a_year_crossing_trip() -> None:
@@ -786,6 +788,16 @@ def test_weather_device_location_far_from_any_region_is_called_current_location(
     facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(snap, ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)))
     assert weather.calls[0]["anchor"] == _HERE_SEA
     assert facts.payload["title"] == "현재 위치 날씨" and facts.detail["anchor"] == "현재 위치"
+
+
+def test_weather_another_day_without_a_trip_guides_to_a_trip_even_with_a_location() -> None:
+    """현재 위치는 '오늘'만 대신한다 — 여행 없이 "내일 날씨"면 위치 동의가 꺼진 턴과 같은 여행 만들기 안내다. 위치가 있다는 이유로
+    "지금 날씨를 확인할 수 없어요"로 막혔다(2026-11-04 리뷰 재현)."""
+    weather = _Weather(pop=30)
+    snap = replace(_snapshot((), trip=None, status=None), here=_HERE_SEOUL)
+    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(snap, arguments={"date": "내일"},
+                                                    ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)))
+    assert facts.needs_trip and weather.calls == []
 
 
 def test_weather_today_before_the_trip_asks_where_the_user_is_not_the_trip_region() -> None:
@@ -1624,6 +1636,7 @@ def test_poi_info_about_a_place_carries_a_kb5_intro_for_the_answer_only() -> Non
 
 
 def test_poi_info_footnotes_an_intro_that_carries_web_facts_but_not_a_card_only_one(monkeypatch) -> None:
+    from trippilot.orchestrator.dialogue.dialogue_orchestrator import DialogueAnswer
     from trippilot.poi_curation import place_fallback
 
     monkeypatch.setattr(place_fallback, "web_facts", lambda: {"ref-우도": ("땅콩 아이스크림을 판다",)})
@@ -1631,11 +1644,13 @@ def test_poi_info_footnotes_an_intro_that_carries_web_facts_but_not_a_card_only_
                        ports=HandlerPorts(poi_info=_RefPoiInfo(), place_intro=_Intro("우도는 제주 동쪽의 섬이다. 웹 확인: 땅콩 아이스크림을 판다.")),
                        remaining_ms=3000), utterance="우도 어떤 곳이야?")
     facts = _run(HANDLERS[Intent.GET_POI_INFO], web)
-    assert facts.footnote == INTRO_WEB_TEXT and any("웹 확인:" in n for n in facts.notes)
+    assert facts.intro_footnote == INTRO_WEB_TEXT and any("웹 확인:" in n for n in facts.notes)
+    # 소개를 쓰는 것은 답변 LLM 뿐 — 템플릿 답(LLM 실패·시한)에는 소개가 없으니 "소개에는 웹 확인…" 각주도 달지 않는다(2026-11-04 리뷰 재현)
+    assert facts.footnote is None and DialogueAnswer.from_facts(facts).footnote is None
     card_only, _ = _intro_run({"place": "우도", "aspect": "어떤 곳"}, "우도 어떤 곳이야?")  # 기본 소개 문장에는 웹 사실이 없다
-    assert card_only.footnote is None
+    assert card_only.intro_footnote is None
     monkeypatch.setenv(place_fallback.SWITCH, "off")  # 꺼져 있으면 대체 문서가 안 쓰인다
-    assert _run(HANDLERS[Intent.GET_POI_INFO], web).footnote is None
+    assert _run(HANDLERS[Intent.GET_POI_INFO], web).intro_footnote is None
 
 
 def test_poi_info_hours_or_fee_question_does_not_fetch_an_intro() -> None:

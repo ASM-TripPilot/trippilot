@@ -7,7 +7,7 @@ import com.trippilot.notification.domain.NotificationSchedule
 import com.trippilot.notification.domain.NotificationScheduleRepository
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionOperations
 import java.time.Clock
 import java.time.Duration
 
@@ -16,6 +16,8 @@ enum class FireOutcome { FIRED, CANCELED_LATE, ALREADY_TAKEN, MUTED }
 
 /**
  * 예약 한 건을 알림으로 옮긴다. 예약당 트랜잭션 하나 — 한 건이 실패해도 나머지 배치는 산다.
+ *
+ * 트랜잭션을 `@Transactional` 이 아니라 코드로([tx]) 여는 이유는 **문구 대조(일정 읽기)가 그 바깥에서 돌아야** 하기 때문이다([fire]).
  */
 @Service
 class NotificationFiringService(
@@ -26,9 +28,20 @@ class NotificationFiringService(
     // 문구가 아직 그날 일정과 맞는지 발화 직전에 대조한다 — 문구는 적재 시점의 스냅숏이다.
     private val plans: ItineraryPlanFacade,
     private val clock: Clock,
+    private val tx: TransactionOperations,
 ) {
-    @Transactional
+    /**
+     * **문구 대조는 트랜잭션 밖에서 한다.** 일정 퍼사드는 `@Transactional(readOnly = true)` 라 발화 트랜잭션 **안**에서 부르면 거기에
+     * 합류하고, 던지는 순간 그 트랜잭션이 rollback-only 로 표시된다 — `runCatching` 으로 삼켜도 소용없다. 그러면 푸시는 이미 나갔는데
+     * (`dispatch` 는 커밋 전에 보낸다) 커밋이 `UnexpectedRollbackException` 으로 끝나 발화가 되돌아가고, 다음 폴링이 같은 예약을 다시 집어
+     * 유예(10분) 동안 매분 같은 푸시를 다시 보낸다. 밖에서 읽으면 실패는 "검증 못 함 → 상수 문구"로 끝나고 발화 트랜잭션은 깨끗하다.
+     */
     fun fire(schedule: NotificationSchedule): FireOutcome {
+        val copyMatches = copyStillMatchesPlan(schedule)
+        return checkNotNull(tx.execute { fireInTransaction(schedule, copyMatches) })
+    }
+
+    private fun fireInTransaction(schedule: NotificationSchedule, matches: Boolean): FireOutcome {
         val now = clock.instant()
         // INV-U6-09 — 지나 버린 예약은 발화하지 않고 닫는다.
         if (schedule.isTooLate(now, LATE_GRACE)) {
@@ -45,12 +58,21 @@ class NotificationFiringService(
         // 반환값을 버려도 되는 것은 [NotificationSchedule.toNotification] 이 `sourceEventId = null` 로
         // 만들기 때문이다 — UNIQUE 가 걸리지 않아 항상 삽입된다. 거기에 원천 이벤트를 싣게 되면
         // 여기서 false 를 받고도 FIRED 를 보고하게 되므로, 그때는 이 줄을 함께 고쳐야 한다.
-        val notification = (if (copyStillMatchesPlan(schedule)) schedule else schedule.withoutCopy()).toNotification(now)
+        val notification = (if (matches) schedule else schedule.withoutCopy()).toNotification(now)
         notifications.appendIfAbsent(notification)
+        // 사용자에게 **어떤 문구가 나갔는가** — AI 문구 / 상수 문구(채우지 못함) / 일정이 바뀌어 접음. 이 한 줄이 "학생 모델 문구가 실제로 몇 %
+        // 나가는가"의 유일한 근거다(적재 로그는 만든 수일 뿐 나간 수가 아니다). 계정·여행은 싣지 않는다 — 건수를 세려는 줄이다.
+        log.info("reminder.fire kind={} copy={}", schedule.kind, copySource(schedule, matches))
         // **적재가 먼저다**(INV-U6-02 · TRIP-549). 푸시가 실패해도 알림함 행은 남아 catch-up 이
         // 그것을 준다 — "누락 0"의 근거는 푸시가 아니라 이 행의 영속성이다.
         pushes.dispatch(notification)
         return FireOutcome.FIRED
+    }
+
+    private fun copySource(schedule: NotificationSchedule, matches: Boolean) = when {
+        !schedule.hasCopy -> "CONSTANT"
+        matches -> "AI"
+        else -> "STALE"
     }
 
     /**

@@ -71,7 +71,7 @@ class ReminderCopyFillPropertyTest : StringSpec({
             val port = Scripted(script, junk)
             val schedules = FakeSchedules()
             val trips = FakeTripOwner().apply { put(tripId, acc, start, start.plusDays(days - 1L)) }
-            val svc = NotificationScheduleService(trips, schedules, port, FakePlans(names), clock, ReminderCopyRetries(listOf(1L)))
+            val svc = NotificationScheduleService(trips, schedules, port, FakePlans(names), clock, ReminderCopyRetries(listOf(1L)), NoDeletionPending)
 
             svc.reload(tripId)
             var prev: Map<UUID, NotificationSchedule> = schedules.findPendingByTrip(tripId).associateBy { it.scheduleId }

@@ -123,7 +123,8 @@ resource "aws_cloudwatch_metric_alarm" "gateway_5xx" {
 # 푸시 — "조용한 실패"를 잡는다. 운영은 OTEL 이 꺼져 있어 푸시 지표(trippilot.push.*)가 어디로도 안 나가고, 푸시가 실패해도 알림은 알림함에 이미
 # 쌓여 5xx·재시작 알람이 하나도 안 울린다(2026-11-04 점검: 운영 푸시 46건 전부 NO_DEVICE 였는데도 아무 신호가 없었다). 백엔드가 남기는 한 줄 로그에서 센다.
 #  - `push.dispatch outcome=FAILED` — Expo 가 거절·장애(액세스 토큰 401·429·5xx·시한 초과)로 **발송 자체가 실패**한 알림. 기기가 없는(NO_DEVICE) 것과 다르다.
-#  - `push.alert` — 영수증이 알려 준 **프로젝트 자격 오류**(InvalidCredentials·MismatchSenderId = .p8·FCM 누락) 또는 영수증 조회의 401·403. 사람이 고쳐야 한다.
+#  - `push.alert` — **프로젝트 자격 오류**(InvalidCredentials·MismatchSenderId = .p8·FCM 누락) 또는 Expo 의 401·403. 사람이 고쳐야 한다.
+#    `stage=ticket` 은 접수 응답·발송 요청에서, `stage=receipt` 는 15분 뒤 영수증·영수증 조회에서 올라온다(패턴은 `stage=` 만 본다).
 # 운영 네임스페이스·backend 컨테이너만(개발 서버가 같은 로그 그룹에 쓴다). 로그 줄은 영어 접두라 필터 패턴에 한글이 없다.
 resource "aws_cloudwatch_log_metric_filter" "push_dispatch_failed" {
   count = local.alerts_count
@@ -214,9 +215,45 @@ resource "aws_cloudwatch_metric_alarm" "push_alert" {
   count = local.alerts_count
 
   alarm_name          = "${local.name}-push-alert"
-  alarm_description   = "푸시 영수증이 프로젝트 자격 오류(InvalidCredentials·MismatchSenderId)를 알렸거나 영수증 조회가 401·403 으로 거절됐다. Expo 자격 증명의 APNs .p8·FCM 키와 PUSH_EXPO_ACCESS_TOKEN 을 확인한다 — 토큰 문제가 아니라 설정 문제다."
+  alarm_description   = "푸시가 프로젝트 자격 오류(InvalidCredentials·MismatchSenderId)로 실패했거나(접수 stage=ticket · 영수증 stage=receipt) Expo 가 401·403 으로 거절했다. Expo 자격 증명의 APNs .p8·FCM 키와 PUSH_EXPO_ACCESS_TOKEN 을 확인한다 — 토큰 문제가 아니라 설정 문제다."
   namespace           = local.alerts_namespace
   metric_name         = aws_cloudwatch_log_metric_filter.push_alert[0].metric_transformation[0].name
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts[0].arn]
+  ok_actions          = [aws_sns_topic.alerts[0].arn]
+}
+
+# 아웃박스 배달 포기 — 이벤트가 재시도 상한(10회)을 넘겨 **영영 소비되지 않은 채** 남는다. 그 이벤트가 일정 생성이면 리마인드 예약이
+# 안 만들어지고, 알림 사건이면 알림함 행이 안 생긴다 — 사용자에게도 5xx 에도 신호가 없다(로그 ERROR 한 줄이 유일한 흔적이었다).
+# 백엔드가 `outbox.abandon eventId=… type=…` 로 시작하는 줄을 남긴다(OutboxRelayIT 가 접두를 지킨다 — 푸시 경보처럼 존재하지 않는 줄을 세지 않게).
+# 운영 네임스페이스·backend 컨테이너만. 로그 줄은 영어 접두라 필터 패턴에 한글이 없다.
+resource "aws_cloudwatch_log_metric_filter" "outbox_abandon" {
+  count = local.alerts_count
+
+  name           = "${local.name}-outbox-abandon"
+  log_group_name = aws_cloudwatch_log_group.container_insights["application"].name
+  pattern        = "{ ($.kubernetes.namespace_name = \"trippilot\") && ($.kubernetes.container_name = \"backend\") && ($.log = %outbox\\.abandon\\W%) }"
+
+  metric_transformation {
+    name      = "OutboxAbandon"
+    namespace = local.alerts_namespace
+    value     = "1"
+  }
+}
+
+# 1건이면 바로 — 포기된 이벤트는 사람이 원인을 고치고 다시 보내기 전까지 그대로다. 평소엔 0 이다(구독자가 실패하는 일은 버그다).
+resource "aws_cloudwatch_metric_alarm" "outbox_abandon" {
+  count = local.alerts_count
+
+  alarm_name          = "${local.name}-outbox-abandon"
+  alarm_description   = "아웃박스 이벤트 배달이 재시도 상한(10회)을 넘겨 포기됐다 — 그 이벤트의 후속(리마인드 예약 적재·알림·회고 등)이 일어나지 않았다. 백엔드 로그의 `outbox.abandon eventId=… type=…` 로 어떤 이벤트인지 보고, `outbox_event` 에서 `published_at IS NULL AND attempts >= 10` 으로 찾는다(REL-U6-02)."
+  namespace           = local.alerts_namespace
+  metric_name         = aws_cloudwatch_log_metric_filter.outbox_abandon[0].metric_transformation[0].name
   statistic           = "Sum"
   period              = 300
   evaluation_periods  = 1

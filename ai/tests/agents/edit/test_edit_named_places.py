@@ -166,6 +166,15 @@ def test_inside_pool_named_place_is_rendered_but_not_added_twice() -> None:
     assert _candidates(llm) == ["- n0 | NATURE | 망원한강공원"]  # 이미 풀 안 — 한 번만
 
 
+def test_same_name_outside_the_pool_is_not_added_beside_the_pool_one() -> None:
+    """풀 안에 같은 이름이 있으면 이름 조회가 찾은 풀 밖 동명 장소(다른 동네)는 합치지 않는다 — 후보에 같은 이름 두 줄이 서고
+    LLM 이 먼 쪽을 고르면 그대로 들어갔다. 이름 조회가 없던 때(풀 안 한 곳)와 같다."""
+    twin = _poi("x2", "망원한강공원", 37.30, 127.20, PoiCategory.NATURE)
+    out, llm = _run("망원한강공원 넣어줘", _Socket((twin,)), canned=_add("x2"))
+    assert out.status is EditStatus.TRANSLATION_FAILED and "closed_set_violation" in (out.reason or "")
+    assert _candidates(llm) == ["- n0 | NATURE | 망원한강공원"]
+
+
 # ── 콘센트를 부르지 않는 길 ───────────────────────────────────────────────
 
 

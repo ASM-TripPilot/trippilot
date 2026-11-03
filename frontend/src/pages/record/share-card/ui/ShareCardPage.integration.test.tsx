@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, focusManager } from '@tanstack/react-query';
 import {
@@ -19,6 +20,7 @@ import type {
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { BASE } from '@/test-support/apiBase';
 import { freezeDate } from '@/test-support/freezeDate';
+import { answerReduceMotionSynchronously } from '@/test-support/animatedProbe';
 import { flushNotifications } from '@/test-support/flushNotifications';
 import { createGate, createHitLog } from '@/test-support/mswHookHarness';
 import { createWrapper } from '@/test-support/queryRender';
@@ -175,6 +177,18 @@ function renderPage() {
   return render(<ShareCardPage tripId={TRIP_ID} />, {
     wrapper: createWrapper(productionLikeClient()),
   });
+}
+
+/** 개발 검사 모드(StrictMode)로 그린다. StrictMode 는 가장 바깥에 둔다 — `wrapper` 옵션 안쪽에 두면 이 렌더러에선 이중 effect 가 재현되지 않아 공허 통과한다. */
+function renderPageStrict() {
+  const Providers = createWrapper(productionLikeClient());
+  return render(
+    <StrictMode>
+      <Providers>
+        <ShareCardPage tripId={TRIP_ID} />
+      </Providers>
+    </StrictMode>
+  );
 }
 
 async function quiet(ms: number = QUIET_MS): Promise<void> {
@@ -584,23 +598,25 @@ describe('🔴 TRIP-1605 AC-7 · 429 SHARE_CARD_DAILY_LIMIT — 한 줄 안내, 
 });
 
 describe('🔴 TRIP-1605 AC-8 · 429 RATE_LIMITED — Retry-After 뒤 정확히 1회만 다시 부른다 (진짜 타이머)', () => {
-  it('기다리는 동안은 안 부르고(온디바이스·안내 없음), Retry-After 뒤 1회 다시 불러 성공하면 AI 문구가 뜨며 그 뒤 더 부르지 않는다', async () => {
+  it('기다리는 동안은 안 부르고(온디바이스·안내 없음), 서버가 준 Retry-After(4초) 뒤 1회 다시 불러 성공하면 AI 문구가 뜨며 그 뒤 더 부르지 않는다', async () => {
+    // TRIP-1663 · 고정 1초로 다시 부르는 구현이 통과하지 못하게 값을 4초로 키우고 2.5초 시점에 아직 1건임을 본다
+    // (검사 시점과 재시도 시점 사이 여유 ≈1.5초 — 3초로 두면 느린 CI 에서 정상 구현이 거짓 red 가 된다).
     serveCopy(
-      copyError(429, 'RATE_LIMITED', { 'Retry-After': '2' }),
+      copyError(429, 'RATE_LIMITED', { 'Retry-After': '4' }),
       copyOk(AI_COPY)
     );
 
     renderPage();
     await frame();
     await waitForHits(1);
-    await quiet(800);
+    await quiet(2500);
 
     // 기다리는 중: 아직 1건, 온디바이스 문구, 한도 안내 없음
     expect(copyHits()).toBe(1);
     expectOnDeviceCard();
 
-    // Retry-After(2초) 뒤 2건째
-    await waitForHits(2, 6000);
+    // Retry-After(4초) 뒤 2건째 — 첫 요청 뒤 약 4초, 마감은 그보다 2.5초 넉넉하게
+    await waitForHits(2, 4000);
     await waitFor(() =>
       expect(hashtagLine()).toHaveTextContent(AI_HASHTAG_LINE)
     );
@@ -839,4 +855,80 @@ describe('화면 동작 — 포맷·사진 없음·통계·편집 한도·저장
       screen.getByTestId('reflection-share-caption-edit')
     ).toBeOnTheScreen();
   });
+});
+
+// TRIP-1663 · 개발 검사 모드(StrictMode)는 effect 를 "실행→정리→재실행"한다. 훅이 응답을 받는 관찰자가 정리 때 떨어지고
+// 다시 안 붙으면, 요청은 나가는데 응답이 화면에 안 닿는다. 운영 앱에는 StrictMode 가 없으므로 이 테스트가 유일한 지킴이다.
+// 변별 단언은 해시태그가 아니라 요청 횟수다 — 가드를 지우거나 정리에서 되돌리면 해시태그는 바뀌어도 POST 가 2건이 된다.
+describe('개발 검사 모드(StrictMode)에서도 서버 문구가 화면에 닿고 요청은 1건이다', () => {
+  // 동작 줄이기 켬: 캡션 자리 Skeleton 의 반짝임이 StrictMode 에서 `findNodeHandle` 경고를 내 소음 예산(`other`)을 쓴다.
+  // 이 테스트는 모션과 무관하므로 애니메이션을 시작하지 않게 한다.
+  beforeEach(() => answerReduceMotionSynchronously(true));
+
+  it('AI 문구 응답 → 요청 정확히 1건이고, 캡션·해시태그 줄이 AI 값으로 바뀐다', async () => {
+    // 준비
+    serveCopy(copyOk(AI_COPY));
+
+    // 실행
+    renderPageStrict();
+    await frame();
+    await waitForHits(1);
+    await quiet();
+
+    // 단언 1 (변별): 이중 effect 에도 POST 는 1건
+    expect(copyHits()).toBe(1);
+
+    // 단언 2: 응답이 화면에 닿았다
+    await waitFor(() =>
+      expect(hashtagLine()).toHaveTextContent(AI_HASHTAG_LINE)
+    );
+    expect(captionLine()).toHaveTextContent(AI_COPY.caption);
+    expect(screen.queryByText(ON_DEVICE_HASHTAGS)).toBeNull();
+  });
+
+  it('429 SHARE_CARD_DAILY_LIMIT → 한도 안내가 뜨고, Retry-After 가 지나도 요청은 1건 그대로', async () => {
+    // 준비: 기존 AC-7(StrictMode 아님)과 같은 응답
+    serveCopy(copyError(429, 'SHARE_CARD_DAILY_LIMIT', { 'Retry-After': '1' }));
+
+    // 실행
+    renderPageStrict();
+    await frame();
+    await waitForHits(1);
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('reflection-share-copy-limit')
+      ).toBeOnTheScreen()
+    );
+    await quiet(1500);
+
+    // 단언
+    expect(copyHits()).toBe(1);
+    expect(
+      screen.getByTestId('reflection-share-copy-limit')
+    ).not.toHaveTextContent('');
+    expect(hashtagLine()).toHaveTextContent(ON_DEVICE_HASHTAGS);
+    expect(captionLine()).toHaveTextContent('');
+    expect(screen.queryByTestId('reflection-share-error')).toBeNull();
+  }, 15000);
+});
+
+// TRIP-1663 · 뮤테이션(서버 쓰기 요청)은 화면이 사라져도 살아서 재시도를 이어간다. 훅이 `mutationFn` 안에서 화면이
+// 남아 있는지 보지 않으면, 떠난 뒤에도 Retry-After 재호출이 하루 횟수·AI 비용을 쓴다.
+// 짝: 위 AC-8 둘째 `it` 이 같은 응답(Retry-After 1)에서 화면에 머물면 총 2회 부른다는 것을 보인다.
+describe('재시도 대기 중 화면을 나가면 서버를 더 부르지 않는다', () => {
+  it('429 RATE_LIMITED(Retry-After 1) 첫 요청 직후 화면을 나가면, 대기가 끝나도 요청은 1건 그대로', async () => {
+    // 준비
+    serveCopy(copyError(429, 'RATE_LIMITED', { 'Retry-After': '1' }));
+
+    // 실행: 첫 요청이 막 나간 시점에 화면을 나가고, Retry-After 를 넘겨 기다린다
+    const view = renderPage();
+    await frame();
+    await waitForHits(1);
+    view.unmount();
+    await quiet(1500);
+
+    // 단언: 화면이 정말 사라졌고(앵커 — 나간 뒤엔 `screen` 쿼리가 던지므로 렌더 결과로 본다), 요청은 늘지 않았다
+    expect(view.toJSON()).toBeNull();
+    expect(copyHits()).toBe(1);
+  }, 15000);
 });

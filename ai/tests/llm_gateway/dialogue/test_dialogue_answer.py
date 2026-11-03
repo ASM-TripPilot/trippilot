@@ -275,7 +275,7 @@ def test_prompt_renders_deterministically_with_ref() -> None:
     p1, ref = reg.render(_FEAT, _vars())
     p2, _ = reg.render(_FEAT, _vars())
     assert p1 == p2  # 결정론
-    assert ref.prompt_id == "prompts/dialogue_answer.yaml" and ref.version == "0.3.9"
+    assert ref.prompt_id == "prompts/dialogue_answer.yaml" and ref.version == "0.3.10"
     assert ref.feature == "DIALOGUE_ANSWER"
     dynamic = p1.rsplit("[문체]", 1)[1]  # 턴마다 바뀌는 칸만 — 고정부 예시에도 GET_WEATHER·최대 강수확률이 있다
     assert "GET_WEATHER" in dynamic and "최대 강수확률" in dynamic
@@ -339,7 +339,7 @@ def test_prompt_examples_pass_gate_and_end_with_next_step() -> None:
     """
     prompt, _ = PromptRegistry(_PROMPTS).render(_FEAT, _vars())
     examples = _EXAMPLE.findall(prompt)
-    assert len(examples) == 4
+    assert len(examples) == 6
     for facts_raw, answer_raw in examples:
         text = json.loads(answer_raw)["text"]
         assert not any(stock in text for stock in ("알려 드릴게요", "확인해 볼게요", "궁금하시")), text  # 0.3.1 — 모델이 여는 말을 베낀다

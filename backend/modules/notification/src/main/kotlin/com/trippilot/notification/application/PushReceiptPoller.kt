@@ -53,6 +53,9 @@ internal enum class ErrorKind {
     OTHER,
 }
 
+/** 토큰이 아니라 **우리 프로젝트**(.p8·FCM 키·발신자)가 틀렸다는 Expo 오류 코드. 접수(티켓)와 도착(영수증) 두 단계가 같은 코드를 쓴다. */
+internal val PROJECT_CREDENTIAL_ERRORS = setOf("InvalidCredentials", "MismatchSenderId")
+
 internal fun decideReceipt(receipt: TicketReceipt?, age: Duration, expiry: Duration): ReceiptDecision = when {
     receipt == null -> if (age >= expiry) ReceiptDecision.Expired else ReceiptDecision.Keep
     receipt.ok -> ReceiptDecision.Ok
@@ -62,7 +65,7 @@ internal fun decideReceipt(receipt: TicketReceipt?, age: Duration, expiry: Durat
             code,
             when (code) {
                 "DeviceNotRegistered" -> ErrorKind.DEAD_TOKEN
-                "InvalidCredentials", "MismatchSenderId" -> ErrorKind.PROJECT_CREDENTIALS
+                in PROJECT_CREDENTIAL_ERRORS -> ErrorKind.PROJECT_CREDENTIALS
                 "MessageRateExceeded" -> ErrorKind.RATE_LIMIT
                 "MessageTooBig" -> ErrorKind.TOO_BIG
                 else -> ErrorKind.OTHER

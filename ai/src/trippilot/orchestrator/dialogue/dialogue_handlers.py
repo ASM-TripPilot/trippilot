@@ -430,6 +430,8 @@ class Facts:
     quick_replies: tuple[QuickReplyDraft, ...] | None  # () = 상시 칩만 · None = 시작 칩 복귀
     template_text: str  # 결정론 폴백 문장 (정본 workers.dialogue_answer — BE 템플릿 이식 + ★ 신설)
     footnote: str | None = None
+    # LLM 답에만 다는 결정론 각주 — 소개(detail.intro)를 쓴 것은 답변 LLM 뿐이라 템플릿 답에 달면 없는 소개를 가리킨다
+    intro_footnote: str | None = None
     needs_trip: bool = False
     detail: Mapping[str, object] = field(default_factory=dict)  # 의도별 추가 사실(JSON-safe) — `$facts` 에 그대로 합쳐진다
 
@@ -561,6 +563,8 @@ def resolve_day(text: str, snapshot: TurnSnapshot, today: date) -> date | None:
     first, last = trip_days
     if "마지막" in t or "막날" in t:
         return last
+    if re.search(r"(?:다음|담|지난|저번)\s?주", t):  # "다음 주 화요일"은 여행 안의 화요일이 아닐 수 있다 — 넘겨짚지 않는다
+        return None
     wd = _WEEKDAY_WORD.search(t)
     if wd:  # "토요일에 쉬어?" — 여행 안의 그 요일이 하나면 그날(영업시간도 그날 기준), 둘 이상이면 어느 날인지 모른다
         days = [first + timedelta(days=i) for i in range((last - first).days + 1)
@@ -884,6 +888,10 @@ def _plan_weather(ctx: TurnContext) -> tuple[HandlerTask, ...]:
 def _assemble_weather(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:
     intent = Intent.GET_WEATHER
     anchor = _weather_anchor(ctx)
+    if anchor is None and ctx.snapshot.trip is None and not ctx.arguments.get("region"):
+        # 현재 위치(`free_when`)는 '오늘'만 대신한다 — 여행 없이 "내일 날씨"면 위치 동의가 꺼진 턴과 같은 여행 만들기 안내다("확인할 수
+        # 없어요" 아님). 말한 지역이 표 밖이면 종전대로 확인할 수 없다
+        return need_trip_facts(intent)
     if anchor is None:
         return _text_facts(intent, FactStatus.EMPTY, (_itinerary_action(ctx.snapshot),),
                            notes=("날씨 앵커 없음 — 그 날 좌표를 얻을 슬롯이 없고 여행·말한 지역도 중심표에 없다",))
@@ -1312,8 +1320,9 @@ def _assemble_poi_info(ctx: TurnContext, results: Mapping[str, TaskResult]) -> F
     intro = value.get("intro") if isinstance(value, Mapping) else None
     # 소개에 대체 문서의 웹 확인 사실이 들었으면 결정론 각주를 단다(KB-5 담당 권고 11-03) — 웹 사실은 근거 없음이 약 4% 라 확정 사실처럼
     # 읽히면 안 된다. 장소 카드(관광공사 상세)만 쓴 소개는 1차 출처라 달지 않고, 미확인 칸의 웹 각주가 이미 있으면 그것이 이긴다
+    intro_footnote = None
     if footnote is None and isinstance(intro, str) and row is not None and place_fallback.web_in(str(row.get("source_ref") or ""), intro):
-        footnote = INTRO_WEB_TEXT
+        intro_footnote = INTRO_WEB_TEXT
         notes = notes + ("소개(intro)의 '웹 확인:' 뒤 문장은 웹 검색으로 확인한 정보다 — 단정하지 말고 '웹에서 확인한 바로는'처럼 말한다. "
                          "출처 주소는 말하지 않는다",)
     detail = {"target": name, **({"intro": intro} if isinstance(intro, str) and intro else {})}
@@ -1324,7 +1333,7 @@ def _assemble_poi_info(ctx: TurnContext, results: Mapping[str, TaskResult]) -> F
         places=(FactPlace(poi_id, name, category, fee=fee if isinstance(fee, int) else None,
                           hours_label=f"{hours}, 입장 마감 {web.last_entry}" if web and web.last_entry and hours else hours),),
         notes=notes, payload=_info("PLACE", name, rows), next_actions=actions, quick_replies=quick,
-        template_text=template, detail=detail, footnote=footnote,
+        template_text=template, detail=detail, footnote=footnote, intro_footnote=intro_footnote,
     )
 
 
