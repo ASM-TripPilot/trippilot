@@ -239,6 +239,38 @@ class OutboxRelayIT : AbstractPostgresIntegrationTest() {
     }
 
     /**
+     * 포기 줄은 **영어 접두 `outbox.abandon` 으로 시작하는 ERROR** 여야 한다 — CloudWatch 경보(alerts.tf `outbox_abandon`)가 이 접두를 센다.
+     * 필터 패턴이 한글을 못 받아 접두를 둔 것이라, 문구를 고치다 접두가 사라져도 기능은 멀쩡히 돌고 **경보만 조용히 죽는다**(푸시 경보가
+     * 존재하지 않는 로그 줄을 세던 것과 같은 형태). 두 경로를 다 본다 — 재시도 소진(폴링)과 직접 포기(Kafka 회수기·행 없음).
+     */
+    @Test
+    fun `포기하면 outbox_abandon 접두의 ERROR 줄이 나간다 — 경보가 이 줄을 센다`() {
+        val logger = LoggerFactory.getLogger(OutboxRelay::class.java) as ch.qos.logback.classic.Logger
+        val captured = ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>()
+        captured.start()
+        logger.addAppender(captured)
+        try {
+            // (1) 재시도 소진 — 10번째 실패가 포기다.
+            tx.execute { publisher.publish(Probe("포기로그")) }
+            jdbc.update("UPDATE outbox_event SET attempts = 9 WHERE aggregate_id = '포기로그'")
+            dueNow("포기로그")
+            subscriber.failNext = true
+            relay.relay()
+            // (2) 직접 포기 — 행이 없는 경로(Kafka 소비 재시도 소진 뒤 회수기가 부른다).
+            relay.abandon(java.util.UUID.randomUUID(), "test.RelayProbe", IllegalStateException("의도된 포기"))
+        } finally {
+            logger.detachAppender(captured)
+        }
+
+        val abandons = captured.list.filter { it.level == ch.qos.logback.classic.Level.ERROR && it.formattedMessage.startsWith("outbox.abandon ") }
+        withClue("포기 ERROR 줄 — ${captured.list.map { it.level.toString() + ' ' + it.formattedMessage.take(60) }}") {
+            abandons.size shouldBe 2
+        }
+        // 찾는 데 필요한 것(이벤트 id·타입)은 줄에 실린다.
+        abandons.all { "eventId=" in it.formattedMessage && "type=test.RelayProbe" in it.formattedMessage } shouldBe true
+    }
+
+    /**
      * **릴레이 지연 계측이 배선돼 있는가**(OBS-U6-01). 이 지표가 PERF-U6-01 목표 대조의 유일한 근거다 —
      * 계측을 지워도 기능은 멀쩡히 돌기 때문에 여기서 잠그지 않으면 조용히 0 으로 남는다.
      */
