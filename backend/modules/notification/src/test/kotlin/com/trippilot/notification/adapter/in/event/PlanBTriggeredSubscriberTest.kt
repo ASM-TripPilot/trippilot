@@ -6,6 +6,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.core.event.EventEnvelope
+import com.trippilot.notification.application.NoDeletionPending
 import com.trippilot.notification.application.FakeNotifications
 import com.trippilot.notification.application.FakeTickets
 import com.trippilot.notification.application.FakeToggles
@@ -71,7 +72,6 @@ class PlanBTriggeredSubscriberTest : StringSpec({
         override fun invalidate(token: String, at: Instant) = false
         override fun invalidateIfNotSeenSince(token: String, notSeenAfter: Instant, at: Instant) = false
         override fun remove(accountId: UUID, token: String) = false
-        override fun removeAll(accountId: UUID) = 0
     }
 
     /** 나간 메시지를 붙든다 — 기기에 무엇이 떴는지(제목·탭 목적지)는 메시지를 봐야 안다. */
@@ -102,7 +102,7 @@ class PlanBTriggeredSubscriberTest : StringSpec({
         val registry = SimpleMeterRegistry()
         val metrics = NotificationMetrics(registry, notifications)
         val sender = RecordingSender()
-        val dispatch = PushDispatchService(OneDevice(), notifications, toggles, sender, metrics, PushRateLimits(), clock, FakeTickets())
+        val dispatch = PushDispatchService(OneDevice(), notifications, toggles, sender, metrics, PushRateLimits(), clock, FakeTickets(), NoDeletionPending)
         val service = NotificationRaiseService(notifications, toggles, dispatch, FakeTripOwner(), metrics, clock)
         return Fixture(clock, notifications, sender, registry, PlanBTriggeredSubscriber(service, mapper))
     }

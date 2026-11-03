@@ -174,8 +174,9 @@ class KafkaOutboxListener(private val relay: OutboxRelay, private val broker: Ka
     //  - 트리거 소비(ItineraryRecalculated → TriggerService.consume): 트리거를 쓰는 구독자는 이것 하나라 구독자끼리 겹치지 않는다.
     //  - 파기(도우미 대화 TripDeleted·AccountDeletionRequested·DialogueForgetRequested · EXIF·경로·기준점 좌표·위치 구간 닫기):
     //    멱등 DELETE·조건부 UPDATE. GpsRecordingOptOut·LocationLegalConsentRevoked 는 키가 같은 accountId 라 한 파티션이다.
-    //  - 알림 중단·되살림(AccountDeletionRequested → 예약 취소·토큰 삭제: 계정 단위 조건부 UPDATE·DELETE / AccountDeletionCancelled →
-    //    여행마다 reload: lockTrip 뒤 현재 상태 재계산). 둘 다 키가 accountId 라 한 파티션 — 요청→철회 순서가 지켜진다.
+    //  - 알림 중단·되살림(AccountDeletionRequested → 예약 취소: 계정 단위 조건부 UPDATE / AccountDeletionCancelled → 취소 흔적이 있는 여행마다
+    //    reload: lockTrip 뒤 현재 상태 재계산). 둘 다 **이벤트가 아니라 처리 시점의 계정 상태**(AccountStatusFacade)를 따른다 — 폴링 모드는 같은
+    //    타입의 다른 구독자가 실패하면 이벤트를 통째로 백오프 재배달해 순서가 뒤바뀌므로, 순서에 기대지 않는다.
     // 새 구독자는 동시 호출을 전제로 쓴다 — 선검사 후 쓰기에는 잠금·유니크를 둔다.
     @KafkaListener(topics = [KafkaOutboxConfig.TOPIC], groupId = "trippilot-outbox", concurrency = KafkaOutboxConfig.CONSUMERS)
     // 값 없는 레코드(tombstone)는 여기까지 오지 않는다 — 스프링이 인자 변환에서 비재시도 실패로 분류해 회수기로 바로 보낸다

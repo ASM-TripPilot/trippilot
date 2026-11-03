@@ -63,7 +63,6 @@ class PushPolicyTest : StringSpec({
         override fun invalidate(token: String, at: Instant) = false
         override fun invalidateIfNotSeenSince(token: String, notSeenAfter: Instant, at: Instant) = false
         override fun remove(accountId: UUID, token: String) = false
-        override fun removeAll(accountId: UUID) = 0
     }
 
     class CountingSender : PushPort {
@@ -118,7 +117,7 @@ class PushPolicyTest : StringSpec({
         val registry = SimpleMeterRegistry()
         val metrics = NotificationMetrics(registry, notifications)
         val sender = CountingSender()
-        val dispatch = PushDispatchService(OneDevice(), notifications, toggleService, sender, metrics, limits, clock, FakeTickets())
+        val dispatch = PushDispatchService(OneDevice(), notifications, toggleService, sender, metrics, limits, clock, FakeTickets(), NoDeletionPending)
         val service = NotificationRaiseService(recent(notifications), toggleService, dispatch, FakeTripOwner(), metrics, clock)
         return Fixture(clock, notifications, sender, registry, service)
     }

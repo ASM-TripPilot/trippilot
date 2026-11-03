@@ -1,5 +1,6 @@
 package com.trippilot.notification.application
 
+import com.trippilot.auth.api.AccountStatusFacade
 import com.trippilot.notification.domain.Notification
 import com.trippilot.notification.domain.NotificationRepository
 import com.trippilot.notification.domain.PushMessage
@@ -65,6 +66,8 @@ class PushDispatchService(
     private val clock: Clock,
     // 접수된 티켓 id 를 남긴다 — 15분 뒤 영수증으로 도착 실패를 알기 위한 열쇠(TRIP-1707).
     private val tickets: PushTicketRepository,
+    // 삭제 유예 중인 계정에는 어떤 알림도 푸시하지 않는다(알림함에는 이미 쌓였다).
+    private val accounts: AccountStatusFacade,
 ) {
     /**
      * 발송 결과를 **한 자리에서** 센다(OBS-U6-02). 반환 지점이 다섯이라 각 자리에서 세면 하나를
@@ -84,6 +87,10 @@ class PushDispatchService(
     }
 
     private inline fun doDispatch(notification: Notification, onReason: (String) -> Unit): PushOutcome {
+        // 삭제를 요청해 유예 중인 계정에는 **종류를 가리지 않고** 푸시하지 않는다 — 리마인드뿐 아니라 Plan-B·숙소·회고 알림도 같은 길을 지난다.
+        // 푸시 토큰은 일부러 지우지 않는다: 철회해도 앱이 같은 토큰을 다시 올리지 않을 수 있어(같은 서명이면 등록을 건너뛴다) 지우면 철회한 사람의 푸시가
+        // 조용히 끊긴다. 보내지 않는 것은 여기서 지킨다. 토큰은 계정 파기 때 FK CASCADE 가 지운다. 결과는 MUTED — 사용자가 끈 것과 같은 "보내지 않음"이다.
+        if (accounts.isDeletionPending(notification.accountId)) return PushOutcome.MUTED
         // 종류 토글 × OS 권한 = 채널 판정. `SYSTEM` 은 토글을 타지 않는다(INV-U6-03).
         if (!toggles.allowsPush(notification.accountId, notification.kind)) return PushOutcome.MUTED
         // 권한이 없는 기기는 쏴도 닿지 않는다 — 시도 자체를 하지 않는다(레이트리밋을 아낀다).

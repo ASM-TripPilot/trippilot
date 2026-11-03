@@ -40,7 +40,7 @@ class ReminderCopyRehydrateTest : StringSpec({
         val retries = ReminderCopyRetries(listOf(180_000L, 300_000L))
         val poller = ReminderCopyRetryPoller(
             retries,
-            NotificationScheduleService(FakeTripOwner(), schedules, Copies(enabled), FakePlans(), clock, retries),
+            NotificationScheduleService(FakeTripOwner(), schedules, Copies(enabled), FakePlans(), clock, retries, NoDeletionPending),
             clock,
         )
     }
@@ -101,7 +101,7 @@ class ReminderCopyRehydrateTest : StringSpec({
         val retries = ReminderCopyRetries(listOf(180_000L))
         val poller = ReminderCopyRetryPoller(
             retries,
-            NotificationScheduleService(FakeTripOwner(), failing, Copies(true), FakePlans(), clock, retries),
+            NotificationScheduleService(FakeTripOwner(), failing, Copies(true), FakePlans(), clock, retries, NoDeletionPending),
             clock,
         )
 
@@ -118,7 +118,7 @@ class ReminderCopyRehydrateTest : StringSpec({
         f.schedules.stored += listOf(row(third, 30), row(first, 2), row(second, 10))
 
         // 서비스 계층에서 상한을 직접 본다 — 폴러의 상한(200)은 상수라 테스트에서 못 줄인다.
-        val service = NotificationScheduleService(FakeTripOwner(), f.schedules, Copies(true), FakePlans(), clock, f.retries)
+        val service = NotificationScheduleService(FakeTripOwner(), f.schedules, Copies(true), FakePlans(), clock, f.retries, NoDeletionPending)
         service.tripsLackingCopy(now, java.time.Duration.ofHours(48), limit = 2) shouldContainExactly listOf(first, second)
     }
 })

@@ -57,7 +57,7 @@ class PushTicketRecordingTest : StringSpec({
         val notifications = FakeNotifications()
         return PushDispatchService(
             OwnedTokens(tokens), notifications, NotificationToggleService(FakeToggles(), clock), push,
-            testMetrics(notifications), PushRateLimits(), clock, tickets,
+            testMetrics(notifications), PushRateLimits(), clock, tickets, NoDeletionPending,
         )
     }
 
@@ -204,5 +204,4 @@ private class OwnedTokens(private val rows: List<PushToken>) : PushTokenReposito
     override fun invalidate(token: String, at: Instant) = false
     override fun invalidateIfNotSeenSince(token: String, notSeenAfter: Instant, at: Instant) = false
     override fun remove(accountId: UUID, token: String) = false
-    override fun removeAll(accountId: UUID) = 0
 }

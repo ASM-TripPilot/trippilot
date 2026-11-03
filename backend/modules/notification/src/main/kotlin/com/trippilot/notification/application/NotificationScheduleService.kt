@@ -1,5 +1,6 @@
 package com.trippilot.notification.application
 
+import com.trippilot.auth.api.AccountStatusFacade
 import com.trippilot.notification.domain.CopyBasis
 import com.trippilot.notification.domain.NotificationKind
 import com.trippilot.notification.domain.NotificationSchedule
@@ -50,9 +51,15 @@ class NotificationScheduleService(
     private val clock: Clock,
     // 문구를 하나도 못 받은 적재를 몇 분 뒤 한 번 더 — 모델 콜드스타트 대응([ReminderCopyRetries]).
     private val retries: ReminderCopyRetries,
+    // 삭제 유예 중인 계정에는 예약을 세우지 않는다.
+    private val accounts: AccountStatusFacade,
 ) {
+    /**
+     * @param fillCopies 문구를 **지금** 묻는가. 사용자 대기가 없는 곳에서도 AI 를 동기로 기다리면 릴레이 스레드가 묶이므로, 되살림(삭제 철회)은
+     * 끄고 재시도 대기열이 곧 채우게 한다(문구 없는 행이 있으면 아래서 대기열에 건다).
+     */
     @Transactional
-    fun reload(tripId: UUID) {
+    fun reload(tripId: UUID, fillCopies: Boolean = true) {
         // 같은 여행의 다른 적재(릴레이)와 겹치지 않게 — 겹치면 하루 리마인드가 두 벌이 된다.
         schedules.lockTrip(tripId)
         val now = clock.instant()
@@ -63,7 +70,14 @@ class NotificationScheduleService(
             log.info("여행이 없어 리마인드 예약을 비웠습니다. tripId={}", tripId)
             return
         }
-        val planned = withCopies(tripId, trip, plan(tripId, trip, now))
+        if (accounts.isDeletionPending(trip.accountId)) {
+            // 삭제 유예 중 — 요청 뒤에 도착한 일정 생성·재계산 이벤트가 예약을 다시 세우지 않게 한다. 철회하면 [tripsCanceledByDeletion] 이 되살린다.
+            schedules.replacePending(tripId, emptyList())
+            log.info("삭제 유예 중인 계정이라 리마인드 예약을 만들지 않았습니다. tripId={}", tripId)
+            return
+        }
+        val rows = plan(tripId, trip, now)
+        val planned = if (fillCopies) withCopies(tripId, trip, rows) else rows
         schedules.replacePending(tripId, planned)
         log.info(
             "리마인드 예약 {}건을 적재했습니다. tripId={} AI문구={}건",
@@ -80,6 +94,13 @@ class NotificationScheduleService(
     /** 계정 삭제 요청 — 이 계정의 미발화 예약을 전부 취소한다(유예 30일 동안 리마인드가 계속 가지 않게). */
     @Transactional
     fun cancelAll(accountId: UUID): Int = schedules.cancelPendingOf(accountId, clock.instant())
+
+    /**
+     * 삭제 철회 — 요청 때 취소된 예약이 아직 울릴 시각 전인 여행들. 호출측이 여행마다 [reload] 를 **프록시를 거쳐** 부른다(이 클래스 안에서
+     * 돌리면 `@Transactional` 이 안 걸려 잠금·교체가 한 트랜잭션이 못 된다).
+     */
+    @Transactional(readOnly = true)
+    fun tripsCanceledByDeletion(accountId: UUID): List<UUID> = schedules.findTripIdsWithCanceledFuture(accountId, clock.instant())
 
     /**
      * 가까운 시일([horizon] 안)에 울릴 예약 중 문구가 아직 없는 것이 있는 여행들 — 재시작으로 사라진 채움 대기열을 되살릴 입력.
