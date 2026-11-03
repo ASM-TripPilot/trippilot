@@ -1,8 +1,10 @@
 import type { ComponentType } from 'react';
-import { act, render, screen } from '@testing-library/react-native';
+import { act, render, screen, within } from '@testing-library/react-native';
 import { QueryClient, type QueryKey } from '@tanstack/react-query';
 import { AxiosError } from 'axios';
 import * as Notifications from 'expo-notifications';
+import * as Sentry from '@sentry/react-native';
+import { useNavigationContainerRef } from 'expo-router';
 
 import {
   getObservedQueryClient,
@@ -41,6 +43,9 @@ import {
  */
 
 process.env.EXPO_PUBLIC_API_MOCK = '1';
+// TRIP-1743 — DSN 이 있는 네이티브 부팅으로 로드한다(아래 「Sentry 추적 배선」 describe). 루트가 Sentry 대역 View 로 한 겹 더 감싸질 뿐
+// 다른 describe 의 단언(testID·within)에는 영향이 없다. DSN 이 없을 때의 통과 동작은 SentryRoot.test 가 본다.
+process.env.EXPO_PUBLIC_SENTRY_DSN = 'https://key@example.invalid/1';
 
 // react-native-gesture-handler 는 네이티브 모듈을 요구하므로 공식 jest 목 설정을 먼저 건다.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -54,6 +59,19 @@ jest.mock('expo-splash-screen', () => ({
   preventAutoHideAsync: jest.fn(),
   hideAsync: mockHideAsync,
 }));
+
+// TRIP-1743 — 실물 SDK 는 init·통합 생성이 네이티브를 부른다. 호출 기록용 공용 대역(wrap 은 testID `sentry-wrap` View 로 감싼다).
+jest.mock('@sentry/react-native', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/test-support/sentryReactNativeMock')
+);
+
+// TRIP-1743 — 실물 expo-router 는 이 버킷에서 로드되지 않는다(@react-navigation/native 가 아래 대역이라 createNavigatorFactory 가 없다).
+// 추적이 켜졌을 때 SentryRoot 가 부르는 훅 하나만 둔다 — 같은 ref 객체를 돌려준다.
+jest.mock('expo-router', () => {
+  const ref = { current: null };
+  return { useNavigationContainerRef: jest.fn(() => ref) };
+});
 
 // 네비게이션 라이브러리는 ESM 배포라 node 버킷 jest 가 못 읽는다 — 대역으로 바꾼다(TRIP-1434).
 jest.mock('@react-navigation/native', () =>
@@ -230,5 +248,55 @@ describe('🔴 상황 감지 FE-A · 루트 레이아웃 — 포그라운드 푸
     // 실행은 파일 머리의 require('@routes/_layout') 다 — 이 describe 앞의 렌더 여러 번과 무관하게 1회여야 모듈 최상위 설치다.
     // 정책 내용(배너·목록 표시)은 shared/push/receive.test 가 본다. 실제 배너는 6-b 실기(T-RD-2).
     expect(Notifications.setNotificationHandler).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * TRIP-1743 · B5 — AppProviders 가 `initSentry()` 를 번들 로드 때 한 번 부르고, 그 결과로 앱 전체(가장 바깥)를 `SentryRoot` 로 감싼다.
+ * 무엇을 보장하나: ① Sentry init 은 로드 때 1번(렌더마다 다시 부르지 않는다) ② 렌더된 트리의 최상위가 `Sentry.wrap` 결과이고 앱 트리가 그 안에 있다
+ * ③ 네비게이션 통합에 expo-router ref 가 등록된다(마운트마다 1번). 이 셋 중 하나라도 빠지면 SentryRoot·initSentry 단위 테스트가 전부 green 인 채로
+ * 추적이 조용히 꺼진다 — 그 연결고리를 여기서 잠근다. 커버하지 않는 것: 실제 트랜잭션이 나가는지(6-b).
+ * 3동작: 준비(파일 머리의 DSN·대역) → 실행(render) → 단언(트리 최상위·대역 호출 기록).
+ */
+describe('🔴 TRIP-1743 · 루트 레이아웃 — Sentry 추적 배선', () => {
+  const navigationIntegration = () =>
+    (Sentry.reactNavigationIntegration as jest.Mock).mock.results[0]?.value as {
+      registerNavigationContainer: jest.Mock;
+    };
+
+  beforeEach(() => {
+    navigationIntegration()?.registerNavigationContainer.mockClear();
+  });
+
+  it('번들을 불러온 시점에 Sentry 를 정확히 한 번 init 하고, 렌더로 다시 부르지 않는다', () => {
+    // 실행은 파일 머리의 require('@routes/_layout') 다 — 앞선 describe 들의 렌더 여러 번과 무관하게 1회여야 모듈 최상위 호출이다.
+    const { rerender } = render(<RootLayout />);
+    rerender(<RootLayout />);
+
+    expect(Sentry.init).toHaveBeenCalledTimes(1);
+    expect(Sentry.reactNavigationIntegration).toHaveBeenCalledTimes(1);
+  });
+
+  it('렌더된 트리의 최상위가 Sentry.wrap 결과이고, 앱 트리(SplashGate 자리·테마)가 그 안에 있다', () => {
+    render(<RootLayout />);
+
+    // toJSON 의 최상위 호스트 = 가장 바깥. SentryRoot 가 제스처 루트 안쪽에 있거나 없으면 여기서 red.
+    expect(screen.toJSON()).toMatchObject({ props: { testID: 'sentry-wrap' } });
+    const wrapped = screen.getByTestId('sentry-wrap');
+    expect(within(wrapped).getByTestId('query-client-probe')).toBeOnTheScreen();
+    expect(
+      within(wrapped).getByTestId('mock-theme-provider')
+    ).toBeOnTheScreen();
+  });
+
+  it('네비게이션 통합에 expo-router ref 를 마운트마다 한 번 등록한다 (다시 그려도 늘지 않는다)', () => {
+    const { rerender } = render(<RootLayout />);
+    rerender(<RootLayout />);
+
+    const register = navigationIntegration().registerNavigationContainer;
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(register.mock.calls[0][0]).toBe(
+      (useNavigationContainerRef as jest.Mock)()
+    );
   });
 });

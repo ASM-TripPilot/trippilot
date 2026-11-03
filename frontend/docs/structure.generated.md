@@ -198,7 +198,8 @@
 
 ## src/app/entrypoint/
 - `src/app/entrypoint/AppProviders.tsx`  →  AppProviders
-- `src/app/entrypoint/initSentry.ts`  →  initSentry
+- `src/app/entrypoint/SentryRoot.tsx`  →  SentryRoot
+- `src/app/entrypoint/initSentry.ts`  →  SentryTracing · initSentry
 - `src/app/entrypoint/queryClient.ts`  →  createAppQueryClient
 - `src/app/entrypoint/registerBackgroundTasks.ts`  →  registerBackgroundTasks
 
@@ -1884,6 +1885,7 @@
 - `src/test-support/queryTimersUnref.ts`  →  (export 없음)
 - `src/test-support/reduceMotionReset.ts`  →  (export 없음)
 - `src/test-support/revealProbe.ts`  →  revealWrapper · RevealValues · revealValues
+- `src/test-support/sentryReactNativeMock.tsx`  →  init · reactNavigationIntegration · reactNativeTracingIntegration · wrap
 - `src/test-support/settingsHandlers.ts`  →  API_BASE · SettingsBodies · settingsHandlers · createNetworkTracker
 - `src/test-support/sheetTree.ts`  →  closestAncestor · isInsideSheet · sheetScrollOf · treeIndexOf · renderedText · closestScrollView · stubScrollTo · fireChipLayout
 - `src/test-support/splashGateRoutes.tsx`  →  SPLASH_GATE_STUB_ROUTES
@@ -1946,4 +1948,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1266개 파일
+합계 1268개 파일
