@@ -2,10 +2,12 @@
  * TRIP-1386 · 숫자 카운트업의 순수 계산(보간·포맷). 타이머·애니메이션은 호출 쪽 몫이다.
  * 표시 문자열(`12`·`38km`·`1.9km`)을 받아 숫자 앞부분만 0 에서 목표까지 올리고, 뒤 접미사(`km`)는 그대로 둔다 —
  * 중간값도 최종값과 같은 형식이라 형식이 중간에 바뀌거나 깜빡이지 않는다. 진행률 1 이상이면 입력 문자열 그대로(INV-2).
+ * `countUpText`·`easeOutCubic` 은 카운트업 반응식(UI 스레드)에서도 불려서 `'worklet'` 이다 — 정규식은 worklets 가 복제해 간다.
  */
 
 /** ease-out cubic — 처음에 빠르게 오르고 끝에서 느려진다. 0→0, 1→1, 단조 증가. */
 export function easeOutCubic(progress: number): number {
+  'worklet';
   const p = Math.min(1, Math.max(0, progress));
   return 1 - Math.pow(1 - p, 3);
 }
@@ -29,6 +31,7 @@ export function isCountable(text: string): boolean {
  * 소수 자릿수는 목표의 자릿수까지만 쓰고 끝 `.0` 은 뗀다(`formatKm` 과 같은 규칙).
  */
 export function countUpText(text: string, progress: number): string {
+  'worklet';
   const m = NUMBER_PREFIX.exec(text);
   if (m === null || progress >= 1) return text;
   const target = Number(m[1]);

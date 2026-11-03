@@ -1,6 +1,14 @@
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
-import { Animated, Easing, Text } from 'react-native';
+import { Text } from 'react-native';
+import {
+  cancelAnimation,
+  Easing,
+  runOnJS,
+  useAnimatedReaction,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { countUpText, isCountable } from '@/shared/lib/countUp';
 import { useReduceMotion } from '@/shared/lib/reduceMotion';
@@ -13,6 +21,7 @@ export const COUNT_UP_DURATION_MS = 900;
  * 그대로라 형식이 흔들리지 않는다. 0·`—`(측정 못 함) 같은 값은 애니메이션 없이 그대로(가짜 숫자 금지).
  * 동작 줄이기면 처음부터 최종값. 답이 오기 전엔 안 보이게 두어 0 → 최종값으로 번쩍이는 것을 막는다.
  * 목표 문자열이 바뀌지 않는 한 한 번만 재생한다. 끝 값은 항상 입력 문자열 그대로(INV-2).
+ * TRIP-1736 — 시계는 reanimated(UI 스레드)가 돌리고, 표시 문자열이 실제로 바뀔 때만 JS 로 넘겨 다시 그린다.
  */
 export function CountUpText({
   value,
@@ -22,36 +31,37 @@ export function CountUpText({
   className?: string;
 }): ReactElement {
   const reduce = useReduceMotion();
-  const [progress, setProgress] = useState(0);
+  const clock = useSharedValue(0);
+  const [shown, setShown] = useState(() => countUpText(value, 0));
   const animate = reduce === false && isCountable(value);
 
   useEffect(() => {
     if (!animate) return;
-    const anim = new Animated.Value(0);
-    setProgress(0);
-    const id = anim.addListener(({ value: v }) => setProgress(v));
-    const timing = Animated.timing(anim, {
-      toValue: 1,
+    clock.value = 0;
+    setShown(countUpText(value, 0));
+    clock.value = withTiming(1, {
       duration: COUNT_UP_DURATION_MS,
       easing: Easing.out(Easing.cubic),
-      // 값은 문자열로 그리는 JS 상태라 네이티브 드라이버로 흘릴 수 없다.
-      useNativeDriver: false,
     });
-    timing.start(({ finished }) => {
-      if (finished) setProgress(1);
-    });
-    return () => {
-      timing.stop();
-      anim.removeListener(id);
-    };
-  }, [animate, value]);
+    return () => cancelAnimation(clock);
+  }, [animate, value, clock]);
 
-  const shown = animate ? countUpText(value, progress) : value;
+  // 첫 계산(prev === null)은 위 effect 가 이미 그린 값이라 거른다 — 같은 문자열로 한 번 더 그리지 않게.
+  // 안 돌 때(null)는 setter 를 부르지 않는다(동작 줄이기·셀 수 없는 값).
+  useAnimatedReaction(
+    () => (animate ? countUpText(value, clock.value) : null),
+    (text, prev) => {
+      if (text !== null && prev !== null && text !== prev) {
+        runOnJS(setShown)(text);
+      }
+    }
+  );
+
   return (
     <Text
       className={reduce === null ? `${className ?? ''} opacity-0` : className}
     >
-      {shown}
+      {animate ? shown : value}
     </Text>
   );
 }
