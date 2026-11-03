@@ -48,10 +48,6 @@ class PushTokenService(
     @Transactional
     fun remove(accountId: UUID, token: String): Boolean = tokens.remove(accountId, token)
 
-    /** 계정 삭제 요청 — 이 계정의 기기를 전부 뗀다. 유예 30일 동안 푸시가 계속 가지 않게 하는 쪽이다. */
-    @Transactional
-    fun removeAll(accountId: UUID): Int = tokens.removeAll(accountId)
-
     /** 이 계정에 **쏠 수 있는 기기가 있는가**. 화면이 `권한 필요` 안내를 그릴지 판단하는 값이다. */
     @Transactional(readOnly = true)
     fun hasDeliverableDevice(accountId: UUID): Boolean = tokens.findActive(accountId).any { it.deliverable }

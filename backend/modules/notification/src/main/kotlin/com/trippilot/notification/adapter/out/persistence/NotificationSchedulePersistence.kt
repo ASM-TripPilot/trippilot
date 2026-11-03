@@ -131,6 +131,16 @@ class NotificationScheduleRepositoryAdapter(
             java.sql.Timestamp.from(at), accountId,
         )
 
+    override fun findTripIdsWithCanceledFuture(accountId: UUID, after: Instant): List<UUID> = jdbc.queryForList(
+        """
+        SELECT DISTINCT trip_id
+          FROM notification_schedule
+         WHERE account_id = ? AND fired_at IS NULL AND canceled_at IS NOT NULL AND fire_at > ?
+        """.trimIndent(),
+        UUID::class.java,
+        accountId, java.sql.Timestamp.from(after),
+    )
+
     private fun NotificationSchedule.toEntity() = NotificationScheduleEntity(
         scheduleId = scheduleId,
         accountId = accountId,

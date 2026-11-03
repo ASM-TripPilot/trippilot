@@ -71,8 +71,6 @@ class PushTokenRepositoryAdapter(private val jdbc: JdbcTemplate) : PushTokenRepo
     override fun remove(accountId: UUID, token: String): Boolean =
         jdbc.update("DELETE FROM push_token WHERE token = ? AND account_id = ?", token, accountId) == 1
 
-    override fun removeAll(accountId: UUID): Int = jdbc.update("DELETE FROM push_token WHERE account_id = ?", accountId)
-
     private fun findByToken(token: String): PushToken? = jdbc.query(
         """
         SELECT push_token_id, account_id, token, device_id, platform, os_permission, last_seen_at, invalidated_at

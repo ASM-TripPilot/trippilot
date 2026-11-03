@@ -86,10 +86,4 @@ private class FakeTokens : PushTokenRepository {
     override fun invalidateIfNotSeenSince(token: String, notSeenAfter: Instant, at: Instant) = false
 
     override fun remove(accountId: UUID, token: String): Boolean = false
-
-    override fun removeAll(accountId: UUID): Int {
-        val mine = byToken.values.filter { it.accountId == accountId }.map { it.token }
-        mine.forEach(byToken::remove)
-        return mine.size
-    }
 }

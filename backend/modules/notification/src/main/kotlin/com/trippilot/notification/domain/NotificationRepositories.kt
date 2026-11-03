@@ -109,10 +109,17 @@ interface NotificationScheduleRepository {
     /**
      * 이 계정의 **미발화·미취소** 예약을 전부 취소한다 — 계정 삭제 요청. 취소한 수를 돌려준다.
      *
-     * 지우지 않고 `canceled_at` 을 찍는다. 이미 발화한 행은 지난 사실이라 건드리지 않고, 철회(복원)하면
-     * 여행마다 [replacePending] 이 새로 만들므로 여기서 지운 것을 되살릴 필요가 없다.
+     * 지우지 않고 `canceled_at` 을 찍는다. 이미 발화한 행은 지난 사실이라 건드리지 않고, 취소 표시가 남아 있어야 철회 때
+     * **무엇을 되살릴지**([findTripIdsWithCanceledFuture]) 알 수 있다.
      */
     fun cancelPendingOf(accountId: UUID, at: Instant): Int
+
+    /**
+     * 취소됐고 아직 울릴 시각이 안 된([after] 이후) 예약이 있는 여행들 — 삭제 철회 때 되살릴 여행이다.
+     * 지난 시각의 취소(유예 초과로 닫힌 것)는 뺀다. 계정의 모든 여행이 아니라 **취소 흔적이 있는 여행만** 돌려주는 이유는, 일정이 아직
+     * 없어 리마인드가 만들어진 적 없는 여행에 철회가 새로 예약을 만들면 안 되기 때문이다(예약은 일정 생성·재계산 이벤트가 만든다).
+     */
+    fun findTripIdsWithCanceledFuture(accountId: UUID, after: Instant): List<UUID>
 }
 
 /** 최근 두 창의 실제 발송 건수(COST-U6-01). */

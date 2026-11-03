@@ -69,7 +69,6 @@ class PushDispatchPropertyTest : StringSpec({
             return true
         }
         override fun remove(accountId: UUID, token: String) = rows.removeIf { it.token == token }
-        override fun removeAll(accountId: UUID): Int = rows.count { it.accountId == accountId }.also { rows.removeIf { r -> r.accountId == accountId } }
     }
 
     class Notifications : NotificationRepository {
@@ -142,7 +141,7 @@ class PushDispatchPropertyTest : StringSpec({
 
 
     fun serviceOf(tokens: Tokens, sender: PushPort, notifications: Notifications, pushOn: Boolean = true, tickets: FakeTickets = FakeTickets()) =
-        PushDispatchService(tokens, notifications, NotificationToggleService(Toggles(pushOn), clock), sender, testMetrics(notifications), PushRateLimits(), clock, tickets)
+        PushDispatchService(tokens, notifications, NotificationToggleService(Toggles(pushOn), clock), sender, testMetrics(notifications), PushRateLimits(), clock, tickets, NoDeletionPending)
 
     /**
      * **"보냈다"와 "보낸 척했다"를 지표가 가른다**(TRIP-834).
@@ -162,7 +161,7 @@ class PushDispatchPropertyTest : StringSpec({
         val svc = PushDispatchService(
             Tokens(listOf(token(deliverable = true))), notifications,
             NotificationToggleService(Toggles(true), clock), notSending,
-            NotificationMetrics(registry, notifications), PushRateLimits(), clock, FakeTickets(),
+            NotificationMetrics(registry, notifications), PushRateLimits(), clock, FakeTickets(), NoDeletionPending,
         )
 
         svc.dispatch(notification()) shouldBe PushOutcome.SENT
@@ -255,7 +254,7 @@ class PushDispatchPropertyTest : StringSpec({
                 override fun send(tokens: List<String>, message: com.trippilot.notification.domain.PushMessage) =
                     emptyList<com.trippilot.notification.domain.PushReceipt>()
             },
-            NotificationMetrics(registry, notifications), PushRateLimits(), clock, FakeTickets(),
+            NotificationMetrics(registry, notifications), PushRateLimits(), clock, FakeTickets(), NoDeletionPending,
         )
 
         svc.dispatch(notification())
@@ -464,7 +463,7 @@ class PushDispatchPropertyTest : StringSpec({
             }
             val outcome = PushDispatchService(
                 Tokens(listOf(token(deliverable = true))), notifications, NotificationToggleService(Toggles(true), clock), broken,
-                NotificationMetrics(registry, notifications), PushRateLimits(), clock, FakeTickets(),
+                NotificationMetrics(registry, notifications), PushRateLimits(), clock, FakeTickets(), NoDeletionPending,
             ).dispatch(notification())
             val tag = registry.find(NotificationMetrics.PUSH_DISPATCH).counters().single().id.getTag("reason")
             return Triple(outcome, notifications.pushResults.single().third, tag)
