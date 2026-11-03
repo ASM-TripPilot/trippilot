@@ -1,18 +1,28 @@
 package com.trippilot.notification.application
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.trippilot.notification.domain.DevicePlatform
 import com.trippilot.notification.domain.Notification
 import com.trippilot.notification.domain.NotificationKind
 import com.trippilot.notification.domain.OsPermission
 import com.trippilot.notification.domain.PushMessage
 import com.trippilot.notification.domain.PushPort
+import com.trippilot.notification.domain.PushRateLimited
 import com.trippilot.notification.domain.PushReceipt
 import com.trippilot.notification.domain.PushStatus
 import com.trippilot.notification.domain.PushTicket
 import com.trippilot.notification.domain.PushToken
 import com.trippilot.notification.domain.PushTokenRepository
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldNotContain
+import org.slf4j.LoggerFactory
+import org.springframework.http.HttpStatus
+import org.springframework.web.client.HttpClientErrorException
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -103,6 +113,67 @@ class PushTicketRecordingTest : StringSpec({
         ).dispatch(notification()) shouldBe PushOutcome.SENT
     }
 
+    /**
+     * 프로젝트 자격 오류는 **토큰이 아니라 우리 설정**이다 — 실패 3건/15분 경보를 기다리면 첫 아침 리마인드가 전부 막힌 뒤에야 안다.
+     * 영수증 단계(`push.alert stage=receipt`)와 같은 접두로 첫 한 건에 올린다. 토큰은 싣지 않는다.
+     */
+    listOf("InvalidCredentials", "MismatchSenderId").forEach { code ->
+        "접수 단계 $code 는 push.alert stage=ticket ERROR 한 줄이다 — 토큰은 싣지 않는다" {
+            val ios = token("ExponentPushToken[secret-ios]", DevicePlatform.IOS)
+            val ok = token("ExponentPushToken[secret-ok]", DevicePlatform.ANDROID)
+            val svc = service(
+                listOf(ios, ok),
+                sender(
+                    ios.token to PushReceipt(ios.token, PushStatus.FAILED, code),
+                    ok.token to PushReceipt(ok.token, PushStatus.SENT, ticketId = "T-OK"),
+                ),
+                FakeTickets(),
+            )
+
+            val alerts = dispatchLogs { svc.dispatch(notification()) }.filter { it.formattedMessage.startsWith("push.alert") }
+
+            alerts shouldHaveSize 1
+            alerts.single().level shouldBe Level.ERROR
+            alerts.single().formattedMessage shouldBe "push.alert stage=ticket reason=$code platform=IOS"
+            alerts.single().formattedMessage shouldNotContain "secret"
+        }
+    }
+
+    "자격과 무관한 접수 실패(너무 큼·알 수 없음)는 경보 줄을 만들지 않는다 — 실패 지표가 맡는다" {
+        val a = token("ExponentPushToken[a]", DevicePlatform.IOS)
+        val b = token("ExponentPushToken[b]", DevicePlatform.IOS)
+        val svc = service(
+            listOf(a, b),
+            sender(
+                a.token to PushReceipt(a.token, PushStatus.FAILED, "MessageTooBig"),
+                b.token to PushReceipt(b.token, PushStatus.FAILED, "UNKNOWN"),
+            ),
+            FakeTickets(),
+        )
+
+        val logs = dispatchLogs { svc.dispatch(notification()) shouldBe PushOutcome.FAILED }
+
+        logs.none { it.formattedMessage.startsWith("push.alert") } shouldBe true
+    }
+
+    "접수 요청이 401·403 으로 거절되면 push.alert stage=ticket HTTP_코드 — 429 와 그 밖의 오류는 아니다" {
+        fun failing(e: Throwable) = object : PushPort {
+            override val deliversExternally = true
+            override fun send(tokens: List<String>, message: PushMessage): List<PushReceipt> = throw e
+        }
+        val t = token("ExponentPushToken[x]", DevicePlatform.IOS)
+        fun alertsFor(e: Throwable) =
+            dispatchLogs { service(listOf(t), failing(e), FakeTickets()).dispatch(notification()) shouldBe PushOutcome.FAILED }
+                .filter { it.formattedMessage.startsWith("push.alert") }.map { it.formattedMessage }
+
+        alertsFor(HttpClientErrorException(HttpStatus.UNAUTHORIZED)).single() shouldBe
+            "push.alert stage=ticket reason=HTTP_401 — 푸시 발송이 거절됐습니다(PUSH_EXPO_ACCESS_TOKEN 확인)"
+        alertsFor(HttpClientErrorException(HttpStatus.FORBIDDEN)).single().startsWith("push.alert stage=ticket reason=HTTP_403") shouldBe true
+        alertsFor(PushRateLimited("429")) shouldBe emptyList()
+        alertsFor(IllegalStateException("connect timed out")) shouldBe emptyList()
+        alertsFor(HttpClientErrorException(HttpStatus.BAD_REQUEST)) shouldBe emptyList()
+    }
+
     "기록만 하는 발송기(티켓 id 없음)는 아무것도 남기지 않는다" {
         val t = token("ExponentPushToken[x]", DevicePlatform.IOS)
         val tickets = FakeTickets()
@@ -112,6 +183,19 @@ class PushTicketRecordingTest : StringSpec({
         tickets.recorded shouldBe emptyList()
     }
 })
+
+/** 발송 서비스가 남기는 로그를 모은다 — 경보 줄이 **실제로** 나가는지는 이 줄들이 말한다. */
+private fun dispatchLogs(block: () -> Unit): List<ILoggingEvent> {
+    val logger = LoggerFactory.getLogger(PushDispatchService::class.java) as Logger
+    val appender = ListAppender<ILoggingEvent>().apply { start() }
+    logger.addAppender(appender)
+    try {
+        block()
+    } finally {
+        logger.detachAppender(appender)
+    }
+    return appender.list.toList()
+}
 
 /** 계정의 활성 토큰만 돌려주는 대역 — 이 테스트가 보는 것은 발송 뒤 티켓 기록이다. */
 private class OwnedTokens(private val rows: List<PushToken>) : PushTokenRepository {

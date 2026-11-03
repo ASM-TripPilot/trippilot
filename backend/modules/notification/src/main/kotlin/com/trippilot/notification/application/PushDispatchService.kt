@@ -13,6 +13,7 @@ import com.trippilot.notification.domain.PushTokenRepository
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.client.HttpClientErrorException
 import java.time.Clock
 import java.time.temporal.ChronoUnit
 import java.util.UUID
@@ -121,8 +122,18 @@ class PushDispatchService(
                 // 재평가 트리거가 지표에서 안 보인다. 처리(기록·결말)는 다른 발송기 예외와 같다.
                 onReason(if (e is PushRateLimited) RATE_LIMITED_REASON else "PUSH_ERROR")
                 log.warn("푸시 발송에 실패했습니다. notificationId={} 원인={}", notification.notificationId, e.toString())
+                // 접수 요청 자체가 자격으로 거절됐다 — 영수증 단계와 같은 경보 접두로 한 건이어도 바로 올린다.
+                if (e is HttpClientErrorException && (e.statusCode.value() == 401 || e.statusCode.value() == 403)) {
+                    log.error("push.alert stage=ticket reason=HTTP_{} — 푸시 발송이 거절됐습니다(PUSH_EXPO_ACCESS_TOKEN 확인)", e.statusCode.value())
+                }
                 return PushOutcome.FAILED
             }
+
+        // 프로젝트 자격 오류는 토큰 탓이 아니라 우리 설정(.p8·FCM 키)이다. 실패 3건/15분 경보를 기다리면 첫 아침 리마인드가 전부
+        // 막힌 뒤에야 안다 — 영수증 단계와 같은 접두로 첫 한 건에 바로 올린다. 토큰은 싣지 않는다.
+        receipts.firstOrNull { it.reason in PROJECT_CREDENTIAL_ERRORS }?.let { r ->
+            log.error("push.alert stage=ticket reason={} platform={}", r.reason, deliverable.firstOrNull { it.token == r.token }?.platform)
+        }
 
         receipts.filter { it.status == PushStatus.DEVICE_NOT_REGISTERED }.forEach {
             // INV-U6-07 — **즉시** 무효화한다. 다음 발송 때 다시 만나면 그때는 후보에도 없다.

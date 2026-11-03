@@ -123,7 +123,8 @@ resource "aws_cloudwatch_metric_alarm" "gateway_5xx" {
 # 푸시 — "조용한 실패"를 잡는다. 운영은 OTEL 이 꺼져 있어 푸시 지표(trippilot.push.*)가 어디로도 안 나가고, 푸시가 실패해도 알림은 알림함에 이미
 # 쌓여 5xx·재시작 알람이 하나도 안 울린다(2026-11-04 점검: 운영 푸시 46건 전부 NO_DEVICE 였는데도 아무 신호가 없었다). 백엔드가 남기는 한 줄 로그에서 센다.
 #  - `push.dispatch outcome=FAILED` — Expo 가 거절·장애(액세스 토큰 401·429·5xx·시한 초과)로 **발송 자체가 실패**한 알림. 기기가 없는(NO_DEVICE) 것과 다르다.
-#  - `push.alert` — 영수증이 알려 준 **프로젝트 자격 오류**(InvalidCredentials·MismatchSenderId = .p8·FCM 누락) 또는 영수증 조회의 401·403. 사람이 고쳐야 한다.
+#  - `push.alert` — **프로젝트 자격 오류**(InvalidCredentials·MismatchSenderId = .p8·FCM 누락) 또는 Expo 의 401·403. 사람이 고쳐야 한다.
+#    `stage=ticket` 은 접수 응답·발송 요청에서, `stage=receipt` 는 15분 뒤 영수증·영수증 조회에서 올라온다(패턴은 `stage=` 만 본다).
 # 운영 네임스페이스·backend 컨테이너만(개발 서버가 같은 로그 그룹에 쓴다). 로그 줄은 영어 접두라 필터 패턴에 한글이 없다.
 resource "aws_cloudwatch_log_metric_filter" "push_dispatch_failed" {
   count = local.alerts_count
