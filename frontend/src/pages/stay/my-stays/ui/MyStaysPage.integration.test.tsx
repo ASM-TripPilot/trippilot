@@ -1024,6 +1024,27 @@ describe('실 화면 + msw — 거점 변경·출처 칩 (옛 .release)', () => 
       ).toHaveLength(0);
     });
 
+    // TRIP-1732 — 등록 숙소 수에 상한이 없다. FlatList 라 처음엔 보이는 만큼만 마운트한다(TRIP-1363 선례).
+    it('저장 숙소가 50곳이어도 첫 렌더에 50행을 전부 그리지 않고, 첫 행은 그린다', async () => {
+      // 준비 — 어느 여행에도 안 걸린 숙소 50곳
+      serveStays(
+        Array.from({ length: 50 }, (_, i) => ({
+          ...OTA_STAY,
+          savedStayId: `m${i}`,
+          name: `숙소 ${i}`,
+        }))
+      );
+
+      // 실행
+      renderPage();
+      expect(await screen.findByTestId('my-stays-row-m0')).toBeOnTheScreen();
+
+      // 단언 — 마운트된 행 수(전환 전 50)
+      const mounted = screen.getAllByTestId(/^my-stays-row-/).length;
+      expect(mounted).toBeGreaterThan(0);
+      expect(mounted).toBeLessThan(50);
+    });
+
     it('좌표 미확정 숙소의 "거점 변경"은 잠겨 있고 눌러도 거점 화면으로 가지 않는다 (INV-U1-08)', async () => {
       // 준비
       serveStays([{ ...STAY, coordConfirmed: false }]);
