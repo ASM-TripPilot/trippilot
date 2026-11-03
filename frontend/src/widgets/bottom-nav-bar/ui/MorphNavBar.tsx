@@ -14,6 +14,7 @@ import {
 import Animated, {
   Easing,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withTiming,
   type SharedValue,
@@ -36,6 +37,7 @@ import {
   BAR_EXIT_SWAP_MS,
   barMorphFrame,
   type BarMorphDirection,
+  type BarMorphFrame,
   type BarMorphShape,
 } from '../model/barMorph';
 import { NavBarBackButton, NavBarCapsule } from './BottomNavBar';
@@ -47,7 +49,7 @@ import { NavBarBackButton, NavBarCapsule } from './BottomNavBar';
  * 변신 모션(영상 4단계 모프) — 출발 탭(`departureTab`)이 있으면 홈 탭 바와 같은 5칸(홈·탐색·일정·기록·마이)으로 시작해
  * ① 확대 → ② 생존 칸(허브 일정·기록 기록)만 남기고 컷 → ③ 폭이 줄며 생존 칸이 맨 앞으로 → ④ 뒤로 원 + 새 칸들 등장을 재생하고,
  * 뒤로 **버튼**은 그 역순을 재생한 **뒤**(`BAR_EXIT_MS` 타이머) `onBack` 을 부른다. 값은 순수 함수 `barMorphFrame(방향, 경과 ms, 폭, 칸 구성)` 이 내고,
- * 이 파일은 시간 하나(`time`)를 흘려 각 `useAnimatedStyle` 이 그 함수를 직접 읽게 한다. 구조(어느 칸이 마운트돼 있나)는 React 상태 `layer` 하나 —
+ * 이 파일은 시간 하나(`time`)를 흘리고 `useDerivedValue` 가 프레임마다 그 함수를 **한 번** 불러 둔 값(`frame`)을 각 `useAnimatedStyle` 이 읽는다(TRIP-1738). 구조(어느 칸이 마운트돼 있나)는 React 상태 `layer` 하나 —
  * 'start' = 홈 탭 바 5칸, 'final' = 뒤로 + 생존 칸 + 새 칸들. 생존 칸은 두 구조에서 같은 자리(같은 노드)라 리마운트되지 않는다.
  * 입장은 `entrance` 가 **마운트 순간** true 였을 때만(화면당 한 번 — 호출자가 정한다), OS 동작 줄이기 답이 `false` 로 확인된 뒤에 시작한다
  * (답 대기 중엔 시작 5칸 그대로, `true` 면 모션 없이 최종). 출발 탭이 없으면(탭 바 위가 아닌 진입) 모션 없이 최종 구조이고 뒤로는 즉시 `onBack`.
@@ -101,15 +103,13 @@ export interface MorphNavBarProps {
 
 type Layer = 'start' | 'final';
 type MorphClock = {
-  dir: SharedValue<BarMorphDirection>;
-  time: SharedValue<number>;
-  /** 바 전체 폭 = 화면 폭 − 좌우 30×2 (바 앵커). 기기마다 다르다. */
-  width: SharedValue<number>;
+  /** 이번 프레임의 모양 — `barMorphFrame(방향, 경과 ms, 바 폭, 칸 구성)` 을 프레임마다 한 번 계산해 둔 값(TRIP-1738). */
+  frame: SharedValue<BarMorphFrame>;
   /** 칸 구성(생존 칸 자리·새 칸 수) — 모션 내내 안 바뀌는 숫자 둘이라 일반 객체다. */
   shape: BarMorphShape;
 };
 
-/** 시작 칸·새 칸 슬롯 — 불투명도·확대를 단계 함수에서 읽는다(`barMorphFrame` 은 각 스타일 본문에서 직접 부른다 — 중첩 헬퍼는 jest 가 구독 못 한다). */
+/** 시작 칸·새 칸 슬롯 — 불투명도·확대를 이번 프레임 값에서 읽는다(스타일 본문이 `frame.value` 를 직접 읽어야 jest 도 구독한다 — 중첩 헬퍼 금지). */
 function MorphSlot({
   clock,
   group,
@@ -122,12 +122,7 @@ function MorphSlot({
   children: ReactNode;
 }): ReactElement {
   const style = useAnimatedStyle(() => {
-    const frame = barMorphFrame(
-      clock.dir.value,
-      clock.time.value,
-      undefined,
-      clock.shape
-    );
+    const frame = clock.frame.value;
     const cell =
       group === 'start' ? frame.startCells[index] : frame.newCells[index];
     return { opacity: cell.opacity, transform: [{ scale: cell.scale }] };
@@ -149,12 +144,7 @@ function SurvivorSlot({
   children: ReactNode;
 }): ReactElement {
   const style = useAnimatedStyle(() => {
-    const frame = barMorphFrame(
-      clock.dir.value,
-      clock.time.value,
-      clock.width.value,
-      clock.shape
-    );
+    const frame = clock.frame.value;
     const inner = frame.barWidth - NAV_BAR_CAPSULE_PADDING_X * 2;
     const layoutCenter =
       frame.barLeft +
@@ -238,7 +228,17 @@ export function MorphNavBar({
   useEffect(() => {
     widthSv.value = barWidth;
   }, [barWidth, widthSv]);
-  const clock: MorphClock = { dir, time, width: widthSv, shape };
+  // 프레임마다 단계 함수를 한 번만 부른다 — 예전엔 스타일 8~9개가 각자 불렀다(TRIP-1738). 칸 구성은 숫자 둘로 잡아 worklet 안에서 객체를
+  // 만든다(렌더마다 새 `shape` 객체를 클로저에 넣지 않게). 폭·구성을 다 넣어도 각 스타일이 읽는 칸은 예전과 같은 값이다 — `barScale`·`barLeft`·
+  // `backSize` 는 폭·구성과 무관하고, 칸 불투명도는 폭과 무관하다.
+  const { newCount } = shape;
+  const frame = useDerivedValue(() =>
+    barMorphFrame(dir.value, time.value, widthSv.value, {
+      survivorSlot,
+      newCount,
+    })
+  );
+  const clock: MorphClock = { frame, shape };
   const showLayer = (next: Layer) => {
     layerSv.value = next === 'start' ? 0 : 1;
     setLayer(next);
@@ -324,14 +324,14 @@ export function MorphNavBar({
   };
   // 바 전체 확대(입장 ① 만).
   const rootStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: barMorphFrame(dir.value, time.value).barScale }],
+    transform: [{ scale: frame.value.barScale }],
   }));
   // 뒤로 원: 레이아웃 폭이 0 → 58 로 열린다. 안쪽 원(58×58)은 오른쪽 가장자리를 58 에 둔 채 왼쪽으로 자라도록 옮기고 줄인다.
   const backWrapStyle = useAnimatedStyle(() => ({
-    width: barMorphFrame(dir.value, time.value).backSize,
+    width: frame.value.backSize,
   }));
   const backCircleStyle = useAnimatedStyle(() => {
-    const size = barMorphFrame(dir.value, time.value).backSize;
+    const size = frame.value.backSize;
     return {
       transform: [
         { translateX: NAV_BAR_HEIGHT / 2 - size / 2 },
@@ -342,8 +342,8 @@ export function MorphNavBar({
   // 캡슐: 왼쪽 끝이 `barLeft` 가 되도록 뒤로 폭을 뺀 만큼 왼쪽 여백을 낸다 — 뒤로–캡슐 간격 8 은 **여기 숫자 한 곳에서만** 난다
   // (최종 66 − 58 = 8, 시작 0). 루트에 `gap-*` 같은 className 간격을 또 두면 겹친다(jest 가 className 을 못 읽어 한 번 새어 나갔던 결함).
   const capsuleWrapStyle = useAnimatedStyle(() => {
-    const frame = barMorphFrame(dir.value, time.value, widthSv.value);
-    return { marginLeft: frame.barLeft - frame.backSize };
+    const now = frame.value;
+    return { marginLeft: now.barLeft - now.backSize };
   });
   const start = layer === 'start';
   // 퇴장 중이면 시작 5칸의 활성 칸은 `exitTab` — ref 라 렌더 본문에서 매번 읽는다(`pressBack` 의 `showLayer('start')` 재렌더가 이 값을 바꾼다).
