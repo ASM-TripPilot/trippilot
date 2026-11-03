@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { useGetMeLocationConsent } from '@/shared/api/index.hooks';
+import { readDevicePosition } from '@/shared/location';
+
 import type { AssistantSurface, TurnInput } from '../api/assistantContract';
 import { isAssistantApiError } from '../api/assistantPort';
 import { useSendTurn } from './assistantQueries';
@@ -15,6 +18,8 @@ import { isSlowTurn, secondsLeft } from './turnTiming';
  *   "보내지 못함 · 다시 보내기"로 바뀐다. 취소는 클라 중단이라 서버 결과는 다음 조회에서 합쳐진다.
  * - 보내는 중엔 새 턴을 막는다(ref 잠금 — 같은 이벤트 루프의 연타도 1회).
  * - 15s 가 지나면 `slow`(진행 표시 유지 + [대기 취소] 강조). 429 면 Retry-After 초 동안 막고 남은 초를 센다.
+ * - 현재 위치(U8 O-U8-5): 위치 동의가 켜지면 단말 위치를 **한 번** 읽어 두고(권한 팝업 없음), 보내는 턴마다 그 값을
+ *   `deviceLocation` 으로 싣는다. 아직 안 왔으면 기다리지 않고 위치 없이 보낸다 — "오늘 날씨" 가 여행 없이도 답하게 하는 재료다.
  */
 
 export interface PendingTurn {
@@ -49,6 +54,18 @@ export function useTurnFlow(
   const inFlightRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
 
+  // 위치 동의는 서버 값만 본다 — 조회 중·실패는 꺼짐이다. 켜지는 순간 한 번만 읽는다(같은 마운트에서 다시 안 읽음).
+  const consentOn = useGetMeLocationConsent().data?.legalConsent === true;
+  const hereRef = useRef<{ lat: number; lng: number } | null>(null);
+  const hereAskedRef = useRef(false);
+  useEffect(() => {
+    if (!consentOn || hereAskedRef.current) return;
+    hereAskedRef.current = true;
+    void readDevicePosition().then((coords) => {
+      hereRef.current = coords;
+    });
+  }, [consentOn]);
+
   // 시계 — 보내는 중(15s 판정)이거나 429 로 막힌 동안만 1초마다 다시 그린다.
   const ticking = startedAt !== null || rateLimitedUntil !== null;
   useEffect(() => {
@@ -73,12 +90,14 @@ export function useTurnFlow(
     setPending({ ...turn, status: 'SENDING' });
     setStartedAt(Date.now());
     setNow(Date.now());
+    const here = consentOn ? hereRef.current : null;
     sendTurn.mutate(
       {
         request: {
           clientTurnId: turn.clientTurnId,
           input: turn.input,
           screen: { surface },
+          ...(here ? { deviceLocation: here } : {}),
         },
         signal: controller.signal,
       },

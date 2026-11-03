@@ -75,6 +75,17 @@ class LocationConsentService(
     )
 
     @Transactional
+    override fun recordUse(accountId: UUID, purpose: LocationUsePurpose, subjectId: UUID) {
+        legalLog.append(
+            LocationLegalEvent.of(
+                AccountId(accountId), LocationLegalEventType.USE,
+                mapOf("purpose" to purpose.name, "subjectId" to subjectId.toString()), // 원시 좌표 없음(V1.3 규약)
+                clock.instant(),
+            ),
+        )
+    }
+
+    @Transactional
     override fun recordCollectionInterval(
         accountId: UUID, source: LocationCollectionSource, intervalId: UUID, tripId: UUID,
         phase: LocationIntervalPhase, at: Instant, endReason: String?, pointCount: Int?,

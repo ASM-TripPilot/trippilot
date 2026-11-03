@@ -323,6 +323,22 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
      * 그러면 "저장은 됐는데 알림은 늘 상수 문구"가 되고, 아무 데서도 안 드러난다.
      */
     @Test
+    fun `문구와 함께 적재한 지문이 발화가 읽는 조회로도 나온다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        val due = NotificationSchedule.pending(accountId, tripId, NotificationKind.TRIP_DAY, now.minusSeconds(60))
+            .copy(title = "AI 제목", body = "AI 본문", copyBasis = "0123456789abcdef")
+        val legacy = NotificationSchedule.pending(accountId, tripId, NotificationKind.TRIP_DAY, now.minusSeconds(30))
+            .copy(title = "옛 문구", body = "옛 본문")      // 지문 칸이 생기기 전에 붙은 문구 — NULL 이어야 한다
+        schedules.replacePending(tripId, listOf(due, legacy))
+
+        val picked = schedules.findDue(now, 500).associateBy { it.scheduleId }
+
+        picked.getValue(due.scheduleId).copyBasis shouldBe "0123456789abcdef"
+        picked.getValue(legacy.scheduleId).copyBasis shouldBe null
+    }
+
+    @Test
     fun `적재한 문구가 폴러를 지나 알림 제목이 된다`() {
         val accountId = newAccount()
         val tripId = newTrip(accountId)
@@ -361,5 +377,43 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
         first.join(10_000); second.join(10_000)
 
         schedules.findPendingByTrip(tripId).size shouldBe 4
+    }
+
+    /**
+     * **제자리 채우기 쓰기(`attachCopy`)의 조건이 SQL 에서 지켜지는가.** 대역으로는 못 본다 — WHERE 절이 느슨하면
+     * 먼저 붙은 문구를 덮거나, 이미 발화한 행을 고치거나, 그 사이 재적재가 새로 만든 행에 옛 문구를 붙인다.
+     * "문구 없음"의 기준은 도메인(`hasCopy` — 제목·본문 둘 다 비어 있지 않음)과 같아서, 한쪽만 있던 행은 채운다.
+     */
+    @Test
+    fun `제자리 채우기는 문구 없는 미발화 행에만 붙는다 — 이미 붙은 문구·발화한 행·없는 행은 건드리지 않는다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        fun row(kind: NotificationKind, plusSec: Long) = NotificationSchedule.pending(accountId, tripId, kind, now.plusSeconds(plusSec))
+        val lacking = row(NotificationKind.TRIP_DAY, 3600)
+        val halfFilled = row(NotificationKind.TRIP_DAY, 7200).copy(title = "제목만", body = null)
+        val filled = row(NotificationKind.TRIP_PRE, 10800).copy(title = "먼저 붙은 제목", body = "먼저 붙은 본문")
+        val fired = row(NotificationKind.TRIP_DAY, 14400)
+        schedules.replacePending(tripId, listOf(lacking, halfFilled, filled, fired))
+        schedules.markFired(fired.scheduleId, now) shouldBe true
+
+        schedules.attachCopy(lacking.scheduleId, "새 제목", "새 본문", "basis-1") shouldBe true
+        schedules.attachCopy(halfFilled.scheduleId, "새 제목2", "새 본문2", "basis-2") shouldBe true   // 한쪽만 있던 행도 채운다
+        schedules.attachCopy(filled.scheduleId, "덮는 제목", "덮는 본문", "basis-x") shouldBe false       // 먼저 붙은 문구가 이긴다
+        schedules.attachCopy(fired.scheduleId, "x", "y", "b") shouldBe false                       // 이미 발화한 행
+        schedules.attachCopy(UUID.randomUUID(), "x", "y", "b") shouldBe false                      // 없는 행(그 사이 재적재가 지웠다)
+
+        val rows = schedules.findPendingByTrip(tripId).associateBy { it.scheduleId }
+        rows.getValue(lacking.scheduleId).let { it.title to it.body } shouldBe ("새 제목" to "새 본문")
+        rows.getValue(halfFilled.scheduleId).let { it.title to it.body } shouldBe ("새 제목2" to "새 본문2")
+        rows.getValue(filled.scheduleId).let { it.title to it.body } shouldBe ("먼저 붙은 제목" to "먼저 붙은 본문")
+        // **문구와 함께 붙은 지문이 왕복한다**(V2.90) — 발화가 읽는 `findDue` 경로로도 나와야 대조가 된다.
+        rows.getValue(lacking.scheduleId).copyBasis shouldBe "basis-1"
+        rows.getValue(halfFilled.scheduleId).copyBasis shouldBe "basis-2"
+        rows.getValue(filled.scheduleId).copyBasis shouldBe null              // 덮이지 않았으니 지문도 그대로(없음)
+        // 발화한 행은 문구가 안 붙은 채 남는다 — 이미 나간 알림을 고치지 않는다.
+        jdbc.queryForObject(
+            "SELECT title IS NULL AND body IS NULL FROM notification_schedule WHERE schedule_id = ?",
+            Boolean::class.java, fired.scheduleId,
+        ) shouldBe true
     }
 }

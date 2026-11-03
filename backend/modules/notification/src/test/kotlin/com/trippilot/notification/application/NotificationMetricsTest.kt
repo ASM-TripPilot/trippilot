@@ -73,7 +73,10 @@ class NotificationMetricsTest : StringSpec({
      * 갈라져 수집기를 망가뜨린다 — 어떤 문자열이 와도 태그 값은 닫힌 집합 안이어야 한다.
      */
     "어떤 실패 사유 문자열이 와도 태그는 닫힌 집합 안이다" {
-        val allowed = setOf("none", "OTHER", "PUSH_ERROR", "DeviceNotRegistered", "MessageRateExceeded", "FAILED", "UNKNOWN")
+        val allowed = setOf(
+            "none", "OTHER", "PUSH_ERROR", "DeviceNotRegistered", "MessageRateExceeded", "FAILED", "UNKNOWN",
+            "NO_TOKEN", "NOT_GRANTED", "InvalidCredentials", "MismatchSenderId", "MessageTooBig",
+        )
 
         checkAll(Arb.string()) { raw ->
             val (metrics, registry) = fixture()
@@ -85,6 +88,21 @@ class NotificationMetricsTest : StringSpec({
                 .map { it.value }
             tags.forEach { allowed.contains(it) shouldBe true }
         }
+    }
+
+    /** 영수증 지표도 같은 닫힌 집합이다 — 벤더 자유 문자열이 태그가 되면 시계열이 무한히 갈라진다. 자격 오류는 OTHER 로 접히지 않는다. */
+    "영수증 지표의 사유도 닫힌 집합이다 — 자격 오류는 그대로, 모르는 값은 OTHER" {
+        val (metrics, registry) = fixture()
+        metrics.pushReceipt("ERROR", "InvalidCredentials", "IOS")
+        metrics.pushReceipt("ERROR", "SomethingNew", "ANDROID")
+        metrics.pushReceipt("OK", null, "IOS")
+
+        fun count(outcome: String, reason: String, platform: String) =
+            registry.find(NotificationMetrics.PUSH_RECEIPT).tag("outcome", outcome).tag("reason", reason).tag("platform", platform).counter()!!.count()
+
+        count("ERROR", "InvalidCredentials", "IOS") shouldBe 1.0
+        count("ERROR", "OTHER", "ANDROID") shouldBe 1.0
+        count("OK", "none", "IOS") shouldBe 1.0
     }
 
     /**
@@ -102,7 +120,15 @@ class NotificationMetricsTest : StringSpec({
             // 죽은 토큰은 표기 하나다 — 상태 이름은 reasonOf 가 Expo 표기로 접어 여기까지 오지 않는다.
             "DEVICE_NOT_REGISTERED" to "OTHER",
             "UNKNOWN" to "UNKNOWN",
-            "MessageTooBig" to "OTHER",
+            // 기기 없음의 두 원인 · 프로젝트 자격/발신자/크기 오류는 OTHER 로 접히지 않는다 — 가장 가능성 높은 원인(자격 누락)이
+            // 가장 안 보이는 칸이 되면 안 된다.
+            "NO_TOKEN" to "NO_TOKEN",
+            "NOT_GRANTED" to "NOT_GRANTED",
+            "InvalidCredentials" to "InvalidCredentials",
+            "MismatchSenderId" to "MismatchSenderId",
+            "MessageTooBig" to "MessageTooBig",
+            // 모르는 사유는 여전히 OTHER 다.
+            "SomethingNew" to "OTHER",
         )
         expected.forEach { (raw, tag) ->
             val (metrics, registry) = fixture()

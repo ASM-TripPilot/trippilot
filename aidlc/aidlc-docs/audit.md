@@ -2009,3 +2009,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **User Input**: (사용자 원문 발췌) "TRIP-1711 을 처리해라. … 요지: 그날 건너뛴 장소가 꼭 갈 곳(고정, isFixed)이면 재계획 결과에 다시 들어온다(웹 재QA 실측: 쩡이네포차 · 고정). … 서버에서 그날 건너뛴 POI 를 고정 슬롯에서도 빼는 쪽을 우선으로 고친다 … BR-U4-17 개정 블록에 고정 포함을 명시. … 정본 개정은 append-only 블록 + aidlc/aidlc-docs/audit.md 기록."
 **AI Response**: `construction/u4-in-trip-planb/functional-design/business-rules.md` 의 `[개정 · 2026-11-01] BR-U4-17` 블록 바로 뒤에 `[개정 · 2026-11-02 · TRIP-1711]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 건너뛴 곳은 시각 고정이어도 잠그지 않고 원 일정에 고정 표시 없이 싣는다(11-01 블록의 "잠금이 제외를 이긴다"를 건너뛴 곳에 한해 뒤집음) · 앱·트리거가 보낸 제외는 종전대로 고정이 이긴다(`ReplanCommand.skippedPoiIds` 를 따로 둔 이유) · 대상 일자만 · 완료·PARTIAL 의 지난 슬롯 잠금은 그대로. 코드 변경은 같은 브랜치(`fix/TRIP-1711-BE-replan-skip-fixed`)의 `fix(be)` 커밋(`ReplanSolver`·`ReplanFacadeService`)이다. AI 는 고치지 않았다(받은 고정을 지키는 것이 계약).
 **Context**: CONSTRUCTION — U4 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — U8 현재 위치를 턴 컨텍스트에 (O-U8-5 구현 · BR-U8-22)
+**Timestamp**: 2026-11-04T01:40:00+09:00 (작업 시점)
+**User Input**: (다른 세션이 전한 사용자 원문, 2026-11-03) "위치추적해서 날씨 찾으면 되잖아." — 도우미에 "오늘 날씨"가 답이 없던 것. 결정 자체는 2026-10-20 사용자 결정 O-U8-5("포그라운드 현재 위치를 턴 컨텍스트에 싣는다")다.
+**AI Response**: `construction/u8-conversational-assistant/functional-design/business-rules.md` 의 `[정정 · 2026-10-21 · TRIP-1524]` 블록 뒤, `[개정 · 2026-10-22 · TRIP-1553]` 앞에 `[개정 · 2026-11-04 · O-U8-5 구현]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 와이어 칸·서버 동의 재확인·법정 로그 USE(이용으로 판단)·AI 날씨 앵커 순서·FE 후속.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.

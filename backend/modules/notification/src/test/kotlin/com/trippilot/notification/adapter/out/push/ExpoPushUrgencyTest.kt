@@ -5,7 +5,9 @@ import com.trippilot.notification.domain.PushMessage
 import com.trippilot.notification.domain.PushUrgency
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldNotContain
 import org.springframework.http.MediaType
+import org.springframework.mock.http.client.MockClientHttpRequest
 import org.springframework.test.web.client.MockRestServiceServer
 import org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath
 import org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo
@@ -106,6 +108,40 @@ class ExpoPushUrgencyTest : StringSpec({
      * **표시하지 않는다** — 프론트에 `setNotificationChannelAsync` 가 아직 없어 지금 실으면
      * 안드로이드에서 조용히 사라진다(2026-09-02 실측).
      */
+    /**
+     * **소리와 보관 시간이 와이어에 실리는가.** `sound` 가 없으면 Expo 는 iOS 에서 소리 없이 배너만 올려 "도착은 했는데 아무도
+     * 모르는" 리마인드가 되고, `ttl` 이 없으면 FCM 기본(4주)이라 꺼 둔 안드로이드 기기에 며칠 전 "오늘의 일정"이 도착한다.
+     */
+    "보통 이상은 기본 소리와 시각 의미에 맞는 보관 시간으로 나간다" {
+        fun expectSoundAndTtl(urgency: PushUrgency, ttl: Int) {
+            val (adapter, server) = fixture()
+            server.expect(requestTo("http://expo.test/--/api/v2/push/send"))
+                .andExpect(jsonPath("$[0].sound").value("default"))
+                .andExpect(jsonPath("$[0].ttl").value(ttl))
+                .andRespond(withSuccess(okBody, MediaType.APPLICATION_JSON))
+
+            adapter.send(listOf("ExponentPushToken[x]"), PushMessage("제목", "본문", urgency = urgency))
+
+            server.verify()
+        }
+        expectSoundAndTtl(PushUrgency.TIME_SENSITIVE, 2 * 3_600)
+        expectSoundAndTtl(PushUrgency.ACTIVE, 6 * 3_600)
+    }
+
+    /** 조용한 등급은 소리를 싣지 않는다(키째로 빠진다 — `null` 을 싣지 않는다). 보관 시간은 하루다. */
+    "조용한 것은 소리 키가 없고 하루 보관이다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://expo.test/--/api/v2/push/send"))
+            // jsonPath 의 doesNotExist 는 `"sound":null` 도 "없음"으로 읽는다 — 키째로 빠졌는지는 원문으로 본다.
+            .andExpect { request -> (request as MockClientHttpRequest).bodyAsString shouldNotContain "\"sound\"" }
+            .andExpect(jsonPath("$[0].ttl").value(24 * 3_600))
+            .andRespond(withSuccess(okBody, MediaType.APPLICATION_JSON))
+
+        adapter.send(listOf("ExponentPushToken[x]"), PushMessage("제목", "본문", urgency = PushUrgency.PASSIVE))
+
+        server.verify()
+    }
+
     "channelId 를 싣지 않는다 — 프론트가 채널을 만들기 전까지" {
         val (adapter, server) = fixture()
         server.expect(requestTo("http://expo.test/--/api/v2/push/send"))

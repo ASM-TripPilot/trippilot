@@ -134,7 +134,7 @@ class NotificationToggleServiceTest : StringSpec({
         val schedules = FakeSchedules().apply { stored += schedule }
         val notifications = FakeNotifications()
 
-        NotificationFiringService(schedules, notifications, svc, noPush(clock, notifications, svc), clock).fire(schedule) shouldBe FireOutcome.MUTED
+        NotificationFiringService(schedules, notifications, svc, noPush(clock, notifications, svc), FakePlans(), clock).fire(schedule) shouldBe FireOutcome.MUTED
 
         notifications.stored shouldBe emptyList()
         // 예약은 소비된다 — 남겨 두면 다음 폴링이 계속 집어 배치를 채운다.
@@ -149,7 +149,7 @@ class NotificationToggleServiceTest : StringSpec({
         val schedules = FakeSchedules().apply { stored += schedule }
         val notifications = FakeNotifications()
 
-        NotificationFiringService(schedules, notifications, svc, noPush(clock, notifications, svc), clock).fire(schedule) shouldBe FireOutcome.FIRED
+        NotificationFiringService(schedules, notifications, svc, noPush(clock, notifications, svc), FakePlans(), clock).fire(schedule) shouldBe FireOutcome.FIRED
 
         notifications.stored.size shouldBe 1
     }

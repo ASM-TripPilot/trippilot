@@ -344,7 +344,32 @@ def collect_region(
     return stats
 
 
+def check_extraction(run: dict) -> int:
+    """이번 실행 지역이 전부 LLM 폴백이면 1 — 잡을 빨갛게 한다.
+
+    폴백은 지역 하나의 일시 실패로 보고 수집을 이어 가지만(main), 전 지역 폴백은 키·엔드포인트
+    고장이다. 10-24 부터 401 로 매일 전멸했는데 이 잡은 초록이었다 — 같은 키 고장을 ai-llm-smoke 가
+    빨갛게 알렸지만 "행사 신규 0건"에는 아무 신호가 없었다.
+    main 이 바로 실패하지 않는 것은 뒤 단계(축제·팝업·만료 청소·영속)를 살리기 위해서다 —
+    판정은 영속 뒤 마지막 단계(--check)가 한다. 하드캡 조기 종료로 지역이 0이면 LLM 실패가 아니다.
+    지역 1개만 돈 실행(수동 regions=서울 등)은 그 지역의 일시 실패도 빨강이다 — 한 지역으로는
+    키 고장과 일시 실패를 가를 수 없어 놓치는 쪽보다 알리는 쪽을 고른다(스케줄은 17개 지역).
+    """
+    regions = run.get("regions") or []
+    failed = [r for r in regions if r.get("fallback")]
+    errors = ", ".join(sorted({str(r.get("error")) for r in failed}))
+    if regions and len(failed) == len(regions):
+        print(f"::error::행사 추출이 이번 실행 {len(regions)}개 지역 전부 LLM 폴백(신규 0건) — "
+              f"키·엔드포인트를 확인하라: {errors}")
+        return 1
+    if failed:
+        print(f"::warning::행사 추출 폴백 {len(failed)}/{len(regions)}개 지역: {errors}")
+    return 0
+
+
 def main() -> int:
+    if len(sys.argv) >= 3 and sys.argv[1] == "--check":
+        return check_extraction(json.loads(Path(sys.argv[2]).read_text(encoding="utf-8")))
     if len(sys.argv) >= 3 and sys.argv[1] == "--summary":
         run = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
         print("## 행사 웹소싱 배치 (NAVER API HUB × EVENT_EXTRACTION)")

@@ -350,3 +350,28 @@ internal class CapturingEvents : com.trippilot.core.event.DomainEventPublisher {
     val published = mutableListOf<com.trippilot.core.event.DomainEvent>()
     override fun publish(event: com.trippilot.core.event.DomainEvent) { published += event }
 }
+
+/** 위치 동의(L2) + 법정 로그 대역(O-U8-5) — 기본은 동의 꺼짐. [uses] 는 1회 이용 기록(계정·목적·대상)이다. */
+internal class FakeLocation(var consent: Boolean = false) :
+    com.trippilot.auth.api.LocationConsentFacade, com.trippilot.auth.api.LocationLegalLogFacade {
+    var failRecord = false
+    val uses = mutableListOf<Triple<UUID, com.trippilot.auth.api.LocationUsePurpose, UUID>>()
+    override fun hasGpsRecordingOptIn(accountId: UUID) = false
+    override fun hasLocationLegalConsent(accountId: UUID) = consent
+    override fun recordUse(accountId: UUID, purpose: com.trippilot.auth.api.LocationUsePurpose, subjectId: UUID) {
+        check(!failRecord) { "legal log down" }
+        uses += Triple(accountId, purpose, subjectId)
+    }
+    override fun recordCollection(accountId: UUID, source: com.trippilot.auth.api.LocationCollectionSource, subjectId: UUID, pointCount: Int?) =
+        error("도우미는 위치를 저장하지 않는다")
+    override fun recordPurge(accountId: UUID, scope: com.trippilot.auth.api.LocationPurgeScope, purgedCount: Int) =
+        error("도우미는 위치를 저장하지 않는다")
+    override fun recordUseInterval(
+        accountId: UUID, purpose: com.trippilot.auth.api.LocationUsePurpose, intervalId: UUID, tripId: UUID,
+        phase: com.trippilot.auth.api.LocationIntervalPhase, at: Instant, endReason: String?, regionCount: Int?,
+    ) = error("도우미는 구간 로그를 쓰지 않는다")
+    override fun recordCollectionInterval(
+        accountId: UUID, source: com.trippilot.auth.api.LocationCollectionSource, intervalId: UUID, tripId: UUID,
+        phase: com.trippilot.auth.api.LocationIntervalPhase, at: Instant, endReason: String?, pointCount: Int?,
+    ) = error("도우미는 구간 로그를 쓰지 않는다")
+}

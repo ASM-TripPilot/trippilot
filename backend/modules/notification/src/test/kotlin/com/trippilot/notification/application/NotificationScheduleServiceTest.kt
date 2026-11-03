@@ -40,7 +40,7 @@ class NotificationScheduleServiceTest : StringSpec({
     fun fixture(now: String, start: String, end: String): Triple<NotificationScheduleService, FakeSchedules, FakeTripOwner> {
         val schedules = FakeSchedules()
         val trips = FakeTripOwner().apply { put(tripId, acc, LocalDate.parse(start), LocalDate.parse(end)) }
-        return Triple(NotificationScheduleService(trips, schedules, NoCopies(), FakePlans(), clockAt(now), ReminderCopyRetries(180_000)), schedules, trips)
+        return Triple(NotificationScheduleService(trips, schedules, NoCopies(), FakePlans(), clockAt(now), ReminderCopyRetries(listOf(180_000L))), schedules, trips)
     }
 
     /**
@@ -65,7 +65,7 @@ class NotificationScheduleServiceTest : StringSpec({
             }
         }
         val svc = NotificationScheduleService(
-            trips, ordered, NoCopies(), FakePlans(), clockAt("2026-08-01T00:00:00Z"), ReminderCopyRetries(180_000),
+            trips, ordered, NoCopies(), FakePlans(), clockAt("2026-08-01T00:00:00Z"), ReminderCopyRetries(listOf(180_000L)),
         )
 
         svc.reload(tripId)

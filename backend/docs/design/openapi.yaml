@@ -4839,6 +4839,15 @@ components:
           required: [surface]
           properties:
             surface: { type: string, enum: [HOME, STAY_SEARCH, ITINERARY, LIVE, STAY_DETAIL] }
+        deviceLocation:
+          type: object
+          description: >-
+            앱의 포그라운드 현재 위치(선택, U8 O-U8-5). 서버가 위치 동의(L2)를 확인한 턴에만 해석에 싣고 이용 사실을 법정 로그에 남긴다 —
+            동의가 없으면 버린다. 저장하지 않는다. 앱은 위치 동의가 켜졌고 단말 권한이 이미 있을 때만 1회 읽어 보낸다(권한 팝업 없음).
+          required: [lat, lng]
+          properties:
+            lat: { type: number, format: double, minimum: -90, maximum: 90 }
+            lng: { type: number, format: double, minimum: -180, maximum: 180 }
     AssistantSendTurnResponse:
       type: object
       required: [messages, quickReplies]
