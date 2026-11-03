@@ -649,7 +649,8 @@ def test_region_the_user_did_not_say_is_dropped_so_explore_stays_near_the_itiner
     def anchor_kind(utterance: str) -> str:
         _, b = _plan_turn(plan, utterance, answer=_answer_json("감천문화마을을 찾아봤어요."))
         (answer_req,) = [r for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_ANSWER"]
-        return "region" if '"anchor_kind": "region"' in answer_req.prompt else "other"
+        facts = answer_req.prompt.split("\n[확인된 사실]\n")[-1]  # 프롬프트 예시에도 같은 꼴 JSON 이 있다 — 실제 사실 칸만 본다
+        return "region" if '"anchor_kind": "region"' in facts else "other"
 
     assert anchor_kind("부산에서 저녁 먹을 데 있어?") == "region"
     assert anchor_kind("저녁 먹을 데 있어?") == "other"  # region 을 버려 일정 근처·여행지로 찾는다
