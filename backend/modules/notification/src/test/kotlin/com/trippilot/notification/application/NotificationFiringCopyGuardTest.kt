@@ -76,6 +76,20 @@ class NotificationFiringCopyGuardTest : StringSpec({
         }
     }
 
+    /**
+     * 나간 문구의 출처를 **한 줄로** 센다 — 운영에서 학생 모델 문구가 실제로 몇 % 나가는지는 이 줄(`reminder.fire kind=… copy=…`)로만 안다.
+     * AI = 저장된 문구가 나갔다 · CONSTANT = 문구가 없어 상수 · STALE = 문구가 있었으나 일정이 바뀌어 접었다.
+     */
+    "발화 로그가 문구의 출처를 AI·CONSTANT·STALE 로 남긴다" {
+        val basis = CopyBasis.of(listOf("성산일출봉"))
+        fun fireLines(schedule: NotificationSchedule, plans: ItineraryPlanFacade) =
+            logsFrom { fireTitle(schedule, plans) }.filter { it.startsWith("reminder.fire ") }
+
+        fireLines(copied(basis), FakePlans(mapOf(day to listOf(place("성산일출봉"))))) shouldBe listOf("reminder.fire kind=TRIP_DAY copy=AI")
+        fireLines(copied(basis), FakePlans(mapOf(day to listOf(place("우도"))))) shouldBe listOf("reminder.fire kind=TRIP_DAY copy=STALE")
+        fireLines(copied(basis).copy(title = null, body = null), FakePlans()) shouldBe listOf("reminder.fire kind=TRIP_DAY copy=CONSTANT")
+    }
+
     "지문이 없는 문구(이 칸이 생기기 전에 붙은 것)는 대조할 근거가 없어 그대로 쓴다" {
         fireTitle(copied(basis = null), FakePlans(mapOf(day to listOf(place("완전히 다른 곳"))))) shouldBe "AI 제목"
     }

@@ -45,12 +45,22 @@ class NotificationFiringService(
         // 반환값을 버려도 되는 것은 [NotificationSchedule.toNotification] 이 `sourceEventId = null` 로
         // 만들기 때문이다 — UNIQUE 가 걸리지 않아 항상 삽입된다. 거기에 원천 이벤트를 싣게 되면
         // 여기서 false 를 받고도 FIRED 를 보고하게 되므로, 그때는 이 줄을 함께 고쳐야 한다.
-        val notification = (if (copyStillMatchesPlan(schedule)) schedule else schedule.withoutCopy()).toNotification(now)
+        val matches = copyStillMatchesPlan(schedule)
+        val notification = (if (matches) schedule else schedule.withoutCopy()).toNotification(now)
         notifications.appendIfAbsent(notification)
+        // 사용자에게 **어떤 문구가 나갔는가** — AI 문구 / 상수 문구(채우지 못함) / 일정이 바뀌어 접음. 이 한 줄이 "학생 모델 문구가 실제로 몇 %
+        // 나가는가"의 유일한 근거다(적재 로그는 만든 수일 뿐 나간 수가 아니다). 계정·여행은 싣지 않는다 — 건수를 세려는 줄이다.
+        log.info("reminder.fire kind={} copy={}", schedule.kind, copySource(schedule, matches))
         // **적재가 먼저다**(INV-U6-02 · TRIP-549). 푸시가 실패해도 알림함 행은 남아 catch-up 이
         // 그것을 준다 — "누락 0"의 근거는 푸시가 아니라 이 행의 영속성이다.
         pushes.dispatch(notification)
         return FireOutcome.FIRED
+    }
+
+    private fun copySource(schedule: NotificationSchedule, matches: Boolean) = when {
+        !schedule.hasCopy -> "CONSTANT"
+        matches -> "AI"
+        else -> "STALE"
     }
 
     /**
