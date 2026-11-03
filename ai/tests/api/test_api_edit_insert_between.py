@@ -363,6 +363,36 @@ def test_unreadable_position_with_a_cue_is_not_appended() -> None:
     assert body["status"] == "TRANSLATION_FAILED" and "position_unread" in body["reason"], body
 
 
+def test_front_of_day_add_without_an_anchor_is_not_appended() -> None:
+    """맨 앞에 넣으라는 말에 번역이 기준점을 빼면 맨 끝에 붙이지 않는다 — 실 번역 A/B 에서 '반영됨'으로 끝에 붙었다(2026-11-04)."""
+    canned = json.dumps({"editCommand": {"op": "ADD_SLOT", "params": {"targetPoiId": str(HYOCHANG.poi_id)},
+                                         "affectedSlots": []}})
+    body = _post(_body(utterance="효창공원을 맨 앞에 넣어줘"), llm=FakeLlm(canned=canned))
+    assert body["status"] == "TRANSLATION_FAILED" and "position_unread" in body["reason"], body
+
+
+def test_first_day_ordinal_is_not_a_position() -> None:
+    """'첫 번째 날에'는 날이지 자리가 아니다 — 하루 맨 앞 단서가 날 서수까지 잡던 판에선 끝에 붙어야 할 추가가 '알아듣지 못했어요'였다
+    (2026-11-04 리뷰 재현: develop APPLIED → TRANSLATION_FAILED)."""
+    canned = json.dumps({"editCommand": {"op": "ADD_SLOT", "params": {"targetPoiId": str(HYOCHANG.poi_id)},
+                                         "affectedSlots": []}})
+    body = _post(_body(utterance="첫 번째 날에 효창공원 추가해줘"), llm=FakeLlm(canned=canned))
+    assert body["status"] == "APPLIED" and _ids(body)[-1] == str(HYOCHANG.poi_id), body
+
+
+def test_code_resolved_position_wins_over_a_guessed_translation_anchor() -> None:
+    """코드가 말의 자리를 풀면 번역 기준점보다 코드 기준점 — 번역은 좌표를 못 봐 "이태원에서 홍대로"를 슬롯 이름으로 짐작한다(0.4.0 부터 번역도
+    기준점을 싣는다). 짐작한 이웃 아닌 짝을 그대로 쓰면 '이웃이 아님'으로 거부됐다(2026-11-04 리뷰 재현)."""
+    canned = json.dumps({"editCommand": {"op": "ADD_SLOT", "params": {
+        "targetPoiId": str(HYOCHANG.poi_id), "afterPoiId": str(GYEONGNI.poi_id), "beforePoiId": str(MANGWON.poi_id)},
+        "affectedSlots": []}})
+    body = _post(_body(utterance="이태원에서 홍대로 넘어갈 때 효창공원 넣어줘"), llm=FakeLlm(canned=canned))
+    assert body["status"] == "APPLIED", body
+    assert _ids(body) == [str(p.poi_id) for p in (GYEONGBOK, GYEONGNI, HYOCHANG, YEONNAM, MANGWON)]
+    assert body["command"]["params"] == {"targetPoiId": str(HYOCHANG.poi_id),
+                                         "afterPoiId": str(GYEONGNI.poi_id), "beforePoiId": str(YEONNAM.poi_id)}
+
+
 def test_neighbourhood_station_resolves_to_its_neighbourhood() -> None:
     body = _post(_body(utterance="홍대입구역 가기 전에 카페 하나 넣어줘"))
     assert body["status"] == "APPLIED" and _ids(body)[2] == str(GONGDEOK_CAFE.poi_id), body

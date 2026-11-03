@@ -116,6 +116,19 @@ class ReflectionTemplateContext:
             raise ValueError("visit_refs ≥ 1 (BR-U6R-15)")
 
 
+# 지역의 짧은 꼴 — 백엔드는 지역을 카탈로그 이름(첫 목적지 — '부산광역시'·'제주특별자치도'·'해운대구')으로 보내는데 사람이 쓰는 태그는
+# #부산여행·#해운대맛집이다. 원문만 대조하던 동안 운영 입력에선 #부산여행조차 HASHTAG_OUT 이라 공유 카드가 카드째 정적 문구였다(2026-11-04
+# 리뷰). 행정 접미 하나만 떼고 두 글자 이상 남을 때만 받는다 — '중구'의 '중'처럼 한 글자는 아무 태그에나 들어간다
+_ADMIN_TAIL = re.compile(r"(?:특별자치도|특별자치시|특별시|광역시|도|시|군|구)$")
+
+
+def _region_forms(region: str) -> tuple[str, ...]:
+    """해시태그 대조에 쓸 지역 꼴 — 공백을 뺀 원문과 행정 접미를 뗀 꼴('부산광역시' → 부산광역시·부산, '중구' → 중구)."""
+    text = "".join(region.split())
+    short = _ADMIN_TAIL.sub("", text)
+    return tuple(dict.fromkeys(f for f in (text, short if len(short) >= 2 else "") if f))
+
+
 def _tag_allowed(tag: str, sources: tuple[str, ...]) -> bool:
     """지역명·방문지명을 부분 포함하거나 브랜드 고정 태그면 허용.
 
@@ -412,7 +425,7 @@ class ReflectionTemplateGate:
         # 라벨은 인덱스형 — 태그 문자열을 라벨에 실으면 태그 내 콜론({poi:i.name}
         # 자리표시자가 설계상 포함)이 composer의 재파싱을 깨뜨린다 (PBT 실측).
         sources = tuple(
-            t for t in (ctx.region, *ctx.poi_names) if t and t.strip()
+            t for t in (*_region_forms(ctx.region), *ctx.poi_names) if t and t.strip()
         )
         for i, tag in enumerate(template.hashtags):
             check_text(tag, None, f"hashtags[{i}]")

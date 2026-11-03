@@ -57,6 +57,7 @@ from trippilot.llm_gateway.gates.content.reflection_template import (
     _BOUND_TAG,
     _PLACEHOLDER,
     _TIME_EXPR,
+    _region_forms,
     _tag_allowed,
 )
 from trippilot.domain.common import TraceId
@@ -200,7 +201,7 @@ def _tag_sources(ctx: ShareCardCopyContext) -> tuple[str, ...]:
     (회고 카드에도 같은 구멍이 있었다) 이 공백 제거형은 중복이지만 무해하다.
     """
     out: list[str] = []
-    for raw in (ctx.region, *ctx.poi_names):
+    for raw in (*_region_forms(ctx.region), *ctx.poi_names):  # 지역은 짧은 꼴도(#부산여행 ← '부산광역시')
         text = raw.strip()
         if not text:
             continue

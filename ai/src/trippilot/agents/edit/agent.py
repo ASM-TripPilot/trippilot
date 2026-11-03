@@ -302,23 +302,28 @@ class EditAgent:
                     return replace(translated, reason=f"{translated.reason} / insert_between: {unresolved}")
                 return translated
             command, apply_mode = translated
-            # 자리를 말한 추가인데 번역이 기준점을 뺐다 — 끝에 붙이면 '반영됨'으로 위장된다(INV-4). 이름을 콕 집은 말은
-            # 번역이 "무엇", 코드가 "어디"를 맡아 기준점을 채운다(2026-10-22 실측: "효창공원을 경리단길 끝나고"가 맨 끝에 붙었다)
-            place = ask or (parse_insert_place(task.utterance)
-                            if command.op is EditOp.ADD_SLOT and not _anchored(command) else None)
-            if place is None and command.op is EditOp.ADD_SLOT and not _anchored(command) and position_cue(task.utterance):
+            # 자리를 말한 추가 — 번역이 "무엇", 코드가 "어디"를 맡는다. 코드가 말의 자리를 풀면 번역이 실은 기준점보다 코드 기준점이 이긴다:
+            # 번역은 좌표를 못 본다(프롬프트 0.4.0 부터 번역도 기준점을 싣는데, "이태원에서 홍대로 넘어갈 때"를 슬롯 이름으로 짐작하면 이웃 아닌
+            # 짝이 나온다 — 2026-11-04 리뷰). 코드가 못 풀면 번역 기준점을 쓰고, 둘 다 없으면 끝에 붙이지 않는다 — '반영됨' 위장(INV-4,
+            # 2026-10-22 실측: "효창공원을 경리단길 끝나고"가 맨 끝에 붙었다)
+            add = command.op is EditOp.ADD_SLOT
+            place = ask or (parse_insert_place(task.utterance) if add else None)
+            if place is None and add and not _anchored(command) and position_cue(task.utterance):
                 return EditOutcome(status=EditStatus.TRANSLATION_FAILED, reason="insert_between: position_unread")
-            if place is not None and command.op is EditOp.ADD_SLOT and not _anchored(command):
+            if place is not None and add:
                 gap = unresolved if ask is not None else self._resolve(task, place)
-                if isinstance(gap, str):
+                if isinstance(gap, str) and not _anchored(command):
                     return EditOutcome(status=EditStatus.TRANSLATION_FAILED,
                                        reason=f"insert_between: position_dropped ({gap})")
-                day = next(d for d in task.solution.days if d.date == task.target_date)
-                command = EditCommand(command.op, {**command.params, **_anchors(day, gap)}, command.affected_slots)
-                out = self._apply(task, command, apply_mode)
-                self._log(task, place, outcome=f"ANCHORED_{out.status.value}", resolved_by=list(gap.resolved_by),
-                          codes=sorted({v.code for v in out.violations}))
-                return out
+                if not isinstance(gap, str):
+                    day = next(d for d in task.solution.days if d.date == task.target_date)
+                    translated_anchor = _anchored(command)
+                    params = {k: v for k, v in command.params.items() if not is_anchor_param_key(k)}
+                    command = EditCommand(command.op, {**params, **_anchors(day, gap)}, command.affected_slots)
+                    out = self._apply(task, command, apply_mode)
+                    self._log(task, place, outcome=f"ANCHORED_{out.status.value}", resolved_by=list(gap.resolved_by),
+                              translated_anchor=translated_anchor, codes=sorted({v.code for v in out.violations}))
+                    return out
         else:
             assert task.command is not None  # __post_init__ 이 보장
             command, apply_mode = task.command, resolve_apply_mode(task.command)
