@@ -11,8 +11,9 @@
 
 **게이트** — 주제에서 일반 형용사·요청 꼴 말(가볼·만한·추천·근처·곳…)·지역 이름·종류 낱말을 뺀 낱말이 하나라도 남아야 연다
 ("서울 가볼 만한 곳"·"부산 맛집"·"제주 카페 추천"은 닫힌다 — 규칙 정렬 그대로). 테마 태그로 이미 잇는 속성 낱말(조용·아이랑 —
-`theme_tags`)은 BM25 낱말에 남기되, 게이트를 여는지는 변형으로 고른다(G1: 열지 않는다 · G2: 연다). BM25 낱말에는 종류 이름을 넣지 않는다
-("카페"를 넣으면 범위의 거의 모든 카페 조각이 근거를 갖는다). 임베딩 질의 = 남은 낱말 + 종류 한글명.
+`theme_tags`)은 BM25 낱말에 남기되, 게이트를 여는지는 변형으로 고른다(G1: 열지 않는다 · G2: 연다). BM25 항에는 종류 이름을 넣지 않는다
+("카페"를 넣으면 범위의 거의 모든 카페 조각이 근거를 갖는다) — 낱말로도("카페들"·"쇼핑하기"), 합성어 안의 2-gram 으로도("북카페"의 '카페',
+`bm25_terms`). 임베딩 질의 = 남은 낱말 + 종류 한글명.
 
 **기본 꺼짐** — `TRIPPILOT_KB5_OPEN_SEARCH=on` 일 때만 배선이 검색기를 붙인다(`place_fallback.SWITCH` 와 같은 꼴). 이 모듈은 표준
 라이브러리와 내부 모듈만 쓴다(`tests/test_architecture.py` poi_curation 순수성).
@@ -61,14 +62,13 @@ def read_index(paths: Iterable[Path]) -> dict[str, tuple[str, ...]]:
     빈다(부가 정보라 없이 간다, INV-4 — 사유는 로그)."""
     out: dict[str, list[str]] = defaultdict(list)
     for path in paths:
-        try:
+        try:  # id 를 펼치는 데까지 — `ids` 가 null·문자열이 아닌 값이어도 그 파일 몫만 빈다
             head = json.loads(gzip.decompress(Path(path).read_bytes()))
-            ids = head["ids"]
+            pairs = [(i.split(":", 1)[-1].split("#", 1)[0], i) for i in head["ids"]]
         except Exception as e:  # noqa: BLE001 — 깨진 머리 하나가 탐색을 막으면 안 된다
             log.warning("kb5 open search index unavailable %s: %s", Path(path).name, type(e).__name__)
             continue
-        for i in ids:
-            ref = i.split(":", 1)[-1].split("#", 1)[0]
+        for ref, i in pairs:
             if ref:
                 out[ref].append(i)
     return {ref: tuple(ids) for ref, ids in out.items()}
@@ -87,23 +87,29 @@ def chunk_index() -> Mapping[str, tuple[str, ...]]:
 # ── 질의 낱말 · 게이트 ──────────────────────────────────────────────────────────
 
 _WORD = re.compile(r"[가-힣A-Za-z]{2,}")
-# 요청 꼴 말 — 무엇을 찾는지가 아니라 찾아 달라는 말·찾는 자리·인기 신호(인기는 규칙 정렬의 '요즘 인기' 태그가 이미 읽는다).
-# 낱말 안의 조각으로 지운다("가볼만한곳"·"북카페추천"). '데'는 '갈 데' 꼴만 — 데이트를 지우지 않게
+# 요청 꼴 말 — 무엇을 찾는지가 아니라 찾아 달라는 말·찾는 자리·인기 신호(인기·많은은 규칙 정렬의 '요즘 인기' 태그·저장 수가 이미 읽는다).
+# 낱말 안의 조각으로 지운다("가볼만한곳"·"북카페추천"). '데'는 '갈 데' 꼴만 — 데이트를 지우지 않게.
+# 리뷰(2026-11-04)로 더한 꼴 — 낱말 안 조각만 지우면 남는 꼬리가 게이트를 열었다: "핫플레이스"의 '레이스' · "먹을 만한"·"들를 곳"의
+# '먹을'·'들를'(을·를 받침 꼴 — 앞 한 글자는 낱말이 못 된다) · "인기 많은"·"볼거리 많은"의 '많은' · "어디 갈까"의 '갈까'
 _REQUEST = re.compile(
-    r"가\s?볼|[갈볼놀할먹쉴들]\s?만한|만한|추천|근처|주변|장소|알려|찾아|보여|골라|해\s?줘|해\s?주|주세요|줄래|있을까|있어|있나|있는"
-    r"|어디|요즘|핫한|핫플|인기|유명|가기|군데|하나|[갈놀할먹쉴볼]\s?(?:곳|데)(?![가-힣])|곳")
+    r"가\s?볼|[갈볼놀할먹쉴들을를]\s?만한|만한|추천|근처|주변|장소|알려|찾아|보여|골라|해\s?줘|해\s?주|주세요|줄래|있을까|있어|있나|있는"
+    r"|어디|요즘|핫한|핫플(?:레이스)?|인기|유명|많은|많고|많이|가기|군데|하나|먹을(?:거리)?|[갈볼할놀쉴]\s?(?:까|래)"
+    r"|[갈놀할먹쉴볼을를]\s?(?:곳|데)(?![가-힣])|곳")
 # 종류 낱말 — 분류의 `category` 가 이미 고른 축(풀 필터)이라 근거 낱말로 쓰지 않는다. 조사가 붙어도 같다
 _KIND_WORDS = frozenset({
     "명소", "맛집", "카페", "야경", "자연", "쇼핑", "문화", "액티비티", "미술", "술집", "식당", "음식점", "밥집", "관광지", "관광",
     "관광명소", "볼거리", "먹거리", "놀거리", "구경", "커피숍", "레스토랑",
 })
 _JOSA = re.compile(r"(?:이랑|랑|에서|으로|로|에|을|를|이|가|은|는|도|만|의|과|와|하고)$")
+# 합성어 안에서 종류 이름이 차지한 2-gram — BM25 항에서 뺀다(`bm25_terms`)
+_KIND_RX = re.compile("|".join(sorted(map(re.escape, _KIND_WORDS), key=len, reverse=True)))
+_KIND_TAILS = tuple(sorted(_KIND_WORDS))
 # BM25 낱말의 끝 — 2-gram 이 말뜻에 맞게 뗀다(결정론 측정 1회차, 2026-11-04: 끝을 안 떼면 '산책하기'의 2-gram '하기'가 개요 거의 전부에
 # 걸려 생선찜집이 "산책하기 좋은 숲길"의 근거를 가졌고, '아이랑'의 '이랑'·'오는데'의 '는데'도 같은 꼴이었다).
-# - 동사 꼴(하기·하는·는데·는)은 늘 뗀다 — 남는 말이 한 글자면 낱말이 빠진다("비 오는 날"의 '오는'이 빈말로 게이트를 열지 않게)
+# - 동사 꼴(하기·하는·할·는데·는)은 늘 뗀다 — 남는 말이 한 글자면 낱말이 빠진다("비 오는 날"의 '오는'이 빈말로 게이트를 열지 않게)
 # - 조사는 남는 말이 두 글자 이상일 때만 뗀다("아이랑"→아이 · "실내로"→실내). '이'·'가'는 떼지 않는다(구이·놀이·휴가)
 # - 형용사 관형형(한·운·은·인)은 남는 말이 두 글자 이상일 때만("조용한"→조용 · "매운"·"작은"은 그대로 — 2-gram 이 남게)
-_VERB_ENDS = ("하기", "하는", "는데", "는")
+_VERB_ENDS = ("하기", "하는", "는데", "는", "할")
 _JOSA_ENDS = ("이랑", "에서", "으로", "하고", "랑", "와", "을", "를", "에", "로", "의")
 _ADJ_END = ("한", "운", "은", "인")
 
@@ -120,14 +126,18 @@ def _stem(word: str) -> str:
     verb = next((e for e in _VERB_ENDS if word.endswith(e)), None)
     if verb is not None:
         return word[:-len(verb)]
-    josa = next((e for e in _JOSA_ENDS if word.endswith(e) and len(word) - len(e) >= 2), None)
+    # 종류 이름으로 끝나면 조사로 보지 않는다 — "북레스토랑"의 '랑'을 떼면 '레스토'가 남아 종류 이름 2-gram 이 BM25 항으로 샜다(PBT)
+    josa = None if word.endswith(_KIND_TAILS) else next(
+        (e for e in _JOSA_ENDS if word.endswith(e) and len(word) - len(e) >= 2), None)
     if josa is not None:
         word = word[:-len(josa)]
     return word[:-1] if word.endswith(_ADJ_END) and len(word) >= 3 else word
 
 
 def _is_kind(word: str) -> bool:
-    return word in _KIND_WORDS or _JOSA.sub("", word) in _KIND_WORDS
+    """종류 낱말인가 — 조사·복수 '들'이 붙어도("카페를"·"관광지들"·"카페들을") 같다. 끝 뗀 꼴("쇼핑하기"→쇼핑)은 호출측이 한 번 더 묻는다."""
+    bare = _JOSA.sub("", word)
+    return any(w in _KIND_WORDS or (w.endswith("들") and w[:-1] in _KIND_WORDS) for w in (word, bare))
 
 
 def _blank(text: str, rx: re.Pattern) -> str:
@@ -151,9 +161,10 @@ def open_query(text: str | None, category_ko: str | None = None, *, generic: Ite
     kept: list[tuple[str, str, bool]] = []  # (원형, 어간, 속성 낱말인가)
     for m in _WORD.finditer(blanked):
         word = m.group()
-        if bare_region(word) is not None or plain_region(word) is not None or _is_kind(word):
-            continue
         stem = _stem(word)
+        # 끝 뗀 꼴도 본다 — "쇼핑하기 좋은"·"구경하는"·"명소인"이 종류 낱말 하나로 게이트를 열었다(리뷰 2026-11-04)
+        if bare_region(word) is not None or plain_region(word) is not None or _is_kind(word) or _is_kind(stem):
+            continue
         if len(stem) < 2:
             continue
         prop = any(a < m.end() and m.start() < b for a, b in spans)
@@ -183,10 +194,22 @@ def _doc_text(hit) -> str:
     return hit.text.replace(title, " ") if title else hit.text
 
 
+def bm25_terms(words: Sequence[str]) -> frozenset[str]:
+    """BM25 항 = 낱말의 글자 2-gram 중 **합성어 안 종류 이름 자리의 2-gram 을 뺀 것**("북카페" → 북카 · '카페'는 빠진다 · "근대거리"의
+    '거리'는 남는다 — 종류 이름 '볼거리'가 거기 없다). 빼지 않으면 '카페' 하나로 범위의 카페 조각 거의 전부가 근거를 얻어 문턱이 꺼졌다
+    (리뷰 2026-11-04 — 서울/북카페 근거 45곳 중 42곳이 '카페' 2-gram 뿐)."""
+    terms: set[str] = set()
+    for tok in (t for w in words for t in _TOKEN.findall(w.lower())):
+        inside = {i for m in _KIND_RX.finditer(tok) for i in range(m.start(), m.end() - 1)}
+        terms.update(tok[i:i + 2] for i in range(len(tok) - 1) if i not in inside)
+    return frozenset(terms)
+
+
 def bm25_scores(hits: Sequence, words: Sequence[str]) -> dict[str, float]:
     """{poi_ref: 그 장소 조각들의 BM25 최댓값} — IDF 는 이 범위(넘겨받은 조각들) 안에서, Lucene 꼴 log(1 + (N−n+0.5)/(n+0.5))
-    (늘 양수). 장소 점수는 조각 점수의 **합이 아니라 최댓값**이다 — 조각이 많은 장소(위키 40조각)가 길이로 이기지 않게."""
-    terms = frozenset(g for w in words for g in bigrams(w))
+    (늘 양수). 장소 점수는 조각 점수의 **합이 아니라 최댓값**이다 — 조각이 많은 장소(위키 40조각)가 길이로 이기지 않게.
+    항은 `bm25_terms` — 종류 이름 2-gram 은 근거가 아니다(키워드 근거 문턱이 그것으로 켜지지 않게)."""
+    terms = bm25_terms(words)
     docs = [(h.poi_ref, bigrams(_doc_text(h))) for h in hits if h.poi_ref]
     if not docs or not terms:
         return {}

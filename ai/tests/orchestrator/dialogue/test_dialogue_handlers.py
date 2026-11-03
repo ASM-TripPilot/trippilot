@@ -2873,6 +2873,7 @@ from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore  #
 from trippilot.agents.planb.kb_retrieval import collection_for  # noqa: E402
 from trippilot.agents.planb.place_search import PlaceSearch  # noqa: E402
 from trippilot.domain.kb import KbKind  # noqa: E402
+from trippilot.poi_curation import hybrid_rank as hr  # noqa: E402
 
 
 class _DocEmbedding:
@@ -2926,9 +2927,13 @@ def _doc_search(texts: Mapping[str, str] = _DOC_TEXTS, *, delay: float = 0.0) ->
 
 
 def _run_doc(arguments: dict, searcher: PlaceSearch | None, *, pool: CandidatePool | None = None, handler=None,
-             remaining_ms: int = 7000, utterance: str = "", earlier: tuple = ()) -> tuple[Facts, dict[str, TaskResult]]:
-    ports = HandlerPorts(poi_info=_PoiInfo(), pool_builder=_PoolBuilder(pool or _pool(*_DOC_CAFES)), place_search=searcher)
+             remaining_ms: int = 7000, utterance: str = "", earlier: tuple = (), builder: _PoolBuilder | None = None,
+             clock: list[int] | None = None, place_sql=None) -> tuple[Facts, dict[str, TaskResult]]:
+    ports = HandlerPorts(poi_info=_PoiInfo(), pool_builder=builder or _PoolBuilder(pool or _pool(*_DOC_CAFES)), place_search=searcher,
+                         place_sql=place_sql)
     ctx = replace(_ctx(_EMPTY_SNAP, arguments, ports=ports, remaining_ms=remaining_ms), utterance=utterance, earlier=earlier)
+    if clock is not None:  # 흐르는 시계 — 대역(풀 조립)이 clock[0] 을 줄인다
+        ctx = replace(ctx, remaining_ms=lambda: clock[0])
     handler = handler or _EXPLORE
     results = {t.name: TaskResult.ok(t.name, t.fn()) for t in handler.plan(ctx)}
     return handler.assemble(ctx, results), results
@@ -2982,6 +2987,63 @@ def test_a_slow_or_late_document_step_leaves_explore_ok_in_rule_order() -> None:
     assert results["explore"].value["doc"] == "BUDGET" and store.calls == [] and facts == base
 
 
+class _SpendingPool(_PoolBuilder):
+    """풀 조립이 시계를 `spend_ms` 만큼 먹는다 — 문서 단계 시한이 풀 조립·정렬에 쓴 시간을 빼는지 본다."""
+
+    def __init__(self, pool: CandidatePool, clock: list[int], spend_ms: int) -> None:
+        super().__init__(pool)
+        self._clock, self._spend = clock, spend_ms
+
+    def build(self, request, now):
+        self._clock[0] -= self._spend
+        return super().build(request, now)
+
+
+def test_document_wait_subtracts_the_time_spent_before_the_search() -> None:
+    base, _ = _run_doc(_QUIET, None)
+    # 몫 min(2.8, 2.5×0.4)=1.0 · 풀 조립 0.6s → 남은 0.4 − 여유 0.35 < 0.5 — 묻지 않는다(지난 시간을 안 빼면 0.65s 를 기다린다)
+    searcher, store, _ = _doc_search()
+    clock = [2500]
+    facts, results = _run_doc(_QUIET, searcher, builder=_SpendingPool(_pool(*_DOC_CAFES), clock, 600), clock=clock)
+    assert results["explore"].value["doc"] == "BUDGET" and store.calls == [] and facts == base
+    # 몫 2.8 · 풀 조립 0.3s → 검색에 넘긴 시한 = 2.8 − 0.3 − 0.35
+    searcher, store, _ = _doc_search()
+    waits: list[float] = []
+    real = searcher.search
+    searcher.search = lambda q, refs, wait_s, **kw: waits.append(wait_s) or real(q, refs, wait_s, **kw)
+    clock = [7000]
+    _, results = _run_doc(_QUIET, searcher, builder=_SpendingPool(_pool(*_DOC_CAFES), clock, 300), clock=clock)
+    assert results["explore"].value["doc"] == "OK" and waits == [pytest.approx(2.8 - 0.3 - dh._DOC_MARGIN_S)]
+
+
+def test_a_broken_index_leaves_explore_ok_in_rule_order() -> None:
+    def broken():
+        raise TypeError("ids is null")
+
+    base, _ = _run_doc(_QUIET, None)
+    embedding, store = _DocEmbedding(), _DocStore()
+    facts, results = _run_doc(_QUIET, PlaceSearch(embedding, store, index=broken))
+    assert results["explore"].status == "OK" and results["explore"].value["doc"] == "ERROR" and facts == base
+
+
+def test_explore_skips_open_search_when_sql_runs_beside_it_but_recommend_keeps_it() -> None:
+    rows = [_row("부산 카페 A", "카페", None, sido="부산광역시"), _row("부산 카페 B", "카페", None, sido="부산광역시")]
+    searcher, store, embedding = _doc_search()
+    facts, results = _run_doc(_QUIET, searcher, place_sql=_PlaceSql(rows))
+    assert set(results) == {"explore", "explore_sql"} and _names_of(facts) == ["부산 카페 A", "부산 카페 B"]  # 탐색은 SQL 행이 이긴다
+    assert store.calls == [] and embedding.calls == [] and "doc" not in results["explore"].value  # 버려질 순서에 임베딩·조회를 쓰지 않는다
+    # 추천은 반경이 먼저 — SQL 이 나란히 돌아도 열린 검색 순서가 답에 닿는다
+    searcher, store, _ = _doc_search()
+    facts, results = _run_doc({**_QUIET, "count": "2"}, searcher, handler=_RECOMMEND, place_sql=_PlaceSql(rows))
+    assert set(results) == {"explore", "explore_sql"} and results["explore"].value["doc"] == "OK" and len(store.calls) == 1
+    assert _names_of(facts) == ["책방 카페", "인기 카페"]
+
+
+def test_category_names_are_kind_words_of_the_open_search() -> None:
+    # 분류 종류 한글명은 BM25 낱말·항에서 빠지는 종류 이름이어야 한다(`hybrid_rank._KIND_WORDS`) — 종류가 늘면 거기도 더한다
+    assert set(dh._CATEGORY_KO.values()) <= hr._KIND_WORDS
+
+
 def test_recommend_keeps_its_count_cut_with_open_search() -> None:
     args = {**_QUIET, "count": "2"}
     facts, _ = _run_doc(args, _doc_search()[0], handler=_RECOMMEND)
@@ -2989,16 +3051,27 @@ def test_recommend_keeps_its_count_cut_with_open_search() -> None:
     assert facts.detail["pick_count"] == 2 and _types(facts) == ["OPEN_PLACE"] * 2
 
 
-@pytest.mark.parametrize(("arguments", "utterance", "earlier"), [
-    ({"region": "홍대와 이태원 사이", "theme": "조용한 북카페"}, "", ()),  # 두 곳 사이 — 가운데 순서가 먼저다
-    ({"region": "부산", "theme": "조용한 바"}, "", ()),  # 밤 말 — 야경·나이트라이프 순서가 먼저다
-    ({"region": "부산", "theme": "조용한"}, "부산 조용한 바 추천해줘", ()),  # 밤 말은 발화에서도 읽는다
-    ({"region": "서울", "theme": "가볼 만한"}, "", ()),  # 대조군 셋
-    ({"region": "부산", "category": "FOOD", "theme": "맛집"}, "", ()),
-    ({"region": "제주", "category": "CAFE", "theme": "카페 추천"}, "", ()),
-    ({"region": "부산", "theme": "조용한 북카페"}, "더 알려줘", (("USER", "부산 조용한 북카페 알려줘"), ("ASSISTANT", "책방 카페가 있어요."))),
+# (인자, 발화, 앞 대화, 게이트가 열리는 주제인가) — 사이·밤·이어 묻기는 게이트가 열리는 주제로만 둔다: 그 가드 하나 때문에만 닫히게
+# ("조용한 바"는 게이트가 먼저 닫아 밤 가드를 지워도 통과했다 — 리뷰 2026-11-04)
+@pytest.mark.parametrize(("arguments", "utterance", "earlier", "gate_opens"), [
+    ({"region": "홍대와 이태원 사이", "theme": "조용한 북카페"}, "", (), True),  # 두 곳 사이 — 가운데 순서가 먼저다
+    ({"region": "부산", "theme": "재즈 라이브 바"}, "", (), True),  # 밤 말(주제) — 야경·나이트라이프 순서가 먼저다
+    ({"region": "부산", "theme": "재즈 공연"}, "부산 재즈 바 추천해줘", (), True),  # 밤 말은 발화에서도 읽는다
+    ({"region": "부산", "category": "NIGHT_VIEW", "theme": "재즈 공연"}, "", (), True),  # 밤 분류
+    ({"region": "서울", "theme": "가볼 만한"}, "", (), False),  # 대조군
+    ({"region": "부산", "category": "FOOD", "theme": "맛집"}, "", (), False),
+    ({"region": "제주", "category": "CAFE", "theme": "카페 추천"}, "", (), False),
+    ({"region": "서울", "theme": "핫플레이스"}, "", (), False),
+    ({"region": "서울", "theme": "인기 많은"}, "", (), False),
+    ({"region": "부산", "category": "FOOD", "theme": "먹을 만한"}, "", (), False),
+    ({"region": "제주", "theme": "관광지들"}, "", (), False),
+    ({"region": "부산", "theme": "조용한 북카페"}, "더 알려줘", (("USER", "부산 조용한 북카페 알려줘"), ("ASSISTANT", "책방 카페가 있어요.")),
+     True),
 ])
-def test_open_search_does_not_run_between_two_places_at_night_for_controls_or_follow_ups(arguments, utterance, earlier) -> None:
+def test_open_search_does_not_run_between_two_places_at_night_for_controls_or_follow_ups(arguments, utterance, earlier,
+                                                                                         gate_opens) -> None:
+    kind = dh._CATEGORY_KO.get(arguments.get("category") or "")
+    assert (hr.open_query(arguments["theme"], kind, generic=dh._GENERIC_WORDS) is not None) is gate_opens  # 전제
     searcher, store, embedding = _doc_search()
     _, results = _run_doc(arguments, searcher, utterance=utterance, earlier=earlier)
     assert store.calls == [] and embedding.calls == [] and "doc" not in results["explore"].value

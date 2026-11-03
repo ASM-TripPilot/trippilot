@@ -6,7 +6,8 @@
 PlanB 후보 추출이 같은 모듈을 쓸 자리다 — 그래서 도우미 타입에 기대지 않는다(입력은 질의·장소 키·시한뿐).
 
 **INV-1** — 결과는 넘겨받은 범위의 부분집합이다(범위 밖 `poi_ref` 는 버린다). 순위일 뿐 후보 자격을 만들지 않는다.
-**INV-4** — 예외를 올리지 않는다. 결과는 닫힌 상태값(`STATUSES`)이고, OK 가 아니면 호출측은 규칙 순서 그대로 간다.
+**INV-4** — 예외를 올리지 않는다(색인 읽기·범위 자르기·일꾼 내기까지 — 조회 전 구간도 ERROR 로). 결과는 닫힌 상태값(`STATUSES`)이고,
+OK 가 아니면 호출측은 규칙 순서 그대로 간다.
 **대체 문서(`place_fallback`)는 쓰지 않는다**(2026-11-03 결정) — 짧은 카드 글이 긴 개요 조각을 점수로 밀어낸다.
 로그는 한 줄(`place_search status=… places=… chunks=… ms=… trace=…`) — 질의 원문은 남기지 않는다(SEC-U8-06).
 """
@@ -72,29 +73,40 @@ class PlaceSearch:
             self._warming = {q: f for q, f in self._warming.items() if not f.done()}
             if query.text in self._warming or len(self._warming) >= SEARCH_MAX_INFLIGHT:
                 return
-            self._warming[query.text] = self._pool.submit(self._embedding.embed, query.text)
+            try:
+                self._warming[query.text] = self._pool.submit(self._embedding.embed, query.text)
+            except Exception as e:  # noqa: BLE001 — 일꾼을 못 내면 미리 하지 않는다(검색이 직접 임베딩한다, INV-4)
+                log.info("place_search warm error=%s", type(e).__name__)
 
     def search(self, query: OpenQuery, scope_refs: Sequence[str], wait_s: float, *,
                trace: str = "") -> tuple[str, dict[str, int]]:
         """(상태, {source_ref: 문서 순위}). 범위에 조각이 없으면 스토어를 부르지 않고 EMPTY. 바쁘면 BUSY, `wait_s` 를 넘기면 TIMEOUT
         (조회는 뒤에서 끝까지 돌고 버려진다), 임베딩·스토어 예외는 ERROR, 근거(BM25 > 0)가 없으면 NO_EVIDENCE."""
         t0 = time.monotonic()
-        refs, ids = scope_ids(scope_refs, self._index(), self._max_ids)
-        status, ranks = "EMPTY", {}
-        if ids and not self._slots.acquire(blocking=False):
-            status = "BUSY"
-        elif ids:
-            future = self._pool.submit(self._run, query, refs, ids)
-            try:
-                status, ranks = future.result(timeout=wait_s)
-            except FutureTimeout:
-                status = "TIMEOUT"
-            except Exception as e:  # noqa: BLE001 — 임베딩·스토어 장애 — 규칙 순서로 간다(INV-4), 사유는 예외 타입까지
-                status = "ERROR"
-                log.info("place_search error=%s trace=%s", type(e).__name__, trace)
+        refs: list[str] = []
+        ids: frozenset[str] = frozenset()
+        try:
+            refs, ids = scope_ids(scope_refs, self._index(), self._max_ids)
+            status, ranks = self._ask(query, refs, ids, wait_s) if ids else ("EMPTY", {})
+        except Exception as e:  # noqa: BLE001 — 색인·임베딩·스토어·일꾼 장애 — 규칙 순서로 간다(INV-4), 사유는 예외 타입까지
+            status, ranks = "ERROR", {}
+            log.info("place_search error=%s trace=%s", type(e).__name__, trace)
         log.info("place_search status=%s places=%d chunks=%d ms=%d trace=%s",
                  status, len(refs), len(ids), int((time.monotonic() - t0) * 1000), trace)
         return status, ranks
+
+    def _ask(self, query: OpenQuery, refs: list[str], ids: frozenset[str], wait_s: float) -> tuple[str, dict[str, int]]:
+        if not self._slots.acquire(blocking=False):
+            return "BUSY", {}
+        try:
+            future = self._pool.submit(self._run, query, refs, ids)
+        except BaseException:
+            self._slots.release()  # 내지 못한 조회의 자리는 돌려준다 — 안 그러면 상한이 영영 차 BUSY 만 남는다
+            raise
+        try:
+            return future.result(timeout=wait_s)
+        except FutureTimeout:
+            return "TIMEOUT", {}
 
     def _vector(self, text: str):
         with self._lock:

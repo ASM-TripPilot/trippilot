@@ -2097,7 +2097,8 @@ def _explore_events(ctx: TurnContext, anchor: _Anchor, theme: str | None,
     return HandlerTask("events", fn)
 
 
-def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
+def _plan_explore(ctx: TurnContext, *, radius_first: bool = False) -> tuple[HandlerTask, ...]:
+    # radius_first = 추천 — 반경 후보가 있으면 SQL 행을 보지 않는다(`_assemble_recommend`). 탐색은 SQL 행이 있으면 SQL 이 이긴다
     anchor, builder = _explore_anchor(ctx), ctx.ports.pool_builder
     category, theme = ctx.arguments.get("category"), ctx.arguments.get("theme")
     # NL2SQL 은 사용자가 지역을 말했을 때만 — 일정 근처 탐색은 거리가 핵심이라 반경 풀이 맞다(뷰에 좌표가 없다)
@@ -2109,18 +2110,22 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     sql = (_explore_by_sql(ctx, anchor, category, theme),) if (
         ctx.ports.place_sql is not None and ctx.ports.place_sql.writes_sql and ctx.arguments.get("region")
         and (anchor is None or (anchor.kind == "region" and _carry(ctx) is None))) else ()
+    # 탐색에서 SQL 이 나란히 돌면 열린 검색은 돌리지 않는다 — SQL 행이 있으면 반경 순서는 통째로 버려지는데(`_assemble_explore`) 임베딩·
+    # pgvector 는 다 치르고 팬아웃은 그 대기까지 기다린다(리뷰 2026-11-04, 운영은 DIALOGUE_SQL 배정). SQL 이 실패·0건인 턴의 반경 순서도
+    # 그래서 규칙 순서 그대로다 — 그 몫은 포기한다. 추천은 반경이 먼저라 SQL 과 무관하게 돌린다
+    sql_wins = bool(sql) and not radius_first
     center_of = _once(lambda: _anchor_center(ctx, anchor)) if anchor is not None else None
     events = _explore_events(ctx, anchor, theme, center_of) if anchor is not None else None
     sql += (events,) if events is not None else ()
     if anchor is None or builder is None:
         return sql
     searcher = ctx.ports.place_search
-    query = _open_query(ctx, anchor, category, theme) if searcher is not None else None
+    query = _open_query(ctx, anchor, category, theme) if searcher is not None and not sql_wins else None
 
     def fn() -> dict:
         doc: dict[str, str] = {}
-        if query is not None:  # 질의 임베딩을 풀 조립과 겹쳐 돌린다 — 시한은 이 시각부터 센다
-            started_ms = ctx.remaining_ms()
+        if query is not None:  # 질의 임베딩을 풀 조립과 겹쳐 돌린다 — 시한은 이 시각부터 센다(팬아웃 몫)
+            left = _fanout_left(ctx)
             searcher.warm(query)
         center = center_of() if center_of is not None else _anchor_center(ctx, anchor)
         if center is None:
@@ -2134,7 +2139,7 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
         shown, (on_the_way, inner) = _shown_before(ctx), _on_the_way(anchor)
         at = {p.poi_id: on_the_way(p.coord) for p in pool.pois}
         # 두 곳 사이면 가운데가 먼저, 양 끝은 모자랄 때만 — 한 번에 순위를 매겨 종류 상한(_PER_CATEGORY)이 전체에 걸리게
-        fuse = _doc_fuse(ctx, searcher, query, started_ms, doc) if query is not None else None
+        fuse = _doc_fuse(ctx, searcher, query, left, doc) if query is not None else None
         ranked = _explore_rank((p for p in pool.pois if not shown(p.name, p.poi_id) and at[p.poi_id] is not None), category, theme,
                                _night_heard(ctx), ahead=lambda p: inner(at[p.poi_id]), fuse=fuse)
         candidates = [{
@@ -2148,26 +2153,28 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     return (HandlerTask("explore", fn), *sql)
 
 
-# 열린 검색(KB-5 문서 순위, `place_search`) — 시한은 팬아웃 몫 min(2.8s, 잔여×0.4)에서 풀 조립·정렬에 쓴 시간과 여유 0.35s 를 뺀
-# 만큼만 기다리고, 0.5s 가 안 남으면 건너뛴다. 검색이 OK 가 아니면 규칙 순서 그대로 — 문서 단계 때문에 탐색이 TIMEOUT 이 되지 않게(INV-4)
-_DOC_CAP_S, _DOC_MARGIN_S, _DOC_MIN_S = 2.8, 0.35, 0.5
+# 열린 검색(KB-5 문서 순위, `place_search`) — 시한은 팬아웃 몫(`_fanout_left` — min(2.8s, 잔여×0.4))에서 풀 조립·정렬에 쓴 시간과
+# 여유 0.35s 를 뺀 만큼만 기다리고, 0.5s 가 안 남으면 건너뛴다. 검색이 OK 가 아니면 규칙 순서 그대로 — 문서 단계 때문에 탐색이 TIMEOUT 이
+# 되지 않게(INV-4)
+_DOC_MARGIN_S, _DOC_MIN_S = 0.35, 0.5
 
 
 def _open_query(ctx: TurnContext, anchor: _Anchor, category: str | None, theme: str | None) -> hybrid_rank.OpenQuery | None:
     """열린 검색을 돌릴 탐색인가 — 주제 게이트가 열리고, 앵커가 지역·일정 근처이고(두 곳 사이·먼 짝 제외 — 가운데 순서가 먼저다),
-    밤 말이 아니고(야경·나이트라이프 순서가 먼저다), 이어 묻기가 아닐 때만. 돌 때 그 질의, 아니면 None."""
+    밤 말이 아니고(야경·나이트라이프 순서가 먼저다), 이어 묻기가 아닐 때만(SQL 이 이기는 탐색은 호출측 `_plan_explore` 가 뺀다).
+    돌 때 그 질의, 아니면 None."""
     if anchor.kind not in ("region", "itinerary") or _said_night(category, theme, _night_heard(ctx)) or _follow_up(ctx) is not None:
         return None
     return hybrid_rank.open_query(theme, _CATEGORY_KO.get(category or ""), generic=_GENERIC_WORDS)
 
 
-def _doc_fuse(ctx: TurnContext, searcher: PlaceSearch, query: hybrid_rank.OpenQuery, started_ms: int,
+def _doc_fuse(ctx: TurnContext, searcher: PlaceSearch, query: hybrid_rank.OpenQuery, left: Callable[[], float],
               doc: dict[str, str]) -> Callable[[list[Poi]], list[Poi]]:
-    """규칙 정렬 결과 → 범위(규칙 순서의 장소 키)를 넘겨 문서 순위를 받고 RRF 로 섞는다. 상태는 `doc["doc"]` 에 남긴다."""
-    budget_s = min(_DOC_CAP_S, started_ms * 0.4 / 1000)
+    """규칙 정렬 결과 → 범위(규칙 순서의 장소 키)를 넘겨 문서 순위를 받고 RRF 로 섞는다. 상태는 `doc["doc"]` 에 남긴다.
+    `left` = 탐색 작업 첫머리에 잡은 팬아웃 남은 초(`_fanout_left`)."""
 
     def fuse(ranked: list[Poi]) -> list[Poi]:
-        wait_s = budget_s - (started_ms - ctx.remaining_ms()) / 1000 - _DOC_MARGIN_S
+        wait_s = left() - _DOC_MARGIN_S
         if wait_s < _DOC_MIN_S:
             doc["doc"] = "BUDGET"
             return ranked
@@ -2468,7 +2475,7 @@ HANDLERS: Mapping[Intent, Handler] = {
     Intent.EXPLORE_PLACES: _handler(Intent.EXPLORE_PLACES, _assemble_explore, _plan_explore,
                                     ask=lambda ctx: ("region", EXPLORE_ASK_REGION_TEXT) if explore_needs_region(ctx) else None),
     Intent.RECOMMEND_REGION: _handler(Intent.RECOMMEND_REGION, _assemble_region),
-    Intent.RECOMMEND_PLACES: _handler(Intent.RECOMMEND_PLACES, _assemble_recommend, _plan_explore,
+    Intent.RECOMMEND_PLACES: _handler(Intent.RECOMMEND_PLACES, _assemble_recommend, lambda ctx: _plan_explore(ctx, radius_first=True),
                                       ask=lambda ctx: ("region", EXPLORE_ASK_REGION_TEXT) if explore_needs_region(ctx) else None),
 }
 

@@ -16,10 +16,12 @@ r"""도우미 장소 탐색 열린 검색(KB-5 문서 순위, `place_search` + `
 (`CandidatePoolBuilder(StaticPoiDb, M7Config)` — 지역 표 중심·반경), 정렬·자르기는 운영 함수(`dialogue_handlers._explore_rank`), 문서는
 리포의 미리 계산 벡터(범위 조각만 `InMemoryVectorStore` 에 싣는다) + 질의만 로컬 KURE. B(w=1.0·G1·Q1)는 운영 핸들러
 (`HANDLERS[...]` + `HandlerPorts.place_search`)로도 한 번 더 돌려 직접 계산과 같은지 대조한다(`e2e_mismatch` 0 이어야 한다).
-인메모리 스토어의 검색 시간은 pgvector 와 무관하다 — 시한·지연은 3단계(실 스택)에서 잰다.
+그 대조는 SQL 미배정(= SQL 실패·0건) 분기다 — **운영 분기**(DIALOGUE_SQL 배정, SQL 이 행을 낸다)는 SQL 대역(`_SqlRows`)을 붙여 한 번 더
+돌려, 열린 검색 순서가 답에 닿는지(`reach`)를 센다. 인메모리 스토어의 검색 시간은 pgvector 와 무관하다 — 시한·지연은 3단계(실 스택)에서 잰다.
 
-**2026-11-04 결정론 측정 결론 — B 가 명백한 오답을 줄였다 → 2단계(유료 쌍대 판정)로 갈 가치가 있다.** 37사례(도시 10 × 날씨·분위기·
-동반·주제·개수형 30 + 대조군 3 + 11-02 겨눔 4), 오답 판정이 있는 17사례:
+**2026-11-04 결정론 측정 결론 — 반경 분기에서 B 가 명백한 오답을 줄였다. 그러나 운영 분기에서 그 사례들에 닿지 않는다(아래 '닿는 범위')
+→ 2단계(유료 쌍대 판정) 전에 닿는 범위부터 정해야 한다.** 41사례(도시 10 × 날씨·분위기·동반·주제·개수형 30 + 대조군 7 + 11-02 겨눔 4),
+오답 판정이 있는 17사례:
 - 오답 합계 A 16 → **B(w=1.0·G1·Q1) 9**(줄어든 사례 4 · 늘어난 사례 1) · B(w=0.5) 13(4 → 3 · 늘어남 0) · B1 문서만 9(늘어남 0) ·
   B3 임베딩만 8(늘어남 1 — 겨눔/제주비). 줄어든 몫은 거의 **비·실내**다 — 게이트가 열린 비 사례 7개에서 A 10 → B 2(서울: 낙산공원·
   북악스카이 팔각정 → 서울시립미술관·세종문화회관 · 부산: 광안리해수욕장·황령산 → 부산문화회관·카페). 아이 동반(술집)은 규칙 정렬이 이미
@@ -29,20 +31,29 @@ r"""도우미 장소 탐색 열린 검색(KB-5 문서 순위, `place_search` + `
   "서울 조용한 북카페"·"성수 조용한 북카페"는 두 팔 모두 0 이고 B 만 순서가 바뀐다.
 - **11-02 겨눔의 날씨 둘("비 오는 날" — 서울·제주)은 게이트가 닫혀 B = A** 다(묘사 낱말이 '비' 한 글자뿐). 고치려면 날씨 말 확장(비 →
   실내, 계획 8(d))이 따로 필요하다. B3 는 같은 말에 레인리포트 경리단(이름이 '비')·채석장 전망대를 올렸다 — 11-02 실패가 재현된다.
-- **B3 는 오답 수만 낮고 쓸 수 없다** — A 와의 겹침 @5 0.29(B 1.94), 대조군 셋의 순서를 전부 바꾼다(B·B1 은 대조군 바이트까지 같다).
-- **문서 보유율**(상위 목록 중 KB-5 조각이 있는 곳) A 0.53 → B 0.81 · B1 0.85 · B3 1.00 — 근거 문턱 때문에 문서가 있는 곳만 오를 수
+- **B3 는 오답 수만 낮고 쓸 수 없다** — A 와의 겹침 @5 0.29(B 2.03), 대조군 일곱의 순서를 전부 바꾼다(B·B1 은 대조군 바이트까지 같다).
+- **문서 보유율**(상위 목록 중 KB-5 조각이 있는 곳) A 0.53 → B 0.77 · B1 0.80 · B3 1.00 — 근거 문턱 때문에 문서가 있는 곳만 오를 수
   있어서다(설계상 편향). 유료 판정은 두 팔 모든 장소에 같은 참고 설명을 주고 "설명 없음은 부적합이 아님"을 명시해야 한다(계획 3단계).
-- **게이트**: G1·Q1 열림 28/34, 대조군 0/3, 열린 사례 중 NO_EVIDENCE 0(2-gram BM25 > 0 은 쉽게 찬다 — 문턱은 '근거 없음'을 가르지
+- **닿는 범위(운영 분기)**: 운영은 DIALOGUE_SQL 이 배정돼 지역 앵커 탐색(EXPLORE)에서 NL2SQL 이 나란히 돌고, 행이 있으면 SQL 행이 답이다
+  — 그래서 그때는 열린 검색을 돌리지도 않는다(`_plan_explore`, 버려질 순서에 임베딩·pgvector 를 쓰지 않게). 열린 검색이 답을 바꾼 28사례
+  중 SQL 행이 있는 분기에서도 답에 닿는 것은 **추천 4사례뿐**(서울/공예3·부산/국밥2·경주/한옥카페2·대구/비3 — 추천은 반경이 먼저다)이고,
+  오답이 준 4사례(서울·부산·제주·경주 비, 전부 EXPLORE)는 하나도 닿지 않는다. 반경 분기가 답이 되는 것은 SQL 실패·0건 턴·일정 근처·이어
+  받은 지역뿐이다. 2단계 전에 고를 것: SQL 이 0건인 비율을 재거나(유료 — 실 NL2SQL), SQL 행에도 문서 순위를 섞을지(설계 변경).
+- **게이트**: G1·Q1 열림 28/34, 대조군 0/7, 열린 사례 중 NO_EVIDENCE 0(2-gram BM25 > 0 은 쉽게 찬다 — 문턱은 '근거 없음'을 가르지
   못하고 순위의 바닥 역할만 한다). G2 는 4사례를 더 연다(속성 낱말만 — 아이랑·바다 보이는·조용한 작업) — 오답 차이 0, 순서만 더 흔든다
   → **G1**. Q2(지역을 뺀 발화)는 '쉬고·싶어·가지' 같은 빈말이 낱말에 남아 Q1 보다 나을 것이 없다 → **Q1**. 무게는 **w=1.0**(0.5 는 비 오답을
   10 → 7 만 줄인다).
-- **범위 크기**: 규칙 정렬을 지난 장소 p50 370 · p95 3,805, 그중 조각이 있는 곳 p50 122 · p95 541, 조각 id p50 246 · p95 2,077
-  → `place_search.MAX_IDS` 2,100(측정 사례는 안 잘린다).
+- **범위 크기**: 규칙 정렬을 지난 장소 p50 571 · p95 3,805, 그중 조각이 있는 곳 p50 122 · p95 541, 조각 id p50 268 · p95 2,077
+  (대조군 넷을 더하기 전 37사례는 370 · 246) → `place_search.MAX_IDS` 2,100(측정 사례는 안 잘린다).
 - **출처 충돌**: 관광공사가 아닌 POI 의 원천 id 가 관광공사 contentid 와 같은 경우 0. 조각 표에 제 id 로 든 Overture 66·카카오 16 은
   위키 수집이 그 장소 id 로 적재한 같은 장소의 문서다(`_collisions` 註).
-- 운영 핸들러 대조 `e2e_mismatch` 0(37/37) · 코퍼스 조각과 벡터 머리 불일치 0.
+- 운영 핸들러 대조 `e2e_mismatch` 0(41/41) · 코퍼스 조각과 벡터 머리 불일치 0.
 - 1회차(2-gram 끝 떼기 전)와 G1·Q1 오답 수는 같았다(Q2 는 10 → 9). 바뀐 것은 판정 밖 사례의 순서다 — '산책하기'의 '하기'가 생선찜집 개요에 걸렸고
   ('강릉/숲길'), Q2 의 '오는데'가 빈말로 게이트를 열었다(`hybrid_rank._VERB_ENDS` 註).
+- 3회차(리뷰 반영 — 종류 이름 2-gram 을 BM25 항에서 빼고, 요청 꼴·복수 '들'·끝 붙은 종류 낱말로 게이트가 열리던 것을 닫았다): 오답 수는
+  모든 팔이 같다(A 16 · B 9 · B0.5 13 · B1 9 · B3 8). 바뀐 것은 북카페 세 사례의 순서뿐이다 — 근거 장소가 서울/북카페 45 → 3 · 겨눔/북카페
+  99 → 12 · 겨눔/성수북카페 36 → 3 으로 줄었다(그전 근거는 거의 '카페' 2-gram 하나였다). 겨눔/북카페의 늘어난 1건은 그대로다 — 서대문 안산은
+  개요에 '북카페'가 실제로 들어 '북카' 근거가 남고, 다른 근거가 빠지자 1위로 올랐다. 새 대조군 넷(핫플레이스·인기 많은·먹을 만한·관광지들)은 닫혀 B = A(바이트까지).
 """
 
 from __future__ import annotations
@@ -80,6 +91,7 @@ from trippilot.orchestrator.dialogue.dialogue_handlers import (  # noqa: E402
     HANDLERS, HandlerPorts, TaskResult, TurnContext, TurnSnapshot,
 )
 from trippilot.poi_curation import hybrid_rank as hr  # noqa: E402
+from trippilot.poi_curation.adapters.pg_place_sql import PlaceRow  # noqa: E402
 from trippilot.poi_curation.chunking import chunk_corpus  # noqa: E402
 from trippilot.poi_curation.config import M7Config  # noqa: E402
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder  # noqa: E402
@@ -124,10 +136,15 @@ CASES: tuple[tuple, ...] = (
     ("대구/비3", _RC, {"region": "대구", "theme": "비 오는 날 실내", "count": "3"}, "대구 비 오는 날 실내 세 곳 추천", "rain"),
     ("인천/아이", _EX, {"region": "인천", "theme": "아이랑 가기 좋은 박물관"}, "인천 아이랑 가기 좋은 박물관", "kids"),
     ("인천/차이나", _EX, {"region": "인천", "theme": "차이나타운 근대 거리"}, "인천 차이나타운 근대 거리 구경", None),
-    # 대조군 — 게이트가 닫혀야 한다(B = A, 바이트까지)
+    # 대조군 — 게이트가 닫혀야 한다(B = A, 바이트까지). 뒤 넷은 리뷰(2026-11-04)가 찾은 꼴 — 낱말 안 조각만 지워 남은 꼬리
+    # ('레이스'·'많은'·'먹을')와 복수 '들'이 게이트를 열었다
     ("대조/서울", _EX, {"region": "서울", "theme": "가볼 만한"}, "서울 가볼 만한 곳", None),
     ("대조/부산", _EX, {"region": "부산", "category": "FOOD", "theme": "맛집"}, "부산 맛집", None),
     ("대조/제주", _EX, {"region": "제주", "category": "CAFE", "theme": "카페 추천"}, "제주 카페 추천", None),
+    ("대조/핫플", _EX, {"region": "서울", "theme": "핫플레이스"}, "서울 핫플레이스 알려줘", None),
+    ("대조/인기", _EX, {"region": "서울", "theme": "인기 많은"}, "서울 인기 많은 곳", None),
+    ("대조/먹을", _EX, {"region": "부산", "category": "FOOD", "theme": "먹을 만한"}, "부산 먹을 만한 곳", None),
+    ("대조/관광지", _EX, {"region": "제주", "theme": "관광지들"}, "제주 관광지들 알려줘", None),
     # 11-02 실패 겨눔(#1796 — 비 오는 날에 숭례문·용두암, 북카페에 라멘집)
     ("겨눔/서울비", _EX, {"region": "서울", "theme": "비 오는 날"}, "비 오는 날 서울에서 갈 만한 곳", "rain"),
     ("겨눔/제주비", _EX, {"region": "제주", "theme": "비 오는 날"}, "제주에 비 오는데 어디 가지", "rain"),
@@ -172,6 +189,20 @@ def _collisions(index) -> tuple[Counter, Counter]:
         elif ref in index:
             own[pr.get("source")] += 1
     return accidental, own
+
+
+class _SqlRows:
+    """운영 분기 대역 — 운영 시크릿에는 DIALOGUE_SQL 이 배정돼 있어(`.env.example`) 지역 앵커 탐색은 NL2SQL 이 반경 탐색과 나란히 돌고, SQL 이
+    행을 내면 탐색(EXPLORE)은 그 행을 쓴다(`_assemble_explore`). 실 LLM 없이 "행이 있었다"만 흉내 낸다 — 그 지역 시·도의 한 행."""
+
+    writes_sql = True
+
+    def __init__(self, sido: str | None) -> None:
+        self._row = PlaceRow(poi_id="sql-row", name="SQL 행", category="명소", sido=sido or "", sigungu=None, trending=False,
+                             nightlife=False)
+
+    def lookup(self, utterance, arguments, trace_id, now, *, timeout_sec):
+        return [self._row]
 
 
 class _Corpus:
@@ -228,7 +259,8 @@ def measure(case, builder, emb, corpus, index) -> dict:
         return hits_of[text]
 
     night = dh._said_night(category, theme, utt)
-    runs = anchor.kind in ("region", "itinerary") and not night  # 운영 `_open_query` 와 같은 조건(이어 묻기 사례는 없다)
+    # 운영 `_open_query` 와 같은 조건(이어 묻기 사례는 없다) — SQL 미배정·SQL 실패/0건 분기다. SQL 이 행을 내는 분기는 아래 `prod`
+    runs = anchor.kind in ("region", "itinerary") and not night
     kind_ko = dh._CATEGORY_KO.get(category or "")
     arms: dict[str, list] = {"A": _top(a_rank, intent, args.get("count"))}
     variants: dict[str, dict] = {}
@@ -252,8 +284,8 @@ def measure(case, builder, emb, corpus, index) -> dict:
         arms[f"B3/{q}"] = ranked(_doc_first(rule, emb_ranks))
 
     # 운영 경로 대조 — A(검색기 없음)·B(w=W_DOC, G1, Q1)를 핸들러 그대로 돌려 직접 계산과 같은지
-    def e2e(searcher) -> tuple[list[str], str | None]:
-        ports = HandlerPorts(pool_builder=builder, place_search=searcher)
+    def e2e(searcher, sql=None) -> tuple[list[str], str | None]:
+        ports = HandlerPorts(pool_builder=builder, place_search=searcher, place_sql=sql)
         # 인메모리 전수 스캔(파이썬 코사인)은 수천 조각에 수 초라 운영 시한(2.8s)을 넘긴다 — 대조에서만 시한을 풀어 순서만 본다
         c = TurnContext(snapshot=_SNAP, arguments=args, now=_NOW, tz=_KST, trace_id=TraceId(f"e2e-{name}"),
                         remaining_ms=lambda: 600_000, ports=ports, utterance=utt, heard=utt)
@@ -268,6 +300,9 @@ def measure(case, builder, emb, corpus, index) -> dict:
     e2e_a, _ = e2e(None)
     expect_b = [p.name for p in arms[f"B{hr.W_DOC}/G1Q1"]]
     mismatch = (e2e_a != [p.name for p in arms["A"]]) + (e2e_b != expect_b)
+    # 운영 분기(SQL 배정, 행 있음) — 열린 검색 순서가 답에 닿는가. 탐색은 SQL 이 이겨 돌리지도 않고(`_plan_explore`), 추천은 반경이 먼저다
+    sido = dh.region_area(anchor.label)[0] if anchor.kind == "region" else None
+    prod_names, prod_status = e2e(ps.PlaceSearch(emb, store, index=lambda: index), _SqlRows(sido))
 
     def stats(rank: list) -> dict:
         return {"names": [p.name for p in rank], "cats": [p.category.value for p in rank],
@@ -277,7 +312,8 @@ def measure(case, builder, emb, corpus, index) -> dict:
     return {"name": name, "kind": kind, "group": name.split("/")[0], "anchor": anchor.label, "pool": len(pool.pois),
             "fits": len(rule), "scope_places": len(all_refs), "scope_ids": len(all_ids), "capped_places": len(scope_refs),
             "capped_ids": len(ids), "variants": variants, "arms": {k: stats(v) for k, v in arms.items()},
-            "e2e_status": e2e_status, "e2e_ms": e2e_ms, "e2e_mismatch": mismatch}
+            "e2e_status": e2e_status, "e2e_ms": e2e_ms, "e2e_mismatch": mismatch,
+            "changed": e2e_b != e2e_a, "prod_status": prod_status, "prod_reach": e2e_b != e2e_a and prod_names == expect_b}
 
 
 def _pct(values: list[int], p: float) -> int:
@@ -324,12 +360,17 @@ def summarize(rows: list[dict], collisions: Counter, missing: int) -> dict:
         vals = [r[key] for r in rows]
         out[key] = {"p50": _pct(vals, 0.5), "p95": _pct(vals, 0.95), "max": max(vals)}
     out["capped_cases"] = [r["name"] for r in rows if r["capped_ids"] < r["scope_ids"]]
+    # 열린 검색이 답을 바꾼 사례(SQL 미배정·실패 분기) 중 운영 분기(SQL 행 있음)에서도 그 순서가 답에 닿는 사례 — 측정 결론이 닿는 범위
+    out["reach"] = {"changed": [r["name"] for r in rows if r["changed"]],
+                    "changed_judged": [r["name"] for r in judged if r["changed"]],
+                    "with_sql": [r["name"] for r in rows if r["prod_reach"]],
+                    "with_sql_status": dict(Counter(str(r["prod_status"]) for r in rows))}
     out["max_ids"] = ps.MAX_IDS
     return out
 
 
 def main() -> None:
-    dh._DOC_CAP_S = 120.0  # 위 `e2e` 註 — 측정 프로세스 안에서만
+    dh._FANOUT_SQL_CAP_S = 120.0  # 위 `e2e` 註(문서 단계 시한은 `_fanout_left` 몫) — 측정 프로세스 안에서만
     t0 = time.monotonic()
     kn = _Knowledge()
     emb = CachingEmbedding(kn.emb)
@@ -356,7 +397,8 @@ def main() -> None:
         print(f"{r['name']:<14} fits {r['fits']:>5} scope {r['scope_places']:>4}곳/{r['scope_ids']:>5}조각 "
               f"G1Q1 {v['G1Q1']['status']:<11} G2Q1 {v['G2Q1']['status']:<11} G1Q2 {v['G1Q2']['status']:<11} "
               f"오답 A{a['wrong']} B{b['wrong']} B1 {r['arms']['B1/G1Q1']['wrong']} B3 {r['arms']['B3/Q1']['wrong']} "
-              f"e2e {r['e2e_status']}·{r['e2e_ms']}ms{' MISMATCH' if r['e2e_mismatch'] else ''} ({time.monotonic() - t:.1f}s)",
+              f"e2e {r['e2e_status']}·{r['e2e_ms']}ms{' MISMATCH' if r['e2e_mismatch'] else ''} "
+              f"SQL분기 {r['prod_status']}{' 닿음' if r['prod_reach'] else ''} ({time.monotonic() - t:.1f}s)",
               flush=True)
         for label, arm in (("A ", a), ("B ", b), ("B3", r["arms"]["B3/Q1"])):
             print(f"    {label}: " + " / ".join(f"{n}({c})" for n, c in zip(arm["names"], arm["cats"])))

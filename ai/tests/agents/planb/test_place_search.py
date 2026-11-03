@@ -4,7 +4,8 @@
   ① 범위가 비면(조각이 있는 장소 0) 스토어·임베딩을 부르지 않고 EMPTY — `item_ids` 가 None(필터 없음 = 전역 검색)으로 새지 않는다
   ② 스토어에는 범위의 실재 조각 id 만, 비지 않은 frozenset 으로 한 번 · top_k = id 수
   ③ id 상한을 넘으면 규칙 순서 앞 장소부터 통째로 담고 멈춘다(결정론)
-  ④ 예외 → ERROR · 시한 초과 → TIMEOUT · 동시 상한 → BUSY · 근거 없음 → NO_EVIDENCE — 늘 상태값(예외를 올리지 않는다)
+  ④ 예외 → ERROR · 시한 초과 → TIMEOUT · 동시 상한 → BUSY · 근거 없음 → NO_EVIDENCE — 늘 상태값(예외를 올리지 않는다).
+     조회 전 구간(색인 읽기·일꾼 내기)의 예외도 ERROR 이고, 내지 못한 조회는 동시 상한 자리를 돌려준다
   ⑤ 결과 ⊆ 범위 — 스토어가 범위 밖 poi_ref 를 내도 버린다(INV-1)
   ⑥ warm 과 search 가 같은 질의를 두 번 임베딩하지 않는다
 """
@@ -98,6 +99,21 @@ def test_id_cap_cuts_whole_places_in_rule_order() -> None:
 def test_store_or_embedding_failure_is_an_error_status() -> None:
     assert _search(_Store(_DOCS, fail=True))[0] == ("ERROR", {})
     assert _search(embedding=_Embedding(fail=True))[0] == ("ERROR", {})
+
+
+def test_failures_before_the_query_are_an_error_status_too() -> None:
+    def broken_index():
+        raise TypeError("ids is null")
+
+    store, embedding = _Store(_DOCS), _Embedding()
+    searcher = PlaceSearch(embedding, store, index=broken_index)
+    searcher.warm(_Q)
+    assert searcher.search(_Q, ["r1"], 1.0) == ("ERROR", {}) and store.calls == []
+    # 일꾼을 못 낸다(풀이 닫혔다) — 미리 임베딩은 조용히 건너뛰고, 검색은 ERROR 이며 자리를 돌려준다(상한만큼 불러도 BUSY 가 아니다)
+    closed = PlaceSearch(_Embedding(), _Store(_DOCS), index=lambda: _INDEX)
+    closed._pool.shutdown()
+    closed.warm(_Q)
+    assert [closed.search(_Q, ["r1"], 1.0)[0] for _ in range(ps.SEARCH_MAX_INFLIGHT + 1)] == ["ERROR"] * (ps.SEARCH_MAX_INFLIGHT + 1)
 
 
 def test_slow_store_is_a_timeout_status_within_the_wait() -> None:
