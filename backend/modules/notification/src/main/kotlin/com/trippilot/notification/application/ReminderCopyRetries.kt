@@ -73,8 +73,8 @@ class ReminderCopyRetries(
 
 /**
  * [ReminderCopyRetries] 를 비운다. 리마인드 발화 폴러([NotificationSchedulePoller])와 같은 이유로
- * ShedLock 을 걸지 않는다 — 대기열이 파드마다 따로라 두 인스턴스가 같은 여행을 집을 일이 없고, 설령 겹쳐도 채우기는
- * 조건부 쓰기(이미 문구가 붙은 행은 덮지 않는다)라 먼저 붙은 문구가 이긴다.
+ * ShedLock 을 걸지 않는다 — 대기열이 파드마다 따로라 보통은 두 인스턴스가 같은 여행을 집지 않지만([rehydrate] 는 재시작한 파드가 DB 에서
+ * 걸어 두 파드가 같은 여행을 가질 수 있다), 겹쳐도 채우기는 조건부 쓰기(이미 문구가 붙은 행은 덮지 않는다)라 먼저 붙은 문구가 이긴다.
  */
 @Component
 class ReminderCopyRetryPoller(
@@ -107,7 +107,9 @@ class ReminderCopyRetryPoller(
                 // 터졌으면 다음 기회에 다시 — 못 채운 것으로 본다.
                 .getOrDefault(FillOutcome.Retry(remaining = UNKNOWN_REMAINING, noMaterial = 0))
             if (outcome !is FillOutcome.Retry) return@forEach
-            if (!retries.later(due.tripId, now, due.attempt + 1)) {
+            // 간격은 **채움이 끝난 시각**부터 잰다 — 틱 시작 시각으로 재면 한 틱에 여럿을 처리할 때(재시작 복원이 몰아 건다) 뒤에 처리된
+            // 여행일수록 다음 시도까지 간격이 앞 여행들이 쓴 시간만큼 짧아진다.
+            if (!retries.later(due.tripId, clock.instant(), due.attempt + 1)) {
                 // 횟수를 다 썼다 — 남은 행은 상수 문구로 간다. 한 줄은 남긴다(조용한 포기 금지).
                 log.warn(
                     "리마인드 문구를 끝내 못 채웠습니다 — 남은 행은 상수 문구로 갑니다. tripId={} 남은 행={}건(재료 없음 {}건) 시도={}회",

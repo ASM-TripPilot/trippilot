@@ -73,8 +73,8 @@ class KafkaOutboxConfig {
             // 포기 기록이 실패해도(DB 끊김) 던지지 않는다 — 던지면 같은 레코드가 재시도 주기를 처음부터 다시 돌며 파티션을 막는다.
             // 그때 흔적은 이 로그 한 줄(eventId 포함)이다.
             if (eventId != null) runCatching { relay.abandon(eventId, eventType, e) }
-                .onFailure { log.error("포기 기록에 실패했습니다 — 이 이벤트는 로그로만 남습니다. eventId={} type={}", eventId, eventType, it) }
-            else log.error("eventId 도 못 읽은 Kafka 메시지를 버립니다 — key={} offset={} value={}",
+                .onFailure { log.error("outbox.abandon eventId={} type={} — 포기 기록에 실패했습니다. 이 이벤트는 로그로만 남습니다", eventId, eventType, it) }
+            else log.error("outbox.abandon eventId=unreadable — eventId 도 못 읽은 Kafka 메시지를 버립니다. key={} offset={} value={}",
                 record.key(), record.offset(), value?.take(500), e)
         },
         ExponentialBackOffWithMaxRetries(OutboxRelay.MAX_ATTEMPTS - 1).apply {
