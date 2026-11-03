@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   postTripsTripIdShareCardCopy,
@@ -18,6 +18,8 @@ import {
  * 429 는 상태가 같고 `error.code` 로만 갈린다 — `RATE_LIMITED`(잠깐 막힘)는 Retry-After 초 뒤 딱 1회 다시 부르고,
  * 하루 상한·그 밖 실패·헤더 없음은 다시 부르지 않는다(호출부는 온디바이스 문구로 대체).
  * 화면을 떠난 뒤에는 그 재호출도 나가지 않는다 — 뮤테이션은 컴포넌트가 사라져도 살아서 재시도를 이어가기 때문이다.
+ * 결과는 훅이 주는 `data`/`isError` 가 아니라 뮤테이션 옵션 콜백에서 직접 state 에 담아 읽는다 — StrictMode 의 effect
+ * 정리가 관찰자를 뮤테이션에서 떼고, 다시 붙는 곳은 `mutate()` 안뿐인데 아래 `requested` 가 두 번째 호출을 막기 때문이다.
  */
 export function useShareCardCopy(tripId: string) {
   const mounted = useRef(true);
@@ -28,8 +30,17 @@ export function useShareCardCopy(tripId: string) {
     };
   }, []);
 
-  const { mutate, data, isError, error } = usePostTripsTripIdShareCardCopy({
+  // 응답 또는 최종 실패(재시도까지 끝난 뒤). null = 아직 없음.
+  const [outcome, setOutcome] = useState<
+    | { copy: Awaited<ReturnType<typeof postTripsTripIdShareCardCopy>> }
+    | { error: unknown }
+    | null
+  >(null);
+
+  const { mutate } = usePostTripsTripIdShareCardCopy({
     mutation: {
+      onSuccess: (copy) => setOutcome({ copy }),
+      onError: (error) => setOutcome({ error }),
       // 재시도도 이 함수를 다시 거친다 — 화면이 없으면 서버를 부르지 않고 실패로 끝낸다(재시도 한도 1회라 거기서 멈춤).
       mutationFn: ({ tripId: id }) =>
         mounted.current
@@ -52,9 +63,12 @@ export function useShareCardCopy(tripId: string) {
   }, [mutate, tripId]);
 
   return {
-    copy: data,
+    copy: outcome !== null && 'copy' in outcome ? outcome.copy : undefined,
     /** 응답도 실패도 아직 없다(호출 전·진행 중·Retry-After 대기). */
-    waiting: data === undefined && !isError,
-    dailyLimit: isError && isShareCardDailyLimit(error),
+    waiting: outcome === null,
+    dailyLimit:
+      outcome !== null &&
+      'error' in outcome &&
+      isShareCardDailyLimit(outcome.error),
   };
 }
