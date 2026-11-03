@@ -353,6 +353,10 @@ class ValidateItineraryRequest(BoundaryModel):
     # HC2(이동 시간)를 이 수단으로 잰다 — 종전엔 칸이 없어 대중교통으로 재 자차 여행의 편집 재검증이 HC2 를 잘못 표시했다.
     # 없으면 종전 동작(PUBLIC).
     transport_modes: list[str] = Field(default_factory=list)
+    # 그 여행의 취향(2026-11-03) — additive optional, generate 의 `preference_profile` 과 같은 스키마·어휘. 액티비티 취향이고
+    # 대중교통으로 재면 HC2 를 생성과 같은 도보 상한(도로 1.0km)으로 잰다 — 종전엔 기본 700m 로 재, 생성이 걸어서 잡은 0.7~0.9km
+    # 구간이 HC2 로 표시됐다. 자차·도보는 바꾸지 않는다(`_plan_less_walk_cap`). 없으면 종전 동작.
+    preference_profile: PreferenceProfileSchema | None = None
 
 
 class ValidateItineraryResponse(BoundaryModel):
@@ -389,6 +393,9 @@ class RepairItineraryRequest(BoundaryModel):
     anchors: list[DayAnchorSchema] = Field(default_factory=list)
     time_windows: list[TimeWindowSchema] = Field(default_factory=list)
     transport_modes: list[str] = Field(default_factory=list)
+    # 그 여행의 취향(2026-11-03) — validate 와 같은 칸·규칙(액티비티 취향 대중교통이면 도보 상한 1.0km). 수리는 모자란 간격만 앞으로
+    # 밀어서, 종전엔 생성이 걸어서 잡은 0.7~0.9km 구간을 [적용]마다 대중교통 시간으로 밀었다. 없으면 종전 동작.
+    preference_profile: PreferenceProfileSchema | None = None
 
 
 class RepairItineraryResponse(BoundaryModel):
@@ -732,7 +739,22 @@ class EditItineraryRequest(BoundaryModel):
     # 먼저 막으면 임베딩·LLM 을 쓰기 전에 422 로 끊긴다. 값의 근거는 그쪽 주석 참조.
     utterance: str | None = Field(default=None, min_length=1, max_length=500)
     confirm: bool = False
+    # 앞서 제안했던 곳("다른 데는?" — spec 003 FR-015) — 이번 편집이 새로 들이지 않는다. 후보 풀을 좁힐 뿐이다(INV-1) — 이미 일정에
+    # 있는 곳을 빼거나 기준점으로 삼는 데는 영향이 없다. 선택 필드(하위호환): BE 는 비면 키째로 뺀다
+    excluded_poi_ids: list[str] = Field(default_factory=list)
     request_meta: RequestMetaSchema
+    # ── 여행 컨텍스트(2026-11-03, additive optional — 셋 다 없으면 종전 동작) ──
+    # 그 여행의 취향 — generate 의 `preference_profile` 과 같은 스키마·어휘(`AlternativesRequest` 와 같은 규칙). 편집은 이것을
+    # **규칙에만** 쓴다: 취향 카테고리(생성과 같은 `_wanted_categories`)로 사이 넣기 순위·날 재구성의 규칙 점수(`taste_fit`)를 매긴다 —
+    # 편집 시한(BE 8s − 왕복 여유) 안에 취향 LLM 점수는 못 든다. 액티비티 취향 대중교통 여행이면 재타이밍·검증을 생성과 같은 도보
+    # 상한(1.0km)으로 잰다.
+    preference_profile: PreferenceProfileSchema | None = None
+    # 날마다 이용 시각 — generate·repair 의 `time_windows` 와 같은 스키마. **빈 날의 시작·창으로만** 쓴다(빈 날에 넣는 첫 곳의
+    # 시작 — 종전 10:00, 날 재구성의 빈 날 창 — 종전 10:00~18:00). HC4 판정 창은 종전(당일 전체) 그대로다 — repair 와 같은 이유로
+    # 사용자가 창 밖에 둔 슬롯 때문에 편집이 막히지 않게 한다.
+    time_windows: list[TimeWindowSchema] = Field(default_factory=list)
+    # 여행 첫날 — 'N일차'를 이 날 + N − 1 로 센다(대화 `trip_dates` 와 같은 셈). 없으면 종전(받은 일정의 첫 날).
+    trip_start_date: dt.date | None = None
 
     @model_validator(mode="after")
     def _exactly_one_entry(self) -> "EditItineraryRequest":

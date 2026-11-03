@@ -43,7 +43,6 @@ src/pages/live/live-itinerary/ui/LiveHubView.automation.test.tsx
 src/pages/live/live-itinerary/ui/LiveItineraryPage.directions.integration.test.tsx
 src/pages/record/trip-records/ui/TripRecordsView.route.test.tsx
 src/pages/record/trip-records/ui/VisitRecordCard.checkPop.test.tsx
-src/pages/record/trip-summary/ui/DayHighlightCard.distanceSource.test.tsx
 src/pages/settings/my-page/model/styleCardModel.face.test.ts
 src/pages/settings/my-page/model/styleCardModel.progress.test.ts
 src/pages/settings/settings-location/ui/LocationConsentScreen.automation.test.tsx
@@ -60,3 +59,5 @@ src/shared/map/MapView.memo.test.tsx
 src/shared/map/MapView.recordMarkers.test.tsx
 src/shared/ui/BottomTabBar.shellTabHref.test.ts
 src/widgets/map-sheet-shell/ui/GenerationProgressCard.indeterminate.test.tsx
+# ── 사유 기재분 ──
+src/app/entrypoint/AppProviders.noDsn.test.tsx  # 모듈 로드 격리 — initSentry() 가 번들 로드 때 DSN env 를 한 번만 읽어, "DSN 없음" 부팅은 DSN 을 켠 AppProviders.test 와 다른 모듈 레지스트리(별 파일)에서만 렌더할 수 있다(TRIP-1743 5-b W2)

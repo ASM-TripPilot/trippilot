@@ -5,6 +5,8 @@ import type {
   ItineraryDaysItemSlotsItem,
 } from '@/shared/api/index.schemas';
 
+import { sortSlotsByStartAt } from './sortSlotsByStartAt';
+
 /**
  * TRIP-302 · h24 편집 드래프트 상자(슬라이스1). 편집 중 `days`를 화면 밖에서 든다 — 서버 상태의
  * 사본이 아니라 **로컬 편집 드래프트**다(README §66 예외: UI 편집 상태지 서버 캐시가 아니다).
@@ -78,9 +80,10 @@ export interface ItineraryEditState {
   /** `onDragEnd.data`를 받아 해당 날 슬롯을 그 순서 그대로 반영(고정 슬롯도 재고정하지 않는다). */
   reorderSlots(date: string, reordered: Slot[]): void;
   /**
-   * 대상 슬롯의 시각 3필드(startAt·endAt·endsNextDay)만 갱신 — 슬롯을 이동시키지 않고
-   * (배열 순서 = 슬롯 순서, INV-U3-02) 시드 원본도 안 건드린다(비파괴). `deleteSlot`·
-   * `reorderSlots`와 같은 "해당 날에만 얹는 얇은 래퍼"다. 없는 poiId 는 무해(어느 것도 안 바뀜).
+   * 대상 슬롯의 시각 3필드(startAt·endAt·endsNextDay)를 갱신한 뒤 **그 날** 슬롯을 시작 시각 순으로
+   * 다시 세운다(`sortSlotsByStartAt` — 서버가 시각 순이 아니면 422, TRIP-1674). 이웃을 넘지 않는
+   * 변경은 순서가 그대로다. 시드 원본은 안 건드린다(비파괴). `deleteSlot`·`reorderSlots`와 같은
+   * "해당 날에만 얹는 얇은 래퍼"다. 없는 poiId 는 무해(어느 것도 안 바뀜 — 정렬도 안 한다).
    * `endsNextDay`는 시트가 유도한 값을 그대로 싣는다 — 여기서 재판정하지 않는다(§3·★10).
    */
   adjustSlotTime(
@@ -129,18 +132,13 @@ const createItineraryEditStore: StateCreator<ItineraryEditState> = (set) => ({
     set((state) => ({
       dirty: true,
       days: state.days.map((day) =>
-        day.date === date
+        day.date === date && day.slots.some((slot) => slot.poiId === poiId)
           ? {
               ...day,
-              slots: day.slots.map((slot) =>
-                slot.poiId === poiId
-                  ? {
-                      ...slot,
-                      startAt: patch.startAt,
-                      endAt: patch.endAt,
-                      endsNextDay: patch.endsNextDay,
-                    }
-                  : slot
+              slots: sortSlotsByStartAt(
+                day.slots.map((slot) =>
+                  slot.poiId === poiId ? { ...slot, ...patch } : slot
+                )
               ),
             }
           : day

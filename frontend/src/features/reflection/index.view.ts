@@ -2,13 +2,29 @@
 // 그려야 하는 소비자용. index.ts 를 물면 슬라이스 전체가 평가돼 devPreviewReleaseGate 지뢰가 터진다(TRIP-1157).
 
 export { formatKm } from './model/formatKm';
-export { buildMagazineVM } from './model/magazineVM';
+export { buildMagazineVM, splitHighlight } from './model/magazineVM';
 export type {
+  MagazineCoverVM,
   MagazineInput,
+  MagazineQuoteVM,
+  MagazineRouteStop,
   MagazineSlot,
+  MagazineStatTile,
   MagazineVM,
 } from './model/magazineVM';
+export {
+  CATEGORY_PALETTES,
+  MAGAZINE_TONES,
+  dominantPaletteKey,
+} from './model/categoryPalette';
+export type { PaletteKey } from './model/categoryPalette';
 export { ReflectionMagazine } from './ui/ReflectionMagazine';
+export {
+  MagazineCover,
+  MagazineQuote,
+  MagazineRoute,
+  MagazineStats,
+} from './ui/MagazineParts';
 export {
   CAPTION_MAX_LENGTH,
   HASHTAG_MAX_COUNT,

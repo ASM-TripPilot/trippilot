@@ -70,7 +70,7 @@ MAX_FACT_CHARS, MAX_TRANSIENT, MAX_RATE_LIMITED, MAX_ERRORS_IN_ROW = 60, 6, 8, 2
 _CAT_KO = {"SIGHT": "명소", "NATURE": "자연", "CULTURE": "문화", "FOOD": "음식점", "CAFE": "카페", "SHOPPING": "쇼핑",
            "ACTIVITY": "액티비티", "BAR": "술집", "ART": "미술관·갤러리", "NIGHT_VIEW": "야경 명소"}
 # 영업시간·가격·전화 — 받지 않는다(날마다 바뀌고, 시각은 INV-2). 시각·소요·연락처·주입은 소개 게이트(`clean_intro`)가 한 번 더 본다.
-# '무료 주차'·'오픈 주방'은 시설 사실이라 막지 않는다 — 시각과 붙은 '오픈'만 영업시간이다.
+# '오픈 주방'은 시설 사실이라 막지 않는다 — 시각과 붙은 '오픈'만 영업시간이다.
 # 때에 묶인 운영(주말에만·저녁에는·매월 2·7일)과 하루 몇 개 한정도 영업 정보다 — 날마다 바뀌고 화면에서 확정값처럼 읽힌다(#1707 리뷰 19건)
 _BANNED = re.compile(r"영업\s?(?:시간|일)|휴무|정기\s?휴|마감|브레이크\s?타임|라스트\s?오더|\d+\s?시\s?(?:에\s?)?오픈|오픈\s?시간|"
                      r"(?:평일|주말|오전|오후|저녁|점심|아침|새벽)(?:에는|에만|엔)|(?:평일|주말)\s?(?:점심|저녁|아침|오전|오후)|"
@@ -85,6 +85,9 @@ _CLOSED = re.compile(r"(?:영업|운영)(?:을|이)?\s?(?:종료|중단)(?:했|�
 _KIND_ONLY = re.compile(r"(?:으로|로)\s?(?:등록|분류)(?:된|되어)|^(?:(?:한식|중식|일식|양식|분식|중국|일본|이탈리안|퓨전|해산물|"
                         r"고기|베이커리|디저트|브런치)\s?)?(?:음식점|식당|중식당|일식당|한식당|양식당|전문점|레스토랑|카페|중국집|주점|"
                         r"술집|매장|가게)(?:이다|입니다|이에요)?\.?$")
+# 주차 사실은 웹 글에서 틀리기 쉽다 — 인용 원문 대조(2026-11-03, 열린 페이지 기준 확인 284건): 근거 없음·다른 말이 주차 4/25(16%), 그 밖 12/259(5%).
+# 틀린 주차 안내는 차로 간 사람이 겪는다 — 웹 사실에서는 뺀다(관광공사 카드의 주차는 공식 상세라 그대로 싣는다)
+_PARKING = re.compile(r"주차")
 FINAL = ("found", "closed", "not_found", "refused")  # 이 상태면 다시 묻지 않는다
 
 PROMPT = """당신은 여행 앱의 장소 정보 정리 담당입니다. 웹 검색으로 아래 [장소]를 찾아, 웹 페이지에 적힌 사실만 JSON 하나로 답하세요.
@@ -407,13 +410,13 @@ def _url_key(url: str) -> str:
 
 
 def clean_facts(rec: dict) -> list[dict]:
-    """사실 거름 — 인용 목록에 있는 URL · 길이 · 시각·가격·소요·연락처·주입·평가 꼴 없음 · 중복 없음."""
+    """사실 거름 — 인용 목록에 있는 URL · 길이 · 시각·가격·소요·연락처·주입·평가·주차 꼴 없음 · 중복 없음."""
     cites, out, seen = {_url_key(u) for u in rec.get("citations") or ()}, [], set()
     for f in rec.get("facts") or ():
         text, url = f.get("text") or "", f.get("url") or ""
         if _url_key(url) not in cites or not (4 <= len(text) <= MAX_FACT_CHARS):
             continue
-        if _BANNED.search(text) or _EVAL.search(text) or _KIND_ONLY.search(text) or has_contact_like(text) \
+        if _BANNED.search(text) or _EVAL.search(text) or _KIND_ONLY.search(text) or _PARKING.search(text) or has_contact_like(text) \
                 or has_injection_like(text) or clean_intro(text) != text:  # 진짜 문서·소개와 같은 게이트(시각·소요·연락처·주입)
             continue
         key = re.sub(r"\s", "", text)

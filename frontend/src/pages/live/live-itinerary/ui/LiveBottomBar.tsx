@@ -9,12 +9,8 @@ import {
   ItineraryIconInactive,
   type ShellTabKey,
 } from '@/shared/ui/BottomTabBar';
+import { NAV_BAR_ICON_SIZE } from '@/shared/ui/navBarLayout';
 import { MorphNavBar, NavBarCell } from '@/widgets/bottom-nav-bar';
-
-import {
-  LIVE_BAR_BOTTOM_GAP,
-  LIVE_BOTTOM_BAR_RESERVE,
-} from '../model/editPopupLayout';
 
 /**
  * TRIP-1522 v2 · i01 여행 중 허브 하단 내비 바(순수 프레젠테이션 — props 만 받는다).
@@ -30,10 +26,6 @@ import {
  * TRIP-1584 — 변신 모션(출발 탭 → 5칸 시작 → 일정만 남기고 폭이 줄며 맨 앞으로 → 새 칸 등장, 뒤로는 역순 뒤 이동)은 공용 `MorphNavBar`(widgets)로
  * 옮겼다. 이 파일은 허브의 칸 4개와 id 만 정해 넘기는 얇은 래퍼다. 일정 칸이 생존 칸이다(홈 탭 바의 3번째 자리).
  */
-
-export { LIVE_BOTTOM_BAR_RESERVE };
-/** 바 아래 띄움 — 부모가 안전영역에 더해 절대 배치한다. */
-export const LIVE_BOTTOM_BAR_BOTTOM_GAP = LIVE_BAR_BOTTOM_GAP;
 
 export type LiveBarActive = 'schedule' | 'edit' | 'event';
 
@@ -95,7 +87,7 @@ export function LiveBottomBar({
           label="수정"
           icon={
             <PencilGlyph
-              size={27}
+              size={NAV_BAR_ICON_SIZE}
               tone={active === 'edit' ? 'primary' : 'muted'}
             />
           }
@@ -107,7 +99,12 @@ export function LiveBottomBar({
           key="chatbot"
           testID="execution-live-bar-chatbot"
           label="챗봇"
-          icon={<ChatBubbleGlyph size={27} color={GLYPH_COLORS.muted} />}
+          icon={
+            <ChatBubbleGlyph
+              size={NAV_BAR_ICON_SIZE}
+              color={GLYPH_COLORS.muted}
+            />
+          }
           selected={false}
           onPress={onPressChatbot}
         />,
@@ -115,7 +112,12 @@ export function LiveBottomBar({
           key="event"
           testID="execution-live-bar-event"
           label="행사"
-          icon={<EventGlyph size={27} color={tone(active === 'event')} />}
+          icon={
+            <EventGlyph
+              size={NAV_BAR_ICON_SIZE}
+              color={tone(active === 'event')}
+            />
+          }
           selected={active === 'event'}
           expanded={active === 'event'}
           disabled={!eventAvailable}

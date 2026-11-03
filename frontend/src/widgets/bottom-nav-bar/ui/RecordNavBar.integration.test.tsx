@@ -5,6 +5,7 @@ import {
 } from '@react-navigation/native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import { NAV_BAR_RESERVE } from '@/shared/ui/navBarLayout';
 import { getToastBottoms, resetToastBottoms } from '@/shared/ui/toastBottom';
 import { useAnimatedProbe } from '@/test-support/animatedProbe';
 import {
@@ -27,7 +28,6 @@ import {
   BAR_ENTER_MS,
   BAR_EXIT_MS,
   barMorphFrame,
-  NAV_BAR_RESERVE,
   RECORD_BAR_SHAPE,
 } from '../index';
 import { RecordNavBar, type RecordNavBarProps } from './RecordNavBar';
@@ -143,6 +143,14 @@ describe('RecordNavBar · 입장 모프와 출발 탭 (AC-4·5·7·11)', () => {
       expect(visibleIds()).toEqual(IDS.start5);
       expect(selectedIds(IDS.start5)).toEqual([
         key === 'records' ? TAB_RECORDS : `${P}-start-${key}`,
+      ]);
+      // TRIP-1739 — 시작 칸 글자는 접근성 이름과 따로 그려진다(공용 라벨로 옮겨도 홈 탭 바와 같은 이름 5개).
+      expect(renderedText(screen.root).split('\n')).toEqual([
+        '홈',
+        '탐색',
+        '일정',
+        '기록',
+        '마이',
       ]);
     }
   );

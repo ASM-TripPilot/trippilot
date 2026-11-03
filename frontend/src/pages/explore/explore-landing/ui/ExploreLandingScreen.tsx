@@ -23,6 +23,7 @@
  */
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PlaceCardVM } from '@/entities/place';
@@ -327,7 +328,7 @@ export function ExploreLandingScreen({
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="explore-landing" className="flex-1 bg-canvas">
-        <ScrollView
+        <Animated.ScrollView
           testID="explore-landing-scroll"
           className="flex-1"
           showsVerticalScrollIndicator={false}
@@ -505,7 +506,7 @@ export function ExploreLandingScreen({
               </Pressable>
             )}
           </View>
-        </ScrollView>
+        </Animated.ScrollView>
 
         {/* 담은 곳 saved-menu FAB — 우하단 하트 FAB 을 누르면 두 미니 FAB 으로 펼쳐진다(Figma
             a01 3012:1731). 왼→오: 담은 장소(위치핀→d02) · 저장한 숙소(가방→e04) · 하트/닫기.

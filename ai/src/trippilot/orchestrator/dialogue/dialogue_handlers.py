@@ -988,14 +988,15 @@ def _plan_free_distance(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     sido = _trip_area(ctx)
 
     def fn() -> dict:
-        ends: list[_End] = []
-        for side, text, end in zip(("origin", "destination"), said, known):
+        ends: list[_End | None] = []
+        for text, end in zip(said, known):
             if end is None:
-                found = finder.find_place(text, sido, ctx.trace_id)
-                if found is None:  # 없거나 여럿 — 고르지 않는다
-                    return {"status": "EMPTY", "reason": "place_not_found", "unfound": side}
-                end = _End(found.name, found.poi_id)
+                found = finder.find_place(text, sido, ctx.trace_id)  # 없거나 여럿이면 None — 고르지 않는다
+                end = _End(found.name, found.poi_id) if found is not None else None
             ends.append(end)
+        if None in ends:  # 두 끝을 다 찾아 본 뒤 — 한쪽에서 멈추면 답이 찾은 쪽까지 못 찾았다고 했다(2026-11-03 개발)
+            return {"status": "EMPTY", "reason": "place_not_found",
+                    "sides": [{"side": side, "label": e.label if e else None} for side, e in zip(("origin", "destination"), ends)]}
         ids = tuple(e.poi_id for e in ends if e.center is None and e.poi_id)
         rows = _lookup(ctx, ids, ctx.today) if ids else {}
         coords = [e.center or _coord(rows.get(e.poi_id)) for e in ends]
@@ -1043,10 +1044,13 @@ def _assemble_free_distance(ctx: TurnContext, results: Mapping[str, TaskResult])
     ends = value.get("ends") if isinstance(value, Mapping) else None
     if not (isinstance(ends, list) and len(ends) == 2):
         notes = (_UNRESOLVED_LEG if ctx.snapshot.trip is not None else _UNFOUND_NO_TRIP,)
-        # 어느 쪽을 못 찾았는지 — 없으면 "서울역과 경복궁은 찾을 수 없어서"처럼 찾은 쪽까지 못 찾았다고 했다(2026-11-03 개발)
-        side = {"origin": "출발지", "destination": "목적지"}.get(value.get("unfound")) if isinstance(value, Mapping) else None
-        if side:
-            notes += (f"못 찾은 쪽은 {side}다 — 다른 쪽까지 못 찾았다고 말하지 않는다",)
+        # 어느 쪽을 못 찾았고 어느 쪽은 찾았는지 — 없으면 "서울역과 경복궁을 찾지 못했어요"(경복궁은 찾힌다, 2026-11-03 개발)
+        sides = value.get("sides") if isinstance(value, Mapping) else None
+        if isinstance(sides, list):
+            ko = {"origin": "출발지", "destination": "목적지"}
+            lost = "·".join(ko[s["side"]] for s in sides if s["label"] is None)
+            kept = [f"{ko[s['side']]}는 '{s['label']}'(으)로 찾았다" for s in sides if s["label"]]
+            notes += (f"못 찾은 쪽: {lost}" + (f" — {kept[0]}. 찾은 곳까지 못 찾았다고 말하지 않는다" if kept else ""),)
         return _text_facts(intent, FactStatus.EMPTY, (_action("OPEN_ITINERARY"),), notes=notes)
     origin, dest = ends
     mode, assumed = _transport_mode(ctx)

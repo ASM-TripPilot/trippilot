@@ -190,6 +190,15 @@ class EditProposalServiceTest : StringSpec({
         areasOf(null) shouldBe emptyMap()
     }
 
+    "다른 데는? — 앞서 보인 곳을 상대 입력에 싣는다(없으면 빈다)" {
+        val agent = Agent(replacing(a, fresh))
+
+        service(agent).propose(acc, tripId, d1, utter.copy(excludedPoiIds = setOf(c, fresh)), 5_000)
+        service(agent).propose(acc, tripId, d1, utter, 5_000)
+
+        agent.inputs.map { it.excludedPoiIds.toSet() } shouldContainExactly listOf(setOf(c, fresh), emptySet())
+    }
+
     "앵커는 고치려는 그 날의 것이다 — 다른 날 숙소에 후보 풀을 매달지 않는다" {
         val agent = Agent { EditProposalOutput(EditProposalStatus.NOT_UNDERSTOOD, null, emptyList(), null, null) }
 

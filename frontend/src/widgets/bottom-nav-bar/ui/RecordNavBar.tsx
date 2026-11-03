@@ -7,13 +7,14 @@ import {
   RecordsIconInactive,
 } from '@/shared/ui/BottomTabBar';
 import { NoteGlyph, SummaryChartGlyph } from '@/shared/ui/glyphs';
-import { useToastBottom } from '@/shared/ui/useToastBottom';
-
 import {
   NAV_BAR_BOTTOM_GAP,
+  NAV_BAR_ICON_SIZE,
   NAV_BAR_RESERVE,
   NAV_BAR_SIDE,
-} from '../config/navBarLayout';
+} from '@/shared/ui/navBarLayout';
+import { useToastBottom } from '@/shared/ui/useToastBottom';
+
 import { useDepartureTab } from '../model/useDepartureTab';
 import { NavBarCell } from './BottomNavBar';
 import { MorphNavBar } from './MorphNavBar';
@@ -131,13 +132,19 @@ export function RecordNavBar({
           cell(
             'reflection',
             '회고',
-            <NoteGlyph size={27} color={glyphColor('reflection')} />,
+            <NoteGlyph
+              size={NAV_BAR_ICON_SIZE}
+              color={glyphColor('reflection')}
+            />,
             onPressReflection
           ),
           cell(
             'summary',
             '요약',
-            <SummaryChartGlyph size={27} color={glyphColor('summary')} />,
+            <SummaryChartGlyph
+              size={NAV_BAR_ICON_SIZE}
+              color={glyphColor('summary')}
+            />,
             onPressSummary
           ),
         ]}

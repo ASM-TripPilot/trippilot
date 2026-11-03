@@ -105,9 +105,13 @@ class HttpScheduleAgentAdapter(
 
     /** 수단을 싣는다 — repair 와 같은 `transport_modes`(목록 그대로, 상대가 아는 첫 값을 고른다). 비면 상대 기본(대중교통). */
     override fun validateWithUnverified(solution: ScheduleAgentOutput, transportModes: List<String>): ValidationResult =
+        validateWithUnverified(solution, transportModes, null)
+
+    /** 취향도 싣는다(2026-11-03) — 상대가 액티비티 취향 대중교통 여행의 도보 상한을 생성과 같게 건다. null 이면 키째 빠진다. */
+    override fun validateWithUnverified(solution: ScheduleAgentOutput, transportModes: List<String>, preference: PreferenceProfile?): ValidationResult =
         post(
             VALIDATE_PATH,
-            AiValidateRequest(solution.toWire(), requestMeta(VALIDATE_DEADLINE_MS), transportModes),
+            AiValidateRequest(solution.toWire(), requestMeta(VALIDATE_DEADLINE_MS), transportModes, preference),
             AiValidateResponse::class.java,
             scheduleAgentBoundedRestClient,
         ).toDomain()
@@ -166,6 +170,7 @@ class HttpScheduleAgentAdapter(
                 anchors = context.anchors,
                 timeWindows = context.anchors.map { TimeWindow(it.date, DAY_START, DAY_END) },
                 transportModes = context.transportModes,
+                preferenceProfile = context.preferenceProfile,
             ),
             AiRepairResponse::class.java,
             scheduleAgentBoundedRestClient,
@@ -303,6 +308,10 @@ class HttpScheduleAgentAdapter(
                 utterance = input.utterance,
                 confirm = true,
                 requestMeta = AiRequestMeta(input.requestMeta.requestId, input.requestMeta.requestedAt, input.requestMeta.deadlineMs),
+                excludedPoiIds = input.excludedPoiIds.map(UUID::toString),
+                preferenceProfile = input.preferenceProfile,
+                timeWindows = input.timeWindows,
+                tripStartDate = input.tripStartDate,
             ),
             AiEditResponse::class.java,
             scheduleAgentBoundedRestClient,

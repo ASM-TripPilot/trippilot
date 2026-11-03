@@ -5,11 +5,12 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import { Pressable, Text } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot';
 import type { Opportunity } from '@/shared/api/index.schemas';
+import { buildFitRegion } from '@/shared/map/fitRegion';
 import { useAnimatedProbe } from '@/test-support/animatedProbe';
 import {
   BAR_ROOT,
@@ -26,7 +27,7 @@ import {
 import * as probe from '@/test-support/fabAnchorProbe';
 
 import { BAR_EXIT_MS } from '@/widgets/bottom-nav-bar';
-import { LIVE_BOTTOM_BAR_RESERVE } from '../model/editPopupLayout';
+import { NAV_BAR_RESERVE } from '@/shared/ui/navBarLayout';
 import { getToastBottoms, resetToastBottoms } from '@/shared/ui/toastBottom';
 import { LiveHubView, type LiveHubSlot } from './LiveHubView';
 
@@ -51,6 +52,12 @@ import { LiveHubView, type LiveHubSlot } from './LiveHubView';
  *   넘긴 index·snapPoints 까지만 잠근다. 실전환·바와 시트의 겹침·핸들 모양·카드 터치는 6-b.
  * 3동작: 준비(Figma 5곳 픽스처) → 실행(렌더·press) → 단언(testID 트리·문구·콜백).
  */
+
+// TRIP-1737 — MapView 본문 렌더 수를 buildFitRegion 호출 수로 센다(HM 묶음). 실물을 감싼 스파이라 다른 묶음의 동작은 같다.
+jest.mock('@/shared/map/fitRegion', () => {
+  const actual = jest.requireActual('@/shared/map/fitRegion');
+  return { ...actual, buildFitRegion: jest.fn(actual.buildFitRegion) };
+});
 
 const DATE = '2026-06-11';
 const DAYS = [{ date: '2026-06-10' }, { date: DATE }, { date: '2026-06-12' }];
@@ -2041,13 +2048,163 @@ describe('LiveHubView · HP 카드 번호와 핀 탭 (TRIP-1558)', () => {
 afterEach(() => resetToastBottoms());
 
 describe('LiveHubView · 토스트 바닥 신고: 하단 내비 바 (TRIP-1559 이음새 ④)', () => {
-  it('허브가 그려지는 동안 하단 내비 바가 차지하는 높이(LIVE_BOTTOM_BAR_RESERVE)를 신고하고 unmount 로 해제한다', () => {
+  it('허브가 그려지는 동안 하단 내비 바가 차지하는 높이(NAV_BAR_RESERVE)를 신고하고 unmount 로 해제한다', () => {
     expect(getToastBottoms()).toEqual([]);
 
     renderHub();
-    expect(getToastBottoms()).toEqual([LIVE_BOTTOM_BAR_RESERVE]);
+    expect(getToastBottoms()).toEqual([NAV_BAR_RESERVE]);
 
     screen.unmount();
     expect(getToastBottoms()).toEqual([]);
+  });
+});
+
+/* ──────────────── TRIP-1737 · M-46 시트가 움직여도 지도(memo(MapView)) 본문은 다시 돌지 않는다 ────────────────
+ * 무엇을 보장하나:
+ *  - 측정: 시트를 다른 칸으로 N회 끌어도 MapView 본문 렌더 0회(허브 자신은 다시 그려진다 — 알약이 사라지는 것이 그 증거).
+ *  - 페이지가 같은 내용의 새 배열로 다시 그려도 0회(조회 갱신마다 페이지는 새 slots 를 만든다).
+ *  - 정상·금지: 핀 상태·좌표가 실제로 바뀌면 그 렌더에서 바로 지도가 갱신되고, 핀 탭도 새 핀 배열을 읽는다(늦게 반영 금지).
+ * 렌더 수 = buildFitRegion 호출 수 — MapView 는 fitPins 일 때 본문에서 매번 이 함수를 부른다(MapView.memo.test 선례).
+ * ⚠️ jest 는 React Compiler 를 안 돌린다. LiveHubView 는 앱에서도 컴파일 포기(렌더 중 ref 읽기)라 이 숫자가 앱과 같은 조건이다.
+ * 3동작: 준비(키·허브 렌더·기준 호출 수) → 실행(시트 끌기·재렌더·핀 탭) → 단언(추가 호출 수·마커·스크롤 y).
+ */
+describe('LiveHubView · MV 시트 이동 때 memo(MapView) (TRIP-1737)', () => {
+  const KEY_NAME = 'EXPO_PUBLIC_NAVER_MAP_CLIENT_ID';
+  let original: string | undefined;
+  original = process.env[KEY_NAME];
+  beforeEach(() => {
+    process.env[KEY_NAME] = 'test-naver-client-id';
+    (buildFitRegion as jest.Mock).mockClear();
+  });
+  afterEach(() => {
+    if (original === undefined) delete process.env[KEY_NAME];
+    else process.env[KEY_NAME] = original;
+  });
+
+  /** 부를 때마다 같은 내용의 새 배열·새 객체(페이지 재렌더가 만드는 모양). */
+  const makeSlots = (
+    jeonpoState: LiveHubSlot['state'] = 'upcoming'
+  ): LiveHubSlot[] => [
+    {
+      state: 'done',
+      slot: mkSlot('gamcheon', '감천', '09:30:00', 35.0975, 129.0106),
+    },
+    {
+      state: 'active',
+      slot: mkSlot('museum', '미술관', '13:00:00', 35.1667, 129.137),
+    },
+    {
+      state: jeonpoState,
+      slot: mkSlot('jeonpo', '전포', '15:00:00', 35.1555, 129.0636),
+    },
+    {
+      state: 'upcoming',
+      slot: mkSlot('haeundae', '해운대', '17:00:00', 35.1587, 129.1604),
+    },
+  ];
+  const PILL = 'fake-trigger-pill-hm';
+  const renders = (): number => (buildFitRegion as jest.Mock).mock.calls.length;
+  const hub = (props: Overrides = {}) => (
+    <LiveHubView
+      tripTitle="부산 여행"
+      days={DAYS}
+      activeDayIndex={1}
+      slots={makeSlots()}
+      initialSnapIndex={0}
+      onBack={jest.fn()}
+      onSelectDay={jest.fn()}
+      onPressManualEdit={jest.fn()}
+      onPressChatbot={jest.fn()}
+      triggerChip={<View testID={PILL} />}
+      triggerPillKey="trg-1"
+      {...props}
+    />
+  );
+
+  it('MV1 · 시트를 다른 칸으로 8회 끌어도 지도 본문은 다시 돌지 않는다 (측정 · 목표 0)', () => {
+    render(hub());
+    const before = renders();
+    expect(before).toBeGreaterThan(0);
+    expect(screen.getByTestId(PILL)).toBeTruthy();
+
+    // 중간↔펼침, 중간↔완전 내림을 두 바퀴 — 첫 끌기가 알약을 숨기고(허브 state), 완전 내림이 sheetClosed 를 바꾼다.
+    for (let lap = 0; lap < 2; lap += 1) {
+      fireSheetAnimate(0, 1);
+      fireSheetAnimate(1, 0);
+      fireSheetAnimate(0, -1);
+      fireSheetAnimate(-1, 0);
+    }
+
+    // 가짜 통과 방지 앵커 — 허브는 실제로 다시 그려졌다(알약이 사라짐).
+    expect(screen.queryByTestId(PILL)).toBeNull();
+    expect(renders() - before).toBe(0);
+  });
+
+  it('MV2 · 페이지가 같은 내용의 새 slots 로 다시 그려도 지도 본문은 다시 돌지 않는다', () => {
+    const { rerender } = render(hub());
+    const before = renders();
+
+    rerender(hub({ tripTitle: '부산 여행 2' }));
+
+    // 앵커 — 허브가 새 props 로 그려졌다(헤더 문구).
+    expect(screen.getByText(/부산 여행 2/)).toBeTruthy();
+    expect(renders() - before).toBe(0);
+  });
+
+  it('MV3 · 핀 상태가 실제로 바뀌면 그 렌더에서 바로 지도가 갱신된다 (정상 · 늦게 반영 금지)', () => {
+    const { rerender } = render(hub());
+    expect(screen.queryByTestId('map-marker-check-3')).toBeNull();
+    const before = renders();
+
+    rerender(hub({ slots: makeSlots('done') }));
+
+    expect(renders() - before).toBeGreaterThan(0);
+    expect(screen.getByTestId('map-marker-check-3')).toBeTruthy();
+  });
+
+  // 03b 경고-2 — 위도·경도를 따로 바꾼다(같이 바꾸면 키에서 한쪽이 빠져도 못 잡는다).
+  it.each([
+    ['위도만', 35.2, 129.1604],
+    ['경도만', 35.1587, 129.2],
+  ])(
+    'MV4 · 핀 %s 바뀌어도 그 렌더에서 바로 마커 좌표가 바뀐다 (늦게 반영 금지)',
+    (_label, lat, lng) => {
+      const { rerender } = render(hub());
+      const moved = makeSlots();
+      moved[3] = { ...moved[3], slot: { ...moved[3].slot, lat, lng } };
+
+      rerender(hub({ slots: moved }));
+
+      const marker = screen.getAllByTestId('map-marker')[3];
+      expect([marker.props.latitude, marker.props.longitude]).toEqual([
+        lat,
+        lng,
+      ]);
+    }
+  );
+
+  // 03b 경고-1 — 지도엔 고정 콜백이 가므로, 핀 탭이 옛 렌더의 핀 배열을 읽으면 엉뚱한 카드로 스크롤한다.
+  it('MV5 · 핀 배열이 바뀐 뒤 핀을 누르면 새 핀 배열 기준의 카드로 스크롤한다 (옛 클로저 금지)', () => {
+    // 준비: 펼침 칸(1)에서 그리고 타임라인·행 위치를 흉내(HP 묶음과 같은 방법).
+    const { rerender } = render(hub({ initialSnapIndex: 1 }));
+    const layAt = (testID: string, y: number) =>
+      fireEvent(screen.getByTestId(testID), 'layout', {
+        nativeEvent: { layout: { x: 0, y, width: 320, height: 120 } },
+      });
+    const ROW_YS = [24, 170, 340, 520];
+    layAt('execution-live-timeline', 300);
+    makeSlots().forEach(({ slot }, index) =>
+      layAt(`execution-live-slot-row-${DATE}#${slot.poiId}`, ROW_YS[index])
+    );
+    scrollSpy().mockClear();
+
+    // 실행: 2번 슬롯이 좌표를 잃는다 → 핀 ①③④. 두 번째 핀(③)을 누른다.
+    const gap = makeSlots();
+    gap[1] = { ...gap[1], slot: { ...gap[1].slot, lat: null, lng: null } };
+    rerender(hub({ slots: gap, initialSnapIndex: 1 }));
+    firePinTap(1);
+
+    // 단언: 3번째 카드 y(300+340). 옛 핀 배열이면 2번째 카드(470)로 간다.
+    expect(scrollSpy().mock.calls.map(([arg]) => arg.y)).toEqual([640]);
   });
 });

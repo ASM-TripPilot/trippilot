@@ -1,6 +1,10 @@
 import type { ReflectionStats, VisitCheck } from '@/shared/api/index.schemas';
 
-import { paletteKeyForCategory, type PaletteKey } from './categoryPalette';
+import {
+  dominantPaletteKey,
+  paletteKeyForCategory,
+  type PaletteKey,
+} from './categoryPalette';
 import { formatKm } from './formatKm';
 import {
   devicePhotoUri,
@@ -51,18 +55,40 @@ export interface MagazinePicture {
   category?: string;
   poiId?: string;
 }
+/** 표지 — j04 는 기간을 모를 수 있어 `dateLabel` 이 선택이다. `picture` 는 기기 사진이 있을 때만(D1) — 없으면 null 이고 카테고리 색이 선다. */
+export interface MagazineCoverVM {
+  title: string;
+  stickerLabel: string;
+  region?: string;
+  dateLabel?: string;
+  visitLabel: string;
+  photoLabel: string;
+  picture: MagazinePicture | null;
+  palette: PaletteKey;
+}
+export interface MagazineQuoteVM {
+  text: string;
+  head: string;
+  mark: string;
+}
+export interface MagazineStatTile {
+  key: 'visits' | 'distance' | 'photos';
+  label: string;
+  value: string;
+  note?: string;
+}
+/** `dayLabel` 은 일차를 넘어 이어 붙이는 j04 동선만 채운다. */
+export interface MagazineRouteStop {
+  order: number;
+  name: string;
+  named: boolean;
+  category?: string;
+  dayLabel?: string;
+}
 export interface MagazineVM {
-  cover: {
-    title: string;
-    stickerLabel: string;
-    region?: string;
-    dateLabel: string;
-    visitLabel: string;
-    photoLabel: string;
-    picture: MagazinePicture | null;
-    palette: PaletteKey;
-  };
-  quote: { text: string; head: string; mark: string };
+  /** j03 는 항상 하루 날짜를 안다 — 부품이 받는 `MagazineCoverVM` 보다 좁다. */
+  cover: MagazineCoverVM & { dateLabel: string };
+  quote: MagazineQuoteVM;
   scenes: {
     key: string;
     number: string;
@@ -78,14 +104,8 @@ export interface MagazineVM {
     palette: PaletteKey;
   }[];
   /** [] = 그날 방문 0곳, null = 이름을 아직 모름. */
-  route:
-    { order: number; name: string; named: boolean; category?: string }[] | null;
-  stats: {
-    key: 'visits' | 'distance' | 'photos';
-    label: string;
-    value: string;
-    note?: string;
-  }[];
+  route: MagazineRouteStop[] | null;
+  stats: MagazineStatTile[];
   hashtags: string[];
 }
 
@@ -199,18 +219,13 @@ export function buildMagazineVM(input: MagazineInput): MagazineVM {
   });
 
   // 표지 색 — PLAN_B 띠 → 방문 카테고리 최빈(미술+문화 한 통, 모르는 카테고리는 안 센다, 동률은 먼저 간 곳) → 중립.
-  const counts = new Map<PaletteKey, number>();
-  for (const stop of route ?? []) {
-    const key = paletteKeyForCategory(stop.category);
-    if (key !== 'STATS') counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  let dominant: PaletteKey = 'STATS';
-  let best = 0;
-  for (const [key, count] of counts)
-    if (count > best) [dominant, best] = [key, count];
+  const dominant = dominantPaletteKey((route ?? []).map((s) => s.category));
   const coverPalette: PaletteKey = planChanges.some((c) => c.event === 'PLAN_B')
     ? 'PLAN_B'
     : dominant;
+
+  // D1 — 표지는 기기 사진이 있을 때만 사진, 없으면 null(카테고리 색). 장면 카드는 사진이 없어도 카테고리 그림이 선다.
+  const coverPicture = pictureOf(payload.cover.slot);
 
   return {
     cover: {
@@ -220,7 +235,7 @@ export function buildMagazineVM(input: MagazineInput): MagazineVM {
       dateLabel: date.replace(/-/g, '.'),
       visitLabel: `${stats.visitCount}곳`,
       photoLabel: `사진 ${stats.photoCount}장`,
-      picture: pictureOf(payload.cover.slot),
+      picture: coverPicture?.uri ? coverPicture : null,
       palette: coverPalette,
     },
     quote: { text: input.narrative, ...splitHighlight(input.narrative) },

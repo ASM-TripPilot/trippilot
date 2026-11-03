@@ -345,10 +345,14 @@ export function LiveItineraryPage({
   const routes = useTripRoutes(automationOn ? tripId : null);
   const dayRoute = routeDayForDate(routes.routes, liveDate);
   const consentOn = locationConsent.data?.legalConsent === true;
-  const actualRoute =
-    automationOn && consentOn && dayRoute
-      ? routeDayToSegments(dayRoute)
-      : undefined;
+  // TRIP-1737 — 지도(memo(MapView))로 가는 경로 좌표는 입력이 같으면 같은 배열이다(useTripRoutes 가 state 로 쥔 dayRoute 참조 기준).
+  const actualRoute = useMemo(
+    () =>
+      automationOn && consentOn && dayRoute
+        ? routeDayToSegments(dayRoute)
+        : undefined,
+    [automationOn, consentOn, dayRoute]
+  );
 
   // 허브 ‹ 와 같은 규칙 — 딥링크 직행이라 돌아갈 곳이 없으면 홈으로(INV-4 침묵 금지).
   const goBackOrHome = (): void => {
