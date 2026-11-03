@@ -988,14 +988,15 @@ def _plan_free_distance(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     sido = _trip_area(ctx)
 
     def fn() -> dict:
-        ends: list[_End] = []
+        ends: list[_End | None] = []
         for text, end in zip(said, known):
             if end is None:
-                found = finder.find_place(text, sido, ctx.trace_id)
-                if found is None:  # 없거나 여럿 — 고르지 않는다
-                    return {"status": "EMPTY", "reason": "place_not_found"}
-                end = _End(found.name, found.poi_id)
+                found = finder.find_place(text, sido, ctx.trace_id)  # 없거나 여럿이면 None — 고르지 않는다
+                end = _End(found.name, found.poi_id) if found is not None else None
             ends.append(end)
+        if None in ends:  # 두 끝을 다 찾아 본 뒤 — 한쪽에서 멈추면 답이 찾은 쪽까지 못 찾았다고 했다(2026-11-03 개발)
+            return {"status": "EMPTY", "reason": "place_not_found",
+                    "sides": [{"side": side, "label": e.label if e else None} for side, e in zip(("origin", "destination"), ends)]}
         ids = tuple(e.poi_id for e in ends if e.center is None and e.poi_id)
         rows = _lookup(ctx, ids, ctx.today) if ids else {}
         coords = [e.center or _coord(rows.get(e.poi_id)) for e in ends]
@@ -1042,8 +1043,15 @@ def _assemble_free_distance(ctx: TurnContext, results: Mapping[str, TaskResult])
     value = _value(results, "transit")
     ends = value.get("ends") if isinstance(value, Mapping) else None
     if not (isinstance(ends, list) and len(ends) == 2):
-        note = _UNRESOLVED_LEG if ctx.snapshot.trip is not None else _UNFOUND_NO_TRIP
-        return _text_facts(intent, FactStatus.EMPTY, (_action("OPEN_ITINERARY"),), notes=(note,))
+        notes = (_UNRESOLVED_LEG if ctx.snapshot.trip is not None else _UNFOUND_NO_TRIP,)
+        # 어느 쪽을 못 찾았고 어느 쪽은 찾았는지 — 없으면 "서울역과 경복궁을 찾지 못했어요"(경복궁은 찾힌다, 2026-11-03 개발)
+        sides = value.get("sides") if isinstance(value, Mapping) else None
+        if isinstance(sides, list):
+            ko = {"origin": "출발지", "destination": "목적지"}
+            lost = "·".join(ko[s["side"]] for s in sides if s["label"] is None)
+            kept = [f"{ko[s['side']]}는 '{s['label']}'(으)로 찾았다" for s in sides if s["label"]]
+            notes += (f"못 찾은 쪽: {lost}" + (f" — {kept[0]}. 찾은 곳까지 못 찾았다고 말하지 않는다" if kept else ""),)
+        return _text_facts(intent, FactStatus.EMPTY, (_action("OPEN_ITINERARY"),), notes=notes)
     origin, dest = ends
     mode, assumed = _transport_mode(ctx)
     notes = (f"이동 수단 가정: {mode}",) if assumed else ()
@@ -1290,6 +1298,12 @@ def _assemble_poi_info(ctx: TurnContext, results: Mapping[str, TaskResult]) -> F
     actions = (_action("OPEN_PLACE", poiId=poi_id),) if poi_id else (_action("OPEN_ITINERARY"),)
     # 소개(KB-5)는 카드(payload)에 싣지 않고 답변 재료로만 — 위키 원문을 그대로 보이면 출처 표기가 걸린다(place_intro 註)
     intro = value.get("intro") if isinstance(value, Mapping) else None
+    # 소개에 대체 문서의 웹 확인 사실이 들었으면 결정론 각주를 단다(KB-5 담당 권고 11-03) — 웹 사실은 근거 없음이 약 4% 라 확정 사실처럼
+    # 읽히면 안 된다. 장소 카드(관광공사 상세)만 쓴 소개는 1차 출처라 달지 않고, 미확인 칸의 웹 각주가 이미 있으면 그것이 이긴다
+    if footnote is None and isinstance(intro, str) and row is not None and place_fallback.web_in(str(row.get("source_ref") or ""), intro):
+        footnote = INTRO_WEB_TEXT
+        notes = notes + ("소개(intro)의 '웹 확인:' 뒤 문장은 웹 검색으로 확인한 정보다 — 단정하지 말고 '웹에서 확인한 바로는'처럼 말한다. "
+                         "출처 주소는 말하지 않는다",)
     detail = {"target": name, **({"intro": intro} if isinstance(intro, str) and intro else {})}
     return Facts(
         intent, status, AnswerKind.INFO, rows=rows,
@@ -1305,6 +1319,7 @@ def _assemble_poi_info(ctx: TurnContext, results: Mapping[str, TaskResult]) -> F
 # 각주는 결정론 — 답변 LLM 이 각주를 쓰지 않으면 이 문장이 나간다(LLM 이 notes 를 놓쳐도 사용자는 안다, 2026-10-22 테스트 화면)
 WEB_PENDING_TEXT = "확인 안 된 정보는 지금 찾아보고 있어요. 잠시 뒤에 다시 물어봐 주세요."
 WEB_FOUND_TEXT = "출처 칸의 값은 웹에서 확인한 정보라 바뀔 수 있어요. 방문 전에 한 번 더 확인해 주세요."
+INTRO_WEB_TEXT = "소개에는 웹에서 확인한 내용이 섞여 있어요. 바뀌었을 수 있으니 방문 전에 한 번 더 확인해 주세요."
 
 
 def _web_sentence(web: PlaceFacts, fee_unknown: bool) -> str:

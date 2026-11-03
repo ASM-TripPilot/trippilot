@@ -104,7 +104,8 @@ class ReplanDiffServiceTest : StringSpec({
             error("초안 표면은 동결 조회 대상이 아니다(TRIP-1060)")
     }
 
-    fun surface(id: UUID, name: String) = PoiSurfaceView(id, name, 34.64, 126.76, "명소", "SIGHT", null, "https://img/$name.jpg", emptyList())
+    fun surface(id: UUID, name: String) =
+        PoiSurfaceView(id, name, 34.64, 126.76, "명소", "SIGHT", null, "https://img/$name.jpg", emptyList(), imageLicense = "TYPE3")
 
     /** 표면 대역은 기본 빈 것 — 표면을 보는 스펙만 명시로 넣는다. */
     fun diffService(sessions: ReplanSessionService, plans: ItineraryPlanFacade, surfaces: PoiSurfaceFacade = FakeSurfaces()) =
@@ -297,19 +298,21 @@ class ReplanDiffServiceTest : StringSpec({
         val byKey = view.after.associateBy { it.slotKey }
         byKey.getValue(slotKey(added)).nameKo shouldBe "가우도 출렁다리"
         byKey.getValue(slotKey(added)).imageUrl shouldBe "https://img/가우도 출렁다리.jpg"
+        byKey.getValue(slotKey(added)).imageLicense shouldBe "TYPE3"   // 사진과 한 쌍(V2.88)
         byKey.getValue(slotKey(added)).category shouldBe "명소"
         byKey.getValue(slotKey(added)).lat shouldBe 34.64
         byKey.getValue(slotKey(added)).lng shouldBe 126.76
         // 정본에서 사라진 장소 — 이름을 지어내지 않되 항목은 빠지지 않는다(INV-1 · BR-U4-25)
         byKey.getValue(slotKey(kept)).nameKo shouldBe null
         byKey.getValue(slotKey(kept)).imageUrl shouldBe null
+        byKey.getValue(slotKey(kept)).imageLicense shouldBe null
         surfaces.calls shouldBe 1
     }
 
     "before 의 표면은 C8 이 준 값 그대로다 — 동결 규칙이 두 응답에서 갈리지 않는다(INV-U1-03)" {
         val proposal = ReplanProposal(UUID.randomUUID(), day, listOf(draftSlot(kept, "10:00", "11:00")))
         val frozenNamed = planned(dropped, "15:00", "16:00", 1).copy(
-            nameKo = "동결된 옛 이름", category = "맛집", imageUrl = null, lat = 34.0, lng = 126.0,
+            nameKo = "동결된 옛 이름", category = "맛집", imageUrl = null, lat = 34.0, lng = 126.0, imageLicense = "TYPE1",
         )
         val view = diffService(
             sessionsOf(ReplanStatus.DRAFT, proposal.toMap()),
@@ -320,6 +323,8 @@ class ReplanDiffServiceTest : StringSpec({
         b.nameKo shouldBe "동결된 옛 이름"
         b.category shouldBe "맛집"
         b.lat shouldBe 34.0
+        b.imageLicense shouldBe "TYPE1"
+        ReplanDiffResponse.from(view).before.single().imageLicense shouldBe "TYPE1"   // 응답 DTO 까지
     }
 
     "ready=false 면 표면 조회를 하지 않는다" {

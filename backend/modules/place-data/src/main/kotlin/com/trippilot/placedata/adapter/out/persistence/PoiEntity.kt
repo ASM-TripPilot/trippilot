@@ -1,6 +1,7 @@
 package com.trippilot.placedata.adapter.out.persistence
 
 import com.trippilot.placedata.domain.DataStatus
+import com.trippilot.placedata.domain.ImageLicense
 import com.trippilot.placedata.domain.Poi
 import com.trippilot.placedata.domain.PoiCategory
 import com.trippilot.placedata.domain.PoiCursor
@@ -46,6 +47,8 @@ class PoiEntity(
     @Column(name = "image_url") var imageUrl: String? = null,
     /** V2.87 — CDN 썸네일. 배치가 채우고 Poi.refreshed 가 원본이 바뀌면 비운다. */
     @Column(name = "image_thumb_url") var imageThumbUrl: String? = null,
+    /** V2.88 — 사진의 공공누리 유형(TYPE1·TYPE3). 모르면 null. */
+    @Column(name = "image_license") var imageLicense: String? = null,
     // text[] 매핑은 preference_set(V1.5) 선례와 동일 — 컨버터 없이 Hibernate 네이티브 배열.
     @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "tags") var tags: Array<String> = emptyArray(),
@@ -252,7 +255,7 @@ class PoiRepositoryAdapter(
         openingHours = openingHours, dataStatus = dataStatus.name, source = source.name,
         savedCount = savedCount, createdAt = createdAt, updatedAt = updatedAt,
         imageUrl = imageUrl, tags = tags.toTypedArray(), sourceRef = sourceRef, address = address,
-        imageThumbUrl = imageThumbUrl,
+        imageThumbUrl = imageThumbUrl, imageLicense = imageLicense?.name,
     )
 
     private fun PoiEntity.toDomain() = Poi.reconstitute(
@@ -261,7 +264,7 @@ class PoiRepositoryAdapter(
         openingHours = openingHours, dataStatus = DataStatus.valueOf(dataStatus), source = PoiSource.valueOf(source),
         savedCount = savedCount, createdAt = createdAt, updatedAt = updatedAt,
         imageUrl = imageUrl, tags = tags.toList(), sourceRef = sourceRef, address = address,
-        imageThumbUrl = imageThumbUrl,
+        imageThumbUrl = imageThumbUrl, imageLicense = imageLicense?.let(ImageLicense::valueOf),
     )
 
     private companion object {

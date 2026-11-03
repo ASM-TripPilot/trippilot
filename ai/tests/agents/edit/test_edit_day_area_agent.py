@@ -54,8 +54,10 @@ class _Facade:
 class _Provider:
     def __init__(self, violations=()) -> None:
         self.facade = _Facade(violations)
+        self.estimators: list[tuple] = []  # ⑤ 가 받은 (도보 상한, 주차 계획) — 풀이가 쓴 추정기로 재는지 본다
 
-    def for_pool(self, poi_index):
+    def for_pool(self, poi_index, walk_max_km=None, parking=None):
+        self.estimators.append((walk_max_km, parking))
         return self.facade
 
 

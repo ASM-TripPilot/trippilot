@@ -1,4 +1,4 @@
-import type { ReactElement, ReactNode } from 'react';
+import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -20,12 +20,13 @@ import type { ReflectionStats } from '@/shared/api/index.schemas';
 import type { MapNotice } from '../model/missingParts';
 import { ChangeSummaryRow } from './ChangeSummaryRow';
 import { isGuideText } from '../model/fillTemplate';
-import { NarrativeBlock } from './NarrativeBlock';
 import {
   EmptyCircleGlyph,
   LocationOffGlyph,
   PhotoOffGlyph,
+  ReflectionMagazine,
   RetryGlyph,
+  type MagazineVM,
   type RecordBarNav,
 } from '@/features/reflection/index.view';
 import { ReflectionPhotoGrid } from './ReflectionPhotoGrid';
@@ -34,13 +35,13 @@ import { ReflectionStatsRow } from './ReflectionStatsRow';
 /**
  * TRIP-571 · j03 오늘의 회고 화면(순수 프레젠테이션 — VM·콜백 주입, 조회/표시본 조립 0).
  * 조립·조회·표시본 결정은 `pages/record/daily-reflection` 이 진다(이 파일은 `@/shared/*`·`@/entities/*` 만
- * import — 프리뷰 격리 렌더 안전, FSD 경계). 화면은 완성된 `narrative`·`editableText` 를 받고,
+ * import — 프리뷰 격리 렌더 안전, FSD 경계). 화면은 완성된 `magazine`(표시본 포함)·`editableText` 를 받고,
  * `draftNarrative`/`editedNarrative`/`resolveDisplayNarrative` 어느 것도 참조하지 않는다.
  *
  * 5얼굴(TRIP-763: 일차 탭·하단 바·헤더 "편집"은 전 얼굴 공통 크롬. TRIP-1584 — 하단은 홈 5칸 탭바가 아니라 뒤로 + 기록·회고·요약 3칸 바(`RecordNavBar`,
  * 회고 활성)이고 헤더 ‹ 는 그 바의 뒤로가 대신한다. 편집 중엔 바가 빠진다 — 저장·취소 푸터가 키보드 위에 있어야 한다):
- *  - default            : stats · 풀폭 지도(좌표 있을 때만) · 서술 카드 · 사진 그리드 · "확인".
- *  - data-insufficient  : stats(거리 "—") + 지도 자리 사유(제목/본문 2줄) + 서술 + "사진 없음" 자리 · "확인".
+ *  - default            : 매거진(표지·인용문·장면·동선·숫자·해시태그, TRIP-1665) · 풀폭 지도(좌표 있을 때만) · "내 기록"(기분·한 줄 메모·사진 그리드).
+ *  - data-insufficient  : 매거진(숫자 타일의 거리 "—", "수정" 링크 없음) + 지도 자리 사유(제목/본문 2줄) · "내 기록" + "사진 없음" 자리.
  *  - empty              : 빈 원 일러스트 + "오늘 기록된 활동이 없습니다" · 하단 CTA "직접 회고 작성".
  *  - error              : stats 채움(BASIC 카드, INV-U5-07) + 에러 카드(다시 시도) · CTA "직접 회고 작성".
  *  - pending            : (TRIP-1068) 조회·생성 중 안내 본문만 · 하단 CTA 없음(empty 로 접지 않는다, INV-4).
@@ -88,8 +89,8 @@ export interface ReflectionDayTab {
 
 export interface DailyReflectionScreenProps {
   face: ReflectionFace;
-  /** 표시본(reflectionFallback 상류 해소). */
-  narrative: string;
+  /** TRIP-1665 · 매거진 VM(페이지가 `buildMagazineVM` 으로 조립 — 표시본 narrative 도 여기 담긴다). default·data-insufficient 가 그린다. */
+  magazine: MagazineVM;
   /** 편집 시드(페이지 조립, empty 얼굴=''). */
   editableText: string;
   stats: ReflectionStats;
@@ -98,8 +99,6 @@ export interface DailyReflectionScreenProps {
   hidePhotoGrid: boolean;
   // photos 는 읽기만 하므로 readonly — 호출자가 `[] as const` 로 넘겨도 받는다(가변 배열도 그대로 할당됨).
   photos: readonly { uri: string }[];
-  /** TRIP-1445 · AI 장면 블록(없으면 안 그린다). */
-  scenesBlock?: ReactNode;
   changeSummary?: string | null;
   mapCenter?: MapCenter;
   mapPins?: MapPin[];
@@ -139,14 +138,13 @@ export interface DailyReflectionScreenProps {
 
 export function DailyReflectionScreen({
   face,
-  narrative,
+  magazine,
   editableText,
   stats,
   distanceDash,
   mapNotice,
   hidePhotoGrid,
   photos,
-  scenesBlock,
   changeSummary,
   mapCenter,
   mapPins,
@@ -478,60 +476,26 @@ export function DailyReflectionScreen({
                 </Pressable>
               </View>
             </>
-          ) : face === 'default' ? (
-            <>
-              <ReflectionStatsRow stats={stats} distanceDash={distanceDash} />
-
-              {/* 좌표 없으면 지도 자리 자체를 그리지 않는다(TRIP-935 R7 — 늘 빈 점선 박스였다). */}
-              {hasMap ? mapArea : null}
-
-              {/* 서술 카드 — 헤드 "오늘의 기록" + "수정"(편집 진입, 죽은 링크 아님) + 본문(NarrativeBlock). */}
-              <View className="w-full gap-sm rounded-card bg-surface-soft px-lg py-md">
-                <View className="flex-row items-center">
-                  <Text className="font-noto-bold text-card-title font-bold text-ink">
-                    오늘의 기록
-                  </Text>
-                  <View className="flex-1" />
-                  <Pressable
-                    testID="reflection-daily-narrative-edit"
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    onPress={handleEnterEdit}
-                  >
-                    <Text className="font-noto-bold text-label font-bold text-primary">
-                      수정
-                    </Text>
-                  </Pressable>
-                </View>
-                <NarrativeBlock narrative={narrative} />
-              </View>
-
-              {scenesBlock}
-
-              {hidePhotoGrid ? (
-                <View
-                  testID="reflection-daily-photo-empty"
-                  className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
-                >
-                  <PhotoOffGlyph size={26} />
-                  <Text className="text-label text-muted">사진 없음</Text>
-                </View>
-              ) : (
-                <ReflectionPhotoGrid photos={photos} />
-              )}
-
-              {extrasBlock}
-
-              {/* changeSummary 는 default 얼굴에서 그리지 않는다(prop 은 무회귀로 유지). */}
-            </>
           ) : (
-            // data-insufficient (무회귀 — 기존 표면 유지).
+            // default · data-insufficient — 매거진(TRIP-1665) 아래에 "내 기록"(기분·한 줄 메모·사진 그리드). 서술 수정은 인용문 옆
+            // "수정"(default 만 — data-insufficient 엔 없다). 방문<2 면 숫자 타일의 거리가 "—", 지도 자리 사유가 매거진 아래에 선다.
             <>
-              <ReflectionStatsRow stats={stats} distanceDash={distanceDash} />
-              {mapArea}
+              <ReflectionMagazine
+                vm={magazine}
+                testIDPrefix="reflection-daily"
+                onEditNarrative={
+                  face === 'default' ? handleEnterEdit : undefined
+                }
+              />
 
-              <NarrativeBlock narrative={narrative} />
+              {/* 좌표 없으면 지도 자리 자체를 그리지 않는다(TRIP-935 R7 — 늘 빈 점선 박스였다). data-insufficient 는 누락 사유를 표기한다. */}
+              {face === 'default' ? (hasMap ? mapArea : null) : mapArea}
 
-              {scenesBlock}
+              <Text className="font-noto-bold text-section font-bold text-ink">
+                내 기록
+              </Text>
+
+              {extrasBlock}
 
               {hidePhotoGrid ? (
                 <View
@@ -545,9 +509,8 @@ export function DailyReflectionScreen({
                 <ReflectionPhotoGrid photos={photos} />
               )}
 
-              {extrasBlock}
-
-              {changeSummary ? (
+              {/* changeSummary 는 data-insufficient 에서만 그린다(default 에선 prop 만 무회귀로 유지). */}
+              {face === 'data-insufficient' && changeSummary ? (
                 <ChangeSummaryRow changeSummary={changeSummary} />
               ) : null}
             </>

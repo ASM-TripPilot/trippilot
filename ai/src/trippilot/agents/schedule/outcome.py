@@ -14,6 +14,7 @@ from enum import Enum
 from typing import Mapping
 
 from trippilot.agents.schedule.budget import DeadlineBudget
+from trippilot.assembly_engine.config import ACTIVE_WALK_MAX_KM
 from trippilot.assembly_engine.parking import ParkingPlan
 from trippilot.domain.common import PoiId
 from trippilot.domain.itinerary.itinerary import ItinerarySolution
@@ -122,6 +123,14 @@ def _wanted_categories(persona: PersonaSummary | None) -> set[PoiCategory]:
         wanted.add(PoiCategory.ART)
     return wanted
 
+
+
+def activity_walk_cap(persona: PersonaSummary | None) -> float | None:
+    """액티비티 취향이면 도보 상한(도로 1.0km — 2026-10-19 사용자), 아니면 None(설정 기본 700m).
+
+    생성(`ScheduleAgent` ④)과 계획 없는 재검증(편집 ④⑤·validate·repair — 배선 `_plan_less_walk_cap`)이 **이 함수 하나**로 가른다 —
+    둘이 갈리면 생성이 걸어서 잡은 구간을 재검증이 HC2 로 친다."""
+    return ACTIVE_WALK_MAX_KM if PoiCategory.ACTIVITY in _wanted_categories(persona) else None
 
 def candidates_report(
     pool: CandidatePool, *, days: int, persona: PersonaSummary | None

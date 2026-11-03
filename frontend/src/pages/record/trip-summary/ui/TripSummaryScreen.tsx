@@ -10,7 +10,7 @@ import {
   LocationOffGlyph,
   type RecordBarNav,
 } from '@/features/reflection/index.view';
-import { CountUpText } from './CountUpText';
+import { CountUpText } from '@/shared/ui/CountUpText';
 import { DayHighlightCard } from './DayHighlightCard';
 import type { SummaryStatCells } from '@/features/reflection/index.view';
 import type { OrderedVisit } from '@/features/reflection/index.view';

@@ -56,9 +56,10 @@ from trippilot.agents.schedule.outcome import (
     ScoringMode,
     SlotAlternative,
     _wanted_categories,
+    activity_walk_cap,
     failed_outcome,
 )
-from trippilot.assembly_engine.config import ACTIVE_WALK_MAX_KM, AssemblyConfig
+from trippilot.assembly_engine.config import AssemblyConfig
 from trippilot.assembly_engine.constraints import open_hours_ok
 from trippilot.assembly_engine.day_focus import pick_day_focus
 from trippilot.assembly_engine.facade import AssemblyConflictError
@@ -289,6 +290,9 @@ class ScheduleTask:
     # 그러면 점수는 무엇을 넣을지를 정하지 않으므로 점수 LLM 을 부르지 않는다. 같은 재계획 시한
     # (25s)에 PlanB·구성·점수 LLM 셋이 들어가면 넘친다(2026-10-13 504, #1102).
     llm_composed: bool = False
+    # 취향은 규칙 점수(`taste_fit`)로만 — **편집 ①b(날마다 동네)만**. 편집 시한(BE 8s − 왕복 여유)에 점수 LLM 은 못 든다
+    # (2026-11-03 결정). 강등이 아니라 요청이 정한 길이라 FallbackEvent 를 내지 않는다(`llm_composed` 와 같은 처리).
+    rule_only: bool = False
     # 다시 짜기 1회 수리의 2차 풀이(배선 `_repair_day`) — 1차가 남긴 재료. 있으면 ⓪ 풀 밖 조회와
     # ②⁗ 영업시간 보강을 다시 하지 않고(1차 값 그대로 — 2차는 잔여 ≈0 에서 시작해 다시 물으면 시한
     # 강등으로 빠지고, 영업시간은 건마다 돈이 든다) 수리 재료도 다시 만들지 않는다(수리는 한 번).
@@ -433,8 +437,8 @@ class ScheduleAgent:
         #    시한을 넘는다: 재계획은 에이전트 앞에서 PlanB 가 예산의 절반을 쓰는데, 2026-10-13 DEV
         #    실측에서 점수 타임아웃 13.4s(=전체 잔여) + OR 5s 로 25s 시한을 넘겨 백스톱 504 가 났다.
         elapsed = self._clock.monotonic_ms() - t0
-        if task.llm_composed:
-            # 강등이 아니다 — 판단은 구성 LLM 이 했다(배선 노트 `llm_composed`). FallbackEvent 를
+        if task.llm_composed or task.rule_only:
+            # 강등이 아니다 — 판단은 구성 LLM 이 했거나(배선 노트 `llm_composed`) 요청이 규칙 점수를 정했다(편집 ①b). FallbackEvent 를
             # 내지 않는다 — 내면 폴백 집계에 성공이 폴백으로 섞인다.
             candidates, mode = self._rule_scores(request, pool, persona), ScoringMode.RULE
         else:
@@ -653,7 +657,7 @@ class ScheduleAgent:
         #    체인 폴백(OR-Tools→LLM→규칙→최소)은 어셈블리가 이미 갖고 있다. 여기서
         #    재시도·재조립을 얹으면 이중 폴백이 되어 시한만 두 배로 쓴다 — 하지 않는다.
         # 액티비티 취향이면 조금 더 걷는다(도로 1.0km, 2026-10-19 사용자) — 조립과 화면 거리가 같은 상한을 쓴다.
-        walk_max = ACTIVE_WALK_MAX_KM if PoiCategory.ACTIVITY in _wanted_categories(persona) else None
+        walk_max = activity_walk_cap(persona)
         # 자차면 가까운 장소들은 차를 한 번 세우고 걸어서 돈다(2026-10-21 사용자) — 시간표에 들어가야 솔버가 순서를 고를 때 안다.
         # 묶기는 잔여 시한을 재기 전에 — 그 시간도 조립 시한 안에서 쓴다
         parking = (self._assembly_provider.parking_for(index, walk_max)

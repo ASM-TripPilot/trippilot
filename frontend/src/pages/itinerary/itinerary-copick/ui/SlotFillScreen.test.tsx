@@ -67,3 +67,53 @@ describe('🔴 SlotFillScreen — 선택 전 확정 잠금 (페이지가 못 만
     expect(onSelectRadio).toHaveBeenCalledWith('A1');
   });
 });
+
+/**
+ * TRIP-1669 · 찾는 중심 영역(순수 뷰) — 페이지가 못 만드는 것만 남겼다(B안 (c)).
+ *
+ *  - `centerChoice` 를 안 주면 영역이 없다 — 프리뷰(`app/_dev/preview.tsx`)가 이 prop 없이 뷰를 격리 렌더하는 계약.
+ *    페이지는 늘 prop 을 주므로 통합으로는 만들 수 없다.
+ *  - 후보 목록·조회 중(스켈레톤)·0건·조회 실패 네 얼굴 모두에 영역이 붙는다 — 페이지로는 얼굴을 하나씩 만들기 어렵다.
+ *
+ * 나머지(제목·글자·선택 표시·펼침/접기·숙소 근처 유무·안내·눌림·시간 표현 0)는 `SlotFillPage.integration.test.tsx`
+ * 「찾는 중심 고르기」가 실 요청으로 본다(02a §8).
+ */
+describe('🔴 SlotFillScreen — 찾는 중심 영역 (TRIP-1669)', () => {
+  const OPT = (key: string) => `itinerary-copick-center-opt-${key}`;
+
+  function choice() {
+    return {
+      selected: 'auto',
+      expanded: false,
+      stayAvailable: true,
+      notice: null,
+      onToggleExpanded: jest.fn(),
+      onSelect: jest.fn(),
+    };
+  }
+
+  it('SC0 · centerChoice 를 안 주면 영역이 없다(선제 green — 기존 호출·프리뷰 무회귀)', () => {
+    renderScreen();
+
+    expect(screen.queryByTestId('itinerary-copick-center-root')).toBeNull();
+    expect(screen.queryByTestId(OPT('auto'))).toBeNull();
+  });
+
+  it.each([
+    ['후보 목록', {}],
+    ['후보 조회 중(스켈레톤)', { candidates: [], candidatesPending: true }],
+    ['0건 얼굴', { candidates: [] }],
+    [
+      '조회 실패 얼굴',
+      { candidates: [], candidatesErrorMessage: '불러오지 못했어요' },
+    ],
+  ] as const)(
+    'SC7 · %s 에서도 영역이 있다(중심을 거기서 바꿀 수 있다)',
+    (_face, overrides) => {
+      renderScreen({ centerChoice: choice(), ...overrides });
+
+      expect(screen.getByTestId('itinerary-copick-center-root')).toBeTruthy();
+      expect(screen.getByTestId(OPT('auto'))).toBeTruthy();
+    }
+  );
+});

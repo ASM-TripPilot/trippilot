@@ -9,20 +9,26 @@
 
 커넥션은 팩토리 주입(psycopg 3 호환, `PgDialogueMemoryStore` 와 같은 패턴 — 호출마다 연결, 풀 없음). 예외는 호출측으로 올린다 —
 반경 탐색으로 내려가는 것은 핸들러 몫이다(INV-4).
+
+이름 찾기 둘은 모델 SQL 이 아니라 **우리가 쓴** 매개변수 SQL 이다 — 도우미의 `find_by_name`(이름 하나), 편집 번역의 `find_said`(발화의 이름
+말 여럿 한 번에 · 지역 접두·지점 접미를 뗀 꼴까지, F9). 같은 이름 여럿에서 고르는 규칙은 둘이 같다(`_pick_one`).
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from trippilot.domain.poi.poi import NIGHTLIFE_TAG, TRENDING_TAG
+from trippilot.domain.poi.region_centers import bare_region
 
 ROW_CAP = 20  # 핸들러는 ≤5 를 쓴다 — 표시 불가 이름·나이트라이프를 거르고도 남게 넉넉히
 STATEMENT_TIMEOUT_MS = 1500  # 팬아웃 작업 예산(≤3s) 안에서 LLM(~1.5s) 뒤에 남는 몫
 # 관광 종류 — 같은 이름이 여럿일 때 관광지와 그 이름을 딴 식당·가게(궁궐 "경복궁" ↔ 울산 식당 "경복궁", 속초항 ↔ 횟집)를 가른다
 _SIGHT_CATEGORIES = frozenset({"명소", "자연", "문화", "미술", "야경"})
+# 편집 이름 조회(`find_said`)의 행 상한 — 말 여럿 × 같은 이름 여럿. 이름 그대로 맞은 행이 앞이라 잘려도 지역 접두·지점 접미 쪽이 먼저 잘린다
+SAID_CAP = 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +51,93 @@ _ROW_COLUMNS = "poi_id::text, name, category, sido, sigungu, tags, rich"
 def _row(r: tuple) -> PlaceRow:
     return PlaceRow(poi_id=r[0], name=r[1], category=r[2], sido=r[3], sigungu=r[4],
                     trending=TRENDING_TAG in (r[5] or ()), nightlife=NIGHTLIFE_TAG in (r[5] or ()), rich=bool(r[6]))
+
+
+def _pick_one(hits: Sequence[PlaceRow], area: str | None) -> PlaceRow | None:
+    """같은 이름 여럿에서 한 곳 — 한 곳뿐 → 지역 안 한 곳 → 정보 충실(rich) 한 곳 → 관광 종류 한 곳, 아니면 None(`find_by_name` 규칙)."""
+    if len(hits) == 1:
+        return hits[0]
+    local = [h for h in hits if area and ((h.sido or "").startswith(area) or (h.sigungu or "").startswith(area))]
+    if len(local) == 1:
+        return local[0]
+    rich = [h for h in (local or hits) if h.rich]  # 지역 안(없으면 전체)에서 정보 충실한 곳이 하나뿐인가 — 정렬이 rich 를 앞에 둔다
+    if len(rich) == 1:
+        return rich[0]
+    sights = [h for h in (rich or local or hits) if h.category in _SIGHT_CATEGORIES]
+    return sights[0] if len(sights) == 1 else None
+
+
+# 편집 이름 조회 — 말(붙여 쓴 한 낱말 `words` · 띄어 쓴 여러 낱말 `spans`, 둘 다 소문자)과 맞는 이름. 세 꼴을 한 번에 본다:
+#   이름 그대로 · 맨 앞 낱말(지역 접두 "서귀포 하논분화구")을 뗀 꼴 · 맨 뒤 '…점' 낱말(지점 접미 "고집돌우럭 중문점")을 뗀 꼴.
+# 한 낱말 말은 이름의 띄어쓰기를 무시하고, 여러 낱말 말은 이름의 띄어쓰기 그대로다(편집 번역 `_named_beyond_cap` 과 같은 규칙 —
+# 이름에 없는 띄어쓰기를 건너 붙이지 않는다). 지역 접두가 정말 그 곳의 지역인지는 SQL 이 아니라 `said_matches` 가 본다.
+# 이름 그대로 맞은 행을 앞에 둔다 — 상한에 잘려도 그쪽은 남는다(`pick_said` 가 잘림을 안다).
+# 첫 조회는 **id 만** 받는다 — 칸(`_ROW_COLUMNS`)을 여기서 고르면 보안 장벽 뷰가 거르기 전에 모든 행의 태그 배열을 만든다(로컬 실측
+# 11.2만 행: 칸까지 154ms · id 만 38ms). 칸은 둘째 조회가 id 로 받는다 — uuid 같음은 leakproof 라 장벽 아래 기본키 색인을 탄다(0.4ms).
+_N = "lower(name)"  # 위치·자르기를 모두 소문자 이름 위에서 센다 — `said_matches` 가 같은 글을 가른다
+_SAID_SQL = (
+    "SELECT poi_id FROM poi_public WHERE"
+    f" replace({_N}, ' ', '') = ANY(%(words)s::text[]) OR {_N} = ANY(%(spans)s::text[])"
+    f" OR (strpos({_N}, ' ') > 0 AND ("
+    f"replace(substr({_N}, strpos({_N}, ' ') + 1), ' ', '') = ANY(%(words)s::text[])"
+    f" OR substr({_N}, strpos({_N}, ' ') + 1) = ANY(%(spans)s::text[])))"
+    f" OR (strpos({_N}, ' ') > 0 AND right({_N}, 1) = '점' AND ("
+    f"replace(left({_N}, length({_N}) - strpos(reverse({_N}), ' ')), ' ', '') = ANY(%(words)s::text[])"
+    f" OR left({_N}, length({_N}) - strpos(reverse({_N}), ' ')) = ANY(%(spans)s::text[])))"
+    f" ORDER BY (replace({_N}, ' ', '') = ANY(%(words)s::text[]) OR {_N} = ANY(%(spans)s::text[])) DESC,"
+    f" poi_id LIMIT {SAID_CAP + 1}"
+)
+
+
+def _region_head(head: str, row: PlaceRow) -> bool:
+    """이름 맨 앞 낱말이 그 곳의 지역인가 — 지역 표 이름(+시·도·구, "제주"·"서귀포"·"중문") 또는 그 행의 시·도·구군 앞부분("양평"→양평군)."""
+    return len(head) >= 2 and (bare_region(head) is not None
+                               or (row.sido or "").startswith(head) or (row.sigungu or "").startswith(head))
+
+
+def said_matches(row: PlaceRow, words: Collection[str], spans: Collection[str]) -> list[tuple[str, int]]:
+    """행 이름이 맞은 (말, 급) 전부 — 0 이름 그대로 · 1 지역 접두를 뗀 꼴 · 2 지점 접미를 뗀 꼴. 셈은 `_SAID_SQL` 과 같다."""
+    def hit(text: str) -> list[str]:
+        squashed = text.replace(" ", "")
+        return [k for k in (squashed if squashed in words else None, text if text in spans else None) if k]
+
+    name = row.name.lower()
+    found = [(k, 0) for k in hit(name)]
+    if " " in name:
+        head, rest = name.split(" ", 1)
+        if _region_head(head, row):
+            found += [(k, 1) for k in hit(rest)]
+        core, tail = name.rsplit(" ", 1)
+        if len(tail) >= 2 and tail.endswith("점"):
+            found += [(k, 2) for k in hit(core)]
+    return found
+
+
+def pick_said(rows: Sequence[PlaceRow], usable: Collection[str], words: Collection[str], spans: Collection[str],
+              *, cap: int = SAID_CAP) -> tuple[str, ...]:
+    """말마다 한 곳(poi_id) — `usable`(부르는 쪽이 거리·자격으로 거른 id) 안에서. 이름 그대로 맞은 곳이 하나라도 있는 말은 그 안에서만
+    `find_by_name` 규칙으로 고르고(여행 지역 대신 거리로 이미 걸렀다), 없으면 지역 접두·지점 접미를 뗀 꼴이 **하나뿐**일 때만 그곳이다 —
+    같은 상호의 지점 여럿("고집돌우럭 중문점·제주공항점")에서 하나를 고르지 않는다. 행이 상한을 넘었으면(`cap`) 뗀 꼴은 믿지 않고, 이름
+    그대로 맞은 행까지 잘렸으면 아무것도 고르지 않는다 — 잘린 쪽에 같은 이름이 더 있을 수 있다."""
+    words, spans = frozenset(words), frozenset(spans)
+    truncated = len(rows) > cap
+    if truncated and any(tier == 0 for _, tier in said_matches(rows[cap], words, spans)):
+        return ()  # 잘린 첫 행도 이름 그대로 맞은 행 — 그 이름의 같은 곳이 더 있을 수 있다
+    rows = rows[:cap]
+    by_key: dict[str, tuple[list[PlaceRow], list[PlaceRow]]] = {}
+    for row in rows:
+        if row.poi_id not in usable:
+            continue
+        for key, tier in said_matches(row, words, spans):
+            exact, core = by_key.setdefault(key, ([], []))
+            if row not in (exact if tier == 0 else core):
+                (exact if tier == 0 else core).append(row)
+    picked: list[str] = []
+    for exact, core in by_key.values():
+        one = _pick_one(exact, None) if exact else (core[0] if len(core) == 1 and not truncated else None)
+        if one is not None and one.poi_id not in picked:
+            picked.append(one.poi_id)
+    return tuple(picked)
 
 
 class PgPlaceSql:
@@ -76,16 +169,28 @@ class PgPlaceSql:
                     hits = [_row(r) for r in cur.fetchall()]
             finally:
                 conn.rollback()
-        if len(hits) == 1:
-            return hits[0]
-        local = [h for h in hits if area and ((h.sido or "").startswith(area) or (h.sigungu or "").startswith(area))]
-        if len(local) == 1:
-            return local[0]
-        rich = [h for h in (local or hits) if h.rich]  # 지역 안(없으면 전체)에서 정보 충실한 곳이 하나뿐인가 — 정렬이 rich 를 앞에 둔다
-        if len(rich) == 1:
-            return rich[0]
-        sights = [h for h in (rich or local or hits) if h.category in _SIGHT_CATEGORIES]
-        return sights[0] if len(sights) == 1 else None
+        return _pick_one(hits, area)
+
+    def find_said(self, words: Sequence[str], spans: Sequence[str]) -> list[PlaceRow]:
+        """편집 이름 조회 — 발화의 이름 말(`said_name_keys`)과 맞는 등록 장소 행(≤ `SAID_CAP` + 1, 넘었는지는 `pick_said` 가 본다).
+        `find_by_name` 과 같은 읽기 전용·시한·매개변수 SQL(LLM 없음)이고, 이름 그대로에 더해 지역 접두·지점 접미를 뗀 꼴도 본다.
+        고르기(말마다 한 곳)는 부르는 쪽이 좌표로 거른 뒤 `pick_said` 로 한다 — 이 뷰에는 좌표가 없다."""
+        if not words and not spans:
+            return []
+        with self._connect() as conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SET TRANSACTION READ ONLY")
+                    cur.execute(f"SET LOCAL statement_timeout = {STATEMENT_TIMEOUT_MS}")
+                    cur.execute(_SAID_SQL, {"words": list(words), "spans": list(spans)})
+                    ids = [r[0] for r in cur.fetchall()]
+                    if not ids:
+                        return []
+                    cur.execute(f"SELECT {_ROW_COLUMNS} FROM poi_public WHERE poi_id = ANY(%s::uuid[])", (ids,))
+                    by_id = {r[0]: r for r in cur.fetchall()}
+            finally:
+                conn.rollback()
+        return [_row(by_id[str(i)]) for i in ids if str(i) in by_id]  # 첫 조회 순서(이름 그대로 먼저) 그대로
 
     def run(self, sql: str) -> list[PlaceRow]:
         """검사를 통과한 SELECT → 그 순서의 `PlaceRow` (≤ `ROW_CAP`). DB 오류·시한은 예외로 올라간다."""

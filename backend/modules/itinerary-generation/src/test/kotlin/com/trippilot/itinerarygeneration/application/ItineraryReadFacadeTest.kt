@@ -72,7 +72,7 @@ class ItineraryReadFacadeTest : StringSpec({
     /** 표면 대역 — poiId 를 그대로 이름으로 쓴다. 이름 규칙 자체는 [SlotSurfaceAssembler] 스펙이 잰다. */
     fun surfaces(names: Map<UUID, String>) = object : PoiSurfaceFacade {
         override fun findSurfaces(poiIds: Collection<UUID>) = poiIds.mapNotNull { id ->
-            names[id]?.let { id to PoiSurfaceView(id, it, 33.0, 126.0, "명소", "SIGHT", null, null, emptyList()) }
+            names[id]?.let { id to PoiSurfaceView(id, it, 33.0, 126.0, "명소", "SIGHT", null, null, emptyList(), imageLicense = "TYPE3") }
         }.toMap()
         override fun findFrozenSurfaces(poiSnapshotIds: Collection<UUID>) = emptyMap<UUID, FrozenPoiView>()
     }
@@ -112,10 +112,12 @@ class ItineraryReadFacadeTest : StringSpec({
         a.category shouldBe "명소"
         a.lat shouldBe 33.0
         a.lng shouldBe 126.0
+        a.imageLicense shouldBe "TYPE3"   // 사진 유형도 같은 합성에서 — 기록 화면(U5)·재계획 before 열이 이 값을 쓴다
         // poiB 는 정본에 없다 — 항목은 남고 표면만 비운다
         val b = slots.single { it.poiId == poiB }
         b.nameKo shouldBe null
         b.imageUrl shouldBe null
+        b.imageLicense shouldBe null
     }
 
     /**
