@@ -1110,8 +1110,25 @@
             "title": "Confirm",
             "type": "boolean"
           },
+          "excluded_poi_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Excluded Poi Ids",
+            "type": "array"
+          },
           "itinerary": {
             "$ref": "#/components/schemas/ItineraryPayload"
+          },
+          "preference_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceProfileSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "request_meta": {
             "$ref": "#/components/schemas/RequestMetaSchema"
@@ -1120,6 +1137,13 @@
             "format": "date",
             "title": "Target Date",
             "type": "string"
+          },
+          "time_windows": {
+            "items": {
+              "$ref": "#/components/schemas/TimeWindowSchema"
+            },
+            "title": "Time Windows",
+            "type": "array"
           },
           "transport_mode": {
             "anyOf": [
@@ -1136,6 +1160,18 @@
             "minLength": 1,
             "title": "Trip Id",
             "type": "string"
+          },
+          "trip_start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trip Start Date"
           },
           "utterance": {
             "anyOf": [
@@ -2240,6 +2276,16 @@
           "itinerary": {
             "$ref": "#/components/schemas/ItineraryPayload"
           },
+          "preference_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceProfileSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "request_meta": {
             "$ref": "#/components/schemas/RequestMetaSchema"
           },
@@ -2988,6 +3034,16 @@
         "properties": {
           "itinerary": {
             "$ref": "#/components/schemas/ItineraryPayload"
+          },
+          "preference_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceProfileSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "request_meta": {
             "$ref": "#/components/schemas/RequestMetaSchema"

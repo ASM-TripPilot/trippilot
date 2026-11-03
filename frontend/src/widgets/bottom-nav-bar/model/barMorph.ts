@@ -1,3 +1,10 @@
+import {
+  NAV_BAR_CAPSULE_PADDING_X,
+  NAV_BAR_GAP,
+  NAV_BAR_HEIGHT,
+  NAV_BAR_SIDE,
+} from '@/shared/ui/navBarLayout';
+
 /**
  * TRIP-1522 사이클 4 · 허브 하단 바 4단계 모프의 단계 함수(순수 — 시간 → 각 요소의 값 표).
  *
@@ -52,12 +59,11 @@ export const BAR_ENTER_CUT_MS = 100;
 /** 퇴장 ⓐ 끝 시각 — 뒤로 원·새 칸이 다 사라지고 시작 칸 자리가 마운트되는 때. */
 export const BAR_EXIT_SWAP_MS = 50;
 
-/** 바 폭 기본값 — 폭 390 기기(좌우 30 여백)의 값. 기기마다 `화면 폭 − 60` 을 넘긴다. */
-export const BAR_DEFAULT_WIDTH = 330;
-const FINAL_LEFT = 66;
-const BACK_MAX = 58;
-const BACK_GAP = 8;
-const CAPSULE_PAD = 10;
+/** 바 폭 기본값 — 폭 390 기기에서 좌우 여백을 뺀 값(330). 기기마다 `화면 폭 − 좌우 여백` 을 넘긴다. */
+export const BAR_DEFAULT_WIDTH = 390 - NAV_BAR_SIDE * 2;
+// 치수는 `navBarLayout` 에서 읽는다(TRIP-1739). worklet 본문의 자유 변수로만 읽는다 — 기본 매개변수에 넣으면 실기에서 죽는다(아래 주석).
+/** 최종 알약 왼쪽 끝 = 뒤로 지름 + 뒤로–캡슐 간격(66). */
+const FINAL_LEFT = NAV_BAR_HEIGHT + NAV_BAR_GAP;
 const SCALE_MIN = 0.4;
 const ENTER_SCALE_PEAK = 1.03;
 
@@ -102,13 +108,14 @@ export function barMorphFrame(
   const barLeft = FINAL_LEFT * fold;
   // 생존 칸 중심: 시작 = 5등분의 survivorSlot 번째, 최종 = (1 + 새 칸 수)등분의 첫째. 칸들은 알약 안쪽(패딩 10 제외)을 똑같이 나눠 갖는다.
   const scheduleStartX =
-    CAPSULE_PAD +
-    ((fullWidth - CAPSULE_PAD * 2) / 5) * (shape.survivorSlot + 0.5);
+    NAV_BAR_CAPSULE_PADDING_X +
+    ((fullWidth - NAV_BAR_CAPSULE_PADDING_X * 2) / 5) *
+      (shape.survivorSlot + 0.5);
   const scheduleFinalX =
-    BACK_MAX +
-    BACK_GAP +
-    CAPSULE_PAD +
-    (fullWidth - FINAL_LEFT - CAPSULE_PAD * 2) / (2 * (1 + shape.newCount));
+    FINAL_LEFT +
+    NAV_BAR_CAPSULE_PADDING_X +
+    (fullWidth - FINAL_LEFT - NAV_BAR_CAPSULE_PADDING_X * 2) /
+      (2 * (1 + shape.newCount));
 
   const none = { opacity: 0, scale: 1 };
   const shown = { opacity: 1, scale: 1 };
@@ -132,7 +139,7 @@ export function barMorphFrame(
         ? [shown, shown, shown, shown]
         : [none, none, none, none]
       : [started(0), started(1), started(2), started(3)],
-    backSize: BACK_MAX * (enter ? span(t, 240, 220) : 1 - span(t, 0, 50)),
+    backSize: NAV_BAR_HEIGHT * (enter ? span(t, 240, 220) : 1 - span(t, 0, 50)),
     newCells,
   };
 }

@@ -40,6 +40,12 @@ jest.mock('@/shared/api/generated/trips/trips', () => ({
     isPending: false,
     isError: false,
   }),
+  // TRIP-1666 — 실물 TripSummaryPage 가 일정 조회를 물게 되면서 같은 무해 스텁이 필요하다(통째로 갈아 끼운 목이라 없는 훅은 undefined 가 된다).
+  useGetTripsTripIdItinerary: () => ({
+    data: undefined,
+    isPending: false,
+    isError: false,
+  }),
 }));
 
 const TRIP = 't1';

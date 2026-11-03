@@ -6,7 +6,14 @@ import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { RevealItem } from '@/shared/ui/RevealItem';
 
 import { CATEGORY_PALETTES, MAGAZINE_TONES } from '../model/categoryPalette';
-import type { MagazinePicture, MagazineVM } from '../model/magazineVM';
+import type {
+  MagazineCoverVM,
+  MagazinePicture,
+  MagazineQuoteVM,
+  MagazineRouteStop,
+  MagazineStatTile,
+  MagazineVM,
+} from '../model/magazineVM';
 import { Highlight, KenBurns, StickerPop } from './MagazineMotion';
 
 /**
@@ -38,9 +45,12 @@ function MagazinePhoto({
 export function MagazineCover({
   cover,
   testID,
+  titleTestID,
 }: {
-  cover: MagazineVM['cover'];
+  cover: MagazineCoverVM;
   testID: string;
+  /** 있으면 제목 글자만 담은 Text 에 단다(j04 — 지역·기간과 한 노드로 섞지 않는다). */
+  titleTestID?: string;
 }): ReactElement {
   const palette = CATEGORY_PALETTES[cover.palette];
   const onPhoto = cover.picture !== null;
@@ -63,12 +73,14 @@ export function MagazineCover({
             {cover.region}
           </Text>
         ) : null}
-        <Text
-          className="rounded-pill bg-scrim/40 px-md py-[7px] font-noto-bold text-label"
-          style={{ color: MAGAZINE_TONES.onPhoto }}
-        >
-          {cover.dateLabel}
-        </Text>
+        {cover.dateLabel ? (
+          <Text
+            className="rounded-pill bg-scrim/40 px-md py-[7px] font-noto-bold text-label"
+            style={{ color: MAGAZINE_TONES.onPhoto }}
+          >
+            {cover.dateLabel}
+          </Text>
+        ) : null}
       </View>
 
       <View className="absolute right-xl top-[68px]">
@@ -93,6 +105,7 @@ export function MagazineCover({
 
       <View className="absolute bottom-[44px] left-[22px] right-[22px] gap-lg">
         <Text
+          testID={titleTestID}
           className="font-noto-bold text-[44px] leading-[50px]"
           style={{ color }}
         >
@@ -106,27 +119,34 @@ export function MagazineCover({
   );
 }
 
+/**
+ * 인용문 — 머리말 줄 + 본문. 루트가 Fragment 라 본문 View(`testID`)가 부모 `RevealItem` 의 직접 자식이 된다(등장 모션 테스트가
+ * 래퍼를 읽는 계약). 그래서 바깥 패딩은 한 겹 View 가 아니라 머리말 줄·본문에 나눠 얹었다(간격은 예전 `gap-md` = 12 를 머리말 아래 패딩으로).
+ */
 export function MagazineQuote({
   quote,
   testID,
+  heading,
   onEdit,
   editTestID,
 }: {
-  quote: MagazineVM['quote'];
+  quote: MagazineQuoteVM;
   testID: string;
+  /** 머리말 — j03 `오늘을 한 줄로`, j04 `이번 여행`. */
+  heading: string;
   /** 있을 때만 "수정" 링크를 그린다. */
   onEdit?: () => void;
-  editTestID: string;
+  editTestID?: string;
 }): ReactElement {
   const { head, mark } = quote;
   return (
-    <View className="gap-md px-[24px] pb-[36px] pt-[40px]">
-      <View className="flex-row items-center">
+    <>
+      <View className="flex-row items-center px-[24px] pb-md pt-[40px]">
         <Text
           className="font-noto-bold text-caption"
           style={{ color: MAGAZINE_TONES.ink, opacity: 0.55, letterSpacing: 2 }}
         >
-          오늘을 한 줄로
+          {heading}
         </Text>
         <View className="flex-1" />
         {onEdit ? (
@@ -140,7 +160,7 @@ export function MagazineQuote({
         ) : null}
       </View>
       {/* 이 노드의 글자 내용 = 표시본 완전 일치(머리말·"수정"은 밖). 형광펜은 중첩 Text. */}
-      <View testID={testID}>
+      <View testID={testID} className="px-[24px] pb-[36px]">
         <Text
           className="font-noto-bold text-[24px] leading-[36px]"
           style={{ color: MAGAZINE_TONES.ink }}
@@ -151,7 +171,7 @@ export function MagazineQuote({
           ) : null}
         </Text>
       </View>
-    </View>
+    </>
   );
 }
 
@@ -239,17 +259,29 @@ export function MagazinePlanChange({
   );
 }
 
-/** 동선 — `MapView` 가 아니라 번호 목록. 한 곳씩 차례로 나타난다(RevealItem). `firstIndex` 는 이 박스가 시작하는 등장 순번. */
+/**
+ * 동선 — `MapView` 가 아니라 번호 목록. 한 곳씩 차례로 나타난다(RevealItem). `firstIndex` 는 이 박스가 시작하는 등장 순번,
+ * `firstDelayMs` 는 첫 정류장이 나오기까지의 지연(j03 300 기본, j04 는 경로 그리기가 끝난 뒤 1050).
+ * `stopTestID` 를 주면 모든 정류장이 그 testID 를 쓴다(j04), 없으면 `{testID}-stop-{N}`(j03).
+ * 정류장에 `dayLabel` 이 있으면 이름 오른쪽에 별도 Text 로 그린다.
+ */
 export function MagazineRoute({
   route,
   palette: key,
   testID,
+  heading,
   firstIndex,
+  firstDelayMs = 300,
+  stopTestID,
 }: {
-  route: NonNullable<MagazineVM['route']>;
+  route: readonly MagazineRouteStop[];
   palette: MagazineVM['cover']['palette'];
   testID: string;
+  /** 머리말 — j03 `오늘의 동선`, j04 `여행 동선`. */
+  heading: string;
   firstIndex: number;
+  firstDelayMs?: number;
+  stopTestID?: string;
 }): ReactElement {
   const palette = CATEGORY_PALETTES[key];
   return (
@@ -262,12 +294,16 @@ export function MagazineRoute({
         className="font-noto-bold text-caption"
         style={{ color: palette.accent, letterSpacing: 2 }}
       >
-        오늘의 동선
+        {heading}
       </Text>
       {route.map((stop, i) => (
-        <RevealItem key={stop.order} index={firstIndex + i} firstDelayMs={300}>
+        <RevealItem
+          key={stop.order}
+          index={firstIndex + i}
+          firstDelayMs={firstDelayMs}
+        >
           <View
-            testID={`${testID}-stop-${stop.order}`}
+            testID={stopTestID ?? `${testID}-stop-${stop.order}`}
             className="flex-row items-center gap-[14px]"
           >
             <View
@@ -287,6 +323,14 @@ export function MagazineRoute({
             >
               {stop.name}
             </Text>
+            {stop.dayLabel ? (
+              <Text
+                className="font-noto-bold text-caption"
+                style={{ color: palette.accent }}
+              >
+                {stop.dayLabel}
+              </Text>
+            ) : null}
           </View>
         </RevealItem>
       ))}
@@ -298,10 +342,10 @@ export function MagazineStats({
   stats,
   testID,
 }: {
-  stats: MagazineVM['stats'];
+  stats: readonly MagazineStatTile[];
   testID: string;
 }): ReactElement {
-  const tile = (key: MagazineVM['stats'][number]['key']) =>
+  const tile = (key: MagazineStatTile['key']) =>
     stats.find((s) => s.key === key);
   const visits = tile('visits');
   const photos = tile('photos');

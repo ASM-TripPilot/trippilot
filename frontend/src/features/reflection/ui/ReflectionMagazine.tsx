@@ -49,6 +49,7 @@ export function ReflectionMagazine({
     'quote',
     <MagazineQuote
       quote={vm.quote}
+      heading="오늘을 한 줄로"
       testID={`${p}-narrative`}
       editTestID={`${p}-narrative-edit`}
       onEdit={onEditNarrative}
@@ -83,6 +84,7 @@ export function ReflectionMagazine({
       <View key="route" className="pt-lg">
         <MagazineRoute
           route={vm.route}
+          heading="오늘의 동선"
           palette={vm.cover.palette}
           testID={`${p}-route`}
           firstIndex={order}

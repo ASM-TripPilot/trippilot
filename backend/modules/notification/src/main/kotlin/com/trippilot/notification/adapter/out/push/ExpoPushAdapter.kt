@@ -14,8 +14,10 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Primary
 import org.springframework.stereotype.Component
+import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.web.client.HttpClientErrorException
 import org.springframework.web.client.RestClient
+import java.time.Duration
 
 /**
  * Expo Push Service 어댑터 — **expo 모드에서만 활성**(기본은 기록만 하는 [LoggingPushAdapter]).
@@ -142,12 +144,35 @@ internal data class ExpoPushTicketDetails(val error: String? = null)
 @ConditionalOnProperty(name = ["trippilot.push.mode"], havingValue = "expo")
 class ExpoPushClientConfiguration {
 
+    /**
+     * **연결·읽기 시한이 있다.** 기본 요청 팩토리는 시한을 안 걸어서, exp.host 가 연결만 받고 응답을 안 주면
+     * 이 호출을 감싼 발화 폴러·아웃박스 릴레이 스레드와 DB 트랜잭션이 풀리지 않는다 — 오류도 로그도 없이
+     * 리마인드·사건 알림이 통째로 멈추고, 재시작 뒤엔 밀린 예약이 유예(10분)를 넘겨 영구 취소된다.
+     * 시한을 넘기면 예외가 올라가 `PUSH_ERROR` 로 기록되고(알림함에는 이미 남아 있다) 다음 발화로 넘어간다.
+     * 리마인드 문구 경계([com.trippilot.notification.adapter.out.external.ReminderCopyConfiguration])가
+     * 같은 이유로 이미 시한을 건다.
+     */
     @Bean(BEAN_NAME)
-    fun expoPushRestClient(@Value("\${trippilot.push.expo.base-url:https://exp.host}") baseUrl: String): RestClient =
-        RestClient.builder().baseUrl(baseUrl).build()
+    fun expoPushRestClient(
+        @Value("\${trippilot.push.expo.base-url:https://exp.host}") baseUrl: String,
+        @Value("\${trippilot.push.expo.connect-timeout-ms:$DEFAULT_CONNECT_TIMEOUT_MS}") connectTimeoutMs: Long,
+        @Value("\${trippilot.push.expo.read-timeout-ms:$DEFAULT_READ_TIMEOUT_MS}") readTimeoutMs: Long,
+    ): RestClient = RestClient.builder()
+        .baseUrl(baseUrl)
+        .requestFactory(
+            SimpleClientHttpRequestFactory().apply {
+                setConnectTimeout(Duration.ofMillis(connectTimeoutMs))
+                setReadTimeout(Duration.ofMillis(readTimeoutMs))
+            },
+        )
+        .build()
 
     companion object {
         /** 앱에 RestClient 빈이 여럿이라 이름으로 집는다(카카오 클라이언트 선례). */
         const val BEAN_NAME = "expoPushRestClient"
+
+        /** 발송은 정상이면 1초 안쪽이다. 한 번 막혀도 폴러(60초)·릴레이(락 5분)를 오래 못 잡도록 짧게 둔다. */
+        const val DEFAULT_CONNECT_TIMEOUT_MS = 3_000L
+        const val DEFAULT_READ_TIMEOUT_MS = 10_000L
     }
 }

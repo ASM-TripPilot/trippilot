@@ -83,3 +83,23 @@ export function paletteKeyForCategory(
 ): PaletteKey {
   return (category && KEY_OF_CATEGORY.get(category)) || 'STATS';
 }
+
+/**
+ * 카테고리 목록의 최빈 팔레트 키 — j03 표지(방문 동선)와 j04 표지·일차 카드가 같은 규칙을 쓴다.
+ * 미술+문화·술집+야경은 한 통으로 세고(`paletteKeyForCategory` 가 접는다), 모르는 값·null 은 안 센다.
+ * 동률은 **먼저 나온 키**(Map 삽입 순서 + 엄격한 `>`). 하나도 못 세면 중립 'STATS'.
+ */
+export function dominantPaletteKey(
+  categories: readonly (string | null | undefined)[]
+): PaletteKey {
+  const counts = new Map<PaletteKey, number>();
+  for (const category of categories) {
+    const key = paletteKeyForCategory(category);
+    if (key !== 'STATS') counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  let dominant: PaletteKey = 'STATS';
+  let best = 0;
+  for (const [key, count] of counts)
+    if (count > best) [dominant, best] = [key, count];
+  return dominant;
+}

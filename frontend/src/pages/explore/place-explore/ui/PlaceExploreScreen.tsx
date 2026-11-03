@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, type ReactElement } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Pressable,
   ScrollView,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PlaceGridCard } from '@/entities/place';
@@ -498,7 +498,7 @@ export function PlaceExploreScreen({
       <View testID="explore-places-root" className="flex-1 bg-canvas">
         <PlaceExploreAppBar onBack={onBack} />
 
-        <FlatList<Place>
+        <Animated.FlatList<Place>
           testID="explore-places-grid"
           className="flex-1"
           scrollEventThrottle={16}

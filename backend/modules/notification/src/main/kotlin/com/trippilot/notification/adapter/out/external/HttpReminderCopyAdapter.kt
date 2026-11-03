@@ -37,8 +37,10 @@ class HttpReminderCopyAdapter(
             // 슬롯 이름을 실으면 그 이름을 쓴 정상 문구가 온다 — 재료가 답의 진위를 가른다(TRIP-883).
             log.info("재료(slots)가 빈 예약 {}건은 묻지 않습니다 — 빈 입력에는 상대가 '일정 없음'을 지어냅니다.", starved)
         }
-        if (sendable.size != items.size) {
-            log.warn("상대가 모르는 알림 종류 {}건을 뺐습니다 — 계약 enum 은 {} 뿐입니다.", items.size - sendable.size, AI_KINDS)
+        // 종류만 센다 — `sendable` 은 재료가 빈 항목도 빼므로 그 차이를 세면 '모르는 종류'가 아닌 것까지 경고가 된다.
+        val unknownKinds = items.count { it.kind.name !in AI_KINDS }
+        if (unknownKinds > 0) {
+            log.warn("상대가 모르는 알림 종류 {}건을 뺐습니다 — 계약 enum 은 {} 뿐입니다.", unknownKinds, AI_KINDS)
         }
         if (sendable.isEmpty()) return emptyMap()
 
@@ -68,11 +70,16 @@ class HttpReminderCopyAdapter(
             .retrieve().body(AiReminderCopyResponse::class.java)
             ?: return emptyMap()
 
-        // 상대가 규칙 문구로 내려갔다 — 그것을 AI 문구로 저장하면 품질 관측이 거짓이 된다.
-        // 우리 상수 문구와 다를 바 없으므로 받지 않고 그쪽으로 간다.
+        // **degraded 는 "빠진 항목이 있다"는 뜻이다**(계약: "빠진 항목은 백엔드가 기존 상수로 채운다 — degraded 가
+        // 그 사실의 증빙"). 상대는 실패·게이트 탈락 항목만 `copies` 에서 빼고 통과한 문구는 그대로 준다 — 상대가 규칙
+        // 문구를 지어 넣는 일은 없다(`fallback_mode=backend_constant`). 종전에는 degraded 면 온 문구까지 전부 버렸다:
+        // 운영 48시간에 일부만 빠진 요청이 16건이었고 그만큼의 멀쩡한 문구(31건)가 상수로 돌아갔다.
+        // 빠진 자리는 호출자가 상수 문구로 둔다(`NotificationSchedulePersistence` 의 null 제목 → 발화가 상수를 쓴다).
         if (res.degraded) {
-            log.info("상대가 규칙 문구로 내려갔습니다(degraded) — 상수 문구를 씁니다. mode={}", res.fallbackMode)
-            return emptyMap()
+            log.info(
+                "상대가 일부 항목을 못 만들었습니다(degraded) — 받은 {}건은 쓰고 나머지는 상수 문구를 씁니다. mode={}",
+                res.copies.size, res.fallbackMode,
+            )
         }
 
         val requested = items.mapTo(mutableSetOf()) { it.scheduleKey }

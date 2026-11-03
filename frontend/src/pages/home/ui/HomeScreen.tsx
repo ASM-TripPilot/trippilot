@@ -24,6 +24,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -1394,7 +1395,8 @@ export function HomeScreen({
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="home-dashboard-root" className="flex-1 bg-canvas">
-        <ScrollView
+        <Animated.ScrollView
+          testID="home-dashboard-scroll"
           className="flex-1"
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 220 }}
@@ -1417,7 +1419,7 @@ export function HomeScreen({
             onPressBell={onPressBell}
             onPressAssistant={onPressAssistant}
           />
-        </ScrollView>
+        </Animated.ScrollView>
         {/* TRIP-699 — 로딩이면 두 FAB 숨김(Figma 2174:2307). 로딩은 항상 discovery라 phase 없음. */}
         {sections.kind !== 'loading' ? (
           <View

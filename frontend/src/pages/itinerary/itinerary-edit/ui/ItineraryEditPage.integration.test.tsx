@@ -756,7 +756,7 @@ describe('완료 슬롯 잠금 실연동', () => {
    * 무엇을 보장하나: 페이지가 execution 방문 데이터(`GET /trips/{id}/visits/days/{day}`)를 조회해
    * `deriveVisitProgress` → 완료 poiId → `buildSlotKey(activeDate, poiId)` 로 `completedSlotKeys` 를 뽑아
    * `EditorView` 에 내리면, **그 슬롯 카드가 잠긴다**(`slot-stopcard-locked-*` 등장 · 편집 어포던스
-   * `slot-stopcard-timechip-*` 사라짐 — `canEditTime = !fixed && !locked`, INV-U3-03/i07).
+   * `slot-stopcard-timechip-*` 사라짐 — 고정(꼭 갈 곳)이어도 완료면 잠긴다, INV-U3-03/i07 · TRIP-1674).
    *
    * 왜 통합인가: "배열(completedSlotKeys)→slotKey 매칭→per-slot 잠금" 은 페이지 조회·파생·prop 전달을
    * 관통해야 관측된다(카드 단위 `SlotStopCard.editor.test` 는 `locked` prop 만 잠갔다, 03b 경고-1 — 이
@@ -781,7 +781,11 @@ describe('완료 슬롯 잠금 실연동', () => {
     });
   }
 
-  /** day1 = [a, b] 둘 다 비고정 — a 만 방문 완료로 잠기고 b 는 편집 가능해야 한다(짝). */
+  /**
+   * day1 = [a(고정 꼭 갈 곳), b(비고정)] — a 만 방문 완료로 잠기고 b 는 편집 가능해야 한다(짝).
+   * TRIP-1674: a 를 고정 비숙소로 둬서 "고정 꼭 갈 곳도 칩을 얻지만 방문 완료면 계속 잠긴다"(A3)를 이 describe
+   * 가 함께 잰다 — 마운트를 늘리지 않으려고 새 `it` 대신 픽스처를 바꿨다(소음 예산).
+   */
   function itinerary(): Itinerary {
     const days: ItineraryDaysItem[] = [
       {
@@ -791,12 +795,13 @@ describe('완료 슬롯 잠금 실연동', () => {
             poiId: 'poi-a',
             startAt: '09:30:00',
             endAt: '11:00:00',
-            isFixed: false,
+            isFixed: true,
             endsNextDay: false,
             hasViolation: false,
             alternatives: [],
             tags: [],
             nameKo: '성산일출봉',
+            category: '명소',
           },
           {
             poiId: 'poi-b',
@@ -868,8 +873,8 @@ describe('완료 슬롯 잠금 실연동', () => {
     });
   }
 
-  describe('🔴 CL1 · AC-11 — 방문 완료 슬롯이 잠기고 미완료 슬롯은 편집 가능하다', () => {
-    it('완료 poi-a 는 잠금 표식+편집칩 부재, 미완료 poi-b 는 편집칩 present+잠금 부재', async () => {
+  describe('🔴 CL1 · AC-11 · A3 — 방문 완료 슬롯은 고정 꼭 갈 곳이어도 잠기고 미완료 슬롯은 편집 가능하다', () => {
+    it('완료 poi-a(고정 꼭 갈 곳)는 잠금 표식+편집칩 부재, 미완료 poi-b 는 편집칩 present+잠금 부재', async () => {
       renderPage();
 
       // 완료 슬롯 — 잠금 표식이 뜨고 편집 어포던스(누름 시각칩)는 사라진다.
@@ -2396,7 +2401,11 @@ describe('시각 조정 시트', () => {
    * 누름 칩(`slot-stopcard-timechip-*`)이고 시트는 `TimeSheet title="시간대 조정"`(접두 `itinerary-edit-time`) 다.
    *
    * 무엇을 보장하나(전부 페이지 층 배선):
-   *  - 🔴 비고정 시각칩 → **시트 조건부 마운트**(등장, IT1), 고정은 **누름 칩 자체가 없다**(IT2 · INV-U3-03).
+   *  - 🔴 비고정 시각칩 → **시트 조건부 마운트**(등장, IT1). **고정 숙소**는 누름 칩 자체가 없고(IT2 · BR-U3-07),
+   *    **꼭 갈 곳(고정, 숙소 아님)** 은 비고정과 같이 눌려 시트가 뜬다(IT2b · INV-U3-03 개정, TRIP-1674).
+   *  - 🔴 꼭 갈 곳 시각을 이웃 너머로 바꾸면 그 날이 **시작 시각 순으로 재정렬**돼 PUT 본문에 `isFixed:true` 와 함께
+   *    실린다(IT7), 이웃을 안 넘으면 순서 불변(IT8) — 둘 다 IT6 `it` 하나에 합쳤다(소음 예산). 서버 422·repair
+   *    이웃 이동은 jest 사각(6-b).
    *  - 🔴 시트는 h04 얼굴 — default 셀·취소 버튼이 없다(IT3, AC-8). 요약 행 = 슬롯 이름·사진뿐(IT3b, AC-9).
    *  - 🔴 스와이프·딤으로 닫히면 카드 무변경·PUT 0, 같은 칩을 다시 누르면 다시 열린다(IT4, AC-7).
    *  - 🔴 종료를 안 건드리고 적용 → 로컬 반영·PUT 0(IT5a), 저장 PUT 의 endAt 은 **드래프트 원값 그대로**
@@ -2413,7 +2422,7 @@ describe('시각 조정 시트', () => {
    * 3동작 뼈대: 준비=가짜 서버 응답 → 실행=시각칩/탭/휠/적용·닫힘·저장 → 단언=시트 개폐·카드·PUT.
    */
 
-  /** 편집 시각칩(누름 Pressable) — 비고정만 존재한다. */
+  /** 편집 시각칩(누름 Pressable) — 고정 숙소·방문 완료만 없다. */
   const timeChip = (poiId: string) =>
     `slot-stopcard-timechip-${buildSlotKey(DAY1, poiId)}`;
   const cardId = (poiId: string) =>
@@ -2434,8 +2443,9 @@ describe('시각 조정 시트', () => {
   }
 
   /**
-   * day1 = [고정 체크아웃(09:00) · 비고정 a(10:15–11:45:30, 사진 없음) · 비고정 b(12:30–13:30, 사진 있음)].
-   * 고정은 편집 어포던스 자체가 없어야 한다.
+   * day1 = [고정 숙소 체크아웃(09:00) · 비고정 a(10:15–11:45:30, 사진 없음) · 비고정 b(12:30–13:30, 사진 있음)
+   *         · 고정 꼭 갈 곳(14:00–15:00)].
+   * 고정 **숙소**는 편집 어포던스 자체가 없어야 하고(BR-U3-07), 꼭 갈 곳은 있어야 한다(TRIP-1674).
    */
   function itinerary(): Itinerary {
     const days: ItineraryDaysItem[] = [
@@ -2452,6 +2462,7 @@ describe('시각 조정 시트', () => {
             alternatives: [],
             tags: [],
             nameKo: '해운대 OO호텔',
+            category: '숙소',
           },
           {
             poiId: 'poi-a',
@@ -2476,6 +2487,18 @@ describe('시각 조정 시트', () => {
             tags: [],
             nameKo: '해운대 블루라인파크',
             imageUrl: B_IMAGE,
+          },
+          {
+            poiId: 'poi-must',
+            startAt: '14:00:00',
+            endAt: '15:00:00',
+            isFixed: true,
+            endsNextDay: false,
+            hasViolation: false,
+            alternatives: [],
+            tags: [],
+            nameKo: '감천문화마을',
+            category: '명소',
           },
         ],
       },
@@ -2565,14 +2588,20 @@ describe('시각 조정 시트', () => {
     });
   });
 
-  describe('🔴 IT2 · AC5 — 고정 슬롯엔 편집 어포던스 자체가 없다 (INV-U3-03)', () => {
-    it('고정 슬롯은 누름 시각칩이 없고, 시트도 열리지 않는다', async () => {
+  // TRIP-1674 — 숙소가 아닌 고정(꼭 갈 곳)의 시각은 사용자가 바꿀 수 있다(INV-U3-03·BR-U3-33 2026-10-30 개정).
+  // IT2b(꼭 갈 곳 칩 → 시트가 뜬다)를 마운트를 늘리지 않으려고 이 `it` 뒤에 합쳤다(소음 예산).
+  describe('🔴 IT2 · AC5 + IT2b — 고정 숙소엔 편집 어포던스가 없고(BR-U3-07), 꼭 갈 곳(고정, 숙소 아님)은 칩을 눌러 시트가 뜬다', () => {
+    it('고정 숙소는 누름 시각칩이 없고 시트도 열리지 않으며, 꼭 갈 곳의 칩을 누르면 시트가 뜬다', async () => {
       renderPage();
       await screen.findByTestId(cardId('poi-fixed'));
 
-      // 고정은 onPressTimeChip 미주입 → 누름 칩(`-timechip-`) 자체가 없다(IT1 이 비고정 열림 긍정 앵커).
+      // 고정 숙소는 onPressTimeChip 미주입 → 누름 칩(`-timechip-`) 자체가 없다(IT1·IT2b 가 열림 긍정 앵커).
       expect(screen.queryByTestId(timeChip('poi-fixed'))).toBeNull();
       expect(screen.queryByTestId(SHEET)).toBeNull();
+
+      // IT2b · A5 — 짝: 같은 화면의 꼭 갈 곳(고정, 숙소 아님)은 칩이 눌려 시트가 열린다.
+      await openSheetFor('poi-must');
+      expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
     });
   });
 
@@ -2745,8 +2774,12 @@ describe('시각 조정 시트', () => {
     });
   });
 
-  describe('🔴 IT6 · AC-11 — 종료를 설정하고 적용하면 저장 PUT 의 endAt 이 그 값이다', () => {
-    it('종료를 13:45 로 설정해 저장하면 a 는 10:15:00–13:45:00 · endsNextDay false', async () => {
+  // TRIP-1674 — IT7(꼭 갈 곳을 이웃 너머로 → 시작 시각 순 재정렬 + isFixed:true 로 PUT)·IT8(이웃을 안 넘으면 순서
+  // 불변)을 마운트를 늘리지 않으려고 이 `it` 의 뒤쪽에 합쳤다(소음 예산). a 의 종료 변경(시작 10:15 그대로라 b 를
+  // 안 넘음)은 순서에 영향이 없다. 서버는 순서가 어긋나면 422 → 판정 보류지만 MSW 는 순서를 검사하지 않는다 — 여기서
+  // 잠그는 건 "PUT 본문이 시각 순으로 나간다"까지이고 실제 422·repair 의 이웃 시각 이동은 실 AI(6-b)에서만 보인다.
+  describe('🔴 IT6 · AC-11 + IT7·IT8 — 종료를 설정하면 PUT 의 endAt 이 그 값이고, 꼭 갈 곳은 이웃을 넘을 때만 시각 순으로 재정렬돼 isFixed:true 로 저장된다', () => {
+    it('a 종료 13:45 → a 10:15:00–13:45:00 · endsNextDay false / 꼭 갈 곳 14→13시는 순서 불변(IT8) · 13→11시는 [숙소,a,꼭 갈 곳,b](IT7)', async () => {
       renderPage();
       await openSheetFor('poi-a');
 
@@ -2756,10 +2789,54 @@ describe('시각 조정 시트', () => {
         /10:15–13:45/
       );
 
+      // IT8 · C8 — 꼭 갈 곳 14:00 → 13:00 은 b(12:30) 뒤라 초안 순서가 그대로다(과정 방어).
+      const draftIds = (): string[] =>
+        useItineraryEditStore.getState().days[0].slots.map((s) => s.poiId);
+      await openSheetFor('poi-must');
+      press('wheel-h-13');
+      await applyAndWaitClosed();
+      expect(draftIds()).toEqual(['poi-fixed', 'poi-a', 'poi-b', 'poi-must']);
+
+      // IT7 · C1 — 다시 열어 13:00 → 11:00(끝 15:00 그대로, 11:00 < 15:00 이라 시트가 허용): a(10:15)와 b(12:30) 사이로.
+      fireEvent.press(screen.getByTestId(timeChip('poi-must')));
+      await screen.findByTestId(SHEET);
+      press('wheel-h-11');
+      await applyAndWaitClosed();
+      expect(draftIds()).toEqual(['poi-fixed', 'poi-a', 'poi-must', 'poi-b']);
+
       const slotA = await saveAndGetSlot('poi-a');
       expect(slotA?.startAt).toBe('10:15:00');
       expect(slotA?.endAt).toBe('13:45:00');
       expect(slotA?.endsNextDay).toBe(false);
+
+      // IT7 · B1·B2·C7 — PUT 본문: 시각 순 / 꼭 갈 곳은 새 시각 + isFixed true / 고정 숙소는 원래 값.
+      const body = putBody as EditItineraryRequest;
+      expect(body.days[0].slots.map((s) => s.poiId)).toEqual([
+        'poi-fixed',
+        'poi-a',
+        'poi-must',
+        'poi-b',
+      ]);
+      expect(
+        body.days[0].slots.find((s) => s.poiId === 'poi-must')
+      ).toMatchObject({
+        startAt: '11:00:00',
+        endAt: '15:00:00',
+        isFixed: true,
+        endsNextDay: false,
+      });
+      expect(body.days[0].slots[0]).toMatchObject({
+        poiId: 'poi-fixed',
+        startAt: '09:00:00',
+        endAt: '10:00:00',
+        isFixed: true,
+      });
+      // AC-13 — 서버 계약 endAt 은 항상 string.
+      expect(
+        body.days
+          .flatMap((day) => day.slots)
+          .every((s) => typeof s.endAt === 'string')
+      ).toBe(true);
     });
   });
 });

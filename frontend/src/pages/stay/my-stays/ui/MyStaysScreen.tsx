@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CARD_SHADOW } from '@/features/settings';
@@ -159,6 +159,10 @@ function MyStayRow({
   );
 }
 
+function keyOfRow(row: MyStayRowVM): string {
+  return row.savedStayId;
+}
+
 export function MyStaysScreen({
   rows,
   isEmpty,
@@ -230,15 +234,19 @@ export function MyStaysScreen({
             </View>
           </View>
         ) : (
-          <ScrollView contentContainerClassName="gap-lg px-lg pb-2xl pt-lg">
-            {rows.map((row) => (
+          // TRIP-1732 — 등록 숙소 수에 상한이 없다. FlatList 로 보이는 행만 마운트한다(TRIP-1363 선례).
+          // getItemLayout·removeClippedSubviews 는 쓰지 않는다(카드 높이가 날짜·메모 유무로 가변).
+          <FlatList
+            contentContainerClassName="gap-lg px-lg pb-2xl pt-lg"
+            data={rows}
+            keyExtractor={keyOfRow}
+            renderItem={({ item }) => (
               <MyStayRow
-                key={row.savedStayId}
-                row={row}
+                row={item}
                 onPressToggle={(pressed) => onPressChangeBase?.(pressed)}
               />
-            ))}
-          </ScrollView>
+            )}
+          />
         )}
       </View>
     </SafeAreaView>

@@ -10,7 +10,7 @@ import logging
 import re
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Future
 from datetime import datetime
 
@@ -148,3 +148,12 @@ class PlaceSqlLookup:
         except Exception as e:  # noqa: BLE001 — 사유는 예외 타입까지(이름 원문 비노출)
             log.warning("place_find db_error trace=%s error=%s", trace_id, type(e).__name__)
             return None
+
+    def find_said(self, words: Sequence[str], spans: Sequence[str], trace_id: TraceId) -> list[PlaceRow]:
+        """편집 번역의 풀 밖 이름 장소(F9) — 발화의 이름 말 여럿을 한 번에(`PgPlaceSql.find_said`, LLM 없음). 고르기는 부르는 쪽
+        (`pick_said`). DB 오류는 빈 목록(번역은 받은 풀로 그대로, INV-4) + 한 줄 — `find_place` 와 같은 접기."""
+        try:
+            return self._executor.find_said(words, spans)
+        except Exception as e:  # noqa: BLE001 — 사유는 예외 타입까지(말 원문 비노출)
+            log.warning("place_said db_error trace=%s error=%s", trace_id, type(e).__name__)
+            return []

@@ -8,6 +8,11 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  runOnJS,
+  useAnimatedScrollHandler,
+  useSharedValue,
+} from 'react-native-reanimated';
 
 import { PlusGlyph, SearchGlyph } from '@/shared/ui/glyphs';
 import type {
@@ -208,9 +213,19 @@ export function MessageList({
 }: MessageListProps): ReactElement {
   const listRef = useRef<FlatList<AssistantMessage>>(null);
   const [away, setAway] = useState(false);
+  // UI 스레드에서 오프셋을 보고, 40 경계를 넘나드는 순간에만 JS 로 건너온다(TRIP-1733).
+  const awayUI = useSharedValue(false);
+  const onScroll = useAnimatedScrollHandler((event) => {
+    'worklet';
+    const next = event.contentOffset.y > SCROLL_DOWN_THRESHOLD;
+    if (next !== awayUI.value) {
+      awayUI.value = next;
+      runOnJS(setAway)(next);
+    }
+  });
   return (
     <View className="flex-1">
-      <FlatList
+      <Animated.FlatList
         ref={listRef}
         testID="assistant-message-list"
         inverted
@@ -221,9 +236,7 @@ export function MessageList({
         // inverted 라 푸터가 화면 맨 위다.
         ListFooterComponent={older ? <OlderMessagesRow {...older} /> : null}
         scrollEventThrottle={16}
-        onScroll={(event) =>
-          setAway(event.nativeEvent.contentOffset.y > SCROLL_DOWN_THRESHOLD)
-        }
+        onScroll={onScroll}
         renderItem={({ item }) =>
           item.role === 'USER' ? (
             <UserBubble message={item} />

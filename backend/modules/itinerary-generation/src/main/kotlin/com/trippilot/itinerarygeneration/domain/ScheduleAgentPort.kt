@@ -34,6 +34,14 @@ interface ScheduleAgentPort {
     fun validateWithUnverified(solution: ScheduleAgentOutput, transportModes: List<String>): ValidationResult =
         validateWithUnverified(solution)
 
+    /**
+     * 그 여행의 취향([preference] — 생성과 같은 프로필)까지 싣는 재검증(2026-11-03). 상대가 액티비티 취향 대중교통 여행이면 HC2 를 생성과
+     * 같은 도보 상한(1.0km)으로 잰다 — 비우면 기본 700m 라 생성이 걸어서 잡은 0.7~0.9km 구간이 '맞지 않는 곳'으로 표시됐다.
+     * 기본 구현은 취향을 버린다 — 대역(Fake·테스트)이 2인자만 구현해도 되게. 실 어댑터는 재정의한다.
+     */
+    fun validateWithUnverified(solution: ScheduleAgentOutput, transportModes: List<String>, preference: PreferenceProfile?): ValidationResult =
+        validateWithUnverified(solution, transportModes)
+
     fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult
 
     /**
@@ -110,6 +118,17 @@ data class EditProposalInput(
     val utterance: String?,
     val command: EditCommand?,
     val requestMeta: RequestMeta,
+    /** 앞서 제안했던 곳 — 상대가 이번 안에 새로 들이지 않는다(후보 풀을 좁힐 뿐, INV-1). 보통은 빈다. */
+    val excludedPoiIds: List<UUID> = emptyList(),
+    /**
+     * 그 여행의 취향 — 생성과 **같은 프로필**(`overriddenBy` → `toProfile`, 기록 기반 개인화 포함). 상대는 규칙에만 쓴다(사이 넣기 순위·
+     * 날 재구성 규칙 점수, 액티비티 취향이면 도보 상한 1.0km) — 편집 시한에 취향 LLM 점수는 못 든다. null 이면 상대 종전 동작.
+     */
+    val preferenceProfile: PreferenceProfile? = null,
+    /** 날마다 기본 일과 창(여행 설정 — 생성과 같은 규칙, 오늘 자르기·고정 블록 넓히기 없음). 상대는 빈 날의 시작으로만 쓴다(HC4 아님). */
+    val timeWindows: List<TimeWindow> = emptyList(),
+    /** 여행 첫날 — 상대가 'N일차'를 대화와 같은 셈(첫날 + N − 1)으로 읽는다. null 이면 상대는 받은 일정의 첫 날부터 센다. */
+    val tripStartDate: LocalDate? = null,
 ) {
     init {
         require((utterance == null) != (command == null)) { "utterance 와 command 중 정확히 하나만 준다." }
@@ -606,8 +625,10 @@ data class ValidationResult(val violations: List<Violation>, val unverifiedPoiId
 /**
  * 수리 요청에 싣는 여행 컨텍스트 — generate 와 **같은 출처**의 일자별 앵커와 취향 이동수단(`transport_modes`).
  * 빈 값이면 상대는 종전 동작(첫 구간 null·대중교통)이다.
+ * [preferenceProfile] — 생성과 같은 그 여행의 취향(2026-11-03). 상대가 액티비티 취향 대중교통 여행의 도보 상한(1.0km)을 생성과 같게 건다 —
+ * 없으면 수리가 생성이 걸어서 잡은 0.7~0.9km 구간을 대중교통 시간으로 밀었다. null 이면 종전.
  */
-data class RepairContext(val anchors: List<DayAnchor>, val transportModes: List<String>) {
+data class RepairContext(val anchors: List<DayAnchor>, val transportModes: List<String>, val preferenceProfile: PreferenceProfile? = null) {
     companion object {
         val NONE = RepairContext(emptyList(), emptyList())
     }

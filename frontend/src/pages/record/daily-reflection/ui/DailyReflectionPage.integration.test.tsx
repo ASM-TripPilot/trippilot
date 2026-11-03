@@ -1849,6 +1849,12 @@ describe('TRIP-1665 · 회고 매거진 — 표지·인용문·장면·동선·�
       /4번째 장소/
     );
 
+    // TRIP-1666 5-b · 공용 부품의 머리말은 호출부가 넘기는 필수 prop 이다(j04 는 `이번 여행`·`여행 동선`) — j03 이 자기 문구를 잃으면 tsc 는 못 잡는다.
+    expect(screen.getByText('오늘을 한 줄로')).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId(`${P}-route`)).getByText('오늘의 동선')
+    ).toBeOnTheScreen();
+
     // 장면 카드 — 일정 변경 띠는 번호를 먹지 않아 카드는 01·02·03 뿐이다.
     const first = within(screen.getByTestId(`${P}-scene-01`));
     expect(first.getByText('01')).toBeOnTheScreen();

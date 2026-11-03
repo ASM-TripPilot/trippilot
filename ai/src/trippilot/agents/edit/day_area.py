@@ -230,13 +230,15 @@ def parse_day_areas(utterance: str, known: Iterable[str] = ()) -> tuple[DayClaus
     return tuple(clauses) if verb else None
 
 
-def day_of(said: str, days: Sequence[date], today: date) -> date | str:
-    """날 말 → 여행 날 하나, 아니면 사유 코드. 순번은 여행 첫날 + N − 1(대화 `resolve_day` 와 같은 셈)."""
+def day_of(said: str, days: Sequence[date], today: date, *, first: date | None = None) -> date | str:
+    """날 말 → 여행 날 하나, 아니면 사유 코드. 순번은 여행 첫날 + N − 1(대화 `resolve_day` 와 같은 셈).
+
+    `first` = 여행 첫날(편집 요청 `trip_start_date`) — 받은 날들이 여행 첫날부터 있지 않아도 순번을 대화와 같게 센다. 없으면 `days[0]`."""
     m = _DAY.fullmatch(said)
     if m is None:
         return "day_out_of_trip"
     g = m.groupdict()
-    first, last, inside = days[0], days[-1], set(days)
+    first, last, inside = first or days[0], days[-1], set(days)
     n = (int(g["n"]) if g["n"] else _KO[g["ko"]] if g["ko"] else
          (int(g["nth"]) if g["nth"].isdigit() else _KO[g["nth"]]) if g["nth"] else 1 if g["first"] else None)
     if n is not None:
@@ -260,15 +262,16 @@ def day_of(said: str, days: Sequence[date], today: date) -> date | str:
 
 
 def resolve_day_areas(clauses: Sequence[DayClause], trip_days: Sequence[date],
-                      today: date) -> tuple[DayArea, ...] | DayAreaIssue:
-    """절 → 여행 날마다 동네. 여행 밖·지난 날·같은 날 두 번이면 사유(되묻기 재료) — 넘겨짚어 다른 날을 고치지 않는다."""
+                      today: date, *, first: date | None = None) -> tuple[DayArea, ...] | DayAreaIssue:
+    """절 → 여행 날마다 동네. 여행 밖·지난 날·같은 날 두 번이면 사유(되묻기 재료) — 넘겨짚어 다른 날을 고치지 않는다.
+    `first` 는 `day_of` 와 같다(순번의 기준 날)."""
     days = sorted(set(trip_days))
     if not days:
         return DayAreaIssue("day_out_of_trip", clauses[0].days[0], tuple(clauses))
     out: list[DayArea] = []
     for c in clauses:
         for said in c.days:
-            on = day_of(said, days, today)
+            on = day_of(said, days, today, first=first)
             if isinstance(on, str):
                 return DayAreaIssue(on, said, tuple(clauses))
             if on < today:

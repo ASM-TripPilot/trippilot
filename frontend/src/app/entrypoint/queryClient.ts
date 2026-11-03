@@ -1,4 +1,10 @@
-import { QueryClient } from '@tanstack/react-query';
+import {
+  MutationCache,
+  QueryCache,
+  QueryClient,
+  type Mutation,
+  type Query,
+} from '@tanstack/react-query';
 
 import { retryUnlessNotFound } from '@/shared/api';
 
@@ -20,13 +26,28 @@ const NO_FOCUS_REFETCH = new Set<unknown>([
   '/places/multi',
 ]);
 
+/** 재시도까지 끝난 최종 실패를 받는 자리(TRIP-1744) — 주지 않으면 콜백이 달리지 않는다. 보고처(Sentry)는 호출부가 정한다. */
+export interface QueryFailureHandlers {
+  onQueryError?: (error: unknown, query: Query<unknown, unknown>) => void;
+  onMutationError?: (
+    error: unknown,
+    variables: unknown,
+    onMutateResult: unknown,
+    mutation: Mutation<unknown, unknown, unknown>
+  ) => void;
+}
+
 // 서버 상태(TanStack Query)의 앱 전역 캐시 저장소를 만든다 — 부작용이 없어 앱(AppProviders)과 팬아웃 하네스가
 // 같은 기본 옵션을 쓴다. retry 는 404 만 다시 묻지 않게 연다(TRIP-986 #063) — 404("없다")는 다시 물어도
 // 답이 같고, 같은 캐시 키의 관찰자들은 요청 하나를 공유해 그 요청을 시작한 관찰자의 retry 가
 // 적용되므로 페이지 단독 옵션만으로는 막히지 않는다. 복귀 재조회는 위 거부 목록이 키별로 정한다(TRIP-1714).
 // 그 밖의 값은 그 값을 실제로 쓰는 소비 화면이 붙는 칸에서 근거와 함께 정한다(TRIP-179 D5).
-export function createAppQueryClient(): QueryClient {
+export function createAppQueryClient(
+  handlers: QueryFailureHandlers = {}
+): QueryClient {
   return new QueryClient({
+    queryCache: new QueryCache({ onError: handlers.onQueryError }),
+    mutationCache: new MutationCache({ onError: handlers.onMutationError }),
     defaultOptions: {
       queries: {
         retry: retryUnlessNotFound,
