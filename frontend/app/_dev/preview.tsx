@@ -49,6 +49,10 @@ import {
 import { DailyReflectionScreen } from '@/pages/record/daily-reflection/ui/DailyReflectionScreen';
 import { ShareCardScreen } from '@/pages/record/share-card/ui/ShareCardScreen';
 import { TravelStyleScreen } from '@/pages/record/travel-style/ui/TravelStyleScreen';
+import {
+  buildSummaryMagazineVM,
+  type SummaryMagazineInput,
+} from '@/pages/record/trip-summary/model/summaryMagazineVM';
 import { TripSummaryScreen } from '@/pages/record/trip-summary/ui/TripSummaryScreen';
 import { MustVisitOutsideConfirmDialog } from '@/pages/explore/saved-places/ui/MustVisitOutsideConfirmDialog';
 import { MustVisitPickScreen } from '@/pages/explore/saved-places/ui/MustVisitPickScreen';
@@ -218,6 +222,7 @@ import { TermsScreen } from '@/pages/onboarding/onboarding-terms/ui/TermsScreen'
 import type { PreferenceSelection } from '@/features/edit-preferences';
 import { PreferencesEditView } from '@/pages/settings/settings-preferences/ui/PreferencesEditView';
 import type {
+  DayHighlight,
   ItineraryDaysItemSlotsItem,
   Opportunity,
   ReflectionStats,
@@ -226,6 +231,7 @@ import type {
   StayItem,
   Trigger,
   TriggerKind,
+  TripSummary,
 } from '@/shared/api/index.schemas';
 import { PersonalizationInfoReason } from '@/shared/api/index.schemas';
 import { buildMonthGrid } from '@/shared/lib/monthGrid';
@@ -2374,6 +2380,102 @@ const TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS = [1, 2, 3].map((day) => ({
   day,
   label: `${day}일차 회고`,
 }));
+
+// j04 여행 요약 매거진(TRIP-1666) — 운영과 같은 빌더(`buildSummaryMagazineVM`)를 네트워크 없이 쓴다. 픽스처는 VM 이 아니라 원재료(요약·여행·일정)라
+// 표지 색·일차 카드 색·거리 문구가 프리뷰에서도 운영과 같은 코드로 나온다. 일차 카드 색은 일정 슬롯의 카테고리 최빈이다.
+const summaryHighlight = (
+  date: string,
+  dayOrder: number,
+  places: string[],
+  over: Partial<DayHighlight> = {}
+): DayHighlight => ({
+  date,
+  dayOrder,
+  visitCount: places.length,
+  places,
+  ...over,
+});
+const summaryOf = (
+  highlights: DayHighlight[],
+  over: { totalVisits?: number; hasLocationData?: boolean } = {}
+): TripSummary => ({
+  narrative:
+    '3일 동안 12곳을 다녀왔어요. 광안리에서 송정까지 바다를 따라 걸은, 느리게 오래 남을 여행',
+  highlights,
+  stats: {
+    totalVisits: over.totalVisits ?? 12,
+    totalDistanceKm: 38,
+    distanceSource: 'VISIT_LINE',
+    totalPhotos: 24,
+    hasLocationData: over.hasLocationData ?? true,
+  },
+  source: 'RULE',
+  generatedAt: '2026-06-14T10:00:00Z',
+});
+const summaryPlanDay = (
+  date: string,
+  named: [string, string][]
+): NonNullable<SummaryMagazineInput['itineraryDays']>[number] => ({
+  date,
+  slots: named.map(([nameKo, category], i) => ({
+    poiId: `${date}-${i}`,
+    startAt: '09:30:00',
+    endAt: '11:00:00',
+    isFixed: false,
+    endsNextDay: false,
+    hasViolation: false,
+    alternatives: [],
+    tags: [],
+    nameKo,
+    category,
+  })),
+});
+const SUMMARY_PREVIEW_TRIP: SummaryMagazineInput['trip'] = {
+  title: '부산 여행',
+  startDate: '2026-06-11',
+  endDate: '2026-06-13',
+  destinations: [{ seq: 1, region: '부산', nights: 2 }],
+};
+// 기본(맛집 최빈 → 주황 표지) — 1일차 맛집, 2일차 자연, 3일차 문화.
+const SUMMARY_PREVIEW_HIGHLIGHTS = [
+  summaryHighlight('2026-06-11', 1, ['광안리 해변', '민락수변공원'], {
+    distanceKm: 4.2,
+    distanceSource: 'VISIT_LINE',
+  }),
+  summaryHighlight('2026-06-12', 2, ['해운대 해변', '동백섬', '청사포'], {
+    distanceKm: 12,
+    distanceSource: 'ROUTE',
+  }),
+  summaryHighlight('2026-06-13', 3, ['감천문화마을'], {
+    distanceKm: 0,
+    distanceSource: 'VISIT_LINE',
+  }),
+];
+const SUMMARY_PREVIEW_PLAN = [
+  summaryPlanDay('2026-06-11', [
+    ['광안리 해변', '맛집'],
+    ['민락수변공원', '맛집'],
+  ]),
+  summaryPlanDay('2026-06-12', [
+    ['해운대 해변', '자연'],
+    ['동백섬', '자연'],
+    ['청사포', '맛집'],
+  ]),
+  summaryPlanDay('2026-06-13', [['감천문화마을', '문화']]),
+];
+// 밝은 바탕(명소 노랑 표지·카페 베이지·쇼핑 분홍 카드) — 사진 없는 표지의 지역·기간 칩 글자 가독성을 육안으로 보는 키.
+const SUMMARY_PREVIEW_BRIGHT_PLAN = [
+  summaryPlanDay('2026-06-11', [
+    ['광안리 해변', '명소'],
+    ['민락수변공원', '명소'],
+  ]),
+  summaryPlanDay('2026-06-12', [
+    ['해운대 해변', '카페'],
+    ['동백섬', '카페'],
+    ['청사포', '명소'],
+  ]),
+  summaryPlanDay('2026-06-13', [['감천문화마을', '쇼핑']]),
+];
 
 // i01 기록 없음(TRIP-747, Figma 4076:2452) — 같은 5곳에서 done 2장의 사진·후기만 뺀다.
 const LIVE_HUB_PREVIEW_SLOTS_NO_RECORDS: LiveHubSlot[] =
@@ -4887,16 +4989,19 @@ export const PREVIEW_STATES: PreviewState[] = [
   // 픽셀이라 6-b/육안 몫 — 자율/야간이라 6-b SKIP, 이 2키가 유일한 육안 대조 자리. (공유 비활성 얼굴은
   // TRIP-764 로 프리뷰 상실 — 회귀 심판은 TripSummaryScreen.test AC-5 가 계속 잠근다.)
   {
-    // default(MAP) — stats 3셀 + 지도 히어로(좌표 주입) + 지도 캡션 + 2톤 날짜카드 3장 + 하단 탭바.
-    // 실화면은 좌표 계약 부재라 늘 map-pending 으로 접히므로 MAP 히어로는 이 키가 유일한 대조 자리.
+    // default(MAP) — 표지(맛집 주황) → 인용문 → 일차 카드 3장(색·거리 각주) → 숫자 타일 → 동선 박스 → 일차 회고 칩 + 하단 바.
+    // 지도 히어로(좌표 주입)는 실화면이 좌표 계약 부재라 늘 접히므로 이 키가 유일한 대조 자리.
     key: 'trip-summary-default',
     band: 'j',
     label: 'j04 · 여행 요약 default',
     login: null,
     render: () => (
       <TripSummaryScreen
-        stats={{ totalVisits: 12, distanceText: '38km', totalPhotos: 24 }}
-        distanceSourceLabel="근사"
+        vm={buildSummaryMagazineVM({
+          summary: summaryOf(SUMMARY_PREVIEW_HIGHLIGHTS),
+          trip: SUMMARY_PREVIEW_TRIP,
+          itineraryDays: SUMMARY_PREVIEW_PLAN,
+        })}
         view="MAP"
         mapCenter={{ lat: 35.1531, lng: 129.1187 }}
         mapPins={[
@@ -4904,59 +5009,72 @@ export const PREVIEW_STATES: PreviewState[] = [
           { number: 2, lat: 35.1264, lng: 129.0403 },
           { number: 3, lat: 35.1587, lng: 129.1604 },
         ]}
-        narrative="3일 동안 12곳을 다녀왔어요. 광안리에서 송정까지 바다를 따라 걸은 여행이었어요."
-        dayCards={[
-          {
-            key: '2026-06-11',
-            dayLabel: '1일차',
-            visitCountLabel: '5곳',
-            subtitle: '광안리 해변→감천문화마을',
-          },
-          {
-            key: '2026-06-12',
-            dayLabel: '2일차',
-            visitCountLabel: '4곳',
-            subtitle: '해운대 해변→전포 카페거리',
-          },
-          {
-            key: '2026-06-13',
-            dayLabel: '3일차',
-            visitCountLabel: '3곳',
-            subtitle: '감천문화마을',
-          },
-        ]}
-        orderedVisits={[]}
         shareEnabled
         recordBar={PREVIEW_RECORD_BAR}
-        tripTitle="부산 여행"
         dayReflections={TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS}
         onPressDayReflection={noop}
       />
     ),
   },
   {
-    // error(VISIT_LIST) — 거리 셀 "—" + 지도 대신 순서 방문 목록(BR-U5-39) + 하단 탭바. 날짜카드 없음.
+    // error(VISIT_LIST) — 이동 타일 "—" + 점선 안내 + 일차 카드·동선은 그대로(위치 기록이 없어도 방문 기록은 있다) + 하단 바.
     key: 'trip-summary-error',
     band: 'j',
     label: 'j04 · 여행 요약 error',
     login: null,
     render: () => (
       <TripSummaryScreen
-        stats={{ totalVisits: 12, distanceText: '—', totalPhotos: 24 }}
-        distanceSourceLabel="근사"
+        vm={buildSummaryMagazineVM({
+          summary: summaryOf(SUMMARY_PREVIEW_HIGHLIGHTS, {
+            hasLocationData: false,
+          }),
+          trip: SUMMARY_PREVIEW_TRIP,
+          itineraryDays: SUMMARY_PREVIEW_PLAN,
+        })}
         view="VISIT_LIST"
-        dayCards={[]}
-        orderedVisits={[
-          { order: 1, dayLabel: '1일차', place: '광안리 해변' },
-          { order: 2, dayLabel: '1일차', place: '감천문화마을' },
-          { order: 3, dayLabel: '2일차', place: '해운대 해변' },
-          { order: 4, dayLabel: '3일차', place: '전포 카페거리' },
-        ]}
         shareEnabled
         recordBar={PREVIEW_RECORD_BAR}
-        tripTitle="부산 여행"
         dayReflections={TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS}
         onPressDayReflection={noop}
+      />
+    ),
+  },
+  {
+    // bright — 명소(노랑) 최빈 표지 + 카페(베이지)·명소·쇼핑(분홍) 일차 카드. 사진 없는 표지(D1)의 지역·기간 칩(`bg-scrim/40` 위 흰 글자)이
+    // 밝은 바탕에서 읽히는지 보는 키 — 6-b 육안으로 칩 색을 결정한다.
+    key: 'trip-summary-bright',
+    band: 'j',
+    label: 'j04 · 여행 요약 밝은 바탕',
+    login: null,
+    render: () => (
+      <TripSummaryScreen
+        vm={buildSummaryMagazineVM({
+          summary: summaryOf(SUMMARY_PREVIEW_HIGHLIGHTS),
+          trip: SUMMARY_PREVIEW_TRIP,
+          itineraryDays: SUMMARY_PREVIEW_BRIGHT_PLAN,
+        })}
+        view="MAP"
+        shareEnabled
+        recordBar={PREVIEW_RECORD_BAR}
+        dayReflections={TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS}
+        onPressDayReflection={noop}
+      />
+    ),
+  },
+  {
+    // neutral — 일정 조회가 없거나 실패하고 여행 조회도 실패한 얼굴: 표지 제목 `이번 여행`·지역/기간 칩 없음·모든 카드가 중립(검정) 바탕.
+    key: 'trip-summary-neutral',
+    band: 'j',
+    label: 'j04 · 여행 요약 중립(일정·여행 조회 실패)',
+    login: null,
+    render: () => (
+      <TripSummaryScreen
+        vm={buildSummaryMagazineVM({
+          summary: summaryOf(SUMMARY_PREVIEW_HIGHLIGHTS),
+        })}
+        view="MAP"
+        shareEnabled
+        recordBar={PREVIEW_RECORD_BAR}
       />
     ),
   },

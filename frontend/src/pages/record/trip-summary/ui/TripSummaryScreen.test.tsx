@@ -10,6 +10,9 @@ import {
 import { revealValues } from '@/test-support/revealProbe';
 
 import { COUNT_UP_DURATION_MS, CountUpText } from '@/shared/ui/CountUpText';
+import type { DayHighlight, TripSummary } from '@/shared/api/index.schemas';
+
+import { buildSummaryMagazineVM } from '../model/summaryMagazineVM';
 import {
   TripSummaryScreen,
   type TripSummaryScreenProps,
@@ -22,22 +25,51 @@ import {
  * 가 요약 응답만 바꿔 본다. 카운트업·등장 순서는 가짜 타이머로 프레임을 흘려 재야 해서 화면을 직접 그린다.
  */
 
+/**
+ * TRIP-1666 — 화면 props 는 `vm`(매거진 VM) 하나로 바뀌었다. 손으로 VM 모양을 베끼지 않고 순수 빌더(`buildSummaryMagazineVM`)로 만든다 —
+ * VM 모양의 정본은 `summaryMagazineVM.test.ts` 이고 이 파일은 "등장 순서·카운트업"만 잰다.
+ */
+interface VmOver {
+  totalVisits?: number;
+  totalDistanceKm?: number;
+  totalPhotos?: number;
+  hasLocationData?: boolean;
+  narrative?: string;
+  highlights?: DayHighlight[];
+}
+const hl = (
+  date: string,
+  dayOrder: number,
+  places: string[]
+): DayHighlight => ({
+  date,
+  dayOrder,
+  visitCount: places.length,
+  places,
+});
+function vmOf(over: VmOver = {}) {
+  const summary: TripSummary = {
+    narrative: over.narrative ?? '',
+    highlights: over.highlights ?? [hl('2026-06-11', 1, ['광안리 해변'])],
+    stats: {
+      totalVisits: over.totalVisits ?? 12,
+      totalDistanceKm: over.totalDistanceKm ?? 38,
+      distanceSource: 'VISIT_LINE',
+      totalPhotos: over.totalPhotos ?? 24,
+      hasLocationData: over.hasLocationData ?? true,
+    },
+    source: 'RULE',
+    generatedAt: '2026-06-12T10:00:00Z',
+  };
+  return buildSummaryMagazineVM({ summary });
+}
+
 function baseProps(
   over: Partial<TripSummaryScreenProps> = {}
 ): TripSummaryScreenProps {
   return {
-    stats: { totalVisits: 12, distanceText: '38km', totalPhotos: 24 },
-    distanceSourceLabel: '근사',
+    vm: vmOf(),
     view: 'MAP',
-    dayCards: [
-      {
-        key: '2026-06-11',
-        dayLabel: '1일차',
-        visitCountLabel: '5곳',
-        subtitle: '광안리 해변→전포 카페거리',
-      },
-    ],
-    orderedVisits: [],
     shareEnabled: true,
     onShare: jest.fn(),
     ...over,
@@ -56,6 +88,7 @@ function renderScreen(over: Partial<TripSummaryScreenProps> = {}) {
 describe('TRIP-1386 · 모션', () => {
   const probe = useAnimatedProbe();
 
+  // 숫자 타일의 화면 순서는 방문 → 사진 → 이동이다(매거진 숫자 타일, TRIP-1666 — 옛 방문·거리·사진 순서에서 바뀜).
   const statTexts = (): string[] => {
     const stats = screen.getByTestId('reflection-summary-stats');
     return within(stats)
@@ -71,65 +104,58 @@ describe('TRIP-1386 · 모션', () => {
 
   it('카운트업이 끝나면 세 칸이 서버 값과 정확히 같고, 도중에는 최종값보다 작다(같은 형식)', async () => {
     probe.setReduceMotion(false);
-    renderScreen({
-      stats: { totalVisits: 12, distanceText: '38km', totalPhotos: 24 },
-    });
+    renderScreen({ vm: vmOf() });
     await advance(0);
-    expect(statTexts()).toEqual(['0', '0km', '0']);
+    expect(statTexts()).toEqual(['0', '0', '0km']);
     await advance(100);
 
     const mid = statTexts();
-    expect(mid[1]).toMatch(/^\d+km$/);
+    expect(mid[2]).toMatch(/^\d+km$/);
     expect(Number(mid[0])).toBeLessThan(12);
-    expect(Number.parseInt(mid[1], 10)).toBeLessThan(38);
-    expect(Number(mid[2])).toBeLessThan(24);
+    expect(Number(mid[1])).toBeLessThan(24);
+    expect(Number.parseInt(mid[2], 10)).toBeLessThan(38);
 
     await advance(1000);
-    expect(statTexts()).toEqual(['12', '38km', '24']);
+    expect(statTexts()).toEqual(['12', '24', '38km']);
   });
 
   it('동작 줄이기면 처음부터 최종값이다', async () => {
     probe.setReduceMotion(true);
-    renderScreen({
-      stats: { totalVisits: 12, distanceText: '38km', totalPhotos: 24 },
-    });
+    renderScreen({ vm: vmOf() });
     await advance(0);
-    expect(statTexts()).toEqual(['12', '38km', '24']);
+    expect(statTexts()).toEqual(['12', '24', '38km']);
     await advance(100);
-    expect(statTexts()).toEqual(['12', '38km', '24']);
+    expect(statTexts()).toEqual(['12', '24', '38km']);
   });
 
   it('0·측정 못 함(—)인 칸은 숫자를 지어내지 않고 그대로다', async () => {
     probe.setReduceMotion(false);
     renderScreen({
-      stats: { totalVisits: 0, distanceText: '—', totalPhotos: 0 },
+      vm: vmOf({
+        totalVisits: 0,
+        totalPhotos: 0,
+        totalDistanceKm: 0,
+        hasLocationData: false,
+      }),
     });
     await advance(0);
-    expect(statTexts()).toEqual(['0', '—', '0']);
+    expect(statTexts()).toEqual(['0', '0', '—']);
     await advance(300);
-    expect(statTexts()).toEqual(['0', '—', '0']);
+    expect(statTexts()).toEqual(['0', '0', '—']);
   });
 
   // 등장 래퍼는 `shared/ui/RevealItem` 이 한 벌로 맡는다 — 곡선·지연 계산은 그쪽 테스트, 여기는 이 화면이 넘기는 첫 지연(1050 = 경로 0.15+0.9초 뒤)과
-  // 카드 순번(내레이션이 있으면 일차 카드가 한 칸 뒤)만 잰다. 1050 대신 h14 의 500 을 넘기면 1000ms 시점에 이미 보여 red.
+  // 카드 순번(내레이션이 있으면 일차 카드가 한 칸 뒤)만 잰다. TRIP-1666: 인용문 testID 노드가 등장 래퍼의 직접 자식이어야 `revealValues` 가 래퍼를 읽는다(구현 쪽 Fragment 루트 계약). 1050 대신 h14 의 500 을 넘기면 1000ms 시점에 이미 보여 red.
   it('내레이션·일차 카드는 경로가 다 그려진 뒤(1050ms) 차례로(150ms 간격) 등장한다', async () => {
     probe.setReduceMotion(false);
     renderScreen({
-      narrative: '3일 동안 12곳을 다녀왔어요.',
-      dayCards: [
-        {
-          key: '2026-06-11',
-          dayLabel: '1일차',
-          visitCountLabel: '5곳',
-          subtitle: '광안리 해변',
-        },
-        {
-          key: '2026-06-12',
-          dayLabel: '2일차',
-          visitCountLabel: '4곳',
-          subtitle: '전포 카페거리',
-        },
-      ],
+      vm: vmOf({
+        narrative: '3일 동안 12곳을 다녀왔어요.',
+        highlights: [
+          hl('2026-06-11', 1, ['광안리 해변']),
+          hl('2026-06-12', 2, ['전포 카페거리']),
+        ],
+      }),
     });
     await advance(0);
     const narrative = screen.getByTestId('reflection-summary-narrative');

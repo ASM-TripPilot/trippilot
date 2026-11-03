@@ -2,6 +2,7 @@ import * as fc from 'fast-check';
 
 import {
   CATEGORY_PALETTES,
+  dominantPaletteKey,
   paletteKeyForCategory,
   type PaletteKey,
 } from './categoryPalette';
@@ -129,6 +130,70 @@ describe('성질 (PBT)', () => {
       fc.property(fc.string(), (text) => {
         expect(KEYS).toContain(paletteKeyForCategory(text));
       }),
+      { numRuns: 300 }
+    );
+  });
+});
+
+// TRIP-1666 · 여러 방문 카테고리 → 그중 가장 많은 색 한 키. j03 표지·j04 표지·j04 일차 카드가 같은 규칙을 한 함수로 쓴다.
+// 규칙: 미술+문화·술집+야경은 한 통(paletteKeyForCategory 가 접는다), 모르는 값은 안 센다, 동률은 먼저 나온 것, 하나도 없으면 중립.
+describe('dominantPaletteKey — 방문 카테고리 최빈 색 (TRIP-1666)', () => {
+  it.each<[string, (string | null | undefined)[], PaletteKey]>([
+    ['미술+문화는 한 통', ['미술', '문화', '맛집'], '문화'],
+    ['술집+야경은 한 통', ['맛집', '술집', '야경'], '야경'],
+    ['영문 코드도 같은 통', ['FOOD', '맛집', 'CAFE'], '맛집'],
+    [
+      '모르는 값 사이에서도 센다',
+      ['공항', '카페', null, '카페', undefined, '맛집'],
+      '카페',
+    ],
+    [
+      '모르는 값만이면 중립',
+      ['공항', '', null, undefined, 'toString'],
+      'STATS',
+    ],
+    [
+      '사건 키 문자열은 카테고리가 아니라 안 센다',
+      ['PLAN_B', 'SKIPPED', '자연'],
+      '자연',
+    ],
+    ['빈 입력이면 중립', [], 'STATS'],
+    ['동률이면 먼저 나온 것', ['카페', '맛집'], '카페'],
+    ['동률(2:2)이면 먼저 나온 키', ['맛집', '카페', '카페', '맛집'], '맛집'],
+    ['뒤에서 역전하면 많은 쪽', ['맛집', '카페', '카페'], '카페'],
+  ])('%s', (_label, categories, expected) => {
+    expect(dominantPaletteKey(categories)).toBe(expected);
+  });
+
+  it('성질 — 결과는 11키 중 하나이고 PLAN_B·SKIPPED 는 나오지 않으며, 아는 값이 하나라도 있으면 중립이 아니다', () => {
+    const known = ['맛집', '카페', '미술', '술집', 'FOOD', 'NATURE', '쇼핑'];
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.oneof(
+            fc.constantFrom(...known),
+            fc.string({ maxLength: 6 }),
+            fc.constantFrom(null, undefined, 'PLAN_B', 'SKIPPED')
+          ),
+          { maxLength: 12 }
+        ),
+        (categories) => {
+          const result = dominantPaletteKey(categories);
+          expect(KEYS).toContain(result);
+          expect(['PLAN_B', 'SKIPPED']).not.toContain(result);
+          const mapped = categories
+            .map((c) => paletteKeyForCategory(c))
+            .filter((key) => key !== 'STATS');
+          if (mapped.length === 0) expect(result).toBe('STATS');
+          else {
+            const count = (key: PaletteKey) =>
+              mapped.filter((m) => m === key).length;
+            expect(mapped).toContain(result);
+            for (const key of mapped)
+              expect(count(result)).toBeGreaterThanOrEqual(count(key));
+          }
+        }
+      ),
       { numRuns: 300 }
     );
   });

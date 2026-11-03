@@ -446,6 +446,69 @@ describe('사진은 기기 사진에서만 (AC-12)', () => {
   });
 });
 
+// TRIP-1666 D1 — 사진이 없는 **표지**는 카테고리 "그림"이 아니라 카테고리 "색"으로 선다(표지 picture 가 null → 뷰가 색 바탕만 깐다).
+// 장면 카드의 그림은 그대로다(Q7). 기존 표지 단언(`?.uri`)은 손대지 않는다 — null 에도 `?.uri` 는 undefined 라 계속 맞다.
+describe('D1 · 사진 없는 표지는 그림이 아니라 색 (TRIP-1666 AC-1·AC-2)', () => {
+  const slotted = (date: string, poiId: string) =>
+    payloadOf({
+      cover: {
+        title: 't',
+        subtitle: 's',
+        photo_slot: { visit_ref: { date, poi_id: poiId } },
+      },
+      scenes: [photoScene('a', '장면 카드')],
+    });
+  const slots = [slot('a', 'A', '맛집')];
+
+  it('AC-1: 표지 사진 자리는 있는데 이 기기 사진이 없으면(없음·다른 날·다른 장소) cover.picture 는 null — 카테고리를 알아도 그림 객체를 만들지 않는다', () => {
+    for (const photos of [[], [{ uri: 'file://other', poiId: 'zzz' }]]) {
+      expect(
+        buildMagazineVM(make({ payload: slotted(DATE, 'a'), slots, photos }))
+          .cover.picture
+      ).toBeNull();
+    }
+    expect(
+      buildMagazineVM(
+        make({
+          payload: slotted('2026-09-25', 'a'),
+          slots,
+          photos: [{ uri: 'file://a', poiId: 'a' }],
+        })
+      ).cover.picture
+    ).toBeNull();
+  });
+
+  it('AC-1 긍정 짝: 같은 날·같은 장소 기기 사진이 있으면 uri 가 있는 사진 객체다', () => {
+    const vm = buildMagazineVM(
+      make({
+        payload: slotted(DATE, 'a'),
+        slots,
+        photos: [{ uri: 'file://a', poiId: 'a' }],
+      })
+    );
+    expect(vm.cover.picture).toMatchObject({ uri: 'file://a' });
+  });
+
+  it('AC-2(선제 green — D1 이 장면까지 지우지 않게 지금 동작을 굳힌다): 같은 입력에서 장면 카드는 사진이 없어도 카테고리 그림용 객체를 그대로 가진다(D1 은 표지만 바꾼다)', () => {
+    const vm = buildMagazineVM(
+      make({ payload: slotted(DATE, 'a'), slots, photos: [] })
+    );
+    expect(vm.scenes[0].picture).toEqual({ poiId: 'a', category: '맛집' });
+  });
+
+  it('AC-3: 표지 색 키 규칙은 그대로다 — 사진이 없어도 방문 카테고리 최빈이 표지 색이 된다', () => {
+    expect(
+      buildMagazineVM(
+        make({
+          payload: slotted(DATE, 'a'),
+          ...dayOf(['카페', '카페', '맛집']),
+          photos: [],
+        })
+      ).cover.palette
+    ).toBe('카페');
+  });
+});
+
 describe('숫자 타일 (Q5 · BR-U5-43 · INV-3)', () => {
   const tiles = (over: Partial<MagazineInput>) =>
     buildMagazineVM(make(over)).stats;
