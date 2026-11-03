@@ -69,24 +69,44 @@ def test_review_route_leaves_change_requests_trip_less_turns_and_failures_alone(
     assert edit.outcome == "FRAME" and edit.frames[0].intent is Intent.EDIT_SCHEDULE
     weather = _build(_canned(Intent.GET_WEATHER)).orch.turn(_input("내일 일정대로 가도 날씨 괜찮아?"))
     assert weather.outcome == "ANSWER" and weather.frames[0].intent is Intent.GET_WEATHER  # 검토 꼴이어도 다른 의도는 그대로
-    trip_less = _null_build().orch.turn(_input("내일 일정에서 무리한 부분 있어?", snapshot=_NO_TRIP))
-    assert trip_less.outcome != "FRAME"  # 여행이 없으면 종전 길(일반 지식 질문일 수 있다)
     general = _null_build().orch.turn(_input("하루에 7곳 가면 무리야?"))
     assert general.outcome != "FRAME"  # 내 일정을 가리키지 않는 말 — 지식 즉답 몫
+    planning = _null_build().orch.turn(_input("여행 일정 짤 때 하루 몇 군데가 괜찮아?", snapshot=_NO_TRIP))
+    assert planning.outcome != "FRAME"  # 여행 없이 묻는 일반 계획 질문 — 지식 즉답 몫(BR-AO-34)
     failed = _build({LlmFeature.DIALOGUE_INTENT: RuntimeError("vendor down")}).orch.turn(_input("내일 일정에서 무리한 부분 있어?"))
     assert failed.outcome == "ANSWER" and failed.answer.text == RETRY_TEXT  # 인프라 실패는 종전 다시 시도
     broken = _build({LlmFeature.DIALOGUE_INTENT: "not json at all"}).orch.turn(_input("내일 일정에서 무리한 부분 있어?"))
     assert broken.outcome == "OUT_OF_SCOPE"  # 깨진 출력은 판단이 아니다 — 2‴ 와 같은 입구라 종전 범위 밖
 
 
+def test_review_question_without_a_trip_is_framed_so_the_backend_says_why(caplog) -> None:
+    """검토할 일정이 없으면 이유가 있는 안내다(AC2·INV-4) — FRAME 을 넘기면 BE 가 여행 없는 일정 보기에 "먼저 여행을 만들거나…"로 답한다.
+    종전엔 지식 즉답이 일반론으로 판정했다. 넘긴 턴은 로그로 센다(BE 저장 칸은 일정 보기와 같아 따로는 못 센다)."""
+    with caplog.at_level("INFO"):
+        out = _null_build().orch.turn(_input("내일 일정에서 무리한 부분 있어?", snapshot=_NO_TRIP))
+    assert out.outcome == "FRAME" and out.frames[0].intent is Intent.SHOW_SCHEDULE
+    (event,) = [json.loads(r.getMessage().split(" ", 1)[1]) for r in caplog.records
+                if r.getMessage().startswith("dialogue_review_routed ")]
+    assert event["classified"] is None and event["trip"] is False
+
+
 @pytest.mark.parametrize("text,want", [
     ("내일 일정에서 무리한 부분 있어?", True), ("내일 일정 너무 빡빡하지 않아?", True), ("2일차 일정 괜찮아?", True),
     ("2일차 일정 괜찮아？", True), ("일정 문제없어?", True), ("내일 일정 체크해줘", True), ("일정이 빼곡한데 무리 없을까?", True),
     ("첫째 날 동선 괜찮을지 봐줘", True),
+    # 반박 리뷰가 찾은 놓침(2026-11-03) — 일정 표지가 없거나 '문제점'·'괜찮은 거야'
+    ("무리한 곳 있어?", True), ("내일 무리한 곳 있어?", True), ("내일 너무 무리한 거 아냐?", True), ("일정에 문제점 있어?", True),
+    ("내 일정 괜찮은 거야?", True), ("검토해줘", True), ("점검해줘", True),
     ("내일 일정 보여줘", False), ("일정 너무 빡빡해서 하나 빼줘", False), ("비 와서 내일 일정 무리일 것 같은데 다시 짜줘", False),
     ("아니 일정 괜찮아", False), ("일정에 체크인 몇 시야?", False), ("하루에 7곳 가면 무리야?", False),
     ("내일 날씨 괜찮아?", False), ("해녀의집 괜찮아?", False),
     ("오늘 일정 마무리 어떻게 해?", False), ("코스모스 괜찮아?", False), ("어제 일정 힘들지만 재밌었어", False),
+    # 반박 리뷰가 찾은 오탐(2026-11-03) — 일반 질문·허락 묻기·주제 질문·문제 알림·묻지 않는 말·만들어 달라는 말
+    ("여행 일정 짤 때 하루 몇 군데가 괜찮아?", False), ("여행 계획 짤 때 하루에 몇 곳이 무리 없어?", False),
+    ("계획 없이 가도 괜찮을까?", False), ("혼자 여행 계획인데 괜찮을까?", False), ("일정 끝나고 술 마셔도 괜찮을까?", False),
+    ("점심에 짠 거 먹어도 괜찮을까?", False), ("일정 중에 주차 문제는 없어?", False), ("일정에 문제가 생겼어", False),
+    ("오늘 무리했더니 피곤해", False), ("제주 3박4일 일정 빡빡하지 않아?", False),
+    ("아이 동반 여행인데 빡빡하지 않게 일정 부탁해요", False),
 ])
 def test_asks_review_needs_a_review_cue_a_schedule_cue_and_no_change_request(text: str, want: bool) -> None:
     assert dialogue_orchestrator.asks_review(normalize(text)) is want  # `_core` 처럼 정리한 말로 묻는다(전각 '？'도 NFKC 로 같다)

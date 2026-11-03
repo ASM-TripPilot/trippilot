@@ -10,7 +10,7 @@
 0  리터럴 "내가 할 수 있는 것 보기" → 결정론 능력 안내 ANSWER (LLM 0, BR-AO-18)
 1  보류 되묻기가 있으면 그 답으로 먼저 읽는다 (`dialogue_interpreter.answer_pending` 재사용, LLM 0)
 2  `DIALOGUE_INTENT` 1회 → `IntentGate` closed-set → `IntentMatch(LLM_DIRECT)`; 실패는 전부 OUT_OF_SCOPE + 사유 (BR-AO-02)
-2⁗′ 여행이 있는 턴의 일정 검토 말(`asks_review`)은 분류가 일정 보기로 골랐거나 판단해서 닫았으면(2‴ 와 같은 입구) 2″·2‴ 보다 먼저
+2⁗′ 일정 검토 말(`asks_review` — 여행이 없어도, BE 가 이유를 말한다)은 분류가 일정 보기로 골랐거나 판단해서 닫았으면(2‴ 와 같은 입구) 2″·2‴ 보다 먼저
    `FRAME(SHOW_SCHEDULE)` — BE 진행 검토 카드가 솔버 표기로 답한다(DEC-U8-14 · BR-U8-14, BR-AO-35)
 2″ 분류가 할 일 없음으로 닫았고(null·범위 밖 라벨) 발화가 맞장구·인사 낱말뿐이면 받아 주는 한마디 ANSWER — 범위 밖 카드 대신 (BR-AO-26)
 2‴ 그 밖에 분류가 판단해서 닫은 말(null·범위 밖 라벨·목록 밖 라벨)은 계획 워커가 있으면 `DIALOGUE_PLAN` 1회 → 닫힌 조회 도구(정보
@@ -598,21 +598,33 @@ def _routed(call: IntentDraft, heard: str, *, seasonal_weather_is_knowledge: boo
 # 일정 검토(US-ASSIST-03) — "내일 일정에서 무리한 부분 있어?"·"둘째 날 동선 빠듯하지 않아?"·"일정 검토해줘". 답은 BE 진행 검토 카드
 # (`QueryCards.review`)다(DEC-U8-14: 진행 검토 = SHOW_SCHEDULE 의 BE 처리기) — 문제는 솔버가 표기한 위반·구조적 사실뿐이고(BR-U8-14) AI 스냅샷엔
 # 위반 표기 칸이 없다. 오케스트레이터가 SHOW_SCHEDULE 을 일정 목록 ANSWER 로 끝내면서 말로 한 검토 요청은 카드에 닿지 못했다(TRIP-1705 — 분류
-# null → 계획 gap OTHER → 지식 즉답이 "하루 7곳이라 빡빡"을 지어내거나 범위 밖 카드). '괜찮'은 묻는 꼴만("아니 일정 괜찮아"는 사양), 체크인·아웃은
-# 아니다. 낱말 안에 든 것('마무리'·'코스모스'·'힘들지만')은 표지가 아니다
-_REVIEW_CUE = re.compile(
-    r"(?<!마)무리|빠듯|빡빡|빡세|촘촘|검토|점검|체크(?!\s?인|\s?아웃)|괜찮(?:은지|을지|을까|나|니|아요?\s?\?|겠)"
-    r"|문제\s?(?:는|가|될|있|없)|힘들(?:지(?!만)|까|겠)")
+# null → 계획 gap OTHER → 지식 즉답이 "하루 7곳이라 빡빡"을 지어내거나 범위 밖 카드). 낱말 안에 든 것('마무리'·'코스모스'·'힘들지만')은 표지가 아니다.
+# 강한 표지는 묻거나 부탁하는 꼴이면 혼자로 충분하다("무리한 곳 있어?"·"검토해줘" — "오늘 무리했더니 피곤해"는 아니다). 약한 표지는 일정 표지가 같이
+# 있어야 하고 주제 낱말이 붙으면 그 주제 질문이다("일정 중에 주차 문제는 없어?"). 일반 질문 표지가 있으면 둘 다 아니다 — 여행 일반 지식(BR-AO-34).
+# 반박 리뷰 재현(2026-11-03): '짠 거'(짠 음식)·"일정에 문제가 생겼어"·"계획 없이 가도 괜찮을까?"가 검토 카드로 갔다
+_STRONG_REVIEW = re.compile(r"(?<!마)무리|빠듯|빡빡|빡세|촘촘|검토|점검")
+_ASKING = re.compile(r"[?？]|줘|주세요|봐|(?:있|없|않)(?:어|나|니|을까|아|냐)|아니야|아냐|(?:나|까|니|냐)\s*$")
+_WEAK_REVIEW = re.compile(
+    r"괜찮은\s?(?:지|거야|건가)|괜찮을지|(?<!도)(?<!도\s)괜찮(?:을까|나|니|아요?\s?[?？]|겠)|문제점|문제\s?(?:는|가)?\s?(?:없|있)"
+    r"|체크(?!\s?인|\s?아웃)|힘들(?:지(?!만)|까|겠)")
 _SCHEDULE_CUE = re.compile(
-    r"일정|코스(?!모스)|동선|스케줄|계획|루트|짠\s?거|\d{1,2}\s?일\s?차|첫\s?(?:째\s?)?날|(?:둘|셋|넷)째\s?날|마지막\s?날")
-# 바꿔 달라는 말은 그 의도(REPLAN·EDIT·REGENERATE)의 몫이다 — 검토로 가로채지 않는다. '빼곡'은 빼 달라는 말이 아니다
+    r"일정|코스(?!모스)|동선|스케줄|계획|루트|\d{1,2}\s?일\s?차|첫\s?(?:째\s?)?날|(?:둘|셋|넷)째\s?날|마지막\s?날")
+_TOPIC_CUE = re.compile(r"주차|날씨|비\s?(?:와|오)|교통|입장|예약|영업|휴무|쉬는|비용|예산|돈")
+_GENERAL_CUE = re.compile(r"짤\s?때|짜는\s?법|보통|하루에|몇\s?(?:군데|곳)|\d+\s?곳|\d+\s?박|며칠|처음|혼자\s?여행|계획\s?없이")
+# 바꿔 달라는 말·만들어 달라는 말은 그 의도(REPLAN·EDIT·REGENERATE·생성)의 몫이다 — 검토로 가로채지 않는다. '빼곡'은 빼 달라는 말이 아니다
 _CHANGE_CUE = re.compile(
-    r"다시|바꿔|바꾸|바꿀|빼\s?(?:줘|고|자|줄)|넣어|넣고|추가|옮겨|옮기|줄여|줄이|늘려|조정|짜\s?(?:줘|줄|자)|만들어|고쳐|취소|세워")
+    r"다시|바꿔|바꾸|바꿀|빼\s?(?:줘|고|자|줄)|넣어|넣고|추가|옮겨|옮기|줄여|줄이|늘려|조정|짜\s?(?:줘|줄|자)|만들어|고쳐|취소|세워"
+    r"|부탁|않게|않도록")
 
 
 def asks_review(text: str) -> bool:
-    """저장된 일정에 무리·문제가 없는지 묻는 말인가(LLM 0) — 검토 표지 ∧ 일정 표지 ∧ 바꿔 달라는 말 없음. `text` 는 정리(`normalize`)한 말."""
-    return bool(_REVIEW_CUE.search(text) and _SCHEDULE_CUE.search(text) and not _CHANGE_CUE.search(text))
+    """저장된 일정에 무리·문제가 없는지 묻는 말인가(LLM 0). `text` 는 정리(`normalize`)한 말 — 일반 질문·바꿔 달라는 말이면 아니고,
+    강한 표지(묻는 꼴) 하나로, 약한 표지는 일정 표지와 함께(주제 낱말 없이)."""
+    if _CHANGE_CUE.search(text) or _GENERAL_CUE.search(text):
+        return False
+    if _STRONG_REVIEW.search(text) and _ASKING.search(text):
+        return True
+    return bool(_WEAK_REVIEW.search(text) and _SCHEDULE_CUE.search(text) and not _TOPIC_CUE.search(text))
 
 
 def _review_outcome(match: IntentMatch | None, cleared: DialogueContext, reason: str | None) -> TurnOutcome:
@@ -1061,9 +1073,13 @@ class DialogueOrchestrator:
             if area_turn is not None and _takes_day_areas(area_turn, match):  # 2⁗ — 분류가 칸을 뭉개도(12/12) 확인한 해석으로 넘긴다
                 return _day_area_outcome(area_turn, match, cleared)
             # 2⁗′ — 일정 검토는 BE 진행 검토 카드로(DEC-U8-14). 분류가 일정 보기로 골랐거나 판단해서 닫은 말만(2‴ 와 같은 입구) — 바꾸는 의도는
-            # 그대로, 시한·벤더 실패는 종전 다시 시도, 여행이 없으면 종전 길(일반 지식 질문일 수 있다)
-            if inp.snapshot.trip is not None and asks_review(text) and (
+            # 그대로, 시한·벤더 실패는 종전 다시 시도. 여행이 없어도 넘긴다 — BE 가 "먼저 여행을 만들거나…"로 이유를 말한다(AC2·INV-4)
+            if asks_review(text) and (
                     match.intent is Intent.SHOW_SCHEDULE if match is not None else _plannable(reason or "")):
+                log.info("dialogue_review_routed %s", json.dumps({  # 오탐을 운영에서 셀 수 있게(BE 저장 칸은 일정 보기와 같다)
+                    "event": "dialogue_review_routed", "trace_id": inp.trace_id,
+                    "classified": match.intent.value if match is not None else None, "trip": inp.snapshot.trip is not None,
+                }, ensure_ascii=False))
                 return _review_outcome(match, cleared, reason)
             if match is not None and (match.intent is Intent.RECOMMEND_REGION and _not_region_choice(text) or match.intent in (
                     Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES) and _when_not_where(text)):
