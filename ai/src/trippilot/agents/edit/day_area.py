@@ -13,24 +13,12 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 
 from trippilot.agents.edit.insert_between import _JOSA, _KIND_WORDS
+from trippilot.domain.trip_day import DAY_WORDS as _DAY
+from trippilot.domain.trip_day import day_of  # 다시 짜기 자유입력도 같은 셈을 쓴다 — 에이전트끼리 import 금지(L-2)라 domain 에 있다
 
-# 날 표현 — 순번·상대·날짜·요일. 이 밖("다음 날"·"마지막에서 두 번째")은 읽지 않는다(넘겨짚지 않는다)
-_DAY = re.compile(
-    r"(?P<n>\d{1,2})\s?일\s?차"
-    r"|(?P<ko>첫|둘|셋|넷|다섯|여섯|일곱|여덟|아홉|열)\s?째\s?(?:날|날짜)?"
-    r"|(?P<nth>\d{1,2}|첫|두|세|네|다섯)\s?번째\s?날"
-    r"|(?P<first>첫\s?날)"
-    r"|(?P<last>마지막\s?날|막\s?날)"
-    r"|(?P<rel>내일\s?모레|오늘|내일|모레)"
-    r"|(?:(?P<m>\d{1,2})\s?월\s?)?(?P<d>\d{1,2})\s?일(?!\s?(?:차|동안|간|째))"
-    r"|(?P<wd>[월화수목금토일])\s?요일"
-)
-_KO = {"첫": 1, "둘": 2, "두": 2, "셋": 3, "세": 3, "넷": 4, "네": 4, "다섯": 5, "여섯": 6, "일곱": 7, "여덟": 8, "아홉": 9, "열": 10}
-_REL = {"오늘": 0, "내일": 1, "모레": 2}
-_WEEKDAYS = "월화수목금토일"
 # 날 사이 잇는 말만 있으면 두 날이 한 동네를 같이 받는다("1일차랑 2일차는 종로로")
 _JOIN = re.compile(r"^\s?(?:이랑|랑|와|과|하고|및|그리고|이나|나)?\s?,?\s?$")
 # 날 말 바로 뒤 조사 — "1일차는"·"1일차를 종로로"·"1일차에 종로 쪽으로"·"1일차의 일정을"
@@ -228,37 +216,6 @@ def parse_day_areas(utterance: str, known: Iterable[str] = ()) -> tuple[DayClaus
         elif w not in _FILLER and _JOSA.sub("", w) not in _FILLER:
             return None
     return tuple(clauses) if verb else None
-
-
-def day_of(said: str, days: Sequence[date], today: date, *, first: date | None = None) -> date | str:
-    """날 말 → 여행 날 하나, 아니면 사유 코드. 순번은 여행 첫날 + N − 1(대화 `resolve_day` 와 같은 셈).
-
-    `first` = 여행 첫날(편집 요청 `trip_start_date`) — 받은 날들이 여행 첫날부터 있지 않아도 순번을 대화와 같게 센다. 없으면 `days[0]`."""
-    m = _DAY.fullmatch(said)
-    if m is None:
-        return "day_out_of_trip"
-    g = m.groupdict()
-    first, last, inside = first or days[0], days[-1], set(days)
-    n = (int(g["n"]) if g["n"] else _KO[g["ko"]] if g["ko"] else
-         (int(g["nth"]) if g["nth"].isdigit() else _KO[g["nth"]]) if g["nth"] else 1 if g["first"] else None)
-    if n is not None:
-        on = first + timedelta(days=n - 1)
-    elif g["last"]:
-        on = last
-    elif g["rel"]:
-        on = today + timedelta(days=_REL.get(g["rel"].replace(" ", ""), 2))
-    elif g["d"]:
-        month, day = (int(g["m"]) if g["m"] else None), int(g["d"])
-        hits = [x for x in days if x.day == day and (month is None or x.month == month)]
-        if len(hits) > 1:
-            return "ambiguous_day"
-        on = hits[0] if hits else None
-    else:
-        hits = [x for x in days if x.weekday() == _WEEKDAYS.index(g["wd"])]
-        if len(hits) > 1:
-            return "ambiguous_day"
-        on = hits[0] if hits else None
-    return on if on is not None and on in inside else "day_out_of_trip"
 
 
 def resolve_day_areas(clauses: Sequence[DayClause], trip_days: Sequence[date],

@@ -523,6 +523,9 @@ class ReplanSessionService(
      * 트리거 **요약**(예: `날씨(비 예보 70%)`)까지는 싣지 않는다 — 그 문구는 C9(planb-detection) 소유이고, C10 이 C9 에서
      * 읽는 것은 진입 날짜 강제용 사실(`TriggerLookupFacade` — kind·상태·날짜)뿐이다. 자동 진입이라는 사실만 `triggerId`
      * 유무로 남긴다(정본 §7 대비 축약 — 문구가 필요해지면 그때 그 계약을 넓힌다).
+     *
+     * **AI 가 이 줄을 읽는다**(다음 재계획의 `change_log.reason`) — 같은 날 앞 요청 기억(AI `wiring._prior_requested`)이
+     * ` · ` 로 나눠 칩 키를 찾고 밤 낱말을 본다. 구분자·칩 키(화면 값 그대로)·자유입력 포함을 바꾸면 그쪽도 같이 고친다.
      */
     private fun changeReason(session: ReplanSession): String {
         val parts = buildList {
@@ -578,7 +581,10 @@ class ReplanSessionService(
 
         private const val REASON_SEPARATOR = " · "
 
-        /** 되돌리기 이력의 사유 머리 — 뒤에 무엇을 되돌렸는지(원래 사유)를 잇는다(BR-U4-31 — 비워 두지 않는다). */
+        /**
+         * 되돌리기 이력의 사유 머리 — 뒤에 무엇을 되돌렸는지(원래 사유)를 잇는다(BR-U4-31 — 비워 두지 않는다).
+         * **AI 가 이 머리로 되돌림을 가른다**(`wiring._REVERT_PREFIX` — 되돌린 다시 짜기가 뺀 앞 요청 기억을 되살린다). 바꾸면 같이 고친다.
+         */
         private const val REVERT_PREFIX = "재계획 되돌림"
 
         /** 사유·지시어를 하나도 안 고른 수동 진입의 최소 문구 — 빈 칸으로 남기지 않는다(BR-U4-31). */

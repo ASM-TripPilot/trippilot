@@ -352,7 +352,9 @@ def test_replan_response_carries_kb_hit_counts() -> None:
 
     # SCHEDULE 키는 없다 — 검색하지 않으므로 0 을 싣는 것도 거짓이다(TRIP-972).
     # 일정 컨텍스트는 요청 봉투(`current_slots`·`placement_reason`)가 들고 온다.
-    assert set(body["retrieved"]) == {"PERSONA", "SITUATION", "POI_DESC"}, body["retrieved"]
+    # SITUATION 도 없다 — dev 앱은 구성기가 있어 선택 LLM 을 안 부르고, 그러면 KB-3 를 찾지 않는다(2026-11-05).
+    # 구성 프롬프트에 실린 상황 원칙 수는 SITUATION_PROMPT 다.
+    assert set(body["retrieved"]) == {"PERSONA", "POI_DESC", "SITUATION_PROMPT"}, body["retrieved"]
 
 
 def test_replan_runs_planb_and_says_so() -> None:
@@ -440,8 +442,9 @@ def test_llm_backed_rank_reaches_the_schedule_task() -> None:
 
     assert len(spy.tasks) == 1
     assert [str(p) for p in spy.tasks[0].planb_rank] == list(ranked), "랭킹이 봉투에 안 실렸다"
-    # PlanB 산출이 응답까지 흐른다 — KB-5 건수만 구성 후보 것이다(스텁 RAG 라 0, 2026-10-21 구성에 장소 지식)
-    assert body["retrieved"] == {"SITUATION": 3, "POI_DESC": 0}
+    # PlanB 산출이 응답까지 흐른다 — KB-5 건수만 구성 후보 것이다(스텁 RAG 라 0, 2026-10-21 구성에 장소 지식).
+    # SITUATION_PROMPT 는 구성 입력의 상황 원칙 수다(dev 앱은 문서 파일 미주입이라 0, 2026-11-05)
+    assert body["retrieved"] == {"SITUATION": 3, "POI_DESC": 0, "SITUATION_PROMPT": 0}
     assert not any("planb_rank_skipped" in n for n in body["notes"])
 
 
