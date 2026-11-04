@@ -179,6 +179,7 @@ export function LiveLocationView({
 
           {/* 건너뛰기 어포던스 — 서버 사다리(마지막 방문지/등록 숙소)로 위임, 클라가 재판정 안 함.
               중립 가정 문구를 캡션으로 밝힌다(AC-2). 배선은 범위 밖(Q8). */}
+          {/* eslint-disable-next-line no-restricted-syntax -- onPress 미배선(Q8) — button 을 달면 죽은 버튼이 낭독기에 드러난다. 배선 때 role 을 단다(TRIP-1765). */}
           <Pressable
             testID="live-location-use-last-visit"
             className="items-center pt-xs"

@@ -96,6 +96,7 @@ export function TripSummaryScreen({
         <View className="flex-1" />
         {onShare ? (
           <Pressable
+            accessibilityRole="button"
             testID="reflection-summary-share"
             disabled={!shareEnabled}
             accessibilityState={{ disabled: !shareEnabled }}

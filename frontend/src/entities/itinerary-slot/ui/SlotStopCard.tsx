@@ -144,6 +144,7 @@ export function SlotStopCard({
         {unspecified ? (
           editable ? (
             <Pressable
+              accessibilityRole="button"
               testID={fieldId('unspecified')}
               onPress={onPressTimeChip}
               className={chipClass}
@@ -164,6 +165,7 @@ export function SlotStopCard({
         ) : hasTime ? (
           editable ? (
             <Pressable
+              accessibilityRole="button"
               testID={fieldId('timechip')}
               onPress={onPressTimeChip}
               className={chipClass}
@@ -212,6 +214,7 @@ export function SlotStopCard({
             {/* 이름 진입 목적지가 없으면 누를 수 없는 글자로, `›` 도 뺀다(TRIP-939 A-3·Q4). */}
             {onPressName ? (
               <Pressable
+                accessibilityRole="button"
                 testID={fieldId('name')}
                 onPress={onPressName}
                 className="flex-shrink flex-row items-center gap-[2px]"
@@ -306,6 +309,7 @@ export function SlotStopCard({
 
         {onPressAlt ? (
           <Pressable
+            accessibilityRole="button"
             testID={fieldId('alt')}
             onPress={onPressAlt}
             className="self-start"

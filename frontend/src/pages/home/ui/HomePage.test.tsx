@@ -754,6 +754,16 @@ describe('진입점 — 누르면 어디로 가나', () => {
     expect(mockPush.mock.calls).toEqual([['/notifications']]);
   });
 
+  // TRIP-1765 — 자식이 글리프뿐이라 라벨이 없으면 낭독기에 이름 없는 버튼이다.
+  it('종은 "알림" 버튼으로 읽힌다', () => {
+    render(<HomePage />);
+
+    expect(screen.getByRole('button', { name: '알림' })).toHaveProp(
+      'testID',
+      'home-dashboard-bell'
+    );
+  });
+
   it('planning 얼굴에서도 종을 누르면 알림함으로 1회 간다', () => {
     mockUseGetTrips.mockReturnValue(tripsOk([trip({ status: 'PLANNED' })]));
     render(<HomePage />);

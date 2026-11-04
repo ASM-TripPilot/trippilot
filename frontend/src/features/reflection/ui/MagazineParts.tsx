@@ -151,6 +151,7 @@ export function MagazineQuote({
         <View className="flex-1" />
         {onEdit ? (
           <Pressable
+            accessibilityRole="button"
             testID={editTestID}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             onPress={onEdit}

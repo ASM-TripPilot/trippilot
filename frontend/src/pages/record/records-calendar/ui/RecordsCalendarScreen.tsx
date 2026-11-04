@@ -171,8 +171,11 @@ function LegendLine({
 }): ReactElement {
   return (
     <Pressable
+      accessibilityRole="button"
       testID={testID}
       className="w-full flex-row items-center gap-sm px-lg pb-[6px] pt-[10px]"
+      // TRIP-1765 — 열 곳이 없는 줄(다가올 여행)은 낭독기에 "흐리게 표시됨"으로 읽히게 한다(누름은 원래도 무반응).
+      disabled={!onPress}
       onPress={onPress}
     >
       <View
@@ -212,7 +215,11 @@ function TripLegendLine({
           ? `record-calendar-legend-chevron-${trip.tripId}`
           : undefined
       }
-      onPress={onPressLegend && (() => onPressLegend(trip.tripId))}
+      onPress={
+        onPressLegend && openable?.has(trip.tripId)
+          ? () => onPressLegend(trip.tripId)
+          : undefined
+      }
     >
       {joinLabel([trip.title, trip.dateRangeLabel, trip.nightsLabel])}
     </LegendLine>
@@ -297,6 +304,7 @@ function MonthLegendBlock({
       {shown.map(renderRow)}
       {hiddenCount > 0 && (
         <Pressable
+          accessibilityRole="button"
           testID="record-calendar-legend-more"
           className="w-full flex-row items-center gap-xs pb-[6px] pl-[33px] pr-lg pt-[10px]"
           onPress={() => setShowAll((open) => !open)}

@@ -199,6 +199,7 @@ export function TermsScreen({
                 {errorMessage}
               </Text>
               <Pressable
+                accessibilityRole="button"
                 testID="onboarding-terms-retry"
                 onPress={onRetry}
                 className="self-start rounded-button border-[1.5px] border-hairline-strong px-lg py-sm"
@@ -214,6 +215,7 @@ export function TermsScreen({
         <View className="px-2xl pb-[30px] pt-md">
           <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
           <Pressable
+            accessibilityRole="button"
             testID="onboarding-terms-next"
             // disabled prop 은 탭을 삼킨다 — 비활성 탭이 안내를 켜야 하므로 접근성 상태로만 알린다.
             accessibilityState={{ disabled: !canProceed }}

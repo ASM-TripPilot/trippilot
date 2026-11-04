@@ -30,6 +30,7 @@ export function FormatSegment({
         const active = format.id === selectedId;
         return (
           <Pressable
+            accessibilityRole="button"
             key={format.id}
             testID={`reflection-share-format-${format.id}`}
             accessibilityState={{ selected: active }}

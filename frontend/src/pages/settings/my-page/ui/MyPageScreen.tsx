@@ -144,7 +144,12 @@ function SettingsRow({
     </>
   );
   return onPress ? (
-    <Pressable testID={testID} onPress={onPress} className={className}>
+    <Pressable
+      accessibilityRole="button"
+      testID={testID}
+      onPress={onPress}
+      className={className}
+    >
       {content}
     </Pressable>
   ) : (

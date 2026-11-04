@@ -137,6 +137,7 @@ export function SheetShell({
     >
       {dismissKeyboardOnBodyTap ? (
         <BottomSheetView testID={testID}>
+          {/* eslint-disable-next-line no-restricted-syntax -- 본문 탭 → 키보드 내리기 그릇(accessible={false}) — 버튼이 아니다(TRIP-1765). */}
           <Pressable
             accessible={false}
             onPress={Keyboard.dismiss}

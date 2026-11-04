@@ -605,6 +605,8 @@ export function TripWizardStep1Screen({
         {overseasBlocked ? (
           <View className="absolute inset-0 items-center justify-center px-xl">
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="닫기"
               testID="trip-wizard-overseas-backdrop"
               className="absolute inset-0 bg-scrim/[58%]"
               onPress={onCloseOverseasDialog}
