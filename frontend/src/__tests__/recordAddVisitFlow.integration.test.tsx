@@ -1241,8 +1241,12 @@ describe('🔴 TRIP-1756 · 여행 조회가 404 아닌 이유로 실패하면 "
     );
     fireEvent.press(screen.getByTestId(REGION_RETRY));
 
-    await waitFor(() => expect(screen.queryByTestId(REGION_NOTICE)).toBeNull());
-    await waitFor(() => expect(screen.queryByTestId(rowId('g1'))).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByTestId(REGION_NOTICE)).not.toBeOnTheScreen()
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId(rowId('g1'))).not.toBeOnTheScreen()
+    );
     // 키(region)가 바뀐 새 조회 응답 전엔 한 틱 목록이 빈다 — 동기 getBy 가 아니라 기다려 찾는다.
     expect(await screen.findByTestId(rowId('p1'))).toBeOnTheScreen();
     expect(hitsOf('GET', `/api/v1/trips/${TRIP_ID}`)).toHaveLength(
