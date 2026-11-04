@@ -186,7 +186,7 @@ function assigned(body: AssignBaseRequest): BaseAssignment {
 /** 여행 GET(기본 2박 06-10~06-12) + 거점 POST(기본 201). 케이스가 필요한 쪽만 덮어쓴다. */
 function useServer(
   options: {
-    trip?: Trip;
+    trip?: Trip | Response;
     tripGate?: Promise<void>;
     post?: (body: AssignBaseRequest, nth: number) => Promise<Response>;
   } = {}
@@ -194,10 +194,13 @@ function useServer(
   server.use(
     http.get(`${BASE}/trips/:tripId`, async () => {
       if (options.tripGate) await options.tripGate;
+      if (options.trip instanceof Response) return options.trip;
       return HttpResponse.json(
         options.trip ?? trip('2026-06-10', '2026-06-12')
       );
     }),
+    // TRIP-1749 — 이 화면은 거점 조회를 켜지 않아 캐시가 비어 있다. 지정은 교체를 계획하려고 지금 배정을 먼저 받아 온다.
+    http.get(`${BASE}/trips/:tripId/bases`, () => HttpResponse.json([])),
     http.post(`${BASE}/trips/:tripId/bases`, async ({ request }) => {
       const body = (await request.json()) as AssignBaseRequest;
       postBodies.push(body);
@@ -647,5 +650,24 @@ describe('TRIP-1582 · 빈 추천 → 인기 숙소', () => {
     await readyCta();
     expect(curatedQueries).toHaveLength(0);
     expect(screen.queryByTestId('curated-stay-browse-all')).toBeNull();
+  });
+});
+
+describe('🔴 I9 · TRIP-1749 결정 3 · INV-4 — 여행 기간을 못 받으면 CTA 가 꺼진 이유를 말한다', () => {
+  it('trip GET 500 → 안내 「여행 기간을 불러오지 못했어요…」 · CTA 비활성 · POST 0', async () => {
+    // 준비 — 여행 조회가 서버 오류로 끝난다(기간을 모른다).
+    useServer({ trip: new HttpResponse(null, { status: 500 }) });
+    renderPage(VIEW);
+
+    // 단언 — 꺼진 CTA 만 보이면 위반이다. 이유가 한 줄로 보인다.
+    expect(
+      await screen.findByTestId('stay-recommend-notice')
+    ).toHaveTextContent(
+      '여행 기간을 불러오지 못했어요. 돌아가서 다시 열어 주세요.'
+    );
+    const cta = screen.getByTestId('sheet-cta-button-0');
+    expect(cta).toBeDisabled();
+    fireEvent.press(cta);
+    expect(postBodies).toEqual([]);
   });
 });

@@ -36,6 +36,9 @@ import { StayRecommendView } from './StayRecommendView';
 
 const ASSIGN_FAILED_NOTICE = '거점으로 지정하지 못했어요. 다시 시도해 주세요.';
 const SAME_DAY_NOTICE = '당일 여행은 거점 숙소 없이 동선만 유지해요.';
+/** 여행 조회가 실패해 기간을 모른다(TRIP-1749 결정 3) — 꺼진 CTA 만 남기지 않고 이유를 말한다(INV-4). */
+const TRIP_FAILED_NOTICE =
+  '여행 기간을 불러오지 못했어요. 돌아가서 다시 열어 주세요.';
 const CURATED_NOTICE =
   '이번 동선 기준 추천은 아직 없어요 · 대신 인기 숙소를 보여 드려요';
 
@@ -197,6 +200,8 @@ export function StayRecommendPage({
 
   let notice: string | null = null;
   if (assignFailed) notice = ASSIGN_FAILED_NOTICE;
+  // 기간을 이미 받았으면 재조회 실패는 안내하지 않는다 — [확정]은 켜져 있다(03b 경고-2).
+  else if (trip.isError && endDate === undefined) notice = TRIP_FAILED_NOTICE;
   else if (sameDay) notice = SAME_DAY_NOTICE;
 
   return (
