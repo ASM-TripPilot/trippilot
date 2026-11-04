@@ -107,6 +107,8 @@ export function TripCalendarMonth({
                 // testID 와 selected 는 같은 요소에 둔다 — `toBeSelected()` 가 이 요소를 본다.
                 return (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${Number(cell.date.slice(5, 7))}월 ${cell.day}일`}
                     key={di}
                     testID={`record-calendar-day-${cell.date}`}
                     accessibilityState={{ selected: isMarked }}

@@ -85,6 +85,8 @@ export function GenerationProgressCard({
     >
       {/* 좌상단 원형 back — 셸 back 을 대체(진행 카드가 오버레이 전체를 소유). */}
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="뒤로"
         testID="generation-progress-back"
         onPress={onBack}
         style={backShadow}

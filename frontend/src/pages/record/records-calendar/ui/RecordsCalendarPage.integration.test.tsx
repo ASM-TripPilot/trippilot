@@ -340,6 +340,25 @@ describe('화면 동작 — 캘린더·legend·진행 중 카드·지난 여행�
     expect(screen.queryByTestId('record-past-empty')).toBeNull();
   });
 
+  // TRIP-1765 — 날짜 칸 이름은 그 칸의 날짜뿐(기록 내용은 안 싣는다). `name` 은 라벨·글자 중 하나만 맞아도 찾으므로
+  // 낭독기가 실제로 읽는 한 값(라벨 우선)은 toHaveAccessibleName(완전 일치)로 따로 본다.
+  it('날짜 칸은 그날 날짜만으로 읽히는 버튼이다 — 여행 제목은 이름에 없다', async () => {
+    await renderReady();
+
+    expect(screen.getByRole('button', { name: '6월 5일' })).toHaveProp(
+      'testID',
+      'record-calendar-day-2026-06-05'
+    );
+    expect(
+      screen.getByTestId('record-calendar-day-2026-06-05')
+    ).toHaveAccessibleName('6월 5일');
+    // 기록 없는 날도 버튼이다(누름 동작 불변 — 페이지가 무시한다).
+    expect(screen.getByRole('button', { name: '6월 11일' })).toHaveProp(
+      'testID',
+      'record-calendar-day-2026-06-11'
+    );
+  });
+
   it('legend — 앞 3줄 + "더 보기 2", 누르면 5줄과 "접기", 다시 누르면 접힌다 · 박수가 줄에 붙는다', async () => {
     await renderReady();
 

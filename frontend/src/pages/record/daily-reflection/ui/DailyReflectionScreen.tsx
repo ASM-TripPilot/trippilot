@@ -343,6 +343,7 @@ export function DailyReflectionScreen({
         <View className="flex-1" />
         {!editing ? (
           <Pressable
+            accessibilityRole="button"
             testID="reflection-daily-edit"
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             onPress={handleEnterEdit}
@@ -366,6 +367,7 @@ export function DailyReflectionScreen({
               : formatDayLabel(tab.day);
             return (
               <Pressable
+                accessibilityRole="button"
                 key={tab.day}
                 testID={`reflection-daily-day-tab-${tab.day}`}
                 // disabled 는 누름을 막고 RN 이 accessibilityState.disabled 로도 합쳐 싣는다.
@@ -465,6 +467,7 @@ export function DailyReflectionScreen({
                   직접 회고를 작성할 수 있어요
                 </Text>
                 <Pressable
+                  accessibilityRole="button"
                   testID="reflection-daily-retry"
                   onPress={onConfirm}
                   className="mt-sm flex-row items-center gap-[6px] rounded-button border border-hairline-strong bg-canvas px-lg py-sm"
@@ -521,6 +524,7 @@ export function DailyReflectionScreen({
           <View className="w-full bg-canvas px-lg pb-md pt-sm">
             <View className="flex-row gap-sm">
               <Pressable
+                accessibilityRole="button"
                 testID="reflection-daily-edit-cancel"
                 onPress={handleCancel}
                 className="h-12 flex-1 items-center justify-center rounded-button border border-hairline-strong bg-canvas"
@@ -530,6 +534,7 @@ export function DailyReflectionScreen({
                 </Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
                 testID="reflection-daily-edit-save"
                 disabled={!canSave}
                 accessibilityState={{ disabled: !canSave }}
@@ -554,6 +559,7 @@ export function DailyReflectionScreen({
           // pb-[104px] 는 탭바(96) 위에 앉히는 여백 — 키보드가 떠도 남는 빈 띠는 그대로 둔다(Seed Q4).
           <View className="w-full bg-canvas px-lg pb-[104px] pt-[8px]">
             <Pressable
+              accessibilityRole="button"
               testID="reflection-daily-compose"
               onPress={handleEnterEdit}
               className="h-[52px] w-full items-center justify-center rounded-button bg-primary"

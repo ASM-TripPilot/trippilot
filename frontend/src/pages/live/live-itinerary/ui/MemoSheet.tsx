@@ -129,6 +129,7 @@ export function MemoSheet({
         </View>
 
         {/* 입력 상자 — 배경·테두리는 감싸는 View 에(MemoInline 입력 className 에 bg 를 넣지 않는다). */}
+        {/* eslint-disable-next-line no-restricted-syntax -- 입력칸 포커스용 그릇(accessible={false}) — 실제 컨트롤은 안의 TextInput(TRIP-1765). */}
         <Pressable
           testID="live-memo-box"
           accessible={false}

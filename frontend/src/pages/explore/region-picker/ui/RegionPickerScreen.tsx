@@ -144,6 +144,7 @@ function SelectableCard({
 }): ReactElement {
   return (
     <Pressable
+      accessibilityRole="button"
       testID={`explore-region-${region.regionCode}`}
       onPress={onPress}
       className="mb-md w-[48%] overflow-hidden rounded-card bg-canvas"
@@ -277,6 +278,7 @@ function SidoRow({
 }): ReactElement {
   return (
     <Pressable
+      accessibilityRole="button"
       testID={`explore-region-sido-${group.sidoCode}`}
       onPress={onOpen}
       className="mb-sm h-[48px] flex-row items-center justify-between rounded-card bg-surface-soft px-md"
@@ -310,6 +312,7 @@ function RegionDetail({
   return (
     <View>
       <Pressable
+        accessibilityRole="button"
         testID="explore-region-drilldown-back"
         onPress={onBack}
         hitSlop={8}

@@ -37,6 +37,7 @@ export function NicknameEditRow({
   return (
     <View testID="settings-row">
       <Pressable
+        accessibilityRole="button"
         testID="settings-nickname-edit"
         onPress={() => {
           // TRIP-1305 5-b W1 — 저장 중 접었다 펼치면 입력이 현재 닉네임으로 돌아가 늦은 409 가 다른 값 아래 붙는다.

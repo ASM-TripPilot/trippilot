@@ -23,7 +23,11 @@ export function ExportRow({
 }): ReactElement {
   return (
     <View testID="settings-row">
-      <Pressable testID="settings-export-row" onPress={onPress}>
+      <Pressable
+        accessibilityRole="button"
+        testID="settings-export-row"
+        onPress={onPress}
+      >
         <RowBody
           rowKey="export"
           label="데이터 내보내기"

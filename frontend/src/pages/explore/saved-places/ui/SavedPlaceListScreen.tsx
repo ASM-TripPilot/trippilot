@@ -130,6 +130,7 @@ function SavedPlaceRow({
     // bare Pressable(accessibilityRole 없음) — d04 카드와 같은 규율(role 을 붙이면 개수 심판이
     // 깨질 위험 · 여기 d02 엔 role-count 가드가 없지만 대칭 유지). d02 하트는 disabled 가 없어
     // 항상 활성이라 하트 press 는 부모로 안 샌다(RNTL Probe A, ★2) — `!pending` 가드 불필요.
+    // eslint-disable-next-line no-restricted-syntax -- 의도적 무역할(위 주석·TRIP-1303) — 테스트가 "행은 버튼 역할이 아니다"를 지킨다(TRIP-1765).
     <Pressable
       testID={`explore-saved-item-${saved.savedPlaceId}`}
       // 보이는 글자 그대로(TRIP-1281) — 없으면 iOS 가 자식 하트 라벨을 행에 끌어다 붙인다.

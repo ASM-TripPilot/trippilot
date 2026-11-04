@@ -130,6 +130,7 @@ function SheetCta({
 }) {
   return (
     <Pressable
+      accessibilityRole="button"
       testID={testID}
       onPress={onPress}
       className="h-[52px] items-center justify-center rounded-button bg-primary"
@@ -149,6 +150,7 @@ function SheetCancel({
 }) {
   return (
     <Pressable
+      accessibilityRole="button"
       testID={testID}
       onPress={onPress}
       className="h-[44px] items-center justify-center"
@@ -231,6 +233,7 @@ export function SocialLoginScreen({
         ).map(({ provider, label, Icon }) => (
           <Fragment key={provider}>
             <Pressable
+              accessibilityRole="button"
               testID={`auth-login-${provider}`}
               onPress={() => onSignIn(provider)}
               className="h-[52px] w-full flex-row items-center justify-center gap-[10px] rounded-button border border-ink bg-canvas"

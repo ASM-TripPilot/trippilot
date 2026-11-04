@@ -955,7 +955,7 @@ describe('화면 동작 — 카피 · 드릴다운 · 뒤로 · 카드 갈래 ·
     expect(screen.getByText('바다 · 야경')).toBeOnTheScreen();
     expect(screen.getByText('섬 · 자연')).toBeOnTheScreen();
 
-    fireEvent.press(screen.getByRole('button', { name: /^제주특별자치도/ }));
+    fireEvent.press(screen.getByRole('button', { name: /^제주특별자치도, / }));
 
     expect(screen.getByText('제주특별자치도 전체')).toBeOnTheScreen();
     expect(regionCardCodes()).toEqual(['50', '50110', '50130']);
