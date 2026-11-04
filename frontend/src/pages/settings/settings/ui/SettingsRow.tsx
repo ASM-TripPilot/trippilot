@@ -81,6 +81,7 @@ export function PreparingRow({
 }): ReactElement {
   return (
     <Pressable
+      accessibilityRole="button"
       testID="settings-row"
       disabled
       accessibilityState={{ disabled: true }}
@@ -119,7 +120,11 @@ export function NavRow({
   onPress?: () => void;
 }): ReactElement {
   return (
-    <Pressable testID={`settings-nav-${rowKey}`} onPress={onPress}>
+    <Pressable
+      accessibilityRole="button"
+      testID={`settings-nav-${rowKey}`}
+      onPress={onPress}
+    >
       <RowBody
         rowKey={rowKey}
         label={label}

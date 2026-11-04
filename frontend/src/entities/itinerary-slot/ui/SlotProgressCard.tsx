@@ -456,6 +456,7 @@ export function SlotProgressCard({
       <View className="flex-row flex-wrap items-center justify-between gap-sm">
         <View className="flex-row gap-[6px]">
           {disabledIcons.map(({ role, icon }) => (
+            // eslint-disable-next-line no-restricted-syntax -- 모양만 있는 아이콘(disabled·onPress 없음) — button 을 달면 이름 없는 흐린 버튼 3개가 생긴다(TRIP-1765).
             <Pressable
               key={role}
               testID={fieldId(role)}

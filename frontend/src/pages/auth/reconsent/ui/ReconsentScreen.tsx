@@ -123,6 +123,7 @@ export function ReconsentScreen({
       <View className="px-2xl pb-[30px] pt-md">
         <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
         <Pressable
+          accessibilityRole="button"
           testID="reconsent-agree"
           disabled={!canAgree}
           onPress={onAgree}

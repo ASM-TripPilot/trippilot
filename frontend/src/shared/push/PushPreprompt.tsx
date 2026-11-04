@@ -45,6 +45,7 @@ export function PushPreprompt({ onProceed }: PushPrepromptProps): ReactElement {
         <View className="gap-sm px-2xl pb-2xl pt-lg">
           <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
           <Pressable
+            accessibilityRole="button"
             testID="onboarding-push-allow"
             onPress={onProceed}
             className="h-[52px] items-center justify-center rounded-button bg-primary"

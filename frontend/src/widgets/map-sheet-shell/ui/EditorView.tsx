@@ -179,6 +179,7 @@ export function EditorView({
     return (
       <View className="gap-md pb-md">
         {/* 롱프레스 → 끌기 — 고정·완료 카드엔 핸들러를 안 건다(AC-3 ①). */}
+        {/* eslint-disable-next-line no-restricted-syntax -- 롱프레스 끌기 손잡이 — 낭독기 대체 수단은 M-102(나중)(TRIP-1765). */}
         <Pressable onLongPress={isPinned(item) ? undefined : drag}>
           <SlotStopCard
             slot={item as ItineraryDaysItemSlotsItem}
@@ -206,6 +207,8 @@ export function EditorView({
             <View className="h-[24px]" />
           ) : (
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="여기에 장소 추가"
               testID={`itinerary-edit-insert-${index}`}
               onPress={() => onPressAddBetween(index)}
               pointerEvents={dragFace ? 'none' : 'auto'}
@@ -229,6 +232,8 @@ export function EditorView({
   const overlay = (
     <View className="flex-row items-center gap-sm">
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="뒤로"
         testID="itinerary-edit-back"
         onPress={onBack}
         className="h-[36px] w-[36px] items-center justify-center rounded-pill bg-canvas"
@@ -241,6 +246,7 @@ export function EditorView({
             const selected = index === activeDayIndex;
             return (
               <Pressable
+                accessibilityRole="button"
                 key={tab.date}
                 testID={`itinerary-edit-day-${tab.dayIndex}`}
                 onPress={() => onSelectDay(index)}
@@ -334,6 +340,7 @@ export function EditorView({
             <View className="gap-md">
               {/* 점선 "+ 장소 추가"(index 미지정 = 말미, AC-8). */}
               <Pressable
+                accessibilityRole="button"
                 testID="itinerary-edit-add-place"
                 onPress={onPressAddPlace}
                 className="flex-row items-center justify-center gap-xs rounded-card border border-dashed border-hairline-strong bg-canvas py-md"

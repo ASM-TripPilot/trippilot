@@ -113,6 +113,8 @@ export function PhotoThumbStrip({
       ))}
       {onPressAdd ? (
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="사진 추가"
           testID="record-trip-photo-add"
           onPress={onPressAdd}
           className={`${CELL} items-center justify-center border-[1.4px] border-dashed border-hairline-strong`}

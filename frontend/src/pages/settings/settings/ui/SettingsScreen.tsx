@@ -208,6 +208,7 @@ export function SettingsScreen({
       case 'logout':
         return (
           <Pressable
+            accessibilityRole="button"
             testID="settings-row-logout"
             onPress={() => setLogoutOpen(true)}
           >
@@ -224,6 +225,7 @@ export function SettingsScreen({
         ) : (
           <View testID="settings-row">
             <Pressable
+              accessibilityRole="button"
               testID="settings-delete-account"
               onPress={() => setDialogOpen(true)}
             >

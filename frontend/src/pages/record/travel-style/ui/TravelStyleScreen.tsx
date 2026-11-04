@@ -62,6 +62,8 @@ function TravelStyleAppBar({ onBack }: { onBack?: () => void }): ReactElement {
       className="w-full flex-row items-center gap-[6px] bg-canvas pb-[12px] pl-[12px] pr-lg pt-[4px]"
       back={{
         testID: 'reflection-style-back',
+        accessibilityRole: 'button',
+        accessibilityLabel: '뒤로',
         hitSlop: { top: 8, bottom: 8, left: 8, right: 8 },
         onPress: onBack,
         className: 'pr-[2px]',

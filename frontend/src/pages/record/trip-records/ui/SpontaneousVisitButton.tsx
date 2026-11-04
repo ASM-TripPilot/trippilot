@@ -19,6 +19,7 @@ export function SpontaneousVisitButton({
 }: SpontaneousVisitButtonProps): ReactElement {
   return (
     <Pressable
+      accessibilityRole="button"
       testID="record-trip-spontaneous-add"
       onPress={onPress}
       className="w-full flex-row items-center justify-center gap-sm rounded-button border-[1.4px] border-hairline-strong bg-canvas py-[14px]"

@@ -106,6 +106,7 @@ export function LocationPreprompt({
           {denied ? (
             <>
               <Pressable
+                accessibilityRole="button"
                 testID="onboarding-location-continue"
                 onPress={onProceed}
                 className="h-[52px] items-center justify-center rounded-button bg-primary"
@@ -115,6 +116,7 @@ export function LocationPreprompt({
                 </Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
                 testID="onboarding-location-settings"
                 onPress={onOpenSettings}
                 className="h-[46px] items-center justify-center"
@@ -127,6 +129,7 @@ export function LocationPreprompt({
           ) : (
             <>
               <Pressable
+                accessibilityRole="button"
                 testID="onboarding-location-allow"
                 onPress={onProceed}
                 className="h-[52px] items-center justify-center rounded-button bg-primary"

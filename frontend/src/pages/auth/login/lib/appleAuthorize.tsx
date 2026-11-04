@@ -56,6 +56,7 @@ export const isAppleSignInAvailable = AppleAuthentication.isAvailableAsync;
 export function AppleSignInButton({ onPress }: { onPress: () => void }) {
   return (
     <Pressable
+      accessibilityRole="button"
       onPress={onPress}
       className="h-[52px] w-full flex-row items-center justify-center gap-[10px] rounded-button border border-ink bg-canvas"
     >
