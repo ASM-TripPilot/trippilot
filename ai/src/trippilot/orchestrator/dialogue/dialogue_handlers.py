@@ -26,6 +26,7 @@ None, 2자 미만 무시), 날짜·'N일차'·상대 날짜로 날을 좁히고,
 
 from __future__ import annotations
 
+import logging
 import math
 import re
 import threading
@@ -37,6 +38,7 @@ from datetime import date, datetime, time, timedelta, tzinfo
 from enum import Enum
 
 from trippilot.agents.edit.insert_between import SlotRef, parse_insert_place, resolve_gap
+from trippilot.agents.planb.place_search import PlaceSearch
 from trippilot.agents.planb.rag import _REASON_KO, PlanBAgent, PlanBRagRequest
 from trippilot.agents.recommendation.agent import PLACES, REGIONS, RecommendationAgent, RecommendTask
 from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent, UnknownTask
@@ -70,7 +72,7 @@ from trippilot.orchestrator.dialogue.opportunity import _displayable, shown_even
 from trippilot.orchestrator.dialogue.place_intro import PlaceIntro, clean_intro
 from trippilot.ports.place_fact_store_port import PlaceFacts
 from trippilot.orchestrator.dialogue.place_sql import PlaceSqlLookup, asks_for_places
-from trippilot.poi_curation import place_fallback
+from trippilot.poi_curation import hybrid_rank, place_fallback
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, restrict_pool_to_target_role
 from trippilot.providers.base import Provider
 from trippilot.providers.transit import _format_distance_range
@@ -82,6 +84,8 @@ __all__ = [
     "TurnSnapshot", "edit_arguments", "explore_needs_region", "need_trip_facts", "needs_trip", "next_slot_after",
     "parse_slot_key", "resolve_day", "resolve_slot", "validate_answer_shape", "validate_answer_text",
 ]
+
+log = logging.getLogger(__name__)  # 작업 콜러블(I/O) 안에서만 쓴다 — plan·assemble 은 순수(BR-AO-16)
 
 # ── closed-set 어휘 (BE assistant 모듈과 같은 집합 — 여기 한 곳) ──────────────────
 
@@ -225,6 +229,8 @@ class HandlerPorts:
     planb: PlanBAgent | None = None
     place_sql: PlaceSqlLookup | None = None  # 장소 탐색 NL2SQL — DIALOGUE_SQL 배정 + 장소 DB DSN 이 있을 때만
     place_intro: PlaceIntro | None = None  # 장소 소개 한 조각(KB-5) — 벡터 스토어가 배선됐을 때만
+    # 장소 탐색 열린 검색(KB-5 문서 순위를 규칙 순서에 섞는다) — 벡터 스토어가 있고 TRIPPILOT_KB5_OPEN_SEARCH 가 켜졌을 때만
+    place_search: PlaceSearch | None = None
     events: Provider | None = None  # EventProvider.fetch({anchor, days, now}) — 행사 저장소가 배선됐을 때만(장소 탐색의 행사 주제)
     unknown: UnknownHandlingAgent | None = None  # 미확인 칸 웹 확인(뒤에서) — PLACE_FACT_LOOKUP 배정이 있을 때만
     # 추천의 고르기 판단(장소 몇 곳·가볼 지역) — 재료가 전부 과제로 오는 LLM 0 에이전트라 늘 있다(2026-10-23 사용자 결정)
@@ -1717,9 +1723,11 @@ def _said_night(category: str | None, theme: str | None, utterance: str) -> bool
 
 
 def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None, utterance: str = "", *,
-                  ahead: Callable[[Poi], bool] | None = None) -> list[Poi]:
+                  ahead: Callable[[Poi], bool] | None = None,
+                  fuse: Callable[[list[Poi]], list[Poi]] | None = None) -> list[Poi]:
     """결정론 정렬 — `ahead`(두 곳 사이의 가운데) → 주제 맞음(밤·야경 주제면 야경·나이트라이프) → 주제 낱말이 태그·이름에 든 수 →
-    '요즘 인기' 태그 → 저장 수 → 별점 → 영업시간 보유 → poi_id. 숙소·표시 불가 이름은 뺀다."""
+    '요즘 인기' 태그 → 저장 수 → 별점 → 영업시간 보유 → poi_id. 숙소·표시 불가 이름은 뺀다. `fuse`(열린 검색)가 있으면 정렬 결과에
+    한 번 적용한 뒤(순열 — 장소를 더하거나 빼지 않는다) 종류 상한·다섯 곳 자르기를 그대로 탄다."""
     night = _said_night(category, theme, utterance)
     # 지역 이름 + 조사("홍대에 있다가 이태원 넘어가는길에")는 앵커지 이름 적중이 아니다 — 이태원 이름이 든 곳만 위로 왔다(2026-10-22).
     # "서울역"·"해운대해수욕장"처럼 접미가 붙은 말은 그 이름의 장소를 가리키니 남긴다
@@ -1743,7 +1751,8 @@ def _explore_rank(pois: Iterable[Poi], category: str | None, theme: str | None, 
 
     picked: list[Poi] = []
     per: dict[PoiCategory, int] = {}
-    for p in sorted(filter(fits, pois), key=key):
+    ranked = sorted(filter(fits, pois), key=key)
+    for p in (ranked if fuse is None else fuse(ranked)):
         if category is None and per.get(p.category, 0) >= _PER_CATEGORY:
             continue
         picked.append(p)
@@ -2103,13 +2112,24 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     sql = (_explore_by_sql(ctx, anchor, category, theme),) if (
         ctx.ports.place_sql is not None and ctx.ports.place_sql.writes_sql and ctx.arguments.get("region")
         and (anchor is None or (anchor.kind == "region" and _carry(ctx) is None))) else ()
+    beside_sql = bool(sql)  # 행사 작업을 더하기 전에 잡는다 — 아래 문서 대기 상한(`_DOC_BESIDE_SQL_S`)
     center_of = _once(lambda: _anchor_center(ctx, anchor)) if anchor is not None else None
     events = _explore_events(ctx, anchor, theme, center_of) if anchor is not None else None
     sql += (events,) if events is not None else ()
     if anchor is None or builder is None:
         return sql
+    # 열린 검색은 SQL 과 나란히 돈다 — 섞인 순서는 반경이 답일 때만 쓰인다(SQL 0건·실패, 일정 근처·SQL 이 돌지 않는 탐색). SQL 이 행을
+    # 내면 SQL 행이 먼저다(`_assemble_explore`, BR-AO-27 · BR-AO-36 — 실 NL2SQL 쌍대 판정에서 SQL 행 대신 쓰는 전환은 이득이 없었다,
+    # 2026-11-04). SQL 이 이길 턴이라고 건너뛰지 않는다 — 0건·실패 대체 반경이 섞인 순서여야 한다(그 자리 판정 4:0). 미리 받기 경로에서는
+    # SQL 이 이미 끝나 있을 수 있어 문서 단계(p50 88·p95 192ms, 러너 latency)가 게이트 열린 지역 탐색 턴에 그대로 더해진다
+    searcher = ctx.ports.place_search
+    query = _open_query(ctx, anchor, category, theme) if searcher is not None else None
 
     def fn() -> dict:
+        doc: dict[str, str] = {}
+        if query is not None:  # 질의 임베딩을 풀 조립과 겹쳐 돌린다 — 시한은 이 시각부터 센다(팬아웃 몫)
+            left = _fanout_left(ctx)
+            searcher.warm(query)
         center = center_of() if center_of is not None else _anchor_center(ctx, anchor)
         if center is None:
             return {"status": "UNAVAILABLE", "reason": "anchor_coord_unknown"}
@@ -2122,17 +2142,58 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
         shown, (on_the_way, inner) = _shown_before(ctx), _on_the_way(anchor)
         at = {p.poi_id: on_the_way(p.coord) for p in pool.pois}
         # 두 곳 사이면 가운데가 먼저, 양 끝은 모자랄 때만 — 한 번에 순위를 매겨 종류 상한(_PER_CATEGORY)이 전체에 걸리게
+        fuse = _doc_fuse(ctx, searcher, query, left, doc, cap_s=_DOC_BESIDE_SQL_S if beside_sql else None) if query is not None else None
         ranked = _explore_rank((p for p in pool.pois if not shown(p.name, p.poi_id) and at[p.poi_id] is not None), category, theme,
-                               _night_heard(ctx), ahead=lambda p: inner(at[p.poi_id]))
+                               _night_heard(ctx), ahead=lambda p: inner(at[p.poi_id]), fuse=fuse)
         candidates = [{
             "poi_id": str(p.poi_id), "name": p.name, "category": _CATEGORY_KO.get(p.category.value),
             # 지역 중심에서의 거리는 사용자에게 뜻이 없다 — 일정 근처일 때만 그 일정에서의 거리를 싣는다(INV-3 거리만)
             "distance_range": _km_label(haversine_km(center, p.coord)) if anchor.kind == "itinerary" else None,
             "reason": "요즘 인기" if TRENDING_TAG in p.tags else (_CATEGORY_KO.get(p.category.value) or "가 볼 만한 곳"),
         } for p in ranked]
-        return {"status": "OK", "candidates": candidates}
+        # doc = 열린 검색 상태(Facts 밖, 관측·측정용) — 조립은 읽지 않는다
+        return {"status": "OK", "candidates": candidates, **doc}
 
     return (HandlerTask("explore", fn), *sql)
+
+
+# 열린 검색(KB-5 문서 순위, `place_search`) — 시한은 팬아웃 몫(`_fanout_left` — min(2.8s, 잔여×0.4))에서 풀 조립·정렬에 쓴 시간과
+# 여유 0.35s 를 뺀 만큼만 기다리고, 0.5s 가 안 남으면 건너뛴다. 검색이 OK 가 아니면 규칙 순서 그대로 — 문서 단계 때문에 탐색이 TIMEOUT 이
+# 되지 않게(INV-4)
+_DOC_MARGIN_S, _DOC_MIN_S = 0.35, 0.5
+# SQL 이 나란히 도는 턴의 문서 대기 상한 — 그 턴은 대개 SQL 행이 답이고 섞인 순서는 0건·실패 대체용인데, 팬아웃은 탐색 작업을 끝까지
+# 기다린다. 벡터 스토어가 느린 날 버려질 문서 결과를 ~2.4s 기다리지 않게(리뷰 2026-11-04). 로컬 문서 단계 p95 192ms(러너 latency)
+_DOC_BESIDE_SQL_S = 0.4
+
+
+def _open_query(ctx: TurnContext, anchor: _Anchor, category: str | None, theme: str | None) -> hybrid_rank.OpenQuery | None:
+    """열린 검색을 돌릴 탐색인가 — 주제 게이트가 열리고, 앵커가 지역·일정 근처이고(두 곳 사이·먼 짝 제외 — 가운데 순서가 먼저다),
+    밤 말이 아닐 때만(야경·나이트라이프 순서가 먼저다). NL2SQL 이 나란히 도는지와는 무관하다(BR-AO-36 — 섞인 순서는 반경이 답일 때만
+    쓰인다). 이어 묻기도 이번 턴 주제로 돈다 — 규칙은 첫 턴과 같다: SQL 이 도는 턴(`_carry` 없음)이면 SQL 행, 지역을 이어받아 SQL 이
+    돌지 않는 턴이면 섞인 반경 순서. 돌 때 그 질의, 아니면 None."""
+    if anchor.kind not in ("region", "itinerary") or _said_night(category, theme, _night_heard(ctx)):
+        return None
+    return hybrid_rank.open_query(theme, _CATEGORY_KO.get(category or ""), generic=_GENERIC_WORDS)
+
+
+def _doc_fuse(ctx: TurnContext, searcher: PlaceSearch, query: hybrid_rank.OpenQuery, left: Callable[[], float],
+              doc: dict[str, str], cap_s: float | None = None) -> Callable[[list[Poi]], list[Poi]]:
+    """규칙 정렬 결과 → 범위(규칙 순서의 장소 키)를 넘겨 문서 순위를 받고 RRF 로 섞는다. 상태는 `doc["doc"]` 에 남긴다.
+    `left` = 탐색 작업 첫머리에 잡은 팬아웃 남은 초(`_fanout_left`), `cap_s` = 대기 상한(남은 몫 판정 뒤에 건다)."""
+
+    def fuse(ranked: list[Poi]) -> list[Poi]:
+        left_s = left()
+        wait_s = left_s - _DOC_MARGIN_S
+        if wait_s < _DOC_MIN_S:  # 묻지 않은 것도 상태 한 줄 — 검색기의 `place_search status=…` 줄과 같은 꼴로 센다(INV-4)
+            doc["doc"] = "BUDGET"
+            log.info("place_search status=BUDGET left_ms=%d trace=%s", int(left_s * 1000), ctx.trace_id)
+            return ranked
+        if cap_s is not None:
+            wait_s = min(wait_s, cap_s)
+        status, ranks = searcher.search(query, [p.source_ref for p in ranked if p.source_ref], wait_s, trace=str(ctx.trace_id))
+        doc["doc"] = status
+        return hybrid_rank.fuse(ranked, ranks, named=query.names) if status == "OK" else ranked
+    return fuse
 
 
 def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:
@@ -2171,7 +2232,10 @@ def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fa
     # 이어 묻기에서 앞에서 다 보여 줬으면 '찾지 못함'이 아니다(바로 앞 턴과 어긋난다)
     told = "앞에서 보여 준 행사 말고는 더 찾지 못함" if events is not None and events.get("exhausted") else "그 기간·지역에서 물은 행사를 찾지 못함"
     asked = ((told,) if events is not None else ("행사 정보 미확인",)) if "events" in results else ()
-    value = by_sql or _value(results, "explore")
+    radius = _value(results, "explore")
+    # SQL 행이 먼저, 0건·실패면 반경(열린 검색이 켜졌으면 문서 순위가 섞인 순서) — 묘사형 말이어도 같다(BR-AO-27 · BR-AO-36, 실 NL2SQL
+    # 쌍대 판정 2026-11-04: SQL 행 대신 섞인 반경을 쓴 13사례 SQL 4 : 섞음 5, p=1.0 — 전환 철회)
+    value = by_sql or radius
     if value is None or value.get("status") != "OK":
         return _text_facts(intent, FactStatus.UNAVAILABLE, home, notes=("장소 탐색 미확인", *asked), detail=detail)
     shown = _shown_before(ctx)
