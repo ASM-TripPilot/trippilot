@@ -38,6 +38,7 @@ from datetime import date, datetime
 from types import MappingProxyType
 
 from trippilot.agents.planb.place_knowledge import fetch_place_knowledge, kb5_counts
+from trippilot.agents.planb.place_search import PlaceSearch
 from trippilot.agents.planb.kb_retrieval import (
     DEFAULT_TOP_K,
     retrieve_persona,
@@ -59,6 +60,7 @@ from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort
 from trippilot.assembly_engine.config import RAIN_OUTDOOR
 from trippilot.assembly_engine.travel import haversine_km
+from trippilot.poi_curation import hybrid_rank
 
 _ALTERNATIVE_LABELS = ("A", "B", "C", "D", "E")
 
@@ -242,6 +244,10 @@ class PlanBRagRequest:
     # False = 선택 LLM 을 부르지 않고 규칙 랭킹만. 다시 짜기는 구성 LLM(REPLAN_COMPOSITION)이
     # 하루를 고르므로 대체지 선택 LLM 은 시한만 먹는다(2026-10-14 DEV 3/3 이 6s 타임아웃 → 구성 몫 부족).
     use_llm: bool = True
+    # True = 규칙 랭킹에 KB-5 문서 순위를 섞는다(`fuse_rule_ranking`, 검색기가 주입됐을 때만). 다시 짜기(구성 LLM 이 이 순위 앞 20 을
+    # 후보로 받는다)만 켠다 — 측정한 경로가 거기뿐이다(2026-11-04 쌍대 판정 42:20). 도우미 대체 제안·대체 카드는 규칙 순위 앞이 곧
+    # 화면이라 '실내포차'('실내' 2-gram) 같은 잡음이 그대로 보인다 — 측정 없이 켜지 않는다
+    fuse_docs: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -360,6 +366,7 @@ class PlanBAgent:
         *,
         alternative_worker: AlternativeSelectionWorker | None = None,
         config: PlanBRagConfig | None = None,
+        place_search: PlaceSearch | None = None,
     ) -> None:
         self._embedding = embedding
         self._store = store
@@ -367,6 +374,8 @@ class PlanBAgent:
         # 안에서 만들지 않는 건 Schedule·Reflect·Edit 와 같은 모양이기 위해서다.
         self._worker = alternative_worker
         self._cfg = config or PlanBRagConfig()
+        # KB-5 열린 검색 — 주입 = 켜짐(스위치·실 스토어 판정은 조립 `place_search.wire`). 요청이 `fuse_docs` 일 때만 쓴다
+        self._place_search = place_search
 
     # ── 공개 API ────────────────────────────────────────────────────────
 
@@ -581,6 +590,12 @@ class PlanBAgent:
         rule_ranked, rule_note = _rule_ranking(
             saved_refs, request.pool, available, request.reason, request.user_request
         )
+        if self._place_search is not None and request.fuse_docs:
+            rule_ranked, status = fuse_rule_ranking(
+                self._place_search, request.pool, rule_ranked,
+                request.user_request.strip() or REASON_NEED.get(request.reason, ""),
+                _doc_wait(request), trace=f"planb-{request.trace_id}")
+            rule_note = f"{rule_note} · open_search={status}" if rule_note else f"open_search={status}"
 
         def _why(cause: str) -> str:  # 폴백 사유 + 규칙 랭킹이 뭘 했는지 (침묵 조정 금지)
             return f"{cause} · {rule_note}" if rule_note else cause
@@ -687,6 +702,38 @@ def _situation_query(request: PlanBRagRequest) -> str:
     # 앞 100자만 — 긴 글이 트리거·사유 몫을 덮어 비 예보 같은 상황 지식이 밀리지 않게.
     said = f" {request.user_request.strip()[:100]}" if request.user_request.strip() else ""
     return f"{request.trigger.kind.value} {reason} 상황{said}"
+
+
+# 다시 짜기 후보 순위에 섞을 KB-5 문서의 질의 — 사용자 말이 있으면 그 말, 없으면 사유의 필요. 여기 없는 사유는 말이 없으면 섞지 않는다
+# (게이트가 닫힌다). 측정 러너(`measure_doc_quota` open 팔)가 이 표를 그대로 쓴다
+REASON_NEED: Mapping[str, str] = MappingProxyType({
+    "weather": "비를 피해 실내에서 보내기 좋은 곳",
+    "fatigue": "많이 걷지 않고 앉아서 쉬어 갈 수 있는 곳",
+})
+# 문서 순위 대기 상한 — 다시 짜기 예산(`deadline_ms`)의 10% 를 넘지 않는다. 실 pgvector 문서 단계 p95 205ms(2026-11-04 로컬 53,716조각)
+_DOC_WAIT_S, _DOC_WAIT_SHARE = 1.0, 0.1
+
+
+def _doc_wait(request: PlanBRagRequest) -> float:
+    if not request.deadline_ms or request.deadline_ms <= 0:
+        return _DOC_WAIT_S
+    return min(_DOC_WAIT_S, request.deadline_ms / 1000.0 * _DOC_WAIT_SHARE)
+
+
+def fuse_rule_ranking(place_search: PlaceSearch, pool: CandidatePool, ranked: tuple[str, ...], text: str,
+                      wait_s: float, *, trace: str = "") -> tuple[tuple[str, ...], str]:
+    """규칙 랭킹 → (KB-5 문서 순위를 RRF 로 섞은 랭킹, 상태). 질의 게이트·검색기·융합은 도우미 탐색과 같다(`hybrid_rank`·
+    `PlaceSearch`). 게이트가 닫히면 `GATE_CLOSED`, 검색이 OK 가 아니면 그 상태 — 둘 다 규칙 랭킹 그대로(INV-4).
+    출력은 입력의 순열이다 — 후보 자격을 만들지 않는다(INV-1)."""
+    query = hybrid_rank.open_query(text, None, generic=hybrid_rank.GENERIC_WORDS)
+    if query is None:
+        return ranked, "GATE_CLOSED"
+    by_id = {str(p.poi_id): p for p in pool.pois}
+    order = [by_id[r] for r in ranked]
+    status, ranks = place_search.search(query, [p.source_ref for p in order if p.source_ref], wait_s, trace=trace)
+    if status != "OK":
+        return ranked, status
+    return tuple(str(p.poi_id) for p in hybrid_rank.fuse(order, ranks, named=query.names)), status
 
 
 def _persona_query(request: PlanBRagRequest) -> str:
