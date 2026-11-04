@@ -50,7 +50,7 @@ import { regionPickerHref } from '@/features/explore';
 import { isWizardOrigin } from '@/features/create-trip';
 import { SERVICE_REGIONS } from '@/entities/trip';
 import { PlaceExploreScreen } from './PlaceExploreScreen';
-import { useTripWizardStore } from '@/features/create-trip';
+import { openNewTripWizard } from '@/features/create-trip';
 
 // 지역 미지정이면 서버 전국 조회 대신 서비스 지역을 묻는다(TRIP-1560) — 홈·d01 과 같은 배열·순서지만 d04 는 seed 가 키에 붙어 캐시는 따로다(TRIP-1563).
 const SERVICE_REGION_NAMES = SERVICE_REGIONS.map((r) => r.name);
@@ -229,8 +229,7 @@ export function PlaceExplorePage(): ReactElement {
         onPressCard={handlePressCard}
         onPressCreateTrip={() => {
           // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
-          useTripWizardStore.getState().reset();
-          router.push('/trips/new/step1');
+          openNewTripWizard(router);
         }}
         hideCreateTrip={fromWizard}
         onPressSavedPlaces={() =>

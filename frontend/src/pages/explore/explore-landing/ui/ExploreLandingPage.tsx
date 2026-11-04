@@ -22,7 +22,7 @@ import {
 import { useSavedPlaces } from '@/features/save-place';
 import { regionPickerHref } from '@/features/explore';
 import { useGetPlaces } from '@/shared/api/index.hooks';
-import { useTripWizardStore } from '@/features/create-trip';
+import { openNewTripWizard } from '@/features/create-trip';
 import {
   CuratedStaysSection,
   CuratedStaysSheet,
@@ -298,8 +298,7 @@ function ExploreLanding({
     // 여기(page)가 잇는다.
     // 새 여행 진입이라 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
     onPressCreateTrip: () => {
-      useTripWizardStore.getState().reset();
-      router.push('/trips/new/step1');
+      openNewTripWizard(router);
     },
     // 조회 대기 얼굴(TRIP-704) — 숙소·장소 둘 중 하나라도 첫 조회 중이면 로딩 스켈레톤을 보인다.
     isLoading: stay.isPending || places.isPending,

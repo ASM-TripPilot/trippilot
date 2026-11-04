@@ -40,7 +40,7 @@ import {
 import { MyTripsListScreen } from './MyTripsListScreen';
 import { MyTripsSortSheet } from './MyTripsSortSheet';
 import { TripDeleteDialog } from './TripDeleteDialog';
-import { useTripWizardStore } from '@/features/create-trip';
+import { openNewTripWizard } from '@/features/create-trip';
 import { GenerationDoneBar } from './GenerationDoneBar';
 
 import { TripCardContainer } from './TripCardContainer';
@@ -202,8 +202,7 @@ export function MyTripsListPage(): ReactElement {
 
   // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
   const onPressCreateTrip = (): void => {
-    useTripWizardStore.getState().reset();
-    router.push('/trips/new/step1');
+    openNewTripWizard(router);
   };
 
   if (isOfflineWaiting(trips)) {

@@ -55,7 +55,11 @@ import { MustVisitOutsideConfirmDialog } from './MustVisitOutsideConfirmDialog';
 import { MustVisitPickScreen } from './MustVisitPickScreen';
 import { SavedPlaceListScreen } from './SavedPlaceListScreen';
 import { buildAnytimeMustVisitRequest } from '@/features/add-must-visit';
-import { mustVisitFailureNotice, seedMustVisits } from '@/features/create-trip';
+import {
+  mustVisitFailureNotice,
+  openNewTripWizard,
+  seedMustVisits,
+} from '@/features/create-trip';
 import { placeLocationLabel, regionCodeInTrip, sidoKey } from '@/features/trip';
 import { useTripWizardStore } from '@/features/create-trip';
 
@@ -538,12 +542,8 @@ export function SavedPlacesPage(): ReactElement {
         const activePlaces = displayList.filter(
           (saved) => !releasedPoiIds.has(saved.place.poiId)
         );
-        // 새 여행 진입이다(TRIP-1012 #031·#074) — 직전 드래프트를 비운 **뒤에** 시드한다. 거꾸로면
-        // reset 이 방금 켠 `preserveMustVisitsOnce` 를 꺼 셸이 시드를 지운다. 여행지는 추정하지 않는다.
-        const store = useTripWizardStore.getState();
-        store.reset();
-        store.seedMustVisitsFromD02(seedMustVisits(activePlaces));
-        router.push('/trips/new/step1');
+        // 새 여행 진입(TRIP-1012 #031·#074) — 비우기 → 시드 → push 순서는 `openNewTripWizard` 가 쥔다.
+        openNewTripWizard(router, seedMustVisits(activePlaces));
       }}
       onPressBrowse={() => router.push('/explore/places')}
       onRetry={handleRetry}

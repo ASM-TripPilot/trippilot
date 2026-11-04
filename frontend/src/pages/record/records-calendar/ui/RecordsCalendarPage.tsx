@@ -20,7 +20,7 @@ import {
   RecordsCalendarOfflineFace,
   RecordsCalendarScreen,
 } from './RecordsCalendarScreen';
-import { useTripWizardStore } from '@/features/create-trip';
+import { openNewTripWizard } from '@/features/create-trip';
 import { buildMonthGrid, shiftMonth } from '@/shared/lib/monthGrid';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -139,8 +139,7 @@ export function RecordsCalendarPage(): ReactElement {
       }}
       onPressCreateTrip={() => {
         // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
-        useTripWizardStore.getState().reset();
-        router.push('/trips/new/step1');
+        openNewTripWizard(router);
       }}
     />
   );

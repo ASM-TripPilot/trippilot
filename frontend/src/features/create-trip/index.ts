@@ -21,6 +21,7 @@ export {
 } from './model/tripWizardStep1';
 export type { CompanionCode } from './model/tripWizardStep1';
 export { minNightsFor, useTripWizardStore } from './model/tripWizardStore';
+export { openNewTripWizard } from './model/openNewTripWizard';
 export { isWizardOrigin, wizardOriginParams } from './model/wizardOrigin';
 export {
   DEFAULT_DAY_END,
