@@ -929,3 +929,271 @@ describe('글리프 이름은 파일 사이에 겹치지 않는다 (TRIP-1773) �
     expect(ruleIds).toEqual([]);
   });
 });
+
+// TRIP-1774 · M-76 — 화면·TS 소스에 raw hex 가 새로 들어오면 error (`trippilot/no-raw-hex`, 로컬 규칙 `scripts/noRawHex.cjs`).
+// 독립 규칙 id 라 `no-restricted-syntax` 덮어쓰기 함정(블록 3개 펼침)이 없고, 면제 파일은 이 규칙만 끄므로 다른 게이트는 그대로 켜져 있다.
+// 이 규칙은 hex 만 본다 — rgba()·이름 색(white·black)·문자열 연결로 만든 hex·`.js/.cjs/.json`·루트 app.config.ts 는 사정거리 밖이다.
+// 정규식·토큰 이름 찾기의 경계는 scripts/noRawHex.test.ts 가 문자열로 직접 잰다. 여기서는 "어느 파일에서 울리나"만 본다.
+// ⚠️ 규칙 정의가 안 보이는 파일의 `eslint-disable trippilot/no-raw-hex` 도 같은 ruleId 로 error("Definition … not found")가 난다 —
+//    그래서 아래 탐침은 ruleId 만이 아니라 줄 번호·메시지까지 본다.
+describe('raw hex 는 토큰으로 (TRIP-1774) — trippilot/no-raw-hex', () => {
+  const NO_RAW_HEX = 'trippilot/no-raw-hex';
+  const TS_PROBE = 'src/features/settings/__hex_probe__.ts';
+  const TSX_PROBE = 'src/features/settings/__hex_probe__.tsx';
+  const PAGES_TSX_PROBE = 'src/pages/settings/settings/ui/__hex_probe__.tsx';
+  const ROUTE_TSX_PROBE = 'app/trips/__hex_probe__.tsx';
+  const DEV_TSX_PROBE = 'app/_dev/__hex_probe__.tsx';
+  // 01b 결정 5 — 토큰 밖 고유 색을 파일 단위로 면제한다(블록 위 주석에 사유).
+  const EXEMPT_FILES = [
+    'src/features/reflection/model/categoryPalette.ts',
+    'src/features/explore/model/regions.ts',
+    'src/features/auth/config/gradients.ts',
+    'src/shared/map/webMapController.ts',
+    'src/features/auth/ui/AuthGlyphs.tsx',
+    'src/pages/onboarding/onboarding-tour/ui/TourGlyphs.tsx',
+  ];
+  const siblingOf = (file: string) =>
+    file.replace(/([^/]+)(\.tsx?)$/, '__hex_sibling__$2');
+  const hexIn = (hex: string) => `export const COLOR = '${hex}';\n`;
+
+  // severity=error 메시지 전체(ruleId·줄·본문). 위 ⚠️ 때문에 ruleId 만 보면 "정의 없음" error 가 양성처럼 보인다.
+  async function errors(code: string, filePath: string) {
+    const [result] = await eslint.lintText(code, {
+      filePath: path.resolve(filePath),
+    });
+    return result.messages
+      .filter((m) => m.severity === 2)
+      .map((m) => ({ ruleId: m.ruleId, line: m.line, message: m.message }));
+  }
+  const hexErrorLines = async (code: string, filePath: string) =>
+    (await errors(code, filePath))
+      .filter((e) => e.ruleId === NO_RAW_HEX)
+      .map((e) => e.line);
+
+  it('.ts 의 hex 문자열은 error', async () => {
+    const found = await errors(hexIn('#C2CCD6'), TS_PROBE);
+
+    expect(found.map((e) => e.ruleId)).toEqual([NO_RAW_HEX]);
+  });
+
+  it('.tsx 의 JSX 속성 문자열 hex 는 error', async () => {
+    const code = [
+      "import Svg, { Path } from 'react-native-svg';",
+      'export const Probe = () => (',
+      '  <Svg>',
+      '    <Path fill="#C2CCD6" />',
+      '  </Svg>',
+      ');',
+      '',
+    ].join('\n');
+
+    const found = await errors(code, TSX_PROBE);
+
+    expect(found.map((e) => e.ruleId)).toEqual([NO_RAW_HEX]);
+  });
+
+  it('pages 경로의 .tsx 도 error (no-restricted-syntax 블록과 달리 pages 만 빠지지 않는다)', async () => {
+    const code = 'export const Probe = () => <view fill="#C2CCD6" />;\n';
+
+    const found = await errors(code, PAGES_TSX_PROBE);
+
+    expect(found.map((e) => e.ruleId)).toContain(NO_RAW_HEX);
+  });
+
+  it.each([
+    ['app 라우트', ROUTE_TSX_PROBE],
+    ['app/_dev 프리뷰 (면제 아님)', DEV_TSX_PROBE],
+  ])('%s 의 hex 도 error', async (_label, filePath) => {
+    const found = await errors(hexIn('#C2CCD6'), filePath);
+
+    expect(found.map((e) => e.ruleId)).toEqual([NO_RAW_HEX]);
+  });
+
+  it('className 임의값 bg-[#ECECEC] 도 error', async () => {
+    const code = [
+      "import { View } from 'react-native';",
+      'export const Probe = () => <View className="items-start bg-[#ECECEC]" />;',
+      '',
+    ].join('\n');
+
+    const found = await errors(code, TSX_PROBE);
+
+    expect(found.map((e) => e.ruleId)).toEqual([NO_RAW_HEX]);
+  });
+
+  it('템플릿 리터럴 안의 hex 도 error (표현식이 섞인 것·없는 것 둘 다)', async () => {
+    const withExpr = 'export const A = `a ${1} b #C2CCD6`;\n';
+    const plain = 'export const B = `border-[#C4C9CF]`;\n';
+
+    expect(await hexErrorLines(withExpr, TS_PROBE)).toEqual([1]);
+    expect(await hexErrorLines(plain, TS_PROBE)).toEqual([1]);
+  });
+
+  it('한 문자열에 hex 가 둘이면 error 도 둘', async () => {
+    const found = await errors(
+      "export const A = 'linear #C2CCD6 #C4C9CF';\n",
+      TS_PROBE
+    );
+
+    expect(found.map((e) => e.ruleId)).toEqual([NO_RAW_HEX, NO_RAW_HEX]);
+  });
+
+  it.each([
+    ['3자리', '#000', true],
+    ['8자리(알파)', '#FFFFFF00', true],
+    ['4자리', '#abcd', false],
+    ['5자리', '#abcde', false],
+  ])('%s %s → error %s', async (_label, hex, flagged) => {
+    const lines = await hexErrorLines(hexIn(hex), TS_PROBE);
+
+    expect(lines).toEqual(flagged ? [1] : []);
+  });
+
+  it('토큰과 같은 값이면 메시지가 그 토큰 이름을 알려준다 (별칭이면 둘 다)', async () => {
+    const canon = jest.requireActual<Record<string, string>>(
+      '../shared/config/colorTokens.cjs'
+    );
+    const primary = await errors(hexIn(canon.primary), TS_PROBE);
+    const white = await errors(
+      hexIn(canon['on-primary'].toLowerCase()),
+      TS_PROBE
+    );
+
+    expect(primary).toHaveLength(1);
+    expect(primary[0].message).toContain('같은 값 토큰:');
+    expect(primary[0].message).toContain('`primary`');
+    expect(white[0].message).toContain('`on-primary`');
+    expect(white[0].message).toContain('`canvas`');
+  });
+
+  it('토큰에 없는 값이면 토큰 안내 없이 hex 만 알려준다', async () => {
+    const [only] = await errors(hexIn('#010203'), TS_PROBE);
+
+    expect(only.ruleId).toBe(NO_RAW_HEX);
+    expect(only.message).toContain('#010203');
+    expect(only.message).not.toContain('같은 값 토큰:');
+  });
+
+  describe('예외는 사유 주석 한 줄이거나 이름 붙인 면제 파일뿐', () => {
+    it('`eslint-disable-next-line` 사유 줄은 바로 다음 줄만 덮는다 — 주석 안 hex 는 안 걸리고, 그다음 줄은 여전히 error', async () => {
+      const code = [
+        '// eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill #C2CCD6, 토큰 없음',
+        "export const DISABLED = '#C2CCD6';",
+        "export const STILL_BAD = '#C2CCD6';",
+        '',
+      ].join('\n');
+
+      const found = await errors(code, TS_PROBE);
+
+      expect(found.map((e) => [e.ruleId, e.line])).toEqual([[NO_RAW_HEX, 3]]);
+    });
+
+    it('JSX 속성 사이의 `//` 사유 줄은 바로 아래 속성만 덮는다', async () => {
+      const code = [
+        "import Svg, { Path } from 'react-native-svg';",
+        'export const Probe = () => (',
+        '  <Svg>',
+        '    <Path',
+        '      // eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill, 토큰 없음',
+        '      fill="#C2CCD6"',
+        '      stroke="#C2CCD6"',
+        '    />',
+        '  </Svg>',
+        ');',
+        '',
+      ].join('\n');
+
+      const found = await errors(code, TSX_PROBE);
+
+      expect(found.map((e) => [e.ruleId, e.line])).toEqual([[NO_RAW_HEX, 7]]);
+    });
+
+    it('템플릿 문자열 안 `${ … }` 표현식 속 리터럴도 윗줄 사유 주석으로 덮인다 (위저드 버튼 className 형태)', async () => {
+      const code = [
+        'export const cls = (off: boolean) =>',
+        '  `w ${',
+        '    // eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill, 토큰 없음',
+        "    off ? 'bg-[#E9E9EB]' : 'bg-primary'",
+        '  }`;',
+        '',
+      ].join('\n');
+
+      const found = await errors(code, TS_PROBE);
+
+      expect(found).toEqual([]);
+    });
+
+    it.each(EXEMPT_FILES)(
+      '면제 파일 %s 는 통과, 같은 폴더의 형제 파일은 여전히 error (폴더 단위 면제 아님)',
+      async (file) => {
+        const exempt = await errors(hexIn('#C2CCD6'), file);
+        const sibling = await errors(hexIn('#C2CCD6'), siblingOf(file));
+
+        expect(exempt).toEqual([]);
+        expect(sibling.map((e) => e.ruleId)).toEqual([NO_RAW_HEX]);
+      }
+    );
+
+    it('면제 파일에서도 다른 게이트는 켜져 있다 — role 없는 Pressable 은 여전히 error, hex 는 아니다', async () => {
+      const code = [
+        "import { Pressable } from 'react-native';",
+        'declare function go(): void;',
+        'export const Probe = () => <Pressable onPress={go} testID="#C2CCD6" />;',
+        '',
+      ].join('\n');
+      const exemptFile = 'src/features/auth/ui/AuthGlyphs.tsx';
+
+      const exempt = await errors(code, exemptFile);
+      const sibling = await errors(code, siblingOf(exemptFile));
+
+      expect(exempt.map((e) => e.ruleId)).toEqual([RESTRICTED_SYNTAX]);
+      expect(sibling.map((e) => e.ruleId).sort()).toEqual(
+        [NO_RAW_HEX, RESTRICTED_SYNTAX].sort()
+      );
+    });
+  });
+
+  describe('규칙이 닿지 않는 파일', () => {
+    it.each([
+      ['단위 테스트', 'src/features/settings/__hex_probe__.test.ts'],
+      ['__tests__ 폴더', 'src/__tests__/__hex_probe__.ts'],
+      ['__mocks__ 폴더', 'src/shared/__mocks__/__hex_probe__.ts'],
+      ['test-support', 'src/test-support/__hex_probe__.ts'],
+    ])('%s 의 hex 는 error 아님', async (_label, filePath) => {
+      const found = await errors(hexIn('#C2CCD6'), filePath);
+
+      expect(found).toEqual([]);
+    });
+
+    it('정본 폴더에서 `.cjs` 는 면제(블록 files 밖)이고 같은 폴더의 `.ts` 는 면제가 아니다', async () => {
+      const cjs = await errors(
+        "module.exports = { primary: '#FF385C' };\n",
+        'src/shared/config/__hex_probe__.cjs'
+      );
+      const ts = await errors(
+        hexIn('#FF385C'),
+        'src/shared/config/__hex_probe__.ts'
+      );
+
+      expect(cjs).toEqual([]);
+      expect(ts.map((e) => e.ruleId)).toEqual([NO_RAW_HEX]);
+    });
+
+    it('규칙이 꺼진 파일(테스트·.cjs)에 사유 주석이 남아 있어도 "정의 없음" error 는 나지 않는다 — 플러그인이 모든 파일에 등록돼 있다', async () => {
+      const code =
+        '// eslint-disable-next-line trippilot/no-raw-hex -- 사유\nexport const A = 1;\n';
+
+      const inTest = await errors(
+        code,
+        'src/features/settings/__hex_probe__.test.ts'
+      );
+      const inCjs = await errors(
+        '// eslint-disable-next-line trippilot/no-raw-hex -- 사유\nmodule.exports = 1;\n',
+        'src/shared/config/__hex_probe__.cjs'
+      );
+
+      expect(inTest).toEqual([]);
+      expect(inCjs).toEqual([]);
+    });
+  });
+});

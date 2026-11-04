@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { isEstimatedOrigin } from '@/features/request-replan/index.view';
 import { CenterPinPicker, type MapCenter } from '@/shared/map';
+import { COLOR_TOKENS } from '@/shared/config';
 
 export type LiveLocationState = 'manual' | 'permission-denied';
 
@@ -39,7 +40,7 @@ export interface LiveLocationViewProps {
  * className 을 못 받는 raw 값이다. `#000000` 은 토큰화 9색 밖이라 raw-hex 가드 사정거리 밖(홈
  * fabShadow·탭바 PILL_SHADOW 선례). */
 const CARD_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,

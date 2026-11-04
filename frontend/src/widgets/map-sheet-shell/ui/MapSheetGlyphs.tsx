@@ -1,11 +1,12 @@
 import Svg, { Path } from 'react-native-svg';
+import { COLOR_TOKENS } from '@/shared/config';
 // TRIP-783 · 지도+시트 셸 전용 인라인 SVG 글리프. widgets 는 `@/features` 를 import 하지 않으므로
 // `features/itinerary/ui/ItineraryGlyphs` 의 Back/Car/Walk 를 **바이트 복제**
 // 한다(리포 글리프 로컬 복제 관례의 N번째 사본). 색은 이 파일에서만 raw hex 로 고정한다(SVG stroke/fill
 // 은 className 을 못 받고 `*Glyphs.tsx` 는 raw-hex 스캔 제외 관례 · docs/structure.md §지금 작업하려면).
 
-const INK = '#222222';
-const MUTED = '#6A6A6A';
+const INK = COLOR_TOKENS.ink;
+const MUTED = COLOR_TOKENS.muted;
 
 type GlyphProps = {
   size?: number;

@@ -25,6 +25,7 @@ import { noContextActionIcon } from '../model/displayActions';
 import { cardConsumes } from './AssistantCards';
 import { ArrowDownGlyph } from './AssistantSheetGlyphs';
 import { ActionRow } from './OutlineCard';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * 대화 목록(TRIP-1322) — 최신이 아래. `inverted` FlatList 라 데이터는 뒤집어 넣는다.
@@ -178,7 +179,10 @@ function OlderMessagesRow({
       className="items-center gap-xs py-md"
     >
       {loading ? (
-        <ActivityIndicator testID="assistant-older-loading" color="#FF385C" />
+        <ActivityIndicator
+          testID="assistant-older-loading"
+          color={COLOR_TOKENS.primary}
+        />
       ) : status === 'error' ? (
         <>
           <Text
@@ -254,7 +258,8 @@ export function MessageList({
       {/* 위쪽 짧은 페이드 — 글이 위 가장자리에서 갑자기 잘려 보이지 않게(반투명 흰색이라 토큰이 아니다) */}
       <LinearGradient
         pointerEvents="none"
-        colors={['#FFFFFF', '#FFFFFF00']}
+        // eslint-disable-next-line trippilot/no-raw-hex -- 알파 0 흰색(페이드 끝점), 토큰 없음
+        colors={[COLOR_TOKENS.canvas, '#FFFFFF00']}
         className="absolute inset-x-0 top-0 h-[16px]"
       />
       {away ? (
@@ -274,7 +279,7 @@ export function MessageList({
             // 지름 38 · 그림자 0 2 10 6% — 토큰에 없는 일회성 값(Figma 5020:3165)
             className="h-[38px] w-[38px] items-center justify-center rounded-full border border-hairline-strong bg-canvas"
             style={{
-              shadowColor: '#000000',
+              shadowColor: COLOR_TOKENS.scrim,
               shadowOpacity: 0.06,
               shadowRadius: 10,
               shadowOffset: { width: 0, height: 2 },

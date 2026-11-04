@@ -20,6 +20,7 @@ import {
   TourVisitCheckRing,
 } from './TourGlyphs';
 import { TourMotionPiece } from './TourMotion';
+import { COLOR_TOKENS } from '@/shared/config';
 
 // c10 무대 조각 6벌(TRIP-1595) — 전부 **장식**이다. 누르는 요소(Pressable)를 하나도 두지 않는다(AC5): 하트·예약 버튼·칩은 모양만 같은 View 다.
 // 모션(TRIP-1596): 움직이는 조각만 `TourMotionPiece` 로 감싼다 — 레이아웃·카피·testID 는 그대로이고 끝 프레임이 이 정지 모양이다.
@@ -27,21 +28,21 @@ import { TourMotionPiece } from './TourMotion';
 
 // 그림자는 토큰 대상이 아니다 — RN 은 box-shadow 가 없어 shadow* 로 옮긴다(HomeScreen 카드 그림자 관례).
 const CARD_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.08,
   shadowRadius: 16,
   elevation: 2,
 } as const;
 const SOFT_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
   elevation: 2,
 } as const;
 const DOT_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 5,
@@ -218,7 +219,7 @@ const MAP_LABELS = [
   { text: '0.6km', x: 218, y: 74 },
 ] as const;
 const HALO = {
-  textShadowColor: '#FFFFFF',
+  textShadowColor: COLOR_TOKENS.canvas,
   textShadowOffset: { width: 0, height: 0 },
   textShadowRadius: 3,
 } as const;
@@ -324,6 +325,7 @@ export function TourTripFragment(): ReactElement {
                 borderRadius: 4.455,
                 alignItems: 'center',
                 justifyContent: 'center',
+                // eslint-disable-next-line trippilot/no-raw-hex -- Figma raw 브랜드 그림자색, 토큰 없음
                 shadowColor: '#DB2647',
                 shadowOffset: { width: 0, height: 0.909 },
                 shadowOpacity: 0.28,

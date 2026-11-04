@@ -76,6 +76,7 @@ const logoShadow = {
   height: 72,
   alignItems: 'center' as const,
   justifyContent: 'center' as const,
+  // eslint-disable-next-line trippilot/no-raw-hex -- Figma raw 브랜드 그림자색, 토큰 없음
   shadowColor: '#DB2647',
   shadowOffset: { width: 0, height: 2.5 },
   shadowOpacity: 0.28,

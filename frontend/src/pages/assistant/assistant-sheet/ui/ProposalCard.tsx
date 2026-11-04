@@ -5,6 +5,7 @@ import type { Proposal, ProposalDiffItem } from '../api/assistantContract';
 import { slotFaceLine } from '../model/cardModel';
 import { AssistantSheetCheckGlyph, WarningGlyph } from './AssistantSheetGlyphs';
 import { OutlineCard } from './OutlineCard';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * b02 전후 비교 카드(TRIP-1324 · BR-U8-30~35). 도우미 경로의 변경은 전부 제안이다 — [적용]을 눌러야만 저장된다.
@@ -166,7 +167,7 @@ export function ProposalCard({
           testID={`assistant-proposal-violation-${index}`}
           className="flex-row items-start gap-[10px] px-[14px] py-md"
         >
-          <WarningGlyph size={20} color="#FF385C" />
+          <WarningGlyph size={20} color={COLOR_TOKENS.primary} />
           <Text className="flex-1 font-noto text-body text-ink">
             {violation}
           </Text>

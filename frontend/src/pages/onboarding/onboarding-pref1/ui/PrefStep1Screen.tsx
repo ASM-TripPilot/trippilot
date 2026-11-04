@@ -25,6 +25,7 @@ import {
   SunGlyph,
   type GlyphComponent,
 } from '@/features/onboarding';
+import { COLOR_TOKENS } from '@/shared/config';
 
 export interface PrefStep1ScreenProps {
   selectedStyles: readonly string[] | null;
@@ -39,7 +40,7 @@ export interface PrefStep1ScreenProps {
 
 // CTA 그림자(Figma 0 2px 10px rgba(0,0,0,.06)) — 반투명은 토큰이 아니라 RN shadow prop로.
 const ctaShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,

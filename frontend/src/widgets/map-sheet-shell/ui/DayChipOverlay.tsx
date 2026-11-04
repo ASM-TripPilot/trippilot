@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { DayChipScroller } from './DayChipScroller';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-783 · 좌상단 오버레이(widgets · presentation-only) — 원형 back 버튼 + 일차 칩. 선택 칩은 primary
@@ -12,7 +13,7 @@ import { DayChipScroller } from './DayChipScroller';
 
 // 원형 back 버튼 그림자. `#000000` 은 브랜드 팔레트(raw-hex 가드 목록) 밖이라 그림자 색으로 정당하다.
 const overlayShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.12,
   shadowRadius: 8,

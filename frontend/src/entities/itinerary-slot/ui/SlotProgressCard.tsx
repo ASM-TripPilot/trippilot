@@ -16,6 +16,7 @@ import { formatOpeningHoursLabel } from '../lib/openingHoursLabel';
 import { buildSlotKey } from '../lib/slotKey';
 import type { SlotProgressState } from '../lib/slotMapPin';
 import { SlotCheckGlyph, MemoGlyph, PhotoGlyph } from './SlotGlyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-746 · i01 허브 시트의 슬롯 카드 3상태(entities · presentation-only, useState 0).
@@ -36,14 +37,14 @@ import { SlotCheckGlyph, MemoGlyph, PhotoGlyph } from './SlotGlyphs';
 
 // 그림자 색은 토큰이 없다 — SlotStopCard·DayChipOverlay 의 `#000000` 스타일 객체 관례.
 const DONE_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 5,
   elevation: 2,
 } as const;
 const ACTIVE_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.08,
   shadowRadius: 8,

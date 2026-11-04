@@ -23,6 +23,7 @@ import {
   ItineraryLockGlyph,
   ItineraryPencilGlyph,
 } from '@/features/itinerary/index.view';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * h02 필수 방문지 — Figma `3824:2173`(default) · `4294:8292`(error).
@@ -73,7 +74,7 @@ const RETRY_LABEL = '다시 시도';
 // 카드 그림자(Figma `0px 4px 16px rgba(0,0,0,0.08)`). RN 은 box-shadow 가 없어 스타일
 // 프로퍼티로 옮긴다 — 그림자는 토큰 대상이 아니다(`HomeScreen.heroCardShadow` 와 같은 값).
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.08,
   shadowRadius: 16,

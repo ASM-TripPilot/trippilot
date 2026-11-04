@@ -1,4 +1,5 @@
 import type { ViewStyle } from 'react-native';
+import { COLOR_TOKENS } from '../config';
 
 /**
  * g01/g02 편집 시트 6종(Destination·Period·Companion·StaySelect·Budget·Pref)의
@@ -16,5 +17,5 @@ export const SHEET_HANDLE_INDICATOR_STYLE: ViewStyle = {
   width: 40,
   height: 4,
   borderRadius: 2,
-  backgroundColor: '#DDDDDD',
+  backgroundColor: COLOR_TOKENS['hairline-strong'],
 };

@@ -1,6 +1,7 @@
 import type { ReactElement, RefObject } from 'react';
 import { useState } from 'react';
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-566 · AC-5(메모 UX) · BR-U5-13 — 방문 메모 인라인 입력(1개, PUT upsert 는 배선 훅 소관).
@@ -71,7 +72,7 @@ export function MemoInline({
       onBlur={submitOnBlur ? handleSubmit : undefined}
       submitBehavior="blurAndSubmit"
       placeholder="메모를 남겨보세요"
-      placeholderTextColor="#9AA1AB"
+      placeholderTextColor={COLOR_TOKENS['muted-soft']}
       maxLength={2000}
       multiline
       className={className}

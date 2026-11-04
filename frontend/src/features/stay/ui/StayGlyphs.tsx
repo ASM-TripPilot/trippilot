@@ -1,5 +1,6 @@
 import Svg, { Circle, Path } from 'react-native-svg';
 import { Check24Glyph } from '@/shared/ui/glyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 // 숙소 검색 결과(e02) 전용 인라인 벡터 글리프(AuthGlyphs/OnboardingGlyphs/HomeGlyphs 패턴
 // 계승 · Figma 1837:2283). features 간 직접 import 금지(importBoundary 의도 — features/stay는
 // eslint FEATURES 목록 밖이라 기계 강제는 없지만, 02a T-16 판정대로 이 리포 관례를 따른다)라
@@ -7,10 +8,10 @@ import { Check24Glyph } from '@/shared/ui/glyphs';
 // 그린다. 색은 이 파일 안에서만 raw hex로 고정한다(선례 — `ui/` 안이지만 `*Screen.tsx`
 // 파일명 필터 밖이라 V1(raw-hex 가드) 대상이 아니다, 02a §6 판정②).
 
-const INK = '#222222';
-const BODY = '#3F3F3F';
-const PRIMARY = '#FF385C';
-const ON_PRIMARY = '#FFFFFF';
+const INK = COLOR_TOKENS.ink;
+const BODY = COLOR_TOKENS.body;
+const PRIMARY = COLOR_TOKENS.primary;
+const ON_PRIMARY = COLOR_TOKENS['on-primary'];
 
 type GlyphProps = {
   size?: number;

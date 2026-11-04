@@ -35,6 +35,7 @@ import {
   OnboardingWalkGlyph,
   type GlyphComponent,
 } from '@/features/onboarding';
+import { COLOR_TOKENS } from '@/shared/config';
 
 export interface PrefStep2ScreenProps {
   selectedCompanions: readonly string[] | null;
@@ -52,7 +53,7 @@ export interface PrefStep2ScreenProps {
 }
 
 const ctaShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,

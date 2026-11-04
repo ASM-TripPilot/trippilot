@@ -2,12 +2,13 @@ import type { ReactElement } from 'react';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 import { TOUR_PAGE_COUNT } from '../model/tourPages';
+import { COLOR_TOKENS } from '@/shared/config';
 
 // c10 기능 안내 전용 SVG 장식(TRIP-1595). 색은 SVG stroke/fill 이 className 을 못 받는 리포 관례대로 이 파일 안에서만 raw hex 로 고정한다
 // (primary·hairline-strong 토큰과 같은 값 — `shared/ui/glyphs/colors.ts` 와 같은 처지). 경로·핀은 S2 모션이 같은 컴포넌트에 얹힌다.
 
-const PRIMARY = '#FF385C';
-const HAIRLINE_STRONG = '#DDDDDD';
+const PRIMARY = COLOR_TOKENS.primary;
+const HAIRLINE_STRONG = COLOR_TOKENS['hairline-strong'];
 
 /**
  * 코랄 점선 경로 — `d` 를 직접 둔다(Figma export SVG 는 점선이 조각으로 구워져 있어 못 쓴다).
@@ -49,10 +50,10 @@ export function TourStopPin(): ReactElement {
       <Path
         d={PIN_BODY}
         fill={PRIMARY}
-        stroke="#FFFFFF"
+        stroke={COLOR_TOKENS.canvas}
         strokeWidth={2.26667}
       />
-      <Path d={PIN_HOLE} fill="#FFFFFF" />
+      <Path d={PIN_HOLE} fill={COLOR_TOKENS.canvas} />
     </Svg>
   );
 }
@@ -64,7 +65,7 @@ export function TourMapPinBody(): ReactElement {
       <Path
         d={PIN_BODY}
         fill={PRIMARY}
-        stroke="#FFFFFF"
+        stroke={COLOR_TOKENS.canvas}
         strokeWidth={2.26667}
       />
     </Svg>
@@ -130,13 +131,13 @@ export function TourVisitCheck(): ReactElement {
         cx={9}
         cy={9}
         r={8}
-        fill="#0E9384"
-        stroke="#FFFFFF"
+        fill={COLOR_TOKENS.success}
+        stroke={COLOR_TOKENS.canvas}
         strokeWidth={2}
       />
       <Path
         d="M12.67 6.75L8.62 10.79L6.83 9"
-        stroke="#FFFFFF"
+        stroke={COLOR_TOKENS.canvas}
         strokeWidth={3}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -178,19 +179,19 @@ export function TourMapBackdrop(): ReactElement {
       {/* 큰 도로 */}
       <Path
         d="M-4 150C50 138 110 132 182 150C216 158 250 150 280 132"
-        stroke="#FFFFFF"
+        stroke={COLOR_TOKENS.canvas}
         strokeWidth={5}
         strokeLinecap="round"
       />
       <Path
         d="M96 -4C112 52 140 104 150 204"
-        stroke="#FFFFFF"
+        stroke={COLOR_TOKENS.canvas}
         strokeWidth={4}
         strokeLinecap="round"
       />
       <Path
         d="M168 -4L186 70L262 92"
-        stroke="#FFFFFF"
+        stroke={COLOR_TOKENS.canvas}
         strokeWidth={4}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -198,7 +199,7 @@ export function TourMapBackdrop(): ReactElement {
       {/* 골목 */}
       <Path
         d="M0 100H78M20 40L120 70M210 0V48H300M40 190L120 170M170 110L230 124"
-        stroke="#FFFFFF"
+        stroke={COLOR_TOKENS.canvas}
         strokeWidth={2}
         strokeLinecap="round"
       />
@@ -231,7 +232,7 @@ export function TourMapRoute({
     >
       <Path
         d={d}
-        stroke="#FFFFFF"
+        stroke={COLOR_TOKENS.canvas}
         strokeWidth={6}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -253,7 +254,7 @@ export function TourScaleBar(): ReactElement {
     <Svg width={56} height={6} viewBox="0 0 56 6" fill="none">
       <Path
         d="M1 0V5H55V0"
-        stroke="#3F3F3F"
+        stroke={COLOR_TOKENS.body}
         strokeWidth={2}
         strokeLinecap="square"
       />

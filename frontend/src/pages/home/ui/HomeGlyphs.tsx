@@ -1,4 +1,5 @@
 import Svg, { Circle, Path } from 'react-native-svg';
+import { COLOR_TOKENS } from '@/shared/config';
 // 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
 
 // 홈 "발견·영감 피드" 전용 인라인 벡터 글리프(AuthGlyphs/OnboardingGlyphs 패턴 계승 · TRIP-316).
@@ -7,10 +8,10 @@ import Svg, { Circle, Path } from 'react-native-svg';
 // 색은 이 파일 안에서만 raw hex로 고정한다(OnboardingGlyphs 선례 — `ui/` 안이지만
 // `*Screen.tsx` 파일명 필터 밖이라 D-3(raw-hex 가드) 대상이 아니다).
 
-const INK = '#222222';
-const MUTED_SOFT = '#9AA1AB';
-const PRIMARY = '#FF385C';
-const WHITE = '#FFFFFF';
+const INK = COLOR_TOKENS.ink;
+const MUTED_SOFT = COLOR_TOKENS['muted-soft'];
+const PRIMARY = COLOR_TOKENS.primary;
+const WHITE = COLOR_TOKENS.canvas;
 
 type GlyphProps = {
   size?: number;

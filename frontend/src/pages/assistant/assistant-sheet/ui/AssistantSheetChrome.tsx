@@ -18,6 +18,7 @@ import {
   ReplyGlyph,
   SendArrowGlyph,
 } from './AssistantSheetGlyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * 시트 테두리 부품(TRIP-1322, 틀 개정 TRIP-1525·1526) — 헤더 · quick reply · 입력 카드(컨텍스트 칩 + 입력 + 전송).
@@ -264,7 +265,7 @@ export function Composer({
           value={value}
           onChangeText={onChange}
           placeholder="무엇이든 물어보세요…"
-          placeholderTextColor="#9AA1AB"
+          placeholderTextColor={COLOR_TOKENS['muted-soft']}
           maxLength={COMPOSER_LIMIT}
           multiline
           className="max-h-[96px] min-h-[44px] flex-1 font-noto text-body text-ink"
@@ -282,7 +283,9 @@ export function Composer({
           }}
           className={`h-[44px] w-[44px] items-center justify-center rounded-full ${canSend ? 'bg-primary' : 'bg-surface-strong'}`}
         >
-          <SendArrowGlyph color={canSend ? '#FFFFFF' : '#9AA1AB'} />
+          <SendArrowGlyph
+            color={canSend ? COLOR_TOKENS.canvas : COLOR_TOKENS['muted-soft']}
+          />
         </Pressable>
       </View>
     </View>

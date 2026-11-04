@@ -62,6 +62,7 @@ import {
 } from '../model/stayRegisterForm';
 import { StayBedGlyph, StayRefreshGlyph } from '@/features/stay/index.view';
 import { AppBar } from '@/shared/ui/AppBar';
+import { COLOR_TOKENS } from '@/shared/config';
 
 export interface StayRegisterScreenProps {
   flow: StayRegisterFlow;
@@ -94,7 +95,7 @@ function isSameCandidate(a: GeocodeCandidate, b: GeocodeCandidate): boolean {
 /** 선택 후보 행의 흰 배경을 띄우는 은은한 그림자(Figma multi-candidate 선택 행) — 색 토큰이 아닌
  * 순수 그림자라 className 으로 못 주고 style prop 으로만 준다(SegmentedControl 선택 셀과 동형). */
 const SELECTED_ROW_SHADOW: ViewStyle = {
-  shadowColor: '#000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOpacity: 0.06,
   shadowRadius: 4,
   shadowOffset: { width: 0, height: 1 },

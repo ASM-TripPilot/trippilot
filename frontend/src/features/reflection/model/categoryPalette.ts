@@ -6,6 +6,8 @@
  * 글자(fg)는 바탕과의 대비가 4.5 이상이 되게 골랐다(WCAG AA, 테스트가 계산). 액티비티 #1E90FF 위 흰 글자는
  * 3.24 라 미달이라 어두운 글자를 쓴다.
  */
+
+import { COLOR_TOKENS } from '@/shared/config';
 export type PaletteKey =
   | '명소'
   | '맛집'
@@ -29,16 +31,16 @@ export interface CategoryPalette {
 export const CATEGORY_PALETTES: Readonly<Record<PaletteKey, CategoryPalette>> =
   {
     맛집: { bg: '#FF6B35', fg: '#1A0F0A', accent: '#FFB27A' },
-    문화: { bg: '#5B5BFF', fg: '#FFFFFF', accent: '#C6B8FF' },
+    문화: { bg: '#5B5BFF', fg: COLOR_TOKENS.canvas, accent: '#C6B8FF' },
     카페: { bg: '#D9C2A7', fg: '#2B1B12', accent: '#F2E6D6' },
-    야경: { bg: '#1A1423', fg: '#FFFFFF', accent: '#FFC933' },
-    자연: { bg: '#0F2D24', fg: '#FFFFFF', accent: '#C6FF3D' },
-    PLAN_B: { bg: '#0B2A3C', fg: '#FFFFFF', accent: '#7DD3FC' },
-    STATS: { bg: '#0B0B0D', fg: '#FFFFFF', accent: '#C6FF3D' },
+    야경: { bg: '#1A1423', fg: COLOR_TOKENS.canvas, accent: '#FFC933' },
+    자연: { bg: '#0F2D24', fg: COLOR_TOKENS.canvas, accent: '#C6FF3D' },
+    PLAN_B: { bg: '#0B2A3C', fg: COLOR_TOKENS.canvas, accent: '#7DD3FC' },
+    STATS: { bg: '#0B0B0D', fg: COLOR_TOKENS.canvas, accent: '#C6FF3D' },
     명소: { bg: '#FFD23F', fg: '#1A1400', accent: '#1A1400' },
     쇼핑: { bg: '#FF8FB1', fg: '#3A0F1E', accent: '#3A0F1E' },
     액티비티: { bg: '#1E90FF', fg: '#0A1A2E', accent: '#0A1A2E' },
-    SKIPPED: { bg: '#2B2B30', fg: '#FFFFFF', accent: '#FFC933' },
+    SKIPPED: { bg: '#2B2B30', fg: COLOR_TOKENS.canvas, accent: '#FFC933' },
   };
 
 /** 매거진 바탕 종이색·형광펜 등 카테고리와 무관한 고정 색(시안 값). */
@@ -46,7 +48,7 @@ export const MAGAZINE_TONES = {
   paper: '#F2EEE4',
   ink: '#111111',
   highlight: '#C6FF3D',
-  onPhoto: '#FFFFFF',
+  onPhoto: COLOR_TOKENS.canvas,
 } as const;
 
 // 한글 10종(미술→문화, 술집→야경) + 영문 코드 8종(`draftView.ts` 비공개 표와 같은 값 — 형제 feature 라 import 불가해 복제).

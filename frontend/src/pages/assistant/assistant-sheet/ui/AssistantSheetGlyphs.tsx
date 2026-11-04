@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * 도우미 시트 전용 글리프(TRIP-1322) — SVG raw hex 는 `*Glyphs.tsx` 리포 관례(className 을 못 받는다).
@@ -8,7 +9,7 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 export function SendArrowGlyph({
   size = 20,
-  color = '#FFFFFF',
+  color = COLOR_TOKENS.canvas,
 }: {
   size?: number;
   color?: string;
@@ -28,7 +29,7 @@ export function SendArrowGlyph({
 
 export function AssistantSheetChevronRightGlyph({
   size = 16,
-  color = '#222222',
+  color = COLOR_TOKENS.ink,
 }: {
   size?: number;
   color?: string;
@@ -48,7 +49,7 @@ export function AssistantSheetChevronRightGlyph({
 
 export function WarningGlyph({
   size = 18,
-  color = '#C13515',
+  color = COLOR_TOKENS['primary-text'],
 }: {
   size?: number;
   color?: string;
@@ -78,10 +79,16 @@ export function AssistantSheetInfoGlyph({
 }): ReactElement {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Circle cx={12} cy={12} r={9} stroke="#0B6E63" strokeWidth={1.8} />
+      <Circle
+        cx={12}
+        cy={12}
+        r={9}
+        stroke={COLOR_TOKENS.info}
+        strokeWidth={1.8}
+      />
       <Path
         d="M12 11v5.5M12 7.8v.2"
-        stroke="#0B6E63"
+        stroke={COLOR_TOKENS.info}
         strokeWidth={1.8}
         strokeLinecap="round"
       />
@@ -98,7 +105,7 @@ export function AssistantSheetRetryGlyph({
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
         d="M19 12a7 7 0 1 1-2.05-4.95M19 4.5V8h-3.5"
-        stroke="#FFFFFF"
+        stroke={COLOR_TOKENS.canvas}
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -116,7 +123,7 @@ export function AssistantSheetCheckGlyph({
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
         d="M5 12.5l4.5 4.5L19 7.5"
-        stroke="#FF385C"
+        stroke={COLOR_TOKENS.primary}
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -138,8 +145,8 @@ export function ThumbGlyph({
   selected?: boolean;
   size?: number;
 }): ReactElement {
-  const color = selected ? '#222222' : '#6A6A6A';
-  const fill = selected ? '#222222' : 'none';
+  const color = selected ? COLOR_TOKENS.ink : COLOR_TOKENS.muted;
+  const fill = selected ? COLOR_TOKENS.ink : 'none';
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Rect
@@ -170,7 +177,7 @@ export function ThumbGlyph({
 /** 헤더 더보기(세로 ⋮) — Figma icon more-v. */
 export function MoreVGlyph({ size = 24 }: { size?: number }): ReactElement {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="#222222">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={COLOR_TOKENS.ink}>
       <Circle cx={12} cy={5} r={1.6} />
       <Circle cx={12} cy={12} r={1.6} />
       <Circle cx={12} cy={19} r={1.6} />
@@ -188,7 +195,7 @@ export function AssistantSheetListGlyph({
     <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
       <Path
         d="M6 4H13.3333M6 8H13.3333M6 12H13.3333M2.66667 4H2.93333M2.66667 8H2.93333M2.66667 12H2.93333"
-        stroke="#222222"
+        stroke={COLOR_TOKENS.ink}
         strokeWidth={1.33333}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -203,7 +210,7 @@ export function ReplyGlyph({ size = 16 }: { size?: number }): ReactElement {
     <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
       <Path
         d="M2 12V9.33333C2 8.44928 2.35119 7.60143 2.97631 6.97631C3.60143 6.35119 4.44928 6 5.33333 6H13.3333M10.6667 3.33333L13.3333 6L10.6667 8.66667"
-        stroke="#6A6A6A"
+        stroke={COLOR_TOKENS.muted}
         strokeWidth={1.33333}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -218,7 +225,7 @@ export function ArrowDownGlyph({ size = 20 }: { size?: number }): ReactElement {
     <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
       <Path
         d="M10 4.16667V15.8333M5 10.8333L10 15.8333L15 10.8333"
-        stroke="#222222"
+        stroke={COLOR_TOKENS.ink}
         strokeWidth={1.83333}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -237,7 +244,7 @@ export function AssistantSheetExternalLinkGlyph({
     <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
       <Path
         d="M11.6667 3.33333H16.6667V8.33333M16.6667 3.33333L8.33333 11.6667M15 10.8333V15C15 15.442 14.8244 15.866 14.5118 16.1785C14.1993 16.4911 13.7754 16.6667 13.3333 16.6667H5C4.55797 16.6667 4.13405 16.4911 3.82149 16.1785C3.50893 15.866 3.33333 15.442 3.33333 15V6.66667C3.33333 6.22464 3.50893 5.80072 3.82149 5.48816C4.13405 5.17559 4.55797 5 5 5H9.16667"
-        stroke="#222222"
+        stroke={COLOR_TOKENS.ink}
         strokeWidth={1.66667}
         strokeLinecap="round"
         strokeLinejoin="round"

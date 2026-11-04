@@ -1,5 +1,6 @@
 import { Pressable, Text, View } from 'react-native';
 import { WarningFilledGlyph } from '@/shared/ui/glyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-561 → TRIP-748 · TriggerChip(i02) — 지도 위 일자 칩 아래에 뜨는 흰 트리거 알약 한 줄
@@ -12,7 +13,7 @@ import { WarningFilledGlyph } from '@/shared/ui/glyphs';
 
 // 그림자 색은 토큰이 없다 — 허브 뒤로가기(BACK_SHADOW)와 같은 값(Figma 0 2 10 rgba(0,0,0,.06)).
 const PILL_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,

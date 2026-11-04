@@ -2,13 +2,14 @@ import type { ReactElement } from 'react';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { GLYPH_COLORS } from '@/shared/ui/glyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * ✦ 도우미 글리프 — 네 갈래 별(Figma b 밴드 헤더 원 안 기호). SVG raw hex 는 `*Glyphs.tsx` 리포 관례.
  */
 export function AssistantSparkleGlyph({
   size = 22,
-  color = '#FFFFFF',
+  color = COLOR_TOKENS.canvas,
 }: {
   size?: number;
   color?: string;

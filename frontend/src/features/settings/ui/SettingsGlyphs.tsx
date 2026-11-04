@@ -1,4 +1,5 @@
 import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-604 · l03 마이페이지 전용 인라인 벡터 글리프. features 간 직접 import 금지 관례라
@@ -10,11 +11,11 @@ import Svg, { Circle, Line, Path } from 'react-native-svg';
  * 가드 제외 관례). SVG `stroke`/`fill` 은 className 을 못 받는다.
  */
 
-const INK = '#222222';
-export const MUTED = '#6A6A6A';
+const INK = COLOR_TOKENS.ink;
+export const MUTED = COLOR_TOKENS.muted;
 // l03 메뉴·헤더 아이콘(Figma 1602:2388 — #3F3F3F stroke 2, 메뉴 chevron #9AA1AB). 토큰 body·muted-soft 와 같은 값.
-const BODY = '#3F3F3F';
-export const MUTED_SOFT = '#9AA1AB';
+const BODY = COLOR_TOKENS.body;
+export const MUTED_SOFT = COLOR_TOKENS['muted-soft'];
 
 type GlyphProps = {
   size?: number;
@@ -225,7 +226,7 @@ export function SettingsHeartGlyph({ size = 22, testID }: GlyphProps) {
     >
       <Path
         d="M12 20C12 20 4 15 4 9.5C4 7 6 5 8.5 5C10 5 11.3 5.8 12 7C12.7 5.8 14 5 15.5 5C18 5 20 7 20 9.5C20 15 12 20 12 20Z"
-        fill="#FF385C"
+        fill={COLOR_TOKENS.primary}
       />
     </Svg>
   );

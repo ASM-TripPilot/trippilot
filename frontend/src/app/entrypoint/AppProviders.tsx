@@ -21,6 +21,7 @@ import { initSentry } from './initSentry';
 import { createAppQueryClient } from './queryClient';
 import { createQueryFailureReporter } from './reportQueryFailure';
 import { SentryRoot } from './SentryRoot';
+import { COLOR_TOKENS } from '@/shared/config';
 
 // 서버 상태(TanStack Query)의 앱 전역 캐시 저장소 — 모듈 스코프에서 한 번만 만들어 리렌더마다 다시 만들지 않는다.
 // 기본 옵션(retry·staleTime·복귀 재조회 정책)의 근거는 `./queryClient`. 최종 실패 보고는 Sentry 가 꺼져 있어도(DSN 없음) 그대로 건다 — 클라이언트가 없으면 Sentry 쪽이 no-op 이다.
@@ -32,7 +33,7 @@ const queryClient = createAppQueryClient(createQueryFailureReporter());
 // 안 깔려 뒤 화면이 비쳐야 하는데, contentStyle 은 그 모달에도 깔린다.
 const APP_THEME = {
   ...DefaultTheme,
-  colors: { ...DefaultTheme.colors, background: '#FFFFFF' },
+  colors: { ...DefaultTheme.colors, background: COLOR_TOKENS.canvas },
 };
 
 // RN 에는 document 가 없어 focusManager 가 항상 focused 로 읽힌다 — 배선하지 않으면 백그라운드에서도

@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-754 · i08 변경 반영 시트(Figma 4401:1568) — 순수 바텀시트(props + 콜백만).
@@ -34,11 +35,11 @@ const DIFF_KIND: Record<AppliedDiffKind, { label: string; dot: string }> = {
 
 // i03 RiskDetailSheet 와 같은 자리(gorhom 배경)지만 Figma 그림자 값이 다르다 — `0 -3 16 rgba(0,0,0,.12)`.
 const SHEET_BACKGROUND = {
-  backgroundColor: '#FFFFFF',
+  backgroundColor: COLOR_TOKENS.canvas,
   borderRadius: 0,
   borderTopLeftRadius: 24,
   borderTopRightRadius: 24,
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: -3 },
   shadowOpacity: 0.12,
   shadowRadius: 16,

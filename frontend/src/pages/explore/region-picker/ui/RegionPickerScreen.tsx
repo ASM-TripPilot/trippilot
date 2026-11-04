@@ -19,6 +19,7 @@ import {
   ExploreBackChevronGlyph,
   ExploreSearchGlyph,
 } from '@/features/explore/index.view';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * e00(숙소 지역 선택) · d1b(여행지 선택) 화면 — **props만 받는 프레젠테이션** (TRIP-445).
@@ -482,7 +483,7 @@ export function RegionPickerScreen({
             value={query}
             onChangeText={onChangeQuery}
             placeholder={copy.placeholder}
-            placeholderTextColor="#9AA1AB"
+            placeholderTextColor={COLOR_TOKENS['muted-soft']}
             className="flex-1 font-noto text-body text-ink"
           />
         </View>

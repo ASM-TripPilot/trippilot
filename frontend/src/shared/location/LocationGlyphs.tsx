@@ -2,6 +2,7 @@ import { View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { LOCATION_ICON_COLORS } from './locationColors';
+import { COLOR_TOKENS } from '../config';
 
 // c08-location 전용 벡터 글리프(TRIP-162 전체화면 정합). Figma 좌표를 react-native-svg 로
 // 1:1 옮긴다(AuthGlyphs.tsx 와 같은 인라인 방식). onboarding 피처의 글리프(OnboardingGlyphs)와
@@ -54,7 +55,7 @@ export function LocationRadarHero({ testID }: { testID?: string }) {
           cy={92}
           r={9}
           fill={LOCATION_ICON_COLORS.primary}
-          stroke="#ffffff"
+          stroke={COLOR_TOKENS.canvas}
           strokeWidth={4}
         />
       </Svg>

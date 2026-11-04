@@ -5,6 +5,7 @@ import {
   TransitGlyph,
 } from '@/shared/ui/glyphs';
 import Svg, { Path } from 'react-native-svg';
+import { COLOR_TOKENS } from '@/shared/config';
 // 온보딩(약관·닉네임) 전용 벡터 글리프(TRIP-162 c06/c07 Figma 정합). Figma 에서 내려받은
 // .svg 좌표를 react-native-svg 프리미티브(<Svg><Path/>)로 1:1 옮긴다 — AuthGlyphs.tsx 와
 // 같은 인라인 방식(transformer 미도입). 위치(c08) 화면은 별도 파일(shared/location/LocationGlyphs)을
@@ -27,7 +28,7 @@ export function OnboardingCheckGlyph({ size = 14, testID }: GlyphProps) {
     >
       <Path
         d="M11.6666 3.5L5.24992 9.91667L2.33325 7"
-        stroke="#ffffff"
+        stroke={COLOR_TOKENS.canvas}
         strokeWidth={1.75}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -48,14 +49,14 @@ export function RegenerateGlyph({ size = 22, testID }: GlyphProps) {
     >
       <Path
         d="M18.3334 10.0834C18.2625 8.35022 17.5795 6.69829 16.4058 5.42107C15.232 4.14386 13.6436 3.32405 11.9225 3.1073C10.2015 2.89054 8.45937 3.29088 7.0056 4.23717C5.55183 5.18347 4.48057 6.61447 3.98213 8.27594C3.48369 9.9374 3.59034 11.7218 4.28314 13.312C4.97594 14.9023 6.21002 16.1955 7.76616 16.9619C9.3223 17.7283 11.0997 17.9183 12.7827 17.4981C14.4656 17.0778 15.9452 16.0747 16.9584 14.6667"
-        stroke="#FF385C"
+        stroke={COLOR_TOKENS.primary}
         strokeWidth={1.83333}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M18.3332 3.6665V10.0832H11.9165"
-        stroke="#FF385C"
+        stroke={COLOR_TOKENS.primary}
         strokeWidth={1.83333}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -76,14 +77,14 @@ export function PositiveCheckGlyph({ size = 16, testID }: GlyphProps) {
     >
       <Path
         d="M8 14C11.3137 14 14 11.3137 14 8C14 4.68629 11.3137 2 8 2C4.68629 2 2 4.68629 2 8C2 11.3137 4.68629 14 8 14Z"
-        stroke="#0B6E63"
+        stroke={COLOR_TOKENS.info}
         strokeWidth={1.4}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M5.66675 8.3335L7.33341 10.0002L10.6667 6.3335"
-        stroke="#0B6E63"
+        stroke={COLOR_TOKENS.info}
         strokeWidth={1.4}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -110,8 +111,8 @@ type SelectableGlyphProps = GlyphProps & {
 export type GlyphComponent = ComponentType<SelectableGlyphProps>;
 
 function selectableStroke(selected?: boolean, onPrimary?: boolean): string {
-  if (onPrimary) return '#ffffff';
-  return selected ? '#FF385C' : '#3F3F3F';
+  if (onPrimary) return COLOR_TOKENS['on-primary'];
+  return selected ? COLOR_TOKENS.primary : COLOR_TOKENS.body;
 }
 
 // 스타일 — 휴양(sun).
@@ -974,7 +975,7 @@ export function SkipChevronGlyph({ size = 16, testID }: GlyphProps) {
     >
       <Path
         d="M6 3.5L10.5 8L6 12.5"
-        stroke="#222222"
+        stroke={COLOR_TOKENS.ink}
         strokeWidth={1.6}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -995,18 +996,18 @@ export function OnboardingInfoCircleGlyph({ size = 16, testID }: GlyphProps) {
     >
       <Path
         d="M8 14.5C11.5899 14.5 14.5 11.5899 14.5 8C14.5 4.41015 11.5899 1.5 8 1.5C4.41015 1.5 1.5 4.41015 1.5 8C1.5 11.5899 4.41015 14.5 8 14.5Z"
-        stroke="#6A6A6A"
+        stroke={COLOR_TOKENS.muted}
         strokeWidth={1.3}
       />
       <Path
         d="M8 7.2V11.3"
-        stroke="#6A6A6A"
+        stroke={COLOR_TOKENS.muted}
         strokeWidth={1.3}
         strokeLinecap="round"
       />
       <Path
         d="M8 5.4C8.44183 5.4 8.8 5.04183 8.8 4.6C8.8 4.15817 8.44183 3.8 8 3.8C7.55817 3.8 7.2 4.15817 7.2 4.6C7.2 5.04183 7.55817 5.4 8 5.4Z"
-        fill="#6A6A6A"
+        fill={COLOR_TOKENS.muted}
       />
     </Svg>
   );

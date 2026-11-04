@@ -1,14 +1,16 @@
 import Svg, { Circle, Path } from 'react-native-svg';
+import { COLOR_TOKENS } from '@/shared/config';
 // 탐색(밴드 d·e00) 전용 인라인 벡터 글리프 — StayGlyphs/HomeGlyphs 패턴 계승.
 // features 간 직접 import 금지 관례라 StayGlyphs의 셰브론을 가져다 쓰지 않고 여기 새로 그린다.
 // 색은 이 파일 안에서만 raw hex로 고정한다(`*Screen.tsx` 파일명 필터 밖 — raw-hex 가드 대상 아님).
 
-const INK = '#222222';
-const MUTED = '#6A6A6A';
-const MUTED_SOFT = '#9AA1AB';
-const PRIMARY = '#FF385C';
-const ON_PRIMARY = '#FFFFFF';
+const INK = COLOR_TOKENS.ink;
+const MUTED = COLOR_TOKENS.muted;
+const MUTED_SOFT = COLOR_TOKENS['muted-soft'];
+const PRIMARY = COLOR_TOKENS.primary;
+const ON_PRIMARY = COLOR_TOKENS['on-primary'];
 // d02 select 미선택 체크 링 색(Figma MISS `#d0d0d0` — 토큰 없음, `*Glyphs.tsx` raw-hex 스캔 제외).
+// eslint-disable-next-line trippilot/no-raw-hex -- Figma raw stroke(비활성 링), 토큰 없음
 const DISABLED_RING = '#D0D0D0';
 
 type GlyphProps = {

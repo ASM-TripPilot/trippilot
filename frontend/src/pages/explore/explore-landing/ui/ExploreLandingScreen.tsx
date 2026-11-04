@@ -48,6 +48,7 @@ import { Skeleton } from '@/shared/ui/Skeleton';
 import { DismissNotice } from '@/shared/ui/NoticeBanner';
 import { FAB_STACK_TOP } from '@/shared/ui/toastBottom';
 import { useToastBottom } from '@/shared/ui/useToastBottom';
+import { COLOR_TOKENS } from '@/shared/config';
 
 // 카드 뷰모델은 entities 로 이관됐다(StayCardVM=807 · PlaceCardVM=806) — 여기서 재수출해 기존
 // 소비처(placePhoto 테스트·라우트)의 `./ExploreLandingScreen`·이 파일 경유
@@ -129,7 +130,7 @@ export interface ExploreLandingScreenProps {
 // 담은 곳 FAB 그림자(홈 SavedPlacesFab 선례) — RN 은 box-shadow 가 없어 style prop 으로 옮긴다.
 // shadowColor '#000000' 은 토큰화 대상이 아니라 raw-hex 가드 사정거리 밖이다(홈 fabShadow 선례).
 const FAB_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 6 },
   shadowOpacity: 0.22,
   shadowRadius: 12,

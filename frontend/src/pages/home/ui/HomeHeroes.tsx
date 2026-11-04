@@ -13,6 +13,7 @@ import { HomeSparkleGlyph } from './HomeGlyphs';
 import { ABSOLUTE_FILL, SCRIM_LOCATIONS, softCardShadow } from './homeSurface';
 import { Image } from '@/shared/ui/Image';
 import type { HomeMagazineHero, TripHeroData } from '../model/homeTypes';
+import { COLOR_TOKENS } from '@/shared/config';
 
 // 사진 위 흰 글씨 가독성을 위한 스크림 그라디언트(브리프 §3-D 명시 raw 허용 — 스크림은 토큰
 // 대상이 아니다). 상단 30%는 투명, 하단은 검정. 카드별 하단 농도만 Figma 실측대로 다르다.
@@ -34,7 +35,7 @@ const HERO_CHIP_STYLE = { backgroundColor: 'rgba(255,255,255,0.22)' } as const;
 // (bg-on-primary)·비활성(opacity-50) 계약은 불변으로 두고, 도트에 미세 검정 그림자(halo)만
 // 얹어 밝은 배경 위에서도 흰 도트가 식별되게 한다. 그림자는 토큰 대상 아님(카드 그림자 관례).
 const heroDotShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 0 },
   shadowOpacity: 0.45,
   shadowRadius: 2,

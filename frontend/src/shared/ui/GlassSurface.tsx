@@ -1,6 +1,7 @@
 import { BlurView } from 'expo-blur';
 import type { ReactElement, ReactNode } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { COLOR_TOKENS } from '../config';
 
 /**
  * TRIP-1522 · 유리(glass) 표면 — 흰 반투명 + 흰 테두리 + 뒤 배경 블러 + 그림자를 한 묶음으로 쓰는 공용 부품.
@@ -16,7 +17,7 @@ import { View, type StyleProp, type ViewStyle } from 'react-native';
 
 // 그림자 색은 토큰이 없다(HomeScreen 그림자 관례).
 const GLASS_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.1,
   shadowRadius: 14,
