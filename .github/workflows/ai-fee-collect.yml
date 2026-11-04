@@ -1,3 +1,6 @@
+# [main 등록용 사본] GitHub은 schedule(cron)·workflow_dispatch를 기본 브랜치의
+# 워크플로만 등록한다. main의 ai/ 는 구버전이므로 checkout을 develop으로 고정 —
+# 이 파일(트리거 등록)은 main, 실행 코드는 항상 develop. develop 쪽 원본 갱신 시 이 사본도 동기화할 것.
 # 장소 입장료 수집 — content_id → {won, raw} (TRIP-902 후속)
 #
 # 8,256건을 일일 한도(키 3개 × 1,000) 안에서 **여러 날에 걸쳐** 받는다. 누적본은
@@ -28,6 +31,8 @@ jobs:
       contents: write   # fee-state 전용 브랜치 push 용 (잡 단위 최소 부여)
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: develop   # 수집 코드·공유본은 develop (main의 ai/는 구버전)
 
       - uses: astral-sh/setup-uv@v5
         with:
