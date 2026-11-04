@@ -60,12 +60,10 @@ import {
  */
 export function TripNewStep2Page(): ReactElement {
   const router = useRouter();
-  const {
-    createdTripId: tripId,
-    startDate,
-    endDate,
-    destinations,
-  } = useTripWizardStore();
+  const tripId = useTripWizardStore((state) => state.createdTripId);
+  const startDate = useTripWizardStore((state) => state.startDate);
+  const endDate = useTripWizardStore((state) => state.endDate);
+  const destinations = useTripWizardStore((state) => state.destinations);
 
   /** 두 출구 CTA의 공통 목적지 — 2/4를 걷고(`back`) 방식 선택(h04)을 `push`. 순서가 계약이다:
    * 거꾸로면 back이 방금 얹은 h04를 치운다. `tripId`는 CTA가 보이는 얼굴에선 `notrip`이 먼저 이겨

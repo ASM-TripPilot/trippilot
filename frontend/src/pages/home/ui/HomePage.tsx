@@ -38,7 +38,7 @@ import type {
   HomeSpotsLane,
 } from '../model/homeTypes';
 import { HomeScreen } from './HomeScreen';
-import { useTripWizardStore } from '@/features/create-trip';
+import { openNewTripWizard } from '@/features/create-trip';
 import { assistantHref } from '@/features/open-assistant';
 
 interface HomeNav {
@@ -282,8 +282,7 @@ export function HomePage() {
   const nav: HomeNav = {
     // 새 여행 진입 — 직전 여행 드래프트를 이동 전에 비운다(TRIP-1012 #074).
     onPressCreateTrip: () => {
-      useTripWizardStore.getState().reset();
-      router.push('/trips/new/step1');
+      openNewTripWizard(router);
     },
     onPressSavedPlaces: () => {
       setSavedMenuOpen(false);

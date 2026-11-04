@@ -349,8 +349,9 @@ const WORKLET_DEFAULT_PARAM_GATE = [
 const PRESS_NAV_MESSAGE =
   '누름 이동은 `guardPress(() => router.…)`로 감싼다(TRIP-1013) — 인라인 화살표의 router 이동은 연타 시 화면이 두 번 쌓인다.';
 // TRIP-1685: `goBackOr(router, …)` 는 router.back 을 감싼 이동이라 같이 잡는다(안 잡으면 교체만으로 그물이 뚫린다).
+// TRIP-1771: `openNewTripWizard(router, …)` 도 router.push 를 감싼 이동이다 — 같은 이유로 잡는다.
 const ROUTER_NAV =
-  ":matches(CallExpression[callee.object.name='router'][callee.property.name=/^(push|navigate|replace|dismissTo|back)$/], CallExpression[callee.name='goBackOr'])";
+  ":matches(CallExpression[callee.object.name='router'][callee.property.name=/^(push|navigate|replace|dismissTo|back)$/], CallExpression[callee.name=/^(goBackOr|openNewTripWizard)$/])";
 const HANDLER_ARROW =
   'JSXExpressionContainer > ArrowFunctionExpression, Property[key.name=/^onPress/] > ArrowFunctionExpression';
 const PRESS_NAV_GATE = [
