@@ -265,7 +265,7 @@ def build_dialogue_orchestrator(
                  "벡터 스토어" if kb_store is None else "임베딩")
     else:
         place_search = PlaceSearch(embedding, kb_store)
-        log.info("도우미 열린 검색 on — 묘사형 말이면 KB-5 문서 순위를 규칙 순서에 섞고, 보일 다섯 곳 중 3곳 이상에 붙으면 그 결과가 SQL 행을 이긴다")
+        log.info("도우미 열린 검색 on — 묘사형 말이면 반경 결과(SQL 0건·실패·추천·일정 근처)에만 KB-5 문서 순위를 섞는다")
     # 미확인 칸 웹 확인(UnknownHandlingAgent) — PLACE_FACT_LOOKUP 배정이 곧 켜기. 조회는 턴 밖(뒤에서)이라 서비스 카운터(`counted`)가
     # 아니라 `llm` 으로 부른다(턴 llm_calls 에 들지 않는다 — 대신 프로세스당 하루 상한, unknown_handling 註)
     # 일반 지식 즉답(BR-AO-32, 2026-10-23) — 같은 에이전트의 둘째 일. DIALOGUE_KNOWLEDGE 배정이 곧 켜기, 턴 안 서비스 호출이라 `counted`

@@ -12,7 +12,6 @@
   ⑥ SQL 팔(조건 4): 고정본은 운영 NL2SQL 경로(미리 받기 → 핸들러 조회 · 프롬프트·출구 게이트·조회)를 오케스트레이터 순서 그대로 타고,
      게이트가 열린 탐색만 담는다. 모델은 정한 값만(EVAL_SQL_MODEL — 추정하지 않는다), 벤더는 그 모델 그대로. 판정은 그 행을 운영
      핸들러로 되돌려 SQL 팔을 짓고, SQL 이 실패·0건·거르기 뒤 빈 행이면 SQL 팔이 없다 — 그 사례는 (A, B) 로만 센다
-  ⑦ 문턱을 고르는 칸(`SQL-B@doc_backed`)은 문턱만이 답을 가르는 사례(검색 OK ∧ 두 가드 통과)만 센다
 """
 
 from __future__ import annotations
@@ -259,37 +258,6 @@ def test_capture_writes_with_a_gpt_model_through_the_same_path(mos, monkeypatch,
                           cases=[cases["부산/비"]])
     assert doc["model"] == "gpt-5.6-luna" and [r.model_id for r in llm.requests] == ["gpt-5.6-luna"]
     assert doc["cases"]["부산/비"]["status"] == "OK" and doc["cases"]["부산/비"]["path"] == "prefetch"
-
-
-def test_threshold_buckets_count_only_cases_the_threshold_alone_decides(mos) -> None:
-    def row(name, backed, status, guards, flip, winner):
-        return {"name": name, "rep": 0, "pair": "SQL-B", "flip": flip, "winner": winner, "identical": False,
-                "doc_backed": backed, "prod_status": status, "guards_ok": guards}
-
-    rows = [row("rain", 3, "OK", True, False, "right"), row("rain", 3, "OK", True, True, "right"),
-            row("named", 3, "OK", False, False, "left"), row("named", 3, "OK", False, True, "left"),  # 이름 가드 — 문턱 무관
-            row("none", 0, "NO_EVIDENCE", True, False, "left"), row("none", 0, "NO_EVIDENCE", True, True, "left")]
-    buckets, skipped = mos.sql_b_by_doc_backed(rows)
-    assert set(buckets) == {3} and buckets[3]["right_win"] == 1 and buckets[3]["left_win"] == 0 and buckets[3]["n"] == 1
-    assert skipped == ["named", "none"]
-
-
-@pytest.mark.parametrize(("region", "sql_name", "ok"), [
-    ("전주", "전주 하숙영가마솥비빔밥", False),  # SQL 이 이름 낱말('비빔밥')로 맞춘 행 — 문턱을 바꿔도 SQL 이 답
-    ("전주", "한옥마을 국수", True),
-    ("서울 연남동", "한옥마을 국수", False),  # 표 밖 지역
-])
-def test_guards_ok_is_the_production_rule_without_the_threshold(mos, region, sql_name, ok) -> None:
-    from trippilot.orchestrator.dialogue.dialogue_handlers import HandlerPorts, TaskResult
-
-    name, intent, args, utt, kind = next(c for c in mos.CASES if c[0] == "전주/비빔밥")
-    ctx = mos._turn((name, intent, {**args, "region": region}, utt, kind), HandlerPorts(), "g")
-    radius = {"status": "OK", "candidates": [{"poi_id": "r1", "name": "반경 식당", "category": "음식", "reason": "음식"}],
-              "doc": "NO_EVIDENCE", "doc_backed": 0}  # 상태·근거 수는 보지 않는다 — 문턱만 뺀 판정이다
-    sql = {"status": "OK", "candidates": [{"poi_id": "s1", "name": sql_name, "category": "음식", "reason": "음식"}]}
-    results = {"explore": TaskResult.ok("explore", radius), "explore_sql": TaskResult.ok("explore_sql", sql)}
-    assert mos._guards_ok(ctx, results) is ok
-    assert mos._guards_ok(ctx, {"explore": results["explore"]}) is True  # SQL 행이 없으면 가드가 없다
 
 
 def test_sql_arm_replays_the_rows_through_the_production_handler(mos) -> None:

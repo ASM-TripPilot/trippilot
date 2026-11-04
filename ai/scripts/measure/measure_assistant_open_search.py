@@ -17,10 +17,8 @@ r"""도우미 장소 탐색 열린 검색(KB-5 문서 순위, `place_search` + `
     운영 핸들러로 되돌려 SQL 팔을 짓는다(`sql_answer`). 고정본이 없으면 SQL 대역(`_SqlRows`)은 "행이 있었다"만 흉내 내는 가짜 한 행이라
     SQL 답의 질을 재지 않는다. SQL 이 실패·0건이거나 거르기 뒤 빈 행인 사례는 반경이 답이므로 SQL 팔 없이 A-B 로 센다(`radius_answer`).
     판정 입력에는 사용자가 말한 지역(분류 인자 원문)과 장소마다 위치(시·도 시·군·구)를 싣는다 — 반경은 지역 중심 반경(서울은 시청 5km)이라
-    도심으로 좁아지고 SQL 행은 시·도 전체에서 온다(조건 2a). SQL-B 는 스위치가 실제로 B 를 고른 사례만(`SQL-B@switch`)·doc_backed 별로
-    (`SQL-B@doc_backed`)도 낸다 — 문턱 `dialogue_handlers._DOC_SWITCH_MIN` 을 고르는 재료다. 그래서 doc_backed 별 칸은 검색 OK 이고 두
-    가드(표 이름 지역·SQL 행 이름에 이름 낱말 없음)를 지난 사례만 센다 — 가드·검색 상태 때문에 SQL 이 답인 사례(전주/비빔밥 등)는 문턱을
-    얼마로 바꿔도 SQL 이 답이라 칸을 흐린다(리뷰 2026-11-04, 뺀 사례는 `SQL-B@doc_backed_skipped`).
+    도심으로 좁아지고 SQL 행은 시·도 전체에서 온다(조건 2a). SQL-B 는 'SQL 행 대신 섞인 반경을 쓰면 나은가'를 잰다 — 6회차에 이득이
+    없어 운영은 SQL 행이 먼저다(아래).
   실 NL2SQL 고정본(유료 — 실 LLM 호출, 사용자 승인 뒤에만. 키는 환경 변수로만, 로컬 백엔드 DB 는 읽기 전용 연결·문장 시한):
     EVAL_SQL_MODEL=<운영 DIALOGUE_SQL 배정> ANTHROPIC_API_KEY=…(GPT 면 OPENAI_API_KEY=… [+ OPENAI_BASE_URL]) uv run python \
         scripts/measure/measure_assistant_open_search.py capture-sql <scratchpad>/sql_rows.json
@@ -54,6 +52,17 @@ r"""도우미 장소 탐색 열린 검색(KB-5 문서 순위, `place_search` + `
 그 대조는 SQL 미배정(= SQL 실패·0건) 분기다 — **운영 분기**(DIALOGUE_SQL 배정, SQL 이 행을 낸다)는 SQL 대역(`_SqlRows`, 고정본이 있으면
 실 행)을 붙여 한 번 더 돌려, 열린 검색 순서가 답에 닿는지(`reach`)·같은 SQL 행에서 스위치가 답을 바꾸는지(`switch`)를 센다. 지연은 `latency`.
 
+**6회차(2026-11-04, 실 NL2SQL·쌍대 판정 — 결론: SQL 우선, 반경 안에서만 섞는다)**: `capture-sql` 고정본(EVAL_SQL_MODEL=claude-haiku-5-5 —
+운영 DIALOGUE_SQL 배정, 도우미 담당 세션 확인 · 프롬프트 0.2.3 · develop #1923 뒤 실행기 · 경로 prefetch 18 · direct 8 · OK 23 · ZERO 3
+(부산/시장·여수/해산물·여수/비) · 운영 기준 초과 0) → `judge 1`(sonnet-5, 판정 실패 0, 44사례):
+- A-B 19:1 · 같음 1 · 흔들림 9 · 같은 목록 14(sign p≈0) — 반경 안에서는 섞음이 확실히 낫다. 운영 답이 반경인 사례(SQL 팔 없음)만 4:0 · 흔들림 4.
+- SQL-B(SQL 팔이 있는 22사례) 5:10 · 흔들림 7(p=0.30). 그중 철회 전 규칙(문턱 3·가드 둘)이 SQL 행 대신 섞인 반경을 쓰던 13사례
+  **SQL 4 : 섞음 5 · 흔들림 4(p=1.0)** — 동기였던 비 사례도 서울/비·부산/비는 두 자리 모두 SQL 이 이겼다(SQL 은 미술관·도서관·아쿠아리움,
+  섞음은 수영장·공원이 앞). 결정론 오답(SQL 팔 22사례)도 A 12 · B 5 · SQL 5.
+- B-B3 13:13(흔들림 16) — 임베딩만은 대안이 아니다.
+→ 사용자 결정 "SQL 우선, 반경 안에서만 섞기": BR-AO-27 개정 철회, `_doc_beats_sql`·`_DOC_SWITCH_MIN`·`doc_backed` 를 지웠다. 아래 5회차의
+조건 1·이어 묻기 단락과 4회차의 `_doc_beats_sql` 단락은 그 철회 전 기록이다(그 칸·집계 `thin_doc`·`SQL-B@switch`·`SQL-B@doc_backed` 도 지웠다).
+
 **5회차(2026-11-04 — 도우미 오케스트레이터·NL2SQL 담당 세션의 BR-AO-27 개정 동의 조건 반영, 44사례)**:
 - 조건 1 — 반경이 SQL 행을 이기려면 보일 다섯 곳(종류 상한·보인 곳 제외 뒤) 중 문서 순위가 붙은 곳이 `_DOC_SWITCH_MIN`(3) 곳 이상
   (`doc_backed`, 반경 작업 결과에만 — Facts 밖). doc OK 30턴의 doc_backed 분포 1:2 · 2:3 · 3:7 · 4:8 · 5:10 — 1~2곳뿐인 턴(`thin_doc`) 5
@@ -69,7 +78,7 @@ r"""도우미 장소 탐색 열린 검색(KB-5 문서 순위, `place_search` + `
   SQL 행으로 바뀐다 — 서울/북카페·강릉/숲길·여수/해산물·여수/비·태그/제주반려견카페는 남은 근거 없음(NO_EVIDENCE), 경주/비는 남은 근거 2.
   턴마다 같은 조건으로 가르기 때문이다(근거가 다 보인 뒤의 반경 순서는 규칙 순서) — BR-AO-27 개정 '근거가 남은 동안만 같은 출처'.
 
-**2026-11-04 규칙 변경(사용자 결정 "묘사형 말이면 열린 검색 우선", BR-AO-27 개정·BR-AO-36)** — 아래 '닿는 범위'는 변경 **전** 값이다.
+**2026-11-04 규칙 변경(사용자 결정 "묘사형 말이면 열린 검색 우선", BR-AO-27 개정·BR-AO-36 — 6회차 판정으로 같은 날 철회)** — 아래 '닿는 범위'는 변경 **전** 값이다.
 이제 탐색도 SQL 과 나란히 열린 검색을 돌리고, 문서 순위가 실제로 섞이면(doc OK) 반경 결과가 SQL 행을 이긴다(리뷰 뒤 조건 둘 — 아래
 4회차) — `prod_reach` 는 B 가 답을 바꾼 사례 전부가 된다. 변경 뒤 6사례 재측정(EVAL_CASES=서울/비,부산/비,제주/비실내,경주/비,대조/서울,
 서울/공예3): SQL 분기에서 닿는 비 탐색 0/4 → **4/4** — 그 넷에서 B(오답 1)가 운영 분기 답이 된다. 바뀌기 전 그 분기의 답은 A(오답 9)가
@@ -432,25 +441,25 @@ def measure(case, builder, emb, corpus, index, keep: dict | None = None, sql: di
         emb_ranks = hr.ranks(hr.embedding_scores(hits(raw)), order) if raw and ids else {}
         arms[f"B3/{q}"] = ranked(_doc_first(rule, emb_ranks))
 
-    # 운영 경로 대조 — A(검색기 없음)·B(w=W_DOC, G1, Q1)를 핸들러 그대로 돌려 직접 계산과 같은지. 셋째 값은 문턱만 뺀 가드 통과(`_guards_ok`)
-    def e2e(searcher, place_sql=None) -> tuple[list[str], dict, bool]:
+    # 운영 경로 대조 — A(검색기 없음)·B(w=W_DOC, G1, Q1)를 핸들러 그대로 돌려 직접 계산과 같은지
+    def e2e(searcher, place_sql=None) -> tuple[list[str], dict]:
         c = _turn(case, HandlerPorts(pool_builder=builder, place_search=searcher, place_sql=place_sql), "e2e")
         handler = HANDLERS[intent]
         results = {t.name: TaskResult.ok(t.name, t.fn()) for t in handler.plan(c)}
-        return [p.name for p in handler.assemble(c, results).places], results["explore"].value, _guards_ok(c, results)
+        return [p.name for p in handler.assemble(c, results).places], results["explore"].value
 
     t0 = time.monotonic()
-    e2e_b, radius_b, _ = e2e(ps.PlaceSearch(emb, store, index=lambda: index))
+    e2e_b, radius_b = e2e(ps.PlaceSearch(emb, store, index=lambda: index))
     e2e_ms = int((time.monotonic() - t0) * 1000)
-    e2e_a, _, _ = e2e(None)
+    e2e_a, _ = e2e(None)
     expect_b = [p.name for p in arms[f"B{hr.W_DOC}/G1Q1"]]
     mismatch = (e2e_a != [p.name for p in arms["A"]]) + (e2e_b != expect_b)
-    # 운영 분기(SQL 배정, 행 있음) — 열린 검색 순서가 답에 닿는가. 탐색은 문서 순위가 섞이고(doc OK) 보일 다섯 곳 중 `_DOC_SWITCH_MIN` 곳
-    # 이상에 붙었을 때만 반경이 SQL 행을 이기고(BR-AO-27 개정), 추천은 반경이 먼저다. 고정본(`sql`)이 있으면 실 NL2SQL 행으로 돈다
+    # 운영 분기(SQL 배정) — 열린 검색 순서가 답에 닿는가. 탐색은 SQL 이 행을 내면 SQL 행이 먼저라 0건·실패일 때만 닿고(BR-AO-27), 추천은
+    # 반경이 먼저다. 고정본(`sql`)이 있으면 실 NL2SQL 행으로 돈다
     sido = dh.region_area(anchor.label)[0] if anchor.kind == "region" else None
     rows = _SqlRows(sido) if sql is None else _Replay(sql.get("rows"))
-    prod_names, prod, guards = e2e(ps.PlaceSearch(emb, store, index=lambda: index), rows)
-    sql_off, _, _ = e2e(None, rows)  # 같은 SQL 행·스위치 꺼짐 — 켜짐 답과 다르면 스위치가 답을 바꾼 사례다
+    prod_names, prod = e2e(ps.PlaceSearch(emb, store, index=lambda: index), rows)
+    sql_off, _ = e2e(None, rows)  # 같은 SQL 행·스위치 꺼짐 — 켜짐 답과 다르면 스위치가 답을 바꾼 사례다
 
     if keep is not None:
         keep.update(arms)
@@ -468,28 +477,11 @@ def measure(case, builder, emb, corpus, index, keep: dict | None = None, sql: di
     return {"name": name, "kind": kind, "group": name.split("/")[0], "anchor": anchor.label, "pool": len(pool.pois),
             "fits": len(rule), "scope_places": len(all_refs), "scope_ids": len(all_ids), "capped_places": len(scope_refs),
             "capped_ids": len(ids), "variants": variants, "arms": {k: stats(v) for k, v in arms.items()},
-            "e2e_status": radius_b.get("doc"), "doc_backed": radius_b.get("doc_backed"), "e2e_ms": e2e_ms,
+            "e2e_status": radius_b.get("doc"), "e2e_ms": e2e_ms,
             "e2e_mismatch": mismatch, "changed": e2e_b != e2e_a, "prod_status": prod.get("doc"),
-            "prod_doc_backed": prod.get("doc_backed"), "guards_ok": guards, "prod_reach": e2e_b != e2e_a and prod_names == expect_b,
+            "prod_reach": e2e_b != e2e_a and prod_names == expect_b,
             "switch": prod_names != sql_off, "sql_rows": None if sql is None else sql.get("status"),
             "sql_arm": None if sql_arm is None else stats(sql_arm)}
-
-
-def _guards_ok(ctx: TurnContext, results: dict) -> bool:
-    """`_doc_beats_sql` 에서 문턱만 뺀 판정 — 검색 OK·근거 수를 문턱 위로 놓고 운영 함수를 다시 부른다. 거짓이면 그 사례는 문턱을
-    얼마로 바꿔도 SQL 이 답이다(말한 지역이 표 밖 · SQL 행 이름에 이름 낱말 — 전주/비빔밥 · 게이트 닫힘). SQL 행이 없으면 참이다."""
-    sql = results.get("explore_sql")
-    by_sql = sql.value if sql is not None and dh._candidates_if_ok(sql.value) else None  # 조립(`_assemble_explore`)과 같은 거르기
-    radius = {**results["explore"].value, "doc": "OK", "doc_backed": UNCAPPED}
-    return dh._doc_beats_sql(ctx, dh._explore_anchor(ctx), radius, by_sql)
-
-
-def sql_b_by_doc_backed(rows: list[dict]) -> tuple[dict, list[str]]:
-    """SQL-B 판정 행 → ({doc_backed: 집계}, 뺀 사례) — 문턱 `_DOC_SWITCH_MIN` 을 고르는 칸. 문턱만이 답을 가르는 사례(운영 분기 검색 OK ∧
-    두 가드 통과)만 센다 — 가드나 검색 상태(NO_EVIDENCE·BUDGET… 는 근거 수가 0 칸에 들었다) 때문에 SQL 이 답인 사례는 문턱과 무관하다."""
-    kept = [r for r in rows if r["prod_status"] == "OK" and r["guards_ok"]]
-    buckets = {k: tally([r for r in kept if r["doc_backed"] == k])["SQL-B"] for k in sorted({r["doc_backed"] for r in kept}, key=str)}
-    return buckets, sorted({r["name"] for r in rows} - {r["name"] for r in kept})
 
 
 def _pct(values: list[int], p: float) -> int:
@@ -542,10 +534,6 @@ def summarize(rows: list[dict], collisions: Counter, missing: int) -> dict:
                     "with_sql": [r["name"] for r in rows if r["prod_reach"]],
                     "with_sql_status": dict(Counter(str(r["prod_status"]) for r in rows))}
     out["max_ids"] = ps.MAX_IDS
-    # 조건 1 의 재료 — 열린 검색이 섞였는데(doc OK) 보일 다섯 곳 중 근거가 1~2곳뿐인 턴. 문턱(`_DOC_SWITCH_MIN`)이 SQL 행을 지키는 사례다
-    ok = [r for r in rows if r["e2e_status"] == "OK"]
-    out["thin_doc"] = {"k": dh._DOC_SWITCH_MIN, "ok": len(ok), "thin": [r["name"] for r in ok if r["doc_backed"] in (1, 2)],
-                       "doc_backed": dict(sorted(Counter(r["doc_backed"] for r in ok).items()))}
     b = f"B{hr.W_DOC}/G1Q1"
     out["tag_hits"] = {r["name"]: {arm: r["arms"][arm]["tag_hits"] for arm in ("A", b)}
                        | ({"SQL": r["sql_arm"]["tag_hits"]} if r["sql_arm"] else {})
@@ -586,7 +574,7 @@ def main() -> None:
               f"G1Q1 {v['G1Q1']['status']:<11} G2Q1 {v['G2Q1']['status']:<11} G1Q2 {v['G1Q2']['status']:<11} "
               f"오답 A{a['wrong']} B{b['wrong']} B1 {r['arms']['B1/G1Q1']['wrong']} B3 {r['arms']['B3/Q1']['wrong']} "
               f"e2e {r['e2e_status']}·{r['e2e_ms']}ms{' MISMATCH' if r['e2e_mismatch'] else ''} "
-              f"근거 {r['doc_backed']} SQL분기 {r['prod_status']}·{r['prod_doc_backed']}{' 닿음' if r['prod_reach'] else ''}"
+              f"SQL분기 {r['prod_status']}{' 닿음' if r['prod_reach'] else ''}"
               f"{' 바뀜' if r['switch'] else ''} ({time.monotonic() - t:.1f}s)", flush=True)
         for label, arm in (("A ", a), ("B ", b), ("B3", r["arms"]["B3/Q1"])):
             print(f"    {label}: " + " / ".join(f"{n}({c})" for n, c in zip(arm["names"], arm["cats"])))
@@ -850,8 +838,8 @@ def latency(reps: int) -> None:
 JUDGE = os.environ.get("EVAL_JUDGE_MODEL", "claude-sonnet-5")
 JUDGE_ARMS = {"A": "A", "B": f"B{hr.W_DOC}/G1Q1", "B3": "B3/Q1"}  # 판정 이름 → `measure` 의 팔(B 는 운영 설정 w=1.0·G1·Q1)
 # SQL-B — 운영 분기(SQL 이 행을 낸 지역 탐색)에서 스위치가 바꾸는 것은 A 가 아니라 SQL 행이다. SQL 팔은 `capture-sql` 고정본이 있는 탐색
-# 사례에만 있고(`sql_answer`), 없는 사례(실패·0건·거르기 뒤 빈 행 — 반경이 답)는 (A, B) 로 센다. SQL-B 판정은 스위치가 실제로 B 를 고른
-# 사례(`switch`)만 따로(`SQL-B@switch`)·doc_backed 별로(`SQL-B@doc_backed`)도 낸다 — 문턱 `_DOC_SWITCH_MIN` 을 고르는 재료
+# 사례에만 있고(`sql_answer`), 없는 사례(실패·0건·거르기 뒤 빈 행 — 반경이 답)는 (A, B) 로 센다. SQL-B 는 'SQL 행 대신 섞인 반경'의
+# 득실이다 — 6회차 5:10(전환하던 13사례 4:5, p=1.0)이라 운영은 SQL 행이 먼저다(머리말)
 JUDGE_PAIRS = (("A", "B"), ("B", "B3"), ("SQL", "B"))
 _NO_DOC = "설명 없음"
 
@@ -1018,8 +1006,7 @@ def judge(repeat: int) -> None:
         if "SQL" in keep:
             where.update({d["poi_id"]: " ".join(filter(None, (d["sido"], d["sigungu"]))) for d in entry["rows"]})
         built.append((case, lists))
-        meta[case[0]] = {"doc_backed": got["prod_doc_backed"], "prod_status": got["prod_status"], "guards_ok": got["guards_ok"],
-                         "switch": got["switch"], "sql_rows": got["sql_rows"]}
+        meta[case[0]] = {"prod_status": got["prod_status"], "sql_rows": got["sql_rows"]}
         print(f"built {case[0]}{' +SQL' if 'SQL' in lists else ''}", flush=True)
     if mismatch:
         raise SystemExit(f"운영 핸들러 대조 불일치 {mismatch} — 판정할 목록이 운영 순서가 아니다(중단)")
@@ -1040,12 +1027,8 @@ def judge(repeat: int) -> None:
         return {**row, "winner": side, "why": why}
 
     rows = _run(one, jobs)
-    sql_b = [r for r in rows if r["pair"] == "SQL-B"]
     with_arm = {case[0] for case, lists in built if "SQL" in lists}
-    by_backed, skipped = sql_b_by_doc_backed(sql_b)
     summary = {"judge": JUDGE, "repeat": repeat, "cases": len(built), "pairs": tally(rows),
-               "SQL-B@switch": tally([r for r in sql_b if r["switch"]])["SQL-B"],
-               "SQL-B@doc_backed": by_backed, "SQL-B@doc_backed_skipped": skipped,
                # SQL 팔이 없는 탐색 — 고정본이 실패·0건이거나 거르기 뒤 빈 행이라 반경이 답이다. 그 사례는 (A, B) 로 센다
                "radius_answer": sorted(name for name, m in meta.items() if m["sql_rows"] and name not in with_arm)}
     print(json.dumps(summary, ensure_ascii=False, indent=1))
