@@ -33,12 +33,12 @@ class PushTokenServiceTest : StringSpec({
         }
 
         lines shouldContainExactly listOf(
-            "push.token.register platform=IOS osPermission=GRANTED deliverable=true tokenFormat=expo",
-            "push.token.register platform=ANDROID osPermission=DENIED deliverable=false tokenFormat=expo",
+            "push.token.register platform=IOS osPermission=GRANTED deliverable=true format=expo",
+            "push.token.register platform=ANDROID osPermission=DENIED deliverable=false format=expo",
         )
     }
 
-    "Expo 토큰 모양이 아니면 tokenFormat=other 로 가른다 — 구형·신형 접두는 expo, APNs·FCM 기기 토큰이나 빈 괄호는 other" {
+    "Expo 토큰 모양이 아니면 format=other 로 가른다 — 구형·신형 접두는 expo, APNs·FCM 기기 토큰이나 빈 괄호는 other" {
         val lines = registerLines {
             service.register(account, "ExpoPushToken[new-style]", null, DevicePlatform.IOS, OsPermission.GRANTED)
             service.register(account, "ExponentPushToken[old-style]", null, DevicePlatform.IOS, OsPermission.GRANTED)
@@ -46,7 +46,7 @@ class PushTokenServiceTest : StringSpec({
             service.register(account, "ExponentPushToken[]", null, DevicePlatform.IOS, OsPermission.GRANTED)
         }
 
-        lines.map { it.substringAfter("tokenFormat=") } shouldContainExactly listOf("expo", "expo", "other", "other")
+        lines.map { it.substringAfter("format=") } shouldContainExactly listOf("expo", "expo", "other", "other")
     }
 
     "줄에 토큰 값을 싣지 않는다" {
@@ -56,6 +56,17 @@ class PushTokenServiceTest : StringSpec({
 
         lines.size shouldBe 1 // 줄이 아예 없어서 통과하는 일이 없게 — 한 줄은 남고, 그 줄에 값이 없다
         lines.none { "secret-value" in it || "ExponentPushToken" in it } shouldBe true
+    }
+
+    "줄의 키 이름이 로그 덤프의 가림 규칙에 걸리지 않는다 — 걸리면 값이 *** 로 지워져 운영에서 expo|other 를 못 가른다" {
+        val lines = registerLines {
+            service.register(account, "ExponentPushToken[log-key-check]", null, DevicePlatform.IOS, OsPermission.GRANTED)   // 새 토큰이어야 줄이 남는다
+        }
+
+        lines.size shouldBe 1
+        // aws-dev-logs 의 덤프가 이 꼴의 값을 가린다(deploy/eks/runtime_kb.py `_CREDENTIAL`: `(KEY|TOKEN|SECRET|PASSWORD)[A-Z_]*=값`, 대소문자 무시).
+        // 앱의 LogMasker 는 `\btoken\b` 만 걸어 이전 키(token 으로 시작하는 이름)를 안 지우므로 앱 테스트·로컬 로그로는 안 보이는 함정이다(2026-11-05).
+        lines.none { Regex("(?i)(KEY|TOKEN|SECRET|PASSWORD)[A-Z_]*=").containsMatchIn(it) } shouldBe true
     }
 })
 
