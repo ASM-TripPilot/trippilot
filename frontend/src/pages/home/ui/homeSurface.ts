@@ -7,7 +7,7 @@ export const SCRIM_LOCATIONS = [0.3, 1] as const;
 
 export const ABSOLUTE_FILL = StyleSheet.absoluteFillObject;
 
-// 카드 그림자 2종(브리프 §3-D 명시 raw 허용 — 그림자는 토큰 대상이 아니다). RN은 box-shadow가
+// 카드 그림자(브리프 §3-D 명시 raw 허용 — 그림자는 토큰 대상이 아니다). RN은 box-shadow가
 // 없어 shadow-* 스타일 프로퍼티로 옮긴다. shadowColor '#000000'은 D-3 13색 밖이라 무제재.
 export const softCardShadow = {
   shadowColor: '#000000',

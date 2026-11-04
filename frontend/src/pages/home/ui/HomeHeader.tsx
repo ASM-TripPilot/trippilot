@@ -84,6 +84,7 @@ export function homeGreeting(phase: HomePhase | undefined): {
       return {
         title: phase.greetTitle,
         subtitle: phase.greetSubtitle,
+        // 이름줄(greetName)은 여행 중 픽스처 전용 — 라이브 resolveHomePhase 는 이름 소스가 없어 미주입.
         name: phase.greetName,
       };
     case 'postTrip':
