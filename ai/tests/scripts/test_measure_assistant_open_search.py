@@ -2,7 +2,8 @@
 
 여기서 묶는 것은 판정 결과를 읽고 세는 규칙이다 — 그쪽이 틀리면 "B 가 이겼다"가 조용히 뒤집힌다.
   ① 못 읽은 판정(본문 비었음·잘림·거절·깨진 JSON·목록 밖 승자)은 '같음'이 아니라 판정 실패다(11-04 사고 — 32판이 전부 '같음'으로 셌다)
-  ② 집계는 판정 실패·같음·같은 목록을 승패에서 빼고, 부호 검정 p 는 승패만으로 낸다
+  ② 짝마다 두 자리를 다 묻고, 두 자리 판정이 같을 때만 승패·같음으로 센다 — 자리를 바꾸자 바뀐 판정(흔들림)·판정 실패·같은 목록은
+     승패에서 빼고, 부호 검정 p 는 승패만으로 낸다. 자리 편향은 낱판에서 첫 자리가 이긴 수로 따로 낸다
   ③ 판정 프롬프트는 두 목록 모든 장소에 같은 참고 설명(개요 → 위키 도입부 → '설명 없음')과 사실 카드를 주고,
      '설명 없음'이 부적합이 아니라고 적는다
   ④ 키는 환경 변수로만 — 없으면 아무것도 읽거나 부르기 전에 멈춘다
@@ -63,18 +64,33 @@ def test_sign_test_is_two_sided_over_wins_and_losses_only(mos) -> None:
     assert mos.sign_test_p(8, 2) == pytest.approx(2 * (1 + 10 + 45) / 1024)
 
 
-def test_tally_keeps_failures_ties_and_identical_lists_out_of_the_win_count(mos) -> None:
-    def row(pair, winner, identical=False):
-        return {"pair": pair, "winner": winner, "identical": identical}
+def test_tally_counts_a_win_only_when_both_positions_agree(mos) -> None:
+    def row(name, flip, winner, pair="A-B", identical=False):
+        return {"name": name, "rep": 0, "pair": pair, "flip": flip, "winner": winner, "identical": identical}
 
-    rows = [row("A-B", "right"), row("A-B", "right"), row("A-B", "left"), row("A-B", "="), row("A-B", None),
-            row("A-B", "=", identical=True), row("A-A", "left"), row("A-A", None), row("B-B3", None)]
+    rows = [row("c1", False, "left"), row("c1", True, "left"),  # 두 자리 모두 A — A 승
+            row("c2", False, "right"), row("c2", True, "right"),  # 두 자리 모두 B — B 승
+            row("c3", False, "left"), row("c3", True, "right"),  # 늘 첫 자리가 이겼다 — 흔들림, 승패 아님
+            row("c4", False, "="), row("c4", True, "="),  # 같음
+            row("c5", False, None), row("c5", True, "left"),  # 한쪽을 못 읽었다 — 판정 실패
+            row("c6", False, "=", identical=True), row("c6", True, "=", identical=True),  # 같은 목록 — 판정 안 함
+            row("d1", False, None, pair="B-B3")]  # 한 자리뿐(다른 자리 없음) — 판정 실패
     got = mos.tally(rows)
-    assert got["A-B"] == {"left": "A", "right": "B", "n": 6, "identical": 1, "left_win": 1, "right_win": 2, "tie": 1,
-                          "judge_fail": 1, "sign_p": 1.0}
-    assert got["A-A"]["left_win"] == 1 and got["A-A"]["judge_fail"] == 1 and got["A-A"]["tie"] == 0
+    assert got["A-B"] == {"left": "A", "right": "B", "n": 6, "identical": 1, "left_win": 1, "right_win": 1, "tie": 1,
+                          "position_flip": 1, "judge_fail": 1, "sign_p": 1.0,
+                          # 낱판 자리 — 첫 자리 승: c1 False·c2 True·c3 둘 = 4, 둘째 자리 승: c1 True·c2 False·c5 True = 3
+                          "first_wins": 4, "second_wins": 3, "position_p": round(mos.sign_test_p(4, 3), 4)}
     assert got["B-B3"]["judge_fail"] == 1 and got["B-B3"]["left_win"] == got["B-B3"]["right_win"] == 0
-    assert set(got) == {"A-B", "A-A", "B-B3"}
+    assert set(got) == {"A-B", "B-B3"}
+
+
+def test_judge_asks_every_pair_in_both_positions_and_has_no_same_list_control(mos) -> None:
+    assert mos.JUDGE_PAIRS == (("A", "B"), ("B", "B3"))  # A-A(바이트까지 같은 두 목록)는 흔들림을 못 잰다 — 자리 일관성 대조로 바꿨다
+    jobs = mos.judge_jobs([(("c1",), {}), (("c2",), {})], 2)
+    keys = [(case[0], left, right, rep, flip) for case, _, left, right, rep, flip in jobs]
+    assert len(keys) == len(set(keys)) == 2 * 2 * len(mos.JUDGE_PAIRS) * 2
+    assert {flip for *_, flip in keys} == {False, True}
+    assert all((c, l, r, rep, not flip) in keys for c, l, r, rep, flip in keys)
 
 
 def _poi(name: str, ref: str | None, category: PoiCategory, tags: tuple[str, ...] = ()) -> Poi:
@@ -112,4 +128,3 @@ def test_judge_needs_the_key_in_the_environment_and_a_claude_judge(mos, monkeypa
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     with pytest.raises(SystemExit, match="Claude"):
         mos.judge(1)
-    assert mos.JUDGE_PAIRS == (("A", "B"), ("A", "A"), ("B", "B3"))

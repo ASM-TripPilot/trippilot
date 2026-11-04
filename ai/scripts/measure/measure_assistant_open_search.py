@@ -6,14 +6,22 @@ r"""도우미 장소 탐색 열린 검색(KB-5 문서 순위, `place_search` + `
   쌍대 판정(2단계 — **유료, 실 Claude 호출이라 사용자 승인 뒤에만**. 키는 환경 변수로만 받는다):
     ANTHROPIC_API_KEY=… TRIPPILOT_EMBEDDING_BASE_URL=http://localhost:8100 uv run python \
         scripts/measure/measure_assistant_open_search.py judge [반복=1]     # EVAL_JUDGE_MODEL(기본 claude-sonnet-5)·EVAL_WORKERS
-    팔 짝 A-B(본 비교)·A-A(같은 입력 대조 — 이 흔들림보다 확실히 이겨야 켠다)·B-B3. 결과 JSON 에 짝마다 승패·같음·판정 실패
-    (`judge_fail` — 0 이 아니면 승패로 읽지 말 것)·부호 검정 p. 두 목록이 같은 사례는 판정하지 않는다(`identical`, A-A 제외).
+    팔 짝 A-B(본 비교)·B-B3. **자리 일관성 대조** — 짝마다 두 자리(목록 A/B 로 보이는 쪽)를 다 묻고, 두 판정이 같을 때만 승패·같음으로
+    센다. 자리를 바꾸자 바뀐 판정(`position_flip`)이 판정의 흔들림, 낱판에서 첫 자리가 이긴 수(`first_wins` 대 `second_wins`·`position_p`)가
+    자리 편향이다 — B 는 이 흔들림보다 확실히 이겨야 켠다. 결과 JSON 에 짝마다 승패·같음·흔들림·판정 실패(`judge_fail` — 0 이 아니면
+    승패로 읽지 말 것)·부호 검정 p. 두 목록이 같은 사례는 판정하지 않는다(`identical`). 종전 A-A(같은 목록 두 개)는 A 가 결정론이라
+    판정자가 바이트까지 같은 목록을 받아 흔들림이 0 근처로만 나왔다(리뷰 2026-11-04 — 선례 KB-5 A/B 의 흔들림은 선택 LLM 몫이었다).
+    **판정이 닿는 범위**: A 는 반경 규칙 순서다 — SQL 실패·0건 턴·일정 근처·이어 받은 지역·추천(반경이 먼저)에서 B 가 바꾸는 답이다.
+    SQL 이 행을 내는 지역 앵커 탐색(운영 — DIALOGUE_SQL 배정)에서 B 가 바꾸는 답은 A 가 아니라 SQL 행이라, A-B 판정은 그 분기를 켤
+    근거가 아니다. 그 분기는 실 NL2SQL 출력 고정본(승인 뒤 한 번 기록하거나 DEV 로그에서)으로 SQL 팔을 더한 판정이 먼저다 — 이 러너의
+    SQL 대역(`_SqlRows`)은 "행이 있었다"만 흉내 내는 가짜 한 행이라 SQL 답의 질을 재지 않는다.
 
 **무엇을 재나.** 운영 핸들러가 짓는 순서(규칙 정렬 `_explore_rank`)에 KB-5 문서 순위를 섞었을 때 **명백한 오답**이 줄어드는가.
 판정 LLM 없이 코드가 셀 수 있는 것만 센다 — 비·실내를 물었는데 야외(자연·야경·액티비티 분류·'야외' 태그), 북카페를 물었는데 카페가
 아닌 곳, 아이 동반을 물었는데 술집. 그 밖의 사례는 순서가 얼마나 바뀌는지(겹침 @3·@5)·문서 보유율만 본다.
 
-**팔**: A 현행(규칙 정렬) · B 규칙+문서 RRF(키워드 근거 문턱, `hybrid_rank.fuse`) · B1 문서만(근거 있는 곳을 문서 순위로 앞에, 나머지 규칙
+**팔**: A 현행(규칙 정렬 — 반경 분기의 현행 답. SQL 이 행을 내는 분기의 현행 답은 SQL 행이다) · B 규칙+문서 RRF(키워드 근거 문턱,
+`hybrid_rank.fuse` — 질의의 이름 낱말이 이름에 든 곳이 앞) · B1 문서만(근거 있는 곳을 문서 순위로 앞에, 나머지 규칙
 순서) · B3 임베딩만·문턱 없음(게이트도 없이 말 그대로 질의 — 2026-11-02 다시 짜기 '문서 몫' #1796 의 실패 재현 대조).
 **변수**: 문서 무게 w ∈ {0.5, 1.0} · 게이트 G1(속성 낱말은 게이트를 안 연다)/G2(연다) · 질의 Q1(분류 theme)/Q2(지역을 뺀 발화).
 
@@ -25,10 +33,27 @@ r"""도우미 장소 탐색 열린 검색(KB-5 문서 순위, `place_search` + `
 돌려, 열린 검색 순서가 답에 닿는지(`reach`)를 센다. 인메모리 스토어의 검색 시간은 pgvector 와 무관하다 — 시한·지연은 3단계(실 스택)에서 잰다.
 
 **2026-11-04 규칙 변경(사용자 결정 "묘사형 말이면 열린 검색 우선", BR-AO-27 개정·BR-AO-36)** — 아래 '닿는 범위'는 변경 **전** 값이다.
-이제 탐색도 SQL 과 나란히 열린 검색을 돌리고, 문서 순위가 실제로 섞이면(doc OK) 반경 결과가 SQL 행을 이긴다 — `prod_reach` 는 B 가 답을
-바꾼 사례 전부가 된다. 변경 뒤 6사례 재측정(EVAL_CASES=서울/비,부산/비,제주/비실내,경주/비,대조/서울,서울/공예3): SQL 분기에서
-닿는 비 탐색 0/4 → **4/4**(오답 A 9 → B 1 이 운영 분기 답이 된다), 대조/서울은 게이트가 닫혀 SQL 분기 그대로, `e2e_mismatch` 0.
-쌍대 판정(`judge`)은 그 규칙을 켤지 정하는 측정이다.
+이제 탐색도 SQL 과 나란히 열린 검색을 돌리고, 문서 순위가 실제로 섞이면(doc OK) 반경 결과가 SQL 행을 이긴다(리뷰 뒤 조건 둘 — 아래
+4회차) — `prod_reach` 는 B 가 답을 바꾼 사례 전부가 된다. 변경 뒤 6사례 재측정(EVAL_CASES=서울/비,부산/비,제주/비실내,경주/비,대조/서울,
+서울/공예3): SQL 분기에서 닿는 비 탐색 0/4 → **4/4** — 그 넷에서 B(오답 1)가 운영 분기 답이 된다. 바뀌기 전 그 분기의 답은 A(오답 9)가
+아니라 SQL 행이었고, SQL 행의 오답은 재지 않았다(대역은 가짜 한 행). 대조/서울은 게이트가 닫혀 SQL 분기 그대로, `e2e_mismatch` 0.
+쌍대 판정(`judge`)은 반경 분기 쪽 켜기 근거다(위 '판정이 닿는 범위').
+
+**4회차(2026-11-04 리뷰 반영 — 41사례 전체, 공유본 112,161건)**: 갱신된 공유본에서도 3회차 숫자 그대로 시작했다(오답 A 16 · B 9 · B0.5 13 ·
+B1 9 · B3 8, `e2e_mismatch` 0, 대조군 바이트 동일). 바꾼 것 셋:
+- SQL 이 이기는 조건(`_assemble_explore` — `_doc_beats_sql`): 말한 지역이 전부 표 이름이고("서울 연남동"은 반경 중심이 서울 시청이다) SQL 행
+  이름에 질의의 이름 낱말이 없을 때만 반경이 이긴다("서울 전주비빔밥"의 '전주비빔밥 명동점'은 SQL 이 이름으로 맞춘 행이다). 게이트는 표에
+  없는 고유명('전주비빔밥'·'명동교자'·'연남동'·'해리단길')에도 열린다. 대역 행 이름이 'SQL 행'이라 이 측정의 `reach` 는 28 그대로다.
+- 융합의 이름 낱말 우선(`hybrid_rank.fuse(named=OpenQuery.names)`): 규칙 1위라도 문서가 없으면 1/61 이라 근거 있는 곳 거의 전부에 밀렸다.
+  오답 수 모든 팔 그대로, 문서 보유율 B 0.77 → 0.71, A 와 겹침 @5 2.03 → 2.21. 이름 적중이 돌아온 곳: 전주/비빔밥(하숙영가마솥비빔밥이
+  다섯 곳 밖 → 1위)·속초/생선구이(등대생선구이)·겨눔/성수북카페(놀숲북카페·북카페세모·서울북카페 센버스가 1~3위)·서울/비·강릉/비(이름에
+  '실내'가 든 수영장·빙상장이 앞, 그 아래 미술관·회관). 버린 안 둘 — ① 규칙 적중 층 전체(태그 포함)를 섞기 위에: 오답 합은 9 그대로지만
+  서울/북카페·겨눔/북카페·겨눔/성수북카페가 B = A 가 됐고('조용한'이 잇는 속성 태그 '분위기'가 든 식당·카페가 층을 채워 문서 순위가 아무것도 못 바꿨다)
+  제주/아이는 '아이동반' 태그가 든 국숫집·핫도그집·카페 넷이 앞, 문서 보유율 0.64 · ② 이름 낱말에 속성 낱말까지: '아이'가 아이더 신제주점·루스트플레이스
+  아이파크점·아이코히를 앞에 세웠다. 남은 것: 겨눔/북카페(종류 없음)는 이름에 '북카페'가 든 산책로('[북악하늘길 3산책로] 북카페~숲속다리')가
+  1위로 왔다(오답 4 그대로), '거리'(인천/차이나)는 먹거리타운·해물탕거리에도 걸린다(A 의 규칙 적중도 같다),
+  '차이나타운'의 '운'을 관형형 끝으로 떼 '차이나타'가 된다(`_ADJ_END`).
+- 이어 묻기도 이번 턴 주제로 열린 검색을 돈다(측정 사례에는 이어 묻기가 없다 — 핸들러 시험으로 묶었다).
 
 **2026-11-04 결정론 측정 결론 — 반경 분기에서 B 가 명백한 오답을 줄였다. 그러나 운영 분기에서 그 사례들에 닿지 않는다(아래 '닿는 범위')
 → 2단계(유료 쌍대 판정) 전에 닿는 범위부터 정해야 한다.** 41사례(도시 10 × 날씨·분위기·동반·주제·개수형 30 + 대조군 7 + 11-02 겨눔 4),
@@ -72,7 +97,6 @@ from __future__ import annotations
 import json
 import math
 import os
-import random
 import sys
 import time
 from collections import Counter
@@ -290,7 +314,7 @@ def measure(case, builder, emb, corpus, index, keep: dict | None = None) -> dict
             status = "OK" if ranks else "NO_EVIDENCE"
         variants[tag] = {"status": status, "evidence": len(ranks), "words": list(query.words) if query else []}
         for w in WEIGHTS:
-            arms[f"B{w}/{tag}"] = ranked(hr.fuse(rule, ranks, w))
+            arms[f"B{w}/{tag}"] = ranked(hr.fuse(rule, ranks, w, named=query.names if query else ()))
         arms[f"B1/{tag}"] = ranked(_doc_first(rule, ranks))
     # B3 — 게이트·문턱 없이 말 그대로(질의 = theme 또는 발화 + 종류) 임베딩 순위만
     for q in ("Q1", "Q2"):
@@ -431,11 +455,15 @@ def main() -> None:
 
 
 # ── 쌍대 판정(유료 — 실 Claude 호출, 사용자 승인 뒤에만 돌린다) ──────────────────────────────────────────────────────────────
-# 팔 짝: A-B(현행 대 섞인 순서 — 본 비교) · A-A(같은 입력 대조 — 판정의 흔들림·자리 편향, 이것보다 확실히 이겨야 켠다) ·
-# B-B3(섞인 순서 대 임베딩만 — 근거 문턱의 값). 두 목록이 같은 사례는 판정하지 않고 `identical` 로 센다(A-A 만 예외 — 그것이 대조다).
+# 팔 짝: A-B(현행 대 섞인 순서 — 본 비교) · B-B3(섞인 순서 대 임베딩만 — 근거 문턱의 값). 두 목록이 같은 사례는 판정하지 않고
+# `identical` 로 센다. **자리 일관성 대조** — 짝마다 두 자리(목록 A/B 로 보이는 쪽)를 결정론으로 모두 묻고, 두 판정이 같을 때만 승패·같음으로
+# 센다. 자리를 바꾸자 판정이 바뀐 사례(`position_flip`)가 판정의 흔들림이고, 낱판에서 첫 자리가 이긴 수(`first_wins` 대 `second_wins`)가
+# 자리 편향이다. 종전 A-A(같은 목록 두 개)는 대조가 못 됐다 — A 는 결정론이라 판정자는 바이트까지 같은 두 목록을 받고 프롬프트도 같으면
+# '같음'이라 지시해, 흔들림·자리 편향이 0 근처로만 나와 '이것보다 확실히 이긴다'는 문턱이 사실상 0 이었다(KB-5 A/B 의 A-A 흔들림
+# ≈12:7 은 선택 LLM 이 같은 입력에도 다른 목록을 냈기 때문이다, 리뷰 2026-11-04)
 JUDGE = os.environ.get("EVAL_JUDGE_MODEL", "claude-sonnet-5")
 JUDGE_ARMS = {"A": "A", "B": f"B{hr.W_DOC}/G1Q1", "B3": "B3/Q1"}  # 판정 이름 → `measure` 의 팔(B 는 운영 설정 w=1.0·G1·Q1)
-JUDGE_PAIRS = (("A", "B"), ("A", "A"), ("B", "B3"))
+JUDGE_PAIRS = (("A", "B"), ("B", "B3"))
 _NO_DOC = "설명 없음"
 
 
@@ -512,23 +540,43 @@ def _ask_judge(client, prompt: str) -> tuple[str | None, str]:
 
 
 def tally(rows: list[dict]) -> dict:
+    """짝마다 사례(이름·반복) 단위로 센다 — 두 자리 판정이 같을 때만 승패·같음, 자리를 바꾸자 판정이 바뀌면 `position_flip`(흔들림),
+    한쪽이라도 못 읽었으면 `judge_fail`(0 이 아니면 승패로 읽지 말 것). 자리 편향은 낱판 단위 — 첫 자리(목록 A 로 보인 쪽)가 이긴 수 대
+    둘째 자리가 이긴 수와 그 부호 검정 p."""
     out: dict = {}
     for left, right in JUDGE_PAIRS:
         pair = f"{left}-{right}"
-        mine = [r for r in rows if r["pair"] == pair]
-        judged = [r for r in mine if not r["identical"]]
-        lw = sum(r["winner"] == "left" for r in judged)
-        rw = sum(r["winner"] == "right" for r in judged)
-        out[pair] = {"left": left, "right": right, "n": len(mine), "identical": len(mine) - len(judged),
-                     "left_win": lw, "right_win": rw, "tie": sum(r["winner"] == "=" for r in judged),
-                     "judge_fail": sum(r["winner"] is None for r in judged),  # 0 이 아니면 승패로 읽지 말 것
-                     "sign_p": round(sign_test_p(lw, rw), 4)}
+        cases: dict[tuple, dict[bool, str | None]] = {}
+        identical: set[tuple] = set()
+        for r in (r for r in rows if r["pair"] == pair):
+            key = (r["name"], r["rep"])
+            if r["identical"]:
+                identical.add(key)
+            else:
+                cases.setdefault(key, {})[r["flip"]] = r["winner"]
+        first = sum((side == "left") != flip for got in cases.values() for flip, side in got.items() if side in ("left", "right"))
+        second = sum(side in ("left", "right") for got in cases.values() for side in got.values()) - first
+        whole = [got for got in cases.values() if len(got) == 2 and None not in got.values()]
+        agreed = [got[False] for got in whole if got[False] == got[True]]
+        lw, rw = agreed.count("left"), agreed.count("right")
+        out[pair] = {"left": left, "right": right, "n": len(cases) + len(identical), "identical": len(identical),
+                     "left_win": lw, "right_win": rw, "tie": agreed.count("="),
+                     "position_flip": len(whole) - len(agreed), "judge_fail": len(cases) - len(whole),
+                     "sign_p": round(sign_test_p(lw, rw), 4),
+                     "first_wins": first, "second_wins": second, "position_p": round(sign_test_p(first, second), 4)}
     return out
+
+
+def judge_jobs(built: list, repeat: int) -> list[tuple]:
+    """(사례, 팔 목록, 왼팔, 오른팔, 반복, flip) — 짝마다 두 자리를 다 묻는다(자리 일관성 대조, `tally`)."""
+    return [(case, lists, left, right, rep, flip) for rep in range(repeat) for case, lists in built
+            for left, right in JUDGE_PAIRS for flip in (False, True)]
 
 
 def judge(repeat: int) -> None:
     """A(현행 반경 순서)·B(섞인 순서)·B3 상위 목록을 사례마다 결정론으로 만들고(위 `measure` 그대로 — 운영 핸들러 대조까지),
-    판정 모델이 순서를 모른 채 짝마다 비교한다. 자리(A/B)는 사례 이름 시드로 뒤집는다. 판정 출력은 평가에만 쓴다(학습 금지, 2026-09-08)."""
+    판정 모델이 순서를 모른 채 짝마다 비교한다. 짝마다 두 자리(목록 A/B)를 모두 묻는다(자리 일관성 대조, `tally`). 판정 출력은 평가에만
+    쓴다(학습 금지, 2026-09-08)."""
     if not JUDGE.startswith("claude"):
         raise SystemExit(f"판정 모델은 Claude 만 — EVAL_JUDGE_MODEL={JUDGE!r}")
     key = os.environ.get("ANTHROPIC_API_KEY")  # 환경 변수로만 — 파일·로그인 프로필에서 읽지 않는다
@@ -556,29 +604,28 @@ def judge(repeat: int) -> None:
         print(f"built {case[0]}", flush=True)
     if mismatch:
         raise SystemExit(f"운영 핸들러 대조 불일치 {mismatch} — 판정할 목록이 운영 순서가 아니다(중단)")
-    jobs = [(case, lists, left, right, rep) for rep in range(repeat) for case, lists in built for left, right in JUDGE_PAIRS]
+    jobs = judge_jobs(built, repeat)
 
     def one(item) -> dict:
-        _, (case, lists, left, right, rep) = item
+        _, (case, lists, left, right, rep, flip) = item
         name, utt = case[0], case[3]
         a, b = lists[left], lists[right]
-        same = [p.poi_id for p in a] == [p.poi_id for p in b]
-        row = {"name": name, "pair": f"{left}-{right}", "rep": rep, "identical": same and left != right,
+        row = {"name": name, "pair": f"{left}-{right}", "rep": rep, "flip": flip,
+               "identical": [p.poi_id for p in a] == [p.poi_id for p in b],
                "lists": {left: [p.name for p in a], right: [p.name for p in b]}}
         if row["identical"]:
             return {**row, "winner": "=", "why": "두 목록이 같다 — 판정하지 않음"}
-        flip = random.Random(f"{name}|{rep}").random() < 0.5  # 사례 이름 시드 — 다시 돌려도 같은 자리
-        shown = (b, a) if flip else (a, b)
+        shown = (b, a) if flip else (a, b)  # flip 이면 오른쪽 팔이 목록 A(첫 자리)로 보인다
         got, why = _ask_judge(client, judge_prompt(utt, *shown, kn))
         side = None if got is None else "=" if got == "=" else ("left" if (got == "A") != flip else "right")
-        return {**row, "flip": flip, "winner": side, "why": why}
+        return {**row, "winner": side, "why": why}
 
     rows = _run(one, jobs)
     summary = {"judge": JUDGE, "repeat": repeat, "cases": len(built), "pairs": tally(rows)}
     print(json.dumps(summary, ensure_ascii=False, indent=1))
-    for r in sorted(rows, key=lambda r: (r["pair"], r["name"], r["rep"])):
+    for r in sorted(rows, key=lambda r: (r["pair"], r["name"], r["rep"], r["flip"])):
         mark = {"left": "<", "right": ">", "=": "=", None: "!"}[r["winner"]]
-        print(f" {mark} {r['pair']:<5} {r['name']:<14} #{r['rep']} {r['why']}")
+        print(f" {mark} {r['pair']:<5} {r['name']:<14} #{r['rep']}{'↔' if r['flip'] else ' '} {r['why']}")
     out = os.environ.get("EVAL_OUT")
     if out:
         Path(out).write_text(json.dumps({"summary": summary, "rows": rows}, ensure_ascii=False, indent=1), encoding="utf-8")

@@ -26,6 +26,7 @@ None, 2자 미만 무시), 날짜·'N일차'·상대 날짜로 날을 좁히고,
 
 from __future__ import annotations
 
+import logging
 import math
 import re
 import threading
@@ -83,6 +84,8 @@ __all__ = [
     "TurnSnapshot", "edit_arguments", "explore_needs_region", "need_trip_facts", "needs_trip", "next_slot_after",
     "parse_slot_key", "resolve_day", "resolve_slot", "validate_answer_shape", "validate_answer_text",
 ]
+
+log = logging.getLogger(__name__)  # 작업 콜러블(I/O) 안에서만 쓴다 — plan·assemble 은 순수(BR-AO-16)
 
 # ── closed-set 어휘 (BE assistant 모듈과 같은 집합 — 여기 한 곳) ──────────────────
 
@@ -2160,9 +2163,10 @@ _DOC_MARGIN_S, _DOC_MIN_S = 0.35, 0.5
 
 def _open_query(ctx: TurnContext, anchor: _Anchor, category: str | None, theme: str | None) -> hybrid_rank.OpenQuery | None:
     """열린 검색을 돌릴 탐색인가 — 주제 게이트가 열리고, 앵커가 지역·일정 근처이고(두 곳 사이·먼 짝 제외 — 가운데 순서가 먼저다),
-    밤 말이 아니고(야경·나이트라이프 순서가 먼저다), 이어 묻기가 아닐 때만. NL2SQL 이 나란히 도는지와는 무관하다(BR-AO-36).
+    밤 말이 아닐 때만(야경·나이트라이프 순서가 먼저다). NL2SQL 이 나란히 도는지와는 무관하다(BR-AO-36). 이어 묻기도 이번 턴 주제로
+    돈다 — 첫 턴이 섞인 반경 순서로 답했는데 "더 알려줘"만 SQL 행·규칙 순서로 돌아가 사슬 안에서 출처가 바뀌었다(리뷰 2026-11-04).
     돌 때 그 질의, 아니면 None."""
-    if anchor.kind not in ("region", "itinerary") or _said_night(category, theme, _night_heard(ctx)) or _follow_up(ctx) is not None:
+    if anchor.kind not in ("region", "itinerary") or _said_night(category, theme, _night_heard(ctx)):
         return None
     return hybrid_rank.open_query(theme, _CATEGORY_KO.get(category or ""), generic=_GENERIC_WORDS)
 
@@ -2173,14 +2177,35 @@ def _doc_fuse(ctx: TurnContext, searcher: PlaceSearch, query: hybrid_rank.OpenQu
     `left` = 탐색 작업 첫머리에 잡은 팬아웃 남은 초(`_fanout_left`)."""
 
     def fuse(ranked: list[Poi]) -> list[Poi]:
-        wait_s = left() - _DOC_MARGIN_S
-        if wait_s < _DOC_MIN_S:
+        left_s = left()
+        wait_s = left_s - _DOC_MARGIN_S
+        if wait_s < _DOC_MIN_S:  # 묻지 않은 것도 상태 한 줄 — 검색기의 `place_search status=…` 줄과 같은 꼴로 센다(INV-4)
             doc["doc"] = "BUDGET"
+            log.info("place_search status=BUDGET left_ms=%d trace=%s", int(left_s * 1000), ctx.trace_id)
             return ranked
         status, ranks = searcher.search(query, [p.source_ref for p in ranked if p.source_ref], wait_s, trace=str(ctx.trace_id))
         doc["doc"] = status
-        return hybrid_rank.fuse(ranked, ranks) if status == "OK" else ranked
+        return hybrid_rank.fuse(ranked, ranks, named=query.names) if status == "OK" else ranked
     return fuse
+
+
+def _doc_beats_sql(ctx: TurnContext, anchor: _Anchor, radius: Mapping | None, by_sql: Mapping | None) -> bool:
+    """문서 순위가 섞인 반경 결과(doc OK)가 SQL 행을 이기는가 — 묘사를 읽은 탐색일 때만(BR-AO-27 개정·BR-AO-36). 게이트는 표에 없는
+    고유명('전주비빔밥'·'명동교자'·'연남동')에도 열리고 근거(2-gram)도 거의 늘 차서, doc OK 만 보면 SQL 이 이름으로 맞춘 행을 버렸다
+    (리뷰 2026-11-04). 그래서 SQL 행이 있으면 둘을 더 본다:
+    ① 말한 지역이 전부 표 이름이다 — '서울 연남동'처럼 표 밖의 더 좁은 곳을 말하면 반경 중심(서울 시청 5km)이 그곳이 아니다
+    ② SQL 행 이름에 질의의 이름 낱말(`OpenQuery.names` — 속성 낱말 제외)이 없다 — 있으면 그 말은 묘사가 아니라 가게·메뉴 이름이고
+       SQL 이 그것으로 맞췄다."""
+    if not (_candidates_if_ok(radius) and radius.get("doc") == "OK"):
+        return False
+    if not by_sql:
+        return True
+    said = ctx.arguments.get("region") or ""
+    if not all(bare_region(w) is not None for w in said.split()):
+        return False
+    query = _open_query(ctx, anchor, ctx.arguments.get("category"), ctx.arguments.get("theme"))
+    names = [str(c.get("name") or "").replace(" ", "") for c in by_sql.get("candidates", ()) if isinstance(c, Mapping)]
+    return query is not None and not any(w in name for w in query.names for name in names)
 
 
 def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:
@@ -2221,8 +2246,9 @@ def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fa
     asked = ((told,) if events is not None else ("행사 정보 미확인",)) if "events" in results else ()
     radius = _value(results, "explore")
     # 묘사형 말로 문서 순위가 실제로 섞인 반경 결과(doc "OK")는 SQL 행을 이긴다 — SQL 은 묘사("비 오는 날 실내")를 못 읽는다
-    # (2026-11-04 사용자 결정, BR-AO-27 개정·BR-AO-36). 그 밖(게이트 닫힘·검색 실패·시한·꺼짐)은 종전대로 SQL 행이 먼저다
-    value = radius if _candidates_if_ok(radius) and radius.get("doc") == "OK" else (by_sql or radius)
+    # (2026-11-04 사용자 결정, BR-AO-27 개정·BR-AO-36). 그 밖(게이트 닫힘·검색 실패·시한·꺼짐·이름 말 — `_doc_beats_sql`)은 종전대로
+    # SQL 행이 먼저다
+    value = radius if _doc_beats_sql(ctx, anchor, radius, by_sql) else (by_sql or radius)
     if value is None or value.get("status") != "OK":
         return _text_facts(intent, FactStatus.UNAVAILABLE, home, notes=("장소 탐색 미확인", *asked), detail=detail)
     shown = _shown_before(ctx)

@@ -16,6 +16,7 @@ from __future__ import annotations
 import gzip
 import json
 import uuid
+from dataclasses import replace
 
 import pytest
 from hypothesis import given, settings
@@ -106,6 +107,32 @@ def test_a_lighter_document_weight_lifts_documented_places_less() -> None:
         assert pos[1.0] <= pos[0.5] <= int(ref[1:])
 
 
+def _named(i: int, name: str) -> Poi:
+    return replace(_poi(i), name=name)
+
+
+def test_a_place_named_by_the_query_stays_ahead_of_documented_places() -> None:
+    """규칙 1위라도 문서가 없으면 1/61 — 이름 낱말 없이 섞으면 근거 있는 곳 전부에 밀린다(리뷰 2026-11-04 전주/비빔밥)."""
+    pois = [_named(0, "하숙영가마솥비빔밥"), _named(1, "고궁"), _named(2, "한국집"), _named(3, "비빔밥 명가"), _named(4, "백송회관")]
+    doc = {"r2": 1, "r4": 2, "r3": 3}
+    assert [p.name for p in hr.fuse(pois, doc)][:1] == ["한국집"]  # 전제 — 이름 낱말 없이 섞으면 규칙 1위가 밀린다
+    out = [p.name for p in hr.fuse(pois, doc, named=("비빔밥",))]
+    # 이름 적중 둘이 먼저(그들끼리 섞인 순서 — 문서 있는 '비빔밥 명가'가 규칙 1위 위로), 나머지는 섞인 순서
+    assert out == ["비빔밥 명가", "하숙영가마솥비빔밥", "한국집", "백송회관", "고궁"]
+    assert hr.fuse(pois, {}, named=("비빔밥",)) == pois  # 근거 0 이면 이름 낱말이 있어도 항등
+
+
+@settings(max_examples=200, deadline=None)
+@given(_orders, st.sets(st.integers(min_value=0, max_value=24)))
+def test_named_places_come_first_and_fuse_stays_a_permutation(case, named) -> None:
+    n, doc, w = case
+    pois = [_named(i, f"이름난곳{i}" if i in named else f"장소{i}") for i in range(n)]
+    out = hr.fuse(pois, doc, w, named=("이름난",))
+    assert sorted(str(p.poi_id) for p in out) == sorted(str(p.poi_id) for p in pois)  # 순열(INV-1)
+    flags = ["이름난" in p.name for p in out]
+    assert flags == sorted(flags, reverse=True) or not doc  # 이름 적중이 늘 앞(근거 0 이면 항등)
+
+
 # ── ② 게이트 ──────────────────────────────────────────────────────────────────
 
 
@@ -146,8 +173,10 @@ def test_property_words_open_the_gate_only_in_g2() -> None:
         assert hr.open_query(text, None, generic=_GENERIC, gate="G1") is None
         q = hr.open_query(text, None, generic=_GENERIC, gate="G2")
         assert q is not None and q.words
-    # 속성 낱말은 게이트를 안 열어도 BM25 낱말에는 남는다
-    assert hr.open_query("조용한 북카페", "카페", generic=_GENERIC, gate="G1").words == ("조용", "북카페")
+    # 속성 낱말은 게이트를 안 열어도 BM25 낱말에는 남는다 — 이름 낱말(`names`, 융합의 이름 적중)에는 들지 않는다
+    quiet = hr.open_query("조용한 북카페", "카페", generic=_GENERIC, gate="G1")
+    assert quiet.words == ("조용", "북카페") and quiet.names == ("북카페",)
+    assert hr.open_query("아이랑 가기 좋은", None, generic=_GENERIC, gate="G2").names == ()
 
 
 def test_unknown_gate_name_is_a_bug() -> None:

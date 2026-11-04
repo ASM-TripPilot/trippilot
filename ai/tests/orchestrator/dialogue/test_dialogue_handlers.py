@@ -2866,6 +2866,7 @@ def test_schedule_anchor_coordinate_is_looked_up_once_for_events_and_places() ->
 
 # ── 장소 탐색 열린 검색(KB-5 문서 순위, 기본 꺼짐) — 규칙 순서에 섞을 뿐 장소를 더하거나 빼지 않는다 ──
 
+import logging  # noqa: E402
 import threading  # noqa: E402
 import time as _wall  # noqa: E402 — 모듈의 `time` 은 datetime.time 이다
 
@@ -2972,7 +2973,7 @@ def test_open_search_only_reorders_the_ranked_pool() -> None:
     assert "책방 카페" in _names_of(wide) and "책방 카페" not in _names_of(_run_doc(_QUIET, None, pool=pool)[0])
 
 
-def test_a_slow_or_late_document_step_leaves_explore_ok_in_rule_order() -> None:
+def test_a_slow_or_late_document_step_leaves_explore_ok_in_rule_order(caplog) -> None:
     base, _ = _run_doc(_QUIET, None)
     searcher, store, _ = _doc_search(delay=5.0)
     try:
@@ -2983,8 +2984,13 @@ def test_a_slow_or_late_document_step_leaves_explore_ok_in_rule_order() -> None:
     finally:
         store.release.set()
     searcher, store, _ = _doc_search()
-    facts, results = _run_doc(_QUIET, searcher, remaining_ms=1500)  # 몫 0.6 − 여유 0.35 < 0.5 — 묻지도 않는다
+    caplog.clear()  # 위 TIMEOUT 갈래의 검색기 줄은 빼고 센다(전체 실행에서는 앞 시험의 로그 설정으로 INFO 가 잡힌다)
+    with caplog.at_level(logging.INFO):
+        facts, results = _run_doc(_QUIET, searcher, remaining_ms=1500)  # 몫 0.6 − 여유 0.35 < 0.5 — 묻지도 않는다
     assert results["explore"].value["doc"] == "BUDGET" and store.calls == [] and facts == base
+    # 묻지 않은 것도 상태 한 줄이 남는다 — 검색기 줄과 같은 꼴(조용한 강등 금지, INV-4)
+    assert [r.getMessage() for r in caplog.records if "place_search" in r.getMessage()] == [
+        f"place_search status=BUDGET left_ms=600 trace={_TRACE}"]
 
 
 class _SpendingPool(_PoolBuilder):
@@ -3096,8 +3102,8 @@ def test_recommend_keeps_its_count_cut_with_open_search() -> None:
     assert facts.detail["pick_count"] == 2 and _types(facts) == ["OPEN_PLACE"] * 2
 
 
-# (인자, 발화, 앞 대화, 게이트가 열리는 주제인가) — 사이·밤·이어 묻기는 게이트가 열리는 주제로만 둔다: 그 가드 하나 때문에만 닫히게
-# ("조용한 바"는 게이트가 먼저 닫아 밤 가드를 지워도 통과했다 — 리뷰 2026-11-04)
+# (인자, 발화, 앞 대화, 게이트가 열리는 주제인가) — 사이·밤은 게이트가 열리는 주제로만 둔다: 그 가드 하나 때문에만 닫히게
+# ("조용한 바"는 게이트가 먼저 닫아 밤 가드를 지워도 통과했다 — 리뷰 2026-11-04). 이어 묻기는 돈다(아래 사슬 시험)
 @pytest.mark.parametrize(("arguments", "utterance", "earlier", "gate_opens"), [
     ({"region": "홍대와 이태원 사이", "theme": "조용한 북카페"}, "", (), True),  # 두 곳 사이 — 가운데 순서가 먼저다
     ({"region": "부산", "theme": "재즈 라이브 바"}, "", (), True),  # 밤 말(주제) — 야경·나이트라이프 순서가 먼저다
@@ -3110,13 +3116,57 @@ def test_recommend_keeps_its_count_cut_with_open_search() -> None:
     ({"region": "서울", "theme": "인기 많은"}, "", (), False),
     ({"region": "부산", "category": "FOOD", "theme": "먹을 만한"}, "", (), False),
     ({"region": "제주", "theme": "관광지들"}, "", (), False),
-    ({"region": "부산", "theme": "조용한 북카페"}, "더 알려줘", (("USER", "부산 조용한 북카페 알려줘"), ("ASSISTANT", "책방 카페가 있어요.")),
-     True),
 ])
-def test_open_search_does_not_run_between_two_places_at_night_for_controls_or_follow_ups(arguments, utterance, earlier,
-                                                                                         gate_opens) -> None:
+def test_open_search_does_not_run_between_two_places_at_night_or_for_controls(arguments, utterance, earlier,
+                                                                              gate_opens) -> None:
     kind = dh._CATEGORY_KO.get(arguments.get("category") or "")
     assert (hr.open_query(arguments["theme"], kind, generic=dh._GENERIC_WORDS) is not None) is gate_opens  # 전제
     searcher, store, embedding = _doc_search()
     _, results = _run_doc(arguments, searcher, utterance=utterance, earlier=earlier)
     assert store.calls == [] and embedding.calls == [] and "doc" not in results["explore"].value
+
+
+# 반경이 SQL 행을 이기는 조건은 doc OK 하나가 아니다 — 게이트는 고유명(가게·메뉴·표 밖 동네)에도 열리고 2-gram 근거는 거의 늘 찬다
+# (리뷰 2026-11-04 · `_doc_beats_sql`)
+@pytest.mark.parametrize(("region", "rows", "radius_wins"), [
+    ("부산", _SQL_ROWS, True),  # 표 이름 그대로 · SQL 행 이름에 질의 낱말 없음 — 섞인 반경 순서
+    ("부산 해운대", _SQL_ROWS, True),  # 표 이름 둘(앵커는 더 좁은 해운대) — 반경 중심이 말한 곳이다
+    ("부산 해리단길", _SQL_ROWS, False),  # 표 밖의 더 좁은 곳 — 반경 중심(부산 시청)이 그곳이 아니다, SQL 이 먼저
+    ("부산", (_row("북카페 오후", "카페", None, sido="부산광역시"), *_SQL_ROWS), False),  # SQL 이 질의 낱말로 이름을 맞췄다
+    ("부산", (_row("조용한 다방", "카페", None, sido="부산광역시"), *_SQL_ROWS), True),  # 속성 낱말('조용')은 이름 낱말이 아니다
+])
+def test_explore_answers_from_the_mixed_radius_order_only_when_the_words_were_a_description(region, rows, radius_wins) -> None:
+    args = {**_QUIET, "region": region}
+    facts, results = _run_doc(args, _doc_search()[0], place_sql=_PlaceSql(list(rows)))
+    assert results["explore"].value["doc"] == "OK" and results["explore_sql"].value["candidates"]  # 전제 — 둘 다 냈다
+    radius = [c["name"] for c in results["explore"].value["candidates"]]
+    sql = [c["name"] for c in results["explore_sql"].value["candidates"]]
+    assert _names_of(facts) == (radius if radius_wins else sql)
+
+
+def test_a_place_named_by_the_query_stays_above_document_evidence() -> None:
+    """질의의 이름 낱말('북카페')이 이름에 든 곳은 섞은 순서에서도 개요 2-gram 근거만 있는 곳보다 앞이다(리뷰 2026-11-04: 전주/비빔밥의
+    하숙영가마솥비빔밥이 다섯 곳 밖으로 났다)."""
+    pool = _pool(_cafe("북카페 숨", "c9"), *_DOC_CAFES)  # 이름에 '북카페' — 문서는 없다
+    assert _names_of(_run_doc(_QUIET, None, pool=pool)[0])[0] == "북카페 숨"  # 전제 — 규칙 1위
+    rule: list = []
+    dh._explore_rank(pool.pois, "CAFE", "조용한 북카페", fuse=lambda r: rule.append(r) or r)
+    assert hr.fuse(rule[0], {"c5": 1})[0].name == "책방 카페"  # 전제 — 층 없이 섞으면 이름 적중이 밀린다
+    facts, results = _run_doc(_QUIET, _doc_search()[0], pool=pool)
+    assert results["explore"].value["doc"] == "OK"
+    assert _names_of(facts)[:2] == ["북카페 숨", "책방 카페"]  # 적중 층이 먼저, 그 아래 층 안에서 근거 있는 곳이 앞으로
+
+
+def test_follow_up_keeps_answering_from_the_mixed_radius_order() -> None:
+    """이어 묻기도 이번 턴 주제로 열린 검색을 돈다 — 첫 턴이 섞인 반경 순서로 답했으면 "더 알려줘"도 같은 출처다(SQL 행으로 바뀌지
+    않는다, 리뷰 2026-11-04). 앞에서 보인 곳은 빠진다."""
+    texts = {"c5": "조용한 북카페로 책을 읽으며 쉬기 좋다", "c3": "조용한 분위기의 작은 카페"}
+    first, first_results = _run_doc(_QUIET, _doc_search(texts)[0], place_sql=_PlaceSql(list(_SQL_ROWS)))
+    assert _names_of(first) == [c["name"] for c in first_results["explore"].value["candidates"]]  # 전제 — 첫 턴은 섞인 반경 순서
+    assert _names_of(first)[0] == "둘째 카페"
+    earlier = (("USER", "부산 조용한 북카페 알려줘"), ("ASSISTANT", "둘째 카페가 있어요."))
+    facts, results = _run_doc(_QUIET, _doc_search(texts)[0], utterance="더 알려줘", earlier=earlier,
+                              place_sql=_PlaceSql(list(_SQL_ROWS)))
+    assert set(results) == {"explore", "explore_sql"} and results["explore"].value["doc"] == "OK"
+    assert _names_of(facts) == [c["name"] for c in results["explore"].value["candidates"]]  # SQL 행이 아니다
+    assert _names_of(facts)[0] == "책방 카페" and "둘째 카페" not in _names_of(facts)

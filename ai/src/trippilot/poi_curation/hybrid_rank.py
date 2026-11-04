@@ -116,10 +116,12 @@ _ADJ_END = ("한", "운", "은", "인")
 
 @dataclass(frozen=True, slots=True)
 class OpenQuery:
-    """게이트를 연 질의. `words` = BM25 낱말(관형형 끝을 뗀 꼴), `text` = 임베딩 질의(남은 낱말 원형 + 종류 한글명)."""
+    """게이트를 연 질의. `words` = BM25 낱말(관형형 끝을 뗀 꼴), `text` = 임베딩 질의(남은 낱말 원형 + 종류 한글명),
+    `names` = `words` 중 속성 낱말(테마 태그가 잇는 말 — 조용·아이)이 아닌 것 — 이름 적중으로 세는 낱말(`fuse`)."""
 
     words: tuple[str, ...]
     text: str
+    names: tuple[str, ...] = ()
 
 
 def _stem(word: str) -> str:
@@ -174,7 +176,8 @@ def open_query(text: str | None, category_ko: str | None = None, *, generic: Ite
         return None
     words = tuple(dict.fromkeys(stem for _, stem, _ in kept))
     query = " ".join(dict.fromkeys(w for w, _, _ in kept))
-    return OpenQuery(words, f"{query} {category_ko}" if category_ko else query)
+    names = tuple(dict.fromkeys(stem for _, stem, prop in kept if not prop))
+    return OpenQuery(words, f"{query} {category_ko}" if category_ko else query, names)
 
 
 # ── BM25 (범위 안 조각) ─────────────────────────────────────────────────────────
@@ -252,9 +255,16 @@ def doc_rank(hits: Sequence, words: Sequence[str], order: Mapping[str, int]) -> 
     return ranks(fused, order)
 
 
-def fuse(rule_sorted: Sequence[Poi], doc: Mapping[str, int], w_doc: float = W_DOC) -> list[Poi]:
+def fuse(rule_sorted: Sequence[Poi], doc: Mapping[str, int], w_doc: float = W_DOC, *,
+         named: Sequence[str] = ()) -> list[Poi]:
     """최종 순위 = RRF(규칙 순위 전체, 문서 순위 × `w_doc`), k=60. 동점은 규칙 순서. **출력은 입력의 순열**이다(INV-1) — 문서 순위에
-    없는 장소는 규칙 점수만 갖고, 그들끼리의 순서는 규칙 순서 그대로다. 문서 순위가 비면 항등."""
+    없는 장소는 규칙 점수만 갖고, 그들끼리의 순서는 규칙 순서 그대로다. 문서 순위가 비면 항등.
+
+    `named`(질의의 이름 낱말 — `OpenQuery.names`)가 이름에 든 곳은 그렇지 않은 곳보다 늘 앞이다(그들끼리·나머지끼리는 위 순서). 규칙
+    1위라도 문서가 없으면 1/61 이라 근거 있는 곳 거의 전부에 밀린다 — 이름이 맞은 가게·메뉴(전주/비빔밥의 하숙영가마솥비빔밥,
+    속초/생선구이의 등대생선구이)가 개요 2-gram 근거만 있는 곳에 밀려 다섯 곳 밖으로 났다(리뷰 2026-11-04). 규칙의 적중 층 전체를
+    올리지 않고, 속성 낱말도 세지 않는 것은 결정론 측정 4회차 때문이다(러너 머리말 — 속성 태그 '분위기'·'아이동반'이 든 식당이 문서 순위를
+    통째로 막았고, '아이'가 아이더·아이파크점 같은 이름에 걸렸다)."""
     if not doc:
         return list(rule_sorted)
 
@@ -262,5 +272,9 @@ def fuse(rule_sorted: Sequence[Poi], doc: Mapping[str, int], w_doc: float = W_DO
         d = doc.get(p.source_ref or "")
         return 1 / (RRF_K + i + 1) + (w_doc / (RRF_K + d) if d is not None else 0.0)
 
-    scored = sorted(((score(i, p), i, p) for i, p in enumerate(rule_sorted)), key=lambda t: (-t[0], t[1]))
+    def unnamed(p: Poi) -> bool:
+        name = p.name.replace(" ", "")
+        return not any(w in name for w in named)
+
+    scored = sorted(((score(i, p), i, p) for i, p in enumerate(rule_sorted)), key=lambda t: (unnamed(t[2]), -t[0], t[1]))
     return [p for _, _, p in scored]
