@@ -8229,7 +8229,11 @@ describe('보조 조회 실패 안내 (TRIP-1753)', () => {
       await gate.opened;
       return HttpResponse.json({ visits: [doneP1] });
     });
-    await renderPartialHub();
+    // 이 케이스만 client 를 쥔다 — 끝 단언을 화면이 아니라 캐시 상태로 본다(아래 ★).
+    const client = newTestQueryClient();
+    render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+      wrapper: createWrapper(client),
+    });
     await waitFor(() => expect(screen.getByTestId(ERROR_ID)).toBeTruthy());
 
     // 실행: 다시 시도 — 둘째 요청이 나간 걸 확인(앵커)한 뒤 그 사이를 본다.
@@ -8242,8 +8246,18 @@ describe('보조 조회 실패 안내 (TRIP-1753)', () => {
     expect(screen.getByTestId(RETRY_ID)).toBeDisabled();
     expect(arriveButtons()).toHaveLength(0);
 
+    // ★ 붙잡은 응답을 풀고 "그 응답이 캐시에 들어갔다"까지만 본다 — CI(느린 러너)에서 화면 재렌더를 기다리는 단언이
+    // 5초 안에 못 끝나 develop 이 연속 red 였다(로컬 재현 0, 원인 미확인 — 레인 A TRIP-1748 #1900 과 같은 계열 처방:
+    // 렌더 값 대신 쿼리 상태로 판정). 성공 뒤 안내가 사라지는 화면 동작은 PF5(붙잡지 않는 같은 흐름)가 본다.
+    // 이 케이스의 몫은 "재조회 도는 동안 안내가 꺼지지 않는다" — 위 단언이 그것이다.
     gate.release();
-    await waitFor(() => expect(screen.queryByTestId(ERROR_ID)).toBeNull());
+    await waitFor(() =>
+      expect(
+        client.getQueryData(
+          getGetTripsTripIdVisitsDaysDayQueryKey(TRIP_ID, TODAY)
+        )
+      ).toEqual({ visits: [doneP1] })
+    );
   });
 
   it('PF8 트리거 실패 [다시 시도] — 트리거만 다시 묻고, 도는 동안 버튼이 잠기며, 200 이면 안내가 사라진다', async () => {

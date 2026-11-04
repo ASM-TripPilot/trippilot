@@ -1243,7 +1243,9 @@ describe('실 화면 + msw — 거점 변경·출처 칩 (옛 .release)', () => 
       fireEvent.press(screen.getByTestId(LINKS_RETRY));
 
       // 단언 — 한 줄이 사라지고 s2 가 연결 행이 된다.
-      await waitFor(() => expect(screen.queryByTestId(LINKS_ERROR)).toBeNull());
+      await waitFor(() =>
+        expect(screen.queryByTestId(LINKS_ERROR)).not.toBeOnTheScreen()
+      );
       expect(
         await screen.findByTestId('my-stays-base-toggle-s2')
       ).toBeOnTheScreen();
@@ -1385,7 +1387,9 @@ describe('실 화면 + msw — 거점 변경·출처 칩 (옛 .release)', () => 
 
       // 열쇠를 풀면 응답이 오고 한 줄이 사라진다.
       release();
-      await waitFor(() => expect(screen.queryByTestId(LINKS_ERROR)).toBeNull());
+      await waitFor(() =>
+        expect(screen.queryByTestId(LINKS_ERROR)).not.toBeOnTheScreen()
+      );
       await settleNetwork();
     });
 
@@ -1402,7 +1406,9 @@ describe('실 화면 + msw — 거점 변경·출처 칩 (옛 .release)', () => 
       });
 
       // 단언
-      await waitFor(() => expect(screen.queryByTestId(LINKS_ERROR)).toBeNull());
+      await waitFor(() =>
+        expect(screen.queryByTestId(LINKS_ERROR)).not.toBeOnTheScreen()
+      );
       expect(screen.queryByTestId(LINKS_RETRY)).toBeNull();
     });
 
@@ -1447,7 +1453,9 @@ describe('실 화면 + msw — 거점 변경·출처 칩 (옛 .release)', () => 
       expect(hits.t2).toBe(2);
       expect(hits.t1).toBe(1);
       release();
-      await waitFor(() => expect(screen.queryByTestId(LINKS_ERROR)).toBeNull());
+      await waitFor(() =>
+        expect(screen.queryByTestId(LINKS_ERROR)).not.toBeOnTheScreen()
+      );
       await settleNetwork();
     });
 
@@ -1472,7 +1480,9 @@ describe('실 화면 + msw — 거점 변경·출처 칩 (옛 .release)', () => 
 
       // 단언 ② — 정말 세 번째 요청이 나가고(무반응 아님) 성공해 한 줄이 사라지며 s2 가 연결 행이 된다.
       await waitFor(() => expect(hits.t2).toBe(3));
-      await waitFor(() => expect(screen.queryByTestId(LINKS_ERROR)).toBeNull());
+      await waitFor(() =>
+        expect(screen.queryByTestId(LINKS_ERROR)).not.toBeOnTheScreen()
+      );
       expect(
         await screen.findByTestId('my-stays-base-toggle-s2')
       ).toBeOnTheScreen();
