@@ -10,9 +10,7 @@ import { DownloadGlyph, ShareGlyph } from './ShareCardGlyphs';
 import { ShareCardPreview } from './ShareCardPreview';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import {
-  CAPTION_MAX_LENGTH,
   HASHTAG_MAX_COUNT,
-  validateCaption,
   validateHashtags,
   type ShareCardVM,
   type ShareFormat,
@@ -35,7 +33,7 @@ import {
  *  - TRIP-939(심사 2.1): 캡처 미장전(isShareCaptureArmed() false)이면 저장/공유 버튼 줄을 그리지 않는다.
  *  - TRIP-1071: 저장/공유는 프리뷰 프레임을 캡처해 앨범·공유 시트로 보내고 결과를 인라인으로 알린다
  *    (저장 성공·권한 거부·실패, 공유는 실패만 — 공유 시트는 실제 전송 여부를 모른다). 서버 호출 0.
- *    [편집]은 항상 있고 해시태그 줄만 인라인으로 고친다(서버 저장 없음, 한도는 validate* 재사용).
+ *    [편집]은 항상 있고 해시태그 줄만 인라인으로 고친다(서버 저장 없음, 개수 한도는 validateHashtags 재사용 — 줄 길이는 안 본다, TRIP-1664).
  */
 
 // TRIP-1016(D10·INV-4): 지도 히어로가 없으므로(TRIP-634) 카드에 실제로 그린 것만 말한다.
@@ -50,7 +48,6 @@ const RESULT_TEXT: Record<ShareResult, string> = {
   failed: '이미지를 만들지 못했어요. 다시 시도해 주세요',
 };
 const HASHTAG_COUNT_ERROR = `해시태그는 ${HASHTAG_MAX_COUNT}개까지 넣을 수 있어요`;
-const HASHTAG_LENGTH_ERROR = `${CAPTION_MAX_LENGTH}자까지 쓸 수 있어요`;
 const COPY_LIMIT_NOTICE =
   '오늘은 추천 문구를 모두 받았어요. 직접 편집해 쓸 수 있어요';
 
@@ -109,16 +106,13 @@ export function ShareCardScreen({
     setDraft(hashtagText);
     setDraftError(null);
   };
-  // 공백으로 나눠 빈 토큰을 버린 개수 · 줄 전체 길이로 검사한다. `#` 는 붙이지 않고 입력 그대로 둔다.
+  // 공백으로 나눠 빈 토큰을 버린 개수만 검사한다. `#` 는 붙이지 않고 입력 그대로 둔다.
+  // 줄 길이는 보지 않는다 — 150자는 캡션 상한이고, 서버 계약은 해시태그 개수(≤10)만 정한다(서버가 준 값을 그대로 [완료]할 수 있어야 한다).
   const commitDraft = () => {
     if (draft === null) return;
     const tags = draft.split(/\s+/).filter(Boolean);
     if (!validateHashtags(tags).valid) {
       setDraftError(HASHTAG_COUNT_ERROR);
-      return;
-    }
-    if (!validateCaption(draft).valid) {
-      setDraftError(HASHTAG_LENGTH_ERROR);
       return;
     }
     onCommitHashtags(draft);

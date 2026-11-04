@@ -841,7 +841,7 @@ describe('화면 동작 — 포맷·사진 없음·통계·편집 한도·저장
     expect(screen.queryByTestId('reflection-share-no-photo-notice')).toBeNull();
   });
 
-  it(`해시태그 11개·151자는 [완료]가 안 되고 안내가 뜨며, 두 칸 간격 10개·"#" 없는 단어는 그대로 확정된다`, async () => {
+  it(`해시태그 11개는 [완료]가 안 되고 안내가 뜨며, 두 칸 간격 10개·"#" 없는 단어는 그대로 확정된다`, async () => {
     renderPage();
     await openExport();
     const input = await openEditor();
@@ -860,10 +860,6 @@ describe('화면 동작 — 포맷·사진 없음·통계·편집 한도·저장
       screen.getByTestId('reflection-share-caption-input')
     ).toBeOnTheScreen();
 
-    fireEvent.changeText(input, `#${'가'.repeat(150)}`);
-    fireEvent.press(screen.getByTestId('reflection-share-caption-save'));
-    expect(screen.getByText('150자까지 쓸 수 있어요')).toBeOnTheScreen();
-
     const tenTags = Array.from({ length: 10 }, (_, i) => `#t${i}`).join('  ');
     fireEvent.changeText(input, tenTags);
     fireEvent.press(screen.getByTestId('reflection-share-caption-save'));
@@ -877,6 +873,29 @@ describe('화면 동작 — 포맷·사진 없음·통계·편집 한도·저장
     fireEvent.press(screen.getByTestId('reflection-share-caption-save'));
     expect(hashtagLine()).toHaveTextContent('바다 노을');
     expect(screen.queryByTestId('reflection-share-caption-error')).toBeNull();
+  });
+
+  it('TRIP-1664 · 서버가 준 150자 넘는 해시태그 줄(개수 10)도 고치지 않고 [편집]→[완료]하면 거부되지 않고 그대로 남는다 — 150자는 캡션 상한이다', async () => {
+    // 준비: 서버 계약 안의 값 — 개수 10 · 항목마다 16자('#' 포함) → 줄 전체 169자.
+    const longTags = Array.from(
+      { length: 10 },
+      (_, i) => `#${'가'.repeat(14)}${'일이삼사오육칠팔구십'[i]}`
+    );
+    const longLine = longTags.join(' ');
+    expect(longLine.length).toBeGreaterThan(150);
+    serveCopy(copyOk({ ...AI_COPY, hashtags: longTags }));
+    renderPage();
+    await openExport();
+    await waitFor(() => expect(hashtagLine()).toHaveTextContent(longLine));
+
+    // 실행: 한 글자도 안 고치고 [편집] → [완료].
+    fireEvent.press(screen.getByTestId('reflection-share-caption-edit'));
+    fireEvent.press(screen.getByTestId('reflection-share-caption-save'));
+
+    // 단언: 안내가 없고, 편집 칸이 닫혔고, 줄은 그대로다(거부됐다면 편집 칸이 남고 안내가 뜬다).
+    expect(screen.queryByTestId('reflection-share-caption-error')).toBeNull();
+    expect(screen.queryByTestId('reflection-share-caption-input')).toBeNull();
+    expect(hashtagLine()).toHaveTextContent(longLine);
   });
 
   it('[이미지 저장] → 프리뷰 프레임을 담은 ref 로 저장 1회 · 성공 안내, [공유하기] → 같은 프레임으로 공유 1회 · 안내 없음', async () => {
