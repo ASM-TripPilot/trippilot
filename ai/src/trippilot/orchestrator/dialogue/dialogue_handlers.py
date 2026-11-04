@@ -2117,14 +2117,15 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     sql += (events,) if events is not None else ()
     if anchor is None or builder is None:
         return sql
-    # 열린 검색은 SQL 이 나란히 돌아도 돈다 — 묘사형 말(게이트가 열린다)이면 문서 순위가 섞인 반경 결과가 SQL 행을 이긴다
-    # (`_assemble_explore`, 2026-11-04 사용자 결정 "묘사형 말이면 열린 검색 우선" · BR-AO-27 개정·BR-AO-36). 종전엔 SQL 이 이긴다고 건너뛰어
-    # 결정론 측정에서 오답이 준 비·실내 탐색 사례에 하나도 닿지 않았다
+    # 열린 검색은 SQL 이 나란히 돌아도 돈다 — 묘사형 말(게이트가 열린다)이면 문서 순위가 섞인 반경 결과가 SQL 행을 이길 수 있다
+    # (`_assemble_explore` — 보일 다섯 곳 중 `_DOC_SWITCH_MIN` 곳 이상에 문서 순위가 붙었을 때, 2026-11-04 사용자 결정 "묘사형 말이면 열린
+    # 검색 우선" · BR-AO-27 개정·BR-AO-36). 종전엔 SQL 이 이긴다고 건너뛰어 결정론 측정에서 오답이 준 비·실내 탐색 사례에 하나도 닿지 않았다
     searcher = ctx.ports.place_search
     query = _open_query(ctx, anchor, category, theme) if searcher is not None else None
 
     def fn() -> dict:
-        doc: dict[str, str] = {}
+        doc: dict[str, object] = {}
+        ranks: dict[str, int] = {}  # 문서 순위(OK 일 때만 찬다) — 아래 doc_backed 를 센다
         if query is not None:  # 질의 임베딩을 풀 조립과 겹쳐 돌린다 — 시한은 이 시각부터 센다(팬아웃 몫)
             left = _fanout_left(ctx)
             searcher.warm(query)
@@ -2140,7 +2141,7 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
         shown, (on_the_way, inner) = _shown_before(ctx), _on_the_way(anchor)
         at = {p.poi_id: on_the_way(p.coord) for p in pool.pois}
         # 두 곳 사이면 가운데가 먼저, 양 끝은 모자랄 때만 — 한 번에 순위를 매겨 종류 상한(_PER_CATEGORY)이 전체에 걸리게
-        fuse = _doc_fuse(ctx, searcher, query, left, doc) if query is not None else None
+        fuse = _doc_fuse(ctx, searcher, query, left, doc, ranks) if query is not None else None
         ranked = _explore_rank((p for p in pool.pois if not shown(p.name, p.poi_id) and at[p.poi_id] is not None), category, theme,
                                _night_heard(ctx), ahead=lambda p: inner(at[p.poi_id]), fuse=fuse)
         candidates = [{
@@ -2149,7 +2150,10 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
             "distance_range": _km_label(haversine_km(center, p.coord)) if anchor.kind == "itinerary" else None,
             "reason": "요즘 인기" if TRENDING_TAG in p.tags else (_CATEGORY_KO.get(p.category.value) or "가 볼 만한 곳"),
         } for p in ranked]
-        # doc = 열린 검색 상태(Facts 밖) — 조립은 "OK"(문서 순위가 실제로 섞였다)인지만 읽어 SQL 행과 어느 쪽을 쓸지 가른다
+        # doc = 열린 검색 상태, doc_backed = 보여 줄 다섯 곳(종류 상한·보인 곳 제외 뒤) 중 문서 순위가 붙은 곳 수 — 둘 다 Facts 밖이고,
+        # 조립이 둘을 읽어(doc OK ∧ doc_backed ≥ `_DOC_SWITCH_MIN`) SQL 행과 어느 쪽을 쓸지 가른다(`_doc_beats_sql`)
+        if doc:
+            doc["doc_backed"] = sum(1 for p in ranked if p.source_ref in ranks)
         return {"status": "OK", "candidates": candidates, **doc}
 
     return (HandlerTask("explore", fn), *sql)
@@ -2159,6 +2163,10 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
 # 여유 0.35s 를 뺀 만큼만 기다리고, 0.5s 가 안 남으면 건너뛴다. 검색이 OK 가 아니면 규칙 순서 그대로 — 문서 단계 때문에 탐색이 TIMEOUT 이
 # 되지 않게(INV-4)
 _DOC_MARGIN_S, _DOC_MIN_S = 0.35, 0.5
+# 반경 결과가 SQL 행을 이기려면 보일 다섯 곳 중 이만큼 이상에 문서 순위가 붙어야 한다(BR-AO-27 개정 — 도우미 오케스트레이터·NL2SQL 세션의
+# 동의 조건 1, 2026-11-04). 근거가 한두 곳뿐이면 묘사를 읽었다고 하기 어려운데 SQL 행은 통째로 버려진다. 측정으로 바꾼다 — 러너
+# `measure_assistant_open_search.py` 의 `thin_doc`(doc OK 인데 근거 1~2곳인 턴)·`judge` 의 SQL-B 짝(사례마다 doc_backed 를 싣는다)
+_DOC_SWITCH_MIN = 3
 
 
 def _open_query(ctx: TurnContext, anchor: _Anchor, category: str | None, theme: str | None) -> hybrid_rank.OpenQuery | None:
@@ -2172,9 +2180,9 @@ def _open_query(ctx: TurnContext, anchor: _Anchor, category: str | None, theme: 
 
 
 def _doc_fuse(ctx: TurnContext, searcher: PlaceSearch, query: hybrid_rank.OpenQuery, left: Callable[[], float],
-              doc: dict[str, str]) -> Callable[[list[Poi]], list[Poi]]:
-    """규칙 정렬 결과 → 범위(규칙 순서의 장소 키)를 넘겨 문서 순위를 받고 RRF 로 섞는다. 상태는 `doc["doc"]` 에 남긴다.
-    `left` = 탐색 작업 첫머리에 잡은 팬아웃 남은 초(`_fanout_left`)."""
+              doc: dict[str, object], ranks: dict[str, int]) -> Callable[[list[Poi]], list[Poi]]:
+    """규칙 정렬 결과 → 범위(규칙 순서의 장소 키)를 넘겨 문서 순위를 받고 RRF 로 섞는다. 상태는 `doc["doc"]` 에, OK 일 때의 문서
+    순위는 `ranks` 에 남긴다. `left` = 탐색 작업 첫머리에 잡은 팬아웃 남은 초(`_fanout_left`)."""
 
     def fuse(ranked: list[Poi]) -> list[Poi]:
         left_s = left()
@@ -2183,20 +2191,24 @@ def _doc_fuse(ctx: TurnContext, searcher: PlaceSearch, query: hybrid_rank.OpenQu
             doc["doc"] = "BUDGET"
             log.info("place_search status=BUDGET left_ms=%d trace=%s", int(left_s * 1000), ctx.trace_id)
             return ranked
-        status, ranks = searcher.search(query, [p.source_ref for p in ranked if p.source_ref], wait_s, trace=str(ctx.trace_id))
+        status, got = searcher.search(query, [p.source_ref for p in ranked if p.source_ref], wait_s, trace=str(ctx.trace_id))
         doc["doc"] = status
-        return hybrid_rank.fuse(ranked, ranks, named=query.names) if status == "OK" else ranked
+        if status != "OK":
+            return ranked
+        ranks.update(got)
+        return hybrid_rank.fuse(ranked, got, named=query.names)
     return fuse
 
 
 def _doc_beats_sql(ctx: TurnContext, anchor: _Anchor, radius: Mapping | None, by_sql: Mapping | None) -> bool:
-    """문서 순위가 섞인 반경 결과(doc OK)가 SQL 행을 이기는가 — 묘사를 읽은 탐색일 때만(BR-AO-27 개정·BR-AO-36). 게이트는 표에 없는
-    고유명('전주비빔밥'·'명동교자'·'연남동')에도 열리고 근거(2-gram)도 거의 늘 차서, doc OK 만 보면 SQL 이 이름으로 맞춘 행을 버렸다
-    (리뷰 2026-11-04). 그래서 SQL 행이 있으면 둘을 더 본다:
+    """문서 순위가 섞인 반경 결과가 SQL 행을 이기는가 — 묘사를 읽은 탐색일 때만(BR-AO-27 개정·BR-AO-36). 먼저 doc OK 이고 보일 다섯 곳
+    중 `_DOC_SWITCH_MIN` 곳 이상에 문서 순위가 붙었어야 한다(`doc_backed` — 근거가 한두 곳이면 섞인 순서가 묘사를 읽었다고 하기 어렵다,
+    오케스트레이터·NL2SQL 세션 동의 조건 1). 게이트는 표에 없는 고유명('전주비빔밥'·'명동교자'·'연남동')에도 열리고 근거(2-gram)도 거의
+    늘 차서, doc OK 만 보면 SQL 이 이름으로 맞춘 행을 버렸다(리뷰 2026-11-04). 그래서 SQL 행이 있으면 둘을 더 본다:
     ① 말한 지역이 전부 표 이름이다 — '서울 연남동'처럼 표 밖의 더 좁은 곳을 말하면 반경 중심(서울 시청 5km)이 그곳이 아니다
     ② SQL 행 이름에 질의의 이름 낱말(`OpenQuery.names` — 속성 낱말 제외)이 없다 — 있으면 그 말은 묘사가 아니라 가게·메뉴 이름이고
        SQL 이 그것으로 맞췄다."""
-    if not (_candidates_if_ok(radius) and radius.get("doc") == "OK"):
+    if not (_candidates_if_ok(radius) and radius.get("doc") == "OK" and radius.get("doc_backed", 0) >= _DOC_SWITCH_MIN):
         return False
     if not by_sql:
         return True
@@ -2245,9 +2257,9 @@ def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fa
     told = "앞에서 보여 준 행사 말고는 더 찾지 못함" if events is not None and events.get("exhausted") else "그 기간·지역에서 물은 행사를 찾지 못함"
     asked = ((told,) if events is not None else ("행사 정보 미확인",)) if "events" in results else ()
     radius = _value(results, "explore")
-    # 묘사형 말로 문서 순위가 실제로 섞인 반경 결과(doc "OK")는 SQL 행을 이긴다 — SQL 은 묘사("비 오는 날 실내")를 못 읽는다
-    # (2026-11-04 사용자 결정, BR-AO-27 개정·BR-AO-36). 그 밖(게이트 닫힘·검색 실패·시한·꺼짐·이름 말 — `_doc_beats_sql`)은 종전대로
-    # SQL 행이 먼저다
+    # 묘사형 말로 문서 순위가 실제로 섞이고(doc "OK") 보일 다섯 곳 중 `_DOC_SWITCH_MIN` 곳 이상에 붙은 반경 결과는 SQL 행을 이긴다 —
+    # SQL 은 묘사("비 오는 날 실내")를 못 읽는다(2026-11-04 사용자 결정, BR-AO-27 개정·BR-AO-36). 그 밖(게이트 닫힘·근거 모자람·검색 실패·
+    # 시한·꺼짐·이름 말 — `_doc_beats_sql`)은 종전대로 SQL 행이 먼저다
     value = radius if _doc_beats_sql(ctx, anchor, radius, by_sql) else (by_sql or radius)
     if value is None or value.get("status") != "OK":
         return _text_facts(intent, FactStatus.UNAVAILABLE, home, notes=("장소 탐색 미확인", *asked), detail=detail)

@@ -3034,16 +3034,21 @@ def test_a_broken_index_leaves_explore_ok_in_rule_order() -> None:
 
 # 운영 분기 — DIALOGUE_SQL 배정이면 지역 앵커 탐색은 NL2SQL 이 반경 탐색과 나란히 돈다. 행이 있으면 종전엔 늘 SQL 행이 답이었다
 _SQL_ROWS = (_row("부산 카페 A", "카페", None, sido="부산광역시"), _row("부산 카페 B", "카페", None, sido="부산광역시"))
+# 근거가 넷(c2·c3·c4·c5) — 보일 다섯 곳 중 `_DOC_SWITCH_MIN`(3) 곳 이상에 문서 순위가 붙어 반경 결과가 SQL 행을 이길 수 있다(BR-AO-27 개정
+# 조건 1). `_DOC_TEXTS`(근거 한 곳)는 doc OK 여도 SQL 행 그대로다
+_DOC_TEXTS_WIDE = {**_DOC_TEXTS, "c2": "조용한 골목 안쪽의 작은 카페", "c3": "조용한 분위기에서 쉬어 가는 카페", "c4": "조용히 쉬기 좋은 2층 카페"}
 
 
 def test_explore_with_sql_rows_answers_from_the_mixed_radius_order_when_the_document_rank_ran() -> None:
-    """묘사형 말이면 열린 검색 우선(2026-11-04 사용자 결정) — 문서 순위가 실제로 섞인(doc OK) 반경 결과가 SQL 행을 이긴다."""
+    """묘사형 말이면 열린 검색 우선(2026-11-04 사용자 결정) — 문서 순위가 실제로 섞이고(doc OK) 보일 다섯 곳 중 3곳 이상에 붙은 반경
+    결과가 SQL 행을 이긴다."""
     base, _ = _run_doc(_QUIET, None)
-    searcher, store, embedding = _doc_search()
+    searcher, store, embedding = _doc_search(_DOC_TEXTS_WIDE)
     facts, results = _run_doc(_QUIET, searcher, place_sql=_PlaceSql(list(_SQL_ROWS)))
     assert set(results) == {"explore", "explore_sql"} and results["explore_sql"].value["candidates"]  # SQL 도 행을 냈다(전제)
     assert results["explore"].value["doc"] == "OK" and len(store.calls) == 1 and embedding.calls  # SQL 과 나란히 검색이 돈다
-    assert facts.status is FactStatus.OK and _names_of(facts)[0] == "책방 카페"  # 근거 있는 곳이 앞으로 — 섞인 순서
+    assert results["explore"].value["doc_backed"] == 4  # 근거 있는 넷이 다 보인다
+    assert facts.status is FactStatus.OK and _names_of(facts)[:2] == ["둘째 카페", "책방 카페"]  # 근거 있는 곳이 앞으로 — 섞인 순서
     assert _names_of(facts) == [c["name"] for c in results["explore"].value["candidates"]]  # 반경 결과 그대로
     assert set(_names_of(facts)) == set(_names_of(base)) and _names_of(facts) != _names_of(base)  # 규칙 순서의 순열
     assert [p.name for p in facts.places] == _names_of(facts) and _types(facts) == ["OPEN_PLACE"] * 5  # 카드·문장 재료·버튼 한 벌
@@ -3052,7 +3057,7 @@ def test_explore_with_sql_rows_answers_from_the_mixed_radius_order_when_the_docu
 def test_open_search_candidates_with_sql_rows_stay_inside_the_radius_pool() -> None:
     """INV-1 — SQL 행을 버리고 반경 결과를 쓸 때도 후보는 반경 풀 안이다(SQL 행 id 가 섞이지 않는다)."""
     pool = _pool(*_DOC_CAFES, _cafe("넷째 카페", "c6", saved=2), _cafe("다섯째 카페", "c7", saved=1))
-    facts, results = _run_doc(_QUIET, _doc_search()[0], pool=pool, place_sql=_PlaceSql(list(_SQL_ROWS)))
+    facts, results = _run_doc(_QUIET, _doc_search(_DOC_TEXTS_WIDE)[0], pool=pool, place_sql=_PlaceSql(list(_SQL_ROWS)))
     assert results["explore"].value["doc"] == "OK"
     assert _ids_of(facts) <= {str(p.poi_id) for p in pool.pois} and not _ids_of(facts) & {r.poi_id for r in _SQL_ROWS}
     assert {p.poi_id for p in facts.places} == _ids_of(facts) and {a.params["poiId"] for a in facts.next_actions} == _ids_of(facts)
@@ -3061,6 +3066,7 @@ def test_open_search_candidates_with_sql_rows_stay_inside_the_radius_pool() -> N
 @pytest.mark.parametrize(("arguments", "texts", "delay", "remaining_ms", "status"), [
     ({"region": "부산", "category": "CAFE", "theme": "카페 추천"}, _DOC_TEXTS, 0.0, 7000, None),  # 게이트 닫힘 — 검색을 안 돈다
     (_QUIET, {"c1": "넓은 테라스와 바다 전망"}, 0.0, 7000, "NO_EVIDENCE"),  # 근거 없음 — 순서가 안 섞였다
+    (_QUIET, _DOC_TEXTS, 0.0, 7000, "OK"),  # 섞였지만 근거가 한 곳뿐 — 보일 다섯 곳 중 3곳 미만(조건 1)
     (_QUIET, _DOC_TEXTS, 5.0, 2500, "TIMEOUT"),  # 시한 — 규칙 순서 그대로다
 ])
 def test_explore_with_sql_rows_keeps_the_sql_answer_unless_the_document_rank_ran(arguments, texts, delay, remaining_ms,
@@ -3137,7 +3143,7 @@ def test_open_search_does_not_run_between_two_places_at_night_or_for_controls(ar
 ])
 def test_explore_answers_from_the_mixed_radius_order_only_when_the_words_were_a_description(region, rows, radius_wins) -> None:
     args = {**_QUIET, "region": region}
-    facts, results = _run_doc(args, _doc_search()[0], place_sql=_PlaceSql(list(rows)))
+    facts, results = _run_doc(args, _doc_search(_DOC_TEXTS_WIDE)[0], place_sql=_PlaceSql(list(rows)))
     assert results["explore"].value["doc"] == "OK" and results["explore_sql"].value["candidates"]  # 전제 — 둘 다 냈다
     radius = [c["name"] for c in results["explore"].value["candidates"]]
     sql = [c["name"] for c in results["explore_sql"].value["candidates"]]
@@ -3160,13 +3166,87 @@ def test_a_place_named_by_the_query_stays_above_document_evidence() -> None:
 def test_follow_up_keeps_answering_from_the_mixed_radius_order() -> None:
     """이어 묻기도 이번 턴 주제로 열린 검색을 돈다 — 첫 턴이 섞인 반경 순서로 답했으면 "더 알려줘"도 같은 출처다(SQL 행으로 바뀌지
     않는다, 리뷰 2026-11-04). 앞에서 보인 곳은 빠진다."""
-    texts = {"c5": "조용한 북카페로 책을 읽으며 쉬기 좋다", "c3": "조용한 분위기의 작은 카페"}
-    first, first_results = _run_doc(_QUIET, _doc_search(texts)[0], place_sql=_PlaceSql(list(_SQL_ROWS)))
+    first, first_results = _run_doc(_QUIET, _doc_search(_DOC_TEXTS_WIDE)[0], place_sql=_PlaceSql(list(_SQL_ROWS)))
     assert _names_of(first) == [c["name"] for c in first_results["explore"].value["candidates"]]  # 전제 — 첫 턴은 섞인 반경 순서
     assert _names_of(first)[0] == "둘째 카페"
     earlier = (("USER", "부산 조용한 북카페 알려줘"), ("ASSISTANT", "둘째 카페가 있어요."))
-    facts, results = _run_doc(_QUIET, _doc_search(texts)[0], utterance="더 알려줘", earlier=earlier,
+    facts, results = _run_doc(_QUIET, _doc_search(_DOC_TEXTS_WIDE)[0], utterance="더 알려줘", earlier=earlier,
                               place_sql=_PlaceSql(list(_SQL_ROWS)))
     assert set(results) == {"explore", "explore_sql"} and results["explore"].value["doc"] == "OK"
+    assert results["explore"].value["doc_backed"] == 3  # 보인 곳(둘째 카페)을 뺀 뒤에 센다
     assert _names_of(facts) == [c["name"] for c in results["explore"].value["candidates"]]  # SQL 행이 아니다
-    assert _names_of(facts)[0] == "책방 카페" and "둘째 카페" not in _names_of(facts)
+    assert _names_of(facts)[0] == "저장 카페" and "둘째 카페" not in _names_of(facts)
+
+
+# 조건 1(BR-AO-27 개정 — 도우미 오케스트레이터·NL2SQL 세션 동의 조건, 2026-11-04): 반경이 SQL 행을 이기려면 보일 다섯 곳(종류 상한·보인 곳
+# 제외 뒤) 중 문서 순위가 붙은 곳이 `_DOC_SWITCH_MIN` 곳 이상이어야 한다. 그 수(doc_backed)는 반경 작업 결과에만 있고 Facts 에는 없다
+@pytest.mark.parametrize("short", [1, 0])
+def test_sql_rows_win_until_enough_of_the_five_carry_the_document_rank(short) -> None:
+    n = dh._DOC_SWITCH_MIN - short
+    texts = {ref: "조용한 골목에서 쉬어 가는 곳" for ref in ("c5", "c4", "c3", "c2", "c1")[:n]}
+    facts, results = _run_doc(_QUIET, _doc_search(texts)[0], place_sql=_PlaceSql(list(_SQL_ROWS)))
+    radius = results["explore"].value
+    assert radius["doc"] == "OK" and radius["doc_backed"] == n  # 둘 다 섞였다 — 갈리는 것은 근거 수뿐
+    off, _ = _run_doc(_QUIET, None, place_sql=_PlaceSql(list(_SQL_ROWS)))
+    assert _names_of(off) == ["부산 카페 A", "부산 카페 B"]  # 전제 — 꺼짐이면 SQL 행
+    if short:  # 하나 모자라다 — SQL 행 그대로, Facts 바이트까지 꺼짐과 같다
+        assert facts == off
+    else:  # 문턱에 닿았다 — 섞인 반경 순서
+        assert _names_of(facts) == [c["name"] for c in radius["candidates"]] and _names_of(facts) != _names_of(off)
+    assert facts.detail == {"anchor": "부산", "anchor_kind": "region"}  # doc·doc_backed 는 Facts 밖
+
+
+def test_doc_backed_counts_the_five_after_the_category_cap() -> None:
+    """종류를 안 정하면 한 종류 ≤2(`_PER_CATEGORY`) — 근거 있는 카페가 셋이어도 보일 다섯 곳에는 둘뿐이라 SQL 행 그대로다. 다른 종류
+    한 곳에 근거가 더 붙어야 셋이 된다(풀 전체가 아니라 보일 다섯 곳을 센다)."""
+    args = {"region": "부산", "theme": "조용한 북카페"}
+    pool = _pool(*_DOC_CAFES, replace(_xpoi("언덕 전시관", PoiCategory.CULTURE), source_ref="s1"),
+                 replace(_xpoi("바닷가 산책로", PoiCategory.NATURE), source_ref="s2"))
+    cafes = {"c3": "조용한 분위기에서 쉬어 가는 카페", "c4": "조용히 쉬기 좋은 2층 카페", "c5": "조용한 북카페로 책을 읽으며 쉬기 좋다"}
+    capped, capped_results = _run_doc(args, _doc_search(cafes)[0], pool=pool, place_sql=_PlaceSql(list(_SQL_ROWS)))
+    shown = capped_results["explore"].value["candidates"]
+    assert [c["category"] for c in shown].count("카페") == 2 and len(shown) == 4  # 전제 — 근거 있는 카페 셋 중 둘만 보인다
+    assert capped_results["explore"].value["doc"] == "OK" and capped_results["explore"].value["doc_backed"] == 2
+    assert _names_of(capped) == ["부산 카페 A", "부산 카페 B"]
+    wide, wide_results = _run_doc(args, _doc_search({**cafes, "s1": "조용한 전시실이 있는 작은 전시관"})[0], pool=pool,
+                                  place_sql=_PlaceSql(list(_SQL_ROWS)))
+    assert wide_results["explore"].value["doc_backed"] == 3
+    assert _names_of(wide) == [c["name"] for c in wide_results["explore"].value["candidates"]]
+
+
+# 조건 2c — #1915 야경 다섯 문장. 밤 말이라 열린 검색을 돌지 않는다(야경 순서가 먼저 — BR-AO-36): 스위치를 켜도 SQL 행 그대로(Facts 바이트까지
+# 꺼짐과 같다). 풀·문서는 밤 가드만 없으면 반경이 이기게 차려 둔다(야경 셋 + 다른 종류 둘, 다섯 곳 모두 '동네·풍경·보기' 근거) — 가드를 지우면
+# 주제 게이트가 열리는 말부터 깨진다. 인자는 분류가 낼 꼴: 종류 NIGHT_VIEW(한글 이름 '야경') + 주제, 그리고 분류가 종류를 비우고 주제에서
+# 밤 말을 뺀 꼴(발화의 밤 말이 막는다)
+_NIGHT_DOC_POOL = _pool(*(replace(_xpoi(name, category), source_ref=ref) for name, category, ref in (
+    ("남산 야경 전망대", PoiCategory.NIGHT_VIEW, "n1"), ("한강 야경 다리", PoiCategory.NIGHT_VIEW, "n2"),
+    ("언덕 야경 쉼터", PoiCategory.NIGHT_VIEW, "n3"), ("옛 골목 명소", PoiCategory.SIGHT, "n4"),
+    ("강변 공원", PoiCategory.NATURE, "n5"))))
+_NIGHT_DOC_TEXTS = {f"n{i}": "동네 풍경을 내려다보기 좋은 곳으로 해가 지면 풍경이 바뀐다" for i in range(1, 6)}
+
+
+def _night_sql_rows(region: str) -> list[PlaceRow]:
+    sido = "서울특별시" if region == "서울" else "부산광역시"
+    return [_row(f"{region} 전망 A", "야경", None, sido=sido), _row(f"{region} 전망 B", "야경", None, sido=sido)]
+
+
+@pytest.mark.parametrize(("utterance", "arguments"), [
+    ("서울 야경 보기 좋은 동네 있어?", {"region": "서울", "category": "NIGHT_VIEW", "theme": "야경 보기 좋은 동네"}),
+    ("야경 좋은 데 알려줘 서울", {"region": "서울", "category": "NIGHT_VIEW", "theme": "야경 좋은"}),
+    ("부산 야경 명소 알려줘", {"region": "부산", "category": "NIGHT_VIEW", "theme": "야경 명소"}),
+    ("부산 밤 풍경 예쁜 곳 어디야?", {"region": "부산", "category": "NIGHT_VIEW", "theme": "밤 풍경 예쁜"}),
+    ("서울에서 야경 예쁜 동네 추천해줘", {"region": "서울", "category": "NIGHT_VIEW", "theme": "야경 예쁜 동네"}),
+    ("서울 야경 보기 좋은 동네 있어?", {"region": "서울", "theme": "보기 좋은 동네"}),
+    ("야경 좋은 데 알려줘 서울", {"region": "서울", "theme": "좋은 데"}),
+    ("부산 야경 명소 알려줘", {"region": "부산", "theme": "명소"}),
+    ("부산 밤 풍경 예쁜 곳 어디야?", {"region": "부산", "theme": "풍경 예쁜"}),
+    ("서울에서 야경 예쁜 동네 추천해줘", {"region": "서울", "theme": "예쁜 동네"}),
+])
+def test_night_view_sentences_keep_the_sql_answer_with_open_search_on(utterance, arguments) -> None:
+    searcher, store, embedding = _doc_search(_NIGHT_DOC_TEXTS)
+    on, results = _run_doc(arguments, searcher, pool=_NIGHT_DOC_POOL, utterance=utterance,
+                           place_sql=_PlaceSql(_night_sql_rows(arguments["region"])))
+    off, _ = _run_doc(arguments, None, pool=_NIGHT_DOC_POOL, utterance=utterance,
+                      place_sql=_PlaceSql(_night_sql_rows(arguments["region"])))
+    assert on == off and _names_of(on) == [f"{arguments['region']} 전망 A", f"{arguments['region']} 전망 B"]
+    assert store.calls == [] and embedding.calls == [] and "doc" not in results["explore"].value  # 검색을 돌지도 않는다

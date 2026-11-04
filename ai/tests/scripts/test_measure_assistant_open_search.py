@@ -1,4 +1,5 @@
-"""열린 검색 측정 러너의 **쌍대 판정 집계** — 실 LLM·임베딩·HTTP 0. 판정을 실제로 돌리는 쪽(`judge`)은 유료라 여기서 부르지 않는다.
+"""열린 검색 측정 러너의 **쌍대 판정 집계·실 NL2SQL 고정본** — 실 LLM·임베딩·HTTP·DB 0. 판정(`judge`)·고정본(`capture-sql`)을 실제로
+돌리는 쪽은 유료라 여기서 부르지 않는다(가짜 LLM·가짜 실행기로만).
 
 여기서 묶는 것은 판정 결과를 읽고 세는 규칙이다 — 그쪽이 틀리면 "B 가 이겼다"가 조용히 뒤집힌다.
   ① 못 읽은 판정(본문 비었음·잘림·거절·깨진 JSON·목록 밖 승자)은 '같음'이 아니라 판정 실패다(11-04 사고 — 32판이 전부 '같음'으로 셌다)
@@ -7,6 +8,9 @@
   ③ 판정 프롬프트는 두 목록 모든 장소에 같은 참고 설명(개요 → 위키 도입부 → '설명 없음')과 사실 카드를 주고,
      '설명 없음'이 부적합이 아니라고 적는다
   ④ 키는 환경 변수로만 — 없으면 아무것도 읽거나 부르기 전에 멈춘다
+  ⑤ 판정자는 사용자가 말한 지역과 장소마다 위치를 본다(반경이 도심으로 좁아진 것이 보이게 — 조건 2a)
+  ⑥ SQL 팔(조건 4): 고정본은 운영 NL2SQL 경로(프롬프트·출구 게이트·조회)를 그대로 타고, 게이트가 열린 탐색만 담는다. 판정은 그 행을
+     운영 핸들러로 되돌려 SQL 팔을 짓고, SQL 이 실패·0건·거르기 뒤 빈 행이면 SQL 팔이 없다 — 그 사례는 (A, B) 로만 센다
 """
 
 from __future__ import annotations
@@ -19,7 +23,10 @@ from pathlib import Path
 import pytest
 
 from trippilot.domain.common import GeoPoint
+from trippilot.domain.llm.llm import LlmFeature
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
+from trippilot.poi_curation.adapters.pg_place_sql import PlaceRow
+from trippilot.ports.llm_port import LlmResponse
 
 _SCRIPTS = Path(__file__).resolve().parents[2] / "scripts" / "measure"
 
@@ -81,16 +88,19 @@ def test_tally_counts_a_win_only_when_both_positions_agree(mos) -> None:
                           # 낱판 자리 — 첫 자리 승: c1 False·c2 True·c3 둘 = 4, 둘째 자리 승: c1 True·c2 False·c5 True = 3
                           "first_wins": 4, "second_wins": 3, "position_p": round(mos.sign_test_p(4, 3), 4)}
     assert got["B-B3"]["judge_fail"] == 1 and got["B-B3"]["left_win"] == got["B-B3"]["right_win"] == 0
-    assert set(got) == {"A-B", "B-B3"}
+    assert set(got) == {"A-B", "B-B3", "SQL-B"} and got["SQL-B"]["n"] == 0
 
 
 def test_judge_asks_every_pair_in_both_positions_and_has_no_same_list_control(mos) -> None:
-    assert mos.JUDGE_PAIRS == (("A", "B"), ("B", "B3"))  # A-A(바이트까지 같은 두 목록)는 흔들림을 못 잰다 — 자리 일관성 대조로 바꿨다
-    jobs = mos.judge_jobs([(("c1",), {}), (("c2",), {})], 2)
+    # A-A(바이트까지 같은 두 목록)는 흔들림을 못 잰다 — 자리 일관성 대조로 바꿨다. SQL-B 는 운영 분기(SQL 행)의 본 비교
+    assert mos.JUDGE_PAIRS == (("A", "B"), ("B", "B3"), ("SQL", "B"))
+    arms = {"A": [], "B": [], "B3": []}
+    jobs = mos.judge_jobs([(("c1",), arms), (("c2",), {**arms, "SQL": []})], 2)
     keys = [(case[0], left, right, rep, flip) for case, _, left, right, rep, flip in jobs]
-    assert len(keys) == len(set(keys)) == 2 * 2 * len(mos.JUDGE_PAIRS) * 2
+    assert len(keys) == len(set(keys)) == 2 * 2 * (2 + 3)  # 반복 2 × 두 자리 × (c1 짝 둘 + c2 짝 셋)
     assert {flip for *_, flip in keys} == {False, True}
     assert all((c, l, r, rep, not flip) in keys for c, l, r, rep, flip in keys)
+    assert {(c, f"{l}-{r}") for c, l, r, *_ in keys if l == "SQL"} == {("c2", "SQL-B")}  # SQL 팔이 없는 c1 은 (A, B) 로만
 
 
 def _poi(name: str, ref: str | None, category: PoiCategory, tags: tuple[str, ...] = ()) -> Poi:
@@ -128,3 +138,129 @@ def test_judge_needs_the_key_in_the_environment_and_a_claude_judge(mos, monkeypa
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     with pytest.raises(SystemExit, match="Claude"):
         mos.judge(1)
+
+
+def test_judge_prompt_shows_the_said_region_and_where_each_place_is(mos) -> None:
+    downtown = _poi("시립미술관", "o1", PoiCategory.ART, ("실내",))
+    far = replace(_poi("노원 실내놀이터", None, PoiCategory.ACTIVITY), poi_id="uuid-1")
+    same = replace(_poi("시립미술관", "o1", PoiCategory.ART, ("실내",)), poi_id="uuid-2")  # SQL 팔의 같은 곳(다른 id·같은 원천 키)
+    where = {"p-시립미술관": "서울특별시 중구", "uuid-1": "서울특별시 노원구"}
+    prompt = mos.judge_prompt("서울 비 오는 날 실내", [downtown], [same, far], _Kn(), "서울", where)
+    assert '사용자가 말한 지역: "서울"' in prompt and "③ 사용자가 말한 지역에 맞는가" in prompt
+    refs = prompt.split("[참고")[1]
+    assert refs.count("시립미술관") == 1  # 원천 키가 같으면 한 곳 — 같은 자료
+    assert "시립미술관 — 분류: 미술 · 태그: 실내 · 위치: 서울특별시 중구 · 설명:" in refs
+    assert "노원 실내놀이터 — 분류: 액티비티 · 태그: 없음 · 위치: 서울특별시 노원구 · 설명: 설명 없음" in refs
+    assert "③" not in mos.judge_prompt("서울 비 오는 날 실내", [downtown], [far], _Kn())  # 지역을 안 넘기면 종전 그대로
+
+
+class _FakeLlm:
+    """DIALOGUE_SQL 대역 — 차례로 정해 둔 본문을 돌려주고 받은 요청을 남긴다."""
+
+    def __init__(self, *texts: str) -> None:
+        self.texts, self.requests = list(texts), []
+
+    def invoke(self, request):
+        self.requests.append(request)
+        return LlmResponse(raw_text=self.texts.pop(0), input_tokens=1, output_tokens=1, latency_ms=1, model_id=request.model_id)
+
+
+class _FakeExecutor:
+    def __init__(self, by_region: dict[str, list[PlaceRow]]) -> None:
+        self.by_region, self.sqls = by_region, []
+
+    def run(self, sql: str) -> list[PlaceRow]:
+        self.sqls.append(sql)
+        return next((rows for region, rows in self.by_region.items() if region in sql), [])
+
+
+_BUSAN = [PlaceRow(poi_id="u1", name="부산시립미술관", category="미술", sido="부산광역시", sigungu="해운대구", trending=False,
+                   nightlife=False, rich=True),
+          PlaceRow(poi_id="u2", name="실내 서핑", category="액티비티", sido="부산광역시", sigungu="수영구", trending=False,
+                   nightlife=False),
+          PlaceRow(poi_id="u3", name="서울 실내 동물원", category="액티비티", sido="서울특별시", sigungu="마포구", trending=False,
+                   nightlife=False)]
+
+
+def _sql(region: str) -> str:
+    return '{"sql": "SELECT poi_id, name FROM poi_public WHERE sido LIKE \'%s%%\' LIMIT 20"}' % region
+
+
+def test_capture_runs_the_production_nl2sql_path_only_for_open_gate_explores(mos, monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("EVAL_SQL_MODEL", "claude-haiku-5-5")
+    cases = {c[0]: c for c in mos.CASES}
+    picked = [cases[n] for n in ("부산/비", "부산/국밥2", "대조/부산", "제주/비실내", "서울/비")]
+    llm = _FakeLlm(_sql("부산"), _sql("제주"), '{"sql": null}')  # 부르는 차례: 부산/비 · 제주/비실내 · 서울/비
+    extra = {"u1": ("TOURAPI", "12345", ["실내"]), "u2": ("KAKAO_LOCAL", "777", []), "u3": ("TOURAPI", "555", [])}
+    saved = mos.dh._FANOUT_SQL_CAP_S
+    doc = mos.capture_sql(tmp_path / "sql.json", llm=llm, executor=_FakeExecutor({"부산": _BUSAN}),
+                          enrich=lambda rows: extra, cases=picked)
+    assert mos.dh._FANOUT_SQL_CAP_S == saved  # 시한 풀기는 고정본 안에서만
+    assert doc == __import__("json").loads((tmp_path / "sql.json").read_text(encoding="utf-8"))
+    got = doc["cases"]
+    assert {n: e["status"] for n, e in got.items()} == {
+        "부산/비": "OK", "부산/국밥2": "SKIPPED", "대조/부산": "SKIPPED", "제주/비실내": "ZERO", "서울/비": "NONE"}
+    assert len(llm.requests) == 3 and {r.model_id for r in llm.requests} == {"claude-haiku-5-5"}  # 추천·닫힌 게이트는 안 부른다
+    assert '부산에 비 오는 날 실내로 갈 데' in llm.requests[0].prompt  # 운영 프롬프트에 발화가 실린다
+    assert {r.prompt_ref.feature for r in llm.requests} == {LlmFeature.DIALOGUE_SQL.value}
+    assert llm.requests[0].prompt_ref.version == doc["prompt_version"]  # 운영 프롬프트 판 그대로
+    busan = got["부산/비"]
+    assert busan["sql"].startswith("SELECT poi_id, name FROM poi_public") and busan["error"] is None
+    assert [r["poi_id"] for r in busan["rows"]] == ["u1", "u2", "u3"]  # 거르기 전 행 그대로(지역 거르기는 판정이 핸들러로 한다)
+    assert {k: busan["rows"][0][k] for k in ("name", "category", "sido", "source_ref", "tags")} == {
+        "name": "부산시립미술관", "category": "미술", "sido": "부산광역시", "source_ref": "12345", "tags": ["실내"]}
+    assert busan["rows"][1]["source_ref"] is None  # 카카오 숫자 id 는 원천 키로 쓰지 않는다
+    assert got["서울/비"]["rows"] is None and got["제주/비실내"]["rows"] == []
+    assert doc["model"] == "claude-haiku-5-5" and doc["prompt_version"] and doc["budget_ms"] == 2800
+
+
+def test_capture_needs_the_key_in_the_environment_and_a_claude_model(mos, monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(mos, "PgPlaceSql", lambda *_: pytest.fail("키 없이 DB 실행기를 만들었다"))
+    monkeypatch.setenv("EVAL_SQL_MODEL", "claude-haiku-5-5")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(SystemExit, match="ANTHROPIC_API_KEY"):
+        mos.capture_sql(tmp_path / "x.json")
+    monkeypatch.setenv("EVAL_SQL_MODEL", "gpt-5.6-luna")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    with pytest.raises(SystemExit, match="Claude"):
+        mos.capture_sql(tmp_path / "x.json")
+    assert not (tmp_path / "x.json").exists()
+
+
+def test_sql_model_follows_the_canon_assignment(mos, monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("EVAL_SQL_MODEL", raising=False)
+    env = tmp_path / ".env.example"
+    env.write_text("# 주석\nAI_LLM_FEATURE_MODELS=INTENT=m0,DIALOGUE_INTENT=m1,DIALOGUE_PLAN=m1\n", encoding="utf-8")
+    assert mos._sql_model(env) == "m1"  # 정본에 DIALOGUE_SQL 이 없으면 도우미 기능(같은 티어·같은 턴)의 한 모델
+    env.write_text("AI_LLM_FEATURE_MODELS=DIALOGUE_INTENT=m1,DIALOGUE_SQL=m2\n", encoding="utf-8")
+    assert mos._sql_model(env) == "m2"
+    env.write_text("AI_LLM_FEATURE_MODELS=DIALOGUE_INTENT=m1,DIALOGUE_PLAN=m3\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="EVAL_SQL_MODEL"):
+        mos._sql_model(env)
+    monkeypatch.setenv("EVAL_SQL_MODEL", "m9")
+    assert mos._sql_model(env) == "m9"
+    monkeypatch.delenv("EVAL_SQL_MODEL")
+    assert mos._sql_model().startswith("claude")  # 리포 정본 — 지금은 도우미 기능 배정(LIGHT)
+
+
+def test_sql_arm_replays_the_rows_through_the_production_handler(mos) -> None:
+    cases = {c[0]: c for c in mos.CASES}
+    rows = [{**{f: getattr(r, f) for f in mos._ROW_FIELDS}, "source_ref": ref, "tags": tags}
+            for r, ref, tags in zip(_BUSAN, ("12345", None, "555"), (["실내"], [], []))]
+    arm = mos.sql_answer(cases["부산/비"], {"status": "OK", "rows": rows}, None)
+    assert [p.name for p in arm] == ["부산시립미술관", "실내 서핑"]  # 부산 앵커 밖(서울) 행은 운영 핸들러가 거른다
+    assert arm[0].source_ref == "12345" and arm[0].tags == ("실내",) and arm[0].category is PoiCategory.ART
+    seoul_only = [rows[2]]
+    # SQL 팔이 없다 — 반경이 답이라 (A, B) 로 센다: 거르기 뒤 빈 행 · 0건 · NL2SQL 실패 · 추천(반경이 먼저)
+    assert mos.sql_answer(cases["부산/비"], {"status": "OK", "rows": seoul_only}, None) is None
+    assert mos.sql_answer(cases["부산/비"], {"status": "ZERO", "rows": []}, None) is None
+    assert mos.sql_answer(cases["부산/비"], {"status": "NONE", "rows": None}, None) is None
+    assert mos.sql_answer(cases["부산/국밥2"], {"status": "OK", "rows": rows}, None) is None
+
+
+def test_tag_contrast_cases_are_counted_apart_from_wrong_answers(mos) -> None:
+    tags = {c[0]: c for c in mos.CASES if c[0].startswith("태그/")}
+    assert set(tags) == {"태그/강릉주차카페", "태그/부산아이실내", "태그/제주반려견카페"}
+    assert {c[4] for c in tags.values()} == {"tag:주차", "tag:아이동반", None}
+    assert all(c[4] not in mos._WRONG_KINDS for c in tags.values())  # 태그 미충족은 오답이 아니다(태그는 방문자 투표라 성기다)
+    assert not mos._wrong("tag:주차", _poi("골목 카페", None, PoiCategory.CAFE))
