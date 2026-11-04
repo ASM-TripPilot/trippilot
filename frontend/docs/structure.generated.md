@@ -830,6 +830,7 @@
 - `src/pages/itinerary/itinerary-draft/index.ts`  →  DraftPage
 
 ## src/pages/itinerary/itinerary-draft/model/
+- `src/pages/itinerary/itinerary-draft/model/reasonTags.ts`  →  parseReasonTags
 - `src/pages/itinerary/itinerary-draft/model/regenerateRoute.ts`  →  RegenerateRoute · RegenerateRouteInput · resolveRegenerateRoute
 
 ## src/pages/itinerary/itinerary-draft/ui/
@@ -1953,4 +1954,4 @@
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1279개 파일
+합계 1280개 파일

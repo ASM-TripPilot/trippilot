@@ -2119,6 +2119,63 @@ describe('h08 셸 기본 얼굴', () => {
     });
   });
 
+  /**
+   * TRIP-1779 · AC-D1·D2·D4 — h08 완성 셸 슬롯 카드의 추천 이유 태그 한 줄.
+   * 서버 `placementReason`(해시태그를 공백으로 이은 문자열)을 `parseReasonTags` 로 자른 뒤 카드에 내린다.
+   * 픽스처에 값이 **실제로 있어야** "줄 없음" 단언이 공허하지 않다 — 정상·null·옛 문장 세 슬롯을 섞는다.
+   * 파서 경계(혼재·`#` 단독)는 `model/reasonTags.test.ts` 가 잠그므로 여기서 반복하지 않는다.
+   * 줄 위치·말줄임·색은 jest 가 못 보는 생김새라 6-b 몫(README 판정 4).
+   *
+   * 3동작 뼈대: 준비 = 1일차 슬롯 셋에 서로 다른 placementReason → 실행 = 셸을 연다 → 단언 = 슬롯별 줄 유무·글자.
+   */
+  describe('🔴 A9 · TRIP-1779 — h08 슬롯 카드에 추천 이유 태그가 서버 순서 그대로 한 줄로 뜬다', () => {
+    const REASON = '#혼자여행 #난타공연 #공연관람';
+
+    function withReasons(): Itinerary {
+      const reasons: Record<string, string | null> = {
+        'poi-a': REASON,
+        'poi-b': null,
+        'poi-c': '오전에 들르기 좋아요',
+      };
+      return itinerary({
+        days: threeStopDays(3).map((one) => ({
+          ...one,
+          slots:
+            one.date === DAY1
+              ? one.slots.map((s) => ({
+                  ...s,
+                  placementReason: reasons[s.poiId],
+                }))
+              : one.slots,
+        })),
+      });
+    }
+
+    it('유효한 태그 슬롯만 줄이 있고(원문 순서·글자 그대로), null·옛 문장 슬롯은 줄이 없다', async () => {
+      itineraryHandler = () => HttpResponse.json(withReasons());
+
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      // 앵커 — 세 카드가 다 떠 있다(화면이 안 뜬 채 "줄 0개"로 통과하지 않게).
+      ['poi-a', 'poi-b', 'poi-c'].forEach((poiId) => {
+        expect(
+          screen.getByTestId(`slot-stopcard-${DAY1}#${poiId}`)
+        ).toBeOnTheScreen();
+      });
+      expect(
+        screen.getByTestId(`slot-stopcard-reason-${DAY1}#poi-a`)
+      ).toHaveTextContent(REASON);
+      expect(
+        screen.queryByTestId(`slot-stopcard-reason-${DAY1}#poi-b`)
+      ).toBeNull();
+      expect(
+        screen.queryByTestId(`slot-stopcard-reason-${DAY1}#poi-c`)
+      ).toBeNull();
+      expect(screen.queryAllByTestId(/^slot-stopcard-reason-/)).toHaveLength(1);
+    });
+  });
+
   describe('🔴 TRIP-1204 · h08 결과 지도는 시트가 열린 채로도 손가락으로 움직인다', () => {
     it('셸 지도가 viewOnly=false 로 열려 있다', async () => {
       renderPage();
@@ -4153,6 +4210,36 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
       expect(
         log.all().filter((hit) => /\/(bases|saved-stays)$/.test(hit))
       ).toEqual([]);
+    });
+  });
+
+  /**
+   * TRIP-1779 · 01b Q1 — 같은 파일의 두 번째 `SlotStopCard` 호출(h07 부분 결과 셸)에는 태그 줄을 주입하지 않는다.
+   * 생성 중 값은 서버가 아직 채우는 중일 수 있고 Figma 검토안(h08)에 없는 얼굴이라서다(결정을 뒤집으려면 이 단언을 반전한다).
+   * 슬롯마다 **유효한** placementReason 을 넣어야 공허 통과가 아니다.
+   */
+  describe('🔴 A8-9 · TRIP-1779 — 부분 결과 셸 카드에는 값이 있어도 추천 이유 줄이 없다', () => {
+    it('유효한 태그를 가진 3슬롯이 카드로 떠도 이유 줄은 0개다', async () => {
+      itineraryHandler = () =>
+        HttpResponse.json(
+          itinerary({
+            generationState: 'PARTIAL',
+            days: threeStopDays(1).map((one) => ({
+              ...one,
+              slots: one.slots.map((s) => ({
+                ...s,
+                placementReason: '#혼자여행 #난타공연 #공연관람',
+              })),
+            })),
+          })
+        );
+
+      renderPage();
+      await screen.findByTestId('generation-progress-card');
+
+      // 앵커 — 부분 셸 카드 3장이 떠 있다.
+      expect(screen.queryAllByTestId(/^slot-stopcard-\d/)).toHaveLength(3);
+      expect(screen.queryAllByTestId(/^slot-stopcard-reason-/)).toHaveLength(0);
     });
   });
 });

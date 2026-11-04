@@ -80,6 +80,10 @@ export interface SlotStopCardProps {
   /** TRIP-921 · h12 편집기에서 **끌리는 중**인 카드(리스트 `isActive`). true 면 루트 테두리를 primary 로
    *  그린다(Figma 떠 있는 카드). 미주입이면 현행 그대로. */
   dragging?: boolean;
+  /** TRIP-1779 · h08 추천 이유 태그(`#혼자여행` …) — 주면 카테고리 줄 아래에 공백으로 이은 한 줄을 그린다.
+   *  미주입·null·빈 배열이면 줄 요소 자체가 없다. 카드는 `slot.placementReason` 을 스스로 읽지 않는다
+   *  (읽으면 h07·h11·h14 등 다른 소비처가 조용히 줄을 얻는다) — 서버 문자열을 태그로 자르는 일은 소비처가 한다. */
+  reasonTags?: readonly string[] | null;
 }
 
 export function SlotStopCard({
@@ -99,6 +103,7 @@ export function SlotStopCard({
   numberOutside,
   violation,
   dragging,
+  reasonTags,
 }: SlotStopCardProps): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string => `slot-stopcard-${role}-${slotKey}`;
@@ -284,6 +289,17 @@ export function SlotStopCard({
             className="font-noto text-caption text-muted"
           >
             {slot.tags.join(' · ')}
+          </Text>
+        ) : null}
+
+        {/* 추천 이유 태그(TRIP-1779) — Figma 5203:3604: Noto Regular 12/16 muted, 한 줄 말줄임. */}
+        {reasonTags && reasonTags.length > 0 ? (
+          <Text
+            testID={fieldId('reason')}
+            numberOfLines={1}
+            className="font-noto text-caption text-muted"
+          >
+            {reasonTags.join(' ')}
           </Text>
         ) : null}
 
