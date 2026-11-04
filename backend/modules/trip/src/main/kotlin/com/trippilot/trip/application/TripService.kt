@@ -5,6 +5,7 @@ import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.trip.api.event.TripDeleted
+import com.trippilot.trip.api.event.TripPeriodChanged
 import org.springframework.transaction.annotation.Transactional
 import com.trippilot.placedata.api.DestinationCheck
 import com.trippilot.placedata.api.DestinationFacade
@@ -120,14 +121,23 @@ class TripService(
 
     fun get(accountId: UUID, tripId: UUID): Trip = ownedOrNotFound(accountId, tripId)
 
+    /**
+     * 편집. **기간이 바뀐 편집만** [TripPeriodChanged] 를 낸다(TRIP-1758) — 알림 예약 같은 파생물이 새 기간으로 다시 서게.
+     * 발행은 저장과 같은 트랜잭션(아웃박스)이다 — 밖에서 내면 롤백된 편집의 사건이 나간다([delete] 와 같다).
+     */
+    @Transactional
     fun edit(accountId: UUID, tripId: UUID, cmd: EditTripCommand): Trip {
-        val trip = ownedOrNotFound(accountId, tripId)
-        return repo.save(
-            trip.edit(
+        val before = ownedOrNotFound(accountId, tripId)
+        val saved = repo.save(
+            before.edit(
                 cmd.title, cmd.startDate, cmd.endDate, cmd.party, cmd.companionType,
                 cmd.budgetTotal, withRegionCodes(cmd.destinations), clock.instant(), cmd.dayWindow,
             ),
         )
+        if (saved.startDate != before.startDate || saved.endDate != before.endDate) {
+            events.publish(TripPeriodChanged(tripId.toString(), tripId.toString(), saved.startDate.toString(), saved.endDate.toString()))
+        }
+        return saved
     }
 
     /**
