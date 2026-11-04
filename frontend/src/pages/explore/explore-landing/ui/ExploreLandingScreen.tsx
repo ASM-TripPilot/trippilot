@@ -116,7 +116,8 @@ export interface ExploreLandingScreenProps {
    * 숨김만 화면 안 `useScrollHide` 가 쥔다 — 뷰 로컬 표시 상태). 개수는 접근성 라벨로만 알린다. */
   savedMenu: {
     open: boolean;
-    savedCount: number;
+    /** null = 목록을 못 받아 모름(TRIP-1754) — 라벨이 개수 없이 `담은 장소`로 읽힌다(0곳이라 읽히지 않게). */
+    savedCount: number | null;
     onToggle: () => void;
     onPressSavedPlaces: () => void;
     onPressSavedStays: () => void;
@@ -289,6 +290,10 @@ function RegionChip({
 // (TRIP-1435 Q-029: 여백 안에서 카드가 잘리던 것).
 const LANE_BLEED_STYLE = { marginHorizontal: -16 } as const;
 const LANE_CONTENT_STYLE = { paddingHorizontal: 16 } as const;
+
+function savedPlacesLabel(count: number | null): string {
+  return count === null ? '담은 장소' : `담은 장소 ${count}곳`;
+}
 
 export function ExploreLandingScreen({
   heading,
@@ -537,7 +542,7 @@ export function ExploreLandingScreen({
                   <Pressable
                     testID="explore-saved-places-fab"
                     accessibilityRole="button"
-                    accessibilityLabel={`담은 장소 ${savedMenu.savedCount}곳`}
+                    accessibilityLabel={savedPlacesLabel(savedMenu.savedCount)}
                     onPress={savedMenu.onPressSavedPlaces}
                     style={FAB_SHADOW}
                     className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
@@ -562,7 +567,7 @@ export function ExploreLandingScreen({
                 accessibilityLabel={
                   savedMenu.open
                     ? '담은 곳 메뉴 닫기'
-                    : `담은 장소 ${savedMenu.savedCount}곳`
+                    : savedPlacesLabel(savedMenu.savedCount)
                 }
                 onPress={savedMenu.onToggle}
                 style={FAB_SHADOW}

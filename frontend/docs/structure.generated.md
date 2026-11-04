@@ -1845,6 +1845,7 @@
 - `src/shared/ui/pref/index.ts`  →  PrefChip · PrefOptionTile · PrefStepHeader · PrefTile
 
 ## src/shared/ui/
+- `src/shared/ui/savedListLoadToast.ts`  →  SAVED_LIST_LOAD_FAILED_TOAST
 - `src/shared/ui/toastBottom.ts`  →  FAB_STACK_TOP · resolveToastBottom · registerToastBottom · getToastBottoms · subscribeToastBottoms · resetToastBottoms
 - `src/shared/ui/useToastBottom.ts`  →  useToastBottom
 
@@ -1953,4 +1954,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1275개 파일
+합계 1276개 파일

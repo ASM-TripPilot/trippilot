@@ -14,7 +14,7 @@
  * 장소 없음·오류 얼굴에도 같은 뒤로를 앱바에 둔다 — notFound 안내엔 행동 버튼 없음(TRIP-1015 D · 결정 3).
  */
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, Share, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { goBackOr } from '@/shared/lib/goBackOr';
@@ -23,7 +23,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useGetPlacesPoiId } from '@/shared/api/index.hooks';
 import { getAccessToken, isNotFound } from '@/shared/api';
+import { SAVED_LIST_LOAD_FAILED_TOAST } from '@/shared/ui/savedListLoadToast';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { showToast } from '@/shared/ui/Toast';
 import { canOpenNaverPlace, openNaverPlace } from '@/shared/map';
 
 import {
@@ -46,11 +48,20 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
   const router = useRouter();
   const isAuthed = getAccessToken() !== null;
   const detail = useGetPlacesPoiId(poiId);
-  const { savedPoiIds, save, remove } = useSavedPlaces({ isAuthed });
+  const { savedPoiIds, save, remove, loadFailureConfirmed } = useSavedPlaces({
+    isAuthed,
+  });
   const [saveError, setSaveError] = useState<PlaceSaveNotice | null>(null);
   const [saving, setSaving] = useState(false);
   const [openNaverError, setOpenNaverError] = useState<string | null>(null);
   const place = detail.data ?? null;
+
+  // TRIP-1754 — 하트가 그려지는 얼굴(장소 도착)에서만, 담은 목록 확정 실패가 켜지는 순간 토스트 1회.
+  // 로딩·오류·없음 얼굴 위에는 소음이라 안 쏜다. 조기 return 보다 앞(Rules of Hooks).
+  const savedListFailed = place !== null && Boolean(loadFailureConfirmed);
+  useEffect(() => {
+    if (savedListFailed) showToast(SAVED_LIST_LOAD_FAILED_TOAST);
+  }, [savedListFailed]);
 
   function handleBack(): void {
     goBackOr(router, shellTabHref('explore'));

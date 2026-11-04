@@ -8,6 +8,7 @@ import { useGetPlaces } from '@/shared/api/index.places';
 import { isOfflineWaiting } from '@/shared/api';
 import { guardPress } from '@/shared/lib/pressGuard';
 import { flushMarks, mark } from '@/shared/lib/startupMarks';
+import { SAVED_LIST_LOAD_FAILED_TOAST } from '@/shared/ui/savedListLoadToast';
 import { showToast } from '@/shared/ui/Toast';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { formatNightsLabel } from '@/entities/trip';
@@ -50,8 +51,9 @@ interface HomeNav {
   onPressHeroCity: (regionCode: string) => void;
   onPressBell: () => void;
   onPressAssistant: () => void;
-  savedPlacesCount: number;
-  savedStaysCount: number;
+  // null = 목록을 못 받아 모름(TRIP-1754) — 배지가 `–` 를 그린다.
+  savedPlacesCount: number | null;
+  savedStaysCount: number | null;
   savedMenuOpen: boolean;
   onToggleSavedMenu: () => void;
   spotsLane: HomeSpotsLane;
@@ -143,7 +145,17 @@ export function HomePage() {
   const { savedPoiIds } = savedPlaces;
   // 담은 곳 미니 FAB 개수 배지(TRIP-695) — 담은 장소 수·전체 저장 숙소 수를 실데이터에서 뽑아
   // 화면에 주입한다. useSavedStays 는 features/stay 것(savedCount 노출) — features/trip 동명 훅 아님.
-  const { savedCount: savedStaysCount } = useSavedStays({ isAuthed: true });
+  const savedStays = useSavedStays({ isAuthed: true });
+  // TRIP-1754 — 담은 목록을 못 받았으면 0 이 아니라 모름(null)이다. 새 필드가 없는 옛 훅 목은 truthy 판정이라 실패 아님.
+  const savedStaysCount = savedStays.loadFailed ? null : savedStays.savedCount;
+  const savedPlacesCount = savedPlaces.loadFailed ? null : savedPoiIds.length;
+  // 확정 실패가 켜지는 순간 토스트 1회 — 전이는 TanStack 이 관찰자별로 기억하는 훅 플래그가 정한다.
+  const savedListFailed = Boolean(
+    savedPlaces.loadFailureConfirmed || savedStays.loadFailureConfirmed
+  );
+  useEffect(() => {
+    if (savedListFailed) showToast(SAVED_LIST_LOAD_FAILED_TOAST);
+  }, [savedListFailed]);
 
   // 담은 곳 saved-menu 열림 상태(TRIP-494) — 순수 화면이 useState 0건이라 page 가 소유한다
   // (탐색 랜딩 선례와 동형). 미니 FAB press 는 메뉴를 닫고 각각 d02/e04 로 이동한다.
@@ -301,7 +313,7 @@ export function HomePage() {
           phase?.kind === 'planning' ? phase.dominantTripId : undefined
         )
       ),
-    savedPlacesCount: savedPoiIds.length,
+    savedPlacesCount,
     savedStaysCount,
     savedMenuOpen,
     onToggleSavedMenu: () => setSavedMenuOpen((v) => !v),

@@ -1,11 +1,17 @@
 import { type ReactElement, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { goBackOr } from '@/shared/lib/goBackOr';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 import type { BaseAssignment, SavedStay } from '@/shared/api/index.schemas';
 import { useGetSavedStays } from '@/shared/api/index.hooks';
-import { useGetTrips, useGetTripsTripIdBases } from '@/shared/api/index.hooks';
+import {
+  getGetTripsTripIdBasesQueryKey,
+  useGetTrips,
+  useGetTripsTripIdBases,
+} from '@/shared/api/index.hooks';
+import { isNotFound } from '@/shared/api';
 import { buildStayTripLink, type StayTripLink } from '../model/stayTripLink';
 import { MyStaysScreen, type MyStayRowVM } from './MyStaysScreen';
 import { isOtaSource } from '@/entities/stay';
@@ -27,21 +33,35 @@ import { isOtaSource } from '@/entities/stay';
  * 실패 얼굴로 올린다. 쿼리별 판정 `data === undefined && (isError || errorUpdateCount > 0)` — 재시도 중엔
  * status 가 pending 으로 돌아가 isError 가 꺼지므로 실패 이력 카운터를 같이 본다(알림함 TRIP-1501 선례).
  * 받은 목록이 있으면(`data` 있음) 재조회가 실패해도 목록을 유지한다. [다시 시도]는 실패한 쿼리만 refetch.
- * bases N+1 부분 실패는 범위 밖이다.
+ *
+ * TRIP-1754(INV-4): 여행별 거점 조회(N+1) 일부가 실패하면 그 여행의 숙소가 「연결된 여행 없음」으로 접혀 거짓이 된다 —
+ * 프로브가 실패(404 아닌 것)를 페이지에 올려 목록 위 한 줄 + [다시 시도]로 밝힌다. 404 는 "연결 없음"이 진짜라 대상이 아니다.
+ * [다시 시도]는 실패한 여행의 거점만 다시 받는다. 행 단위 표식은 안 한다(`buildStayTripLink` 가 실패 여행을 모른다).
  */
 
 /** 여행 1건의 거점 목록을 조회해 페이지로 올린다(N+1 훅-per-여행 — 훅이 루프를 못 도는 우회). */
 function TripBasesProbe({
   tripId,
   onResult,
+  onFailure,
 }: {
   tripId: string;
   onResult: (tripId: string, bases: BaseAssignment[]) => void;
+  onFailure: (tripId: string, failed: boolean) => void;
 }): null {
-  const { data } = useGetTripsTripIdBases(tripId);
+  const { data, error } = useGetTripsTripIdBases(tripId);
   useEffect(() => {
     if (data !== undefined) onResult(tripId, data);
   }, [tripId, data, onResult]);
+  // 실패는 상태에서 매번 다시 도출하지 않고 **전이 순간에 기록**한다 — 재조회가 시작되면 `error` 가 null 로 지워져
+  // (이 효과는 아무것도 안 해 기록이 유지된다) 그 뒤엔 404 와 5xx 를 가를 수 없다. 성공(data 도착)은 onResult 가 기록을 푼다.
+  useEffect(() => {
+    if (data === undefined && error != null) {
+      onFailure(tripId, !isNotFound(error));
+    }
+  }, [tripId, data, error, onFailure]);
+  // 여행이 지워져 프로브가 사라지면 그 여행의 실패 기록도 푼다(배너가 영영 안 남게).
+  useEffect(() => () => onFailure(tripId, false), [tripId, onFailure]);
   return null;
 }
 
@@ -105,13 +125,25 @@ export function MyStaysPage(): ReactElement {
   >({});
 
   // react-query 의 `data` 는 값이 바뀔 때만 참조가 바뀐다 — 같은 참조면 상태를 안 건드려 무한 루프를 막는다.
+  const [failedBaseTripIds, setFailedBaseTripIds] = useState<string[]>([]);
+  const [retryingLinks, setRetryingLinks] = useState(false);
+  const queryClient = useQueryClient();
+
+  const handleBaseFailure = useCallback((tripId: string, failed: boolean) => {
+    setFailedBaseTripIds((prev) => {
+      if (prev.includes(tripId) === failed) return prev;
+      return failed ? [...prev, tripId] : prev.filter((id) => id !== tripId);
+    });
+  }, []);
+
   const handleBasesResult = useCallback(
     (tripId: string, bases: BaseAssignment[]) => {
       setBasesByTripId((prev) =>
         prev[tripId] === bases ? prev : { ...prev, [tripId]: bases }
       );
+      handleBaseFailure(tripId, false);
     },
-    []
+    [handleBaseFailure]
   );
 
   const links = buildStayTripLink(savedStays, trips, basesByTripId);
@@ -135,6 +167,23 @@ export function MyStaysPage(): ReactElement {
     if (tripsFailed) void tripsQuery.refetch();
   };
 
+  // 전체 실패(loadFailed)면 화면이 큰 얼굴만 그려 이 한 줄은 보이지 않는다.
+  const linksFailed = failedBaseTripIds.length > 0;
+
+  const handleRetryLinks = (): void => {
+    setRetryingLinks(true);
+    // 실패한 여행의 거점만 다시 받는다(저장 숙소·여행 목록·성공한 여행은 다시 안 부른다).
+    void Promise.all(
+      failedBaseTripIds.map((tripId) =>
+        queryClient.refetchQueries({
+          queryKey: getGetTripsTripIdBasesQueryKey(tripId),
+        })
+      )
+    ).finally(() => {
+      setRetryingLinks(false);
+    });
+  };
+
   const isEmpty = !savedQuery.isPending && rows.length === 0;
 
   const handleChangeBase = (row: MyStayRowVM): void => {
@@ -154,6 +203,7 @@ export function MyStaysPage(): ReactElement {
           key={trip.tripId}
           tripId={trip.tripId}
           onResult={handleBasesResult}
+          onFailure={handleBaseFailure}
         />
       ))}
       <MyStaysScreen
@@ -165,6 +215,9 @@ export function MyStaysPage(): ReactElement {
         loadFailed={loadFailed}
         retrying={retrying}
         onRetry={handleRetry}
+        linksFailed={linksFailed}
+        retryingLinks={retryingLinks}
+        onRetryLinks={handleRetryLinks}
       />
     </>
   );

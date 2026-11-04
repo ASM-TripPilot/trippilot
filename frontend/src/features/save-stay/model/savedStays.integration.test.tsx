@@ -1,11 +1,18 @@
 import { http, HttpResponse } from 'msw';
-import { defaultScheduler, notifyManager } from '@tanstack/react-query';
+import {
+  defaultScheduler,
+  notifyManager,
+  onlineManager,
+} from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import { useGetTrips } from '@/shared/api/index.hooks';
-import { useGetSavedStays } from '@/shared/api/index.hooks';
+import {
+  getGetSavedStaysQueryKey,
+  useGetSavedStays,
+  useGetTrips,
+} from '@/shared/api/index.hooks';
 import type { SavedStay, StayItem } from '@/shared/api/index.schemas';
 import { flushNotifications } from '@/test-support/flushNotifications';
 
@@ -17,6 +24,10 @@ import {
   createHitLog,
   createWrapper,
 } from '@/test-support/mswHookHarness';
+import {
+  createWrapper as createClientWrapper,
+  newTestQueryClient,
+} from '@/test-support/queryRender';
 
 /**
  * TRIP-417 AC-1·AC-2·AC-4·AC-5·AC-6·AC-7 — 숙소 저장 하트 토글 훅의 서버 상태.
@@ -127,6 +138,8 @@ beforeEach(() => {
 
 afterEach(() => {
   server.resetHandlers();
+  // onlineManager 는 모듈 싱글턴 — 오프라인 케이스(L6)가 어떻게 끝나든 다음 케이스는 온라인으로 시작한다(파일 최상위).
+  onlineManager.setOnline(true);
 });
 
 afterAll(() => {
@@ -801,5 +814,222 @@ describe('TRIP-1578 · 좌표 없는 숙소 담기 — 본문·낙관 행에 lat
       outcome = await pending;
     });
     expect(outcome).toEqual({ kind: 'saved' });
+  });
+});
+
+/**
+ * TRIP-1754 · 저장 숙소 목록 조회가 **실패했는데 "안 담김"·"0곳"처럼 보이는** 문제 — 훅이 "모름" 표식을 더한다(기존 필드는 그대로).
+ * (`useSavedPlaces` 의 같은 이름 describe 와 동형 — `savedPlaces.savedList.integration.test.tsx` 참고. 개념 설명도 거기 있다.)
+ *
+ *  - **L1** 로그인 · 500 → `loadFailed`·`loadFailureConfirmed` true. `savedKeys` `[]` · `savedCount` 0 · `isError` true 는 그대로.
+ *  - **L2** 성공이면 false/false, 실패 뒤 재조회 성공도 false/false. **L3** 게스트 false · **L4** 실패 캐시가 남은 채 로그아웃해도 false.
+ *  - **L5** 실패 캐시 위 재조회 진행 중: `loadFailed` 유지 · `confirmed` false → 실패로 굳으면 true / 성공이면 false/false.
+ *  - **L6** 오프라인 콜드스타트 true·true. **L7** 받은 목록이 있으면 재조회 실패에도 false(Seed Q5 ⓐ).
+ */
+describe('TRIP-1754 · 저장 숙소 목록 조회 실패 표식 (loadFailed)', () => {
+  type Reply = 'ok' | 500 | 'hold' | 'hold500';
+  let replies: Reply[] = [];
+  let gate = createGate();
+
+  beforeEach(() => {
+    replies = [];
+    gate = createGate();
+    setAccessToken('valid-access');
+    server.use(
+      http.get(`${BASE}/saved-stays`, async () => {
+        const reply = replies.shift() ?? 'ok';
+        if (reply === 'hold' || reply === 'hold500') await gate.opened;
+        if (reply === 500 || reply === 'hold500') {
+          return HttpResponse.json(
+            { error: { code: 'INTERNAL', message: '서버 오류' } },
+            { status: 500 }
+          );
+        }
+        return HttpResponse.json([SAVED_B]);
+      })
+    );
+  });
+
+  // 실패해 중간에 죽은 케이스가 보류 요청을 남기지 않게.
+  afterEach(() => gate.release());
+
+  async function pause(ms = 30): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+    });
+  }
+
+  it('L1 로그인 · 500 이면 둘 다 true, 기존 필드는 그대로다', async () => {
+    // 준비
+    replies = [500];
+
+    // 실행
+    const { result } = renderHook(() => useSavedStays({ isAuthed: true }), {
+      wrapper: createClientWrapper(newTestQueryClient()),
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    // 단언
+    expect(result.current.loadFailed).toBe(true);
+    expect(result.current.loadFailureConfirmed).toBe(true);
+    expect(result.current.savedKeys).toEqual([]);
+    expect(result.current.savedCount).toBe(0);
+  });
+
+  it('L2 성공이면 둘 다 false, 실패 뒤 재조회가 성공하면 다시 false 다', async () => {
+    // 준비 — 성공 한 번.
+    const ok = renderHook(() => useSavedStays({ isAuthed: true }), {
+      wrapper: createClientWrapper(newTestQueryClient()),
+    });
+    await waitFor(() => expect(ok.result.current.savedCount).toBe(1));
+    expect(ok.result.current.loadFailed).toBe(false);
+    expect(ok.result.current.loadFailureConfirmed).toBe(false);
+    ok.unmount();
+
+    // 준비 — 이번엔 첫 응답만 실패.
+    replies = [500];
+    const { result } = renderHook(() => useSavedStays({ isAuthed: true }), {
+      wrapper: createClientWrapper(newTestQueryClient()),
+    });
+    await waitFor(() => expect(result.current.loadFailed).toBe(true));
+
+    // 실행
+    await act(async () => {
+      await result.current.refetch();
+    });
+
+    // 단언
+    await waitFor(() => expect(result.current.savedCount).toBe(1));
+    expect(result.current.loadFailed).toBe(false);
+    expect(result.current.loadFailureConfirmed).toBe(false);
+  });
+
+  it('L3 게스트는 실패가 아니다 — 둘 다 false · isError false · 요청 0건', async () => {
+    // 실행
+    const { result } = renderHook(() => useSavedStays({ isAuthed: false }), {
+      wrapper: createClientWrapper(newTestQueryClient()),
+    });
+    await pause();
+
+    // 단언
+    expect(result.current.loadFailed).toBe(false);
+    expect(result.current.loadFailureConfirmed).toBe(false);
+    expect(result.current.isError).toBe(false);
+    expect(hitCount('GET /api/v1/saved-stays')).toBe(0);
+  });
+
+  it('L4 로그인 중 실패한 캐시가 남은 채 isAuthed 가 false 가 되면 둘 다 false 다', async () => {
+    // 준비
+    replies = [500];
+    const client = newTestQueryClient();
+    const { result, rerender } = renderHook(
+      ({ authed }: { authed: boolean }) => useSavedStays({ isAuthed: authed }),
+      { wrapper: createClientWrapper(client), initialProps: { authed: true } }
+    );
+    await waitFor(() => expect(result.current.loadFailed).toBe(true));
+
+    // 실행 — 세션 만료(같은 캐시, 이제 게스트).
+    rerender({ authed: false });
+    await pause();
+
+    // 단언 — 앵커: 캐시에 실패가 정말 남아 있다. 그래도 게스트에겐 표식이 없다.
+    expect(result.current.isError).toBe(true);
+    expect(result.current.loadFailed).toBe(false);
+    expect(result.current.loadFailureConfirmed).toBe(false);
+  });
+
+  it('L5 실패 캐시 위 재조회가 진행 중이면 loadFailed 는 유지되고 confirmed 는 아직 false, 실패로 굳으면 true', async () => {
+    // 준비 — 첫 마운트에서 실패하고 닫는다(캐시 gcTime 무한). 두 번째 응답은 문 뒤.
+    replies = [500, 'hold500'];
+    const client = newTestQueryClient();
+    const first = renderHook(() => useSavedStays({ isAuthed: true }), {
+      wrapper: createClientWrapper(client),
+    });
+    await waitFor(() => expect(first.result.current.isError).toBe(true));
+    first.unmount();
+
+    // 실행 — 다시 마운트(재조회가 시작되고 문 앞에서 멈춘다).
+    const { result } = renderHook(() => useSavedStays({ isAuthed: true }), {
+      wrapper: createClientWrapper(client),
+    });
+    await waitFor(() => expect(hitCount('GET /api/v1/saved-stays')).toBe(2));
+    await pause();
+
+    // 단언 ① — 보류 중: v5 가 isError 를 껐지만(앵커) loadFailed 는 유지, confirmed 는 아직 아니다.
+    expect(result.current.isError).toBe(false);
+    expect(result.current.isPending).toBe(true);
+    expect(result.current.loadFailed).toBe(true);
+    expect(result.current.loadFailureConfirmed).toBe(false);
+
+    // 실행 ② — 문을 열면 두 번째도 500.
+    gate.release();
+
+    // 단언 ②
+    await waitFor(() => expect(result.current.loadFailureConfirmed).toBe(true));
+    expect(result.current.loadFailed).toBe(true);
+  });
+
+  it('L5b 재조회가 성공으로 끝나면 둘 다 false 로 끝난다(보류 중 confirmed 가 켜진 적도 없다)', async () => {
+    // 준비
+    replies = [500, 'hold'];
+    const client = newTestQueryClient();
+    const first = renderHook(() => useSavedStays({ isAuthed: true }), {
+      wrapper: createClientWrapper(client),
+    });
+    await waitFor(() => expect(first.result.current.isError).toBe(true));
+    first.unmount();
+    const { result } = renderHook(() => useSavedStays({ isAuthed: true }), {
+      wrapper: createClientWrapper(client),
+    });
+    await waitFor(() => expect(hitCount('GET /api/v1/saved-stays')).toBe(2));
+    await pause();
+    expect(result.current.loadFailureConfirmed).toBe(false);
+
+    // 실행
+    gate.release();
+
+    // 단언
+    await waitFor(() => expect(result.current.savedCount).toBe(1));
+    expect(result.current.loadFailed).toBe(false);
+    expect(result.current.loadFailureConfirmed).toBe(false);
+  });
+
+  it('L6 오프라인 콜드스타트(요청이 나가지도 못함)도 실패다 — true·true, 요청 0건', async () => {
+    // 준비 — 앞 케이스의 오프라인이 새지 않았다는 앵커.
+    expect(onlineManager.isOnline()).toBe(true);
+    onlineManager.setOnline(false);
+
+    // 실행
+    const { result } = renderHook(() => useSavedStays({ isAuthed: true }), {
+      wrapper: createClientWrapper(newTestQueryClient()),
+    });
+    await pause();
+
+    // 단언 — isError 도 errorUpdateCount 도 없는 보류 상태(pending·paused)라 이 판독만이 잡는다.
+    expect(result.current.isError).toBe(false);
+    expect(result.current.loadFailed).toBe(true);
+    expect(result.current.loadFailureConfirmed).toBe(true);
+    expect(hitCount('GET /api/v1/saved-stays')).toBe(0);
+  });
+
+  it('L7 목록을 받은 뒤 재조회가 실패해도(데이터가 남아 있으니) loadFailed 는 false 다 (Seed Q5 ⓐ)', async () => {
+    // 준비 — 첫 응답 성공, 두 번째 500.
+    replies = ['ok', 500];
+    const client = newTestQueryClient();
+    const { result } = renderHook(() => useSavedStays({ isAuthed: true }), {
+      wrapper: createClientWrapper(client),
+    });
+    await waitFor(() => expect(result.current.savedCount).toBe(1));
+
+    // 실행 — 무효화로 다시 받는데 서버가 500.
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: getGetSavedStaysQueryKey() });
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    // 단언 — 진짜 목록이 그대로이니 "모름"이 아니다.
+    expect(result.current.savedKeys).toEqual([KEY_B]);
+    expect(result.current.loadFailed).toBe(false);
+    expect(result.current.loadFailureConfirmed).toBe(false);
   });
 });
