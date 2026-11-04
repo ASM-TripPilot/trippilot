@@ -1393,3 +1393,78 @@ describe('SlotProgressCard · [방문 완료]는 콜백을 받을 때만 · 기�
     }
   );
 });
+
+/**
+ * TRIP-1751 · 개정 AC-12 — 허브 카드 메모 자리의 "불러오지 못함" 표식(`memoLoadFailed`, presentation-only).
+ * 준비: done·active 카드를 그린다 → 실행: 표식 prop 을 켜고 끈다 → 단언: 표식 testID·문구·메모 박스 유무.
+ * 메모 박스가 없는 모양("메모 없음")과 같으면 위반이라 표식은 박스와 별 testID 로 선다. 메모가 있으면 메모가 이긴다
+ * (페이지가 own 이 있을 땐 실패 신호를 안 주지만 카드도 이중으로 막는다). 재시도 버튼은 카드엔 없다(시트에서).
+ */
+describe('SlotProgressCard · 메모 불러오지 못함 표식 (TRIP-1751)', () => {
+  const ERROR_ID = id('memo-error');
+  const COPY = '메모를 불러오지 못했어요';
+
+  it.each<['done' | 'active']>([['done'], ['active']])(
+    'K1 %s: memoLoadFailed 면 표식이 문구 그대로 서고 메모 박스는 없으며, 끄면 표식이 없다',
+    (state) => {
+      const { rerender } = render(
+        <SlotProgressCard
+          slot={mkSlot()}
+          date={DATE}
+          state={state}
+          memoLoadFailed
+        />
+      );
+
+      expect(screen.getByTestId(ERROR_ID)).toHaveTextContent(COPY);
+      expect(screen.queryByTestId(id('memo'))).toBeNull();
+
+      rerender(
+        <SlotProgressCard
+          slot={mkSlot()}
+          date={DATE}
+          state={state}
+          memoLoadFailed={false}
+        />
+      );
+      expect(screen.queryByTestId(ERROR_ID)).toBeNull();
+      // 앵커 — 카드는 있다.
+      expect(
+        screen.getByTestId(`execution-live-slot-${KEY}`)
+      ).toBeOnTheScreen();
+    }
+  );
+
+  it.each<['done' | 'active']>([['done'], ['active']])(
+    'K2 %s: 메모와 실패 표식이 함께 오면 메모 박스만 서고 표식은 없다(메모 우선)',
+    (state) => {
+      render(
+        <SlotProgressCard
+          slot={mkSlot()}
+          date={DATE}
+          state={state}
+          memo={MEMO}
+          memoLoadFailed
+        />
+      );
+
+      expect(screen.getByTestId(id('memo'))).toHaveTextContent(MEMO);
+      expect(screen.queryByTestId(ERROR_ID)).toBeNull();
+    }
+  );
+
+  it('K3 upcoming 카드는 memoLoadFailed 를 받아도 표식을 그리지 않는다(메모 자리가 없는 상태)', () => {
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="upcoming"
+        memoLoadFailed
+      />
+    );
+
+    expect(screen.queryByTestId(ERROR_ID)).toBeNull();
+    // 앵커 — 카드는 있다.
+    expect(screen.getByTestId(`execution-live-slot-${KEY}`)).toBeOnTheScreen();
+  });
+});

@@ -529,19 +529,24 @@ export function LiveItineraryPage({
     const visitCheckId = mediaVisitIdByPoiId[poiId];
     return visitCheckId === undefined
       ? null
-      : (savedMemos[visitCheckId] ?? null);
+      : (savedMemos.memos[visitCheckId] ?? null);
   };
+  // TRIP-1751 — 서버 메모를 못 받은 카드 표식. 방문 id 를 아는(= 메모 자리가 있는) 카드에만. 메모가 있으면 카드가 이 값을 안 본다.
+  const memoFailedOf = (poiId: string): boolean =>
+    savedMemos.loadFailed && mediaVisitIdByPoiId[poiId] !== undefined;
   const hubSlots = projected.map((entry) =>
     entry.state === 'active'
       ? {
           ...entry,
           memo: memoOf(entry.slot.poiId),
+          memoLoadFailed: memoFailedOf(entry.slot.poiId),
           visitedLabel: activeArrivedLabel,
         }
       : entry.state === 'done'
         ? {
             ...entry,
             memo: memoOf(entry.slot.poiId),
+            memoLoadFailed: memoFailedOf(entry.slot.poiId),
             visitedLabel: visitedLabels[entry.slot.poiId] ?? null,
           }
         : entry
@@ -694,6 +699,16 @@ export function LiveItineraryPage({
         }
         text={visitMemo.savedMemo}
         editable={visitMemo.memoReady}
+        loadError={
+          visitMemo.memoLoadFailed || visitMemo.memoLoadOffline
+            ? {
+                onRetry: visitMemo.memoLoadFailed
+                  ? visitMemo.retryMemoLoad
+                  : undefined,
+                retrying: visitMemo.memoLoadRetrying,
+              }
+            : null
+        }
         notice={memoFailedFor === memoSheetFor ? MEMO_SAVE_FAILED : null}
         saving={memoSavingShown.has(memoSheetFor)}
         onSubmit={(text, seed) => submitMemo(memoSheetFor, text, seed)}
