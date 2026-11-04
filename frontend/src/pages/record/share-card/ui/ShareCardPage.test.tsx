@@ -1,3 +1,4 @@
+import { AxiosError } from 'axios';
 import { createElement } from 'react';
 import { View } from 'react-native';
 import {
@@ -9,7 +10,11 @@ import {
 } from '@testing-library/react-native';
 import { router } from 'expo-router';
 
-import type { Trip, TripSummary } from '@/shared/api/index.schemas';
+import type {
+  ShareCardCopy,
+  Trip,
+  TripSummary,
+} from '@/shared/api/index.schemas';
 import { customInstance } from '@/shared/api/mutator';
 import { renderWithQueryClient } from '@/test-support/queryRender';
 
@@ -108,6 +113,25 @@ const SUMMARY: TripSummary = {
   source: 'RULE',
   generatedAt: '2026-06-12T10:00:00Z',
 };
+
+const AI_COPY: ShareCardCopy = {
+  caption: '광안리에서 노을을 보고 감천문화마을 골목을 걸었어요',
+  hashtags: ['#광안리노을', '#감천문화마을'],
+  isFallback: false,
+};
+
+/** 서버가 준 실패 응답 흉내 — `isAxiosError` 가 true 여야 훅의 한도 판정이 돈다(`isRateLimited.test.ts` 선례). */
+function httpError(status: number, data: unknown = {}): AxiosError {
+  const error = new AxiosError('request failed');
+  error.response = {
+    status,
+    statusText: '',
+    data,
+    headers: {},
+    config: { headers: {} },
+  } as AxiosError['response'];
+  return error;
+}
 
 function givenTrip() {
   (useGetTripsTripId as jest.Mock).mockReturnValue({
@@ -338,4 +362,60 @@ describe('🔴 TRIP-1667 · 스토리 덱 ↔ 내보내기 전환 (같은 얼굴
     expect(props.copyLimitReached).toBe(false);
     expect(props.caption).toBe('');
   });
+
+  it('PU-6 · 서버 문구가 오면 대기 표시(copyPending)가 꺼지고 문구가 내려간다 — 응답 뒤에도 true 면 캡션 자리 회색 상자가 계속 깜빡인다', async () => {
+    // 준비: 응답을 우리가 풀어 줄 때까지 붙잡아 둔다(PU-5 의 "끝나지 않는 Promise" 와 짝 — 이쪽은 끝나는 쪽).
+    let resolveCopy: (copy: ShareCardCopy) => void = () => undefined;
+    customInstanceMock.mockImplementation(
+      () =>
+        new Promise<ShareCardCopy>((resolve) => {
+          resolveCopy = resolve;
+        })
+    );
+    await mount();
+    make();
+    expect(lastProps(screenMock).copyPending).toBe(true); // 응답 전 앵커 — 아래 false 가 "원래 false" 가 아님을 보인다
+
+    // 실행: 서버가 문구를 준다.
+    await act(async () => resolveCopy(AI_COPY));
+
+    // 단언: 대기가 꺼지고, 서버 캡션이 화면 쪽 props 로 내려간다.
+    const props = lastProps(screenMock);
+    expect(props.copyPending).toBe(false);
+    expect(props.caption).toBe(AI_COPY.caption);
+    expect(props.copyLimitReached).toBe(false);
+  });
+
+  it.each([
+    [
+      '하루 한도(429 SHARE_CARD_DAILY_LIMIT)',
+      httpError(429, { error: { code: 'SHARE_CARD_DAILY_LIMIT' } }),
+      true,
+    ],
+    ['그 밖의 서버 실패(500)', httpError(500), false],
+  ])(
+    'PU-7 · 문구 요청이 %s 로 끝나도 대기 표시(copyPending)가 꺼진다 — 한도 안내(copyLimitReached)만 갈린다',
+    async (_name, error, limitReached) => {
+      // 준비: PU-6 과 같게 응답을 붙잡아 두되, 이번엔 실패로 푼다.
+      let rejectCopy: (reason: unknown) => void = () => undefined;
+      customInstanceMock.mockImplementation(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectCopy = reject;
+          })
+      );
+      await mount();
+      make();
+      expect(lastProps(screenMock).copyPending).toBe(true); // 실패 전 앵커
+
+      // 실행: 서버가 실패로 답한다.
+      await act(async () => rejectCopy(error));
+
+      // 단언: 대기는 꺼지고, 서버 문구는 없으며(캡션 빈 채), 한도 안내만 실패 종류에 따라 갈린다.
+      const props = lastProps(screenMock);
+      expect(props.copyPending).toBe(false);
+      expect(props.caption).toBe('');
+      expect(props.copyLimitReached).toBe(limitReached);
+    }
+  );
 });
