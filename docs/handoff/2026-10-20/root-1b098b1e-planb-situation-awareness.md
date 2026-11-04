@@ -26,7 +26,7 @@ tickets: [TRIP-1446, TRIP-1668, TRIP-1707, TRIP-1758, TRIP-1759, TRIP-1760, TRIP
 | 영역 | PR |
 |---|---|
 | 문구 채움 | #1859 거짓 경고 정리 · #1862 일부만 성공해도 쓰기 · #1865 빠진 행만 제자리에서 점점 늘려 재시도(3·8·16·29·50분)+묶음 3건·마감 10.5s · #1873 문구 근거 지문(`copy_basis`)을 발화 직전 일정과 대조 · #1866(AI) 게이트가 허용 장소명을 지운 뒤 소요시간을 본다 · #1876(AI) 게이트 드롭 규칙명 로그 · #1884 기동 때 대기열 복원(재시작에 사라지는 인메모리 재시도) |
-| 푸시 발송·도착 | #1861 Expo 호출 시한 · #1863 `NO_DEVICE` 원인 분리(NO_TOKEN/NOT_GRANTED)+소리·보관 시간 · #1867 토큰 해제 DELETE 대괄호 · #1869 티켓 id 기록 · #1872 영수증 폴러(TRIP-1707) · #1883 티켓 기록 세이브포인트 · #1889 등록 줄 `tokenFormat` |
+| 푸시 발송·도착 | #1861 Expo 호출 시한 · #1863 `NO_DEVICE` 원인 분리(NO_TOKEN/NOT_GRANTED)+소리·보관 시간 · #1867 토큰 해제 DELETE 대괄호 · #1869 티켓 id 기록 · #1872 영수증 폴러(TRIP-1707) · #1883 티켓 기록 세이브포인트 · #1889 등록 줄 토큰 모양(`format`) |
 | 경보·관측 | #1874 CloudWatch 경보(`push_dispatch_failed`·`push_alert`) · #1880 접수 단계 `push.alert stage=ticket` · #1885 `outbox.abandon` 경보 → **#1913 로그 그룹당 regex 패턴 5개 한도에 걸려 와일드카드로** · #1886 발화 줄 `reminder.fire copy=AI|CONSTANT|STALE` |
 | 계정 | #1879 삭제 요청 시 리마인드 중단·철회 시 복원(TRIP-1760) → **#1901 이 이벤트 순서가 아니라 처리 시점의 계정 상태(`auth.api.AccountStatusFacade`)를 따르게 고침** — 푸시 토큰은 지우지 않고 발송 지점이 유예 계정에 MUTED |
 | 독립 리뷰가 찾은 결함 | #1899 발화 때 일정 읽기 실패 → rollback-only 로 같은 푸시 매분 재발송(#1873 의 잠복 결함, 11-04 06:38 수리 배포) · #1901 삭제 요청·철회 순서 의존 · #1902 낮은 심각도 정리 · #1905 안티패턴 3건 |
@@ -42,8 +42,8 @@ tickets: [TRIP-1446, TRIP-1668, TRIP-1707, TRIP-1758, TRIP-1759, TRIP-1760, TRIP
 - **순서**: (서버는 끝남) → (사용자) Expo APNs .p8 업로드·프로비저닝 프로파일 확인 → 새 iOS 빌드 → 팀 TestFlight → 사용자 릴리스.
 
 ## 다음에 이어서 할 일
-1. 날마다 운영 로그의 `reminder.fire kind=… copy=AI|CONSTANT|STALE` 로 AI 문구 비율을 센다(첫 08:00 실측은 위 90%, 종전 15%). 같이 `push.alert`·`outbox.abandon` 이 0 · `push.token.register … tokenFormat=` 이 `expo` · `push.dispatch` 가 아직 전부 `NO_DEVICE`(토큰 0)인지. 로그는 `.github/workflows/aws-dev-logs.yml` 을 **`--ref develop`** 으로 디스패치(main 판에는 `namespace` 입력이 없다 → 422).
-2. 첫 실기기 시험이 나오면 로그 순서: `push.token.register platform=… tokenFormat=expo` → `push.dispatch outcome=SENT` → 15분 뒤 `push.receipt outcome=…`. `tokenFormat=other` 면 앱이 Expo 토큰이 아닌 값을 보낸 것(앱 담당). `push.alert stage=ticket|receipt` 는 자격 문제 — .p8·`PUSH_EXPO_ACCESS_TOKEN`.
+1. 날마다 운영 로그의 `reminder.fire kind=… copy=AI|CONSTANT|STALE` 로 AI 문구 비율을 센다(첫 08:00 실측은 위 90%, 종전 15%). 같이 `push.alert`·`outbox.abandon` 이 0 · `push.token.register … format=` 이 `expo` · `push.dispatch` 가 아직 전부 `NO_DEVICE`(토큰 0)인지. 로그는 `.github/workflows/aws-dev-logs.yml` 을 **`--ref develop`** 으로 디스패치(main 판에는 `namespace` 입력이 없다 → 422).
+2. 첫 실기기 시험이 나오면 로그 순서: `push.token.register platform=… format=expo` → `push.dispatch outcome=SENT` → 15분 뒤 `push.receipt outcome=…`. `format=other` 면 앱이 Expo 토큰이 아닌 값을 보낸 것(앱 담당). `push.alert stage=ticket|receipt` 는 자격 문제 — .p8·`PUSH_EXPO_ACCESS_TOKEN`.
 3. 매일 08:22 크론(`77b35d3d`, 세션 한정·7일)이 `scratchpad/t6tools/daily_check.py` 로 요약한다 — 이 스크립트는 로컬 scratchpad 에만 있다(리포 밖). 클라우드 세션은 못 돌린다.
 4. 사람·제품 결정이 필요한 것(「내가 할 일」 페이지 https://claude.ai/artifact/A8MsxLJ6hP9evGhyd4CUfB 에 올라 있다): Expo .p8 업로드·프로파일 확인 · 스토어 빌드 요청 · SLOT_PRE(일정 시작 전 알림) 구현 여부 — 설정 행과 온보딩 문구가 약속하는데 생산자가 없다 · 인앱 알림 OFF 가 푸시까지 막는 계약 불일치 · 회고 푸시(TRIP-1759, 회고 담당) · 안드로이드 FCM·채널(출시 전) · 여행 길이 상한(TRIP-1761 — 서버 어디에도 없다, 숫자는 제품 결정. 알림 적재만 366일 방어선).
 5. 서버 쪽 남은 것(작은 것): 08:00 동시 도래(계정 1~2천 넘으면 꼬리 취소, 지금은 무관). 끝난 것 — TRIP-1758(여행 기간 PATCH 후 예약 재계산)은 #1920, 삭제 대기 계정을 거르는 공용 판정은 #1901 의 `AccountStatusFacade`.
