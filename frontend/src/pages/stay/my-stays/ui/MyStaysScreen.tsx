@@ -3,13 +3,8 @@ import { FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CARD_SHADOW } from '@/features/settings';
-import {
-  BedGlyph,
-  ChevronLeftGlyph,
-  ChevronRightGlyph,
-  MUTED,
-} from '@/features/settings';
-import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
+import { SettingsBedGlyph, ChevronLeftGlyph } from '@/features/settings';
+import { WarningTriangleGlyph, ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**
@@ -157,7 +152,7 @@ function MyStayRow({
             className="flex-row items-center gap-[2px]"
           >
             <Text className="font-noto text-label text-body">거점 변경</Text>
-            <ChevronRightGlyph size={15} color={MUTED} />
+            <ChevronRight24Glyph size={15} color="muted" />
           </Pressable>
         ) : null}
       </View>
@@ -225,7 +220,7 @@ export function MyStaysScreen({
                 testID="my-stays-empty-icon"
                 className="h-[96px] w-[96px] items-center justify-center rounded-full bg-surface-strong"
               >
-                <BedGlyph size={44} />
+                <SettingsBedGlyph size={44} />
               </View>
               <Text className="text-center font-noto text-body leading-[21px] text-muted">
                 {'숙소를 탐색하고 등록하면\n일정을 만들 수 있어요'}

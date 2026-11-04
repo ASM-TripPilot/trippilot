@@ -10,14 +10,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { startUnlessReduceMotion } from '@/shared/lib/reduceMotion';
-import { StateNotice } from '@/shared/ui/StateNotice';
-
 import {
   AlertCircleGlyph,
-  BackChevronGlyph,
   FullAiGlyph,
-} from '@/features/itinerary/index.view';
+  BackChevronGlyph,
+} from '@/shared/ui/glyphs';
+import { startUnlessReduceMotion } from '@/shared/lib/reduceMotion';
+import { StateNotice } from '@/shared/ui/StateNotice';
 
 import { GeneratingIllustration } from './GeneratingIllustration';
 
@@ -312,7 +311,7 @@ export function GeneratingScreen({
                 className="w-full gap-md rounded-card border border-hairline bg-canvas p-lg"
               >
                 <View className="w-full flex-row items-center gap-sm">
-                  <FullAiGlyph size={22} tone="primary" />
+                  <FullAiGlyph size={22} color="primary" />
                   <Text className="flex-1 font-noto-bold text-[16px] font-bold text-ink">
                     {PROGRESS_HEADING}
                   </Text>

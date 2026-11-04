@@ -57,28 +57,18 @@ export type { SheetCountRule } from './model/sheetMeta';
 export { placeAddSubtitle } from './model/placeAddSubtitle';
 export { resolveUnplacedNames } from './model/unplacedMustVisits';
 export {
-  AlertCircleGlyph,
-  BackChevronGlyph,
-  CalendarGlyph,
+  ItineraryCalendarGlyph,
   CheckCircleGlyph,
-  CheckGlyph,
-  ChevronDownGlyph,
-  ChevronRightGlyph,
-  ClockGlyph,
-  CloseGlyph,
+  ItineraryCloseGlyph,
   CoPickGlyph,
   DashGlyph,
   DiamondGlyph,
-  FullAiGlyph,
-  InfoCircleGlyph,
-  LinkChevronGlyph,
-  LocationOffGlyph,
-  LockGlyph,
+  ItineraryLocationOffGlyph,
+  ItineraryLockGlyph,
   ManualGlyph,
-  PencilGlyph,
-  PlusGlyph,
+  ItineraryPencilGlyph,
   SortCheckGlyph,
-  WarningTriangleGlyph,
+  ItineraryWarningTriangleGlyph,
 } from './ui/ItineraryGlyphs';
 export { PlaceAddHeader, PlaceAddRow } from './ui/PlaceAddScreen';
 export { UnplacedMustVisitNotice } from './ui/UnplacedMustVisitNotice';

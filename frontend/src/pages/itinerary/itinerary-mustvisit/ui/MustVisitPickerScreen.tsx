@@ -1,5 +1,10 @@
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  PlusGlyph,
+  InfoCircleGlyph,
+  BackChevronGlyph,
+} from '@/shared/ui/glyphs';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,12 +19,9 @@ import {
   type MustVisitListView,
 } from '@/features/itinerary/index.view';
 import {
-  BackChevronGlyph,
-  CloseGlyph,
-  InfoCircleGlyph,
-  LockGlyph,
-  PencilGlyph,
-  PlusGlyph,
+  ItineraryCloseGlyph,
+  ItineraryLockGlyph,
+  ItineraryPencilGlyph,
 } from '@/features/itinerary/index.view';
 
 /**
@@ -231,7 +233,7 @@ function MustVisitCard({
           <Chip
             testID={`itinerary-mustvisit-chip-fixed-${item.sourcePoiId}`}
             label={CHIP_FIXED}
-            icon={<LockGlyph />}
+            icon={<ItineraryLockGlyph />}
           />
         ) : (
           <Chip
@@ -284,7 +286,7 @@ function MustVisitCard({
           onPress={() => onPressItem?.(item.sourcePoiId)}
           hitSlop={8}
         >
-          <PencilGlyph />
+          <ItineraryPencilGlyph />
         </Pressable>
       ) : (
         <Pressable
@@ -299,7 +301,7 @@ function MustVisitCard({
           }
           hitSlop={8}
         >
-          <CloseGlyph />
+          <ItineraryCloseGlyph />
         </Pressable>
       )}
     </Pressable>
@@ -321,7 +323,7 @@ function AddButton({
       onPress={onPress}
       className="w-full flex-row items-center justify-center gap-sm rounded-button border-[1.4px] border-hairline-strong bg-canvas py-[14px]"
     >
-      <PlusGlyph tone="primary" />
+      <PlusGlyph color="primary" />
       <Text className="font-noto-bold text-body font-bold text-ink">
         {ADD_LABEL}
       </Text>
@@ -501,7 +503,7 @@ export function MustVisitPickerScreen({
             <StateNotice
               testID="itinerary-mustvisit-screen-empty"
               dashed
-              icon={<InfoCircleGlyph size={32} tone="primaryText" />}
+              icon={<InfoCircleGlyph size={32} color="primaryText" />}
               title={EMPTY_TITLE}
               description={mode === 'CO_PLAN' ? EMPTY_NOTE_CO_PLAN : EMPTY_NOTE}
               actions={[]}

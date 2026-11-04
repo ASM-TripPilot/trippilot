@@ -8,7 +8,7 @@ import {
   isOptimisticVisit,
 } from '@/features/check-visit/index.view';
 import {
-  RetryGlyph,
+  RecordRetryGlyph,
   VisitCheckActiveGlyph,
   VisitCheckDoneGlyph,
   VisitCheckSkippedGlyph,
@@ -301,7 +301,7 @@ export function VisitRecordCard({
             onPress={uploadRetry.onPress}
             className="w-full flex-row items-center justify-center gap-xs rounded-pill border border-primary py-[10px]"
           >
-            <RetryGlyph size={16} />
+            <RecordRetryGlyph size={16} />
             <Text className="font-noto-bold text-label text-primary">
               다시 시도
             </Text>

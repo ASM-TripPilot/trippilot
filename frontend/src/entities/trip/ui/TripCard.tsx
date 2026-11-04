@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { TrashGlyph, ChevronRightGlyph } from '@/shared/ui/glyphs';
 import { Image } from '@/shared/ui/Image';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -9,7 +10,7 @@ import {
   COVER_START,
 } from '../config/coverGradients';
 
-import { ChevronRightGlyph, MoreDotsGlyph, TrashGlyph } from './TripGlyphs';
+import { MoreDotsGlyph } from './TripGlyphs';
 import type { MyTripCardVM } from '../model';
 
 /**
@@ -210,7 +211,7 @@ export function TripCard({
               onPress={onPressDelete}
               className="h-[44px] flex-row items-center gap-sm px-lg"
             >
-              <TrashGlyph size={18} />
+              <TrashGlyph size={18} color="primary" />
               <Text className="font-noto text-body text-primary">
                 {MENU_DELETE_LABEL}
               </Text>

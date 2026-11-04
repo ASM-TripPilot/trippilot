@@ -9,7 +9,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot/model';
 import { describeAtFontScales, setFontScale } from '@/test-support/fontScale';
 
-import { ChevronRightGlyph } from './SlotGlyphs';
+import { ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import { SlotProgressCard } from './SlotProgressCard';
 
 /**
@@ -642,7 +642,7 @@ describe('SlotProgressCard · 이름 진입 (TRIP-987 A-1·A-2·A-4)', () => {
       expect(isTouchable(name)).toBe(true);
       // '›' 는 누름 영역 안에 있다 — 글리프만 따로 떠 있으면 눌러도 안 간다.
       const chevron = within(name).getByTestId(id('chevron'));
-      expect(screen.UNSAFE_queryAllByType(ChevronRightGlyph)).toHaveLength(1);
+      expect(screen.UNSAFE_queryAllByType(ChevronRight24Glyph)).toHaveLength(1);
 
       fireEvent.press(name);
       expect(onPressName).toHaveBeenCalledTimes(1);
@@ -660,7 +660,7 @@ describe('SlotProgressCard · 이름 진입 (TRIP-987 A-1·A-2·A-4)', () => {
       expect(name).toHaveTextContent('감천문화마을');
       expect(isTouchable(name)).toBe(false);
       expect(screen.queryByTestId(id('chevron'))).toBeNull();
-      expect(screen.UNSAFE_queryAllByType(ChevronRightGlyph)).toHaveLength(0);
+      expect(screen.UNSAFE_queryAllByType(ChevronRight24Glyph)).toHaveLength(0);
     }
   );
 

@@ -9,6 +9,7 @@ export const GLYPH_COLORS = {
   primaryText: '#C13515',
   onPrimary: '#FFFFFF',
   success: '#0E9384',
+  info: '#0B6E63',
 } as const;
 
 export type GlyphColor = keyof typeof GLYPH_COLORS;

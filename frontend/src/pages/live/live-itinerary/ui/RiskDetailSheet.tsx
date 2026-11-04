@@ -9,7 +9,7 @@ import {
 } from '@/features/planb/index.view';
 import type { RiskAffectedRow } from '../model/riskAffectedRow';
 import type { TriggerWatchlistRow } from '../model/triggerWatchlist';
-import { RiskWarningGlyph } from '@/features/planb/index.view';
+import { WarningFilledGlyph } from '@/shared/ui/glyphs';
 import type { TriggerSeverity } from '@/shared/api/index.schemas';
 
 /**
@@ -97,7 +97,7 @@ export function RiskDetailSheet({
 
         <View className="gap-xs">
           <View className="flex-row items-center gap-[6px]">
-            <RiskWarningGlyph size={12} testID="planb-risk-warning" />
+            <WarningFilledGlyph size={12} testID="planb-risk-warning" />
             <Text
               testID="planb-risk-eyebrow"
               className="font-noto-bold text-caption font-bold text-primary-text"

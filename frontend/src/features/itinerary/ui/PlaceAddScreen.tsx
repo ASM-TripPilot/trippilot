@@ -4,9 +4,10 @@ import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 
 import { PlaceRowCard } from '@/entities/place';
 import { PlaceSubtitle } from '@/entities/place';
+import { PlusGlyph } from '@/shared/ui/glyphs';
 import type { Place, PoiCategory } from '@/shared/api/index.schemas';
 
-import { PlusGlyph, SearchGlyph } from './ItineraryGlyphs';
+import { ItinerarySearchGlyph } from './ItineraryGlyphs';
 import { PLACE_CATEGORY_CHIPS } from '../config/placeCategoryChips';
 import { placeAddSubtitle } from '../model/placeAddSubtitle';
 
@@ -84,7 +85,7 @@ export function PlaceAddHeader({
   return (
     <View className="w-full gap-md px-lg pb-sm pt-sm">
       <View className="h-[46px] w-full flex-row items-center gap-sm rounded-pill border border-hairline bg-surface-soft pl-lg pr-md">
-        <SearchGlyph size={20} />
+        <ItinerarySearchGlyph size={20} />
         <BottomSheetTextInput
           testID={`${testIDPrefix}-search`}
           value={searchText}
@@ -185,7 +186,7 @@ export function PlaceAddRow({
             onPress={onPressAdd}
             className="flex-row items-center gap-[3px] rounded-button border border-primary px-md py-sm"
           >
-            <PlusGlyph size={14} tone="primary" />
+            <PlusGlyph size={14} color="primary" />
             <Text className="font-noto-bold text-label font-bold text-primary">
               추가
             </Text>

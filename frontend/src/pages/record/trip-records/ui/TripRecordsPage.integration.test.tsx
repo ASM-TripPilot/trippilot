@@ -16,7 +16,7 @@ import {
 import type { ReactTestInstance } from 'react-test-renderer';
 import { router } from 'expo-router';
 
-import { PlusGlyph } from '@/features/record';
+import { PlusGlyph } from '@/shared/ui/glyphs';
 import { server } from '@/mocks/server';
 import {
   createFakeAutomationSink,

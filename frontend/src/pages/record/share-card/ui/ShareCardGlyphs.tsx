@@ -13,7 +13,7 @@ const CORAL = '#FF385C';
 type GlyphProps = { size?: number; color?: string };
 
 /** ↓ 이미지 저장(다운로드) — 하단 버튼. */
-export function DownloadGlyph({
+export function ShareCardDownloadGlyph({
   size = 18,
   color = INK,
 }: GlyphProps): ReactElement {
@@ -38,7 +38,7 @@ export function DownloadGlyph({
 }
 
 /** ⤴ 공유하기(연결된 세 점) — 하단 버튼(코랄 배경 위 흰색). */
-export function ShareGlyph({
+export function ShareCardShareGlyph({
   size = 18,
   color = WHITE,
 }: GlyphProps): ReactElement {

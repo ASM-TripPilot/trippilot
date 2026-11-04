@@ -1,7 +1,7 @@
 import { type ReactElement, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
-import { ChevronRightGlyph, MUTED_SOFT } from '@/features/settings';
+import { ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import { RowBody } from './SettingsRow';
 
 /**
@@ -52,7 +52,7 @@ export function NicknameEditRow({
           right={
             <View className="flex-row items-center gap-sm">
               <Text className="font-noto text-body text-muted">{value}</Text>
-              <ChevronRightGlyph color={MUTED_SOFT} />
+              <ChevronRight24Glyph size={20} color="mutedSoft" />
             </View>
           }
         />

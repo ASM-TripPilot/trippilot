@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { goBackOr } from '@/shared/lib/goBackOr';
 
 import type { StayRecommendView as StayRecommendViewModel } from '../model/stayRecommend';
-import { LocationOffGlyph } from '@/features/itinerary';
+import { ItineraryLocationOffGlyph } from '@/features/itinerary';
 import { useAssignBase } from '@/features/assign-trip-base';
 import { useGetTripsTripId } from '@/shared/api/index.hooks';
 import { SAVED_LIST_LOAD_FAILED_TOAST } from '@/shared/ui/savedListLoadToast';
@@ -111,7 +111,7 @@ export function StayRecommendPage({
               <View className="flex-1 items-center justify-center bg-canvas px-lg">
                 <StateNotice
                   testID="stay-recommend-empty"
-                  icon={<LocationOffGlyph />}
+                  icon={<ItineraryLocationOffGlyph />}
                   title="지금은 동선 기준 추천을 보여 드릴 수 없어요"
                   description="숙소를 직접 둘러보고 저장하면 거점으로 지정할 수 있어요."
                   actions={[

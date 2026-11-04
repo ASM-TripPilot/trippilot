@@ -1,3 +1,4 @@
+import { BackArrowGlyph } from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
@@ -5,8 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { openAppSettings } from '@/shared/external-link';
 
 import { FormatSegment } from './FormatSegment';
-import { BackArrowGlyph } from '@/features/reflection/index.view';
-import { DownloadGlyph, ShareGlyph } from './ShareCardGlyphs';
+import { ShareCardDownloadGlyph, ShareCardShareGlyph } from './ShareCardGlyphs';
 import { ShareCardPreview } from './ShareCardPreview';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import {
@@ -285,7 +285,7 @@ export function ShareCardScreen({
             }}
             className="h-[50px] flex-1 flex-row items-center justify-center gap-sm rounded-button border border-hairline-strong bg-canvas"
           >
-            <DownloadGlyph size={18} />
+            <ShareCardDownloadGlyph size={18} />
             <Text className="font-noto-bold text-card-title text-ink">
               이미지 저장
             </Text>
@@ -298,7 +298,7 @@ export function ShareCardScreen({
             }}
             className="h-[50px] flex-1 flex-row items-center justify-center gap-sm rounded-button bg-primary"
           >
-            <ShareGlyph size={18} />
+            <ShareCardShareGlyph size={18} />
             <Text className="font-noto-bold text-card-title text-on-primary">
               공유하기
             </Text>

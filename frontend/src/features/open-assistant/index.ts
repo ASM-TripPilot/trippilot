@@ -5,4 +5,4 @@ export {
   type AssistantHref,
   type AssistantSurface,
 } from './model/assistantHref';
-export { ChatBubbleGlyph, SparkleGlyph } from './ui/AssistantGlyphs';
+export { ChatBubbleGlyph, AssistantSparkleGlyph } from './ui/AssistantGlyphs';

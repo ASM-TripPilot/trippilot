@@ -4,8 +4,11 @@ export type { GlyphProps } from './types';
 export {
   BackArrowGlyph,
   BackChevronGlyph,
+  Check24Glyph,
   CheckGlyph,
   ChevronDownGlyph,
+  ChevronRight16Glyph,
+  ChevronRight24Glyph,
   ChevronRightGlyph,
   CloseGlyph,
   PlusGlyph,
@@ -14,11 +17,23 @@ export {
   AlertCircleGlyph,
   ClockGlyph,
   FullAiGlyph,
+  InfoCircle18Glyph,
   InfoCircleGlyph,
+  InfoGlyph,
   LockGlyph,
+  WarningFilledGlyph,
+  WarningTriangle24Glyph,
   WarningTriangleGlyph,
 } from './StatusGlyphs';
-export { CarGlyph, MapPinGlyph, SuitcaseGlyph, WalkGlyph } from './PlaceGlyphs';
+export {
+  CarGlyph,
+  ForkKnifeGlyph,
+  MapPinGlyph,
+  ShoppingBagGlyph,
+  SuitcaseGlyph,
+  TransitGlyph,
+  WalkGlyph,
+} from './PlaceGlyphs';
 export {
   NoteGlyph,
   SearchGlyph,

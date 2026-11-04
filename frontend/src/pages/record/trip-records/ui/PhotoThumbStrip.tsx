@@ -1,9 +1,10 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { PlusGlyph } from '@/shared/ui/glyphs';
 import { Image } from '@/shared/ui/Image';
 
 import type { PhotoAvailability } from '../model/photoAvailability';
-import { PlusGlyph, WarningTriangleGlyph } from '@/features/record';
+import { RecordWarningTriangleGlyph } from '@/features/record';
 
 /**
  * TRIP-566 · AC-3·AC-4·AC-5(다건 UI) — 방문 사진 썸네일 스트립(순수 프레젠테이션, VM 주입).
@@ -79,7 +80,7 @@ function PhotoCell({ vm }: { vm: PhotoThumbVM }): ReactElement {
         testID={`record-photo-upload-failed-${id}`}
         className={`${CELL} items-center justify-center gap-[2px] bg-surface-strong px-[4px]`}
       >
-        <WarningTriangleGlyph size={18} />
+        <RecordWarningTriangleGlyph size={18} />
         <Text className="text-center text-[10px] leading-[12px] text-muted-soft">
           업로드 실패
         </Text>
@@ -119,7 +120,7 @@ export function PhotoThumbStrip({
           onPress={onPressAdd}
           className={`${CELL} items-center justify-center border-[1.4px] border-dashed border-hairline-strong`}
         >
-          <PlusGlyph size={22} />
+          <PlusGlyph size={22} color="primary" strokeWidth={1.95 * (22 / 18)} />
         </Pressable>
       ) : null}
     </View>

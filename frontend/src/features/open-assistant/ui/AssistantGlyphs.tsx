@@ -6,7 +6,7 @@ import { GLYPH_COLORS } from '@/shared/ui/glyphs';
 /**
  * ✦ 도우미 글리프 — 네 갈래 별(Figma b 밴드 헤더 원 안 기호). SVG raw hex 는 `*Glyphs.tsx` 리포 관례.
  */
-export function SparkleGlyph({
+export function AssistantSparkleGlyph({
   size = 22,
   color = '#FFFFFF',
 }: {

@@ -1,13 +1,10 @@
 import type { ReactElement } from 'react';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
-// 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
-export { BackArrowGlyph } from '@/shared/ui/glyphs';
-
 /**
  * TRIP-571 · j03 오늘의 회고 인라인 아이콘(react-native-svg). `*Glyphs.tsx` raw-hex 스캔 제외 관례
  * (SVG stroke/fill 은 className 을 못 받는다).
  *
- * ★ `LocationOffGlyph` 는 `shared/location/LocationGlyphs.tsx` 에도 있으나 features 간 import 금지라
+ * ★ `ReflectionLocationOffGlyph` 는 `shared/location/LocationGlyphs.tsx` 에도 있으나 features 간 import 금지라
  * 그대로 못 쓴다 — `RecordGlyphs` 선례대로 벡터만 feature-local 로 미러한다(색·크기는 이 화면 톤).
  * fill 색은 심판 대상이 아니다(repo-traps 글리프 함정 — jest 는 fill 을 못 본다). 얼굴 분기는 색이 아니라
  * 서로 다른 testID·조건부 렌더로 잠근다.
@@ -19,7 +16,7 @@ const CORAL = '#FF385C';
 type GlyphProps = { size?: number; color?: string };
 
 /** 위치 기록 없음 — 핀 위 사선(data-insufficient 지도 자리). */
-export function LocationOffGlyph({
+export function ReflectionLocationOffGlyph({
   size = 30,
   color = MUTED,
 }: GlyphProps): ReactElement {
@@ -89,7 +86,7 @@ export function EmptyCircleGlyph({ size = 72 }: GlyphProps): ReactElement {
 }
 
 /** ↻ 다시 시도(error 카드). */
-export function RetryGlyph({
+export function ReflectionRetryGlyph({
   size = 20,
   color = CORAL,
 }: GlyphProps): ReactElement {

@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { pickRegionCover } from '@/entities/trip';
 import { APP_ICON_COLORS, AppIconGlyph } from '@/features/auth/index.view';
-import { SparkleGlyph } from '@/features/open-assistant';
+import { AssistantSparkleGlyph } from '@/features/open-assistant';
 import { ChevronRightGlyph, GLYPH_COLORS } from '@/shared/ui/glyphs';
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 import { Image } from '@/shared/ui/Image';
@@ -453,7 +453,7 @@ export function TourAssistantFragment(): ReactElement {
             className="h-[40px] w-[40px] items-center justify-center rounded-pill bg-canvas"
             style={DOT_SHADOW}
           >
-            <SparkleGlyph size={20} color={GLYPH_COLORS.primary} />
+            <AssistantSparkleGlyph size={20} color={GLYPH_COLORS.primary} />
           </View>
           <Text className="flex-1 font-noto text-body leading-[22px] text-ink">
             1일차 동선을 보니 황령산에서 미술관까지 0.8km예요. 그대로 두셔도

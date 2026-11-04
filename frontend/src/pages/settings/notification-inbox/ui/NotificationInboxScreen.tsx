@@ -3,8 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { NotificationIconKind } from '../model/notificationKind';
-import { NotifBackChevronGlyph } from '@/features/notification';
-import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
+import { WarningTriangleGlyph, BackChevronGlyph } from '@/shared/ui/glyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { NotifBellGlyph } from './NotificationInboxGlyphs';
 import { NotificationRow } from './NotificationRow';
@@ -93,7 +92,7 @@ function InboxHeader({
           accessibilityRole="button"
           onPress={onPressBack}
         >
-          <NotifBackChevronGlyph />
+          <BackChevronGlyph />
         </Pressable>
         <Text className="text-[20px] font-noto-bold text-ink">알림</Text>
       </View>

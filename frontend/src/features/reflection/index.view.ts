@@ -54,9 +54,8 @@ export {
 } from './model/summaryView';
 export type { OrderedVisit } from './model/summaryView';
 export {
-  BackArrowGlyph,
   EmptyCircleGlyph,
-  LocationOffGlyph,
+  ReflectionLocationOffGlyph,
   PhotoOffGlyph,
-  RetryGlyph,
+  ReflectionRetryGlyph,
 } from './ui/ReflectionGlyphs';

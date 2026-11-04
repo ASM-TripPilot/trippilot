@@ -14,13 +14,13 @@ import {
   ArtGlyph,
   BalanceGlyph,
   CameraGlyph,
-  CheckGlyph,
-  ForkKnifeGlyph,
-  InfoCircleGlyph,
+  OnboardingCheckGlyph,
+  OnboardingForkKnifeGlyph,
+  OnboardingInfoCircleGlyph,
   LightningGlyph,
   MoonGlyph,
   MountainGlyph,
-  ShoppingBagGlyph,
+  OnboardingShoppingBagGlyph,
   SkipChevronGlyph,
   SunGlyph,
   type GlyphComponent,
@@ -48,12 +48,12 @@ const ctaShadow = {
 
 const STYLE_OPTIONS: { slug: string; label: string; Icon: GlyphComponent }[] = [
   { slug: 'rest', label: '휴양', Icon: SunGlyph },
-  { slug: 'gourmet', label: '미식', Icon: ForkKnifeGlyph },
+  { slug: 'gourmet', label: '미식', Icon: OnboardingForkKnifeGlyph },
   { slug: 'nature', label: '자연', Icon: MountainGlyph },
   { slug: 'art', label: '문화예술', Icon: ArtGlyph },
   { slug: 'activity', label: '액티비티', Icon: ActivityGlyph },
   { slug: 'sightseeing', label: '관광', Icon: CameraGlyph },
-  { slug: 'shopping', label: '쇼핑', Icon: ShoppingBagGlyph },
+  { slug: 'shopping', label: '쇼핑', Icon: OnboardingShoppingBagGlyph },
 ];
 
 const PACE_OPTIONS: { slug: string; label: string; Icon: GlyphComponent }[] = [
@@ -107,7 +107,7 @@ export function PrefStep1Screen({
                     testID={`onboarding-pref1-style-${slug}`}
                     label={label}
                     Icon={Icon}
-                    CheckIcon={CheckGlyph}
+                    CheckIcon={OnboardingCheckGlyph}
                     selected={selectedStyles?.includes(slug) ?? false}
                     onPress={() => onToggleStyle(slug)}
                     className="h-[104px] gap-[10px] py-[14px]"
@@ -145,7 +145,7 @@ export function PrefStep1Screen({
               testID="onboarding-pref1-info"
               className="flex-row gap-[10px] rounded-button bg-surface-soft p-md"
             >
-              <InfoCircleGlyph size={16} />
+              <OnboardingInfoCircleGlyph size={16} />
               <Text className="flex-1 font-noto text-label text-muted">
                 지금 안 정해도 앱을 쓰며 자연스럽게 맞춰가요
               </Text>

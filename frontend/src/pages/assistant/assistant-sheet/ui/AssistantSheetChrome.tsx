@@ -8,14 +8,13 @@ import {
   View,
 } from 'react-native';
 
-import { SparkleGlyph } from '@/features/open-assistant';
-import { ChevronDownGlyph } from '@/shared/ui/glyphs';
+import { AssistantSparkleGlyph } from '@/features/open-assistant';
+import { ChevronDownGlyph, CloseGlyph } from '@/shared/ui/glyphs';
 import type { QuickReply } from '../api/assistantContract';
 import { COMPOSER_LIMIT } from '../model/composerLimit';
 import { CAPABILITIES_LABEL } from '../model/displayActions';
 import {
-  CloseGlyph,
-  ListGlyph,
+  AssistantSheetListGlyph,
   ReplyGlyph,
   SendArrowGlyph,
 } from './AssistantSheetGlyphs';
@@ -38,7 +37,7 @@ export function AssistantSheetHeader({
         testID="assistant-sheet-mark"
         className="h-[30px] w-[30px] items-center justify-center rounded-full bg-primary"
       >
-        <SparkleGlyph size={16} />
+        <AssistantSparkleGlyph size={16} />
       </View>
       <View className="flex-row items-center">
         {trailing}
@@ -49,7 +48,7 @@ export function AssistantSheetHeader({
           onPress={onClose}
           className="h-[44px] w-[44px] items-center justify-center"
         >
-          <CloseGlyph size={24} />
+          <CloseGlyph size={24} color="ink" />
         </Pressable>
       </View>
     </View>
@@ -82,7 +81,7 @@ function ContextChip({
       hitSlop={{ top: 4, bottom: 4 }}
       className="min-h-[37px] flex-row items-center gap-[6px] self-start rounded-pill border border-hairline-strong bg-canvas px-md"
     >
-      <ListGlyph />
+      <AssistantSheetListGlyph />
       <Text className="font-noto text-label text-ink">{label}</Text>
       {expanded === undefined ? null : (
         // Figma: 펼친 상태 ⌃(14). 접힌 상태는 아래를 가리키는 ⌄ — 같은 글리프를 뒤집는다.

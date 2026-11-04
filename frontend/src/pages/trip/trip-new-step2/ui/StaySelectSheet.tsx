@@ -26,6 +26,7 @@
  * ⚠️ 실개폐·딤 전면 커버·중앙정렬·터치 차단은 `@gorhom/bottom-sheet` 통과형 목이라 jest 원리적
  * 사각(repo-traps 바텀시트 함정) — 6-b 실기(`_dev/preview.tsx` 의 시트 열림 키) 몫이다.
  */
+import { SearchGlyph } from '@/shared/ui/glyphs';
 import { type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
@@ -35,7 +36,7 @@ import { SavedStayCard } from '@/entities/stay';
 import { formatBaseNightRange } from '@/entities/trip';
 import type { SavedStay } from '@/shared/api/index.schemas';
 
-import { CheckGlyph, SearchGlyph } from '@/features/trip/index.view';
+import { TripCheckGlyph } from '@/features/trip/index.view';
 
 /** 후보 = 저장 숙소 + 표시용 rich 필드(사진·동네·가격·그림 키). 동네는 배선이 주소 시군구 토큰으로 채운다
  *  (TRIP-1074, 주소 모름이면 undefined). 사진·가격은 SavedStay 계약에 없어(실측) 실데이터 경로는
@@ -135,7 +136,7 @@ export function StaySelectSheet({
             </Text>
           ) : undefined
         }
-        trailing={selected ? <CheckGlyph size={22} tone="primary" /> : null}
+        trailing={selected ? <TripCheckGlyph size={22} tone="primary" /> : null}
         onPress={() => onSelect(stay.savedStayId)}
       />
     );

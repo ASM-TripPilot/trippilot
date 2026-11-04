@@ -3,19 +3,18 @@ import { Pressable, Text, View } from 'react-native';
 
 import type { SettingsRowChip } from '../model/settingsSections';
 
+import { ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import {
-  BellGlyph,
-  ChevronRightGlyph,
+  SettingsBellGlyph,
   ContrastGlyph,
   DocumentGlyph,
-  DownloadGlyph,
-  ExternalLinkGlyph,
+  SettingsDownloadGlyph,
+  SettingsExternalLinkGlyph,
   LogoutGlyph,
-  MUTED_SOFT,
   PersonGlyph,
-  PinGlyph,
-  SparkleGlyph,
-  TrashGlyph,
+  SettingsPinGlyph,
+  SettingsSparkleGlyph,
+  SettingsTrashGlyph,
 } from '@/features/settings';
 
 /** 행 key → 리딩 아이콘. Figma `1607:2440` 아이콘 배치. */
@@ -24,14 +23,14 @@ const LEADING_GLYPHS: Record<
   (props: { size?: number }) => ReactElement
 > = {
   nickname: PersonGlyph,
-  export: DownloadGlyph,
+  export: SettingsDownloadGlyph,
   preferences: ContrastGlyph,
-  'location-consent': PinGlyph,
-  personalization: SparkleGlyph,
-  notifications: BellGlyph,
-  'affiliate-toggle': ExternalLinkGlyph,
+  'location-consent': SettingsPinGlyph,
+  personalization: SettingsSparkleGlyph,
+  notifications: SettingsBellGlyph,
+  'affiliate-toggle': SettingsExternalLinkGlyph,
   logout: LogoutGlyph,
-  'delete-account': TrashGlyph,
+  'delete-account': SettingsTrashGlyph,
   // TRIP-937 앱 정보 약관 3행 — 발명 글리프(Figma 역반영 대상).
   'terms-TERMS_OF_SERVICE': DocumentGlyph,
   'terms-PRIVACY_POLICY': DocumentGlyph,
@@ -134,10 +133,10 @@ export function NavRow({
               <Text className="font-noto text-body text-muted">{value}</Text>
             ) : null}
             {chip ? <RowChip rowKey={rowKey} chip={chip} /> : null}
-            <ChevronRightGlyph
+            <ChevronRight24Glyph
               size={18}
-              color={MUTED_SOFT}
               testID={`settings-nav-${rowKey}-chevron`}
+              color="mutedSoft"
             />
           </View>
         }

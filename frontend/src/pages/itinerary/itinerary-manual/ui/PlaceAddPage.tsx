@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
 import { goBackOr } from '@/shared/lib/goBackOr';
 import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
@@ -19,7 +20,6 @@ import {
 } from '@/features/edit-itinerary';
 import { buildDraftPins } from '@/features/itinerary';
 import { usePlacesInfinite } from '@/features/explore';
-import { WarningTriangleGlyph } from '@/features/explore/index.view';
 import { PlaceAddHeader, PlaceAddRow } from '@/features/itinerary';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { TimeSheet } from '@/widgets/time-sheet';
@@ -392,7 +392,7 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
             <View className="w-full items-center justify-center px-lg pt-xl">
               <StateNotice
                 testID="itinerary-place-load-error"
-                icon={<WarningTriangleGlyph size={32} />}
+                icon={<WarningTriangleGlyph size={32} color="primary" />}
                 title="지금 장소 정보를 불러올 수 없어요"
                 description="잠시 후 다시 시도해 주세요"
                 actions={[

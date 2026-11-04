@@ -3,13 +3,9 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { METHOD_SUBTITLE, METHOD_SWITCH_NOTE } from '../config/methodPicker';
+import { FullAiGlyph, ChevronRightGlyph } from '@/shared/ui/glyphs';
 import { formatWizardStep } from '@/features/create-trip';
-import {
-  ChevronRightGlyph,
-  CoPickGlyph,
-  FullAiGlyph,
-  ManualGlyph,
-} from '@/features/itinerary/index.view';
+import { CoPickGlyph, ManualGlyph } from '@/features/itinerary/index.view';
 import { TripWizardHeader } from '@/widgets/trip-wizard-header';
 
 /**

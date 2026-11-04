@@ -2,7 +2,10 @@ import type { ReactElement } from 'react';
 import { Text, View } from 'react-native';
 
 import { PastTripRow } from '@/entities/trip';
-import { BookmarkGlyph, ChevronRightGlyph } from '@/features/record';
+import {
+  RecordBookmarkGlyph,
+  RecordChevronRightGlyph,
+} from '@/features/record';
 import type { PastTripCardVM } from '../model/recordsCalendar';
 
 /**
@@ -29,7 +32,7 @@ export function PastTripList({
         className="w-full flex-row items-center gap-[12px] rounded-[12px] border border-dashed border-hairline-strong px-[12px] py-[16px]"
       >
         <View className="h-[48px] w-[48px] items-center justify-center rounded-full bg-surface-soft">
-          <BookmarkGlyph size={24} />
+          <RecordBookmarkGlyph size={24} />
         </View>
         <Text className="font-noto text-[14px] leading-[20px] text-muted">
           여행이 끝나면 여기에 기록이 쌓여요
@@ -44,7 +47,7 @@ export function PastTripList({
           key={card.tripId}
           vm={card}
           onPress={() => onSelectTrip(card.tripId)}
-          trailing={<ChevronRightGlyph size={20} />}
+          trailing={<RecordChevronRightGlyph size={20} />}
           testID={`record-calendar-past-trip-${card.tripId}`}
         />
       ))}

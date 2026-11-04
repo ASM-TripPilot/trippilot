@@ -1,7 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-
-import { NotifWarningGlyph } from '@/features/notification';
+import { WarningTriangle24Glyph } from '@/shared/ui/glyphs';
 
 /**
  * l02 permission-denied 상단 대시 배너 — "기기 설정에서 알림 권한을 허용하세요" + [설정 이동] 버튼.
@@ -22,7 +21,7 @@ export function PermissionBanner({
       onPress={onOpenSettings}
       className="flex-row items-center gap-[10px] rounded-[12px] border-[1.2px] border-dashed border-hairline-strong py-[13px] pl-[14px] pr-[13px]"
     >
-      <NotifWarningGlyph size={18} />
+      <WarningTriangle24Glyph size={18} />
       <Text className="flex-1 font-noto text-label text-body">
         기기 설정에서 알림 권한을 허용하세요
       </Text>

@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { MapPinGlyph } from '@/shared/ui/glyphs';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -12,10 +13,9 @@ import type { Place } from '@/shared/api/index.schemas';
 
 import type { PlaceSaveNotice } from '@/features/save-place/index.view';
 import {
-  BackChevronGlyph,
-  InfoGlyph,
-  MapPinGlyph,
-  ShareGlyph,
+  ExploreBackChevronGlyph,
+  ExploreInfoGlyph,
+  ExploreShareGlyph,
 } from '@/features/explore/index.view';
 import { NoticeBanner } from '@/shared/ui/NoticeBanner';
 import { OpenNaverMapButton } from '@/shared/ui/OpenNaverMapButton';
@@ -104,7 +104,7 @@ function SaveErrorBanner({
         retry: 'explore-place-saveerror-retry',
       }}
       onPressAction={onPressAction}
-      icon={<InfoGlyph size={18} />}
+      icon={<ExploreInfoGlyph size={18} />}
     />
   );
 }
@@ -162,7 +162,7 @@ export function PlaceDetailScreen({
               <MapPinGlyph
                 testID="explore-place-subtitle-pin"
                 size={14}
-                tone="on-primary"
+                color="onPrimary"
               />
               <PlaceSubtitle
                 parts={subtitleParts}
@@ -278,7 +278,7 @@ export function PlaceDetailScreen({
           onPress={onPressBack}
           className="h-[38px] w-[38px] items-center justify-center rounded-pill bg-on-primary"
         >
-          <BackChevronGlyph size={20} />
+          <ExploreBackChevronGlyph size={20} />
         </Pressable>
         <View pointerEvents="none" className="flex-1" />
         <Pressable
@@ -288,7 +288,7 @@ export function PlaceDetailScreen({
           onPress={onPressShare}
           className="h-[38px] w-[38px] items-center justify-center rounded-pill bg-on-primary"
         >
-          <ShareGlyph size={19} />
+          <ExploreShareGlyph size={19} />
         </Pressable>
         <Pressable
           testID="explore-place-save"
@@ -318,7 +318,7 @@ export function PlaceDetailScreen({
             login: 'explore-place-opennaver-error-login',
             retry: 'explore-place-opennaver-error-retry',
           }}
-          icon={<InfoGlyph size={18} />}
+          icon={<ExploreInfoGlyph size={18} />}
         />
       ) : null}
       {saveError ? (

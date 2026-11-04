@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
+import { AlertCircleGlyph } from '@/shared/ui/glyphs';
 import { goBackOr } from '@/shared/lib/goBackOr';
 
 import { useSavedPlaces } from '@/features/save-place';
@@ -27,7 +28,6 @@ import type { DraftView, GenerationDayState } from '@/features/itinerary';
 import { resolveUnplacedNames } from '@/features/itinerary';
 import { DraftScreen } from './DraftScreen';
 import { GenerationFallbackScreen } from './GenerationFallbackScreen';
-import { AlertCircleGlyph } from '@/features/itinerary';
 import { UnplacedMustVisitNotice } from '@/features/itinerary';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { violationNotice } from '@/entities/itinerary-slot';

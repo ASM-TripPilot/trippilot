@@ -3,7 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import type { Proposal, ProposalDiffItem } from '../api/assistantContract';
 import { slotFaceLine } from '../model/cardModel';
-import { CheckGlyph, WarningGlyph } from './AssistantSheetGlyphs';
+import { AssistantSheetCheckGlyph, WarningGlyph } from './AssistantSheetGlyphs';
 import { OutlineCard } from './OutlineCard';
 
 /**
@@ -59,7 +59,7 @@ function DiffRow({
       >
         {line}
       </Text>
-      {checked ? <CheckGlyph size={20} /> : null}
+      {checked ? <AssistantSheetCheckGlyph size={20} /> : null}
     </View>
   );
 }

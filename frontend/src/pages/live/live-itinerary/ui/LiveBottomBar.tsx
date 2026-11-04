@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 
 import { EventGlyph } from '@/features/execution/index.view';
-import { PencilGlyph } from '@/features/itinerary/index.view';
+import { ItineraryPencilGlyph } from '@/features/itinerary/index.view';
 import { ChatBubbleGlyph } from '@/features/open-assistant';
 import { GLYPH_COLORS } from '@/shared/ui/glyphs';
 import {
@@ -86,7 +86,7 @@ export function LiveBottomBar({
           testID="execution-live-bar-edit"
           label="수정"
           icon={
-            <PencilGlyph
+            <ItineraryPencilGlyph
               size={NAV_BAR_ICON_SIZE}
               tone={active === 'edit' ? 'primary' : 'muted'}
             />

@@ -91,7 +91,10 @@ export function RailUpcomingGlyph({ size = 12 }: GlyphProps) {
 }
 
 // i10 원형 버튼 뒤로가기(‹) — 화살표 없이 굵은 셰브론. 흰 원 위 먹색이 기본(TRIP-755).
-export function BackArrowGlyph({ size = 24, color = INK }: TintGlyphProps) {
+export function ExecutionBackArrowGlyph({
+  size = 24,
+  color = INK,
+}: TintGlyphProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
@@ -106,7 +109,10 @@ export function BackArrowGlyph({ size = 24, color = INK }: TintGlyphProps) {
 }
 
 // i10 원형 버튼 공유 — 세 점 + 잇는 선. 흰 원 위 먹색이 기본(TRIP-755).
-export function ShareGlyph({ size = 24, color = INK }: TintGlyphProps) {
+export function ExecutionShareGlyph({
+  size = 24,
+  color = INK,
+}: TintGlyphProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle cx={18} cy={5} r={2.4} stroke={color} strokeWidth={1.8} />
@@ -118,33 +124,6 @@ export function ShareGlyph({ size = 24, color = INK }: TintGlyphProps) {
         strokeWidth={1.8}
         strokeLinecap="round"
       />
-    </Svg>
-  );
-}
-
-// ── TRIP-748 · i02 지도 위 트리거 알약 leading ──
-// 채운 빨강 삼각 + 흰 `!`(Figma 4184:2741 — `⚠` 텍스트를 SVG 로: iOS 가 U+26A0 을 노랑 컬러 이모지로
-// 그릴 수 있어 색을 결정론으로 고정한다, Seed Q3). testID 는 Svg 호스트에 얹는다(존재 단언용).
-export function WarningFilledGlyph({
-  size = 12,
-  testID,
-}: GlyphProps & { testID?: string }) {
-  return (
-    <Svg testID={testID} width={size} height={size} viewBox="0 0 12 12">
-      <Path
-        d="M6 1.2L11.2 10.4H0.8L6 1.2Z"
-        fill={PRIMARY}
-        stroke={PRIMARY}
-        strokeWidth={1}
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M6 4.6V7.1"
-        stroke={WHITE}
-        strokeWidth={1.3}
-        strokeLinecap="round"
-      />
-      <Circle cx={6} cy={8.8} r={0.7} fill={WHITE} />
     </Svg>
   );
 }
@@ -171,39 +150,6 @@ export function WeatherCloudGlyph({
         stroke={color}
         strokeWidth={1.6}
         strokeLinecap="round"
-      />
-    </Svg>
-  );
-}
-
-// ── TRIP-755 · i10 히어로(사진 위 흰 글리프) ──
-// 부제 앞 흰 핀(Figma 4159:2673). 형제 feature `MapPinGlyph`(explore on-primary)와 같은 도형이지만
-// features 간 import 금지라 여기 다시 그린다 — 동명 복제(traps-glyphs)를 피하려 이름을 달리했다.
-export function HeroPinGlyph({
-  size = 14,
-  testID,
-}: GlyphProps & { testID?: string }) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 32 32"
-      fill="none"
-    >
-      <Path
-        d="M26.6667 13.3333C26.6667 21.3333 16 29.3333 16 29.3333C16 29.3333 5.33333 21.3333 5.33333 13.3333C5.33333 10.5044 6.45714 7.79125 8.45753 5.79086C10.4579 3.79047 13.171 2.66667 16 2.66667C18.829 2.66667 21.5421 3.79047 23.5425 5.79086C25.5429 7.79125 26.6667 10.5044 26.6667 13.3333Z"
-        stroke={WHITE}
-        strokeWidth={2.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M16 17.3333C18.2091 17.3333 20 15.5425 20 13.3333C20 11.1242 18.2091 9.33333 16 9.33333C13.7909 9.33333 12 11.1242 12 13.3333C12 15.5425 13.7909 17.3333 16 17.3333Z"
-        stroke={WHITE}
-        strokeWidth={2.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
       />
     </Svg>
   );

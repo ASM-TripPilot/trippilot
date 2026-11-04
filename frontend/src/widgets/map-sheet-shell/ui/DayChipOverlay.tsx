@@ -1,8 +1,8 @@
+import { BackChevronGlyph } from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { DayChipScroller } from './DayChipScroller';
-import { BackChevronGlyph } from './MapSheetGlyphs';
 
 /**
  * TRIP-783 · 좌상단 오버레이(widgets · presentation-only) — 원형 back 버튼 + 일차 칩. 선택 칩은 primary

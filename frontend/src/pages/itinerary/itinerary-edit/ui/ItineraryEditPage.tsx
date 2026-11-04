@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
+import { InfoCircleGlyph, AlertCircleGlyph } from '@/shared/ui/glyphs';
 import { goBackOr } from '@/shared/lib/goBackOr';
 import { guardPress } from '@/shared/lib/pressGuard';
 
@@ -19,7 +20,6 @@ import { deriveVisitProgress } from '@/entities/itinerary-slot';
 import { reorderKeepingLocked } from '../model/reorderKeepingLocked';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
-import { AlertCircleGlyph, InfoCircleGlyph } from '@/features/itinerary';
 import { SaveConflictDialog } from '@/features/edit-itinerary';
 import { TimeSheet } from '@/widgets/time-sheet';
 import {
@@ -335,7 +335,7 @@ export function ItineraryEditPage({
     return (
       <EditFace
         testID="itinerary-edit-notfound"
-        icon={<InfoCircleGlyph size={32} tone="primaryText" />}
+        icon={<InfoCircleGlyph size={32} color="primaryText" />}
         title="아직 편집할 일정이 없어요"
         description="일정을 만들면 여기에서 수정할 수 있어요"
       />
@@ -346,7 +346,7 @@ export function ItineraryEditPage({
     return (
       <EditFace
         testID="itinerary-edit-failed"
-        icon={<AlertCircleGlyph size={32} tone="primaryText" />}
+        icon={<AlertCircleGlyph size={32} />}
         title="일정을 불러오지 못했어요"
         description="네트워크를 확인하고 다시 시도해주세요"
       />

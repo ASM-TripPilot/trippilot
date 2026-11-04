@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { defineConfig } = require('eslint/config');
+const { glyphExportBlocks } = require('./scripts/glyphExportBlocks.cjs');
 const expoConfig = require('eslint-config-expo/flat');
 
 // FSD 층 방향(app → pages → widgets → features → entities → shared)을 import 경계로 강제한다.
@@ -39,6 +40,21 @@ const layerGlob = (...segments) => path.join(SRC, ...segments, '**');
 const ROUTES = path.join(__dirname, 'app', '**');
 const ROUTE_FILES = 'app/**/*.{ts,tsx}';
 const ROUTE_DEV = 'app/_dev/**';
+
+// 글리프 이름 겹침 금지(TRIP-1773)의 입력 — src 아래 `*Glyphs.tsx` 소스를 읽어 순수 함수(scripts/glyphExportBlocks.cjs)에 넘긴다.
+const collectGlyphFiles = (dir) =>
+  fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return collectGlyphFiles(full);
+    return entry.name.endsWith('Glyphs.tsx') ? [full] : [];
+  });
+const glyphSources = () =>
+  Object.fromEntries(
+    collectGlyphFiles(SRC).map((abs) => [
+      path.relative(__dirname, abs).split(path.sep).join('/'),
+      fs.readFileSync(abs, 'utf8'),
+    ])
+  );
 
 // 층별 슬라이스 목록은 손으로 나열하지 않고 디렉토리에서 읽는다 — 새 슬라이스가 생기면 자동으로
 // 형제 격리 대상에 편입돼 하드코딩 드리프트를 막는다(구조 테스트도 같은 방식으로 목록을 읽는다).
@@ -667,6 +683,15 @@ module.exports = defineConfig([
       ],
     },
   },
+  // ── 글리프 이름 겹침 금지(TRIP-1773 · M-66) ────────────────────────────────────────────
+  // `*Glyphs.tsx` 파일 사이에 같은 이름을 export 하면 error — 같은 이름이 파일마다 다른 도형이라(141 정의·40 이름) grep 으로
+  // 정본을 못 찾던 문제를 0 으로 맞춰 둔 걸 지킨다. 공용(shared/ui/glyphs)만 접두 없는 이름을 갖고, 슬라이스 것은 접두를 붙인다.
+  // 금지 목록은 설정 로드 때 디스크의 글리프 파일에서 읽어 scripts/glyphExportBlocks.cjs(순수 함수, 단위 테스트가 있다)로 계산한다:
+  // 파일 F 에는 "F 가 아닌 다른 글리프 파일이 정의한 이름"이 걸린다(전체 − 내 이름이 아니다 — 두 파일이 같은 이름을 정의하면 서로 자기 이름이라 면제돼 영영 안 울린다).
+  // 사정거리: 정의는 `export [async] function X`·`export const X`·`export { X }`·`export { Y as X }` 로 거두고(둘째 글자 대문자 이름·간접 export 포함),
+  // 린트가 잡는 형태는 그 위에 `export { X } from` 재수출까지다. 못 보는 것: `export * from`(이름이 없다) · `export type/interface`(컴포넌트 아님) · ALL_CAPS 상수.
+  // `no-restricted-exports` 는 이 파일 어디에도 안 쓰여 `no-restricted-syntax` 덮어쓰기 함정과 안 부딪힌다.
+  ...glyphExportBlocks(glyphSources()),
   {
     // .cjs 는 node CommonJS 런타임으로 실행되는 스크립트다(하네스 스크립트 포함).
     // eslint.config.js 도 CommonJS 런타임 파일이며, 층 zone 을 세우려 `__dirname` 으로

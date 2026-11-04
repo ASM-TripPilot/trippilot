@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { MapPinOffGlyph, RetryGlyph } from './MapSheetGlyphs';
+import { MapPinOffGlyph, MapSheetRetryGlyph } from './MapSheetGlyphs';
 
 /**
  * TRIP-919 · 지도 폴백 바(widgets · presentation-only) — Figma h14 `4286:2123` `mapfallback`.
@@ -32,7 +32,7 @@ export function MapFallbackBar({
           onPress={onRetry}
           className="flex-row items-center gap-[6px] rounded-[8px] border border-hairline-strong bg-canvas px-lg py-sm"
         >
-          <RetryGlyph />
+          <MapSheetRetryGlyph />
           <Text className="font-noto-bold text-label font-bold text-ink">
             다시 시도
           </Text>

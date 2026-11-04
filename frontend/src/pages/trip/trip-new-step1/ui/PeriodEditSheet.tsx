@@ -16,7 +16,7 @@
  * 세우면 회색인데 눌린다 — [[disabled prop과 accessibilityState]]).
  *
  * 아이콘은 신규 없이 `TripGlyphs` 재사용: 이전 달 `BackChevronGlyph tone="muted"`, 다음 달
- * `ChevronRightGlyph tone="muted"` — 둘 다 18px·회색 좌우 대칭 쌍(TRIP-737, Figma `3627:2068`),
+ * `TripChevronRightGlyph tone="muted"` — 둘 다 18px·회색 좌우 대칭 쌍(TRIP-737, Figma `3627:2068`),
  * 비활성(이전 달 하한)은 톤이 아니라 opacity 로만 죽인다. 시작/종료 원은 순수 원이라
  * `rounded-full bg-primary` View 로 그린다(옛 `TripDateSheet`의 선택 원과 동형 — 에셋 불필요).
  *
@@ -24,6 +24,7 @@
  * `@gorhom/bottom-sheet` 통과형 목이라 jest 가 원리적으로 못 본다(repo-traps 바텀시트 함정) — 6-b
  * 실기(`_dev/preview.tsx`의 `trip-new-step1-period-sheet`) 몫이다.
  */
+import { BackChevronGlyph } from '@/shared/ui/glyphs';
 import { type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
@@ -39,10 +40,7 @@ import { SheetShell } from '@/shared/ui/SheetShell';
 import { dateCell, type TripDateRange } from '../model/tripDatePicker';
 import { summaryPeriod } from '@/features/create-trip';
 
-import {
-  BackChevronGlyph,
-  ChevronRightGlyph,
-} from '@/features/trip/index.view';
+import { TripChevronRightGlyph } from '@/features/trip/index.view';
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -232,7 +230,7 @@ export function PeriodEditSheet({
               canGoPrev ? '' : 'opacity-40'
             }`}
           >
-            <BackChevronGlyph size={18} tone="muted" />
+            <BackChevronGlyph size={18} color="muted" />
           </Pressable>
           <Text
             testID="trip-wizard-period-month"
@@ -250,7 +248,7 @@ export function PeriodEditSheet({
               canGoNext ? '' : 'opacity-40'
             }`}
           >
-            <ChevronRightGlyph size={18} tone="muted" />
+            <TripChevronRightGlyph size={18} tone="muted" />
           </Pressable>
         </View>
 

@@ -4,6 +4,7 @@
  * props 만 받고 네트워크를 모른다 — 대상 조회·저장·탈출 배선은 `pages/auth/reconsent` 몫이다.
  * 뒤로가기는 없다 — 재동의 전에는 나갈 곳이 없는 게이트 화면이다(거부 경로는 TRIP-938).
  */
+import { ChevronRight16Glyph } from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import {
   ActivityIndicator,
@@ -14,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CheckGlyph, ViewChevronGlyph } from '@/features/onboarding';
+import { OnboardingCheckGlyph } from '@/features/onboarding';
 
 export interface ReconsentItemView {
   termsType: string;
@@ -81,7 +82,7 @@ export function ReconsentScreen({
                     : 'border-[1.5px] border-hairline-strong bg-canvas'
                 }`}
               >
-                {item.checked ? <CheckGlyph /> : null}
+                {item.checked ? <OnboardingCheckGlyph /> : null}
               </View>
               <Text className="font-noto text-body text-ink">{item.label}</Text>
             </Pressable>
@@ -93,7 +94,7 @@ export function ReconsentScreen({
               className="flex-row items-center gap-[2px] py-[15px] pl-md"
             >
               <Text className="font-noto text-label text-muted-soft">보기</Text>
-              <ViewChevronGlyph />
+              <ChevronRight16Glyph color="mutedSoft" />
             </Pressable>
           </View>
         ))}

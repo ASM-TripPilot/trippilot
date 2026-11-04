@@ -5,7 +5,7 @@ import { Pressable, Share, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { usePlaceDetail } from '../model/usePlaceDetail';
-import { BackArrowGlyph } from '@/features/execution';
+import { ExecutionBackArrowGlyph } from '@/features/execution';
 import { isNotFound } from '@/shared/api';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { canOpenNaverPlace, openNaverPlace } from '@/shared/map';
@@ -112,7 +112,7 @@ export function LivePlacePage({ tripId, poiId }: LivePlacePageProps) {
               onPress={handleBack}
               hitSlop={8}
             >
-              <BackArrowGlyph />
+              <ExecutionBackArrowGlyph />
             </Pressable>
           </View>
           <View className="flex-1 items-center justify-center px-lg">

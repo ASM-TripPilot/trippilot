@@ -2,12 +2,13 @@
  * c06-terms 프레젠테이션 (US-ONB-02 · AC A1~A8 · C6 · Figma 1293:1208 정합 TRIP-162).
  * props 만 받고 네트워크를 모른다 — 서버 호출은 컨테이너/훅 몫이다.
  */
+import { ChevronRight16Glyph } from '@/shared/ui/glyphs';
 import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CheckGlyph, ViewChevronGlyph } from '@/features/onboarding';
+import { OnboardingCheckGlyph } from '@/features/onboarding';
 
 export interface TermsItemView {
   termsType: string;
@@ -91,7 +92,7 @@ export function TermsScreen({
                   : 'border-[1.5px] border-hairline-strong bg-canvas'
               }`}
             >
-              {allChecked ? <CheckGlyph /> : null}
+              {allChecked ? <OnboardingCheckGlyph /> : null}
             </View>
             <Text className="font-noto-bold text-card-title font-bold text-ink">
               약관 전체 동의
@@ -123,7 +124,7 @@ export function TermsScreen({
                         : 'border-[1.5px] border-hairline-strong bg-canvas'
                     }`}
                   >
-                    {item.checked ? <CheckGlyph /> : null}
+                    {item.checked ? <OnboardingCheckGlyph /> : null}
                   </View>
                   <View testID={`onboarding-terms-badge-${item.termsType}`}>
                     <Text
@@ -148,7 +149,7 @@ export function TermsScreen({
                   <Text className="font-noto text-label text-muted-soft">
                     보기
                   </Text>
-                  <ViewChevronGlyph />
+                  <ChevronRight16Glyph color="mutedSoft" />
                 </Pressable>
               </View>
             ))}

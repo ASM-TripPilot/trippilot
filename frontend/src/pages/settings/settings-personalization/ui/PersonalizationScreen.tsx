@@ -2,11 +2,11 @@ import { type ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackChevronGlyph } from '@/shared/ui/glyphs';
 import type {
   PersonalizationInfoReason,
   PersonalizationItem,
 } from '@/shared/api/index.schemas';
-import { LocationBackChevronGlyph } from '@/shared/location/index.view';
 import { Toggle } from '@/shared/ui/Toggle';
 
 import { personalizationCopy } from '../model/personalizationCopy';
@@ -70,7 +70,7 @@ export function PersonalizationScreen({
           accessibilityRole="button"
           onPress={onPressBack}
         >
-          <LocationBackChevronGlyph />
+          <BackChevronGlyph />
         </Pressable>
         <Text className="text-[18px] font-noto-bold text-ink">개인화</Text>
       </View>

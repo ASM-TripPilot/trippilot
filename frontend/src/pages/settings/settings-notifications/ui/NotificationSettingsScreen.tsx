@@ -4,8 +4,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { NotificationToggleKind } from '@/shared/api/index.schemas';
 
-import { NotifBackChevronGlyph, NotifInfoGlyph } from '@/features/notification';
-import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
+import {
+  WarningTriangleGlyph,
+  BackChevronGlyph,
+  InfoCircle18Glyph,
+} from '@/shared/ui/glyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { PermissionBanner } from './PermissionBanner';
 import { ToggleRow } from './ToggleRow';
@@ -83,7 +86,7 @@ const cardShadow = {
 function InfoBanner({ text }: { text: string }): ReactElement {
   return (
     <View className="flex-row items-start gap-[10px] rounded-[12px] bg-surface-soft px-[14px] py-md">
-      <NotifInfoGlyph size={18} />
+      <InfoCircle18Glyph size={18} />
       <Text className="flex-1 font-noto text-label text-muted">{text}</Text>
     </View>
   );
@@ -109,7 +112,7 @@ export function NotificationSettingsScreen({
         accessibilityRole="button"
         onPress={onPressBack}
       >
-        <NotifBackChevronGlyph />
+        <BackChevronGlyph />
       </Pressable>
       <Text className="text-[20px] font-noto-bold text-ink">알림 설정</Text>
     </View>

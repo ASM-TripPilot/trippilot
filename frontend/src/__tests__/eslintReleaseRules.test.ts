@@ -863,3 +863,69 @@ describe('React Compiler 규칙은 error (TRIP-1768) — 렌더 중 ref.current 
     expect(ruleIds).toContain('react-hooks/refs');
   });
 });
+
+// TRIP-1773 · M-66 — 글리프 파일(`*Glyphs.tsx`) 사이에 같은 이름을 내보내면 error (`no-restricted-exports`).
+// 금지 목록은 설정 로드 때 디스크의 글리프 파일에서 읽는다: 파일 F 에는 "F 가 아닌 다른 글리프 파일이 정의한 이름"이 걸린다.
+// 그래서 가짜 경로(어느 실파일도 아님)에서는 모든 글리프 이름이, 실파일에서는 자기 이름만 빠진 목록이 걸린다.
+// 양성 탐침의 이름은 공용(shared/ui/glyphs)이 계속 들고 있을 `ChevronRightGlyph`·`LockGlyph` 다 — 슬라이스 쪽 이름은 개명되므로 쓰지 않는다.
+// 이 룰은 `export * from`(이름 없는 전체 재수출)을 못 본다 — 그 사각은 탐침으로 굳히지 않고 02a 에 적었다.
+describe('글리프 이름은 파일 사이에 겹치지 않는다 (TRIP-1773) — no-restricted-exports', () => {
+  const NO_RESTRICTED_EXPORTS = 'no-restricted-exports';
+  const SLICE_GLYPH_PROBE = 'src/features/settings/ui/zzProbeGlyphs.tsx';
+  const PAGES_GLYPH_PROBE = 'src/pages/settings/settings/ui/zzProbeGlyphs.tsx';
+  const NAVIGATION_GLYPHS = 'src/shared/ui/glyphs/NavigationGlyphs.tsx';
+  const declare = (name: string) =>
+    `export function ${name}() {\n  return null;\n}\n`;
+
+  it('다른 파일이 이미 정의한 이름을 새 글리프 파일이 내보내면 error', async () => {
+    const ruleIds = await lint(declare('ChevronRightGlyph'), SLICE_GLYPH_PROBE);
+
+    expect(ruleIds).toEqual([NO_RESTRICTED_EXPORTS]);
+  });
+
+  it('고유한 이름이면 error 0', async () => {
+    const ruleIds = await lint(declare('ZzProbeOnlyGlyph'), SLICE_GLYPH_PROBE);
+
+    expect(ruleIds).toEqual([]);
+  });
+
+  it('pages 경로에서도 error (같은 룰을 덮는 pages 블록 뒤에서 살아 있다)', async () => {
+    const ruleIds = await lint(declare('ChevronRightGlyph'), PAGES_GLYPH_PROBE);
+
+    expect(ruleIds).toEqual([NO_RESTRICTED_EXPORTS]);
+  });
+
+  it('`export { A as 겹치는이름 }` 별칭으로 내보내도 error', async () => {
+    const aliased =
+      'function Local() {\n  return null;\n}\nexport { Local as ChevronRightGlyph };\n';
+
+    const ruleIds = await lint(aliased, SLICE_GLYPH_PROBE);
+
+    expect(ruleIds).toEqual([NO_RESTRICTED_EXPORTS]);
+  });
+
+  it('`export const` 화살표 정의도 error', async () => {
+    const arrow = 'export const ChevronRightGlyph = () => null;\n';
+
+    const ruleIds = await lint(arrow, SLICE_GLYPH_PROBE);
+
+    expect(ruleIds).toEqual([NO_RESTRICTED_EXPORTS]);
+  });
+
+  it('실파일은 자기 이름만 통과하고 다른 파일의 이름은 여전히 error (자기를 뺀 덮어쓰기 블록)', async () => {
+    const own = await lint(declare('ChevronRightGlyph'), NAVIGATION_GLYPHS);
+    const other = await lint(declare('LockGlyph'), NAVIGATION_GLYPHS);
+
+    expect(own).toEqual([]);
+    expect(other).toEqual([NO_RESTRICTED_EXPORTS]);
+  });
+
+  it('글리프 파일이 아니면(이름이 *Glyphs.tsx 가 아님) 이 금지를 걸지 않는다', async () => {
+    const ruleIds = await lint(
+      declare('ChevronRightGlyph'),
+      'src/features/settings/ui/zzProbe.tsx'
+    );
+
+    expect(ruleIds).toEqual([]);
+  });
+});
