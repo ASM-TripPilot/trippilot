@@ -160,9 +160,15 @@ describe('AssistantSheetPage (TRIP-1322)', () => {
     expect(fake.calls.openSession).toBe(2);
   });
 
-  it('세션 생성 401 이면 시트를 닫는다', async () => {
+  it('세션 생성 401 이면 시트를 닫는다 — 다시 그려져도 뒤로는 한 번', async () => {
     renderPage({ open: 'UNAUTHORIZED' });
     await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
+
+    // TRIP-1768 — 닫기 함수가 effect deps 에 들어가도 다시 그릴 때 또 닫지 않는다.
+    screen.rerender(<AssistantSheetPage surface="ITINERARY" tripId="t1" />);
+    screen.rerender(<AssistantSheetPage surface="ITINERARY" tripId="t1" />);
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
   it('닫기를 두 번 눌러도 뒤로는 한 번', async () => {

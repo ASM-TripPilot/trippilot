@@ -438,6 +438,8 @@ const NO_HAND_QUERYCLIENT = {
 };
 
 module.exports = defineConfig([
+  // expoConfig 가 eslint-plugin-react-hooks recommended 를 펼친다 — 7.x 는 React Compiler 규칙(error)까지 켠다.
+  // 버전은 pnpm-workspace.yaml overrides 두 줄이 정한다(7.1.1 + 그 하위 zod-validation-error 4.0.2 — 7.x 가 `/v4` 를 require, TRIP-1768).
   expoConfig,
   {
     // .claude/** = 에이전트·스킬 문서와 스크립트. 앱 소스 아님 → 린트 제외.
