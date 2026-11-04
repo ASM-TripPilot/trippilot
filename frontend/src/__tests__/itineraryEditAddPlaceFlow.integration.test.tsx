@@ -318,10 +318,13 @@ function Flow({ kind }: { kind: Kind }): ReactElement {
   );
 }
 
+let lastFlowClient: QueryClient | undefined;
+
 function renderFlow(
   kind: Kind,
   client: QueryClient = newTestQueryClient({ gcTime: 0 })
 ) {
+  lastFlowClient = client;
   const view = render(
     <QueryClientProvider client={client}>
       <Flow kind={kind} />
@@ -336,6 +339,18 @@ const cardId = (date: string, poiId: string): string =>
 /** 편집기가 일정을 시드해 첫 카드가 뜰 때까지. */
 async function ready(): Promise<void> {
   await screen.findByTestId(cardId(D1, 'a'));
+  // TRIP-1748 — h12 편집기는 그 날 방문 조회가 응답하기 전엔 저장을 막는다(완료 여부를 모름). 카드와 방문 조회 시작이 같은
+  // 렌더라 바로 저장하면 경합한다 — 방문 조회가 끝나기를 기다린다(직접 짜기는 방문 조회가 없어 곧바로 통과).
+  await waitFor(() =>
+    expect(
+      (lastFlowClient?.getQueryCache().getAll() ?? []).some(
+        (query) =>
+          String(query.queryKey[0]).includes('/visits/days/') &&
+          query.getObserversCount() > 0 &&
+          query.state.status === 'pending'
+      )
+    ).toBe(false)
+  );
 }
 
 const editor = () => within(screen.getByTestId(EDITOR));

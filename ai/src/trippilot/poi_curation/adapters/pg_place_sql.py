@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -29,6 +30,15 @@ STATEMENT_TIMEOUT_MS = 1500  # 팬아웃 작업 예산(≤3s) 안에서 LLM(~1.5
 _SIGHT_CATEGORIES = frozenset({"명소", "자연", "문화", "미술", "야경"})
 # 편집 이름 조회(`find_said`)의 행 상한 — 말 여럿 × 같은 이름 여럿. 이름 그대로 맞은 행이 앞이라 잘려도 지역 접두·지점 접미 쪽이 먼저 잘린다
 SAID_CAP = 60
+# 모델 정렬의 끝 — 프롬프트 규칙대로 '요즘 인기'·rich 를 다 실었는지 마지막 ORDER BY 뒤만 본다(`run`)
+_ORDER_BY = re.compile(r"\border\s+by\b", re.IGNORECASE)
+_RICH_DESC = re.compile(r"\brich\s+desc\b", re.IGNORECASE)
+
+
+def _model_ordered(sql: str) -> bool:
+    heads = list(_ORDER_BY.finditer(sql))
+    tail = sql[heads[-1].end():] if heads else ""
+    return f"'{TRENDING_TAG}'" in tail and _RICH_DESC.search(tail) is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,6 +217,12 @@ class PgPlaceSql:
                     by_id = {r[0]: r for r in cur.fetchall()}
             finally:
                 conn.rollback()
-        # 모델이 고른 집합(≤ROW_CAP) 안에서 '요즘 인기' → 정보 충실(rich) 순으로 한 번 더 — 반경 탐색과 같은 신호. 안정 정렬이라 그 안은
-        # 모델 순서다. 모델이 정렬 끝의 rich 를 빠뜨려도(프롬프트 규칙) 화면 앞자리에 사업자 법인명만 남지 않게 코드가 지킨다.
-        return sorted((_row(by_id[i]) for i in ids if i in by_id), key=lambda r: (not r.trending, not r.rich))
+        rows = [_row(by_id[i]) for i in ids if i in by_id]
+        # 모델이 정렬에 두 신호('요즘 인기'·rich)를 다 실었으면 그 순서 그대로 — 말의 성격 표지('뷰'·'아이동반'…)를 맨 앞에 둔 정렬
+        # (프롬프트 0.2.1, 0.2.2 부터 표지는 정렬에만)을 여기서 '요즘 인기' 먼저로 다시 덮으면 표지 없는 인기 장소가 앞자리를 채운다
+        # (2026-11-04 개발: "서울 경치 좋은 곳" 맨 앞에 미술관, "제주 아이랑 가기 좋은 곳" 아이동반 0/5 — 모델 순서면 5/5·2/5).
+        # 빠뜨렸을 때만 '요즘 인기' → 정보 충실(rich) 순으로 한 번 더 지킨다 — 화면 앞자리에 사업자 법인명만 남지 않게(#1500).
+        # 안정 정렬이라 그 안은 모델 순서다
+        if _model_ordered(sql):
+            return rows
+        return sorted(rows, key=lambda r: (not r.trending, not r.rich))

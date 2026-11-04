@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -27,6 +27,7 @@ import {
   getGetTripsTripIdItineraryQueryOptions,
   useGetTripsTripIdItinerary,
   getPutTripsTripIdItineraryMutationOptions,
+  getGetTripsTripIdVisitsDaysDayQueryKey,
   useGetTripsTripIdVisitsDaysDay,
   usePutTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
@@ -73,6 +74,8 @@ const SAVE_CONFIRMED_NOTE = '확정된 일정은 수정할 수 없어요';
 const SAVE_GENERATING_NOTE =
   '일정을 만드는 중이에요. 잠시 후 다시 시도해 주세요';
 const SAVE_ERROR_NOTE = '일정을 저장하지 못했어요. 잠시 후 다시 시도해 주세요';
+/** 그 날 방문 기록 조회가 404 아닌 실패(TRIP-1748) — 어느 곳을 다녀왔는지 몰라 저장을 막는다. */
+const VISITS_ERROR_NOTE = '방문 기록을 불러오지 못해 저장할 수 없어요';
 const SAVED_TOAST = '일정을 저장했어요';
 // 일정 PUT 진행 중 판정 키 — 장소 추가 화면(스택 위, 편집기는 언마운트 안 됨)의 PUT 도 같은 키다.
 const PUT_MUTATION_KEY =
@@ -178,6 +181,18 @@ export function ItineraryEditPage({
   const visits = useGetTripsTripIdVisitsDaysDay(tripId, activeDate, {
     query: { enabled: activeDate !== '' },
   });
+  // 그 날 완료 여부를 모르면(첫 응답 전 · 404 아닌 실패) 잠금이 비어 완료 카드를 옮기거나 지운 초안이 될 수 있다 — 서버
+  // PUT(전체 교체)엔 완료 방문 가드가 없어 화면이 유일한 그물이다(TRIP-1748). 실패면 안내 + [다시 시도]. 404 는 빈 목록 그대로.
+  const visitsFailed = visits.isError && !isNotFound(visits.error);
+  const activeUnknown = activeDate !== '' && (visits.isPending || visitsFailed);
+  // 보는 동안 모름이었던 날을 기억한다 — 그 날 초안을 든 채 다른 날로 옮겨도 PUT 은 모든 날을 싣는다(03b W1). 캐시는
+  // gc 로 그 날의 실패를 잊으므로 페이지가 쥔다. 다시 그 날을 보고 알게 되면 지운다.
+  const unknownDatesRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (activeDate === '') return;
+    if (activeUnknown) unknownDatesRef.current.add(activeDate);
+    else unknownDatesRef.current.delete(activeDate);
+  }, [activeDate, activeUnknown]);
 
   // 저장 뒤 복귀와 헤더 ‹ 공통 — 히스토리가 없으면(딥링크) 얼굴별 목적지로 replace(h12 일정 탭 · i07 라이브 허브).
   function leaveAfterSave(): void {
@@ -189,6 +204,31 @@ export function ItineraryEditPage({
 
   function handleSave(): void {
     if (inFlightRef.current) return;
+    // 완료 여부를 모르는 날이 있으면 저장하지 않고 그 날로 옮긴다(TRIP-1748) — 보고 있는 날이면 제자리(실패면 안내가 이유를
+    // 말하고, 조회 중이면 곧 풀린다), 다른 날이면 그 날의 안내·다시 시도를 보인다. 보지 않은 날은 편집할 수도 없었다.
+    // 보고 있는 날은 누른 순간의 캐시 상태로 본다 — 렌더 값·기억(effect)은 응답 직후 화면이 다시 그려지기 전까지
+    // 늦다(03b2 W2 · CI 실측: 응답이 캐시에 들어왔는데 다시 그려지기 전에 누르면 막혔다). 보고 있는 날은 관찰자가
+    // 있어 캐시에서 지워지지 않는다.
+    const activeState =
+      activeDate === ''
+        ? undefined
+        : queryClient.getQueryState(
+            getGetTripsTripIdVisitsDaysDayQueryKey(tripId, activeDate)
+          );
+    const activeUnknownNow =
+      activeState === undefined
+        ? activeUnknown
+        : activeState.status === 'pending' ||
+          (activeState.status === 'error' && !isNotFound(activeState.error));
+    const unknownDayIndex = days.findIndex((day) =>
+      day.date === activeDate
+        ? activeUnknownNow
+        : unknownDatesRef.current.has(day.date)
+    );
+    if (unknownDayIndex !== -1) {
+      setActiveDayIndex(unknownDayIndex);
+      return;
+    }
     // 장소 추가 PUT 이 응답 전이면 무반응 — 지금 초안엔 그 장소가 없어 전체 교체 PUT 이 추가분을 지운다(TRIP-1519).
     // 응답이 오면 편집기 초안이 갱신돼(시드/삽입) 이어 누른 저장은 추가분을 싣는다. 진행 표시는 Figma 공백.
     if (queryClient.isMutating({ mutationKey: PUT_MUTATION_KEY }) > 0) return;
@@ -382,11 +422,30 @@ export function ItineraryEditPage({
 
       {/* 순수 뷰가 못 가진 인라인 안내 — 저장 오류·미지정 제외(둘 다 INV-4). 지도·시트 위에 얹는 배너
           (Figma 프레임 없는 발명 표면). testID 는 EditorView 가 아니라 페이지 소유다(02a-C ★C5). */}
-      {saveError !== null || unspecifiedNotice !== null ? (
+      {saveError !== null || unspecifiedNotice !== null || visitsFailed ? (
         <View
           pointerEvents="box-none"
           className="absolute left-0 right-0 top-[96px] items-center gap-xs px-lg"
         >
+          {visitsFailed ? (
+            <View
+              testID="itinerary-edit-visits-error"
+              className="w-full flex-row items-center justify-between gap-sm rounded-card bg-primary-pale px-md py-sm"
+            >
+              <Text className="flex-1 font-noto text-caption text-primary-text">
+                {VISITS_ERROR_NOTE}
+              </Text>
+              <Pressable
+                testID="itinerary-edit-visits-retry"
+                accessibilityRole="button"
+                onPress={() => void visits.refetch()}
+              >
+                <Text className="font-noto-bold text-caption font-bold text-primary-text">
+                  다시 시도
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
           {saveError !== null ? (
             <View
               testID="itinerary-edit-save-error"
