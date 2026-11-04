@@ -799,9 +799,15 @@
 - `src/pages/home/model/homeTypes.ts`  →  HomeCollectionCard · HomeCollectionsLane · HomeSpotCard · HomeSpotsLane · HomeMagazineHero · HomeSections · TripHeroData · PastTrip · HomeSoftNote · HomePhase · HomeScreenProps
 
 ## src/pages/home/ui/
+- `src/pages/home/ui/HomeFabs.tsx`  →  CreateTripFab · SavedMenuFab
 - `src/pages/home/ui/HomeGlyphs.tsx`  →  BellGlyph · SearchGlyph · SparkleGlyph · LocationPinGlyph · HeartOutlineGlyph · HeartFilledGlyph · PlusGlyph · MapPinGlyph · SuitcaseGlyph · CloseGlyph
+- `src/pages/home/ui/HomeHeader.tsx`  →  GreetingHeader · homeGreeting · SearchBarBlock · TripsLoadError · TripsOfflineNotice
+- `src/pages/home/ui/HomeHeroes.tsx`  →  DiscoveryHeroCarousel · PlanningHeroCarousel
 - `src/pages/home/ui/HomePage.tsx`  →  HomePage
+- `src/pages/home/ui/HomePhaseBody.tsx`  →  PhaseBody
 - `src/pages/home/ui/HomeScreen.tsx`  →  HomeScreen
+- `src/pages/home/ui/HomeSections.tsx`  →  CollectionsSection · SpotsSection · PastTripsSection · CollectionStrip
+- `src/pages/home/ui/homeSurface.ts`  →  SCRIM_LOCATIONS · ABSOLUTE_FILL · softCardShadow
 
 ## src/pages/itinerary/itinerary-copick/config/
 - `src/pages/itinerary/itinerary-copick/config/conceptCards.ts`  →  CONCEPT_DESCRIPTIONS
@@ -1954,4 +1960,4 @@
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 - `src/widgets/trip-wizard-header/ui/TripWizardHeaderGlyphs.tsx`  →  BackChevronGlyph
 
-합계 1276개 파일
+합계 1282개 파일
