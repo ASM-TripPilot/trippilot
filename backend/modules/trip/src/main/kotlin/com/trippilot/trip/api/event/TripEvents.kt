@@ -37,3 +37,20 @@ data class TripDeleted(
     override val eventType: String = "trip.TripDeleted"
     override val aggregateType: String = "Trip"
 }
+
+/**
+ * 여행 기간(시작일·종료일)이 바뀌었다 — 편집이 기간을 **실제로** 바꾼 때만 나간다(제목·인원·목적지만 바꾼 편집은 안 낸다).
+ *
+ * 기간에서 파생된 것은 이 사건으로 스스로 다시 계산한다 — 첫 소비자: notification 의 리마인드 예약
+ * (안 하면 다음 일정 생성·재계획이 올 때까지 예약이 옛 날짜 그대로라 옛 날에 울리거나 새 날에 안 울린다).
+ * 날짜는 새 값이다. 배달은 아웃박스 릴레이(at-least-once) — 구독자는 멱등이어야 한다.
+ */
+data class TripPeriodChanged(
+    override val aggregateId: String, // tripId
+    val tripId: String,
+    val startDate: String,
+    val endDate: String,
+) : DomainEvent {
+    override val eventType: String = "trip.TripPeriodChanged"
+    override val aggregateType: String = "Trip"
+}

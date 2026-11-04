@@ -11,7 +11,9 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from hypothesis import given
@@ -136,6 +138,16 @@ def test_rejected_sql_is_a_failure_with_a_drop_event_and_no_sql_in_the_label() -
 @pytest.mark.parametrize("raw", ["not json", {"query": "SELECT 1"}, {"sql": 3}])
 def test_broken_output_is_a_parse_error(raw) -> None:
     assert _gate(raw).error.startswith("parse_error")
+
+
+def test_every_sql_example_in_the_prompt_passes_the_gate() -> None:
+    """모델은 프롬프트 예시 꼴을 그대로 따라 쓴다 — 예시에 허용 목록 밖 낱말이 섞이면 그 꼴의 말이 전부 게이트에서 떨어진다(0.2.3 야경 예시 포함)."""
+    text = (Path(__file__).resolve().parents[3] / "prompts" / "dialogue_sql.yaml").read_text(encoding="utf-8")
+    examples = re.findall(r'→ (\{"sql": "[^\n]+\})', text)
+    assert any("category = '야경'" in raw for raw in examples)  # 야경은 표지가 아니라 종류
+    for raw in examples:
+        out = _gate(raw)
+        assert out.error is None and out.value, raw
 
 
 def test_worker_vars_are_one_line_and_keep_only_explore_args() -> None:

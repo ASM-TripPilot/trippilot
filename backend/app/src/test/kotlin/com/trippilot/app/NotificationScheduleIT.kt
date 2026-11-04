@@ -5,6 +5,7 @@ import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.core.event.DomainEventPublisher
+import com.trippilot.core.event.OutboxSubscriber
 import com.trippilot.itinerarygeneration.api.event.ItineraryGenerated
 import com.trippilot.recalculation.api.event.ItineraryRecalculated
 import com.trippilot.notification.application.FireOutcome
@@ -17,11 +18,13 @@ import com.trippilot.notification.domain.NotificationRepository
 import com.trippilot.notification.domain.NotificationSchedule
 import com.trippilot.notification.domain.NotificationScheduleRepository
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
+import com.trippilot.trip.application.EditTripCommand
 import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripRepository
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -31,6 +34,7 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 
 /**
@@ -54,6 +58,7 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var scheduleService: NotificationScheduleService
     @Autowired private lateinit var publisher: DomainEventPublisher
     @Autowired private lateinit var relay: OutboxRelay
+    @Autowired private lateinit var subscribers: List<OutboxSubscriber>
     @Autowired private lateinit var trips: TripRepository
     @Autowired private lateinit var tripService: com.trippilot.trip.application.TripService
     @Autowired private lateinit var accounts: AccountRepository
@@ -228,6 +233,75 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
         repeat(3) { relay.relay() } // 배치 상한 대비 — 다른 IT 의 미발행분이 앞에 있을 수 있다
 
         schedules.findPendingByTrip(tripId) shouldBe emptyList()
+    }
+
+    private fun editPeriod(start: String, end: String) = EditTripCommand(
+        title = null, startDate = LocalDate.parse(start), endDate = LocalDate.parse(end), party = 2,
+        companionType = null, budgetTotal = null, destinations = listOf(TripDestination(0, "제주", 2)),
+    )
+
+    private fun periodEvents(tripId: UUID, where: String): Int = jdbc.queryForObject(
+        "SELECT count(*) FROM outbox_event WHERE event_type = 'trip.TripPeriodChanged' AND aggregate_id = ? AND $where",
+        Int::class.java, tripId.toString(),
+    )!!
+
+    /** 같은 컨테이너의 다른 IT 가 내 행을 먼저 집어갈 수 있다 — 내 사건이 배달될 때까지 돌린다(이 리포의 관용구). */
+    private fun deliverPeriodEvent(tripId: UUID) =
+        repeat(20) { if (periodEvents(tripId, "published_at IS NULL") > 0) relay.relay() }
+
+    /**
+     * 기간을 고치면 **운영 경로만으로** 예약이 새 기간으로 다시 선다(TRIP-1758) — 편집 → 아웃박스 → 릴레이 → 구독자.
+     * 종전에는 편집이 이벤트를 내지 않아, 일정을 다시 짜기 전까지 예약이 옛 날짜 그대로였다(늘린 날엔 안 울리고 줄인 날엔 울렸다).
+     */
+    @Test
+    fun `여행 기간을 고치면 운영 경로(이벤트-릴레이)만으로 예약이 새 기간으로 다시 선다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId) // 2036-08-10 ~ 08-12
+        scheduleService.reload(tripId)
+        schedules.findPendingByTrip(tripId).size shouldBe 4
+
+        tripService.edit(accountId, tripId, editPeriod("2036-08-10", "2036-08-13"))
+        deliverPeriodEvent(tripId)
+
+        periodEvents(tripId, "published_at IS NOT NULL") shouldBe 1 // '배달됐다'를 센다
+        val pending = schedules.findPendingByTrip(tripId)
+        pending.size shouldBe 5 // 전날 1 + 4일
+        pending.last().fireAt shouldBe LocalDate.parse("2036-08-13").atTime(8, 0).atZone(ZoneId.of("Asia/Seoul")).toInstant()
+    }
+
+    /**
+     * 일정을 짜기 전에 기간만 고친 여행에 예약을 새로 세우면 없는 일정의 알림이 울린다 — 예약은 일정 생성·재계산 이벤트가 처음 만든다.
+     * **빈 결과만으로는 "가드가 막았다"와 "사건이 배달되지 않았다"를 가를 수 없다** — 사건이 구독자에게 닿았다는 것을 먼저 센다(anti-patterns).
+     */
+    @Test
+    fun `예약이 만들어진 적 없는 여행은 기간을 고쳐도 예약이 생기지 않는다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+
+        tripService.edit(accountId, tripId, editPeriod("2036-08-10", "2036-08-13"))
+        deliverPeriodEvent(tripId)
+
+        // 구독자가 있어야 '구독자 없음으로 닫힘'이 아니라 '구독자가 받고 가드가 막음'이다. 던졌다면 행이 미발행으로 남아 여기서 먼저 깨진다.
+        subscribers.map { it.eventType } shouldContain "trip.TripPeriodChanged"
+        periodEvents(tripId, "published_at IS NOT NULL") shouldBe 1
+        schedules.findPendingByTrip(tripId) shouldBe emptyList()
+    }
+
+    /** 존재 판정 SQL — 대역은 "상태 무관·여행 한정"을 흉내낼 뿐이라 실 DB 에서 한 번 본다. 미발화 조건이 붙으면 발화를 마친 여행이 '예약 없음'으로 읽혀 기간을 늘려도 새 날의 알림이 안 선다. */
+    @Test
+    fun `예약 존재 판정은 발화·취소한 행도 센다 — 다른 여행의 행은 세지 않는다`() {
+        val accountId = newAccount()
+        val used = newTrip(accountId)
+        val untouched = newTrip(accountId)
+        val fired = NotificationSchedule.pending(accountId, used, NotificationKind.TRIP_DAY, now.plusSeconds(3600))
+        val canceled = NotificationSchedule.pending(accountId, used, NotificationKind.TRIP_DAY, now.plusSeconds(7200))
+        schedules.replacePending(used, listOf(fired, canceled))
+        schedules.markFired(fired.scheduleId, now) shouldBe true
+        schedules.markCanceled(canceled.scheduleId, now) shouldBe true
+
+        schedules.findPendingByTrip(used) shouldBe emptyList() // 미발화 행이 하나도 없다
+        schedules.existsForTrip(used) shouldBe true // 그래도 '적재된 적 있음'
+        schedules.existsForTrip(untouched) shouldBe false // 남의 여행 행이 있어도 이 여행은 아니다
     }
 
     @Test

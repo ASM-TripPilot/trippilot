@@ -288,6 +288,34 @@ class PushDispatchPropertyTest : StringSpec({
         )
     }
 
+    /**
+     * **일부러 안 보낸 것도 이유가 갈려 찍힌다.** 푸시 설정이 꺼져 있는가(`PUSH_OFF`), 삭제 유예 중인 계정인가(`DELETION_PENDING`) —
+     * 둘 다 `MUTED` 라 종전 로그(`reason=-`)로는 "푸시가 안 와요"의 원인을 못 갈랐다(11-04 08:00 운영: 21건 중 1건이 MUTED, 어느 쪽인지 모름).
+     */
+    "일부러 안 보낸 이유가 로그에 남는다 — 설정 끔은 PUSH_OFF, 삭제 유예는 DELETION_PENDING" {
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        val logger = LoggerFactory.getLogger(PushDispatchService::class.java) as Logger
+        logger.addAppender(appender)
+        val registry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
+        try {
+            serviceOf(Tokens(listOf(token(deliverable = true))), Sender(), Notifications(), pushOn = false).dispatch(notification())
+            val notifications = Notifications()
+            PushDispatchService(
+                Tokens(listOf(token(deliverable = true))), notifications, NotificationToggleService(Toggles(true), clock), Sender(),
+                NotificationMetrics(registry, notifications), PushRateLimits(), clock, FakeTickets(), PendingDeletion(acc),
+            ).dispatch(notification())
+        } finally {
+            logger.detachAppender(appender)
+        }
+
+        appender.list.map { it.formattedMessage }.filter { it.startsWith("push.dispatch ") } shouldContainExactly listOf(
+            "push.dispatch outcome=MUTED kind=TRIP_DAY reason=PUSH_OFF real=true",
+            "push.dispatch outcome=MUTED kind=TRIP_DAY reason=DELETION_PENDING real=true",
+        )
+        // 지표 태그도 같은 이유를 싣는다 — OTHER 로 접히지 않는다.
+        registry.find(NotificationMetrics.PUSH_DISPATCH).tag("outcome", "MUTED").tag("reason", "DELETION_PENDING").counter()!!.count() shouldBe 1.0
+    }
+
     /** **죽은 토큰만 있는 계정도 `NO_TOKEN`** — 활성 토큰이 없다는 뜻이다(무효화는 `findActive` 가 이미 뺀다). */
     "활성 토큰이 하나도 없으면(무효화된 것만 있어도) NO_TOKEN 이다" {
         val appender = ListAppender<ILoggingEvent>().apply { start() }
