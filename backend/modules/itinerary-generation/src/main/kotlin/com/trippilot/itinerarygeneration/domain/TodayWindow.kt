@@ -3,7 +3,7 @@ package com.trippilot.itinerarygeneration.domain
 import java.time.LocalTime
 
 /**
- * 오늘을 "지금부터" 짤 때의 창 규칙 — 생성(`GenerateItineraryService.dayWindowOf`)과 재계획(AI 어댑터)이 함께 쓴다.
+ * 오늘을 "지금부터" 짤 때의 창 규칙 — 생성(`GenerateItineraryService.dayWindowOf`)과 재계획(`ReplanFacadeService.replanWindow`)이 함께 쓴다.
  * 둘이 따로 들고 있으면 저녁 생성은 한두 곳이 나오는데 같은 시각의 [다시 짜기]는 "대안 없음"이 된다.
  */
 object TodayWindow {
@@ -33,7 +33,7 @@ object TodayWindow {
 
     /**
      * 생성의 오늘 끝 — [eveningEnd] 가 하루 끝(23:59)에 막혀 지금부터 2시간을 못 채우면 **익일 01:00**.
-     * 재계획(AI 어댑터)은 [eveningEnd] 그대로다 — 재계획 경계는 아직 자정 넘는 슬롯 시각을 주고받지 못한다.
+     * 재계획(`ReplanFacadeService.replanWindow`)은 [eveningEnd] 그대로다 — 재계획 경계는 아직 자정 넘는 슬롯 시각을 주고받지 못한다.
      */
     fun generationEnd(from: LocalTime, end: LocalTime): LocalTime {
         val fromMin = from.toSecondOfDay() / 60
