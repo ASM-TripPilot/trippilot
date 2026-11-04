@@ -141,7 +141,8 @@ def test_invalid_stage_result_is_rejected_inv2() -> None:
 
     assert result.solve_mode == SolveMode.RULE_FALLBACK   # 위반 해는 반환 안 됨
     assert facade.validate(result, problem, deadline_ms=1000) == []
-    assert any(e.reason.startswith("invalid") for e in trace.of_type(FallbackEvent))
+    # 사유에 위반 코드가 실린다(day window 밖 슬롯 = HC4 한 건) — 건수만 남기면 운영에서 원인을 못 가린다
+    assert "invalid:HC4x1" in [e.reason for e in trace.of_type(FallbackEvent)]
 
 
 def test_success_emits_assembly_run_record() -> None:
