@@ -315,6 +315,21 @@ class SecretTests(unittest.TestCase):
                 runtime_secrets.validate_groups({**base, "ai": {"TRIPPILOT_KB5_FALLBACK": bad}})
         self.assertEqual(runtime_secrets.parse_runtime_switches("TRIPPILOT_KB5_FALLBACK=off"), {"TRIPPILOT_KB5_FALLBACK": "off"})
 
+    def test_kb5_open_search_switch_is_allowlisted_validated_and_a_runtime_switch(self):
+        """도우미 열린 검색은 앱 기본이 꺼짐이다 — 측정 뒤 코드 배포 없이 배포 입력으로 켠다(`TRIPPILOT_KB5_OPEN_SEARCH=on`).
+        앱은 켜짐 낱말 밖의 값을 조용히 꺼짐으로 읽으니(오타 = 켠 줄 알고 꺼진 채) 여기서 두 값만 받는다."""
+        self.assertIn("TRIPPILOT_KB5_OPEN_SEARCH", runtime_secrets.AI_KEYS)
+        self.assertEqual(runtime_secrets.RUNTIME_SWITCHES["TRIPPILOT_KB5_OPEN_SEARCH"], "ai")
+        base = {name: {} for name in runtime_secrets.GROUP_KEYS}
+        for ok in ("on", "off", ""):
+            with self.subTest(ok=ok):
+                runtime_secrets.validate_groups({**base, "ai": {"TRIPPILOT_KB5_OPEN_SEARCH": ok}})
+        for bad in ("true", "ON", "yes", "1", "enabled"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                runtime_secrets.validate_groups({**base, "ai": {"TRIPPILOT_KB5_OPEN_SEARCH": bad}})
+        self.assertEqual(runtime_secrets.parse_runtime_switches("TRIPPILOT_KB5_OPEN_SEARCH=on"),
+                         {"TRIPPILOT_KB5_OPEN_SEARCH": "on"})
+
     def test_runtime_switches_parse_pairs_and_refuse_anything_else(self):
         """배포 입력 `runtime_switches`(KEY=VALUE;…) — 쌍 구분이 `;` 인 것은 카나리 계정 목록 값에 쉼표가 들어 있어서다.
         허용 밖 키·형식 오류·같은 키 두 번은 버리지 않고 배포를 멈춘다 — 조용히 버리면 켠 줄 알고 넘어간다."""
@@ -329,7 +344,7 @@ class SecretTests(unittest.TestCase):
         self.assertEqual(parse("PLANB_PREPARED_REPLAN= "), {"PLANB_PREPARED_REPLAN": ""})  # 빈 값 = 지운다
         self.assertEqual(set(runtime_secrets.RUNTIME_SWITCHES), {
             "PLANB_SITUATION_SWEEP", "PLANB_SITUATION_HORIZON", "PLANB_SITUATION_SWEEP_ACCOUNT_IDS", "PLANB_PREPARED_REPLAN",
-            "HOLIDAY_CLOSURE_MODE", "TRIPPILOT_KB5_FALLBACK"})
+            "HOLIDAY_CLOSURE_MODE", "TRIPPILOT_KB5_FALLBACK", "TRIPPILOT_KB5_OPEN_SEARCH"})
         for key, group in runtime_secrets.RUNTIME_SWITCHES.items():  # 스위치는 제 그룹 허용목록 안이어야 쓸 수 있다
             self.assertIn(key, runtime_secrets.GROUP_KEYS[group])
         bads = ("PUSH_MODE=expo", "OPENAI_API_KEY=sk-x", "planb_situation_sweep=on",  # 허용 밖 — 다른 키는 이 길로 못 쓴다

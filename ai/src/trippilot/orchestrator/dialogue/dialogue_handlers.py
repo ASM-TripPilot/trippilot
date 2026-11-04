@@ -2097,8 +2097,7 @@ def _explore_events(ctx: TurnContext, anchor: _Anchor, theme: str | None,
     return HandlerTask("events", fn)
 
 
-def _plan_explore(ctx: TurnContext, *, radius_first: bool = False) -> tuple[HandlerTask, ...]:
-    # radius_first = 추천 — 반경 후보가 있으면 SQL 행을 보지 않는다(`_assemble_recommend`). 탐색은 SQL 행이 있으면 SQL 이 이긴다
+def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     anchor, builder = _explore_anchor(ctx), ctx.ports.pool_builder
     category, theme = ctx.arguments.get("category"), ctx.arguments.get("theme")
     # NL2SQL 은 사용자가 지역을 말했을 때만 — 일정 근처 탐색은 거리가 핵심이라 반경 풀이 맞다(뷰에 좌표가 없다)
@@ -2110,17 +2109,16 @@ def _plan_explore(ctx: TurnContext, *, radius_first: bool = False) -> tuple[Hand
     sql = (_explore_by_sql(ctx, anchor, category, theme),) if (
         ctx.ports.place_sql is not None and ctx.ports.place_sql.writes_sql and ctx.arguments.get("region")
         and (anchor is None or (anchor.kind == "region" and _carry(ctx) is None))) else ()
-    # 탐색에서 SQL 이 나란히 돌면 열린 검색은 돌리지 않는다 — SQL 행이 있으면 반경 순서는 통째로 버려지는데(`_assemble_explore`) 임베딩·
-    # pgvector 는 다 치르고 팬아웃은 그 대기까지 기다린다(리뷰 2026-11-04, 운영은 DIALOGUE_SQL 배정). SQL 이 실패·0건인 턴의 반경 순서도
-    # 그래서 규칙 순서 그대로다 — 그 몫은 포기한다. 추천은 반경이 먼저라 SQL 과 무관하게 돌린다
-    sql_wins = bool(sql) and not radius_first
     center_of = _once(lambda: _anchor_center(ctx, anchor)) if anchor is not None else None
     events = _explore_events(ctx, anchor, theme, center_of) if anchor is not None else None
     sql += (events,) if events is not None else ()
     if anchor is None or builder is None:
         return sql
+    # 열린 검색은 SQL 이 나란히 돌아도 돈다 — 묘사형 말(게이트가 열린다)이면 문서 순위가 섞인 반경 결과가 SQL 행을 이긴다
+    # (`_assemble_explore`, 2026-11-04 사용자 결정 "묘사형 말이면 열린 검색 우선" · BR-AO-27 개정·BR-AO-36). 종전엔 SQL 이 이긴다고 건너뛰어
+    # 결정론 측정에서 오답이 준 비·실내 탐색 사례에 하나도 닿지 않았다
     searcher = ctx.ports.place_search
-    query = _open_query(ctx, anchor, category, theme) if searcher is not None and not sql_wins else None
+    query = _open_query(ctx, anchor, category, theme) if searcher is not None else None
 
     def fn() -> dict:
         doc: dict[str, str] = {}
@@ -2148,7 +2146,8 @@ def _plan_explore(ctx: TurnContext, *, radius_first: bool = False) -> tuple[Hand
             "distance_range": _km_label(haversine_km(center, p.coord)) if anchor.kind == "itinerary" else None,
             "reason": "요즘 인기" if TRENDING_TAG in p.tags else (_CATEGORY_KO.get(p.category.value) or "가 볼 만한 곳"),
         } for p in ranked]
-        return {"status": "OK", "candidates": candidates, **doc}  # doc = 열린 검색 상태(관측용 — 조립은 읽지 않는다, Facts 밖)
+        # doc = 열린 검색 상태(Facts 밖) — 조립은 "OK"(문서 순위가 실제로 섞였다)인지만 읽어 SQL 행과 어느 쪽을 쓸지 가른다
+        return {"status": "OK", "candidates": candidates, **doc}
 
     return (HandlerTask("explore", fn), *sql)
 
@@ -2161,7 +2160,7 @@ _DOC_MARGIN_S, _DOC_MIN_S = 0.35, 0.5
 
 def _open_query(ctx: TurnContext, anchor: _Anchor, category: str | None, theme: str | None) -> hybrid_rank.OpenQuery | None:
     """열린 검색을 돌릴 탐색인가 — 주제 게이트가 열리고, 앵커가 지역·일정 근처이고(두 곳 사이·먼 짝 제외 — 가운데 순서가 먼저다),
-    밤 말이 아니고(야경·나이트라이프 순서가 먼저다), 이어 묻기가 아닐 때만(SQL 이 이기는 탐색은 호출측 `_plan_explore` 가 뺀다).
+    밤 말이 아니고(야경·나이트라이프 순서가 먼저다), 이어 묻기가 아닐 때만. NL2SQL 이 나란히 도는지와는 무관하다(BR-AO-36).
     돌 때 그 질의, 아니면 None."""
     if anchor.kind not in ("region", "itinerary") or _said_night(category, theme, _night_heard(ctx)) or _follow_up(ctx) is not None:
         return None
@@ -2220,7 +2219,10 @@ def _assemble_explore(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Fa
     # 이어 묻기에서 앞에서 다 보여 줬으면 '찾지 못함'이 아니다(바로 앞 턴과 어긋난다)
     told = "앞에서 보여 준 행사 말고는 더 찾지 못함" if events is not None and events.get("exhausted") else "그 기간·지역에서 물은 행사를 찾지 못함"
     asked = ((told,) if events is not None else ("행사 정보 미확인",)) if "events" in results else ()
-    value = by_sql or _value(results, "explore")
+    radius = _value(results, "explore")
+    # 묘사형 말로 문서 순위가 실제로 섞인 반경 결과(doc "OK")는 SQL 행을 이긴다 — SQL 은 묘사("비 오는 날 실내")를 못 읽는다
+    # (2026-11-04 사용자 결정, BR-AO-27 개정·BR-AO-36). 그 밖(게이트 닫힘·검색 실패·시한·꺼짐)은 종전대로 SQL 행이 먼저다
+    value = radius if _candidates_if_ok(radius) and radius.get("doc") == "OK" else (by_sql or radius)
     if value is None or value.get("status") != "OK":
         return _text_facts(intent, FactStatus.UNAVAILABLE, home, notes=("장소 탐색 미확인", *asked), detail=detail)
     shown = _shown_before(ctx)
@@ -2475,7 +2477,7 @@ HANDLERS: Mapping[Intent, Handler] = {
     Intent.EXPLORE_PLACES: _handler(Intent.EXPLORE_PLACES, _assemble_explore, _plan_explore,
                                     ask=lambda ctx: ("region", EXPLORE_ASK_REGION_TEXT) if explore_needs_region(ctx) else None),
     Intent.RECOMMEND_REGION: _handler(Intent.RECOMMEND_REGION, _assemble_region),
-    Intent.RECOMMEND_PLACES: _handler(Intent.RECOMMEND_PLACES, _assemble_recommend, lambda ctx: _plan_explore(ctx, radius_first=True),
+    Intent.RECOMMEND_PLACES: _handler(Intent.RECOMMEND_PLACES, _assemble_recommend, _plan_explore,
                                       ask=lambda ctx: ("region", EXPLORE_ASK_REGION_TEXT) if explore_needs_region(ctx) else None),
 }
 

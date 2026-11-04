@@ -394,6 +394,9 @@ class ChartTests(unittest.TestCase):
             # KB-5 대체 문서를 끄는 길 — 시크릿의 off 가 파드에 닿지 않으면 끈 줄 알고 켜진 채로 돈다(앱 기본이 켜짐이라 더 나쁘다)
             self.assertEqual(env["TRIPPILOT_KB5_FALLBACK"]["valueFrom"]["secretKeyRef"],
                              {"name": "trippilot-ai", "key": "TRIPPILOT_KB5_FALLBACK", "optional": True})
+            # 도우미 열린 검색을 켜는 길 — 시크릿의 on 이 파드에 닿지 않으면 켠 줄 알고 꺼진 채로 돈다(앱 기본이 꺼짐)
+            self.assertEqual(env["TRIPPILOT_KB5_OPEN_SEARCH"]["valueFrom"]["secretKeyRef"],
+                             {"name": "trippilot-ai", "key": "TRIPPILOT_KB5_OPEN_SEARCH", "optional": True})
 
 
 class RequestSizingTests(unittest.TestCase):

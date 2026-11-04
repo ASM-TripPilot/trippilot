@@ -3,6 +3,11 @@ r"""도우미 장소 탐색 열린 검색(KB-5 문서 순위, `place_search` + `
 실행(ai/ 에서 — 로컬 서빙 임베딩 컨테이너만 부른다, 실 LLM·외부 API 0):
     TRIPPILOT_EMBEDDING_BASE_URL=http://localhost:8100 uv run python scripts/measure/measure_assistant_open_search.py
     EVAL_CASES=서울/비,제주/비 … 로 사례를 고른다(이름 앞부분 일치). 결과 JSON 은 `EVAL_OUT` 경로에도 쓴다.
+  쌍대 판정(2단계 — **유료, 실 Claude 호출이라 사용자 승인 뒤에만**. 키는 환경 변수로만 받는다):
+    ANTHROPIC_API_KEY=… TRIPPILOT_EMBEDDING_BASE_URL=http://localhost:8100 uv run python \
+        scripts/measure/measure_assistant_open_search.py judge [반복=1]     # EVAL_JUDGE_MODEL(기본 claude-sonnet-5)·EVAL_WORKERS
+    팔 짝 A-B(본 비교)·A-A(같은 입력 대조 — 이 흔들림보다 확실히 이겨야 켠다)·B-B3. 결과 JSON 에 짝마다 승패·같음·판정 실패
+    (`judge_fail` — 0 이 아니면 승패로 읽지 말 것)·부호 검정 p. 두 목록이 같은 사례는 판정하지 않는다(`identical`, A-A 제외).
 
 **무엇을 재나.** 운영 핸들러가 짓는 순서(규칙 정렬 `_explore_rank`)에 KB-5 문서 순위를 섞었을 때 **명백한 오답**이 줄어드는가.
 판정 LLM 없이 코드가 셀 수 있는 것만 센다 — 비·실내를 물었는데 야외(자연·야경·액티비티 분류·'야외' 태그), 북카페를 물었는데 카페가
@@ -18,6 +23,12 @@ r"""도우미 장소 탐색 열린 검색(KB-5 문서 순위, `place_search` + `
 (`HANDLERS[...]` + `HandlerPorts.place_search`)로도 한 번 더 돌려 직접 계산과 같은지 대조한다(`e2e_mismatch` 0 이어야 한다).
 그 대조는 SQL 미배정(= SQL 실패·0건) 분기다 — **운영 분기**(DIALOGUE_SQL 배정, SQL 이 행을 낸다)는 SQL 대역(`_SqlRows`)을 붙여 한 번 더
 돌려, 열린 검색 순서가 답에 닿는지(`reach`)를 센다. 인메모리 스토어의 검색 시간은 pgvector 와 무관하다 — 시한·지연은 3단계(실 스택)에서 잰다.
+
+**2026-11-04 규칙 변경(사용자 결정 "묘사형 말이면 열린 검색 우선", BR-AO-27 개정·BR-AO-36)** — 아래 '닿는 범위'는 변경 **전** 값이다.
+이제 탐색도 SQL 과 나란히 열린 검색을 돌리고, 문서 순위가 실제로 섞이면(doc OK) 반경 결과가 SQL 행을 이긴다 — `prod_reach` 는 B 가 답을
+바꾼 사례 전부가 된다. 변경 뒤 6사례 재측정(EVAL_CASES=서울/비,부산/비,제주/비실내,경주/비,대조/서울,서울/공예3): SQL 분기에서
+닿는 비 탐색 0/4 → **4/4**(오답 A 9 → B 1 이 운영 분기 답이 된다), 대조/서울은 게이트가 닫혀 SQL 분기 그대로, `e2e_mismatch` 0.
+쌍대 판정(`judge`)은 그 규칙을 켤지 정하는 측정이다.
 
 **2026-11-04 결정론 측정 결론 — 반경 분기에서 B 가 명백한 오답을 줄였다. 그러나 운영 분기에서 그 사례들에 닿지 않는다(아래 '닿는 범위')
 → 2단계(유료 쌍대 판정) 전에 닿는 범위부터 정해야 한다.** 41사례(도시 10 × 날씨·분위기·동반·주제·개수형 30 + 대조군 7 + 11-02 겨눔 4),
@@ -59,7 +70,9 @@ r"""도우미 장소 탐색 열린 검색(KB-5 문서 순위, `place_search` + `
 from __future__ import annotations
 
 import json
+import math
 import os
+import random
 import sys
 import time
 from collections import Counter
@@ -193,7 +206,8 @@ def _collisions(index) -> tuple[Counter, Counter]:
 
 class _SqlRows:
     """운영 분기 대역 — 운영 시크릿에는 DIALOGUE_SQL 이 배정돼 있어(`.env.example`) 지역 앵커 탐색은 NL2SQL 이 반경 탐색과 나란히 돌고, SQL 이
-    행을 내면 탐색(EXPLORE)은 그 행을 쓴다(`_assemble_explore`). 실 LLM 없이 "행이 있었다"만 흉내 낸다 — 그 지역 시·도의 한 행."""
+    행을 내면 탐색(EXPLORE)은 그 행을 쓴다(`_assemble_explore` — 11-04 부터 문서 순위가 섞인 탐색은 예외).
+    실 LLM 없이 "행이 있었다"만 흉내 낸다 — 그 지역 시·도의 한 행."""
 
     writes_sql = True
 
@@ -231,7 +245,8 @@ def _top(rank: list, intent: Intent, count: str | None) -> list:
     return rank[:n]
 
 
-def measure(case, builder, emb, corpus, index) -> dict:
+def measure(case, builder, emb, corpus, index, keep: dict | None = None) -> dict:
+    """`keep` 을 주면 팔별 상위 목록(Poi)을 거기 담는다 — 쌍대 판정(`judge`)이 같은 목록을 판정에 넘긴다."""
     name, intent, args, utt, kind = case
     category, theme = args.get("category"), args.get("theme")
     ctx = TurnContext(snapshot=_SNAP, arguments=args, now=_NOW, tz=_KST, trace_id=TraceId(f"m-{name}"),
@@ -300,9 +315,13 @@ def measure(case, builder, emb, corpus, index) -> dict:
     e2e_a, _ = e2e(None)
     expect_b = [p.name for p in arms[f"B{hr.W_DOC}/G1Q1"]]
     mismatch = (e2e_a != [p.name for p in arms["A"]]) + (e2e_b != expect_b)
-    # 운영 분기(SQL 배정, 행 있음) — 열린 검색 순서가 답에 닿는가. 탐색은 SQL 이 이겨 돌리지도 않고(`_plan_explore`), 추천은 반경이 먼저다
+    # 운영 분기(SQL 배정, 행 있음) — 열린 검색 순서가 답에 닿는가. 탐색은 문서 순위가 섞였을 때(doc OK)만 반경이 SQL 행을 이기고
+    # (2026-11-04 규칙 변경, BR-AO-27 개정), 추천은 반경이 먼저다
     sido = dh.region_area(anchor.label)[0] if anchor.kind == "region" else None
     prod_names, prod_status = e2e(ps.PlaceSearch(emb, store, index=lambda: index), _SqlRows(sido))
+
+    if keep is not None:
+        keep.update(arms)
 
     def stats(rank: list) -> dict:
         return {"names": [p.name for p in rank], "cats": [p.category.value for p in rank],
@@ -411,5 +430,162 @@ def main() -> None:
         Path(out).write_text(json.dumps({"summary": summary, "rows": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
+# ── 쌍대 판정(유료 — 실 Claude 호출, 사용자 승인 뒤에만 돌린다) ──────────────────────────────────────────────────────────────
+# 팔 짝: A-B(현행 대 섞인 순서 — 본 비교) · A-A(같은 입력 대조 — 판정의 흔들림·자리 편향, 이것보다 확실히 이겨야 켠다) ·
+# B-B3(섞인 순서 대 임베딩만 — 근거 문턱의 값). 두 목록이 같은 사례는 판정하지 않고 `identical` 로 센다(A-A 만 예외 — 그것이 대조다).
+JUDGE = os.environ.get("EVAL_JUDGE_MODEL", "claude-sonnet-5")
+JUDGE_ARMS = {"A": "A", "B": f"B{hr.W_DOC}/G1Q1", "B3": "B3/Q1"}  # 판정 이름 → `measure` 의 팔(B 는 운영 설정 w=1.0·G1·Q1)
+JUDGE_PAIRS = (("A", "B"), ("A", "A"), ("B", "B3"))
+_NO_DOC = "설명 없음"
+
+
+def _reference(kn: _Knowledge, p) -> str:
+    """판정자용 참고 설명 — 두 목록에 똑같이: 관광공사 개요 → 위키 도입부 → '설명 없음'(대체 문서는 쓰지 않는다 — 열린 검색도 안 쓴다)."""
+    for name in ("place_corpus_overview.jsonl.gz", "place_corpus_wiki.jsonl.gz"):
+        row = kn.rows[name].get(p.source_ref or "")
+        if row and row.get("sections"):
+            return " ".join(row["sections"][0]["text"].split())[:400]
+    return _NO_DOC
+
+
+def _card(p) -> str:
+    kind = dh._CATEGORY_KO.get(p.category.value, p.category.value)
+    return f"분류: {kind} · 태그: {', '.join(p.tags) or '없음'}"
+
+
+def judge_prompt(utterance: str, a: list, b: list, kn: _Knowledge) -> str:
+    places = {str(p.poi_id): p for p in (*a, *b)}  # 두 목록의 모든 장소 — 같은 자료를 한 번씩
+
+    def show(items: list) -> str:
+        return "\n".join(f"{i}. {p.name} ({dh._CATEGORY_KO.get(p.category.value, p.category.value)})"
+                         for i, p in enumerate(items, 1)) or "(목록 없음)"
+
+    refs = "\n".join(f"- {p.name} — {_card(p)} · 설명: {_reference(kn, p)}" for p in places.values())
+    return (
+        f"여행자가 여행 도우미에게 이렇게 물었다: \"{utterance}\"\n"
+        "도우미가 보여 줄 장소 목록이 두 개 있다. 목록은 위에서부터 보이고, 앞 순서일수록 먼저 눈에 든다.\n\n"
+        f"[목록 A]\n{show(a)}\n\n[목록 B]\n{show(b)}\n\n"
+        f"[참고: 장소 사실 카드와 설명 — 두 목록 모두에 같은 자료]\n{refs}\n\n"
+        "어느 목록이 이 요청에 더 잘 맞는지 고르세요. 기준: ① 요청의 묘사·조건에 실제로 맞는 곳이 앞에 있는가 "
+        "② 요청과 어긋나는 곳(예: 비 오는 날에 야외)이 앞에 있지 않은가.\n"
+        f"'{_NO_DOC}'은 자료가 없다는 뜻일 뿐 그곳이 부적합하다는 뜻이 아닙니다 — 분류·태그·이름으로 판단하고, 설명이 있다는 이유만으로 "
+        "높이 치지 마세요. 목록 길이·문체는 보지 마세요. 두 목록이 같거나 우열이 없으면 \"같음\".\n"
+        '답은 JSON 한 줄: {"winner": "A" 또는 "B" 또는 "같음", "why": "한 문장"}'
+    )
+
+
+def read_verdict(text: str, stop_reason: str | None) -> tuple[str | None, str]:
+    """(승자 'A'·'B'·'=' 또는 None = 판정 실패, 까닭). **못 읽은 판정을 '같음'으로 삼키지 않는다** — 11-04 사고(KB-5 A/B: 사고가
+    `max_tokens` 를 다 먹어 본문이 비었고 32판 전부 '같음'으로 세어졌다, `docs/conventions/anti-patterns.md`)."""
+    if stop_reason != "end_turn":
+        return None, f"판정 실패: stop_reason={stop_reason}"
+    try:
+        got = json.loads(text[text.index("{"): text.rindex("}") + 1])
+    except ValueError:
+        return None, f"판정 실패: 파싱 {text[:80]!r}"
+    winner = {"A": "A", "B": "B", "같음": "="}.get(str(got.get("winner", "")).strip()) if isinstance(got, dict) else None
+    if winner is None:
+        return None, f"판정 실패: winner {text[:80]!r}"
+    return winner, str(got.get("why", ""))
+
+
+def sign_test_p(wins: int, losses: int) -> float:
+    """양측 부호 검정(같음·판정 실패 제외) — 이항(n, 1/2) 에서 min(승, 패) 이하가 나올 확률의 두 배."""
+    n = wins + losses
+    if n == 0:
+        return 1.0
+    tail = sum(math.comb(n, k) for k in range(min(wins, losses) + 1)) / 2 ** n
+    return min(1.0, 2 * tail)
+
+
+def _ask_judge(client, prompt: str) -> tuple[str | None, str]:
+    import anthropic
+
+    try:
+        # effort low + 2000 — 400 으로 두면 사고가 상한을 먹어 본문이 빈다(11-02 KB-5 A/B 1차). Claude 5 세대는 temperature 를 400 으로 거부한다
+        out = client.messages.create(model=JUDGE, max_tokens=2000, output_config={"effort": "low"},
+                                     messages=[{"role": "user", "content": prompt}])
+    except anthropic.APIError as e:  # 호출 실패도 판정 실패로 센다 — 같음으로 접지 않는다
+        return None, f"판정 실패: {type(e).__name__}"
+    text = "".join(b.text for b in out.content if getattr(b, "type", None) == "text").strip()
+    return read_verdict(text, out.stop_reason)
+
+
+def tally(rows: list[dict]) -> dict:
+    out: dict = {}
+    for left, right in JUDGE_PAIRS:
+        pair = f"{left}-{right}"
+        mine = [r for r in rows if r["pair"] == pair]
+        judged = [r for r in mine if not r["identical"]]
+        lw = sum(r["winner"] == "left" for r in judged)
+        rw = sum(r["winner"] == "right" for r in judged)
+        out[pair] = {"left": left, "right": right, "n": len(mine), "identical": len(mine) - len(judged),
+                     "left_win": lw, "right_win": rw, "tie": sum(r["winner"] == "=" for r in judged),
+                     "judge_fail": sum(r["winner"] is None for r in judged),  # 0 이 아니면 승패로 읽지 말 것
+                     "sign_p": round(sign_test_p(lw, rw), 4)}
+    return out
+
+
+def judge(repeat: int) -> None:
+    """A(현행 반경 순서)·B(섞인 순서)·B3 상위 목록을 사례마다 결정론으로 만들고(위 `measure` 그대로 — 운영 핸들러 대조까지),
+    판정 모델이 순서를 모른 채 짝마다 비교한다. 자리(A/B)는 사례 이름 시드로 뒤집는다. 판정 출력은 평가에만 쓴다(학습 금지, 2026-09-08)."""
+    if not JUDGE.startswith("claude"):
+        raise SystemExit(f"판정 모델은 Claude 만 — EVAL_JUDGE_MODEL={JUDGE!r}")
+    key = os.environ.get("ANTHROPIC_API_KEY")  # 환경 변수로만 — 파일·로그인 프로필에서 읽지 않는다
+    if not key:
+        raise SystemExit("ANTHROPIC_API_KEY 환경 변수가 없다 — 판정은 실 Claude 호출이다(사용자 승인 뒤에만)")
+    import anthropic
+
+    from measure_prompt_ab import _run
+
+    client = anthropic.Anthropic(api_key=key, max_retries=1)
+    dh._FANOUT_SQL_CAP_S = 120.0  # `main` 註와 같다 — 운영 핸들러 대조의 시한만 푼다
+    kn = _Knowledge()
+    emb = CachingEmbedding(kn.emb)
+    builder = CandidatePoolBuilder(StaticPoiDb(tuple(_pois())), M7Config())
+    index = hr.chunk_index()
+    corpus = _Corpus(kn)
+    picks = tuple(filter(None, os.environ.get("EVAL_CASES", "").split(",")))
+    built, mismatch = [], 0
+    for case in CASES:
+        if picks and not case[0].startswith(picks):
+            continue
+        keep: dict = {}
+        mismatch += measure(case, builder, emb, corpus, index, keep)["e2e_mismatch"]
+        built.append((case, {k: keep[v] for k, v in JUDGE_ARMS.items()}))
+        print(f"built {case[0]}", flush=True)
+    if mismatch:
+        raise SystemExit(f"운영 핸들러 대조 불일치 {mismatch} — 판정할 목록이 운영 순서가 아니다(중단)")
+    jobs = [(case, lists, left, right, rep) for rep in range(repeat) for case, lists in built for left, right in JUDGE_PAIRS]
+
+    def one(item) -> dict:
+        _, (case, lists, left, right, rep) = item
+        name, utt = case[0], case[3]
+        a, b = lists[left], lists[right]
+        same = [p.poi_id for p in a] == [p.poi_id for p in b]
+        row = {"name": name, "pair": f"{left}-{right}", "rep": rep, "identical": same and left != right,
+               "lists": {left: [p.name for p in a], right: [p.name for p in b]}}
+        if row["identical"]:
+            return {**row, "winner": "=", "why": "두 목록이 같다 — 판정하지 않음"}
+        flip = random.Random(f"{name}|{rep}").random() < 0.5  # 사례 이름 시드 — 다시 돌려도 같은 자리
+        shown = (b, a) if flip else (a, b)
+        got, why = _ask_judge(client, judge_prompt(utt, *shown, kn))
+        side = None if got is None else "=" if got == "=" else ("left" if (got == "A") != flip else "right")
+        return {**row, "flip": flip, "winner": side, "why": why}
+
+    rows = _run(one, jobs)
+    summary = {"judge": JUDGE, "repeat": repeat, "cases": len(built), "pairs": tally(rows)}
+    print(json.dumps(summary, ensure_ascii=False, indent=1))
+    for r in sorted(rows, key=lambda r: (r["pair"], r["name"], r["rep"])):
+        mark = {"left": "<", "right": ">", "=": "=", None: "!"}[r["winner"]]
+        print(f" {mark} {r['pair']:<5} {r['name']:<14} #{r['rep']} {r['why']}")
+    out = os.environ.get("EVAL_OUT")
+    if out:
+        Path(out).write_text(json.dumps({"summary": summary, "rows": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "judge":
+        judge(int(sys.argv[2]) if len(sys.argv) > 2 else 1)
+    else:
+        main()

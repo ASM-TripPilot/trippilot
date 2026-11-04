@@ -3026,15 +3026,60 @@ def test_a_broken_index_leaves_explore_ok_in_rule_order() -> None:
     assert results["explore"].status == "OK" and results["explore"].value["doc"] == "ERROR" and facts == base
 
 
-def test_explore_skips_open_search_when_sql_runs_beside_it_but_recommend_keeps_it() -> None:
-    rows = [_row("부산 카페 A", "카페", None, sido="부산광역시"), _row("부산 카페 B", "카페", None, sido="부산광역시")]
+# 운영 분기 — DIALOGUE_SQL 배정이면 지역 앵커 탐색은 NL2SQL 이 반경 탐색과 나란히 돈다. 행이 있으면 종전엔 늘 SQL 행이 답이었다
+_SQL_ROWS = (_row("부산 카페 A", "카페", None, sido="부산광역시"), _row("부산 카페 B", "카페", None, sido="부산광역시"))
+
+
+def test_explore_with_sql_rows_answers_from_the_mixed_radius_order_when_the_document_rank_ran() -> None:
+    """묘사형 말이면 열린 검색 우선(2026-11-04 사용자 결정) — 문서 순위가 실제로 섞인(doc OK) 반경 결과가 SQL 행을 이긴다."""
+    base, _ = _run_doc(_QUIET, None)
     searcher, store, embedding = _doc_search()
-    facts, results = _run_doc(_QUIET, searcher, place_sql=_PlaceSql(rows))
-    assert set(results) == {"explore", "explore_sql"} and _names_of(facts) == ["부산 카페 A", "부산 카페 B"]  # 탐색은 SQL 행이 이긴다
-    assert store.calls == [] and embedding.calls == [] and "doc" not in results["explore"].value  # 버려질 순서에 임베딩·조회를 쓰지 않는다
-    # 추천은 반경이 먼저 — SQL 이 나란히 돌아도 열린 검색 순서가 답에 닿는다
+    facts, results = _run_doc(_QUIET, searcher, place_sql=_PlaceSql(list(_SQL_ROWS)))
+    assert set(results) == {"explore", "explore_sql"} and results["explore_sql"].value["candidates"]  # SQL 도 행을 냈다(전제)
+    assert results["explore"].value["doc"] == "OK" and len(store.calls) == 1 and embedding.calls  # SQL 과 나란히 검색이 돈다
+    assert facts.status is FactStatus.OK and _names_of(facts)[0] == "책방 카페"  # 근거 있는 곳이 앞으로 — 섞인 순서
+    assert _names_of(facts) == [c["name"] for c in results["explore"].value["candidates"]]  # 반경 결과 그대로
+    assert set(_names_of(facts)) == set(_names_of(base)) and _names_of(facts) != _names_of(base)  # 규칙 순서의 순열
+    assert [p.name for p in facts.places] == _names_of(facts) and _types(facts) == ["OPEN_PLACE"] * 5  # 카드·문장 재료·버튼 한 벌
+
+
+def test_open_search_candidates_with_sql_rows_stay_inside_the_radius_pool() -> None:
+    """INV-1 — SQL 행을 버리고 반경 결과를 쓸 때도 후보는 반경 풀 안이다(SQL 행 id 가 섞이지 않는다)."""
+    pool = _pool(*_DOC_CAFES, _cafe("넷째 카페", "c6", saved=2), _cafe("다섯째 카페", "c7", saved=1))
+    facts, results = _run_doc(_QUIET, _doc_search()[0], pool=pool, place_sql=_PlaceSql(list(_SQL_ROWS)))
+    assert results["explore"].value["doc"] == "OK"
+    assert _ids_of(facts) <= {str(p.poi_id) for p in pool.pois} and not _ids_of(facts) & {r.poi_id for r in _SQL_ROWS}
+    assert {p.poi_id for p in facts.places} == _ids_of(facts) and {a.params["poiId"] for a in facts.next_actions} == _ids_of(facts)
+
+
+@pytest.mark.parametrize(("arguments", "texts", "delay", "remaining_ms", "status"), [
+    ({"region": "부산", "category": "CAFE", "theme": "카페 추천"}, _DOC_TEXTS, 0.0, 7000, None),  # 게이트 닫힘 — 검색을 안 돈다
+    (_QUIET, {"c1": "넓은 테라스와 바다 전망"}, 0.0, 7000, "NO_EVIDENCE"),  # 근거 없음 — 순서가 안 섞였다
+    (_QUIET, _DOC_TEXTS, 5.0, 2500, "TIMEOUT"),  # 시한 — 규칙 순서 그대로다
+])
+def test_explore_with_sql_rows_keeps_the_sql_answer_unless_the_document_rank_ran(arguments, texts, delay, remaining_ms,
+                                                                                  status) -> None:
+    searcher, store, _ = _doc_search(texts, delay=delay)
+    try:
+        facts, results = _run_doc(arguments, searcher, remaining_ms=remaining_ms, place_sql=_PlaceSql(list(_SQL_ROWS)))
+    finally:
+        store.release.set()
+    assert results["explore"].value.get("doc") == status
+    assert _names_of(facts) == ["부산 카페 A", "부산 카페 B"]  # 종전 — SQL 행이 답이다
+    assert facts == _run_doc(arguments, None, remaining_ms=remaining_ms, place_sql=_PlaceSql(list(_SQL_ROWS)))[0]
+
+
+def test_explore_with_sql_rows_and_no_searcher_keeps_the_legacy_shape() -> None:
+    """꺼짐(검색기 미배선) — 작업 모양은 종전 그대로(반경 결과에 doc 칸 없음), 답은 SQL 행. 검색기가 있어도 게이트가 닫힌 말은
+    꺼짐과 Facts 가 바이트까지 같다(위 매개 시험의 첫 줄)."""
+    facts, results = _run_doc(_QUIET, None, place_sql=_PlaceSql(list(_SQL_ROWS)))
+    assert set(results) == {"explore", "explore_sql"} and set(results["explore"].value) == {"status", "candidates"}
+    assert _names_of(facts) == ["부산 카페 A", "부산 카페 B"] and facts.detail == {"anchor": "부산", "anchor_kind": "region"}
+
+
+def test_recommend_with_sql_rows_keeps_the_mixed_radius_order() -> None:
     searcher, store, _ = _doc_search()
-    facts, results = _run_doc({**_QUIET, "count": "2"}, searcher, handler=_RECOMMEND, place_sql=_PlaceSql(rows))
+    facts, results = _run_doc({**_QUIET, "count": "2"}, searcher, handler=_RECOMMEND, place_sql=_PlaceSql(list(_SQL_ROWS)))
     assert set(results) == {"explore", "explore_sql"} and results["explore"].value["doc"] == "OK" and len(store.calls) == 1
     assert _names_of(facts) == ["책방 카페", "인기 카페"]
 
