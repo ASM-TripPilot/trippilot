@@ -27,6 +27,7 @@ import {
   getGetTripsTripIdItineraryQueryOptions,
   useGetTripsTripIdItinerary,
   getPutTripsTripIdItineraryMutationOptions,
+  getGetTripsTripIdVisitsDaysDayQueryKey,
   useGetTripsTripIdVisitsDaysDay,
   usePutTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
@@ -205,10 +206,23 @@ export function ItineraryEditPage({
     if (inFlightRef.current) return;
     // 완료 여부를 모르는 날이 있으면 저장하지 않고 그 날로 옮긴다(TRIP-1748) — 보고 있는 날이면 제자리(실패면 안내가 이유를
     // 말하고, 조회 중이면 곧 풀린다), 다른 날이면 그 날의 안내·다시 시도를 보인다. 보지 않은 날은 편집할 수도 없었다.
-    // 보고 있는 날은 이번 렌더 값으로 본다 — 기억(effect)은 응답 직후 한 틱 늦다(03b2 W2).
+    // 보고 있는 날은 누른 순간의 캐시 상태로 본다 — 렌더 값·기억(effect)은 응답 직후 화면이 다시 그려지기 전까지
+    // 늦다(03b2 W2 · CI 실측: 응답이 캐시에 들어왔는데 다시 그려지기 전에 누르면 막혔다). 보고 있는 날은 관찰자가
+    // 있어 캐시에서 지워지지 않는다.
+    const activeState =
+      activeDate === ''
+        ? undefined
+        : queryClient.getQueryState(
+            getGetTripsTripIdVisitsDaysDayQueryKey(tripId, activeDate)
+          );
+    const activeUnknownNow =
+      activeState === undefined
+        ? activeUnknown
+        : activeState.status === 'pending' ||
+          (activeState.status === 'error' && !isNotFound(activeState.error));
     const unknownDayIndex = days.findIndex((day) =>
       day.date === activeDate
-        ? activeUnknown
+        ? activeUnknownNow
         : unknownDatesRef.current.has(day.date)
     );
     if (unknownDayIndex !== -1) {
