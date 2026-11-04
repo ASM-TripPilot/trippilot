@@ -9,6 +9,7 @@
  */
 import { useQueryClient } from '@tanstack/react-query';
 
+import { isOfflineWaiting } from '@/shared/api';
 import type { PreferenceInput } from '@/shared/api/index.schemas';
 import {
   getGetMePreferencesQueryKey,
@@ -19,6 +20,14 @@ import {
 export interface UsePreferencesResult {
   view: ReturnType<typeof useGetMePreferences>['data'];
   isLoading: boolean;
+  /**
+   * TRIP-1755 · 받아 본 값이 없는데 실패했거나(`errorUpdateCount` — 다시 시도로 `isError` 가 꺼진 틈 포함) 오프라인 보류 중.
+   * 받아 둔 값이 있으면 재조회가 실패해도 false.
+   */
+  loadFailed: boolean;
+  /** 다시 받는 중 — 화면이 다시 시도를 잠근다. */
+  isFetching: boolean;
+  refetch: () => unknown;
   /** `onSaved` 는 PUT 성공 뒤에만 불린다(화면이 토스트·뒤로 가기를 건다). */
   save: (input: PreferenceInput, onSaved?: () => void) => void;
   saveError: boolean;
@@ -40,6 +49,11 @@ export function usePreferences(): UsePreferencesResult {
   return {
     view: query.data,
     isLoading: query.isPending,
+    loadFailed:
+      query.data === undefined &&
+      (query.isError || query.errorUpdateCount > 0 || isOfflineWaiting(query)),
+    isFetching: query.isFetching,
+    refetch: query.refetch,
     save: (input, onSaved) =>
       mutation.mutate({ data: input }, { onSuccess: onSaved }),
     saveError: mutation.isError,

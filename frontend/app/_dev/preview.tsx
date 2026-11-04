@@ -9135,6 +9135,103 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // 설정 4화면 조회 실패(TRIP-1755) — 거짓 값(OFF·active·빈 닉네임·빈 화면) 대신 오류 얼굴 + 다시 시도. Figma 프레임 없음.
+  // 배치·룩·비활성 버튼 룩은 jest 사각이라 이 키들이 6-b 육안 자리다.
+  {
+    key: 'settings-account-load-error',
+    band: 'l',
+    label: 'l05 · 설정 계정·프로필 조회 실패(TRIP-1755, Figma 프레임 없음)',
+    login: null,
+    render: () => (
+      <SettingsScreen
+        groups={filterReadySettingsSections(
+          buildSettingsSections({
+            nickname: '',
+            email: null,
+            accountLoadFailed: true,
+            profileLoadFailed: true,
+          })
+        )}
+        deletionState="active"
+        accountLoadFailed
+        onRetryAccountLoad={noop}
+        currentNickname=""
+        onPressBack={noop}
+        onSubmitNickname={noop}
+        onPressExport={noop}
+        onPressDeleteAccount={noop}
+        onPressCancelDeletion={noop}
+      />
+    ),
+  },
+  {
+    key: 'l02-notification-load-error',
+    band: 'l',
+    label: 'l02 · 알림 설정 조회 실패(TRIP-1755, Figma 프레임 없음)',
+    login: null,
+    render: () => (
+      <NotificationSettingsScreen
+        values={{}}
+        pushColumnAvailable
+        loadFailed
+        onRetry={noop}
+        onToggle={noop}
+        onOpenSettings={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'settings-preferences-load-error',
+    band: 'l',
+    label: 'l05 · 여행 취향 조회 실패(TRIP-1755, Figma 프레임 없음)',
+    login: null,
+    render: () => (
+      <PreferencesEditView
+        selection={null}
+        saveError={false}
+        loadFailed
+        onRetry={noop}
+        onToggle={noop}
+        onTogglePet={noop}
+        onSave={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'l05-personalization-load-error',
+    band: 'l',
+    label: 'l05 · 개인화 조회 실패(TRIP-1755, Figma 프레임 없음)',
+    login: null,
+    render: () => (
+      <PersonalizationScreen
+        consentOn={false}
+        reason={PersonalizationInfoReason.CONSENT_MISSING}
+        sharedItems={[]}
+        loadState="error"
+        onRetry={noop}
+        onToggle={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'l05-personalization-loading',
+    band: 'l',
+    label: 'l05 · 개인화 조회 중(TRIP-1755, Figma 프레임 없음)',
+    login: null,
+    render: () => (
+      <PersonalizationScreen
+        consentOn={false}
+        reason={PersonalizationInfoReason.CONSENT_MISSING}
+        sharedItems={[]}
+        loadState="loading"
+        onToggle={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
   // l01 알림함 — 기본(오늘 3·이전 2, 미읽음 dot·PLAN_B 인라인 링크·미읽음 2 → '모두 읽음'). 딤·글리프 픽셀은 6-b 실기 몫.
   {
     key: 'notification-inbox-default',

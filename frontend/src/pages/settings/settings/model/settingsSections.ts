@@ -26,6 +26,10 @@ export interface SettingsInput {
   personalizationOn?: boolean;
   /** 이 플랫폼에 푸시가 있는가(TRIP-1648). 생략=true. false(웹)면 알림 행이 `ready:false` 라 "알림" 그룹째 빠진다. */
   pushAvailable?: boolean;
+  /** `/me` 조회가 실패했다(TRIP-1755). true 면 삭제 요청·삭제 철회 행이 `ready:false` — 모르는 상태를 'active' 로 그리지 않는다. */
+  accountLoadFailed?: boolean;
+  /** `/me/profile` 조회가 실패했다(TRIP-1755). true 면 닉네임 행이 `ready:false` — 빈 값 위에서 편집을 열지 않는다. */
+  profileLoadFailed?: boolean;
 }
 
 export interface SettingsRowChip {
@@ -74,7 +78,7 @@ export function buildSettingsSections(input: SettingsInput): SettingsGroupVM[] {
           key: 'nickname',
           label: '닉네임',
           value: input.nickname,
-          ready: true,
+          ready: !input.profileLoadFailed,
         },
         { key: 'export', label: '데이터 내보내기', ready: true },
         { key: 'logout', label: '로그아웃', ready: true },
@@ -151,7 +155,13 @@ export function buildSettingsSections(input: SettingsInput): SettingsGroupVM[] {
     {
       key: 'danger',
       label: '위험 영역',
-      rows: [{ key: 'delete-account', label: '계정 삭제', ready: true }],
+      rows: [
+        {
+          key: 'delete-account',
+          label: '계정 삭제',
+          ready: !input.accountLoadFailed,
+        },
+      ],
     },
   ];
 }

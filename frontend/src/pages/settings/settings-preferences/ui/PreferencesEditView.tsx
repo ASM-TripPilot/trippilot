@@ -17,7 +17,9 @@ import { type ReactElement, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
 import { PrefChip } from '@/shared/ui/pref';
+import { StateNotice } from '@/shared/ui/StateNotice';
 import {
   PreferenceInputActivitiesItem,
   PreferenceInputCompanionTypesItem,
@@ -116,6 +118,11 @@ export interface PreferencesEditViewProps {
   onTogglePet: () => void;
   onSave: () => void;
   onBack: () => void;
+  /** 조회 실패(TRIP-1755) — `selection` 이 없을 때만 빈 화면 대신 오류 얼굴. 생략=로딩 중·프리뷰라 오류로 번쩍이지 않는다. */
+  loadFailed?: boolean;
+  /** 다시 받는 중 — 다시 시도 비활성. */
+  retrying?: boolean;
+  onRetry?: () => void;
 }
 
 export function PreferencesEditView({
@@ -125,6 +132,9 @@ export function PreferencesEditView({
   onTogglePet,
   onSave,
   onBack,
+  loadFailed = false,
+  retrying = false,
+  onRetry,
 }: PreferencesEditViewProps): ReactElement {
   return (
     <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
@@ -223,6 +233,24 @@ export function PreferencesEditView({
               </Pressable>
             </View>
           </>
+        ) : loadFailed ? (
+          <View className="w-full flex-1 items-center justify-center px-lg">
+            <StateNotice
+              testID="settings-pref-load-error"
+              icon={<WarningTriangleGlyph size={32} color="primary" />}
+              title="취향을 불러올 수 없어요"
+              description="잠시 후 다시 시도해 주세요"
+              actions={[
+                {
+                  testID: 'settings-pref-load-retry',
+                  label: '다시 시도',
+                  variant: 'filled',
+                  onPress: onRetry,
+                  disabled: retrying,
+                },
+              ]}
+            />
+          </View>
         ) : null}
       </View>
     </SafeAreaView>

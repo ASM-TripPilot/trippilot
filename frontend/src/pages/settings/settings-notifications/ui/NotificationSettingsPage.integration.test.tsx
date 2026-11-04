@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { http, HttpResponse } from 'msw';
+import { onlineManager } from '@tanstack/react-query';
 import { AppState } from 'react-native';
 import {
   act,
@@ -18,7 +19,14 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { BASE } from '@/test-support/apiBase';
 import { routerSpies } from '@/test-support/expoRouterMock';
 import { primeExpoToken, primeOsPermission } from '@/test-support/pushOsFake';
-import { createGcZeroWrapper, settle } from '@/test-support/queryRender';
+import { getGetMeNotificationSettingsQueryKey } from '@/shared/api/index.hooks';
+import { createGate } from '@/test-support/mswHookHarness';
+import {
+  createGcZeroWrapper,
+  createWrapper,
+  newTestQueryClient,
+  settle,
+} from '@/test-support/queryRender';
 
 import { NotificationSettingsPage } from './NotificationSettingsPage';
 
@@ -157,6 +165,8 @@ afterEach(() => {
   server.resetHandlers();
   clearAccessToken();
   appStateSpy?.mockRestore();
+  // onlineManager 는 모듈 싱글턴 — 오프라인 케이스(NF5)가 어떻게 끝나든 다음 케이스는 온라인으로 시작한다(파일 최상위).
+  onlineManager.setOnline(true);
 });
 
 afterAll(() => server.close());
@@ -522,5 +532,150 @@ describe('NotificationSettingsPage · 화면 동작 (옛 뷰 단위 흡수)', ()
     fireEvent.press(screen.getByTestId('notification-settings-back'));
 
     expect(routerSpies.back).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * TRIP-1755 · 알림 설정 조회가 실패하면 "6종 전부 꺼짐"을 그리지 않고 오류 + 다시 시도(INV-4 · US-NOTIF-05).
+ *
+ * 왜: 훅은 `isError` 를 내보냈지만 페이지가 `items` 만 읽어, 조회 실패가 서버 값이 아닌 "전부 OFF" 토글 12개로 보였다.
+ * 그 거짓 OFF 를 누르면 서버 값을 모른 채 덮어쓰는 PATCH 가 나간다.
+ *
+ * 무엇을 보장하나(권한 허용을 줘서 토글이 있었다면 반드시 그려졌을 상황 — 부정 단언의 앵커):
+ *  - NF1 콜드 500 → 오류 + 다시 시도, 푸시 6 + 인앱 6 = 토글 12개 전부 없음.
+ *  - NF2 다시 시도 중(둘째 GET 이 서버에 도착했고 응답 전 — TanStack v5 가 pending 으로 되돌려 isError 가 꺼지는 틈)에도
+ *    오류 유지·다시 시도 비활성·토글 없음.
+ *  - NF3 다시 시도 성공 → 오류가 사라지고 서버 값대로 토글(STAY 푸시 ON·SLOT_PRE 푸시 OFF).
+ *  - NF4 받아 둔 값이 있으면 재조회 500 이어도 토글 유지(오류 얼굴 아님 — 받아 둔 값을 오류로 덮지 않는다).
+ *  - NF5 오프라인 첫 진입(요청이 나가지도 못함) → 오류 얼굴, 토글 없음, 요청 0.
+ * 권한 배너는 서버 조회와 무관한 로컬 사실이라 실패 얼굴에서 유지 여부를 단언하지 않는다.
+ * 오류 카드의 배치·비활성 룩, 앱 전역 재시도 3회(≈7초) 뒤의 실제 타이밍은 jest 사각 — 6-b.
+ */
+describe('TRIP-1755 · 알림 설정 조회 실패', () => {
+  const ERROR = 'notification-settings-load-error';
+  const RETRY = 'notification-settings-load-retry';
+  const ALL_TOGGLES = VISIBLE_KINDS.flatMap((kind) => [
+    `notification-settings-toggle-push-${kind}`,
+    `notification-settings-toggle-inapp-${kind}`,
+  ]);
+
+  type Reply = { status: 200 | 500; gate?: Promise<void> };
+  let replies: Reply[] = [];
+  let gets = 0;
+  let releaseGate: () => void = () => {};
+
+  beforeEach(() => {
+    replies = [];
+    gets = 0;
+    releaseGate = () => {};
+    primeOsPermission(Notifications, 'granted');
+    server.use(
+      http.get(`${BASE}/me/notification-settings`, async () => {
+        gets += 1;
+        const reply = replies.shift() ?? { status: 200 };
+        if (reply.gate) await reply.gate;
+        return reply.status === 500
+          ? HttpResponse.json(
+              { error: { code: 'INTERNAL', message: 'x' } },
+              { status: 500 }
+            )
+          : HttpResponse.json({ items: SERVER_ITEMS });
+      })
+    );
+  });
+
+  // 중간에 실패해도 붙잡힌 요청을 남기지 않게.
+  afterEach(() => {
+    releaseGate();
+  });
+
+  function expectNoToggles() {
+    for (const testID of ALL_TOGGLES) {
+      expect(screen.queryByTestId(testID)).toBeNull();
+    }
+  }
+
+  it('NF1 콜드 500 → 오류와 다시 시도가 있고 토글 12개는 하나도 없다', async () => {
+    replies = [{ status: 500 }];
+
+    renderPage();
+
+    // 긍정 앵커 — 실패가 화면에 도착했다. 그 위에서 "없음"을 잰다.
+    expect(await screen.findByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+    expectNoToggles();
+    expect(gets).toBe(1);
+  });
+
+  it('NF2 다시 시도 중(둘째 응답 전)에도 오류가 유지되고 다시 시도는 비활성이며 토글은 없다', async () => {
+    // 준비 — 둘째 GET 은 문 뒤에서 기다린다.
+    const gate = createGate();
+    releaseGate = gate.release;
+    replies = [{ status: 500 }, { status: 200, gate: gate.opened }];
+    renderPage();
+    await screen.findByTestId(ERROR);
+
+    // 실행 — 다시 시도. 둘째 요청이 서버에 도착한 뒤가 윈도다.
+    fireEvent.press(screen.getByTestId(RETRY));
+    await waitFor(() => expect(gets).toBe(2));
+    await settle();
+
+    // 단언 — isError 만 보는 구현이면 이 순간 오류가 꺼지고 거짓 OFF 토글이 되살아난다.
+    expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeDisabled();
+    expectNoToggles();
+  });
+
+  it('NF3 다시 시도가 성공하면 오류가 사라지고 서버 값대로 토글이 나타난다', async () => {
+    replies = [{ status: 500 }, { status: 200 }];
+    renderPage();
+    await screen.findByTestId(ERROR);
+
+    fireEvent.press(screen.getByTestId(RETRY));
+
+    await waitFor(() => expect(screen.queryByTestId(ERROR)).toBeNull());
+    await waitFor(() => expect(screen.getByTestId(PUSH_STAY)).toBeChecked());
+    expect(screen.getByTestId(PUSH_SLOT_PRE)).not.toBeChecked();
+    for (const testID of ALL_TOGGLES) {
+      expect(screen.getByTestId(testID)).toBeOnTheScreen();
+    }
+    expect(screen.queryByTestId(RETRY)).toBeNull();
+    expect(gets).toBe(2);
+  });
+
+  it('NF4 받아 둔 값이 있으면 재조회가 500 이어도 토글이 유지되고 오류 얼굴은 없다', async () => {
+    // 준비 — 첫 응답 성공, 재조회 500. 클라이언트를 직접 쥔다(밖에서 재조회를 일으키려고).
+    replies = [{ status: 200 }, { status: 500 }];
+    const client = newTestQueryClient();
+    render(<NotificationSettingsPage />, { wrapper: createWrapper(client) });
+    await waitForServerValues();
+
+    // 실행
+    await act(async () => {
+      await client.invalidateQueries({
+        queryKey: getGetMeNotificationSettingsQueryKey(),
+      });
+    });
+
+    // 단언 — 앵커: 실패가 캐시에 실제로 도착했다. 그 위에서 토글 유지·오류 얼굴 없음.
+    expect(
+      client.getQueryState(getGetMeNotificationSettingsQueryKey())?.status
+    ).toBe('error');
+    expect(screen.getByTestId(INAPP_STAY)).toBeChecked();
+    expect(screen.getByTestId(PUSH_STAY)).toBeChecked();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+  });
+
+  it('NF5 오프라인으로 처음 켜면(요청이 나가지도 못함) 오류 얼굴이고 토글은 없으며 요청은 0건이다', async () => {
+    // 준비 — 앞 케이스의 오프라인이 새지 않았다는 앵커.
+    expect(onlineManager.isOnline()).toBe(true);
+    onlineManager.setOnline(false);
+
+    renderPage();
+
+    // isError 도 errorUpdateCount 도 없는 pending+paused 라 오프라인 판정만이 잡는다.
+    expect(await screen.findByTestId(ERROR)).toBeOnTheScreen();
+    expectNoToggles();
+    expect(gets).toBe(0);
   });
 });

@@ -5,6 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NotificationToggleKind } from '@/shared/api/index.schemas';
 
 import { NotifBackChevronGlyph, NotifInfoGlyph } from '@/features/notification';
+import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
+import { StateNotice } from '@/shared/ui/StateNotice';
 import { PermissionBanner } from './PermissionBanner';
 import { ToggleRow } from './ToggleRow';
 
@@ -49,6 +51,11 @@ export interface NotificationSettingsScreenProps {
   ) => void;
   onOpenSettings: () => void;
   onPressBack?: () => void;
+  /** 알림 설정 조회 실패(TRIP-1755) — 6행을 꺼짐으로 그리지 않고 오류 얼굴 + 다시 시도. 기본 false(preview·옛 호출부 무파손). */
+  loadFailed?: boolean;
+  /** 다시 받는 중 — 다시 시도 비활성. */
+  retrying?: boolean;
+  onRetry?: () => void;
 }
 
 /** 화면이 소유하는 6종(순서·라벨) — COMMUNITY 는 U7 개통 전까지, SYSTEM 은 계약상 여기 없다. */
@@ -89,21 +96,53 @@ export function NotificationSettingsScreen({
   onToggle,
   onOpenSettings,
   onPressBack,
+  loadFailed = false,
+  retrying = false,
+  onRetry,
 }: NotificationSettingsScreenProps): ReactElement {
   const showPermissionDenied = !pushColumnAvailable && !permissionChecking;
+  const header = (
+    <View className="flex-row items-center gap-sm px-lg pb-md pt-sm">
+      <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
+      <Pressable
+        testID="notification-settings-back"
+        accessibilityRole="button"
+        onPress={onPressBack}
+      >
+        <NotifBackChevronGlyph />
+      </Pressable>
+      <Text className="text-[20px] font-noto-bold text-ink">알림 설정</Text>
+    </View>
+  );
+
+  if (loadFailed) {
+    return (
+      <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
+        {header}
+        <View className="w-full flex-1 items-center justify-center px-lg">
+          <StateNotice
+            testID="notification-settings-load-error"
+            icon={<WarningTriangleGlyph size={32} color="primary" />}
+            title="알림 설정을 불러올 수 없어요"
+            description="잠시 후 다시 시도해 주세요"
+            actions={[
+              {
+                testID: 'notification-settings-load-retry',
+                label: '다시 시도',
+                variant: 'filled',
+                onPress: onRetry,
+                disabled: retrying,
+              },
+            ]}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
-      <View className="flex-row items-center gap-sm px-lg pb-md pt-sm">
-        <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
-        <Pressable
-          testID="notification-settings-back"
-          accessibilityRole="button"
-          onPress={onPressBack}
-        >
-          <NotifBackChevronGlyph />
-        </Pressable>
-        <Text className="text-[20px] font-noto-bold text-ink">알림 설정</Text>
-      </View>
+      {header}
 
       <ScrollView contentContainerClassName="gap-lg px-lg pb-[26px] pt-[18px]">
         {showPermissionDenied ? (

@@ -10,6 +10,7 @@ import { ExportRow } from './ExportRow';
 import { LogoutConfirmDialog } from './LogoutConfirmDialog';
 import { NicknameEditRow } from './NicknameEditRow';
 import { ChevronLeftGlyph, TrashGlyph } from '@/features/settings';
+import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
 import { SettingsGroup } from './SettingsGroup';
 import { NavRow, PreparingRow, RowBody } from './SettingsRow';
 
@@ -28,6 +29,11 @@ const TERMS_ROW_PREFIX = 'terms-';
 export interface SettingsScreenProps {
   groups: SettingsGroupVM[];
   deletionState: 'active' | 'pending';
+  /** 계정·프로필 조회 실패(TRIP-1755) — 화면 맨 위에 안내 한 줄 + 다시 시도. 페이지가 두 조회를 묶어 판정한다. preview 무파손 위해 optional. */
+  accountLoadFailed?: boolean;
+  /** 위 줄의 다시 시도가 진행 중 — 버튼 비활성. */
+  accountLoadRetrying?: boolean;
+  onRetryAccountLoad?: () => void;
   purgeAt?: string | null;
   currentNickname: string;
   nicknameError?: string | null;
@@ -76,6 +82,9 @@ export interface SettingsScreenProps {
 export function SettingsScreen({
   groups,
   deletionState,
+  accountLoadFailed,
+  accountLoadRetrying,
+  onRetryAccountLoad,
   purgeAt,
   currentNickname,
   nicknameError,
@@ -256,6 +265,28 @@ export function SettingsScreen({
       {/* 키보드가 떠 있을 때 닉네임 "저장" 첫 탭이 키보드 닫기에만 먹히지 않게(TRIP-990 D23). */}
       <ScrollView keyboardShouldPersistTaps="handled">
         <View className="gap-[22px] px-lg pb-3xl pt-lg">
+          {accountLoadFailed ? (
+            // TRIP-1755 — 계정·프로필 조회 실패: 삭제 행·닉네임 행을 거짓 값으로 그리지 않고 사유를 한 줄로 밝힌다(INV-4).
+            <View
+              testID="settings-account-load-error"
+              className="flex-row items-center gap-sm rounded-button border border-hairline bg-surface-soft px-md py-sm"
+            >
+              <WarningTriangleGlyph size={20} color="primary" />
+              <Text className="flex-1 font-noto text-label text-body">
+                계정 정보를 불러오지 못했어요
+              </Text>
+              <Pressable
+                testID="settings-account-load-retry"
+                accessibilityRole="button"
+                disabled={accountLoadRetrying}
+                onPress={onRetryAccountLoad}
+              >
+                <Text className="font-noto text-label text-primary">
+                  다시 시도
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
           {groups.map((group) => (
             <SettingsGroup key={group.key} label={group.label}>
               {group.rows.map((row) => (

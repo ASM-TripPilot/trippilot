@@ -163,3 +163,77 @@ describe('🔴 TRIP-991 · 개인화 스위치 이름 (AC-3)', () => {
     ).toHaveProp('testID', 'settings-personalization-toggle');
   });
 });
+
+/**
+ * TRIP-1755 · 개인화 조회가 안 끝났거나 실패했으면 토글을 그리지 않는다(INV-4 · BR-U0-12).
+ *
+ * 왜: 토글은 "동의했나"를 보여주는 면인데, 조회가 실패해도 기본값(동의 없음)으로 OFF 를 그리면 실제 동의자가
+ * 철회하지 못하고 누르면 GRANT 가 나가 법적 증적이 한 줄 더 쌓인다. 그래서 `loadState` 가 'ready' 가 아니면
+ * 토글·안내 문구·목록을 모두 빼고 로딩/오류 카드로 바꾼다(위치 l06 `settings-location-consent-loading/-error/-retry` 동형).
+ *
+ * 무엇을 보장하나(prop `loadState?: 'loading'|'error'|'ready'` 기본 'ready', `onRetry?`):
+ *  - PS1 'error' → 오류 카드·다시 시도, 토글·목록·"동의하면…" 문구·"사용 안 함" 부제 없음. 헤더 뒤로는 남는다.
+ *  - PS2 'loading' → 로딩 카드, 토글·목록·오류 카드 없음.
+ *  - PS3 'ready'(명시) → 토글 있고 새 testID 3종 없음.
+ * 3동작 뼈대: 준비=props(reason 기본 CONSENT_MISSING + 목록 2개 — 거짓 표면이 새면 보이도록) → 실행=render → 단언=testID.
+ */
+describe('TRIP-1755 · PersonalizationScreen — 로딩·오류 얼굴', () => {
+  const LOADING = 'settings-personalization-load-loading';
+  const ERROR = 'settings-personalization-load-error';
+  const RETRY = 'settings-personalization-load-retry';
+  const TOGGLE = 'settings-personalization-toggle';
+
+  it('PS1 error → 오류 카드·다시 시도가 있고, 토글·목록·안내 문구·부제는 없으며, 뒤로·다시 시도가 콜백으로 나간다', () => {
+    const onRetry = jest.fn();
+    const props = renderScreen({
+      loadState: 'error',
+      onRetry,
+      consentOn: false,
+      reason: PersonalizationInfoReason.CONSENT_MISSING,
+      sharedItems: TWO_ITEMS,
+    });
+
+    expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+    expect(screen.queryByTestId(TOGGLE)).toBeNull();
+    expect(
+      screen.queryAllByTestId('settings-personalization-item')
+    ).toHaveLength(0);
+    expect(screen.queryByText(/동의하면/)).toBeNull();
+    expect(screen.queryByText(/사용 안 함/)).toBeNull();
+    expect(screen.queryByTestId(LOADING)).toBeNull();
+
+    fireEvent.press(screen.getByTestId(RETRY));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    fireEvent.press(screen.getByTestId('settings-personalization-back'));
+    expect(props.onPressBack).toHaveBeenCalledTimes(1);
+    expect(props.onToggle).not.toHaveBeenCalled();
+  });
+
+  it('PS2 loading → 로딩 카드만 있고 토글·목록·오류 카드는 없다', () => {
+    renderScreen({
+      loadState: 'loading',
+      consentOn: false,
+      reason: PersonalizationInfoReason.CONSENT_MISSING,
+      sharedItems: TWO_ITEMS,
+    });
+
+    expect(screen.getByTestId(LOADING)).toBeOnTheScreen();
+    expect(screen.queryByTestId(TOGGLE)).toBeNull();
+    expect(
+      screen.queryAllByTestId('settings-personalization-item')
+    ).toHaveLength(0);
+    expect(screen.queryByText(/동의하면/)).toBeNull();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+    expect(screen.queryByTestId(RETRY)).toBeNull();
+  });
+
+  it("PS3 loadState='ready' 를 명시하면 토글이 있고 로딩·오류 카드는 없다(기본값과 같다)", () => {
+    renderScreen({ loadState: 'ready', consentOn: true });
+
+    expect(screen.getByTestId(TOGGLE)).toBeChecked();
+    expect(screen.queryByTestId(LOADING)).toBeNull();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+    expect(screen.queryByTestId(RETRY)).toBeNull();
+  });
+});
