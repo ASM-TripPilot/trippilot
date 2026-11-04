@@ -19,7 +19,7 @@ import { COLOR_TOKENS } from '@/shared/config';
  * 소요시간 단위 0(INV-3, slack leaf 는 두 고정시각 차라 예외).
  *
  * TRIP-793 additive(전부 기본값이 기존 렌더 불변): h08 "다른 후보 시트"가 이 카드를 직접 소비하며
- * 사진·이름·태그를 켜고 rationale·"이동" 라벨을 끈다.
+ * 사진·이름·태그를 켜고 "이동" 라벨을 끈다(rationale 은 TRIP-1780 부터 `rationaleSentence` 로 문장 줄을 켠다).
  *  - `tags?` — 주면 태그줄(`{prefix}-tags-{poiId}`, **첫 태그만 `#`**) 렌더. 미주입=태그줄 0(planb·CC 불변).
  *  - `nameKo?` — 주면 이름 자리에 실이름(없으면 종전 플레이스홀더). CC1~4 는 미주입이라 "이름 준비 중" 그대로.
  *  - `showRationale?`(기본 true) — false 면 rationale leaf 미렌더. planb·CC 는 미주입=true 라 rationale 그대로.
@@ -44,8 +44,13 @@ export interface SlotCandidateCardProps {
   tags?: string[];
   /** 실이름 — 주면 플레이스홀더 대신 표시(h08 시트). */
   nameKo?: string | null;
-  /** rationale leaf 를 그릴지(기본 true) — h08 시트는 false 로 추천이유를 버린다. */
+  /** rationale leaf 를 그릴지(기본 true) — 현재 행·planb 가 아닌 곳에서 끌 때 쓴다. */
   showRationale?: boolean;
+  /**
+   * TRIP-1780 추천 이유 "문장" 모드(기본 off). 켜면 rationale leaf 가 메타 줄(#태그 · 거리) 아래·2줄 말줄임·
+   * `text-body` 로 바뀌고, 빈·공백뿐이면 요소를 그리지 않는다. `showRationale={false}` 가 우선.
+   */
+  rationaleSentence?: boolean;
   /** 이름 자리 플레이스홀더(기본 '이름 준비 중'). */
   namePlaceholder?: string;
   /** 이름 leaf 에 testID 를 붙일지(itin true / planb false, ★6-a). */
@@ -99,6 +104,7 @@ export function SlotCandidateCard({
   tags,
   nameKo,
   showRationale = true,
+  rationaleSentence = false,
   namePlaceholder = '이름 준비 중',
   showNameTestId = false,
   showImage = false,
@@ -175,7 +181,7 @@ export function SlotCandidateCard({
           {nameLabel}
         </Text>
 
-        {showRationale ? (
+        {showRationale && !rationaleSentence ? (
           <Text
             testID={leafId('rationale')}
             className="font-noto text-caption text-muted"
@@ -209,6 +215,18 @@ export function SlotCandidateCard({
             {candidate.distanceRange}
           </Text>
         </View>
+
+        {showRationale &&
+        rationaleSentence &&
+        candidate.rationale.trim() !== '' ? (
+          <Text
+            testID={leafId('rationale')}
+            numberOfLines={2}
+            className="font-noto text-caption text-body"
+          >
+            {candidate.rationale}
+          </Text>
+        ) : null}
 
         {slack ? (
           <View className="flex-row items-center gap-xs">

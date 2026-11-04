@@ -200,7 +200,7 @@ describe('후보 조회·선택·교체 배선', () => {
 
   /** 후보 카드 루트 셀렉터(재설계 반영 — 하위·특수 testID 부정 룩어헤드 제외). */
   const CANDIDATE_ROOT =
-    /^itinerary-candidate-(?!sheet|scrim|current|empty|error|place-search|confirm|name-|image-|distance-|tags-|radio-|check-)/;
+    /^itinerary-candidate-(?!sheet|scrim|current|empty|error|place-search|confirm|name-|image-|distance-|tags-|rationale-|radio-|check-)/;
 
   /** 라디오 선택 후 "교체하기"를 눌러 확정하는 2단계 헬퍼. */
   async function selectAndConfirm(poiId: string) {
@@ -1133,7 +1133,7 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       {
         poiId: 'Q',
         distanceRange: '약 0.9km',
-        rationale: '주변 문화',
+        rationale: '한옥 골목을 천천히 걷기 좋아요',
         nameKo: '북촌한옥마을',
         tags: ['한옥'],
         imageUrl: null,
@@ -1141,7 +1141,7 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       {
         poiId: 'Z',
         distanceRange: '약 1.5km',
-        rationale: '주변 문화',
+        rationale: '현대 미술을 보며 쉬어 가기 좋아요',
         nameKo: '국립현대미술관',
         tags: ['미술관'],
         imageUrl: null,
@@ -1149,7 +1149,7 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       {
         poiId: 'W',
         distanceRange: '약 2.0km',
-        rationale: '주변 문화',
+        rationale: '궁궐 산책으로 일정에 여유를 줘요',
         nameKo: '덕수궁',
         tags: ['궁궐'],
         imageUrl: null,
@@ -1402,11 +1402,14 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       expect(
         screen.getByTestId('itinerary-candidate-distance-P')
       ).toHaveTextContent('약 1.2km · 도보 추정');
-      // 추천 이유는 행에서 숨긴다(h08 행 모양 그대로).
+      // TRIP-1780 — 추천 이유 문장은 후보 행에 보인다(옛 "행에서 숨긴다" 단언을 의도적으로 뒤집었다:
+      // US-SCHED-05 미충족 해소). 행마다 자기 문장이다.
       expect(
-        screen.queryByTestId('itinerary-candidate-rationale-P')
-      ).toBeNull();
-      expect(screen.queryByText('야경이 좋은 전망대')).toBeNull();
+        screen.getByTestId('itinerary-candidate-rationale-P')
+      ).toHaveTextContent('야경이 좋은 전망대');
+      expect(
+        screen.getByTestId('itinerary-candidate-rationale-Q')
+      ).toHaveTextContent('조용한 한옥 골목');
 
       for (const id of [
         ID.loading,
@@ -1434,6 +1437,26 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       expect(rowIds()).toEqual(['P']);
       expect(screen.queryByTestId('itinerary-candidate-radio-Q')).toBeNull();
       expect(postBodies).toHaveLength(0);
+    });
+
+    // TRIP-1780 · AC-I3 — 거름으로 첫 행이 빠져도 남은 행은 자기 poiId 의 문장을 보인다(위치로 맞추지 않는다).
+    it('A2b · 앞 차선책(P)이 일정에 있어 빠져도 남은 Q 행은 Q 자기 문장이고 P 의 문장은 없다', async () => {
+      // 준비 — P 가 day2 슬롯에 있다
+      day2PoiId = 'P';
+
+      // 실행
+      renderWithItinerary();
+      await waitMountSettled();
+
+      // 단언
+      expect(rowIds()).toEqual(['Q']);
+      expect(
+        screen.getByTestId('itinerary-candidate-rationale-Q')
+      ).toHaveTextContent('조용한 한옥 골목');
+      expect(
+        screen.queryByTestId('itinerary-candidate-rationale-P')
+      ).toBeNull();
+      expect(screen.queryByText('야경이 좋은 전망대')).toBeNull();
     });
 
     it('A3 · AC-3 — 차선책에 교체 대상 자신이 섞여 있어도 그 행은 없다', async () => {
@@ -1616,6 +1639,37 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       // 단언 — 응답 뒤
       expect(rowIds()).toEqual(['Q', 'W', 'Z']);
       expect(screen.queryAllByTestId(SKELETON_ROW)).toHaveLength(0);
+    });
+
+    // TRIP-1780 · AC-I2·I4 — 온디맨드(POST) 경로도 응답 후보의 문장이 자기 행에 뜬다. 현재 행엔 문장이 없다.
+    it('A4c · POST 경로 — 응답 후보마다 자기 문장이 뜨고 현재 행엔 문장이 없다', async () => {
+      // 준비 — 차선책이 전부 일정에 있어 POST 로 간다
+      alternatives = [alt('a'), alt('d')];
+      postPlan = ['gate'];
+
+      // 실행
+      renderWithItinerary();
+      await waitFor(() => expect(postBodies).toHaveLength(1));
+      await release();
+      await screen.findByTestId('itinerary-candidate-radio-Z');
+
+      // 단언 — 문장이 서로 다른 픽스처라 행 사이 오배선이면 red
+      expect(
+        screen.getByTestId('itinerary-candidate-rationale-Q')
+      ).toHaveTextContent('한옥 골목을 천천히 걷기 좋아요');
+      expect(
+        screen.getByTestId('itinerary-candidate-rationale-Z')
+      ).toHaveTextContent('현대 미술을 보며 쉬어 가기 좋아요');
+      expect(
+        screen.getByTestId('itinerary-candidate-rationale-W')
+      ).toHaveTextContent('궁궐 산책으로 일정에 여유를 줘요');
+      // 현재 행(앵커 present) — 문장 없음
+      expect(
+        screen.getByTestId('itinerary-candidate-current')
+      ).toBeOnTheScreen();
+      expect(
+        screen.queryByTestId('itinerary-candidate-rationale-current')
+      ).toBeNull();
     });
 
     // 5-b W1 — 지워진 P6(0건 응답이면 선표시 행 없음)의 보호를 차선책이 실제로 있는 픽스처로 옮긴다.

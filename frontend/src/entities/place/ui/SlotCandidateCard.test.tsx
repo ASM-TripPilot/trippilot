@@ -220,3 +220,107 @@ describe('🔴 SlotCandidateCard — 사진 칸 생성 이미지(coverPoiId·cat
     ).toEqual([coverFor('술집', 'poi-a')]);
   });
 });
+
+/**
+ * TRIP-1780 · h08 후보 행 추천 이유 "문장" 모드(`rationaleSentence`) — opt-in 선택 prop 하나가
+ * 메타 줄 아래·2줄·`text-body` 를 한 세트로 켠다. 세 가지는 생김새라 jest 대상이 아니다(README 판정 4 · 6-b 몫).
+ * 여기서 재는 것은 그 모드의 비시각 계약뿐 — 빈·공백 문장이면 요소 자체가 없다(INV-4)·원문 그대로(변형 금지)·
+ * showRationale=false 가 우선·미주입이면 지금과 똑같다(빈 문자열도 빈 leaf 로 그대로).
+ *
+ * ⚠️ `toHaveTextContent(문자열)` 은 trim·공백 축소를 양쪽에 적용한다 — 원문 보존은 항등 normalizer 로 잰다.
+ */
+describe('🔴 SlotCandidateCard — TRIP-1780 rationaleSentence', () => {
+  const SENTENCE = '조용한 골목 산책을 좋아하는 취향에 맞아요';
+  const RAW = (t: string): string => t;
+
+  const renderSentence = (
+    rationale: string,
+    over: Partial<ComponentProps<typeof SlotCandidateCard>> = {}
+  ): void => {
+    render(
+      <SlotCandidateCard
+        candidate={{ ...CAND, rationale }}
+        testIDPrefix="itinerary-candidate"
+        tags={['카페', '갤러리']}
+        showNameTestId
+        rationaleSentence
+        {...over}
+      />
+    );
+  };
+
+  it('RS1 · 켜면 문장 leaf 가 문장 그대로(완전일치) 뜨고 태그·거리는 그대로다', () => {
+    renderSentence(SENTENCE);
+
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-p1')
+    ).toHaveTextContent(SENTENCE);
+    expect(screen.getByTestId('itinerary-candidate-tags-p1')).toHaveTextContent(
+      '#카페 · 갤러리'
+    );
+    expect(
+      screen.getByTestId('itinerary-candidate-distance-p1')
+    ).toHaveTextContent(CAND.distanceRange);
+  });
+
+  it('RS1b · 앞뒤·가운데 공백이 있어도 원문 그대로다 — trim·공백 축소로 변형하지 않는다', () => {
+    const raw = '  조용한  골목 산책  ';
+
+    renderSentence(raw);
+
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-p1')
+    ).toHaveTextContent(raw, { normalizer: RAW });
+  });
+
+  it.each(['', '   ', '\n '])(
+    'RS2 · 켠 채 문장이 빈·공백뿐(%j)이면 문장 요소 자체가 없다 — 카드·태그·거리는 그대로',
+    (blank) => {
+      renderSentence(blank);
+
+      expect(screen.getByTestId('itinerary-candidate-p1')).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('itinerary-candidate-tags-p1')
+      ).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('itinerary-candidate-distance-p1')
+      ).toBeOnTheScreen();
+      expect(
+        screen.queryByTestId('itinerary-candidate-rationale-p1')
+      ).toBeNull();
+    }
+  );
+
+  it('RS3 · showRationale=false 가 우선이다 — 문장 모드를 켜 놔도 leaf 없음', () => {
+    renderSentence(SENTENCE, { showRationale: false });
+
+    expect(screen.getByTestId('itinerary-candidate-p1')).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-candidate-rationale-p1')).toBeNull();
+  });
+
+  it('RS4 · 안 켜면 지금과 같다 — 문장은 그대로, 빈 문자열도 빈 leaf 로 그려진다(숨김은 켠 쪽만)', () => {
+    const { unmount } = render(
+      <SlotCandidateCard
+        candidate={{ ...CAND, rationale: SENTENCE }}
+        testIDPrefix="itinerary-candidate"
+      />
+    );
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-p1')
+    ).toHaveTextContent(SENTENCE);
+    unmount();
+
+    render(
+      <SlotCandidateCard
+        candidate={{ ...CAND, rationale: '' }}
+        testIDPrefix="itinerary-candidate"
+      />
+    );
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-p1')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-p1')
+    ).toHaveTextContent('');
+  });
+});

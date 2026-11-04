@@ -117,3 +117,35 @@ describe('🔴 SlotFillScreen — 찾는 중심 영역 (TRIP-1669)', () => {
     }
   );
 });
+
+/**
+ * TRIP-1780 범위 그물 — 추천 이유 "문장" 모드(`rationaleSentence`)는 h08 시트만 켠다. 같이 짜기 후보 카드는
+ * 지금 모양 그대로다(이름 아래·제한 없음·muted 는 생김새라 6-b 몫).
+ *
+ * 비시각 판별 신호: 문장 모드는 빈 문장의 요소를 그리지 않는다. copick 이 모드를 받았다면 빈 rationale 후보의 leaf
+ * 가 사라지므로, **rationale 이 빈 후보의 빈 leaf 가 그대로 있다**는 것이 "무변경"의 신호다.
+ * (값이 있는 후보 문장도 같이 단언해 leaf 자체가 안 그려지는 경우와 구별한다.)
+ */
+describe('🔴 SlotFillScreen — TRIP-1780 copick 후보 카드는 무변경', () => {
+  it('CP-1780 · 문장이 있는 후보는 그대로, 문장이 빈 후보도 빈 leaf 로 그려진다(문장 모드 미적용)', () => {
+    renderScreen({
+      candidates: [
+        ...CANDIDATES,
+        { poiId: 'C3', distanceRange: '1.2km', rationale: '' },
+      ],
+    });
+
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-A1')
+    ).toHaveTextContent('가장 가까운 실내 전시');
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-B2')
+    ).toHaveTextContent('전시+카페 한 번에');
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-C3')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-C3')
+    ).toHaveTextContent('');
+  });
+});
