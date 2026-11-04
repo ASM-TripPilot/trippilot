@@ -19,6 +19,7 @@ import { startUnlessReduceMotion } from '@/shared/lib/reduceMotion';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 import { GeneratingIllustration } from './GeneratingIllustration';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * h07 [완전AI] "AI가 일정 짜는 중" 화면 — Figma `4294:8516`. 프레젠테이션(props만, 재판정 금지).
@@ -73,7 +74,7 @@ const REFUSED_CLOSE_LABEL = '닫기';
 // 프로퍼티로 옮긴다. `#000000` 은 raw-hex 가드의 브랜드 팔레트에 없어 그림자 색으로 정당하다
 // (`MethodPickerScreen.tsx` 선례).
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,

@@ -26,6 +26,7 @@ import {
   GENERATION_FALLBACK_VIEW_PLAN,
 } from '../config/generationFallback';
 import { DashGlyph } from '@/features/itinerary/index.view';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * h07 [완전AI] 일정 생성 · fallback — Figma `3831:2177`.
@@ -46,7 +47,7 @@ import { DashGlyph } from '@/features/itinerary/index.view';
 // 카드·pill 그림자(Figma `0px 2px 10px rgba(0,0,0,0.06)`). RN 은 box-shadow 가 없어 스타일
 // 프로퍼티로 옮긴다 — 그림자는 토큰 대상이 아니다(`DraftScreen`·`ZeroCandidateScreen` 선례).
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,

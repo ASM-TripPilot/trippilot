@@ -22,6 +22,7 @@ import {
   AssistantSheetInfoGlyph,
   WarningGlyph,
 } from './AssistantSheetGlyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * 도우미 카드 7종(TRIP-1323) — 라이브 Figma b01 review · b03 scope · b04 guardrail · b05 error/solver-unavailable ·
@@ -66,7 +67,8 @@ function LinkLine({
   onPress: () => void;
   tone: 'primary' | 'info';
 }): ReactElement {
-  const color = tone === 'primary' ? '#C13515' : '#0B6E63';
+  const color =
+    tone === 'primary' ? COLOR_TOKENS['primary-text'] : COLOR_TOKENS.info;
   return (
     <Pressable
       testID={testID}
@@ -86,7 +88,7 @@ function LinkLine({
 
 // 아이콘(20) + 본문 한 줄 — 경고·안내 카드의 공통 골격. 색은 아이콘과 링크에만 둔다(TRIP-1528 공통 규칙).
 const ICON_CARD = 'flex-row items-start gap-[10px] px-[14px] py-md';
-const WARN = '#FF385C';
+const WARN = COLOR_TOKENS.primary;
 
 export function ReviewCard({
   payload,
@@ -169,7 +171,10 @@ export function CandidateCard({
               </Text>
             </View>
             {target.kind === 'NONE' ? null : (
-              <AssistantSheetChevronRightGlyph size={20} color="#6A6A6A" />
+              <AssistantSheetChevronRightGlyph
+                size={20}
+                color={COLOR_TOKENS.muted}
+              />
             )}
           </OutlineCard>
         );

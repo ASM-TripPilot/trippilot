@@ -158,6 +158,7 @@
 ## src/__tests__/
 - `src/__tests__/affiliateNoticeOneTruth.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/backFallback.integration.test.tsx`  →  (export 없음)
+- `src/__tests__/colorTokens.test.ts`  →  (export 없음)
 - `src/__tests__/copickHrefRoundTrip.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/deletionScopeStructure.test.ts`  →  (export 없음)
 - `src/__tests__/destinationRedirectRoute.test.tsx`  →  (export 없음)
@@ -1670,6 +1671,9 @@
 - `src/shared/api/useAccessToken.ts`  →  useAccessToken
 - `src/shared/api/visitConflict.ts`  →  VISIT_CONFLICT_CODES · VisitConflictKind · resolveVisitConflict
 
+## src/shared/config/
+- `src/shared/config/index.ts`  →  COLOR_TOKENS · ColorTokenName
+
 ## src/shared/dev-fault/
 - `src/shared/dev-fault/FaultInjectionBadge.tsx`  →  FaultInjectionBadge
 - `src/shared/dev-fault/RequestCountBadge.tsx`  →  RequestCountBadge
@@ -1949,4 +1953,4 @@
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1277개 파일
+합계 1279개 파일

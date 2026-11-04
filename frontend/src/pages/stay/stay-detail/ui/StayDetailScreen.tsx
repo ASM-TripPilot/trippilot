@@ -41,6 +41,7 @@ import {
   StayExternalLinkGlyph,
   StayShareGlyph,
 } from '@/features/stay/index.view';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /** 조회 결과 — `kind` 하나로 얼굴을 고른다. notFound=404 · invalid=400/stayId 없음 · error=5xx/네트워크. */
 export type StayDetailState =
@@ -83,7 +84,7 @@ const FACE_TEST_ID = {
 // 그림자(브리프 §4-2 관례 — #000000은 토큰화된 색 목록 밖이라 V1 가드 대상이 아니다,
 // StaySearchScreen.tsx cardShadow와 동형).
 const heroButtonShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,

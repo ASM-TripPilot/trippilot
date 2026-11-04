@@ -13,13 +13,14 @@ import Animated, {
 import { NaverMapPathOverlay } from '@mj-studio/react-native-naver-map';
 
 import { onReduceMotionAnswer } from '@/shared/lib/reduceMotion';
+import { COLOR_TOKENS } from '../config';
 
 /** 경로 그려지기 기본 시간(ms) — 모션 명세 「완성 일정 공개」 0.65초. */
 export const DRAW_PATH_DURATION_MS = 650;
 
 // MapView 의 경로선 색과 같은 값(PIN_PRIMARY·PIN_WHITE). 순환 import 를 피하려 여기에 둔다.
-const PRIMARY = '#FF385C';
-const WHITE = '#FFFFFF';
+const PRIMARY = COLOR_TOKENS.primary;
+const WHITE = COLOR_TOKENS.canvas;
 // 알파 0 인 흰색 — "transparent" 같은 0 값은 iOS 가 변경 없음으로 무시해 기본색이 칠해진다(MapView 반경 원 주석).
 const CLEAR = 'rgba(255,255,255,0)';
 

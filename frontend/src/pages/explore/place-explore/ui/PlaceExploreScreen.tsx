@@ -34,12 +34,13 @@ import { AppBar } from '@/shared/ui/AppBar';
 import { useScrollHide } from '@/shared/lib/useScrollHide';
 import { FAB_STACK_TOP } from '@/shared/ui/toastBottom';
 import { useToastBottom } from '@/shared/ui/useToastBottom';
+import { COLOR_TOKENS } from '@/shared/config';
 
 // 우하단 FAB 그림자 — `ExploreLandingScreen`의 FAB_SHADOW와 동형
 // (RN에 CSS box-shadow가 없어 style prop으로 옮긴다). `#000000`은 raw-hex 가드
 // 사정거리 밖(TOKENIZED_HEX 9색에 없음, 홈 fabShadow 선례).
 const FAB_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 6 },
   shadowOpacity: 0.22,
   shadowRadius: 12,

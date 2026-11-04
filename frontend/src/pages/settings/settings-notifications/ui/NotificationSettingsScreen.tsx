@@ -12,6 +12,7 @@ import {
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { PermissionBanner } from './PermissionBanner';
 import { ToggleRow } from './ToggleRow';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-607 · l02 알림 설정 화면 — 순수 프레젠테이션(값·콜백 주입).
@@ -75,7 +76,7 @@ const EMPTY_VALUE = { pushEnabled: false, inAppEnabled: false } as const;
 
 // 카드 그림자(Figma 0,2,10 · 6%) — 그림자는 className 으로 못 준다. l01 cardShadow 와 같은 값('#000000' raw-hex 예외).
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
@@ -161,7 +162,10 @@ export function NotificationSettingsScreen({
           <View className="flex-row gap-lg">
             <View className="min-w-[46px] items-center">
               {showPermissionDenied ? (
-                <View className="rounded-[8px] border border-dashed border-[#C4C9CF] px-[10px] py-xs">
+                <View
+                  // eslint-disable-next-line trippilot/no-raw-hex -- Figma raw stroke(점선 테두리), 토큰 없음
+                  className="rounded-[8px] border border-dashed border-[#C4C9CF] px-[10px] py-xs"
+                >
                   <Text
                     numberOfLines={1}
                     className="text-[11.5px] font-noto-bold text-muted-soft"

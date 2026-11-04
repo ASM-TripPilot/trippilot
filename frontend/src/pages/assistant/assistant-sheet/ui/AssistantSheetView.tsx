@@ -26,6 +26,7 @@ import {
 } from './AssistantSheetChrome';
 import { AssistantSheetRetryGlyph, WarningGlyph } from './AssistantSheetGlyphs';
 import { MessageList, type OlderMessagesProps } from './MessageList';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * b01~b07 도우미 시트 순수 뷰(TRIP-1322) — props 만 받는다. 네트워크·라우터·판정 없음(판정은 page 가
@@ -80,7 +81,7 @@ const PANEL_EDGE = 12;
 /** 키보드가 떠 있을 때 패널(입력 카드)과 키보드 사이 간격(Figma bv3-입력 (키보드) = 14). */
 const KEYBOARD_GAP = 14;
 const PANEL_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOpacity: 0.08,
   shadowRadius: 16,
   shadowOffset: { width: 0, height: 4 },
@@ -224,7 +225,7 @@ export function AssistantSheetView({
               testID="assistant-sheet-loading"
               className="flex-1 items-center justify-center"
             >
-              <ActivityIndicator color="#FF385C" />
+              <ActivityIndicator color={COLOR_TOKENS.primary} />
             </View>
           ) : null}
           {state === 'OPEN_FAILED' ? (

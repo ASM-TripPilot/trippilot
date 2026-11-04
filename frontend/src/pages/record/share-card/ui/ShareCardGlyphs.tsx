@@ -1,14 +1,15 @@
 import type { ReactElement } from 'react';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-574 · j06 공유 카드 인라인 아이콘(react-native-svg). `*Glyphs.tsx` raw-hex 스캔 제외 관례
  * (SVG stroke/fill 은 className 을 못 받는다). 카드 코랄·워터마크는 브랜드색(의도적 raw, 토큰화 금지).
  */
 
-const INK = '#222222';
-const WHITE = '#FFFFFF';
-const CORAL = '#FF385C';
+const INK = COLOR_TOKENS.ink;
+const WHITE = COLOR_TOKENS.canvas;
+const CORAL = COLOR_TOKENS.primary;
 
 type GlyphProps = { size?: number; color?: string };
 

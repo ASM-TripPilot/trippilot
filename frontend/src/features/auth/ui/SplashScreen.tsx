@@ -16,6 +16,7 @@ import {
 
 // 앱아이콘 박스(94px) 브랜드 그림자 — 브랜드색 raw 라 토큰화하지 않고 플랫폼 그림자로 변환한다.
 const logoShadow = {
+  // eslint-disable-next-line trippilot/no-raw-hex -- Figma raw 브랜드 그림자색, 토큰 없음
   shadowColor: '#DB2647',
   shadowOffset: { width: 0, height: 4.27 },
   shadowOpacity: 0.28,

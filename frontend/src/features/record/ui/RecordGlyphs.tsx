@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import Svg, { Circle, Path } from 'react-native-svg';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-565 · j01 방문 기록 인라인 아이콘(react-native-svg). path 는 Figma j01(5000:3227)
@@ -10,12 +11,13 @@ import Svg, { Circle, Path } from 'react-native-svg';
  * 완료↔미완료 구분은 카드가 상태별로 **다른 testID** 를 렌더해 구조로 잠근다(VisitRecordCard).
  */
 
-const CORAL = '#FF385C';
-const INK = '#222222';
+const CORAL = COLOR_TOKENS.primary;
+const INK = COLOR_TOKENS.ink;
+// eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill(예정 원), 토큰 없음
 const CIRCLE_UPCOMING = '#C2C7CE';
-const CIRCLE_SKIPPED = '#9AA1AB';
-const MUTED_SOFT = '#9AA1AB';
-const MUTED = '#6A6A6A';
+const CIRCLE_SKIPPED = COLOR_TOKENS['muted-soft'];
+const MUTED_SOFT = COLOR_TOKENS['muted-soft'];
+const MUTED = COLOR_TOKENS.muted;
 
 type GlyphProps = { size?: number };
 

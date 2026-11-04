@@ -17,6 +17,7 @@ import {
 } from '@/features/request-replan/index.view';
 import { WarningFilledGlyph } from '@/shared/ui/glyphs';
 import type { StartReplanRequestScope } from '@/shared/api/index.schemas';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-750 · i04 재계획 요청 시트("AI에게 맡길게요", Figma 4067:2427). 순수 시트 — props+콜백만 받고
@@ -296,7 +297,7 @@ export function ReplanRequestSheet({
             value={freeText}
             onChangeText={onChangeFreeText}
             placeholder={FREETEXT_PLACEHOLDER}
-            placeholderTextColor="#9AA1AB"
+            placeholderTextColor={COLOR_TOKENS['muted-soft']}
             maxLength={FREETEXT_MAX}
             className="h-[44px] rounded-input border border-hairline-strong bg-surface-soft px-[14px] font-noto text-label text-ink"
           />

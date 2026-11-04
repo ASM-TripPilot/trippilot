@@ -20,6 +20,7 @@ import type {
 import { Toggle } from '@/shared/ui/Toggle';
 
 import { RevokeConfirmDialog } from './RevokeConfirmDialog';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * l06 위치정보 동의 화면(무상태 프레젠테이션 + 철회 게이트 UI 로직). 상태·서버 호출은 페이지 몫이고,
@@ -88,7 +89,7 @@ const TOGGLE_TITLE = '위치정보 수집';
 
 /** 카드 그림자(Figma 0,2,10 · 6%) — 그림자는 className 으로 못 준다(HomeScreen 선례). */
 const CARD_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,

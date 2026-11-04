@@ -1,6 +1,7 @@
 import Svg, { Path } from 'react-native-svg';
 
 import { ForkKnifeGlyph, ShoppingBagGlyph } from '@/shared/ui/glyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 // TRIP-809 · entities/itinerary-slot 슬롯 카드 글리프. 카테고리 아이콘 6종(맛집·카페·자연·쇼핑·
 // 문화 + 폴백 이미지, 컨셉 선택 화면이 쓴다 — 명소·야경은 사진 칸이 생성 이미지로 바뀌며 삭제)을 features/itinerary/ui/ItineraryGlyphs 에서 바이트 그대로
 // 이관했고(TRIP-465 출생), ReplanSlotRow(i13)용 chevron·lock 2종은 planb PlanbGlyphs 판을 바이트 복제했다
@@ -10,13 +11,14 @@ import { ForkKnifeGlyph, ShoppingBagGlyph } from '@/shared/ui/glyphs';
 // raw-hex 스캔 제외 관례 · docs/structure.md §지금 작업하려면). 카테고리 아이콘 색은 틴트 계열의 "진한
 // 잉크"로 스냅한다 — info-bg 틴트엔 info, success-bg 틴트엔 success.
 
-const MUTED = '#6A6A6A';
-const INFO = '#0B6E63';
-const SUCCESS = '#0E9384';
-const INK = '#222222';
+const MUTED = COLOR_TOKENS.muted;
+const INFO = COLOR_TOKENS.info;
+const SUCCESS = COLOR_TOKENS.success;
+const INK = COLOR_TOKENS.ink;
 // 비활성 회청(Figma #C2CCD6) — 토큰 없음, TripGlyphs `DISABLED` 선례와 같은 값.
+// eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill(비활성), 토큰 없음
 const DISABLED = '#C2CCD6';
-const ON_PRIMARY = '#FFFFFF';
+const ON_PRIMARY = COLOR_TOKENS['on-primary'];
 
 type GlyphProps = {
   size?: number;

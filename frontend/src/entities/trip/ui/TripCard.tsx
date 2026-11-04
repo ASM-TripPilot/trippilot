@@ -12,6 +12,7 @@ import {
 
 import { MoreDotsGlyph } from './TripGlyphs';
 import type { MyTripCardVM } from '../model';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-808 · h06 "내 여행" 카드 — 순수 프레젠테이션(features/itinerary/ui/MyTripCard 에서 이관).
@@ -65,14 +66,14 @@ const MENU_DELETE_LABEL = '삭제';
 
 /** Figma 4682:2573 — ⋯ 버튼 drop 0,2,10 · 6% / 메뉴 drop 0,4,16 · 8%. */
 const MORE_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
   elevation: 2,
 } as const;
 const MENU_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.08,
   shadowRadius: 16,

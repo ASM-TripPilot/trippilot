@@ -16,6 +16,7 @@ import {
   TripPlusGlyph,
   TripSparkleGlyph,
 } from '@/features/trip/index.view';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-665 g01 '여행 만들기' default 재작성 — **props만 받는 프레젠테이션 화면**(Figma `3742:2068`).
@@ -98,7 +99,7 @@ export interface TripWizardStep1ScreenProps {
 /** 요약 카드 그림자 — Figma `0 2 10 rgba(0,0,0,.06)`. 그림자는 토큰 대상이 아니라 raw 가 맞다
  * (`HomeScreen.tsx`·옛 썸네일 제거 버튼 선례). */
 const SUMMARY_CARD_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
@@ -599,6 +600,7 @@ export function TripWizardStep1Screen({
             disabled={nextDisabled}
             onPress={onNext}
             className={`w-full flex-row items-center justify-center gap-sm rounded-button py-[15px] ${
+              // eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill(비활성 버튼), 토큰 없음
               nextDisabled ? 'bg-[#E9E9EB]' : 'bg-primary'
             }`}
           >

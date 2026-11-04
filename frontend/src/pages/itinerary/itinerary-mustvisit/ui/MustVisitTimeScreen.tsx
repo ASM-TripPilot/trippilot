@@ -29,6 +29,7 @@ import {
   type MustVisitTimeForm,
   type startTimeOptions,
 } from '@/features/add-must-visit';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * h07 방문 시각 지정 — Figma `1904:1083`.
@@ -64,7 +65,7 @@ const BLOCK_REASON_TEXT: Record<'DATE_MISSING' | 'START_MISSING', string> = {
 
 // 카드·세그먼트 그림자(Figma `0px 2px 10px rgba(0,0,0,0.06)`) — 그림자는 토큰 대상이 아니다.
 const softShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,

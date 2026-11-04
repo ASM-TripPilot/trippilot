@@ -50,6 +50,7 @@ import {
 import { AppBar } from '@/shared/ui/AppBar';
 import { FAB_STACK_TOP } from '@/shared/ui/toastBottom';
 import { useToastBottom } from '@/shared/ui/useToastBottom';
+import { COLOR_TOKENS } from '@/shared/config';
 
 export interface StaySearchScreenProps {
   region: string;
@@ -132,7 +133,7 @@ const listContentStyle = { flexGrow: 1 } as const;
 // 검색바·FAB 소프트 그림자 — className 으로 못 줘 style prop 으로 옮긴다. shadowColor '#000000'
 // 은 토큰화 대상 밖이라 raw-hex 가드(V1) 사정거리 밖(카드 cardShadow·HomeScreen 선례).
 const searchShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 8,
@@ -140,7 +141,7 @@ const searchShadow = {
 } as const;
 
 const fabShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.16,
   shadowRadius: 12,
@@ -150,7 +151,7 @@ const fabShadow = {
 // empty 등록 유도 카드 틀 소프트 그림자(Figma 0 2 10 rgba(0,0,0,0.06), TRIP-726 AC-E1) —
 // searchShadow(radius 8)보다 Figma 실측 radius 만 2 크다(결과카드 cardShadow 0/4/16/.08 보다 약함).
 const softCardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,

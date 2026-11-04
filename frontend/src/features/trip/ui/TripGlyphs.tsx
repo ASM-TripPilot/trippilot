@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import Svg, { Path } from 'react-native-svg';
+import { COLOR_TOKENS } from '@/shared/config';
 
 // g01 위저드 1/2 전용 인라인 벡터 글리프(AuthGlyphs/OnboardingGlyphs/StayGlyphs/ExploreGlyphs
 // 패턴 계승 · Figma 파일 1MTF3dtptIrbg8gld5IdO2, 노드 1675:1183). 전부 Figma 벡터 path
@@ -10,16 +11,17 @@ import Svg, { Path } from 'react-native-svg';
 // 스캔 가드 제외 관례, `docs/structure.md` §지금 작업하려면). SVG `stroke`/`fill`은
 // className을 못 받는다.
 
-const INK = '#222222';
-const BODY = '#3F3F3F';
-const MUTED = '#6A6A6A';
-const MUTED_SOFT = '#9AA1AB';
-const PRIMARY = '#FF385C';
-const PRIMARY_TEXT = '#C13515';
-const ON_PRIMARY = '#FFFFFF';
+const INK = COLOR_TOKENS.ink;
+const BODY = COLOR_TOKENS.body;
+const MUTED = COLOR_TOKENS.muted;
+const MUTED_SOFT = COLOR_TOKENS['muted-soft'];
+const PRIMARY = COLOR_TOKENS.primary;
+const PRIMARY_TEXT = COLOR_TOKENS['primary-text'];
+const ON_PRIMARY = COLOR_TOKENS['on-primary'];
 /** 등록 숙소 행의 비활성 색(Figma `2226:2027`) — 토큰 컬렉션에 없는 푸른 회색이다.
  * 같은 값이 `pages/trip/trip-new-step1/ui/TripWizardStep1Screen.tsx`의 제목 임의값 클래스에도 있다 —
  * 색을 바꿀 땐 두 자리를 함께 고친다(색은 어떤 테스트도 단언하지 않는다). */
+// eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill(비활성), 토큰 없음
 const DISABLED = '#C2CCD6';
 
 type GlyphProps = {

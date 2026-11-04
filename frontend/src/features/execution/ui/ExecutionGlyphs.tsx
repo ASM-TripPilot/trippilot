@@ -1,4 +1,5 @@
 import Svg, { Circle, Path } from 'react-native-svg';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-395 · 여행 중(i01·i05·i08) 인라인 벡터 글리프 — i01 허브 레일 상태 점 3종(TRIP-746),
@@ -9,15 +10,16 @@ import Svg, { Circle, Path } from 'react-native-svg';
  * `ItineraryGlyphs.tsx` 선례). 정확한 벡터 정합(굵기·곡률)은 6-b 실기 캘리브레이션 대상이다.
  */
 
-const PRIMARY = '#FF385C';
-const SUCCESS = '#0E9384';
+const PRIMARY = COLOR_TOKENS.primary;
+const SUCCESS = COLOR_TOKENS.success;
 // 비활성 회청(Figma #C2CCD6) — 토큰 없음, TripGlyphs `DISABLED` 선례와 같은 값.
+// eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill(비활성), 토큰 없음
 const DISABLED = '#C2CCD6';
-const WHITE = '#FFFFFF';
-const INK = '#222222';
-const MUTED = '#6A6A6A';
+const WHITE = COLOR_TOKENS.canvas;
+const INK = COLOR_TOKENS.ink;
+const MUTED = COLOR_TOKENS.muted;
 // 비구름 글리프 기본색(text-primary-text 토큰의 raw 값).
-const PRIMARY_TEXT = '#C13515';
+const PRIMARY_TEXT = COLOR_TOKENS['primary-text'];
 
 type GlyphProps = { size?: number };
 type TintGlyphProps = GlyphProps & { color?: string };

@@ -29,7 +29,8 @@ export function Toggle({
   onPress,
 }: ToggleProps): ReactElement {
   const track = disabled
-    ? 'items-start bg-[#ECECEC]'
+    ? // eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill(꺼짐 트랙), 토큰 없음
+      'items-start bg-[#ECECEC]'
     : checked
       ? 'items-end bg-primary'
       : 'items-start bg-hairline-strong';
@@ -46,6 +47,7 @@ export function Toggle({
       <View
         testID={`${testID}-thumb`}
         className={`h-[22px] w-[22px] rounded-pill ${
+          // eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill(꺼짐 썸), 토큰 없음
           disabled ? 'bg-[#C4C9CF]' : 'bg-canvas'
         }`}
       />

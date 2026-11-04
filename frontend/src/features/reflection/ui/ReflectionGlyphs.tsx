@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { COLOR_TOKENS } from '@/shared/config';
 /**
  * TRIP-571 · j03 오늘의 회고 인라인 아이콘(react-native-svg). `*Glyphs.tsx` raw-hex 스캔 제외 관례
  * (SVG stroke/fill 은 className 을 못 받는다).
@@ -10,8 +11,8 @@ import Svg, { Circle, Line, Path } from 'react-native-svg';
  * 서로 다른 testID·조건부 렌더로 잠근다.
  */
 
-const MUTED = '#9AA1AB';
-const CORAL = '#FF385C';
+const MUTED = COLOR_TOKENS['muted-soft'];
+const CORAL = COLOR_TOKENS.primary;
 
 type GlyphProps = { size?: number; color?: string };
 

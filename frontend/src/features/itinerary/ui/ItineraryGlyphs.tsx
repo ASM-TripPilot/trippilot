@@ -1,4 +1,5 @@
 import Svg, { Path } from 'react-native-svg';
+import { COLOR_TOKENS } from '@/shared/config';
 // h05·h07 전용 인라인 벡터 글리프(TripGlyphs/StayGlyphs/ExploreGlyphs 패턴 계승 · Figma 파일
 // 1MTF3dtptIrbg8gld5IdO2, 노드 1875:1083 · 1904:1083). 전부 Figma 벡터 path 실측이다.
 // features 간 직접 import 금지 관례라 TripGlyphs 와 겹치는 아이콘(chevron 계열)도 새로 그린다.
@@ -7,13 +8,13 @@ import Svg, { Path } from 'react-native-svg';
 // 스캔 가드 제외 관례, `docs/structure.md` §지금 작업하려면). SVG `stroke`/`fill` 은
 // className 을 못 받는다.
 
-const INK = '#222222';
-const PRIMARY = '#FF385C';
-const BODY = '#3F3F3F';
-const MUTED = '#6A6A6A';
-const MUTED_SOFT = '#9AA1AB';
-const PRIMARY_TEXT = '#C13515';
-const WHITE = '#FFFFFF';
+const INK = COLOR_TOKENS.ink;
+const PRIMARY = COLOR_TOKENS.primary;
+const BODY = COLOR_TOKENS.body;
+const MUTED = COLOR_TOKENS.muted;
+const MUTED_SOFT = COLOR_TOKENS['muted-soft'];
+const PRIMARY_TEXT = COLOR_TOKENS['primary-text'];
+const WHITE = COLOR_TOKENS.canvas;
 // h07 폴백 체크리스트의 완료 체크 색(`tailwind.config` success). SVG stroke 는 className 을 못 받아
 // 이 파일 안에서만 raw hex 로 고정한다(위 색 상수와 같은 관례).
 

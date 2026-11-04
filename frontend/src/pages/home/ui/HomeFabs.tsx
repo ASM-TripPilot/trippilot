@@ -9,11 +9,12 @@ import {
   SuitcaseGlyph,
 } from '@/shared/ui/glyphs';
 import { formatCountBadge } from '../lib/formatCountBadge';
+import { COLOR_TOKENS } from '@/shared/config';
 
 // 카드 그림자(브리프 §3-D 명시 raw 허용 — 그림자는 토큰 대상이 아니다). RN은 box-shadow가
 // 없어 shadow-* 스타일 프로퍼티로 옮긴다. shadowColor '#000000'은 D-3 13색 밖이라 무제재.
 const fabShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 6 },
   shadowOpacity: 0.22,
   shadowRadius: 16,
