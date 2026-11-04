@@ -18,13 +18,22 @@ r"""도우미 장소 탐색 열린 검색(KB-5 문서 순위, `place_search` + `
     SQL 답의 질을 재지 않는다. SQL 이 실패·0건이거나 거르기 뒤 빈 행인 사례는 반경이 답이므로 SQL 팔 없이 A-B 로 센다(`radius_answer`).
     판정 입력에는 사용자가 말한 지역(분류 인자 원문)과 장소마다 위치(시·도 시·군·구)를 싣는다 — 반경은 지역 중심 반경(서울은 시청 5km)이라
     도심으로 좁아지고 SQL 행은 시·도 전체에서 온다(조건 2a). SQL-B 는 스위치가 실제로 B 를 고른 사례만(`SQL-B@switch`)·doc_backed 별로
-    (`SQL-B@doc_backed`)도 낸다 — 문턱 `dialogue_handlers._DOC_SWITCH_MIN` 을 고르는 재료다.
-  실 NL2SQL 고정본(유료 — 실 Claude 호출, 사용자 승인 뒤에만. 키는 환경 변수로만, 로컬 백엔드 DB 는 읽기 전용 연결·문장 시한):
-    ANTHROPIC_API_KEY=… uv run python scripts/measure/measure_assistant_open_search.py capture-sql <scratchpad>/sql_rows.json
+    (`SQL-B@doc_backed`)도 낸다 — 문턱 `dialogue_handlers._DOC_SWITCH_MIN` 을 고르는 재료다. 그래서 doc_backed 별 칸은 검색 OK 이고 두
+    가드(표 이름 지역·SQL 행 이름에 이름 낱말 없음)를 지난 사례만 센다 — 가드·검색 상태 때문에 SQL 이 답인 사례(전주/비빔밥 등)는 문턱을
+    얼마로 바꿔도 SQL 이 답이라 칸을 흐린다(리뷰 2026-11-04, 뺀 사례는 `SQL-B@doc_backed_skipped`).
+  실 NL2SQL 고정본(유료 — 실 LLM 호출, 사용자 승인 뒤에만. 키는 환경 변수로만, 로컬 백엔드 DB 는 읽기 전용 연결·문장 시한):
+    EVAL_SQL_MODEL=<운영 DIALOGUE_SQL 배정> ANTHROPIC_API_KEY=…(GPT 면 OPENAI_API_KEY=… [+ OPENAI_BASE_URL]) uv run python \
+        scripts/measure/measure_assistant_open_search.py capture-sql <scratchpad>/sql_rows.json
     운영 경로 그대로(`PlaceSqlLookup` + 운영 프롬프트·출구 게이트 `DialogueSqlGate` + 실행기 `PgPlaceSql`, ai_user 롤 — EVAL_PLACE_DB_URL).
-    모델은 EVAL_SQL_MODEL, 없으면 정본(.env.example)의 DIALOGUE_SQL 배정, 정본에 없으면(2026-11-04 지금 — 운영 시크릿에만 있다) 도우미
-    기능(DIALOGUE_*) 한 모델(claude-haiku-5-5, 티어 LIGHT). 게이트가 열린 탐색만 부른다(추천·닫힌 말은 스위치가 답을 안 바꾼다). 행마다
-    원천 키·태그를 붙여 둔다(EVAL_POI_DB_URL — 판정 참고 설명이 반경 목록과 같은 자료로 붙게). 시한은 15s 로 풀고 2.8s 넘은 사례를 센다.
+    **오케스트레이터 순서도 그대로** — 분류 전에 미리 받기(`prefetch`)를 부른다: 지역 이름 + 장소 찾기 말이면 운영은 발화만으로(분류 인자
+    없이) SQL 을 쓰고 핸들러가 그것을 쓴다(그 SQL 이 null·폴백이면 인자를 실어 다시 쓰지 않고 반경으로 간다). 종전 고정본은 이 단계를 빼
+    인자를 실어 썼다 — 게이트가 열린 탐색 26사례 중 18사례가 운영과 다른 입력이었다(리뷰 2026-11-04). 사례마다 경로(`path` — prefetch·
+    direct)를 싣는다. 모델은 **EVAL_SQL_MODEL 필수** — 운영 배정은 리포 정본(.env.example)에 없고 운영 시크릿·배포 입력에만 있다(그 파일
+    註). 운영 ai-wiring 로그나 배포 입력으로 확인한 값을 준다(종전엔 정본에서 도우미 기능 한 모델을 조용히 골랐다). 벤더는 운영 그대로
+    (Claude 면 ANTHROPIC_API_KEY, 그 밖은 OpenAI 갈래 — OPENAI_API_KEY). 게이트가 열린 탐색만 부른다(추천·닫힌 말은 스위치가 답을 안
+    바꾼다). 행마다 원천 키·태그를 붙여 둔다(EVAL_POI_DB_URL — 판정 참고 설명이 반경 목록과 같은 자료로 붙게). 시한은 두 경로 모두 15s 로
+    풀고 경로별 운영 기준(direct 2.8s · prefetch 6s 작성 상한)을 넘은 사례를 센다 — prefetch 는 분류와 겹쳐 돌아 실제 기준이 분류 시간에
+    달려 느슨하다(`budget_note`).
   지연(LLM 0, 승인 불필요): `latency [반복=3]` — 게이트가 열린 사례의 탐색 작업을 스위치 꺼짐/켜짐 나란히, 문서 단계(검색기 `search`)를
     따로 p50/p95. 로컬 벡터 DB(EVAL_VECTOR_DB_URL, 기본 localhost:5433 ai_kb)에 KB-5 조각이 범위의 95% 이상 있을 때만 실 `PgVectorStore`
     로도 잰다 — 아니면 적재 수만 보고하고 인메모리만(적재는 하지 않는다).
@@ -56,6 +65,9 @@ r"""도우미 장소 탐색 열린 검색(KB-5 문서 순위, `place_search` + `
 - 조건 3 — `latency`(인메모리, 게이트 열린 30사례 × 3): 탐색 작업 꺼짐 p50 70·p95 87ms → 켜짐 161·282ms, 문서 단계 p50 88·p95 192·최대
   264ms, 운영 시한 초과 0. 로컬 벡터 DB 의 poi_desc 컬렉션은 통문서 위키 1,470행뿐이고 조각은 0/53,716 이라 pgvector 는 못 쟀다.
   (종전 註 "인메모리 전수 스캔은 수천 조각에 수 초"는 이 측정과 맞지 않는다 — 2,077조각 사례도 0.2s 대)
+- 이어 묻기(3차 리뷰 재현 — 첫 턴 운영 분기 답의 카드 다섯 곳을 보인 곳으로, "더 알려줘", LLM 0): 첫 턴이 반경으로 답한 22사례 중 6이
+  SQL 행으로 바뀐다 — 서울/북카페·강릉/숲길·여수/해산물·여수/비·태그/제주반려견카페는 남은 근거 없음(NO_EVIDENCE), 경주/비는 남은 근거 2.
+  턴마다 같은 조건으로 가르기 때문이다(근거가 다 보인 뒤의 반경 순서는 규칙 순서) — BR-AO-27 개정 '근거가 남은 동안만 같은 출처'.
 
 **2026-11-04 규칙 변경(사용자 결정 "묘사형 말이면 열린 검색 우선", BR-AO-27 개정·BR-AO-36)** — 아래 '닿는 범위'는 변경 **전** 값이다.
 이제 탐색도 SQL 과 나란히 열린 검색을 돌리고, 문서 순위가 실제로 섞이면(doc OK) 반경 결과가 SQL 행을 이긴다(리뷰 뒤 조건 둘 — 아래
@@ -125,6 +137,7 @@ import os
 import sys
 import time
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, fields
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -159,6 +172,7 @@ from trippilot.orchestrator.dialogue import dialogue_handlers as dh  # noqa: E40
 from trippilot.orchestrator.dialogue.dialogue_handlers import (  # noqa: E402
     HANDLERS, HandlerPorts, TaskResult, TurnContext, TurnSnapshot,
 )
+from trippilot.orchestrator.dialogue import place_sql as psql  # noqa: E402
 from trippilot.orchestrator.dialogue.place_sql import PlaceSqlLookup  # noqa: E402
 from trippilot.poi_curation import hybrid_rank as hr  # noqa: E402
 from trippilot.poi_curation.adapters.pg_place_sql import PgPlaceSql, PlaceRow  # noqa: E402
@@ -418,25 +432,25 @@ def measure(case, builder, emb, corpus, index, keep: dict | None = None, sql: di
         emb_ranks = hr.ranks(hr.embedding_scores(hits(raw)), order) if raw and ids else {}
         arms[f"B3/{q}"] = ranked(_doc_first(rule, emb_ranks))
 
-    # 운영 경로 대조 — A(검색기 없음)·B(w=W_DOC, G1, Q1)를 핸들러 그대로 돌려 직접 계산과 같은지
-    def e2e(searcher, place_sql=None) -> tuple[list[str], dict]:
+    # 운영 경로 대조 — A(검색기 없음)·B(w=W_DOC, G1, Q1)를 핸들러 그대로 돌려 직접 계산과 같은지. 셋째 값은 문턱만 뺀 가드 통과(`_guards_ok`)
+    def e2e(searcher, place_sql=None) -> tuple[list[str], dict, bool]:
         c = _turn(case, HandlerPorts(pool_builder=builder, place_search=searcher, place_sql=place_sql), "e2e")
         handler = HANDLERS[intent]
         results = {t.name: TaskResult.ok(t.name, t.fn()) for t in handler.plan(c)}
-        return [p.name for p in handler.assemble(c, results).places], results["explore"].value
+        return [p.name for p in handler.assemble(c, results).places], results["explore"].value, _guards_ok(c, results)
 
     t0 = time.monotonic()
-    e2e_b, radius_b = e2e(ps.PlaceSearch(emb, store, index=lambda: index))
+    e2e_b, radius_b, _ = e2e(ps.PlaceSearch(emb, store, index=lambda: index))
     e2e_ms = int((time.monotonic() - t0) * 1000)
-    e2e_a, _ = e2e(None)
+    e2e_a, _, _ = e2e(None)
     expect_b = [p.name for p in arms[f"B{hr.W_DOC}/G1Q1"]]
     mismatch = (e2e_a != [p.name for p in arms["A"]]) + (e2e_b != expect_b)
     # 운영 분기(SQL 배정, 행 있음) — 열린 검색 순서가 답에 닿는가. 탐색은 문서 순위가 섞이고(doc OK) 보일 다섯 곳 중 `_DOC_SWITCH_MIN` 곳
     # 이상에 붙었을 때만 반경이 SQL 행을 이기고(BR-AO-27 개정), 추천은 반경이 먼저다. 고정본(`sql`)이 있으면 실 NL2SQL 행으로 돈다
     sido = dh.region_area(anchor.label)[0] if anchor.kind == "region" else None
     rows = _SqlRows(sido) if sql is None else _Replay(sql.get("rows"))
-    prod_names, prod = e2e(ps.PlaceSearch(emb, store, index=lambda: index), rows)
-    sql_off, _ = e2e(None, rows)  # 같은 SQL 행·스위치 꺼짐 — 켜짐 답과 다르면 스위치가 답을 바꾼 사례다
+    prod_names, prod, guards = e2e(ps.PlaceSearch(emb, store, index=lambda: index), rows)
+    sql_off, _, _ = e2e(None, rows)  # 같은 SQL 행·스위치 꺼짐 — 켜짐 답과 다르면 스위치가 답을 바꾼 사례다
 
     if keep is not None:
         keep.update(arms)
@@ -456,9 +470,26 @@ def measure(case, builder, emb, corpus, index, keep: dict | None = None, sql: di
             "capped_ids": len(ids), "variants": variants, "arms": {k: stats(v) for k, v in arms.items()},
             "e2e_status": radius_b.get("doc"), "doc_backed": radius_b.get("doc_backed"), "e2e_ms": e2e_ms,
             "e2e_mismatch": mismatch, "changed": e2e_b != e2e_a, "prod_status": prod.get("doc"),
-            "prod_doc_backed": prod.get("doc_backed"), "prod_reach": e2e_b != e2e_a and prod_names == expect_b,
+            "prod_doc_backed": prod.get("doc_backed"), "guards_ok": guards, "prod_reach": e2e_b != e2e_a and prod_names == expect_b,
             "switch": prod_names != sql_off, "sql_rows": None if sql is None else sql.get("status"),
             "sql_arm": None if sql_arm is None else stats(sql_arm)}
+
+
+def _guards_ok(ctx: TurnContext, results: dict) -> bool:
+    """`_doc_beats_sql` 에서 문턱만 뺀 판정 — 검색 OK·근거 수를 문턱 위로 놓고 운영 함수를 다시 부른다. 거짓이면 그 사례는 문턱을
+    얼마로 바꿔도 SQL 이 답이다(말한 지역이 표 밖 · SQL 행 이름에 이름 낱말 — 전주/비빔밥 · 게이트 닫힘). SQL 행이 없으면 참이다."""
+    sql = results.get("explore_sql")
+    by_sql = sql.value if sql is not None and dh._candidates_if_ok(sql.value) else None  # 조립(`_assemble_explore`)과 같은 거르기
+    radius = {**results["explore"].value, "doc": "OK", "doc_backed": UNCAPPED}
+    return dh._doc_beats_sql(ctx, dh._explore_anchor(ctx), radius, by_sql)
+
+
+def sql_b_by_doc_backed(rows: list[dict]) -> tuple[dict, list[str]]:
+    """SQL-B 판정 행 → ({doc_backed: 집계}, 뺀 사례) — 문턱 `_DOC_SWITCH_MIN` 을 고르는 칸. 문턱만이 답을 가르는 사례(운영 분기 검색 OK ∧
+    두 가드 통과)만 센다 — 가드나 검색 상태(NO_EVIDENCE·BUDGET… 는 근거 수가 0 칸에 들었다) 때문에 SQL 이 답인 사례는 문턱과 무관하다."""
+    kept = [r for r in rows if r["prod_status"] == "OK" and r["guards_ok"]]
+    buckets = {k: tally([r for r in kept if r["doc_backed"] == k])["SQL-B"] for k in sorted({r["doc_backed"] for r in kept}, key=str)}
+    return buckets, sorted({r["name"] for r in rows} - {r["name"] for r in kept})
 
 
 def _pct(values: list[int], p: float) -> int:
@@ -578,20 +609,19 @@ _READ_ONLY = "-c default_transaction_read_only=on -c statement_timeout=1500 -c s
 _SQL_BUDGET_MS = 2800  # 운영 NL2SQL 시한 상한(`dh._FANOUT_SQL_CAP_S`) — 고정본은 꼬리까지 받고 넘은 사례를 따로 센다
 
 
-def _sql_model(env_example: Path = _AI.parent / ".env.example") -> str:
-    """EVAL_SQL_MODEL, 없으면 정본(.env.example `AI_LLM_FEATURE_MODELS`)의 DIALOGUE_SQL 배정. 2026-11-04 정본에는 DIALOGUE_SQL 이 없다
-    (그 파일 註 — 운영 시크릿에만 있고, 티어맵상 LIGHT). 그때는 정본의 도우미 기능(DIALOGUE_*) 배정이 한 모델로 같으면 그것(같은 티어·
-    같은 턴 시한) — 갈리면 고르지 않고 멈춘다."""
-    if os.environ.get("EVAL_SQL_MODEL"):
-        return os.environ["EVAL_SQL_MODEL"]
-    line = next(x for x in env_example.read_text(encoding="utf-8").splitlines() if x.startswith("AI_LLM_FEATURE_MODELS="))
-    models = dict(pair.split("=", 1) for pair in line.split("=", 1)[1].split(",") if "=" in pair)
-    if "DIALOGUE_SQL" in models:
-        return models["DIALOGUE_SQL"]
-    dialogue = {m for f, m in models.items() if f.startswith("DIALOGUE_")}
-    if len(dialogue) != 1:
-        raise SystemExit(f"정본에 DIALOGUE_SQL 배정이 없고 도우미 기능 배정도 갈린다 {sorted(dialogue)} — EVAL_SQL_MODEL 로 정한다")
-    return dialogue.pop()
+# 경로별 운영 기준 — direct 는 분류 뒤 팬아웃 몫(`dh._FANOUT_SQL_CAP_S`), prefetch 는 분류와 겹쳐 도는 작성 시한 상한(`PREFETCH_TIMEOUT_S`)
+_PATH_BUDGET_MS = {"direct": _SQL_BUDGET_MS, "prefetch": int(psql.PREFETCH_TIMEOUT_S * 1000)}
+_BUDGET_NOTE = ("prefetch 는 분류와 나란히 돈다 — 운영에서 쓰이려면 분류 시간 + 팬아웃 몫(≤2.8s) 안에 끝나야 하고 6s 는 작성 시한 상한이다"
+                "(분류 시간을 재지 않아 이 기준은 느슨하다). direct 는 분류 뒤 팬아웃 몫 2.8s")
+
+
+def _sql_model() -> str:
+    """EVAL_SQL_MODEL — 필수. 운영 DIALOGUE_SQL 배정은 리포 정본(.env.example)에 없고 운영 시크릿·배포 입력에만 있다(그 파일 註). 그래서
+    추정하지 않는다 — 종전엔 정본의 도우미 기능(DIALOGUE_*) 한 모델을 조용히 골라 고정본이 운영 모델이 아닐 수 있었다(리뷰 2026-11-04)."""
+    model = os.environ.get("EVAL_SQL_MODEL")
+    if not model:
+        raise SystemExit("EVAL_SQL_MODEL 이 없다 — 운영 DIALOGUE_SQL 배정(운영 ai-wiring 로그·배포 입력으로 확인한 값)을 준다")
+    return model
 
 
 def sql_capture() -> dict[str, dict]:
@@ -641,14 +671,14 @@ def _row_doc(row: PlaceRow, extra: dict[str, tuple]) -> dict:
 
 
 def capture_sql(out: Path, *, llm=None, executor=None, enrich=_enrich_db, cases=None) -> dict:
-    """사례마다 운영 NL2SQL 경로를 돌려 행을 `out`(JSON)에 남긴다. `llm`·`executor`·`enrich` 는 시험용 주입 — 비우면 실 Claude(키는
-    환경 변수로만)·로컬 백엔드 DB. 시한은 꼬리까지 받으려고 15s 로 풀고(운영 2.8s) 사례마다 걸린 시간을 싣는다."""
+    """사례마다 운영 NL2SQL 경로를 오케스트레이터 순서 그대로(미리 받기 → 핸들러 작업) 돌려 행을 `out`(JSON)에 남긴다. `llm`·`executor`·
+    `enrich` 는 시험용 주입 — 비우면 실 LLM(EVAL_SQL_MODEL 의 벤더, 키는 환경 변수로만)·로컬 백엔드 DB. 시한은 꼬리까지 받으려고 두 경로
+    모두 15s 로 풀고(운영 direct 2.8s · prefetch 6s) 사례마다 걸린 시간과 경로를 싣는다."""
     model = _sql_model()
     if llm is None:
-        if not model.startswith("claude"):
-            raise SystemExit(f"고정본 모델은 Claude 만 — {model!r} (EVAL_SQL_MODEL)")
-        if not os.environ.get("ANTHROPIC_API_KEY"):  # 환경 변수로만 — 파일·로그인 프로필에서 읽지 않는다
-            raise SystemExit("ANTHROPIC_API_KEY 환경 변수가 없다 — 고정본은 실 Claude 호출이다(사용자 승인 뒤에만)")
+        key = "ANTHROPIC_API_KEY" if model.startswith("claude") else "OPENAI_API_KEY"  # 벤더는 모델 이름으로(운영 RoutingLlm 과 같다)
+        if not os.environ.get(key):  # 환경 변수로만 — 파일·로그인 프로필에서 읽지 않는다
+            raise SystemExit(f"{key} 환경 변수가 없다 — 고정본은 실 LLM 호출이다(사용자 승인 뒤에만)")
         from measure_prompt_ab import _llm
 
         llm = _llm(model)
@@ -660,8 +690,10 @@ def capture_sql(out: Path, *, llm=None, executor=None, enrich=_enrich_db, cases=
     from measure_prompt_ab import _NullTrace
 
     worker = _Recorded(DialogueSqlWorker(GatewayFacade(llm, PromptRegistry(_AI / "prompts"), DialogueSqlGate(), cfg, _NullTrace())))
-    saved, dh._FANOUT_SQL_CAP_S = dh._FANOUT_SQL_CAP_S, 15.0
+    saved = dh._FANOUT_SQL_CAP_S, psql.PREFETCH_TIMEOUT_S
+    dh._FANOUT_SQL_CAP_S = psql.PREFETCH_TIMEOUT_S = 15.0
     got: dict[str, dict] = {}
+    pool = ThreadPoolExecutor(1)  # 오케스트레이터 풀 대역 — 미리 받기가 여기서 돈다
     try:
         for case in cases if cases is not None else _picked():
             name, intent, args = case[:3]
@@ -675,26 +707,32 @@ def capture_sql(out: Path, *, llm=None, executor=None, enrich=_enrich_db, cases=
             if task is None:
                 got[name] = {"status": "SKIPPED", "reason": "no_sql_task"}
                 continue
-            worker.last = None
+            worker.last, submitted = None, []
             t0 = time.monotonic()
+            # 오케스트레이터 0″ 그대로 — 분류 전에 미리 받기. 자격(지역 이름 + 장소 찾기 말)은 prefetch 가 스스로 가르고, 받았으면 핸들러의
+            # 조회가 그 SQL(발화만, 분류 인자 없음)을 쓴다. 같은 trace_id·같은 발화라 운영처럼 이어진다
+            lookup.prefetch(ctx.utterance, ctx.trace_id, ctx.now, lambda fn: submitted.append(fn) or pool.submit(fn))
             task.fn()  # 운영 핸들러 작업 그대로 — 조회 인자(종류 한글명)·시한 구성까지
             ms = int((time.monotonic() - t0) * 1000)
             rows, result = lookup.rows, worker.last
             extra = enrich(rows) if rows else {}
-            got[name] = {"status": "NONE" if rows is None else "ZERO" if not rows else "OK", "ms": ms,
+            got[name] = {"status": "NONE" if rows is None else "ZERO" if not rows else "OK",
+                         "path": "prefetch" if submitted else "direct", "ms": ms,
                          "sql": result.value if result is not None else None,
                          "error": result.error if result is not None else None,
                          "rows": None if rows is None else [_row_doc(r, extra) for r in rows]}
-            print(f"{name:<16} {got[name]['status']:<4} rows {len(rows or ())} {ms}ms", flush=True)
+            print(f"{name:<16} {got[name]['status']:<4} {got[name]['path']:<8} rows {len(rows or ())} {ms}ms", flush=True)
     finally:
-        dh._FANOUT_SQL_CAP_S = saved
+        pool.shutdown(wait=True)
+        dh._FANOUT_SQL_CAP_S, psql.PREFETCH_TIMEOUT_S = saved
     version = __import__("yaml").safe_load((_AI / "prompts/dialogue_sql.yaml").read_text(encoding="utf-8"))["version"]
     doc = {"model": model, "prompt_version": version, "captured_at": datetime.now(_KST).isoformat(timespec="seconds"),
-           "budget_ms": _SQL_BUDGET_MS, "cases": got,
-           "over_budget": [n for n, e in got.items() if e.get("ms", 0) > _SQL_BUDGET_MS],
+           "budget_ms": _PATH_BUDGET_MS, "budget_note": _BUDGET_NOTE, "cases": got,
+           "over_budget": [n for n, e in got.items() if "path" in e and e["ms"] > _PATH_BUDGET_MS[e["path"]]],
+           "paths": dict(Counter(e["path"] for e in got.values() if "path" in e)),
            "status": dict(Counter(e["status"] for e in got.values()))}
     out.write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
-    print(json.dumps({k: doc[k] for k in ("model", "prompt_version", "status", "over_budget")}, ensure_ascii=False))
+    print(json.dumps({k: doc[k] for k in ("model", "prompt_version", "status", "paths", "over_budget")}, ensure_ascii=False))
     return doc
 
 
@@ -980,7 +1018,8 @@ def judge(repeat: int) -> None:
         if "SQL" in keep:
             where.update({d["poi_id"]: " ".join(filter(None, (d["sido"], d["sigungu"]))) for d in entry["rows"]})
         built.append((case, lists))
-        meta[case[0]] = {"doc_backed": got["prod_doc_backed"], "switch": got["switch"], "sql_rows": got["sql_rows"]}
+        meta[case[0]] = {"doc_backed": got["prod_doc_backed"], "prod_status": got["prod_status"], "guards_ok": got["guards_ok"],
+                         "switch": got["switch"], "sql_rows": got["sql_rows"]}
         print(f"built {case[0]}{' +SQL' if 'SQL' in lists else ''}", flush=True)
     if mismatch:
         raise SystemExit(f"운영 핸들러 대조 불일치 {mismatch} — 판정할 목록이 운영 순서가 아니다(중단)")
@@ -1003,10 +1042,10 @@ def judge(repeat: int) -> None:
     rows = _run(one, jobs)
     sql_b = [r for r in rows if r["pair"] == "SQL-B"]
     with_arm = {case[0] for case, lists in built if "SQL" in lists}
+    by_backed, skipped = sql_b_by_doc_backed(sql_b)
     summary = {"judge": JUDGE, "repeat": repeat, "cases": len(built), "pairs": tally(rows),
                "SQL-B@switch": tally([r for r in sql_b if r["switch"]])["SQL-B"],
-               "SQL-B@doc_backed": {k: tally([r for r in sql_b if r["doc_backed"] == k])["SQL-B"]
-                                    for k in sorted({r["doc_backed"] for r in sql_b}, key=str)},
+               "SQL-B@doc_backed": by_backed, "SQL-B@doc_backed_skipped": skipped,
                # SQL 팔이 없는 탐색 — 고정본이 실패·0건이거나 거르기 뒤 빈 행이라 반경이 답이다. 그 사례는 (A, B) 로 센다
                "radius_answer": sorted(name for name, m in meta.items() if m["sql_rows"] and name not in with_arm)}
     print(json.dumps(summary, ensure_ascii=False, indent=1))

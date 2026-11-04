@@ -9,8 +9,10 @@
      '설명 없음'이 부적합이 아니라고 적는다
   ④ 키는 환경 변수로만 — 없으면 아무것도 읽거나 부르기 전에 멈춘다
   ⑤ 판정자는 사용자가 말한 지역과 장소마다 위치를 본다(반경이 도심으로 좁아진 것이 보이게 — 조건 2a)
-  ⑥ SQL 팔(조건 4): 고정본은 운영 NL2SQL 경로(프롬프트·출구 게이트·조회)를 그대로 타고, 게이트가 열린 탐색만 담는다. 판정은 그 행을
-     운영 핸들러로 되돌려 SQL 팔을 짓고, SQL 이 실패·0건·거르기 뒤 빈 행이면 SQL 팔이 없다 — 그 사례는 (A, B) 로만 센다
+  ⑥ SQL 팔(조건 4): 고정본은 운영 NL2SQL 경로(미리 받기 → 핸들러 조회 · 프롬프트·출구 게이트·조회)를 오케스트레이터 순서 그대로 타고,
+     게이트가 열린 탐색만 담는다. 모델은 정한 값만(EVAL_SQL_MODEL — 추정하지 않는다), 벤더는 그 모델 그대로. 판정은 그 행을 운영
+     핸들러로 되돌려 SQL 팔을 짓고, SQL 이 실패·0건·거르기 뒤 빈 행이면 SQL 팔이 없다 — 그 사례는 (A, B) 로만 센다
+  ⑦ 문턱을 고르는 칸(`SQL-B@doc_backed`)은 문턱만이 답을 가르는 사례(검색 OK ∧ 두 가드 통과)만 센다
 """
 
 from __future__ import annotations
@@ -202,6 +204,12 @@ def test_capture_runs_the_production_nl2sql_path_only_for_open_gate_explores(mos
         "부산/비": "OK", "부산/국밥2": "SKIPPED", "대조/부산": "SKIPPED", "제주/비실내": "ZERO", "서울/비": "NONE"}
     assert len(llm.requests) == 3 and {r.model_id for r in llm.requests} == {"claude-haiku-5-5"}  # 추천·닫힌 게이트는 안 부른다
     assert '부산에 비 오는 날 실내로 갈 데' in llm.requests[0].prompt  # 운영 프롬프트에 발화가 실린다
+    # 오케스트레이터 순서 — 지역 이름 + 장소 찾기 말("갈 데")은 분류와 나란히 발화만으로 미리 받고 핸들러가 그것을 쓴다(인자 없음).
+    # 장소 찾기 말이 없는 "체험할 곳"은 핸들러가 분류 인자를 실어 쓴다. 한 사례에 한 번만 쓴다(미리 받은 것을 다시 쓰지 않는다)
+    assert "[분류 인자]\n(없음)" in llm.requests[0].prompt and "[분류 인자]\n(없음)" in llm.requests[2].prompt
+    assert '[분류 인자]\n{"region": "제주", "theme": "비 오는 날 실내 체험"}' in llm.requests[1].prompt
+    assert {n: e["path"] for n, e in got.items() if "path" in e} == {"부산/비": "prefetch", "제주/비실내": "direct", "서울/비": "prefetch"}
+    assert mos.psql.PREFETCH_TIMEOUT_S == 6.0  # 미리 받기 시한 풀기도 고정본 안에서만
     assert {r.prompt_ref.feature for r in llm.requests} == {LlmFeature.DIALOGUE_SQL.value}
     assert llm.requests[0].prompt_ref.version == doc["prompt_version"]  # 운영 프롬프트 판 그대로
     busan = got["부산/비"]
@@ -211,36 +219,77 @@ def test_capture_runs_the_production_nl2sql_path_only_for_open_gate_explores(mos
         "name": "부산시립미술관", "category": "미술", "sido": "부산광역시", "source_ref": "12345", "tags": ["실내"]}
     assert busan["rows"][1]["source_ref"] is None  # 카카오 숫자 id 는 원천 키로 쓰지 않는다
     assert got["서울/비"]["rows"] is None and got["제주/비실내"]["rows"] == []
-    assert doc["model"] == "claude-haiku-5-5" and doc["prompt_version"] and doc["budget_ms"] == 2800
+    assert doc["model"] == "claude-haiku-5-5" and doc["prompt_version"]
+    assert doc["budget_ms"] == {"direct": 2800, "prefetch": 6000} and doc["budget_note"]  # 경로마다 운영 기준이 다르다
+    assert doc["paths"] == {"prefetch": 2, "direct": 1} and doc["over_budget"] == []
 
 
-def test_capture_needs_the_key_in_the_environment_and_a_claude_model(mos, monkeypatch, tmp_path) -> None:
+def test_capture_needs_the_model_and_its_vendor_key_in_the_environment(mos, monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(mos, "PgPlaceSql", lambda *_: pytest.fail("키 없이 DB 실행기를 만들었다"))
+    monkeypatch.setattr(mos, "_Capturing", lambda *_: pytest.fail("모델·키 없이 조회를 만들었다"))
+    monkeypatch.delenv("EVAL_SQL_MODEL", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    with pytest.raises(SystemExit, match="EVAL_SQL_MODEL"):  # 운영 배정은 정본에 없다 — 추정하지 않는다
+        mos.capture_sql(tmp_path / "x.json")
     monkeypatch.setenv("EVAL_SQL_MODEL", "claude-haiku-5-5")
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
     with pytest.raises(SystemExit, match="ANTHROPIC_API_KEY"):
         mos.capture_sql(tmp_path / "x.json")
-    monkeypatch.setenv("EVAL_SQL_MODEL", "gpt-5.6-luna")
+    monkeypatch.setenv("EVAL_SQL_MODEL", "gpt-5.6-luna")  # 운영이 GPT 면 그 벤더 그대로 — 키는 OpenAI 것
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
-    with pytest.raises(SystemExit, match="Claude"):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(SystemExit, match="OPENAI_API_KEY"):
         mos.capture_sql(tmp_path / "x.json")
     assert not (tmp_path / "x.json").exists()
 
 
-def test_sql_model_follows_the_canon_assignment(mos, monkeypatch, tmp_path) -> None:
+def test_sql_model_is_the_given_one_only(mos, monkeypatch) -> None:
     monkeypatch.delenv("EVAL_SQL_MODEL", raising=False)
-    env = tmp_path / ".env.example"
-    env.write_text("# 주석\nAI_LLM_FEATURE_MODELS=INTENT=m0,DIALOGUE_INTENT=m1,DIALOGUE_PLAN=m1\n", encoding="utf-8")
-    assert mos._sql_model(env) == "m1"  # 정본에 DIALOGUE_SQL 이 없으면 도우미 기능(같은 티어·같은 턴)의 한 모델
-    env.write_text("AI_LLM_FEATURE_MODELS=DIALOGUE_INTENT=m1,DIALOGUE_SQL=m2\n", encoding="utf-8")
-    assert mos._sql_model(env) == "m2"
-    env.write_text("AI_LLM_FEATURE_MODELS=DIALOGUE_INTENT=m1,DIALOGUE_PLAN=m3\n", encoding="utf-8")
     with pytest.raises(SystemExit, match="EVAL_SQL_MODEL"):
-        mos._sql_model(env)
-    monkeypatch.setenv("EVAL_SQL_MODEL", "m9")
-    assert mos._sql_model(env) == "m9"
-    monkeypatch.delenv("EVAL_SQL_MODEL")
-    assert mos._sql_model().startswith("claude")  # 리포 정본 — 지금은 도우미 기능 배정(LIGHT)
+        mos._sql_model()
+    monkeypatch.setenv("EVAL_SQL_MODEL", "gpt-5.6-luna")
+    assert mos._sql_model() == "gpt-5.6-luna"
+
+
+def test_capture_writes_with_a_gpt_model_through_the_same_path(mos, monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("EVAL_SQL_MODEL", "gpt-5.6-luna")
+    cases = {c[0]: c for c in mos.CASES}
+    llm = _FakeLlm(_sql("부산"))
+    doc = mos.capture_sql(tmp_path / "sql.json", llm=llm, executor=_FakeExecutor({"부산": _BUSAN}), enrich=lambda rows: {},
+                          cases=[cases["부산/비"]])
+    assert doc["model"] == "gpt-5.6-luna" and [r.model_id for r in llm.requests] == ["gpt-5.6-luna"]
+    assert doc["cases"]["부산/비"]["status"] == "OK" and doc["cases"]["부산/비"]["path"] == "prefetch"
+
+
+def test_threshold_buckets_count_only_cases_the_threshold_alone_decides(mos) -> None:
+    def row(name, backed, status, guards, flip, winner):
+        return {"name": name, "rep": 0, "pair": "SQL-B", "flip": flip, "winner": winner, "identical": False,
+                "doc_backed": backed, "prod_status": status, "guards_ok": guards}
+
+    rows = [row("rain", 3, "OK", True, False, "right"), row("rain", 3, "OK", True, True, "right"),
+            row("named", 3, "OK", False, False, "left"), row("named", 3, "OK", False, True, "left"),  # 이름 가드 — 문턱 무관
+            row("none", 0, "NO_EVIDENCE", True, False, "left"), row("none", 0, "NO_EVIDENCE", True, True, "left")]
+    buckets, skipped = mos.sql_b_by_doc_backed(rows)
+    assert set(buckets) == {3} and buckets[3]["right_win"] == 1 and buckets[3]["left_win"] == 0 and buckets[3]["n"] == 1
+    assert skipped == ["named", "none"]
+
+
+@pytest.mark.parametrize(("region", "sql_name", "ok"), [
+    ("전주", "전주 하숙영가마솥비빔밥", False),  # SQL 이 이름 낱말('비빔밥')로 맞춘 행 — 문턱을 바꿔도 SQL 이 답
+    ("전주", "한옥마을 국수", True),
+    ("서울 연남동", "한옥마을 국수", False),  # 표 밖 지역
+])
+def test_guards_ok_is_the_production_rule_without_the_threshold(mos, region, sql_name, ok) -> None:
+    from trippilot.orchestrator.dialogue.dialogue_handlers import HandlerPorts, TaskResult
+
+    name, intent, args, utt, kind = next(c for c in mos.CASES if c[0] == "전주/비빔밥")
+    ctx = mos._turn((name, intent, {**args, "region": region}, utt, kind), HandlerPorts(), "g")
+    radius = {"status": "OK", "candidates": [{"poi_id": "r1", "name": "반경 식당", "category": "음식", "reason": "음식"}],
+              "doc": "NO_EVIDENCE", "doc_backed": 0}  # 상태·근거 수는 보지 않는다 — 문턱만 뺀 판정이다
+    sql = {"status": "OK", "candidates": [{"poi_id": "s1", "name": sql_name, "category": "음식", "reason": "음식"}]}
+    results = {"explore": TaskResult.ok("explore", radius), "explore_sql": TaskResult.ok("explore_sql", sql)}
+    assert mos._guards_ok(ctx, results) is ok
+    assert mos._guards_ok(ctx, {"explore": results["explore"]}) is True  # SQL 행이 없으면 가드가 없다
 
 
 def test_sql_arm_replays_the_rows_through_the_production_handler(mos) -> None:

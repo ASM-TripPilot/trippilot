@@ -2929,10 +2929,11 @@ def _doc_search(texts: Mapping[str, str] = _DOC_TEXTS, *, delay: float = 0.0) ->
 
 def _run_doc(arguments: dict, searcher: PlaceSearch | None, *, pool: CandidatePool | None = None, handler=None,
              remaining_ms: int = 7000, utterance: str = "", earlier: tuple = (), builder: _PoolBuilder | None = None,
-             clock: list[int] | None = None, place_sql=None) -> tuple[Facts, dict[str, TaskResult]]:
+             clock: list[int] | None = None, place_sql=None, shown: frozenset[str] = frozenset()) -> tuple[Facts, dict[str, TaskResult]]:
     ports = HandlerPorts(poi_info=_PoiInfo(), pool_builder=builder or _PoolBuilder(pool or _pool(*_DOC_CAFES)), place_search=searcher,
                          place_sql=place_sql)
-    ctx = replace(_ctx(_EMPTY_SNAP, arguments, ports=ports, remaining_ms=remaining_ms), utterance=utterance, earlier=earlier)
+    ctx = replace(_ctx(_EMPTY_SNAP, arguments, ports=ports, remaining_ms=remaining_ms), utterance=utterance, earlier=earlier,
+                  shown=shown)
     if clock is not None:  # 흐르는 시계 — 대역(풀 조립)이 clock[0] 을 줄인다
         ctx = replace(ctx, remaining_ms=lambda: clock[0])
     handler = handler or _EXPLORE
@@ -3163,19 +3164,32 @@ def test_a_place_named_by_the_query_stays_above_document_evidence() -> None:
     assert _names_of(facts)[:2] == ["북카페 숨", "책방 카페"]  # 적중 층이 먼저, 그 아래 층 안에서 근거 있는 곳이 앞으로
 
 
-def test_follow_up_keeps_answering_from_the_mixed_radius_order() -> None:
-    """이어 묻기도 이번 턴 주제로 열린 검색을 돈다 — 첫 턴이 섞인 반경 순서로 답했으면 "더 알려줘"도 같은 출처다(SQL 행으로 바뀌지
-    않는다, 리뷰 2026-11-04). 앞에서 보인 곳은 빠진다."""
-    first, first_results = _run_doc(_QUIET, _doc_search(_DOC_TEXTS_WIDE)[0], place_sql=_PlaceSql(list(_SQL_ROWS)))
-    assert _names_of(first) == [c["name"] for c in first_results["explore"].value["candidates"]]  # 전제 — 첫 턴은 섞인 반경 순서
-    assert _names_of(first)[0] == "둘째 카페"
-    earlier = (("USER", "부산 조용한 북카페 알려줘"), ("ASSISTANT", "둘째 카페가 있어요."))
-    facts, results = _run_doc(_QUIET, _doc_search(_DOC_TEXTS_WIDE)[0], utterance="더 알려줘", earlier=earlier,
-                              place_sql=_PlaceSql(list(_SQL_ROWS)))
-    assert set(results) == {"explore", "explore_sql"} and results["explore"].value["doc"] == "OK"
-    assert results["explore"].value["doc_backed"] == 3  # 보인 곳(둘째 카페)을 뺀 뒤에 센다
-    assert _names_of(facts) == [c["name"] for c in results["explore"].value["candidates"]]  # SQL 행이 아니다
-    assert _names_of(facts)[0] == "저장 카페" and "둘째 카페" not in _names_of(facts)
+# 이어 묻기 — 운영처럼 첫 턴 카드 다섯 곳이 `ctx.shown` 에 실린다(오케스트레이터 `_remember_shown`). 출처는 턴마다 같은 조건으로 가른다:
+# 보인 곳을 뺀 다섯 곳에 근거가 문턱(`_DOC_SWITCH_MIN`) 이상 남으면 섞인 반경 순서 그대로, 문턱 밖으로 줄면 그 턴은 SQL 행이다(BR-AO-27
+# 개정·BR-AO-36 — 근거가 남은 동안만 같은 출처). 사슬 첫 판정을 잇지 않는다 — 근거가 다 보인 뒤의 반경 순서는 규칙 순서라 묘사를 읽은
+# 것이 아니고, 문턱은 그때 SQL 행을 고르라는 동의 조건이다. 종전 시험은 `ctx.shown` 을 비우고 도우미 문장에 한 곳만 적어 이 갈래를 못 봤다
+# (리뷰 2026-11-04: 근거 6곳·카페 12곳이면 첫 턴 doc_backed 5 → "더 알려줘" doc_backed 1 로 SQL 행)
+_TWELVE = tuple(_cafe(f"카페{i:02d}", f"c{i}", saved=100 - i) for i in range(1, 13))
+
+
+@pytest.mark.parametrize(("backed", "radius_again"), [(8, True), (6, False)])
+def test_follow_up_keeps_the_mixed_radius_order_only_while_evidence_remains(backed, radius_again) -> None:
+    texts = {f"c{i}": "조용한 북카페로 책을 읽으며 쉬기 좋다" for i in range(13 - backed, 13)}  # 규칙 순서 뒤쪽 `backed` 곳에만 근거
+    pool = _pool(*_TWELVE)
+    first, first_results = _run_doc(_QUIET, _doc_search(texts)[0], pool=pool, place_sql=_PlaceSql(list(_SQL_ROWS)))
+    assert first_results["explore"].value["doc_backed"] == 5  # 전제 — 첫 턴은 다섯 곳 모두 근거, 섞인 반경 순서로 답했다
+    assert _names_of(first) == [c["name"] for c in first_results["explore"].value["candidates"]]
+    earlier = (("USER", "부산 조용한 북카페 알려줘"), ("ASSISTANT", f"{_names_of(first)[0]}가 조용해요."))
+    facts, results = _run_doc(_QUIET, _doc_search(texts)[0], pool=pool, utterance="더 알려줘", earlier=earlier,
+                              shown=frozenset(_ids_of(first)), place_sql=_PlaceSql(list(_SQL_ROWS)))
+    radius = results["explore"].value
+    assert set(results) == {"explore", "explore_sql"} and radius["doc"] == "OK"
+    assert radius["doc_backed"] == backed - 5  # 보인 다섯 곳을 뺀 뒤에 센다
+    assert not set(_names_of(facts)) & set(_names_of(first))  # 어느 출처든 보인 곳은 다시 안 나온다
+    if radius_again:  # 근거 셋이 남았다 — 같은 출처(섞인 반경 순서)
+        assert _names_of(facts) == [c["name"] for c in radius["candidates"]]
+    else:  # 근거 한 곳 — 이 턴은 SQL 행으로 바뀐다
+        assert _names_of(facts) == ["부산 카페 A", "부산 카페 B"]
 
 
 # 조건 1(BR-AO-27 개정 — 도우미 오케스트레이터·NL2SQL 세션 동의 조건, 2026-11-04): 반경이 SQL 행을 이기려면 보일 다섯 곳(종류 상한·보인 곳
