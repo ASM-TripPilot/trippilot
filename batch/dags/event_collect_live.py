@@ -8,6 +8,8 @@ ai-event-collect.yml 과 같은 스크립트·같은 순서다. 행사는 저장
 - **영속 뒤(freshness)**: 수집이 멈췄는가 — 가장 오래된 운영 지역의 마지막 수집(`checks.check_event_freshness`). 영속을
   막지 않는 경보다. 막으면 교착이다: 폴백이 이어져 coverage 가 안 찍히는 동안 포인터·coverage 도 영속되지 않아, 원인이
   풀려도 같은 낡은 저장소에서 다시 시작하고 신선도가 영영 회복되지 않는다. Actions 판처럼 포인터는 전진하고 빨간불만 켠다.
+- **영속 뒤(extraction)**: 이번 실행 지역이 전부 LLM 폴백인가(`collect_events.py --check` — ai-event-collect 의 마지막 스텝,
+  TRIP-1745). 키·엔드포인트 고장은 첫날 빨갛게 한다 — 신선도는 `max_age_days` 가 지나야 잡는다. 실 모드에서만 돈다.
 
 기본은 **그림자**(`BATCH_LIVE` 미설정): 실 API 를 부르지 않고 collect-state 의 저장소(= Actions 가 영속한 것)를 검증만 한다.
 """
@@ -103,11 +105,20 @@ def event_collect_live():
             where = "저장소는 이미 영속했다" if live.live() else "그림자 — Actions 가 영속한 저장소"
             raise AirflowFailException(f"행사 수집 정체 경보({where}) — " + " / ".join(failures))
 
+    @task
+    def extraction(repo: str) -> None:
+        """전 지역 LLM 폴백이면 실패 — 영속 뒤에 둔다(축제·팝업·포인터는 이미 영속했다). 일부 폴백은 경고만 남긴다."""
+        if not live.live():
+            raise AirflowSkipException("그림자 모드 — 수집하지 않았다")
+        # 실행 기록이 없으면(이 태스크만 다시 돌려 복제본이 이미 정리됐다) 수집기 안의 낯선 오류 대신 할 일을 말한다.
+        pipeline.require_candidate(Path(repo) / "ai/collect_events_run.json")
+        live.collect(Path(repo), "collect_events.py", "--check", "collect_events_run.json")
+
     @teardown   # 실행의 성패에 세지 않는다 — 보통 태스크로 두면 유일한 잎이라 경보 실패를 success 로 덮는다
     def cleanup() -> None:
         pipeline.finish_run(run_path())
 
     checked = validate(collect())
-    publish(checked) >> freshness(checked) >> cleanup()
+    publish(checked) >> [freshness(checked), extraction(checked)] >> cleanup()
 
 event_collect_live()

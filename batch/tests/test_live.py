@@ -60,8 +60,11 @@ FAKE_UV = textwrap.dedent("""\
         out = rest[rest.index("-o") + 1]
         docs = [json.load(open(p, encoding="utf-8")) for p in rest[rest.index("-o") + 2:]]
         dump(out, {"proposals": [p for d in docs for p in d["proposals"]], "stats": {}})
+    elif name == "collect_events.py" and rest[:1] == ["--check"]:
+        sys.exit(int(os.environ.get("FAKE_CHECK_EXIT", "0")))
     elif name == "collect_events.py":
         dump(os.environ["EVENTS_STORE"], json.loads(os.environ["FAKE_EVENTS"]))
+        dump("collect_events_run.json", {"regions": []})   # 진짜 수집기처럼 실행 기록을 남긴다(판정의 입력)
     elif name == "collect_novelty.py":
         sys.exit(int(os.environ.get("FAKE_NOVELTY_EXIT", "0")))
     elif name == "collect_tourapi_festivals.py":
@@ -363,6 +366,8 @@ class LiveDagTest(Sandbox):
         event = bag.get_dag("event_collect_live")
         self.assertEqual(event.get_task("publish").upstream_task_ids, {"validate"})
         self.assertEqual(event.get_task("freshness").upstream_task_ids, {"validate", "publish"})   # 신선도는 영속 뒤
+        self.assertEqual(event.get_task("extraction").upstream_task_ids, {"validate", "publish"})   # LLM 판정도 영속 뒤
+        self.assertEqual(event.get_task("cleanup").upstream_task_ids, {"freshness", "extraction"})
         for dag in (poi, event):
             self.assertTrue(dag.get_task("cleanup").is_teardown, dag.dag_id)   # 실행 성패에 세지 않는다
         for dag in (poi, event):   # 켜는 것은 사람이다 — 올라가자마자 Actions 와 함께 실 수집하면 안 된다
@@ -481,6 +486,7 @@ class LiveDagTest(Sandbox):
         self.assertEqual(set(self.states(run).values()), {"success"})
         self.assertEqual(len(json.loads(origin.show("collect-state:collected_events.json"))["events"]), 40)
         self.assertEqual(origin.show("collect-state:rehearsal_log.jsonl"), "{}")
+        self.assertIn("collect_events.py --check collect_events_run.json", self.calls())
 
     def test_행사_첫_영속_브랜치가_없으면_만든다(self):
         origin = self.origin(state_branch=False)
@@ -514,13 +520,22 @@ class LiveDagTest(Sandbox):
         self.assertEqual((states["publish"], states["freshness"]), ("success", "failed"))
         self.assertEqual(len(json.loads(origin.show("collect-state:collected_events.json"))["events"]), 40)
 
+    def test_행사_전_지역_LLM_폴백이면_영속은_하고_실행은_빨갛다_1745(self):
+        # 키·엔드포인트 고장(10-24 부터 401) — 신선도는 max_age_days 가 지나야 잡는다. 판정은 첫날 빨갛게 한다.
+        origin = self.origin()
+        run = self.run_events(self.events(40), FAKE_CHECK_EXIT="1")
+        self.assertEqual(run.state, "failed")   # 정리(teardown)가 성공으로 덮지 않는다
+        states = self.states(run)
+        self.assertEqual((states["publish"], states["freshness"], states["extraction"]), ("success", "success", "failed"))
+        self.assertEqual(len(json.loads(origin.show("collect-state:collected_events.json"))["events"]), 40)
+
     def test_행사_문서_모양이_깨지면_영속하지_않는다(self):
         origin = self.origin()
         run = self.run_events({"items": []})
         self.assertEqual(run.state, "failed")
         states = self.states(run)
-        self.assertEqual((states["validate"], states["publish"], states["freshness"]),
-                         ("failed", "upstream_failed", "upstream_failed"))
+        self.assertEqual((states["validate"], states["publish"], states["freshness"], states["extraction"]),
+                         ("failed", "upstream_failed", "upstream_failed", "upstream_failed"))
         self.assertEqual(json.loads(origin.show("collect-state:collected_events.json"))["events"], [])
         self.assertEqual(len(list((self.root / "out/runs/event_collect_live").glob("*/KEEP"))), 1)
 
@@ -537,7 +552,7 @@ class LiveDagTest(Sandbox):
         run = mod.event_collect_live().test(logical_date=datetime.combine(self.DAY, time(4, 40), tzinfo=ZoneInfo("Asia/Seoul")))
         self.assertEqual(run.state, "success")
         self.assertEqual(self.states(run), {"collect": "success", "validate": "success", "publish": "skipped",
-                                            "freshness": "success", "cleanup": "success"})
+                                            "freshness": "success", "extraction": "skipped", "cleanup": "success"})
         self.assertEqual(list((self.root / "out/runs/event_collect_live").iterdir()), [])
         self.assertNotIn("collect_events.py", self.calls())
         self.assertEqual(git(origin.bare, "rev-list", "--count", "collect-state"), "1")   # 영속하지 않았다

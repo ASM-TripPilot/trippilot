@@ -75,7 +75,7 @@ docker compose --profile batch down
 | DAG | 태스크 |
 |---|---|
 | `poi_collect_live` | collect(develop 복제·collect-state 복원·`collect_pois.py`·`merge_pois_docs.py --state`) → validate(축소 가드 + `check_pois`) → publish(롤링 PR·**머지 확인**) → persist_cursor(collect-state). 곁가지: collect → novelty(`collect_novelty.py --fail-if-stalled`, 비차단) |
-| `event_collect_live` | collect(복원·`collect_events.py`·팝업·축제) → validate(`check_event_store` — 모양·그날 유효 건수) → publish(collect-state 영속) → freshness(`check_event_freshness`, 영속 뒤 경보) |
+| `event_collect_live` | collect(복원·`collect_events.py`·팝업·축제) → validate(`check_event_store` — 모양·그날 유효 건수) → publish(collect-state 영속) → freshness(`check_event_freshness`)·extraction(`collect_events.py --check` — 전 지역 LLM 폴백, 실 모드만) — 둘 다 영속 뒤 경보 |
 
 두 DAG 모두 마지막에 cleanup(**teardown** — 실행 성패에 세지 않는다)이 실행 폴더를 지운다. collect·validate·publish·영속이 실패한
 실행은 남긴다(`KEEP`) — 원인을 보고, 실패한 태스크를 **하류(Downstream)와 함께** 지워(clear) 다시 돌리면 그 복제본에서 이어 간다.
@@ -100,6 +100,8 @@ docker compose --profile batch down
   행사도 영속 앞에서 저장소 모양·유효 건수를 검증하고, 실 모드에 키가 없거나 collect-state 조회가 실패하면 초록불로 넘기지 않고 실패한다.
 - 행사 신선도는 영속을 **막지 않는다**(영속 뒤 경보). 막으면 폴백이 이어지는 동안 포인터·coverage 도 영속되지 않아, 원인이
   풀려도 같은 낡은 저장소로 돌아가 신선도가 회복되지 않는다. 영속을 막는 것은 저장소가 깨졌을 때(모양·유효 건수)뿐이다.
+- 전 지역 LLM 폴백 판정(extraction)도 영속 뒤다 — Actions 판의 마지막 스텝과 같다(TRIP-1745). 신선도는 `max_age_days` 가 지나야
+  키 고장을 잡으므로, 이 판정이 첫날 빨갛게 한다.
 - 신규율 정체 경보는 Actions 판처럼 병합을 막지 않는다 — 곁가지 태스크라 빨개져도 게시·커서 저장은 기다리지 않는다.
 - 배포 초안은 `deploy/airflow/values.yaml`(적용 전 결정 목록이 그 머리에 있다).
 
