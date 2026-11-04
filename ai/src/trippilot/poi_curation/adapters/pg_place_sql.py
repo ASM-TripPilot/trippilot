@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from trippilot.domain.poi.poi import NIGHTLIFE_TAG, TRENDING_TAG
-from trippilot.domain.poi.region_centers import bare_region
+from trippilot.domain.poi.region_centers import bare_region, in_sido
 
 ROW_CAP = 20  # 핸들러는 ≤5 를 쓴다 — 표시 불가 이름·나이트라이프를 거르고도 남게 넉넉히
 STATEMENT_TIMEOUT_MS = 1500  # 팬아웃 작업 예산(≤3s) 안에서 LLM(~1.5s) 뒤에 남는 몫
@@ -67,7 +67,7 @@ def _pick_one(hits: Sequence[PlaceRow], area: str | None) -> PlaceRow | None:
     """같은 이름 여럿에서 한 곳 — 한 곳뿐 → 지역 안 한 곳 → 정보 충실(rich) 한 곳 → 관광 종류 한 곳, 아니면 None(`find_by_name` 규칙)."""
     if len(hits) == 1:
         return hits[0]
-    local = [h for h in hits if area and ((h.sido or "").startswith(area) or (h.sigungu or "").startswith(area))]
+    local = [h for h in hits if area and (in_sido(area, h.sido, h.sigungu) or (h.sigungu or "").startswith(area))]
     if len(local) == 1:
         return local[0]
     rich = [h for h in (local or hits) if h.rich]  # 지역 안(없으면 전체)에서 정보 충실한 곳이 하나뿐인가 — 정렬이 rich 를 앞에 둔다

@@ -58,7 +58,7 @@ from trippilot.domain.poi.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCatego
 from trippilot.domain.poi.theme_tags import themes_in
 from trippilot.domain.poi.poi_curation import CandidatePoolRequest
 from trippilot.domain.poi.region_centers import (
-    bare_region, covering_region, plain_region, region_area, region_center, region_mentions, region_pair,
+    MERGED_SIDO, bare_region, covering_region, in_sido, plain_region, region_area, region_center, region_mentions, region_pair,
 )
 from trippilot.domain.itinerary.transit import TransitPurpose
 from trippilot.domain.dialogue.trigger import TriggerKind, TriggerParams
@@ -1774,7 +1774,7 @@ def _explore_by_sql(ctx: TurnContext, anchor: _Anchor | None, category: str | No
     shown = _shown_before(ctx)  # 자르기 전에 뺀다 — 자른 다섯 곳에서 빼면 남은 행이 있어도 비었다
 
     def in_area(r: PlaceRow) -> bool:  # 앵커 지역의 시·도·시군구 밖 행은 버린다 — SQL 은 이름을 읽어 "홍대"에 천안·용산구 행을 냈다
-        if sido is not None and not (r.sido or "").startswith(sido):
+        if sido is not None and not in_sido(sido, r.sido, r.sigungu):
             return False
         if not gus or any((r.sigungu or "").startswith(gu) for gu in gus):
             return True
@@ -2074,6 +2074,9 @@ def _explore_events(ctx: TurnContext, anchor: _Anchor, theme: str | None,
 
         def inside(e: EventInfo) -> bool:
             if sido is not None:  # 주소가 시·도를 말하면 그것으로, 아니면(주소 없음·"여의도 집결") 15km
+                words = (e.address or "").split()
+                if words and words[0] == MERGED_SIDO:  # 통합 특별시 주소는 다음 낱말(구·시·군)로 가른다 — 정규식은 '전남'을 잡았다
+                    return in_sido(sido, words[0], words[1] if len(words) > 1 else None)
                 said = _ADDRESS_SIDO.match(e.address or "")
                 return said.group(0) == sido if said else haversine_km(center, e.coord) <= _EVENT_NEAR_KM
             return haversine_km(center, e.coord) <= near_km

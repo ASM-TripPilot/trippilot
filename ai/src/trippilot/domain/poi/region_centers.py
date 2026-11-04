@@ -115,8 +115,21 @@ _AREA: dict[str, tuple[str | None, tuple[str, ...]]] = {
 }
 
 
+# 2026 행정 통합 — 전남과 광주가 한 시·도다. 데이터의 sido·주소 첫 낱말이 '전남광주통합특별시'(2026-08 수집본부터)라 시·도 앞글자 대조로는
+# 광주 행이 하나도 안 걸렸다(도우미 장소 SQL 행을 전부 버려 광주 탐색이 늘 반경이었다, 2026-11-04 개발 DB). 광주(옛 광역시)는 그 안의 다섯 구
+MERGED_SIDO = "전남광주통합특별시"
+GWANGJU_GU = frozenset({"동구", "서구", "남구", "북구", "광산구"})
+
+
+def in_sido(want: str, sido: str | None, sigungu: str | None) -> bool:
+    """시·도 앞글자 `want`("광주"·"서울"·"전남") 안의 행인가 — 통합 특별시 행은 시군구로 가른다(광주는 다섯 구, 나머지는 전남)."""
+    if sido == MERGED_SIDO and want in ("광주", "전남", "전라남도"):
+        return ((sigungu or "") in GWANGJU_GU) == (want == "광주")
+    return (sido or "").startswith(want)
+
+
 def region_area(name: str) -> tuple[str | None, tuple[str, ...]]:
-    """표 이름 → (sido 앞글자, sigungu 앞글자들) — (None, ()) 이면 표에 없는 이름(거르지 않는다)."""
+    """표 이름 → (sido 앞글자, sigungu 앞글자들) — (None, ()) 이면 표에 없는 이름(거르지 않는다). 시·도 대조는 `in_sido` 로."""
     if name in _AREA:
         return _AREA[name]
     return (None, (name,)) if name in _CENTERS else (None, ())
