@@ -1497,6 +1497,10 @@ def _left_originals(request: schemas.ReplanRequest, held: Collection[PoiId],
     return tuple(out)
 
 
+# 되돌림 이력의 사유 머리 — BE `ReplanSessionService.REVERT_PREFIX`("재계획 되돌림 · <원래 사유>", 출처 `MANUAL`).
+_REVERT_PREFIX = "재계획 되돌림"
+
+
 def _prior_requested(request: schemas.ReplanRequest, pois: Sequence[Poi],
                      specs: Sequence[DirectiveSpec]) -> tuple[Poi, ...]:
     """같은 날 반영된 앞 다시 짜기가 **요청해서** 넣은 곳 중 지금 일정에 남은 곳 (F-5 — AI 단독 근사, 와이어 불변).
@@ -1507,12 +1511,20 @@ def _prior_requested(request: schemas.ReplanRequest, pois: Sequence[Poi],
     곳**일 때 그 곳(둘이면 어느 쪽인지 모른다). 뒤 이력이 그 곳을 뺐으면 잊는다 — 편집, 그리고 되돌림(`MANUAL` 로
     반영분을 뺀다)이 여기 걸린다. 편집으로 바꿔 뺀 곳(SWAPPED_OUT)도 잊는다. 이름으로 집은 곳·자유입력의 한 곳 추가
     ("카페 넣어줘")는 사유만으로 못 가른다 — 정식안(F-8)이 AI 가 집은 id 를 세션에 남겨 받는다.
+
+    뒤 **다시 짜기**가 뺀 기억은 그 다시 짜기를 되돌리면 되살린다 — 되돌림은 그 세션이 뺀 곳을 다시 넣는다(`added`).
+    "클럽 넣어줘" → "클럽은 빼줘" → 되돌림이면 지금 반영된 요청은 앞의 것이다(리뷰 2026-11-05).
     """
     index = {p.poi_id: p for p in pois}
     keep: dict[PoiId, Poi] = {}
+    undone: dict[PoiId, Poi] = {}  # 다시 짜기가 뺀 기억 — 그 세션을 되돌리면 되살린다
     for ev in sorted(reversed(request.change_log), key=lambda e: e.at):  # BE 는 최신순 — 같은 시각이면 먼저 쓴 것 먼저
         for pid in ev.removed_poi_ids:
-            keep.pop(PoiId(pid), None)
+            gone = keep.pop(PoiId(pid), None)
+            if gone is not None and ev.source == "PLAN_B":
+                undone[gone.poi_id] = gone
+        if ev.source == "MANUAL" and (ev.reason or "").startswith(_REVERT_PREFIX):
+            keep.update((PoiId(pid), undone.pop(PoiId(pid))) for pid in ev.added_poi_ids if PoiId(pid) in undone)
         if ev.source != "PLAN_B" or not ev.reason:
             continue
         added = [index[PoiId(pid)] for pid in ev.added_poi_ids if PoiId(pid) in index]
@@ -2987,6 +2999,19 @@ class WiredItineraryOrchestrator:
             """지킨 날의 하루 상한 — 잠금 + 원 남은 수(바뀔 자리 포함) + 더한 곳. 바뀔 자리만 규칙 점수가 채운다."""
             return None if "FILL_MORE" in resolved else len(active) + len({*orig_left, *extra}) + len(add)
 
+        # 기억한 밤 장소(F-5)만으로 창을 23:59 로 넓혔는데 원 일정 지키기·사유 상한이 없으면(새로 짜 보기) 구성 없이
+        # 푸는 점수 경로에 상한을 준다 — 상한 없이 긴 창을 채우게 두면 조립이 무너졌다(리뷰 2026-11-05: 11곳 → 4곳,
+        # 10:37~20:00 공백 — 보고 ③ 재발). 상한 = 잠금 + 원 창(~BE 끝)을 채우는 만큼(시간 환산) + 기억한 밤 장소.
+        late_only = (late_kept and not (night or extend) and nl.window_end is None and visit_cap is None
+                     and earlier is None and not orig_left and "FILL_MORE" not in resolved)
+        fill_from = nl.window_start or datetime.combine(window.date, window.start, tzinfo=self._tz)
+        fill_from = max(fill_from, not_before) if not_before is not None else fill_from
+
+        def fill_cap(add: frozenset[PoiCategory]) -> int | None:
+            """구성 없이 푸는 하루의 상한 — 위 경우만 시간 환산 상한, 그 밖엔 종전 `visit_cap`."""
+            return (len(active) + composition.visits_by_time(fill_from, window_end) + len(add)
+                    + sum(1 for p in remembered if NIGHTLIFE_TAG in p.tags) if late_only else visit_cap)
+
         if orig_left and not composed:
             kept = originals
             notes.append(f"replan_keep: {len(kept)}/{len(orig_left)}")
@@ -3029,7 +3054,7 @@ class WiredItineraryOrchestrator:
             max_visits_per_day=keep_cap((*nl_extra, *night[:1]), add_one)
             if orig_left and not composed else _with_nl_room(
                 (len(active) + len(set(composed) - {b.poi_id for b in active}) + len(add_one)
-                 if composed or earlier is not None else visit_cap),
+                 if composed or earlier is not None else fill_cap(add_one)),
                 tuple(p for p in nl_extra if p not in mem_ids)),  # 기억한 곳은 원 일정의 한 곳 — 피로 상한 안에서 센다
             not_before=not_before,
             # 더 늦게까지(`kept`) — 원 일정 남은 방문은 원 체류·우선 가중 그대로. 구성이 없으면 그것만 필수로 두고
@@ -3101,7 +3126,8 @@ class WiredItineraryOrchestrator:
                                           reason="nightlife_request", priority=True)
                             for p in night[:1]),
                                         max_visits_per_day=keep_cap((*nl_ids, *night[:1]), add_one_asked)
-                                        if orig_left else visit_cap,
+                                        if orig_left else _with_nl_room(fill_cap(add_one_asked), tuple(
+                                            p for p in nl_ids if p not in mem_ids)) if late_only else visit_cap,
                                         add_one_categories=add_one_asked),
                         pool=pool, persona=persona, daily_rain=daily_rain, event_bonus=None,
                         candidates_summary=core.candidates_report(
@@ -3274,9 +3300,10 @@ class WiredItineraryOrchestrator:
             rain_threshold=AssemblyConfig().rain_threshold_pct,
             available=available,
             # 장소의 날 말("2일차에"·"내일") 환산 — 순번은 여행 첫날부터, '오늘'은 다시 짜는 날이 아니라 요청 시각의 날
+            # (현지 날 — BE 는 UTC(…Z)로 보내므로 옮기지 않으면 KST 00~09시에 하루 어긋난다, `_local_minute_ceil` 과 같다)
             trip_days=tuple(trip.start_date + timedelta(days=i)
                             for i in range((trip.end_date - trip.start_date).days + 1)),
-            today=_tz_aware(request.request_meta.requested_at, self._tz).date(),
+            today=_tz_aware(request.request_meta.requested_at, self._tz).astimezone(self._tz).date(),
         )
         if lookup is not None:
             lookup.cancel()  # 풀에서 다 찾았으면 아직 줄 선 조회는 접는다(돌고 있으면 결과만 버린다)

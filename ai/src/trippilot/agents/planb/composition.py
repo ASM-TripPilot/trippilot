@@ -106,15 +106,20 @@ def date_label(when: datetime) -> str:
     return f"{when:%Y-%m-%d} ({_WEEKDAYS[when.weekday()]})"
 
 
+def visits_by_time(start: datetime, end: datetime) -> int:
+    """남은 시간 → 방문 수 환산(이동 포함 90분당 1곳, 0 이상) — MAX_VISITS·사유 상한을 걸지 않은 값."""
+    # 반올림 — 내림이면 저녁 2.5시간(식사 + 한 곳)이 1곳으로 줄었다(로컬 실측 18:30).
+    minutes = int((end - start).total_seconds() // 60)
+    return max(0, (minutes + _MINUTES_PER_VISIT // 2) // _MINUTES_PER_VISIT)
+
+
 def max_visits(start: datetime, end: datetime, cap: int | None, *, floor: int | None = None) -> int:
     """남은 시간 → 고를 수 있는 방문 수(1~MAX_VISITS). `cap` 은 사유 상한에서 고정을 뺀 값.
 
     `floor` 는 원 일정의 남은 비고정 방문 수 — 시간이 되는 만큼은 MAX_VISITS 를 넘어 그 수까지 연다. 원 11곳이
     8곳으로 잘렸고(운영 2026-11-05 run1 `limit=8 kept=8/11`), 06:00~21:00 창의 시간 환산 10 도 8 에 막혔다.
     """
-    # 반올림 — 내림이면 저녁 2.5시간(식사 + 한 곳)이 1곳으로 줄었다(로컬 실측 18:30).
-    minutes = int((end - start).total_seconds() // 60)
-    by_time = (minutes + _MINUTES_PER_VISIT // 2) // _MINUTES_PER_VISIT
+    by_time = visits_by_time(start, end)
     n = max(1, min(MAX_VISITS, by_time))
     if floor:
         n = max(n, min(floor, by_time))

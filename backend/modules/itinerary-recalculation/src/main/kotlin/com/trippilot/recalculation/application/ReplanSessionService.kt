@@ -581,7 +581,10 @@ class ReplanSessionService(
 
         private const val REASON_SEPARATOR = " · "
 
-        /** 되돌리기 이력의 사유 머리 — 뒤에 무엇을 되돌렸는지(원래 사유)를 잇는다(BR-U4-31 — 비워 두지 않는다). */
+        /**
+         * 되돌리기 이력의 사유 머리 — 뒤에 무엇을 되돌렸는지(원래 사유)를 잇는다(BR-U4-31 — 비워 두지 않는다).
+         * **AI 가 이 머리로 되돌림을 가른다**(`wiring._REVERT_PREFIX` — 되돌린 다시 짜기가 뺀 앞 요청 기억을 되살린다). 바꾸면 같이 고친다.
+         */
         private const val REVERT_PREFIX = "재계획 되돌림"
 
         /** 사유·지시어를 하나도 안 고른 수동 진입의 최소 문구 — 빈 칸으로 남기지 않는다(BR-U4-31). */

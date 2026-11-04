@@ -188,20 +188,20 @@ class _AllComposer:
                            is_fallback=False, error=None, call_record=None)
 
 
-def _report_day_body(**over) -> dict:
+def _report_day_body(*, target: str = "2026-11-05", requested_at: str = "2026-11-05T05:30:00+09:00",
+                     **over) -> dict:
     """운영 보고와 같은 꼴 — 여행 11-05~07, 1일차(11-05)를 11-05 에 다시 짠다.
     사유는 비운다 — `_body` 기본 사유 weather 는 실외(한라산 NATURE)를 따로 빼서 이 판정을 가린다(역검증에서 확인)."""
     return _body(
         reasons=[],
         trip_context={"destinations": ["제주"], "start_date": "2026-11-05", "end_date": "2026-11-07"},
-        target_date="2026-11-05", time_window={"date": "2026-11-05", "start": "06:00", "end": "21:00"},
-        from_instant="2026-11-05T06:00:00+09:00",
-        request_meta={"request_id": "replan-other-day", "requested_at": "2026-11-05T05:30:00+09:00",
-                      "deadline_ms": 20000},
+        target_date=target, time_window={"date": target, "start": "06:00", "end": "21:00"},
+        from_instant=f"{target}T06:00:00+09:00",
+        request_meta={"request_id": "replan-other-day", "requested_at": requested_at, "deadline_ms": 20000},
         **over)
 
 
-def _run(place: ExtractedPlace, *, composer=None):
+def _run(place: ExtractedPlace, *, composer=None, **body_over):
     app = build_dev_app(directives=_DIRECTIVES)
     orch = app.state.orchestrator
     orch._request_extractor = _StubExtractor(ExtractedRequest(places=(place,)))
@@ -218,7 +218,7 @@ def _run(place: ExtractedPlace, *, composer=None):
 
     orch._schedule_agent = _Spy()
     with TestClient(app, raise_server_exceptions=False) as client:
-        r = client.post("/ai/v1/planb/replan", json=_report_day_body(free_text="꼭 가고 싶어"))
+        r = client.post("/ai/v1/planb/replan", json=_report_day_body(free_text="꼭 가고 싶어", **body_over))
     assert r.status_code == 200, r.text
     body = r.json()
     placed = [s["poi_id"] for d in body["itinerary"]["days"] for s in d["slots"]]
@@ -243,3 +243,24 @@ def test_same_day_words_still_put_the_place_on_this_day(said: str | None) -> Non
     body, placed, required = _run(ExtractedPlace("월정리 카페거리", "visit", day=said))
     assert _WOLJEONG in placed, body["notes"]
     assert f"nl_place_accepted: visit {_WOLJEONG}" in body["notes"]
+
+
+# ── ⑤ '오늘'·'내일'의 기준은 현지 날 — 백엔드는 요청 시각을 UTC(…Z)로 보낸다 ──────────
+
+
+def test_today_said_before_9am_kst_is_this_day_even_when_requested_at_is_utc() -> None:
+    """2일차(11-06)를 05:30 KST 에 다시 짜며 "오늘" — BE `AiRequestMeta.requestedAt: Instant` 는 `2026-11-05T20:30:00Z`
+    로 온다. UTC 날짜(11-05)로 '오늘'을 세면 1일차로 읽어 이 날에서 뺐다(리뷰 2026-11-05)."""
+    body, placed, _ = _run(ExtractedPlace("월정리 카페거리", "visit", day="오늘"),
+                           target="2026-11-06", requested_at="2026-11-05T20:30:00Z")
+    assert _WOLJEONG in placed, body["notes"]
+    assert f"nl_place_accepted: visit {_WOLJEONG}" in body["notes"]
+
+
+def test_tomorrow_said_before_9am_kst_is_another_day_even_when_requested_at_is_utc() -> None:
+    """1일차(11-05)를 05:30 KST(`2026-11-04T20:30:00Z`)에 다시 짜며 "내일" = 11-06 — 이 날에 넣지 않는다."""
+    body, placed, required = _run(ExtractedPlace("월정리 카페거리", "visit", day="내일"),
+                                  requested_at="2026-11-04T20:30:00Z")
+    assert _WOLJEONG not in placed, body["notes"]
+    assert _WOLJEONG not in required
+    assert f"nl_place_other_day: visit {_WOLJEONG} 2026-11-06" in body["notes"]
