@@ -213,6 +213,22 @@ def test_executor_with_no_ids_skips_the_second_query_and_still_rolls_back() -> N
     assert PgPlaceSql(lambda: conn).run(_OK[1]) == [] and len(conn.log) == 3 and conn.rolled_back
 
 
+def test_executor_keeps_the_model_order_when_it_ends_with_both_signals_else_puts_trending_first() -> None:
+    """성격 표지를 맨 앞에 둔 모델 정렬('뷰' → '요즘 인기' → … → rich)은 그대로 — 다시 '요즘 인기' 먼저로 덮으면 표지 없는 인기 장소가
+    앞자리를 채운다("서울 경치 좋은 곳" 맨 앞에 미술관, 2026-11-04 개발). 정렬 끝을 빠뜨린 SQL 만 코드가 '요즘 인기' → rich 로 지킨다(#1500)."""
+    head = "SELECT poi_id, name FROM poi_public WHERE sido LIKE '서울%' AND category IN ('명소','자연') ORDER BY ('뷰' = ANY(tags)) DESC, "
+    view, museum = (("v", "인왕산 수성동계곡", "명소", "서울특별시", "종로구", ["뷰"], False),
+                    ("m", "서울시립미술관", "문화", "서울특별시", "중구", ["요즘 인기"], True))
+
+    def ids(sql: str) -> list[str]:
+        return [r.poi_id for r in PgPlaceSql(lambda: _Conn([[("v",), ("m",)], [museum, view]])).run(sql)]
+
+    assert ids(head + "('요즘 인기' = ANY(tags)) DESC, saved_count DESC, rich DESC, poi_id LIMIT 20") == ["v", "m"]
+    assert ids(head + "('요즘 인기' = ANY(tags)) DESC, saved_count DESC LIMIT 20") == ["m", "v"]  # rich 를 빠뜨렸다
+    assert ids(head + "saved_count DESC, rich DESC, poi_id LIMIT 20") == ["m", "v"]  # '요즘 인기'를 빠뜨렸다
+    assert ids("SELECT poi_id, name FROM poi_public WHERE sido LIKE '서울%' LIMIT 20") == ["m", "v"]  # 정렬이 없다
+
+
 class _OneQueryConn(_Conn):
     """find_by_name 용 — fetchall 한 번."""
 
