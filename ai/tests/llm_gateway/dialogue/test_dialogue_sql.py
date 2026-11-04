@@ -225,6 +225,8 @@ def test_executor_keeps_the_model_order_when_it_ends_with_both_signals_else_puts
 
     assert ids(head + "('요즘 인기' = ANY(tags)) DESC, saved_count DESC, rich DESC, poi_id LIMIT 20") == ["v", "m"]
     assert ids(head + "('요즘 인기' = ANY(tags)) DESC, saved_count DESC LIMIT 20") == ["m", "v"]  # rich 를 빠뜨렸다
+    assert ids(head + "saved_count DESC, rich DESC, poi_id LIMIT 20") == ["m", "v"]  # '요즘 인기'를 빠뜨렸다
+    assert ids("SELECT poi_id, name FROM poi_public WHERE sido LIKE '서울%' LIMIT 20") == ["m", "v"]  # 정렬이 없다
 
 
 class _OneQueryConn(_Conn):
