@@ -2112,6 +2112,7 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
     sql = (_explore_by_sql(ctx, anchor, category, theme),) if (
         ctx.ports.place_sql is not None and ctx.ports.place_sql.writes_sql and ctx.arguments.get("region")
         and (anchor is None or (anchor.kind == "region" and _carry(ctx) is None))) else ()
+    beside_sql = bool(sql)  # 행사 작업을 더하기 전에 잡는다 — 아래 문서 대기 상한(`_DOC_BESIDE_SQL_S`)
     center_of = _once(lambda: _anchor_center(ctx, anchor)) if anchor is not None else None
     events = _explore_events(ctx, anchor, theme, center_of) if anchor is not None else None
     sql += (events,) if events is not None else ()
@@ -2141,7 +2142,7 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
         shown, (on_the_way, inner) = _shown_before(ctx), _on_the_way(anchor)
         at = {p.poi_id: on_the_way(p.coord) for p in pool.pois}
         # 두 곳 사이면 가운데가 먼저, 양 끝은 모자랄 때만 — 한 번에 순위를 매겨 종류 상한(_PER_CATEGORY)이 전체에 걸리게
-        fuse = _doc_fuse(ctx, searcher, query, left, doc) if query is not None else None
+        fuse = _doc_fuse(ctx, searcher, query, left, doc, cap_s=_DOC_BESIDE_SQL_S if beside_sql else None) if query is not None else None
         ranked = _explore_rank((p for p in pool.pois if not shown(p.name, p.poi_id) and at[p.poi_id] is not None), category, theme,
                                _night_heard(ctx), ahead=lambda p: inner(at[p.poi_id]), fuse=fuse)
         candidates = [{
@@ -2160,6 +2161,9 @@ def _plan_explore(ctx: TurnContext) -> tuple[HandlerTask, ...]:
 # 여유 0.35s 를 뺀 만큼만 기다리고, 0.5s 가 안 남으면 건너뛴다. 검색이 OK 가 아니면 규칙 순서 그대로 — 문서 단계 때문에 탐색이 TIMEOUT 이
 # 되지 않게(INV-4)
 _DOC_MARGIN_S, _DOC_MIN_S = 0.35, 0.5
+# SQL 이 나란히 도는 턴의 문서 대기 상한 — 그 턴은 대개 SQL 행이 답이고 섞인 순서는 0건·실패 대체용인데, 팬아웃은 탐색 작업을 끝까지
+# 기다린다. 벡터 스토어가 느린 날 버려질 문서 결과를 ~2.4s 기다리지 않게(리뷰 2026-11-04). 로컬 문서 단계 p95 192ms(러너 latency)
+_DOC_BESIDE_SQL_S = 0.4
 
 
 def _open_query(ctx: TurnContext, anchor: _Anchor, category: str | None, theme: str | None) -> hybrid_rank.OpenQuery | None:
@@ -2173,9 +2177,9 @@ def _open_query(ctx: TurnContext, anchor: _Anchor, category: str | None, theme: 
 
 
 def _doc_fuse(ctx: TurnContext, searcher: PlaceSearch, query: hybrid_rank.OpenQuery, left: Callable[[], float],
-              doc: dict[str, str]) -> Callable[[list[Poi]], list[Poi]]:
+              doc: dict[str, str], cap_s: float | None = None) -> Callable[[list[Poi]], list[Poi]]:
     """규칙 정렬 결과 → 범위(규칙 순서의 장소 키)를 넘겨 문서 순위를 받고 RRF 로 섞는다. 상태는 `doc["doc"]` 에 남긴다.
-    `left` = 탐색 작업 첫머리에 잡은 팬아웃 남은 초(`_fanout_left`)."""
+    `left` = 탐색 작업 첫머리에 잡은 팬아웃 남은 초(`_fanout_left`), `cap_s` = 대기 상한(남은 몫 판정 뒤에 건다)."""
 
     def fuse(ranked: list[Poi]) -> list[Poi]:
         left_s = left()
@@ -2184,6 +2188,8 @@ def _doc_fuse(ctx: TurnContext, searcher: PlaceSearch, query: hybrid_rank.OpenQu
             doc["doc"] = "BUDGET"
             log.info("place_search status=BUDGET left_ms=%d trace=%s", int(left_s * 1000), ctx.trace_id)
             return ranked
+        if cap_s is not None:
+            wait_s = min(wait_s, cap_s)
         status, ranks = searcher.search(query, [p.source_ref for p in ranked if p.source_ref], wait_s, trace=str(ctx.trace_id))
         doc["doc"] = status
         return hybrid_rank.fuse(ranked, ranks, named=query.names) if status == "OK" else ranked

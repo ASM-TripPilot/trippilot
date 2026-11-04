@@ -3023,6 +3023,21 @@ def test_document_wait_subtracts_the_time_spent_before_the_search() -> None:
     assert results["explore"].value["doc"] == "OK" and waits == [pytest.approx(2.8 - 0.3 - dh._DOC_MARGIN_S)]
 
 
+def test_document_wait_is_capped_when_sql_runs_beside_the_search() -> None:
+    # SQL 이 나란히 도는 턴은 섞인 순서가 0건·실패 대체용뿐이라 대기를 `_DOC_BESIDE_SQL_S` 로 자른다 — 행사 작업만 붙은 턴(SQL 미배정)은 그대로
+    waits: list[float] = []
+
+    def spying():
+        searcher, _, _ = _doc_search()
+        real = searcher.search
+        searcher.search = lambda q, refs, wait_s, **kw: waits.append(wait_s) or real(q, refs, wait_s, **kw)
+        return searcher
+
+    _run_doc(_QUIET, spying(), place_sql=_PlaceSql(()))
+    _run_doc(_QUIET, spying())
+    assert waits == [dh._DOC_BESIDE_SQL_S, pytest.approx(2.8 - dh._DOC_MARGIN_S)]
+
+
 def test_a_broken_index_leaves_explore_ok_in_rule_order() -> None:
     def broken():
         raise TypeError("ids is null")
