@@ -33,8 +33,23 @@ export interface UseNotificationInboxResult {
 }
 
 export function useNotificationInbox(): UseNotificationInboxResult {
-  const query = useGetMeNotifications();
   const queryClient = useQueryClient();
+  const key = getGetMeNotificationsQueryKey();
+  // TRIP-1766 — 받은 목록 없이 실패가 이미 한 번 확정된 뒤의 조회([다시 시도]·재진입·푸시 무효화)는 자동 재시도를 하지
+  // 않는다. 하면 한 번 누를 때 요청이 4건 나가고 그동안(최대 ~11초) 오류 얼굴 위 [다시 시도]가 잠긴다. 첫 조회의
+  // 재시도는 클라이언트 기본 그대로. 캐시는 실패가 난 그 순간에 읽는다 — 렌더 중에 읽으면 React Compiler 가 첫 렌더
+  // 값으로 굳혀 앱에서만 안 먹는다(jest 는 컴파일러 없이 돌아 못 본다, 6-b 실측).
+  function retry(failureCount: number, error: unknown): boolean {
+    const state = queryClient.getQueryState(key);
+    if (state?.data === undefined && (state?.errorUpdateCount ?? 0) > 0) {
+      return false;
+    }
+    const base = queryClient.getDefaultOptions().queries?.retry ?? 3;
+    // 클라이언트 기본 재시도 함수는 react-query 기본 오류 타입(Error)으로 선언돼 있다.
+    if (typeof base === 'function') return base(failureCount, error as Error);
+    return typeof base === 'number' ? failureCount < base : base;
+  }
+  const query = useGetMeNotifications(undefined, { query: { retry } });
   const items = query.data?.items ?? [];
 
   async function markAllRead(): Promise<boolean> {
