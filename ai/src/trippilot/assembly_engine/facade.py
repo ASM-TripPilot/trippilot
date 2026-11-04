@@ -153,6 +153,7 @@ class HybridAssemblyFacade:
             return deadline_ms - (self._clock.monotonic_ms() - t0)
 
         tid = trace_id if trace_id is not None else TraceId("assembly")
+        last_invalid: str | None = None  # 마지막으로 거른 해의 위반 요약 — 전 단계 실패 사유에 싣는다
         for idx, stage in enumerate(self._stages):
             next_name = (self._stages[idx + 1].name
                          if idx + 1 < len(self._stages) else "(end)")
@@ -178,8 +179,11 @@ class HybridAssemblyFacade:
                           + check_hc2_coords_known(result, self._pois)
                           + check_not_before(result, problem, self._pois, self._est))
             if violations:  # 유효하지 않은 해는 반환 금지 (INV-2)
-                self._emit_fallback(tid, stage.name, next_name,
-                                    f"invalid:{len(violations)}")
+                # 어느 제약을 어겼는지 사유에 싣는다(repair 의 `unrepairable:HC1x1,HC2x2` 와 같은 꼴) —
+                # 운영 2026-10-29 생성 409 가 `invalid:1` 만 남겨 모순의 종류를 로그로 가릴 수 없었다.
+                codes = Counter(v.code for v in violations)
+                last_invalid = "invalid:" + ",".join(f"{c}x{n}" for c, n in sorted(codes.items()))
+                self._emit_fallback(tid, stage.name, next_name, last_invalid)
                 continue
             # 유일 수렴 반환점 — 모든 경로(OR-Tools·LLM·규칙 폴백)에 품질 점수 부착
             # (§3.7, TRIP-261). regenerate()도 solve() 경유라 함께 커버된다.
@@ -200,7 +204,9 @@ class HybridAssemblyFacade:
             return replace(result, score=score)
         # RuleFallback이 체인에 있으면 시한과 무관하게 도달 불가(TRIP-291).
         # 도달 = 유효 해 자체가 없음(모순 입력) — "시간이 없어서"는 이유가 될 수 없다.
-        raise AssemblyConflictError("모든 단계 실패 — 고정 블록 모순 등 입력 확인 필요")
+        raise AssemblyConflictError(
+            "모든 단계 실패 — 고정 블록 모순 등 입력 확인 필요"
+            + (f" (마지막 단계 {last_invalid})" if last_invalid else ""))
 
     # ── warm-start 재생성 (U5-P2 멱등, 정본 §4.3) ──
     def regenerate(self, problem: ItineraryProblem,

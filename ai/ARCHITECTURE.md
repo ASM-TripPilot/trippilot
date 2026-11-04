@@ -113,8 +113,8 @@ flowchart LR
 4. 화면 거리(실경로, 짧은 예산), 꼭 갈 곳 미배치 판정, 응답 봉투.
 
 **다시 짜기** `/planb/replan` — 조율자는 `WiredItineraryOrchestrator` 다.
-1. 자유 발화 추출(`REPLAN_REQUEST_EXTRACTION`)을 먼저 띄운다. 재계획 지시(KB-4 매칭 → `REPLAN_DIRECTIVE_TRANSLATION`).
-2. `InfoCollector`(REPLAN), 잠금 블록(고정·저녁·진행 중·지난 칸), 추출 주장 대조.
+1. 자유 발화 추출(`REPLAN_REQUEST_EXTRACTION`)과 재계획 지시 해석(KB-4 매칭 → `REPLAN_DIRECTIVE_TRANSLATION`)을 배경으로 먼저 띄운다. 추출이 장소 이름을 내면 이름 대조용 등록 POI 조회(반경 50km)도 곧바로 배경으로 띄운다.
+2. `InfoCollector`(REPLAN) — 지시 해석은 풀 확대 판정 직전에 받는다. 잠금 블록(고정·저녁·진행 중·지난 칸), 추출 주장 대조(이름은 받은 후보 풀에서 정확 일치로 먼저 찾고, 없을 때만 그 50km 조회를 기다린다).
 3. `PlanBAgent` 규칙 랭킹 → **구성 LLM 이 남은 하루를 고른다**(`REPLAN_COMPOSITION`, 번호 선택 게이트, KB-5 장소 지식) → `ScheduleAgent` 로 solve → 1회 수리.
 
 **다른 후보** `/planb/alternatives` — `InfoCollector` → `PlanBAgent.run`(KB-3 상황·KB-2 취향·KB-5 장소 검색 → `ALTERNATIVE_SELECTION`, 실패 시 규칙 랭킹) → 닫힌 집합 재확인. 응답에 시각이 없다(배치는 백엔드의 repair 몫).

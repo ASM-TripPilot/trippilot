@@ -156,7 +156,7 @@ from trippilot.domain.itinerary.itinerary import (
     Violation,
     VisitSlot,
 )
-from trippilot.domain.llm.llm import CandidatePool, ModelTier, PoiExplanation
+from trippilot.domain.llm.llm import CandidatePool, ModelTier, PoiExplanation, TypedResult
 from trippilot.domain.persona import PersonaSummary
 from trippilot.domain.poi.poi import (
     NIGHTLIFE_TAG, DataQuality, Poi, PoiCategory, PoiSource, counts_as_food, open_windows_on,
@@ -1480,6 +1480,65 @@ def _remaining_visits(
     return tuple(out)
 
 
+def _left_originals(request: schemas.ReplanRequest, held: Collection[PoiId],
+                    not_before: datetime | None) -> tuple[PoiId, ...]:
+    """원 일정 중 아직 안 끝난 비잠금 방문(POI 한 번씩) — `_remaining_visits` 와 같은 기준이되 제외 요청도 센다.
+
+    방문 수를 지킬 때(F-4) 제외 요청·회피로 바뀔 곳은 빠지는 곳이 아니라 다른 곳으로 채울 자리다.
+    """
+    out: list[PoiId] = []
+    for s in request.current_slots:
+        pid = PoiId(s.poi_id)
+        ended = (not_before is not None and s.start_at is not None and s.end_at is not None
+                 and not s.ends_next_day
+                 and datetime.combine(request.target_date, s.end_at, tzinfo=not_before.tzinfo) <= not_before)
+        if pid not in held and pid not in out and not ended:
+            out.append(pid)
+    return tuple(out)
+
+
+# 되돌림 이력의 사유 머리 — BE `ReplanSessionService.REVERT_PREFIX`("재계획 되돌림 · <원래 사유>", 출처 `MANUAL`).
+_REVERT_PREFIX = "재계획 되돌림"
+
+
+def _prior_requested(request: schemas.ReplanRequest, pois: Sequence[Poi],
+                     specs: Sequence[DirectiveSpec]) -> tuple[Poi, ...]:
+    """같은 날 반영된 앞 다시 짜기가 **요청해서** 넣은 곳 중 지금 일정에 남은 곳 (F-5 — AI 단독 근사, 와이어 불변).
+
+    재료는 이미 오는 변경 이력이다 — BE 가 이 날짜를 건드린 것만 diff 로 싣고, 반영된 다시 짜기는 `PLAN_B` 에 사유 한 줄
+    (칩 키·자유입력을 ` · ` 로 이은 것, BE `ReplanSessionService.changeReason`)이다. 그 사유가 바란 곳만 센다 — 밤 낱말
+    ("클럽 넣어줘", 부정문 제외)이면 들어온 곳 중 술집 태그, 한 곳 추가 칩(ADD_FOOD)이면 그 종류로 들어온 곳이 **딱 한
+    곳**일 때 그 곳(둘이면 어느 쪽인지 모른다). 뒤 이력이 그 곳을 뺐으면 잊는다 — 편집, 그리고 되돌림(`MANUAL` 로
+    반영분을 뺀다)이 여기 걸린다. 편집으로 바꿔 뺀 곳(SWAPPED_OUT)도 잊는다. 이름으로 집은 곳·자유입력의 한 곳 추가
+    ("카페 넣어줘")는 사유만으로 못 가른다 — 정식안(F-8)이 AI 가 집은 id 를 세션에 남겨 받는다.
+
+    뒤 **다시 짜기**가 뺀 기억은 그 다시 짜기를 되돌리면 되살린다 — 되돌림은 그 세션이 뺀 곳을 다시 넣는다(`added`).
+    "클럽 넣어줘" → "클럽은 빼줘" → 되돌림이면 지금 반영된 요청은 앞의 것이다(리뷰 2026-11-05).
+    """
+    index = {p.poi_id: p for p in pois}
+    keep: dict[PoiId, Poi] = {}
+    undone: dict[PoiId, Poi] = {}  # 다시 짜기가 뺀 기억 — 그 세션을 되돌리면 되살린다
+    for ev in sorted(reversed(request.change_log), key=lambda e: e.at):  # BE 는 최신순 — 같은 시각이면 먼저 쓴 것 먼저
+        for pid in ev.removed_poi_ids:
+            gone = keep.pop(PoiId(pid), None)
+            if gone is not None and ev.source == "PLAN_B":
+                undone[gone.poi_id] = gone
+        if ev.source == "MANUAL" and (ev.reason or "").startswith(_REVERT_PREFIX):
+            keep.update((PoiId(pid), undone.pop(PoiId(pid))) for pid in ev.added_poi_ids if PoiId(pid) in undone)
+        if ev.source != "PLAN_B" or not ev.reason:
+            continue
+        added = [index[PoiId(pid)] for pid in ev.added_poi_ids if PoiId(pid) in index]
+        if _NIGHT_WORDS.search(ev.reason) and not _NEGATION.search(ev.reason):
+            keep.update((p.poi_id, p) for p in added if NIGHTLIFE_TAG in p.tags)
+        for spec in resolve_chips(ev.reason.split(" · "), specs)[0]:
+            hit = [p for p in added if p.category in _categories_of(spec.prefer_categories)]
+            if spec.cardinality == "ONE" and len(hit) == 1:
+                keep[hit[0].poi_id] = hit[0]
+    current = {PoiId(s.poi_id) for s in request.current_slots}
+    swapped = {PoiId(r.poi_id) for r in request.rejections if r.kind == "SWAPPED_OUT"}
+    return tuple(p for pid, p in keep.items() if pid in current and pid not in swapped)
+
+
 def _end_near(request: schemas.ReplanRequest, resolved: Sequence[str],
               notes: list[str]) -> GeoPoint | None:
     """END_NEAR_STAY("숙소 근처에서 끝내기")·SHORTER_DAY("일찍 마무리") → 하루를 마칠 곳(그날 밤 숙소).
@@ -1757,7 +1816,9 @@ _NL_EXTRACT_SHARE = 0.25
 # 추출 LLM 은 후보 풀이 필요 없어 재계획 **시작 시점에** 띄운다 — 지시 번역·후보 수집과 겹쳐 돌아
 # 순차 경로에서 빠진다(DEV 실측 2026-10-14: 번역 3.75s + 추출 ~5s 가 직렬로 쌓여 구성 LLM 이 굶었다).
 # 게이트웨이를 스레드에서 부르는 것은 이미 쓰는 패턴이다(`route_budget._POOL`·취향 점수 워커).
-_NL_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="nl-extract")
+# 다시 짜기 하나가 셋을 띄운다(추출·지시 해석·이름 대조 50km 조회, 2026-11-05 F-3) — 8 이면 동시 셋째 요청부터 본 스레드가
+# 기다리는 일(지시 해석)이 남의 추출 뒤에 줄을 선다. 전부 I/O 대기라 스레드를 넉넉히 둔다.
+_NL_POOL = ThreadPoolExecutor(max_workers=24, thread_name_prefix="nl-extract")
 # 5s → 8s (2026-10-15 운영 실호출 2회 중 1회 `timeout > 5.0s` — 추출이 빠지자 "성산 꼭"·"6시까지"가 통째로
 # 무시된 하루가 나왔다). 시작 시점에 배경으로 띄우므로 결과를 받는 지점(지시 번역·후보 수집 뒤)까지는 공짜고,
 # 그보다 늦을 때만 그만큼 기다린다. 운영 재계획 응답은 12~18s 라 시한(60s)에 여유가 있다.
@@ -2551,6 +2612,13 @@ class WiredItineraryOrchestrator:
             "trigger": request.trigger.kind if request.trigger is not None
             else _REASON_TO_TRIGGER.get(primary, TriggerKind.MANUAL).value,
         }, ensure_ascii=False))
+        # 받은 창 — "여행 설정은 06:00 인데 09:00 부터"(운영 2026-11-05)를 BE 가 보낸 값으로 가르는 한 줄
+        entry_nb = _replan_not_before(request, self._tz)
+        _logger.info("replan_window %s", json.dumps({
+            "trace_id": str(trace_id),
+            "time_window": f"{request.time_window.date} {request.time_window.start:%H:%M}~{request.time_window.end:%H:%M}",
+            "not_before": f"{entry_nb:%H:%M}" if entry_nb is not None else None,
+        }, ensure_ascii=False))
         notes: list[str] = []
         # PlanB·점수·어셈블리가 **한 시계 원점을 공유한다** — PlanB 가 쓴 시간이
         # ScheduleAgent 의 잔여에서 저절로 빠져야 두 LLM 호출이 예산을 겹쳐 쓰지 않는다.
@@ -2558,9 +2626,12 @@ class WiredItineraryOrchestrator:
 
         nl_pending = self._begin_extraction(
             request, trace_id=trace_id, now=now, remaining_ms=_deadline_budget(meta))
-        resolved, unknown, prefer, avoid, near, add_one, pace = self._replan_directives(
-            request, notes, trace_id=trace_id, now=now, deadline_ms=_deadline_budget(meta))
-        resolved = _spoken_nightlife(request, resolved, notes)
+        # 지시 해석(임베딩 매칭 → 번역 LLM)도 배경으로 — 장소 수집과 겹친다(운영 2026-11-05 run3: 매칭 0.7s + 번역 1.5s 가
+        # 수집 앞에 직렬로 쌓여 구성 시한이 7.8s 였다). 첫 소비자는 풀 확대 판정(`near_user`)이라 그 직전에 받는다.
+        directive_notes: list[str] = []
+        directives_pending = _NL_POOL.submit(
+            contextvars.copy_context().run, self._replan_directives, request, directive_notes,
+            trace_id=trace_id, now=now, deadline_ms=_deadline_budget(meta))
 
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
@@ -2583,6 +2654,11 @@ class WiredItineraryOrchestrator:
                 kind="persona", ref_id=request.trip_id, owner_id=request.trip_id)
         packets = self._info.collect(Intent.REPLAN, params)
         radius_pool = self._pool_from(packets, now)
+        stage_t = self._clock.monotonic_ms()
+        resolved, unknown, prefer, avoid, near, add_one, pace = directives_pending.result()  # 해석이 던지면 종전처럼 던진다
+        notes.extend(directive_notes)  # 앞서 notes 에 쓴 것이 없어 종전 순서 그대로다
+        notes.append(f"stage_ms: directives_wait={self._clock.monotonic_ms() - stage_t}")  # 본 스레드가 막힌 몫
+        resolved = _spoken_nightlife(request, resolved, notes)
         if not radius_pool.pois:
             # **검색 결과(반경 풀)가 비면** 반경을 한 단 넓혀 **한 번** 더 찾는다 (2026-10-14 사용자 결정,
             # BR-U3-25 개정). 판정은 원 일정 합류 **앞**에서 — 실 요청은 원 일정 슬롯이 늘 실려 합류 뒤
@@ -2665,7 +2741,7 @@ class WiredItineraryOrchestrator:
         # `directive_fit`). 남는 후보가 없으면 빼지 않고 밝힌다(INV-4) — 빈 하루보다 낫다.
         # ── 자연어 요청 — 뽑고, **검증한 것만** 쓴다 ─────────────────────
         nl = self._verified_request(request, anchor, not_before, daily_rain, notes, nl_pending,
-                                    available=frozenset(p.category for p in pool.pois))
+                                    available=frozenset(p.category for p in pool.pois), nearby=pool.pois)
         # "을지로 말고 강남에서 놀고 싶어" — 그 지역 둘레로 후보 풀을 다시 받는다. 종전엔 풀이 지금 위치 기준이라 하루가
         # 그대로 을지로였다(사용자 2026-10-20). 원 일정 중 그 지역 밖(잠금·지난 곳·진행 중 제외)은 아래 제외에 더한다.
         # 시간만 당기기는 장소를 안 바꾼다는 요청이라 옮기지 않는다.
@@ -2730,11 +2806,33 @@ class WiredItineraryOrchestrator:
             else:
                 notes.append(f"avoid_excluded: {len(avoided)} {cats}")
         avoided = avoided | (nl.avoid - held)  # 사용자가 이름으로 뺀 곳(등록 POI 로 확인된 것만)
+        avoided = avoided | (nl.other_day - held)  # 다른 날 가겠다고 한 곳("2일차에") — 이 날엔 넣지 않는다(F-6)
         avoided = avoided | (area_out - held)  # 옮겨 간 지역 밖의 원 일정
         if nl.only:
             # "카페로만" — 다른 종류는 후보에서 뺀다. 잠금·이름으로 집은 곳은 둔다(말이 어긋나면 이름이 이긴다).
             avoided = avoided | frozenset(
                 p.poi_id for p in pool.pois if p.category not in nl.only and p.poi_id not in held)
+        # 앞 요청 기억(F-5, 2026-11-05 사용자 결정) — 같은 날 반영된 다시 짜기가 요청해서 넣은 곳(`_prior_requested`)을
+        # 이름으로 집은 곳처럼 우선 필수 방문으로 둔다(구성 결과 맨 앞, 구성이 실패해도). 이번 요청이 이긴다 — 회피·이름으로
+        # 뺀 곳·다른 날·옮긴 지역 밖(`avoided`)·건너뛰기·"클럽은 빼줘"면 잊는다. 시간만 당기기·일찍 마무리는 장소를 더하지
+        # 않는 요청이라 걸지 않는다. 잠금·이미 끝난 곳은 따로 지킬 것이 없다.
+        remembered: tuple[Poi, ...] = ()
+        if earlier is None and "SHORTER_DAY" not in resolved:
+            said = request.free_text or ""
+            no_night = bool(_NIGHT_WORDS.search(said) and _NEGATION.search(said))
+            skip = {PoiId(p) for p in request.excluded_poi_ids} | avoided
+            left = set(_left_originals(request, {b.poi_id for b in blocks}, not_before))
+            prior = [p for p in _prior_requested(request, pool.pois, self._directives) if p.poi_id in left]
+            remembered = tuple(p for p in prior
+                               if p.poi_id not in skip and not (no_night and NIGHTLIFE_TAG in p.tags))
+            if len(remembered) < len(prior):
+                notes.append("replan_memory_dropped: " + ",".join(
+                    str(p.poi_id) for p in prior if p not in remembered))
+            if remembered:
+                notes.append("replan_memory: " + ",".join(str(p.poi_id) for p in remembered))
+        mem_ids = frozenset(p.poi_id for p in remembered)
+        nl_ids = tuple(dict.fromkeys((*nl_ids, *(p.poi_id for p in remembered))))
+        held |= mem_ids  # 밤 후보(`_nightlife_candidates`)가 기억한 곳을 또 세지 않는다 — 이름으로 집은 곳과 같다
 
         # ── PlanBAgent (RAG) — 상황 지식으로 순서를 낸다 ─────────────
         # 다녀온 곳(지난 잠금)은 PlanB 에도 제외다 — 기준점이 "마지막 완료 방문"이면 그 POI 가
@@ -2752,9 +2850,11 @@ class WiredItineraryOrchestrator:
             # 구성 LLM 이 이 순위 앞 20 을 후보로 받을 때만 문서 순위를 섞는다(측정 경로 — `PlanBRagRequest.fuse_docs`)
             fuse_docs=self._composer is not None,
         )
+        stage_t = self._clock.monotonic_ms()
         planb = self._rag.run(planb_request)
         self._rag_events(meta, planb.notes)
         notes += [f"planb: {n}" for n in planb.notes]
+        notes.append(f"stage_ms: planb={self._clock.monotonic_ms() - stage_t}")
         # 랭킹은 **LLM 경로일 때만** 넘긴다 (독스트링 마지막 단락).
         planb_rank = () if planb.is_fallback else planb.ranked_poi_ids
         if planb.is_fallback:
@@ -2786,7 +2886,9 @@ class WiredItineraryOrchestrator:
         window_end = datetime.combine(window.date, window.end, tzinfo=self._tz)
         night_end = max(window_end, datetime.combine(window.date, datetime.min.time(),
                                                      tzinfo=self._tz) + _NIGHT_END)
-        day_end = nl.window_end or (night_end if night or extend else window_end)  # 더 늦게까지도 같은 창
+        # 기억한 밤 장소(F-5)도 밤에 놀기와 같은 창 — 다음 다시 짜기의 BE 창(~21:00)엔 술집 추정 영업(20시~)이 못 든다
+        late_kept = any(NIGHTLIFE_TAG in p.tags for p in remembered)
+        day_end = nl.window_end or (night_end if night or extend or late_kept else window_end)  # 더 늦게까지도 같은 창
         # 밤 늦은 "더 늦게까지"의 밤 장소 체류 — 기본(술집 90·클럽 120분)이면 23:59 창에 안 들어간다. 남은 시간에
         # 맞춰 줄이고(이동 몫 20분, 바닥 30분) 우선으로 둔다. 그 밖엔 None = 카테고리 기본.
         late_dwell = (max(30, min(90, int((day_end - not_before).total_seconds() // 60) - 20))
@@ -2817,6 +2919,10 @@ class WiredItineraryOrchestrator:
             notes.append(f"llm_compose_error: {type(e).__name__}")
             self._compose_event(meta, f"compose_error: {type(e).__name__}: {e}")
             composed = ()
+        if compose_ctx and not composed:
+            # 구성 입력에 문서를 실었는데 구성이 결과를 못 냈다(실패·시한 생략·오류) — 아래 `retrieved` 의 POI_DESC·
+            # SITUATION_PROMPT 는 실은 수일 뿐 최종 일정에 쓰이지 않았다(운영 2026-11-05 run3: 7.8s 타임아웃인데 적중으로 찍힘).
+            notes.append("compose_docs_unread")
         if composed and nl_ids and earlier is None:
             # 사용자가 이름으로 집은 곳은 구성 결과 **맨 앞**에 둔다. 방문 수는 구성 LLM 이 정한 그대로 둔다 —
             # 그 수가 남은 시간에 맞춘 값이라, 하나를 더 얹으면 솔버가 시간 부족으로 누군가를 떨어뜨리는데 그게
@@ -2876,12 +2982,44 @@ class WiredItineraryOrchestrator:
                     composed = composed[:room]
             if not composed:
                 add_one = add_one_asked
+        # 원 일정 지키기(F-4, 2026-11-05 사용자 결정 "일관되게") — 구성이 결과를 못 내면(실패·시한 생략·오류·고른 곳 전부
+        # 미배치) 원 일정의 남은 방문을 **우선 아닌** 필수 방문으로 둔다. 종전엔 규칙 점수로 하루를 새로 짰고, 원 일정
+        # 곳은 프리필터 몫에 밀려 술집·카페·미술·문화가 0곳으로 잘렸다(운영 run3: 클럽 소실·방문 급감). 잠금·지난 곳·
+        # 제외 요청·회피(이번 요청이 이긴다)·이름으로 집은 곳(우선 필수로 따로 간다)·밤 일정 한 곳은 넣지 않는다.
+        # 사유 상한(피로·지연·일찍 마무리)·시간만 당기기·더 늦게까지는 각자의 규칙이 이기고, 새로 짜 보기(사유·요청
+        # 없음)는 다른 하루를 원하므로 지키지 않는다. 체류는 카테고리 기본(pace 적용) — 구성이 원 곳을 다시 고를 때와 같다.
+        orig_left = () if (earlier is not None or extend or visit_cap is not None
+                           or self._change_rule(request, resolved) == composition.CHANGE_REFRESH) else _left_originals(
+            request, {b.poi_id for b in blocks}, not_before)
+        originals = {v.poi_id: replace(v, dwell_min=None) for v in _remaining_visits(
+            request, {b.poi_id for b in blocks} | avoided | set(nl_ids) | set(night[:1]), {}, not_before,
+            "replan_keep")} if orig_left else {}
+
+        def keep_cap(extra: Collection[PoiId], add: frozenset[PoiCategory]) -> int | None:
+            """지킨 날의 하루 상한 — 잠금 + 원 남은 수(바뀔 자리 포함) + 더한 곳. 바뀔 자리만 규칙 점수가 채운다."""
+            return None if "FILL_MORE" in resolved else len(active) + len({*orig_left, *extra}) + len(add)
+
+        # 기억한 밤 장소(F-5)만으로 창을 23:59 로 넓혔는데 원 일정 지키기·사유 상한이 없으면(새로 짜 보기) 구성 없이
+        # 푸는 점수 경로에 상한을 준다 — 상한 없이 긴 창을 채우게 두면 조립이 무너졌다(리뷰 2026-11-05: 11곳 → 4곳,
+        # 10:37~20:00 공백 — 보고 ③ 재발). 상한 = 잠금 + 원 창(~BE 끝)을 채우는 만큼(시간 환산) + 기억한 밤 장소.
+        late_only = (late_kept and not (night or extend) and nl.window_end is None and visit_cap is None
+                     and earlier is None and not orig_left and "FILL_MORE" not in resolved)
+        fill_from = nl.window_start or datetime.combine(window.date, window.start, tzinfo=self._tz)
+        fill_from = max(fill_from, not_before) if not_before is not None else fill_from
+
+        def fill_cap(add: frozenset[PoiCategory]) -> int | None:
+            """구성 없이 푸는 하루의 상한 — 위 경우만 시간 환산 상한, 그 밖엔 종전 `visit_cap`."""
+            return (len(active) + composition.visits_by_time(fill_from, window_end) + len(add)
+                    + sum(1 for p in remembered if NIGHTLIFE_TAG in p.tags) if late_only else visit_cap)
+
+        if orig_left and not composed:
+            kept = originals
+            notes.append(f"replan_keep: {len(kept)}/{len(orig_left)}")
         # 사용자가 이름으로 집은 곳은 시각 없는 필수 방문 — 구성 LLM 이 이미 고른 곳·잠금은 겹쳐 세지 않는다.
         # 시간만 당기기(earlier)는 장소를 안 바꾼다는 요청이라 더하지 않는다.
         nl_extra = () if earlier is not None else tuple(
-            p.poi_id for p in nl.visit
-            if p.poi_id not in set(composed) and p.poi_id not in {b.poi_id for b in blocks}
-            and p.poi_id not in kept)
+            p for p in nl_ids  # 기억한 곳(F-5) 포함
+            if p not in set(composed) and p not in {b.poi_id for b in blocks} and p not in kept)
         domain_request = core.GenerateItineraryRequest(
             schedule_id=ScheduleId(request.trip_id),
             anchor=anchor,
@@ -2913,13 +3051,14 @@ class WiredItineraryOrchestrator:
             prefer_near=near,
             pace=pace,
             travel_weight=_route_weight(request.reasons, resolved),
-            max_visits_per_day=_with_nl_room(
+            max_visits_per_day=keep_cap((*nl_extra, *night[:1]), add_one)
+            if orig_left and not composed else _with_nl_room(
                 (len(active) + len(set(composed) - {b.poi_id for b in active}) + len(add_one)
-                 if composed or earlier is not None else visit_cap),
-                nl_extra),
+                 if composed or earlier is not None else fill_cap(add_one)),
+                tuple(p for p in nl_extra if p not in mem_ids)),  # 기억한 곳은 원 일정의 한 곳 — 피로 상한 안에서 센다
             not_before=not_before,
             # 더 늦게까지(`kept`) — 원 일정 남은 방문은 원 체류·우선 가중 그대로. 구성이 없으면 그것만 필수로 두고
-            # 상한 없는 점수 경로가 새 방문을 더한다.
+            # 상한 없는 점수 경로가 새 방문을 더한다. 구성이 실패한 원 일정 지키기(F-4)도 `kept` 로 온다(우선 아님).
             required_visits=earlier if earlier is not None else (() if composed else tuple(kept.values())) + tuple(
                 # 구성 결과 안에도 이름으로 집은 곳이 있다(맨 앞에 고정) — 그곳과, 사용자가 수를 정한 종류의
                 # 곳("카페는 한 곳만")만 우선 가중. 수를 맞춘 곳이 같은 무게면 솔버가 시간 부족에 그걸 뺐다
@@ -2976,6 +3115,9 @@ class WiredItineraryOrchestrator:
                 rerun = left >= budget.c2_reserved_ms
                 self._compose_event(meta, f"composed_unplaced: rerun={rerun} remaining={left}ms")
                 if rerun:
+                    if orig_left:  # 원 일정 지키기(F-4) — 다시 풀기도 구성 실패와 같은 규칙
+                        kept = originals
+                        notes.append(f"replan_keep: {len(kept)}/{len(orig_left)}")
                     outcome = self._schedule_agent.run(core.ScheduleTask(
                         request=replace(domain_request, required_visits=tuple(kept.values()) + tuple(
                             RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
@@ -2983,7 +3125,9 @@ class WiredItineraryOrchestrator:
                             RequiredVisit(poi_id=p, day=request.target_date, dwell_min=late_dwell,
                                           reason="nightlife_request", priority=True)
                             for p in night[:1]),
-                                        max_visits_per_day=visit_cap,
+                                        max_visits_per_day=keep_cap((*nl_ids, *night[:1]), add_one_asked)
+                                        if orig_left else _with_nl_room(fill_cap(add_one_asked), tuple(
+                                            p for p in nl_ids if p not in mem_ids)) if late_only else visit_cap,
                                         add_one_categories=add_one_asked),
                         pool=pool, persona=persona, daily_rain=daily_rain, event_bonus=None,
                         candidates_summary=core.candidates_report(
@@ -3013,7 +3157,7 @@ class WiredItineraryOrchestrator:
                       for s in d.slots}
             for pid in nl_ids:
                 if pid not in placed:
-                    notes.append(f"nl_place_unplaced: {pid}")
+                    notes.append(f"{'replan_memory' if pid in mem_ids else 'nl_place'}_unplaced: {pid}")
         if nl.counts and earlier is None:
             # 수를 정한 종류가 최종 일정에서 모자라면 밝힌다 — 구성은 맞췄어도 솔버가 못 넣을 수 있다(INV-4).
             got = [cat_of.get(s.poi_id) for d in (outcome.solution.days if outcome.solution else ())
@@ -3037,7 +3181,9 @@ class WiredItineraryOrchestrator:
         return self._replan_projection(
             request, outcome, notes, resolved, unknown,
             # KB-5 는 구성 후보로 찾는다 — 건수도 그쪽 것이다(PlanB 는 선택 LLM 이 없으면 찾지 않는다).
-            retrieved={**planb.retrieved, **kb5_counts(compose_ctx[0][0].place_knowledge)}
+            # SITUATION_PROMPT = 구성 프롬프트 [상황 대처 원칙]에 실린 KB-3 문서 수(PlanB 는 이때 KB-3 를 찾지 않는다).
+            retrieved={**planb.retrieved, **kb5_counts(compose_ctx[0][0].place_knowledge),
+                       "SITUATION_PROMPT": len(compose_ctx[0][0].situation)}
             if compose_ctx else planb.retrieved,
             planb_fallback=planb.is_fallback, started_ms=t0, past=past,
             composed=bool(composed), reasons=why,
@@ -3069,7 +3215,8 @@ class WiredItineraryOrchestrator:
     ) -> "Future | str | None":
         """추출 LLM 을 **배경에서** 띄운다 — 결과는 `_verified_request` 가 받는다.
 
-        반환: 띄웠으면 Future, 시한 부족이면 그 사유 문자열(노트는 본 스레드가 쓴다), 할 일이 없으면 None.
+        반환: 띄웠으면 Future[(추출 결과, 이름 대조 조회 Future | None)], 시한 부족이면 그 사유 문자열(노트는 본
+        스레드가 쓴다), 할 일이 없으면 None.
         """
         text = (request.free_text or "").strip()
         if not text or self._request_extractor is None:
@@ -3079,9 +3226,19 @@ class WiredItineraryOrchestrator:
             return "nl_extract_skipped: deadline"
         window = request.time_window
         return _NL_POOL.submit(
-            self._request_extractor.extract,
+            self._extract_then_lookup, GeoPoint(request.anchor.lat, request.anchor.lng),
             text, composition.date_label(datetime.combine(request.target_date, clock_time())),
             f"{window.start:%H:%M}~{window.end:%H:%M}", trace_id, now, timeout_sec=timeout)
+
+    def _extract_then_lookup(self, anchor: GeoPoint, *args, **kwargs) -> "tuple[TypedResult, Future | None]":
+        """추출 → 대조에 등록 POI(반경 50km)가 쓰일 수 있으면 그 조회를 **곧바로** 띄운다 — 본 스레드의 장소 수집과
+        겹친다(운영 2026-11-05 run3: 수집 뒤에야 불러 구성 앞 4.9s 공백). 기다릴지는 `_verified_request` 가 정한다 —
+        집은 이름이 받은 풀에 다 있으면 안 기다린다. 조회 양은 종전과 같다(이름·먼 지역을 말했을 때만 한 번)."""
+        result = self._request_extractor.extract(*args, **kwargs)
+        need = (not result.is_fallback and isinstance(result.value, ExtractedRequest)
+                and nl_verify.needs_registered(result.value, anchor))
+        return result, (_NL_POOL.submit(self._poi_db.find_by_radius, anchor, nl_verify.NAME_SEARCH_RADIUS_KM)
+                        if need else None)
 
     def _verified_request(
         self,
@@ -3093,11 +3250,12 @@ class WiredItineraryOrchestrator:
         pending: "Future | str | None",
         *,
         available: frozenset[PoiCategory] = frozenset(),
+        nearby: Sequence[Poi] = (),
     ) -> nl_verify.VerifiedRequest:
         """배경 추출 결과 → **외부 출처 대조** → 통과분만. 예외를 던지지 않는다(INV-4).
 
         자유입력이 없거나 워커 미주입이면 빈 결과다(종전과 동일). 대조 출처와 규칙은
-        `agents/planb/request_verification` 모듈 표에 있다.
+        `agents/planb/request_verification` 모듈 표에 있다. 이름은 `nearby`(받은 후보 풀)에서 먼저 찾는다.
         """
         empty = nl_verify.VerifiedRequest()
         if pending is None:
@@ -3105,12 +3263,15 @@ class WiredItineraryOrchestrator:
         if isinstance(pending, str):
             notes.append(pending)
             return empty
+        stage_t = self._clock.monotonic_ms()
         try:
             # 워커 호출 자체가 시한(timeout_sec)을 지닌다 — 여기 상한은 그 위의 안전판일 뿐이다.
-            result = pending.result(timeout=_NL_EXTRACT_MAX_S + 1.0)
+            result, lookup = pending.result(timeout=_NL_EXTRACT_MAX_S + 1.0)
         except Exception as e:  # 설정 버그·안전판 초과도 재계획을 죽이지 않는다
             notes.append(f"nl_extract_error: {type(e).__name__}")
             return empty
+        finally:  # 배경 추출을 기다린 시간(본 스레드가 막힌 몫) — 구성 앞 공백을 나눠 본다(2026-11-05)
+            notes.append(f"stage_ms: extract_wait={self._clock.monotonic_ms() - stage_t}")
         if result.is_fallback or not isinstance(result.value, ExtractedRequest):
             notes.append(f"nl_extract_fallback: {result.error}")
             return empty
@@ -3119,6 +3280,8 @@ class WiredItineraryOrchestrator:
             notes.append("nl_extract_empty")
             return empty
         window = request.time_window
+        trip = request.trip_context
+        stage_t = self._clock.monotonic_ms()
         verified = nl_verify.verify(
             extracted,
             on=request.target_date,
@@ -3127,14 +3290,25 @@ class WiredItineraryOrchestrator:
             window_end=datetime.combine(window.date, window.end, tzinfo=self._tz),
             not_before=not_before,
             tz=self._tz,
-            registered=lambda: self._poi_db.find_by_radius(anchor, nl_verify.NAME_SEARCH_RADIUS_KM),
+            # 추출 직후 띄워 둔 조회를 받는다(조회 장애는 그 예외가 그대로 올라와 `nl_place_lookup_error`)
+            registered=(lookup.result if lookup is not None
+                        else lambda: self._poi_db.find_by_radius(anchor, nl_verify.NAME_SEARCH_RADIUS_KM)),
+            nearby=nearby,
             existence=self._existence,  # type: ignore[arg-type]
             existence_deadline_ms=_NL_EXISTENCE_MS,
             rain_by_date=daily_rain or {},
             rain_threshold=AssemblyConfig().rain_threshold_pct,
             available=available,
+            # 장소의 날 말("2일차에"·"내일") 환산 — 순번은 여행 첫날부터, '오늘'은 다시 짜는 날이 아니라 요청 시각의 날
+            # (현지 날 — BE 는 UTC(…Z)로 보내므로 옮기지 않으면 KST 00~09시에 하루 어긋난다, `_local_minute_ceil` 과 같다)
+            trip_days=tuple(trip.start_date + timedelta(days=i)
+                            for i in range((trip.end_date - trip.start_date).days + 1)),
+            today=_tz_aware(request.request_meta.requested_at, self._tz).astimezone(self._tz).date(),
         )
+        if lookup is not None:
+            lookup.cancel()  # 풀에서 다 찾았으면 아직 줄 선 조회는 접는다(돌고 있으면 결과만 버린다)
         notes.extend(verified.notes)
+        notes.append(f"stage_ms: verify={self._clock.monotonic_ms() - stage_t}")  # 이름 장소 대조(등록 POI·지도 실재)
         return verified
 
     def _repair_day(
@@ -3383,6 +3557,7 @@ class WiredItineraryOrchestrator:
         # 찾고 읽는 LLM 없이 버렸다. 부가 정보라 못 찾으면 없이 짠다(INV-4 — 노트는 남긴다).
         knowledge: Mapping[str, str] = {}
         if planb_request is not None:
+            stage_t = self._clock.monotonic_ms()
             try:
                 knowledge, note = self._rag.place_knowledge(planb_request, shortlist.pois)
             except Exception as e:
@@ -3390,11 +3565,14 @@ class WiredItineraryOrchestrator:
             if note:
                 notes.append(f"compose: {note}")
                 self._rag_events(request.request_meta, (note,))
+            notes.append(f"stage_ms: kb5={self._clock.monotonic_ms() - stage_t}")
         labels = {spec.key: spec.label for spec in self._directives}
-        specs = index_of(self._directives)
-        chosen = [specs[k] for k in resolved if k in specs]
+        rule = self._change_rule(request, resolved)
         rain = (daily_rain or {}).get(day)
-        limit = composition.max_visits(start, end, free_cap)
+        # 원 일정의 남은 비고정 수까지는 고를 수 있다(F-4) — 사유 상한·새로 짜 보기는 아니다.
+        floor = (None if free_cap is not None or rule == composition.CHANGE_REFRESH
+                 else len(_left_originals(request, past_ids | fixed_ids, not_before)))
+        limit = composition.max_visits(start, end, free_cap, floor=floor)
         inp = ComposeDayInput(
             date=composition.date_label(start),
             window=f"{start:%H:%M}~{end:%H:%M}",
@@ -3419,11 +3597,7 @@ class WiredItineraryOrchestrator:
             max_visits=limit,
             recent_changes=composition.recent_change_lines(
                 request.change_log, {p.poi_id: p.name for p in pool.pois}),
-            change_rule=composition.change_rule(
-                request.reasons,
-                day_directives=any(s.cardinality != "ONE" for s in chosen),
-                add_one=any(s.cardinality == "ONE" for s in chosen),
-                free_text=bool((request.free_text or "").strip())),
+            change_rule=rule,
             # 기준점과 반경 밖에서 집은 곳 중 가까운 쪽 — 그 둘레 후보가 "38km"로 보이면 LLM 이 안 고른다.
             distance_km={p.poi_id: min(haversine_km(o, p.coord) for o in (anchor, *origins))
                          for p in shortlist.pois},
@@ -3431,6 +3605,10 @@ class WiredItineraryOrchestrator:
                    for p in shortlist.pois},
             place_knowledge=knowledge,
         )
+        # 1회 수리가 같은 입력·제외에서 2차를 만든다(`_repair_day`). 시한 생략 **앞**에서 담는다 — 찾은 장소 지식이
+        # 시한 때문에 안 읽혀도 응답이 그 건수와 `compose_docs_unread` 로 밝힌다(호출측). 수리는 구성이 고른 뒤에만 돈다.
+        if ctx_out is not None:
+            ctx_out.append((inp, frozenset(excluded)))
         # 장소 지식 조회가 쓴 시간을 뺀 잔여 — 시한 원점은 그대로(#1102).
         remaining = (budget.total_ms - (self._clock.monotonic_ms() - started_ms)
                      - budget.c2_reserved_ms)
@@ -3438,8 +3616,7 @@ class WiredItineraryOrchestrator:
             notes.append(f"llm_compose_skipped: deadline remaining={remaining}ms")
             self._compose_event(request.request_meta, f"deadline: remaining={remaining}ms")
             return ()
-        if ctx_out is not None:  # 1회 수리가 같은 입력·제외에서 2차를 만든다(`_repair_day`)
-            ctx_out.append((inp, frozenset(excluded)))
+        notes.append(f"stage_ms: compose_left={remaining}")  # 구성 시작 잔여 — 시한은 min(이것, 상한)
         result = self._composer.compose(
             shortlist, inp, trace_id, now,
             timeout_sec=min(remaining, _COMPOSE_MAX_MS) / 1000.0)
@@ -3455,6 +3632,16 @@ class WiredItineraryOrchestrator:
                      f"shortlist={len(shortlist.pois)} limit={limit} "
                      f"kept={len(remaining_ids & set(picks[:limit]))}/{len(remaining_ids)}")
         return picks[:limit]
+
+    def _change_rule(self, request: schemas.ReplanRequest, resolved: Sequence[str]) -> str:
+        """이번 요청이 바꿀 정도(`composition.change_rule`) — 구성 프롬프트와 원 일정 지키기(F-4)가 같은 판정을 쓴다."""
+        specs = index_of(self._directives)
+        chosen = [specs[k] for k in resolved if k in specs]
+        return composition.change_rule(
+            request.reasons,
+            day_directives=any(s.cardinality != "ONE" for s in chosen),
+            add_one=any(s.cardinality == "ONE" for s in chosen),
+            free_text=bool((request.free_text or "").strip()))
 
     def _replan_directives(
         self, request: schemas.ReplanRequest, notes: list[str], *,
@@ -3636,6 +3823,7 @@ class WiredItineraryOrchestrator:
         """
         if self._directive_translator is None or not self._directives:
             return ()
+        stage_t = self._clock.monotonic_ms()
         try:
             result = self._directive_translator.translate(
                 DirectiveTranslationInput(utterance=text, options=options_from(self._directives)),
@@ -3645,6 +3833,8 @@ class WiredItineraryOrchestrator:
         except Exception as e:  # 설정 버그(라우트·렌더)도 재계획을 죽이지 않는다 — 칩으로 진행
             notes.append(f"free_text_translation_error: {type(e).__name__}")
             return ()
+        finally:  # 배경에서 돈다(F-3) — 구성 시한을 깎는 것은 본 스레드가 기다린 몫(`directives_wait`)이다(운영 run3: 1.5s)
+            notes.append(f"stage_ms: translate={self._clock.monotonic_ms() - stage_t}")
         if result.is_fallback:
             notes.append(f"free_text_translation_fallback: {result.error}")
             return ()

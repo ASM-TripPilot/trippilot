@@ -21,6 +21,7 @@ import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.DaySchedule
 import com.trippilot.itinerarygeneration.domain.RepairContext
+import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.itinerarygeneration.domain.RepairResult
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.Violation
@@ -999,7 +1000,8 @@ class SlotCandidateServiceTest : StringSpec({
         fitSvc(first, tripFacade = rentalTrip, repairContexts = withContext)
             .propose(acc, tripId, RequestSlotCandidates(SlotKey.of(d1, neighborBefore), null, null, null)) // index 0
         val rentalProfile = PreferenceProfile(emptyList(), emptyList(), emptyList(), listOf("렌터카"), null, emptyList(), false, null) // 생성과 같은 프로필
-        first.contexts shouldContainExactly List(2) { RepairContext(listOf(DayAnchor(d1, 35.15, 129.05)), listOf("렌터카"), rentalProfile) }
+        val d1Window = TimeWindow(d1, LocalTime.of(9, 0), LocalTime.of(21, 0)) // 앵커가 실린 날의 기본 일과 창(설정 없음)
+        first.contexts shouldContainExactly List(2) { RepairContext(listOf(DayAnchor(d1, 35.15, 129.05)), listOf("렌터카"), rentalProfile, listOf(d1Window)) }
 
         val middle = FitAgent(proposed = listOf(a, b))
         fitSvc(middle, tripFacade = rentalTrip, repairContexts = withContext)

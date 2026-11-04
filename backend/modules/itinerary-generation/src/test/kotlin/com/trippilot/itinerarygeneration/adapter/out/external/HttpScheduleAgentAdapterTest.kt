@@ -255,9 +255,9 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             .andExpect(jsonPath("$.rejections[0].poi_id").value(REJECTED_POI.toString()))
             .andExpect(jsonPath("$.rejections[0].kind").value("SWAPPED_OUT"))
             .andExpect(jsonPath("$.rejections[0].count").value(2))
-            // 창은 **하루 전체**다 — 좁히면 오전에 잠긴 고정 블록이 창 밖이 되어 상대가 409 로 거부한다.
-            .andExpect(jsonPath("$.time_window.start").value("09:00:00"))
-            .andExpect(jsonPath("$.time_window.end").value("21:00:00"))
+            // 창은 서비스가 정한 그날 창 그대로다(2026-11-05) — 종전엔 어댑터가 시작을 09:00 상수로 박아 06:00 시작 여행도 09:00 부터 짰다.
+            .andExpect(jsonPath("$.time_window.start").value("06:00:00"))
+            .andExpect(jsonPath("$.time_window.end").value("22:30:00"))
             .andExpect(jsonPath("$.anchor.lat").value(33.4))
             // 숙소 근처에서 끝내기(END_NEAR_STAY)의 끝점 — 기준점(anchor)과 다른 값이 따로 실린다.
             .andExpect(jsonPath("$.stay_anchor.lat").value(33.25))
@@ -293,27 +293,15 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         server.verify()
     }
 
-    // 오늘을 밤에 다시 짜면 창 끝(21:00)이 막아 "대안 없음"이 됐다 — 생성과 같은 규칙(TodayWindow)으로 끝만 늘린다.
-    // 시작은 하루 전체 그대로(09:00) — 좁히면 오전에 잠긴 고정 블록이 창 밖이 되어 상대가 409 로 거부한다.
-    "오늘을 밤 9시 반에 다시 짜면 창 끝이 23:59 다 — 야경 한두 곳이 들어갈 자리" {
+    // 창 규칙(여행 설정·원 일정·오늘 저녁 늘리기)의 주인은 서비스 한 곳이다(ReplanFacadeServiceTest) — 어댑터가 또 늘리면 두 벌이 된다.
+    "재계획 창은 입력 그대로다 — 오늘 밤 9시 반에 불러도 어댑터가 끝을 따로 늘리지 않는다" {
         val (adapter, server) = fixture()
         server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
             .andExpect(jsonPath("$.time_window.start").value("09:00:00"))
-            .andExpect(jsonPath("$.time_window.end").value("23:59:00"))
-            .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
-
-        adapter.replan(replanInput().copy(scope = ReplanScope.PARTIAL_SLOTS, fromInstant = Instant.parse("2026-08-01T12:30:00Z")))
-
-        server.verify()
-    }
-
-    "다른 날을 다시 짜면 창은 그대로다 — 밤 규칙은 오늘에만" {
-        val (adapter, server) = fixture()
-        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
             .andExpect(jsonPath("$.time_window.end").value("21:00:00"))
             .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
 
-        adapter.replan(replanInput().copy(fromInstant = Instant.parse("2026-08-01T12:30:00Z"), targetDate = LocalDate.parse("2026-08-02")))
+        adapter.replan(replanInput().copy(scope = ReplanScope.PARTIAL_SLOTS, fromInstant = Instant.parse("2026-08-01T12:30:00Z")))
 
         server.verify()
     }
@@ -948,14 +936,21 @@ class HttpScheduleAgentAdapterTest : StringSpec({
             .andExpect(jsonPath("$.anchors.length()").value(1))
             .andExpect(jsonPath("$.anchors[0].date").value("2026-08-02"))
             .andExpect(jsonPath("$.anchors[0].lat").value(33.5))
+            // 창은 컨텍스트가 실은 그 날 기본 일과 창 그대로다(2026-11-05) — 종전엔 어댑터가 09:00 상수를 실었다.
+            .andExpect(jsonPath("$.time_windows.length()").value(1))
             .andExpect(jsonPath("$.time_windows[0].date").value("2026-08-02"))
-            .andExpect(jsonPath("$.time_windows[0].start").value("09:00:00"))
+            .andExpect(jsonPath("$.time_windows[0].start").value("06:00:00"))
+            .andExpect(jsonPath("$.time_windows[0].end").value("21:00:00"))
             .andExpect(jsonPath("$.transport_modes[0]").value("렌터카"))
             .andRespond(withSuccess("""{"repaired":null,"changes":[]}""", MediaType.APPLICATION_JSON))
 
+        val d2 = java.time.LocalDate.parse("2026-08-02")
         adapter.repair(
             dummyOutput(), emptyList(),
-            RepairContext(listOf(DayAnchor(java.time.LocalDate.parse("2026-08-02"), 33.5, 126.5)), listOf("렌터카")),
+            RepairContext(
+                listOf(DayAnchor(d2, 33.5, 126.5)), listOf("렌터카"),
+                timeWindows = listOf(TimeWindow(d2, LocalTime.of(6, 0), LocalTime.of(21, 0))),
+            ),
         )
         server.verify()
     }
@@ -1244,6 +1239,8 @@ private val REJECTED_POI: UUID = UUID.randomUUID()
 
 /** 다섯 값을 전부 채운 표본. 비워 두면 "안 싣는다"와 "빈 값을 싣는다"가 구분되지 않는다. */
 private fun richReplanInput() = replanInput().copy(
+    windowStart = LocalTime.of(6, 0),
+    windowEnd = LocalTime.of(22, 30),
     freeText = "비 와서 실내로",
     stayLat = 33.25,
     stayLng = 126.41,
@@ -1265,6 +1262,8 @@ private fun replanInput() = ReplanInput(
     destinations = listOf("제주"),
     fromInstant = Instant.parse("2026-08-01T03:00:00Z"),
     targetDate = LocalDate.parse("2026-08-01"),
+    windowStart = LocalTime.of(9, 0),
+    windowEnd = LocalTime.of(21, 0),
     originLat = 33.4,
     originLng = 126.5,
     stayLat = null,

@@ -23,6 +23,8 @@ class ExtractedPlace:
     name: str
     want: str  # "visit" | "avoid"
     at: time | None = None  # "성심당은 5시에" → 17:00. 갈 곳에만 뜻이 있다
+    # "서울광장은 2일차에" → "2일차" — 말 그대로다. 여행 날짜로 환산하는 것은 호출측(`request_verification`) 몫
+    day: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +63,7 @@ _CATEGORIES = frozenset({"FOOD", "CAFE", "SIGHT", "NIGHT_VIEW", "NATURE", "CULTU
 _MAX_CATEGORIES = 4
 _MAX_COUNT = 8  # 재계획 하루 방문 상한과 같은 급
 _MAX_AREA = 20
+_MAX_DAY = 20
 
 
 def _hhmm(value: object) -> time | None:
@@ -76,8 +79,14 @@ def _area(value: object) -> str | None:
     return value.strip()
 
 
+def _day(value: object) -> str | None:
+    if not isinstance(value, str) or not value.strip() or len(value.strip()) > _MAX_DAY:
+        return None
+    return value.strip()
+
+
 class ReplanRequestExtractionGate:
-    """`{"places": [{"name", "want", "at"}], "start_after", "end_by", "weather",
+    """`{"places": [{"name", "want", "at", "day"}], "start_after", "end_by", "weather",
     "categories": [{"category", "count", "at"}], "only", "area"}` 강제."""
 
     def apply(
@@ -105,7 +114,8 @@ class ReplanRequestExtractionGate:
             if (isinstance(name, str) and name.strip() and len(name.strip()) <= _MAX_NAME
                     and want in ("visit", "avoid")):
                 places.append(ExtractedPlace(name=name.strip(), want=want,
-                                             at=_hhmm(item.get("at")) if want == "visit" else None))
+                                             at=_hhmm(item.get("at")) if want == "visit" else None,
+                                             day=_day(item.get("day"))))
         weather = data.get("weather") if data.get("weather") in ("rain", "clear") else None
         cats: dict[str, ExtractedCategory] = {}  # 같은 종류가 두 번 오면 앞의 것
         raw_cats = data.get("categories", [])

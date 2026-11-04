@@ -318,16 +318,18 @@ class RagContext:
     place_knowledge: Mapping[str, str] = field(default_factory=dict)
     # LLM 에 보일 후보(`_shortlist`). None 이면 풀 전원 — 검색을 건너뛴 직접 조립용.
     shortlist: CandidatePool | None = None
+    # KB-3 를 찾았나 — 선택 LLM 을 안 부르면 찾지 않는다(`retrieve`). 안 찾았으면 SITUATION 키를 싣지 않는다.
+    situation_searched: bool = True
 
     def counts(self) -> dict:
         # SCHEDULE 키가 없다 — 검색하지 않으므로 0 을 싣는 것도 거짓이다(TRIP-972).
-        # 0 은 "찾았는데 없었다"로 읽히고, 사실은 "찾지 않는다"다.
+        # 0 은 "찾았는데 없었다"로 읽히고, 사실은 "찾지 않는다"다. SITUATION 도 안 찾았으면 같다(2026-11-05).
         # POI_DESC = 장소 지식이 붙은 후보 수(KB-5). 이것 없이는 운영에서 KB-5 가 비었는지(적재 전·장애) 볼 길이
         # 없었다(2026-10-18 청킹). 백엔드는 이 맵을 키 그대로 로그에 남긴다(`Map<String, Int>`).
         # 대체 문서(2026-10-23)는 섞지 않는다 — 붙었으면 POI_DESC_FALLBACK 으로 따로(`kb5_counts`).
         return {
             KbKind.PERSONA.value: len(self.persona),
-            KbKind.SITUATION.value: len(self.situation),
+            **({KbKind.SITUATION.value: len(self.situation)} if self.situation_searched else {}),
             **kb5_counts(self.place_knowledge),
         }
 
@@ -493,9 +495,12 @@ class PlanBAgent:
             situ_v = persona_v = None
             notes.append(f"embed_batch_degraded: {type(e).__name__}: {e}")
 
+        # KB-3 히트를 읽는 곳은 선택 LLM 프롬프트뿐이다 — 안 부르면(다시 짜기·도우미) 찾지 않는다. 운영 로그의
+        # `SITUATION=4` 가 이 읽히지 않는 검색이었다(2026-11-05). 다시 짜기 구성의 상황 원칙은 사유 표지로 따로 고른다
+        # (`composition.situation_lines` → `retrieved.SITUATION_PROMPT`). KB-2 는 남긴다 — 규칙 랭킹(`_saved_refs`)이 읽는다.
         situation, note = self._safe_retrieve(
             retrieve_situation, situ_q, KbKind.SITUATION, situ_v
-        )
+        ) if request.use_llm else ((), "")
         if note:
             notes.append(note)
         persona, note = self._safe_retrieve(
@@ -523,6 +528,7 @@ class PlanBAgent:
             notes=tuple(notes),
             place_knowledge=knowledge,
             shortlist=shortlist,
+            situation_searched=request.use_llm,
         )
 
     def place_knowledge(

@@ -5,7 +5,8 @@
 
 증명하는 것 (실 LLM·실 API 0):
   ① 배선: 피로·지연이면 상한(남은 원 방문 − 1, 최소 1)이 에이전트 요청까지 실리고 노트가 남는다.
-     우천·휴무·없음, 사용자 FILL_MORE, 원 일정 없음이면 상한 없음. 지난 잠금은 세지 않는다.
+     우천·휴무·없음, 사용자 FILL_MORE, 원 일정 없음이면 사유 상한 없음(구성 실패 때의 원 일정 지키기 상한은
+     `test_replan_keeps_original_day.py`). 지난 잠금은 세지 않는다.
   ② PBT(OR·폴백): 자유 방문 ≤ 몫, 고정 블록은 그대로(HC3), 상한 없이 놓인 필수 방문은 상한을
      걸어도 놓인다 — 상한은 고정·필수를 세되 빼지 않는다.
   ③ 직렬화 왕복·음수 거부
@@ -66,15 +67,16 @@ def test_피로_지연은_원_일정_빼기_1_상한이_요청까지_실리고_�
     assert len(body["itinerary"]["days"][0]["slots"]) <= 3
 
 
-@pytest.mark.parametrize("over", [
-    {"reasons": ["weather"]},
-    {"reasons": ["closed"]},
-    {"reasons": ["none"]},
-    {"reasons": ["fatigue"], "directives": ["FILL_MORE"]},  # 사용자 우선
+@pytest.mark.parametrize("over, cap", [
+    # 사유 상한은 없다. 구성이 없는(UnwiredLlm) 이 조립에선 원 일정 지키기(F-4)가 원 남은 수 그대로를 상한으로 둔다 — 원−1 이 아니다
+    ({"reasons": ["weather"]}, 4),
+    ({"reasons": ["closed"]}, 4),
+    ({"reasons": ["none"]}, None),  # 새로 짜 보기 — 원 일정을 지키지 않는다
+    ({"reasons": ["fatigue"], "directives": ["FILL_MORE"]}, None),  # 사용자 우선
 ])
-def test_해당_사유가_아니거나_더_채워서면_상한이_없다(over) -> None:
+def test_해당_사유가_아니거나_더_채워서면_상한이_없다(over, cap) -> None:
     request, body = _spied(current_slots=_slots(4), **over)
-    assert request.max_visits_per_day is None
+    assert request.max_visits_per_day == cap
     assert not any("planb_visit_cap" in n for n in body["notes"]), body["notes"]
 
 
