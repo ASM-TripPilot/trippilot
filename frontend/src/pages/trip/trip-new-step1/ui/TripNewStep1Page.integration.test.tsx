@@ -1951,6 +1951,111 @@ describe('만든 여행의 취향 잠금 (AC-10)', () => {
 });
 
 /**
+ * TRIP-1750 (S5G 확장 · BR-U1-38 · INV-4) — 계정 취향 조회(`GET /me/preferences`)가 실패하면 프리필이 빈 [] 로 접혀,
+ * 시트가 빈 칩으로 열리고 [적용]이 빈 오버라이드를 커밋한다 → 제출 스냅숏이 styles·activities 를 빈 배열로 실어 이 여행의
+ * 온보딩 취향이 사라진다. 그래서 프리필이 없으면(로딩·실패) 시트를 열지 않고, 실패면 토스트(결정 1 = a)와 함께 다시 받는다.
+ * 이 응답은 404 가 없다(openapi 200 하나) — 모든 실패가 "모름"이다.
+ *
+ * 3동작 뼈대: 준비 = 취향 GET 실패 → 실행 = 취향 행 누름 / [다음] → 단언 = 시트 없음·토스트·제출 본문 키 없음 → 다시 받은 뒤 시트.
+ */
+describe('취향 조회 실패 — 빈 칩 시트를 열지 않는다 (TRIP-1750)', () => {
+  afterEach(expectNoExitWizard);
+
+  const {
+    tracker,
+    createTripHandler,
+    renderPage,
+    next,
+    seedValidDraft,
+    waitForPrefill,
+  } = wizardStep1Harness({ Inner: WithToastHost });
+
+  const LOAD_ERROR = 'trip-wizard-pref-load-error';
+  let prefReply: 'status500' | 'network' | 'ok' = 'status500';
+  let prefGets = 0;
+
+  beforeEach(() => {
+    mockPush.mockClear();
+    useTripWizardStore.getState().reset();
+    prefReply = 'status500';
+    prefGets = 0;
+    server.use(
+      http.get(`${BASE}/me/preferences`, () => {
+        prefGets += 1;
+        if (prefReply === 'status500')
+          return new HttpResponse(null, { status: 500 });
+        if (prefReply === 'network') return HttpResponse.error();
+        return HttpResponse.json(
+          makePreference({ styles: { value: ['자연'] } })
+        );
+      }),
+      createTripHandler()
+    );
+  });
+
+  afterEach(() => {
+    resetToast();
+    server.resetHandlers();
+  });
+
+  function preferenceRow() {
+    return screen.getByTestId('trip-wizard-summary-preference');
+  }
+
+  it.each<[string, 'status500' | 'network']>([
+    ['500', 'status500'],
+    ['네트워크 끊김', 'network'],
+  ])(
+    '🔴 취향 GET %s → 취향 행을 눌러도 시트가 안 열리고 실패 토스트 · 그대로 [다음]이면 스냅숏에 styles·activities 키가 없다',
+    async (_label, failure) => {
+      prefReply = failure;
+      seedValidDraft();
+      renderPage();
+      await waitForPrefill();
+      expect(screen.queryByTestId(LOAD_ERROR)).toBeNull();
+
+      fireEvent.press(preferenceRow());
+
+      // 단언 — 빈 칩 시트가 열리면 위반이다. 이유가 토스트로 보인다.
+      expect(await screen.findByTestId(LOAD_ERROR)).toBeOnTheScreen();
+      expect(screen.queryByTestId('trip-wizard-pref-sheet')).toBeNull();
+
+      // 시트를 거치지 않고 제출 — 모르는 취향은 키를 빼서 서버 쪽 기존 취향이 쓰이게 한다(616~623행 무회귀).
+      // 누름이 띄운 재조회(이번에도 실패)가 끝나기를 기다린다 — 도는 동안은 로딩 얼굴이라 [다음]이 잠긴다(03b N2).
+      await waitFor(() => expect(prefGets).toBe(2));
+      await waitForPrefill();
+      fireEvent.press(next());
+      await waitFor(() => expect(tracker.postedBodies).toHaveLength(1));
+      const snapshot = tracker.postedBodies[0].preferenceSnapshot as Record<
+        string,
+        unknown
+      >;
+      expect(snapshot).not.toHaveProperty('styles');
+      expect(snapshot).not.toHaveProperty('activities');
+    }
+  );
+
+  it('🔴 실패 뒤 취향 행을 누르면 다시 받는다 → 200(자연)이 오면 다음 누름에 시트가 자연 칩 선택으로 열린다', async () => {
+    renderPage();
+    await waitForPrefill();
+    const beforePress = prefGets;
+
+    // 실행 — 실패 상태에서 누른다. 이번 재조회는 성공한다.
+    prefReply = 'ok';
+    fireEvent.press(preferenceRow());
+    expect(await screen.findByTestId(LOAD_ERROR)).toBeOnTheScreen();
+    await waitFor(() => expect(prefGets).toBe(beforePress + 1));
+
+    // 단언 — 도착 뒤 다시 누르면 시트가 프리필(자연)로 열린다.
+    await waitFor(() => {
+      fireEvent.press(preferenceRow());
+      expect(screen.getByTestId('trip-wizard-pref-sheet')).toBeOnTheScreen();
+    });
+    expect(screen.getByTestId('trip-wizard-pref-chip-nature')).toBeSelected();
+  });
+});
+
+/**
  * TRIP-1113 — 이미 만든 여행이 있으면 「다음」은 여행을 새로 만들지 않고 고친다(실 HTTP 심판).
  *
  * 무엇을 보장하나:
