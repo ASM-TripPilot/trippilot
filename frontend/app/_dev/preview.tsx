@@ -8378,6 +8378,59 @@ export const PREVIEW_STATES: PreviewState[] = [
       </>
     ),
   },
+  // i01 메모 시트 불러오기 실패(TRIP-1751) — 서버 메모를 끝내 못 받아 입력이 잠기고 안내 + [다시 시도]. 보류(오프라인)는 같은 문구에 버튼 없음.
+  {
+    key: 'live-hub-memo-sheet-load-error',
+    band: 'i',
+    label: 'i01 · 여행중 허브 메모 시트 (불러오기 실패)',
+    login: null,
+    render: () => (
+      <>
+        {renderLiveHubPreview(0, { barHidden: true })}
+        <MemoSheet
+          placeName="부산시립미술관"
+          editable={false}
+          loadError={{ onRetry: noop, retrying: false }}
+          onSubmit={noop}
+          onClose={noop}
+        />
+      </>
+    ),
+  },
+  {
+    key: 'live-hub-memo-sheet-load-offline',
+    band: 'i',
+    label: 'i01 · 여행중 허브 메모 시트 (불러오기 보류·버튼 없음)',
+    login: null,
+    render: () => (
+      <>
+        {renderLiveHubPreview(0, { barHidden: true })}
+        <MemoSheet
+          placeName="부산시립미술관"
+          editable={false}
+          loadError={{ retrying: false }}
+          onSubmit={noop}
+          onClose={noop}
+        />
+      </>
+    ),
+  },
+  // i01 완료·관람 중 카드 메모 불러오기 실패 표식(TRIP-1751) — "메모 없음"(아무것도 없음)과 구별된다. 메모가 있으면 메모만.
+  {
+    key: 'live-hub-memo-load-failed',
+    band: 'i',
+    label: 'i01 · 여행중 허브 카드 메모 불러오기 실패 표식',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(1, {
+        slots: LIVE_HUB_PREVIEW_SLOTS_NO_RECORDS.map((entry) =>
+          entry.state === 'upcoming'
+            ? entry
+            : { ...entry, memoLoadFailed: true }
+        ),
+        doneMediaPoiIds: new Set(['gamcheon', 'gwangalli']),
+      }),
+  },
   // i01 메모 시트 저장 중(TRIP-1426) — 응답을 기다리는 동안 [저장]이 비활성(opacity-40)이다.
   {
     key: 'live-hub-memo-sheet-saving',

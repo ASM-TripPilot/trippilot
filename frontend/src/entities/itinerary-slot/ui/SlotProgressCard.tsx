@@ -68,6 +68,8 @@ export interface SlotProgressCardProps {
   visitedLabel?: string | null;
   /** done·active(TRIP-1117). null/미전달이면 메모 박스를 안 그린다. */
   memo?: string | null;
+  /** TRIP-1751 — done·active. 서버 메모를 못 받았다. `memo` 가 없을 때만 "불러오지 못했어요" 표식(메모 우선 > 표식 > 없음). */
+  memoLoadFailed?: boolean;
   /** active [방문 완료]. 미주입이면 버튼을 그리지 않는다(TRIP-1561 — 허브가 "마지막 장소"에서만 준다). */
   onPressComplete?: () => void;
   /** active·done(TRIP-1203) [사진](TRIP-1070). 미주입이면 버튼을 그리지 않는다. */
@@ -102,6 +104,7 @@ export function SlotProgressCard({
   state,
   photos = [],
   memo,
+  memoLoadFailed,
   visitedLabel,
   onPressComplete,
   onPressPhoto,
@@ -264,6 +267,17 @@ export function SlotProgressCard({
     </View>
   ) : null;
 
+  // TRIP-1751 — 메모가 없고 서버 메모를 못 받았을 때만. "메모 없음"(아무것도 안 그림)과 구별한다.
+  const memoErrorLine =
+    !memo && memoLoadFailed ? (
+      <Text
+        testID={fieldId('memo-error')}
+        className="font-noto text-caption text-muted"
+      >
+        메모를 불러오지 못했어요
+      </Text>
+    ) : null;
+
   // [사진]·[메모] 버튼과 안내 줄 — active 와 done(TRIP-1203)이 같은 모양을 쓴다. testID 만 다르다:
   // active 는 고정 id, done 은 카드가 여러 장이라 slotKey 를 붙인다.
   const mediaButton = (
@@ -364,6 +378,7 @@ export function SlotProgressCard({
         })}
         {actionNoticeLine}
         {memoBox}
+        {memoErrorLine}
       </View>
     );
   }
@@ -410,6 +425,7 @@ export function SlotProgressCard({
           memoNotice: 'execution-arrive-memo-notice',
         })}
         {memoBox}
+        {memoErrorLine}
       </View>
     );
   }

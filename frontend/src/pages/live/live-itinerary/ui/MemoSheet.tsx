@@ -25,6 +25,11 @@ export interface MemoSheetProps {
   text?: string | null;
   /** TRIP-1415 — false 면 입력 잠금(첫 서버 메모 조회 중). 열리는 순간 입력·글자 수를 `text` 로 다시 심는다. 기본 true. */
   editable?: boolean;
+  /**
+   * TRIP-1751 — 서버 메모를 못 불러온 채 입력이 잠긴 상태의 안내(실패·오프라인 보류). 있으면 안내 줄, `onRetry` 가 있을 때만
+   * [다시 시도](보류는 재조회가 대기뿐이라 버튼 없음). `retrying` 이면 안내는 남기고 버튼만 잠근다. 잠금 자체는 `editable`.
+   */
+  loadError?: { onRetry?: () => void; retrying: boolean } | null;
   /** 저장 실패 안내 한 줄(INV-4). 비면 안 그린다. */
   notice?: string | null;
   /** TRIP-1426 — 저장 요청이 진행 중이면 true([저장] 비활성). 같은 틱 중복은 페이지의 ref 잠금이 막는다. */
@@ -55,6 +60,7 @@ export function MemoSheet({
   placeName,
   text,
   editable = true,
+  loadError,
   notice,
   saving = false,
   onSubmit,
@@ -144,6 +150,31 @@ export function MemoSheet({
             {`${draft.length}/${MEMO_MAX}`}
           </Text>
         </Pressable>
+
+        {loadError ? (
+          <View className="flex-row items-center justify-between gap-sm">
+            <Text
+              testID="live-memo-load-error"
+              className="shrink font-noto text-caption text-muted"
+            >
+              메모를 불러오지 못했어요
+            </Text>
+            {loadError.onRetry ? (
+              <Pressable
+                testID="live-memo-load-retry"
+                accessibilityRole="button"
+                disabled={loadError.retrying}
+                accessibilityState={{ disabled: loadError.retrying }}
+                hitSlop={8}
+                onPress={loadError.onRetry}
+              >
+                <Text className="font-noto-bold text-caption font-bold text-primary">
+                  다시 시도
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
 
         {notice ? (
           <Text

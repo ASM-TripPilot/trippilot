@@ -2797,18 +2797,25 @@ describe('메모 저장 실패 안내·세션 캐시 시드', () => {
     });
   });
 
-  // TRIP-1415 · AC-1·3~10·12 — 서버 메모(GET /trips/{id}/records 의 memo)로 카드 입력을 시드한다.
+  // TRIP-1415 · AC-1·3~10 — 서버 메모(GET /trips/{id}/records 의 memo)로 카드 입력을 시드한다.
+  // TRIP-1751 · 개정 AC-12 — 조회가 끝내 실패(500·404, 재시도 1회까지)하면 입력을 막고 "불러오지 못했어요 + [다시 시도]"를 보인다(옛 AC-12 "막히지 않는다"의 반전).
   describe('서버 메모 시드 — records 의 memo', () => {
     /**
      * 무엇을 보장하나: 앱을 다시 켜도(세션 저장본 없음) 서버에 남은 메모가 그 방문 카드 입력칸에 보인다. 순위는
      *   세션 저장본 → 서버 memo → 빈칸이고, 방문 id 로만 찾는다(날짜 묶음 무관). 첫 조회가 끝나기 전엔 입력이 글자를
      *   받지 않고(빈칸에 써서 서버 메모를 덮는 upsert 차단), 한 번 열리면 재조회가 와도 쓰던 초안을 지키며, 조회가
-     *   실패해도 막히지 않는다. 시드된 값 그대로 포커스를 빼면 PUT 은 나가지 않는다.
+     *   끝내 실패하면 입력은 막힌 채 안내 + [다시 시도](성공하면 서버 글로 열림)가 선다. 시드된 값 그대로 포커스를 빼면 PUT 은 나가지 않는다.
      * (개념) `createGate()` = 테스트가 열 때까지 응답을 붙잡는 문(시간 대신 신호) · `client.invalidateQueries()` =
      *   캐시를 낡음으로 표시해 보고 있는 조회를 다시 부르기(앱 복귀 재조회 흉내).
      */
     const RECORDS_GET = `GET /api/v1/trips/${TRIP_ID}/records`;
     const INPUT = 'record-trip-memo-input';
+    // TRIP-1751 — 카드가 여럿이라 방문 id 를 붙인다(한 여행은 records 한 키라 카드 전부가 같이 실패한다 — 02a ★10).
+    const ERROR = 'record-trip-memo-load-error-v-in';
+    const RETRY = 'record-trip-memo-load-retry-v-in';
+    const LOAD_ERROR_COPY = '메모를 불러오지 못했어요';
+    // 안내는 재시도 1회(대기 약 1초) 뒤에 선다. 기본 상한(5초)은 jest 테스트 상한과 같아 끝내 안 뜨면 원인이 가려진다 — 짧게 건다.
+    const LOAD_WAIT = { timeout: 3000 };
     let recordsReply: (call: number) => Response | Promise<Response>;
     let recordsCalls = 0;
 
@@ -2968,8 +2975,10 @@ describe('메모 저장 실패 안내·세션 캐시 시드', () => {
       fireEvent.changeText(locked, '몰래 쓴 글');
       fireEvent(locked, 'blur');
 
-      // 단언 ① — 입력이 바뀌지 않았다.
+      // 단언 ① — 입력이 바뀌지 않았다. 조회 중은 로딩이지 실패가 아니라 "불러오지 못했어요"는 없다(TRIP-1751 ★7).
       expect(valueOf()).toBe('');
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+      expect(screen.queryByTestId(RETRY)).toBeNull();
 
       // 실행 ② — 응답 도착.
       await act(async () => {
@@ -3081,28 +3090,137 @@ describe('메모 저장 실패 안내·세션 캐시 시드', () => {
       ['500', 500],
       ['404', 404],
     ])(
-      'J8 records %s 여도 카드·입력은 막히지 않고 빈칸으로 열려 저장된다 (AC-12)',
+      'J8 records %s 로 끝내 실패하면 카드는 그대로이고 입력은 막힌 채 "불러오지 못했어요 + [다시 시도]"가 서며 글을 써도 PUT 은 0회다 (개정 AC-12)',
       async (_label, status) => {
-        // 준비
+        // 준비 — 재시도 1회까지 같은 응답(404 도 막는다: 결정 3).
         recordsReply = () => HttpResponse.json({ error: 'boom' }, { status });
 
-        // 실행
+        // 실행 ① — 안내가 뜰 때까지 기다린다(막힌 입력은 openedMemoInput 이 영원히 기다린다 — 02a ★9).
         renderPage(newClient());
-        const input = await memoInput();
+        const notice = await screen.findByTestId(ERROR, undefined, LOAD_WAIT);
 
-        // 단언 ① — 카드와 빈 입력.
+        // 단언 ① — 카드·안내 문구·다시 시도 버튼·잠긴 빈 입력.
         expect(cardOf()).toBeOnTheScreen();
-        expect(input.props.value).toBe('');
+        expect(notice).toHaveTextContent(LOAD_ERROR_COPY);
+        expect(screen.getByTestId(RETRY)).toHaveTextContent('다시 시도');
+        expect(screen.getByTestId(RETRY)).toBeEnabled();
+        expect(field()).toBeDisabled();
+        expect(valueOf()).toBe('');
 
-        // 실행 ② — 쓴다.
-        fireEvent.changeText(input, '조회 실패 뒤 메모');
-        fireEvent(input, 'blur');
+        // 실행 ② — 써 본다(잠긴 입력은 이벤트를 버린다).
+        fireEvent.changeText(field(), '조회 실패 뒤 메모');
+        fireEvent(field(), 'blur');
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        });
 
-        // 단언 ② — 저장이 나간다.
-        await waitFor(() => expect(memoBodies).toHaveLength(1));
-        expect(memoBodies).toEqual([{ text: '조회 실패 뒤 메모' }]);
+        // 단언 ② — 아무것도 나가지 않았고(PUT 0), 조회는 최초 + 재시도 1회로 2번이다.
+        expect(valueOf()).toBe('');
+        expect(memoBodies).toEqual([]);
+        expect(hitCount(RECORDS_GET)).toBe(2);
       }
     );
+
+    it('J10 [다시 시도] — 응답 전엔 안내가 남고 버튼은 잠기며, 도착하면 입력이 서버 글로 열리고 안내가 사라지고 그 뒤 저장은 PUT 한다 (개정 AC-12)', async () => {
+      // 준비 — 1·2번째(최초+재시도)는 500, 3번째부터는 문 뒤 '기존 글'.
+      const gate = createGate();
+      recordsReply = async (call) => {
+        if (call <= 2)
+          return HttpResponse.json({ error: 'boom' }, { status: 500 });
+        await gate.opened;
+        return recordsOf([actualVisit('v-in', '기존 글')]);
+      };
+      renderPage(newClient());
+      await screen.findByTestId(ERROR, undefined, LOAD_WAIT);
+
+      // 실행 ① — [다시 시도].
+      fireEvent.press(screen.getByTestId(RETRY));
+      await waitFor(() => expect(hitCount(RECORDS_GET)).toBe(3));
+      await flushNotifications();
+
+      // 단언 ① — 응답 전: v5 가 isError 를 풀어도 안내는 남고(★2), 버튼은 잠기고, 입력은 잠겨 있다.
+      expect(screen.getByTestId(ERROR)).toHaveTextContent(LOAD_ERROR_COPY);
+      expect(screen.getByTestId(RETRY)).toBeDisabled();
+      expect(field()).toBeDisabled();
+
+      // 실행 ② — 잠긴 버튼을 또 눌러도 요청이 늘지 않는다.
+      fireEvent.press(screen.getByTestId(RETRY));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      expect(hitCount(RECORDS_GET)).toBe(3);
+
+      // 실행 ③ — 응답 도착.
+      await act(async () => {
+        gate.release();
+      });
+
+      // 단언 ② — 서버 글로 열리고 안내·버튼이 사라진다.
+      await waitFor(() => expect(valueOf()).toBe('기존 글'));
+      const opened = await memoInput();
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+      expect(screen.queryByTestId(RETRY)).toBeNull();
+
+      // 실행 ④ — 고쳐서 포커스를 뺀다.
+      fireEvent.changeText(opened, '새 글');
+      fireEvent(opened, 'blur');
+
+      // 단언 ③ — 그 뒤 저장은 지금처럼 PUT 1회.
+      await waitFor(() => expect(memoBodies).toHaveLength(1));
+      expect(memoBodies).toEqual([{ text: '새 글' }]);
+    });
+
+    it('J11 카드가 둘이면 같은 실패가 카드마다 안내 하나씩 선다(방문 id 접미 — testID 가 겹치지 않는다) — records GET 은 여행당 한 번(+재시도)이다 (개정 AC-12)', async () => {
+      // 준비 — J1 과 같은 일정(같은 날 카드 둘), records 는 늘 500.
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+          HttpResponse.json(
+            tripItinerary(
+              [
+                {
+                  date: DAY,
+                  slots: [
+                    daySlot('p1', '광안리 해변'),
+                    daySlot('p2', '부산시립미술관'),
+                  ],
+                },
+              ],
+              TRIP_ID
+            )
+          )
+        ),
+        http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
+          HttpResponse.json({
+            visits: [V_IN, completedVisitOn('v-2', DAY, 'p2')],
+          })
+        )
+      );
+      recordsReply = () =>
+        HttpResponse.json({ error: 'boom' }, { status: 500 });
+
+      // 실행
+      renderPage(newClient());
+      await screen.findByTestId(
+        'record-trip-memo-load-error-v-2',
+        undefined,
+        LOAD_WAIT
+      );
+
+      // 단언 — 카드마다 하나(정규식으로 센 총합 2), 각자 자기 카드 안에 있고 버튼도 카드마다 있다.
+      expect(
+        screen.getAllByTestId(/^record-trip-memo-load-error-/)
+      ).toHaveLength(2);
+      for (const id of ['v-in', 'v-2']) {
+        const card = within(screen.getByTestId(`record-trip-visit-card-${id}`));
+        expect(
+          card.getByTestId(`record-trip-memo-load-error-${id}`)
+        ).toHaveTextContent(LOAD_ERROR_COPY);
+        expect(
+          card.getByTestId(`record-trip-memo-load-retry-${id}`)
+        ).toBeOnTheScreen();
+      }
+      expect(hitCount(RECORDS_GET)).toBe(2);
+    });
   });
 });
 

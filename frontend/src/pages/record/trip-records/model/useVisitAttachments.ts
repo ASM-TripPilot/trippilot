@@ -33,6 +33,7 @@ import { useVisitMemo } from '@/features/attach-visit-media';
  *
  * TRIP-1078 · 메모 세션 캐시(`saveMemo`·`savedMemo`)는 `useVisitMemo` 가 진다(TRIP-1117 — 허브와 키 한 벌).
  *   TRIP-1415 — 서버 memo 시드와 입력 잠금(`memoReady`)도 그 훅 것을 그대로 넘긴다.
+ *   TRIP-1751 — 불러오기 실패 신호(`memoLoadFailed`·`memoLoadOffline`·`memoLoadRetrying`·`retryMemoLoad`)도 통과시킨다.
  */
 export function useVisitAttachments({
   tripId,
@@ -47,10 +48,7 @@ export function useVisitAttachments({
     visitCheckId
   );
   const query = useGetTripsTripIdVisitsVisitCheckIdPhotos(tripId, visitCheckId);
-  const { saveMemo, savedMemo, memoReady } = useVisitMemo({
-    tripId,
-    visitCheckId,
-  });
+  const memo = useVisitMemo({ tripId, visitCheckId });
 
   // 실패로 노출 중인 자산 — 재시도가 같은 POST 를 다시 부를 수 있게 자산 메타·동의를 함께 쥔다.
   const [failures, setFailures] = useState<
@@ -106,8 +104,6 @@ export function useVisitAttachments({
       localAssetId: f.asset.localAssetId,
     })),
     retryUpload,
-    saveMemo,
-    savedMemo,
-    memoReady,
+    ...memo,
   };
 }

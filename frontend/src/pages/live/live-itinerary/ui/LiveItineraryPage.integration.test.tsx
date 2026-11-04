@@ -4100,7 +4100,9 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
     });
   });
 
-  // TRIP-1415 · AC-2·3·5~9·12 — 허브 카드 메모 박스·[메모] 시트가 서버 메모(GET /trips/{id}/records 의 memo)를 본다.
+  // TRIP-1415 · AC-2·3·5~9 — 허브 카드 메모 박스·[메모] 시트가 서버 메모(GET /trips/{id}/records 의 memo)를 본다.
+  // TRIP-1751 · 개정 AC-12 — 조회가 끝내 실패하면 시트 입력은 막히고 "불러오지 못했어요 + [다시 시도]", 카드엔 "메모 없음"과 다른
+  //   실패 표식이 선다(옛 AC-12 "막히지 않고 빈칸으로 열린다"의 반전).
   describe('서버 메모 시드 — records 의 memo', () => {
     /**
      * 무엇을 보장하나: 앱을 다시 켜도 서버에 남은 메모가 완료·관람 중 카드 박스와 [메모] 시트(입력·글자 수)에 보인다.
@@ -4112,6 +4114,15 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
     const DONE_BOX = `execution-live-slot-memo-${DONE_KEY}`;
     const ACTIVE_BOX = `execution-live-slot-memo-${ACTIVE_KEY}`;
     const COUNT = 'live-memo-count';
+    // TRIP-1751 — 시트 안내(시트는 하나라 접미 없음)·카드 표식(`fieldId('memo-error')` — 카드마다 slotKey).
+    const LOAD_ERROR = 'live-memo-load-error';
+    const LOAD_RETRY = 'live-memo-load-retry';
+    const LOAD_ERROR_COPY = '메모를 불러오지 못했어요';
+    const DONE_ERROR = `execution-live-slot-memo-error-${DONE_KEY}`;
+    const ACTIVE_ERROR = `execution-live-slot-memo-error-${ACTIVE_KEY}`;
+    const UPCOMING_ERROR = `execution-live-slot-memo-error-${UPCOMING_KEY}`;
+    // 안내는 재시도 1회(대기 약 1초) 뒤에 선다. 기본 상한(5초)은 jest 테스트 상한과 같아 끝내 안 뜨면 원인이 가려진다 — 짧게 건다.
+    const LOAD_WAIT = { timeout: 3000 };
     let recordsReply: (call: number) => Response | Promise<Response>;
     let recordsCalls = 0;
 
@@ -4150,6 +4161,9 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
       expect(screen.getByTestId(ACTIVE_BOX)).toHaveTextContent('광안리 밤바다');
       await settle();
       expect(hitCount(RECORDS_GET)).toBe(1);
+      // 잘 받았으면 실패 표식은 없다(TRIP-1751 — 메모가 보이는 카드엔 표식이 같이 서지 않는다).
+      expect(screen.queryByTestId(DONE_ERROR)).toBeNull();
+      expect(screen.queryByTestId(ACTIVE_ERROR)).toBeNull();
 
       // 실행 ② — 완료 [메모].
       fireEvent.press(screen.getByTestId(done('memo')));
@@ -4173,6 +4187,8 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
       // 단언 ① — 완료 카드는 있고 박스는 없다.
       expect(card(DONE_KEY)).toBeOnTheScreen();
       expect(screen.queryByTestId(DONE_BOX)).toBeNull();
+      // TRIP-1751 — "메모 없음"(조회 성공, 본문 없음)은 "불러오지 못함"이 아니다: 표식도 없다.
+      expect(screen.queryByTestId(DONE_ERROR)).toBeNull();
 
       // 단언 ② — 시트도 비어 있다.
       fireEvent.press(screen.getByTestId(done('memo')));
@@ -4223,6 +4239,9 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
       expect(screen.getByTestId(SAVE)).toBeDisabled();
       expect(hitCount(MEMO_PUT_V1)).toBe(0);
       expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
+      // TRIP-1751 — 조회 중은 로딩이지 실패가 아니다: 시트 안내·카드 표식이 번쩍이지 않는다(★7).
+      expect(screen.queryByTestId(LOAD_ERROR)).toBeNull();
+      expect(screen.queryByTestId(DONE_ERROR)).toBeNull();
 
       // 실행 ② — 응답 도착.
       await act(async () => {
@@ -4414,29 +4433,99 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
       expect(hitCount(RECORDS_GET)).toBe(0);
     });
 
-    it('H8 records 가 500 이어도 허브·카드는 그대로이고, 시트 입력은 빈칸으로 열려 저장된다 (AC-12)', async () => {
-      // 준비
-      recordsReply = () =>
-        HttpResponse.json(
-          { error: { code: 'INTERNAL', message: 'boom' } },
-          { status: 500 }
-        );
+    it('H8 records 가 끝내 500 이면 시트 입력은 막히고 "불러오지 못했어요 + [다시 시도]"가 서며 카드엔 실패 표식이 선다 — [다시 시도]가 성공하면 서버 글로 열리고 표식이 사라진다 (개정 AC-12)', async () => {
+      // 준비 — 1·2번째(최초+재시도)는 500, 3번째부터는 문 뒤 '기존 글'.
+      const gate = createGate();
+      recordsReply = async (call) => {
+        if (call <= 2)
+          return HttpResponse.json(
+            { error: { code: 'INTERNAL', message: 'boom' } },
+            { status: 500 }
+          );
+        await gate.opened;
+        return recordsOf([actualVisit('v1', '기존 글')]);
+      };
 
-      // 실행 ①
+      // 실행 ① — 허브를 그리고 곧바로 완료 [메모](조회가 아직 진행 중일 때 연다 — 실패 뒤에 열면 마운트 재조회가 끼어든다, ★8).
       await renderHub();
       fireEvent.press(screen.getByTestId(done('memo')));
-      const input = await openedMemoInput();
+      const notice = await screen.findByTestId(
+        LOAD_ERROR,
+        undefined,
+        LOAD_WAIT
+      );
 
-      // 단언 ①
+      // 단언 ① — 시트: 안내 문구·버튼·잠긴 입력·잠긴 [저장]. 허브·카드는 그대로다.
       expect(card(DONE_KEY)).toBeOnTheScreen();
-      expect(input.props.value).toBe('');
+      expect(notice).toHaveTextContent(LOAD_ERROR_COPY);
+      expect(screen.getByTestId(LOAD_RETRY)).toHaveTextContent('다시 시도');
+      expect(screen.getByTestId(LOAD_RETRY)).toBeEnabled();
+      expect(field()).toBeDisabled();
+      expect(field().props.value).toBe('');
+      expect(screen.getByTestId(SAVE)).toBeDisabled();
 
-      // 실행 ② — 쓴다.
-      typeAndSave(input, '조회 실패 뒤 메모');
+      // 단언 ② — 카드: 완료·관람 중 두 카드에 표식(문구 완전 일치), 예정 카드엔 없고, 메모 박스는 없다("메모 없음"과 같은 모양이면 위반).
+      expect(await screen.findByTestId(DONE_ERROR)).toHaveTextContent(
+        LOAD_ERROR_COPY
+      );
+      expect(screen.getByTestId(ACTIVE_ERROR)).toHaveTextContent(
+        LOAD_ERROR_COPY
+      );
+      expect(screen.queryByTestId(UPCOMING_ERROR)).toBeNull();
+      expect(
+        screen.queryByTestId(`execution-live-slot-memo-${DONE_KEY}`)
+      ).toBeNull();
+      expect(
+        screen.queryByTestId(`execution-live-slot-memo-${ACTIVE_KEY}`)
+      ).toBeNull();
 
-      // 단언 ② — 저장이 나간다.
+      // 실행 ② — 잠긴 입력에 쓰고 [저장]을 눌러 본다.
+      typeAndSave(field(), '몰래 쓴 글');
+      await settle();
+
+      // 단언 ③ — PUT 0회, 입력 그대로, 조회는 최초+재시도 2회.
+      expect(hitCount(MEMO_PUT_V1)).toBe(0);
+      expect(memoBodies).toEqual([]);
+      expect(field().props.value).toBe('');
+      expect(hitCount(RECORDS_GET)).toBe(2);
+
+      // 실행 ③ — [다시 시도].
+      fireEvent.press(screen.getByTestId(LOAD_RETRY));
+      await waitFor(() => expect(hitCount(RECORDS_GET)).toBe(3));
+      await settle();
+
+      // 단언 ④ — 응답 전: v5 가 isError 를 풀어도 시트 안내·카드 표식은 남고(★2), 버튼은 잠기고, 입력은 잠겨 있다.
+      expect(screen.getByTestId(LOAD_ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(LOAD_RETRY)).toBeDisabled();
+      expect(screen.getByTestId(DONE_ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(ACTIVE_ERROR)).toBeOnTheScreen();
+      expect(field()).toBeDisabled();
+      // 잠긴 버튼을 또 눌러도 요청이 늘지 않는다.
+      fireEvent.press(screen.getByTestId(LOAD_RETRY));
+      await settle();
+      expect(hitCount(RECORDS_GET)).toBe(3);
+
+      // 실행 ④ — 응답 도착.
+      await act(async () => {
+        gate.release();
+      });
+
+      // 단언 ⑤ — 서버 글('기존 글' 4자)로 열리고, 안내·버튼·표식이 사라지고, 완료 카드에 서버 메모 박스가 선다.
+      const input = await openedMemoInput();
+      expect(input.props.value).toBe('기존 글');
+      expect(screen.getByTestId(COUNT)).toHaveTextContent('4/2000');
+      expect(screen.queryByTestId(LOAD_ERROR)).toBeNull();
+      expect(screen.queryByTestId(LOAD_RETRY)).toBeNull();
+      expect(screen.queryByTestId(DONE_ERROR)).toBeNull();
+      expect(screen.queryByTestId(ACTIVE_ERROR)).toBeNull();
+      expect(screen.getByTestId(DONE_BOX)).toHaveTextContent('기존 글');
+
+      // 실행 ⑤ — 새 글을 저장한다.
+      typeAndSave(input, '새 글');
+
+      // 단언 ⑥ — 그 뒤 저장은 지금처럼 PUT 1회.
       await waitFor(() => expect(hitCount(MEMO_PUT_V1)).toBe(1));
-      expect(memoBodies).toEqual([{ text: '조회 실패 뒤 메모' }]);
+      expect(memoBodies).toEqual([{ text: '새 글' }]);
     });
   });
 });
