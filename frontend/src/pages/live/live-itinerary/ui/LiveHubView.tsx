@@ -183,6 +183,11 @@ export interface LiveHubViewProps {
     detail: string;
     onPressSettings?: () => void;
   } | null;
+  /**
+   * TRIP-1753 — 보조 조회(방문 기록·위험 트리거)가 404 아닌 이유로 실패했다는 한 줄 + [다시 시도](INV-4).
+   * 판정·재조회는 페이지 몫. 미전달·null 이면 줄 없음. `retrying` 이면 버튼만 잠근다(줄은 남는다).
+   */
+  partialErrorNotice?: { onRetry: () => void; retrying: boolean } | null;
   /** TRIP-1561 — 건너뛴(skippedAt) 슬롯의 poiId. 진행 중 슬롯 뒤에서 [도착] 대상과 "마지막 장소" 판정에서 빠진다. */
   skippedPoiIds?: ReadonlySet<string>;
   /** TRIP-1561 — 자동 기록이 무장(ARMED)이면 [방문 완료]를 늘 둔다(BR-U10-17). 기본 false(수동). */
@@ -237,6 +242,7 @@ export function LiveHubView({
   onPressDirections,
   directionsNotice,
   automationNotice,
+  partialErrorNotice,
   actualRoute,
   showMyLocation,
   skippedPoiIds,
@@ -495,6 +501,30 @@ export function LiveHubView({
         }}
         header={
           <View className="px-lg">
+            {partialErrorNotice ? (
+              <View
+                testID="execution-live-partial-error"
+                className="mb-md flex-row items-center justify-between gap-sm rounded-[12px] bg-surface-soft px-md py-sm"
+              >
+                <Text className="shrink font-noto-bold text-[13px] font-bold text-ink">
+                  일부 정보를 불러오지 못했어요
+                </Text>
+                <Pressable
+                  testID="execution-live-partial-retry"
+                  accessibilityRole="button"
+                  onPress={partialErrorNotice.onRetry}
+                  disabled={partialErrorNotice.retrying}
+                  accessibilityState={{
+                    disabled: partialErrorNotice.retrying,
+                  }}
+                  hitSlop={8}
+                >
+                  <Text className="font-noto-bold text-[13px] font-bold text-primary-text">
+                    다시 시도
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
             {automationNotice ? (
               <View
                 testID="execution-live-automation-notice"
