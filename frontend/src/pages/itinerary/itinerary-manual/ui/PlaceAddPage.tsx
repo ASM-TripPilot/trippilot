@@ -3,7 +3,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { goBackOr } from '@/shared/lib/goBackOr';
 import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Keyboard,
+  Pressable,
+  Text,
+  View,
+} from 'react-native';
 
 import {
   addSlot,
@@ -13,11 +19,14 @@ import {
 } from '@/features/edit-itinerary';
 import { buildDraftPins } from '@/features/itinerary';
 import { usePlacesInfinite } from '@/features/explore';
+import { WarningTriangleGlyph } from '@/features/explore/index.view';
 import { PlaceAddHeader, PlaceAddRow } from '@/features/itinerary';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { TimeSheet } from '@/widgets/time-sheet';
 import { suggestNextSlotTime } from '@/entities/itinerary-slot';
 import { regionForDay } from '@/entities/trip';
+import { isNotFound } from '@/shared/api';
+import { StateNotice } from '@/shared/ui/StateNotice';
 import {
   getGetTripsTripIdItineraryQueryKey,
   getPutTripsTripIdItineraryMutationOptions,
@@ -96,6 +105,8 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
       : undefined;
   // TRIP-1424 — 마지막 추가 저장이 실패했나. 다음 저장이 시작되면 지운다(01b Q7).
   const [addFailed, setAddFailed] = useState(false);
+  // TRIP-1756 — 일정 조회 실패(404 제외)인 채로 [추가]를 눌렀다. 눌러야 뜨고, 일정이 돌아오면 사라진다(아래 파생).
+  const [itineraryFailedTapped, setItineraryFailedTapped] = useState(false);
   // 저장 중인 추가(null = 없음) — 응답과 견줄 그날 요청 슬롯·추가한 자리를 들고 있다. 값이 있는 동안은 다른 추가를
   // 받지 않는다(01b Q3 — 첫 응답이 캐시에 오기 전 days 로 둘째 PUT 을 만들면 서버에서 첫 추가가 지워진다).
   // 상태가 아니라 ref 인 이유: 「+ 추가」(시트 열기)의 같은 틱 누름도 막아야 하고, 화면을 떠난 뒤 도는 훅 콜백도
@@ -185,18 +196,30 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   // 세워 2일차를 못 채웠다). 다지역이면 N 을 알려면 일정이 와야 하므로 그때까지 조회를 미룬다.
   const destinations = trip.data?.destinations ?? [];
   const region = regionForDay(destinations, dayNumber);
-  const { items, fetchNextPage, hasNextPage, isFetchingNextPage, isSuccess } =
-    usePlacesInfinite(
-      {
-        ...(region !== null ? { region } : {}),
-        ...(selectedCategory ? { category: selectedCategory } : {}),
-        ...(trimmedQuery ? { q: trimmedQuery } : {}),
-      },
-      {
-        enabled:
-          !trip.isPending && !(destinations.length >= 2 && itinerary.isPending),
-      }
-    );
+  const {
+    items,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isSuccess,
+    isError: listFailed,
+    refetch: refetchList,
+  } = usePlacesInfinite(
+    {
+      ...(region !== null ? { region } : {}),
+      ...(selectedCategory ? { category: selectedCategory } : {}),
+      ...(trimmedQuery ? { q: trimmedQuery } : {}),
+    },
+    {
+      enabled:
+        !trip.isPending && !(destinations.length >= 2 && itinerary.isPending),
+    }
+  );
+
+  const showItineraryError =
+    itineraryFailedTapped &&
+    itinerary.data === undefined &&
+    !isNotFound(itinerary.error);
 
   function handleEndReached(): void {
     if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
@@ -283,6 +306,28 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
               {`장소 추가 · ${dayNumber}일차`}
             </Text>
             {/* TRIP-1424 — 저장 실패 안내(Figma 공백 — 편집기 저장 실패 배너 꼴). 토스트는 성공 아이콘 고정이라 못 쓴다. */}
+            {showItineraryError ? (
+              <View
+                testID="itinerary-place-itinerary-error"
+                className="mx-lg mb-xs flex-row items-center gap-sm rounded-card bg-primary-pale px-md py-sm"
+              >
+                <Text className="shrink font-noto text-caption text-primary-text">
+                  일정을 불러오지 못해 장소를 담을 수 없어요
+                </Text>
+                <Pressable
+                  testID="itinerary-place-itinerary-retry"
+                  accessibilityRole="button"
+                  onPress={() => {
+                    void itinerary.refetch();
+                  }}
+                  className="ml-auto"
+                >
+                  <Text className="font-noto-bold text-caption font-bold text-primary">
+                    다시 시도
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
             {addFailed ? (
               <View
                 testID="itinerary-place-add-error"
@@ -302,8 +347,19 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
               place={item}
               added={addedPoiIds.includes(item.poiId)}
               onPressAdd={() => {
-                // 담을 일자가 없으면 시트를 안 연다(조용한 소실 차단, W-2 — 배너는 제거됐다).
-                if (notReady) return;
+                // 담을 일자가 없으면 시트를 안 연다(조용한 소실 차단, W-2). 로딩·404·빈 days 는 무반응 그대로,
+                // 일정 조회가 오류로 끝난 경우만 사유를 알린다(INV-4).
+                if (notReady) {
+                  // 404 는 누를 때 거른다 — 플래그를 세우면 뒤 재조회 중(error=null)에 거짓 안내가 뜬다.
+                  if (
+                    itinerary.data === undefined &&
+                    itinerary.isError &&
+                    !isNotFound(itinerary.error)
+                  ) {
+                    setItineraryFailedTapped(true);
+                  }
+                  return;
+                }
                 // 저장 중엔 다른 추가를 받지 않는다(TRIP-1424 Q3 — 진행 표시는 6-b 결정).
                 if (inFlightRef.current !== null) return;
                 // 다른 화면 인스턴스(나갔다 다시 들어온 이 화면)의 저장이 아직 진행 중이어도 받지 않는다 — ref 는
@@ -330,8 +386,28 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
               <ActivityIndicator />
             </View>
           ) : null,
-          // 조회 성공 + 0건일 때만 안내(INV-4 — 검색 0건 침묵 금지). 로딩 중엔 안 띄운다(깜빡임), 실패는 범위 밖.
-          ListEmptyComponent: isSuccess ? (
+          // 조회 성공 + 0건이면 빈 안내(INV-4 — 검색 0건 침묵 금지), 실패면 실패 얼굴. 로딩 중엔 안 띄운다(깜빡임).
+          // 실패 얼굴은 목록이 비었을 때만 보인다 — 다음 쪽 실패로 목록이 남아 있으면 안 뜬다(범위 밖).
+          ListEmptyComponent: listFailed ? (
+            <View className="w-full items-center justify-center px-lg pt-xl">
+              <StateNotice
+                testID="itinerary-place-load-error"
+                icon={<WarningTriangleGlyph size={32} />}
+                title="지금 장소 정보를 불러올 수 없어요"
+                description="잠시 후 다시 시도해 주세요"
+                actions={[
+                  {
+                    testID: 'itinerary-place-load-retry',
+                    label: '다시 시도',
+                    variant: 'filled',
+                    onPress: () => {
+                      void refetchList();
+                    },
+                  },
+                ]}
+              />
+            </View>
+          ) : isSuccess ? (
             <View
               testID="itinerary-place-empty"
               className="w-full items-center py-lg"

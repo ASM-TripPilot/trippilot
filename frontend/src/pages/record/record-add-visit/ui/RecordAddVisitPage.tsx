@@ -8,6 +8,7 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { PlaceRowCard } from '@/entities/place';
 import { PlaceSubtitle } from '@/entities/place';
 import { useMultiRegionPlaces } from '@/features/explore';
+import { WarningTriangleGlyph } from '@/features/explore/index.view';
 import { usePlacesInfinite } from '@/features/explore';
 import {
   buildDraftPins,
@@ -21,6 +22,8 @@ import {
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
+import { isNotFound } from '@/shared/api';
+import { StateNotice } from '@/shared/ui/StateNotice';
 import { ArriveRequestSource } from '@/shared/api/index.schemas';
 import type { Place, PoiCategory } from '@/shared/api/index.schemas';
 import {
@@ -39,6 +42,8 @@ const PICK_FAILED = '방문을 기록하지 못했어요. 다시 시도해 주�
  *
  * 후보는 `GET /places` 결과만(INV-1 취지), 여행 목적지로 좁힌다 — 여행 조회가 끝날 때까지 장소 조회를
  * 미루고, 2곳 이상이면 지역별 병합, 실패·0곳이면 region 없이(PlaceAddPage TRIP-981 과 같은 규칙).
+ * 여행 조회가 404 아닌 이유로 실패해 전국 목록으로 열리면 그 사실을 목록 위에 알린다(기록이 남는 화면 — TRIP-1756).
+ * 장소 조회 실패는 빈 목록이 아니라 실패 얼굴 + 다시 시도로 말한다.
  *
  * 고르면 `useVisitCheck.arrive` 로 slotKey 없는 도착 1건 — j01 과 같은 (tripId, day) 캐시에 낙관 카드를
  * 끼우고 응답으로 교체하므로 돌아가면 재조회 없이 카드가 서 있다. 이름은 arrive **전에** 세션 캐시에
@@ -87,6 +92,13 @@ export function RecordAddVisitPage({
   });
   const { items, fetchNextPage, hasNextPage, isFetchingNextPage } =
     isMultiRegion ? multi : infinite;
+  const listFailed = isMultiRegion ? multi.isError : infinite.isError;
+  // 여행 조회 실패(404 제외 — 404 는 종전대로 안내 없이 region 없이 연다)로 전국 목록이 떴을 때만.
+  const regionUnknown =
+    trip.data === undefined && trip.isError && !isNotFound(trip.error);
+  function retryList(): void {
+    void (isMultiRegion ? multi : infinite).refetch();
+  }
   const isSuccess = isMultiRegion
     ? !multi.isPending && !multi.isError
     : infinite.isSuccess;
@@ -139,6 +151,28 @@ export function RecordAddVisitPage({
             <Text className="px-lg pb-xs pt-sm font-noto-bold text-[18px] font-bold text-ink">
               방문 추가
             </Text>
+            {regionUnknown ? (
+              <View
+                testID="record-add-visit-region-notice"
+                className="mx-lg mt-xs flex-row items-center gap-sm rounded-card bg-primary-pale px-md py-sm"
+              >
+                <Text className="shrink font-noto text-caption text-primary-text">
+                  여행지를 확인하지 못해 전국 장소를 보여 드려요
+                </Text>
+                <Pressable
+                  testID="record-add-visit-region-retry"
+                  accessibilityRole="button"
+                  onPress={() => {
+                    void trip.refetch();
+                  }}
+                  className="ml-auto"
+                >
+                  <Text className="font-noto-bold text-caption font-bold text-primary">
+                    다시 시도
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
             {failed ? (
               <View
                 testID="record-add-visit-error"
@@ -207,8 +241,26 @@ export function RecordAddVisitPage({
               <ActivityIndicator />
             </View>
           ) : null,
-          // 조회 성공 + 0건일 때만 안내(INV-4). 로딩 중엔 안 띄운다(깜빡임).
-          ListEmptyComponent: isSuccess ? (
+          // 조회 성공 + 0건이면 빈 안내, 실패면 실패 얼굴(INV-4). 로딩 중엔 안 띄운다(깜빡임).
+          // 실패 얼굴은 목록이 비었을 때만 보인다 — 다음 쪽 실패로 목록이 남아 있으면 안 뜬다(범위 밖).
+          ListEmptyComponent: listFailed ? (
+            <View className="w-full items-center justify-center px-lg pt-xl">
+              <StateNotice
+                testID="record-add-visit-load-error"
+                icon={<WarningTriangleGlyph size={32} />}
+                title="지금 장소 정보를 불러올 수 없어요"
+                description="잠시 후 다시 시도해 주세요"
+                actions={[
+                  {
+                    testID: 'record-add-visit-load-retry',
+                    label: '다시 시도',
+                    variant: 'filled',
+                    onPress: retryList,
+                  },
+                ]}
+              />
+            </View>
+          ) : isSuccess ? (
             <View
               testID="record-add-visit-empty"
               className="w-full items-center py-lg"

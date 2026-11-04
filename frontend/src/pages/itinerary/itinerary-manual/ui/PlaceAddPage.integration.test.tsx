@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { Keyboard, Text } from 'react-native';
@@ -507,6 +507,8 @@ describe('🟢 W-2 · TRIP-338 — 일정 미도착이면 add 가 조용히 소�
     // 담을 대상 일자가 없으니 시트를 안 열고 빈-PUT 도 안 내보낸다(데이터 손실 차단).
     expect(screen.queryByTestId('itinerary-edit-time-apply')).toBeNull();
     expect(hitsOf('PUT', '/api/v1/trips/t1/itinerary')).toHaveLength(0);
+    // TRIP-1756 — 일정 조회가 실패한 게 아니라 days 가 비었을 뿐이니 실패 안내는 없다.
+    expect(screen.queryByTestId('itinerary-place-itinerary-error')).toBeNull();
   });
 });
 
@@ -2431,5 +2433,178 @@ describe('장소 추가 행 부제 — 같은 이름 장소를 지역·주소로
     const ids = day?.slots.map((slot) => slot.poiId);
     expect(ids).toContain('k2');
     expect(ids).not.toContain('k1');
+  });
+});
+
+// TRIP-1756 · 후보 조회·일정 조회 실패를 빈 목록·무반응으로 접지 않는다(INV-4). 로딩·404·빈 days 는 지금처럼 안내 없음.
+// 준비=실패 응답 → 실행=화면 열기·[추가] 누르기·[다시 시도] → 단언=실패 얼굴 testID·시트 부재·PUT 0·요청 수.
+describe('🔴 TRIP-1756 · 후보 목록 조회가 실패하면 실패 얼굴과 다시 시도가 뜬다', () => {
+  const LOAD_ERROR = 'itinerary-place-load-error';
+  const LOAD_RETRY = 'itinerary-place-load-retry';
+  const placesOk = () =>
+    http.get(`${BASE}/places`, () =>
+      HttpResponse.json({ items: PLACES, nextCursor: null })
+    );
+
+  it('L1: /places 500 → 실패 얼굴·다시 시도가 보이고, 0건 안내·후보 카드·추가 실패 줄은 없다', async () => {
+    server.use(
+      http.get(`${BASE}/places`, () => new HttpResponse(null, { status: 500 }))
+    );
+
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+
+    const face = await screen.findByTestId(LOAD_ERROR);
+    expect(
+      within(face).getByText('지금 장소 정보를 불러올 수 없어요')
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId(LOAD_RETRY)).toHaveTextContent('다시 시도');
+    expect(screen.queryByTestId('itinerary-place-empty')).toBeNull();
+    expect(screen.queryAllByTestId(/^itinerary-place-card-/)).toHaveLength(0);
+    // 저장(PUT) 실패 줄과 다른 얼굴이다.
+    expect(screen.queryByTestId('itinerary-place-add-error')).toBeNull();
+  });
+
+  it('L1r: 서버가 돌아온 뒤 [다시 시도] → 카드가 뜨고 얼굴이 사라지며 /places 는 정확히 +1회, 쿼리 문자열은 그대로다', async () => {
+    server.use(
+      http.get(`${BASE}/places`, () => new HttpResponse(null, { status: 500 }))
+    );
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+    await screen.findByTestId(LOAD_ERROR);
+    expect(hitsOf('GET', '/api/v1/places')).toHaveLength(1);
+
+    server.use(placesOk());
+    fireEvent.press(screen.getByTestId(LOAD_RETRY));
+
+    expect(
+      await screen.findByTestId('itinerary-place-card-p1')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId(LOAD_ERROR)).toBeNull();
+    const hits = hitsOf('GET', '/api/v1/places');
+    expect(hits).toHaveLength(2);
+    expect(new URL(hits[1].url).search).toBe(new URL(hits[0].url).search);
+  });
+
+  it('L2: 조회가 성공했는데 0건이면 실패 얼굴이 아니라 0건 안내만 뜬다 (무회귀 · 선제 green)', async () => {
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: [], nextCursor: null })
+      )
+    );
+
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+
+    expect(
+      await screen.findByTestId('itinerary-place-empty')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId(LOAD_ERROR)).toBeNull();
+  });
+});
+
+describe('🔴 TRIP-1756 · 일정 조회가 실패한 채 [추가]를 누르면 말하고, 로딩·404·빈 일정은 지금처럼 무반응이다', () => {
+  const ITINERARY_PATH = '/api/v1/trips/t1/itinerary';
+  const ITINERARY_ERROR = 'itinerary-place-itinerary-error';
+  const ITINERARY_RETRY = 'itinerary-place-itinerary-retry';
+  const SHEET_APPLY = 'itinerary-edit-time-apply';
+
+  async function settle(): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+  }
+
+  /** 일정 GET 이 한 번 끝난 뒤(요청 도착 + 응답 처리 틈)까지 기다린다. */
+  async function renderAfterItineraryRequested() {
+    render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+    await screen.findByTestId('itinerary-place-add-p1');
+    await waitFor(() =>
+      expect(hitsOf('GET', ITINERARY_PATH).length).toBeGreaterThanOrEqual(1)
+    );
+    await settle();
+  }
+
+  it('I1: 일정 GET 500 → [추가] p1 → 안내와 다시 시도가 뜨고 시각 시트는 안 열리며 PUT 은 0회다 (누르기 전엔 안내가 없다)', async () => {
+    server.use(
+      http.get(
+        `${BASE}/trips/:tripId/itinerary`,
+        () => new HttpResponse(null, { status: 500 })
+      )
+    );
+    await renderAfterItineraryRequested();
+    expect(screen.queryByTestId(ITINERARY_ERROR)).toBeNull();
+
+    fireEvent.press(screen.getByTestId('itinerary-place-add-p1'));
+
+    expect(await screen.findByTestId(ITINERARY_ERROR)).toHaveTextContent(/\S/);
+    expect(screen.getByTestId(ITINERARY_RETRY)).toHaveTextContent(/다시 시도/);
+    expect(screen.queryByTestId(SHEET_APPLY)).toBeNull();
+    await settle();
+    expect(hitsOf('PUT', ITINERARY_PATH)).toHaveLength(0);
+  });
+
+  it('I1r: 서버가 돌아온 뒤 [다시 시도] → 일정 GET +1, 안내가 사라지고, 다시 [추가] 하면 시각 시트가 열린다', async () => {
+    server.use(
+      http.get(
+        `${BASE}/trips/:tripId/itinerary`,
+        () => new HttpResponse(null, { status: 500 })
+      )
+    );
+    await renderAfterItineraryRequested();
+    fireEvent.press(screen.getByTestId('itinerary-place-add-p1'));
+    await screen.findByTestId(ITINERARY_ERROR);
+    const before = hitsOf('GET', ITINERARY_PATH).length;
+
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json({
+          ...ITINERARY_ENVELOPE,
+          days: [{ date: '2026-06-10', slots: [] }],
+        })
+      )
+    );
+    fireEvent.press(screen.getByTestId(ITINERARY_RETRY));
+
+    await waitFor(() =>
+      expect(hitsOf('GET', ITINERARY_PATH)).toHaveLength(before + 1)
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId(ITINERARY_ERROR)).toBeNull()
+    );
+    await settle();
+    fireEvent.press(screen.getByTestId('itinerary-place-add-p1'));
+    expect(await screen.findByTestId(SHEET_APPLY)).toBeOnTheScreen();
+  });
+
+  it('I2: 일정 응답이 아직 안 왔으면(로딩) [추가]는 안내도 시트도 PUT 도 없다 — 로딩은 실패가 아니다 (선제 green)', async () => {
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, async () => {
+        await delay('infinite');
+        return HttpResponse.json({ ...ITINERARY_ENVELOPE, days: [] });
+      })
+    );
+    await renderAfterItineraryRequested();
+
+    fireEvent.press(screen.getByTestId('itinerary-place-add-p1'));
+    await settle();
+
+    expect(screen.queryByTestId(ITINERARY_ERROR)).toBeNull();
+    expect(screen.queryByTestId(SHEET_APPLY)).toBeNull();
+    expect(hitsOf('PUT', ITINERARY_PATH)).toHaveLength(0);
+  });
+
+  it('I3: 일정 GET 404(일정이 아직 없음)면 [추가]는 안내도 시트도 PUT 도 없다 — 404 는 없음이다 (선제 green)', async () => {
+    server.use(
+      http.get(
+        `${BASE}/trips/:tripId/itinerary`,
+        () => new HttpResponse(null, { status: 404 })
+      )
+    );
+    await renderAfterItineraryRequested();
+
+    fireEvent.press(screen.getByTestId('itinerary-place-add-p1'));
+    await settle();
+
+    expect(screen.queryByTestId(ITINERARY_ERROR)).toBeNull();
+    expect(screen.queryByTestId(SHEET_APPLY)).toBeNull();
+    expect(hitsOf('PUT', ITINERARY_PATH)).toHaveLength(0);
   });
 });

@@ -1433,10 +1433,13 @@ function renderH14PlanSheet(options: {
   meta: string;
   mapFallback?: ReactElement;
   noBase?: boolean;
+  /** 거점 조회 실패(TRIP-1756) — 「없어요」가 아니라 「확인하지 못했어요」 + 다시 시도. */
+  baseUnknown?: boolean;
   unplaced?: UnplacedMustVisitRow[];
   center?: { lat: number; lng: number };
 }): ReactElement {
-  const { slots, meta, mapFallback, noBase, unplaced, center } = options;
+  const { slots, meta, mapFallback, noBase, baseUnknown, unplaced, center } =
+    options;
   return (
     <MapSheetShell
       center={center ?? { lat: 35.1532, lng: 129.1188 }}
@@ -1491,6 +1494,7 @@ function renderH14PlanSheet(options: {
           return items;
         })}
         {noBase ? <NoBaseNoticeCard /> : null}
+        {baseUnknown ? <NoBaseNoticeCard unknown onRetry={noop} /> : null}
       </View>
     </MapSheetShell>
   );
@@ -6931,6 +6935,18 @@ export const PREVIEW_STATES: PreviewState[] = [
         slots: H14_PLAN_NO_BASE_SLOTS,
         meta: '4곳 · 3.5km',
         noBase: true,
+      }),
+  },
+  {
+    key: 'h14-plan-base-unknown',
+    band: 'h',
+    label: 'h14 · 완성 일정 거점 확인 못 함',
+    login: null,
+    render: () =>
+      renderH14PlanSheet({
+        slots: H14_PLAN_NO_BASE_SLOTS,
+        meta: '4곳 · 3.5km',
+        baseUnknown: true,
       }),
   },
   {
