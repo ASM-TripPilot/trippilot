@@ -3,7 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import { BackArrowGlyph } from '@/features/record';
 import type { MonthCell } from '@/shared/lib/monthGrid';
-import { TRIP_COLORS, UNLISTED_COLOR } from '../model/recordsCalendar';
+import { cellColorFor } from '../model/recordsCalendar';
 
 /**
  * TRIP-575 · j07 월 캘린더(무상태 프레젠테이션 — 계산된 그리드·마킹·콜백만 받는다).
@@ -24,7 +24,7 @@ export interface TripCalendarMonthProps {
   monthLabel: string;
   grid: (MonthCell | null)[];
   markedDays: string[];
-  /** 마킹된 날 → 여행 색 인덱스(TRIP-1436 Q-159). 없는 날은 중립색, 미지정이면 첫 색(코랄). */
+  /** 마킹된 날 → 여행 색 인덱스(TRIP-1436 Q-159). 맵에 없는 날은 중립색, 맵 자체가 미지정이면 첫 색(코랄) — 판정은 `cellColorFor`. */
   dayColors?: Record<string, number>;
   onPressPrev: () => void;
   onPressNext: () => void;
@@ -97,10 +97,7 @@ export function TripCalendarMonth({
                   return <View key={di} className="flex-1 py-[9px]" />;
                 }
                 const isMarked = markedSet.has(cell.date);
-                const palette =
-                  TRIP_COLORS[
-                    (dayColors?.[cell.date] ?? 0) % TRIP_COLORS.length
-                  ];
+                const palette = cellColorFor(dayColors, cell.date);
                 const prev = week[di - 1];
                 const next = week[di + 1];
                 const roundLeft =
