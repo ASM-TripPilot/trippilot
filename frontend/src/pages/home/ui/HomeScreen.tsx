@@ -20,6 +20,7 @@ import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CreateTripFab, SavedMenuFab } from './HomeFabs';
+import { GreetingHeader, homeGreeting, SearchBarBlock } from './HomeHeader';
 import { PhaseBody } from './HomePhaseBody';
 import { FAB_STACK_TOP } from '@/shared/ui/toastBottom';
 import { useScrollHide } from '@/shared/lib/useScrollHide';
@@ -55,6 +56,7 @@ export function HomeScreen({
   // 그대로 둔다 — 스크롤 숨김은 닫힌 상태의 FAB 만 다룬다.
   const { hidden: fabsHidden, onScroll: handleScroll } =
     useScrollHide(menuOpen);
+  const greeting = homeGreeting(phase);
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="home-dashboard-root" className="flex-1 bg-canvas">
@@ -66,6 +68,14 @@ export function HomeScreen({
           scrollEventThrottle={16}
           onScroll={handleScroll}
         >
+          <GreetingHeader
+            title={greeting.title}
+            subtitle={greeting.subtitle}
+            name={greeting.name}
+            onPressBell={onPressBell}
+            onPressAssistant={onPressAssistant}
+          />
+          <SearchBarBlock onPress={onPressSearch} />
           <PhaseBody
             hero={hero}
             sections={sections}
@@ -77,10 +87,7 @@ export function HomeScreen({
             onPressSpotsMore={onPressSpotsMore}
             onPressPastTripsMore={onPressPastTripsMore}
             onPressTripHeroCta={onPressTripHeroCta}
-            onPressSearch={onPressSearch}
             onPressHeroCity={onPressHeroCity}
-            onPressBell={onPressBell}
-            onPressAssistant={onPressAssistant}
           />
         </Animated.ScrollView>
         {/* TRIP-699 — 로딩이면 두 FAB 숨김(Figma 2174:2307). 로딩은 항상 discovery라 phase 없음. */}

@@ -801,7 +801,7 @@
 ## src/pages/home/ui/
 - `src/pages/home/ui/HomeFabs.tsx`  →  CreateTripFab · SavedMenuFab
 - `src/pages/home/ui/HomeGlyphs.tsx`  →  BellGlyph · SearchGlyph · SparkleGlyph · LocationPinGlyph · HeartOutlineGlyph · HeartFilledGlyph · PlusGlyph · MapPinGlyph · SuitcaseGlyph · CloseGlyph
-- `src/pages/home/ui/HomeHeader.tsx`  →  GreetingHeader · SearchBarBlock · TripsLoadError · TripsOfflineNotice
+- `src/pages/home/ui/HomeHeader.tsx`  →  GreetingHeader · homeGreeting · SearchBarBlock · TripsLoadError · TripsOfflineNotice
 - `src/pages/home/ui/HomeHeroes.tsx`  →  DiscoveryHeroCarousel · PlanningHeroCarousel
 - `src/pages/home/ui/HomePage.tsx`  →  HomePage
 - `src/pages/home/ui/HomePhaseBody.tsx`  →  PhaseBody

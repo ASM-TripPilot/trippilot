@@ -2,12 +2,7 @@
 import type { ReactElement } from 'react';
 import { View } from 'react-native';
 
-import {
-  GreetingHeader,
-  SearchBarBlock,
-  TripsLoadError,
-  TripsOfflineNotice,
-} from './HomeHeader';
+import { TripsLoadError, TripsOfflineNotice } from './HomeHeader';
 import { DiscoveryHeroCarousel, PlanningHeroCarousel } from './HomeHeroes';
 import {
   CollectionStrip,
@@ -34,10 +29,7 @@ function DiscoveryBody({
   tripsError,
   tripsOffline,
   onPressSpotsMore,
-  onPressSearch,
   onPressHeroCity,
-  onPressBell,
-  onPressAssistant,
 }: {
   hero: readonly HomeMagazineHero[];
   sections: HomeSections;
@@ -46,20 +38,10 @@ function DiscoveryBody({
   tripsError?: HomeScreenProps['tripsError'];
   tripsOffline?: boolean;
   onPressSpotsMore?: () => void;
-  onPressSearch?: () => void;
   onPressHeroCity?: (regionCode: string) => void;
-  onPressBell?: () => void;
-  onPressAssistant?: () => void;
 }): ReactElement {
   return (
     <>
-      <GreetingHeader
-        title="오늘은 어디를 상상해볼까요"
-        subtitle="떠나지 않아도, 구경하고 모으는 즐거움"
-        onPressBell={onPressBell}
-        onPressAssistant={onPressAssistant}
-      />
-      <SearchBarBlock onPress={onPressSearch} />
       {tripsError ? (
         <TripsLoadError
           onRetry={tripsError.onRetry}
@@ -104,10 +86,7 @@ function PlanningBody({
   collectionsLane,
   onPressSpotsMore,
   onPressTripHeroCta,
-  onPressSearch,
   onPressHeroCity,
-  onPressBell,
-  onPressAssistant,
 }: {
   phase: Extract<HomePhase, { kind: 'planning' }>;
   hero: readonly HomeMagazineHero[];
@@ -116,21 +95,10 @@ function PlanningBody({
   collectionsLane?: HomeCollectionsLane;
   onPressSpotsMore?: () => void;
   onPressTripHeroCta?: () => void;
-  onPressSearch?: () => void;
   onPressHeroCity?: (regionCode: string) => void;
-  onPressBell?: () => void;
-  onPressAssistant?: () => void;
 }): ReactElement {
   return (
     <>
-      <GreetingHeader
-        title={phase.greetTitle}
-        subtitle={phase.greetSubtitle}
-        name={phase.greetName}
-        onPressBell={onPressBell}
-        onPressAssistant={onPressAssistant}
-      />
-      <SearchBarBlock onPress={onPressSearch} />
       <PlanningHeroCarousel
         trip={phase.trip}
         heroes={hero}
@@ -167,10 +135,7 @@ function PostTripBody({
   collectionsLane,
   onPressPastTripsMore,
   onPressTripHeroCta,
-  onPressSearch,
   onPressHeroCity,
-  onPressBell,
-  onPressAssistant,
 }: {
   phase: Extract<HomePhase, { kind: 'postTrip' }>;
   hero: readonly HomeMagazineHero[];
@@ -178,20 +143,10 @@ function PostTripBody({
   collectionsLane?: HomeCollectionsLane;
   onPressPastTripsMore?: () => void;
   onPressTripHeroCta?: () => void;
-  onPressSearch?: () => void;
   onPressHeroCity?: (regionCode: string) => void;
-  onPressBell?: () => void;
-  onPressAssistant?: () => void;
 }): ReactElement {
   return (
     <>
-      <GreetingHeader
-        title={phase.greetTitle}
-        subtitle={phase.greetSubtitle}
-        onPressBell={onPressBell}
-        onPressAssistant={onPressAssistant}
-      />
-      <SearchBarBlock onPress={onPressSearch} />
       <PlanningHeroCarousel
         trip={phase.trip}
         heroes={hero}
@@ -236,11 +191,11 @@ export function PhaseBody({
   onPressSpotsMore,
   onPressPastTripsMore,
   onPressTripHeroCta,
-  onPressSearch,
   onPressHeroCity,
-  onPressBell,
-  onPressAssistant,
-}: HomeScreenProps): ReactElement {
+}: Omit<
+  HomeScreenProps,
+  'onPressBell' | 'onPressAssistant' | 'onPressSearch'
+>): ReactElement {
   if (phase === undefined || phase.kind === 'discovery') {
     return (
       <DiscoveryBody
@@ -251,10 +206,7 @@ export function PhaseBody({
         tripsError={tripsError}
         tripsOffline={tripsOffline}
         onPressSpotsMore={onPressSpotsMore}
-        onPressSearch={onPressSearch}
         onPressHeroCity={onPressHeroCity}
-        onPressBell={onPressBell}
-        onPressAssistant={onPressAssistant}
       />
     );
   }
@@ -269,10 +221,7 @@ export function PhaseBody({
           collectionsLane={collectionsLane}
           onPressSpotsMore={onPressSpotsMore}
           onPressTripHeroCta={onPressTripHeroCta}
-          onPressSearch={onPressSearch}
           onPressHeroCity={onPressHeroCity}
-          onPressBell={onPressBell}
-          onPressAssistant={onPressAssistant}
         />
       );
     case 'postTrip':
@@ -284,10 +233,7 @@ export function PhaseBody({
           collectionsLane={collectionsLane}
           onPressPastTripsMore={onPressPastTripsMore}
           onPressTripHeroCta={onPressTripHeroCta}
-          onPressSearch={onPressSearch}
           onPressHeroCity={onPressHeroCity}
-          onPressBell={onPressBell}
-          onPressAssistant={onPressAssistant}
         />
       );
   }

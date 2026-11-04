@@ -7,6 +7,7 @@ import { softCardShadow } from './homeSurface';
 import { SparkleGlyph as AssistantSparkleGlyph } from '@/features/open-assistant';
 import { WarningTriangleGlyph } from '@/features/explore/index.view';
 import { GLYPH_COLORS } from '@/shared/ui/glyphs';
+import type { HomePhase } from '../model/homeTypes';
 
 // ── 인사 헤더 ───────────────────────────────────────────────────────────
 // discovery는 고정 카피, 단계 얼굴은 greetTitle/greetSubtitle/greetName을 주입받는다.
@@ -63,6 +64,31 @@ export function GreetingHeader({
       </Pressable>
     </View>
   );
+}
+
+// 얼굴별 인사 문구 — 헤더는 HomeScreen 이 얼굴과 무관하게 한 번만 그리고, 문구만 phase 로 고른다(TRIP-1769).
+// phase 없음(로딩 포함)·discovery 는 고정 카피, postTrip 타입엔 이름줄이 없다.
+export function homeGreeting(phase: HomePhase | undefined): {
+  title: string;
+  subtitle?: string;
+  name?: string;
+} {
+  switch (phase?.kind) {
+    case undefined:
+    case 'discovery':
+      return {
+        title: '오늘은 어디를 상상해볼까요',
+        subtitle: '떠나지 않아도, 구경하고 모으는 즐거움',
+      };
+    case 'planning':
+      return {
+        title: phase.greetTitle,
+        subtitle: phase.greetSubtitle,
+        name: phase.greetName,
+      };
+    case 'postTrip':
+      return { title: phase.greetTitle, subtitle: phase.greetSubtitle };
+  }
 }
 
 // ── 검색바(가짜 — Pressable+Text, 실 TextInput 아님 · 02a §4-8) ──────────
