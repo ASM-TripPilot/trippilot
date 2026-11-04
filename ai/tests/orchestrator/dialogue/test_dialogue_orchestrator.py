@@ -1925,6 +1925,34 @@ def test_explore_without_any_anchor_asks_for_the_region_once_and_the_answer_runs
     assert out.answer.kind is AnswerKind.CANDIDATES and out.context.pending is None
 
 
+def test_weather_without_a_trip_or_a_location_asks_for_the_region_and_the_answer_fetches_it() -> None:
+    """여행도 현재 위치도 없는 "오늘 날씨" — "먼저 여행을 만들어"로 끝내지 않고 지역을 되묻는다(운영 2026-11-04 13:18, 위치가 안 실린 턴).
+    다음 턴의 "서울"은 분류 없이 그 답이고(LLM 0), 서울 중심 좌표로 날씨를 묻는다."""
+    from trippilot.domain.poi.region_centers import region_center
+    from trippilot.llm_gateway.workers.dialogue.dialogue_answer import WEATHER_ASK_REGION_TEXT
+
+    weather = _Weather(pop=30)
+    ports = HandlerPorts(poi_info=_PoiInfo(), weather=weather)
+    asked = _build(_canned(Intent.GET_WEATHER), ports=ports).orch.turn(_input("오늘 날씨", snapshot=_NO_TRIP, turn_index=3))
+    assert asked.outcome == "ARGUMENT_CLARIFY" and asked.answer is None and weather.calls == []
+    assert asked.clarify.argument == "region" and asked.clarify.question == WEATHER_ASK_REGION_TEXT
+    assert asked.context.pending.intent is Intent.GET_WEATHER and asked.context.pending.asked == "region"
+
+    b2 = _build(_canned(Intent.EXPLORE_PLACES), ports=ports)  # 분류가 불리면 탐색이 나올 것 — 불리지 않아야 한다
+    out = b2.orch.turn(_input("서울", snapshot=_NO_TRIP, context=asked.context, turn_index=4))
+    assert out.outcome == "ANSWER" and out.frames[0].match_route == "CLARIFY_ANSWER" and "DIALOGUE_INTENT" not in b2.llm.features()
+    assert weather.calls[0]["anchor"] == region_center("서울")[1]
+    assert out.answer.kind is AnswerKind.INFO and out.answer.payload["title"] == "서울 날씨"
+
+
+def test_weather_without_a_trip_but_with_a_location_answers_without_asking() -> None:
+    weather = _Weather(pop=30)
+    here = replace(_NO_TRIP, here=GeoPoint(37.57, 126.982))
+    out = _build(_canned(Intent.GET_WEATHER), ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)).orch.turn(
+        _input("오늘 날씨", snapshot=here))
+    assert out.outcome == "ANSWER" and weather.calls[0]["anchor"] == here.here
+
+
 def test_a_request_shaped_reply_to_a_pending_question_is_classified_not_swallowed() -> None:
     """장소를 되묻는 중에 온 "부산 요즘 핫한 곳 알려줘" — 뱅크는 탐색을 모르니(13종) 요청 꼴이면 삼키지 않고 분류한다."""
     pending = DialogueContext(pending=PendingFrame(Intent.GET_POI_INFO, {}, "place", 0.9), turn_index=2, clarify_count=1)

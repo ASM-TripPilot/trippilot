@@ -25,6 +25,9 @@ export interface TermsScreenProps {
   missingRequiredLabels: string[];
   /** A8 — 서버 저장 실패 메시지. null 이면 오류 영역을 그리지 않는다. */
   errorMessage: string | null;
+  /** 약관 목록을 못 받았다(TRIP-1752) — 제출 실패(errorMessage)와 다른 표면이다. */
+  loadError?: boolean;
+  onRetryLoad?: () => void;
   onToggle: (termsType: string) => void;
   onToggleAll: () => void;
   onNext: () => void;
@@ -39,6 +42,8 @@ export function TermsScreen({
   canProceed,
   missingRequiredLabels,
   errorMessage,
+  loadError = false,
+  onRetryLoad,
   onToggle,
   onToggleAll,
   onNext,
@@ -161,6 +166,27 @@ export function TermsScreen({
               >
                 {missingRequiredLabels.join(', ')}
               </Text>
+            </View>
+          ) : null}
+
+          {loadError ? (
+            <View className="gap-sm pt-md">
+              <Text
+                testID="onboarding-terms-load-error"
+                className="font-noto text-label text-primary-text"
+              >
+                약관을 불러오지 못했어요. 다시 시도해 주세요.
+              </Text>
+              <Pressable
+                testID="onboarding-terms-load-retry"
+                accessibilityRole="button"
+                onPress={onRetryLoad}
+                className="self-start rounded-button border-[1.5px] border-hairline-strong px-lg py-sm"
+              >
+                <Text className="font-noto-medium text-body font-medium text-ink">
+                  다시 시도
+                </Text>
+              </Pressable>
             </View>
           ) : null}
 

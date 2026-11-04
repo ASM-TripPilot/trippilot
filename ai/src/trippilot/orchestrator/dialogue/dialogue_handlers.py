@@ -61,7 +61,9 @@ from trippilot.domain.poi.region_centers import (
 from trippilot.domain.itinerary.transit import TransitPurpose
 from trippilot.domain.dialogue.trigger import TriggerKind, TriggerParams
 from trippilot.llm_gateway.gates.dialogue.dialogue_answer import _MAX_FOOTNOTE, _MAX_LENGTH, _violates, clock_times
-from trippilot.llm_gateway.workers.dialogue.dialogue_answer import EXPLORE_ASK_REGION_TEXT, REGION_ASK_TASTE_TEXT, fallback_answer_text
+from trippilot.llm_gateway.workers.dialogue.dialogue_answer import (
+    EXPLORE_ASK_REGION_TEXT, REGION_ASK_TASTE_TEXT, WEATHER_ASK_REGION_TEXT, fallback_answer_text,
+)
 from trippilot.orchestrator.arguments import extract_kind
 from trippilot.orchestrator.intent.intent_router import normalize
 from trippilot.orchestrator.dialogue.opportunity import _displayable, shown_event
@@ -2403,7 +2405,11 @@ HANDLERS: Mapping[Intent, Handler] = {
     Intent.GET_NEXT_SLOT: _handler(Intent.GET_NEXT_SLOT, _assemble_next_slot),
     Intent.GET_WEATHER: _handler(Intent.GET_WEATHER, _assemble_weather, _plan_weather,
                                  # 현재 위치도 여행 없이 묻는 갈래다 — 없으면 "오늘 날씨" 가 "먼저 여행을 만들어"로 끝났다(운영 11-03)
-                                 free_when=lambda ctx: bool(ctx.arguments.get("region")) or ctx.snapshot.here is not None),
+                                 free_when=lambda ctx: bool(ctx.arguments.get("region")) or ctx.snapshot.here is not None,
+                                 # 그것도 없으면 지역을 묻는다 — 앱이 위치를 못 실은 턴(권한·옛 빌드)도 날씨에 닿는다(운영 11-04)
+                                 ask=lambda ctx: ("region", WEATHER_ASK_REGION_TEXT) if (
+                                     ctx.snapshot.trip is None and not ctx.arguments.get("region") and _weather_anchor(ctx) is None
+                                 ) else None),
     Intent.GET_DISTANCE: _handler(Intent.GET_DISTANCE, _assemble_distance, _plan_distance,
                                   free_when=lambda ctx: bool(ctx.arguments.get("origin") and ctx.arguments.get("destination"))),
     Intent.GET_POI_INFO: _handler(Intent.GET_POI_INFO, _assemble_poi_info, _plan_poi_info,

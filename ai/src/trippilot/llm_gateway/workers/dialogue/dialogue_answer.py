@@ -115,6 +115,8 @@ _EMPTY_TEXT: dict[Intent, str] = {
 }
 # EXPLORE_PLACES 의 앵커(지역·일정·여행 목적지)가 하나도 없을 때 — 지역 되묻기 문안(요청당 1회, BR-AO-27)이자 이미 물은 뒤의 결정론 답
 EXPLORE_ASK_REGION_TEXT = "어느 지역에서 찾아 드릴까요? '부산'이나 '제주 애월'처럼 알려 주세요."
+# GET_WEATHER 에 여행도 현재 위치도 말한 지역도 없을 때 — 여행 만들기 안내 대신 지역을 되묻는다(요청당 1회, 탐색과 같은 장치)
+WEATHER_ASK_REGION_TEXT = "어느 지역 날씨를 알려 드릴까요? '서울'이나 '제주'처럼 알려 주세요."
 # RECOMMEND_REGION 에 취향(대화 문맥)도 말한 바람도 없을 때 — 고를 근거가 없으니 묻는다(사실 없음 → LLM 0)
 REGION_ASK_TASTE_TEXT = "어떤 여행을 좋아하세요? 바다·맛집·역사처럼 알려 주시면 맞는 지역을 골라 드릴게요."
 # status UNAVAILABLE — 출처 불통 (BE FallbackCause.SOURCE_UNAVAILABLE 문구)

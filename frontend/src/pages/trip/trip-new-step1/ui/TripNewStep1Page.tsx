@@ -108,6 +108,9 @@ const OVERSEAS_DESTINATION_ERROR_CODE = 'OVERSEAS_DESTINATION';
 /** 이미 만든 여행의 취향 행을 눌렀을 때 — PATCH 계약에 취향 스냅숏이 없어 바꿔도 반영되지 않는다
  * (TRIP-1113 결정 1, 발명 문구). */
 const PREF_LOCKED_MESSAGE = '이미 만든 여행은 취향을 바꿀 수 없어요';
+/** 계정 취향 조회 실패(TRIP-1750) — 빈 칩으로 열면 적용이 온보딩 취향을 지운다. 열지 않고 알린 뒤 다시 받는다. */
+const PREF_LOAD_ERROR_MESSAGE =
+  '취향을 불러오지 못했어요. 잠시 후 다시 눌러 주세요';
 
 /** 제출 실패 배너 본문 — Figma 가 확정한 유일한 문구다(`2226:2128`). 미상 코드·미상 필드·응답
  * 자체 없음도 이 문구로 떨어진다(새 문구를 발명하는 대신 확정된 문구 하나를 재사용). */
@@ -694,8 +697,17 @@ export function TripNewStep1Page({
     }
     // 프리필 미도착이면 열지 않는다(S5G — 데이터 손실 봉합). GET /me/preferences 도착 전 열면
     // 드래프트가 빈 []로 열리고, 적용 시 `[] ?? prefill`(빈 배열은 값이라 ?? 폴백 안 함)로 온보딩
-    // 취향이 영구 유실된다. 신호는 preference.isPending(★3).
-    if (preference.isPending) return;
+    // 취향이 영구 유실된다. 신호는 "데이터 없음" — 로딩(isPending)이면 무반응, 실패면 알리고 다시 받는다(TRIP-1750).
+    if (preference.data === undefined) {
+      if (preference.isError) {
+        showToast({
+          message: PREF_LOAD_ERROR_MESSAGE,
+          testID: 'trip-wizard-pref-load-error',
+        });
+        void preference.refetch();
+      }
+      return;
+    }
     // 두 축 모두 이 가드 안에서 초기화한다 — 밖에서 따로 하면 같은 유실이 활동 축에 생긴다.
     const {
       prefStyleOverride: styleOverride,

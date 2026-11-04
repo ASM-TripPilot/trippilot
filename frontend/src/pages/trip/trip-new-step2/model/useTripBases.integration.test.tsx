@@ -3,11 +3,19 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { setAccessToken, clearAccessToken } from '@/shared/api/tokenManager';
-import type { BaseAssignment, SavedStay } from '@/shared/api/index.schemas';
+import type {
+  AssignBaseRequest,
+  BaseAssignment,
+  SavedStay,
+} from '@/shared/api/index.schemas';
 
 import { useSavedStays } from '@/features/trip';
 import { useAssignBase, useTripBases } from '@/features/assign-trip-base';
 import { createWrapper } from '@/test-support/mswHookHarness';
+import {
+  createWrapper as createClientWrapper,
+  newTestQueryClient,
+} from '@/test-support/queryRender';
 import { BASE } from '@/test-support/apiBase';
 
 /**
@@ -332,5 +340,150 @@ describe('AC-3 · 교체 중 지울 배정이 이미 없으면(DELETE 404) 붙�
     // 앵커 — POST 까지 갔다(지우기에서 멈춘 거부가 아니다).
     expect(hitCount(POST_HIT)).toBe(1);
     expect(rejected).toBe(true);
+  });
+});
+
+describe('TRIP-1749 · 캐시가 비면 지금 배정을 받아 와서 교체를 계획한다 (TRIP-1011 C · INV-4)', () => {
+  /**
+   * 지정은 교체다 — 그 밤을 덮던 배정을 지우고(DELETE) 새 배정을 붙인다(POST). "지금 배정"을 캐시에서만 읽으면, 캐시가
+   * 빈 화면(거점 조회를 안 켜는 h15 추천)에서는 DELETE 없이 POST 만 나가 같은 밤에 배정이 둘이 된다. 그래서 캐시가 비면
+   * 받아 오고, 받아 오기가 404 아닌 실패면 POST 전에 실패로 끝낸다.
+   *
+   * 3동작 뼈대: 준비 = 거점 조회를 켜지 않은 훅(캐시 빔) + GET bases 응답 → 실행 = mutateAsync → 단언 = 나간 요청 순서·거부 여부.
+   */
+  const REPLACE_REQUEST = {
+    savedStayId: 'stay-b',
+    dateFrom: '2026-06-10',
+    dateTo: '2026-06-12',
+  };
+  const DELETE_HIT = `DELETE /api/v1/trips/${TRIP_ID}/bases/ba-1`;
+  const POST_HIT = `POST /api/v1/trips/${TRIP_ID}/bases`;
+
+  function basesRespondWith(response: () => Response): void {
+    server.use(
+      http.get(`${BASE}/trips/${TRIP_ID}/bases`, response),
+      http.delete(
+        `${BASE}/trips/${TRIP_ID}/bases/:baseAssignmentId`,
+        () => new HttpResponse(null, { status: 204 })
+      )
+    );
+  }
+
+  /** 거점 조회를 켜지 않은 지정 훅만 띄운다 — 캐시가 빈 화면(h15)과 같은 모양. */
+  async function assignWithEmptyCache(): Promise<{ rejected: boolean }> {
+    setAccessToken('valid-access');
+    const { result } = renderHook(() => useAssignBase(), {
+      wrapper: createWrapper(),
+    });
+    let rejected = false;
+    await act(async () => {
+      await result.current
+        .mutateAsync({ tripId: TRIP_ID, data: REPLACE_REQUEST })
+        .catch(() => {
+          rejected = true;
+        });
+    });
+    return { rejected };
+  }
+
+  it.each<[string, () => Response]>([
+    ['500', () => new HttpResponse(null, { status: 500 })],
+    ['네트워크 끊김', () => HttpResponse.error()],
+  ])(
+    '🔴 GET bases %s → POST 0 · DELETE 0 · 실패로 끝난다',
+    async (_label, failure) => {
+      basesRespondWith(failure);
+
+      const { rejected } = await assignWithEmptyCache();
+
+      // 앵커 — 받아 오기를 실제로 시도했다.
+      expect(hitCount(BASES_HIT)).toBeGreaterThanOrEqual(1);
+      expect(rejected).toBe(true);
+      expect(hitCount(POST_HIT)).toBe(0);
+      expect(hitCount(DELETE_HIT)).toBe(0);
+    }
+  );
+
+  it('🔴 GET bases 200(같은 밤을 덮는 ba-1) → ba-1 DELETE 뒤 POST', async () => {
+    basesRespondWith(() => HttpResponse.json([ASSIGNMENT_FIXTURE]));
+
+    const { rejected } = await assignWithEmptyCache();
+
+    expect(rejected).toBe(false);
+    const order = observedHits.filter(
+      (hit) => hit === DELETE_HIT || hit === POST_HIT
+    );
+    expect(order).toEqual([DELETE_HIT, POST_HIT]);
+    expect(capturedBody).toEqual(REPLACE_REQUEST);
+  });
+
+  it('GET bases 404(여행 없음) → 지금처럼 POST 로 가서 그 404 로 끝난다', async () => {
+    basesRespondWith(() => new HttpResponse(null, { status: 404 }));
+    postStatus = 404;
+
+    const { rejected } = await assignWithEmptyCache();
+
+    expect(hitCount(POST_HIT)).toBe(1);
+    expect(rejected).toBe(true);
+  });
+
+  it('회귀 · 캐시가 있으면 지정 전에 bases 를 더 받지 않는다(재조회 횟수 무회귀)', async () => {
+    const { result } = await renderSettledProbe();
+
+    await assign(result);
+
+    // 지정 전 추가 GET 0 — 늘어난 1회는 지정 뒤 무효화의 재조회뿐이다(★4 와 같은 2).
+    await waitFor(() => expect(hitCount(BASES_HIT)).toBe(2));
+    const firstPost = observedHits.indexOf(POST_HIT);
+    const basesBeforePost = observedHits
+      .slice(0, firstPost)
+      .filter((hit) => hit === BASES_HIT).length;
+    expect(basesBeforePost).toBe(1);
+  });
+
+  it('🔴 같은 화면에서 두 번 지정하면 둘째는 첫 지정 뒤의 배정을 다시 받아 계획한다 (03b 경고-1)', async () => {
+    // 준비 — 캐시가 살아남는 클라이언트(gcTime 무한, 운영과 같은 모양). 서버는 첫 POST 뒤 그 배정을 돌려준다.
+    let posted: BaseAssignment | null = null;
+    server.use(
+      http.get(`${BASE}/trips/${TRIP_ID}/bases`, () =>
+        HttpResponse.json(posted === null ? [] : [posted])
+      ),
+      http.post(`${BASE}/trips/${TRIP_ID}/bases`, async ({ request }) => {
+        const body = (await request.json()) as AssignBaseRequest;
+        posted = { baseAssignmentId: 'ba-new', ...body };
+        return HttpResponse.json(posted, { status: 201 });
+      }),
+      http.delete(
+        `${BASE}/trips/${TRIP_ID}/bases/:baseAssignmentId`,
+        () => new HttpResponse(null, { status: 204 })
+      )
+    );
+    setAccessToken('valid-access');
+    const { result } = renderHook(() => useAssignBase(), {
+      wrapper: createClientWrapper(newTestQueryClient()),
+    });
+
+    // 실행 — 같은 밤에 stay-a, 이어서 stay-b.
+    await act(async () => {
+      await result.current.mutateAsync({
+        tripId: TRIP_ID,
+        data: { ...REPLACE_REQUEST, savedStayId: 'stay-a' },
+      });
+    });
+    await act(async () => {
+      await result.current.mutateAsync({
+        tripId: TRIP_ID,
+        data: REPLACE_REQUEST,
+      });
+    });
+
+    // 단언 — 둘째 지정은 첫 배정(ba-new)을 지운 뒤 붙인다. 낡은 빈 캐시로 계획하면 DELETE 없이 POST 만 나가 같은 밤이 둘이 된다.
+    expect(
+      observedHits.filter((hit) => hit.startsWith('DELETE') || hit === POST_HIT)
+    ).toEqual([
+      POST_HIT,
+      `DELETE /api/v1/trips/${TRIP_ID}/bases/ba-new`,
+      POST_HIT,
+    ]);
   });
 });
