@@ -12,7 +12,9 @@
  */
 import path from 'path';
 
-type Lib = { runtimeSpecifiers: (file: string, src?: string) => string[] };
+type Lib = {
+  runtimeSpecifiers: (file: string, src?: string, dev?: boolean) => string[];
+};
 
 const { runtimeSpecifiers } = jest.requireActual<Lib>(
   './boot-import-count.cjs'
@@ -85,6 +87,17 @@ describe('__DEV__ 가드 — 운영에서 접히는 분기는 세지 않는다',
     expect(specsOf(`${line}\n${CONTROL}`)).toEqual(
       [spec, 'prod-control'].sort()
     );
+  });
+});
+
+describe('dev 그래프(TRIP-1770 — index.view 가드용)', () => {
+  it('dev 가 참이면 __DEV__ 분기를 접지 않고 양쪽 require 를 센다', () => {
+    const src =
+      "const m = __DEV__ ? require('dev-only') : require('prod-branch');\nif (__DEV__) require('dev-if');";
+
+    expect(
+      runtimeSpecifiers('virtual/never-exists.ts', src, true).sort()
+    ).toEqual(['dev-if', 'dev-only', 'prod-branch']);
   });
 });
 

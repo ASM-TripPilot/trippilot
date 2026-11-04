@@ -55,7 +55,11 @@ const NICKNAME_SAVED_TOAST = '닉네임을 바꿨어요';
  * no-op). 처음 근거였던 두 테스트(expo-router 미목 node 테스트 · 팩토리가 `mockPush` 를 직접 무는
  * nav 테스트)는 TRIP-1154 합치기로 사라졌다. 지금 이 page 를 그리는 테스트는 모두 `router` 를
  * 화살표 래퍼로 목하고, `SettingsPage.hookMock.test.tsx` 의 목엔 `useRouter` 가 없다 — `useRouter()`
- * 로 바꾸면 그 파일이 깨진다. 정적 import 로 되돌려도 되는지는 재측정 전이다.
+ * 로 바꾸면 그 파일이 깨진다.
+ * TRIP-1770 재측정: `import { router } from 'expo-router'` 로 바꿔도 settings 테스트는 전부 green 이다 — 남은 근거는 테스트가
+ * 아니라 린트다. 정적 `router.push` 가 되면 TRIP-1013 규칙(`guardPress` 없는 인라인 이동 금지)이 아래 행 이동 5곳을 error 로
+ * 잡는다(지금은 `loadRouter()` 호출이라 그 규칙의 사각). 그 5곳은 실제로 연타 가드가 없어 두 번 누르면 두 번 쌓인다 — 가드를
+ * 넣는 건 동작 변경이라 정리 칸(TRIP-1770) 밖이고, 정적 import 전환과 같이 후속 티켓에서 한다.
  */
 function loadRouter(): typeof import('expo-router').router | null {
   try {

@@ -91,7 +91,12 @@ function isDevGuard(node) {
 }
 
 // 트랜스파일 결과(타입 전용 import 제거됨)에서 런타임 의존 지정자를 뽑는다. src 를 주면 파일을 읽지 않는다(테스트용).
-function runtimeSpecifiers(file, src = fs.readFileSync(file, 'utf8')) {
+// dev 가 참이면 `__DEV__` 분기를 접지 않는다 — 개발 빌드·프리뷰·jest(`__DEV__ = true`)가 실제로 평가하는 그래프(TRIP-1770 index.view 가드).
+function runtimeSpecifiers(
+  file,
+  src = fs.readFileSync(file, 'utf8'),
+  dev = false
+) {
   const out = ts.transpileModule(src, {
     fileName: file,
     compilerOptions: {
@@ -117,9 +122,9 @@ function runtimeSpecifiers(file, src = fs.readFileSync(file, 'utf8')) {
       return;
     }
     if (ts.isFunctionLike(node)) return; // 함수 안 require 는 지연 로드
-    if (ts.isConditionalExpression(node) && isDevGuard(node.condition))
+    if (!dev && ts.isConditionalExpression(node) && isDevGuard(node.condition))
       return visit(node.whenFalse);
-    if (ts.isIfStatement(node) && isDevGuard(node.expression))
+    if (!dev && ts.isIfStatement(node) && isDevGuard(node.expression))
       return node.elseStatement && visit(node.elseStatement);
     if (
       ts.isCallExpression(node) &&
@@ -136,7 +141,7 @@ function runtimeSpecifiers(file, src = fs.readFileSync(file, 'utf8')) {
   return specs;
 }
 
-function walk(entries) {
+function walk(entries, { dev = false } = {}) {
   const seen = new Map(); // 파일 → 처음 끌어온 파일
   const pkgs = new Set();
   const queue = entries.map((e) => [path.join(ROOT, e), null]);
@@ -144,7 +149,7 @@ function walk(entries) {
     const [file, from] = queue.shift();
     if (seen.has(file)) continue;
     seen.set(file, from);
-    for (const spec of runtimeSpecifiers(file)) {
+    for (const spec of runtimeSpecifiers(file, undefined, dev)) {
       const r = resolve(spec, file);
       if (r === null) continue;
       if (typeof r === 'object') pkgs.add(r.pkg);
