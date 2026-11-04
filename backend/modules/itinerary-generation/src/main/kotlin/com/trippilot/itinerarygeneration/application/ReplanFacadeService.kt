@@ -85,7 +85,7 @@ class ReplanFacadeService(
         // 비교가 성립하지 않는다.
         val prefs = preferences.findPreferences(command.accountId).overriddenBy(ctx.preferenceSnapshot)
         val profile = prefs.toProfile(personalization.hintsFor(command.accountId), ctx.preferenceSnapshot.keys)
-        val (windowStart, windowEnd) = replanWindow(ctx, command, current.days.firstOrNull { it.date == command.targetDate })
+        val (windowStart, windowEnd) = replanWindow(ctx, command, current)
         val output = scheduleAgent.replan(
             ReplanInput(
                 tripId = command.tripId,
@@ -163,19 +163,26 @@ class ReplanFacadeService(
      * - **시작** = 여행 설정의 그날 시작([baseDayWindow] — 첫날 `firstDayStartAt` → `dayStartAt` → 09:00)과 **원 일정의 아직 안 지난
      *   첫 슬롯 시작** 중 이른 쪽. 설정보다 이르게 놓인 원 일정(편집으로 당긴 곳·고정 블록에 맞춰 넓힌 생성 창)을 창 밖으로 내몰지 않는다.
      *   지난 슬롯(오늘, 끝 ≤ 지금 · 자정 넘김 제외)은 세지 않는다 — 상대가 지난 잠금을 솔버에 넣지 않는다(AI `_past_blocks`).
-     *   다른 날은 지난 것이 없다(상대도 그 날엔 하한을 걸지 않아, 그 날 잠금은 전부 창 안에 있어야 한다).
+     *   다른 날은 지난 것이 없어 원 일정 슬롯을 모두 센다. 단 **이번에 빠지는 슬롯**(제외 목록 — 상황 감지 시드·앱의 제외·건너뜀 — 에 들고
+     *   잠기지 않은 곳, 잠금 판정은 [lockedSlots] 와 같다)은 어느 날이든 세지 않는다 — 사라질 곳이라 지킬 것이 없는데 창만 당겨 설정보다
+     *   이른 새 방문이 들어온다. 창은 새 방문이 놓일 범위이지 잠금의 제약이 아니다 — 상대는 창 밖 고정 블록도 그 시각 핀으로 받는다
+     *   (AI `check_hc4` 핀 면제 · TRIP-1390).
      * - **끝** = 그날 기본 끝(마지막 날 `lastDayEndAt` 포함). 오늘이면 생성과 같은 규칙([TodayWindow.eveningEnd])으로 끝만 늘린다 —
      *   밤 9시에 누른 [다시 짜기]가 남은 시간 0 으로 "대안 없음"이 되지 않게. 사용자가 적은 끝(마지막 날 귀가)은 사실이라 늘리지 않는다
      *   (생성 `dayWindowOf` 와 같다).
      * - '지금부터'로 좁히지 않는다(연동 설계 §1) — 지금 이후는 잠금과 `from_instant` 로 표현한다.
      * - 설정이 모순(시작 ≥ 끝)이면 설정 없는 날의 창(09:00~21:00) — 생성은 그 모순을 400 으로 드러내지만, 재계획은 창이 필수라 종전 값으로 간다.
      */
-    private fun replanWindow(ctx: TripGenerationContext, command: ReplanCommand, day: ItineraryDay?): Pair<LocalTime, LocalTime> {
+    private fun replanWindow(ctx: TripGenerationContext, command: ReplanCommand, current: Itinerary): Pair<LocalTime, LocalTime> {
         val date = command.targetDate
         val (baseStart, baseEnd) = ctx.baseDayWindow(date).takeIf { (s, e) -> s.isBefore(e) } ?: (DEFAULT_DAY_START to DEFAULT_DAY_END)
         val now = command.fromInstant.atZone(TRAVEL_ZONE)
         val today = now.toLocalDate() == date
-        val upcoming = day?.slots.orEmpty().filterNot { today && !it.endsNextDay && it.endAt <= now.toLocalTime() }
+        val locked = lockedSlots(current, command)
+        val upcoming = current.days.firstOrNull { it.date == date }?.slots.orEmpty().filterNot {
+            (today && !it.endsNextDay && it.endAt <= now.toLocalTime()) ||
+                (it.sourcePoiId in command.excludedPoiIds && locked.none { l -> l === it })
+        }
         val start = (upcoming.map { it.startAt } + baseStart).min()
         val userEnd = date == ctx.endDate && ctx.lastDayEndAt != null
         val from = if (today && !userEnd) TodayWindow.earliest(now.toLocalTime()) else null

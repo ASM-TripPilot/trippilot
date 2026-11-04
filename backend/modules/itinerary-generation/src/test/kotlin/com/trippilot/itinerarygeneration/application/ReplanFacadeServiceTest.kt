@@ -318,6 +318,31 @@ class ReplanFacadeServiceTest : StringSpec({
         windowSent(trips, command(), dawnTomorrow) shouldBe (t("09:00") to t("21:00"))
     }
 
+    // 리뷰 지적(2026-11-05): 이번에 빠지는 이른 슬롯까지 세면, 지킬 곳이 사라지는데도 창이 그 시각으로 당겨져
+    // 설정보다 이른 새 방문이 들어온다(AI 는 비고정 노드의 시각 하한을 창 시작으로 둔다).
+    "이번에 빠지는 이른 슬롯(제외·건너뜀)은 창을 당기지 않는다 — 잠금이 제외를 이기는 고정은 당긴다" {
+        val dawn = UUID.randomUUID()
+        fun dawnTomorrow(fixed: Boolean) = Itinerary.create(
+            trip, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(
+                ItineraryDay.of(today, 0, listOf(slot(evening, "18:00", "19:00", order = 0))),
+                ItineraryDay.of(
+                    tomorrow, 1,
+                    listOf(slot(dawn, "06:30", "07:30", isFixed = fixed, order = 0), slot(UUID.randomUUID(), "10:00", "11:00", order = 1)),
+                ),
+            ),
+            now, GenerationState.COMPLETE,
+        )
+        val base = command(fullDay = true).copy(targetDate = tomorrow)
+        // 비고정을 뺐다(상황 감지 시드·앱의 제외) — 사라질 곳이라 지킬 대상이 없다.
+        windowSent(replanTrips, base.copy(excludedPoiIds = listOf(dawn)), dawnTomorrow(false)) shouldBe (t("09:00") to t("21:00"))
+        // 건너뛴 고정 — 잠금이 풀려(TRIP-1711) 제외가 먹는다.
+        windowSent(replanTrips, base.copy(excludedPoiIds = listOf(dawn), skippedPoiIds = listOf(dawn)), dawnTomorrow(true)) shouldBe
+            (t("09:00") to t("21:00"))
+        // 건너뛰지 않은 고정은 제외해도 잠겨 원 시각에 남는다 — 그 시각부터.
+        windowSent(replanTrips, base.copy(excludedPoiIds = listOf(dawn)), dawnTomorrow(true)) shouldBe (t("06:30") to t("21:00"))
+    }
+
     "오늘 밤에 다시 짜면 끝만 늘린다(23:59) — 마지막 날 사용자가 적은 끝은 늘리지 않는다" {
         // 21:30 KST — 기본 끝 21:00 이면 남은 시간이 0 이라 "대안 없음"이었다. 시작은 하루 전체 그대로.
         windowSent(replanTrips, command().copy(fromInstant = Instant.parse("2026-08-11T12:30:00Z"))) shouldBe (t("09:00") to t("23:59"))
