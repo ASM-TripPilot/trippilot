@@ -48,6 +48,7 @@ import {
   usePostTripsTripIdItinerarySlotCandidates,
   usePutTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
+import { isNotFound } from '@/shared/api';
 import { CoPickStepper, type CoPickStep } from './CoPickStepper';
 
 /**
@@ -83,6 +84,8 @@ import { CoPickStepper, type CoPickStep } from './CoPickStepper';
  */
 
 const CONFIRM_LOCKED_TEXT = '나머지 일정을 만드는 중이에요';
+const ITINERARY_LOAD_FAILED =
+  '일정을 불러오지 못했어요. 잠시 후 다시 눌러 주세요';
 
 const CONCEPTS: readonly { key: string; label: string }[] = [
   { key: 'meal', label: '식사' },
@@ -460,6 +463,17 @@ export function SlotFillPage({
 
   function handleConfirm(): void {
     // itinerary GET 미도착(data undefined)이면 조기 반환 — 빈 days 전체교체 PUT(일정 소실) 방지(E1).
+    // 단 조회가 404 아닌 오류로 끝났으면 무반응 대신 사유를 알리고 한 번 다시 묻는다(INV-4). 로딩·404 는 그대로 무반응.
+    // firedRef 를 세우기 전에 돌려야 한 번 실패한 뒤에도 다음 [확정]이 영구 잠기지 않는다.
+    if (
+      itinerary.data === undefined &&
+      itinerary.isError &&
+      !isNotFound(itinerary.error)
+    ) {
+      setErrorMessage(ITINERARY_LOAD_FAILED);
+      void itinerary.refetch();
+      return;
+    }
     // generationState==='PARTIAL'(2단계 생성 중, day1 만 도착)이면 확정도 잠근다 — day1-only 전체교체
     // PUT 이 뒷날을 덮어쓰기 전에 막는다(TRIP-601 가드 b · 서버 409 의 클라 사본, 심층 방어).
     if (

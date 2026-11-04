@@ -208,6 +208,7 @@ export function SettingsScreen({
       case 'logout':
         return (
           <Pressable
+            accessibilityRole="button"
             testID="settings-row-logout"
             onPress={() => setLogoutOpen(true)}
           >
@@ -224,6 +225,7 @@ export function SettingsScreen({
         ) : (
           <View testID="settings-row">
             <Pressable
+              accessibilityRole="button"
               testID="settings-delete-account"
               onPress={() => setDialogOpen(true)}
             >
@@ -256,6 +258,8 @@ export function SettingsScreen({
           testID="settings-back"
           accessibilityRole="button"
           onPress={onPressBack}
+          // TRIP-1764 — 글리프 24 + 사방 10 = 44(보이는 크기·자리는 그대로).
+          hitSlop={10}
         >
           <ChevronLeftGlyph />
         </Pressable>

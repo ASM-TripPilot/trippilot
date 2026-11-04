@@ -175,6 +175,8 @@ function StaySearchAppBar({ onPress }: { onPress?: () => void }): ReactElement {
         testID: 'stay-search-back',
         accessibilityRole: 'button',
         onPress,
+        // TRIP-1764 — 35(h-10) + 5×2 = 45. 앱바 h-14 가운데라 위아래 7 여유 안에 든다.
+        hitSlop: 5,
         className: 'h-10 w-10 items-center justify-center',
         glyph: <BackChevronGlyph size={24} />,
       }}
@@ -183,6 +185,9 @@ function StaySearchAppBar({ onPress }: { onPress?: () => void }): ReactElement {
     />
   );
 }
+
+// TRIP-1764 — 칩(37) 위아래 4 = 45. 가로는 칩 사이 gap-sm 8 이라 넓히지 않는다(옆 칩을 덮지 않게).
+const CHIP_HIT_SLOP = { top: 4, bottom: 4 };
 
 function FilterChip({
   axis,
@@ -205,6 +210,7 @@ function FilterChip({
       testID={`stay-search-filter-${axis}`}
       accessibilityRole="button"
       accessibilityState={selected ? { selected } : undefined}
+      hitSlop={CHIP_HIT_SLOP}
       onPress={onPress}
       className={
         selected

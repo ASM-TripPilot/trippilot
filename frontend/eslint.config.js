@@ -364,6 +364,19 @@ const PRESS_NAV_GATE = [
   },
 ];
 
+// 누름 요소 역할 필수(TRIP-1765 · M-99) — role 없는 Pressable·Touchable* 은 낭독기·XCUITest 에 버튼으로 안 보인다.
+// 속성 존재만 본다(값이 `{x}` 로 비면 못 잡는다 — AppBar 처럼 선택 prop 으로 넘기는 래퍼는 사용처가 챙긴다).
+// `{...props}` 펼치기도 예외로 두지 않는다(안에 role 이 있는지 정적으로 못 본다 — 직접 단다).
+// 버튼이 아닌 누름 영역(입력 포커스 그릇·롱프레스 손잡이 등)은 `<Pressable` 줄 위에 사유 주석으로 연다.
+const PRESS_ROLE_GATE = [
+  {
+    selector:
+      'JSXOpeningElement[name.name=/^(Pressable|TouchableOpacity|TouchableHighlight|TouchableWithoutFeedback)$/]:not(:has(> JSXAttribute[name.name=/^(accessibilityRole|role)$/]))',
+    message:
+      '누름 요소엔 accessibilityRole(보통 "button")을 단다(TRIP-1765) — 아이콘만 있으면 accessibilityLabel 도. 버튼이 아니면 `// eslint-disable-next-line no-restricted-syntax -- <사유>`.',
+  },
+];
+
 // ── 테스트 재팽창 방지 재료(아래 테스트 블록에서 쓴다) ──────────────────────────────────────
 const TEST_FILES = [
   'src/**/*.test.{ts,tsx}',
@@ -563,6 +576,7 @@ module.exports = defineConfig([
         ...DELETE_DIALOG_GATE,
         ...WORKLET_DEFAULT_PARAM_GATE,
         ...PRESS_NAV_GATE,
+        ...PRESS_ROLE_GATE,
       ],
     },
   },
@@ -577,6 +591,7 @@ module.exports = defineConfig([
         ...DEAD_HANDLER,
         ...WORKLET_DEFAULT_PARAM_GATE,
         ...PRESS_NAV_GATE,
+        ...PRESS_ROLE_GATE,
       ],
     },
   },

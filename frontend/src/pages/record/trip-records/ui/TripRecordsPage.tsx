@@ -388,6 +388,7 @@ export function TripRecordsPage({
           className="absolute inset-x-0 px-lg pb-md"
         >
           <Pressable
+            accessibilityRole="button"
             onPress={() => setTimeResult(null)}
             className="rounded-button bg-ink px-lg py-md"
           >

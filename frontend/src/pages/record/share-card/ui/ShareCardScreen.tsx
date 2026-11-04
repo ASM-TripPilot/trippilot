@@ -125,6 +125,8 @@ export function ShareCardScreen({
       {/* 헤더 — 뒤로 · 제목(현 j06 엔 편집/공유 액션 없음, 하단 버튼이 진다) */}
       <View className="w-full flex-row items-center bg-canvas pb-[12px] pl-[12px] pr-lg pt-[4px]">
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="뒤로"
           testID="reflection-share-back"
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           onPress={onBack}
@@ -176,6 +178,7 @@ export function ShareCardScreen({
                 끌어올리면 [완료]도 늘 그 위에 있다(아래 큰 버튼은 커서+15pt 기준 밖이라 키보드 뒤에 남았다). */}
             {draft === null ? (
               <Pressable
+                accessibilityRole="button"
                 testID="reflection-share-caption-edit"
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 onPress={openEditor}
@@ -186,6 +189,7 @@ export function ShareCardScreen({
               </Pressable>
             ) : (
               <Pressable
+                accessibilityRole="button"
                 testID="reflection-share-caption-save"
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 onPress={commitDraft}
@@ -254,6 +258,7 @@ export function ShareCardScreen({
             </Text>
             {result === 'permission-denied' ? (
               <Pressable
+                accessibilityRole="button"
                 testID="reflection-share-open-settings"
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 onPress={() => {
@@ -273,6 +278,7 @@ export function ShareCardScreen({
       {exportArmed ? (
         <View className="w-full flex-row gap-md bg-canvas px-lg pb-[24px] pt-[8px]">
           <Pressable
+            accessibilityRole="button"
             testID="reflection-share-save"
             onPress={() => {
               void handleSave();
@@ -285,6 +291,7 @@ export function ShareCardScreen({
             </Text>
           </Pressable>
           <Pressable
+            accessibilityRole="button"
             testID="reflection-share-export"
             onPress={() => {
               void handleShare();

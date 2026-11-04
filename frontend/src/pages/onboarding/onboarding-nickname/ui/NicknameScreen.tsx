@@ -105,6 +105,8 @@ export function NicknameScreen({
                   className="flex-1 font-noto text-card-title text-ink"
                 />
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="닉네임 다시 추천"
                   testID="onboarding-nickname-regenerate"
                   onPress={onRegenerate}
                   hitSlop={8}
@@ -139,6 +141,7 @@ export function NicknameScreen({
                 >
                   {suggestions.map((suggestion, index) => (
                     <Pressable
+                      accessibilityRole="button"
                       key={`${index}-${suggestion}`}
                       testID={`onboarding-nickname-suggest-${index}`}
                       onPress={() => onSelectSuggestion(suggestion)}
@@ -164,6 +167,7 @@ export function NicknameScreen({
           <View className="px-2xl pb-[30px] pt-md">
             <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
             <Pressable
+              accessibilityRole="button"
               testID="onboarding-nickname-next"
               disabled={!canProceed}
               onPress={onNext}

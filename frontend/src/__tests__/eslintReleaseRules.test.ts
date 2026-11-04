@@ -497,7 +497,8 @@ describe('pages·app 은 아무것도 안 하는 핸들러를 넘기지 않는�
       "import { Pressable } from 'react-native';",
       'declare function go(): void;',
       'declare const onPressTab: (() => void) | undefined;',
-      `export const Probe = () => (\n  <Pressable\n${attr}\n  />\n);`,
+      // TRIP-1765 — role 을 달아 둔다(없으면 role 게이트가 음성까지 울린다).
+      `export const Probe = () => (\n  <Pressable\n    accessibilityRole="button"\n${attr}\n  />\n);`,
       '',
     ].join('\n');
 
@@ -729,7 +730,7 @@ describe('누름 이동 연타 관통 (TRIP-1013) — 인라인 화살표의 rou
       'declare function save(o: { onSuccess: () => void }): void;',
       'export function Probe() {',
       '  const router = useRouter();',
-      `  return <Pressable onPress={${attr}} />;`,
+      `  return <Pressable accessibilityRole="button" onPress={${attr}} />;`,
       '}',
       '',
     ].join('\n');
@@ -804,5 +805,38 @@ describe('테스트 재팽창 방지 (2026-11-01 jest 축소 — README 판정 3
         'src/shared/ui/zzProbe.ts'
       )
     ).toEqual([]);
+  });
+});
+
+// TRIP-1765 · M-99 — 누름 요소(Pressable·Touchable*)에 역할이 없으면 낭독기·XCUITest 가 버튼으로 못 본다.
+// 조각은 role 말고 어떤 게이트에도 안 걸리게 짰다(실제 함수 핸들러·router 이동 없음) — 음성 짝이 [] 로 그것을 보인다.
+// pages·app 블록과 .tsx 전역 블록이 같은 룰을 덮어쓰므로(위 ⚠️) 두 쪽 경로에서 각각 양성을 본다.
+describe('누름 요소엔 역할을 단다 (TRIP-1765) — role 없는 Pressable·Touchable* 은 error', () => {
+  const roleProbe = (tag: string, attr = '') =>
+    [
+      "import { Pressable, TouchableOpacity } from 'react-native';",
+      'declare function go(): void;',
+      `export const Probe = () => <${tag} ${attr}onPress={go} />;`,
+      '',
+    ].join('\n');
+
+  it.each([
+    ['pages', 'Pressable', PAGE_PROBE],
+    ['app 라우트', 'Pressable', ROUTE_PROBE],
+    ['pages 밖 features', 'Pressable', WORKLET_TSX_PROBE],
+    ['pages 밖 features 의 Touchable', 'TouchableOpacity', WORKLET_TSX_PROBE],
+  ])('%s — role 없는 <%s> 는 error', async (_label, tag, filePath) => {
+    const ruleIds = await lint(roleProbe(tag), filePath);
+
+    expect(ruleIds).toContain(RESTRICTED_SYNTAX);
+  });
+
+  it.each([
+    ['accessibilityRole', 'accessibilityRole="button" '],
+    ['role', 'role="button" '],
+  ])('%s 가 있으면 error 0', async (_label, attr) => {
+    const ruleIds = await lint(roleProbe('Pressable', attr), PAGE_PROBE);
+
+    expect(ruleIds).toEqual([]);
   });
 });

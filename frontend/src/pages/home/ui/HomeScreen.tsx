@@ -161,6 +161,7 @@ function GreetingHeader({
       <Pressable
         testID="home-dashboard-bell"
         accessibilityRole="button"
+        accessibilityLabel="알림"
         onPress={onPressBell}
         style={softCardShadow}
         className="h-[40px] w-[40px] items-center justify-center rounded-full bg-canvas"
