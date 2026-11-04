@@ -1480,6 +1480,23 @@ def _remaining_visits(
     return tuple(out)
 
 
+def _left_originals(request: schemas.ReplanRequest, held: Collection[PoiId],
+                    not_before: datetime | None) -> tuple[PoiId, ...]:
+    """원 일정 중 아직 안 끝난 비잠금 방문(POI 한 번씩) — `_remaining_visits` 와 같은 기준이되 제외 요청도 센다.
+
+    방문 수를 지킬 때(F-4) 제외 요청·회피로 바뀔 곳은 빠지는 곳이 아니라 다른 곳으로 채울 자리다.
+    """
+    out: list[PoiId] = []
+    for s in request.current_slots:
+        pid = PoiId(s.poi_id)
+        ended = (not_before is not None and s.start_at is not None and s.end_at is not None
+                 and not s.ends_next_day
+                 and datetime.combine(request.target_date, s.end_at, tzinfo=not_before.tzinfo) <= not_before)
+        if pid not in held and pid not in out and not ended:
+            out.append(pid)
+    return tuple(out)
+
+
 def _end_near(request: schemas.ReplanRequest, resolved: Sequence[str],
               notes: list[str]) -> GeoPoint | None:
     """END_NEAR_STAY("숙소 근처에서 끝내기")·SHORTER_DAY("일찍 마무리") → 하루를 마칠 곳(그날 밤 숙소).
@@ -2889,6 +2906,26 @@ class WiredItineraryOrchestrator:
                     composed = composed[:room]
             if not composed:
                 add_one = add_one_asked
+        # 원 일정 지키기(F-4, 2026-11-05 사용자 결정 "일관되게") — 구성이 결과를 못 내면(실패·시한 생략·오류·고른 곳 전부
+        # 미배치) 원 일정의 남은 방문을 **우선 아닌** 필수 방문으로 둔다. 종전엔 규칙 점수로 하루를 새로 짰고, 원 일정
+        # 곳은 프리필터 몫에 밀려 술집·카페·미술·문화가 0곳으로 잘렸다(운영 run3: 클럽 소실·방문 급감). 잠금·지난 곳·
+        # 제외 요청·회피(이번 요청이 이긴다)·이름으로 집은 곳(우선 필수로 따로 간다)·밤 일정 한 곳은 넣지 않는다.
+        # 사유 상한(피로·지연·일찍 마무리)·시간만 당기기·더 늦게까지는 각자의 규칙이 이기고, 새로 짜 보기(사유·요청
+        # 없음)는 다른 하루를 원하므로 지키지 않는다. 체류는 카테고리 기본(pace 적용) — 구성이 원 곳을 다시 고를 때와 같다.
+        orig_left = () if (earlier is not None or extend or visit_cap is not None
+                           or self._change_rule(request, resolved) == composition.CHANGE_REFRESH) else _left_originals(
+            request, {b.poi_id for b in blocks}, not_before)
+        originals = {v.poi_id: replace(v, dwell_min=None) for v in _remaining_visits(
+            request, {b.poi_id for b in blocks} | avoided | set(nl_ids) | set(night[:1]), {}, not_before,
+            "replan_keep")} if orig_left else {}
+
+        def keep_cap(extra: Collection[PoiId], add: frozenset[PoiCategory]) -> int | None:
+            """지킨 날의 하루 상한 — 잠금 + 원 남은 수(바뀔 자리 포함) + 더한 곳. 바뀔 자리만 규칙 점수가 채운다."""
+            return None if "FILL_MORE" in resolved else len(active) + len({*orig_left, *extra}) + len(add)
+
+        if orig_left and not composed:
+            kept = originals
+            notes.append(f"replan_keep: {len(kept)}/{len(orig_left)}")
         # 사용자가 이름으로 집은 곳은 시각 없는 필수 방문 — 구성 LLM 이 이미 고른 곳·잠금은 겹쳐 세지 않는다.
         # 시간만 당기기(earlier)는 장소를 안 바꾼다는 요청이라 더하지 않는다.
         nl_extra = () if earlier is not None else tuple(
@@ -2926,13 +2963,14 @@ class WiredItineraryOrchestrator:
             prefer_near=near,
             pace=pace,
             travel_weight=_route_weight(request.reasons, resolved),
-            max_visits_per_day=_with_nl_room(
+            max_visits_per_day=keep_cap((*nl_extra, *night[:1]), add_one)
+            if orig_left and not composed else _with_nl_room(
                 (len(active) + len(set(composed) - {b.poi_id for b in active}) + len(add_one)
                  if composed or earlier is not None else visit_cap),
                 nl_extra),
             not_before=not_before,
             # 더 늦게까지(`kept`) — 원 일정 남은 방문은 원 체류·우선 가중 그대로. 구성이 없으면 그것만 필수로 두고
-            # 상한 없는 점수 경로가 새 방문을 더한다.
+            # 상한 없는 점수 경로가 새 방문을 더한다. 구성이 실패한 원 일정 지키기(F-4)도 `kept` 로 온다(우선 아님).
             required_visits=earlier if earlier is not None else (() if composed else tuple(kept.values())) + tuple(
                 # 구성 결과 안에도 이름으로 집은 곳이 있다(맨 앞에 고정) — 그곳과, 사용자가 수를 정한 종류의
                 # 곳("카페는 한 곳만")만 우선 가중. 수를 맞춘 곳이 같은 무게면 솔버가 시간 부족에 그걸 뺐다
@@ -2989,6 +3027,9 @@ class WiredItineraryOrchestrator:
                 rerun = left >= budget.c2_reserved_ms
                 self._compose_event(meta, f"composed_unplaced: rerun={rerun} remaining={left}ms")
                 if rerun:
+                    if orig_left:  # 원 일정 지키기(F-4) — 다시 풀기도 구성 실패와 같은 규칙
+                        kept = originals
+                        notes.append(f"replan_keep: {len(kept)}/{len(orig_left)}")
                     outcome = self._schedule_agent.run(core.ScheduleTask(
                         request=replace(domain_request, required_visits=tuple(kept.values()) + tuple(
                             RequiredVisit(poi_id=p, day=request.target_date, dwell_min=None,
@@ -2996,7 +3037,8 @@ class WiredItineraryOrchestrator:
                             RequiredVisit(poi_id=p, day=request.target_date, dwell_min=late_dwell,
                                           reason="nightlife_request", priority=True)
                             for p in night[:1]),
-                                        max_visits_per_day=visit_cap,
+                                        max_visits_per_day=keep_cap((*nl_ids, *night[:1]), add_one_asked)
+                                        if orig_left else visit_cap,
                                         add_one_categories=add_one_asked),
                         pool=pool, persona=persona, daily_rain=daily_rain, event_bonus=None,
                         candidates_summary=core.candidates_report(
@@ -3413,10 +3455,12 @@ class WiredItineraryOrchestrator:
                 self._rag_events(request.request_meta, (note,))
             notes.append(f"stage_ms: kb5={self._clock.monotonic_ms() - stage_t}")
         labels = {spec.key: spec.label for spec in self._directives}
-        specs = index_of(self._directives)
-        chosen = [specs[k] for k in resolved if k in specs]
+        rule = self._change_rule(request, resolved)
         rain = (daily_rain or {}).get(day)
-        limit = composition.max_visits(start, end, free_cap)
+        # 원 일정의 남은 비고정 수까지는 고를 수 있다(F-4) — 사유 상한·새로 짜 보기는 아니다.
+        floor = (None if free_cap is not None or rule == composition.CHANGE_REFRESH
+                 else len(_left_originals(request, past_ids | fixed_ids, not_before)))
+        limit = composition.max_visits(start, end, free_cap, floor=floor)
         inp = ComposeDayInput(
             date=composition.date_label(start),
             window=f"{start:%H:%M}~{end:%H:%M}",
@@ -3441,11 +3485,7 @@ class WiredItineraryOrchestrator:
             max_visits=limit,
             recent_changes=composition.recent_change_lines(
                 request.change_log, {p.poi_id: p.name for p in pool.pois}),
-            change_rule=composition.change_rule(
-                request.reasons,
-                day_directives=any(s.cardinality != "ONE" for s in chosen),
-                add_one=any(s.cardinality == "ONE" for s in chosen),
-                free_text=bool((request.free_text or "").strip())),
+            change_rule=rule,
             # 기준점과 반경 밖에서 집은 곳 중 가까운 쪽 — 그 둘레 후보가 "38km"로 보이면 LLM 이 안 고른다.
             distance_km={p.poi_id: min(haversine_km(o, p.coord) for o in (anchor, *origins))
                          for p in shortlist.pois},
@@ -3480,6 +3520,16 @@ class WiredItineraryOrchestrator:
                      f"shortlist={len(shortlist.pois)} limit={limit} "
                      f"kept={len(remaining_ids & set(picks[:limit]))}/{len(remaining_ids)}")
         return picks[:limit]
+
+    def _change_rule(self, request: schemas.ReplanRequest, resolved: Sequence[str]) -> str:
+        """이번 요청이 바꿀 정도(`composition.change_rule`) — 구성 프롬프트와 원 일정 지키기(F-4)가 같은 판정을 쓴다."""
+        specs = index_of(self._directives)
+        chosen = [specs[k] for k in resolved if k in specs]
+        return composition.change_rule(
+            request.reasons,
+            day_directives=any(s.cardinality != "ONE" for s in chosen),
+            add_one=any(s.cardinality == "ONE" for s in chosen),
+            free_text=bool((request.free_text or "").strip()))
 
     def _replan_directives(
         self, request: schemas.ReplanRequest, notes: list[str], *,
