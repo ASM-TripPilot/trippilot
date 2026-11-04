@@ -8,7 +8,7 @@
 
 | 뽑은 것 | 대조하는 출처 | 통과해야 할 것 |
 |---|---|---|
-| 장소명 | 등록 POI(place-data, 반경 조회) | 이름이 맞는 등록 장소가 있다 — **후보 자격은 여기서만 생긴다**(INV-1) |
+| 장소명 | 등록 POI(받은 후보 풀에서 정확 일치 먼저, 없으면 place-data 반경 50km 조회) | 이름이 맞는 등록 장소가 있다 — **후보 자격은 여기서만 생긴다**(INV-1) |
 | 〃 | 지도 실재 포트(Kakao·Google) | NOT_FOUND 가 아니다(UNVERIFIED 는 통과 — 장애를 폐업으로 읽지 않는다) |
 | 〃 | 그날 영업시간 | 휴무가 증명되지 않았다(정보 없음은 막지 않는다 — HC1 과 같은 판정) |
 | 시각 제약 | 그날 남은 시간창 | 창 안이고 지금 이후다 — 창을 **좁히기만** 한다(넓히면 백엔드 창을 어긴다) |
@@ -381,6 +381,25 @@ def apply_counts(
     return tuple(out), notes
 
 
+def _area_needs_lookup(extracted: ExtractedRequest, anchor: GeoPoint) -> bool:
+    """지역 이름이 등록 POI 를 불러야 하나 — 가까운 표 이름이면 안 불러도 된다(반경 50km 조회는 서울에서 수만 건이다)."""
+    return bool(extracted.area) and not any(
+        k in _area_key(extracted.area) and haversine_km(anchor, c) <= NAME_SEARCH_RADIUS_KM
+        for k, c in KNOWN_AREAS.items())
+
+
+def needs_registered(extracted: ExtractedRequest, anchor: GeoPoint) -> bool:
+    """대조에 반경 `NAME_SEARCH_RADIUS_KM` 등록 POI 가 쓰일 수 있나 — 다시 짜기가 추출 직후 그 조회를 미리 띄우는 조건.
+    `verify` 와 같은 판정이다(장소 이름이 있거나, 표에 없는·먼 지역 이름)."""
+    return bool(extracted.places) or _area_needs_lookup(extracted, anchor)
+
+
+def _all_exact_in(places: Sequence[ExtractedPlace], pois: Sequence[Poi]) -> bool:
+    """집은 이름이 전부 `pois` 에 정확 일치로 있나(너무 짧은 이름은 어디서든 탈락이라 따지지 않는다)."""
+    names = {normalize(p.name) for p in pois}
+    return all(len(k := normalize(ep.name)) < _MIN_NAME_CHARS or k in names for ep in places)
+
+
 def verify(
     extracted: ExtractedRequest,
     *,
@@ -398,19 +417,24 @@ def verify(
     available: frozenset[PoiCategory] = frozenset(),
     trip_days: Sequence[date] = (),
     today: date | None = None,
+    nearby: Sequence[Poi] = (),
 ) -> VerifiedRequest:
     """뽑은 주장 전부를 각자의 출처로 대조한다. 예외를 던지지 않는다(INV-4).
     `available` = 이번 후보 풀에 있는 종류(종류 조건의 대조 출처).
-    `trip_days`·`today` = 장소의 날 말("2일차에"·"내일")을 환산할 여행 날짜와 지금 날짜(`today` 없으면 `on`)."""
+    `trip_days`·`today` = 장소의 날 말("2일차에"·"내일")을 환산할 여행 날짜와 지금 날짜(`today` 없으면 `on`).
+    `nearby` = 이미 받은 후보 풀 — 집은 이름이 전부 여기 **정확 일치**로 있으면 `registered`(반경 50km)를 부르지 않는다."""
     notes: list[str] = []
     visit: tuple[Poi, ...] = ()
     avoid: frozenset[PoiId] = frozenset()
     pool: Sequence[Poi] = ()
-    # 가까운 표 이름이면 등록 POI 를 안 불러도 된다(반경 50km 조회는 서울에서 수만 건이다)
-    table_near = extracted.area is not None and any(
-        k in _area_key(extracted.area) and haversine_km(anchor, c) <= NAME_SEARCH_RADIUS_KM
-        for k, c in KNOWN_AREAS.items())
-    if extracted.places or (extracted.area and not table_near):
+    # 풀 먼저(운영 2026-11-05 run3: 50km 조회가 구성 앞 4.9s 공백). 정확 일치만 — 부분 일치뿐이면 50km 안의 더 먼
+    # 정확 일치가 이겨야 하니(`match_place`) 조회한다. 풀은 반경 안 등록 POI 의 부분집합이라 정확 일치끼리 가까운 곳도
+    # 대개 같다(풀 자격·상한에 걸린 곳만 다를 수 있다 — 그때 풀 쪽이 후보 자격을 이미 지난 곳이다).
+    if (nearby and extracted.places and not _area_needs_lookup(extracted, anchor)
+            and _all_exact_in(extracted.places, nearby)):
+        pool = nearby
+        notes.append("nl_place_lookup: pool")
+    elif needs_registered(extracted, anchor):
         try:
             pool = registered()
         except Exception as e:  # 등록 POI 조회 장애 — 장소·지역 주장은 하나도 쓸 수 없다

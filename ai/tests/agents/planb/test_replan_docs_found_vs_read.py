@@ -191,7 +191,8 @@ def test_구성_앞_단계마다_걸린_시간을_남긴다(caplog) -> None:
                    from_instant="2026-09-21T10:30:00+09:00")
 
     stages = _stage_ms(body["notes"])
-    assert set(stages) == {"translate", "extract_wait", "verify", "planb", "kb5", "compose_left"}, body["notes"]
+    assert set(stages) == {"translate", "directives_wait", "extract_wait", "verify", "planb", "kb5",
+                           "compose_left"}, body["notes"]
     assert stages["translate"] >= 30  # 번역 호출을 감싸 잰다
     assert all(v >= 0 for k, v in stages.items() if k != "compose_left")
     # 실제로 받은 창 — 운영 ①(06:00 설정인데 09:00 부터)을 로그 한 줄로 가른다

@@ -156,7 +156,7 @@ from trippilot.domain.itinerary.itinerary import (
     Violation,
     VisitSlot,
 )
-from trippilot.domain.llm.llm import CandidatePool, ModelTier, PoiExplanation
+from trippilot.domain.llm.llm import CandidatePool, ModelTier, PoiExplanation, TypedResult
 from trippilot.domain.persona import PersonaSummary
 from trippilot.domain.poi.poi import (
     NIGHTLIFE_TAG, DataQuality, Poi, PoiCategory, PoiSource, counts_as_food, open_windows_on,
@@ -1774,7 +1774,9 @@ _NL_EXTRACT_SHARE = 0.25
 # 추출 LLM 은 후보 풀이 필요 없어 재계획 **시작 시점에** 띄운다 — 지시 번역·후보 수집과 겹쳐 돌아
 # 순차 경로에서 빠진다(DEV 실측 2026-10-14: 번역 3.75s + 추출 ~5s 가 직렬로 쌓여 구성 LLM 이 굶었다).
 # 게이트웨이를 스레드에서 부르는 것은 이미 쓰는 패턴이다(`route_budget._POOL`·취향 점수 워커).
-_NL_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="nl-extract")
+# 다시 짜기 하나가 셋을 띄운다(추출·지시 해석·이름 대조 50km 조회, 2026-11-05 F-3) — 8 이면 동시 셋째 요청부터 본 스레드가
+# 기다리는 일(지시 해석)이 남의 추출 뒤에 줄을 선다. 전부 I/O 대기라 스레드를 넉넉히 둔다.
+_NL_POOL = ThreadPoolExecutor(max_workers=24, thread_name_prefix="nl-extract")
 # 5s → 8s (2026-10-15 운영 실호출 2회 중 1회 `timeout > 5.0s` — 추출이 빠지자 "성산 꼭"·"6시까지"가 통째로
 # 무시된 하루가 나왔다). 시작 시점에 배경으로 띄우므로 결과를 받는 지점(지시 번역·후보 수집 뒤)까지는 공짜고,
 # 그보다 늦을 때만 그만큼 기다린다. 운영 재계획 응답은 12~18s 라 시한(60s)에 여유가 있다.
@@ -2582,9 +2584,12 @@ class WiredItineraryOrchestrator:
 
         nl_pending = self._begin_extraction(
             request, trace_id=trace_id, now=now, remaining_ms=_deadline_budget(meta))
-        resolved, unknown, prefer, avoid, near, add_one, pace = self._replan_directives(
-            request, notes, trace_id=trace_id, now=now, deadline_ms=_deadline_budget(meta))
-        resolved = _spoken_nightlife(request, resolved, notes)
+        # 지시 해석(임베딩 매칭 → 번역 LLM)도 배경으로 — 장소 수집과 겹친다(운영 2026-11-05 run3: 매칭 0.7s + 번역 1.5s 가
+        # 수집 앞에 직렬로 쌓여 구성 시한이 7.8s 였다). 첫 소비자는 풀 확대 판정(`near_user`)이라 그 직전에 받는다.
+        directive_notes: list[str] = []
+        directives_pending = _NL_POOL.submit(
+            contextvars.copy_context().run, self._replan_directives, request, directive_notes,
+            trace_id=trace_id, now=now, deadline_ms=_deadline_budget(meta))
 
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)
@@ -2607,6 +2612,11 @@ class WiredItineraryOrchestrator:
                 kind="persona", ref_id=request.trip_id, owner_id=request.trip_id)
         packets = self._info.collect(Intent.REPLAN, params)
         radius_pool = self._pool_from(packets, now)
+        stage_t = self._clock.monotonic_ms()
+        resolved, unknown, prefer, avoid, near, add_one, pace = directives_pending.result()  # 해석이 던지면 종전처럼 던진다
+        notes.extend(directive_notes)  # 앞서 notes 에 쓴 것이 없어 종전 순서 그대로다
+        notes.append(f"stage_ms: directives_wait={self._clock.monotonic_ms() - stage_t}")  # 본 스레드가 막힌 몫
+        resolved = _spoken_nightlife(request, resolved, notes)
         if not radius_pool.pois:
             # **검색 결과(반경 풀)가 비면** 반경을 한 단 넓혀 **한 번** 더 찾는다 (2026-10-14 사용자 결정,
             # BR-U3-25 개정). 판정은 원 일정 합류 **앞**에서 — 실 요청은 원 일정 슬롯이 늘 실려 합류 뒤
@@ -2689,7 +2699,7 @@ class WiredItineraryOrchestrator:
         # `directive_fit`). 남는 후보가 없으면 빼지 않고 밝힌다(INV-4) — 빈 하루보다 낫다.
         # ── 자연어 요청 — 뽑고, **검증한 것만** 쓴다 ─────────────────────
         nl = self._verified_request(request, anchor, not_before, daily_rain, notes, nl_pending,
-                                    available=frozenset(p.category for p in pool.pois))
+                                    available=frozenset(p.category for p in pool.pois), nearby=pool.pois)
         # "을지로 말고 강남에서 놀고 싶어" — 그 지역 둘레로 후보 풀을 다시 받는다. 종전엔 풀이 지금 위치 기준이라 하루가
         # 그대로 을지로였다(사용자 2026-10-20). 원 일정 중 그 지역 밖(잠금·지난 곳·진행 중 제외)은 아래 제외에 더한다.
         # 시간만 당기기는 장소를 안 바꾼다는 요청이라 옮기지 않는다.
@@ -3127,7 +3137,8 @@ class WiredItineraryOrchestrator:
     ) -> "Future | str | None":
         """추출 LLM 을 **배경에서** 띄운다 — 결과는 `_verified_request` 가 받는다.
 
-        반환: 띄웠으면 Future, 시한 부족이면 그 사유 문자열(노트는 본 스레드가 쓴다), 할 일이 없으면 None.
+        반환: 띄웠으면 Future[(추출 결과, 이름 대조 조회 Future | None)], 시한 부족이면 그 사유 문자열(노트는 본
+        스레드가 쓴다), 할 일이 없으면 None.
         """
         text = (request.free_text or "").strip()
         if not text or self._request_extractor is None:
@@ -3137,9 +3148,19 @@ class WiredItineraryOrchestrator:
             return "nl_extract_skipped: deadline"
         window = request.time_window
         return _NL_POOL.submit(
-            self._request_extractor.extract,
+            self._extract_then_lookup, GeoPoint(request.anchor.lat, request.anchor.lng),
             text, composition.date_label(datetime.combine(request.target_date, clock_time())),
             f"{window.start:%H:%M}~{window.end:%H:%M}", trace_id, now, timeout_sec=timeout)
+
+    def _extract_then_lookup(self, anchor: GeoPoint, *args, **kwargs) -> "tuple[TypedResult, Future | None]":
+        """추출 → 대조에 등록 POI(반경 50km)가 쓰일 수 있으면 그 조회를 **곧바로** 띄운다 — 본 스레드의 장소 수집과
+        겹친다(운영 2026-11-05 run3: 수집 뒤에야 불러 구성 앞 4.9s 공백). 기다릴지는 `_verified_request` 가 정한다 —
+        집은 이름이 받은 풀에 다 있으면 안 기다린다. 조회 양은 종전과 같다(이름·먼 지역을 말했을 때만 한 번)."""
+        result = self._request_extractor.extract(*args, **kwargs)
+        need = (not result.is_fallback and isinstance(result.value, ExtractedRequest)
+                and nl_verify.needs_registered(result.value, anchor))
+        return result, (_NL_POOL.submit(self._poi_db.find_by_radius, anchor, nl_verify.NAME_SEARCH_RADIUS_KM)
+                        if need else None)
 
     def _verified_request(
         self,
@@ -3151,11 +3172,12 @@ class WiredItineraryOrchestrator:
         pending: "Future | str | None",
         *,
         available: frozenset[PoiCategory] = frozenset(),
+        nearby: Sequence[Poi] = (),
     ) -> nl_verify.VerifiedRequest:
         """배경 추출 결과 → **외부 출처 대조** → 통과분만. 예외를 던지지 않는다(INV-4).
 
         자유입력이 없거나 워커 미주입이면 빈 결과다(종전과 동일). 대조 출처와 규칙은
-        `agents/planb/request_verification` 모듈 표에 있다.
+        `agents/planb/request_verification` 모듈 표에 있다. 이름은 `nearby`(받은 후보 풀)에서 먼저 찾는다.
         """
         empty = nl_verify.VerifiedRequest()
         if pending is None:
@@ -3166,7 +3188,7 @@ class WiredItineraryOrchestrator:
         stage_t = self._clock.monotonic_ms()
         try:
             # 워커 호출 자체가 시한(timeout_sec)을 지닌다 — 여기 상한은 그 위의 안전판일 뿐이다.
-            result = pending.result(timeout=_NL_EXTRACT_MAX_S + 1.0)
+            result, lookup = pending.result(timeout=_NL_EXTRACT_MAX_S + 1.0)
         except Exception as e:  # 설정 버그·안전판 초과도 재계획을 죽이지 않는다
             notes.append(f"nl_extract_error: {type(e).__name__}")
             return empty
@@ -3190,7 +3212,10 @@ class WiredItineraryOrchestrator:
             window_end=datetime.combine(window.date, window.end, tzinfo=self._tz),
             not_before=not_before,
             tz=self._tz,
-            registered=lambda: self._poi_db.find_by_radius(anchor, nl_verify.NAME_SEARCH_RADIUS_KM),
+            # 추출 직후 띄워 둔 조회를 받는다(조회 장애는 그 예외가 그대로 올라와 `nl_place_lookup_error`)
+            registered=(lookup.result if lookup is not None
+                        else lambda: self._poi_db.find_by_radius(anchor, nl_verify.NAME_SEARCH_RADIUS_KM)),
+            nearby=nearby,
             existence=self._existence,  # type: ignore[arg-type]
             existence_deadline_ms=_NL_EXISTENCE_MS,
             rain_by_date=daily_rain or {},
@@ -3201,6 +3226,8 @@ class WiredItineraryOrchestrator:
                             for i in range((trip.end_date - trip.start_date).days + 1)),
             today=_tz_aware(request.request_meta.requested_at, self._tz).date(),
         )
+        if lookup is not None:
+            lookup.cancel()  # 풀에서 다 찾았으면 아직 줄 선 조회는 접는다(돌고 있으면 결과만 버린다)
         notes.extend(verified.notes)
         notes.append(f"stage_ms: verify={self._clock.monotonic_ms() - stage_t}")  # 이름 장소 대조(등록 POI·지도 실재)
         return verified
@@ -3727,7 +3754,7 @@ class WiredItineraryOrchestrator:
         except Exception as e:  # 설정 버그(라우트·렌더)도 재계획을 죽이지 않는다 — 칩으로 진행
             notes.append(f"free_text_translation_error: {type(e).__name__}")
             return ()
-        finally:  # 직렬 LLM 호출이라 구성 시한을 그만큼 깎는다(운영 2026-11-05 run3: 1.5s)
+        finally:  # 배경에서 돈다(F-3) — 구성 시한을 깎는 것은 본 스레드가 기다린 몫(`directives_wait`)이다(운영 run3: 1.5s)
             notes.append(f"stage_ms: translate={self._clock.monotonic_ms() - stage_t}")
         if result.is_fallback:
             notes.append(f"free_text_translation_fallback: {result.error}")
