@@ -92,6 +92,14 @@ interface NotificationScheduleRepository {
     fun findPendingByTrip(tripId: UUID): List<NotificationSchedule>
 
     /**
+     * 이 여행에 예약이 **한 번이라도** 적재된 적이 있는가 — 발화·취소한 행도 센다.
+     *
+     * 예약은 일정 생성·재계산 이벤트가 처음 만든다. 기간 변경처럼 일정과 무관한 사건이 **일정도 없는 여행에** 예약을 새로 세우면
+     * 안 되므로(없는 일정의 "오늘의 일정"이 울린다), 다시 세울지를 가르는 데 쓴다.
+     */
+    fun existsForTrip(tripId: UUID): Boolean
+
+    /**
      * 문구가 **아직 없는** 미발화·미취소 예약이 [from] 초과 [until] 이하에 울릴 여행들 — 파드 재시작으로 사라진 문구 채움 대기열을 되살리는 입력이다
      * ([ReminderCopyRetryPoller.rehydrate]). 한 여행이 여러 행이어도 한 번만 나온다. 문구 없음의 기준은 [attachCopy] 와 같다(제목·본문 둘 다 있어야 있음).
      */

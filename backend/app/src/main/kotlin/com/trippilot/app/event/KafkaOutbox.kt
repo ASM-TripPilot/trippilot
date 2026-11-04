@@ -160,7 +160,7 @@ class KafkaOutboxListener(private val relay: OutboxRelay, private val broker: Ka
     // ⚠ 폴링 모드에 없던 동시성이다 — 폴링은 ShedLock 으로 한 번에 한 릴레이만 차례로 배달한다. 여기서는 키(aggregateId)가
     // 다른 이벤트가 동시에 구독자를 탄다. (순서 뒤바뀜은 새것이 아니다 — 폴링도 행마다 백오프해 순서가 바뀐다.)
     // TRIP-1469 에서 구독자 전부(OutboxSubscriber 구현 16개)를 동시 호출 기준으로 확인했다:
-    //  - 리마인드 재적재(ItineraryGenerated 키=itineraryId · ItineraryRecalculated·TripDeleted 키=tripId → reload):
+    //  - 리마인드 재적재(ItineraryGenerated 키=itineraryId · ItineraryRecalculated·TripDeleted·TripPeriodChanged 키=tripId → reload):
     //    여행 권고 잠금(lockTrip) 뒤 현재 상태로 다시 계산 — 누가 먼저 오든 마지막 커밋이 최신 상태다.
     //  - 알림 적재(StayRegistered·PlanBTriggered·ReflectionReady → raise): source_event_id UNIQUE(ON CONFLICT). Plan-B 묶음
     //    푸시(같은 여행, 키=triggerId 라 갈린다)만 단일 실행에 기대고 있었다 → lockPushGroup 으로 고쳤다(DomainNotificationIT).

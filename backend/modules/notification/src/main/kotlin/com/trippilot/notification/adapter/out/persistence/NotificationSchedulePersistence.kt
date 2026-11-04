@@ -97,6 +97,9 @@ class NotificationScheduleRepositoryAdapter(
     override fun findPendingByTrip(tripId: UUID): List<NotificationSchedule> =
         jpa.findByTripIdAndFiredAtIsNullAndCanceledAtIsNullOrderByFireAt(tripId).map { it.toDomain() }
 
+    override fun existsForTrip(tripId: UUID): Boolean =
+        jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM notification_schedule WHERE trip_id = ?)", Boolean::class.java, tripId) == true
+
     // 부분 인덱스(ix_notification_schedule_pending, fire_at)로 시각 범위를 좁힌 뒤 문구 없음만 거른다. 가까운 것부터 — 상한에 걸려도 곧 울릴 여행이 먼저다.
     override fun findTripsLackingCopy(from: Instant, until: Instant, limit: Int): List<UUID> = jdbc.queryForList(
         """

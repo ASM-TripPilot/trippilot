@@ -188,6 +188,9 @@ internal class FakeSchedules : NotificationScheduleRepository {
     override fun findPendingByTrip(tripId: UUID) =
         stored.filter { it.tripId == tripId && it.firedAt == null && it.canceledAt == null }.sortedBy { it.fireAt }
 
+    /** 실 DB 질의와 같은 조건 — 상태와 무관하게 그 여행의 행이 하나라도 있나. */
+    override fun existsForTrip(tripId: UUID) = stored.any { it.tripId == tripId }
+
     /** 실 DB 질의와 같은 조건 — 미발화·미취소, 시각 범위 (from, until], 문구 없음. 가까운 여행부터, 한 여행은 한 번. */
     override fun findTripsLackingCopy(from: Instant, until: Instant, limit: Int): List<UUID> =
         stored.filter { it.firedAt == null && it.canceledAt == null && it.fireAt.isAfter(from) && !it.fireAt.isAfter(until) && !it.hasCopy }

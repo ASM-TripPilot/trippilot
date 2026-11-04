@@ -2,6 +2,7 @@ package com.trippilot.trip.application
 
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
+import com.trippilot.trip.api.event.TripPeriodChanged
 import com.trippilot.trip.domain.Trip
 import com.trippilot.placedata.api.DestinationCheck
 import com.trippilot.placedata.api.DestinationFacade
@@ -29,6 +30,14 @@ private class FakeRepo : TripRepository {
 /** 발행만 삼키는 싱크 — 발행 여부는 삭제 스펙이 따로 본다(TRIP-1061). */
 private object NoTripEvents : com.trippilot.core.event.DomainEventPublisher {
     override fun publish(event: com.trippilot.core.event.DomainEvent) = Unit
+}
+
+/** 발행한 사건을 모은다 — 기간 변경 사건의 발행 여부·내용을 보는 스펙용(TRIP-1758). */
+private class RecordingTripEvents : com.trippilot.core.event.DomainEventPublisher {
+    val published = mutableListOf<com.trippilot.core.event.DomainEvent>()
+    override fun publish(event: com.trippilot.core.event.DomainEvent) {
+        published += event
+    }
 }
 
 class TripServiceTest : StringSpec({
@@ -122,6 +131,64 @@ class TripServiceTest : StringSpec({
         edited.title shouldBe "내 여행"
         edited.party shouldBe 4
         edited.destinations.single().region shouldBe "부산"
+    }
+
+    // ── 기간 변경 사건(TRIP-1758) ───────────────────────────────────────────────
+    // 알림 예약 같은 파생물이 새 기간으로 다시 서려면 편집이 기간을 바꿨다는 사실이 나가야 한다.
+    fun edit(
+        start: String, end: String, title: String? = "내 여행", party: Int = 2,
+        dests: List<TripDestination> = listOf(TripDestination(0, "제주", 3)),
+    ) = EditTripCommand(title, LocalDate.parse(start), LocalDate.parse(end), party, null, null, dests)
+
+    "기간이 바뀐 편집은 TripPeriodChanged 를 한 번 낸다 — 새 기간을 싣는다" {
+        val events = RecordingTripEvents()
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), events, clock)
+        val t = svc.create(acc, cmd(start = "2026-08-01", end = "2026-08-04"))
+
+        svc.edit(acc, t.tripId, edit("2026-08-02", "2026-08-05"))
+
+        events.published shouldBe listOf(TripPeriodChanged(t.tripId.toString(), t.tripId.toString(), "2026-08-02", "2026-08-05"))
+    }
+
+    "시작일만 또는 종료일만 바뀌어도 낸다" {
+        val events = RecordingTripEvents()
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), events, clock)
+        val t = svc.create(acc, cmd(start = "2026-08-01", end = "2026-08-04"))
+
+        svc.edit(acc, t.tripId, edit("2026-08-01", "2026-08-05"))
+        svc.edit(acc, t.tripId, edit("2026-08-02", "2026-08-05"))
+
+        events.published.size shouldBe 2
+    }
+
+    "기간이 그대로인 편집은 아무것도 내지 않는다 — 제목·인원·목적지만 바꿔도" {
+        val events = RecordingTripEvents()
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), events, clock)
+        val t = svc.create(acc, cmd(start = "2026-08-01", end = "2026-08-04"))
+
+        svc.edit(acc, t.tripId, edit("2026-08-01", "2026-08-04", title = "바뀐 제목", party = 4, dests = listOf(TripDestination(0, "부산", 2))))
+
+        events.published shouldBe emptyList()
+    }
+
+    "검증에 걸려 저장되지 않은 편집은 사건도 내지 않는다" {
+        val events = RecordingTripEvents()
+        val svc = TripService(FakeRepo(), FakeDomestic(), FakeRegions(), events, clock)
+        val t = svc.create(acc, cmd(start = "2026-08-01", end = "2026-08-04"))
+
+        // 1박인데 목적지 3박 — Σnights > 박수
+        shouldThrow<ValidationFailed> { svc.edit(acc, t.tripId, edit("2026-08-01", "2026-08-02")) }
+
+        events.published shouldBe emptyList()
+        svc.get(acc, t.tripId).endDate shouldBe LocalDate.parse("2026-08-04")
+    }
+
+    // 저장과 아웃박스 적재가 한 트랜잭션이어야 롤백된 편집·삭제의 사건이 안 나간다 — 어노테이션이 빠져도 기능 테스트는 초록이라 직접 고정한다.
+    "edit 와 delete 는 @Transactional 이다 — 저장과 사건 발행이 한 트랜잭션" {
+        listOf("edit", "delete").forEach { name ->
+            TripService::class.java.declaredMethods.single { it.name == name }
+                .isAnnotationPresent(org.springframework.transaction.annotation.Transactional::class.java) shouldBe true
+        }
     }
 
     // ── 행정구역 표준코드 채우기(TRIP-361) ─────────────────────────────────────

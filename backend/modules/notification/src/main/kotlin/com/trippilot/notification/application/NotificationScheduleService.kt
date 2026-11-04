@@ -57,11 +57,19 @@ class NotificationScheduleService(
     /**
      * @param fillCopies 문구를 **지금** 묻는가. 사용자 대기가 없는 곳에서도 AI 를 동기로 기다리면 릴레이 스레드가 묶이므로, 되살림(삭제 철회)은
      * 끄고 재시도 대기열이 곧 채우게 한다(문구 없는 행이 있으면 아래서 대기열에 건다).
+     * @param onlyIfScheduled 예약이 한 번이라도 적재된 여행만 다시 세운다. 일정과 무관한 사건(여행 기간 변경)이 부를 때 켠다 — 예약은 일정 생성·재계산
+     * 이벤트가 처음 만들므로, 일정이 아직 없는 여행에 기간만 바뀌었다고 예약을 새로 세우면 없는 일정의 알림이 울린다. 잠금 **뒤에** 판정하므로 같은 여행의
+     * 첫 적재와 겹쳐도 그 커밋을 보고 가른다. 한계: 일정 생성 때 모든 알림 시각이 이미 지나 행이 한 건도 안 만들어진 여행(마지막 날 아침 이후에 짠 하루 여행)은
+     * 기간 변경만으로는 안 선다 — 다음 일정 생성·재계획이 세운다.
      */
     @Transactional
-    fun reload(tripId: UUID, fillCopies: Boolean = true) {
+    fun reload(tripId: UUID, fillCopies: Boolean = true, onlyIfScheduled: Boolean = false) {
         // 같은 여행의 다른 적재(릴레이)와 겹치지 않게 — 겹치면 하루 리마인드가 두 벌이 된다.
         schedules.lockTrip(tripId)
+        if (onlyIfScheduled && !schedules.existsForTrip(tripId)) {
+            log.debug("리마인드 예약이 만들어진 적 없는 여행이라 다시 세우지 않습니다. tripId={}", tripId)
+            return
+        }
         val now = clock.instant()
         val trip = trips.findOwnedPeriod(tripId)
         if (trip == null) {
@@ -158,8 +166,14 @@ class NotificationScheduleService(
         rows += NotificationSchedule.pending(
             trip.accountId, tripId, NotificationKind.TRIP_PRE, fireAt(trip.startDate.minusDays(1)),
         )
+        // 기간 상한 — 서버가 여행 길이를 막지 않아(편집으로 종료일을 9999년까지 보낼 수 있다) 하루 한 건씩 만들면 수백만 행이 한 트랜잭션에 실려
+        // 릴레이 스레드를 묶는다. 현실의 여행은 이 안에 든다(앱은 30박까지만 받는다).
+        val last = minOf(trip.endDate, trip.startDate.plusDays(MAX_PLANNED_DAYS))
+        if (last != trip.endDate) {
+            log.warn("여행 기간이 너무 길어 시작일부터 {}일치만 예약합니다. tripId={} endDate={}", MAX_PLANNED_DAYS, tripId, trip.endDate)
+        }
         var day = trip.startDate
-        while (!day.isAfter(trip.endDate)) {
+        while (!day.isAfter(last)) {
             rows += NotificationSchedule.pending(
                 trip.accountId, tripId, NotificationKind.TRIP_DAY, fireAt(day),
             )
@@ -239,5 +253,8 @@ class NotificationScheduleService(
          * 설정이 붙을 때 고칠 자리가 둘이 된다.
          */
         private val REMIND_TIME: LocalTime = LocalTime.of(8, 0)
+
+        /** 한 번의 적재가 만드는 당일 알림의 상한(시작일부터 며칠). 방어선이지 제품 규칙이 아니다 — 여행 길이 상한은 trip 이 정할 일이다. */
+        private const val MAX_PLANNED_DAYS = 366L
     }
 }
