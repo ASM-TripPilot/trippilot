@@ -18,6 +18,7 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone, tzinfo
 
 from trippilot.agents.adapters.memory_place_fact_store import InMemoryPlaceFactStore
+from trippilot.agents.planb.place_search import wire as wire_place_search
 from trippilot.agents.planb.rag import PlanBAgent
 from trippilot.agents.schedule.agent import Clock
 from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent
@@ -253,6 +254,13 @@ def build_dialogue_orchestrator(
         log.info("도우미 장소 DB off — TRIPPILOT_PLACE_DB_URL 미설정이라 미배선(장소 탐색은 반경 풀, 일정 밖 장소는 못 찾는다)")
     # 장소 소개(KB-5) — PlanB 와 같은 임베딩·벡터 스토어. 스토어가 미배선(Unwired)이면 조회가 빈 결과로 강등될 뿐이라 늘 붙인다
     place_intro = PlaceIntro(embedding, kb_store) if kb_store is not None else None
+    # 장소 탐색·추천 열린 검색(KB-5 문서 순위, BR-AO-36) — 기본 꺼짐, `TRIPPILOT_KB5_OPEN_SEARCH=on` 이고 벡터 스토어·실 임베딩이 있을 때만.
+    # 판정은 PlanB 다시 짜기 후보와 같은 한 곳(`place_search.wire` — 미배선 임베딩은 늘 터져 매 턴 ERROR 로그만 남기니 붙이지 않는다)
+    place_search, off = wire_place_search(embedding, kb_store)
+    if off:
+        log.info("도우미 열린 검색 off — %s이라 미배선(장소 탐색은 규칙 순서)", off)
+    else:
+        log.info("도우미 열린 검색 on — 묘사형 말이면 반경 결과(SQL 0건·실패·추천·일정 근처)에만 KB-5 문서 순위를 섞는다")
     # 미확인 칸 웹 확인(UnknownHandlingAgent) — PLACE_FACT_LOOKUP 배정이 곧 켜기. 조회는 턴 밖(뒤에서)이라 서비스 카운터(`counted`)가
     # 아니라 `llm` 으로 부른다(턴 llm_calls 에 들지 않는다 — 대신 프로세스당 하루 상한, unknown_handling 註)
     # 일반 지식 즉답(BR-AO-32, 2026-10-23) — 같은 에이전트의 둘째 일. DIALOGUE_KNOWLEDGE 배정이 곧 켜기, 턴 안 서비스 호출이라 `counted`
@@ -276,7 +284,7 @@ def build_dialogue_orchestrator(
     ports = HandlerPorts(poi_info=providers[ProviderKind.POI_INFO], weather=providers.get(ProviderKind.WEATHER),
                          transit=providers[ProviderKind.TRANSIT], pool_builder=pool_builder, planb=rag,
                          place_sql=place_lookup, place_intro=place_intro, events=providers.get(ProviderKind.EVENT),
-                         unknown=unknown)
+                         unknown=unknown, place_search=place_search)
     tools = plan_tools(ports)  # 배선된 도구 → 설명(여행 필요 꼬리표 포함) — 게이트 closed-set 과 `$tools` 가 같은 사전에서 나온다
     planner = None
     if LlmFeature.DIALOGUE_PLAN in c1_config.feature_models:  # DEC-AO-18 — 배정이 곧 켜기(env 무증가)

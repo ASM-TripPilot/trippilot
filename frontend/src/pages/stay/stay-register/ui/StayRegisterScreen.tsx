@@ -510,9 +510,11 @@ export function StayRegisterScreen({
   const canPress = canPressStayRegister(flow);
   // TRIP-1429 — 검색 키·[검색] 버튼 공용 입구. 검색 중이면 무시(중복 지오코드 요청 방지), 공백 검색어면
   // 버튼을 잠근다(page 조회도 공백이면 꺼져 있어 눌러도 아무 일이 없는 버튼이 된다 — INV-4).
+  // TRIP-1672 — 검색 키도 같은 `canSearch` 를 지나야 한다: 버튼의 `disabled` 만으로는 키보드 경로가 막히지 않아,
+  // 공백 검색어로 검색 키를 누르면 조회는 안 나가는데 골라 둔 후보와 좌표 확정만 풀렸다.
   const canSearch = flow.query.trim() !== '';
   const submitSearch = (): void => {
-    if (flow.searchStatus !== 'loading') onSubmitQuery();
+    if (canSearch && flow.searchStatus !== 'loading') onSubmitQuery();
   };
   // AC-3 문구는 coordConfirmed 하나에만 걸린다(후보 유무를 조건에 넣지 않는다) — 재검색으로
   // 이전 후보가 풀려도(§3-2 초기화) 안내는 그대로 남아야 한다(I-5). 핀 탭 좌표 미확정(P-6,

@@ -33,6 +33,16 @@ JSON 이 잘렸고, 못 읽으면 '같음'으로 삼켰다(종전 '같음' 12·8
   **효과 있음 — 운영에 넣는다.** 운영 KB-3 임베딩 검색(`retrieve_situation`)은 이 문서들을 못 고른다(비 1/4 · "조용한 북카페" 0/3 겹침) —
   그래서 넣을 때도 측정과 같은 '사유가 같은 문서' 방식이다.
 
+**2026-11-04 열린 검색(하이브리드) 팔(`EVAL_ARM=open`) — 효과 있음 → 운영에 넣는다(스위치 `TRIPPILOT_KB5_OPEN_SEARCH`).** 도우미 탐색의
+검색기(#1925 — BM25 글자 2-gram + KURE 임베딩 RRF, 묘사 낱말 게이트·키워드 근거 문턱)로 PlanB 규칙 순위 **전체**에 KB-5 문서 순위를
+섞고 그 앞 20 을 keep 으로(운영 `rag.fuse_rule_ranking` 그대로). 질의는 사용자 말, 없으면 사유의 필요(`rag.REASON_NEED`). 문서 몫 +8 이
+'실내'·'조용한'을 못 갈랐던 것(KURE 만)과 달리 BM25 근거가 붙는다 — 위 '재검토 조건(질의·검색 재설계)'에 해당. 24/24 검색 OK, 40곳 중 평균
+11.75곳이 바뀌고 바뀐 곳 채택 ≈7%. 판정(구성 opus-5-5·판정 sonnet-5, 구성 실패 제외): **14 : 5 · 13 : 7 · 15 : 8 (합 42 : 20, 부호 검정
+양측 p≈0.008)**, 판정 실패 3/72, 지연 p50 같음, 입력 +≈850토큰. 잡음: 서울 비 오는 날 '실내포차' 셋이 '실내' 2-gram 으로 들어온다(구성
+LLM 이 안 고른다 — 도우미 대체 제안처럼 순위 앞이 곧 화면인 곳에는 켜지 않는다, `PlanBRagRequest.fuse_docs`).
+**러너 결함 수정(같은 날):** 한 팔 구성이 폴백·실패면 빈 목록이 지는데 그것을 승패로 셌다(open 1회차 원 팔 실패 4건이 문서 팔 승으로,
+2회차 문서 팔 실패 3건이 원 팔 승으로). 이제 '구성 실패'로 빼고 까닭을 싣는다(`compose_failed`). 그 전 회차들은 실패 0이라 결론 무관.
+
 실행(ai/ 에서 — 로컬 서빙 임베딩 + 운영 모델 키, 실 API 를 부른다):
     TRIPPILOT_EMBEDDING_BASE_URL=http://localhost:8100 ANTHROPIC_API_KEY=… \
         uv run python scripts/measure/measure_doc_quota.py [반복=1]
@@ -71,6 +81,7 @@ from trippilot.agents.planb import composition, rag  # noqa: E402
 from trippilot.agents.planb.kb_retrieval import collection_for  # noqa: E402
 from trippilot.agents.planb.kb_retrieval import retrieve  # noqa: E402
 from trippilot.agents.planb.place_knowledge import CHUNKED_SOURCES, fetch_place_knowledge  # noqa: E402
+from trippilot.agents.planb.place_search import PlaceSearch  # noqa: E402
 from trippilot.assembly_engine.scorer import build_rule_score  # noqa: E402
 from trippilot.assembly_engine.travel import haversine_km  # noqa: E402
 from trippilot.domain.common import BudgetLevel, PoiId, ScheduleId, TraceId  # noqa: E402
@@ -93,12 +104,16 @@ QUERY = os.environ.get("EVAL_DOC_QUERY", "situation")
 # 비교할 팔 — `quota`(문서 몫 +8, 기본) · `course`(남은 일정과 같은 관광공사 여행코스에 든 곳에 규칙 점수 +`COURSE_STEP`,
 # `data/tour_courses.jsonl.gz` #1827). 코스 팔은 두 팔 후보가 같은 상황(코스 동료가 이미 다 후보거나 없는 곳)을 판정하지 않는다.
 ARM = os.environ.get("EVAL_ARM", "quota")
+# `open` 팔(2026-11-04, 도우미 열린 검색 #1925 의 검색기): PlanB 규칙 순위 전체에 KB-5 문서 순위(BM25 2-gram + 임베딩 RRF, 묘사 낱말
+# 게이트·키워드 근거 문턱)를 섞고 그 앞 20(`rag.MAX_RANKED`)을 keep 으로 — 후보는 풀의 순열에서만 나온다(INV-1). 질의는 사용자 말,
+# 없으면 사유의 필요(`rag.REASON_NEED`). 운영 함수 `rag.fuse_rule_ranking` 을 그대로 부른다(측정 = 운영). 게이트가 닫히거나 검색이 OK 가 아니면 두 팔이 같다('입력 같음'). 종전 `quota`(KURE 만으로 +8)가
+# '실내'·'조용한' 속성을 못 갈랐던 것(비 오는 날 숭례문)을 BM25 근거가 고치는지 본다 — replan-shortlist 재검토 조건(질의·검색 재설계)
 # `kb3` 팔: 두 팔 후보·설명이 같고, 한쪽만 KB-3 상황 대처 원칙을 싣는다(구성 프롬프트 0.10.0). 기준 팔은 `EVAL_BASE_PROMPTS`
 # (develop 의 0.9.0 프롬프트 디렉토리 — `git archive origin/develop ai/prompts`)로 렌더한다. 상황 문서는 운영 검색 대신 사유가 같은
 # KB-3 문서 앞 4건(선택 러너 `measure_prompt_ab.SELECT_CASES` 와 같은 근사).
 BASE_PROMPTS = Path(os.environ["EVAL_BASE_PROMPTS"]) if os.environ.get("EVAL_BASE_PROMPTS") else _AI / "prompts"
 COURSE_STEP = float(os.environ.get("EVAL_COURSE_STEP", "0.3"))  # 지시 한 단(`scorer.DIRECTIVE_STEP`)과 같은 크기
-_NEED = {"weather": "비를 피해 실내에서 보내기 좋은 곳", "fatigue": "많이 걷지 않고 앉아서 쉬어 갈 수 있는 곳"}
+_NEED = rag.REASON_NEED  # 사유의 필요 — 운영 다시 짜기 후보 질의와 같은 표
 _DAY = date(2026, 11, 4)  # 수요일
 _NOW = datetime(2026, 11, 4, 4, 0, tzinfo=timezone.utc)  # 13:00 KST
 _RADIUS_KM = 7.0  # 대중교통 다일 반경
@@ -182,6 +197,12 @@ def _cases(kn: _Knowledge) -> list[dict]:
             store = _store(kn, {p.source_ref for p in (*short.pois, *tier) if p.source_ref})
             if ARM in ("kb3", "aa"):  # aa = 두 팔 입력이 완전히 같다 — 판정 잡음(A/A) 기준선
                 other, extra = short.pois, ()
+            elif ARM == "open":
+                fused = _open_ranking(kn, pool, ranked, said or _NEED.get(reason, ""))
+                keep_open = keep if fused is None else [s.poi_id for s in slots] + fused[:rag.MAX_RANKED]
+                other = composition.shortlist(pool, keep=keep_open, excluded=(), day=_DAY, score=score).pois
+                store = _store(kn, {p.source_ref for p in (*short.pois, *other) if p.source_ref})
+                extra = tuple(p for p in other if p.poi_id not in short.poi_ids)
             elif ARM == "course":
                 near_slots = set().union(*(mates.get(s.source_ref or "", set()) for s in slots))
 
@@ -205,6 +226,18 @@ def _cases(kn: _Knowledge) -> list[dict]:
             out.append(dict(name=f"{city}/{reason}{'·말' if said else ''}", city=city, anchor=anchor, reason=reason,
                             said=said, text=text, slots=slots, extra=extra, arms=arms))
     return out
+
+
+def _open_ranking(kn: _Knowledge, pool: CandidatePool, ranked: tuple[str, ...], text: str) -> list[PoiId] | None:
+    """PlanB 규칙 순위 → 운영 `rag.fuse_rule_ranking` 으로 섞은 순위. 스토어만 리포 미리 계산 벡터(인메모리)이고 시한은 풀었다.
+    게이트 닫힘·검색 OK 아님이면 None."""
+    refs = {p.source_ref for p in pool.pois if p.source_ref}
+    fused, status = rag.fuse_rule_ranking(PlaceSearch(kn.emb, _store(kn, refs)), pool, ranked, text, 60.0, trace="dq-open")
+    OPEN_STATUS.append(status)
+    return [PoiId(r) for r in fused] if status == "OK" else None
+
+
+OPEN_STATUS: list[str] = []
 
 
 def _kb3(reason: str) -> tuple[str, ...]:
@@ -285,6 +318,10 @@ def main(repeat: int) -> None:
             idx = {p.poi_id: p for p in cand.pois}
             picks[arm] = [] if (r.is_fallback or r.value is None) else [(idx[v.poi_id], v.reason) for v in r.value]
             rows[arm] = dict(wall=int((time.monotonic() - t0) * 1000), err=r.error, **_usage(r))
+        if not picks["base"] or not picks["quota"]:  # 한 팔이 폴백·실패면 빈 목록이 진다 — 승패로 세지 않는다(11-04 open 1회차 4/24)
+            return dict(name=case["name"], winner="구성 실패", extra=len(case["extra"]), adopted=0,
+                        picks={k: [p.name for p, _ in v] for k, v in picks.items()},
+                        **{f"{k}_{m}": v[m] for k, v in rows.items() for m in ("wall", "inp", "err")})
         flip = i % 2 == 1  # A/B 자리를 번갈아 — 위치 편향을 상쇄한다
         a, b = (picks["quota"], picks["base"]) if flip else (picks["base"], picks["quota"])
         got = _judge(judge, case, a, b, kn)
@@ -296,7 +333,8 @@ def main(repeat: int) -> None:
                                                                                 for m in ("wall", "inp", "err")})
 
     rows = _run(one, cases * repeat)
-    judged = [r for r in rows if r["winner"] != "입력 같음"]
+    judged = [r for r in rows if r["winner"] not in ("입력 같음", "구성 실패")]
+    compose_failed = [(r["name"], str(r.get("base_err") or r.get("quota_err"))[:120]) for r in rows if r["winner"] == "구성 실패"]
     tally = {w: sum(r["winner"] == w for r in judged) for w in ("quota", "base", "같음", "판정 실패")}
 
     def p50(key):
@@ -309,6 +347,7 @@ def main(repeat: int) -> None:
                           adopted=f"{sum(r['adopted'] for r in judged)}/{sum(r['extra'] for r in judged)}",
                           wall_p50={"base": p50("base_wall"), "quota": p50("quota_wall")},
                           in_p50={"base": p50("base_inp"), "quota": p50("quota_inp")},
+                          compose_failed=compose_failed,
                           errors={a: sum(1 for r in judged if r.get(f"{a}_err")) for a in ("base", "quota")}),
                      ensure_ascii=False))
     for r in sorted(rows, key=lambda r: r["name"]):

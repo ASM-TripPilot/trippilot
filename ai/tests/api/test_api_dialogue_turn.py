@@ -301,6 +301,41 @@ def test_unassigned_plan_is_not_wired_and_says_so_at_startup(caplog) -> None:
     assert body["outcome"] == "OUT_OF_SCOPE" and body["llm_calls"] == 1  # 종전 그대로(위 null 의도 테스트와 같은 값)
 
 
+@pytest.mark.parametrize(("switch", "store", "embedding", "wired", "why"), [
+    (None, True, True, False, "꺼짐"),  # 기본 꺼짐 — 스토어·임베딩이 있어도 붙이지 않는다
+    ("off", True, True, False, "꺼짐"),
+    ("on", False, True, False, "벡터 스토어 없음"),
+    ("on", True, False, False, "임베딩 없음"),  # wiring 이 넣는 UnwiredEmbedding — 매 턴 ERROR 만 남기니 붙이지 않는다
+    ("on", True, True, True, None),
+])
+def test_open_search_is_wired_only_when_switched_on_with_a_store_and_an_embedding(monkeypatch, caplog, switch, store, embedding,
+                                                                                  wired, why) -> None:
+    """BR-AO-36 — 열린 검색은 `TRIPPILOT_KB5_OPEN_SEARCH=on` + 벡터 스토어 + 실 임베딩일 때만 핸들러 포트에 붙고, 기동 로그 한 줄이 그
+    상태를 말한다(꺼짐 줄은 표식 `미배선` — 배포 smoke 의 `ai-wiring:` 이 끌어올린다)."""
+    from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore
+    from trippilot.agents.planb.place_search import PlaceSearch
+    from trippilot.poi_curation import hybrid_rank
+
+    if switch is None:
+        monkeypatch.delenv(hybrid_rank.SWITCH, raising=False)
+    else:
+        monkeypatch.setenv(hybrid_rank.SWITCH, switch)
+    ports: list = []
+    real = projection.HandlerPorts
+    monkeypatch.setattr(projection, "HandlerPorts", lambda **kw: ports.append(real(**kw)) or ports[-1])
+    caplog.set_level(logging.INFO, logger="trippilot.api.dialogue")
+    build_dev_app(llm=FeatureRoutingLlm({}), model_id="m-fake", poi_db=InMemoryPoi(_SCHEDULED + _ALTS), weather=_Weather(),
+                  dialogue_orchestrator_enabled=True, shadow_rate=0.0, shadow_rng=random.Random(1),
+                  vector_store=InMemoryVectorStore() if store else None, embedding=FakeEmbedding() if embedding else None)
+    (port,) = ports
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("도우미 열린 검색")]
+    assert len(lines) == 1
+    if wired:
+        assert isinstance(port.place_search, PlaceSearch) and lines[0].startswith("도우미 열린 검색 on")
+    else:
+        assert port.place_search is None and lines[0].startswith("도우미 열린 검색 off") and why in lines[0] and "미배선" in lines[0]
+
+
 def test_capabilities_literal_answers_without_any_llm_call() -> None:
     client = _client({_INTENT: Exception("분류 LLM 을 부르면 안 된다")})
     res = client.post(URL, json=_body("내가 할 수 있는 것 보기"))

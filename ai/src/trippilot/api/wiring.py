@@ -168,6 +168,7 @@ from trippilot.agents.edit.commands import EditStatus
 from trippilot.agents.planb import composition
 from trippilot.agents.planb import request_verification as nl_verify
 from trippilot.agents.planb.place_knowledge import kb5_counts
+from trippilot.agents.planb.place_search import wire as wire_place_search
 from trippilot.agents.planb.rag import PlanBAgent, PlanBRagRequest, SavedPlace
 from trippilot.agents.schedule.agent import ScheduleAgent, trim_planb_rank_for_add_one
 from trippilot.agents.schedule.family import normalize_name, same_place
@@ -2748,6 +2749,8 @@ class WiredItineraryOrchestrator:
             excluded_poi_ids=frozenset(PoiId(p) for p in request.excluded_poi_ids)
             | {b.poi_id for b in past} | avoided,
             use_llm=self._composer is None,
+            # 구성 LLM 이 이 순위 앞 20 을 후보로 받을 때만 문서 순위를 섞는다(측정 경로 — `PlanBRagRequest.fuse_docs`)
+            fuse_docs=self._composer is not None,
         )
         planb = self._rag.run(planb_request)
         self._rag_events(meta, planb.notes)
@@ -4701,11 +4704,16 @@ def build_orchestrator(
     }
     # Plan-B RAG (TRIP-428) — 벡터·임베딩 미주입이면 Unwired 스텁: 파이프라인이
     # 검색 실패를 notes로 남기고 빈 컨텍스트 + 규칙 랭킹으로 강등한다(INV-4).
+    # 다시 짜기 후보 순위의 KB-5 열린 검색 — 도우미와 같은 스위치·판정(`place_search.wire`), 요청이 `fuse_docs` 일 때만 쓴다
+    planb_search, planb_search_off = wire_place_search(embedding, vector_store)
+    _logger.info("PlanB 열린 검색 %s", f"off — {planb_search_off}이라 미배선(다시 짜기 후보는 규칙 순위)" if planb_search_off
+                 else "on — 다시 짜기 후보 순위에도 KB-5 문서 순위를 섞는다")
     rag = PlanBAgent(
         embedding if embedding is not None else UnwiredEmbedding(),
         vector_store if vector_store is not None else UnwiredVectorStore(),
         alternative_worker=AlternativeSelectionWorker(GatewayFacade(
             llm, renderer, AlternativeSelectionGate(), c1_config, trace)),
+        place_search=planb_search,
     )
     place_fallback.warm()  # KB-5 대체 문서 표(켜져 있을 때만) — 첫 대안 요청이 파일 읽기를 떠안지 않게
     if weather is not None:

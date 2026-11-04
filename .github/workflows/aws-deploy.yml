@@ -48,7 +48,7 @@ on:
         type: string
         default: ''
       runtime_switches:
-        description: 상황 감지 스위치를 시크릿에 쓴다 — KEY=VALUE;KEY=VALUE (쌍 구분은 세미콜론). 허용 키는 PLANB_SITUATION_SWEEP(off|dry-run|on) · PLANB_SITUATION_HORIZON(today|tomorrow|pre-trip) · PLANB_SITUATION_SWEEP_ACCOUNT_IDS(UUID 쉼표 목록) · PLANB_PREPARED_REPLAN(off|on) · HOLIDAY_CLOSURE_MODE(off|on) · TRIPPILOT_KB5_FALLBACK(off|on, 앱 기본은 on이라 off 로 끈다)뿐, KEY= 는 그 키를 지워 앱 기본값으로 되돌린다. 그 밖의 키·형식·값 오류는 배포 실패. 비우면 유지
+        description: 상황 감지 스위치를 시크릿에 쓴다 — KEY=VALUE;KEY=VALUE (쌍 구분은 세미콜론). 허용 키는 PLANB_SITUATION_SWEEP(off|dry-run|on) · PLANB_SITUATION_HORIZON(today|tomorrow|pre-trip) · PLANB_SITUATION_SWEEP_ACCOUNT_IDS(UUID 쉼표 목록) · PLANB_PREPARED_REPLAN(off|on) · HOLIDAY_CLOSURE_MODE(off|on) · TRIPPILOT_KB5_FALLBACK(off|on, 앱 기본은 on이라 off 로 끈다) · TRIPPILOT_KB5_OPEN_SEARCH(off|on, 앱 기본은 off라 on 으로 켠다)뿐, KEY= 는 그 키를 지워 앱 기본값으로 되돌린다. 그 밖의 키·형식·값 오류는 배포 실패. 비우면 유지
         type: string
         required: false
         default: ''
