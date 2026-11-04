@@ -25,7 +25,7 @@ import base64
 import itertools
 import logging
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 import anthropic
 
@@ -127,30 +127,48 @@ def _key_scoped(e: Exception) -> bool:
     return isinstance(e, anthropic.BadRequestError) and ("credit balance" in msg or "usage limit" in msg)
 
 
+# 오래 가는 키 문제로 실패한 키를 맨 뒤로 돌려 두는 시간 — 라운드로빈이라 그대로 두면 막힌 키 차례마다(키 셋이면 호출 셋 중 하나)
+# 실패 한 번(~0.3s)이 기능 시한 안에 먼저 얹힌다(2026-11-04 운영 키 1 이 12-01 까지 월 사용 한도). 한도(429)는 분 단위라 넣지 않는다 —
+# 남은 키로 몰면 그쪽도 429 가 난다
+_KEY_REST_S = 600.0
+
+
+def _key_down(e: Exception) -> bool:
+    """한동안 그 키로는 안 되는 오류인가 — 크레딧 소진·월 사용 한도·결제(402)·인증(401)·권한(403). `_key_scoped` 에서 429 를 뺀 것."""
+    return _key_scoped(e) and not isinstance(e, anthropic.RateLimitError)
+
+
 class AnthropicAdapter:
     """LlmPort Protocol 구현.
 
     **키 여러 개를 번갈아 쓴다** (2026-11-02 사용자 지시, 운영 Claude 키 3개). client 를 리스트로 주면 호출마다
     다음 client 부터 시작하는 라운드로빈이고, 그 키가 키 문제(`_key_scoped`)로 실패하면 남은 키를 한 번씩 더
     돈다. 모든 키가 실패하면 마지막 예외를 그대로 던진다(게이트웨이가 폴백으로 수렴 — INV-4). 하나만 주면 종전과 같다.
+    오래 가는 키 문제(`_key_down`)로 실패한 키는 `_KEY_REST_S` 동안 순서의 맨 뒤다 — 다른 키가 다 실패할 때만 묻는다.
     """
 
-    def __init__(self, client: "anthropic.Anthropic | Sequence[anthropic.Anthropic]") -> None:
+    def __init__(self, client: "anthropic.Anthropic | Sequence[anthropic.Anthropic]", *,
+                 clock: Callable[[], float] = time.monotonic) -> None:
         self._clients = tuple(client) if isinstance(client, (list, tuple)) else (client,)
         if not self._clients:
             raise ValueError("client 가 하나도 없다")
         self._client = self._clients[0]  # 단일 키 시절 이름 — 재시도 정책 검사(max_retries)가 읽는다
         self._turn = itertools.count()  # next() 는 CPython 에서 원자적 — 동시 호출이 같은 키로 몰리지 않게 순번만 가져간다
+        self._clock = clock
+        self._resting: dict[int, float] = {}  # 키 순번 → 쉼이 끝나는 시각. 칸 하나 쓰기라 경합해도 실패 한 번 더일 뿐이다
 
     def _create(self, kwargs: dict):
         n = len(self._clients)
         first = next(self._turn) % n
+        now = self._clock()
+        order = sorted(((first + i) % n for i in range(n)), key=lambda i: self._resting.get(i, 0.0) > now)  # 안정 정렬
         last: Exception | None = None
-        for i in range(n):
-            idx = (first + i) % n
+        for i, idx in enumerate(order):
             try:
                 return self._clients[idx].messages.create(**kwargs)
             except Exception as e:  # noqa: BLE001 — 키 문제만 다음 키로, 나머지는 그대로
+                if _key_down(e):
+                    self._resting[idx] = self._clock() + _KEY_REST_S
                 if not _key_scoped(e) or i == n - 1:
                     raise
                 last = e
