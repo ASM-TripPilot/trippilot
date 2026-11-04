@@ -111,10 +111,13 @@ class ReminderCopyRetryPoller(
             // 여행일수록 다음 시도까지 간격이 앞 여행들이 쓴 시간만큼 짧아진다.
             if (!retries.later(due.tripId, clock.instant(), due.attempt + 1)) {
                 // 횟수를 다 썼다 — 남은 행은 상수 문구로 간다. 한 줄은 남긴다(조용한 포기 금지).
-                log.warn(
-                    "리마인드 문구를 끝내 못 채웠습니다 — 남은 행은 상수 문구로 갑니다. tripId={} 남은 행={}건(재료 없음 {}건) 시도={}회",
-                    due.tripId, outcome.remaining, outcome.noMaterial, due.attempt + 1,
-                )
+                // 남은 행이 전부 재료 없음(그 날 일정에 장소가 없다)이면 평소 상태다 — 못 받은 것이 아니라 물을 것이 없었다. 그때만 INFO.
+                val message = "리마인드 문구를 끝내 못 채웠습니다 — 남은 행은 상수 문구로 갑니다. tripId={} 남은 행={}건(재료 없음 {}건) 시도={}회"
+                if (outcome.remaining > outcome.noMaterial) {
+                    log.warn(message, due.tripId, outcome.remaining, outcome.noMaterial, due.attempt + 1)
+                } else {
+                    log.info(message, due.tripId, outcome.remaining, outcome.noMaterial, due.attempt + 1)
+                }
             }
         }
     }

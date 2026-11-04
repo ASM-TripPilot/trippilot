@@ -136,6 +136,12 @@ class NotificationMetrics(
         /** NO_DEVICE 의 원인 — 활성 토큰은 있는데 OS 알림 권한이 허용이 아니다(사용자 설정·권한 요청 흐름). */
         const val REASON_NOT_GRANTED = "NOT_GRANTED"
 
+        /** MUTED 의 원인 — 삭제를 요청해 유예 중인 계정이라 어떤 종류도 푸시하지 않는다. */
+        const val REASON_DELETION_PENDING = "DELETION_PENDING"
+
+        /** MUTED 의 원인 — 이 종류의 푸시 설정이 꺼져 있다(사용자가 껐거나 종류의 기본값이 꺼짐). */
+        const val REASON_PUSH_OFF = "PUSH_OFF"
+
         private const val NONE = "none"
         private const val OTHER = "OTHER"
         private const val PUSH_ERROR_PREFIX = "PUSH_ERROR"
@@ -152,6 +158,8 @@ class NotificationMetrics(
             "DeviceNotRegistered", "MessageRateExceeded", "FAILED", "UNKNOWN",
             // 기기 없음의 두 원인(NO_DEVICE) — 토큰 자체가 없는가, 있는데 OS 알림 권한이 허용이 아닌가.
             REASON_NO_TOKEN, REASON_NOT_GRANTED,
+            // 일부러 보내지 않음(MUTED)의 두 원인 — 삭제 유예 중인 계정인가, 푸시 설정이 꺼져 있는가.
+            REASON_DELETION_PENDING, REASON_PUSH_OFF,
             // 프로젝트 자격(APNs .p8 · FCM)·발신자·크기 오류 — 지금껏 OTHER 로 접혀, 가장 가능성 높은 원인(자격 누락)이 가장 안 보였다.
             "InvalidCredentials", "MismatchSenderId", "MessageTooBig",
         )

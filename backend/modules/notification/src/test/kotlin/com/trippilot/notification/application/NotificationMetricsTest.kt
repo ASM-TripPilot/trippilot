@@ -75,7 +75,7 @@ class NotificationMetricsTest : StringSpec({
     "어떤 실패 사유 문자열이 와도 태그는 닫힌 집합 안이다" {
         val allowed = setOf(
             "none", "OTHER", "PUSH_ERROR", "DeviceNotRegistered", "MessageRateExceeded", "FAILED", "UNKNOWN",
-            "NO_TOKEN", "NOT_GRANTED", "InvalidCredentials", "MismatchSenderId", "MessageTooBig",
+            "NO_TOKEN", "NOT_GRANTED", "DELETION_PENDING", "PUSH_OFF", "InvalidCredentials", "MismatchSenderId", "MessageTooBig",
         )
 
         checkAll(Arb.string()) { raw ->
@@ -124,6 +124,9 @@ class NotificationMetricsTest : StringSpec({
             // 가장 안 보이는 칸이 되면 안 된다.
             "NO_TOKEN" to "NO_TOKEN",
             "NOT_GRANTED" to "NOT_GRANTED",
+            // 일부러 보내지 않음(MUTED)의 두 원인 — OTHER 로 접히면 "푸시가 안 와요"의 원인이 지표에서 사라진다.
+            "DELETION_PENDING" to "DELETION_PENDING",
+            "PUSH_OFF" to "PUSH_OFF",
             "InvalidCredentials" to "InvalidCredentials",
             "MismatchSenderId" to "MismatchSenderId",
             "MessageTooBig" to "MessageTooBig",

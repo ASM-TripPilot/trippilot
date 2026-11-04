@@ -90,9 +90,16 @@ class PushDispatchService(
         // 삭제를 요청해 유예 중인 계정에는 **종류를 가리지 않고** 푸시하지 않는다 — 리마인드뿐 아니라 Plan-B·숙소·회고 알림도 같은 길을 지난다.
         // 푸시 토큰은 일부러 지우지 않는다: 철회해도 앱이 같은 토큰을 다시 올리지 않을 수 있어(같은 서명이면 등록을 건너뛴다) 지우면 철회한 사람의 푸시가
         // 조용히 끊긴다. 보내지 않는 것은 여기서 지킨다. 토큰은 계정 파기 때 FK CASCADE 가 지운다. 결과는 MUTED — 사용자가 끈 것과 같은 "보내지 않음"이다.
-        if (accounts.isDeletionPending(notification.accountId)) return PushOutcome.MUTED
+        // MUTED 는 원인을 남긴다 — 새 빌드 뒤 "푸시가 안 와요"가 설정(끔)인지 탈퇴 유예인지 로그로 갈린다.
+        if (accounts.isDeletionPending(notification.accountId)) {
+            onReason(NotificationMetrics.REASON_DELETION_PENDING)
+            return PushOutcome.MUTED
+        }
         // 종류 토글 × OS 권한 = 채널 판정. `SYSTEM` 은 토글을 타지 않는다(INV-U6-03).
-        if (!toggles.allowsPush(notification.accountId, notification.kind)) return PushOutcome.MUTED
+        if (!toggles.allowsPush(notification.accountId, notification.kind)) {
+            onReason(NotificationMetrics.REASON_PUSH_OFF)
+            return PushOutcome.MUTED
+        }
         // 권한이 없는 기기는 쏴도 닿지 않는다 — 시도 자체를 하지 않는다(레이트리밋을 아낀다).
         val active = tokens.findActive(notification.accountId)
         val deliverable = active.filter { it.deliverable }
