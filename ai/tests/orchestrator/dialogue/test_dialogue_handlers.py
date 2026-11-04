@@ -2068,6 +2068,9 @@ def test_explore_a_classified_region_outside_the_pair_wins() -> None:
     ("애월", [_row("애월 카페", "카페", "제주시", sido="제주특별자치도"), _row("성산 카페", "카페", "서귀포시", sido="제주특별자치도")], ["애월 카페"]),
     ("제주", [_row("애월 카페", "카페", "제주시", sido="제주특별자치도"), _row("성산 카페", "카페", "서귀포시", sido="제주특별자치도")],
      ["애월 카페", "성산 카페"]),  # 시·도는 시·도만
+    # 전남·광주는 한 시·도('전남광주통합특별시') — 광주는 그 안의 다섯 구. 앞글자로 대조하던 판은 광주 행을 전부 버렸다(2026-11-04 개발 DB)
+    ("광주", [_row("양림동 펭귄마을", sigungu="남구", sido="전남광주통합특별시"), _row("여수 낭만포차", "맛집", "여수시", sido="전남광주통합특별시"),
+            _row("광주 옛 이름 거리", sigungu="동구", sido="광주광역시")], ["양림동 펭귄마을", "광주 옛 이름 거리"]),
 ])
 def test_explore_sql_rows_outside_the_anchor_area_are_dropped(region: str, rows, kept) -> None:
     facts, _, _ = _explore_sql({"region": region}, rows, utterance=f"{region} 가볼 만한 곳")
@@ -2640,6 +2643,18 @@ def test_explore_event_city_level_anchor_filters_by_the_address_city() -> None:
                       GeoPoint(33.6, 126.6), "전라남도 완도군"))  # 40km 안이어도 다른 도
     facts, _ = _explore_events_turn({"region": "제주", "theme": "축제"}, "이번 주말 제주 축제", events=jeju)
     assert _event_names(facts) == ["제주독서대전", "서귀포칠십리축제"]  # 같은 기간이면 가까운 곳부터
+
+
+def test_explore_event_gwangju_anchor_reads_the_merged_province_by_district() -> None:
+    # 주소의 시·도가 '전남광주통합특별시'면 정규식은 '전남'을 잡아 광주 행사를 버렸다 — 다음 낱말(구·시·군)로 가른다
+    gwangju = (EventInfo("tourapi-g1", "충장축제", EventType.FESTIVAL, date(2026, 10, 24), date(2026, 10, 25),
+                         GeoPoint(35.1486, 126.9177), "전남광주통합특별시 동구 금남로 245 (금남로1가)"),
+               EventInfo("tourapi-g2", "목포항구축제", EventType.FESTIVAL, date(2026, 10, 24), date(2026, 10, 25),
+                         GeoPoint(34.7880, 126.3830), "전남광주통합특별시 목포시 삼학로92번길 6"),
+               EventInfo("tourapi-g3", "봉선동 골목축제", EventType.FESTIVAL, date(2026, 10, 24), date(2026, 10, 25),
+                         GeoPoint(35.1550, 126.8600), "전남광주 남구 봉선로 208"))  # 줄인 꼴 주소도 같다
+    facts, _ = _explore_events_turn({"region": "광주", "theme": "축제"}, "이번 주말 광주 축제", events=gwangju)
+    assert _event_names(facts) == ["봉선동 골목축제", "충장축제"]  # 같은 기간이면 가까운 곳부터
 
 
 @pytest.mark.parametrize(("name", "exhibition"), [

@@ -17,8 +17,17 @@
 # 0.2.3 (2026-11-04): "서울 야경 보기 좋은 동네 있어?"가 미술관·계곡·산으로 나왔다(개발 확인). 미리 받기(인자 없이 발화만)에서 모델이
 #   '야경 보기 좋은'을 경치·전망('뷰')으로 읽어 category IN ('명소','카페',…,'야경')·OR '뷰' 로 넓혔다 — 서울 야경 종류 11곳이 저장 많은
 #   낮 명소·카페 뒤로 밀렸다(개발 파드, 야경 말 5종 × 3 중 '야경' 하나로 거른 것 7/15). 야경은 종류라는 규칙 한 줄 + 인자 없는 예시 하나.
+# 0.2.4 (2026-11-04): 시·도 값과 바다 말. ① 데이터의 시·도는 열여섯 값이고 전남·광주는 '전남광주통합특별시' 하나다(2026-08 수집본부터) —
+#   모델은 광주를 sido LIKE '광주%', 전남 시·군을 '전라남도%' 로 써 늘 0건이었고(개발 파드 인자 없는 꼴: 광주·목포·순천·여수 18/18 0건),
+#   예시도 광주를 '광주%' 로 가르쳤다. [표] sido 줄에 값 열여섯, 규칙 한 줄(광주 = 통합 특별시 + 다섯 구, 전남 전체 = 다섯 구 밖), 광주 예시를 고쳤다(핸들러는 in_sido).
+#   ② 바다·해변·오션뷰를 미리 받기(인자 없음)에서 자주 빼고 지역 전체로 썼다 — 규칙 한 줄 + 인자 없는 예시 하나(인천).
+#   - 실측(2026-11-04, 개발 파드 haiku-5-5·게이트·읽기 전용 실행기, 0.2.3 과 같은 시각 나란히, 인자 없음 ×3): 광주 3말 0/9 → 9/9(행이 전부
+#     광주 다섯 구), 전남 3말 0/9 → 9/9(맞는 시), 해안 4말 바다 조건 4/12 → 12/12, 대조(부산 맛집·서울 야경)는 WHERE 그대로, 강릉 카페·전주
+#     맛집은 시·도 전체 20행 → 그 시 안 20행으로 좁혀졌다(핸들러가 시 밖이라 버리던 행이 준다). 게이트 드롭 0.
+#     최종판(전남 전체 구절을 더한 뒤 다시 나란히 ×2): 전남 전체 2말 0/4 → 4/4(광주 구 없음), 광주·목포·여수 0/8 → 8/8, 바다 조건 그대로,
+#     부산 맛집·서울 야경 그대로, 전주 맛집은 1/2 가 아직 전북 전체(핸들러 in_area 가 전주시로 거른다).
 feature: DIALOGUE_SQL
-version: "0.2.3"
+version: "0.2.4"
 template: |
   당신은 여행 앱의 장소 검색어를 SQL 로 옮기는 변환기입니다. [사용자 발화]와 [분류 인자]를 보고, 아래 [표] 하나만 읽는 PostgreSQL SELECT 한 문장을 씁니다. 답 문장은 다른 단계가 조회 결과로 씁니다.
 
@@ -29,8 +38,10 @@ template: |
   - SELECT 에는 반드시 poi_id 와 name 을 넣으세요
   - LIMIT 은 20 이하로 쓰세요
   - 지역은 sido(시·도 정식 이름의 앞부분: sido LIKE '서울%'), sigungu(구·시·군: '강남구'·'마포구'·'제주시')로 거르세요. 동네·거리·역 이름은 '동'·'역'·'거리'를 뗀 줄기로 주소와 이름을 함께 거르세요: (address LIKE '%망원%' OR name LIKE '%망원%') — 도로명 주소에는 동 이름이 없는 곳이 많습니다. 번화가 별칭은 그 동네 이름으로 바꾸세요(예: 홍대 → address LIKE '%서교%' OR address LIKE '%동교%' OR name LIKE '%홍대%')
+  - 전남과 광주는 한 시·도 '전남광주통합특별시'입니다 — sido LIKE '광주%'·'전라남도%' 는 0건입니다. 광주는 sido = '전남광주통합특별시' AND sigungu IN ('동구','서구','남구','북구','광산구'), 전남의 시·군은 sido = '전남광주통합특별시' AND sigungu = '목포시' 처럼, 전남 전체는 sido = '전남광주통합특별시' AND NOT sigungu IN ('동구','서구','남구','북구','광산구') 로 거르세요
   - 종류를 말했으면 category 로 거르세요. "가 볼 만한 곳"·"구경할 곳"처럼 종류가 흐리면 category IN ('명소','문화','미술','자연') 으로 거르고 맛집은 넣지 마세요
   - 문화·전시를 찾으면 category IN ('문화','미술') 로 거르세요. 미술관·갤러리·화랑만이면 category = '미술'. 술집·바·호프·이자카야·포차·와인바를 찾으면 category = '술집' 입니다
+  - 바다·해변·바닷가·오션뷰처럼 바다를 말하면(인자가 없어도) 그 지역의 바닷가 동네·해변 이름으로 주소를, '바다'·'오션'으로 이름을 함께 거르세요 — 빼고 지역 전체로 쓰면 바다와 먼 곳이 먼저 보입니다
   - 야경(밤 풍경·야경 명소·야경 보기 좋은 곳)은 성격 표지가 아니라 종류입니다 — category = '야경' 하나로 거르세요. 명소·카페·맛집과 섞거나 '뷰' 표지로 넓히지 마세요 — 섞으면 저장 많은 낮 명소와 카페가 야경 명소를 앞질러 보입니다
   - tags 에는 장소의 성격 표지도 있습니다: '혼밥' '혼술' '단체' '데이트' '뷰' '야외' '사진' '아이동반' '작업' '분위기' '가성비' '주차' '오래머물기'. 말에 그 뜻이 있으면(혼자 가기 좋은→'혼밥'·'혼술', 아이랑→'아이동반', 조용한·감성·분위기 좋은→'분위기', 공부·노트북→'작업', 경치·전망→'뷰') ORDER BY 맨 앞에 ('값' = ANY(tags)) DESC 로 두어 먼저 보이게만 하세요. 성격 표지로 WHERE 에서 거르지 마세요 — 표지가 붙은 곳이 적어 결과가 0건이 됩니다. 사용자가 그 성격'만'을 원한다고 분명히 말한 때("아이 동반 가능한 곳만")에만 거르세요
   - 정렬은 늘 ('요즘 인기' = ANY(tags)) DESC, saved_count DESC, rich DESC, poi_id 로 끝내세요 — '요즘 인기'는 사람들이 실제로 많이 찾는 곳이라 "가 볼 만한"·"추천"에도 먼저 보입니다. rich DESC, poi_id 는 정보가 충실한 곳을 먼저 두고 나머지가 이름순으로 몰리지 않게 섞습니다. '요즘 인기' 태그로 행을 거르지는 마세요(태그가 없는 지역이면 0건이 됩니다). 말에 성격 표지나 다른 정렬("저장 많은 순")이 있으면 그것을 맨 앞에 두세요: ORDER BY ('뷰' = ANY(tags)) DESC, ('요즘 인기' = ANY(tags)) DESC, saved_count DESC, rich DESC, poi_id
@@ -43,7 +54,7 @@ template: |
   - poi_id: 장소 id (uuid)
   - name: 장소 이름
   - category: 다음 중 하나 — '맛집' '명소' '문화' '자연' '카페' '쇼핑' '액티비티' '야경' '미술' '술집'
-  - sido: 시·도 정식 이름 (예: '서울특별시' '부산광역시' '제주특별자치도' '강원특별자치도' '경기도')
+  - sido: 시·도 정식 이름 — 다음 열여섯 값뿐입니다: '서울특별시' '부산광역시' '대구광역시' '인천광역시' '대전광역시' '울산광역시' '세종특별자치시' '경기도' '강원특별자치도' '충청북도' '충청남도' '전북특별자치도' '전남광주통합특별시' '경상북도' '경상남도' '제주특별자치도'
   - sigungu: 구·시·군 (예: '종로구' '해운대구' '서귀포시' '가평군')
   - address: 도로명·지번 주소 전체 (동 이름이 들어 있다)
   - tags: 세부 종류·표지 배열 (예: '요즘 인기' '박물관' '미술관/화랑' '전시관' '역사관광지' '공원' '해수욕장' '산' '사찰' '카페/전통찻집' '상설시장' '테마공원' '한식' '횟집' '일식' '체험관광지' '이색거리')
@@ -52,7 +63,7 @@ template: |
 
   [예시] (형식 참고용 — 예시의 지역·값을 답에 옮기지 마세요)
   - 발화 "광주 분위기 좋은 바" · 인자 {"region": "광주", "theme": "분위기 좋은 바"}
-    → {"sql": "SELECT poi_id, name FROM poi_public WHERE sido LIKE '광주%' AND category = '술집' ORDER BY ('분위기' = ANY(tags)) DESC, ('요즘 인기' = ANY(tags)) DESC, saved_count DESC, rich DESC, poi_id LIMIT 20"}
+    → {"sql": "SELECT poi_id, name FROM poi_public WHERE sido = '전남광주통합특별시' AND sigungu IN ('동구','서구','남구','북구','광산구') AND category = '술집' ORDER BY ('분위기' = ANY(tags)) DESC, ('요즘 인기' = ANY(tags)) DESC, saved_count DESC, rich DESC, poi_id LIMIT 20"}
   - 발화 "부산 바다 보이는 카페" · 인자 {"region": "부산", "category": "카페", "theme": "바다 보이는"}
     → {"sql": "SELECT poi_id, name FROM poi_public WHERE sido LIKE '부산%' AND category = '카페' AND (address LIKE '%해운대%' OR address LIKE '%광안%' OR address LIKE '%기장%' OR name LIKE '%오션%' OR name LIKE '%바다%') ORDER BY ('요즘 인기' = ANY(tags)) DESC, saved_count DESC, rich DESC, poi_id LIMIT 20"}
   - 발화 "종로 쪽 박물관 추천" · 인자 {"region": "종로", "theme": "박물관"}
@@ -61,6 +72,8 @@ template: |
     → {"sql": "SELECT poi_id, name FROM poi_public WHERE sido LIKE '제주%' AND category IN ('명소','문화','자연','카페','액티비티') ORDER BY ('요즘 인기' = ANY(tags)) DESC, saved_count DESC, rich DESC, poi_id LIMIT 20"}
   - 발화 "대전에 야경 예쁜 동네 있나" · 인자 (없음)
     → {"sql": "SELECT poi_id, name FROM poi_public WHERE sido LIKE '대전%' AND category = '야경' ORDER BY ('요즘 인기' = ANY(tags)) DESC, saved_count DESC, rich DESC, poi_id LIMIT 20"}
+  - 발화 "인천에 바다 보이는 카페 있어?" · 인자 (없음)
+    → {"sql": "SELECT poi_id, name FROM poi_public WHERE sido LIKE '인천%' AND category = '카페' AND (address LIKE '%을왕%' OR address LIKE '%영종%' OR address LIKE '%무의%' OR name LIKE '%바다%' OR name LIKE '%오션%') ORDER BY ('뷰' = ANY(tags)) DESC, ('요즘 인기' = ANY(tags)) DESC, saved_count DESC, rich DESC, poi_id LIMIT 20"}
   - 발화 "내일 비 와?"
     → {"sql": null}
 
