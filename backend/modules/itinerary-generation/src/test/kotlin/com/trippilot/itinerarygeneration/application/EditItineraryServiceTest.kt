@@ -42,6 +42,7 @@ import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.DayAnchor
 import com.trippilot.itinerarygeneration.domain.RepairContext
+import com.trippilot.itinerarygeneration.domain.TimeWindow
 import com.trippilot.placedata.api.RegionCenter
 import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.profile.api.PreferenceFacade
@@ -1069,7 +1070,31 @@ class EditItineraryServiceTest : StringSpec({
         EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, contexts)
             .edit(acc, tripId, editDays(listOf(x, b), listOf(c, y))) // 1일차 첫 장소 교체, 2일차는 둘째만
 
-        agent.lastContext shouldBe RepairContext(listOf(DayAnchor(day, 33.25, 126.41)), listOf("택시", "렌터카"), profileWith(listOf("택시", "렌터카")))
+        agent.lastContext shouldBe RepairContext(
+            listOf(DayAnchor(day, 33.25, 126.41)), listOf("택시", "렌터카"), profileWith(listOf("택시", "렌터카")),
+            listOf(TimeWindow(day, LocalTime.of(9, 0), LocalTime.of(21, 0))), // 앵커가 실린 날만 — 설정 없는 여행은 09:00~21:00
+        )
+    }
+
+    // 2026-11-05 — 수리 창은 여행 설정의 그 날 기본 창이다(편집 제안과 같은 규칙). 상대는 그 시작을 앵커 출발 시각으로 쓰므로, 종전 09:00
+    // 상수면 06:00 시작 여행의 이른 첫 슬롯을 09:00 + 앵커 이동 뒤로 밀 수 있었다.
+    "repair 창은 여행 설정의 그 날 시작이다 — 06:00 시작 여행이면 06:00, 첫날 시작이 있으면 그것" {
+        val (a, b, c, d) = List(4) { UUID.randomUUID() }
+        val x = UUID.randomUUID(); val y = UUID.randomUUID()
+        fun windowsSent(ctx: TripGenerationContext): List<TimeWindow>? {
+            val repo = repoWith(twoDays(a, b, c, d))
+            val agent = EditFakeAgent(repairWith = shiftingRepair())
+            val contexts = repairContexts(ctx, stays = listOf(DayAnchorView(day, 33.25, 126.41)), modes = listOf("렌터카"))
+            EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, contexts)
+                .edit(acc, tripId, editDays(listOf(x, b), listOf(c, y))) // 1일차 첫 장소 교체 → 1일차만 앵커
+            return agent.lastContext?.timeWindows
+        }
+        val base = tripCtx(TripDestinationRef("제주", null, 1)).copy(dayStartAt = LocalTime.of(6, 0))
+
+        windowsSent(base) shouldBe listOf(TimeWindow(day, LocalTime.of(6, 0), LocalTime.of(21, 0)))
+        windowsSent(base.copy(firstDayStartAt = LocalTime.of(7, 0))) shouldBe listOf(TimeWindow(day, LocalTime.of(7, 0), LocalTime.of(21, 0)))
+        // 설정이 모순(시작 ≥ 끝)인 날은 싣지 않는다 — 편집 제안과 같다(상대는 그 날 출발 시각으로 밀지 않는다)
+        windowsSent(base.copy(firstDayStartAt = LocalTime.of(22, 0))) shouldBe emptyList()
     }
 
     "숙소도 목적지 좌표도 없는 날은 앵커를 생략한다 — 수단은 그대로 싣는다" {

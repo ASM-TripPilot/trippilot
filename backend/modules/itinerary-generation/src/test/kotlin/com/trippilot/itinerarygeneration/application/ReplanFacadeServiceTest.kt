@@ -259,6 +259,79 @@ class ReplanFacadeServiceTest : StringSpec({
         sentMode(tripModes("택시")).shouldBeNull()          // 아는 값이 없다
     }
 
+    // ───── 그날 창(상대 time_window) — 2026-11-05 사용자 결정 A+B ─────────────────────
+    // 운영 11-04(trip 8311ac19): 하루 시작 06:00 여행을 다시 짜면 09:00 부터 짰다 — 어댑터가 시작을 09:00 상수로 박았다.
+    // 이제 시작 = min(여행 설정의 그날 시작, 원 일정의 아직 안 지난 첫 슬롯 시작), 끝 = 그날 기본 끝(오늘이면 저녁까지 늘린다).
+
+    fun tripWith(
+        start: LocalDate = today, end: LocalDate = today.plusDays(1),
+        dayStart: LocalTime? = null, firstDayStart: LocalTime? = null, lastDayEnd: LocalTime? = null,
+    ) = object : TripFacade {
+        override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
+        override fun findGenerationContext(accountId: UUID, tripId: UUID) = TripGenerationContext(
+            start, end, refs("제주"), "친구", 500_000, emptyList(),
+            dayStartAt = dayStart, firstDayStartAt = firstDayStart, lastDayEndAt = lastDayEnd,
+        )
+    }
+    /** 보낸 창 (시작, 끝). [itinerary] 를 주면 기본 일정 대신 그것을 다시 짠다. */
+    fun windowSent(trips: TripFacade, cmd: ReplanCommand = command(), itinerary: Itinerary? = null): Pair<LocalTime, LocalTime> {
+        val agent = Agent(proposal(replacement))
+        val fx = fixture(agent, trips = trips)
+        itinerary?.let { fx.repo.byTrip[trip] = it }
+        fx.svc.propose(cmd)
+        return agent.inputs.single().let { it.windowStart to it.windowEnd }
+    }
+    fun t(hhmm: String) = LocalTime.parse(hhmm)
+    val tomorrow = today.plusDays(1)
+
+    "여행 설정의 하루 시작(06:00)부터 다시 짠다 — 오늘도 다른 날도(운영 11-04 신고)" {
+        val early = tripWith(dayStart = t("06:00"))
+        // 오늘(지금 15:00): 남은 원 일정 첫 슬롯이 18:00 이라 설정이 이르다. 끝은 지금+4h(19:30)가 21:00 보다 이르니 그대로.
+        windowSent(early) shouldBe (t("06:00") to t("21:00"))
+        // 다른 날: 원 일정 첫 슬롯 10:00 보다 설정이 이르다.
+        windowSent(early, command().copy(targetDate = tomorrow)) shouldBe (t("06:00") to t("21:00"))
+    }
+
+    "첫날 시작(firstDayStartAt)이 매일 시작보다 우선한다 — 그 날에만" {
+        val trips = tripWith(dayStart = t("06:00"), firstDayStart = t("08:00"))
+        windowSent(trips) shouldBe (t("08:00") to t("21:00"))                                      // 오늘 = 첫날
+        windowSent(trips, command().copy(targetDate = tomorrow)) shouldBe (t("06:00") to t("21:00")) // 둘째 날은 매일 시작
+    }
+
+    "설정이 없으면 09:00~21:00 — 종전과 같다" {
+        windowSent(replanTrips) shouldBe (t("09:00") to t("21:00"))
+        windowSent(replanTrips, command().copy(targetDate = tomorrow)) shouldBe (t("09:00") to t("21:00"))
+    }
+
+    "원 일정의 아직 안 지난 슬롯이 설정보다 이르면 그 시작부터 — 지난 슬롯은 세지 않는다" {
+        val dawnTomorrow = Itinerary.create(
+            trip, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(
+                // 오늘 06:00 슬롯은 지금(15:00) 이미 끝났다 — 상대가 지난 잠금을 솔버에 넣지 않으니 창에 넣을 이유가 없다.
+                ItineraryDay.of(today, 0, listOf(slot(morning, "06:00", "07:00", order = 0), slot(evening, "18:00", "19:00", order = 1))),
+                ItineraryDay.of(tomorrow, 1, listOf(slot(UUID.randomUUID(), "06:30", "07:30", order = 0))),
+            ),
+            now, GenerationState.COMPLETE,
+        )
+        val trips = tripWith(dayStart = t("09:00"))
+        windowSent(trips, command().copy(targetDate = tomorrow), dawnTomorrow) shouldBe (t("06:30") to t("21:00"))
+        windowSent(trips, command(), dawnTomorrow) shouldBe (t("09:00") to t("21:00"))
+    }
+
+    "오늘 밤에 다시 짜면 끝만 늘린다(23:59) — 마지막 날 사용자가 적은 끝은 늘리지 않는다" {
+        // 21:30 KST — 기본 끝 21:00 이면 남은 시간이 0 이라 "대안 없음"이었다. 시작은 하루 전체 그대로.
+        windowSent(replanTrips, command().copy(fromInstant = Instant.parse("2026-08-11T12:30:00Z"))) shouldBe (t("09:00") to t("23:59"))
+        // 마지막 날(오늘) 귀가 19:00 — 17:00 에 다시 짜도 19:00 에서 끝난다(생성과 같은 규칙).
+        val lastDay = tripWith(start = today.minusDays(1), end = today, lastDayEnd = t("19:00"))
+        windowSent(lastDay, command().copy(fromInstant = Instant.parse("2026-08-11T08:00:00Z"))) shouldBe (t("09:00") to t("19:00"))
+        // 마지막 날이 다른 날이면 그 끝 그대로.
+        windowSent(tripWith(lastDayEnd = t("18:00")), command().copy(targetDate = tomorrow)) shouldBe (t("09:00") to t("18:00"))
+    }
+
+    "설정이 모순(시작 ≥ 끝)이면 설정 없는 날의 창으로 — 창은 필수라 상대에 뒤집힌 창을 보내지 않는다" {
+        windowSent(tripWith(dayStart = t("22:00")), command().copy(targetDate = tomorrow)) shouldBe (t("09:00") to t("21:00"))
+    }
+
     // ───── 숙소 근처에서 끝내기의 끝점 ─────────────────────────────────────
 
     fun anchorsOn(vararg days: Pair<LocalDate, Double>) = object : BaseAnchorFacade {

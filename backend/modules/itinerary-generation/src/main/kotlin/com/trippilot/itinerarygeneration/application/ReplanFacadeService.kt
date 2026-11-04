@@ -23,6 +23,7 @@ import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.RevisionActor
 import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
+import com.trippilot.itinerarygeneration.domain.TodayWindow
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.PersonalizationPort
@@ -84,6 +85,7 @@ class ReplanFacadeService(
         // 비교가 성립하지 않는다.
         val prefs = preferences.findPreferences(command.accountId).overriddenBy(ctx.preferenceSnapshot)
         val profile = prefs.toProfile(personalization.hintsFor(command.accountId), ctx.preferenceSnapshot.keys)
+        val (windowStart, windowEnd) = replanWindow(ctx, command, current.days.firstOrNull { it.date == command.targetDate })
         val output = scheduleAgent.replan(
             ReplanInput(
                 tripId = command.tripId,
@@ -92,6 +94,8 @@ class ReplanFacadeService(
                 destinations = ctx.destinations,
                 fromInstant = command.fromInstant,
                 targetDate = command.targetDate,
+                windowStart = windowStart,
+                windowEnd = windowEnd,
                 originLat = origin.first,
                 originLng = origin.second,
                 stayLat = stay?.lat,
@@ -151,6 +155,31 @@ class ReplanFacadeService(
         // 빈 초안은 "해 없음"이다 — 빈 하루를 초안이라고 보여 주면 사용자가 그걸 확정한다.
         if (slots.isEmpty()) return null
         return ReplanProposal(current.itineraryId, command.targetDate, slots, output.totalDistanceKm)
+    }
+
+    /**
+     * 그날 다시 짤 창(상대 `time_window`) — 2026-11-05 사용자 결정(운영 11-04 신고: 06:00 시작 여행을 09:00 부터 다시 짰다).
+     *
+     * - **시작** = 여행 설정의 그날 시작([baseDayWindow] — 첫날 `firstDayStartAt` → `dayStartAt` → 09:00)과 **원 일정의 아직 안 지난
+     *   첫 슬롯 시작** 중 이른 쪽. 설정보다 이르게 놓인 원 일정(편집으로 당긴 곳·고정 블록에 맞춰 넓힌 생성 창)을 창 밖으로 내몰지 않는다.
+     *   지난 슬롯(오늘, 끝 ≤ 지금 · 자정 넘김 제외)은 세지 않는다 — 상대가 지난 잠금을 솔버에 넣지 않는다(AI `_past_blocks`).
+     *   다른 날은 지난 것이 없다(상대도 그 날엔 하한을 걸지 않아, 그 날 잠금은 전부 창 안에 있어야 한다).
+     * - **끝** = 그날 기본 끝(마지막 날 `lastDayEndAt` 포함). 오늘이면 생성과 같은 규칙([TodayWindow.eveningEnd])으로 끝만 늘린다 —
+     *   밤 9시에 누른 [다시 짜기]가 남은 시간 0 으로 "대안 없음"이 되지 않게. 사용자가 적은 끝(마지막 날 귀가)은 사실이라 늘리지 않는다
+     *   (생성 `dayWindowOf` 와 같다).
+     * - '지금부터'로 좁히지 않는다(연동 설계 §1) — 지금 이후는 잠금과 `from_instant` 로 표현한다.
+     * - 설정이 모순(시작 ≥ 끝)이면 설정 없는 날의 창(09:00~21:00) — 생성은 그 모순을 400 으로 드러내지만, 재계획은 창이 필수라 종전 값으로 간다.
+     */
+    private fun replanWindow(ctx: TripGenerationContext, command: ReplanCommand, day: ItineraryDay?): Pair<LocalTime, LocalTime> {
+        val date = command.targetDate
+        val (baseStart, baseEnd) = ctx.baseDayWindow(date).takeIf { (s, e) -> s.isBefore(e) } ?: (DEFAULT_DAY_START to DEFAULT_DAY_END)
+        val now = command.fromInstant.atZone(TRAVEL_ZONE)
+        val today = now.toLocalDate() == date
+        val upcoming = day?.slots.orEmpty().filterNot { today && !it.endsNextDay && it.endAt <= now.toLocalTime() }
+        val start = (upcoming.map { it.startAt } + baseStart).min()
+        val userEnd = date == ctx.endDate && ctx.lastDayEndAt != null
+        val from = if (today && !userEnd) TodayWindow.earliest(now.toLocalTime()) else null
+        return start to (from?.let { TodayWindow.eveningEnd(it, baseEnd) } ?: baseEnd)
     }
 
     /**

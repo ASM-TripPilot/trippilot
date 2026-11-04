@@ -195,6 +195,13 @@ data class ReplanInput(
     /** '지금 이후'의 기준점. PARTIAL_SLOTS 는 이 시각 이전 슬롯을 전부 잠근다. */
     val fromInstant: Instant,
     val targetDate: LocalDate,
+    /**
+     * 그날 창(상대 `time_window`) — 시작은 여행 설정의 그날 시작과 원 일정의 아직 안 지난 첫 슬롯 시작 중 이른 쪽, 끝은 그날 기본 끝
+     * (오늘이면 저녁까지 늘린 값). 규칙의 주인은 호출측(`ReplanFacadeService.replanWindow`)이고 어댑터는 그대로 싣는다
+     * (2026-11-05 — 종전엔 어댑터가 시작을 09:00 상수로 박아 06:00 시작 여행도 09:00 부터 다시 짰다).
+     */
+    val windowStart: LocalTime,
+    val windowEnd: LocalTime,
     /** null 허용 — 기준점 사다리(BR-U4-19)로 정한 좌표가 없을 수도 있다. */
     val originLat: Double?,
     val originLng: Double?,
@@ -627,8 +634,15 @@ data class ValidationResult(val violations: List<Violation>, val unverifiedPoiId
  * 빈 값이면 상대는 종전 동작(첫 구간 null·대중교통)이다.
  * [preferenceProfile] — 생성과 같은 그 여행의 취향(2026-11-03). 상대가 액티비티 취향 대중교통 여행의 도보 상한(1.0km)을 생성과 같게 건다 —
  * 없으면 수리가 생성이 걸어서 잡은 0.7~0.9km 구간을 대중교통 시간으로 밀었다. null 이면 종전.
+ * [timeWindows] — 앵커가 실린 날의 기본 일과 창(여행 설정, 편집 제안과 같은 규칙 — 2026-11-05). 상대는 그 시작을 앵커 출발 시각으로만 쓴다.
+ * 종전엔 어댑터가 09:00 상수를 실어 06:00 시작 여행의 이른 첫 슬롯을 09:00 + 이동 뒤로 밀 수 있었다. 비면 상대는 출발 시각으로 밀지 않는다.
  */
-data class RepairContext(val anchors: List<DayAnchor>, val transportModes: List<String>, val preferenceProfile: PreferenceProfile? = null) {
+data class RepairContext(
+    val anchors: List<DayAnchor>,
+    val transportModes: List<String>,
+    val preferenceProfile: PreferenceProfile? = null,
+    val timeWindows: List<TimeWindow> = emptyList(),
+) {
     companion object {
         val NONE = RepairContext(emptyList(), emptyList())
     }

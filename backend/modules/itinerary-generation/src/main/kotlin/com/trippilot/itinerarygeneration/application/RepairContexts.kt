@@ -28,6 +28,7 @@ import java.util.UUID
  *
  * 앵커는 [dates] 의 날만 싣는다 — 앵커가 실린 날은 상대가 첫 슬롯을 앵커 이동만큼 밀 수 있어서,
  * 첫 구간이 안 바뀐 날까지 실으면 사용자가 옮겨 둔 시각이 그 편집과 무관하게 움직인다.
+ * 그 날들의 창도 편집 제안과 같은 기본 일과 창([baseDayWindow])이다(2026-11-05) — 상대는 그 시작을 앵커 출발 시각으로만 쓴다.
  */
 @Component
 class RepairContexts(
@@ -46,7 +47,7 @@ class RepairContexts(
             RegionAnchors.dayAnchors(regions, ctx.startDate, ctx.endDate, stays, ctx.destinationRefs).filter { it.date in dates }
         }
         val prefs = prefsOf(accountId, ctx)
-        return RepairContext(anchors, prefs.transportModes, profileOf(accountId, ctx, prefs))
+        return RepairContext(anchors, prefs.transportModes, profileOf(accountId, ctx, prefs), anchors.mapNotNull { ctx.openWindowOn(it.date) })
     }
 
     /**
@@ -80,13 +81,17 @@ class RepairContexts(
         return EditProposalContext(
             anchor, firstAiTransport(prefs.transportModes), prefs.budgetTier,
             preferenceProfile = profileOf(accountId, ctx, prefs),
-            // 여행 설정이 모순(시작 ≥ 끝)인 날은 싣지 않는다 — 생성은 그 모순을 400 으로 드러내고, 편집은 창 없이(종전 기본값) 간다
-            timeWindows = dates.distinct().sorted().mapNotNull { d ->
-                ctx.baseDayWindow(d).takeIf { (s, e) -> s.isBefore(e) }?.let { (s, e) -> TimeWindow(d, s, e) }
-            },
+            timeWindows = dates.distinct().sorted().mapNotNull { ctx.openWindowOn(it) },
             tripStartDate = ctx.startDate,
         )
     }
+
+    /**
+     * 그 날의 기본 일과 창([baseDayWindow]) — 수리·편집 제안이 같은 규칙을 쓴다. 여행 설정이 모순(시작 ≥ 끝)인 날은 null(싣지 않는다) —
+     * 생성은 그 모순을 400 으로 드러내고, 편집은 창 없이(종전 기본값) 간다.
+     */
+    private fun TripGenerationContext.openWindowOn(date: LocalDate): TimeWindow? =
+        baseDayWindow(date).takeIf { (s, e) -> s.isBefore(e) }?.let { (s, e) -> TimeWindow(date, s, e) }
 
     private fun prefsOf(accountId: UUID, ctx: TripGenerationContext): PreferenceSnapshot =
         preferences.findPreferences(accountId).overriddenBy(ctx.preferenceSnapshot)

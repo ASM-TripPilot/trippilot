@@ -44,6 +44,13 @@ tripContext = TripContext(destinations, targetDate, targetDate, null, null),
 
 `PARTIAL_SLOTS` 여도 `time_window` 는 하루 전체다. 창을 "지금부터"로 좁혔더니 **오전에 잠긴 고정 블록이 창 밖이 되어 409 로 거부된 실측**이 어댑터 주석에 남아 있다. 이 결정은 새 경계에서도 그대로 간다.
 
+> **[개정 · 2026-11-05] '하루 전체'의 시작·끝은 여행 설정과 원 일정에서 온다.** 종전엔 어댑터가 시작을 09:00 상수로 박아, 하루 시작을 06:00 으로 둔 여행도 09:00 부터 다시 짰다(운영 11-04 신고, trip `8311ac19`). 이제 `ReplanFacadeService.replanWindow` 한 곳이 정하고 어댑터는 `ReplanInput.windowStart`·`windowEnd` 를 그대로 싣는다(사용자 결정 A+B).
+> - **시작** = min(여행 설정의 그날 시작, 그날 원 일정의 **아직 안 지난** 첫 슬롯 시작). 여행 설정은 생성·편집 제안과 같은 `TripDayWindows.baseDayWindow` 다(첫날 `first_day_start_at` → `day_start_at` → 09:00). 설정보다 이르게 놓인 원 일정을 창 밖으로 내몰지 않는다. 지난 슬롯(오늘, 끝 ≤ 지금 · 자정 넘김 제외)은 세지 않는다 — AI 가 지난 잠금을 솔버에 넣지 않는다(`_past_blocks`). 다른 날은 AI 가 하한을 걸지 않아 그 날 잠금이 전부 창 안에 있어야 하므로 모든 슬롯을 센다.
+> - **끝** = 그날 기본 끝(마지막 날 `last_day_end_at` 포함). 오늘이면 생성과 같은 규칙(`TodayWindow.eveningEnd`, 지금+4시간·23:59 까지)으로 끝만 늘린다 — 단 사용자가 적은 끝(마지막 날 귀가)은 사실이라 늘리지 않는다(생성 `dayWindowOf` 와 같다).
+> - 설정이 모순(시작 ≥ 끝)이면 설정 없는 날의 창(09:00~21:00) — 생성은 그 모순을 400 으로 드러내지만 재계획은 창이 필수다.
+> - '지금부터'로 좁히지 않는다는 위 결정은 그대로다. AI 스키마도 그대로(`time_window` 의 뜻 불변 — 와이어 변경 없음).
+> - 수리(`/ai/v1/itinerary/repair`)의 앵커 날 `time_windows` 도 같은 출처(그 날 기본 일과 창, 모순인 날은 생략 — 편집 제안과 같은 규칙)로 바꿨다. 종전 09:00 상수는 06:00 시작 여행의 이른 첫 슬롯을 09:00 + 앵커 이동 뒤로 밀 수 있었다.
+
 ---
 
 ## 2. 요청 매핑표 — `ReplanInput` + DB → AI `ReplanRequest`
@@ -59,6 +66,7 @@ tripContext = TripContext(destinations, targetDate, targetDate, null, null),
 | `locked_blocks` | `visit_slot.is_fixed` + `visit_check` 완료 + `from_instant` 이전 | 시각 포함 — 시각 없는 블록은 AI 가 거부(422 실측) |
 | `excluded_poi_ids` | `replan_session.excluded_poi_ids` | |
 | `stay_anchor` | `base_assignment` 숙소 — 그날 밤, 없으면 전날 밤(체크아웃일) | [추가 2026-10-14] '숙소 근처에서 끝내기'의 끝점. 없으면 null. `anchor` 와 별개(기준점은 숙소를 보장하지 않는다) |
+| `time_window` | `trip.day_start_at`·`first_day_start_at`·`last_day_end_at` + 그날 `visit_slot.start_at`(아직 안 지난 것) | [개정 2026-11-05] 종전 09:00~21:00 상수. 규칙은 §1 개정 |
 | `request_meta` | 런타임 | **`deadline_ms` 는 §6 참조** |
 
 ### 새로 실어야 하는 것 — **DB 에 이미 있다. 읽어서 보내면 된다**
@@ -117,7 +125,7 @@ class ReplanRequest(BoundaryModel):
     trip_id: str = Field(min_length=1)
     trip_context: TripContextSchema
     target_date: dt.date
-    time_window: TimeWindowSchema            # 하루 전체. 좁히지 않는다 (§1)
+    time_window: TimeWindowSchema            # 그날 창(여행 설정·원 일정, §1 개정). '지금부터'로 좁히지 않는다 (§1)
     anchor: CoordSchema
     stay_anchor: CoordSchema | None = None   # 그날 밤 숙소(없으면 전날) — END_NEAR_STAY 끝점
 
