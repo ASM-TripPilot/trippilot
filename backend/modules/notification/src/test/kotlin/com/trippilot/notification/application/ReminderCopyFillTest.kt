@@ -363,6 +363,36 @@ class ReminderCopyFillTest : StringSpec({
         warns.count { "끝내 못 채웠습니다" in it } shouldBe 1
     }
 
+    /**
+     * 남은 행이 **전부 재료 없음**이면(그 날 일정에 장소가 없다) 포기해도 경고가 아니다 — 못 받은 것이 아니라 물을 것이 없었다.
+     * 11-04 운영 첫 08:00 에는 장소 없는 날만 남은 여행 3개가 파드마다 WARN 을 남겨, 상대가 죽어 못 받은 진짜 경고와 섞였다.
+     * 줄 자체는 남긴다(조용한 포기 금지) — 수준만 INFO 다.
+     */
+    "남은 행이 전부 재료 없음이면 포기해도 경고가 아니다 — 같은 줄이 INFO 로 남는다" {
+        val port = object : ReminderCopyPort {
+            override val enabled = true
+            var calls = 0
+            override fun copiesFor(tripTitle: String?, items: List<ReminderCopyRequest>): Map<String, ReminderCopy> {
+                calls++
+                return emptyMap()
+            }
+        }
+        val retries = ReminderCopyRetries(RETRY_DELAYS_MS)
+        val (svc, _) = serviceWith(port, names = emptyMap(), retries = retries)
+
+        val lines = linesFrom(ReminderCopyRetryPoller::class.java) {
+            svc.reload(tripId)
+            repeat(RETRY_DELAYS_MS.size + 3) { i ->
+                pollerAt(retries, svc, RETRY_DELAYS_MS.sum() * (i + 1)).retryDue()
+            }
+        }
+
+        // 적재 때 한 번 물었을 뿐이다 — 재시도는 재료가 없는 행을 아예 안 묻는다.
+        port.calls shouldBe 1
+        val giveUp = lines.filter { "끝내 못 채웠습니다" in it.second }
+        giveUp.map { it.first } shouldBe listOf(ch.qos.logback.classic.Level.INFO)
+    }
+
     /** 채움이 예외로 끝나도 사슬이 끊기지 않는다 — 다음 기회에 다시 한다(일시적인 조회 실패가 문구를 영구히 포기시키지 않는다). */
     "채움이 터져도 다음 기회에 다시 한다" {
         var failNext = true
@@ -476,6 +506,19 @@ private val RETRY_DELAYS_MS = listOf(180_000L, 300_000L, 480_000L)
 /** 시각 기준 [offsetMs] 뒤에 도는 재시도 폴러. */
 private fun pollerAt(retries: ReminderCopyRetries, svc: NotificationScheduleService, offsetMs: Long) =
     ReminderCopyRetryPoller(retries, svc, Clock.offset(Clock.fixed(Instant.parse("2026-08-01T00:00:00Z"), ZoneOffset.UTC), Duration.ofMillis(offsetMs)))
+
+/** [loggerClass] 의 모든 줄을 (수준, 메시지) 로 모은다 — 같은 줄의 수준이 상황에 따라 갈리는지 볼 때 쓴다. */
+private fun linesFrom(loggerClass: Class<*>, block: () -> Unit): List<Pair<ch.qos.logback.classic.Level, String>> {
+    val appender = ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>().apply { start() }
+    val logger = org.slf4j.LoggerFactory.getLogger(loggerClass) as ch.qos.logback.classic.Logger
+    logger.addAppender(appender)
+    try {
+        block()
+    } finally {
+        logger.detachAppender(appender)
+    }
+    return appender.list.map { it.level to it.formattedMessage }
+}
 
 /** [loggerClass] 의 WARN 줄을 모은다. */
 private fun warnsFrom(loggerClass: Class<*>, block: () -> Unit): List<String> {
