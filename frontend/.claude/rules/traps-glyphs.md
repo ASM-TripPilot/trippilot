@@ -3,7 +3,7 @@ paths:
   - "src/**/*Glyphs.tsx"
 ---
 이 파일은 repo-traps.md에서 경로별로 쪼갠 함정이다 — 해당 경로 만질 때만 로드된다.
-(전역 "raw hex 스캔은 `*Glyphs.tsx` 제외" 항목은 코어 `repo-traps.md`에 남아 무조건 로드된다.)
+(raw hex 는 ESLint `trippilot/no-raw-hex` 가 막는다 — 서술은 코어 `repo-traps.md` 「글리프 · 심판 사정거리」에 있고 무조건 로드된다.)
 
 ## 동명 글리프 (TRIP-1773 로 0 — ESLint 가 지킨다)
 
