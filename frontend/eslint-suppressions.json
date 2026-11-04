@@ -9,6 +9,21 @@
       "count": 1
     }
   },
+  "src/__tests__/recordBarStack.integration.test.tsx": {
+    "react-hooks/globals": {
+      "count": 1
+    }
+  },
+  "src/__tests__/tabsFreeze.integration.test.tsx": {
+    "react-hooks/globals": {
+      "count": 1
+    }
+  },
+  "src/app/model/usePermissionCatchUp.ts": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
   "src/app/routing/SplashGate.accountBoundary.test.tsx": {
     "no-restricted-syntax": {
       "count": 1
@@ -56,6 +71,16 @@
   },
   "src/features/auth/model/prefetchTrips.test.ts": {
     "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/assistant/assistant-sheet/model/assistantQueries.ts": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/pages/assistant/assistant-sheet/model/useTurnFlow.ts": {
+    "react-hooks/set-state-in-effect": {
       "count": 1
     }
   },
@@ -132,6 +157,9 @@
   "src/pages/home/ui/HomePage.tsx": {
     "no-restricted-syntax": {
       "count": 6
+    },
+    "react-hooks/refs": {
+      "count": 1
     }
   },
   "src/pages/home/ui/HomeScreen.heroMemo.test.tsx": {
@@ -169,8 +197,18 @@
       "count": 2
     }
   },
+  "src/pages/itinerary/itinerary-generating/ui/GeneratingIllustration.tsx": {
+    "react-hooks/refs": {
+      "count": 10
+    }
+  },
   "src/pages/itinerary/itinerary-generating/ui/GeneratingPage.hookMock.test.tsx": {
     "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/itinerary/itinerary-generating/ui/GeneratingPage.tsx": {
+    "react-hooks/refs": {
       "count": 1
     }
   },
@@ -179,11 +217,26 @@
       "count": 5
     }
   },
+  "src/pages/itinerary/itinerary-generating/ui/GeneratingScreen.tsx": {
+    "react-hooks/refs": {
+      "count": 4
+    }
+  },
   "src/pages/itinerary/itinerary-list/ui/MyTripsListPage.integration.test.tsx": {
     "no-restricted-properties": {
       "count": 3
     },
     "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/pages/itinerary/itinerary-list/ui/MyTripsListPage.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/pages/itinerary/itinerary-list/ui/TripCardContainer.tsx": {
+    "react-hooks/refs": {
       "count": 1
     }
   },
@@ -195,6 +248,9 @@
   "src/pages/itinerary/itinerary-manual/ui/ManualPlanPage.tsx": {
     "no-restricted-syntax": {
       "count": 2
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
     }
   },
   "src/pages/itinerary/itinerary-manual/ui/PlaceAddPage.integration.test.tsx": {
@@ -213,6 +269,9 @@
   "src/pages/itinerary/itinerary-method/ui/ItineraryMethodPage.integration.test.tsx": {
     "no-restricted-syntax": {
       "count": 2
+    },
+    "react-hooks/globals": {
+      "count": 1
     }
   },
   "src/pages/itinerary/itinerary-method/ui/ItineraryMethodPage.tsx": {
@@ -225,6 +284,11 @@
       "count": 2
     }
   },
+  "src/pages/itinerary/itinerary-mustvisit/ui/MustVisitTimePage.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
   "src/pages/live/live-itinerary/ui/LiveBottomBar.test.tsx": {
     "no-restricted-properties": {
       "count": 1
@@ -233,6 +297,14 @@
   "src/pages/live/live-itinerary/ui/LiveHubView.test.tsx": {
     "no-restricted-properties": {
       "count": 1
+    }
+  },
+  "src/pages/live/live-itinerary/ui/LiveHubView.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 2
     }
   },
   "src/pages/live/live-itinerary/ui/LiveItineraryPage.directions.integration.test.tsx": {
@@ -283,6 +355,12 @@
   "src/pages/live/planb-draft/ui/PlanbSolvingPage.tsx": {
     "no-restricted-syntax": {
       "count": 1
+    },
+    "react-hooks/purity": {
+      "count": 1
+    },
+    "react-hooks/refs": {
+      "count": 1
     }
   },
   "src/pages/live/planb-draft/ui/ReplanDraftView.test.tsx": {
@@ -303,6 +381,21 @@
       "count": 2
     }
   },
+  "src/pages/onboarding/onboarding-pref1/ui/PrefStep1Page.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/pages/onboarding/onboarding-pref2/ui/PrefStep2Page.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/pages/onboarding/onboarding-terms/model/useTermsConsent.ts": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
   "src/pages/onboarding/onboarding-terms/ui/TermsPage.tsx": {
     "no-restricted-syntax": {
       "count": 1
@@ -311,6 +404,16 @@
   "src/pages/onboarding/onboarding-tour/ui/OnboardingTourView.test.tsx": {
     "no-restricted-properties": {
       "count": 2
+    }
+  },
+  "src/pages/onboarding/onboarding-tour/ui/OnboardingTourView.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/pages/onboarding/onboarding-tour/ui/TourMotion.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
     }
   },
   "src/pages/record/daily-reflection/ui/DailyReflectionPage.tsx": {
@@ -358,6 +461,11 @@
       "count": 1
     }
   },
+  "src/pages/record/trip-records/ui/VisitRecordCard.tsx": {
+    "react-hooks/refs": {
+      "count": 6
+    }
+  },
   "src/pages/record/trip-summary/ui/TripSummaryPage.integration.test.tsx": {
     "no-restricted-syntax": {
       "count": 1
@@ -401,6 +509,9 @@
   "src/pages/settings/settings-preferences/ui/SettingsPreferencesPage.tsx": {
     "no-restricted-syntax": {
       "count": 1
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
     }
   },
   "src/pages/settings/settings/model/preferenceSummary.test.ts": {
@@ -438,6 +549,11 @@
       "count": 1
     }
   },
+  "src/pages/stay/stay-detail/ui/StayDetailScreen.tsx": {
+    "react-hooks/static-components": {
+      "count": 1
+    }
+  },
   "src/pages/stay/stay-register/ui/StayRegisterPage.tsx": {
     "no-restricted-syntax": {
       "count": 1
@@ -456,6 +572,12 @@
   "src/pages/trip/trip-new-step1/ui/TripNewStep1Page.tsx": {
     "no-restricted-syntax": {
       "count": 4
+    },
+    "react-hooks/refs": {
+      "count": 2
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
     }
   },
   "src/pages/trip/trip-new-step2/ui/StaySelectSheet.test.tsx": {
@@ -471,6 +593,29 @@
   "src/pages/trip/trip-new-step2/ui/TripNewStep2Page.tsx": {
     "no-restricted-syntax": {
       "count": 2
+    },
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/shared/lib/useDeadlineFlag.ts": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/shared/lib/useElapsedFlag.ts": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/shared/lib/useScrollHide.test.tsx": {
+    "react-hooks/globals": {
+      "count": 1
+    }
+  },
+  "src/shared/location/automation/useAutomationStatus.ts": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
     }
   },
   "src/shared/map/MapView.test.tsx": {
@@ -478,9 +623,19 @@
       "count": 3
     }
   },
+  "src/shared/ui/CountUpText.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
   "src/shared/ui/HeartButton.test.tsx": {
     "no-restricted-properties": {
       "count": 1
+    }
+  },
+  "src/shared/ui/HeartButton.tsx": {
+    "react-hooks/refs": {
+      "count": 6
     }
   },
   "src/shared/ui/PlacePhoto.test.tsx": {
@@ -494,6 +649,11 @@
     },
     "no-restricted-syntax": {
       "count": 1
+    }
+  },
+  "src/shared/ui/Skeleton.tsx": {
+    "react-hooks/refs": {
+      "count": 4
     }
   },
   "src/shared/ui/Toast.test.tsx": {
@@ -511,8 +671,31 @@
       "count": 1
     }
   },
+  "src/test-support/expoRouterTabsMock.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    }
+  },
   "src/test-support/fabAnchorProbe.ts": {
     "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/test-support/queryClientProbe.tsx": {
+    "react-hooks/globals": {
+      "count": 1
+    }
+  },
+  "src/widgets/bottom-nav-bar/ui/MorphNavBar.tsx": {
+    "react-hooks/immutability": {
+      "count": 2
+    },
+    "react-hooks/refs": {
+      "count": 3
+    }
+  },
+  "src/widgets/bottom-nav-bar/ui/RecordNavBar.tsx": {
+    "react-hooks/refs": {
       "count": 1
     }
   },
@@ -534,6 +717,11 @@
   "src/widgets/map-sheet-shell/ui/GenerationProgressCard.test.tsx": {
     "no-restricted-properties": {
       "count": 1
+    }
+  },
+  "src/widgets/map-sheet-shell/ui/IndeterminateBar.tsx": {
+    "react-hooks/refs": {
+      "count": 4
     }
   },
   "src/widgets/map-sheet-shell/ui/MapSheetShell.test.tsx": {

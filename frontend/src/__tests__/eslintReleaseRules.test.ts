@@ -840,3 +840,26 @@ describe('누름 요소엔 역할을 단다 (TRIP-1765) — role 없는 Pressabl
     expect(ruleIds).toEqual([]);
   });
 });
+
+// TRIP-1768 · react-hooks 7.x 컴파일러 규칙(recommended)이 error 로 켜져 있는지 대표 1규칙으로 본다.
+// 기존 위반은 eslint-suppressions.json 에 얼려 있다 — lintText 는 얼림을 적용하지 않아 규칙 발동만 본다.
+describe('React Compiler 규칙은 error (TRIP-1768) — 렌더 중 ref.current 읽기', () => {
+  const refDuringRender = [
+    "import { useRef } from 'react';",
+    '',
+    'export function useProbe(): number {',
+    '  const ref = useRef(0);',
+    '  return ref.current;',
+    '}',
+    '',
+  ].join('\n');
+
+  it.each([
+    ['pages', PAGE_PROBE],
+    ['app 라우트', ROUTE_PROBE],
+  ])('%s — react-hooks/refs 가 error 로 울린다', async (_label, filePath) => {
+    const ruleIds = await lint(refDuringRender, filePath);
+
+    expect(ruleIds).toContain('react-hooks/refs');
+  });
+});

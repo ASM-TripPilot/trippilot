@@ -87,4 +87,21 @@ describe('useQueryDataUpdateCount', () => {
     });
     expect(result.current).toBe(1);
   });
+
+  // TRIP-1768 — 해시로 캐시를 찾게 바꿔도 키가 바뀌면 새 키의 값을 읽는다.
+  it('키가 바뀌면 새 키의 값을 보여 준다', () => {
+    const { client, wrapper } = setup();
+    const OTHER = ['itinerary', 't2'] as const;
+    for (let i = 0; i < 3; i += 1) client.setQueryData(KEY, { n: i });
+    client.setQueryData(OTHER, { n: 0 });
+    const { result, rerender } = renderHook(
+      ({ k }: { k: readonly string[] }) => useQueryDataUpdateCount(k),
+      { wrapper, initialProps: { k: KEY } }
+    );
+    expect(result.current).toBe(3);
+
+    rerender({ k: OTHER });
+
+    expect(result.current).toBe(1);
+  });
 });

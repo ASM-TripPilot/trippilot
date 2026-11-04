@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+} from 'react';
 import { Pressable } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { goBackOr } from '@/shared/lib/goBackOr';
@@ -115,18 +121,16 @@ export function AssistantSheetPage({
   const checkingRef = useRef(false);
 
   const closingRef = useRef(false);
-  function handleClose(): void {
+  const handleClose = useCallback((): void => {
     if (closingRef.current) return;
     closingRef.current = true;
     goBackOr(router, shellTabHref('home'));
-  }
+  }, [router]);
 
-  // 401 — 열 수 없는 사람에게 빈 시트를 남기지 않는다.
+  // 401 — 열 수 없는 사람에게 빈 시트를 남기지 않는다. handleClose 는 ref 로 한 번만 동작한다.
   useEffect(() => {
     if (state === 'UNAUTHORIZED') handleClose();
-    // handleClose 는 ref 로 한 번만 동작한다 — 의존성은 판정 결과뿐이다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state]);
+  }, [state, handleClose]);
 
   const ctx = { tripId: tripKey, surface };
   const rawMessages: readonly AssistantMessage[] =
