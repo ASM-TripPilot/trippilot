@@ -2551,6 +2551,13 @@ class WiredItineraryOrchestrator:
             "trigger": request.trigger.kind if request.trigger is not None
             else _REASON_TO_TRIGGER.get(primary, TriggerKind.MANUAL).value,
         }, ensure_ascii=False))
+        # 받은 창 — "여행 설정은 06:00 인데 09:00 부터"(운영 2026-11-05)를 BE 가 보낸 값으로 가르는 한 줄
+        entry_nb = _replan_not_before(request, self._tz)
+        _logger.info("replan_window %s", json.dumps({
+            "trace_id": str(trace_id),
+            "time_window": f"{request.time_window.date} {request.time_window.start:%H:%M}~{request.time_window.end:%H:%M}",
+            "not_before": f"{entry_nb:%H:%M}" if entry_nb is not None else None,
+        }, ensure_ascii=False))
         notes: list[str] = []
         # PlanB·점수·어셈블리가 **한 시계 원점을 공유한다** — PlanB 가 쓴 시간이
         # ScheduleAgent 의 잔여에서 저절로 빠져야 두 LLM 호출이 예산을 겹쳐 쓰지 않는다.
@@ -2752,9 +2759,11 @@ class WiredItineraryOrchestrator:
             # 구성 LLM 이 이 순위 앞 20 을 후보로 받을 때만 문서 순위를 섞는다(측정 경로 — `PlanBRagRequest.fuse_docs`)
             fuse_docs=self._composer is not None,
         )
+        stage_t = self._clock.monotonic_ms()
         planb = self._rag.run(planb_request)
         self._rag_events(meta, planb.notes)
         notes += [f"planb: {n}" for n in planb.notes]
+        notes.append(f"stage_ms: planb={self._clock.monotonic_ms() - stage_t}")
         # 랭킹은 **LLM 경로일 때만** 넘긴다 (독스트링 마지막 단락).
         planb_rank = () if planb.is_fallback else planb.ranked_poi_ids
         if planb.is_fallback:
@@ -2817,6 +2826,10 @@ class WiredItineraryOrchestrator:
             notes.append(f"llm_compose_error: {type(e).__name__}")
             self._compose_event(meta, f"compose_error: {type(e).__name__}: {e}")
             composed = ()
+        if compose_ctx and not composed:
+            # 구성 입력에 문서를 실었는데 구성이 결과를 못 냈다(실패·시한 생략·오류) — 아래 `retrieved` 의 POI_DESC·
+            # SITUATION_PROMPT 는 실은 수일 뿐 최종 일정에 쓰이지 않았다(운영 2026-11-05 run3: 7.8s 타임아웃인데 적중으로 찍힘).
+            notes.append("compose_docs_unread")
         if composed and nl_ids and earlier is None:
             # 사용자가 이름으로 집은 곳은 구성 결과 **맨 앞**에 둔다. 방문 수는 구성 LLM 이 정한 그대로 둔다 —
             # 그 수가 남은 시간에 맞춘 값이라, 하나를 더 얹으면 솔버가 시간 부족으로 누군가를 떨어뜨리는데 그게
@@ -3037,7 +3050,9 @@ class WiredItineraryOrchestrator:
         return self._replan_projection(
             request, outcome, notes, resolved, unknown,
             # KB-5 는 구성 후보로 찾는다 — 건수도 그쪽 것이다(PlanB 는 선택 LLM 이 없으면 찾지 않는다).
-            retrieved={**planb.retrieved, **kb5_counts(compose_ctx[0][0].place_knowledge)}
+            # SITUATION_PROMPT = 구성 프롬프트 [상황 대처 원칙]에 실린 KB-3 문서 수(PlanB 는 이때 KB-3 를 찾지 않는다).
+            retrieved={**planb.retrieved, **kb5_counts(compose_ctx[0][0].place_knowledge),
+                       "SITUATION_PROMPT": len(compose_ctx[0][0].situation)}
             if compose_ctx else planb.retrieved,
             planb_fallback=planb.is_fallback, started_ms=t0, past=past,
             composed=bool(composed), reasons=why,
@@ -3105,12 +3120,15 @@ class WiredItineraryOrchestrator:
         if isinstance(pending, str):
             notes.append(pending)
             return empty
+        stage_t = self._clock.monotonic_ms()
         try:
             # 워커 호출 자체가 시한(timeout_sec)을 지닌다 — 여기 상한은 그 위의 안전판일 뿐이다.
             result = pending.result(timeout=_NL_EXTRACT_MAX_S + 1.0)
         except Exception as e:  # 설정 버그·안전판 초과도 재계획을 죽이지 않는다
             notes.append(f"nl_extract_error: {type(e).__name__}")
             return empty
+        finally:  # 배경 추출을 기다린 시간(본 스레드가 막힌 몫) — 구성 앞 공백을 나눠 본다(2026-11-05)
+            notes.append(f"stage_ms: extract_wait={self._clock.monotonic_ms() - stage_t}")
         if result.is_fallback or not isinstance(result.value, ExtractedRequest):
             notes.append(f"nl_extract_fallback: {result.error}")
             return empty
@@ -3119,6 +3137,7 @@ class WiredItineraryOrchestrator:
             notes.append("nl_extract_empty")
             return empty
         window = request.time_window
+        stage_t = self._clock.monotonic_ms()
         verified = nl_verify.verify(
             extracted,
             on=request.target_date,
@@ -3135,6 +3154,7 @@ class WiredItineraryOrchestrator:
             available=available,
         )
         notes.extend(verified.notes)
+        notes.append(f"stage_ms: verify={self._clock.monotonic_ms() - stage_t}")  # 이름 장소 대조(등록 POI·지도 실재)
         return verified
 
     def _repair_day(
@@ -3383,6 +3403,7 @@ class WiredItineraryOrchestrator:
         # 찾고 읽는 LLM 없이 버렸다. 부가 정보라 못 찾으면 없이 짠다(INV-4 — 노트는 남긴다).
         knowledge: Mapping[str, str] = {}
         if planb_request is not None:
+            stage_t = self._clock.monotonic_ms()
             try:
                 knowledge, note = self._rag.place_knowledge(planb_request, shortlist.pois)
             except Exception as e:
@@ -3390,6 +3411,7 @@ class WiredItineraryOrchestrator:
             if note:
                 notes.append(f"compose: {note}")
                 self._rag_events(request.request_meta, (note,))
+            notes.append(f"stage_ms: kb5={self._clock.monotonic_ms() - stage_t}")
         labels = {spec.key: spec.label for spec in self._directives}
         specs = index_of(self._directives)
         chosen = [specs[k] for k in resolved if k in specs]
@@ -3431,6 +3453,10 @@ class WiredItineraryOrchestrator:
                    for p in shortlist.pois},
             place_knowledge=knowledge,
         )
+        # 1회 수리가 같은 입력·제외에서 2차를 만든다(`_repair_day`). 시한 생략 **앞**에서 담는다 — 찾은 장소 지식이
+        # 시한 때문에 안 읽혀도 응답이 그 건수와 `compose_docs_unread` 로 밝힌다(호출측). 수리는 구성이 고른 뒤에만 돈다.
+        if ctx_out is not None:
+            ctx_out.append((inp, frozenset(excluded)))
         # 장소 지식 조회가 쓴 시간을 뺀 잔여 — 시한 원점은 그대로(#1102).
         remaining = (budget.total_ms - (self._clock.monotonic_ms() - started_ms)
                      - budget.c2_reserved_ms)
@@ -3438,8 +3464,7 @@ class WiredItineraryOrchestrator:
             notes.append(f"llm_compose_skipped: deadline remaining={remaining}ms")
             self._compose_event(request.request_meta, f"deadline: remaining={remaining}ms")
             return ()
-        if ctx_out is not None:  # 1회 수리가 같은 입력·제외에서 2차를 만든다(`_repair_day`)
-            ctx_out.append((inp, frozenset(excluded)))
+        notes.append(f"stage_ms: compose_left={remaining}")  # 구성 시작 잔여 — 시한은 min(이것, 상한)
         result = self._composer.compose(
             shortlist, inp, trace_id, now,
             timeout_sec=min(remaining, _COMPOSE_MAX_MS) / 1000.0)
@@ -3636,6 +3661,7 @@ class WiredItineraryOrchestrator:
         """
         if self._directive_translator is None or not self._directives:
             return ()
+        stage_t = self._clock.monotonic_ms()
         try:
             result = self._directive_translator.translate(
                 DirectiveTranslationInput(utterance=text, options=options_from(self._directives)),
@@ -3645,6 +3671,8 @@ class WiredItineraryOrchestrator:
         except Exception as e:  # 설정 버그(라우트·렌더)도 재계획을 죽이지 않는다 — 칩으로 진행
             notes.append(f"free_text_translation_error: {type(e).__name__}")
             return ()
+        finally:  # 직렬 LLM 호출이라 구성 시한을 그만큼 깎는다(운영 2026-11-05 run3: 1.5s)
+            notes.append(f"stage_ms: translate={self._clock.monotonic_ms() - stage_t}")
         if result.is_fallback:
             notes.append(f"free_text_translation_fallback: {result.error}")
             return ()
