@@ -810,6 +810,17 @@ def test_weather_today_before_the_trip_asks_where_the_user_is_not_the_trip_regio
     assert weather.calls[0]["anchor"] == _HERE_SEOUL and weather.calls[0]["days"] == (date(2026, 10, 10),)
 
 
+def test_weather_asks_for_a_region_only_without_a_trip_a_said_region_or_a_usable_location() -> None:
+    """앱이 위치를 못 실은 턴(권한 없음·옛 빌드)의 "오늘 날씨"가 여행 만들기 안내로 끝났다(운영 2026-11-04) — 그때만 지역을 묻는다."""
+    ask = HANDLERS[Intent.GET_WEATHER].ask
+    no_trip = _snapshot((), trip=None, status=None)
+    assert ask(_ctx(no_trip))[0] == "region"
+    assert ask(_ctx(no_trip, {"region": "부산"})) is None
+    assert ask(_ctx(replace(no_trip, here=_HERE_SEOUL))) is None  # 오늘 여기
+    assert ask(_ctx(replace(no_trip, here=_HERE_SEOUL), {"date": "내일"}))[0] == "region"  # 현재 위치는 '오늘'만 대신한다
+    assert ask(_ctx(_SNAP)) is None and ask(_ctx(_snapshot((), trip=_TRIP))) is None  # 여행이 있으면 그 여행으로
+
+
 def test_weather_device_location_yields_to_a_said_region_a_slot_and_a_trip_day() -> None:
     """말한 지역 · 그 날 일정 장소 · 오늘이 아닌 날(여행 첫날)은 현재 위치보다 먼저다 — 현재 위치는 '오늘 여기'만 대신한다."""
     said = _Weather(pop=70)
@@ -2293,7 +2304,7 @@ def test_explore_asks_for_a_region_only_when_no_anchor_can_be_found() -> None:
     assert ask(_ctx(_snapshot((), trip=None, status=None), {"region": "강원도"})) is None  # 말했으면 묻지 않는다 — 못 찾으면 EMPTY
     assert ask(_ctx(_SNAP, ports=HandlerPorts(poi_info=_PoiInfo()))) is None  # 일정 근처
     assert ask(_ctx(_snapshot((), trip=_TRIP))) is None  # 여행 목적지
-    assert all(HANDLERS[i].ask is None for i in HANDLERS if i not in (Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES))
+    assert all(HANDLERS[i].ask is None for i in HANDLERS if i not in (Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES, Intent.GET_WEATHER))
 
 
 
