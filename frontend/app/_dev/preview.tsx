@@ -4045,6 +4045,25 @@ export const PREVIEW_STATES: PreviewState[] = [
         />
       ),
   },
+  // 저장 목록 조회 실패(TRIP-1754) — 모름(null)은 0 이 아니라 `–` 배지.
+  {
+    key: 'home-saved-menu-badge-unknown',
+    band: 'a',
+    label: 'a01 · 담은 곳 배지(조회 실패 –/–, TRIP-1754)',
+    login: null,
+    render: () =>
+      withShellTabBar(
+        <HomeScreen
+          {...HOME_DEFAULT_PROPS}
+          savedMenuOpen
+          savedPlacesCount={null}
+          savedStaysCount={null}
+          onToggleSavedMenu={noop}
+          onPressSavedPlaces={noop}
+          onPressSavedStays={noop}
+        />
+      ),
+  },
   // 지도 계층 선행(TRIP-197 D9) — 층 C(실기) 진입점. 키/로드 실패 분기는 렌더 안 해봐야
   // 알 수 없어 여기서는 해피패스 1키만 둔다(env 키는 빌드 시 번들에 인라인되므로 preview가
   // 런타임에 비울 수 없다 — 실패 분기는 MapView.test.tsx가, C-2는 .env를 실제로 비우고
@@ -7274,6 +7293,23 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // l04 거점 조회 부분 실패(TRIP-1754) — 목록 위 한 줄 + 다시 시도, Figma 프레임 없음(PartialFailureBanner 선례).
+  {
+    key: 'my-stays-links-error',
+    band: 'l',
+    label: 'l04 · 등록 숙소 거점 조회 일부 실패(TRIP-1754, Figma 프레임 없음)',
+    login: null,
+    render: () => (
+      <MyStaysScreen
+        rows={MY_STAYS_PREVIEW_ROWS}
+        isEmpty={false}
+        linksFailed
+        onRetryLinks={noop}
+        onPressExplore={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
   // l02 알림 설정 default(1600:2388) — 6행×푸시·인앱 2열(COMMUNITY 숨김)·
   // 상단 정보 배너·하단 SYSTEM 줄. 토글
   // 빨강/회색·thumb 위치·정보 배너 틴트는 jest 사각이라 이 키가 육안 대조 자리다.
@@ -9094,6 +9130,103 @@ export const PREVIEW_STATES: PreviewState[] = [
         consentOn
         reason={PersonalizationInfoReason.NOT_ENOUGH_RECORDS}
         sharedItems={[]}
+        onToggle={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  // 설정 4화면 조회 실패(TRIP-1755) — 거짓 값(OFF·active·빈 닉네임·빈 화면) 대신 오류 얼굴 + 다시 시도. Figma 프레임 없음.
+  // 배치·룩·비활성 버튼 룩은 jest 사각이라 이 키들이 6-b 육안 자리다.
+  {
+    key: 'settings-account-load-error',
+    band: 'l',
+    label: 'l05 · 설정 계정·프로필 조회 실패(TRIP-1755, Figma 프레임 없음)',
+    login: null,
+    render: () => (
+      <SettingsScreen
+        groups={filterReadySettingsSections(
+          buildSettingsSections({
+            nickname: '',
+            email: null,
+            accountLoadFailed: true,
+            profileLoadFailed: true,
+          })
+        )}
+        deletionState="active"
+        accountLoadFailed
+        onRetryAccountLoad={noop}
+        currentNickname=""
+        onPressBack={noop}
+        onSubmitNickname={noop}
+        onPressExport={noop}
+        onPressDeleteAccount={noop}
+        onPressCancelDeletion={noop}
+      />
+    ),
+  },
+  {
+    key: 'l02-notification-load-error',
+    band: 'l',
+    label: 'l02 · 알림 설정 조회 실패(TRIP-1755, Figma 프레임 없음)',
+    login: null,
+    render: () => (
+      <NotificationSettingsScreen
+        values={{}}
+        pushColumnAvailable
+        loadFailed
+        onRetry={noop}
+        onToggle={noop}
+        onOpenSettings={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'settings-preferences-load-error',
+    band: 'l',
+    label: 'l05 · 여행 취향 조회 실패(TRIP-1755, Figma 프레임 없음)',
+    login: null,
+    render: () => (
+      <PreferencesEditView
+        selection={null}
+        saveError={false}
+        loadFailed
+        onRetry={noop}
+        onToggle={noop}
+        onTogglePet={noop}
+        onSave={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'l05-personalization-load-error',
+    band: 'l',
+    label: 'l05 · 개인화 조회 실패(TRIP-1755, Figma 프레임 없음)',
+    login: null,
+    render: () => (
+      <PersonalizationScreen
+        consentOn={false}
+        reason={PersonalizationInfoReason.CONSENT_MISSING}
+        sharedItems={[]}
+        loadState="error"
+        onRetry={noop}
+        onToggle={noop}
+        onPressBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'l05-personalization-loading',
+    band: 'l',
+    label: 'l05 · 개인화 조회 중(TRIP-1755, Figma 프레임 없음)',
+    login: null,
+    render: () => (
+      <PersonalizationScreen
+        consentOn={false}
+        reason={PersonalizationInfoReason.CONSENT_MISSING}
+        sharedItems={[]}
+        loadState="loading"
         onToggle={noop}
         onPressBack={noop}
       />

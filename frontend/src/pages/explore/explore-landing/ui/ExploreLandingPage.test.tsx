@@ -29,6 +29,7 @@ import {
 } from '@/test-support/wizardDraftFixture';
 import { ExploreLandingPage } from '@/pages/explore/explore-landing';
 import { routerSpies } from '@/test-support/expoRouterMock';
+import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 
 /**
  * 탐색 d01 랜딩 page — 숙소·장소 조회를 물어 카드 VM 을 조립하고 항법 콜백을 순수 화면
@@ -239,6 +240,8 @@ beforeEach(() => {
 
 // 위저드 드래프트는 모듈 싱글턴이라 describe 밖에서 비운다 — 안에 걸면 앞 테스트 상태가 샌다.
 afterEach(resetWizardDraft);
+// TRIP-1754 — 토스트 슬롯은 모듈 싱글턴이라 앞 테스트의 토스트가 샌다. 파일 최상위에서 비운다(describe 안이면 샌다).
+afterEach(resetToast);
 
 // TRIP-201 · 447 · 703 · 499/985 · 412 · 453 · 470 · 500 · 704
 describe('전국 d01 — 구획·검색·레인', () => {
@@ -1248,5 +1251,127 @@ describe('화면 동작 — 레인 제목 · 담은 곳 메뉴 이름 · 로딩 
       screen.getByTestId('explore-landing-skeleton-stay-0')
     ).toBeOnTheScreen();
     expect(screen.queryByTestId('explore-lane-stay-retry')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1754 · 저장 목록 **조회 실패**가 "담은 장소 0곳"·"안 담김"으로 접히던 문제 — 훅이 내려 준 표식을 탐색 랜딩이 어떻게 읽나.
+ * (훅은 `savedPlaces.savedList`·`savedStays` 통합 테스트가, 실제 500 연결은 `ExploreLandingPage.integration` 이 본다.)
+ *
+ * 무엇을 보장하나(3동작 = 준비: 훅 목이 돌려줄 값 → 실행: 그리기 → 단언: 접근성 이름·토스트):
+ *  - **EN1** 장소 목록이 실패면 ♥ FAB 의 접근성 이름이 개수 없이 `담은 장소`다("0곳"이라 읽히지 않는다).
+ *  - **EN2** 장소·숙소 어느 쪽이든 `loadFailureConfirmed` 가 켜지면 같은 토스트 1개(둘 다여도 1개). `loadFailed` 만이면 없다.
+ *  - **EN3** 새 필드가 없는(옛) 훅 목은 실패로 읽지 않는다 — 훅 목이 새 필드를 안 주는 다른 테스트가 안 깨지는 계약.
+ */
+describe('TRIP-1754 · 저장 목록 실패 표식 — ♥ 라벨 · 토스트', () => {
+  const TOAST = 'saved-list-load-error';
+  const TOAST_TEXT = '저장 목록을 불러오지 못했어요';
+
+  function renderLanding() {
+    return render(
+      <WithToastHost>
+        <ExploreLandingPage />
+      </WithToastHost>
+    );
+  }
+  function placesFailed(confirmed: boolean): void {
+    mockUseSavedPlaces.mockReturnValue({
+      savedPoiIds: [],
+      loadFailed: true,
+      loadFailureConfirmed: confirmed,
+    });
+  }
+  function staysFailed(confirmed: boolean): void {
+    mockUseSavedStays.mockReturnValue({
+      isSaved: () => false,
+      save: jest.fn(),
+      remove: jest.fn(),
+      savedKeys: [],
+      loadFailed: true,
+      loadFailureConfirmed: confirmed,
+    });
+  }
+
+  it('EN1 장소 목록이 실패면 ♥ FAB 이름이 `담은 장소`(개수 없음)이고, 정상이면 `담은 장소 2곳`이다', () => {
+    // 준비 — 앵커: 정상일 땐 개수가 붙는다.
+    mockUseSavedPlaces.mockReturnValue({ savedPoiIds: ['p1', 'p2'] });
+    const ok = renderLanding();
+    // toHaveAccessibleName(문자열) = 완전 일치.
+    expect(
+      screen.getByTestId('explore-saved-menu-toggle')
+    ).toHaveAccessibleName('담은 장소 2곳');
+    ok.unmount();
+
+    // 실행
+    placesFailed(false);
+    renderLanding();
+
+    // 단언
+    expect(
+      screen.getByTestId('explore-saved-menu-toggle')
+    ).toHaveAccessibleName('담은 장소');
+  });
+
+  it('EN2 장소 목록의 확정 실패 → 토스트 1개(문구·오류 아이콘), 아직 확정이 아니면 없다', () => {
+    // 준비·실행 ① — 실패지만 확정 아님.
+    placesFailed(false);
+    const notYet = renderLanding();
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+    notYet.unmount();
+
+    // 실행 ②
+    placesFailed(true);
+    renderLanding();
+
+    // 단언
+    expect(
+      within(screen.getByTestId(TOAST)).getByText(TOAST_TEXT)
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId(`${TOAST}-error-icon`)).toBeOnTheScreen();
+  });
+
+  it('EN2 숙소 목록의 확정 실패도 같은 토스트다', () => {
+    // 준비
+    staysFailed(true);
+
+    // 실행
+    renderLanding();
+
+    // 단언
+    expect(
+      within(screen.getByTestId(TOAST)).getByText(TOAST_TEXT)
+    ).toBeOnTheScreen();
+  });
+
+  it('EN2 같은 값으로 다시 그려도 다시 쏘지 않는다 — 슬롯을 비운 뒤 rerender 해도 없다', () => {
+    // 준비
+    placesFailed(true);
+    const tree = () => (
+      <WithToastHost>
+        <ExploreLandingPage />
+      </WithToastHost>
+    );
+    const { rerender } = render(tree());
+    expect(screen.getByTestId(TOAST)).toBeOnTheScreen();
+
+    // 실행 — 슬롯이 1개라 "보임 1개"로는 1회를 못 잰다. 비운 뒤 같은 값으로 다시 그린다(새 엘리먼트).
+    resetToast();
+    rerender(tree());
+
+    // 단언
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+  });
+
+  it('EN3 새 필드가 없는 옛 훅 목은 실패로 읽지 않는다 — 라벨 `담은 장소 1곳` · 토스트 없음 (계약 잠금)', () => {
+    // 준비 — beforeEach 기본 목 그대로(savedPoiIds ['p1'] · loadFailed 없음).
+
+    // 실행
+    renderLanding();
+
+    // 단언
+    expect(
+      screen.getByTestId('explore-saved-menu-toggle')
+    ).toHaveAccessibleName('담은 장소 1곳');
+    expect(screen.queryByTestId(TOAST)).toBeNull();
   });
 });

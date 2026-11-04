@@ -71,7 +71,7 @@ import {
 import { encodePolyline } from '@/shared/location/automation/polyline';
 
 import { LiveItineraryPage } from './LiveItineraryPage';
-import { newTestQueryClient } from '@/test-support/queryRender';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * i01 허브(LiveItineraryPage) 통합 테스트 — 실 페이지 + 실제 HTTP(MSW). 관점 9개를 바깥 describe 9개로 나눈다
@@ -8072,5 +8072,221 @@ describe('기회 카드 (상황 감지 FE-C)', () => {
     expect(screen.getByTestId(TITLE)).toHaveTextContent(VENUE_TITLE, {
       exact: true,
     });
+  });
+});
+
+/**
+ * TRIP-1753 · 보조 조회 실패 안내 — 일정은 받았는데 그날 방문 기록·발화 중 트리거가 404 아닌 이유로 실패하면 '없음'으로
+ * 보이지 않게 한 줄 안내 + [다시 시도](INV-4 · US-ONTRIP-01 · US-PLANB-02). 방문 실패면 모든 카드가 '예정'이고 [도착]이
+ * 안내 없이 사라지며, 트리거 실패면 알약이 없는 것과 "위험 없음"이 같아 보인다. 숨김(409 방지)은 유지하고 실패를 말한다.
+ * 재시도는 꺼 둔다(retry:false) — "재시도까지 끝난 실패"를 바로 만든다. 요청 수는 파일 공통 관찰자(hitCount)로 센다.
+ */
+describe('보조 조회 실패 안내 (TRIP-1753)', () => {
+  const ERROR_ID = 'execution-live-partial-error';
+  const RETRY_ID = 'execution-live-partial-retry';
+  const VISITS_PATH = `GET /api/v1/trips/${TRIP_ID}/visits/days/${TODAY}`;
+  const TRIGGERS_PATH = `GET /api/v1/trips/${TRIP_ID}/triggers`;
+
+  const partialSlot = (poiId: string, startAt: string) =>
+    liveSlot(poiId, `장소-${poiId}`, startAt, { lat: 35.1, lng: 129.1 });
+  const SLOTS = [partialSlot('p1', '10:00:00'), partialSlot('p2', '12:00:00')];
+
+  const doneP1 = liveVisit({
+    poiId: 'p1',
+    arrivedAt: '2026-08-20T10:00:00',
+    completedAt: '2026-08-20T10:50:00',
+  });
+
+  const status = (code: number) => () =>
+    HttpResponse.json({ error: { code: 'X', message: 'x' } }, { status: code });
+
+  /** 허브 기본 GET 4종(위치 동의·records 는 파일 공통 beforeEach) — 덮을 경로만 뒤의 `server.use` 가 앞에 끼운다(나중 등록이 이긴다). */
+  function seed(visits: Parameters<typeof liveHubHandlers>[0]['visits'] = []) {
+    server.use(
+      ...liveHubHandlers({
+        itinerary: liveItinerary([{ date: TODAY, slots: SLOTS }]),
+        visits,
+      })
+    );
+  }
+  const failVisits = (
+    handler: () => Response | Promise<Response> = status(500)
+  ) => server.use(http.get(`${BASE}/trips/:tripId/visits/days/:day`, handler));
+  const failTriggers = (code = 500) =>
+    server.use(http.get(`${BASE}/trips/:tripId/triggers`, status(code)));
+
+  // 렌더마다 새 client(재시도 0) — 공용 래퍼(TRIP-1120 린트).
+  const partialWrapper = () => createWrapper(newTestQueryClient());
+
+  async function renderPartialHub() {
+    render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+      wrapper: partialWrapper(),
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
+    );
+  }
+
+  const arriveId = (poiId: string) =>
+    `execution-live-slot-arrive-${TODAY}#${poiId}`;
+  const arriveButtons = () =>
+    screen.queryAllByTestId(/^execution-live-slot-arrive-/);
+
+  it('PF1 방문 GET 500 — 안내·[다시 시도]가 보이고 [도착]은 숨긴 채다(카드는 예정)', async () => {
+    // 준비: 일정 200 · 오늘 방문 500.
+    seed();
+    failVisits();
+    // 실행
+    await renderPartialHub();
+    // 단언: 안내 한 줄 + 버튼. [도착]은 0개(숨김 유지). 카드 자체는 그려져 있다(앵커).
+    await waitFor(() => expect(screen.getByTestId(ERROR_ID)).toBeTruthy());
+    expect(
+      within(screen.getByTestId(ERROR_ID)).getByText(
+        '일부 정보를 불러오지 못했어요'
+      )
+    ).toBeTruthy();
+    expect(screen.getByTestId(RETRY_ID)).toHaveTextContent('다시 시도');
+    expect(screen.getByTestId(`execution-live-slot-${TODAY}#p1`)).toBeTruthy();
+    expect(arriveButtons()).toHaveLength(0);
+  });
+
+  it('PF2 트리거 GET 500 — 같은 안내가 보인다(방문은 정상이라 [도착]은 그대로)', async () => {
+    seed();
+    failTriggers();
+    await renderPartialHub();
+
+    await waitFor(() => expect(screen.getByTestId(ERROR_ID)).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByTestId(arriveId('p1'))).toBeTruthy()
+    );
+  });
+
+  it('PF3 모두 200 — 안내가 없다(대조군)', async () => {
+    seed();
+    await renderPartialHub();
+
+    // 방문 기록이 도착해 [도착]이 선 뒤(앵커)에도 안내가 없다.
+    await waitFor(() =>
+      expect(screen.getByTestId(arriveId('p1'))).toBeTruthy()
+    );
+    await waitFor(() => expect(hitCount(TRIGGERS_PATH)).toBe(1));
+    await settle();
+    expect(screen.queryByTestId(ERROR_ID)).toBeNull();
+  });
+
+  it('PF4 방문·트리거 GET 404 — 지금 동작 그대로(안내 없음 · [도착] 없음)', async () => {
+    seed();
+    failVisits(status(404));
+    failTriggers(404);
+    await renderPartialHub();
+
+    // 앵커: 두 404 가 실제로 왔다.
+    await waitFor(() => {
+      expect(hitCount(VISITS_PATH)).toBe(1);
+      expect(hitCount(TRIGGERS_PATH)).toBe(1);
+    });
+    await settle();
+    expect(screen.getByTestId(`execution-live-slot-${TODAY}#p1`)).toBeTruthy();
+    expect(screen.queryByTestId(ERROR_ID)).toBeNull();
+    expect(arriveButtons()).toHaveLength(0);
+  });
+
+  it('PF5 [다시 시도] → 방문 200(완료 1곳) — 안내가 사라지고 그 카드가 완료, 다음 카드에 [도착]. 실패한 쿼리만 다시 묻는다', async () => {
+    // 준비: 첫 방문 응답 500, 둘째부터 p1 완료.
+    let visitCalls = 0;
+    seed();
+    failVisits(() => {
+      visitCalls += 1;
+      return visitCalls === 1
+        ? status(500)()
+        : HttpResponse.json({ visits: [doneP1] });
+    });
+    await renderPartialHub();
+    await waitFor(() => expect(screen.getByTestId(ERROR_ID)).toBeTruthy());
+    await waitFor(() => expect(hitCount(TRIGGERS_PATH)).toBe(1));
+
+    // 실행
+    fireEvent.press(screen.getByTestId(RETRY_ID));
+
+    // 단언
+    await waitFor(() => expect(screen.queryByTestId(ERROR_ID)).toBeNull());
+    expect(
+      screen.getByTestId(`execution-live-slot-visit-label-${TODAY}#p1`)
+    ).toHaveTextContent('방문');
+    expect(screen.getByTestId(arriveId('p2'))).toBeTruthy();
+    expect(hitCount(VISITS_PATH)).toBe(2);
+    expect(hitCount(TRIGGERS_PATH)).toBe(1);
+  });
+
+  it('PF6 [다시 시도] 재조회가 도는 동안 안내가 꺼졌다가 "모두 예정"으로 돌아가지 않는다(errorUpdateCount 판정)', async () => {
+    // 준비: 첫 응답 500, 둘째 응답은 붙잡아 둔다.
+    const gate = createGate();
+    let visitCalls = 0;
+    seed();
+    failVisits(async () => {
+      visitCalls += 1;
+      if (visitCalls === 1) return status(500)();
+      await gate.opened;
+      return HttpResponse.json({ visits: [doneP1] });
+    });
+    await renderPartialHub();
+    await waitFor(() => expect(screen.getByTestId(ERROR_ID)).toBeTruthy());
+
+    // 실행: 다시 시도 — 둘째 요청이 나간 걸 확인(앵커)한 뒤 그 사이를 본다.
+    fireEvent.press(screen.getByTestId(RETRY_ID));
+    await waitFor(() => expect(hitCount(VISITS_PATH)).toBe(2));
+    await settle();
+
+    // 단언: 재조회 중에도 안내가 남고, [도착]은 여전히 없다. 버튼은 잠긴다(연타 방지).
+    expect(screen.getByTestId(ERROR_ID)).toBeTruthy();
+    expect(screen.getByTestId(RETRY_ID)).toBeDisabled();
+    expect(arriveButtons()).toHaveLength(0);
+
+    gate.release();
+    await waitFor(() => expect(screen.queryByTestId(ERROR_ID)).toBeNull());
+  });
+
+  it('PF8 트리거 실패 [다시 시도] — 트리거만 다시 묻고, 도는 동안 버튼이 잠기며, 200 이면 안내가 사라진다', async () => {
+    // 준비: 트리거 첫 응답 500, 둘째 응답은 붙잡아 둔다. 방문은 정상.
+    const gate = createGate();
+    let triggerCalls = 0;
+    seed();
+    server.use(
+      http.get(`${BASE}/trips/:tripId/triggers`, async () => {
+        triggerCalls += 1;
+        if (triggerCalls === 1) return status(500)();
+        await gate.opened;
+        return HttpResponse.json({ triggers: [] });
+      })
+    );
+    await renderPartialHub();
+    await waitFor(() => expect(screen.getByTestId(ERROR_ID)).toBeTruthy());
+    await waitFor(() => expect(hitCount(VISITS_PATH)).toBe(1));
+
+    // 실행
+    fireEvent.press(screen.getByTestId(RETRY_ID));
+    await waitFor(() => expect(hitCount(TRIGGERS_PATH)).toBe(2));
+    await settle();
+
+    // 단언: 재조회 중엔 안내가 남고 버튼이 잠긴다. 방문은 다시 묻지 않는다.
+    expect(screen.getByTestId(ERROR_ID)).toBeTruthy();
+    expect(screen.getByTestId(RETRY_ID)).toBeDisabled();
+    gate.release();
+    await waitFor(() => expect(screen.queryByTestId(ERROR_ID)).toBeNull());
+    expect(hitCount(VISITS_PATH)).toBe(1);
+    expect(hitCount(TRIGGERS_PATH)).toBe(2);
+  });
+
+  it('PF7 회귀 — 일정 GET 500 이면 기존 일정 실패 얼굴이고 이 안내는 없다', async () => {
+    seed();
+    server.use(http.get(`${BASE}/trips/:tripId/itinerary`, status(500)));
+    render(<LiveItineraryPage tripId={TRIP_ID} today={TODAY} />, {
+      wrapper: partialWrapper(),
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('execution-live-error')).toBeTruthy()
+    );
+    expect(screen.queryByTestId(ERROR_ID)).toBeNull();
   });
 });

@@ -14,17 +14,23 @@ import {
 import { BASE } from '@/test-support/apiBase';
 import {
   createGcZeroWrapper,
+  createWrapper,
   newTestQueryClient,
 } from '@/test-support/queryRender';
+import { createGate } from '@/test-support/mswHookHarness';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { StayDetail } from '@/shared/api/index.schemas';
-import { getGetMeSettingsQueryKey } from '@/shared/api/index.hooks';
+import {
+  getGetMeSettingsQueryKey,
+  getGetSavedStaysQueryKey,
+} from '@/shared/api/index.hooks';
 import { formatPrice } from '@/entities/stay';
 import { stayCoverFor } from '@/test-support/placeCoverFixtures';
 import { StayDetailPage } from './StayDetailPage';
 import { routerSpies } from '@/test-support/expoRouterMock';
+import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 
 /**
  * TRIP-457 AC-2·8·9·10·11 (배선) — e03 상세 페이지가 params 데이터·제휴 시트·이동·저장에
@@ -224,6 +230,8 @@ beforeEach(() => {
 });
 
 afterEach(() => server.resetHandlers());
+// TRIP-1754 — 토스트 슬롯은 모듈 싱글턴이라 앞 테스트의 토스트가 샌다. 파일 최상위에서 비운다(describe 안이면 샌다).
+afterEach(resetToast);
 afterAll(() => server.close());
 
 /** 조회가 끝나 ready 얼굴(`stay-detail-root`)이 뜰 때까지 기다린다 — 버튼은 그 뒤에만 있다(AC-4). */
@@ -1432,6 +1440,192 @@ describe('화면 얼굴 — 응답 모양마다 무엇을 그리나', () => {
       expect(mockBack).toHaveBeenCalledTimes(1);
     } finally {
       spy.mockRestore();
+    }
+  });
+});
+
+/**
+ * TRIP-1754 · 저장 숙소 조회가 **실패했는데 하트가 "안 담김"으로 보이는** 문제(INV-4) — 실제 500 응답으로 잰다.
+ * 하트는 상세 조회가 성공해 `ready` 얼굴이 뜬 뒤에만 그려지므로, 토스트도 **그 얼굴에서만** 뜬다.
+ *
+ *  - **SD1** 상세 200 + `GET /saved-stays` 500 → 토스트(문구·오류 아이콘) · 하트가 눌린다(비활성 아님).
+ *  - **SD2** 상세가 아직 로딩 중이면(하트 없음) 토스트도 아직 없고, 상세가 도착하면 그때 뜬다.
+ *  - **SD3** 상세 404(없음 얼굴) + 저장 목록 500 → 토스트 없음. **SD4** 둘 다 성공이면 토스트 없음.
+ */
+describe('TRIP-1754 · 저장 숙소 조회 실패 — 토스트 · 하트', () => {
+  const TOAST = 'saved-list-load-error';
+  const TOAST_TEXT = '저장 목록을 불러오지 못했어요';
+
+  function renderWithToast(): void {
+    render(
+      <WithToastHost>
+        <StayDetailPage />
+      </WithToastHost>,
+      { wrapper: createGcZeroWrapper() }
+    );
+  }
+  function failSavedList(): void {
+    server.use(
+      http.get(`${BASE}/saved-stays`, () =>
+        HttpResponse.json(
+          { error: { code: 'INTERNAL', message: '서버 오류' } },
+          { status: 500 }
+        )
+      )
+    );
+  }
+  async function pause(ms = 100): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+    });
+  }
+
+  it('SD1 상세 200 + 저장 숙소 500 → 토스트 · 하트는 눌린다(비활성 아님)', async () => {
+    // 준비
+    signInWithDismissed(false);
+    failSavedList();
+
+    // 실행
+    renderWithToast();
+    await ready();
+    const toast = await screen.findByTestId(TOAST);
+
+    // 단언
+    expect(within(toast).getByText(TOAST_TEXT)).toBeOnTheScreen();
+    expect(screen.getByTestId(`${TOAST}-error-icon`)).toBeOnTheScreen();
+    expect(screen.getByTestId('stay-detail-save')).not.toBeDisabled();
+  });
+
+  it('SD2 상세가 로딩 중인 동안엔 토스트가 없고, 상세가 도착하면 그때 1개 뜬다', async () => {
+    // 준비 — 저장 목록은 곧바로 500, 상세 응답은 문 뒤.
+    signInWithDismissed(false);
+    failSavedList();
+    const release = holdDetail();
+
+    // 실행 ①
+    renderWithToast();
+    await screen.findByTestId('stay-detail-loading');
+    await waitFor(() =>
+      expect(hitCount('GET /api/v1/saved-stays')).toBeGreaterThanOrEqual(1)
+    );
+    await pause();
+
+    // 단언 ① — 하트가 없는 로딩 얼굴 위엔 토스트도 없다(긍정 앵커: 로딩 얼굴이 떠 있다).
+    expect(screen.getByTestId('stay-detail-loading')).toBeOnTheScreen();
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+
+    // 실행 ② — 상세가 도착한다.
+    release();
+    await ready();
+
+    // 단언 ②
+    expect(
+      within(await screen.findByTestId(TOAST)).getByText(TOAST_TEXT)
+    ).toBeOnTheScreen();
+  });
+
+  it('SD3 상세 404(없음 얼굴) + 저장 숙소 500 → 하트가 없는 얼굴이라 토스트가 없다', async () => {
+    // 준비
+    signInWithDismissed(false);
+    failSavedList();
+    answerDetailWith(404);
+
+    // 실행
+    renderWithToast();
+    await screen.findByTestId('stay-detail-notfound');
+    await waitFor(() =>
+      expect(hitCount('GET /api/v1/saved-stays')).toBeGreaterThanOrEqual(1)
+    );
+    await pause();
+
+    // 단언
+    expect(screen.queryByTestId('stay-detail-save')).toBeNull();
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+  });
+
+  it('SD4 상세·저장 숙소 모두 성공이면 토스트가 없다', async () => {
+    // 준비
+    signInWithDismissed(false);
+
+    // 실행
+    renderWithToast();
+    await ready();
+    await pause();
+
+    // 단언 — (앞 테스트의 토스트가 샌 거라면 여기서 red 로 드러난다: 파일 최상위 afterEach 가 비운다.)
+    expect(screen.getByTestId('stay-detail-save-outline')).toBeOnTheScreen();
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+  });
+
+  // 5-b 후 심판 보강(03b W1·W2) — SD1~SD4 는 "새 마운트 + 첫 응답이 곧바로 500"이라 훅의 두 표식(`loadFailed` 모름 ·
+  // `loadFailureConfirmed` 확정)이 같은 값이다. 둘이 갈리는 구간(실패 캐시 위 재마운트의 응답 대기)과 effect 의존 배열(1회)은 아래가 문다.
+  it('SD5 실패 캐시 위에 다시 열면 — 재조회 중엔 토스트 없음 · 실패로 굳으면 1회 · 그 뒤 재조회엔 다시 안 뜬다', async () => {
+    // 준비 — 저장 숙소 응답 큐: ① 500 ② 문 뒤에서 500 ③ 500. 캐시가 남는 클라이언트로 두 번 그린다.
+    signInWithDismissed(false);
+    const gate = createGate();
+    const replies: ('500' | 'hold500')[] = ['500', 'hold500', '500'];
+    let savedGets = 0;
+    server.use(
+      http.get(`${BASE}/saved-stays`, async () => {
+        savedGets += 1;
+        if (replies.shift() === 'hold500') await gate.opened;
+        return HttpResponse.json(
+          { error: { code: 'INTERNAL', message: '서버 오류' } },
+          { status: 500 }
+        );
+      })
+    );
+    const client = newTestQueryClient();
+    const mount = () =>
+      render(
+        <WithToastHost>
+          <StayDetailPage />
+        </WithToastHost>,
+        { wrapper: createWrapper(client) }
+      );
+    const pause = () =>
+      act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      });
+
+    try {
+      // 실행 ① — 첫 마운트: 실패 → 토스트. 닫고(캐시는 남는다) 토스트를 비운다.
+      const first = mount();
+      await screen.findByTestId(TOAST);
+      first.unmount();
+      resetToast();
+
+      // 실행 ② — 다시 열기: 재조회가 문 앞에서 멈춘다.
+      mount();
+      await ready();
+      await waitFor(() => expect(savedGets).toBe(2));
+      await pause();
+
+      // 단언 ② — 아직 응답 전이라 "확정 실패"가 아니다 → 옛 실패만 보고 토스트를 쏘지 않는다.
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      // 실행 ③ — 문을 열면 두 번째 응답도 500 → 이번 마운트에서 실패가 굳는다.
+      gate.release();
+
+      // 단언 ③ — 그때 1회.
+      expect(
+        within(await screen.findByTestId(TOAST)).getByText(TOAST_TEXT)
+      ).toBeOnTheScreen();
+
+      // 실행 ④ — 슬롯을 비우고 같은 목록을 다시 받는다(세 번째 500). 화면은 다시 그려진다.
+      resetToast();
+      await act(async () => {
+        await client.invalidateQueries({
+          queryKey: getGetSavedStaysQueryKey(),
+        });
+      });
+      await waitFor(() => expect(savedGets).toBe(3));
+      await pause();
+
+      // 단언 ④ — 재조회가 정말 나갔는데도(앵커) 같은 화면에선 또 쏘지 않는다.
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+    } finally {
+      gate.release();
     }
   });
 });

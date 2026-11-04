@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import { useRef } from 'react';
 
+import { isOfflineWaiting } from '@/shared/api';
 import {
   deleteSavedStaysSavedStayId,
   getGetSavedStaysQueryKey,
@@ -70,6 +71,18 @@ export function useSavedStays(deps: { isAuthed: boolean }) {
         )
         .map((entry) => `${entry.externalSource}:${entry.externalId}`)
     : [];
+
+  // TRIP-1754 — 목록을 못 받은 "모름"과 받았는데 빈 "없음"을 가른다. 판정 근거는 savedPlaces.ts 와 동형.
+  const offlineWaiting = isOfflineWaiting(savedListQuery);
+  const loadFailed =
+    deps.isAuthed &&
+    savedListQuery.data === undefined &&
+    (savedListQuery.isError ||
+      savedListQuery.errorUpdateCount > 0 ||
+      offlineWaiting);
+  // 토스트용 "확정" 실패 — 마운트 때 만난 옛 실패 캐시가 재조회 중인 동안(성공할 수도 있다)은 false.
+  const loadFailureConfirmed =
+    loadFailed && (savedListQuery.isFetchedAfterMount || offlineWaiting);
 
   function isSaved(key: string): boolean {
     return savedKeys.includes(key);
@@ -185,6 +198,8 @@ export function useSavedStays(deps: { isAuthed: boolean }) {
     savedCount: savedListQuery.data?.length ?? 0,
     isPending: savedListQuery.isPending,
     isError: savedListQuery.isError,
+    loadFailed,
+    loadFailureConfirmed,
     refetch: savedListQuery.refetch,
   };
 }

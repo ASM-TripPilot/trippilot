@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { fetchTerms, patchConsent } from '@/shared/api';
+import { fetchTerms, isOfflineWaiting, patchConsent } from '@/shared/api';
 import {
   getGetMePersonalizationQueryKey,
   useGetMePersonalization,
@@ -29,6 +29,12 @@ export interface UsePersonalizationResult {
   sharedItems: PersonalizationItem[];
   /** 마지막 저장이 실패했다 — 다음 누름 때 걷힌다. */
   saveFailed: boolean;
+  /**
+   * TRIP-1755 · 동의 상태를 알 수 있는가. 'ready' 가 아니면 화면은 토글을 그리지 않는다(OFF 로 접으면 실제 동의자가
+   * 누를 때 GRANT 가 한 줄 더 쌓인다 — BR-U0-12). `isError` 면 받아 둔 값이 있어도 'error'(위치 l06 `useLocationConsent` 동형).
+   */
+  loadState: 'loading' | 'error' | 'ready';
+  onRetry: () => void;
   onToggle: () => void;
 }
 
@@ -42,6 +48,14 @@ export function usePersonalization(): UsePersonalizationResult {
   const sharedItems = query.data?.sharedItems ?? [];
   const consentOn = reason !== PersonalizationInfoReason.CONSENT_MISSING;
 
+  // 다시 시도하면 v5 는 데이터 없는 쿼리를 pending 으로 돌려 isError 가 꺼진다 → 그 틈은 'loading' 이라 토글이 안 뜬다.
+  const loadState =
+    query.isError || isOfflineWaiting(query)
+      ? 'error'
+      : query.data === undefined
+        ? 'loading'
+        : 'ready';
+
   const inFlightRef = useRef(false);
   const [saveFailed, setSaveFailed] = useState(false);
 
@@ -50,7 +64,11 @@ export function usePersonalization(): UsePersonalizationResult {
     reason,
     sharedItems,
     saveFailed,
+    loadState,
+    onRetry: () => void query.refetch(),
     onToggle: () => {
+      // 동의 상태를 모르면 누른 쪽(GRANT/REVOKE)도 모른다 — 화면 밖 호출까지 막는다.
+      if (loadState !== 'ready') return;
       if (inFlightRef.current) return;
       inFlightRef.current = true;
       setSaveFailed(false);

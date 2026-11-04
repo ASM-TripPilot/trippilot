@@ -3,6 +3,7 @@ import { onlineManager } from '@tanstack/react-query';
 import {
   act,
   fireEvent,
+  render,
   screen,
   waitFor,
   within,
@@ -14,10 +15,18 @@ import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import {
   getGetPlacesQueryKey,
+  getGetSavedPlacesQueryKey,
   getGetTripsQueryKey,
 } from '@/shared/api/index.hooks';
-import type { Itinerary, Place, Trip } from '@/shared/api/index.schemas';
+import type {
+  Itinerary,
+  Place,
+  SavedPlace,
+  SavedStay,
+  Trip,
+} from '@/shared/api/index.schemas';
 import { BASE } from '@/test-support/apiBase';
+import { createGate } from '@/test-support/mswHookHarness';
 import { routerSpies } from '@/test-support/expoRouterMock';
 import {
   day,
@@ -27,6 +36,7 @@ import {
 } from '@/test-support/itineraryFixtures';
 import {
   createClockSkew,
+  createWrapper,
   newTestQueryClient,
   renderWithQueryClient,
   settle,
@@ -844,4 +854,235 @@ describe('스크롤 중 FAB 숨김 배선', () => {
       )
     );
   });
+});
+
+/**
+ * TRIP-1754 · 담은 장소·저장 숙소 조회가 **실패했는데 "배지 없음·0곳"처럼 보이는** 문제(INV-4) — 실제 500 응답으로 잰다.
+ *
+ * 무엇을 보장하나(3동작 = 준비: 서버 응답 큐 → 실행: 홈 그리기·♥ 메뉴 펼치기 → 단언: 토스트·배지·하트):
+ *  - **HM1** 장소 목록 500 → 토스트(문구·오류 아이콘) · 장소 배지 `–` · 숙소 배지는 제 숫자(독립) · 하트는 비활성 아님.
+ *  - **HM2** 숙소 목록 500 → 토스트 · 숙소 배지 `–` · 장소 배지는 제 숫자.
+ *  - **HM3** 둘 다 성공이면 토스트·`–` 없음.
+ *  - **HM4** "화면당 1회" — 토스트를 비운 뒤 같은 실패가 또 와도(재조회 500) 다시 안 뜬다.
+ *  - **HM5** 실패 캐시 위에 다시 마운트해 재조회가 **진행 중인 동안** 토스트는 없고(옛 실패로 쏘지 않는다), 재조회가 성공하면 끝까지 0,
+ *    또 실패하면 그때 1회. 쿼리(장소·숙소)마다 한 행씩.
+ *
+ * *(개념)* 이 파일의 앱 전역 재시도는 0 이라 실패 응답 1개 = 확정 실패 1회다. 실제 앱은 ≈7초 뒤에야 확정 — jest 사각(6-b).
+ */
+describe('TRIP-1754 · 저장 목록 조회 실패 — 토스트 · 배지 `–`', () => {
+  const TOAST = 'saved-list-load-error';
+  const TOAST_TEXT = '저장 목록을 불러오지 못했어요';
+  type Reply = 'ok' | 500 | 'hold' | 'hold500';
+
+  function savedRow(poiId: string): SavedPlace {
+    return {
+      savedPlaceId: `sp-${poiId}`,
+      savedAt: '2026-08-01T00:00:00Z',
+      place: place(poiId, '서울', 10),
+    };
+  }
+  const PLACE_ROWS: SavedPlace[] = [savedRow('서울-0'), savedRow('서울-1')];
+  const STAY_ROWS: SavedStay[] = [
+    {
+      savedStayId: 'ss-1',
+      name: '서울 호텔',
+      coordConfirmed: true,
+      linkedTripIds: [],
+      registerRoute: 'MAP_SEARCH',
+      createdAt: '2026-08-01T00:00:00Z',
+      updatedAt: '2026-08-01T00:00:00Z',
+    },
+  ];
+
+  let queues: Record<'saved-places' | 'saved-stays', Reply[]> = {
+    'saved-places': [],
+    'saved-stays': [],
+  };
+  let gate = createGate();
+
+  async function answer(
+    which: 'saved-places' | 'saved-stays',
+    rows: unknown[]
+  ): Promise<Response> {
+    const reply = queues[which].shift() ?? 'ok';
+    if (reply === 'hold' || reply === 'hold500') await gate.opened;
+    if (reply === 500 || reply === 'hold500') {
+      return HttpResponse.json(
+        { error: { code: 'INTERNAL', message: '서버 오류' } },
+        { status: 500 }
+      );
+    }
+    return HttpResponse.json(rows);
+  }
+
+  beforeEach(() => {
+    queues = { 'saved-places': [], 'saved-stays': [] };
+    gate = createGate();
+    // 파일 최상위 beforeEach 의 평소 `/saved-places` 위에 응답 큐 핸들러를 얹는다(server.use 는 앞에 끼운다).
+    server.use(
+      http.get(`${BASE}/saved-places`, () =>
+        answer('saved-places', PLACE_ROWS)
+      ),
+      http.get(`${BASE}/saved-stays`, () => answer('saved-stays', STAY_ROWS))
+    );
+  });
+
+  // 실패해 중간에 죽은 케이스가 보류 요청을 남기지 않게.
+  afterEach(() => gate.release());
+
+  function renderHome(client = newTestQueryClient({ gcTime: 0 })) {
+    return {
+      client,
+      ...render(
+        <WithToastHost>
+          <HomePage />
+        </WithToastHost>,
+        { wrapper: createWrapper(client) }
+      ),
+    };
+  }
+  // 여행 목록이 오기 전엔 FAB 묶음이 아예 없다(로딩 얼굴) — 그려질 때까지 기다린 뒤 누른다.
+  async function openSavedMenu(): Promise<void> {
+    fireEvent.press(await screen.findByTestId('home-saved-menu-toggle'));
+  }
+  async function pause(ms = 100): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+    });
+  }
+
+  it('HM1 장소 목록 500 → 토스트 · 장소 배지 `–` · 숙소 배지는 제 숫자(1) · 하트는 눌린다', async () => {
+    // 준비
+    queues['saved-places'] = [500];
+
+    // 실행
+    renderHome();
+    const toast = await screen.findByTestId(TOAST);
+    await openSavedMenu();
+
+    // 단언
+    expect(within(toast).getByText(TOAST_TEXT)).toBeOnTheScreen();
+    expect(screen.getByTestId(`${TOAST}-error-icon`)).toBeOnTheScreen();
+    await waitFor(() =>
+      expect(screen.getByTestId('home-saved-stays-badge')).toHaveTextContent(
+        '1'
+      )
+    );
+    expect(screen.getByTestId('home-saved-places-badge')).toHaveTextContent(
+      '–'
+    );
+    // 하트는 그대로(비활성 아님) — 누르면 서버가 409 로 담김에 수렴시킨다.
+    const hearts = await screen.findAllByTestId(/^home-spot-save-/);
+    expect(hearts.length).toBeGreaterThan(0);
+    hearts.forEach((heart) => expect(heart).not.toBeDisabled());
+  });
+
+  it('HM2 숙소 목록 500 → 토스트 · 숙소 배지 `–` · 장소 배지는 제 숫자(2)', async () => {
+    // 준비
+    queues['saved-stays'] = [500];
+
+    // 실행
+    renderHome();
+    const toast = await screen.findByTestId(TOAST);
+    await openSavedMenu();
+
+    // 단언
+    expect(within(toast).getByText(TOAST_TEXT)).toBeOnTheScreen();
+    await waitFor(() =>
+      expect(screen.getByTestId('home-saved-places-badge')).toHaveTextContent(
+        '2'
+      )
+    );
+    expect(screen.getByTestId('home-saved-stays-badge')).toHaveTextContent('–');
+  });
+
+  it('HM3 둘 다 성공이면 토스트도 `–` 도 없고 배지는 제 숫자다', async () => {
+    // 실행 — (앞 테스트의 토스트가 샌 거라면 아래 "토스트 없음"이 red 로 드러난다: 파일 최상위 afterEach 가 비운다.)
+    renderHome();
+    await openSavedMenu();
+    await waitFor(() =>
+      expect(screen.getByTestId('home-saved-places-badge')).toHaveTextContent(
+        '2'
+      )
+    );
+    await pause();
+
+    // 단언
+    expect(screen.getByTestId('home-saved-stays-badge')).toHaveTextContent('1');
+    expect(screen.queryByText('–')).toBeNull();
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+  });
+
+  it('HM4 토스트를 비운 뒤 같은 실패가 또 와도(재조회 500) 다시 뜨지 않는다 — 화면당 1회', async () => {
+    // 준비 — 두 번 다 500.
+    queues['saved-places'] = [500, 500];
+    const { client } = renderHome();
+    await screen.findByTestId(TOAST);
+    expect(count('GET /api/v1/saved-places')).toBe(1);
+
+    // 실행 — 슬롯을 비우고(슬롯이 1개라 "보임 1개"로는 1회를 못 잰다) 같은 목록을 다시 받게 한다.
+    resetToast();
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: getGetSavedPlacesQueryKey() });
+    });
+    await waitFor(() => expect(count('GET /api/v1/saved-places')).toBe(2));
+    await pause();
+
+    // 단언 — 재조회가 정말 나갔고(앵커), 그런데도 토스트는 없다.
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+  });
+
+  describe.each(['saved-places', 'saved-stays'] as const)(
+    'HM5 실패 캐시 위 재조회 진행 중 — %s',
+    (which) => {
+      async function mountOverFailedCache(second: Reply) {
+        // 준비 — 첫 마운트에서 실패해 토스트가 뜨고, 닫는다(캐시 gcTime 무한). 두 번째 응답은 문 뒤.
+        queues[which] = [500, second];
+        const client = newTestQueryClient();
+        const first = renderHome(client);
+        await screen.findByTestId(TOAST);
+        first.unmount();
+        resetToast();
+        // 실행 — 다시 마운트: 재조회가 시작되고 문 앞에서 멈춘다.
+        renderHome(client);
+        await waitFor(() => expect(count(`GET /api/v1/${which}`)).toBe(2));
+        await pause();
+      }
+
+      it('보류 중엔 토스트가 없고, 재조회가 성공하면 끝까지 없다', async () => {
+        await mountOverFailedCache('hold');
+        // 단언 ① — 보류 중: 옛 실패만 보고 쏘지 않는다.
+        expect(screen.queryByTestId(TOAST)).toBeNull();
+
+        // 실행 ② — 문을 열면 200.
+        gate.release();
+        await pause();
+
+        // 단언 ② — 앵커: 성공이 화면에 반영됐다(배지가 제 숫자) · 토스트는 끝까지 0.
+        await openSavedMenu();
+        await waitFor(() =>
+          expect(
+            screen.getByTestId(
+              which === 'saved-places'
+                ? 'home-saved-places-badge'
+                : 'home-saved-stays-badge'
+            )
+          ).toHaveTextContent(which === 'saved-places' ? '2' : '1')
+        );
+        expect(screen.queryByText('–')).toBeNull();
+        expect(screen.queryByTestId(TOAST)).toBeNull();
+      });
+
+      it('보류 중엔 토스트가 없고, 재조회도 실패로 굳으면 그때 1회 뜬다', async () => {
+        await mountOverFailedCache('hold500');
+        expect(screen.queryByTestId(TOAST)).toBeNull();
+
+        gate.release();
+
+        expect(
+          within(await screen.findByTestId(TOAST)).getByText(TOAST_TEXT)
+        ).toBeOnTheScreen();
+      });
+    }
+  );
 });

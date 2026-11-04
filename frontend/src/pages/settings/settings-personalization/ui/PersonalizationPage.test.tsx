@@ -12,6 +12,9 @@ jest.mock('@/shared/api/generated/reflection/reflection', () => ({
 jest.mock('@/shared/api', () => ({
   patchConsent: jest.fn(),
   fetchTerms: jest.fn(),
+  // TRIP-1755 — 훅이 오프라인 보류를 실패로 읽으려고 배럴에서 부르는 실물 판정(목은 이 export 가 없으면 전 케이스가 깨진다).
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  isOfflineWaiting: require('@/shared/api/isOfflineWaiting').isOfflineWaiting,
 }));
 
 // 라우터 — 헤더 뒤로가기 배선이 있어도 죽지 않게 고정 스텁(내비게이션 무단언).
@@ -301,5 +304,175 @@ describe('TRIP-1689 FV-CONSENT-02 · 저장 실패 안내 + 실패해도 다시 
         screen.queryByTestId('settings-personalization-save-error')
       ).toBeNull()
     );
+  });
+});
+
+/**
+ * TRIP-1755 · 개인화 조회가 안 끝났거나 실패했으면 OFF 토글을 그리지 않는다(INV-4 · BR-U0-12).
+ *
+ * 왜: 조회 실패·로딩 중에도 토글이 OFF 로 그려지고 눌려서(`consentOn ? REVOKE : GRANT`) 이미 동의한 사용자의 GRANT 가
+ * 한 줄 더 쌓였다 — 동의 이력은 append-only 법적 증적이라 지울 수 없다. 그래서 토글 자체를 안 그린다.
+ *
+ * 무엇을 보장하나(훅 목으로 상태를 주입 — 배선만 본다):
+ *  - PL1 콜드 실패 → 오류 카드, 토글·안내·목록 없음, `fetchTerms`·`patchConsent` 0회.
+ *  - PL2 (Q2a) **데이터가 있어도** `isError` 면 오류 카드·토글 없음(옛 값을 토글로 보이지 않는다 — FV ShownMatchesServerPers).
+ *  - PL3 로딩 중 → 로딩 카드, 토글 없음. PL4 (Q4) 오프라인 보류(paused) → 로딩에 갇히지 않고 오류 카드.
+ *  - PL5 다시 시도 → 훅의 `refetch` 1회, 동의 PATCH 0회.
+ *  - PL6 재시도 윈도(v5: 데이터 없는 쿼리를 refetch 하면 pending 으로 돌아가 `isError` 가 꺼진다) → 거짓 OFF 토글이 되살아나지 않는다.
+ *    얼굴 종류(로딩/오류)는 구현 재량이라 잠그지 않는다. PL7 회복(데이터 도착) → 토글 ON·카드 사라짐.
+ * 재시도 윈도·회복의 실제 v5 전이는 `PersonalizationPage.integration.test.tsx`(실 QueryClient)가 잰다.
+ *
+ * 3동작 뼈대: 준비=GET 훅 반환 주입 → 실행=render(+재시도 누름·rerender) → 단언=testID·호출 수.
+ */
+describe('TRIP-1755 · 조회 실패·로딩 (훅 목)', () => {
+  const ERROR = 'settings-personalization-load-error';
+  const RETRY = 'settings-personalization-load-retry';
+  const LOADING = 'settings-personalization-load-loading';
+  const TOGGLE = 'settings-personalization-toggle';
+  const APPLIED_WITH_ITEMS: PersonalizationInfo = {
+    applied: true,
+    reason: 'APPLIED',
+    sharedItems: [{ item: '맛집 방문 기록', purpose: '다음 여행 맛집 추천' }],
+  };
+
+  const refetch = jest.fn();
+  const FAILED = {
+    data: undefined,
+    isPending: false,
+    isError: true,
+    errorUpdateCount: 1,
+    fetchStatus: 'idle',
+    refetch,
+  };
+
+  function page(client = newTestQueryClient()) {
+    return (
+      <QueryClientProvider client={client}>
+        <PersonalizationPage />
+      </QueryClientProvider>
+    );
+  }
+
+  /** 동의 PATCH 가 한 번도 안 나갔다 — 거짓 OFF 를 눌러 GRANT 가 쌓이는 길이 없다. */
+  function expectNoConsentTraffic() {
+    expect(mockPatch).not.toHaveBeenCalled();
+    expect(mockFetchTerms).not.toHaveBeenCalled();
+  }
+
+  it('PL1 콜드 실패 → 오류 카드·다시 시도, 토글·안내·목록은 없고 동의 요청은 0회', () => {
+    mockUseGet.mockReturnValue(FAILED);
+
+    render(page());
+
+    expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+    expect(screen.queryByTestId(TOGGLE)).toBeNull();
+    expect(screen.queryByText(/동의하면/)).toBeNull();
+    expect(
+      screen.queryAllByTestId('settings-personalization-item')
+    ).toHaveLength(0);
+    expectNoConsentTraffic();
+  });
+
+  it('PL2 (Q2a) 데이터가 있어도 isError 면 오류 카드이고 토글·목록은 없다', () => {
+    mockUseGet.mockReturnValue({
+      ...FAILED,
+      data: APPLIED_WITH_ITEMS,
+    });
+
+    render(page());
+
+    expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.queryByTestId(TOGGLE)).toBeNull();
+    expect(
+      screen.queryAllByTestId('settings-personalization-item')
+    ).toHaveLength(0);
+    expectNoConsentTraffic();
+  });
+
+  it('PL3 응답 전(로딩)에는 로딩 카드만 있고 토글은 없다', () => {
+    mockUseGet.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      errorUpdateCount: 0,
+      fetchStatus: 'fetching',
+      refetch,
+    });
+
+    render(page());
+
+    expect(screen.getByTestId(LOADING)).toBeOnTheScreen();
+    expect(screen.queryByTestId(TOGGLE)).toBeNull();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+    expectNoConsentTraffic();
+  });
+
+  it('PL4 (Q4) 오프라인 보류(pending+paused)는 로딩에 영영 갇히지 않고 오류 카드로 알린다', () => {
+    mockUseGet.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      errorUpdateCount: 0,
+      fetchStatus: 'paused',
+      refetch,
+    });
+
+    render(page());
+
+    expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.queryByTestId(TOGGLE)).toBeNull();
+    expect(screen.queryByTestId(LOADING)).toBeNull();
+  });
+
+  it('PL5 다시 시도를 누르면 조회를 다시 받고(refetch 1회) 동의 요청은 나가지 않는다', () => {
+    mockUseGet.mockReturnValue(FAILED);
+    render(page());
+
+    fireEvent.press(screen.getByTestId(RETRY));
+
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expectNoConsentTraffic();
+  });
+
+  it('PL6·PL7 재시도 윈도(v5 pending 복귀)에도 거짓 OFF 토글이 없고, 데이터가 도착하면 토글 ON 으로 회복한다', () => {
+    // 준비 — 콜드 실패에서 시작.
+    mockUseGet.mockReturnValue(FAILED);
+    const client = newTestQueryClient();
+    const { rerender } = render(page(client));
+    expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+
+    // 실행 ① — 다시 시도 누름 → v5 는 데이터 없는 쿼리를 pending 으로 되돌린다(isError false, errorUpdateCount 는 남음).
+    fireEvent.press(screen.getByTestId(RETRY));
+    mockUseGet.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      errorUpdateCount: 1,
+      fetchStatus: 'fetching',
+      refetch,
+    });
+    rerender(page(client));
+
+    // 단언 ① — 윈도 동안 거짓 OFF 토글도, "동의하면…" 안내도, 동의 요청도 없다(얼굴 종류는 안 잠근다).
+    expect(screen.queryByTestId(TOGGLE)).toBeNull();
+    expect(screen.queryByText(/동의하면/)).toBeNull();
+    expectNoConsentTraffic();
+
+    // 실행 ② — 응답 도착(동의 상태).
+    mockUseGet.mockReturnValue({
+      data: { applied: true, reason: 'APPLIED', sharedItems: [] },
+      isPending: false,
+      isError: false,
+      errorUpdateCount: 1,
+      fetchStatus: 'idle',
+      refetch,
+    });
+    rerender(page(client));
+
+    // 단언 ② — 서버 값대로 토글 ON, 카드는 사라진다.
+    expect(screen.getByTestId(TOGGLE)).toBeChecked();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+    expect(screen.queryByTestId(LOADING)).toBeNull();
   });
 });

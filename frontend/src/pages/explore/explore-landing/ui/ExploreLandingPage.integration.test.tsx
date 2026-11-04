@@ -8,6 +8,7 @@ import {
   within,
 } from '@testing-library/react-native';
 import { BASE } from '@/test-support/apiBase';
+import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 import { createGate } from '@/test-support/mswHookHarness';
 import {
   createClockSkew,
@@ -18,6 +19,7 @@ import {
 } from '@/test-support/queryRender';
 
 import { server } from '@/mocks/server';
+import { getGetSavedStaysQueryKey } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type {
   CuratedStay,
@@ -107,6 +109,8 @@ beforeEach(() => {
 });
 
 afterEach(() => server.resetHandlers());
+// TRIP-1754 — 토스트 슬롯은 모듈 싱글턴이라 앞 테스트의 토스트가 샌다. 파일 최상위에서 비운다(describe 안이면 샌다).
+afterEach(resetToast);
 afterAll(() => server.close());
 
 // TRIP-1049 — 로그인 하트는 응답 전에 칠해지고(낙관), 담은 곳 FAB 수도 같은 캐시라 함께 움직인다.
@@ -898,5 +902,224 @@ describe('스크롤 중 FAB 숨김 배선', () => {
         'box-none'
       )
     );
+  });
+});
+
+/**
+ * TRIP-1754 · 저장 목록 조회가 **실패했는데 "안 담김·0곳"처럼 보이는** 문제(INV-4) — 실제 500 응답으로 잰다.
+ *
+ * 무엇을 보장하나(3동작 = 준비: 서버 응답 → 실행: 그리기 → 단언: 토스트·♥ 이름·하트):
+ *  - **EX1** 장소 목록 500 → 토스트 · ♥ FAB 이름 `담은 장소`(개수 없음) · 장소 하트가 눌린다(비활성 아님).
+ *  - **EX2** 숙소 목록 500 → 토스트 · 숙소 하트가 눌린다.
+ *  - **EX3** 둘 다 성공 → 토스트 없음 · 이름 `담은 장소 1곳`.
+ *  - (게스트 케이스는 없다 — 탐색 랜딩은 탭 화면이라 로그인 뒤에만 열리고 훅을 `isAuthed:true` 고정으로 부른다.)
+ */
+describe('TRIP-1754 · 저장 목록 조회 실패 — 토스트 · 하트', () => {
+  const TOAST = 'saved-list-load-error';
+  const TOAST_TEXT = '저장 목록을 불러오지 못했어요';
+  const POI = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const PLACE: Place = {
+    poiId: POI,
+    nameKo: '감천문화마을',
+    category: '명소',
+    lat: 35.0975,
+    lng: 129.0106,
+    region: '부산',
+    openingHours: null,
+    imageUrl: null,
+    tags: [],
+    savedCount: 0,
+    dataStatus: 'ACTIVE',
+  };
+  const STAY: StayItem = {
+    externalSource: 'NAVER',
+    externalId: 's1',
+    name: '해운대 그랜드 호텔',
+    lat: 35.1587,
+    lng: 129.1604,
+    region: '해운대',
+    amenities: [],
+    stayType: 'HOTEL',
+    price: { amount: 145000, currency: 'KRW' },
+    address: '부산광역시 해운대구 해운대해변로 296',
+  };
+  const STAY_KEY = stayKey(STAY);
+  const SAVED_ROW: SavedPlace = {
+    savedPlaceId: '22222222-2222-2222-2222-222222222222',
+    savedAt: '2026-09-01T00:00:00Z',
+    place: PLACE,
+  };
+
+  function failure(): Response {
+    return HttpResponse.json(
+      { error: { code: 'INTERNAL', message: '서버 오류' } },
+      { status: 500 }
+    );
+  }
+  function serve(saved: { places: 'ok' | 500; stays: 'ok' | 500 }): void {
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: [PLACE], nextCursor: null })
+      ),
+      http.get(`${BASE}/saved-places`, () =>
+        saved.places === 500 ? failure() : HttpResponse.json([SAVED_ROW])
+      ),
+      http.get(`${BASE}/saved-stays`, () =>
+        saved.stays === 500 ? failure() : HttpResponse.json([])
+      )
+    );
+  }
+  function renderWithToast(): void {
+    render(
+      <WithToastHost>
+        <ExploreLandingPage />
+      </WithToastHost>,
+      { wrapper: createGcZeroWrapper() }
+    );
+  }
+
+  it('EX1 장소 목록 500 → 토스트 · ♥ 이름 `담은 장소` · 장소 하트는 눌린다', async () => {
+    // 준비
+    mockUseStaySearch.mockReturnValue(stayResults([]));
+    serve({ places: 500, stays: 'ok' });
+    setAccessToken('valid-access');
+
+    // 실행
+    renderWithToast();
+    const toast = await screen.findByTestId(TOAST, undefined, WAIT);
+
+    // 단언
+    expect(within(toast).getByText(TOAST_TEXT)).toBeOnTheScreen();
+    expect(screen.getByTestId(`${TOAST}-error-icon`)).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('explore-saved-menu-toggle')
+    ).toHaveAccessibleName('담은 장소');
+    const heart = await screen.findByTestId(
+      `explore-place-save-${POI}`,
+      undefined,
+      WAIT
+    );
+    expect(heart).not.toBeDisabled();
+  });
+
+  it('EX2 숙소 목록 500 → 토스트 · 숙소 하트는 눌린다', async () => {
+    // 준비
+    mockUseStaySearch.mockReturnValue(stayResults([STAY]));
+    serve({ places: 'ok', stays: 500 });
+    setAccessToken('valid-access');
+
+    // 실행
+    renderWithToast();
+    const toast = await screen.findByTestId(TOAST, undefined, WAIT);
+
+    // 단언
+    expect(within(toast).getByText(TOAST_TEXT)).toBeOnTheScreen();
+    const heart = await screen.findByTestId(
+      `explore-stay-save-${STAY_KEY}`,
+      undefined,
+      WAIT
+    );
+    expect(heart).not.toBeDisabled();
+  });
+
+  it('EX3 둘 다 성공이면 토스트가 없고 ♥ 이름은 `담은 장소 1곳`이다', async () => {
+    // 준비
+    mockUseStaySearch.mockReturnValue(stayResults([]));
+    serve({ places: 'ok', stays: 'ok' });
+    setAccessToken('valid-access');
+
+    // 실행
+    renderWithToast();
+    await waitFor(
+      () =>
+        expect(
+          screen.getByTestId('explore-saved-menu-toggle')
+        ).toHaveAccessibleName('담은 장소 1곳'),
+      WAIT
+    );
+    await settle();
+
+    // 단언 — (앞 테스트의 토스트가 샌 거라면 여기서 red 로 드러난다: 파일 최상위 afterEach 가 비운다.)
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+  });
+
+  // 5-b 후 심판 보강(03b W1·W2) — EX1~EX3 는 "새 마운트 + 첫 응답이 곧바로 500"이라 훅의 두 표식(`loadFailed` 모름 ·
+  // `loadFailureConfirmed` 확정)이 같은 값이다. 둘이 갈리는 구간(실패 캐시 위 재마운트의 응답 대기)과 effect 의존 배열(1회)은 아래가 문다.
+  it('EX5 실패 캐시 위에 다시 열면 — 재조회 중엔 토스트 없음 · 실패로 굳으면 1회 · 그 뒤 재조회엔 다시 안 뜬다', async () => {
+    // 준비 — 저장 숙소 응답 큐: ① 500 ② 문 뒤에서 500 ③ 500. 캐시가 남는 클라이언트로 두 번 그린다.
+    mockUseStaySearch.mockReturnValue(stayResults([STAY]));
+    serve({ places: 'ok', stays: 'ok' });
+    setAccessToken('valid-access');
+    const gate = createGate();
+    const replies: ('500' | 'hold500')[] = ['500', 'hold500', '500'];
+    let savedGets = 0;
+    server.use(
+      http.get(`${BASE}/saved-stays`, async () => {
+        savedGets += 1;
+        if (replies.shift() === 'hold500') await gate.opened;
+        return HttpResponse.json(
+          { error: { code: 'INTERNAL', message: '서버 오류' } },
+          { status: 500 }
+        );
+      })
+    );
+    const client = newTestQueryClient();
+    const mount = () =>
+      render(
+        <WithToastHost>
+          <ExploreLandingPage />
+        </WithToastHost>,
+        { wrapper: createWrapper(client) }
+      );
+    const pause = () =>
+      act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      });
+
+    try {
+      // 실행 ① — 첫 마운트: 실패 → 토스트. 닫고(캐시는 남는다) 토스트를 비운다.
+      const first = mount();
+      await screen.findByTestId(TOAST, undefined, WAIT);
+      first.unmount();
+      resetToast();
+
+      // 실행 ② — 다시 열기: 재조회가 문 앞에서 멈춘다.
+      mount();
+      await screen.findByTestId(
+        `explore-stay-save-${STAY_KEY}`,
+        undefined,
+        WAIT
+      );
+      await waitFor(() => expect(savedGets).toBe(2));
+      await pause();
+
+      // 단언 ② — 아직 응답 전이라 "확정 실패"가 아니다 → 옛 실패만 보고 토스트를 쏘지 않는다.
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      // 실행 ③ — 문을 열면 두 번째 응답도 500 → 이번 마운트에서 실패가 굳는다.
+      gate.release();
+
+      // 단언 ③ — 그때 1회.
+      expect(
+        within(await screen.findByTestId(TOAST, undefined, WAIT)).getByText(
+          TOAST_TEXT
+        )
+      ).toBeOnTheScreen();
+
+      // 실행 ④ — 슬롯을 비우고 같은 목록을 다시 받는다(세 번째 500). 화면은 다시 그려진다.
+      resetToast();
+      await act(async () => {
+        await client.invalidateQueries({
+          queryKey: getGetSavedStaysQueryKey(),
+        });
+      });
+      await waitFor(() => expect(savedGets).toBe(3));
+      await pause();
+
+      // 단언 ④ — 재조회가 정말 나갔는데도(앵커) 같은 화면에선 또 쏘지 않는다.
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+    } finally {
+      gate.release();
+    }
   });
 });

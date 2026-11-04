@@ -1,9 +1,11 @@
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import type { Place, StayItem } from '@/shared/api/index.schemas';
 import { guardPress } from '@/shared/lib/pressGuard';
+import { SAVED_LIST_LOAD_FAILED_TOAST } from '@/shared/ui/savedListLoadToast';
+import { showToast } from '@/shared/ui/Toast';
 import { formatPrice } from '@/entities/stay';
 import { orderLanePlaces } from '@/entities/place';
 import { SERVICE_REGIONS } from '@/entities/trip';
@@ -234,6 +236,11 @@ function ExploreLanding({
   const router = useRouter();
   const savedPlaces = useSavedPlaces({ isAuthed: true });
   const { savedPoiIds } = savedPlaces;
+  // TRIP-1754 — 확정 실패가 켜지는 순간 토스트 1회(옛 훅 목은 필드가 없어 실패 아님). 숙소 쪽은 SavableStayLane 이 건다.
+  const placesListFailed = Boolean(savedPlaces.loadFailureConfirmed);
+  useEffect(() => {
+    if (placesListFailed) showToast(SAVED_LIST_LOAD_FAILED_TOAST);
+  }, [placesListFailed]);
   // 장소 담기 하트(TRIP-1049) — base.placeLane 으로 내린다.
   const placeSave = usePlaceSaveToggle({
     isAuthed: true,
@@ -357,7 +364,8 @@ function ExploreLanding({
     // 메뉴를 닫고 이동한다. 0곳이어도 FAB 은 유지돼 d02/e04 빈 상태로 간다(TRIP-448 계승).
     savedMenu: {
       open: savedMenuOpen,
-      savedCount: savedPoiIds.length,
+      // null = 목록을 못 받아 모름 — 접근성 라벨이 `0곳` 으로 읽히지 않게(TRIP-1754)
+      savedCount: savedPlaces.loadFailed ? null : savedPoiIds.length,
       onToggle: () => setSavedMenuOpen((v) => !v),
       onPressSavedPlaces: () => {
         setSavedMenuOpen(false);
@@ -389,9 +397,14 @@ function SavableStayLane({
   base: LandingBase;
   items: StayItem[];
 }): ReactElement {
-  const { isSaved, save, remove, savedKeys } = useSavedStays({
-    isAuthed: true,
-  });
+  const { isSaved, save, remove, savedKeys, loadFailureConfirmed } =
+    useSavedStays({
+      isAuthed: true,
+    });
+  const staysListFailed = Boolean(loadFailureConfirmed);
+  useEffect(() => {
+    if (staysListFailed) showToast(SAVED_LIST_LOAD_FAILED_TOAST);
+  }, [staysListFailed]);
   const [pendingKeys, setPendingKeys] = useState<string[]>([]);
   const [saveError, setSaveError] = useState(false);
 

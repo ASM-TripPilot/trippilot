@@ -118,6 +118,22 @@ const PHOTO_SAVED_TOAST = '사진을 기록했어요';
 /** 뒤로 갈 히스토리가 없을 때(딥링크·푸시 직행)의 폴백(INV-4 침묵 금지) · notFound 얼굴 [홈으로] 목적지. */
 const HOME_FALLBACK = '/(tabs)';
 
+/**
+ * TRIP-1753 — 보조 조회가 404 아닌 이유로 실패했나(INV-4). 404(여행 없음)는 '없음' 그대로 둔다 — 그땐 일정도 404 라
+ * 허브가 notFound 얼굴로 먼저 선다. 데이터 없는 재조회 중엔 v5 가 isError 를 풀므로 실패 이력(errorUpdateCount)으로
+ * 잇는다 — 안 그러면 [다시 시도] 동안 안내가 꺼지고 "모두 예정" 화면으로 돌아간다(MyStaysPage 선례).
+ * ponytail: 404 뒤 재조회(복귀 등) 중엔 error 가 비어 안내가 잠깐 설 수 있다 — 그 404 는 일정 404 와 함께라 얼굴이 바뀐다.
+ */
+function failedUnlessNotFound(query: {
+  data: unknown;
+  isError: boolean;
+  error: unknown;
+  errorUpdateCount: number;
+}): boolean {
+  if (query.data !== undefined) return false;
+  return query.isError ? !isNotFound(query.error) : query.errorUpdateCount > 0;
+}
+
 export function LiveItineraryPage({
   tripId,
   today = seoulDate(new Date()),
@@ -716,6 +732,23 @@ export function LiveItineraryPage({
     return match ? triggerLabel(match.kind, match.variant).label : null;
   };
 
+  // TRIP-1753 — 방문 실패면 카드가 전부 '예정'·[도착] 숨김, 트리거 실패면 알약·배지·위험 시트가 없다. 둘 다 '없음'과
+  // 구별되지 않으므로 한 줄로 말하고, [다시 시도]는 실패한 쿼리만 다시 묻는다.
+  const visitsFailed = failedUnlessNotFound(visits);
+  const triggersFailed = failedUnlessNotFound(triggers);
+  const partialErrorNotice =
+    visitsFailed || triggersFailed
+      ? {
+          retrying:
+            (visitsFailed && visits.isFetching) ||
+            (triggersFailed && triggers.isFetching),
+          onRetry: () => {
+            if (visitsFailed) void visits.refetch();
+            if (triggersFailed) void triggers.refetch();
+          },
+        }
+      : null;
+
   // 시트는 허브의 형제로 조건부 마운트한다 — 딤이 FAB·알약까지 전면을 덮고, 닫힘 = 트리에서 사라짐.
   const riskTrigger = displayTriggers.find(
     (trigger) => trigger.triggerId === riskTriggerId
@@ -838,6 +871,7 @@ export function LiveItineraryPage({
         directionsPoiIds={directionsPoiIds}
         onPressDirections={(poiId) => void pressDirections(poiId)}
         directionsNotice={directionsNotice}
+        partialErrorNotice={partialErrorNotice}
         initialSnapIndex={initialSnapIndex}
         expandSignal={expandSignal}
         actualRoute={actualRoute}

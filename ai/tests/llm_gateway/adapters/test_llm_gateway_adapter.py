@@ -13,7 +13,7 @@ import anthropic
 import httpx
 import pytest
 
-from trippilot.llm_gateway.adapters.anthropic_adapter import AnthropicAdapter
+from trippilot.llm_gateway.adapters.anthropic_adapter import _KEY_REST_S, AnthropicAdapter
 from trippilot.domain.llm.prompt import PromptRef
 from trippilot.ports.llm_port import LlmRequest, LlmTimeoutError
 
@@ -327,3 +327,26 @@ def test_timeout_does_not_fall_over() -> None:
     with pytest.raises(LlmTimeoutError):
         AnthropicAdapter([slow, other]).invoke(_REQUEST)
     assert other.calls == 0  # 시한은 키 탓이 아니고, 시한 안에서 재시도하지 않는다(TRIP-381)
+
+
+def test_a_key_down_for_long_goes_to_the_back_until_its_rest_ends() -> None:
+    """월 사용 한도·크레딧 소진처럼 오래 가는 실패는 그 키를 쉬게 한다 — 그대로 두면 라운드로빈이 막힌 키 차례마다 실패 한 번을 먼저
+    치렀다(2026-11-04 운영 키 1 이 12-01 까지 월 한도). 쉬는 동안은 맨 뒤라 다른 키가 다 실패할 때만 묻고, 쉼이 끝나면 다시 차례가 온다."""
+    usage = _status_error(anthropic.BadRequestError, 400, "You have reached your specified API usage limits")
+    now = [0.0]
+    down, ok = _KeyClient(fail=usage), _KeyClient()
+    adapter = AnthropicAdapter([down, ok], clock=lambda: now[0])
+    for _ in range(6):
+        adapter.invoke(_REQUEST)
+    assert (down.calls, ok.calls) == (1, 6)
+    now[0] = _KEY_REST_S + 1
+    for _ in range(2):
+        adapter.invoke(_REQUEST)
+    assert down.calls == 2  # 쉼이 끝나 다시 물었다(아직 막혀 다시 쉰다)
+
+    a, b = _KeyClient(fail=usage), _KeyClient(fail=usage)
+    both = AnthropicAdapter([a, b], clock=lambda: 0.0)
+    for _ in range(2):
+        with pytest.raises(anthropic.BadRequestError):
+            both.invoke(_REQUEST)
+    assert (a.calls, b.calls) == (2, 2)  # 다 쉬고 있어도 묻는다 — 쉼은 순서만 바꾸고 키를 버리지 않는다

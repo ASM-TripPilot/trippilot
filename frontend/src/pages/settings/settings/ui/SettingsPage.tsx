@@ -15,7 +15,7 @@ import {
   filterReadySettingsSections,
 } from '../model/settingsSections';
 import { SettingsScreen } from './SettingsScreen';
-import { logout } from '@/shared/api';
+import { isOfflineWaiting, logout } from '@/shared/api';
 import {
   useDeleteMeDeletion,
   useGetMe,
@@ -67,6 +67,22 @@ function loadRouter(): typeof import('expo-router').router | null {
 }
 
 /**
+ * TRIP-1755 · 받아 본 값이 없는데 실패했거나(재시도로 `isError` 가 꺼진 틈 포함: `errorUpdateCount`) 오프라인에서 보류 중이면 true.
+ * 받아 둔 값이 있으면 재조회가 실패해도 false — 그 값을 오류로 덮지 않는다. 로딩(`{data: undefined}` 만)도 false.
+ */
+function queryLoadFailed(query: {
+  data: unknown;
+  isError: boolean;
+  errorUpdateCount: number;
+  fetchStatus?: 'fetching' | 'paused' | 'idle';
+}): boolean {
+  return (
+    query.data === undefined &&
+    (query.isError || query.errorUpdateCount > 0 || isOfflineWaiting(query))
+  );
+}
+
+/**
  * l05 설정 배선(pages 층) — 조회(useGetMe·useGetMeProfile)와 뮤테이션 4종(닉네임 PATCH · 삭제
  * POST · 철회 DELETE · 내보내기 지연 GET)을 화면에 잇는다. **판정·상태 전이는 여기서만** 산다
  * (화면은 순수 프레젠테이션).
@@ -91,6 +107,10 @@ export function SettingsPage(): ReactElement {
   const deletionState =
     deletionOverride ??
     (account.data?.status === 'DELETION_PENDING' ? 'pending' : 'active');
+  // 삭제 요청·철회를 이 세션에서 한 뒤(override)에는 상태를 알고 있으니 /me 실패가 "모름"이 아니다.
+  const accountLoadFailed =
+    deletionOverride === null && queryLoadFailed(account);
+  const profileLoadFailed = queryLoadFailed(profile);
   const [purgeAt, setPurgeAt] = useState<string | null>(null);
   const [cancelDeletionError, setCancelDeletionError] = useState(false);
   const [deleteRequestError, setDeleteRequestError] = useState(false);
@@ -285,6 +305,8 @@ export function SettingsPage(): ReactElement {
             ? undefined
             : locationConsent.data?.legalConsent,
           pushAvailable: isPushSupported(),
+          accountLoadFailed,
+          profileLoadFailed,
           personalizationOn:
             personalizationReason === undefined
               ? undefined
@@ -293,6 +315,16 @@ export function SettingsPage(): ReactElement {
         })
       )}
       deletionState={deletionState}
+      accountLoadFailed={accountLoadFailed || profileLoadFailed}
+      accountLoadRetrying={
+        (accountLoadFailed && account.isFetching) ||
+        (profileLoadFailed && profile.isFetching)
+      }
+      // 실패한 조회만 다시 받는다 — 멀쩡한 쪽까지 다시 부르지 않는다.
+      onRetryAccountLoad={() => {
+        if (accountLoadFailed) void account.refetch();
+        if (profileLoadFailed) void profile.refetch();
+      }}
       purgeAt={purgeAt}
       currentNickname={currentNickname}
       nicknameError={nicknameError}

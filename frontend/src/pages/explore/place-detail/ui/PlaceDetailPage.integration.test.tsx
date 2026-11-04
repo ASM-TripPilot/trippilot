@@ -4,6 +4,7 @@ import * as Linking from 'expo-linking';
 import { http, HttpResponse } from 'msw';
 import { QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -19,7 +20,10 @@ import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 
 import { PlaceDetailPage } from './PlaceDetailPage';
-import { newTestQueryClient } from '@/test-support/queryRender';
+import { createGate } from '@/test-support/mswHookHarness';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
+import { getGetSavedPlacesQueryKey } from '@/shared/api/index.hooks';
+import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 
 /**
  * TRIP-1372(TRIP-824 단건 조회) · d06 장소 상세 배선(페이지 층).
@@ -141,6 +145,8 @@ afterEach(() => {
   server.resetHandlers();
   clearAccessToken();
 });
+// TRIP-1754 — 토스트 슬롯은 모듈 싱글턴이라 앞 테스트의 토스트가 샌다. 파일 최상위에서 비운다(describe 안이면 샌다).
+afterEach(resetToast);
 afterAll(() => server.close());
 
 // 빈 QueryClient 로 그린다 — 앞 화면 캐시가 없는 딥링크 진입 그대로.
@@ -543,5 +549,158 @@ describe('화면 동작 — 부제 · 영업시간 줄바꿈 · 원 버튼 이�
     expect(screen.getByTestId('explore-place-save')).toHaveAccessibleName(
       '부산시립미술관 저장'
     );
+  });
+});
+
+/**
+ * TRIP-1754 · 담은 장소 조회가 **실패했는데 하트가 "안 담김"으로 보이는** 문제(INV-4) — 실제 500 응답으로 잰다.
+ *
+ *  - **PD1** 장소 200 + `GET /saved-places` 500 → 토스트(문구·오류 아이콘) · 하트가 눌린다(비활성 아님).
+ *  - **PD2** 장소 404(없음 얼굴 — 하트가 안 그려진다) + 담은 목록 500 → 토스트 없음(없는 하트 위에 소음을 얹지 않는다).
+ *  - **PD3** 둘 다 성공이면 토스트 없음.
+ */
+describe('TRIP-1754 · 담은 장소 조회 실패 — 토스트 · 하트', () => {
+  const TOAST = 'saved-list-load-error';
+  const TOAST_TEXT = '저장 목록을 불러오지 못했어요';
+
+  function renderDetailWithToast(poiId: string): void {
+    const client = newTestQueryClient({ gcTime: 0 });
+    function wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+    render(
+      <WithToastHost>
+        <PlaceDetailPage poiId={poiId} />
+      </WithToastHost>,
+      { wrapper }
+    );
+  }
+  function failSavedList(): void {
+    server.use(
+      http.get(`${BASE}/saved-places`, () =>
+        HttpResponse.json(
+          { error: { code: 'INTERNAL', message: '서버 오류' } },
+          { status: 500 }
+        )
+      )
+    );
+  }
+
+  it('PD1 장소 200 + 담은 목록 500 → 토스트 · 하트는 눌린다(비활성 아님)', async () => {
+    // 준비
+    failSavedList();
+
+    // 실행
+    renderDetailWithToast('p1');
+    const toast = await screen.findByTestId(TOAST);
+
+    // 단언
+    expect(within(toast).getByText(TOAST_TEXT)).toBeOnTheScreen();
+    expect(screen.getByTestId(`${TOAST}-error-icon`)).toBeOnTheScreen();
+    expect(screen.getByTestId('explore-place-save')).not.toBeDisabled();
+  });
+
+  it('PD2 장소 404(없음 얼굴) + 담은 목록 500 → 하트가 없는 얼굴이라 토스트가 없다', async () => {
+    // 준비
+    detailReply = 404;
+    failSavedList();
+
+    // 실행
+    renderDetailWithToast('p1');
+    await screen.findByTestId('explore-place-notfound');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    // 단언 — 긍정 앵커(없음 얼굴·하트 없음)와 함께 토스트 없음.
+    expect(screen.queryByTestId('explore-place-save')).toBeNull();
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+  });
+
+  it('PD3 장소·담은 목록 모두 성공이면 토스트가 없다', async () => {
+    // 실행
+    renderDetailWithToast('p1');
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-place-save-outline')).toBeOnTheScreen()
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    // 단언 — (앞 테스트의 토스트가 샌 거라면 여기서 red 로 드러난다: 파일 최상위 afterEach 가 비운다.)
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+  });
+
+  // 5-b 후 심판 보강(03b W1·W2) — PD1~PD3 는 "새 마운트 + 첫 응답이 곧바로 500"이라 훅의 두 표식(`loadFailed` 모름 ·
+  // `loadFailureConfirmed` 확정)이 같은 값이다. 둘이 갈리는 구간(실패 캐시 위 재마운트의 응답 대기)과 effect 의존 배열(1회)은 아래가 문다.
+  it('PD4 실패 캐시 위에 다시 열면 — 재조회 중엔 토스트 없음 · 실패로 굳으면 1회 · 그 뒤 재조회엔 다시 안 뜬다', async () => {
+    // 준비 — 담은 장소 응답 큐: ① 500 ② 문 뒤에서 500 ③ 500. 캐시가 남는 클라이언트로 두 번 그린다.
+    const gate = createGate();
+    const replies: ('500' | 'hold500')[] = ['500', 'hold500', '500'];
+    let savedGets = 0;
+    server.use(
+      http.get(`${BASE}/saved-places`, async () => {
+        savedGets += 1;
+        if (replies.shift() === 'hold500') await gate.opened;
+        return HttpResponse.json(
+          { error: { code: 'INTERNAL', message: '서버 오류' } },
+          { status: 500 }
+        );
+      })
+    );
+    const client = newTestQueryClient();
+    const mount = () =>
+      render(
+        <WithToastHost>
+          <PlaceDetailPage poiId="p1" />
+        </WithToastHost>,
+        { wrapper: createWrapper(client) }
+      );
+    const pause = () =>
+      act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      });
+
+    try {
+      // 실행 ① — 첫 마운트: 실패 → 토스트. 닫고(캐시는 남는다) 토스트를 비운다.
+      const first = mount();
+      await screen.findByTestId(TOAST);
+      first.unmount();
+      resetToast();
+
+      // 실행 ② — 다시 열기: 재조회가 문 앞에서 멈춘다.
+      mount();
+      await screen.findByTestId('explore-place-save');
+      await waitFor(() => expect(savedGets).toBe(2));
+      await pause();
+
+      // 단언 ② — 아직 응답 전이라 "확정 실패"가 아니다 → 옛 실패만 보고 토스트를 쏘지 않는다.
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      // 실행 ③ — 문을 열면 두 번째 응답도 500 → 이번 마운트에서 실패가 굳는다.
+      gate.release();
+
+      // 단언 ③ — 그때 1회.
+      expect(
+        within(await screen.findByTestId(TOAST)).getByText(TOAST_TEXT)
+      ).toBeOnTheScreen();
+
+      // 실행 ④ — 슬롯을 비우고 같은 목록을 다시 받는다(세 번째 500). 화면은 다시 그려진다.
+      resetToast();
+      await act(async () => {
+        await client.invalidateQueries({
+          queryKey: getGetSavedPlacesQueryKey(),
+        });
+      });
+      await waitFor(() => expect(savedGets).toBe(3));
+      await pause();
+
+      // 단언 ④ — 재조회가 정말 나갔는데도(앵커) 같은 화면에선 또 쏘지 않는다.
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+    } finally {
+      gate.release();
+    }
   });
 });
