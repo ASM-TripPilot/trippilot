@@ -50,6 +50,11 @@ BM25_K1, BM25_B = 1.2, 0.75
 GATES = ("G1", "G2")
 
 
+# 주제의 일반 형용사 — 게이트·이름 적중으로 세지 않는다("분위기 좋은" 의 '좋은'이 날마다좋은집·좋은하루를 올렸다, 2026-10-22 테스트 화면).
+# 도우미 탐색(`dialogue_handlers._GENERIC_WORDS`)과 PlanB 다시 짜기 후보(`rag.fuse_rule_ranking`)가 같은 한 벌을 쓴다
+GENERIC_WORDS = frozenset({"좋은", "괜찮은", "멋진", "예쁜", "근사한"})
+
+
 def enabled() -> bool:
     return os.environ.get(SWITCH, "off").strip().lower() in ("on", "1", "true", "yes")
 
@@ -151,7 +156,7 @@ def open_query(text: str | None, category_ko: str | None = None, *, generic: Ite
                gate: str = "G1") -> OpenQuery | None:
     """주제(또는 지역을 뺀 발화) → 게이트가 열리면 `OpenQuery`, 닫히면 None.
 
-    `generic` 은 호출측의 일반 형용사 표(도우미 `_GENERIC_WORDS` — 이름 적중에서 빼는 말과 같은 한 벌을 넘긴다)."""
+    `generic` 은 호출측의 일반 형용사 표(`GENERIC_WORDS` — 이름 적중에서 빼는 말과 같은 한 벌을 넘긴다)."""
     if gate not in GATES:
         raise ValueError(f"gate 는 {GATES} 중 하나: {gate!r}")
     if not text or not text.strip():

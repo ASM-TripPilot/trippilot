@@ -23,6 +23,7 @@ from concurrent.futures import TimeoutError as FutureTimeout
 
 from trippilot.agents.planb.kb_retrieval import retrieve
 from trippilot.domain.kb import KbKind
+from trippilot.poi_curation import hybrid_rank
 from trippilot.poi_curation.hybrid_rank import OpenQuery, chunk_index, doc_rank
 from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort
@@ -122,3 +123,14 @@ class PlaceSearch:
         order = {r: i for i, r in enumerate(refs)}
         ranks = doc_rank([h for h in hits if h.poi_ref in order], query.words, order)  # 범위 밖 poi_ref 는 버린다(INV-1)
         return ("OK" if ranks else "NO_EVIDENCE"), ranks
+
+
+def wire(embedding: EmbeddingPort | None, store: VectorStorePort | None) -> tuple[PlaceSearch | None, str]:
+    """기동 배선 — `TRIPPILOT_KB5_OPEN_SEARCH=on` 이고 벡터 스토어·실 임베딩이 있으면 (검색기, ""), 아니면 (None, 꺼진 까닭).
+    미배선 임베딩(`UnwiredEmbedding`, model_id "unwired")은 늘 터져 매번 ERROR 로그만 남기니 붙이지 않는다. 도우미(`api.dialogue`)와
+    PlanB(`api.wiring`)가 같은 판정을 쓴다 — 까닭은 각자의 기동 로그 한 줄에 싣는다."""
+    if not hybrid_rank.enabled():
+        return None, f"{hybrid_rank.SWITCH} 꺼짐"
+    if store is None or embedding is None or embedding.model_id == "unwired":
+        return None, f"{hybrid_rank.SWITCH}=on 이지만 {'벡터 스토어' if store is None else '임베딩'} 없음"
+    return PlaceSearch(embedding, store), ""
