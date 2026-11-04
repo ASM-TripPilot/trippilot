@@ -523,6 +523,9 @@ class ReplanSessionService(
      * 트리거 **요약**(예: `날씨(비 예보 70%)`)까지는 싣지 않는다 — 그 문구는 C9(planb-detection) 소유이고, C10 이 C9 에서
      * 읽는 것은 진입 날짜 강제용 사실(`TriggerLookupFacade` — kind·상태·날짜)뿐이다. 자동 진입이라는 사실만 `triggerId`
      * 유무로 남긴다(정본 §7 대비 축약 — 문구가 필요해지면 그때 그 계약을 넓힌다).
+     *
+     * **AI 가 이 줄을 읽는다**(다음 재계획의 `change_log.reason`) — 같은 날 앞 요청 기억(AI `wiring._prior_requested`)이
+     * ` · ` 로 나눠 칩 키를 찾고 밤 낱말을 본다. 구분자·칩 키(화면 값 그대로)·자유입력 포함을 바꾸면 그쪽도 같이 고친다.
      */
     private fun changeReason(session: ReplanSession): String {
         val parts = buildList {

@@ -1497,6 +1497,36 @@ def _left_originals(request: schemas.ReplanRequest, held: Collection[PoiId],
     return tuple(out)
 
 
+def _prior_requested(request: schemas.ReplanRequest, pois: Sequence[Poi],
+                     specs: Sequence[DirectiveSpec]) -> tuple[Poi, ...]:
+    """같은 날 반영된 앞 다시 짜기가 **요청해서** 넣은 곳 중 지금 일정에 남은 곳 (F-5 — AI 단독 근사, 와이어 불변).
+
+    재료는 이미 오는 변경 이력이다 — BE 가 이 날짜를 건드린 것만 diff 로 싣고, 반영된 다시 짜기는 `PLAN_B` 에 사유 한 줄
+    (칩 키·자유입력을 ` · ` 로 이은 것, BE `ReplanSessionService.changeReason`)이다. 그 사유가 바란 곳만 센다 — 밤 낱말
+    ("클럽 넣어줘", 부정문 제외)이면 들어온 곳 중 술집 태그, 한 곳 추가 칩(ADD_FOOD)이면 그 종류로 들어온 곳이 **딱 한
+    곳**일 때 그 곳(둘이면 어느 쪽인지 모른다). 뒤 이력이 그 곳을 뺐으면 잊는다 — 편집, 그리고 되돌림(`MANUAL` 로
+    반영분을 뺀다)이 여기 걸린다. 편집으로 바꿔 뺀 곳(SWAPPED_OUT)도 잊는다. 이름으로 집은 곳·자유입력의 한 곳 추가
+    ("카페 넣어줘")는 사유만으로 못 가른다 — 정식안(F-8)이 AI 가 집은 id 를 세션에 남겨 받는다.
+    """
+    index = {p.poi_id: p for p in pois}
+    keep: dict[PoiId, Poi] = {}
+    for ev in sorted(reversed(request.change_log), key=lambda e: e.at):  # BE 는 최신순 — 같은 시각이면 먼저 쓴 것 먼저
+        for pid in ev.removed_poi_ids:
+            keep.pop(PoiId(pid), None)
+        if ev.source != "PLAN_B" or not ev.reason:
+            continue
+        added = [index[PoiId(pid)] for pid in ev.added_poi_ids if PoiId(pid) in index]
+        if _NIGHT_WORDS.search(ev.reason) and not _NEGATION.search(ev.reason):
+            keep.update((p.poi_id, p) for p in added if NIGHTLIFE_TAG in p.tags)
+        for spec in resolve_chips(ev.reason.split(" · "), specs)[0]:
+            hit = [p for p in added if p.category in _categories_of(spec.prefer_categories)]
+            if spec.cardinality == "ONE" and len(hit) == 1:
+                keep[hit[0].poi_id] = hit[0]
+    current = {PoiId(s.poi_id) for s in request.current_slots}
+    swapped = {PoiId(r.poi_id) for r in request.rejections if r.kind == "SWAPPED_OUT"}
+    return tuple(p for pid, p in keep.items() if pid in current and pid not in swapped)
+
+
 def _end_near(request: schemas.ReplanRequest, resolved: Sequence[str],
               notes: list[str]) -> GeoPoint | None:
     """END_NEAR_STAY("숙소 근처에서 끝내기")·SHORTER_DAY("일찍 마무리") → 하루를 마칠 곳(그날 밤 숙소).
@@ -2770,6 +2800,27 @@ class WiredItineraryOrchestrator:
             # "카페로만" — 다른 종류는 후보에서 뺀다. 잠금·이름으로 집은 곳은 둔다(말이 어긋나면 이름이 이긴다).
             avoided = avoided | frozenset(
                 p.poi_id for p in pool.pois if p.category not in nl.only and p.poi_id not in held)
+        # 앞 요청 기억(F-5, 2026-11-05 사용자 결정) — 같은 날 반영된 다시 짜기가 요청해서 넣은 곳(`_prior_requested`)을
+        # 이름으로 집은 곳처럼 우선 필수 방문으로 둔다(구성 결과 맨 앞, 구성이 실패해도). 이번 요청이 이긴다 — 회피·이름으로
+        # 뺀 곳·다른 날·옮긴 지역 밖(`avoided`)·건너뛰기·"클럽은 빼줘"면 잊는다. 시간만 당기기·일찍 마무리는 장소를 더하지
+        # 않는 요청이라 걸지 않는다. 잠금·이미 끝난 곳은 따로 지킬 것이 없다.
+        remembered: tuple[Poi, ...] = ()
+        if earlier is None and "SHORTER_DAY" not in resolved:
+            said = request.free_text or ""
+            no_night = bool(_NIGHT_WORDS.search(said) and _NEGATION.search(said))
+            skip = {PoiId(p) for p in request.excluded_poi_ids} | avoided
+            left = set(_left_originals(request, {b.poi_id for b in blocks}, not_before))
+            prior = [p for p in _prior_requested(request, pool.pois, self._directives) if p.poi_id in left]
+            remembered = tuple(p for p in prior
+                               if p.poi_id not in skip and not (no_night and NIGHTLIFE_TAG in p.tags))
+            if len(remembered) < len(prior):
+                notes.append("replan_memory_dropped: " + ",".join(
+                    str(p.poi_id) for p in prior if p not in remembered))
+            if remembered:
+                notes.append("replan_memory: " + ",".join(str(p.poi_id) for p in remembered))
+        mem_ids = frozenset(p.poi_id for p in remembered)
+        nl_ids = tuple(dict.fromkeys((*nl_ids, *(p.poi_id for p in remembered))))
+        held |= mem_ids  # 밤 후보(`_nightlife_candidates`)가 기억한 곳을 또 세지 않는다 — 이름으로 집은 곳과 같다
 
         # ── PlanBAgent (RAG) — 상황 지식으로 순서를 낸다 ─────────────
         # 다녀온 곳(지난 잠금)은 PlanB 에도 제외다 — 기준점이 "마지막 완료 방문"이면 그 POI 가
@@ -2823,7 +2874,9 @@ class WiredItineraryOrchestrator:
         window_end = datetime.combine(window.date, window.end, tzinfo=self._tz)
         night_end = max(window_end, datetime.combine(window.date, datetime.min.time(),
                                                      tzinfo=self._tz) + _NIGHT_END)
-        day_end = nl.window_end or (night_end if night or extend else window_end)  # 더 늦게까지도 같은 창
+        # 기억한 밤 장소(F-5)도 밤에 놀기와 같은 창 — 다음 다시 짜기의 BE 창(~21:00)엔 술집 추정 영업(20시~)이 못 든다
+        late_kept = any(NIGHTLIFE_TAG in p.tags for p in remembered)
+        day_end = nl.window_end or (night_end if night or extend or late_kept else window_end)  # 더 늦게까지도 같은 창
         # 밤 늦은 "더 늦게까지"의 밤 장소 체류 — 기본(술집 90·클럽 120분)이면 23:59 창에 안 들어간다. 남은 시간에
         # 맞춰 줄이고(이동 몫 20분, 바닥 30분) 우선으로 둔다. 그 밖엔 None = 카테고리 기본.
         late_dwell = (max(30, min(90, int((day_end - not_before).total_seconds() // 60) - 20))
@@ -2940,9 +2993,8 @@ class WiredItineraryOrchestrator:
         # 사용자가 이름으로 집은 곳은 시각 없는 필수 방문 — 구성 LLM 이 이미 고른 곳·잠금은 겹쳐 세지 않는다.
         # 시간만 당기기(earlier)는 장소를 안 바꾼다는 요청이라 더하지 않는다.
         nl_extra = () if earlier is not None else tuple(
-            p.poi_id for p in nl.visit
-            if p.poi_id not in set(composed) and p.poi_id not in {b.poi_id for b in blocks}
-            and p.poi_id not in kept)
+            p for p in nl_ids  # 기억한 곳(F-5) 포함
+            if p not in set(composed) and p not in {b.poi_id for b in blocks} and p not in kept)
         domain_request = core.GenerateItineraryRequest(
             schedule_id=ScheduleId(request.trip_id),
             anchor=anchor,
@@ -2978,7 +3030,7 @@ class WiredItineraryOrchestrator:
             if orig_left and not composed else _with_nl_room(
                 (len(active) + len(set(composed) - {b.poi_id for b in active}) + len(add_one)
                  if composed or earlier is not None else visit_cap),
-                nl_extra),
+                tuple(p for p in nl_extra if p not in mem_ids)),  # 기억한 곳은 원 일정의 한 곳 — 피로 상한 안에서 센다
             not_before=not_before,
             # 더 늦게까지(`kept`) — 원 일정 남은 방문은 원 체류·우선 가중 그대로. 구성이 없으면 그것만 필수로 두고
             # 상한 없는 점수 경로가 새 방문을 더한다. 구성이 실패한 원 일정 지키기(F-4)도 `kept` 로 온다(우선 아님).
@@ -3079,7 +3131,7 @@ class WiredItineraryOrchestrator:
                       for s in d.slots}
             for pid in nl_ids:
                 if pid not in placed:
-                    notes.append(f"nl_place_unplaced: {pid}")
+                    notes.append(f"{'replan_memory' if pid in mem_ids else 'nl_place'}_unplaced: {pid}")
         if nl.counts and earlier is None:
             # 수를 정한 종류가 최종 일정에서 모자라면 밝힌다 — 구성은 맞췄어도 솔버가 못 넣을 수 있다(INV-4).
             got = [cat_of.get(s.poi_id) for d in (outcome.solution.days if outcome.solution else ())
