@@ -15,16 +15,16 @@ export function useQueryDataUpdateCount(queryKey: QueryKey): number {
   const queryClient = useQueryClient();
   const hash = hashKey(queryKey);
 
-  // 키 배열은 렌더마다 새로 오는 게 보통이라 해시로 구독 정체성을 고정한다.
+  // 구독은 캐시 전체를 듣는다(키 무관). 키 배열은 렌더마다 새로 오는 게 보통이라
+  // 스냅샷은 키 대신 해시로 캐시를 찾는다 — 해시가 같으면 같은 쿼리다.
   const subscribe = useCallback(
     (onChange: () => void) => queryClient.getQueryCache().subscribe(onChange),
-    // hash 가 같으면 같은 쿼리다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [queryClient, hash]
+    [queryClient]
   );
+  // 기본 해시(`hashKey`) 가정: QueryClient 기본 옵션에 `queryKeyHashFn` 을 넣으면 캐시 해시와
+  // 어긋나 이 훅은 늘 0 을 돌려준다(상한 판정이 안 켜진다 — TRIP-1364 재발). 넣을 땐 여기도 바꾼다.
   const getSnapshot = useCallback(
-    () => queryClient.getQueryState(queryKey)?.dataUpdateCount ?? 0,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    () => queryClient.getQueryCache().get(hash)?.state.dataUpdateCount ?? 0,
     [queryClient, hash]
   );
 
