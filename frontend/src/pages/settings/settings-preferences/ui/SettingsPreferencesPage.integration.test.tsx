@@ -1,16 +1,21 @@
 import type * as PreferencesModel from '../model/usePreferences';
 import { http, HttpResponse } from 'msw';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   fireEvent,
   render,
   screen,
   waitFor,
   within,
 } from '@testing-library/react-native';
+import { getGetMePreferencesQueryKey } from '@/shared/api/index.hooks';
+import { createGate } from '@/test-support/mswHookHarness';
 import {
   createGcZeroWrapper,
+  createWrapper,
   newTestQueryClient,
+  settle,
 } from '@/test-support/queryRender';
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -63,6 +68,8 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
   mockFakePreferences = false;
   resetToast();
+  // onlineManager 는 모듈 싱글턴 — 오프라인 케이스(PF5)가 어떻게 끝나든 다음 케이스는 온라인으로 시작한다(파일 최상위).
+  onlineManager.setOnline(true);
 });
 afterAll(() => server.close());
 
@@ -427,5 +434,176 @@ describe('저장 diff 기준선 — 가짜 훅 (옛 .baseline)', () => {
       expect(mockSave).toHaveBeenCalledTimes(1);
       expect(mockSave.mock.calls[0][0]).toStrictEqual({ pace: '알차게' });
     });
+  });
+});
+
+/**
+ * TRIP-1755 · 취향 조회가 실패하면 빈 화면 대신 오류 + 다시 시도(INV-4 · US-NOTIF-10).
+ *
+ * 왜: 페이지는 GET 이 도착했을 때만 선택을 시드하고, 실패하면 `selection=null` 이라 헤더만 남은 빈 화면이 영원히 이어졌다
+ * (로딩·오류·재시도 없음) — "취향이 없음"으로 읽힌다.
+ *
+ * 무엇을 보장하나(3동작: 준비=GET 응답 큐·게이트 → 실행=렌더·다시 시도·저장 → 단언=오류·칩·저장·PUT 바디):
+ *  - PF1 콜드 500 → 오류 + 다시 시도, 칩·저장 버튼·안내 없음, 저장 실패 전용 `settings-pref-error` 와 섞이지 않음, 뒤로 가능.
+ *  - PF2 다시 시도 중(둘째 GET 이 서버에 도착했고 응답 전 — v5 가 pending 으로 되돌려 isError 가 꺼지는 틈)에도 오류 유지·
+ *    다시 시도 비활성·칩·저장 없음.
+ *  - PF3 다시 시도 성공 → 오류가 사라지고 도착한 값으로 선택이 시드되며, 한 축만 바꿔 저장하면 PUT 바디에 그 축만 실린다
+ *    (기준선이 재시도 성공 뒤의 시드로 잡힘 — 시드 1회 계약).
+ *  - PF4 시드 뒤 재조회가 500 이어도 칩 유지·오류 얼굴 없음(선택을 오류로 덮지 않는다).
+ *  - PF5 오프라인 첫 진입 → 오류 얼굴, 칩 없음, 요청 0.
+ * 오류 카드의 배치·룩, 앱 전역 재시도 3회(≈7초) 뒤의 실제 타이밍은 jest 사각 — 6-b.
+ */
+describe('TRIP-1755 · 취향 조회 실패', () => {
+  const BASE = `${
+    process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8080'
+  }/api/v1`;
+  const ERROR = 'settings-pref-load-error';
+  const RETRY = 'settings-pref-load-retry';
+  const VIEW: PreferenceView = {
+    styles: { value: ['휴양'], isNeutralDefault: false },
+    pace: { value: '균형있게', isNeutralDefault: false },
+  };
+
+  type Reply = { status: 200 | 500; gate?: Promise<void> };
+  let replies: Reply[] = [];
+  let gets = 0;
+  let putBody: unknown = null;
+  let releaseGate: () => void = () => {};
+
+  beforeEach(() => {
+    replies = [];
+    gets = 0;
+    putBody = null;
+    releaseGate = () => {};
+    mockBack.mockClear();
+    setAccessToken('valid-access');
+    server.use(
+      http.get(`${BASE}/me/preferences`, async () => {
+        gets += 1;
+        const reply = replies.shift() ?? { status: 200 };
+        if (reply.gate) await reply.gate;
+        return reply.status === 500
+          ? HttpResponse.json(
+              { error: { code: 'INTERNAL', message: 'x' } },
+              { status: 500 }
+            )
+          : HttpResponse.json(VIEW);
+      }),
+      http.put(`${BASE}/me/preferences`, async ({ request }) => {
+        putBody = await request.json();
+        return new HttpResponse(null, { status: 200 });
+      })
+    );
+  });
+
+  afterEach(() => {
+    // 중간에 실패해도 붙잡힌 요청을 남기지 않게.
+    releaseGate();
+    server.resetHandlers();
+    clearAccessToken();
+  });
+
+  const expectNoEditor = () => {
+    expect(screen.queryByTestId('settings-pref-save')).toBeNull();
+    expect(screen.queryByTestId('settings-pref-style-휴양')).toBeNull();
+    expect(screen.queryByTestId('settings-pref-pace-균형있게')).toBeNull();
+    expect(screen.queryByTestId('settings-pref-priority-note')).toBeNull();
+  };
+
+  it('PF1 콜드 500 → 오류·다시 시도가 있고 칩·저장·안내와 저장 실패 줄은 없으며 뒤로는 갈 수 있다', async () => {
+    replies = [{ status: 500 }];
+
+    render(<SettingsPreferencesPage />, { wrapper: createGcZeroWrapper() });
+
+    // 긍정 앵커 — 실패가 화면에 도착했다. 그 위에서 "없음"을 잰다.
+    expect(await screen.findByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+    expectNoEditor();
+    expect(screen.queryByTestId('settings-pref-error')).toBeNull();
+    fireEvent.press(screen.getByTestId('settings-pref-back'));
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('PF2 다시 시도 중(둘째 응답 전)에도 오류가 유지되고 다시 시도는 비활성이며 칩·저장은 없다', async () => {
+    // 준비 — 둘째 GET 은 문 뒤에서 기다린다.
+    const gate = createGate();
+    releaseGate = gate.release;
+    replies = [{ status: 500 }, { status: 200, gate: gate.opened }];
+    render(<SettingsPreferencesPage />, { wrapper: createGcZeroWrapper() });
+    await screen.findByTestId(ERROR);
+
+    // 실행 — 다시 시도. 둘째 요청이 서버에 도착한 뒤가 윈도다.
+    fireEvent.press(screen.getByTestId(RETRY));
+    await waitFor(() => expect(gets).toBe(2));
+    await settle();
+
+    // 단언 — isError 만 보는 구현이면 이 순간 오류가 꺼지고 다시 빈 화면이 된다.
+    expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeDisabled();
+    expectNoEditor();
+  });
+
+  it('PF3 다시 시도가 성공하면 오류가 사라지고 도착한 값으로 시드되며, 한 축만 바꿔 저장하면 PUT 에 그 축만 실린다', async () => {
+    replies = [{ status: 500 }, { status: 200 }];
+    render(<SettingsPreferencesPage />, { wrapper: createGcZeroWrapper() });
+    await screen.findByTestId(ERROR);
+
+    fireEvent.press(screen.getByTestId(RETRY));
+
+    // 시드 — 재시도로 처음 도착한 view 가 선택이 된다.
+    expect(
+      await screen.findByTestId('settings-pref-style-휴양')
+    ).toBeSelected();
+    expect(screen.getByTestId('settings-pref-pace-균형있게')).toBeSelected();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+    expect(screen.queryByTestId(RETRY)).toBeNull();
+
+    // 실행 — pace 만 바꿔 저장.
+    fireEvent.press(screen.getByTestId('settings-pref-pace-알차게'));
+    fireEvent.press(screen.getByTestId('settings-pref-save'));
+    await waitFor(() => expect(putBody).not.toBeNull());
+
+    // 단언 — 안 만진 styles 는 기준선(재시도로 도착한 값) 대비 무변경이라 빠진다.
+    // toEqual — msw 가 만든 본문은 다른 실행 영역(realm) 객체라 toStrictEqual 이 내용이 같아도 실패한다.
+    // JSON 을 거친 본문엔 undefined 키가 남을 수 없어 여분 축 검출력은 같다.
+    expect(putBody).toEqual({ pace: '알차게' });
+  });
+
+  it('PF4 시드 뒤 재조회가 500 이어도 칩이 유지되고 오류 얼굴은 없다', async () => {
+    // 준비 — 첫 응답 성공, 재조회 500. 클라이언트를 직접 쥔다(밖에서 재조회를 일으키려고).
+    replies = [{ status: 200 }, { status: 500 }];
+    const client = newTestQueryClient();
+    render(<SettingsPreferencesPage />, { wrapper: createWrapper(client) });
+    expect(
+      await screen.findByTestId('settings-pref-style-휴양')
+    ).toBeSelected();
+
+    // 실행
+    await act(async () => {
+      await client.invalidateQueries({
+        queryKey: getGetMePreferencesQueryKey(),
+      });
+    });
+
+    // 단언 — 앵커: 실패가 캐시에 실제로 도착했다. 그 위에서 칩·저장 유지, 오류 얼굴 없음.
+    expect(client.getQueryState(getGetMePreferencesQueryKey())?.status).toBe(
+      'error'
+    );
+    expect(screen.getByTestId('settings-pref-style-휴양')).toBeSelected();
+    expect(screen.getByTestId('settings-pref-save')).toBeOnTheScreen();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+  });
+
+  it('PF5 오프라인으로 처음 켜면(요청이 나가지도 못함) 오류 얼굴이고 칩은 없으며 요청은 0건이다', async () => {
+    // 준비 — 앞 케이스의 오프라인이 새지 않았다는 앵커.
+    expect(onlineManager.isOnline()).toBe(true);
+    onlineManager.setOnline(false);
+
+    render(<SettingsPreferencesPage />, { wrapper: createGcZeroWrapper() });
+
+    // isError 도 errorUpdateCount 도 없는 pending+paused 라 오프라인 판정만이 잡는다.
+    expect(await screen.findByTestId(ERROR)).toBeOnTheScreen();
+    expectNoEditor();
+    expect(gets).toBe(0);
   });
 });

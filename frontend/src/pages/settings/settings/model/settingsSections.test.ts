@@ -14,6 +14,7 @@ import {
 import {
   buildSettingsSections,
   filterReadySettingsSections,
+  type SettingsGroupVM,
 } from './settingsSections';
 
 /**
@@ -581,4 +582,92 @@ describe('설정 모델 — pushAvailable', () => {
       ]);
     }
   );
+});
+
+// TRIP-1755 · 계정(/me)·프로필(/me/profile) 조회가 실패하면 삭제 행·닉네임 행을 모델에서 `ready:false` 로 뺀다.
+// 화면 쪽에서 null 을 돌려 숨기면 빈 "위험 영역" 카드와 머리글이 남는다 — 필터가 빈 그룹까지 떨구게 하는 유일한 길이다.
+// 입력을 안 주면(기본) 기존 동작 그대로다. 순수 함수라 렌더 없이 값으로 잰다(가장 싼 심판).
+describe('TRIP-1755 · 조회 실패 입력(accountLoadFailed · profileLoadFailed)', () => {
+  const INPUT = { nickname: '여행자123', email: 'a@b.com' };
+  const rowsOf = (groups: SettingsGroupVM[], groupKey: string) =>
+    groups.find((group) => group.key === groupKey)?.rows ?? [];
+
+  it('SM1 두 플래그를 생략한 것과 명시한 false 는 결과가 같다(기존 7그룹·행 불변)', () => {
+    const omitted = buildSettingsSections(INPUT);
+    const explicit = buildSettingsSections({
+      ...INPUT,
+      accountLoadFailed: false,
+      profileLoadFailed: false,
+    });
+
+    expect(explicit).toEqual(omitted);
+    expect(omitted).toHaveLength(7);
+  });
+
+  it('SM2 accountLoadFailed → 삭제 행만 ready:false, 필터 뒤 "위험 영역" 그룹이 통째로 빠진다', () => {
+    const groups = buildSettingsSections({ ...INPUT, accountLoadFailed: true });
+
+    // 원본 모델: 삭제 행만 닫힌다. 다른 행은 전부 그대로 열려 있다(긍정 앵커 겸 격리).
+    expect(rowsOf(groups, 'danger')).toEqual([
+      { key: 'delete-account', label: '계정 삭제', ready: false },
+    ]);
+    const others = groups
+      .flatMap((group) => group.rows)
+      .filter((row) => row.key !== 'delete-account');
+    expect(others.every((row) => row.ready)).toBe(true);
+
+    // 운영 필터: 빈 그룹 제거 — 머리글만 남은 카드가 없다.
+    const visible = filterReadySettingsSections(groups);
+    expect(visible.map((group) => group.key)).toEqual([
+      'account',
+      'preferences',
+      'location',
+      'notifications',
+      'affiliate',
+      'app-info',
+    ]);
+  });
+
+  it('SM3 profileLoadFailed → 닉네임 행만 ready:false, 필터 뒤 계정 그룹은 내보내기·로그아웃만 남고 7그룹은 유지된다', () => {
+    const groups = buildSettingsSections({ ...INPUT, profileLoadFailed: true });
+
+    const nickname = rowsOf(groups, 'account').find(
+      (row) => row.key === 'nickname'
+    );
+    expect(nickname?.ready).toBe(false);
+
+    const visible = filterReadySettingsSections(groups);
+    expect(visible).toHaveLength(7);
+    expect(rowsOf(visible, 'account').map((row) => row.key)).toEqual([
+      'export',
+      'logout',
+    ]);
+    // 계정 조회는 멀쩡하다 — 삭제 행은 그대로.
+    expect(rowsOf(visible, 'danger').map((row) => row.key)).toEqual([
+      'delete-account',
+    ]);
+  });
+
+  it('SM4 둘 다 실패해도 D4 행 값(취향·위치 칩·개인화)은 바뀌지 않는다', () => {
+    const base = {
+      ...INPUT,
+      locationConsent: true,
+      personalizationOn: true,
+    };
+    const normal = buildSettingsSections(base);
+    const failed = buildSettingsSections({
+      ...base,
+      accountLoadFailed: true,
+      profileLoadFailed: true,
+    });
+
+    for (const key of ['preferences', 'location', 'notifications']) {
+      expect(rowsOf(failed, key)).toEqual(rowsOf(normal, key));
+    }
+    // 긍정 앵커: 비교 대상이 실제 값을 갖고 있다(둘 다 빈 값끼리의 공허한 일치 방지).
+    expect(
+      rowsOf(failed, 'location').find((row) => row.key === 'personalization')
+        ?.value
+    ).toBe('사용 중');
+  });
 });
