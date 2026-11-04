@@ -134,6 +134,8 @@ const FAB_SHADOW = {
   elevation: 6,
 } as const;
 
+const SEE_ALL_HIT_SLOP = { top: 14, bottom: 14 };
+
 function LaneHeader({
   title,
   onSeeAll,
@@ -153,6 +155,9 @@ function LaneHeader({
           testID={seeAllTestID}
           accessibilityRole="button"
           onPress={onSeeAll}
+          // TRIP-1764 — 글자 줄 17 + 위아래 14 = 45. 헤더 줄 밖으로 나가도 눌린다(RN 0.81 시뮬 실측). 위는 레인
+          // mt-2xl 여백, 아래는 mb-md 12 안이라 카드와 안 겹친다.
+          hitSlop={SEE_ALL_HIT_SLOP}
           className="flex-row items-center gap-xs"
         >
           <Text className="font-noto text-label text-muted">모두 보기</Text>
