@@ -2173,8 +2173,9 @@ def _open_query(ctx: TurnContext, anchor: _Anchor, category: str | None, theme: 
     """열린 검색을 돌릴 탐색인가 — 주제 게이트가 열리고, 앵커가 지역·일정 근처이고(두 곳 사이·먼 짝 제외 — 가운데 순서가 먼저다),
     밤 말이 아닐 때만(야경·나이트라이프 순서가 먼저다). NL2SQL 이 나란히 도는지와는 무관하다(BR-AO-36). 이어 묻기도 이번 턴 주제로
     돈다 — 첫 턴이 섞인 반경 순서로 답했는데 "더 알려줘"만 SQL 행·규칙 순서로 돌아가 사슬 안에서 출처가 바뀌었다(리뷰 2026-11-04).
-    출처는 그래도 턴마다 같은 조건(`_doc_beats_sql`)으로 가른다 — 보인 곳을 뺀 다섯 곳에 근거가 문턱 밖으로 줄면 그 턴은 SQL 행이다
-    (근거가 남은 동안만 같은 출처, 사슬 첫 판정을 잇지 않는다). 돌 때 그 질의, 아니면 None."""
+    출처는 그래도 턴마다 같은 조건(`_doc_beats_sql`)으로 가른다 — 보인 곳을 뺀 다섯 곳에 근거가 문턱 밖으로 줄면 SQL 이 도는 턴
+    (`_carry` 없음)은 SQL 행, 지역을 이어받아 SQL 이 돌지 않는 턴은 규칙 순서의 반경이다(근거가 남은 동안만 같은 출처, 사슬 첫 판정을
+    잇지 않는다). 돌 때 그 질의, 아니면 None."""
     if anchor.kind not in ("region", "itinerary") or _said_night(category, theme, _night_heard(ctx)):
         return None
     return hybrid_rank.open_query(theme, _CATEGORY_KO.get(category or ""), generic=_GENERIC_WORDS)
