@@ -8209,7 +8209,10 @@ describe('보조 조회 실패 안내 (TRIP-1753)', () => {
     fireEvent.press(screen.getByTestId(RETRY_ID));
 
     // 단언
-    await waitFor(() => expect(screen.queryByTestId(ERROR_ID)).toBeNull());
+    // toBeNull 은 실패할 때마다 노드를 _fiber 째 찍어 느린 CI 에서 5초를 넘긴다(#1941) — not.toBeOnTheScreen 으로.
+    await waitFor(() =>
+      expect(screen.queryByTestId(ERROR_ID)).not.toBeOnTheScreen()
+    );
     expect(
       screen.getByTestId(`execution-live-slot-visit-label-${TODAY}#p1`)
     ).toHaveTextContent('방문');
@@ -8286,7 +8289,10 @@ describe('보조 조회 실패 안내 (TRIP-1753)', () => {
     expect(screen.getByTestId(ERROR_ID)).toBeTruthy();
     expect(screen.getByTestId(RETRY_ID)).toBeDisabled();
     gate.release();
-    await waitFor(() => expect(screen.queryByTestId(ERROR_ID)).toBeNull());
+    // toBeNull 은 실패할 때마다 노드를 _fiber 째 찍어 느린 CI 에서 5초를 넘긴다(#1941) — not.toBeOnTheScreen 으로.
+    await waitFor(() =>
+      expect(screen.queryByTestId(ERROR_ID)).not.toBeOnTheScreen()
+    );
     expect(hitCount(VISITS_PATH)).toBe(1);
     expect(hitCount(TRIGGERS_PATH)).toBe(2);
   });
