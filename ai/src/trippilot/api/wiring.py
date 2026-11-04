@@ -2754,6 +2754,7 @@ class WiredItineraryOrchestrator:
             else:
                 notes.append(f"avoid_excluded: {len(avoided)} {cats}")
         avoided = avoided | (nl.avoid - held)  # 사용자가 이름으로 뺀 곳(등록 POI 로 확인된 것만)
+        avoided = avoided | (nl.other_day - held)  # 다른 날 가겠다고 한 곳("2일차에") — 이 날엔 넣지 않는다(F-6)
         avoided = avoided | (area_out - held)  # 옮겨 간 지역 밖의 원 일정
         if nl.only:
             # "카페로만" — 다른 종류는 후보에서 뺀다. 잠금·이름으로 집은 곳은 둔다(말이 어긋나면 이름이 이긴다).
@@ -3179,6 +3180,7 @@ class WiredItineraryOrchestrator:
             notes.append("nl_extract_empty")
             return empty
         window = request.time_window
+        trip = request.trip_context
         stage_t = self._clock.monotonic_ms()
         verified = nl_verify.verify(
             extracted,
@@ -3194,6 +3196,10 @@ class WiredItineraryOrchestrator:
             rain_by_date=daily_rain or {},
             rain_threshold=AssemblyConfig().rain_threshold_pct,
             available=available,
+            # 장소의 날 말("2일차에"·"내일") 환산 — 순번은 여행 첫날부터, '오늘'은 다시 짜는 날이 아니라 요청 시각의 날
+            trip_days=tuple(trip.start_date + timedelta(days=i)
+                            for i in range((trip.end_date - trip.start_date).days + 1)),
+            today=_tz_aware(request.request_meta.requested_at, self._tz).date(),
         )
         notes.extend(verified.notes)
         notes.append(f"stage_ms: verify={self._clock.monotonic_ms() - stage_t}")  # 이름 장소 대조(등록 POI·지도 실재)

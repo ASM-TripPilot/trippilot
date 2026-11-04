@@ -15,6 +15,7 @@
 | 방문 시각("3시에 카페") | 〃 | 창 안이고 지금 이후다 — 하루 시작이 아니라 그 곳·종류의 방문 시각이다 |
 | 날씨 주장 | 기상청 강수확률(수집 패킷) | 비 주장이면 임계 이상일 때만 실내 쪽으로 기운다 |
 | 지역("강남에서") | 등록 POI 이름 | 그 이름이 든 곳이 `AREA_MIN_MATCHES` 이상 — 중심은 그 좌표들의 중앙값(후보가 아니라 기준점) |
+| 장소의 날("2일차에") | 여행 날짜(시작~끝)·오늘 | 다시 짜는 날이어야 이 날에 쓴다 — 다른 날이면 이 날엔 넣지도 빼지도 않는다(노트). 못 환산하면 종전처럼 이 날 |
 
 웹 검색 결과를 후보로 쓰지 않는다 — 지도 포트는 **확인용**이고, 후보는 등록 POI 에서만 온다.
 """
@@ -31,6 +32,7 @@ from trippilot.agents.planb.composition import hours_label
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import GeoPoint, PoiId
 from trippilot.domain.poi.poi import Poi, PoiCategory
+from trippilot.domain.trip_day import day_of
 from trippilot.llm_gateway.gates.replan.replan_request_extraction import (
     ExtractedPlace,
     ExtractedRequest,
@@ -56,6 +58,8 @@ MIN_WINDOW_MINUTES = 60
 # 두 글자 지역·상호(강남·홍대·명동·성수, 카페 '해림')가 빠진다.
 _MIN_NAME_CHARS = 2
 _NORMALIZE = re.compile(r"[\s\-·.,'\"()\[\]]+")
+# 날 말 끝의 조사 — 프롬프트는 "조사 없이"라 했지만 모델이 "2일차에"로 옮겨도 같은 날로 읽는다
+_DAY_JOSA = re.compile(r"(?:에는|에도|에|엔|은|는|도)$")
 # 후보 반경 밖에서 집은 곳 둘레 — 거기까지 가서 그곳 하나만 보고 오면 이동 앞뒤로 몇 시간이 빈다
 # (DEV 2026-10-14: 제주시 → 성산 38km, 12:00~16:00 공백). 둘레의 등록 POI 를 후보에 넣어 구성 LLM 이
 # 그 근처로 하루를 이어 짤 수 있게 한다. 카테고리당 상한은 둘레 463곳 중 393곳이 맛집이라서다.
@@ -113,6 +117,8 @@ class VerifiedRequest:
     visit_at: tuple[tuple[PoiId, datetime], ...] = ()
     category_at: tuple[tuple[PoiCategory, datetime], ...] = ()
     area_center: GeoPoint | None = None  # "강남에서 놀고 싶어" — 그 지역 중심(기준점일 뿐, 후보 자격 없음)
+    # "서울광장 꼭, 2일차에" — 다른 날 가겠다고 한 곳. 배선이 이 날 후보에서 뺀다(이 날에 넣지 않는다)
+    other_day: frozenset[PoiId] = frozenset()
     notes: tuple[str, ...] = field(default=())
 
 
@@ -235,6 +241,33 @@ def verify_places(
     if avoid:
         notes.append(f"nl_place_accepted: avoid {len(avoid)}")
     return tuple(keep), frozenset(avoid), notes
+
+
+def split_by_day(
+    places: Sequence[ExtractedPlace], on: date, trip_days: Sequence[date], today: date,
+) -> tuple[list[ExtractedPlace], list[tuple[ExtractedPlace, date]], list[str]]:
+    """장소 주장 → (이 날 것, 다른 날 것과 그 날, 노트). 날 말은 편집·대화와 같은 셈(`domain.trip_day.day_of`)으로 환산한다.
+
+    날 말이 없거나 이 날이거나 **못 환산하면**(여행 밖·모호·읽지 않는 꼴) 종전처럼 이 날 것이다 — 넘겨짚어 다른 날로 보내지
+    않는다. 여행 날짜를 모르면(`trip_days` 빈 값) 날 말을 읽지 않는다. 노트에 사용자 말은 싣지 않는다(사유 코드만)."""
+    here: list[ExtractedPlace] = []
+    there: list[tuple[ExtractedPlace, date]] = []
+    notes: list[str] = []
+    days = sorted(set(trip_days))
+    for ep in places:
+        if ep.day is None or not days:
+            here.append(ep)
+            continue
+        said = _DAY_JOSA.sub("", ep.day.strip())
+        resolved = day_of(said, days, today) if said else "day_out_of_trip"
+        if isinstance(resolved, str):
+            notes.append(f"nl_place_day_unresolved: {resolved}")
+            here.append(ep)
+        elif resolved == on:
+            here.append(ep)
+        else:
+            there.append((ep, resolved))
+    return here, there, notes
 
 
 def verify_window(
@@ -363,9 +396,12 @@ def verify(
     rain_by_date: Mapping[date, int],
     rain_threshold: int,
     available: frozenset[PoiCategory] = frozenset(),
+    trip_days: Sequence[date] = (),
+    today: date | None = None,
 ) -> VerifiedRequest:
     """뽑은 주장 전부를 각자의 출처로 대조한다. 예외를 던지지 않는다(INV-4).
-    `available` = 이번 후보 풀에 있는 종류(종류 조건의 대조 출처)."""
+    `available` = 이번 후보 풀에 있는 종류(종류 조건의 대조 출처).
+    `trip_days`·`today` = 장소의 날 말("2일차에"·"내일")을 환산할 여행 날짜와 지금 날짜(`today` 없으면 `on`)."""
     notes: list[str] = []
     visit: tuple[Poi, ...] = ()
     avoid: frozenset[PoiId] = frozenset()
@@ -379,6 +415,21 @@ def verify(
             pool = registered()
         except Exception as e:  # 등록 POI 조회 장애 — 장소·지역 주장은 하나도 쓸 수 없다
             notes.append(f"nl_place_lookup_error: {type(e).__name__}")
+    # "서울광장 꼭, 2일차에" — 다른 날 것은 이 날에 넣지도(갈 곳) 빼지도(뺄 곳) 않는다. 종전엔 날 칸이 없어 무조건 이 날
+    # 필수 방문이 됐다(운영 2026-11-05 trip 8311ac19). 그 날로 옮기는 것은 후속(F-7) — 지금은 노트로 밝힌다(BR-U4-14).
+    # 이 날 영업·지도 실재는 묻지 않는다(그 날 일이다). 이 날 것만 아래 대조로 간다.
+    here, there, n = split_by_day(extracted.places, on, trip_days, today or on)
+    notes += n
+    extracted = replace(extracted, places=tuple(here))
+    other: set[PoiId] = set()
+    for ep, day in there if pool else ():
+        poi, how = match_place(ep.name, pool, anchor)
+        if poi is None:
+            notes.append(f"nl_place_rejected: {how}")
+            continue
+        if ep.want == "visit":
+            other.add(poi.poi_id)
+        notes.append(f"nl_place_other_day: {ep.want} {poi.poi_id} {day.isoformat()}")
     if extracted.places and pool:
         visit, avoid, n = verify_places(
             extracted.places, pool, anchor, on.weekday(), existence, existence_deadline_ms)
@@ -423,4 +474,4 @@ def verify(
     return VerifiedRequest(visit=visit, avoid=avoid, window_start=start, window_end=end,
                            rain_confirmed=rain, only=only, counts=counts,
                            visit_at=tuple(visit_at), category_at=tuple(category_at), area_center=center,
-                           notes=tuple(notes))
+                           other_day=frozenset(other) - {p.poi_id for p in visit}, notes=tuple(notes))
