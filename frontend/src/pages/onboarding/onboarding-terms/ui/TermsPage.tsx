@@ -16,6 +16,8 @@ export function TermsPage(): ReactElement {
     canProceed,
     missingRequiredLabels,
     errorMessage,
+    loadError,
+    retryLoad,
     toggle,
     toggleAll,
     submit,
@@ -38,6 +40,8 @@ export function TermsPage(): ReactElement {
       canProceed={canProceed}
       missingRequiredLabels={missingRequiredLabels}
       errorMessage={errorMessage}
+      loadError={loadError}
+      onRetryLoad={retryLoad}
       onToggle={toggle}
       onToggleAll={toggleAll}
       onNext={handleNext}

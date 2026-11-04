@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { goBackOr } from '@/shared/lib/goBackOr';
@@ -10,6 +10,8 @@ import { useStyleAnalysis } from '../model/useStyleAnalysis';
 import { TravelStyleScreen } from './TravelStyleScreen';
 import type { ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
+import { StateNotice } from '@/shared/ui/StateNotice';
+import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
 
 /**
  * TRIP-573 · travel-style 페이지 — j05 스타일 조회·얼굴 판정·배선의 단일 출처(FSD, 계정 단위).
@@ -33,18 +35,53 @@ export function TravelStylePage(): ReactElement {
     goBackOr(router, shellTabHref('my'));
   };
 
+  // 봉투가 없으면 탭바도 없는 화면이라 딥링크·도우미 이동으로 오면 갇힌다 — 실패면 [다시 시도]·[뒤로],
+  // 로딩이면 [뒤로](TRIP-1752 결정 1). GET /me/style 은 404 가 없다.
   if (envelope == null) {
     return (
       <SafeAreaView
         edges={['top']}
         style={{ flex: 1 }}
-        className="items-center justify-center bg-canvas"
+        className="items-center justify-center bg-canvas px-lg"
       >
-        <View>
-          <Text className="font-noto text-label text-muted">
-            {query.isError ? '불러오지 못했어요' : '불러오는 중…'}
-          </Text>
-        </View>
+        {query.isError ? (
+          <StateNotice
+            testID="reflection-style-error"
+            icon={<WarningTriangleGlyph size={32} color="primary" />}
+            title="여행 스타일을 불러오지 못했어요"
+            description="잠시 후 다시 시도해 주세요"
+            actions={[
+              {
+                testID: 'reflection-style-retry',
+                label: '다시 시도',
+                variant: 'filled',
+                onPress: () => void query.refetch(),
+              },
+              {
+                testID: 'reflection-style-error-back',
+                label: '돌아가기',
+                variant: 'outline',
+                onPress: handleBack,
+              },
+            ]}
+          />
+        ) : (
+          <View className="items-center gap-md">
+            <Text className="font-noto text-label text-muted">
+              불러오는 중…
+            </Text>
+            <Pressable
+              testID="reflection-style-loading-back"
+              accessibilityRole="button"
+              onPress={handleBack}
+              className="rounded-button border border-hairline-strong px-lg py-sm"
+            >
+              <Text className="font-noto-medium text-body font-medium text-ink">
+                돌아가기
+              </Text>
+            </Pressable>
+          </View>
+        )}
       </SafeAreaView>
     );
   }

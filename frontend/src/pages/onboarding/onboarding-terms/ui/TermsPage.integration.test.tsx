@@ -433,3 +433,83 @@ describe('TermsPage — 화면 얼굴 · 탈출구 없음 · 보기 버튼', () 
     expect(within(checkbox).queryByText('보기')).toBeNull();
   });
 });
+
+describe('🔴 TRIP-1752 · 약관 목록을 못 받으면 오류 + [다시 시도] (BR-U0-10 · INV-4)', () => {
+  // 목록을 못 받으면 필수 3종을 GRANT 할 수 없어 [다음]이 영구히 막힌다 — 이유와 다시 받는 손잡이가 있어야 막다른 화면이 아니다.
+  // 제출 실패용 onboarding-terms-error/-retry 와 다른 손잡이다(재사용하면 제출 재시도가 조회를 부른다).
+  it.each<[string, () => Response]>([
+    ['500', () => new HttpResponse(null, { status: 500 })],
+    ['네트워크 끊김', () => HttpResponse.error()],
+  ])(
+    'GET /terms %s → 오류·다시 시도가 보이고 [다음]은 비활성 → 다시 시도로 200 이면 필수 3행이 그려지고 오류가 사라진다',
+    async (_label, failure) => {
+      // 준비 — 첫 조회만 실패하고, 그 뒤엔 시나리오 핸들러(6종)로 흘려보낸다(undefined = 다음 핸들러).
+      let calls = 0;
+      server.use(
+        http.get(`${BASE}/terms`, () => {
+          calls += 1;
+          return calls === 1 ? failure() : undefined;
+        })
+      );
+      render(<TermsPage />);
+
+      // 단언 1 — 빈 목록 + 꺼진 [다음]만 있으면 위반이다.
+      expect(
+        await screen.findByTestId('onboarding-terms-load-error')
+      ).toBeOnTheScreen();
+      expect(screen.getByTestId('onboarding-terms-next')).toHaveProp(
+        'accessibilityState',
+        { disabled: true }
+      );
+      // 제출 실패 안내와 섞이지 않는다.
+      expect(screen.queryByTestId('onboarding-terms-error')).toBeNull();
+
+      // 실행 — 다시 시도.
+      fireEvent.press(screen.getByTestId('onboarding-terms-load-retry'));
+
+      // 단언 2 — 3행이 그려지고 오류가 사라진다 · 전체 동의 뒤 [다음]이 열린다.
+      await waitFor(() =>
+        expect(screen.getByTestId(ROW.service)).toBeOnTheScreen()
+      );
+      expect(screen.queryByTestId('onboarding-terms-load-error')).toBeNull();
+      expect(calls).toBe(2);
+      fireEvent.press(screen.getByTestId('onboarding-terms-agreeall'));
+      expect(screen.getByTestId('onboarding-terms-next')).toHaveProp(
+        'accessibilityState',
+        { disabled: false }
+      );
+    }
+  );
+});
+
+describe('🔴 TRIP-1752 · 03b 경고-1 — 목록은 왔는데 필수 종이 빠져도 막다른 화면이 아니다', () => {
+  it('GET /terms 200 인데 위치 약관이 없으면 → 오류·다시 시도가 보이고 행은 그리지 않는다', async () => {
+    // 준비 — 필수 3종 중 둘만 주는 응답(전부 동의할 수 없다 → [다음]이 영구히 막힌다).
+    server.use(
+      http.get(`${BASE}/terms`, () =>
+        HttpResponse.json([
+          {
+            termsType: 'TERMS_OF_SERVICE',
+            version: 'v1',
+            title: '이용약관',
+            body: '본문',
+            required: true,
+          },
+          {
+            termsType: 'PRIVACY_POLICY',
+            version: 'v1',
+            title: '개인정보',
+            body: '본문',
+            required: true,
+          },
+        ])
+      )
+    );
+    render(<TermsPage />);
+
+    expect(
+      await screen.findByTestId('onboarding-terms-load-error')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId(ROW.service)).toBeNull();
+  });
+});
