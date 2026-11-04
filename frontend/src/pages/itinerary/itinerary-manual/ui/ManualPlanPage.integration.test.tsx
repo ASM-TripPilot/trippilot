@@ -2254,7 +2254,8 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
   });
 
   /** 조회 응답 차례 — 테스트가 바꾼다. `'held'` 는 `openGet` 이 풀 때까지 붙잡는다. */
-  let getReply: 'held' | 'notFound' | Itinerary = 'notFound';
+  let getReply: 'held' | 'notFound' | 'status500' | 'network' | Itinerary =
+    'notFound';
   let openGet: (() => void) | null = null;
   let getCount = 0;
   let postBodies: string[] = [];
@@ -2285,6 +2286,10 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
             openGet = resolve;
           });
         }
+        // TRIP-1747 — 404 아닌 실패(서버 오류·응답 없음).
+        if (getReply === 'status500')
+          return new HttpResponse(null, { status: 500 });
+        if (getReply === 'network') return HttpResponse.error();
         // 풀린 뒤에는 POST 가 일정을 만든 상태다.
         if (getReply === 'notFound' || getReply === 'held') {
           return postBodies.length > 0
@@ -2337,8 +2342,8 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
     });
   };
 
-  describe('🔴 G-a2·a3 · 조회가 끝나기 전엔 POST 를 보류하고, 일정 없음으로 정착하면 MANUAL 한 건만 쏜다', () => {
-    it('조회 중 POST 0 → 404 정착 뒤 POST 1건, 본문은 { generationMode:"MANUAL" } 하나뿐 · 응답 전에 화면을 떠나도 성공하면 목록을 정확히 한 번 다시 받는다 (TRIP-1677 W2)', async () => {
+  describe('🔴 G-a2·a3 · 조회가 끝나기 전엔 POST 를 보류하고, 일정 없음으로 정착하면 MANUAL 한 건만 쏜다 · 404 아닌 실패면 쏘지 않고 알린다 (TRIP-1747)', () => {
+    it('조회 중 POST 0 → 404 아닌 실패(네트워크·500)면 안내·[다시 시도] 하며 POST 0 (TRIP-1747) → 다시 시도로 404 정착 뒤 POST 1건, 본문은 { generationMode:"MANUAL" } 하나뿐 · 응답 전에 화면을 떠나도 성공하면 목록을 정확히 한 번 다시 받는다 (TRIP-1677 W2)', async () => {
       // TRIP-1677 W2 — 목록(`GET /trips`)의 일정 상태 네 칸이 직접 짜기 POST 로 처음 생긴다. 무효화가 빠지면 방금 만든 일정이 목록 카드에
       // "아직 일정이 없어요"로 남는다(첫 생성은 일정 조회도 404 였으므로 다른 갱신 계기가 없다). 그리고 무효화는 "호출별 콜백"이 아니라
       // 훅 옵션에 있어야 한다 — 호출별 `mutate(…, { onSuccess })` 는 그 컴포넌트가 이미 사라졌으면 불리지 않는다(TRIP-1015 와 같은 함정).
@@ -2357,13 +2362,51 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
       await settleMs();
       expect(postBodies).toEqual([]);
 
-      // 일정 없음(404)으로 정착하면 그때 한 번 쏜다.
-      getReply = 'notFound';
+      // TRIP-1747 (BR-U3-06 · INV-4) — 조회가 404 도 성공도 아니면 기존(확정일 수도 있는) 일정이 있는지 모른다. 서버는
+      // 확정 일정 재생성을 막지 않으므로 모른 채 쏘면 되돌릴 수 없다 → POST 0 + 안내 + [다시 시도]. 다시 시도가 404 면
+      // 그때 1회 쏜다(일정이 오면 가드 a 가 막는다 — C6·E2). 편집기를 한 번 더 그리면 reanimated 소음 예산(174, 여유 0)이
+      // 넘어 새 `it` 대신 이 케이스의 "보류 → 정착" 사이에 실패 두 종류와 회복을 끼웠다(04 1차 FAIL 175/174).
+      const LOAD_ERROR = 'itinerary-manual-load-error';
+      const LOAD_RETRY = 'itinerary-manual-load-retry';
+      let putCalls = 0;
+      server.use(
+        http.put(`${BASE}/trips/:tripId/itinerary`, () => {
+          putCalls += 1;
+          return HttpResponse.json(EMPTY_MANUAL);
+        })
+      );
+
+      // 실행 — 붙잡힌 조회가 응답 없음(네트워크 끊김, "모름")으로 끝난다.
+      getReply = 'network';
       await act(async () => {
         openGet?.();
       });
+      // 단언 — 실패를 알리고 다시 시도 손잡이가 있다(빈 편집기만 보이면 위반) · startFresh 안내와 섞이지 않는다 · POST 0.
+      expect(await screen.findByTestId(LOAD_ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(LOAD_RETRY)).toBeOnTheScreen();
+      expect(screen.queryByTestId('itinerary-manual-fresh-error')).toBeNull();
+      await settleMs();
+      expect(postBodies).toEqual([]);
+      // 안내 상태에서 저장을 눌러도 PUT 이 나가지 않는다(슬롯 0 → CTA 비활성 무회귀 표식).
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+      await settleMs();
+      expect(putCalls).toBe(0);
+
+      // 실행 — 다시 시도, 이번엔 서버 오류(500). 단언 — 다시 알리고 여전히 쏘지 않는다.
+      getReply = 'status500';
+      const beforeRetry = getCount;
+      fireEvent.press(screen.getByTestId(LOAD_RETRY));
+      await waitFor(() => expect(getCount).toBe(beforeRetry + 1));
+      expect(await screen.findByTestId(LOAD_ERROR)).toBeOnTheScreen();
+      await settleMs();
+      expect(postBodies).toEqual([]);
+
+      // 일정 없음(404)으로 정착하면 그때 한 번 쏜다 — 다시 시도로 와도 같다(실패 때 생성을 잠그면 여기서 영영 안 나간다).
+      getReply = 'notFound';
+      fireEvent.press(screen.getByTestId(LOAD_RETRY));
       await waitFor(() => expect(postBodies).toHaveLength(1));
       expect(JSON.parse(postBodies[0])).toEqual({ generationMode: 'MANUAL' });
+      expect(screen.queryByTestId(LOAD_ERROR)).toBeNull();
 
       // 실행 — POST 응답이 오기 전에 화면을 떠난다(언마운트). 그다음 서버가 일정을 만들고 201 을 준다.
       view.unmount();
