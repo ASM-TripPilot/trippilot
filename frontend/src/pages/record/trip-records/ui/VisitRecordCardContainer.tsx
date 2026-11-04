@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { Pressable, Text } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useQueries } from '@tanstack/react-query';
 
 import { openAppSettings } from '@/shared/external-link';
@@ -57,6 +57,10 @@ export function VisitRecordCardContainer({
     saveMemo,
     savedMemo,
     memoReady,
+    memoLoadFailed,
+    memoLoadOffline,
+    memoLoadRetrying,
+    retryMemoLoad,
   } = useVisitAttachments({
     tripId,
     visitCheckId: card.visitCheckId,
@@ -192,6 +196,31 @@ export function VisitRecordCardContainer({
             text={savedMemo}
             onSubmit={onSubmitMemo}
           />
+          {/* TRIP-1751 — 서버 메모를 못 불러온 채(실패·오프라인 보류) 입력이 잠겨 있다. 버튼은 실패일 때만(보류 중 재조회는 대기뿐). */}
+          {memoLoadFailed || memoLoadOffline ? (
+            <View className="flex-row items-center justify-between gap-sm">
+              <Text
+                testID={`record-trip-memo-load-error-${card.visitCheckId}`}
+                className="shrink text-caption text-muted"
+              >
+                메모를 불러오지 못했어요
+              </Text>
+              {memoLoadFailed ? (
+                <Pressable
+                  testID={`record-trip-memo-load-retry-${card.visitCheckId}`}
+                  accessibilityRole="button"
+                  disabled={memoLoadRetrying}
+                  accessibilityState={{ disabled: memoLoadRetrying }}
+                  hitSlop={8}
+                  onPress={retryMemoLoad}
+                >
+                  <Text className="font-noto-bold text-caption text-primary">
+                    다시 시도
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
           {memoFailed ? (
             <Text
               testID={`record-trip-memo-notice-${card.visitCheckId}`}

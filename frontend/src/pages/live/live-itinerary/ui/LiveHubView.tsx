@@ -98,6 +98,8 @@ export interface LiveHubSlot {
   state: SlotProgressState;
   photos?: ImageSourcePropType[];
   memo?: string | null;
+  /** TRIP-1751 — 서버 메모를 못 받았다(메모가 없으면 카드가 "불러오지 못했어요" 표식을 단다). */
+  memoLoadFailed?: boolean;
   /** TRIP-1220 done · TRIP-1419 active — 실제 도착 시각 'HH:mm'. */
   visitedLabel?: string | null;
 }
@@ -585,7 +587,8 @@ export function LiveHubView({
           className="gap-[22px] px-[20px] pt-xl"
         >
           <View className="absolute bottom-0 left-[33px] top-[40px] w-[2px] bg-hairline-strong" />
-          {slots.map(({ slot, state, photos, memo, visitedLabel }, index) => {
+          {slots.map((hubSlot, index) => {
+            const { slot, state, photos, memo, visitedLabel } = hubSlot;
             const slotKey = buildSlotKey(activeDate, slot.poiId);
             // [사진]·[메모]는 관람 중 카드와, 페이지가 고른 완료 카드(TRIP-1203)에만.
             const media =
@@ -617,6 +620,7 @@ export function LiveHubView({
                     order={index + 1}
                     photos={photos}
                     memo={memo}
+                    memoLoadFailed={hubSlot.memoLoadFailed}
                     visitedLabel={visitedLabel}
                     onPressComplete={
                       state === 'active' && showComplete
