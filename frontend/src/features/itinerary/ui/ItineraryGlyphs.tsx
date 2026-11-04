@@ -1,21 +1,4 @@
 import Svg, { Path } from 'react-native-svg';
-import {
-  PlusGlyph as SharedPlusGlyph,
-  CheckGlyph as SharedCheckGlyph,
-  InfoCircleGlyph as SharedInfoCircleGlyph,
-  FullAiGlyph as SharedFullAiGlyph,
-  AlertCircleGlyph as SharedAlertCircleGlyph,
-  ChevronDownGlyph as SharedChevronDownGlyph,
-} from '@/shared/ui/glyphs';
-// 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
-export {
-  BackChevronGlyph,
-  ChevronRightGlyph,
-  ClockGlyph,
-  WalkGlyph,
-  CarGlyph,
-} from '@/shared/ui/glyphs';
-
 // h05·h07 전용 인라인 벡터 글리프(TripGlyphs/StayGlyphs/ExploreGlyphs 패턴 계승 · Figma 파일
 // 1MTF3dtptIrbg8gld5IdO2, 노드 1875:1083 · 1904:1083). 전부 Figma 벡터 path 실측이다.
 // features 간 직접 import 금지 관례라 TripGlyphs 와 겹치는 아이콘(chevron 계열)도 새로 그린다.
@@ -41,7 +24,7 @@ type GlyphProps = {
 
 // `고정` 칩 자물쇠(12) — Figma `1876:1089`. h25 는 primary-pale 칩이라 primary-text(기본),
 // h24 는 surface-strong(회색) 칩이라 `tone="muted"` 로 회색 자물쇠를 쓴다(같은 도형, 색만 스냅).
-export function LockGlyph({
+export function ItineraryLockGlyph({
   size = 12,
   tone = 'primaryText',
   testID,
@@ -70,42 +53,6 @@ export function LockGlyph({
         strokeLinejoin="round"
       />
     </Svg>
-  );
-}
-
-// h24 [장소 추가] 버튼 플러스(18) — Figma `1896:1083`. h24 버튼 글자와 같은 ink 가 기본이고,
-// h19 빈 밴드 원(primary-pale)엔 primary, primary 버튼(장소 검색 CTA·h20 추가)엔 white 로 스냅
-// 한다(같은 도형, 색만 — LockGlyph·FullAiGlyph 의 tone 패턴 계승, 기본값이 기존 h24 렌더 불변).
-export function PlusGlyph({
-  size = 18,
-  tone = 'ink',
-  testID,
-}: GlyphProps & { tone?: 'ink' | 'primary' | 'white' }) {
-  return (
-    <SharedPlusGlyph
-      size={size}
-      color={
-        tone === 'primary' ? 'primary' : tone === 'white' ? 'onPrimary' : 'ink'
-      }
-      testID={testID}
-    />
-  );
-}
-
-// `시각 고정` 칩 체크(12) — Figma `1876:1096`. h24 칩은 primary-text(기본), h07 폴백
-// 체크리스트는 `tone="success"` 로 초록 체크를 낸다(같은 도형, 색만 스냅 — LockGlyph/PlusGlyph
-// tone 패턴 계승, 기본값이 기존 h24 렌더 불변).
-export function CheckGlyph({
-  size = 12,
-  tone = 'primaryText',
-  testID,
-}: GlyphProps & { tone?: 'primaryText' | 'success' }) {
-  return (
-    <SharedCheckGlyph
-      size={size}
-      color={tone === 'success' ? 'success' : 'primaryText'}
-      testID={testID}
-    />
   );
 }
 
@@ -206,7 +153,7 @@ export function CheckCircleGlyph({ size = 20, testID }: GlyphProps) {
 // 카드 우측 편집 연필(20) — Figma `1876:1099`. FIXED 항목에만 붙는 muted-soft 가 기본이고,
 // h19 hero 의 primary 원 안에서는 white 로, i01 [직접 수정] 흰 알약(TRIP-747)에서는 primary 로
 // 스냅한다(같은 도형, 색만 — PlusGlyph tone 패턴과 동형). TRIP-1522 하단 바 "수정" 칸의 비활성은 `muted`.
-export function PencilGlyph({
+export function ItineraryPencilGlyph({
   size = 20,
   tone = 'mutedSoft',
   testID,
@@ -246,7 +193,7 @@ export function PencilGlyph({
 }
 
 // h20 검색 필 돋보기(20) — Figma `1894:1090`. 검색 placeholder 와 같은 muted-soft. 원 + 손잡이.
-export function SearchGlyph({ size = 20, testID }: GlyphProps) {
+export function ItinerarySearchGlyph({ size = 20, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -274,7 +221,7 @@ export function SearchGlyph({ size = 20, testID }: GlyphProps) {
 }
 
 // 카드 우측 해제 ×(20) — Figma `1876:1111`. ANYTIME 항목에만 붙는다.
-export function CloseGlyph({ size = 20, testID }: GlyphProps) {
+export function ItineraryCloseGlyph({ size = 20, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -303,7 +250,7 @@ export function CloseGlyph({ size = 20, testID }: GlyphProps) {
 
 // h06 빈 목록 얼굴 캘린더(30) — Figma `3994:2575`. 회색 원(surface-soft) 위에 얹는 muted-soft 달력.
 // 프레임(둥근 사각)+상단 구분선+걸이 2개 4-path. 브리프 §에셋 벡터 실측.
-export function CalendarGlyph({ size = 30, testID }: GlyphProps) {
+export function ItineraryCalendarGlyph({ size = 30, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -344,35 +291,9 @@ export function CalendarGlyph({ size = 30, testID }: GlyphProps) {
   );
 }
 
-// h07 시작 시각 필드 chevron-down(20) — Figma `1904:1117`.
-export function ChevronDownGlyph({ size = 20, testID }: GlyphProps) {
-  return <SharedChevronDownGlyph size={size} testID={testID} />;
-}
-
-// h15 `다른 숙소 둘러보기 ›` 링크 쉐브론(16) — Figma `4385:1784`. 링크 글자색(primary-text)과 한 쌍.
-export function LinkChevronGlyph({ size = 16, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-    >
-      <Path
-        d="M6 4L10 8L6 12"
-        stroke={PRIMARY_TEXT}
-        strokeWidth={1.46667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 // h35 히어로 배지 안의 「위치-off」(36) — Figma `1906:1083`. 지도 핀 위에 사선 하나를 그어
 // "여기서 찾을 곳이 없다"를 말한다. 색은 브랜드 primary 로, 배지 배경(primary-pale)과 한 쌍이다.
-export function LocationOffGlyph({ size = 36, testID }: GlyphProps) {
+export function ItineraryLocationOffGlyph({ size = 36, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -409,28 +330,12 @@ export function LocationOffGlyph({ size = 36, testID }: GlyphProps) {
 /** 원형 아이콘 두 종이 쓰는 색조. 빈 목록 얼굴은 배지 배경(primary-pale) 위라 primary-text 다. */
 export type CircleGlyphTone = 'muted' | 'primaryText';
 
-// h07 안내 박스 ⓘ(20) — Figma `1904:1131`. 빈 목록 얼굴의 배지도 같은 도형을 키워 쓴다.
-export function InfoCircleGlyph({
-  size = 20,
-  tone = 'muted',
-  testID,
-}: GlyphProps & { tone?: CircleGlyphTone }) {
-  return <SharedInfoCircleGlyph size={size} color={tone} testID={testID} />;
-}
-
-// 조회 실패 얼굴·실패 알림의 경고 원(20). h05·h07 에 실패 프레임이 없어(정본 공백) 위
-// `InfoCircleGlyph` 와 **같은 원**에 느낌표 배치만 뒤집었다 — 두 아이콘이 한 벌로 보인다.
-export function AlertCircleGlyph({
-  size = 20,
-  tone = 'primaryText',
-  testID,
-}: GlyphProps & { tone?: CircleGlyphTone }) {
-  return <SharedAlertCircleGlyph size={size} color={tone} testID={testID} />;
-}
-
 // h31 지도 폴백 경고 삼각형(24) — Figma `1912:1083`. 지도를 못 불러온 자리의 △! 표식. 회색
 // muted 로, 실패지만 치명적이지 않다는 톤(카드 목록으로 계속 볼 수 있다)에 맞춘다.
-export function WarningTriangleGlyph({ size = 24, testID }: GlyphProps) {
+export function ItineraryWarningTriangleGlyph({
+  size = 24,
+  testID,
+}: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -467,7 +372,7 @@ export function WarningTriangleGlyph({ size = 24, testID }: GlyphProps) {
 // h34 appbar 공유 아이콘(22) — TRIP-354 Q3. Figma `1884:1083` 우상단. iOS 공유(상자+위 화살표)
 // 형태를 손으로 재구성했다(Figma 벡터 실측 아님 — `AlertCircleGlyph` 선례처럼 도형만 맞춤). 정적
 // 스텁이라 탭 동작은 없다(실동작은 후속 TRIP-300). 앱바 제목과 같은 ink.
-export function ShareGlyph({ size = 22, testID }: GlyphProps) {
+export function ItineraryShareGlyph({ size = 22, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -503,7 +408,7 @@ export function ShareGlyph({ size = 22, testID }: GlyphProps) {
 
 // h31 지도 폴백 재시도 새로고침(18) — Figma `1912:1083`. 호(arc)+화살촉 한 벌. 재시도 버튼
 // 글자와 같은 muted 로 은은한 어포던스.
-export function RefreshGlyph({ size = 18, testID }: GlyphProps) {
+export function ItineraryRefreshGlyph({ size = 18, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -533,16 +438,6 @@ export function RefreshGlyph({ size = 18, testID }: GlyphProps) {
 // h04 시작 방법 3방식 아이콘(24) — Figma `1903:1083`(opt 카드 아이콘 노드 1903:1092·1902·1115).
 // 전부 벡터 path 실측. `react-native-svg-transformer` 가 없어 .svg 파일 import 가 안 되므로
 // 리포 관례대로 인라인 글리프로 둔다.
-
-// 「완전 AI가 짜기」 — 4각 반짝임(fill). h04 카드는 회색(`body`) 기본, h09 진행 카드 히어로는
-// 브랜드 primary 로(같은 도형, 색만 스냅 — LockGlyph 의 tone 패턴 계승).
-export function FullAiGlyph({
-  size = 24,
-  tone = 'body',
-  testID,
-}: GlyphProps & { tone?: 'body' | 'primary' }) {
-  return <SharedFullAiGlyph size={size} color={tone} testID={testID} />;
-}
 
 // 「AI와 같이 짜기」 — 반쯤 채운 원(테두리 + 왼쪽 절반 fill). 다른 두 방식과 같은 회색(`body`) — 분홍이면
 // 이미 고른 것처럼 보였다(TRIP-1568).

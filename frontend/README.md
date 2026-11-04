@@ -19,7 +19,7 @@ React Native + Expo (TypeScript strict) 클라이언트.
 | 소셜 로그인 | 어댑터 인터페이스 1개 뒤 프로바이더별 구현 — **카카오·네이버는 네이티브 SDK**(@react-native-seoul/kakao-login·naver-login — 카카오톡·네이버앱 간편 로그인, 미설치 시 웹 폴백) · Apple은 expo-apple-authentication · Google은 expo-auth-session | 검증·세션 발급은 전부 서버, 앱에 클라이언트 시크릿은 **원칙적으로** 없음(예외는 아래 참고). 어댑터가 서버 전달 자격 증명(인가 코드 또는 SDK 발급 토큰)을 표준화 — 백엔드 `/auth/social/{provider}` code 경로와 `/auth/social/{provider}/token` 토큰 경로(TRIP-210)를 provider 별로 나눠 탄다 |
 | 애니메이션·제스처 | react-native-reanimated + react-native-gesture-handler + @gorhom/bottom-sheet | 바텀시트(제휴 고지·외부 지도 선택·필터)가 전역 UI 패턴. 네이티브 모듈이라 최초 스캐폴드에 포함 — 나중에 추가하면 EAS 재빌드 유발 |
 | 크래시 리포팅 | Sentry (@sentry/react-native + Expo config plugin) | 크래시·JS 오류·성능 수집. `beforeSend` 스크러빙으로 토큰·PII 차단 — "크래시 리포트에 토큰 미포함" 불변식의 집행 지점 |
-| 기기 능력 | expo-notifications(푸시, FCM/APNs) · expo-location(위치, 포그라운드 한정) · @react-native-community/netinfo(네트워크 상태) | `features/notification`·`shared/location`의 구현 스택. netinfo는 부트스트랩 게이트의 네트워크 상태 감지(`useBootstrapGate`) |
+| 기기 능력 | expo-notifications(푸시, FCM/APNs) · expo-location(위치, 포그라운드 한정) · @react-native-community/netinfo(네트워크 상태) | `pages/settings`(알림 설정·알림함)·`shared/push`·`shared/location`의 구현 스택. netinfo는 부트스트랩 게이트의 네트워크 상태 감지(`useBootstrapGate`) |
 | 스타일링 | NativeWind 4 — **tailwindcss는 3.4.x 고정(4.x 비호환)** | 디자인 토큰을 tailwind.config로 일원화, 화면 양산 속도. 공용 컴포넌트는 `shared/ui` 경유 |
 | API 클라이언트 | orval 코드젠 — `backend/docs/design/openapi.yaml` → axios 클라이언트 + TanStack Query 훅 + Zod 스키마 | 클라이언트 타입 ↔ 스펙 문서의 drift 차단. §API 계층 참고 |
 | 패키지 매니저 | pnpm | 속도·엄격한 의존성 해석 |

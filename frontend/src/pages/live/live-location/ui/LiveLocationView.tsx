@@ -11,15 +11,12 @@
  *    포획하므로 먼저 띄우면 늦게 온 좌표를 못 받는다.
  *  - 확정은 좌표만 올린다 — 역지오코딩 없음(AC-9).
  */
+import { BackChevronGlyph, InfoCircle18Glyph } from '@/shared/ui/glyphs';
 import { useState, type ReactElement } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { isEstimatedOrigin } from '@/features/request-replan/index.view';
-import {
-  LocationBackChevronGlyph,
-  LocationInfoGlyph,
-} from '@/shared/location/index.view';
 import { CenterPinPicker, type MapCenter } from '@/shared/map';
 
 export type LiveLocationState = 'manual' | 'permission-denied';
@@ -92,7 +89,7 @@ export function LiveLocationView({
       <View testID={face.rootTestID} className="flex-1 bg-canvas">
         <View className="h-[56px] flex-row items-center px-lg">
           <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
-          <LocationBackChevronGlyph />
+          <BackChevronGlyph />
         </View>
 
         <View className="flex-1 gap-md px-lg pt-lg">
@@ -103,7 +100,7 @@ export function LiveLocationView({
           {/* 안내 배너(점선 박스 + info) — 첫 줄은 상태별, subline 은 공통. */}
           <View className="flex-row gap-sm rounded-[14px] border border-dashed border-hairline-strong bg-surface-soft px-lg py-md">
             <View className="pt-[2px]">
-              <LocationInfoGlyph />
+              <InfoCircle18Glyph color="info" />
             </View>
             <View className="flex-1 gap-xs">
               <Text className="font-noto text-body text-ink">

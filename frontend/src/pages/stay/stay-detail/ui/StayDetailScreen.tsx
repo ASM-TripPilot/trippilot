@@ -14,6 +14,13 @@
  * (`-filled`/`-outline`) + `accessibilityState.selected`로 관찰되게 그린다(repo-trap: `*Glyphs.tsx`
  * fill은 jest 렌더 트리에 안 남는다).
  */
+import {
+  InfoGlyph,
+  HeartStrokeFilledGlyph,
+  MapPinGlyph,
+  HeartStrokeOutlineGlyph,
+  BackChevronGlyph,
+} from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import {
   ActivityIndicator,
@@ -31,13 +38,8 @@ import { heartSaveLabel } from '@/shared/ui/HeartButton';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { resolveAmenityIcon } from '../config/amenityIcons';
 import {
-  BackChevronGlyph,
-  ExternalLinkGlyph,
-  HeartFilledGlyph,
-  HeartOutlineGlyph,
-  InfoGlyph,
-  MapPinGlyph,
-  ShareGlyph,
+  StayExternalLinkGlyph,
+  StayShareGlyph,
 } from '@/features/stay/index.view';
 
 /** 조회 결과 — `kind` 하나로 얼굴을 고른다. notFound=404 · invalid=400/stayId 없음 · error=5xx/네트워크. */
@@ -321,7 +323,7 @@ export function StayDetailScreen({
               testID="stay-detail-address"
               className="flex-row items-center gap-xs"
             >
-              <MapPinGlyph size={15} tone="ink" />
+              <MapPinGlyph size={15} color="ink" />
               <Text className="font-noto text-label text-body">
                 {detail.address ?? '미확인'}
               </Text>
@@ -372,7 +374,7 @@ export function StayDetailScreen({
               onPress={onPressBook}
               className="h-[52px] flex-row items-center justify-center gap-sm rounded-button bg-primary"
             >
-              <ExternalLinkGlyph size={19} />
+              <StayExternalLinkGlyph size={19} />
               <Text className="font-noto-bold text-card-title font-bold text-on-primary">
                 외부에서 예약하기
               </Text>
@@ -398,7 +400,7 @@ export function StayDetailScreen({
           accessibilityLabel="공유"
           onPress={onPressShare}
         >
-          <ShareGlyph size={24} />
+          <StayShareGlyph size={24} />
         </HeroCircle>
       </View>
       <View className="absolute right-lg top-[52px]">
@@ -411,9 +413,15 @@ export function StayDetailScreen({
           selected={saved}
         >
           {saved ? (
-            <HeartFilledGlyph testID="stay-detail-save-filled" size={24} />
+            <HeartStrokeFilledGlyph
+              testID="stay-detail-save-filled"
+              size={24}
+            />
           ) : (
-            <HeartOutlineGlyph testID="stay-detail-save-outline" size={24} />
+            <HeartStrokeOutlineGlyph
+              testID="stay-detail-save-outline"
+              size={24}
+            />
           )}
         </HeroCircle>
       </View>

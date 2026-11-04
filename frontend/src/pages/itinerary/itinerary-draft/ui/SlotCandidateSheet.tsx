@@ -3,15 +3,17 @@ import { Pressable, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import { SlotCandidateCard } from '@/entities/place';
+import {
+  CheckGlyph,
+  AlertCircleGlyph,
+  ChevronRightGlyph,
+} from '@/shared/ui/glyphs';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
   ALL_IN_ITINERARY_HINT,
   ALL_IN_ITINERARY_TITLE,
   resolveSlotEmptyFace,
-  AlertCircleGlyph,
-  CheckGlyph,
-  ChevronRightGlyph,
   DiamondGlyph,
 } from '@/features/itinerary/index.view';
 
@@ -209,7 +211,7 @@ export function SlotCandidateSheet({
             testID="itinerary-candidate-error"
             className="w-full flex-row items-center gap-sm rounded-button bg-primary-pale px-md py-sm"
           >
-            <AlertCircleGlyph size={20} tone="primaryText" />
+            <AlertCircleGlyph size={20} />
             <Text className="flex-1 font-noto text-label text-primary-text">
               {errorMessage}
             </Text>
@@ -342,7 +344,6 @@ export function SlotCandidateSheet({
               >
                 <AlertCircleGlyph
                   size={24}
-                  tone="primaryText"
                   testID="itinerary-candidate-fetch-error-icon"
                 />
                 <Text className="text-center font-noto-bold text-card-title font-bold text-ink">
@@ -383,7 +384,6 @@ export function SlotCandidateSheet({
                       isSelected ? (
                         <CheckGlyph
                           size={22}
-                          tone="primaryText"
                           testID={`itinerary-candidate-check-${candidate.poiId}`}
                         />
                       ) : undefined

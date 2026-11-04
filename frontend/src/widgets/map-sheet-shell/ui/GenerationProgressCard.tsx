@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { IndeterminateBar } from './IndeterminateBar';
-import { BackChevronGlyph, CheckGlyph, FullAiGlyph } from './MapSheetGlyphs';
+import { FullAiGlyph, BackChevronGlyph, CheckGlyph } from '@/shared/ui/glyphs';
 
 /**
  * TRIP-790 · h07 부분 결과의 상단 진행 카드(widgets · presentation-only, useState 0). 전면 지도 위
@@ -102,7 +102,7 @@ export function GenerationProgressCard({
       >
         {/* 제목 행 — ✦ 스파클 + 안내 문구(+ i05 [취소]). 퍼센트(67%)는 계약에 없어 안 그린다. */}
         <View className="flex-row items-center gap-sm">
-          <FullAiGlyph size={18} />
+          <FullAiGlyph size={18} color="primary" />
           <Text className="flex-1 font-noto-bold text-label font-bold text-ink">
             {title}
           </Text>

@@ -3,18 +3,18 @@ import { FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PlaceListState } from '@/features/explore/index.view';
+import { MapPinGlyph } from '@/shared/ui/glyphs';
 import type { SavedPlace } from '@/shared/api/index.schemas';
 import { EmptyCollage } from './EmptyCollage';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
-  BackChevronGlyph,
+  ExploreBackChevronGlyph,
   CheckCircleFilledGlyph,
   CheckCircleOutlineGlyph,
   CircleExclaimGlyph,
-  MapPinGlyph,
-  SearchGlyph,
+  ExploreSearchGlyph,
 } from '@/features/explore/index.view';
 
 /**
@@ -76,7 +76,7 @@ function AppBar({
         onPress={onBack}
         className="h-10 w-10 items-center justify-center"
       >
-        <BackChevronGlyph size={24} />
+        <ExploreBackChevronGlyph size={24} />
       </Pressable>
       <View className="gap-xs">
         <Text className="font-noto-bold text-[18px] font-bold text-ink">
@@ -160,7 +160,7 @@ const PickRow = memo(function PickRow({
         </Text>
         {location ? (
           <View className="flex-row items-center gap-xs">
-            <MapPinGlyph size={13} tone="muted" />
+            <MapPinGlyph size={13} color="muted" />
             <Text className="font-noto text-caption text-muted">
               {location}
             </Text>
@@ -442,7 +442,7 @@ function EmptyBody({
         onPress={onPressBrowse}
         className="mt-sm h-[48px] flex-row items-center gap-sm self-center rounded-button bg-primary px-xl"
       >
-        <SearchGlyph size={18} />
+        <ExploreSearchGlyph size={18} />
         <Text className="font-noto-bold text-[15px] font-bold text-on-primary">
           장소 둘러보기
         </Text>

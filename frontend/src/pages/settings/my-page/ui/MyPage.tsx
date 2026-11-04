@@ -1,3 +1,4 @@
+import { ChevronRightGlyph } from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import { guardPress } from '@/shared/lib/pressGuard';
 import { useRouter, type Href } from 'expo-router';
@@ -11,7 +12,6 @@ import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { formatTripDateRange } from '@/entities/trip';
 import { classifyTripPhase, tripItinerarySummary } from '@/entities/trip';
-import { ChevronRightGlyph } from '@/entities/trip';
 import { PastTripRow } from '@/entities/trip';
 import { pickRegionCover } from '@/entities/trip';
 import { buildStyleCardModel } from '../model/styleCardModel';

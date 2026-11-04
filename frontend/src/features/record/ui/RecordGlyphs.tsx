@@ -69,35 +69,13 @@ export function VisitCheckSkippedGlyph(props: GlyphProps): ReactElement {
   return <CircleOutlineGlyph {...props} stroke={CIRCLE_SKIPPED} />;
 }
 
-/** ＋ (즉석 방문 추가·사진 추가 타일). */
-export function PlusGlyph({
-  size = 18,
-  color = CORAL,
-}: GlyphProps & { color?: string }): ReactElement {
-  const s = size / 18;
-  return (
-    <Svg width={size} height={size} viewBox="0 0 18 18" fill="none">
-      <Path
-        d="M9 3.75V14.25"
-        stroke={color}
-        strokeWidth={1.95 * s}
-        strokeLinecap="round"
-      />
-      <Path
-        d="M3.75 9H14.25"
-        stroke={color}
-        strokeWidth={1.95 * s}
-        strokeLinecap="round"
-      />
-    </Svg>
-  );
-}
-
 /**
  * ⚠ 업로드 실패 셀 아이콘(경고 삼각 + 느낌표) — muted-soft.
  * TRIP-760 · 색·정확한 벡터는 jest 사각(6-b 육안, Figma 1561:1790).
  */
-export function WarningTriangleGlyph({ size = 18 }: GlyphProps): ReactElement {
+export function RecordWarningTriangleGlyph({
+  size = 18,
+}: GlyphProps): ReactElement {
   const s = size / 18;
   return (
     <Svg width={size} height={size} viewBox="0 0 18 18" fill="none">
@@ -127,7 +105,7 @@ export function WarningTriangleGlyph({ size = 18 }: GlyphProps): ReactElement {
  * ↻ 업로드 다시 시도 아이콘(원형 화살표) — primary(coral).
  * TRIP-760 · 색·정확한 벡터는 jest 사각(6-b 육안, Figma 1561:1790).
  */
-export function RetryGlyph({
+export function RecordRetryGlyph({
   size = 16,
   color = CORAL,
 }: GlyphProps & { color?: string }): ReactElement {
@@ -152,27 +130,8 @@ export function RetryGlyph({
   );
 }
 
-/** ‹ 뒤로가기. `color` 미지정이면 INK(하위호환 — 앱바 뒤로가기 소비처가 안 깨진다); 월 캘린더 chevron 은
- *  회색을 넘겨 얇은 회색으로 그린다. stroke 색은 className 을 못 받아 prop 으로 받는다(글리프 함정). */
-export function BackArrowGlyph({
-  size = 24,
-  color = INK,
-}: GlyphProps & { color?: string }): ReactElement {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M15 18L9 12L15 6"
-        stroke={color}
-        strokeWidth={2.2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 /** › 카드 우측 진입 chevron(지난 여행 카드). features 경계로 trip/itinerary 글리프 재사용 불가라 로컬 미러. */
-export function ChevronRightGlyph({
+export function RecordChevronRightGlyph({
   size = 20,
   color = CIRCLE_UPCOMING,
 }: GlyphProps & { color?: string }): ReactElement {
@@ -211,7 +170,7 @@ export function LegendChevronGlyph({ size = 14 }: GlyphProps): ReactElement {
  * ⌄ legend '더 보기' chevron(TRIP-1084). Figma 4699:2914 Icon — 16 박스 가운데 9.6 벡터(stroke 0.8)를
  * 16 좌표로 3.2 평행이동했다. '접기'는 호출부가 180° 돌린다(Figma Icon 세트에 up 이 없다).
  */
-export function ChevronDownGlyph({
+export function RecordChevronDownGlyph({
   size = 16,
   color = MUTED,
 }: GlyphProps & { color?: string }): ReactElement {
@@ -232,7 +191,7 @@ export function ChevronDownGlyph({
  * ⓘ 안내 아이콘(원 + i) — TRIP-761 · GPS 미동의 배너 좌측. muted.
  * 색·정확한 벡터는 jest 사각(글리프 함정, 6-b 육안, Figma 1562:1949).
  */
-export function InfoCircleGlyph({ size = 20 }: GlyphProps): ReactElement {
+export function RecordInfoCircleGlyph({ size = 20 }: GlyphProps): ReactElement {
   const s = size / 20;
   return (
     <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
@@ -279,7 +238,7 @@ export function GpsOffGlyph({ size = 15 }: GlyphProps): ReactElement {
 }
 
 /** 📅 빈 상태 안내 아이콘(캘린더 아웃라인). StateNotice 아이콘 슬롯용. */
-export function CalendarGlyph({ size = 32 }: GlyphProps): ReactElement {
+export function RecordCalendarGlyph({ size = 32 }: GlyphProps): ReactElement {
   const s = size / 32;
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
@@ -306,7 +265,7 @@ export function CalendarGlyph({ size = 32 }: GlyphProps): ReactElement {
 }
 
 /** 🔖 기록 탭 아이콘과 같은 북마크 외곽선(j07 지난 여행 빈 상태 · Figma 4821:2887). 색은 muted-soft. */
-export function BookmarkGlyph({ size = 24 }: GlyphProps): ReactElement {
+export function RecordBookmarkGlyph({ size = 24 }: GlyphProps): ReactElement {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
@@ -322,7 +281,7 @@ export function BookmarkGlyph({ size = 24 }: GlyphProps): ReactElement {
 
 /** ✕ 닫기 — i01 허브 메모 시트 머리(Figma 4741:2993 · Icon close 1237:1058). ink 선이라 home·explore
  *  ✕(흰·on-primary)를 못 쓰고, features 경계로 가져올 수도 없어 벡터만 옮겼다. */
-export function CloseGlyph({ size = 24 }: GlyphProps): ReactElement {
+export function RecordCloseGlyph({ size = 24 }: GlyphProps): ReactElement {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M6 6L18 18" stroke={INK} strokeWidth={2} strokeLinecap="round" />

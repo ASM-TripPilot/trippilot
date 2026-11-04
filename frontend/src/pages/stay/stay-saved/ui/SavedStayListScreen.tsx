@@ -4,6 +4,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { SavedStayCardVM } from '@/entities/stay';
 import { SavedStayCard } from '@/entities/stay';
+import {
+  WarningTriangleGlyph,
+  SearchGlyph,
+  HeartStrokeFilledGlyph,
+  MapPinGlyph,
+  BackChevronGlyph,
+} from '@/shared/ui/glyphs';
 import { CollageEmptyState } from '@/shared/ui/CollageEmptyState';
 import { heartSaveLabel } from '@/shared/ui/HeartButton';
 import {
@@ -12,14 +19,6 @@ import {
 } from '@/shared/ui/NoticeBanner';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
-
-import {
-  BackChevronGlyph,
-  HeartFilledGlyph,
-  MapPinGlyph,
-  SearchGlyph,
-  WarningTriangleGlyph,
-} from '@/features/stay/index.view';
 
 /**
  * e04 저장한 숙소(Figma default `1701:1183` · empty `1702:1183`) — **무상태 프레젠테이션 화면**.
@@ -155,7 +154,7 @@ const SavedStayRow = memo(function SavedStayRow({
           hitSlop={9}
           onPress={() => onPressHeart?.(vm.savedStayId)}
         >
-          <HeartFilledGlyph
+          <HeartStrokeFilledGlyph
             size={27}
             testID={`saved-stay-heart-filled-${vm.savedStayId}`}
           />
@@ -202,7 +201,7 @@ function ResultsFace({
           onPress={onPressRegister}
           className="h-[52px] w-full flex-row items-center justify-center gap-sm rounded-button border border-hairline-strong bg-canvas"
         >
-          <MapPinGlyph size={19} tone="ink" />
+          <MapPinGlyph size={19} color="ink" />
           <Text className="font-noto-bold text-card-title font-bold text-ink">
             숙소 직접 등록
           </Text>
@@ -227,7 +226,7 @@ function EmptyFace({
       }
       ctaTestID="saved-stay-browse"
       ctaLabel="숙소 둘러보기"
-      ctaIcon={<SearchGlyph size={19} />}
+      ctaIcon={<SearchGlyph size={19} color="onPrimary" strokeWidth={1.8} />}
       onPressCta={onPressBrowse}
     />
   );
@@ -254,7 +253,7 @@ function ErrorFace({ onRetry }: { onRetry?: () => void }): ReactElement {
     <View className="w-full flex-1 items-center justify-center px-lg">
       <StateNotice
         testID="saved-stay-error"
-        icon={<WarningTriangleGlyph size={32} tone="primary" />}
+        icon={<WarningTriangleGlyph size={32} color="primary" />}
         title="저장한 숙소를 불러올 수 없어요"
         description="잠시 후 다시 시도해 주세요"
         actions={[
@@ -279,7 +278,7 @@ function GuestFace({
     <View className="w-full flex-1 items-center justify-center px-lg">
       <StateNotice
         testID="saved-stay-guest"
-        icon={<HeartFilledGlyph size={30} />}
+        icon={<HeartStrokeFilledGlyph size={30} />}
         title="로그인하면 저장한 숙소를 볼 수 있어요"
         description="마음에 든 숙소를 저장해 두면 여행 거점으로 바로 이어져요"
         actions={[

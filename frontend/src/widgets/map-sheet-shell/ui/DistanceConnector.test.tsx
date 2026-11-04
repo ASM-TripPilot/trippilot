@@ -2,7 +2,7 @@ import fc from 'fast-check';
 import { render, screen } from '@testing-library/react-native';
 
 import { DistanceConnector, isZeroDistance } from './DistanceConnector';
-import { CarGlyph, TransitGlyph, WalkGlyph } from './MapSheetGlyphs';
+import { CarGlyph, TransitGlyph, WalkGlyph } from '@/shared/ui/glyphs';
 
 /**
  * TRIP-783 · AC-3·AC-4·E3 — 카드 사이 거리 커넥터(widgets). 서버 `distanceRange` 문자열을

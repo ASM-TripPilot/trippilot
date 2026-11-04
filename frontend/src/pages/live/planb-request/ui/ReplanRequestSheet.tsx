@@ -15,9 +15,8 @@ import {
   REPLAN_SCOPES,
   type ReplanScopeOption,
 } from '@/features/request-replan/index.view';
+import { WarningFilledGlyph } from '@/shared/ui/glyphs';
 import type { StartReplanRequestScope } from '@/shared/api/index.schemas';
-
-import { RiskWarningGlyph } from '@/features/planb/index.view';
 
 /**
  * TRIP-750 · i04 재계획 요청 시트("AI에게 맡길게요", Figma 4067:2427). 순수 시트 — props+콜백만 받고
@@ -245,7 +244,7 @@ export function ReplanRequestSheet({
                 selected={selectedReasons.includes(detected.reasonKey)}
                 size="small"
                 onToggle={() => onToggleReason(detected.reasonKey)}
-                icon={<RiskWarningGlyph size={11} />}
+                icon={<WarningFilledGlyph size={11} />}
               />
             ) : null}
             {renderChoices(

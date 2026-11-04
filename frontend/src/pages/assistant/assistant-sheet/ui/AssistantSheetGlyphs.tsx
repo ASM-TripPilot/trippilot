@@ -6,19 +6,6 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
  * 색: ink #222222 · primary #FF385C · primary-text #C13515 · info #0B6E63 · muted #6A6A6A.
  */
 
-export function CloseGlyph({ size = 22 }: { size?: number }): ReactElement {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M6 6l12 12M18 6L6 18"
-        stroke="#222222"
-        strokeWidth={2}
-        strokeLinecap="round"
-      />
-    </Svg>
-  );
-}
-
 export function SendArrowGlyph({
   size = 20,
   color = '#FFFFFF',
@@ -39,7 +26,7 @@ export function SendArrowGlyph({
   );
 }
 
-export function ChevronRightGlyph({
+export function AssistantSheetChevronRightGlyph({
   size = 16,
   color = '#222222',
 }: {
@@ -84,7 +71,11 @@ export function WarningGlyph({
   );
 }
 
-export function InfoGlyph({ size = 18 }: { size?: number }): ReactElement {
+export function AssistantSheetInfoGlyph({
+  size = 18,
+}: {
+  size?: number;
+}): ReactElement {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle cx={12} cy={12} r={9} stroke="#0B6E63" strokeWidth={1.8} />
@@ -98,7 +89,11 @@ export function InfoGlyph({ size = 18 }: { size?: number }): ReactElement {
   );
 }
 
-export function RetryGlyph({ size = 16 }: { size?: number }): ReactElement {
+export function AssistantSheetRetryGlyph({
+  size = 16,
+}: {
+  size?: number;
+}): ReactElement {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
@@ -112,7 +107,11 @@ export function RetryGlyph({ size = 16 }: { size?: number }): ReactElement {
   );
 }
 
-export function CheckGlyph({ size = 18 }: { size?: number }): ReactElement {
+export function AssistantSheetCheckGlyph({
+  size = 18,
+}: {
+  size?: number;
+}): ReactElement {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
@@ -180,7 +179,11 @@ export function MoreVGlyph({ size = 24 }: { size?: number }): ReactElement {
 }
 
 /** 컨텍스트 칩 아이콘(목록) — Figma icon list. */
-export function ListGlyph({ size = 16 }: { size?: number }): ReactElement {
+export function AssistantSheetListGlyph({
+  size = 16,
+}: {
+  size?: number;
+}): ReactElement {
   return (
     <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
       <Path
@@ -225,7 +228,7 @@ export function ArrowDownGlyph({ size = 20 }: { size?: number }): ReactElement {
 }
 
 /** 외부 링크(20) — Figma icon-ext. 범위 밖 OTA 카드 우측. */
-export function ExternalLinkGlyph({
+export function AssistantSheetExternalLinkGlyph({
   size = 20,
 }: {
   size?: number;

@@ -1,8 +1,8 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { PencilGlyph } from '@/features/itinerary/index.view';
-import { SparkleGlyph } from '@/features/open-assistant';
+import { ItineraryPencilGlyph } from '@/features/itinerary/index.view';
+import { AssistantSparkleGlyph } from '@/features/open-assistant';
 import { GLYPH_COLORS } from '@/shared/ui/glyphs';
 import { GlassSurface } from '@/shared/ui/GlassSurface';
 
@@ -61,13 +61,13 @@ export function LiveEditPopup({
       <Item
         testID="execution-live-edit-popup-ai"
         label="AI에게 맡기기"
-        icon={<SparkleGlyph size={20} color={GLYPH_COLORS.primary} />}
+        icon={<AssistantSparkleGlyph size={20} color={GLYPH_COLORS.primary} />}
         onPress={onPressAi}
       />
       <Item
         testID="execution-live-edit-popup-manual"
         label="직접 수정"
-        icon={<PencilGlyph size={18} tone="primary" />}
+        icon={<ItineraryPencilGlyph size={18} tone="primary" />}
         onPress={onPressManual}
       />
     </View>

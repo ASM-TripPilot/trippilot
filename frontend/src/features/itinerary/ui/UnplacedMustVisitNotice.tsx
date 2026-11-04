@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Text, View } from 'react-native';
 
 import type { UnplacedMustVisitRow } from '../model/unplacedMustVisits';
-import { AlertCircleGlyph } from './ItineraryGlyphs';
+import { AlertCircleGlyph } from '@/shared/ui/glyphs';
 
 /**
  * TRIP-1094 · h08 초안·h14/h16 완성 일정 시트 맨 위의 "일정에 넣지 못한 꼭 갈 곳" 블록. Figma 전용

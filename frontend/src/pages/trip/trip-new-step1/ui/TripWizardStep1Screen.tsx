@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { AlertCircleGlyph } from '@/shared/ui/glyphs';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,11 +11,10 @@ import type { MustVisitSeedItem } from '@/features/create-trip';
 import { formatWizardStep } from '@/features/create-trip';
 import type { PreferenceSummary, SummaryLine } from '@/features/create-trip';
 import {
-  AlertCircleGlyph,
-  ChevronRightGlyph,
+  TripChevronRightGlyph,
   GlobeGlyph,
-  PlusGlyph,
-  SparkleGlyph,
+  TripPlusGlyph,
+  TripSparkleGlyph,
 } from '@/features/trip/index.view';
 
 /**
@@ -192,7 +192,7 @@ function SummaryRow({
           </View>
         )}
       </View>
-      <ChevronRightGlyph size={20} tone="muted" />
+      <TripChevronRightGlyph size={20} tone="muted" />
     </Pressable>
   );
 }
@@ -234,7 +234,7 @@ function MustVisitStrip({
             <Text className="font-noto-bold text-label font-bold text-ink">
               전체 보기
             </Text>
-            <ChevronRightGlyph size={16} tone="muted" />
+            <TripChevronRightGlyph size={16} tone="muted" />
           </Pressable>
         ) : null}
       </View>
@@ -249,7 +249,7 @@ function MustVisitStrip({
           onPress={onPressMore}
           className="h-[129px] w-[112px] items-center justify-center gap-[6px] rounded-[14px] border-[1.5px] border-dashed border-hairline-strong"
         >
-          <PlusGlyph size={22} />
+          <TripPlusGlyph size={22} />
           <Text className="font-noto-bold text-label font-bold text-primary-text">
             더 담기
           </Text>
@@ -472,11 +472,11 @@ export function TripWizardStep1Screen({
                 skeletonTestID="trip-wizard-summary-skeleton-4"
                 skeletonWidths={[110, 48]}
                 trailing={
-                  // 온보딩 상속일 때만 기존 SparkleGlyph + 분홍 "온보딩" 배지(옛 " + 온보딩" 문자열
+                  // 온보딩 상속일 때만 기존 TripSparkleGlyph + 분홍 "온보딩" 배지(옛 " + 온보딩" 문자열
                   // 대체, TRIP-732 AC-5). onboarding=false 면 배지 자체를 안 그린다.
                   summaryPreferences?.onboarding ? (
                     <View className="flex-row items-center gap-[3px]">
-                      <SparkleGlyph
+                      <TripSparkleGlyph
                         testID="trip-wizard-preference-sparkle"
                         size={14}
                       />
@@ -510,7 +510,11 @@ export function TripWizardStep1Screen({
               testID="trip-wizard-submit-banner"
               className="mb-sm flex-row items-center gap-md rounded-button border border-hairline bg-canvas px-lg py-md"
             >
-              <AlertCircleGlyph size={18} />
+              <AlertCircleGlyph
+                size={18}
+                color="primary"
+                strokeWidth={1.83333}
+              />
               {/* §F ⓐ: submitError 는 표시값이 아니라 배너를 켜는 트리거다 — 서버 사유·옛 제목은 안 그린다. */}
               <Text className="flex-1 font-noto text-card-title text-ink">
                 저장하지 못했어요
@@ -532,7 +536,11 @@ export function TripWizardStep1Screen({
               testID="trip-wizard-mustvisit-banner"
               className="mb-sm flex-row items-center gap-md rounded-button border border-hairline bg-canvas px-lg py-md"
             >
-              <AlertCircleGlyph size={18} />
+              <AlertCircleGlyph
+                size={18}
+                color="primary"
+                strokeWidth={1.83333}
+              />
               <Text className="flex-1 font-noto text-[11.5px] text-primary-text">
                 {mustVisitError}
               </Text>
@@ -553,7 +561,11 @@ export function TripWizardStep1Screen({
               testID="trip-wizard-outside-notice"
               className="mb-sm flex-row items-center gap-md rounded-button border border-hairline bg-canvas px-lg py-md"
             >
-              <AlertCircleGlyph size={18} />
+              <AlertCircleGlyph
+                size={18}
+                color="primary"
+                strokeWidth={1.83333}
+              />
               <Text className="flex-1 font-noto text-label text-ink">
                 {`꼭 갈 곳 중 ${outsideRegionCount}곳은 이 여행 지역 밖이에요`}
               </Text>
@@ -597,7 +609,9 @@ export function TripWizardStep1Screen({
             >
               다음
             </Text>
-            <ChevronRightGlyph tone={nextDisabled ? 'muted' : 'onPrimary'} />
+            <TripChevronRightGlyph
+              tone={nextDisabled ? 'muted' : 'onPrimary'}
+            />
           </Pressable>
         </View>
 

@@ -10,4 +10,4 @@ paths:
 | 파일 | 역할 |
 |---|---|
 | `src/features/stay/model/useStaySearch.ts` | 생성 훅(`useGetStaysSearch`)을 도메인 이름으로 감싼 얇은 층 — 생성물 경로를 한 곳에 가두는 것이 존재 이유다. `options?.enabled`를 생성 훅의 `{ query: { enabled } }`로 매핑한다 — 이 매핑의 실효는 `useStaySearch.integration.test.tsx`(`{enabled:false}`→요청 0건)만 잠근다(`{query:{}}`로 깨져도 tsc는 green) |
-| `src/features/stay/ui/StayGlyphs.tsx` | 숙소 화면 글리프 전부(Figma 벡터 실측, `tone` prop으로 색 변형). 다른 feature 글리프를 재사용하지 않는다. raw hex 소스 스캔은 없다(TRIP-1145에서 삭제) — 저장 하트 같은 상태 신호를 여기 fill로만 두면 jest가 못 본다(`repo-traps.md` 「글리프」) |
+| `src/features/stay/ui/StayGlyphs.tsx` | 숙소 화면 글리프(Figma 벡터 실측, `tone` prop으로 색 변형). 공용과 같은 도형은 TRIP-1773 에서 공용으로 합쳐졌고 슬라이스 것은 `Stay` 접두(`StayBedGlyph` 등). raw hex 소스 스캔은 없다(TRIP-1145에서 삭제) — 저장 하트 같은 상태 신호를 여기 fill로만 두면 jest가 못 본다(`repo-traps.md` 「글리프」) |

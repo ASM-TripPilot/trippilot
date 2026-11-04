@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { LocationPinGlyph } from './HomeGlyphs';
+import { HomeLocationPinGlyph } from './HomeGlyphs';
 import { ABSOLUTE_FILL, SCRIM_LOCATIONS } from './homeSurface';
 import { HeartButton } from '@/shared/ui/HeartButton';
 import { Image } from '@/shared/ui/Image';
@@ -111,7 +111,7 @@ function CollectionCard({
           {card.title}
         </Text>
         <View className="flex-row items-center gap-[4px]">
-          <LocationPinGlyph size={12} />
+          <HomeLocationPinGlyph size={12} />
           <Text className="font-noto text-micro text-on-primary opacity-90">
             {card.region}
           </Text>

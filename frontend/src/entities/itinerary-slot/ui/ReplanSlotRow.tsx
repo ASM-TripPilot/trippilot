@@ -1,3 +1,4 @@
+import { LockGlyph, ClockGlyph } from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
@@ -5,7 +6,6 @@ import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { ALT_LABEL } from '../config/altLabel';
 import { parseSlotKey } from '../lib/slotKey';
 import type { ReplanSlotVM } from '../model';
-import { ClockGlyph, LockGlyph } from './SlotGlyphs';
 
 /**
  * TRIP-751 · AC-3 — i05·i06 재계획안 슬롯 1행(순수 props+콜백, 라우팅·훅 모름). Figma `4314:1923`.

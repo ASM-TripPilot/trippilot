@@ -2,11 +2,10 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { BellGlyph, SearchGlyph } from './HomeGlyphs';
+import { HomeBellGlyph, HomeSearchGlyph } from './HomeGlyphs';
 import { softCardShadow } from './homeSurface';
-import { SparkleGlyph as AssistantSparkleGlyph } from '@/features/open-assistant';
-import { WarningTriangleGlyph } from '@/features/explore/index.view';
-import { GLYPH_COLORS } from '@/shared/ui/glyphs';
+import { AssistantSparkleGlyph } from '@/features/open-assistant';
+import { GLYPH_COLORS, WarningTriangleGlyph } from '@/shared/ui/glyphs';
 import type { HomePhase } from '../model/homeTypes';
 
 // ── 인사 헤더 ───────────────────────────────────────────────────────────
@@ -60,7 +59,7 @@ export function GreetingHeader({
         style={softCardShadow}
         className="h-[40px] w-[40px] items-center justify-center rounded-full bg-canvas"
       >
-        <BellGlyph size={22} />
+        <HomeBellGlyph size={22} />
       </Pressable>
     </View>
   );
@@ -109,7 +108,7 @@ export function SearchBarBlock({
         onPress={onPress}
         className="w-full flex-row items-center gap-[10px] rounded-pill bg-surface-soft px-lg py-[13px]"
       >
-        <SearchGlyph size={19} />
+        <HomeSearchGlyph size={19} />
         <Text className="font-noto text-body text-muted-soft">
           가고 싶은 도시를 검색해보세요
         </Text>
@@ -131,7 +130,7 @@ export function TripsLoadError({
       testID="home-trips-error"
       className="mx-lg mb-[14px] items-center gap-sm rounded-card bg-surface-soft px-lg py-2xl"
     >
-      <WarningTriangleGlyph size={28} tone="primary" />
+      <WarningTriangleGlyph size={28} color="primary" />
       <Text className="font-noto text-label text-muted">
         여행 정보를 불러오지 못했어요
       </Text>
@@ -160,7 +159,7 @@ export function TripsOfflineNotice(): ReactElement {
       testID="home-trips-offline"
       className="mx-lg mb-[14px] items-center gap-sm rounded-card bg-surface-soft px-lg py-2xl"
     >
-      <WarningTriangleGlyph size={28} tone="primary" />
+      <WarningTriangleGlyph size={28} color="primary" />
       <Text className="font-noto-bold text-label font-bold text-ink">
         인터넷에 연결되어 있지 않아요
       </Text>

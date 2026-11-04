@@ -5,10 +5,9 @@
  * onRetry(=refetch)에 물린다(AC-6). features 경계상 stay 의 동명 배너를 import 하지 않고
  * explore 에 새로 그린다 — 아이콘만 explore `ExploreGlyphs.WarningTriangleGlyph` 재사용.
  */
+import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-
-import { WarningTriangleGlyph } from '@/features/explore/index.view';
 
 export function PartialFailureBanner({
   onRetry,
@@ -20,7 +19,7 @@ export function PartialFailureBanner({
       testID="explore-places-partialfailure"
       className="flex-row items-center gap-sm rounded-button border border-hairline bg-surface-soft px-md py-sm"
     >
-      <WarningTriangleGlyph size={20} tone="ink" />
+      <WarningTriangleGlyph size={20} />
       <Text className="flex-1 font-noto text-label text-body">
         일부 지역을 불러오지 못했어요
       </Text>

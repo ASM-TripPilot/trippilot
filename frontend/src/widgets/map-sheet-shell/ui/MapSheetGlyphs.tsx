@@ -1,13 +1,4 @@
 import Svg, { Path } from 'react-native-svg';
-import { FullAiGlyph as SharedFullAiGlyph } from '@/shared/ui/glyphs';
-// 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
-export {
-  BackChevronGlyph,
-  CheckGlyph,
-  WalkGlyph,
-  CarGlyph,
-} from '@/shared/ui/glyphs';
-
 // TRIP-783 · 지도+시트 셸 전용 인라인 SVG 글리프. widgets 는 `@/features` 를 import 하지 않으므로
 // `features/itinerary/ui/ItineraryGlyphs` 의 Back/Car/Walk 를 **바이트 복제**
 // 한다(리포 글리프 로컬 복제 관례의 N번째 사본). 색은 이 파일에서만 raw hex 로 고정한다(SVG stroke/fill
@@ -20,57 +11,6 @@ type GlyphProps = {
   size?: number;
   testID?: string;
 };
-
-// ✦ 스파클(18) — FullAiGlyph(ItineraryGlyphs) 바이트 복제, h07 진행 카드 제목의 AI 표식.
-// widget 은 primary 톤 하나만 쓰므로 tone 인자 없이 primary 채움으로 고정한다(YAGNI).
-export function FullAiGlyph({ size = 18, testID }: GlyphProps) {
-  return <SharedFullAiGlyph size={size} color={'primary'} testID={testID} />;
-}
-
-// 대중교통(16) — 거리 커넥터 이동수단 표식(사용자 결정 2026-10-19). `features/onboarding/ui/OnboardingGlyphs`
-// 의 TransitGlyph(교환 화살표) 경로를 **바이트 복제**한다(widgets→features 금지). 옆의 Walk/Car 에 맞춰
-// 16px·muted 로 고정하고, 원본 viewBox 24 를 16 으로 줄이면 선이 얇아지므로 strokeWidth 를 1.95 로 올려
-// 실효 굵기를 CarGlyph(1.3) 와 맞춘다. 선택 상태(selected)는 커넥터에 없어 뺐다.
-export function TransitGlyph({ size = 16, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M4 9.5L4 15.5C4 16.6 4.9 17.5 6 17.5H16.5"
-        stroke={MUTED}
-        strokeWidth={1.95}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M14 14.5L17 17.5L14 20.5"
-        stroke={MUTED}
-        strokeWidth={1.95}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M20 14.5L20 8.5C20 7.4 19.1 6.5 18 6.5L7.5 6.5"
-        stroke={MUTED}
-        strokeWidth={1.95}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M10 3.5L7 6.5L10 9.5"
-        stroke={MUTED}
-        strokeWidth={1.95}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
 
 // 지도핀-꺼짐(16) — 지도 폴백 바 아이콘 원 안 표식(TRIP-919, Figma `4287:2126` 벡터 그대로). muted.
 export function MapPinOffGlyph({ size = 16, testID }: GlyphProps) {
@@ -115,7 +55,7 @@ export function MapPinOffGlyph({ size = 16, testID }: GlyphProps) {
 }
 
 // 새로고침(16) — 지도 폴백 바 [다시 시도] 버튼 표식(TRIP-919, Figma `4287:2133` 벡터 그대로). ink.
-export function RetryGlyph({ size = 16, testID }: GlyphProps) {
+export function MapSheetRetryGlyph({ size = 16, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}

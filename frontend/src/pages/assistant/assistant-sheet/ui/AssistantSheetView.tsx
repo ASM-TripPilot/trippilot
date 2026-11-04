@@ -24,7 +24,7 @@ import {
   Composer,
   QuickReplyBar,
 } from './AssistantSheetChrome';
-import { RetryGlyph, WarningGlyph } from './AssistantSheetGlyphs';
+import { AssistantSheetRetryGlyph, WarningGlyph } from './AssistantSheetGlyphs';
 import { MessageList, type OlderMessagesProps } from './MessageList';
 
 /**
@@ -103,7 +103,7 @@ function OpenFailed({ onRetry }: { onRetry: () => void }): ReactElement {
           onPress={onRetry}
           className="flex-row items-center gap-xs self-start rounded-button bg-primary px-lg py-sm"
         >
-          <RetryGlyph />
+          <AssistantSheetRetryGlyph />
           <Text className="font-noto-bold text-label font-bold text-on-primary">
             다시 시도
           </Text>

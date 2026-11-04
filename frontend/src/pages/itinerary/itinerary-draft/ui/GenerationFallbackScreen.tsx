@@ -2,6 +2,11 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import {
+  CheckGlyph,
+  AlertCircleGlyph,
+  BackChevronGlyph,
+} from '@/shared/ui/glyphs';
 import { MapView } from '@/shared/map';
 
 import type { DraftPin } from '@/features/itinerary/index.view';
@@ -20,12 +25,7 @@ import {
   GENERATION_FALLBACK_TITLE,
   GENERATION_FALLBACK_VIEW_PLAN,
 } from '../config/generationFallback';
-import {
-  AlertCircleGlyph,
-  BackChevronGlyph,
-  CheckGlyph,
-  DashGlyph,
-} from '@/features/itinerary/index.view';
+import { DashGlyph } from '@/features/itinerary/index.view';
 
 /**
  * h07 [완전AI] 일정 생성 · fallback — Figma `3831:2177`.
@@ -146,7 +146,7 @@ export function GenerationFallbackScreen({
           // 함께 물지 않게 한다(02a §5 · RNTL toHaveTextContent = 완전일치).
           <View className="flex-1 items-center justify-center gap-md px-lg">
             <View className="h-[88px] w-[88px] items-center justify-center rounded-pill bg-primary-pale">
-              <AlertCircleGlyph size={36} tone="primaryText" />
+              <AlertCircleGlyph size={36} />
             </View>
             <Text
               testID="itinerary-fallback-failed"
@@ -208,8 +208,8 @@ export function GenerationFallbackScreen({
                   {row.marker === 'check' ? (
                     <CheckGlyph
                       size={18}
-                      tone="success"
                       testID={`itinerary-fallback-mark-check-${row.n}`}
+                      color="success"
                     />
                   ) : (
                     <DashGlyph

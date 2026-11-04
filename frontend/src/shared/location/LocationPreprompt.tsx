@@ -8,16 +8,12 @@
  * ⚠️ 라우트로 등록하지 않는다(D7) — 라우트 없는 재사용 컴포넌트다.
  * ⚠️ OS 다이얼로그를 직접 부르지 않는다 — 콜백만 올려보낸다(D2). 발화 시점은 호출자가 정한다.
  */
+import { InfoCircle18Glyph } from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import {
-  LocationInfoGlyph,
-  LocationOffGlyph,
-  LocationRadarHero,
-} from './LocationGlyphs';
-import { LOCATION_ICON_COLORS } from './locationColors';
+import { LocationOffGlyph, LocationRadarHero } from './LocationGlyphs';
 
 export type LocationPrepromptState = 'default' | 'permission-denied';
 
@@ -63,7 +59,7 @@ export function LocationPreprompt({
                 × 와 1회성 숨김 상태(onDismissNotice/noticeDismissed)는 폐기했다. testID 요소는
                 '설정에서' 조각만 감싼다 — 동결 테스트 앵커 패턴 유지. */}
             <View className="w-full flex-row items-start gap-sm rounded-input border border-hairline p-lg">
-              <LocationInfoGlyph color={LOCATION_ICON_COLORS.info} />
+              <InfoCircle18Glyph color="info" />
               <Text
                 className="flex-1 font-noto text-card-title text-ink"
                 lineBreakStrategyIOS="hangul-word"

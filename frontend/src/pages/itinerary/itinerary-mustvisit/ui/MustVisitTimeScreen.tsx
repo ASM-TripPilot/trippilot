@@ -1,6 +1,13 @@
 import type { ReactElement } from 'react';
 import { useContext, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  ChevronDownGlyph,
+  InfoCircleGlyph,
+  AlertCircleGlyph,
+  BackChevronGlyph,
+  ClockGlyph,
+} from '@/shared/ui/glyphs';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import {
   SafeAreaInsetsContext,
@@ -22,13 +29,6 @@ import {
   type MustVisitTimeForm,
   type startTimeOptions,
 } from '@/features/add-must-visit';
-import {
-  AlertCircleGlyph,
-  BackChevronGlyph,
-  ChevronDownGlyph,
-  ClockGlyph,
-  InfoCircleGlyph,
-} from '@/features/itinerary/index.view';
 
 /**
  * h07 방문 시각 지정 — Figma `1904:1083`.
@@ -341,7 +341,7 @@ export function MustVisitTimeScreen({
 
             {duplicateText === undefined ? null : (
               <View className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline bg-primary-pale px-[14px] py-md">
-                <InfoCircleGlyph tone="primaryText" />
+                <InfoCircleGlyph color="primaryText" />
                 <Text
                   testID="itinerary-mustvisit-time-duplicate"
                   className="flex-1 font-noto text-label text-primary-text"
@@ -353,7 +353,7 @@ export function MustVisitTimeScreen({
 
             {leaveWarningText === undefined ? null : (
               <View className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline bg-primary-pale px-[14px] py-md">
-                <InfoCircleGlyph tone="primaryText" />
+                <InfoCircleGlyph color="primaryText" />
                 <Text
                   testID="itinerary-mustvisit-time-leave-warning"
                   className="flex-1 font-noto text-label text-primary-text"

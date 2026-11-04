@@ -1,8 +1,10 @@
 import type { ComponentType } from 'react';
+import {
+  ForkKnifeGlyph,
+  ShoppingBagGlyph,
+  TransitGlyph,
+} from '@/shared/ui/glyphs';
 import Svg, { Path } from 'react-native-svg';
-// 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
-export { BackChevronGlyph } from '@/shared/ui/glyphs';
-
 // 온보딩(약관·닉네임) 전용 벡터 글리프(TRIP-162 c06/c07 Figma 정합). Figma 에서 내려받은
 // .svg 좌표를 react-native-svg 프리미티브(<Svg><Path/>)로 1:1 옮긴다 — AuthGlyphs.tsx 와
 // 같은 인라인 방식(transformer 미도입). 위치(c08) 화면은 별도 파일(shared/location/LocationGlyphs)을
@@ -14,7 +16,7 @@ type GlyphProps = {
 };
 
 // 체크박스 체크 표시(흰색) — 약관 checked 상태 안에 얹는다(T5·T6).
-export function CheckGlyph({ size = 14, testID }: GlyphProps) {
+export function OnboardingCheckGlyph({ size = 14, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -27,27 +29,6 @@ export function CheckGlyph({ size = 14, testID }: GlyphProps) {
         d="M11.6666 3.5L5.24992 9.91667L2.33325 7"
         stroke="#ffffff"
         strokeWidth={1.75}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// "보기 ›" 옆 chevron(T3·AC-T5).
-export function ViewChevronGlyph({ size = 16, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-    >
-      <Path
-        d="M6 4L10 8L6 12"
-        stroke="#9AA1AB"
-        strokeWidth={1.46667}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -167,36 +148,18 @@ export function SunGlyph({
 }
 
 // 스타일 — 미식(fork & knife).
-export function ForkKnifeGlyph({
+export function OnboardingForkKnifeGlyph({
   size = 24,
   selected,
   onPrimary,
   testID,
 }: SelectableGlyphProps) {
-  const stroke = selectableStroke(selected, onPrimary);
   return (
-    <Svg
+    <ForkKnifeGlyph
+      size={size}
+      color={onPrimary ? 'onPrimary' : selected ? 'primary' : 'body'}
       testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M7 2.5V10.5M9 2.5V10.5M5 2.5V8.5C5 9.6 5.9 10.5 7 10.5V21.5"
-        stroke={stroke}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M17 2.5C15.3431 2.5 14 4.79086 14 7.5C14 9.98528 15.1193 12.0402 16.5714 12.4272L16 21.5"
-        stroke={stroke}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    />
   );
 }
 
@@ -339,36 +302,18 @@ export function CameraGlyph({
 }
 
 // 스타일 — 쇼핑(bag).
-export function ShoppingBagGlyph({
+export function OnboardingShoppingBagGlyph({
   size = 24,
   selected,
   onPrimary,
   testID,
 }: SelectableGlyphProps) {
-  const stroke = selectableStroke(selected, onPrimary);
   return (
-    <Svg
+    <ShoppingBagGlyph
+      size={size}
+      color={onPrimary ? 'onPrimary' : selected ? 'primary' : 'body'}
       testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M4.5 8.5H19.5L18.5 20.5H5.5L4.5 8.5Z"
-        stroke={stroke}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M8 8.5V6.5C8 4.29086 9.79086 2.5 12 2.5C14.2091 2.5 16 4.29086 16 6.5V8.5"
-        stroke={stroke}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    />
   );
 }
 
@@ -585,7 +530,7 @@ export function SoloPersonGlyph({
 }
 
 // 동행 — 친구(두 사람).
-export function FriendsGlyph({
+export function OnboardingFriendsGlyph({
   size = 24,
   selected,
   testID,
@@ -629,7 +574,7 @@ export function FriendsGlyph({
 }
 
 // 동행 — 연인(heart).
-export function HeartGlyph({
+export function OnboardingHeartGlyph({
   size = 24,
   selected,
   testID,
@@ -655,7 +600,7 @@ export function HeartGlyph({
 }
 
 // 동행 — 가족(사람 여럿).
-export function FamilyGlyph({
+export function OnboardingFamilyGlyph({
   size = 24,
   selected,
   testID,
@@ -805,7 +750,7 @@ export function PetGlyph({
 }
 
 // 이동 — 도보 위주(발자국).
-export function WalkGlyph({
+export function OnboardingWalkGlyph({
   size = 24,
   selected,
   testID,
@@ -855,54 +800,22 @@ export function WalkGlyph({
 }
 
 // 이동 — 대중교통(교환/순환 화살표).
-export function TransitGlyph({
+export function OnboardingTransitGlyph({
   size = 24,
   selected,
   testID,
 }: SelectableGlyphProps) {
-  const stroke = selectableStroke(selected);
   return (
-    <Svg
+    <TransitGlyph
+      size={size}
+      color={selected ? 'primary' : 'body'}
       testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M4 9.5L4 15.5C4 16.6 4.9 17.5 6 17.5H16.5"
-        stroke={stroke}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M14 14.5L17 17.5L14 20.5"
-        stroke={stroke}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M20 14.5L20 8.5C20 7.4 19.1 6.5 18 6.5L7.5 6.5"
-        stroke={stroke}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M10 3.5L7 6.5L10 9.5"
-        stroke={stroke}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    />
   );
 }
 
 // 이동 — 차량(car).
-export function CarGlyph({
+export function OnboardingCarGlyph({
   size = 24,
   selected,
   testID,
@@ -1071,7 +984,7 @@ export function SkipChevronGlyph({ size = 16, testID }: GlyphProps) {
 }
 
 // info 배너(ⓘ) — 상태 없음, muted 고정.
-export function InfoCircleGlyph({ size = 16, testID }: GlyphProps) {
+export function OnboardingInfoCircleGlyph({ size = 16, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}

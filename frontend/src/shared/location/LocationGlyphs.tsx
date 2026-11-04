@@ -15,28 +15,6 @@ type GlyphProps = {
   testID?: string;
 };
 
-// 내비바 back chevron — 표시만(장식), 실동작 미배선. terms·nickname 의 것과 좌표는 같지만
-// import 경계상 복제가 맞는 선택이다(위 주석 참고).
-export function LocationBackChevronGlyph({ size = 24, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M15 18L9 12L15 6"
-        stroke={LOCATION_ICON_COLORS.ink}
-        strokeWidth={2.2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 // 레이더 히어로 — 동심원 3개(중심에서 멀수록 옅어지는 opacity) + 채워진 중심 점.
 // Figma 컨테이너(342x184) 좌표를 viewBox 로 고정하고 width="100%" 로 실제 폭에 비례
 // 스케일한다 — 기기 폭이 Figma 시안(390)과 달라도 중심이 항상 컨테이너 가운데에 온다.
@@ -112,47 +90,6 @@ export function LocationOffGlyph({ size = 34, testID }: GlyphProps) {
         d="M5.6665 5.6665L28.3332 28.3332"
         stroke={LOCATION_ICON_COLORS.mutedSoft}
         strokeWidth={2.69167}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// 안내 정보 아이콘. 색은 호출자가 정한다 — LiveLocationPage 는 기본(info 청록)을 쓰고,
-// LocationPreprompt 거부 안내는 뉴트럴(mutedSoft)로 넘긴다(TRIP-592 위계 전환). stroke prop 은
-// className 을 못 받아 값이 필요하므로 상수를 그대로 넘긴다(raw hex 아님, 가드 밖).
-export function LocationInfoGlyph({
-  size = 18,
-  testID,
-  color = LOCATION_ICON_COLORS.info,
-}: GlyphProps & { color?: string }) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 18 18"
-      fill="none"
-    >
-      <Path
-        d="M9 15.75C12.7279 15.75 15.75 12.7279 15.75 9C15.75 5.27208 12.7279 2.25 9 2.25C5.27208 2.25 2.25 5.27208 2.25 9C2.25 12.7279 5.27208 15.75 9 15.75Z"
-        stroke={color}
-        strokeWidth={1.575}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M9 8.25V12"
-        stroke={color}
-        strokeWidth={1.575}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M9 6H9.0075"
-        stroke={color}
-        strokeWidth={1.575}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -244,45 +181,6 @@ export function LocationPinGlyph({
         strokeLinejoin="round"
       />
       <Circle cx={12} cy={10} r={3} stroke={color} strokeWidth={1.8} />
-    </Svg>
-  );
-}
-
-// permission-denied 상단 배너 경고 삼각형(⚠).
-export function LocationWarningGlyph({
-  size = 20,
-  testID,
-  color = LOCATION_ICON_COLORS.ink,
-}: GlyphProps & { color?: string }) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M12 3.5 22 20H2L12 3.5Z"
-        stroke={color}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M12 10V14"
-        stroke={color}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M12 17H12.01"
-        stroke={color}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
     </Svg>
   );
 }

@@ -127,3 +127,114 @@ export function CarGlyph({ size = 16, color = 'muted', testID }: GlyphProps) {
     </Svg>
   );
 }
+
+// 맛집 — 포크+나이프.
+export function ForkKnifeGlyph({
+  size = 24,
+  color = 'body',
+  testID,
+}: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M7 2.5V10.5M9 2.5V10.5M5 2.5V8.5C5 9.6 5.9 10.5 7 10.5V21.5"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M17 2.5C15.3431 2.5 14 4.79086 14 7.5C14 9.98528 15.1193 12.0402 16.5714 12.4272L16 21.5"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 쇼핑 — 쇼핑백.
+export function ShoppingBagGlyph({
+  size = 24,
+  color = 'body',
+  testID,
+}: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M4.5 8.5H19.5L18.5 20.5H5.5L4.5 8.5Z"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M8 8.5V6.5C8 4.29086 9.79086 2.5 12 2.5C14.2091 2.5 16 4.29086 16 6.5V8.5"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 대중교통(교환/순환 화살표) — 소비처마다 획 굵기가 달라(1.8/1.95) strokeWidth 를 열어 둔다.
+export function TransitGlyph({
+  size = 24,
+  color = 'body',
+  strokeWidth = 1.8,
+  testID,
+}: GlyphProps & { strokeWidth?: number }) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M4 9.5L4 15.5C4 16.6 4.9 17.5 6 17.5H16.5"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M14 14.5L17 17.5L14 20.5"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M20 14.5L20 8.5C20 7.4 19.1 6.5 18 6.5L7.5 6.5"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M10 3.5L7 6.5L10 9.5"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}

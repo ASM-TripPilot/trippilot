@@ -3,6 +3,11 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import {
+  InfoCircleGlyph,
+  AlertCircleGlyph,
+  BackChevronGlyph,
+} from '@/shared/ui/glyphs';
 import { goBackOr } from '@/shared/lib/goBackOr';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
@@ -26,11 +31,6 @@ import {
 } from '@/features/itinerary';
 import { timeBandLabel } from '@/entities/itinerary-slot';
 import { resolveUnplacedNames } from '@/features/itinerary';
-import {
-  AlertCircleGlyph,
-  BackChevronGlyph,
-  InfoCircleGlyph,
-} from '@/features/itinerary';
 import { UnplacedMustVisitNotice } from '@/features/itinerary';
 import { useConfirmItinerary } from '@/features/edit-itinerary';
 import { useTripWizardStore } from '@/features/create-trip';
@@ -247,7 +247,7 @@ export function ItineraryPlanPage({
     return (
       <PlanFace
         testID="itinerary-view-trip-deleted"
-        icon={<InfoCircleGlyph size={32} tone="primaryText" />}
+        icon={<InfoCircleGlyph size={32} color="primaryText" />}
         title="삭제된 여행이에요"
         description="이 여행은 삭제되어 일정을 볼 수 없어요"
         onBack={handleBack}
@@ -270,7 +270,7 @@ export function ItineraryPlanPage({
     return (
       <PlanFace
         testID="itinerary-view-notfound"
-        icon={<InfoCircleGlyph size={32} tone="primaryText" />}
+        icon={<InfoCircleGlyph size={32} color="primaryText" />}
         title="아직 완성된 일정이 없어요"
         description="일정을 만들면 여기에서 볼 수 있어요"
         onBack={handleBack}
@@ -290,7 +290,7 @@ export function ItineraryPlanPage({
     return (
       <PlanFace
         testID="itinerary-view-failed"
-        icon={<AlertCircleGlyph size={32} tone="primaryText" />}
+        icon={<AlertCircleGlyph size={32} />}
         title="일정을 불러오지 못했어요"
         description="네트워크를 확인하고 다시 시도해주세요"
         onBack={handleBack}

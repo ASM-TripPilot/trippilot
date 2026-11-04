@@ -8,7 +8,6 @@ paths:
 
 | 파일 | 역할 |
 |---|---|
-| `src/features/planb/ui/PlanbGlyphs.tsx` | 로컬 복제 글리프(`AppliedAlertGlyph`·`RiskWarningGlyph`·`ChevronRightGlyph`·`LockGlyph`) — 다른 feature 동명 글리프는 import 금지라 복제한다 |
 | `src/features/planb/model/appliedSummary.ts` | `appliedSummaryBadges(...)` — 거리 부호는 U+2212/`+`, `\|Δ\|<10`이면 `이동 0m`, `distanceDeltaM===null`이면 배지를 뺀다. 타입에 `duration`이 없어 INV-3 원리적 보장. **프로덕션 소비처 0**(`app/_dev/preview.tsx`만 부른다) |
 | `src/features/planb/model/triggerLabel.ts` | `TRIGGER_LABELS`·`triggerLabel(kind, variant?)` — `TriggerKind` 4종 → `{label, iconKey}` 정적 요지(상세 사유는 서버 `reason`, 섞지 않는다). 상황 감지 FE-B: `VARIANT_LABELS: Record<NonNullable<TriggerVariant>, string>`(변형 12종 — 서버 enum 이 늘면 tsc 가 잡는다)·`isKnownVariant` — 아는 변형이면 그 라벨 + **kind 의 iconKey**, 모르는 값·null 이면 kind 라벨(`TRIGGER_LABELS` 무변경). 조회는 `hasOwnProperty`(`'toString'` 같은 프로토타입 키가 라벨로 새지 않게). node-safe. 표 도출 강제 소스 스캔(`RiskDetailSheet.labelSource.test.ts`)은 TRIP-1354 에서 지웠다(판정 3 — 리터럴만 잡아 import 우회는 못 봤다). PBT-SA-22 는 `triggerLabel.property.test.ts`(라벨·알약·날짜어 묶음 1파일) |
 | `src/features/planb/model/triggerPillCopy.ts` | i02 지도 위 알약 카피 `{dayLabel }{라벨}{ · 장소}{ 시}` — WEATHER `{슬롯명} {H}시`·DELAY `{슬롯명} 방면`·CLOSURE `{슬롯명} 주변 시설`, 매칭 슬롯이 없으면 라벨만. 상황 감지 FE-B: 3번째 인자 `{variant, dayLabel}` — 아는 변형이면 변형 라벨, CLOSURE 는 변형이 있을 때만 `주변 시설` 꼬리를 뗀다(그 장소 자체의 영업). 옵션이 없거나 null 이면 **옛 출력과 바이트까지 같다**(PBT-SA-22 ④의 오라클이 옛 구현 사본). `startAt` 옆 산술 없음(BR-U4-34) |

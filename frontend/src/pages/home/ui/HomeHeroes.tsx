@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { SparkleGlyph } from './HomeGlyphs';
+import { HomeSparkleGlyph } from './HomeGlyphs';
 import { ABSOLUTE_FILL, SCRIM_LOCATIONS, softCardShadow } from './homeSurface';
 import { Image } from '@/shared/ui/Image';
 import type { HomeMagazineHero, TripHeroData } from '../model/homeTypes';
@@ -87,7 +87,7 @@ function MagazineHeroImpl({
         {/* 상단: eyebrow pill(하트는 TRIP-694로 제거) */}
         <View className="w-full flex-row items-start justify-between">
           <View className="flex-row items-center gap-[6px] self-start rounded-pill bg-canvas px-md py-[5px]">
-            <SparkleGlyph size={13} />
+            <HomeSparkleGlyph size={13} />
             <Text className="font-noto-bold text-[11.5px] font-bold text-ink">
               {hero.eyebrow}
             </Text>

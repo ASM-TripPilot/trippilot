@@ -1,7 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-
-import { InfoCircleGlyph } from '@/features/itinerary/index.view';
+import { InfoCircleGlyph } from '@/shared/ui/glyphs';
 
 /**
  * TRIP-799 · h14 거점 없음 안내 카드(D4) — 선택일에 고정 숙소 슬롯도, 그날을 덮는 거점 배정도 없을 때(TRIP-1704)
@@ -36,7 +35,7 @@ export function NoBaseNoticeCard({
       }
       className="flex-row items-center gap-xs rounded-card border border-hairline bg-canvas px-md py-sm"
     >
-      <InfoCircleGlyph size={16} tone="muted" />
+      <InfoCircleGlyph size={16} />
       <Text className="shrink font-noto text-label text-muted">
         {unknown ? BASE_UNKNOWN_TITLE : NO_BASE_TITLE}
       </Text>

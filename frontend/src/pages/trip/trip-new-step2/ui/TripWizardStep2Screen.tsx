@@ -5,9 +5,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { StateNotice } from '@/shared/ui/StateNotice';
 import {
-  BedGlyph,
-  ChevronRightGlyph,
-  WarningTriangleGlyph,
+  TripBedGlyph,
+  TripChevronRightGlyph,
+  TripWarningTriangleGlyph,
 } from '@/features/trip/index.view';
 import { formatWizardStep } from '@/features/create-trip';
 import { Skeleton } from '@/shared/ui/Skeleton';
@@ -143,7 +143,7 @@ function NightCard({
             </Text>
           ) : null}
         </View>
-        <ChevronRightGlyph size={20} tone="muted" />
+        <TripChevronRightGlyph size={20} tone="muted" />
       </View>
     </Pressable>
   );
@@ -170,7 +170,7 @@ function EmptyNightRow({
       <Text className="flex-1 font-noto text-caption text-muted">
         {`${card.nightNumber}번째 밤 · ${card.dateLabel} · ${card.region}`}
       </Text>
-      <ChevronRightGlyph size={20} tone="muted" />
+      <TripChevronRightGlyph size={20} tone="muted" />
     </Pressable>
   );
 }
@@ -201,7 +201,7 @@ function NightSkeleton({ index }: { index: number }): ReactElement {
 function GuideRow(): ReactElement {
   return (
     <View className="w-full flex-row items-center gap-sm">
-      <BedGlyph size={18} tone="muted" />
+      <TripBedGlyph size={18} tone="muted" />
       <Text className="flex-1 font-noto text-caption text-muted">
         숙소는 나중에 정해도 돼요 · 동선 기준으로 추천해 드려요
       </Text>
@@ -241,7 +241,7 @@ export function TripWizardStep2Screen({
           <View className="flex-1 items-center justify-center px-lg">
             <StateNotice
               testID="trip-base-error"
-              icon={<WarningTriangleGlyph />}
+              icon={<TripWarningTriangleGlyph />}
               title={LOAD_ERROR_TITLE}
               description={LOAD_ERROR_DESCRIPTION}
               actions={[
@@ -270,7 +270,7 @@ export function TripWizardStep2Screen({
           <View className="flex-1 items-center justify-center px-lg">
             <StateNotice
               testID="trip-base-notrip"
-              icon={<WarningTriangleGlyph />}
+              icon={<TripWarningTriangleGlyph />}
               title={NO_TRIP_TITLE}
               description={NO_TRIP_DESCRIPTION}
               actions={[

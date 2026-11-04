@@ -2,17 +2,17 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import {
+  InfoCircleGlyph,
+  AlertCircleGlyph,
+  BackChevronGlyph,
+} from '@/shared/ui/glyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 import type { DraftDayTab, DraftView } from '@/features/itinerary/index.view';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import { DayChipScroller } from '@/widgets/map-sheet-shell';
-import {
-  AlertCircleGlyph,
-  BackChevronGlyph,
-  CheckCircleGlyph,
-  InfoCircleGlyph,
-} from '@/features/itinerary/index.view';
+import { CheckCircleGlyph } from '@/features/itinerary/index.view';
 
 import { DraftFallbackBanner } from './DraftFallbackBanner';
 
@@ -227,7 +227,7 @@ export function DraftScreen({
           {view.kind === 'failed' ? (
             <StateNotice
               testID="itinerary-draft-failed"
-              icon={<AlertCircleGlyph size={32} tone="primaryText" />}
+              icon={<AlertCircleGlyph size={32} />}
               title={FAILED_TITLE}
               description={FAILED_NOTE}
               actions={[]}
@@ -246,7 +246,7 @@ export function DraftScreen({
             <StateNotice
               testID="itinerary-draft-empty"
               dashed
-              icon={<InfoCircleGlyph size={32} tone="primaryText" />}
+              icon={<InfoCircleGlyph size={32} color="primaryText" />}
               title={EMPTY_TITLE}
               description={EMPTY_NOTE}
               actions={[]}

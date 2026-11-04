@@ -26,7 +26,7 @@ paths:
 
 ## 하트 글리프 정본
 
-- **하트 저장 글리프(Outline·Filled) 정본은 `shared/ui/HeartGlyphs.tsx`다** — place·stay 검색 카드가 공유한다. 옛 경로(`entities/place/ui/PlaceGlyphs`·`features/explore/ui/ExploreGlyphs`의 동명 함수)는 삭제됐다. 새 하트 소비처가 feature 로컬 글리프에 하트를 다시 그리면 조용히 두 벌로 되돌아간다(`traps-glyphs.md`의 `LocationOffGlyph` 세 벌과 동형, 실측 2건) — raw-hex·fill 스캔은 `*Glyphs.tsx` 제외 관례라 기계가 못 잡는다.
+- **하트 저장 글리프(Outline·Filled) 정본은 `shared/ui/HeartGlyphs.tsx`다** — place·stay 검색 카드가 공유한다. 옛 경로(`entities/place/ui/PlaceGlyphs`·`features/explore/ui/ExploreGlyphs`의 동명 함수)는 삭제됐다. 새 하트 소비처가 feature 로컬 글리프에 하트를 다시 그리면 조용히 두 벌로 되돌아간다(동명 복제 계열 — 지금은 `traps-glyphs.md` 의 ESLint 가드가 *같은 이름*은 막지만 접두 붙인 새 하트 사본은 못 막는다, 실측 2건) — raw-hex·fill 스캔은 `*Glyphs.tsx` 제외 관례라 기계가 못 잡는다.
 
 ## 지역 피커 → 결과 화면 복귀 (`dismissTo`)
 
