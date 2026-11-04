@@ -102,14 +102,12 @@ import { PlaceAddHeader, PlaceAddRow } from '@/features/itinerary/index.view';
 import { SlotCandidateSheet as ItinerarySlotCandidateSheet } from '@/pages/itinerary/itinerary-draft/ui/SlotCandidateSheet';
 import { CenterPointPicker } from '@/pages/itinerary/itinerary-copick/ui/CenterPointPicker';
 import { SlotFillScreen } from '@/pages/itinerary/itinerary-copick/ui/SlotFillScreen';
-import {
-  AlertCircleGlyph,
-  UnplacedMustVisitNotice,
-} from '@/features/itinerary/index.view';
+import { UnplacedMustVisitNotice } from '@/features/itinerary/index.view';
 import type { UnplacedMustVisitRow } from '@/features/itinerary/model/unplacedMustVisits';
 import type { StayRecommendView as StayRecommendViewModel } from '@/pages/itinerary/itinerary-stay-recommend/model/stayRecommend';
 import { CoPickStepper } from '@/pages/itinerary/itinerary-copick/ui/CoPickStepper';
 import { GenerationDoneBar } from '@/pages/itinerary/itinerary-list/ui/GenerationDoneBar';
+import { AlertCircleGlyph, ChevronRightGlyph } from '@/shared/ui/glyphs';
 import { showToast } from '@/shared/ui/Toast';
 import { DistanceConnector } from '@/widgets/map-sheet-shell';
 import { GenerationProgressCard } from '@/widgets/map-sheet-shell';
@@ -120,7 +118,6 @@ import { SheetHeader } from '@/widgets/map-sheet-shell';
 import { SlotStopCard } from '@/entities/itinerary-slot';
 import { violationNotice } from '@/entities/itinerary-slot';
 import { PastTripRow, TripCard, type MyTripCardVM } from '@/entities/trip';
-import { ChevronRightGlyph as TripChevronRightGlyph } from '@/entities/trip';
 import type { PastTripCardVM } from '@/entities/trip';
 import type { MonthLegends } from '@/pages/record/records-calendar/model/recordsCalendar';
 import { buildSlotKey } from '@/entities/itinerary-slot';
@@ -7231,7 +7228,7 @@ export const PREVIEW_STATES: PreviewState[] = [
               testID={`my-trip-reflection-${vm.tripId}`}
               vm={vm}
               onPress={noop}
-              trailing={<TripChevronRightGlyph size={20} />}
+              trailing={<ChevronRightGlyph size={20} />}
             />
           ))}
           pastEmpty={false}

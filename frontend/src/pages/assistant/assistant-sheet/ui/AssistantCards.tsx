@@ -17,11 +17,12 @@ import { candidateTarget } from '../model/cardModel';
 import { ProposalCard } from './ProposalCard';
 import { ActionRow, OutlineCard } from './OutlineCard';
 import {
-  ChevronRightGlyph,
-  ExternalLinkGlyph,
-  InfoGlyph,
+  AssistantSheetChevronRightGlyph,
+  AssistantSheetExternalLinkGlyph,
+  AssistantSheetInfoGlyph,
   WarningGlyph,
 } from './AssistantSheetGlyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * 도우미 카드 7종(TRIP-1323) — 라이브 Figma b01 review · b03 scope · b04 guardrail · b05 error/solver-unavailable ·
@@ -66,7 +67,8 @@ function LinkLine({
   onPress: () => void;
   tone: 'primary' | 'info';
 }): ReactElement {
-  const color = tone === 'primary' ? '#C13515' : '#0B6E63';
+  const color =
+    tone === 'primary' ? COLOR_TOKENS['primary-text'] : COLOR_TOKENS.info;
   return (
     <Pressable
       testID={testID}
@@ -79,14 +81,14 @@ function LinkLine({
       >
         {label}
       </Text>
-      <ChevronRightGlyph size={14} color={color} />
+      <AssistantSheetChevronRightGlyph size={14} color={color} />
     </Pressable>
   );
 }
 
 // 아이콘(20) + 본문 한 줄 — 경고·안내 카드의 공통 골격. 색은 아이콘과 링크에만 둔다(TRIP-1528 공통 규칙).
 const ICON_CARD = 'flex-row items-start gap-[10px] px-[14px] py-md';
-const WARN = '#FF385C';
+const WARN = COLOR_TOKENS.primary;
 
 export function ReviewCard({
   payload,
@@ -169,7 +171,10 @@ export function CandidateCard({
               </Text>
             </View>
             {target.kind === 'NONE' ? null : (
-              <ChevronRightGlyph size={20} color="#6A6A6A" />
+              <AssistantSheetChevronRightGlyph
+                size={20}
+                color={COLOR_TOKENS.muted}
+              />
             )}
           </OutlineCard>
         );
@@ -246,7 +251,7 @@ export function ScopeCard({
               {otaAction.label}
             </Text>
           </View>
-          <ExternalLinkGlyph />
+          <AssistantSheetExternalLinkGlyph />
         </Pressable>
       ) : (
         <View className="gap-xs px-[14px] py-md">
@@ -269,7 +274,7 @@ export function RefusalNotice({
 }): ReactElement {
   return (
     <OutlineCard testID="assistant-refusal" className={ICON_CARD}>
-      <InfoGlyph size={20} />
+      <AssistantSheetInfoGlyph size={20} />
       <Text
         testID="assistant-capabilities"
         className="flex-1 font-noto text-body text-ink"
@@ -323,7 +328,7 @@ export function FallbackNotice({
           다시 시도가 있는 응답 실패는 안내 카드 + 링크, 없는 솔버 불가 등은 한 줄 행 카드(Figma 5027:5106). */}
       {retryAction ? (
         <OutlineCard className={ICON_CARD}>
-          <InfoGlyph size={20} />
+          <AssistantSheetInfoGlyph size={20} />
           <View className="flex-1">
             <Text className="font-noto-bold text-body font-bold text-ink">
               도우미 없이도 계속할 수 있어요

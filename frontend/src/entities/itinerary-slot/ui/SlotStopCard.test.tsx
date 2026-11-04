@@ -11,7 +11,7 @@ import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
 
 import { ALT_LABEL } from '../config/altLabel';
 import { buildSlotKey } from '../lib/slotKey';
-import { ChevronRightGlyph } from './SlotGlyphs';
+import { ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import { SlotStopCard } from './SlotStopCard';
 
 /** 호스트가 누를 수 있는가 — Pressable 은 onPress 없이도 응답자 핸들러를 단다(02a ★6 · §5-B). */
@@ -240,21 +240,21 @@ describe('🔴 SlotStopCard · CS7 — 이름 press 어포던스', () => {
 
   it('TRIP-939 AC-7: onPressName 미주입이면 이름은 누를 수 없는 글자이고 옆 › 도 없다 (A-3 · Q4)', () => {
     // 준비·실행: 라이브 호출부 6곳의 현재 모양(이름 진입 미주입). 기본 렌더는 편집기 칩이 아니라
-    // 카드 안 ChevronRightGlyph 는 이름 옆 › 하나뿐이다(02a ★11).
+    // 카드 안 ChevronRight24Glyph 는 이름 옆 › 하나뿐이다(02a ★11).
     const { slotKey } = renderCard();
     const name = screen.getByTestId(id(slotKey)('name'));
 
     // 단언: 이름은 그대로 보이되(앵커) 버튼이 아니고, 누를 수 있어 보이는 › 가 없다.
     expect(name).toHaveTextContent('광안리 해변');
     expect(isTouchable(name)).toBe(false);
-    expect(screen.UNSAFE_queryAllByType(ChevronRightGlyph)).toHaveLength(0);
+    expect(screen.UNSAFE_queryAllByType(ChevronRight24Glyph)).toHaveLength(0);
   });
 
   it('onPressName 주입이면 이름이 버튼이고 › 가 1개다(짝 — 목적지가 생기면 되살림)', () => {
     const { slotKey } = renderCard({ onPressName: jest.fn() });
 
     expect(isTouchable(screen.getByTestId(id(slotKey)('name')))).toBe(true);
-    expect(screen.UNSAFE_queryAllByType(ChevronRightGlyph)).toHaveLength(1);
+    expect(screen.UNSAFE_queryAllByType(ChevronRight24Glyph)).toHaveLength(1);
   });
 });
 

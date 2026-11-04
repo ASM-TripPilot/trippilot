@@ -7,6 +7,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { MapPinGlyph } from '@/shared/ui/glyphs';
 import { Image } from '@/shared/ui/Image';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,10 +15,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { PlaceSubtitle } from '@/entities/place';
 import {
-  BackArrowGlyph,
+  ExecutionBackArrowGlyph,
   HeroPhotoGlyph,
-  HeroPinGlyph,
-  ShareGlyph,
+  ExecutionShareGlyph,
 } from '@/features/execution/index.view';
 import { MapView } from '@/shared/map';
 import { NoticeBanner } from '@/shared/ui/NoticeBanner';
@@ -204,7 +204,7 @@ export function PlaceDetailScreen({
           >
             {onPressBack ? (
               <CircleButton testID="execution-place-back" onPress={onPressBack}>
-                <BackArrowGlyph size={20} />
+                <ExecutionBackArrowGlyph size={20} />
               </CircleButton>
             ) : null}
             <View pointerEvents="none" className="flex-1" />
@@ -213,7 +213,7 @@ export function PlaceDetailScreen({
                 testID="execution-place-share"
                 onPress={onPressShare}
               >
-                <ShareGlyph size={19} />
+                <ExecutionShareGlyph size={19} />
               </CircleButton>
             ) : null}
           </View>
@@ -230,7 +230,11 @@ export function PlaceDetailScreen({
             </Text>
             {view.category !== null ? (
               <View className="flex-row items-center gap-[6px]">
-                <HeroPinGlyph testID="execution-place-subtitle-pin" />
+                <MapPinGlyph
+                  size={14}
+                  testID="execution-place-subtitle-pin"
+                  color="onPrimary"
+                />
                 <PlaceSubtitle
                   parts={[view.category]}
                   className="font-noto text-caption text-on-primary"

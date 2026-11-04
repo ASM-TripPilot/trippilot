@@ -1,11 +1,6 @@
 import type { ComponentType } from 'react';
 import Svg, { Path } from 'react-native-svg';
-import {
-  AlertCircleGlyph as SharedAlertCircleGlyph,
-  BackChevronGlyph as SharedBackChevronGlyph,
-  ChevronDownGlyph as SharedChevronDownGlyph,
-  SearchGlyph as SharedSearchGlyph,
-} from '@/shared/ui/glyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 
 // g01 위저드 1/2 전용 인라인 벡터 글리프(AuthGlyphs/OnboardingGlyphs/StayGlyphs/ExploreGlyphs
 // 패턴 계승 · Figma 파일 1MTF3dtptIrbg8gld5IdO2, 노드 1675:1183). 전부 Figma 벡터 path
@@ -16,16 +11,17 @@ import {
 // 스캔 가드 제외 관례, `docs/structure.md` §지금 작업하려면). SVG `stroke`/`fill`은
 // className을 못 받는다.
 
-const INK = '#222222';
-const BODY = '#3F3F3F';
-const MUTED = '#6A6A6A';
-const MUTED_SOFT = '#9AA1AB';
-const PRIMARY = '#FF385C';
-const PRIMARY_TEXT = '#C13515';
-const ON_PRIMARY = '#FFFFFF';
+const INK = COLOR_TOKENS.ink;
+const BODY = COLOR_TOKENS.body;
+const MUTED = COLOR_TOKENS.muted;
+const MUTED_SOFT = COLOR_TOKENS['muted-soft'];
+const PRIMARY = COLOR_TOKENS.primary;
+const PRIMARY_TEXT = COLOR_TOKENS['primary-text'];
+const ON_PRIMARY = COLOR_TOKENS['on-primary'];
 /** 등록 숙소 행의 비활성 색(Figma `2226:2027`) — 토큰 컬렉션에 없는 푸른 회색이다.
  * 같은 값이 `pages/trip/trip-new-step1/ui/TripWizardStep1Screen.tsx`의 제목 임의값 클래스에도 있다 —
  * 색을 바꿀 땐 두 자리를 함께 고친다(색은 어떤 테스트도 단언하지 않는다). */
+// eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill(비활성), 토큰 없음
 const DISABLED = '#C2CCD6';
 
 type GlyphProps = {
@@ -43,26 +39,8 @@ function companionStroke(selected?: boolean): string {
   return selected ? ON_PRIMARY : BODY;
 }
 
-// 앱바 뒤로가기(24) — Figma `1675:1185`.
-// 이전 달·뒤로 back chevron. 기본 ink 고정이나, g01 기간 시트(TRIP-737, `3627:2068`) 월 네비는
-// 좌우 대칭 muted 쌍이라 `muted`(#6A6A6A)를 additive 로 더한다(다음 달 `ChevronRightGlyph tone="muted"`
-// 와 짝). 좁은 유니온 — 범용 색상표는 안 만든다.
-export function BackChevronGlyph({
-  size = 24,
-  tone = 'ink',
-  testID,
-}: GlyphProps & { tone?: 'ink' | 'muted' }) {
-  return (
-    <SharedBackChevronGlyph
-      size={size}
-      color={tone === 'muted' ? 'muted' : 'ink'}
-      testID={testID}
-    />
-  );
-}
-
 // 여행지 칩 핀(14) — Figma `1860:2311`. 색은 primary가 아니라 primary-text(#C13515)다.
-export function PinGlyph({ size = 14, testID }: GlyphProps) {
+export function TripPinGlyph({ size = 14, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -119,7 +97,7 @@ export function RemoveGlyph({ size = 14, testID }: GlyphProps) {
 
 // 도시 추가 칩 +(14) — Figma `1860:2329`. 텍스트는 primary-text지만 아이콘은 primary다.
 // '꼭 갈 곳' 점선 박스의 +(20, `1740:1110`)는 같은 도형의 정비례 확대라 size로 겸한다.
-export function PlusGlyph({ size = 14, testID }: GlyphProps) {
+export function TripPlusGlyph({ size = 14, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -147,7 +125,7 @@ export function PlusGlyph({ size = 14, testID }: GlyphProps) {
 }
 
 // 날짜 카드 캘린더(22) — Figma `1675:1226`.
-export function CalendarGlyph({ size = 22, testID }: GlyphProps) {
+export function TripCalendarGlyph({ size = 22, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -185,18 +163,6 @@ export function CalendarGlyph({ size = 22, testID }: GlyphProps) {
         strokeLinejoin="round"
       />
     </Svg>
-  );
-}
-
-// 날짜 카드 chevron-down(20) — Figma `1675:1234`.
-export function ChevronDownGlyph({ size = 20, testID }: GlyphProps) {
-  return (
-    <SharedChevronDownGlyph
-      size={size}
-      color="mutedSoft"
-      strokeWidth={2}
-      testID={testID}
-    />
   );
 }
 
@@ -283,7 +249,7 @@ export function SoloGlyph({
 }
 
 // 동반 유형 '친구'(18) — Figma `1675:1258`. 라이브 default 선택 상태(흰색)로 실측했다.
-export function FriendsGlyph({
+export function TripFriendsGlyph({
   size = 18,
   selected,
   testID,
@@ -330,7 +296,7 @@ export function FriendsGlyph({
 }
 
 // 동반 유형 '연인'(18) — Figma `1675:1265`.
-export function HeartGlyph({
+export function TripHeartGlyph({
   size = 18,
   selected,
   testID,
@@ -356,7 +322,7 @@ export function HeartGlyph({
 }
 
 // 동반 유형 '가족'(18, 집 모양) — Figma `1675:1269`.
-export function FamilyGlyph({
+export function TripFamilyGlyph({
   size = 18,
   selected,
   testID,
@@ -396,7 +362,7 @@ export function FamilyGlyph({
 }
 
 // 취향 카드 반짝임(18, 채움) — Figma `1675:1277`.
-export function SparkleGlyph({ size = 18, testID }: GlyphProps) {
+export function TripSparkleGlyph({ size = 18, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -410,20 +376,6 @@ export function SparkleGlyph({ size = 18, testID }: GlyphProps) {
         fill={PRIMARY}
       />
     </Svg>
-  );
-}
-
-// 인라인 오류 경고(15) — Figma `2228:1733`(nightsErr) · `2226:2115`(dateErr). 제출 실패
-// 배너는 같은 도형을 18로 키워 쓴다(`2226:2122`) — 뷰박스를 그대로 스케일한 값이라 size
-// prop 하나로 겸한다(15px·18px 두 export가 좌표까지 정비례).
-export function AlertCircleGlyph({ size = 15, testID }: GlyphProps) {
-  return (
-    <SharedAlertCircleGlyph
-      size={size}
-      color="primary"
-      strokeWidth={1.83333}
-      testID={testID}
-    />
   );
 }
 
@@ -479,7 +431,7 @@ const BED_STROKE: Record<BedTone, string> = {
 // 등록 숙소 날짜 연계 침대(19) — Figma `2225:2363`(활성 #3F3F3F) · `2226:2027`(비활성
 // #C2CCD6) · `2226:1918`(대안 18px #9AA1AB). 세 노드의 path를 받아 대조하니 좌표까지
 // 정비례(19:18)라 색만 다른 같은 도형이었다 — AlertCircleGlyph처럼 size prop 하나로 겸한다.
-export function BedGlyph({
+export function TripBedGlyph({
   size = 19,
   tone = 'body',
   testID,
@@ -543,7 +495,7 @@ const CHEVRON_STROKE: Record<
   ink: INK,
 };
 
-export function ChevronRightGlyph({
+export function TripChevronRightGlyph({
   size = 18,
   tone = 'onPrimary',
   testID,
@@ -567,7 +519,7 @@ export function ChevronRightGlyph({
   );
 }
 
-// g02 후보 카드 `거점` 배지 안 마커(14, 흰색) — Figma `1866:2319`. 위 `PinGlyph`(물방울형)와
+// g02 후보 카드 `거점` 배지 안 마커(14, 흰색) — Figma `1866:2319`. 위 `TripPinGlyph`(물방울형)와
 // **다른 도형**이라 새로 그린다(근사 금지 규율). 배지 배경이 항상 분홍이라 색 분기가 없다.
 export function BaseBadgePinGlyph({ size = 14, testID }: GlyphProps) {
   return (
@@ -606,7 +558,7 @@ export function BaseBadgePinGlyph({ size = 14, testID }: GlyphProps) {
 // g02 후보 카드 우상단 하트(26, 채움) — Figma `1866:2316`. 이 목록의 출처가 `GET /saved-stays`라
 // 카드는 정의상 전부 저장된 숙소다 → 외곽(미저장) 상태가 이 화면에는 없다. 토글은 e04
 // (TRIP-192) 몫이라 이 칸은 그리기만 하고 심판을 걸지 않는다(02a ★16).
-export function HeartFilledGlyph({ size = 26, testID }: GlyphProps) {
+export function TripHeartFilledGlyph({ size = 26, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -624,8 +576,8 @@ export function HeartFilledGlyph({ size = 26, testID }: GlyphProps) {
 }
 
 // g02 지정됨 pill 안 체크(14) — Figma `1866:2332`. 기본 톤은 primaryText(#C13515) 보존(기존 렌더
-// 불변), g02 후보 선택 체크는 primary(#FF385C)다 — ChevronRightGlyph tone 확장 선례(좁은 유니온).
-export function CheckGlyph({
+// 불변), g02 후보 선택 체크는 primary(#FF385C)다 — TripChevronRightGlyph tone 확장 선례(좁은 유니온).
+export function TripCheckGlyph({
   size = 14,
   tone = 'primaryText',
   testID,
@@ -649,14 +601,9 @@ export function CheckGlyph({
   );
 }
 
-// g02 empty `숙소 둘러보기` 돋보기(20) — Figma `1708:1208`.
-export function SearchGlyph({ size = 20, testID }: GlyphProps) {
-  return <SharedSearchGlyph size={size} color="ink" testID={testID} />;
-}
-
 // g02 경고 삼각형 — error 배지 32px(`2456:1502`)과 blocked 안내행 20px(`2456:1514`)이 **같은
-// 노드**다(좌표·획이 32:20으로 정비례 — 실측). `BedGlyph` 선례대로 size prop 하나로 겸한다.
-export function WarningTriangleGlyph({ size = 32, testID }: GlyphProps) {
+// 노드**다(좌표·획이 32:20으로 정비례 — 실측). `TripBedGlyph` 선례대로 size prop 하나로 겸한다.
+export function TripWarningTriangleGlyph({ size = 32, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}

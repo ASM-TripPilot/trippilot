@@ -6,6 +6,7 @@ import {
   View,
   type ImageSourcePropType,
 } from 'react-native';
+import { ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import { Image } from '@/shared/ui/Image';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
@@ -14,12 +15,8 @@ import { isLargeText } from '@/shared/lib/fontScale';
 import { formatOpeningHoursLabel } from '../lib/openingHoursLabel';
 import { buildSlotKey } from '../lib/slotKey';
 import type { SlotProgressState } from '../lib/slotMapPin';
-import {
-  CheckGlyph,
-  ChevronRightGlyph,
-  MemoGlyph,
-  PhotoGlyph,
-} from './SlotGlyphs';
+import { SlotCheckGlyph, MemoGlyph, PhotoGlyph } from './SlotGlyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-746 · i01 허브 시트의 슬롯 카드 3상태(entities · presentation-only, useState 0).
@@ -40,14 +37,14 @@ import {
 
 // 그림자 색은 토큰이 없다 — SlotStopCard·DayChipOverlay 의 `#000000` 스타일 객체 관례.
 const DONE_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 5,
   elevation: 2,
 } as const;
 const ACTIVE_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.08,
   shadowRadius: 8,
@@ -164,7 +161,7 @@ export function SlotProgressCard({
       >
         {nameText()}
         <View testID={fieldId('chevron')}>
-          <ChevronRightGlyph size={18} tone="ink" />
+          <ChevronRight24Glyph size={18} color="ink" />
         </View>
       </Pressable>
     ) : (
@@ -432,7 +429,7 @@ export function SlotProgressCard({
 
   const hoursLabel = formatOpeningHoursLabel(slot.openingHours);
   const disabledIcons = [
-    { role: 'disabled-check', icon: <CheckGlyph size={15} /> },
+    { role: 'disabled-check', icon: <SlotCheckGlyph size={15} /> },
     { role: 'disabled-photo', icon: <PhotoGlyph size={15} tone="disabled" /> },
     { role: 'disabled-memo', icon: <MemoGlyph size={15} tone="disabled" /> },
   ];
@@ -478,7 +475,7 @@ export function SlotProgressCard({
                 onPress={onPressArrive}
                 className="flex-row items-center gap-[4px] rounded-button bg-primary px-md py-[6px]"
               >
-                <CheckGlyph size={15} tone="onPrimary" />
+                <SlotCheckGlyph size={15} tone="onPrimary" />
                 <Text className="font-noto-bold text-label font-bold text-on-primary">
                   도착
                 </Text>

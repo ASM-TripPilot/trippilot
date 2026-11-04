@@ -22,10 +22,10 @@ import { ChangeSummaryRow } from './ChangeSummaryRow';
 import { isGuideText } from '../model/fillTemplate';
 import {
   EmptyCircleGlyph,
-  LocationOffGlyph,
+  ReflectionLocationOffGlyph,
   PhotoOffGlyph,
   ReflectionMagazine,
-  RetryGlyph,
+  ReflectionRetryGlyph,
   type MagazineVM,
   type RecordBarNav,
 } from '@/features/reflection/index.view';
@@ -311,7 +311,7 @@ export function DailyReflectionScreen({
       testID="reflection-daily-map-notice"
       className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
     >
-      <LocationOffGlyph size={30} />
+      <ReflectionLocationOffGlyph size={30} />
       {mapNotice ? (
         // 제목·본문을 각각 leaf Text 로 — 객체를 한 슬롯에 넣으면 React child 에러라 2줄로 나눈다.
         <>
@@ -472,7 +472,7 @@ export function DailyReflectionScreen({
                   onPress={onConfirm}
                   className="mt-sm flex-row items-center gap-[6px] rounded-button border border-hairline-strong bg-canvas px-lg py-sm"
                 >
-                  <RetryGlyph size={16} />
+                  <ReflectionRetryGlyph size={16} />
                   <Text className="font-noto-bold text-label font-bold text-ink">
                     다시 시도
                   </Text>

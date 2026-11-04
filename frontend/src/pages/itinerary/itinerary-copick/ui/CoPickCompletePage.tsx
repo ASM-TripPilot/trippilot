@@ -14,7 +14,7 @@ import {
   sheetRowKeys,
 } from '@/features/itinerary';
 import { timeBandLabel } from '@/entities/itinerary-slot';
-import { WarningTriangleGlyph } from '@/features/itinerary';
+import { ItineraryWarningTriangleGlyph } from '@/features/itinerary';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { SlotStopCard } from '@/entities/itinerary-slot';
 import {
@@ -65,7 +65,7 @@ export function CoPickCompletePage({
       <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
         <StateNotice
           testID="itinerary-copick-complete-error"
-          icon={<WarningTriangleGlyph />}
+          icon={<ItineraryWarningTriangleGlyph />}
           title="일정을 불러올 수 없어요"
           description="잠시 후 다시 시도해 주세요."
           actions={[

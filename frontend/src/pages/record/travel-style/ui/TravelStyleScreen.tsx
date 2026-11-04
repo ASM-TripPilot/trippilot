@@ -1,3 +1,4 @@
+import { BackArrowGlyph } from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,7 +11,6 @@ import type {
 import type { StyleFace } from '@/entities/style-analysis';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 
-import { BackArrowGlyph } from '@/features/reflection/index.view';
 import { CategoryBarList } from './CategoryBarList';
 import { StatTile } from './StatTile';
 import { AppBar } from '@/shared/ui/AppBar';

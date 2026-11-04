@@ -2,7 +2,8 @@ import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { IndeterminateBar } from './IndeterminateBar';
-import { BackChevronGlyph, CheckGlyph, FullAiGlyph } from './MapSheetGlyphs';
+import { FullAiGlyph, BackChevronGlyph, CheckGlyph } from '@/shared/ui/glyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-790 · h07 부분 결과의 상단 진행 카드(widgets · presentation-only, useState 0). 전면 지도 위
@@ -31,7 +32,7 @@ const GAUGE_TITLE = 'AI가 일정을 짜고 있어요';
 // 진행 카드 그림자(Figma 0 4 8 rgba(0,0,0,0.08)). `#000000` 은 브랜드 팔레트(토큰 raw-hex 가드
 // 목록) 밖이라 그림자 색으로 정당하다(MapSheetShell 형제·DayChipOverlay 선례 동형).
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.08,
   shadowRadius: 8,
@@ -40,7 +41,7 @@ const cardShadow = {
 
 // 원형 back 버튼 그림자(Figma 0 2 10 rgba(0,0,0,0.06)).
 const backShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
@@ -102,7 +103,7 @@ export function GenerationProgressCard({
       >
         {/* 제목 행 — ✦ 스파클 + 안내 문구(+ i05 [취소]). 퍼센트(67%)는 계약에 없어 안 그린다. */}
         <View className="flex-row items-center gap-sm">
-          <FullAiGlyph size={18} />
+          <FullAiGlyph size={18} color="primary" />
           <Text className="flex-1 font-noto-bold text-label font-bold text-ink">
             {title}
           </Text>

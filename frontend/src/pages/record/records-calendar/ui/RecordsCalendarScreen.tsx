@@ -4,8 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PastTripList } from './PastTripList';
 import {
-  CalendarGlyph,
-  ChevronDownGlyph,
+  RecordCalendarGlyph,
+  RecordChevronDownGlyph,
   LegendChevronGlyph,
 } from '@/features/record';
 import { TripCalendarMonth } from './TripCalendarMonth';
@@ -29,7 +29,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  * - 지난 여행이 0건이어도(총 여행>0) 캘린더는 뜬다.
  *
  * 경계(G2·프리뷰 격리): `@/shared/api`·`@/features/*`(stay/trip/itinerary/reflection/execution)를 import
- * 하지 않는다 — 빈 상태 아이콘은 record 자체 글리프(`CalendarGlyph`)를 쓴다.
+ * 하지 않는다 — 빈 상태 아이콘은 record 자체 글리프(`RecordCalendarGlyph`)를 쓴다.
  *
  * legend(TRIP-1084)는 페이지가 `buildMonthLegends`로 만든 `monthLegends`(옵셔널)를 받아 앞 줄만 그리고,
  * '더 보기 N'·묶음 줄 누름으로 같은 자리에서 펼친다. 펼침 두 가지는 화면 로컬 UI 상태이고 월이 바뀌면
@@ -316,7 +316,7 @@ function MonthLegendBlock({
             testID="record-calendar-legend-more-chevron"
             style={showAll ? { transform: [{ rotate: '180deg' }] } : undefined}
           >
-            <ChevronDownGlyph />
+            <RecordChevronDownGlyph />
           </View>
         </Pressable>
       )}
@@ -367,7 +367,7 @@ export function RecordsCalendarScreen({
         <View className="flex-1 items-center justify-center px-lg">
           <StateNotice
             testID="record-calendar-empty"
-            icon={<CalendarGlyph size={32} />}
+            icon={<RecordCalendarGlyph size={32} />}
             title="아직 기록된 여행이 없어요"
             description="여행을 만들고 다녀오면 이곳에서 사진과 메모로 돌아볼 수 있어요"
             actions={[

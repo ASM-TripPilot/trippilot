@@ -12,6 +12,13 @@
  * 대기(disabled)를 그리되 저장/해제 판정·네트워크는 모른다(TRIP-417, 미지정=빈 하트 무회귀).
  * `다시 시도`는 `onRetry`(=`refetch`)에 실배선된다(Q8).
  */
+import {
+  ChevronRightGlyph,
+  WarningTriangleGlyph,
+  SearchGlyph,
+  MapPinGlyph,
+  BackChevronGlyph,
+} from '@/shared/ui/glyphs';
 import type { ReactElement, ReactNode } from 'react';
 import {
   FlatList,
@@ -36,18 +43,14 @@ import { stayKey } from '@/features/save-stay/index.view';
 import { PartialFailureBanner } from './PartialFailureBanner';
 import { SkeletonList } from './SkeletonList';
 import {
-  BackChevronGlyph,
-  ChevronDownGlyph,
-  ChevronRightGlyph,
-  FilterSlidersGlyph,
-  MapPinGlyph,
-  PlusGlyph,
-  SearchGlyph,
-  WarningTriangleGlyph,
+  StayChevronDownGlyph,
+  StayFilterSlidersGlyph,
+  StayPlusGlyph,
 } from '@/features/stay/index.view';
 import { AppBar } from '@/shared/ui/AppBar';
 import { FAB_STACK_TOP } from '@/shared/ui/toastBottom';
 import { useToastBottom } from '@/shared/ui/useToastBottom';
+import { COLOR_TOKENS } from '@/shared/config';
 
 export interface StaySearchScreenProps {
   region: string;
@@ -130,7 +133,7 @@ const listContentStyle = { flexGrow: 1 } as const;
 // 검색바·FAB 소프트 그림자 — className 으로 못 줘 style prop 으로 옮긴다. shadowColor '#000000'
 // 은 토큰화 대상 밖이라 raw-hex 가드(V1) 사정거리 밖(카드 cardShadow·HomeScreen 선례).
 const searchShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 8,
@@ -138,7 +141,7 @@ const searchShadow = {
 } as const;
 
 const fabShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.16,
   shadowRadius: 12,
@@ -148,7 +151,7 @@ const fabShadow = {
 // empty 등록 유도 카드 틀 소프트 그림자(Figma 0 2 10 rgba(0,0,0,0.06), TRIP-726 AC-E1) —
 // searchShadow(radius 8)보다 Figma 실측 radius 만 2 크다(결과카드 cardShadow 0/4/16/.08 보다 약함).
 const softCardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
@@ -235,9 +238,9 @@ function FilterChip({
         </View>
       ) : null}
       {axis === 'more' ? (
-        <FilterSlidersGlyph size={15} />
+        <StayFilterSlidersGlyph size={15} />
       ) : (
-        <ChevronDownGlyph size={14} />
+        <StayChevronDownGlyph size={14} />
       )}
     </Pressable>
   );
@@ -315,7 +318,7 @@ function RegisterPromptCard({
       className="w-full flex-row items-center gap-[14px] rounded-card border border-hairline bg-canvas p-md"
     >
       <View className="h-10 w-10 items-center justify-center rounded-pill bg-primary-pale">
-        <PlusGlyph size={22} />
+        <StayPlusGlyph size={22} />
       </View>
       <View className="flex-1 gap-xs">
         <Text className="font-noto-bold text-[14px] font-bold text-ink">
@@ -325,7 +328,7 @@ function RegisterPromptCard({
           찾는 숙소가 없으면 위치 · 이름으로 직접 등록
         </Text>
       </View>
-      <ChevronRightGlyph size={20} />
+      <ChevronRightGlyph size={20} strokeWidth={1.75} />
     </Pressable>
   );
 }
@@ -410,7 +413,7 @@ function FilterZeroNotice({
   return (
     <StateNotice
       testID="stay-search-filterzero"
-      icon={<FilterSlidersGlyph size={32} tone="primary" />}
+      icon={<StayFilterSlidersGlyph size={32} tone="primary" />}
       title={`‘${label}’ 필터가 0건을 만들었어요`}
       description="필터를 해제하면 더 많은 숙소를 볼 수 있어요"
       actions={[
@@ -445,7 +448,7 @@ function ErrorNotice({
   return (
     <StateNotice
       testID="stay-search-error"
-      icon={<WarningTriangleGlyph size={32} tone="primary" />}
+      icon={<WarningTriangleGlyph size={32} color="primary" />}
       title="지금 숙소 정보를 불러올 수 없어요"
       description="잠시 후 다시 시도해 주세요"
       actions={[
@@ -524,7 +527,7 @@ function ListEmptyBlock({
       <View className="w-full flex-1 items-center justify-center">
         <StateNotice
           testID="stay-search-name-empty"
-          icon={<SearchGlyph size={32} tone="mutedSoft" />}
+          icon={<SearchGlyph size={32} color="mutedSoft" strokeWidth={1.8} />}
           title="검색 결과가 없어요"
           description="다른 이름이나 지역으로 찾아보세요"
           actions={actions}
@@ -619,7 +622,11 @@ export function StaySearchScreen({
                     style={searchShadow}
                     className="h-12 flex-row items-center gap-sm rounded-pill border border-hairline bg-canvas px-md"
                   >
-                    <SearchGlyph size={20} tone="mutedSoft" />
+                    <SearchGlyph
+                      size={20}
+                      color="mutedSoft"
+                      strokeWidth={1.8}
+                    />
                     <TextInput
                       testID="stay-search-name-input"
                       value={nameQuery ?? ''}
@@ -723,7 +730,7 @@ export function StaySearchScreen({
           style={fabShadow}
           className="absolute bottom-[84px] right-lg h-[56px] w-[56px] items-center justify-center rounded-pill bg-primary"
         >
-          <PlusGlyph size={24} tone="onPrimary" />
+          <StayPlusGlyph size={24} tone="onPrimary" />
         </Pressable>
       </View>
     </SafeAreaView>

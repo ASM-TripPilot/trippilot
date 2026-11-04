@@ -9,7 +9,7 @@ import type { SavedStay } from '@/shared/api/index.schemas';
 
 import { stayCoverFor } from '@/test-support/placeCoverFixtures';
 import { StaySelectSheet } from './StaySelectSheet';
-import { CheckGlyph } from '@/features/trip/index.view';
+import { TripCheckGlyph } from '@/features/trip/index.view';
 
 /**
  * TRIP-673 g02 숙소 선택 시트(S9) → TRIP-741 후보 카드 Figma 정합.
@@ -34,7 +34,7 @@ import { CheckGlyph } from '@/features/trip/index.view';
  *
  * 매처 근거: `toHaveTextContent`는 문자열 인자면 완전일치(카드가 여러 Text 를 이어붙이므로 반드시
  * RegExp 부분 포함) · `toBeSelected()`/`toBeDisabled()`는 accessibilityState 를 읽는다(리포 선례 다수) ·
- * `UNSAFE_getByType(CheckGlyph).props`는 합성 컴포넌트 원본 prop 을 노출한다(실측 P2).
+ * `UNSAFE_getByType(TripCheckGlyph).props`는 합성 컴포넌트 원본 prop 을 노출한다(실측 P2).
  */
 
 function stay(over: Partial<SavedStay> = {}): SavedStay {
@@ -289,8 +289,8 @@ describe('S9 · 선택 체크 톤 (AC-2)', () => {
   it('짝 · 미선택 후보엔 체크가 없다 (색이 아니라 존재로 잼)', () => {
     renderSheet({ selectedSavedStayId: 'stay-gwangalli' });
 
-    // 선택 1개 → CheckGlyph 정확히 1개(2개 이상이면 UNSAFE_getAllByType 로 검출됨).
-    expect(screen.UNSAFE_getAllByType(CheckGlyph)).toHaveLength(1);
+    // 선택 1개 → TripCheckGlyph 정확히 1개(2개 이상이면 UNSAFE_getAllByType 로 검출됨).
+    expect(screen.UNSAFE_getAllByType(TripCheckGlyph)).toHaveLength(1);
   });
 });
 

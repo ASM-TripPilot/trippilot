@@ -28,6 +28,7 @@ import {
   NAV_BAR_SIDE,
 } from './navBarLayout';
 import { useToastBottom } from './useToastBottom';
+import { COLOR_TOKENS } from '../config';
 
 export type ShellTabKey = 'home' | 'explore' | 'itinerary' | 'records' | 'my';
 
@@ -58,8 +59,8 @@ export interface BottomTabBarProps {
 }
 
 // 탭바 전용 아이콘 색 — screens/ 스코프 밖(shared/ui)이라 raw hex가 D-3 가드 대상이 아니다.
-const PRIMARY = '#FF385C';
-const MUTED = '#6A6A6A';
+const PRIMARY = COLOR_TOKENS.primary;
+const MUTED = COLOR_TOKENS.muted;
 
 type TabIconProps = { size?: number };
 
@@ -103,7 +104,7 @@ function ExploreIconActive({ size = NAV_BAR_ICON_SIZE }: TabIconProps) {
       />
       <Path
         d="M17.1 9.90005L14.625 14.6251L9.89999 17.1001L12.375 12.3751L17.1 9.90005Z"
-        fill="#ffffff"
+        fill={COLOR_TOKENS.canvas}
       />
     </Svg>
   );
@@ -138,7 +139,11 @@ export function ItineraryIconActive({
         d="M20.475 5.17511H6.52501C4.90958 5.17511 3.60001 6.48468 3.60001 8.10011V20.2501C3.60001 21.8655 4.90958 23.1751 6.52501 23.1751H20.475C22.0904 23.1751 23.4 21.8655 23.4 20.2501V8.10011C23.4 6.48468 22.0904 5.17511 20.475 5.17511Z"
         fill={PRIMARY}
       />
-      <Path d="M3.60001 10.5749H23.4" stroke="#ffffff" strokeWidth={1.8} />
+      <Path
+        d="M3.60001 10.5749H23.4"
+        stroke={COLOR_TOKENS.canvas}
+        strokeWidth={1.8}
+      />
     </Svg>
   );
 }

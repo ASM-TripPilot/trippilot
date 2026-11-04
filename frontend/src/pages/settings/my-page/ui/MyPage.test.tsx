@@ -27,11 +27,10 @@ import {
 import { renderWithQueryClient, settle } from '@/test-support/queryRender';
 import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
 import { MyPage } from './MyPage';
-import { ChevronRightGlyph as TripChevronGlyph } from '@/entities/trip';
+import { ChevronRight24Glyph, ChevronRightGlyph } from '@/shared/ui/glyphs';
 import {
-  ChevronRightGlyph as SettingsChevronGlyph,
-  BookmarkGlyph,
-  HeartGlyph,
+  SettingsBookmarkGlyph,
+  SettingsHeartGlyph,
 } from '@/features/settings/ui/SettingsGlyphs';
 import { routerSpies } from '@/test-support/expoRouterMock';
 import { NO_ITINERARY } from '@/test-support/tripItineraryCols';
@@ -786,8 +785,8 @@ describe('지난 여행 카드 (옛 .l03empty)', () => {
       ).toBeOnTheScreen();
       // chevron — 어느 층의 ChevronRightGlyph 든 하나 이상(글리프 선택은 구현 자유).
       const chevrons =
-        card.findAllByType(TripChevronGlyph).length +
-        card.findAllByType(SettingsChevronGlyph).length;
+        card.findAllByType(ChevronRightGlyph).length +
+        card.findAllByType(ChevronRight24Glyph).length;
       expect(chevrons).toBeGreaterThanOrEqual(1);
 
       // 단언(부정): 옛 칩 카드 · 숙소/일정 칩 · M.D~M.D 표기가 이 섹션에 없다.
@@ -1111,7 +1110,9 @@ describe('Figma 배선 결과 (옛 .l03parity)', () => {
     it('첫 행 아이콘은 북마크가 아니다(Figma 침대)', () => {
       renderWithQueryClient(<MyPage />);
 
-      expect(screen.UNSAFE_queryAllByType(BookmarkGlyph)).toHaveLength(0);
+      expect(screen.UNSAFE_queryAllByType(SettingsBookmarkGlyph)).toHaveLength(
+        0
+      );
       // 짝 앵커: 첫 행은 그려졌다.
       expect(screen.getByTestId('my-stays-row')).toBeOnTheScreen();
     });
@@ -1298,7 +1299,7 @@ describe('조회 → 모델 → 배치 (옛 .integration)', () => {
       expect(mockPush).toHaveBeenCalledWith('/records');
 
       // 단언(부재): 장식 하트 버튼은 여전히 없다.
-      expect(screen.UNSAFE_queryAllByType(HeartGlyph)).toHaveLength(0);
+      expect(screen.UNSAFE_queryAllByType(SettingsHeartGlyph)).toHaveLength(0);
     });
   });
 });

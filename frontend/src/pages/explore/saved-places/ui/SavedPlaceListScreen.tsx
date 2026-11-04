@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { WarningTriangleGlyph, MapPinGlyph } from '@/shared/ui/glyphs';
 import type { SavedPlace } from '@/shared/api/index.schemas';
 import { CollageEmptyState } from '@/shared/ui/CollageEmptyState';
 import { heartSaveLabel } from '@/shared/ui/HeartButton';
@@ -15,10 +16,8 @@ import type { PlaceListState } from '@/features/explore/index.view';
 import type { PlaceSaveNotice } from '@/features/save-place/index.view';
 import { SAVED_PLACE_BADGE } from '../model/savedPlaceList';
 import {
-  BackChevronGlyph,
-  MapPinGlyph,
-  SearchGlyph,
-  WarningTriangleGlyph,
+  ExploreBackChevronGlyph,
+  ExploreSearchGlyph,
 } from '@/features/explore/index.view';
 import { NoticeBanner } from '@/shared/ui/NoticeBanner';
 
@@ -86,7 +85,7 @@ function AppBar({
         onPress={onBack}
         className="h-10 w-10 items-center justify-center"
       >
-        <BackChevronGlyph size={24} />
+        <ExploreBackChevronGlyph size={24} />
       </Pressable>
       <View className="gap-xs">
         <Text className="font-noto-bold text-[18px] font-bold text-ink">
@@ -191,7 +190,7 @@ function SavedPlaceRow({
             testID={`explore-saved-region-${saved.savedPlaceId}`}
             className="flex-row items-center gap-xs"
           >
-            <MapPinGlyph size={13} tone="muted" />
+            <MapPinGlyph size={13} color="muted" />
             <Text className="font-noto text-caption text-muted">
               {place.region}
             </Text>
@@ -367,7 +366,7 @@ function ErrorBlock({ onRetry }: { onRetry?: () => void }): ReactElement {
     <View className="w-full items-center justify-center px-lg pt-xl">
       <StateNotice
         testID="explore-saved-error"
-        icon={<WarningTriangleGlyph size={32} />}
+        icon={<WarningTriangleGlyph size={32} color="primary" />}
         title="담은 장소를 불러올 수 없어요"
         description="잠시 후 다시 시도해 주세요"
         actions={[
@@ -424,7 +423,7 @@ function EmptyBlock({
       ctaTestID="explore-saved-browse"
       ctaLabel="장소 둘러보기"
       ctaIcon={
-        <SearchGlyph
+        <ExploreSearchGlyph
           size={19}
           tone="on-primary"
           testID="explore-saved-browse-icon"

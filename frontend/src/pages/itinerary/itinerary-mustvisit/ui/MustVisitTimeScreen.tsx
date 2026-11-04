@@ -1,6 +1,13 @@
 import type { ReactElement } from 'react';
 import { useContext, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  ChevronDownGlyph,
+  InfoCircleGlyph,
+  AlertCircleGlyph,
+  BackChevronGlyph,
+  ClockGlyph,
+} from '@/shared/ui/glyphs';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import {
   SafeAreaInsetsContext,
@@ -22,13 +29,7 @@ import {
   type MustVisitTimeForm,
   type startTimeOptions,
 } from '@/features/add-must-visit';
-import {
-  AlertCircleGlyph,
-  BackChevronGlyph,
-  ChevronDownGlyph,
-  ClockGlyph,
-  InfoCircleGlyph,
-} from '@/features/itinerary/index.view';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * h07 방문 시각 지정 — Figma `1904:1083`.
@@ -64,7 +65,7 @@ const BLOCK_REASON_TEXT: Record<'DATE_MISSING' | 'START_MISSING', string> = {
 
 // 카드·세그먼트 그림자(Figma `0px 2px 10px rgba(0,0,0,0.06)`) — 그림자는 토큰 대상이 아니다.
 const softShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
@@ -341,7 +342,7 @@ export function MustVisitTimeScreen({
 
             {duplicateText === undefined ? null : (
               <View className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline bg-primary-pale px-[14px] py-md">
-                <InfoCircleGlyph tone="primaryText" />
+                <InfoCircleGlyph color="primaryText" />
                 <Text
                   testID="itinerary-mustvisit-time-duplicate"
                   className="flex-1 font-noto text-label text-primary-text"
@@ -353,7 +354,7 @@ export function MustVisitTimeScreen({
 
             {leaveWarningText === undefined ? null : (
               <View className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline bg-primary-pale px-[14px] py-md">
-                <InfoCircleGlyph tone="primaryText" />
+                <InfoCircleGlyph color="primaryText" />
                 <Text
                   testID="itinerary-mustvisit-time-leave-warning"
                   className="flex-1 font-noto text-label text-primary-text"

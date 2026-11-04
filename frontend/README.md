@@ -19,7 +19,7 @@ React Native + Expo (TypeScript strict) 클라이언트.
 | 소셜 로그인 | 어댑터 인터페이스 1개 뒤 프로바이더별 구현 — **카카오·네이버는 네이티브 SDK**(@react-native-seoul/kakao-login·naver-login — 카카오톡·네이버앱 간편 로그인, 미설치 시 웹 폴백) · Apple은 expo-apple-authentication · Google은 expo-auth-session | 검증·세션 발급은 전부 서버, 앱에 클라이언트 시크릿은 **원칙적으로** 없음(예외는 아래 참고). 어댑터가 서버 전달 자격 증명(인가 코드 또는 SDK 발급 토큰)을 표준화 — 백엔드 `/auth/social/{provider}` code 경로와 `/auth/social/{provider}/token` 토큰 경로(TRIP-210)를 provider 별로 나눠 탄다 |
 | 애니메이션·제스처 | react-native-reanimated + react-native-gesture-handler + @gorhom/bottom-sheet | 바텀시트(제휴 고지·외부 지도 선택·필터)가 전역 UI 패턴. 네이티브 모듈이라 최초 스캐폴드에 포함 — 나중에 추가하면 EAS 재빌드 유발 |
 | 크래시 리포팅 | Sentry (@sentry/react-native + Expo config plugin) | 크래시·JS 오류·성능 수집. `beforeSend` 스크러빙으로 토큰·PII 차단 — "크래시 리포트에 토큰 미포함" 불변식의 집행 지점 |
-| 기기 능력 | expo-notifications(푸시, FCM/APNs) · expo-location(위치, 포그라운드 한정) · @react-native-community/netinfo(네트워크 상태) | `features/notification`·`shared/location`의 구현 스택. netinfo는 부트스트랩 게이트의 네트워크 상태 감지(`useBootstrapGate`) |
+| 기기 능력 | expo-notifications(푸시, FCM/APNs) · expo-location(위치, 포그라운드 한정) · @react-native-community/netinfo(네트워크 상태) | `pages/settings`(알림 설정·알림함)·`shared/push`·`shared/location`의 구현 스택. netinfo는 부트스트랩 게이트의 네트워크 상태 감지(`useBootstrapGate`) |
 | 스타일링 | NativeWind 4 — **tailwindcss는 3.4.x 고정(4.x 비호환)** | 디자인 토큰을 tailwind.config로 일원화, 화면 양산 속도. 공용 컴포넌트는 `shared/ui` 경유 |
 | API 클라이언트 | orval 코드젠 — `backend/docs/design/openapi.yaml` → axios 클라이언트 + TanStack Query 훅 + Zod 스키마 | 클라이언트 타입 ↔ 스펙 문서의 drift 차단. §API 계층 참고 |
 | 패키지 매니저 | pnpm | 속도·엄격한 의존성 해석 |
@@ -69,7 +69,7 @@ frontend/
   
   애매하면 pages에 둔다. 한 곳만 쓰는 feature·entity·widget은 그 소비처로 되돌린다.
 - **어느 층으로 빼는가**: 여러 화면이 공유하는 사용자 행동(행동 + 그 UI)은 `features`, 도메인 모델은 `entities`, 업무 규칙이 없는 부품·유틸·API 클라이언트는 `shared`, 앱 전역 설정·레이아웃은 `app`. 업무 규칙(제품이 자기 데이터에 거는 규칙)은 `shared`에 두지 않는다.
-- **widgets**: 공식이 비권장하는 층이다(적극 도입하지 말 것을 권하되, 기존 슬라이스는 유효). 새 widget은 기본적으로 만들지 않고, 먼저 pages·app에서 조립(Strategy C)하거나 features·shared로 보낸다. 그래도 아래를 **모두** 만족하면 만든다 — ① 추출 규칙 세 조건 ② 여러 feature를 엮는 UI 덩어리라 features·shared 어디에도 맞지 않는다 ③ page에서 조립하면 여러 화면에 같은 조립 코드가 반복된다. 만들 때는 그 이유를 슬라이스 안 주석으로 남긴다. 여러 화면이 쓰는 기존 두 슬라이스(`map-sheet-shell` · `time-sheet`)는 유지하고, 한 화면만 쓰는 슬라이스는 그 page로 되돌린다(TRIP-1143).
+- **widgets**: 공식이 비권장하는 층이다(적극 도입하지 말 것을 권하되, 기존 슬라이스는 유효). 새 widget은 기본적으로 만들지 않고, 먼저 pages·app에서 조립(Strategy C)하거나 features·shared로 보낸다. 그래도 아래를 **모두** 만족하면 만든다 — ① 추출 규칙 세 조건 ② 여러 feature를 엮는 UI 덩어리라 features·shared 어디에도 맞지 않는다 ③ page에서 조립하면 여러 화면에 같은 조립 코드가 반복된다. 만들 때는 그 이유를 슬라이스 안 주석으로 남긴다. TRIP-1143 당시 여러 화면이 쓰던 두 슬라이스(`map-sheet-shell` · `time-sheet`)는 유지했고, 한 화면만 쓰는 슬라이스는 그 page로 되돌렸다(지금 목록은 `src/widgets` 디렉토리).
 - **entities**: 조심해서 쓴다 — 거의 모든 층이 보는 층이라 변경이 넓게 퍼진다. 순수 CRUD·전송 타입(DTO)은 entity가 아니라 `shared/api` 소관이다(점검은 TRIP-1155).
 - **슬라이스 그룹**: pages는 여정 단계로 묶는다 — `auth · onboarding · explore · stay · trip · itinerary · live · record · settings`(TRIP-1156). 그룹 폴더는 탐색용일 뿐이라 그 자체에 세그먼트·`index.ts`를 두지 않는다.
 - **라우팅 폴더 ≠ FSD app 층**: Expo Router의 라우트 폴더(루트 `app/`)는 프레임워크 영역이고 FSD 층이 아니다. 라우트 파일에는 로직을 두지 않고 `src/pages`의 화면을 꽂기만 한다. FSD app 층(`src/app/`)과 `shared`는 슬라이스 없이 세그먼트로만 구성하며, 세그먼트 이름은 주제가 아니라 목적(`ui`·`api`·`lib`·`config`, 인프라 세그먼트 `map`·`location`·`push` 등)으로 짓는다 — 날짜·버전 비교 같은 유틸은 `shared/lib`.
@@ -85,12 +85,12 @@ frontend/
 - **공개 API(`index.ts`)**: 슬라이스 밖에서는 그 슬라이스의 `index.ts`로만 import한다. `shared`는 슬라이스가 없으므로 세그먼트(또는 컴포넌트 폴더)마다 `index.ts`를 둔다.
   - **딥 임포트 금지(TRIP-1157)**: 슬라이스 밖에서 `@/features/itinerary/model/planMapCenter`처럼 내부 파일을 직접 물면 lint error다. 진입점은 슬라이스(또는 shared 세그먼트) 루트의 `index.ts`와 `index.<이름>.ts`(`index.view`·`index.schemas`·`index.hooks`)뿐이다. shared/ui·shared/lib 루트 직속 파일은 세그먼트 index 없이 직접 import한다.
   - **두 번째 진입점 `index.view.ts`**: 네트워크·컨테이너를 싣는 슬라이스는 순수 뷰·글리프·config·순수 model만 모은 `index.view.ts`를 따로 둔다. 개발 프리뷰처럼 네트워크 없이 그려야 하는 소비자는 이것을 문다 — `index.ts`를 물면 슬라이스 전체가 평가돼 프리뷰 지뢰(`devPreviewReleaseGate`)가 터진다. 새 공개 심볼을 view에도 넣을지는 "그 정의 모듈이 네트워크·컨테이너에 닿는가"로만 정한다. 타입은 `export type { … }`으로 낸다 — `export { T } from`은 타입이어도 런타임 `require`로 남는다.
-  - **shared/api 진입점**: 본체 `@/shared/api`(클라이언트·토큰·에러 헬퍼) · `@/shared/api/index.client`(생성 훅이 없는 경로를 부르는 손수 짠 어댑터용 — TRIP-1410) · `@/shared/api/index.schemas`(생성 타입) · `@/shared/api/index.hooks`(생성 react-query 훅 12태그 — 물면 네트워크 계층이 실린다) · 태그 입구 4개 `index.{trips,places,saved-stays,notification}`(태그 하나씩 — `index.hooks`가 이것들을 다시 낸다). 본체 index로 되돌아오는 헬퍼(`generationInProgress`)는 순환을 피해 `index.trips`로 낸다.
-    - **부팅 경로(레이아웃·홈이 import로 닿는 파일) 소비처는 태그 입구, 그 밖은 `index.hooks`** — 부팅 때 12태그를 다 평가하지 않게(TRIP-1716, `node scripts/boot-import-count.cjs`로 센다).
+  - **shared/api 진입점**: 본체 `@/shared/api`(클라이언트·토큰·에러 헬퍼) · `@/shared/api/index.client`(생성 훅이 없는 경로를 부르는 손수 짠 어댑터용 — TRIP-1410) · `@/shared/api/index.schemas`(생성 타입) · `@/shared/api/index.hooks`(생성 react-query 훅 전 태그 — 태그 목록은 `orval.config.ts` `filters.tags`, 물면 네트워크 계층이 실린다) · 태그 입구 `index.{trips,places,saved-stays,notification}`(태그 하나씩 — `index.hooks`가 이것들을 다시 낸다). 본체 index로 되돌아오는 헬퍼(`generationInProgress`)는 순환을 피해 `index.trips`로 낸다.
+    - **부팅 경로(레이아웃·홈이 import로 닿는 파일) 소비처는 태그 입구, 그 밖은 `index.hooks`** — 부팅 때 생성 훅 전 태그를 평가하지 않게(TRIP-1716, `node scripts/boot-import-count.cjs`로 센다).
   - **테스트**: `jest.mock`·`jest.requireActual` 등 jest 계열 지정자, 목 타이핑(`typeof import`)·`spyOn` 대상 네임스페이스, 공개 API에 없는 테스트 전용 심볼은 정의 모듈(딥 경로)을 겨눈다 — 테스트 때문에 index를 넓히지 않는다. 배럴을 통째로 목으로 바꾸는 테스트는 팩토리 맨 앞에서 `jest.requireActual`로 실물을 펼친 뒤 덮는다(재수출이 늘 때 형제 export가 `undefined`가 되지 않게).
-  - 현재: pages 53 · features 25 · widgets 2 · entities 5 슬라이스 전부가 루트 `index.ts`를 가진다. shared는 세그먼트(또는 `ui/pref` 같은 컴포넌트 폴더)마다 `index.ts`를 두고, `index.view.ts`는 15개(features 13 · `shared/location` · `shared/push`)다.
+  - 현재: pages · features · widgets · entities 슬라이스 전부가 루트 `index.ts`를 가진다(슬라이스 목록의 정본은 디렉토리 — 손 카운트는 드리프트한다). shared는 세그먼트(또는 `ui/pref` 같은 컴포넌트 폴더)마다 `index.ts`를 두고, `index.view.ts`는 features 여럿과 `pages/assistant/assistant-sheet`·`shared/location`·`shared/push`에 있다(목록 `find src -name 'index.view.ts'` — 네트워크 계층을 끌지 않는다는 전제는 `scripts/indexViewPurity.test.ts`가 전수로 잠근다, TRIP-1770).
 - **이주 방식**: 화면 묶음 단위로 옮긴다(TRIP-1138 · 서브 1146~1154) — 테스트 정상화를 먼저 하고 그 화면의 이동을 뒤 커밋으로.
-- **린터**: 경계는 두 도구가 나눠 지킨다 — ESLint zone은 import 줄(층 방향·형제 격리·딥 임포트 금지), 공식 FSD 린터 Steiger(`pnpm fsd`, `steiger.config.ts`)는 폴더·슬라이스 배치(권장 설정 `fsd.configs.recommended` 전 규칙)를 본다. 둘 다 CI 머지 게이트다(TRIP-1158) — 구조 소스 스캔은 TRIP-1145에서 지웠다. Steiger 예외는 넷뿐이고 설정 파일 주석과 같다: ① 테스트는 검사 대상에서 뺀다(아래 「테스트」대로 딥 경로가 설계, ESLint 면제 범위와 같음 — 다시 켤 조건 없음. 개발 프리뷰 `app/_dev/**`는 라우트 폴더라 애초에 `steiger ./src` 밖) ② `src/features`의 `excessive-slicing`을 끈다(25개 > 20, 다시 켤 조건 features ≤ 20 — TRIP-1159 껍데기 정리) ③ `pages/itinerary`·`pages/onboarding` 그룹의 `repetitive-naming`을 끈다(접두를 떼면 16개 개명 + shared 세그먼트와 이름 충돌 — 다시 켤 조건 두 그룹 접두 제거, 별 티켓). ④ `src/shared/lib`의 `shared-lib-grouping`을 끈다(모듈 16개 > 기준 15 — 다시 켤 조건 shared/lib 를 하위 폴더로 묶어 ≤ 15, 별 티켓 — TRIP-1524). 딥 임포트 금지 zone(TRIP-1157)은 프로덕션 파일(라우트 `app/**` 포함)에만 걸고 테스트·`app/_dev/**`는 면제한다. 같은 룰 ID라 층 zone과 한 블록에 함께 펼친다(flat config는 같은 규칙을 거는 뒤 블록이 앞을 덮어쓴다). `import/no-cycle`은 상시 lint에 없다 — 자기 슬라이스 index를 물어 순환을 만들어도 `pnpm lint`는 침묵한다.
+- **린터**: 경계는 두 도구가 나눠 지킨다 — ESLint zone은 import 줄(층 방향·형제 격리·딥 임포트 금지), 공식 FSD 린터 Steiger(`pnpm fsd`, `steiger.config.ts`)는 폴더·슬라이스 배치(권장 설정 `fsd.configs.recommended` 전 규칙)를 본다. 둘 다 CI 머지 게이트다(TRIP-1158) — 구조 소스 스캔은 TRIP-1145에서 지웠다. Steiger 예외의 정본은 `steiger.config.ts` 예외 블록이고(블록마다 이유·다시 켤 조건) 요약은 이렇다: ① 테스트는 검사 대상에서 뺀다(아래 「테스트」대로 딥 경로가 설계, ESLint 면제 범위와 같음 — 다시 켤 조건 없음. 개발 프리뷰 `app/_dev/**`는 라우트 폴더라 애초에 `steiger ./src` 밖) ② `src/features`의 `excessive-slicing`을 끈다(슬라이스 수 > 기준 20, 다시 켤 조건 features ≤ 20 — TRIP-1159 껍데기 정리) ③ `pages/itinerary`·`pages/onboarding` 그룹의 `repetitive-naming`을 끈다(접두를 떼면 두 그룹 슬라이스 전부 개명 + shared 세그먼트와 이름 충돌 — 다시 켤 조건 두 그룹 접두 제거, 별 티켓). ④ `src/shared/lib`의 `shared-lib-grouping`을 끈다(모듈 수 > 기준 15 — 다시 켤 조건 shared/lib 를 하위 폴더로 묶어 ≤ 15, 별 티켓 — TRIP-1524). ⑤ `features/curated-stay`의 `insignificant-slice`를 끈다(위젯 하나만 조립해 참조 1 — 다시 켤 조건 위젯 밖 소비처가 생기거나 위젯 안으로 합칠 때, TRIP-1579). 딥 임포트 금지 zone(TRIP-1157)은 프로덕션 파일(라우트 `app/**` 포함)에만 걸고 테스트·`app/_dev/**`는 면제한다. 같은 룰 ID라 층 zone과 한 블록에 함께 펼친다(flat config는 같은 규칙을 거는 뒤 블록이 앞을 덮어쓴다). `import/no-cycle`은 상시 lint에 없다 — 자기 슬라이스 index를 물어 순환을 만들어도 `pnpm lint`는 침묵한다.
 - **`app → features` 제한은 두지 않는다** — 공식 FSD는 app 층이 아래 층 전부를 import하는 것을 허용한다. 라우트 파일은 page를 꽂는 얇은 래퍼로 두는 것을 권장한다(lint 강제 없음, TRIP-1142).
 - 절대 경로 별칭 `@/` = `src/` (tsconfig paths — `@/features/...`, `@/shared/...`).
 
@@ -121,7 +121,7 @@ frontend/
 
 ## 환경 구성
 
-- 환경 3종: `development` / `preview` / `production` — `eas.json` 프로파일과 1:1.
+- 환경: `development` / `preview` / `production`. 빌드 프로파일 목록의 정본은 `eas.json` `build`다(운영 변형 `production-dev-server`·`production-automation*` 포함 — 환경과 1:1이 아니다).
 - API base URL 등 환경값은 `app.config.ts` + EAS 환경변수로 주입. 코드에 하드코딩 금지, `.env`는 로컬 개발 편의용(미커밋).
 - 앱에는 시크릿을 두지 않는다(소셜 로그인은 PKCE, 교환은 서버). 지도 앱 키 등은 EAS 시크릿으로 빌드 시 주입.
 - **구글 로그인(TRIP-1057)**: Google Cloud 콘솔의 **iOS 유형 OAuth 클라이언트**(번들 ID `com.trippilot.travel`)를 쓴다 — 시크릿 없는 공개 클라이언트라 앱은 PKCE 로 인가 코드만 받고 교환은 서버가 한다. **앱과 백엔드가 같은 클라이언트 ID** 를 쓰고(`EXPO_PUBLIC_GOOGLE_CLIENT_ID` ↔ 루트 `.env` `GOOGLE_CLIENT_ID`), 백엔드 `GOOGLE_CLIENT_SECRET` 은 **비운다**(보내면 `invalid_client` — 루트 `.env.example` 주석). redirect 는 iOS 클라이언트의 역방향 스킴 `com.googleusercontent.apps.{ID 앞부분}:/oauthredirect`. 변수 이름·형식은 `frontend/.env.example`. 웹 빌드(TRIP-1649)는 iOS 클라이언트가 아니라 **웹 애플리케이션 유형** 클라이언트를 따로 쓴다(`EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, redirect 는 `<origin>/oauth/google`). env 를 바꾸면 Metro `--clear` 로 다시 띄운다(인라인 치환).
@@ -210,14 +210,14 @@ pnpm lint && pnpm tsc --noEmit
 ```
 
 - **`ios/`·`android/` 네이티브 프로젝트는 커밋하지 않는다** — prebuild 산출물이며 EAS 원격 빌드에서 재현된다(CNG). `.gitignore`에 포함.
-- EAS Build 프로파일 3종: development / preview / production (`eas.json`). CI 성공 후 수동 트리거.
+- EAS Build 프로파일은 `eas.json` `build`가 정본이다. CI 성공 후 수동 트리거.
 - 네이티브 모듈 추가(지도 SDK·expo-location·expo-notifications 등)는 EAS 재빌드 필요, 순수 JS/TS 변경은 OTA 대상.
 - **운영 빌드 전 EAS 환경변수 2개를 확인한다**(TRIP-1370) — `EXPO_PUBLIC_SENTRY_DSN`(크래시 수집 주소)·`SENTRY_AUTH_TOKEN`(소스맵·dSYM 업로드, secret). DSN 이 비면 `initSentry` 가 에러 없이 꺼져 크래시가 안 쌓인다(빌드는 성공하므로 이 줄이 심판이다). token 이 없으면 **운영 iOS 빌드가 실패한다** — Sentry Xcode 스크립트가 업로드 실패를 `error:` 로 끝내기 때문이다(`SENTRY_ALLOW_FAILURE=true` 로 넘길 수 있으나 그러면 업로드 실패가 조용해져 쓰지 않는다). 값은 리포·채팅에 적지 않는다(`.env.example` 은 키 이름만).
 
 ## 문서
 
 - 화면 명세: **Figma가 유일한 정본** (리포에 사본 없음). 밴드 맵·파일 키: `.claude/skills/spec-perception/reference/figma-structure.md`
-- 기획 참조: 리포 루트 `aidlc/aidlc-docs/inception/` — requirements(요구사항)·user-stories(스토리 119개)·application-design(컴포넌트·유닛 설계)
+- 기획 참조: 리포 루트 `aidlc/aidlc-docs/inception/` — requirements(요구사항)·user-stories(스토리)·application-design(컴포넌트·유닛 설계)
 - API 스키마: `backend/docs/design/openapi.yaml` (orval 입력)
 - AI 계층 계약: `ai/README.md`
 

@@ -8,4 +8,4 @@ paths:
 
 | 파일 | 역할 |
 |---|---|
-| `src/features/open-assistant/ui/AssistantGlyphs.tsx` | `SparkleGlyph`(✦)·`ChatBubbleGlyph`(TRIP-1522 신규 — 말풍선+가운데 점 셋, 허브 하단 바 챗봇 칸). 말풍선은 `shared/ui/glyphs`·`ItineraryGlyphs`·`TripGlyphs` 에 없었고 Figma 킷 §6 에도 아직 미등록이다. 챗봇 칸이 ✦ 와 시각적으로 구분되도록 따로 만들었다(v1 은 같은 ✦ 라 AI 도우미 ✦ 와 혼동) |
+| `src/features/open-assistant/ui/AssistantGlyphs.tsx` | `AssistantSparkleGlyph`(✦ — TRIP-1773 에서 `SparkleGlyph` 개명)·`ChatBubbleGlyph`(TRIP-1522 신규 — 말풍선+가운데 점 셋, 허브 하단 바 챗봇 칸). 말풍선은 `shared/ui/glyphs`·`ItineraryGlyphs`·`TripGlyphs` 에 없었고 Figma 킷 §6 에도 아직 미등록이다. 챗봇 칸이 ✦ 와 시각적으로 구분되도록 따로 만들었다(v1 은 같은 ✦ 라 AI 도우미 ✦ 와 혼동) |

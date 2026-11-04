@@ -14,6 +14,12 @@
  *
  * 실제 시트 열림/딤/슬라이드는 gorhom 목이 통과 컴포넌트라 jest 무심판(6-b 실기).
  */
+import {
+  ChevronRightGlyph,
+  Check24Glyph,
+  InfoGlyph,
+  WarningTriangleGlyph,
+} from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
@@ -24,12 +30,6 @@ import { SheetShell } from '@/shared/ui/SheetShell';
 import { formatPrice } from '@/entities/stay';
 import { otaConfirmLabel, otaDisplayName } from '@/entities/stay';
 import type { StayOutboundMode } from '../model/stayOutbound';
-import {
-  CheckGlyph,
-  ChevronRightGlyph,
-  InfoGlyph,
-  WarningTriangleGlyph,
-} from './OutboundGlyphs';
 
 // 법정성 문구(BR-U1-30 → l07 두 문장). 각 문장을 한 Text 노드로 렌더해 오탈자가 완전일치 red 가 되게 한다.
 // 가운뎃점은 Figma 원문 그대로 U+00B7.
@@ -135,7 +135,7 @@ export function OtaChoiceSheet({
                 </>
               ) : null}
             </View>
-            <ChevronRightGlyph size={18} />
+            <ChevronRightGlyph size={18} strokeWidth={1.75} />
           </View>
 
           {isAffiliate ? (
@@ -168,7 +168,7 @@ export function OtaChoiceSheet({
                     : 'border-[1.6px] border-hairline-strong bg-canvas'
                 }`}
               >
-                {dontShowAgain ? <CheckGlyph size={14} /> : null}
+                {dontShowAgain ? <Check24Glyph size={14} /> : null}
               </View>
               <Text className="font-noto text-label text-body">
                 이 안내를 다시 보지 않기

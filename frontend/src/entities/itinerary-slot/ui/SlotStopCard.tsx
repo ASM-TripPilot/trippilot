@@ -1,12 +1,13 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { ChevronRight24Glyph, ClockGlyph } from '@/shared/ui/glyphs';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
 import { ALT_LABEL } from '../config/altLabel';
 import { buildSlotKey } from '../lib/slotKey';
-import { ChevronRightGlyph, ClockGlyph } from './SlotGlyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /** TRIP-797 · 미지정(startAt 없는) 슬롯 칩 문구 — 정본 공백 발명 카피(Figma 근거 6-b 이연). */
 export const UNSPECIFIED_CHIP_LABEL = '시간대 설정';
@@ -30,7 +31,7 @@ export const UNSPECIFIED_CHIP_LABEL = '시간대 설정';
 // 카드 그림자(Figma 0 4 16 rgba(0,0,0,0.08)). RN 은 box-shadow 가 없어 스타일로 옮긴다. `#000000` 은
 // 브랜드 팔레트(raw-hex 가드 목록) 밖이라 그림자 색으로 정당하다(PoiSlotCard·ManualEditShell 선례 동형).
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.08,
   shadowRadius: 16,
@@ -179,7 +180,7 @@ export function SlotStopCard({
               </Text>
               {/* ⌄ caret — 우향 chevron 을 90° 돌려 아래를 가리키게(신규 글리프 없이 재사용). */}
               <View style={{ transform: [{ rotate: '90deg' }] }}>
-                <ChevronRightGlyph size={14} tone="muted" />
+                <ChevronRight24Glyph size={14} color="muted" />
               </View>
             </Pressable>
           ) : locked ? (
@@ -225,7 +226,7 @@ export function SlotStopCard({
                 >
                   {slot.nameKo ?? ''}
                 </Text>
-                <ChevronRightGlyph size={14} tone="muted" />
+                <ChevronRight24Glyph size={14} color="muted" />
               </Pressable>
             ) : (
               <View

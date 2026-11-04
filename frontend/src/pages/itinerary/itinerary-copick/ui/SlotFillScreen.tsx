@@ -2,6 +2,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AlertCircleGlyph, BackChevronGlyph } from '@/shared/ui/glyphs';
 import { MapView } from '@/shared/map';
 import type { MapCenter, MapPin } from '@/shared/map';
 import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
@@ -12,8 +13,6 @@ import {
   ALL_IN_ITINERARY_HINT,
   ALL_IN_ITINERARY_TITLE,
   resolveSlotEmptyFace,
-  AlertCircleGlyph,
-  BackChevronGlyph,
 } from '@/features/itinerary/index.view';
 import type { CenterChoiceKey } from '../model/centerChoice';
 import { SlotCandidateCard } from './SlotCandidateCard';
@@ -220,7 +219,7 @@ function CenterChoiceArea({
           testID="itinerary-copick-center-notice"
           className="w-full flex-row items-center gap-sm rounded-button bg-primary-pale px-md py-sm"
         >
-          <AlertCircleGlyph size={20} tone="primaryText" />
+          <AlertCircleGlyph size={20} />
           <Text className="flex-1 font-noto text-label text-primary-text">
             {notice}
           </Text>
@@ -495,7 +494,7 @@ export function SlotFillScreen({
               testID="itinerary-copick-slotfill-error"
               className="w-full flex-row items-center gap-sm rounded-button bg-primary-pale px-md py-sm"
             >
-              <AlertCircleGlyph size={20} tone="primaryText" />
+              <AlertCircleGlyph size={20} />
               <Text className="flex-1 font-noto text-label text-primary-text">
                 {errorMessage}
               </Text>
@@ -507,7 +506,7 @@ export function SlotFillScreen({
               testID="itinerary-copick-candidates-error"
               className="w-full flex-row items-center gap-sm rounded-button bg-primary-pale px-md py-sm"
             >
-              <AlertCircleGlyph size={20} tone="primaryText" />
+              <AlertCircleGlyph size={20} />
               <Text className="flex-1 font-noto text-label text-primary-text">
                 {candidatesErrorMessage}
               </Text>
@@ -649,7 +648,7 @@ export function SlotFillScreen({
             testID="itinerary-copick-confirm-locked"
             className="mx-lg flex-row items-center gap-sm rounded-button bg-primary-pale px-md py-sm"
           >
-            <AlertCircleGlyph size={20} tone="primaryText" />
+            <AlertCircleGlyph size={20} />
             <Text className="flex-1 font-noto text-label text-primary-text">
               {CONFIRM_LOCKED_TEXT}
             </Text>

@@ -2,19 +2,19 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { HomeMapPinGlyph, HomePlusGlyph } from './HomeGlyphs';
 import {
   CloseGlyph,
-  HeartFilledGlyph,
-  MapPinGlyph,
-  PlusGlyph,
+  HeartStrokeFilledGlyph,
   SuitcaseGlyph,
-} from './HomeGlyphs';
+} from '@/shared/ui/glyphs';
 import { formatCountBadge } from '../lib/formatCountBadge';
+import { COLOR_TOKENS } from '@/shared/config';
 
 // 카드 그림자(브리프 §3-D 명시 raw 허용 — 그림자는 토큰 대상이 아니다). RN은 box-shadow가
 // 없어 shadow-* 스타일 프로퍼티로 옮긴다. shadowColor '#000000'은 D-3 13색 밖이라 무제재.
 const fabShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 6 },
   shadowOpacity: 0.22,
   shadowRadius: 16,
@@ -46,7 +46,7 @@ export function CreateTripFab({
       style={fabShadow}
       className="absolute bottom-[84px] right-lg h-[56px] w-[56px] items-center justify-center rounded-full bg-primary"
     >
-      <PlusGlyph size={22} />
+      <HomePlusGlyph size={22} />
     </Pressable>
   );
 }
@@ -122,7 +122,7 @@ export function SavedMenuFab({
             style={fabShadow}
             className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
           >
-            <MapPinGlyph size={26} />
+            <HomeMapPinGlyph size={26} />
             <CountBadge
               testID="home-saved-places-badge"
               count={savedPlacesCount}
@@ -154,7 +154,7 @@ export function SavedMenuFab({
           open ? 'bg-primary' : 'bg-canvas'
         }`}
       >
-        {open ? <CloseGlyph size={24} /> : <HeartFilledGlyph size={26} />}
+        {open ? <CloseGlyph size={24} /> : <HeartStrokeFilledGlyph size={26} />}
       </Pressable>
     </View>
   );

@@ -1,22 +1,16 @@
 import Svg, { Circle, Path } from 'react-native-svg';
-import {
-  CloseGlyph as SharedCloseGlyph,
-  WarningTriangleGlyph as SharedWarningTriangleGlyph,
-  MapPinGlyph as SharedMapPinGlyph,
-} from '@/shared/ui/glyphs';
-// 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
-export { SuitcaseGlyph } from '@/shared/ui/glyphs';
-
+import { COLOR_TOKENS } from '@/shared/config';
 // 탐색(밴드 d·e00) 전용 인라인 벡터 글리프 — StayGlyphs/HomeGlyphs 패턴 계승.
 // features 간 직접 import 금지 관례라 StayGlyphs의 셰브론을 가져다 쓰지 않고 여기 새로 그린다.
 // 색은 이 파일 안에서만 raw hex로 고정한다(`*Screen.tsx` 파일명 필터 밖 — raw-hex 가드 대상 아님).
 
-const INK = '#222222';
-const MUTED = '#6A6A6A';
-const MUTED_SOFT = '#9AA1AB';
-const PRIMARY = '#FF385C';
-const ON_PRIMARY = '#FFFFFF';
+const INK = COLOR_TOKENS.ink;
+const MUTED = COLOR_TOKENS.muted;
+const MUTED_SOFT = COLOR_TOKENS['muted-soft'];
+const PRIMARY = COLOR_TOKENS.primary;
+const ON_PRIMARY = COLOR_TOKENS['on-primary'];
 // d02 select 미선택 체크 링 색(Figma MISS `#d0d0d0` — 토큰 없음, `*Glyphs.tsx` raw-hex 스캔 제외).
+// eslint-disable-next-line trippilot/no-raw-hex -- Figma raw stroke(비활성 링), 토큰 없음
 const DISABLED_RING = '#D0D0D0';
 
 type GlyphProps = {
@@ -24,25 +18,9 @@ type GlyphProps = {
   testID?: string;
 };
 
-/** 담은 곳 saved-menu 닫기(X) — 펼친 FAB 위(분홍 원 위 흰 X). Figma a01 3012:1909.
- * `tone='primary'`는 d01 지역 칩(연분홍 바탕) 위 분홍 ✕(TRIP-1105, Figma 4767:2957). */
-export function CloseGlyph({
-  size = 24,
-  testID,
-  tone = 'on-primary',
-}: GlyphProps & { tone?: 'on-primary' | 'primary' }) {
-  return (
-    <SharedCloseGlyph
-      size={size}
-      color={tone === 'primary' ? 'primary' : 'onPrimary'}
-      testID={testID}
-    />
-  );
-}
-
 /** 여행 만들기 FAB — 흰 십자(＋). 핑크 원(bg-primary) 위에 얹힌다(CloseGlyph 와 같은 관례로
  * 흰색 stroke 고정). 단순 십자선이라 Figma path 근사 없이 충분(글리프 벡터는 jest 사각·6-b 육안). */
-export function PlusGlyph({ size = 24, testID }: GlyphProps) {
+export function ExplorePlusGlyph({ size = 24, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -62,7 +40,7 @@ export function PlusGlyph({ size = 24, testID }: GlyphProps) {
 }
 
 /** 앱바 뒤로가기 셰브론. */
-export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
+export function ExploreBackChevronGlyph({ size = 24, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -85,7 +63,7 @@ export function BackChevronGlyph({ size = 24, testID }: GlyphProps) {
 /** d06 갤러리 헤더 공유 — 세 점 + 잇는 선. `features/execution`의 ShareGlyph와 같은 그림이나
  * features 간 직접 import 금지라 여기 다시 그린다(BackChevronGlyph가 StayGlyphs 셰브론을 안
  * 가져다 쓴 것과 같은 관례). */
-export function ShareGlyph({ size = 20, testID }: GlyphProps) {
+export function ExploreShareGlyph({ size = 20, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -108,7 +86,7 @@ export function ShareGlyph({ size = 20, testID }: GlyphProps) {
 }
 
 /** 검색 돋보기. `tone='on-primary'`는 분홍 버튼 위 흰 돋보기(TRIP-1050, d02 empty CTA). */
-export function SearchGlyph({
+export function ExploreSearchGlyph({
   size = 20,
   tone = 'muted-soft',
   testID,
@@ -136,35 +114,10 @@ export function SearchGlyph({
 // 하트(filled/outline) 글리프는 TRIP-806 으로 `@/entities/place/ui/PlaceGlyphs` 로 이관됐다 —
 // place 카드가 entities 로 올라가며 그 하트도 함께 이동, explore 소비처(d01·d05·d06)는 이제 거기서 문다.
 
-/** d04 empty 상태 배지 — 위치 핀(32px, 분홍). e02 `MapPinGlyph`(1341:1378)와 같은 도형을
- * feature 간 직접 import 금지 관례대로 이 파일에 다시 그린다. `tone`은 TRIP-223(d02) 행의
- * 지역구 핀(회색, 13px)을 위한 확장 — `FilterSlidersGlyph`·`WarningTriangleGlyph`의 색 prop
- * 선례를 따른다(브리프 §6-2, 범용 색상표는 만들지 않는다). 기본값은 기존 d04 용법과 동일.
- * `on-primary`(흰색)는 TRIP-710(d06) 부제 핀 — hero 사진 위에 얹혀 흰색이어야 읽힌다. */
-export function MapPinGlyph({
-  size = 32,
-  tone = 'primary',
-  testID,
-}: GlyphProps & { tone?: 'primary' | 'muted' | 'on-primary' }) {
-  return (
-    <SharedMapPinGlyph
-      size={size}
-      color={
-        tone === 'muted'
-          ? 'muted'
-          : tone === 'on-primary'
-            ? 'onPrimary'
-            : 'primary'
-      }
-      testID={testID}
-    />
-  );
-}
-
 /** d04 filter-zero 상태 배지 — 슬라이더(32px). `tone`을 처음부터 파라미터화한다 — stay 쪽
  * 형제 컴포넌트가 색 prop 없이 먹색으로 굳어 있던 결함(구조 지도 실측)을 이 파일에 복사하지
  * 않기 위해서다. */
-export function FilterSlidersGlyph({
+export function ExploreFilterSlidersGlyph({
   size = 32,
   tone = 'primary',
   testID,
@@ -193,21 +146,6 @@ export function FilterSlidersGlyph({
         strokeLinejoin="round"
       />
     </Svg>
-  );
-}
-
-/** d04 error 상태 배지 — 경고 삼각형(32px). */
-export function WarningTriangleGlyph({
-  size = 32,
-  tone = 'primary',
-  testID,
-}: GlyphProps & { tone?: 'ink' | 'primary' }) {
-  return (
-    <SharedWarningTriangleGlyph
-      size={size}
-      color={tone === 'primary' ? 'primary' : 'ink'}
-      testID={testID}
-    />
   );
 }
 
@@ -280,7 +218,7 @@ export function CircleExclaimGlyph({ size = 40, testID }: GlyphProps) {
 }
 
 /** 안내 배너 정보 아이콘. */
-export function InfoGlyph({ size = 16, testID }: GlyphProps) {
+export function ExploreInfoGlyph({ size = 16, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}

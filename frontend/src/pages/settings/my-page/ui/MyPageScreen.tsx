@@ -4,15 +4,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { TripBucket } from '../model/tripBuckets';
 import { ProfileCard, type ProfileCardCounts } from './ProfileCard';
+import { ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import { CARD_SHADOW } from '@/features/settings';
 import {
   BarChartGlyph,
-  ChevronRightGlyph,
   EyeOffGlyph,
   GearGlyph,
-  ListGlyph,
+  SettingsListGlyph,
   MenuBedGlyph,
-  MUTED_SOFT,
   ShareNodesGlyph,
 } from '@/features/settings';
 
@@ -72,7 +71,7 @@ const SETTINGS_ROWS: {
   {
     key: 'shared',
     label: '내가 공유한 일정',
-    icon: <ListGlyph />,
+    icon: <SettingsListGlyph />,
     ready: false,
   },
   {
@@ -140,7 +139,7 @@ function SettingsRow({
       <Text className="flex-1 font-noto-bold text-[14.5px] font-bold text-ink">
         {label}
       </Text>
-      <ChevronRightGlyph size={20} color={MUTED_SOFT} />
+      <ChevronRight24Glyph size={20} color="mutedSoft" />
     </>
   );
   return onPress ? (

@@ -4,6 +4,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
 import type { Region } from '@/shared/api/index.schemas';
 import { RegionLevel } from '@/shared/api/index.schemas';
 import { StateNotice } from '@/shared/ui/StateNotice';
@@ -15,10 +16,10 @@ import { pickRegionCover } from '@/entities/trip';
 import { groupRegionsBySido, regionTint } from '@/features/explore/index.view';
 import type { RegionGroup } from '@/features/explore/index.view';
 import {
-  BackChevronGlyph,
-  SearchGlyph,
-  WarningTriangleGlyph,
+  ExploreBackChevronGlyph,
+  ExploreSearchGlyph,
 } from '@/features/explore/index.view';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * e00(숙소 지역 선택) · d1b(여행지 선택) 화면 — **props만 받는 프레젠테이션** (TRIP-445).
@@ -287,7 +288,7 @@ function SidoRow({
         {group.sidoName}
       </Text>
       <View style={{ transform: [{ scaleX: -1 }] }}>
-        <BackChevronGlyph size={18} />
+        <ExploreBackChevronGlyph size={18} />
       </View>
     </Pressable>
   );
@@ -318,7 +319,7 @@ function RegionDetail({
         hitSlop={8}
         className="mb-md flex-row items-center gap-xs"
       >
-        <BackChevronGlyph size={18} />
+        <ExploreBackChevronGlyph size={18} />
         <Text className="font-noto-medium text-body text-muted">지역 목록</Text>
       </Pressable>
 
@@ -457,7 +458,7 @@ export function RegionPickerScreen({
           onPress={detail ? () => setOpenSidoCode(null) : onBack}
           hitSlop={8}
         >
-          <BackChevronGlyph />
+          <ExploreBackChevronGlyph />
         </Pressable>
         <Text className="font-noto-bold text-section font-bold text-ink">
           {copy.appBar}
@@ -476,13 +477,13 @@ export function RegionPickerScreen({
         </Text>
 
         <View className="mt-lg h-[58px] flex-row items-center gap-sm rounded-input border border-hairline-strong px-md">
-          <SearchGlyph />
+          <ExploreSearchGlyph />
           <TextInput
             testID="explore-region-search"
             value={query}
             onChangeText={onChangeQuery}
             placeholder={copy.placeholder}
-            placeholderTextColor="#9AA1AB"
+            placeholderTextColor={COLOR_TOKENS['muted-soft']}
             className="flex-1 font-noto text-body text-ink"
           />
         </View>
@@ -504,7 +505,7 @@ export function RegionPickerScreen({
         {isError ? (
           <StateNotice
             testID="explore-region-error"
-            icon={<WarningTriangleGlyph tone="primary" />}
+            icon={<WarningTriangleGlyph size={32} color="primary" />}
             title="지역을 불러오지 못했어요"
             description="잠시 후 다시 시도해 주세요"
             actions={[

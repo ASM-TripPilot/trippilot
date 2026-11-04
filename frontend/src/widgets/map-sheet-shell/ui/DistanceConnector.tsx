@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Text, View } from 'react-native';
 
-import { CarGlyph, TransitGlyph, WalkGlyph } from './MapSheetGlyphs';
+import { TransitGlyph, WalkGlyph, CarGlyph } from '@/shared/ui/glyphs';
 
 /**
  * TRIP-783 · 카드 사이 거리 커넥터(widgets · presentation-only). 서버 `distanceRange` 문자열을 **가공
@@ -43,7 +43,13 @@ export function DistanceConnector({
       testID={`sheet-connector-${slotKey}`}
       className="flex-row items-center gap-[6px] pl-md"
     >
-      {isCar ? <CarGlyph /> : isTransit ? <TransitGlyph /> : <WalkGlyph />}
+      {isCar ? (
+        <CarGlyph />
+      ) : isTransit ? (
+        <TransitGlyph size={16} color="muted" strokeWidth={1.95} />
+      ) : (
+        <WalkGlyph />
+      )}
       {hasDistance ? (
         <Text
           testID={`sheet-connector-distance-${slotKey}`}

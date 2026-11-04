@@ -4,7 +4,8 @@ import { Pressable, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import { MemoInline } from '@/features/attach-visit-media/index.view';
-import { CloseGlyph } from '@/features/record';
+import { RecordCloseGlyph } from '@/features/record';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-1117 · i01 허브 메모 시트(Figma 4952:3098 · 시트 4741:2984) — 순수 바텀시트(props + 콜백만).
@@ -43,11 +44,11 @@ export interface MemoSheetProps {
 // gorhom 배경 — canvas(#FFFFFF)·위 라운드 24·위쪽 그림자(Figma 0 -3 16 rgba(0,0,0,.12), i08 자매 값).
 // 그림자 토큰이 없어 스타일 객체(RiskDetailSheet 관례). 내용 컨테이너는 overflow:hidden 이라 여기 단다.
 const SHEET_BACKGROUND = {
-  backgroundColor: '#FFFFFF',
+  backgroundColor: COLOR_TOKENS.canvas,
   borderRadius: 0,
   borderTopLeftRadius: 24,
   borderTopRightRadius: 24,
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: -3 },
   shadowOpacity: 0.12,
   shadowRadius: 16,
@@ -124,7 +125,7 @@ export function MemoSheet({
             onPress={onClose}
             className="h-[44px] w-[44px] items-center justify-center"
           >
-            <CloseGlyph size={24} />
+            <RecordCloseGlyph size={24} />
           </Pressable>
         </View>
 

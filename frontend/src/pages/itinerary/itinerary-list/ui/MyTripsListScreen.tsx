@@ -2,16 +2,13 @@ import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
+import { WarningTriangleGlyph, ChevronDownGlyph } from '@/shared/ui/glyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import type { MyTripsSortKey } from '../model/myTripsOrder';
 
-import {
-  CalendarGlyph,
-  ChevronDownGlyph,
-} from '@/features/itinerary/index.view';
+import { ItineraryCalendarGlyph } from '@/features/itinerary/index.view';
 
 /**
  * TRIP-468 · h37 "내 여행" 목록 화면 — 순수 프레젠테이션(4얼굴: list·empty·loading·error).
@@ -138,7 +135,7 @@ export function MyTripsListScreen({
                   testID="itinerary-tab-empty-illustration"
                   className="h-[72px] w-[72px] items-center justify-center rounded-pill bg-surface-soft"
                 >
-                  <CalendarGlyph
+                  <ItineraryCalendarGlyph
                     size={30}
                     testID="itinerary-tab-empty-calendar"
                   />

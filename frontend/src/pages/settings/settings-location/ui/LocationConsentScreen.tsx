@@ -3,12 +3,14 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
-  LocationBackChevronGlyph,
+  BackChevronGlyph,
+  InfoCircle18Glyph,
+  WarningTriangle24Glyph,
+} from '@/shared/ui/glyphs';
+import {
   LocationClockGlyph,
-  LocationInfoGlyph,
   LocationPinGlyph,
   LocationSwapGlyph,
-  LocationWarningGlyph,
 } from '@/shared/location/index.view';
 import { LOCATION_ICON_COLORS } from '@/shared/location/index.view';
 import type {
@@ -18,6 +20,7 @@ import type {
 import { Toggle } from '@/shared/ui/Toggle';
 
 import { RevokeConfirmDialog } from './RevokeConfirmDialog';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * l06 위치정보 동의 화면(무상태 프레젠테이션 + 철회 게이트 UI 로직). 상태·서버 호출은 페이지 몫이고,
@@ -86,7 +89,7 @@ const TOGGLE_TITLE = '위치정보 수집';
 
 /** 카드 그림자(Figma 0,2,10 · 6%) — 그림자는 className 으로 못 준다(HomeScreen 선례). */
 const CARD_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
@@ -151,7 +154,7 @@ export function LocationConsentScreen({
           accessibilityRole="button"
           onPress={onPressBack}
         >
-          <LocationBackChevronGlyph />
+          <BackChevronGlyph />
         </Pressable>
         <Text className="font-noto-bold text-section text-ink">
           위치정보 동의
@@ -168,10 +171,7 @@ export function LocationConsentScreen({
             testID="settings-location-denied-banner"
             className="flex-row items-center gap-[10px] rounded-[12px] border-[1.4px] border-dashed border-hairline-strong py-md pl-[14px] pr-md"
           >
-            <LocationWarningGlyph
-              size={18}
-              color={LOCATION_ICON_COLORS.muted}
-            />
+            <WarningTriangle24Glyph size={18} color="muted" />
             <Text className="flex-1 font-noto text-label text-body">
               기기 설정에서 위치 권한을 허용하세요
             </Text>
@@ -386,7 +386,7 @@ export function LocationConsentScreen({
           className="gap-[10px] rounded-[12px] bg-surface-soft p-[14px]"
         >
           <View className="flex-row items-center gap-sm">
-            <LocationInfoGlyph size={18} color={LOCATION_ICON_COLORS.muted} />
+            <InfoCircle18Glyph size={18} />
             <Text className="text-[13.5px] font-noto-bold text-body">
               동의를 꺼도 계속 동작해요
             </Text>

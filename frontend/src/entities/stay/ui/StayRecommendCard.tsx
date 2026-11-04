@@ -4,6 +4,7 @@ import { Image } from '@/shared/ui/Image';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import type { ImageSourcePropType } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-800 · h15 동선 기준 추천 숙소 카드(props-only, Figma `4385:1731`). 사진 64 · 이름(+`추천` 배지) ·
@@ -37,7 +38,7 @@ export interface StayRecommendCardProps {
 
 // Figma 카드 그림자 0 2 10 rgba(0,0,0,.06) — className 으로 못 줘 style prop(SavedStayCard cardShadow 선례).
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
@@ -51,14 +52,14 @@ function DistancePinGlyph(): ReactElement {
     <Svg width={13} height={13} viewBox="0 0 13 13" fill="none">
       <Path
         d="M10.8337 5.41634C10.8337 8.66634 6.50033 11.9163 6.50033 11.9163C6.50033 11.9163 2.16699 8.66634 2.16699 5.41634C2.16699 4.26707 2.62354 3.16487 3.4362 2.35221C4.24885 1.53955 5.35105 1.08301 6.50033 1.08301C7.6496 1.08301 8.7518 1.53955 9.56446 2.35221C10.3771 3.16487 10.8337 4.26707 10.8337 5.41634Z"
-        stroke="#9AA1AB"
+        stroke={COLOR_TOKENS['muted-soft']}
         strokeWidth={1.08333}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M6.5 7.04199C7.39746 7.04199 8.125 6.31446 8.125 5.41699C8.125 4.51953 7.39746 3.79199 6.5 3.79199C5.60254 3.79199 4.875 4.51953 4.875 5.41699C4.875 6.31446 5.60254 7.04199 6.5 7.04199Z"
-        stroke="#9AA1AB"
+        stroke={COLOR_TOKENS['muted-soft']}
         strokeWidth={1.08333}
         strokeLinecap="round"
         strokeLinejoin="round"

@@ -1,14 +1,6 @@
 import Svg, { Circle, Path } from 'react-native-svg';
-import {
-  WarningTriangleGlyph as SharedWarningTriangleGlyph,
-  MapPinGlyph as SharedMapPinGlyph,
-  SearchGlyph as SharedSearchGlyph,
-  HeartStrokeFilledGlyph,
-  HeartStrokeOutlineGlyph,
-} from '@/shared/ui/glyphs';
-// 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
-export { BackChevronGlyph } from '@/shared/ui/glyphs';
-
+import { Check24Glyph } from '@/shared/ui/glyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 // 숙소 검색 결과(e02) 전용 인라인 벡터 글리프(AuthGlyphs/OnboardingGlyphs/HomeGlyphs 패턴
 // 계승 · Figma 1837:2283). features 간 직접 import 금지(importBoundary 의도 — features/stay는
 // eslint FEATURES 목록 밖이라 기계 강제는 없지만, 02a T-16 판정대로 이 리포 관례를 따른다)라
@@ -16,13 +8,10 @@ export { BackChevronGlyph } from '@/shared/ui/glyphs';
 // 그린다. 색은 이 파일 안에서만 raw hex로 고정한다(선례 — `ui/` 안이지만 `*Screen.tsx`
 // 파일명 필터 밖이라 V1(raw-hex 가드) 대상이 아니다, 02a §6 판정②).
 
-const INK = '#222222';
-const BODY = '#3F3F3F';
-const MUTED = '#6A6A6A';
-const PRIMARY = '#FF385C';
-const MUTED_SOFT = '#9AA1AB';
-const ON_PRIMARY = '#FFFFFF';
-const INFO = '#0B6E63';
+const INK = COLOR_TOKENS.ink;
+const BODY = COLOR_TOKENS.body;
+const PRIMARY = COLOR_TOKENS.primary;
+const ON_PRIMARY = COLOR_TOKENS['on-primary'];
 
 type GlyphProps = {
   size?: number;
@@ -30,7 +19,7 @@ type GlyphProps = {
 };
 
 // 필터 칩 '가격대'·'지역' 드롭다운 셰브론.
-export function ChevronDownGlyph({ size = 14, testID }: GlyphProps) {
+export function StayChevronDownGlyph({ size = 14, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -54,7 +43,7 @@ export function ChevronDownGlyph({ size = 14, testID }: GlyphProps) {
 // 필터 칩(15px, tone 미지정 = body)과 filter-zero 원형 배지(32px, tone='primary')가 같은
 // 도형을 다른 색으로 쓴다 — WarningTriangleGlyph와 같은 형태로 색만 prop으로 뺀다.
 // 기본값을 body로 두는 이유: 칩이 먼저 이 글리프를 쓰고 있었고, 그 색이 바뀌면 안 된다.
-export function FilterSlidersGlyph({
+export function StayFilterSlidersGlyph({
   size = 14,
   tone = 'body',
   testID,
@@ -86,65 +75,10 @@ export function FilterSlidersGlyph({
   );
 }
 
-// 경고 삼각형(TRIP-182 §3-7) — partial 배너(20px·tone='ink') · error 배지(32px·
-// tone='primary') 겸용. 벡터는 Figma 1343:1429(배너, ink)·1344:1455(error, primary)에서
-// 그대로 추출했다 — 두 노드는 좌표 비율이 완전히 같은 도형이라(20 grid ↔ 32 grid 스케일만
-// 다름) 하나의 viewBox·path에 size prop만 바꿔 겸용한다.
-export function WarningTriangleGlyph({
-  size = 20,
-  tone = 'ink',
-  testID,
-}: GlyphProps & { tone?: 'ink' | 'primary' }) {
-  return (
-    <SharedWarningTriangleGlyph
-      size={size}
-      color={tone === 'primary' ? 'primary' : 'ink'}
-      testID={testID}
-    />
-  );
-}
-
-// 위치 핀(TRIP-182 §3-2) — empty 배지 32px, 분홍. Figma 1341:1378 벡터 그대로.
-// tone: 분홍(기본, e02 empty 배지)과 먹색(e04 하단 "거점 지정" 버튼 핀 — 흰 버튼 위라 텍스트와
-// 같은 먹색) 겸용. FilterSlidersGlyph·WarningTriangleGlyph 의 tone 선례와 동형(색만 prop 으로).
-// 기본값을 primary 로 두는 이유: 기존 호출부(StaySearchScreen·StayDetailScreen)가 이 색을 쓴다.
-export function MapPinGlyph({
-  size = 32,
-  tone = 'primary',
-  testID,
-}: GlyphProps & { tone?: 'primary' | 'ink' }) {
-  return (
-    <SharedMapPinGlyph
-      size={size}
-      color={tone === 'ink' ? 'ink' : 'primary'}
-      testID={testID}
-    />
-  );
-}
-
-// 돋보기 — e04 empty CTA `숙소 둘러보기`(19, 분홍 버튼 위 흰색 ON_PRIMARY, Figma 1702:1183) 와
-// e02 검색바(20, 회색 MUTED_SOFT, Figma 2488:1500) 겸용. 색만 tone prop 으로 뺀다(SearchGlyph 를
-// 두 벌로 나누지 않는다 — FilterSlidersGlyph tone 선례). 기본값 onPrimary: e04 가 먼저 이 색을 썼다.
-// TripGlyphs 에 동명 그림이 있으나 features 간 직접 import 금지(리포 관례)라 새로 그린다.
-export function SearchGlyph({
-  size = 19,
-  tone = 'onPrimary',
-  testID,
-}: GlyphProps & { tone?: 'onPrimary' | 'mutedSoft' }) {
-  return (
-    <SharedSearchGlyph
-      size={size}
-      color={tone}
-      strokeWidth={1.8}
-      testID={testID}
-    />
-  );
-}
-
 // 플러스 — 수동 등록 유도 카드 배지(22, 분홍 PRIMARY, 연분홍 원 위, Figma 1341:1391) ·
 // e02 분홍 원 FAB(24, 흰색 ON_PRIMARY, Figma 4463:2113) 겸용. 색만 tone prop 으로 뺀다(SearchGlyph
 // tone 선례). 기본값 primary: 등록 카드가 먼저 이 색을 썼다(무prop 호출 무회귀).
-export function PlusGlyph({
+export function StayPlusGlyph({
   size = 22,
   tone = 'primary',
   testID,
@@ -176,36 +110,9 @@ export function PlusGlyph({
   );
 }
 
-// 수동 등록 유도 카드 우측 셰브론(TRIP-182 §3-2) — 20px, muted-soft. Figma 1341:1397 벡터 그대로.
-export function ChevronRightGlyph({ size = 20, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M7.5 5L12.5 10L7.5 15"
-        stroke={MUTED_SOFT}
-        strokeWidth={1.75}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// 카드 저장 하트 — 미저장(외곽선). TRIP-181까지는 이 화면의 유일한 하트였다(AC-7 정직한 스텁).
-// ponytail: 회색 플레이스홀더 전제, 실사진 붙으면 흰색으로 되돌린다
-export function HeartOutlineGlyph({ size = 22, testID }: GlyphProps) {
-  return <HeartStrokeOutlineGlyph size={size} color="muted" testID={testID} />;
-}
-
 // e03 hero 공유 아이콘(TRIP-457) — 표시만(공유 계약 미존재, 범위 밖 — FAB·탭바 등급의 정적
 // 어포던스). Figma 1700:1194 벡터 근사.
-export function ShareGlyph({ size = 20, testID }: GlyphProps) {
+export function StayShareGlyph({ size = 20, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -246,45 +153,9 @@ export function ShareGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
-// e03 인라인 제휴 고지(TRIP-457) — 정보 원(ⓘ). Figma 1700:1266 벡터 근사.
-// tone: muted(기본, e03 제휴 고지)와 info(민트, e05 coordnotice — Figma multi 1358 실측) 겸용.
-// 색만 prop 으로 뺀다(FilterSlidersGlyph·WarningTriangleGlyph tone 선례). 기본값 muted: e03 이
-// 먼저 이 색을 썼다(무prop 호출 무회귀).
-export function InfoGlyph({
-  size = 15,
-  tone = 'muted',
-  testID,
-}: GlyphProps & { tone?: 'muted' | 'info' }) {
-  const color = tone === 'info' ? INFO : MUTED;
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-    >
-      <Path
-        d="M8 14.5C11.5899 14.5 14.5 11.5899 14.5 8C14.5 4.41015 11.5899 1.5 8 1.5C4.41015 1.5 1.5 4.41015 1.5 8C1.5 11.5899 4.41015 14.5 8 14.5Z"
-        stroke={color}
-        strokeWidth={1.4}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M8 7.3V11M8 5H8.008"
-        stroke={color}
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 // e05 확정 카드 침대 아이콘(TRIP-730) — 연분홍 사각 위 분홍 침대(Figma default 1703 실측 근사).
 // 헤드보드·매트리스·발치·베개로 구성. 색은 6-b 실기 몫(글리프 stroke jest 무심판).
-export function BedGlyph({ size = 20, testID }: GlyphProps) {
+export function StayBedGlyph({ size = 20, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -332,29 +203,8 @@ export function BedGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
-// e05 확정 CTA 체크(TRIP-730) — 분홍 버튼 위라 흰색(ON_PRIMARY). "이 숙소 등록" 앞 ✓.
-export function CheckGlyph({ size = 20, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M20 6L9 17L4 12"
-        stroke={ON_PRIMARY}
-        strokeWidth={2.2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 // e05 지도 검색 실패 배너 재시도(TRIP-730) — 원형 화살표(↻). text-primary 옆이라 분홍.
-export function RefreshGlyph({ size = 16, testID }: GlyphProps) {
+export function StayRefreshGlyph({ size = 16, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -382,7 +232,7 @@ export function RefreshGlyph({ size = 16, testID }: GlyphProps) {
 }
 
 // e03 1차 CTA(외부에서 예약하기) — 외부 링크(상자 밖 화살표), 분홍 버튼 위라 흰색. Figma 1700:1272.
-export function ExternalLinkGlyph({ size = 19, testID }: GlyphProps) {
+export function StayExternalLinkGlyph({ size = 19, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -420,21 +270,7 @@ export function ExternalLinkGlyph({ size = 19, testID }: GlyphProps) {
 // 하나의 일반 체크 배지로 그린다. 색은 6-b 실기 몫(★F-10, 글리프 fill은 jest 무심판).
 export function AmenityGlyph({ size = 24, testID }: GlyphProps) {
   return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M20 6L9 17L4 12"
-        stroke={BODY}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    <Check24Glyph size={size} color="body" strokeWidth={2} testID={testID} />
   );
 }
 
@@ -576,11 +412,4 @@ export function OceanViewGlyph({ size = 24, testID }: GlyphProps) {
       />
     </Svg>
   );
-}
-
-// 카드 저장 하트 — 담김(채움, TRIP-417). 같은 22-viewBox path를 분홍(PRIMARY)으로 채운다 —
-// 빈/찬을 색으로 재는 것은 jest 무심판(repo-trap: `*Glyphs.tsx` fill은 렌더 트리에 안 남는다)이라,
-// 상태는 이 별도 컴포넌트(=다른 testID) + Pressable의 accessibilityState.selected 두 신호로 잰다.
-export function HeartFilledGlyph({ size = 22, testID }: GlyphProps) {
-  return <HeartStrokeFilledGlyph size={size} testID={testID} />;
 }

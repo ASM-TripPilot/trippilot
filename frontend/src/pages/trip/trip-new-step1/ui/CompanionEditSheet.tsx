@@ -20,7 +20,7 @@
  * [[disabled prop과 accessibilityState]]).
  *
  * 아이콘은 신규 없이 `TripGlyphs` 재사용: 스테퍼 −/+ 는 `StepperMinusGlyph`·`StepperPlusGlyph`
- * (20px), 유형 칩은 `SoloGlyph`/`FriendsGlyph`/`HeartGlyph`/`FamilyGlyph`(각 `selected` prop).
+ * (20px), 유형 칩은 `SoloGlyph`/`TripFriendsGlyph`/`TripHeartGlyph`/`TripFamilyGlyph`(각 `selected` prop).
  * 스테퍼 원버튼은 같은 폴더 `StepperButton.tsx` 를 `DestinationEditSheet` 와 같이 쓴다(TRIP-1360 —
  * 두 사본을 1벌로).
  *
@@ -37,10 +37,10 @@ import type { CompanionType } from '@/shared/api/index.schemas';
 import { COMPANION_OPTIONS, type CompanionCode } from '@/features/create-trip';
 
 import {
-  FamilyGlyph,
-  FriendsGlyph,
+  TripFamilyGlyph,
+  TripFriendsGlyph,
   type GlyphComponent,
-  HeartGlyph,
+  TripHeartGlyph,
   SoloGlyph,
   StepperMinusGlyph,
   StepperPlusGlyph,
@@ -67,9 +67,9 @@ export interface CompanionEditSheetProps {
 /** 칩 코드 → 글리프. `COMPANION_OPTIONS` 는 code·type 만 갖고 글리프는 안 담으므로 여기서 잇는다. */
 const CHIP_GLYPHS: Record<CompanionCode, GlyphComponent> = {
   alone: SoloGlyph,
-  friend: FriendsGlyph,
-  partner: HeartGlyph,
-  family: FamilyGlyph,
+  friend: TripFriendsGlyph,
+  partner: TripHeartGlyph,
+  family: TripFamilyGlyph,
 };
 
 export function CompanionEditSheet({

@@ -8,17 +8,17 @@ import {
   View,
 } from 'react-native';
 
-import { SparkleGlyph } from '@/features/open-assistant';
-import { ChevronDownGlyph } from '@/shared/ui/glyphs';
+import { AssistantSparkleGlyph } from '@/features/open-assistant';
+import { ChevronDownGlyph, CloseGlyph } from '@/shared/ui/glyphs';
 import type { QuickReply } from '../api/assistantContract';
 import { COMPOSER_LIMIT } from '../model/composerLimit';
 import { CAPABILITIES_LABEL } from '../model/displayActions';
 import {
-  CloseGlyph,
-  ListGlyph,
+  AssistantSheetListGlyph,
   ReplyGlyph,
   SendArrowGlyph,
 } from './AssistantSheetGlyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * 시트 테두리 부품(TRIP-1322, 틀 개정 TRIP-1525·1526) — 헤더 · quick reply · 입력 카드(컨텍스트 칩 + 입력 + 전송).
@@ -38,7 +38,7 @@ export function AssistantSheetHeader({
         testID="assistant-sheet-mark"
         className="h-[30px] w-[30px] items-center justify-center rounded-full bg-primary"
       >
-        <SparkleGlyph size={16} />
+        <AssistantSparkleGlyph size={16} />
       </View>
       <View className="flex-row items-center">
         {trailing}
@@ -49,7 +49,7 @@ export function AssistantSheetHeader({
           onPress={onClose}
           className="h-[44px] w-[44px] items-center justify-center"
         >
-          <CloseGlyph size={24} />
+          <CloseGlyph size={24} color="ink" />
         </Pressable>
       </View>
     </View>
@@ -82,7 +82,7 @@ function ContextChip({
       hitSlop={{ top: 4, bottom: 4 }}
       className="min-h-[37px] flex-row items-center gap-[6px] self-start rounded-pill border border-hairline-strong bg-canvas px-md"
     >
-      <ListGlyph />
+      <AssistantSheetListGlyph />
       <Text className="font-noto text-label text-ink">{label}</Text>
       {expanded === undefined ? null : (
         // Figma: 펼친 상태 ⌃(14). 접힌 상태는 아래를 가리키는 ⌄ — 같은 글리프를 뒤집는다.
@@ -265,7 +265,7 @@ export function Composer({
           value={value}
           onChangeText={onChange}
           placeholder="무엇이든 물어보세요…"
-          placeholderTextColor="#9AA1AB"
+          placeholderTextColor={COLOR_TOKENS['muted-soft']}
           maxLength={COMPOSER_LIMIT}
           multiline
           className="max-h-[96px] min-h-[44px] flex-1 font-noto text-body text-ink"
@@ -283,7 +283,9 @@ export function Composer({
           }}
           className={`h-[44px] w-[44px] items-center justify-center rounded-full ${canSend ? 'bg-primary' : 'bg-surface-strong'}`}
         >
-          <SendArrowGlyph color={canSend ? '#FFFFFF' : '#9AA1AB'} />
+          <SendArrowGlyph
+            color={canSend ? COLOR_TOKENS.canvas : COLOR_TOKENS['muted-soft']}
+          />
         </Pressable>
       </View>
     </View>

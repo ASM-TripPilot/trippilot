@@ -1,3 +1,4 @@
+import { LockGlyph, ClockGlyph } from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
@@ -5,7 +6,7 @@ import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { ALT_LABEL } from '../config/altLabel';
 import { parseSlotKey } from '../lib/slotKey';
 import type { ReplanSlotVM } from '../model';
-import { ClockGlyph, LockGlyph } from './SlotGlyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-751 · AC-3 — i05·i06 재계획안 슬롯 1행(순수 props+콜백, 라우팅·훅 모름). Figma `4314:1923`.
@@ -23,7 +24,7 @@ import { ClockGlyph, LockGlyph } from './SlotGlyphs';
 // 안쪽이라 RN 에선 패딩을 1 줄인다). 글 칸 70 = 알약 25 + 6 + 이름 18 + 6 + 카테고리 15 — 토큰 기본 줄
 // 높이(16·20)를 쓰면 글 칸이 사진보다 커져 카드가 행마다 늘어난다(TRIP-751 6단계 육안 게이트 실측).
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.08,
   shadowRadius: 16,

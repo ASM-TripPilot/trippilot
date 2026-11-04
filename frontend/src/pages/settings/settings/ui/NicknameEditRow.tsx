@@ -1,8 +1,9 @@
 import { type ReactElement, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
-import { ChevronRightGlyph, MUTED_SOFT } from '@/features/settings';
+import { ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import { RowBody } from './SettingsRow';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * 계정 닉네임 행 — **행 인라인 확장** 편집(Q5). 트리거를 누르면 같은 행 안에서 TextInput +
@@ -52,7 +53,7 @@ export function NicknameEditRow({
           right={
             <View className="flex-row items-center gap-sm">
               <Text className="font-noto text-body text-muted">{value}</Text>
-              <ChevronRightGlyph color={MUTED_SOFT} />
+              <ChevronRight24Glyph size={20} color="mutedSoft" />
             </View>
           }
         />
@@ -72,7 +73,7 @@ export function NicknameEditRow({
               editable={!saving}
               autoCapitalize="none"
               placeholder="새 닉네임"
-              placeholderTextColor="#9AA1AB"
+              placeholderTextColor={COLOR_TOKENS['muted-soft']}
               className="h-11 flex-1 rounded-input border border-hairline-strong px-md font-noto text-body text-ink"
             />
             <Pressable

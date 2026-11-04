@@ -3,6 +3,7 @@ import { Text, View } from 'react-native';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 
 import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-806 · AC-M2·M5·M6 — 슬롯 후보 카드(itinerary h08·h10 · planb i14 공용).
@@ -83,7 +84,7 @@ const IMAGE_SIZE_CLASS = {
 
 // 카드 그림자(itinerary h12·h18 값) — planb 는 그림자 없음이라 showImage 로 게이트한다.
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 5,

@@ -14,7 +14,7 @@
  *
  * 아이콘은 전부 `TripGlyphs`를 재사용한다(신규 글리프·에셋 0): 스테퍼 −/+는 `StepperMinusGlyph`
  * ·`StepperPlusGlyph`(둘 다 20px, Figma `1675:1244`·`1675:1248`), 삭제 ×는 `RemoveGlyph`(18px),
- * 도시 추가 +는 `PlusGlyph`(16px, 아이콘은 primary·텍스트는 primary-text).
+ * 도시 추가 +는 `TripPlusGlyph`(16px, 아이콘은 primary·텍스트는 primary-text).
  *
  * ⚠️ 실제 개폐·딤·중앙정렬·터치차단은 `@gorhom/bottom-sheet` 통과형 목이라 jest가 원리적으로
  * 못 본다(repo-traps 바텀시트 함정) — 6-b 실기(`_dev/preview.tsx`) 몫. Figma `note`("꼭 갈 곳 N곳이
@@ -35,7 +35,7 @@ import {
 import type { TripDestination } from '@/shared/api/index.schemas';
 
 import {
-  PlusGlyph,
+  TripPlusGlyph,
   RemoveGlyph,
   StepperMinusGlyph,
   StepperPlusGlyph,
@@ -175,7 +175,7 @@ export function DestinationEditSheet({
             atMaxNights ? 'opacity-40' : ''
           }`}
         >
-          <PlusGlyph size={16} />
+          <TripPlusGlyph size={16} />
           <Text className="font-noto-bold text-label font-bold text-primary-text">
             도시 추가
           </Text>

@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { View } from 'react-native';
 
 import { Skeleton } from '@/shared/ui/Skeleton';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-1205 · i05 시트 빈 곳의 스켈레톤 슬롯 카드 2장 + 사이 거리 줄(Figma `4817:2695`
@@ -16,7 +17,7 @@ const CARD_COUNT = 2;
 
 // 카드 그림자 — ReplanSlotRow 와 같은 값.
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.08,
   shadowRadius: 16,

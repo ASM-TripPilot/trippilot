@@ -34,4 +34,4 @@ export { pickRegionCover } from './lib/regionCover';
 export { SERVICE_REGIONS } from './config/serviceRegions';
 export { PastTripRow } from './ui/PastTripRow';
 export { TripCard } from './ui/TripCard';
-export { ChevronRightGlyph } from './ui/TripGlyphs';
+export {} from './ui/TripGlyphs';

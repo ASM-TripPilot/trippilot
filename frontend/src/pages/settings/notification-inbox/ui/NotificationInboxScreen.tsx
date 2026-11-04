@@ -3,11 +3,11 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { NotificationIconKind } from '../model/notificationKind';
-import { NotifBackChevronGlyph } from '@/features/notification';
-import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
+import { WarningTriangleGlyph, BackChevronGlyph } from '@/shared/ui/glyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { NotifBellGlyph } from './NotificationInboxGlyphs';
 import { NotificationRow } from './NotificationRow';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-576 · l01 알림함 화면 — 순수 프레젠테이션(주입 VM + onNavigate 콜백).
@@ -24,7 +24,7 @@ import { NotificationRow } from './NotificationRow';
 // l01 카드 그림자(§8.2 MISS raw 허용 — 그림자는 토큰 대상 아님, RN shadow prop). features 경계로
 // 홈의 동형 softCardShadow 를 import 못 해 동일 값을 지역 상수로 둔다. '#000000'은 raw-hex 예외.
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
@@ -93,7 +93,7 @@ function InboxHeader({
           accessibilityRole="button"
           onPress={onPressBack}
         >
-          <NotifBackChevronGlyph />
+          <BackChevronGlyph />
         </Pressable>
         <Text className="text-[20px] font-noto-bold text-ink">알림</Text>
       </View>

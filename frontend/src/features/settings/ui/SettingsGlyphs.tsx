@@ -1,4 +1,5 @@
 import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-604 · l03 마이페이지 전용 인라인 벡터 글리프. features 간 직접 import 금지 관례라
@@ -10,45 +11,19 @@ import Svg, { Circle, Line, Path } from 'react-native-svg';
  * 가드 제외 관례). SVG `stroke`/`fill` 은 className 을 못 받는다.
  */
 
-const INK = '#222222';
-export const MUTED = '#6A6A6A';
-const HAIRLINE_STRONG = '#DDDDDD';
+const INK = COLOR_TOKENS.ink;
+export const MUTED = COLOR_TOKENS.muted;
 // l03 메뉴·헤더 아이콘(Figma 1602:2388 — #3F3F3F stroke 2, 메뉴 chevron #9AA1AB). 토큰 body·muted-soft 와 같은 값.
-const BODY = '#3F3F3F';
-export const MUTED_SOFT = '#9AA1AB';
+const BODY = COLOR_TOKENS.body;
+export const MUTED_SOFT = COLOR_TOKENS['muted-soft'];
 
 type GlyphProps = {
   size?: number;
   testID?: string;
 };
 
-/** 우향 chevron — 카드·행 진입 어포던스(회고 진입·설정 행 공용). `color` 미주입이면 기존 연회색. */
-export function ChevronRightGlyph({
-  size = 20,
-  testID,
-  color = HAIRLINE_STRONG,
-}: GlyphProps & { color?: string }) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M9 6L15 12L9 18"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 /** 등록 숙소 행 — 책갈피/기록. */
-export function BookmarkGlyph({ size = 20, testID }: GlyphProps) {
+export function SettingsBookmarkGlyph({ size = 20, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -124,7 +99,7 @@ export function ShareNodesGlyph({ size = 20, testID }: GlyphProps) {
 }
 
 /** 내가 공유한 일정 행 — 목록. */
-export function ListGlyph({ size = 20, testID }: GlyphProps) {
+export function SettingsListGlyph({ size = 20, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -220,7 +195,7 @@ export function GearGlyph({ size = 22, testID }: GlyphProps) {
 }
 
 /** 편집 버튼 안의 연필 — 프로필 편집. */
-export function PencilGlyph({ size = 14, testID }: GlyphProps) {
+export function SettingsPencilGlyph({ size = 14, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -240,7 +215,7 @@ export function PencilGlyph({ size = 14, testID }: GlyphProps) {
 }
 
 /** 회고 진입 하트(default 프레임 우하단 원형 어포던스) — 종료 카드 회고와 결이 같은 장식. */
-export function HeartGlyph({ size = 22, testID }: GlyphProps) {
+export function SettingsHeartGlyph({ size = 22, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -251,7 +226,7 @@ export function HeartGlyph({ size = 22, testID }: GlyphProps) {
     >
       <Path
         d="M12 20C12 20 4 15 4 9.5C4 7 6 5 8.5 5C10 5 11.3 5.8 12 7C12.7 5.8 14 5 15.5 5C18 5 20 7 20 9.5C20 15 12 20 12 20Z"
-        fill="#FF385C"
+        fill={COLOR_TOKENS.primary}
       />
     </Svg>
   );
@@ -307,7 +282,7 @@ export function PersonGlyph({ size = 22, testID }: GlyphProps) {
 }
 
 /** 데이터 내보내기 행 — 아래로 내려받는 화살표 + 받침. */
-export function DownloadGlyph({ size = 22, testID }: GlyphProps) {
+export function SettingsDownloadGlyph({ size = 22, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -362,7 +337,7 @@ export function ContrastGlyph({ size = 22, testID }: GlyphProps) {
 }
 
 /** 위치정보 행 — 지도 핀. */
-export function PinGlyph({ size = 22, testID }: GlyphProps) {
+export function SettingsPinGlyph({ size = 22, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -383,7 +358,7 @@ export function PinGlyph({ size = 22, testID }: GlyphProps) {
 }
 
 /** 알림 행 — 종. */
-export function BellGlyph({ size = 22, testID }: GlyphProps) {
+export function SettingsBellGlyph({ size = 22, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -409,7 +384,7 @@ export function BellGlyph({ size = 22, testID }: GlyphProps) {
 }
 
 /** 개인화 행 — 4갈래 반짝임 외곽선(TRIP-778, Figma `4526:2415`). */
-export function SparkleGlyph({ size = 22, testID }: GlyphProps) {
+export function SettingsSparkleGlyph({ size = 22, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -429,7 +404,7 @@ export function SparkleGlyph({ size = 22, testID }: GlyphProps) {
 }
 
 /** 제휴 안내 행 — 외부 링크(박스 밖으로 나가는 화살표). */
-export function ExternalLinkGlyph({ size = 22, testID }: GlyphProps) {
+export function SettingsExternalLinkGlyph({ size = 22, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -458,7 +433,7 @@ export function ExternalLinkGlyph({ size = 22, testID }: GlyphProps) {
 
 /**
  * l04 등록 숙소 0건 안내(빈 상태) 일러스트 — 침대(Figma 1605:2440 실측 path, 44 격자를 24 viewBox 로
- * 환산). `features/trip/ui/TripGlyphs` 에 `BedGlyph` 가 있으나 features 경계로 import 불가라 여기
+ * 환산). `features/trip/ui/TripGlyphs` 에 `SettingsBedGlyph` 가 있으나 features 경계로 import 불가라 여기
  * 새로 그린다(리포 확립 관례). muted-soft 톤.
  */
 const BED_PATHS = [
@@ -468,7 +443,7 @@ const BED_PATHS = [
   'M6 8V17',
 ] as const;
 
-export function BedGlyph({ size = 44, testID }: GlyphProps) {
+export function SettingsBedGlyph({ size = 44, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -493,7 +468,7 @@ export function BedGlyph({ size = 44, testID }: GlyphProps) {
 
 /**
  * l03 메뉴 첫 행(등록 숙소) — 침대(Figma 1602:2494 실측 path, 22 격자). l04 빈 상태
- * `BedGlyph`(muted-soft·24 격자)와 색·격자가 달라 따로 둔다 — 같은 메뉴의 다른 행(body 톤)과 맞춘다.
+ * `SettingsBedGlyph`(muted-soft·24 격자)와 색·격자가 달라 따로 둔다 — 같은 메뉴의 다른 행(body 톤)과 맞춘다.
  */
 export function MenuBedGlyph({ size = 22, testID }: GlyphProps) {
   return (
@@ -516,7 +491,7 @@ export function MenuBedGlyph({ size = 22, testID }: GlyphProps) {
 }
 
 /** 위험 영역(계정 삭제) 행 — 휴지통. */
-export function TrashGlyph({ size = 22, testID }: GlyphProps) {
+export function SettingsTrashGlyph({ size = 22, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}

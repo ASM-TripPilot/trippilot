@@ -1,6 +1,6 @@
 # TripPilot 디자인 킷 (Figma 정본)
 
-> 화면을 **일관되게** 그리고 고치기 위한 Figma 쪽 정본. **값(색·반경·간격·폰트)의 정본은 코드 `frontend/tailwind.config.js`**(`src/__tests__/design-tokens.test.ts`가 심판)이고, 이 킷은 그 값의 Figma 변수명·헬퍼·레시피·이 파일 고유 함정이다. 값을 즉석에서 바꾸지 않는다.
+> 화면을 **일관되게** 그리고 고치기 위한 Figma 쪽 정본. **값의 정본은 코드 — 색은 `frontend/src/shared/config/colorTokens.cjs`, 반경·간격·폰트는 `frontend/tailwind.config.js`**이고, 이 킷은 그 값의 Figma 변수명·헬퍼·레시피·이 파일 고유 함정이다. 값을 즉석에서 바꾸지 않는다.
 >
 > **유래:** VoltAgent/awesome-design-md `airbnb/DESIGN.md`(웹 1440·Cereal)를 2026-07에 모바일 390 + Noto/Inter + TripPilot 컴포넌트로 각색. 무드(코랄 1색 볼티지·photo-first·soft shape·그림자 1단)만 가져왔고 값은 코드 토큰이 정본이다. **원본은 참조하지 않는다** — 킷에 없는 값은 만들지 말고 질문으로 돌린다.
 
@@ -66,7 +66,7 @@ Variables `1229:1045`(Light `1229:0`) · 컴포넌트 BottomTab `1236:1177` · I
 ---
 
 ## 3. 반경·간격·그림자
-- 반경(Variables `radius/*` = 코드 `borderRadius`): **card 12 · button 12 · input 12 · thumb 12 · pill/chip 8** · sheet-top 24. **크기 규칙: 카드 안 작은 선택 세그(`아무 때나`·`시간 정해두기`, 높이 ~19) = 8 / 상태 배지(고정·필수·같이 고름…) = 12 / 입력·버튼·CTA·카드 = 12 / 일차 칩·헤더 컨트롤 = 999(원래대로, 손대지 않음). 원형(아바타·점·핀·FAB·토글 손잡이)만 999** — 사용자 결정("radius 12로 가자": 알약 칩·16 카드·14 CTA가 부풀어 보임). Figma는 변수 `radius/card`=12·`radius/pill`=8 + raw 노드 치환 완료(상세는 하네스 변경이력). **코드 `tailwind.config.js`·`design-tokens.test.ts`는 아직 card 16 / pill 999** — 동기화 dev-cycle 대기(card→12, pill→8, `rounded-pill`이 원형 17곳에 쓰여 `rounded-full`로 바꿔야 함). 그때까지 코드 쪽 값은 stale.
+- 반경(Variables `radius/*` = 코드 `borderRadius`): **card 12 · button 12 · input 12 · thumb 12 · pill/chip 8** · sheet-top 24. **크기 규칙: 카드 안 작은 선택 세그(`아무 때나`·`시간 정해두기`, 높이 ~19) = 8 / 상태 배지(고정·필수·같이 고름…) = 12 / 입력·버튼·CTA·카드 = 12 / 일차 칩·헤더 컨트롤 = 999(원래대로, 손대지 않음). 원형(아바타·점·핀·FAB·토글 손잡이)만 999** — 사용자 결정("radius 12로 가자": 알약 칩·16 카드·14 CTA가 부풀어 보임). Figma는 변수 `radius/card`=12·`radius/pill`=8 + raw 노드 치환 완료(상세는 하네스 변경이력). **코드 `tailwind.config.js`는 아직 card 16 / pill 999** — 동기화 dev-cycle 대기(card→12, pill→8, `rounded-pill`이 원형 17곳에 쓰여 `rounded-full`로 바꿔야 함). 그때까지 코드 쪽 값은 stale.
 - 간격: 코드 spacing 램프 **4/8/12/16/20/24/32**만. 화면 좌우 16, 섹션 gap 20~24, 카드 내부 16(콤팩트 12), 칩 padding 12×8, 칩 gap 8. (2026-07 화면 일부는 14로 그려졌다 — 신규·수정은 램프 값.)
 - 그림자(카드·pill·시트 딱 하나): `DROP_SHADOW rgba(0,0,0,0.08) offset(0,4) blur16` (작은건 0.06/2/10). 그 외 flat.
 

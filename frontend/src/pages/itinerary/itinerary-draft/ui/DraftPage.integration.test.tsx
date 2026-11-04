@@ -32,7 +32,8 @@ import {
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import { buildSlotKey } from '@/entities/itinerary-slot';
-import { AlertCircleGlyph, CheckCircleGlyph } from '@/features/itinerary';
+import { CheckCircleGlyph } from '@/features/itinerary';
+import { AlertCircleGlyph } from '@/shared/ui/glyphs';
 import { guardKeyWarnings } from '@/test-support/keyWarnings';
 import {
   DAY1,

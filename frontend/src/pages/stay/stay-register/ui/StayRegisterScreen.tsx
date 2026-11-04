@@ -17,6 +17,13 @@
  * 픽셀 충실도(간격·그림자·앱바)는 이 계약이 잠그지 않는다(02a §3-3) — figma-screen-impl
  * 루프 몫으로 남긴다.
  */
+import {
+  Check24Glyph,
+  WarningTriangleGlyph,
+  SearchGlyph,
+  InfoGlyph,
+  BackChevronGlyph,
+} from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import {
   Pressable,
@@ -53,16 +60,9 @@ import {
   type StayRegisterFlow,
   type StayRegisterTab,
 } from '../model/stayRegisterForm';
-import {
-  BackChevronGlyph,
-  BedGlyph,
-  CheckGlyph,
-  InfoGlyph,
-  RefreshGlyph,
-  SearchGlyph,
-  WarningTriangleGlyph,
-} from '@/features/stay/index.view';
+import { StayBedGlyph, StayRefreshGlyph } from '@/features/stay/index.view';
 import { AppBar } from '@/shared/ui/AppBar';
+import { COLOR_TOKENS } from '@/shared/config';
 
 export interface StayRegisterScreenProps {
   flow: StayRegisterFlow;
@@ -95,7 +95,7 @@ function isSameCandidate(a: GeocodeCandidate, b: GeocodeCandidate): boolean {
 /** 선택 후보 행의 흰 배경을 띄우는 은은한 그림자(Figma multi-candidate 선택 행) — 색 토큰이 아닌
  * 순수 그림자라 className 으로 못 주고 style prop 으로만 준다(SegmentedControl 선택 셀과 동형). */
 const SELECTED_ROW_SHADOW: ViewStyle = {
-  shadowColor: '#000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOpacity: 0.06,
   shadowRadius: 4,
   shadowOffset: { width: 0, height: 1 },
@@ -183,7 +183,7 @@ function SearchFailBlock({
           className="flex-row items-center gap-xs"
         >
           {/* TRIP-730 — Figma 배너 우측 ↻. "다시 시도" 텍스트는 R-6 이 잠근다(제거 금지). */}
-          <RefreshGlyph size={16} />
+          <StayRefreshGlyph size={16} />
           <Text className="font-noto-bold text-label font-bold text-primary">
             다시 시도
           </Text>
@@ -624,7 +624,11 @@ export function StayRegisterScreen({
                   </Text>
                   <View className="w-full flex-row items-center gap-sm">
                     <View className="h-12 flex-1 flex-row items-center gap-sm rounded-input border border-hairline-strong px-md">
-                      <SearchGlyph size={20} tone="mutedSoft" />
+                      <SearchGlyph
+                        size={20}
+                        color="mutedSoft"
+                        strokeWidth={1.8}
+                      />
                       <TextInput
                         testID="stay-register-search-input"
                         value={flow.query}
@@ -702,7 +706,7 @@ export function StayRegisterScreen({
                 className="flex-row items-center gap-md rounded-card bg-surface-soft p-[14px]"
               >
                 <View className="h-10 w-10 items-center justify-center rounded-[10px] bg-primary-pale">
-                  <BedGlyph size={20} />
+                  <StayBedGlyph size={20} />
                 </View>
                 <View className="flex-1 gap-xs">
                   <Text className="font-noto-bold text-card-title font-bold text-ink">
@@ -725,7 +729,7 @@ export function StayRegisterScreen({
                     testID="stay-register-coordnotice"
                     className="flex-row items-center gap-sm rounded-button border border-info-border bg-canvas px-md py-sm"
                   >
-                    <InfoGlyph size={16} tone="info" />
+                    <InfoGlyph size={16} color="info" />
                     <Text className="flex-1 font-noto text-body text-info">
                       지도에서 위치를 확인해 주세요
                     </Text>
@@ -774,7 +778,7 @@ export function StayRegisterScreen({
                 </Text>
               ) : flow.coordConfirmed ? (
                 <>
-                  <CheckGlyph size={20} />
+                  <Check24Glyph size={20} />
                   <Text
                     className={`font-noto-bold text-card-title font-bold ${
                       canPress ? 'text-on-primary' : 'text-muted-soft'

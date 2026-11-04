@@ -14,6 +14,11 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
+import {
+  PlusGlyph,
+  InfoCircleGlyph,
+  BackChevronGlyph,
+} from '@/shared/ui/glyphs';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { buildSlotKey } from '@/entities/itinerary-slot';
@@ -21,10 +26,8 @@ import { overlapAwareNotice } from '@/entities/itinerary-slot';
 import { SlotStopCard } from '@/entities/itinerary-slot';
 
 import { CTA_BAR_HEIGHT, type CtaButton } from './CtaBar';
-import { InfoCircleGlyph, PlusGlyph } from './EditorGlyphs';
 import { DayChipScroller } from './DayChipScroller';
 import { decideDragEnd, DELETE_ZONE_BAR_HEIGHT } from './dragDelete';
-import { BackChevronGlyph } from './MapSheetGlyphs';
 import { MapSheetShell } from './MapSheetShell';
 import { SheetHeader } from './SheetHeader';
 import { SlotDropZone } from './SlotDropZone';
@@ -219,7 +222,7 @@ export function EditorView({
               style={dragFace ? { opacity: 0 } : undefined}
               className="flex-row items-center justify-center py-[2px]"
             >
-              <PlusGlyph size={20} tone="primary" />
+              <PlusGlyph size={20} color="primary" />
             </Pressable>
           )
         ) : null}

@@ -9,7 +9,7 @@ import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { ExportRow } from './ExportRow';
 import { LogoutConfirmDialog } from './LogoutConfirmDialog';
 import { NicknameEditRow } from './NicknameEditRow';
-import { ChevronLeftGlyph, TrashGlyph } from '@/features/settings';
+import { ChevronLeftGlyph, SettingsTrashGlyph } from '@/features/settings';
 import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
 import { SettingsGroup } from './SettingsGroup';
 import { NavRow, PreparingRow, RowBody } from './SettingsRow';
@@ -347,7 +347,7 @@ function DeletionPendingBanner({
     <View testID="settings-deletion-pending" className="gap-sm px-lg py-lg">
       <View className="flex-row items-center gap-md">
         <View className="w-6 items-center">
-          <TrashGlyph size={22} />
+          <SettingsTrashGlyph size={22} />
         </View>
         <Text className="flex-1 font-noto-bold text-body text-ink">
           계정 삭제가 예정되어 있어요

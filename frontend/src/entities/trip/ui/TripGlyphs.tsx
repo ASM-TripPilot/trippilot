@@ -1,8 +1,6 @@
 import Svg, { Path } from 'react-native-svg';
+import { COLOR_TOKENS } from '@/shared/config';
 // 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
-import { TrashGlyph as SharedTrashGlyph } from '@/shared/ui/glyphs';
-
-export { ChevronRightGlyph } from '@/shared/ui/glyphs';
 
 // TRIP-808 · entities/trip 카드 전용 인라인 벡터 글리프. features/itinerary/ui/ItineraryGlyphs 는
 // entities → features 역참조라 import 할 수 없어(층 위반) chevron 을 여기 자기 사본으로 둔다
@@ -12,7 +10,7 @@ export { ChevronRightGlyph } from '@/shared/ui/glyphs';
 // 색은 이 파일 안에서만 raw hex 로 고정한다(선례 — `*Glyphs.tsx` 는 raw-hex 스캔 제외 관례,
 // SVG `stroke`/`fill` 은 className 을 못 받는다).
 
-const INK = '#222222';
+const INK = COLOR_TOKENS.ink;
 
 type GlyphProps = {
   size?: number;
@@ -43,9 +41,4 @@ export function MoreDotsGlyph({ size = 20, testID }: GlyphProps) {
       />
     </Svg>
   );
-}
-
-// 휴지통(18) — Figma `4682:2647`(h06 삭제 메뉴 항목). primary 선 1.5.
-export function TrashGlyph({ size = 18, testID }: GlyphProps) {
-  return <SharedTrashGlyph size={size} color="primary" testID={testID} />;
 }

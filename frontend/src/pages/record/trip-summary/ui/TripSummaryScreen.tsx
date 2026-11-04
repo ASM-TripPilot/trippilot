@@ -7,7 +7,7 @@ import { RevealItem } from '@/shared/ui/RevealItem';
 import { RecordNavBar } from '@/widgets/bottom-nav-bar';
 
 import {
-  LocationOffGlyph,
+  ReflectionLocationOffGlyph,
   MAGAZINE_TONES,
   MagazineCover,
   MagazineQuote,
@@ -175,7 +175,7 @@ export function TripSummaryScreen({
           <View className="gap-sm px-xl pt-sm">
             {/* 위치 전무 — 빈 지도 대신 안내(BR-U5-39). 폴백 박스는 1줄(사유)만, 안내 두번째 문장은 박스 밖 좌측(Figma 1572:2050 정합). */}
             <View className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl">
-              <LocationOffGlyph size={30} />
+              <ReflectionLocationOffGlyph size={30} />
               <Text className="text-center font-noto text-label text-muted">
                 위치 기록이 없어 지도를 표시할 수 없어요
               </Text>

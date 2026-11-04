@@ -5,7 +5,7 @@ import { formatDayLabel } from '@/entities/trip';
 import { formatCoPickDayHeader } from '@/features/itinerary/index.view';
 import {
   GpsOffGlyph,
-  InfoCircleGlyph,
+  RecordInfoCircleGlyph,
   VisitCheckUpcomingGlyph,
 } from '@/features/record';
 import { SpontaneousVisitButton } from './SpontaneousVisitButton';
@@ -310,7 +310,7 @@ export function TripRecordsView({
               testID="record-gps-banner"
               className="w-full flex-row items-start gap-[10px] rounded-button border-[1.3px] border-dashed border-hairline-strong bg-surface-soft px-[13px] py-md"
             >
-              <InfoCircleGlyph size={20} />
+              <RecordInfoCircleGlyph size={20} />
               <View className="flex-1 gap-[3px]">
                 <Text className="font-noto-bold text-label text-ink">
                   위치 권한 없음 — 수동 체크인으로 기록해요

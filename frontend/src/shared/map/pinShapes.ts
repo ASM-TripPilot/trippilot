@@ -1,4 +1,5 @@
 import type { MapPinKind } from './MapView';
+import { COLOR_TOKENS } from '../config';
 
 /**
  * 핀 모양 상수 — 네이티브(`MapView.tsx` 의 react-native-svg)와 웹(`webMarkerHtml.ts` 의 SVG 문자열)이
@@ -9,10 +10,10 @@ import type { MapPinKind } from './MapView';
  * SDK 가 자식 뷰를 화면 밖에서 마커 이미지로 스냅샷할 때 적용이 보장되지 않고(초록 링·흰 실루엣),
  * SVG stroke/fill 은 애초에 className 을 못 받는다(shared/map 관례). 색은 tailwind 팔레트 raw hex —
  * S7 팔레트 부분집합 가드는 TRIP-864 로 삭제됐고 재도입하지 않았다(TRIP-745 Q3). */
-export const PIN_PRIMARY = '#FF385C'; // primary — current·기본 물방울
-export const PIN_SUCCESS = '#0E9384'; // success — done 물방울
-export const PIN_MUTED_SOFT = '#9AA1AB'; // muted-soft — upcoming 테두리·번호
-export const PIN_WHITE = '#FFFFFF'; // on-primary·canvas — 흰 테두리·흰 번호·흰 체크
+export const PIN_PRIMARY = COLOR_TOKENS.primary; // primary — current·기본 물방울
+export const PIN_SUCCESS = COLOR_TOKENS.success; // success — done 물방울
+export const PIN_MUTED_SOFT = COLOR_TOKENS['muted-soft']; // muted-soft — upcoming 테두리·번호
+export const PIN_WHITE = COLOR_TOKENS['on-primary']; // on-primary·canvas — 흰 테두리·흰 번호·흰 체크
 
 /** Figma 4125:3958 물방울 벡터 1:1. 큰 것(current·기본)은 35×45.5, 작은 것(upcoming·done)은 28×36. */
 export const TEARDROP_LARGE =

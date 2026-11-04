@@ -1,3 +1,4 @@
+import { BackChevronGlyph, ChevronRightGlyph } from '@/shared/ui/glyphs';
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,10 +12,6 @@ import {
   CategoryTreeGlyph,
 } from '@/entities/itinerary-slot';
 import { CONCEPT_DESCRIPTIONS } from '../config/conceptCards';
-import {
-  BackChevronGlyph,
-  ChevronRightGlyph,
-} from '@/features/itinerary/index.view';
 
 /**
  * TRIP-335 슬라이스2 → TRIP-794 h09 Figma 정합(3845:2227) · "같이 고르기(co-pick)" 컨셉 고르기 화면(순수).

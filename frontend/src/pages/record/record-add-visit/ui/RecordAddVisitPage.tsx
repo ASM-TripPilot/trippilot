@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
+import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
 import { goBackOr } from '@/shared/lib/goBackOr';
 import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
@@ -8,7 +9,6 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { PlaceRowCard } from '@/entities/place';
 import { PlaceSubtitle } from '@/entities/place';
 import { useMultiRegionPlaces } from '@/features/explore';
-import { WarningTriangleGlyph } from '@/features/explore/index.view';
 import { usePlacesInfinite } from '@/features/explore';
 import {
   buildDraftPins,
@@ -247,7 +247,7 @@ export function RecordAddVisitPage({
             <View className="w-full items-center justify-center px-lg pt-xl">
               <StateNotice
                 testID="record-add-visit-load-error"
-                icon={<WarningTriangleGlyph size={32} />}
+                icon={<WarningTriangleGlyph size={32} color="primary" />}
                 title="지금 장소 정보를 불러올 수 없어요"
                 description="잠시 후 다시 시도해 주세요"
                 actions={[

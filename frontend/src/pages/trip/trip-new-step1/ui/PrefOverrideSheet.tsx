@@ -41,12 +41,12 @@ import {
   CameraGlyph,
   CoffeeCupGlyph,
   FerrisWheelGlyph,
-  ForkKnifeGlyph,
+  OnboardingForkKnifeGlyph,
   type GlyphComponent,
   LandmarkGlyph,
   MoonGlyph,
   MountainGlyph,
-  ShoppingBagGlyph,
+  OnboardingShoppingBagGlyph,
   SunGlyph,
 } from '@/features/onboarding';
 
@@ -70,12 +70,12 @@ export interface PrefOverrideSheetProps {
 /** slug → 글리프. `STYLE`은 slug→한국어 라벨만 갖고 아이콘은 안 담으므로 여기서 잇는다. */
 const CHIP_GLYPHS: Record<string, GlyphComponent> = {
   rest: SunGlyph,
-  gourmet: ForkKnifeGlyph,
+  gourmet: OnboardingForkKnifeGlyph,
   nature: MountainGlyph,
   art: ArtGlyph,
   activity: ActivityGlyph,
   sightseeing: CameraGlyph,
-  shopping: ShoppingBagGlyph,
+  shopping: OnboardingShoppingBagGlyph,
 };
 
 /** 활동 slug → 글리프. 전시=ArtGlyph·야경=MoonGlyph 재사용, 역사문화·테마파크·카페는 신설(Figma 근거 없음). */
@@ -83,11 +83,11 @@ const ACTIVITY_GLYPHS: Record<string, GlyphComponent> = {
   nature: MountainGlyph,
   history: LandmarkGlyph,
   themepark: FerrisWheelGlyph,
-  foodtour: ForkKnifeGlyph,
+  foodtour: OnboardingForkKnifeGlyph,
   cafe: CoffeeCupGlyph,
   exhibition: ArtGlyph,
   nightview: MoonGlyph,
-  shopping: ShoppingBagGlyph,
+  shopping: OnboardingShoppingBagGlyph,
 };
 
 // 칩 순서 = STYLE 카탈로그 삽입 순서(휴양·미식·자연·문화예술·액티비티·관광·쇼핑) = Figma 칩 순서.

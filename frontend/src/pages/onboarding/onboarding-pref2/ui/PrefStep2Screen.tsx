@@ -20,21 +20,22 @@ import {
 
 import {
   BikeGlyph,
-  CarGlyph,
-  CheckGlyph,
-  FamilyGlyph,
-  FriendsGlyph,
-  HeartGlyph,
-  InfoCircleGlyph,
+  OnboardingCarGlyph,
+  OnboardingCheckGlyph,
+  OnboardingFamilyGlyph,
+  OnboardingFriendsGlyph,
+  OnboardingHeartGlyph,
+  OnboardingInfoCircleGlyph,
   ParentsGlyph,
   PetGlyph,
   SkipChevronGlyph,
   SoloPersonGlyph,
   TaxiGlyph,
-  TransitGlyph,
-  WalkGlyph,
+  OnboardingTransitGlyph,
+  OnboardingWalkGlyph,
   type GlyphComponent,
 } from '@/features/onboarding';
+import { COLOR_TOKENS } from '@/shared/config';
 
 export interface PrefStep2ScreenProps {
   selectedCompanions: readonly string[] | null;
@@ -52,14 +53,14 @@ export interface PrefStep2ScreenProps {
 }
 
 const ctaShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
   elevation: 2,
 } as const;
 
-// 동행 6종(US-ONB-07). couple slug는 유지하고 라벨만 "커플"(HeartGlyph 재사용 — 미래 PUT
+// 동행 6종(US-ONB-07). couple slug는 유지하고 라벨만 "커플"(OnboardingHeartGlyph 재사용 — 미래 PUT
 // enum 매핑 안정성). 반려동물은 화면상 칩 하나지만 계약에선 companionTypes가 아니라 별개
 // petFlag 불리언이다(TRIP-254 §맹점 — PUT 배선 칸 몫, 이번 사이클은 칩만 그린다).
 const COMPANION_OPTIONS: {
@@ -68,9 +69,9 @@ const COMPANION_OPTIONS: {
   Icon: GlyphComponent;
 }[] = [
   { slug: 'solo', label: '혼자', Icon: SoloPersonGlyph },
-  { slug: 'couple', label: '커플', Icon: HeartGlyph },
-  { slug: 'friends', label: '친구', Icon: FriendsGlyph },
-  { slug: 'family', label: '가족', Icon: FamilyGlyph },
+  { slug: 'couple', label: '커플', Icon: OnboardingHeartGlyph },
+  { slug: 'friends', label: '친구', Icon: OnboardingFriendsGlyph },
+  { slug: 'family', label: '가족', Icon: OnboardingFamilyGlyph },
   { slug: 'parents', label: '부모님', Icon: ParentsGlyph },
   { slug: 'pet', label: '반려동물', Icon: PetGlyph },
 ];
@@ -106,9 +107,9 @@ const TRANSPORT_OPTIONS: {
   label: string;
   Icon: GlyphComponent;
 }[] = [
-  { slug: 'walk', label: '도보', Icon: WalkGlyph },
-  { slug: 'transit', label: '대중교통', Icon: TransitGlyph },
-  { slug: 'rental', label: '렌터카', Icon: CarGlyph },
+  { slug: 'walk', label: '도보', Icon: OnboardingWalkGlyph },
+  { slug: 'transit', label: '대중교통', Icon: OnboardingTransitGlyph },
+  { slug: 'rental', label: '렌터카', Icon: OnboardingCarGlyph },
   { slug: 'taxi', label: '택시', Icon: TaxiGlyph },
   { slug: 'bike', label: '자전거', Icon: BikeGlyph },
 ];
@@ -165,7 +166,7 @@ export function PrefStep2Screen({
                     testID={`onboarding-pref2-companion-${slug}`}
                     label={label}
                     Icon={Icon}
-                    CheckIcon={CheckGlyph}
+                    CheckIcon={OnboardingCheckGlyph}
                     selected={selectedCompanions?.includes(slug) ?? false}
                     onPress={() => onToggleCompanion(slug)}
                     className="gap-sm py-lg"
@@ -248,7 +249,7 @@ export function PrefStep2Screen({
               testID="onboarding-pref2-info"
               className="flex-row gap-[10px] rounded-button bg-surface-soft p-md"
             >
-              <InfoCircleGlyph size={16} />
+              <OnboardingInfoCircleGlyph size={16} />
               <View className="flex-1">
                 <Text className="font-noto text-label text-muted">
                   지금 안 정해도 앱을 쓰며 자연스럽게 맞춰가요

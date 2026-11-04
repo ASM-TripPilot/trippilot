@@ -3,14 +3,11 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { METHOD_SUBTITLE, METHOD_SWITCH_NOTE } from '../config/methodPicker';
+import { FullAiGlyph, ChevronRightGlyph } from '@/shared/ui/glyphs';
 import { formatWizardStep } from '@/features/create-trip';
-import {
-  ChevronRightGlyph,
-  CoPickGlyph,
-  FullAiGlyph,
-  ManualGlyph,
-} from '@/features/itinerary/index.view';
+import { CoPickGlyph, ManualGlyph } from '@/features/itinerary/index.view';
 import { TripWizardHeader } from '@/widgets/trip-wizard-header';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * h01 시작 방법 — Figma `3824:2128`. 세 방식(완전 AI · AI와 같이 · 직접) 중 하나를 고른다.
@@ -29,7 +26,7 @@ const HEADING = '어떻게 만들까요?';
 // 프로퍼티로 옮긴다. `#000000` 은 raw-hex 가드의 브랜드 팔레트에 없어 그림자 색으로 정당하다
 // (`PoiSlotCard.tsx` 선례).
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,

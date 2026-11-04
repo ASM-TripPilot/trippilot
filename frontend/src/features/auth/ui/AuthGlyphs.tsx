@@ -1,6 +1,7 @@
 import Svg, { Path } from 'react-native-svg';
 
 import { AUTH_ICON_COLORS } from '../config/gradients';
+import { COLOR_TOKENS } from '@/shared/config';
 
 // 인증 화면 전용 벡터 글리프(D3 인라인 방식). Figma 에서 내려받은 .svg 의 좌표를
 // react-native-svg 프리미티브(<Svg><Path/>)로 1:1 옮긴 것 — transformer 미도입.
@@ -26,11 +27,11 @@ export function AppIconGlyph({ size = 34, testID }: GlyphProps) {
     >
       <Path
         d="M49.35 7.0498L7.05 27.7298L26.79 34.3098L49.35 7.0498Z"
-        fill="#ffffff"
+        fill={COLOR_TOKENS.canvas}
       />
       <Path
         d="M49.35 7.0498L26.79 34.3098L33.84 50.2898L49.35 7.0498Z"
-        fill="#ffffff"
+        fill={COLOR_TOKENS.canvas}
         opacity={0.72}
       />
     </Svg>
@@ -78,7 +79,7 @@ export function AppleLogoGlyph({ size = 20, testID }: GlyphProps) {
     >
       <Path
         d="M13.6333 10.7834C13.6167 9.0751 15.0333 8.25843 15.0917 8.21676C14.3 7.05843 13.0667 6.9001 12.625 6.88343C11.575 6.7751 10.575 7.5001 10.0417 7.5001C9.50835 7.5001 8.69168 6.9001 7.81668 6.91676C6.67501 6.93343 5.61668 7.58343 5.02501 8.60843C3.83335 10.6751 4.71668 13.7334 5.87501 15.4084C6.44168 16.2251 7.11668 17.1418 8.00002 17.1084C8.85002 17.0751 9.17501 16.5584 10.2083 16.5584C11.2333 16.5584 11.525 17.1084 12.425 17.0918C13.3417 17.0751 13.9167 16.2584 14.475 15.4334C15.125 14.4834 15.3917 13.5668 15.4083 13.5168C15.3917 13.5084 13.6167 12.8251 13.6 10.7834H13.6333ZM12.0833 5.7501C12.55 5.18343 12.8667 4.39176 12.775 3.6001C12.1 3.6251 11.2833 4.0501 10.8 4.61676C10.3667 5.11676 9.98335 5.91676 10.0833 6.68343C10.8333 6.74176 11.6083 6.3001 12.0833 5.7501Z"
-        fill="#000000"
+        fill={COLOR_TOKENS.scrim}
       />
     </Svg>
   );
@@ -120,7 +121,7 @@ export function NaverIcon({ size = 20, testID }: GlyphProps) {
       />
       <Path
         d="M6.66669 5.8335H8.91669L11.0834 9.16683V5.8335H13.3334V14.1668H11.0834L8.91669 10.8335V14.1668H6.66669V5.8335Z"
-        fill="#ffffff"
+        fill={COLOR_TOKENS.canvas}
       />
     </Svg>
   );
@@ -129,7 +130,7 @@ export function NaverIcon({ size = 20, testID }: GlyphProps) {
 // 에러 배너 경고 아이콘 — 형태 선례는 shared/location/LocationGlyphs.tsx 의
 // LocationInfoGlyph(원형 info, 같은 18px·strokeWidth 1.575·round cap/join, 내부 2 path).
 // 여기서는 원(info) 대신 삼각(warning) 외곽 + 세로 막대 + 하단 점 3-path.
-export function WarningTriangleGlyph({
+export function AuthWarningTriangleGlyph({
   size = 18,
   testID,
   color,

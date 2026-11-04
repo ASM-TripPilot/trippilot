@@ -1,11 +1,6 @@
 import Svg, { Circle, Path } from 'react-native-svg';
+import { COLOR_TOKENS } from '@/shared/config';
 // 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
-import {
-  HeartStrokeFilledGlyph,
-  HeartStrokeOutlineGlyph,
-} from '@/shared/ui/glyphs';
-
-export { SuitcaseGlyph, CloseGlyph } from '@/shared/ui/glyphs';
 
 // 홈 "발견·영감 피드" 전용 인라인 벡터 글리프(AuthGlyphs/OnboardingGlyphs 패턴 계승 · TRIP-316).
 // features 간 직접 import 금지(importBoundary)라 화면끼리 글리프를 공유하지 않는다 — 이 파일은
@@ -13,10 +8,10 @@ export { SuitcaseGlyph, CloseGlyph } from '@/shared/ui/glyphs';
 // 색은 이 파일 안에서만 raw hex로 고정한다(OnboardingGlyphs 선례 — `ui/` 안이지만
 // `*Screen.tsx` 파일명 필터 밖이라 D-3(raw-hex 가드) 대상이 아니다).
 
-const INK = '#222222';
-const MUTED_SOFT = '#9AA1AB';
-const PRIMARY = '#FF385C';
-const WHITE = '#FFFFFF';
+const INK = COLOR_TOKENS.ink;
+const MUTED_SOFT = COLOR_TOKENS['muted-soft'];
+const PRIMARY = COLOR_TOKENS.primary;
+const WHITE = COLOR_TOKENS.canvas;
 
 type GlyphProps = {
   size?: number;
@@ -24,7 +19,7 @@ type GlyphProps = {
 };
 
 // 인사 헤더 우측 알림 벨 — 장식만, 배지 dot은 화면 쪽에서 별도 View로 얹는다(no-op 대상).
-export function BellGlyph({ size = 22, testID }: GlyphProps) {
+export function HomeBellGlyph({ size = 22, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -51,7 +46,7 @@ export function BellGlyph({ size = 22, testID }: GlyphProps) {
 }
 
 // 검색바 왼쪽 돋보기 — 플레이스홀더와 같은 muted-soft 톤.
-export function SearchGlyph({ size = 19, testID }: GlyphProps) {
+export function HomeSearchGlyph({ size = 19, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -72,7 +67,7 @@ export function SearchGlyph({ size = 19, testID }: GlyphProps) {
 }
 
 // magazineHero eyebrow('오늘의 여행 영감') 앞 반짝임 — 흰 pill 위 primary 4각 별.
-export function SparkleGlyph({ size = 13, testID }: GlyphProps) {
+export function HomeSparkleGlyph({ size = 13, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -90,7 +85,7 @@ export function SparkleGlyph({ size = 13, testID }: GlyphProps) {
 }
 
 // destCard 지역 라벨('부산 사하구') 앞 위치 핀 — TRIP-694로 흰색→primary(Figma 정합, AC-4).
-export function LocationPinGlyph({ size = 12, testID }: GlyphProps) {
+export function HomeLocationPinGlyph({ size = 12, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -110,22 +105,8 @@ export function LocationPinGlyph({ size = 12, testID }: GlyphProps) {
   );
 }
 
-// 카드·hero 우상단 하트 — 전부 사진 위라 흰색(장식 · no-op). 저장 상태 토글은 아직 없다.
-export function HeartOutlineGlyph({ size = 22, testID }: GlyphProps) {
-  return (
-    <HeartStrokeOutlineGlyph size={size} color="onPrimary" testID={testID} />
-  );
-}
-
-// 담은 곳 FAB 안 하트 — 흰 배경 위라 채움·선 둘 다 primary. `HeartOutlineGlyph`(사진 위 흰
-// 장식)와 경로는 같고 색만 다르다. features 간 글리프 공유가 금지(importBoundary)라
-// features/stay 의 같은 이름 글리프를 가져오지 않고 이 파일에 다시 적는다.
-export function HeartFilledGlyph({ size = 22, testID }: GlyphProps) {
-  return <HeartStrokeFilledGlyph size={size} testID={testID} />;
-}
-
 // FAB('여행 만들기') 앞 plus — bg-primary 위라 on-primary(흰색) 고정.
-export function PlusGlyph({ size = 22, testID }: GlyphProps) {
+export function HomePlusGlyph({ size = 22, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}
@@ -146,7 +127,7 @@ export function PlusGlyph({ size = 22, testID }: GlyphProps) {
 
 // 담은 곳 saved-menu 미니 FAB 아이콘(TRIP-494 홈 확장, Figma a01 3012:1731).
 /** 담은 장소 미니 FAB — 위치 핀(분홍, 흰 원 위). 26px 확대판(hero 우상단 WHITE 핀과 색·용도 상이). */
-export function MapPinGlyph({ size = 26, testID }: GlyphProps) {
+export function HomeMapPinGlyph({ size = 26, testID }: GlyphProps) {
   return (
     <Svg
       testID={testID}

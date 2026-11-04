@@ -1,7 +1,7 @@
 import Svg, { Path } from 'react-native-svg';
-// 공용 글리프(shared/ui/glyphs) 재수출 — 소비처 import 경로는 그대로다 (TRIP-1358)
-export { LockGlyph, ClockGlyph } from '@/shared/ui/glyphs';
 
+import { ForkKnifeGlyph, ShoppingBagGlyph } from '@/shared/ui/glyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 // TRIP-809 · entities/itinerary-slot 슬롯 카드 글리프. 카테고리 아이콘 6종(맛집·카페·자연·쇼핑·
 // 문화 + 폴백 이미지, 컨셉 선택 화면이 쓴다 — 명소·야경은 사진 칸이 생성 이미지로 바뀌며 삭제)을 features/itinerary/ui/ItineraryGlyphs 에서 바이트 그대로
 // 이관했고(TRIP-465 출생), ReplanSlotRow(i13)용 chevron·lock 2종은 planb PlanbGlyphs 판을 바이트 복제했다
@@ -11,14 +11,14 @@ export { LockGlyph, ClockGlyph } from '@/shared/ui/glyphs';
 // raw-hex 스캔 제외 관례 · docs/structure.md §지금 작업하려면). 카테고리 아이콘 색은 틴트 계열의 "진한
 // 잉크"로 스냅한다 — info-bg 틴트엔 info, success-bg 틴트엔 success.
 
-const MUTED = '#6A6A6A';
-const PRIMARY_TEXT = '#C13515';
-const INFO = '#0B6E63';
-const SUCCESS = '#0E9384';
-const INK = '#222222';
+const MUTED = COLOR_TOKENS.muted;
+const INFO = COLOR_TOKENS.info;
+const SUCCESS = COLOR_TOKENS.success;
+const INK = COLOR_TOKENS.ink;
 // 비활성 회청(Figma #C2CCD6) — 토큰 없음, TripGlyphs `DISABLED` 선례와 같은 값.
+// eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill(비활성), 토큰 없음
 const DISABLED = '#C2CCD6';
-const ON_PRIMARY = '#FFFFFF';
+const ON_PRIMARY = COLOR_TOKENS['on-primary'];
 
 type GlyphProps = {
   size?: number;
@@ -27,30 +27,7 @@ type GlyphProps = {
 
 // 맛집 — 포크+나이프(primary-text). onboarding `ForkKnifeGlyph` 벡터 복제, 색만 스냅.
 export function CategoryForkKnifeGlyph({ size = 30, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M7 2.5V10.5M9 2.5V10.5M5 2.5V8.5C5 9.6 5.9 10.5 7 10.5V21.5"
-        stroke={PRIMARY_TEXT}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M17 2.5C15.3431 2.5 14 4.79086 14 7.5C14 9.98528 15.1193 12.0402 16.5714 12.4272L16 21.5"
-        stroke={PRIMARY_TEXT}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
+  return <ForkKnifeGlyph size={size} color="primaryText" testID={testID} />;
 }
 
 // 카페 — 커피컵+김(muted). 컵 몸통 + 손잡이 + 위로 오르는 김 2줄.
@@ -125,30 +102,7 @@ export function CategoryTreeGlyph({ size = 30, testID }: GlyphProps) {
 
 // 쇼핑 — 쇼핑백(primary-text). onboarding `ShoppingBagGlyph` 벡터 복제, 색만 스냅.
 export function CategoryShoppingBagGlyph({ size = 30, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M4.5 8.5H19.5L18.5 20.5H5.5L4.5 8.5Z"
-        stroke={PRIMARY_TEXT}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M8 8.5V6.5C8 4.29086 9.79086 2.5 12 2.5C14.2091 2.5 16 4.29086 16 6.5V8.5"
-        stroke={PRIMARY_TEXT}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
+  return <ShoppingBagGlyph size={size} color="primaryText" testID={testID} />;
 }
 
 // 문화 — 기둥/박공 건물(info). 삼각 지붕 + 기둥 4개 + 밑단.
@@ -219,29 +173,6 @@ export function CategoryImageGlyph({ size = 30, testID }: GlyphProps) {
   );
 }
 
-// TRIP-563 출생 · ReplanSlotRow(i13) 슬롯 행 어포던스 글리프 2종 — planb PlanbGlyphs 판 바이트 복제.
-// primary-text(#C13515) raw 고정("다른 후보 N" 텍스트·고정 pill 텍스트와 같은 잉크). 무prop 호출(<Glyph/>).
-// "다른 후보 N >" 우측 체브론. TRIP-783 · SlotStopCard 의 이름 뒤 회색 chevron 용으로 `tone` 확장
-// (LockGlyph·PlusGlyph 의 tone 패턴 계승, 후방호환 — 무prop 호출은 여전히 primary-text). muted 는
-// 이름 leaf 옆에 붙는 은은한 어포던스(이름 텍스트 뒤라 primary-text 는 과하다).
-export function ChevronRightGlyph({
-  size = 16,
-  tone = 'primaryText',
-}: GlyphProps & { tone?: 'primaryText' | 'muted' | 'ink' }) {
-  const stroke = tone === 'muted' ? MUTED : tone === 'ink' ? INK : PRIMARY_TEXT;
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M9 6L15 12L9 18"
-        stroke={stroke}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 // TRIP-746 · i01 허브 진행 카드 아이콘 3종(Figma 4125:3957 벡터 그대로) — active [사진]·[메모]는
 // ink(16), upcoming 비활성 버튼은 회청(15). 같은 모양을 `tone` 으로 가른다(ChevronRightGlyph 패턴).
 // TRIP-1021 — upcoming 수동 [✓ 도착](bg-primary 알약)의 체크는 흰색(onPrimary).
@@ -306,7 +237,7 @@ export function MemoGlyph({
   );
 }
 
-export function CheckGlyph({
+export function SlotCheckGlyph({
   size = 15,
   tone = 'disabled',
 }: GlyphProps & { tone?: ProgressTone }) {

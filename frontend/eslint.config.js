@@ -3,6 +3,9 @@ const fs = require('fs');
 const path = require('path');
 
 const { defineConfig } = require('eslint/config');
+const crypto = require('crypto');
+const { glyphExportBlocks } = require('./scripts/glyphExportBlocks.cjs');
+const noRawHex = require('./scripts/noRawHex.cjs');
 const expoConfig = require('eslint-config-expo/flat');
 
 // FSD 층 방향(app → pages → widgets → features → entities → shared)을 import 경계로 강제한다.
@@ -39,6 +42,31 @@ const layerGlob = (...segments) => path.join(SRC, ...segments, '**');
 const ROUTES = path.join(__dirname, 'app', '**');
 const ROUTE_FILES = 'app/**/*.{ts,tsx}';
 const ROUTE_DEV = 'app/_dev/**';
+
+// 글리프 이름 겹침 금지(TRIP-1773)의 입력 — src 아래 `*Glyphs.tsx` 소스를 읽어 순수 함수(scripts/glyphExportBlocks.cjs)에 넘긴다.
+const collectGlyphFiles = (dir) =>
+  fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return collectGlyphFiles(full);
+    return entry.name.endsWith('Glyphs.tsx') ? [full] : [];
+  });
+const glyphSources = () =>
+  Object.fromEntries(
+    collectGlyphFiles(SRC).map((abs) => [
+      path.relative(__dirname, abs).split(path.sep).join('/'),
+      fs.readFileSync(abs, 'utf8'),
+    ])
+  );
+
+// raw hex 규칙(TRIP-1774)의 `--cache` 무효화용 해시 — 규칙 소스와 색 정본이 바뀌면 값이 바뀐다(아래 켜는 블록 settings).
+const RAW_HEX_SOURCE_HASH = crypto
+  .createHash('sha1')
+  .update(fs.readFileSync(path.join(__dirname, 'scripts/noRawHex.cjs')))
+  .update(
+    fs.readFileSync(path.join(__dirname, 'src/shared/config/colorTokens.cjs'))
+  )
+  .digest('hex')
+  .slice(0, 12);
 
 // 층별 슬라이스 목록은 손으로 나열하지 않고 디렉토리에서 읽는다 — 새 슬라이스가 생기면 자동으로
 // 형제 격리 대상에 편입돼 하드코딩 드리프트를 막는다(구조 테스트도 같은 방식으로 목록을 읽는다).
@@ -349,8 +377,9 @@ const WORKLET_DEFAULT_PARAM_GATE = [
 const PRESS_NAV_MESSAGE =
   '누름 이동은 `guardPress(() => router.…)`로 감싼다(TRIP-1013) — 인라인 화살표의 router 이동은 연타 시 화면이 두 번 쌓인다.';
 // TRIP-1685: `goBackOr(router, …)` 는 router.back 을 감싼 이동이라 같이 잡는다(안 잡으면 교체만으로 그물이 뚫린다).
+// TRIP-1771: `openNewTripWizard(router, …)` 도 router.push 를 감싼 이동이다 — 같은 이유로 잡는다.
 const ROUTER_NAV =
-  ":matches(CallExpression[callee.object.name='router'][callee.property.name=/^(push|navigate|replace|dismissTo|back)$/], CallExpression[callee.name='goBackOr'])";
+  ":matches(CallExpression[callee.object.name='router'][callee.property.name=/^(push|navigate|replace|dismissTo|back)$/], CallExpression[callee.name=/^(goBackOr|openNewTripWizard)$/])";
 const HANDLER_ARROW =
   'JSXExpressionContainer > ArrowFunctionExpression, Property[key.name=/^onPress/] > ArrowFunctionExpression';
 const PRESS_NAV_GATE = [
@@ -665,6 +694,51 @@ module.exports = defineConfig([
         },
       ],
     },
+  },
+  // ── 글리프 이름 겹침 금지(TRIP-1773 · M-66) ────────────────────────────────────────────
+  // `*Glyphs.tsx` 파일 사이에 같은 이름을 export 하면 error — 같은 이름이 파일마다 다른 도형이라(141 정의·40 이름) grep 으로
+  // 정본을 못 찾던 문제를 0 으로 맞춰 둔 걸 지킨다. 공용(shared/ui/glyphs)만 접두 없는 이름을 갖고, 슬라이스 것은 접두를 붙인다.
+  // 금지 목록은 설정 로드 때 디스크의 글리프 파일에서 읽어 scripts/glyphExportBlocks.cjs(순수 함수, 단위 테스트가 있다)로 계산한다:
+  // 파일 F 에는 "F 가 아닌 다른 글리프 파일이 정의한 이름"이 걸린다(전체 − 내 이름이 아니다 — 두 파일이 같은 이름을 정의하면 서로 자기 이름이라 면제돼 영영 안 울린다).
+  // 사정거리: 정의는 `export [async] function X`·`export const X`·`export { X }`·`export { Y as X }` 로 거두고(둘째 글자 대문자 이름·간접 export 포함),
+  // 린트가 잡는 형태는 그 위에 `export { X } from` 재수출까지다. 못 보는 것: `export * from`(이름이 없다) · `export type/interface`(컴포넌트 아님) · ALL_CAPS 상수.
+  // `no-restricted-exports` 는 이 파일 어디에도 안 쓰여 `no-restricted-syntax` 덮어쓰기 함정과 안 부딪힌다.
+  ...glyphExportBlocks(glyphSources()),
+  // ── raw hex 금지(TRIP-1774 · M-76) ────────────────────────────────────────────────────
+  // 색 hex 는 정본(src/shared/config/colorTokens.cjs) 한 곳에만 적는다 — `.ts/.tsx` 문자열·템플릿에 3·6·8자리 hex 가 있으면 error.
+  // 규칙 본문은 scripts/noRawHex.cjs(독립 id 라 `no-restricted-syntax` 덮어쓰기와 무관). 이 파일은 배선만 한다.
+  // 사정거리 — 못 보는 것: rgba()·이름 색(white·black)·문자열 연결/템플릿 조합으로 만든 hex·4·5·7자리·JSX 텍스트·주석·`.js/.cjs/.json`·루트 app.config.ts.
+  //   `__fixtures__` 는 TEST_IGNORES 에 없어 오히려 걸린다. `app/_dev` 도 걸린다(ROUTE_DEV 를 안 뺀다).
+  // ⚠️ 플러그인 등록은 `files` 없는 블록이어야 한다 — 켜는 블록 안에만 두면 테스트·`.cjs` 에 남은 사유 주석(eslint-disable trippilot/no-raw-hex)이
+  //    "정의 없음" error 가 된다.
+  { plugins: { trippilot: { rules: { 'no-raw-hex': noRawHex.rule } } } },
+  {
+    files: ['src/**/*.{ts,tsx}', 'app/**/*.{ts,tsx}'],
+    ignores: TEST_IGNORES,
+    rules: { 'trippilot/no-raw-hex': 'error' },
+    // ⚠️ `eslint --cache` 는 규칙 코드·정본 값의 변경을 못 본다(캐시 키 = 파일 내용 + 설정 직렬화, 함수는 직렬화에서 빠진다).
+    //    규칙 소스와 정본의 해시를 설정에 실어 그 둘이 바뀌면 직렬화가 바뀌어 전 파일이 다시 검사되게 한다.
+    // 지워도 테스트가 모른다 — 지우면 규칙 변경 뒤 캐시 lint 가 옛 판정을 재사용한다.
+    settings: { 'trippilot/rawHexSourceHash': RAW_HEX_SOURCE_HASH },
+  },
+  // 면제 — 토큰 밖 고유 팔레트 파일(파일 단위, 폴더 아님). 이 규칙만 끈다(다른 게이트는 켜져 있다). 켜는 블록 **뒤**에 있어야 이긴다.
+  // 새 면제는 사유와 함께 이 목록에만 추가한다.
+  //  · categoryPalette.ts — 회고 카테고리 쌍 색, Figma 변수에 없는 고유 팔레트
+  //  · regions.ts — 지역 대표 색, 고유 팔레트
+  //  · gradients.ts — 스플래시·앱아이콘 브랜드 그라디언트 stop
+  //  · webMapController.ts — 웹 지도 HTML 템플릿 안의 인라인 색
+  //  · AuthGlyphs.tsx — 소셜 로그인 브랜드 로고 색
+  //  · TourGlyphs.tsx — 온보딩 일러스트 고유 색
+  {
+    files: [
+      'src/features/reflection/model/categoryPalette.ts',
+      'src/features/explore/model/regions.ts',
+      'src/features/auth/config/gradients.ts',
+      'src/shared/map/webMapController.ts',
+      'src/features/auth/ui/AuthGlyphs.tsx',
+      'src/pages/onboarding/onboarding-tour/ui/TourGlyphs.tsx',
+    ],
+    rules: { 'trippilot/no-raw-hex': 'off' },
   },
   {
     // .cjs 는 node CommonJS 런타임으로 실행되는 스크립트다(하네스 스크립트 포함).
