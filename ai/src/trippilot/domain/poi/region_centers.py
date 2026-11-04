@@ -122,9 +122,9 @@ GWANGJU_GU = frozenset({"동구", "서구", "남구", "북구", "광산구"})
 
 
 def in_sido(want: str, sido: str | None, sigungu: str | None) -> bool:
-    """시·도 앞글자 `want`("광주"·"서울"·"전남") 안의 행인가 — 통합 특별시 행은 시군구로 가른다(광주는 다섯 구, 나머지는 전남)."""
-    if sido == MERGED_SIDO and want in ("광주", "전남", "전라남도"):
-        return ((sigungu or "") in GWANGJU_GU) == (want == "광주")
+    """시·도 앞글자 `want`("광주"·"서울") 안의 행인가 — 통합 특별시 행의 광주는 다섯 구다. 그 밖은 앞글자(옛 '광주광역시'도 맞는다)."""
+    if sido == MERGED_SIDO and want == "광주":
+        return (sigungu or "") in GWANGJU_GU
     return (sido or "").startswith(want)
 
 

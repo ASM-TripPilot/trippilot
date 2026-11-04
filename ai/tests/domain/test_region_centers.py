@@ -119,8 +119,8 @@ def test_putting_a_place_off_for_next_time_is_not_a_departure(text: str) -> None
 
 @pytest.mark.parametrize(("want", "sido", "sigungu", "inside"), [
     ("광주", "전남광주통합특별시", "동구", True), ("광주", "전남광주통합특별시", "광산구", True),  # 통합 특별시의 광주 다섯 구
-    ("광주", "전남광주통합특별시", "여수시", False), ("전남", "전남광주통합특별시", "목포시", True),  # 나머지는 전남
-    ("전남", "전남광주통합특별시", "북구", False), ("서울", "전남광주통합특별시", "동구", False),
+    ("광주", "전남광주통합특별시", "여수시", False), ("광주", "전남광주통합특별시", None, False),  # 나머지는 전남
+    ("서울", "전남광주통합특별시", "동구", False), ("광주", "경기도", "광주시", False),  # 경기 광주시는 광주가 아니다
     ("광주", "광주광역시", "동구", True), ("서울", "서울특별시", "종로구", True), ("부산", "서울특별시", None, False),  # 그 밖은 앞글자
 ])
 def test_in_sido_splits_the_merged_province_by_district(want: str, sido: str, sigungu: str | None, inside: bool) -> None:

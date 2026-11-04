@@ -2075,8 +2075,8 @@ def _explore_events(ctx: TurnContext, anchor: _Anchor, theme: str | None,
         def inside(e: EventInfo) -> bool:
             if sido is not None:  # 주소가 시·도를 말하면 그것으로, 아니면(주소 없음·"여의도 집결") 15km
                 words = (e.address or "").split()
-                if words and words[0] == MERGED_SIDO:  # 통합 특별시 주소는 다음 낱말(구·시·군)로 가른다 — 정규식은 '전남'을 잡았다
-                    return in_sido(sido, words[0], words[1] if len(words) > 1 else None)
+                if words and words[0] in (MERGED_SIDO, "전남광주"):  # 통합 특별시 주소(줄인 꼴도)는 다음 낱말(구·시·군)로 가른다 — 정규식은 '전남'을 잡았다
+                    return in_sido(sido, MERGED_SIDO, words[1] if len(words) > 1 else None)
                 said = _ADDRESS_SIDO.match(e.address or "")
                 return said.group(0) == sido if said else haversine_km(center, e.coord) <= _EVENT_NEAR_KM
             return haversine_km(center, e.coord) <= near_km

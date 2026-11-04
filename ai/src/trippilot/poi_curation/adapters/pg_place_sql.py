@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from trippilot.domain.poi.poi import NIGHTLIFE_TAG, TRENDING_TAG
-from trippilot.domain.poi.region_centers import bare_region, in_sido
+from trippilot.domain.poi.region_centers import bare_region, in_sido, region_area
 
 ROW_CAP = 20  # 핸들러는 ≤5 를 쓴다 — 표시 불가 이름·나이트라이프를 거르고도 남게 넉넉히
 STATEMENT_TIMEOUT_MS = 1500  # 팬아웃 작업 예산(≤3s) 안에서 LLM(~1.5s) 뒤에 남는 몫
@@ -67,7 +67,9 @@ def _pick_one(hits: Sequence[PlaceRow], area: str | None) -> PlaceRow | None:
     """같은 이름 여럿에서 한 곳 — 한 곳뿐 → 지역 안 한 곳 → 정보 충실(rich) 한 곳 → 관광 종류 한 곳, 아니면 None(`find_by_name` 규칙)."""
     if len(hits) == 1:
         return hits[0]
-    local = [h for h in hits if area and (in_sido(area, h.sido, h.sigungu) or (h.sigungu or "").startswith(area))]
+    sido_level = area is not None and region_area(area) == (area, ())  # 시·도 이름("광주")은 시·도로만 — 구·군 앞글자면 경기 광주시가 걸렸다
+    local = [h for h in hits if area and (in_sido(area, h.sido, h.sigungu)
+                                          or (not sido_level and (h.sigungu or "").startswith(area)))]
     if len(local) == 1:
         return local[0]
     rich = [h for h in (local or hits) if h.rich]  # 지역 안(없으면 전체)에서 정보 충실한 곳이 하나뿐인가 — 정렬이 rich 를 앞에 둔다
@@ -156,8 +158,9 @@ class PgPlaceSql:
 
     def find_by_name(self, name: str, area: str | None = None) -> PlaceRow | None:
         """일정 밖 장소를 이름으로 한 곳 찾는다 — **우리가 쓴** 매개변수 SQL(LLM 없음). 공백만 뗀 **완전 일치**만 본다.
-        여러 곳이면(체인점) 여행 지역(`area` — 지역 표 이름: "서울"·"제주"·"강릉")으로 좁힌다. 행의 시·도나 구·군이 그 이름으로 시작하면
-        같은 지역이다("강릉"→강릉시, 도 아래 시군 여행도 걸린다). 그 안에서 정보가 충실한 곳(rich — 사진·영업시간)이 하나뿐이면 그곳이다
+        여러 곳이면(체인점) 여행 지역(`area` — 지역 표 이름: "서울"·"제주"·"강릉")으로 좁힌다. 시·도 이름이면 행의 시·도로(`in_sido` — 광주는
+        통합 특별시의 다섯 구, 경기 광주시는 아니다), 시·군이면 구·군이 그 이름으로 시작하면 같은 지역이다("강릉"→강릉시, 도 아래 시군 여행도
+        걸린다). 그 안에서 정보가 충실한 곳(rich — 사진·영업시간)이 하나뿐이면 그곳이다
         ("경복궁"은 서울에만 9곳 — 같은 이름의 식당·업소 사업자 등록 사이에서 관광지 한 곳만 사진·영업시간을 갖췄다, 2026-10-21 로컬 적재).
         그래도 둘 이상이면 그중 관광 종류(`_SIGHT_CATEGORIES`)가 하나뿐일 때 그곳이다 — 여행이 없으면 지역으로 못 좁히는데 개발 DB 의
         "경복궁" 11곳 중 rich 가 궁궐(종로)과 울산 식당 둘이었다(2026-11-02). 그래도 둘 이상이면 None — 하나를 골라 다른 곳의 영업시간을 말하면

@@ -2650,9 +2650,11 @@ def test_explore_event_gwangju_anchor_reads_the_merged_province_by_district() ->
     gwangju = (EventInfo("tourapi-g1", "충장축제", EventType.FESTIVAL, date(2026, 10, 24), date(2026, 10, 25),
                          GeoPoint(35.1486, 126.9177), "전남광주통합특별시 동구 금남로 245 (금남로1가)"),
                EventInfo("tourapi-g2", "목포항구축제", EventType.FESTIVAL, date(2026, 10, 24), date(2026, 10, 25),
-                         GeoPoint(34.7880, 126.3830), "전남광주통합특별시 목포시 삼학로92번길 6"))
+                         GeoPoint(34.7880, 126.3830), "전남광주통합특별시 목포시 삼학로92번길 6"),
+               EventInfo("tourapi-g3", "봉선동 골목축제", EventType.FESTIVAL, date(2026, 10, 24), date(2026, 10, 25),
+                         GeoPoint(35.1550, 126.8600), "전남광주 남구 봉선로 208"))  # 줄인 꼴 주소도 같다
     facts, _ = _explore_events_turn({"region": "광주", "theme": "축제"}, "이번 주말 광주 축제", events=gwangju)
-    assert _event_names(facts) == ["충장축제"]
+    assert _event_names(facts) == ["봉선동 골목축제", "충장축제"]  # 같은 기간이면 가까운 곳부터
 
 
 @pytest.mark.parametrize(("name", "exhibition"), [
