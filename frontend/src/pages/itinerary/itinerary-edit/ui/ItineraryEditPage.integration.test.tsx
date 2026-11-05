@@ -26,6 +26,7 @@ import type {
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import {
+  editListData,
   fireEditDragEnd,
   fireEditDropOnZone,
 } from '@/test-support/editDragList';
@@ -323,6 +324,8 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       expect(putCalls).toBe(0);
       // TRIP-1791 — 일정 편집(h24)에는 「선택」(여러 곳 빼기) 진입이 있다. 직접 짜기에는 없다(ManualPlanPage M1).
       expect(screen.getByTestId('editor-select-toggle')).toBeOnTheScreen();
+      // TRIP-1792 — 편집을 시작한 직후엔 되돌릴 게 없어 머리 ↶ 가 있되 비활성이다(AC-5). 직접 짜기엔 아예 없다(ManualPlanPage M1).
+      expect(screen.getByTestId('editor-undo')).toBeDisabled();
     });
   });
 
@@ -536,6 +539,15 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       expect(await screen.findByTestId(cardId('poi-a'))).toBeOnTheScreen();
       expect(screen.getByTestId(cardId('poi-b'))).toBeOnTheScreen();
       expect(screen.getByTestId(META)).toHaveTextContent('2곳');
+
+      // TRIP-1792 · AC-9 — 2일차에서 한 삭제는 1일차를 보는 중에도 머리 ↶ 로 되돌려지고, 되돌리면 그 2일차로 따라간다.
+      expect(screen.getByTestId('editor-undo')).not.toBeDisabled();
+      fireEvent.press(screen.getByTestId('editor-undo'));
+      expect(await screen.findByTestId(cardIdDay2('poi-c'))).toBeOnTheScreen();
+      expect(screen.getByTestId(META)).toHaveTextContent('1곳');
+      expect(screen.queryByTestId(cardId('poi-a'))).toBeNull();
+      expect(screen.getByTestId('editor-undo')).toBeDisabled(); // 쌓인 게 없어졌다
+      expect(putCalls).toBe(0);
     });
   });
 
@@ -1255,13 +1267,27 @@ describe('드래그 실배선', () => {
     clearAccessToken();
   });
 
+  // TRIP-1792 — 끌기·선택 빼기 직후의 안내 바(공용 Toast)를 보려면 루트 호스트를 같이 그려야 한다.
   function renderPage() {
     const client = newTestQueryClient({ gcTime: 0 });
     lastClient = client;
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>
+          <WithToastHost>{children}</WithToastHost>
+        </QueryClientProvider>
+      );
+    }
     return render(<ItineraryEditPage tripId={TRIP_ID} />, {
-      wrapper: createWrapper(client),
+      wrapper: Wrapper,
     });
   }
+
+  const UNDO = 'editor-undo';
+  const BAR = 'editor-undo-bar';
+  const BAR_ACTION = 'editor-undo-bar-action';
+  const listOrder = (): string[] =>
+    (editListData() as { poiId: string }[]).map((s) => s.poiId);
 
   /** 첫 슬롯 카드가 뜰 때까지 기다린다 — 시드는 GET 도착 뒤다. */
   async function ready(): Promise<void> {
@@ -1322,10 +1348,52 @@ describe('드래그 실배선', () => {
   });
 
   describe('🔴 E4 · AC-8 — 드롭존에 놓은 곳은 곳수에서 빠지고 PUT 에 없다', () => {
-    it('b 를 드롭존에 놓으면 헤더가 2곳이 되고 저장 PUT 은 [a,c] 다', async () => {
+    it('b 를 드롭존에 놓으면 헤더가 2곳이 되고 저장 PUT 은 [a,c] 다 · 앞서 되돌리기 안내 바·머리 ↶·낡은 바 가드를 거쳐도 그렇다 (TRIP-1792)', async () => {
       renderPage();
       await ready();
       expect(screen.getByTestId(META)).toHaveTextContent('3곳');
+
+      // TRIP-1792 · 저장 전 되돌리기 — 끌어서 삭제 직후 안내 바와 머리 ↶ (AC-1·4·5·11). 문구는 Text 한 줄이라 within 으로 읽는다
+      //  (바 컨테이너의 글자는 문구+「되돌리기」가 붙어 `toHaveTextContent('1곳을 뺐어요')` 는 완전 일치에서 빗나간다).
+      expect(screen.getByTestId(UNDO)).toBeDisabled();
+      expect(screen.queryByTestId(BAR)).toBeNull(); // 앵커 — 편집 전엔 바가 없다
+
+      // ① 바 「되돌리기」 — b 가 원래 가운데 자리로 돌아온다(AC-1), 바는 닫힌다.
+      await fireEditDropOnZone(1);
+      expect(listOrder()).toEqual(['a', 'c']);
+      expect(
+        within(screen.getByTestId(BAR)).getByText('1곳을 뺐어요')
+      ).toBeOnTheScreen();
+      expect(screen.getByTestId(UNDO)).not.toBeDisabled();
+      fireEvent.press(screen.getByTestId(BAR_ACTION));
+      expect(listOrder()).toEqual(['a', 'b', 'c']);
+      expect(screen.getByTestId(META)).toHaveTextContent('3곳');
+      expect(screen.queryByTestId(BAR)).toBeNull();
+      expect(screen.getByTestId(UNDO)).toBeDisabled();
+
+      // ② 바가 사라진 뒤에도 머리 ↶ 가 같은 일을 한다(AC-4 — 바의 6초 수명에 묶지 않는다).
+      await fireEditDropOnZone(1);
+      expect(screen.getByTestId(BAR)).toBeOnTheScreen();
+      resetToast(); // 6초 만료와 같은 상태: 바가 지워졌다
+      expect(screen.queryByTestId(BAR)).toBeNull();
+      expect(screen.getByTestId(UNDO)).not.toBeDisabled();
+      fireEvent.press(screen.getByTestId(UNDO));
+      expect(listOrder()).toEqual(['a', 'b', 'c']);
+
+      // ③ 낡은 바 — 삭제(바 떠 있음) → 머리 ↶ 로 되돌림 → 다른 편집(c 를 맨 앞으로) → 아직 떠 있는 옛 바를 누른다.
+      //    이력 길이는 1 로 같지만 맨 위가 "순서 바꾸기"라 옛 바는 그걸 되돌리면 안 된다(AC-11). 바는 그냥 닫힌다.
+      await fireEditDropOnZone(1);
+      fireEvent.press(screen.getByTestId(UNDO));
+      fireEditDragEnd(2, 0);
+      expect(listOrder()).toEqual(['c', 'a', 'b']);
+      expect(screen.getByTestId(BAR)).toBeOnTheScreen(); // 옛 바가 남아 있다
+      fireEvent.press(screen.getByTestId(BAR_ACTION));
+      expect(listOrder()).toEqual(['c', 'a', 'b']); // 순서 바꾸기는 그대로
+      expect(screen.queryByTestId(BAR)).toBeNull();
+      expect(screen.getByTestId(UNDO)).not.toBeDisabled(); // 순서 바꾸기는 여전히 되돌릴 수 있다
+      fireEvent.press(screen.getByTestId(UNDO)); // 순서 바꾸기도 걷어 처음(a,b,c)으로 — 아래 원래 단언이 이어진다
+      expect(listOrder()).toEqual(['a', 'b', 'c']);
+      expect(screen.getByTestId(UNDO)).toBeDisabled();
 
       await fireEditDropOnZone(1);
 
@@ -1343,6 +1411,9 @@ describe('드래그 실배선', () => {
       await fireEditDropOnZone(1);
 
       expect(screen.getByTestId(META)).toHaveTextContent('4곳');
+      // TRIP-1792 — 안 지워진 시도는 이력도 안내 바도 만들지 않는다(바가 거짓으로 "뺐어요"를 말하지 않는다).
+      expect(screen.queryByTestId(BAR)).toBeNull();
+      expect(screen.getByTestId(UNDO)).toBeDisabled();
 
       // TRIP-1791 — 이어서 「선택」으로 여러 곳 빼기. 고정 F 의 체크는 비활성이라 눌러도 선택되지 않는다.
       fireEvent.press(screen.getByTestId('editor-select-toggle'));
@@ -1368,6 +1439,25 @@ describe('드래그 실배선', () => {
         screen.queryByTestId(`slot-stopcard-${buildSlotKey(DAY, 'b')}`)
       ).toBeNull();
       expect(putCalls).toBe(0);
+
+      // TRIP-1792 · 여러 곳 빼기 직후 안내 바 — 문구는 곳수, 「되돌리기」 한 번에 두 곳이 같은 자리로 돌아온다(AC-3·11).
+      expect(
+        within(screen.getByTestId(BAR)).getByText('2곳을 뺐어요')
+      ).toBeOnTheScreen();
+      expect(listOrder()).toEqual(['F', 'c']);
+      fireEvent.press(screen.getByTestId(BAR_ACTION));
+      expect(listOrder()).toEqual(['a', 'F', 'b', 'c']);
+      expect(screen.getByTestId(META)).toHaveTextContent('4곳');
+      expect(screen.queryByTestId(BAR)).toBeNull();
+      expect(screen.getByTestId(UNDO)).toBeDisabled();
+      expect(putCalls).toBe(0);
+      // 다시 같은 두 곳을 빼 둔다 — 이어지는 저장 단언(남은 2곳만 실린다)은 1791 계약 그대로.
+      fireEvent.press(screen.getByTestId('editor-select-toggle'));
+      fireEvent.press(screen.getByTestId('editor-select-check-a'));
+      fireEvent.press(screen.getByTestId('editor-select-check-b'));
+      fireEvent.press(screen.getByTestId('editor-select-delete'));
+      fireEvent.press(screen.getByTestId('editor-select-confirm-ok'));
+      expect(listOrder()).toEqual(['F', 'c']);
       // 이어 저장하면 남은 2곳만 실린다.
       expect(await saveAndReadOrder()).toEqual(['F', 'c']);
     });

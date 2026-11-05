@@ -8204,6 +8204,8 @@ export const PREVIEW_STATES: PreviewState[] = [
         onPressAddBetween={noop}
         onSave={noop}
         onDeleteSelected={noop}
+        // TRIP-1792 — 머리 ↶(「선택」 오른쪽). 활성 얼굴; 비활성은 enabled:false.
+        undo={{ enabled: true, onPress: noop }}
       />
     ),
   },

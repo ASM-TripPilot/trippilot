@@ -1083,6 +1083,8 @@ describe('🔴 EditorView · 여러 곳 골라 빼기 (TRIP-1791)', () => {
       onDeleteSelected: undefined,
     });
     expect(screen.queryByTestId('editor-select-toggle')).toBeNull();
+    // TRIP-1792 — 되돌리기 prop 도 안 줬으니 머리에 ↶ 가 없다(직접 짜기 = 기능 부재, AC-10).
+    expect(screen.queryByTestId('editor-undo')).toBeNull();
 
     // ② 콜백을 주면(편집 h24·i07) 「선택」이 생긴다. 아직 선택 얼굴 요소는 없다.
     redraw({ onDeleteSelected: cb.onDeleteSelected });
@@ -1096,12 +1098,45 @@ describe('🔴 EditorView · 여러 곳 골라 빼기 (TRIP-1791)', () => {
       screen.getByTestId(`slot-stopcard-timechip-${buildSlotKey(DATE, 'a')}`)
     ).toBeOnTheScreen();
 
+    // ②b TRIP-1792 · 머리 되돌리기 ↶ — `undo` prop 이 있을 때만 생기고, 「선택」 오른쪽에 선다(AC-5·10).
+    //  `redraw` 는 초기 prop 위에 덮어쓰므로 선택 콜백을 매번 다시 준다.
+    const onUndo = jest.fn();
+    expect(screen.queryByTestId('editor-undo')).toBeNull(); // undo 만 안 줬다 — 선택 콜백이 있어도 ↶ 는 없다
+    redraw({
+      onDeleteSelected: cb.onDeleteSelected,
+      undo: { enabled: false, onPress: onUndo },
+    });
+    expect(screen.getByTestId('editor-undo')).toBeOnTheScreen();
+    expect(screen.getByLabelText('되돌리기')).toHaveProp(
+      'testID',
+      'editor-undo'
+    );
+    expect(
+      screen
+        .getAllByTestId(/^editor-(select-toggle|undo)$/)
+        .map((node) => node.props.testID)
+    ).toEqual(['editor-select-toggle', 'editor-undo']);
+    // 이력이 없으면(enabled=false) 비활성이고 눌러도 아무 일이 없다.
+    expect(screen.getByTestId('editor-undo')).toBeDisabled();
+    press('editor-undo');
+    expect(onUndo).not.toHaveBeenCalled();
+    // 이력이 쌓이면(enabled=true) 눌림이 한 번 전달된다.
+    redraw({
+      onDeleteSelected: cb.onDeleteSelected,
+      undo: { enabled: true, onPress: onUndo },
+    });
+    expect(screen.getByTestId('editor-undo')).not.toBeDisabled();
+    press('editor-undo');
+    expect(onUndo).toHaveBeenCalledTimes(1);
+
     // ③ 실행 — 「선택」을 누른다. 선택 얼굴로 바뀐다.
     press('editor-select-toggle');
     expect(screen.getByTestId('editor-select-count')).toHaveTextContent(
       '0곳 선택'
     );
     expect(screen.queryByTestId('editor-select-toggle')).toBeNull();
+    // 선택 모드 머리에는 ↶ 가 없다(짝: 위에서 같은 prop 으로 있었다).
+    expect(screen.queryByTestId('editor-undo')).toBeNull();
     expect(screen.queryByTestId('sheet-header-title')).toBeNull();
     expect(screen.queryByTestId('sheet-header-meta')).toBeNull();
     // 카드마다 체크 원 — 잠긴 둘(고정·방문 완료)은 비활성, 나머지는 선택 안 됨·활성.
@@ -1186,6 +1221,7 @@ describe('🔴 EditorView · 여러 곳 골라 빼기 (TRIP-1791)', () => {
     // ⑨ 하단 「취소」 — 일반 얼굴로 복귀, 삭제 콜백은 한 번도 안 불린다(AC-3).
     press('editor-select-cancel');
     expect(screen.getByTestId('editor-select-toggle')).toBeOnTheScreen();
+    expect(screen.getByTestId('editor-undo')).not.toBeDisabled(); // ↶ 도 돌아온다(prop 은 그대로)
     expect(screen.queryByTestId('editor-select-count')).toBeNull();
     expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
     expect(screen.getByText('일정 저장하기')).toBeOnTheScreen();
