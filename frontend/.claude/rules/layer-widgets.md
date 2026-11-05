@@ -4,10 +4,10 @@ paths:
 ---
 # `src/widgets/` — FSD widgets 층
 
-여러 화면이 쓰는 **화면 조각**(지도+시트 셸 같은 조립 단위)을 두는 층. 담은 곳 FAB 스택(a01·d01·d03)은 소비처가 전부 features 층 화면이라 넣지 않았다 — features→widgets 상향 참조가 된다. **소비처가 한 page뿐인 부품은 위젯이 아니라 그 page 안에 둔다**(공식 FSD — TRIP-1143으로 `CoPickStepper`·`GenerationDoneBar`가 `pages/itinerary/itinerary-copick`·`pages/itinerary/itinerary-list`로 들어갔다). 지금 이 층은 `map-sheet-shell`·`time-sheet`·`bottom-nav-bar`·`curated-stays` 이다(`bottom-nav-bar`는 TRIP-1557 — 소비처가 `pages/live`·`pages/record` 두 page 라 승격됐다. `curated-stays`는 TRIP-1579 — 소비처는 d01·e02 등 page 들, TRIP-1580~).
+여러 화면이 쓰는 **화면 조각**(지도+시트 셸 같은 조립 단위)을 두는 층. 담은 곳 FAB 스택(a01·d01·d03)은 소비처가 전부 features 층 화면이라 넣지 않았다 — features→widgets 상향 참조가 된다. **소비처가 한 page뿐인 부품은 위젯이 아니라 그 page 안에 둔다**(공식 FSD — TRIP-1143으로 `CoPickStepper`·`GenerationDoneBar`가 `pages/itinerary/itinerary-copick`·`pages/itinerary/itinerary-list`로 들어갔다). 지금 이 층은 `map-sheet-shell`·`time-sheet`·`bottom-nav-bar`·`curated-stays`·`trip-edit-sheets` 이다(`bottom-nav-bar`는 TRIP-1557 — 소비처가 `pages/live`·`pages/record` 두 page 라 승격됐다. `curated-stays`는 TRIP-1579 — 소비처는 d01·e02 등 page 들, TRIP-1580~).
 
 ## import 방향
-- widgets → entities · shared 만 참조하는 것이 이 층의 옛 관례다(예외: `curated-stays`는 공식 FSD 대로 features 셋을 조립한다, TRIP-1579). 층 린트는 widgets→features를 막지 않는다(그것을 막던 소스 스캔은 TRIP-1145에서 지웠다 — 기계 강제 없음). 그래서 위젯은 features의 판단·글리프를 못 물고 로컬 복제하거나 소비처가 문자열로 넘긴다(`MapSheetGlyphs`·`EditorView`의 `dateLabel`).
+- widgets → entities · shared 만 참조하는 것이 이 층의 옛 관례다(예외: `curated-stays`는 공식 FSD 대로 features 셋을 조립한다, TRIP-1579 · `trip-edit-sheets` 는 `features/create-trip`·`features/trip` 의 규칙·글리프를 읽는다, TRIP-1787). 층 린트는 widgets→features를 막지 않는다(그것을 막던 소스 스캔은 TRIP-1145에서 지웠다 — 기계 강제 없음). 그래서 위젯은 features의 판단·글리프를 못 물고 로컬 복제하거나 소비처가 문자열로 넘긴다(`MapSheetGlyphs`·`EditorView`의 `dateLabel`).
 - pages · app · app-shell 은 참조하지 못한다. `eslint.config.js`의 층 zone이 강제하고 (층 방향 탐침은 TRIP-1350 에서 지웠다 — CI lint 가 본다).
 - ⚠️ **features→widgets 는 상향 참조라 금지**다. 위젯을 쓰는 자리는 **pages/app** — features 화면은 `ReactNode` 슬롯으로 완성된 노드만 받는다.
 
@@ -54,6 +54,18 @@ paths:
 | 파일 | 역할 |
 |---|---|
 | `src/widgets/time-sheet/ui/TimeSheet.tsx` | 공용 시각 시트 — 모든 소비처가 **한 입력**을 쓴다(TRIP-1196): 시작/종료 세그(`shared/ui/SegmentedControl`) + readout(시작·종료 둘 다 항상 실제 시각 — 종료 '설정 안 됨' 얼굴은 TRIP-1417 에서 사라졌다, 종료를 안 건드려도 `endAt`을 보인다) + 24시간 시·분 휠 2열(`shared/ui/HourMinuteWheel` — TRIP-1437, 오전/오후 열·12↔24 접기 함수 소멸, 값은 `HH:mm` 한 덩이, testID `{p}-wheel-h-NN`/`-wheel-m-NN` zero-pad) + 단일 '적용' + 머리 오른쪽 **X 닫기**(`{prefix}-close`, 44×44, `CloseGlyph color="ink"`, `onPress={onCancel}` = 딤·끌어내림과 같은 길 — 하단 취소 버튼은 여전히 없다. Figma 4970:3288 는 X 미개정이라 6-b 육안 대조에서 '알려진 차이'). 소비처 차이는 `title`(기본 '시각 조정', 편집기만 '시간대 조정')과 `placeSummary`(편집기만 장소 요약 행)뿐. `onApply({startAt,endAt,endsNextDay})` — 종료를 안 건드리면 `endAt`은 현재 값 유지(null 없음)·`endsNextDay`만 재유도. 분은 bare 숫자(INV-3), `endsNextDay` 유도는 `entities/itinerary-slot/lib/endsNextDay.ts`의 `deriveEndsNextDay`만 쓴다(재구현 금지는 코드 리뷰 몫 — `<=` 개수 소스 스캔은 TRIP-1356 에서 지웠다). (시작, 실제로 실릴 종료 — 안 건드렸으면 숨은 `endAt`) 쌍이 `isValidTimeRange`를 어기면 `${prefix}-error` 문구 + [적용] `disabled`·`bg-hairline-strong`(TRIP-1215, 매 렌더 판정 — 소비처는 재판정하지 않으므로 시트가 유일한 문). `enablePanDownToClose`·`enableContentPanningGesture={false}`(휠 스크롤이 시트 끌기로 새지 않게)·`onClose={onCancel}` — jest 통과형 목의 사각이라 6-b 전용(prop 값만 `TimeSheet.test.tsx` D1 이 잠금) |
+
+## `src/widgets/trip-edit-sheets/` — 위저드·여행 설정 공용 편집 시트 (TRIP-1787)
+
+g01 위저드(`pages/trip/trip-new-step1`)와 g03 여행 설정(`pages/trip/trip-settings`)이 같은 동행·일과 시트를 쓰도록 승격했다(`git mv`, 내용·testID `trip-wizard-*` 불변). **이 층의 옛 관례(widgets→entities·shared 만)의 예외**다 — 시트가 `@/features/create-trip`(`COMPANION_OPTIONS`·일과 규칙)과 `@/features/trip/index.view`(글리프)를 읽는다(`curated-stays` 와 같은 선례, 층 린트는 통과, TRIP-1579). 시트는 props-only 라 네트워크·스토어를 안 문다 — **`index.ts` 에 네트워크 훅·스토어를 export 하지 마라**(프리뷰 `app/_dev/preview.tsx` 가 이 배럴을 물어 전이 로드된다).
+
+| 파일 | 역할 |
+|---|---|
+| `src/widgets/trip-edit-sheets/index.ts` | 공개 API — 시트 2·`StepperButton`·`partyRangeFor`·`clampParty`(+시트 props 타입) |
+| `src/widgets/trip-edit-sheets/model/partyRange.ts` | `partyRangeFor(유형)`(혼자 [1,1]·연인 [2,2]·친구·가족 [2,∞)·미선택 [1,∞) — 시트의 −·+ `disabled`)와 `clampParty(유형, 인원)`(= `min(max, max(min, 인원))` — 칩을 고를 때 인원을 범위로 끌어오는 한 곳, 위저드 `pickCompanion`·설정 화면이 같이 쓴다. 두 벌이 갈라지지 않게 승격). |
+| `src/widgets/trip-edit-sheets/ui/StepperButton.tsx` | 스테퍼 원버튼(`CompanionEditSheet`·`pages/trip/trip-new-step1` 의 `DestinationEditSheet` 공용, TRIP-1360). |
+| `src/widgets/trip-edit-sheets/ui/CompanionEditSheet.tsx` | (TRIP-1155로 features/trip에서 이사 → TRIP-1787 로 `pages/trip/trip-new-step1/ui` 에서 이 위젯으로 승격) g01 동행 편집 시트. 인원 스테퍼(`StepperButton` 공용, `accessibilityLabel` **필수 prop**이라 빠뜨리면 tsc 가 막는다 — 호출처는 이 시트와 `pages/trip/trip-new-step1` 의 `DestinationEditSheet`뿐). **(TRIP-1423)** −/+ 의 `disabled` 는 `model/partyRange.ts` 의 `partyRangeFor(유형)`(혼자 [1,1]·연인 [2,2]·친구·가족 [2,∞)·미선택 [1,∞))에서 파생하고, 칩을 누를 때 인원을 범위로 끌어오는 값 맞추기는 `clampParty`(`model/partyRange.ts`)로 위저드 `pickCompanion`·설정 화면이 같이 한다(시트는 그리기만). 이 인원 규칙은 정본·서버에 없는 클라 규칙이다(서버 미검증). 유형 칩 4종은 색이 아니라 선택 칩만 별도 활성 마커(`-chip-active-{code}`)로 구분. |
+| `src/widgets/trip-edit-sheets/ui/DayWindowEditSheet.tsx` | g01 일과 시간 시트(TRIP-1787 로 위저드·여행 설정 화면 공용 위젯으로 승격). **(TRIP-1423)** 비공개 `ClockWheel` 은 `shared/ui/HourMinuteWheel` 을 감싸는 얇은 어댑터(눈금 24시×00·30분 + testID 4종 조립)다. **탭 전환은 보기만** — [첫날]/[마지막 날]을 눌러도 값이 생기지 않고(`value=null`·`anchor` 12:00/18:00 로 휠만 세운다), 휠이 멈추거나 칸을 눌러야 `setTabValue` 가 드래프트에 쓴다. [따로 정하지 않기]는 그 탭에 값이 있을 때만 그린다. 당일치기는 휠 둘이 같은 프레임에 멈출 수 있어 `setDraft` 는 **함수형 갱신**이어야 한다(값 형태로 되돌리면 시작 값이 사라짐 — SF2 가 문다). ⚠️ Android 에서 프로그램 스크롤이 정지 이벤트를 쏘면 anchor 가 값으로 샌다 — jest 사각, 6-b 전용. 옛 컨테이너 testID(`trip-wizard-daywindow-wheel/-start/-end`)는 없앴다. |
 
 ## `src/widgets/curated-stays/` — 인기 숙소 줄 + Trip.com 전체 보기 (TRIP-1579)
 

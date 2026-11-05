@@ -7,7 +7,7 @@ import { render } from '@testing-library/react-native';
  * `replan='1'→true`·`mode==='edit'` 거르기)가 빠지면 양쪽 페이지 테스트가 다 green 인 채 흐름이 끊긴다.
  * 옛 7파일(`draftRouteDayPassthrough`·`manualRouteFreshPassthrough`·`generatingRouteModePassthrough`·`itineraryEditRoute`·
  * `tripBasesRoute`·`liveHubRoute`·`planbManualRoute`)을 한 표로 합쳤다 — 출처 티켓: #1235 W2 · TRIP-1038 C · TRIP-1006 ·
- * TRIP-1233 · TRIP-1011 · TRIP-1082 · TRIP-754 · TRIP-1195 · TRIP-753.
+ * TRIP-1233 · TRIP-1011 · TRIP-1082 · TRIP-754 · TRIP-1195 · TRIP-753 · TRIP-1787(여행 설정).
  *
  * 무엇을 보장하나: 행마다 페이지가 받은 props 전체를 `toEqual` 로 잰다 — 모르는 키·옛 이름(`date`·`variant`·`stray`)이
  * 새거나 기본값을 지어내면(`mode ?? 'FULLY_AI'` — 재진입이 생성을 다시 쏜다, #083) red 다.
@@ -45,6 +45,9 @@ jest.mock('@/pages/itinerary/itinerary-edit', () => ({
 jest.mock('@/pages/trip/trip-new-step2', () => ({
   TripBasesPage: mockSpyPage('TripBasesPage'),
 }));
+jest.mock('@/pages/trip/trip-settings', () => ({
+  TripSettingsPage: mockSpyPage('TripSettingsPage'),
+}));
 jest.mock('@/pages/live/live-itinerary', () => ({
   LiveItineraryPage: mockSpyPage('LiveItineraryPage'),
 }));
@@ -55,6 +58,7 @@ import ManualPlanRoute from '@routes/trips/[tripId]/itinerary/manual/index';
 import ItineraryGeneratingRoute from '@routes/trips/[tripId]/itinerary/generating';
 import ItineraryEditRoute from '@routes/trips/[tripId]/itinerary/edit';
 import TripBasesRoute from '@routes/trips/[tripId]/bases';
+import TripSettingsRoute from '@routes/trips/[tripId]/settings';
 import LiveRoute from '@routes/trips/[tripId]/live/index';
 import PlanbManualRoute from '@routes/trips/[tripId]/planb/manual';
 /* eslint-enable import/first */
@@ -171,6 +175,14 @@ const ROWS: Row[] = [
     TripBasesRoute,
     { ...T, mode: 'wizard' },
     'TripBasesPage',
+    T,
+  ],
+  // 여행 설정(TRIP-1787) — tripId 만 읽어 페이지에 내린다(그 밖의 주소 파라미터는 새지 않는다).
+  [
+    'settings · tripId 만',
+    TripSettingsRoute,
+    { ...T, mode: 'edit' },
+    'TripSettingsPage',
     T,
   ],
   // 여행 중 허브 — applied → appliedSessionId(TRIP-754), day → initialDate(TRIP-1195).
