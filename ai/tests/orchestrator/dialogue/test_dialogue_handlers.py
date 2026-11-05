@@ -923,7 +923,21 @@ def test_distance_to_a_registered_place_outside_the_itinerary_finds_it_by_exact_
     assert transit.calls[0]["destination"] == _COORD["천지연폭포"] and facts.detail["destination"] == "천지연폭포"
 
 
-@pytest.mark.parametrize("name", ["세종문화회관", "인천공항", "서울대공원", "서울역", "부산 역"])
+def test_distance_from_a_transit_hub_uses_the_hub_point_not_the_city_center() -> None:
+    """"서울역에서 경복궁까지" — 역은 교통 거점 표(카카오 좌표)로 푼다. 지역 표 꼬리 '역'이 서울 중심(시청)을 잡아 약 1.2km(실제 2.8km)가
+    됐었다(2026-11-02 개발). 거점은 어림이 아니라 그 시설의 점이라 "(지역 중심 기준)"을 달지 않는다."""
+    from trippilot.domain.poi.transit_hubs import transit_hub
+
+    found = [PlaceRow(_U["천지연폭포"], "경복궁", "명소", "서울특별시", "종로구", False, False)]
+    facts, transit, finder = _free_distance({"origin": "서울역", "destination": "경복궁"}, found)
+    (call,) = transit.calls
+    assert call["origin"] == transit_hub("서울역").point and call["destination"] == _COORD["천지연폭포"]
+    assert finder.calls == [("find", "경복궁", "제주")]  # 역은 등록 장소에서 찾지 않는다
+    assert facts.status is FactStatus.OK and facts.payload["rows"] == [{"label": "구간", "value": "약 1.2km"}]
+    assert facts.detail["origin"] == "서울역" and "지역 중심" not in json.dumps(facts.notes, ensure_ascii=False)
+
+
+@pytest.mark.parametrize("name", ["세종문화회관", "인천공항철도", "서울대공원", "파주역", "부산 역사관"])
 def test_a_place_name_containing_a_region_name_is_looked_up_not_taken_as_that_region(name: str) -> None:
     """표 이름 뒤에 다른 낱말이 붙으면 지역이 아니다 — "세종문화회관"이 세종시 중심(124km 밖)이 되던 것(2026-10-30 Codex 리뷰).
     시·군 이름의 역도 — "서울역→경복궁"이 서울 중심에서 재 약 1.2km(실제 직선 2.8km, 2026-11-02 개발). 동네 역은 위 강남역처럼 중심."""
