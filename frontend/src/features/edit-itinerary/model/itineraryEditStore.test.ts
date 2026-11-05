@@ -647,3 +647,260 @@ describe('U · 되돌리기 이력 (TRIP-1792)', () => {
     expect(st().dirty).toBe(false);
   });
 });
+
+/**
+ * TRIP-1793 · 다른 날로 옮기기 — 스토어 `moveSlot(fromDate, toDate, poiId, patch)` (Seed D4·D6, AC-1·3·5·7·8·9·11).
+ *
+ * 무엇을 보장하나: 장소 하나를 출발 날에서 빼 대상 날에 **한 번의 set** 으로 넣고(통지 1회 = 이력 1장 = 되돌리기 1단계),
+ * 대상 날을 시작 시각 순으로 다시 세우며(서버가 순서 어긋남을 422 로 거절), 옮긴 슬롯에 `movedFromDate`(옮김 표식)를 단다.
+ * 아무 일도 안 하는 호출(같은 날·없는 날·없는 장소·대상 날에 이미 같은 장소)은 상태·이력·통지가 전혀 안 변한다.
+ *
+ * > *(개념)* **옮김 표식(`movedFromDate`)** — 서버 데이터가 아니라 편집 초안 안의 꼬리표(포스트잇). 슬롯 안에 두기 때문에
+ * > 되돌리기 이력(= days 통째 스냅샷)과 함께 되돌아가고, 저장 뒤 `seed` 가 서버 슬롯으로 덮으면 사라진다.
+ *
+ * 3동작 뼈대: 준비=reset+시드 → 실행=moveSlot(+undo/seed 등) → 단언=getState() 의 days·dirty·history·통지 횟수.
+ */
+describe('MV · moveSlot — 다른 날로 옮기기 (TRIP-1793)', () => {
+  const DAY3 = '2026-06-12';
+  const st = () => useItineraryEditStore.getState();
+  const order = (date: string): string[] =>
+    poiIds(st().days.find((d) => d.date === date)?.slots ?? []);
+  const slotOf = (date: string, poiId: string): Slot | undefined =>
+    st()
+      .days.find((d) => d.date === date)
+      ?.slots.find((s) => s.poiId === poiId);
+  /** 옮김 표식 읽기 — 타입 선언이 아직 없어도 읽히게 단언으로 읽는다. */
+  const movedOf = (s: Slot | undefined): string | undefined =>
+    (s as (Slot & { movedFromDate?: string }) | undefined)?.movedFromDate;
+  const allSlots = (): Slot[] => st().days.flatMap((d) => d.slots);
+
+  const T = (startAt: string, endAt: string) => ({
+    startAt,
+    endAt,
+    endsNextDay: false,
+  });
+  const P15 = T('15:00:00', '16:00:00');
+
+  /** 입력 배열을 바깥에서 쥐고 있어야 "시드 원본 비파괴"를 잴 수 있다. */
+  function seededThree() {
+    const input = {
+      d1: [
+        slot('a', { startAt: '09:00:00', endAt: '10:00:00' }),
+        slot('b', {
+          startAt: '11:00:00',
+          endAt: '12:00:00',
+          nameKo: '이름-b',
+          tags: ['바다'],
+        }),
+        slot('c', { startAt: '13:00:00', endAt: '14:00:00' }),
+      ],
+      d2: [
+        slot('d', { startAt: '10:00:00', endAt: '11:00:00' }),
+        slot('e', { startAt: '12:00:00', endAt: '13:00:00' }),
+      ],
+      d3: [slot('f', { startAt: '09:00:00', endAt: '10:00:00' })],
+    };
+    st().seed([
+      { date: DAY1, slots: input.d1 },
+      { date: DAY2, slots: input.d2 },
+      { date: DAY3, slots: input.d3 },
+    ]);
+    return input;
+  }
+
+  it('MV1 · 1일차 b 를 2일차로 옮기면 1일차에서 빠지고 2일차 마지막에 고른 시각으로 들어간다 · 이력 1장 · 통지 1회 · 입력 비파괴 (AC-1·3·11)', () => {
+    const input = seededThree();
+    expect(st().history).toHaveLength(0); // 앵커 — 옮기기 전엔 이력 없음
+    expect(st().dirty).toBe(false);
+    const listener = jest.fn();
+    const unsubscribe = useItineraryEditStore.subscribe(listener);
+
+    st().moveSlot(DAY1, DAY2, 'b', P15);
+    unsubscribe();
+
+    expect(order(DAY1)).toEqual(['a', 'c']);
+    expect(order(DAY2)).toEqual(['d', 'e', 'b']); // 2일차 마지막
+    expect(order(DAY3)).toEqual(['f']); // 다른 날 무변화
+    const moved = slotOf(DAY2, 'b') as Slot;
+    expect([moved.startAt, moved.endAt, moved.endsNextDay]).toEqual([
+      '15:00:00',
+      '16:00:00',
+      false,
+    ]);
+    expect(moved.nameKo).toBe('이름-b'); // 다른 필드는 그대로 따라온다
+    expect(moved.tags).toEqual(['바다']);
+    expect(movedOf(moved)).toBe(DAY1);
+    expect(
+      allSlots()
+        .filter((s) => s.poiId !== 'b')
+        .map(movedOf)
+    ).toEqual([undefined, undefined, undefined, undefined, undefined]);
+    expect(st().dirty).toBe(true);
+    expect(st().history).toHaveLength(1);
+    expect(st().history[0].date).toBe(DAY1); // 되돌리면 출발 날로 따라가게
+    // days·dirty·history 가 한 번의 set 으로 같이 바뀐다 — deleteSlot+insertSlot 조합이면 2회.
+    expect(listener).toHaveBeenCalledTimes(1);
+    // 시드에 쓴 입력 배열·원본 슬롯 객체는 안 바뀐다.
+    expect(poiIds(input.d1)).toEqual(['a', 'b', 'c']);
+    expect(poiIds(input.d2)).toEqual(['d', 'e']);
+    expect(movedOf(input.d1[1])).toBeUndefined();
+    expect(input.d1[1].startAt).toBe('11:00:00');
+  });
+
+  it.each([
+    {
+      name: '대상 날 맨 앞(08:00)',
+      start: ['08:00:00', '09:00:00'],
+      want: ['b', 'd', 'e'],
+    },
+    {
+      name: '대상 날 가운데(11:00)',
+      start: ['11:00:00', '11:30:00'],
+      want: ['d', 'b', 'e'],
+    },
+    {
+      name: '대상 날 맨 뒤(15:00)',
+      start: ['15:00:00', '16:00:00'],
+      want: ['d', 'e', 'b'],
+    },
+  ])(
+    'MV2 · $name 시각을 고르면 대상 날이 시작 시각 순으로 다시 서 있다 (AC-8)',
+    ({ start, want }) => {
+      seededThree();
+
+      st().moveSlot(DAY1, DAY2, 'b', T(start[0], start[1]));
+
+      expect(order(DAY2)).toEqual(want);
+    }
+  );
+
+  describe.each([
+    { name: '같은 날로', args: [DAY1, DAY1, 'b'] as const, dup: false },
+    {
+      name: '없는 출발 날에서',
+      args: ['2099-01-01', DAY2, 'b'] as const,
+      dup: false,
+    },
+    {
+      name: '없는 대상 날로',
+      args: [DAY1, '2099-01-01', 'b'] as const,
+      dup: false,
+    },
+    {
+      name: '출발 날에 없는 장소를',
+      args: [DAY1, DAY2, 'zzz'] as const,
+      dup: false,
+    },
+    {
+      name: '대상 날에 이미 같은 장소가 있는데',
+      args: [DAY1, DAY2, 'b'] as const,
+      dup: true,
+    },
+  ])('MV3 · $name 옮기면', ({ args, dup }) => {
+    it('아무 일도 안 한다 — days 같은 참조 · 이력 그대로(안 쌓임·안 비워짐) · dirty 그대로 · 통지 0 (AC-9)', () => {
+      seededThree();
+      if (dup) {
+        st().seed([
+          { date: DAY1, slots: [slot('a'), slot('b')] },
+          { date: DAY2, slots: [slot('b'), slot('d')] },
+        ]);
+      }
+      // 먼저 이력 1장을 쌓아 둔다 — "이력을 비우는" 구현(insertSlot 류)을 잡으려는 앵커.
+      st().deleteSlot(DAY2, dup ? 'd' : 'e');
+      expect(st().history).toHaveLength(1);
+      const before = st().days;
+      const listener = jest.fn();
+      const unsubscribe = useItineraryEditStore.subscribe(listener);
+
+      st().moveSlot(args[0], args[1], args[2], P15);
+      unsubscribe();
+
+      expect(st().days).toBe(before);
+      expect(st().history).toHaveLength(1);
+      expect(st().dirty).toBe(true); // 삭제가 올려 둔 값 그대로
+      expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
+  it('MV4 · 옮기기는 정확히 한 단계다 — undo 한 번에 옮기기 직전 값으로 돌아오고 출발 날을 알려주며 표식도 사라진다 (AC-3)', () => {
+    seededThree();
+    st().deleteSlot(DAY2, 'e'); // 앞선 편집 1장
+    const beforeMove = st().days;
+    const depthBefore = st().history.length;
+
+    st().moveSlot(DAY1, DAY2, 'b', P15);
+    expect(st().history).toHaveLength(depthBefore + 1);
+    expect(movedOf(slotOf(DAY2, 'b'))).toBe(DAY1);
+
+    const date = st().undo();
+
+    expect(date).toBe(DAY1);
+    expect(st().days).toEqual(beforeMove); // 값이 옮기기 직전과 같다 — 원래 자리(1일차 가운데)·원래 시각
+    expect(order(DAY1)).toEqual(['a', 'b', 'c']);
+    expect(slotOf(DAY1, 'b')?.startAt).toBe('11:00:00');
+    expect(
+      allSlots()
+        .map(movedOf)
+        .filter((v) => v !== undefined)
+    ).toEqual([]);
+    expect(st().history).toHaveLength(depthBefore);
+    expect(st().dirty).toBe(true); // 삭제는 아직 남아 있다
+    st().undo();
+    expect(order(DAY2)).toEqual(['d', 'e']); // 두 번째 undo 로 삭제도 걷힌다
+    expect(st().dirty).toBe(false);
+  });
+
+  it('MV5 · 표식 규칙 — 처음 옮길 때 출발 날을 적고, 또 옮겨도 최초 출발 날을 유지하고, 원래 날로 돌아오면 지운다 (AC-7)', () => {
+    seededThree();
+
+    st().moveSlot(DAY1, DAY2, 'b', P15);
+    expect(movedOf(slotOf(DAY2, 'b'))).toBe(DAY1);
+
+    st().moveSlot(DAY2, DAY3, 'b', T('12:00:00', '13:00:00'));
+    expect(order(DAY2)).toEqual(['d', 'e']);
+    expect(order(DAY3)).toEqual(['f', 'b']);
+    expect(movedOf(slotOf(DAY3, 'b'))).toBe(DAY1); // DAY2 로 덮어쓰지 않는다
+
+    st().moveSlot(DAY3, DAY1, 'b', T('11:00:00', '12:00:00'));
+    expect(order(DAY1)).toEqual(['a', 'b', 'c']); // 시각 순 제자리
+    expect(movedOf(slotOf(DAY1, 'b'))).toBeUndefined(); // 원래 날로 돌아왔으니 표식 없음
+    expect(st().history).toHaveLength(3);
+  });
+
+  it('MV6 · 다른 편집(시각 조정·순서 바꾸기·다른 곳 빼기)을 해도 옮김 표식은 유지된다 (AC-7)', () => {
+    seededThree();
+    st().moveSlot(DAY1, DAY2, 'b', P15);
+
+    st().adjustSlotTime(DAY2, 'b', T('09:00:00', '09:30:00'));
+    expect(order(DAY2)).toEqual(['b', 'd', 'e']); // 시각 순으로 다시 섰다
+    expect(movedOf(slotOf(DAY2, 'b'))).toBe(DAY1);
+
+    st().reorderSlots(DAY2, [...(st().days[1].slots as Slot[])].reverse());
+    expect(order(DAY2)).toEqual(['e', 'd', 'b']);
+    expect(movedOf(slotOf(DAY2, 'b'))).toBe(DAY1);
+
+    st().deleteSlots(DAY2, ['e']);
+    expect(movedOf(slotOf(DAY2, 'b'))).toBe(DAY1);
+  });
+
+  it('MV7 · 저장 성공으로 서버 응답을 다시 시드하면 표식이 사라지고 이력·dirty 도 비워진다 (AC-7)', () => {
+    seededThree();
+    st().moveSlot(DAY1, DAY2, 'b', P15);
+    expect(movedOf(slotOf(DAY2, 'b'))).toBe(DAY1); // 앵커 — 시드 전엔 있다
+
+    // 서버 응답 모양: 같은 자리에 b 가 있되 표식은 없다.
+    st().seed([
+      { date: DAY1, slots: [slot('a'), slot('c')] },
+      { date: DAY2, slots: [slot('d'), slot('e'), slot('b', P15)] },
+      { date: DAY3, slots: [slot('f')] },
+    ]);
+
+    expect(
+      allSlots()
+        .map(movedOf)
+        .filter((v) => v !== undefined)
+    ).toEqual([]);
+    expect(st().history).toHaveLength(0);
+    expect(st().dirty).toBe(false);
+  });
+});

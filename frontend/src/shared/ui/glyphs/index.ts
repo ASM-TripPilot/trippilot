@@ -35,6 +35,7 @@ export {
   WalkGlyph,
 } from './PlaceGlyphs';
 export {
+  MoreDotsGlyph,
   NoteGlyph,
   SearchGlyph,
   SummaryChartGlyph,

@@ -29,6 +29,7 @@ import type {
   Trip,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import {
   editListData,
   fireEditDragEnd,
@@ -387,6 +388,8 @@ async function addPlaceAndWait(poiId: string): Promise<void> {
   fireEvent.press(await screen.findByTestId('itinerary-edit-time-apply'));
   await screen.findByTestId(TOAST);
   await settle();
+  // 연타 창(400ms)이 지난 것과 같다 — [적용]이 창을 연다(TRIP-1793 D4), 사람 손은 편집기 [저장]까지 그보다 느리다.
+  resetPressGuard();
 }
 
 describe.each([

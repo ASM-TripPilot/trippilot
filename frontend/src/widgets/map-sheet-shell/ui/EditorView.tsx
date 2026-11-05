@@ -23,6 +23,7 @@ import {
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { buildSlotKey } from '@/entities/itinerary-slot';
+import { respectPressGuard } from '@/shared/lib/pressGuard';
 import { overlapAwareNotice } from '@/entities/itinerary-slot';
 import { SlotStopCard } from '@/entities/itinerary-slot';
 
@@ -56,6 +57,8 @@ import { useDeleteZoneHover } from './useDeleteZoneHover';
 /** 편집 중 슬롯 — 서버 슬롯에서 startAt 만 미지정(null) 허용(편집 스토어 EditorSlot 과 같은 모양). */
 export type EditorViewSlot = Omit<ItineraryDaysItemSlotsItem, 'startAt'> & {
   startAt: string | null;
+  /** TRIP-1793 · 옮김 표식(스토어 `EditorSlot.movedFromDate` 와 같은 값) — 있으면 카드에 「N일차에서 옮김」 배지. */
+  movedFromDate?: string;
 };
 
 export interface EditorViewProps {
@@ -91,6 +94,9 @@ export interface EditorViewProps {
   /** TRIP-1792 · 머리 되돌리기 ↶ — 「선택」 오른쪽. **없으면 ↶ 자체가 없다**(직접 짜기 = 기능 부재). `enabled` 가 거짓이면(쌓인 편집
    *  없음) 선 색만 `muted-soft` 로 바뀌고 눌러도 아무 일이 없다. 선택 모드(`N곳 선택` 머리)에는 안 보인다. */
   undo?: { enabled: boolean; onPress: () => void };
+  /** TRIP-1793 · 카드 ⋯ → 「다른 날로 옮기기」(페이지가 시트를 소유). **없으면 ⋯ 자체가 없다**(직접 짜기 = 지금 화면). 줘도 고정·방문 완료 카드·
+   *  선택 모드·일정이 하루뿐일 때는 ⋯ 가 없다. */
+  onPressMore?: (poiId: string) => void;
   /** 드래그 중 얼굴 강제(프리뷰 `h12-editor-dragging`). 실제 끌기는 내부 상태가 켠다. */
   isDragging?: boolean;
   /** 방문 완료 잠금(AC-11). */
@@ -126,6 +132,7 @@ export function EditorView({
   onDeleteViaDrag,
   onDeleteSelected,
   undo,
+  onPressMore,
   isDragging,
   completedSlotKeys,
   inTrip,
@@ -205,6 +212,12 @@ export function EditorView({
     else if (decision.kind === 'reorder') onReorder?.(decision.slots);
   }
 
+  // TRIP-1793 · 옮김 배지 문구 — 출발 날짜가 이 일정의 몇 일차인지 `days` 에서 찾는다(없으면 지어내지 않는다).
+  function movedLabelOf(slot: EditorViewSlot): string | null {
+    const from = days.find((tab) => tab.date === slot.movedFromDate);
+    return from === undefined ? null : `${from.dayIndex}일차에서 옮김`;
+  }
+
   function renderItem({
     item,
     getIndex,
@@ -245,6 +258,18 @@ export function EditorView({
                 ? () => onPressTimeChip(slotKey)
                 : undefined
             }
+            more={
+              onPressMore !== undefined &&
+              !selecting &&
+              !isPinned(item) &&
+              days.length > 1
+                ? {
+                    onPress: () => onPressMore(item.poiId),
+                    testID: `editor-slot-more-${item.poiId}`,
+                  }
+                : undefined
+            }
+            movedLabel={movedLabelOf(item)}
             selection={
               selecting
                 ? {
@@ -412,7 +437,9 @@ export function EditorView({
           {
             label: saveLabel,
             variant: 'primary',
-            onPress: onSave,
+            // 연타 창을 따른다 — 시트 [적용] 연타의 둘째 탭이 닫힌 시트 아래 이 자리에 닿아도 저장하지 않는다(TRIP-1793 D4).
+            // 창을 열지는 않는다 — 저장 자신의 연타는 페이지 `inFlightRef` 가 막고, 실패 뒤 다시 저장은 곧바로 눌려야 한다.
+            onPress: respectPressGuard(onSave),
             disabled: slots.length === 0,
           },
         ];

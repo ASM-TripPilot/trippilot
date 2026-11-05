@@ -14,12 +14,29 @@ export function guardPress<Args extends unknown[]>(
 ): (...args: Args) => void {
   return (...args) => {
     // 무시된 누름은 창을 늘리지 않는다 — 연타를 계속해도 400ms 뒤엔 누를 수 있어야 한다.
-    // 음수 경과(기기 시계가 뒤로 감)는 창 밖으로 본다 — 아니면 뒤로 간 만큼 먹통이 된다(5-b 경고-1).
-    const elapsed = Date.now() - openedAt;
-    if (elapsed >= 0 && elapsed < WINDOW_MS) return;
+    if (windowOpen()) return;
     openPressGuardWindow();
     handler(...args);
   };
+}
+
+/**
+ * 창을 **따르기만** 한다 — 열려 있으면 무시하고, 누름이 창을 열지는 않는다. 자기 연타는 다른 잠금이 막는 버튼용이다
+ * (편집기 저장 CTA 의 `inFlightRef` — 저장이 창을 열면 실패 뒤 곧바로 다시 저장하는 누름까지 삼킨다, TRIP-1793 D4).
+ */
+export function respectPressGuard<Args extends unknown[]>(
+  handler: (...args: Args) => void
+): (...args: Args) => void {
+  return (...args) => {
+    if (windowOpen()) return;
+    handler(...args);
+  };
+}
+
+// 음수 경과(기기 시계가 뒤로 감)는 창 밖으로 본다 — 아니면 뒤로 간 만큼 먹통이 된다(5-b 경고-1).
+function windowOpen(): boolean {
+  const elapsed = Date.now() - openedAt;
+  return elapsed >= 0 && elapsed < WINDOW_MS;
 }
 
 /** 누름 없이 창을 연다 — 서버 응답으로 표면이 바뀌는 순간에 부른다(01b Q2). */

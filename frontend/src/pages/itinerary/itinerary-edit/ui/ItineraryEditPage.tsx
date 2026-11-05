@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { InfoCircleGlyph, AlertCircleGlyph } from '@/shared/ui/glyphs';
 import { goBackOr } from '@/shared/lib/goBackOr';
-import { guardPress } from '@/shared/lib/pressGuard';
+import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
 
 import { buildEditItineraryRequest } from '@/features/edit-itinerary';
 import { buildDraftPins, formatCoPickDayHeader } from '@/features/itinerary';
@@ -16,7 +16,11 @@ import {
   type EditorSlot,
 } from '@/features/edit-itinerary';
 import { buildPlanDayTabs, resolvePlanState } from '@/features/itinerary';
-import { deriveVisitProgress } from '@/entities/itinerary-slot';
+import {
+  deriveVisitProgress,
+  suggestNextSlotTime,
+} from '@/entities/itinerary-slot';
+import { buildMoveDayOptions } from '../model/moveDayOptions';
 import { reorderKeepingLocked } from '../model/reorderKeepingLocked';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
@@ -36,6 +40,7 @@ import { isNotFound } from '@/shared/api';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { showToast } from '@/shared/ui/Toast';
 import { EditorView } from '@/widgets/map-sheet-shell';
+import { MoveDaySheet } from './MoveDaySheet';
 
 /**
  * h24 일정 편집 배선(TRIP-302 슬라이스1~3) — **TRIP-797 묶음 C 로 소비 화면을 옛
@@ -133,6 +138,17 @@ export function ItineraryEditPage({
   // 어느 슬롯의 시각조정 시트가 열렸나(null = 닫힘). 시트 개폐는 뷰가 아니라 여기가 쥔다(순수 뷰 유지,
   // h07 선례) — 조건부 마운트라 닫히면 시트가 트리에서 사라진다.
   const [editingSlotKey, setEditingSlotKey] = useState<string | null>(null);
+  // TRIP-1793 · 「다른 날로 옮기기」 두 단계 — `moving` = 장소 시트(일차 고르기), 확정하면 `pendingMove` = 시각 시트(시각 고르기). 둘 다 조건부
+  // 마운트라 어느 쪽을 닫아도 아무것도 안 옮겨진다(시각 없는 슬롯 0). 실제 이동은 시각 시트 [적용] 한 곳에서만 일어난다.
+  const [moving, setMoving] = useState<{
+    fromDate: string;
+    poiId: string;
+  } | null>(null);
+  const [pendingMove, setPendingMove] = useState<{
+    fromDate: string;
+    poiId: string;
+    toDate: string;
+  } | null>(null);
   // 저장 연타 잠금 — isPending 은 다음 렌더에야 참이라 같은 틱 연타를 못 막는다(ManualPlanPage 선례).
   // 떠나는 성공에선 풀지 않는다(늦게 온 두 번째 응답이 back 을 한 번 더 부르지 않게).
   const inFlightRef = useRef(false);
@@ -155,6 +171,7 @@ export function ItineraryEditPage({
     deleteSlots,
     reorderSlots,
     adjustSlotTime,
+    moveSlot,
     undo,
     canUndo,
     topUndoId,
@@ -395,6 +412,29 @@ export function ItineraryEditPage({
     buildSlotKey(activeDate, poiId)
   );
 
+  // TRIP-1793 · 옮기기 시트 재료 — 열린 시트의 슬롯이 드래프트에 실재할 때만 시트를 마운트한다(조건부, 위 시각 시트와 같은 방식).
+  const slotIn = (date: string, poiId: string) =>
+    days.find((day) => day.date === date)?.slots.find((s) => s.poiId === poiId);
+  const movingSlot =
+    moving === null ? undefined : slotIn(moving.fromDate, moving.poiId);
+  const movingDayNumber =
+    moving === null ? 0 : days.findIndex((d) => d.date === moving.fromDate) + 1;
+  const moveOptions =
+    moving === null
+      ? { options: [], initialDate: null }
+      : buildMoveDayOptions(days, moving.fromDate, moving.poiId);
+  const pendingSlot =
+    pendingMove === null
+      ? undefined
+      : slotIn(pendingMove.fromDate, pendingMove.poiId);
+  const pendingTargetSlots =
+    pendingMove === null
+      ? []
+      : (days.find((day) => day.date === pendingMove.toDate)?.slots ?? []);
+  const pendingDefault = suggestNextSlotTime(
+    pendingTargetSlots[pendingTargetSlots.length - 1]
+  );
+
   // 편집 중인 슬롯의 **현재 드래프트 값**을 찾아 시트에 시드한다 — 시트가 열렸고 그 슬롯이 드래프트에
   // 실재할 때만 마운트한다(둘 중 하나라도 없으면 안 그린다).
 
@@ -452,6 +492,13 @@ export function ItineraryEditPage({
           )
         }
         undo={{ enabled: canUndo, onPress: () => undoTo() }}
+        // TRIP-1793 5-b W2 — 그 날 방문 기록을 모르면(응답 전·404 아닌 실패) 완료 카드도 잠기지 않아 ⋯ 로 옮길 수 있고,
+        // 옮긴 뒤엔 출발 날에 그 카드가 없어 저장 가드(unknownDatesRef)도 못 잡는다 → 모르는 동안은 ⋯ 를 안 준다.
+        onPressMore={
+          activeUnknown
+            ? undefined
+            : (poiId) => setMoving({ fromDate: activeDate, poiId })
+        }
         completedSlotKeys={completedSlotKeys}
         inTrip={inTrip}
       />
@@ -526,6 +573,72 @@ export function ItineraryEditPage({
           }}
           onCancel={() => setEditingSlotKey(null)}
           testIDPrefix="itinerary-edit-time"
+          labels={{ start: '시작', end: '종료' }}
+        />
+      ) : null}
+
+      {moving !== null && movingSlot !== undefined ? (
+        <MoveDaySheet
+          name={movingSlot.nameKo ?? ''}
+          photo={{
+            imageUrl: movingSlot.imageUrl ?? null,
+            poiId: movingSlot.poiId,
+            category: movingSlot.category,
+          }}
+          subtitle={[
+            `${movingDayNumber}일차`,
+            `${movingSlot.startAt.slice(0, 5)}–${movingSlot.endAt.slice(0, 5)}`,
+            ...movingSlot.tags,
+          ].join(' · ')}
+          options={moveOptions.options}
+          initialDate={moveOptions.initialDate}
+          onConfirm={(toDate) => {
+            // 장소 시트 [옮기기] 연타의 둘째 탭이 시각 시트가 올라오기 전 아래 「일정 저장하기」에 닿지 않게(TRIP-1793 D4).
+            openPressGuardWindow();
+            setPendingMove({ ...moving, toDate });
+            setMoving(null);
+          }}
+          onClose={() => {
+            // 머리 X 연타의 둘째 탭이 닫힌 시트 아래 「일정 저장하기」에 닿지 않게(TRIP-1793 D4, 5-b 경고-1).
+            openPressGuardWindow();
+            setMoving(null);
+          }}
+        />
+      ) : null}
+
+      {/* 시각 시트 — 기본값은 대상 날 마지막 슬롯 기준(`suggestNextSlotTime`, 장소 추가와 같은 규칙). 닫으면 옮기지 않는다. */}
+      {pendingMove !== null && pendingSlot !== undefined ? (
+        <TimeSheet
+          title="시간대 조정"
+          startAt={pendingDefault.startAt}
+          endAt={pendingDefault.endAt}
+          placeSummary={{
+            imageUrl: pendingSlot.imageUrl ?? null,
+            poiId: pendingSlot.poiId,
+            category: pendingSlot.category,
+            name: pendingSlot.nameKo ?? '',
+          }}
+          onApply={(patch) => {
+            moveSlot(
+              pendingMove.fromDate,
+              pendingMove.toDate,
+              pendingMove.poiId,
+              patch
+            );
+            const toIndex = days.findIndex(
+              (day) => day.date === pendingMove.toDate
+            );
+            if (toIndex !== -1) {
+              setActiveDayIndex(toIndex);
+              showToast({
+                testID: 'editor-move-toast',
+                message: `${toIndex + 1}일차로 옮겼어요`,
+              });
+            }
+            setPendingMove(null);
+          }}
+          onCancel={() => setPendingMove(null)}
+          testIDPrefix="editor-move-time"
           labels={{ start: '시작', end: '종료' }}
         />
       ) : null}

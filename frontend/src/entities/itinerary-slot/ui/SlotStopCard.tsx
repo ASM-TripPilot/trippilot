@@ -4,6 +4,7 @@ import {
   Check24Glyph,
   ChevronRight24Glyph,
   ClockGlyph,
+  MoreDotsGlyph,
 } from '@/shared/ui/glyphs';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 
@@ -96,6 +97,11 @@ export interface SlotStopCardProps {
     onToggle: () => void;
     testID: string;
   };
+  /** TRIP-1793 · 편집기 「다른 날로 옮기기」 — 주면 카드 오른쪽 위에 ⋯ 버튼(보이는 원 28, 히트 44 는 `hitSlop` — 레이아웃 상자를 키우면 머리 줄이
+   *  처진다)을 그린다. 언제 보일지(고정·완료·1일·선택 모드)는 부모 몫이고, 카드 몸통은 안 눌린다(킷 §10). 미주입이면 현행 그대로. */
+  more?: { onPress: () => void; testID: string };
+  /** TRIP-1793 · 옮김 배지 문구(`3일차에서 옮김`, 이름 옆 연분홍 알약) — 카드는 문구를 안 만든다(`violation` 선례). 미주입·null·빈 문자열이면 요소가 없다. */
+  movedLabel?: string | null;
 }
 
 export function SlotStopCard({
@@ -117,6 +123,8 @@ export function SlotStopCard({
   dragging,
   reasonTags,
   selection,
+  more,
+  movedLabel,
 }: SlotStopCardProps): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string => `slot-stopcard-${role}-${slotKey}`;
@@ -132,6 +140,19 @@ export function SlotStopCard({
       style={cardShadow}
       className={`flex-row gap-[10px] rounded-card bg-canvas p-md ${selection?.state === 'on' ? 'border-[1.5px] border-primary' : dragging ? 'border border-primary' : 'border border-hairline'} ${numberOutside ? 'flex-1 items-center' : 'items-start'}`}
     >
+      {more ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="더보기"
+          testID={more.testID}
+          onPress={more.onPress}
+          hitSlop={8}
+          className="absolute right-[10px] top-[10px] h-[28px] w-[28px] items-center justify-center rounded-pill bg-surface-strong"
+        >
+          <MoreDotsGlyph size={20} />
+        </Pressable>
+      ) : null}
+
       {/* 번호 배지 — 24px squircle(rounded-[8px]) primary. numberOutside 면 카드 밖(아래 return)에 그린다. */}
       {numberOutside ? null : (
         <View className="h-[24px] w-[24px] items-center justify-center rounded-[8px] bg-primary">
@@ -293,6 +314,16 @@ export function SlotStopCard({
               >
                 <Text className="font-noto-bold text-micro font-bold text-primary-text">
                   필수
+                </Text>
+              </View>
+            ) : null}
+            {movedLabel ? (
+              <View
+                testID={fieldId('moved')}
+                className="rounded-[12px] bg-primary-pale px-sm py-[3px]"
+              >
+                <Text className="font-noto-bold text-micro font-bold text-primary">
+                  {movedLabel}
                 </Text>
               </View>
             ) : null}

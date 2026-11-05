@@ -1,6 +1,10 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { TrashGlyph, ChevronRightGlyph } from '@/shared/ui/glyphs';
+import {
+  TrashGlyph,
+  ChevronRightGlyph,
+  MoreDotsGlyph,
+} from '@/shared/ui/glyphs';
 import { Image } from '@/shared/ui/Image';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -10,7 +14,7 @@ import {
   COVER_START,
 } from '../config/coverGradients';
 
-import { TripGearGlyph, MoreDotsGlyph, PushpinGlyph } from './TripGlyphs';
+import { TripGearGlyph, PushpinGlyph } from './TripGlyphs';
 import type { MyTripCardVM } from '../model';
 import { COLOR_TOKENS } from '@/shared/config';
 
