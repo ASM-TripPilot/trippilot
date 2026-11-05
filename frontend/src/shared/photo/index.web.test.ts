@@ -15,7 +15,11 @@
  * 3동작: 준비(던지는 목) → 실행(두 함수 호출) → 단언(값 완전 일치·export 이름).
  */
 
-import { pickPhotoAssets, resolvePhotoUri } from './index.web';
+import {
+  canResolveDevicePhotos,
+  pickPhotoAssets,
+  resolvePhotoUri,
+} from './index.web';
 
 jest.mock('expo-media-library', () => {
   throw new Error('expo-media-library must not load on web');
@@ -34,6 +38,10 @@ describe('웹 사진 앨범 스텁', () => {
 
   it('resolvePhotoUri 는 null 이다', async () => {
     await expect(resolvePhotoUri('asset-1')).resolves.toBeNull();
+  });
+
+  it('canResolveDevicePhotos 는 false 다 — 앨범 화면(TRIP-1798)이 성립하지 않아 링크를 숨기는 근거', () => {
+    expect(canResolveDevicePhotos()).toBe(false);
   });
 
   it('네이티브·웹 파일은 같은 이름만 내보낸다', () => {

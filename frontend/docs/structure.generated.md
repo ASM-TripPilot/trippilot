@@ -141,6 +141,7 @@
 
 ## app/trips/[tripId]/records/
 - `app/trips/[tripId]/records/add-visit.tsx`  →  (export 없음)
+- `app/trips/[tripId]/records/album.tsx`  →  (export 없음)
 - `app/trips/[tripId]/records/index.tsx`  →  (export 없음)
 
 ## app/trips/[tripId]/records/reflection/
@@ -1161,6 +1162,19 @@
 - `src/pages/record/travel-style/ui/TravelStylePage.tsx`  →  TravelStylePage
 - `src/pages/record/travel-style/ui/TravelStyleScreen.tsx`  →  TravelStyleScreenProps · TravelStyleScreen
 
+## src/pages/record/trip-album/
+- `src/pages/record/trip-album/index.ts`  →  TripAlbumPage
+
+## src/pages/record/trip-album/model/
+- `src/pages/record/trip-album/model/failedUnlessNotFound.ts`  →  failedUnlessNotFound
+- `src/pages/record/trip-album/model/tripAlbumVM.ts`  →  TripAlbumInput · TripAlbumPlace · TripAlbumDay · TripAlbumVM · buildTripAlbumVM
+- `src/pages/record/trip-album/model/useTripAlbum.ts`  →  TripAlbumState · useTripAlbum
+
+## src/pages/record/trip-album/ui/
+- `src/pages/record/trip-album/ui/AlbumPhotoGrid.tsx`  →  AlbumPhotoGrid
+- `src/pages/record/trip-album/ui/TripAlbumPage.tsx`  →  TripAlbumPage
+- `src/pages/record/trip-album/ui/TripAlbumScreen.tsx`  →  TripAlbumFace · TripAlbumScreenProps · TripAlbumScreen
+
 ## src/pages/record/trip-records/
 - `src/pages/record/trip-records/index.ts`  →  TripRecordsPage
 
@@ -1798,8 +1812,8 @@
 - `src/shared/map/webMarkerHtml.ts`  →  WebMarker · buildWebMarker
 
 ## src/shared/photo/
-- `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAssets · resolvePhotoUri
-- `src/shared/photo/index.web.ts`  →  pickPhotoAssets · resolvePhotoUri
+- `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAssets · canResolveDevicePhotos · resolvePhotoUri
+- `src/shared/photo/index.web.ts`  →  pickPhotoAssets · resolvePhotoUri · canResolveDevicePhotos
 
 ## src/shared/push/
 - `src/shared/push/PushGlyphs.tsx`  →  PushBellHero
@@ -1992,4 +2006,4 @@
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1304개 파일
+합계 1312개 파일

@@ -6,11 +6,12 @@ live_verified_at: 2026-11-02 (f153fe245)
 routes:
   - app/trips/[tripId]/records/index.tsx
   - app/trips/[tripId]/records/summary.tsx
+  - app/trips/[tripId]/records/album.tsx
 ---
 
-# 여행 기록 (방문 기록 j01 · 여행 요약 j04)
+# 여행 기록 (방문 기록 j01 · 여행 요약 j04 · 여행 앨범)
 
-방문 기록(j01)은 한 여행의 일차별 방문을 전면 지도 + 바텀시트로 보여 준다. 사용자는 좌상단 일차 칩으로 날을 바꾸고, 도착한 카드에 사진·메모를 붙이고, 방문 시각을 고치거나 건너뛰기를 하고, 오늘 탭에서는 계획 장소를 직접 방문 체크하거나 계획에 없던 곳을 추가한다. 여행 요약(j04)은 끝난 여행의 총 방문·거리·사진과 일차별 하이라이트를 보여 주고, 일차 회고·공유 카드로 이어진다. 두 화면과 회고(j03)는 같은 하단 바(뒤로 + 기록·회고·요약)를 공유한다.
+방문 기록(j01)은 한 여행의 일차별 방문을 전면 지도 + 바텀시트로 보여 준다. 사용자는 좌상단 일차 칩으로 날을 바꾸고, 도착한 카드에 사진·메모를 붙이고, 방문 시각을 고치거나 건너뛰기를 하고, 오늘 탭에서는 계획 장소를 직접 방문 체크하거나 계획에 없던 곳을 추가한다. 여행 요약(j04)은 끝난 여행의 총 방문·거리·사진과 일차별 하이라이트를 보여 주고, 일차 회고·공유 카드로 이어진다. 두 화면과 회고(j03)는 같은 하단 바(뒤로 + 기록·회고·요약)를 공유한다. 요약의 `앨범 보기`로 여는 여행 앨범은 이 기기에서 붙인 사진만 일차 → 장소 → 3열 격자로 모아 보여 주는 화면이다(하단 바 없음).
 
 ## Sub-features
 
@@ -42,6 +43,11 @@ routes:
 - `sum-visit-list` 위치 데이터가 하나도 없으면 지도 대신 `위치 기록이 없어 지도를 표시할 수 없어요` + 순서 방문 목록(방문 0곳이면 `기록된 방문 장소가 없어요`).
 - `sum-day-reflection` 여행 기간 일차마다 `N일차 회고` 칩 → j03.
 - `sum-share` 헤더 `공유` → j06 공유 카드. 캡처 네이티브 모듈이 없는 빌드면 버튼 자체가 없다.
+- `sum-album-link` 요약이 준비돼 있고 사진이 1장 이상이며 앱(웹 아님)이면 숫자 타일 바로 아래 오른쪽에 `앨범 보기 ›` 링크가 선다 → 여행 앨범. 사진 0장·요약 준비 전·오류 얼굴·웹에서는 링크 자체가 없다. *(TRIP-1798 · 프리뷰 `trip-summary-default` 로 위치 육안 — 실화면 미확인)*
+- `album-grid` 앨범은 `{여행 제목} · 사진 N장`(N = 화면에 실제로 보이는 장수) 아래 `이 기기에 있는 사진만 보여요`, 그 아래 일차 묶음(`1일차 · 6월 10일(수)`) → 장소(이름 + `3장`) → 3열 정사각 격자 순으로 선다. 사진이 0장인 장소·일차는 숨고 일차 번호는 여행 시작일 기준이라 비어 있는 날이 있어도 유지된다. 사진을 눌러도 아무 일도 없다. *(TRIP-1798 · 프리뷰 `trip-album-default` 로 3열 114·r12·gap 8 육안 — 실화면 미확인)*
+- `album-notices` 다른 기기에서 붙인 사진이 있으면 `다른 기기 사진 N장`, 이 기기 사진인데 앨범에서 못 찾은(원본 삭제 등) 것이 있으면 `불러올 수 없는 사진 M장` 줄이 선다(0이면 줄 없음). 이 사진들은 격자에 안 그려지고 제목 장수에서도 빠진다. *(TRIP-1798 · 프리뷰 `trip-album-notices`)*
+- `album-empty` 이 기기에서 볼 수 있는 사진이 하나도 없으면 `이 기기에서 볼 수 있는 사진이 없어요`. 기기 번호·사진 목록·앨범 주소를 읽는 동안에는 이 문구도 사진도 먼저 뜨지 않는다. *(TRIP-1798 · 프리뷰 `trip-album-empty`)*
+- `album-error` 기록 조회 실패면 `앨범을 불러오지 못했어요` + `다시 시도`(빈 앨범으로 접지 않는다). 일부 방문의 사진 목록만 실패하면(404 제외) 나머지는 그대로 그리고 앨범 위에 `일부 사진 목록을 불러오지 못했어요` 한 줄 + `다시 시도`(실패한 방문만 다시 부른다). *(TRIP-1798 · 프리뷰 `trip-album-error`·`trip-album-notices`)*
 - `sum-count-up` 진입하면 통계 숫자(총 방문·총 거리·총 사진)가 작은 값에서 서버 값까지 올라가고, 끝 글자는 서버 문자열 그대로다(`3.7km`). `0`·`—` 칸은 안 올라간다. 처음에 0 이나 최종값이 번쩍였다가 다시 올라가지 않는다. 동작 줄이기가 켜져 있으면 처음부터 최종값. *(TRIP-1736 · 2026-11-03 실화면 pass)*
 - `sum-path-draw` 지도가 있는 요약은 0.15초 뒤 경로선이 1번 핀에서 마지막 핀까지 0.9초 동안 자라고 핀이 하나씩 드러난다. 핀이 드러날 때 선이 0 으로 되감기거나 깜빡이지 않고, 끝은 primary 선 + 흰 케이싱 완성선 + 핀 전부. 동작 줄이기면 처음부터 완성선. *(TRIP-1736 · 실화면 미확인 — 2026-11-03 시뮬에서 연 j04 두 여행에 지도가 없었다. 같은 오버레이를 쓰는 추천안 `draft-reveal`(ai-generate.md)로 갈음 확인)*
 - `tr-sheet-layout` 지도가 화면 전체에 깔리고 시트 본문이 헤더 → 숙소 줄 → 안내문 → 방문 카드 → 계획 행 → 방문 추가 순서로 선다. 수동 체크인 GPS 배너는 헤더 바로 아래, 지도 배지 「GPS 자동기록 꺼짐」은 일차 칩 옆에 서고 누를 수 없다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass(일부 — Gotchas))*
@@ -60,10 +66,11 @@ routes:
 - 홈 여행 후(여행 완료) 히어로의 `회고 보기` → j01.
 - 마이 페이지 지난 여행 행 → j01 (이 섹션은 예정 여행이 0건일 때만 그려진다).
 - j03 회고·j04 요약 하단 바 `기록` 칸 → j01(j03 에서는 그 날짜 `?day=` 로).
+- j04 숫자 타일 아래 `앨범 보기 ›` → 여행 앨범 (사진이 1장 이상일 때만).
 - j01·j03 하단 바 `요약` 칸 → j04. j04 준비 중 얼굴의 `방문 기록 보기` → j01.
 - 알림함 행·푸시 탭: 종류 `TRIP_SUMMARY` → j04.
 - 도우미 다음 행동 `OPEN_TRIP_SUMMARY` → j04, `OPEN_REFLECTION`(날짜 없음) → j01.
-- 딥링크 `trippilot://trips/<tripId>/records`(선택 `?day=YYYY-MM-DD`), `trippilot://trips/<tripId>/records/summary`. 시뮬레이터에선 `com.trippilot.travel://` 스킴으로 연다.
+- 딥링크 `trippilot://trips/<tripId>/records`(선택 `?day=YYYY-MM-DD`), `trippilot://trips/<tripId>/records/summary`, `trippilot://trips/<tripId>/records/album`. 시뮬레이터에선 `com.trippilot.travel://` 스킴으로 연다.
 
 ## Driving it with agent-device
 
@@ -102,6 +109,11 @@ Preconditions:
 - **j04 오류.** 네트워크를 끊고 j04 를 연다. testID: `reflection-summary-error`(`요약을 불러오지 못했어요`) → testID: `reflection-summary-retry`(`다시 시도`).
 - **j04 요약.** 끝난 여행으로 연다. 헤더 `여행 요약`, 표지 testID: `reflection-summary-cover`(이 기기 사진이 있으면 그 안에 사진 testID: `reflection-summary-cover-photo` 와 어두운 막 testID: `reflection-summary-cover-scrim` 이 서고, 없으면 두 노드 모두 없는 색 표지; 여행 제목을 알면 제목 testID: `reflection-summary-trip-title`), 인용문 testID: `reflection-summary-narrative`(머리말 `이번 여행`), 일차 카드 testID: `reflection-summary-day-card` 가 일차 수만큼(`N일차`·`· M곳`·거리 각주), 숫자 타일 testID: `reflection-summary-stats` 에 `방문`·`이동`·`사진`, 동선 박스 testID: `reflection-summary-route`(`여행 동선`).
 - **j04 위치 없음.** 위치 없는 여행이면 `위치 기록이 없어 지도를 표시할 수 없어요`, 방문이 있으면 `대신 방문 장소를 순서대로 보여드릴게요` + 동선 박스의 testID: `reflection-summary-visit-item` 줄들(지도 얼굴과 같은 박스), 없으면 testID: `reflection-summary-visit-empty`(`기록된 방문 장소가 없어요`).
+- **j04 → 앨범 보기.** 사진이 1장 이상인 끝난 여행의 j04 에서 testID: `trip-album-link`(`앨범 보기`)를 누른다. 앨범 testID: `trip-album-screen` 이 슬라이드로 열리고 제목 testID: `trip-album-title`(`{여행 제목} · 사진 N장`), 안내 testID: `trip-album-hint`(`이 기기에 있는 사진만 보여요`)가 보인다. 사진이 0장인 여행·웹에는 링크가 없다. 시뮬레이터 앨범에 사진이 없으면 아래 사진 줄이 비므로, 이 기기에서 방문에 사진을 먼저 붙인다(j01 사진 추가).
+- **앨범 내용.** 일차 묶음 testID: `trip-album-day-{n}`(n=여행 시작일 기준 일차, 제목 `1일차 · 6월 10일(수)`) 안에 장소 묶음 testID: `trip-album-place-{visitCheckId}`(이름 + `3장`)와 사진 셀 testID: `trip-album-photo-{visitPhotoMetaId}` 가 3열로 선다. 한 방문에서 붙인 순서대로 보이고, 같은 장소를 두 번 갔으면 묶음이 둘이다. 여행 조회가 실패해도 앨범은 서고 제목이 `이번 여행`, 일차 제목은 날짜 없이 `1일차` 다.
+- **앨범 안내 줄.** 다른 기기에서 붙인 사진이 있으면 testID: `trip-album-other-device-notice`(`다른 기기 사진 N장`), 원본이 지워진 사진이 있으면 testID: `trip-album-unresolved-notice`(`불러올 수 없는 사진 M장`). 사진이 하나도 안 보이면 testID: `trip-album-empty`.
+- **앨범 오류.** 실패 주입으로 `path=/trips/*/records&status=500` 을 걸고 앨범을 연다. testID: `trip-album-error` → 주입을 풀고 testID: `trip-album-retry`(`다시 시도`)를 누르면 앨범이 선다. `path=/trips/*/visits/*/photos&status=500` 이면 testID: `trip-album-photo-error` 한 줄과 testID: `trip-album-photo-retry` 가 서고 나머지 방문 사진은 그대로다.
+- **앨범 뒤로.** testID: `trip-album-back` 을 누르면 j04 로 돌아간다(딥링크로 첫 화면이었으면 j04 로 바뀐다). iOS 가장자리 스와이프 뒤로도 된다.
 - **j04 → 일차 회고.** testID: `reflection-summary-day-reflection-{N}`(N=1)(`1일차 회고`)을 누르면 1일차 j03 이 열린다.
 - **j04 → 공유.** testID: `reflection-summary-share`(`공유`)를 누르면 j06 이 열린다 (`share-card`). 하단 바 testID: `reflection-summary-bottom-bar{-tab-reflection}` 은 여행 중이면 오늘, 끝났으면 마지막 일차 j03 으로 간다.
 - **교차 확인.** j01 에서 완료·사진·메모를 바꾼 뒤 j03 회고(그날)와 j04 요약의 방문 수·사진 수를 다시 읽어 맞는지 본다.
@@ -121,6 +133,7 @@ Preconditions:
 - 여행에 일정이 없으면(404) 일차 칩이 없고 기록 조회도 꺼져, 빈 안내·오류 없이 시트가 비어 보인다. 이 얼굴을 "빈 날"로 판정하지 않는다. 일정·여행 조회가 404 가 **아닌** 이유로 실패한 경우는 이제 시트에 `tr-plan-error` 줄이 선다(TRIP-1757) — 칩이 없는데 줄도 없으면 404 쪽이다.
 - j04 지도는 요약 계약에 좌표가 없어 늘 그려지지 않는다(`hasLocationData:true` 여도 지도 자리 없음). 지도가 안 보이는 것은 정상이다.
 - j04 `공유` 는 캡처 3종 네이티브 모듈이 없는 빌드에서 버튼 자체가 없다 — 재빌드 여부를 먼저 확인한다.
+- 앨범은 이 기기 앨범에서 사진 주소를 꺼내므로 시뮬레이터 앨범에 없는 사진은 `불러올 수 없는 사진`, 다른 기기에서 붙인 사진은 `다른 기기 사진` 줄로만 나온다 — 격자에 사진이 안 보이는 것은 정상일 수 있다. 3열 크기·간격·링크 위치는 jest 가 못 본다. **[실화면 전용]**
 - j04·j03 은 iOS 가장자리 스와이프 뒤로가 꺼져 있다. 뒤로는 하단 바 뒤로 원뿐이다.
 - 푸시(`TRIP_SUMMARY`)는 개발 서버에서 발송이 꺼져 있을 수 있다(확인 필요). 알림함 행으로 대신 통과시키지 말고 두 경로를 따로 적는다.
 - 여행 요약은 딥링크뿐 아니라 캘린더 지난 여행 카드·알림·도우미로도 온다.

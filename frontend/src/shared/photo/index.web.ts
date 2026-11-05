@@ -12,9 +12,16 @@ export async function pickPhotoAssets(_opts: {
 export async function resolvePhotoUri(_localAssetId: string): Promise<null> {
   return null;
 }
+export function canResolveDevicePhotos(): boolean {
+  return false;
+}
 
 // 시그니처 대조 — 실 모듈(index.ts) 타입이 바뀌면 여기서 빨개진다(tsc 는 소비처를 index.ts 로만 푼다).
-void ({ pickPhotoAssets, resolvePhotoUri } satisfies Pick<
+void ({
+  pickPhotoAssets,
+  resolvePhotoUri,
+  canResolveDevicePhotos,
+} satisfies Pick<
   typeof import('./index'),
-  'pickPhotoAssets' | 'resolvePhotoUri'
+  'pickPhotoAssets' | 'resolvePhotoUri' | 'canResolveDevicePhotos'
 >);

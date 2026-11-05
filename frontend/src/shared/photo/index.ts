@@ -99,6 +99,11 @@ export async function pickPhotoAssets({
   }
 }
 
+/** TRIP-1798 · 이 빌드가 기기 앨범에서 사진 주소를 풀 수 있는가(앱 true · 웹 false — index.web.ts). 앨범 화면 진입 링크의 웹 숨김 판정. */
+export function canResolveDevicePhotos(): boolean {
+  return true;
+}
+
 export async function resolvePhotoUri(
   localAssetId: string
 ): Promise<string | null> {
