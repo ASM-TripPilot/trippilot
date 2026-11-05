@@ -24,6 +24,7 @@ import { createGate } from '@/test-support/mswHookHarness';
 import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
 import { getGetSavedPlacesQueryKey } from '@/shared/api/index.hooks';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
+import { copyText } from '@/shared/clipboard';
 
 /**
  * TRIP-1372(TRIP-824 단건 조회) · d06 장소 상세 배선(페이지 층).
@@ -57,6 +58,10 @@ jest.mock('@/shared/storage', () => ({
 
 jest.mock('expo-linking', () => ({ openURL: jest.fn() }));
 const mockOpenURL = Linking.openURL as jest.Mock;
+
+// TRIP-1799 — 클립보드 입구만 목한다(실제 클립보드는 jest 가 못 본다). 입구 자체는 shared/clipboard/index.test.ts 가 잰다.
+jest.mock('@/shared/clipboard', () => ({ copyText: jest.fn() }));
+const mockCopyText = copyText as jest.Mock;
 
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
@@ -103,6 +108,7 @@ beforeEach(() => {
   detailReply = makePlace();
   mockBack.mockClear();
   mockOpenURL.mockReset();
+  mockCopyText.mockReset();
   resetPressGuard();
   mockReplace.mockClear();
   mockCanGoBack.mockReset();
@@ -702,5 +708,153 @@ describe('TRIP-1754 · 담은 장소 조회 실패 — 토스트 · 하트', () 
     } finally {
       gate.release();
     }
+  });
+});
+
+/**
+ * TRIP-1799 · d06 주소 행 — 전체 주소를 보이고(address → region → 미확인), 진짜 주소가 있을 때만 복사 버튼.
+ *
+ *  - **AD1** 도로명 주소가 있으면 지역명이 아니라 주소를 보이고 복사 버튼이 있다.
+ *  - **AD2~AD4** 지역명 폴백·공백 주소·둘 다 없음은 글자만 — 복사 버튼 없음(지역명을 「주소 복사」로 넣어 봐야 쓸모가 없다).
+ *  - **AD5** 누르면 화면에 보이는(trim 한) 주소로 복사 입구가 1회 불리고 「주소를 복사했어요」.
+ *  - **AD6·AD7** 복사가 실패하면(false · reject) 「복사했어요」 대신 에러 토스트(INV-4).
+ *  - **AD8** 아이콘뿐인 버튼이라 접근성 이름 「주소 복사」.
+ *
+ * (개념) 클립보드 = 기기가 임시로 들고 있는 복사 내용. 입구 `copyText` 는 성공이면 true 를 돌려준다.
+ * 3동작: 준비(주소 데이터 · 입구 응답) → 실행(복사 버튼 누름) → 단언(입구 인자 · 토스트).
+ */
+describe('장소 상세 주소 — 보이기 · 복사', () => {
+  const ADDRESS = '부산광역시 해운대구 APEC로 58';
+  const COPY = 'explore-place-address-copy';
+  const COPIED = 'explore-place-address-copied';
+  const FAILED = 'explore-place-address-copy-failed';
+
+  function renderWithToast(): void {
+    const client = newTestQueryClient({ gcTime: 0 });
+    function wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+    render(
+      <WithToastHost>
+        <PlaceDetailPage poiId="p1" />
+      </WithToastHost>,
+      { wrapper }
+    );
+  }
+  async function renderLoaded(): Promise<void> {
+    renderWithToast();
+    await screen.findByTestId('explore-place-detail');
+  }
+
+  it('AD1 주소가 있으면 지역명이 아니라 주소를 보이고 복사 버튼이 있다', async () => {
+    detailReply = makePlace({ address: ADDRESS, region: '부산 해운대구' });
+
+    await renderLoaded();
+
+    expect(screen.getByTestId('explore-place-address')).toHaveTextContent(
+      ADDRESS
+    );
+    expect(screen.getByTestId(COPY)).toBeOnTheScreen();
+  });
+
+  it('AD2 주소가 null 이면 지역명을 보이고 복사 버튼은 없다', async () => {
+    detailReply = makePlace({ address: null, region: '부산 부산진구' });
+
+    await renderLoaded();
+
+    expect(screen.getByTestId('explore-place-address')).toHaveTextContent(
+      '부산 부산진구'
+    );
+    expect(screen.queryByTestId(COPY)).toBeNull();
+  });
+
+  it.each([[''], ['   ']])(
+    'AD3 주소가 %j 이면 null 과 같이 지역명으로 접고 복사 버튼은 없다',
+    async (blank) => {
+      detailReply = makePlace({ address: blank, region: '부산 부산진구' });
+
+      await renderLoaded();
+
+      expect(screen.getByTestId('explore-place-address')).toHaveTextContent(
+        '부산 부산진구'
+      );
+      expect(screen.queryByTestId(COPY)).toBeNull();
+    }
+  );
+
+  it('AD4 주소도 지역명도 없으면 미확인이고 복사 버튼은 없다', async () => {
+    detailReply = makePlace({ address: null, region: null });
+
+    await renderLoaded();
+
+    expect(screen.getByTestId('explore-place-address')).toHaveTextContent(
+      '미확인'
+    );
+    expect(screen.queryByTestId(COPY)).toBeNull();
+  });
+
+  it('AD5 누르면 보이는(trim 한) 주소로 복사 입구가 1회 불리고 「주소를 복사했어요」가 뜬다', async () => {
+    // 준비 — 앞뒤 공백이 섞인 주소(표시 단언은 공백을 접어 trim 유무를 못 가른다 — 입구 인자로 잰다)
+    mockCopyText.mockResolvedValue(true);
+    detailReply = makePlace({
+      address: `  ${ADDRESS} `,
+      region: '부산 해운대구',
+    });
+    await renderLoaded();
+    expect(screen.queryByTestId(COPIED)).toBeNull();
+    expect(screen.queryByTestId(FAILED)).toBeNull();
+
+    // 실행
+    fireEvent.press(screen.getByTestId(COPY));
+
+    // 단언
+    const toast = await screen.findByTestId(COPIED);
+    expect(within(toast).getByText('주소를 복사했어요')).toBeOnTheScreen();
+    expect(screen.getByTestId(`${COPIED}-success-icon`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(FAILED)).toBeNull();
+    expect(mockCopyText).toHaveBeenCalledTimes(1);
+    expect(mockCopyText.mock.calls[0][0]).toBe(ADDRESS);
+  });
+
+  it('AD6 복사가 실패(false)하면 「복사했어요」 없이 에러 토스트가 뜬다 (INV-4)', async () => {
+    mockCopyText.mockResolvedValue(false);
+    detailReply = makePlace({ address: ADDRESS });
+    await renderLoaded();
+    expect(screen.queryByTestId(COPIED)).toBeNull();
+    expect(screen.queryByTestId(FAILED)).toBeNull();
+
+    fireEvent.press(screen.getByTestId(COPY));
+
+    const toast = await screen.findByTestId(FAILED);
+    expect(
+      within(toast).getByText('주소를 복사하지 못했어요')
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId(`${FAILED}-error-icon`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(COPIED)).toBeNull();
+  });
+
+  it('AD7 입구가 reject 해도 화면은 살아 있고 에러 토스트가 뜬다', async () => {
+    mockCopyText.mockRejectedValue(new Error('boom'));
+    detailReply = makePlace({ address: ADDRESS });
+    await renderLoaded();
+
+    fireEvent.press(screen.getByTestId(COPY));
+
+    expect(await screen.findByTestId(FAILED)).toBeOnTheScreen();
+    expect(screen.queryByTestId(COPIED)).toBeNull();
+    expect(screen.getByTestId('explore-place-detail')).toBeOnTheScreen();
+  });
+
+  it('AD8 복사 버튼은 「주소 복사」 이름의 버튼이다', async () => {
+    detailReply = makePlace({ address: ADDRESS });
+
+    await renderLoaded();
+
+    expect(screen.getByRole('button', { name: '주소 복사' })).toHaveProp(
+      'testID',
+      COPY
+    );
   });
 });

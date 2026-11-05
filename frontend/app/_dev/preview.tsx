@@ -5979,6 +5979,8 @@ export const PREVIEW_STATES: PreviewState[] = [
           lat: 35.1689,
           lng: 129.1355,
           region: '부산 해운대구',
+          // TRIP-1799 — 주소 행 + 복사 버튼(Figma 5227:4395) 육안 대조. 복사 핸들러는 noop(프리뷰는 서버·클립보드 안 탄다).
+          address: '부산광역시 해운대구 APEC로 58',
           openingHours: '10:00~18:00 (월 휴관)',
           imageUrl: PLACE_DETAIL_PREVIEW_IMAGE,
           tags: ['미술', '실내', '취향매칭', '비와도좋음'],
@@ -5986,6 +5988,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           dataStatus: 'ACTIVE',
         }}
         saved={false}
+        onPressCopyAddress={noop}
       />
     ),
   },

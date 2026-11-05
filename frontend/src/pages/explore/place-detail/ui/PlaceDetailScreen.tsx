@@ -14,6 +14,7 @@ import type { Place } from '@/shared/api/index.schemas';
 import type { PlaceSaveNotice } from '@/features/save-place/index.view';
 import {
   ExploreBackChevronGlyph,
+  ExploreCopyGlyph,
   ExploreInfoGlyph,
   ExploreShareGlyph,
 } from '@/features/explore/index.view';
@@ -28,9 +29,10 @@ import { OpenNaverMapButton } from '@/shared/ui/OpenNaverMapButton';
  *
  * ⚠️ **가진 것만 그린다(INV-1)**: `Place` 스키마엔 소개 본문·입장료·42장 갤러리·관련사진의
  * 데이터원이 없다(단건 GET 계약 부재). 그래서 `explore-place-intro`·`-fee`·`-relphotos`·
- * `-galcount`는 **아예 만들지 않는다** — 없는 값을 지어내면 발명이다. 주소는 full address가
- * 없어 `region ?? '미확인'`, 영업시간 NULL은 값 자리를 다른 testID(`-unknown-openhours`)로
- * 바꿔 기계로 구분한다(i05 선례).
+ * `-galcount`는 **아예 만들지 않는다** — 없는 값을 지어내면 발명이다. 주소는 `Place.address`(공백 제외)
+ * → 없으면 `region` → 둘 다 없으면 `미확인`(TRIP-1799). 복사 버튼은 **진짜 address 가 있을 때만**
+ * 나온다(지역명은 주소가 아니라 붙여 넣어도 쓸모없다). 영업시간 NULL은 값 자리를 다른
+ * testID(`-unknown-openhours`)로 바꿔 기계로 구분한다(i05 선례).
  *
  * ⚠️ **하트 정체성은 색이 아니라 글리프 컴포넌트+testID+`selected`로 잰다** — SVG fill 색은
  * 렌더 트리에 안 남아, 색만 토글하면 "저장됐다는 거짓말"이 심판을 통과한다(repo-trap 글리프
@@ -49,6 +51,8 @@ export interface PlaceDetailScreenProps {
   onToggleSave?: () => void;
   /** "네이버 지도에서 보기" — 미지정이면 버튼을 그리지 않는다(열 이름·좌표가 없을 때). */
   onPressOpenNaver?: () => void;
+  /** 주소 복사 — 미지정이면 주소 행에 복사 버튼을 그리지 않는다(진짜 `address` 가 없을 때, TRIP-1799). */
+  onPressCopyAddress?: () => void;
   /** 네이버 지도를 못 열었을 때 안내 문구(INV-4). 미지정·null 이면 안 그린다. */
   openNaverError?: string | null;
   onPressSaveErrorAction?: () => void;
@@ -68,20 +72,30 @@ const STATUS_BADGE: Record<Place['dataStatus'], string | null> = {
 const SCRIM_COLORS = ['rgba(0,0,0,0)', 'rgba(0,0,0,0.5)'] as const;
 const SCRIM_LOCATIONS = [0.3, 1] as const;
 
-/** 정보 카드 한 행 — 라벨(고정 폭) + 값 슬롯(결측 스위치 때문에 호출부가 조립해 넘긴다). */
+/** 정보 카드 한 행 — 라벨(고정 폭) + 값 슬롯(결측 스위치 때문에 호출부가 조립해 넘긴다).
+ * `trailing` 이 있으면 행이 가운데 정렬로 바뀌고(Figma 주소 행: 44 버튼이 행 높이) 세로 패딩은 버튼이 대신한다. */
 function InfoRow({
   label,
   children,
+  trailing,
 }: {
   label: string;
   children: ReactNode;
+  trailing?: ReactNode;
 }): ReactElement {
   return (
-    <View className="flex-row items-start gap-[10px] py-[13px]">
+    <View
+      className={
+        trailing
+          ? 'flex-row items-center gap-[10px]'
+          : 'flex-row items-start gap-[10px] py-[13px]'
+      }
+    >
       <View className="w-[60px]">
         <Text className="font-noto text-label text-muted">{label}</Text>
       </View>
       <View className="flex-1">{children}</View>
+      {trailing}
     </View>
   );
 }
@@ -118,6 +132,7 @@ export function PlaceDetailScreen({
   onPressShare,
   onToggleSave,
   onPressOpenNaver,
+  onPressCopyAddress,
   openNaverError,
   onPressSaveErrorAction,
 }: PlaceDetailScreenProps): ReactElement {
@@ -220,13 +235,28 @@ export function PlaceDetailScreen({
 
             <View className="h-px w-full bg-hairline" />
 
-            <InfoRow label="주소">
-              {/* full address 계약 없음 — region 만 있고 없으면 "미확인"(INV-1). */}
+            <InfoRow
+              label="주소"
+              trailing={
+                onPressCopyAddress ? (
+                  <Pressable
+                    testID="explore-place-address-copy"
+                    accessibilityRole="button"
+                    accessibilityLabel="주소 복사"
+                    onPress={onPressCopyAddress}
+                    className="h-[44px] w-[44px] items-center justify-center"
+                  >
+                    <ExploreCopyGlyph size={20} />
+                  </Pressable>
+                ) : undefined
+              }
+            >
+              {/* 도로명 주소(`Place.address`) → 없으면 지역명 → 둘 다 없으면 "미확인"(INV-1). */}
               <Text
                 testID="explore-place-address"
                 className="font-noto text-label text-ink"
               >
-                {place.region ?? '미확인'}
+                {place.address?.trim() || place.region || '미확인'}
               </Text>
             </InfoRow>
           </View>

@@ -452,7 +452,7 @@
 
 ## src/features/explore/
 - `src/features/explore/index.ts`  →  PLACE_LANE_STALE_TIME · useMultiRegionPlaces · usePlacesInfinite
-- `src/features/explore/index.view.ts`  →  resolvePlaceListState · regionPickerHref · filterRegions · groupRegionsBySido · regionTint · useRegions · ExploreBackChevronGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · ExploreFilterSlidersGlyph · ExploreInfoGlyph · ExplorePlusGlyph · ExploreSearchGlyph · ExploreShareGlyph
+- `src/features/explore/index.view.ts`  →  resolvePlaceListState · regionPickerHref · filterRegions · groupRegionsBySido · regionTint · useRegions · ExploreBackChevronGlyph · ExploreCopyGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · ExploreFilterSlidersGlyph · ExploreInfoGlyph · ExplorePlusGlyph · ExploreSearchGlyph · ExploreShareGlyph
 
 ## src/features/explore/model/
 - `src/features/explore/model/mergePlaces.ts`  →  mergePlacesByPoiId · interleavePlacesByRegion
@@ -464,7 +464,7 @@
 - `src/features/explore/model/usePlacesInfinite.ts`  →  usePlacesInfinite
 
 ## src/features/explore/ui/
-- `src/features/explore/ui/ExploreGlyphs.tsx`  →  ExplorePlusGlyph · ExploreBackChevronGlyph · ExploreShareGlyph · ExploreSearchGlyph · ExploreFilterSlidersGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · ExploreInfoGlyph
+- `src/features/explore/ui/ExploreGlyphs.tsx`  →  ExplorePlusGlyph · ExploreBackChevronGlyph · ExploreShareGlyph · ExploreCopyGlyph · ExploreSearchGlyph · ExploreFilterSlidersGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · ExploreInfoGlyph
 
 ## src/features/itinerary/config/
 - `src/features/itinerary/config/placeCategoryChips.ts`  →  PlaceCategoryChip · PLACE_CATEGORY_CHIPS
@@ -1711,6 +1711,10 @@
 - `src/shared/api/useAccessToken.ts`  →  useAccessToken
 - `src/shared/api/visitConflict.ts`  →  VISIT_CONFLICT_CODES · VisitConflictKind · resolveVisitConflict
 
+## src/shared/clipboard/
+- `src/shared/clipboard/index.ts`  →  copyText
+- `src/shared/clipboard/index.web.ts`  →  copyText
+
 ## src/shared/config/
 - `src/shared/config/index.ts`  →  COLOR_TOKENS · ColorTokenName
 
@@ -2006,4 +2010,4 @@
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1312개 파일
+합계 1314개 파일

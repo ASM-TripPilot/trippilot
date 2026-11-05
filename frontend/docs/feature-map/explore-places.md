@@ -10,7 +10,7 @@ routes:
 
 # 장소 탐색 · 장소 상세 · 장소 저장
 
-장소 탐색(d04)은 「장소 탐색」 앱바, 서버 검색창, 카테고리 칩 11개(「전체」+10), 지역 칩, 2열 장소 그리드(무한 스크롤·진입마다 무작위 순서), 우하단 ♥ 담은 장소·＋ 여행 만들기 FAB, 복제 탭바를 보여 준다. 카드를 누르면 장소 상세(d06)로, 하트를 누르면 담기/해제된다. 장소 상세는 `GET /places/{poiId}` 단건으로 사진·제목·부제(카테고리 · 지역)·상태 배지·태그·영업시간·주소·「네이버 지도에서 보기」·미니맵과 뒤로·공유·저장 버튼을 그리고, 404면 「장소를 찾을 수 없어요」, 그 밖의 실패면 오류 얼굴을 보인다.
+장소 탐색(d04)은 「장소 탐색」 앱바, 서버 검색창, 카테고리 칩 11개(「전체」+10), 지역 칩, 2열 장소 그리드(무한 스크롤·진입마다 무작위 순서), 우하단 ♥ 담은 장소·＋ 여행 만들기 FAB, 복제 탭바를 보여 준다. 카드를 누르면 장소 상세(d06)로, 하트를 누르면 담기/해제된다. 장소 상세는 `GET /places/{poiId}` 단건으로 사진·제목·부제(카테고리 · 지역)·상태 배지·태그·영업시간·주소(도로명 주소가 있으면 복사 버튼과 함께)·「네이버 지도에서 보기」·미니맵과 뒤로·공유·저장 버튼을 그리고, 404면 「장소를 찾을 수 없어요」, 그 밖의 실패면 오류 얼굴을 보인다.
 
 ## Sub-features
 
@@ -27,7 +27,8 @@ routes:
 - `places-save` 카드 하트 담기/해제(응답 전 비활성), 실패 배너 + 「다시 시도」/「로그인하기」.
 - `places-fab` ♥ → 담은 장소(위저드 출처면 뒤로), ＋ → 위저드 1/4(위저드 출처면 ＋ 숨김).
 - `places-tabbar` 복제 탭바 「탐색」 활성, 다른 칸 → 스택 걷고 그 탭으로.
-- `place-detail` 단건 상세 렌더(상태 배지 「폐업」/「미확인」, 영업시간·주소 결측은 「미확인」).
+- `place-detail` 단건 상세 렌더(상태 배지 「폐업」/「미확인」, 영업시간·주소 결측은 「미확인」). 주소 행은 도로명 주소 → 없으면 지역명 → 둘 다 없으면 「미확인」.
+- `place-detail-address-copy` 도로명 주소가 있을 때만 주소 행 오른쪽 복사 버튼 → 기기 클립보드에 주소를 넣고 토스트 「주소를 복사했어요」, 복사가 안 되면 에러 토스트 「주소를 복사하지 못했어요」(지역명·「미확인」 행에는 버튼 없음). *(TRIP-1799 · 실화면 미검증 — 네이티브 재빌드 필요)*
 - `place-detail-save` 저장 버튼 토글(라벨 `{이름} 저장`, 담김은 `selected`), 실패 배너.
 - `place-detail-share` 공유 → OS 공유 시트(장소 이름만).
 - `place-detail-naver` 「네이버 지도에서 보기」 → 외부 네이버 지도, 실패 시 안내 배너.
@@ -78,9 +79,10 @@ Preconditions:
 - **담기 실패.** testID: `explore-places-saveerror` 배너(예 「연결이 불안정해 담지 못했어요」) + testID: `explore-places-saveerror-retry` 「다시 시도」, 게스트면 testID: `explore-places-saveerror-login` 「로그인하기」 → `/(auth)/login`. 배너는 다음 조작(검색·칩·재시도·새 하트)에서 사라진다.
 - **FAB.** testID: `explore-places-saved-fab`(「담은 장소」) → `/explore/saved-places`. testID: `explore-places-create-fab`(「여행 만들기」) → `/trips/new/step1`. 둘의 묶음 testID: `explore-places-fab-stack`.
 - **앱바 뒤로.** testID: `explore-places-back` → 이전 화면.
-- **상세 렌더.** 카드를 눌러 상세로. testID: `explore-place-detail`, 사진 testID: `explore-place-hero`, 제목 testID: `explore-place-title`, 영업시간 testID: `explore-place-openhours`(없으면 testID: `explore-place-unknown-openhours` 「미확인」), 주소 testID: `explore-place-address`(지역만, 없으면 「미확인」), 지도 testID: `explore-place-map`.
+- **상세 렌더.** 카드를 눌러 상세로. testID: `explore-place-detail`, 사진 testID: `explore-place-hero`, 제목 testID: `explore-place-title`, 영업시간 testID: `explore-place-openhours`(없으면 testID: `explore-place-unknown-openhours` 「미확인」), 주소 testID: `explore-place-address`(도로명 주소, 없으면 지역명, 둘 다 없으면 「미확인」), 지도 testID: `explore-place-map`.
 - **상태 배지.** CLOSED 장소 id 로 진입하면 testID: `explore-place-status-badge` 에 「폐업」, UNVERIFIED·LOST 는 「미확인」, ACTIVE 는 배지 없음.
 - **상세 저장.** testID: `explore-place-save`(라벨 `{이름} 저장`)를 누른다. `selected` 가 true 로, 글리프 testID: `explore-place-save-filled` 로 바뀐다(해제면 `explore-place-save-outline`). 저장 중엔 비활성. 실패면 testID: `explore-place-saveerror` + `explore-place-saveerror-retry`/`explore-place-saveerror-login`. 결과를 담은 장소에서 다시 읽는다.
+- **주소 복사.** 도로명 주소가 있는 장소에서 testID: `explore-place-address-copy`(「주소 복사」)를 누른다 → 토스트 testID: `explore-place-address-copied`(「주소를 복사했어요」), 실패면 testID: `explore-place-address-copy-failed`(「주소를 복사하지 못했어요」). 지역명·「미확인」 행엔 이 버튼이 없다. 실제 클립보드 내용은 시뮬레이터 검색창·메모에 붙여 넣어 확인한다.
 - **공유.** testID: `explore-place-share`(「공유」) → OS 공유 시트(장소 이름). 시트는 취소까지만 한다.
 - **네이버 지도.** testID: `explore-place-open-naver`(「네이버 지도에서 보기」) → 외부 앱/웹이 열린다. 실패면 testID: `explore-place-opennaver-error` 「네이버 지도를 열 수 없어요. 잠시 후 다시 시도해 주세요.」.
 - **뒤로.** testID: `explore-place-back`(「뒤로」) → 직전 화면. 딥링크 직진입이면 홈 탭으로 교체된다.
@@ -97,6 +99,7 @@ Preconditions:
 - 미인증 딥링크에서 담기 하트·상세 저장을 누르면 「로그인하기」가 로그인 화면을 여는데, 상황에 따라 로그인 화면이 열리지 않을 수 있다(확인 필요).
 - `GET /places`·`/places/{poiId}` 가 미인증에 401 을 주는지 확인 필요 — 주면 미인증 딥링크는 오류 얼굴이다.
 - **[실화면 전용]** 미니맵(네이버 네이티브)은 Client ID·번들 불일치 시 회색 빈 지도로 조용히 실패한다(`map-failure` 표면은 env 키 부재만 잡는다).
+- **[실화면 전용]** 주소 복사는 네이티브 재빌드(`expo-clipboard`) 전 옛 dev build 에서는 눌러도 에러 토스트로 접힌다(크래시 없이). 복사 버튼 44×44·아이콘 중앙·긴 주소 줄바꿈 때 버튼이 안 밀리는지·토스트가 가려지지 않는지는 프리뷰 `place-detail-default` 로 육안 대조한다. 웹은 https 에서만 복사된다.
 - **[실화면 전용]** 상세 원형 버튼(뒤로·공유·저장)은 `top-[52px]` 고정이라 기기별 상태바와 겹칠 수 있다. 공유 시트·네이버 앱 열림은 OS 화면이라 증명 후 바로 취소·복귀한다.
 - 상세 하트 해제(이미 담긴 장소) 경로는 통합테스트가 없다 — 실화면에서 해제→담은 장소에서 빈 하트/사라짐까지 반드시 다시 읽는다.
 - **[실화면 전용]** 우측 열 카드 하트가 ♥ FAB 아래 깔리던 실측이 있었다(현재는 스크롤 중 FAB 숨김). 스크롤을 멈추면 250ms 뒤 FAB 가 돌아오니 그때 하트를 누르면 FAB 가 받을 수 있다.
