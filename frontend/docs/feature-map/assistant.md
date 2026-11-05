@@ -43,6 +43,7 @@ routes:
 - `asst-answer-layout` 도우미 답은 말풍선·✦ 아바타 없는 평문이고, 한 답 안은 본문 → 카드 → 다음 행동 → 각주 → 평가 줄 순서다. 최신 답이 맨 아래다. 이력 보기 안내 문장에도 아바타가 없다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
 - `asst-scroll-down` ↓를 누르면 맨 아래로 내려가고, 위로 올려 둔 채 새 답이 와도 자동으로 내리지 않는다(↓도 그대로 남는다). *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
 - `asst-header` 헤더에는 ✦ 마크·⋮(이력 보기)·✕만 있고, 제목·새 대화·+ 버튼은 없다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 — 지도 정정)*
+- `asst-new-trip-reset` 여행 만들기 화면에 값을 넣다 나온 뒤 도우미에서 "새 여행 만들기"를 누르면 1단계가 빈 채로 뜨고, 뒤로 가도 도우미 시트가 아래에 남지 않는다. *(TRIP-1776 · 실화면 미검증 — jest 는 이동 순간의 초기화까지만 보고 실제 화면 교체는 못 본다)*
 - `assistant-cold-close` 도우미 시트를 링크로 바로 열고 ✕ 를 누르면 시트가 걷히고 홈이 뜬다(투명 모달을 홈으로 replace — jest 로는 실제로 걷히는지 못 본다). *(TRIP-1685 · 실화면 미검증 — 오케 실기 몫)*
 
 ## How to get to it (user POV)
@@ -70,7 +71,7 @@ Preconditions:
 - **느림·취소.** 15초 넘게 답이 없으면 testID: `assistant-progress-slow` "응답이 늦어지고 있어요". testID: `assistant-progress-cancel` → 입력창에 방금 문구가 돌아오고 "보내지 못했어요 · 임시 보관 중" + testID: `assistant-resend`("다시 보내기"). [다시 보내기]를 누르면 같은 턴이 다시 간다.
 - **429.** 짧은 시간에 여러 번 보내 서버가 막으면 testID: `assistant-rate-limited` "잠시 후 다시 시도해 주세요 (N초)", 초가 줄다 0이면 사라진다. 그동안 보내기·칩 비활성.
 - **능력 보기.** `NO_CONTEXT` 에서 칩 "내가 할 수 있는 것 보기"(testID: `assistant-context-chip`)를 누른다 → 그 문구로 턴이 나가고 능력 안내 답.
-- **다음 행동.** 답 아래 testID: `assistant-next-action-<type>`(예: `assistant-next-action-OPEN_ITINERARY`)을 누른다 → `OPEN_ITINERARY` 는 testID: `assistant-itinerary-checking`("일정을 확인하고 있어요") 뒤 일정 화면으로 시트 자리가 바뀐다(실패면 testID: `assistant-itinerary-failed`). 장소·숙소·회고·요약·스타일은 시트 위에 상세가 쌓이고 뒤로 오면 같은 대화가 남아 있다.
+- **다음 행동.** 답 아래 testID: `assistant-next-action-<type>`(예: `assistant-next-action-OPEN_ITINERARY`)을 누른다 → `OPEN_ITINERARY` 는 testID: `assistant-itinerary-checking`("일정을 확인하고 있어요") 뒤 일정 화면으로 시트 자리가 바뀐다(실패면 testID: `assistant-itinerary-failed`). 장소·숙소·회고·요약·스타일은 시트 위에 상세가 쌓이고 뒤로 오면 같은 대화가 남아 있다. testID: `assistant-next-action-CREATE_TRIP`("새 여행 만들기")은 시트 자리가 여행 만들기 1단계로 바뀌고, 전에 입력하다 만 여행지·기간·인원·취향은 남아 있지 않다(빈 위저드).
 - **제안 카드(서버가 제안할 때).** "남은 일정에서 ○○ 빼줘" 류 요청 → testID: `assistant-proposal-<proposalId>` 에 변경 목록(배지 "지금"/"빠짐"/"추가"/"변경"), 위반이면 testID: `assistant-proposal-violation-<n>` 와 함께 [적용] 없음. testID: `assistant-proposal-dismiss`("취소") → testID: `assistant-proposal-status` "취소했어요". 테스트 여행에서만 testID: `assistant-proposal-apply`("적용") → "적용했어요", 일정 화면에서 바뀐 슬롯을 한 번 더 읽는다. 실패면 testID: `assistant-proposal-error`, 낡은 제안이면 testID: `assistant-proposal-stale` + testID: `assistant-proposal-repropose`("다시 제안").
 - **폴백 카드(서버가 줄 때).** testID: `assistant-fallback`, 다시 시도가 있으면 testID: `assistant-fallback-retry`, 출구 testID: `assistant-fallback-continue`(서버 라벨 또는 "도우미 없이 계속") → 시트가 닫힌다.
 - **답 평가.** 답 아래 testID: `assistant-feedback-down-<messageId>` → 이유 칩 testID: `assistant-feedback-reason-WRONG-<messageId>` 등과 testID: `assistant-feedback-comment-<messageId>`("직접 적기"). 이유를 고르면 testID: `assistant-feedback-thanks-<messageId>` "의견 고마워요". 실패면 testID: `assistant-feedback-error-<messageId>`. 같은 엄지를 다시 누르면 평가가 풀린다.
