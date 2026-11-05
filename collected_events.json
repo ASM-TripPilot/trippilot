@@ -3748,17 +3748,6 @@
    "collected_at": "2026-10-19T06:46:38.883754+09:00"
   },
   {
-   "event_id": "evx-a0bedaebc167e9ed",
-   "name": "서울 핀테크 위크 2026",
-   "event_type": "OTHER",
-   "start": "2026-10-26",
-   "end": "2026-10-28",
-   "coord": null,
-   "address": null,
-   "region": "서울",
-   "collected_at": "2026-10-20T08:02:29.997041+09:00"
-  },
-  {
    "event_id": "evx-9519ea7f11badbea",
    "name": "2026 동작 빵도동 축제",
    "event_type": "FESTIVAL",
@@ -4488,20 +4477,6 @@
    "collected_at": "2026-10-24T07:34:15.172199+09:00"
   },
   {
-   "event_id": "evx-6828b713dd44976b",
-   "name": "2026 왔니껴 안동장터",
-   "event_type": "OTHER",
-   "start": "2026-10-26",
-   "end": "2026-10-28",
-   "coord": {
-    "lat": 37.5656726042805,
-    "lng": 126.977968926957
-   },
-   "address": "서울시청 앞 서울광장",
-   "region": "서울",
-   "collected_at": "2026-10-24T07:34:15.172199+09:00"
-  },
-  {
    "event_id": "evx-e260ac56375b446f",
    "name": "제6회 시간을 담은 캔버스 전시회",
    "event_type": "EXHIBITION",
@@ -4977,6 +4952,48 @@
    "address": "부산광역시 해운대구 수영강변대로 120 (우동)",
    "region": "부산",
    "collected_at": "2026-11-04T09:14:14.367130+09:00"
+  },
+  {
+   "event_id": "tourapi-4144229",
+   "name": "MATERIALISM｜비야케 잉겔스 그룹 기획 전시",
+   "event_type": "FESTIVAL",
+   "start": "2026-11-07",
+   "end": "2027-02-28",
+   "coord": {
+    "lat": 37.5668837502,
+    "lng": 126.9767024196
+   },
+   "address": "서울특별시 중구 세종대로 119 (태평로1가)",
+   "region": "서울",
+   "collected_at": "2026-11-05T09:33:22.372665+09:00"
+  },
+  {
+   "event_id": "tourapi-3396705",
+   "name": "울산문화박람회",
+   "event_type": "FESTIVAL",
+   "start": "2026-11-26",
+   "end": "2026-11-29",
+   "coord": {
+    "lat": 35.5556181512,
+    "lng": 129.1316552505
+   },
+   "address": "울산광역시 울주군 삼남읍 울산역로 255",
+   "region": "울산",
+   "collected_at": "2026-11-05T09:33:22.372665+09:00"
+  },
+  {
+   "event_id": "tourapi-3557873",
+   "name": "2026 은행나무길 거리예술제  〈아트 스트리트：Art Street〉",
+   "event_type": "FESTIVAL",
+   "start": "2026-11-14",
+   "end": "2026-11-15",
+   "coord": {
+    "lat": 36.8005410219,
+    "lng": 127.0187977731
+   },
+   "address": "충청남도 아산시 염치읍 은행나무길 293",
+   "region": "충남",
+   "collected_at": "2026-11-05T09:33:22.372665+09:00"
   }
  ],
  "coverage": {
