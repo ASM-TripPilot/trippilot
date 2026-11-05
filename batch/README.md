@@ -1,7 +1,7 @@
 # batch — 수집 파이프라인(로컬, Airflow)
 
 수집 → **검증** → 게시를 DAG 로 묶어, 깨진 수집 결과가 정본을 덮지 못하게 구조로 막는다(TRIP-1468).
-운영 배치는 지금처럼 GitHub Actions(`ai-poi-collect.yml`·`ai-event-collect.yml`)가 돈다 — 이 폴더는 로컬 전용이다.
+운영 배치는 지금처럼 GitHub Actions(`ai-poi-collect.yml`·`ai-event-collect.yml`)가 돈다. 운영 이전용 실 수집 DAG 는 아래 §실 수집 DAG.
 
 ## 실행
 
@@ -62,13 +62,52 @@ docker compose --profile batch down
 | 관측 | 잡 요약·로그 | 태스크별 상태·로그·실행 이력 UI |
 | 운영 비용 | 0(러너 무료 한도) | 상시 스케줄러·메타 DB 가 필요 — 지금 규모에서 운영에 올릴 이유는 없다 |
 
-결론: 운영은 GitHub Actions 를 유지한다. 이 파이프라인이 보여 주는 것은 "검증 게이트를 게시 앞에 두는 구조"이고,
+결론(2026-10-20): 운영은 GitHub Actions 를 유지한다. 이 파이프라인이 보여 주는 것은 "검증 게이트를 게시 앞에 두는 구조"이고,
 그 구조는 GitHub Actions 에서도 스텝으로 옮길 수 있다.
+갱신(2026-11-03, TRIP-1725): 옮길 이유가 하나 생겼다 — TourAPI 가 일부 러너 IP 를 블랙홀 처리해 ai-poi-collect 최근 100런
+(8/19~) 중 정기 72 가운데 12, 재시도·수동 28 가운데 15 가 실패했다. 고정 IP 에서 도는 실 수집 DAG 를 그림자로 먼저 올린다(§실 수집 DAG).
+
+## 실 수집 DAG — 운영 이전 1단계(TRIP-1725)
+
+`poi_collect_live`·`event_collect_live` 는 위 두 DAG 와 달리 **실제로 수집한다** — Actions 워크플로와 같은 수집 스크립트를
+같은 순서로 부르고(리포 조작은 `live.py`), 검증을 게시 앞 태스크로 둔다.
+
+| DAG | 태스크 |
+|---|---|
+| `poi_collect_live` | collect(develop 복제·collect-state 복원·`collect_pois.py`·`merge_pois_docs.py --state`) → validate(축소 가드 + `check_pois`) → publish(롤링 PR·**머지 확인**) → persist_cursor(collect-state). 곁가지: collect → novelty(`collect_novelty.py --fail-if-stalled`, 비차단) |
+| `event_collect_live` | collect(복원·`collect_events.py`·팝업·축제) → validate(`check_event_store` — 모양·그날 유효 건수) → publish(collect-state 영속) → freshness(`check_event_freshness`)·extraction(`collect_events.py --check` — 전 지역 LLM 폴백, 실 모드만) — 둘 다 영속 뒤 경보 |
+
+두 DAG 모두 마지막에 cleanup(**teardown** — 실행 성패에 세지 않는다)이 실행 폴더를 지운다. collect·validate·publish·영속이 실패한
+실행은 남긴다(`KEEP`) — 원인을 보고, 실패한 태스크를 **하류(Downstream)와 함께** 지워(clear) 다시 돌리면 그 복제본에서 이어 간다.
+남긴 실행은 다음 실행이 시작할 때 최근 3개(`pipeline.KEPT_RUNS`)만 두고 지운다(복제본 수백 MB × 매일 실패 → emptyDir 10Gi 축출
+방지). 표시 없는 폴더는 하루 넘은 것만 지운다.
+- **낡은 실행의 재시도는 더 새 게시를 덮지 않는다.** 복원 때 본 collect-state 의 blob, 복제 때 본 develop 공유본의 blob 을 실행
+  폴더에 적어 두고, 영속·게시 직전에 지금 값과 다르면(그사이 다른 실행이 먼저 영속·게시했다) 실패한다 — collect 부터 다시 돈다.
+  지금 값이 이미 이 실행의 내용이면(앞 시도가 영속하고 죽었다) 성공이다. 전환기에 Actions 와 함께 실 수집해도 같은 검사로 한쪽이 멈춘다.
+- **운영 파드에서 `airflow dags test` 를 돌리지 말 것** — max_active_runs 를 따지지 않아 정기 실행과 같은 실행 폴더·collect-state 를
+  동시에 만진다. 수동 실행은 UI 의 Trigger 로.
+
+- **기본은 그림자다**(`BATCH_LIVE` 미설정): 실 API 를 부르지 않고, Actions 가 게시한 것(develop 공유본·collect-state 행사
+  저장소)을 검증만 한다. 게시·영속은 건너뛴다. 생성 시 paused. 실 수집은 Actions 스케줄을 끈 뒤 `BATCH_LIVE=1` 로만 —
+  둘이 함께 실 수집하면 일일 한도를 두 번 쓰고 collect-state 를 서로 덮는다.
+- 커서는 게시가 머지를 **확인한 뒤에만** 저장한다(TRIP-1475). 앞 태스크가 실패하면 저장하지 않는다 — 다음 실행이 같은
+  자리부터 다시 받는다.
+- 머지 뒤 backend-ci 를 디스패치하지 않는다 — Actions 판은 GITHUB_TOKEN 이라 봇 PR 런이 승인 대기(0회)이고 머지 push 도 런을
+  만들지 않아 디스패치 런(test 잡만)이 필요하다. Airflow 판의 GH_TOKEN(PAT·App)은 PR 이벤트·머지 push 가 CI 를 저절로 건다.
+- **CI 런이 늘어난다.** 공유본 머지 하루마다 backend-ci 2·ai-ci 2(PR·push — 두 push 런 모두 image 잡이 ghcr develop 이미지를
+  발행한다: trippilot-backend·trippilot-ai. PR 런은 빌드·테스트만). Actions 판은 디스패치 test 1회였다. concurrency 나 PR 런 축소는 2단계 토큰 결정 때 본다.
+- Actions 판과 다른 점: 러너 IP 재시도 잡이 없고(고정 IP — EKS NAT 3.36.199.183 에서 TourAPI 도달 확인 2026-11-03),
+  행사도 영속 앞에서 저장소 모양·유효 건수를 검증하고, 실 모드에 키가 없거나 collect-state 조회가 실패하면 초록불로 넘기지 않고 실패한다.
+- 행사 신선도는 영속을 **막지 않는다**(영속 뒤 경보). 막으면 폴백이 이어지는 동안 포인터·coverage 도 영속되지 않아, 원인이
+  풀려도 같은 낡은 저장소로 돌아가 신선도가 회복되지 않는다. 영속을 막는 것은 저장소가 깨졌을 때(모양·유효 건수)뿐이다.
+- 전 지역 LLM 폴백 판정(extraction)도 영속 뒤다 — Actions 판의 마지막 스텝과 같다(TRIP-1745). 신선도는 `max_age_days` 가 지나야
+  키 고장을 잡으므로, 이 판정이 첫날 빨갛게 한다.
+- 신규율 정체 경보는 Actions 판처럼 병합을 막지 않는다 — 곁가지 태스크라 빨개져도 게시·커서 저장은 기다리지 않는다.
+- 배포 초안은 `deploy/airflow/values.yaml`(적용 전 결정 목록이 그 머리에 있다).
 
 ## 한계
 
-- 실제 수집(API 호출·수집 커서·병합)은 하지 않는다. 운영 수집기를 DAG 로 옮기려면 병합 뒤 검증·커서 저장 순서까지
-  옮겨야 하고(TRIP-1475 가 운영 쪽에서 다룬다), 지금 규모에서 그만한 이득이 없다.
+- 위 두 로컬 DAG 는 실제 수집을 하지 않는다 — 실 수집은 `*_live` 의 몫이다.
 - CI 는 검증 로직·DAG 구조·합성 문서와 리포 행사 사본으로 도는 실행을 본다(`batch-ci.yml`, 실 API 호출 0건).
 
 ## 테스트
