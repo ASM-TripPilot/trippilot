@@ -23,6 +23,12 @@ import { answerReduceMotionSynchronously } from '@/test-support/animatedProbe';
 import { day, itinerary, slot } from '@/test-support/itineraryFixtures';
 import { createRequestLog, serveItinerary } from '@/test-support/mswItinerary';
 import {
+  photoOf,
+  recordOf,
+  serveCoverPhotos,
+  visitOf,
+} from '@/test-support/coverPhotoFixtures';
+import {
   flushOsAnswer,
   holdReduceMotionOn,
 } from '@/test-support/barMotionProbe';
@@ -58,6 +64,14 @@ jest.mock('@/shared/storage', () => ({
   }),
   clearTokens: jest.fn().mockResolvedValue(undefined),
   hasStoredToken: jest.fn().mockResolvedValue(true),
+  // TRIP-1781 — 표지 사진 훅이 "이 기기 id"를 묻는다(후보 방문이 있을 때만).
+  getInstallId: jest.fn().mockResolvedValue('me'),
+}));
+
+// TRIP-1781 — 기기 앨범에서 사진 주소를 푸는 입구. `gone…` 으로 시작하는 앨범 id 는 앨범에 없는 것으로 친다.
+jest.mock('@/shared/photo', () => ({
+  resolvePhotoUri: async (id: string) =>
+    id.startsWith('gone') ? null : `file://${id}`,
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -810,5 +824,80 @@ describe('TRIP-1666 · 매거진형 j04', () => {
       await waitFor(() => expect(hits(ITINERARY_HIT)).toBe(1));
       expect(screen.getByTestId('reflection-summary-cover')).toBeOnTheScreen();
     });
+  });
+});
+
+// TRIP-1781 · j04 표지에 기기 사진 — 페이지가 훅(`useTripCoverPhoto`)을 부르고 그 결과가 표지 사진 노드가 된다. 사진 고르는 규칙은 훅 통합이,
+// 표지 구조(사진·스크림 존재/부재)는 `TripSummaryScreen.test` 가 따로 잰다. 여기서는 "요약 사진 수 → 요청 → 표지" 배선과 요청 수만 본다.
+describe('🔴 TRIP-1781 · 표지 기기 사진', () => {
+  const PHOTO_SUMMARY: TripSummary = {
+    ...summary(true, ['코엑스', '봉은사']),
+    stats: {
+      totalVisits: 2,
+      totalDistanceKm: 1,
+      distanceSource: 'VISIT_LINE',
+      totalPhotos: 3,
+      hasLocationData: true,
+    },
+  };
+  const recordsHits = () => requests.hitsFor('GET', '/trips/trip-1/records');
+  const photoHits = () => requests.hitsFor('GET', '/photos');
+
+  async function renderCover(data: TripSummary = PHOTO_SUMMARY) {
+    server.use(summaryHandler({ ready: true, summary: data }), tripOk());
+    renderPage();
+    await screen.findByTestId('reflection-summary-cover');
+  }
+
+  it('TP-1 · AC-7·12 사진이 있으면 표지에 이 기기 앨범의 사진·스크림이 뜨고 records 는 1건이며 소요시간 문자열은 없다', async () => {
+    serveCoverPhotos(server, {
+      record: () => recordOf([visitOf('v1', 3)]),
+      photos: { v1: () => [photoOf('a')] },
+    });
+    await renderCover();
+
+    const photo = await screen.findByTestId('reflection-summary-cover-photo');
+    expect(photo.props.source).toEqual([{ uri: 'file://a' }]);
+    expect(
+      screen.getByTestId('reflection-summary-cover-scrim')
+    ).toBeOnTheScreen();
+    expect(recordsHits()).toBe(1);
+    expect(photoHits()).toBe(1);
+    expect(DURATION.test(JSON.stringify(screen.toJSON()))).toBe(false);
+  });
+
+  it('TP-2 · AC-9 기록이 비어 후보가 없으면 표지는 서고 사진·스크림은 없다(색 표지) — 앨범·기기 id 도 묻지 않는다', async () => {
+    await renderCover(); // records 기본 핸들러 = 빈 기록
+    await waitFor(() => expect(recordsHits()).toBe(1));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(screen.getByTestId('reflection-summary-cover')).toBeOnTheScreen();
+    expect(screen.queryByTestId('reflection-summary-cover-photo')).toBeNull();
+    expect(screen.queryByTestId('reflection-summary-cover-scrim')).toBeNull();
+    expect(photoHits()).toBe(0);
+  });
+
+  it('TP-3 · AC-3 요약의 사진이 0장이면 records 를 아예 묻지 않고 표지는 색이다', async () => {
+    await renderCover(summary(true, ['코엑스', '봉은사']));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(recordsHits()).toBe(0);
+    expect(screen.queryByTestId('reflection-summary-cover-photo')).toBeNull();
+  });
+
+  it('TP-4 · AC-6 records 가 500 이어도 오류 얼굴 없이 요약이 서고 표지는 색이다', async () => {
+    server.use(
+      http.get(
+        `${BASE}/trips/:tripId/records`,
+        () => new HttpResponse(null, { status: 500 })
+      )
+    );
+    await renderCover();
+    await waitFor(() => expect(recordsHits()).toBeGreaterThanOrEqual(1));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(screen.queryByTestId('reflection-summary-error')).toBeNull();
+    expect(screen.getByTestId('reflection-summary-stats')).toBeOnTheScreen();
+    expect(screen.queryByTestId('reflection-summary-cover-photo')).toBeNull();
   });
 });

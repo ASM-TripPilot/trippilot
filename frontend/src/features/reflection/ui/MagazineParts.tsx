@@ -23,14 +23,18 @@ import { Highlight, KenBurns, StickerPop } from './MagazineMotion';
  */
 
 /** 사진(기기 사진 또는 카테고리 그림)이 칸을 채운다 — 천천히 확대. 부모가 크기와 overflow-hidden 을 준다. */
-function MagazinePhoto({
+export function MagazinePhoto({
   picture,
+  testID,
 }: {
   picture: MagazinePicture;
+  /** 사진 노드(`PlacePhoto` 호스트)에 단다 — 사진이 섰는지·어떤 주소인지 테스트가 읽는다. */
+  testID?: string;
 }): ReactElement {
   return (
     <KenBurns>
       <PlacePhoto
+        testID={testID}
         imageUrl={picture.uri}
         category={picture.category}
         poiId={picture.poiId}
@@ -61,8 +65,15 @@ export function MagazineCover({
       className="h-[520px] w-full overflow-hidden"
       style={{ backgroundColor: palette.bg }}
     >
-      {cover.picture ? <MagazinePhoto picture={cover.picture} /> : null}
-      {onPhoto ? <View className="absolute inset-0 bg-scrim/45" /> : null}
+      {cover.picture ? (
+        <MagazinePhoto picture={cover.picture} testID={`${testID}-photo`} />
+      ) : null}
+      {onPhoto ? (
+        <View
+          testID={`${testID}-scrim`}
+          className="absolute inset-0 bg-scrim/45"
+        />
+      ) : null}
 
       <View className="absolute left-xl top-[28px] flex-row gap-sm">
         {cover.region ? (

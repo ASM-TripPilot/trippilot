@@ -12,6 +12,7 @@ import { Skeleton } from '@/shared/ui/Skeleton';
 import {
   HASHTAG_MAX_COUNT,
   validateHashtags,
+  type MagazinePicture,
   type ShareCardVM,
   type ShareFormat,
 } from '@/features/reflection/index.view';
@@ -63,6 +64,10 @@ export interface ShareCardScreenProps {
   copyPending?: boolean;
   /** 서버 문구의 하루 상한에 닿았다 — 캡션 자리에 한 줄 안내. 생략하면 없음. */
   copyLimitReached?: boolean;
+  /** TRIP-1781 · 대표 카드에 깔 표지 사진 — 덱 표지와 같은 값을 페이지가 내린다. 생략하면 사진 없는 카드. */
+  coverPicture?: MagazinePicture | null;
+  /** TRIP-1781 · 사진을 고르는 동안 저장·공유를 잠근다(고르기 전에 캡처하면 사진 없는 PNG 가 나간다). 생략하면 잠기지 않음. */
+  exportLocked?: boolean;
   onBack: () => void;
 }
 
@@ -74,6 +79,8 @@ export function ShareCardScreen({
   onCommitHashtags,
   copyPending = false,
   copyLimitReached = false,
+  coverPicture = null,
+  exportLocked = false,
   onBack,
 }: ShareCardScreenProps): ReactElement {
   const [selectedFormatId, setSelectedFormatId] = useState<ShareFormat['id']>(
@@ -87,15 +94,18 @@ export function ShareCardScreen({
   const selectedFormat =
     formats.find((format) => format.id === selectedFormatId) ?? formats[0];
   const exportArmed = isShareCaptureArmed();
+  const lockedDim = exportLocked ? 'opacity-50' : '';
 
   // 실행 함수는 reject 하지 않는 계약이지만, 뜻밖의 예외도 실패로 드러낸다(INV-4 — 침묵 금지).
   const handleSave = async () => {
+    if (exportLocked) return;
     const outcome = await saveShareCardImage(frameRef).catch(
       () => ({ status: 'failed' }) as const
     );
     setResult(outcome.status);
   };
   const handleShare = async () => {
+    if (exportLocked) return;
     const outcome = await shareShareCardImage(frameRef).catch(
       () => ({ status: 'failed' }) as const
     );
@@ -156,6 +166,7 @@ export function ShareCardScreen({
           card={card}
           aspectRatio={selectedFormat.aspectRatio}
           frameRef={frameRef}
+          picture={coverPicture}
         />
 
         {card.mode === 'no-photo' ? (
@@ -280,10 +291,12 @@ export function ShareCardScreen({
           <Pressable
             accessibilityRole="button"
             testID="reflection-share-save"
+            disabled={exportLocked}
+            accessibilityState={{ disabled: exportLocked }}
             onPress={() => {
               void handleSave();
             }}
-            className="h-[50px] flex-1 flex-row items-center justify-center gap-sm rounded-button border border-hairline-strong bg-canvas"
+            className={`h-[50px] flex-1 flex-row items-center justify-center gap-sm rounded-button border border-hairline-strong bg-canvas ${lockedDim}`}
           >
             <ShareCardDownloadGlyph size={18} />
             <Text className="font-noto-bold text-card-title text-ink">
@@ -293,10 +306,12 @@ export function ShareCardScreen({
           <Pressable
             accessibilityRole="button"
             testID="reflection-share-export"
+            disabled={exportLocked}
+            accessibilityState={{ disabled: exportLocked }}
             onPress={() => {
               void handleShare();
             }}
-            className="h-[50px] flex-1 flex-row items-center justify-center gap-sm rounded-button bg-primary"
+            className={`h-[50px] flex-1 flex-row items-center justify-center gap-sm rounded-button bg-primary ${lockedDim}`}
           >
             <ShareCardShareGlyph size={18} />
             <Text className="font-noto-bold text-card-title text-on-primary">

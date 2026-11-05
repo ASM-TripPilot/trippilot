@@ -4,8 +4,10 @@ import { Text, View } from 'react-native';
 import {
   CATEGORY_PALETTES,
   MAGAZINE_TONES,
+  MagazinePhoto,
   MagazineRoute,
   MagazineStats,
+  type CategoryPalette,
   type MagazineStatTile,
   type PaletteKey,
 } from '@/features/reflection/index.view';
@@ -24,8 +26,7 @@ const ID = 'reflection-share-deck';
 /** 위쪽 진행 바·× 와 아래쪽 버튼 줄을 피하는 장 바깥 여백. */
 const SLIDE_FRAME = 'absolute inset-0 px-[28px] pb-[132px] pt-[108px]';
 
-/** 덱 크롬(진행 바·×)이 장 바탕 위에서 읽히도록 장의 팔레트를 알려 준다. */
-export function slidePalette(slide: StorySlide): PaletteKey {
+function slidePalette(slide: StorySlide): PaletteKey {
   switch (slide.kind) {
     case 'cover':
       return slide.cover.palette;
@@ -38,6 +39,17 @@ export function slidePalette(slide: StorySlide): PaletteKey {
   }
 }
 
+/**
+ * 장의 색 한 벌 — 덱 크롬(진행 바·×)과 표지 글자가 같이 읽는다. 사진 표지만 글자색이 사진 위 색(onPhoto)이고,
+ * 바탕은 팔레트 그대로(사진이 뜨기 전·사진 뒤 바탕).
+ */
+export function slideTone(slide: StorySlide): CategoryPalette {
+  const palette = CATEGORY_PALETTES[slidePalette(slide)];
+  return slide.kind === 'cover' && slide.cover.picture
+    ? { ...palette, fg: MAGAZINE_TONES.onPhoto }
+    : palette;
+}
+
 function CoverSlide({
   slide,
   caption,
@@ -46,14 +58,23 @@ function CoverSlide({
   caption: string;
 }): ReactElement {
   const { cover } = slide;
-  const palette = CATEGORY_PALETTES[cover.palette];
+  const palette = slideTone(slide);
   const chipStyle = { borderColor: palette.fg, color: palette.fg };
   return (
     <View
       testID={`${ID}-slide-cover`}
-      className={`${SLIDE_FRAME} justify-between`}
+      className={`${SLIDE_FRAME} justify-between overflow-hidden`}
       style={{ backgroundColor: palette.bg }}
     >
+      {cover.picture ? (
+        <>
+          <MagazinePhoto picture={cover.picture} testID={`${ID}-cover-photo`} />
+          <View
+            testID={`${ID}-cover-scrim`}
+            className="absolute inset-0 bg-scrim/45"
+          />
+        </>
+      ) : null}
       <RevealItem index={0} firstDelayMs={0}>
         <View className="flex-row flex-wrap gap-sm">
           <Text

@@ -532,3 +532,29 @@ describe('성질 (AC-11 · INV-3 · INV-4)', () => {
     );
   });
 });
+
+// TRIP-1781 · 표지 사진 — 고른 사진(훅 결과)을 빌더 입력으로 받아 `cover.picture` 한 곳에서만 만든다.
+// 이 한 곳 덕분에 j04 표지·j06 덱 표지·j06 대표 카드가 같은 사진을 받는다(각 화면이 따로 계산하지 않는다).
+describe('표지 사진 입력 (TRIP-1781 VM-1·VM-2)', () => {
+  const PHOTO = { uri: 'file://a', poiId: 'p1' };
+
+  it('VM-1 · 고른 사진이 cover.picture 가 되고, 표지의 나머지 값(제목·라벨·색)은 사진 없을 때와 같다', () => {
+    const rows = [hl(D1, 1, ['A'])];
+    const withPhoto = build(rows, { trip: TRIP, coverPhoto: PHOTO });
+    const without = build(rows, { trip: TRIP });
+
+    expect(withPhoto.cover.picture).toEqual(PHOTO);
+    expect({ ...withPhoto.cover, picture: null }).toEqual(without.cover);
+  });
+
+  it.each([
+    ['null', { coverPhoto: null }],
+    ['생략', {}],
+    ['주소가 빈 문자열', { coverPhoto: { uri: '', poiId: 'p1' } }],
+  ])(
+    'VM-2 · 사진 입력이 %s 이면 picture 는 null(빈 칸·깨진 이미지를 만들지 않는다)',
+    (_name, extra) => {
+      expect(build([hl(D1, 1, ['A'])], extra).cover.picture).toBeNull();
+    }
+  );
+});

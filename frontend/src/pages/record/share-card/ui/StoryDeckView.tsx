@@ -9,11 +9,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CATEGORY_PALETTES } from '@/features/reflection/index.view';
-
 import type { StorySlide } from '../model/shareStory';
 import { HOLD_DELAY_MS } from '../model/storyDeck';
-import { StorySlideView, slidePalette } from './StorySlides';
+import { StorySlideView, slideTone } from './StorySlides';
 
 /**
  * TRIP-1667 · j06 스토리 덱의 순수 뷰 — 지금 장 하나 + 진행 바 + 좌/우 탭 영역 + × + (마지막 장에만) [공유 카드 만들기].
@@ -119,7 +117,7 @@ export function StoryDeckView({
   onMake,
 }: StoryDeckViewProps): ReactElement {
   const slide = slides[Math.min(index, slides.length - 1)];
-  const palette = CATEGORY_PALETTES[slidePalette(slide)];
+  const palette = slideTone(slide);
   const isLast = index === slides.length - 1;
   const zoneProps = { onPressIn, onPressOut, onLongPress };
 

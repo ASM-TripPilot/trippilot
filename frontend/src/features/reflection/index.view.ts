@@ -6,6 +6,7 @@ export { buildMagazineVM, splitHighlight } from './model/magazineVM';
 export type {
   MagazineCoverVM,
   MagazineInput,
+  MagazinePicture,
   MagazineQuoteVM,
   MagazineRouteStop,
   MagazineSlot,
@@ -17,10 +18,11 @@ export {
   MAGAZINE_TONES,
   dominantPaletteKey,
 } from './model/categoryPalette';
-export type { PaletteKey } from './model/categoryPalette';
+export type { CategoryPalette, PaletteKey } from './model/categoryPalette';
 export { ReflectionMagazine } from './ui/ReflectionMagazine';
 export {
   MagazineCover,
+  MagazinePhoto,
   MagazineQuote,
   MagazineRoute,
   MagazineStats,
@@ -37,6 +39,7 @@ export {
 export type { ShareCardVM, ShareFormat } from './model/shareCard';
 export { pickReflectionDate } from './model/recordBarNav';
 export type { RecordBarNav } from './model/recordBarNav';
+export type { CoverPhoto } from './model/coverPhoto';
 export { buildSummaryMagazineVM } from './model/summaryMagazineVM';
 export type {
   SummaryDayCardVM,

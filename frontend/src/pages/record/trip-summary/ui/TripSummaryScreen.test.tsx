@@ -36,6 +36,8 @@ interface VmOver {
   hasLocationData?: boolean;
   narrative?: string;
   highlights?: DayHighlight[];
+  /** TRIP-1781 — 훅이 고른 표지 사진. */
+  coverPhoto?: { uri: string; poiId: string } | null;
 }
 const hl = (
   date: string,
@@ -61,7 +63,7 @@ function vmOf(over: VmOver = {}) {
     source: 'RULE',
     generatedAt: '2026-06-12T10:00:00Z',
   };
-  return buildSummaryMagazineVM({ summary });
+  return buildSummaryMagazineVM({ summary, coverPhoto: over.coverPhoto });
 }
 
 function baseProps(
@@ -262,5 +264,34 @@ describe('TRIP-1736 · CountUpText — 문자열이 바뀔 때만 다시 그린�
       jest.advanceTimersByTime(COUNT_UP_DURATION_MS + 100);
     });
     expect(shownNow()).toBe('38km');
+  });
+});
+
+// TRIP-1781 · 표지 사진 — 사진이 있으면 표지에 사진·스크림 노드가 서고, 없으면 둘 다 없다(색 표지). 색·농도는 jest 가 안 본다(구조만).
+// 훅이 사진을 고르는 흐름은 `TripSummaryPage.integration` 이, 사진 입력 → 표지 값은 `summaryMagazineVM.test` 가 맡는다.
+describe('TRIP-1781 · 표지 사진·스크림 노드', () => {
+  it('TS-1 · 사진이 있으면 표지에 사진(그 주소)·스크림 노드가 서고 제목은 그대로다', () => {
+    renderScreen({
+      vm: vmOf({ coverPhoto: { uri: 'file://a', poiId: 'p1' } }),
+    });
+
+    const photo = screen.getByTestId('reflection-summary-cover-photo');
+    expect(photo.props.source).toEqual([{ uri: 'file://a' }]);
+    expect(
+      screen.getByTestId('reflection-summary-cover-scrim')
+    ).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('reflection-summary-cover')).getByText(
+        '12곳 · 사진 24장'
+      )
+    ).toBeOnTheScreen();
+  });
+
+  it('TS-2 · 사진이 없으면 표지는 서고 사진·스크림 노드는 둘 다 없다(짝)', () => {
+    renderScreen({ vm: vmOf() });
+
+    expect(screen.getByTestId('reflection-summary-cover')).toBeOnTheScreen();
+    expect(screen.queryByTestId('reflection-summary-cover-photo')).toBeNull();
+    expect(screen.queryByTestId('reflection-summary-cover-scrim')).toBeNull();
   });
 });
