@@ -523,11 +523,12 @@
 - `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · RecordWarningTriangleGlyph · RecordRetryGlyph · RecordChevronRightGlyph · LegendChevronGlyph · RecordChevronDownGlyph · RecordInfoCircleGlyph · GpsOffGlyph · RecordCalendarGlyph · RecordBookmarkGlyph · RecordCloseGlyph
 
 ## src/features/reflection/
-- `src/features/reflection/index.ts`  →  useTripSummary · useRecordBarNav
-- `src/features/reflection/index.view.ts`  →  formatKm · buildMagazineVM · splitHighlight · CATEGORY_PALETTES · MAGAZINE_TONES · dominantPaletteKey · ReflectionMagazine · MagazineCover · MagazineQuote · MagazineRoute · MagazineStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · SHARE_FORMATS · buildShareCard · formatShareCardStats · validateCaption · validateHashtags · pickReflectionDate · buildSummaryMagazineVM · summaryStats · daySubtitle · distanceSourceLabel · resolveSummaryView · shareEnabled · toOrderedVisitList · EmptyCircleGlyph · ReflectionLocationOffGlyph · PhotoOffGlyph · ReflectionRetryGlyph
+- `src/features/reflection/index.ts`  →  useTripSummary · useRecordBarNav · useTripCoverPhoto
+- `src/features/reflection/index.view.ts`  →  formatKm · buildMagazineVM · splitHighlight · CATEGORY_PALETTES · MAGAZINE_TONES · dominantPaletteKey · ReflectionMagazine · MagazineCover · MagazinePhoto · MagazineQuote · MagazineRoute · MagazineStats · CAPTION_MAX_LENGTH · HASHTAG_MAX_COUNT · SHARE_FORMATS · buildShareCard · formatShareCardStats · validateCaption · validateHashtags · pickReflectionDate · buildSummaryMagazineVM · summaryStats · daySubtitle · distanceSourceLabel · resolveSummaryView · shareEnabled · toOrderedVisitList · EmptyCircleGlyph · ReflectionLocationOffGlyph · PhotoOffGlyph · ReflectionRetryGlyph
 
 ## src/features/reflection/model/
 - `src/features/reflection/model/categoryPalette.ts`  →  PaletteKey · CategoryPalette · CATEGORY_PALETTES · MAGAZINE_TONES · paletteKeyForCategory · dominantPaletteKey
+- `src/features/reflection/model/coverPhoto.ts`  →  COVER_CANDIDATE_LIMIT · CoverPhoto · coverCandidates · firstDevicePhotoId
 - `src/features/reflection/model/formatKm.ts`  →  formatKm
 - `src/features/reflection/model/magazineVM.ts`  →  MagazineVisit · MagazineSlot · MagazineInput · MagazinePicture · MagazineCoverVM · MagazineQuoteVM · MagazineStatTile · MagazineRouteStop · MagazineVM · splitHighlight · buildMagazineVM
 - `src/features/reflection/model/recordBarNav.ts`  →  RecordBarNav · pickReflectionDate
@@ -537,11 +538,12 @@
 - `src/features/reflection/model/summaryStats.ts`  →  SummaryStatCells · summaryStats
 - `src/features/reflection/model/summaryView.ts`  →  OrderedVisit · shareEnabled · resolveSummaryView · toOrderedVisitList · distanceSourceLabel · daySubtitle
 - `src/features/reflection/model/useRecordBarNav.ts`  →  useRecordBarNav
+- `src/features/reflection/model/useTripCoverPhoto.ts`  →  useTripCoverPhoto
 - `src/features/reflection/model/useTripSummary.ts`  →  UseTripSummaryResult · useTripSummary
 
 ## src/features/reflection/ui/
 - `src/features/reflection/ui/MagazineMotion.tsx`  →  KenBurns · StickerPop · Highlight
-- `src/features/reflection/ui/MagazineParts.tsx`  →  MagazineCover · MagazineQuote · MagazineSceneCard · MagazinePlanChange · MagazineRoute · MagazineStats · MagazineHashtags
+- `src/features/reflection/ui/MagazineParts.tsx`  →  MagazinePhoto · MagazineCover · MagazineQuote · MagazineSceneCard · MagazinePlanChange · MagazineRoute · MagazineStats · MagazineHashtags
 - `src/features/reflection/ui/ReflectionGlyphs.tsx`  →  ReflectionLocationOffGlyph · PhotoOffGlyph · EmptyCircleGlyph · ReflectionRetryGlyph
 - `src/features/reflection/ui/ReflectionMagazine.tsx`  →  ReflectionMagazineProps · ReflectionMagazine
 
@@ -1132,7 +1134,7 @@
 - `src/pages/record/share-card/ui/ShareCardScreen.tsx`  →  ShareCardScreenProps · ShareCardScreen
 - `src/pages/record/share-card/ui/StoryDeck.tsx`  →  StoryDeckProps · StoryDeck
 - `src/pages/record/share-card/ui/StoryDeckView.tsx`  →  StoryDeckViewProps · StoryDeckView
-- `src/pages/record/share-card/ui/StorySlides.tsx`  →  slidePalette · StorySlideView
+- `src/pages/record/share-card/ui/StorySlides.tsx`  →  slideTone · StorySlideView
 
 ## src/pages/record/travel-style/
 - `src/pages/record/travel-style/index.ts`  →  TravelStylePage
@@ -1857,6 +1859,7 @@
 - `src/test-support/apiBase.ts`  →  BASE
 - `src/test-support/barMotionProbe.ts`  →  BAR_ROOT · SCHEDULE · START_HOME · START_EXPLORE · START_RECORDS · START_MY · START_CELLS · FINAL_IDS · START5_IDS · NEW_CELLS · BarIds · HUB_IDS · withBarIds · visibleIds · frameSample · MotionWatch · watchMotion · joinWatches · advance · moved · structureSteady · lastSample · firstSeen · firstGone · staysOnceSeen · staysOnceGone · deferOsAnswer · flushOsAnswer · holdReduceMotionOn · layoutStyle · hiddenSpacingClasses · RowReading · readRow · setWindowWidth · SlotEffect · slotEffect · rootScale · isMounted · scheduleVisibleCenter · InteractionGate · useInteractionGate
 - `src/test-support/basesFakeServer.ts`  →  basesStay · STAY_A · STAY_B · basesAssignment · basesTrip · NETWORK_WAIT · assignNight · sheetClosed · settle · BasesFakeInit · createBasesFakeServer
+- `src/test-support/coverPhotoFixtures.ts`  →  COVER_TRIP_ID · THIS_DEVICE · OTHER_DEVICE · visitOf · recordOf · photoOf · Reply · serveCoverPhotos
 - `src/test-support/editDragList.ts`  →  EDIT_LIST · editListData · moveItem · fireEditDragEnd · hoverOverDeleteZone · fireEditDropOnZone · fireEditDragBegin
 - `src/test-support/envSandbox.ts`  →  sandboxEnv
 - `src/test-support/expoAppleAuthenticationMock.tsx`  →  appleSignInAsyncSpy · appleIsAvailableAsyncSpy · expoAppleAuthenticationModule · resetExpoAppleAuthenticationMock
@@ -1955,4 +1958,4 @@
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1281개 파일
+합계 1284개 파일

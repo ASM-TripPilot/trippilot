@@ -2502,12 +2502,19 @@ const SUMMARY_PREVIEW_BRIGHT_PLAN = [
   summaryPlanDay('2026-06-13', [['감천문화마을', '쇼핑']]),
 ];
 
+// TRIP-1781 표지 사진 프리뷰 3키가 공유하는 샘플 사진 — 번들 에셋이라 jest 에선 주소가 없어 null(색 표지), 실기에서만 사진이 뜬다.
+const SHARE_COVER_PREVIEW_PHOTO: SummaryMagazineInput['coverPhoto'] =
+  DRAFT_PREVIEW_PHOTOS[0]
+    ? { uri: DRAFT_PREVIEW_PHOTOS[0], poiId: 'poi-a' }
+    : null;
+
 // j06 스토리 덱(TRIP-1667) — 운영과 같은 빌더 두 개(j04 매거진 VM + 대표 카드 → 장 목록)를 네트워크 없이 쓴다. 장 번호·시간은 덱 훅이 정한다
 // (동작 줄이기 OS 설정이 켜져 있으면 자동 넘김 없이 탭만 된다 — 프리뷰 전용 키 없음). 진행 바 칠하기·장 등장 연출·탭/길게 누르기는 여기서 눈으로 본다.
 function renderShareDeckPreview(
   highlights: DayHighlight[],
   itineraryDays: SummaryMagazineInput['itineraryDays'],
-  caption: string
+  caption: string,
+  coverPhoto: SummaryMagazineInput['coverPhoto'] = null
 ): ReactElement {
   // 방문 0곳 키는 숫자 장도 0곳이어야 한다(고정 픽스처 12곳이 그대로 찍히던 것 — 6-b 관찰).
   const summary = summaryOf(
@@ -2516,7 +2523,7 @@ function renderShareDeckPreview(
   );
   const trip = SUMMARY_PREVIEW_TRIP as Trip;
   const slides = buildStorySlides(
-    buildSummaryMagazineVM({ summary, trip, itineraryDays }),
+    buildSummaryMagazineVM({ summary, trip, itineraryDays, coverPhoto }),
     buildShareCard({ summary, trip, format: SHARE_FORMATS[0] })
   );
   return (
@@ -5098,6 +5105,28 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
+    // TRIP-1781 · 표지에 기기 사진 — 사진 + 스크림 위 흰 글자·칩. 사진은 번들 샘플(실기에서만 뜬다 — jest 는 .uri 가 없어 색 표지).
+    key: 'trip-summary-cover-photo',
+    band: 'j',
+    label: 'j04 · 여행 요약 표지 사진',
+    login: null,
+    render: () => (
+      <TripSummaryScreen
+        vm={buildSummaryMagazineVM({
+          summary: summaryOf(SUMMARY_PREVIEW_HIGHLIGHTS),
+          trip: SUMMARY_PREVIEW_TRIP,
+          itineraryDays: SUMMARY_PREVIEW_PLAN,
+          coverPhoto: SHARE_COVER_PREVIEW_PHOTO,
+        })}
+        view="MAP"
+        shareEnabled
+        recordBar={PREVIEW_RECORD_BAR}
+        dayReflections={TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS}
+        onPressDayReflection={noop}
+      />
+    ),
+  },
+  {
     // error(VISIT_LIST) — 이동 타일 "—" + 점선 안내 + 일차 카드·동선은 그대로(위치 기록이 없어도 방문 기록은 있다) + 하단 바.
     key: 'trip-summary-error',
     band: 'j',
@@ -5203,6 +5232,23 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
+    // TRIP-1781 · 대표 카드에 표지 사진(프레임 전체 배경 + 스크림 + 흰 글자). 포맷 세그를 눌러 세 비율의 크롭을 본다. 사진을 고르는 중 잠금은 jest 가 본다.
+    key: 'share-card-cover-photo',
+    band: 'j',
+    label: 'j06 · 공유 카드 표지 사진',
+    login: null,
+    render: () => (
+      <ShareCardScreenPreview
+        card={SHARE_CARD_COPY_PREVIEW}
+        formats={SHARE_FORMATS}
+        caption="광안리에서 노을을 보고 감천문화마을 골목을 걸었어요"
+        hashtagText="#광안리노을 #감천문화마을"
+        coverPicture={SHARE_COVER_PREVIEW_PHOTO}
+        onBack={noop}
+      />
+    ),
+  },
+  {
     key: 'share-card-no-photo',
     band: 'j',
     label: 'j06 · 공유 카드 no-photo',
@@ -5292,6 +5338,19 @@ export const PREVIEW_STATES: PreviewState[] = [
         SUMMARY_PREVIEW_HIGHLIGHTS,
         SUMMARY_PREVIEW_PLAN,
         SHARE_DECK_PREVIEW_CAPTION
+      ),
+  },
+  {
+    key: 'share-card-deck-cover-photo',
+    band: 'j',
+    label: 'j06 · 공유 스토리 덱 표지 사진',
+    login: null,
+    render: () =>
+      renderShareDeckPreview(
+        SUMMARY_PREVIEW_HIGHLIGHTS,
+        SUMMARY_PREVIEW_PLAN,
+        SHARE_DECK_PREVIEW_CAPTION,
+        SHARE_COVER_PREVIEW_PHOTO
       ),
   },
   {

@@ -56,6 +56,14 @@ jest.mock('@/features/reflection/model/useTripSummary', () => ({
   useTripSummary: jest.fn(),
 }));
 
+// TRIP-1781 — 표지 사진을 고르는 훅. 이 파일은 `generated/trips/trips` 를 두 함수만 남기고 목하므로 진짜 훅(records 조회)이 못 돈다 →
+// 배럴을 부분 목으로 막는다(나머지 export 는 그대로). 훅이 실제로 사진을 고르는 흐름은 `useTripCoverPhoto.integration`·`ShareCardPage.integration` 몫.
+const mockUseTripCoverPhoto = jest.fn();
+jest.mock('@/features/reflection', () => ({
+  ...jest.requireActual('@/features/reflection'),
+  useTripCoverPhoto: (...args: unknown[]) => mockUseTripCoverPhoto(...args),
+}));
+
 // 일정 조회(TRIP-1667 — 일차 카드 색용)도 이 모듈에서 온다. 빠지면 페이지가 TypeError 로 죽는다.
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTripsTripId: jest.fn(),
@@ -158,6 +166,7 @@ const lastProps = (mock: jest.Mock) => mock.mock.calls.at(-1)?.[0];
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockUseTripCoverPhoto.mockReturnValue({ photo: null, picking: false });
   customInstanceMock.mockImplementation(() => new Promise(() => undefined));
   // 일정 조회는 색에만 쓰인다 — 이 파일에선 "아직 안 옴"(데이터 없음)으로 둔다. 몇 번·언제 부르는지는 통합이 MSW 로 센다.
   (useGetTripsTripIdItinerary as jest.Mock).mockReturnValue({
@@ -418,4 +427,73 @@ describe('🔴 TRIP-1667 · 스토리 덱 ↔ 내보내기 전환 (같은 얼굴
       expect(props.copyLimitReached).toBe(limitReached);
     }
   );
+});
+
+// TRIP-1781 · 표지 사진 — 페이지가 훅 결과를 한 번 받아 덱 표지와 대표 카드(내보내기)에 **같은 값**으로 내리고, 고르는 동안은 저장·공유를 잠근다.
+// 화면·덱은 props 캡처 목이라 "무엇을 받았나"만 본다. 노드가 실제로 서는지는 `ShareCardPage.integration`·`StoryDeck.test` 가 본다.
+describe('🔴 TRIP-1781 · 표지 사진 배선', () => {
+  const PHOTO = { uri: 'file://a', poiId: 'p1' };
+  const mount = async () => {
+    givenTrip();
+    givenSummary(true);
+    const view = renderWithQueryClient(<ShareCardPage tripId="trip-1" />);
+    await waitFor(() => expect(customInstanceMock).toHaveBeenCalledTimes(1));
+    return view;
+  };
+  const make = () => act(() => lastProps(deckMock).onMake());
+
+  it('PC-1 · 사진이 있으면 덱 첫 장(표지)과 내보내기 화면이 같은 사진을 받고, 잠금은 풀려 있다', async () => {
+    mockUseTripCoverPhoto.mockReturnValue({ photo: PHOTO, picking: false });
+    await mount();
+
+    const cover = lastProps(deckMock).slides[0];
+    expect(cover.kind).toBe('cover');
+    expect(cover.cover.picture).toEqual(PHOTO);
+
+    make();
+    expect(lastProps(screenMock).coverPicture).toEqual(PHOTO);
+    expect(lastProps(screenMock).exportLocked).toBe(false);
+  });
+
+  it('PC-2 · 사진이 없으면 표지의 사진도 대표 카드의 사진도 null(색 표지)이다', async () => {
+    await mount();
+
+    expect(lastProps(deckMock).slides[0].cover.picture).toBeNull();
+    make();
+    expect(lastProps(screenMock).coverPicture).toBeNull();
+  });
+
+  it('PC-3 · 사진을 고르는 중이면 내보내기 화면의 exportLocked 가 참이고, 끝나면 거짓으로 따라간다', async () => {
+    mockUseTripCoverPhoto.mockReturnValue({ photo: null, picking: true });
+    const view = await mount();
+    make();
+    expect(lastProps(screenMock).exportLocked).toBe(true); // 고르는 중 앵커
+
+    mockUseTripCoverPhoto.mockReturnValue({ photo: PHOTO, picking: false });
+    view.rerender(<ShareCardPage tripId="trip-1" />);
+
+    expect(lastProps(screenMock).exportLocked).toBe(false);
+    expect(lastProps(screenMock).coverPicture).toEqual(PHOTO);
+  });
+
+  it('PC-4 · 훅은 요약이 준비돼도 안 돼도 불린다 — 준비되면 사진 수를, 아니면 undefined(요청 0)를 넘긴다', async () => {
+    givenTrip();
+    givenSummary(true);
+    const ready = renderWithQueryClient(<ShareCardPage tripId="trip-1" />);
+    await waitFor(() => expect(customInstanceMock).toHaveBeenCalledTimes(1));
+    expect(mockUseTripCoverPhoto).toHaveBeenLastCalledWith({
+      tripId: 'trip-1',
+      totalPhotos: SUMMARY.stats.totalPhotos,
+    });
+    ready.unmount();
+
+    mockUseTripCoverPhoto.mockClear();
+    givenSummary(false);
+    renderWithQueryClient(<ShareCardPage tripId="trip-1" />);
+    expect(mockUseTripCoverPhoto).toHaveBeenCalled();
+    expect(mockUseTripCoverPhoto).toHaveBeenLastCalledWith({
+      tripId: 'trip-1',
+      totalPhotos: undefined,
+    });
+  });
 });

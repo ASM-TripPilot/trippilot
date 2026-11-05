@@ -13,9 +13,15 @@ import {
   useAnimatedProbe,
 } from '@/test-support/animatedProbe';
 
+import {
+  CATEGORY_PALETTES,
+  MAGAZINE_TONES,
+} from '@/features/reflection/index.view';
+
 import type { StorySlide } from '../model/shareStory';
 import { SLIDE_MS } from '../model/storyDeck';
 import { StoryDeck, type StoryDeckProps } from './StoryDeck';
+import { slideTone } from './StorySlides';
 
 /**
  * TRIP-1667 · j06 스토리 덱(`StoryDeck` = 시간 훅 ↔ 순수 뷰 연결) — "손가락 → 훅" 배선과 시간이 얽힌 것만 잰다.
@@ -279,5 +285,65 @@ describe('StoryDeck — 시간·손가락 배선', () => {
     expect(slide('day-1')).toBeNull(); // 장이 실제로 바뀌었음을 먼저 확인
     expect(slide('day-2')).toBeOnTheScreen();
     expect(dayLabel() === dayOne).toBe(false);
+  });
+});
+
+// TRIP-1781 · 덱 표지 사진 — 표지 장에 기기 사진과 스크림이 서고(사진이 없으면 둘 다 없다), 덱 크롬(진행 바·×)과 표지 글자가 같은 색 함수(`slideTone`)를 쓴다.
+// 사진 위 글자색·스크림 농도·진행 바 대비는 jest 가 못 본다 — 분기(어느 색 묶음을 고르나)만 상수와 비교한다. 실화면 몫은 기능 지도로.
+describe('TRIP-1781 · 덱 표지 사진', () => {
+  beforeEach(() => answerReduceMotionSynchronously(true));
+
+  const photoCover = (picture: { uri: string; poiId: string } | null) =>
+    ({
+      kind: 'cover',
+      key: 'cover',
+      cover: { ...COVER_VM, picture, palette: '맛집' },
+    }) as StorySlide;
+
+  it('SD-P1 · 표지에 사진이 있으면 사진(그 주소)·스크림 노드가 서고 제목·캡션 자리는 그대로다', () => {
+    renderDeck({
+      slides: [
+        photoCover({ uri: 'file://a', poiId: 'p1' }),
+        ...SLIDES.slice(1),
+      ],
+    });
+
+    expect(
+      screen.getByTestId('reflection-share-deck-cover-photo').props.source
+    ).toEqual([{ uri: 'file://a' }]);
+    expect(
+      screen.getByTestId('reflection-share-deck-cover-scrim')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('reflection-share-deck-cover-title')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('reflection-share-deck-cover-caption-slot')
+    ).toBeOnTheScreen();
+  });
+
+  it('SD-P2 · 사진이 없으면 표지 장은 서고 사진·스크림 노드는 없다(짝)', () => {
+    renderDeck({ slides: [photoCover(null), ...SLIDES.slice(1)] });
+
+    expect(slide('cover')).toBeOnTheScreen();
+    expect(
+      screen.queryByTestId('reflection-share-deck-cover-photo')
+    ).toBeNull();
+    expect(
+      screen.queryByTestId('reflection-share-deck-cover-scrim')
+    ).toBeNull();
+  });
+
+  it('SD-P3 · slideTone: 사진 표지만 글자색이 사진 위 색(onPhoto)이고 바탕은 팔레트 그대로, 그 밖의 장은 각자 팔레트', () => {
+    const withPhoto = photoCover({ uri: 'file://a', poiId: 'p1' });
+    const noPhoto = photoCover(null);
+    const day = SLIDES[1];
+    const stats = SLIDES[2];
+
+    expect(slideTone(withPhoto).fg).toBe(MAGAZINE_TONES.onPhoto);
+    expect(slideTone(withPhoto).bg).toBe(CATEGORY_PALETTES['맛집'].bg);
+    expect(slideTone(noPhoto)).toEqual(CATEGORY_PALETTES['맛집']);
+    expect(slideTone(day)).toEqual(CATEGORY_PALETTES.STATS);
+    expect(slideTone(stats)).toEqual(CATEGORY_PALETTES.STATS);
   });
 });

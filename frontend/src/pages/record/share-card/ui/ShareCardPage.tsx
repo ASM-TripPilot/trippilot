@@ -4,11 +4,16 @@ import { router } from 'expo-router';
 import { goBackOr } from '@/shared/lib/goBackOr';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { SHARE_FORMATS, buildShareCard } from '@/features/reflection';
+import {
+  SHARE_FORMATS,
+  buildShareCard,
+  useTripCoverPhoto,
+} from '@/features/reflection';
 import { useTripSummary } from '@/features/reflection';
 import {
   buildSummaryMagazineVM,
   shareEnabled,
+  type MagazinePicture,
   type ShareCardVM,
 } from '@/features/reflection/index.view';
 import {
@@ -88,6 +93,12 @@ export function ShareCardPage({ tripId }: ShareCardPageProps): ReactElement {
     },
   });
 
+  // TRIP-1781 · 표지 사진 — 요약이 준비돼 사진 수를 알 때만 요청이 나간다(j04 와 같은 훅·같은 캐시). 훅이라 조기 return 위.
+  const cover = useTripCoverPhoto({
+    tripId,
+    totalPhotos: summaryReady ? data?.stats.totalPhotos : undefined,
+  });
+
   const handleBack = () => {
     goBackOr(router, `/trips/${tripId}/records`);
   };
@@ -153,14 +164,14 @@ export function ShareCardPage({ tripId }: ShareCardPageProps): ReactElement {
     trip: trip.data,
     format: SHARE_FORMATS[0],
   });
-  const slides = buildStorySlides(
-    buildSummaryMagazineVM({
-      summary: data,
-      trip: trip.data,
-      itineraryDays: itinerary.data?.days,
-    }),
-    card
-  );
+  // 덱 표지와 대표 카드가 같은 사진을 쓰도록 VM 을 한 번만 만들어 둘 다에 내린다.
+  const magazine = buildSummaryMagazineVM({
+    summary: data,
+    trip: trip.data,
+    coverPhoto: cover.photo,
+    itineraryDays: itinerary.data?.days,
+  });
+  const slides = buildStorySlides(magazine, card);
 
   // TRIP-766: 해시태그는 지역으로 조립(온디바이스) — 서버 문구가 없을 때의 대체값.
   const onDeviceHashtags = (trip.data?.destinations ?? [])
@@ -172,6 +183,8 @@ export function ShareCardPage({ tripId }: ShareCardPageProps): ReactElement {
       tripId={tripId}
       card={card}
       slides={slides}
+      coverPicture={magazine.cover.picture}
+      exportLocked={cover.picking}
       onDeviceHashtags={onDeviceHashtags}
       onBack={handleBack}
     />
@@ -190,12 +203,16 @@ function ShareCardFace({
   tripId,
   card,
   slides,
+  coverPicture,
+  exportLocked,
   onDeviceHashtags,
   onBack,
 }: {
   tripId: string;
   card: ShareCardVM;
   slides: StorySlide[];
+  coverPicture: MagazinePicture | null;
+  exportLocked: boolean;
   onDeviceHashtags: string;
   onBack: () => void;
 }): ReactElement {
@@ -218,6 +235,8 @@ function ShareCardFace({
         onCommitHashtags={setEditedHashtags}
         copyPending={waiting}
         copyLimitReached={dailyLimit}
+        coverPicture={coverPicture}
+        exportLocked={exportLocked}
         onBack={() => setStage('story-end')}
       />
     );
