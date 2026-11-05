@@ -87,6 +87,19 @@ class LocationLegalConsentBackfillIT {
 
             legal(onboarded) shouldBe true
             logs(onboarded) shouldBe listOf("CONSENT_GRANTED:ONBOARDING:BACKFILL_TRIP_1800")
+            // 반영 시각(occurred_at)과 별개로 원래 동의 시각·증적 id 가 남는다 — "백필한 날 동의했다"로 읽히지 않게
+            c.createStatement().executeQuery(
+                """
+                SELECT l.detail->>'termsType', l.detail->>'version',
+                       (l.detail->>'consentedAt')::timestamptz = r.occurred_at, l.detail->>'consentRecordId' = r.record_id::text
+                  FROM location_legal_log l JOIN consent_record r ON r.account_id = l.account_id
+                 WHERE l.account_id = '$onboarded'
+                """.trimIndent(),
+            ).use { rs ->
+                rs.next()
+                listOf(rs.getString(1), rs.getString(2), rs.getBoolean(3), rs.getBoolean(4)) shouldBe
+                    listOf("LOCATION_TERMS", "1.0", true, true)
+            }
 
             legal(osOnly) shouldBe true
             c.createStatement().executeQuery("SELECT os_permission_mirror FROM location_consent_state WHERE account_id = '$osOnly'")

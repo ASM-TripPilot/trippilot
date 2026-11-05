@@ -304,6 +304,30 @@ class ConsentServiceTest : StringSpec({
         f.location.state.stored[account]?.legalConsent shouldBe true
     }
 
+    "증적은 GRANT 인데 L2 가 꺼진 계정은 같은 동의를 다시 보내면 맞춰진다 — 증적은 늘지 않는다" {
+        val f = fixtureWithLocation(withLocationTerms)
+        // 백필 뒤 옛 파드가 받은 가입처럼: 증적만 있고 L2 는 꺼져 있다
+        f.records.append(ConsentRecord.of(account, TermsType.LOCATION_TERMS, "1.0", ConsentAction.GRANT, ConsentChannel.ONBOARDING, now))
+
+        f.svc.submitOnboarding(account, onboardingWithLocation)
+
+        f.location.state.stored[account]?.legalConsent shouldBe true
+        f.location.log.events shouldHaveSize 1
+        f.records.appended.filter { it.termsType == TermsType.LOCATION_TERMS } shouldHaveSize 1
+    }
+
+    "L2 가 켜진 계정의 새 버전 재동의는 증적만 남고 법정 로그는 더하지 않는다" {
+        val f = fixtureWithLocation(listOf(term(TermsType.LOCATION_TERMS, "1.1", reconsent = true)))
+        f.records.append(ConsentRecord.of(account, TermsType.LOCATION_TERMS, "1.0", ConsentAction.GRANT, ConsentChannel.ONBOARDING, now))
+        f.location.state.save(LocationConsent.initial(account, now).withLegalConsent(true, now))
+
+        f.svc.changeConsent(account, TermsType.LOCATION_TERMS, ConsentAction.GRANT, "1.1")
+
+        f.records.appended.last().channel shouldBe ConsentChannel.RECONSENT
+        f.location.log.events shouldHaveSize 0
+        f.location.state.stored[account]?.legalConsent shouldBe true
+    }
+
     "개별 변경으로 위치 약관을 철회하면 L2 가 꺼지고 좌표 파기 신호가 나간다" {
         val f = fixtureWithLocation(withLocationTerms)
         f.svc.submitOnboarding(account, onboardingWithLocation)
