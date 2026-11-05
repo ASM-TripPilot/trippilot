@@ -51,17 +51,33 @@ export function parseMyTripsSortKey(raw: unknown): MyTripsSortKey {
   return raw === 'start' || raw === 'title' ? raw : 'recent';
 }
 
+/**
+ * TRIP-1786 · 「맨 위에 고정」 — 세 묶음 [여행 중] → [내가 고정(여행 중 아님)] → [나머지], 각 묶음은 같은 비교자.
+ * 고정은 사용자가 고른 것이라 일정이 안 온(pending) 여행도 고정된다. 여행 중이면서 고정이면 여행 중 묶음에 한 번만 선다.
+ * 목록에 없는 id 는 무시한다. 인자를 안 주면 종전 결과 그대로다.
+ */
 export function orderMyTrips(
   entries: readonly DoneBarEntry[],
   today: string,
-  compare: (a: Trip, b: Trip) => number = byLatest
+  compare: (a: Trip, b: Trip) => number = byLatest,
+  pinnedIds?: ReadonlySet<string>
 ): Trip[] {
   const ongoing: Trip[] = [];
+  const pinnedRest: Trip[] = [];
   const rest: Trip[] = [];
   for (const { trip, itinerary } of entries) {
-    const pinned =
+    const isOngoing =
       itinerary !== 'pending' && isTripOngoing(trip, itinerary.status, today);
-    (pinned ? ongoing : rest).push(trip);
+    (isOngoing
+      ? ongoing
+      : pinnedIds?.has(trip.tripId)
+        ? pinnedRest
+        : rest
+    ).push(trip);
   }
-  return [...ongoing.sort(compare), ...rest.sort(compare)];
+  return [
+    ...ongoing.sort(compare),
+    ...pinnedRest.sort(compare),
+    ...rest.sort(compare),
+  ];
 }

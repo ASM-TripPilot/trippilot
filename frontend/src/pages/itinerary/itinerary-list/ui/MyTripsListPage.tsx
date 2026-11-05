@@ -19,7 +19,13 @@ import { isNotFound, isOfflineWaiting } from '@/shared/api';
 import { isLargeText } from '@/shared/lib/fontScale';
 import { guardPress } from '@/shared/lib/pressGuard';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';
-import { readStringValue, writeStringValue } from '@/shared/storage';
+import {
+  readIdSet,
+  readStringValue,
+  writeIdSet,
+  writeStringValue,
+} from '@/shared/storage';
+import { showToast } from '@/shared/ui/Toast';
 import {
   readDoneBarSeen,
   tripItinerarySummary,
@@ -76,6 +82,11 @@ import { TripCardContainer } from './TripCardContainer';
  * 예정 쪽), 정렬 시트·기준은 두 세그가 공유한다. 고른 세그는 정렬과 같은 꼴로 기기에 남긴다(`itinerary.myTrips.segment`): 읽기 전엔 예정,
  * 읽기 실패·모르는 값도 예정, 사용자가 먼저 누르면 늦게 온 저장값은 무시한다. 세그 전환은 이미 받은 목록을 나눌 뿐 네트워크 호출이 없다.
  *
+ * TRIP-1786 · 「맨 위에 고정」 — 고정한 여행 id 집합을 페이지가 쥐고(`itinerary.myTrips.pinned`, 기기 저장 — 서버 필드 없음, 앱·웹 사이엔 안 따라간다)
+ * `orderMyTrips` 의 선택 인자로 흘린다(여행 중 → 고정 → 나머지, 세그마다). 마운트 때 한 번 읽는다: 읽기 전엔 고정 항목을 막고(`pinDisabled`),
+ * 읽기가 실패하면 고정 없이 풀어 시작한다(INV-4). 읽은 값은 그사이 쌓인 것에 더해 넣는다. 토글은 집합 갱신·저장(실패 삼킴)·토스트,
+ * 삭제 성공(404 포함)은 그 id 가 집합에 있을 때만 저장값에서 뺀다.
+ *
  * TRIP-1677 · 일정 상태(확정 여부·생성 상태)는 목록(`GET /trips`)이 여행마다 싣는 네 칸에서 읽는다 — 예전엔 여행마다 일정을
  * 따로 물어(N+1) 도착 전엔 정렬·배너를 보류했다. 이제 목록이 오면 한꺼번에 판정한다. 생성 중 여행의 폴링은 앱 셸이 한다.
  *
@@ -96,6 +107,7 @@ import { TripCardContainer } from './TripCardContainer';
 /** SecureStore 키 규칙(영숫자·`.`·`-`·`_`) · 토큰 키와 다른 이름. */
 const SORT_KEY = 'itinerary.myTrips.sort';
 const SEGMENT_KEY = 'itinerary.myTrips.segment';
+const PINNED_KEY = 'itinerary.myTrips.pinned';
 
 export function MyTripsListPage(): ReactElement {
   const router = useRouter();
@@ -182,7 +194,18 @@ export function MyTripsListPage(): ReactElement {
   const [segment, setSegment] = useState<MyTripsSegment>('upcoming');
   const segmentPickedRef = useRef(false);
 
+  // TRIP-1786 · 고정 — 읽기 전(`pinnedReady` false)엔 항목이 막힌다. 읽기 실패도 준비 완료(빈 집합, INV-4).
+  const [pinned, setPinned] = useState<ReadonlySet<string>>(new Set());
+  const [pinnedReady, setPinnedReady] = useState(false);
+
   useEffect(() => {
+    readIdSet(PINNED_KEY).then(
+      (ids) => {
+        setPinned((current) => new Set([...ids, ...current]));
+        setPinnedReady(true);
+      },
+      () => setPinnedReady(true)
+    );
     // 읽기 실패는 최신순 그대로(INV-4 — 목록은 이미 최신순으로 서 있다).
     readStringValue(SORT_KEY).then(
       (raw) => {
@@ -211,6 +234,22 @@ export function MyTripsListPage(): ReactElement {
     shown || !focused || seen === null || trips.isPending
       ? null
       : pickDoneBar(entries, seen);
+
+  // 고정 집합을 바꾸고 기기에 쓴다 — 저장 실패는 삼킨다(이번 화면은 바뀐 대로 남는다, 정렬 쓰기와 같은 선례).
+  const commitPinned = (next: ReadonlySet<string>): void => {
+    setPinned(next);
+    writeIdSet(PINNED_KEY, [...next]).catch(() => {});
+  };
+  const onTogglePin = (tripId: string): void => {
+    const next = new Set(pinned);
+    const adding = !next.delete(tripId);
+    if (adding) next.add(tripId);
+    commitPinned(next);
+    showToast({
+      message: adding ? '맨 위에 고정했어요' : '고정을 풀었어요',
+      testID: 'my-trips-pin-toast',
+    });
+  };
 
   useEffect(() => {
     if (!pick) return;
@@ -263,7 +302,8 @@ export function MyTripsListPage(): ReactElement {
       ? byStart(today)
       : sortKey === 'title'
         ? byTitle
-        : byLatest
+        : byLatest,
+    pinned
   );
 
   const onSelectSort = (key: MyTripsSortKey): void => {
@@ -289,6 +329,12 @@ export function MyTripsListPage(): ReactElement {
     // 목록은 항상 다시 받고(지워진 건 사실), 다이얼로그는 보낸 여행의 것일 때만 닫는다.
     const done = (): void => {
       setDeleteTargetId((current) => (current === tripId ? null : current));
+      // TRIP-1786 · 지운 여행이 고정돼 있었으면 저장값에서 뺀다(없으면 쓰지 않는다).
+      if (pinned.has(tripId)) {
+        const next = new Set(pinned);
+        next.delete(tripId);
+        commitPinned(next);
+      }
       // TRIP-1441 — 완료 배너가 지운 여행을 가리키면 내린다(확정 여행에도 ⋯ 가 열려 도달 가능해졌다).
       // 함수형 갱신 — 응답이 늦게 와도 그 시점의 shown 이 지운 여행일 때만 비운다. 닫힘 플래그(barDismissed)는
       // 건드리지 않는다: 지운 여행은 seen 에 이미 있어 다시 안 뜨고, 플래그를 세우면 새로 고른 다른 여행의
@@ -351,6 +397,9 @@ export function MyTripsListPage(): ReactElement {
             key={trip.tripId}
             trip={trip}
             today={today}
+            pinned={pinned.has(trip.tripId)}
+            pinDisabled={!pinnedReady}
+            onTogglePin={() => onTogglePin(trip.tripId)}
             onPressDelete={() => {
               setDeleteFailedId(null);
               setDeleteTargetId(trip.tripId);

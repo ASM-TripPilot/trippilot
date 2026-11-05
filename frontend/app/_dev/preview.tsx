@@ -1742,12 +1742,15 @@ const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
 
 // h06 삭제 프리뷰(TRIP-1055) — 작성중 '부산 여행'(⋯ 있음) + 완성 '서귀포시 여행'(⋯ 없음 — 지난 여행 가정) 순서, Figma 4682:2573. TRIP-1441 · 확정이어도 시작 전(upcoming)이면 ⋯ 가 열린다(실앱 판정은 TripCardContainer).
 // TRIP-1271 · `generating` — 생성 중 '제주 여행'에도 ⋯ 를 연다(결정 1=A, 세션이 돌아도 작성중이면 삭제 가능).
+// TRIP-1786 · 메뉴는 「여행 설정」 · 「맨 위에 고정」(`pinned` 면 「고정 해제」 + 우상단 「고정」 표식) · 구분선 · 「삭제」 세 항목 — 팝오버가 사진 영역에 잘리지 않는지가 6-b 육안 자리다.
 function renderH06DeleteList({
   menuOpen,
   generating = false,
+  pinned = false,
 }: {
   menuOpen: boolean;
   generating?: boolean;
+  pinned?: boolean;
 }) {
   const [done, generatingVm, draftVm] = MY_TRIPS_PREVIEW_VMS;
   const draft = generating ? generatingVm : draftVm;
@@ -1764,6 +1767,9 @@ function renderH06DeleteList({
           onPressDelete={noop}
           menuOpen={menuOpen}
           onPressMenu={noop}
+          onPressSettings={noop}
+          onTogglePin={noop}
+          pinned={pinned}
         />,
         <TripCard
           testIDPrefix="my-trip"
@@ -1800,6 +1806,9 @@ function renderH06Ongoing() {
           key={H06_ONGOING_VM.tripId}
           vm={H06_ONGOING_VM}
           onPress={noop}
+          onPressMenu={noop}
+          onPressSettings={noop}
+          onTogglePin={noop}
         />,
         <TripCard
           testIDPrefix="my-trip"
@@ -7253,6 +7262,13 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'h06 · 내 여행 삭제 메뉴',
     login: null,
     render: () => renderH06DeleteList({ menuOpen: true }),
+  },
+  {
+    key: 'h06-my-trips-menu-pinned',
+    band: 'h',
+    label: 'h06 · 내 여행 고정한 카드 메뉴(고정 해제 · 고정 표식)',
+    login: null,
+    render: () => renderH06DeleteList({ menuOpen: true, pinned: true }),
   },
   {
     key: 'h06-my-trips-generating-menu',

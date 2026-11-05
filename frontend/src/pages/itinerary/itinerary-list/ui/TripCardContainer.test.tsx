@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react-native';
+import { act, fireEvent, screen } from '@testing-library/react-native';
 
 import type { Trip } from '@/shared/api/index.schemas';
 import {
@@ -264,7 +264,7 @@ describe('🔴 카드 누름 목적지 — copick 이 아니면 일정 조회 �
 describe('여행 중 배지 — 오늘이 기간 안인가 (TRIP-1121)', () => {
   /**
    * 컨테이너가 페이지에서 받은 `today` 로 "여행 중" 배지를 낸다. 컨테이너는 시계를 읽지 않는다.
-   *  - K1 확정 + 기간 안 → '여행 중' · 상태문 '일정 확정' · ⋯·resume 없음(삭제 콜백을 줘도).
+   *  - K1 확정 + 기간 안 → '여행 중' · 상태문 '일정 확정' · resume 없음 · ⋯ 는 있다(TRIP-1786 — 열면 삭제 없이 설정·고정만).
    *  - K2 같은 기간 초안 → '작성중' · ⋯ 있음(US-TRIP-10).
    *  - K3 확정이어도 기간 밖이면 '확정'.
    *  - K4 today 를 안 주면 기간 안 확정이어도 '확정'.
@@ -274,7 +274,7 @@ describe('여행 중 배지 — 오늘이 기간 안인가 (TRIP-1121)', () => {
   const base = (over: Partial<Trip> = {}) =>
     trip({ title: '부산 여행', ...IN, status: 'ACTIVE', ...over });
 
-  it('K1 확정 + 오늘이 기간 안 → 배지 "여행 중" · 상태문 "일정 확정" · 삭제 콜백을 줘도 ⋯·resume 없음', () => {
+  it('K1 확정 + 오늘이 기간 안 → 배지 "여행 중" · 상태문 "일정 확정" · resume 없음 · ⋯ 는 있고 삭제 항목은 없다 (TRIP-1786 이 뒤집음)', () => {
     renderCard(
       <TripCardContainer
         trip={base(cols('COMPLETE', 'CONFIRMED'))}
@@ -287,8 +287,12 @@ describe('여행 중 배지 — 오늘이 기간 안인가 (TRIP-1121)', () => {
     expect(screen.getByTestId('my-trip-extra-t1')).toHaveTextContent(
       '일정 확정'
     );
-    expect(screen.queryByTestId('my-trip-menu-t1')).toBeNull();
     expect(screen.queryByTestId('my-trip-resume-t1')).toBeNull();
+    // 앵커 → 실행 → 단언: 닫혀 있을 땐 항목이 없고, ⋯ 를 누르면 설정이 뜨되 삭제는 끝까지 없다.
+    expect(screen.queryByTestId('my-trip-menu-settings-t1')).toBeNull();
+    fireEvent.press(screen.getByTestId('my-trip-menu-t1'));
+    expect(screen.getByTestId('my-trip-menu-settings-t1')).toBeOnTheScreen();
+    expect(screen.queryByTestId('my-trip-menu-delete-t1')).toBeNull();
   });
 
   it('K2 같은 기간 PLANNED 초안 → 배지 "작성중" · ⋯ 있음 · resume 있음', () => {
@@ -424,24 +428,34 @@ describe('⋯ 삭제 진입점 (TRIP-1055 · TRIP-1271 · TRIP-1441)', () => {
       },
       undefined,
     ],
-  ])('삭제 불가: %s → 카드는 뜨고 ⋯ 는 없다', (_label, over, today) => {
-    renderCard(
-      <TripCardContainer
-        trip={trip(over)}
-        today={today}
-        onPressDelete={jest.fn()}
-      />
-    );
+  ])(
+    '삭제 불가: %s → ⋯ 는 있고 열어도 「삭제」·구분선이 없다 (TRIP-1786 이 뒤집음)',
+    (_label, over, today) => {
+      renderCard(
+        <TripCardContainer
+          trip={trip(over)}
+          today={today}
+          onPressDelete={jest.fn()}
+          onTogglePin={jest.fn()}
+        />
+      );
+
+      expect(screen.getByTestId('my-trip-card-t1')).toBeOnTheScreen();
+      fireEvent.press(screen.getByTestId('my-trip-menu-t1'));
+      expect(screen.getByTestId('my-trip-menu-settings-t1')).toBeOnTheScreen();
+      expect(screen.getByTestId('my-trip-menu-pin-t1')).toBeOnTheScreen();
+      expect(screen.queryByTestId('my-trip-menu-delete-t1')).toBeNull();
+      expect(screen.queryByTestId('my-trip-menu-divider-t1')).toBeNull();
+    }
+  );
+
+  it('삭제 콜백을 안 주면 삭제 가능한 카드여도 ⋯ 는 있고 「삭제」만 없다 (TRIP-1786 이 뒤집음)', () => {
+    renderCard(<TripCardContainer trip={trip()} onTogglePin={jest.fn()} />);
 
     expect(screen.getByTestId('my-trip-card-t1')).toBeOnTheScreen();
-    expect(screen.queryByTestId('my-trip-menu-t1')).toBeNull();
-  });
-
-  it('삭제 콜백을 안 주면 삭제 가능한 카드여도 ⋯ 가 없다', () => {
-    renderCard(<TripCardContainer trip={trip()} />);
-
-    expect(screen.getByTestId('my-trip-card-t1')).toBeOnTheScreen();
-    expect(screen.queryByTestId('my-trip-menu-t1')).toBeNull();
+    fireEvent.press(screen.getByTestId('my-trip-menu-t1'));
+    expect(screen.getByTestId('my-trip-menu-settings-t1')).toBeOnTheScreen();
+    expect(screen.queryByTestId('my-trip-menu-delete-t1')).toBeNull();
   });
 
   it('⋯ → 열림 → ⋯ → 닫힘 → ⋯ → 삭제 항목 → 콜백 1번·메뉴 닫힘, 화면 이동 0번', () => {
@@ -618,4 +632,174 @@ describe('🔴 TRIP-1785 · 「기록 보기 ›」 — 끝난 확정 여행에�
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(String(mockPush.mock.calls[0][0])).toBe('/trips/t1/live');
   });
+});
+
+// TRIP-1786 · ⋯ 메뉴 — 「여행 설정」 · 「맨 위에 고정」 · 구분선 · 「삭제」. 새 props: `onTogglePin` · `pinned` · `pinDisabled`(고정 상태·저장은 페이지가 쥔다).
+describe('🔴 TRIP-1786 · ⋯ 메뉴 항목 — 노출 조건 · 설정 이동 · 고정 토글 · 닫힘', () => {
+  const TODAY = '2026-11-05';
+  const SOON = { startDate: '2026-12-01', endDate: '2026-12-03' } as const;
+  const ENDED = { startDate: '2026-06-10', endDate: '2026-06-13' } as const;
+  const confirmed = (over: Partial<Trip> = {}) =>
+    trip({ ...cols('COMPLETE', 'CONFIRMED'), ...over });
+  const open = (): void => {
+    fireEvent.press(screen.getByTestId('my-trip-menu-t1'));
+  };
+  const item = (part: string) => screen.getByTestId(`my-trip-menu-${part}-t1`);
+  const has = (part: string): boolean =>
+    screen.queryByTestId(`my-trip-menu-${part}-t1`) !== null;
+
+  it.each<[string, Partial<Trip>]>([
+    ['확정 · 시작 전', confirmed(SOON)],
+    ['작성중(일정 없음)', {}],
+  ])(
+    '삭제 가능한 카드(%s): 설정 · 고정 · 구분선 · 삭제 네 가지가 뜬다',
+    (_l, over) => {
+      renderCard(
+        <TripCardContainer
+          trip={trip(over)}
+          today={TODAY}
+          onPressDelete={jest.fn()}
+          onTogglePin={jest.fn()}
+        />
+      );
+
+      open();
+
+      expect(
+        screen
+          .getAllByTestId(/^my-trip-menu-(settings|pin|divider|delete)-t1$/)
+          .map((el) => el.props.testID)
+      ).toEqual([
+        'my-trip-menu-settings-t1',
+        'my-trip-menu-pin-t1',
+        'my-trip-menu-divider-t1',
+        'my-trip-menu-delete-t1',
+      ]);
+      expect(item('settings')).toHaveTextContent('여행 설정');
+      expect(item('pin')).toHaveTextContent('맨 위에 고정');
+      expect(item('delete')).toHaveTextContent('삭제');
+    }
+  );
+
+  it.each<[string, Partial<Trip>]>([
+    ['여행 중', confirmed({ startDate: '2026-11-04', endDate: '2026-11-07' })],
+    ['지난(끝난 확정)', confirmed(ENDED)],
+  ])('%s 카드: ⋯ 가 있고 설정 · 고정만 — 삭제와 구분선은 없다', (_l, over) => {
+    renderCard(
+      <TripCardContainer
+        trip={trip(over)}
+        today={TODAY}
+        onPressDelete={jest.fn()}
+        onTogglePin={jest.fn()}
+      />
+    );
+
+    open();
+
+    expect(has('settings')).toBe(true);
+    expect(has('pin')).toBe(true);
+    expect(has('delete')).toBe(false);
+    expect(has('divider')).toBe(false);
+  });
+
+  it('「여행 설정」: 메뉴가 닫히고 /trips/t1/settings 로 정확히 1번 — 카드 본문 이동(/live 등)은 없다', () => {
+    const onPressDelete = jest.fn();
+    const onTogglePin = jest.fn();
+    renderCard(
+      <TripCardContainer
+        trip={confirmed(SOON)}
+        today={TODAY}
+        onPressDelete={onPressDelete}
+        onTogglePin={onTogglePin}
+      />
+    );
+    open();
+
+    fireEvent.press(item('settings'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/trips/t1/settings');
+    expect(has('settings')).toBe(false);
+    expect(onPressDelete).not.toHaveBeenCalled();
+    expect(onTogglePin).not.toHaveBeenCalled();
+  });
+
+  it('「여행 설정」을 연타해도 이동은 1번 (guardPress) — 닫힌 메뉴의 같은 항목을 다시 눌러도', () => {
+    renderCard(<TripCardContainer trip={confirmed(SOON)} today={TODAY} />);
+    open();
+    const settings = item('settings');
+
+    // 같은 프레임 연타: act 하나 안에서 누르면 메뉴가 닫히기(리렌더) 전에 세 번 다 핸들러에 닿는다
+    // — 리렌더 사이에 누르면 닫힌 항목이라 가드 없이도 1번이 돼 심판이 헛돈다(03b 경고-1).
+    act(() => {
+      fireEvent.press(settings);
+      fireEvent.press(settings);
+      fireEvent.press(settings);
+    });
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+  });
+
+  it.each<[string, boolean, string]>([
+    ['고정 안 한 카드: 「맨 위에 고정」', false, '맨 위에 고정'],
+    ['고정한 카드: 「고정 해제」', true, '고정 해제'],
+  ])(
+    '%s — 누르면 토글 콜백 1번 · 메뉴 닫힘 · 이동 0번',
+    (_l, pinned, label) => {
+      const onTogglePin = jest.fn();
+      renderCard(
+        <TripCardContainer
+          trip={confirmed(SOON)}
+          today={TODAY}
+          pinned={pinned}
+          onTogglePin={onTogglePin}
+        />
+      );
+      open();
+      expect(item('pin')).toHaveTextContent(label);
+
+      fireEvent.press(item('pin'));
+
+      expect(onTogglePin).toHaveBeenCalledTimes(1);
+      expect(has('pin')).toBe(false);
+      expect(mockPush).not.toHaveBeenCalled();
+    }
+  );
+
+  it('pinDisabled(저장값을 아직 못 읽음): 고정 항목은 막힘 표시 · 눌러도 토글 0번 · 메뉴는 열려 있고 설정은 눌린다', () => {
+    const onTogglePin = jest.fn();
+    renderCard(
+      <TripCardContainer
+        trip={confirmed(SOON)}
+        today={TODAY}
+        pinDisabled
+        onTogglePin={onTogglePin}
+      />
+    );
+    open();
+
+    expect(item('pin')).toBeDisabled();
+    fireEvent.press(item('pin'));
+
+    expect(onTogglePin).not.toHaveBeenCalled();
+    expect(has('pin')).toBe(true);
+    expect(item('settings')).not.toBeDisabled();
+  });
+
+  it.each<[string, Partial<Trip>]>([
+    ['예정', confirmed(SOON)],
+    ['여행 중', confirmed({ startDate: '2026-11-04', endDate: '2026-11-07' })],
+  ])(
+    'pinned 이면 %s 카드에도 「고정」 표식이 뜨고, 아니면 없다',
+    (_l, over) => {
+      const view = renderCard(
+        <TripCardContainer trip={trip(over)} today={TODAY} pinned />
+      );
+      expect(screen.getByTestId('my-trip-pinned-t1')).toHaveTextContent('고정');
+      view.unmount();
+
+      renderCard(<TripCardContainer trip={trip(over)} today={TODAY} />);
+      expect(screen.queryByTestId('my-trip-pinned-t1')).toBeNull();
+    }
+  );
 });

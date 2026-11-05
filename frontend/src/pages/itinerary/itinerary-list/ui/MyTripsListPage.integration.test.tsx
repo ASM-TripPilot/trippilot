@@ -123,6 +123,9 @@ jest.mock('@/shared/storage', () => ({
 // 완료 배너가 읽는 "알린 여행" 저장소 — 한 칸짜리 메모리(`mockSeen`)다. 기본은 비어 있어(확정 여행 B 가 배너로
 // 뜬다) 쓰면 실제로 값이 바뀐다 — 최상위 beforeEach 가 매번 비우고 구현을 되돌린다(TRIP-1352: 옛 hookMock 배선 이사).
 let mockSeen: string[] = [];
+// TRIP-1786 · 「맨 위에 고정」 저장소 — 같은 idSet 목이 키로 갈라 응답한다(안 가르면 완료 배너 seen 값이 고정 집합으로 읽혀 두 기능이 서로를 오염한다).
+const PINNED_KEY = 'itinerary.myTrips.pinned';
+let mockPinned: string[] = [];
 jest.mock('@/shared/storage/idSet', () => ({
   readIdSet: jest.fn(),
   writeIdSet: jest.fn(),
@@ -248,13 +251,17 @@ beforeEach(() => {
   mockSetOptions.mockClear();
   mockPathname = '/itinerary';
   mockSeen = [];
+  mockPinned = [];
   (readIdSet as jest.Mock)
     .mockReset()
-    .mockImplementation(async () => [...mockSeen]);
+    .mockImplementation(async (key: string) =>
+      key === PINNED_KEY ? [...mockPinned] : [...mockSeen]
+    );
   (writeIdSet as jest.Mock)
     .mockReset()
-    .mockImplementation(async (_key: string, ids: readonly string[]) => {
-      mockSeen = [...ids];
+    .mockImplementation(async (key: string, ids: readonly string[]) => {
+      if (key === PINNED_KEY) mockPinned = [...ids];
+      else mockSeen = [...ids];
     });
   (SecureStore.getItemAsync as jest.Mock).mockReset();
   (SecureStore.setItemAsync as jest.Mock)
@@ -2025,7 +2032,14 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
 
       // 쓰기 1번 — 목록에 없는 옛 id 는 버리고 초안은 넣지 않는다. 읽은 키와 쓴 키가 같고 토큰 키가 아니다.
       expect(seenWrites()).toEqual([[SEEN_KEY, ['trip-a', 'trip-b']]]);
-      expect((readIdSet as jest.Mock).mock.calls[0][0]).toBe(SEEN_KEY);
+      // TRIP-1786 — 고정 키 읽기가 섞여도 되므로 "첫 호출"이 아니라 읽은 키 목록으로 본다(seen 읽기가 있었고, 토큰 키는 아니다).
+      const readKeys = (readIdSet as jest.Mock).mock.calls.map(
+        ([key]: [string]) => key
+      );
+      expect(readKeys).toContain(SEEN_KEY);
+      expect(
+        readKeys.every((key: string) => key === SEEN_KEY || key === PINNED_KEY)
+      ).toBe(true);
       // 저장이 끝났어도 이 화면에선 배너가 그대로다.
       expect(bar()).toBeOnTheScreen();
 
@@ -2455,7 +2469,7 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
       updatedAt: '2026-08-15T00:00:00.000Z',
     });
 
-    it('목록이 도착하면 여행 중 A 가 처음부터 맨 위 · 배지 "여행 중" · ⋯/resume 없음 — 일정이 따로 올 때까지 기다리지 않는다', async () => {
+    it('목록이 도착하면 여행 중 A 가 처음부터 맨 위 · 배지 "여행 중" · resume 없음 · ⋯ 는 있다(TRIP-1786) — 일정이 따로 올 때까지 기다리지 않는다', async () => {
       // 완료 배너는 이 describe 의 관심 밖 — seen 읽기를 막아 끈다.
       (readIdSet as jest.Mock).mockImplementation(() => new Promise(() => {}));
       serve([PC, PA, PB], { A: done('A'), B: done('B'), C: done('C') });
@@ -2470,7 +2484,8 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
         'my-trip-card-B',
         'my-trip-card-C',
       ]);
-      expect(screen.queryByTestId('my-trip-menu-A')).toBeNull();
+      // TRIP-1786 — ⋯ 는 모든 카드에 있다(여행 중도). 「삭제」가 없는 것은 아래 TRIP-1786 describe 가 잰다.
+      expect(screen.getByTestId('my-trip-menu-A')).toBeOnTheScreen();
       expect(screen.queryByTestId('my-trip-resume-A')).toBeNull();
       expect(screen.getByTestId('my-trip-badge-C')).toHaveTextContent('확정');
       expect(itineraryHits(hits)).toBe(0);
@@ -3268,6 +3283,429 @@ describe('내 여행 목록 배선 — 완료 배너·여행 중 고정·정렬'
       await loaded();
       await waitFor(() => expect(cardOrder()).toEqual(TITLE));
       expect(trigger()).toHaveTextContent('이름순');
+    });
+  });
+
+  // TRIP-1786 · 내 여행 카드 ⋯ 메뉴 — 고정 목록은 기기 저장(키 `itinerary.myTrips.pinned`, idSet 목은 맨 위에서 키별로 응답한다).
+  describe('TRIP-1786 · ⋯ 메뉴 — 맨 위에 고정 · 저장 · 삭제 정리', () => {
+    /**
+     * 무엇을 보장하나:
+     *  - ⋯ 는 모든 카드에 있고 「삭제」는 지금 조건(작성중 · 확정+시작 전)일 때만 — 여행 중 카드는 설정·고정만(AC-1·2).
+     *  - 고정하면 [여행 중] 다음 맨 위로 서고 메뉴는 닫히며 라벨이 「고정 해제」로 바뀐다. 저장은 고정 키에 한 번, 해제하면 다시 한 번(AC-3).
+     *  - 저장값으로 다시 열면 그 자리다. 읽기 전엔 고정 항목이 막히고(눌러도 쓰기 0), 읽기가 실패하면 고정 없이 시작한다(AC-4 · INV-4).
+     *  - 읽기가 늦게 와도 저장돼 있던 다른 고정이 사라지지 않는다. 쓰기가 실패해도 이번 화면은 고정이 유지된다.
+     *  - 삭제가 끝나면(404 포함) 그 id 만 고정 저장값에서 빠진다 — 고정 아닌 여행을 지울 땐 고정 키를 쓰지 않는다(AC-5 · D7).
+     *
+     * *(개념 — 막힌 항목 3단)* 막힘 표시(`toBeDisabled`)만 보면 "표시만 막고 동작은 되는" 구현이 통과한다. 그래서 실제로 눌러 보고 저장 쓰기 0회까지 본다.
+     * 고정 목록은 완료 배너 seen 과 같은 저장 함수(`readIdSet`/`writeIdSet`)를 쓰므로 키로 가른다 — 아래 `pinnedWrites` 는 고정 키 쓰기만 센다.
+     */
+    const DURING = { startDate: '2020-01-01', endDate: '2099-12-31' };
+    const PAST = { startDate: '2026-06-10', endDate: '2026-06-13' };
+    const ONG = mk('ONG', '양양 여행', {
+      ...DURING,
+      updatedAt: '2026-07-01T00:00:00.000Z',
+    });
+    const N1 = mk('N1', '부산 여행', {
+      startDate: '2099-06-10',
+      endDate: '2099-06-13',
+      updatedAt: '2026-09-20T00:00:00.000Z',
+    });
+    const N2 = mk('N2', '제주 여행', {
+      startDate: '2099-05-10',
+      endDate: '2099-05-13',
+      updatedAt: '2026-09-10T00:00:00.000Z',
+    });
+    const N3 = mk('N3', '강릉 여행', {
+      startDate: '2099-04-10',
+      endDate: '2099-04-13',
+      updatedAt: '2026-09-01T00:00:00.000Z',
+    });
+    const P1 = mk('P1', '속초 여행', {
+      ...PAST,
+      updatedAt: '2026-08-20T00:00:00.000Z',
+    });
+    const P2 = mk('P2', '여수 여행', {
+      ...PAST,
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    });
+    const ALL = ['ONG', 'N1', 'N2', 'N3', 'P1', 'P2'];
+    const SCRIPT = Object.fromEntries(ALL.map((id) => [id, done(id)]));
+    const card = (id: string) => `my-trip-card-${id}`;
+    /** 예정 세그 기본 순서(최신순, 여행 중 맨 위): ONG · N1 · N2 · N3. */
+    const BASE = [card('ONG'), card('N1'), card('N2'), card('N3')];
+
+    const pinnedWrites = (): unknown[][] =>
+      (writeIdSet as jest.Mock).mock.calls
+        .filter(([key]: [string]) => key === PINNED_KEY)
+        .map(([key, ids]: [string, string[]]) => [key, [...ids].sort()]);
+    /** 고정 키 읽기만 대본대로, 다른 키(완료 배너 seen)는 기본 메모리. */
+    function pinnedRead(read: () => Promise<string[]>): void {
+      (readIdSet as jest.Mock).mockImplementation((key: string) =>
+        key === PINNED_KEY ? read() : Promise.resolve([...mockSeen])
+      );
+    }
+    const openMenu = (id: string): void => {
+      fireEvent.press(screen.getByTestId(`my-trip-menu-${id}`));
+    };
+    const pinItem = (id: string) =>
+      screen.getByTestId(`my-trip-menu-pin-${id}`);
+    const hasItem = (part: string, id: string): boolean =>
+      screen.queryByTestId(`my-trip-menu-${part}-${id}`) !== null;
+    const mark = (id: string) => screen.queryByTestId(`my-trip-pinned-${id}`);
+    /** 목록이 서고 저장값 읽기까지 끝난 뒤. */
+    async function listed(): Promise<void> {
+      await screen.findByTestId(card('ONG'));
+      await settle();
+    }
+
+    beforeEach(() => {
+      // 완료 배너는 관심 밖 — 전부 이미 알린 것으로 둔다(배너가 seen 을 쓰면 쓰기 목록이 시끄럽다).
+      mockSeen = [...ALL];
+      serve([N3, N1, P2, ONG, N2, P1], SCRIPT);
+    });
+
+    it('AC-1·2 · ⋯ 는 여행 중 카드에도 있다 — 여행 중은 설정·고정만, 시작 전 확정은 구분선과 삭제까지', async () => {
+      renderPage();
+      await listed();
+
+      openMenu('ONG');
+      expect(hasItem('settings', 'ONG')).toBe(true);
+      expect(hasItem('pin', 'ONG')).toBe(true);
+      expect(hasItem('delete', 'ONG')).toBe(false);
+      expect(hasItem('divider', 'ONG')).toBe(false);
+
+      openMenu('N1');
+      expect(hasItem('settings', 'N1')).toBe(true);
+      expect(hasItem('pin', 'N1')).toBe(true);
+      expect(hasItem('divider', 'N1')).toBe(true);
+      expect(hasItem('delete', 'N1')).toBe(true);
+    });
+
+    it('AC-2 · 지난 세그의 끝난 카드도 ⋯ 가 있고 삭제는 없다', async () => {
+      renderPage();
+      await listed();
+      fireEvent.press(screen.getByTestId('my-trips-seg-past'));
+
+      openMenu('P1');
+
+      expect(hasItem('settings', 'P1')).toBe(true);
+      expect(hasItem('pin', 'P1')).toBe(true);
+      expect(hasItem('delete', 'P1')).toBe(false);
+    });
+
+    it('AC-3 · 3번째 카드(N2)를 고정하면 여행 중 다음 맨 위로 서고, 토스트 · 메뉴 닫힘 · 「고정」 표식 · 한 번 저장 — 해제하면 원래 자리', async () => {
+      renderPage(undefined, { toast: true });
+      await listed();
+      expect(cardOrder()).toEqual(BASE);
+      expect(mark('N2')).toBeNull();
+
+      // 실행 ① — 고정.
+      openMenu('N2');
+      expect(pinItem('N2')).toHaveTextContent('맨 위에 고정');
+      expect(pinItem('N2')).not.toBeDisabled();
+      fireEvent.press(pinItem('N2'));
+      await settle();
+
+      // 단언 ① — 여행 중 ONG 다음 N2, 나머지는 원래 순서. 저장 한 번.
+      expect(cardOrder()).toEqual([
+        card('ONG'),
+        card('N2'),
+        card('N1'),
+        card('N3'),
+      ]);
+      expect(pinnedWrites()).toEqual([[PINNED_KEY, ['N2']]]);
+      expect(screen.getByText('맨 위에 고정했어요')).toBeOnTheScreen();
+      expect(hasItem('pin', 'N2')).toBe(false);
+      expect(mark('N2')).toHaveTextContent('고정');
+      expect(mark('N1')).toBeNull();
+      openMenu('N2');
+      expect(pinItem('N2')).toHaveTextContent('고정 해제');
+
+      // 실행 ② — 해제(연타 가드 창은 이 칸의 몫이 아니라 닫고 간다).
+      resetPressGuard();
+      fireEvent.press(pinItem('N2'));
+      await settle();
+
+      // 단언 ② — 원래 순서, 표식 없음, 빈 집합 저장.
+      expect(cardOrder()).toEqual(BASE);
+      expect(mark('N2')).toBeNull();
+      expect(pinnedWrites()).toEqual([
+        [PINNED_KEY, ['N2']],
+        [PINNED_KEY, []],
+      ]);
+      expect(screen.getByText('고정을 풀었어요')).toBeOnTheScreen();
+    });
+
+    it('연속으로 두 장을 고정하면 저장값은 둘 다 담고, 고정 묶음 안은 현재 정렬 기준(최신순)이다', async () => {
+      renderPage();
+      await listed();
+
+      openMenu('N3');
+      fireEvent.press(pinItem('N3'));
+      resetPressGuard();
+      openMenu('N2');
+      fireEvent.press(pinItem('N2'));
+      await settle();
+
+      // 고정 N2(9/10)·N3(9/01) 는 최신순으로, 나머지 N1 은 그 뒤.
+      expect(cardOrder()).toEqual([
+        card('ONG'),
+        card('N2'),
+        card('N3'),
+        card('N1'),
+      ]);
+      expect(pinnedWrites().at(-1)).toEqual([PINNED_KEY, ['N2', 'N3']]);
+    });
+
+    it('AC-4 · 저장값 [N3] 으로 열면 N3 가 처음부터 고정 자리 · 표식 · 「고정 해제」 — 완료 배너 seen 은 섞이지 않는다', async () => {
+      mockPinned = ['N3'];
+      renderPage();
+      await listed();
+
+      expect(cardOrder()).toEqual([
+        card('ONG'),
+        card('N3'),
+        card('N1'),
+        card('N2'),
+      ]);
+      expect(mark('N3')).toHaveTextContent('고정');
+      openMenu('N3');
+      expect(pinItem('N3')).toHaveTextContent('고정 해제');
+      // seen 값(전 여행 id)이 고정으로 읽혔다면 표식이 다른 카드에도 붙는다.
+      expect(mark('N1')).toBeNull();
+      expect(mark('N2')).toBeNull();
+    });
+
+    it('AC-4 · 고정하고 화면을 닫았다 다시 열어도(새 마운트) 그 자리다', async () => {
+      const first = renderPage();
+      await listed();
+      openMenu('N2');
+      fireEvent.press(pinItem('N2'));
+      await settle();
+      first.unmount();
+
+      renderPage();
+      await listed();
+
+      expect(cardOrder()).toEqual([
+        card('ONG'),
+        card('N2'),
+        card('N1'),
+        card('N3'),
+      ]);
+      expect(mark('N2')).toHaveTextContent('고정');
+    });
+
+    it('AC-4 · 읽기 전: 고정 항목은 막혀 있다 — 막힘 표시 · 눌러도 순서 그대로 · 고정 키 쓰기 0회 · 토스트 없음', async () => {
+      pinnedRead(() => new Promise(() => {}));
+      renderPage(undefined, { toast: true });
+      await listed();
+
+      openMenu('N2');
+      expect(pinItem('N2')).toBeDisabled();
+      fireEvent.press(pinItem('N2'));
+      await settle();
+
+      expect(cardOrder()).toEqual(BASE);
+      expect(pinnedWrites()).toEqual([]);
+      expect(screen.queryByText('맨 위에 고정했어요')).toBeNull();
+      expect(hasItem('settings', 'N2')).toBe(true);
+    });
+
+    it('읽기가 늦게 와도 저장돼 있던 다른 고정(N3)은 사라지지 않는다 — 도착 뒤 N2 를 고정하면 저장값은 둘이다', async () => {
+      let arrive!: (ids: string[]) => void;
+      pinnedRead(
+        () =>
+          new Promise<string[]>((resolve) => {
+            arrive = resolve;
+          })
+      );
+      renderPage();
+      await listed();
+      openMenu('N2');
+      expect(pinItem('N2')).toBeDisabled();
+
+      await act(async () => {
+        arrive(['N3']);
+      });
+      await settle();
+
+      // 도착하자 저장돼 있던 N3 가 고정 자리로 서고, 막혔던 항목이 풀린다.
+      expect(cardOrder()).toEqual([
+        card('ONG'),
+        card('N3'),
+        card('N1'),
+        card('N2'),
+      ]);
+      expect(pinItem('N2')).not.toBeDisabled();
+      fireEvent.press(pinItem('N2'));
+      await settle();
+
+      expect(cardOrder()).toEqual([
+        card('ONG'),
+        card('N2'),
+        card('N3'),
+        card('N1'),
+      ]);
+      expect(pinnedWrites()).toEqual([[PINNED_KEY, ['N2', 'N3']]]);
+    });
+
+    it('INV-4 · 읽기가 실패하면 고정 없이 열리고, 항목은 막히지 않으며, 고정하면 저장한다', async () => {
+      pinnedRead(() => Promise.reject(new Error('keychain')));
+      renderPage();
+      await listed();
+
+      expect(cardOrder()).toEqual(BASE);
+      openMenu('N2');
+      expect(pinItem('N2')).not.toBeDisabled();
+      fireEvent.press(pinItem('N2'));
+      await settle();
+
+      expect(cardOrder()).toEqual([
+        card('ONG'),
+        card('N2'),
+        card('N1'),
+        card('N3'),
+      ]);
+      expect(pinnedWrites()).toEqual([[PINNED_KEY, ['N2']]]);
+    });
+
+    it('목록에 없는 고정 id(다른 기기에서 지운 여행)가 섞여 있어도 오류 없이, 있는 카드만 고정 자리에 선다', async () => {
+      mockPinned = ['ghost', 'N3'];
+      renderPage();
+      await listed();
+
+      expect(cardOrder()).toEqual([
+        card('ONG'),
+        card('N3'),
+        card('N1'),
+        card('N2'),
+      ]);
+      expect(mark('N3')).toBeOnTheScreen();
+    });
+
+    it('여행 중이면서 고정(ONG)인 카드는 한 번만, 여행 중 자리에 서고 표식과 「고정 해제」가 뜬다', async () => {
+      mockPinned = ['ONG', 'N3'];
+      renderPage();
+      await listed();
+
+      expect(cardOrder()).toEqual([
+        card('ONG'),
+        card('N3'),
+        card('N1'),
+        card('N2'),
+      ]);
+      expect(mark('ONG')).toHaveTextContent('고정');
+      openMenu('ONG');
+      expect(pinItem('ONG')).toHaveTextContent('고정 해제');
+    });
+
+    it('세그마다 따로 선다 — 예정의 고정(N2)과 지난의 고정(P2)은 서로의 순서를 건드리지 않는다', async () => {
+      mockPinned = ['N2', 'P2'];
+      renderPage();
+      await listed();
+
+      expect(cardOrder()).toEqual([
+        card('ONG'),
+        card('N2'),
+        card('N1'),
+        card('N3'),
+      ]);
+      fireEvent.press(screen.getByTestId('my-trips-seg-past'));
+      // 고정 없이는 최신순 P1·P2.
+      expect(cardOrder()).toEqual([card('P2'), card('P1')]);
+      expect(mark('P2')).toHaveTextContent('고정');
+    });
+
+    it('저장 쓰기가 실패해도 이번 화면은 고정이 유지된다 (삼킨다)', async () => {
+      (writeIdSet as jest.Mock).mockRejectedValue(new Error('keychain'));
+      renderPage();
+      await listed();
+
+      openMenu('N2');
+      fireEvent.press(pinItem('N2'));
+      await settle();
+
+      expect(cardOrder()).toEqual([
+        card('ONG'),
+        card('N2'),
+        card('N1'),
+        card('N3'),
+      ]);
+      expect(mark('N2')).toBeOnTheScreen();
+      expect(pinnedWrites()).toEqual([[PINNED_KEY, ['N2']]]);
+    });
+
+    describe('AC-5 · 삭제 — 확인 뒤에만, 끝나면 고정 저장값에서 그 id 만 빠진다', () => {
+      const confirmDelete = async (id: string): Promise<void> => {
+        await openDialogFor(id);
+        fireEvent.press(screen.getByTestId('my-trip-delete-confirm'));
+        await settle();
+      };
+
+      it('고정한 N1 을 지우면(204) 고정 키를 [] 로 다시 쓴다', async () => {
+        mockPinned = ['N1'];
+        renderPage();
+        await listed();
+        servedList = servedList.filter((t) => t.tripId !== 'N1');
+
+        await confirmDelete('N1');
+
+        expect(deletes()).toEqual([`DELETE /api/v1/trips/N1`]);
+        expect(pinnedWrites()).toEqual([[PINNED_KEY, []]]);
+        await waitFor(() =>
+          expect(screen.queryByTestId(card('N1'))).toBeNull()
+        );
+      });
+
+      it('이미 없는 여행(404)도 성공처럼 고정에서 뺀다', async () => {
+        mockPinned = ['N1', 'N3'];
+        deleteMode = 404;
+        renderPage();
+        await listed();
+        servedList = servedList.filter((t) => t.tripId !== 'N1');
+
+        await confirmDelete('N1');
+
+        expect(pinnedWrites()).toEqual([[PINNED_KEY, ['N3']]]);
+      });
+
+      it('고정 아닌 N2 를 지울 땐 고정 키를 쓰지 않는다', async () => {
+        mockPinned = ['N3'];
+        renderPage();
+        await listed();
+        servedList = servedList.filter((t) => t.tripId !== 'N2');
+
+        await confirmDelete('N2');
+
+        expect(deletes()).toEqual([`DELETE /api/v1/trips/N2`]);
+        expect(pinnedWrites()).toEqual([]);
+      });
+
+      it('삭제가 실패하면(500) 카드도 고정도 그대로 — 고정 키 쓰기 0회', async () => {
+        mockPinned = ['N1'];
+        deleteMode = 500;
+        renderPage();
+        await listed();
+
+        await confirmDelete('N1');
+
+        expect(screen.getByTestId('my-trip-delete-dialog')).toBeOnTheScreen();
+        expect(pinnedWrites()).toEqual([]);
+        expect(mark('N1')).toBeOnTheScreen();
+      });
+
+      it('「삭제」 항목만으로는 요청이 나가지 않고 확인창이 뜬다 — 메뉴는 닫힌다', async () => {
+        renderPage();
+        await listed();
+
+        const dialog = await openDialogFor('N1');
+        await settle();
+
+        expect(within(dialog).getByText(TITLE)).toBeOnTheScreen();
+        expect(deletes()).toEqual([]);
+        expect(hasItem('delete', 'N1')).toBe(false);
+      });
     });
   });
 });
