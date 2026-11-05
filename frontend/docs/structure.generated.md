@@ -1188,6 +1188,7 @@
 - `src/pages/settings/my-page/index.ts`  →  MyPage
 
 ## src/pages/settings/my-page/model/
+- `src/pages/settings/my-page/model/cumulativeStats.ts`  →  RECORDS_LIMIT · CumulativeStats · cumulativeStats
 - `src/pages/settings/my-page/model/styleCardModel.ts`  →  StyleGauge · StyleCardVM · buildStyleCardModel
 - `src/pages/settings/my-page/model/tripBuckets.ts`  →  TripBucket · phaseBucket · bucketTrips
 
@@ -1196,6 +1197,7 @@
 - `src/pages/settings/my-page/ui/MyPage.tsx`  →  MyPage
 - `src/pages/settings/my-page/ui/MyPageScreen.tsx`  →  MyPageScreenProps · MyPageScreen
 - `src/pages/settings/my-page/ui/ProfileCard.tsx`  →  ProfileCardCounts · ProfileCardProps · ProfileCard
+- `src/pages/settings/my-page/ui/StatsCard.tsx`  →  StatsVM · StatsCard
 - `src/pages/settings/my-page/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 
 ## src/pages/settings/notification-inbox/
@@ -1982,4 +1984,4 @@
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1294개 파일
+합계 1296개 파일

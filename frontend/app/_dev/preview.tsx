@@ -153,6 +153,7 @@ import {
   MyStaysScreen,
   type MyStayRowVM,
 } from '@/pages/stay/my-stays/ui/MyStaysScreen';
+import { StatsCard, type StatsVM } from '@/pages/settings/my-page/ui/StatsCard';
 import { StyleSummaryCard } from '@/pages/settings/my-page/ui/StyleSummaryCard';
 import { RevokeConfirmDialog } from '@/pages/settings/settings-location/ui/RevokeConfirmDialog';
 import { SettingsScreen } from '@/pages/settings/settings/ui/SettingsScreen';
@@ -7372,6 +7373,13 @@ export const PREVIEW_STATES: PreviewState[] = [
           nickname="여행자123"
           email="trippilot@email.com"
           counts={{ upcoming: 2, active: 0, ended: 3 }}
+          stats={{
+            kind: 'ready',
+            trips: 3,
+            cities: 2,
+            visits: 12,
+            truncated: false,
+          }}
           tags={STYLE_CARD_OFFICIAL_VM.descriptors}
           onPressCount={noop}
           styleCard={
@@ -7390,6 +7398,34 @@ export const PREVIEW_STATES: PreviewState[] = [
         'my'
       ),
   },
+  // l03 「지금까지」 통계 카드(TRIP-1790 · Figma E9 5237:4052) — default 의 ready 얼굴 외 잘림(`+`)·실패(`–` + 다시 시도) 두 얼굴.
+  // 카드를 단독으로 세워 6-b 에서 칸·세로선·재시도 버튼 모양을 Figma 와 대조한다. 종료 0건(카드 숨김)·조회 중(`–`)은 jest 가 잰다.
+  ...(
+    [
+      [
+        'my-page-stats-truncated',
+        'l03 · 마이페이지 stats-truncated',
+        { kind: 'ready', trips: 12, cities: 3, visits: 100, truncated: true },
+      ],
+      [
+        'my-page-stats-failed',
+        'l03 · 마이페이지 stats-failed',
+        { kind: 'failed', retrying: false },
+      ],
+    ] as const satisfies readonly (readonly [string, string, StatsVM])[]
+  ).map(([key, label, stats]) => ({
+    key,
+    band: 'l' as const,
+    label,
+    login: null,
+    render: () => (
+      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+        <View className="flex-1 bg-canvas p-lg">
+          <StatsCard stats={stats} onRetry={noop} />
+        </View>
+      </SafeAreaView>
+    ),
+  })),
   // l03 마이페이지 empty(TRIP-776·1123) — Figma 4755:3123 과 같은 데이터: 카운트 0/0/3(칸마다 ›) · 프로필 태그(스타일 카드
   // 없음 — Figma 내부 모순 그대로) · 지난 여행 썸네일 카드 3장 + "캘린더 ›" ·
   // 메뉴 3행 · 탭바(마이). 종료 0건 엣지("아직 종료된 여행이 없어요")는 jest(`MyPageScreen.test.tsx`)가 잰다.

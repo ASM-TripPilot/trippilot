@@ -14,9 +14,11 @@ import { formatTripDateRange } from '@/entities/trip';
 import { classifyTripPhase, tripItinerarySummary } from '@/entities/trip';
 import { PastTripRow } from '@/entities/trip';
 import { pickRegionCover } from '@/entities/trip';
+import { cumulativeStats, RECORDS_LIMIT } from '../model/cumulativeStats';
 import { buildStyleCardModel } from '../model/styleCardModel';
 import { bucketTrips, type TripBucket } from '../model/tripBuckets';
 import { MyPageScreen } from './MyPageScreen';
+import type { StatsVM } from './StatsCard';
 import { StyleSummaryCard } from './StyleSummaryCard';
 
 /**
@@ -95,8 +97,29 @@ export function MyPage(): ReactElement {
   // 모르면 닫는다 — null 을 0 으로 접으면 모름 상태에서 섹션이 열린다.
   const showPast = counts !== null && counts.upcoming === 0;
   // 목은 select 를 안 돌리므로 가공 전 응답(items)을 직접 읽는다.
-  // 사진 수를 쓰는 곳은 지난 여행 섹션뿐 — 섹션이 숨으면 조회하지 않는다.
-  const records = useGetMeRecords(undefined, { query: { enabled: showPast } });
+  // 누적 통계(방문 수)와 지난 여행 섹션의 사진 수가 같은 응답을 쓴다 — 여행 목록을 받은 뒤엔 섹션이 닫혀도 켠다(TRIP-1790).
+  const records = useGetMeRecords(
+    { limit: RECORDS_LIMIT },
+    { query: { enabled: trips.data !== undefined } }
+  );
+  // 통계 얼굴 — 종료 0건(알고 0)이면 카드 없음, 모르면 `–`, 모르는데 실패(받아 둔 데이터 없음)면 `–` + 다시 시도.
+  // 실패 판정은 렌더 중 훅 결과 값만 읽는다(React Compiler — queryClient 직접 읽기 금지, repo-traps).
+  // 다시 시도는 실패한 조회만 부른다: 여행 목록을 못 받았으면 trips, 받았으면 records.
+  const stats = cumulativeStats(buckets?.ended ?? null, records.data);
+  const failedQuery = buckets === null ? trips : records;
+  let statsVM: StatsVM | null = { kind: 'loading' };
+  let retryStats: (() => void) | undefined;
+  if (buckets?.ended.length === 0) {
+    statsVM = null;
+  } else if (stats) {
+    statsVM = { kind: 'ready', ...stats };
+  } else if (
+    failedQuery.data === undefined &&
+    (failedQuery.isError || failedQuery.errorUpdateCount > 0)
+  ) {
+    statsVM = { kind: 'failed', retrying: failedQuery.isFetching };
+    retryStats = () => void failedQuery.refetch();
+  }
   // 정식/미달 판정은 모델 한 곳(buildStyleCardModel)이 진다 — 태그 출처도 그 결과로 가른다.
   const styleVM = style.data ? buildStyleCardModel(style.data) : undefined;
   const tags =
@@ -117,6 +140,8 @@ export function MyPage(): ReactElement {
       nickname={profile.data?.nickname ?? null}
       email={me.data?.email ?? null}
       counts={counts}
+      stats={statsVM}
+      onRetryStats={retryStats}
       // TRIP-1282 — 창을 연다: 둘째 탭이 바뀐 탭의 여행 카드에 떨어져도 무시된다(연타 관통).
       onPressCount={guardPress((bucket: TripBucket) =>
         router.replace(shellTabHref(BUCKET_TAB[bucket]))
