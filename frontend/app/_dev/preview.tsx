@@ -7549,12 +7549,16 @@ export const PREVIEW_STATES: PreviewState[] = [
             tags: ['카페', '갤러리'],
             imageUrl: DRAFT_PREVIEW_PHOTOS[1],
             distanceRange: '1.1km',
+            // 2줄을 넘어 말줄임이 나는 장문(6-b 육안용).
+            rationale:
+              '조용한 골목 산책과 오래된 공간의 전시를 함께 즐기는 취향에 잘 맞고, 앞뒤 일정과 가까워 이동 부담이 적어요',
           },
           {
             poiId: 'p3',
             nameKo: '부산근대역사관',
             tags: ['지역', '무료'],
             distanceRange: '1.8km',
+            rationale: '역사 전시를 무료로 볼 수 있어요',
           },
         ]}
         startAt="13:00:00"
