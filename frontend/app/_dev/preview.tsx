@@ -920,6 +920,15 @@ const H08_PREVIEW_TIME_LABELS = [
   '15:30–16:30',
 ];
 
+// 추천 이유 태그(TRIP-1779, 서버 실제 모양 5개 — Figma 5203:3604 카드1 소재) — 6-b 육안용. 카드1은 한 줄
+// 말줄임 얼굴, 카드3은 짧은 얼굴, 카드 2·4는 일부러 비워 "줄 없음" 얼굴도 함께 본다.
+const H08_PREVIEW_REASON_TAGS: (readonly string[] | undefined)[] = [
+  ['#혼자여행', '#난타공연', '#공연관람', '#명동나들이', '#활동체험'],
+  undefined,
+  ['#바다', '#산책'],
+  undefined,
+];
+
 // 카드 사이 커넥터 3개(Figma 4221:2448): leg1 광안리→황령산 차량 2.1km, leg2 0.8km·leg3 0.6km 도보.
 // 합 3.5km = 시트 헤더 `4곳 · 3.5km`(내부 일치). leg1 차량/leg2·3 도보라 두 이동수단 글리프도 함께 보인다.
 const H08_PREVIEW_CONNECTORS = ['차량 · 2.1km', '0.8km', '0.6km'];
@@ -6450,6 +6459,7 @@ export const PREVIEW_STATES: PreviewState[] = [
                 timeLabel={H08_PREVIEW_TIME_LABELS[index]}
                 required={index === 2}
                 onPressAlt={noop}
+                reasonTags={H08_PREVIEW_REASON_TAGS[index]}
               />,
             ];
             if (index < H08_PREVIEW_CONNECTORS.length) {
@@ -6514,6 +6524,7 @@ export const PREVIEW_STATES: PreviewState[] = [
                 timeLabel={H08_PREVIEW_TIME_LABELS[index]}
                 required={index === 2}
                 onPressAlt={noop}
+                reasonTags={H08_PREVIEW_REASON_TAGS[index]}
               />,
             ];
             if (index < H08_PREVIEW_CONNECTORS.length) {

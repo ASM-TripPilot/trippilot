@@ -97,11 +97,11 @@ def _poi(pid: str, name: str, cat: PoiCategory = PoiCategory.SIGHT) -> Poi:
 _REG = (_poi("p1", "서울광장"), _poi("p2", "덕수궁"))
 
 
-def _verify(*places: ExtractedPlace, existence=None, trip=_TRIP, today=_ON):
+def _verify(*places: ExtractedPlace, existence=None, trip=_TRIP, today=_ON, registered=lambda: _REG):
     return v.verify(
         ExtractedRequest(places=places), on=_ON, anchor=_A,
         window_start=datetime(2026, 11, 5, 6, 0, tzinfo=KST), window_end=datetime(2026, 11, 5, 21, 0, tzinfo=KST),
-        not_before=None, tz=KST, registered=lambda: _REG, existence=existence or FakeExistence(),
+        not_before=None, tz=KST, registered=registered, existence=existence or FakeExistence(),
         existence_deadline_ms=1000, rain_by_date={}, rain_threshold=60, trip_days=trip, today=today)
 
 
@@ -135,6 +135,26 @@ def test_unresolvable_day_falls_back_to_this_day_and_says_so(said: str) -> None:
     assert [str(p.poi_id) for p in out.visit] == ["p1"]
     assert "nl_place_day_unresolved: day_out_of_trip" in out.notes
     assert not any(said in n for n in out.notes)
+
+
+def test_an_empty_lookup_still_says_why_each_named_place_was_dropped() -> None:
+    """50km 안 등록 POI 가 0곳이면 조회는 빈 목록으로 **정상** 끝난다 — 그때 다른 날 장소도 이 날 장소도 노트 한 줄 없이
+    사라졌다(2026-11-05 Codex 리뷰). 빈 결과는 "조회 안 함"이 아니라 "못 찾음"이다 — 장소마다 사유를 남긴다(INV-4)."""
+    out = _verify(ExtractedPlace("서울광장", "visit", day="2일차"), ExtractedPlace("덕수궁", "visit"),
+                  registered=lambda: ())
+    assert out.visit == () and out.other_day == frozenset()
+    assert out.notes.count("nl_place_rejected: not_registered") == 2
+
+
+def test_a_failed_lookup_does_not_call_the_places_unregistered() -> None:
+    """조회 장애는 `nl_place_lookup_error` 하나로 밝힌다 — 장소마다 '등록 안 됨'이라고 하면 사유가 거짓이다(못 본 것이다)."""
+    def down():
+        raise RuntimeError("db down")
+
+    out = _verify(ExtractedPlace("서울광장", "visit", day="2일차"), ExtractedPlace("덕수궁", "visit"), registered=down)
+    assert out.visit == () and out.other_day == frozenset()
+    assert "nl_place_lookup_error: RuntimeError" in out.notes
+    assert not any(n.startswith("nl_place_rejected") for n in out.notes)
 
 
 def test_pre_trip_relative_day_counts_from_the_real_today() -> None:

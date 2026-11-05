@@ -14,7 +14,7 @@
 | EXPL-H10 | 스키마 엄격: `tags` 비배열·원소 비문자열·`tags` 누락(v0.1.0 `text` 회귀)·`explanations` 비배열 → 전체 `parse_error` |
 | EXPL-H11 | 길이 경계: 본문 1~10 통과, 11 탈락, `#` 은 안 센다(코드포인트 기준) |
 | EXPL-H12 | 처리 순서 `strip → 첫 등장 중복 제거 → 필터 → 5개`: 공백 패딩은 살고 패딩만 다른 중복은 하나로, 중복 제거는 **절단보다 먼저** |
-| EXPL-H13 | `feature=ALTERNATIVE_EXPLANATION` 은 종전 **문장** 경로 그대로 — 보통 문장 유지·연락처/시간 문장은 `""` 로 **슬롯 유지**·풀 밖 드롭·`tags` 스키마는 parse_error |
+| EXPL-H13 | `feature=ALTERNATIVE_EXPLANATION` 은 **문장** 경로 — 보통 문장 유지·연락처/시간 문장은 **싣지 않고 센다**(`""` 로 실으면 호출측이 템플릿 rationale 을 덮는다, 2026-11-05)·풀 밖 드롭·`tags` 스키마는 parse_error |
 
 프롬프트 ↔ 게이트 상수 정합(개수 5·길이 10)은 `test_llm_gateway_extended.py::
 test_explanation_prompt_states_the_gate_limits` 가 고정한다 — 여기서 다시 쓰지 않는다.
@@ -549,11 +549,22 @@ def test_h13_alternative_keeps_ordinary_sentence() -> None:
 
 @pytest.mark.parametrize("text", ["예약은 book-now.example.kr 에서 미리 하세요", "관람에 약 40분이면 충분합니다",
                                   "한 시간 걸려요"])
-def test_h13_alternative_blanks_contact_or_time_sentence_but_keeps_slot(text) -> None:
-    """문장 경로는 종전 그대로 — `""` 로 **슬롯을 유지**한다(해시태그 경로의 '싣지 않고 센다'와 다른 자리)."""
+def test_h13_alternative_omits_contact_or_time_sentence_and_counts_it(text) -> None:
+    """시간·연락처 문장은 싣지 않고 `dropped_count` 에 센다 — 종전처럼 `""` 로 실으면 호출측(ScheduleAgent·wiring)이
+    그 빈 값을 문장으로 받아 템플릿 rationale("같은 카페 후보")을 덮었다(2026-11-05). 혼자면 전량 드롭 사유가 실린다."""
     out = _alt(text)
-    assert out.error is None and out.drop_event is None
-    assert out.value[0].poi_id == PoiId("p1") and out.value[0].text == ""
+    assert out.value == ()
+    assert out.drop_event is not None and out.drop_event.dropped_count == 1 and out.drop_event.dropped_ids == ()
+    assert out.error == "gate_dropped_all"
+
+
+def test_h13_alternative_omitted_sentence_leaves_the_other_untouched() -> None:
+    raw = json.dumps({"explanations": [{"poiId": "p1", "text": "조용한 곳이라 잘 맞아요."},
+                                       {"poiId": "p2", "text": "관람에 약 40분이면 충분합니다"}]})
+    out = _apply(raw, "p1", "p2", feature=_ALT)
+    assert out.error is None
+    assert [(x.poi_id, x.text) for x in out.value] == [(PoiId("p1"), "조용한 곳이라 잘 맞아요.")]
+    assert out.drop_event is not None and out.drop_event.dropped_count == 1 and out.drop_event.total_count == 2
 
 
 def test_h13_alternative_still_enforces_closed_set() -> None:

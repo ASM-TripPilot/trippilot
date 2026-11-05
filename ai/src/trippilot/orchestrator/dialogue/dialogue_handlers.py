@@ -57,6 +57,7 @@ from trippilot.domain.dialogue.intent import DIALOGUE_INTENTS, Intent
 from trippilot.domain.poi.poi import NIGHTLIFE_TAG, TRENDING_TAG, Poi, PoiCategory, counts_as_food, reputation_bonus
 from trippilot.domain.poi.theme_tags import themes_in
 from trippilot.domain.poi.poi_curation import CandidatePoolRequest
+from trippilot.domain.poi.transit_hubs import transit_hub
 from trippilot.domain.poi.region_centers import (
     MERGED_SIDO, bare_region, covering_region, in_sido, plain_region, region_area, region_center, region_mentions, region_pair,
 )
@@ -981,18 +982,23 @@ def _transport_mode(ctx: TurnContext) -> tuple[str, bool]:
 
 @dataclass(frozen=True, slots=True)
 class _End:
-    """일정 밖 구간의 한 끝 — 일정 슬롯·지역 중심(표)·등록 장소(이름 완전 일치) 중 하나. label 은 일정·표·DB 값(발화 원문 아님)."""
+    """일정 밖 구간의 한 끝 — 일정 슬롯·교통 거점(표)·지역 중심(표)·등록 장소(이름 완전 일치) 중 하나. label 은 일정·표·DB 값(발화 원문 아님)."""
 
     label: str
     poi_id: str | None = None
-    center: GeoPoint | None = None  # 지역 중심 — 근사(그 지역의 한 점)
+    center: GeoPoint | None = None  # 좌표를 표에서 바로 얻은 끝 — 거점이면 그 시설의 점, 지역이면 근사(그 지역의 한 점)
+    area: bool = False  # 지역 중심인가 — 답에 "(지역 중심 기준)"을 단다. 거점은 아니다
 
 
 def _known_end(ctx: TurnContext, said: str) -> _End | None:
-    """I/O 없이 풀리는 끝 — 일정 슬롯이 먼저, 그다음 지역 표("강남"·"홍대"). 등록 장소 찾기는 콜러블 안에서."""
+    """I/O 없이 풀리는 끝 — 일정 슬롯이 먼저, 그다음 교통 거점 표(서울역·김포공항·고속터미널), 그다음 지역 표("강남"·"홍대").
+    등록 장소 찾기는 콜러블 안에서. 거점이 지역보다 앞인 까닭: "서울역"은 지역 표 꼬리 '역'으로 서울 중심이 됐다(2026-11-02 개발)."""
     slot = resolve_slot(ctx.snapshot, day=None, target=said, now=ctx.now, tz=ctx.tz)
     if slot is not None and slot.poi_id:
         return _End(slot.name or _UNNAMED, slot.poi_id)
+    hub = transit_hub(normalize(said))
+    if hub is not None:
+        return _End(hub.name, None, hub.point)
     # 표 이름 뒤에 다른 낱말이 붙은 것(세종문화회관·인천공항·서울대)은 지역이 아니다 — 등록 장소 찾기로 넘긴다
     named = " ".join(name for _, name in region_mentions(normalize(said)))
     hit = region_center(named) if named else None
@@ -1000,7 +1006,7 @@ def _known_end(ctx: TurnContext, said: str) -> _End | None:
     # 2.8km, 2026-11-02 개발). 반경 4km 이상이 시·군 단위다. 동네 역("강남역"·"홍대입구역")은 그 동네 중심 그대로
     if hit and hit[2] >= 4.0 and f"{hit[0]}역" in "".join(said.split()):
         return None
-    return _End(hit[0], None, hit[1]) if hit else None
+    return _End(hit[0], None, hit[1], area=True) if hit else None
 
 
 def _plan_free_distance(ctx: TurnContext) -> tuple[HandlerTask, ...]:
@@ -1035,7 +1041,7 @@ def _plan_free_distance(ctx: TurnContext) -> tuple[HandlerTask, ...]:
         # 거리만 — internal_minutes 는 여기서 떨어진다 (INV-3)
         return {"status": packet.status.value, "distance_range": packet.data.get("distance_range"),
                 "confidence": packet.data.get("confidence"), "mode": mode,
-                "ends": [{"label": e.label, "poi_id": e.poi_id, "area": e.center is not None} for e in ends]}
+                "ends": [{"label": e.label, "poi_id": e.poi_id, "area": e.area} for e in ends]}
 
     return (HandlerTask("transit", fn),)
 
