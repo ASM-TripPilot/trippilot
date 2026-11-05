@@ -119,6 +119,8 @@ class VerifiedRequest:
     area_center: GeoPoint | None = None  # "강남에서 놀고 싶어" — 그 지역 중심(기준점일 뿐, 후보 자격 없음)
     # "서울광장 꼭, 2일차에" — 다른 날 가겠다고 한 곳. 배선이 이 날 후보에서 뺀다(이 날에 넣지 않는다)
     other_day: frozenset[PoiId] = frozenset()
+    # 위 곳과 그 날(말한 순서) — 응답 `deferred_places`(F-7)의 재료. 이 날에도 가겠다고 한 곳은 없다(`other_day` 와 같다)
+    deferred: tuple[tuple[Poi, date], ...] = ()
     notes: tuple[str, ...] = field(default=())
 
 
@@ -449,14 +451,14 @@ def verify(
     here, there, n = split_by_day(extracted.places, on, trip_days, today or on)
     notes += n
     extracted = replace(extracted, places=tuple(here))
-    other: set[PoiId] = set()
+    other: dict[PoiId, tuple[Poi, date]] = {}
     for ep, day in there if looked_up else ():
         poi, how = match_place(ep.name, pool, anchor)
         if poi is None:
             notes.append(f"nl_place_rejected: {how}")
             continue
         if ep.want == "visit":
-            other.add(poi.poi_id)
+            other.setdefault(poi.poi_id, (poi, day))
         notes.append(f"nl_place_other_day: {ep.want} {poi.poi_id} {day.isoformat()}")
     if extracted.places and looked_up:
         visit, avoid, n = verify_places(
@@ -502,4 +504,6 @@ def verify(
     return VerifiedRequest(visit=visit, avoid=avoid, window_start=start, window_end=end,
                            rain_confirmed=rain, only=only, counts=counts,
                            visit_at=tuple(visit_at), category_at=tuple(category_at), area_center=center,
-                           other_day=frozenset(other) - {p.poi_id for p in visit}, notes=tuple(notes))
+                           other_day=frozenset(other) - {p.poi_id for p in visit},
+                           deferred=tuple(v for k, v in other.items() if k not in {p.poi_id for p in visit}),
+                           notes=tuple(notes))

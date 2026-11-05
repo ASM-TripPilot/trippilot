@@ -59,6 +59,7 @@ class ReplanSessionServiceTest : StringSpec({
         override fun findSystemByTrigger(triggerId: UUID) = stored.systemByTrigger(triggerId)
         override fun findLatestSystem(tripId: UUID, targetDate: LocalDate) = stored.latestSystem(tripId, targetDate)
         override fun countSystemSince(tripId: UUID?, since: Instant) = stored.countSystemSince(tripId, since)
+        override fun findAppliedOn(tripId: UUID, targetDate: LocalDate) = stored.appliedOn(tripId, targetDate)
         override fun purgeOrigins(tripIds: List<UUID>): Int {
             var n = 0
             stored.replaceAll { s ->

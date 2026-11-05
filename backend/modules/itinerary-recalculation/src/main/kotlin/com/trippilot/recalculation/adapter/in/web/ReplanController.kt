@@ -208,6 +208,11 @@ data class ReplanSessionResponse(
      * true 여도 누르면 409 일 수 있다 — 지난 날·되돌리면 빠지는 곳의 방문 기록·그 사이 바뀐 일정은 누르는 순간에만 판정한다.
      */
     val revertible: Boolean,
+    /**
+     * 다른 날 요청이라 이 날에 넣지 않은 갈 곳(F-7) — 앱이 "‘서울광장’은 11월 6일(2일차) 요청이라 이번엔 넣지 않았어요
+     * [2일차에 넣어 다시 짜기]"를 그린다. 탭하면 그 날(`date`)·원문 자유입력으로 새 세션을 연다. 지난 날은 오지 않는다. 초안이 없으면 빈 목록.
+     */
+    val deferredPlaces: List<DeferredPlaceResponse>,
 ) {
     companion object {
         fun from(v: SessionView): ReplanSessionResponse {
@@ -217,10 +222,14 @@ data class ReplanSessionResponse(
                 s.origin.kind, s.origin.lat, s.origin.lng, s.origin.isEstimated,
                 s.reasons, s.directives, s.freeText, s.excludedPoiIds,
                 s.status, s.createdAt, s.closedAt, s.initiatedBy, v.stale, s.revertedAt, s.isRevertible,
+                v.deferredPlaces.map { DeferredPlaceResponse(it.poiId, it.name, it.date) },
             )
         }
     }
 }
+
+/** 다른 날로 미룬 갈 곳 한 건(F-7). [name] 은 등록 장소 이름이다(사용자가 쓴 말이 아니다). */
+data class DeferredPlaceResponse(val poiId: UUID, val name: String, val date: LocalDate)
 
 /** 토큰 sub → 계정 id. UUID 가 아니면 인증 실패로 다룬다(형식 오류를 500 으로 흘리지 않는다). */
 private fun Principal.accountId(): UUID =

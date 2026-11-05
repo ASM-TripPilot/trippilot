@@ -9,6 +9,7 @@ import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.ReplanInput
+import com.trippilot.itinerarygeneration.domain.ReplanDeferredPlace
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
 import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
@@ -209,8 +210,9 @@ class HttpScheduleAgentAdapter(
 
         val request = AiReplanRequest(
             tripId = input.tripId.toString(),
+            // 여행 기간 — 상대가 "2일차에"·"내일"을 이 기간으로 환산한다(F-6). 그날 하루만 싣던 동안엔 다른 날 요청이 늘 여행 밖이었다.
             tripContext = TripContext(
-                input.destinations, input.targetDate, input.targetDate,
+                input.destinations, input.tripStartDate, input.tripEndDate,
                 input.companionType, input.budgetLevel,
             ),
             targetDate = input.targetDate,
@@ -241,6 +243,7 @@ class HttpScheduleAgentAdapter(
                     it.removedPoiIds.map(UUID::toString), it.addedPoiIds.map(UUID::toString),
                 )
             },
+            priorRequests = input.priorRequests.map { AiPriorRequest(it.text, it.keptPoiIds.map(UUID::toString)) },
         )
 
         val res = post(REPLAN_PATH, request, AiReplanResponse::class.java)
@@ -267,11 +270,25 @@ class HttpScheduleAgentAdapter(
 
         return try {
             itinerary.toDomain(clock.instant())
-                .copy(totalDistanceKm = res.totalDistanceKm)
+                .copy(
+                    totalDistanceKm = res.totalDistanceKm,
+                    // 칸이 없으면 null 그대로 — "요청한 곳 없음"(빈 목록)과 가른다(다음 재계획의 prior_requests 근거)
+                    requestedPoiIds = res.requestedPoiIds?.mapNotNull { replanPoiUuid(it, "requested_poi_ids") },
+                    deferredPlaces = res.deferredPlaces.mapNotNull { d ->
+                        replanPoiUuid(d.poiId, "deferred_places")?.let { ReplanDeferredPlace(it, d.name, d.date) }
+                    },
+                )
                 .groundAlternatives()
         } catch (e: IllegalArgumentException) {
             throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 재계획 응답 스키마 불일치: ${e.message}", cause = e)
         }
+    }
+
+    /** 재계획 응답의 장소 id — UUID 가 아니면 그 한 건만 버리고 드러낸다(미판정 보고 `poiUuid` 와 같은 처리). */
+    private fun replanPoiUuid(raw: String, field: String): UUID? {
+        val id = runCatching { UUID.fromString(raw) }.getOrNull()
+        if (id == null) log.warn("재계획 응답 {} 의 poi_id 가 UUID 가 아닙니다 — 그 한 건만 버립니다. poiId={}", field, raw)
+        return id
     }
 
     /**

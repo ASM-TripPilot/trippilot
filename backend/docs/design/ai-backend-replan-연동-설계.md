@@ -61,6 +61,7 @@ tripContext = TripContext(destinations, targetDate, targetDate, null, null),
 |---|---|---|
 | `trip_id` | `replan_session.trip_id` | |
 | `trip_context.destinations` | `trip_destination.region` | 비면 AI 가 422 (실측) |
+| `trip_context.start_date`·`end_date` | `trip.start_date`·`end_date` | [개정 2026-11-05] 종전 다시 짜는 날 하루(시작=끝) — AI 가 자유입력 "2일차에"·"내일"을 이 기간으로 환산해서(F-6), 하루만 실으면 다른 날 요청이 늘 여행 밖으로 읽혔다 |
 | `target_date` | `replan_session.from_instant` → Asia/Seoul 파생 | 컬럼 아님 |
 | `anchor` | `replan_session.origin_lat/lng` (없으면 `trip_base_day` 숙소) | 기준점 사다리 BR-U4-19 |
 | `locked_blocks` | `visit_slot.is_fixed` + `visit_check` 완료 + `from_instant` 이전 | 시각 포함 — 시각 없는 블록은 AI 가 거부(422 실측) |
@@ -68,6 +69,7 @@ tripContext = TripContext(destinations, targetDate, targetDate, null, null),
 | `stay_anchor` | `base_assignment` 숙소 — 그날 밤, 없으면 전날 밤(체크아웃일) | [추가 2026-10-14] '숙소 근처에서 끝내기'의 끝점. 없으면 null. `anchor` 와 별개(기준점은 숙소를 보장하지 않는다) |
 | `time_window` | `trip.day_start_at`·`first_day_start_at`·`last_day_end_at` + 그날 `visit_slot.start_at`(아직 안 지난 것) | [개정 2026-11-05] 종전 09:00~21:00 상수. 규칙은 §1 개정 |
 | `request_meta` | 런타임 | **`deadline_ms` 는 §6 참조** |
+| `prior_requests` | 같은 날 `replan_session`(APPLIED · `reverted_at` 없음)의 `draft.requestedPoiIds` + 이력 사유 한 줄 | [추가 2026-11-05 · F-8] 최근 반영 먼저 상한 20. **그 칸이 남은 세션이 없으면 키째 뺀다** — AI 요청은 extra=forbid 라 이 칸을 모르는 AI 는 422. 그 칸은 새 AI 응답 뒤에만 생겨 배포 순서가 자연히 닫힌다 |
 
 ### 새로 실어야 하는 것 — **DB 에 이미 있다. 읽어서 보내면 된다**
 
@@ -188,6 +190,8 @@ class ReplanResponse(BoundaryModel):
     resolved_directives: list[str] = []      # 자유입력 → 해석된 지시
     unknown_directives: list[str] = []       # 모르는 지시 (조용한 무시 금지)
     empty_reason: ReplanEmptyReasonSchema | None = None
+    requested_poi_ids: list[str] = []        # [추가 2026-11-05 · F-8] 요청 때문에 든 곳 → BE 세션 초안 → 다음 회차 prior_requests
+    deferred_places: list[DeferredPlaceSchema] = []  # [추가 2026-11-05 · F-7] 다른 날로 집어 이 날에 안 넣은 갈 곳 {poi_id, name, date}
 
 
 class ReplanEmptyReasonSchema(BoundaryModel):

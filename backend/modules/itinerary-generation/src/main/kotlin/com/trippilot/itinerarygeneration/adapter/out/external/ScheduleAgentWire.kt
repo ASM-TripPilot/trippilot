@@ -466,7 +466,16 @@ internal data class AiReplanRequest(
     val transportMode: String? = null,
     /** 이 날짜를 건드린 변경 이력(TRIP-975) — 상대 `ChangeLogEntrySchema`. 비면 종전과 같다. */
     val changeLog: List<AiChangeLogEntry> = emptyList(),
+    /**
+     * 같은 날 반영된 앞 다시 짜기들(F-8) — 상대 `PriorRequestSchema`. **비면 키째로 뺀다** — 이 칸을 모르는 상대는 422 다(extra=forbid).
+     * 채우는 쪽은 상대가 `requested_poi_ids` 를 돌려준 세션이 있을 때만 채우므로, 새 상대가 응답하기 전에는 키가 나가지 않는다.
+     */
+    @param:JsonInclude(JsonInclude.Include.NON_EMPTY)
+    val priorRequests: List<AiPriorRequest> = emptyList(),
 )
+
+/** 앞 다시 짜기 한 건 — 그 회차 사유 한 줄과 그 회차가 요청 때문에 넣은 곳. */
+internal data class AiPriorRequest(val text: String, val keptPoiIds: List<String>)
 
 /** 변경 이력 한 건 — 그날 diff 만(시각·행위자 없음, [com.trippilot.itinerarygeneration.domain.ReplanChange]). */
 internal data class AiChangeLogEntry(
@@ -513,7 +522,16 @@ internal data class AiReplanResponse(
      * "자유입력을 넣었는데 왜 안 먹었나"의 1차 근거가 '검색이 0건이었다'이기 때문이다.
      */
     val retrieved: Map<String, Int> = emptyMap(),
+    /**
+     * 요청 때문에 든 곳(F-8). **null = 상대가 이 칸을 모른다**(옛 상대) — 빈 목록("요청한 곳이 없다")과 가른다. 세션에 이 칸이
+     * 남은 회차만 다음 재계획의 `prior_requests` 가 된다.
+     */
+    val requestedPoiIds: List<String>? = null,
+    /** 다른 날로 집어 이 날에 넣지 않은 갈 곳(F-7) — 앱의 '그 날에 넣어 다시 짜기' 재료. */
+    val deferredPlaces: List<AiDeferredPlace> = emptyList(),
 )
+
+internal data class AiDeferredPlace(val poiId: String, val name: String, val date: LocalDate)
 
 /**
  * 대안 없음 사유(`i06`). **코드와 파라미터로 온다** — 상대가 완성 문장을 주지 않는 것이 맞다.

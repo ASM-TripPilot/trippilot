@@ -1560,6 +1560,7 @@
 - `src/shared/api/generated/schemas/registerRoute.ts`  →  RegisterRoute
 - `src/shared/api/generated/schemas/registerSavedStayRequest.ts`  →  RegisterSavedStayRequest
 - `src/shared/api/generated/schemas/reorderPhotosRequest.ts`  →  ReorderPhotosRequest
+- `src/shared/api/generated/schemas/replanDeferredPlace.ts`  →  ReplanDeferredPlace
 - `src/shared/api/generated/schemas/replanDiff.ts`  →  ReplanDiff
 - `src/shared/api/generated/schemas/replanDiffEntry.ts`  →  ReplanDiffEntry
 - `src/shared/api/generated/schemas/replanDiffEntryChange.ts`  →  ReplanDiffEntryChange
@@ -1953,4 +1954,4 @@
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1279개 파일
+합계 1280개 파일

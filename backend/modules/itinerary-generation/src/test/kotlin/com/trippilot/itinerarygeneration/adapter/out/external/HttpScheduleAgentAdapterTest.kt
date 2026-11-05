@@ -6,6 +6,8 @@ import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.RejectedPoi
 import com.trippilot.itinerarygeneration.domain.ReplanCurrentSlot
 import com.trippilot.itinerarygeneration.domain.ReplanInput
+import com.trippilot.itinerarygeneration.domain.ReplanDeferredPlace
+import com.trippilot.itinerarygeneration.domain.ReplanPriorRequest
 import com.trippilot.itinerarygeneration.domain.SavedPlaceRef
 import com.trippilot.itinerarygeneration.domain.ReplanScope
 import com.trippilot.itinerarygeneration.domain.EditCommand
@@ -314,6 +316,81 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         val (adapter, server) = fixture()
         server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
             .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
+
+        adapter.replan(replanInput()).totalDistanceKm shouldBe 6.9
+    }
+
+    // F-6 — 상대는 자유입력의 날 말("2일차에"·"내일")을 trip_context 기간으로 환산한다. 그날 하루만 실으면 '2일차'가 늘 여행 밖이라
+    // 다른 날 요청이 이 날에 들어갔다(운영 2026-11-05 보고 ②가 AI 수정 뒤에도 남는 길).
+    "재계획이 여행 기간을 trip_context 에 싣는다 — 그날 하루가 아니다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andExpect(jsonPath("$.target_date").value("2026-08-01"))
+            .andExpect(jsonPath("$.trip_context.start_date").value("2026-07-31"))
+            .andExpect(jsonPath("$.trip_context.end_date").value("2026-08-03"))
+            .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
+
+        adapter.replan(replanInput().copy(tripStartDate = LocalDate.parse("2026-07-31"), tripEndDate = LocalDate.parse("2026-08-03")))
+
+        server.verify()
+    }
+
+    // F-8 — 상대 요청 스키마는 모르는 키를 422 로 거절한다(extra=forbid). 비었을 때 키째 빼야 이 칸을 모르는 상대와도 맞는다.
+    "앞 요청이 있으면 prior_requests 로 싣고, 없으면 키째 뺀다" {
+        val kept = UUID.randomUUID()
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andExpect(jsonPath("$.prior_requests[0].text").value("NIGHTLIFE · 클럽 넣어줘"))
+            .andExpect(jsonPath("$.prior_requests[0].kept_poi_ids[0]").value(kept.toString()))
+            .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andExpect(jsonPath("$.prior_requests").doesNotExist())
+            .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
+
+        adapter.replan(replanInput().copy(priorRequests = listOf(ReplanPriorRequest("NIGHTLIFE · 클럽 넣어줘", listOf(kept)))))
+        adapter.replan(replanInput())
+
+        server.verify()
+    }
+
+    "응답의 requested_poi_ids·deferred_places 가 산출물에 실린다 — UUID 가 아닌 한 건만 버린다" {
+        val later = UUID.randomUUID()
+        val body = replanBody(
+            aiBody("OR_TOOLS"),
+            extra = ""","requested_poi_ids":["$poi","nope"],""" +
+                """"deferred_places":[{"poi_id":"$later","name":"서울광장","date":"2026-08-02"},{"poi_id":"bad","name":"x","date":"2026-08-02"}]""",
+        )
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan")).andRespond(withSuccess(body, MediaType.APPLICATION_JSON))
+
+        val out = adapter.replan(replanInput())
+
+        out.requestedPoiIds shouldBe listOf(poi)
+        out.deferredPlaces shouldBe listOf(ReplanDeferredPlace(later, "서울광장", LocalDate.parse("2026-08-02")))
+    }
+
+    /**
+     * **칸이 없는 응답(옛 상대)은 null 이다 — 빈 목록과 다르다.** null 인 초안은 다음 재계획의 앞 요청으로 싣지 않는다(옛 상대에
+     * `prior_requests` 를 보내면 422). 빈 목록은 "요청한 곳이 없었다"는 새 상대의 사실이라 싣는다.
+     */
+    "옛 상대 응답은 requestedPoiIds 가 null 이고, 빈 목록은 빈 목록이다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS"), extra = ""","requested_poi_ids":[]"""), MediaType.APPLICATION_JSON))
+
+        val old = adapter.replan(replanInput())
+        old.requestedPoiIds shouldBe null
+        old.deferredPlaces shouldBe emptyList()
+        adapter.replan(replanInput()).requestedPoiIds shouldBe emptyList()
+    }
+
+    // 배포는 AI 먼저다 — 그 사이 옛 BE 가 새 응답 칸을 받는다. 경계 매퍼(Jackson 3)는 모르는 응답 키를 버린다(실패하지 않는다).
+    "모르는 응답 키가 와도 재계획 응답을 읽는다 — AI 를 먼저 배포해도 옛 BE 가 깨지지 않는다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS"), extra = ""","field_from_the_future":[1]"""), MediaType.APPLICATION_JSON))
 
         adapter.replan(replanInput()).totalDistanceKm shouldBe 6.9
     }
@@ -1262,6 +1339,8 @@ private fun replanInput() = ReplanInput(
     destinations = listOf("제주"),
     fromInstant = Instant.parse("2026-08-01T03:00:00Z"),
     targetDate = LocalDate.parse("2026-08-01"),
+    tripStartDate = LocalDate.parse("2026-08-01"),
+    tripEndDate = LocalDate.parse("2026-08-01"),
     windowStart = LocalTime.of(9, 0),
     windowEnd = LocalTime.of(21, 0),
     originLat = 33.4,

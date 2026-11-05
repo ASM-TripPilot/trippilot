@@ -1539,6 +1539,37 @@ def _prior_requested(request: schemas.ReplanRequest, pois: Sequence[Poi],
     return tuple(p for pid, p in keep.items() if pid in current and pid not in swapped)
 
 
+def _prior_kept(request: schemas.ReplanRequest, pois: Sequence[Poi]) -> tuple[Poi, ...]:
+    """같은 날 반영된 앞 다시 짜기들이 **요청 때문에** 넣은 곳 중 지금 일정에 남은 곳 (F-8 — `prior_requests`, BE 가 세션에서 싣는다).
+
+    `_prior_requested`(F-5 근사)와 같은 자리·같은 규칙이다 — 지금 일정에 없는 곳(뒤 편집·다시 짜기가 뺐다)·편집으로 바꿔 뺀
+    곳(SWAPPED_OUT)은 잊는다. 되돌린 세션은 BE 가 싣지 않는다. 사유를 다시 읽어 가르지 않으므로 이름으로 집은 곳·자유입력의
+    한 곳 추가도 기억한다(F-5 가 못 하던 몫).
+    """
+    index = {p.poi_id: p for p in pois}
+    current = {PoiId(s.poi_id) for s in request.current_slots}
+    swapped = {PoiId(r.poi_id) for r in request.rejections if r.kind == "SWAPPED_OUT"}
+    kept = dict.fromkeys(PoiId(pid) for pr in request.prior_requests for pid in pr.kept_poi_ids)
+    return tuple(index[pid] for pid in kept if pid in index and pid in current and pid not in swapped)
+
+
+def _asked_here(request: schemas.ReplanRequest, outcome: core.GenerationOutcome, add_one: Collection[PoiCategory],
+                cat_of: Mapping[PoiId, PoiCategory], *named: Collection[PoiId]) -> tuple[PoiId, ...]:
+    """이번 결과에 **요청 때문에** 든 곳의 후보(F-8 `requested_poi_ids`) — 최종 일정에 남았는지는 사영이 거른다.
+
+    `named` = 이름으로 집은 곳·앞 요청에서 이어받은 곳·밤에 놀기 후보. 한 곳 추가는 그 종류로 **새로**(원 일정 밖) 든 곳이 딱
+    한 곳일 때 그 곳이다 — 둘이면 어느 쪽인지 모른다(`_prior_requested` 와 같은 규칙).
+    """
+    placed = tuple(dict.fromkeys(s.poi_id for d in (outcome.solution.days if outcome.solution else ()) for s in d.slots))
+    orig = {PoiId(s.poi_id) for s in request.current_slots}
+    picks = []
+    for cat in add_one:
+        new = [p for p in placed if cat_of.get(p) is cat and p not in orig]
+        if len(new) == 1:
+            picks.append(new[0])
+    return tuple(dict.fromkeys((*(p for ids in named for p in ids), *picks)))
+
+
 def _end_near(request: schemas.ReplanRequest, resolved: Sequence[str],
               notes: list[str]) -> GeoPoint | None:
     """END_NEAR_STAY("숙소 근처에서 끝내기")·SHORTER_DAY("일찍 마무리") → 하루를 마칠 곳(그날 밤 숙소).
@@ -2820,18 +2851,24 @@ class WiredItineraryOrchestrator:
         # 이름으로 집은 곳처럼 우선 필수 방문으로 둔다(구성 결과 맨 앞, 구성이 실패해도). 이번 요청이 이긴다 — 회피·이름으로
         # 뺀 곳·다른 날·옮긴 지역 밖(`avoided`)·건너뛰기·"클럽은 빼줘"면 잊는다. 시간만 당기기·일찍 마무리는 장소를 더하지
         # 않는 요청이라 걸지 않는다. 잠금·이미 끝난 곳은 따로 지킬 것이 없다.
+        # 재료는 BE 가 싣는 앞 세션들의 요청한 곳(F-8 `prior_requests`)이 있으면 그것, 없으면 변경 이력 근사(F-5).
+        if request.prior_requests:
+            notes.append(f"replan_memory_source: prior_requests={len(request.prior_requests)}")
+        prior_all = (_prior_kept(request, pool.pois) if request.prior_requests
+                     else _prior_requested(request, pool.pois, self._directives))
         remembered: tuple[Poi, ...] = ()
+        dropped: tuple[Poi, ...] = ()  # 이번 요청이 이겨 잊은 곳 — 다음 회차로 이어 주지 않는다(`requested_poi_ids`)
         if earlier is None and "SHORTER_DAY" not in resolved:
             said = request.free_text or ""
             no_night = bool(_NIGHT_WORDS.search(said) and _NEGATION.search(said))
             skip = {PoiId(p) for p in request.excluded_poi_ids} | avoided
             left = set(_left_originals(request, {b.poi_id for b in blocks}, not_before))
-            prior = [p for p in _prior_requested(request, pool.pois, self._directives) if p.poi_id in left]
+            prior = [p for p in prior_all if p.poi_id in left]
             remembered = tuple(p for p in prior
                                if p.poi_id not in skip and not (no_night and NIGHTLIFE_TAG in p.tags))
-            if len(remembered) < len(prior):
-                notes.append("replan_memory_dropped: " + ",".join(
-                    str(p.poi_id) for p in prior if p not in remembered))
+            dropped = tuple(p for p in prior if p not in remembered)
+            if dropped:
+                notes.append("replan_memory_dropped: " + ",".join(str(p.poi_id) for p in dropped))
             if remembered:
                 notes.append("replan_memory: " + ",".join(str(p.poi_id) for p in remembered))
         mem_ids = frozenset(p.poi_id for p in remembered)
@@ -3191,6 +3228,11 @@ class WiredItineraryOrchestrator:
             if compose_ctx else planb.retrieved,
             planb_fallback=planb.is_fallback, started_ms=t0, past=past,
             composed=bool(composed), reasons=why,
+            # 요청 때문에 든 곳(F-8) — 이번 요청이 잊은 기억은 다음 회차로 잇지 않는다. 밤 후보(`night`)는 밤에 놀기·밤 늦은
+            # "더 늦게까지"가 올린 곳뿐이다
+            asked=_asked_here(request, outcome, add_one_asked, cat_of, tuple(p.poi_id for p in nl.visit),
+                              tuple(p.poi_id for p in prior_all if p not in dropped), night),
+            deferred=nl.deferred,
         )
 
     def _rag_events(self, meta: schemas.RequestMetaSchema, notes) -> None:
@@ -3965,8 +4007,13 @@ class WiredItineraryOrchestrator:
         composed: bool = False,
         end_day: bool = False,
         reasons: Mapping[PoiId, str] | None = None,
+        asked: Collection[PoiId] = (),
+        deferred: Sequence[tuple[Poi, date]] = (),
     ) -> schemas.ReplanResponse:
         """`GenerationOutcome` → `ReplanResponse`. **예외로 올리지 않는다** (IO-7).
+
+        `asked` — 요청 때문에 든 곳의 후보, `deferred` — 다른 날로 집은 갈 곳. 둘 다 **최종 일정**으로 거른다(되실은 잠금과
+        겹쳐 빠진 새 방문까지 본 뒤) — `requested_poi_ids` 는 일정에 남은 것만, `deferred_places` 는 일정에 안 든 것만.
 
         `generate` 는 FAILED 를 HTTP 오류로 올리지만(`_failure_exception`) 재계획은
         200 + `empty_reason` 이다 — 백엔드가 폴백 여부를 상태값으로 읽는 계약이고,
@@ -4046,6 +4093,8 @@ class WiredItineraryOrchestrator:
         # 원래 이유를 되싣고, 구성 LLM 이 고른 곳은 그 이유로(같은 곳을 다시 골랐으면 새 이유). 상한은 BE 칸(500자).
         why = {PoiId(s.poi_id): s.placement_reason for s in request.current_slots if s.placement_reason}
         why |= reasons or {}
+        final = [s.poi_id for day in solution.days for s in day.slots]
+        asked, today = set(asked), _tz_aware(request.request_meta.requested_at, self._tz).astimezone(self._tz).date()
         envelope = _envelope(
             solution,
             tuple(PoiExplanation(pid, text[:_PLACEMENT_REASON_MAX]) for pid, text in why.items()),
@@ -4064,6 +4113,10 @@ class WiredItineraryOrchestrator:
             unknown_directives=unknown,
             # 계약이 "KB 히트 수"라고 적어 둔 그 필드 — 배선 전에는 항상 빈 dict 였다.
             retrieved=dict(retrieved or {}),
+            requested_poi_ids=[str(p) for p in dict.fromkeys(final) if p in asked],
+            # 지난 날은 싣지 않는다 — 앱이 그 날로 다시 짜기를 열 수 없다('오늘'은 요청 시각의 현지 날)
+            deferred_places=[schemas.DeferredPlaceSchema(poi_id=str(p.poi_id), name=p.name, date=d)
+                             for p, d in deferred if p.poi_id not in final and d >= today],
         )
 
     def _total_distance_km(

@@ -196,6 +196,13 @@ data class ReplanInput(
     val fromInstant: Instant,
     val targetDate: LocalDate,
     /**
+     * 여행 기간(상대 `trip_context.start_date`·`end_date`) — 상대가 자유입력의 날 말("2일차에"·"내일")을 여행 날짜로 환산하는
+     * 기준이다(F-6). 종전엔 [targetDate] 하루만 실어 '2일차'가 언제나 여행 밖으로 읽혀 다른 날 요청이 이 날에 들어갔다(2026-11-05).
+     * 기본값을 두지 않는다(이 타입의 규약).
+     */
+    val tripStartDate: LocalDate,
+    val tripEndDate: LocalDate,
+    /**
      * 그날 창(상대 `time_window`) — 시작은 여행 설정의 그날 시작과 원 일정의 아직 안 지난 첫 슬롯 시작 중 이른 쪽, 끝은 그날 기본 끝
      * (오늘이면 저녁까지 늘린 값). 규칙의 주인은 호출측(`ReplanFacadeService.replanWindow`)이고 어댑터는 그대로 싣는다
      * (2026-11-05 — 종전엔 어댑터가 시작을 09:00 상수로 박아 06:00 시작 여행도 09:00 부터 다시 짰다).
@@ -257,7 +264,19 @@ data class ReplanInput(
      * 정본 KB-1 표("변경 이력 — 같은 제안 반복 방지")의 마지막 항목이다.
      */
     val changeLog: List<ReplanChange> = emptyList(),
+    /**
+     * 같은 날 반영된(되돌리지 않은) 앞 다시 짜기들, 최신순(F-8 — 상대 `prior_requests`). 상대가 그 회차가 **요청 때문에** 넣은 곳을
+     * 이번에도 우선 지킨다. **비면 키째로 뺀다** — 이 칸을 모르는 상대는 422 다(어댑터). 채우는 쪽(C10)은 그 칸을 돌려준 상대의
+     * 응답을 저장한 세션이 있을 때만 채운다.
+     */
+    val priorRequests: List<ReplanPriorRequest> = emptyList(),
 )
+
+/** 앞 다시 짜기 한 건(F-8) — 그 회차 사유 한 줄([text], 변경 이력 사유와 같은 줄)과 그 회차가 요청 때문에 넣은 곳. */
+data class ReplanPriorRequest(val text: String, val keptPoiIds: List<UUID>)
+
+/** 다른 날로 집어 이 날에 넣지 않은 갈 곳(F-7) — 상대가 등록 POI 이름과 여행 날짜로 환산한 그 날을 준다. */
+data class ReplanDeferredPlace(val poiId: UUID, val name: String, val date: LocalDate)
 
 /**
  * 변경 이력 한 건의 경계 사영 — **그날 diff 만**. 스냅숏 전체·시각·행위자는 싣지 않는다:
@@ -453,6 +472,13 @@ data class ScheduleAgentOutput(
     val scoredCandidates: ScoredCandidatePool? = null,
     /** 취향 점수 신호(TRIP-1173). **기본 모름** — generate 경로만 실값이고 repair·replan·Fake 는 주지 않는다. */
     val scoring: ScoringSignal = ScoringSignal.UNKNOWN,
+    /**
+     * 재계획 결과 중 **요청 때문에** 든 곳(F-8 — 상대 `requested_poi_ids`). **재계획 응답에만 있다.** null = 상대가 이 칸을 모른다
+     * (옛 상대·생성 경로) — 빈 목록("요청한 곳이 없다")과 다르다. 그 차이가 다음 재계획에 앞 요청을 실어도 되는지의 근거다.
+     */
+    val requestedPoiIds: List<UUID>? = null,
+    /** 다른 날로 집어 이 날에 넣지 않은 갈 곳(F-7 — 상대 `deferred_places`). 재계획 응답에만 있다. */
+    val deferredPlaces: List<ReplanDeferredPlace> = emptyList(),
 )
 
 /**

@@ -63,6 +63,8 @@ interface ReplanFacade {
  * @property skippedPoiIds 대상 일자에 **건너뛴** 곳(실적 — C10 이 안다). [excludedPoiIds] 에도 이미 들어 있다.
  *   따로 받는 이유는 잠금 하나다: C8 은 시각 고정 슬롯을 잠그는데, 건너뛴 곳까지 잠그면 AI 가 고정 블록으로 되살려
  *   제외를 빠져나간다(TRIP-1711). 앱·트리거가 보낸 제외는 종전대로 고정이 이긴다 — 그래서 합집합으로는 못 가른다.
+ * @property priorRequests 같은 날 반영된(되돌리지 않은) 앞 재계획들, 최신순(F-8). 세션은 C10 만 안다. 앞 초안에 AI 가 돌려준
+ *   요청한 곳([ReplanProposal.requestedPoiIds])이 남은 세션만 싣는다 — 그 칸을 모르는 AI 에 보내면 422 라서다.
  */
 @Suppress("LongParameterList")
 data class ReplanCommand(
@@ -79,7 +81,14 @@ data class ReplanCommand(
     val freeText: String?,
     val excludedPoiIds: List<UUID>,
     val skippedPoiIds: List<UUID>,
+    val priorRequests: List<PriorReplan> = emptyList(),
 )
+
+/** 앞 재계획 한 건(F-8) — 그 회차 사유 한 줄(변경 이력 사유와 같은 줄)과 그 회차가 요청 때문에 넣은 곳. */
+data class PriorReplan(val text: String, val keptPoiIds: List<UUID>)
+
+/** 다른 날로 집어 이 날에 넣지 않은 갈 곳(F-7) — 앱이 '그 날에 넣어 다시 짜기' 한 탭을 그린다. [name] 은 등록 장소 이름이다. */
+data class DeferredPlace(val poiId: UUID, val name: String, val date: LocalDate)
 
 /**
  * 재계획안 — **확정 전 초안**이다. 세션 jsonb 에 그대로 실려 이력이 되므로
@@ -100,6 +109,14 @@ data class ReplanProposal(
      * 0 으로 접으면 "이동이 전혀 없는 하루"라는 거짓이 화면에 나간다.
      */
     val totalDistanceKm: Double? = null,
+    /**
+     * 이 초안에 **요청 때문에** 든 곳(F-8 — AI `requested_poi_ids`). 반영되면 같은 날 다음 재계획이 이것을 '앞 요청'으로 싣는다.
+     * **null 과 빈 목록이 다르다** — null 은 AI 가 이 칸을 몰랐다(옛 AI·옛 초안), 빈 목록은 요청한 곳이 없었다. null 인 세션은 앞 요청으로
+     * 싣지 않는다(그 칸을 모르는 AI 에 `prior_requests` 를 보내면 422 다).
+     */
+    val requestedPoiIds: List<UUID>? = null,
+    /** 다른 날로 집어 이 날에 넣지 않은 갈 곳(F-7). 옛 초안은 빈 목록이다. */
+    val deferredPlaces: List<DeferredPlace> = emptyList(),
 ) {
     /** 대안이 하나도 없으면 "해 없음"이다 — 빈 초안을 보여 주면 사용자가 빈 하루를 확정하게 된다. */
     val isEmpty: Boolean get() = slots.isEmpty()
@@ -111,6 +128,11 @@ data class ReplanProposal(
         // null 은 **넣지 않는다** — jsonb 에 `null` 을 적으면 "몰라서 비었다"와 구분이 안 되고,
         // 왕복 항등 검사도 `{k:null}` vs 키 없음에서 갈린다.
         totalDistanceKm?.let { put("totalDistanceKm", it) }
+        // 빈 목록은 **넣는다** — 키 없음(= AI 가 몰랐다)과 "요청한 곳 없음"을 가르는 것이 이 칸의 쓸모다.
+        requestedPoiIds?.let { put("requestedPoiIds", it.map(UUID::toString)) }
+        if (deferredPlaces.isNotEmpty()) {
+            put("deferredPlaces", deferredPlaces.map { mapOf("poiId" to it.poiId.toString(), "name" to it.name, "date" to it.date.toString()) })
+        }
     }
 
     companion object {
@@ -122,7 +144,18 @@ data class ReplanProposal(
             // jsonb 왕복은 수 타입을 보존하지 않는다 — 잭슨이 정수로 읽히는 값을 Integer 로 돌려주므로
             // Double 캐스팅만 두면 `12` 가 조용히 null 이 된다(= "이동 모름"). Number 로 받아 내린다.
             totalDistanceKm = (raw["totalDistanceKm"] as? Number)?.toDouble(),
+            requestedPoiIds = (raw["requestedPoiIds"] as? List<*>)?.mapNotNull { (it as? String)?.toUuidOrNull() },
+            deferredPlaces = (raw["deferredPlaces"] as? List<*>).orEmpty().mapNotNull { d ->
+                val m = d as? Map<*, *> ?: return@mapNotNull null
+                val poiId = (m["poiId"] as? String)?.toUuidOrNull() ?: return@mapNotNull null
+                val name = m["name"] as? String ?: return@mapNotNull null
+                val date = (m["date"] as? String)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@mapNotNull null
+                DeferredPlace(poiId, name, date)
+            },
         )
+
+        /** 손으로 고쳐질 수 있는 jsonb 칸이라 한 건이 틀려도 그 한 건만 버린다 — 초안 전체(확정·비교)를 깨지 않는다. */
+        private fun String.toUuidOrNull(): UUID? = runCatching { UUID.fromString(this) }.getOrNull()
     }
 }
 

@@ -7,6 +7,7 @@ import com.trippilot.changelog.api.ChangeSourceType
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.itinerarygeneration.api.DeferredPlace
 import com.trippilot.itinerarygeneration.api.ReplanCommand
 import com.trippilot.itinerarygeneration.api.ReplanFacade
 import com.trippilot.itinerarygeneration.api.ReplanProposal
@@ -18,6 +19,7 @@ import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.RejectionStore
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.ReplanInput
+import com.trippilot.itinerarygeneration.domain.ReplanPriorRequest
 import com.trippilot.itinerarygeneration.domain.ReplanScope
 import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.RevisionActor
@@ -94,6 +96,8 @@ class ReplanFacadeService(
                 destinations = ctx.destinations,
                 fromInstant = command.fromInstant,
                 targetDate = command.targetDate,
+                tripStartDate = ctx.startDate,
+                tripEndDate = ctx.endDate,
                 windowStart = windowStart,
                 windowEnd = windowEnd,
                 originLat = origin.first,
@@ -131,6 +135,7 @@ class ReplanFacadeService(
                     log.warn("변경 이력 조회 실패 — 이력 없이 재계획합니다. tripId={}", command.tripId, it)
                     emptyList()
                 },
+                priorRequests = command.priorRequests.map { ReplanPriorRequest(it.text, it.keptPoiIds) },
             ),
         )
         // **요청한 날짜만** 받는다. 다른 날을 돌려줬을 때 그것을 오늘 초안으로 삼으면, 확정 순간
@@ -154,7 +159,11 @@ class ReplanFacadeService(
         }
         // 빈 초안은 "해 없음"이다 — 빈 하루를 초안이라고 보여 주면 사용자가 그걸 확정한다.
         if (slots.isEmpty()) return null
-        return ReplanProposal(current.itineraryId, command.targetDate, slots, output.totalDistanceKm)
+        return ReplanProposal(
+            current.itineraryId, command.targetDate, slots, output.totalDistanceKm,
+            requestedPoiIds = output.requestedPoiIds,
+            deferredPlaces = output.deferredPlaces.map { DeferredPlace(it.poiId, it.name, it.date) },
+        )
     }
 
     /**
