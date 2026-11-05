@@ -427,16 +427,20 @@ def verify(
     visit: tuple[Poi, ...] = ()
     avoid: frozenset[PoiId] = frozenset()
     pool: Sequence[Poi] = ()
+    # 조회가 끝났나(빈 결과 포함) — 장애면 False. 빈 결과를 "조회 안 함"과 같이 다루면 집은 장소가 노트 없이 사라진다
+    # (50km 안 등록 POI 가 0곳인 앵커, 2026-11-05 Codex 리뷰). 장애는 `nl_place_lookup_error` 하나로 밝히고 장소마다
+    # 'not_registered' 라고 하지 않는다 — 등록 안 된 것이 아니라 못 본 것이다.
+    looked_up = False
     # 풀 먼저(운영 2026-11-05 run3: 50km 조회가 구성 앞 4.9s 공백). 정확 일치만 — 부분 일치뿐이면 50km 안의 더 먼
     # 정확 일치가 이겨야 하니(`match_place`) 조회한다. 풀은 반경 안 등록 POI 의 부분집합이라 정확 일치끼리 가까운 곳도
     # 대개 같다(풀 자격·상한에 걸린 곳만 다를 수 있다 — 그때 풀 쪽이 후보 자격을 이미 지난 곳이다).
     if (nearby and extracted.places and not _area_needs_lookup(extracted, anchor)
             and _all_exact_in(extracted.places, nearby)):
-        pool = nearby
+        pool, looked_up = nearby, True
         notes.append("nl_place_lookup: pool")
     elif needs_registered(extracted, anchor):
         try:
-            pool = registered()
+            pool, looked_up = registered(), True
         except Exception as e:  # 등록 POI 조회 장애 — 장소·지역 주장은 하나도 쓸 수 없다
             notes.append(f"nl_place_lookup_error: {type(e).__name__}")
     # "서울광장 꼭, 2일차에" — 다른 날 것은 이 날에 넣지도(갈 곳) 빼지도(뺄 곳) 않는다. 종전엔 날 칸이 없어 무조건 이 날
@@ -446,7 +450,7 @@ def verify(
     notes += n
     extracted = replace(extracted, places=tuple(here))
     other: set[PoiId] = set()
-    for ep, day in there if pool else ():
+    for ep, day in there if looked_up else ():
         poi, how = match_place(ep.name, pool, anchor)
         if poi is None:
             notes.append(f"nl_place_rejected: {how}")
@@ -454,7 +458,7 @@ def verify(
         if ep.want == "visit":
             other.add(poi.poi_id)
         notes.append(f"nl_place_other_day: {ep.want} {poi.poi_id} {day.isoformat()}")
-    if extracted.places and pool:
+    if extracted.places and looked_up:
         visit, avoid, n = verify_places(
             extracted.places, pool, anchor, on.weekday(), existence, existence_deadline_ms)
         notes += n
