@@ -40,6 +40,8 @@ export interface TripCardProps {
   /** 메뉴 열림 — 카드는 상태를 갖지 않아 소비처가 쥔다. */
   menuOpen?: boolean;
   onPressMenu?: () => void;
+  /** TRIP-1785 · 주어지면 상태문(extra) 자리에 「기록 보기 ›」 링크를 그린다(extra 는 그리지 않는다). 지난 여행 판정은 소비처 몫. */
+  onPressRecords?: () => void;
 }
 
 const BADGE_LABEL: Record<'done' | 'draft' | 'live', string> = {
@@ -63,6 +65,7 @@ const COVER_SCRIM_END = { x: 0, y: 0.6 } as const;
 
 const RESUME_LABEL = '일정 이어서 짜기';
 const MENU_DELETE_LABEL = '삭제';
+const RECORDS_LABEL = '기록 보기';
 
 /** Figma 4682:2573 — ⋯ 버튼 drop 0,2,10 · 6% / 메뉴 drop 0,4,16 · 8%. */
 const MORE_SHADOW = {
@@ -88,6 +91,7 @@ export function TripCard({
   onPressDelete,
   menuOpen = false,
   onPressMenu,
+  onPressRecords,
 }: TripCardProps): ReactElement {
   const {
     tripId,
@@ -251,7 +255,21 @@ export function TripCard({
         >
           {metaLine}
         </Text>
-        {extra !== null ? (
+        {onPressRecords !== undefined ? (
+          // 보이는 높이 18 + hitSlop 13×2 = 44 터치. 카드 onPress 로 새지 않게 자식 Pressable 이 자기 onPress 를 쥔다.
+          <Pressable
+            testID={`${testIDPrefix}-records-link-${tripId}`}
+            accessibilityRole="button"
+            onPress={onPressRecords}
+            hitSlop={{ top: 13, bottom: 13 }}
+            className="flex-row items-center gap-[2px] self-start"
+          >
+            <Text className="font-noto-bold text-label font-bold text-primary-text">
+              {RECORDS_LABEL}
+            </Text>
+            <ChevronRightGlyph size={14} color="primaryText" />
+          </Pressable>
+        ) : extra !== null ? (
           <Text
             testID={`${testIDPrefix}-extra-${tripId}`}
             numberOfLines={1}

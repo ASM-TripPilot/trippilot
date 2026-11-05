@@ -38,6 +38,11 @@ import {
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary';
+import {
+  parseMyTripsSegment,
+  splitMyTripsBySegment,
+  type MyTripsSegment,
+} from '../model/myTripsSegment';
 import { MyTripsListScreen } from './MyTripsListScreen';
 import { MyTripsSortSheet } from './MyTripsSortSheet';
 import { TripDeleteDialog } from './TripDeleteDialog';
@@ -67,6 +72,10 @@ import { TripCardContainer } from './TripCardContainer';
  * 기준, 읽기 실패·모르는 값은 최신순(INV-4). 사용자가 먼저 고르면 늦게 온 저장값은 무시한다. TRIP-1121 · 여행 중
  * (확정 + 오늘이 기간 안)은 어느 기준에서도 맨 위(`orderMyTrips`). 오늘을 여기서 한 번 만들어 정렬과 카드에 같은 값을 넘긴다.
  *
+ * TRIP-1785 · 「예정 / 지난」 세그 — 지난 = 일정 확정 ∧ 오늘 > 종료일(`splitMyTripsBySegment`), 나머지는 예정. 정렬은 세그 안에서(여행 중 고정은
+ * 예정 쪽), 정렬 시트·기준은 두 세그가 공유한다. 고른 세그는 정렬과 같은 꼴로 기기에 남긴다(`itinerary.myTrips.segment`): 읽기 전엔 예정,
+ * 읽기 실패·모르는 값도 예정, 사용자가 먼저 누르면 늦게 온 저장값은 무시한다. 세그 전환은 이미 받은 목록을 나눌 뿐 네트워크 호출이 없다.
+ *
  * TRIP-1677 · 일정 상태(확정 여부·생성 상태)는 목록(`GET /trips`)이 여행마다 싣는 네 칸에서 읽는다 — 예전엔 여행마다 일정을
  * 따로 물어(N+1) 도착 전엔 정렬·배너를 보류했다. 이제 목록이 오면 한꺼번에 판정한다. 생성 중 여행의 폴링은 앱 셸이 한다.
  *
@@ -86,6 +95,7 @@ import { TripCardContainer } from './TripCardContainer';
 
 /** SecureStore 키 규칙(영숫자·`.`·`-`·`_`) · 토큰 키와 다른 이름. */
 const SORT_KEY = 'itinerary.myTrips.sort';
+const SEGMENT_KEY = 'itinerary.myTrips.segment';
 
 export function MyTripsListPage(): ReactElement {
   const router = useRouter();
@@ -168,12 +178,22 @@ export function MyTripsListPage(): ReactElement {
     return () => setOptions({ tabBarStyle: undefined });
   }, [hideTabBar, setOptions]);
   const sortPickedRef = useRef(false);
+  // TRIP-1785 · 세그 — 정렬과 같은 꼴(상태 + 사용자 우선 ref + 마운트 읽기).
+  const [segment, setSegment] = useState<MyTripsSegment>('upcoming');
+  const segmentPickedRef = useRef(false);
 
   useEffect(() => {
     // 읽기 실패는 최신순 그대로(INV-4 — 목록은 이미 최신순으로 서 있다).
     readStringValue(SORT_KEY).then(
       (raw) => {
         if (!sortPickedRef.current) setSortKey(parseMyTripsSortKey(raw));
+      },
+      () => {}
+    );
+    // 읽기 실패는 예정 그대로(INV-4).
+    readStringValue(SEGMENT_KEY).then(
+      (raw) => {
+        if (!segmentPickedRef.current) setSegment(parseMyTripsSegment(raw));
       },
       () => {}
     );
@@ -237,7 +257,7 @@ export function MyTripsListPage(): ReactElement {
   }
 
   const sorted = orderMyTrips(
-    entries,
+    splitMyTripsBySegment(entries, today)[segment],
     today,
     sortKey === 'start'
       ? byStart(today)
@@ -252,6 +272,13 @@ export function MyTripsListPage(): ReactElement {
     setSortOpen(false);
     // 저장 실패는 삼킨다 — 이번 마운트의 화면은 고른 대로 남는다(doneBar 쓰기와 같은 선례).
     writeStringValue(SORT_KEY, key).catch(() => {});
+  };
+
+  const onSelectSegment = (next: MyTripsSegment): void => {
+    segmentPickedRef.current = true;
+    setSegment(next);
+    // 저장 실패는 삼킨다 — 정렬 쓰기와 같다.
+    writeStringValue(SEGMENT_KEY, next).catch(() => {});
   };
 
   const onConfirmDelete = (): void => {
@@ -315,6 +342,9 @@ export function MyTripsListPage(): ReactElement {
         onPressCreateTrip={onPressCreateTrip}
         sortKey={sortKey}
         onPressSort={() => setSortOpen(true)}
+        segment={segment}
+        onSelectSegment={onSelectSegment}
+        segmentEmpty={sorted.length === 0}
         listHeader={largeText ? doneBar : undefined}
         cards={sorted.map((trip) => (
           <TripCardContainer

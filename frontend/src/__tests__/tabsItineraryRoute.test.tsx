@@ -109,8 +109,9 @@ function trip(over: Partial<Trip> = {}): Trip {
   return {
     tripId: 'trip-a',
     title: '제주 여행',
-    startDate: '2026-06-10',
-    endDate: '2026-06-13',
+    // TRIP-1785 — 기본 세그가 「예정」이라 끝난 확정 여행은 카드가 안 보인다. 이 파일의 카드 계약은 예정 쪽이므로 기본 날짜를 먼 미래로 둔다.
+    startDate: '2099-06-10',
+    endDate: '2099-06-13',
     party: 2,
     preferenceSnapshot: {},
     destinations: [{ seq: 1, region: '제주', nights: 3 }],
@@ -291,7 +292,7 @@ describe('🔴 AC-6 · 카드 탭은 눌린 카드의 tripId 목적지로 간다
     );
   });
 
-  it('첫 카드(A, CONFIRMED · 여행 기간 지남)를 누르면 그 여행의 여행 중 화면으로 1회 간다', () => {
+  it('첫 카드(A, CONFIRMED)를 누르면 그 여행의 여행 중 화면으로 1회 간다', () => {
     renderTwoTrips();
 
     fireEvent.press(screen.getByTestId('my-trip-card-trip-a'));

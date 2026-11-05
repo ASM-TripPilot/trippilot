@@ -7,6 +7,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import type { MyTripsSortKey } from '../model/myTripsOrder';
+import type { MyTripsSegment } from '../model/myTripsSegment';
 
 import { ItineraryCalendarGlyph } from '@/features/itinerary/index.view';
 
@@ -26,6 +27,9 @@ import { ItineraryCalendarGlyph } from '@/features/itinerary/index.view';
  * 경고 아이콘 + [다시 시도] 하나. Figma 에 h06 오류 프레임이 없어 코드 선례를 따랐다. 재시도 중 얼굴은
  * 페이지가 정한다(데이터 없는 refetch 는 pending 으로 돌아가 loading 이 대신한다) — 이 화면엔 재시도 중 상태가 없다.
  *
+ * TRIP-1785 · list 얼굴 맨 위 줄은 좌 「예정 / 지난」 칩 + 우 정렬 줄이다(Figma h06 `segRow`). 칩은 이 페이지 로컬 UI — 공용 `SegmentedControl`
+ * 은 연결형 알약이라 모양이 달라 건드리지 않았다. 다른 얼굴(empty·loading·error·offline)엔 세그가 없다.
+ *
  * TRIP-1638 · offline 은 오프라인으로 처음 켜 받아 둔 목록이 없을 때(요청이 보류됨) — 스켈레톤이 끝나지 않는 걸 막는다(INV-4).
  * error 와 같은 틀이되 **버튼이 없다**: 보류 요청에 다시 시도는 무동작이라 눌러도 아무 일 없는 새 침묵 실패가 된다.
  * 연결이 돌아오면 쿼리가 스스로 재개해 목록으로 바뀐다. Figma 프레임 없음 — error 얼굴 코드 선례.
@@ -36,6 +40,14 @@ const SORT_LABELS: Record<MyTripsSortKey, string> = {
   recent: '최신순',
   start: '출발일순',
   title: '이름순',
+};
+const SEGMENT_OPTIONS: readonly { key: MyTripsSegment; label: string }[] = [
+  { key: 'upcoming', label: '예정' },
+  { key: 'past', label: '지난' },
+];
+const SEGMENT_EMPTY_LABELS: Record<MyTripsSegment, string> = {
+  upcoming: '예정된 여행이 없어요',
+  past: '지난 여행이 아직 없어요',
 };
 const EMPTY_TITLE = '아직 만든 여행이 없어요';
 const EMPTY_DESCRIPTION =
@@ -62,22 +74,78 @@ export interface MyTripsListScreenProps {
   onPressSort?: () => void;
   /** TRIP-1297 — list 모드 목록 스크롤의 첫 자식(카드 앞)에 그릴 것. 없으면 현행과 같다. */
   listHeader?: ReactNode;
+  /** TRIP-1785 · 현재 세그(기본 예정)와 선택 콜백. 세그 줄은 list 모드에서만 그린다. */
+  segment?: MyTripsSegment;
+  onSelectSegment?: (segment: MyTripsSegment) => void;
+  /** 현재 세그에 카드가 0장이면 카드 대신 한 줄 안내(만들기 CTA 없음). */
+  segmentEmpty?: boolean;
 }
 
-/** 정렬 줄(우측 정렬) — 누르면 정렬 시트(TRIP-1122 가 TRIP-468 01b Q1 "옵션 1개라 표시 라벨만"을 뒤집음). */
-function SortRow({
-  sortKey,
+/** 세그 칩 — 선택 표시는 색이 아니라 `accessibilityState.selected` 로도 둔다. 선택 칩에 그림자·scale 은 얹지 않는다(TRIP-977). */
+function SegmentChip({
+  segmentKey,
+  label,
+  selected,
   onPress,
 }: {
-  sortKey: MyTripsSortKey;
+  segmentKey: MyTripsSegment;
+  label: string;
+  selected: boolean;
   onPress?: () => void;
 }): ReactElement {
   return (
-    <View className="w-full flex-row justify-end px-lg pt-md">
+    <Pressable
+      testID={`my-trips-seg-${segmentKey}`}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      hitSlop={{ top: 5, bottom: 5 }}
+      className={`rounded-[8px] px-[14px] py-sm ${
+        selected ? 'bg-primary-pale' : 'bg-surface-soft'
+      }`}
+    >
+      <Text
+        className={`text-label ${
+          selected
+            ? 'font-noto-bold font-bold text-primary'
+            : 'font-noto text-ink'
+        }`}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/** 세그 줄 — 좌 「예정 / 지난」 칩, 우 정렬 줄(누르면 정렬 시트, TRIP-1122가 TRIP-468 01b Q1 "옵션 1개라 표시 라벨만"을 뒤집음). */
+function SegmentSortRow({
+  segment,
+  onSelectSegment,
+  sortKey,
+  onPressSort,
+}: {
+  segment: MyTripsSegment;
+  onSelectSegment?: (segment: MyTripsSegment) => void;
+  sortKey: MyTripsSortKey;
+  onPressSort?: () => void;
+}): ReactElement {
+  return (
+    <View className="w-full flex-row items-center justify-between px-lg pt-md">
+      <View className="flex-row gap-sm">
+        {SEGMENT_OPTIONS.map(({ key, label }) => (
+          <SegmentChip
+            key={key}
+            segmentKey={key}
+            label={label}
+            selected={key === segment}
+            onPress={() => onSelectSegment?.(key)}
+          />
+        ))}
+      </View>
       <Pressable
         testID="my-trips-sort"
         accessibilityRole="button"
-        onPress={onPress}
+        onPress={onPressSort}
         className="flex-row items-center gap-[2px]"
       >
         <Text className="font-noto text-label text-muted">
@@ -116,6 +184,9 @@ export function MyTripsListScreen({
   sortKey = 'recent',
   onPressSort,
   listHeader,
+  segment = 'upcoming',
+  onSelectSegment,
+  segmentEmpty = false,
 }: MyTripsListScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -187,10 +258,24 @@ export function MyTripsListScreen({
           </ScrollView>
         ) : (
           <>
-            <SortRow sortKey={sortKey} onPress={onPressSort} />
+            <SegmentSortRow
+              segment={segment}
+              onSelectSegment={onSelectSegment}
+              sortKey={sortKey}
+              onPressSort={onPressSort}
+            />
             <ScrollView contentContainerClassName="gap-lg px-lg pb-2xl pt-sm">
               {listHeader}
-              {cards}
+              {segmentEmpty ? (
+                <Text
+                  testID={`my-trips-${segment}-empty`}
+                  className="py-2xl text-center font-noto text-label text-muted"
+                >
+                  {SEGMENT_EMPTY_LABELS[segment]}
+                </Text>
+              ) : (
+                cards
+              )}
             </ScrollView>
           </>
         )}
