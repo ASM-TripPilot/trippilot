@@ -654,6 +654,9 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       // TRIP-1791 — 같은 편집 뷰지만 직접 짜기는 「선택」(여러 곳 빼기)이 없다: 선택 prop 미주입 = 지금 화면.
       // 카드 3장이 있는 화면이라 "카드가 없어서 숨음"이 아니다(짝: EditorView.test S-A ②, ItineraryEditPage R1).
       expect(screen.queryByTestId('editor-select-toggle')).toBeNull();
+      // TRIP-1792 — 저장 전 되돌리기도 마찬가지로 직접 짜기엔 없다(`undo` 미주입 = 기능 부재, D7·AC-10).
+      // 짝은 ItineraryEditPage R1 의 `editor-undo` 비활성 존재 단언 — 같은 뷰·같은 3곳 상태에서 거기엔 있다.
+      expect(screen.queryByTestId('editor-undo')).toBeNull();
     });
   });
 
@@ -689,6 +692,8 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       await fireEditDropOnZone(1);
 
       expect(screen.getByTestId(META)).toHaveTextContent('2곳');
+      // TRIP-1792 — 이력이 쌓일 편집을 한 뒤에도 직접 짜기엔 되돌리기 아이콘이 없다.
+      expect(screen.queryByTestId('editor-undo')).toBeNull();
       expect(ids(await save())).toEqual(['a', 'c']);
     });
   });

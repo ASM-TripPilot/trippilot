@@ -20,6 +20,9 @@ export function useEditorDraft(editingSlotKey: string | null) {
   const deleteSlots = useItineraryEditStore((s) => s.deleteSlots);
   const reorderSlots = useItineraryEditStore((s) => s.reorderSlots);
   const adjustSlotTime = useItineraryEditStore((s) => s.adjustSlotTime);
+  const undo = useItineraryEditStore((s) => s.undo);
+  // 구독 값 — 렌더에서 써도 안전한 건 이 불리언뿐이다(맨 위 번호는 아래 getter 로 호출 시점에 읽는다).
+  const canUndo = useItineraryEditStore((s) => s.history.length > 0);
   const days = useItineraryEditStore((s) => s.days);
 
   const seedUnlessDirty = useCallback(
@@ -28,6 +31,11 @@ export function useEditorDraft(editingSlotKey: string | null) {
     },
     [seed]
   );
+  // 맨 위 이력 번호(없으면 null) — 삭제 핸들러·안내 바 콜백이 부를 때 스토어를 읽는다. 렌더 중에 부르면 React Compiler 가 첫 값으로 굳힌다.
+  const topUndoId = useCallback((): number | null => {
+    const { history } = useItineraryEditStore.getState();
+    return history.length > 0 ? history[history.length - 1].id : null;
+  }, []);
   useEffect(() => () => useItineraryEditStore.getState().reset(), []);
 
   const editing = editingSlotKey === null ? null : parseSlotKey(editingSlotKey);
@@ -45,6 +53,9 @@ export function useEditorDraft(editingSlotKey: string | null) {
     deleteSlots,
     reorderSlots,
     adjustSlotTime,
+    undo,
+    canUndo,
+    topUndoId,
     days,
     editing,
     editingSlot,

@@ -18,6 +18,7 @@ import {
   PlusGlyph,
   InfoCircleGlyph,
   BackChevronGlyph,
+  UndoGlyph,
 } from '@/shared/ui/glyphs';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import type { MapCenter, MapPin } from '@/shared/map';
@@ -87,6 +88,9 @@ export interface EditorViewProps {
   /** TRIP-1791 · 「선택」으로 골라 한 번에 빼기 — 확정된 poiId(슬롯 순서)를 준다. **없으면 「선택」 버튼 자체가 없다**
    *  (직접 짜기 = 지금 화면). 선택 모드·고른 곳·확인창 상태는 이 뷰 안에 산다. */
   onDeleteSelected?: (poiIds: string[]) => void;
+  /** TRIP-1792 · 머리 되돌리기 ↶ — 「선택」 오른쪽. **없으면 ↶ 자체가 없다**(직접 짜기 = 기능 부재). `enabled` 가 거짓이면(쌓인 편집
+   *  없음) 선 색만 `muted-soft` 로 바뀌고 눌러도 아무 일이 없다. 선택 모드(`N곳 선택` 머리)에는 안 보인다. */
+  undo?: { enabled: boolean; onPress: () => void };
   /** 드래그 중 얼굴 강제(프리뷰 `h12-editor-dragging`). 실제 끌기는 내부 상태가 켠다. */
   isDragging?: boolean;
   /** 방문 완료 잠금(AC-11). */
@@ -121,6 +125,7 @@ export function EditorView({
   onReorder,
   onDeleteViaDrag,
   onDeleteSelected,
+  undo,
   isDragging,
   completedSlotKeys,
   inTrip,
@@ -327,6 +332,7 @@ export function EditorView({
     </View>
   );
 
+  const showSelect = onDeleteSelected !== undefined && hasUnlocked;
   const header = selecting ? (
     <View className="px-lg pb-md pt-sm">
       <Text
@@ -343,18 +349,39 @@ export function EditorView({
       dateLabel={dateLabel}
       meta={`${slots.length}곳`}
       trailing={
-        onDeleteSelected !== undefined && hasUnlocked ? (
-          <Pressable
-            accessibilityRole="button"
-            testID="editor-select-toggle"
-            onPress={() => setSelecting(true)}
-            hitSlop={8}
-            className="rounded-pill border border-hairline-strong bg-canvas px-md py-[4px]"
-          >
-            <Text className="font-noto-bold text-caption font-bold text-ink">
-              선택
-            </Text>
-          </Pressable>
+        showSelect || undo !== undefined ? (
+          <View className="flex-row items-center gap-sm">
+            {showSelect ? (
+              <Pressable
+                accessibilityRole="button"
+                testID="editor-select-toggle"
+                onPress={() => setSelecting(true)}
+                hitSlop={8}
+                className="rounded-pill border border-hairline-strong bg-canvas px-md py-[4px]"
+              >
+                <Text className="font-noto-bold text-caption font-bold text-ink">
+                  선택
+                </Text>
+              </Pressable>
+            ) : null}
+            {undo !== undefined ? (
+              // 보이는 원 32(Figma 5210:4520), 히트는 hitSlop 6 으로 44 — 비활성은 opacity 가 아니라 선 색만 바뀐다.
+              // 레이아웃 높이를 44 로 두면 머리(items-start)의 오른쪽 묶음이 제목보다 처진다(6-b 실측) → 원 32 + -my 4 로
+              // 줄 높이는 「선택」 알약과 같게 두고 원만 위아래로 4 씩 넘친다.
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="되돌리기"
+                accessibilityState={{ disabled: !undo.enabled }}
+                testID="editor-undo"
+                disabled={!undo.enabled}
+                onPress={undo.onPress}
+                hitSlop={6}
+                className="-my-[4px] h-[32px] w-[32px] items-center justify-center rounded-pill bg-surface-strong"
+              >
+                <UndoGlyph color={undo.enabled ? 'ink' : 'mutedSoft'} />
+              </Pressable>
+            ) : null}
+          </View>
         ) : undefined
       }
     />

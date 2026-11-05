@@ -121,3 +121,28 @@ export function SummaryChartGlyph({
     </Svg>
   );
 }
+
+// 되돌리기 ↶(18 격자, 화살촉 + 반원 되돌이선) — 일정 편집 머리 「되돌리기」(Figma 5210:4522 `undo`). 선 굵기 1.65 는 시안 값.
+export function UndoGlyph({ size = 18, color = 'ink', testID }: GlyphProps) {
+  const stroke = {
+    stroke: GLYPH_COLORS[color],
+    strokeWidth: 1.65,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+  } as const;
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 18 18"
+      fill="none"
+    >
+      <Path d="M6.75 10.5L3 6.75L6.75 3" {...stroke} />
+      <Path
+        d="M3 6.75H10.875C11.4167 6.75 11.9531 6.8567 12.4536 7.064C12.954 7.2713 13.4088 7.57514 13.7918 7.95818C14.1749 8.34123 14.4787 8.79596 14.686 9.29643C14.8933 9.7969 15 10.3333 15 10.875C15 11.4167 14.8933 11.9531 14.686 12.4536C14.4787 12.954 14.1749 13.4088 13.7918 13.7918C13.4088 14.1749 12.954 14.4787 12.4536 14.686C11.9531 14.8933 11.4167 15 10.875 15H8.25"
+        {...stroke}
+      />
+    </Svg>
+  );
+}

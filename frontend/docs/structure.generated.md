@@ -415,7 +415,7 @@
 
 ## src/features/edit-itinerary/model/
 - `src/features/edit-itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
-- `src/features/edit-itinerary/model/itineraryEditStore.ts`  →  EditorSlot · EditorDaysItem · removeSlot · removeSlots · addSlot · insertSlotAt · ItineraryEditState · useItineraryEditStore
+- `src/features/edit-itinerary/model/itineraryEditStore.ts`  →  EditorSlot · EditorDaysItem · removeSlot · removeSlots · addSlot · insertSlotAt · EditHistoryEntry · ItineraryEditState · useItineraryEditStore
 - `src/features/edit-itinerary/model/slotSwapError.ts`  →  SLOT_SWAP_CONFLICT_CODES · SlotSwapErrorKind · SlotSwapError · resolveSlotSwapError
 - `src/features/edit-itinerary/model/sortSlotsByStartAt.ts`  →  sortSlotsByStartAt
 - `src/features/edit-itinerary/model/swapSlotPoi.ts`  →  swapSlotPoi
@@ -1842,13 +1842,13 @@
 - `src/shared/ui/WheelPicker.tsx`  →  WHEEL_CELL_HEIGHT · WheelPickerProps · WheelPicker
 
 ## src/shared/ui/glyphs/
-- `src/shared/ui/glyphs/ActionGlyphs.tsx`  →  SearchGlyph · TrashGlyph · NoteGlyph · SummaryChartGlyph
+- `src/shared/ui/glyphs/ActionGlyphs.tsx`  →  SearchGlyph · TrashGlyph · NoteGlyph · SummaryChartGlyph · UndoGlyph
 - `src/shared/ui/glyphs/HeartGlyphs.tsx`  →  HeartStrokeFilledGlyph · HeartStrokeOutlineGlyph
 - `src/shared/ui/glyphs/NavigationGlyphs.tsx`  →  BackChevronGlyph · BackArrowGlyph · ChevronDownGlyph · ChevronRightGlyph · ChevronRight24Glyph · ChevronRight16Glyph · CloseGlyph · PlusGlyph · CheckGlyph · Check24Glyph
 - `src/shared/ui/glyphs/PlaceGlyphs.tsx`  →  MapPinGlyph · SuitcaseGlyph · WalkGlyph · CarGlyph · ForkKnifeGlyph · ShoppingBagGlyph · TransitGlyph
 - `src/shared/ui/glyphs/StatusGlyphs.tsx`  →  AlertCircleGlyph · WarningTriangleGlyph · InfoCircleGlyph · LockGlyph · ClockGlyph · FullAiGlyph · WarningFilledGlyph · InfoGlyph · InfoCircle18Glyph · WarningTriangle24Glyph
 - `src/shared/ui/glyphs/colors.ts`  →  GLYPH_COLORS · GlyphColor
-- `src/shared/ui/glyphs/index.ts`  →  GLYPH_COLORS · BackArrowGlyph · BackChevronGlyph · Check24Glyph · CheckGlyph · ChevronDownGlyph · ChevronRight16Glyph · ChevronRight24Glyph · ChevronRightGlyph · CloseGlyph · PlusGlyph · AlertCircleGlyph · ClockGlyph · FullAiGlyph · InfoCircle18Glyph · InfoCircleGlyph · InfoGlyph · LockGlyph · WarningFilledGlyph · WarningTriangle24Glyph · WarningTriangleGlyph · CarGlyph · ForkKnifeGlyph · MapPinGlyph · ShoppingBagGlyph · SuitcaseGlyph · TransitGlyph · WalkGlyph · NoteGlyph · SearchGlyph · SummaryChartGlyph · TrashGlyph · HeartStrokeFilledGlyph · HeartStrokeOutlineGlyph
+- `src/shared/ui/glyphs/index.ts`  →  GLYPH_COLORS · BackArrowGlyph · BackChevronGlyph · Check24Glyph · CheckGlyph · ChevronDownGlyph · ChevronRight16Glyph · ChevronRight24Glyph · ChevronRightGlyph · CloseGlyph · PlusGlyph · AlertCircleGlyph · ClockGlyph · FullAiGlyph · InfoCircle18Glyph · InfoCircleGlyph · InfoGlyph · LockGlyph · WarningFilledGlyph · WarningTriangle24Glyph · WarningTriangleGlyph · CarGlyph · ForkKnifeGlyph · MapPinGlyph · ShoppingBagGlyph · SuitcaseGlyph · TransitGlyph · WalkGlyph · NoteGlyph · SearchGlyph · SummaryChartGlyph · TrashGlyph · UndoGlyph · HeartStrokeFilledGlyph · HeartStrokeOutlineGlyph
 - `src/shared/ui/glyphs/types.ts`  →  GlyphProps
 
 ## src/shared/ui/

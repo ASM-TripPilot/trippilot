@@ -39,5 +39,6 @@ export {
   SearchGlyph,
   SummaryChartGlyph,
   TrashGlyph,
+  UndoGlyph,
 } from './ActionGlyphs';
 export { HeartStrokeFilledGlyph, HeartStrokeOutlineGlyph } from './HeartGlyphs';

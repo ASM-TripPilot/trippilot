@@ -155,6 +155,9 @@ export function ItineraryEditPage({
     deleteSlots,
     reorderSlots,
     adjustSlotTime,
+    undo,
+    canUndo,
+    topUndoId,
     days,
     editing,
     editingSlot,
@@ -194,6 +197,29 @@ export function ItineraryEditPage({
     if (activeUnknown) unknownDatesRef.current.add(activeDate);
     else unknownDatesRef.current.delete(activeDate);
   }, [activeDate, activeUnknown]);
+
+  // TRIP-1792 · 되돌리기 — 스토어가 한 장을 되돌리고 날짜를 알려주면 그 일차로 따라간다(다른 날 편집이면 눌러도 화면이 안 변해 보인다).
+  // 칩 전환은 보는 날과 비교하지 않고 항상 건다 — 안내 바 콜백은 띄운 시점의 값을 쥐어 "보는 날"이 낡을 수 있다.
+  function undoTo(expectId?: number): void {
+    const date = undo(expectId);
+    if (date === null) return;
+    const index = days.findIndex((day) => day.date === date);
+    if (index !== -1) setActiveDayIndex(index);
+  }
+
+  // 끌어서 삭제·선택 빼기 공통 — 삭제를 부른 **뒤** 맨 위 번호가 달라졌으면(정말 쌓였으면) 안내 바를 띄운다. 안 지워진 시도
+  // (고정·없는 곳)엔 바가 없다. 맨 위 번호는 핸들러·콜백 안에서만 읽는다(렌더 중이면 React Compiler 가 굳힌다).
+  function removeWithUndoBar(remove: () => void, count: number): void {
+    const before = topUndoId();
+    remove();
+    const barId = topUndoId();
+    if (barId === null || barId === before) return;
+    showToast({
+      testID: 'editor-undo-bar',
+      message: `${count}곳을 뺐어요`,
+      action: { label: '되돌리기', onPress: () => undoTo(barId) },
+    });
+  }
 
   // 저장 뒤 복귀와 헤더 ‹ 공통 — 히스토리가 없으면(딥링크) 얼굴별 목적지로 replace(h12 일정 탭 · i07 라이브 허브).
   function leaveAfterSave(): void {
@@ -416,8 +442,16 @@ export function ItineraryEditPage({
             )
           )
         }
-        onDeleteViaDrag={(poiId) => deleteSlot(activeDate, poiId)}
-        onDeleteSelected={(poiIds) => deleteSlots(activeDate, poiIds)}
+        onDeleteViaDrag={(poiId) =>
+          removeWithUndoBar(() => deleteSlot(activeDate, poiId), 1)
+        }
+        onDeleteSelected={(poiIds) =>
+          removeWithUndoBar(
+            () => deleteSlots(activeDate, poiIds),
+            poiIds.length
+          )
+        }
+        undo={{ enabled: canUndo, onPress: () => undoTo() }}
         completedSlotKeys={completedSlotKeys}
         inTrip={inTrip}
       />

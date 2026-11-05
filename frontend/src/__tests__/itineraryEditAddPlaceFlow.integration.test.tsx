@@ -466,6 +466,7 @@ describe('ItineraryEditPage — 로컬 변경 뒤 장소 추가 (변형·무회�
     // 실행 1 — b 를 삭제 영역에 놓는다.
     await fireEditDropOnZone(1);
     expect(draftIds(D1)).toEqual(['a', 'c']);
+    expect(editor().getByTestId('editor-undo')).not.toBeDisabled(); // TRIP-1792 — 삭제 직후엔 되돌릴 수 있다
 
     // 실행 2 — 말미 「장소 추가」 → p1.
     await openAdd('itinerary-edit-add-place');
@@ -475,6 +476,8 @@ describe('ItineraryEditPage — 로컬 변경 뒤 장소 추가 (변형·무회�
     expect(draftIds(D1)).toEqual(['a', 'c', 'p1']);
     expect(editor().getByTestId(META)).toHaveTextContent('3곳');
     expect(sentIds(0, D1).filter((id) => id !== 'p1')).toEqual(['a', 'b', 'c']);
+    // TRIP-1792 — 장소 추가는 서버가 이미 저장한 변경이라 그 전 편집(삭제)의 되돌리기 길을 닫는다: ↶ 가 다시 비활성(D1·AC-8).
+    expect(editor().getByTestId('editor-undo')).toBeDisabled();
   });
 
   it('F1-시각 · AC-a1 — 시각을 바꾼 뒤 장소를 추가해도 바꾼 시각이 남는다', async () => {
