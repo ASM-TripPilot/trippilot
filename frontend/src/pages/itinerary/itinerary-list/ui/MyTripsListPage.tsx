@@ -17,6 +17,7 @@ import {
 } from '@/shared/api/index.hooks';
 import { isNotFound, isOfflineWaiting } from '@/shared/api';
 import { isLargeText } from '@/shared/lib/fontScale';
+import { guardPress } from '@/shared/lib/pressGuard';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { readStringValue, writeStringValue } from '@/shared/storage';
 import {
@@ -200,10 +201,10 @@ export function MyTripsListPage(): ReactElement {
     writeDoneBarSeen(pick.seenNext).catch(() => {});
   }, [pick]);
 
-  // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
-  const onPressCreateTrip = (): void => {
+  // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074). 연타는 한 번만(TRIP-1775).
+  const onPressCreateTrip = guardPress((): void => {
     openNewTripWizard(router);
-  };
+  });
 
   if (isOfflineWaiting(trips)) {
     return (

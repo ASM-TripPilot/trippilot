@@ -10,6 +10,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { getGetTripsQueryKey } from '@/shared/api/index.hooks';
 import type { Trip } from '@/shared/api/index.schemas';
 import { BASE } from '@/test-support/apiBase';
@@ -129,6 +130,7 @@ beforeEach(() => {
 // onlineManager 는 모듈 싱글턴 — 오프라인 케이스가 어떻게 끝나든 다음 케이스는 온라인으로 시작한다(02a ★1, 파일 최상위).
 afterEach(() => {
   onlineManager.setOnline(true);
+  resetPressGuard();
   // 단언이 문을 열기 전에 실패해도 붙잡힌 요청을 남기지 않는다.
   const waiting = tripsGate;
   tripsGate = [];
@@ -497,6 +499,17 @@ describe('화면 동작 — 캘린더·legend·진행 중 카드·지난 여행�
     expect(screen.getByText('아직 기록된 여행이 없어요')).toBeOnTheScreen();
     expect(screen.queryByTestId('record-calendar-month')).toBeNull();
     fireEvent.press(screen.getByTestId('record-calendar-empty-create'));
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+  });
+
+  // TRIP-1775 — 창 안의 둘째 탭은 위저드를 한 번 더 쌓지 않는다.
+  it('[새 여행 만들기]를 빠르게 두 번 눌러도 step1 은 한 번만 쌓인다', async () => {
+    await renderReady([]);
+    const button = screen.getByTestId('record-calendar-empty-create');
+
+    fireEvent.press(button);
+    fireEvent.press(button);
+
     expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
   });
 });

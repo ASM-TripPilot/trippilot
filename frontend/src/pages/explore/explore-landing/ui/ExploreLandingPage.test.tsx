@@ -569,6 +569,17 @@ describe('담은 곳 메뉴 · ＋ 여행 만들기', () => {
     expect(String(mockPush.mock.calls[0][0])).toBe('/trips/new/step1');
     expect(draftAtPush()).toEqual(freshWizardDraft());
   });
+
+  // TRIP-1775 — 창 안의 둘째 탭은 위저드를 한 번 더 쌓지 않는다.
+  it('＋ 여행 만들기 FAB 를 빠르게 두 번 눌러도 step1 은 한 번만 쌓인다', () => {
+    render(<ExploreLandingPage />);
+    const fab = screen.getByTestId('explore-create-trip-fab');
+
+    fireEvent.press(fab);
+    fireEvent.press(fab);
+
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+  });
 });
 
 // TRIP-457 AC-6·7 · TRIP-940 — 상세가 GET /stays/{stayId} 로 스스로 조회하므로 item 을 싣지 않는다.

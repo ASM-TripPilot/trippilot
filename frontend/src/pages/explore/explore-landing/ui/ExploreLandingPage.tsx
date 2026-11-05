@@ -296,10 +296,10 @@ function ExploreLanding({
       ),
     // ＋ 여행 만들기 FAB → g01 위저드(TRIP-703). 화면은 순수 뷰라 라우터를 모르므로 목적지를
     // 여기(page)가 잇는다.
-    // 새 여행 진입이라 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
-    onPressCreateTrip: () => {
+    // 새 여행 진입이라 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074). 연타는 한 번만(TRIP-1775).
+    onPressCreateTrip: guardPress(() => {
       openNewTripWizard(router);
-    },
+    }),
     // 조회 대기 얼굴(TRIP-704) — 숙소·장소 둘 중 하나라도 첫 조회 중이면 로딩 스켈레톤을 보인다.
     isLoading: stay.isPending || places.isPending,
     // 지역 필터 칩(TRIP-1105) — ✕ 는 URL 의 region 을 비운다(키를 직접 실어야 지워진다). 비워지면
