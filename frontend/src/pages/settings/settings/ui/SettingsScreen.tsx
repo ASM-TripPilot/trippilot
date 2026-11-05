@@ -381,6 +381,8 @@ function DeletionPendingBanner({
 /**
  * 데이터 출처 고지(TRIP-886) — 버전 문구 바로 아래. 법적 고지라 콜백 유무와 상관없이 항상 보이고,
  * OSM 줄만 링크다(콜백이 주입됐을 때만 누를 자리를 그린다).
+ * 위키백과(CC BY-SA 4.0)는 AI 가 장소 소개에 줄여 쓰므로 출처 표기가 이용 조건이고, 행정안전부
+ * LOCALDATA 는 장소 대부분의 원천이라 출처 표시가 이용 조건이다(TRIP-1678).
  */
 function DataAttribution({
   onPressOsmCopyright,
@@ -392,7 +394,8 @@ function DataAttribution({
     <View testID="settings-data-attribution" className="items-center gap-xs">
       <Text className={textClass}>데이터 출처</Text>
       <Text className={textClass}>
-        한국관광공사 TourAPI · Overture Maps Foundation
+        한국관광공사 TourAPI · 행정안전부 LOCALDATA · Overture Maps Foundation ·
+        위키백과(CC BY-SA 4.0)
       </Text>
       {onPressOsmCopyright ? (
         <Pressable
