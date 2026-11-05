@@ -1,5 +1,6 @@
 package com.trippilot.auth.application
 
+import com.trippilot.auth.api.event.LocationLegalConsentRevoked
 import com.trippilot.auth.domain.AccountId
 import com.trippilot.auth.domain.consent.ConsentAction
 import com.trippilot.auth.domain.consent.ConsentChannel
@@ -7,16 +8,24 @@ import com.trippilot.auth.domain.consent.ConsentRecord
 import com.trippilot.auth.domain.consent.MarketingConsent
 import com.trippilot.auth.domain.consent.TermsType
 import com.trippilot.auth.domain.consent.TermsVersion
+import com.trippilot.auth.domain.location.LocationConsent
+import com.trippilot.auth.domain.location.LocationLegalEvent
+import com.trippilot.auth.domain.location.LocationLegalEventType
 import com.trippilot.auth.domain.port.ConsentRecordRepository
+import com.trippilot.auth.domain.port.LocationConsentStateRepository
+import com.trippilot.auth.domain.port.LocationLegalLogRepository
 import com.trippilot.auth.domain.port.MarketingConsentRepository
 import com.trippilot.auth.domain.port.TermsVersionRepository
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.core.event.DomainEvent
+import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.core.error.ValidationFailed
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -43,6 +52,32 @@ private class FakeMarketingConsentRepository : MarketingConsentRepository {
     override fun save(consent: MarketingConsent): MarketingConsent = consent.also { stored[it.accountId] = it }
 }
 
+private class ConsentTestLocationState : LocationConsentStateRepository {
+    val stored = mutableMapOf<AccountId, LocationConsent>()
+    override fun find(accountId: AccountId) = stored[accountId]
+    override fun save(state: LocationConsent) = state.also { stored[it.accountId] = it }
+    override fun lockRouteRecordingConsent(accountId: AccountId) = false
+}
+
+private class ConsentTestLegalLog : LocationLegalLogRepository {
+    val events = mutableListOf<LocationLegalEvent>()
+    override fun append(event: LocationLegalEvent) { events.add(event) }
+    override fun purgeExpired(): Int = 0
+}
+
+private class ConsentTestEvents : DomainEventPublisher {
+    val published = mutableListOf<DomainEvent>()
+    override fun publish(event: DomainEvent) { published += event }
+}
+
+/** 위치 L2 동기화(TRIP-1800)를 들여다볼 수 있는 대역 묶음. */
+private class LocationSide(terms: TermsVersionRepository, records: ConsentRecordRepository, clock: Clock) {
+    val state = ConsentTestLocationState()
+    val log = ConsentTestLegalLog()
+    val events = ConsentTestEvents()
+    val service = LocationConsentService(state, log, terms, records, events, clock)
+}
+
 class ConsentServiceTest : StringSpec({
 
     val now = Instant.parse("2026-07-19T00:00:00Z")
@@ -53,10 +88,21 @@ class ConsentServiceTest : StringSpec({
     fun term(type: TermsType, version: String = "1.0", reconsent: Boolean = false) =
         TermsVersion(type, version, "본문", past, reconsent)
 
-    fun fixture(terms: List<TermsVersion>): Triple<ConsentService, FakeConsentRecordRepository, FakeMarketingConsentRepository> {
+    data class WithLocation(
+        val svc: ConsentService, val records: FakeConsentRecordRepository,
+        val marketing: FakeMarketingConsentRepository, val location: LocationSide,
+    )
+
+    fun fixtureWithLocation(terms: List<TermsVersion>): WithLocation {
+        val termsRepo = FakeTermsVersionRepository(terms.toMutableList())
         val records = FakeConsentRecordRepository()
         val marketing = FakeMarketingConsentRepository()
-        val svc = ConsentService(FakeTermsVersionRepository(terms.toMutableList()), records, marketing, clock)
+        val location = LocationSide(termsRepo, records, clock)
+        return WithLocation(ConsentService(termsRepo, records, marketing, location.service, clock), records, marketing, location)
+    }
+
+    fun fixture(terms: List<TermsVersion>): Triple<ConsentService, FakeConsentRecordRepository, FakeMarketingConsentRepository> {
+        val (svc, records, marketing, _) = fixtureWithLocation(terms)
         return Triple(svc, records, marketing)
     }
 
@@ -138,9 +184,9 @@ class ConsentServiceTest : StringSpec({
             override fun withZone(zone: java.time.ZoneId) = this
         }
         val records = FakeConsentRecordRepository()
+        val termsRepo = FakeTermsVersionRepository(mutableListOf(term(TermsType.PRIVACY_POLICY, "2.0", reconsent = true)))
         val svc = ConsentService(
-            FakeTermsVersionRepository(mutableListOf(term(TermsType.PRIVACY_POLICY, "2.0", reconsent = true))),
-            records, FakeMarketingConsentRepository(), ticking,
+            termsRepo, records, FakeMarketingConsentRepository(), LocationSide(termsRepo, records, ticking).service, ticking,
         )
         svc.changeConsent(account, TermsType.PRIVACY_POLICY, ConsentAction.GRANT, "2.0")   // 최초 동의
         svc.changeConsent(account, TermsType.PRIVACY_POLICY, ConsentAction.REVOKE, "2.0")  // 철회
@@ -215,5 +261,91 @@ class ConsentServiceTest : StringSpec({
         svc.submitOnboarding(account, submissions)
         svc.submitOnboarding(account, submissions)
         records.appended shouldHaveSize 2
+    }
+
+    // ── TRIP-1800: 약관 경로의 위치 약관 동의가 위치 L2 에 반영된다 ──────────────────────────────
+
+    val withLocationTerms = baseTerms + term(TermsType.LOCATION_TERMS)
+    val onboardingWithLocation = listOf(
+        ConsentSubmission(TermsType.TERMS_OF_SERVICE, "1.0", ConsentAction.GRANT),
+        ConsentSubmission(TermsType.PRIVACY_POLICY, "1.0", ConsentAction.GRANT),
+        ConsentSubmission(TermsType.LOCATION_TERMS, "1.0", ConsentAction.GRANT),
+    )
+
+    "온보딩에서 위치 약관에 동의하면 L2 가 켜지고 법정 로그가 채널 ONBOARDING 으로 1줄 남는다" {
+        val f = fixtureWithLocation(withLocationTerms)
+
+        f.svc.submitOnboarding(account, onboardingWithLocation)
+
+        f.location.state.stored[account]?.legalConsent shouldBe true
+        f.location.log.events.map { it.eventType } shouldBe listOf(LocationLegalEventType.CONSENT_GRANTED)
+        f.location.log.events.single().detail["channel"] shouldBe ConsentChannel.ONBOARDING.name
+        // 증적은 약관 경로가 남긴 1줄뿐 — 동기화가 SETTINGS 증적을 덧붙이지 않는다
+        f.records.appended.filter { it.termsType == TermsType.LOCATION_TERMS }.map { it.channel } shouldBe listOf(ConsentChannel.ONBOARDING)
+    }
+
+    "온보딩을 두 번 제출해도 위치 법정 로그는 1줄" {
+        val f = fixtureWithLocation(withLocationTerms)
+
+        f.svc.submitOnboarding(account, onboardingWithLocation)
+        f.svc.submitOnboarding(account, onboardingWithLocation)
+
+        f.location.log.events shouldHaveSize 1
+    }
+
+    "이미 설정에서 L2 를 켠 계정의 온보딩 동의는 법정 로그를 더하지 않는다" {
+        val f = fixtureWithLocation(withLocationTerms)
+        f.location.service.update(account, legalConsent = true, gpsRecordingOptIn = null)
+        val logged = f.location.log.events.size
+
+        f.svc.submitOnboarding(account, onboardingWithLocation)
+
+        f.location.log.events shouldHaveSize logged
+        f.location.state.stored[account]?.legalConsent shouldBe true
+    }
+
+    "증적은 GRANT 인데 L2 가 꺼진 계정은 같은 동의를 다시 보내면 맞춰진다 — 증적은 늘지 않는다" {
+        val f = fixtureWithLocation(withLocationTerms)
+        // 백필 뒤 옛 파드가 받은 가입처럼: 증적만 있고 L2 는 꺼져 있다
+        f.records.append(ConsentRecord.of(account, TermsType.LOCATION_TERMS, "1.0", ConsentAction.GRANT, ConsentChannel.ONBOARDING, now))
+
+        f.svc.submitOnboarding(account, onboardingWithLocation)
+
+        f.location.state.stored[account]?.legalConsent shouldBe true
+        f.location.log.events shouldHaveSize 1
+        f.records.appended.filter { it.termsType == TermsType.LOCATION_TERMS } shouldHaveSize 1
+    }
+
+    "L2 가 켜진 계정의 새 버전 재동의는 증적만 남고 법정 로그는 더하지 않는다" {
+        val f = fixtureWithLocation(listOf(term(TermsType.LOCATION_TERMS, "1.1", reconsent = true)))
+        f.records.append(ConsentRecord.of(account, TermsType.LOCATION_TERMS, "1.0", ConsentAction.GRANT, ConsentChannel.ONBOARDING, now))
+        f.location.state.save(LocationConsent.initial(account, now).withLegalConsent(true, now))
+
+        f.svc.changeConsent(account, TermsType.LOCATION_TERMS, ConsentAction.GRANT, "1.1")
+
+        f.records.appended.last().channel shouldBe ConsentChannel.RECONSENT
+        f.location.log.events shouldHaveSize 0
+        f.location.state.stored[account]?.legalConsent shouldBe true
+    }
+
+    "개별 변경으로 위치 약관을 철회하면 L2 가 꺼지고 좌표 파기 신호가 나간다" {
+        val f = fixtureWithLocation(withLocationTerms)
+        f.svc.submitOnboarding(account, onboardingWithLocation)
+
+        f.svc.changeConsent(account, TermsType.LOCATION_TERMS, ConsentAction.REVOKE, "1.0")
+
+        f.location.state.stored[account]?.legalConsent shouldBe false
+        f.location.log.events.map { it.eventType } shouldBe
+            listOf(LocationLegalEventType.CONSENT_GRANTED, LocationLegalEventType.CONSENT_REVOKED)
+        f.location.events.published.single().shouldBeInstanceOf<LocationLegalConsentRevoked>()
+    }
+
+    "위치 약관이 아닌 동의는 위치 상태를 만들지 않는다" {
+        val f = fixtureWithLocation(withLocationTerms)
+
+        f.svc.submitOnboarding(account, onboardingWithLocation.filter { it.termsType != TermsType.LOCATION_TERMS })
+
+        f.location.state.stored shouldBe emptyMap()
+        f.location.log.events shouldHaveSize 0
     }
 })
