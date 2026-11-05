@@ -207,6 +207,25 @@ def test_weather_turn_without_a_trip_asks_at_the_device_location() -> None:
     assert "37.57" not in json.dumps(res.json())  # 좌표를 응답(→ 저장되는 도우미 행)으로 되돌려 싣지 않는다
 
 
+def test_each_turn_logs_its_intent_and_outcome_without_the_utterance_or_coordinates(caplog: pytest.LogCaptureFixture) -> None:
+    """운영에서 "오늘 날씨 그대로야"를 두 번 쫓았는데 그 턴이 무슨 의도·결과였는지 로그에 없었다(섀도는 표본만 남긴다, 11-04·05).
+    턴마다 한 줄 — 의도·결과·여행·현재 위치 **유무**만. 발화 원문·account_ref·좌표는 싣지 않는다(SEC-U8-06)."""
+    client = _client({_INTENT: _intent_json("GET_WEATHER"), _ANSWER: _answer_json("오늘 서울은 비 올 확률이 80%예요.")})
+    no_trip = _body("오늘 날씨 어때")
+    no_trip["context"] = {"surface": "HOME", "trip": None, "base_stays": [], "itinerary": None}
+    here = _body("오늘 날씨 어때")
+    here["context"] = {**no_trip["context"], "device_location": {"lat": 37.57, "lng": 126.982}}
+    with caplog.at_level(logging.INFO, logger="trippilot.api.dialogue"):
+        for body in (no_trip, here):
+            assert client.post(URL, json=body).status_code == 200
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("dialogue_turn {")]
+    asked, answered = (json.loads(line.removeprefix("dialogue_turn ")) for line in lines)
+    assert asked == {"event": "dialogue_turn", "trace_id": asked["trace_id"], "outcome": "ARGUMENT_CLARIFY", "intent": "GET_WEATHER",
+                     "route": "LLM_DIRECT", "answer_kind": None, "clarify": "region", "trip": False, "here": False, "llm_calls": 1}
+    assert (answered["outcome"], answered["answer_kind"], answered["here"]) == ("ANSWER", "INFO", True)
+    assert not any(s in line for line in lines for s in ("오늘 날씨", _ACCOUNT, "37.57", "126.98"))
+
+
 def test_alternative_turn_returns_candidates_only_from_the_in_memory_pool() -> None:
     client = _client({_INTENT: _intent_json("SUGGEST_ALTERNATIVE", target="우도"),
                       _ANSWER: _answer_json("우도 대신 갈 만한 곳을 골라 봤어요. 마음에 드는 곳을 눌러 바꿀 수 있어요.")})

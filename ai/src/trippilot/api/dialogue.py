@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import random
 from collections.abc import Callable, Mapping, Sequence
@@ -187,6 +188,16 @@ def interpret(
         if clock is None:
             raise ValueError("오케스트레이터 경로는 clock 필수 — started_ms 의 시계가 오케스트레이터와 같아야 한다")
         turn = orchestrator.turn(_turn_input(request, now, clock.monotonic_ms()))
+        # 턴마다 한 줄 — 섀도는 표본만 남겨 "그 턴이 무슨 의도·결과였나"를 못 봤다(운영 11-04). 원문·계정·좌표는 싣지 않는다(SEC-U8-06)
+        frame = turn.frames[0] if turn.frames else None
+        log.info("dialogue_turn %s", json.dumps({
+            "event": "dialogue_turn", "trace_id": meta.request_id, "outcome": turn.outcome,
+            "intent": frame.intent.value if frame else None, "route": frame.match_route if frame else None,
+            "answer_kind": turn.answer.kind.value if turn.answer else None,
+            "clarify": turn.clarify.argument if turn.clarify else None,
+            "trip": request.context.trip is not None, "here": request.context.device_location is not None,
+            "llm_calls": turn.llm_calls,
+        }, ensure_ascii=False))
         return _wire(turn.outcome, turn.frames, turn.clarify, turn.context, turn.llm_calls, turn.answer)
     result = interpreter.interpret(
         request.utterance,
