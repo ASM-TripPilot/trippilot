@@ -342,6 +342,9 @@ def _replan(tweak_task=lambda task: task, **over):
             seen["rag"].append(request)
             return real_rag.run(request)
 
+        def warm_docs(self, user_request, reason):
+            real_rag.warm_docs(user_request, reason)
+
     object.__setattr__(orchestrator, "_schedule_agent", _Spy())
     object.__setattr__(orchestrator, "_rag", _RagSpy())
     with TestClient(app, raise_server_exceptions=False) as client:

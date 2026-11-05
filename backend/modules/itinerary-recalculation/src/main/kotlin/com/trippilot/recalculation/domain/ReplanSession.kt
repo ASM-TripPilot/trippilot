@@ -284,4 +284,10 @@ interface ReplanSessionRepository {
 
     /** [since] 이후 연 선계산 세션 수 — 하루 상한(BR-SA-18). [tripId] 가 null 이면 전체. */
     fun countSystemSince(tripId: UUID?, since: Instant): Int
+
+    /**
+     * 그 날짜에 반영됐고 되돌리지 않은 세션, 최근 반영(`closedAt`) 먼저 — 다음 재계획이 앞 요청으로 싣는다(F-8).
+     * 되돌린 세션(`revertedAt` 있음)은 그 요청이 일정에서 물러났으니 뺀다.
+     */
+    fun findAppliedOn(tripId: UUID, targetDate: LocalDate): List<ReplanSession>
 }

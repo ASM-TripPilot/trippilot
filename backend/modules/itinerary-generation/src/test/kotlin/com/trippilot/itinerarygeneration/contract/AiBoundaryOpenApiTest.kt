@@ -12,6 +12,8 @@ import com.trippilot.itinerarygeneration.adapter.out.external.AiEditResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiExplanationsRequest
 import com.trippilot.itinerarygeneration.adapter.out.external.AiExplanationsResponse
 import com.trippilot.itinerarygeneration.adapter.out.external.AiFreshness
+import com.trippilot.itinerarygeneration.adapter.out.external.AiDeferredPlace
+import com.trippilot.itinerarygeneration.adapter.out.external.AiPriorRequest
 import com.trippilot.itinerarygeneration.adapter.out.external.AiReplanEmptyReason
 import com.trippilot.itinerarygeneration.adapter.out.external.AiReplanRequest
 import com.trippilot.itinerarygeneration.adapter.out.external.AiReplanResponse
@@ -329,11 +331,13 @@ class AiBoundaryOpenApiTest : StringSpec({
         wireKeys(sampleReplanRequest.savedPlaces.single()) shouldContainExactly props("SavedPlaceSchema")
         wireKeys(sampleReplanRequest.lockedBlocks.single()) shouldContainExactly props("FixedBlockSchema")
         wireKeys(sampleReplanRequest.changeLog.single()) shouldContainExactly props("ChangeLogEntrySchema")
+        wireKeys(sampleReplanRequest.priorRequests.single()) shouldContainExactly props("PriorRequestSchema")
     }
 
     "replan 응답 키가 계약과 정확히 일치한다 — 개명되면 거리·사유가 조용히 사라진다" {
         wireKeys(sampleReplanResponse) shouldContainExactly props("ReplanResponse")
         wireKeys(requireNotNull(sampleReplanResponse.emptyReason)) shouldContainExactly props("ReplanEmptyReasonSchema")
+        wireKeys(sampleReplanResponse.deferredPlaces.single()) shouldContainExactly props("DeferredPlaceSchema")
     }
 
     /**
@@ -535,6 +539,8 @@ private val sampleReplanRequest = AiReplanRequest(
             listOf(UUID.randomUUID().toString()), listOf(UUID.randomUUID().toString()),
         ),
     ),
+    // 비면 키째 빠진다(NON_EMPTY) — 표본은 채워 그 키의 이름·모양을 잰다
+    priorRequests = listOf(AiPriorRequest("NIGHTLIFE · 클럽 넣어줘", listOf(UUID.randomUUID().toString()))),
 )
 
 /** 응답 표본도 전부 채운다 — 비운 칸은 직렬화에서 빠져 "그 필드를 안 읽는다"가 통과해 버린다. */
@@ -548,6 +554,8 @@ private val sampleReplanResponse = AiReplanResponse(
     resolvedDirectives = listOf("INDOOR"),
     unknownDirectives = listOf("뭐시기"),
     retrieved = mapOf("kb1" to 3),
+    requestedPoiIds = listOf(UUID.randomUUID().toString()),
+    deferredPlaces = listOf(AiDeferredPlace(UUID.randomUUID().toString(), "서울광장", LocalDate.parse("2026-08-02"))),
 )
 
 /** 모든 필드를 채운다 — 비운 칸은 직렬화에서 빠져 "그 필드를 안 읽는다"가 통과해 버린다. */

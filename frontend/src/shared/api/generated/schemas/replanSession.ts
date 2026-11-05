@@ -8,6 +8,7 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { ReplanDeferredPlace } from './replanDeferredPlace';
 import type { ReplanSessionInitiatedBy } from './replanSessionInitiatedBy';
 import type { ReplanSessionOriginKind } from './replanSessionOriginKind';
 import type { ReplanSessionScope } from './replanSessionScope';
@@ -45,4 +46,6 @@ export interface ReplanSession {
   revertedAt?: string | null;
   /** [되돌리기]를 그릴 수 있는가 — 반영됐고, 아직 안 되돌렸고, 되돌리기 지점이 있다(이 기능 이전 반영분은 false). true 여도 누르면 409 일 수 있다 — 지난 날·되돌리면 빠지는 곳의 방문 기록·그 사이 바뀐 일정은 누르는 순간에만 판정한다 */
   revertible?: boolean;
+  /** 다른 날 요청이라 이 날에 넣지 않은 갈 곳(자유입력 "서울광장 꼭, 2일차에" — U4 BR [추가 · 2026-11-05]). 앱이 "‘서울광장’은 11월 6일(2일차) 요청이라 이번엔 넣지 않았어요 [2일차에 넣어 다시 짜기]"를 그리고, 탭하면 targetDate=그 날 · FULL_DAY · freeText="{name} 꼭"(날 말 없는 문장)으로 새 세션을 연다 — 원문을 보내면 "내일"이 누르는 날 기준으로 다시 환산돼 하루 더 밀린다. 지난 날은 오지 않는다. 초안이 없으면(산출 중·대안 없음) 빈 목록 — 반영 뒤에도 실린다 */
+  deferredPlaces?: ReplanDeferredPlace[];
 }

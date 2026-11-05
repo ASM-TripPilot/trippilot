@@ -437,6 +437,32 @@
         "title": "DayScheduleSchema",
         "type": "object"
       },
+      "DeferredPlaceSchema": {
+        "additionalProperties": false,
+        "description": "다른 날 가겠다고 해서 이 날에 넣지 않은 곳 (F-7) — 앱이 '그 날에 넣어 다시 짜기' 한 탭을 그린다.\n\n`name` 은 등록 POI 이름이다(사용자가 쓴 말이 아니다). `date` 는 여행 날짜로 환산한 그 날이다.",
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "poi_id": {
+            "title": "Poi Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "poi_id",
+          "name",
+          "date"
+        ],
+        "title": "DeferredPlaceSchema",
+        "type": "object"
+      },
       "DialogueAnswerSchema": {
         "additionalProperties": false,
         "description": "오케스트레이터가 AI 안에서 끝낸 답 (outcome `ANSWER`, assistant-orchestrator FD DE §2.3·§3.2).\n\n문장의 시각·거리는 facts(Provider·스냅샷 검증값)에서만 온다(INV-2) — 소요시간 필드는 없다(INV-3).\n`text` 상한 600 은 게이트 상한(400) + 와이어 여유다.",
@@ -1921,6 +1947,28 @@
         "title": "PreferenceProfileSchema",
         "type": "object"
       },
+      "PriorRequestSchema": {
+        "additionalProperties": false,
+        "description": "같은 날 반영된(되돌리지 않은) 앞 다시 짜기 한 건 (F-8 — 요청 간 기억 정식안).\n\n`kept_poi_ids` 는 그 회차 응답의 `requested_poi_ids` 를 BE 가 세션에 남겼다가 되싣는 것이다 — 그 회차가 **요청 때문에**\n넣은 곳(이름으로 집은 곳·밤에 놀기·한 곳 추가·그때 이어받은 기억). `text` 는 그 회차의 사유 한 줄(BE `changeReason` —\n칩 키·자유입력을 ` · ` 로 이은 것, `change_log.reason` 과 같은 줄)이다. 읽는 것은 아직 id 뿐이다.",
+        "properties": {
+          "kept_poi_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30,
+            "title": "Kept Poi Ids",
+            "type": "array"
+          },
+          "text": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "title": "PriorRequestSchema",
+        "type": "object"
+      },
       "ReflectionGenerateRequest": {
         "additionalProperties": false,
         "description": "회고 템플릿 생성 요청 — visits ≥ 1 (0건은 트리거 단에서 미발생, 이중 방어는 도메인).",
@@ -2452,6 +2500,14 @@
           "preference_profile": {
             "$ref": "#/components/schemas/PreferenceProfileSchema"
           },
+          "prior_requests": {
+            "items": {
+              "$ref": "#/components/schemas/PriorRequestSchema"
+            },
+            "maxItems": 20,
+            "title": "Prior Requests",
+            "type": "array"
+          },
           "reasons": {
             "items": {
               "type": "string"
@@ -2550,6 +2606,13 @@
         "additionalProperties": false,
         "description": "재계획안 1안. 못 만들면 `itinerary=null` + `empty_reason` (200, IO-7).\n\n`diff` 는 여기 없다 — `i08` 의 \"바뀐 곳 1 · 이동 −6.9km\" 는 `ReplanDiffService` 가\n이미 백엔드에 있고, 원 일정을 가진 쪽이 만드는 것이 맞다.",
         "properties": {
+          "deferred_places": {
+            "items": {
+              "$ref": "#/components/schemas/DeferredPlaceSchema"
+            },
+            "title": "Deferred Places",
+            "type": "array"
+          },
           "empty_reason": {
             "anyOf": [
               {
@@ -2585,6 +2648,13 @@
               "type": "string"
             },
             "title": "Notes",
+            "type": "array"
+          },
+          "requested_poi_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requested Poi Ids",
             "type": "array"
           },
           "resolved_directives": {

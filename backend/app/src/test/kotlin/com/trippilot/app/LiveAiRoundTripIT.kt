@@ -212,6 +212,8 @@ class LiveAiRoundTripIT : AbstractPostgresIntegrationTest() {
             ReplanInput(
                 tripId = UUID.randomUUID(), itineraryId = UUID.randomUUID(),
                 scope = ReplanScope.PARTIAL_SLOTS, destinations = listOf("제주"), fromInstant = Instant.now(), targetDate = today,
+                // 여행 기간 — 상대가 "2일차에"를 이 기간으로 환산한다(F-6). 실물이 받는지도 같이 본다.
+                tripStartDate = today, tripEndDate = today.plusDays(2),
                 // 창은 서비스가 정한 값을 싣는다(ReplanFacadeService.replanWindow) — 여기는 설정 없는 여행의 다른 날과 같은 값.
                 windowStart = LocalTime.parse("09:00"), windowEnd = LocalTime.parse("21:00"),
                 originLat = 33.45, originLng = 126.56, stayLat = null, stayLng = null, lockedBlocks = listOf(FixedBlock(poi, today, LocalTime.parse("09:00"), 60)),

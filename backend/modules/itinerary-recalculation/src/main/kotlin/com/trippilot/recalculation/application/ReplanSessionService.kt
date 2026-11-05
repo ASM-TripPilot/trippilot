@@ -21,6 +21,7 @@ import com.trippilot.recalculation.domain.ReplanSession
 import com.trippilot.recalculation.domain.ReplanSessionRepository
 import com.trippilot.recalculation.domain.Staleness
 import com.trippilot.core.event.DomainEventPublisher
+import com.trippilot.itinerarygeneration.api.DeferredPlace
 import com.trippilot.itinerarygeneration.api.ReplanCommand
 import com.trippilot.itinerarygeneration.api.ReplanFacade
 import com.trippilot.itinerarygeneration.api.ReplanProposal
@@ -85,8 +86,11 @@ sealed interface Prepared {
 /** 선계산을 건너뛴 까닭(BR-SA-18). [BUSY] 는 실행 자리를 못 얻어 세션을 열지도 않은 것이다(상한·트리거당 1회를 쓰지 않는다). */
 enum class PrepareSkip { DUPLICATE, TRIP_CAP, GLOBAL_CAP, INVALID, OPEN_SESSION, EARLIER_OPEN, BUSY }
 
-/** 세션 + 낡음(BR-SA-19) — 화면 응답의 `stale` 과 적용 거절이 같은 판정을 쓴다. */
-data class SessionView(val session: ReplanSession, val stale: Boolean)
+/**
+ * 세션 + 낡음(BR-SA-19) — 화면 응답의 `stale` 과 적용 거절이 같은 판정을 쓴다.
+ * [deferredPlaces] = 초안이 다른 날 요청이라 이 날에 넣지 않은 갈 곳(F-7) — 앱이 '그 날에 넣어 다시 짜기'를 그린다. 초안이 없으면 빈 목록.
+ */
+data class SessionView(val session: ReplanSession, val stale: Boolean, val deferredPlaces: List<DeferredPlace>)
 
 /**
  * 재계획 세션 수명 관리(C10 · LC-U4-4).
@@ -266,7 +270,11 @@ class ReplanSessionService(
     /** 응답용 — 세션과 낡음(BR-SA-19). 사용자 세션은 읽기 없이 늘 낡지 않음이다. */
     @Transactional(readOnly = true)
     fun view(accountId: UUID, session: ReplanSession): SessionView =
-        SessionView(session, stalenessOf(accountId, session, clock.instant()) != null)
+        SessionView(
+            session, stalenessOf(accountId, session, clock.instant()) != null,
+            // 반영 뒤에도 싣는다 — 원탭 [다시 짜기]는 초안을 보자마자 반영해 앱은 반영된 세션으로 결과를 그린다
+            session.draft?.let { runCatching { ReplanProposal.fromMap(it).deferredPlaces }.getOrNull() }.orEmpty(),
+        )
 
     /** 진입 판정 결과 — 시작과 선계산이 같은 값으로 세션을 연다. */
     private class Entry(
@@ -513,30 +521,6 @@ class ReplanSessionService(
         }
     }
 
-    /**
-     * 이력의 `reason` 한 줄(BR-U4-31) — 진입 경로 + 사유 + 방향 지시어 + 자유입력을 ` · ` 로 잇는다.
-     * 예: `자동 감지 · 비 예보 · 실내로`.
-     *
-     * **비워서 넘기지 않는다.** 사유·지시어를 하나도 안 고른 수동 진입이면 최소한 "여행 중 재계획"이라도 남긴다 —
-     * 빈 칸은 이력을 열었을 때 "왜 바꿨는지"를 되짚을 근거를 없앤다(US-PLANB-09 의 목적 자체).
-     *
-     * 트리거 **요약**(예: `날씨(비 예보 70%)`)까지는 싣지 않는다 — 그 문구는 C9(planb-detection) 소유이고, C10 이 C9 에서
-     * 읽는 것은 진입 날짜 강제용 사실(`TriggerLookupFacade` — kind·상태·날짜)뿐이다. 자동 진입이라는 사실만 `triggerId`
-     * 유무로 남긴다(정본 §7 대비 축약 — 문구가 필요해지면 그때 그 계약을 넓힌다).
-     *
-     * **AI 가 이 줄을 읽는다**(다음 재계획의 `change_log.reason`) — 같은 날 앞 요청 기억(AI `wiring._prior_requested`)이
-     * ` · ` 로 나눠 칩 키를 찾고 밤 낱말을 본다. 구분자·칩 키(화면 값 그대로)·자유입력 포함을 바꾸면 그쪽도 같이 고친다.
-     */
-    private fun changeReason(session: ReplanSession): String {
-        val parts = buildList {
-            if (session.triggerId != null) add("자동 감지")
-            addAll(session.reasons)
-            addAll(session.directives)
-            session.freeText?.takeIf { it.isNotBlank() }?.let { add(it.trim()) }
-        }.filter { it.isNotBlank() }
-        return parts.joinToString(REASON_SEPARATOR).ifBlank { DEFAULT_REASON }.take(REASON_MAX)
-    }
-
     @Transactional(readOnly = true)
     fun get(accountId: UUID, tripId: UUID, sessionId: UUID): ReplanSession = owned(accountId, tripId, sessionId, sessions::findById)
 
@@ -579,19 +563,11 @@ class ReplanSessionService(
         /** 여행 "오늘"은 사용자가 있는 곳의 날짜지, 서버 UTC 날짜가 아니다. */
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
 
-        private const val REASON_SEPARATOR = " · "
-
         /**
          * 되돌리기 이력의 사유 머리 — 뒤에 무엇을 되돌렸는지(원래 사유)를 잇는다(BR-U4-31 — 비워 두지 않는다).
          * **AI 가 이 머리로 되돌림을 가른다**(`wiring._REVERT_PREFIX` — 되돌린 다시 짜기가 뺀 앞 요청 기억을 되살린다). 바꾸면 같이 고친다.
          */
         private const val REVERT_PREFIX = "재계획 되돌림"
-
-        /** 사유·지시어를 하나도 안 고른 수동 진입의 최소 문구 — 빈 칸으로 남기지 않는다(BR-U4-31). */
-        private const val DEFAULT_REASON = "여행 중 재계획"
-
-        /** `change_log_entry.reason` 은 varchar(500) — 넘치면 저장이 통째로 실패한다(자유입력이 길 수 있다). */
-        private const val REASON_MAX = 500
 
         /** 전날 창 밖의 여행 전 진입·적용(BR-SA-20 ②③). */
         private const val PRE_TRIP_ONLY = "여행 전날에는 알림으로 받은 첫날 일정만 다시 짤 수 있어요."
@@ -604,3 +580,37 @@ class ReplanSessionService(
         private val USER_GRACE: Duration = Duration.ofMinutes(30)
     }
 }
+
+/**
+ * 이력의 `reason` 한 줄(BR-U4-31) — 진입 경로 + 사유 + 방향 지시어 + 자유입력을 ` · ` 로 잇는다.
+ * 예: `자동 감지 · 비 예보 · 실내로`.
+ *
+ * **비워서 넘기지 않는다.** 사유·지시어를 하나도 안 고른 수동 진입이면 최소한 "여행 중 재계획"이라도 남긴다 —
+ * 빈 칸은 이력을 열었을 때 "왜 바꿨는지"를 되짚을 근거를 없앤다(US-PLANB-09 의 목적 자체).
+ *
+ * 트리거 **요약**(예: `날씨(비 예보 70%)`)까지는 싣지 않는다 — 그 문구는 C9(planb-detection) 소유이고, C10 이 C9 에서
+ * 읽는 것은 진입 날짜 강제용 사실(`TriggerLookupFacade` — kind·상태·날짜)뿐이다. 자동 진입이라는 사실만 `triggerId`
+ * 유무로 남긴다(정본 §7 대비 축약 — 문구가 필요해지면 그때 그 계약을 넓힌다).
+ *
+ * 다음 재계획이 같은 날 반영 세션의 앞 요청(`prior_requests.text`, F-8)으로도 이 줄을 싣는다([ReplanSolver]).
+ *
+ * **AI 가 이 줄을 읽는다**(다음 재계획의 `change_log.reason`) — 같은 날 앞 요청 기억(AI `wiring._prior_requested`)이
+ * ` · ` 로 나눠 칩 키를 찾고 밤 낱말을 본다. 구분자·칩 키(화면 값 그대로)·자유입력 포함을 바꾸면 그쪽도 같이 고친다.
+ */
+internal fun changeReason(session: ReplanSession): String {
+    val parts = buildList {
+        if (session.triggerId != null) add("자동 감지")
+        addAll(session.reasons)
+        addAll(session.directives)
+        session.freeText?.takeIf { it.isNotBlank() }?.let { add(it.trim()) }
+    }.filter { it.isNotBlank() }
+    return parts.joinToString(REASON_SEPARATOR).ifBlank { DEFAULT_REASON }.take(REASON_MAX)
+}
+
+private const val REASON_SEPARATOR = " · "
+
+/** 사유·지시어를 하나도 안 고른 수동 진입의 최소 문구 — 빈 칸으로 남기지 않는다(BR-U4-31). */
+private const val DEFAULT_REASON = "여행 중 재계획"
+
+/** `change_log_entry.reason` 은 varchar(500) — 넘치면 저장이 통째로 실패한다(자유입력이 길 수 있다). */
+private const val REASON_MAX = 500

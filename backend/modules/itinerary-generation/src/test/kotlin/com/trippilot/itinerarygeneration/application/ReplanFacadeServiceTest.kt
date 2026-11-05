@@ -11,6 +11,8 @@ import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import io.kotest.matchers.shouldNotBe
 import com.trippilot.placedata.api.RegionCenter
 import com.trippilot.placedata.api.RegionLookupFacade
+import com.trippilot.itinerarygeneration.api.DeferredPlace
+import com.trippilot.itinerarygeneration.api.PriorReplan
 import com.trippilot.itinerarygeneration.api.ReplanCommand
 import com.trippilot.itinerarygeneration.api.ReplanProposal
 import com.trippilot.itinerarygeneration.api.ReplanSlot
@@ -34,6 +36,8 @@ import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripPeriod
 import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.itinerarygeneration.domain.ReplanInput
+import com.trippilot.itinerarygeneration.domain.ReplanDeferredPlace
+import com.trippilot.itinerarygeneration.domain.ReplanPriorRequest
 import com.trippilot.itinerarygeneration.domain.SavedPlaceRef
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.SolveMode
@@ -118,7 +122,10 @@ class ReplanFacadeServiceTest : StringSpec({
         scoring = ScoringSignal(ScoringMode.LLM, listOf("weather:weather_error")),
     )
 
-    class Agent(val days: List<DaySchedule>, val totalDistanceKm: Double? = null) : StubScheduleAgent() {
+    class Agent(
+        val days: List<DaySchedule>, val totalDistanceKm: Double? = null,
+        val requestedPoiIds: List<UUID>? = null, val deferredPlaces: List<ReplanDeferredPlace> = emptyList(),
+    ) : StubScheduleAgent() {
         val inputs = mutableListOf<ReplanInput>()
         override fun replan(input: ReplanInput): ScheduleAgentOutput {
             inputs += input
@@ -127,6 +134,8 @@ class ReplanFacadeServiceTest : StringSpec({
                 solveMode = SolveMode.DETERMINISTIC, isFallback = false,
                 freshness = FreshnessMeta(Instant.parse("2026-08-11T06:00:00Z"), degraded = false),
                 totalDistanceKm = totalDistanceKm,
+                requestedPoiIds = requestedPoiIds,
+                deferredPlaces = deferredPlaces,
             )
         }
     }
@@ -946,6 +955,70 @@ class ReplanFacadeServiceTest : StringSpec({
         val svc = fixture(agent).svc
 
         svc.propose(command())!!.totalDistanceKm shouldBe 6.9
+    }
+
+    // F-6 — AI 는 "2일차에"를 trip_context 기간으로 환산한다. 그날 하루만 보내면 '2일차'가 늘 여행 밖이라 다른 날 요청이 이 날에 들어갔다.
+    // F-8 — 앞 요청은 C10 이 세션에서 모아 명령으로 넘기고, 여기는 그대로 싣는다.
+    "재계획 입력에 여행 기간과 앞 요청이 실린다" {
+        val kept = UUID.randomUUID()
+        val agent = Agent(proposal(replacement))
+
+        fixture(agent).svc.propose(command().copy(priorRequests = listOf(PriorReplan("클럽 넣어줘", listOf(kept)))))
+
+        val sent = agent.inputs.single()
+        sent.tripStartDate shouldBe today
+        sent.tripEndDate shouldBe today.plusDays(1)
+        sent.priorRequests shouldBe listOf(ReplanPriorRequest("클럽 넣어줘", listOf(kept)))
+    }
+
+    /** 요청한 곳은 다음 재계획의 앞 요청이 되고, 미룬 곳은 앱의 '그 날에 넣어 다시 짜기'가 된다 — 초안에서 새면 둘 다 조용히 사라진다. */
+    "AI 가 준 요청한 곳·미룬 곳이 초안까지 간다 — 모르면 null 그대로" {
+        val later = UUID.randomUUID()
+        val deferred = ReplanDeferredPlace(later, "서울광장", today.plusDays(1))
+        val draft = fixture(Agent(proposal(replacement), requestedPoiIds = listOf(replacement), deferredPlaces = listOf(deferred)))
+            .svc.propose(command())!!
+
+        draft.requestedPoiIds shouldBe listOf(replacement)
+        draft.deferredPlaces shouldBe listOf(DeferredPlace(later, "서울광장", today.plusDays(1)))
+        fixture(Agent(proposal(replacement))).svc.propose(command())!!.requestedPoiIds.shouldBeNull()
+    }
+
+    "초안 왕복이 요청한 곳·미룬 곳도 지킨다 — null 과 빈 목록을 가른다" {
+        val base = ReplanProposal(UUID.randomUUID(), today, emptyList())
+        fun throughJsonb(p: ReplanProposal) = ReplanProposal.fromMap(jsonb(p.toMap()))
+        val full = base.copy(
+            requestedPoiIds = listOf(replacement, evening),
+            deferredPlaces = listOf(DeferredPlace(UUID.randomUUID(), "서울광장", today.plusDays(1))),
+        )
+
+        throughJsonb(full) shouldBe full
+        // 빈 목록은 "요청한 곳 없음"이라는 새 AI 의 사실이다 — 키 없음(= AI 가 몰랐다)으로 접히면 다음 재계획이 앞 요청을 못 싣는다
+        throughJsonb(base.copy(requestedPoiIds = emptyList())).requestedPoiIds shouldBe emptyList()
+        throughJsonb(base).requestedPoiIds.shouldBeNull()
+        base.toMap().containsKey("requestedPoiIds") shouldBe false
+        base.toMap().containsKey("deferredPlaces") shouldBe false
+    }
+
+    "옛 초안·손으로 고친 초안도 읽는다 — 틀린 한 건만 버린다" {
+        val ok = UUID.randomUUID()
+        val raw = mapOf<String, Any>(
+            "itineraryId" to UUID.randomUUID().toString(),
+            "date" to today.toString(),
+            "slots" to emptyList<Map<String, Any>>(),
+            "requestedPoiIds" to listOf(ok.toString(), "nope"),
+            "deferredPlaces" to listOf(
+                mapOf("poiId" to ok.toString(), "name" to "서울광장", "date" to "2026-08-12"),
+                mapOf("poiId" to "bad", "name" to "x", "date" to "2026-08-12"),
+                mapOf("poiId" to ok.toString(), "name" to "x", "date" to "언젠가"),
+            ),
+        )
+
+        val read = ReplanProposal.fromMap(raw)
+        read.requestedPoiIds shouldBe listOf(ok)
+        read.deferredPlaces shouldBe listOf(DeferredPlace(ok, "서울광장", LocalDate.parse("2026-08-12")))
+        val legacy = ReplanProposal.fromMap(raw - "requestedPoiIds" - "deferredPlaces")
+        legacy.requestedPoiIds.shouldBeNull()
+        legacy.deferredPlaces shouldBe emptyList()
     }
 
     "재계획 요청이 실제 취향·동반·예산·원 일정·담은 장소를 싣는다 — 중립으로 덮지 않는다(B-1)" {

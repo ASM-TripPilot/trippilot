@@ -100,6 +100,24 @@ class ReplanSessionPersistenceIT : AbstractPostgresIntegrationTest() {
         sessions.findById(drafted.sessionId)!!.draft shouldBe mapOf("days" to listOf("2026-08-11"))
     }
 
+    /** F-8 — 다음 재계획이 앞 요청으로 싣는 세션(JPA 파생 질의): 그 날 · 반영됨 · 안 되돌림, 최근 반영 먼저. */
+    @Test
+    fun `그 날 반영되고 되돌리지 않은 세션만 최근 반영 먼저 읽는다`() {
+        val tripId = newTrip()
+        val day = LocalDate.ofInstant(now, ZoneId.of("Asia/Seoul"))
+        fun applied(hours: Long, target: LocalDate = day): ReplanSession {
+            val drafted = sessions.save(start(tripId).copy(targetDate = target).solving().drafted(mapOf("requestedPoiIds" to emptyList<String>())))
+            return sessions.save(drafted.applied(now.plusSeconds(hours * 3600), emptyList(), mapOf("slots" to emptyList<Any>())))
+        }
+        val first = applied(1)
+        val second = applied(2)
+        sessions.save(applied(3).reverted(now.plusSeconds(4 * 3600)))   // 되돌림
+        applied(5, target = day.plusDays(1))                             // 다른 날
+        sessions.save(sessions.save(start(tripId)).canceled(now))         // 반영 안 됨
+
+        sessions.findAppliedOn(tripId, day).map { it.sessionId } shouldContainExactly listOf(second.sessionId, first.sessionId)
+    }
+
     @Test
     fun `빈 배열도 왕복한다 — 기본값이 null 로 새면 도메인이 깨진다`() {
         val tripId = newTrip()
