@@ -11,7 +11,7 @@
   NAVER_MAX_CALLS        일일 호출 하드캡 (기본 300 — "정확히 무료까지만")
   EVENT_REGIONS          쉼표 지역 목록 (기본 광역 17) · EVENT_REGIONS_PER_RUN (기본 3)
   EVENTS_STORE           저장소 경로 (기본 collected_events.json — collect-state 브랜치 영속)
-  LLM_PROVIDER 등        어댑터 조립은 smoke_llm 재사용 (AZUREAPIKEY 등)
+  LLM_PROVIDER 등        어댑터 조립은 smoke_llm 재사용 (anthropic — ANTHROPIC_API_KEY·ANTHROPIC_MODEL)
 
 하드캡 규약: 상한 도달 시 그 자리에서 수집을 멈추고 **정상 종료**한다 — 진행 중이던
 지역은 포인터를 안 넘겨 내일 재시도(중복은 저장소 dedup이 흡수). 상한 초과 호출 0건.
