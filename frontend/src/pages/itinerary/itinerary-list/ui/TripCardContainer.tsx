@@ -184,10 +184,11 @@ export function TripCardContainer({
       pinDisabled={pinDisabled}
       onTogglePin={
         onTogglePin
-          ? () => {
+          ? // 통합 QA D1 — 고정하면 메뉴가 닫히고 순서가 바뀌어 연타 둘째 탭이 그 자리 카드를 연다. 창을 연다.
+            guardPress(() => {
               setMenuOpen(false);
               onTogglePin();
-            }
+            })
           : undefined
       }
       onPressRecords={ended ? onPressRecords : undefined}

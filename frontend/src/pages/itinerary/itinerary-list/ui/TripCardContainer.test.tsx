@@ -766,6 +766,32 @@ describe('🔴 TRIP-1786 · ⋯ 메뉴 항목 — 노출 조건 · 설정 이동
     }
   );
 
+  // 통합 QA D1(11-06) — 고정하면 메뉴가 닫히고 목록 순서가 바뀐다. 연타의 둘째 탭은 그 자리에 온 카드 본문에 떨어져
+  // 다른 여행이 열렸다. 고정 누름이 연타 창(guardPress 와 같은 400ms)을 열어야 한다.
+  it('「맨 위에 고정」 직후 같은 자리 카드 본문 탭은 창 안이라 이동 0번 — 창이 닫힌 뒤 한 번은 간다 (D1)', () => {
+    const onTogglePin = jest.fn();
+    renderCard(
+      <TripCardContainer
+        trip={confirmed(SOON)}
+        today={TODAY}
+        onTogglePin={onTogglePin}
+      />
+    );
+    open();
+
+    // 실행 — 첫 탭은 고정(메뉴가 닫힌다), 둘째 탭은 그 자리의 카드 본문.
+    fireEvent.press(item('pin'));
+    fireEvent.press(screen.getByTestId('my-trip-card-t1'));
+
+    expect(onTogglePin).toHaveBeenCalledTimes(1);
+    expect(mockPush).not.toHaveBeenCalled();
+
+    // 무회귀 — 창이 닫힌 뒤의 한 번은 그대로 이동.
+    resetPressGuard();
+    fireEvent.press(screen.getByTestId('my-trip-card-t1'));
+    expect(mockPush).toHaveBeenCalledTimes(1);
+  });
+
   it('pinDisabled(저장값을 아직 못 읽음): 고정 항목은 막힘 표시 · 눌러도 토글 0번 · 메뉴는 열려 있고 설정은 눌린다', () => {
     const onTogglePin = jest.fn();
     renderCard(
