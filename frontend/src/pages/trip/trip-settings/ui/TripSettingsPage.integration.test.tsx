@@ -3,10 +3,13 @@ import type { QueryClient } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
-import { getGetTripsTripIdQueryKey } from '@/shared/api/index.hooks';
+import {
+  getGetTripsQueryKey,
+  getGetTripsTripIdQueryKey,
+} from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { EditTripRequest, Trip } from '@/shared/api/index.schemas';
-import { resetPressGuard } from '@/shared/lib/pressGuard';
+import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
 import { BASE } from '@/test-support/apiBase';
 import { makeTrip } from '@/test-support/mustVisitFixtures';
 import { createRequestLog } from '@/test-support/mswItinerary';
@@ -209,6 +212,15 @@ async function openPage(): Promise<void> {
 function press(testID: string): void {
   resetPressGuard();
   fireEvent.press(screen.getByTestId(testID));
+}
+
+/** 연타 창이 지금 열려 있나 — 창 안이면 `guardPress` 로 감싼 함수가 무시된다(창이 닫혀 있었으면 이 탐침이 창을 연다). */
+function pressWindowOpen(): boolean {
+  let ran = false;
+  guardPress(() => {
+    ran = true;
+  })();
+  return !ran;
 }
 
 const typeTitle = (value: string) =>
@@ -732,6 +744,22 @@ describe('F · 저장 실패 (AC-5 · INV-4) — 입력 유지 + 오류 + 다시
     }
   );
 
+  // 통합 QA D2(11-06) — [저장] 연타의 둘째 탭이 뒤로 간 목록의 다른 카드를 눌렀다. 이동하는 순간 연타 창이 열려 있어야
+  // 목록 카드(guardPress)가 그 탭을 버린다.
+  it('저장 성공으로 뒤로 가는 순간 연타 창이 열려 있다 — 둘째 탭이 뒤 화면(목록 카드)에 닿아도 무시된다 (D2)', async () => {
+    let openAtBack: boolean | null = null;
+    routerSpies.back.mockImplementationOnce(() => {
+      openAtBack = pressWindowOpen();
+    });
+    await openPage();
+
+    typeTitle('연타 이름');
+    press('trip-settings-save'); // 누르기 전에 창을 닫는다 — 열려 있다면 이동이 연 것이다
+
+    await waitFor(() => expect(routerSpies.back).toHaveBeenCalledTimes(1));
+    expect(openAtBack).toBe(true);
+  });
+
   it('응답을 기다리는 동안 저장을 연타해도 PATCH 는 1번이다', async () => {
     let release: () => void = () => {};
     patchGate = new Promise<void>((resolve) => {
@@ -788,6 +816,53 @@ describe('G · 삭제 (AC-6 · D7)', () => {
     await waitFor(() => expect(listHits(log.all())).toBe(2));
     unwatch();
   });
+
+  // 통합 QA D3(11-06) — [삭제] 연타의 둘째 탭이 돌아간 목록의 **지운 카드**(무효화만 해서 재조회 전까지 남아 있음)를 열었다.
+  // 돌아가는 순간 목록 캐시에서 이미 빠져 있고, 연타 창도 열려 있어야 한다.
+  it.each<[string, (() => Response)[]]>([
+    ['204', []],
+    [
+      '404(이미 없음)',
+      [
+        () =>
+          HttpResponse.json(
+            { code: 'NOT_FOUND', message: 'gone' },
+            { status: 404 }
+          ),
+      ],
+    ],
+  ])(
+    '삭제 %s 로 돌아가는 순간 목록 캐시에 지운 여행이 없고 연타 창이 열려 있다 (D3)',
+    async (_l, queue) => {
+      deleteQueue = queue;
+      let listAtDismiss: Trip[] | undefined;
+      let openAtDismiss: boolean | null = null;
+      routerSpies.dismissTo.mockImplementationOnce(() => {
+        listAtDismiss = client.getQueryData<Trip[]>(getGetTripsQueryKey());
+        openAtDismiss = pressWindowOpen();
+      });
+      await openPage();
+      const unwatch = watchTripsList(client);
+      // 앵커 — 목록 캐시에 이 여행이 들어 있다(빼는 단언이 공허하지 않게).
+      await waitFor(() =>
+        expect(
+          client
+            .getQueryData<Trip[]>(getGetTripsQueryKey())
+            ?.map((t) => t.tripId)
+        ).toEqual([TRIP_ID])
+      );
+
+      press('trip-settings-delete');
+      press('my-trip-delete-confirm');
+
+      await waitFor(() =>
+        expect(routerSpies.dismissTo).toHaveBeenCalledWith(DELETE_DONE_HREF)
+      );
+      expect(listAtDismiss?.map((t) => t.tripId)).toEqual([]);
+      expect(openAtDismiss).toBe(true);
+      unwatch();
+    }
+  );
 
   it('이미 없는 여행(404)은 성공으로 본다 — 안내 없이 일정 탭으로 돌아가고 목록을 다시 받는다', async () => {
     deleteQueue = [

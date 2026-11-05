@@ -12,12 +12,14 @@
  *    'draft' 라 잠금이 안 걸려 서버 409 를 맞는다. 저장 응답 409 도 같은 잠금.
  *  - **바뀐 값(dirty)은 매 렌더 파생** — 원래대로 되돌리면 다시 꺼진다. 안 바꾼 일과는 서버 원문(`HH:mm:ss`)을 그대로 보낸다.
  *  - 삭제 노출·확인 문구는 내 여행 목록 ⋯ 「삭제」와 같은 판정(`classifyTripPhase` draft·upcoming). 연타 잠금은 ref.
+ *  - 저장·삭제로 화면을 떠나는 순간 `openPressGuardWindow()` — 연타 둘째 탭이 뒤 목록 카드를 누르지 않게(통합 QA D2·D3).
+ *    삭제는 목록 캐시에서 그 여행을 바로 뺀다(무효화만 하면 재조회 전까지 지운 카드가 남아 눌린다).
  */
 import { isAxiosError } from 'axios';
 import { type ReactElement, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
 import { isNotFound } from '@/shared/api';
@@ -30,7 +32,7 @@ import {
 } from '@/shared/api/index.hooks';
 import type { CompanionType, Trip } from '@/shared/api/index.schemas';
 import { goBackOr } from '@/shared/lib/goBackOr';
-import { guardPress } from '@/shared/lib/pressGuard';
+import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { showToast } from '@/shared/ui/Toast';
@@ -208,20 +210,20 @@ function TripSettingsBody({
       },
     },
   });
+  // 목록 캐시에서 바로 빼고 다시 받는다 — 훅 옵션이라 호출별 onSuccess(이동)보다 먼저 돈다.
+  const dropFromList = (client: QueryClient): void => {
+    client.setQueryData<Trip[]>(getGetTripsQueryKey(), (list) =>
+      list?.filter((one) => one.tripId !== tripId)
+    );
+    void client.invalidateQueries({ queryKey: getGetTripsQueryKey() });
+  };
   const deleteTrip = useDeleteTripsTripId({
     mutation: {
-      onSuccess: (_data, _vars, _onMutateResult, context) => {
-        void context.client.invalidateQueries({
-          queryKey: getGetTripsQueryKey(),
-        });
-      },
+      onSuccess: (_data, _vars, _onMutateResult, context) =>
+        dropFromList(context.client),
       // 이미 없는 여행(404)도 목록에선 지워져야 한다.
       onError: (error, _vars, _onMutateResult, context) => {
-        if (isNotFound(error)) {
-          void context.client.invalidateQueries({
-            queryKey: getGetTripsQueryKey(),
-          });
-        }
+        if (isNotFound(error)) dropFromList(context.client);
       },
     },
   });
@@ -268,6 +270,7 @@ function TripSettingsBody({
             message: '여행 설정을 저장했어요',
             testID: 'trip-settings-saved-toast',
           });
+          openPressGuardWindow();
           goBackOr(router, shellTabHref('itinerary'));
         },
         onError: (error) => {
@@ -303,7 +306,10 @@ function TripSettingsBody({
     if (deletingRef.current) return;
     deletingRef.current = true;
     setDeleteFailed(false);
-    const done = (): void => router.dismissTo(DELETE_DONE_HREF);
+    const done = (): void => {
+      openPressGuardWindow();
+      router.dismissTo(DELETE_DONE_HREF);
+    };
     deleteTrip.mutate(
       { tripId },
       {
