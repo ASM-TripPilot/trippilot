@@ -55,7 +55,7 @@ jobs:
             helm lint --strict deploy/eks/chart -f "deploy/eks/chart/values-$environment.yaml" \
               --set images.backend.repository=example/backend,images.backend.tag=sha123 \
               --set images.ai.repository=example/ai,images.ai.tag=sha123 \
-              --set config.databaseHost=database.example.internal,config.redisHost=redis.example.internal \
+              --set config.databaseHost=database.example.internal \
               --set gateway.certificateArn=arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789abc \
               --set gateway.hostname=api.example.com
           done

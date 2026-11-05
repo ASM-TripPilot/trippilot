@@ -9,4 +9,3 @@ container_logs_retention_days  = 30
 database_instance_class        = "db.t4g.medium"
 database_allocated_storage     = 100
 database_max_allocated_storage = 1000
-redis_node_type                = "cache.t4g.small"

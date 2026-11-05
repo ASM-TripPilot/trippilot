@@ -16,7 +16,7 @@ def render(environment="dev", embedding=False, overrides=None):
          "--set", "images.backend.repository=example/backend,images.backend.tag=sha123",
          "--set", "images.ai.repository=example/ai,images.ai.tag=sha123",
          "--set", "images.embedding.repository=example/embedding,images.embedding.tag=sha123",
-         "--set", "config.databaseHost=database.example.internal,config.redisHost=redis.example.internal",
+         "--set", "config.databaseHost=database.example.internal",
          "--set", "gateway.certificateArn=arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789012",
          "--set", f"embedding.enabled={str(embedding).lower()}",
          "--set-string", "rolloutNonce=run-123"] + (overrides or []),
@@ -33,7 +33,7 @@ def render_default(overrides=None):
          "--set", "images.backend.repository=example/backend,images.backend.tag=sha123",
          "--set", "images.ai.repository=example/ai,images.ai.tag=sha123",
          "--set", "images.embedding.repository=example/embedding,images.embedding.tag=sha123",
-         "--set", "config.databaseHost=database.example.internal,config.redisHost=redis.example.internal",
+         "--set", "config.databaseHost=database.example.internal",
          "--set", "gateway.certificateArn=arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789012",
          "--set-string", "rolloutNonce=run-123"] + (overrides or []),
         check=True, text=True, capture_output=True,
@@ -167,7 +167,6 @@ class ChartTests(unittest.TestCase):
             backend = next(item for item in deployments if item["metadata"]["name"] == "backend")
             env = {item["name"]: item for item in backend["spec"]["template"]["spec"]["containers"][0]["env"]}
             self.assertIn("sslmode=require", env["DB_URL"]["value"])
-            self.assertEqual(env["SPRING_DATA_REDIS_SSL_ENABLED"]["value"], "true")
             self.assertEqual(env["JWT_REQUIRE_CONFIGURED_KEY"]["value"], "true")
             self.assertEqual(env["SERVICE_AUTH_REQUIRE_TOKEN"]["value"], "true")
             self.assertEqual(env["TRIPPILOT_ASYNC_AWAIT_TERMINATION_SECONDS"]["value"], "630")

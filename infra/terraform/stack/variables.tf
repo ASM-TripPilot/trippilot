@@ -144,17 +144,6 @@ variable "database_max_allocated_storage" {
   }
 }
 
-variable "redis_node_type" {
-  description = "ElastiCache Redis-compatible node class."
-  type        = string
-  default     = "cache.t4g.micro"
-
-  validation {
-    condition     = can(regex("^cache\\.[a-z0-9]+\\.[a-z0-9]+$", var.redis_node_type))
-    error_message = "redis_node_type must be a valid ElastiCache node class name."
-  }
-}
-
 variable "data_protection_enabled" {
   description = <<-EOT
     삭제 보호 · 최종 스냅숏 · 백업 보존을 켠다. **환경과 분리된 축이다.**
@@ -166,8 +155,7 @@ variable "data_protection_enabled" {
     삭제 보호가 없고 지워도 최종 스냅숏이 안 남는다.
 
     `multi_az` 는 **여기 포함하지 않는다** — 그쪽은 가용성·비용 축이고, 끄고 가도 데이터 유실은
-    아니다(AZ 장애 시 복구 시간만 길어진다). Redis 스냅숏(`snapshot_retention_limit`)도 제외다 —
-    Redis 는 캐시이고 영속 사실은 PostgreSQL 에 있다.
+    아니다(AZ 장애 시 복구 시간만 길어진다).
 
     기본값이 `true` 인 이유: 잊었을 때 보호가 켜지는 쪽으로 틀려야 한다.
   EOT
@@ -196,7 +184,7 @@ variable "dev_target_enabled" {
   description = <<-EOT
     이 스택 안에 **개발 대상**(네임스페이스 trippilot-dev)을 둔다(2026-10-15 개발·운영 분리): 시크릿 그릇 한 벌,
     작은 RDS 한 대(`aws_db_instance.dev_target`), 개발 네임스페이스 AI 파드의 Bedrock 연결.
-    클러스터·NAT·Redis 는 운영과 같이 쓴다.
+    클러스터·NAT 는 운영과 같이 쓴다.
     시크릿 이름은 `trippilot/<env>/dev-target/<그룹>`, DB 는 `trippilot-<env>-target` 이라 만들기는 배포 역할 기존 권한 안이다.
     단 배포가 **개발 DB 마스터 비밀번호를 읽으려면** bootstrap 템플릿 `ReadEnvironmentRdsMasterSecret` 조건에 이 DB 가 들어 있다(#1262, bootstrap 반영 2026-10-15 KST).
   EOT

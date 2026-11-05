@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | GitHub Environment | `dev` | `prd` |
 | 기본 배포 브랜치 | 운영 대상 `main` · 개발 대상(`target=dev`) `develop` | `main` |
-| VPC / EKS / ECR / DB / Redis | `trippilot-dev-*` | `trippilot-prd-*` |
+| VPC / EKS / ECR / DB | `trippilot-dev-*` | `trippilot-prd-*` |
 | 가용 영역 | 2 | 3 |
 | NAT Gateway | 1개 | AZ별 1개 |
 | PostgreSQL | RDS, 단일 AZ | RDS Multi-AZ, 삭제 보호 |
@@ -30,7 +30,6 @@ flowchart LR
     Gateway --> Backend[Spring Boot backend]
     Backend <--> AI[FastAPI AI]
     Backend --> DB[(RDS PostgreSQL)]
-    Backend --> Cache[(TLS Redis)]
     AI --> Embed[선택형 임베딩]
     AI --> DB
 ```
@@ -115,7 +114,7 @@ DB 초기화 Job은 관리자 자격증명을 임시로 사용해 `app_migrate`,
 
 `SERVICE_AUTH_REQUIRE_TOKEN`과 `JWT_REQUIRE_CONFIGURED_KEY`를 켜서 비밀값 누락 시 시작을 막는다. PRD의 여러 backend replica가 같은 JWT 키를 사용하므로 서로의 액세스 토큰을 검증할 수 있다. 비밀값을 수정한 뒤에는 수동 배포를 다시 실행해야 Pod에 반영된다. DB 암호를 바꾸는 경우 기존 연결에 영향을 줄 수 있으므로 계획된 배포로 수행한다.
 
-HTTPS NLB는 nginx gateway로 연결된다. gateway는 API 경로와 상태 확인 경로만 노출하며 `/internal`·Actuator 등은 외부에 공개하지 않는다. AI·임베딩·DB·Redis는 public LoadBalancer가 없다. RDS 연결에는 TLS를 사용한다. Redis는 TLS를 강제하는 private cache로 준비하며, 현재 backend에는 Redis adapter 구현이 없어 실제 캐시 사용은 해당 어댑터 구현 후 활성화된다.
+HTTPS NLB는 nginx gateway로 연결된다. gateway는 API 경로와 상태 확인 경로만 노출하며 `/internal`·Actuator 등은 외부에 공개하지 않는다. AI·임베딩·DB는 public LoadBalancer가 없다. RDS 연결에는 TLS를 사용한다. Redis(ElastiCache)는 앱이 쓰지 않아 제거했다(TRIP-1784) — 캐시가 필요해지면 어댑터와 함께 다시 둔다.
 
 ## 확인과 복구
 
@@ -127,7 +126,7 @@ Pod 로그는 클러스터 접근 없이 CloudWatch Logs 에서 본다. `amazon-
 
 앱 코드를 되돌리려면 배포 브랜치에 revert commit을 만든 뒤 수동 배포한다. 인프라 변경과 DB migration은 Helm rollback으로 되돌아가지 않는다. 런타임 Secret(`trippilot-ai` 등 — 비밀값 동기화 단계가 Helm 밖에서 쓴다)도 되돌아가지 않는다. destructive DB migration은 별도 복구 계획·백업을 준비한다. PRD RDS는 삭제 보호가 켜져 있고, 전체 destroy나 state 삭제 workflow는 제공하지 않는다.
 
-NLB·RDS·Redis 준비, EKS 노드 생성, 임베딩 모델 빌드는 첫 실행에서 오래 걸릴 수 있다. 테스트 환경이라도 EKS·NAT·RDS 등은 생성 후 계속 과금된다. 임베딩 활성화 시 Pod당 약 5GiB 이상의 메모리를 확보해야 한다. AI KB 벡터 적재는 배포가 한다 — 임베딩이 켜진 배포는 끝에서 `load-kb` Job(`deploy/eks/runtime_kb.py`)이 같은 AI 이미지의 `scripts/load_kb.py` 로 멱등 적재한다. KB 데이터(이미지의 `data/`)가 바뀌면 재배포만 하면 되고, 확인은 배포 로그의 `load_kb` 요약 줄("총 N건 (dim=1024, provider=http, 멱등 upsert)")이다.
+NLB·RDS 준비, EKS 노드 생성, 임베딩 모델 빌드는 첫 실행에서 오래 걸릴 수 있다. 테스트 환경이라도 EKS·NAT·RDS 등은 생성 후 계속 과금된다. 임베딩 활성화 시 Pod당 약 5GiB 이상의 메모리를 확보해야 한다. AI KB 벡터 적재는 배포가 한다 — 임베딩이 켜진 배포는 끝에서 `load-kb` Job(`deploy/eks/runtime_kb.py`)이 같은 AI 이미지의 `scripts/load_kb.py` 로 멱등 적재한다. KB 데이터(이미지의 `data/`)가 바뀌면 재배포만 하면 되고, 확인은 배포 로그의 `load_kb` 요약 줄("총 N건 (dim=1024, provider=http, 멱등 upsert)")이다.
 
 ## 코드 위치와 로컬 검증
 

@@ -45,7 +45,6 @@ run "dev_is_private_and_cost_conscious" {
     container_logs_retention_days = 7
     database_instance_class       = "db.t4g.small"
     database_allocated_storage    = 20
-    redis_node_type               = "cache.t4g.micro"
     alerts_slack_team_id          = "T0000000000"
     alerts_slack_channel_id       = "C0000000000"
     dev_target_enabled            = true
@@ -136,11 +135,6 @@ run "dev_is_private_and_cost_conscious" {
   }
 
   assert {
-    condition     = aws_elasticache_replication_group.redis.transit_encryption_enabled && aws_elasticache_replication_group.redis.at_rest_encryption_enabled && aws_elasticache_replication_group.redis.transit_encryption_mode == "required"
-    error_message = "Cache traffic and stored data must always be encrypted."
-  }
-
-  assert {
     condition     = alltrue([for repository in aws_ecr_repository.app : repository.image_tag_mutability == "IMMUTABLE" && !repository.force_delete]) && length(aws_ecr_repository.app) == 3
     error_message = "Backend, AI and embedding repositories must prevent image tag replacement and forced deletion."
   }
@@ -213,7 +207,6 @@ run "prd_has_high_availability_and_data_protection" {
     container_logs_retention_days = 30
     database_instance_class       = "db.t4g.medium"
     database_allocated_storage    = 100
-    redis_node_type               = "cache.t4g.small"
   }
 
   # 받을 채널이 없으면 알람도 없다 — 아무도 못 받는 알람은 요금만 낸다.
@@ -230,11 +223,6 @@ run "prd_has_high_availability_and_data_protection" {
   assert {
     condition     = aws_db_instance.postgres.multi_az && aws_db_instance.postgres.deletion_protection && !aws_db_instance.postgres.skip_final_snapshot && aws_db_instance.postgres.backup_retention_period >= 7
     error_message = "PRD database requires Multi-AZ, deletion protection, final snapshots and retained backups."
-  }
-
-  assert {
-    condition     = aws_elasticache_replication_group.redis.automatic_failover_enabled && aws_elasticache_replication_group.redis.multi_az_enabled && aws_elasticache_replication_group.redis.num_cache_clusters == 3 && aws_elasticache_replication_group.redis.snapshot_retention_limit >= 7
-    error_message = "PRD cache requires three replicas/primary nodes, Multi-AZ failover and backups."
   }
 
   assert {
