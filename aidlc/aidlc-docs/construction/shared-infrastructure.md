@@ -177,7 +177,7 @@ GitHub Actions --(OIDC 배포 역할)--> Terraform apply -> ECR 이미지 push -
 
 > **[개정 · 2026-10-12 · Infra 결정]** ElastiCache Redis 는 Q5=A 로 **제거하기로 했다**(앱 미사용, U1 Q8=B 는 "보류 → 철회"). 운영 환경(dev)의 컨테이너 로그 보존은 Q3=A 로 **90일**로 올린다. 위 표는 결정 시점의 as-built 그대로이고, 코드 반영은 후속 작업이다(§12).
 
-> **[개정 · 2026-11-05 · TRIP-1784]** Q5=A(Redis 제거)를 이행했다 — Terraform·Helm·runtime·테스트에서 삭제(#1989, 운영 반영은 다음 정기 배포). 이 문서의 다른 Redis 서술(표·그림·서브넷·보안 그룹·§10 평가 등)은 그 전 as-built 다. 같은 PR 에서 **EKS 컨트롤플레인 audit 로그를 끈다**: 컨트롤플레인 로그의 99%(하루 ~2.3GB)인데 조사에 쓴 적이 없고, 12/14 종료까지 비용을 줄이는 쪽을 택했다(사용자 결정). 대가로 클러스터 안 Kubernetes API 행위(Secret 조회·exec 등)는 사후 추적할 수 없다 — CloudTrail 은 EKS 관리 API 만 남긴다. 접속 기록(authenticator)은 남는다.
+> **[개정 · 2026-11-05 · TRIP-1784]** Q5=A(Redis 제거)를 이행했다 — Terraform·Helm·runtime·테스트에서 삭제(#1989, 운영 반영은 다음 정기 배포). 이 문서의 다른 Redis 서술(표·그림·서브넷·보안 그룹·§10 평가 등)은 그 전 as-built 다. 같은 PR 에서 **EKS 컨트롤플레인 audit 로그를 끈다**: 컨트롤플레인 로그의 99%(하루 ~2.3GB, 2026-11-05 Logs Insights 로그 스트림별 실측)인데 조사에 쓴 적이 없고, 12/14 종료까지 비용을 줄이는 쪽을 택했다(사용자 결정). 대가로 클러스터 안 Kubernetes API 행위(Secret 조회·exec 등)는 사후 추적할 수 없다 — CloudTrail 은 EKS 관리 API 만 남긴다. 접속 기록(authenticator)은 남는다.
 
 - **법정 append-only 테이블**: DB 권한 수준(앱 롤 DELETE 없음)은 Flyway 마이그레이션이 소유하고, 인프라는 롤을 나누는 데까지만 맡는다(`bootstrap.sql` 의 `app_user`/`app_migrate` 분리, `application.yml` flyway user 분리).
 
@@ -207,7 +207,7 @@ GitHub Actions --(OIDC 배포 역할)--> Terraform apply -> ECR 이미지 push -
 
 | 신호 | As-built | 근거 |
 |---|---|---|
-| EKS 컨트롤플레인 로그 | api·authenticator·controllerManager·scheduler → `/aws/eks/trippilot-<env>/cluster`(14일, prd 90일) (audit 은 2026-11-05 제외 — §4.3 끝 TRIP-1784 개정 블록) | `eks.tf` `aws_cloudwatch_log_group.eks` · `enabled_cluster_log_types` |
+| EKS 컨트롤플레인 로그 | api·authenticator·controllerManager·scheduler → `/aws/eks/trippilot-<env>/cluster`(14일, prd 90일) (audit 은 2026-11-05 제외 — §4.3 의 TRIP-1784 개정 블록) | `eks.tf` `aws_cloudwatch_log_group.eks` · `enabled_cluster_log_types` |
 | 컨테이너 로그(stdout) | 애드온 `amazon-cloudwatch-observability` 는 **`container_logs_enabled=true` 일 때만** 설치된다. **두 tfvars 모두 `false`** → 이 상태로는 kubectl 로만 볼 수 있다 | `eks.tf` 주석 · `environments/dev.tfvars` · `prd.tfvars` |
 | RDS 로그 | `postgresql`·`upgrade` 를 CloudWatch 로 내보낸다 | `data.tf` `enabled_cloudwatch_logs_exports` |
 | 앱 메트릭·트레이스 | 이미지에 OTel Java 에이전트가 들어 있지만(sha256 검증) EKS 에서는 `OTEL_SDK_DISABLED=true`, exporter `none`, Micrometer OTLP 도 꺼져 있다. **수집기 없음** | `backend/Dockerfile` · `templates/backend.yaml` · `application.yml` `management.otlp` |
