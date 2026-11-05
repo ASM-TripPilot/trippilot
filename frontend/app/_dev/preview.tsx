@@ -58,6 +58,8 @@ import { buildStorySlides } from '@/pages/record/share-card/model/shareStory';
 import { ShareCardScreen } from '@/pages/record/share-card/ui/ShareCardScreen';
 import { StoryDeck } from '@/pages/record/share-card/ui/StoryDeck';
 import { TravelStyleScreen } from '@/pages/record/travel-style/ui/TravelStyleScreen';
+import type { TripAlbumVM } from '@/pages/record/trip-album/model/tripAlbumVM';
+import { TripAlbumScreen } from '@/pages/record/trip-album/ui/TripAlbumScreen';
 import { TripSummaryScreen } from '@/pages/record/trip-summary/ui/TripSummaryScreen';
 import { MustVisitOutsideConfirmDialog } from '@/pages/explore/saved-places/ui/MustVisitOutsideConfirmDialog';
 import { MustVisitPickScreen } from '@/pages/explore/saved-places/ui/MustVisitPickScreen';
@@ -2554,6 +2556,50 @@ const SHARE_COVER_PREVIEW_PHOTO: SummaryMagazineInput['coverPhoto'] =
   DRAFT_PREVIEW_PHOTOS[0]
     ? { uri: DRAFT_PREVIEW_PHOTOS[0], poiId: 'poi-a' }
     : null;
+
+// TRIP-1798 · 여행 앨범(E8) 프리뷰 재료 — 사진은 번들 샘플 3장을 돌려 쓴다(jest 에선 주소가 없어 자리표시, 실기에서만 사진이 뜬다).
+const albumPhotos = (prefix: string, count: number) =>
+  Array.from({ length: count }, (_, i) => ({
+    visitPhotoMetaId: `${prefix}-${i}`,
+    uri: DRAFT_PREVIEW_PHOTOS[i % 3] ?? 'file:///preview-missing',
+  }));
+const TRIP_ALBUM_PREVIEW_VM: TripAlbumVM = {
+  days: [
+    {
+      dayNumber: 1,
+      title: '1일차 · 6월 10일(수)',
+      places: [
+        {
+          visitCheckId: 'v1',
+          name: '코엑스',
+          countLabel: '4장',
+          photos: albumPhotos('a', 4),
+        },
+        {
+          visitCheckId: 'v2',
+          name: '봉은사',
+          countLabel: '2장',
+          photos: albumPhotos('b', 2),
+        },
+      ],
+    },
+    {
+      dayNumber: 2,
+      title: '2일차 · 6월 11일(목)',
+      places: [
+        {
+          visitCheckId: 'v3',
+          name: '광안리',
+          countLabel: '3장',
+          photos: albumPhotos('c', 3),
+        },
+      ],
+    },
+  ],
+  visiblePhotoCount: 9,
+  otherDeviceCount: 0,
+  unresolvedCount: 0,
+};
 
 // j06 스토리 덱(TRIP-1667) — 운영과 같은 빌더 두 개(j04 매거진 VM + 대표 카드 → 장 목록)를 네트워크 없이 쓴다. 장 번호·시간은 덱 훅이 정한다
 // (동작 줄이기 OS 설정이 켜져 있으면 자동 넘김 없이 탭만 된다 — 프리뷰 전용 키 없음). 진행 바 칠하기·장 등장 연출·탭/길게 누르기는 여기서 눈으로 본다.
@@ -5147,6 +5193,83 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // ── j04 → 여행 앨범(TRIP-1798) — 순수 뷰(`TripAlbumScreen`)를 격리 렌더한다. 3열 114·r12·gap 8, 제목 간격은 6-b 육안 몫. ──
+  {
+    key: 'trip-album-default',
+    band: 'j',
+    label: 'j04 · 여행 앨범 default',
+    login: null,
+    render: () => (
+      <TripAlbumScreen
+        face={{
+          kind: 'ready',
+          title: '부산 여행',
+          vm: TRIP_ALBUM_PREVIEW_VM,
+          empty: false,
+          photoError: null,
+        }}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    // 다른 기기 사진 N줄 + 앨범에서 못 푼 사진 M줄 + 일부 방문 사진 목록 실패 한 줄.
+    key: 'trip-album-notices',
+    band: 'j',
+    label: 'j04 · 여행 앨범 안내 줄(다른 기기·못 푼 사진·목록 실패)',
+    login: null,
+    render: () => (
+      <TripAlbumScreen
+        face={{
+          kind: 'ready',
+          title: '부산 여행',
+          vm: {
+            ...TRIP_ALBUM_PREVIEW_VM,
+            otherDeviceCount: 3,
+            unresolvedCount: 1,
+          },
+          empty: false,
+          photoError: { retrying: false, onRetry: noop },
+        }}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'trip-album-empty',
+    band: 'j',
+    label: 'j04 · 여행 앨범 빈 안내',
+    login: null,
+    render: () => (
+      <TripAlbumScreen
+        face={{
+          kind: 'ready',
+          title: '부산 여행',
+          vm: {
+            days: [],
+            visiblePhotoCount: 0,
+            otherDeviceCount: 2,
+            unresolvedCount: 0,
+          },
+          empty: true,
+          photoError: null,
+        }}
+        onBack={noop}
+      />
+    ),
+  },
+  {
+    key: 'trip-album-error',
+    band: 'j',
+    label: 'j04 · 여행 앨범 오류',
+    login: null,
+    render: () => (
+      <TripAlbumScreen
+        face={{ kind: 'error', retrying: false, onRetry: noop }}
+        onBack={noop}
+      />
+    ),
+  },
   // j04 여행 요약 2키(TRIP-764 개명·삭제) — 순수 뷰(`TripSummaryScreen`)를 격리 렌더한다(`@/shared/api`
   // 값 import 0 이라 프리뷰 지뢰 목 통과, 컨테이너를 별 파일로 분리해 import 사슬 전이 로드 없음).
   // jest 는 testID·행동만 잠그고 stats 3셀·지도 히어로·2톤 카드·방문목록 레이아웃·코랄 토큰·탭바는
@@ -5174,6 +5297,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           { number: 3, lat: 35.1587, lng: 129.1604 },
         ]}
         shareEnabled
+        onPressAlbum={noop}
         recordBar={PREVIEW_RECORD_BAR}
         dayReflections={TRIP_SUMMARY_PREVIEW_DAY_REFLECTIONS}
         onPressDayReflection={noop}

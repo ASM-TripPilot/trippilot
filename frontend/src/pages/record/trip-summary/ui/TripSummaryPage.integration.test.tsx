@@ -69,7 +69,10 @@ jest.mock('@/shared/storage', () => ({
 }));
 
 // TRIP-1781 — 기기 앨범에서 사진 주소를 푸는 입구. `gone…` 으로 시작하는 앨범 id 는 앨범에 없는 것으로 친다.
+// TRIP-1798 — `canResolveDevicePhotos` 는 앨범 링크의 웹 숨김 판정(앱 true / 웹 false). 홀더로 웹을 흉내 낸다(파일 최상위 beforeEach 가 true 로 되돌린다).
+const mockCanResolve = { value: true };
 jest.mock('@/shared/photo', () => ({
+  canResolveDevicePhotos: () => mockCanResolve.value,
   resolvePhotoUri: async (id: string) =>
     id.startsWith('gone') ? null : `file://${id}`,
 }));
@@ -209,6 +212,7 @@ beforeEach(() => {
   });
   setAccessToken('a');
   mockShareArmed.value = false;
+  mockCanResolve.value = true;
   // TRIP-1624 — 카운트업 숫자가 실제 타이머로 돌며 틱마다 act 밖에서 상태를 바꾸지 않게 "동작 줄이기 켜짐"을 동기로 답한다.
   answerReduceMotionSynchronously(true);
 });
@@ -899,5 +903,85 @@ describe('🔴 TRIP-1781 · 표지 기기 사진', () => {
     expect(screen.queryByTestId('reflection-summary-error')).toBeNull();
     expect(screen.getByTestId('reflection-summary-stats')).toBeOnTheScreen();
     expect(screen.queryByTestId('reflection-summary-cover-photo')).toBeNull();
+  });
+});
+
+// TRIP-1798 · 「앨범 보기 ›」 — 요약이 준비돼 있고 사진이 1장 이상이며 이 빌드가 기기 앨범을 풀 수 있을 때만 링크가 선다.
+// 이동은 요약 페이지가 `router.push` 한다(화면은 콜백만 받는다). 링크 위치(컬러 타일 바로 아래 오른쪽)·글자 모양은 jest 사각 — 실화면 QA 몫.
+describe('🔴 TRIP-1798 · 앨범 보기 링크', () => {
+  const withPhotos = (totalPhotos: number): TripSummary => ({
+    ...summary(true, ['코엑스', '봉은사']),
+    stats: {
+      totalVisits: 2,
+      totalDistanceKm: 1,
+      distanceSource: 'VISIT_LINE',
+      totalPhotos,
+      hasLocationData: true,
+    },
+  });
+  const linkAbsent = async () => {
+    await waitSummary();
+    expect(screen.queryByTestId('trip-album-link')).toBeNull();
+  };
+
+  it('L1 사진이 있으면 「앨범 보기」 링크가 서고, 누르면 앨범 라우트로 push 한다', async () => {
+    server.use(
+      summaryHandler({ ready: true, summary: withPhotos(3) }),
+      tripOk()
+    );
+    renderPage();
+    await waitSummary();
+
+    const link = await screen.findByTestId('trip-album-link');
+    expect(within(link).getByText('앨범 보기')).toBeOnTheScreen();
+    expect(mockPush).not.toHaveBeenCalled();
+
+    fireEvent.press(link);
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith('/trips/trip-1/records/album');
+  });
+
+  it('L2 사진이 0장이면 링크가 없다 (L1 의 짝)', async () => {
+    server.use(
+      summaryHandler({ ready: true, summary: withPhotos(0) }),
+      tripOk()
+    );
+    renderPage();
+
+    await linkAbsent();
+  });
+
+  it('L3 요약이 아직 없으면(ready:false) 링크가 없다', async () => {
+    server.use(summaryHandler({ ready: false }), tripOk());
+    renderPage();
+
+    await screen.findByTestId('reflection-summary-pending');
+    expect(screen.queryByTestId('trip-album-link')).toBeNull();
+  });
+
+  it('L4 웹(기기 앨범을 풀 수 없는 빌드)이면 사진이 있어도 링크가 없다', async () => {
+    mockCanResolve.value = false;
+    server.use(
+      summaryHandler({ ready: true, summary: withPhotos(3) }),
+      tripOk()
+    );
+    renderPage();
+
+    await linkAbsent();
+  });
+
+  it('L5 요약 조회가 실패하면(오류 얼굴) 링크가 없다', async () => {
+    server.use(
+      http.get(
+        `${BASE}/trips/:tripId/summary`,
+        () => new HttpResponse(null, { status: 500 })
+      ),
+      tripOk()
+    );
+    renderPage();
+
+    await screen.findByTestId('reflection-summary-error');
+    expect(screen.queryByTestId('trip-album-link')).toBeNull();
   });
 });

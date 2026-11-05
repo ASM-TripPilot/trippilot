@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MapView, type MapCenter, type MapPin } from '@/shared/map';
+import { ChevronRight16Glyph } from '@/shared/ui/glyphs';
 import { RevealItem } from '@/shared/ui/RevealItem';
 import { RecordNavBar } from '@/widgets/bottom-nav-bar';
 
@@ -51,6 +52,8 @@ export interface TripSummaryScreenProps {
   shareEnabled: boolean;
   /** TRIP-939 — 미주입이면 [공유]를 그리지 않는다(공유 카드 미장전 시 페이지가 넘기지 않음). */
   onShare?: () => void;
+  /** TRIP-1798 — 「앨범 보기 ›」 링크(숫자 타일 바로 아래 오른쪽). 미주입이면 링크를 그리지 않는다(사진 0장·웹·요약 전). */
+  onPressAlbum?: () => void;
   /** TRIP-1584 — 하단 바(기록·회고·요약)의 칸 이동 콜백 묶음. 미주입이면 바를 그리지 않는다(프리뷰·무회귀 테스트). */
   recordBar?: RecordBarNav;
   /** TRIP-987 — 여행 기간 전체 일차의 회고 진입(j03). 비었으면 칩 줄을 그리지 않는다. */
@@ -71,6 +74,7 @@ export function TripSummaryScreen({
   mapPins,
   shareEnabled,
   onShare,
+  onPressAlbum,
   recordBar,
   dayReflections = [],
   onPressDayReflection,
@@ -170,6 +174,23 @@ export function TripSummaryScreen({
         ) : null}
 
         <MagazineStats stats={vm.stats} testID="reflection-summary-stats" />
+
+        {onPressAlbum ? (
+          <View className="items-end px-xl pt-sm">
+            <Pressable
+              testID="trip-album-link"
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={onPressAlbum}
+              className="flex-row items-center gap-xs"
+            >
+              <Text className="font-noto-bold text-label font-bold text-primary-text">
+                앨범 보기
+              </Text>
+              <ChevronRight16Glyph />
+            </Pressable>
+          </View>
+        ) : null}
 
         {view === 'VISIT_LIST' ? (
           <View className="gap-sm px-xl pt-sm">

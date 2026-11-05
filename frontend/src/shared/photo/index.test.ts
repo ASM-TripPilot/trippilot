@@ -1,7 +1,11 @@
 /**
  * @jest-environment node
  */
-import { pickPhotoAssets, resolvePhotoUri } from './index';
+import {
+  canResolveDevicePhotos,
+  pickPhotoAssets,
+  resolvePhotoUri,
+} from './index';
 
 /**
  * TRIP-1070 · AC-2·AC-6·AC-9·AC-10 — 사진 앨범 어댑터(`shared/photo`) 실장.
@@ -314,5 +318,17 @@ describe('🔴 resolvePhotoUri · 이 기기 앨범에서 사진 주소 찾기 (
     mockAssetInfo.mockResolvedValue(response);
 
     await expect(resolvePhotoUri('asset-1')).resolves.toBeNull();
+  });
+});
+
+// TRIP-1798 · 여행 앨범 — 앱(네이티브)은 이 기기 앨범에서 주소를 풀 수 있다. 웹은 `index.web.ts` 가 false.
+describe('🔴 canResolveDevicePhotos · 앨범 화면이 성립하는 빌드인가 (TRIP-1798 Q3)', () => {
+  it('C1 네이티브는 true 이고, 묻기만 할 뿐 앨범·피커·기기 id 를 건드리지 않는다', () => {
+    expect(canResolveDevicePhotos()).toBe(true);
+
+    expect(mockAssetInfo).not.toHaveBeenCalled();
+    expect(mockMlRequest).not.toHaveBeenCalled();
+    expect(mockLaunch).not.toHaveBeenCalled();
+    expect(mockGetInstallId).not.toHaveBeenCalled();
   });
 });
