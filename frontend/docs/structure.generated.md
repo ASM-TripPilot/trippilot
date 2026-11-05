@@ -150,6 +150,9 @@
 - `app/trips/[tripId]/records/share.tsx`  →  (export 없음)
 - `app/trips/[tripId]/records/summary.tsx`  →  (export 없음)
 
+## app/trips/[tripId]/
+- `app/trips/[tripId]/settings.tsx`  →  (export 없음)
+
 ## app/trips/new/
 - `app/trips/new/_layout.tsx`  →  (export 없음)
 - `app/trips/new/step1.tsx`  →  (export 없음)
@@ -297,7 +300,7 @@
 - `src/entities/trip/config/serviceRegions.ts`  →  SERVICE_REGIONS
 
 ## src/entities/trip/
-- `src/entities/trip/index.ts`  →  formatDayLabel · formatNightsLabel · nightsCountLabel · nightsLabel · nightsOnlyLabel · formatShareCardPeriod · dayOfWeek · formatBaseNightRange · formatConfirmedDateRange · formatDateRangeWithDow · formatLegendDateRange · formatTripDateRange · formatTripRange · regionForDay · tripDayNumber · tripItinerarySummary · classifyTripPhase · isTripOngoing · markDoneBarSeen · readDoneBarSeen · writeDoneBarSeen · COVER_GRADIENTS · pickCoverCity · pickRegionCover · SERVICE_REGIONS · PastTripRow · TripCard
+- `src/entities/trip/index.ts`  →  formatDayLabel · formatNightsLabel · nightsCountLabel · nightsLabel · nightsOnlyLabel · formatShareCardPeriod · dayOfWeek · formatBaseNightRange · formatConfirmedDateRange · formatDateRangeWithDow · formatLegendDateRange · formatTripDateRange · formatTripRange · regionForDay · tripDayNumber · tripItinerarySummary · classifyTripPhase · isTripOngoing · markDoneBarSeen · readDoneBarSeen · writeDoneBarSeen · COVER_GRADIENTS · pickCoverCity · pickRegionCover · SERVICE_REGIONS · PastTripRow · TripCard · TripDeleteDialog
 
 ## src/entities/trip/lib/
 - `src/entities/trip/lib/coverCity.ts`  →  pickCoverCity
@@ -318,7 +321,8 @@
 ## src/entities/trip/ui/
 - `src/entities/trip/ui/PastTripRow.tsx`  →  PastTripRowProps · PastTripRow
 - `src/entities/trip/ui/TripCard.tsx`  →  TripCardProps · TripCard
-- `src/entities/trip/ui/TripGlyphs.tsx`  →  MoreDotsGlyph
+- `src/entities/trip/ui/TripDeleteDialog.tsx`  →  TripDeleteDialog
+- `src/entities/trip/ui/TripGlyphs.tsx`  →  MoreDotsGlyph · TripGearGlyph · PushpinGlyph
 
 ## src/features/add-must-visit/
 - `src/features/add-must-visit/index.ts`  →  DEFAULT_DWELL_KEY · DWELL_OPTIONS · buildAnytimeMustVisitRequest · buildFixedMustVisitRequest · canSubmitMustVisitTime · mustVisitTimeBlockReason · startTimeOptions · startWheelAnchor · tripDayChips
@@ -866,6 +870,7 @@
 ## src/pages/itinerary/itinerary-list/model/
 - `src/pages/itinerary/itinerary-list/model/doneBar.ts`  →  DoneBarEntry · DoneBarPick · pickDoneBar
 - `src/pages/itinerary/itinerary-list/model/myTripsOrder.ts`  →  MyTripsSortKey · byLatest · byStart · byTitle · parseMyTripsSortKey · orderMyTrips
+- `src/pages/itinerary/itinerary-list/model/myTripsSegment.ts`  →  MyTripsSegment · parseMyTripsSegment · splitMyTripsBySegment
 - `src/pages/itinerary/itinerary-list/model/tripCardFace.ts`  →  TripCardFace · deriveTripCardFace
 
 ## src/pages/itinerary/itinerary-list/ui/
@@ -874,7 +879,6 @@
 - `src/pages/itinerary/itinerary-list/ui/MyTripsListScreen.tsx`  →  MyTripsListMode · MyTripsListScreenProps · MyTripsListScreen
 - `src/pages/itinerary/itinerary-list/ui/MyTripsSortSheet.tsx`  →  MyTripsSortSheetProps · MyTripsSortSheet
 - `src/pages/itinerary/itinerary-list/ui/TripCardContainer.tsx`  →  TripCardContainerProps · TripCardContainer
-- `src/pages/itinerary/itinerary-list/ui/TripDeleteDialog.tsx`  →  TripDeleteDialog
 
 ## src/pages/itinerary/itinerary-manual/
 - `src/pages/itinerary/itinerary-manual/index.ts`  →  ManualPlanPage · PlaceAddPage
@@ -1184,6 +1188,7 @@
 - `src/pages/settings/my-page/index.ts`  →  MyPage
 
 ## src/pages/settings/my-page/model/
+- `src/pages/settings/my-page/model/cumulativeStats.ts`  →  RECORDS_LIMIT · CumulativeStats · cumulativeStats
 - `src/pages/settings/my-page/model/styleCardModel.ts`  →  StyleGauge · StyleCardVM · buildStyleCardModel
 - `src/pages/settings/my-page/model/tripBuckets.ts`  →  TripBucket · phaseBucket · bucketTrips
 
@@ -1192,6 +1197,7 @@
 - `src/pages/settings/my-page/ui/MyPage.tsx`  →  MyPage
 - `src/pages/settings/my-page/ui/MyPageScreen.tsx`  →  MyPageScreenProps · MyPageScreen
 - `src/pages/settings/my-page/ui/ProfileCard.tsx`  →  ProfileCardCounts · ProfileCardProps · ProfileCard
+- `src/pages/settings/my-page/ui/StatsCard.tsx`  →  StatsVM · StatsCard
 - `src/pages/settings/my-page/ui/StyleSummaryCard.tsx`  →  StyleSummaryCardProps · StyleSummaryCard
 
 ## src/pages/settings/notification-inbox/
@@ -1336,18 +1342,14 @@
 ## src/pages/trip/trip-new-step1/model/
 - `src/pages/trip/trip-new-step1/model/createTripRequest.ts`  →  CreateTripInput · buildCreateTripRequest · tripTitle
 - `src/pages/trip/trip-new-step1/model/mustVisitSync.ts`  →  MustVisitSyncPlan · planMustVisitSync
-- `src/pages/trip/trip-new-step1/model/partyRange.ts`  →  partyRangeFor
 - `src/pages/trip/trip-new-step1/model/tripDatePicker.ts`  →  dateCell · TripDateRange
 - `src/pages/trip/trip-new-step1/model/useCreateTrip.ts`  →  useCreateTrip
 - `src/pages/trip/trip-new-step1/model/usePreferencePrefill.ts`  →  usePreferencePrefill
 
 ## src/pages/trip/trip-new-step1/ui/
-- `src/pages/trip/trip-new-step1/ui/CompanionEditSheet.tsx`  →  CompanionEditSheetProps · CompanionEditSheet
-- `src/pages/trip/trip-new-step1/ui/DayWindowEditSheet.tsx`  →  DayWindowEditSheetProps · DayWindowEditSheet
 - `src/pages/trip/trip-new-step1/ui/DestinationEditSheet.tsx`  →  DestinationEditSheetProps · DestinationEditSheet
 - `src/pages/trip/trip-new-step1/ui/PeriodEditSheet.tsx`  →  PeriodEditSheetProps · PeriodEditSheet
 - `src/pages/trip/trip-new-step1/ui/PrefOverrideSheet.tsx`  →  PrefOverrideSheetProps · PrefOverrideSheet
-- `src/pages/trip/trip-new-step1/ui/StepperButton.tsx`  →  StepperButton
 - `src/pages/trip/trip-new-step1/ui/TripNewStep1Page.tsx`  →  TripNewStep1PageProps · TripNewStep1Page
 - `src/pages/trip/trip-new-step1/ui/TripWizardLeaveDialog.tsx`  →  TripWizardLeaveDialog
 - `src/pages/trip/trip-new-step1/ui/TripWizardStep1Screen.tsx`  →  TripWizardStep1ScreenProps · TripWizardStep1Screen
@@ -1367,6 +1369,17 @@
 - `src/pages/trip/trip-new-step2/ui/TripBasesPage.tsx`  →  TripBasesPage
 - `src/pages/trip/trip-new-step2/ui/TripNewStep2Page.tsx`  →  TripNewStep2Page · BaseNightsFlowProps · BaseNightsFlow
 - `src/pages/trip/trip-new-step2/ui/TripWizardStep2Screen.tsx`  →  NightlyBaseCardVM · Step2Variant · TripWizardStep2ScreenProps · TripWizardStep2Screen
+
+## src/pages/trip/trip-settings/
+- `src/pages/trip/trip-settings/index.ts`  →  TripSettingsPage
+
+## src/pages/trip/trip-settings/model/
+- `src/pages/trip/trip-settings/model/editTripRequest.ts`  →  TripEdits · toEditTripRequest
+- `src/pages/trip/trip-settings/model/titleRule.ts`  →  titleViolation
+
+## src/pages/trip/trip-settings/ui/
+- `src/pages/trip/trip-settings/ui/TripSettingsPage.tsx`  →  TripSettingsPage
+- `src/pages/trip/trip-settings/ui/TripSettingsView.tsx`  →  TripSettingsViewProps · TripSettingsHeader · TripSettingsView
 
 ## src/shared/api/generated/account/
 - `src/shared/api/generated/account/account.ts`  →  getMe · getGetMeQueryKey · getGetMeQueryOptions · GetMeQueryResult · GetMeQueryError · useGetMe · postMeDeletion · getPostMeDeletionMutationOptions · PostMeDeletionMutationResult · PostMeDeletionMutationError · usePostMeDeletion · deleteMeDeletion · getDeleteMeDeletionMutationOptions · DeleteMeDeletionMutationResult · DeleteMeDeletionMutationError · useDeleteMeDeletion · getMeExport · getGetMeExportQueryKey · getGetMeExportQueryOptions · GetMeExportQueryResult · GetMeExportQueryError · useGetMeExport
@@ -1955,10 +1968,21 @@
 ## src/widgets/time-sheet/ui/
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
+## src/widgets/trip-edit-sheets/
+- `src/widgets/trip-edit-sheets/index.ts`  →  CompanionEditSheet · DayWindowEditSheet · StepperButton · clampParty · partyRangeFor
+
+## src/widgets/trip-edit-sheets/model/
+- `src/widgets/trip-edit-sheets/model/partyRange.ts`  →  partyRangeFor · clampParty
+
+## src/widgets/trip-edit-sheets/ui/
+- `src/widgets/trip-edit-sheets/ui/CompanionEditSheet.tsx`  →  CompanionEditSheetProps · CompanionEditSheet
+- `src/widgets/trip-edit-sheets/ui/DayWindowEditSheet.tsx`  →  DayWindowEditSheetProps · DayWindowEditSheet
+- `src/widgets/trip-edit-sheets/ui/StepperButton.tsx`  →  StepperButton
+
 ## src/widgets/trip-wizard-header/
 - `src/widgets/trip-wizard-header/index.ts`  →  TripWizardHeader
 
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1287개 파일
+합계 1297개 파일
