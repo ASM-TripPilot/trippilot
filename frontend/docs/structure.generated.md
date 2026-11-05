@@ -344,13 +344,17 @@
 - `src/features/assign-trip-base/model/useTripBases.ts`  →  useTripBases · useAssignBase
 
 ## src/features/attach-visit-media/
-- `src/features/attach-visit-media/index.ts`  →  pickPhotoForVisit · useSavedVisitMemos · useVisitMemo
-- `src/features/attach-visit-media/index.view.ts`  →  photoAttach · MemoInline
+- `src/features/attach-visit-media/index.ts`  →  pickPhotoForVisit · useSavedVisitMemos · useVisitMemo · useMultiPhotoAttach
+- `src/features/attach-visit-media/index.view.ts`  →  photoAttach · PHOTO_LIMIT_FULL_TEXT · PHOTO_SAVED_SINGLE_TEXT · photoFailedText · photoProgressLabel · photoSavedText · MemoInline
 
 ## src/features/attach-visit-media/model/
+- `src/features/attach-visit-media/model/attachPhotosInOrder.ts`  →  attachPhotosInOrder
 - `src/features/attach-visit-media/model/photoAttach.ts`  →  photoAttach
+- `src/features/attach-visit-media/model/photoBatchCopy.ts`  →  photoProgressLabel · photoFailedText · photoSavedText · PHOTO_SAVED_SINGLE_TEXT · PHOTO_LIMIT_FULL_TEXT
 - `src/features/attach-visit-media/model/pickPhotoForVisit.ts`  →  PhotoPickOutcome · pickPhotoForVisit
+- `src/features/attach-visit-media/model/useMultiPhotoAttach.ts`  →  MultiPhotoNotice · useMultiPhotoAttach
 - `src/features/attach-visit-media/model/useVisitMemo.ts`  →  useVisitMemo · useSavedVisitMemos
+- `src/features/attach-visit-media/model/visitPhotoLimit.ts`  →  MAX_PHOTOS_PER_VISIT · MAX_PICK_PER_BATCH · remainingPhotoSlots
 
 ## src/features/attach-visit-media/ui/
 - `src/features/attach-visit-media/ui/MemoInline.tsx`  →  MemoInlineProps · MemoInline
@@ -1794,8 +1798,8 @@
 - `src/shared/map/webMarkerHtml.ts`  →  WebMarker · buildWebMarker
 
 ## src/shared/photo/
-- `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAsset · resolvePhotoUri
-- `src/shared/photo/index.web.ts`  →  pickPhotoAsset · resolvePhotoUri
+- `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAssets · resolvePhotoUri
+- `src/shared/photo/index.web.ts`  →  pickPhotoAssets · resolvePhotoUri
 
 ## src/shared/push/
 - `src/shared/push/PushGlyphs.tsx`  →  PushBellHero
@@ -1988,4 +1992,4 @@
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1300개 파일
+합계 1304개 파일

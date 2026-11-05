@@ -1468,3 +1468,68 @@ describe('SlotProgressCard · 메모 불러오지 못함 표식 (TRIP-1751)', ()
     expect(screen.getByTestId(`execution-live-slot-${KEY}`)).toBeOnTheScreen();
   });
 });
+
+// TRIP-1797 — 사진 여러 장 한 번에: 진행 줄(`visit-photo-progress`)과 [다시 시도](`visit-photo-retry`)는 부모가 문구·콜백을 줄 때만 선다.
+// 두 testID 는 고정 이름이다(역할 접두 없음) — 한 번에 한 카드에서만 배치가 돌아서 화면에 최대 하나다.
+describe('SlotProgressCard · 사진 붙이는 중 줄·다시 시도 (TRIP-1797)', () => {
+  const PROGRESS = 'visit-photo-progress';
+  const RETRY = 'visit-photo-retry';
+
+  it.each<['active' | 'done']>([['active'], ['done']])(
+    'E1 %s 카드: photoProgress 문구를 주면 그 글자 그대로 한 줄이 서고, 안 주거나 null 이면 없다',
+    (state) => {
+      const { rerender } = render(
+        <SlotProgressCard
+          slot={mkSlot()}
+          date={DATE}
+          state={state}
+          onPressPhoto={jest.fn()}
+          photoProgress="2/3 붙이는 중"
+        />
+      );
+
+      expect(screen.getByTestId(PROGRESS)).toHaveTextContent('2/3 붙이는 중');
+
+      rerender(
+        <SlotProgressCard
+          slot={mkSlot()}
+          date={DATE}
+          state={state}
+          onPressPhoto={jest.fn()}
+          photoProgress={null}
+        />
+      );
+      expect(screen.queryByTestId(PROGRESS)).toBeNull();
+    }
+  );
+
+  it.each<['active' | 'done']>([['active'], ['done']])(
+    'E2 %s 카드: photoRetry 를 주면 [다시 시도] 가 서고 누르면 그 콜백 1회, 안 주면 없다',
+    (state) => {
+      const onPress = jest.fn();
+      const { rerender } = render(
+        <SlotProgressCard
+          slot={mkSlot()}
+          date={DATE}
+          state={state}
+          onPressPhoto={jest.fn()}
+          photoRetry={{ onPress }}
+        />
+      );
+
+      fireEvent.press(screen.getByTestId(RETRY));
+
+      expect(onPress).toHaveBeenCalledTimes(1);
+
+      rerender(
+        <SlotProgressCard
+          slot={mkSlot()}
+          date={DATE}
+          state={state}
+          onPressPhoto={jest.fn()}
+        />
+      );
+      expect(screen.queryByTestId(RETRY)).toBeNull();
+    }
+  );
+});

@@ -4,7 +4,9 @@ import type { PhotoPickResult } from './index';
 // 무반응 [설정 열기] 를 그리므로 별도 갈래(`unsupported`)로 정직하게 답한다. 앨범·피커 패키지는 불러오지 않는다.
 export type { PhotoAssetMeta, PhotoPickResult } from './index';
 
-export async function pickPhotoAsset(): Promise<PhotoPickResult> {
+export async function pickPhotoAssets(_opts: {
+  limit: number;
+}): Promise<PhotoPickResult> {
   return { kind: 'unsupported' };
 }
 export async function resolvePhotoUri(_localAssetId: string): Promise<null> {
@@ -12,7 +14,7 @@ export async function resolvePhotoUri(_localAssetId: string): Promise<null> {
 }
 
 // 시그니처 대조 — 실 모듈(index.ts) 타입이 바뀌면 여기서 빨개진다(tsc 는 소비처를 index.ts 로만 푼다).
-void ({ pickPhotoAsset, resolvePhotoUri } satisfies Pick<
+void ({ pickPhotoAssets, resolvePhotoUri } satisfies Pick<
   typeof import('./index'),
-  'pickPhotoAsset' | 'resolvePhotoUri'
+  'pickPhotoAssets' | 'resolvePhotoUri'
 >);

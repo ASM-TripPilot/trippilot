@@ -31,7 +31,11 @@ import {
   PREVIEW_SAVED_POI_IDS,
 } from '@/pages/explore/explore-landing/model/exploreFixtures';
 import { TriggerChip } from '@/pages/live/live-itinerary/ui/TriggerChip';
-import { MemoInline } from '@/features/attach-visit-media/index.view';
+import {
+  MemoInline,
+  photoFailedText,
+  photoProgressLabel,
+} from '@/features/attach-visit-media/index.view';
 import { MemoSheet } from '@/pages/live/live-itinerary/ui/MemoSheet';
 import { PhotoThumbStrip } from '@/pages/record/trip-records/ui/PhotoThumbStrip';
 import {
@@ -8689,6 +8693,36 @@ export const PREVIEW_STATES: PreviewState[] = [
           text: '사진 접근 권한이 없어 사진을 불러올 수 없어요',
         },
         onPressPhotoSettings: noop,
+      }),
+  },
+  // i01 사진 여러 장(TRIP-1797, Figma 근거 없음 — 진행·실패는 기존 안내 한 줄·[설정 열기] 어휘 재사용). 완료 카드(감천)에
+  // 「2/5 붙이는 중」 한 줄 / 「1장을 붙이지 못했어요」 + [다시 시도]를 얹어 6-b 가 선택기 없이 모양을 본다.
+  {
+    key: 'live-hub-photo-progress',
+    band: 'i',
+    label: 'i01 · 여행중 허브 사진 붙이는 중',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(1, {
+        slots: LIVE_HUB_PREVIEW_SLOTS_NO_RECORDS,
+        doneMediaPoiIds: new Set(['gamcheon', 'gwangalli']),
+        photoProgress: {
+          poiId: 'gamcheon',
+          text: photoProgressLabel(2, 5),
+        },
+      }),
+  },
+  {
+    key: 'live-hub-photo-partial-failed',
+    band: 'i',
+    label: 'i01 · 여행중 허브 사진 일부 실패 + 다시 시도',
+    login: null,
+    render: () =>
+      renderLiveHubPreview(1, {
+        slots: LIVE_HUB_PREVIEW_SLOTS_NO_RECORDS,
+        doneMediaPoiIds: new Set(['gamcheon', 'gwangalli']),
+        photoNotice: { poiId: 'gamcheon', text: photoFailedText(1) },
+        photoRetry: { poiId: 'gamcheon', onPress: noop },
       }),
   },
   // i01 메모 시트(TRIP-1117, Figma 4952:3098) — 중간 허브 위에 페이지처럼 형제 시트를 얹고 하단 바를 숨긴다.

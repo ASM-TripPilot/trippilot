@@ -132,6 +132,10 @@ export interface LiveHubViewProps {
   doneMediaPoiIds?: ReadonlySet<string>;
   /** 사진 안내 한 줄 — 그 poiId 카드(관람 중·완료)에만 선다. 상태는 페이지가 가진다. */
   photoNotice?: { poiId: string; text: string } | null;
+  /** TRIP-1797 — 여러 장을 붙이는 동안의 진행 한 줄. 누른 그 poiId 카드에만(한 번에 하나뿐). 상태는 페이지가 가진다. */
+  photoProgress?: { poiId: string; text: string } | null;
+  /** TRIP-1797 — 붙이지 못한 사진 [다시 시도]. 그 poiId 카드에만. */
+  photoRetry?: { poiId: string; onPress: () => void } | null;
   /** TRIP-1216 — 사진 안내 옆 [설정 열기](권한 거부일 때만 페이지가 준다). */
   onPressPhotoSettings?: () => void;
   /** TRIP-1117 — 메모 안내 한 줄(시트가 닫힌 뒤 도착한 저장 실패, Q3) — 그 poiId 카드에만. 상태는 페이지가 가진다. */
@@ -229,6 +233,8 @@ export function LiveHubView({
   onPressMemo,
   doneMediaPoiIds,
   photoNotice,
+  photoProgress,
+  photoRetry,
   onPressPhotoSettings,
   memoNotice,
   barHidden = false,
@@ -641,6 +647,12 @@ export function LiveHubView({
                         : undefined
                     }
                     photoNotice={noticeFor(photoNotice)}
+                    photoProgress={noticeFor(photoProgress)}
+                    photoRetry={
+                      state !== 'upcoming' && photoRetry?.poiId === slot.poiId
+                        ? { onPress: photoRetry.onPress }
+                        : undefined
+                    }
                     onPressPhotoSettings={
                       state !== 'upcoming' ? onPressPhotoSettings : undefined
                     }

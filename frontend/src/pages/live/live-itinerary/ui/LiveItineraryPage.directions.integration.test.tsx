@@ -58,7 +58,7 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('@/shared/photo', () => ({
-  pickPhotoAsset: jest.fn(),
+  pickPhotoAssets: jest.fn(),
   resolvePhotoUri: jest.fn(),
 }));
 
