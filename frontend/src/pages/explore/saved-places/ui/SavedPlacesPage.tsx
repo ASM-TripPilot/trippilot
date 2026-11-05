@@ -27,6 +27,7 @@ import { useRef, useState } from 'react';
 import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBackOr } from '@/shared/lib/goBackOr';
+import { guardPress } from '@/shared/lib/pressGuard';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -533,7 +534,7 @@ export function SavedPlacesPage(): ReactElement {
       onPressRow={(saved) =>
         router.push(`/explore/places/${saved.place.poiId}`)
       }
-      onPressCreateTrip={() => {
+      onPressCreateTrip={guardPress(() => {
         // TRIP-458 → 사용자 결정으로 갱신: 위저드 진입마다 도는 자동 시드는 폐지됐지만(다른
         // 진입점 — FAB "여행 만들기" 등 — 은 항상 빈 상태), **이 버튼은 "이 장소들로" 만들겠다는
         // 명시적 선택**이라 여기서 직접 심는다. 지금 화면에 그려진 목록(빈 하트로 해제한 항목은
@@ -544,7 +545,7 @@ export function SavedPlacesPage(): ReactElement {
         );
         // 새 여행 진입(TRIP-1012 #031·#074) — 비우기 → 시드 → push 순서는 `openNewTripWizard` 가 쥔다.
         openNewTripWizard(router, seedMustVisits(activePlaces));
-      }}
+      })}
       onPressBrowse={() => router.push('/explore/places')}
       onRetry={handleRetry}
       onPressLogin={() => router.push('/(auth)/login')}

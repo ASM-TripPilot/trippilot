@@ -482,6 +482,19 @@ describe('P-6 · ＋ FAB 는 여행 생성 1/2 로 보낸다 (AC-1 · AC-6 · US
 
     expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
   });
+
+  // TRIP-1775 — 창 안의 둘째 탭은 위저드를 한 번 더 쌓지 않는다.
+  it('＋ FAB 를 빠르게 두 번 눌러도 step1 은 한 번만 쌓인다', async () => {
+    setAccessToken('valid-access');
+    savedRows = [savedRowOf('p1')];
+
+    await renderPage();
+    const fab = screen.getByTestId('explore-places-create-fab');
+    fireEvent.press(fab);
+    fireEvent.press(fab);
+
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+  });
 });
 
 describe('P-12 · ♥ FAB 는 담은 장소(d02)로 보낸다 (AC-1 · 3-a)', () => {

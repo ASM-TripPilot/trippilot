@@ -131,12 +131,12 @@
   },
   "src/pages/explore/explore-landing/ui/ExploreLandingPage.tsx": {
     "no-restricted-syntax": {
-      "count": 7
+      "count": 6
     }
   },
   "src/pages/explore/place-explore/ui/PlaceExplorePage.tsx": {
     "no-restricted-syntax": {
-      "count": 6
+      "count": 5
     }
   },
   "src/pages/explore/place-explore/ui/PlaceExploreScreen.memo.test.tsx": {
@@ -151,12 +151,12 @@
   },
   "src/pages/explore/saved-places/ui/SavedPlacesPage.tsx": {
     "no-restricted-syntax": {
-      "count": 8
+      "count": 7
     }
   },
   "src/pages/home/ui/HomePage.tsx": {
     "no-restricted-syntax": {
-      "count": 6
+      "count": 5
     },
     "react-hooks/refs": {
       "count": 1
@@ -428,7 +428,7 @@
   },
   "src/pages/record/records-calendar/ui/RecordsCalendarPage.tsx": {
     "no-restricted-syntax": {
-      "count": 6
+      "count": 5
     }
   },
   "src/pages/record/share-card/ui/ShareCardPage.integration.test.tsx": {

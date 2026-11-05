@@ -13,6 +13,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import type {
   MustVisit,
   Place,
@@ -150,6 +151,7 @@ afterEach(() => {
   mockBack.mockReset();
   mockParams = {};
   resetWizardDraft();
+  resetPressGuard();
 });
 
 afterAll(() => server.close());
@@ -805,6 +807,18 @@ describe('save', () => {
       ).toEqual(['p1', 'p2', 'p3', 'p4']);
       expect(atPush?.mustVisitsInitialized).toBe(true);
       expect(atPush?.preserveMustVisitsOnce).toBe(true);
+    });
+
+    // TRIP-1775 — 창 안의 둘째 탭은 위저드를 한 번 더 쌓지 않는다.
+    it('버튼을 빠르게 두 번 눌러도 step1 은 한 번만 쌓인다', async () => {
+      await renderLoaded();
+      await waitFor(() => expect(itemTestIds()).toHaveLength(4));
+      const button = screen.getByTestId('explore-saved-createtrip');
+
+      fireEvent.press(button);
+      fireEvent.press(button);
+
+      expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
     });
   });
 

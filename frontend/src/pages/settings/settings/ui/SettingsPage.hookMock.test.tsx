@@ -12,6 +12,7 @@ import { AxiosError } from 'axios';
 import { useState } from 'react';
 import { Keyboard, Share } from 'react-native';
 import { DELETION_SCOPE } from '../model/deletionScope';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import {
   useDeleteMeDeletion,
   useGetMe,
@@ -158,6 +159,8 @@ afterEach(() => {
   // 메모리 파일 시스템·"모듈 없음" 집합도 모듈 싱글턴이다 — 앞 테스트가 쓴 파일이 뒤 테스트의 "파일 1개" 단언으로 새지 않게.
   resetFakeFs();
   mockMissingNativeModules.clear();
+  // 행 이동은 모듈 전역 연타 창(400ms)을 연다(TRIP-1775) — 앞 테스트의 창이 뒤 테스트의 첫 누름을 삼키지 않게.
+  resetPressGuard();
 });
 
 /** 뮤테이션 목이 부르는 콜백 모양(react-query 의 훅 옵션 `mutation` 과 `mutate` 호출별 옵션이 같다). */

@@ -1014,6 +1014,18 @@ describe('TRIP-1615 · GET /trips 조회 실패 — "여행 없음"으로 접지
     // 빈 얼굴엔 정렬 줄이 없다(옛 MyTripsListScreen.test 이전 — B안).
     expect(screen.queryByTestId('my-trips-sort')).toBeNull();
   });
+
+  // TRIP-1775 — 빈 얼굴 [여행 만들기]: 창 안의 둘째 탭은 위저드를 한 번 더 쌓지 않는다.
+  it('빈 얼굴 [여행 만들기]를 빠르게 두 번 눌러도 step1 은 한 번만 쌓인다', async () => {
+    serverTrips = [];
+
+    renderPage();
+    const button = await screen.findByTestId('itinerary-tab-create-trip');
+    fireEvent.press(button);
+    fireEvent.press(button);
+
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+  });
 });
 
 // TRIP-1638 · 오프라인으로 처음 켜면(캐시 없음) 요청이 나가지도 않은 채 `pending + paused` 가 되어 스켈레톤이 영원히 남던 문제(INV-4).
