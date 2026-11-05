@@ -543,3 +543,79 @@ describe('컨테이너 → 커버 도시', () => {
     expect(screen.queryByTestId('my-trip-city-t1')).toBeNull();
   });
 });
+
+// TRIP-1785 · 지난 카드의 「기록 보기 ›」 — 링크 유무는 세그가 아니라 컨테이너의 `phase === 'ended'` 판정이 정한다(01c).
+describe('🔴 TRIP-1785 · 「기록 보기 ›」 — 끝난 확정 여행에만, 기록 요약으로 (AC-4)', () => {
+  const ENDED = { startDate: '2026-06-10', endDate: '2026-06-13' } as const;
+  const TODAY = '2026-11-05';
+  const LINK = 'my-trip-records-link-t1';
+  const ended = (over: Partial<Trip> = {}) =>
+    trip({ ...ENDED, ...cols('COMPLETE', 'CONFIRMED'), ...over });
+
+  it('끝난 확정 여행: 링크가 뜨고 상태문 자리를 대신한다', () => {
+    renderCard(<TripCardContainer trip={ended()} today={TODAY} />);
+
+    expect(screen.getByTestId(LINK)).toHaveTextContent(/^기록 보기/);
+    expect(screen.queryByTestId('my-trip-extra-t1')).toBeNull();
+  });
+
+  it.each<[string, Partial<Trip>, string | undefined]>([
+    ['시작 전 확정', cols('COMPLETE', 'CONFIRMED'), '2026-06-01'],
+    [
+      '여행 중 확정',
+      { startDate: '2026-06-10', endDate: '2026-06-13' },
+      '2026-06-11',
+    ],
+    [
+      '날짜가 지난 작성중(확정 전) — 예정에 남는다',
+      cols('COMPLETE', 'PLANNED'),
+      TODAY,
+    ],
+    ['일정 없음', NO_ITINERARY, TODAY],
+    [
+      'today 를 안 주면(컨테이너는 시계를 안 읽는다)',
+      cols('COMPLETE', 'CONFIRMED'),
+      undefined,
+    ],
+  ])('%s 이면 링크가 없다 (상태문은 그대로)', (_label, over, today) => {
+    renderCard(
+      <TripCardContainer
+        trip={trip({ ...ENDED, ...cols('COMPLETE', 'CONFIRMED'), ...over })}
+        today={today}
+      />
+    );
+
+    expect(screen.queryByTestId(LINK)).toBeNull();
+    expect(screen.getByTestId('my-trip-card-t1')).toBeOnTheScreen();
+    expect(screen.getByTestId('my-trip-extra-t1')).toBeOnTheScreen();
+  });
+
+  it('링크를 누르면 기록 요약으로 정확히 1번 — 카드 본문 이동(허브)은 불리지 않는다', () => {
+    renderCard(<TripCardContainer trip={ended()} today={TODAY} />);
+
+    fireEvent.press(screen.getByTestId(LINK));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/trips/t1/records/summary');
+    expect(useGetTripsTripIdItinerary).not.toHaveBeenCalled();
+  });
+
+  it('링크를 연타해도 이동은 1번 (guardPress)', () => {
+    renderCard(<TripCardContainer trip={ended()} today={TODAY} />);
+
+    fireEvent.press(screen.getByTestId(LINK));
+    fireEvent.press(screen.getByTestId(LINK));
+    fireEvent.press(screen.getByTestId(LINK));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+  });
+
+  it('카드 본문 탭의 목적지는 현행 그대로 — 끝난 확정 여행도 /live (D9)', () => {
+    renderCard(<TripCardContainer trip={ended()} today={TODAY} />);
+
+    fireEvent.press(screen.getByTestId('my-trip-card-t1'));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(String(mockPush.mock.calls[0][0])).toBe('/trips/t1/live');
+  });
+});

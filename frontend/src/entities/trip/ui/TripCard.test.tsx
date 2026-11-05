@@ -363,3 +363,81 @@ describe('⋯ 버튼과 삭제 메뉴', () => {
     });
   });
 });
+
+// TRIP-1785 · 지난 카드의 「기록 보기 ›」 — additive 옵셔널 prop `onPressRecords`.
+describe('🔴 TRIP-1785 TC10 · 「기록 보기 ›」 링크 슬롯 — onPressRecords 가 있을 때만, 상태문 자리에', () => {
+  /** hitSlop(숫자 또는 {top,bottom,left,right}) 의 세로 합. */
+  function verticalSlop(value: unknown): number {
+    if (typeof value === 'number') return value * 2;
+    const s = (value ?? {}) as { top?: number; bottom?: number };
+    return (s.top ?? 0) + (s.bottom ?? 0);
+  }
+
+  it('onPressRecords 를 주면 링크가 뜨고, 눌러도 링크 콜백만 1번 — 카드 onPress 는 안 불린다', () => {
+    // 준비
+    const onPress = jest.fn();
+    const onPressRecords = jest.fn();
+    render(
+      <TripCard
+        vm={vm()}
+        onPress={onPress}
+        onPressRecords={onPressRecords}
+        testIDPrefix="my-trip"
+      />
+    );
+
+    // 실행
+    const link = screen.getByTestId('my-trip-records-link-t1');
+    fireEvent.press(link);
+
+    // 단언 — 글자는 「기록 보기」로 시작(뒤 › 는 글리프든 글자든 허용: 정규식)
+    expect(link).toHaveTextContent(/^기록 보기/);
+    expect(link.props.accessibilityRole).toBe('button');
+    expect(onPressRecords).toHaveBeenCalledTimes(1);
+    expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it('링크가 상태문(extra) 자리를 대신한다 — 둘이 함께 뜨지 않는다', () => {
+    render(
+      <TripCard
+        vm={vm({ extra: '일정 확정' })}
+        onPress={noop}
+        onPressRecords={noop}
+        testIDPrefix="my-trip"
+      />
+    );
+
+    expect(screen.getByTestId('my-trip-records-link-t1')).toBeOnTheScreen();
+    expect(screen.queryByTestId('my-trip-extra-t1')).toBeNull();
+  });
+
+  it('onPressRecords 가 없으면 링크가 없고 상태문은 그대로 — 기존 소비처 무회귀 짝', () => {
+    render(
+      <TripCard
+        vm={vm({ extra: '일정 확정' })}
+        onPress={noop}
+        testIDPrefix="my-trip"
+      />
+    );
+
+    expect(screen.queryByTestId('my-trip-records-link-t1')).toBeNull();
+    expect(screen.getByTestId('my-trip-extra-t1')).toHaveTextContent(
+      '일정 확정'
+    );
+  });
+
+  it('터치 영역: 보이는 높이 18(Figma) + hitSlop 세로 합이 44 이상', () => {
+    render(
+      <TripCard
+        vm={vm()}
+        onPress={noop}
+        onPressRecords={noop}
+        testIDPrefix="my-trip"
+      />
+    );
+
+    const link = screen.getByTestId('my-trip-records-link-t1');
+
+    expect(18 + verticalSlop(link.props.hitSlop)).toBeGreaterThanOrEqual(44);
+  });
+});

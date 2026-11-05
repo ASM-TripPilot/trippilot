@@ -7123,6 +7123,29 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
+    key: 'h06-my-trips-past',
+    band: 'h',
+    label: 'h06 · 내 여행 목록 · 지난(기록 보기 링크)',
+    login: null,
+    render: () => (
+      <MyTripsListScreen
+        mode="list"
+        onPressCreateTrip={noop}
+        segment="past"
+        onSelectSegment={noop}
+        cards={MY_TRIPS_PREVIEW_VMS.slice(0, 1).map((vm) => (
+          <TripCard
+            testIDPrefix="my-trip"
+            key={vm.tripId}
+            vm={{ ...vm, coverTone: 'ended' }}
+            onPress={noop}
+            onPressRecords={noop}
+          />
+        ))}
+      />
+    ),
+  },
+  {
     key: 'h05-my-trips-done-bar',
     band: 'h',
     label: 'h05 · 완료 도킹 배너',

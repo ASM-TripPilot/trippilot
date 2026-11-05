@@ -131,6 +131,15 @@ export function TripCardContainer({
       });
   });
 
+  // TRIP-1785 · 지난 여행(확정 ∧ 오늘 > 종료일) 카드는 상태문 자리에 「기록 보기 ›」 — 기록 탭 지난 카드와 같은 j04 요약으로 간다.
+  // 링크 유무는 세그가 아니라 이 판정이 정한다(지난 세그 카드 = ended 카드). today 가 없으면 판정을 안 한다.
+  const onPressRecords = guardPress((): void => {
+    router.push(`/trips/${trip.tripId}/records/summary`);
+  });
+  const ended =
+    today !== undefined &&
+    classifyTripPhase(trip, summary.status, today) === 'ended';
+
   // TRIP-1055 · 삭제 진입점(UX 사본 — 판정 정본은 서버 BR-U1-57, 상태 가드 TRIP-1061 전까진 이게 유일한
   // 방어). 보이는 배지가 '작성중'이면(Q3 — 날짜 지난 초안 포함) 생성 세션이 돌아도 연다(TRIP-1271 결정 1=A).
   // TRIP-1441 — 확정했지만 아직 시작 전인 여행('upcoming', 서울 날짜 기준)에도 연다(사용자 결정 2026-10-16,
@@ -157,6 +166,7 @@ export function TripCardContainer({
       }
       menuOpen={menuOpen}
       onPressMenu={() => setMenuOpen((open) => !open)}
+      onPressRecords={ended ? onPressRecords : undefined}
     />
   );
 }
