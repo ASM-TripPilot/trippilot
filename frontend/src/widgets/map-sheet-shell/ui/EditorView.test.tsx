@@ -1013,7 +1013,7 @@ describe('🔴 EditorView · H1 — 장소 추가 즉시 저장 안내 한 줄 (
  *
  * 3동작 뼈대: 준비=슬롯·콜백 주입 렌더 → 실행=토글·체크·하단 버튼·확인창 press → 단언=트리(곳수·라벨·부재/존재)·콜백 인자.
  */
-describe('🔴 EditorView · 여러 곳 골라 빼기 (TRIP-1791)', () => {
+describe('🔴 EditorView · 여러 곳 골라 빼기 (TRIP-1791) · 카드 ⋯ 노출 조건 (TRIP-1793)', () => {
   const CHECK = (poiId: string): string => `editor-select-check-${poiId}`;
   const CARD = (poiId: string): string =>
     `slot-stopcard-${buildSlotKey(DATE, poiId)}`;
@@ -1331,7 +1331,7 @@ describe('🔴 EditorView · 여러 곳 골라 빼기 (TRIP-1791)', () => {
     expect(screen.getByTestId(CHECK('b'))).not.toBeSelected();
   });
 
-  it('S-C · 체크 뒤에 잠기면 빼기 대상에서 제외(D12) · 일차 칩은 모드를 즉시 끈다(D3) · 안 잠긴 카드가 없으면 「선택」 숨김(D4)', () => {
+  it('S-C · 체크 뒤에 잠기면 빼기 대상에서 제외(D12) · 일차 칩은 모드를 즉시 끈다(D3) · 안 잠긴 카드가 없으면 「선택」 숨김(D4) · 카드 ⋯ 노출 조건·옮김 배지 (TRIP-1793)', () => {
     const slots = [
       named('a', '황령산 전망대'),
       named('b', '부산시립미술관'),
@@ -1388,5 +1388,101 @@ describe('🔴 EditorView · 여러 곳 골라 빼기 (TRIP-1791)', () => {
     expect(screen.queryByTestId('editor-select-toggle')).toBeNull();
     redraw({ completedSlotKeys: [key('a'), key('b')] });
     expect(screen.getByTestId('editor-select-toggle')).toBeOnTheScreen();
+
+    // ── TRIP-1793 · 카드 ⋯ (다른 날로 옮기기) — 같은 인스턴스에 prop 만 바꿔 노출 조건을 차례로 잰다(새 mount 0, 소음 예산).
+    //  이 `it` 의 준비는 이미 이틀 일정(a·b·c, 둘 다 안 고정)이고 선택 모드는 위에서 취소로 나왔다.
+    const MORE = (poiId: string): string => `editor-slot-more-${poiId}`;
+    const moreIds = (): string[] =>
+      screen
+        .queryAllByTestId(/^editor-slot-more-/)
+        .map((node) => node.props.testID as string);
+    const onPressMore = jest.fn();
+
+    // ① 콜백을 안 준 화면(직접 짜기)은 ⋯ 가 없다 — 카드 3장이 있고 이틀 일정이라 "숨을 이유"가 없는데도.
+    redraw({ completedSlotKeys: [] });
+    expect(moreIds()).toEqual([]);
+
+    // ② 주면 안 잠긴 카드마다 ⋯ 가 슬롯 순서로 서고, 누르면 poiId 로 콜백한다.
+    redraw({ completedSlotKeys: [], onPressMore });
+    expect(moreIds()).toEqual([MORE('a'), MORE('b'), MORE('c')]);
+    press(MORE('b'));
+    expect(onPressMore).toHaveBeenCalledTimes(1);
+    expect(onPressMore).toHaveBeenCalledWith('b');
+
+    // ③ 방문 완료 카드엔 ⋯ 가 없다.
+    redraw({ completedSlotKeys: [key('a')], onPressMore });
+    expect(moreIds()).toEqual([MORE('b'), MORE('c')]);
+
+    // ④ 고정(isFixed) 카드에도 없다 — 끌기와 같은 isPinned 기준.
+    redraw({
+      completedSlotKeys: [],
+      onPressMore,
+      slots: [
+        named('a', '황령산 전망대'),
+        named('b', '부산시립미술관'),
+        named('c', '감천문화마을', { isFixed: true }),
+      ],
+    });
+    expect(moreIds()).toEqual([MORE('a'), MORE('b')]);
+
+    // ⑤ 선택 모드에서는 전부 사라지고, 취소하면 돌아온다.
+    redraw({ completedSlotKeys: [], onPressMore });
+    press('editor-select-toggle');
+    expect(moreIds()).toEqual([]);
+    press('editor-select-cancel');
+    expect(moreIds()).toEqual([MORE('a'), MORE('b'), MORE('c')]);
+
+    // ⑥ 일정이 하루뿐이면 옮길 날이 없어 ⋯ 가 없다. 다시 이틀이면 돌아온다.
+    redraw({
+      completedSlotKeys: [],
+      onPressMore,
+      days: buildPlanDayTabs(daysOf(DATE)),
+    });
+    expect(moreIds()).toEqual([]);
+    redraw({ completedSlotKeys: [], onPressMore });
+    expect(moreIds()).toEqual([MORE('a'), MORE('b'), MORE('c')]);
+
+    // ⑦ 옮김 배지 — 뷰가 일차 목록(`days`)에서 출발 날짜의 일차를 찾아 「N일차에서 옮김」을 카드에 내린다.
+    const movedId = (poiId: string): string =>
+      `slot-stopcard-moved-${key(poiId)}`;
+    const withMoved = (poiId: string, from: string): EditorSlot =>
+      ({ ...named(poiId, `장소-${poiId}`), movedFromDate: from }) as EditorSlot;
+    redraw({
+      completedSlotKeys: [],
+      onPressMore,
+      slots: [
+        named('a', '황령산 전망대'),
+        withMoved('b', DATE),
+        named('c', '감천문화마을'),
+      ],
+    });
+    expect(screen.getByTestId(movedId('b'))).toHaveTextContent(
+      '1일차에서 옮김'
+    );
+    expect(screen.queryByTestId(movedId('a'))).toBeNull();
+    expect(screen.queryByTestId(movedId('c'))).toBeNull();
+    redraw({
+      completedSlotKeys: [],
+      onPressMore,
+      slots: [
+        named('a', '황령산 전망대'),
+        withMoved('b', DATE2),
+        named('c', '감천문화마을'),
+      ],
+    });
+    expect(screen.getByTestId(movedId('b'))).toHaveTextContent(
+      '2일차에서 옮김'
+    );
+    // 일정에 없는 날짜면 뷰가 일차를 지어내지 않는다 — 배지 없음.
+    redraw({
+      completedSlotKeys: [],
+      onPressMore,
+      slots: [
+        named('a', '황령산 전망대'),
+        withMoved('b', '2099-01-01'),
+        named('c', '감천문화마을'),
+      ],
+    });
+    expect(screen.queryByTestId(movedId('b'))).toBeNull();
   });
 });

@@ -128,6 +128,7 @@ import type { MonthLegends } from '@/pages/record/records-calendar/model/records
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { buildStatePins } from '@/entities/itinerary-slot';
 import { TimeSheet } from '@/widgets/time-sheet';
+import { MoveDaySheet } from '@/pages/itinerary/itinerary-edit/ui/MoveDaySheet';
 import { MethodPickerScreen } from '@/pages/itinerary/itinerary-method/ui/MethodPickerScreen';
 import { MyTripsListScreen } from '@/pages/itinerary/itinerary-list/ui/MyTripsListScreen';
 import { TripSettingsView } from '@/pages/trip/trip-settings/ui/TripSettingsView';
@@ -8193,7 +8194,11 @@ export const PREVIEW_STATES: PreviewState[] = [
       <EditorView
         center={{ lat: 35.1532, lng: 129.1188 }}
         days={TIMELINE_PREVIEW_DAYS}
-        slots={TIMELINE_PREVIEW_SLOTS}
+        slots={TIMELINE_PREVIEW_SLOTS.map((slot, index) =>
+          index === 0
+            ? { ...slot, movedFromDate: TIMELINE_PREVIEW_DAYS[1].date }
+            : slot
+        )}
         activeDayIndex={0}
         activeDate={TIMELINE_PREVIEW_DAYS[0].date}
         dateLabel={formatCoPickDayHeader(TIMELINE_PREVIEW_DAYS[0].date)}
@@ -8206,7 +8211,34 @@ export const PREVIEW_STATES: PreviewState[] = [
         onDeleteSelected={noop}
         // TRIP-1792 — 머리 ↶(「선택」 오른쪽). 활성 얼굴; 비활성은 enabled:false.
         undo={{ enabled: true, onPress: noop }}
+        // TRIP-1793 — 카드 ⋯(고정 poi-b 에는 없음) + 첫 카드의 「2일차에서 옮김」 배지.
+        onPressMore={noop}
       />
+    ),
+  },
+  // TRIP-1793 — 「다른 날로 옮기기」 장소 시트 단독(3일 일정에서 1일차 장소: 현재 날·이미 있는 날 칩 비활성 + 중복 안내). 시트 실제 열림·딤·끌어내림은 통과형 목이
+  // 못 봐서 이 키가 6-b 육안 자리다.
+  {
+    key: 'h12-editor-move-sheet',
+    band: 'h',
+    label: 'h12 · 편집기 다른 날로 옮기기 시트',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <MoveDaySheet
+          name="부산시립미술관"
+          photo={{ imageUrl: null, poiId: 'poi-a', category: '문화' }}
+          subtitle="1일차 · 14:30–15:15 · 감성 · 브런치"
+          options={[
+            { dayIndex: 1, date: '2026-06-10', blocked: 'current' },
+            { dayIndex: 2, date: '2026-06-11', blocked: 'duplicate' },
+            { dayIndex: 3, date: '2026-06-12', blocked: null },
+          ]}
+          initialDate="2026-06-12"
+          onConfirm={noop}
+          onClose={noop}
+        />
+      </View>
     ),
   },
   {

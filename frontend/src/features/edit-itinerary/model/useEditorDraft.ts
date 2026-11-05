@@ -20,6 +20,7 @@ export function useEditorDraft(editingSlotKey: string | null) {
   const deleteSlots = useItineraryEditStore((s) => s.deleteSlots);
   const reorderSlots = useItineraryEditStore((s) => s.reorderSlots);
   const adjustSlotTime = useItineraryEditStore((s) => s.adjustSlotTime);
+  const moveSlot = useItineraryEditStore((s) => s.moveSlot);
   const undo = useItineraryEditStore((s) => s.undo);
   // 구독 값 — 렌더에서 써도 안전한 건 이 불리언뿐이다(맨 위 번호는 아래 getter 로 호출 시점에 읽는다).
   const canUndo = useItineraryEditStore((s) => s.history.length > 0);
@@ -53,6 +54,7 @@ export function useEditorDraft(editingSlotKey: string | null) {
     deleteSlots,
     reorderSlots,
     adjustSlotTime,
+    moveSlot,
     undo,
     canUndo,
     topUndoId,

@@ -32,6 +32,11 @@ type Slot = ItineraryDaysItemSlotsItem;
  */
 export type EditorSlot = Omit<ItineraryDaysItemSlotsItem, 'startAt'> & {
   startAt: string | null;
+  /**
+   * TRIP-1793 · 옮김 표식 — 「다른 날로 옮기기」로 온 슬롯이 **처음 있던 날**(`YYYY-MM-DD`). 서버 데이터가 아니라 초안 안의
+   * 꼬리표다: 이력 스냅샷과 함께 되돌아가고, `seed`(저장 성공)가 서버 슬롯으로 덮으면 사라지며, 요청 조립은 5필드만 골라 싣는다.
+   */
+  movedFromDate?: string;
 };
 export type EditorDaysItem = { date: string; slots: EditorSlot[] };
 
@@ -150,6 +155,17 @@ export interface ItineraryEditState {
    * 이력이 비었거나 `expectId` 가 주어졌는데 맨 위 번호와 다르면(낡은 안내 바) 아무것도 안 하고 null.
    */
   undo(expectId?: number): string | null;
+  /**
+   * TRIP-1793 · 슬롯 하나를 `fromDate` 에서 빼 `toDate` 에 넣고(시각은 `patch`) 대상 날을 시작 시각 순으로 다시 세운다 — **한 번의 set**
+   * (통지 1회 = 이력 1장 = 되돌리기 1단계, 이력 날짜 = 출발 날). `insertSlot` 은 이력을 비우므로 쓰지 않는다. 옮긴 슬롯엔 `movedFromDate`
+   * (이미 있으면 최초 출발 날 유지, 원래 날로 돌아오면 지움). 같은 날·없는 날·없는 장소·대상 날에 같은 장소가 이미 있으면 state 그대로.
+   */
+  moveSlot(
+    fromDate: string,
+    toDate: string,
+    poiId: string,
+    patch: { startAt: string; endAt: string; endsNextDay: boolean }
+  ): void;
   /** 테스트/재진입 초기화(싱글턴 격리). */
   reset(): void;
 }
@@ -229,6 +245,48 @@ const createItineraryEditStore: StateCreator<ItineraryEditState> = (
           : day
       ),
     })),
+  moveSlot: (fromDate, toDate, poiId, patch) =>
+    set((state) => {
+      const from = state.days.find((day) => day.date === fromDate);
+      const to = state.days.find((day) => day.date === toDate);
+      const moving = from?.slots.find((slot) => slot.poiId === poiId);
+      if (
+        fromDate === toDate ||
+        from === undefined ||
+        to === undefined ||
+        moving === undefined ||
+        to.slots.some((slot) => slot.poiId === poiId)
+      ) {
+        return state;
+      }
+      const origin = (moving as EditorSlot).movedFromDate ?? fromDate;
+      const { movedFromDate: _stale, ...rest } = moving as EditorSlot;
+      const moved = (
+        origin === toDate
+          ? { ...rest, ...patch }
+          : { ...rest, ...patch, movedFromDate: origin }
+      ) as Slot;
+      return {
+        ...state,
+        dirty: true,
+        days: state.days.map((day) =>
+          day === from
+            ? { ...day, slots: removeSlot(day.slots, poiId) }
+            : day === to
+              ? { ...day, slots: sortSlotsByStartAt([...day.slots, moved]) }
+              : day
+        ),
+        history: [
+          ...state.history,
+          {
+            id: nextHistoryId++,
+            date: fromDate,
+            days: state.days,
+            dirty: state.dirty,
+          },
+        ],
+      };
+    }),
   undo: (expectId) => {
     const { history } = get();
     const top = history[history.length - 1];

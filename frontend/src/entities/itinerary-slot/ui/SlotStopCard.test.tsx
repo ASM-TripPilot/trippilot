@@ -11,6 +11,7 @@ import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
 
 import { ALT_LABEL } from '../config/altLabel';
 import { buildSlotKey } from '../lib/slotKey';
+import * as SharedGlyphs from '@/shared/ui/glyphs';
 import { ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import { SlotStopCard } from './SlotStopCard';
 
@@ -615,4 +616,52 @@ describe('🔴 SlotStopCard · SEL — selection prop (TRIP-1791)', () => {
       expect(screen.getByTestId(CHECK)).toBeOnTheScreen();
     }
   );
+});
+
+// ── TRIP-1793 · 편집기 「다른 날로 옮기기」 ⋯ 버튼과 옮김 배지 — `more`·`movedLabel` opt-in ─────────────────
+//
+// 카드는 ⋯ 를 **그릴 뿐** 언제 보일지(고정·완료·1일·선택 모드)는 부모(`EditorView`)가 정한다. 배지 문구도 카드가 안 만든다 —
+// 받은 문자열을 그대로 그린다(`violation` 선례). 색·크기·히트는 생김새라 단언하지 않는다(실화면 QA, hitSlop 은 6-b).
+// 3동작 뼈대: 준비=prop 별 렌더 → 실행=press → 단언=역할·콜백 횟수·leaf 문자열.
+
+describe('SlotStopCard · MORE — more·movedLabel prop (TRIP-1793)', () => {
+  const MORE = 'editor-slot-more-probe';
+
+  it('MORE-1 · 둘 다 안 주면 ⋯ 도 배지도 없다 (결과 화면 5종 회귀 앵커)', () => {
+    const { slotKey } = renderCard();
+
+    expect(screen.queryByTestId(MORE)).toBeNull();
+    expect(screen.queryByTestId(id(slotKey)('moved'))).toBeNull();
+  });
+
+  it('MORE-2 · more 를 주면 그 testID 의 버튼이 생기고 누르면 onPress 1회 — 카드 루트·사진은 눌려도 0회 (카드 전체 탭 금지)', () => {
+    const onPress = jest.fn();
+    const { slotKey } = renderCard({ more: { onPress, testID: MORE } });
+
+    const more = screen.getByTestId(MORE);
+    expect(more).toHaveProp('accessibilityRole', 'button');
+    fireEvent.press(more);
+    expect(onPress).toHaveBeenCalledTimes(1);
+
+    fireEvent.press(screen.getByTestId(`slot-stopcard-${slotKey}`));
+    fireEvent.press(screen.getByTestId(id(slotKey)('photo')));
+    expect(onPress).toHaveBeenCalledTimes(1);
+
+    // ⋯ 글리프는 공용 글리프 폴더에 산다 — entities/trip 에서 이사(형제 entities 라 거기서는 못 물었다).
+    expect(typeof SharedGlyphs.MoreDotsGlyph).toBe('function');
+  });
+
+  it('MORE-3 · movedLabel 은 받은 문자열을 leaf 하나에 완전일치로 그리고, null·빈 문자열·미주입이면 요소가 없다', () => {
+    const { slotKey } = renderCard({ movedLabel: '3일차에서 옮김' });
+    const moved = screen.getByTestId(id(slotKey)('moved'));
+    expect(moved).toHaveTextContent('3일차에서 옮김'); // 카드가 문구를 만들지 않는다 — 받은 값 그대로
+    expect(moved).not.toHaveTextContent('3일차'); // 부분 일치면 통과 → 완전일치라 .not 성립
+    screen.unmount();
+
+    for (const empty of [null, '', undefined]) {
+      const again = renderCard({ movedLabel: empty });
+      expect(screen.queryByTestId(id(again.slotKey)('moved'))).toBeNull();
+      screen.unmount();
+    }
+  });
 });

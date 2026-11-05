@@ -640,6 +640,17 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
 
   describe('🔴 M1 · AC-9 — 직접 짜기가 위젯 편집 뷰를 소비하고 헤더 날짜가 괄호형이다', () => {
     it('드래그 리스트가 있고 헤더가 "일정 만들기 · 6월 10일(수) · 3곳" 조각이다', async () => {
+      // TRIP-1793 — 「직접 짜기엔 카드 ⋯(다른 날로 옮기기)가 없다」를 비공허하게 재려고 이틀짜리 초안으로 연다(하루뿐이면 ⋯ 가 어차피 없다).
+      serveItinerary(server, {
+        trip: () => trip(),
+        itinerary: () => ({
+          ...manualDraft(PLAIN),
+          days: [
+            { date: DAY, slots: PLAIN },
+            { date: '2026-06-11', slots: [slot('z', '09:00:00', '10:00:00')] },
+          ],
+        }),
+      });
       renderPage();
       await ready();
 
@@ -657,6 +668,9 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       // TRIP-1792 — 저장 전 되돌리기도 마찬가지로 직접 짜기엔 없다(`undo` 미주입 = 기능 부재, D7·AC-10).
       // 짝은 ItineraryEditPage R1 의 `editor-undo` 비활성 존재 단언 — 같은 뷰·같은 3곳 상태에서 거기엔 있다.
       expect(screen.queryByTestId('editor-undo')).toBeNull();
+      // TRIP-1793 — 이틀 일정(일차 칩 있음)에 안 잠긴 카드 3장이 있어도 ⋯ 가 없다: `onPressMore` 미주입 = 지금 화면(D2).
+      expect(screen.getByTestId('itinerary-edit-day-2')).toBeOnTheScreen();
+      expect(screen.queryAllByTestId(/^editor-slot-more-/)).toHaveLength(0);
     });
   });
 

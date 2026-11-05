@@ -140,6 +140,8 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
    *  - 🔴 409 는 **재조회한 일정 상태**(신호 B)로 "확정" vs "만드는 중" 을 서로 다른 문구로 가른다
    *    (R4·R5 · AC6). 500·네트워크도 **인라인 안내**(INV-4 침묵 금지) 다(R6·R7 · AC7).
    *  - 🔴 다일자 칩(`itinerary-edit-day-2`) press 로 활성 일자가 바뀐다(R8 · AC4).
+   *  - 🔴 TRIP-1793 R8 에 이어 붙인 「다른 날로 옮기기」 — ⋯ → 장소 시트 → 시각 시트 → 대상 일차로 이동·알림 줄·옮김 배지 → ↶ 로 출발 일차 복귀
+   *    → 시트 어디서든 닫으면 안 옮김 → 저장 PUT 에 대상 날 슬롯만 실리고 표식은 없음(새 `it` 을 안 만든 이유: integration 소음 예산 174/174).
    *  - 🔴 활성 일자 슬롯에 좌표가 없으면(핀 0개) 지도 center = 서울 시청, 있으면 첫 핀 좌표(M1·M2 · TRIP-926).
    *
    * ⚠️ 재조립으로 **삭제·재정렬은 이 편집기에서 드래그(→드롭존 삭제)** 가 됐다 — 목이 원리적 사각이라
@@ -303,11 +305,19 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
     clearAccessToken();
   });
 
+  // TRIP-1793 — 옮긴 뒤 알림 줄(공용 토스트)을 보려면 루트 호스트를 같이 그려야 한다(R8).
   function renderPage() {
     const client = newTestQueryClient({ gcTime: 0 });
     lastClient = client;
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>
+          <WithToastHost>{children}</WithToastHost>
+        </QueryClientProvider>
+      );
+    }
     return render(<ItineraryEditPage tripId={TRIP_ID} />, {
-      wrapper: createWrapper(client),
+      wrapper: Wrapper,
     });
   }
 
@@ -513,7 +523,7 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
   });
 
   describe('🔴 R8 · AC4 — 다일자 칩으로 활성 일자 전환', () => {
-    it('day2 칩 press → day2 슬롯(poi-c)이 뜨고 곳 수가 1곳으로 갱신된다', async () => {
+    it('day2 칩 press → day2 슬롯(poi-c)이 뜨고 곳 수가 1곳으로 갱신된다 · 이어서 다른 날로 옮기기 흐름 (TRIP-1793)', async () => {
       renderPage();
       await screen.findByTestId(cardId('poi-a'));
       expect(screen.getByTestId(META)).toHaveTextContent('2곳');
@@ -548,6 +558,134 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       expect(screen.queryByTestId(cardId('poi-a'))).toBeNull();
       expect(screen.getByTestId('editor-undo')).toBeDisabled(); // 쌓인 게 없어졌다
       expect(putCalls).toBe(0);
+
+      // ── TRIP-1793 · 다른 날로 옮기기. 시작점 = 위 undo 가 2일차를 보여 준 상태(2일차 [poi-c], 쌓인 이력 0).
+      //  시트의 실제 열림·딤은 통과형 목이라 jest 사각(6-b) — 여기서는 시트 안 내용·콜백·옮긴 결과를 잰다.
+      const MORE = (poiId: string): string => `editor-slot-more-${poiId}`;
+      const moreIds = (): string[] =>
+        screen
+          .queryAllByTestId(/^editor-slot-more-/)
+          .map((node) => node.props.testID as string);
+      const listOrder = (): string[] =>
+        (editListData() as { poiId: string }[]).map((s) => s.poiId);
+      const SHEET = 'editor-move-sheet';
+      const TIME = 'editor-move-time';
+      const TOAST = 'editor-move-toast';
+      const movedId = (date: string, poiId: string): string =>
+        `slot-stopcard-moved-${buildSlotKey(date, poiId)}`;
+
+      // ① 2일차에는 ⋯ 가 poi-c 하나. 누르면 장소 시트 — 현재 날(2일차) 칩은 막히고 다음 날이 없으니 1일차가 선택돼 있다.
+      //  ⋯ 는 그 날 방문 조회가 끝나야 선다(W2 — 모르는 동안엔 없다, CL1 이 잰다).
+      await visitsSettled();
+      expect(moreIds()).toEqual([MORE('poi-c')]);
+      expect(screen.queryByTestId(SHEET)).toBeNull(); // 앵커 — 누르기 전엔 시트가 없다
+      expect(screen.queryByTestId(TOAST)).toBeNull(); // 앵커 — 옮기기 전엔 알림 줄이 없다
+      fireEvent.press(screen.getByTestId(MORE('poi-c')));
+      expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+      expect(screen.getByTestId('editor-move-day-2')).toBeDisabled();
+      expect(screen.getByTestId('editor-move-day-1')).toBeSelected();
+      expect(screen.getByTestId('editor-move-hint')).toHaveTextContent(
+        '1일차 마지막에 넣어요 · 다음 단계에서 시각을 골라요'
+      );
+      expect(screen.getByTestId('editor-move-confirm')).toHaveTextContent(
+        '1일차로 옮기기'
+      );
+
+      // ② AC-5 — 장소 시트를 닫으면 아무것도 안 옮겨진다.
+      fireEvent.press(screen.getByTestId('editor-move-close'));
+      expect(screen.queryByTestId(SHEET)).toBeNull();
+      expect(listOrder()).toEqual(['poi-c']);
+      expect(screen.getByTestId('editor-undo')).toBeDisabled();
+
+      // ③ AC-5 — 확정하면 시각 시트가 열리고(장소 시트는 닫힘), 기본 시각은 1일차 마지막(poi-b 13:00–14:00)이 끝나는 14:00 부터 1시간.
+      //    시각 시트를 닫으면 시각 없는 슬롯을 만들지 않고 아무것도 안 옮겨진다.
+      fireEvent.press(screen.getByTestId(MORE('poi-c')));
+      fireEvent.press(await screen.findByTestId('editor-move-confirm'));
+      expect(await screen.findByTestId(`${TIME}-sheet`)).toBeOnTheScreen();
+      expect(screen.queryByTestId(SHEET)).toBeNull();
+      expect(screen.getByTestId(`${TIME}-readout`)).toHaveTextContent(
+        '시작 14:00 · 종료 15:00'
+      );
+      fireEvent.press(screen.getByTestId(`${TIME}-close`));
+      expect(screen.queryByTestId(`${TIME}-sheet`)).toBeNull();
+      expect(listOrder()).toEqual(['poi-c']);
+      expect(screen.getByTestId(META)).toHaveTextContent('1곳');
+      expect(screen.getByTestId('editor-undo')).toBeDisabled();
+      expect(putCalls).toBe(0);
+
+      // ④ AC-1·10·7 — 이번엔 [적용]. 뒷날(2일차)에서 앞날(1일차)로 옮겨지고 화면이 1일차를 따라간다 — 1일차 마지막에 14:00 으로.
+      fireEvent.press(screen.getByTestId(MORE('poi-c')));
+      fireEvent.press(await screen.findByTestId('editor-move-confirm'));
+      fireEvent.press(await screen.findByTestId(`${TIME}-apply`));
+      expect(screen.queryByTestId(`${TIME}-sheet`)).toBeNull();
+      expect(screen.getByTestId('itinerary-edit-day-1')).toBeSelected();
+      expect(listOrder()).toEqual(['poi-a', 'poi-b', 'poi-c']);
+      expect(screen.getByTestId(META)).toHaveTextContent('3곳');
+      expect(screen.getByTestId(TOAST)).toHaveTextContent('1일차로 옮겼어요');
+      expect(screen.getByTestId(movedId(DAY1, 'poi-c'))).toHaveTextContent(
+        '2일차에서 옮김'
+      );
+      expect(putCalls).toBe(0); // 저장 전 — 서버 쓰기 0
+
+      // ⑤ AC-3 — 머리 ↶ 한 번: 옮긴 한 번이 한 단계라 poi-c 가 원래 일차(2일차)로 돌아가고 화면이 거기로 따라간다. 배지도 사라진다.
+      fireEvent.press(screen.getByTestId('editor-undo'));
+      expect(screen.getByTestId('itinerary-edit-day-2')).toBeSelected();
+      expect(listOrder()).toEqual(['poi-c']);
+      expect(screen.queryByTestId(movedId(DAY1, 'poi-c'))).toBeNull();
+      expect(screen.queryByTestId(movedId(DAY2, 'poi-c'))).toBeNull();
+      expect(screen.getByTestId('editor-undo')).toBeDisabled();
+      fireEvent.press(screen.getByTestId('itinerary-edit-day-1'));
+      expect(listOrder()).toEqual(['poi-a', 'poi-b']); // 1일차도 원래대로
+      await visitsSettled(); // W2 — 날을 바꾸면 그 날 방문 조회가 끝나야 ⋯ 가 선다
+      expect(moreIds()).toEqual([MORE('poi-a'), MORE('poi-b')]);
+
+      // ⑥ AC-1·8 — 앞날→뒷날: poi-b 를 2일차로, 시각 시트 기본은 10:00–11:00(2일차 마지막 poi-c 가 자정을 넘겨 끝나 폴백)
+      //    → 시작 15시·종료 16시로 고쳐 [적용]. 15:00 은 poi-c(22:00) 보다 이르니 시각 순으로 poi-c 앞에 선다.
+      fireEvent.press(screen.getByTestId(MORE('poi-b')));
+      expect(await screen.findByTestId('editor-move-day-1')).toBeDisabled();
+      expect(screen.getByTestId('editor-move-day-2')).toBeSelected();
+      fireEvent.press(screen.getByTestId('editor-move-confirm'));
+      expect(await screen.findByTestId(`${TIME}-readout`)).toHaveTextContent(
+        '시작 10:00 · 종료 11:00'
+      );
+      fireEvent.press(screen.getByTestId(`${TIME}-wheel-h-15`));
+      fireEvent.press(screen.getByTestId(`${TIME}-seg-end`));
+      fireEvent.press(screen.getByTestId(`${TIME}-wheel-h-16`));
+      fireEvent.press(screen.getByTestId(`${TIME}-apply`));
+      expect(screen.getByTestId('itinerary-edit-day-2')).toBeSelected();
+      expect(listOrder()).toEqual(['poi-b', 'poi-c']);
+      expect(screen.getByTestId(META)).toHaveTextContent('2곳');
+      expect(screen.getByTestId(TOAST)).toHaveTextContent('2일차로 옮겼어요');
+      expect(screen.getByTestId(movedId(DAY2, 'poi-b'))).toHaveTextContent(
+        '1일차에서 옮김'
+      );
+      expect(screen.queryByTestId(movedId(DAY2, 'poi-c'))).toBeNull();
+
+      // ⑦ AC-2 — 저장: 1일차 [poi-a], 2일차 [poi-b(15:00–16:00), poi-c]. 옮김 표식은 요청 어디에도 없다. 저장 뒤 재시드로 표식이 사라진다.
+      await visitsSettled();
+      fireEvent.press(screen.getByTestId(SAVE));
+      await waitFor(() => expect(putCalls).toBe(1));
+      const sent = putBody as EditItineraryRequest;
+      expect(sent.days.map((d) => d.slots.map((s) => s.poiId))).toEqual([
+        ['poi-a'],
+        ['poi-b', 'poi-c'],
+      ]);
+      const sentB = sent.days[1].slots[0];
+      expect([sentB.startAt, sentB.endAt, sentB.endsNextDay]).toEqual([
+        '15:00:00',
+        '16:00:00',
+        false,
+      ]);
+      expect(sent.days[1].slots[1].endsNextDay).toBe(true); // poi-c 는 그대로
+      expect(JSON.stringify(putBody)).not.toContain('moved');
+      await waitFor(() =>
+        expect(
+          useItineraryEditStore
+            .getState()
+            .days.flatMap((day) => day.slots)
+            .filter((s) => (s as { movedFromDate?: string }).movedFromDate)
+        ).toEqual([])
+      );
     });
   });
 
@@ -881,6 +1019,23 @@ describe('완료 슬롯 잠금 실연동', () => {
           },
         ],
       },
+      // TRIP-1793 5-b W2 — 옮길 날이 있어야 ⋯ 가 뜬다(일정 1일이면 ⋯ 부재가 공허 통과). 1일차 판정에는 영향 없다.
+      {
+        date: DAY2,
+        slots: [
+          {
+            poiId: 'poi-z',
+            startAt: '10:00:00',
+            endAt: '11:00:00',
+            isFixed: false,
+            endsNextDay: false,
+            hasViolation: false,
+            alternatives: [],
+            tags: [],
+            nameKo: '우도',
+          },
+        ],
+      },
     ];
     return baseItinerary({
       itineraryId: 'itin-1',
@@ -980,6 +1135,8 @@ describe('완료 슬롯 잠금 실연동', () => {
       await waitFor(() => expect(visitsGets).toBe(1));
       // 응답 전엔 실패 안내를 띄우지 않는다(아직 실패가 아니다).
       expect(screen.queryByTestId(VISITS_ERROR)).toBeNull();
+      // TRIP-1793 W2 — 완료 여부를 모르는 동안엔 ⋯(다른 날로 옮기기)도 없다(짝: 4) 회복 뒤 poi-b ⋯ present).
+      expect(screen.queryAllByTestId(/^editor-slot-more-/)).toHaveLength(0);
       fireEvent.press(screen.getByTestId(SAVE));
       await settle();
       expect(putCalls).toBe(0);
@@ -990,6 +1147,7 @@ describe('완료 슬롯 잠금 실연동', () => {
         openVisits();
       });
       expect(await screen.findByTestId(VISITS_ERROR)).toBeOnTheScreen();
+      expect(screen.queryAllByTestId(/^editor-slot-more-/)).toHaveLength(0); // W2 — 실패도 모름
       fireEvent.press(screen.getByTestId(SAVE));
       await settle();
       expect(putCalls).toBe(0);
@@ -1020,6 +1178,9 @@ describe('완료 슬롯 잠금 실연동', () => {
       expect(
         screen.queryByTestId(`slot-stopcard-locked-${openKey}`)
       ).toBeNull();
+      // TRIP-1793 W2 짝 — 알게 되면 미완료 poi-b 에 ⋯ 가 서고, 완료 poi-a 엔 여전히 없다.
+      expect(screen.getByTestId('editor-slot-more-poi-b')).toBeOnTheScreen();
+      expect(screen.queryByTestId('editor-slot-more-poi-a')).toBeNull();
 
       // TRIP-1748 — 회복하면 안내가 사라지고 저장이 다시 나간다.
       expect(screen.queryByTestId(VISITS_ERROR)).toBeNull();
@@ -1634,6 +1795,8 @@ describe('여행 중 직접 수정(i07)', () => {
         I07_GUIDE
       );
       expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('5곳');
+      // TRIP-1793 — 여행 중 편집에도 ⋯ 를 주지만 일정이 하루뿐이면 옮길 날이 없어 ⋯ 가 없다(짝: 아래 이틀짜리 `it`).
+      expect(screen.queryAllByTestId(/^editor-slot-more-/)).toHaveLength(0);
 
       expect(
         screen.queryByTestId(`slot-stopcard-timechip-${k('p1')}`)
@@ -1697,6 +1860,17 @@ describe('여행 중 직접 수정(i07)', () => {
         });
       renderPage();
       await waitForLocked();
+
+      // TRIP-1793 — 여행 중(i07) 이틀 일정: 방문 완료 p1·p2 는 ⋯ 가 없고 예정 p3·p4·p5 만 있다(h24 와 같은 ⋯ 를 i07 도 받는다).
+      expect(
+        screen
+          .queryAllByTestId(/^editor-slot-more-/)
+          .map((node) => node.props.testID)
+      ).toEqual([
+        'editor-slot-more-p3',
+        'editor-slot-more-p4',
+        'editor-slot-more-p5',
+      ]);
 
       // 칩 testID 번호는 1부터다(day-2 = 2일차, EditorView 가 tab.dayIndex 를 쓴다).
       fireEvent.press(screen.getByTestId('itinerary-edit-day-2'));
