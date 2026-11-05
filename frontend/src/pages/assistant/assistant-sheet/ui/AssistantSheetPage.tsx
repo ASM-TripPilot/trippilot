@@ -412,6 +412,19 @@ export function AssistantSheetPage({
             otherSessions={(sessions.data ?? []).filter(
               (item) => item.id !== sessionId
             )}
+            // TRIP-1757 — 목록을 못 받은 채(실패 확정, 또는 재조회 중이라도 이전 실패가 있음 — v5 가 재조회 중 error 를 비운다)면 「이전 대화」가
+            // 통째로 사라진 것과 구별되지 않는다. 계약에 404 가 없고 어댑터가 모든 실패를 AssistantApiError 로 접어 `isNotFound` 를 쓸 수 없다 — 404 예외 없음.
+            sessionsError={
+              sessions.data === undefined &&
+              (sessions.isError || sessions.errorUpdateCount > 0)
+                ? {
+                    retrying: sessions.isFetching,
+                    onRetry: () => {
+                      void sessions.refetch();
+                    },
+                  }
+                : undefined
+            }
             confirmingClear={confirmingClear}
             clearing={clearSession.isPending}
             onContinue={() => setView('CHAT')}

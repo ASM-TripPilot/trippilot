@@ -37,6 +37,7 @@ routes:
 - `assist-older` 긴 대화는 맨 위 "이전 대화 더 보기" → 로딩 → 실패 시 "이전 대화를 불러오지 못했어요" + 다시 시도.
 - `assist-scroll-down` 위로 올리면 ↓(맨 아래로) 버튼.
 - `assist-history` ⋮ → "이번 여행에서 도우미와 한 대화·변경이에요." + 변경 기록(없으면 "아직 도우미로 바꾼 것이 없어요") + "이전 대화" 목록 + [대화 이어서]/[이력 지우기]/[닫기].
+- `assist-history-sessions-error` 이력 보기의 「이전 대화」 목록(지난 대화 목록)을 못 받으면 — 이유가 무엇이든(이 목록엔 "없음(404)" 응답이 계약에 없고, 앱의 도우미 연결부가 모든 실패를 한 종류로 접어 404 를 가를 수 없다) — 그 자리에 `지난 대화를 불러오지 못했어요` + `다시 시도`가 선다. 지난 대화가 사라진 것과 "원래 없음"을 구별하게 한다. `다시 시도`는 이 목록만 다시 부르고 부르는 동안에도 줄이 남으며 버튼은 잠긴다. 목록이 빈 배열이거나 이미 받은 목록 위에서 배경 재조회만 실패하면 줄이 없다. 변경 기록·`대화 이어서`·`이력 지우기`와는 독립. *(2026-11-05 TRIP-1757 · 결정: 404 에도 띄운다 · 프리뷰 `assistant-history-sessions-error` 는 이력 시트·로그 행만 확인, 줄은 시스템 창에 가려 일부만 확인)*
 - `assist-history-clear` [이력 지우기] → "대화 이력을 지울까요?" [취소]/[지우기].
 - `assist-close` ✕·딤 탭·[닫기] → 시트 닫힘(뒤로 갈 곳이 없으면 홈 탭).
 - `asst-next-action-rows` 여행 없이 연 모드의 다음 행동 행은 앞에 아이콘(검색·+)이 있고, 여행 문맥 모드의 행은 아이콘 없는 링크 행이다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
@@ -77,6 +78,7 @@ Preconditions:
 - **답 평가.** 답 아래 testID: `assistant-feedback-down-<messageId>` → 이유 칩 testID: `assistant-feedback-reason-WRONG-<messageId>` 등과 testID: `assistant-feedback-comment-<messageId>`("직접 적기"). 이유를 고르면 testID: `assistant-feedback-thanks-<messageId>` "의견 고마워요". 실패면 testID: `assistant-feedback-error-<messageId>`. 같은 엄지를 다시 누르면 평가가 풀린다.
 - **이전 대화 더 보기.** 긴 세션에서 맨 위로 스크롤 → testID: `assistant-older-more`("이전 대화 더 보기") → testID: `assistant-older-loading` → 옛 메시지가 위에 붙는다. 실패면 testID: `assistant-older-error`. 위로 올린 상태에선 testID: `assistant-scroll-down`(라벨 "맨 아래로").
 - **이력.** testID: `assistant-history-toggle` → testID: `assistant-history`, testID: `assistant-history-intro`, 기록이 없으면 testID: `assistant-history-empty` "아직 도우미로 바꾼 것이 없어요", 있으면 testID: `assistant-history-row-<id>`. 다른 세션은 "이전 대화" 아래 testID: `assistant-history-session-<id>`(제목 없으면 "여행 없이 한 대화"). testID: `assistant-history-continue`("대화 이어서") → 대화로 복귀.
+- **이전 대화 목록 실패.** 실패 주입 `com.trippilot.travel://_dev/fault?path=/assistant/sessions&status=500`(GET 에만 걸림 — 추론, 실측하지 않았다)으로 지난 대화 목록만 실패하게 하고 이력(testID: `assistant-history-toggle`)을 연다. **앱 전역 재시도 때문에 실패가 확정되는 약 7초 뒤에야** testID: `assistant-history-sessions-error`(`지난 대화를 불러오지 못했어요`)가 「이전 대화」 자리에 서고 testID: `assistant-history-sessions-retry`(`다시 시도`)가 같이 선다 — 기다린다. 주입을 풀고 누르면 줄이 사라지고 testID: `assistant-history-session-<id>` 행이 선다. 변경 기록 카드·`assistant-history-continue` 는 그대로 눌린다.
 - **이력 지우기(취소까지만).** testID: `assistant-history-clear`("이력 지우기") → testID: `assistant-history-clear-dialog` "대화 이력을 지울까요?"·"이미 반영한 일정 변경은 그대로 남아요." → testID: `assistant-history-clear-cancel`("취소"). testID: `assistant-history-clear-confirm`("지우기")은 누르지 않는다.
 - **열기 실패.** (서버 장애 때) testID: `assistant-open-failed` 문구와 testID: `assistant-open-retry`("다시 시도") → 재조회.
 - **닫기.** testID: `assistant-sheet-close`, 딤 testID: `assistant-sheet-scrim`(라벨 "도우미 닫기"), 이력의 testID: `assistant-history-close`("닫기") 셋 다 시트 전체를 닫고 연 화면으로 돌아간다.
@@ -100,3 +102,4 @@ Preconditions:
 - [실화면] 2026-10-31 도달 불가 — `assist-loading`·`assist-open-failed`·`assist-unauthorized`·`assist-slow`·`assist-send-failed`·`assist-rate-limited`(실패·지연 유도 수단 없음, 연타 범위 밖), `assist-cards`·`assist-fallback`·`assist-proposal*`(서버가 글 답만 줌), `assist-older`·`assist-scroll-down`(긴 세션 없음).
 - [실화면] 2026-11-03 대화 목록의 스크롤 처리가 바뀐 뒤(TRIP-1733) `asst-scroll-down`·아래부터 쌓임은 실화면 재확인을 못 했다 — dev 계정 대화가 비어 있어 빈 시트 렌더만 봤다. 다음 재QA 때 아래 2026-11-02 방법(질문 4번)으로 긴 세션을 만들어 ↓ 나타남·누르면 맨 아래·맨 아래면 사라짐을 다시 본다.
 - [실화면] 2026-11-02 질문 4번(홈 ✦, 여행 중 문맥)으로 긴 세션을 만들어 ↓ 를 확인했다 — 위로 올려 둔 채 보낸 새 답은 자동으로 내리지 않았다. 각주·이력 안내 문장은 이번 답에 없었다.
+- **[미검증 · 실화면 전용] 2026-11-05 TRIP-1757 이전 대화 실패 줄** — 프리뷰 `assistant-history-sessions-error`(순수 뷰)로 이력 시트·로그 행은 봤지만 줄 자리가 iOS 「Apple 계정 확인」 암호 창에 가려 오른쪽 끝 빨간 글자 일부만 보였다 — 줄 모양·위치는 미확인(PASS 로 적지 않는다). 실화면에서 볼 것: ① 줄 모양·위치(「이전 대화」 자리) ② 실패 확정까지 약 7초가 걸리는 것(그동안은 「이전 대화」가 비어 보이고 줄이 없다) ③ `다시 시도` 직후 줄이 꺼졌다 켜지지 않는지(React Compiler 는 jest 에 안 붙는다). 이 줄은 실서버 + 실패 주입으로만 만들 수 있다(프리뷰 키는 줄 모양만 보여 준다).

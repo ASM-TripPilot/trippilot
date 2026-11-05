@@ -54,13 +54,26 @@ jest.mock('../model/useDailyReflection', () => ({
 }));
 
 jest.mock('../model/useReflectionPhotos', () => ({
-  useReflectionPhotos: jest.fn(() => []),
+  // 거울은 실물과 같은 모양이어야 한다(TRIP-1757) — 배열이 아니라 객체.
+  useReflectionPhotos: jest.fn(() => ({
+    photos: [],
+    photoLoadFailed: false,
+    photoLoadRetrying: false,
+    retryPhotoLoad: () => {},
+  })),
 }));
 
 // TRIP-1665 — 매거진이 그날 방문·일정 조회(`useMagazineSources`)를 읽는다. 이 파일은 `generated/trips/trips` 를 `useGetTripsTripId` 하나로 바꿔
 // 끼우고 QueryClient 도 없어 실제 훅이 죽는다 → 스텁("조회 끝난 빈 하루": 방문 0 · 일정 [] )으로 막는다. 매거진 동작은 통합 파일이 본다.
 jest.mock('../model/useMagazineSources', () => ({
-  useMagazineSources: () => ({ visits: [], slots: [], spontaneousNames: {} }),
+  useMagazineSources: () => ({
+    visits: [],
+    slots: [],
+    spontaneousNames: {},
+    visitsLoadFailed: false,
+    visitsRetrying: false,
+    retryVisits: () => {},
+  }),
 }));
 
 // TRIP-1584 — 하단 바가 `useTripSummary` 를 읽는다. 이 파일엔 QueryClient 가 없어 스텁(조회 중)으로 막는다.

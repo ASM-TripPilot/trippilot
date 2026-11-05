@@ -8,7 +8,11 @@ import type {
   VisitPhoto,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import { createHitLog, createWrapper } from '@/test-support/mswHookHarness';
+import {
+  createGate,
+  createHitLog,
+  createWrapper,
+} from '@/test-support/mswHookHarness';
 import { flushNotifications } from '@/test-support/flushNotifications';
 import { recordsHandler } from '@/test-support/tripRecordsFixtures';
 
@@ -371,5 +375,104 @@ describe('🔴 TRIP-1078 · saveMemo 성공값 캐시 + 같은 값 PUT 0', () =>
     expect(memoBodies).toEqual([{ text: '노을' }, { text: '노을' }]);
     await flushNotifications();
     await waitFor(() => expect(api().savedMemo).toBe('노을'));
+  });
+});
+
+/**
+ * 🔴 TRIP-1757 · 사진 목록 불러오기 실패 신호 — 훅이 `photoLoadFailed`·`photoLoadRetrying`·`retryPhotoLoad` 를 내려준다
+ * (메모 선례 `memoLoadFailed`·`memoLoadRetrying`·`retryMemoLoad`). 카드가 이 신호로 「사진을 불러오지 못했어요」 줄을 그린다.
+ *
+ * 무엇을 보장하나(3동작 = 준비: 사진 GET 을 500·404·200 으로 → 실행: 렌더·retryPhotoLoad → 단언: 신호 값·요청 수):
+ *  - 404 아닌 실패(재시도 끝) = `photoLoadFailed` true. 404(방문 기록 없음)·200 = false.
+ *  - `retryPhotoLoad()` = 사진 GET 만 다시(메모의 records GET 은 안 건드린다). 응답을 붙잡는 동안 `photoLoadFailed` 는 true 로
+ *    남고(v5 가 error 를 비워도 `errorUpdateCount`) `photoLoadRetrying` 이 true.
+ *  - 사진을 이미 받았으면 배경 재조회 실패는 신호가 아니다(목록이 화면에 있다).
+ */
+describe('TRIP-1757 · 사진 목록 실패 신호', () => {
+  const PHOTOS_GET = `GET /api/v1/trips/${TRIP}/visits/${VC}/photos`;
+  const RECORDS_GET = `GET /api/v1/trips/${TRIP}/records`;
+  const photosReply = (reply: () => Response | Promise<Response>) =>
+    server.use(
+      http.get(`${BASE}/trips/:tripId/visits/:visitCheckId/photos`, reply)
+    );
+  const status = (code: number) => () =>
+    HttpResponse.json({ error: { code: 'X', message: 'x' } }, { status: code });
+  const renderHook1757 = () =>
+    renderHook(() => useVisitAttachments({ tripId: TRIP, visitCheckId: VC }), {
+      wrapper: createWrapper(),
+    });
+
+  it('P1 사진 GET 500 → photoLoadFailed true · photos 비어 있음 · 재시도 중 아님', async () => {
+    photosReply(status(500));
+    const { result } = renderHook1757();
+
+    await waitFor(() => expect(result.current.photoLoadFailed).toBe(true));
+    expect(result.current.photos).toEqual([]);
+    expect(result.current.photoLoadRetrying).toBe(false);
+  });
+
+  it.each([
+    ['404(방문 기록 없음)', status(404)],
+    ['200', () => HttpResponse.json({ items: [], count: 0 })],
+  ])('P2 사진 GET %s → photoLoadFailed false', async (_label, reply) => {
+    photosReply(reply);
+    const { result } = renderHook1757();
+
+    await waitFor(() => expect(hitCount(PHOTOS_GET)).toBe(1));
+    await flushNotifications();
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.photoLoadFailed).toBe(false);
+  });
+
+  it('P3 retryPhotoLoad → 사진 GET 만 다시(records 는 그대로), 붙잡는 동안 failed·retrying 둘 다 true, 200 이면 둘 다 false', async () => {
+    photosReply(status(500));
+    const { result } = renderHook1757();
+    await waitFor(() => expect(result.current.photoLoadFailed).toBe(true));
+    const recordsBefore = hitCount(RECORDS_GET);
+
+    const gate = createGate();
+    photosReply(async () => {
+      await gate.opened;
+      return HttpResponse.json({
+        items: [photo({ visitPhotoMetaId: 'a' })],
+        count: 1,
+      });
+    });
+    act(() => result.current.retryPhotoLoad());
+    await waitFor(() => expect(hitCount(PHOTOS_GET)).toBe(2));
+    await flushNotifications();
+
+    expect(result.current.photoLoadRetrying).toBe(true);
+    expect(result.current.photoLoadFailed).toBe(true);
+
+    gate.release();
+    await waitFor(() => expect(result.current.photos.length).toBe(1));
+    expect(result.current.photoLoadFailed).toBe(false);
+    expect(result.current.photoLoadRetrying).toBe(false);
+    expect(hitCount(RECORDS_GET)).toBe(recordsBefore);
+  });
+
+  it('P4 이미 받은 목록이 있고 배경 재조회(addPhoto 무효화)만 500 이면 photoLoadFailed false', async () => {
+    const { result } = await renderReady([photo({ visitPhotoMetaId: 'a' })]);
+    await waitFor(() => expect(result.current.photos.length).toBe(1));
+    server.use(
+      http.post(`${BASE}/trips/:tripId/visits/:visitCheckId/photos`, () =>
+        HttpResponse.json(photo({ visitPhotoMetaId: 'b' }), { status: 201 })
+      )
+    );
+    photosReply(status(500));
+
+    await act(async () => {
+      await result.current.addPhoto(
+        { localAssetId: 'local-b', deviceId: 'dev-1' },
+        false
+      );
+    });
+    // 앵커 — 재조회 GET 이 실제로 나가 실패했다.
+    await waitFor(() => expect(hitCount(PHOTOS_GET)).toBe(2));
+    await flushNotifications();
+
+    expect(result.current.photos.length).toBe(1);
+    expect(result.current.photoLoadFailed).toBe(false);
   });
 });

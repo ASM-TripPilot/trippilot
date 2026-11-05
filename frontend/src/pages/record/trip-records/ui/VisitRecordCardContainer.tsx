@@ -51,6 +51,9 @@ export function VisitRecordCardContainer({
 }: VisitRecordCardContainerProps): ReactElement {
   const {
     photos,
+    photoLoadFailed,
+    photoLoadRetrying,
+    retryPhotoLoad,
     attachPhoto,
     failedUploads,
     retryUpload,
@@ -164,6 +167,29 @@ export function VisitRecordCardContainer({
             photos={photoVMs}
             onPressAdd={() => void onPressAdd()}
           />
+          {/* TRIP-1757 — 목록을 못 받은 채(404 아닌 실패)면 '+' 만 남아 올린 사진이 사라진 것처럼 보인다. 안내만 더하고 '+' 는 살려 둔다. */}
+          {photoLoadFailed ? (
+            <View className="flex-row items-center justify-between gap-sm">
+              <Text
+                testID={`record-trip-photo-load-error-${card.visitCheckId}`}
+                className="shrink text-caption text-muted"
+              >
+                사진을 불러오지 못했어요
+              </Text>
+              <Pressable
+                testID={`record-trip-photo-load-retry-${card.visitCheckId}`}
+                accessibilityRole="button"
+                disabled={photoLoadRetrying}
+                accessibilityState={{ disabled: photoLoadRetrying }}
+                hitSlop={8}
+                onPress={retryPhotoLoad}
+              >
+                <Text className="font-noto-bold text-caption text-primary">
+                  다시 시도
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
           {photoNotice ? (
             <Text
               testID={`record-trip-photo-notice-${card.visitCheckId}`}

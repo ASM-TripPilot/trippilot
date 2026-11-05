@@ -1083,6 +1083,7 @@
 
 ## src/pages/record/daily-reflection/model/
 - `src/pages/record/daily-reflection/model/editCard.ts`  →  buildEditCard
+- `src/pages/record/daily-reflection/model/failedUnlessNotFound.ts`  →  failedUnlessNotFound
 - `src/pages/record/daily-reflection/model/fillTemplate.ts`  →  TemplateContext · GUIDE_TEXTS · isGuideText · isTemplateOnly · fillTemplate
 - `src/pages/record/daily-reflection/model/missingParts.ts`  →  LocationPermissionState · MapNoticeReason · MapNotice · MissingParts · missingParts
 - `src/pages/record/daily-reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative · basicNarrative
@@ -1154,6 +1155,7 @@
 
 ## src/pages/record/trip-records/model/
 - `src/pages/record/trip-records/model/adjustTimesDraft.ts`  →  AdjustTimesViolation · AdjustTimesDraftResult · adjustTimesDraft
+- `src/pages/record/trip-records/model/failedUnlessNotFound.ts`  →  failedUnlessNotFound
 - `src/pages/record/trip-records/model/photoAvailability.ts`  →  PhotoAvailability · photoAvailability
 - `src/pages/record/trip-records/model/stayAttribution.ts`  →  AttributedStay · DayAttribution · deriveStayAttribution
 - `src/pages/record/trip-records/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
@@ -1958,4 +1960,4 @@
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1284개 파일
+합계 1286개 파일

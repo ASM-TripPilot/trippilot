@@ -10,6 +10,7 @@ import {
   fireEvent,
   render,
   screen,
+  userEvent,
   waitFor,
   within,
 } from '@testing-library/react-native';
@@ -26,6 +27,8 @@ import {
 import { encodePolyline } from '@/shared/location/automation/polyline';
 import type { VisitPhoto } from '@/shared/api/index.schemas';
 import {
+  getGetTripsTripIdItineraryQueryKey,
+  getGetTripsTripIdQueryKey,
   getGetTripsTripIdSummaryQueryKey,
   getGetTripsTripIdVisitsVisitCheckIdPhotosQueryKey,
 } from '@/shared/api/index.hooks';
@@ -55,7 +58,7 @@ import {
 import { tripRecordsTrip } from '@/test-support/tripRecordsTrip';
 
 import { TripRecordsPage } from './TripRecordsPage';
-import { newTestQueryClient } from '@/test-support/queryRender';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * j01 방문 기록 페이지 — 실 페이지 + 실제 HTTP(msw) 로 본 사용자 관측 결과. 관점마다 describe 하나(옛 파일 하나).
@@ -438,7 +441,7 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
    * 무엇을 보장하나:
    *  - MS1 (AC-1)   페이지가 새 뷰(`record-trip-view`)를 그리고, 지도는 셸 것 하나 · 탭바 없음 · 카드는 시트 안.
    *  - MS2·3 (AC-12) 시트 헤더 = "여행명 · N일차 · M월 D일(요일) · N곳". 여행명은 GET /trips/{tripId} 에서 온다.
-   *                  그 조회가 실패하면 여행명 조각만 빠지고 오류 표면은 없다(INV-4).
+   *                  그 조회가 404 아닌 이유로 실패하면 조각이 빠지고 화면 한 줄 `record-trip-plan-error` 가 선다(TRIP-1757 J01-2, 옛 MS3 뒤집음).
    *  - MS4~6 (AC-10·11 · 결정 3(c)) 핀 = 그날 계획 슬롯 순서. slotKey 로 맞춘 방문이 **도착했고 건너뛰지
    *                  않았으면** 체크 핀(`done`), 아니면 번호 핀(`upcoming`). 즉석 방문은 핀이 없다. 같은 장소의
    *                  즉석 방문이 계획 핀을 체크하지 않는다(poiId 가 아니라 slotKey). 핀 전부 맞추기·지도 잠금.
@@ -554,8 +557,6 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
 
   let dayHits: string[] = [];
 
-  let tripHits = 0;
-
   const pinsOnMap = () => screen.getByTestId('map-root').props.pins;
 
   beforeEach(() => {
@@ -579,10 +580,8 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
       ],
     };
     dayHits = [];
-    tripHits = 0;
     server.use(
       http.get(`${BASE}/trips/:tripId`, () => {
-        tripHits += 1;
         return HttpResponse.json(tripRecordsTrip('부산 여행', TRIP_ID));
       }),
       http.get(`${BASE}/trips/:tripId/itinerary`, () =>
@@ -635,31 +634,243 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
         ).toHaveTextContent('부산 여행 · 1일차 · 8월 20일(목) · 4곳')
       );
     });
+  });
 
-    it('MS3 여행 조회가 실패하면 여행명 조각만 빠지고 오류 표면은 없다 (INV-4)', async () => {
-      server.use(
-        http.get(`${BASE}/trips/:tripId`, () => {
-          tripHits += 1;
-          return HttpResponse.json(
-            { error: { code: 'INTERNAL', message: 'boom' } },
-            { status: 500 }
-          );
-        })
+  /**
+   * 🔴 TRIP-1757 · 보조 조회(일정·여행) 실패 한 줄 — INV-4. 옛 MS3(여행 500 → 오류 표면 없음)을 J01-2 로 뒤집었다.
+   *
+   * 무엇을 보장하나(3동작 = 준비: 일정/여행 GET 을 500·404 로 → 실행: 렌더·[다시 시도] → 단언: testID·요청 수):
+   *  - J01-1/2/3  일정 또는 여행 GET 이 404 아닌 실패면 화면에 `record-trip-plan-error` + `-retry` 가 **하나** 선다.
+   *  - J01-1b     `?day=` 없이 들어오면 방문 조회가 아예 안 나가 이 한 줄이 유일한 신호다.
+   *  - J01-4      [다시 시도]는 **실패한 쿼리만** 다시 부른다. 재조회가 도는 동안(v5 가 error 를 비움)에도 줄이 남고 버튼이 잠긴다.
+   *  - J01-5      404 는 지금 동작(줄 없음). 데이터를 받은 뒤 배경 재조회 실패도 줄 없음.
+   *  - J01-6      records(방문) 500 의 `record-trip-error` 는 그대로, 둘이 함께 뜰 수 있다.
+   * 모든 케이스는 `day` 를 명시한다(없으면 activeDay='' 라 방문 조회가 안 나가 "records 200" 전제가 공허해진다) — J01-1b 만 예외.
+   * (개념) `userEvent.press` = 실제 Pressability 경로로 누름. `fireEvent.press` 는 조상 prop 으로 새어 거짓 green 을 만든다.
+   */
+  describe('🔴 TRIP-1757 · 일정·여행 조회 실패 한 줄', () => {
+    const PLAN_ERROR = 'record-trip-plan-error';
+    const PLAN_RETRY = 'record-trip-plan-retry';
+    const ITINERARY_GET = `GET /api/v1/trips/${TRIP_ID}/itinerary`;
+    const TRIP_GET = `GET /api/v1/trips/${TRIP_ID}`;
+
+    const status = (code: number) => () =>
+      HttpResponse.json(
+        { error: { code: 'X', message: 'x' } },
+        { status: code }
       );
+    const itineraryReply = (reply: () => Response | Promise<Response>) =>
+      server.use(http.get(`${BASE}/trips/:tripId/itinerary`, reply));
+    const tripReply = (reply: () => Response | Promise<Response>) =>
+      server.use(http.get(`${BASE}/trips/:tripId`, reply));
+    const okItinerary = () => HttpResponse.json(itinerary());
+    const okTrip = () =>
+      HttpResponse.json(tripRecordsTrip('부산 여행', TRIP_ID));
 
-      render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
+    beforeEach(() => {
+      observedHits = [];
+    });
 
-      // 앵커 — 여행 요청이 실제로 나가 실패했고 카드도 그려졌다(로딩 중의 공허 통과 차단).
-      await screen.findByTestId('record-trip-visit-card-v1');
-      await waitFor(() => expect(tripHits).toBeGreaterThanOrEqual(1));
+    function renderDay1() {
+      render(<TripRecordsPage tripId={TRIP_ID} day={DAY1} today={DAY1} />, {
+        wrapper,
+      });
+    }
+    async function settleLoose() {
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 30));
       });
+    }
 
+    it('J01-1 일정 GET 500 → 한 줄이 서고 일차 칩은 없다 (방문 카드는 그려짐)', async () => {
+      itineraryReply(status(500));
+      renderDay1();
+
+      expect(await screen.findByTestId(PLAN_ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(PLAN_RETRY)).toBeOnTheScreen();
+      expect(screen.getByTestId('record-trip-visit-card-v1')).toBeOnTheScreen();
+      expect(screen.queryByTestId('sheet-daychip-0')).toBeNull();
+      expect(screen.queryByTestId('record-trip-error')).toBeNull();
+    });
+
+    it('J01-1b ?day= 없이 들어와 일정이 500 이면 방문 조회는 안 나가고 이 한 줄이 유일한 신호다', async () => {
+      itineraryReply(status(500));
+      render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
+
+      expect(await screen.findByTestId(PLAN_ERROR)).toBeOnTheScreen();
+      await settleLoose();
+      expect(dayHits).toEqual([]);
+      expect(screen.queryByTestId('record-trip-empty')).toBeNull();
+    });
+
+    it('J01-2 여행 GET 500 → 같은 한 줄이 서고 제목 조각만 빠진 채다 (옛 MS3 뒤집음)', async () => {
+      tripReply(status(500));
+      renderDay1();
+
+      expect(await screen.findByTestId(PLAN_ERROR)).toBeOnTheScreen();
+      await screen.findByTestId('record-trip-visit-card-v1');
       expect(screen.getByTestId('record-trip-sheet-header')).toHaveTextContent(
         '1일차 · 8월 20일(목) · 4곳'
       );
       expect(screen.queryByTestId('record-trip-error')).toBeNull();
+    });
+
+    it('J01-3 일정·여행 둘 다 500 이어도 줄과 버튼은 정확히 1개다', async () => {
+      itineraryReply(status(500));
+      tripReply(status(500));
+      renderDay1();
+
+      await screen.findByTestId(PLAN_ERROR);
+      await waitFor(() => {
+        expect(hitCount(ITINERARY_GET)).toBe(1);
+        expect(hitCount(TRIP_GET)).toBe(1);
+      });
+      await settleLoose();
+      expect(screen.getAllByTestId(PLAN_ERROR)).toHaveLength(1);
+      expect(screen.getAllByTestId(PLAN_RETRY)).toHaveLength(1);
+    });
+
+    it('J01-4a 일정만 500 → [다시 시도]는 일정 GET 만 다시 부르고, 200 이면 줄이 사라지고 칩·계획 행·장소 이름이 그려진다', async () => {
+      itineraryReply(status(500));
+      renderDay1();
+      await screen.findByTestId(PLAN_ERROR);
+      expect(hitCount(ITINERARY_GET)).toBe(1);
+      expect(hitCount(TRIP_GET)).toBe(1);
+
+      itineraryReply(okItinerary);
+      const user = userEvent.setup();
+      await user.press(screen.getByTestId(PLAN_RETRY));
+
+      await waitFor(() =>
+        expect(screen.queryByTestId(PLAN_ERROR)).not.toBeOnTheScreen()
+      );
+      expect(await screen.findByTestId('sheet-daychip-0')).toBeOnTheScreen();
+      expect(
+        screen.getByTestId(`record-trip-plan-row-${DAY1}#p3`)
+      ).toBeOnTheScreen();
+      expect(
+        within(screen.getByTestId('record-trip-visit-card-v1')).getByText(
+          '광안리 해변'
+        )
+      ).toBeOnTheScreen();
+      expect(hitCount(ITINERARY_GET)).toBe(2);
+      expect(hitCount(TRIP_GET)).toBe(1);
+    });
+
+    it('J01-4b 여행만 500 → [다시 시도]는 여행 GET 만 다시 부르고, 200 이면 줄이 사라지고 제목이 돌아온다', async () => {
+      tripReply(status(500));
+      renderDay1();
+      await screen.findByTestId(PLAN_ERROR);
+
+      tripReply(okTrip);
+      const user = userEvent.setup();
+      await user.press(screen.getByTestId(PLAN_RETRY));
+
+      await waitFor(() =>
+        expect(screen.queryByTestId(PLAN_ERROR)).not.toBeOnTheScreen()
+      );
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('record-trip-sheet-header')
+        ).toHaveTextContent('부산 여행 · 1일차 · 8월 20일(목) · 4곳')
+      );
+      expect(hitCount(TRIP_GET)).toBe(2);
+      expect(hitCount(ITINERARY_GET)).toBe(1);
+    });
+
+    it('J01-4c 재조회 응답을 붙잡는 동안에도 줄이 남고 [다시 시도]는 잠기며, 응답이 오면 사라진다 (v5 가 error 를 비워도)', async () => {
+      itineraryReply(status(500));
+      renderDay1();
+      await screen.findByTestId(PLAN_ERROR);
+
+      const gate = createGate();
+      itineraryReply(async () => {
+        await gate.opened;
+        return okItinerary();
+      });
+      const user = userEvent.setup();
+      await user.press(screen.getByTestId(PLAN_RETRY));
+      await waitFor(() => expect(hitCount(ITINERARY_GET)).toBe(2));
+      await settleLoose();
+
+      // 앵커: 둘째 요청이 나가 응답 대기 중이다. 그래도 줄은 남고 버튼은 잠긴다.
+      expect(screen.getByTestId(PLAN_ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(PLAN_RETRY)).toBeDisabled();
+
+      gate.release();
+      await waitFor(() =>
+        expect(screen.queryByTestId(PLAN_ERROR)).not.toBeOnTheScreen()
+      );
+    });
+
+    it('J01-5a 일정·여행 GET 404 → 줄이 없다 (지금 동작 그대로)', async () => {
+      itineraryReply(status(404));
+      tripReply(status(404));
+      renderDay1();
+
+      await screen.findByTestId('record-trip-visit-card-v1');
+      await waitFor(() => {
+        expect(hitCount(ITINERARY_GET)).toBe(1);
+        expect(hitCount(TRIP_GET)).toBe(1);
+      });
+      await settleLoose();
+      expect(screen.queryByTestId(PLAN_ERROR)).toBeNull();
+    });
+
+    it('J01-5b 데이터를 받은 뒤 배경 재조회가 500 이어도 줄이 없고 받아 둔 화면이 그대로다', async () => {
+      const client = newTestQueryClient({ gcTime: 0 });
+      render(<TripRecordsPage tripId={TRIP_ID} day={DAY1} today={DAY1} />, {
+        wrapper: createWrapper(client),
+      });
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('record-trip-sheet-header')
+        ).toHaveTextContent('부산 여행 · 1일차 · 8월 20일(목) · 4곳')
+      );
+
+      itineraryReply(status(500));
+      tripReply(status(500));
+      await act(async () => {
+        await client.invalidateQueries({
+          queryKey: getGetTripsTripIdItineraryQueryKey(TRIP_ID),
+        });
+        await client.invalidateQueries({
+          queryKey: getGetTripsTripIdQueryKey(TRIP_ID),
+        });
+      });
+      // 앵커: 두 번째 요청이 실제로 나갔다.
+      expect(hitCount(ITINERARY_GET)).toBe(2);
+      expect(hitCount(TRIP_GET)).toBe(2);
+
+      await settleLoose();
+      expect(screen.queryByTestId(PLAN_ERROR)).toBeNull();
+      expect(screen.getByTestId('record-trip-sheet-header')).toHaveTextContent(
+        '부산 여행 · 1일차 · 8월 20일(목) · 4곳'
+      );
+    });
+
+    it('J01-6a 회귀: 방문(records) 500 이면 record-trip-error 가 그대로 뜨고 plan 줄은 없다', async () => {
+      server.use(
+        http.get(`${BASE}/trips/:tripId/visits/days/:day`, status(500))
+      );
+      renderDay1();
+
+      expect(await screen.findByTestId('record-trip-error')).toBeOnTheScreen();
+      expect(screen.getByTestId('record-trip-error-retry')).toBeOnTheScreen();
+      await waitFor(() => expect(hitCount(ITINERARY_GET)).toBe(1));
+      await settleLoose();
+      expect(screen.queryByTestId(PLAN_ERROR)).toBeNull();
+    });
+
+    it('J01-6b 방문 500 + 일정 500 이면 두 안내가 함께 뜬다 (서로 다른 원인)', async () => {
+      server.use(
+        http.get(`${BASE}/trips/:tripId/visits/days/:day`, status(500))
+      );
+      itineraryReply(status(500));
+      renderDay1();
+
+      expect(await screen.findByTestId('record-trip-error')).toBeOnTheScreen();
+      expect(await screen.findByTestId(PLAN_ERROR)).toBeOnTheScreen();
     });
   });
 
@@ -3605,6 +3816,154 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
       expect(
         within(card).getByTestId('record-trip-upload-retry-v-a')
       ).toBeOnTheScreen();
+    });
+  });
+
+  /**
+   * 🔴 TRIP-1757 · 방문 카드 사진 **목록 불러오기** 실패 (INV-4 · BR-U5-14) — 올린 사진이 사라진 것처럼 '+' 만 남지 않게.
+   *
+   * 무엇을 보장하나(3동작 = 준비: 카드 두 장 중 한 장의 사진 GET 만 500 → 실행: 렌더·[다시 시도] → 단언: 카드별 testID·요청 수):
+   *  - J01-7   실패한 카드에만 `record-trip-photo-load-error-{id}` 가 서고, 다른 카드엔 없다(카드마다 따로).
+   *  - J01-8   그 카드 [다시 시도] = 그 방문 사진 GET 만 다시(다른 카드 GET 0). 응답을 붙잡는 동안 줄 유지·버튼 잠김(v5 가 error 를
+   *            비워도 `errorUpdateCount`), 200 이 오면 줄이 사라지고 썸네일이 그려진다.
+   *  - J01-9   404(방문 기록 없음)는 지금 동작(줄 없음). 업로드 실패 칸·`record-trip-photo-notice-*` 와 한 카드에 공존한다.
+   *  - J01-10  목록이 실패한 동안에도 '+'(사진 추가)는 그대로 있고 누르면 POST 가 나간다(Q1 = a).
+   * 기존 「사진을 불러올 수 없어요」(앨범 접근 실패, BR-U5-14)와 한 글자 차이인 「사진을 불러오지 못했어요」(서버 목록 실패)는 의미가 달라 따로 단언한다.
+   */
+  describe('🔴 TRIP-1757 · 사진 목록 불러오기 실패 (카드별)', () => {
+    const LOAD_ERROR_A = 'record-trip-photo-load-error-v-a';
+    const LOAD_RETRY_A = 'record-trip-photo-load-retry-v-a';
+    const LOAD_COPY = '사진을 불러오지 못했어요';
+    const GET_B = `GET /api/v1/trips/${TRIP_ID}/visits/v-b/photos`;
+
+    const fail = (code: number) => () =>
+      HttpResponse.json(
+        { error: { code: 'X', message: 'x' } },
+        { status: code }
+      );
+    /** v-a 의 사진 GET 만 `replyA` 로, v-b 는 늘 200. 카드 둘이 같은 날에 있다(둘 다 도착·완료). */
+    function twoCards(replyA: () => Response | Promise<Response>) {
+      server.use(
+        http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
+          HttpResponse.json({
+            visits: [completedVisit(), completedVisitOn('v-b', DAY, 'p2')],
+          })
+        ),
+        http.get(
+          `${BASE}/trips/:tripId/visits/:visitCheckId/photos`,
+          ({ params }) =>
+            params.visitCheckId === 'v-a'
+              ? replyA()
+              : HttpResponse.json({ items: [], count: 0 })
+        )
+      );
+    }
+    async function renderTwo() {
+      render(<TripRecordsPage tripId={TRIP_ID} today={DAY} />, { wrapper });
+      await screen.findByTestId('record-trip-visit-card-v-b');
+      return screen.getByTestId(CARD);
+    }
+
+    it('J01-7 한 카드의 사진 GET 500 → 그 카드에만 안내가 서고 다른 카드엔 없다', async () => {
+      twoCards(fail(500));
+      const card = await renderTwo();
+
+      expect(await within(card).findByTestId(LOAD_ERROR_A)).toHaveTextContent(
+        LOAD_COPY
+      );
+      expect(within(card).getByTestId(LOAD_RETRY_A)).toBeOnTheScreen();
+      await waitFor(() => expect(hitCount(GET_B)).toBe(1));
+      expect(
+        screen.getAllByTestId(/^record-trip-photo-load-error-/)
+      ).toHaveLength(1);
+      expect(
+        within(screen.getByTestId('record-trip-visit-card-v-b')).queryByTestId(
+          'record-trip-photo-load-error-v-b'
+        )
+      ).toBeNull();
+    });
+
+    it('J01-8a [다시 시도] → 그 방문 사진 GET 만 다시, 200 이면 안내가 사라지고 썸네일이 그려진다', async () => {
+      twoCards(fail(500));
+      const card = await renderTwo();
+      await within(card).findByTestId(LOAD_ERROR_A);
+      await waitFor(() => expect(hitCount(GET_B)).toBe(1));
+      expect(hitCount(PHOTOS_GET)).toBe(1);
+
+      serverPhotos = [serverPhoto('ph1', 'asset-1', 'dev-A')];
+      twoCards(() =>
+        HttpResponse.json({ items: serverPhotos, count: serverPhotos.length })
+      );
+      const user = userEvent.setup();
+      await user.press(within(card).getByTestId(LOAD_RETRY_A));
+
+      expect(
+        await within(card).findByTestId('record-photo-available-ph1')
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId(LOAD_ERROR_A)).toBeNull();
+      expect(hitCount(PHOTOS_GET)).toBe(2);
+      expect(hitCount(GET_B)).toBe(1);
+    });
+
+    it('J01-8b 재조회 응답을 붙잡는 동안에도 안내가 남고 [다시 시도]는 잠긴다 (v5 가 error 를 비워도)', async () => {
+      twoCards(fail(500));
+      const card = await renderTwo();
+      await within(card).findByTestId(LOAD_ERROR_A);
+
+      const gate = createGate();
+      twoCards(async () => {
+        await gate.opened;
+        return HttpResponse.json({ items: [], count: 0 });
+      });
+      const user = userEvent.setup();
+      await user.press(within(card).getByTestId(LOAD_RETRY_A));
+      await waitFor(() => expect(hitCount(PHOTOS_GET)).toBe(2));
+      await settle();
+
+      expect(screen.getByTestId(LOAD_ERROR_A)).toBeOnTheScreen();
+      expect(screen.getByTestId(LOAD_RETRY_A)).toBeDisabled();
+
+      gate.release();
+      await waitFor(() =>
+        expect(screen.queryByTestId(LOAD_ERROR_A)).not.toBeOnTheScreen()
+      );
+    });
+
+    it('J01-9a 사진 GET 404(방문 기록 없음) → 안내 없음 (지금 동작 그대로)', async () => {
+      twoCards(fail(404));
+      await renderTwo();
+
+      await waitFor(() => expect(hitCount(PHOTOS_GET)).toBe(1));
+      await settle();
+      expect(screen.queryByTestId(LOAD_ERROR_A)).toBeNull();
+    });
+
+    it('J01-9b 목록 실패 안내는 같은 카드의 피커 안내(notice)와 함께 선다 — 서로 독립이다', async () => {
+      twoCards(fail(500));
+      mockPick.mockResolvedValue({ kind: 'denied' });
+      const card = await renderTwo();
+      await within(card).findByTestId(LOAD_ERROR_A);
+
+      const user = userEvent.setup();
+      await user.press(within(card).getByTestId('record-trip-photo-add'));
+
+      expect(await within(card).findByTestId(NOTICE)).toHaveTextContent(
+        COPY_DENIED
+      );
+      expect(within(card).getByTestId(LOAD_ERROR_A)).toHaveTextContent(
+        LOAD_COPY
+      );
+    });
+
+    it('J01-10 목록이 실패한 동안에도 `+` 는 그대로 있고 누르면 POST 가 나간다 (Q1 = a)', async () => {
+      twoCards(fail(500));
+      const card = await renderTwo();
+      await within(card).findByTestId(LOAD_ERROR_A);
+
+      const user = userEvent.setup();
+      await user.press(within(card).getByTestId('record-trip-photo-add'));
+
+      await waitFor(() => expect(hitCount(PHOTOS_POST)).toBe(1));
     });
   });
 });

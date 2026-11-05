@@ -7,13 +7,18 @@ import {
   render,
   renderHook,
   screen,
+  userEvent,
   waitFor,
   within,
 } from '@testing-library/react-native';
 
 import { useDailyReflection } from '../model/useDailyReflection';
 import { server } from '@/mocks/server';
-import { getGetTripsTripIdReflectionsQueryKey } from '@/shared/api/index.hooks';
+import {
+  getGetTripsTripIdQueryKey,
+  getGetTripsTripIdReflectionsQueryKey,
+  getGetTripsTripIdVisitsDaysDayQueryKey,
+} from '@/shared/api/index.hooks';
 import type {
   EditReflectionRequest,
   ErrorResponse,
@@ -50,6 +55,13 @@ jest.mock('@/shared/storage', () => ({
   }),
   clearTokens: jest.fn().mockResolvedValue(undefined),
   hasStoredToken: jest.fn().mockResolvedValue(true),
+  // TRIP-1757 — 실물 `useReflectionPhotos` 를 켜는 describe 만 쓴다(기본은 아래 스위치로 훅 자체를 비운다).
+  getInstallId: jest.fn().mockResolvedValue('me'),
+}));
+
+// TRIP-1757 — 앨범 주소 조회. 실물 사진 훅을 켠 describe 에서만 불린다.
+jest.mock('@/shared/photo', () => ({
+  resolvePhotoUri: jest.fn(async (id: string) => `file://${id}`),
 }));
 
 // TRIP-1584 — 하단 바가 `useTripSummary`(GET /summary)를 읽는다. `onUnhandledRequest:'error'` 라 스텁(조회 중)으로 막는다.
@@ -65,9 +77,25 @@ jest.mock('@/features/reflection/model/useTripSummary', () => ({
 }));
 
 // 사진 배선(TRIP-1444)은 useReflectionPhotos.test 가 본다 — 여기선 사진 요청이 가짜 서버로 새지 않게 비운다.
-jest.mock('../model/useReflectionPhotos', () => ({
-  useReflectionPhotos: () => [],
-}));
+// 단 TRIP-1757 「방문별 사진 GET 실패」 describe 는 실물 훅이 필요해 스위치(`mockRealPhotos`)로 켠다(MyStaysPage 의 `mockRealWiring` 선례).
+// 반환 모양은 실물과 같아야 한다(거울은 실물과 같게) — 사진 0장·실패 없음.
+let mockRealPhotos = false;
+jest.mock('../model/useReflectionPhotos', () => {
+  const actual = jest.requireActual<
+    typeof import('../model/useReflectionPhotos')
+  >('../model/useReflectionPhotos');
+  return {
+    useReflectionPhotos: (tripId: string, date: string) =>
+      mockRealPhotos
+        ? actual.useReflectionPhotos(tripId, date)
+        : {
+            photos: [],
+            photoLoadFailed: false,
+            photoLoadRetrying: false,
+            retryPhotoLoad: () => {},
+          },
+  };
+});
 
 jest.mock('expo-router', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -1994,5 +2022,415 @@ describe('TRIP-1665 · 회고 매거진 — 표지·인용문·장면·동선·�
 
     const cover = await screen.findByTestId(`${P}-cover`);
     expect(cover).not.toHaveTextContent(/[{}]/);
+  });
+});
+
+describe('TRIP-1757 · 보조 조회(여행·그날 방문·방문별 사진) 실패 한 줄', () => {
+  /**
+   * j03 하루 회고의 곁들이 조회 셋이 404 아닌 이유로 실패하면 조용히 접히던 것을 화면 한 줄로 말한다(INV-4).
+   * 실제 페이지·훅 + msw. 초심자용: 서버 응답 코드만 바꿔 실패를 만들고, 줄(testID)이 서는지·[다시 시도]가 무엇을 다시 부르는지 본다.
+   *
+   * 무엇을 보장하나:
+   *  - J03-1/2/3  여행 GET · 그날 방문 GET · 방문별 사진 GET 중 하나라도 실패하면 `reflection-daily-partial-error` + `-retry`.
+   *               방문 실패가 오류 얼굴(`reflection-daily-error`)로 번지지 않는다.
+   *  - J03-4      여럿이 겹쳐도 줄은 하나. [다시 시도]는 실패한 쿼리만 다시 부른다(요청 수로 센다). 응답을 붙잡는 동안 줄이 남고 버튼이 잠긴다.
+   *  - J03-5      일정 GET 실패는 줄을 만들지 않고 장소 이름이 "N번째 장소"로 접힌다(BR-U5-31 그대로).
+   *  - J03-6      404 는 지금 동작(줄 없음).
+   *  - J03-7/8    회고 목록 500 = 기존 오류 얼굴 그대로, 여행 실패와 겹치면 두 안내가 함께, 편집 중에는 줄이 없다(J3).
+   * (개념) `userEvent.press` = 실제 Pressability 경로로 누름(`fireEvent.press` 는 조상 prop 으로 새어 거짓 green 이 난다).
+   */
+  const TRIP_ID = 'trip-1757';
+  const TODAY = '2026-09-26';
+  const P = 'reflection-daily';
+  const LINE = `${P}-partial-error`;
+  const RETRY = `${P}-partial-retry`;
+
+  const TRIP: Trip = {
+    tripId: TRIP_ID,
+    title: '부산 여행',
+    startDate: '2026-09-24',
+    endDate: '2026-09-25',
+    party: 1,
+    preferenceSnapshot: {},
+    destinations: [],
+    status: 'PLANNED',
+    createdAt: '2026-09-20T00:00:00Z',
+    updatedAt: '2026-09-20T00:00:00Z',
+    baseCount: 0,
+    itineraryDayCount: 0,
+    itineraryStatus: null,
+    itineraryGenerationState: null,
+    itineraryGenerationMode: null,
+    itineraryGenerating: false,
+  };
+  const CARD: ReflectionCard = {
+    templateId: 'backend.rule.daily.v1',
+    format: 'CARD',
+    title: '부산 첫날',
+    subtitle: '광안리해수욕장·해운대시장 을(를) 다녀왔어요.',
+    payload: JSON.stringify({
+      template_id: 'backend.rule.daily.v1',
+      format: 'CARD',
+      cover: { title: '부산 첫날', subtitle: '광안리를 다녀왔어요.' },
+      scenes: [{ layout: 'TEXT', caption: '바다를 오래 봤다' }],
+    }),
+  };
+  const REFLECTION: Reflection = {
+    dayDate: DAY,
+    card: CARD,
+    draftCard: CARD,
+    editedCard: null,
+    source: 'AI',
+    stats: {
+      distanceKm: 4.2,
+      distanceSource: 'VISIT_LINE',
+      visitCount: 2,
+      photoCount: 1,
+    },
+    generatedAt: '2026-09-24T12:00:00Z',
+    updatedAt: '2026-09-24T12:00:00Z',
+  };
+  const visitOf = (id: string, poiId: string, hour: number): VisitCheck => ({
+    visitCheckId: id,
+    poiId,
+    slotKey: `slot-${poiId}`,
+    arrivedAt: `2026-09-24T0${hour}:00:00Z`,
+    source: 'MANUAL',
+    spontaneous: false,
+    updatedAt: '2026-09-24T12:00:00Z',
+  });
+  const VISITS = [visitOf('v1', 'poi-1', 1), visitOf('v2', 'poi-2', 2)];
+  const ITINERARY = itinerary({
+    tripId: TRIP_ID,
+    days: [
+      day(DAY, [
+        slot('poi-1', { nameKo: '광안리해수욕장', category: '명소' }),
+        slot('poi-2', { nameKo: '해운대시장', category: '맛집' }),
+      ]),
+    ],
+  });
+
+  interface Gate {
+    promise: Promise<void>;
+    open: () => void;
+  }
+  function makeGate(): Gate {
+    let open = () => {};
+    const promise = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    return { promise, open };
+  }
+  const bad = (code: number) =>
+    HttpResponse.json({ error: { code: 'X', message: 'x' } }, { status: code });
+
+  // 케이스가 바꾸는 가짜 서버 상태(핸들러가 호출 때마다 읽는다) — 요청 수는 이 파일의 다른 describe 처럼 핸들러 안에서 센다.
+  let tripStatus: number;
+  let visitsStatus: number;
+  let listStatus: number;
+  let itineraryStatus: number;
+  let photoStatus: Record<string, number>;
+  let tripGate: Gate | null;
+  let visitsGate: Gate | null;
+  let tripHits: number;
+  let visitHits: number;
+  let photoHits: Record<string, number>;
+
+  beforeEach(() => {
+    mockRealPhotos = true;
+    tripStatus = 200;
+    visitsStatus = 200;
+    listStatus = 200;
+    itineraryStatus = 200;
+    photoStatus = {};
+    tripGate = null;
+    visitsGate = null;
+    tripHits = 0;
+    visitHits = 0;
+    photoHits = {};
+    setAccessToken('a');
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, async () => {
+        tripHits += 1;
+        if (tripGate) await tripGate.promise;
+        return tripStatus === 200 ? HttpResponse.json(TRIP) : bad(tripStatus);
+      }),
+      http.get(`${BASE}/trips/:tripId/reflections`, () =>
+        listStatus === 200
+          ? HttpResponse.json({ items: [REFLECTION] })
+          : bad(listStatus)
+      ),
+      http.get(`${BASE}/trips/:tripId/visits/days/:day`, async () => {
+        visitHits += 1;
+        if (visitsGate) await visitsGate.promise;
+        return visitsStatus === 200
+          ? HttpResponse.json({ visits: VISITS })
+          : bad(visitsStatus);
+      }),
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        itineraryStatus === 200
+          ? HttpResponse.json(ITINERARY)
+          : bad(itineraryStatus)
+      ),
+      http.get(
+        `${BASE}/trips/:tripId/visits/:visitCheckId/photos`,
+        ({ params }) => {
+          const id = String(params.visitCheckId);
+          photoHits[id] = (photoHits[id] ?? 0) + 1;
+          const code = photoStatus[id] ?? 200;
+          return code === 200
+            ? HttpResponse.json({ items: [], count: 0 })
+            : bad(code);
+        }
+      )
+    );
+  });
+
+  afterEach(() => {
+    mockRealPhotos = false;
+    tripGate?.open();
+    visitsGate?.open();
+    server.resetHandlers();
+    clearAccessToken();
+  });
+
+  function renderPage() {
+    const client = newTestQueryClient({ gcTime: 0 });
+    render(<DailyReflectionPage tripId={TRIP_ID} date={DAY} today={TODAY} />, {
+      wrapper: createWrapper(client),
+    });
+    return client;
+  }
+  async function settle() {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+  }
+  const photoGets = (id: string) => photoHits[id] ?? 0;
+
+  it('J03-1 여행 GET 500 → 한 줄이 서고 일차 칩은 없다 (오류 얼굴은 아니다)', async () => {
+    tripStatus = 500;
+    renderPage();
+
+    expect(await screen.findByTestId(LINE)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+    expect(screen.getByTestId(`${P}-cover`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(`${P}-day-tab-1`)).toBeNull();
+    expect(screen.queryByTestId(`${P}-error`)).toBeNull();
+  });
+
+  it('J03-2 그날 방문 GET 500 → 같은 한 줄이 서고 얼굴은 오류 얼굴로 바뀌지 않는다', async () => {
+    visitsStatus = 500;
+    renderPage();
+
+    expect(await screen.findByTestId(LINE)).toBeOnTheScreen();
+    expect(screen.getByTestId(`${P}-cover`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(`${P}-error`)).toBeNull();
+  });
+
+  it('J03-3 방문 200(2곳) · 한 방문의 사진 GET 500 → 같은 한 줄이 선다', async () => {
+    photoStatus = { v2: 500 };
+    renderPage();
+
+    expect(await screen.findByTestId(LINE)).toBeOnTheScreen();
+    expect(photoGets('v2')).toBe(1);
+    expect(screen.queryByTestId(`${P}-error`)).toBeNull();
+  });
+
+  it('J03-4a 여행 500 + 한 방문 사진 500 이 겹쳐도 줄은 하나, [다시 시도]는 실패한 둘만 다시 부르고 200 이면 칩이 돌아오며 줄이 사라진다', async () => {
+    tripStatus = 500;
+    photoStatus = { v2: 500 };
+    renderPage();
+    await screen.findByTestId(LINE);
+    await waitFor(() => expect(photoGets('v2')).toBe(1));
+    await settle();
+    expect(screen.getAllByTestId(LINE)).toHaveLength(1);
+    expect(screen.getAllByTestId(RETRY)).toHaveLength(1);
+    expect([tripHits, visitHits, photoGets('v1')]).toEqual([1, 1, 1]);
+
+    tripStatus = 200;
+    photoStatus = {};
+    const user = userEvent.setup();
+    await user.press(screen.getByTestId(RETRY));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId(LINE)).not.toBeOnTheScreen()
+    );
+    expect(await screen.findByTestId(`${P}-day-tab-1`)).toBeOnTheScreen();
+    // 실패한 것만: 여행·실패한 방문(v2) 사진 +1, 방문 GET·성공한 방문(v1) 사진은 그대로.
+    expect(tripHits).toBe(2);
+    expect(photoGets('v2')).toBe(2);
+    expect(visitHits).toBe(1);
+    expect(photoGets('v1')).toBe(1);
+  });
+
+  it('J03-4b 방문 500 + 여행 500 → 줄은 하나, [다시 시도]는 방문 GET(요청 하나)과 여행 GET 을 다시 부르고 200 이면 둘 다 돌아온다', async () => {
+    tripStatus = 500;
+    visitsStatus = 500;
+    renderPage();
+    await screen.findByTestId(LINE);
+    await waitFor(() => expect(visitHits).toBe(1));
+    await settle();
+    expect(screen.getAllByTestId(LINE)).toHaveLength(1);
+
+    tripStatus = 200;
+    visitsStatus = 200;
+    const user = userEvent.setup();
+    await user.press(screen.getByTestId(RETRY));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId(LINE)).not.toBeOnTheScreen()
+    );
+    expect(await screen.findByTestId(`${P}-day-tab-1`)).toBeOnTheScreen();
+    expect(visitHits).toBe(2);
+    expect(tripHits).toBe(2);
+    // 방문이 돌아오자 그제야 방문별 사진이 한 번씩 불린다.
+    await waitFor(() => expect(photoGets('v1')).toBe(1));
+  });
+
+  it('J03-4c 재조회 응답을 붙잡는 동안에도 줄이 남고 [다시 시도]는 잠기며, 응답이 오면 사라진다 (v5 가 error 를 비워도)', async () => {
+    tripStatus = 500;
+    renderPage();
+    await screen.findByTestId(LINE);
+
+    tripStatus = 200;
+    tripGate = makeGate();
+    const user = userEvent.setup();
+    await user.press(screen.getByTestId(RETRY));
+    await waitFor(() => expect(tripHits).toBe(2));
+    await settle();
+
+    expect(screen.getByTestId(LINE)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeDisabled();
+
+    tripGate.open();
+    await waitFor(() =>
+      expect(screen.queryByTestId(LINE)).not.toBeOnTheScreen()
+    );
+  });
+
+  it('J03-4d 방문만 500 → 재조회를 붙잡는 동안에도 줄이 남고 [다시 시도]는 잠기며, 응답이 오면 줄이 사라지고 방문별 사진이 불린다', async () => {
+    visitsStatus = 500;
+    renderPage();
+    await screen.findByTestId(LINE);
+
+    visitsStatus = 200;
+    visitsGate = makeGate();
+    const user = userEvent.setup();
+    await user.press(screen.getByTestId(RETRY));
+    await waitFor(() => expect(visitHits).toBe(2));
+    await settle();
+
+    expect(screen.getByTestId(LINE)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeDisabled();
+    expect(tripHits).toBe(1);
+
+    visitsGate.open();
+    await waitFor(() =>
+      expect(screen.queryByTestId(LINE)).not.toBeOnTheScreen()
+    );
+    await waitFor(() => expect(photoGets('v1')).toBe(1));
+  });
+
+  it('J03-9a 그날 방문을 받은 뒤 배경 재조회만 500 이면 줄이 없고 장면(동선)이 그대로다', async () => {
+    const client = renderPage();
+    expect(await screen.findByTestId(`${P}-route-stop-1`)).toBeOnTheScreen();
+    expect(visitHits).toBe(1);
+
+    visitsStatus = 500;
+    await act(async () => {
+      await client.invalidateQueries({
+        queryKey: getGetTripsTripIdVisitsDaysDayQueryKey(TRIP_ID, DAY),
+      });
+    });
+    // 앵커: 재조회가 실제로 나가 **실패로 끝났다**(요청 2회 + 캐시: 실패 1회·진행 중 아님). 화면은 한 틱 뒤 반영하므로 흘려보낸 뒤 본다(5-b W1).
+    expect(visitHits).toBe(2);
+    const state = client.getQueryState(
+      getGetTripsTripIdVisitsDaysDayQueryKey(TRIP_ID, DAY)
+    );
+    expect(state?.errorUpdateCount).toBe(1);
+    expect(state?.fetchStatus).toBe('idle');
+    await settle();
+
+    expect(screen.queryByTestId(LINE)).toBeNull();
+    expect(screen.getByTestId(`${P}-route-stop-1`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(`${P}-error`)).toBeNull();
+  });
+
+  it('J03-9b 여행을 받은 뒤 배경 재조회만 500 이면 줄이 없고 일차 칩이 그대로다', async () => {
+    const client = renderPage();
+    expect(await screen.findByTestId(`${P}-day-tab-1`)).toBeOnTheScreen();
+    expect(tripHits).toBe(1);
+
+    tripStatus = 500;
+    await act(async () => {
+      await client.invalidateQueries({
+        queryKey: getGetTripsTripIdQueryKey(TRIP_ID),
+      });
+    });
+    expect(tripHits).toBe(2);
+    const state = client.getQueryState(getGetTripsTripIdQueryKey(TRIP_ID));
+    expect(state?.errorUpdateCount).toBe(1);
+    expect(state?.fetchStatus).toBe('idle');
+    await settle();
+
+    expect(screen.queryByTestId(LINE)).toBeNull();
+    expect(screen.getByTestId(`${P}-day-tab-1`)).toBeOnTheScreen();
+  });
+
+  it('J03-5 일정 GET 500(방문은 있음) → 줄이 없고 장소 이름이 "N번째 장소"로 접힌다 (BR-U5-31 그대로)', async () => {
+    itineraryStatus = 500;
+    renderPage();
+
+    expect(await screen.findByTestId(`${P}-route-stop-1`)).toHaveTextContent(
+      /1번째 장소/
+    );
+    await settle();
+    expect(screen.queryByTestId(LINE)).toBeNull();
+    expect(screen.queryByTestId(`${P}-error`)).toBeNull();
+  });
+
+  it.each([
+    ['여행 404', () => (tripStatus = 404)],
+    ['그날 방문 404', () => (visitsStatus = 404)],
+    ['방문별 사진 404', () => (photoStatus = { v1: 404, v2: 404 })],
+  ])('J03-6 %s → 줄이 없다 (지금 동작 그대로)', async (_label, arrange) => {
+    arrange();
+    renderPage();
+
+    await screen.findByTestId(`${P}-cover`);
+    await waitFor(() => {
+      expect(tripHits).toBe(1);
+      expect(visitHits).toBe(1);
+    });
+    await settle();
+    expect(screen.queryByTestId(LINE)).toBeNull();
+  });
+
+  it('J03-7 회귀: 회고 목록 500 이면 기존 오류 얼굴과 [다시 시도]가 그대로 뜨고 줄은 없다', async () => {
+    listStatus = 500;
+    renderPage();
+
+    expect(await screen.findByTestId(`${P}-error`)).toBeOnTheScreen();
+    expect(screen.getByTestId(`${P}-retry`)).toBeOnTheScreen();
+    await waitFor(() => expect(tripHits).toBe(1));
+    await settle();
+    expect(screen.queryByTestId(LINE)).toBeNull();
+  });
+
+  it('J03-8 오류 얼굴과 여행 실패가 겹치면 두 안내가 함께 뜨고, 편집 중에는 줄이 없다 (J3)', async () => {
+    listStatus = 500;
+    tripStatus = 500;
+    renderPage();
+
+    expect(await screen.findByTestId(`${P}-error`)).toBeOnTheScreen();
+    expect(await screen.findByTestId(LINE)).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId(`${P}-edit`));
+    expect(screen.getByTestId(`${P}-edit-input`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(LINE)).toBeNull();
+
+    fireEvent.press(screen.getByTestId(`${P}-edit-cancel`));
+    expect(await screen.findByTestId(LINE)).toBeOnTheScreen();
   });
 });

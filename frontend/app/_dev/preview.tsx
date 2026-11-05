@@ -3130,6 +3130,31 @@ export const PREVIEW_STATES: PreviewState[] = [
       }),
   },
   {
+    // TRIP-1757 — 이전 대화 목록 조회 실패 한 줄. fake 어댑터는 listSessions 가 실패하지 않아 이 얼굴은 프리뷰로만 본다.
+    key: 'assistant-history-sessions-error',
+    band: 'b',
+    label: 'b06 · 이력 — 이전 대화 불러오기 실패',
+    login: null,
+    render: () =>
+      renderAssistantPreview('greeting', {
+        body: (
+          <HistoryView
+            logs={sampleActionLogs()}
+            otherSessions={[]}
+            sessionsError={{ onRetry: noop, retrying: false }}
+            confirmingClear={false}
+            clearing={false}
+            onContinue={noop}
+            onClose={noop}
+            onRequestClear={noop}
+            onConfirmClear={noop}
+            onCancelClear={noop}
+            onOpenSession={noop}
+          />
+        ),
+      }),
+  },
+  {
     key: 'assistant-history-clear',
     band: 'b',
     label: 'b06 · 이력 지우기 확인',
@@ -4407,6 +4432,8 @@ export const PREVIEW_STATES: PreviewState[] = [
         )}
         onPressComplete={noop}
         onPressSkip={noop}
+        // TRIP-1757 — 일정·여행 조회 실패 한 줄(records 오류 얼굴과 함께 뜨는 경우).
+        planError={{ onRetry: noop, retrying: false }}
         onPressBack={noop}
         onPressReflection={noop}
       />
@@ -4781,6 +4808,8 @@ export const PREVIEW_STATES: PreviewState[] = [
         dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
         activeDay={2}
         onSelectDay={noop}
+        // TRIP-1757 — 곁들이 조회(여행·방문·사진) 실패 한 줄(오류 얼굴과 함께 뜨는 경우).
+        partialError={{ onRetry: noop, retrying: false }}
         recordBar={PREVIEW_RECORD_BAR}
         onEnterEdit={noop}
         onConfirm={noop}

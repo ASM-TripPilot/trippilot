@@ -95,6 +95,8 @@ export interface TripRecordsViewProps {
   /** TRIP-1021 — 기록 조회 상태. 미주입 = 'ready'. loading 이면 빈 안내 없음, error 면 오류 표면. */
   recordsStatus?: 'ready' | 'loading' | 'error';
   onPressRetryRecords?: () => void;
+  /** TRIP-1757 — 일정·여행 조회가 404 아닌 이유로 실패했다. 주면 화면 한 줄 + [다시 시도]. 미주입 = 줄 없음(프리뷰·기존 뷰 테스트 무회귀). */
+  planError?: { onRetry: () => void; retrying: boolean };
   onPressComplete: (visitCheckId: string) => void;
   onPressSkip: (visitCheckId: string) => void;
   /** 즉석 방문 추가 — 미주입이면 [방문 추가]를 그리지 않는다(TRIP-939). */
@@ -145,6 +147,7 @@ export function TripRecordsView({
   onPressPlanCheck,
   recordsStatus = 'ready',
   onPressRetryRecords,
+  planError,
   onPressComplete,
   onPressSkip,
   onPressSpontaneous,
@@ -342,6 +345,29 @@ export function TripRecordsView({
           <Text className="w-full text-label text-muted">
             {noticeCopy ?? DEFAULT_NOTICE}
           </Text>
+
+          {planError ? (
+            <View
+              testID="record-trip-plan-error"
+              className="w-full flex-row items-center justify-between gap-sm rounded-[12px] bg-surface-soft px-md py-sm"
+            >
+              <Text className="shrink font-noto-bold text-[13px] font-bold text-ink">
+                일부 정보를 불러오지 못했어요
+              </Text>
+              <Pressable
+                testID="record-trip-plan-retry"
+                accessibilityRole="button"
+                onPress={planError.onRetry}
+                disabled={planError.retrying}
+                accessibilityState={{ disabled: planError.retrying }}
+                hitSlop={8}
+              >
+                <Text className="font-noto-bold text-[13px] font-bold text-primary-text">
+                  다시 시도
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           {recordsStatus === 'error' ? (
             <StateNotice

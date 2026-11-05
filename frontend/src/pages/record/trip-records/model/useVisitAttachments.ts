@@ -13,6 +13,7 @@ import {
   type PhotoAssetMeta,
 } from '@/features/attach-visit-media';
 import { useVisitMemo } from '@/features/attach-visit-media';
+import { failedUnlessNotFound } from './failedUnlessNotFound';
 
 /**
  * TRIP-566 · AC-5 · BR-U5-13 — 방문 첨부 배선 훅(사진 GET/POST · 메모 PUT upsert).
@@ -34,6 +35,8 @@ import { useVisitMemo } from '@/features/attach-visit-media';
  * TRIP-1078 · 메모 세션 캐시(`saveMemo`·`savedMemo`)는 `useVisitMemo` 가 진다(TRIP-1117 — 허브와 키 한 벌).
  *   TRIP-1415 — 서버 memo 시드와 입력 잠금(`memoReady`)도 그 훅 것을 그대로 넘긴다.
  *   TRIP-1751 — 불러오기 실패 신호(`memoLoadFailed`·`memoLoadOffline`·`memoLoadRetrying`·`retryMemoLoad`)도 통과시킨다.
+ * TRIP-1757 — 사진 목록 실패 신호(`photoLoadFailed`·`photoLoadRetrying`·`retryPhotoLoad`): 404 아닌 실패로 목록을 못 받은 채일 때만 —
+ *   이미 받은 목록이 있으면 배경 재조회 실패는 신호가 아니다. 사진 GET 만 다시 부른다(메모의 records GET 은 안 건드린다).
  */
 export function useVisitAttachments({
   tripId,
@@ -49,6 +52,7 @@ export function useVisitAttachments({
   );
   const query = useGetTripsTripIdVisitsVisitCheckIdPhotos(tripId, visitCheckId);
   const memo = useVisitMemo({ tripId, visitCheckId });
+  const photoLoadFailed = failedUnlessNotFound(query);
 
   // 실패로 노출 중인 자산 — 재시도가 같은 POST 를 다시 부를 수 있게 자산 메타·동의를 함께 쥔다.
   const [failures, setFailures] = useState<
@@ -98,6 +102,11 @@ export function useVisitAttachments({
     photos: query.data?.items ?? [],
     photoCount: query.data?.count ?? 0,
     isLoading: query.isLoading,
+    photoLoadFailed,
+    photoLoadRetrying: photoLoadFailed && query.isFetching,
+    retryPhotoLoad: () => {
+      void query.refetch();
+    },
     addPhoto,
     attachPhoto,
     failedUploads: failures.map((f) => ({
