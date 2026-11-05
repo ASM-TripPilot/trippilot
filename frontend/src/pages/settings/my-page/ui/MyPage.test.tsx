@@ -492,8 +492,9 @@ describe('숫자 3칸 → 탭 · 지난 여행 열림 (옛 .counts)', () => {
       expect(pastCardRoots()).toHaveLength(0);
       // 짝 앵커 — 숫자는 떴다(판정이 끝났다).
       expect(values()).toEqual(['1', '0', '1']);
-      // 섹션이 닫혔으니 사진 수 조회도 꺼져 있다.
-      expect(lastRecordsEnabled()).toBe(false);
+      // TRIP-1790 개정 — 섹션이 닫혀도 records 조회는 켜 둔다(누적 통계가 같은 응답을 쓴다). 옛 단언은 `false`(섹션과 같이 꺼짐)였다.
+      // 켜는 기준은 섹션이 아니라 "여행 목록을 받았나"다 — 모르는 상태에서 꺼지는 쪽은 아래 ⓒ 가 지킨다.
+      expect(lastRecordsEnabled()).toBe(true);
     });
 
     it('ⓑ 예정 0 · 확정 종료 2 · 날짜 지난 초안 1 → 카드 2장(종료일 최근순), 초안 카드 없음, 종료 숫자와 같다', async () => {
@@ -1199,6 +1200,51 @@ describe('조회 → 모델 → 배치 (옛 .integration)', () => {
       expect(idxStyle).toBeGreaterThan(idxProfile);
       expect(idxMenu).toBeGreaterThan(idxStyle);
     });
+
+    // TRIP-1790 O1 — 「지금까지」 카드는 프로필과 스타일 카드 사이다(Figma E9).
+    it('종료 여행이 있으면 통계 카드가 프로필 카드 < 통계 카드 < 스타일 카드 < 메뉴 카드 순서로 놓인다', () => {
+      // 준비 — 종료(확정 + 지난 날짜) 여행 1건과 그 방문 기록.
+      mockUseTrips.mockReturnValue(
+        asQuery([myPageTrip('e1', PAST, { ...CONFIRMED_COLS })]) as ReturnType<
+          typeof useGetTrips
+        >
+      );
+      mockUseRecords.mockReturnValue({
+        data: {
+          items: [
+            {
+              tripId: 'e1',
+              title: 'e1 여행',
+              startDate: PAST.startDate,
+              endDate: PAST.endDate,
+              regions: ['부산'],
+              visitCount: 2,
+              photoCount: 0,
+            },
+          ],
+        },
+        isPending: false,
+        isError: false,
+      } as unknown as ReturnType<typeof useGetMeRecords>);
+
+      // 실행
+      renderPage();
+
+      // 단언 — 문서 순서(DFS)로 네 카드의 위치를 비교한다.
+      const order = screen
+        .getByTestId('my-page-root')
+        .findAll((node) => typeof node.props.testID === 'string')
+        .map((node) => node.props.testID as string);
+      const profile = order.indexOf('my-profile-card');
+      const stats = order.indexOf('my-stats-card');
+      const style = order.indexOf('my-style-card');
+      const menu = order.indexOf('my-menu-card');
+
+      expect(profile).toBeGreaterThanOrEqual(0);
+      expect(stats).toBeGreaterThan(profile);
+      expect(style).toBeGreaterThan(stats);
+      expect(menu).toBeGreaterThan(style);
+    });
   });
 
   describe('🔴 TRIP-618 AC-1 · 하단 설정 행 진입 배선', () => {
@@ -1361,6 +1407,427 @@ describe('스타일 카드 상세 진입 (옛 .styleDetail.integration)', () => 
 
       expect(mockPush).toHaveBeenCalledTimes(1);
       expect(mockPush).toHaveBeenCalledWith('/records/style');
+    });
+  });
+});
+
+// TRIP-1790
+describe('누적 통계 (TRIP-1790 · 마이 탭 「지금까지」)', () => {
+  /**
+   * TRIP-1790 · 마이 탭 「지금까지」 — 종료한 여행의 여행·도시·방문 수를 프로필 카드 아래 별도 카드로 보인다(Figma E9).
+   *
+   * 무엇을 보장하나:
+   *  - AC-1 종료 3건(부산·부산 시군구·제주) + 방문 4·5·3 → 여행 3 · 도시 2 · 방문 12. records 에는 예정 여행(7)·작성중 지난 여행(6)·
+   *    목록에 없는 여행(9)의 방문도 함께 오지만 **종료 칸과 같은 판정**(확정 ∧ 종료)만 센다 — 프로필 「종료」 칸 숫자와 항상 같다.
+   *  - AC-6 예정 여행이 있어도 records 조회가 켜진다. 첫 인자는 `{ limit: 100 }`(서버 상한) — 지난 여행 카드의 「사진 N」도 같은 응답을 쓴다.
+   *  - AC-4 종료 0건(알고 0)이면 카드를 그리지 않는다. 모르는 상태(여행 목록 대기)는 카드가 `–` 로 선다.
+   *  - AC-2 records 실패 → 세 값 `–` + 「다시 시도」(0 으로 접지 않는다). 누르면 records 만 다시 받고, 성공하면 숫자가 나온다.
+   *    조회 중 → `–`·버튼 없음. 실패 이력 + 재조회 중 → 버튼 disabled. 받아 둔 데이터가 있으면 재조회 실패에도 숫자 유지.
+   *    여행 목록 실패 → `–` + 「다시 시도」(Seed D6), 누르면 여행 목록만 다시 받는다.
+   *  - AC-5 records 100건이면 세 값 `+`, 99건이면 `+` 없음.  AC-3 카드 안에 분·시간·소요·km·이동 글자 없음(INV-3).
+   *
+   * 왜 이렇게 테스트하나: 조회 훅만 목이고 모델·화면·카드는 실물이다. 훅 목은 가공 전 응답(`data.items`)을 그대로 주므로(`select` 미실행)
+   * 필요한 필드(`isError`·`errorUpdateCount`·`isFetching`·`refetch`)를 `recordsQuery`/`tripsQuery` 가 명시해 준다.
+   * 종료 판정은 시계를 흉내 내지 않는다 — PAST(2026-06) 확정 = 종료, FUTURE(2099) 확정 = 예정, 일정 없음 = 작성중(초안).
+   *
+   * 커버하지 않는 것: 카드 생김새(칸 사이 세로선·간격·그림자·재시도 버튼 모양)·실제 재조회 응답 도착 — 실화면 QA(6-b) 몫.
+   */
+
+  const mockUseMe = useGetMe as jest.MockedFunction<typeof useGetMe>;
+  const mockUseProfile = useGetMeProfile as jest.MockedFunction<
+    typeof useGetMeProfile
+  >;
+  const mockUseStyle = useGetMeStyle as jest.MockedFunction<
+    typeof useGetMeStyle
+  >;
+  const mockUseTrips = useGetTrips as jest.MockedFunction<typeof useGetTrips>;
+  const mockUseRecords = useGetMeRecords as jest.MockedFunction<
+    typeof useGetMeRecords
+  >;
+
+  const EN_DASH = '–';
+
+  type QueryShape = {
+    data: unknown;
+    isPending: boolean;
+    isError: boolean;
+    isFetching: boolean;
+    errorUpdateCount: number;
+    refetch: jest.Mock;
+  };
+
+  /** 조회 결과 목 — 실패·재시도 판정에 쓰이는 필드를 전부 명시한다(기본 = 응답 전). */
+  function query(over: Partial<QueryShape> = {}): QueryShape {
+    return {
+      data: undefined,
+      isPending: true,
+      isError: false,
+      isFetching: false,
+      errorUpdateCount: 0,
+      refetch: jest.fn(),
+      ...over,
+    };
+  }
+  const loaded = (data: unknown, over: Partial<QueryShape> = {}) =>
+    query({ data, isPending: false, ...over });
+
+  function setTrips(q: QueryShape): void {
+    mockUseTrips.mockReturnValue(
+      q as unknown as ReturnType<typeof useGetTrips>
+    );
+  }
+  function setRecords(q: QueryShape): void {
+    mockUseRecords.mockReturnValue(
+      q as unknown as ReturnType<typeof useGetMeRecords>
+    );
+  }
+
+  /** 목적지 한 곳 짜리 여행. 일정 네 칸이 종료·예정을 가른다 — 확정이면 날짜로, 없으면 작성중. */
+  function tripOf(
+    tripId: string,
+    period: { startDate: string; endDate: string },
+    destinations: { region: string; regionCode?: string }[],
+    confirmed = true
+  ): Trip {
+    return myPageTrip(tripId, period, {
+      ...(confirmed ? CONFIRMED_COLS : {}),
+      destinations: destinations.map((dest, i) => ({
+        seq: i + 1,
+        nights: 1,
+        ...dest,
+      })),
+    });
+  }
+
+  function rec(tripId: string, visitCount: number): TripRecordSummary {
+    return {
+      tripId,
+      title: `${tripId} 기록`,
+      startDate: PAST.startDate,
+      endDate: PAST.endDate,
+      regions: [],
+      visitCount,
+      photoCount: 0,
+    };
+  }
+
+  /** 종료 여행 하나(부산 `'26'`)와 그 방문 기록 — 단순한 장면용. */
+  const ONE_ENDED = [
+    tripOf('t1', PAST, [{ region: '부산광역시', regionCode: '26' }]),
+  ];
+
+  function stat(cell: 'trips' | 'cities' | 'visits'): string {
+    return [screen.getByTestId(`my-stats-${cell}-value`).props.children]
+      .flat()
+      .join('');
+  }
+  function statValues(): string[] {
+    return (['trips', 'cities', 'visits'] as const).map(stat);
+  }
+
+  /** records 훅이 받은 모든 호출의 첫 인자. */
+  function recordsArgs(): unknown[] {
+    return mockUseRecords.mock.calls.map((call) => call[0]);
+  }
+
+  beforeEach(() => {
+    mockPush.mockClear();
+    mockUseMe.mockReturnValue(
+      asQuery({ email: 'a@b.c' }) as ReturnType<typeof useGetMe>
+    );
+    mockUseProfile.mockReturnValue(
+      asQuery({ nickname: '테스터' }) as ReturnType<typeof useGetMeProfile>
+    );
+    mockUseStyle.mockReturnValue(
+      asQuery(undefined) as ReturnType<typeof useGetMeStyle>
+    );
+    setTrips(loaded([]));
+    setRecords(query());
+  });
+
+  describe('🔴 AC-1·AC-6 · 종료 여행만 세고, 예정 여행이 있어도 조회한다', () => {
+    /** 종료 3 + 예정 1(서울) + 작성중 지난 여행 1(경기) — 오염 입력. */
+    function scenario() {
+      setTrips(
+        loaded([
+          tripOf('t1', PAST, [{ region: '부산광역시', regionCode: '26' }]),
+          tripOf('t2', PAST, [{ region: '해운대구', regionCode: '26350' }]),
+          tripOf('t3', PAST, [{ region: '제주시', regionCode: '50110' }]),
+          tripOf('u1', FUTURE, [{ region: '서울특별시', regionCode: '11' }]),
+          tripOf('d1', PAST, [{ region: '경기도', regionCode: '41' }], false),
+        ])
+      );
+      setRecords(
+        loaded({
+          items: [
+            rec('t1', 4),
+            rec('t2', 5),
+            rec('t3', 3),
+            rec('u1', 7),
+            rec('d1', 6),
+            rec('stranger', 9),
+          ],
+        })
+      );
+    }
+
+    it('M1 · 종료 3건 → 여행 3 · 도시 2 · 방문 12 (예정·작성중·모르는 여행의 방문·도시는 안 센다), 프로필 「종료」 칸과 같은 숫자', async () => {
+      scenario();
+
+      renderPage();
+      await settle();
+
+      // 단언 — 합산 구현이면 방문 34, 작성중을 세면 여행 4 · 도시 4.
+      expect(statValues()).toEqual(['3', '2', '12']);
+      // 짝 — 같은 모집단: 프로필 카드 「종료」 칸(3)·「예정」 칸(1).
+      expect(
+        screen.getByTestId('my-profile-count-ended-value')
+      ).toHaveTextContent(stat('trips'));
+      expect(
+        screen.getByTestId('my-profile-count-upcoming-value')
+      ).toHaveTextContent('1');
+    });
+
+    it('M2 · 예정 여행이 있어도 통계 카드가 뜨고 records 조회는 켜져 있으며 첫 인자는 { limit: 100 } 이다', async () => {
+      scenario();
+
+      renderPage();
+      await settle();
+
+      expect(screen.getByTestId('my-stats-card')).toBeOnTheScreen();
+      // 예정 1건 → 지난 여행 섹션은 닫혀 있다(옛 규칙에선 이때 조회도 꺼졌다).
+      expect(screen.queryByText('지난 여행')).toBeNull();
+      expect(lastRecordsEnabled()).toBe(true);
+      expect(mockUseRecords).toHaveBeenCalled();
+      expect(recordsArgs()).toEqual(recordsArgs().map(() => ({ limit: 100 })));
+    });
+
+    /** 페이지가 마지막으로 `/me/records` 훅에 넘긴 enabled 값. */
+    function lastRecordsEnabled(): unknown {
+      const calls = mockUseRecords.mock.calls;
+      const options = calls[calls.length - 1]?.[1] as
+        { query?: { enabled?: unknown } } | undefined;
+      return options?.query?.enabled;
+    }
+  });
+
+  describe('🔴 AC-4 · 종료 0건이면 카드가 없고, 모르는 상태는 `–` 로 선다', () => {
+    it.each<[string, Trip[]]>([
+      [
+        '예정 여행만 있다',
+        [tripOf('u1', FUTURE, [{ region: '부산', regionCode: '26' }])],
+      ],
+      ['여행이 0건이다', []],
+      [
+        '작성중(초안) 지난 여행만 있다',
+        [tripOf('d1', PAST, [{ region: '부산', regionCode: '26' }], false)],
+      ],
+    ])('M4 · %s → 통계 카드 없음', async (_name, trips) => {
+      setTrips(loaded(trips));
+      setRecords(loaded({ items: [rec('u1', 7)] }));
+
+      renderPage();
+      await settle();
+
+      expect(screen.queryByTestId('my-stats-card')).toBeNull();
+      // 짝 — 판정이 끝난 화면이고(프로필 카드 있음), 새 호출 모양으로 조회가 이뤄졌다(선제 green 방지).
+      expect(screen.getByTestId('my-profile-card')).toBeOnTheScreen();
+      expect(mockUseRecords).toHaveBeenCalled();
+      expect(recordsArgs()).toEqual(recordsArgs().map(() => ({ limit: 100 })));
+    });
+  });
+
+  describe('🔴 AC-2 · 못 받았을 때 0 으로 접지 않는다', () => {
+    it('M5 · records 실패 → 세 값 `–` + 다시 시도. 누르면 records 만 다시 받고(여행 목록 0회), 성공하면 숫자가 나온다', async () => {
+      // 준비 — 종료 1건, records 는 데이터 없이 실패.
+      const trips = loaded(ONE_ENDED);
+      const failedRecords = query({ isPending: false, isError: true });
+      setTrips(trips);
+      setRecords(failedRecords);
+
+      const view = renderPage();
+      await settle();
+
+      // 단언 — 0 이 아니라 `–`, 버튼 하나.
+      expect(statValues()).toEqual([EN_DASH, EN_DASH, EN_DASH]);
+      const retry = screen.getByTestId('my-stats-retry');
+      expect(retry).toHaveTextContent('다시 시도');
+
+      // 실행 — 누른다.
+      fireEvent.press(retry);
+
+      // 단언 — records 만 다시 부른다.
+      expect(failedRecords.refetch).toHaveBeenCalledTimes(1);
+      expect(trips.refetch).not.toHaveBeenCalled();
+
+      // 실행 — 재조회가 성공해 응답이 도착한 다음 렌더.
+      setRecords(loaded({ items: [rec('t1', 2)] }));
+      view.rerender(<MyPage />);
+      await settle();
+
+      // 단언 — 짝: 성공 뒤 숫자, 버튼은 사라진다.
+      expect(statValues()).toEqual(['1', '1', '2']);
+      expect(screen.queryByTestId('my-stats-retry')).toBeNull();
+    });
+
+    it('M6 · records 조회 중 → 세 값 `–` 이고 버튼은 없다', async () => {
+      setTrips(loaded(ONE_ENDED));
+      setRecords(query({ isPending: true }));
+
+      renderPage();
+      await settle();
+
+      expect(screen.getByTestId('my-stats-card')).toBeOnTheScreen();
+      expect(statValues()).toEqual([EN_DASH, EN_DASH, EN_DASH]);
+      expect(screen.queryByTestId('my-stats-retry')).toBeNull();
+    });
+
+    it('M7 · 실패 이력이 있는 채 재조회 중(isError 는 꺼짐)이면 실패 얼굴을 유지하고 버튼은 disabled 다', async () => {
+      // 준비 — TanStack v5 는 데이터 없이 실패한 쿼리를 다시 받는 동안 isError 를 끄고 errorUpdateCount 만 남긴다.
+      const refetching = query({
+        isPending: true,
+        isError: false,
+        errorUpdateCount: 1,
+        isFetching: true,
+      });
+      setTrips(loaded(ONE_ENDED));
+      setRecords(refetching);
+
+      renderPage();
+      await settle();
+
+      expect(statValues()).toEqual([EN_DASH, EN_DASH, EN_DASH]);
+      const retry = screen.getByTestId('my-stats-retry');
+      expect(retry).toBeDisabled();
+
+      fireEvent.press(retry);
+
+      expect(refetching.refetch).not.toHaveBeenCalled();
+    });
+
+    it('M8 · 받아 둔 records 가 있으면 재조회가 실패해도 숫자를 그대로 두고 버튼은 없다', async () => {
+      setTrips(loaded(ONE_ENDED));
+      setRecords(loaded({ items: [rec('t1', 2)] }, { isError: true }));
+
+      renderPage();
+      await settle();
+
+      expect(statValues()).toEqual(['1', '1', '2']);
+      expect(screen.queryByTestId('my-stats-retry')).toBeNull();
+    });
+
+    it('M9 · 여행 목록 조회 중이면 `–`·버튼 없음, 여행 목록 실패면 `–` + 다시 시도(여행 목록만 다시 받는다)', async () => {
+      // 준비 — 목록 대기.
+      setTrips(query({ isPending: true }));
+      const view = renderPage();
+      await settle();
+
+      expect(screen.getByTestId('my-stats-card')).toBeOnTheScreen();
+      expect(statValues()).toEqual([EN_DASH, EN_DASH, EN_DASH]);
+      expect(screen.queryByTestId('my-stats-retry')).toBeNull();
+
+      // 준비 — 목록 실패(받아 둔 목록 없음).
+      const failedTrips = query({ isPending: false, isError: true });
+      const records = query({ isPending: true });
+      setTrips(failedTrips);
+      setRecords(records);
+      view.rerender(<MyPage />);
+      await settle();
+
+      expect(statValues()).toEqual([EN_DASH, EN_DASH, EN_DASH]);
+      const retry = screen.getByTestId('my-stats-retry');
+
+      // 실행
+      fireEvent.press(retry);
+
+      // 단언
+      expect(failedTrips.refetch).toHaveBeenCalledTimes(1);
+      expect(records.refetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('🔴 AC-5 · 100건이면 잘렸을 수 있어 `+`', () => {
+    const filler = (n: number) =>
+      Array.from({ length: n }, (_, i) => rec(`filler-${i}`, 1));
+
+    it('M10 · records 100건 → 세 값 뒤 `+`, 99건 → `+` 없음', async () => {
+      setTrips(loaded(ONE_ENDED));
+      setRecords(loaded({ items: [rec('t1', 4), ...filler(99)] }));
+
+      const view = renderPage();
+      await settle();
+
+      // 100건 — 방문 4 만 센다(필러 99는 종료 여행이 아니다).
+      expect(statValues()).toEqual(['1+', '1+', '4+']);
+
+      setRecords(loaded({ items: [rec('t1', 4), ...filler(98)] }));
+      view.rerender(<MyPage />);
+      await settle();
+
+      expect(statValues()).toEqual(['1', '1', '4']);
+    });
+  });
+
+  describe('🔴 AC-3 · 시간·거리 글자가 없다 (INV-3)', () => {
+    it('M11 · 통계 카드 안에 분·시간·소요·km·이동 글자가 없고 값은 그려져 있다', async () => {
+      setTrips(loaded(ONE_ENDED));
+      // 응답에 시간 같은 문자열이 섞여 와도(제목 등) 카드는 그것을 쓰지 않는다.
+      setRecords(
+        loaded({
+          items: [
+            {
+              ...rec('t1', 4),
+              title: '3시간 이동 · 40분 소요',
+              regions: ['120km'],
+            },
+          ],
+        })
+      );
+
+      renderPage();
+      await settle();
+
+      const card = screen.getByTestId('my-stats-card');
+      expect(statValues()).toEqual(['1', '1', '4']);
+      expect(within(card).queryAllByText(/분|시간|소요|km|이동/)).toHaveLength(
+        0
+      );
+    });
+  });
+
+  describe('🔴 AC-1 · 진행 중 여행은 통계 모집단 밖 (5-b 보강 W1)', () => {
+    it('M12 · 종료 2 + 진행 중 1 + 예정 1 → 여행 2 · 도시는 종료 여행 시도만 · 방문은 종료 여행 합이고, 프로필 「종료」 칸과 같은 숫자', async () => {
+      // 준비 — 종료 둘(부산 '26' · 제주 '50') + 진행 중(서울 '11', 방문 7) + 예정(강원 '51', 방문 5).
+      setTrips(
+        loaded([
+          tripOf('e1', PAST, [{ region: '부산광역시', regionCode: '26' }]),
+          tripOf('e2', PAST, [{ region: '제주시', regionCode: '50110' }]),
+          tripOf('a1', DURING, [{ region: '서울특별시', regionCode: '11' }]),
+          tripOf('u1', FUTURE, [{ region: '강릉시', regionCode: '51150' }]),
+        ])
+      );
+      setRecords(
+        loaded({
+          items: [rec('e1', 4), rec('e2', 3), rec('a1', 7), rec('u1', 5)],
+        })
+      );
+
+      // 실행 — 마이 탭을 연다.
+      renderPage();
+      await settle();
+
+      // 단언 — 진행 중을 섞으면 여행 3 · 도시 3 · 방문 14.
+      expect(statValues()).toEqual(['2', '2', '7']);
+      // 짝 — 판정이 갈린 화면이다: 프로필 칸은 종료 2 · 진행 중 1 · 예정 1, 통계 「여행」은 「종료」 칸과 같다.
+      expect(
+        screen.getByTestId('my-profile-count-ended-value')
+      ).toHaveTextContent(stat('trips'));
+      expect(
+        screen.getByTestId('my-profile-count-active-value')
+      ).toHaveTextContent('1');
+      expect(
+        screen.getByTestId('my-profile-count-upcoming-value')
+      ).toHaveTextContent('1');
     });
   });
 });

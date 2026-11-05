@@ -1,4 +1,5 @@
 import type { ComponentProps } from 'react';
+import { View } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { MyPageScreen } from './MyPageScreen';
@@ -135,5 +136,73 @@ describe('헤더 (AC-3)', () => {
 
     expect(screen.getByText('마이페이지')).toBeOnTheScreen();
     expect(screen.getByTestId('my-header-settings')).toBeOnTheScreen();
+  });
+});
+
+// TRIP-1790 — 「지금까지」 통계 카드 슬롯. 값 계산·실패 판정은 페이지 몫이고, 화면은 완성된 `stats` 를 프로필·스타일 카드 사이에 놓을 뿐이다.
+describe('누적 통계 슬롯', () => {
+  const READY = {
+    kind: 'ready',
+    trips: 3,
+    cities: 2,
+    visits: 12,
+    truncated: false,
+  } as const;
+
+  it('T1 · stats 를 주면 프로필 카드 < 통계 카드 < 스타일 카드 < 메뉴 카드 순서로 놓인다', () => {
+    // 준비 — 스타일 카드 자리에는 testID 만 있는 표식을 꽂는다.
+    render(
+      <MyPageScreen
+        {...base({
+          stats: READY,
+          styleCard: <View testID="stub-style-card" />,
+        })}
+      />
+    );
+
+    // 실행·단언 — 렌더 트리 깊이 우선(문서 순서)으로 testID 를 모아 위치를 비교한다.
+    const order = screen
+      .getByTestId('my-page-root')
+      .findAll((node) => typeof node.props.testID === 'string')
+      .map((node) => node.props.testID as string);
+    const profile = order.indexOf('my-profile-card');
+    const stats = order.indexOf('my-stats-card');
+    const style = order.indexOf('stub-style-card');
+    const menu = order.indexOf('my-menu-card');
+
+    expect(profile).toBeGreaterThanOrEqual(0);
+    expect(stats).toBeGreaterThan(profile);
+    expect(style).toBeGreaterThan(stats);
+    expect(menu).toBeGreaterThan(style);
+  });
+
+  it('T2 · stats 가 없거나 null 이면 통계 카드를 그리지 않는다', () => {
+    const { rerender } = render(<MyPageScreen {...base()} />);
+
+    expect(screen.queryByTestId('my-stats-card')).toBeNull();
+
+    rerender(<MyPageScreen {...base({ stats: null })} />);
+
+    expect(screen.queryByTestId('my-stats-card')).toBeNull();
+    // 짝 앵커 — 화면은 그려졌고, 값이 오면 카드가 생긴다.
+    expect(screen.getByTestId('my-profile-card')).toBeOnTheScreen();
+    rerender(<MyPageScreen {...base({ stats: READY })} />);
+    expect(screen.getByTestId('my-stats-card')).toBeOnTheScreen();
+  });
+
+  it('T3 · failed 얼굴의 「다시 시도」는 onRetryStats 를 1회 부른다', () => {
+    const onRetryStats = jest.fn();
+    render(
+      <MyPageScreen
+        {...base({
+          stats: { kind: 'failed', retrying: false },
+          onRetryStats,
+        })}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('my-stats-retry'));
+
+    expect(onRetryStats).toHaveBeenCalledTimes(1);
   });
 });
