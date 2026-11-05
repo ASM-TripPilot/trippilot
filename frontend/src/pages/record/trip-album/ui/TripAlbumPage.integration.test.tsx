@@ -207,6 +207,10 @@ function renderAlbum(client = newTestQueryClient()) {
 const cell = (metaId: string) =>
   screen.queryByTestId(`trip-album-photo-${metaId}`);
 const cells = () => screen.queryAllByTestId(/^trip-album-photo-meta-/);
+// 셀 수는 숫자로 잰다 — `expect(cellCount()).toBe(n)` 은 실패할 때마다 받은 셀(ReactTestInstance, fiber 포함)을 통째 문자열로
+// 찍느라 한 번에 ~0.4초 이벤트 루프를 막는다. `waitFor` 가 50ms 마다 그 실패를 되풀이하는 동안 붙잡아 둔 응답·주소 찾기가 못 돌아
+// CI 에서 5초 한도를 넘겼다(P6·P17, run 42069223999·42075679272).
+const cellCount = () => cells().length;
 const sourceOf = (node: ReactTestInstance) =>
   ([] as unknown[]).concat(node.props.source);
 const isTouchable = (node: ReactTestInstance) =>
@@ -255,7 +259,7 @@ describe('🔴 TRIP-1798 · 여행 앨범 — 정상·기기·이름 (AC1·2·7�
       within(screen.getByTestId('trip-album-place-v3')).getByText('광안리')
     ).toBeOnTheScreen();
 
-    await waitFor(() => expect(cells()).toHaveLength(6));
+    await waitFor(() => expect(cellCount()).toBe(6));
     // 이 기기 앨범의 주소로 그려지고, 누를 수 없다(Q8). 장소 안 순서는 sortOrder(응답은 2,0,1 로 섞여 옴).
     expect(sourceOf(screen.getByTestId('trip-album-photo-meta-a0'))).toEqual([
       { uri: 'file://a0' },
@@ -297,7 +301,7 @@ describe('🔴 TRIP-1798 · 여행 앨범 — 정상·기기·이름 (AC1·2·7�
     });
     renderAlbum();
 
-    await waitFor(() => expect(cells()).toHaveLength(6));
+    await waitFor(() => expect(cellCount()).toBe(6));
     expect(cell('x0')).toBeNull();
     expect(cell('x1')).toBeNull();
     expect(cell('x2')).toBeNull();
@@ -354,7 +358,7 @@ describe('🔴 TRIP-1798 · 여행 앨범 — 정상·기기·이름 (AC1·2·7�
 
     const day1 = await screen.findByTestId('trip-album-day-1');
     expect(within(day1).getByText('1일차')).toBeOnTheScreen();
-    await waitFor(() => expect(cells()).toHaveLength(6));
+    await waitFor(() => expect(cellCount()).toBe(6));
     expect(screen.getByTestId('trip-album-title')).toHaveTextContent(
       '이번 여행 · 사진 6장'
     );
@@ -387,7 +391,7 @@ describe('🔴 TRIP-1798 · 여행 앨범 — 빈 앨범·기기 번호 (AC2·3)
       expect(await screen.findByTestId('trip-album-empty')).toHaveTextContent(
         '이 기기에서 볼 수 있는 사진이 없어요'
       );
-      expect(cells()).toHaveLength(0);
+      expect(cellCount()).toBe(0);
       expect(screen.queryByTestId('trip-album-error')).toBeNull();
     }
   );
@@ -429,11 +433,11 @@ describe('🔴 TRIP-1798 · 여행 앨범 — 빈 앨범·기기 번호 (AC2·3)
     await waitFor(() => expect(hits('GET', '/trips/trip-1/records')).toBe(1));
     await settleScreen();
     expect(screen.queryByTestId('trip-album-empty')).toBeNull();
-    expect(cells()).toHaveLength(0);
+    expect(cellCount()).toBe(0);
 
     gate.release();
 
-    await waitFor(() => expect(cells()).toHaveLength(6));
+    await waitFor(() => expect(cellCount()).toBe(6));
     expect(screen.queryByTestId('trip-album-empty')).toBeNull();
   });
 
@@ -458,11 +462,11 @@ describe('🔴 TRIP-1798 · 여행 앨범 — 빈 앨범·기기 번호 (AC2·3)
     await waitFor(() => expect(hits('GET', '/visits/v3/photos')).toBe(1));
     await settleScreen();
     expect(screen.queryByTestId('trip-album-empty')).toBeNull();
-    expect(cells()).toHaveLength(0);
+    expect(cellCount()).toBe(0);
 
     gate.release();
 
-    await waitFor(() => expect(cells()).toHaveLength(3));
+    await waitFor(() => expect(cellCount()).toBe(3));
     expect(screen.queryByTestId('trip-album-empty')).toBeNull();
   });
 
@@ -490,11 +494,11 @@ describe('🔴 TRIP-1798 · 여행 앨범 — 빈 앨범·기기 번호 (AC2·3)
     await screen.findByTestId('trip-album-screen');
     await settleScreen();
     expect(screen.queryByTestId('trip-album-empty')).toBeNull();
-    expect(cells()).toHaveLength(0);
+    expect(cellCount()).toBe(0);
 
     gate.release();
 
-    await waitFor(() => expect(cells()).toHaveLength(1));
+    await waitFor(() => expect(cellCount()).toBe(1));
     expect(screen.queryByTestId('trip-album-empty')).toBeNull();
   });
 
@@ -509,14 +513,14 @@ describe('🔴 TRIP-1798 · 여행 앨범 — 빈 앨범·기기 번호 (AC2·3)
     );
     expect(hits('GET', '/visits/v3/photos')).toBe(1); // 세 방문 모두 실제로 404 를 받았다
     expect(screen.queryByTestId('trip-album-photo-error')).toBeNull();
-    expect(cells()).toHaveLength(0);
+    expect(cellCount()).toBe(0);
   });
 
   it('P8 이 기기 사진인데 앨범에서 못 푼 것은 셀 없이 「불러올 수 없는 사진 1장」으로 알리고 제목 장수에서 뺀다', async () => {
     serve({ photos: { ...standardPhotos(), v2: () => [photo('gone-b0')] } });
     renderAlbum();
 
-    await waitFor(() => expect(cells()).toHaveLength(5));
+    await waitFor(() => expect(cellCount()).toBe(5));
     expect(
       screen.getByTestId('trip-album-unresolved-notice')
     ).toHaveTextContent('불러올 수 없는 사진 1장');
@@ -570,7 +574,7 @@ describe('🔴 TRIP-1798 · 여행 앨범 — 실패는 빈 앨범이 아니다 
     expect(
       await screen.findByTestId('trip-album-photo-error')
     ).toBeOnTheScreen();
-    await waitFor(() => expect(cells()).toHaveLength(5)); // v2 의 b0 만 빠짐
+    await waitFor(() => expect(cellCount()).toBe(5)); // v2 의 b0 만 빠짐
     expect(screen.queryByTestId('trip-album-empty')).toBeNull();
 
     v2Fails = false;
@@ -579,7 +583,7 @@ describe('🔴 TRIP-1798 · 여행 앨범 — 실패는 빈 앨범이 아니다 
     expect(screen.getByTestId('trip-album-photo-error')).toBeOnTheScreen(); // 재시도 중에도 줄은 안 꺼진다
     gate.release();
 
-    await waitFor(() => expect(cells()).toHaveLength(6));
+    await waitFor(() => expect(cellCount()).toBe(6));
     expect(screen.queryByTestId('trip-album-photo-error')).toBeNull();
     expect(hits('GET', '/visits/v1/photos')).toBe(1); // 성공한 방문은 다시 부르지 않는다
     expect(hits('GET', '/visits/v3/photos')).toBe(1);
@@ -658,7 +662,7 @@ describe('🔴 TRIP-1798 · 여행 앨범 — 실패는 빈 앨범이 아니다 
     expect(refetchSpy).toHaveBeenCalledTimes(1); // 실패한 v2 한 건만, 첫 누름에서 한 번
 
     gate.release();
-    await waitFor(() => expect(cells()).toHaveLength(6));
+    await waitFor(() => expect(cellCount()).toBe(6));
   });
 
   it('P6c 사진 목록이 전부 실패해 그릴 사진이 0장이어도 「사진이 없어요」 빈 앨범으로 접지 않는다', async () => {
@@ -671,7 +675,7 @@ describe('🔴 TRIP-1798 · 여행 앨범 — 실패는 빈 앨범이 아니다 
     ).toBeOnTheScreen();
     await settleScreen();
     expect(screen.queryByTestId('trip-album-empty')).toBeNull();
-    expect(cells()).toHaveLength(0);
+    expect(cellCount()).toBe(0);
   });
 
   it('P6b 사진 목록이 404(방문 기록 없음)면 오류 줄 없이 그 방문만 빠진다', async () => {
@@ -683,7 +687,7 @@ describe('🔴 TRIP-1798 · 여행 앨범 — 실패는 빈 앨범이 아니다 
     });
     renderAlbum();
 
-    await waitFor(() => expect(cells()).toHaveLength(5));
+    await waitFor(() => expect(cellCount()).toBe(5));
     expect(screen.queryByTestId('trip-album-photo-error')).toBeNull();
   });
 });
