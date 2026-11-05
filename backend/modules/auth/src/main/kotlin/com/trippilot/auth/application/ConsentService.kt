@@ -36,6 +36,7 @@ class ConsentService(
     private val terms: TermsVersionRepository,
     private val records: ConsentRecordRepository,
     private val marketing: MarketingConsentRepository,
+    private val location: LocationConsentService,
     private val clock: Clock,
 ) {
     /** 항목별 현재 동의 상태(증적 폴드, INV-C2). */
@@ -117,12 +118,19 @@ class ConsentService(
      * 최신 증적과 같은 동작(같은 약관 버전의 같은 GRANT/REVOKE)이면 남기지 않는다(TRIP-1689) — 연타·두 기기 동시 요청이
      * 같은 법적 증적을 두 줄로 만들지 않게. 응답은 그대로 200 이다(위치 `update` 의 "실제 값이 바뀔 때만" 선례 —
      * 앱 개인화 훅은 오류 응답을 처리하지 않아 409 면 재조회도 못 한다). 잠금은 **읽기 전에** 건다.
+     *
+     * 위치 약관(LOCATION_TERMS)은 증적만으로 끝나지 않는다 — GPS 수용 판정의 정본은 위치 L2 상태라 같이 맞춘다(TRIP-1800).
+     * 약관 API(온보딩·설정·재동의)는 모두 이 함수를 지난다(설정 토글 `PUT /me/location-consent` 는 L2 를 직접 바꾼다).
+     * 증적이 중복으로 걸러져도 동기화는 부른다 — 증적과 L2 가 이미 어긋난 계정(백필 뒤 옛 파드가 받은 가입 등)이
+     * 같은 동의를 다시 보내면 스스로 맞춰지게. 동기화는 값이 같으면 아무것도 하지 않는다.
      */
     private fun appendIfChanged(record: ConsentRecord) {
         records.lockAccount(record.accountId)
         val latest = ConsentFold.latestPerType(records.findByAccount(record.accountId))[record.termsType]
-        if (latest?.action == record.action && latest.termsVersion == record.termsVersion) return
-        records.append(record)
+        if (latest?.action != record.action || latest.termsVersion != record.termsVersion) records.append(record)
+        if (record.termsType == TermsType.LOCATION_TERMS) {
+            location.syncLegalConsentFromTerms(record.accountId, record.isGrant, record.termsVersion, record.channel)
+        }
     }
 
     private fun inferChannel(accountId: AccountId, term: TermsVersion, action: ConsentAction): ConsentChannel {
