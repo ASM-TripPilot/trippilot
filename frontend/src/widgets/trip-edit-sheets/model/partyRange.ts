@@ -14,3 +14,12 @@ export function partyRangeFor(type: CompanionType | undefined): {
   if (type === '친구' || type === '가족') return { min: 2, max: Infinity };
   return { min: 1, max: Infinity };
 }
+
+/** 칩을 고를 때 인원을 그 유형의 범위 안으로 옮긴다 — 위저드와 여행 설정 화면이 같이 쓴다. */
+export function clampParty(
+  type: CompanionType | undefined,
+  party: number
+): number {
+  const { min, max } = partyRangeFor(type);
+  return Math.min(max, Math.max(min, party));
+}

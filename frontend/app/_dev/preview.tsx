@@ -117,7 +117,12 @@ import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { SheetHeader } from '@/widgets/map-sheet-shell';
 import { SlotStopCard } from '@/entities/itinerary-slot';
 import { violationNotice } from '@/entities/itinerary-slot';
-import { PastTripRow, TripCard, type MyTripCardVM } from '@/entities/trip';
+import {
+  PastTripRow,
+  TripCard,
+  TripDeleteDialog,
+  type MyTripCardVM,
+} from '@/entities/trip';
 import type { PastTripCardVM } from '@/entities/trip';
 import type { MonthLegends } from '@/pages/record/records-calendar/model/recordsCalendar';
 import { buildSlotKey } from '@/entities/itinerary-slot';
@@ -125,8 +130,8 @@ import { buildStatePins } from '@/entities/itinerary-slot';
 import { TimeSheet } from '@/widgets/time-sheet';
 import { MethodPickerScreen } from '@/pages/itinerary/itinerary-method/ui/MethodPickerScreen';
 import { MyTripsListScreen } from '@/pages/itinerary/itinerary-list/ui/MyTripsListScreen';
+import { TripSettingsView } from '@/pages/trip/trip-settings/ui/TripSettingsView';
 import { MyTripsSortSheet } from '@/pages/itinerary/itinerary-list/ui/MyTripsSortSheet';
-import { TripDeleteDialog } from '@/pages/itinerary/itinerary-list/ui/TripDeleteDialog';
 import {
   NotificationInboxScreen,
   type NotificationSection,
@@ -188,8 +193,10 @@ import {
   TripWizardStep1Screen,
   type TripWizardStep1ScreenProps,
 } from '@/pages/trip/trip-new-step1/ui/TripWizardStep1Screen';
-import { CompanionEditSheet } from '@/pages/trip/trip-new-step1/ui/CompanionEditSheet';
-import { DayWindowEditSheet } from '@/pages/trip/trip-new-step1/ui/DayWindowEditSheet';
+import {
+  CompanionEditSheet,
+  DayWindowEditSheet,
+} from '@/widgets/trip-edit-sheets';
 import { DestinationEditSheet } from '@/pages/trip/trip-new-step1/ui/DestinationEditSheet';
 import { PeriodEditSheet } from '@/pages/trip/trip-new-step1/ui/PeriodEditSheet';
 import {
@@ -299,6 +306,31 @@ try {
 
 // 프리뷰는 보기 전용이라 화면이 요구하는 콜백을 전부 빈 함수로 채운다.
 const noop = () => {};
+
+// g03 여행 설정(TRIP-1787, Figma `5151:3550`) — 순수 뷰만 태운다(컨테이너는 조회·저장 훅을 문다). 기본 얼굴(바꿀 수 있고 삭제 노출)과
+// 끝난 여행 잠금 얼굴(이유 한 줄·삭제 없음)을 Figma 와 대조한다. 시트·삭제 다이얼로그 개폐·키보드는 jest 가 못 봐서 6-b 몫이다.
+const TRIP_SETTINGS_VIEW = {
+  title: '제주 가족 여행',
+  titleInvalid: false,
+  locked: false,
+  companionLabel: '가족',
+  partyLabel: '3명',
+  dayRangeLabel: '09:30 ~ 21:00',
+  dayEndLabel: '마지막 날 18:00까지',
+  periodLabel: '6월 10일(수) – 13일(토)',
+  nightsLabel: '3박 4일',
+  destinationsLabel: '제주시 · 서귀포시',
+  cover: null,
+  canSave: false,
+  saveFailed: false,
+  deletable: true,
+  onBack: noop,
+  onChangeTitle: noop,
+  onPressCompanion: noop,
+  onPressDayWindow: noop,
+  onSave: noop,
+  onPressDelete: noop,
+} as const;
 
 /** j06 서버 문구 프리뷰 3키가 공유하는 카드 VM(TRIP-1605). */
 const SHARE_CARD_COPY_PREVIEW: ComponentProps<typeof ShareCardScreen>['card'] =
@@ -6047,6 +6079,22 @@ export const PREVIEW_STATES: PreviewState[] = [
         onApply={noop}
         onClose={noop}
       />
+    ),
+  },
+  {
+    key: 'trip-settings-default',
+    band: 'g',
+    label: 'g03 · 여행 설정',
+    login: null,
+    render: () => <TripSettingsView {...TRIP_SETTINGS_VIEW} />,
+  },
+  {
+    key: 'trip-settings-locked',
+    band: 'g',
+    label: 'g03 · 여행 설정 · 끝난 여행 잠금',
+    login: null,
+    render: () => (
+      <TripSettingsView {...TRIP_SETTINGS_VIEW} locked deletable={false} />
     ),
   },
   // g01 동행 편집 시트(TRIP-668, Figma `3642:2068`) — 친구 선택·인원 2명 열린 상태.

@@ -28,6 +28,7 @@ import {
 import { showToast } from '@/shared/ui/Toast';
 import {
   readDoneBarSeen,
+  TripDeleteDialog,
   tripItinerarySummary,
   writeDoneBarSeen,
 } from '@/entities/trip';
@@ -51,7 +52,6 @@ import {
 } from '../model/myTripsSegment';
 import { MyTripsListScreen } from './MyTripsListScreen';
 import { MyTripsSortSheet } from './MyTripsSortSheet';
-import { TripDeleteDialog } from './TripDeleteDialog';
 import { openNewTripWizard } from '@/features/create-trip';
 import { GenerationDoneBar } from './GenerationDoneBar';
 

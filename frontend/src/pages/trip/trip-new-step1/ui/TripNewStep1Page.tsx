@@ -46,7 +46,6 @@ import {
 import { deriveEndDate } from '@/features/create-trip';
 import { mustVisitFailureNotice } from '@/features/create-trip';
 import { planMustVisitSync } from '../model/mustVisitSync';
-import { partyRangeFor } from '../model/partyRange';
 import {
   dayWindowFields,
   summaryCompanion,
@@ -59,8 +58,11 @@ import {
 import { useTripWizardStore } from '@/features/create-trip';
 import { useCreateTrip } from '../model/useCreateTrip';
 import { usePreferencePrefill } from '../model/usePreferencePrefill';
-import { CompanionEditSheet } from './CompanionEditSheet';
-import { DayWindowEditSheet } from './DayWindowEditSheet';
+import {
+  clampParty,
+  CompanionEditSheet,
+  DayWindowEditSheet,
+} from '@/widgets/trip-edit-sheets';
 import { DestinationEditSheet } from './DestinationEditSheet';
 import { PeriodEditSheet } from './PeriodEditSheet';
 import { TripWizardLeaveDialog } from './TripWizardLeaveDialog';
@@ -669,9 +671,8 @@ export function TripNewStep1Page({
   /** 칩을 고르면 draftParty 를 그 유형의 범위 안으로 맞춘다(TRIP-1423 — 혼자 1 · 연인 2 · 친구·가족 2 이상).
    * 시트는 같은 범위로 `disabled` 만 그리고, 값을 옮기는 것은 배선이다(D2). */
   function pickCompanion(type: CompanionType): void {
-    const { min, max } = partyRangeFor(type);
     setDraftCompanion(type);
-    setDraftParty((party) => Math.min(max, Math.max(min, party)));
+    setDraftParty((party) => clampParty(type, party));
   }
 
   /** "적용" — 드래프트를 store 에 커밋(각 1회) + 닫기. 동행 미선택이면 `selectCompanion` 은

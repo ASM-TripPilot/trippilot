@@ -5,6 +5,7 @@ status: live-verified
 live_verified_at: 2026-11-02 (f153fe245)
 routes:
   - app/(tabs)/itinerary.tsx
+  - app/trips/[tripId]/settings.tsx
 ---
 
 # 내 여행 목록 (일정 탭)
@@ -22,7 +23,8 @@ routes:
 - `mytrips-sort` 정렬 줄을 눌러 시트에서 최신순·출발일순·이름순을 고른다. 고른 값은 기기에 저장되어 다시 열어도 남는다.
 - `mytrips-pin-ongoing` 확정 + 오늘이 기간 안인 여행은 「여행 중」 배지로 맨 위에 고정된다.
 - `mytrips-menu` ⋯ 버튼은 **모든 카드**(여행 중·지난 포함)에 있다. 누르면 패널에 「여행 설정」 → 「맨 위에 고정」(고정한 카드는 「고정 해제」) → 구분선 → 「삭제」 순서로 뜨고, 「삭제」와 구분선은 삭제 가능한 카드(작성중 · 시작 전 확정)에만 있다. 항목을 누르면 메뉴가 닫힌다. *(TRIP-1786 · jest 기준 — 팝오버가 사진 영역에 잘리지 않고 「삭제」 행까지 다 보이는지, 압정·톱니 모양, 두 카드 메뉴가 겹치는지는 실화면 전용)*
-- `mytrips-settings` 「여행 설정」(testID: `my-trip-menu-settings-${tripId}`)은 `/trips/{tripId}/settings` 로 간다(연타해도 한 번). **이 화면은 TRIP-1787 이 만든다 — 이 항목은 그 라우트와 함께 머지돼야 한다**(먼저 머지하면 없는 화면으로 간다). *(TRIP-1786)*
+- `mytrips-settings` 「여행 설정」(testID: `my-trip-menu-settings-${tripId}`)은 `/trips/{tripId}/settings` 로 간다(연타해도 한 번). 도착 화면은 아래 `trip-settings`. *(TRIP-1786)*
+- `trip-settings` 여행 설정 화면(Figma g03) — 위에 커버(첫 목적지 그림, 보기만), 카드에 「여행 이름」(입력, testID: `trip-settings-title`)·「여행지」·「기간」(보기만, 눌러도 아무 일 없다 — chevron 없음)·「동행」(testID: `trip-settings-companion`)·「일과 시간」(testID: `trip-settings-day-start`) 행, 아래 「저장」(testID: `trip-settings-save`)과 카드 밖 「여행 삭제」(testID: `trip-settings-delete`, 뉴트럴 글자). 동행·일과 행은 눌러 g01 위저드와 같은 시트로 고친다. **저장은 바뀐 값이 있고 이름이 1~120자(코드포인트)일 때만 켜진다**(안내 testID: `trip-settings-title-error`) — 원래대로 되돌리면 다시 꺼진다. 저장하면 이름·동행·일과만 바뀌고 기간·예산·여행지는 그대로이며, 성공하면 토스트 「여행 설정을 저장했어요」 후 뒤로(스택이 없으면 일정 탭). 끝난 여행은 열리되 입력·시트·저장이 막히고 「끝난 여행은 바꿀 수 없어요」(testID: `trip-settings-locked`)가 뜬다(저장 응답이 409 여도 같다). 저장 실패는 「저장하지 못했어요」 + 「다시 시도」(testID: `trip-settings-retry`)이고 입력은 그대로다. 삭제 버튼은 내 여행 목록 ⋯ 삭제와 같은 조건(작성중·시작 전 확정)에만 보이고 확인 다이얼로그 → 삭제 → 일정 탭으로 돌아간다. 조회 중·실패·없는 여행 얼굴이 따로 있다(testID: `trip-settings-loading`·`trip-settings-fetch-error`·`trip-settings-notfound`). *(TRIP-1787 · jest 기준 — 시트 열림·삭제 다이얼로그 딤·키보드·Figma 픽셀·삭제 버튼 색은 실화면 전용)*
 - `mytrips-pin` 「맨 위에 고정」(testID: `my-trip-menu-pin-${tripId}`)을 누르면 그 여행이 같은 묶음 순서로 [여행 중] 다음 맨 위에 서고 우상단 배지 앞에 「고정」 표식(testID: `my-trip-pinned-${tripId}`)이 붙으며 토스트 「맨 위에 고정했어요」가 뜬다. 같은 항목이 「고정 해제」로 바뀌고 누르면 원래 자리로 돌아가며 「고정을 풀었어요」가 뜬다. 고정 묶음 안은 고른 정렬 기준을 따르고, 「예정」·「지난」 칩마다 따로 선다. 여행 중 카드도 고정·표식이 된다(순서는 이미 맨 위). 고정 목록은 **이 기기에만** 저장되어(SecureStore `itinerary.myTrips.pinned`, 서버 필드 없음 — 앱·웹·다른 기기 사이에 안 따라간다) 다시 열어도 남는다. 저장값을 읽기 전엔 고정 항목이 막혀 있고, 읽기 실패면 고정 없이 열리며, 쓰기 실패는 삼켜 이번 화면엔 고정이 유지된다. 고정한 여행을 지우면(404 포함) 저장값에서도 빠진다. *(TRIP-1786 · jest 기준, 실화면 미검증)*
 - `mytrips-delete` ⋯ → 삭제 → 확인 다이얼로그(작성중/확정 문구가 다르다) → 목록에서 사라진다. 실패는 다이얼로그 안 문구로 알린다.
 - `mytrips-done-bar` 생성이 완성된 여행 배너(보기·닫기). 한 번 띄운 여행은 다시 안 띄운다. 끝난 여행은 대상이 아니다.
