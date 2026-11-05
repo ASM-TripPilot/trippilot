@@ -14,12 +14,17 @@ import { useToastBottom } from '@/shared/ui/useToastBottom';
 
 export interface CtaButton {
   label: string;
-  variant: 'primary' | 'outline';
+  /** `ink` = 검정 바탕(TRIP-1791 선택 모드 「N곳 빼기」). */
+  variant: 'primary' | 'outline' | 'ink';
   onPress: () => void;
   /** 비활성(TRIP-799 D6·AC-9). 참이면 CtaBar 가 `<Pressable disabled>`(+회색)로 렌더해 press 가
    *  onPress 를 안 부른다. 미전달=활성(기존 소비처 무변경). 렌더 배선은 아래 CtaBar 본문
    *  (CTA3 가 잠금). h14 PARTIAL 잠금이 이 값을 쓴다(isConfirmLocked). */
   disabled?: boolean;
+  /** TRIP-1791 · 두 버튼 동폭(`flex-1`). 미전달=기존 폭. */
+  fill?: boolean;
+  /** TRIP-1791 · 주면 기본 `sheet-cta-button-{i}` 를 **대체**한다(한 요소에 testID 는 하나). */
+  testID?: string;
 }
 
 export interface CtaBarProps {
@@ -47,23 +52,26 @@ export function CtaBar({ buttons }: CtaBarProps): ReactElement {
       <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
       {buttons.map((button, index) => {
         const primary = button.variant === 'primary';
+        const ink = button.variant === 'ink';
         // 비활성이면 press 를 죽이고(Pressable disabled) primary 채움을 회색으로 바꾼다(TRIP-799 D6·AC-9).
         // `disabled` prop 이 press 를 막아 onPress 가 안 나가고, 회색은 눈으로 잠김을 알린다.
         const disabled = button.disabled === true;
-        const shape = primary
-          ? `flex-1 ${disabled ? 'bg-hairline-strong' : 'bg-primary'}`
-          : `${single ? 'flex-1' : 'w-[140px]'} border border-hairline-strong bg-canvas`;
+        const filled = primary || ink;
+        const fillColor = ink ? 'bg-ink' : 'bg-primary';
+        const shape = filled
+          ? `flex-1 ${disabled ? 'bg-hairline-strong' : fillColor}`
+          : `${single || button.fill ? 'flex-1' : 'w-[140px]'} border border-hairline-strong bg-canvas`;
         return (
           <Pressable
             key={button.label}
-            testID={`sheet-cta-button-${index}`}
+            testID={button.testID ?? `sheet-cta-button-${index}`}
             accessibilityRole="button"
             onPress={button.onPress}
             disabled={disabled}
             className={`min-h-[52px] items-center justify-center rounded-card ${shape}`}
           >
             <Text
-              className={`font-noto-bold text-[16px] font-bold ${primary ? 'text-on-primary' : 'text-ink'}`}
+              className={`font-noto-bold text-[16px] font-bold ${filled ? 'text-on-primary' : 'text-ink'}`}
             >
               {button.label}
             </Text>

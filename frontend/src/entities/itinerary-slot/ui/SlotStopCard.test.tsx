@@ -539,3 +539,80 @@ describe('🔴 SlotStopCard · R3 — 카드는 slot.placementReason 을 스스�
     );
   });
 });
+
+// ── TRIP-1791 · 편집기 「여러 곳 골라 빼기」 체크 원 — `selection` opt-in ─────────────────────────────
+//
+// 카드는 체크 원을 **그릴 뿐** 선택 여부를 정하지 않는다(상태는 부모 몫). 체크 원만 눌리고 카드 전체는
+// 눌리지 않는다(킷 §10 「카드 전체 탭 금지」). 색·테두리·위치는 생김새라 단언하지 않는다(실화면 QA).
+// 3동작 뼈대: 준비=selection 상태별 렌더 → 실행=press → 단언=역할·선택/비활성 표식·onToggle 횟수.
+
+describe('🔴 SlotStopCard · SEL — selection prop (TRIP-1791)', () => {
+  const CHECK = 'editor-select-check-probe';
+
+  function renderWithSelection(
+    state: 'off' | 'on' | 'disabled',
+    slotOverrides: Partial<ItineraryDaysItemSlotsItem> = {}
+  ): { onToggle: jest.Mock; slotKey: string } {
+    const onToggle = jest.fn();
+    const { slotKey } = renderCard({
+      slot: makeSlot(slotOverrides),
+      selection: { state, onToggle, testID: CHECK },
+    });
+    return { onToggle, slotKey };
+  }
+
+  it('SEL-1 · selection 을 안 주면 체크 원이 없다 (결과 화면 5종 회귀 앵커)', () => {
+    renderCard();
+
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+    expect(screen.queryByTestId(CHECK)).toBeNull();
+  });
+
+  it('SEL-2 · off — 호출부 testID 의 checkbox 가 있고 선택·비활성이 아니며, 누르면 onToggle 1회', () => {
+    const { onToggle } = renderWithSelection('off');
+
+    const check = screen.getByTestId(CHECK);
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(check).not.toBeSelected();
+    expect(check).not.toBeDisabled();
+
+    fireEvent.press(check);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('SEL-3 · on — 선택으로 읽히고, 누르면 onToggle 1회 (끄는 판단은 부모 몫)', () => {
+    const { onToggle } = renderWithSelection('on');
+
+    const check = screen.getByTestId(CHECK);
+    expect(check).toBeSelected();
+    expect(check).not.toBeDisabled();
+
+    fireEvent.press(check);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('SEL-4 · disabled — 비활성으로 읽히고 선택은 아니며, 눌러도 onToggle 0회 (표식만이 아니라 실제 눌림 차단)', () => {
+    const { onToggle } = renderWithSelection('disabled');
+
+    const check = screen.getByTestId(CHECK);
+    expect(check).toBeDisabled();
+    expect(check).not.toBeSelected();
+
+    fireEvent.press(check);
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  it.each(['off', 'on', 'disabled'] as const)(
+    'SEL-5 · %s 에서도 카드 루트·사진을 눌러서는 onToggle 이 안 나간다 (카드 전체 탭 금지)',
+    (state) => {
+      const { onToggle, slotKey } = renderWithSelection(state);
+
+      fireEvent.press(screen.getByTestId(`slot-stopcard-${slotKey}`));
+      fireEvent.press(screen.getByTestId(id(slotKey)('photo')));
+
+      expect(onToggle).not.toHaveBeenCalled();
+      // 짝 — 체크 원은 여전히 그 자리에 있다(공허 통과 방지).
+      expect(screen.getByTestId(CHECK)).toBeOnTheScreen();
+    }
+  );
+});

@@ -8182,6 +8182,31 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-1791 — 「선택」으로 여러 곳 골라 빼기. 선택 모드·체크·확인창 상태는 뷰 안에 살아서 키로 직접 못 연다:
+  // 머리 오른쪽 「선택」을 눌러 들어간다(고정 카드는 회색 체크로 잠김). 확정 콜백은 noop.
+  {
+    key: 'h12-editor-select',
+    band: 'h',
+    label: 'h12 · 편집기 여러 곳 골라 빼기(「선택」을 눌러 진입)',
+    login: null,
+    render: () => (
+      <EditorView
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        days={TIMELINE_PREVIEW_DAYS}
+        slots={TIMELINE_PREVIEW_SLOTS}
+        activeDayIndex={0}
+        activeDate={TIMELINE_PREVIEW_DAYS[0].date}
+        dateLabel={formatCoPickDayHeader(TIMELINE_PREVIEW_DAYS[0].date)}
+        onSelectDay={noop}
+        onBack={noop}
+        onPressTimeChip={noop}
+        onPressAddPlace={noop}
+        onPressAddBetween={noop}
+        onSave={noop}
+        onDeleteSelected={noop}
+      />
+    ),
+  },
   {
     key: 'h12-editor-dragging',
     band: 'h',

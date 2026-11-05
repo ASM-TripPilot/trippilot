@@ -47,6 +47,15 @@ export function removeSlot(slots: Slot[], poiId: string): Slot[] {
 }
 
 /**
+ * TRIP-1791 · 고른 poiId 를 **한꺼번에** 뺀 새 배열. `removeSlot` 과 달리 같은 poiId 슬롯을 전부 지운다 —
+ * 선택 체크가 poiId 단위라 화면에서 보이는 대로 빠져야 한다. 원본은 안 건드린다(`filter`).
+ */
+export function removeSlots(slots: Slot[], poiIds: string[]): Slot[] {
+  const gone = new Set(poiIds);
+  return slots.filter((s) => !gone.has(s.poiId));
+}
+
+/**
  * TRIP-338 · 슬롯을 **배열 끝에 붙인 새 배열**(배열 순서 = 슬롯 순서, INV-U3-02). 스프레드라
  * 원본 배열은 안 건드린다(비파괴 — 시드한 GET 배열을 건드리지 않기 위함, `removeSlot`과 같은 패턴).
  */
@@ -77,6 +86,8 @@ export interface ItineraryEditState {
   seed(days: ItineraryDaysItem[]): void;
   /** 해당 날에서 첫 일치 슬롯 제거. */
   deleteSlot(date: string, poiId: string): void;
+  /** TRIP-1791 · 해당 날에서 고른 poiId 를 set 1회로 제거(되돌리기 1단계 근거). 다른 날은 안 건드린다. */
+  deleteSlots(date: string, poiIds: string[]): void;
   /** `onDragEnd.data`를 받아 해당 날 슬롯을 그 순서 그대로 반영(고정 슬롯도 재고정하지 않는다). */
   reorderSlots(date: string, reordered: Slot[]): void;
   /**
@@ -118,6 +129,15 @@ const createItineraryEditStore: StateCreator<ItineraryEditState> = (set) => ({
       days: state.days.map((day) =>
         day.date === date
           ? { ...day, slots: removeSlot(day.slots, poiId) }
+          : day
+      ),
+    })),
+  deleteSlots: (date, poiIds) =>
+    set((state) => ({
+      dirty: true,
+      days: state.days.map((day) =>
+        day.date === date
+          ? { ...day, slots: removeSlots(day.slots, poiIds) }
           : day
       ),
     })),

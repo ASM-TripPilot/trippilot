@@ -141,6 +141,81 @@ describe('🔴 CtaBar · TRIP-991 — 버튼 역할(AC-1 · AC-5 짝)', () => {
   });
 });
 
+// TRIP-1791 가산 — 선택 모드 하단 바: 검정(ink) 변형 · 동폭(fill) · 호출부가 정하는 testID.
+// 색·동폭은 생김새라 단언하지 않는다(실화면 QA). 여기선 새 prop 경로의 동작만 본다.
+describe('CtaBar · CTA-ink — ink 변형과 호출부 testID (TRIP-1791)', () => {
+  it('testID 를 주면 기본 sheet-cta-button-{i} 를 대체하고, ink 버튼도 눌리며, 안 준 버튼은 기본 testID 를 지킨다', () => {
+    const onCancel = jest.fn();
+    const onDelete = jest.fn();
+    render(
+      <CtaBar
+        buttons={[
+          {
+            label: '취소',
+            variant: 'outline',
+            onPress: onCancel,
+            fill: true,
+            testID: 'probe-cancel',
+          },
+          {
+            label: '2곳 빼기',
+            variant: 'ink',
+            onPress: onDelete,
+            fill: true,
+            testID: 'probe-delete',
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByTestId('probe-cancel')).toHaveTextContent('취소');
+    expect(screen.getByTestId('probe-delete')).toHaveTextContent('2곳 빼기');
+    // 한 요소에 testID 는 하나 — 준 쪽이 기본을 대신한다.
+    expect(screen.queryByTestId('sheet-cta-button-0')).toBeNull();
+    expect(screen.queryByTestId('sheet-cta-button-1')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('probe-delete'));
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('비활성 ink 버튼은 비활성으로 읽히고 눌러도 onPress 가 안 나간다', () => {
+    const onDelete = jest.fn();
+    render(
+      <CtaBar
+        buttons={[
+          {
+            label: '빼기',
+            variant: 'ink',
+            onPress: onDelete,
+            disabled: true,
+            testID: 'probe-delete',
+          },
+        ]}
+      />
+    );
+
+    const cta = screen.getByTestId('probe-delete');
+    expect(cta).toBeDisabled();
+    fireEvent.press(cta);
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+
+  it('testID 를 안 주면 기존 소비처 그대로 sheet-cta-button-{i} 다 (회귀 앵커)', () => {
+    render(
+      <CtaBar
+        buttons={[
+          { label: '확정하기', variant: 'primary', onPress: jest.fn() },
+        ]}
+      />
+    );
+
+    expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
+      '확정하기'
+    );
+  });
+});
+
 describe('CtaBar — 토스트 바닥 신고 (TRIP-1559 T4·T5)', () => {
   const buttons = [
     { label: '일정 저장하기', variant: 'primary' as const, onPress: jest.fn() },

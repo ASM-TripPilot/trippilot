@@ -17,6 +17,7 @@ import { useItineraryEditStore } from './itineraryEditStore';
 export function useEditorDraft(editingSlotKey: string | null) {
   const seed = useItineraryEditStore((s) => s.seed);
   const deleteSlot = useItineraryEditStore((s) => s.deleteSlot);
+  const deleteSlots = useItineraryEditStore((s) => s.deleteSlots);
   const reorderSlots = useItineraryEditStore((s) => s.reorderSlots);
   const adjustSlotTime = useItineraryEditStore((s) => s.adjustSlotTime);
   const days = useItineraryEditStore((s) => s.days);
@@ -41,6 +42,7 @@ export function useEditorDraft(editingSlotKey: string | null) {
     seed,
     seedUnlessDirty,
     deleteSlot,
+    deleteSlots,
     reorderSlots,
     adjustSlotTime,
     days,

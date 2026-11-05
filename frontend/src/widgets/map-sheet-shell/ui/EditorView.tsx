@@ -29,6 +29,7 @@ import { CTA_BAR_HEIGHT, type CtaButton } from './CtaBar';
 import { DayChipScroller } from './DayChipScroller';
 import { decideDragEnd, DELETE_ZONE_BAR_HEIGHT } from './dragDelete';
 import { MapSheetShell } from './MapSheetShell';
+import { RemoveSelectedDialog } from './RemoveSelectedDialog';
 import { SheetHeader } from './SheetHeader';
 import { SlotDropZone } from './SlotDropZone';
 import { useDeleteZoneHover } from './useDeleteZoneHover';
@@ -83,6 +84,9 @@ export interface EditorViewProps {
   onReorder?: (slots: EditorViewSlot[]) => void;
   /** 드롭존(센티널 뒤)에 놓인 카드. 고정·완료 카드는 부르지 않는다. */
   onDeleteViaDrag?: (poiId: string) => void;
+  /** TRIP-1791 · 「선택」으로 골라 한 번에 빼기 — 확정된 poiId(슬롯 순서)를 준다. **없으면 「선택」 버튼 자체가 없다**
+   *  (직접 짜기 = 지금 화면). 선택 모드·고른 곳·확인창 상태는 이 뷰 안에 산다. */
+  onDeleteSelected?: (poiIds: string[]) => void;
   /** 드래그 중 얼굴 강제(프리뷰 `h12-editor-dragging`). 실제 끌기는 내부 상태가 켠다. */
   isDragging?: boolean;
   /** 방문 완료 잠금(AC-11). */
@@ -116,6 +120,7 @@ export function EditorView({
   saveLabel = '일정 저장하기',
   onReorder,
   onDeleteViaDrag,
+  onDeleteSelected,
   isDragging,
   completedSlotKeys,
   inTrip,
@@ -139,6 +144,41 @@ export function EditorView({
     completedSlotKeys?.includes(buildSlotKey(activeDate, slot.poiId)) === true;
   const isPinned = (slot: EditorViewSlot): boolean =>
     slot.isFixed === true || isLocked(slot);
+
+  // TRIP-1791 · 선택 모드 — 모드·체크·확인창은 뷰 국소 상태. 빼기 대상 `picked` 는 **매 렌더 도출**한다
+  // (고른 것 ∩ 지금 슬롯 ∖ 잠김) — 체크 뒤 방문 완료로 잠긴 카드는 자동으로 빠진다(D12).
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [confirming, setConfirming] = useState(false);
+  const hasUnlocked = slots.some((slot) => !isPinned(slot));
+  const pickedSlots: EditorViewSlot[] = [];
+  for (const slot of slots) {
+    if (
+      selected.includes(slot.poiId) &&
+      !isPinned(slot) &&
+      !pickedSlots.some((p) => p.poiId === slot.poiId)
+    ) {
+      pickedSlots.push(slot);
+    }
+  }
+  const picked = pickedSlots.map((slot) => slot.poiId);
+  function exitSelecting(): void {
+    setSelecting(false);
+    setSelected([]);
+    setConfirming(false);
+  }
+  function toggleSelected(poiId: string): void {
+    setSelected((prev) =>
+      prev.includes(poiId)
+        ? prev.filter((id) => id !== poiId)
+        : [...prev, poiId]
+    );
+  }
+  function confirmDelete(): void {
+    // 캡처 → 모드 종료(동기) → 콜백. 전부 잠겨 비었으면 확인창만 닫는다.
+    exitSelecting();
+    if (picked.length > 0) onDeleteSelected?.(picked);
+  }
 
   const { onAnimValInit } = useDeleteZoneHover({
     scrollOffset,
@@ -183,7 +223,7 @@ export function EditorView({
       <View className="gap-md pb-md">
         {/* 롱프레스 → 끌기 — 고정·완료 카드엔 핸들러를 안 건다(AC-3 ①). */}
         {/* eslint-disable-next-line no-restricted-syntax -- 롱프레스 끌기 손잡이 — 낭독기 대체 수단은 M-102(나중)(TRIP-1765). */}
-        <Pressable onLongPress={isPinned(item) ? undefined : drag}>
+        <Pressable onLongPress={isPinned(item) || selecting ? undefined : drag}>
           <SlotStopCard
             slot={item as ItineraryDaysItemSlotsItem}
             date={activeDate}
@@ -196,7 +236,22 @@ export function EditorView({
             dragging={isActive}
             violation={overlapAwareNotice(item, slots[index - 1])}
             onPressTimeChip={
-              canEditTime ? () => onPressTimeChip(slotKey) : undefined
+              canEditTime && !selecting
+                ? () => onPressTimeChip(slotKey)
+                : undefined
+            }
+            selection={
+              selecting
+                ? {
+                    state: isPinned(item)
+                      ? 'disabled'
+                      : selected.includes(item.poiId)
+                        ? 'on'
+                        : 'off',
+                    onToggle: () => toggleSelected(item.poiId),
+                    testID: `editor-select-check-${item.poiId}`,
+                  }
+                : undefined
             }
           />
         </Pressable>
@@ -206,7 +261,7 @@ export function EditorView({
             눌리지만 **자리는 지킨다**: 라이브러리가 끌기 시작 순간 끄는 카드 위치를 스냅샷으로 적어 두므로,
             여기서 줄이 사라지면 놓일 칸 계산이 드롭존 쪽으로 밀린다(03b 경고-1). display none·언마운트 금지. */}
         {index < slots.length - 1 ? (
-          inTrip === true && isLocked(slots[index + 1]) ? (
+          selecting || (inTrip === true && isLocked(slots[index + 1])) ? (
             <View className="h-[24px]" />
           ) : (
             <Pressable
@@ -252,7 +307,10 @@ export function EditorView({
                 accessibilityRole="button"
                 key={tab.date}
                 testID={`itinerary-edit-day-${tab.dayIndex}`}
-                onPress={() => onSelectDay(index)}
+                onPress={() => {
+                  exitSelecting();
+                  onSelectDay(index);
+                }}
                 accessibilityState={{ selected }}
                 className={`rounded-pill px-md py-[6px] ${selected ? 'bg-primary' : 'border border-hairline-strong bg-canvas'}`}
               >
@@ -269,132 +327,187 @@ export function EditorView({
     </View>
   );
 
-  const header = (
+  const header = selecting ? (
+    <View className="px-lg pb-md pt-sm">
+      <Text
+        testID="editor-select-count"
+        className="font-noto-bold text-card-title font-bold text-ink"
+      >
+        {`${picked.length}곳 선택`}
+      </Text>
+    </View>
+  ) : (
     <SheetHeader
       title={title}
       dayLabel={`${activeDayIndex + 1}일차`}
       dateLabel={dateLabel}
       meta={`${slots.length}곳`}
+      trailing={
+        onDeleteSelected !== undefined && hasUnlocked ? (
+          <Pressable
+            accessibilityRole="button"
+            testID="editor-select-toggle"
+            onPress={() => setSelecting(true)}
+            hitSlop={8}
+            className="rounded-pill border border-hairline-strong bg-canvas px-md py-[4px]"
+          >
+            <Text className="font-noto-bold text-caption font-bold text-ink">
+              선택
+            </Text>
+          </Pressable>
+        ) : undefined
+      }
     />
   );
 
   // 끌기 중엔 드롭존이 삭제 자리라 CTA 를 비운다(빈 배열이면 MapSheetShell 이 CTA 바 미렌더).
   const cta: CtaButton[] = dragFace
     ? []
-    : [
-        {
-          label: saveLabel,
-          variant: 'primary',
-          onPress: onSave,
-          disabled: slots.length === 0,
-        },
-      ];
+    : selecting
+      ? [
+          {
+            label: '취소',
+            variant: 'outline',
+            fill: true,
+            testID: 'editor-select-cancel',
+            onPress: exitSelecting,
+          },
+          {
+            label: picked.length === 0 ? '빼기' : `${picked.length}곳 빼기`,
+            variant: 'ink',
+            fill: true,
+            testID: 'editor-select-delete',
+            disabled: picked.length === 0,
+            onPress: () => setConfirming(true),
+          },
+        ]
+      : [
+          {
+            label: saveLabel,
+            variant: 'primary',
+            onPress: onSave,
+            disabled: slots.length === 0,
+          },
+        ];
 
   return (
-    <MapSheetShell
-      center={center}
-      pins={pins}
-      overlay={overlay}
-      header={null}
-      cta={cta}
-      initialIndex={2}
-      // TRIP-1112: 셸 스크롤 안에 드래그 리스트를 넣으면 카드 위 스와이프를 리스트 Pan 이 먼저 가져가 스크롤도
-      // 시트도 안 움직였다(실기). 셸 스크롤을 끄고 시트는 손잡이로만 끌며, 스크롤은 Nestable 컨테이너가
-      // 리스트와 판정을 나눠 갖는다(실기 스파이크 A 통과). 두 값은 정적이다 — 렌더 중 바꾸면 본문이 재마운트된다.
-      bodyScroll={false}
-      contentPanning={false}
-    >
-      <View
-        testID="itinerary-edit-viewport"
-        className="flex-1"
-        onLayout={(e) => {
-          viewportHeight.value = e.nativeEvent.layout.height;
-        }}
+    <>
+      <MapSheetShell
+        center={center}
+        pins={pins}
+        overlay={overlay}
+        header={null}
+        cta={cta}
+        initialIndex={2}
+        // TRIP-1112: 셸 스크롤 안에 드래그 리스트를 넣으면 카드 위 스와이프를 리스트 Pan 이 먼저 가져가 스크롤도
+        // 시트도 안 움직였다(실기). 셸 스크롤을 끄고 시트는 손잡이로만 끌며, 스크롤은 Nestable 컨테이너가
+        // 리스트와 판정을 나눠 갖는다(실기 스파이크 A 통과). 두 값은 정적이다 — 렌더 중 바꾸면 본문이 재마운트된다.
+        bodyScroll={false}
+        contentPanning={false}
       >
-        <NestableScrollContainer
-          ref={scrollRef as never}
-          contentContainerStyle={{
-            paddingBottom: CTA_BAR_HEIGHT + bottomInset,
+        <View
+          testID="itinerary-edit-viewport"
+          className="flex-1"
+          onLayout={(e) => {
+            viewportHeight.value = e.nativeEvent.layout.height;
           }}
         >
-          {header}
-          <View className="px-lg pb-2xl pt-xs">
-            {/* activationDistance·scrollEnabled 는 넘기지 않는다 — 라이브러리 기본(20·false)을 {...props} 가
-              덮으면(undefined 라도) 활성 거리 0 이 돼 스와이프를 드래그가 다시 뺏는다. */}
-            <NestableDraggableFlatList
-              testID="itinerary-edit-list"
-              data={slots}
-              keyExtractor={(item) => `card-${item.poiId}-${dragEpoch}`}
-              renderItem={renderItem}
-              // 끌던 카드가 목록 밖(하단 삭제 영역)까지 손가락을 따라가게 한다 — 기본은 목록 경계에 묶여 영역에 못 닿는다.
-              dragItemOverflow
-              onAnimValInit={onAnimValInit}
-              onDragBegin={() => {
-                overZoneRef.current = false;
-                setDragging(true);
-              }}
-              onDragEnd={handleDragEnd}
-              // 원래 자리 점선 칸(Figma `4196:2468`) — 번호 원(24 + gap 10) 자리는 비운다.
-              renderPlaceholder={() => (
-                <View className="mb-md ml-[34px] flex-1 rounded-card border border-dashed border-hairline-strong" />
-              )}
-            />
-
-            <View className="gap-md">
-              {/* 점선 "+ 장소 추가"(index 미지정 = 말미, AC-8). */}
-              <Pressable
-                accessibilityRole="button"
-                testID="itinerary-edit-add-place"
-                onPress={onPressAddPlace}
-                className="flex-row items-center justify-center gap-xs rounded-card border border-dashed border-hairline-strong bg-canvas py-md"
-              >
-                <PlusGlyph size={24} />
-                <Text className="font-noto-bold text-body font-bold text-muted">
-                  장소 추가
-                </Text>
-              </Pressable>
-
-              {/* 안내줄(AC-12) — Figma 는 "장소 추가" 아래(h12·i07 공통), 문구만 모드별. */}
-              {/* 0곳이면 끌어 바꿀 카드가 없어 끌기 안내를 안 보인다(TRIP-1440 Q-141). */}
-              {slots.length > 0 ? (
-                <View
-                  testID="itinerary-edit-guide"
-                  className="flex-row items-center gap-[6px]"
-                >
-                  <InfoCircleGlyph size={16} />
-                  <Text className="font-noto text-caption text-muted">
-                    {inTrip ? GUIDE_IN_TRIP : GUIDE_H12}
-                  </Text>
-                </View>
-              ) : null}
-
-              {/* TRIP-1424 — 장소 추가는 [저장]과 따로 곧장 서버에 저장된다(PlaceAddPage PUT). Figma 공백이라 안내줄 꼴을 따른다. */}
-              <View
-                testID="itinerary-edit-add-saved-hint"
-                className="flex-row items-center gap-[6px]"
-              >
-                <InfoCircleGlyph size={16} />
-                <Text className="font-noto text-caption text-muted">
-                  장소를 추가하면 바로 저장돼요
-                </Text>
-              </View>
-            </View>
-          </View>
-        </NestableScrollContainer>
-        {/* 하단 고정 삭제 영역 — 리스트 밖(끌기 중에만, Figma `4195:2468`: CTA 자리 84 = 12 + 56 + 16). 터치는
-          통과(pointerEvents none) — 판정은 위치 추적이라 이 View 가 눌릴 일이 없다. */}
-        {dragFace ? (
-          <View
-            testID="itinerary-edit-dropzone-bar"
-            pointerEvents="none"
-            style={{ height: DELETE_ZONE_BAR_HEIGHT + bottomInset }}
-            className="absolute bottom-0 left-0 right-0 bg-canvas px-lg pt-md"
+          <NestableScrollContainer
+            ref={scrollRef as never}
+            contentContainerStyle={{
+              paddingBottom: CTA_BAR_HEIGHT + bottomInset,
+            }}
           >
-            <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
-            <SlotDropZone isActive />
-          </View>
-        ) : null}
-      </View>
-    </MapSheetShell>
+            {header}
+            <View className="px-lg pb-2xl pt-xs">
+              {/* activationDistance·scrollEnabled 는 넘기지 않는다 — 라이브러리 기본(20·false)을 {...props} 가
+              덮으면(undefined 라도) 활성 거리 0 이 돼 스와이프를 드래그가 다시 뺏는다. */}
+              <NestableDraggableFlatList
+                testID="itinerary-edit-list"
+                data={slots}
+                keyExtractor={(item) => `card-${item.poiId}-${dragEpoch}`}
+                renderItem={renderItem}
+                // 끌던 카드가 목록 밖(하단 삭제 영역)까지 손가락을 따라가게 한다 — 기본은 목록 경계에 묶여 영역에 못 닿는다.
+                dragItemOverflow
+                onAnimValInit={onAnimValInit}
+                onDragBegin={() => {
+                  overZoneRef.current = false;
+                  setDragging(true);
+                }}
+                onDragEnd={handleDragEnd}
+                // 원래 자리 점선 칸(Figma `4196:2468`) — 번호 원(24 + gap 10) 자리는 비운다.
+                renderPlaceholder={() => (
+                  <View className="mb-md ml-[34px] flex-1 rounded-card border border-dashed border-hairline-strong" />
+                )}
+              />
+
+              {/* 선택 모드(TRIP-1791)에선 장소 추가·안내줄이 없다 — 리스트·key 는 그대로 둔다. */}
+              {selecting ? null : (
+                <View className="gap-md">
+                  {/* 점선 "+ 장소 추가"(index 미지정 = 말미, AC-8). */}
+                  <Pressable
+                    accessibilityRole="button"
+                    testID="itinerary-edit-add-place"
+                    onPress={onPressAddPlace}
+                    className="flex-row items-center justify-center gap-xs rounded-card border border-dashed border-hairline-strong bg-canvas py-md"
+                  >
+                    <PlusGlyph size={24} />
+                    <Text className="font-noto-bold text-body font-bold text-muted">
+                      장소 추가
+                    </Text>
+                  </Pressable>
+
+                  {/* 안내줄(AC-12) — Figma 는 "장소 추가" 아래(h12·i07 공통), 문구만 모드별. */}
+                  {/* 0곳이면 끌어 바꿀 카드가 없어 끌기 안내를 안 보인다(TRIP-1440 Q-141). */}
+                  {slots.length > 0 ? (
+                    <View
+                      testID="itinerary-edit-guide"
+                      className="flex-row items-center gap-[6px]"
+                    >
+                      <InfoCircleGlyph size={16} />
+                      <Text className="font-noto text-caption text-muted">
+                        {inTrip ? GUIDE_IN_TRIP : GUIDE_H12}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {/* TRIP-1424 — 장소 추가는 [저장]과 따로 곧장 서버에 저장된다(PlaceAddPage PUT). Figma 공백이라 안내줄 꼴을 따른다. */}
+                  <View
+                    testID="itinerary-edit-add-saved-hint"
+                    className="flex-row items-center gap-[6px]"
+                  >
+                    <InfoCircleGlyph size={16} />
+                    <Text className="font-noto text-caption text-muted">
+                      장소를 추가하면 바로 저장돼요
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          </NestableScrollContainer>
+          {/* 하단 고정 삭제 영역 — 리스트 밖(끌기 중에만, Figma `4195:2468`: CTA 자리 84 = 12 + 56 + 16). 터치는
+          통과(pointerEvents none) — 판정은 위치 추적이라 이 View 가 눌릴 일이 없다. */}
+          {dragFace ? (
+            <View
+              testID="itinerary-edit-dropzone-bar"
+              pointerEvents="none"
+              style={{ height: DELETE_ZONE_BAR_HEIGHT + bottomInset }}
+              className="absolute bottom-0 left-0 right-0 bg-canvas px-lg pt-md"
+            >
+              <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
+              <SlotDropZone isActive />
+            </View>
+          ) : null}
+        </View>
+      </MapSheetShell>
+      {/* TRIP-1791 · 빼기 확인창 — 시트 위를 덮으려 셸 형제로 둔다(소비처 루트가 flex-1 View). 조건부 absolute 오버레이라 덮임은 6-b. */}
+      {confirming && picked.length > 0 ? (
+        <RemoveSelectedDialog
+          names={pickedSlots.map((slot) => slot.nameKo ?? '')}
+          onConfirm={confirmDelete}
+          onCancel={() => setConfirming(false)}
+        />
+      ) : null}
+    </>
   );
 }

@@ -3,7 +3,11 @@ import type {
   ItineraryDaysItemSlotsItem,
 } from '@/shared/api/index.schemas';
 
-import { removeSlot, useItineraryEditStore } from './itineraryEditStore';
+import {
+  removeSlot,
+  removeSlots,
+  useItineraryEditStore,
+} from './itineraryEditStore';
 
 /**
  * TRIP-302 · h24 편집 스토어 (슬라이스1 · AC3 삭제 · AC4 재정렬 · AC5 · 엣지5).
@@ -293,5 +297,84 @@ describe('S7 · dirty 표시와 insertSlot (TRIP-1498 a)', () => {
     expect(
       useItineraryEditStore.getState().days.map((d) => poiIds(d.slots))
     ).toEqual(before);
+  });
+});
+
+// TRIP-1791 · 여러 곳 골라 한 번에 빼기 — 순수 헬퍼 `removeSlots` 와 액션 `deleteSlots`.
+// 3동작 뼈대: 준비=슬롯/시드 → 실행=헬퍼·액션 호출 → 단언=남은 poiId·dirty·구독 통지 수.
+describe('M1 · removeSlots 순수 — 고른 poiId 를 전부 뺀다, 원본 비파괴', () => {
+  it('같은 poiId 가 둘이어도 전부 빼고, 없는 키는 무해하고, 순서를 지킨다', () => {
+    const slots = [slot('a'), slot('b'), slot('c'), slot('b')];
+
+    const result = removeSlots(slots, ['b', 'x']);
+
+    // 체크가 poiId 단위라 화면에 보이던 중복 카드도 함께 빠진다(removeSlot 의 "첫 일치만"과 다른 점).
+    expect(poiIds(result)).toEqual(['a', 'c']);
+    // 짝 — 원본은 안 바뀌고, 결과는 새 배열이다.
+    expect(poiIds(slots)).toEqual(['a', 'b', 'c', 'b']);
+    expect(result).not.toBe(slots);
+  });
+
+  it('빈 poiIds 는 같은 내용의 새 배열이다', () => {
+    const slots = [slot('a'), slot('b')];
+
+    const result = removeSlots(slots, []);
+
+    expect(poiIds(result)).toEqual(['a', 'b']);
+    expect(result).not.toBe(slots);
+  });
+});
+
+describe('M2 · deleteSlots 액션 — 해당 날만, 한 번의 set, dirty (TRIP-1791 AC-8)', () => {
+  function seededTwoDays(): void {
+    useItineraryEditStore.getState().seed([
+      { date: DAY1, slots: [slot('a'), slot('b'), slot('c')] },
+      { date: DAY2, slots: [slot('b'), slot('d')] },
+    ]);
+  }
+
+  it('DAY1 에서 a·c 를 빼면 DAY1 만 줄고, 같은 poiId b 가 있는 DAY2 는 그대로이며 dirty 가 선다', () => {
+    seededTwoDays();
+    // 앵커 — 시드 직후엔 안 건드렸다.
+    expect(useItineraryEditStore.getState().dirty).toBe(false);
+
+    useItineraryEditStore.getState().deleteSlots(DAY1, ['a', 'c']);
+
+    const { days, dirty } = useItineraryEditStore.getState();
+    expect(poiIds(days[0].slots)).toEqual(['b']);
+    expect(poiIds(days[1].slots)).toEqual(['b', 'd']);
+    expect(dirty).toBe(true);
+  });
+
+  it('여러 곳을 한 번에 빼도 구독자는 한 번만 통지받는다 — 되돌리기 한 단계의 근거 (deleteSlot 반복은 N번)', () => {
+    seededTwoDays();
+    const listener = jest.fn();
+    const unsubscribe = useItineraryEditStore.subscribe(listener);
+
+    useItineraryEditStore.getState().deleteSlots(DAY1, ['a', 'c']);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    // 짝 — 한 곳씩 빼면 그만큼 통지된다(위 1회가 우연이 아니라는 대조).
+    seededTwoDays();
+    listener.mockClear();
+    useItineraryEditStore.getState().deleteSlot(DAY1, 'a');
+    useItineraryEditStore.getState().deleteSlot(DAY1, 'c');
+    expect(listener).toHaveBeenCalledTimes(2);
+    unsubscribe();
+  });
+
+  it('시드에 쓴 입력 배열은 안 바뀌고, 없는 날짜·없는 poiId 는 무해하다', () => {
+    const day1Slots = [slot('a'), slot('b')];
+    useItineraryEditStore.getState().seed([{ date: DAY1, slots: day1Slots }]);
+
+    useItineraryEditStore.getState().deleteSlots(DAY1, ['a']);
+    expect(poiIds(day1Slots)).toEqual(['a', 'b']);
+
+    const before = poiIds(useItineraryEditStore.getState().days[0].slots);
+    useItineraryEditStore.getState().deleteSlots('2099-01-01', ['b']);
+    useItineraryEditStore.getState().deleteSlots(DAY1, ['nope']);
+    expect(poiIds(useItineraryEditStore.getState().days[0].slots)).toEqual(
+      before
+    );
   });
 });
