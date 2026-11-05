@@ -1,5 +1,6 @@
 import { formatDayLabel, formatShareCardPeriod } from '@/entities/trip';
 import { dominantPaletteKey } from './categoryPalette';
+import type { CoverPhoto } from './coverPhoto';
 import { formatKm } from './formatKm';
 import type {
   MagazineCoverVM,
@@ -32,6 +33,8 @@ export interface SummaryMagazineInput {
   summary: TripSummary;
   /** 여행 조회 전·실패면 없음 — 제목 폴백, 지역·기간 없음. */
   trip?: Pick<Trip, 'title' | 'startDate' | 'endDate' | 'destinations'>;
+  /** TRIP-1781 · 훅이 고른 표지 사진 — 표지(`cover.picture`)를 만드는 유일한 입구라 j04·j06 이 같은 사진을 받는다. 없음·빈 주소면 색 표지. */
+  coverPhoto?: CoverPhoto | null;
   /** undefined = 일정을 모름(전부 중립). */
   itineraryDays?: readonly ItineraryDaysItem[];
   /** 위치 자동화가 파생한 거리 출처(`distanceSourceByDate` 반환 모양). 서버 값이 없을 때만 쓴다. */
@@ -53,7 +56,7 @@ export interface SummaryDayCardVM {
 }
 
 export interface SummaryMagazineVM {
-  cover: MagazineCoverVM & { picture: null };
+  cover: MagazineCoverVM;
   tripTitleKnown: boolean;
   quote: MagazineQuoteVM | null;
   days: SummaryDayCardVM[];
@@ -111,7 +114,9 @@ export function buildSummaryMagazineVM(
           : undefined,
       visitLabel: `${cells.totalVisits}곳`,
       photoLabel: `사진 ${cells.totalPhotos}장`,
-      picture: null,
+      picture: input.coverPhoto?.uri
+        ? { uri: input.coverPhoto.uri, poiId: input.coverPhoto.poiId }
+        : null,
       palette,
     },
     tripTitleKnown,

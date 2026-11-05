@@ -8,6 +8,7 @@ import { buildSummaryMagazineVM } from '@/features/reflection/index.view';
 import {
   pickReflectionDate,
   useRecordBarNav,
+  useTripCoverPhoto,
   useTripSummary,
 } from '@/features/reflection';
 import { TripSummaryScreen } from './TripSummaryScreen';
@@ -76,6 +77,11 @@ export function TripSummaryPage({
       enabled:
         summaryReady && !!data?.highlights.some((h) => h.places.length > 0),
     },
+  });
+  // TRIP-1781 · 표지에 이 기기 사진 한 장 — 요약이 준비돼 사진 수를 알 때만 요청이 나간다. j04 는 사진이 늦어도 막을 것이 없어 `picking` 을 안 쓴다.
+  const cover = useTripCoverPhoto({
+    tripId,
+    totalPhotos: summaryReady ? data?.stats.totalPhotos : undefined,
   });
   const automationOn = isLocationAutomationEnabled();
   const routes = useTripRoutes(automationOn ? tripId : null);
@@ -159,6 +165,7 @@ export function TripSummaryPage({
   const vm = buildSummaryMagazineVM({
     summary: data,
     trip: trip.data,
+    coverPhoto: cover.photo,
     itineraryDays: itinerary.data?.days,
     routeSources: sources,
   });

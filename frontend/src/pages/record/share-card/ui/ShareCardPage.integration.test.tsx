@@ -30,6 +30,12 @@ import { flushNotifications } from '@/test-support/flushNotifications';
 import { day, itinerary, slot } from '@/test-support/itineraryFixtures';
 import { createGate, createHitLog } from '@/test-support/mswHookHarness';
 import { createRequestLog, serveItinerary } from '@/test-support/mswItinerary';
+import {
+  photoOf,
+  recordOf,
+  serveCoverPhotos,
+  visitOf,
+} from '@/test-support/coverPhotoFixtures';
 import { createWrapper } from '@/test-support/queryRender';
 
 import { ShareCardPage } from './ShareCardPage';
@@ -56,10 +62,18 @@ import { ShareCardPage } from './ShareCardPage';
  *   green 이 된다. 운영은 404 외 실패를 3회 더 시도하고 staleTime 이 30초다(`AppProviders`).
  */
 
-jest.mock('@/shared/storage', () =>
+jest.mock('@/shared/storage', () => ({
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  require('@/test-support/storageMock')
-);
+  ...require('@/test-support/storageMock'),
+  // TRIP-1781 — 표지 사진 훅이 "이 기기 id"를 묻는다(후보 방문이 있을 때만).
+  getInstallId: () => Promise.resolve('me'),
+}));
+
+// TRIP-1781 — 기기 앨범에서 사진 주소를 푸는 입구. `gone…` 으로 시작하는 앨범 id 는 앨범에 없는 것으로 친다.
+jest.mock('@/shared/photo', () => ({
+  resolvePhotoUri: async (id: string) =>
+    id.startsWith('gone') ? null : `file://${id}`,
+}));
 
 jest.mock('expo-router', () => ({
   router: {
@@ -231,14 +245,22 @@ const deckId = (suffix: string) => `reflection-share-deck-${suffix}`;
  * 탭은 `fireEvent.press`(= onPress 핸들러, 접근성 클릭과 같은 경로) — 시간이 아니라 손으로 넘긴다. 연타 가드(400ms 창)가 걸려 있었다면
  * 이 연속 누름이 막혀 실패한다. 만들기 직후 창을 닫아(`resetPressGuard`) 뒤따르는 헤더 뒤로 등이 앞 누름에 막히지 않게 한다.
  */
-async function openExport() {
+async function openExport({ waitUnlocked = true } = {}) {
   await deck();
   for (let i = 0; i < 12 && !screen.queryByTestId(deckId('make')); i += 1) {
     fireEvent.press(screen.getByTestId(deckId('next')));
   }
   fireEvent.press(screen.getByTestId(deckId('make')));
   resetPressGuard();
-  return frame();
+  const exportFrame = await frame();
+  // TRIP-1781 — 표지 사진을 고르는 동안(records 응답 전) 저장·공유 버튼은 잠긴다. 이 도우미를 쓰는 기존 it 들은 곧바로 버튼을 누르므로
+  // 잠금이 풀릴 때까지(버튼이 있을 때만) 기다린다. 잠금 자체를 보는 it 만 `waitUnlocked: false` 로 부른다.
+  if (waitUnlocked && screen.queryByTestId('reflection-share-save')) {
+    await waitFor(() =>
+      expect(screen.getByTestId('reflection-share-save')).toBeEnabled()
+    );
+  }
+  return exportFrame;
 }
 const captionLine = () => screen.getByTestId('reflection-share-caption-text');
 const hashtagLine = () => screen.getByTestId('reflection-share-hashtags');
@@ -1629,5 +1651,131 @@ describe('🔴 TRIP-1667 AC-13 · 일정 조회는 일차 카드 색용 — 요�
     gate.release();
     await settled();
     expect(screen.getByTestId(deckId('slide-cover'))).toBeOnTheScreen();
+  });
+});
+
+// TRIP-1781 · j06 표지에 기기 사진 — 덱 표지·대표 카드(저장·공유되는 PNG 의 원본)가 같은 사진을 받고, 고르는 동안은 저장·공유가 잠긴다.
+// 사진 케이스는 전부 StrictMode 밖이다(통합 소음 예산 `other` 가 꽉 차 있고, 덱 표지의 KenBurns 는 StrictMode 에서 findNodeHandle 경고를 낸다).
+// 색·스크림 농도·진행 바 대비·PNG 에 실제로 사진이 찍히는지는 jest 가 못 본다 — 실화면/실기 몫이다.
+describe('🔴 TRIP-1781 · 표지 기기 사진 (덱 표지 · 대표 카드 · 저장·공유 잠금)', () => {
+  const COVER_PHOTO = `reflection-share-preview-photo`;
+  const COVER_SCRIM = `reflection-share-preview-scrim`;
+  const DECK_PHOTO = deckId('cover-photo');
+  const DECK_SCRIM = deckId('cover-scrim');
+
+  function serveOnePhoto() {
+    serveCoverPhotos(server, {
+      record: () => recordOf([visitOf('v1', 3)]),
+      photos: { v1: () => [photoOf('a')] },
+    });
+  }
+  const recordsHits = () =>
+    requests.hitsFor('GET', `/trips/${TRIP_ID}/records`);
+
+  beforeEach(() => serveCopy(copyOk(AI_COPY)));
+
+  it('SP-1 · AC-8 덱 표지에 이 기기 앨범의 사진(주소 file://a)과 스크림이 뜨고 제목은 그대로다', async () => {
+    serveOnePhoto();
+    renderPage();
+    await deck();
+
+    const photo = await screen.findByTestId(DECK_PHOTO);
+    expect(photo.props.source).toEqual([{ uri: 'file://a' }]);
+    expect(screen.getByTestId(DECK_SCRIM)).toBeOnTheScreen();
+    expect(screen.getByTestId(deckId('cover-title'))).toHaveTextContent(
+      '부산 여행'
+    );
+  });
+
+  it('SP-2 · AC-8·13 내보내기 대표 카드는 세 포맷(스토리·정방형·피드) 모두에서 덱 표지와 같은 사진을 그린다', async () => {
+    serveOnePhoto();
+    renderPage();
+    await screen.findByTestId(DECK_PHOTO); // 사진이 정해진 뒤 내보내기로 간다
+    await openExport();
+
+    for (const format of ['story', 'square', 'feed']) {
+      fireEvent.press(screen.getByTestId(`reflection-share-format-${format}`));
+      expect(screen.getByTestId(COVER_PHOTO).props.source).toEqual([
+        { uri: 'file://a' },
+      ]);
+      // 사진 위 흰 글자를 받쳐 주는 막(스크림)도 같이 선다 — 색·농도는 실기 몫, 있고 없음만 본다(5-b W1).
+      expect(screen.getByTestId(COVER_SCRIM)).toBeOnTheScreen();
+    }
+    // 사진은 캡처 대상 프레임 안에 있다(밖에 두면 PNG 에 안 찍힌다).
+    expect(
+      within(screen.getByTestId('reflection-share-preview-frame')).getByTestId(
+        COVER_PHOTO
+      )
+    ).toBeOnTheScreen();
+  });
+
+  it('SP-3 · AC-9 사진이 없으면(빈 기록) 덱 표지·대표 카드 모두 사진·스크림이 없고 표지 장·프레임은 선다', async () => {
+    renderPage();
+    await deck();
+    await waitFor(() => expect(recordsHits()).toBe(1));
+    await quiet();
+
+    expect(screen.getByTestId(deckId('slide-cover'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(DECK_PHOTO)).toBeNull();
+    expect(screen.queryByTestId(DECK_SCRIM)).toBeNull();
+
+    await openExport();
+    expect(
+      screen.getByTestId('reflection-share-preview-frame')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId(COVER_PHOTO)).toBeNull();
+    // 사진이 없는 라이트 카드 위에 어두운 막이 혼자 남으면 안 된다(5-b W1).
+    expect(screen.queryByTestId(COVER_SCRIM)).toBeNull();
+  });
+
+  it('SP-4 · AC-6 records 가 500 이어도 오류 얼굴 없이 덱이 서고 내보내기도 열린다(사진만 없다)', async () => {
+    server.use(
+      http.get(
+        `${BASE}/trips/:tripId/records`,
+        () => new HttpResponse(null, { status: 500 })
+      )
+    );
+    renderPage();
+    await deck();
+    await waitFor(() => expect(recordsHits()).toBeGreaterThanOrEqual(1));
+    await quiet();
+
+    expect(screen.queryByTestId('reflection-share-error')).toBeNull();
+    expect(screen.queryByTestId(DECK_PHOTO)).toBeNull();
+    await openExport();
+    expect(screen.queryByTestId(COVER_PHOTO)).toBeNull();
+  });
+
+  it('SP-5 · AC-14 사진을 고르는 동안은 저장·공유 버튼이 잠겨 눌러도 캡처 콜백이 0회이고, 사진이 정해지면 풀려 각 1회 나간다', async () => {
+    const gate = createGate();
+    serveCoverPhotos(server, {
+      record: async () => {
+        await gate.opened;
+        return recordOf([visitOf('v1', 3)]);
+      },
+      photos: { v1: () => [photoOf('a')] },
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await openExport({ waitUnlocked: false });
+    await waitFor(() => expect(recordsHits()).toBe(1)); // records 요청은 나갔고 아직 답이 없다
+
+    const save = screen.getByTestId('reflection-share-save');
+    const share = screen.getByTestId('reflection-share-export');
+    expect(save).toBeDisabled();
+    expect(share).toBeDisabled();
+    await user.press(save);
+    await user.press(share);
+    expect(mockSave).not.toHaveBeenCalled();
+    expect(mockShare).not.toHaveBeenCalled();
+
+    // 긍정 짝: 문을 열어 사진이 정해지면 같은 버튼이 눌린다.
+    gate.release();
+    await screen.findByTestId(COVER_PHOTO);
+    await waitFor(() => expect(save).toBeEnabled());
+    await user.press(save);
+    await user.press(share);
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    expect(mockShare).toHaveBeenCalledTimes(1);
   });
 });

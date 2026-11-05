@@ -478,4 +478,10 @@ export const handlers = [
   http.get(`${BASE}/trips/:tripId/triggers`, () =>
     HttpResponse.json({ triggers: [] })
   ),
+  // TRIP-1781 — 끝난 여행의 표지 사진을 고르는 훅(j04 요약·j06 공유 카드)이 `summary.stats.totalPhotos > 0` 이면 여행 전체 기록을 한 번 묻는다.
+  // 통합 픽스처의 `totalPhotos` 는 0 이 아닌 값이 많아 기본값이 없으면 준비 단계에서 미처리 요청으로 죽는다. 기본은 **빈 기록**(후보 0 = 색 표지,
+  // 이 기기 id·앨범도 안 묻는다). 사진 있는 방문이 필요한 테스트는 `server.use(...)`(`@/test-support/coverPhotoFixtures`)로 덮는다.
+  http.get(`${BASE}/trips/:tripId/records`, ({ params }) =>
+    HttpResponse.json({ tripId: params.tripId, days: [], changes: [] })
+  ),
 ];
