@@ -227,7 +227,7 @@ run "prd_has_high_availability_and_data_protection" {
 
   assert {
     condition     = aws_eks_cluster.this.deletion_protection && aws_cloudwatch_log_group.eks.retention_in_days >= 30
-    error_message = "PRD EKS requires deletion protection and retained audit logs."
+    error_message = "PRD EKS requires deletion protection and retained control-plane logs."
   }
 
   assert {
