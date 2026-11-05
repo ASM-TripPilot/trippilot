@@ -36,8 +36,10 @@ class PushTokenService(
         if (saved.pushTokenId == incoming.pushTokenId) {
             // 토큰 모양도 센다 — Expo 푸시 서비스는 `ExponentPushToken[…]`/`ExpoPushToken[…]` 만 받는다. 앱이 APNs·FCM 기기 토큰을 보내면
             // 등록은 되지만 첫 발송에서 `DeviceNotRegistered` 로 보여 죽은 토큰과 구분이 안 된다 — 등록 줄에서 바로 갈라 둔다. 값은 싣지 않는다.
+            // 키 이름에 token 을 넣지 않는다 — 운영 로그 덤프(aws-dev-logs)는 `KEY|TOKEN|SECRET|PASSWORD…=값` 을 `***` 로 가려서
+            // `tokenFormat=expo` 가 `tokenFormat=***` 로 나왔다(2026-11-05 첫 운영 등록 줄). 앱 마스커는 이 줄을 안 지우니 로컬에선 안 보이는 함정이다.
             log.info(
-                "push.token.register platform={} osPermission={} deliverable={} tokenFormat={}",
+                "push.token.register platform={} osPermission={} deliverable={} format={}",
                 saved.platform, saved.osPermission, saved.deliverable, if (EXPO_TOKEN.matches(saved.token)) "expo" else "other",
             )
         }
