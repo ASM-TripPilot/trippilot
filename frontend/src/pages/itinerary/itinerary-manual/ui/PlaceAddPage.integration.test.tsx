@@ -87,6 +87,10 @@ import { PlaceAddPage } from './PlaceAddPage';
  *  - 🔴 **S1·S2·S3** 담은 순서대로 선행 카드 뒤에 이어 붙고, 기본 시각은 앞서 담은 곳 종료부터이며, dirty 초안도 같다.
  *  - 🟢선제 **S4** 첫 저장이 실패하면 자리가 안 밀린다(시도가 아니라 성공을 센다).
  *
+ * TRIP-1794 추가 — 여러 곳을 체크해 한 일차에 한 번에 담기(체크 → 「N일차에 K곳 담기」 → 시각 시트 차례로 → PUT 1회):
+ *  - 🔴 **B1~B12** 시트 순서·마지막 확정에서만 PUT·기본값 연쇄·취소=전부 안 담기+체크 유지·같은 틱 연타 1회·저장 중 CTA 비활성·실패=체크 유지+오류 줄·
+ *    체크 0 이면 기존 「추가」 무변경(≥1 이면 숨김)·insertAfter 연속 삽입과 성공 뒤 오프셋 K·일정 5xx 가드·dirty 초안·밀림 토스트·검색해도 체크 유지.
+ *
  * 왜 통합 버킷인가: 최종 직렬화된 URL·나간 PUT 바디·재요청 횟수·캐시 무효화는 msw/스파이만 본다.
  * 3동작 뼈대: 준비=핸들러/래퍼/params → 실행=렌더/입력/칩/add → 단언=나간 URL·PUT 바디·보이는 트리.
  */
@@ -2305,6 +2309,557 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
       },
       SLOW
     );
+  });
+
+  /**
+   * TRIP-1794 · E2 — 장소 추가에서 여러 곳을 체크해 한 일차에 한 번에 담는다.
+   * 체크(`place-add-check-{poiId}`) → 하단 「N일차에 K곳 담기」(`place-add-bulk-confirm`) → 고른 순서대로 시각 시트 K번(곳마다 새로 마운트,
+   * 기본값 = 앞 곳에서 사용자가 확정한 끝 시각) → 마지막 [적용]에서 PUT **한 번**. 규칙(전이 표·poiId 가드·조립)은 `bulkAdd.test.ts` 가 재고,
+   * 여기서는 페이지가 그 규칙을 배선했는지 — 나간 PUT 의 횟수·바디·시트 순서·시트 기본값·체크 상태를 msw 로 관찰한다.
+   * 시각 시트 안 장소는 `itinerary-edit-time-place-summary` 글자(= 장소 이름)로 알아본다(시트 요약 행 `placeSummary.name`).
+   * 체크 0 이면 기존 「+ 추가」 한 곳 흐름이 그대로다(위 TRIP-1424·1640 블록이 그 그물이고, 여기 B7 이 체크를 켰다 끈 뒤 그대로임을 한 번 더 본다).
+   * 시트 실제 열림·딤·휠 제스처·체크 시 FlatList 행 갱신·CTA 등장 시 시트 여백은 jest 사각 — 6-b 실기.
+   * ⚠️ 비활성 Pressable 을 `fireEvent.press` 하면 RNTL 이 던진다(핸들러를 못 찾음) — 비활성은 `toBeDisabled()` 로만 본다.
+   */
+  describe('TRIP-1794 · 여러 곳 한 번에 담기', () => {
+    const CTA = 'place-add-bulk-confirm';
+    const SUMMARY = 'itinerary-edit-time-place-summary';
+    const READOUT = 'itinerary-edit-time-readout';
+    const APPLY = 'itinerary-edit-time-apply';
+    const CLOSE = 'itinerary-edit-time-close';
+    const SA = slotAt('sA', '08:00:00', '09:30:00');
+    const SB = slotAt('sB', '13:00:00', '14:00:00');
+    const TA = slotAt('tA', '10:00:00', '11:00:00');
+    const NAME: Record<string, string> = {
+      p1: '감천문화마을',
+      p2: '해운대 해수욕장',
+      p3: '전포 카페거리',
+    };
+    const checkId = (poiId: string): string => `place-add-check-${poiId}`;
+    const addedId = (poiId: string): string => `itinerary-place-added-${poiId}`;
+
+    beforeEach(() => {
+      serveDays([
+        { date: D1, slots: [SA, SB] },
+        { date: D2, slots: [TA] },
+      ]);
+    });
+
+    /** 체크 원을 순서대로 누른다. */
+    async function pick(...poiIds: string[]): Promise<void> {
+      for (const poiId of poiIds) {
+        fireEvent.press(await screen.findByTestId(checkId(poiId)));
+      }
+    }
+
+    /** 시각 시트의 [적용]을 n번 누른다 — 시트는 곳마다 새로 열리므로 매번 다시 찾는다. */
+    async function applyTimes(n: number): Promise<void> {
+      for (let i = 0; i < n; i += 1) {
+        fireEvent.press(await screen.findByTestId(APPLY));
+      }
+    }
+
+    async function tick(ms = 0): Promise<void> {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, ms));
+      });
+    }
+
+    /** 지금 열린 시트의 장소 이름 — 다음 시트로 바뀐 뒤 읽도록 기다린다. */
+    async function expectSheetFor(poiId: string): Promise<void> {
+      await waitFor(() =>
+        expect(screen.getByTestId(SUMMARY)).toHaveTextContent(NAME[poiId])
+      );
+    }
+
+    /** 담기 PUT 이 끝난 것(행이 "추가됨")까지 기다린다 — 끝나기 전 다음 동작은 저장 중 잠금에 막힌다. */
+    async function settleAdded(...poiIds: string[]): Promise<void> {
+      for (const poiId of poiIds) {
+        await screen.findByTestId(addedId(poiId));
+      }
+      await tick();
+    }
+
+    it(
+      '🔴 B1 · AC-1 — 세 곳을 체크한 순서(p2→p1→p3)대로 시트 3번 → 마지막 [적용]에서야 PUT 1회, 그날 끝에 그 순서로 들어가고 행은 "추가됨"·체크는 사라진다',
+      async () => {
+        const { client } = renderTree();
+        await ready(client);
+        // 앵커 — 체크 전엔 CTA 가 없고 시트 머리는 기존 문구다.
+        await screen.findByTestId(checkId('p1'));
+        expect(screen.queryByTestId(CTA)).toBeNull();
+        expect(screen.getByText('장소 추가 · 1일차')).toBeOnTheScreen();
+
+        await pick('p2', 'p1', 'p3');
+        expect(screen.getByText('1일차에 담기 · 3곳 선택')).toBeOnTheScreen();
+        expect(screen.getByTestId(CTA)).toHaveTextContent('1일차에 3곳 담기');
+        // 체크만으로는 시트도 PUT 도 없다.
+        expect(screen.queryByTestId(SHEET)).toBeNull();
+        expect(putBodies).toHaveLength(0);
+
+        fireEvent.press(screen.getByTestId(CTA));
+        await expectSheetFor('p2');
+        fireEvent.press(screen.getByTestId(APPLY));
+        await expectSheetFor('p1');
+        // 아직 마지막이 아니다 — PUT 0.
+        expect(putBodies).toHaveLength(0);
+        fireEvent.press(screen.getByTestId(APPLY));
+        await expectSheetFor('p3');
+        expect(putBodies).toHaveLength(0);
+        fireEvent.press(screen.getByTestId(APPLY));
+        // 마지막 확정 뒤 시트는 닫힌다(저장 중).
+        expect(screen.queryByTestId(SHEET)).toBeNull();
+
+        await settleAdded('p2', 'p1', 'p3');
+
+        expect(putBodies).toHaveLength(1);
+        expect(sent(0, D1).map(([poiId]) => poiId)).toEqual([
+          'sA',
+          'sB',
+          'p2',
+          'p1',
+          'p3',
+        ]);
+        // 다른 날은 그대로, 새 슬롯은 고정이 아니다.
+        expect(
+          putBodies[0].days
+            .find((day) => day.date === D2)
+            ?.slots.map((s) => s.poiId)
+        ).toEqual(['tA']);
+        expect(
+          putBodies[0].days[0].slots.slice(2).map((s) => s.isFixed)
+        ).toEqual([false, false, false]);
+        // 일정 GET 캐시가 PUT 응답으로 바뀌어 편집기 대역도 새 순서를 본다.
+        expect(screen.getByTestId(EDITOR)).toHaveTextContent('sA,sB,p2,p1,p3');
+        // 체크는 비워지고(담은 행엔 체크 원이 없다) CTA·바뀐 머리가 원래대로다.
+        expect(screen.queryByTestId(checkId('p1'))).toBeNull();
+        expect(screen.getByTestId(checkId('p5'))).not.toBeChecked();
+        expect(screen.queryByTestId(CTA)).toBeNull();
+        expect(screen.getByText('장소 추가 · 1일차')).toBeOnTheScreen();
+        // 토스트는 담은 곳 수를 말하고 소요시간 꼴이 없다(INV-3).
+        expect(await screen.findByTestId(TOAST)).toHaveTextContent(
+          '3곳을 담았어요 · 일정에 바로 저장됐어요'
+        );
+        expect(
+          renderedTexts().filter((text) => DURATION_TEXT.test(text))
+        ).toEqual([]);
+      },
+      SLOW
+    );
+
+    it(
+      '🔴 B2 · AC-7 — 둘째 시트 기본값은 첫 곳 확정 끝 시각부터 1시간, 셋째는 둘째 확정 끝부터다 (첫 시트의 값을 재사용하지 않는다 · 사용자가 바꾼 시각이 PUT 에 그대로)',
+      async () => {
+        const { client } = renderTree();
+        await ready(client);
+        await pick('p1', 'p2', 'p3');
+        fireEvent.press(screen.getByTestId(CTA));
+
+        // 첫 곳 — 앞 장소(sB, 14:00 종료)부터 1시간. 사용자가 시작 분을 15 로 바꿔 14:15–15:00 으로 확정.
+        await expectSheetFor('p1');
+        expect(screen.getByTestId(READOUT)).toHaveTextContent(
+          '시작 14:00 · 종료 15:00'
+        );
+        fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-m-15'));
+        expect(screen.getByTestId(READOUT)).toHaveTextContent(
+          '시작 14:15 · 종료 15:00'
+        );
+        fireEvent.press(screen.getByTestId(APPLY));
+
+        // 둘째 — 첫 곳의 확정 종료(15:00)부터. 첫 시트가 남았다면 14:15–15:00 으로 뜬다.
+        await expectSheetFor('p2');
+        expect(screen.getByTestId(READOUT)).toHaveTextContent(
+          '시작 15:00 · 종료 16:00'
+        );
+        // 종료 탭으로 바꿔 17 시로 — 15:00–17:00 확정.
+        fireEvent.press(screen.getByTestId('itinerary-edit-time-seg-end'));
+        fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-17'));
+        expect(screen.getByTestId(READOUT)).toHaveTextContent(
+          '시작 15:00 · 종료 17:00'
+        );
+        fireEvent.press(screen.getByTestId(APPLY));
+
+        // 셋째 — 둘째의 확정 종료(17:00)부터(첫째 기준 15:00 이 아니다).
+        await expectSheetFor('p3');
+        expect(screen.getByTestId(READOUT)).toHaveTextContent(
+          '시작 17:00 · 종료 18:00'
+        );
+        fireEvent.press(screen.getByTestId(APPLY));
+
+        await settleAdded('p1', 'p2', 'p3');
+        expect(putBodies).toHaveLength(1);
+        const slots = putBodies[0].days[0].slots;
+        expect(
+          slots.slice(2).map((s) => [s.poiId, s.startAt, s.endAt])
+        ).toEqual([
+          ['p1', '14:15:00', '15:00:00'],
+          ['p2', '15:00:00', '17:00:00'],
+          ['p3', '17:00:00', '18:00:00'],
+        ]);
+      },
+      SLOW
+    );
+
+    it(
+      '🔴 B3 · AC-2 — 어느 시트든 취소하면 PUT 0·토스트 0·"추가됨" 0, 체크는 그대로이고, 다시 담기는 첫 곳부터 새로 시작한다',
+      async () => {
+        const { client } = renderTree();
+        await ready(client);
+        await pick('p1', 'p2');
+
+        // 첫 시트 취소.
+        fireEvent.press(screen.getByTestId(CTA));
+        await expectSheetFor('p1');
+        fireEvent.press(screen.getByTestId(CLOSE));
+        expect(screen.queryByTestId(SHEET)).toBeNull();
+        expect(screen.getByTestId(checkId('p1'))).toBeChecked();
+        expect(screen.getByTestId(checkId('p2'))).toBeChecked();
+
+        // 둘째 시트 취소 — 첫 곳은 확정했어도 아무것도 안 담긴다.
+        fireEvent.press(screen.getByTestId(CTA));
+        await expectSheetFor('p1');
+        fireEvent.press(screen.getByTestId(APPLY));
+        await expectSheetFor('p2');
+        fireEvent.press(screen.getByTestId(CLOSE));
+        expect(screen.queryByTestId(SHEET)).toBeNull();
+
+        await tick(50);
+        expect(putBodies).toHaveLength(0);
+        expect(screen.queryByTestId(TOAST)).toBeNull();
+        expect(screen.queryByTestId(addedId('p1'))).toBeNull();
+        expect(screen.queryByTestId(addedId('p2'))).toBeNull();
+        expect(screen.getByTestId(checkId('p1'))).toBeChecked();
+        expect(screen.getByTestId(checkId('p2'))).toBeChecked();
+        expect(screen.getByText('1일차에 담기 · 2곳 선택')).toBeOnTheScreen();
+
+        // 재시도 — 첫 곳부터, 기본값도 처음 값(옛 확정이 안 샌다).
+        fireEvent.press(screen.getByTestId(CTA));
+        await expectSheetFor('p1');
+        expect(screen.getByTestId(READOUT)).toHaveTextContent(
+          '시작 14:00 · 종료 15:00'
+        );
+        fireEvent.press(screen.getByTestId(CLOSE));
+        await tick();
+      },
+      SLOW
+    );
+
+    it(
+      '🔴 B4 · AC-3a — 마지막 [적용]을 같은 틱에 두 번 눌러도 PUT 은 1회다 (기존 한 곳 추가는 이 연타가 가드 밖이었다)',
+      async () => {
+        holdPut();
+        const { client } = renderTree();
+        await ready(client);
+        await pick('p1', 'p2');
+        fireEvent.press(screen.getByTestId(CTA));
+        await expectSheetFor('p1');
+        fireEvent.press(screen.getByTestId(APPLY));
+        await expectSheetFor('p2');
+
+        // 같은 act 안에서 두 번 — 첫 누름의 상태 변경이 반영되기 전이라 둘째는 옛 화면의 핸들러를 부른다.
+        const apply = screen.getByTestId(APPLY);
+        act(() => {
+          fireEvent.press(apply);
+          fireEvent.press(apply);
+        });
+
+        await waitFor(() => expect(putBodies).toHaveLength(1));
+        // PUT 이 붙잡힌 채로 시간을 흘려도 늘지 않는다.
+        await tick(50);
+        expect(putBodies).toHaveLength(1);
+
+        await act(async () => {
+          openPutGate?.();
+        });
+        await settleAdded('p1', 'p2');
+        expect(putBodies).toHaveLength(1);
+      },
+      SLOW
+    );
+
+    it(
+      '🔴 B5 · AC-3b — 저장 중에는 CTA 가 비활성이고 새 시트도 두 번째 PUT 도 없다',
+      async () => {
+        holdPut();
+        const { client } = renderTree();
+        await ready(client);
+        await pick('p1', 'p2');
+        fireEvent.press(screen.getByTestId(CTA));
+        await applyTimes(2);
+        await waitFor(() => expect(putBodies).toHaveLength(1));
+
+        // 저장 중 — 체크가 남아 CTA 는 보이되 눌리지 않는다(비활성 press 는 RNTL 이 던지니 상태만 본다).
+        expect(screen.getByTestId(CTA)).toBeDisabled();
+        expect(screen.queryByTestId(SHEET)).toBeNull();
+        await tick(50);
+        expect(putBodies).toHaveLength(1);
+
+        await act(async () => {
+          openPutGate?.();
+        });
+        await settleAdded('p1', 'p2');
+        expect(putBodies).toHaveLength(1);
+      },
+      SLOW
+    );
+
+    it(
+      '🔴 B6 · AC-4 — PUT 이 실패하면 오류 줄이 뜨고 체크가 그대로이며(추가됨 0·토스트 0), 다시 담으면 같은 자리·같은 바디로 재시도된다 (실패는 자리를 안 민다)',
+      async () => {
+        mockParams = { tripId: 't1', insertAfter: '0' };
+        let calls = 0;
+        respond = (body) => {
+          calls += 1;
+          return calls === 1
+            ? HttpResponse.json(
+                { error: { code: 'INTERNAL' } },
+                { status: 500 }
+              )
+            : HttpResponse.json(echo(body));
+        };
+        const { client } = renderTree();
+        await ready(client);
+        await pick('p1', 'p2');
+        fireEvent.press(screen.getByTestId(CTA));
+        await applyTimes(2);
+
+        expect(await screen.findByTestId(ERROR)).toHaveTextContent(ERROR_TEXT);
+        await tick();
+        expect(putBodies).toHaveLength(1);
+        expect(screen.getByTestId(checkId('p1'))).toBeChecked();
+        expect(screen.getByTestId(checkId('p2'))).toBeChecked();
+        expect(screen.queryByTestId(addedId('p1'))).toBeNull();
+        expect(screen.queryByTestId(TOAST)).toBeNull();
+        expect(screen.getByText('1일차에 담기 · 2곳 선택')).toBeOnTheScreen();
+        expect(screen.getByTestId(CTA)).not.toBeDisabled();
+
+        // 재시도.
+        fireEvent.press(screen.getByTestId(CTA));
+        await applyTimes(2);
+        await settleAdded('p1', 'p2');
+
+        expect(putBodies).toHaveLength(2);
+        expect(sent(0, D1).map(([poiId]) => poiId)).toEqual([
+          'sA',
+          'p1',
+          'p2',
+          'sB',
+        ]);
+        // 첫 실패가 자리를 밀었다면 둘째 바디가 달라진다.
+        expect(sent(1, D1)).toEqual(sent(0, D1));
+        // 새 저장이 시작되면 오류 줄은 지워진다.
+        expect(screen.queryByTestId(ERROR)).toBeNull();
+      },
+      SLOW
+    );
+
+    it(
+      '🔴 B7 · AC-6 — 체크 0 이면 모든 행에 「추가」와 안 체크된 원이 있고 CTA 가 없다 / 체크가 하나라도 있으면 모든 행의 「추가」가 숨고 / 다 풀면 되돌아와 기존 한 곳 추가가 그대로 된다',
+      async () => {
+        const { client } = renderTree();
+        await ready(client);
+        const ids = ['p1', 'p2', 'p3', 'p5'];
+        await screen.findByTestId(checkId('p1'));
+        for (const poiId of ids) {
+          expect(
+            screen.getByTestId(`itinerary-place-add-${poiId}`)
+          ).toBeOnTheScreen();
+          expect(screen.getByTestId(checkId(poiId))).not.toBeChecked();
+        }
+        expect(screen.queryByTestId(CTA)).toBeNull();
+
+        await pick('p1');
+        for (const poiId of ids) {
+          expect(
+            screen.queryByTestId(`itinerary-place-add-${poiId}`)
+          ).toBeNull();
+        }
+        expect(screen.getByTestId(checkId('p1'))).toBeChecked();
+        expect(screen.getByTestId(checkId('p2'))).not.toBeChecked();
+        expect(screen.getByTestId(CTA)).toHaveTextContent('1일차에 1곳 담기');
+
+        // 체크를 풀면 원래대로.
+        fireEvent.press(screen.getByTestId(checkId('p1')));
+        expect(screen.queryByTestId(CTA)).toBeNull();
+        expect(screen.getByText('장소 추가 · 1일차')).toBeOnTheScreen();
+        for (const poiId of ids) {
+          expect(
+            screen.getByTestId(`itinerary-place-add-${poiId}`)
+          ).toBeOnTheScreen();
+        }
+
+        // 기존 한 곳 추가 — 체크를 켰다 껐어도 그대로 PUT 1회·그날 끝.
+        await add('p5');
+        await settleAdded('p5');
+        expect(putBodies).toHaveLength(1);
+        expect(sent(0, D1).map(([poiId]) => poiId)).toEqual(['sA', 'sB', 'p5']);
+      },
+      SLOW
+    );
+
+    it(
+      '🔴 B8 · AC-8 — insertAfter 로 들어오면 담은 곳이 그 자리부터 연속으로 끼고(첫 기본값 = 선행 카드 종료), 성공 뒤 이어 한 곳 추가하면 자리가 K 만큼 밀려 있다',
+      async () => {
+        mockParams = { tripId: 't1', insertAfter: '0' };
+        const { client } = renderTree();
+        await ready(client);
+        await pick('p1', 'p2');
+        fireEvent.press(screen.getByTestId(CTA));
+
+        await expectSheetFor('p1');
+        expect(screen.getByTestId(READOUT)).toHaveTextContent(
+          '시작 09:30 · 종료 10:30'
+        );
+        fireEvent.press(screen.getByTestId(APPLY));
+        await expectSheetFor('p2');
+        expect(screen.getByTestId(READOUT)).toHaveTextContent(
+          '시작 10:30 · 종료 11:30'
+        );
+        fireEvent.press(screen.getByTestId(APPLY));
+        await settleAdded('p1', 'p2');
+
+        expect(putBodies).toHaveLength(1);
+        expect(sent(0, D1)).toEqual([
+          ['sA', '08:00:00'],
+          ['p1', '09:30:00'],
+          ['p2', '10:30:00'],
+          ['sB', '13:00:00'],
+        ]);
+
+        // 체크가 비워져 「추가」가 돌아왔다 — 이어 p3 를 한 곳 추가하면 p2 바로 뒤(자리 0+1+K=3), 기본 시각은 p2 종료부터.
+        await add('p3');
+        await waitFor(() => expect(putBodies).toHaveLength(2));
+        expect(sent(1, D1)).toEqual([
+          ['sA', '08:00:00'],
+          ['p1', '09:30:00'],
+          ['p2', '10:30:00'],
+          ['p3', '11:30:00'],
+          ['sB', '13:00:00'],
+        ]);
+        await settleAdded('p3');
+      },
+      SLOW
+    );
+
+    it(
+      '🔴 B9 · AC-5g — 일정을 못 받은 채(5xx) CTA 를 누르면 시트도 PUT 도 없고 일정 오류 안내가 뜬다 (체크는 남는다)',
+      async () => {
+        server.use(
+          http.get(
+            `${BASE}/trips/:tripId/itinerary`,
+            () => new HttpResponse(null, { status: 500 })
+          )
+        );
+        renderTree();
+        await screen.findByTestId(checkId('p1'));
+        await waitFor(() =>
+          expect(
+            hitsOf('GET', '/api/v1/trips/t1/itinerary').length
+          ).toBeGreaterThanOrEqual(1)
+        );
+        await tick(50);
+        await pick('p1');
+        expect(
+          screen.queryByTestId('itinerary-place-itinerary-error')
+        ).toBeNull();
+
+        fireEvent.press(screen.getByTestId(CTA));
+
+        expect(
+          await screen.findByTestId('itinerary-place-itinerary-error')
+        ).toHaveTextContent(/\S/);
+        expect(screen.queryByTestId(SHEET)).toBeNull();
+        await tick(50);
+        expect(putBodies).toHaveLength(0);
+        expect(screen.getByTestId(checkId('p1'))).toBeChecked();
+      },
+      SLOW
+    );
+
+    it(
+      '🔴 B10 · AC-5c — 저장 안 한 편집 초안(dirty)이 있으면 담은 곳이 초안에도 같은 순서·자리로 끼고 dirty 는 그대로이며 토스트에 "다른 수정은 저장해야 남아요"가 붙는다',
+      async () => {
+        mockParams = { tripId: 't1', insertAfter: '0' };
+        const store = useItineraryEditStore.getState();
+        store.seed([{ date: D1, slots: [SA, SB] }]);
+        store.adjustSlotTime(D1, 'sB', {
+          startAt: '13:10:00',
+          endAt: '14:00:00',
+          endsNextDay: false,
+        });
+        expect(useItineraryEditStore.getState().dirty).toBe(true);
+        const { client } = renderTree();
+        await ready(client);
+        await pick('p1', 'p2');
+        fireEvent.press(screen.getByTestId(CTA));
+        await applyTimes(2);
+        await settleAdded('p1', 'p2');
+
+        const draftIds =
+          useItineraryEditStore
+            .getState()
+            .days.find((day) => day.date === D1)
+            ?.slots.map((one) => one.poiId) ?? [];
+        expect(draftIds).toEqual(['sA', 'p1', 'p2', 'sB']);
+        expect(useItineraryEditStore.getState().dirty).toBe(true);
+        // PUT 바디는 서버 캐시 기준이라 초안의 시각 변경(13:10)이 실리지 않는다.
+        expect(sent(0, D1)).toContainEqual(['sB', '13:00:00']);
+        expect(await screen.findByTestId(TOAST)).toHaveTextContent(
+          '2곳을 담았어요 · 일정에 바로 저장됐어요 · 다른 수정은 저장해야 남아요'
+        );
+      },
+      SLOW
+    );
+
+    it(
+      '🔴 B11 · D6 — 서버가 담은 곳의 시각을 밀었으면 토스트가 그 사실을 말하되 구체 시각·소요시간은 말하지 않는다',
+      async () => {
+        respond = (body) =>
+          HttpResponse.json(echo(body, { [D1]: { 2: '14:30:00' } }));
+        const { client } = renderTree();
+        await ready(client);
+        await pick('p1', 'p2');
+        fireEvent.press(screen.getByTestId(CTA));
+        await applyTimes(2);
+        await settleAdded('p1', 'p2');
+
+        const toast = await screen.findByTestId(TOAST);
+        expect(toast).toHaveTextContent(/^2곳을 담았어요/);
+        // 밀림이 없을 때의 문구와 다르다(완전 일치 비교).
+        expect(toast).not.toHaveTextContent(
+          '2곳을 담았어요 · 일정에 바로 저장됐어요'
+        );
+        expect(toast).not.toHaveTextContent(/\d{1,2}:\d{2}/);
+        expect(toast).not.toHaveTextContent(DURATION_TEXT);
+      },
+      SLOW
+    );
+
+    it('🔴 B12 · AC-5f — 검색으로 목록이 바뀌어도 체크한 곳은 유지되고(CTA 개수·시트 이름) 체크 순서가 그대로다', async () => {
+      const { client } = renderTree();
+      await ready(client);
+      await pick('p1');
+
+      // 검색 '해' → 서버가 p2 만 돌려준다 — 체크한 p1 은 목록에서 사라진다.
+      fireEvent.changeText(screen.getByTestId('itinerary-place-search'), '해');
+      await waitFor(
+        () =>
+          expect(screen.queryByTestId('itinerary-place-card-p1')).toBeNull(),
+        { timeout: 8000 }
+      );
+      expect(screen.getByTestId(CTA)).toHaveTextContent('1일차에 1곳 담기');
+
+      await pick('p2');
+      expect(screen.getByTestId(CTA)).toHaveTextContent('1일차에 2곳 담기');
+      fireEvent.press(screen.getByTestId(CTA));
+      // 체크 순서 — 목록에 없는 p1 이 먼저, 그 시트에도 이름이 있다.
+      await expectSheetFor('p1');
+      fireEvent.press(screen.getByTestId(APPLY));
+      await expectSheetFor('p2');
+      fireEvent.press(screen.getByTestId(CLOSE));
+      await tick();
+      expect(putBodies).toHaveLength(0);
+    }, 20000);
   });
 });
 

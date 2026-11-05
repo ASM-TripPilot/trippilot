@@ -8349,6 +8349,58 @@ export const PREVIEW_STATES: PreviewState[] = [
       </MapSheetShell>
     ),
   })),
+  // TRIP-1794 — 여러 곳 체크 얼굴: 일부 행 체크(선택 테두리·체크 원)·체크가 있어 「추가」 숨김·하단 CTA. 담은 행(첫 곳)엔 체크 원이 없다.
+  // 체크 원 히트(hitSlop)·선택 테두리 모양·CTA 가 시트 하단에서 목록을 가리는지는 jest 가 못 봐서 6-b 로 본다. 시각 시트·PUT 은 페이지 몫이라 여기 없다.
+  {
+    key: 'h13-place-add-bulk',
+    band: 'h',
+    label: 'h13 · 장소 추가 · 여러 곳 체크',
+    login: null,
+    render: () => (
+      <MapSheetShell
+        center={{ lat: 35.1532, lng: 129.1188 }}
+        pins={buildDraftPins(H11_COPICK_PREVIEW_SLOTS)}
+        onBack={noop}
+        header={
+          <Text className="px-lg pb-xs pt-sm font-noto-bold text-[18px] font-bold text-ink">
+            1일차에 담기 · 2곳 선택
+          </Text>
+        }
+        cta={[
+          {
+            label: '1일차에 2곳 담기',
+            variant: 'primary',
+            testID: 'place-add-bulk-confirm',
+            onPress: noop,
+          },
+        ]}
+        list={{
+          data: PREVIEW_PLACES,
+          renderItem: ({ item }) => (
+            <PlaceAddRow
+              place={item}
+              added={item.poiId === PREVIEW_PLACES[0].poiId}
+              check={{
+                checked: item.poiId === 'p-2' || item.poiId === 'p-3',
+                onToggle: noop,
+              }}
+              showAdd={false}
+              onPressAdd={noop}
+            />
+          ),
+          keyExtractor: (place) => place.poiId,
+          testID: 'itinerary-place-list',
+        }}
+      >
+        <PlaceAddHeader
+          searchText=""
+          selectedCategory={null}
+          onChangeSearchText={noop}
+          onSelectCategory={noop}
+        />
+      </MapSheetShell>
+    ),
+  },
   // TRIP-1433 — 같은 이름 장소를 지역(1줄 맨 앞)·주소(2줄)로 가른다. 지역·주소 둘 다 / 지역만 / 둘 다 없음
   // (지금 부제 그대로) 세 얼굴. 말줄임 때 지역이 보이는지·주소 줄 위계는 jest 가 못 봐서 여기서 눈으로 본다.
   {

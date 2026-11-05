@@ -24,7 +24,15 @@ export interface PlaceRowCardProps {
   save?: { saved: boolean; onToggle: () => void };
   /** 오른쪽 슬롯(h13 추가 버튼 등). */
   trailing?: ReactNode;
+  /** TRIP-1794 · 여러 곳 체크 선택 표시 — 주면 루트에 `accessibilityState.selected` + 선택 테두리. 안 주면 접근성 상태도 없다(다른 소비처 무변경). */
+  selected?: boolean;
 }
+
+const ROW_CLASS =
+  'w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas p-md';
+// 1791 SlotStopCard 선례 — 선택은 1.5 primary 테두리.
+const ROW_SELECTED_CLASS =
+  'w-full flex-row items-center gap-md rounded-card border-[1.5px] border-primary bg-canvas p-md';
 
 export function PlaceRowCard({
   testIDPrefix,
@@ -35,11 +43,13 @@ export function PlaceRowCard({
   subtitle,
   save,
   trailing,
+  selected,
 }: PlaceRowCardProps): ReactElement {
   return (
     <View
       testID={`${testIDPrefix}-${id}`}
-      className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas p-md"
+      accessibilityState={selected === undefined ? undefined : { selected }}
+      className={selected === true ? ROW_SELECTED_CLASS : ROW_CLASS}
     >
       <PlacePhoto
         testID={`${testIDPrefix}-photo-${id}`}
