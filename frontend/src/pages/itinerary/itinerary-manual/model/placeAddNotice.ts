@@ -65,3 +65,29 @@ export function placeAddToastMessage(shift: PlaceAddShift | null): string {
     ? `추가했어요 · 뒤 ${laterShiftedCount}곳의 시간이 밀렸어요`
     : '추가했어요 · 일정에 바로 저장됐어요';
 }
+
+/**
+ * TRIP-1794 · 여러 곳 담기 토스트 — 요청·응답 그날 슬롯을 같은 자리끼리 견줘 **어느 시작이라도** 달라졌으면 밀림 문구, 아니면(특정 못 함 포함)
+ * 저장 문구. 곳이 여럿이라 구체 시각은 말하지 않는다(INV-2·3 — 시각은 시트·일정 화면이 응답 그대로 보여 준다).
+ */
+export function bulkAddToastMessage({
+  count,
+  requestSlots,
+  responseSlots,
+}: {
+  count: number;
+  requestSlots: readonly PlaceAddSlotLike[];
+  responseSlots: readonly PlaceAddSlotLike[] | undefined;
+}): string {
+  const shifted =
+    responseSlots !== undefined &&
+    responseSlots.length === requestSlots.length &&
+    requestSlots.every((slot, i) => slot.poiId === responseSlots[i].poiId) &&
+    requestSlots.some(
+      (slot, i) =>
+        slot.startAt.slice(0, 5) !== responseSlots[i].startAt.slice(0, 5)
+    );
+  return `${count}곳을 담았어요 · ${
+    shifted ? '이동 시간을 반영해 시각을 맞췄어요' : '일정에 바로 저장됐어요'
+  }`;
+}

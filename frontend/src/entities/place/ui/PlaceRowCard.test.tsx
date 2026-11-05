@@ -144,4 +144,44 @@ describe('🔴 PlaceRowCard (AC-M2·M4·M5 — 중립 접두 자기 계약)', ()
       FALLBACK_COVER,
     ]);
   });
+
+  // TRIP-1794 — h13 장소 추가의 "여러 곳 체크". 선택은 색이 아니라 접근성 상태로 잰다(생김새 단언 금지, 테두리 색은 6-b 실기).
+  // `toBeSelected()` 는 host 요소의 `accessibilityState.selected` 만 읽는다(RNTL to-be-selected.js 확인 — 접근성 요소 여부 무관).
+  it('W7 · selected 를 안 주면 접근성 상태가 아예 없다 — 다른 소비처(d02·j01 방문 추가) 무변경', () => {
+    render(
+      <PlaceRowCard testIDPrefix="place-row" id="p1" name="감천문화마을" />
+    );
+
+    expect(
+      screen.getByTestId('place-row-p1').props.accessibilityState
+    ).toBeUndefined();
+  });
+
+  it('W8 · selected=true 면 루트가 선택됨, selected=false 면 선택 아님이다', () => {
+    const { rerender } = render(
+      <PlaceRowCard
+        testIDPrefix="place-row"
+        id="p1"
+        name="감천문화마을"
+        selected
+      />
+    );
+    expect(screen.getByTestId('place-row-p1')).toBeSelected();
+
+    rerender(
+      <PlaceRowCard
+        testIDPrefix="place-row"
+        id="p1"
+        name="감천문화마을"
+        selected={false}
+      />
+    );
+    expect(screen.getByTestId('place-row-p1')).not.toBeSelected();
+    // 앵커 — false 는 "안 줌"과 다르다(상태가 명시된다).
+    expect(screen.getByTestId('place-row-p1').props.accessibilityState).toEqual(
+      {
+        selected: false,
+      }
+    );
+  });
 });
