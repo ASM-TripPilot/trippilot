@@ -13,7 +13,6 @@ container_logs_retention_days  = 90
 database_instance_class        = "db.t4g.small"
 database_allocated_storage     = 20
 database_max_allocated_storage = 100
-redis_node_type                = "cache.t4g.micro"
 # 개발 대상(trippilot-dev 네임스페이스)의 시크릿 그릇 — 이 스택이 출시를 받은 운영이고, 개발은 같은 클러스터 안에 따로 둔다(2026-10-15).
 dev_target_enabled = true
 # 운영 알람 → Slack(인프라 결정 Q3=A). 워크스페이스는 2026-10-14 AWS Chatbot 에 연결했다. ID 는 비밀이 아니다.

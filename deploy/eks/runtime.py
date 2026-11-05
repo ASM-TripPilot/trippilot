@@ -34,14 +34,13 @@ def parse_outputs(raw, target="prod"):
         raise ValueError("Unknown deploy target")
     source = {key: TARGETS[target].get(key, key) for key in (
         "aws_region", "cluster_name", "database_host", "database_master_secret_arn",
-        "redis_host", "ecr_repositories", "app_secret_arns")}
+        "ecr_repositories", "app_secret_arns")}
     if any(name not in raw or not isinstance(raw[name], dict) or "value" not in raw[name] for name in source.values()):
         raise ValueError("Missing required Terraform outputs; run terraform output -json")
     # 개발 대상 출력이 비어 있으면(스위치 꺼짐) 아래 형식 검사에서 실패한다 — 운영 값으로 떨어지지 않는다.
     result = {key: raw[name]["value"] for key, name in source.items()}
-    for key in ("database_host", "redis_host"):
-        if not isinstance(result[key], str) or not re.fullmatch(HOST_PATTERN, result[key]):
-            raise ValueError(f"Invalid Terraform output {key}")
+    if not isinstance(result["database_host"], str) or not re.fullmatch(HOST_PATTERN, result["database_host"]):
+        raise ValueError("Invalid Terraform output database_host")
     if not re.fullmatch(r"[a-z]{2}(?:-[a-z]+)+-\d", result["aws_region"]):
         raise ValueError("Invalid AWS region")
     if set(result["ecr_repositories"]) != {"backend", "ai", "embedding"}:
@@ -80,7 +79,7 @@ def helm_values(outputs, image_tag, certificate_arn, hostname, embedding_enabled
     return {
         "images": {name: {"repository": repository, "tag": tags.get(name, image_tag)}
                    for name, repository in outputs["ecr_repositories"].items()},
-        "config": {"databaseHost": outputs["database_host"], "redisHost": outputs["redis_host"]},
+        "config": {"databaseHost": outputs["database_host"]},
         "gateway": {"certificateArn": certificate_arn, "hostname": hostname},
         "embedding": {"enabled": embedding_enabled},
     }

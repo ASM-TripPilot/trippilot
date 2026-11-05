@@ -22,7 +22,6 @@ def outputs():
         "aws_region": "ap-northeast-2", "cluster_name": "trippilot-dev",
         "database_host": "db.example.rds.amazonaws.com",
         "database_master_secret_arn": "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:master-abc",
-        "redis_host": "redis.example.cache.amazonaws.com",
         "ecr_repositories": {name: f"123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/trippilot-dev/{name}" for name in ("backend", "ai", "embedding")},
         "app_secret_arns": {name: f"arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:{name}-abc" for name in ("backend", "ai", "database", "shared")},
     }
@@ -460,8 +459,8 @@ class TargetTests(unittest.TestCase):
         self.assertEqual(dev["app_secret_arns"], self.DEV["dev_target_secret_arns"])
         self.assertEqual(dev["database_host"], "dev-target.example.rds.amazonaws.com")
         self.assertIn("rds!db-dev-target", dev["database_master_secret_arn"])
-        # 공유 자원(리전·클러스터·Redis·이미지 저장소)은 같다
-        for key in ("aws_region", "cluster_name", "redis_host", "ecr_repositories"):
+        # 공유 자원(리전·클러스터·이미지 저장소)은 같다
+        for key in ("aws_region", "cluster_name", "ecr_repositories"):
             self.assertEqual(dev[key], prod[key])
 
     def test_dev_target_never_falls_back_to_production(self):

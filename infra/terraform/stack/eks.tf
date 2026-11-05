@@ -25,7 +25,8 @@ resource "aws_eks_cluster" "this" {
   version                       = var.cluster_version
   deletion_protection           = var.data_protection_enabled
   bootstrap_self_managed_addons = false
-  enabled_cluster_log_types     = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+  # audit 은 뺐다 — 컨트롤 플레인 로그의 99%(하루 ~2.3GB)인데 조사에 쓴 적이 없다(TRIP-1784, 비용).
+  enabled_cluster_log_types = ["api", "authenticator", "controllerManager", "scheduler"]
 
   access_config {
     authentication_mode                         = "API"

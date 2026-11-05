@@ -177,6 +177,8 @@ GitHub Actions --(OIDC 배포 역할)--> Terraform apply -> ECR 이미지 push -
 
 > **[개정 · 2026-10-12 · Infra 결정]** ElastiCache Redis 는 Q5=A 로 **제거하기로 했다**(앱 미사용, U1 Q8=B 는 "보류 → 철회"). 운영 환경(dev)의 컨테이너 로그 보존은 Q3=A 로 **90일**로 올린다. 위 표는 결정 시점의 as-built 그대로이고, 코드 반영은 후속 작업이다(§12).
 
+> **[개정 · 2026-11-05 · TRIP-1784]** Q5=A(Redis 제거)를 이행했다 — Terraform·Helm·runtime·테스트에서 삭제(#1989, 운영 반영은 다음 정기 배포). 이 문서의 다른 Redis 서술(표·그림·서브넷·보안 그룹·§10 평가 등)은 그 전 as-built 다. 같은 PR 에서 **EKS 컨트롤플레인 audit 로그를 끈다**: 컨트롤플레인 로그의 99%(하루 ~2.3GB, 2026-11-05 Logs Insights 로그 스트림별 실측)인데 조사에 쓴 적이 없고, 12/14 종료까지 비용을 줄이는 쪽을 택했다(사용자 결정). 대가로 클러스터 안 Kubernetes API 행위(Secret 조회·exec 등)는 사후 추적할 수 없다 — CloudTrail 은 EKS 관리 API 만 남긴다. 접속 기록(authenticator)은 남는다.
+
 - **법정 append-only 테이블**: DB 권한 수준(앱 롤 DELETE 없음)은 Flyway 마이그레이션이 소유하고, 인프라는 롤을 나누는 데까지만 맡는다(`bootstrap.sql` 의 `app_user`/`app_migrate` 분리, `application.yml` flyway user 분리).
 
 ### 4.4 Messaging Infrastructure
@@ -205,7 +207,7 @@ GitHub Actions --(OIDC 배포 역할)--> Terraform apply -> ECR 이미지 push -
 
 | 신호 | As-built | 근거 |
 |---|---|---|
-| EKS 컨트롤플레인 로그 | api·audit·authenticator·controllerManager·scheduler → `/aws/eks/trippilot-<env>/cluster`(14일, prd 90일) | `eks.tf` `aws_cloudwatch_log_group.eks` · `enabled_cluster_log_types` |
+| EKS 컨트롤플레인 로그 | api·authenticator·controllerManager·scheduler → `/aws/eks/trippilot-<env>/cluster`(14일, prd 90일) (audit 은 2026-11-05 제외 — §4.3 의 TRIP-1784 개정 블록) | `eks.tf` `aws_cloudwatch_log_group.eks` · `enabled_cluster_log_types` |
 | 컨테이너 로그(stdout) | 애드온 `amazon-cloudwatch-observability` 는 **`container_logs_enabled=true` 일 때만** 설치된다. **두 tfvars 모두 `false`** → 이 상태로는 kubectl 로만 볼 수 있다 | `eks.tf` 주석 · `environments/dev.tfvars` · `prd.tfvars` |
 | RDS 로그 | `postgresql`·`upgrade` 를 CloudWatch 로 내보낸다 | `data.tf` `enabled_cloudwatch_logs_exports` |
 | 앱 메트릭·트레이스 | 이미지에 OTel Java 에이전트가 들어 있지만(sha256 검증) EKS 에서는 `OTEL_SDK_DISABLED=true`, exporter `none`, Micrometer OTLP 도 꺼져 있다. **수집기 없음** | `backend/Dockerfile` · `templates/backend.yaml` · `application.yml` `management.otlp` |
@@ -375,7 +377,7 @@ GitHub Actions --(OIDC 배포 역할)--> Terraform apply -> ECR 이미지 push -
 
 | ID | 간극 | 증거 | 영향 |
 |---|---|---|---|
-| **G-01** | **Redis 를 프로비저닝했지만 쓰지 않는다** | 인프라: `data.tf` `aws_elasticache_replication_group.redis`, `backend.yaml` 이 `REDIS_HOST`·`SPRING_DATA_REDIS_*` 주입. 앱: `backend/gradle/libs.versions.toml` 에 Redis 클라이언트 없음, `modules/accommodation-search/build.gradle.kts:2` "Redis 캐시는 실 벤더 어댑터 단계", `docs/guides/aws-eks-deployment.md` "backend 에는 Redis adapter 구현이 없어", `backend/docs/design/work-graph.toml:2509` "Redis 유휴(TRIP-895)". 설계 3개가 서로 다르다: U0 미도입(`u0-foundation/nfr-design/nfr-design-patterns.md` §9) → U1 도입(`u1-.../tech-stack-decisions.md` U1-TS-4) → U6 "보류 상태 유지"(`u6-.../tech-stack-decisions.md`) | 비용만 나간다(prd 이면 노드 3개). TLS·SG 를 갖춘 공격면이 놀고 있다. 문서와 실제가 어긋난다 → 계획서 Q5 **[개정 · 2026-10-12] 결정됨 — 후속 작업(팀)**: Q5=A 제거. Terraform `aws_elasticache_*`·Redis SG·`redis_node_type`·`redis_host/port` 출력 삭제, Helm `config.redisHost/Port`·backend Redis env 삭제, `deploy/eks/runtime.py` 필수 출력에서 `redis_host` 삭제, 관련 tftest·python 테스트 갱신. |
+| **G-01** | **Redis 를 프로비저닝했지만 쓰지 않는다** | 인프라: `data.tf` `aws_elasticache_replication_group.redis`, `backend.yaml` 이 `REDIS_HOST`·`SPRING_DATA_REDIS_*` 주입. 앱: `backend/gradle/libs.versions.toml` 에 Redis 클라이언트 없음, `modules/accommodation-search/build.gradle.kts:2` "Redis 캐시는 실 벤더 어댑터 단계", `docs/guides/aws-eks-deployment.md` "backend 에는 Redis adapter 구현이 없어", `backend/docs/design/work-graph.toml:2509` "Redis 유휴(TRIP-895)". 설계 3개가 서로 다르다: U0 미도입(`u0-foundation/nfr-design/nfr-design-patterns.md` §9) → U1 도입(`u1-.../tech-stack-decisions.md` U1-TS-4) → U6 "보류 상태 유지"(`u6-.../tech-stack-decisions.md`) | 비용만 나간다(prd 이면 노드 3개). TLS·SG 를 갖춘 공격면이 놀고 있다. 문서와 실제가 어긋난다 → 계획서 Q5 **[개정 · 2026-10-12] 결정됨 — 후속 작업(팀)**: Q5=A 제거. Terraform `aws_elasticache_*`·Redis SG·`redis_node_type`·`redis_host/port` 출력 삭제, Helm `config.redisHost/Port`·backend Redis env 삭제, `deploy/eks/runtime.py` 필수 출력에서 `redis_host` 삭제, 관련 tftest·python 테스트 갱신. **[개정 · 2026-11-05] 이행 — TRIP-1784(#1989)**, 운영 반영은 다음 정기 배포. |
 | **G-02** | **실사용 트래픽이 dev 스택에 있고, dev 데이터 계층은 단일 AZ 다** | `variables.tf` 설명 "스토어 출시를 dev 스택으로 받기로(2026-10-04)", `values-dev.yaml` "prd 신설은 비용 보류", `eas.json` production → `api-dev`. dev: `multi_az = local.production`(false), Redis `num_cache_clusters` 1, `single_nat_gateway=true` | AVAIL-01(99.9%, 다중 AZ 전제)과 SCALE-03 을 데이터 계층이 충족하지 못한다. AZ 장애 때 RDS 를 복구하는 동안 서비스가 중단되고, NAT 가 하나라 이그레스도 단일 장애점이다 → 계획서 Q1·Q2 **[개정 · 2026-10-12] 결정됨 — 후속 작업(팀)**: Q1=A·Q2=A. 단일 AZ 데이터 계층을 수용하고 AVAIL-01 을 월 99.5% 로 낮췄다(U0 `nfr-requirements.md` 개정 블록). 인프라 변경은 없다. 남은 일: prd 미적용 라이브 확인, GitHub Environment `dev` 보호 규칙 확인·설정. |
 | **G-03** | **알람·알림 라우팅이 0건이다** | `infra/terraform/stack/*.tf` 에 `aws_cloudwatch_metric_alarm`·`aws_sns_topic` 없음, 차트에도 없음 | U0 OBS-02(보안 이벤트 5분류 — "수집·라우팅은 Infra Design 이연")가 미해소다. SECURITY-14 와 RESILIENCY-05·07 도 간극으로 남는다 → 계획서 Q3 **[개정 · 2026-10-12] 결정됨 — 후속 작업(팀)**: Q3=A. 알람·SNS 토픽·Slack 연결을 Terraform 에 추가한다(5xx 비율, RDS CPU·여유 스토리지·연결 수, 파드 재시작/NotReady, OBS-02 리프레시 재사용 감지 로그 메트릭 필터). 담당자를 지정한다. |
 | **G-04** | **컨테이너 로그 중앙 수집이 꺼져 있다** | `environments/dev.tfvars`·`prd.tfvars` `container_logs_enabled = false`(주석: 2026-10-03 기준 cloudwatch-pod 역할 부재). `eks.tf` 주석 "Container stdout is otherwise reachable only through kubectl". 그런데 `docs/guides/aws-eks-deployment.md` 는 "Pod 로그는 … CloudWatch Logs 에서 본다"고 적는다(**문서 드리프트**). 켜도 보존은 7·30일이다 | 사고 뒤 로그를 추적하기 어렵다(파드가 교체되면 로그도 사라진다). SECURITY-03·14(90일) 간극. 라이브에서 켰는지는 **[라이브 미확인]** → 계획서 Q3 **[개정 · 2026-10-12] 결정됨 — 후속 작업(팀)**: Q3=A. bootstrap 재실행(`cloudwatch-pod` 역할 생성) → `dev.tfvars` `container_logs_enabled=true`·보존 90일 → deploy. 가이드의 로그 서술을 실제와 맞춘다. |
@@ -421,7 +423,7 @@ GitHub Actions --(OIDC 배포 역할)--> Terraform apply -> ECR 이미지 push -
 1. **관측 기준선(Q3)** — bootstrap 재실행 → 컨테이너 로그 켜기(보존 90일) → 최소 알람 + SNS → Slack → 담당자 지정. 라이브 앱의 안전 간극이라 가장 먼저 한다.
 2. **롤백 핀(Q6)** — `aws-deploy.yml` 이미지 태그 입력과 계약 테스트, 그리고 RT-9 리허설.
 3. **복원 리허설(Q4)** — PITR 복원 1회, 소요 시간 기록.
-4. **Redis 제거(Q5)** — Terraform·Helm·runtime·테스트. 제거 apply 는 dev 운영 스택에 대한 변경이므로 plan 을 먼저 검토한다.
+4. **Redis 제거(Q5)** — Terraform·Helm·runtime·테스트. 제거 apply 는 dev 운영 스택에 대한 변경이므로 plan 을 먼저 검토한다. **[개정 · 2026-11-05] 이행 — TRIP-1784(#1989)**
 5. **운영 환경 정리(Q1)** — prd 미적용 라이브 확인, `dev` Environment 보호 규칙, 가이드 정정(G-04·G-16).
 
 이번 결정 범위 밖으로 남는 간극: G-05(앱 메트릭·트레이스), G-06(NLB access log), G-08(backend HPA), G-09(VPC 엔드포인트), G-10(JWT 알고리즘), G-11(푸시 기본 off), G-12(NetworkPolicy 강제), G-13(공급망), G-14(CI 이미지 ≠ 배포 이미지).
