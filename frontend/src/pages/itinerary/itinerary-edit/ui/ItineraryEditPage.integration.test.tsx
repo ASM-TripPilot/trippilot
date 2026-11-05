@@ -321,6 +321,8 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       await waitFor(() => expect(itineraryGetCalls).toBe(1));
       // 짝 — 저장은 나가지 않았다.
       expect(putCalls).toBe(0);
+      // TRIP-1791 — 일정 편집(h24)에는 「선택」(여러 곳 빼기) 진입이 있다. 직접 짜기에는 없다(ManualPlanPage M1).
+      expect(screen.getByTestId('editor-select-toggle')).toBeOnTheScreen();
     });
   });
 
@@ -519,6 +521,21 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       expect(screen.getByTestId(META)).toHaveTextContent('1곳');
       // 짝 — day1 슬롯은 더 이상 활성 목록에 없다.
       expect(screen.queryByTestId(cardId('poi-a'))).toBeNull();
+
+      // TRIP-1791 — 여러 곳 빼기는 **보고 있는 날**만 지운다: 2일차에서 poi-c 를 골라 빼도 1일차는 그대로고,
+      // 저장 전이라 서버 쓰기(PUT)는 0이다.
+      fireEvent.press(screen.getByTestId('editor-select-toggle'));
+      fireEvent.press(screen.getByTestId('editor-select-check-poi-c'));
+      fireEvent.press(screen.getByTestId('editor-select-delete'));
+      fireEvent.press(screen.getByTestId('editor-select-confirm-ok'));
+
+      expect(screen.queryByTestId(cardIdDay2('poi-c'))).toBeNull();
+      expect(screen.getByTestId(META)).toHaveTextContent('0곳');
+      expect(putCalls).toBe(0);
+      fireEvent.press(screen.getByTestId('itinerary-edit-day-1'));
+      expect(await screen.findByTestId(cardId('poi-a'))).toBeOnTheScreen();
+      expect(screen.getByTestId(cardId('poi-b'))).toBeOnTheScreen();
+      expect(screen.getByTestId(META)).toHaveTextContent('2곳');
     });
   });
 
@@ -1317,8 +1334,8 @@ describe('드래그 실배선', () => {
     });
   });
 
-  describe('🔴 E5 · AC-3 ② — 고정 카드는 드롭존에 억지로 놓여도 안 지워진다', () => {
-    it('F 를 드롭존에 강제로 놓아도 헤더는 4곳 그대로고 저장 PUT 에 F 가 있다', async () => {
+  describe('🔴 E5 · AC-3 ② — 고정 카드는 드롭존에 억지로 놓여도 안 지워지고, 여러 곳 빼기에서도 체크가 잠겨 있다 (TRIP-1791 단계 추가)', () => {
+    it('F 를 드롭존에 강제로 놓아도 헤더는 4곳 그대로다 · 선택 모드에서 a·b 를 빼면(F 체크는 잠김) 저장 전 서버 호출 0, 저장 PUT 은 [F,c] 다', async () => {
       daySlots = WITH_FIXED;
       renderPage();
       await ready();
@@ -1326,7 +1343,33 @@ describe('드래그 실배선', () => {
       await fireEditDropOnZone(1);
 
       expect(screen.getByTestId(META)).toHaveTextContent('4곳');
-      expect(await saveAndReadOrder()).toEqual(['a', 'F', 'b', 'c']);
+
+      // TRIP-1791 — 이어서 「선택」으로 여러 곳 빼기. 고정 F 의 체크는 비활성이라 눌러도 선택되지 않는다.
+      fireEvent.press(screen.getByTestId('editor-select-toggle'));
+      expect(screen.getByTestId('editor-select-check-F')).toBeDisabled();
+      fireEvent.press(screen.getByTestId('editor-select-check-F'));
+      expect(screen.getByTestId('editor-select-count')).toHaveTextContent(
+        '0곳 선택'
+      );
+      fireEvent.press(screen.getByTestId('editor-select-check-a'));
+      fireEvent.press(screen.getByTestId('editor-select-check-b'));
+      expect(screen.getByTestId('editor-select-count')).toHaveTextContent(
+        '2곳 선택'
+      );
+      fireEvent.press(screen.getByTestId('editor-select-delete'));
+      fireEvent.press(screen.getByTestId('editor-select-confirm-ok'));
+
+      // 스토어에서 한 번에 빠졌고, 아직 아무것도 서버로 안 나갔다(저장은 기존 「일정 저장하기」).
+      expect(screen.getByTestId(META)).toHaveTextContent('2곳');
+      expect(
+        screen.queryByTestId(`slot-stopcard-${buildSlotKey(DAY, 'a')}`)
+      ).toBeNull();
+      expect(
+        screen.queryByTestId(`slot-stopcard-${buildSlotKey(DAY, 'b')}`)
+      ).toBeNull();
+      expect(putCalls).toBe(0);
+      // 이어 저장하면 남은 2곳만 실린다.
+      expect(await saveAndReadOrder()).toEqual(['F', 'c']);
     });
   });
 });
@@ -1515,6 +1558,19 @@ describe('여행 중 직접 수정(i07)', () => {
       // 완료 알약을 눌러도 시각 시트가 열리지 않는다(03b 경고-1 — press 불가를 직접 잠근다).
       fireEvent.press(screen.getByTestId(`slot-stopcard-locked-${k('p1')}`));
       expect(screen.queryByTestId(SHEET)).toBeNull();
+
+      // TRIP-1791 — 여행 중 편집에도 「선택」이 있고, 페이지가 계산한 방문 완료(p1·p2)는 체크가 잠긴다.
+      fireEvent.press(screen.getByTestId('editor-select-toggle'));
+      expect(screen.getByTestId('editor-select-check-p1')).toBeDisabled();
+      expect(screen.getByTestId('editor-select-check-p2')).toBeDisabled();
+      for (const poiId of ['p3', 'p4', 'p5']) {
+        expect(
+          screen.getByTestId(`editor-select-check-${poiId}`)
+        ).not.toBeDisabled();
+      }
+      // 잠긴 곳만 눌러서는 「빼기」가 열리지 않는다.
+      fireEvent.press(screen.getByTestId('editor-select-check-p1'));
+      expect(screen.getByTestId('editor-select-delete')).toBeDisabled();
     });
 
     it('i07 의 insert-2 press → 장소 추가 화면으로 insertAfter "2" 와 보고 있는 날 date 를 싣고 1회 push (TRIP-1115 · h12 와 같은 경로)', async () => {

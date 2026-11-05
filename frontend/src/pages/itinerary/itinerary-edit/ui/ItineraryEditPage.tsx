@@ -152,6 +152,7 @@ export function ItineraryEditPage({
     seed,
     seedUnlessDirty,
     deleteSlot,
+    deleteSlots,
     reorderSlots,
     adjustSlotTime,
     days,
@@ -416,6 +417,7 @@ export function ItineraryEditPage({
           )
         }
         onDeleteViaDrag={(poiId) => deleteSlot(activeDate, poiId)}
+        onDeleteSelected={(poiIds) => deleteSlots(activeDate, poiIds)}
         completedSlotKeys={completedSlotKeys}
         inTrip={inTrip}
       />

@@ -651,6 +651,9 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
         '6월 10일(수)'
       );
       expect(screen.getByTestId(META)).toHaveTextContent('3곳');
+      // TRIP-1791 — 같은 편집 뷰지만 직접 짜기는 「선택」(여러 곳 빼기)이 없다: 선택 prop 미주입 = 지금 화면.
+      // 카드 3장이 있는 화면이라 "카드가 없어서 숨음"이 아니다(짝: EditorView.test S-A ②, ItineraryEditPage R1).
+      expect(screen.queryByTestId('editor-select-toggle')).toBeNull();
     });
   });
 

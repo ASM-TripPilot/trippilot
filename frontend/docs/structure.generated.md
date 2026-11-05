@@ -415,7 +415,7 @@
 
 ## src/features/edit-itinerary/model/
 - `src/features/edit-itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
-- `src/features/edit-itinerary/model/itineraryEditStore.ts`  →  EditorSlot · EditorDaysItem · removeSlot · addSlot · insertSlotAt · ItineraryEditState · useItineraryEditStore
+- `src/features/edit-itinerary/model/itineraryEditStore.ts`  →  EditorSlot · EditorDaysItem · removeSlot · removeSlots · addSlot · insertSlotAt · ItineraryEditState · useItineraryEditStore
 - `src/features/edit-itinerary/model/slotSwapError.ts`  →  SLOT_SWAP_CONFLICT_CODES · SlotSwapErrorKind · SlotSwapError · resolveSlotSwapError
 - `src/features/edit-itinerary/model/sortSlotsByStartAt.ts`  →  sortSlotsByStartAt
 - `src/features/edit-itinerary/model/swapSlotPoi.ts`  →  swapSlotPoi
@@ -1956,6 +1956,7 @@
 - `src/widgets/map-sheet-shell/ui/MapFallbackBar.tsx`  →  MapFallbackBar
 - `src/widgets/map-sheet-shell/ui/MapSheetGlyphs.tsx`  →  MapPinOffGlyph · MapSheetRetryGlyph
 - `src/widgets/map-sheet-shell/ui/MapSheetShell.tsx`  →  MapSheetListSlot · MapSheetShellProps · MapSheetShell
+- `src/widgets/map-sheet-shell/ui/RemoveSelectedDialog.tsx`  →  RemoveSelectedDialog
 - `src/widgets/map-sheet-shell/ui/SheetHeader.tsx`  →  SheetHeaderProps · SheetHeader
 - `src/widgets/map-sheet-shell/ui/SlotDropZone.tsx`  →  SlotDropZoneProps · SlotDropZone
 - `src/widgets/map-sheet-shell/ui/dragDelete.ts`  →  DELETE_ZONE_BAR_HEIGHT · HoverGeometry · isOverDeleteZone · DragDecision · decideDragEnd
@@ -1984,4 +1985,4 @@
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1296개 파일
+합계 1297개 파일

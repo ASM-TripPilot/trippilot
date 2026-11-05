@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react-native';
+import { render, screen, within } from '@testing-library/react-native';
+import { Pressable, Text } from 'react-native';
 
 import { SheetHeader } from './SheetHeader';
 
@@ -70,5 +71,48 @@ describe('🔴 SheetHeader · SHH2 — 빈 dateLabel 세그+구분자 생략 (D5
     expect(screen.getByTestId('sheet-header-day')).toHaveTextContent(
       '6월 10일(수)'
     );
+  });
+});
+
+/* ──────────────── TRIP-1791 가산 — 오른쪽 `trailing` 슬롯 ────────────────
+ * 편집 머리 오른쪽에 「선택」 버튼을 담으려는 additive prop. 안 주는 소비처(다른 5곳)는 트리가 그대로다.
+ * ─────────────────────────────────────────────────────────────────────── */
+describe('SheetHeader · SHH3 — trailing 슬롯은 줄 때만 래퍼와 함께 생긴다', () => {
+  it('trailing 을 주면 래퍼 안에 그 노드가 있고 meta leaf 는 그대로이며, 안 주면 래퍼가 없다', () => {
+    // 준비 + 실행 — trailing 있는 렌더.
+    render(
+      <SheetHeader
+        title="일정 편집"
+        dayLabel="1일차"
+        dateLabel="6월 10일(수)"
+        meta="3곳"
+        trailing={
+          <Pressable accessibilityRole="button" testID="trailing-probe">
+            <Text>선택</Text>
+          </Pressable>
+        }
+      />
+    );
+
+    // 단언 — 래퍼 안에 있고, 기존 leaf 는 값 하나 그대로(완전일치).
+    expect(
+      within(screen.getByTestId('sheet-header-trailing')).getByTestId(
+        'trailing-probe'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('3곳');
+    screen.unmount();
+
+    // 짝 — 안 준 렌더에는 래퍼 자체가 없다(기존 소비처 무변경).
+    render(
+      <SheetHeader
+        title="일정 편집"
+        dayLabel="1일차"
+        dateLabel="6월 10일(수)"
+        meta="3곳"
+      />
+    );
+    expect(screen.queryByTestId('sheet-header-trailing')).toBeNull();
+    expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('3곳');
   });
 });

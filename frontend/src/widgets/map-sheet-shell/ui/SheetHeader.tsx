@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { Text, View } from 'react-native';
 
 /**
@@ -22,6 +22,8 @@ export interface SheetHeaderProps {
    * 제목 줄 폭을 넓혀 덜 끊기게 할 뿐 구분자가 줄 끝에 남는 구조 자체는 그대로다(좁은 폭·큰 글자는 실기 확인).
    * 소비처가 고른다 — 다른 헤더의 모양은 그대로다. */
   metaBelow?: boolean;
+  /** TRIP-1791 · 오른쪽 끝(meta 옆)에 얹는 노드 — 편집 머리의 「선택」 버튼. 줄 때만 래퍼가 생겨 안 주는 소비처는 트리가 그대로다. */
+  trailing?: ReactNode;
 }
 
 export function SheetHeader({
@@ -30,6 +32,7 @@ export function SheetHeader({
   dateLabel,
   meta,
   metaBelow = false,
+  trailing,
 }: SheetHeaderProps): ReactElement {
   // 비어있지 않은 세그먼트만 남긴다 — 순서(title→day→date)는 유지. 빈 값은 leaf 도, 앞 구분자도 안 뜬다.
   const segments = [
@@ -37,6 +40,15 @@ export function SheetHeader({
     { testID: 'sheet-header-day', value: dayLabel },
     { testID: 'sheet-header-date', value: dateLabel },
   ].filter((segment) => segment.value !== '');
+
+  const metaText = (
+    <Text
+      testID="sheet-header-meta"
+      className="font-noto text-label text-muted"
+    >
+      {meta}
+    </Text>
+  );
 
   return (
     <View
@@ -67,12 +79,14 @@ export function SheetHeader({
           </Fragment>
         ))}
       </View>
-      <Text
-        testID="sheet-header-meta"
-        className="font-noto text-label text-muted"
-      >
-        {meta}
-      </Text>
+      {trailing === undefined ? (
+        metaText
+      ) : (
+        <View className="flex-row items-center gap-sm">
+          {metaText}
+          <View testID="sheet-header-trailing">{trailing}</View>
+        </View>
+      )}
     </View>
   );
 }
