@@ -59,8 +59,12 @@ def bootstrap_manifests(outputs, namespace, run_id, master, database):
         {"apiVersion": "v1", "kind": "Secret", "type": "Opaque", "metadata": metadata, "stringData": secret_values},
         {"apiVersion": "v1", "kind": "ConfigMap", "metadata": metadata, "data": {"bootstrap.sql": Path(__file__).with_name("bootstrap.sql").read_text()}},
         {"apiVersion": "batch/v1", "kind": "Job", "metadata": metadata,
+         # runtime_pois.manifest 와 같은 이유 — Karpenter 노드 통합이 짧은 배치 Job 을
+         # 중간에 쫓아내지 못하게 막는다.
          "spec": {"backoffLimit": 0, "activeDeadlineSeconds": 600, "ttlSecondsAfterFinished": 600,
-                  "template": {"metadata": {"labels": {"app.kubernetes.io/name": "trippilot-db-init"}}, "spec": pod}}},
+                  "template": {"metadata": {"labels": {"app.kubernetes.io/name": "trippilot-db-init"},
+                                            "annotations": {"karpenter.sh/do-not-disrupt": "true"}},
+                               "spec": pod}}},
     ]
 
 

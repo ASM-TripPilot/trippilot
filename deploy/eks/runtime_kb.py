@@ -51,7 +51,10 @@ def manifest(namespace, image):
         # 실효 1코어 ≈3초/건 ≈74분까지 갈 수 있어 60분에서 늘렸다. 전량 재적재는 모델이 바뀔 때뿐이고, 평소엔 본문·payload 가 바뀐
         # 문서만 다시 임베딩한다(seed 에서 지운 문서의 옛 행은 지우지 않는다).
         "spec": {"backoffLimit": 2, "activeDeadlineSeconds": DEADLINE_SEC, "ttlSecondsAfterFinished": 3600,
-                 "template": {"metadata": {"labels": {"app.kubernetes.io/name": NAME}},
+                 # runtime_pois.manifest 와 같은 이유 — Karpenter 노드 통합이 짧은 배치 Job 을
+                 # 중간에 쫓아내지 못하게 막는다. 마감이 90분이라 더 걸리기 쉽다.
+                 "template": {"metadata": {"labels": {"app.kubernetes.io/name": NAME},
+                                           "annotations": {"karpenter.sh/do-not-disrupt": "true"}},
                               "spec": {
                                   "restartPolicy": "Never", "automountServiceAccountToken": False,
                                   "nodeSelector": {"kubernetes.io/os": "linux", "kubernetes.io/arch": "amd64"},
