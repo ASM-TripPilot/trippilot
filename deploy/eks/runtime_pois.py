@@ -76,7 +76,13 @@ def manifest(namespace, image, script_source, *, close_missing=False, close_miss
         "metadata": {"name": NAME, "namespace": namespace},
         # 멱등(upsert)이라 재시도가 이어받는다. 20분: 19,084건·500건 묶음 39회 — 로컬 수 초, 원격 DB 여유.
         "spec": {"backoffLimit": 1, "activeDeadlineSeconds": DEADLINE_SEC, "ttlSecondsAfterFinished": 3600,
-                 "template": {"metadata": {"labels": {"app.kubernetes.io/name": NAME}},
+                 # Karpenter 노드 통합(consolidation)이 이 파드를 "활용도 낮음"으로 보고 중간에 쫓아낸다
+                 # (2026-11-05 실측 — 66/145 묶음까지 간 뒤 Evicted: Underutilized). 짧게 끝나는 배치
+                 # Job 은 끝까지 가게 막아야 한다 — dev-target Deployment 의 PDB 없음(통합 허용) 결정과는
+                 # 다른 자리다: 거긴 상시 대기하는 복제본이라 통합이 비용을 아끼지만, 이건 한 번 쓰고
+                 # 끝나는 작업이라 중간에 끊기면 배포 전체가 실패한다.
+                 "template": {"metadata": {"labels": {"app.kubernetes.io/name": NAME},
+                                           "annotations": {"karpenter.sh/do-not-disrupt": "true"}},
                               "spec": {
                                   "restartPolicy": "Never", "automountServiceAccountToken": False,
                                   "nodeSelector": {"kubernetes.io/os": "linux", "kubernetes.io/arch": "amd64"},
