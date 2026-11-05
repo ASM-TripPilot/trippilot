@@ -300,7 +300,8 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
   // B안(2026-11-01) — 옛 `SettingsScreen.test.tsx`(뷰 단위)가 보던 화면 동작을 서버 응답만 바꿔 이 페이지 위에서 본다.
   describe('화면 동작 — 그룹·행 분기·이동·버전·출처·유예 (옛 뷰 단위 흡수)', () => {
     const SOURCE_TITLE = '데이터 출처';
-    const SOURCE_DATASETS = '한국관광공사 TourAPI · Overture Maps Foundation';
+    const SOURCE_DATASETS =
+      '한국관광공사 TourAPI · 행정안전부 LOCALDATA · Overture Maps Foundation · 위키백과(CC BY-SA 4.0)';
     const SOURCE_OSM = '© OpenStreetMap contributors';
     const GROUP_LABELS = [
       '계정',
