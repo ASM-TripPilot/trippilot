@@ -7,7 +7,11 @@ import com.trippilot.auth.domain.consent.ConsentRecord
 import com.trippilot.auth.domain.consent.MarketingConsent
 import com.trippilot.auth.domain.consent.TermsType
 import com.trippilot.auth.domain.consent.TermsVersion
+import com.trippilot.auth.domain.location.LocationConsent
+import com.trippilot.auth.domain.location.LocationLegalEvent
 import com.trippilot.auth.domain.port.ConsentRecordRepository
+import com.trippilot.auth.domain.port.LocationConsentStateRepository
+import com.trippilot.auth.domain.port.LocationLegalLogRepository
 import com.trippilot.auth.domain.port.MarketingConsentRepository
 import com.trippilot.auth.domain.port.TermsVersionRepository
 import io.kotest.core.spec.style.StringSpec
@@ -36,6 +40,17 @@ private class FacadeMarketing : MarketingConsentRepository {
     override fun save(consent: MarketingConsent) = consent
 }
 
+private class FacadeLocationState : LocationConsentStateRepository {
+    override fun find(accountId: AccountId): LocationConsent? = null
+    override fun save(state: LocationConsent) = state
+    override fun lockRouteRecordingConsent(accountId: AccountId) = false
+}
+
+private class FacadeLegalLog : LocationLegalLogRepository {
+    override fun append(event: LocationLegalEvent) {}
+    override fun purgeExpired(): Int = 0
+}
+
 /** 온보딩 게이트가 부트스트랩 재동의 로직과 정합함을 검증(구버전 GRANT 로 통과 방지). */
 class AuthConsentFacadeTest : StringSpec({
 
@@ -44,8 +59,16 @@ class AuthConsentFacadeTest : StringSpec({
     val clock = Clock.fixed(now, ZoneOffset.UTC)
     val account = AccountId(UUID.randomUUID())
 
-    fun facade(terms: List<TermsVersion>, records: FacadeRecords) =
-        AuthConsentFacade(ConsentService(FacadeTerms(terms), records, FacadeMarketing(), clock))
+    fun facade(terms: List<TermsVersion>, records: FacadeRecords): AuthConsentFacade {
+        val location = LocationConsentService(
+            FacadeLocationState(), FacadeLegalLog(), FacadeTerms(terms), records,
+            object : com.trippilot.core.event.DomainEventPublisher {
+                override fun publish(event: com.trippilot.core.event.DomainEvent) {}
+            },
+            clock,
+        )
+        return AuthConsentFacade(ConsentService(FacadeTerms(terms), records, FacadeMarketing(), location, clock))
+    }
 
     "필수 약관 현행 버전 동의면 true" {
         val records = FacadeRecords()

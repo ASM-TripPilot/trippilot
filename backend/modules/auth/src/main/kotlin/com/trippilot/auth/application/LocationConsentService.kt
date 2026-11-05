@@ -204,17 +204,40 @@ class LocationConsentService(
         stateRepository.save(state)
     }
 
+    /**
+     * 약관 경로(온보딩 일괄·개별 변경)가 LOCATION_TERMS 증적을 **이미 남긴 뒤** L2 를 맞춘다(TRIP-1800).
+     * 증적은 호출측 몫이라 여기선 상태·법정 로그·철회 신호만 — [update] 와 같은 전이를 같은 기록으로 남긴다.
+     * 종전엔 L2 가 설정 토글로만 켜져, 온보딩에서 위치 약관에 동의한 사용자도 GPS 가 막혀 있었다.
+     */
+    @Transactional
+    fun syncLegalConsentFromTerms(accountId: AccountId, granted: Boolean, version: String, channel: ConsentChannel) {
+        val now = clock.instant()
+        val state = stateRepository.find(accountId) ?: LocationConsent.initial(accountId, now)
+        if (state.legalConsent == granted) return
+        appendConsentLog(accountId, TermsType.LOCATION_TERMS, version, channel, granted, now)
+        stateRepository.save(state.withLegalConsent(granted, now))
+        if (!granted) {
+            events.publish(LocationLegalConsentRevoked(accountId.value.toString(), LocationLegalConsentRevoked.REASON_REVOKED))
+        }
+    }
+
     /** L2/L3 전이를 consent_record(채널 SETTINGS) + location_legal_log(GRANTED/REVOKED)로 이중 기록. */
     private fun recordConsentChange(accountId: AccountId, termsType: TermsType, granted: Boolean, now: Instant) {
         val version = terms.findCurrent(termsType, now)?.version
             ?: throw ResourceNotFound("현행 약관을 찾을 수 없습니다: $termsType")
         val action = if (granted) ConsentAction.GRANT else ConsentAction.REVOKE
         consentRecords.append(ConsentRecord.of(accountId, termsType, version, action, ConsentChannel.SETTINGS, now))
+        appendConsentLog(accountId, termsType, version, ConsentChannel.SETTINGS, granted, now)
+    }
+
+    private fun appendConsentLog(
+        accountId: AccountId, termsType: TermsType, version: String, channel: ConsentChannel, granted: Boolean, now: Instant,
+    ) {
         legalLog.append(
             LocationLegalEvent.of(
                 accountId,
                 if (granted) LocationLegalEventType.CONSENT_GRANTED else LocationLegalEventType.CONSENT_REVOKED,
-                mapOf("termsType" to termsType.name, "version" to version, "channel" to ConsentChannel.SETTINGS.name),
+                mapOf("termsType" to termsType.name, "version" to version, "channel" to channel.name),
                 now,
             ),
         )

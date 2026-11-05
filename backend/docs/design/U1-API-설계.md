@@ -95,6 +95,8 @@ GET  /api/v1/health/liveness  (LB 전용)
 | PATCH `/me/location-consent/os-permission` | L1 OS 권한 미러 보고(단말→서버) | G182 |
 
 > **와이어프레임 정합(c06/c08/l06)**: `LOCATION_TERMS`(위치기반서비스 약관·법정 동의 L2)는 온보딩 약관 게이트(c06)에서 받지 않고 **위치 동의 플로우(c08 프리프롬프트·l06 위치정보 동의)** 에서 수집한다 — `PUT /me/location-consent` 시 `consent_record(LOCATION_TERMS)` 증적을 남긴다. 즉 온보딩 완료 필수 약관은 이용약관·개인정보 2종이고, 위치 동의는 **위치 기능 게이트**(온보딩 게이트 아님). c08 "나중에 하기"·l06 "동의를 꺼도 계속 동작" 반영. → 정본 INV-C3(필수 3종) 대비 변경.
+>
+> **[개정 · 2026-11-06 · TRIP-1800]** 실제 앱 온보딩(c06)은 `LOCATION_TERMS` 를 필수로 **받는다**(`frontend` `useTermsConsent` — 서버 필수 판정은 여전히 2종). 그런데 L2 는 `PUT /me/location-consent` 로만 켜져, 온보딩에서 동의한 사용자(운영 284명 중 281명)의 GPS 가 막혀 있었다. 이제 **어느 경로든 `LOCATION_TERMS` 증적이 실제로 남으면 L2 를 같이 맞춘다** — `POST /me/consents`(온보딩)·개별 변경(`PATCH /me/consents/{termsType}`, 설정·재동의)의 GRANT 는 L2 를 켜고, REVOKE 는 끄고 좌표 파기 신호(`LocationLegalConsentRevoked`)를 낸다. 법정 로그(`location_legal_log`)에는 그 경로의 채널(ONBOARDING·SETTINGS·RECONSENT)로 남는다. 기존 가입자 백필은 별도 결정.
 
 ### 3.4 프로필·닉네임 (M2 · C3)
 
