@@ -56,7 +56,7 @@ Preconditions:
 - **내보내기.** testID: `settings-export-row`("데이터 내보내기")를 누른다 → OS 공유 시트가 뜬다. 시트를 취소로 닫는다. 잘린 계정이면 testID: `settings-export-truncated` "일부 항목이 잘렸어요: …". 실패면 testID: `settings-export-error` 에 "내보내기 정보를 불러오지 못했어요. 다시 시도해 주세요." / "이 앱 버전에서는 파일로 내보낼 수 없어요. 앱을 업데이트해 주세요." / "내보내기 파일을 만들지 못했어요. 다시 시도해 주세요." 중 하나.
 - **제휴 안내 토글.** testID: `settings-affiliate-toggle`(접근성 라벨 "외부 이동 시 제휴 안내 다시 보기")를 누른다 → 즉시 반대 상태. 숙소 상세의 외부 이동 고지 시트가 다시 뜨는지/안 뜨는지로 한 번 더 읽는다(숙소 레인). 실패면 토글이 되돌아가고 testID: `settings-affiliate-error` "설정을 바꾸지 못했어요. 다시 시도해 주세요.". 원래 값으로 되돌린다.
 - **하위 화면 진입.** testID: `settings-nav-preferences` → `settings-preferences.md`, `settings-nav-location-consent` → `settings-location.md`, `settings-nav-personalization` → `settings-preferences.md`, `settings-nav-notifications`("알림 설정") → `settings-notifications.md`, `settings-nav-terms-TERMS_OF_SERVICE`·`settings-nav-terms-PRIVACY_POLICY`·`settings-nav-terms-LOCATION_TERMS` → `terms.md`. 각각 진입 후 그 화면의 뒤로 버튼으로 돌아온다.
-- **하단.** 맨 아래로 스크롤 → `TripPilot v<버전>`, testID: `settings-data-attribution`("데이터 출처"·"한국관광공사 TourAPI · Overture Maps Foundation"), testID: `settings-osm-copyright` 를 누르면 사파리로 `https://www.openstreetmap.org/copyright`. 앱으로 돌아와 설정이 그대로인지 본다.
+- **하단.** 맨 아래로 스크롤 → `TripPilot v<버전>`, testID: `settings-data-attribution`("데이터 출처"·"한국관광공사 TourAPI · 행정안전부 LOCALDATA · Overture Maps Foundation · 위키백과(CC BY-SA 4.0)"), testID: `settings-osm-copyright` 를 누르면 사파리로 `https://www.openstreetmap.org/copyright`. 앱으로 돌아와 설정이 그대로인지 본다.
 - **뒤로.** testID: `settings-back` → 마이 탭.
 
 ## Gotchas
