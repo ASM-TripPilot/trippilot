@@ -3,7 +3,11 @@ package com.trippilot.recalculation.application
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.itinerarygeneration.api.ItineraryFacade
 import com.trippilot.itinerarygeneration.api.ItineraryRef
+import com.trippilot.itinerarygeneration.api.DeferredPlace
+import com.trippilot.itinerarygeneration.api.PriorReplan
 import com.trippilot.itinerarygeneration.api.ReplanProposal
+import com.trippilot.recalculation.adapter.`in`.web.DeferredPlaceResponse
+import com.trippilot.recalculation.adapter.`in`.web.ReplanSessionResponse
 import com.trippilot.placedata.api.FrozenPoiView
 import com.trippilot.savedaccommodation.api.BaseAnchorFacade
 import com.trippilot.savedaccommodation.api.DayAnchorView
@@ -40,6 +44,7 @@ private class ExecSessions : ReplanSessionRepository {
     override fun findSystemByTrigger(triggerId: UUID) = store.values.systemByTrigger(triggerId)
     override fun findLatestSystem(tripId: UUID, targetDate: LocalDate) = store.values.latestSystem(tripId, targetDate)
     override fun countSystemSince(tripId: UUID?, since: Instant) = store.values.countSystemSince(tripId, since)
+    override fun findAppliedOn(tripId: UUID, targetDate: LocalDate) = store.values.appliedOn(tripId, targetDate)
     override fun purgeOrigins(tripIds: List<UUID>): Int {
         val hit = store.values.filter { it.tripId in tripIds && it.origin.kind in setOf(OriginKind.GPS, OriginKind.MANUAL) }
         hit.forEach { store[it.sessionId] = it.copy(origin = ReplanOrigin(OriginKind.PURGED, null, null)) }
@@ -343,5 +348,105 @@ class ReplanExecutionTest : StringSpec({
         cmd.reasons shouldContainExactly listOf("비가 와요")
         cmd.directives shouldContainExactly listOf("실내로")
         cmd.originLat shouldBe 33.45
+    }
+
+    // ── 앞 요청 기억(F-8) — 같은 날 반영된 재계획이 요청해서 넣은 곳을 다음 재계획에 싣는다 ─────────────
+
+    /** 그 날 반영된 세션 하나 — 초안에 AI 가 돌려준 요청한 곳([requested], null = 그 칸을 모르던 AI)을 담는다. */
+    fun applied(
+        requested: List<UUID>?, freeText: String, closedAt: String, target: LocalDate = today, tripId: UUID = trip,
+        status: ReplanStatus = ReplanStatus.APPLIED, revertedAt: String? = null,
+    ): ReplanSession {
+        val at = Instant.parse(closedAt)
+        return ReplanSession.start(
+            tripId, FakeReplans.ITINERARY_ID, null, ReplanScope.FULL_DAY, target, at, ReplanOrigin(OriginKind.GPS, 33.45, 126.56),
+            emptyList(), emptyList(), freeText, emptyList(), at.minusSeconds(60),
+        ).copy(
+            status = status, closedAt = at, revertedAt = revertedAt?.let(Instant::parse),
+            draft = FakeReplans.sampleProposal(target).copy(requestedPoiIds = requested).toMap(),
+        )
+    }
+
+    "앞 요청은 같은 날 반영·안 되돌린 세션 중 요청한 곳을 저장한 것만 싣는다 — 최근 반영 먼저" {
+        val club = UUID.randomUUID()
+        val forest = UUID.randomUUID()
+        val f = fixture()
+        listOf(
+            applied(listOf(club), "클럽 넣어줘", "2026-08-11T01:00:00Z"),
+            applied(listOf(forest), "숲 산책로 꼭", "2026-08-11T02:00:00Z"),
+            // 새 AI 가 "요청한 곳 없음"이라 답한 회차도 싣는다 — 그래야 AI 가 같은 이력을 사유로 다시 읽어 더하지 않는다
+            applied(emptyList(), "오늘 남은 일정 다시 맞춰줘", "2026-08-11T01:30:00Z"),
+            applied(listOf(UUID.randomUUID()), "카페 넣어줘", "2026-08-11T02:20:00Z", revertedAt = "2026-08-11T02:30:00Z"), // 되돌림
+            applied(null, "옛 AI 의 회차", "2026-08-11T00:30:00Z"),                                                         // 칸 없음
+            applied(listOf(UUID.randomUUID()), "내일 것", "2026-08-11T02:40:00Z", target = today.plusDays(1)),               // 다른 날
+            applied(listOf(UUID.randomUUID()), "남의 여행", "2026-08-11T02:50:00Z", tripId = UUID.randomUUID()),             // 다른 여행
+            applied(listOf(UUID.randomUUID()), "취소한 회차", "2026-08-11T02:55:00Z", status = ReplanStatus.CANCELED),        // 반영 안 됨
+        ).forEach { f.sessions.save(it) }
+
+        f.start()
+
+        f.replans.commands.single().priorRequests shouldContainExactly listOf(
+            PriorReplan("숲 산책로 꼭", listOf(forest)),
+            PriorReplan("오늘 남은 일정 다시 맞춰줘", emptyList()),
+            PriorReplan("클럽 넣어줘", listOf(club)),
+        )
+    }
+
+    /**
+     * **배포 순서 가드(앞으로 가는 쪽).** AI 요청 스키마는 모르는 키를 422 로 거절한다 — 요청한 곳을 저장한 세션이 없으면(전부 옛 AI 의
+     * 응답·이 기능 이전 반영) 아무것도 싣지 않고, 어댑터가 빈 칸을 키째 뺀다(`HttpScheduleAgentAdapterTest`). 새 AI 가 응답해야 그 칸이
+     * 생긴다. 옛·새 AI 파드가 섞인 창(롤링·롤백)은 어댑터가 422 에서 이 칸을 빼고 한 번 다시 불러 닫는다.
+     */
+    "요청한 곳을 저장한 세션이 없으면 앞 요청을 싣지 않는다 — 그 칸을 모르는 AI 에 보내지 않는다" {
+        val f = fixture()
+        f.sessions.save(applied(null, "클럽 넣어줘", "2026-08-11T01:00:00Z"))
+        f.sessions.save(applied(null, "숲 산책로 꼭", "2026-08-11T02:00:00Z"))
+
+        f.start()
+
+        f.replans.commands.single().priorRequests shouldBe emptyList()
+    }
+
+    /**
+     * AI 는 맨 앞(가장 최근 반영) 회차의 기억만 읽는다 — 응답이 이미 사슬이라서다. 가장 최근 회차가 그 칸을 모르면(옛 AI 파드가 답했다)
+     * 그 앞 회차들을 싣지 않는다: 앞 사슬은 칸 없는 회차가 잊게 한 곳("클럽은 빼줘")을 몰라, 실으면 잊은 곳이 되살아난다. 그때 AI 는
+     * 변경 이력 근사(F-5)로 기억한다.
+     */
+    "가장 최근 반영 세션이 요청한 곳을 모르면 그 앞 회차의 기억도 싣지 않는다" {
+        val f = fixture()
+        f.sessions.save(applied(listOf(UUID.randomUUID()), "클럽 넣어줘", "2026-08-11T01:00:00Z"))
+        f.sessions.save(applied(null, "클럽은 빼줘", "2026-08-11T02:00:00Z"))
+
+        f.start()
+
+        f.replans.commands.single().priorRequests shouldBe emptyList()
+    }
+
+    "반영한 재계획이 요청한 곳이 다음 재계획의 앞 요청이 된다 — 되돌리면 빠진다" {
+        val club = UUID.randomUUID()
+        val f = fixture(FakeReplans(proposal = FakeReplans.sampleProposal().copy(requestedPoiIds = listOf(club))))
+        val first = f.start()
+        f.service.apply(acc, trip, first.sessionId)
+
+        f.start()
+        f.replans.commands.last().priorRequests shouldBe listOf(PriorReplan("비가 와요 · 실내로", listOf(club)))
+
+        f.sessions.save(f.sessions.findById(first.sessionId)!!.copy(revertedAt = clock.instant()))
+        f.start()
+        f.replans.commands.last().priorRequests shouldBe emptyList()
+    }
+
+    // F-7 — 앱이 세션 응답의 이 칸으로 "‘서울광장’은 2일차 요청이라 이번엔 넣지 않았어요 [2일차에 넣어 다시 짜기]"를 그린다.
+    "초안이 미룬 갈 곳이 세션 응답에 실린다 — 반영 뒤에도" {
+        val later = UUID.randomUUID()
+        val deferred = DeferredPlace(later, "서울광장", today.plusDays(1))
+        val f = fixture(FakeReplans(proposal = FakeReplans.sampleProposal().copy(deferredPlaces = listOf(deferred))))
+        val opened = f.start()
+
+        val drafted = f.service.view(acc, f.sessions.findById(opened.sessionId)!!)
+        drafted.deferredPlaces shouldBe listOf(deferred)
+        ReplanSessionResponse.from(drafted).deferredPlaces shouldBe listOf(DeferredPlaceResponse(later, "서울광장", today.plusDays(1)))
+        f.service.view(acc, f.service.apply(acc, trip, opened.sessionId)).deferredPlaces shouldBe listOf(deferred)
+        f.service.view(acc, applied(null, "옛 초안", "2026-08-11T01:00:00Z")).deferredPlaces shouldBe emptyList()
     }
 })

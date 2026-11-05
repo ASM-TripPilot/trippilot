@@ -17,7 +17,7 @@ import { SlotCandidateSheet } from './SlotCandidateSheet';
  *
  * 무엇을 보장하나:
  *  - 헤더 제목 `{현재 장소명} 대신` + 부제 `{HH:mm}–{HH:mm} · {컨셉} 슬롯의 다른 후보 · 동선은 …`.
- *  - 후보 행: 사진·이름·`#태그 · 태그`·거리 — 배지·추천이유(rationale) leaf·"이동" 라벨은 **없다**.
+ *  - 후보 행: 사진·이름·`#태그 · 태그`·거리 — 배지·"이동" 라벨은 **없다**. 추천 이유 문장은 TRIP-1780 부터 후보 행에만 뜬다.
  *  - 현재 행: 회색 "현재" 칩, 라디오 없음(탭 불가 · BR-U3-24).
  *  - 라디오 2단계: 행 press → onSelectRadio(제어 상태만) / 선택 전 CTA 비활성·무발화 / 선택 후 1회 확정.
  *  - 0건: ◇ 아이콘 + 2줄 문구 + CTA "장소 검색"(h13). "장소 검색 ›" 링크도 h13.
@@ -57,7 +57,7 @@ const CANDIDATES = [
 
 /** 후보 카드 **루트**만 잡는 셀렉터 — 하위·특수 testID 는 부정 룩어헤드로 제외(개명·재설계 반영). */
 const CANDIDATE_ROOT =
-  /^itinerary-candidate-(?!sheet|scrim|current|empty|error|place-search|confirm|name-|image-|distance-|tags-|radio-|check-)/;
+  /^itinerary-candidate-(?!sheet|scrim|current|empty|error|place-search|confirm|name-|image-|distance-|tags-|rationale-|radio-|check-)/;
 
 const renderedCandidatePoiIds = () =>
   screen
@@ -117,7 +117,7 @@ describe('🔴 SlotCandidateSheet — 헤더(AC-1·5·V1)', () => {
 });
 
 describe('🔴 SlotCandidateSheet — 후보 행 재설계(AC-2)', () => {
-  it('S2 · 사진·이름·`#태그 · 태그`·거리 — 배지·추천이유·"이동" 라벨은 없다', () => {
+  it('S2 · 사진·이름·`#태그 · 태그`·거리 — 배지·"이동" 라벨은 없다', () => {
     renderSheet();
 
     // 선택 후보 p2 로 전 요소를 확인한다.
@@ -139,8 +139,7 @@ describe('🔴 SlotCandidateSheet — 후보 행 재설계(AC-2)', () => {
       screen.getByTestId('itinerary-candidate-distance-p2')
     ).toHaveTextContent('1.1km');
 
-    // 재설계로 버린 것: 추천이유 leaf 부재(부정 짝) + "이동" 라벨 부재.
-    expect(screen.queryByTestId('itinerary-candidate-rationale-p2')).toBeNull();
+    // 재설계로 버린 것: "이동" 라벨 부재. (추천 이유 문장은 TRIP-1780 부터 보인다 — 맨 아래 describe.)
     expect(screen.queryByText(/이동/)).toBeNull();
   });
 
@@ -561,5 +560,75 @@ describe('🔴 SlotCandidateSheet — 0건 사유 얼굴(TRIP-948)', () => {
     expect(
       screen.getByTestId('itinerary-candidate-radio-p2')
     ).toBeOnTheScreen();
+  });
+});
+
+/**
+ * TRIP-1780 · 후보 행 추천 이유 문장 — 서버가 준 `rationale` 한 문장을 후보 행에만 보인다.
+ * 메타 줄 아래·2줄·색은 생김새라 jest 대상이 아니다(README 판정 4 · 6-b 몫).
+ *
+ * ★ 현재 행 "문장 없음"은 `current.rationale` 에 문장을 **일부러 실어야** 판정력이 있다(컨테이너가 현재 행엔
+ *   안 채워 값 없는 픽스처로는 코드가 틀려도 green).
+ */
+describe('🔴 SlotCandidateSheet — TRIP-1780 후보 행 추천 이유 문장', () => {
+  const SENT_P2 = '조용한 골목 산책을 좋아하는 취향에 맞아요';
+  const SENT_P3 = '근현대 역사를 한눈에 볼 수 있어 전시 일정에 잘 어울려요';
+  const rationaleOf = (poiId: string) =>
+    `itinerary-candidate-rationale-${poiId}`;
+
+  it('SS1 · 후보마다 자기 문장이 자기 행에 그대로 뜬다(서로 바뀌지 않는다)', () => {
+    renderSheet({
+      candidates: [
+        { ...CANDIDATES[0], rationale: SENT_P2 },
+        { ...CANDIDATES[1], rationale: SENT_P3 },
+      ],
+    });
+
+    expect(screen.getByTestId(rationaleOf('p2'))).toHaveTextContent(SENT_P2);
+    expect(screen.getByTestId(rationaleOf('p3'))).toHaveTextContent(SENT_P3);
+  });
+
+  it('SS2 · 현재 행에 문장을 실어도 현재 행엔 문장이 없다(후보 행은 있다)', () => {
+    renderSheet({
+      current: { ...CURRENT, rationale: '현재 장소에 달린 문장' },
+      candidates: [{ ...CANDIDATES[0], rationale: SENT_P2 }],
+    });
+
+    expect(screen.getByTestId('itinerary-candidate-current')).toBeOnTheScreen();
+    expect(screen.getByTestId(rationaleOf('p2'))).toHaveTextContent(SENT_P2);
+    expect(screen.queryByTestId(rationaleOf('current'))).toBeNull();
+    expect(screen.queryByText('현재 장소에 달린 문장')).toBeNull();
+  });
+
+  it.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['빈 문자열', ''],
+    ['공백뿐', '   '],
+  ])(
+    'SS3 · 문장이 %s 이면 그 행에 문장 요소가 없다 — 다른 행의 문장은 그대로',
+    (_label, blank) => {
+      renderSheet({
+        candidates: [
+          { ...CANDIDATES[0], rationale: blank },
+          { ...CANDIDATES[1], rationale: SENT_P3 },
+        ],
+      });
+
+      expect(screen.getByTestId('itinerary-candidate-p2')).toBeOnTheScreen();
+      expect(screen.queryByTestId(rationaleOf('p2'))).toBeNull();
+      expect(screen.getByTestId(rationaleOf('p3'))).toHaveTextContent(SENT_P3);
+    }
+  );
+
+  it('SS4 · 문장은 원문 그대로다 — 앞뒤·가운데 공백을 trim·축소하지 않는다', () => {
+    const raw = '  앞뒤 공백  두 칸 ';
+
+    renderSheet({ candidates: [{ ...CANDIDATES[0], rationale: raw }] });
+
+    // 기본 매처는 trim·공백 축소를 양쪽에 적용하므로 항등 normalizer 로 원문을 잰다.
+    expect(screen.getByTestId(rationaleOf('p2'))).toHaveTextContent(raw, {
+      normalizer: (text: string) => text,
+    });
   });
 });

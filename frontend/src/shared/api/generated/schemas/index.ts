@@ -173,6 +173,7 @@ export * from './registerPushTokenRequestPlatform';
 export * from './registerRoute';
 export * from './registerSavedStayRequest';
 export * from './reorderPhotosRequest';
+export * from './replanDeferredPlace';
 export * from './replanDiff';
 export * from './replanDiffEntry';
 export * from './replanDiffEntryChange';

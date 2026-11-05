@@ -405,6 +405,9 @@ class _StubRag:
     def __init__(self, ranked: tuple[str, ...]) -> None:
         self._ranked = tuple(PoiId(r) for r in ranked)
 
+    def warm_docs(self, user_request, reason):  # 검색기 없는 PlanB 와 같다 — 미리 임베딩할 것이 없다
+        pass
+
     def run(self, request):
         return PlanBRagResult(
             alternatives=(Alternative(label="A", poi_ids=self._ranked[:1], rationale="r"),),

@@ -5,6 +5,7 @@ import com.trippilot.recalculation.domain.ReplanInitiator
 import com.trippilot.recalculation.domain.ReplanOrigin
 import com.trippilot.recalculation.domain.ReplanSession
 import com.trippilot.recalculation.domain.ReplanSessionRepository
+import com.trippilot.recalculation.domain.ReplanStatus
 import org.springframework.dao.DataIntegrityViolationException
 import java.time.Instant
 import java.time.LocalDate
@@ -20,6 +21,11 @@ internal fun Iterable<ReplanSession>.latestSystem(tripId: UUID, targetDate: Loca
 
 internal fun Iterable<ReplanSession>.countSystemSince(tripId: UUID?, since: Instant): Int =
     count { it.initiatedBy == ReplanInitiator.SYSTEM && (tripId == null || it.tripId == tripId) && !it.createdAt.isBefore(since) }
+
+/** 그 날 반영·안 되돌린 세션, 최근 반영 먼저 — 실물은 JPA 파생 질의(`…StatusAndRevertedAtIsNullOrderByClosedAtDesc`). */
+internal fun Iterable<ReplanSession>.appliedOn(tripId: UUID, targetDate: LocalDate): List<ReplanSession> =
+    filter { it.status == ReplanStatus.APPLIED && it.revertedAt == null && it.tripId == tripId && it.targetDate == targetDate }
+        .sortedByDescending { it.closedAt }
 
 /**
  * 재계획 세션 저장소 대역 — **DB 의 두 부분 유니크를 흉내 낸다**(여행당 열린 세션 1개 · 트리거당 선계산 1개).
@@ -49,6 +55,7 @@ internal class InMemoryReplanSessions : ReplanSessionRepository {
     override fun findSystemByTrigger(triggerId: UUID) = stored.values.systemByTrigger(triggerId)
     override fun findLatestSystem(tripId: UUID, targetDate: LocalDate) = stored.values.latestSystem(tripId, targetDate)
     override fun countSystemSince(tripId: UUID?, since: Instant) = stored.values.countSystemSince(tripId, since)
+    override fun findAppliedOn(tripId: UUID, targetDate: LocalDate) = stored.values.appliedOn(tripId, targetDate)
 
     override fun purgeOrigins(tripIds: List<UUID>): Int {
         val hit = stored.values.filter { it.tripId in tripIds && it.origin.kind in setOf(OriginKind.GPS, OriginKind.MANUAL) }

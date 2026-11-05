@@ -563,6 +563,18 @@ class ChangeLogEntrySchema(BoundaryModel):
     added_poi_ids: list[str] = Field(default_factory=list)
 
 
+class PriorRequestSchema(BoundaryModel):
+    """같은 날 반영된(되돌리지 않은) 앞 다시 짜기 한 건 (F-8 — 요청 간 기억 정식안).
+
+    `kept_poi_ids` 는 그 회차 응답의 `requested_poi_ids` 를 BE 가 세션에 남겼다가 되싣는 것이다 — 그 회차가 **요청 때문에**
+    넣은 곳(이름으로 집은 곳·밤에 놀기·한 곳 추가·그때 이어받은 기억). `text` 는 그 회차의 사유 한 줄(BE `changeReason` —
+    칩 키·자유입력을 ` · ` 로 이은 것, `change_log.reason` 과 같은 줄)이다. 읽는 것은 아직 id 뿐이다.
+    """
+
+    text: str = Field(default="", max_length=500)
+    kept_poi_ids: list[str] = Field(default_factory=list, max_length=30)
+
+
 class ReplanRequest(BoundaryModel):
     """POST /ai/v1/planb/replan — 하루를 다시 짠다 (i04 → i06). (구 itinerary 경로는 TRIP-960 ④ 에서 삭제)
 
@@ -613,6 +625,10 @@ class ReplanRequest(BoundaryModel):
     # 반복 방지**. 기본 빈 목록이라 백엔드가 안 보내도 종전과 같다. 상한 20 은 백스톱이고 주된
     # 제한은 날짜 필터다(실측이 아니라 프롬프트 예산에서 잡은 값).
     change_log: list[ChangeLogEntrySchema] = Field(default_factory=list, max_length=20)
+    # 같은 날 반영된 앞 다시 짜기들, 최신순 (F-8). **있으면** 앞 요청 기억을 이 칸으로 정하고 `change_log` 근사(F-5)는 쓰지
+    # 않는다 — 기억은 맨 앞 회차의 `kept_poi_ids` 만 읽는다(응답 `requested_poi_ids` 가 이미 사슬이다). BE 는 `requested_poi_ids` 를
+    # 저장한 세션이 있을 때만 싣고, 이 칸을 모르는 AI(롤링 배포 중 옛 파드·롤백)가 422(extra=forbid)면 이 칸을 빼고 한 번 다시 부른다.
+    prior_requests: list[PriorRequestSchema] = Field(default_factory=list, max_length=20)
     request_meta: RequestMetaSchema
 
     @model_validator(mode="after")
@@ -645,6 +661,17 @@ class ReplanEmptyReasonSchema(BoundaryModel):
     params: dict[str, str] = Field(default_factory=dict)
 
 
+class DeferredPlaceSchema(BoundaryModel):
+    """다른 날 가겠다고 해서 이 날에 넣지 않은 곳 (F-7) — 앱이 '그 날에 넣어 다시 짜기' 한 탭을 그린다.
+
+    `name` 은 등록 POI 이름이다(사용자가 쓴 말이 아니다). `date` 는 여행 날짜로 환산한 그 날이다.
+    """
+
+    poi_id: str
+    name: str
+    date: dt.date
+
+
 class ReplanResponse(BoundaryModel):
     """재계획안 1안. 못 만들면 `itinerary=null` + `empty_reason` (200, IO-7).
 
@@ -663,6 +690,11 @@ class ReplanResponse(BoundaryModel):
     # 모르는 지시를 **조용히 무시하지 않는다** — 되돌려 보내 FE 가 알릴 수 있게 한다.
     unknown_directives: list[str] = Field(default_factory=list)
     empty_reason: ReplanEmptyReasonSchema | None = None
+    # 이번 일정에 **요청 때문에** 든 곳(F-8) — 이름으로 집은 곳·밤에 놀기·한 곳 추가(그 종류로 새로 든 곳이 딱 한 곳일 때)·
+    # 앞 요청에서 이어받아 지금도 남은 곳. BE 가 세션에 남겼다가 다음 다시 짜기의 `prior_requests` 로 되싣는다.
+    requested_poi_ids: list[str] = Field(default_factory=list)
+    # 다른 날로 집어 이 날에 넣지 않은 '갈 곳'(F-7) — 빼 달라는 곳·지난 날·결국 이 날 일정에 든 곳은 싣지 않는다.
+    deferred_places: list[DeferredPlaceSchema] = Field(default_factory=list)
 
 
 

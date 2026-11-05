@@ -28,9 +28,9 @@ import {
  *
  * 무엇을 보장하나:
  *  - 헤더 제목 `{현재 장소명} 대신` + 부제 `{HH:mm}–{HH:mm} · {컨셉} 슬롯의 다른 후보 · 동선은 …`.
- *  - 후보 행(entities 카드 직접 소비 · planb 시트 선례): 사진·이름·`#태그 · 태그`·거리 — 배지·
- *    추천이유(rationale)·"이동" 라벨은 **끈다**(entities opt-in additive). 현재 행은 회색 "현재" 칩·
- *    라디오 없음(BR-U3-24).
+ *  - 후보 행(entities 카드 직접 소비 · planb 시트 선례): 사진·이름·`#태그 · 태그`·거리 + 그 아래
+ *    추천 이유 문장(TRIP-1780, 없으면 생략) — 배지·"이동" 라벨은 **끈다**(entities opt-in additive).
+ *    현재 행은 추천 이유 없이 회색 "현재" 칩·라디오 없음(BR-U3-24).
  *  - 라디오 2단계: 행 press → onSelectRadio(제어 상태만) / 선택 전 CTA 비활성·무발화 / 선택 후 1회 확정.
  *  - 0건: ◇ 아이콘 + 2줄 문구 + CTA "장소 검색"(h13). "장소 검색 ›" 링크도 h13.
  *  - PUT 실패는 인라인 오류(INV-4) — 시트는 안 닫힌다. degraded 전용 표면은 없다(응답 degraded 무표시).
@@ -72,6 +72,8 @@ export interface SlotCandidateSheetRow {
   imageUrl?: string | null;
   /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본). */
   category?: string | null;
+  /** 후보 행 추천 이유 문장(TRIP-1780) — 없거나 빈·공백이면 문장 줄 생략. 현재 행은 넘겨도 안 그린다. */
+  rationale?: string | null;
 }
 
 export interface SlotCandidateSheetProps {
@@ -367,7 +369,7 @@ export function SlotCandidateSheet({
                     candidate={{
                       poiId: candidate.poiId,
                       distanceRange: candidate.distanceRange ?? '',
-                      rationale: '',
+                      rationale: candidate.rationale ?? '',
                     }}
                     testIDPrefix="itinerary-candidate"
                     nameKo={candidate.nameKo}
@@ -377,7 +379,7 @@ export function SlotCandidateSheet({
                     category={candidate.category}
                     coverPoiId={candidate.poiId}
                     showNameTestId
-                    showRationale={false}
+                    rationaleSentence
                     distanceTone="muted"
                     selected={isSelected}
                     trailing={
