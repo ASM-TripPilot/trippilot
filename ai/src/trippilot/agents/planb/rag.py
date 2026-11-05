@@ -540,6 +540,17 @@ class PlanBAgent:
         """
         return fetch_place_knowledge(pois, _situation_query(request), self._embedding, self._store)
 
+    def warm_docs(self, user_request: str, reason: str) -> None:
+        """다시 짜기 후보 순위에 섞을 문서 질의의 임베딩을 미리 시작한다(`PlaceSearch.warm`) — 요청 진입에서 불러 풀 수집·지시 해석과
+        겹치게. 검색은 그 뒤라 그때서야 임베딩하면 문서 대기(`_doc_wait` ≤1.0s)를 임베딩이 먹는다(개발 2026-11-05 TIMEOUT 1,166ms).
+        질의는 `_select` 와 같은 `_doc_text` → `_doc_query` 라 검색이 이 결과를 기다리거나 임베딩 캐시(`CachingEmbedding`)에서 집는다.
+        검색기가 없거나 게이트가 닫히면 아무것도 하지 않는다. 섞을지(`fuse_docs`)는 호출측이 같은 조건으로 판정한다."""
+        if self._place_search is None:
+            return
+        query = _doc_query(_doc_text(user_request, reason))
+        if query is not None:
+            self._place_search.warm(query)
+
     def _safe_retrieve(
         self, fn, query: str, kb: KbKind, vector: Sequence[float] | None = None
     ) -> tuple[tuple[KbHit, ...], str]:
@@ -598,8 +609,7 @@ class PlanBAgent:
         )
         if self._place_search is not None and request.fuse_docs:
             rule_ranked, status = fuse_rule_ranking(
-                self._place_search, request.pool, rule_ranked,
-                request.user_request.strip() or REASON_NEED.get(request.reason, ""),
+                self._place_search, request.pool, rule_ranked, _doc_text(request.user_request, request.reason),
                 _doc_wait(request), trace=f"planb-{request.trace_id}")
             rule_note = f"{rule_note} · open_search={status}" if rule_note else f"open_search={status}"
 
@@ -720,6 +730,14 @@ REASON_NEED: Mapping[str, str] = MappingProxyType({
 _DOC_WAIT_S, _DOC_WAIT_SHARE = 1.0, 0.1
 
 
+def _doc_text(user_request: str, reason: str) -> str:
+    return user_request.strip() or REASON_NEED.get(reason, "")
+
+
+def _doc_query(text: str) -> hybrid_rank.OpenQuery | None:
+    return hybrid_rank.open_query(text, None, generic=hybrid_rank.GENERIC_WORDS)
+
+
 def _doc_wait(request: PlanBRagRequest) -> float:
     if not request.deadline_ms or request.deadline_ms <= 0:
         return _DOC_WAIT_S
@@ -731,7 +749,7 @@ def fuse_rule_ranking(place_search: PlaceSearch, pool: CandidatePool, ranked: tu
     """규칙 랭킹 → (KB-5 문서 순위를 RRF 로 섞은 랭킹, 상태). 질의 게이트·검색기·융합은 도우미 탐색과 같다(`hybrid_rank`·
     `PlaceSearch`). 게이트가 닫히면 `GATE_CLOSED`, 검색이 OK 가 아니면 그 상태 — 둘 다 규칙 랭킹 그대로(INV-4).
     출력은 입력의 순열이다 — 후보 자격을 만들지 않는다(INV-1)."""
-    query = hybrid_rank.open_query(text, None, generic=hybrid_rank.GENERIC_WORDS)
+    query = _doc_query(text)
     if query is None:
         return ranked, "GATE_CLOSED"
     by_id = {str(p.poi_id): p for p in pool.pois}

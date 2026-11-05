@@ -6,6 +6,8 @@
   ③ 질의는 사용자 말이 사유의 필요를 이긴다 · 필요가 없는 사유는 말이 없으면 섞지 않는다
   ④ 에이전트: `fuse_docs` 이고 검색기가 있을 때만 순위가 바뀌고, 노트에 `open_search=…` 가 남는다
   ⑤ 배선: 스위치를 안 켜면 PlanB 에 검색기가 붙지 않는다
+  ⑥ 미리 임베딩(`warm_docs`): 다시 짜기 진입에서 수집보다 먼저 띄우고, 검색은 같은 질의를 쓴다(이벤트 순서 — 시간 문턱 아님) ·
+     미리 띄운 몫이 먼저 치워져도 검색은 임베딩 캐시(`CachingEmbedding`)에서 집어 다시 임베딩하지 않는다
 """
 
 from __future__ import annotations
@@ -32,13 +34,18 @@ def _pool(*ids: str) -> CandidatePool:
 
 
 class _Search:
-    """`PlaceSearch.search` 대역 — 정한 상태·문서 순위를 돌려주고 질의를 붙잡는다."""
+    """`PlaceSearch` 대역 — 정한 상태·문서 순위를 돌려주고 질의를 붙잡는다. `events` = 미리 임베딩·검색이 불린 순서(질의 문자열과 함께)."""
 
-    def __init__(self, status: str = "OK", ranks: dict[str, int] | None = None) -> None:
+    def __init__(self, status: str = "OK", ranks: dict[str, int] | None = None, events: list | None = None) -> None:
         self.status, self.ranks, self.queries = status, ranks or {}, []
+        self.events = events if events is not None else []
+
+    def warm(self, query):
+        self.events.append(("warm", query.text))
 
     def search(self, query, scope_refs, wait_s, *, trace=""):
         self.queries.append((query, tuple(scope_refs), wait_s))
+        self.events.append(("search", query.text))
         return self.status, self.ranks
 
 
@@ -128,3 +135,84 @@ def test_조립이_스위치대로_PlanB_에_검색기를_붙인다(monkeypatch,
     monkeypatch.setattr(wiring, "PlanBAgent", lambda *a, **kw: seen.append(kw.get("place_search")) or real(*a, **kw))
     wiring.build_dev_app(model_id="m", vector_store=InMemoryVectorStore(), embedding=FakeEmbedding(dim=_SMALL))
     assert len(seen) == 1 and isinstance(seen[0], PlaceSearch) is wired
+
+
+def _doc_text(said: str, reason: str = "weather") -> str:
+    return hybrid_rank.open_query(said or rag.REASON_NEED[reason], None, generic=hybrid_rank.GENERIC_WORDS).text
+
+
+@pytest.mark.parametrize("said", ["", "조용한 북카페"])
+def test_미리_임베딩한_질의를_검색이_그대로_쓴다(said) -> None:
+    search = _Search("OK", {})
+    agent = _agent(search)
+    agent.warm_docs(said, "weather")
+    agent.run(replace(_request(_pool(*_IDS), reason="weather"), use_llm=False, fuse_docs=True, user_request=said))
+    assert search.events == [("warm", _doc_text(said)), ("search", _doc_text(said))]
+
+
+def test_검색기가_없거나_게이트가_닫히면_미리_임베딩하지_않는다() -> None:
+    _agent(None).warm_docs("조용한 북카페", "weather")  # 검색기 없음 — 아무것도 하지 않는다(던지지 않는다)
+    search = _Search("OK", {})
+    _agent(search).warm_docs("", "closed")  # 말도 필요도 없다 — 검색도 게이트에서 닫힌다
+    _agent(search).warm_docs("가볼 만한 곳 추천", "weather")  # 묘사 낱말 없는 말이 필요를 이긴다 — 검색도 GATE_CLOSED
+    assert search.events == []
+
+
+def test_미리_띄운_몫이_치워져도_검색은_임베딩_캐시에서_집는다() -> None:
+    """운영 임베딩은 `CachingEmbedding`(main.py `_vector_backend`)이다. 끝난 미리 임베딩은 다음 `warm` 이 치운다(다른 요청) — 그때
+    검색은 직접 임베딩하는데, 같은 문자열이라 캐시에 걸려 안쪽 임베딩은 한 번뿐이다."""
+    from tests.agents.planb.test_place_search import _Embedding, _Store
+    from trippilot.agents.planb.place_search import PlaceSearch
+    from trippilot.llm_gateway.adapters.caching_embedding import CachingEmbedding
+
+    inner = _Embedding()
+    searcher = PlaceSearch(CachingEmbedding(inner), _Store({"overview:r-p7#0": ("r-p7", "조용한 북카페")}),
+                           index=lambda: {"r-p7": ("overview:r-p7#0",)})
+    agent = _agent(searcher)
+    agent.warm_docs("조용한 북카페", "weather")
+    searcher._warming[_doc_text("조용한 북카페")].result(timeout=2.0)  # noqa: SLF001 — 미리 임베딩이 끝날 때까지(시간 문턱 대신)
+    searcher.warm(hybrid_rank.OpenQuery(("다른",), "다른 질의"))  # 다른 요청의 미리 임베딩 — 끝난 몫을 치운다
+    assert _doc_text("조용한 북카페") not in searcher._warming  # noqa: SLF001
+    out = agent.run(replace(_request(_pool(*_IDS), reason="weather"), use_llm=False, fuse_docs=True,
+                            user_request="조용한 북카페"))
+    assert any("open_search=OK" in n for n in out.notes), out.notes
+    assert inner.calls.count(_doc_text("조용한 북카페")) == 1, inner.calls
+
+
+def test_다시_짜기는_진입에서_질의를_미리_임베딩하고_검색이_같은_질의를_쓴다(monkeypatch) -> None:
+    """미리 임베딩이 장소 수집(`InfoCollector.collect`)보다 먼저 불려야 수집과 겹친다 — 순서는 이벤트로 본다."""
+    from fastapi.testclient import TestClient
+
+    from tests.api.test_api_replan_wired import _DIRECTIVES, _body
+    from trippilot.api import wiring
+
+    events: list = []
+    monkeypatch.setattr(wiring, "wire_place_search", lambda embedding, store: (_Search("OK", {}, events), ""))
+    app = wiring.build_dev_app(directives=_DIRECTIVES)
+    info = app.state.orchestrator._info  # noqa: SLF001
+    real = info.collect
+    monkeypatch.setattr(info, "collect", lambda *a, **kw: events.append(("collect", "")) or real(*a, **kw))
+    for said in (None, "조용한 북카페"):
+        events.clear()
+        with TestClient(app) as client:
+            assert client.post("/ai/v1/planb/replan", json=_body(free_text=said)).status_code == 200
+        text = _doc_text(said or "")
+        assert events[0] == ("warm", text), events
+        assert [e for e in events if e[0] != "collect"] == [("warm", text), ("search", text)], events
+        assert events.index(("collect", "")) < events.index(("search", text)), events
+
+
+def test_구성_LLM_이_없으면_진입에서_미리_임베딩하지_않는다(monkeypatch) -> None:
+    """문서 순위를 섞는 조건(`fuse_docs` = 구성 LLM 있음)과 미리 임베딩 조건이 같다 — 안 섞을 질의를 임베딩하지 않는다."""
+    from fastapi.testclient import TestClient
+
+    from tests.api.test_api_replan_wired import _DIRECTIVES, _body
+    from trippilot.api import wiring
+
+    events: list = []
+    monkeypatch.setattr(wiring, "wire_place_search", lambda embedding, store: (_Search("OK", {}, events), ""))
+    app = wiring.build_dev_app(directives=_DIRECTIVES)
+    app.state.orchestrator._composer = None  # noqa: SLF001
+    with TestClient(app) as client:
+        assert client.post("/ai/v1/planb/replan", json=_body()).status_code == 200
+    assert events == []

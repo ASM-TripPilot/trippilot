@@ -2632,6 +2632,10 @@ class WiredItineraryOrchestrator:
         directives_pending = _NL_POOL.submit(
             contextvars.copy_context().run, self._replan_directives, request, directive_notes,
             trace_id=trace_id, now=now, deadline_ms=_deadline_budget(meta))
+        # 후보 순위에 섞을 문서 질의 임베딩도 지금 띄운다 — 검색은 수집·해석 뒤라 그때 임베딩하면 문서 대기를 먹었다(개발 2026-11-05
+        # TIMEOUT 1,166ms). 섞는 조건(아래 `fuse_docs`)·질의 재료(`_replan_rag_request` 의 원문·대표 사유)가 같아야 같은 질의다
+        if self._composer is not None:
+            self._rag.warm_docs(request.free_text or "", primary)
 
         transport = _token_or(
             _TRANSPORT_TOKENS, request.transport_mode, TransportMode.PUBLIC)

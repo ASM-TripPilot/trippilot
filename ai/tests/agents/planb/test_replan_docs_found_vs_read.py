@@ -146,6 +146,9 @@ def test_장소_지식을_찾은_뒤_시한으로_구성을_생략해도_안_읽
         def run(self, request):
             return inner.run(request)
 
+        def warm_docs(self, user_request, reason):
+            inner.warm_docs(user_request, reason)
+
         def place_knowledge(self, request, pois):
             monkeypatch.setattr(wiring, "_COMPOSE_MIN_MS", 10**9)  # 조회가 끝나면 구성 바닥을 못 넘긴다
             return {str(pois[0].source_ref): "문서"}, ""
