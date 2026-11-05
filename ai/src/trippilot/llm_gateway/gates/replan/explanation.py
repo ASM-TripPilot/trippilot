@@ -39,7 +39,10 @@ class ExplanationGate:
       집계해 "모델이 `#` 을 빼먹는" 드리프트가 어디에도 남지 않는다(INV-4). 전 슬롯이 그러면
       survivors 가 비어 `gate_dropped_all` 로 폴백 사유가 실린다. `dropped_ids` 는 풀 밖 poiId
       만 담는다(문구 드롭은 ID 가 아니다 — share_card_copy·nudge 선례).
-    - 그 외(`ALTERNATIVE_EXPLANATION`, TRIP-887) — `{"poiId", "text"}` 문장. 종전 처리 그대로.
+    - 그 외(`ALTERNATIVE_EXPLANATION`, TRIP-887) — `{"poiId", "text"}` 문장. 시간 표현·연락처 꼴 문장은
+      **그 선택지를 싣지 않고 `dropped_count` 에 센다** — 종전엔 `""` 로 실었는데, 호출측(`ScheduleAgent`
+      `_explain_alternatives`·wiring `_alternative_explanations`)이 그 빈 값을 문장으로 받아 템플릿 rationale
+      ("같은 카페 후보")을 빈 값으로 덮었다(2026-11-05 — 해시태그 경로가 #706 에서 막은 것과 같은 결함).
 
     중복 poiId 는 첫 등장 채택.
 
@@ -79,30 +82,31 @@ class ExplanationGate:
         seen: set[str] = set()
         survivors: list[PoiExplanation] = []
         dropped: list[PoiId] = []
-        blank = 0  # 해시태그 경로 — 태그가 하나도 안 남은 슬롯 수
+        blank = 0  # 태그가 하나도 안 남은 슬롯 · 시간/연락처로 버린 문장 — 싣지 않고 센다
         for pid_str, text in parsed:
             if pid_str in seen:
                 continue
             seen.add(pid_str)
             pid = PoiId(pid_str)
-            in_pool = pool.contains(pid)
-            if hashtags and not text and in_pool:
+            if not pool.contains(pid):
+                dropped.append(pid)
+                continue
+            # ⑴ 시간·소요시간 표현: 이 text 는 백엔드 `visit_slot.placement_reason` 과
+            #    리비전 스냅샷에 **영속된다**. 걸러 내지 않으면 INV-3 위반이 화면과 DB
+            #    양쪽에 남는다. 정규식은 reflection_template 것을 **공유**한다 —
+            #    두 벌을 두면 한쪽만 고쳐진다(alternative_selection 의 같은 주석 참조).
+            # ⑵ 링크·연락처 꼴: 프롬프트에 실린 제3자 문자열(웹 수집 상호명 등)이 유도한
+            #    유인 문구를 앱이 자기 목소리로 말하지 않게 한다.
+            # 해시태그 경로는 태그마다 이미 같은 검사를 거쳤다 — 여기는 문장 경로 몫이고,
+            # 이어 붙인 태그 문자열에는 걸리지 않는다('#'이 표현을 끊는다).
+            # 걸린 문장을 alternative_selection 처럼 `""` 로 남기지 않는다 — 그 게이트는 선택 자체가 값이라
+            # 슬롯을 살려야 하지만, 여기 값은 문장뿐이라 빈 값은 호출측의 템플릿 문장만 덮는다.
+            if text and (_TIME_EXPR.search(text) or has_contact_like(text)):
+                text = ""
+            if not text:
                 blank += 1
                 continue
-            if in_pool:
-                # 형제 게이트(alternative_selection)와 같은 처리 — 문장만 버리고 슬롯은 살린다.
-                # ⑴ 시간·소요시간 표현: 이 text 는 백엔드 `visit_slot.placement_reason` 과
-                #    리비전 스냅샷에 **영속된다**. 걸러 내지 않으면 INV-3 위반이 화면과 DB
-                #    양쪽에 남는다. 정규식은 reflection_template 것을 **공유**한다 —
-                #    두 벌을 두면 한쪽만 고쳐진다(alternative_selection 의 같은 주석 참조).
-                # ⑵ 링크·연락처 꼴: 프롬프트에 실린 제3자 문자열(웹 수집 상호명 등)이 유도한
-                #    유인 문구를 앱이 자기 목소리로 말하지 않게 한다.
-                # 해시태그 경로는 태그마다 이미 같은 검사를 거쳤다 — 여기는 문장 경로 몫이고,
-                # 이어 붙인 태그 문자열에는 걸리지 않는다('#'이 표현을 끊는다).
-                safe = "" if (_TIME_EXPR.search(text) or has_contact_like(text)) else text
-                survivors.append(PoiExplanation(poi_id=pid, text=safe))
-            else:
-                dropped.append(pid)
+            survivors.append(PoiExplanation(poi_id=pid, text=text))
         drop_event = (
             GateDropEvent(
                 trace_id=trace_id, occurred_at=now, component="c1.gate",
