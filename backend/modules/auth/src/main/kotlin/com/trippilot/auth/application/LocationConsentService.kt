@@ -208,6 +208,8 @@ class LocationConsentService(
      * 약관 경로(온보딩 일괄·개별 변경)가 LOCATION_TERMS 증적을 **이미 남긴 뒤** L2 를 맞춘다(TRIP-1800).
      * 증적은 호출측 몫이라 여기선 상태·법정 로그·철회 신호만 — [update] 와 같은 전이를 같은 기록으로 남긴다.
      * 종전엔 L2 가 설정 토글로만 켜져, 온보딩에서 위치 약관에 동의한 사용자도 GPS 가 막혀 있었다.
+     * 증적이 중복이라 새로 남지 않은 재제출(어긋난 계정의 자가 치유)도 여기로 온다 — 그 재제출 자체를 지금 다시 표시한
+     * 동의로 보고 지금 시각·이번 경로 채널로 남긴다(백필 V2.91 과 달리 원래 동의 시각을 붙이지 않는다).
      */
     @Transactional
     fun syncLegalConsentFromTerms(accountId: AccountId, granted: Boolean, version: String, channel: ConsentChannel) {
