@@ -14,6 +14,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { isNotFound } from '@/shared/api';
 import { guardPress } from '@/shared/lib/pressGuard';
 import { getGetTripsTripIdItineraryQueryOptions } from '@/shared/api/index.hooks';
+import { openNewTripWizard } from '@/features/create-trip';
 import {
   itineraryDestinationHref,
   resolveItineraryDestination,
@@ -322,6 +323,13 @@ export function AssistantSheetPage({
       if (target.mode === 'push') {
         // 일정 확인 중엔 push 하지 않는다 — 확인 뒤 replace 가 방금 연 상세를 갈아치운다.
         if (!checkingRef.current) pushTo(target.href);
+        return;
+      }
+      if (action.type === 'CREATE_TRIP') {
+        // 새 여행은 위저드 진입이다 — 직전 여행 값을 이동 전에 비우는 한 진입점을 거친다(TRIP-1776).
+        // 이동은 다른 흐름 목적지처럼 시트 자리를 갈아끼우고, 닫는 중 잠금도 `replaceTo` 와 같이 세운다.
+        closingRef.current = true;
+        openNewTripWizard(router, undefined, 'replace');
         return;
       }
       replaceTo(target.href);

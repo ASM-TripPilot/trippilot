@@ -30,6 +30,13 @@ import {
 import { AssistantSheetPage } from './AssistantSheetPage';
 import * as sheetPublicApi from '../index';
 import { newTestQueryClient } from '@/test-support/queryRender';
+import {
+  captureDraftAtNextCall,
+  freshWizardDraft,
+  leavePreviousTripDraft,
+  resetWizardDraft,
+  wizardDraftData,
+} from '@/test-support/wizardDraftFixture';
 
 /**
  * TRIP-1322 — 시트 page 배선(가짜 서버 주입). 서버 HTTP 가 없어 MSW 대신 `setAssistantPort` 로
@@ -108,6 +115,8 @@ afterEach(() => {
   mockBack.mockClear();
   mockReplace.mockClear();
   mockPush.mockClear();
+  // TRIP-1776 — 위저드 드래프트는 모듈 싱글턴이다. describe 안에만 걸면 앞 테스트의 값이 샌다.
+  resetWizardDraft();
 });
 
 // TRIP-1567 — 시작 quick reply 는 칩 안에 접혀 있다. 누르기 전에 칩으로 펼친다.
@@ -1650,6 +1659,72 @@ describe('AssistantSheetPage · 이동 방식 (TRIP-1565)', () => {
 
     expect(mockReplace.mock.calls).toEqual([['/stays']]);
     expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  // TRIP-1776 — [새 여행 만들기]는 위저드 진입이다: 직전 여행이 남긴 값이 그대로 열리면 안 된다.
+  // 계약은 "replace 가 불리는 **그 순간**의 드래프트"다 — 호출 뒤 상태로 재면 이동 → 초기화 순서도 green.
+  // 못 보는 것(6-b): 실제 라우터가 위저드 셸을 새로 세우는지 · 시트 자리가 교체되는 모양.
+  describe('새 여행 만들기(CREATE_TRIP) · 위저드 초기화 (TRIP-1776)', () => {
+    it('이동 순간의 위저드 드래프트가 새 여행의 초기값이고, step1 로 replace 1회·push 0회다', async () => {
+      leavePreviousTripDraft();
+      // 앵커 — 준비가 직전 여행 흔적을 실제로 남겼다
+      expect(wizardDraftData()).not.toEqual(freshWizardDraft());
+      const row = await openWith(act1('CREATE_TRIP'));
+      const seen = captureDraftAtNextCall(mockReplace);
+
+      await press(row());
+
+      expect(seen()).toEqual(freshWizardDraft());
+      expect(mockReplace.mock.calls).toEqual([['/trips/new/step1']]);
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['OPEN_STAY_SEARCH', {}],
+      ['OPEN_REPLAN', {}],
+      ['OPEN_PLACE', { poiId: 'poi-a' }],
+    ] as const)(
+      '%s 는 위저드 드래프트를 건드리지 않는다 — 초기화는 새 여행 행동만의 일이다',
+      async (type, params) => {
+        leavePreviousTripDraft();
+        const before = wizardDraftData();
+        // 앵커 — 지울 흔적이 실제로 있다
+        expect(before).not.toEqual(freshWizardDraft());
+        const row = await openWith(act1(type, params));
+
+        await press(row());
+
+        // 앵커 — 이동은 실제로 나갔다
+        expect(mockReplace.mock.calls.length + mockPush.mock.calls.length).toBe(
+          1
+        );
+        expect(wizardDraftData()).toEqual(before);
+      }
+    );
+
+    it('누른 뒤에는 시트가 닫히는 중이라 다른 이동이 막힌다 — replace 1회뿐', async () => {
+      renderPage(
+        {
+          seedMessages: [
+            actionInfo('m-new', act1('CREATE_TRIP')),
+            actionInfo('m-stay', act1('OPEN_STAY_SEARCH')),
+          ],
+        },
+        { tripId: 't1', surface: 'ITINERARY' }
+      );
+      await screen.findByTestId('assistant-message-m-stay');
+
+      await press(rowOf('m-new', 'CREATE_TRIP'));
+      // 앵커 — 첫 이동은 나갔다
+      expect(mockReplace.mock.calls).toEqual([['/trips/new/step1']]);
+      // 연타 창이 아니라 닫는 중 잠금이 막는 것을 고립한다
+      resetPressGuard();
+
+      await press(rowOf('m-stay', 'OPEN_STAY_SEARCH'));
+
+      expect(mockReplace.mock.calls).toEqual([['/trips/new/step1']]);
+      expect(mockPush).not.toHaveBeenCalled();
+    });
   });
 });
 
