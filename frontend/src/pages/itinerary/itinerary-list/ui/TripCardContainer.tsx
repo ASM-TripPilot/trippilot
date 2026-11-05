@@ -43,8 +43,12 @@ import { deriveTripCardFace } from '../model/tripCardFace';
 
 export interface TripCardContainerProps {
   trip: Trip;
-  /** TRIP-1055 · 삭제 요청(다이얼로그 열기) — 페이지가 쥔다. 없으면 ⋯ 도 없다. */
+  /** TRIP-1055 · 삭제 요청(다이얼로그 열기) — 페이지가 쥔다. 없으면 메뉴에 「삭제」가 없다(⋯ 는 TRIP-1786 부터 항상 있다). */
   onPressDelete?: () => void;
+  /** TRIP-1786 · 고정 상태·토글 — 페이지가 쥔다(기기 저장). `onTogglePin` 이 없으면 고정 항목도 없다. */
+  pinned?: boolean;
+  pinDisabled?: boolean;
+  onTogglePin?: () => void;
   /** TRIP-1121 · 오늘(서울 'YYYY-MM-DD') — 페이지가 정렬과 같은 값을 넘긴다. 없으면 여행 중 판정을 안 한다
    * (컨테이너는 시계를 읽지 않는다, TRIP-986). */
   today?: string;
@@ -73,6 +77,9 @@ function coverTone(
 export function TripCardContainer({
   trip,
   onPressDelete,
+  pinned,
+  pinDisabled,
+  onTogglePin,
   today,
 }: TripCardContainerProps): ReactElement {
   const router = useRouter();
@@ -140,6 +147,12 @@ export function TripCardContainer({
     today !== undefined &&
     classifyTripPhase(trip, summary.status, today) === 'ended';
 
+  // TRIP-1786 · 「여행 설정」 — 메뉴를 닫고 설정 화면으로(연타는 한 번만).
+  const onPressSettings = guardPress((): void => {
+    setMenuOpen(false);
+    router.push(`/trips/${trip.tripId}/settings`);
+  });
+
   // TRIP-1055 · 삭제 진입점(UX 사본 — 판정 정본은 서버 BR-U1-57, 상태 가드 TRIP-1061 전까진 이게 유일한
   // 방어). 보이는 배지가 '작성중'이면(Q3 — 날짜 지난 초안 포함) 생성 세션이 돌아도 연다(TRIP-1271 결정 1=A).
   // TRIP-1441 — 확정했지만 아직 시작 전인 여행('upcoming', 서울 날짜 기준)에도 연다(사용자 결정 2026-10-16,
@@ -166,6 +179,18 @@ export function TripCardContainer({
       }
       menuOpen={menuOpen}
       onPressMenu={() => setMenuOpen((open) => !open)}
+      onPressSettings={onPressSettings}
+      pinned={pinned}
+      pinDisabled={pinDisabled}
+      onTogglePin={
+        onTogglePin
+          ? // 통합 QA D1 — 고정하면 메뉴가 닫히고 순서가 바뀌어 연타 둘째 탭이 그 자리 카드를 연다. 창을 연다.
+            guardPress(() => {
+              setMenuOpen(false);
+              onTogglePin();
+            })
+          : undefined
+      }
       onPressRecords={ended ? onPressRecords : undefined}
     />
   );
