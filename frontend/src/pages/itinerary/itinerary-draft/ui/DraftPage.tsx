@@ -48,6 +48,7 @@ import type { GenerationProgressCell } from '@/widgets/map-sheet-shell';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { SheetHeader } from '@/widgets/map-sheet-shell';
 
+import { parseReasonTags } from '../model/reasonTags';
 import { resolveRegenerateRoute } from '../model/regenerateRoute';
 import type { RegenerateRoute } from '../model/regenerateRoute';
 import { DraftFallbackBanner } from './DraftFallbackBanner';
@@ -846,6 +847,7 @@ export function DraftPage({
                             )
                     }
                     violation={violationNotice(slot)}
+                    reasonTags={parseReasonTags(slot.placementReason)}
                   />
                 </RevealItem>,
               ];

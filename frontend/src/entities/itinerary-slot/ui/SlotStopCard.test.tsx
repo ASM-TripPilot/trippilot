@@ -479,3 +479,63 @@ describe('SlotStopCard 편집 · C5 (회귀앵커) — violation 없거나 null 
     }
   );
 });
+
+// ── TRIP-1779 · h08 일정 카드 추천 이유 태그 한 줄 ─────────────────────────────────────────────
+//
+// 카드는 `reasonTags`(이미 잘린 태그 목록)를 **받으면** 한 줄을 그린다. 서버 문자열을 태그로 자르는 일은
+// 소비처(DraftPage h08 셸)가 하고, 카드는 `slot.placementReason` 을 스스로 읽지 않는다(`violation` 선례 —
+// 읽으면 다른 소비처 4곳이 조용히 줄을 얻는다). 말줄임(numberOfLines)·색·줄 위치는 jest 가 못 보는 생김새라
+// 6-b 실화면 몫이다(README 판정 4).
+
+describe('🔴 SlotStopCard · R1 — reasonTags 를 주면 태그를 공백으로 이은 한 줄 (TRIP-1779 AC-C1)', () => {
+  it('leaf 하나가 태그 전부를 공백으로 이은 문자열 하나만 담는다', () => {
+    const { slotKey } = renderCard({
+      reasonTags: ['#혼자여행', '#난타공연', '#공연관람'],
+    });
+    const at = id(slotKey);
+
+    const reason = screen.getByTestId(at('reason'));
+    expect(reason).toHaveTextContent('#혼자여행 #난타공연 #공연관람');
+    // 완전일치 잠금 — 부분포함이면 통과, exact 라 실패 → .not 성립(구분자를 ' · ' 등으로 바꾸면 위에서 red).
+    expect(reason).not.toHaveTextContent('#혼자여행 #난타공연');
+    // 카테고리 줄은 그대로(영향 0).
+    expect(screen.getByTestId(at('tags'))).toHaveTextContent('바다 · 산책');
+  });
+});
+
+describe('SlotStopCard · R2 (회귀앵커) — reasonTags 가 없거나 null·빈 배열이면 줄 요소 자체가 없다 (TRIP-1779 AC-C3)', () => {
+  it.each([
+    ['미주입', undefined],
+    ['null', null],
+    ['빈 배열', []],
+  ])('%s 이면 카드·카테고리 줄은 있고 이유 줄은 없다', (_label, reasonTags) => {
+    const { slotKey } = renderCard({ reasonTags });
+    const at = id(slotKey);
+
+    expect(screen.getByTestId(`slot-stopcard-${slotKey}`)).toBeOnTheScreen();
+    expect(screen.getByTestId(at('tags'))).toHaveTextContent('바다 · 산책');
+    expect(screen.queryByTestId(at('reason'))).toBeNull();
+  });
+});
+
+describe('🔴 SlotStopCard · R3 — 카드는 slot.placementReason 을 스스로 읽지 않는다 (TRIP-1779 AC-C4)', () => {
+  const withReason = () => makeSlot({ placementReason: '#혼자여행 #난타공연' });
+
+  it('R3a · 슬롯에 값이 있어도 reasonTags 를 안 주면 줄이 없다(다른 소비처가 조용히 줄을 얻지 않는다)', () => {
+    const { slotKey } = renderCard({ slot: withReason() });
+
+    expect(screen.getByTestId(`slot-stopcard-${slotKey}`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(id(slotKey)('reason'))).toBeNull();
+  });
+
+  it('R3b · 짝 — reasonTags 를 주면 슬롯 원문이 아니라 받은 값을 그린다', () => {
+    const { slotKey } = renderCard({
+      slot: withReason(),
+      reasonTags: ['#주입'],
+    });
+
+    expect(screen.getByTestId(id(slotKey)('reason'))).toHaveTextContent(
+      '#주입'
+    );
+  });
+});

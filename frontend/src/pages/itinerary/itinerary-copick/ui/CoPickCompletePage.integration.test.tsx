@@ -645,3 +645,37 @@ describe('같은 날 같은 장소 두 번', () => {
     ]);
   });
 });
+
+/**
+ * TRIP-1779 · AC-D3 — 추천 이유 태그 줄은 h08 완성 셸 전용이다. 같이 짜기 결과(h11)는 슬롯에 `placementReason` 이
+ * 실제로 있어도 줄을 얻지 않는다(카드가 슬롯 필드를 스스로 읽는 회귀는 카드 단위 R3a 가 소비처 전부를 한 번에 막고,
+ * 여기는 "누가 이 페이지에 파서를 새로 배선하는" 경우를 한 곳에서 지킨다).
+ */
+describe('🔴 TRIP-1779 · h11 카드엔 슬롯에 값이 있어도 추천 이유 줄이 없다', () => {
+  it('유효한 태그를 가진 5슬롯이 카드로 떠도 이유 줄은 0개다', async () => {
+    itineraryHandler = () =>
+      HttpResponse.json(
+        baseItinerary({
+          itineraryId: 'itin-796',
+          tripId: TRIP_ID,
+          generationMode: 'CO_PLAN',
+          days: [
+            day(
+              DAY1,
+              daySlots().map((s) => ({
+                ...s,
+                placementReason: '#혼자여행 #난타공연',
+              }))
+            ),
+          ],
+        })
+      );
+
+    renderPage();
+
+    await screen.findByTestId('map-sheet-shell-root');
+    // 앵커 — 카드 5장이 떠 있다(셸이 안 뜬 채 "줄 0개"로 통과하지 않게).
+    expect(screen.queryAllByTestId(/^slot-stopcard-\d/)).toHaveLength(5);
+    expect(screen.queryAllByTestId(/^slot-stopcard-reason-/)).toHaveLength(0);
+  });
+});
