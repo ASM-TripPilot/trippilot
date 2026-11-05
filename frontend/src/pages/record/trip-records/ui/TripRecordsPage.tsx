@@ -8,6 +8,7 @@ import { buildSlotKey } from '@/entities/itinerary-slot';
 import { buildStatePins } from '@/entities/itinerary-slot';
 import { formatDayLabel } from '@/entities/trip';
 import { deriveStayAttribution } from '../model/stayAttribution';
+import { failedUnlessNotFound } from '../model/failedUnlessNotFound';
 import {
   useRecordBases,
   useRecordSavedStays,
@@ -50,7 +51,8 @@ import { TripRecordsView, type RecordPlanRowVM } from './TripRecordsView';
  * 조립한다(VisitCheck 엔 장소명이 없어 itinerary 로 조인). 낙관 갱신(complete/skip)은
  * `useVisitCheck` 가 진다. 뷰(`TripRecordsView`, 셸 조립)는 무상태 — 여기서 내린 VM·콜백만 그린다.
  * TRIP-1085 — 전면 지도 + 바텀시트라 하단 탭바가 없다(결정 1(b)). 시트 헤더 여행명은 `GET /trips/{tripId}`
- * 에서 오고, 실패하면 그 조각만 빠진다(INV-4).
+ * 에서 온다. 일정·여행 조회가 404 아닌 이유로 실패하면 일차 칩·계획 행·장소명·여행명이 조용히 빠지므로(INV-4), 화면 한 줄
+ * (`record-trip-plan-error`) + [다시 시도](실패한 쿼리만)로 말한다(TRIP-1757). 404 는 "없다"는 답이라 줄을 만들지 않는다.
  *
  * 카드의 `arrivedLabel` 은 서버 순간(UTC)을 **서울 시계** HH:mm 로 읽어 내린다(TRIP-1069 · BR-U5-27 —
  * 시각 표시일 뿐 소요시간이 아니다, INV-3). 카드는 도착 이른 순, 도착 없는 카드는 끝(결정 2(a)).
@@ -85,6 +87,8 @@ export function TripRecordsPage({
   const itinerary = useGetTripsTripIdItinerary(tripId);
   const trip = useGetTripsTripId(tripId);
   const days = itinerary.data?.days ?? [];
+  const itineraryFailed = failedUnlessNotFound(itinerary);
+  const tripFailed = failedUnlessNotFound(trip);
 
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   // TRIP-1584 — 회고·요약에서 기록 칸을 누르면 같은 화면에 새 `?day=` 가 실려 온다(dismissTo). 칩으로 고른 일차보다 새 `day` 를 따른다(렌더 중 조정 —
@@ -342,6 +346,19 @@ export function TripRecordsPage({
         onPressRetryRecords={() => {
           void records.refetch();
         }}
+        planError={
+          itineraryFailed || tripFailed
+            ? {
+                retrying:
+                  (itineraryFailed && itinerary.isFetching) ||
+                  (tripFailed && trip.isFetching),
+                onRetry: () => {
+                  if (itineraryFailed) void itinerary.refetch();
+                  if (tripFailed) void trip.refetch();
+                },
+              }
+            : undefined
+        }
         // TRIP-1069 D3 — 도착한(완료 포함) 실 레코드 카드는 전부 사진/메모 컨테이너로 그린다(메모 PUT 은
         // 방문 기록만 있으면 된다). 건너뛴 카드·도착 전 카드·낙관 자리표시자는 undefined → 화면의 기본 카드
         // (슬롯 없음 = 사진·메모 칸 없음). 낙관 카드는 아직 서버에 없어 시각 수정·메모·사진이 404 로 간다(D7).

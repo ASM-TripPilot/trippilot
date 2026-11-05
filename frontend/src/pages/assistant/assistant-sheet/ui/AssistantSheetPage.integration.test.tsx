@@ -6,6 +6,7 @@ import {
   fireEvent,
   render,
   screen,
+  userEvent,
   waitFor,
   within,
 } from '@testing-library/react-native';
@@ -23,6 +24,7 @@ import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { API_BASE, settingsHandlers } from '@/test-support/settingsHandlers';
 
 import { assistantPort } from '../api/assistantClient';
+import { assistantKeys } from '../model/assistantQueries';
 import type {
   AssistantMessage,
   AssistantSurface,
@@ -487,6 +489,163 @@ describe('도우미 시트 · 이력 (TRIP-1514 AC-2)', () => {
     expect((seen as unknown as URL).searchParams.get('limit')).toBe('30');
     expect(page.nextBefore).toBe('cursor-2');
     expect(page.messages.map((message) => message.id)).toEqual(['u-9']);
+  });
+});
+
+/**
+ * 🔴 TRIP-1757 · 이력 보기의 「이전 대화」 목록 불러오기 실패 (INV-4 · US-ASSIST-05 · BR-U8-18) — 지난 대화가 사라진 것처럼 비지 않게.
+ *
+ * 무엇을 보장하나(3동작 = 준비: `GET /assistant/sessions` 를 500·404·200 으로 → 실행: 이력 보기 열기·[다시 시도] → 단언: testID·요청 수):
+ *  - AS-1  목록 GET 500 → 「이전 대화」 자리에 `assistant-history-sessions-error` + `-sessions-retry`, 대화 행은 없다.
+ *  - AS-2  [다시 시도] → 목록 GET 1회 더. 재조회 중(v5 가 error 를 비워도 `errorUpdateCount`)에도 줄이 남고 버튼은 잠긴다. 200 이면 줄이 사라지고 행이 선다.
+ *  - AS-3  200 `[]` 는 실패가 아니다(줄 없음). 목록을 받은 뒤 배경 재조회 500 도 줄 없음(받아 둔 행 유지).
+ *  - AS-4  404 도 줄이 **선다** — 계약(openapi)에 404 가 없고 어댑터가 모든 실패를 `AssistantApiError('SERVER')` 로 접어 `isNotFound` 로 가를 수 없다.
+ *  - AS-5  목록 실패는 로그 행·[대화 이어서]·CHAT 보기에 영향이 없다.
+ * `renderPage()` 의 클라이언트는 `retry:false` 라 500 한 번이 곧 실패 확정이다(앱 전역 `retryUnlessNotFound` 의 약 7초 대기 없음).
+ * 시트 실제 열림·딤은 jest 사각(6-b). (개념) `userEvent.press` = 실제 Pressability 경로.
+ */
+describe('도우미 시트 · 이력 — 이전 대화 목록 실패 (TRIP-1757)', () => {
+  const ERROR = 'assistant-history-sessions-error';
+  const RETRY = 'assistant-history-sessions-retry';
+  const OTHER = '22222222-2222-2222-2222-222222222222';
+  const OTHER_SESSION = {
+    id: OTHER,
+    tripId: '33333333-3333-3333-3333-333333333333',
+    tripTitle: '제주 3박 4일',
+    lastTurnAt: '2026-10-10T05:25:00Z',
+  };
+  const SESSIONS_GET = () => log.hitsFor('GET', '/assistant/sessions');
+  const sessionsReply = (reply: () => Response | Promise<Response>) =>
+    server.use(http.get(`${BASE}/assistant/sessions`, reply));
+  const failWith = (code: number) => () =>
+    HttpResponse.json({ error: { code: 'X', message: 'x' } }, { status: code });
+
+  async function openHistory() {
+    fireEvent.press(await screen.findByTestId('assistant-history-toggle'));
+    await screen.findByTestId('assistant-history');
+  }
+
+  it('AS-1 목록 GET 500 → 줄과 [다시 시도]가 서고 대화 행은 없으며 로그 행은 그대로다', async () => {
+    serveOpen(opened(sampleActionLogs(TRIP)));
+    sessionsReply(failWith(500));
+    renderPage();
+    await openHistory();
+
+    expect(await screen.findByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+    expect(screen.queryByTestId(/^assistant-history-session-/)).toBeNull();
+    expect(screen.getByTestId('assistant-history-row-log-1')).toBeOnTheScreen();
+    expect(SESSIONS_GET()).toBe(1);
+  });
+
+  it('AS-2a [다시 시도] → 목록 GET 1회 더, 200 이면 줄이 사라지고 이전 대화 행이 선다', async () => {
+    serveOpen(opened(sampleActionLogs(TRIP)));
+    sessionsReply(failWith(500));
+    renderPage();
+    await openHistory();
+    await screen.findByTestId(ERROR);
+
+    sessionsReply(() => HttpResponse.json([OTHER_SESSION]));
+    const user = userEvent.setup();
+    await user.press(screen.getByTestId(RETRY));
+
+    expect(
+      await screen.findByTestId(`assistant-history-session-${OTHER}`)
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+    expect(SESSIONS_GET()).toBe(2);
+  });
+
+  it('AS-2b 재조회 응답을 붙잡는 동안에도 줄이 남고 [다시 시도]는 잠기며, 응답이 오면 사라진다 (v5 가 error 를 비워도)', async () => {
+    serveOpen(opened(sampleActionLogs(TRIP)));
+    sessionsReply(failWith(500));
+    renderPage();
+    await openHistory();
+    await screen.findByTestId(ERROR);
+
+    const held = holdResponse();
+    sessionsReply(async () => {
+      await held.gate;
+      return HttpResponse.json([OTHER_SESSION]);
+    });
+    const user = userEvent.setup();
+    await user.press(screen.getByTestId(RETRY));
+    await waitFor(() => expect(SESSIONS_GET()).toBe(2));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeDisabled();
+
+    await act(async () => held.release());
+    await waitFor(() => expect(screen.queryByTestId(ERROR)).toBeNull());
+    expect(
+      screen.getByTestId(`assistant-history-session-${OTHER}`)
+    ).toBeOnTheScreen();
+  });
+
+  it('AS-3a 200 [] 는 실패가 아니다 — 줄이 없다', async () => {
+    serveOpen(opened(sampleActionLogs(TRIP)), []);
+    renderPage();
+    await openHistory();
+
+    await waitFor(() => expect(SESSIONS_GET()).toBe(1));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+  });
+
+  it('AS-3b 목록을 받은 뒤 배경 재조회만 500 이어도 줄이 없고 받아 둔 행이 남는다', async () => {
+    serveOpen(opened(sampleActionLogs(TRIP)), [OTHER_SESSION]);
+    renderPage();
+    await openHistory();
+    await screen.findByTestId(`assistant-history-session-${OTHER}`);
+
+    sessionsReply(failWith(500));
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: assistantKeys.sessions() });
+    });
+    // 앵커: 재조회가 실제로 나가 **실패로 끝났다**(요청 2회 + 쿼리 캐시: 실패 1회 누적·진행 중 아님). 이 앵커 뒤에야 화면이 그 실패를
+    // 반영하므로(react-query 알림은 한 틱 뒤) 짧게 흘려보낸 다음 줄 부재를 본다 — 안 그러면 가드를 지워도 반영 전에 평가돼 green 이다(5-b W2).
+    expect(SESSIONS_GET()).toBe(2);
+    const state = client.getQueryState(assistantKeys.sessions());
+    expect(state?.errorUpdateCount).toBe(1);
+    expect(state?.fetchStatus).toBe('idle');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+    expect(
+      screen.getByTestId(`assistant-history-session-${OTHER}`)
+    ).toBeOnTheScreen();
+  });
+
+  it('AS-4 404 도 줄이 선다 — 계약에 404 가 없어 일반 실패와 같다', async () => {
+    serveOpen(opened(sampleActionLogs(TRIP)));
+    sessionsReply(failWith(404));
+    renderPage();
+    await openHistory();
+
+    expect(await screen.findByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+  });
+
+  it('AS-5 목록이 실패해도 [대화 이어서] 로 CHAT 보기가 열리고 입력이 산다', async () => {
+    serveOpen(opened(sampleActionLogs(TRIP)));
+    sessionsReply(failWith(500));
+    renderPage();
+    await openHistory();
+    await screen.findByTestId(ERROR);
+
+    const user = userEvent.setup();
+    await user.press(screen.getByTestId('assistant-history-continue'));
+
+    expect(await screen.findByTestId('assistant-input')).toBeOnTheScreen();
+    expect(screen.queryByTestId('assistant-history')).toBeNull();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
   });
 });
 
