@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
 import { goBackOr } from '@/shared/lib/goBackOr';
+import { respectPressGuard } from '@/shared/lib/pressGuard';
 import type { ReactElement } from 'react';
 import { useReducer, useRef, useState } from 'react';
 import {
@@ -427,7 +428,11 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
               added={addedPoiIds.includes(item.poiId)}
               check={{
                 checked: isPicked(bulk, item.poiId),
-                onToggle: () => dispatchBulk({ type: 'toggle', place: item }),
+                // 연타 창을 따른다 — 시각 시트 [적용] 연타의 둘째 탭이 닫힌 시트 아래 이 원을 누르지 않게(TRIP-1793 D4).
+                // 창을 열지는 않는다 — 여러 곳을 빠르게 체크하는 손은 막지 않는다.
+                onToggle: respectPressGuard(() =>
+                  dispatchBulk({ type: 'toggle', place: item })
+                ),
               }}
               showAdd={pickedCount === 0}
               onPressAdd={() => {

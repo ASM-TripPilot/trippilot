@@ -15,6 +15,7 @@ import {
 import { server } from '@/mocks/server';
 import { useItineraryEditStore } from '@/features/edit-itinerary';
 import { setAccessToken, clearAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import {
   getGetTripsTripIdItineraryQueryKey,
   useGetTripsTripIdItinerary,
@@ -207,6 +208,8 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  // 연타 창(400ms)은 모듈 전역이다 — 앞 테스트의 시트 [적용]이 이 테스트의 첫 체크를 삼키지 않게(TRIP-1793 D4).
+  resetPressGuard();
   observed = [];
   putBodies = [];
   mockParams = { tripId: 't1' };
@@ -2345,8 +2348,9 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
       ]);
     });
 
-    /** 체크 원을 순서대로 누른다. */
+    /** 체크 원을 순서대로 누른다. 사람 손이라 앞 시트를 닫은 연타 창(400ms)은 지난 뒤다(TRIP-1793 D4 — 창 안 체크는 B7 이 잰다). */
     async function pick(...poiIds: string[]): Promise<void> {
+      resetPressGuard();
       for (const poiId of poiIds) {
         fireEvent.press(await screen.findByTestId(checkId(poiId)));
       }
@@ -2690,6 +2694,10 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
 
         // 기존 한 곳 추가 — 체크를 켰다 껐어도 그대로 PUT 1회·그날 끝.
         await add('p5');
+        // 통합 QA D4 — [적용] 연타의 둘째 탭이 닫힌 시트 아래 행의 체크 원에 닿아도 체크되지 않는다.
+        fireEvent.press(screen.getByTestId(checkId('p1')));
+        expect(screen.getByTestId(checkId('p1'))).not.toBeChecked();
+        expect(screen.queryByTestId(CTA)).toBeNull();
         await settleAdded('p5');
         expect(putBodies).toHaveLength(1);
         expect(sent(0, D1).map(([poiId]) => poiId)).toEqual(['sA', 'sB', 'p5']);
