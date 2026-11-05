@@ -2,6 +2,7 @@ import {
   guardPress,
   openPressGuardWindow,
   resetPressGuard,
+  respectPressGuard,
 } from './pressGuard';
 
 /**
@@ -195,5 +196,39 @@ describe('5-b 경고-1 · 시계가 뒤로 가도 창이 400ms 보다 길어지�
 
     // 단언 — 경과 시간이 음수면 창 밖이다(아니면 다음 날까지 먹통).
     expect(rawB).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * TRIP-1793 D4 — `respectPressGuard` 는 창을 **따르기만** 한다: 창 안이면 무시하고, 받아들인 누름이 창을 열지는 않는다
+ * (편집기 저장 CTA — 실패 뒤 곧바로 다시 저장은 눌려야 하고, 저장 자신의 연타는 페이지 잠금이 막는다).
+ */
+describe('AC-G6 · respectPressGuard — 창을 따르되 열지 않는다', () => {
+  it('창 안(399ms)이면 0회, 400ms 면 1회 · 받아들인 누름 뒤 다른 가드 콜백은 곧바로 통과한다', () => {
+    // 준비
+    const rawSave = jest.fn();
+    const rawOther = jest.fn();
+    const save = respectPressGuard(rawSave);
+    const other = guardPress(rawOther);
+
+    // 실행·단언 — 시트 [적용]이 창을 연 직후
+    openPressGuardWindow();
+    save();
+    expect(rawSave).toHaveBeenCalledTimes(0);
+    jest.advanceTimersByTime(399);
+    save();
+    expect(rawSave).toHaveBeenCalledTimes(0);
+    jest.advanceTimersByTime(1);
+    save('arg');
+    expect(rawSave).toHaveBeenCalledTimes(1);
+    expect(rawSave).toHaveBeenLastCalledWith('arg');
+
+    // 받아들인 누름이 창을 열지 않았다 — 같은 순간 다른 가드 콜백도, 자기 자신도 통과한다
+    other();
+    expect(rawOther).toHaveBeenCalledTimes(1);
+    resetPressGuard();
+    save();
+    save();
+    expect(rawSave).toHaveBeenCalledTimes(3);
   });
 });

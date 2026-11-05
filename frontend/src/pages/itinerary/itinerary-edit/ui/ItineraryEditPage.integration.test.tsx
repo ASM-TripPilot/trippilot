@@ -25,6 +25,7 @@ import type {
   ItineraryStatus,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import {
   editListData,
   fireEditDragEnd,
@@ -113,6 +114,8 @@ beforeEach(() => {
     fn.mockClear()
   );
   mockCanGoBack = true;
+  // 연타 창(400ms)은 모듈 전역이다 — 앞 테스트의 시트 [적용]·‹ 누름이 뒤 테스트의 첫 누름을 삼키지 않게.
+  resetPressGuard();
 });
 
 afterEach(() => {
@@ -596,6 +599,11 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       expect(screen.queryByTestId(SHEET)).toBeNull();
       expect(listOrder()).toEqual(['poi-c']);
       expect(screen.getByTestId('editor-undo')).toBeDisabled();
+      //  D4 — 머리 X 연타의 둘째 탭이 닫힌 시트 아래 「일정 저장하기」에 닿아도 저장하지 않는다.
+      fireEvent.press(screen.getByTestId(SAVE));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(putCalls).toBe(0);
+      resetPressGuard();
 
       // ③ AC-5 — 확정하면 시각 시트가 열리고(장소 시트는 닫힘), 기본 시각은 1일차 마지막(poi-b 13:00–14:00)이 끝나는 14:00 부터 1시간.
       //    시각 시트를 닫으면 시각 없는 슬롯을 만들지 않고 아무것도 안 옮겨진다.
@@ -614,8 +622,13 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       expect(putCalls).toBe(0);
 
       // ④ AC-1·10·7 — 이번엔 [적용]. 뒷날(2일차)에서 앞날(1일차)로 옮겨지고 화면이 1일차를 따라간다 — 1일차 마지막에 14:00 으로.
+      resetPressGuard(); // ③ 의 X 가 연 연타 창이 지난 것과 같다 — 아래 D4 단언이 [옮기기] 한 동작만 재게
       fireEvent.press(screen.getByTestId(MORE('poi-c')));
       fireEvent.press(await screen.findByTestId('editor-move-confirm'));
+      //  D4 — 장소 시트 [옮기기] 연타의 둘째 탭이 시각 시트가 올라오기 전 아래 「일정 저장하기」에 닿아도 저장하지 않는다.
+      fireEvent.press(screen.getByTestId(SAVE));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(putCalls).toBe(0);
       fireEvent.press(await screen.findByTestId(`${TIME}-apply`));
       expect(screen.queryByTestId(`${TIME}-sheet`)).toBeNull();
       expect(screen.getByTestId('itinerary-edit-day-1')).toBeSelected();
@@ -651,6 +664,7 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       fireEvent.press(screen.getByTestId(`${TIME}-wheel-h-15`));
       fireEvent.press(screen.getByTestId(`${TIME}-seg-end`));
       fireEvent.press(screen.getByTestId(`${TIME}-wheel-h-16`));
+      resetPressGuard(); // [옮기기]가 연 창이 지난 것과 같다(휠을 고르는 사이) — 아래 ⑥b 가 [적용] 한 동작만 재게
       fireEvent.press(screen.getByTestId(`${TIME}-apply`));
       expect(screen.getByTestId('itinerary-edit-day-2')).toBeSelected();
       expect(listOrder()).toEqual(['poi-b', 'poi-c']);
@@ -661,8 +675,16 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       );
       expect(screen.queryByTestId(movedId(DAY2, 'poi-c'))).toBeNull();
 
-      // ⑦ AC-2 — 저장: 1일차 [poi-a], 2일차 [poi-b(15:00–16:00), poi-c]. 옮김 표식은 요청 어디에도 없다. 저장 뒤 재시드로 표식이 사라진다.
+      // ⑥b 통합 QA D4 — [적용] 연타의 둘째 탭이 시트가 닫힌 자리 아래 「일정 저장하기」에 닿아도 저장하지 않는다
+      //  (시트 [적용]이 연타 창을 열고 저장 CTA 가 그 창을 따른다). 방문 조회가 끝난 뒤라야 「모름이라 PUT 0」과 섞이지 않는다.
       await visitsSettled();
+      fireEvent.press(screen.getByTestId(SAVE));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(putCalls).toBe(0);
+      expect(mockBack).not.toHaveBeenCalled();
+      resetPressGuard(); // 400ms 가 지난 것과 같다 — 아래 ⑦ 의 저장은 창 밖 누름
+
+      // ⑦ AC-2 — 저장: 1일차 [poi-a], 2일차 [poi-b(15:00–16:00), poi-c]. 옮김 표식은 요청 어디에도 없다. 저장 뒤 재시드로 표식이 사라진다.
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
       const sent = putBody as EditItineraryRequest;
@@ -1959,6 +1981,7 @@ describe('여행 중 직접 수정(i07)', () => {
       fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-15'));
       fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+      resetPressGuard(); // 연타 창이 지난 것과 같다(TRIP-1793 D4 — [적용]이 창을 연다)
 
       expect(
         screen.getByTestId(`slot-stopcard-time-${k('p3')}`)
@@ -3041,6 +3064,8 @@ describe('시각 조정 시트', () => {
   async function applyAndWaitClosed() {
     press('apply');
     await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+    // 연타 창(400ms)이 지난 것과 같다 — 시트를 닫는 누름이 창을 연다(TRIP-1793 D4), 사람 손은 저장까지 그보다 느리다.
+    resetPressGuard();
   }
 
   async function saveAndGetSlot(poiId: string) {

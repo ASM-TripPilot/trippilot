@@ -23,6 +23,7 @@ import {
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { buildSlotKey } from '@/entities/itinerary-slot';
+import { respectPressGuard } from '@/shared/lib/pressGuard';
 import { overlapAwareNotice } from '@/entities/itinerary-slot';
 import { SlotStopCard } from '@/entities/itinerary-slot';
 
@@ -436,7 +437,9 @@ export function EditorView({
           {
             label: saveLabel,
             variant: 'primary',
-            onPress: onSave,
+            // 연타 창을 따른다 — 시트 [적용] 연타의 둘째 탭이 닫힌 시트 아래 이 자리에 닿아도 저장하지 않는다(TRIP-1793 D4).
+            // 창을 열지는 않는다 — 저장 자신의 연타는 페이지 `inFlightRef` 가 막고, 실패 뒤 다시 저장은 곧바로 눌려야 한다.
+            onPress: respectPressGuard(onSave),
             disabled: slots.length === 0,
           },
         ];

@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { InfoCircleGlyph, AlertCircleGlyph } from '@/shared/ui/glyphs';
 import { goBackOr } from '@/shared/lib/goBackOr';
-import { guardPress } from '@/shared/lib/pressGuard';
+import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
 
 import { buildEditItineraryRequest } from '@/features/edit-itinerary';
 import { buildDraftPins, formatCoPickDayHeader } from '@/features/itinerary';
@@ -593,10 +593,16 @@ export function ItineraryEditPage({
           options={moveOptions.options}
           initialDate={moveOptions.initialDate}
           onConfirm={(toDate) => {
+            // 장소 시트 [옮기기] 연타의 둘째 탭이 시각 시트가 올라오기 전 아래 「일정 저장하기」에 닿지 않게(TRIP-1793 D4).
+            openPressGuardWindow();
             setPendingMove({ ...moving, toDate });
             setMoving(null);
           }}
-          onClose={() => setMoving(null)}
+          onClose={() => {
+            // 머리 X 연타의 둘째 탭이 닫힌 시트 아래 「일정 저장하기」에 닿지 않게(TRIP-1793 D4, 5-b 경고-1).
+            openPressGuardWindow();
+            setMoving(null);
+          }}
         />
       ) : null}
 

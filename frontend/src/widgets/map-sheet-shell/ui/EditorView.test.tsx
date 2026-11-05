@@ -22,7 +22,11 @@ import {
   hoverOverDeleteZone,
 } from '@/test-support/editDragList';
 
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { EditorView } from './EditorView';
+
+// 저장 CTA 는 모듈 전역 연타 창(400ms)을 따른다(TRIP-1793 D4) — 앞 테스트의 누름이 다음 테스트의 첫 저장을 삼키지 않게.
+beforeEach(resetPressGuard);
 
 /**
  * TRIP-797 · AC-1·2·3·4·5·6·8·9·10·12 (OQ-3) — h12 통일 편집기 **순수 뷰** 구조·배선.

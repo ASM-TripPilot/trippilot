@@ -24,6 +24,7 @@ import type {
   SavedStay,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { promptAndRegisterPush } from '@/shared/push';
 import {
   EDIT_LIST,
@@ -739,6 +740,7 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       fireEvent.press(screen.getByTestId('itinerary-manual-time-seg-end'));
       fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-15'));
       fireEvent.press(screen.getByTestId('itinerary-manual-time-apply'));
+      resetPressGuard(); // 연타 창이 지난 것과 같다(TRIP-1793 D4 — 시트를 닫는 누름이 창을 연다)
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
       const body = await save();
@@ -770,6 +772,7 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       fireEvent.press(screen.getByTestId('itinerary-manual-time-seg-start'));
       fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-14'));
       fireEvent.press(screen.getByTestId('itinerary-manual-time-apply'));
+      resetPressGuard(); // 연타 창이 지난 것과 같다(TRIP-1793 D4 — 시트를 닫는 누름이 창을 연다)
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
       const body = await save();
@@ -820,6 +823,7 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-14'));
 
       fireEvent.press(screen.getByTestId('itinerary-manual-time-close'));
+      resetPressGuard(); // 연타 창이 지난 것과 같다(TRIP-1793 D4 — 시트를 닫는 누름이 창을 연다)
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
       const body = await save();
