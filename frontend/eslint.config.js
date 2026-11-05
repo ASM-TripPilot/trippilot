@@ -264,9 +264,11 @@ const NATIVE_MODULES = [
   'expo-sharing',
   // TRIP-1338 — U10 백그라운드 태스크. 플래그 OFF 빌드(재빌드 전 dev build 포함)에는 모듈이 없을 수 있다.
   'expo-task-manager',
+  // TRIP-1799 — 주소 복사. 모듈 없는 옛 dev build 에선 로드 순간 던진다.
+  'expo-clipboard',
 ];
 const NATIVE_MESSAGE =
-  '네이티브 모듈 정적 import 금지 — 사진은 @/shared/photo 의 require 입구, 공유 캡처는 shareCaptureNative 로만, 위치 자동화 태스크는 shared/location/automation/tasks.ts(플래그 ON 일 때만 require) 로만.';
+  '네이티브 모듈 정적 import 금지 — 사진은 @/shared/photo 의 require 입구, 클립보드는 @/shared/clipboard 의 require 입구, 공유 캡처는 shareCaptureNative 로만, 위치 자동화 태스크는 shared/location/automation/tasks.ts(플래그 ON 일 때만 require) 로만.';
 const nativePaths = (names) =>
   names.map((name) => ({ name, message: NATIVE_MESSAGE }));
 const nativeSubpaths = (names) =>

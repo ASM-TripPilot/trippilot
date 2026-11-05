@@ -87,6 +87,34 @@ export function ExploreShareGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
+/** d06 주소 행 복사 — 겹친 사각 둘(TRIP-1799, Figma `5227:4395` copy 에셋 path 그대로 · 20 박스, muted stroke). */
+export function ExploreCopyGlyph({ size = 20, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <Path
+        d="M8.33333 6.66667H16.6667C17.5871 6.66667 18.3333 7.41286 18.3333 8.33333V16.6667C18.3333 17.5871 17.5871 18.3333 16.6667 18.3333H8.33333C7.41286 18.3333 6.66667 17.5871 6.66667 16.6667V8.33333C6.66667 7.41286 7.41286 6.66667 8.33333 6.66667Z"
+        stroke={MUTED}
+        strokeWidth={1.66667}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3.33333 13.3333C2.41667 13.3333 1.66667 12.5833 1.66667 11.6667V3.33333C1.66667 2.41667 2.41667 1.66667 3.33333 1.66667H11.6667C12.5833 1.66667 13.3333 2.41667 13.3333 3.33333"
+        stroke={MUTED}
+        strokeWidth={1.66667}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /** 검색 돋보기. `tone='on-primary'`는 분홍 버튼 위 흰 돋보기(TRIP-1050, d02 empty CTA). */
 export function ExploreSearchGlyph({
   size = 20,

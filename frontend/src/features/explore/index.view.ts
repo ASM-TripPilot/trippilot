@@ -14,6 +14,7 @@ export {
 export type { RegionGroup } from './model/regions';
 export {
   ExploreBackChevronGlyph,
+  ExploreCopyGlyph,
   CheckCircleFilledGlyph,
   CheckCircleOutlineGlyph,
   CircleExclaimGlyph,
