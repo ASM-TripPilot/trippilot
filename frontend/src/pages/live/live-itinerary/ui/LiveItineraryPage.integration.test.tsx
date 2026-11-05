@@ -142,7 +142,7 @@ jest.mock('@react-navigation/native', () => ({
 const mockPick = jest.fn();
 const mockResolveUri = jest.fn();
 jest.mock('@/shared/photo', () => ({
-  pickPhotoAsset: () => mockPick(),
+  pickPhotoAssets: (opts: { limit: number }) => mockPick(opts),
   resolvePhotoUri: (id: string) => mockResolveUri(id),
 }));
 
@@ -3161,7 +3161,7 @@ describe('메모 시트', () => {
  *          이동"을 뒤집었다). 여는 것만으로는 저장 요청이 없다 — 저장·실패·표시 계약은 위 「메모 시트」.
  *  - AC-8  좌표는 서버의 GPS 기록 동의(`gpsRecordingOptIn`)가 켜졌을 때만 싣는다. 동의 조회가 실패하면 끈 것으로.
  *  - AC-9·10·12  취소는 조용히, 권한 거부·자산 번호 없음·피커 실패·저장 실패는 카드 아래 안내 한 줄로.
- *  - F6  허브는 사진 목록을 조회하지 않고, 화면을 열 때 동의를 미리 조회하지도 않는다(누른 뒤에만).
+ *  - F6  허브는 마운트에 사진 목록을 조회하지 않고(누른 순간 1회만 — TRIP-1797), 화면을 열 때 동의를 미리 조회하지도 않는다(누른 뒤에만).
  *
  * 왜 이렇게 테스트하나:
  *  - 앨범(`@/shared/photo`)은 네이티브라 가짜로 바꾸고, 서버 요청은 MSW 로 실제 경로·본문을 본다.
@@ -3177,9 +3177,10 @@ describe('관람 중 카드 [사진]·[메모]', () => {
   const PHOTOS_POST = `POST /api/v1/trips/${TRIP_ID}/visits/v1/photos`;
   const PHOTOS_GET = `GET /api/v1/trips/${TRIP_ID}/visits/v1/photos`;
   const CONSENT_GET = 'GET /api/v1/me/location-consent';
+  const PHOTO_TOAST_ID = 'live-photo-saved-toast';
 
   const COPY_DENIED = '사진 접근 권한이 없어 사진을 불러올 수 없어요';
-  const COPY_SAVE_FAILED = '사진을 기록하지 못했어요. 다시 시도해 주세요';
+  const COPY_SAVE_FAILED = '1장을 붙이지 못했어요';
 
   const PICKED_ASSET = {
     localAssetId: 'asset-1',
@@ -3219,6 +3220,8 @@ describe('관람 중 카드 [사진]·[메모]', () => {
   });
   let photoBodies: Record<string, unknown>[] = [];
   let photoStatus = 201;
+  // TRIP-1797 — [사진]을 누른 순간 한 번 읽는 "이 방문의 현재 사진 수". 'error' 면 500.
+  let photoCount: number | 'error' = 0;
   let consentResponse: () => Response;
 
   let client: QueryClient;
@@ -3233,13 +3236,15 @@ describe('관람 중 카드 [사진]·[메모]', () => {
   beforeEach(() => {
     photoBodies = [];
     photoStatus = 201;
+    photoCount = 0;
     consentResponse = () => HttpResponse.json(consent(true, true));
     client = newTestQueryClient({ gcTime: 0 });
     // 옛 목 값 — 이 관점은 뒤로가기 히스토리가 없는 것으로 돌았다.
     mockCanGoBack.mockReturnValue(false);
     mockPick.mockReset().mockResolvedValue({
       kind: 'picked',
-      asset: PICKED_ASSET,
+      assets: [PICKED_ASSET],
+      skipped: 0,
     });
     mockResolveUri.mockReset().mockResolvedValue(null);
     server.use(
@@ -3251,6 +3256,14 @@ describe('관람 중 카드 [사진]·[메모]', () => {
         HttpResponse.json({ visits: [arrivedVisit()] })
       ),
       http.get(`${BASE}/me/location-consent`, () => consentResponse()),
+      http.get(`${BASE}/trips/:tripId/visits/:visitCheckId/photos`, () =>
+        photoCount === 'error'
+          ? HttpResponse.json(
+              { error: { code: 'INTERNAL', message: 'boom' } },
+              { status: 500 }
+            )
+          : HttpResponse.json({ items: [], count: photoCount })
+      ),
       http.post(
         `${BASE}/trips/:tripId/visits/:visitCheckId/photos`,
         async ({ request }) => {
@@ -3312,6 +3325,7 @@ describe('관람 중 카드 [사진]·[메모]', () => {
         deviceId: 'dev-A',
       });
       expect(mockPick).toHaveBeenCalledTimes(1);
+      expect(mockPick).toHaveBeenCalledWith({ limit: 10 });
     });
   });
 
@@ -3410,7 +3424,7 @@ describe('관람 중 카드 [사진]·[메모]', () => {
 
   // TRIP-1426 · Q-090 — 허브엔 사진 칸이 없어(F6) 붙여도 화면이 안 바뀌었다. POST 가 성공하면 공용 토스트로 알린다(결정 1=A).
   describe('🔴 TRIP-1426 · [사진] 이 저장되면 안내하고, 저장되지 않았으면 안내하지 않는다', () => {
-    const PHOTO_TOAST = 'live-photo-saved-toast';
+    const PHOTO_TOAST = PHOTO_TOAST_ID;
 
     it('PH1 사진을 골라 POST 가 성공하면 "사진을 기록했어요" 안내가 뜬다 (AC-9)', async () => {
       // 준비
@@ -3480,21 +3494,191 @@ describe('관람 중 카드 [사진]·[메모]', () => {
     );
   });
 
-  describe('🔴 F6 · 허브는 사진 목록을 조회하지 않고, 사진 흐름의 동의는 누른 뒤에만 읽는다', () => {
-    it('L9 화면을 연 뒤 사진 흐름의 동의 조회 0회(내 위치 몫 1회만) · 사진을 붙인 뒤에도 사진 목록 조회 0회', async () => {
+  describe('🔴 F6 · 허브는 마운트에 사진 목록을 조회하지 않는다 — [사진]을 누른 순간에만 1회, 동의는 누른 뒤에만 읽는다', () => {
+    // TRIP-1797 로 "조회 0회 영구"가 "마운트 0회 · 누른 뒤 1회"로 개정됐다(남은 칸 계산에 현재 장수가 필요하다).
+    it('L9 화면을 연 뒤 사진 목록 조회 0회·사진 흐름의 동의 조회 0회(내 위치 몫 1회만) → 누른 뒤 사진 목록 1회·동의 1회 더', async () => {
       const photo = await renderHub();
       await settle();
 
-      // 단언 — 누르기 전엔 사진 흐름이 동의를 조회하지 않는다(화면을 열 때 내 위치 표시 몫 1회만 — TRIP-1535).
+      // 단언 — 누르기 전엔 사진 목록도, 사진 흐름의 동의도 조회하지 않는다(내 위치 표시 몫 1회만 — TRIP-1535).
+      expect(hitCount(PHOTOS_GET)).toBe(0);
       expect(hitCount(CONSENT_GET)).toBe(1);
 
       fireEvent.press(photo);
       await waitFor(() => expect(hitCount(PHOTOS_POST)).toBe(1));
       await settle();
 
-      // 단언 — 사진 흐름의 동의 조회는 누른 뒤 1회(열 때 1회 + 1), 사진 목록 조회는 처음부터 끝까지 0회.
+      // 단언 — 누른 순간 사진 목록 1회(남은 칸 계산), 사진 흐름의 동의 조회는 누른 뒤 1회(열 때 1회 + 1).
+      expect(hitCount(PHOTOS_GET)).toBe(1);
       expect(hitCount(CONSENT_GET)).toBe(2);
-      expect(hitCount(PHOTOS_GET)).toBe(0);
+    });
+  });
+
+  // TRIP-1797 — 한 번에 여러 장. 규칙은 j01 과 같은 훅이 쥐고, 여기서는 허브 표면(누른 카드 안 진행 줄·안내·[다시 시도])을 본다.
+  describe('🔴 TRIP-1797 · 여러 장 한 번에 붙이기', () => {
+    const PROGRESS = 'visit-photo-progress';
+    const RETRY = 'visit-photo-retry';
+    const NOTICE = 'execution-arrive-photo-notice';
+    const COPY_FULL = '이 방문엔 사진을 더 붙일 수 없어요 (최대 30장)';
+
+    let failAssetIds: Set<string>;
+    let hold: boolean;
+    let gates: (() => void)[];
+
+    const asset = (id: string) => ({ ...PICKED_ASSET, localAssetId: id });
+    const picks = (...ids: string[]) => ({
+      kind: 'picked',
+      assets: ids.map(asset),
+      skipped: 0,
+    });
+
+    beforeEach(() => {
+      failAssetIds = new Set();
+      hold = false;
+      gates = [];
+      server.use(
+        http.post(
+          `${BASE}/trips/:tripId/visits/:visitCheckId/photos`,
+          async ({ request }) => {
+            const body = (await request.json()) as Record<string, unknown>;
+            photoBodies.push(body);
+            if (hold) await new Promise<void>((resolve) => gates.push(resolve));
+            if (failAssetIds.has(String(body.localAssetId))) {
+              return HttpResponse.json(
+                { error: { code: 'INTERNAL', message: 'boom' } },
+                { status: 500 }
+              );
+            }
+            return HttpResponse.json(
+              {
+                visitPhotoMetaId: `ph-${String(body.localAssetId)}`,
+                localAssetId: body.localAssetId,
+                deviceId: body.deviceId,
+                takenAt: null,
+                exifLat: null,
+                exifLng: null,
+                sortOrder: 0,
+              },
+              { status: 201 }
+            );
+          }
+        )
+      );
+    });
+
+    async function releaseAll(total: number) {
+      for (let i = 0; i < total; i += 1) {
+        await waitFor(() => expect(gates.length).toBeGreaterThan(i));
+        await act(async () => {
+          gates[i]?.();
+        });
+      }
+    }
+
+    it('HM1 5장을 고르면 목록 조회 1회 · 피커 한도 10 · POST 5회가 고른 순서대로, 끝나면 "사진 5장을 붙였어요" 안내', async () => {
+      mockPick.mockResolvedValue(picks('a1', 'a2', 'a3', 'a4', 'a5'));
+      const photo = await renderHub();
+      expect(screen.queryByTestId(PHOTO_TOAST_ID)).toBeNull();
+
+      fireEvent.press(photo);
+
+      expect(
+        await screen.findByTestId(PHOTO_TOAST_ID, {}, TOAST_WAIT)
+      ).toHaveTextContent('사진 5장을 붙였어요');
+      expect(hitCount(PHOTOS_GET)).toBe(1);
+      expect(mockPick).toHaveBeenCalledWith({ limit: 10 });
+      expect(photoBodies.map((b) => b.localAssetId)).toEqual([
+        'a1',
+        'a2',
+        'a3',
+        'a4',
+        'a5',
+      ]);
+      expect(hitCount(PHOTOS_POST)).toBe(5);
+      expect(screen.queryByTestId(NOTICE)).toBeNull();
+    });
+
+    it.each<[string, number | 'error', number]>([
+      ['이미 26장', 26, 4],
+      ['목록 조회 실패(500)', 'error', 10],
+    ])('HM2 %s → 피커 한도 %s', async (_label, count, limit) => {
+      photoCount = count;
+      mockPick.mockResolvedValue({ kind: 'canceled' });
+      const photo = await renderHub();
+
+      fireEvent.press(photo);
+
+      await waitFor(() => expect(mockPick).toHaveBeenCalledTimes(1));
+      expect(mockPick).toHaveBeenCalledWith({ limit });
+    });
+
+    it('HM2b 이미 30장이면 피커를 열지 않고 누른 카드에 "더 붙일 수 없어요" 한 줄만 남기며 POST 는 없다', async () => {
+      photoCount = 30;
+      const photo = await renderHub();
+
+      fireEvent.press(photo);
+
+      expect(await screen.findByTestId(NOTICE)).toHaveTextContent(COPY_FULL);
+      expect(mockPick).not.toHaveBeenCalled();
+      expect(hitCount(PHOTOS_POST)).toBe(0);
+    });
+
+    it('HM3 붙이는 동안 "1/3 붙이는 중" → "2/3 붙이는 중" 이 카드에 서고 끝나면 사라진다', async () => {
+      hold = true;
+      mockPick.mockResolvedValue(picks('a1', 'a2', 'a3'));
+      const photo = await renderHub();
+      expect(screen.queryByTestId(PROGRESS)).toBeNull();
+
+      fireEvent.press(photo);
+
+      await waitFor(() => expect(gates).toHaveLength(1));
+      expect(screen.getByTestId(PROGRESS)).toHaveTextContent('1/3 붙이는 중');
+      await act(async () => {
+        gates[0]?.();
+      });
+      await waitFor(() => expect(gates).toHaveLength(2));
+      expect(screen.getByTestId(PROGRESS)).toHaveTextContent('2/3 붙이는 중');
+      await releaseAll(3);
+      await waitFor(() => expect(screen.queryByTestId(PROGRESS)).toBeNull());
+    });
+
+    it('HM4 [사진]을 같은 틱에 두 번, 진행 중에 또 눌러도 목록 조회·피커는 1회뿐이다', async () => {
+      hold = true;
+      mockPick.mockResolvedValue(picks('a1', 'a2'));
+      const photo = await renderHub();
+
+      fireEvent.press(photo);
+      fireEvent.press(photo);
+      await waitFor(() => expect(gates).toHaveLength(1));
+      fireEvent.press(photo);
+      await settle();
+
+      expect(hitCount(PHOTOS_GET)).toBe(1);
+      expect(mockPick).toHaveBeenCalledTimes(1);
+      expect(hitCount(PHOTOS_POST)).toBe(1);
+      await releaseAll(2);
+    });
+
+    it('HM5 3장 중 둘째가 실패하면 끝 장까지 보내고 "1장을 붙이지 못했어요" + [다시 시도] — 누르면 그 한 장만 다시 보낸다', async () => {
+      failAssetIds.add('a2');
+      mockPick.mockResolvedValue(picks('a1', 'a2', 'a3'));
+      const photo = await renderHub();
+
+      fireEvent.press(photo);
+
+      expect(await screen.findByTestId(NOTICE)).toHaveTextContent(
+        '1장을 붙이지 못했어요'
+      );
+      expect(hitCount(PHOTOS_POST)).toBe(3);
+      expect(screen.queryByTestId(PHOTO_TOAST_ID)).toBeNull();
+
+      failAssetIds.clear();
+      fireEvent.press(await screen.findByTestId(RETRY));
+
+      await waitFor(() => expect(hitCount(PHOTOS_POST)).toBe(4));
+      expect(photoBodies[3]).toMatchObject({ localAssetId: 'a2' });
+      await waitFor(() => expect(screen.queryByTestId(NOTICE)).toBeNull());
+      expect(screen.queryByTestId(RETRY)).toBeNull();
     });
   });
 });
@@ -3505,7 +3689,7 @@ describe('관람 중 카드 [사진]·[메모]', () => {
  * 무엇을 보장하나:
  *  - AC-1  방문 id 를 아는 완료 카드(낙관 id 가 아닌 완료 계획 방문)에 [사진]·[메모]가 선다. [방문 완료]·[길찾기]는
  *          없고, 관람 중 카드의 고정 한 쌍은 그대로 1쌍이다. 시각 표기(TRIP-1220)는 그대로다(AC-8).
- *  - AC-2  완료 [사진] → `POST …/visits/{그 완료 방문 id}/photos` 1회(본문은 관람 중과 같은 메타), 사진 목록 GET 0(F6).
+ *  - AC-2  완료 [사진] → `POST …/visits/{그 완료 방문 id}/photos` 1회(본문은 관람 중과 같은 메타), 사진 목록 GET 은 누른 순간에만 1회(F6, TRIP-1797).
  *  - AC-3  결과 안내는 누른 그 카드 아래 1줄 — 취소 무음, 권한 사유면 [설정 열기], 저장 실패 문구. 어느 카드든
  *          다음 [사진]에 지워진다.
  *  - AC-4  완료 [메모] → 이동 없이 허브 위 메모 시트(제목 `{그 장소} · 메모`, 시드 = 그 방문 저장본) → [저장] →
@@ -3540,7 +3724,7 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
 
   const COPY_DENIED = '사진 접근 권한이 없어 사진을 불러올 수 없어요';
   const COPY_FAILED = '사진을 불러올 수 없어요';
-  const COPY_SAVE_FAILED = '사진을 기록하지 못했어요. 다시 시도해 주세요';
+  const COPY_SAVE_FAILED = '1장을 붙이지 못했어요';
   const COPY_MEMO_FAILED = '메모를 저장하지 못했어요. 다시 시도해 주세요.';
 
   const SHEET = 'live-memo-sheet';
@@ -3631,7 +3815,8 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
     mockCanGoBack.mockReturnValue(false);
     mockPick.mockReset().mockResolvedValue({
       kind: 'picked',
-      asset: PICKED_ASSET,
+      assets: [PICKED_ASSET],
+      skipped: 0,
     });
     mockResolveUri.mockReset().mockResolvedValue(null);
     server.use(
@@ -3781,8 +3966,11 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
   });
 
   describe('🔴 AC-2 · 완료 [사진] → 그 완료 방문에 메타만 POST', () => {
-    it('D3 POST …/visits/v1/photos 정확히 1회(v2 로는 0), 본문에 자산 번호·설치 식별자, 사진 목록 조회 0', async () => {
+    it('D3 POST …/visits/v1/photos 정확히 1회(v2 로는 0), 본문에 자산 번호·설치 식별자, 사진 목록 조회는 누른 순간에만 v1 로 1회', async () => {
       const photo = await renderHub();
+      await settle();
+      // F6 앵커 — 누르기 전엔 사진 목록 조회가 없다(TRIP-1797 로 "영구 0"이 "마운트 0 · 누른 뒤 1"로 개정).
+      expect(hitCount(PHOTOS_GET_V1)).toBe(0);
 
       fireEvent.press(photo);
 
@@ -3794,7 +3982,33 @@ describe('방문 완료 카드 [사진]·[메모]', () => {
         localAssetId: 'asset-9',
         deviceId: 'dev-B',
       });
-      expect(hitCount(PHOTOS_GET_V1)).toBe(0);
+      expect(hitCount(PHOTOS_GET_V1)).toBe(1);
+    });
+
+    // TRIP-1797 — 완료 카드도 같은 여러 장 흐름(진행 줄은 그 카드 안, POST 는 그 완료 방문으로만).
+    it('DM1 완료 카드에서 3장을 고르면 v1 로만 POST 3회가 순서대로 나가고 "사진 3장을 붙였어요" 안내가 뜬다', async () => {
+      mockPick.mockResolvedValue({
+        kind: 'picked',
+        assets: ['b1', 'b2', 'b3'].map((id) => ({
+          ...PICKED_ASSET,
+          localAssetId: id,
+        })),
+        skipped: 0,
+      });
+      const photo = await renderHub();
+
+      fireEvent.press(photo);
+
+      expect(
+        await screen.findByTestId('live-photo-saved-toast', {}, TOAST_WAIT)
+      ).toHaveTextContent('사진 3장을 붙였어요');
+      expect(photoBodies.map((b) => b.localAssetId)).toEqual([
+        'b1',
+        'b2',
+        'b3',
+      ]);
+      expect(hitCount(PHOTOS_POST_V1)).toBe(3);
+      expect(hitCount(PHOTOS_POST_V2)).toBe(0);
     });
 
     // TRIP-1426 AC-9 — 완료 카드 [사진]도 같은 저장 안내를 띄운다.

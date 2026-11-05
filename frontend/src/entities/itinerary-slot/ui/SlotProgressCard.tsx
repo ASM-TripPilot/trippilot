@@ -75,6 +75,10 @@ export interface SlotProgressCardProps {
   onPressMemo?: () => void;
   /** active·done 사진 안내 한 줄(권한 거부·저장 실패 등) — 상태는 부모가 가진다. 비면 안 그린다. */
   photoNotice?: string | null;
+  /** TRIP-1797 — active·done. 여러 장을 붙이는 동안의 진행 한 줄("2/3 붙이는 중"). 있으면 그리고, 없거나 null 이면 안 그린다. 상태는 부모가 가진다. */
+  photoProgress?: string | null;
+  /** TRIP-1797 — active·done. 붙이지 못한 사진 [다시 시도]. 주면 그린다(안내 줄 아래). 어느 카드에 줄지는 부모가 정한다. */
+  photoRetry?: { onPress: () => void };
   /** TRIP-1216 — 사진 안내 옆 [설정 열기](권한 거부). 주면 안내가 있을 때만 그린다. 설정을 여는 일은 부모 몫. */
   onPressPhotoSettings?: () => void;
   /** TRIP-1117 — active·done 메모 안내 한 줄(저장 실패, Q3). 상태는 부모가 가진다. 비면 안 그린다. */
@@ -107,6 +111,8 @@ export function SlotProgressCard({
   onPressPhoto,
   onPressMemo,
   photoNotice,
+  photoProgress,
+  photoRetry,
   onPressPhotoSettings,
   memoNotice,
   badgeLabel,
@@ -307,6 +313,14 @@ export function SlotProgressCard({
     memoNotice: string;
   }): ReactElement => (
     <>
+      {photoProgress ? (
+        <Text
+          testID="visit-photo-progress"
+          className="font-noto text-caption text-muted"
+        >
+          {photoProgress}
+        </Text>
+      ) : null}
       {photoNotice ? (
         <Text
           testID={ids.photoNotice}
@@ -314,6 +328,19 @@ export function SlotProgressCard({
         >
           {photoNotice}
         </Text>
+      ) : null}
+      {photoRetry ? (
+        <Pressable
+          testID="visit-photo-retry"
+          accessibilityRole="button"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          onPress={photoRetry.onPress}
+          className="self-start"
+        >
+          <Text className="font-noto-bold text-caption font-bold text-primary">
+            다시 시도
+          </Text>
+        </Pressable>
       ) : null}
       {photoNotice && onPressPhotoSettings ? (
         <Pressable

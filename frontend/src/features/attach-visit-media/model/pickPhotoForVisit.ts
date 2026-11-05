@@ -1,12 +1,12 @@
 import { getMeLocationConsent } from '@/shared/api/index.hooks';
-import { pickPhotoAsset, type PhotoAssetMeta } from '@/shared/photo';
+import { pickPhotoAssets, type PhotoAssetMeta } from '@/shared/photo';
 
 /**
- * TRIP-1070 · 방문에 붙일 사진 1장 고르기 — 허브 [사진]과 j01 `+` 가 함께 쓴다.
+ * TRIP-1070 · 방문에 붙일 사진 고르기(TRIP-1797 — 한 번에 최대 `limit` 장) — 허브 [사진]과 j01 `+` 가 함께 쓴다.
  *
  * 무엇을 보장하나:
- *  - 골랐으면 `{ asset, gpsConsent }` — 위치 동의는 **고른 뒤에** 한 번 읽는다(보기만 한 화면에서
- *    요청하지 않는다). 서버 `gpsRecordingOptIn`(L3, BR-U5-12)만 보고, 조회 실패는 끈 것으로 본다
+ *  - 골랐으면 `{ assets, skipped, gpsConsent }` — 위치 동의는 **고른 뒤에** 장수와 무관하게 한 번 읽는다(보기만 한 화면에서
+ *    요청하지 않는다). `skipped` = 자산 번호가 없어 빠진 장수. 서버 `gpsRecordingOptIn`(L3, BR-U5-12)만 보고, 조회 실패는 끈 것으로 본다
  *    (좌표만 빠질 뿐 첨부는 막지 않는다).
  *  - 못 골랐으면 `{ notice }` — 취소는 null(사용자 의도라 조용히), 나머지는 사용자에게 보일 안내 한 줄
  *    (INV-4 · US-REC-02 예외). 성공 전용 Toast 가 아니라 부르는 쪽이 트리거 옆에 그린다.
@@ -15,7 +15,7 @@ import { pickPhotoAsset, type PhotoAssetMeta } from '@/shared/photo';
  */
 
 export type PhotoPickOutcome =
-  | { asset: PhotoAssetMeta; gpsConsent: boolean }
+  | { assets: PhotoAssetMeta[]; skipped: number; gpsConsent: boolean }
   | { notice: string | null; settings?: true };
 
 const PICK_NOTICE = {
@@ -29,8 +29,12 @@ const PICK_NOTICE = {
   unsupported: '사진 붙이기는 앱에서만 쓸 수 있어요',
 } as const;
 
-export async function pickPhotoForVisit(): Promise<PhotoPickOutcome> {
-  const result = await pickPhotoAsset();
+export async function pickPhotoForVisit({
+  limit,
+}: {
+  limit: number;
+}): Promise<PhotoPickOutcome> {
+  const result = await pickPhotoAssets({ limit });
   if (result.kind !== 'picked') {
     const notice = PICK_NOTICE[result.kind];
     // 권한이 원인인 사유(거부·제한·자산 번호 없음)는 설정에서만 풀린다 — 재시도 대신 설정으로 보낸다.
@@ -44,5 +48,5 @@ export async function pickPhotoForVisit(): Promise<PhotoPickOutcome> {
     (consent) => consent.gpsRecordingOptIn === true,
     () => false
   );
-  return { asset: result.asset, gpsConsent };
+  return { assets: result.assets, skipped: result.skipped, gpsConsent };
 }

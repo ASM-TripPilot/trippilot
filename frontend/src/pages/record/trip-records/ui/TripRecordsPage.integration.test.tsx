@@ -127,8 +127,8 @@ jest.mock('@/shared/photo', () => {
   const actual =
     jest.requireActual<typeof import('@/shared/photo')>('@/shared/photo');
   return {
-    pickPhotoAsset: () =>
-      mockPhotoSeam ? mockPick() : actual.pickPhotoAsset(),
+    pickPhotoAssets: (opts: { limit: number }) =>
+      mockPhotoSeam ? mockPick(opts) : actual.pickPhotoAssets(opts),
     resolvePhotoUri: (id: string) =>
       mockPhotoSeam ? mockResolveUri(id) : actual.resolvePhotoUri(id),
   };
@@ -3546,7 +3546,11 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
     photoBodies = [];
     photoStatus = 201;
     gpsOptIn = true;
-    mockPick.mockReset().mockResolvedValue({ kind: 'picked', asset: asset() });
+    mockPick.mockReset().mockResolvedValue({
+      kind: 'picked',
+      assets: [asset()],
+      skipped: 0,
+    });
     mockResolveUri
       .mockReset()
       .mockImplementation(async (id: string) => `file:///photos/${id}.jpg`);
@@ -3805,7 +3809,11 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
 
     it('R8 저장 요청이 실패하면(500) "업로드 실패" 칸과 카드 [다시 시도]가 뜬다', async () => {
       photoStatus = 500;
-      mockPick.mockResolvedValue({ kind: 'picked', asset: asset('asset-9') });
+      mockPick.mockResolvedValue({
+        kind: 'picked',
+        assets: [asset('asset-9')],
+        skipped: 0,
+      });
       const card = await renderCard();
 
       fireEvent.press(await within(card).findByTestId('record-trip-photo-add'));
@@ -3816,6 +3824,264 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
       expect(
         within(card).getByTestId('record-trip-upload-retry-v-a')
       ).toBeOnTheScreen();
+    });
+  });
+
+  /**
+   * TRIP-1797 · 여러 장 한 번에 — 한 번 골라 최대 10장(방문 30장 − 이미 붙은 장수 이내)을 차례로 붙인다.
+   *
+   * 무엇을 보장하나:
+   *  - M1  5장을 고르면 피커 한도 10 · POST 5회가 고른 순서대로 · 사진 칸 5개 · 사진 목록은 끝에서 한 번만 다시 받는다(첫 로드 1 + 끝 1)
+   *        · "사진 5장을 붙였어요" 토스트. 1장이면 토스트 없음(현행).
+   *  - M2  이미 26장이면 한도 4, 0장이면 10, 30장이면 피커를 열지 않고 "더 붙일 수 없어요" 한 줄(요청 0).
+   *  - M3·M4  붙이는 동안 "1/3 붙이는 중" → "2/3 …" 줄이 서고 끝나면 사라진다. 그 사이 `+` 를 또 눌러도 피커는 다시 안 열린다.
+   *  - M5  3장 중 2번째가 실패해도 끝 장까지 보낸다 → 성공 칸 2 · 실패 칸 1 · "1장을 붙이지 못했어요" · 토스트 없음 ·
+   *        [다시 시도] 는 실패한 그 장만 보내 성공하면 안내·실패 칸이 사라진다.
+   *  - M6  자산 번호 없는 선택이 섞이면 있는 장만 붙이고 개수 안내만(다시 시도·실패 칸 없음).
+   *
+   * (개념) 문(gate) = 테스트가 풀어 줄 때까지 POST 응답을 붙잡는 장치 — 진행 중 화면을 시간 대기 없이 붙잡아 본다.
+   * 3동작: 준비(서버 사진 수·피커 결과·실패 규칙) → 실행(`+` 누르기) → 단언(요청 순서·횟수·칸·안내 문구·토스트).
+   * ★ 토스트 부재 단언은 호스트가 그려져야 의미가 있다 — M1 의 존재 단언이 짝이다. 사진 칸 id 는 자산별(`ph-{자산}`)로 만든다.
+   */
+  describe('🔴 TRIP-1797 · 여러 장 한 번에 붙이기', () => {
+    const PROGRESS_ID = 'visit-photo-progress-v-a';
+    const TOAST = 'record-trip-photo-saved-toast';
+    const RETRY = 'record-trip-upload-retry-v-a';
+    const COPY_FULL = '이 방문엔 사진을 더 붙일 수 없어요 (최대 30장)';
+    const COPY_ONE_FAILED = '1장을 붙이지 못했어요';
+
+    let failIds: Set<string>;
+    let hold: boolean;
+    let gates: (() => void)[];
+
+    const picks = (...ids: string[]) => ({
+      kind: 'picked',
+      assets: ids.map((id) => asset(id)),
+      skipped: 0,
+    });
+    const others = (count: number) =>
+      Array.from({ length: count }, (_, i) =>
+        serverPhoto(`old-${i}`, `old-asset-${i}`, 'dev-Z')
+      );
+
+    beforeEach(() => {
+      failIds = new Set();
+      hold = false;
+      gates = [];
+      server.use(
+        http.post(
+          `${BASE}/trips/:tripId/visits/:visitCheckId/photos`,
+          async ({ request }) => {
+            const body = (await request.json()) as Record<string, unknown>;
+            photoBodies.push(body);
+            if (hold) await new Promise<void>((resolve) => gates.push(resolve));
+            if (failIds.has(String(body.localAssetId))) {
+              return HttpResponse.json(
+                { error: { code: 'INTERNAL', message: 'boom' } },
+                { status: 500 }
+              );
+            }
+            const created = serverPhoto(
+              `ph-${String(body.localAssetId)}`,
+              String(body.localAssetId),
+              String(body.deviceId)
+            );
+            serverPhotos = [...serverPhotos, created];
+            return HttpResponse.json(created, { status: 201 });
+          }
+        )
+      );
+    });
+
+    async function renderCardWithToast() {
+      const client = newTestQueryClient({ gcTime: 0 });
+      const toastWrapper = ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>
+          <WithToastHost>{children}</WithToastHost>
+        </QueryClientProvider>
+      );
+      render(<TripRecordsPage tripId={TRIP_ID} today={DAY} />, {
+        wrapper: toastWrapper,
+      });
+      const card = await screen.findByTestId(CARD);
+      await within(card).findByTestId('record-trip-photo-add');
+      // 첫 사진 목록이 도착해야 남은 칸 계산이 맞다.
+      await waitFor(() => expect(hitCount(PHOTOS_GET)).toBe(1));
+      await settle();
+      return card;
+    }
+
+    /** 붙잡힌 POST 를 하나씩 풀어 준다(n 번째가 도착하길 기다린 뒤). */
+    async function releaseAll(total: number) {
+      for (let i = 0; i < total; i += 1) {
+        await waitFor(() => expect(gates.length).toBeGreaterThan(i));
+        await act(async () => {
+          gates[i]?.();
+        });
+      }
+    }
+
+    it('M1 5장을 고르면 한도 10 · 고른 순서대로 POST 5회 · 사진 칸 5개 · 목록은 끝에서 한 번만 다시 받고 "사진 5장을 붙였어요"', async () => {
+      mockPick.mockResolvedValue(picks('a1', 'a2', 'a3', 'a4', 'a5'));
+      const card = await renderCardWithToast();
+
+      fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+
+      await waitFor(() =>
+        expect(within(card).queryAllByTestId(ANY_CELL)).toHaveLength(5)
+      );
+      await settle();
+      expect(mockPick).toHaveBeenCalledWith({ limit: 10 });
+      expect(photoBodies.map((b) => b.localAssetId)).toEqual([
+        'a1',
+        'a2',
+        'a3',
+        'a4',
+        'a5',
+      ]);
+      expect(hitCount(PHOTOS_POST)).toBe(5);
+      expect(hitCount(PHOTOS_GET)).toBe(2);
+      expect(await screen.findByTestId(TOAST)).toHaveTextContent(
+        '사진 5장을 붙였어요'
+      );
+    });
+
+    it('M1b 한 장만 붙이면 토스트는 없다 (현행 유지)', async () => {
+      mockPick.mockResolvedValue(picks('a1'));
+      const card = await renderCardWithToast();
+
+      fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+
+      await within(card).findByTestId('record-photo-available-ph-a1');
+      await settle();
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+    });
+
+    it.each([
+      [26, 4],
+      [0, 10],
+    ])(
+      'M2 서버에 이미 %s장이면 피커 한도는 %s장이다',
+      async (existing, limit) => {
+        serverPhotos = others(existing);
+        mockPick.mockResolvedValue({ kind: 'canceled' });
+        const card = await renderCardWithToast();
+
+        fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+
+        await waitFor(() => expect(mockPick).toHaveBeenCalledTimes(1));
+        expect(mockPick).toHaveBeenCalledWith({ limit });
+      }
+    );
+
+    it('M2b 이미 30장이면 피커를 열지 않고 "더 붙일 수 없어요" 한 줄만 남기며 요청은 없다', async () => {
+      serverPhotos = others(30);
+      const card = await renderCardWithToast();
+
+      fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+
+      expect(await within(card).findByTestId(NOTICE)).toHaveTextContent(
+        COPY_FULL
+      );
+      expect(mockPick).not.toHaveBeenCalled();
+      expect(hitCount(PHOTOS_POST)).toBe(0);
+    });
+
+    it('M3 붙이는 동안 "1/3 붙이는 중" → "2/3 붙이는 중" 줄이 서고 끝나면 사라진다', async () => {
+      hold = true;
+      mockPick.mockResolvedValue(picks('a1', 'a2', 'a3'));
+      const card = await renderCardWithToast();
+      expect(within(card).queryByTestId(PROGRESS_ID)).toBeNull();
+
+      fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+
+      await waitFor(() => expect(gates).toHaveLength(1));
+      expect(within(card).getByTestId(PROGRESS_ID)).toHaveTextContent(
+        '1/3 붙이는 중'
+      );
+      await act(async () => {
+        gates[0]?.();
+      });
+      await waitFor(() => expect(gates).toHaveLength(2));
+      expect(within(card).getByTestId(PROGRESS_ID)).toHaveTextContent(
+        '2/3 붙이는 중'
+      );
+      await releaseAll(3);
+      await waitFor(() =>
+        expect(within(card).queryByTestId(PROGRESS_ID)).toBeNull()
+      );
+    });
+
+    it('M4 붙이는 중에 `+` 를 또 눌러도 피커는 다시 열리지 않는다', async () => {
+      hold = true;
+      mockPick.mockResolvedValue(picks('a1', 'a2'));
+      const card = await renderCardWithToast();
+      fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+      await waitFor(() => expect(gates).toHaveLength(1));
+
+      fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+      await settle();
+
+      expect(mockPick).toHaveBeenCalledTimes(1);
+      expect(hitCount(PHOTOS_POST)).toBe(1);
+      await releaseAll(2);
+    });
+
+    it('M5 3장 중 둘째가 실패해도 끝 장까지 붙이고, 실패 안내·[다시 시도] 는 그 한 장만 다시 보낸다', async () => {
+      failIds.add('a2');
+      mockPick.mockResolvedValue(picks('a1', 'a2', 'a3'));
+      const card = await renderCardWithToast();
+
+      fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+
+      expect(
+        await within(card).findByTestId('record-photo-upload-failed-a2')
+      ).toBeOnTheScreen();
+      expect(hitCount(PHOTOS_POST)).toBe(3);
+      expect(
+        await within(card).findByTestId('record-photo-available-ph-a1')
+      ).toBeOnTheScreen();
+      expect(
+        await within(card).findByTestId('record-photo-available-ph-a3')
+      ).toBeOnTheScreen();
+      expect(within(card).getByTestId(NOTICE)).toHaveTextContent(
+        COPY_ONE_FAILED
+      );
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      failIds.clear();
+      fireEvent.press(within(card).getByTestId(RETRY));
+
+      await waitFor(() => expect(hitCount(PHOTOS_POST)).toBe(4));
+      expect(photoBodies[3]).toMatchObject({ localAssetId: 'a2' });
+      expect(
+        await within(card).findByTestId('record-photo-available-ph-a2')
+      ).toBeOnTheScreen();
+      expect(
+        within(card).queryByTestId('record-photo-upload-failed-a2')
+      ).toBeNull();
+      expect(within(card).queryByTestId(NOTICE)).toBeNull();
+      expect(within(card).queryByTestId(RETRY)).toBeNull();
+    });
+
+    it('M6 자산 번호 없는 선택이 섞이면 있는 장만 붙이고 개수 안내만 남긴다 (다시 시도·실패 칸 없음)', async () => {
+      mockPick.mockResolvedValue({
+        kind: 'picked',
+        assets: [asset('a1'), asset('a2')],
+        skipped: 1,
+      });
+      const card = await renderCardWithToast();
+
+      fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+
+      expect(await within(card).findByTestId(NOTICE)).toHaveTextContent(
+        COPY_ONE_FAILED
+      );
+      expect(hitCount(PHOTOS_POST)).toBe(2);
+      expect(within(card).queryByTestId(RETRY)).toBeNull();
+      expect(
+        within(card).queryAllByTestId(/^record-photo-upload-failed-/)
+      ).toHaveLength(0);
     });
   });
 
