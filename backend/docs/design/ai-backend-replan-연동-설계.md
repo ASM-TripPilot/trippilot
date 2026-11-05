@@ -69,7 +69,7 @@ tripContext = TripContext(destinations, targetDate, targetDate, null, null),
 | `stay_anchor` | `base_assignment` 숙소 — 그날 밤, 없으면 전날 밤(체크아웃일) | [추가 2026-10-14] '숙소 근처에서 끝내기'의 끝점. 없으면 null. `anchor` 와 별개(기준점은 숙소를 보장하지 않는다) |
 | `time_window` | `trip.day_start_at`·`first_day_start_at`·`last_day_end_at` + 그날 `visit_slot.start_at`(아직 안 지난 것) | [개정 2026-11-05] 종전 09:00~21:00 상수. 규칙은 §1 개정 |
 | `request_meta` | 런타임 | **`deadline_ms` 는 §6 참조** |
-| `prior_requests` | 같은 날 `replan_session`(APPLIED · `reverted_at` 없음)의 `draft.requestedPoiIds` + 이력 사유 한 줄 | [추가 2026-11-05 · F-8] 최근 반영 먼저 상한 20. **그 칸이 남은 세션이 없으면 키째 뺀다** — AI 요청은 extra=forbid 라 이 칸을 모르는 AI 는 422. 그 칸은 새 AI 응답 뒤에만 생겨 배포 순서가 자연히 닫힌다 |
+| `prior_requests` | 같은 날 `replan_session`(APPLIED · `reverted_at` 없음)의 `draft.requestedPoiIds` + 이력 사유 한 줄 | [추가 2026-11-05 · F-8] 최근 반영 먼저, 그 칸이 끊기기 전까지(상한 20) — AI 는 맨 앞 회차만 읽는다(응답이 사슬). **그 칸이 남은 세션이 없으면 키째 뺀다** — AI 요청은 extra=forbid 라 이 칸을 모르는 AI 는 422. 그 칸은 새 AI 응답 뒤에만 생기지만 이것은 앞으로 가는 순서만 닫는다: BE·AI 는 helm 한 번에 같이 올라가고 AI 롤링(maxSurge 1)·롤백 동안 옛·새 파드가 섞인다. 그 창은 어댑터가 닫는다 — 422 가 `prior_requests` 를 짚으면 그 칸만 빼고 한 번 다시 부른다(`HttpScheduleAgentAdapter.replan`) |
 
 ### 새로 실어야 하는 것 — **DB 에 이미 있다. 읽어서 보내면 된다**
 

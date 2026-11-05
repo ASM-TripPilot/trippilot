@@ -246,7 +246,15 @@ class HttpScheduleAgentAdapter(
             priorRequests = input.priorRequests.map { AiPriorRequest(it.text, it.keptPoiIds.map(UUID::toString)) },
         )
 
-        val res = post(REPLAN_PATH, request, AiReplanResponse::class.java)
+        val res = try {
+            post(REPLAN_PATH, request, AiReplanResponse::class.java)
+        } catch (e: ScheduleAgentCallFailed) {
+            // 이 칸을 모르는 상대(롤링 배포 중 옛 AI 파드·AI 롤백)는 모르는 키를 422 로 거절한다(extra=forbid). 그 칸만 빼고 한 번
+            // 다시 부른다 — 기억은 변경 이력 근사(F-5)로 내려간다. BE·AI 를 한 번에 올리는 배포라 '새 응답 뒤에만 싣는다'로는 못 닫는다.
+            if (request.priorRequests.isEmpty() || e.errorCode != "VALIDATION_ERROR" || e.message?.contains("prior_requests") != true) throw e
+            log.warn("상대가 prior_requests 를 거절했습니다 — 그 칸을 빼고 한 번 다시 부릅니다(옛 AI). {}", e.message)
+            post(REPLAN_PATH, request.copy(priorRequests = emptyList()), AiReplanResponse::class.java)
+        }
 
         // 상대가 못 알아들은 지시는 **드러낸다.** 삼키면 "지시를 넣었는데 왜 안 먹었나"를 못 짚는다.
         if (res.unknownDirectives.isNotEmpty()) {

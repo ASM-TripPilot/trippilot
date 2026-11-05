@@ -393,13 +393,29 @@ class ReplanExecutionTest : StringSpec({
     }
 
     /**
-     * **배포 순서 가드.** AI 요청 스키마는 모르는 키를 422 로 거절한다 — 요청한 곳을 저장한 세션이 없으면(전부 옛 AI 의 응답·이 기능 이전 반영)
-     * 아무것도 싣지 않고, 어댑터가 빈 칸을 키째 뺀다(`HttpScheduleAgentAdapterTest`). 새 AI 가 응답해야 그 칸이 생긴다.
+     * **배포 순서 가드(앞으로 가는 쪽).** AI 요청 스키마는 모르는 키를 422 로 거절한다 — 요청한 곳을 저장한 세션이 없으면(전부 옛 AI 의
+     * 응답·이 기능 이전 반영) 아무것도 싣지 않고, 어댑터가 빈 칸을 키째 뺀다(`HttpScheduleAgentAdapterTest`). 새 AI 가 응답해야 그 칸이
+     * 생긴다. 옛·새 AI 파드가 섞인 창(롤링·롤백)은 어댑터가 422 에서 이 칸을 빼고 한 번 다시 불러 닫는다.
      */
     "요청한 곳을 저장한 세션이 없으면 앞 요청을 싣지 않는다 — 그 칸을 모르는 AI 에 보내지 않는다" {
         val f = fixture()
         f.sessions.save(applied(null, "클럽 넣어줘", "2026-08-11T01:00:00Z"))
         f.sessions.save(applied(null, "숲 산책로 꼭", "2026-08-11T02:00:00Z"))
+
+        f.start()
+
+        f.replans.commands.single().priorRequests shouldBe emptyList()
+    }
+
+    /**
+     * AI 는 맨 앞(가장 최근 반영) 회차의 기억만 읽는다 — 응답이 이미 사슬이라서다. 가장 최근 회차가 그 칸을 모르면(옛 AI 파드가 답했다)
+     * 그 앞 회차들을 싣지 않는다: 앞 사슬은 칸 없는 회차가 잊게 한 곳("클럽은 빼줘")을 몰라, 실으면 잊은 곳이 되살아난다. 그때 AI 는
+     * 변경 이력 근사(F-5)로 기억한다.
+     */
+    "가장 최근 반영 세션이 요청한 곳을 모르면 그 앞 회차의 기억도 싣지 않는다" {
+        val f = fixture()
+        f.sessions.save(applied(listOf(UUID.randomUUID()), "클럽 넣어줘", "2026-08-11T01:00:00Z"))
+        f.sessions.save(applied(null, "클럽은 빼줘", "2026-08-11T02:00:00Z"))
 
         f.start()
 

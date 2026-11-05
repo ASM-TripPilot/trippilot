@@ -101,16 +101,20 @@ class ReplanSolver(
     /**
      * 같은 날 반영된(되돌리지 않은) 앞 재계획들이 **요청해서** 넣은 곳(F-8) — AI 가 다음 재계획에서도 우선 지킨다.
      *
-     * **AI 가 그 칸(`requested_poi_ids`)을 돌려준 세션만 싣는다.** 그 칸이 없는 초안(옛 AI 의 응답·이 기능 이전 세션)뿐이면 아무것도
-     * 싣지 않는다 — 그러면 AI 는 변경 이력 근사(F-5)로 기억한다. 이 가드가 배포 순서를 닫는다: AI 요청 스키마는 모르는 키를 422 로
-     * 거절하는데(extra=forbid), 그 칸을 저장한 세션은 새 AI 가 응답한 뒤에만 생기므로 옛 AI 에는 `prior_requests` 가 나가지 않는다.
+     * **AI 가 그 칸(`requested_poi_ids`)을 돌려준 세션만, 최근 반영부터 그 칸이 끊기기 전까지 싣는다.** AI 는 맨 앞 회차의 기억만
+     * 읽는다(응답이 이미 사슬이다) — 가장 최근 회차가 그 칸을 모르면(옛 AI 파드가 답했다) 그 앞 사슬은 그 회차가 잊게 한 곳을 몰라
+     * 싣지 않는다. 실을 것이 없으면 AI 는 변경 이력 근사(F-5)로 기억한다. 그 칸이 있는 세션은 새 AI 가 응답한 뒤에만 생기므로 앞으로
+     * 가는 배포에선 옛 AI 에 `prior_requests` 가 나가지 않는다 — 옛·새 AI 파드가 섞인 창(롤링·롤백)은 어댑터가 422 에서 이 칸을 빼고
+     * 한 번 다시 불러 닫는다(`HttpScheduleAgentAdapter.replan`).
      */
     private fun priorRequestsOf(session: ReplanSession): List<PriorReplan> =
-        sessions.findAppliedOn(session.tripId, session.targetDate).mapNotNull { applied ->
-            // 초안 한 건이 깨져도 재계획을 막지 않는다 — 그 세션만 빼고 간다(초안 jsonb 는 손으로 고쳐질 수 있는 자리다)
-            val requested = applied.draft?.let { runCatching { ReplanProposal.fromMap(it) }.getOrNull() }?.requestedPoiIds
-            requested?.let { PriorReplan(changeReason(applied), it.take(MAX_KEPT)) }
-        }.take(MAX_PRIOR)
+        sessions.findAppliedOn(session.tripId, session.targetDate).asSequence()
+            // 초안 한 건이 깨져도 재계획을 막지 않는다 — 칸 없는 회차처럼 거기서 끊는다(초안 jsonb 는 손으로 고쳐질 수 있는 자리다)
+            .map { applied -> applied to applied.draft?.let { runCatching { ReplanProposal.fromMap(it) }.getOrNull() }?.requestedPoiIds }
+            .takeWhile { (_, requested) -> requested != null }
+            .mapNotNull { (applied, requested) -> requested?.let { PriorReplan(changeReason(applied), it.take(MAX_KEPT)) } }
+            .take(MAX_PRIOR)
+            .toList()
 
     /**
      * 산출을 시작도 못 하고 포기한다(실행기 거절·종료) — `FAILED` 로 닫는다. 열어 둔 채 두면 화면은 끝난 적 없는 산출을

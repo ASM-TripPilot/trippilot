@@ -1545,11 +1545,15 @@ def _prior_kept(request: schemas.ReplanRequest, pois: Sequence[Poi]) -> tuple[Po
     `_prior_requested`(F-5 근사)와 같은 자리·같은 규칙이다 — 지금 일정에 없는 곳(뒤 편집·다시 짜기가 뺐다)·편집으로 바꿔 뺀
     곳(SWAPPED_OUT)은 잊는다. 되돌린 세션은 BE 가 싣지 않는다. 사유를 다시 읽어 가르지 않으므로 이름으로 집은 곳·자유입력의
     한 곳 추가도 기억한다(F-5 가 못 하던 몫).
+
+    **맨 앞(가장 최근 반영) 회차만 읽는다.** 그 `kept_poi_ids` 는 그 회차 응답의 `requested_poi_ids` 이고 응답은 이미 사슬이다 —
+    이어받아 남은 곳은 다시 싣고, 그 회차 요청이 잊게 한 곳은 뺀다. 더 앞 회차까지 합치면 잊은 곳이 되살아났다("클럽 넣어줘" →
+    "클럽은 빼줘"(술집은 일정에 남음) → 다음 회차에 술집이 다시 우선 필수 — 리뷰 2026-11-05).
     """
     index = {p.poi_id: p for p in pois}
     current = {PoiId(s.poi_id) for s in request.current_slots}
     swapped = {PoiId(r.poi_id) for r in request.rejections if r.kind == "SWAPPED_OUT"}
-    kept = dict.fromkeys(PoiId(pid) for pr in request.prior_requests for pid in pr.kept_poi_ids)
+    kept = dict.fromkeys(PoiId(pid) for pr in request.prior_requests[:1] for pid in pr.kept_poi_ids)
     return tuple(index[pid] for pid in kept if pid in index and pid in current and pid not in swapped)
 
 
@@ -2905,9 +2909,9 @@ class WiredItineraryOrchestrator:
         # 가산을 뒤로 옮겨도 그 카테고리가 2~3곳 들어온다. 1위는 남겨 PlanB 의 선택을 존중하고
         # (에이전트의 한 곳 가산이 그 위에 얹힌다), 다른 카테고리의 상황 추천은 건드리지 않는다.
         if add_one and planb_rank:
-            planb_rank, dropped = trim_planb_rank_for_add_one(planb_rank, pool.pois, add_one)
-            if dropped:
-                notes.append(f"planb_rank_trimmed: add_one dropped={dropped}")
+            planb_rank, trimmed = trim_planb_rank_for_add_one(planb_rank, pool.pois, add_one)
+            if trimmed:
+                notes.append(f"planb_rank_trimmed: add_one dropped={trimmed}")
 
         visit_cap = None if earlier is not None or extend else _visit_cap(request, resolved, past, not_before)
         if "SHORTER_DAY" in resolved and earlier is None:

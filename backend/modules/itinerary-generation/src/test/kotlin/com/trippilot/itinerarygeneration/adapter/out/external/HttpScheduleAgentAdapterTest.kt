@@ -353,6 +353,53 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         server.verify()
     }
 
+    /**
+     * **이 칸을 모르는 상대가 섞여 있어도 재계획은 실패하지 않는다.** 배포는 BE·AI 를 helm 한 번으로 같이 올리고 AI 는 롤링(maxSurge 1)이라,
+     * 운영(ai 2개)에선 새 BE 가 옛 AI 파드를 부르는 창이 있다 — AI 롤백(helm --atomic 포함)도 같다. 옛 상대의 422 본문(실측 — origin/develop
+     * AI 를 띄워 받은 그대로)이 이 칸을 짚으면 그 칸만 빼고 한 번 다시 부른다. 기억은 변경 이력 근사(F-5)로 내려간다.
+     */
+    "옛 상대가 prior_requests 를 422 로 거절하면 그 칸만 빼고 한 번 다시 부른다" {
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andExpect(jsonPath("$.prior_requests[0].text").value("NIGHTLIFE · 클럽 넣어줘"))
+            .andRespond(
+                withStatus(HttpStatus.UNPROCESSABLE_ENTITY).contentType(MediaType.APPLICATION_JSON).body(
+                    """{"error_code":"VALIDATION_ERROR","message":"요청 스키마 위반 — body.prior_requests: Extra inputs are not permitted","retryable":false}""",
+                ),
+            )
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andExpect(jsonPath("$.prior_requests").doesNotExist())
+            .andExpect(jsonPath("$.free_text").value("클럽 넣어줘"))
+            .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS")), MediaType.APPLICATION_JSON))
+
+        val out = adapter.replan(
+            replanInput().copy(freeText = "클럽 넣어줘", priorRequests = listOf(ReplanPriorRequest("NIGHTLIFE · 클럽 넣어줘", listOf(UUID.randomUUID())))),
+        )
+
+        out.totalDistanceKm shouldBe 6.9
+        server.verify()
+    }
+
+    "prior_requests 를 짚지 않은 422·스키마 거절이 아닌 오류는 다시 부르지 않는다 — 앞 요청이 없을 때도" {
+        val other = """{"error_code":"VALIDATION_ERROR","message":"요청 스키마 위반 — body.anchor: Field required","retryable":false}"""
+        val prior = """{"error_code":"VALIDATION_ERROR","message":"요청 스키마 위반 — body.prior_requests: Extra inputs are not permitted","retryable":false}"""
+        val crash = """{"error_code":"INTERNAL_ERROR","message":"TypeError: prior_requests","retryable":false}"""
+        val withPrior = replanInput().copy(priorRequests = listOf(ReplanPriorRequest("t", emptyList())))
+        val (adapter, server) = fixture()
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andRespond(withStatus(HttpStatus.UNPROCESSABLE_ENTITY).contentType(MediaType.APPLICATION_JSON).body(other))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR).contentType(MediaType.APPLICATION_JSON).body(crash))
+        server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
+            .andRespond(withStatus(HttpStatus.UNPROCESSABLE_ENTITY).contentType(MediaType.APPLICATION_JSON).body(prior))
+
+        shouldThrow<ScheduleAgentCallFailed> { adapter.replan(withPrior) }.errorCode shouldBe "VALIDATION_ERROR"
+        shouldThrow<ScheduleAgentCallFailed> { adapter.replan(withPrior) }.errorCode shouldBe "INTERNAL_ERROR"
+        shouldThrow<ScheduleAgentCallFailed> { adapter.replan(replanInput()) } // 싣지 않았으면 뺄 것이 없다
+
+        server.verify() // 세 번만 불렀다 — 다시 부르기가 나갔으면 기대 밖 요청으로 깬다
+    }
+
     "응답의 requested_poi_ids·deferred_places 가 산출물에 실린다 — UUID 가 아닌 한 건만 버린다" {
         val later = UUID.randomUUID()
         val body = replanBody(
@@ -386,8 +433,8 @@ class HttpScheduleAgentAdapterTest : StringSpec({
         adapter.replan(replanInput()).requestedPoiIds shouldBe emptyList()
     }
 
-    // 배포는 AI 먼저다 — 그 사이 옛 BE 가 새 응답 칸을 받는다. 경계 매퍼(Jackson 3)는 모르는 응답 키를 버린다(실패하지 않는다).
-    "모르는 응답 키가 와도 재계획 응답을 읽는다 — AI 를 먼저 배포해도 옛 BE 가 깨지지 않는다" {
+    // 롤링 배포 중엔 옛 BE 파드가 새 AI 파드의 응답 칸을 받는다(AI 롤백이면 반대). 경계 매퍼(Jackson 3)는 모르는 응답 키를 버린다(실패하지 않는다).
+    "모르는 응답 키가 와도 재계획 응답을 읽는다 — 새 AI 파드가 옛 BE 파드에 답해도 깨지지 않는다" {
         val (adapter, server) = fixture()
         server.expect(requestTo("http://ai.test/ai/v1/planb/replan"))
             .andRespond(withSuccess(replanBody(aiBody("OR_TOOLS"), extra = ""","field_from_the_future":[1]"""), MediaType.APPLICATION_JSON))

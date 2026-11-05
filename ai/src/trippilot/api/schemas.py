@@ -626,7 +626,8 @@ class ReplanRequest(BoundaryModel):
     # 제한은 날짜 필터다(실측이 아니라 프롬프트 예산에서 잡은 값).
     change_log: list[ChangeLogEntrySchema] = Field(default_factory=list, max_length=20)
     # 같은 날 반영된 앞 다시 짜기들, 최신순 (F-8). **있으면** 앞 요청 기억을 이 칸으로 정하고 `change_log` 근사(F-5)는 쓰지
-    # 않는다. BE 는 `requested_poi_ids` 를 저장한 세션이 있을 때만 싣는다 — 이 칸을 모르는 AI 는 422(extra=forbid)라서다.
+    # 않는다 — 기억은 맨 앞 회차의 `kept_poi_ids` 만 읽는다(응답 `requested_poi_ids` 가 이미 사슬이다). BE 는 `requested_poi_ids` 를
+    # 저장한 세션이 있을 때만 싣고, 이 칸을 모르는 AI(롤링 배포 중 옛 파드·롤백)가 422(extra=forbid)면 이 칸을 빼고 한 번 다시 부른다.
     prior_requests: list[PriorRequestSchema] = Field(default_factory=list, max_length=20)
     request_meta: RequestMetaSchema
 

@@ -229,3 +229,66 @@ def test_지난_날로_집은_곳은_싣지_않는다() -> None:
     assert f"nl_place_other_day: visit {_WOLJEONG} 2026-11-05" in body["notes"], body["notes"]
     assert _WOLJEONG not in placed
     assert body["deferred_places"] == []
+
+
+# ── 리뷰 2026-11-05 — 세 회차 사슬 · 한 곳 추가와 같이 · 다른 날 안내의 다시 짜기 문장 ─────────────
+
+
+def test_잊은_기억은_다음_회차에서_되살아나지_않는다(monkeypatch) -> None:
+    """회차1 "클럽 넣어줘" → 회차2 "클럽은 빼줘"(술집은 원 일정 지키기로 일정에 남는다) → 회차3 관계없는 요청.
+
+    BE 는 그 날 반영된 세션을 최근 반영 먼저 싣는다. 응답 `requested_poi_ids` 가 이미 사슬이라(이어받아 남은 곳은 다시 싣고 잊은
+    곳은 뺀다) AI 는 맨 앞 회차만 읽는다 — 전부 합치면 회차2 가 잊은 술집이 회차1 기록에서 되살아나 우선 필수·창 23:59 로 돌아왔다.
+    """
+    second, _, _ = _run(_ComposeTimesOut(), monkeypatch, prior_requests=_CLUB_KEPT, free_text="클럽은 빼줘")
+    assert _BAR in _placed(second) and second["requested_poi_ids"] == [], second["notes"]  # 전제 — 잊었고 일정에 남았다
+    prior = [{"text": "클럽은 빼줘", "kept_poi_ids": second["requested_poi_ids"]}, *_CLUB_KEPT]  # BE 가 싣는 모양 그대로
+
+    body, req, _ = _run(_ComposeTimesOut(), monkeypatch, prior_requests=prior, **_KEEP)
+
+    assert "replan_memory_source: prior_requests=2" in body["notes"], body["notes"]
+    assert not any(n.startswith("replan_memory:") for n in body["notes"]), body["notes"]
+    visit = _visit(req, _BAR)
+    assert visit is None or not visit.priority
+    assert req.day_window.end.strftime("%H:%M") == "21:00"
+    assert _BAR not in body["requested_poi_ids"]
+
+
+def test_구성_LLM_없이_한_곳_추가와_앞_요청_기억이_같이_와도_일정이_나온다() -> None:
+    """PlanB 선택 LLM 순위를 한 곳 추가로 자르는 줄이 자른 수(int)로 잊은 기억 이름을 덮어써, 사영 직전 `p not in dropped` 가
+    TypeError → 500 이었다(IO-7 위반). 구성 LLM 이 없고 PlanB 가 LLM 경로일 때만 타는 길이라 운영에선 잠복했다."""
+    from fastapi.testclient import TestClient
+
+    from tests.agents.planb.test_replan_via_planb import _StubRag
+    from tests.api.test_api_replan_wired import _DIRECTIVES, _body
+    from trippilot.api.wiring import build_dev_app
+
+    food, cafe = "e0000000-0000-4000-8000-000000000002", "e0000000-0000-4000-8000-000000000003"
+    app = build_dev_app(directives=_DIRECTIVES)
+    orch = app.state.orchestrator
+    orch._composer = None
+    orch._rag = _StubRag((food, cafe))  # 선택 LLM 이 성공한 모양 — 순위가 자르기를 탄다
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.post("/ai/v1/planb/replan", json=_body(
+            current_slots=[{"poi_id": food}], directives=["ADD_FOOD"],
+            prior_requests=[{"text": "숲 산책로 꼭", "kept_poi_ids": [food]}]))
+
+    assert r.status_code == 200, r.text
+    assert "replan_memory_source: prior_requests=1" in r.json()["notes"]
+    assert not any(n.startswith("planb_rank_skipped") for n in r.json()["notes"])  # 자르기 길을 탔다
+
+
+def test_다른_날_안내를_그_날_눌러도_날_말_없는_문장이면_그_날에_든다() -> None:
+    """앱 계약(F-7): [N일차에 넣어 다시 짜기]는 원문이 아니라 날 말 없는 문장 `"{name} 꼭"` 으로 그 날을 다시 짠다.
+
+    원문의 "내일"은 **새 요청 시각**의 오늘로 다시 환산된다 — 11-05 에 "내일 월정리"로 미룬 곳을 11-06 아침에 원문으로 누르면
+    하루 더 밀려(11-07) 그 날에도 안 든다(리뷰 2026-11-05).
+    """
+    tapped = {"target": "2026-11-06", "requested_at": "2026-11-06T09:00:00+09:00"}
+    raw, placed, _ = _run_day(ExtractedPlace("월정리 카페거리", "visit", day="내일"), **tapped)
+    assert _WOLJEONG not in placed
+    assert [d["date"] for d in raw["deferred_places"]] == ["2026-11-07"]  # 원문이면 또 미룬다
+
+    body, placed, _ = _run_day(ExtractedPlace("월정리 카페거리", "visit"), **tapped)  # "월정리 카페거리 꼭" — 날 말 없음
+    assert _WOLJEONG in placed, body["notes"]
+    assert body["deferred_places"] == []
