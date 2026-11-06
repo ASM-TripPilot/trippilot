@@ -118,6 +118,51 @@ class ItineraryRevisionServiceTest : StringSpec({
         revs.stored.map { it.seq } shouldContainExactly listOf(1, 2, 3)
     }
 
+    "기간을 옮기기 전 스냅숏을 되돌려도 지금 기간 안에 놓인다(TRIP-1789) — 리비전은 고쳐 쓸 수 없다" {
+        val d2 = d1.plusDays(1)
+        val moved = object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(d1.plusDays(1), d2.plusDays(1))
+            override fun findGenerationContext(accountId: UUID, tripId: UUID) = null
+        }
+        val revs = Revisions()
+        val twoDays = { a: String ->
+            Itinerary.reconstitute(
+                UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false, GenerationState.COMPLETE,
+                listOf(ItineraryDay.of(d1, 0, listOf(slot(cafe, a, "23:00"))), ItineraryDay.of(d2, 1, listOf(slot(hotel, a, "23:00")))),
+                now, now, null, emptyList(), ScoringSignal.UNKNOWN,
+            )
+        }
+        val old = twoDays("10:00")
+        val its = Itineraries(old)
+        val svc = ItineraryRevisionService(revs, its, moved, NoopValidateAgent(), REV_NOOP_TX, clock, modesOnlyRepairContexts(moved))
+        svc.record(old, RevisionActor.AI, RevisionKind.BASELINE, "옮기기 전")
+        its.current = twoDays("15:00").shiftedBy(1, now)
+
+        val restored = svc.restore(acc, tripId, revs.stored.single().revisionId)
+
+        restored.days.map { it.date } shouldContainExactly listOf(d1.plusDays(1), d2.plusDays(1))
+        restored.days[0].slots.single().sourcePoiId shouldBe cafe
+        restored.days[0].slots.single().startAt shouldBe LocalTime.parse("10:00")
+    }
+
+    "일수를 줄이며 버린 일정의 옛 버전은 기간을 넘쳐 복원할 수 없다 409 — 잘라 넣지 않는다" {
+        val short = object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(d1.plusDays(10), d1.plusDays(10))
+            override fun findGenerationContext(accountId: UUID, tripId: UUID) = null
+        }
+        val revs = Revisions()
+        val old = Itinerary.reconstitute(
+            UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false, GenerationState.COMPLETE,
+            listOf(ItineraryDay.of(d1, 0, listOf(slot(cafe, "10:00", "11:00"))), ItineraryDay.of(d1.plusDays(1), 1, listOf(slot(hotel, "10:00", "11:00")))),
+            now, now, null, emptyList(), ScoringSignal.UNKNOWN,
+        )
+        val its = Itineraries(old)
+        val svc = ItineraryRevisionService(revs, its, short, NoopValidateAgent(), REV_NOOP_TX, clock, modesOnlyRepairContexts(short))
+        svc.record(old, RevisionActor.USER, RevisionKind.EDIT, "기간을 바꾸며 버린 일정")
+
+        shouldThrow<ConflictDetected> { svc.restore(acc, tripId, revs.stored.single().revisionId) }
+    }
+
     "되돌리면 과거 리비전이 남고 새 리비전이 쌓인다(BR-U3-32 — 되돌리기의 되돌리기 가능)" {
         val revs = Revisions()
         val v1 = itinerary(listOf(slot(cafe, "10:00", "11:00")))

@@ -257,6 +257,18 @@ class Itinerary private constructor(
         )
     }
 
+    /**
+     * 여행 기간과 함께 전 일차를 [days] 칸 민다(TRIP-1789) — 장소·순서·시각·동결은 그대로, 재계산 없음.
+     *
+     * **id 를 새로 받는다.** 옛 날짜로 만든 재계획 안·되돌리기(`proposal.itineraryId`)는 날짜가 겹치면 다른 날을 덮을 수 있는데,
+     * id 가 갈리면 "그 사이 일정이 바뀌었습니다"로 물러난다 — 재생성이 새 id 를 받는 것과 같은 이유다.
+     */
+    fun shiftedBy(days: Long, now: Instant): Itinerary = Itinerary(
+        UUID.randomUUID(), tripId, status, solveMode, generationMode, isFallback, generationState,
+        this.days.map { ItineraryDay.of(it.date.plusDays(days), it.dayOrder, it.slots) }, createdAt, now,
+        candidatesSummary, unplacedMustVisits, scoring,
+    )
+
     /** 2차 생성 실패 — 1차분(day1)은 유효하게 두고 FAILED 로 전이(PARTIAL 에서만). 침묵 실패 금지(INV-4). */
     fun failGeneration(now: Instant): Itinerary {
         if (generationState != GenerationState.PARTIAL) {
@@ -313,6 +325,12 @@ interface ItineraryRepository {
 
     /** 여행의 현행 일정을 교체(원자적) — 재생성 시 기존 제거 후 저장. 여행당 1개 유지. */
     fun replaceForTrip(tripId: UUID, itinerary: Itinerary): Itinerary
+
+    /**
+     * 여행의 일정을 지운다(TRIP-1789 — 일수를 바꾸며 일정을 버릴 때). day·slot 은 FK CASCADE.
+     * 기본 구현은 실패한다 — 이 경로를 안 타는 대역이 조용히 아무것도 안 지운 채 통과하지 않게.
+     */
+    fun deleteForTrip(tripId: UUID) { error("이 대역은 일정 삭제를 구현하지 않았다") }
 
     /**
      * 현행 일정이 [expectedItineraryId] 이고 아직 [GenerationState.PARTIAL] 일 때만 교체한다(조건부 쓰기).

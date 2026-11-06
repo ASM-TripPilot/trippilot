@@ -171,6 +171,7 @@ class KafkaOutboxListener(private val relay: OutboxRelay, private val broker: Ka
     //  - 회고(TripEnded 키=tripId → 요약 생성 · ActualRouteStored 키=routeDayId → 통계 갱신): 같은 여행·같은 날 권고 잠금
     //    (TripSummaryPersistence·ReflectionPersistence.findForUpdate) — 요약이 아직 없어도 잠금이 줄 세운다.
     //  - Plan-B 선계산(PlanBTriggered → onRisk): 부분 유니크 + 자리 세마포어 — 사용자 요청과의 동시성을 이미 견딘다.
+    //  - 기간 이동 뒤 재검증(TripPeriodChanged 키=tripId → 위반 표시 갱신): 일정 쓰기 잠금 뒤 다시 읽어 그 사이 내용이 바뀌었으면 쓰지 않는다.
     //  - 트리거 소비(ItineraryRecalculated → TriggerService.consume): 트리거를 쓰는 구독자는 이것 하나라 구독자끼리 겹치지 않는다.
     //  - 파기(도우미 대화 TripDeleted·AccountDeletionRequested·DialogueForgetRequested · EXIF·경로·기준점 좌표·위치 구간 닫기):
     //    멱등 DELETE·조건부 UPDATE. GpsRecordingOptOut·LocationLegalConsentRevoked 는 키가 같은 accountId 라 한 파티션이다.

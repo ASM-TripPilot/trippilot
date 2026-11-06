@@ -63,6 +63,9 @@ class ItineraryRepositoryAdapter(
     }
 
     @Transactional
+    override fun deleteForTrip(tripId: UUID) = itineraries.deleteByTripId(tripId)
+
+    @Transactional
     override fun replaceIfCurrent(tripId: UUID, expectedItineraryId: UUID, itinerary: Itinerary): Boolean {
         // 삭제가 한 행도 못 지웠다 = 그 사이 재생성·전이가 일어났다 → 아무것도 쓰지 않는다.
         if (itineraries.deleteIfCurrent(tripId, expectedItineraryId, GenerationState.PARTIAL.name) == 0) return false
