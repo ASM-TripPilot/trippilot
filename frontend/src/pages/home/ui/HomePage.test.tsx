@@ -81,7 +81,7 @@ jest.mock('@/shared/api/generated/places/places', () => ({
   useGetPlaces: (...args: unknown[]) => mockUseGetPlaces(...args),
 }));
 
-// TRIP-1432 — 여행 중이 아닐 때 장소 레인은 서비스 지역 3곳 병렬 조회다. 이 훅은 `useQuery` 를 직접 써서
+// TRIP-1432 — 여행 중이 아닐 때 장소 레인은 서비스 지역 병렬 조회다. 이 훅은 `useQuery` 를 직접 써서
 // QueryClient 없는 이 버킷에선 실훅이 죽는다 — 깊은 경로로 목한다(묶음째 목하면 regionPickerHref 도 사라진다).
 const mockUseMultiRegionPlaces = jest.fn();
 jest.mock('@/features/explore/model/useMultiRegionPlaces', () => ({
@@ -211,7 +211,7 @@ function multiOk(items: Place[], degraded = false) {
   };
 }
 
-const SERVICE_REGION_NAMES = ['서울', '부산', '제주'];
+const SERVICE_REGION_NAMES = ['서울', '부산', '제주', '강원', '경북', '경남'];
 
 // 두 조회 목은 react-query 처럼 꺼진 조회에 "데이터 없음 · 영원히 대기"를 돌려준다 — 고정 반환값이면
 // 꺼진 조회의 상태를 레인에 그리는 구현을 못 본다. 다지역 훅은 지역 2곳 미만이면 꺼진다(훅 내부 규칙).
@@ -231,7 +231,7 @@ const MULTI_DISABLED = {
 let placesResult: Record<string, unknown>;
 let multiResult: Record<string, unknown>;
 
-/** 지역 1곳 조회(여행 중)·3지역 조회(그 밖) 어느 쪽이든 같은 장소를 받는다 — 레인 그리기만 볼 때. */
+/** 지역 1곳 조회(여행 중)·서비스 지역 조회(그 밖) 어느 쪽이든 같은 장소를 받는다 — 레인 그리기만 볼 때. */
 function lanePlaces(items: Place[]): void {
   placesResult = placesOk(items);
   multiResult = multiOk(items);
@@ -274,7 +274,7 @@ function enabledMultiCalls(): MultiCall[] {
     ([regions]) => regions.length >= 2
   );
 }
-/** 장소 레인 = 서비스 지역 3곳(이 순서·필터 없음 → 탐색 탭과 같은 쿼리 키), 지역 없는 전국 조회는 0. */
+/** 장소 레인 = 서비스 지역(이 순서·필터 없음 → 탐색 탭과 같은 쿼리 키), 지역 없는 전국 조회는 0. */
 function expectServiceRegionQuery(): void {
   const calls = enabledMultiCalls();
   expect(calls.length).toBeGreaterThan(0);
@@ -952,7 +952,7 @@ describe('지금 뜨는 장소', () => {
 
   describe('조회 인자·고르기', () => {
     // TRIP-1432 — 신규 사용자 레인은 서비스 지역(서울·부산·제주) 장소만. 지역 밖 장소를 주는 전국 조회는 안 쓴다.
-    it('여행이 없으면 서울·부산·제주 3곳을 묻고, 지역 없는 전국 조회는 나가지 않는다', () => {
+    it('여행이 없으면 서비스 지역을 묻고, 지역 없는 전국 조회는 나가지 않는다', () => {
       placesResult = placesOk([place('out', '밀양 장소', 99)]);
       multiResult = multiOk([place('in', '해운대 해변', 1)]);
 
@@ -1106,7 +1106,7 @@ describe('지금 뜨는 장소', () => {
   // 안 쓰일 전국 200행을 받는다. 두 번째 인자의 `query.enabled` 가 false 면 요청이 안 나가는 호출이다
   // (react-query 규칙) — 훅을 아예 안 부르는 구현도 통과한다(요청 0 이라는 결과가 같다).
   describe('여행 정보가 확정되기 전엔 장소 조회를 켜지 않는다', () => {
-    it('대기 중엔 켜진 조회 0건 · 여행 없음으로 확정되면 3지역 조회가 켜진다', () => {
+    it('대기 중엔 켜진 조회 0건 · 여행 없음으로 확정되면 서비스 지역 조회가 켜진다', () => {
       mockUseGetTrips.mockReturnValue(TRIPS_PENDING);
       const { rerender } = render(<HomePage />);
 
@@ -1120,7 +1120,7 @@ describe('지금 뜨는 장소', () => {
       expectServiceRegionQuery();
     });
 
-    it('여행 중 사용자는 대기 → 도착 전 과정에서 전국·3지역 조회가 한 번도 켜지지 않는다', () => {
+    it('여행 중 사용자는 대기 → 도착 전 과정에서 전국·서비스 지역 조회가 한 번도 켜지지 않는다', () => {
       mockUseGetTrips.mockReturnValue(TRIPS_PENDING);
       const { rerender } = render(<HomePage />);
       expect(enabledPlacesCalls()).toHaveLength(0);
@@ -1137,7 +1137,7 @@ describe('지금 뜨는 장소', () => {
       expect(enabledMultiCalls()).toHaveLength(0);
     });
 
-    it('여행 조회가 실패해도(발견 얼굴 폴백) 3지역 조회는 켜진다 — 스팟이 영원히 스켈레톤이 되지 않게', () => {
+    it('여행 조회가 실패해도(발견 얼굴 폴백) 서비스 지역 조회는 켜진다 — 스팟이 영원히 스켈레톤이 되지 않게', () => {
       mockUseGetTrips.mockReturnValue(TRIPS_ERROR);
 
       render(<HomePage />);
@@ -1148,9 +1148,9 @@ describe('지금 뜨는 장소', () => {
   });
 });
 
-// TRIP-1432 — 여행 중이 아닌 얼굴(여행 없음·여행 전·여행 후)의 장소 레인은 서비스 지역 3곳 조회이고, 사진 있는
+// TRIP-1432 — 여행 중이 아닌 얼굴(여행 없음·여행 전·여행 후)의 장소 레인은 서비스 지역 조회이고, 사진 있는
 // 곳을 먼저, 그 안에서 지역을 번갈아 세운다(각 지역 안은 담긴 수 순). 여행 중은 그 여행 지역 1곳 조회 그대로다.
-describe('장소 레인 — 서비스 지역 3곳 · 사진 먼저', () => {
+describe('장소 레인 — 서비스 지역 · 사진 먼저', () => {
   /** 담긴 수·사진·시도 코드를 정한 장소. 이름이 곧 poiId 다. */
   function lanePlace(
     nameKo: string,
@@ -1173,7 +1173,7 @@ describe('장소 레인 — 서비스 지역 3곳 · 사진 먼저', () => {
     });
   }
 
-  it('여행 전 얼굴의 컬렉션도 3지역 조회 결과다', () => {
+  it('여행 전 얼굴의 컬렉션도 서비스 지역 조회 결과다', () => {
     mockUseGetTrips.mockReturnValue(tripsOk([beforeTrip()]));
     placesResult = placesOk(rankedPlaces(7));
     multiResult = multiOk(
@@ -1192,7 +1192,7 @@ describe('장소 레인 — 서비스 지역 3곳 · 사진 먼저', () => {
     expect(screen.queryByText('실장소4')).toBeNull();
   });
 
-  it('여행 후 얼굴의 추천도 3지역 조회 결과다', () => {
+  it('여행 후 얼굴의 추천도 서비스 지역 조회 결과다', () => {
     const end = addDays(seoulDate(new Date()), -1);
     mockUseGetTrips.mockReturnValue(
       tripsOk([
@@ -1220,7 +1220,7 @@ describe('장소 레인 — 서비스 지역 3곳 · 사진 먼저', () => {
     ).toBeOnTheScreen();
   });
 
-  it('여행 중이면 그 여행 지역 1곳만 묻고 3지역 조회는 켜지지 않는다 — 카드는 그 지역 장소다', () => {
+  it('여행 중이면 그 여행 지역 1곳만 묻고 서비스 지역 조회는 켜지지 않는다 — 카드는 그 지역 장소다', () => {
     mockUseGetTrips.mockReturnValue(tripsOk([travelingTrip()]));
     placesResult = placesOk([place('busan', '부산 장소', 3)]);
     multiResult = multiOk([place('seoul', '서울 장소', 9)]);

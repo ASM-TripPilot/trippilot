@@ -54,7 +54,7 @@ import { routerSpies } from '@/test-support/expoRouterMock';
  *  - **P-8 (TRIP-502)** 목록 끝에 닿으면 `nextCursor` 로 다음 장을 이어 받는다(무한 스크롤).
  *  - **P-9 (TRIP-687)** 라우트 `region` 이 2곳 이상이면 지역별로 `getPlaces` 를 각 1회 부르고
  *    (fan-out) 병합 결과를 한 목록에 함께 그린다 — 단일지역 경로(P-2)의 무한 스크롤은 안 탄다.
- *  - **P-16 (TRIP-1560)** 지역을 안 고르면 전국 조회(region 없음)가 아니라 서비스 지역(서울·부산·제주)별로
+ *  - **P-16 (TRIP-1560)** 지역을 안 고르면 전국 조회(region 없음)가 아니라 서비스 지역별로
  *    조회한다 — 카테고리·검색어를 걸어도 같고, 일부·전부 실패는 배너·error 얼굴로 갈린다(AC-4·S-4 가 AC-5).
  *  - **P-17 (TRIP-1563)** 목록은 이름순이 아니라 진입마다 새로 뽑는 시드 무작위다 — 모든 `/places` 요청이
  *    `order=random&seed=<이번 진입의 번호표>` 를 싣고, 진입 중에는 고정(칩·검색·다시 시도·이어받기·지역 바꾸기),
@@ -199,7 +199,7 @@ function hitsOf(method: string, pathname: string) {
 /**
  * 지역 미지정일 때 d04 가 묻는 지역 이름 — 서비스 지역 상수(`SERVICE_REGIONS`)에서 파생한다.
  * 빌드 환경값 `EXPO_PUBLIC_TEST_REGIONS`(부천 등)가 있으면 상수 뒤에 붙으므로 이름을 손으로 적지 않는다
- * (jest 환경에는 그 값이 없어 지금은 서울·부산·제주 셋 — P-16 첫 케이스가 앞 셋을 앵커로 굳힌다).
+ * (jest 환경에는 그 값이 없어 지금은 6곳 — P-16 첫 케이스가 앞 셋을 앵커로 굳힌다).
  */
 const SERVICE_REGION_NAMES = SERVICE_REGIONS.map((region) => region.name);
 /** 지역 미지정 조회 한 번(파도)이 내는 `/places` 요청 수 = 서비스 지역 수. 지역별 병렬 발사라 순서는 안 굳힌다. */
@@ -870,7 +870,7 @@ describe('P-11 · 다지역 부분 실패면 degraded 배너를 얹고 다시 �
   });
 });
 
-describe('P-16 · 지역을 안 고르면 서비스 지역(서울·부산·제주)별로 조회한다 (TRIP-1560 · AC-1 · AC-4)', () => {
+describe('P-16 · 지역을 안 고르면 서비스 지역별로 조회한다 (TRIP-1560 · AC-1 · AC-4)', () => {
   // 기본 핸들러는 region 을 안 보고 같은 5장을 주고 병합이 poiId 중복을 거른다 — 그래서 카드만 봐서는 전국
   // 조회와 서비스 지역 조회가 구분되지 않는다. 지역별로 **다른** 장소를 주는 핸들러를 걸어(P-9 선례),
   // 요청 URL(region)과 "세 지역 결과가 한 목록에 섞인다"를 함께 본다. region 이 없는 요청(전국 누수)은 기본 5장을 받는다 —
@@ -882,7 +882,7 @@ describe('P-16 · 지역을 안 고르면 서비스 지역(서울·부산·제�
   const BUSAN: Place[] = [makePlace('b1', '감천문화마을', '명소', '부산', 12)];
   const JEJU: Place[] = [makePlace('j1', '성산일출봉', '명소', '제주', 60)];
 
-  /** 지역별 응답 — `failing` 에 든 지역은 500. region 없는 요청(전국 누수)은 기본 5장 — 요청 수·region 단언이 잡는다. */
+  /** 지역별 응답 — `failing` 에 든 지역은 500, 표에 없는 서비스 지역은 0건. region 없는 요청(전국 누수)은 기본 5장 — 요청 수·region 단언이 잡는다. */
   function useRegionResponder(failing: string[] = []) {
     server.use(
       http.get(`${BASE}/places`, ({ request }) => {
@@ -896,14 +896,16 @@ describe('P-16 · 지역을 안 고르면 서비스 지역(서울·부산·제�
               ? BUSAN
               : region === '제주'
                 ? JEJU
-                : PLACES;
+                : region === null
+                  ? PLACES
+                  : [];
         return HttpResponse.json({ items, nextCursor: null });
       })
     );
   }
 
   it('서비스 지역 상수의 앞 셋은 서울·부산·제주다 (테스트 기대값의 앵커)', () => {
-    // 아래 케이스는 지역 이름을 SERVICE_REGIONS 에서 파생한다 — 제품 결정(3지역)이 바뀌면 여기서 먼저 red 가 난다.
+    // 아래 케이스는 지역 이름을 SERVICE_REGIONS 에서 파생한다 — 앞 세 지역 순서가 바뀌면 여기서 먼저 red 가 난다.
     expect(SERVICE_REGION_NAMES.slice(0, 3)).toEqual(['서울', '부산', '제주']);
   });
 
@@ -930,6 +932,29 @@ describe('P-16 · 지역을 안 고르면 서비스 지역(서울·부산·제�
     // 전부 성공이면 부분 실패 배너가 없다.
     expect(screen.queryByTestId('explore-places-partialfailure')).toBeNull();
     expect(screen.queryByTestId('explore-places-error')).toBeNull();
+  });
+
+  it('새 서비스 시도(경남)의 장소도 목록에 뜬다 (TRIP-1807)', async () => {
+    // 준비 — 경남만 장소가 있다.
+    setAccessToken('valid-access');
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const region = new URL(request.url).searchParams.get('region');
+        return HttpResponse.json({
+          items:
+            region === '경남'
+              ? [makePlace('n1', '외도 보타니아', '명소', '경남', 5)]
+              : [],
+          nextCursor: null,
+        });
+      })
+    );
+
+    // 실행
+    await renderPage();
+
+    // 단언
+    expect(cardTestIds()).toEqual(['explore-places-card-n1']);
   });
 
   it('카테고리 칩·검색어를 걸어도 그 필터를 실은 채 서비스 지역별로 나간다 (AC-1)', async () => {

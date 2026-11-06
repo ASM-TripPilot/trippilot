@@ -86,14 +86,14 @@ type LandingBase = Pick<
 };
 
 // 가볼 곳 가로 레인에 그릴 카드 수 = 지역 필터 갈래가 서버에 요청할 limit(TRIP-500). 레인 개수와 요청 개수의
-// 단일 출처. 전국 갈래는 서비스 지역 3곳을 지역당 200곳 받아(홈과 같은 쿼리 키) 이만큼 골라 그린다(TRIP-1432).
+// 단일 출처. 전국 갈래는 서비스 지역을 지역당 200곳 받아(홈과 같은 쿼리 키) 이만큼 골라 그린다(TRIP-1432·1807).
 const PLACE_LANE_LIMIT = 8;
 
 // 홈 장소 레인과 같은 배열·순서 — 홈이 여행 없음 얼굴일 때 같은 쿼리 키라 홈에서 받은 응답을 그대로 쓴다(TRIP-1432).
 // 홈이 여행 중 얼굴이면 키가 달라 공유하지 않는다(TRIP-1713).
 const SERVICE_REGION_NAMES = SERVICE_REGIONS.map((r) => r.name);
 
-/** 주소가 서비스 지역(서울·부산·제주) 안인가 — 주소를 모르면 밖으로 본다(fail-closed, 지역 필터의 fail-open 과 반대). */
+/** 주소가 서비스 지역 안인가 — 주소를 모르면 밖으로 본다(fail-closed, 지역 필터의 fail-open 과 반대). */
 function inServiceRegion(item: StayItem): boolean {
   const address = item.address;
   return (
@@ -131,9 +131,9 @@ export function ExploreLandingPage(): ReactElement {
 }
 
 /**
- * 필터 없는 d01 — 서비스 지역(서울·부산·제주)만 보인다(TRIP-1432). 전국 이름순 앞쪽은 지역 밖(밀양·대구…)이었다.
- * 장소: 3지역 병렬 조회(한 곳 실패는 받은 곳으로 채움) → 사진 먼저·지역 번갈아 8장.
- * 숙소: 요청은 전국 1회 그대로, 응답을 주소로 3지역만 남긴다(지역별 3회는 약 17배라 안 함 — 브리프 Q6).
+ * 필터 없는 d01 — 서비스 지역만 보인다(TRIP-1432·1807). 전국 이름순 앞쪽은 지역 밖(대구…)이었다.
+ * 장소: 서비스 지역 병렬 조회(한 곳 실패는 받은 곳으로 채움) → 사진 먼저·지역 번갈아 8장.
+ * 숙소: 요청은 전국 1회 그대로, 응답을 주소로 서비스 지역만 남긴다(지역별 조회는 수십 배라 안 함 — TRIP-1432 브리프 Q6).
  */
 function NationwideExplore(): ReactElement {
   const stay = useStaySearch();
