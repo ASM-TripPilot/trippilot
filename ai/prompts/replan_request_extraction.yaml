@@ -25,8 +25,9 @@ template: |
   - 가고 싶다는 곳은 want "visit", 빼 달라는 곳은 want "avoid"
   - 시각은 24시간 "HH:MM" 으로. "6시까지 숙소" → end_by "18:00", "2시 이후에" → start_after "14:00". 오전·오후가 불분명하면 남은 시간($window) 안에 드는 쪽으로
     - "저녁"·"밤"이 붙으면 오후, "아침"·"새벽"이 붙으면 오전 — "저녁 8시 반 이후로" → start_after "20:30", "밤 10시까지" → end_by "22:00", "아침 7시부터" → start_after "07:00"
-    - 말한 시각이 남은 시간 밖이어도 **그대로** 적으세요 — 남은 시간 안으로 옮기거나 비우지 마세요. 쓸 수 있는지는 코드가 정합니다
-    - "2시부터 5시까지"처럼 시간대를 말하면 start_after "14:00" 과 end_by "17:00" 을 함께
+    - "자정까지"·"밤 12시까지" → end_by "23:59" (00:00·24:00 은 쓰지 않습니다)
+    - 말한 시각이 남은 시간 밖이어도 **그대로** 적으세요 — 남은 시간 안으로 옮기거나 비우지 마세요. 쓸 수 있는지는 코드가 정합니다. 오전·오후 어느 쪽도 남은 시간 안에 없으면 남은 시간에 가까운 쪽
+    - "2시부터 5시까지"처럼 하루의 시간대를 말하면 start_after "14:00" 과 end_by "17:00" 을 함께. 장소·종류에 붙은 시간대("2시부터 5시까지 카페에서")는 그 방문의 at "14:00" 이고 start_after·end_by 가 아니에요
   - 장소나 종류에 붙은 시각은 그 방문의 at 이에요 — 하루 시작(start_after)이 아니에요
     - "성심당은 5시에" → places [{"name":"성심당","want":"visit","at":"17:00"}]
     - "3시에 카페 가고 싶어" → categories [{"category":"CAFE","count":null,"at":"15:00"}], start_after null
@@ -52,4 +53,4 @@ template: |
   - $user_request
 
   [출력 JSON 스키마]
-  {"places": [{"name": "string", "want": "visit|avoid", "at": "HH:MM|null", "day": "string|null"}], "start_after": "HH:MM|null", "end_by": "HH:MM|null", "weather": "rain|clear|null", "categories": [{"category": "FOOD|CAFE|SIGHT|NIGHT_VIEW|NATURE|CULTURE|ACTIVITY|SHOPPING", "count": "1~8|null", "at": "HH:MM|null"}], "only": "true|false", "area": "string|null"}
+  {"places": [{"name": "string", "want": "visit|avoid", "at": "HH:MM|null", "day": "string|null"}], "start_after": "HH:MM|null", "end_by": "HH:MM|null", "weather": "rain|clear|null", "categories": [{"category": "FOOD|CAFE|SIGHT|NIGHT_VIEW|NATURE|CULTURE|ART|ACTIVITY|SHOPPING|BAR", "count": "1~8|null", "at": "HH:MM|null"}], "only": "true|false", "area": "string|null"}

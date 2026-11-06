@@ -168,6 +168,36 @@ def test_말한_시각_창_밖의_원_일정은_지키지_않는다(monkeypatch)
     assert all(s["start_at"] >= "15:00" for d in body["itinerary"]["days"] for s in d["slots"]), body
 
 
+def test_말한_끝_시각_뒤의_원_일정은_지키지_않고_못_놓인_수를_밝힌다(monkeypatch) -> None:
+    """"3시까지만" + 구성 타임아웃 — 15시 뒤에 시작하는 원 일정 3곳(숲·저녁·풍월관)은 필수로 두지 않는다(`until`). 지킨 8곳이
+    06~15시에 다 안 들어가면 `replan_keep_unplaced` 로 밝힌다(종전엔 구성 없는 경로가 조용히 빠뜨렸다, INV-4)."""
+    body, req, _ = _run(_ComposeTimesOut(), monkeypatch, extracted=ExtractedRequest(end_by=time(15, 0)),
+                        free_text="3시까지만")
+    assert "nl_time_accepted: end_by 15:00" in body["notes"], body["notes"]
+    assert "replan_keep: 8/8" in body["notes"], body["notes"]
+    assert {str(v.poi_id) for v in req.required_visits if v.reason == "replan_keep"} == set(_IDS[:8])
+    assert (req.day_window.end.hour, req.day_window.end.minute) == (15, 0)
+    placed = _placed(body)
+    assert not set(_IDS[8:]) & set(placed), body["notes"]
+    assert all(s["end_at"] <= "15:00" for d in body["itinerary"]["days"] for s in d["slots"]), body
+    lost = len(set(_IDS[:8]) - set(placed))
+    assert (lost == 0) or (f"replan_keep_unplaced: {lost}/8" in body["notes"]), (lost, body["notes"])
+
+
+def test_더_늦게까지도_말한_시각_창_밖의_원_일정은_두지_않는다(monkeypatch) -> None:
+    """"3시 이후로 더 늦게까지" — 더 늦게까지(EXTEND_DAY)의 '남은 방문 그대로'도 15시 전 원 일정은 세지 않는다(검토 2026-11-06).
+    종전엔 kept 가 nl 창보다 앞에서 계산돼 오전 7곳이 15시 뒤 창에 우선 필수로 몰렸다."""
+    body, req, _ = _run(_ComposeTimesOut(), monkeypatch, extracted=ExtractedRequest(start_after=time(15, 0)),
+                        free_text="3시 이후로 더 늦게까지 놀고 싶어", directives=["EXTEND_DAY"])
+    assert "extend_day_window: kept 4" in body["notes"], body["notes"]
+    kept = {str(v.poi_id) for v in req.required_visits if v.reason == "extend_keep"}
+    assert kept == set(_IDS[7:]), body["notes"]
+    assert (req.day_window.start.hour, req.day_window.start.minute) == (15, 0)
+    # 오전 원 일정은 우선 필수가 아니다 — 후보로 남아 규칙 점수로 15시 뒤에 들 수는 있다(다른 후보와 같은 자격)
+    assert not any(str(v.poi_id) in _IDS[:7] for v in req.required_visits), req.required_visits
+    assert all(s["start_at"] >= "15:00" for d in body["itinerary"]["days"] for s in d["slots"]), body
+
+
 # ── ② 이번 요청이 이긴다 ──────────────────────────────────────────────
 
 

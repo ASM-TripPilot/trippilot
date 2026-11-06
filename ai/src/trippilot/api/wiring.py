@@ -1421,9 +1421,34 @@ def _dinner_blocks(
     return tuple(out)
 
 
+def _stretch_to_locks(
+    nl: nl_verify.VerifiedRequest, locks: Sequence[FixedBlock], window: schemas.TimeWindowSchema, tz: timezone,
+    notes: list[str],
+) -> nl_verify.VerifiedRequest:
+    """받은 창 밖에 잠근 방문("밤 10시에 클럽" 22:00~, "아침 8시에 카페")까지 그날 창을 늘린다 — 잠근 것만, 말한 시작·끝은 넘지 않는다.
+
+    늘림은 그 방문의 잠금 블록(시작·체류 끝)까지이고 23:59 를 넘지 않는다(`_NIGHT_END`). 사용자가 말한 쪽(`window_start`·
+    `end_said` 인 `window_end`)은 두고, 시작만 말해 코드가 늘린 끝은 잠금이 더 늦으면 그만큼 더 늘린다.
+    """
+    if not locks:
+        return nl
+    ws = datetime.combine(window.date, window.start, tzinfo=tz)
+    we = datetime.combine(window.date, window.end, tzinfo=tz)
+    cap = datetime.combine(window.date, clock_time(), tzinfo=tz) + _NIGHT_END
+    lo, hi = min(b.window.start for b in locks), min(max(b.window.end for b in locks), cap)
+    if nl.window_start is None and lo < ws:
+        nl = replace(nl, window_start=lo)
+        notes.append(f"nl_time_extended: start_after {lo:%H:%M}")
+    if not (nl.window_end is not None and nl.end_said) and hi > (nl.window_end or we):
+        nl = replace(nl, window_end=hi)
+        notes.append(f"nl_time_extended: end_by {hi:%H:%M}")
+    return nl
+
+
 def _earlier_visits(
     request: schemas.ReplanRequest, resolved: Sequence[str], blocks: tuple[FixedBlock, ...],
     not_before: datetime | None, notes: list[str], *, ineffective: frozenset[str] = frozenset(),
+    until: datetime | None = None,
 ) -> tuple[RequiredVisit, ...] | None:
     """EARLIER("시간만 당기기") — 원 일정의 남은 방문을 **그대로**(장소·체류) 필수 방문으로. 아니면 None.
 
@@ -1445,7 +1470,7 @@ def _earlier_visits(
     # 방문이 전부 저녁 뒤로 밀린다.
     held = {b.poi_id for b in blocks if b.reason != "keep_dinner"}
     dinner = {b.poi_id: b.window.start.time() for b in blocks if b.reason == "keep_dinner"}
-    out = _remaining_visits(request, held, dinner, not_before, "earlier_retime")
+    out = _remaining_visits(request, held, dinner, not_before, "earlier_retime", until=until)
     notes.append(f"earlier_retime: {len(out)}")
     return out
 
@@ -1637,7 +1662,7 @@ _NIGHTLIFE_KEEP = 6  # 구성 후보에 올리는 나이트라이프 수(가까�
 _NIGHTLIFE_SUBTYPES = ("클럽", "칵테일바", "와인바", "라운지바", "비어가든", "스피크이지", "혼술바")
 # 그날 창을 23:59 까지 넓힌다 — 클럽·바 추정 영업(20:00~04:00) 중 그날 안쪽. 자정을 넘기지 않는 이유: OR 모델이
 # 창 끝을 하루 안의 분으로 읽어(`_mod`) 자정을 넘는 창이면 자유 방문이 전부 놓일 수 없게 된다(로컬 재현).
-_NIGHT_END = timedelta(hours=23, minutes=59)
+_NIGHT_END = nl_verify.DAY_END  # 그날의 끝(23:59) — 자유입력 시각의 상한과 같은 값이어야 "밤 10시까지"와 밤에 놀기가 한 창을 본다
 _EXTEND_LATE_HOUR = 21  # 이 시각 넘은 "더 늦게까지"는 늦게 여는 곳을 하나 넣는다(`_nightlife_candidates` late)
 
 # SOLVER 지시 중 배선된 것 — 여행 속도로 집행한다. "여유 있게"는 느긋하게(`Pace.SLOW`, 체류
@@ -2787,15 +2812,6 @@ class WiredItineraryOrchestrator:
         # ── 자연어 요청 — 뽑고, **검증한 것만** 쓴다 ─────────────────────
         nl = self._verified_request(request, anchor, not_before, daily_rain, notes, nl_pending,
                                     available=frozenset(p.category for p in pool.pois), nearby=pool.pois)
-        if nl.window_start or nl.window_end or any(n.startswith(("nl_time_", "nl_at_")) for n in nl.notes):
-            # 시각 말의 처리 결과 — 노트는 응답에만 실려 로그로는 안 보였다(개발 7일 로그에 nl_time 0건, 2026-11-06).
-            # 시각(HH:MM)·사유 코드·POI id 만 — 사용자 말은 싣지 않는다.
-            _logger.info("replan_nl_window %s", json.dumps({
-                "trace_id": str(trace_id),
-                "start": f"{nl.window_start:%H:%M}" if nl.window_start else None,
-                "end": f"{nl.window_end:%H:%M}" if nl.window_end else None,
-                "notes": [n for n in nl.notes if n.startswith(("nl_time_", "nl_at_"))],
-            }, ensure_ascii=False))
         # "을지로 말고 강남에서 놀고 싶어" — 그 지역 둘레로 후보 풀을 다시 받는다. 종전엔 풀이 지금 위치 기준이라 하루가
         # 그대로 을지로였다(사용자 2026-10-20). 원 일정 중 그 지역 밖(잠금·지난 곳·진행 중 제외)은 아래 제외에 더한다.
         # 시간만 당기기는 장소를 안 바꾼다는 요청이라 옮기지 않는다.
@@ -2835,7 +2851,33 @@ class WiredItineraryOrchestrator:
             notes.append(f"nl_nearby_added: {p.poi_id} +{len(around)}")
         # "3시에 카페" — 말한 시각에 잠근다. 시간만 당기기는 장소·순서를 안 바꾼다는 요청이라 걸지 않는다.
         if earlier is None:
-            blocks += _timed_blocks(request, nl, pool, blocks, anchor, pace, self._tz, notes, holidays)
+            timed = _timed_blocks(request, nl, pool, blocks, anchor, pace, self._tz, notes, holidays)
+            blocks += timed
+            # 받은 창 밖에 **실제로 잠근** 방문("밤 10시에 클럽"·"아침 8시에 카페")까지 창을 늘린다 — 잠그지 못한 방문(영업시간·
+            # 겹침·제외)을 위해 창만 벌리지 않게 잠금 뒤에 한다. 사용자가 말한 시작·끝은 넘지 않는다(그 말이 이긴다).
+            nl = _stretch_to_locks(nl, timed, request.time_window, self._tz, notes)
+        # 사용자가 말한 창(없으면 지금)으로 원 일정을 거르는 하한·상한 — 원 일정 지키기(F-4)·더 늦게까지·앞 요청 기억이 같이 본다.
+        # "3시 이후로"면 하루가 15시에 시작한다는 말이라, 15시 전에 끝난 원 일정을 15시 뒤 창에 몰아넣지 않는다(검토 2026-11-06).
+        nl_floor = max(filter(None, (not_before, nl.window_start)), default=None)
+        if nl.window_start or nl.window_end:
+            if extend:
+                kept = {v.poi_id: v for v in _remaining_visits(
+                    request, {b.poi_id for b in blocks}, {}, nl_floor, "extend_keep", priority=True, until=nl.window_end)}
+                notes.append(f"extend_day_window: kept {len(kept)}")
+            if earlier is not None:
+                # 시간만 당기기 + "3시 이후로" — 장소는 그대로 두되 15시 전에 끝난 원 일정은 뺀다(15시부터 당긴다). 둘 다 사용자 말이라
+                # 한쪽을 버리지 않고, 창이 가르는 쪽만 뺀다(검토 2026-11-06).
+                earlier = _earlier_visits(request, resolved, blocks, nl_floor, notes, until=nl.window_end,
+                                          ineffective=frozenset(d.key for d in self._directives if d.unwired))
+        if any(n.startswith(("nl_time_", "nl_at_")) for n in notes):
+            # 시각 말의 처리 결과 — 노트는 응답에만 실려 로그로는 안 보였다(개발 7일 로그에 nl_time 0건, 2026-11-06).
+            # 시각(HH:MM)·사유 코드·POI id 만 — 사용자 말은 싣지 않는다. 잠금 결과(nl_at_locked·none·skipped)까지 한 줄에.
+            _logger.info("replan_nl_window %s", json.dumps({
+                "trace_id": str(trace_id),
+                "start": f"{nl.window_start:%H:%M}" if nl.window_start else None,
+                "end": f"{nl.window_end:%H:%M}" if nl.window_end else None,
+                "notes": [n for n in notes if n.startswith(("nl_time_", "nl_at_"))],
+            }, ensure_ascii=False))
         if nl.rain_confirmed and not (RAIN_OUTDOOR <= avoid):
             avoid = avoid | RAIN_OUTDOOR  # 말이 아니라 기상청이 확인한 비다
         drop = avoid - prefer
@@ -2881,7 +2923,7 @@ class WiredItineraryOrchestrator:
             said = request.free_text or ""
             no_night = bool(_NIGHT_WORDS.search(said) and _NEGATION.search(said))
             skip = {PoiId(p) for p in request.excluded_poi_ids} | avoided
-            left = set(_left_originals(request, {b.poi_id for b in blocks}, not_before))
+            left = set(_left_originals(request, {b.poi_id for b in blocks}, nl_floor, until=nl.window_end))  # 말한 창 밖은 잊는다
             prior = [p for p in prior_all if p.poi_id in left]
             remembered = tuple(p for p in prior
                                if p.poi_id not in skip and not (no_night and NIGHTLIFE_TAG in p.tags))
@@ -2948,7 +2990,14 @@ class WiredItineraryOrchestrator:
                                                      tzinfo=self._tz) + _NIGHT_END)
         # 기억한 밤 장소(F-5)도 밤에 놀기와 같은 창 — 다음 다시 짜기의 BE 창(~21:00)엔 술집 추정 영업(20시~)이 못 든다
         late_kept = any(NIGHTLIFE_TAG in p.tags for p in remembered)
-        day_end = nl.window_end or (night_end if night or extend or late_kept else window_end)  # 더 늦게까지도 같은 창
+        # 사용자가 말한 끝이 이긴다. 코드가 늘린 끝(시작+4시간·잠근 방문까지)은 밤 창(23:59)을 줄이지 않는다 — 더 늦게까지도 같은 창
+        widened = night or extend or late_kept
+        if nl.window_end is not None and nl.end_said:
+            day_end = nl.window_end
+        elif nl.window_end is not None:
+            day_end = max(nl.window_end, night_end) if widened else nl.window_end
+        else:
+            day_end = night_end if widened else window_end
         # 밤 늦은 "더 늦게까지"의 밤 장소 체류 — 기본(술집 90·클럽 120분)이면 23:59 창에 안 들어간다. 남은 시간에
         # 맞춰 줄이고(이동 몫 20분, 바닥 30분) 우선으로 둔다. 그 밖엔 None = 카테고리 기본.
         late_dwell = (max(30, min(90, int((day_end - not_before).total_seconds() // 60) - 20))
@@ -3050,7 +3099,6 @@ class WiredItineraryOrchestrator:
         # 없음)는 다른 하루를 원하므로 지키지 않는다. 체류는 카테고리 기본(pace 적용) — 구성이 원 곳을 다시 고를 때와 같다.
         # "3시 이후로"·"6시까지"(nl 창)면 그 창 밖의 원 일정은 지키지 않는다 — 하루가 그 시각에 시작·끝난다는 말이라, 창 앞·뒤의
         # 방문까지 필수로 두면 좁은 창에 몰아넣어 "말한 대로"가 깨진다(검토 2026-11-06). 창 안의 원 일정은 종전대로 지킨다.
-        nl_floor = max(filter(None, (not_before, nl.window_start)), default=None)
         orig_left = () if (earlier is not None or extend or visit_cap is not None
                            or self._change_rule(request, resolved) == composition.CHANGE_REFRESH) else _left_originals(
             request, {b.poi_id for b in blocks}, nl_floor, until=nl.window_end)
@@ -3213,14 +3261,19 @@ class WiredItineraryOrchestrator:
                 except Exception as e:  # 수리는 덤이다 — 실패해도 1차 해 그대로(INV-4: 밝힌다)
                     notes.append(f"llm_repair_error: {type(e).__name__}")
                     self._repair_event(meta, f"error: {type(e).__name__}: {e}")
+        placed = {s.poi_id for d in (outcome.solution.days if outcome.solution else ()) for s in d.slots}
         if nl_ids and earlier is None:
             # 검증을 통과했는데 일정에 못 들어간 곳 — **조용히 빠지지 않는다**(INV-4). 지금까지는 구성이 고른
             # 곳만 `llm_composed_unplaced` 로 셌고, 이름으로 집은 곳은 아무 표시 없이 사라졌다.
-            placed = {s.poi_id for d in (outcome.solution.days if outcome.solution else ())
-                      for s in d.slots}
             for pid in nl_ids:
                 if pid not in placed:
                     notes.append(f"{'replan_memory' if pid in mem_ids else 'nl_place'}_unplaced: {pid}")
+        if kept and not composed:
+            # 지킨 원 일정(F-4)·더 늦게까지의 남은 방문이 못 놓인 수 — 구성 없이 푸는 경로엔 `llm_composed_unplaced` 가 없어
+            # 조용히 빠졌다(검토 2026-11-06, INV-4). 창을 좁힌 요청("6시까지")에서 흔해진다.
+            lost = [p for p in kept if p not in placed]
+            if lost:
+                notes.append(f"{'extend_keep' if extend else 'replan_keep'}_unplaced: {len(lost)}/{len(kept)}")
         if nl.counts and earlier is None:
             # 수를 정한 종류가 최종 일정에서 모자라면 밝힌다 — 구성은 맞췄어도 솔버가 못 넣을 수 있다(INV-4).
             got = [cat_of.get(s.poi_id) for d in (outcome.solution.days if outcome.solution else ())
@@ -3293,10 +3346,14 @@ class WiredItineraryOrchestrator:
         if timeout < 0.5:
             return "nl_extract_skipped: deadline"
         window = request.time_window
+        # 프롬프트의 '남은 시간'은 오늘이면 **지금부터**다 — 받은 창은 06:00 류로 시작해(원 일정 첫 슬롯) 오후에 "3시 이후"를
+        # 03:00 쪽으로 읽을 여지가 있었다(검토 2026-11-06). 지금이 창 끝을 지났으면 받은 창 그대로.
+        nb = _replan_not_before(request, self._tz)
+        start = max(window.start, nb.time()) if nb is not None and nb.time() < window.end else window.start
         return _NL_POOL.submit(
             self._extract_then_lookup, GeoPoint(request.anchor.lat, request.anchor.lng),
             text, composition.date_label(datetime.combine(request.target_date, clock_time())),
-            f"{window.start:%H:%M}~{window.end:%H:%M}", trace_id, now, timeout_sec=timeout)
+            f"{start:%H:%M}~{window.end:%H:%M}", trace_id, now, timeout_sec=timeout)
 
     def _extract_then_lookup(self, anchor: GeoPoint, *args, **kwargs) -> "tuple[TypedResult, Future | None]":
         """추출 → 대조에 등록 POI(반경 50km)가 쓰일 수 있으면 그 조회를 **곧바로** 띄운다 — 본 스레드의 장소 수집과
@@ -3597,7 +3654,12 @@ class WiredItineraryOrchestrator:
                      if r.kind == "SWAPPED_OUT"} - current_ids
         anchor = GeoPoint(request.anchor.lat, request.anchor.lng)
         seed = _seed_from(request.trip_id)
-        slots = sorted(request.current_slots,
+        # 사용자가 말한 창("3시 이후로"·"6시까지") 밖의 원 일정은 '남은 일정'이 아니다 — 폴백(F-4)과 같은 집합을 봐야 LLM 성공·
+        # 실패 경로가 같은 하루를 낸다(검토 2026-11-06: 종전엔 15시 전 원 일정이 '남은 일정'으로 실려 15시 뒤에 들어갔다).
+        nl_floor = max(filter(None, (not_before, window_start)), default=None)
+        in_window = set(_left_originals(request, (), nl_floor, until=window_end))
+        slots = sorted((s for s in request.current_slots if PoiId(s.poi_id) in in_window
+                        or PoiId(s.poi_id) in past_ids | fixed_ids | in_progress_ids),
                        key=lambda s: (s.start_at is None, s.start_at or datetime.min.time()))
         keep = [PoiId(s.poi_id) for s in slots] + list(planb_rank) + list(nearby)
         shortlist = composition.shortlist(
@@ -3639,7 +3701,7 @@ class WiredItineraryOrchestrator:
         rain = (daily_rain or {}).get(day)
         # 원 일정의 남은 비고정 수까지는 고를 수 있다(F-4) — 사유 상한·새로 짜 보기는 아니다.
         floor = (None if free_cap is not None or rule == composition.CHANGE_REFRESH
-                 else len(_left_originals(request, past_ids | fixed_ids, not_before)))
+                 else len(_left_originals(request, past_ids | fixed_ids, nl_floor, until=window_end)))
         limit = composition.max_visits(start, end, free_cap, floor=floor)
         inp = ComposeDayInput(
             date=composition.date_label(start),

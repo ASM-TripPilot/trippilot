@@ -20,6 +20,7 @@ F-5(변경 이력 근사)는 사유 한 줄만 읽어 밤 낱말·한 곳 추가
 from __future__ import annotations
 
 import pytest
+from datetime import time
 
 from trippilot.domain.common import PoiId
 from trippilot.domain.poi.poi import PoiCategory
@@ -137,6 +138,29 @@ def test_앞_회차의_클럽은_창을_밤까지_넓혀_남긴다(monkeypatch) 
     assert _visit(req, _BAR).priority
     assert req.day_window.end.strftime("%H:%M") == "23:59"
     assert (_bar_start(body) or "") >= "20:00", body["notes"]
+
+
+def test_말한_시각_창_밖에서_기억한_곳은_잊는다(monkeypatch) -> None:
+    """"3시 이후로" + 앞 회차가 넣은 오전 카페(07:10~07:55) — 15시 하루의 맨 앞에 끌어오지 않는다(검토 2026-11-06)."""
+    cafe = _IDS[1]
+    body, req, _ = _run(_ComposeTimesOut(), monkeypatch, prior_requests=[{"text": "골목 카페 꼭", "kept_poi_ids": [cafe]}],
+                        time_window=_WINDOW_21, free_text="3시 이후로 다시 짜줘", extracted=ExtractedRequest(start_after=time(15, 0)))
+    assert "nl_time_accepted: start_after 15:00" in body["notes"], body["notes"]
+    assert not any(n.startswith(("replan_memory:", "replan_memory_dropped")) for n in body["notes"]), body["notes"]
+    assert _visit(req, cafe) is None and cafe not in _placed(body), body["notes"]
+    assert cafe not in body["requested_poi_ids"]
+
+
+def test_이번에_말한_끝_시각이_앞_회차_클럽의_밤_창보다_이긴다(monkeypatch) -> None:
+    """"8시까지만" + 기억한 클럽 — 창 끝은 20:00(이번 말이 이긴다, 기억한 밤 장소가 창을 23:59 로 넓히지 않는다).
+    클럽은 그 창에 못 들면 일정에 없다(다시 짜기 담당 세션 확인 요청 2026-11-06)."""
+    body, req, _ = _run(_ComposeTimesOut(), monkeypatch, prior_requests=_CLUB_KEPT, time_window=_WINDOW_21,
+                        free_text="8시까지만", extracted=ExtractedRequest(end_by=time(20, 0)))
+    assert "nl_time_accepted: end_by 20:00" in body["notes"], body["notes"]
+    assert req.day_window.end.strftime("%H:%M") == "20:00"
+    assert body["itinerary"] is not None and _placed(body), body["notes"]
+    assert all(s["end_at"] <= "20:00" for d in body["itinerary"]["days"] for s in d["slots"]), body
+    assert _BAR not in _placed(body), body["notes"]
 
 
 @pytest.mark.parametrize("over", [
