@@ -1452,12 +1452,12 @@ def _earlier_visits(
 
 def _remaining_visits(
     request: schemas.ReplanRequest, held: set[PoiId], dinner: Mapping[PoiId, clock_time],
-    not_before: datetime | None, reason: str, *, priority: bool = False,
+    not_before: datetime | None, reason: str, *, priority: bool = False, until: datetime | None = None,
 ) -> tuple[RequiredVisit, ...]:
     """원 일정의 남은 방문 → 장소·체류 그대로 필수 방문(시각은 조립이 정한다, INV-2). EARLIER·EXTEND_DAY 공용.
 
     `held`(잠금·지난 곳)·제외 요청·하한 전에 끝난 슬롯은 넣지 않는다. `dinner` 는 잠근 저녁 식당의 원 시각 —
-    그 시각의 슬롯만 자리표로 든다(`_earlier_visits`).
+    그 시각의 슬롯만 자리표로 든다(`_earlier_visits`). `until`(사용자가 말한 그날 끝) 뒤에 시작하는 슬롯도 넣지 않는다.
     """
     excluded = {PoiId(p) for p in request.excluded_poi_ids}
     out: list[RequiredVisit] = []
@@ -1471,6 +1471,9 @@ def _remaining_visits(
         if (timed and not_before is not None and datetime.combine(
                 request.target_date, s.end_at, tzinfo=not_before.tzinfo) <= not_before):
             continue
+        if (timed and until is not None
+                and datetime.combine(request.target_date, s.start_at, tzinfo=until.tzinfo) >= until):
+            continue
         dwell = None
         if timed:
             dwell = (s.end_at.hour * 60 + s.end_at.minute) - (s.start_at.hour * 60 + s.start_at.minute)
@@ -1481,18 +1484,21 @@ def _remaining_visits(
 
 
 def _left_originals(request: schemas.ReplanRequest, held: Collection[PoiId],
-                    not_before: datetime | None) -> tuple[PoiId, ...]:
+                    not_before: datetime | None, *, until: datetime | None = None) -> tuple[PoiId, ...]:
     """원 일정 중 아직 안 끝난 비잠금 방문(POI 한 번씩) — `_remaining_visits` 와 같은 기준이되 제외 요청도 센다.
 
     방문 수를 지킬 때(F-4) 제외 요청·회피로 바뀔 곳은 빠지는 곳이 아니라 다른 곳으로 채울 자리다.
+    `until` 뒤에 시작하는 슬롯은 `_remaining_visits` 와 같이 세지 않는다.
     """
     out: list[PoiId] = []
     for s in request.current_slots:
         pid = PoiId(s.poi_id)
-        ended = (not_before is not None and s.start_at is not None and s.end_at is not None
-                 and not s.ends_next_day
+        timed = s.start_at is not None and s.end_at is not None and not s.ends_next_day
+        ended = (timed and not_before is not None
                  and datetime.combine(request.target_date, s.end_at, tzinfo=not_before.tzinfo) <= not_before)
-        if pid not in held and pid not in out and not ended:
+        late = (timed and until is not None
+                and datetime.combine(request.target_date, s.start_at, tzinfo=until.tzinfo) >= until)
+        if pid not in held and pid not in out and not ended and not late:
             out.append(pid)
     return tuple(out)
 
@@ -2781,6 +2787,15 @@ class WiredItineraryOrchestrator:
         # ── 자연어 요청 — 뽑고, **검증한 것만** 쓴다 ─────────────────────
         nl = self._verified_request(request, anchor, not_before, daily_rain, notes, nl_pending,
                                     available=frozenset(p.category for p in pool.pois), nearby=pool.pois)
+        if nl.window_start or nl.window_end or any(n.startswith(("nl_time_", "nl_at_")) for n in nl.notes):
+            # 시각 말의 처리 결과 — 노트는 응답에만 실려 로그로는 안 보였다(개발 7일 로그에 nl_time 0건, 2026-11-06).
+            # 시각(HH:MM)·사유 코드·POI id 만 — 사용자 말은 싣지 않는다.
+            _logger.info("replan_nl_window %s", json.dumps({
+                "trace_id": str(trace_id),
+                "start": f"{nl.window_start:%H:%M}" if nl.window_start else None,
+                "end": f"{nl.window_end:%H:%M}" if nl.window_end else None,
+                "notes": [n for n in nl.notes if n.startswith(("nl_time_", "nl_at_"))],
+            }, ensure_ascii=False))
         # "을지로 말고 강남에서 놀고 싶어" — 그 지역 둘레로 후보 풀을 다시 받는다. 종전엔 풀이 지금 위치 기준이라 하루가
         # 그대로 을지로였다(사용자 2026-10-20). 원 일정 중 그 지역 밖(잠금·지난 곳·진행 중 제외)은 아래 제외에 더한다.
         # 시간만 당기기는 장소를 안 바꾼다는 요청이라 옮기지 않는다.
@@ -3033,12 +3048,15 @@ class WiredItineraryOrchestrator:
         # 제외 요청·회피(이번 요청이 이긴다)·이름으로 집은 곳(우선 필수로 따로 간다)·밤 일정 한 곳은 넣지 않는다.
         # 사유 상한(피로·지연·일찍 마무리)·시간만 당기기·더 늦게까지는 각자의 규칙이 이기고, 새로 짜 보기(사유·요청
         # 없음)는 다른 하루를 원하므로 지키지 않는다. 체류는 카테고리 기본(pace 적용) — 구성이 원 곳을 다시 고를 때와 같다.
+        # "3시 이후로"·"6시까지"(nl 창)면 그 창 밖의 원 일정은 지키지 않는다 — 하루가 그 시각에 시작·끝난다는 말이라, 창 앞·뒤의
+        # 방문까지 필수로 두면 좁은 창에 몰아넣어 "말한 대로"가 깨진다(검토 2026-11-06). 창 안의 원 일정은 종전대로 지킨다.
+        nl_floor = max(filter(None, (not_before, nl.window_start)), default=None)
         orig_left = () if (earlier is not None or extend or visit_cap is not None
                            or self._change_rule(request, resolved) == composition.CHANGE_REFRESH) else _left_originals(
-            request, {b.poi_id for b in blocks}, not_before)
+            request, {b.poi_id for b in blocks}, nl_floor, until=nl.window_end)
         originals = {v.poi_id: replace(v, dwell_min=None) for v in _remaining_visits(
-            request, {b.poi_id for b in blocks} | avoided | set(nl_ids) | set(night[:1]), {}, not_before,
-            "replan_keep")} if orig_left else {}
+            request, {b.poi_id for b in blocks} | avoided | set(nl_ids) | set(night[:1]), {}, nl_floor,
+            "replan_keep", until=nl.window_end)} if orig_left else {}
 
         def keep_cap(extra: Collection[PoiId], add: frozenset[PoiCategory]) -> int | None:
             """지킨 날의 하루 상한 — 잠금 + 원 남은 수(바뀔 자리 포함) + 더한 곳. 바뀔 자리만 규칙 점수가 채운다."""

@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 import pytest
 
@@ -150,6 +150,22 @@ def test_고른_곳이_하나도_안_놓여_다시_풀_때도_원_일정을_지�
     assert req.max_visits_per_day == 11
     assert set(_IDS) <= set(_placed(body)), body["notes"]
     assert not any(s["is_fixed"] for d in body["itinerary"]["days"] for s in d["slots"])
+
+
+def test_말한_시각_창_밖의_원_일정은_지키지_않는다(monkeypatch) -> None:
+    """"3시 이후로 다시 짜줘" + 구성 타임아웃 — 하루가 15시에 시작한다는 말이라, 15시 전에 끝나는 원 일정 7곳을 필수로 두고
+    15시 뒤에 몰아넣지 않는다(검토 2026-11-06). 15시에 걸치거나 뒤인 4곳은 종전대로 지킨다."""
+    body, req, _ = _run(_ComposeTimesOut(), monkeypatch, extracted=ExtractedRequest(start_after=time(15, 0)),
+                        free_text="3시 이후로 다시 짜줘")
+
+    assert "nl_time_accepted: start_after 15:00" in body["notes"], body["notes"]
+    assert "replan_keep: 4/4" in body["notes"], body["notes"]
+    assert {str(v.poi_id) for v in req.required_visits if v.reason == "replan_keep"} == set(_IDS[7:])
+    assert req.max_visits_per_day == 4 and (req.day_window.start.hour, req.day_window.start.minute) == (15, 0)
+    placed = _placed(body)
+    assert set(_IDS[7:]) <= set(placed), (sorted(set(_IDS[7:]) - set(placed)), body["notes"])
+    assert not set(_IDS[:7]) & set(placed), body["notes"]
+    assert all(s["start_at"] >= "15:00" for d in body["itinerary"]["days"] for s in d["slots"]), body
 
 
 # ── ② 이번 요청이 이긴다 ──────────────────────────────────────────────

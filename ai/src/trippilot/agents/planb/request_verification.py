@@ -11,8 +11,8 @@
 | 장소명 | 등록 POI(받은 후보 풀에서 정확 일치 먼저, 없으면 place-data 반경 50km 조회) | 이름이 맞는 등록 장소가 있다 — **후보 자격은 여기서만 생긴다**(INV-1) |
 | 〃 | 지도 실재 포트(Kakao·Google) | NOT_FOUND 가 아니다(UNVERIFIED 는 통과 — 장애를 폐업으로 읽지 않는다) |
 | 〃 | 그날 영업시간 | 휴무가 증명되지 않았다(정보 없음은 막지 않는다 — HC1 과 같은 판정) |
-| 시각 제약 | 그날 남은 시간창 | 창 안이고 지금 이후다 — 창을 **좁히기만** 한다(넓히면 백엔드 창을 어긴다) |
-| 방문 시각("3시에 카페") | 〃 | 창 안이고 지금 이후다 — 하루 시작이 아니라 그 곳·종류의 방문 시각이다 |
+| 시각 제약 | 지금·그날 끝(23:59) | 지금 이후·그날 안이면 **말한 대로** 그날 창이 된다 — 받은 창(BE 기본 09:00~21:00 류)은 말이 없을 때의 값이다(사용자 2026-11-06 "그대로 적용"). 지난 시각·자정 넘김·60분도 안 남는 창은 버린다 |
+| 방문 시각("3시에 카페") | 〃 | 지금 이후·그날 안이면 그 시각에 잠근다 — 하루 시작이 아니라 그 곳·종류의 방문 시각이고, 창은 그 방문이 들도록 늘어난다 |
 | 날씨 주장 | 기상청 강수확률(수집 패킷) | 비 주장이면 임계 이상일 때만 실내 쪽으로 기운다 |
 | 지역("강남에서") | 등록 POI 이름 | 그 이름이 든 곳이 `AREA_MIN_MATCHES` 이상 — 중심은 그 좌표들의 중앙값(후보가 아니라 기준점) |
 | 장소의 날("2일차에") | 여행 날짜(시작~끝)·오늘 | 다시 짜는 날이어야 이 날에 쓴다 — 다른 날이면 이 날엔 넣지도 빼지도 않는다(노트). 못 환산하면 종전처럼 이 날 |
@@ -53,6 +53,14 @@ from trippilot.ports.place_existence_port import (
 NAME_SEARCH_RADIUS_KM = 50.0
 # 지정 시각이 남은 창에서 이만큼은 남겨야 의미가 있다 — 10분 남기고 "6시까지"는 무효.
 MIN_WINDOW_MINUTES = 60
+# 말한 시각이 닿을 수 있는 그날의 끝 — 재계획 경계는 자정 넘김을 못 나른다(BE 슬롯 시각이 그날 것이라 "새벽 1시까지"의 01:00 은
+# 표현이 없다). 와이어의 밤에 놀기 창(`_NIGHT_END`)과 같은 값이다.
+DAY_END = timedelta(hours=23, minutes=59)
+# "저녁 8시 반 이후"처럼 시작만 말했는데 받은 창 끝(21:00 류)까지 이만큼이 안 남으면 끝을 시작+이만큼(≤23:59)으로 늘린다 — 늦게
+# 시작하겠다는 말에 한 곳도 못 넣는 창을 주지 않기 위해서다. BE 저녁 생성의 '시작+4시간'(`TodayWindow.EVENING_REACH_MIN`)과 같은 값.
+START_REACH = timedelta(hours=4)
+# "밤 10시에 클럽" — 말한 방문 시각부터 이만큼은 창이 열려야 그 방문이 든다(체류 상한 클럽 120분). 23:59 를 넘지 않는다.
+AT_REACH = timedelta(hours=2)
 # 이름 대조 최소 길이 — 한 글자 키("산"·"역")가 그 글자를 품은 모든 이름에 붙지 않게. "카페" 같은 종류 단어를
 # 막는 것은 이 문턱이 아니라 추출 프롬프트다(places 는 "이름으로 콕 집은 장소만", 종류는 categories). 3 으로 올리면
 # 두 글자 지역·상호(강남·홍대·명동·성수, 카페 '해림')가 빠진다.
@@ -281,23 +289,34 @@ def verify_window(
     not_before: datetime | None,
     tz: tzinfo,
 ) -> tuple[datetime | None, datetime | None, list[str]]:
-    """시각 주장 → 좁힌 창. 창 밖·지난 시각·너무 좁아지는 것은 버린다."""
+    """시각 주장 → 그날 창. 받은 창은 말이 없을 때의 값이다 — 말한 시각이 지금 이후·그날 안(23:59)이면 창 밖이어도 **그대로** 쓴다
+    (사용자 2026-11-06 "말한 대로 적용"; 종전엔 창 안으로 좁히기만 해 "밤 10시까지"·"아침 7시부터"가 노트만 남기고 무시됐다).
+    지난 시각은 '지금이 이미 그 이후'라 창을 안 움직이고(버린 것이 아니다), 자정 넘김·시작보다 앞인 끝·60분도 안 남는 창은 버린다.
+    시작만 말해 받은 창 끝까지 4시간이 안 남으면 끝을 시작+4시간(≤23:59)으로 늘린다(`START_REACH`) — 노트는 `extended`."""
     notes: list[str] = []
+    day_end = datetime.combine(on, time(0, 0), tzinfo=tz) + DAY_END
     floor = max(window_start, not_before) if not_before else window_start
     start = end = None
     if start_after is not None:
         at = datetime.combine(on, start_after, tzinfo=tz)
-        if floor <= at < window_end:
+        if not_before is not None and at < not_before:
+            notes.append(f"nl_time_satisfied: start_after {at:%H:%M}")
+        elif at < day_end:
             start = at
         else:
             notes.append("nl_time_rejected: start_after_outside_window")
     if end_by is not None:
         at = datetime.combine(on, end_by, tzinfo=tz)
         lo = start or floor
-        if lo < at <= window_end:
+        if lo < at <= day_end:
             end = at
         else:
             notes.append("nl_time_rejected: end_by_outside_window")
+    extended = False
+    if start is not None and end is None and window_end - start < START_REACH:
+        reach = min(start + START_REACH, day_end)
+        if reach > window_end:
+            end, extended = reach, True
     lo, hi = start or floor, end or window_end
     if (start or end) and hi - lo < timedelta(minutes=MIN_WINDOW_MINUTES):
         notes.append("nl_time_rejected: window_too_narrow")
@@ -305,7 +324,7 @@ def verify_window(
     if start:
         notes.append(f"nl_time_accepted: start_after {start:%H:%M}")
     if end:
-        notes.append(f"nl_time_accepted: end_by {end:%H:%M}")
+        notes.append(f"nl_time_{'extended' if extended else 'accepted'}: end_by {end:%H:%M}")
     return start, end, notes
 
 
@@ -475,11 +494,17 @@ def verify(
     if extracted.start_after in times:
         extracted = replace(extracted, start_after=None)
         notes.append("nl_time_dropped: start_after_is_visit_time")
-    floor = max(window_start, not_before) if not_before else window_start
+    start, end, n = verify_window(
+        on, extracted.start_after, extracted.end_by, window_start, window_end, not_before, tz)
+    notes += n
+    day_start = datetime.combine(on, time(0, 0), tzinfo=tz)
+    day_end = day_start + DAY_END
+    # 방문 시각의 하한 — 오늘이면 지금, 다른 날이면 그날 0시. 받은 창 밖이어도 말한 대로다(`verify_window` 와 같은 규칙).
+    floor = not_before or day_start
 
     def at_in_window(t: time, label: str) -> datetime | None:
         at = datetime.combine(on, t, tzinfo=tz)
-        if floor <= at < window_end:
+        if floor <= at < day_end:
             return at
         notes.append(f"nl_at_rejected: {label} outside_window")
         return None
@@ -490,9 +515,6 @@ def verify(
         poi = match_place(ep.name, pool, anchor)[0] if ep.at else None
         if poi is not None and poi.poi_id in kept and (at := at_in_window(ep.at, str(poi.poi_id))):
             visit_at.append((poi.poi_id, at))
-    start, end, n = verify_window(
-        on, extracted.start_after, extracted.end_by, window_start, window_end, not_before, tz)
-    notes += n
     rain, n = verify_weather(extracted.weather, rain_by_date.get(on), rain_threshold)
     notes += n
     only, counts, n = verify_categories(extracted, available)
@@ -501,6 +523,17 @@ def verify(
     for c in extracted.categories:
         if c.at and PoiCategory(c.category) in available and (at := at_in_window(c.at, c.category)):
             category_at.append((PoiCategory(c.category), at))
+    # 말한 방문 시각이 창 밖이면 창을 그 방문이 들도록 늘린다 — "밤 10시에 클럽"은 끝을 23:59 로, "아침 8시에 카페"는 시작을 08:00 으로.
+    ats = [at for _, at in (*visit_at, *category_at)]
+    if ats:
+        lo = start or (max(window_start, not_before) if not_before else window_start)
+        if min(ats) < lo:
+            start = min(ats)
+            notes.append(f"nl_time_extended: start_after {start:%H:%M}")
+        need = min(max(ats) + AT_REACH, day_end)
+        if need > (end or window_end):
+            end = need
+            notes.append(f"nl_time_extended: end_by {end:%H:%M}")
     return VerifiedRequest(visit=visit, avoid=avoid, window_start=start, window_end=end,
                            rain_confirmed=rain, only=only, counts=counts,
                            visit_at=tuple(visit_at), category_at=tuple(category_at), area_center=center,
