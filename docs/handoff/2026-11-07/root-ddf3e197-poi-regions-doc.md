@@ -6,9 +6,9 @@ branches_seen: [feature/region-covers-gw-gb-gn]
 current_branch: feature/region-covers-gw-gb-gn (이 브랜치는 지역 커버 이미지용 — POI 작업은 새 브랜치에서)
 span_kst: "11-04 → 11-07"
 ended_by: 사용자 요청(세션 인수인계)
-status: 진행중(코드 #2031 머지 · 데이터 #2032 · 닫기 TRIP-1811 PR, 배포는 사람 몫)
+status: 진행중(#2031·#2032 머지 · 닫기 #2033, 배포는 사람 몫)
 resume_local: "claude --resume ddf3e197-8c82-4da8-b2f5-261457bcfa7b"
-related_prs: [1815, 2031, 2032]
+related_prs: [1815, 2031, 2032, 2033]
 tickets: [TRIP-1537, TRIP-392, TRIP-1810, TRIP-1811]
 session_name: 장소 데이터 확장(부산·강원·경북·경남 정제) → 공유본 분할 반영
 picked_up_by: Claude Code 2026-11-07 04:20 (레인 poi, TRIP-1810, 브랜치 chore/TRIP-1810-DATA-regions-doc)
@@ -52,8 +52,8 @@ picked_up_by: Claude Code 2026-11-07 04:20 (레인 poi, TRIP-1810, 브랜치 cho
 - **코드 PR #2031**(데이터 없음): 배포 적재가 이미지 안에 지역 문서가 있으면 `[공유본, 지역 문서]` 순으로 붓는다 · CI 경로 · 계약 IT(문서 없으면 건너뜀). 이 문서가 함께 커밋된다.
 - **지역 문서**: `~/trippilot-data/processed/regions/collected_pois_regions.json` — 레포 밖, **커밋 안 함**. 수치·명령은 RUNBOOK §12.1.
 - **로컬 리허설 통과**: 신규 39,193 · 보강 3,569 · 탈락 0(위 표의 41,414 / 3,590 과 다른 이유는 아래).
-- **데이터 PR #2032**: `ai/data/collected_pois_regions.json` 한 파일.
-- **TRIP-1811 PR**: LOST 를 공유본에서 빼고(제외 목록 `poi_excluded_filtered.json` + 재병합), `--close-missing` 이 여러 문서를 합쳐 대조한다.
+- **데이터 PR #2032 머지**: `ai/data/collected_pois_regions.json` 한 파일.
+- **TRIP-1811 PR #2033**: LOST 를 공유본에서 빼고(제외 목록 `poi_excluded_filtered.json` + 재병합), `--close-missing` 이 여러 문서를 합쳐 대조한다.
 - **결정(사용자 11-07)**: 겹치면 지역 문서가 이긴다 · 이름 겹침 2,676 은 뺀다 · LOST 4,152 는 TRIP-1811 로 분리 · 비공개 전환은 운영 적재 뒤 맨 마지막.
 
 **위 표와 수가 다른 이유** — 정제(prep) 뒤에 공유본이 바뀌었다(#2009 112,481 → #2017 체인 794 제거 · #2019 85 추가 → 111,772).
@@ -62,7 +62,7 @@ picked_up_by: Claude Code 2026-11-07 04:20 (레인 poi, TRIP-1810, 브랜치 cho
 
 ## 다음에 이어서 할 일
 ### 머지 — 오케
-1. #2032(지역 문서) 먼저, 그다음 TRIP-1811 PR. 일일 병합이 공유본을 건드렸으면 1811 은 최신 develop 에서 재병합 뒤 머지(RUNBOOK §12.2).
+1. #2033 머지. 일일 병합이 공유본을 건드렸으면 최신 develop 에서 재병합 뒤 머지(RUNBOOK §12.2).
 2. 공유본이 지역 문서 생성 뒤 바뀌어도 머지는 막히지 않는다. 겹치는 행 값을 최신으로 맞추려면 `build_regions.py --regions-only` 재실행(RUNBOOK §12.1).
 
 ### 개발 서버 확인 — 사람(AWS/kubectl 필요)
