@@ -199,3 +199,30 @@ describe('sheetRowKeys — 성질', () => {
     );
   });
 });
+
+describe('TRIP-1795 · AC-4 — 고정 숙소 판정은 원본 분류만 읽는다', () => {
+  // 표시 분류를 사용자가 `명소` 로 바꿔 불러도 숙소 보호(시각 고정·곳 수 제외)는 풀리지 않는다.
+  // 변수로 만들어 넘긴다 — 판정 함수 입력 타입엔 표시 분류 칸이 없다(있으면 안 된다).
+  const renamedStay = {
+    isFixed: true,
+    category: '숙소',
+    displayCategory: '명소',
+  };
+
+  it('FS-D1 · isFixed·원본 숙소·표시 분류 명소 슬롯은 여전히 고정 숙소이고 곳 수에서 빠진다', () => {
+    expect(isFixedStay(renamedStay)).toBe(true);
+    expect(
+      sheetMeta([renamedStay, slot()], { count: 'excludeFixedStay', km: false })
+    ).toBe('1곳');
+  });
+
+  it('FS-D2 · 반대로 원본이 숙소가 아니면 표시 분류를 숙소로 둘 수도 없지만(서버 400), 표시 분류가 어떻든 판정은 원본이다', () => {
+    const notStay = {
+      isFixed: true,
+      category: '명소',
+      displayCategory: '카페',
+    };
+
+    expect(isFixedStay(notStay)).toBe(false);
+  });
+});

@@ -26,6 +26,7 @@ import { buildSlotKey } from '@/entities/itinerary-slot';
 import { respectPressGuard } from '@/shared/lib/pressGuard';
 import { overlapAwareNotice } from '@/entities/itinerary-slot';
 import { SlotStopCard } from '@/entities/itinerary-slot';
+import { slotDisplayName } from '@/entities/itinerary-slot';
 
 import { CTA_BAR_HEIGHT, type CtaButton } from './CtaBar';
 import { DayChipScroller } from './DayChipScroller';
@@ -259,10 +260,8 @@ export function EditorView({
                 : undefined
             }
             more={
-              onPressMore !== undefined &&
-              !selecting &&
-              !isPinned(item) &&
-              days.length > 1
+              // TRIP-1795 · 고정·방문 완료·하루 일정에서도 연다 — 이름·분류 고치기는 일수·고정과 무관하다. 옮기기 가능 여부는 페이지(`canMove`)가 정한다.
+              onPressMore !== undefined && !selecting
                 ? {
                     onPress: () => onPressMore(item.poiId),
                     testID: `editor-slot-more-${item.poiId}`,
@@ -557,7 +556,7 @@ export function EditorView({
       {/* TRIP-1791 · 빼기 확인창 — 시트 위를 덮으려 셸 형제로 둔다(소비처 루트가 flex-1 View). 조건부 absolute 오버레이라 덮임은 6-b. */}
       {confirming && picked.length > 0 ? (
         <RemoveSelectedDialog
-          names={pickedSlots.map((slot) => slot.nameKo ?? '')}
+          names={pickedSlots.map((slot) => slotDisplayName(slot) ?? '')}
           onConfirm={confirmDelete}
           onCancel={() => setConfirming(false)}
         />

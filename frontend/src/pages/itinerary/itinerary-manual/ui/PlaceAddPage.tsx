@@ -79,7 +79,7 @@ const UNSAVED_EDITS_TAIL = ' · 다른 수정은 저장해야 남아요';
  * 추가 저장(TRIP-338 무심판 해소 — AC-6 통합 심판이 이 플로우를 잠근다): "추가" → `TimeSheet` 로 시각
  * 자유입력 → **삽입 index 분기**(AC-7): 라우트 `insertAfter`(선행 슬롯 index)가 있으면
  * `insertSlotAt(slots, slot, Number(insertAfter) + 1)`(797 "카드 사이 +" 가 넘긴 선행 index 의 다음
- * 자리 — 같은 화면에서 연달아 담으면 성공한 추가 수만큼 뒤로 민다, TRIP-1640), 없으면 `addSlot`(말미 append, 후방호환) → `buildEditItineraryRequest`(5필드 픽) →
+ * 자리 — 같은 화면에서 연달아 담으면 성공한 추가 수만큼 뒤로 민다, TRIP-1640), 없으면 `addSlot`(말미 append, 후방호환) → `buildEditItineraryRequest`(서버 칸만 픽) →
  * `PUT /trips/{tripId}/itinerary`(전체 교체) → 성공 시 일정 GET 캐시 무효화로 h19 가 갱신 재조회한다
  * (없으면 추가가 화면에 영영 안 보인다, W-1). 서버 재검증 결과(`hasViolation`)는 그 재조회가 표시한다
  * (INV-2 — 클라는 시각 타당성을 판정하지 않는다). 일정 GET 미도착·실패(`notReady`)면 추가를 조용히

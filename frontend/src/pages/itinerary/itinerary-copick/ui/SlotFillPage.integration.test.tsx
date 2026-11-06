@@ -302,6 +302,69 @@ describe('컨셉·후보·확정 순회 배선', () => {
       expect(mockBack).not.toHaveBeenCalled();
     });
 
+    // TRIP-1795 · AC-3·7·8 — 이 여행에서 고쳐 부르는 이름·분류가 있는 일정. a(경복궁)는 별칭 둘, b 도 별칭 둘.
+    function aliasedItinerary(): Itinerary {
+      const base = itinerary();
+      return {
+        ...base,
+        days: [
+          {
+            ...base.days[0],
+            slots: [
+              {
+                ...base.days[0].slots[0],
+                displayName: '우리 아지트',
+                displayCategory: '카페' as const,
+              },
+              {
+                ...base.days[0].slots[1],
+                displayName: '이웃 별칭',
+                displayCategory: '야경' as const,
+              },
+            ],
+          },
+        ],
+      };
+    }
+
+    it('C5d · TRIP-1795 AC-3 — h13 문맥 줄 "… · {직전 슬롯} 다음" 의 직전 슬롯 이름은 고친 이름이다', async () => {
+      serveItinerary(server, {
+        trip: () => TRIP_NO_DESTINATIONS,
+        itinerary: () => aliasedItinerary(),
+      });
+      renderPage(buildSlotKey(DAY1, 'b'));
+
+      expect(
+        await screen.findByText('점심 일정 · 우리 아지트 다음')
+      ).toBeTruthy();
+      expect(screen.queryByText('점심 일정 · 경복궁 다음')).toBeNull();
+    });
+
+    it('C5e · TRIP-1795 AC-7·8 — 후보로 채우면 PUT 에서 바뀐 슬롯(a→X)의 별칭 두 키는 없어지고 이웃 b 의 별칭은 그대로 실린다', async () => {
+      serveItinerary(server, {
+        trip: () => TRIP_NO_DESTINATIONS,
+        itinerary: () => aliasedItinerary(),
+      });
+      renderPage();
+      await pickConcept('culture');
+      await screen.findByTestId('itinerary-candidate-radio-X');
+
+      fireEvent.press(screen.getByTestId('itinerary-candidate-radio-X'));
+      fireEvent.press(screen.getByTestId('itinerary-copick-slotfill-confirm'));
+
+      await waitFor(() => expect(putCalls).toBe(1));
+      const [swapped, neighbor] = (putBody as EditItineraryRequest).days[0]
+        .slots;
+      expect(swapped.poiId).toBe('X');
+      expect(Object.keys(swapped)).not.toContain('displayName'); // 다른 장소가 옛 별칭을 달고 저장되지 않는다
+      expect(Object.keys(swapped)).not.toContain('displayCategory');
+      expect(neighbor).toMatchObject({
+        poiId: 'b',
+        displayName: '이웃 별칭',
+        displayCategory: '야경',
+      });
+    });
+
     it('C12 · AC-7 마지막 비고정 슬롯 확정 → 다음이 없으면 h17(complete)로 replace', async () => {
       // 마지막 비고정 슬롯(d1#b)에서 진입 — 뒤에 비고정이 없다.
       renderPage(buildSlotKey(DAY1, 'b'));
@@ -2908,6 +2971,35 @@ describe('진행줄·스텝퍼 배선', () => {
       renderAtSlotB();
       await screen.findByTestId('itinerary-copick-concept-progress');
       expect(screen.queryByText(DURATION_TEXT)).toBeNull();
+    });
+
+    it('W7 · TRIP-1795 — 스텝퍼 이전 단 제목은 고친 이름, 현재 단 제목의 분류는 고친 분류를 따른다 (같은 슬롯을 이 여행에서 고쳐 부른 경우)', async () => {
+      const base = itinerary(true);
+      const aliased = {
+        ...base,
+        days: base.days.map((day) => ({
+          ...day,
+          slots: day.slots.map((slot) =>
+            slot.poiId === 'a'
+              ? { ...slot, displayName: '우리 아지트' }
+              : slot.poiId === 'b'
+                ? { ...slot, displayCategory: '카페' as const }
+                : slot
+          ),
+        })),
+      };
+      serveItinerary(server, {
+        trip: () => TRIP_NO_DESTINATIONS,
+        itinerary: () => aliased,
+      });
+      renderAtSlotB();
+
+      expect(
+        await screen.findByTestId('copick-stepper-prev-title')
+      ).toHaveTextContent('우리 아지트');
+      const current = screen.getByTestId('copick-stepper-current-title');
+      expect(current).toHaveTextContent(/카페/);
+      expect(current).not.toHaveTextContent(/전시/); // 원본 분류(전시)가 아니다
     });
   });
 });

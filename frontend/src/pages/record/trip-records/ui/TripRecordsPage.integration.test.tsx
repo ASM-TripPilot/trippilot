@@ -17,6 +17,7 @@ import {
 import type { ReactTestInstance } from 'react-test-renderer';
 import { router } from 'expo-router';
 
+import { buildSlotKey } from '@/entities/itinerary-slot';
 import { PlusGlyph } from '@/shared/ui/glyphs';
 import { server } from '@/mocks/server';
 import {
@@ -321,6 +322,45 @@ describe('기본 — 일자 탭·사진/메모 슬롯·[방문 추가]·메모 �
 
       // 부정 — 옛 영문 라벨은 사라진다(구현 전엔 present 라 red).
       expect(screen.queryByText('Day1')).toBeNull();
+    });
+  });
+
+  describe('TRIP-1795 · Q5 — 이 여행에서 고친 이름이 방문 기록 카드에도 보인다', () => {
+    it('일정 슬롯의 고친 이름이 완료 방문 카드 제목이 되고(원본은 안 보인다), 고치지 않은 슬롯은 원본 이름 그대로다', async () => {
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+          HttpResponse.json(
+            tripItinerary(
+              [
+                {
+                  date: '2026-08-20',
+                  slots: [
+                    daySlot('p1', '광안리 해변', {
+                      displayName: '우리 아지트',
+                    }),
+                    // 방문 기록이 없는 슬롯 — 「계획 행」(`nameKo: slotDisplayName(slot)`)에도 고친 이름이 보인다.
+                    daySlot('p9', '송정 해변', { displayName: '내 해변' }),
+                  ],
+                },
+                {
+                  date: '2026-08-21',
+                  slots: [daySlot('p2', '부산시립미술관')],
+                },
+              ],
+              TRIP_ID
+            )
+          )
+        )
+      );
+      render(<TripRecordsPage tripId={TRIP_ID} />, { wrapper });
+
+      await screen.findByText('우리 아지트');
+      expect(screen.queryByText('광안리 해변')).toBeNull();
+      const planRow = await screen.findByTestId(
+        `record-trip-plan-row-${buildSlotKey('2026-08-20', 'p9')}`
+      );
+      expect(within(planRow).getByText('내 해변')).toBeOnTheScreen();
+      expect(screen.queryByText('송정 해변')).toBeNull();
     });
   });
 

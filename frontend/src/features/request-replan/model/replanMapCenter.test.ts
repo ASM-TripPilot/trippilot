@@ -249,3 +249,19 @@ describe('🔴 AC-B1 · 성질(PBT)', () => {
     );
   });
 });
+
+describe('deriveReplanMapAnchor — 고친 이름 (TRIP-1795 AC-3)', () => {
+  it('슬롯에서 중심을 골랐으면 placeName(`{이름} 인근` 재료)이 고친 이름이다', () => {
+    const renamed = {
+      ...slot('p0', '남산서울타워', NAMSAN),
+      displayName: '우리 아지트',
+    };
+
+    const anchor = deriveReplanMapAnchor({
+      days: [{ date: '2026-06-10', slots: [renamed] }],
+      preferredDate: '2026-06-10',
+    });
+
+    expect(anchor.placeName).toBe('우리 아지트');
+  });
+});

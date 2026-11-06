@@ -25,7 +25,7 @@ import type {
   ItineraryStatus,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import { resetPressGuard } from '@/shared/lib/pressGuard';
+import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
 import {
   editListData,
   fireEditDragEnd,
@@ -525,8 +525,41 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
     });
   });
 
+  // TRIP-1795 · 이 여행에서만 고친 이름·분류 — R8 흐름 안에 단계로 끼운다(새 렌더 0: 셸 렌더가 늘면 소음 예산 reanimated 가 넘는다).
+  const NAME = '우리 아지트';
+  /** 기본 일정의 슬롯에 덮어쓰기(분류·표시값 등)를 얹은 일정. */
+  function aliased(
+    overrides: Record<string, Partial<ItineraryDaysItemSlotsItem>>
+  ): Itinerary {
+    const it = itinerary();
+    return {
+      ...it,
+      days: it.days.map((day) => ({
+        ...day,
+        slots: day.slots.map((s) => ({ ...s, ...(overrides[s.poiId] ?? {}) })),
+      })),
+    };
+  }
+
   describe('🔴 R8 · AC4 — 다일자 칩으로 활성 일자 전환', () => {
-    it('day2 칩 press → day2 슬롯(poi-c)이 뜨고 곳 수가 1곳으로 갱신된다 · 이어서 다른 날로 옮기기 흐름 (TRIP-1793)', async () => {
+    it('day2 칩 press → day2 슬롯(poi-c)이 뜨고 곳 수가 1곳으로 갱신된다 · 이어서 다른 날로 옮기기 흐름 (TRIP-1793) · 이름·분류 고치기 (TRIP-1795)', async () => {
+      // TRIP-1795 — poi-a 에 분류를 주고(칩 선택 표식을 보려고), 저장 응답은 서버가 별칭을 돌려주는 모양으로 둔다.
+      const cats = {
+        'poi-a': { category: '명소' },
+        'poi-b': { category: '자연' },
+      };
+      getHandler = () => HttpResponse.json(aliased(cats));
+      putHandler = () =>
+        HttpResponse.json(
+          aliased({
+            ...cats,
+            'poi-a': {
+              category: '명소',
+              displayName: NAME,
+              displayCategory: '카페',
+            },
+          })
+        );
       renderPage();
       await screen.findByTestId(cardId('poi-a'));
       expect(screen.getByTestId(META)).toHaveTextContent('2곳');
@@ -652,6 +685,125 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       await visitsSettled(); // W2 — 날을 바꾸면 그 날 방문 조회가 끝나야 ⋯ 가 선다
       expect(moreIds()).toEqual([MORE('poi-a'), MORE('poi-b')]);
 
+      // ── TRIP-1795 · 이 여행에서만 이름·분류 고치기. 단계 사이 `resetPressGuard()` 로 전역 연타 창을 분리한다
+      //    (앞 단계가 연 창이 뒤 단언을 가려 `openPressGuardWindow()` 를 지워도 green 이던 TRIP-1793 D4 실측).
+      const RENAME_ROW = 'editor-move-rename';
+      const RENAME_SHEET = 'editor-rename-sheet';
+      const RENAME_INPUT = 'editor-rename-input';
+      const RENAME_CATEGORIES = [
+        '명소',
+        '맛집',
+        '카페',
+        '야경',
+        '자연',
+        '쇼핑',
+        '문화',
+        '액티비티',
+        '미술',
+        '술집',
+      ];
+      const nameOfA = `slot-stopcard-name-${buildSlotKey(DAY1, 'poi-a')}`;
+      const pressSaveAndSettle = async (): Promise<void> => {
+        fireEvent.press(screen.getByTestId(SAVE));
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      };
+      expect(screen.queryByTestId(RENAME_SHEET)).toBeNull(); // 앵커 — 열기 전엔 고치기 시트가 없다
+      expect(screen.getByTestId(nameOfA)).toHaveTextContent('성산일출봉');
+
+      // ① AC-10·11 — 비고정·미완료·이틀 일정이라 장소 시트에 날짜 섹션이 있고(짝), 행을 누르면 고치기 시트가 장소 시트를 **대신한다**.
+      fireEvent.press(screen.getByTestId(MORE('poi-a')));
+      expect(await screen.findByTestId('editor-move-day-2')).toBeOnTheScreen();
+      expect(screen.getByTestId(RENAME_ROW)).toHaveTextContent(
+        '이름·분류 고치기'
+      );
+      resetPressGuard(); // ⋯ 가 연 창을 닫는다 — 아래 ⓐ 가 행 누름이 연 창만 재게(안 닫으면 그 줄을 지워도 green, 03b)
+      fireEvent.press(screen.getByTestId(RENAME_ROW));
+      expect(screen.queryByTestId(SHEET)).toBeNull();
+      expect(screen.getByTestId(RENAME_SHEET)).toBeOnTheScreen();
+      expect(screen.getByTestId(RENAME_INPUT)).toHaveDisplayValue('성산일출봉');
+      expect(
+        screen
+          .getAllByTestId(/^editor-rename-category-/)
+          .map((n) => n.props.testID.replace('editor-rename-category-', ''))
+      ).toEqual(RENAME_CATEGORIES);
+      expect(screen.getByTestId('editor-rename-category-명소')).toBeSelected();
+      expect(screen.getByTestId('editor-rename-reset')).toBeDisabled(); // 덮어쓴 게 없다
+      // ⓐ 통합 QA D3 — 행 누름 직후의 둘째 탭이 올라오는 시트의 분류 칩에 닿아도 지금 분류가 그대로다(행이 연 창을 칩이 따른다).
+      //   저장 단언(50ms 대기)보다 앞에 둔다 — 실제 시간 400ms 창이라 대기 뒤로 가면 느린 CI 에서 거짓 red 가 날 수 있다.
+      fireEvent.press(screen.getByTestId('editor-rename-category-미술'));
+      expect(screen.getByTestId('editor-rename-category-명소')).toBeSelected();
+      expect(
+        screen.getByTestId('editor-rename-category-미술')
+      ).not.toBeSelected();
+      // ⓐ-2 AC-15 — 같은 둘째 탭이 새 시트 자리 아래 「일정 저장하기」에 닿아도 저장하지 않는다.
+      await pressSaveAndSettle();
+      expect(putCalls).toBe(0);
+      resetPressGuard();
+
+      // ② AC-12 — 이름·분류를 고쳐 `적용` → 시트가 닫히고 카드 이름이 즉시 바뀐다. 서버 호출 0, ↶ 활성.
+      fireEvent.changeText(screen.getByTestId(RENAME_INPUT), NAME);
+      fireEvent.press(screen.getByTestId('editor-rename-category-카페'));
+      fireEvent.press(screen.getByTestId('editor-rename-apply'));
+      expect(screen.queryByTestId(RENAME_SHEET)).toBeNull();
+      expect(screen.getByTestId(nameOfA)).toHaveTextContent(NAME);
+      expect(screen.queryByText('성산일출봉')).toBeNull();
+      expect(screen.getByTestId('editor-undo')).not.toBeDisabled();
+      expect(putCalls).toBe(0);
+      // ⓑ AC-15 — `적용` 직후의 둘째 탭도 저장에 닿지 않는다.
+      await pressSaveAndSettle();
+      expect(putCalls).toBe(0);
+      resetPressGuard();
+
+      // ②b AC-3 — 고친 뒤 다시 연 장소 시트의 제목·사진 분류, 옮기기 시각 시트·편집 시각 시트의 이름·사진 분류가 모두 고친 값이다.
+      const expectPlaceSummary = (sheetTestID: string, thumbTestID: string) => {
+        const sheet = screen.getByTestId(sheetTestID);
+        expect(within(sheet).getByText(NAME)).toBeOnTheScreen();
+        expect(within(sheet).queryByText('성산일출봉')).toBeNull();
+        expect(screen.getByTestId(thumbTestID).props.source).toEqual([
+          coverFor('카페', 'poi-a'), // 원본 분류(명소) 그림이 아니다
+        ]);
+      };
+      fireEvent.press(screen.getByTestId(MORE('poi-a')));
+      const placeSheet = await screen.findByTestId(SHEET);
+      expect(within(placeSheet).getByText(NAME)).toBeOnTheScreen();
+      expect(within(placeSheet).queryByText('성산일출봉')).toBeNull();
+      expect(screen.getByTestId('editor-move-photo').props.source).toEqual([
+        coverFor('카페', 'poi-a'),
+      ]);
+      fireEvent.press(screen.getByTestId('editor-move-confirm')); // 옮기기 시각 시트(`pendingSlot`)
+      await screen.findByTestId(`${TIME}-sheet`);
+      expectPlaceSummary(`${TIME}-place-summary`, `${TIME}-place-thumb-image`);
+      fireEvent.press(screen.getByTestId(`${TIME}-close`));
+      resetPressGuard();
+      fireEvent.press(
+        screen.getByTestId(
+          `slot-stopcard-timechip-${buildSlotKey(DAY1, 'poi-a')}`
+        )
+      ); // 편집 시각 시트(`editingSlot`)
+      await screen.findByTestId('itinerary-edit-time-sheet');
+      expectPlaceSummary(
+        'itinerary-edit-time-place-summary',
+        'itinerary-edit-time-place-thumb-image'
+      );
+      fireEvent.press(screen.getByTestId('itinerary-edit-time-close'));
+      resetPressGuard();
+
+      // ③ AC-14 — ↶ 한 번이면 고치기 전 이름으로 돌아가고 되돌릴 게 없어진다.
+      fireEvent.press(screen.getByTestId('editor-undo'));
+      expect(screen.getByTestId(nameOfA)).toHaveTextContent('성산일출봉');
+      expect(screen.getByTestId('editor-undo')).toBeDisabled();
+      resetPressGuard();
+
+      // ④ 다시 고쳐 둔 채(되돌리지 않고) R8 의 나머지 흐름·저장으로 이어 간다 — 저장 본문·재시드는 ⑦ 에서 잰다.
+      fireEvent.press(screen.getByTestId(MORE('poi-a')));
+      fireEvent.press(await screen.findByTestId(RENAME_ROW));
+      fireEvent.changeText(screen.getByTestId(RENAME_INPUT), NAME);
+      resetPressGuard(); // 행 누름이 연 창이 지난 것과 같다 — 칩·`적용` 이 첫 누름으로 선다
+      fireEvent.press(screen.getByTestId('editor-rename-category-카페'));
+      fireEvent.press(screen.getByTestId('editor-rename-apply'));
+      resetPressGuard();
+      expect(screen.getByTestId(nameOfA)).toHaveTextContent(NAME);
+
       // ⑥ AC-1·8 — 앞날→뒷날: poi-b 를 2일차로, 시각 시트 기본은 10:00–11:00(2일차 마지막 poi-c 가 자정을 넘겨 끝나 폴백)
       //    → 시작 15시·종료 16시로 고쳐 [적용]. 15:00 은 poi-c(22:00) 보다 이르니 시각 순으로 poi-c 앞에 선다.
       fireEvent.press(screen.getByTestId(MORE('poi-b')));
@@ -700,6 +852,14 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       ]);
       expect(sent.days[1].slots[1].endsNextDay).toBe(true); // poi-c 는 그대로
       expect(JSON.stringify(putBody)).not.toContain('moved');
+      // TRIP-1795 AC-7 — 고친 poi-a 의 두 칸이 저장 본문에 실리고, 안 고친 poi-c 에는 키가 없다(옛 구현은 5필드만 골라 별칭을 지웠다).
+      expect(sent.days[0].slots[0]).toMatchObject({
+        poiId: 'poi-a',
+        displayName: NAME,
+        displayCategory: '카페',
+      });
+      expect(Object.keys(sent.days[1].slots[1])).not.toContain('displayName');
+      expect(JSON.stringify(putBody)).not.toContain('성산일출봉');
       await waitFor(() =>
         expect(
           useItineraryEditStore
@@ -707,6 +867,11 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
             .days.flatMap((day) => day.slots)
             .filter((s) => (s as { movedFromDate?: string }).movedFromDate)
         ).toEqual([])
+      );
+      // TRIP-1795 — 응답으로 재시드한 뒤에도 1일차 poi-a 는 고친 이름이다.
+      fireEvent.press(screen.getByTestId('itinerary-edit-day-1'));
+      await waitFor(() =>
+        expect(screen.getByTestId(nameOfA)).toHaveTextContent(NAME)
       );
     });
   });
@@ -959,6 +1124,9 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
 
       expect(screen.getByTestId(SAVE)).toHaveTextContent('일정 저장하기');
       await visitsSettled();
+      // 복귀 순간 돌아간 화면의 버튼이 눌린 것과 같다 — 실제 「돌아가기」와 같은 `guardPress` 판정. 창은 이동 **전에** 열려 있어야 한다.
+      const nextScreenPress = jest.fn();
+      mockBack.mockImplementationOnce(() => guardPress(nextScreenPress)());
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
       // 확정이 따라 나갔다면 여기까지 흘려 보낸 뒤 잡힌다(요청은 비동기).
@@ -969,6 +1137,8 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       expect(confirmCalls).toBe(0);
       expect(mockBack).toHaveBeenCalledTimes(1);
       expect(mockReplace).not.toHaveBeenCalled();
+      // 통합 QA O2 — 저장 뒤 복귀 직전에 창을 열어, 연타의 둘째 탭이 돌아간 화면의 「돌아가기」(`guardPress`)를 누르지 않는다.
+      expect(nextScreenPress).not.toHaveBeenCalled();
     });
   });
 });
@@ -1200,9 +1370,27 @@ describe('완료 슬롯 잠금 실연동', () => {
       expect(
         screen.queryByTestId(`slot-stopcard-locked-${openKey}`)
       ).toBeNull();
-      // TRIP-1793 W2 짝 — 알게 되면 미완료 poi-b 에 ⋯ 가 서고, 완료 poi-a 엔 여전히 없다.
+      // TRIP-1793 W2 짝 — 알게 되면 미완료 poi-b 에 ⋯ 가 선다.
       expect(screen.getByTestId('editor-slot-more-poi-b')).toBeOnTheScreen();
-      expect(screen.queryByTestId('editor-slot-more-poi-a')).toBeNull();
+      // TRIP-1795(뒤집음) — 방문 완료이면서 고정인 poi-a 에도 ⋯ 가 선다(이름·분류 고치기는 잠금·고정과 무관, Q4·Q5).
+      expect(screen.getByTestId('editor-slot-more-poi-a')).toBeOnTheScreen();
+
+      // TRIP-1795 — 방문 완료이면서 고정인 poi-a 의 시트에는 날짜 섹션·옮기기 CTA 가 없고 고치기 행만 있다(`moveSlot` 은 고정·완료를
+      // 안 막아 이 게이트가 유일한 방어선이다). 같은 화면의 미완료·비고정 poi-b 는 이틀 일정이라 날짜 섹션이 있다(짝 — 공허 통과 방지).
+      fireEvent.press(screen.getByTestId('editor-slot-more-poi-a'));
+      expect(await screen.findByTestId('editor-move-sheet')).toBeOnTheScreen();
+      expect(screen.getByTestId('editor-move-rename')).toBeOnTheScreen();
+      expect(screen.queryByTestId('editor-move-day-2')).toBeNull();
+      expect(screen.queryByTestId('editor-move-confirm')).toBeNull();
+      fireEvent.press(screen.getByTestId('editor-move-close'));
+      expect(screen.queryByTestId('editor-move-sheet')).toBeNull();
+      resetPressGuard(); // X 가 연 연타 창이 지난 것과 같다 — 아래 짝·저장이 첫 누름으로 서게
+      fireEvent.press(screen.getByTestId('editor-slot-more-poi-b'));
+      expect(await screen.findByTestId('editor-move-day-2')).toBeOnTheScreen();
+      expect(screen.getByTestId('editor-move-confirm')).toBeOnTheScreen();
+      expect(screen.getByTestId('editor-move-rename')).toBeOnTheScreen();
+      fireEvent.press(screen.getByTestId('editor-move-close'));
+      resetPressGuard();
 
       // TRIP-1748 — 회복하면 안내가 사라지고 저장이 다시 나간다.
       expect(screen.queryByTestId(VISITS_ERROR)).toBeNull();
@@ -1817,8 +2005,18 @@ describe('여행 중 직접 수정(i07)', () => {
         I07_GUIDE
       );
       expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent('5곳');
-      // TRIP-1793 — 여행 중 편집에도 ⋯ 를 주지만 일정이 하루뿐이면 옮길 날이 없어 ⋯ 가 없다(짝: 아래 이틀짜리 `it`).
-      expect(screen.queryAllByTestId(/^editor-slot-more-/)).toHaveLength(0);
+      // TRIP-1795(뒤집음) — 일정이 하루뿐이어도(옮길 날 없음) 방문 완료 p1·p2 를 포함해 다섯 곳 모두 ⋯ 가 있다(이름·분류 고치기).
+      expect(
+        screen
+          .queryAllByTestId(/^editor-slot-more-/)
+          .map((node) => node.props.testID)
+      ).toEqual([
+        'editor-slot-more-p1',
+        'editor-slot-more-p2',
+        'editor-slot-more-p3',
+        'editor-slot-more-p4',
+        'editor-slot-more-p5',
+      ]);
 
       expect(
         screen.queryByTestId(`slot-stopcard-timechip-${k('p1')}`)
@@ -1848,7 +2046,39 @@ describe('여행 중 직접 수정(i07)', () => {
       expect(screen.getByTestId('editor-select-delete')).toBeDisabled();
     });
 
-    it('i07 의 insert-2 press → 장소 추가 화면으로 insertAfter "2" 와 보고 있는 날 date 를 싣고 1회 push (TRIP-1115 · h12 와 같은 경로)', async () => {
+    it('i07 의 insert-2 press → 장소 추가 화면으로 insertAfter "2" 와 보고 있는 날 date 를 싣고 1회 push (TRIP-1115 · h12 와 같은 경로) · 하루 일정에서 고정·숙소·덮어쓴 장소의 이름·분류 고치기 (TRIP-1795)', async () => {
+      // TRIP-1795 — 하루 일정(옮길 날 없음)에서: p2(방문 완료)는 분류만 덮어씀 · p3 는 고정 꼭 갈 곳 · p4 는 서버가 표시 분류 `명소` 를 준
+      // 고정 숙소 · p5 는 이름·분류를 덮어씀. 새 렌더 없이 이 `it` 의 단계로 잰다(셸 렌더가 늘면 소음 예산 reanimated 가 넘는다).
+      getHandler = () =>
+        HttpResponse.json({
+          ...itinerary(),
+          days: [
+            {
+              date: DAY,
+              slots: SLOTS.map((s) =>
+                s.poiId === 'p2'
+                  ? { ...s, category: '자연', displayCategory: '야경' as const }
+                  : s.poiId === 'p3'
+                    ? { ...s, isFixed: true, category: '명소' }
+                    : s.poiId === 'p4'
+                      ? {
+                          ...s,
+                          isFixed: true,
+                          category: '숙소',
+                          displayCategory: '명소' as const,
+                        }
+                      : s.poiId === 'p5'
+                        ? {
+                            ...s,
+                            category: '맛집',
+                            displayName: '내 별칭',
+                            displayCategory: '야경' as const,
+                          }
+                        : s
+              ),
+            },
+          ],
+        });
       renderPage();
       await waitForLocked();
 
@@ -1859,6 +2089,93 @@ describe('여행 중 직접 수정(i07)', () => {
         pathname: '/trips/[tripId]/itinerary/manual/add',
         params: { tripId: TRIP_ID, insertAfter: '2', date: DAY },
       });
+
+      // ── TRIP-1795 R10b. 단계 사이 `resetPressGuard()` 로 전역 연타 창을 분리한다.
+      const ROW = 'editor-move-rename';
+      const RENAME_SHEET = 'editor-rename-sheet';
+      const INPUT = 'editor-rename-input';
+      const MORE = (poiId: string): string => `editor-slot-more-${poiId}`;
+      const nameOf = (poiId: string): string =>
+        `slot-stopcard-name-${k(poiId)}`;
+      const pressSaveAndSettle = async (): Promise<void> => {
+        fireEvent.press(screen.getByTestId(SAVE));
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      };
+      resetPressGuard();
+
+      // ① 고정 꼭 갈 곳(하루 일정) — 시트에 고치기 행만 있고 날짜 섹션·옮기기 CTA 가 없다.
+      fireEvent.press(screen.getByTestId(MORE('p3')));
+      expect(await screen.findByTestId(ROW)).toBeOnTheScreen();
+      expect(screen.queryByTestId('editor-move-day-1')).toBeNull();
+      expect(screen.queryByTestId('editor-move-confirm')).toBeNull();
+      fireEvent.press(screen.getByTestId('editor-move-close'));
+      resetPressGuard();
+
+      // ② AC-4·AC-10 — 고정 숙소 p4(서버 표시 분류 `명소`): 시각칩이 없고, 시트엔 분류 칩이 없다. X 로 닫으면 아무것도 안 바뀌고
+      //    X 직후의 둘째 탭도 저장에 안 닿는다(ⓓ).
+      expect(
+        screen.queryByTestId(`slot-stopcard-timechip-${k('p4')}`)
+      ).toBeNull();
+      fireEvent.press(screen.getByTestId(MORE('p4')));
+      fireEvent.press(await screen.findByTestId(ROW));
+      expect(screen.getByTestId(RENAME_SHEET)).toBeOnTheScreen();
+      expect(screen.queryAllByTestId(/^editor-rename-category-/)).toHaveLength(
+        0
+      );
+      resetPressGuard(); // 행 누름이 연 창이 지난 것과 같다 — 아래 X 가 첫 누름으로 선다
+      fireEvent.press(screen.getByTestId('editor-rename-close'));
+      expect(screen.queryByTestId(RENAME_SHEET)).toBeNull();
+      expect(screen.getByTestId('editor-undo')).toBeDisabled(); // X 는 아무것도 안 바꾼다
+      await pressSaveAndSettle();
+      expect(putCalls).toBe(0);
+      resetPressGuard();
+
+      // ②b W3 — 숙소는 분류 칩이 없어 이름만 고치는데, 서버가 준 표시 분류 `명소` 는 그대로 보존되어야 한다(저장 본문에서 잰다).
+      fireEvent.press(screen.getByTestId(MORE('p4')));
+      fireEvent.press(await screen.findByTestId(ROW));
+      fireEvent.changeText(screen.getByTestId(INPUT), '내 숙소');
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId('editor-rename-apply'));
+      resetPressGuard();
+      expect(screen.getByTestId(nameOf('p4'))).toHaveTextContent('내 숙소');
+
+      // ③ AC-13 — 덮어쓴 p5: 시트는 고친 이름·분류(야경)로 열리고 원래대로가 켜져 있다 → 누르면 두 칸이 비고 카드가 원본으로 돌아간다.
+      expect(screen.getByTestId(nameOf('p5'))).toHaveTextContent('내 별칭');
+      fireEvent.press(screen.getByTestId(MORE('p5')));
+      fireEvent.press(await screen.findByTestId(ROW));
+      expect(screen.getByTestId(INPUT)).toHaveDisplayValue('내 별칭');
+      expect(screen.getByTestId('editor-rename-category-야경')).toBeSelected();
+      expect(screen.getByTestId('editor-rename-reset')).not.toBeDisabled();
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId('editor-rename-reset'));
+      expect(screen.queryByTestId(RENAME_SHEET)).toBeNull();
+      expect(screen.getByTestId(nameOf('p5'))).toHaveTextContent('해운대 해변');
+      // ⓒ AC-15 — 원래대로 직후의 둘째 탭도 저장에 안 닿는다.
+      await pressSaveAndSettle();
+      expect(putCalls).toBe(0);
+      resetPressGuard();
+
+      // ③b W4 — 분류만 덮어쓴(이름은 안 고친) 방문 완료 p2: 원래대로가 켜져 있어야 한다(덮어쓴 게 분류뿐이어도 "덮어쓴 게 있다").
+      fireEvent.press(screen.getByTestId(MORE('p2')));
+      fireEvent.press(await screen.findByTestId(ROW));
+      expect(screen.getByTestId('editor-rename-reset')).not.toBeDisabled();
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId('editor-rename-close'));
+      resetPressGuard();
+
+      // ④ AC-7·16 — 저장: 비워진 p5 는 두 키가 없고, 이름만 고친 숙소 p4 는 서버가 준 표시 분류를 그대로 싣고, 분류만 덮어쓴 p2 는 그 칸만 싣는다.
+      fireEvent.press(screen.getByTestId(SAVE));
+      await waitFor(() => expect(putCalls).toBe(1));
+      const slots = (putBody as EditItineraryRequest).days[0].slots;
+      const find = (poiId: string) => slots.find((s) => s.poiId === poiId);
+      expect(Object.keys(find('p5') ?? {})).not.toContain('displayName');
+      expect(Object.keys(find('p5') ?? {})).not.toContain('displayCategory');
+      expect(find('p4')).toMatchObject({
+        displayName: '내 숙소',
+        displayCategory: '명소',
+      });
+      expect(find('p2')).toMatchObject({ displayCategory: '야경' });
+      expect(Object.keys(find('p2') ?? {})).not.toContain('displayName');
     });
 
     // 5-b 차단-1 — "+" 번호는 **보고 있는 날** 목록 기준이다. 날짜를 안 실으면 장소 추가 화면이 1일차에
@@ -1869,7 +2186,13 @@ describe('여행 중 직접 수정(i07)', () => {
         HttpResponse.json({
           ...itinerary(),
           days: [
-            { date: DAY, slots: SLOTS },
+            {
+              date: DAY,
+              // W1 — p4 를 고정(미완료)으로: 고정만으로 옮기기가 막히는지 단독으로 잰다.
+              slots: SLOTS.map((s) =>
+                s.poiId === 'p4' ? { ...s, isFixed: true } : s
+              ),
+            },
             {
               date: DAY2,
               slots: [
@@ -1883,16 +2206,42 @@ describe('여행 중 직접 수정(i07)', () => {
       renderPage();
       await waitForLocked();
 
-      // TRIP-1793 — 여행 중(i07) 이틀 일정: 방문 완료 p1·p2 는 ⋯ 가 없고 예정 p3·p4·p5 만 있다(h24 와 같은 ⋯ 를 i07 도 받는다).
+      // TRIP-1795(뒤집음) — 여행 중(i07) 이틀 일정: 방문 완료 p1·p2 도 ⋯ 가 있다(이름·분류 고치기). 옮기기 가능 여부는 시트가 갈라 준다(R10b).
       expect(
         screen
           .queryAllByTestId(/^editor-slot-more-/)
           .map((node) => node.props.testID)
       ).toEqual([
+        'editor-slot-more-p1',
+        'editor-slot-more-p2',
         'editor-slot-more-p3',
         'editor-slot-more-p4',
         'editor-slot-more-p5',
       ]);
+
+      // TRIP-1795 W1 — `canMove`(옮기기 가능) 세 조건이 각자 독립으로 문다. 이틀 일정이라 하루 조건은 통과한 상태에서:
+      //  p3(비고정·미완료) → 날짜 섹션·옮기기 CTA 가 **있다**(짝 — 공허 통과 방지)
+      //  p1(비고정이지만 방문 완료) → 없다 · p4(방문 미완료이지만 고정) → 없다. `moveSlot` 은 고정·완료를 안 막아 시트 게이트가 유일한 방어선이다.
+      const expectMoveSection = async (
+        poiId: string,
+        present: boolean
+      ): Promise<void> => {
+        fireEvent.press(screen.getByTestId(`editor-slot-more-${poiId}`));
+        expect(
+          await screen.findByTestId('editor-move-rename')
+        ).toBeOnTheScreen();
+        expect(screen.queryByTestId('editor-move-day-2') !== null).toBe(
+          present
+        );
+        expect(screen.queryByTestId('editor-move-confirm') !== null).toBe(
+          present
+        );
+        fireEvent.press(screen.getByTestId('editor-move-close'));
+        resetPressGuard(); // X 가 연 연타 창이 지난 것과 같다 — 다음 단계가 첫 누름으로 선다
+      };
+      await expectMoveSection('p3', true);
+      await expectMoveSection('p1', false);
+      await expectMoveSection('p4', false);
 
       // 칩 testID 번호는 1부터다(day-2 = 2일차, EditorView 가 tab.dayIndex 를 쓴다).
       fireEvent.press(screen.getByTestId('itinerary-edit-day-2'));
@@ -2352,12 +2701,16 @@ describe('저장 뒤 위반 요약 게이트', () => {
       // ★ 01b Q1 ⓔ — 게이트가 토스트보다 앞선다. PUT 성공 즉시 토스트를 띄우면 여기서 red(02a ★12).
       expect(screen.queryByTestId(SAVED)).toBeNull();
 
+      // 통합 QA O2 — 게이트 복귀도 이동 전에 창을 연다(복귀 순간 돌아간 화면의 `guardPress` 누름이 무시된다).
+      const nextScreenPress = jest.fn();
+      mockBack.mockImplementationOnce(() => guardPress(nextScreenPress)());
       fireEvent.press(screen.getByTestId(ASIS));
 
       expect(await screen.findByTestId(SAVED)).toHaveTextContent(
         '일정을 저장했어요'
       );
       await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
+      expect(nextScreenPress).not.toHaveBeenCalled();
       expect(screen.queryByTestId(GATE)).toBeNull();
       await settle();
       expect(mockReplace).not.toHaveBeenCalled();

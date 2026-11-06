@@ -5,7 +5,11 @@ import { useRouter } from 'expo-router';
 
 import { buildEditItineraryRequest } from '@/features/edit-itinerary';
 import { isConfirmLocked } from '@/features/itinerary';
-import { parseSlotKey } from '@/entities/itinerary-slot';
+import {
+  parseSlotKey,
+  slotDisplayCategory,
+  slotDisplayName,
+} from '@/entities/itinerary-slot';
 import { resolveSlotSwapError } from '@/features/edit-itinerary';
 import { swapSlotPoi } from '@/features/edit-itinerary';
 import { SlotCandidateSheet } from './SlotCandidateSheet';
@@ -206,17 +210,19 @@ export function SlotCandidatePanelContainer({
     <SlotCandidateSheet
       current={{
         poiId: parsed.kind === 'ok' ? parsed.poiId : '',
-        nameKo: currentSlot?.nameKo,
+        nameKo: currentSlot ? slotDisplayName(currentSlot) : undefined,
         tags: currentSlot?.tags,
         imageUrl: currentSlot?.imageUrl,
-        category: currentSlot?.category,
+        category: currentSlot ? slotDisplayCategory(currentSlot) : undefined,
         distanceRange: currentSlot?.distanceRange,
       }}
       // 후보(또는 차선책)의 이름·태그·사진을 그대로 내린다(TRIP-1024, QA #053 "이름 준비 중"·사진 없음).
       candidates={rows}
       startAt={currentSlot?.startAt}
       endAt={currentSlot?.endAt}
-      category={currentSlot?.category ?? undefined}
+      category={
+        (currentSlot ? slotDisplayCategory(currentSlot) : null) ?? undefined
+      }
       selectedPoiId={selected}
       onSelectRadio={setSelectedPoiId}
       onConfirm={handleConfirm}

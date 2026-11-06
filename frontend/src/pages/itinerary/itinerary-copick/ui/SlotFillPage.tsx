@@ -29,6 +29,10 @@ import { resolveSlotSwapError } from '@/features/edit-itinerary';
 import { swapSlotPoi } from '@/features/edit-itinerary';
 import { timeBandLabel } from '@/entities/itinerary-slot';
 import {
+  slotDisplayCategory,
+  slotDisplayName,
+} from '@/entities/itinerary-slot';
+import {
   ConceptPickerScreen,
   type ConceptProgress,
 } from './ConceptPickerScreen';
@@ -250,8 +254,9 @@ export function SlotFillPage({
     const index = day.slots.findIndex((slot) => slot.poiId === parsed.poiId);
     if (index === -1) return undefined;
     const band = timeBandLabel(day.slots[index].startAt);
-    const prevName = index > 0 ? day.slots[index - 1].nameKo : undefined;
-    return prevName !== null && prevName !== undefined && prevName !== ''
+    const prevName =
+      index > 0 ? slotDisplayName(day.slots[index - 1]) : undefined;
+    return prevName !== null && prevName !== undefined
       ? `${band} 일정 · ${prevName} 다음`
       : `${band} 일정`;
   }
@@ -310,11 +315,8 @@ export function SlotFillPage({
   // "오후"는 시간대 라벨이라 INV-3(소요시간 비표시) 안전 — 시각·분/시간은 안 낸다.
   function bandTitle(slot: ItineraryDaysItemSlotsItem): string {
     const band = timeBandLabel(slot.startAt);
-    return slot.category !== null &&
-      slot.category !== undefined &&
-      slot.category !== ''
-      ? `${band} · ${slot.category}`
-      : band;
+    const category = slotDisplayCategory(slot);
+    return category !== null ? `${band} · ${category}` : band;
   }
 
   function conceptProgress(): ConceptProgress | undefined {
@@ -354,7 +356,7 @@ export function SlotFillPage({
     const prevSlot = ctx.nonFixed[ctx.index - 1];
     const currentSlot = ctx.nonFixed[ctx.index];
     const prev: CoPickStep = {
-      title: prevSlot.nameKo ?? '',
+      title: slotDisplayName(prevSlot) ?? '',
       status: '선택함',
       done: true,
     };

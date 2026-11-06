@@ -136,6 +136,7 @@ import { buildSlotKey } from '@/entities/itinerary-slot';
 import { buildStatePins } from '@/entities/itinerary-slot';
 import { TimeSheet } from '@/widgets/time-sheet';
 import { MoveDaySheet } from '@/pages/itinerary/itinerary-edit/ui/MoveDaySheet';
+import { RenameSlotSheet } from '@/pages/itinerary/itinerary-edit/ui/RenameSlotSheet';
 import { MethodPickerScreen } from '@/pages/itinerary/itinerary-method/ui/MethodPickerScreen';
 import { MyTripsListScreen } from '@/pages/itinerary/itinerary-list/ui/MyTripsListScreen';
 import { periodHint } from '@/pages/trip/trip-settings/model/periodRules';
@@ -8502,13 +8503,94 @@ export const PREVIEW_STATES: PreviewState[] = [
           name="부산시립미술관"
           photo={{ imageUrl: null, poiId: 'poi-a', category: '문화' }}
           subtitle="1일차 · 14:30–15:15 · 감성 · 브런치"
-          options={[
-            { dayIndex: 1, date: '2026-06-10', blocked: 'current' },
-            { dayIndex: 2, date: '2026-06-11', blocked: 'duplicate' },
-            { dayIndex: 3, date: '2026-06-12', blocked: null },
-          ]}
-          initialDate="2026-06-12"
-          onConfirm={noop}
+          move={{
+            options: [
+              { dayIndex: 1, date: '2026-06-10', blocked: 'current' },
+              { dayIndex: 2, date: '2026-06-11', blocked: 'duplicate' },
+              { dayIndex: 3, date: '2026-06-12', blocked: null },
+            ],
+            initialDate: '2026-06-12',
+            onConfirm: noop,
+          }}
+          onPressRename={noop}
+          onClose={noop}
+        />
+      </View>
+    ),
+  },
+  // TRIP-1795 — 고정·방문 완료·하루 일정 장소의 장소 시트: 날짜 섹션·옮기기 CTA 없이 「이름·분류 고치기」 행만.
+  {
+    key: 'h12-editor-place-sheet-nomove',
+    band: 'h',
+    label: 'h12 · 편집기 장소 시트(옮길 수 없음)',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <MoveDaySheet
+          name="부산시립미술관"
+          photo={{ imageUrl: null, poiId: 'poi-a', category: '문화' }}
+          subtitle="1일차 · 14:30–15:15 · 감성 · 브런치"
+          move={null}
+          onPressRename={noop}
+          onClose={noop}
+        />
+      </View>
+    ),
+  },
+  // TRIP-1795 — 「이름·분류 고치기」 시트(Figma 5225:4083). 시트 실제 열림·키보드 밀림·딤·칩 10종 줄바꿈은 통과형 목이 못 봐서 이 키가 6-b 육안 자리다.
+  {
+    key: 'h12-editor-rename-sheet',
+    band: 'h',
+    label: 'h12 · 편집기 이름·분류 고치기 시트(덮어쓴 상태)',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <RenameSlotSheet
+          name="웨이브온 카페 (2층 창가)"
+          category="카페"
+          categoryEditable
+          canReset
+          onApply={noop}
+          onReset={noop}
+          onClose={noop}
+        />
+      </View>
+    ),
+  },
+  // 엣지 — 60 코드포인트 초과(적용 비활성 + 안내 한 줄) · 분류를 못 고치는 장소(숙소 — 칩 없음, 덮어쓴 게 없어 원래대로 비활성).
+  {
+    key: 'h12-editor-rename-sheet-over',
+    band: 'h',
+    label: 'h12 · 이름·분류 고치기 시트(60자 초과)',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <RenameSlotSheet
+          name={'아주 긴 이름 '.repeat(12)}
+          category="맛집"
+          categoryEditable
+          canReset={false}
+          onApply={noop}
+          onReset={noop}
+          onClose={noop}
+        />
+      </View>
+    ),
+  },
+  {
+    key: 'h12-editor-rename-sheet-stay',
+    band: 'h',
+    label: 'h12 · 이름·분류 고치기 시트(숙소 — 이름만)',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <RenameSlotSheet
+          name="해운대 그랜드 호텔"
+          category="숙소"
+          categoryEditable={false}
+          canReset={false}
+          onApply={noop}
+          onReset={noop}
           onClose={noop}
         />
       </View>

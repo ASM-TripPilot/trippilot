@@ -176,3 +176,24 @@ export function MoreDotsGlyph({
     </Svg>
   );
 }
+
+// 연필(TRIP-1795) — 18px 격자의 Lucide 풍 선 아이콘, 장소 시트 「이름·분류 고치기」 행 앞에 쓴다.
+export function PencilGlyph({ size = 18, color = 'ink', testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
