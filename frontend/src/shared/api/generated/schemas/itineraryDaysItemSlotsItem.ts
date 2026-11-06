@@ -10,6 +10,7 @@
  */
 import type { ImageLicense } from './imageLicense';
 import type { ItineraryDaysItemSlotsItemAlternativesItem } from './itineraryDaysItemSlotsItemAlternativesItem';
+import type { PoiCategory } from './poiCategory';
 
 export type ItineraryDaysItemSlotsItem = {
   poiId: string;
@@ -31,6 +32,10 @@ export type ItineraryDaysItemSlotsItem = {
   lat?: number | null;
   lng?: number | null;
   category?: string | null;
+  /** 이 여행에서만 쓰는 표시 이름(TRIP-1801). null = 덮어쓰기 없음 — 클라가 `nameKo` 로 폴백한다. `nameKo` 는 계속 장소 원본 값이다. */
+  displayName?: string | null;
+  /** 이 여행에서만 쓰는 표시 분류(TRIP-1801). null = 덮어쓰기 없음 — 클라가 `category` 로 폴백한다. `category` 는 계속 장소 원본 값이다. */
+  displayCategory?: PoiCategory | null;
   /** 영업시간 **원문 문자열**(자유형) — 기계 판정에 쓰지 말 것. structured 스키마는 U6. NULL = 미확인. */
   openingHours?: string | null;
   /** 영업시간 확인 여부. false 면 확정 배치가 아니라 **사용자 확인 후보**로 분리한다 (US-SCHED-03 예외). 현재는 값 유무 판정까지만 신뢰할 수 있다. **확정된 일정(status=CONFIRMED)에서는 null** — 확정 전 분류 신호라 확정 뒤에는 판정 대상이 아니다(정본을 따라가면 확정 슬롯이 사후에 재분류된다). */
