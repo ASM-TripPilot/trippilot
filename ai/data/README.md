@@ -528,6 +528,14 @@ uv run python scripts/collect/merge_pois_docs.py --allow-mixed -o data/collected
   data/collected_pois.json data/collected_localcafe.json
 ```
 
+## `poi_excluded_filtered.json` — 정제 필터에서 빠진 기존 행 (TRIP-1811)
+
+부산·강원·경북·경남 정제 1차 필터에서 빠진 기존 LOCALDATA 식당·카페 4,152곳의 `(source, ref)` 목록이다.
+폐업 판정이 아니라 여행 후보로 올리지 않기로 한 행이다. `load_closed_refs` 가 폐업 목록과 합쳐 읽어 수집 게이트와
+병합 소급(`drop_closed`)이 함께 막는다 — 재수집해도 공유본에 돌아오지 않는다.
+**DB 행은 공유본에서 빠져도 그대로다.** `poi_close_missing` 배포로 한 번 LOST 로 내린다.
+목록을 고치면 같은 PR 에서 공유본에 병합을 한 번 돌린다(`test_공유본에_폐업_확인분이_남아_있지_않다` 가 본다).
+
 ## `overture/` — Overture Maps 수집 제안 (지역별)
 
 TourAPI 단일 출처의 구조적 한계를 메우는 **두 번째 POI 출처**다 (TRIP-684).

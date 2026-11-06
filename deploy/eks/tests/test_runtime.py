@@ -1178,32 +1178,13 @@ class RuntimeIntegrationTests(unittest.TestCase):
                 "/app/data/collected_pois.json /app/data/collected_pois_regions.json")
         self.assertEqual(self._run_load_shell(regions=True), (0, [both]))
         self.assertEqual(self._run_load_shell(regions=True, exit_code=2), (2, [both]))
-        # 드라이런이 두 문서라 거부돼도 적재는 간다(적재 호출의 종료 코드가 Job 의 것).
+        # 닫기·드라이런도 두 문서를 함께 넘긴다 — 스크립트가 합쳐서 대조한다(하나만 넘기면 지역 문서 행이 닫힌다).
+        self.assertIn("--close-missing /app/data/collected_pois.json /app/data/collected_pois_regions.json",
+                      self._run_load_shell(regions=True, close_missing=True)[1][0])
         code, lines = self._run_load_shell(regions=True, close_missing_dry_run=True)
         self.assertEqual(code, 0)
         self.assertEqual(lines[1], both)
         self.assertIn("--dry-run --close-missing /app/data/collected_pois.json /app/data/collected_pois_regions.json", lines[0])
-
-    def test_close_missing_with_two_documents_is_refused_before_any_write(self):
-        """Job 이 넘기는 두 문서 + `--close-missing` 을 **정본 스크립트**가 실제로 거부한다 — 둘째 문서가 첫째의 행을
-        닫으면 공유본 수만 건이 LOST 가 된다. 거부 이유 줄은 요약에도 올라간다(드라이런이 숫자 없이 끝나도 왜인지 보이게)."""
-        import os
-        import subprocess
-        import tempfile
-        import runtime_pois
-        row = {"source": "LOCALDATA", "poi": {}, "provenance": {"content_id": "1"}}
-        with tempfile.TemporaryDirectory() as folder:
-            paths = [os.path.join(folder, name) for name in ("a.json", "b.json")]
-            for path in paths:
-                with open(path, "w", encoding="utf-8") as stream:
-                    json.dump({"source": "LOCALDATA", "proposals": [row]}, stream)
-            done = subprocess.run(
-                [sys.executable, str(runtime_pois.SCRIPT), "--base-url", "http://127.0.0.1:9", "--close-missing", *paths],
-                capture_output=True, text=True, timeout=30, check=False,
-                env={**os.environ, "SERVICE_AUTH_TOKEN": "t"})
-        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
-        self.assertIn("겹친 출처: LOCALDATA", done.stderr)
-        self.assertIn("--close-missing 은", runtime_pois.summary_of(done.stderr))
 
     def test_load_pois_runs_waits_prints_the_summary_and_cleans_up(self):
         summary = "합계 — 접수=19084 신규=689 갱신=18395 지역코드미상=0\n탈락 없음"
