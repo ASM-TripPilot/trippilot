@@ -173,6 +173,61 @@ class PlaceApiIT : AbstractPostgresIntegrationTest() {
         }
     }
 
+    /** QA O2 — 서울 중구 여행의 목록에 울산·대구 중구 장소가 섞였다. 코드로 물으면 그 구만이다(TRIP-1808). */
+    @Test
+    fun `코드로 조회하면 동명 시군구가 섞이지 않고 이름 조회는 그대로다`() {
+        val token = newToken()
+        val ids = listOf("11140" to "서울", "26110" to "부산", "27110" to "대구", "30140" to "대전", "31110" to "울산")
+            .map { (code, city) -> seedPoi("코드조회-${city}중구", 36.0, 127.0, code) }
+
+        try {
+            fun mine(url: String) = call(url, token).second.names().filter { it.startsWith("코드조회-") }
+
+            mine("/api/v1/places?regionCode=11140") shouldBe listOf("코드조회-서울중구")
+            // 이름이 함께 와도 코드가 이긴다 — 이름이 틀려 빈 목록이 되거나 전부로 번지면 안 된다.
+            mine("/api/v1/places?regionCode=11140&region=부산") shouldBe listOf("코드조회-서울중구")
+            mine("/api/v1/places?regionCode=11140&region=없는지역") shouldBe listOf("코드조회-서울중구")
+            // 옛 앱 — 이름만 보내면 지금처럼 그 이름을 가진 지역 전부다.
+            mine("/api/v1/places?region=중구").sorted() shouldBe
+                listOf("코드조회-대구중구", "코드조회-대전중구", "코드조회-부산중구", "코드조회-서울중구", "코드조회-울산중구")
+        } finally {
+            ids.forEach { cleanupJdbc.update("DELETE FROM poi WHERE poi_id = ?", it) }
+        }
+    }
+
+    /** 강원·경남을 열면 고성군이 둘이다(51820·48820) — 탐색을 넓히며 새로 드러나는 동명이지역. 시도 코드 롤업도 함께 본다. */
+    @Test
+    fun `고성군은 코드로 갈리고 시도 코드는 그 안 시군구를 잡는다`() {
+        val token = newToken()
+        val 강원 = seedPoi("코드조회-강원고성", 38.38, 128.46, "51820")
+        val 경남 = seedPoi("코드조회-경남고성", 34.97, 128.32, "48820")
+
+        try {
+            fun mine(url: String) = call(url, token).second.names().filter { it.startsWith("코드조회-") }
+
+            mine("/api/v1/places?regionCode=51820") shouldBe listOf("코드조회-강원고성")
+            mine("/api/v1/places?regionCode=48820") shouldBe listOf("코드조회-경남고성")
+            mine("/api/v1/places?regionCode=51") shouldBe listOf("코드조회-강원고성")
+            mine("/api/v1/places?region=고성").sorted() shouldBe listOf("코드조회-강원고성", "코드조회-경남고성")
+        } finally {
+            cleanupJdbc.update("DELETE FROM poi WHERE poi_id in (?, ?)", 강원, 경남)
+        }
+    }
+
+    /** 지역 조건을 떨어뜨리면 전국이 나간다 — 틀린 형식은 400, 형식만 맞고 없는 코드는 빈 목록이다. */
+    @Test
+    fun `지역 코드 형식이 틀리면 400 이고 없는 코드는 빈 목록이다`() {
+        val token = newToken()
+        listOf("", "1", "111", "111400", "abcde", "11,26").forEach {
+            call("/api/v1/places?regionCode=$it", token).first shouldBe 400
+        }
+        call("/api/v1/places?regionCode=11&regionCode=26", token).first shouldBe 400
+
+        val (status, body) = call("/api/v1/places?regionCode=99999", token)
+        status shouldBe 200
+        body.names().size shouldBe 0
+    }
+
     /**
      * **정렬이 실제로 걸려 있다.** 결정성만 보면 행이 적을 때 우연히 통과한다(역검증에서 `ORDER BY`
      * 제거가 안 잡혔다). 넣은 순서의 역순으로 심어, 서버가 다시 세우는지 본다.
