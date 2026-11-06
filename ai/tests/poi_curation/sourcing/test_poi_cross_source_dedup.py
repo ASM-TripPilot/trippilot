@@ -145,7 +145,7 @@ def test_pbt_상호_동일성_판정은_대칭이다(pair: tuple[str, str]) -> N
 
 @pytest.mark.parametrize(
     ("short", "other"),
-    [("김", "김밥천국"), ("면", "면사무소식당"), ("점", "고집돌우럭 중문점")],
+    [("김", "다정김밥"), ("면", "면사무소식당"), ("점", "고집돌우럭 중문점")],
 )
 def test_한_글자_상호는_아무_이름에나_붙지_않는다(short: str, other: str) -> None:
     """포함 판정의 2자 하한 — 1자면 전국의 아무 가게에나 걸린다."""
@@ -307,10 +307,10 @@ def test_pbt_같은_주소_다른_상호는_병합되지_않는다(
 
 
 def test_같은_주소_1자_상호는_붙지_않는다() -> None:
-    """'김' 이 '김밥천국' 에 걸리면 한 건물의 모든 가게가 한 덩어리가 된다."""
+    """'김' 이 '다정김밥' 에 걸리면 한 건물의 모든 가게가 한 덩어리가 된다."""
     report = CollectionGate().apply([
         _cand("1", name="김", address="제주특별자치도 제주시 월랑로 36"),
-        _cand("2", name="김밥천국", address="제주특별자치도 제주시 월랑로 36,",
+        _cand("2", name="다정김밥", address="제주특별자치도 제주시 월랑로 36,",
               lat=33.51, lng=126.52, source="localdata"),
     ])
     assert len(report.passed) == 2 and report.merged == 0
