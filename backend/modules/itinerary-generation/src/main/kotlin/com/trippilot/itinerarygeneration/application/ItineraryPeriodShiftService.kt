@@ -103,7 +103,7 @@ class ItineraryPeriodShiftService(
                     val hit = violations.filter { it.dayIndex == dayIdx && it.slotIndex == slotIdx }
                     VisitSlot.of(
                         s.sourcePoiId, s.poiSnapshotId, s.orderIndex, s.startAt, s.endAt, s.isFixed, hit.isNotEmpty(), s.endsNextDay,
-                        s.distanceRange, s.placementReason, ViolationText.reasonOf(hit), s.alternatives,
+                        s.distanceRange, s.placementReason, ViolationText.reasonOf(hit), s.alternatives, s.displayName, s.displayCategory,
                     )
                 },
             )

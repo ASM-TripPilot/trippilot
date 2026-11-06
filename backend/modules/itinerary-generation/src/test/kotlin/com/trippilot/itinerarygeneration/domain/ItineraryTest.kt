@@ -24,6 +24,24 @@ class ItineraryTest : StringSpec({
         now = now,
     )
 
+    // 생성 중(PARTIAL) 편집이 열려 있어(TRIP-1000) 근거가 늦게 도착할 때 이미 고친 이름이 있을 수 있다(TRIP-1801).
+    "늦게 도착한 근거를 채워도 사용자가 고친 표시값은 그대로다" {
+        val alt = SlotAlternative(UUID.randomUUID(), "템플릿 문구", null)
+        val named = VisitSlot.of(
+            UUID.randomUUID(), null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"),
+            alternatives = listOf(alt), displayName = "새 이름", displayCategory = "카페",
+        )
+
+        named.withPlacementReason("근거").let {
+            it.displayName shouldBe "새 이름"
+            it.displayCategory shouldBe "카페"
+        }
+        named.withAlternativeRationales(mapOf("k" to "다른 문구")) { "k" }.let {
+            it.displayName shouldBe "새 이름"
+            it.displayCategory shouldBe "카페"
+        }
+    }
+
     "생성은 PLANNED" {
         itinerary().status shouldBe ItineraryStatus.PLANNED
     }

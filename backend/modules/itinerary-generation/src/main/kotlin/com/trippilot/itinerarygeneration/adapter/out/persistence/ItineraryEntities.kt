@@ -71,6 +71,9 @@ class VisitSlotEntity(
     // (`unplacedMustVisits` 선례). 빈 목록이 기본이고 null 은 쓰지 않는다(DB 도 NOT NULL).
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "alternatives") var alternatives: List<Map<String, Any>>,
+    // 이 여행 전용 표시값(V2.93 · TRIP-1801). NULL = 덮어쓰기 없음.
+    @Column(name = "display_name") var displayName: String? = null,
+    @Column(name = "display_category") var displayCategory: String? = null,
 )
 
 interface ItineraryJpaRepository : JpaRepository<ItineraryEntity, UUID> {

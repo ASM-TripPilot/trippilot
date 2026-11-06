@@ -179,6 +179,7 @@ class RequestStringBoundGateTest {
 
         /** 상한이 없어도 되는 필드와 그 사유. 키는 `FQCN.필드`(중첩 클래스는 `바깥$안`). */
         val EXEMPT = mapOf(
+            "com.trippilot.itinerarygeneration.adapter.in.web.EditSlotRequest.displayCategory" to "닫힌 집합 — 서비스가 장소 분류 어휘로 판정해 밖이면 400(TRIP-1801). 길이로 저장까지 갈 수 없다",
             // 어휘·형식 판정이 저장 전에 400 으로 막는다
             "$ASSISTANT.FeedbackRequest.rating" to "enum 판정(어휘 밖 400)",
             "$ASSISTANT.FeedbackRequest.reason" to "enum 판정(어휘 밖 400)",

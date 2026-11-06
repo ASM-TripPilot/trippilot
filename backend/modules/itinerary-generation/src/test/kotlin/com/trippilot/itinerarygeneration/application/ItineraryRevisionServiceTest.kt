@@ -163,6 +163,20 @@ class ItineraryRevisionServiceTest : StringSpec({
         shouldThrow<ConflictDetected> { svc.restore(acc, tripId, revs.stored.single().revisionId) }
     }
 
+    "되돌리면 그 버전의 표시값도 돌아온다(TRIP-1801) — 스냅숏에 없으면 되돌린 순간 사라진다" {
+        val revs = Revisions()
+        val named = itinerary(listOf(VisitSlot.of(cafe, null, 0, LocalTime.parse("10:00"), LocalTime.parse("11:00"), displayName = "새 이름", displayCategory = "맛집")))
+        val its = Itineraries(named)
+        val svc = service(revs, its)
+        svc.record(named, RevisionActor.USER, RevisionKind.EDIT, "이름 고침")
+        its.current = itinerary(listOf(slot(cafe, "15:00", "16:00")))
+
+        val slot = svc.restore(acc, tripId, revs.stored.single().revisionId).days.single().slots.single()
+
+        slot.displayName shouldBe "새 이름"
+        slot.displayCategory shouldBe "맛집"
+    }
+
     "되돌리면 과거 리비전이 남고 새 리비전이 쌓인다(BR-U3-32 — 되돌리기의 되돌리기 가능)" {
         val revs = Revisions()
         val v1 = itinerary(listOf(slot(cafe, "10:00", "11:00")))
