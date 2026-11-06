@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 
 import type { Trip } from '@/shared/api/index.schemas';
+import { coverSourceForKey } from '@/entities/trip';
 import { NO_ITINERARY } from '@/test-support/tripItineraryCols';
 
 import { formatDday, resolveHomePhase } from './homePhase';
@@ -716,5 +717,94 @@ describe('resolveHomePhase — 지역 커버(coverSource)', () => {
     const result = planned([{ seq: 1, region: '부산', nights: 3 }]);
     if (result?.kind !== 'planning') throw new Error('planning 이어야 한다');
     expect(result.trip.coverSource).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1788 · 커버 소비처 ②③ — 홈 히어로(계획 중·여행 중 / 여행 후)가 고른 `coverKey` 그림을 쓴다.
+ * 고른 키(서울 종로구)와 첫 목적지(부산 해운대구)는 다른 지역 — 첫 목적지 그림이 나오면 red.
+ */
+describe('resolveHomePhase — 고른 커버(coverKey)', () => {
+  const FIRST: Trip['destinations'] = [
+    { seq: 1, region: '해운대구', regionCode: '26350', nights: 2 },
+  ];
+
+  it('계획 중·여행 중 히어로(②): coverKey 가 첫 목적지보다 앞선다', () => {
+    const result = resolveHomePhase({
+      trips: [
+        trip({
+          status: 'PLANNED',
+          startDate: '2026-06-22',
+          destinations: FIRST,
+          coverKey: '11110',
+        }),
+      ],
+      today: '2026-06-01',
+      savedCount: 0,
+      formatTripMeta: metaOfTitle,
+    });
+
+    if (result?.kind !== 'planning') throw new Error('planning 이어야 한다');
+    expect(coverSourceForKey('11110')).not.toBe(coverSourceForKey('26350'));
+    expect(result.trip.coverSource).toBe(coverSourceForKey('11110'));
+  });
+
+  it('여행 후 히어로(③): coverKey 가 첫 목적지보다 앞선다', () => {
+    const result = resolveHomePhase({
+      trips: [
+        trip({
+          status: 'ENDED',
+          startDate: '2026-05-01',
+          endDate: '2026-05-03',
+          destinations: FIRST,
+          coverKey: '11110',
+        }),
+      ],
+      today: '2026-05-05',
+      savedCount: 0,
+      formatTripMeta: metaOfTitle,
+    });
+
+    if (result?.kind !== 'postTrip') throw new Error('postTrip 이어야 한다');
+    expect(result.trip.coverSource).toBe(coverSourceForKey('11110'));
+  });
+
+  it.each<[string, Partial<Trip>]>([
+    ['null(자동)', { coverKey: null }],
+    ['칸 없음(옛 서버)', {}],
+    ['앱이 모르는 키', { coverKey: 'zz9' }],
+  ])('coverKey 가 %s 면 두 얼굴 모두 첫 목적지 그림(폴백)', (_label, over) => {
+    const planning = resolveHomePhase({
+      trips: [
+        trip({
+          status: 'PLANNED',
+          startDate: '2026-06-22',
+          destinations: FIRST,
+          ...over,
+        }),
+      ],
+      today: '2026-06-01',
+      savedCount: 0,
+      formatTripMeta: metaOfTitle,
+    });
+    const post = resolveHomePhase({
+      trips: [
+        trip({
+          status: 'ENDED',
+          startDate: '2026-05-01',
+          endDate: '2026-05-03',
+          destinations: FIRST,
+          ...over,
+        }),
+      ],
+      today: '2026-05-05',
+      savedCount: 0,
+      formatTripMeta: metaOfTitle,
+    });
+
+    if (planning?.kind !== 'planning' || post?.kind !== 'postTrip')
+      throw new Error('얼굴이 틀렸다');
+    expect(planning.trip.coverSource).toBe(coverSourceForKey('26350'));
+    expect(post.trip.coverSource).toBe(coverSourceForKey('26350'));
   });
 });

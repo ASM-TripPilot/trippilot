@@ -22,7 +22,10 @@ export type ConfirmDialogProps = {
   testID?: string;
   cardTestID?: string;
   title: string;
+  /** 제목·본문 글자를 testID 로 관측하고 싶은 래퍼만 준다(없으면 testID 없음 — 기존 래퍼 불변). */
+  titleTestID?: string;
   description?: string;
+  descriptionTestID?: string;
   /** tight = `mt-sm`, loose = `mt-[10px] leading-[21px]` */
   descriptionSpacing?: 'tight' | 'loose';
   /** iOS 어절 단위 줄바꿈('요.' 한 글자 고아 줄 방지) — 기본으로 켠다(TRIP-1434 — 끄려면 false). */
@@ -129,7 +132,9 @@ export function ConfirmDialog({
   testID,
   cardTestID,
   title,
+  titleTestID,
   description,
+  descriptionTestID,
   descriptionSpacing = 'tight',
   hangulBreak = true,
   children,
@@ -154,9 +159,15 @@ export function ConfirmDialog({
         style={shadow === 'none' ? undefined : SHADOWS[shadow]}
         className={`w-[330px] rounded-[20px] bg-canvas ${cardPaddingClassName}`}
       >
-        <Text className="font-noto-bold text-[19px] text-ink">{title}</Text>
+        <Text
+          testID={titleTestID}
+          className="font-noto-bold text-[19px] text-ink"
+        >
+          {title}
+        </Text>
         {description === undefined ? null : (
           <Text
+            testID={descriptionTestID}
             lineBreakStrategyIOS={hangulBreak ? 'hangul-word' : undefined}
             className={`font-noto text-body text-body ${
               descriptionSpacing === 'loose'

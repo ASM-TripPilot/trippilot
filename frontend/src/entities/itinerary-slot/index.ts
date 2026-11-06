@@ -21,6 +21,7 @@ export {
   CategoryImageGlyph,
   CategoryShoppingBagGlyph,
   CategoryTreeGlyph,
+  PhotoGlyph,
 } from './ui/SlotGlyphs';
 export { SlotProgressCard } from './ui/SlotProgressCard';
 export { SlotStopCard } from './ui/SlotStopCard';

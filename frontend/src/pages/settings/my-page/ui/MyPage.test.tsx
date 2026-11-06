@@ -27,6 +27,7 @@ import {
 import { renderWithQueryClient, settle } from '@/test-support/queryRender';
 import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
 import { MyPage } from './MyPage';
+import { coverSourceForKey } from '@/entities/trip';
 import { ChevronRight24Glyph, ChevronRightGlyph } from '@/shared/ui/glyphs';
 import {
   SettingsBookmarkGlyph,
@@ -766,6 +767,39 @@ describe('지난 여행 카드 (옛 .l03empty)', () => {
     );
     // 기본 = 응답 전(사진 수 모름).
     setRecords({ data: undefined, isPending: true, isError: false });
+  });
+
+  /**
+   * TRIP-1788 · 커버 소비처 ⑤ — 마이 탭 지난 여행 행의 썸네일이 사용자가 고른 `coverKey` 그림을 쓴다.
+   * 고른 키(서울 종로구)와 첫 목적지(부산 해운대구)는 다른 지역 — 첫 목적지 그림이 나오면 red.
+   */
+  describe('TRIP-1788 · 지난 여행 썸네일 = 고른 커버', () => {
+    const FIRST = [
+      { seq: 1, region: '해운대구', nights: 2, regionCode: '26350' },
+    ];
+    const thumb = () =>
+      screen.getByTestId('my-trip-reflection-e-jeju-cover').props.source;
+
+    it('coverKey 가 있으면 첫 목적지가 달라도 그 그림이다', async () => {
+      setTrips([ended('e-jeju', { destinations: FIRST, coverKey: '11110' })]);
+
+      await renderPage();
+
+      expect(coverSourceForKey('11110')).not.toBe(coverSourceForKey('26350'));
+      expect(thumb()).toEqual([coverSourceForKey('11110')]);
+    });
+
+    it.each<[string, Partial<Trip>]>([
+      ['null(자동)', { coverKey: null }],
+      ['칸 없음(옛 서버)', {}],
+      ['앱이 모르는 키', { coverKey: 'zz9' }],
+    ])('coverKey 가 %s 면 첫 목적지 그림(폴백)', async (_label, over) => {
+      setTrips([ended('e-jeju', { destinations: FIRST, ...over })]);
+
+      await renderPage();
+
+      expect(thumb()).toEqual([coverSourceForKey('26350')]);
+    });
   });
 
   describe('🔴 AC-3 · 지난 여행은 썸네일형 카드', () => {

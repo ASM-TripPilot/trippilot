@@ -1,4 +1,5 @@
 import type { Trip } from '@/shared/api/index.schemas';
+import { coverSourceForKey } from '@/entities/trip';
 
 import {
   buildPastTripCards,
@@ -236,5 +237,45 @@ describe('nightsLabel — 박수 라벨(0박은 당일치기, 역전은 null)', 
     expect(nightsLabel('2026-05-01', '2026-05-01')).toBe('당일치기');
     expect(nightsLabel('2026-05-03', '2026-05-01')).toBeNull();
     expect(nightsLabel(null, '2026-05-03')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1788 · 커버 소비처 ④ — 기록 달력의 지난 여행 행이 사용자가 고른 `coverKey` 그림을 쓴다.
+ * 고른 키(서울 종로구)와 첫 목적지(부산 해운대구)는 다른 지역 — 첫 목적지 그림이 나오면 red.
+ */
+describe('buildPastTripCards — 고른 커버(coverKey)', () => {
+  const ended = (extra: Partial<Trip>): Trip => ({
+    ...trip({
+      tripId: 'e1',
+      title: '부산',
+      startDate: '2026-05-01',
+      endDate: '2026-05-03',
+      status: 'ENDED',
+    }),
+    destinations: [
+      { seq: 1, region: '해운대구', nights: 2, regionCode: '26350' },
+    ],
+    ...extra,
+  });
+
+  it('coverKey 가 있으면 첫 목적지가 달라도 그 그림이다', () => {
+    const [card] = buildPastTripCards(
+      [ended({ coverKey: '11110' })],
+      '2026-09-01'
+    );
+
+    expect(coverSourceForKey('11110')).not.toBe(coverSourceForKey('26350'));
+    expect(card.coverSource).toBe(coverSourceForKey('11110'));
+  });
+
+  it.each<[string, Partial<Trip>]>([
+    ['null(자동)', { coverKey: null }],
+    ['칸 없음(옛 서버)', {}],
+    ['앱이 모르는 키', { coverKey: 'zz9' }],
+  ])('coverKey 가 %s 면 첫 목적지 그림(폴백)', (_label, over) => {
+    const [card] = buildPastTripCards([ended(over)], '2026-09-01');
+
+    expect(card.coverSource).toBe(coverSourceForKey('26350'));
   });
 });

@@ -62,9 +62,9 @@ import {
   clampParty,
   CompanionEditSheet,
   DayWindowEditSheet,
+  PeriodEditSheet,
 } from '@/widgets/trip-edit-sheets';
 import { DestinationEditSheet } from './DestinationEditSheet';
-import { PeriodEditSheet } from './PeriodEditSheet';
 import { TripWizardLeaveDialog } from './TripWizardLeaveDialog';
 import { TripWizardStep1Screen } from './TripWizardStep1Screen';
 

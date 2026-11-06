@@ -17,7 +17,7 @@ import {
 import {
   formatConfirmedDateRange,
   isTripOngoing,
-  pickRegionCover,
+  tripCoverSource,
 } from '@/entities/trip';
 import {
   ITINERARY_OPEN_FAILED_MESSAGE,
@@ -107,7 +107,7 @@ export function TripCardContainer({
     resume: face.resume,
     // TRIP-1208 · 커버 — 첫 목적지 도시 + 단계 톤(확정 × 오늘: 여행 중=live · 종료=ended · 그 외=upcoming).
     coverCity: pickCoverCity(trip.destinations),
-    coverSource: pickRegionCover(trip.destinations),
+    coverSource: tripCoverSource(trip),
     coverTone: coverTone(trip, summary.status, today),
   };
 
