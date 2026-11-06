@@ -2948,6 +2948,186 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
       await tick();
       expect(putBodies).toHaveLength(0);
     }, 20000);
+
+    /**
+     * TRIP-1804 · 저장 안 한 변경(dirty)이 있으면 초안에도 새 슬롯을 끼운다. 그날 이미 있는 장소를 또 담아도 **끼운 자리의 슬롯**을 써야 한다.
+     * 응답을 poiId 첫 일치로 찾으면 기존 슬롯(옛 시각)이 들어가, 이어 누른 [저장]이 고른 시각을 지운다(QA N1 — 서버 [힙합 12:00, 바당 09:00, 힙합 12:00]).
+     * 준비: 서버 [p1 09:00, p2 12:00], 초안은 p1 을 뺀 [p2](dirty — QA 재현 그대로) → 실행: 담기 → 단언: 초안의 장소·시각.
+     */
+    describe('TRIP-1804 · 저장 안 한 변경 + 그날 이미 있는 장소', () => {
+      const P1 = slotAt('p1', '09:00:00', '10:00:00');
+      const P2 = slotAt('p2', '12:00:00', '13:00:00');
+
+      const draft = (): [string, string][] =>
+        (
+          useItineraryEditStore.getState().days.find((day) => day.date === D1)
+            ?.slots ?? []
+        ).map((one) => [one.poiId, one.startAt]);
+
+      function seedDirtyDraft(): void {
+        serveDays([{ date: D1, slots: [P1, P2] }]);
+        const store = useItineraryEditStore.getState();
+        store.seed([{ date: D1, slots: [P1, P2] }]);
+        store.deleteSlot(D1, 'p1');
+        expect(useItineraryEditStore.getState().dirty).toBe(true);
+      }
+
+      /** 시트 기본값(앞 장소 끝 13:00 ~ 14:00)에서 분만 고른다 — 시를 종료 뒤로 올리면 [적용]이 잠긴다. */
+      async function addAt1314(poiId: string): Promise<void> {
+        fireEvent.press(
+          await screen.findByTestId(`itinerary-place-add-${poiId}`)
+        );
+        await screen.findByTestId(SHEET);
+        fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-m-14'));
+        fireEvent.press(screen.getByTestId(APPLY));
+      }
+
+      it(
+        '🔴 Q1 · AC-1 — 그 장소를 13:14 로 담으면 새 슬롯은 13:14, 있던 슬롯 시각은 그대로',
+        async () => {
+          seedDirtyDraft();
+          const { client } = renderTree();
+          await ready(client);
+
+          await addAt1314('p1');
+          await settleAdded('p1');
+
+          const [, newStart] = sent(0, D1)[2];
+          expect(newStart.slice(0, 5)).toBe('13:14'); // 앵커 — PUT 도 고른 시각이다.
+          expect(draft()).toEqual([
+            ['p2', '12:00:00'],
+            ['p1', newStart],
+          ]);
+          expect(useItineraryEditStore.getState().dirty).toBe(true);
+        },
+        SLOW
+      );
+
+      it(
+        '🔴 Q2 · AC-2 — 이미 있는 두 곳을 여러 곳 담기로 각각 다른 시각에 담으면 각자 고른 시각 (QA 재현 13시·14시)',
+        async () => {
+          seedDirtyDraft();
+          const { client } = renderTree();
+          await ready(client);
+
+          await pick('p1', 'p2');
+          fireEvent.press(screen.getByTestId(CTA));
+          await expectSheetFor('p1');
+          fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-13'));
+          fireEvent.press(screen.getByTestId(APPLY));
+          await expectSheetFor('p2');
+          fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-14'));
+          fireEvent.press(screen.getByTestId(APPLY));
+          await settleAdded('p1', 'p2');
+
+          const [[, firstStart], [, secondStart]] = sent(0, D1).slice(2);
+          expect(firstStart.slice(0, 2)).toBe('13'); // 앵커 — 두 시각이 서로 다르다.
+          expect(secondStart.slice(0, 2)).toBe('14');
+          expect(draft()).toEqual([
+            ['p2', '12:00:00'],
+            ['p1', firstStart],
+            ['p2', secondStart],
+          ]);
+        },
+        SLOW
+      );
+
+      it(
+        '🔴 Q3 · INV-2 — 서버가 새 슬롯 시각을 밀었으면 초안은 응답 시각을 쓴다(요청값이 아니다)',
+        async () => {
+          seedDirtyDraft();
+          respond = (body) =>
+            HttpResponse.json(echo(body, { [D1]: { 2: '17:40:00' } }));
+          const { client } = renderTree();
+          await ready(client);
+
+          await addAt1314('p1');
+          await settleAdded('p1');
+
+          expect(draft()).toEqual([
+            ['p2', '12:00:00'],
+            ['p1', '17:40:00'],
+          ]);
+        },
+        SLOW
+      );
+
+      it(
+        '🔴 Q4 · 응답 자리가 어긋나 새 슬롯을 특정 못 하면 고른 시각을 쓴다 — 첫 일치로 옛 시각을 집지 않는다',
+        async () => {
+          seedDirtyDraft();
+          // 정본(BR-U3-13·14 §3)상 안 나는 응답이지만, 나도 시각이 사라지면 안 된다 — 요청 [p1, p2, 새 p1] 을 [p1, 새 p1, p2] 로
+          // 돌려줘 끼운 자리(2)에 다른 장소가 온다. 첫 일치로 찾으면 옛 p1(09:00)을, 자리만 보면 p2 를 집는다.
+          respond = (body) => {
+            const reply = echo(body);
+            const day = reply.days[0];
+            const [first, second, third] = day.slots;
+            reply.days[0] = { ...day, slots: [first, third, second] };
+            return HttpResponse.json(reply);
+          };
+          const { client } = renderTree();
+          await ready(client);
+
+          await addAt1314('p1');
+          await settleAdded('p1');
+
+          const [, newStart] = sent(0, D1)[2];
+          expect(draft()).toEqual([
+            ['p2', '12:00:00'],
+            ['p1', newStart],
+          ]);
+        },
+        SLOW
+      );
+
+      it(
+        '🔴 Q6 · 여러 곳을 담았는데 서버가 둘 다 밀었으면 각자 자기 자리의 응답 시각을 쓴다',
+        async () => {
+          seedDirtyDraft();
+          respond = (body) =>
+            HttpResponse.json(
+              echo(body, { [D1]: { 2: '13:30:00', 3: '14:30:00' } })
+            );
+          const { client } = renderTree();
+          await ready(client);
+
+          await pick('p1', 'p2');
+          fireEvent.press(screen.getByTestId(CTA));
+          await applyTimes(2);
+          await settleAdded('p1', 'p2');
+
+          expect(draft()).toEqual([
+            ['p2', '12:00:00'],
+            ['p1', '13:30:00'],
+            ['p2', '14:30:00'],
+          ]);
+        },
+        SLOW
+      );
+
+      it(
+        '🟢 Q5 · AC-3 — 저장 안 한 변경이 없으면 초안에 손대지 않는다(편집기가 응답으로 시드한다)',
+        async () => {
+          serveDays([{ date: D1, slots: [P1, P2] }]);
+          useItineraryEditStore
+            .getState()
+            .seed([{ date: D1, slots: [P1, P2] }]);
+          const { client } = renderTree();
+          await ready(client);
+
+          await addAt1314('p1');
+          await settleAdded('p1');
+
+          expect(sent(0, D1)).toHaveLength(3); // 앵커 — PUT 은 나갔다.
+          expect(draft()).toEqual([
+            ['p1', '09:00:00'],
+            ['p2', '12:00:00'],
+          ]);
+          expect(useItineraryEditStore.getState().dirty).toBe(false);
+        },
+        SLOW
+      );
+    });
   });
 });
 
