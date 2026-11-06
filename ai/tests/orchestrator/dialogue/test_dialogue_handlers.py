@@ -821,20 +821,48 @@ def test_weather_asks_for_a_region_only_without_a_trip_a_said_region_or_a_usable
     assert ask(_ctx(_SNAP)) is None and ask(_ctx(_snapshot((), trip=_TRIP))) is None  # 여행이 있으면 그 여행으로
 
 
-def test_weather_device_location_yields_to_a_said_region_a_slot_and_a_trip_day() -> None:
-    """말한 지역 · 그 날 일정 장소 · 오늘이 아닌 날(여행 첫날)은 현재 위치보다 먼저다 — 현재 위치는 '오늘 여기'만 대신한다."""
+def test_weather_today_is_where_the_user_is_before_the_itinerary_but_after_a_said_region() -> None:
+    """오늘 날씨는 지금 있는 곳 — 수원에 있는데 오늘 일정의 청계천 날씨를 냈다(사용자 2026-11-06). 말한 지역은 그보다 먼저고,
+    오늘이 아닌 날(여행 첫날)은 현재 위치가 대신하지 않는다."""
     said = _Weather(pop=70)
     _run(HANDLERS[Intent.GET_WEATHER], _ctx(replace(_SNAP, here=_HERE_SEOUL), arguments={"region": "부산"},
                                             ports=HandlerPorts(poi_info=_PoiInfo(), weather=said)))
     assert said.calls[0]["anchor"] == region_center("부산")[1]
-    slot = _Weather(pop=70)
-    _run(HANDLERS[Intent.GET_WEATHER], _ctx(replace(_SNAP, here=_HERE_SEOUL), ports=HandlerPorts(poi_info=_PoiInfo(), weather=slot)))
-    assert slot.calls[0]["anchor"] == _COORD["우도"]
+    today = _Weather(pop=70)
+    _run(HANDLERS[Intent.GET_WEATHER], _ctx(replace(_SNAP, here=_HERE_SEOUL), ports=HandlerPorts(poi_info=_PoiInfo(), weather=today)))
+    assert today.calls[0]["anchor"] == _HERE_SEOUL  # 오늘 일정의 우도가 아니라
+    tomorrow = _Weather(pop=70)
+    _run(HANDLERS[Intent.GET_WEATHER], _ctx(replace(_SNAP, here=_HERE_SEOUL), arguments={"date": "내일"},
+                                            ports=HandlerPorts(poi_info=_PoiInfo(), weather=tomorrow)))
+    assert tomorrow.calls[0]["anchor"] != _HERE_SEOUL  # 내일은 일정 장소
     first_day = _Weather(pop=10)
     before = datetime(2026, 10, 10, 9, 0, tzinfo=_KST)
     _run(HANDLERS[Intent.GET_WEATHER], _ctx(replace(_snapshot((), status=None), here=_HERE_SEOUL), now=before,
                                             ports=HandlerPorts(poi_info=_PoiInfo(), weather=first_day)))
     assert first_day.calls[0]["anchor"] == region_center("제주")[1] and first_day.calls[0]["days"] == (_D1,)
+
+
+def test_weather_before_the_trip_asks_where_the_user_is_today_but_not_while_travelling() -> None:
+    """여행 전 "오늘 날씨"(위치 없음)를 여행지·일정으로 짐작하지 않고 묻는다. 여행 중엔 묻지 않고 오늘 일정 장소 — 위치를 못 싣는 폰으로
+    여행하는 사람이 매번 질문을 받지 않게. 날짜 칸이 비어도 말에 '오늘'이 있으면 오늘이다(비면 여행 첫날로 갔다)."""
+    ask = HANDLERS[Intent.GET_WEATHER].ask
+    before = datetime(2026, 10, 10, 9, 0, tzinfo=_KST)
+    assert ask(_ctx(_SNAP, {"date": "오늘"}, now=before))[0] == "region"
+    assert ask(replace(_ctx(_SNAP, now=before), utterance="오늘 날씨 어때"))[0] == "region"
+    assert ask(_ctx(_SNAP, now=before)) is None  # 날을 안 말한 여행 전 "날씨 어때"는 여행 첫날 일정 질문 그대로
+    assert ask(_ctx(_SNAP, {"date": "오늘"})) is None  # 여행 중 — 오늘 일정 장소로 답한다
+    assert ask(_ctx(replace(_SNAP, here=_HERE_SEOUL), {"date": "오늘"}, now=before)) is None  # 위치가 있으면 그곳
+    ended = datetime(2026, 10, 25, 9, 0, tzinfo=_KST)
+    assert ask(_ctx(_SNAP, {"date": "오늘"}, now=ended))[0] == "region"  # 여행이 끝난 뒤도 여행지에 있지 않다
+
+
+def test_weather_today_word_without_a_date_slot_means_today_not_the_first_trip_day() -> None:
+    weather = _Weather(pop=10)
+    before = datetime(2026, 10, 10, 9, 0, tzinfo=_KST)
+    ctx = replace(_ctx(replace(_SNAP, here=_HERE_SEOUL), now=before, ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)),
+                  utterance="오늘 날씨 어때")
+    _run(HANDLERS[Intent.GET_WEATHER], ctx)
+    assert weather.calls[0]["anchor"] == _HERE_SEOUL and weather.calls[0]["days"] == (date(2026, 10, 10),)
 
 
 def test_distance_uses_previous_slot_as_origin_and_keeps_only_distance_strings() -> None:
