@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { HomeSparkleGlyph } from './HomeGlyphs';
 import { ABSOLUTE_FILL, SCRIM_LOCATIONS, softCardShadow } from './homeSurface';
+import { CoverLabel } from '@/entities/trip';
 import { Image } from '@/shared/ui/Image';
 import type { HomeMagazineHero, TripHeroData } from '../model/homeTypes';
 import { COLOR_TOKENS } from '@/shared/config';
@@ -274,16 +275,24 @@ function IntegratedTripHero({
               {trip.meta}
             </Text>
           </View>
-          <Pressable
-            testID="home-trip-hero-cta"
-            accessibilityRole="button"
-            onPress={onPress}
-            className="self-start rounded-[12px] bg-primary px-[16px] py-[10px]"
-          >
-            <Text className="font-noto-bold text-[14px] font-bold text-on-primary">
-              {trip.ctaLabel}
-            </Text>
-          </Pressable>
+          {/* CTA 줄 — 오른쪽 끝에 그림 이름. 같은 줄의 형제라 큰 글자에서도 겹치지 않고 이름이 줄어든다. */}
+          <View className="flex-row items-center justify-between gap-sm">
+            <Pressable
+              testID="home-trip-hero-cta"
+              accessibilityRole="button"
+              onPress={onPress}
+              className="self-start rounded-[12px] bg-primary px-[16px] py-[10px]"
+            >
+              <Text className="font-noto-bold text-[14px] font-bold text-on-primary">
+                {trip.ctaLabel}
+              </Text>
+            </Pressable>
+            <CoverLabel
+              label={trip.coverLabel}
+              testID="home-trip-hero-cover-label"
+              className="shrink"
+            />
+          </View>
         </View>
       </View>
     </Pressable>

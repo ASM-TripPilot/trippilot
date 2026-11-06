@@ -34,6 +34,7 @@ routes:
 - `home-spot-save-error` ♥ 실패 — 섹션 위 안내 행(누르면 닫힘).
 - `home-fab-scroll-hide` 세로 스크롤 중 FAB 묶음이 투명·터치 불가가 되고 멈춘 뒤 250ms에 돌아온다(메뉴가 열려 있으면 유지). 가로로 도시 카드 캐러셀을 밀 때는 안 숨고(컬렉션 가로 줄은 미확인), 스크롤하는 동안·멈춘 뒤 앱이 죽지 않는다. *(2026-11-03 실화면 pass — TRIP-1733 스크롤 처리 이관 뒤)*
 - `home-look` 스팟·컬렉션 카드 사진 칸은 서버 사진(없으면 카테고리 생성 그림), 여행 카드 배경은 그 여행 지역 그림(없으면 도시 그림을 대신 깔지 않는다), 카드 위엔 장식 하트가 없고, 토스트는 FAB 묶음 위에 떠서 가려지지 않는다. *(2026-11-01 B안으로 실화면 전용)*
+- `home-cover-label` 여행 카드에 첫 목적지와 다른 시도의 그림을 고른 여행이면 CTA 줄 오른쪽(카드 오른쪽 아래)에 어두운 알약 「그림 · 해운대」(testID: `home-trip-hero-cover-label`)가 보이고 CTA·도트와 겹치지 않는다. 이름이 없는 여행은 알약이 없고 CTA 는 왼쪽 정렬·같은 크기다. 계획 중·여행 후 **[실화면 프리뷰]** *(TRIP-1806 · 2026-11-07 프리뷰 `home-planning-cover-label`·`home-post-trip-cover-label`·`home-planning`, 값은 jest)* 여행 중은 같은 컴포넌트라 따로 안 찍었다 **[실화면 전용 — 미확인]**. 큰 글자는 `my-trips.md` `mytrips-cover-label-legibility`.
 - `home-lane-fresh-10min` 홈 장소 레인을 본 뒤 30초~10분 안에 탐색 탭을 처음 열어도 `GET /places` 가 안 나간다(TRIP-1713, 여행 없음 얼굴 — 3지역 키 공유). 실기 미검증: TRIP-1714 6-b 계정이 여행 중 얼굴이라 못 봤다.
 
 ## How to get to it (user POV)

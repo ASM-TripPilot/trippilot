@@ -61,6 +61,7 @@ import {
   formatDateRangeWithDow,
   formatNightsLabel,
   TripDeleteDialog,
+  tripCoverLabel,
   tripCoverSource,
   tripItinerarySummary,
 } from '@/entities/trip';
@@ -575,6 +576,10 @@ function TripSettingsBody({
           .map((one) => one.region)
           .join(' · ')}
         cover={tripCoverSource({
+          coverKey,
+          destinations: trip.destinations,
+        })}
+        coverLabel={tripCoverLabel({
           coverKey,
           destinations: trip.destinations,
         })}

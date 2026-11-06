@@ -1,5 +1,7 @@
 import type { ImageSourcePropType } from 'react-native';
 
+import { sidoKey } from '@/shared/lib/sidoKey';
+
 import coverNames from '../../../../assets/region-covers/index.json';
 import { REGION_COVERS } from '../config/regionCovers';
 import type { TripDestination } from '../model';
@@ -25,13 +27,20 @@ export function coverChoices(): readonly { key: string; label: string }[] {
   }));
 }
 
-/** 첫 목적지(seq 최소)의 `regionCode` → 시군구 그림, 없으면 같은 시도(앞 2자리) 그림, 그마저 없으면 null. */
+/** 첫 목적지(seq 최소)의 `regionCode`. 목적지·코드가 없으면 null. */
+function firstRegionCode(
+  destinations: readonly CoverDestination[] | undefined
+): string | null {
+  if (!destinations || destinations.length === 0) return null;
+  const first = destinations.reduce((a, b) => (b.seq < a.seq ? b : a));
+  return first.regionCode?.trim() || null;
+}
+
+/** 첫 목적지 → 시군구 그림, 없으면 같은 시도(앞 2자리) 그림, 그마저 없으면 null. */
 function firstDestinationCover(
   destinations: readonly CoverDestination[] | undefined
 ): ImageSourcePropType | null {
-  if (!destinations || destinations.length === 0) return null;
-  const first = destinations.reduce((a, b) => (b.seq < a.seq ? b : a));
-  const code = first.regionCode?.trim();
+  const code = firstRegionCode(destinations);
   if (!code) return null;
   return coverSourceForKey(code) ?? coverSourceForKey(code.slice(0, 2));
 }
@@ -46,6 +55,42 @@ export function tripCoverSource(trip: {
 }): ImageSourcePropType | null {
   const chosen = trip.coverKey ? coverSourceForKey(trip.coverKey) : null;
   return chosen ?? firstDestinationCover(trip.destinations);
+}
+
+/** 다른 시도에 같은 이름이 있는 시군구(카탈로그 선택 가능 237행 실측). 접미를 떼거나 시도를 빼면 도시 글자와 같아 보여 거짓이 된다. */
+const SHARED_SIGUNGU_NAMES = new Set([
+  '중구',
+  '동구',
+  '서구',
+  '남구',
+  '북구',
+  '강서구',
+  '고성군',
+]);
+
+/** 이름표(`부산광역시 해운대구`) → 그림 위 짧은 이름(`해운대`·`부산`·`부산 중구`). */
+function shortCoverName(label: string): string {
+  const [sido, sigungu] = label.split(' ');
+  if (!sigungu) return sidoKey(sido);
+  return SHARED_SIGUNGU_NAMES.has(sigungu)
+    ? `${sidoKey(sido)} ${sigungu}`
+    : sigungu.replace(/[구군시]$/, '');
+}
+
+/**
+ * 고른 그림이 첫 목적지와 다른 시도면 그 이름(`그림 · 해운대`), 아니면 null(TRIP-1806).
+ * 앱이 모르는 키는 `tripCoverSource` 가 자동 커버로 내려가므로 null. 첫 목적지 코드를 모르면 붙인다 — 같은 지역 그림이어도 글자는 참이다.
+ */
+export function tripCoverLabel(trip: {
+  coverKey?: string | null;
+  destinations?: readonly CoverDestination[];
+}): string | null {
+  const key = trip.coverKey;
+  const choice = key ? coverChoices().find((one) => one.key === key) : null;
+  if (!key || !choice) return null;
+  const code = firstRegionCode(trip.destinations);
+  if (code?.slice(0, 2) === key.slice(0, 2)) return null;
+  return `그림 · ${shortCoverName(choice.label)}`;
 }
 
 /**

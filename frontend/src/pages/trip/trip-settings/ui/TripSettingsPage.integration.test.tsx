@@ -2034,6 +2034,53 @@ describe('O · 커버 고르기 (AC-6 · AC-8 · AC-9 · 소비처 ⑥)', () => 
   });
 });
 
+// TRIP-1806 · 설정은 방금 고른 화면이라 저장 전 드래프트로 판정한다. 시트 첫 창에 있는 종로로 잰다 —
+// 숫자 모양 키는 오름차순이고 jest 는 칸 레이아웃이 없어 해운대(26350) 칸은 첫 창에 없다(02a ★3).
+describe('O2 · 다른 지역 커버 이름 (TRIP-1806 AC-8)', () => {
+  beforeEach(freezeToday);
+
+  const coverLabel = () => screen.queryByTestId('trip-settings-cover-label');
+
+  it('서버 키가 첫 여행지(제주)와 다른 시도면 열자마자 이름이 보인다', async () => {
+    serverTrip = baseTrip({ coverKey: '26350' });
+
+    await openPage();
+
+    expect(coverLabel()).toHaveTextContent('그림 · 해운대');
+  });
+
+  it.each<[string, Partial<Trip>]>([
+    ['같은 시도의 다른 곳', { coverKey: '50130' }],
+    ['자동(null)', { coverKey: null }],
+    ['앱이 모르는 서버 키 — 보이는 그림은 자동 커버', { coverKey: 'zz9' }],
+  ])('%s 면 그림은 있고 이름은 없다', async (_label, over) => {
+    serverTrip = baseTrip(over);
+
+    await openPage();
+
+    expect(screen.getByTestId('trip-settings-cover-image')).toBeOnTheScreen();
+    expect(coverLabel()).toBeNull();
+  });
+
+  it('저장 전에도 드래프트를 따른다: 다른 지역 그림 [적용] → 이름 등장, 「첫 여행지 그림」 [적용] → 사라짐, PATCH 0건', async () => {
+    serverTrip = baseTrip({ coverKey: null });
+    await openPage();
+    expect(coverLabel()).toBeNull();
+
+    openCoverSheet();
+    press('trip-settings-cover-option-11110');
+    expect(coverLabel()).toBeNull(); // 고르기만 해선 아직 아니다
+    press('trip-settings-cover-apply');
+    expect(coverLabel()).toHaveTextContent('그림 · 종로');
+
+    openCoverSheet();
+    press('trip-settings-cover-option-auto');
+    press('trip-settings-cover-apply');
+    expect(coverLabel()).toBeNull();
+    expect(patchHits()).toBe(0);
+  });
+});
+
 describe('P · 캐시 (AC-1 · D11) — 그 여행 하위 조회만, 훅 옵션이라 화면을 떠나도', () => {
   beforeEach(freezeToday);
 

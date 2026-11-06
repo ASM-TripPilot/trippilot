@@ -1,5 +1,10 @@
 import { Image, Text } from 'react-native';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import { PastTripRow } from './PastTripRow';
 import type { PastTripCardVM } from '../model';
@@ -161,5 +166,86 @@ describe('🔴 PR6 · 행 접근성 라벨은 한 문자열 (TRIP-1697)', () => 
       />
     );
     expect(screen.getByTestId(ROOT).props.accessibilityLabel).toBe('부산 여행');
+  });
+});
+
+/**
+ * TRIP-1806 · 다른 지역 커버 이름 — 썸네일(64·72)엔 글자가 안 들어가 그림 밖 글자 줄에 한 줄로 쓴다.
+ * 행 루트에 접근성 라벨을 직접 주므로 자식 글자는 낭독되지 않는다 → 라벨에도 넣어야 들린다.
+ */
+describe('🔴 PR7 · 다른 지역 커버 이름 — 그림 밖 한 줄 + 낭독 라벨', () => {
+  const NAME = `${ROOT}-cover-label`;
+  const COVER = 1; // jest 에서 번들 이미지는 숫자 id
+
+  it('이름 칸을 안 넘긴 행(자동 커버의 옵셔널 필드)은 빈 글자 노드를 만들지 않는다', () => {
+    render(
+      <PastTripRow
+        vm={vm({ coverSource: COVER })}
+        onPress={noop}
+        testID={ROOT}
+      />
+    );
+
+    expect(screen.getByTestId(ROOT)).toBeOnTheScreen();
+    expect(screen.queryByTestId(NAME)).toBeNull();
+  });
+
+  it('이름이 있으면 그림 밖에 보이고 낭독 라벨 끝에 붙는다', () => {
+    // 준비 → 실행
+    render(
+      <PastTripRow
+        vm={vm({ coverSource: COVER, coverLabel: '그림 · 해운대' })}
+        onPress={noop}
+        testID={ROOT}
+      />
+    );
+
+    // 단언 — 글자는 썸네일 칸 안이 아니다(칸에 넣으면 넘친다)
+    expect(screen.getByTestId(NAME)).toHaveTextContent('그림 · 해운대');
+    expect(
+      within(screen.getByTestId(`${ROOT}-thumb`)).queryByTestId(NAME)
+    ).toBeNull();
+    expect(screen.getByTestId(ROOT).props.accessibilityLabel).toBe(
+      '부산 여행, 2026.5.1–5.3 · 2박 3일, 그림 · 해운대'
+    );
+  });
+
+  it('부제가 없어도 낭독 라벨은 제목 + 이름이고 빈 조각이 없다', () => {
+    render(
+      <PastTripRow
+        vm={vm({
+          dateRangeLabel: null,
+          nightsLabel: null,
+          coverSource: COVER,
+          coverLabel: '그림 · 해운대',
+        })}
+        onPress={noop}
+        testID={ROOT}
+      />
+    );
+
+    expect(screen.getByTestId(ROOT).props.accessibilityLabel).toBe(
+      '부산 여행, 그림 · 해운대'
+    );
+  });
+
+  it('사진(imageUrl)이 이긴 행에는 이름도 라벨 조각도 없다 — 보이는 건 커버 그림이 아니다', () => {
+    render(
+      <PastTripRow
+        vm={vm({
+          imageUrl: 'https://example.com/a.jpg',
+          coverSource: COVER,
+          coverLabel: '그림 · 해운대',
+        })}
+        onPress={noop}
+        testID={ROOT}
+      />
+    );
+
+    expect(screen.getByTestId(`${ROOT}-photo`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(NAME)).toBeNull();
+    expect(screen.getByTestId(ROOT).props.accessibilityLabel).toBe(
+      '부산 여행, 2026.5.1–5.3 · 2박 3일'
+    );
   });
 });

@@ -1,4 +1,4 @@
-import { tripCoverSource } from '@/entities/trip';
+import { tripCoverLabel, tripCoverSource } from '@/entities/trip';
 
 import type { HomePhase } from './homeTypes';
 
@@ -142,6 +142,7 @@ function resolvePostTripPhase(
       title: trip.title,
       meta: formatTripMeta(trip),
       coverSource: tripCoverSource(trip),
+      coverLabel: tripCoverLabel(trip),
     },
     recommendationTitle: '다음엔 여기 어때요',
     // 추천 카드는 서버 장소가 소스라 화면이 컬렉션 레인(collectionsLane)으로 그린다 — 여기선 비운다.
@@ -226,6 +227,7 @@ export function resolveHomePhase(
       title: dominant.title,
       meta: formatTripMeta(dominant),
       coverSource: tripCoverSource(dominant),
+      coverLabel: tripCoverLabel(dominant),
     },
     bridge: {
       title: `담은 곳 ${savedCount}곳이 아직 일정에 없어요`,

@@ -3,7 +3,7 @@ import { buildMonthGrid, isDateInRange } from '@/shared/lib/monthGrid';
 import { formatDayLabel } from '@/entities/trip';
 import { formatLegendDateRange, formatTripDateRange } from '@/entities/trip';
 import { nightsLabel } from '@/entities/trip';
-import { tripCoverSource } from '@/entities/trip';
+import { tripCoverLabel, tripCoverSource } from '@/entities/trip';
 import { tripDayNumber } from '@/entities/trip';
 import { isTripOngoing } from '@/entities/trip';
 import type { PastTripCardVM } from '@/entities/trip';
@@ -79,6 +79,7 @@ export function buildPastTripCards(
       ),
       nightsLabel: nightsLabel(trip.startDate ?? null, trip.endDate ?? null),
       coverSource: tripCoverSource(trip),
+      coverLabel: tripCoverLabel(trip),
     }));
 }
 

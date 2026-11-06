@@ -40,9 +40,11 @@ export {
   coverChoices,
   coverSourceForKey,
   pickRegionCover,
+  tripCoverLabel,
   tripCoverSource,
 } from './lib/regionCover';
 export { SERVICE_REGIONS } from './config/serviceRegions';
+export { CoverLabel } from './ui/CoverLabel';
 export { PastTripRow } from './ui/PastTripRow';
 export { TripCard } from './ui/TripCard';
 export { TripDeleteDialog } from './ui/TripDeleteDialog';

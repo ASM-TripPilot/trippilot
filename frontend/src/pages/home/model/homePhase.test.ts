@@ -194,6 +194,7 @@ describe('resolveHomePhase — postTrip 진입 조건 (TRIP-1369)', () => {
       title: '부산 여행',
       meta: 'META:부산 여행',
       coverSource: null, // 목적지 regionCode 없음 → 지역 커버 없음
+      coverLabel: null,
     });
     // 단일 배지 — 보조 텍스트 없음.
     expect(result.trip.badgeSub).toBeUndefined();
@@ -806,5 +807,94 @@ describe('resolveHomePhase — 고른 커버(coverKey)', () => {
       throw new Error('얼굴이 틀렸다');
     expect(planning.trip.coverSource).toBe(coverSourceForKey('26350'));
     expect(post.trip.coverSource).toBe(coverSourceForKey('26350'));
+  });
+});
+
+/**
+ * TRIP-1806 · 홈 히어로의 그림 이름 — 세 얼굴 모두 판정값이 `trip.coverLabel` 에 실린다.
+ * 이름이 없으면 null 이다(`coverSource: null` 과 같은 모양, 02a 「오케 정정」).
+ */
+describe('resolveHomePhase — 다른 지역 커버 이름(coverLabel)', () => {
+  const FIRST: Trip['destinations'] = [
+    { seq: 1, region: '해운대구', regionCode: '26350', nights: 2 },
+  ];
+  const planned = (over: Partial<Trip>) =>
+    resolveHomePhase({
+      trips: [
+        trip({
+          status: 'PLANNED',
+          startDate: '2026-06-22',
+          destinations: FIRST,
+          ...over,
+        }),
+      ],
+      today: '2026-06-01',
+      savedCount: 0,
+      formatTripMeta: metaOfTitle,
+    });
+  const postTrip = (over: Partial<Trip>) =>
+    resolveHomePhase({
+      trips: [
+        trip({
+          status: 'ENDED',
+          startDate: '2026-05-01',
+          endDate: '2026-05-03',
+          destinations: FIRST,
+          ...over,
+        }),
+      ],
+      today: '2026-05-05',
+      savedCount: 0,
+      formatTripMeta: metaOfTitle,
+    });
+
+  it('계획 중: 다른 시도 그림이면 이름이 실린다', () => {
+    const result = planned({ coverKey: '50110' });
+
+    if (result?.kind !== 'planning') throw new Error('planning 이어야 한다');
+    expect(result.trip.badge).toBe('계획 중');
+    expect(result.trip.coverLabel).toBe('그림 · 제주');
+  });
+
+  it('여행 중: 다른 시도 그림이면 이름이 실린다', () => {
+    const result = resolveHomePhase({
+      trips: [
+        trip({
+          status: 'ACTIVE',
+          startDate: '2026-05-30',
+          endDate: '2026-06-03',
+          destinations: FIRST,
+          coverKey: '50110',
+        }),
+      ],
+      today: '2026-06-01',
+      savedCount: 0,
+      formatTripMeta: metaOfTitle,
+    });
+
+    if (result?.kind !== 'planning') throw new Error('planning 이어야 한다');
+    expect(result.trip.badge).toBe('여행 중');
+    expect(result.trip.coverLabel).toBe('그림 · 제주');
+  });
+
+  it('여행 후: 다른 시도 그림이면 이름이 실린다', () => {
+    const result = postTrip({ coverKey: '50110' });
+
+    if (result?.kind !== 'postTrip') throw new Error('postTrip 이어야 한다');
+    expect(result.trip.coverLabel).toBe('그림 · 제주');
+  });
+
+  it.each<[string, Partial<Trip>]>([
+    ['자동(null)', { coverKey: null }],
+    ['같은 시도의 다른 구', { coverKey: '26110' }],
+  ])('%s 면 두 얼굴 모두 이름 없음(null)', (_label, over) => {
+    const before = planned(over);
+    const after = postTrip(over);
+
+    if (before?.kind !== 'planning' || after?.kind !== 'postTrip')
+      throw new Error('얼굴이 틀렸다');
+    expect(before.trip.coverSource).not.toBeNull();
+    expect(before.trip.coverLabel).toBeNull();
+    expect(after.trip.coverLabel).toBeNull();
   });
 });
