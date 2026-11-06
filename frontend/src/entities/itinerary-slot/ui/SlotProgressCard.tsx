@@ -13,6 +13,7 @@ import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import { isLargeText } from '@/shared/lib/fontScale';
 
 import { formatOpeningHoursLabel } from '../lib/openingHoursLabel';
+import { slotDisplayName } from '../lib/slotDisplay';
 import { buildSlotKey } from '../lib/slotKey';
 import type { SlotProgressState } from '../lib/slotMapPin';
 import { SlotCheckGlyph, MemoGlyph, PhotoGlyph } from './SlotGlyphs';
@@ -138,7 +139,7 @@ export function SlotProgressCard({
         state === 'upcoming' ? 'text-body' : 'text-ink'
       }`}
     >
-      {slot.nameKo ?? ''}
+      {slotDisplayName(slot) ?? ''}
     </Text>
   );
 

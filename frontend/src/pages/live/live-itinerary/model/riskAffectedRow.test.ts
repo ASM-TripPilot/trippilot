@@ -127,3 +127,24 @@ describe('🔴 riskAffectedRow (i03 영향 장소 조인)', () => {
     expect(JSON.stringify(row)).not.toContain('분');
   });
 });
+
+describe('riskAffectedRow — 고친 이름·분류 (TRIP-1795 AC-3)', () => {
+  it('영향 장소 행의 이름·메타(N번째 · 분류 · 영업시간)가 고친 값을 따른다 · 없으면 원본', () => {
+    const renamed = riskAffectedRow(
+      [
+        fiveDay({
+          displayName: '우리 아지트',
+          displayCategory: '카페',
+        }),
+      ],
+      KEY
+    );
+
+    expect(renamed?.name).toBe('우리 아지트');
+    expect(renamed?.meta).toBe('5번째 · 카페 · 24시간 개방');
+
+    const plain = riskAffectedRow([fiveDay()], KEY);
+    expect(plain?.name).toBe('해운대 해변');
+    expect(plain?.meta).toBe('5번째 · 해변 · 24시간 개방');
+  });
+});

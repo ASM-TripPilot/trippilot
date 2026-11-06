@@ -4,8 +4,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
 
-import { buildSlotKey } from '@/entities/itinerary-slot';
-import { buildStatePins } from '@/entities/itinerary-slot';
+import {
+  buildSlotKey,
+  buildStatePins,
+  slotDisplayName,
+} from '@/entities/itinerary-slot';
 import { formatDayLabel } from '@/entities/trip';
 import { deriveStayAttribution } from '../model/stayAttribution';
 import { failedUnlessNotFound } from '../model/failedUnlessNotFound';
@@ -167,7 +170,7 @@ export function TripRecordsPage({
   const nameByPoi = new Map(
     days
       .flatMap((d) => d.slots)
-      .map((slot) => [slot.poiId, slot.nameKo ?? slot.poiId])
+      .map((slot) => [slot.poiId, slotDisplayName(slot) ?? slot.poiId])
   );
 
   const activeSlots = days.find((d) => d.date === activeDay)?.slots ?? [];
@@ -253,7 +256,7 @@ export function TripRecordsPage({
         .map((slot) => ({
           slotKey: buildSlotKey(activeDay, slot.poiId),
           poiId: slot.poiId,
-          nameKo: slot.nameKo ?? slot.poiId,
+          nameKo: slotDisplayName(slot) ?? slot.poiId,
           planOrder: planOrderBySlotKey.get(
             buildSlotKey(activeDay, slot.poiId)
           ),

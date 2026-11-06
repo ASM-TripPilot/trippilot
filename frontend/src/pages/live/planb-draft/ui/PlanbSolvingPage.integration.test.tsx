@@ -480,6 +480,39 @@ describe('🔴 P1 · AC-6(a)·9·11 — 짜는 중: 진행 카드 + 오늘 방�
   });
 });
 
+describe('TRIP-1795 · AC-3 — 방문 완료 행의 이름은 이 여행에서 고친 이름을 따른다', () => {
+  it('P1d · 일정 슬롯의 고친 이름이 완료 행 이름이 되고(원본은 안 보인다), 고치지 않은 행은 원본이다', () => {
+    const renamed = {
+      ...ITINERARY,
+      days: ITINERARY.days.map((day) => ({
+        ...day,
+        slots: day.slots.map((s) =>
+          s.poiId === 'p1'
+            ? {
+                ...s,
+                category: '문화', // 원본 분류 — 고친 분류(카페)의 그림이 보여야 한다
+                displayName: '우리 아지트',
+                displayCategory: '카페',
+              }
+            : s
+        ),
+      })),
+    };
+    mockItinerary = { data: renamed as unknown as Itinerary, isPending: false };
+
+    renderPage();
+
+    expect(textsOf(/^planb-draft-slot-name-/)).toEqual([
+      '우리 아지트',
+      '광안리 해변',
+    ]);
+    // 완료 행 사진 칸의 그림 키(분류)도 고친 분류다 — 원본(문화) 그림이 아니다.
+    expect(
+      screen.getByTestId(`planb-draft-slot-photo-${DAY}#p1`).props.source
+    ).toEqual([coverFor('카페', 'p1')]);
+  });
+});
+
 describe('🔴 P2 · AC-9·11 · Q5 — 어느 날인가는 fromInstant 의 KST 날짜다', () => {
   it('UTC 6/10 16:00(KST 6/11 01시)이면 캡션 1시·헤더 6월 11일·그날 방문 행 2개다', () => {
     mockFromInstant = '2026-06-10T16:00:00Z';

@@ -665,3 +665,102 @@ describe('SlotStopCard · MORE — more·movedLabel prop (TRIP-1793)', () => {
     }
   });
 });
+
+// ── TRIP-1795 · 이 여행에서만 고친 이름·분류가 카드에 보인다 ─────────────────────────────────────────
+//
+// 카드는 7개 화면(h07·h08·h11·h12·h14·h16·i07)이 같이 쓰는 한 곳이라 여기가 가장 넓은 표면이다.
+// 보이는 곳: ① 이름 ② 체크박스 낭독 라벨 ③ 사진 칸(서버 사진 없을 때 분류 일러스트) ④ 메타 줄(분류 + 태그).
+// 메타 줄은 종전엔 서버 태그만 그렸다 — 분류를 고쳐도 카드가 안 바뀌어 "안 됐다"로 읽히지 않게 **덮어쓴 경우에만** 분류를 맨 앞에 붙인다.
+//
+// 3동작 뼈대: 준비=덮어쓴/안 쓴 슬롯 → 실행=렌더 → 단언=이름·낭독 라벨·사진 소스·메타 leaf 문자열.
+describe('SlotStopCard · SD — 고친 이름·분류 표시 (TRIP-1795 AC-2)', () => {
+  const OVERRIDDEN = {
+    displayName: '우리 아지트',
+    displayCategory: '카페',
+  } as const;
+
+  it('SD1 · 고친 이름이 이름 leaf(눌리는·안 눌리는 둘 다)와 체크박스 낭독 라벨에 그려지고 원본 이름은 안 보인다 · 덮어쓰기 없으면 종전', () => {
+    const slot = makeSlot(OVERRIDDEN);
+    const key = buildSlotKey(DATE, slot.poiId);
+    const selection = {
+      state: 'off' as const,
+      onToggle: jest.fn(),
+      testID: 'probe-check',
+    };
+
+    // 눌리지 않는 이름 갈래(onPressName 없음).
+    renderCard({ slot, selection });
+    expect(screen.getByTestId(id(key)('name'))).toHaveTextContent(
+      '우리 아지트'
+    );
+    expect(screen.queryByText('광안리 해변')).toBeNull();
+    expect(screen.getByTestId('probe-check')).toHaveProp(
+      'accessibilityLabel',
+      '우리 아지트 선택'
+    );
+    screen.unmount();
+
+    // 눌리는 이름 갈래(onPressName 있음).
+    renderCard({ slot, onPressName: jest.fn() });
+    expect(screen.getByTestId(id(key)('name'))).toHaveTextContent(
+      '우리 아지트'
+    );
+    expect(screen.queryByText('광안리 해변')).toBeNull();
+    screen.unmount();
+
+    // 짝 — 덮어쓰기가 없으면 원본 이름 그대로.
+    const plain = renderCard({ selection });
+    expect(screen.getByTestId(id(plain.slotKey)('name'))).toHaveTextContent(
+      '광안리 해변'
+    );
+    expect(screen.getByTestId('probe-check')).toHaveProp(
+      'accessibilityLabel',
+      '광안리 해변 선택'
+    );
+  });
+
+  it('SD2 · 서버 사진이 없으면 사진 칸이 고친 분류(카페)의 생성 이미지를 따른다 — 원본 분류(자연) 이미지가 아니다', () => {
+    const slot = makeSlot({ imageUrl: null, category: '자연', ...OVERRIDDEN });
+    const { slotKey } = renderCard({ slot });
+
+    expect(screen.getByTestId(id(slotKey)('photo')).props.source).toEqual([
+      coverFor('카페', 'poi-gwangalli'),
+    ]);
+  });
+
+  it('SD3 · 메타 줄 — 덮어쓰기+태그는 `카페 · 바다 · 산책`, 덮어쓰기+태그 없음도 `카페`가 보이고, 덮어쓰기 없으면 종전(태그 없으면 줄 없음)', () => {
+    // ⓐ 덮어쓰기 + 태그 — 분류가 맨 앞.
+    const a = renderCard({ slot: makeSlot(OVERRIDDEN) });
+    expect(screen.getByTestId(id(a.slotKey)('tags'))).toHaveTextContent(
+      '카페 · 바다 · 산책'
+    );
+    screen.unmount();
+
+    // ⓑ 덮어쓰기 + 태그 없음 — `tags.length>0` 게이트에 막혀 분류가 안 보이던 함정.
+    const b = renderCard({ slot: makeSlot({ ...OVERRIDDEN, tags: [] }) });
+    expect(screen.getByTestId(id(b.slotKey)('tags'))).toHaveTextContent('카페');
+    screen.unmount();
+
+    // ⓒ 덮어쓰기 없음 + 태그 없음 — 줄 자체가 없다(종전).
+    const c = renderCard({ slot: makeSlot({ tags: [] }) });
+    expect(screen.queryByTestId(id(c.slotKey)('tags'))).toBeNull();
+    screen.unmount();
+
+    // ⓓ 덮어쓰기 없음 + 태그 — 종전 그대로(분류를 안 붙인다).
+    const d = renderCard({ slot: makeSlot() });
+    expect(screen.getByTestId(id(d.slotKey)('tags'))).toHaveTextContent(
+      '바다 · 산책'
+    );
+    screen.unmount();
+
+    // ⓔ 빈·공백 분류는 "없음" — 줄이 `· 바다` 처럼 깨지지 않는다. (타입 밖 값이라 변수로 우회)
+    for (const empty of ['', '   ']) {
+      const odd = { ...makeSlot(), displayCategory: empty } as unknown;
+      const e = renderCard({ slot: odd as ItineraryDaysItemSlotsItem });
+      expect(screen.getByTestId(id(e.slotKey)('tags'))).toHaveTextContent(
+        '바다 · 산책'
+      );
+      screen.unmount();
+    }
+  });
+});

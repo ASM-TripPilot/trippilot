@@ -3,6 +3,7 @@ import { create, type StateCreator } from 'zustand';
 import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
+  PoiCategory,
 } from '@/shared/api/index.schemas';
 
 import { sortSlotsByStartAt } from './sortSlotsByStartAt';
@@ -96,7 +97,7 @@ export interface EditHistoryEntry {
  */
 let nextHistoryId = 1;
 
-/** 슬롯 목록이 값으로 같은가(poiId·시각 3필드·순서) — 새 객체여도 같은 값이면 무변화다. */
+/** 슬롯 목록이 값으로 같은가(poiId·시각 3필드·표시 이름·분류·순서) — 새 객체여도 같은 값이면 무변화다. 표시 두 칸은 `?? null` 로 비교해 undefined↔null 만으로 이력이 안 쌓인다. */
 function sameSlots(a: Slot[], b: Slot[]): boolean {
   return (
     a.length === b.length &&
@@ -106,7 +107,9 @@ function sameSlots(a: Slot[], b: Slot[]): boolean {
         slot.poiId === other.poiId &&
         slot.startAt === other.startAt &&
         slot.endAt === other.endAt &&
-        slot.endsNextDay === other.endsNextDay
+        slot.endsNextDay === other.endsNextDay &&
+        (slot.displayName ?? null) === (other.displayName ?? null) &&
+        (slot.displayCategory ?? null) === (other.displayCategory ?? null)
       );
     })
   );
@@ -165,6 +168,16 @@ export interface ItineraryEditState {
     toDate: string,
     poiId: string,
     patch: { startAt: string; endAt: string; endsNextDay: boolean }
+  ): void;
+  /**
+   * TRIP-1795 · 슬롯의 이 여행 표시 이름·분류를 **두 칸 통째로** 바꾼다(`null` = 덮어쓰기 없음). 정규화는 여기서 한다 — 이름은 앞뒤 공백을
+   * 자르고 공백뿐이거나 원본(`nameKo`)과 같으면 null, 분류가 원본(`category`)과 같으면 null — 그래야 "덮어쓴 게 있나"가 `원래대로` 활성과 맞는다.
+   * 값이 실제로 바뀔 때만 `dirty` + 이력 1장. 없는 날·없는 poiId 는 state 그대로.
+   */
+  renameSlot(
+    date: string,
+    poiId: string,
+    patch: { displayName: string | null; displayCategory: PoiCategory | null }
   ): void;
   /** 테스트/재진입 초기화(싱글턴 격리). */
   reset(): void;
@@ -287,6 +300,24 @@ const createItineraryEditStore: StateCreator<ItineraryEditState> = (
         ],
       };
     }),
+  renameSlot: (date, poiId, patch) =>
+    set((state) =>
+      commit(state, date, (slots) => {
+        const index = slots.findIndex((slot) => slot.poiId === poiId);
+        if (index === -1) return slots;
+        const slot = slots[index];
+        const name = patch.displayName?.trim() || null;
+        const renamed: Slot = {
+          ...slot,
+          displayName: name === slot.nameKo ? null : name,
+          displayCategory:
+            patch.displayCategory === slot.category
+              ? null
+              : patch.displayCategory,
+        };
+        return slots.map((s, i) => (i === index ? renamed : s));
+      })
+    ),
   undo: (expectId) => {
     const { history } = get();
     const top = history[history.length - 1];

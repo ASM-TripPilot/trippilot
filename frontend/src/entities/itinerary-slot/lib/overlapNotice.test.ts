@@ -83,3 +83,18 @@ describe('overlapAwareNotice (TRIP-1505)', () => {
     ).toBe('‘백년가게’ 시각과 겹쳐요');
   });
 });
+
+describe('overlapAwareNotice — 고친 이름 (TRIP-1795 AC-3)', () => {
+  it('앞 카드를 이 여행에서 고쳐 불렀으면 겹침 안내도 그 이름으로 말한다', () => {
+    const renamedPrev = { ...prev, displayName: '우리 아지트' };
+
+    expect(overlapAwareNotice(cur({}), renamedPrev)).toBe(
+      '‘우리 아지트’ 시각과 겹쳐요'
+    );
+    // 짝 — 덮어쓰기가 없으면 원본 이름(위 첫 케이스와 같다).
+    const plainPrev = { ...prev, displayName: null };
+    expect(overlapAwareNotice(cur({}), plainPrev)).toBe(
+      '‘백년가게’ 시각과 겹쳐요'
+    );
+  });
+});

@@ -18,12 +18,17 @@ import {
 import { buildPlanDayTabs, resolvePlanState } from '@/features/itinerary';
 import {
   deriveVisitProgress,
+  slotDisplayCategory,
+  slotDisplayName,
   suggestNextSlotTime,
 } from '@/entities/itinerary-slot';
 import { buildMoveDayOptions } from '../model/moveDayOptions';
 import { reorderKeepingLocked } from '../model/reorderKeepingLocked';
 import { buildSlotKey } from '@/entities/itinerary-slot';
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
+import {
+  PoiCategory,
+  type ItineraryDaysItemSlotsItem,
+} from '@/shared/api/index.schemas';
 import { SaveConflictDialog } from '@/features/edit-itinerary';
 import { TimeSheet } from '@/widgets/time-sheet';
 import {
@@ -41,6 +46,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
 import { showToast } from '@/shared/ui/Toast';
 import { EditorView } from '@/widgets/map-sheet-shell';
 import { MoveDaySheet } from './MoveDaySheet';
+import { RenameSlotSheet } from './RenameSlotSheet';
 
 /**
  * h24 일정 편집 배선(TRIP-302 슬라이스1~3) — **TRIP-797 묶음 C 로 소비 화면을 옛
@@ -149,6 +155,12 @@ export function ItineraryEditPage({
     poiId: string;
     toDate: string;
   } | null>(null);
+  // TRIP-1795 · 「이름·분류 고치기」 — 장소 시트의 행을 누르면 `moving` 을 비우고 이 시트가 **대신** 열린다(조건부 마운트, 둘이 동시에 안 보인다).
+  // 닫으면 아무것도 안 바뀌고, 바뀌는 건 `적용`·`원래대로` 둘뿐이며 둘 다 편집 드래프트에만 반영한다(서버 호출 없음).
+  const [renaming, setRenaming] = useState<{
+    date: string;
+    poiId: string;
+  } | null>(null);
   // 저장 연타 잠금 — isPending 은 다음 렌더에야 참이라 같은 틱 연타를 못 막는다(ManualPlanPage 선례).
   // 떠나는 성공에선 풀지 않는다(늦게 온 두 번째 응답이 back 을 한 번 더 부르지 않게).
   const inFlightRef = useRef(false);
@@ -172,6 +184,7 @@ export function ItineraryEditPage({
     reorderSlots,
     adjustSlotTime,
     moveSlot,
+    renameSlot,
     undo,
     canUndo,
     topUndoId,
@@ -423,6 +436,29 @@ export function ItineraryEditPage({
     moving === null
       ? { options: [], initialDate: null }
       : buildMoveDayOptions(days, moving.fromDate, moving.poiId);
+  // 옮기기 가능 여부 — 고정(`isFixed`)·방문 완료·하루 일정은 날짜 섹션 없이 고치기 행만 연다. `moveSlot` 은 고정을 안 막으므로 이 판정이 유일한 방어선이다.
+  const canMove =
+    movingSlot !== undefined &&
+    moving !== null &&
+    !movingSlot.isFixed &&
+    !completedSlotKeys.includes(buildSlotKey(moving.fromDate, moving.poiId)) &&
+    days.length > 1;
+  const renamingSlot =
+    renaming === null ? undefined : slotIn(renaming.date, renaming.poiId);
+  function closeRename(): void {
+    // 시트가 사라진 자리 아래 「일정 저장하기」에 둘째 탭이 닿지 않게(TRIP-1793 D4 와 같은 처방).
+    openPressGuardWindow();
+    setRenaming(null);
+  }
+  function applyRename(
+    date: string,
+    poiId: string,
+    patch: Parameters<typeof renameSlot>[2]
+  ): void {
+    openPressGuardWindow();
+    renameSlot(date, poiId, patch);
+    setRenaming(null);
+  }
   const pendingSlot =
     pendingMove === null
       ? undefined
@@ -564,8 +600,8 @@ export function ItineraryEditPage({
           placeSummary={{
             imageUrl: editingSlot.imageUrl ?? null,
             poiId: editingSlot.poiId,
-            category: editingSlot.category,
-            name: editingSlot.nameKo ?? '',
+            category: slotDisplayCategory(editingSlot),
+            name: slotDisplayName(editingSlot) ?? '',
           }}
           onApply={(patch) => {
             adjustSlotTime(editing.date, editing.poiId, patch);
@@ -579,23 +615,35 @@ export function ItineraryEditPage({
 
       {moving !== null && movingSlot !== undefined ? (
         <MoveDaySheet
-          name={movingSlot.nameKo ?? ''}
+          name={slotDisplayName(movingSlot) ?? ''}
           photo={{
             imageUrl: movingSlot.imageUrl ?? null,
             poiId: movingSlot.poiId,
-            category: movingSlot.category,
+            category: slotDisplayCategory(movingSlot),
           }}
           subtitle={[
             `${movingDayNumber}일차`,
             `${movingSlot.startAt.slice(0, 5)}–${movingSlot.endAt.slice(0, 5)}`,
             ...movingSlot.tags,
           ].join(' · ')}
-          options={moveOptions.options}
-          initialDate={moveOptions.initialDate}
-          onConfirm={(toDate) => {
-            // 장소 시트 [옮기기] 연타의 둘째 탭이 시각 시트가 올라오기 전 아래 「일정 저장하기」에 닿지 않게(TRIP-1793 D4).
+          move={
+            canMove
+              ? {
+                  options: moveOptions.options,
+                  initialDate: moveOptions.initialDate,
+                  onConfirm: (toDate) => {
+                    // 장소 시트 [옮기기] 연타의 둘째 탭이 시각 시트가 올라오기 전 아래 「일정 저장하기」에 닿지 않게(TRIP-1793 D4).
+                    openPressGuardWindow();
+                    setPendingMove({ ...moving, toDate });
+                    setMoving(null);
+                  },
+                }
+              : null
+          }
+          onPressRename={() => {
+            // 행 누름 직후의 둘째 탭이 새 시트 자리 아래 「일정 저장하기」에 닿지 않게 — 시트 교체 직전에 창을 연다(TRIP-1795 AC-15).
             openPressGuardWindow();
-            setPendingMove({ ...moving, toDate });
+            setRenaming({ date: moving.fromDate, poiId: moving.poiId });
             setMoving(null);
           }}
           onClose={() => {
@@ -603,6 +651,36 @@ export function ItineraryEditPage({
             openPressGuardWindow();
             setMoving(null);
           }}
+        />
+      ) : null}
+
+      {renaming !== null && renamingSlot !== undefined ? (
+        <RenameSlotSheet
+          name={slotDisplayName(renamingSlot) ?? ''}
+          category={slotDisplayCategory(renamingSlot)}
+          // 분류 칩은 **원본** 분류가 닫힌 10종일 때만 — 숙소 등은 이름만 고친다(판정은 원본, 표시 분류가 아니다).
+          categoryEditable={Object.values(PoiCategory).some(
+            (candidate) => candidate === renamingSlot.category
+          )}
+          canReset={
+            !!renamingSlot.displayName?.trim() ||
+            !!renamingSlot.displayCategory?.trim()
+          }
+          onApply={(patch) =>
+            applyRename(renaming.date, renaming.poiId, {
+              displayName: patch.displayName,
+              // 분류를 못 고치는 장소는 서버가 준 표시 분류를 건드리지 않고 그대로 둔다.
+              displayCategory:
+                patch.displayCategory ?? renamingSlot.displayCategory ?? null,
+            })
+          }
+          onReset={() =>
+            applyRename(renaming.date, renaming.poiId, {
+              displayName: null,
+              displayCategory: null,
+            })
+          }
+          onClose={closeRename}
         />
       ) : null}
 
@@ -615,8 +693,8 @@ export function ItineraryEditPage({
           placeSummary={{
             imageUrl: pendingSlot.imageUrl ?? null,
             poiId: pendingSlot.poiId,
-            category: pendingSlot.category,
-            name: pendingSlot.nameKo ?? '',
+            category: slotDisplayCategory(pendingSlot),
+            name: slotDisplayName(pendingSlot) ?? '',
           }}
           onApply={(patch) => {
             moveSlot(

@@ -1,5 +1,7 @@
 import type { TriggerKind, TriggerVariant } from '@/shared/api/index.schemas';
 
+import { slotDisplayName } from '@/entities/itinerary-slot';
+
 import { isKnownVariant, triggerLabel } from './triggerLabel';
 
 /**
@@ -16,6 +18,7 @@ import { isKnownVariant, triggerLabel } from './triggerLabel';
 
 export interface TriggerPillSlot {
   nameKo?: string | null;
+  displayName?: string | null;
   startAt: string;
 }
 
@@ -31,7 +34,7 @@ function pillBody(
   variant: TriggerVariant | undefined
 ): string {
   const { label } = triggerLabel(kind, variant);
-  const name = slot?.nameKo;
+  const name = slot ? slotDisplayName(slot) : null;
   if (!slot || !name) return label;
   if (kind === 'WEATHER') {
     return `${label} · ${name} ${Number(slot.startAt.slice(0, 2))}시`;

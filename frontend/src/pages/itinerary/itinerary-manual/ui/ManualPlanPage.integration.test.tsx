@@ -689,13 +689,29 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
   });
 
   describe('🔴 M2 · AC-9 — 끌어서 바꾼 순서가 저장 PUT 순서가 된다 (INV-U3-02)', () => {
-    it('c 를 맨 앞으로(2→0) 끌고 저장하면 PUT 순서가 [c,a,b] 다', async () => {
+    it('c 를 맨 앞으로(2→0) 끌고 저장하면 PUT 순서가 [c,a,b] 다 · 이 여행에서 고친 a 의 이름·분류는 저장에서 그대로 실린다 (TRIP-1795 AC-7)', async () => {
+      // 일정(GET)에 a 의 별칭이 있다 — 직접 짜기 저장 PUT 도 같은 빌더를 지나 두 칸을 실어야 한다(옛 구현은 5필드만 실어 지웠다).
+      daySlots = PLAIN.map((s) =>
+        s.poiId === 'a'
+          ? {
+              ...s,
+              displayName: '우리 아지트',
+              displayCategory: '카페' as const,
+            }
+          : s
+      );
       renderPage();
       await ready();
 
       fireEditDragEnd(2, 0);
 
-      expect(ids(await save())).toEqual(['c', 'a', 'b']);
+      const body = await save();
+      expect(ids(body)).toEqual(['c', 'a', 'b']);
+      expect(body.days[0].slots.find((s) => s.poiId === 'a')).toMatchObject({
+        displayName: '우리 아지트',
+        displayCategory: '카페',
+      });
+      expect(Object.keys(body.days[0].slots[0])).not.toContain('displayName'); // 안 고친 c 에는 키가 없다
     });
   });
 

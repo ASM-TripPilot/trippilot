@@ -831,3 +831,35 @@ describe('성질 (PBT)', () => {
     );
   });
 });
+
+describe('TRIP-1795 · 고친 이름·분류가 회고 매거진에 보인다 (AC-3 · Q5)', () => {
+  // 슬롯 입력에 새 칸이 없어도 컴파일되게 변수로 만든다(구현이 `MagazineSlot` 에 두 칸을 더한다).
+  const renamed = {
+    ...slot('a', '웨이브온', '맛집'),
+    displayName: '우리 아지트',
+    displayCategory: '카페',
+  };
+
+  it('MG-D1 · 동선 이름·카테고리가 고친 값이고, 원본 이름은 동선에 안 나온다 (카테고리는 팔레트 색의 재료)', () => {
+    const { route } = buildMagazineVM(
+      make({ visits: [visit('a', at(1))], slots: [renamed] })
+    );
+
+    expect(route?.[0]).toMatchObject({
+      name: '우리 아지트',
+      named: true,
+      category: '카페',
+    });
+    expect(JSON.stringify(route)).not.toContain('웨이브온');
+    expect(JSON.stringify(route)).not.toContain('맛집');
+  });
+
+  it('MG-D2 · 덮어쓰기가 없으면 원본 이름·카테고리 그대로(옛 서버 호환)', () => {
+    const plain = { ...slot('a', '웨이브온', '맛집'), displayName: null };
+    const { route } = buildMagazineVM(
+      make({ visits: [visit('a', at(1))], slots: [plain] })
+    );
+
+    expect(route?.[0]).toMatchObject({ name: '웨이브온', category: '맛집' });
+  });
+});

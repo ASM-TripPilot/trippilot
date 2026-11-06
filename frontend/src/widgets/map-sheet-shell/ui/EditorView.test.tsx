@@ -1413,11 +1413,11 @@ describe('🔴 EditorView · 여러 곳 골라 빼기 (TRIP-1791) · 카드 ⋯ 
     expect(onPressMore).toHaveBeenCalledTimes(1);
     expect(onPressMore).toHaveBeenCalledWith('b');
 
-    // ③ 방문 완료 카드엔 ⋯ 가 없다.
+    // ③ (TRIP-1795 뒤집음) 방문 완료 카드에도 ⋯ 가 있다 — 이름·분류 고치기는 잠금과 무관하다(Q5). 옮기기 가능 여부는 페이지가 정한다.
     redraw({ completedSlotKeys: [key('a')], onPressMore });
-    expect(moreIds()).toEqual([MORE('b'), MORE('c')]);
+    expect(moreIds()).toEqual([MORE('a'), MORE('b'), MORE('c')]);
 
-    // ④ 고정(isFixed) 카드에도 없다 — 끌기와 같은 isPinned 기준.
+    // ④ (TRIP-1795 뒤집음) 고정(isFixed) 카드에도 ⋯ 가 있다 — 끌기는 isPinned 로 막혀도 이름 고치기는 열려 있다.
     redraw({
       completedSlotKeys: [],
       onPressMore,
@@ -1427,7 +1427,9 @@ describe('🔴 EditorView · 여러 곳 골라 빼기 (TRIP-1791) · 카드 ⋯ 
         named('c', '감천문화마을', { isFixed: true }),
       ],
     });
-    expect(moreIds()).toEqual([MORE('a'), MORE('b')]);
+    expect(moreIds()).toEqual([MORE('a'), MORE('b'), MORE('c')]);
+    press(MORE('c'));
+    expect(onPressMore).toHaveBeenLastCalledWith('c');
 
     // ⑤ 선택 모드에서는 전부 사라지고, 취소하면 돌아온다.
     redraw({ completedSlotKeys: [], onPressMore });
@@ -1436,13 +1438,13 @@ describe('🔴 EditorView · 여러 곳 골라 빼기 (TRIP-1791) · 카드 ⋯ 
     press('editor-select-cancel');
     expect(moreIds()).toEqual([MORE('a'), MORE('b'), MORE('c')]);
 
-    // ⑥ 일정이 하루뿐이면 옮길 날이 없어 ⋯ 가 없다. 다시 이틀이면 돌아온다.
+    // ⑥ (TRIP-1795 뒤집음) 일정이 하루뿐이어도 ⋯ 가 있다 — 이름·분류 고치기는 옮길 날이 없어도 의미가 있다. 선택 모드는 여전히 숨김.
     redraw({
       completedSlotKeys: [],
       onPressMore,
       days: buildPlanDayTabs(daysOf(DATE)),
     });
-    expect(moreIds()).toEqual([]);
+    expect(moreIds()).toEqual([MORE('a'), MORE('b'), MORE('c')]);
     redraw({ completedSlotKeys: [], onPressMore });
     expect(moreIds()).toEqual([MORE('a'), MORE('b'), MORE('c')]);
 
@@ -1488,5 +1490,50 @@ describe('🔴 EditorView · 여러 곳 골라 빼기 (TRIP-1791) · 카드 ⋯ 
       ],
     });
     expect(screen.queryByTestId(movedId('b'))).toBeNull();
+
+    // ── TRIP-1795 · 같은 인스턴스에 prop 만 바꿔 잰다(새 mount 0 — 셸 렌더가 늘면 소음 예산 reanimated 가 넘는다).
+    // ⑧ AC-3 — 「N곳 빼기」 확인창 본문은 고친 이름으로 말하고 원본 이름은 안 나온다 · 고치지 않은 곳은 원본 이름.
+    redraw({
+      completedSlotKeys: [],
+      onPressMore,
+      slots: [
+        named('a', '황령산 전망대', { displayName: '우리 아지트' }),
+        named('b', '부산시립미술관'),
+        named('c', '감천문화마을'),
+      ],
+    });
+    press('editor-select-toggle');
+    press(CHECK('a'));
+    press(CHECK('b'));
+    press('editor-select-delete');
+    expect(screen.getByTestId(CONFIRM)).toBeOnTheScreen(); // 긍정 앵커 — 확인창이 떴다
+    expect(screen.getByText('우리 아지트 · 부산시립미술관')).toBeOnTheScreen();
+    expect(screen.queryByText(/황령산 전망대/)).toBeNull();
+    press('editor-select-confirm-cancel');
+    press('editor-select-cancel');
+
+    // ⑨ AC-4 — 고정 숙소를 이 여행에서 `명소`·다른 이름으로 불러도 시각칩은 여전히 없다(판정은 원본 분류). 카드는 고친 이름으로 보인다.
+    redraw({
+      completedSlotKeys: [],
+      onPressMore,
+      slots: [
+        named('stay', '원래 숙소', {
+          isFixed: true,
+          category: '숙소',
+          displayCategory: '명소',
+          displayName: '우리 숙소',
+        }),
+        named('must', '꼭 갈 곳', { isFixed: true, category: '명소' }),
+      ],
+    });
+    expect(
+      screen.queryByTestId(`slot-stopcard-timechip-${key('stay')}`)
+    ).toBeNull();
+    expect(
+      screen.getByTestId(`slot-stopcard-timechip-${key('must')}`)
+    ).toBeOnTheScreen(); // 짝 — 같은 화면의 꼭 갈 곳은 눌린다(공허 통과 방지)
+    expect(
+      screen.getByTestId(`slot-stopcard-name-${key('stay')}`)
+    ).toHaveTextContent('우리 숙소');
   });
 });

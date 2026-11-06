@@ -558,3 +558,34 @@ describe('표지 사진 입력 (TRIP-1781 VM-1·VM-2)', () => {
     }
   );
 });
+
+describe('TRIP-1795 · 고친 이름·분류와 서버 방문지 이름의 조인 (AC-5)', () => {
+  /**
+   * 서버 요약의 `places` 는 **장소 원본 이름**이다. 일차 카드 색은 "일정 슬롯 중 이름이 places 에 있는 것"의 카테고리 최빈이라
+   * 조인 키는 반드시 원본 `nameKo` 여야 하고(고친 이름으로 조인하면 서버와 안 맞아 색이 중립으로 빠진다),
+   * 색의 재료인 카테고리 값만 고친 분류를 따른다.
+   */
+  const renamedDay = day(D1, [
+    {
+      ...slot(`${D1}-0`, { nameKo: '웨이브온', category: '자연' }),
+      displayName: '우리 아지트',
+      displayCategory: '맛집',
+    },
+  ]);
+
+  it('SM-D1 · places 가 원본 이름이면 조인이 되고, 일차 카드 색은 고친 분류(맛집)를 따른다', () => {
+    const { days } = build([hl(D1, 1, ['웨이브온'])], {
+      itineraryDays: [renamedDay],
+    });
+
+    expect(days[0].palette).toBe('맛집'); // 원본 분류(자연)였다면 '자연'
+  });
+
+  it('SM-D2 · places 가 고친 이름이면 조인하지 않는다(서버 문자열은 원본이라 이 경우는 없지만 키가 원본임을 못박는다)', () => {
+    const { days } = build([hl(D1, 1, ['우리 아지트'])], {
+      itineraryDays: [renamedDay],
+    });
+
+    expect(days[0].palette).toBe('STATS');
+  });
+});

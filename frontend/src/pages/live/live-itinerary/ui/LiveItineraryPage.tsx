@@ -14,6 +14,7 @@ import {
   useLiveItinerary,
 } from '@/features/execution';
 import { projectSlotProgress } from '@/entities/itinerary-slot';
+import { slotDisplayName } from '@/entities/itinerary-slot';
 import {
   photoProgressLabel,
   useMultiPhotoAttach,
@@ -705,8 +706,9 @@ export function LiveItineraryPage({
     memoSheetOpen && memoSheetFor !== null ? (
       <MemoSheet
         placeName={
-          activeSlots.find((slot) => slot.poiId === memoSheetPoiId)?.nameKo ??
-          ''
+          slotDisplayName(
+            activeSlots.find((slot) => slot.poiId === memoSheetPoiId) ?? {}
+          ) ?? ''
         }
         text={visitMemo.savedMemo}
         editable={visitMemo.memoReady}

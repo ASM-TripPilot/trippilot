@@ -1910,6 +1910,50 @@ describe('완성 셸(h14) 얼굴', () => {
         screen.queryByTestId(`slot-stopcard-subtitle-${DAY1}#poi-fixed-mv`)
       ).toBeNull();
     });
+
+    it('T2c · TRIP-1795 AC-4 — 고정 숙소를 이 여행에서 `명소`·다른 이름으로 불러도 "숙소 · 변경 불가" 부제·곳 수 제외는 그대로다 (판정은 원본 분류)', async () => {
+      const hotel = {
+        ...busanHotel('0.6km'),
+        displayName: '내 숙소',
+        displayCategory: '명소' as const,
+      };
+      // W6 — 거점 조회가 도착해야 거점 안내 판정이 선다(첫 로딩엔 두 카드 다 없다). 기본 핸들러(빈 목록)를 세는 걸로 덮는다.
+      let basesCalls = 0;
+      server.use(
+        http.get(BASES_DEFAULT_URL, () => {
+          basesCalls += 1;
+          return HttpResponse.json([]);
+        })
+      );
+      useItinerary(() =>
+        HttpResponse.json(
+          itineraryOf('PLANNED', [
+            ...busanFourPois([null, '2.1km', '0.8km', '0.6km']),
+            hotel,
+          ])
+        )
+      );
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      await waitFor(() => expect(basesCalls).toBe(1));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50)); // 응답이 상태로 반영될 틈
+      });
+      // W6 — 고정 숙소 판정(`hasBase` 슬롯 항)도 원본 분류만 읽는다: 표시 분류가 `명소`여도 「거점 숙소가 없어요」가 거짓으로 뜨지 않는다.
+      expect(screen.queryByTestId('itinerary-plan-no-base')).toBeNull();
+
+      // 표시는 고친 이름 — 구현이 헬퍼를 지나는지 보이는 짝(공허 통과 방지).
+      expect(
+        screen.getByTestId(`slot-stopcard-name-${DAY1}#poi-hotel`)
+      ).toHaveTextContent('내 숙소');
+      // 논리는 원본 — 부제·곳 수가 종전(T2 와 같은 일정)과 같다.
+      expect(
+        screen.getByTestId(`slot-stopcard-subtitle-${DAY1}#poi-hotel`)
+      ).toHaveTextContent('저녁 · 숙소 · 변경 불가');
+      expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+        '4곳 · 4.1km'
+      );
+    });
   });
 
   describe('🔴 T3 · AC-3 — 셸 얼굴에 소요시간·% 가 0건이다 (INV-3)', () => {

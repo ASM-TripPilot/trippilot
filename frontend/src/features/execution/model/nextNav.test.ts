@@ -454,3 +454,31 @@ describe('AC-4 · openNextNav 폴백 사다리 3단 (openURL reject 기반)', ()
     expect(fallback).toHaveBeenCalledWith(null);
   });
 });
+
+describe('TRIP-1795 · AC-5 — 길찾기 이름은 고친 이름이 아니라 장소 원본이다', () => {
+  it('ND-1 · 이름을 고친 슬롯의 도착지·출발지 nameKo 는 원본이다 (네이버가 고친 이름으로는 장소를 못 찾는다)', () => {
+    const dests = resolveSlotDests([
+      projected('done', {
+        poiId: 'prev',
+        nameKo: '광안리',
+        displayName: '우리 아지트',
+      }),
+      projected('upcoming', {
+        poiId: 'next',
+        nameKo: '해운대',
+        displayName: '내 바다',
+      }),
+    ]);
+
+    const dest = dests.get('next');
+    expect(dest?.nameKo).toBe('해운대');
+    expect(dest?.webOrigin?.nameKo).toBe('광안리');
+    // 짝 — URL 도 원본 이름으로 만들어진다.
+    expect(buildWebNavUrl(dest as NavDest)).toContain(
+      encodeURIComponent('해운대')
+    );
+    expect(buildWebNavUrl(dest as NavDest)).not.toContain(
+      encodeURIComponent('내 바다')
+    );
+  });
+});
