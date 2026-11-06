@@ -61,4 +61,6 @@ export interface Trip {
   firstDayStartAt?: string | null;
   /** 마지막날만 다른 종료(출발 전) */
   lastDayEndAt?: string | null;
+  /** 사용자가 고른 커버 — 앱 번들 지역 그림 키(TRIP-1789). null 이면 첫 목적지로 자동. 서버는 키 목록을 모른다(형식만 검증). */
+  coverKey?: string | null;
 }
