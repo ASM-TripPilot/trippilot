@@ -6,9 +6,9 @@ branches_seen: [feature/region-covers-gw-gb-gn]
 current_branch: feature/region-covers-gw-gb-gn (이 브랜치는 지역 커버 이미지용 — POI 작업은 새 브랜치에서)
 span_kst: "11-04 → 11-07"
 ended_by: 사용자 요청(세션 인수인계)
-status: 진행중(코드 PR 완료 · 데이터 PR 은 비공개 전환 뒤)
+status: 진행중(코드 PR #2031 · 데이터 PR 은 비공개 전환 뒤)
 resume_local: "claude --resume ddf3e197-8c82-4da8-b2f5-261457bcfa7b"
-related_prs: [1815]
+related_prs: [1815, 2031]
 tickets: [TRIP-1537, TRIP-392, TRIP-1810, TRIP-1811]
 session_name: 장소 데이터 확장(부산·강원·경북·경남 정제) → 공유본 분할 반영
 picked_up_by: Claude Code 2026-11-07 04:20 (레인 poi, TRIP-1810, 브랜치 chore/TRIP-1810-DATA-regions-doc)
@@ -49,7 +49,7 @@ picked_up_by: Claude Code 2026-11-07 04:20 (레인 poi, TRIP-1810, 브랜치 cho
 규칙은 RUNBOOK §11(서울·제주)과 같다. 단 **테마 태그 평균은 지역·카테고리별**로 잡았다(서울 기준이면 시골 주차 태그가 32% 로 넘쳤다).
 
 ## 멈춘 지점 (2026-11-07, 레인 poi · TRIP-1810)
-- **코드 PR**(데이터 없음): 배포 적재가 이미지 안에 지역 문서가 있으면 `[공유본, 지역 문서]` 순으로 붓는다 · CI 경로 · 계약 IT(문서 없으면 건너뜀). 이 문서가 함께 커밋된다.
+- **코드 PR #2031**(데이터 없음): 배포 적재가 이미지 안에 지역 문서가 있으면 `[공유본, 지역 문서]` 순으로 붓는다 · CI 경로 · 계약 IT(문서 없으면 건너뜀). 이 문서가 함께 커밋된다.
 - **지역 문서**: `~/trippilot-data/processed/regions/collected_pois_regions.json` — 레포 밖, **커밋 안 함**. 수치·명령은 RUNBOOK §12.1.
 - **로컬 리허설 통과**: 신규 39,193 · 보강 3,569 · 탈락 0(위 표의 41,414 / 3,590 과 다른 이유는 아래).
 - **결정(사용자 11-07)**: 겹치면 지역 문서가 이긴다 · 이름 겹침 2,676 은 뺀다 · LOST 4,152 는 이번에 안 닫는다(TRIP-1811) · 비공개 전환은 협의하에 맨 마지막.
