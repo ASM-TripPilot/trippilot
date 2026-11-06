@@ -88,6 +88,14 @@ _KIND_ONLY = re.compile(r"(?:으로|로)\s?(?:등록|분류)(?:된|되어)|^(?:(
 # 주차 사실은 웹 글에서 틀리기 쉽다 — 인용 원문 대조(2026-11-03, 열린 페이지 기준 확인 284건): 근거 없음·다른 말이 주차 4/25(16%), 그 밖 12/259(5%).
 # 틀린 주차 안내는 차로 간 사람이 겪는다 — 웹 사실에서는 뺀다(관광공사 카드의 주차는 공식 상세라 그대로 싣는다)
 _PARKING = re.compile(r"주차")
+# 여러 가게가 섞인 검색 결과·태그 모음 페이지는 그 장소의 근거가 아니다(2026-11-06 표본 40건: polle 태그 페이지가 다른 가게
+# 얘기였다, 기존 문서 7,537곳 중 이런 URL 사실 327건·그것만으로 된 문서 149곳). 장소 전용 페이지는 질의 문자열이 붙어도
+# 남는다(bluer `/restaurants/…?query=`, 114 `/search/detail?comp_id=`)
+_LISTING_URL = re.compile(r"diningcode\.com/list\.dc|/posts/tag/|/toplist\b|/(?:total-)?search(?:/local-profile)?/?(?:\?|$)"
+                          r"|^https?://[^/]+/?\?(?:query|q|keywords?)="
+                          # 순위·이웃 검색·태그·지역 목록(ai-4e 검토: 8,900곳 중 103개가 더 남아 있었다)
+                          r"|diningcode\.com/rank/|daangn\.com/kr/local-profile/?\?[^#]*search=|soonwidot\.co\.kr/rank/"
+                          r"|/tags?/[^/?#]+/?$|/list/geoCategory/|/dir\?[^#]*search=", re.I)
 FINAL = ("found", "closed", "not_found", "refused")  # 이 상태면 다시 묻지 않는다
 
 PROMPT = """당신은 여행 앱의 장소 정보 정리 담당입니다. 웹 검색으로 아래 [장소]를 찾아, 웹 페이지에 적힌 사실만 JSON 하나로 답하세요.
@@ -439,7 +447,7 @@ def clean_facts(rec: dict) -> list[dict]:
     cites, out, seen = {_url_key(u) for u in rec.get("citations") or ()}, [], set()
     for f in rec.get("facts") or ():
         text, url = f.get("text") or "", f.get("url") or ""
-        if _url_key(url) not in cites or not (4 <= len(text) <= MAX_FACT_CHARS):
+        if _url_key(url) not in cites or _LISTING_URL.search(url) or not (4 <= len(text) <= MAX_FACT_CHARS):
             continue
         if _BANNED.search(text) or _EVAL.search(text) or _KIND_ONLY.search(text) or _PARKING.search(text) or has_contact_like(text) \
                 or has_injection_like(text) or clean_intro(text) != text:  # 진짜 문서·소개와 같은 게이트(시각·소요·연락처·주입)
