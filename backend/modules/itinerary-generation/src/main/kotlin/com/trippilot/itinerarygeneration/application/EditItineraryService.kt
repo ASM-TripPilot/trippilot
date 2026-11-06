@@ -33,6 +33,7 @@ import com.trippilot.itinerarygeneration.domain.Violation
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.VisitSlotDisplay
 import com.trippilot.placedata.api.PoiSnapshotFacade
+import com.trippilot.placedata.api.categoryBoundaryCodeOf
 import com.trippilot.trip.api.TripFacade
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -46,7 +47,12 @@ import java.time.ZoneId
 import java.util.UUID
 
 /** 편집 요청 — 전체 교체(사용자가 수정한 일자·슬롯 배열). 슬롯 순서 = 배열 순서. [reason] 은 선택(변경 이력에 남는다). */
-data class EditItinerary(val days: List<EditDay>, val reason: String? = null)
+data class EditItinerary(
+    val days: List<EditDay>,
+    val reason: String? = null,
+    /** 슬롯의 표시값을 묻지 않고 같은 장소의 현행 값을 잇는다 — 다른 모듈의 입구(도우미 [적용])는 표시값을 모른다. */
+    val inheritDisplay: Boolean = false,
+)
 data class EditDay(val date: LocalDate, val slots: List<EditSlot>)
 data class EditSlot(
     val poiId: UUID,
@@ -54,6 +60,9 @@ data class EditSlot(
     val endAt: LocalTime,
     val isFixed: Boolean,
     val endsNextDay: Boolean, // 자정 넘김(HC4) — 전체 교체 편집이라 클라가 현행 값을 그대로 실어야 소실되지 않는다
+    // 이 여행 전용 표시값(TRIP-1801) — 같은 규칙으로 현행 값을 실어야 안 사라진다.
+    val displayName: String? = null,
+    val displayCategory: String? = null,
 )
 
 /**
@@ -93,6 +102,7 @@ class EditItineraryService(
         val command = EditItinerary(
             days.map { d -> EditDay(d.date, d.slots.map { EditSlot(it.poiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) },
             reason,
+            inheritDisplay = true,
         )
         val (saved, judged) = save(accountId, tripId, command, source, onlyIf)
         return ItineraryEditResult(
@@ -107,9 +117,10 @@ class EditItineraryService(
 
     /** @return 저장된 일정과, 이번 저장에서 재검증이 **판정됐는지**(AI 불통으로 보류됐으면 false). */
     private fun save(
-        accountId: UUID, tripId: UUID, edit: EditItinerary, source: ItineraryEditSource,
+        accountId: UUID, tripId: UUID, rawEdit: EditItinerary, source: ItineraryEditSource,
         onlyIf: ((current: List<EditDayCommand>) -> Boolean)? = null,
     ): Pair<Itinerary, Boolean> {
+        val edit = rawEdit.withCheckedDisplay() // 400 은 소유 확인 전이어도 된다 — 본문 형식 판정이다
         // 빈 문자열도 "사유 없음"이다 — 그대로 두면 이력의 사유 칸이 빈 채 남는다(BR-U4-31).
         val reason = edit.reason?.takeIf { it.isNotBlank() }
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound() // 소유·존재(404 은닉)
@@ -135,12 +146,15 @@ class EditItineraryService(
         // 이동 거리·시각이 옛 장소 기준에 머물렀다). BR-U3-13·14 의 [AI 자동 보정]을 이 경우 자동으로 적용한 것 —
         // 정본 개정 주석 참조. 시각만 바꾼 편집은 쌍이 그대로라 부르지 않는다(사용자 시각 존중).
         val repair = if (legsOf(current) != legsOf(edit)) attemptRepair(output, edit, accountId, tripId, current) else RepairAttempt.Skipped
+        // 이름·분류만 고친 저장은 AI 를 부르지 않는다(≈20초) — 시각·순서가 그대로라 위반 판정이 달라질 근거가 없다. 보류 경로가 직전 표시를 잇는다.
+        val displayOnly = !edit.inheritDisplay && scheduleOf(current) == scheduleOf(edit) && displayOf(current) != displayOf(edit)
         val verdict = when (repair) {
             is RepairAttempt.Used -> Revalidation.Judged(emptyList()) // 상대가 재검증을 통과시킨 값만 온다(INV-2)
             RepairAttempt.Failed -> Revalidation.Withheld // AI 불통 — 같은 상대를 validate 로 한 번 더 기다리지 않는다
             // 수리와 같은 출처의 수단·취향으로 잰다 — 비우면 대중교통이라 자차 여행의 시각만 바꾼 편집·[적용]이 HC2 로 표시됐고,
             // 기본 도보 상한(700m)이라 액티비티 취향 여행의 걸어서 잡은 0.7~0.9km 구간이 '맞지 않는 곳'으로 표시됐다
-            RepairAttempt.Skipped, RepairAttempt.Rejected -> Revalidation.attempt(scheduleAgent, output, tripId, repairContexts.forRevalidation(accountId, tripId))
+            RepairAttempt.Skipped, RepairAttempt.Rejected ->
+                if (displayOnly) Revalidation.Withheld else Revalidation.attempt(scheduleAgent, output, tripId, repairContexts.forRevalidation(accountId, tripId))
         }
         val flagged = reshape(current, edit, verdict, (repair as? RepairAttempt.Used)?.days)
         ViolationText.warnUnattached(verdict.violations(), flagged.days, tripId)
@@ -252,6 +266,11 @@ class EditItineraryService(
     private fun legsOf(it: Itinerary) = it.days.flatMap { d -> d.slots.mapIndexed { i, s -> Triple(d.date, d.slots.getOrNull(i - 1)?.sourcePoiId, s.sourcePoiId) } }.toSet()
     private fun legsOf(it: EditItinerary) = it.days.flatMap { d -> d.slots.mapIndexed { i, s -> Triple(d.date, d.slots.getOrNull(i - 1)?.poiId, s.poiId) } }.toSet()
 
+    private fun scheduleOf(it: Itinerary) = it.days.map { d -> d.date to d.slots.map { s -> listOf(s.sourcePoiId, s.startAt, s.endAt, s.isFixed, s.endsNextDay) } }
+    private fun scheduleOf(it: EditItinerary) = it.days.map { d -> d.date to d.slots.map { s -> listOf(s.poiId, s.startAt, s.endAt, s.isFixed, s.endsNextDay) } }
+    private fun displayOf(it: Itinerary) = it.days.map { d -> d.slots.map { s -> s.displayName to s.displayCategory } }
+    private fun displayOf(it: EditItinerary) = it.days.map { d -> d.slots.map { s -> s.displayName to s.displayCategory } }
+
     /**
      * 편집안 + 재검증 결과 → 새 일정 슬롯 배열(위반 슬롯 has_violation=true). identity·createdAt·solveMode 는 현행 보존.
      * [repaired] 가 있으면(장소 교체 편집의 수리 성공) 시각은 그 값(조립 검증값, INV-2), 쌍이 바뀐 구간의 거리도 그 값이다.
@@ -274,6 +293,9 @@ class EditItineraryService(
                 Triple(d.date, d.slots.getOrNull(i - 1)?.sourcePoiId, s.sourcePoiId) to s.distanceRange
             }
         }.toMap()
+        // 표시값을 모르는 입구(도우미 [적용]) — 같은 날 같은 장소가 먼저, 다른 날로 옮겼으면 장소로 잇는다.
+        val keptOnDay = current.days.flatMap { d -> d.slots.map { (d.date to it.sourcePoiId) to it } }.toMap()
+        val keptByPoi = current.days.flatMap { it.slots }.associateBy { it.sourcePoiId }
         val days = edit.days.mapIndexed { dayIdx, d ->
             ItineraryDay.of(
                 d.date, dayIdx,
@@ -281,6 +303,7 @@ class EditItineraryService(
                     val hit = violations.filter { it.dayIndex == dayIdx && it.slotIndex == slotIdx }
                     val fixedUp = repaired?.get(dayIdx)?.slots?.get(slotIdx) // 순서 동일은 attemptRepair 가 보장
                     val leg = Triple(d.date, d.slots.getOrNull(slotIdx - 1)?.poiId, s.poiId)
+                    val kept = if (edit.inheritDisplay) keptOnDay[d.date to s.poiId] ?: keptByPoi[s.poiId] else null
                     VisitSlot.of(
                         s.poiId, null, slotIdx, fixedUp?.startAt ?: s.startAt, fixedUp?.endAt ?: s.endAt, s.isFixed,
                         hasViolation = if (prior != null) prior.flagOf(d.date, s.poiId) else hit.isNotEmpty(),
@@ -291,6 +314,8 @@ class EditItineraryService(
                         placementReason = reasonBySlot[d.date to s.poiId],
                         // 저장 후에도 "무엇이 왜 문제인지"가 남아야 한다(BR-U3-13 지속 가시화).
                         violationReason = if (prior != null) prior.reasonOf(d.date, s.poiId, s.startAt, s.endAt) else ViolationText.reasonOf(hit),
+                        displayName = if (edit.inheritDisplay) kept?.displayName else s.displayName,
+                        displayCategory = if (edit.inheritDisplay) kept?.displayCategory else s.displayCategory,
                     )
                 },
             )
@@ -321,6 +346,26 @@ private val ItineraryEditSource.defaultReason: String
         ItineraryEditSource.MANUAL -> "일정을 직접 수정함"
         ItineraryEditSource.ASSISTANT -> "도우미 제안을 적용함"
     }
+
+/**
+ * 표시값 판정(TRIP-1801) — 이름은 앞뒤 공백을 지우고 공백뿐이면 null(상한은 요청 DTO). 분류는 장소 정본 어휘 밖이면 400.
+ * 어휘를 여기 복제하지 않는다 — place-data 가 소유한다(값이 늘 때 한쪽만 고쳐지지 않게).
+ */
+private fun EditItinerary.withCheckedDisplay(): EditItinerary {
+    val errors = mutableListOf<FieldError>()
+    val checked = days.mapIndexed { dayIdx, d ->
+        d.copy(
+            slots = d.slots.mapIndexed { slotIdx, s ->
+                if (s.displayCategory != null && categoryBoundaryCodeOf(s.displayCategory) == null) {
+                    errors += FieldError("days[$dayIdx].slots[$slotIdx].displayCategory", "알 수 없는 분류입니다.")
+                }
+                s.copy(displayName = s.displayName?.trim()?.takeIf { it.isNotEmpty() })
+            },
+        )
+    }
+    if (errors.isNotEmpty()) throw ValidationFailed(errors)
+    return copy(days = checked)
+}
 
 /** 리비전 요약 — 변경 이력과 달리 출처 칸이 없어, 도우미 경로는 문구 앞에 표지를 붙인다. */
 private fun ItineraryEditSource.revisionSummary(reason: String?): String = when (this) {

@@ -88,7 +88,7 @@ class ItineraryPeriodShiftServiceTest : StringSpec({
                 listOf(
                     VisitSlot.of(
                         poi, UUID.randomUUID(), 0, LocalTime.of(10, 0), LocalTime.of(11, 0), hasViolation = flagged,
-                        distanceRange = "약 1km", placementReason = "이유", violationReason = if (flagged) "옛 사유" else null,
+                        distanceRange = "약 1km", placementReason = "이유", violationReason = if (flagged) "옛 사유" else null, displayName = "새 이름", displayCategory = "카페",
                     ),
                 ),
             ),
@@ -159,6 +159,8 @@ class ItineraryPeriodShiftServiceTest : StringSpec({
         slot.hasViolation shouldBe true
         slot.violationReason shouldBe ViolationText.reasonOf(listOf(closed))
         slot.distanceRange shouldBe "약 1km"
+        slot.displayName shouldBe "새 이름"
+        slot.displayCategory shouldBe "카페"
     }
 
     "재검증 — 옛 요일의 휴무 표시는 위반이 없으면 꺼진다" {

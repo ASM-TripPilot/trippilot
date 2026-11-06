@@ -193,13 +193,15 @@ class ItineraryRevisionService(
                     endsNextDay = fixed?.endsNextDay ?: s.endsNextDay,
                     distanceRange = s.distanceRange,
                     placementReason = s.placementReason,
+                    displayName = s.displayName,
+                    displayCategory = s.displayCategory,
                 )
             }
             // 지금 고정돼 있는데 스냅숏에 없는 블록은 **되살려 붙인다** — 빠뜨리면 되돌리기가 필수 방문지를 지운다
             // (BR-U3-33 은 고정 블록이 스냅숏을 이긴다고 정한다. 누락도 그 "짐"에 포함된다.)
             val missingFixed = fixedNow.filterKeys { (date, poi) -> date == d.date && (date to poi) !in used }
                 .values.map { f ->
-                    SlotDraft(f.sourcePoiId, f.startAt, f.endAt, true, f.endsNextDay, f.distanceRange, f.placementReason)
+                    SlotDraft(f.sourcePoiId, f.startAt, f.endAt, true, f.endsNextDay, f.distanceRange, f.placementReason, f.displayName, f.displayCategory)
                 }
             (fromSnapshot + missingFixed).sortedBy { it.startAt } to d.date
         }
@@ -217,6 +219,8 @@ class ItineraryRevisionService(
                         placementReason = s.placementReason,
                         // 복원 결과도 편집과 같은 기준으로 사유를 남긴다 — 배지만 켜면 화면이 이유를 못 그린다(BR-U3-13).
                         violationReason = if (prior != null) prior.reasonOf(date, s.poiId, s.startAt, s.endAt) else ViolationText.reasonOf(hit),
+                        displayName = s.displayName,
+                        displayCategory = s.displayCategory,
                     )
                 },
             )
@@ -232,6 +236,8 @@ class ItineraryRevisionService(
         val endsNextDay: Boolean,
         val distanceRange: String?,
         val placementReason: String?,
+        val displayName: String?,
+        val displayCategory: String?,
     )
 
     /** 재검증 입력 — 시각·순서만. 거리·소요시간 없음(INV-3). */
@@ -249,7 +255,7 @@ fun Itinerary.toSnapshot(): ItinerarySnapshot = ItinerarySnapshot(
         DaySnapshot(
             d.date,
             d.slots.map {
-                SlotSnapshot(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay, it.distanceRange, it.placementReason)
+                SlotSnapshot(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay, it.distanceRange, it.placementReason, it.displayName, it.displayCategory)
             },
         )
     },

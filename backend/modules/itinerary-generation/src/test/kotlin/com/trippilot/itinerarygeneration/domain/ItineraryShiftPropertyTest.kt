@@ -27,7 +27,7 @@ class ItineraryShiftPropertyTest : StringSpec({
                 (0 until n).map {
                     VisitSlot.of(
                         UUID.randomUUID(), UUID.randomUUID(), it, LocalTime.of(9 + it, 0), LocalTime.of(9 + it, 30),
-                        isFixed = it == 0, hasViolation = it == 1, distanceRange = "약 1km", placementReason = "이유", violationReason = "사유".takeIf { _ -> it == 1 },
+                        isFixed = it == 0, hasViolation = it == 1, distanceRange = "약 1km", placementReason = "이유", violationReason = "사유".takeIf { _ -> it == 1 }, displayName = "새 이름".takeIf { _ -> it == 0 }, displayCategory = "카페",
                     )
                 },
             )
@@ -35,7 +35,7 @@ class ItineraryShiftPropertyTest : StringSpec({
         now,
     )
 
-    fun Itinerary.content() = days.map { d -> d.dayOrder to d.slots.map { listOf(it.sourcePoiId, it.poiSnapshotId, it.orderIndex, it.startAt, it.endAt, it.isFixed, it.hasViolation, it.distanceRange, it.placementReason, it.violationReason) } }
+    fun Itinerary.content() = days.map { d -> d.dayOrder to d.slots.map { listOf(it.sourcePoiId, it.poiSnapshotId, it.orderIndex, it.startAt, it.endAt, it.isFixed, it.hasViolation, it.distanceRange, it.placementReason, it.violationReason, it.displayName, it.displayCategory) } }
 
     "민 뒤 일차·슬롯·순서·값 불변, 날짜만 +k" {
         checkAll(Arb.list(Arb.int(0..6), 1..10), Arb.long(-400L..400L)) { counts, k ->

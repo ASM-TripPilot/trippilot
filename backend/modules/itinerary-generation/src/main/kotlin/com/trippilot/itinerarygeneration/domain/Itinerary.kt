@@ -57,6 +57,12 @@ class VisitSlot private constructor(
      * 화면에 틀린 거리가 남는다. 사라지는 쪽이 틀린 값을 보여주는 쪽보다 낫다.
      */
     val alternatives: List<SlotAlternative>,
+    /**
+     * 이 여행에서만 쓰는 표시 이름·분류(TRIP-1801). null = 덮어쓰기 없음. 장소 원본은 고치지 않는다(INV-1).
+     * **표시 전용이다** — AI 경계·리마인드 문구·기록 화면은 원본 이름을 쓴다. 슬롯을 다시 쓰는 경로는 잇고, 다시 만들기만 버린다.
+     */
+    val displayName: String?,
+    val displayCategory: String?,
 ) {
     companion object {
         fun of(
@@ -73,6 +79,8 @@ class VisitSlot private constructor(
             violationReason: String? = null,
             // 기본값 인자는 **맨 뒤에** — 가운데 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다.
             alternatives: List<SlotAlternative> = emptyList(),
+            displayName: String? = null,
+            displayCategory: String? = null,
         ): VisitSlot {
             val errors = mutableListOf<FieldError>()
             if (orderIndex < 0) errors += FieldError("orderIndex", "순서는 0 이상입니다.")
@@ -82,7 +90,7 @@ class VisitSlot private constructor(
             // 화면에 "이 장소 대신 이 장소"가 뜬다. 거르는 자리를 도메인에 두는 이유는 경로가 여럿이라서다.
             val kept = alternatives.filter { it.poiId != sourcePoiId }.distinctBy { it.poiId }
             if (errors.isNotEmpty()) throw ValidationFailed(errors)
-            return VisitSlot(sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay, distanceRange, placementReason, violationReason, kept)
+            return VisitSlot(sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay, distanceRange, placementReason, violationReason, kept, displayName, displayCategory)
         }
     }
 }
@@ -95,7 +103,7 @@ class VisitSlot private constructor(
  */
 fun VisitSlot.withPlacementReason(reason: String?): VisitSlot = VisitSlot.of(
     sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay,
-    distanceRange, reason, violationReason, alternatives,
+    distanceRange, reason, violationReason, alternatives, displayName, displayCategory,
 )
 
 /**
@@ -119,7 +127,7 @@ fun VisitSlot.withAlternativeRationales(
     return VisitSlot.of(
         sourcePoiId, poiSnapshotId, orderIndex, startAt, endAt, isFixed, hasViolation, endsNextDay,
         distanceRange, placementReason, violationReason,
-        alternatives.map { alt -> byAltPoiKey[key(alt)]?.let { alt.copy(rationale = it) } ?: alt },
+        alternatives.map { alt -> byAltPoiKey[key(alt)]?.let { alt.copy(rationale = it) } ?: alt }, displayName, displayCategory,
     )
 }
 
@@ -197,7 +205,7 @@ class Itinerary private constructor(
                         // 동결은 스냅숏 참조만 붙이는 것 — 표시값은 **전부 그대로 옮긴다**.
                         // 하나라도 빠뜨리면 확정하는 순간 조용히 사라진다(endsNextDay 로 이미 겪은 회귀).
                         s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay, s.distanceRange, s.placementReason,
-                        s.violationReason, s.alternatives,
+                        s.violationReason, s.alternatives, s.displayName, s.displayCategory,
                     )
                 },
             )
