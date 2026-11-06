@@ -179,6 +179,7 @@
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/openapiContract.test.ts`  →  (export 없음)
 - `src/__tests__/photoUploadGuard.test.ts`  →  (export 없음)
+- `src/__tests__/placeRegionParamsRoute.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/planbApplyStack.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/planbRequestRoute.test.tsx`  →  (export 없음)
 - `src/__tests__/planbSessionRoutes.test.tsx`  →  (export 없음)
@@ -302,7 +303,7 @@
 - `src/entities/trip/config/serviceRegions.ts`  →  SERVICE_REGIONS
 
 ## src/entities/trip/
-- `src/entities/trip/index.ts`  →  formatDayLabel · formatNightsLabel · nightsCountLabel · nightsLabel · nightsOnlyLabel · formatShareCardPeriod · dayOfWeek · formatBaseNightRange · formatConfirmedDateRange · formatDateRangeWithDow · formatLegendDateRange · formatTripDateRange · formatTripRange · regionForDay · tripDayNumber · tripItinerarySummary · classifyTripPhase · isTripOngoing · markDoneBarSeen · readDoneBarSeen · writeDoneBarSeen · COVER_GRADIENTS · pickCoverCity · coverChoices · coverSourceForKey · pickRegionCover · tripCoverSource · SERVICE_REGIONS · PastTripRow · TripCard · TripDeleteDialog
+- `src/entities/trip/index.ts`  →  formatDayLabel · formatNightsLabel · nightsCountLabel · nightsLabel · nightsOnlyLabel · formatShareCardPeriod · dayOfWeek · formatBaseNightRange · formatConfirmedDateRange · formatDateRangeWithDow · formatLegendDateRange · formatTripDateRange · formatTripRange · destinationForDay · placeRegionParams · placeRegionQueries · placeRegionQuery · regionForDay · tripDayNumber · tripItinerarySummary · classifyTripPhase · isTripOngoing · markDoneBarSeen · readDoneBarSeen · writeDoneBarSeen · COVER_GRADIENTS · pickCoverCity · coverChoices · coverSourceForKey · pickRegionCover · tripCoverSource · SERVICE_REGIONS · PastTripRow · TripCard · TripDeleteDialog
 
 ## src/entities/trip/lib/
 - `src/entities/trip/lib/coverCity.ts`  →  pickCoverCity
@@ -311,7 +312,7 @@
 - `src/entities/trip/lib/formatShareCardPeriod.ts`  →  ShareCardPeriodOptions · formatShareCardPeriod
 - `src/entities/trip/lib/formatTripPeriod.ts`  →  WEEKDAY_LABELS · dayOfWeek · formatDateRange · formatSectionRange · formatTripRange · formatConfirmedDateRange · formatTripDateRange · formatLegendDateRange · formatDateRangeWithDow · formatBaseNightRange
 - `src/entities/trip/lib/regionCover.ts`  →  coverSourceForKey · coverChoices · tripCoverSource · pickRegionCover
-- `src/entities/trip/lib/regionForDay.ts`  →  regionForDay
+- `src/entities/trip/lib/regionForDay.ts`  →  regionForDay · destinationForDay · placeRegionQuery · placeRegionParams · placeRegionQueries
 - `src/entities/trip/lib/tripDayNumber.ts`  →  tripDayNumber
 - `src/entities/trip/lib/tripItinerarySummary.ts`  →  TripItinerarySummary · tripItinerarySummary
 - `src/entities/trip/lib/tripPhase.ts`  →  TripPhase · classifyTripPhase · isTripOngoing
@@ -2015,4 +2016,4 @@
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1319개 파일
+합계 1320개 파일

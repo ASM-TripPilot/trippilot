@@ -208,6 +208,79 @@ describe('useMultiRegionPlaces · seed (TRIP-1563)', () => {
 });
 
 /**
+ * TRIP-1809 · 지역 항목에 코드를 실을 수 있다 — 이름 문자열 항목(서비스 지역)은 코드 없이 그대로다.
+ */
+describe('useMultiRegionPlaces · 지역 코드 (TRIP-1809)', () => {
+  it('이름이 같아도 코드가 다르면 서로의 캐시를 쓰지 않는다', async () => {
+    // 준비 — 같은 클라이언트에서 코드만 다른 두 호출.
+    let hits = 0;
+    server.use(
+      http.get(`${BASE}/places`, () => {
+        hits += 1;
+        return HttpResponse.json({ items: [], nextCursor: null });
+      })
+    );
+    const client = newTestQueryClient({ staleTime: Infinity });
+    const mount = async (codes: [string, string]) => {
+      const { result } = renderHook(
+        () =>
+          useMultiRegionPlaces(
+            codes.map((regionCode) => ({ region: '중구', regionCode }))
+          ),
+        { wrapper: createWrapper(client) }
+      );
+      await waitFor(() => expect(result.current.isPending).toBe(false));
+    };
+
+    // 실행
+    await mount(['11140', '26110']);
+    await mount(['27110', '31110']);
+
+    // 단언 — 두 번째도 서버에 물었다.
+    expect(hits).toBe(4);
+    client.clear();
+  });
+
+  it('코드가 있는 항목은 region·regionCode 를 함께, 이름 항목은 region 만 보낸다', async () => {
+    // 준비
+    const sent: { region: string | null; regionCode: string | null }[] = [];
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        sent.push({
+          region: params.get('region'),
+          regionCode: params.get('regionCode'),
+        });
+        return HttpResponse.json({ items: [], nextCursor: null });
+      })
+    );
+
+    // 실행
+    const { result } = renderHook(
+      () =>
+        useMultiRegionPlaces([
+          { region: '중구', regionCode: '11140' },
+          { region: '중구', regionCode: '26110' },
+          '제주',
+        ]),
+      { wrapper: createWrapper(newTestQueryClient()) }
+    );
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+
+    // 단언
+    expect(
+      [...sent].sort((a, b) =>
+        String(a.regionCode).localeCompare(String(b.regionCode))
+      )
+    ).toEqual([
+      { region: '중구', regionCode: '11140' },
+      { region: '중구', regionCode: '26110' },
+      { region: '제주', regionCode: null },
+    ]);
+  });
+});
+
+/**
  * TRIP-1617 · `useMultiRegionPlaces` 의 취소 계약 (같은 integration 파일에 붙였다 — 이 폴더의 유일한 통합 버킷).
  *
  * 무엇을 보장하나: ① 지역별 `getPlaces` 호출이 두 번째 인자로 `AbortSignal` 을 받는다(M2). ② 검색어(키)가 바뀌면

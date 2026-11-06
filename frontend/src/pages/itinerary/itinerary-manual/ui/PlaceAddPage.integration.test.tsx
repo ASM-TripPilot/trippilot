@@ -1131,7 +1131,12 @@ describe('TRIP-981 · A — 장소 추가 시트의 "+ 추가" 무반응', () =>
  */
 describe('TRIP-981 · B — 후보를 여행 목적지로 좁힌다 (region)', () => {
   function tripJson(
-    destinations: { seq: number; region: string; nights: number }[]
+    destinations: {
+      seq: number;
+      region: string;
+      nights: number;
+      regionCode?: string;
+    }[]
   ) {
     return {
       tripId: 't1',
@@ -1256,6 +1261,81 @@ describe('TRIP-981 · B — 후보를 여행 목적지로 좁힌다 (region)', (
     const regions = regionsOf(placeHits());
     expect(regions.length).toBeGreaterThanOrEqual(1);
     expect(regions).toEqual(regions.map(() => '부산'));
+  });
+
+  describe('TRIP-1809 · 동명 지역 — 서울 중구 여행', () => {
+    const SEOUL_JUNG: Place = {
+      ...makePlace('jung-seoul', '명동성당', '명소', 30),
+      region: '중구',
+      regionCode: '11140',
+    };
+    const ULSAN_JUNG: Place = {
+      ...makePlace('jung-ulsan', '태화강', '명소', 20),
+      region: '중구',
+      regionCode: '31110',
+    };
+
+    /** 서버 흉내 — 새 서버는 코드 접두사로, 옛 서버는 코드를 무시하고 이름으로 거른다(동명 전부). */
+    function serveJung(server_: 'new' | 'old'): void {
+      server.use(
+        http.get(`${BASE}/trips/:tripId`, () =>
+          HttpResponse.json(
+            tripJson([
+              { seq: 1, region: '중구', nights: 2, regionCode: '11140' },
+            ])
+          )
+        ),
+        http.get(`${BASE}/places`, ({ request }) => {
+          const params = new URL(request.url).searchParams;
+          const code = params.get('regionCode');
+          const items = [SEOUL_JUNG, ULSAN_JUNG].filter((place) =>
+            server_ === 'new' && code !== null
+              ? place.regionCode?.startsWith(code)
+              : place.region === params.get('region')
+          );
+          return HttpResponse.json({ items, nextCursor: null });
+        })
+      );
+    }
+
+    it('새 서버면 서울 중구 장소만 나온다 — 이름과 코드를 함께 보낸다', async () => {
+      // 준비
+      serveJung('new');
+
+      // 실행
+      render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('itinerary-place-card-jung-seoul')
+        ).toBeOnTheScreen()
+      );
+
+      // 단언
+      expect(
+        screen.queryByTestId('itinerary-place-card-jung-ulsan')
+      ).toBeNull();
+      const params = new URL(placeHits()[0].url).searchParams;
+      expect(params.get('region')).toBe('중구');
+      expect(params.get('regionCode')).toBe('11140');
+    });
+
+    it('옛 서버면 지금처럼 동명 중구가 나온다 — 전국으로 넓어지지 않는다', async () => {
+      // 준비
+      serveJung('old');
+
+      // 실행
+      render(<PlaceAddPage tripId="t1" />, { wrapper: createWrapper() });
+
+      // 단언 — 이름을 함께 보내 이름 조회가 살아 있다(코드만 보내면 region 이 비어 0건/전국).
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('itinerary-place-card-jung-ulsan')
+        ).toBeOnTheScreen()
+      );
+      expect(
+        screen.getByTestId('itinerary-place-card-jung-seoul')
+      ).toBeOnTheScreen();
+    });
   });
 
   it('🔴 B1b · 목적지가 부산 1곳이면 나간 장소 요청이 전부 region=부산 이다', async () => {

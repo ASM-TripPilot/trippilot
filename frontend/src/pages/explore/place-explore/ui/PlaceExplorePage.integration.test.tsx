@@ -362,6 +362,50 @@ describe('P-2 · region 라우트 파라미터 (01b Seed Q9)', () => {
     // (페이지가 항상 false 전달) → 배너 없음. 선제 green 회귀 앵커.
     expect(screen.queryByTestId('explore-places-partialfailure')).toBeNull();
   });
+
+  const placeQueries = () =>
+    hitsOf('GET', '/api/v1/places').map((hit) => {
+      const params = new URL(hit.url).searchParams;
+      return {
+        region: params.get('region'),
+        regionCode: params.get('regionCode'),
+      };
+    });
+
+  it('TRIP-1809 · 라우트에 코드가 있으면 이름과 함께 싣는다', async () => {
+    setAccessToken('valid-access');
+    mockParams = { region: 'goseong', regionCode: '48820' };
+
+    await renderPage();
+
+    expect(placeQueries()).toEqual([
+      { region: 'goseong', regionCode: '48820' },
+    ]);
+  });
+
+  it('TRIP-1809 · 다지역은 지역마다 자기 코드를 싣는다 (이름이 같아도)', async () => {
+    setAccessToken('valid-access');
+    // 객체 href 의 배열이 실제 라우터를 지나면 이 모양이다(왕복은 placeRegionParamsRoute 테스트).
+    mockParams = { region: 'jung,jung', regionCode: '11140,26110' };
+
+    await renderPage();
+
+    expect(
+      placeQueries()
+        .map((q) => q.regionCode)
+        .sort()
+    ).toEqual(['11140', '26110']);
+    expect(placeQueries().every((q) => q.region === 'jung')).toBe(true);
+  });
+
+  it('TRIP-1809 · 이름과 코드 수가 다르면 코드를 버리고 이름으로만 묻는다 (엉뚱한 지역 금지)', async () => {
+    setAccessToken('valid-access');
+    mockParams = { region: 'busan,gyeongju', regionCode: '26' };
+
+    await renderPage();
+
+    expect(placeQueries().map((q) => q.regionCode)).toEqual([null, null]);
+  });
 });
 
 describe('P-3 · 검색은 서버가 한다 (q) — 로드된 페이지 한정이 아니다 (AC-8 · TRIP-502)', () => {

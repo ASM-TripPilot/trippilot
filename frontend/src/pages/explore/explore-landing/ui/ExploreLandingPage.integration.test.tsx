@@ -725,6 +725,71 @@ describe('TRIP-1713 · 탐색 전국 장소 레인 캐시 정책', () => {
   });
 });
 
+// TRIP-1809 — 피커에서 고른 시군구는 코드로 묻는다. 고성군은 경남(48820)·강원(51820) 둘이다.
+describe('TRIP-1809 · 동명 시군구 — 경상남도 고성군', () => {
+  function goseong(poiId: string, regionCode: string): Place {
+    return {
+      poiId,
+      nameKo: poiId,
+      category: '명소',
+      lat: 35,
+      lng: 128,
+      region: '고성군',
+      regionCode,
+      openingHours: null,
+      imageUrl: null,
+      tags: [],
+      savedCount: 0,
+      dataStatus: 'ACTIVE',
+    };
+  }
+
+  it('경남 고성군을 고르면 서버 코드 조회로 경남 장소만 그린다', async () => {
+    // 준비 — 새 서버 흉내: 코드가 있으면 접두사로만 거른다(코드를 안 보내면 두 고성군이 다 온다).
+    mockParams = { region: '48820' };
+    server.use(
+      http.get(`${BASE}/regions`, () =>
+        HttpResponse.json([
+          {
+            regionCode: '48820',
+            name: '고성군',
+            sidoName: '경상남도',
+            level: 'SIGUNGU',
+            selectable: true,
+            poiCount: 1,
+          },
+        ])
+      ),
+      http.get(`${BASE}/stays/curated`, () =>
+        HttpResponse.json({ city: '고성군', items: [] })
+      ),
+      http.get(`${BASE}/saved-places`, () => HttpResponse.json([])),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
+      http.get(`${BASE}/places`, ({ request }) => {
+        const code = new URL(request.url).searchParams.get('regionCode');
+        return HttpResponse.json({
+          items: [goseong('gn', '48820'), goseong('gw', '51820')].filter(
+            (place) => code === null || place.regionCode?.startsWith(code)
+          ),
+          nextCursor: null,
+        });
+      })
+    );
+    mockUseStaySearch.mockReturnValue(stayResults([]));
+
+    // 실행
+    renderPage();
+
+    // 단언
+    await waitFor(
+      () =>
+        expect(screen.getByTestId('explore-place-card-gn')).toBeOnTheScreen(),
+      WAIT
+    );
+    expect(screen.queryByTestId('explore-place-card-gw')).toBeNull();
+  });
+});
+
 // TRIP-1580 — 지역 필터 d01 은 숙소 레인을 인기 숙소 레인으로 바꾼다(성공해서 카드가 있을 때만).
 describe('TRIP-1580 · 지역 필터 숙소 레인 → 인기 숙소', () => {
   const LOCAL: StayItem = {

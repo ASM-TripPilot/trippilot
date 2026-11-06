@@ -13,7 +13,7 @@ import { showToast } from '@/shared/ui/Toast';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { formatNightsLabel } from '@/entities/trip';
 import { formatTripRange, tripItinerarySummary } from '@/entities/trip';
-import { SERVICE_REGIONS } from '@/entities/trip';
+import { placeRegionQuery, SERVICE_REGIONS } from '@/entities/trip';
 import { orderLanePlaces, pickTrendingPlaces } from '@/entities/place';
 import { usePlaceSaveToggle } from '@/features/save-place';
 import { useSavedPlaces } from '@/features/save-place';
@@ -180,11 +180,14 @@ export function HomePage() {
 
   // '지금 뜨는 장소'(TRIP-1049) — 여행 중이면 지배 여행 첫 목적지 지역 200곳, 아니면 서비스 지역 3곳
   // (TRIP-1432, 지역당 200곳)을 받아 고른다. 서버엔 인기순 정렬이 없어 클라가 고른다(pickTrendingPlaces).
-  const spotsRegion =
+  const spotsDestination =
     phase?.kind === 'planning' && phase.showSpots
       ? trips.data?.find((t) => t.tripId === phase.dominantTripId)
-          ?.destinations[0]?.region
+          ?.destinations[0]
       : undefined;
+  const spotsRegion = spotsDestination?.region
+    ? placeRegionQuery(spotsDestination)
+    : undefined;
   // 여행 조회 대기 중엔 어느 쪽인지 모르므로 둘 다 끈다(여행 중 사용자에게 3지역 600행 낭비 방지).
   // 실패면 발견 얼굴로 폴백하므로 3지역 조회를 켠다(끄면 스팟이 영원히 스켈레톤).
   // 훅 규칙상 둘 다 늘 부르고 켜짐으로만 고른다 — 꺼진 쪽은 isPending 이 계속 true 라 그 상태를 읽지 않는다.
@@ -196,7 +199,7 @@ export function HomePage() {
   // TRIP-1713 · 두 조회 모두 신선 시간 10분 — 10분 안의 재마운트는 다시 받지 않는다(여행 중 1지역 키만 하트 담기 낡음 표시로 재조회).
   // 여행 중 얼굴(지역 1곳 키)과 여행 없음 얼굴(3지역 키)은 캐시 키가 달라 서로의 응답을 쓰지 않는다.
   const regionPlaces = useGetPlaces(
-    { ...(spotsRegion ? { region: spotsRegion } : {}), limit: 200 },
+    { ...spotsRegion, limit: 200 },
     {
       query: {
         enabled: tripsSettled && inTrip,

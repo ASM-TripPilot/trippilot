@@ -20,7 +20,7 @@ import { PlaceAddHeader, PlaceAddRow } from '@/features/itinerary';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { TimeSheet } from '@/widgets/time-sheet';
 import { suggestNextSlotTime } from '@/entities/itinerary-slot';
-import { regionForDay } from '@/entities/trip';
+import { destinationForDay, placeRegionQuery } from '@/entities/trip';
 import { isNotFound } from '@/shared/api';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import {
@@ -223,7 +223,7 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   // 후보 지역 = 담을 날(헤더 N일차)의 지역 하나(TRIP-1233 AC-3 — 옛 다지역 병합은 1일차 지역을 앞에
   // 세워 2일차를 못 채웠다). 다지역이면 N 을 알려면 일정이 와야 하므로 그때까지 조회를 미룬다.
   const destinations = trip.data?.destinations ?? [];
-  const region = regionForDay(destinations, dayNumber);
+  const destination = destinationForDay(destinations, dayNumber);
   const {
     items,
     fetchNextPage,
@@ -234,7 +234,7 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
     refetch: refetchList,
   } = usePlacesInfinite(
     {
-      ...(region !== null ? { region } : {}),
+      ...(destination ? placeRegionQuery(destination) : {}),
       ...(selectedCategory ? { category: selectedCategory } : {}),
       ...(trimmedQuery ? { q: trimmedQuery } : {}),
     },

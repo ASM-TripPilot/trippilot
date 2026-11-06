@@ -776,7 +776,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
         { enabled: true }
       );
       expect(mockUseGetPlaces).toHaveBeenLastCalledWith(
-        { region: '부산광역시', limit: 8 },
+        { region: '부산광역시', regionCode: '26', limit: 8 },
         { query: { enabled: true } }
       );
     });
@@ -954,7 +954,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       ]);
     });
 
-    it('장소 모두 보기를 누르면 /explore/places?region=부산광역시 로 간다', () => {
+    it('장소 모두 보기를 누르면 d04 로 이름과 코드를 싣고 간다', () => {
       render(<ExploreLandingPage />);
 
       fireEvent.press(screen.getByTestId('explore-lane-place-cta'));
@@ -962,11 +962,11 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(mockPush).toHaveBeenCalledTimes(1);
       expect(targetOf(mockPush.mock.calls[0][0])).toEqual({
         path: '/explore/places',
-        params: { region: '부산광역시' },
+        params: { region: '부산광역시', regionCode: '26' },
       });
     });
 
-    it('장소 0건 폴백을 눌러도 같은 곳(/explore/places?region=부산광역시)으로 간다', () => {
+    it('장소 0건 폴백을 눌러도 같은 곳으로 간다', () => {
       placesResult = placesOk([]);
       render(<ExploreLandingPage />);
 
@@ -975,7 +975,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(mockPush).toHaveBeenCalledTimes(1);
       expect(targetOf(mockPush.mock.calls[0][0])).toEqual({
         path: '/explore/places',
-        params: { region: '부산광역시' },
+        params: { region: '부산광역시', regionCode: '26' },
       });
     });
   });
@@ -1113,7 +1113,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       );
     });
 
-    it('장소 모두 보기는 지금처럼 이름만 싣는다(/explore/places?region=강서구)', () => {
+    it('장소 모두 보기는 동명 구를 가르도록 코드도 싣는다 (TRIP-1809)', () => {
       mockParams = { region: SEOUL_GANGSEO.regionCode };
       render(<ExploreLandingPage />);
 
@@ -1122,7 +1122,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(mockPush).toHaveBeenCalledTimes(1);
       expect(targetOf(mockPush.mock.calls[0][0])).toEqual({
         path: '/explore/places',
-        params: { region: '강서구' },
+        params: { region: '강서구', regionCode: SEOUL_GANGSEO.regionCode },
       });
     });
 

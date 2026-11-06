@@ -47,7 +47,7 @@ routes:
 - 홈 도시 카드(서울·부산·제주) → `/explore?region={코드}` — home.md.
 - 홈 검색바 → 지역 선택 `/explore/region?purpose=explore` → 고르면 `/explore?region={코드}`.
 - 탐색 랜딩 검색창 → 같은 지역 선택(purpose=explore).
-- 지역 선택의 다른 목적(이 파일은 화면만 다루고 결과 화면은 각 파일 소관): 숙소 검색 지역 칩·「지역 바꾸기」 → `purpose=stay`(→ `/stays`, stay-search.md) · 위저드 「도시 추가」 → `purpose=trip`(→ 위저드에 1박으로 담고 뒤로) · 장소 탐색 지역 칩·「다른 지역 보기」 → `purpose=places`(→ `/explore/places?region={이름}`, explore-places.md).
+- 지역 선택의 다른 목적(이 파일은 화면만 다루고 결과 화면은 각 파일 소관): 숙소 검색 지역 칩·「지역 바꾸기」 → `purpose=stay`(→ `/stays`, stay-search.md) · 위저드 「도시 추가」 → `purpose=trip`(→ 위저드에 1박으로 담고 뒤로) · 장소 탐색 지역 칩·「다른 지역 보기」 → `purpose=places`(→ `/explore/places?region={이름}&regionCode={코드}`, explore-places.md).
 - `(tabs)` 밖 복제 탭바(장소 탐색·숙소 검색)의 「탐색」 → 쌓인 화면을 걷고 탐색 탭으로.
 - 딥링크: `trippilot:///explore`·`trippilot:///explore?region=26`(로그인 필요 — `(tabs)` 가드), `trippilot:///explore/region?purpose=explore`(가드 밖), `trippilot:///explore/destination/26`(가드 밖 리다이렉트지만 도착지 `/explore` 는 `(tabs)` 라 로그인 필요).
 - 푸시 알림·도우미에서 이 세 화면으로 오는 길은 없다(도우미는 장소 상세로만 보낸다).
@@ -72,7 +72,7 @@ Preconditions:
 - **시도 드릴다운.** 「지역별 둘러보기」의 시도 행 testID: `explore-region-sido-${group.sidoCode}`(예: 부산 `26`)나 인기 카드 testID: `explore-region-popular-${group.sidoCode}`(라벨 `{시도}, {태그라인}` 예 「부산광역시, 바다 · 야경」 — 시도명은 서버 값)을 누른다. 「{시도} 전체」 제목과 구군 카드 testID: `explore-region-${region.regionCode}`, 1단 복귀 testID: `explore-region-drilldown-back`(「지역 목록」).
 - **앱바 뒤로 두 단계.** 드릴다운이 열린 채 `explore-region-back`(라벨 「뒤로」)을 누르면 시도 목록으로만 돌아가고, 한 번 더 누르면 지역 선택을 나간다.
 - **검색.** `explore-region-search` 에 「해운대」를 `fill` 한다. 제목이 「검색 결과」로 바뀌고 평면 카드(구군은 시도명 부제)가 뜬다. 「경복궁」 같은 장소명은 「검색 결과가 없어요」 — 지역 이름만 걸린다.
-- **선택 → 필터.** 「부산 전체」 카드(부산 SIDO 행, `explore-region-${region.regionCode}`)를 누른다. 지역 선택이 걷히고 탐색 탭에 칩 testID: `explore-region-chip`(지역 이름), 레인 제목 「{이름} 숙소」(또는 「인기 숙소」)·「{이름} 장소」가 뜬다. 「모두 보기」는 `/stays` 에 `region`·`regionCode`·`sido` 를, 장소 「모두 보기」는 `/explore/places?region={이름}` 을 싣는다.
+- **선택 → 필터.** 「부산 전체」 카드(부산 SIDO 행, `explore-region-${region.regionCode}`)를 누른다. 지역 선택이 걷히고 탐색 탭에 칩 testID: `explore-region-chip`(지역 이름), 레인 제목 「{이름} 숙소」(또는 「인기 숙소」)·「{이름} 장소」가 뜬다. 「모두 보기」는 `/stays` 에 `region`·`regionCode`·`sido` 를, 장소 「모두 보기」는 `/explore/places?region={이름}&regionCode={코드}` 를 싣는다.
 - **인기 숙소.** 필터 중 인기 숙소가 오면 숙소 레인 제목이 「인기 숙소」, 몸통이 testID: `curated-stays` 블록으로 바뀐다(전체 보기 버튼 없음). 카드·제휴 시트는 stay-search.md 소관.
 - **필터 해제.** testID: `explore-region-chip-clear`(라벨 「지역 필터 해제」)를 누른다. 칩이 사라지고 레인 제목이 「숙소」·「장소」로 돌아온다(검색창 본체를 누르면 대신 지역 선택이 열린다).
 - **선택 불가 지역.** 장소 0곳 지역 카드는 흐리고 「추천 장소 없음」, 묶음 지역은 회색 행 — 눌러도 화면이 그대로다.
@@ -88,6 +88,7 @@ Preconditions:
 - **[실화면 전용]** 홈 검색바에서 지역을 고르면 홈 탭에서 탐색 탭으로 예고 없이 바뀐다(QA 실측). 스택에 (tabs) 가 없을 때(지역 선택 딥링크 직진입) 어디에 닿는지 확인 필요.
 - 필터 없는 숙소 레인은 서버가 전국 1회 응답을 주고 클라가 주소로 3지역만 남긴다 — 주소 없는 숙소는 빠진다. 숙소가 0장이고 오류도 아니면 레인이 제목만 남고 비어 보인다(빈 안내 없음).
 - 필터 숙소 레인은 서버가 이름으로 동명 구(서울·부산 「강서구」)를 합쳐 주므로 카탈로그 시도로 한 번 더 거른다 — 주소 없는 숙소는 남긴다.
+- 필터 장소 레인은 이름과 코드를 함께 물어 동명 시군구(경남·강원 고성군)를 서버가 가른다(TRIP-1809, 서버 TRIP-1808 필요). 숙소는 서버에 코드 조회가 없어 위 줄 그대로다.
 - 랜딩 로딩 스켈레톤은 숙소·장소 **둘 중 하나라도** 대기면 두 레인 모두 스켈레톤이다.
 - **[실화면 전용]** 시도→구군 드릴다운 레이아웃·「전체」 카드 구분·「인천광역시 전체」식 문구 중복, 딤 전면 커버, 세로 스크롤 중 FAB 숨김(멈춘 뒤 250ms 복귀) 은 실화면으로만 확인된다.
 - 탐색 탭 저장 하트는 `(tabs)` 가드 덕에 로그인 전제다 — 게스트 분기 없음.

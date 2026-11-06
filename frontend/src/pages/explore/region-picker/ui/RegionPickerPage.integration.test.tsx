@@ -484,7 +484,12 @@ describe('985 · places → d04 로 돌아가며 지역 **이름**을 교체한�
 
     // d04 는 결과 화면과 반대로 이름을 받는다(`PlaceExplorePage` 의 region 파라미터).
     expect(mockDismissTo.mock.calls).toEqual([
-      [{ pathname: '/explore/places', params: { region: '부산광역시' } }],
+      [
+        {
+          pathname: '/explore/places',
+          params: { region: '부산광역시', regionCode: '26' },
+        },
+      ],
     ]);
     expect(mockAddDestination).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();

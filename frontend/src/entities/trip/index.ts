@@ -15,7 +15,13 @@ export {
   formatTripDateRange,
   formatTripRange,
 } from './lib/formatTripPeriod';
-export { regionForDay } from './lib/regionForDay';
+export {
+  destinationForDay,
+  placeRegionParams,
+  placeRegionQueries,
+  placeRegionQuery,
+  regionForDay,
+} from './lib/regionForDay';
 export { tripDayNumber } from './lib/tripDayNumber';
 export { tripItinerarySummary } from './lib/tripItinerarySummary';
 export type { TripItinerarySummary } from './lib/tripItinerarySummary';

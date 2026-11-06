@@ -70,10 +70,10 @@ export function RegionPickerPage(): ReactElement {
       return;
     }
     if (purpose === 'places') {
-      // TRIP-985 — d04 "지역 바꾸기". d04 는 지역을 URL 로만 들고 있어 **이름**을 실어 돌아간다.
+      // TRIP-985 — d04 "지역 바꾸기". d04 는 지역을 URL 로만 들고 있어 이름과 코드(동명 지역 분리, TRIP-1809)를 실어 돌아간다.
       router.dismissTo({
         pathname: '/explore/places',
-        params: { region: region.name },
+        params: { region: region.name, regionCode: region.regionCode },
       });
       return;
     }

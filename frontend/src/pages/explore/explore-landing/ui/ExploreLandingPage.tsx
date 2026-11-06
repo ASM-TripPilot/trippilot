@@ -172,8 +172,9 @@ function RegionExplore({ regionCode }: { regionCode: string }): ReactElement {
     showBrowseAll: false,
   });
   const stay = useStaySearch({ region: regionName }, { enabled });
+  // 코드를 함께 실어 동명 시군구(경남·강원 고성군)를 서버에서 가른다(TRIP-1809). 이름은 옛 서버 호환으로 남긴다.
   const places = useGetPlaces(
-    { region: regionName, limit: PLACE_LANE_LIMIT },
+    { region: regionName, regionCode, limit: PLACE_LANE_LIMIT },
     { query: { enabled } }
   );
 
@@ -291,7 +292,7 @@ function ExploreLanding({
     onPressPlaces: () =>
       router.push(
         filter?.regionName
-          ? `/explore/places?region=${encodeURIComponent(filter.regionName)}`
+          ? `/explore/places?region=${encodeURIComponent(filter.regionName)}&regionCode=${encodeURIComponent(filter.regionCode)}`
           : '/explore/places'
       ),
     // ＋ 여행 만들기 FAB → g01 위저드(TRIP-703). 화면은 순수 뷰라 라우터를 모르므로 목적지를
