@@ -225,6 +225,7 @@ def test_extraction_prompt_keeps_times_outside_the_window_as_said() -> None:
         LlmFeature.REPLAN_REQUEST_EXTRACTION,
         build_extraction_vars("밤 10시까지 놀고 싶어", "11월 6일 (금)", "09:00~21:00"))
     assert "남은 시간 밖이어도" in prompt and '"22:00"' in prompt and '"20:30"' in prompt
+    assert '저녁부터' in prompt and '"한 시간 뒤부터"' in prompt  # 시간대·지금 기준 말
     assert '"23:59"' in prompt and "그 방문의 at" in prompt  # 자정 · 장소에 붙은 시간대는 at
     assert "ART|ACTIVITY|SHOPPING|BAR" in prompt  # 출력 스키마가 규칙·게이트와 같은 10종
 
@@ -309,6 +310,150 @@ def test_end_by_reaches_the_solver_window(hh, mm, text) -> None:
         body = client.post("/ai/v1/planb/replan", json=_body(free_text=text)).json()
     assert f"nl_time_accepted: end_by {hh:02d}:{mm:02d}" in body["notes"]
     assert seen and (seen[0].end.hour, seen[0].end.minute) == (hh, mm)
+
+
+# ── 말한 시각 vs 자유입력에서 추정한 모양 지시 ─────────────────────────────
+
+
+def _layout(free_text: str, resolved: list[str], *, directives: tuple[str, ...] = ()) -> tuple[list[str], list[str]]:
+    from trippilot.api.wiring import _spoken_layout
+
+    notes: list[str] = []
+    return _spoken_layout(SimpleNamespace(free_text=free_text, directives=list(directives)), resolved, notes), notes
+
+
+@pytest.mark.parametrize("said", ["오늘 남은 일정 다시 맞춰줘", "오늘 일정 취소하고 다시 짜줘", "남은 일정 조정해줘"])
+def test_rearranging_words_never_end_the_day(said) -> None:
+    """개발 실측 2026-11-06: "오늘 남은 일정 다시 맞춰줘"가 임베딩에서 END_DAY·EXTEND_DAY 에 붙어 하루가 통째로 끝났다."""
+    out, notes = _layout(said, ["EXTEND_DAY", "END_DAY", "INDOOR"])
+    assert out == ["INDOOR"] and "end_day_dropped: no_end_word" in notes
+
+
+@pytest.mark.parametrize("said", ["전부 취소", "다 취소해줘", "남은 일정 취소", "오늘 일정 끝", "오늘은 여기까지 할래"])
+def test_ending_words_still_end_the_day(said) -> None:
+    assert _layout(said, ["END_DAY"])[0] == ["END_DAY"]
+
+
+def test_a_chip_is_never_dropped_by_the_word_guard() -> None:
+    assert _layout("다시 맞춰줘", ["END_DAY", "EXTEND_DAY"], directives=("END_DAY", "EXTEND_DAY"))[0] == ["END_DAY", "EXTEND_DAY"]
+
+
+@pytest.mark.parametrize("said,kept", [
+    ("저녁 8시 반 이후로 바꿔줘", False), ("3시 이후로 다시 짜줘", False),
+    ("밤 10시까지 놀고 싶어", True), ("더 늦게까지 놀고 싶어", True), ("일정 더 추가해줘", True), ("한 곳 더", True),
+    ("너무 더워서 실내로", False),
+])
+def test_extending_needs_a_word_that_asks_for_more(said, kept) -> None:
+    assert ("EXTEND_DAY" in _layout(said, ["EXTEND_DAY"])[0]) is kept
+
+
+class _ResolvedLayout:
+    """자유입력 임베딩이 이 지시들로 잡았다고 치는 대역 — `match_free_text` 자리."""
+
+    def __init__(self, *keys: str) -> None:
+        self.keys = keys
+
+    def __call__(self, text, specs, embedding, store):
+        return tuple(s for s in specs if s.key in self.keys)
+
+
+def _replan_spied(monkeypatch, extracted: ExtractedRequest, free_text: str, *keys: str, **over):
+    import trippilot.api.wiring as wiring
+
+    monkeypatch.setattr(wiring, "match_free_text", _ResolvedLayout(*keys))
+    app = build_dev_app(directives=_DIRECTIVES)
+    orch = app.state.orchestrator
+    orch._request_extractor = _StubExtractor(extracted)
+    orch._embedding, orch._vector_store = object(), object()
+    seen = []
+    inner = orch._schedule_agent
+
+    class _Spy:
+        def run(self, task):
+            seen.append(task.request)
+            return inner.run(task)
+
+    orch._schedule_agent = _Spy()
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.post("/ai/v1/planb/replan", json=_body(free_text=free_text, **over))
+    assert r.status_code == 200, r.text[:300]
+    return r.json(), seen
+
+
+def test_a_said_end_replaces_the_one_more_place_cap(monkeypatch) -> None:
+    """"6시까지 숙소로 돌아갈래"가 일찍 마무리(새 방문 한 곳)로 읽혀 09~18시 창에 한 곳이었다(개발 실측 2026-11-06)."""
+    body, seen = _replan_spied(monkeypatch, ExtractedRequest(end_by=time(18, 0)), "6시까지 숙소로 돌아갈래", "SHORTER_DAY")
+    assert "nl_time_over_directive: SHORTER_DAY" in body["notes"], body["notes"]
+    assert not any(n.startswith(("shorter_day:", "planb_visit_cap")) for n in body["notes"]), body["notes"]
+    assert seen[-1].day_window.end.hour == 18
+    assert body["resolved_directives"] == ["END_NEAR_STAY"]  # 숙소 쪽 마무리는 남긴다
+
+
+def test_a_chip_shorter_day_still_caps_even_with_a_said_end(monkeypatch) -> None:
+    body, _ = _replan_spied(monkeypatch, ExtractedRequest(end_by=time(18, 0)), "6시까지", directives=["SHORTER_DAY"])
+    assert any(n.startswith("shorter_day:") for n in body["notes"]), body["notes"]
+
+
+def test_a_said_start_replaces_keeping_only_the_places(monkeypatch) -> None:
+    """"아침 7시부터 시작하고 싶어"가 시간만 당기기로 읽혀 첫 곳만 07시, 다음은 11:30 으로 3시간이 비었다(개발 실측 2026-11-06)."""
+    body, seen = _replan_spied(monkeypatch, ExtractedRequest(start_after=time(7, 0)), "아침 7시부터 시작하고 싶어", "EARLIER",
+                               from_instant="2026-09-20T20:00:00+09:00",
+                               current_slots=[{"poi_id": _HALLA, "start_at": "09:00", "end_at": "10:30", "is_fixed": False}])
+    assert "nl_time_over_directive: EARLIER" in body["notes"], body["notes"]
+    assert not any(n.startswith("earlier_retime") for n in body["notes"]), body["notes"]
+    assert seen[-1].day_window.start.hour == 7 and not seen[-1].required_in_order
+
+
+@pytest.mark.parametrize("extracted,said,chip", [
+    (ExtractedRequest(start_after=time(17, 0)), "저녁부터 일정 짜줘", "SHORTER_DAY"),  # "저녁" 한 낱말로 "저녁 전에 마무리"에 붙어 상한 2곳이었다
+    (ExtractedRequest(end_by=time(12, 0)), "오전에만 다니고 싶어", "EARLIER"),         # 장소 그대로라 09~12시에 한 곳이었다
+])
+def test_any_said_time_drops_the_inferred_layout(monkeypatch, extracted, said, chip) -> None:
+    body, _ = _replan_spied(monkeypatch, extracted, said, chip, from_instant="2026-09-20T20:00:00+09:00")
+    assert f"nl_time_over_directive: {chip}" in body["notes"], body["notes"]
+    assert chip not in body["resolved_directives"]
+
+
+def test_a_fixed_visit_outside_a_said_window_stays_where_it_is() -> None:
+    """"3시 이후로" + 12:00 고정 — 사용자가 잠근 곳은 창 밖이어도 원 시각 그대로이고, 나머지는 15시 뒤다(창을 좁혀도 409 가 아니다)."""
+    body, _ = _replan(ExtractedRequest(start_after=time(15, 0)),
+                      current_slots=[{"poi_id": _HALLA, "start_at": "12:00", "end_at": "13:00", "is_fixed": True}])
+    assert _start_of(body, _HALLA).startswith("12:00"), body["notes"]
+    others = [s for d in body["itinerary"]["days"] for s in d["slots"] if s["poi_id"] != _HALLA]
+    assert others and all(s["start_at"] >= "15:00" for s in others), others
+
+
+def test_extending_another_day_does_not_crash() -> None:
+    """다른 날(지금이 없는 날)의 "더 늦게까지"가 `not_before.hour` 에서 500 이었다(개발 실측 2026-11-06 "밤 10시까지 놀고 싶어")."""
+    app = build_dev_app(directives=_DIRECTIVES)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.post("/ai/v1/planb/replan", json=_body(
+            directives=["EXTEND_DAY"], from_instant="2026-09-20T20:00:00+09:00",
+            request_meta={"request_id": "x", "requested_at": "2026-09-20T20:00:00+09:00", "deadline_ms": 25000}))
+    assert r.status_code == 200, r.text[:300]
+
+
+@pytest.mark.parametrize("from_instant,date_tail,window", [
+    ("2026-09-21T10:30:00+09:00", " · 지금 10:30", "10:30~21:00"),  # 오늘 — 남은 시간은 지금부터, 받은 창 시작이 아니다
+    ("2026-09-21T07:10:00+09:00", " · 지금 07:10", "07:10~21:00"),  # 창 시작(09:00)보다 이른 지금도 그대로
+    ("2026-09-20T20:00:00+09:00", "", "09:00~21:00"),               # 다른 날 — 지금은 뜻이 없다
+])
+def test_extraction_gets_now_only_on_the_day_being_replanned(from_instant, date_tail, window) -> None:
+    app = build_dev_app(directives=_DIRECTIVES)
+    orch = app.state.orchestrator
+    calls = []
+
+    class _Capture(_StubExtractor):
+        def extract(self, *a, **kw):
+            calls.append(a)
+            return super().extract(*a, **kw)
+
+    orch._request_extractor = _Capture(ExtractedRequest())
+    with TestClient(app, raise_server_exceptions=False) as client:
+        client.post("/ai/v1/planb/replan", json=_body(free_text="한 시간 뒤부터", from_instant=from_instant))
+    _, date_label, win = calls[0][:3]
+    assert date_label.endswith(date_tail) and win == window, calls[0]
+    assert ("지금" in date_label) is bool(date_tail)
 
 
 def test_extractor_failure_keeps_the_old_path() -> None:

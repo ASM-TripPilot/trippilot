@@ -311,6 +311,21 @@ EVENT_CASES = [
     ("EXPLORE_PLACES", "다음 달 부산 불꽃축제 열려?"),
     ("EXPLORE_PLACES", "부산에 이번 달 공연 있어?"),
 ]
+# 시간대 — 하루·남은 일정 전체의 시간대는 REPLAN, 특정 곳의 시각은 EDIT_SCHEDULE (0.2.10). 평가셋(`intent_eval_set.yaml`)은 재생 픽스처가
+# 물려 있어 건드리지 않고 여기 둔다.
+TIME_WINDOW_CASES = [
+    ("REPLAN", "3시 이후로 바꿔줘"),
+    ("REPLAN", "저녁 8시 이후로 일정 바꿔줘"),
+    ("REPLAN", "밤 10시까지 놀 수 있게 다시 짜줘"),
+    ("REPLAN", "일정 2시부터 5시까지로 바꿔줘"),
+    ("REPLAN", "오전은 쉬고 오후부터 움직일래"),
+    ("REPLAN", "오늘 남은 일정 6시까지만 하고 싶어"),
+    ("EDIT_SCHEDULE", "저녁 식사 시간을 7시로 미뤄줘"),
+    ("EDIT_SCHEDULE", "카페는 3시로 옮겨줘"),
+    ("EDIT_SCHEDULE", "남산타워를 오후 2시로 바꿔줘"),
+    ("EDIT_SCHEDULE", "경복궁을 3시 이후로 옮겨줘"),
+    ("EDIT_SCHEDULE", "점심을 1시로 미뤄줘"),
+]
 
 
 def run_intent(prompts: Path, repeat: int) -> None:
@@ -326,6 +341,7 @@ def run_intent(prompts: Path, repeat: int) -> None:
     cases += [(label, u, [], "recommend") for label, u in RECOMMEND_CASES]
     cases += [(label, u, [], "region") for label, u in REGION_CASES]
     cases += [(label, u, [], "knowledge") for label, u in KNOWLEDGE_CASES]
+    cases += [(label, u, [], "time_window") for label, u in TIME_WINDOW_CASES]
 
     def one(item):
         i, (label, utt, history, kind) = item

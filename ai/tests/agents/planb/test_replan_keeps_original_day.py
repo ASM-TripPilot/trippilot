@@ -189,7 +189,7 @@ def test_더_늦게까지도_말한_시각_창_밖의_원_일정은_두지_않�
     종전엔 kept 가 nl 창보다 앞에서 계산돼 오전 7곳이 15시 뒤 창에 우선 필수로 몰렸다."""
     body, req, _ = _run(_ComposeTimesOut(), monkeypatch, extracted=ExtractedRequest(start_after=time(15, 0)),
                         free_text="3시 이후로 더 늦게까지 놀고 싶어", directives=["EXTEND_DAY"])
-    assert "extend_day_window: kept 4" in body["notes"], body["notes"]
+    assert "extend_day: kept 4" in body["notes"], body["notes"]
     kept = {str(v.poi_id) for v in req.required_visits if v.reason == "extend_keep"}
     assert kept == set(_IDS[7:]), body["notes"]
     assert (req.day_window.start.hour, req.day_window.start.minute) == (15, 0)

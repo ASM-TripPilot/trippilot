@@ -2273,11 +2273,32 @@ def _handoff_to(intent: Intent, action_type: str) -> Callable[[TurnContext, Mapp
     return assemble
 
 
+# BE `replan_session.free_text` 상한 — 넘는 말을 실으면 앱의 시작 요청이 400 이다.
+_REPLAN_PREFILL_MAX = 500
+# 제안 뒤의 짧은 수락("응"·"네 부탁해요") — 입력 칸에 실을 내용이 없다. 넘겨짚어 놓쳐도 입력 칸이 빌 뿐이다.
+_ACK_ONLY = re.compile(r"^(?:응|어|네|넵|예|그래|좋아|ㅇㅇ|ㅇㅋ|오케이|부탁|해줘|그렇게)[가-힣\s.!~]{0,8}$")
+
+
+def _replan_params(ctx: TurnContext, trip: TripInfo) -> dict[str, str]:
+    """다시 짜기 화면을 열 때 실을 것 — 사용자가 한 말(자유 입력 칸 초기값)과, 오늘이 아닌 날을 말했으면 그 날.
+
+    버튼만 주면 "3시 이후로 바꿔줘"를 입력 칸에 다시 쳐야 했고, 안 치면 시각이 사라졌다(2026-11-06). 앱이 모르는 키는 안 읽으니 옛 빌드도 안전하다."""
+    params: dict[str, str] = {}
+    said = (ctx.heard or ctx.utterance).strip()
+    if said and not _ACK_ONLY.match(said):
+        params["prefill"] = said[:_REPLAN_PREFILL_MAX]
+    day = ctx.arguments.get("target_date")
+    on = resolve_day(day, ctx.snapshot, ctx.today) if day else None
+    if on is not None and on != ctx.today and trip.start_date <= on <= trip.end_date:
+        params["targetDate"] = on.isoformat()
+    return params
+
+
 def _assemble_replan(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:
     """재계획은 여행 중에만 있다 — 그 밖에는 다시 만들기로 (BE IntentDispatcher REPLAN 분기, 문장도 그쪽 것)."""
     trip = ctx.snapshot.trip
     if trip is not None and trip.phase == "IN_TRIP":
-        return _text_facts(Intent.REPLAN, FactStatus.OK, (_action("OPEN_REPLAN"),))
+        return _text_facts(Intent.REPLAN, FactStatus.OK, (_action("OPEN_REPLAN", **_replan_params(ctx, trip)),))
     return Facts(Intent.REPLAN, FactStatus.OK, AnswerKind.TEXT, rows=(), places=(), notes=(), payload=None,
                  next_actions=(_action("OPEN_REGENERATE"),), quick_replies=(),
                  template_text=_template(Intent.REGENERATE, FactStatus.OK))

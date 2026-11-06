@@ -489,6 +489,28 @@ def test_handoff_intents_are_text_with_the_dispatcher_action(intent: Intent, act
     assert facts.template_text == fallback_answer_text(intent, {})
 
 
+def test_replan_carries_what_was_said_and_the_day_to_the_replan_screen() -> None:
+    """"3시 이후로 바꿔줘"가 버튼만 남으면 시각이 사라진다 — 말은 입력 칸 초기값으로, 오늘이 아닌 여행 날은 그 날로 싣는다."""
+    said = replace(_ctx(arguments={"target_date": "내일"}), utterance="내일 일정 3시 이후로 바꿔줘")
+    on = said.today + timedelta(days=1)
+    trip = TripInfo("trip-1", ("제주",), said.today, on, "IN_TRIP")
+    action = _run(HANDLERS[Intent.REPLAN], replace(said, snapshot=replace(_SNAP, trip=trip))).next_actions[0]
+    assert action.params == {"prefill": "내일 일정 3시 이후로 바꿔줘", "targetDate": on.isoformat()}
+    # 오늘을 말했거나 여행 밖의 날이면 날은 싣지 않는다 — 앱이 오늘로 연다(여행 밖이면 시작이 409 다)
+    today = replace(said, arguments={"target_date": "오늘"}, snapshot=replace(_SNAP, trip=trip))
+    assert "targetDate" not in _run(HANDLERS[Intent.REPLAN], today).next_actions[0].params
+    last = TripInfo("trip-1", ("제주",), said.today, said.today, "IN_TRIP")
+    outside = replace(said, snapshot=replace(_SNAP, trip=last))
+    assert "targetDate" not in _run(HANDLERS[Intent.REPLAN], outside).next_actions[0].params
+    # 말이 없으면(버튼 턴) 비운다 · 너무 길면 앱 시작 요청이 400 이니 자른다
+    assert _run(HANDLERS[Intent.REPLAN], _ctx()).next_actions[0].params == {}
+    for ack in ("응", "네 부탁해요", "그래 그렇게 해줘"):
+        assert _run(HANDLERS[Intent.REPLAN], replace(_ctx(), utterance=ack)).next_actions[0].params == {}, ack
+    assert _run(HANDLERS[Intent.REPLAN], replace(_ctx(), utterance="좋아 저녁부터 다시 짜줘")).next_actions[0].params != {}
+    long = replace(_ctx(), utterance="가" * 501)
+    assert len(_run(HANDLERS[Intent.REPLAN], long).next_actions[0].params["prefill"]) == 500
+
+
 def test_replan_goes_to_replan_in_trip_and_regenerate_otherwise() -> None:
     in_trip = _run(HANDLERS[Intent.REPLAN], _ctx())
     assert _types(in_trip) == ["OPEN_REPLAN"] and in_trip.next_actions[0].label == "다시 짜기"
