@@ -6,9 +6,9 @@ branches_seen: [feature/region-covers-gw-gb-gn]
 current_branch: feature/region-covers-gw-gb-gn (이 브랜치는 지역 커버 이미지용 — POI 작업은 새 브랜치에서)
 span_kst: "11-04 → 11-07"
 ended_by: 사용자 요청(세션 인수인계)
-status: 진행중(코드 PR #2031 · 데이터 PR 은 비공개 전환 뒤)
+status: 진행중(#2031·#2032 머지 · 닫기 #2033, 배포는 사람 몫)
 resume_local: "claude --resume ddf3e197-8c82-4da8-b2f5-261457bcfa7b"
-related_prs: [1815, 2031]
+related_prs: [1815, 2031, 2032, 2033]
 tickets: [TRIP-1537, TRIP-392, TRIP-1810, TRIP-1811]
 session_name: 장소 데이터 확장(부산·강원·경북·경남 정제) → 공유본 분할 반영
 picked_up_by: Claude Code 2026-11-07 04:20 (레인 poi, TRIP-1810, 브랜치 chore/TRIP-1810-DATA-regions-doc)
@@ -23,7 +23,7 @@ picked_up_by: Claude Code 2026-11-07 04:20 (레인 poi, TRIP-1810, 브랜치 cho
 ## 결정 (사용자 확정 / 내가 제안해 채택)
 - **A안 = "기존 파일 그대로 + 새 지역 파일 추가"** (사용자 확정 11-06). 기존 `ai/data/collected_pois.json`(90MB)은 그대로 두고 수집 병합도 이 파일만 계속 갱신한다. 이번 정제의 신규·보강 행은 `ai/data/collected_pois_regions.json`(가칭)으로 따로 둔다. 선례: `collected_localdata.json`·`collected_localcafe.json`·`ai/data/overture/` 가 이미 공유본과 따로 있다(`collect_overture.py` 머리 주석).
 - **같은 `(source, content_id)` 가 두 파일에 있으면 지역 파일이 이긴다**(사용자 확정 11-07).
-- 비공개 전환은 **박태현이 한다**(레포 admin). 협의하에 가장 마지막이고, 전환 전엔 네이버 파생값이 든 파일을 커밋·푸시하지 않는다(코드 PR 은 데이터가 없어 먼저 간다, 11-07 변경).
+- 비공개 전환은 **박태현이 한다**(레포 admin). 운영 적재 뒤 가장 마지막이다. **사용자 결정(11-07)으로 지역 문서 한 파일은 레포 PUBLIC 인 채로 커밋한다**(노출 위험 고지·합의). 그 밖의 파생값 파일은 여전히 커밋하지 않는다.
 - 경기는 수집이 끝난 뒤(약 4~5일, 11-06 기준) 같은 스크립트로 한 번 더 정제한다 — 이 작업과 분리.
 
 ## 검증된 사실 (이어받을 때 다시 확인할 필요 없음)
@@ -52,21 +52,23 @@ picked_up_by: Claude Code 2026-11-07 04:20 (레인 poi, TRIP-1810, 브랜치 cho
 - **코드 PR #2031**(데이터 없음): 배포 적재가 이미지 안에 지역 문서가 있으면 `[공유본, 지역 문서]` 순으로 붓는다 · CI 경로 · 계약 IT(문서 없으면 건너뜀). 이 문서가 함께 커밋된다.
 - **지역 문서**: `~/trippilot-data/processed/regions/collected_pois_regions.json` — 레포 밖, **커밋 안 함**. 수치·명령은 RUNBOOK §12.1.
 - **로컬 리허설 통과**: 신규 39,193 · 보강 3,569 · 탈락 0(위 표의 41,414 / 3,590 과 다른 이유는 아래).
-- **결정(사용자 11-07)**: 겹치면 지역 문서가 이긴다 · 이름 겹침 2,676 은 뺀다 · LOST 4,152 는 이번에 안 닫는다(TRIP-1811) · 비공개 전환은 협의하에 맨 마지막.
+- **데이터 PR #2032 머지**: `ai/data/collected_pois_regions.json` 한 파일.
+- **TRIP-1811 PR #2033**: LOST 를 공유본에서 빼고(제외 목록 `poi_excluded_filtered.json` + 재병합), `--close-missing` 이 여러 문서를 합쳐 대조한다.
+- **결정(사용자 11-07)**: 겹치면 지역 문서가 이긴다 · 이름 겹침 2,676 은 뺀다 · LOST 4,152 는 TRIP-1811 로 분리 · 비공개 전환은 운영 적재 뒤 맨 마지막.
 
 **위 표와 수가 다른 이유** — 정제(prep) 뒤에 공유본이 바뀌었다(#2009 112,481 → #2017 체인 794 제거 · #2019 85 추가 → 111,772).
 - 신규 41,414 → 39,193: 체인·비여행 2,218(#2017 의 최신 게이트, 그대로 두면 지운 체인이 지역 문서로 되돌아온다) · prep 뒤 들어온 행과 이름 겹침 3.
 - 보강 3,590 → 3,569: prep 뒤 공유본에서 빠진 행 21.
 
 ## 다음에 이어서 할 일
-### 코드 PR 머지 — 사람
-### 데이터 PR — 맨 마지막, 사람 협의
-1. 레포 비공개 전환을 `gh repo view --json visibility` 로 확인. PUBLIC 이면 중단.
-2. 최신 develop 공유본으로 `build_regions.py --regions-only` 를 **다시** 돌려(RUNBOOK §12.1) 그 파일 하나만 `ai/data/collected_pois_regions.json` 으로 커밋.
+### 머지 — 오케
+1. #2033 머지. 일일 병합이 공유본을 건드렸으면 최신 develop 에서 재병합 뒤 머지(RUNBOOK §12.2).
+2. 공유본이 지역 문서 생성 뒤 바뀌어도 머지는 막히지 않는다. 겹치는 행 값을 최신으로 맞추려면 `build_regions.py --regions-only` 재실행(RUNBOOK §12.1).
 
 ### 개발 서버 확인 — 사람(AWS/kubectl 필요)
 - 접속 확인 → DB 스냅샷 → 배포 → 장소 수·카테고리·일정 생성·도우미 질의("서울 미술관"·"홍대 술집"·"부산 해변 카페" 등) 확인. **개발 서버 디스패치는 아직 한 번도 안 했다. 운영은 승인 안 됨.**
-- `poi_close_missing` 입력은 두 문서면 스텝이 실패한다(TRIP-1811 전까지 켜지 않는다). `poi_close_missing_dry_run` 은 거부 이유만 남기고 적재로 간다.
+- LOST 닫기: `poi_close_missing_dry_run` 으로 닫을 수를 먼저 본다. **4,152 와 다를 수 있다** — 공유본에서 먼저 빠졌는데 아직 안 닫힌 행(#2017 체인 794 등)도 함께 닫힌다. 숫자를 보고 `poi_close_missing=true` 를 사람이 켠다. 이후 배포에서는 끈다.
+- 이미지에 지역 문서가 없는 채로 닫으면 안 된다 — OVERTURE 가 41% 로 409 가 나서 막히지만, 순서는 #2032 먼저.
 - ART·BAR(V2.79·V2.80)와 평판 태그를 쓰는 AI 코드는 develop 에 이미 있다 — 함께 배포할 브랜치 없음.
 
 ## 열린 문제

@@ -44,9 +44,7 @@ def manifest(namespace, image, script_source, *, close_missing=False, close_miss
     배포 로그뿐이다. 드라이런이 upsert 를 대신하면 그 배포는 공유본을 안 붓게 되므로 둘을 잇는다.
     실제 `close_missing` 이 켜져 있으면 드라이런은 뜻이 없어 건너뛴다.
 
-    지역 문서가 있으면 `--close-missing` 은 스크립트가 보내기 전에 거부한다(문서 한 장을 그 출처의 전부로 읽어
-    둘째 문서가 첫째의 행을 닫는다). 실제 닫기는 그 거부로 Job 이 실패하고, 드라이런은 이유만 요약에 남긴 채
-    적재로 넘어간다 — 두 문서로 닫는 길은 TRIP-1811 몫이다.
+    지역 문서가 있으면 `--close-missing` 은 두 문서를 합쳐 그 출처의 전부로 읽는다 — 어느 쪽에도 없는 행만 닫힌다(TRIP-1811).
     """
     base = ["/app/.venv/bin/python", "/scripts/ingest_pois.py", "--base-url", BACKEND]
     documents = f'set -- {DOCUMENT}; [ -f {REGIONS_DOCUMENT} ] && set -- "$@" {REGIONS_DOCUMENT}'
@@ -104,8 +102,8 @@ def manifest(namespace, image, script_source, *, close_missing=False, close_miss
     return {"apiVersion": "v1", "kind": "List", "items": [configmap, job]}
 
 
-# 요약으로 올릴 줄 — 적재 합계·탈락(사유별 수)·드라이런의 "닫을 것"과 그 거부 이유. 묶음별 진행 줄은 뺀다.
-_SUMMARY_LINE = re.compile(r"^\s*(합계 — |합계 제안 |탈락|\S[^:]*: \d+$|미포함 정리|--close-missing 은)")
+# 요약으로 올릴 줄 — 적재 합계·탈락(사유별 수)·드라이런의 "닫을 것". 묶음별 진행 줄은 뺀다.
+_SUMMARY_LINE = re.compile(r"^\s*(합계 — |합계 제안 |탈락|\S[^:]*: \d+$|미포함 정리)")
 
 
 def summary_of(logs):

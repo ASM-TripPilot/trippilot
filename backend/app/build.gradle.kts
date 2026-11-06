@@ -97,6 +97,12 @@ tasks.named<Test>("test") {
         rootProject.file("../deploy/eks/runtime_secrets.py"),
         rootProject.file("scripts/ingest_pois.py"),
     ).withPropertyName("배선통로파일").withPathSensitivity(PathSensitivity.RELATIVE)
+    // `PoiProposalRealDocumentIT` 가 읽는 실문서 — 같은 이유다. 문서만 바뀐 PR 에서 계약 IT 가 안 돌았다
+    // (실측 2026-11-07: 지역 문서만 고쳐도 `:app:test UP-TO-DATE`, 397ms).
+    inputs.files(
+        rootProject.file("../ai/data/collected_pois.json"),
+        rootProject.file("../ai/data/collected_pois_regions.json"),
+    ).withPropertyName("실문서").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // 합산 리포트는 기본이 HTML 뿐이다 — 하한선 스크립트(scripts/coverage_gate.py)가 읽을 XML 을 켠다.
