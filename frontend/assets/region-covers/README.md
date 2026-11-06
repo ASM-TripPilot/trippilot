@@ -4,7 +4,7 @@ AI(`gpt-image-2.5-sunburst`)로 만든 수묵담채풍 일러스트 115장. 여�
 
 > **연결됨(서울·부산·제주):** `src/entities/trip/config/regionCovers.ts`(코드→이미지 매핑)와 `lib/regionCover.ts`(`pickRegionCover`)가 이 폴더의 `covers/` 46장을 `TripCard`(일정 목록)와 홈 여행 히어로에 싣는다. `hero/` 3장은 홈 히어로 도시 카드(서울·부산·제주, `src/pages/home/model/homeFixtures.ts`, TRIP-1432)가 쓴다. `placeholder/` 2장은 아직 안 쓴다 — 숙소/장소 빈 이미지는 후속.
 >
-> **아직 안 연결됨(강원·경북·경남):** 2026-11-06 에 `covers/` 61장(시도 3 + 시군 58)과 `hero/` 3장을 더했다. 앱이 이 세 곳을 서비스 지역으로 열지 않아 `regionCovers.ts`·`homeFixtures.ts` 에는 올리지 않았다 — 지금은 코드가 없어 번들되지 않는다(static `require` 만 번들). 지역을 열 때 `regionCovers.ts` 에 한 줄씩 더하면 된다.
+> **아직 안 연결됨(강원·경북·경남):** 2026-11-06 에 `covers/` 61장(시도 3 + 시군 58)과 `hero/` 3장을 더했다. 앱이 이 세 곳을 서비스 지역으로 열지 않아 `regionCovers.ts`·`homeFixtures.ts` 에는 올리지 않았다 — 지금은 코드가 없어 번들되지 않는다(static `require` 만 번들). 지역을 열 때 `regionCovers.ts` 에 한 줄씩 더하고, 그 키들의 이름표를 `index-gw-gb-gn.json` 에서 `index.json` 으로 옮긴다(키 집합이 어긋나면 `regionCover.test` 가 red). 이름표를 `index.json` 에 먼저 넣으면 연결하지 않은 채 그 테스트가 깨진다.
 
 ## 구성 (115파일 · 약 9.7MB)
 
@@ -13,7 +13,8 @@ AI(`gpt-image-2.5-sunburst`)로 만든 수묵담채풍 일러스트 115장. 여�
 | `covers/` | 107 | 3:2, 738×492 WebP q75 | 지역 코드 — 시도 `11`·`26`·`50`·`47`·`48`·`51`, 시군구 `11680` 등 (서울 25 · 부산 16 · 제주 2 · 강원 18 · 경북 22 · 경남 18) |
 | `hero/` | 6 | 6:7 세로, 1024×1195 WebP q80 | 시도 코드 `11`·`26`·`50`·`51`·`47`·`48` — 홈 히어로 도시 카드(TRIP-1432) |
 | `placeholder/` | 2 | 3:2 WebP q75 | `stay`·`place` — 숙소·장소 공용 폴백 |
-| `index.json` | | | 코드 → 지역 이름 |
+| `index.json` | | | 코드 → 지역 이름 — **앱에 연결된 지역만**(서울·부산·제주). `regionCover.test` 가 이 파일의 키가 `REGION_COVERS` 와 같음을 강제한다 |
+| `index-gw-gb-gn.json` | | | 강원·경북·경남 이름표(covers 61 · hero 3) — 아직 연결 전이라 따로 둔다 |
 
 코드는 서버 `GET /regions` 의 `regionCode`(법정동코드 기반)와 같다. 같은 이름(서울 중구·부산 중구 등)을 코드로 구분한다. **강원은 `51`**(강원특별자치도, 2023~) — 옛 코드 `42` 가 아니다. `covers/` 의 시군은 서버 카탈로그에서 선택 가능한 것만 만들었다 — 포항시·창원시는 시 하나(`47110`·`48120`)이고 구 단위(`47111` 등)는 없다.
 
