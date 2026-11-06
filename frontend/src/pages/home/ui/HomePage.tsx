@@ -281,9 +281,10 @@ export function HomePage() {
 
   const nav: HomeNav = {
     // 새 여행 진입 — 직전 여행 드래프트를 이동 전에 비운다(TRIP-1012 #074).
-    onPressCreateTrip: () => {
+    // TRIP-1775 — 창을 연다: 둘째 탭이 위저드를 한 번 더 쌓지 않는다.
+    onPressCreateTrip: guardPress(() => {
       openNewTripWizard(router);
-    },
+    }),
     onPressSavedPlaces: () => {
       setSavedMenuOpen(false);
       router.push('/explore/saved-places');

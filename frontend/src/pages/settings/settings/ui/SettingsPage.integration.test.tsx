@@ -38,6 +38,7 @@ import { clearTokens, getTokens, saveTokens } from '@/shared/storage';
 import { registerPushToken } from '@/shared/push';
 import { primeExpoToken, primeOsPermission } from '@/test-support/pushOsFake';
 import { routerSpies } from '@/test-support/expoRouterMock';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import Constants from 'expo-constants';
 
 /**
@@ -121,6 +122,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => {
   mockPush.mockReset();
   mockReplace.mockReset();
+  resetPressGuard();
   installHookSwitch();
 });
 afterEach(() => {
@@ -370,11 +372,17 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
       const { back: mockBack } = routerSpies;
       mockBack.mockReset();
 
-      fireEvent.press(screen.getByTestId('settings-nav-preferences'));
-      fireEvent.press(screen.getByTestId('settings-nav-personalization'));
-      fireEvent.press(screen.getByTestId('settings-nav-notifications'));
-      fireEvent.press(screen.getByTestId('settings-nav-terms-PRIVACY_POLICY'));
-      fireEvent.press(screen.getByTestId('settings-back'));
+      // 연타 창(400ms)은 모듈 전역 하나라 이어 누르면 첫 누름만 간다(TRIP-1775) — 누름마다 창을 닫고 누른다.
+      for (const testID of [
+        'settings-nav-preferences',
+        'settings-nav-personalization',
+        'settings-nav-notifications',
+        'settings-nav-terms-PRIVACY_POLICY',
+        'settings-back',
+      ]) {
+        resetPressGuard();
+        fireEvent.press(screen.getByTestId(testID));
+      }
 
       expect(mockPush.mock.calls).toEqual([
         ['/settings/preferences'],
@@ -384,6 +392,26 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
       ]);
       expect(mockBack).toHaveBeenCalledTimes(1);
     });
+
+    // TRIP-1775 — 행을 빠르게 두 번 눌러도 화면은 한 번만 쌓인다.
+    it.each([
+      ['위치', 'settings-nav-location-consent', '/settings/location'],
+      ['알림', 'settings-nav-notifications', '/settings/notifications'],
+      ['약관', 'settings-nav-terms-PRIVACY_POLICY', '/terms/PRIVACY_POLICY'],
+      ['취향', 'settings-nav-preferences', '/settings/preferences'],
+      ['개인화', 'settings-nav-personalization', '/settings/personalization'],
+    ])(
+      '%s 행을 빠르게 두 번 눌러도 한 번만 이동한다',
+      async (_name, testID, href) => {
+        await renderReady();
+        const row = screen.getByTestId(testID);
+
+        fireEvent.press(row);
+        fireEvent.press(row);
+
+        expect(mockPush.mock.calls).toEqual([[href]]);
+      }
+    );
 
     it('맨 아래 버전 줄 다음에 출처 세 줄이 오고, OSM 줄만 저작권 페이지를 연다', async () => {
       appConfig.version = '1.0.0';

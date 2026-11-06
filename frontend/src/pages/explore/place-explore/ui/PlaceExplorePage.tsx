@@ -227,10 +227,10 @@ export function PlaceExplorePage(): ReactElement {
         onChangeSearchText={handleChangeSearchText}
         onToggleSave={handleToggleSave}
         onPressCard={handlePressCard}
-        onPressCreateTrip={() => {
-          // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
+        onPressCreateTrip={guardPress(() => {
+          // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074). 연타는 한 번만(TRIP-1775).
           openNewTripWizard(router);
-        }}
+        })}
         hideCreateTrip={fromWizard}
         onPressSavedPlaces={() =>
           // 위저드 출처면 바로 아래가 d02 select 다 — save 모드를 새로 열면 그 CTA 가 드래프트를

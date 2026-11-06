@@ -658,6 +658,17 @@ describe('진입점 — 누르면 어디로 가나', () => {
     expect(draftAtPush()).toEqual(freshWizardDraft());
   });
 
+  // TRIP-1775 — 창 안의 둘째 탭은 위저드를 한 번 더 쌓지 않는다.
+  it('＋ 여행 만들기 FAB 를 빠르게 두 번 눌러도 step1 은 한 번만 쌓인다', () => {
+    render(<HomePage />);
+    const fab = screen.getByTestId('home-create-trip-fab');
+
+    fireEvent.press(fab);
+    fireEvent.press(fab);
+
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+  });
+
   it('하트 FAB 를 펼치고 담은 장소 미니 FAB 를 누르면 담은 장소로 간다(펼치기는 push 안 함)', () => {
     render(<HomePage />);
 

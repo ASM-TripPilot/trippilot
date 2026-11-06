@@ -58,8 +58,9 @@ const NICKNAME_SAVED_TOAST = '닉네임을 바꿨어요';
  * 로 바꾸면 그 파일이 깨진다.
  * TRIP-1770 재측정: `import { router } from 'expo-router'` 로 바꿔도 settings 테스트는 전부 green 이다 — 남은 근거는 테스트가
  * 아니라 린트다. 정적 `router.push` 가 되면 TRIP-1013 규칙(`guardPress` 없는 인라인 이동 금지)이 아래 행 이동 5곳을 error 로
- * 잡는다(지금은 `loadRouter()` 호출이라 그 규칙의 사각). 그 5곳은 실제로 연타 가드가 없어 두 번 누르면 두 번 쌓인다 — 가드를
- * 넣는 건 동작 변경이라 정리 칸(TRIP-1770) 밖이고, 정적 import 전환과 같이 후속 티켓에서 한다.
+ * 잡는다(지금은 `loadRouter()` 호출이라 그 규칙의 사각).
+ * TRIP-1775: 그 5곳은 `guardPress` 로 직접 감쌌다. 린트가 `loadRouter()?.push` 는 안 보니 새 행을 더할 때도 직접 감싸야 한다
+ * (정적 import 전환은 동작 변경이라 아직 안 했다).
  */
 function loadRouter(): typeof import('expo-router').router | null {
   try {
@@ -346,14 +347,22 @@ export function SettingsPage(): ReactElement {
       onPressExport={() => void runExport()}
       onPressDeleteAccount={() => postDeletion.mutate()}
       onPressCancelDeletion={() => cancelDeletion.mutate()}
-      onPressLocation={() => loadRouter()?.push('/settings/location')}
-      onPressNotifications={() => loadRouter()?.push('/settings/notifications')}
-      onPressTerms={(termsType) => loadRouter()?.push(`/terms/${termsType}`)}
+      onPressLocation={guardPress(() =>
+        loadRouter()?.push('/settings/location')
+      )}
+      onPressNotifications={guardPress(() =>
+        loadRouter()?.push('/settings/notifications')
+      )}
+      onPressTerms={guardPress((termsType) =>
+        loadRouter()?.push(`/terms/${termsType}`)
+      )}
       onPressLogout={() => void runLogout()}
-      onPressPreferences={() => loadRouter()?.push('/settings/preferences')}
-      onPressPersonalization={() =>
+      onPressPreferences={guardPress(() =>
+        loadRouter()?.push('/settings/preferences')
+      )}
+      onPressPersonalization={guardPress(() =>
         loadRouter()?.push('/settings/personalization')
-      }
+      )}
       affiliateNoticeOn={dismissed === undefined ? null : !dismissed}
       affiliateNoticeError={affiliateNoticeError}
       onToggleAffiliateNotice={() => {
