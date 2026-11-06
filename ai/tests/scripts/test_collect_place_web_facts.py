@@ -271,3 +271,16 @@ def test_thinking_low_is_the_default_and_raises_the_output_cap(monkeypatch) -> N
     assert c.THINKING == "low"  # 11-02 시험: 지시문을 조이고 effort low — 근거 없음 4%·지원 90%(사고 끔은 지원 81%)
     c.ask_claude(_Client(), "질문")
     assert seen[0]["output_config"] == {"effort": "low"} and "thinking" not in seen[0] and seen[0]["max_tokens"] == 8000
+
+
+def test_검색_결과_태그_모음_페이지는_근거가_아니다() -> None:
+    """여러 가게가 섞인 목록은 그 장소의 근거가 아니다 — 11-06 표본 40건 중 polle 태그 페이지가 다른 가게 얘기였다.
+    장소 전용 페이지는 질의 문자열이 붙어도 남는다(bluer `/restaurants/…?query=`, 114 `/search/detail?comp_id=`)."""
+    listing = ["https://www.diningcode.com/list.dc?query=안국동+점심", "https://polle.com/posts/tag/닭도리탕",
+               "https://www.siksinhot.com/search?keywords=종로", "https://www.siksinhot.com/toplist/123",
+               "https://www.daangn.com/kr/search/local-profile/?q=종로", "https://www.albamon.com/total-search?keyword=x",
+               "https://korea.beautihost.com/seoul/search/?q=sujeong", "https://bizno.net/?query=마작골"]
+    detail = ["https://www.bluer.co.kr/restaurants/12530?query=&foodType=",
+              "https://www.114.co.kr/search/detail?comp_id=654490", "https://guide.michelin.com/kr/ko/seoul/restaurant/muoki"]
+    rec = _rec(*[(f"사실 {i}", u, None) for i, u in enumerate(listing + detail)], cites=listing + detail)
+    assert [f["url"] for f in c.clean_facts(rec)] == detail
