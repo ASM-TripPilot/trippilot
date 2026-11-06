@@ -169,13 +169,16 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
           (day) => day.date === added.date
         )?.slots;
         if (hasUnsavedEdits) {
-          added.slots.forEach((slot, i) =>
+          added.slots.forEach((slot, i) => {
+            // 끼운 자리의 응답 슬롯을 쓴다(장소 순서는 요청과 같다 — comparePlaceAdd 와 같은 규칙). poiId 로 찾으면 그날 이미 있는
+            // 같은 장소의 옛 시각이 들어가 고른 시각이 사라진다(TRIP-1804). 자리가 어긋나면 고른 시각 그대로.
+            const placed = responseSlots?.[added.addedIndex + i];
             draft.insertSlot(
               added.date,
-              responseSlots?.find((one) => one.poiId === slot.poiId) ?? slot,
+              placed?.poiId === slot.poiId ? placed : slot,
               added.insertAt === undefined ? undefined : added.insertAt + i
-            )
-          );
+            );
+          });
         }
         // 서버가 이동을 반영해 시각을 밀었으면 응답 시각 그대로 말한다(INV-2). 응답엔 "밀었다" 필드가 없어
         // 요청과 같은 자리의 슬롯을 견준다(BR-U3-13·14 §3 개정 — 장소·순서는 요청 그대로일 때만 repair 를 쓴다).

@@ -478,7 +478,10 @@ export function EditorView({
               <NestableDraggableFlatList
                 testID="itinerary-edit-list"
                 data={slots}
-                keyExtractor={(item) => `card-${item.poiId}-${dragEpoch}`}
+                // 같은 날 같은 장소가 둘일 수 있어(TRIP-1804) 앞선 같은 장소 수를 붙인다 — 라이브러리가 이 키로 카드 자리를 잰다.
+                keyExtractor={(item, index) =>
+                  `card-${item.poiId}-${slots.slice(0, index).filter((one) => one.poiId === item.poiId).length}-${dragEpoch}`
+                }
                 renderItem={renderItem}
                 // 끌던 카드가 목록 밖(하단 삭제 영역)까지 손가락을 따라가게 한다 — 기본은 목록 경계에 묶여 영역에 못 닿는다.
                 dragItemOverflow
