@@ -8,16 +8,25 @@ import {
 import { resolvePhotoUri } from '@/shared/photo';
 import { getInstallId } from '@/shared/storage';
 
+import { failedUnlessNotFound } from './failedUnlessNotFound';
+
 /**
  * TRIP-1444 · j03 회고 사진 칸 — 그 날 방문들의 사진 메타를 모아 **이 기기 앨범**에서 주소를 꺼낸다.
  * 서버엔 사진 파일이 없고 메타(localAssetId·deviceId)뿐이라 URL 은 앞으로도 안 온다. j01
  * `VisitRecordCardContainer` 와 같은 쿼리 키(photos · photo-uri)를 써서 캐시를 공유한다.
  * 다른 기기 사진·앨범에서 못 찾은 사진은 조용히 뺀다(회고 격자는 빈 칸을 그리지 않는다).
+ * TRIP-1757 — 단 방문별 **사진 목록 GET** 이 404 아닌 이유로 실패한 것은 조용히 빼지 않고 `photoLoadFailed` 로 알린다
+ * (`retryPhotoLoad` 는 실패한 방문의 목록만 다시 부른다). 반환은 배열에서 객체로 바뀌었다. 방문 GET 자체의 실패는 `useMagazineSources` 소관.
  */
 export function useReflectionPhotos(
   tripId: string,
   date: string
-): { uri: string; poiId: string }[] {
+): {
+  photos: { uri: string; poiId: string }[];
+  photoLoadFailed: boolean;
+  photoLoadRetrying: boolean;
+  retryPhotoLoad: () => void;
+} {
   const visits = useGetTripsTripIdVisitsDaysDay(tripId, date, {
     query: { enabled: tripId !== '' && date !== '' },
   });
@@ -58,7 +67,16 @@ export function useReflectionPhotos(
       staleTime: Infinity,
     })),
   });
-  return uris.flatMap((q, i) =>
+  const photos = uris.flatMap((q, i) =>
     q.data ? [{ uri: q.data, poiId: mine[i].poiId }] : []
   );
+  const failed = lists.filter(failedUnlessNotFound);
+  return {
+    photos,
+    photoLoadFailed: failed.length > 0,
+    photoLoadRetrying: failed.some((q) => q.isFetching),
+    retryPhotoLoad: () => {
+      for (const q of failed) void q.refetch();
+    },
+  };
 }

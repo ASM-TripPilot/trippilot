@@ -35,9 +35,11 @@ export {
   WalkGlyph,
 } from './PlaceGlyphs';
 export {
+  MoreDotsGlyph,
   NoteGlyph,
   SearchGlyph,
   SummaryChartGlyph,
   TrashGlyph,
+  UndoGlyph,
 } from './ActionGlyphs';
 export { HeartStrokeFilledGlyph, HeartStrokeOutlineGlyph } from './HeartGlyphs';

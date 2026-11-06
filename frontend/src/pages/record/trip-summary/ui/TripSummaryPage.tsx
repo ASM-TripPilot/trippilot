@@ -25,6 +25,8 @@ import {
   useTripRoutes,
 } from '@/shared/location';
 import { seoulDate } from '@/shared/lib/seoulDate';
+import { guardPress } from '@/shared/lib/pressGuard';
+import { canResolveDevicePhotos } from '@/shared/photo';
 import { RecordNavBar } from '@/widgets/bottom-nav-bar';
 
 /**
@@ -179,6 +181,12 @@ export function TripSummaryPage({
       onShare={
         isShareCaptureArmed()
           ? () => router.push(`/trips/${tripId}/records/share`)
+          : undefined
+      }
+      // TRIP-1798 — 사진이 1장 이상이고 이 빌드가 기기 앨범을 풀 수 있을 때만(웹은 주소가 늘 null 이라 앨범이 늘 빈다).
+      onPressAlbum={
+        canResolveDevicePhotos() && data.stats.totalPhotos > 0
+          ? guardPress(() => router.push(`/trips/${tripId}/records/album`))
           : undefined
       }
       // 번호는 여행 기간 기준(1-기반, j03 탭과 같다) — `highlight.dayOrder` 는 기록 있는 날 순번이라 쓰지 않는다.

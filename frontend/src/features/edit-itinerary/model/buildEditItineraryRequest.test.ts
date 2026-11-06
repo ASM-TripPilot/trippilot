@@ -146,3 +146,37 @@ describe('🔴 P4 · AC1 — 배열 순서 = 슬롯 순서 · 다일자 · date 
     expect(out.days[1].slots.map((s) => s.poiId)).toEqual(['d']);
   });
 });
+
+/**
+ * TRIP-1793 · 다른 날로 옮긴 슬롯의 저장 요청 (AC-2) — **선제 green 회귀 그물**.
+ *
+ * 옮김 표식(`movedFromDate`)은 편집 초안 안의 꼬리표라 서버로 나가면 안 된다. 요청 조립이 지금처럼 5필드만 골라 싣는 한
+ * 구조적으로 안 나가는데, 누가 "슬롯을 통째로 펼쳐(`...slot`) 싣는" 식으로 바꾸면 tsc 는 구조적 타이핑이라 못 잡고
+ * 표식이 서버로 샌다. 그 변경을 여기서 잡는다.
+ */
+describe('🔴 MV-R1 · TRIP-1793 AC-2 — 옮긴 슬롯은 대상 날에 startAt 과 함께 실리고 표식은 요청에 없다', () => {
+  it('2일차에 들어간 b 는 5필드만, 1일차 요청에는 b 가 없고, 직렬화 문자열에 moved 가 없다', () => {
+    // 2일차 마지막에 15:00 으로 옮겨진 b — 표식이 달려 있다.
+    const moved = {
+      ...richSlot({
+        poiId: 'b',
+        startAt: '15:00:00',
+        endAt: '16:00:00',
+      }),
+      movedFromDate: '2026-06-10',
+    } as ItineraryDaysItemSlotsItem;
+    const days: ItineraryDaysItem[] = [
+      { date: '2026-06-10', slots: [richSlot({ poiId: 'a' })] },
+      { date: '2026-06-11', slots: [richSlot({ poiId: 'd' }), moved] },
+    ];
+
+    const out = buildEditItineraryRequest(days);
+
+    expect(out.days[0].slots.map((s) => s.poiId)).toEqual(['a']);
+    expect(out.days[1].slots.map((s) => s.poiId)).toEqual(['d', 'b']);
+    const sent = out.days[1].slots[1];
+    expect(sent.startAt).toBe('15:00:00');
+    expect(Object.keys(sent).sort()).toEqual(REQUEST_KEYS);
+    expect(JSON.stringify(out)).not.toContain('moved');
+  });
+});

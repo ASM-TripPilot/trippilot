@@ -12,6 +12,8 @@ const ON_PRIMARY = COLOR_TOKENS['on-primary'];
 // d02 select 미선택 체크 링 색(Figma MISS `#d0d0d0` — 토큰 없음, `*Glyphs.tsx` raw-hex 스캔 제외).
 // eslint-disable-next-line trippilot/no-raw-hex -- Figma raw stroke(비활성 링), 토큰 없음
 const DISABLED_RING = '#D0D0D0';
+// d02 select 체크 틱 — 채움·미선택 두 글리프가 같은 경로를 쓴다(TRIP-1796).
+const CHECK_TICK_D = 'M7.5 12.3l3 3 6-6.6';
 
 type GlyphProps = {
   size?: number;
@@ -80,6 +82,34 @@ export function ExploreShareGlyph({ size = 20, testID }: GlyphProps) {
         stroke={INK}
         strokeWidth={1.8}
         strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+/** d06 주소 행 복사 — 겹친 사각 둘(TRIP-1799, Figma `5227:4395` copy 에셋 path 그대로 · 20 박스, muted stroke). */
+export function ExploreCopyGlyph({ size = 20, testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <Path
+        d="M8.33333 6.66667H16.6667C17.5871 6.66667 18.3333 7.41286 18.3333 8.33333V16.6667C18.3333 17.5871 17.5871 18.3333 16.6667 18.3333H8.33333C7.41286 18.3333 6.66667 17.5871 6.66667 16.6667V8.33333C6.66667 7.41286 7.41286 6.66667 8.33333 6.66667Z"
+        stroke={MUTED}
+        strokeWidth={1.66667}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3.33333 13.3333C2.41667 13.3333 1.66667 12.5833 1.66667 11.6667V3.33333C1.66667 2.41667 2.41667 1.66667 3.33333 1.66667H11.6667C12.5833 1.66667 13.3333 2.41667 13.3333 3.33333"
+        stroke={MUTED}
+        strokeWidth={1.66667}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );
@@ -163,7 +193,7 @@ export function CheckCircleFilledGlyph({ size = 24, testID }: GlyphProps) {
     >
       <Circle cx={12} cy={12} r={11} fill={PRIMARY} />
       <Path
-        d="M7.5 12.3l3 3 6-6.6"
+        d={CHECK_TICK_D}
         stroke={ON_PRIMARY}
         strokeWidth={2}
         strokeLinecap="round"
@@ -173,8 +203,8 @@ export function CheckCircleFilledGlyph({ size = 24, testID }: GlyphProps) {
   );
 }
 
-/** d02 select 미선택 체크 — 흰 배경 + 회색 빈 원. 채움(`CheckCircleFilledGlyph`)과 다른 컴포넌트다
- * (위 함정 참고). 링 색 `#d0d0d0` 은 토큰 밖 raw 지만 `*Glyphs.tsx` 는 raw-hex 스캔 제외라 허용된다. */
+/** d02 select 미선택 체크 — 회색 원 + 옅은 회색 체크 틱(고를 수 있는 칸임을 보이게, TRIP-1796).
+ * 채움(`CheckCircleFilledGlyph`)과 다른 컴포넌트다(위 함정 참고). 틱 경로는 채움과 같다. */
 export function CheckCircleOutlineGlyph({ size = 24, testID }: GlyphProps) {
   return (
     <Svg
@@ -190,6 +220,13 @@ export function CheckCircleOutlineGlyph({ size = 24, testID }: GlyphProps) {
         r={10.2}
         stroke={DISABLED_RING}
         strokeWidth={1.6}
+      />
+      <Path
+        d={CHECK_TICK_D}
+        stroke={MUTED_SOFT}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );

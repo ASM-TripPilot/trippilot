@@ -41,7 +41,7 @@ import {
   StepperPlusGlyph,
 } from '@/features/trip/index.view';
 
-import { StepperButton } from './StepperButton';
+import { StepperButton } from '@/widgets/trip-edit-sheets';
 
 export interface DestinationEditSheetProps {
   /** 각 행 렌더 소스(스토어 `destinations` 그대로). */

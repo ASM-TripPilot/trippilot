@@ -2,6 +2,8 @@
 paths:
   - "src/features/trip/**"
   - "src/pages/trip/trip-new-*/**"
+  - "src/pages/trip/trip-settings/**"
+  - "src/widgets/trip-edit-sheets/**"
   - "app/trips/**"
   - "src/features/create-trip/**"
   - "src/features/assign-trip-base/**"
@@ -22,3 +24,9 @@ paths:
 
 ## 예산 등급 (g01)
 
+
+## 여행 설정 (g03, TRIP-1787)
+
+- **저장·삭제 성공의 캐시 갱신(목록 무효화·단건 쓰기)은 훅 옵션 `onSuccess`(`context.client`)에 있다 — `mutate(vars, { onSuccess })` 호출별 콜백에 두면 응답 전 뒤로 간 화면에서 건너뛰어 목록이 낡는다** → 5-b 가 이 페이지에서 또 잡았다(`traps-itinerary` GeneratingPage 와 같은 함정인데 그 파일은 이 경로에서 안 로드된다). 화면 이동·토스트만 호출별 콜백에 둔다. 지키는 것은 TripSettingsPage unmount 테스트 2건뿐이다.
+- **일과 시간을 바꿔도 이미 만든 일정은 다시 계산되지 않고 그 사실을 알리는 안내도 없다** → 서버에 "매일 끝" 필드가 없어 행은 「하루 시작 ~ 21:00」 고정 표기다. Figma 에 안내 프레임이 없어 의도적 공백이다.
+- **끝난 여행 잠금은 `trip.status==='ENDED'` 다 — `classifyTripPhase` 로 바꾸지 마라**(날짜 지난 작성 중은 draft 라 저장이 열린 채 서버 409 를 맞는다).

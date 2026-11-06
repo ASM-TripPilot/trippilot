@@ -12,6 +12,7 @@ import {
   basicNarrative,
   resolveDisplayNarrative,
 } from '../model/reflectionFallback';
+import { failedUnlessNotFound } from '../model/failedUnlessNotFound';
 import { statsCard } from '../model/statsCard';
 import { useDailyReflection } from '../model/useDailyReflection';
 import { useMagazineSources } from '../model/useMagazineSources';
@@ -60,6 +61,10 @@ import { showToast } from '@/shared/ui/Toast';
  *
  * TRIP-1665 · 매거진 — 표시본·그날 방문·일정 슬롯·즉석 이름·기기 사진을 `buildMagazineVM` 한 번에 모아 화면에 넘긴다.
  * 방문·일정 조회(`useMagazineSources`)는 얼굴 판정에 끼지 않는다 — 실패해도 오류 얼굴로 떨어지지 않고 동선 이름만 접힌다.
+ *
+ * TRIP-1757 · 곁들이 조회 셋(여행·그날 방문·방문별 사진)이 404 아닌 이유로 실패하면 조용히 접히던(칩 줄 사라짐·"방문 없음"·사진 빠짐) 것을
+ * 화면 한 줄(`reflection-daily-partial-error`) + [다시 시도]로 말한다(INV-4). [다시 시도]는 실패한 쿼리만 다시 부른다. 일정 조회 실패는 줄을 만들지
+ * 않는다(분류 1 — "N번째 장소" 폴백 그대로).
  */
 
 export interface DailyReflectionPageProps {
@@ -99,11 +104,13 @@ export function DailyReflectionPage({
 }: DailyReflectionPageProps): ReactElement {
   const daily = useDailyReflection(tripId, date);
   const res = daily.reflection;
-  const photos = useReflectionPhotos(tripId, date);
+  const { photos, photoLoadFailed, photoLoadRetrying, retryPhotoLoad } =
+    useReflectionPhotos(tripId, date);
   const sources = useMagazineSources(tripId, date);
 
   // 여행 기간에서 일차 탭을 조립한다(TRIP-762). 회고 계약엔 일차 소스가 없어 여행 조회로 얻는다.
   const trip = useGetTripsTripId(tripId);
+  const tripFailed = failedUnlessNotFound(trip);
   const startDate = trip.data?.startDate;
   const endDate = trip.data?.endDate;
   const activeDay =
@@ -223,6 +230,21 @@ export function DailyReflectionPage({
     else daily.refetch();
   };
 
+  const partialError =
+    tripFailed || sources.visitsLoadFailed || photoLoadFailed
+      ? {
+          retrying:
+            (tripFailed && trip.isFetching) ||
+            sources.visitsRetrying ||
+            photoLoadRetrying,
+          onRetry: () => {
+            if (tripFailed) void trip.refetch();
+            if (sources.visitsLoadFailed) sources.retryVisits();
+            if (photoLoadFailed) retryPhotoLoad();
+          },
+        }
+      : undefined;
+
   return (
     <DailyReflectionScreen
       face={face}
@@ -244,6 +266,7 @@ export function DailyReflectionPage({
         );
       }}
       recordBar={recordBar}
+      partialError={partialError}
       mood={res?.mood}
       shortMemo={res?.shortMemo}
       onChangeMood={daily.saveMood}

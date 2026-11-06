@@ -34,4 +34,5 @@ export { pickRegionCover } from './lib/regionCover';
 export { SERVICE_REGIONS } from './config/serviceRegions';
 export { PastTripRow } from './ui/PastTripRow';
 export { TripCard } from './ui/TripCard';
+export { TripDeleteDialog } from './ui/TripDeleteDialog';
 export {} from './ui/TripGlyphs';

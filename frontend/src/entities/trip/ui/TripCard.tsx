@@ -1,6 +1,10 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { TrashGlyph, ChevronRightGlyph } from '@/shared/ui/glyphs';
+import {
+  TrashGlyph,
+  ChevronRightGlyph,
+  MoreDotsGlyph,
+} from '@/shared/ui/glyphs';
 import { Image } from '@/shared/ui/Image';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -10,7 +14,7 @@ import {
   COVER_START,
 } from '../config/coverGradients';
 
-import { MoreDotsGlyph } from './TripGlyphs';
+import { TripGearGlyph, PushpinGlyph } from './TripGlyphs';
 import type { MyTripCardVM } from '../model';
 import { COLOR_TOKENS } from '@/shared/config';
 
@@ -35,11 +39,21 @@ export interface TripCardProps {
   onPress: () => void;
   onResume?: () => void;
   testIDPrefix: string;
-  /** TRIP-1055 · 주어지면 ⋯ 버튼을 그린다(삭제 가능 판정은 소비처 몫). */
+  /** TRIP-1055 · 주어지면 메뉴에 「삭제」 항목을 그린다(삭제 가능 판정은 소비처 몫). */
   onPressDelete?: () => void;
   /** 메뉴 열림 — 카드는 상태를 갖지 않아 소비처가 쥔다. */
   menuOpen?: boolean;
+  /** TRIP-1786 · 주어지면 ⋯ 버튼을 그린다(삭제 콜백과 무관 — 항목은 각자 자기 콜백이 있을 때만 뜬다). */
   onPressMenu?: () => void;
+  /** TRIP-1786 · 「여행 설정」 항목. */
+  onPressSettings?: () => void;
+  /** TRIP-1786 · 「맨 위에 고정」(pinned 면 「고정 해제」) 항목. 고정 상태·저장은 소비처가 쥔다. */
+  onTogglePin?: () => void;
+  pinned?: boolean;
+  /** 고정 목록을 아직 못 읽었을 때 — 항목을 막는다(눌러도 콜백 0). */
+  pinDisabled?: boolean;
+  /** TRIP-1785 · 주어지면 상태문(extra) 자리에 「기록 보기 ›」 링크를 그린다(extra 는 그리지 않는다). 지난 여행 판정은 소비처 몫. */
+  onPressRecords?: () => void;
 }
 
 const BADGE_LABEL: Record<'done' | 'draft' | 'live', string> = {
@@ -63,6 +77,12 @@ const COVER_SCRIM_END = { x: 0, y: 0.6 } as const;
 
 const RESUME_LABEL = '일정 이어서 짜기';
 const MENU_DELETE_LABEL = '삭제';
+const MENU_SETTINGS_LABEL = '여행 설정';
+const MENU_PIN_LABEL = '맨 위에 고정';
+const MENU_UNPIN_LABEL = '고정 해제';
+const PINNED_LABEL = '고정';
+const PIN_DISABLED_STYLE = { opacity: 0.4 } as const;
+const RECORDS_LABEL = '기록 보기';
 
 /** Figma 4682:2573 — ⋯ 버튼 drop 0,2,10 · 6% / 메뉴 drop 0,4,16 · 8%. */
 const MORE_SHADOW = {
@@ -88,6 +108,11 @@ export function TripCard({
   onPressDelete,
   menuOpen = false,
   onPressMenu,
+  onPressSettings,
+  onTogglePin,
+  pinned = false,
+  pinDisabled = false,
+  onPressRecords,
 }: TripCardProps): ReactElement {
   const {
     tripId,
@@ -102,7 +127,7 @@ export function TripCard({
     coverTone = 'upcoming',
   } = vm;
   const city = coverCity?.trim() ? coverCity.trim() : null;
-  const showMore = onPressDelete !== undefined;
+  const showMore = onPressMenu !== undefined;
   const showMenu = showMore && menuOpen;
 
   // TRIP-788 · resume 는 배지와 독립(AC-5 seam) — 명시 신호가 오면 그것, 없으면 기존 배지 파생 폴백.
@@ -164,8 +189,19 @@ export function TripCard({
             ) : null}
           </>
         )}
-        {/* 우상단 줄 — [배지][⋯](Figma topRight, gap 8). testID 없음(TC7 host testID 수 보호). */}
+        {/* 우상단 줄 — [고정][배지][⋯](Figma topRight, gap 8). testID 없음(TC7 host testID 수 보호). */}
         <View className="absolute right-[14px] top-[14px] flex-row items-center gap-sm">
+          {pinned ? (
+            <View
+              testID={`${testIDPrefix}-pinned-${tripId}`}
+              className="flex-row items-center gap-[2px] rounded-pill bg-canvas px-sm py-[3px]"
+            >
+              <PushpinGlyph size={12} />
+              <Text className="font-noto-bold text-label font-bold text-ink">
+                {PINNED_LABEL}
+              </Text>
+            </View>
+          ) : null}
           {badge !== null ? (
             <View
               testID={`${testIDPrefix}-badge-${tripId}`}
@@ -199,27 +235,6 @@ export function TripCard({
           ) : null}
         </View>
 
-        {/* 팝오버 — ⋯ 아래 3px(14+36+3), 오른쪽 끝 맞춤. 사진 자리(178) 안에 들어가 카드 overflow 에 안 잘린다. */}
-        {showMenu ? (
-          <View
-            testID={`${testIDPrefix}-menu-panel-${tripId}`}
-            style={MENU_SHADOW}
-            className="absolute right-[14px] top-[53px] w-[160px] rounded-button border border-hairline bg-canvas py-xs"
-          >
-            <Pressable
-              testID={`${testIDPrefix}-menu-delete-${tripId}`}
-              accessibilityRole="button"
-              onPress={onPressDelete}
-              className="h-[44px] flex-row items-center gap-sm px-lg"
-            >
-              <TrashGlyph size={18} color="primary" />
-              <Text className="font-noto text-body text-primary">
-                {MENU_DELETE_LABEL}
-              </Text>
-            </Pressable>
-          </View>
-        ) : null}
-
         {showResume ? (
           <Pressable
             testID={`${testIDPrefix}-resume-${tripId}`}
@@ -251,7 +266,21 @@ export function TripCard({
         >
           {metaLine}
         </Text>
-        {extra !== null ? (
+        {onPressRecords !== undefined ? (
+          // 보이는 높이 18 + hitSlop 13×2 = 44 터치. 카드 onPress 로 새지 않게 자식 Pressable 이 자기 onPress 를 쥔다.
+          <Pressable
+            testID={`${testIDPrefix}-records-link-${tripId}`}
+            accessibilityRole="button"
+            onPress={onPressRecords}
+            hitSlop={{ top: 13, bottom: 13 }}
+            className="flex-row items-center gap-[2px] self-start"
+          >
+            <Text className="font-noto-bold text-label font-bold text-primary-text">
+              {RECORDS_LABEL}
+            </Text>
+            <ChevronRightGlyph size={14} color="primaryText" />
+          </Pressable>
+        ) : extra !== null ? (
           <Text
             testID={`${testIDPrefix}-extra-${tripId}`}
             numberOfLines={1}
@@ -263,6 +292,67 @@ export function TripCard({
           </Text>
         ) : null}
       </View>
+
+      {/* 팝오버 — ⋯ 아래 3px(14+36+3), 오른쪽 끝 맞춤. 사진 자리(h178, overflow-hidden)의 자식이 아니라 카드 루트의 자식이다:
+          항목이 셋이면 높이가 151 이라 53+151=204 > 178 로 사진 상자에 「삭제」 행이 잘린다. 루트 높이는 사진+정보로 ≈270 이라 안에 든다.
+          형제 중 마지막이라 정보 영역 위에 얹힌다. */}
+      {showMenu ? (
+        <View
+          testID={`${testIDPrefix}-menu-panel-${tripId}`}
+          style={MENU_SHADOW}
+          className="absolute right-[14px] top-[53px] w-[160px] rounded-button border border-hairline bg-canvas py-xs"
+        >
+          {onPressSettings !== undefined ? (
+            <Pressable
+              testID={`${testIDPrefix}-menu-settings-${tripId}`}
+              accessibilityRole="button"
+              onPress={onPressSettings}
+              className="h-[44px] flex-row items-center gap-sm px-lg"
+            >
+              <TripGearGlyph size={18} />
+              <Text className="font-noto text-body text-ink">
+                {MENU_SETTINGS_LABEL}
+              </Text>
+            </Pressable>
+          ) : null}
+          {onTogglePin !== undefined ? (
+            <Pressable
+              testID={`${testIDPrefix}-menu-pin-${tripId}`}
+              accessibilityRole="button"
+              disabled={pinDisabled}
+              onPress={onTogglePin}
+              style={pinDisabled ? PIN_DISABLED_STYLE : undefined}
+              className="h-[44px] flex-row items-center gap-sm px-lg"
+            >
+              <PushpinGlyph size={18} />
+              <Text className="font-noto text-body text-ink">
+                {pinned ? MENU_UNPIN_LABEL : MENU_PIN_LABEL}
+              </Text>
+            </Pressable>
+          ) : null}
+          {onPressDelete !== undefined ? (
+            <>
+              {onPressSettings !== undefined || onTogglePin !== undefined ? (
+                <View
+                  testID={`${testIDPrefix}-menu-divider-${tripId}`}
+                  className="my-xs h-px bg-hairline"
+                />
+              ) : null}
+              <Pressable
+                testID={`${testIDPrefix}-menu-delete-${tripId}`}
+                accessibilityRole="button"
+                onPress={onPressDelete}
+                className="h-[44px] flex-row items-center gap-sm px-lg"
+              >
+                <TrashGlyph size={18} color="primary" />
+                <Text className="font-noto text-body text-primary">
+                  {MENU_DELETE_LABEL}
+                </Text>
+              </Pressable>
+            </>
+          ) : null}
+        </View>
+      ) : null}
     </Pressable>
   );
 }

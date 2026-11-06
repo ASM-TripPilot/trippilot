@@ -108,6 +108,8 @@ export interface DailyReflectionScreenProps {
   activeDay?: number;
   /** TRIP-762(default) — 일차 탭 선택. */
   onSelectDay?: (day: number) => void;
+  /** TRIP-1757 — 곁들이 조회(여행·방문·방문별 사진) 중 404 아닌 실패가 있다. 주면 일차 칩 줄 아래에 한 줄 + [다시 시도](편집 중엔 없음). 미주입 = 줄 없음. */
+  partialError?: { onRetry: () => void; retrying: boolean };
   /** TRIP-1584 — 하단 바(기록·회고·요약)의 칸 이동 콜백 묶음. 미주입이면 바를 그리지 않는다(프리뷰·무회귀 테스트). */
   recordBar?: RecordBarNav;
   /**
@@ -152,6 +154,7 @@ export function DailyReflectionScreen({
   activeDay,
   onSelectDay,
   recordBar,
+  partialError,
   isToday = true,
   mood,
   shortMemo,
@@ -390,6 +393,30 @@ export function DailyReflectionScreen({
               </Pressable>
             );
           })}
+        </View>
+      ) : null}
+
+      {/* TRIP-1757 — 곁들이 조회 실패 한 줄. 얼굴과 무관하게(오류 얼굴 포함) 편집 중이 아닐 때 칩 줄 바로 아래. */}
+      {!editing && partialError ? (
+        <View
+          testID="reflection-daily-partial-error"
+          className="mx-lg mb-sm flex-row items-center justify-between gap-sm rounded-[12px] bg-surface-soft px-md py-sm"
+        >
+          <Text className="shrink font-noto-bold text-[13px] font-bold text-ink">
+            일부 정보를 불러오지 못했어요
+          </Text>
+          <Pressable
+            testID="reflection-daily-partial-retry"
+            accessibilityRole="button"
+            onPress={partialError.onRetry}
+            disabled={partialError.retrying}
+            accessibilityState={{ disabled: partialError.retrying }}
+            hitSlop={8}
+          >
+            <Text className="font-noto-bold text-[13px] font-bold text-primary-text">
+              다시 시도
+            </Text>
+          </Pressable>
         </View>
       ) : null}
 

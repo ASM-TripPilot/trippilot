@@ -45,4 +45,12 @@ export default defineConfig([
     files: ['./src/features/curated-stay/**'],
     rules: { 'fsd/insignificant-slice': 'off' },
   },
+  // 예외 6(범위 끄기): pages/trip 그룹의 repetitive-naming(슬라이스 이름에 `trip` 반복 — TRIP-1787 `trip-settings` 가 셋째).
+  // 이유: 규칙은 같은 단어가 슬라이스 이름 3개 이상에 들어가면 낸다. 접두를 떼면 `trip-new-step1/2`·`trip-settings` 개명 +
+  //   라우트 테스트(`routeParamMapping`)·통합 테스트의 import 경로가 모두 바뀌는 별 티켓 몫이다(드라이브바이 금지, 예외 3 과 같은 사정).
+  // 다시 켤 조건: pages/trip 슬라이스 이름에서 `trip` 접두를 뗀 뒤 — 이 블록을 지운다.
+  {
+    files: ['./src/pages/trip/**'],
+    rules: { 'fsd/repetitive-naming': 'off' },
+  },
 ]);

@@ -9,7 +9,7 @@ routes:
 
 # 마이 탭
 
-마이 탭(l03)은 프로필(닉네임·이메일·취향 태그)과 확정된 여행 수(예정·진행 중·종료)를 보여 주고, 숫자를 누르면 일정·기록 탭으로 보낸다. 그 아래 스타일 요약 카드, 예정 여행이 없을 때만 열리는 "지난 여행" 섹션, 그리고 등록 숙소·여행 스타일 분석·설정으로 가는 메뉴 카드가 있다. 이 화면은 데이터를 바꾸지 않는다 — 모든 조작은 다른 화면으로의 이동이다.
+마이 탭(l03)은 프로필(닉네임·이메일·취향 태그)과 확정된 여행 수(예정·진행 중·종료)를 보여 주고, 숫자를 누르면 일정·기록 탭으로 보낸다. 그 아래 종료한 여행의 누적 통계 카드(「지금까지」 여행·도시·방문), 스타일 요약 카드, 예정 여행이 없을 때만 열리는 "지난 여행" 섹션, 그리고 등록 숙소·여행 스타일 분석·설정으로 가는 메뉴 카드가 있다. 이 화면은 데이터를 바꾸지 않는다 — 모든 조작은 다른 화면으로의 이동이다.
 
 ## Sub-features
 
@@ -18,6 +18,10 @@ routes:
 - `my-counts` 예정·진행 중·종료 3칸에 **일정이 확정된** 여행 수를 보인다(초안은 세지 않는다).
 - `my-counts-unknown` 여행 목록이나 여행 하나의 일정이라도 조회 중·실패면 세 칸 모두 `–`.
 - `my-counts-nav` 예정·진행 중 칸 → 일정 탭, 종료 칸 → 기록 탭으로 바뀐다(replace).
+- `my-stats` 프로필 카드 아래 「지금까지」 카드에 종료한 여행의 여행 수·도시 수(시도 단위)·방문 수를 보인다. 여행 수는 프로필 「종료」 칸과 같다.
+- `my-stats-unknown` 여행 목록이나 방문 기록(`/me/records`)을 아직 모르면 세 값 `–`, 조회가 실패했으면 `–` + `다시 시도`(실패한 조회만 다시 받는다). 받아 둔 데이터가 있으면 재조회가 실패해도 숫자를 유지한다.
+- `my-stats-empty` 종료한 여행이 0건이면(알고 0) 통계 카드 자체를 그리지 않는다.
+- `my-stats-truncated` 방문 기록이 상한 100건이면 세 값 뒤에 `+`(더 있었을 수 있다).
 - `my-style-official` 정식 분석이면 디스크립터 칩 + 3축 점 게이지(여유로움·미식 취향·활동성) + `상세 분석 ›`.
 - `my-style-insufficient` 정식 분석 미달이면 "10곳 이상 쌓이면 분석을 제공해요 (현재 N곳)" 한 줄만.
 - `my-style-missing` 스타일 조회 전·실패면 카드 자체가 없다.
@@ -48,6 +52,7 @@ Preconditions:
 - **프로필.** testID: `my-profile-card` 안에 닉네임과 이메일이 보이고, 태그가 있으면 testID: `my-profile-tag` 칩이 1개 이상. 정식 분석이면 태그는 정식 분석 디스크립터, 미달이면 온보딩 취향 미리보기 디스크립터다.
 - **숫자 3칸.** testID: `my-profile-count-upcoming-value`·`my-profile-count-active-value`·`my-profile-count-ended-value` 의 값이 숫자 또는 `–`. 라벨은 "예정"·"진행 중"·"종료". 값을 일정 탭 카드 수와 대조한다.
 - **숫자 → 탭.** testID: `my-profile-count-upcoming` 를 누른다 → 일정 탭으로 바뀐다(마이 탭이 스택에 남지 않는다). `my-profile-count-ended` → 기록 탭. 각 확인 뒤 마이 탭으로 돌아온다.
+- **누적 통계.** testID: `my-stats-card` 에 "지금까지"와 testID: `my-stats-trips`·`my-stats-cities`·`my-stats-visits` 세 칸(값은 `-value`)이 보인다. `my-stats-trips-value` 는 `my-profile-count-ended-value` 와 같아야 한다. 종료 여행이 0건인 계정에서는 카드가 없다. 조회 실패 얼굴은 `/me/records`·`/trips` 500 주입으로 만든다 — 세 값 `–` + testID: `my-stats-retry`("다시 시도"). 잘림(`+`)은 여행이 100건 이상인 계정에서만 나온다.
 - **스타일 카드(정식).** testID: `my-style-card` 에 "내 여행 스타일", testID: `my-style-chip` 칩들, testID: `my-style-gauge` 3행. 각 행의 testID: `my-style-dot-filled` 개수가 그 축 값이다(0~5). testID: `my-style-detail`("상세 분석 ›")을 누르면 스타일 분석 화면 — 이후는 `record-style.md`.
 - **스타일 카드(미달).** testID: `my-style-card` 에 "10곳 이상 쌓이면 분석을 제공해요 (현재 N곳)" — 게이지·칩·`my-style-detail` 이 없다.
 - **지난 여행.** (예정 0건 계정) "지난 여행" 제목과 testID: `my-past-calendar`("캘린더 ›")가 보인다. 누르면 기록 탭 캘린더(`/records`)로 push. 행은 testID: `my-trip-reflection-<tripId>` — 누르면 그 여행 기록(`/trips/<tripId>/records`). 종료 여행이 없으면 "아직 종료된 여행이 없어요".
@@ -57,6 +62,7 @@ Preconditions:
 
 ## Gotchas
 
+- 통계 「도시」는 시도 단위(목적지 코드 앞 2자리)로 센다 — 서울 강서구와 부산 강서구는 둘, 같은 시도의 시군구는 하나. 코드가 없는 옛 목적지는 이름(`부산광역시`→`부산`)으로 접어 코드 있는 목적지와 따로 셀 수 있다(과대 집계 가능). 「방문」은 방문 기록 행 수라 건너뜀·재방문도 한 건씩 센다. 거리·시간 칸은 없다.
 - 숫자 칸 testID는 `my-profile-count-${bucket}`·그 뒤 `-value` 꼴이다(예 `my-profile-count-upcoming-value`). 지난 여행 행도 `my-trip-reflection-${trip.tripId}`.
 - 브리프에 적힌 "세그먼트·여행 카드"는 TRIP-1123에서 걷혔다 — 이 화면에 여행 목록·세그먼트·[새 여행 만들기]는 없다. 여행 목록 입구는 숫자 3칸뿐이다.
 - 숫자는 서버 `Trip.status`가 아니라 "일정 확정 × 서울 오늘"로 센다. 일정 탭에 보이는 초안 여행이 마이 숫자에 안 잡히는 것은 정상이다.

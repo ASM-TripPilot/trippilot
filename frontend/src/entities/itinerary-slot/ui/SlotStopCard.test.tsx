@@ -11,6 +11,7 @@ import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
 
 import { ALT_LABEL } from '../config/altLabel';
 import { buildSlotKey } from '../lib/slotKey';
+import * as SharedGlyphs from '@/shared/ui/glyphs';
 import { ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import { SlotStopCard } from './SlotStopCard';
 
@@ -537,5 +538,130 @@ describe('🔴 SlotStopCard · R3 — 카드는 slot.placementReason 을 스스�
     expect(screen.getByTestId(id(slotKey)('reason'))).toHaveTextContent(
       '#주입'
     );
+  });
+});
+
+// ── TRIP-1791 · 편집기 「여러 곳 골라 빼기」 체크 원 — `selection` opt-in ─────────────────────────────
+//
+// 카드는 체크 원을 **그릴 뿐** 선택 여부를 정하지 않는다(상태는 부모 몫). 체크 원만 눌리고 카드 전체는
+// 눌리지 않는다(킷 §10 「카드 전체 탭 금지」). 색·테두리·위치는 생김새라 단언하지 않는다(실화면 QA).
+// 3동작 뼈대: 준비=selection 상태별 렌더 → 실행=press → 단언=역할·선택/비활성 표식·onToggle 횟수.
+
+describe('🔴 SlotStopCard · SEL — selection prop (TRIP-1791)', () => {
+  const CHECK = 'editor-select-check-probe';
+
+  function renderWithSelection(
+    state: 'off' | 'on' | 'disabled',
+    slotOverrides: Partial<ItineraryDaysItemSlotsItem> = {}
+  ): { onToggle: jest.Mock; slotKey: string } {
+    const onToggle = jest.fn();
+    const { slotKey } = renderCard({
+      slot: makeSlot(slotOverrides),
+      selection: { state, onToggle, testID: CHECK },
+    });
+    return { onToggle, slotKey };
+  }
+
+  it('SEL-1 · selection 을 안 주면 체크 원이 없다 (결과 화면 5종 회귀 앵커)', () => {
+    renderCard();
+
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+    expect(screen.queryByTestId(CHECK)).toBeNull();
+  });
+
+  it('SEL-2 · off — 호출부 testID 의 checkbox 가 있고 선택·비활성이 아니며, 누르면 onToggle 1회', () => {
+    const { onToggle } = renderWithSelection('off');
+
+    const check = screen.getByTestId(CHECK);
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(check).not.toBeSelected();
+    expect(check).not.toBeDisabled();
+
+    fireEvent.press(check);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('SEL-3 · on — 선택으로 읽히고, 누르면 onToggle 1회 (끄는 판단은 부모 몫)', () => {
+    const { onToggle } = renderWithSelection('on');
+
+    const check = screen.getByTestId(CHECK);
+    expect(check).toBeSelected();
+    expect(check).not.toBeDisabled();
+
+    fireEvent.press(check);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('SEL-4 · disabled — 비활성으로 읽히고 선택은 아니며, 눌러도 onToggle 0회 (표식만이 아니라 실제 눌림 차단)', () => {
+    const { onToggle } = renderWithSelection('disabled');
+
+    const check = screen.getByTestId(CHECK);
+    expect(check).toBeDisabled();
+    expect(check).not.toBeSelected();
+
+    fireEvent.press(check);
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  it.each(['off', 'on', 'disabled'] as const)(
+    'SEL-5 · %s 에서도 카드 루트·사진을 눌러서는 onToggle 이 안 나간다 (카드 전체 탭 금지)',
+    (state) => {
+      const { onToggle, slotKey } = renderWithSelection(state);
+
+      fireEvent.press(screen.getByTestId(`slot-stopcard-${slotKey}`));
+      fireEvent.press(screen.getByTestId(id(slotKey)('photo')));
+
+      expect(onToggle).not.toHaveBeenCalled();
+      // 짝 — 체크 원은 여전히 그 자리에 있다(공허 통과 방지).
+      expect(screen.getByTestId(CHECK)).toBeOnTheScreen();
+    }
+  );
+});
+
+// ── TRIP-1793 · 편집기 「다른 날로 옮기기」 ⋯ 버튼과 옮김 배지 — `more`·`movedLabel` opt-in ─────────────────
+//
+// 카드는 ⋯ 를 **그릴 뿐** 언제 보일지(고정·완료·1일·선택 모드)는 부모(`EditorView`)가 정한다. 배지 문구도 카드가 안 만든다 —
+// 받은 문자열을 그대로 그린다(`violation` 선례). 색·크기·히트는 생김새라 단언하지 않는다(실화면 QA, hitSlop 은 6-b).
+// 3동작 뼈대: 준비=prop 별 렌더 → 실행=press → 단언=역할·콜백 횟수·leaf 문자열.
+
+describe('SlotStopCard · MORE — more·movedLabel prop (TRIP-1793)', () => {
+  const MORE = 'editor-slot-more-probe';
+
+  it('MORE-1 · 둘 다 안 주면 ⋯ 도 배지도 없다 (결과 화면 5종 회귀 앵커)', () => {
+    const { slotKey } = renderCard();
+
+    expect(screen.queryByTestId(MORE)).toBeNull();
+    expect(screen.queryByTestId(id(slotKey)('moved'))).toBeNull();
+  });
+
+  it('MORE-2 · more 를 주면 그 testID 의 버튼이 생기고 누르면 onPress 1회 — 카드 루트·사진은 눌려도 0회 (카드 전체 탭 금지)', () => {
+    const onPress = jest.fn();
+    const { slotKey } = renderCard({ more: { onPress, testID: MORE } });
+
+    const more = screen.getByTestId(MORE);
+    expect(more).toHaveProp('accessibilityRole', 'button');
+    fireEvent.press(more);
+    expect(onPress).toHaveBeenCalledTimes(1);
+
+    fireEvent.press(screen.getByTestId(`slot-stopcard-${slotKey}`));
+    fireEvent.press(screen.getByTestId(id(slotKey)('photo')));
+    expect(onPress).toHaveBeenCalledTimes(1);
+
+    // ⋯ 글리프는 공용 글리프 폴더에 산다 — entities/trip 에서 이사(형제 entities 라 거기서는 못 물었다).
+    expect(typeof SharedGlyphs.MoreDotsGlyph).toBe('function');
+  });
+
+  it('MORE-3 · movedLabel 은 받은 문자열을 leaf 하나에 완전일치로 그리고, null·빈 문자열·미주입이면 요소가 없다', () => {
+    const { slotKey } = renderCard({ movedLabel: '3일차에서 옮김' });
+    const moved = screen.getByTestId(id(slotKey)('moved'));
+    expect(moved).toHaveTextContent('3일차에서 옮김'); // 카드가 문구를 만들지 않는다 — 받은 값 그대로
+    expect(moved).not.toHaveTextContent('3일차'); // 부분 일치면 통과 → 완전일치라 .not 성립
+    screen.unmount();
+
+    for (const empty of [null, '', undefined]) {
+      const again = renderCard({ movedLabel: empty });
+      expect(screen.queryByTestId(id(again.slotKey)('moved'))).toBeNull();
+      screen.unmount();
+    }
   });
 });

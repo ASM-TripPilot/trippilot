@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
+import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 import { coverFor } from '@/test-support/placeCoverFixtures';
 import { closestScrollView, stubScrollTo } from '@/test-support/sheetTree';
@@ -810,4 +811,35 @@ describe('🔴 시트 안 종료<시작 막기 — 문구·disabled 가 휠을 �
     expect(appliedPatch()).toStrictEqual(applied);
   });
   // T4(막힘 때 [적용]·문구 색 토큰·raw hex)는 jest-cut 에서 지웠다 — 색 토큰이라 실화면 QA 몫. 막힘 자체는 T1·T2, 소요시간 0건은 INV-3 가 본다.
+});
+
+/**
+ * TRIP-1793 통합 QA D4 — [적용]·머리 X 를 연타하면 시트가 닫힌 뒤 둘째 탭이 그 자리 아래 버튼(편집기의
+ * 「일정 저장하기」 등)을 누른다. 시트가 닫히는 누름은 그 순간 연타 창(`openPressGuardWindow`, 400ms)을 연다 —
+ * 아래 버튼이 `guardPress` 로 감싸져 있으면 그 둘째 탭은 무시된다. 소비처(편집기 시각 칩·옮기기·장소 추가·직접 짜기)
+ * 전부가 이 한 곳을 지난다.
+ *
+ * 3동작 뼈대: 준비=시트 렌더 + 아래 버튼 대역(`guardPress(spy)`) → 실행=[적용]/X press 뒤 곧바로 아래 버튼 →
+ * 단언=아래 버튼 0회 · 창이 지나면(`resetPressGuard`) 1회(짝 — 대역 자체가 눌리는지).
+ */
+describe('🔴 TRIP-1793 D4 · 시트를 닫는 누름은 연타 창을 연다', () => {
+  beforeEach(resetPressGuard);
+  afterEach(resetPressGuard);
+
+  it.each(['apply', 'close'])(
+    'G1 · %s 를 누른 직후 아래 guardPress 버튼은 무시되고, 창이 지나면 불린다',
+    (suffix) => {
+      const below = jest.fn();
+      const pressBelow = guardPress(below);
+      renderSheet(CONFIGS[1], '13:00:00', '14:00:00');
+
+      fireEvent.press(screen.getByTestId(`itinerary-edit-time-${suffix}`));
+      pressBelow(); // 연타의 둘째 탭이 닫힌 시트 아래 버튼에 닿는다
+
+      expect(below).not.toHaveBeenCalled();
+      resetPressGuard(); // 400ms 가 지난 것과 같다
+      pressBelow();
+      expect(below).toHaveBeenCalledTimes(1);
+    }
+  );
 });

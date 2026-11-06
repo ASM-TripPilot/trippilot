@@ -2,8 +2,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
 import { goBackOr } from '@/shared/lib/goBackOr';
+import { respectPressGuard } from '@/shared/lib/pressGuard';
 import type { ReactElement } from 'react';
-import { useRef, useState } from 'react';
+import { useReducer, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
@@ -12,12 +13,7 @@ import {
   View,
 } from 'react-native';
 
-import {
-  addSlot,
-  buildEditItineraryRequest,
-  insertSlotAt,
-  useItineraryEditStore,
-} from '@/features/edit-itinerary';
+import { useItineraryEditStore } from '@/features/edit-itinerary';
 import { buildDraftPins } from '@/features/itinerary';
 import { usePlacesInfinite } from '@/features/explore';
 import { PlaceAddHeader, PlaceAddRow } from '@/features/itinerary';
@@ -45,7 +41,19 @@ import {
 } from '@/shared/lib/useDebouncedValue';
 import { showToast } from '@/shared/ui/Toast';
 
-import { comparePlaceAdd, placeAddToastMessage } from '../model/placeAddNotice';
+import {
+  buildBulkAddRequest,
+  bulkAddReducer,
+  currentBulkSheet,
+  initialBulkAdd,
+  isPicked,
+} from '../model/bulkAdd';
+import type { BulkTime } from '../model/bulkAdd';
+import {
+  bulkAddToastMessage,
+  comparePlaceAdd,
+  placeAddToastMessage,
+} from '../model/placeAddNotice';
 import type { PlaceAddSlotLike } from '../model/placeAddNotice';
 
 // 핀이 없을 때 지도 중심 — 서울 시청(LiveHubView 선례). {0,0} 은 기니만 바다(null-island)라 무의미하다.
@@ -93,6 +101,8 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   );
   const [searchText, setSearchText] = useState('');
   const [pendingPlace, setPendingPlace] = useState<Place | null>(null);
+  // TRIP-1794 — 여러 곳 체크 → 시각 시트 차례로 → PUT 1회의 단계. 규칙은 `model/bulkAdd.ts`(순수 리듀서)가 쥔다.
+  const [bulk, dispatchBulk] = useReducer(bulkAddReducer, initialBulkAdd);
   // 저장에 성공한 추가마다 하나씩(중복 poiId 도) — 행의 "담김" 표시이자 아래 insertAt 오프셋(길이 = 성공 수)이다.
   // 줄이거나 중복을 거르면 연달아 담기 자리가 어긋난다(TRIP-1640).
   const [addedPoiIds, setAddedPoiIds] = useState<string[]>([]);
@@ -112,14 +122,18 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   // 상태가 아니라 ref 인 이유: 「+ 추가」(시트 열기)의 같은 틱 누름도 막아야 하고, 화면을 떠난 뒤 도는 훅 콜백도
   // 읽어야 한다. 실제로 PUT 을 내는 [적용]의 같은 틱 두 누름은 이 가드 밖이다.
   const inFlightRef = useRef<{
-    poiId: string;
+    /** 이번 저장으로 담는 곳들(고른 순서) — 한 곳 「추가」는 길이 1. */
+    poiIds: string[];
     date: string;
     requestSlots: PlaceAddSlotLike[];
+    /** 첫 새 슬롯의 그날 자리. */
     addedIndex: number;
-    /** 요청에 넣은 새 슬롯 — 편집기 초안에 끼울 때 응답에서 못 찾으면 이걸 쓴다. */
-    slot: ItineraryDaysItemSlotsItem;
+    /** 요청에 넣은 새 슬롯들 — 편집기 초안에 끼울 때 응답에서 못 찾으면 이걸 쓴다. */
+    slots: ItineraryDaysItemSlotsItem[];
     /** 요청 때의 삽입 자리 — 초안에도 같은 자리에 끼운다(없으면 말미). */
     insertAt: number | undefined;
+    /** 여러 곳 담기(CTA)에서 왔나 — 토스트 문구가 갈린다. */
+    bulk: boolean;
   } | null>(null);
 
   // 검색은 서버가 한다(q) + 커서 무한 스크롤(TRIP-502) — 클라 이름 필터·전량 수신을 없앤다.
@@ -143,19 +157,24 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
         );
         const added = inFlightRef.current;
         if (added === null) return;
-        setAddedPoiIds((ids) => [...ids, added.poiId]);
+        setAddedPoiIds((ids) => [...ids, ...added.poiIds]);
+        // 여러 곳 담기면 체크를 비운다(한 곳 「추가」 중엔 saving 이 아니라 무시된다).
+        dispatchBulk({ type: 'succeeded' });
         // 편집기에 저장 안 한 변경(dirty)이 있으면 편집기는 이 응답으로 초안을 다시 채우지 않는다 — 그러면 추가한
         // 장소가 초안에 없어 이어 누른 [저장]이 서버에서 그 장소를 지운다. 그래서 초안에도 같은 자리(초안 기준
         // 삽입 자리 insertAt, 없으면 말미)에 끼운다. dirty 가 아니면 편집기가 응답으로 시드하므로 손대지 않는다.
         const draft = useItineraryEditStore.getState();
         const hasUnsavedEdits = draft.dirty;
+        const responseSlots = data.days.find(
+          (day) => day.date === added.date
+        )?.slots;
         if (hasUnsavedEdits) {
-          draft.insertSlot(
-            added.date,
-            data.days
-              .find((day) => day.date === added.date)
-              ?.slots.find((slot) => slot.poiId === added.poiId) ?? added.slot,
-            added.insertAt
+          added.slots.forEach((slot, i) =>
+            draft.insertSlot(
+              added.date,
+              responseSlots?.find((one) => one.poiId === slot.poiId) ?? slot,
+              added.insertAt === undefined ? undefined : added.insertAt + i
+            )
           );
         }
         // 서버가 이동을 반영해 시각을 밀었으면 응답 시각 그대로 말한다(INV-2). 응답엔 "밀었다" 필드가 없어
@@ -163,18 +182,27 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
         showToast({
           testID: 'itinerary-place-added-toast',
           message:
-            placeAddToastMessage(
-              comparePlaceAdd({
-                requestSlots: added.requestSlots,
-                responseSlots: data.days.find((day) => day.date === added.date)
-                  ?.slots,
-                addedIndex: added.addedIndex,
-              })
-            ) + (hasUnsavedEdits ? UNSAVED_EDITS_TAIL : ''),
+            (added.bulk
+              ? bulkAddToastMessage({
+                  count: added.poiIds.length,
+                  requestSlots: added.requestSlots,
+                  responseSlots,
+                })
+              : placeAddToastMessage(
+                  comparePlaceAdd({
+                    requestSlots: added.requestSlots,
+                    responseSlots,
+                    addedIndex: added.addedIndex,
+                  })
+                )) + (hasUnsavedEdits ? UNSAVED_EDITS_TAIL : ''),
         });
       },
       // 실패한 추가를 "추가됨"으로 두지 않고 말한다(INV-4). 화면을 떠난 뒤의 실패는 보일 자리가 없다(맹점 ③-c).
-      onError: () => setAddFailed(true),
+      onError: () => {
+        setAddFailed(true);
+        // 여러 곳 담기 실패 — 체크를 남기고 고르는 중으로(다시 담기부터 새로).
+        dispatchBulk({ type: 'failed' });
+      },
       onSettled: () => {
         inFlightRef.current = null;
       },
@@ -239,58 +267,93 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
       : targetSlots[targetSlots.length - 1]
   );
 
-  function handleApplyTime(patch: {
-    startAt: string;
-    endAt: string;
-    endsNextDay: boolean;
-  }): void {
-    const place = pendingPlace;
-    setPendingPlace(null);
-    if (!place) return;
+  /**
+   * 담기 PUT 한 번을 낸다 — 한 곳 「추가」(K=1)도 여러 곳 담기도 같은 조립(`buildBulkAddRequest`)을 지난다.
+   * 호출 직전 `inFlightRef` 를 **동기로** 잠가, 같은 틱에 두 번 불려도(마지막 [적용] 연타) 두 번째는 호출부 가드에서 막힌다.
+   */
+  function submitAdd(
+    places: Place[],
+    times: BulkTime[],
+    bulkAdd: boolean
+  ): void {
     // 방어 — notReady 면 press 가 이미 막지만 빈-PUT 은 절대 안 내보낸다(데이터 손실 차단).
-    if (targetDate === undefined) return;
-
-    const newSlot = {
-      poiId: place.poiId,
-      startAt: patch.startAt,
-      endAt: patch.endAt,
-      isFixed: false,
-      endsNextDay: patch.endsNextDay,
-      hasViolation: false,
-      tags: [],
-      // 로컬로 만든 새 슬롯엔 AI 차선책이 없다 — 계약상 "편집하면 사라진다"(빈 배열).
-      alternatives: [],
-    };
-    const nextDays = days.map((day) =>
-      day.date === targetDate
-        ? {
-            ...day,
-            // 삽입 자리(insertAt)가 있으면 그 자리에 splice, 없으면 말미 append(후방호환).
-            slots:
-              insertAt !== undefined
-                ? insertSlotAt(day.slots, newSlot, insertAt)
-                : addSlot(day.slots, newSlot),
-          }
-        : day
-    );
-
-    const request = buildEditItineraryRequest(nextDays);
+    if (targetDate === undefined) {
+      dispatchBulk({ type: 'failed' });
+      return;
+    }
+    const { request, newSlots, addedIndex } = buildBulkAddRequest({
+      days,
+      targetDate,
+      insertAt,
+      places,
+      times,
+    });
     inFlightRef.current = {
-      poiId: place.poiId,
+      poiIds: places.map((place) => place.poiId),
       date: targetDate,
       requestSlots:
         request.days.find((day) => day.date === targetDate)?.slots ?? [],
       // 서버 슬롯은 시작이 늘 있어 요청이 거르는 슬롯이 없다 — 그날 배열의 자리가 곧 요청의 자리다.
-      addedIndex:
-        nextDays
-          .find((day) => day.date === targetDate)
-          ?.slots.indexOf(newSlot) ?? -1,
-      slot: newSlot,
+      addedIndex,
+      slots: newSlots,
       insertAt,
+      bulk: bulkAdd,
     };
     setAddFailed(false);
     save.mutate({ tripId, data: request });
   }
+
+  function handleApplyTime(patch: BulkTime): void {
+    const place = pendingPlace;
+    setPendingPlace(null);
+    if (!place) return;
+    submitAdd([place], [patch], false);
+  }
+
+  /** 시각 시트의 [적용] — 마지막 곳이면 PUT. 이미 저장 중이면(같은 틱 연타 포함) 무시한다. */
+  function handleBulkApply(poiId: string, time: BulkTime): void {
+    if (inFlightRef.current !== null) return;
+    const event = { type: 'apply', poiId, time } as const;
+    const next = bulkAddReducer(bulk, event);
+    dispatchBulk(event);
+    if (bulk.phase === 'timing' && next.phase === 'saving') {
+      submitAdd(next.picked, next.times, true);
+    }
+  }
+
+  /**
+   * 담기를 시작할 수 있나 — 한 곳 「추가」와 CTA 가 같은 가드를 쓴다. 막으면 false.
+   * 담을 일자가 없으면 시트를 안 연다(조용한 소실 차단, W-2). 로딩·404·빈 days 는 무반응 그대로,
+   * 일정 조회가 오류로 끝난 경우만 사유를 알린다(INV-4).
+   */
+  function canStartAdd(): boolean {
+    if (notReady) {
+      // 404 는 누를 때 거른다 — 플래그를 세우면 뒤 재조회 중(error=null)에 거짓 안내가 뜬다.
+      if (
+        itinerary.data === undefined &&
+        itinerary.isError &&
+        !isNotFound(itinerary.error)
+      ) {
+        setItineraryFailedTapped(true);
+      }
+      return false;
+    }
+    // 저장 중엔 다른 추가를 받지 않는다(TRIP-1424 Q3 — 진행 표시는 6-b 결정).
+    if (inFlightRef.current !== null) return false;
+    // 다른 화면 인스턴스(나갔다 다시 들어온 이 화면)의 저장이 아직 진행 중이어도 받지 않는다 — ref 는
+    // 인스턴스마다 새로 생겨 그 저장을 모른다(TRIP-1498). 일정 PUT 이 하나라도 도는 중이면 무반응.
+    if (queryClient.isMutating({ mutationKey: PUT_MUTATION_KEY }) > 0) {
+      return false;
+    }
+    // 검색 키보드를 내린다 — 목록은 탭을 행에 넘기되(handled) 키보드는 그대로 두므로,
+    // 안 내리면 새 시각 시트가 키보드 밑에 깔린다(TRIP-981 #057).
+    Keyboard.dismiss();
+    return true;
+  }
+
+  // 체크 ≥1 이면 시트 머리·하단 CTA 가 바뀌고 행의 「추가」는 숨는다(체크 0 이면 한 곳씩 「추가」 흐름 그대로).
+  const pickedCount = bulk.picked.length;
+  const bulkSheet = currentBulkSheet(bulk, suggested);
 
   return (
     <View className="flex-1">
@@ -303,7 +366,9 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
         header={
           <View>
             <Text className="px-lg pb-xs pt-sm font-noto-bold text-[18px] font-bold text-ink">
-              {`장소 추가 · ${dayNumber}일차`}
+              {pickedCount > 0
+                ? `${dayNumber}일차에 담기 · ${pickedCount}곳 선택`
+                : `장소 추가 · ${dayNumber}일차`}
             </Text>
             {/* TRIP-1424 — 저장 실패 안내(Figma 공백 — 편집기 저장 실패 배너 꼴). 토스트는 성공 아이콘 고정이라 못 쓴다. */}
             {showItineraryError ? (
@@ -340,37 +405,38 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
             ) : null}
           </View>
         }
+        cta={
+          pickedCount > 0
+            ? [
+                {
+                  label: `${dayNumber}일차에 ${pickedCount}곳 담기`,
+                  variant: 'primary',
+                  testID: 'place-add-bulk-confirm',
+                  disabled: bulk.phase === 'saving',
+                  onPress: () => {
+                    if (canStartAdd()) dispatchBulk({ type: 'start' });
+                  },
+                },
+              ]
+            : undefined
+        }
         list={{
           data: items,
           renderItem: ({ item }) => (
             <PlaceAddRow
               place={item}
               added={addedPoiIds.includes(item.poiId)}
+              check={{
+                checked: isPicked(bulk, item.poiId),
+                // 연타 창을 따른다 — 시각 시트 [적용] 연타의 둘째 탭이 닫힌 시트 아래 이 원을 누르지 않게(TRIP-1793 D4).
+                // 창을 열지는 않는다 — 여러 곳을 빠르게 체크하는 손은 막지 않는다.
+                onToggle: respectPressGuard(() =>
+                  dispatchBulk({ type: 'toggle', place: item })
+                ),
+              }}
+              showAdd={pickedCount === 0}
               onPressAdd={() => {
-                // 담을 일자가 없으면 시트를 안 연다(조용한 소실 차단, W-2). 로딩·404·빈 days 는 무반응 그대로,
-                // 일정 조회가 오류로 끝난 경우만 사유를 알린다(INV-4).
-                if (notReady) {
-                  // 404 는 누를 때 거른다 — 플래그를 세우면 뒤 재조회 중(error=null)에 거짓 안내가 뜬다.
-                  if (
-                    itinerary.data === undefined &&
-                    itinerary.isError &&
-                    !isNotFound(itinerary.error)
-                  ) {
-                    setItineraryFailedTapped(true);
-                  }
-                  return;
-                }
-                // 저장 중엔 다른 추가를 받지 않는다(TRIP-1424 Q3 — 진행 표시는 6-b 결정).
-                if (inFlightRef.current !== null) return;
-                // 다른 화면 인스턴스(나갔다 다시 들어온 이 화면)의 저장이 아직 진행 중이어도 받지 않는다 — ref 는
-                // 인스턴스마다 새로 생겨 그 저장을 모른다(TRIP-1498). 일정 PUT 이 하나라도 도는 중이면 무반응.
-                if (
-                  queryClient.isMutating({ mutationKey: PUT_MUTATION_KEY }) > 0
-                )
-                  return;
-                // 검색 키보드를 내린다 — 목록은 탭을 행에 넘기되(handled) 키보드는 그대로 두므로,
-                // 안 내리면 새 시각 시트가 키보드 밑에 깔린다(TRIP-981 #057).
-                Keyboard.dismiss();
+                if (!canStartAdd()) return;
                 setPendingPlace(item);
               }}
             />
@@ -436,6 +502,27 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
           onCancel={() => setPendingPlace(null)}
           testIDPrefix="itinerary-edit-time"
           labels={{ start: '시작', end: '종료' }}
+        />
+      ) : null}
+
+      {/* TRIP-1794 — 고른 곳마다 새로 마운트(key)해 시트 안 휠 상태·기본값이 앞 곳 것을 물려받지 않게 한다. */}
+      {bulkSheet ? (
+        <TimeSheet
+          key={bulkSheet.place.poiId}
+          startAt={bulkSheet.startAt}
+          endAt={bulkSheet.endAt}
+          onApply={(time) => handleBulkApply(bulkSheet.place.poiId, time)}
+          onCancel={() =>
+            dispatchBulk({ type: 'cancel', poiId: bulkSheet.place.poiId })
+          }
+          testIDPrefix="itinerary-edit-time"
+          labels={{ start: '시작', end: '종료' }}
+          placeSummary={{
+            imageUrl: bulkSheet.place.imageUrl ?? null,
+            poiId: bulkSheet.place.poiId,
+            category: bulkSheet.place.category,
+            name: bulkSheet.place.nameKo,
+          }}
         />
       ) : null}
     </View>

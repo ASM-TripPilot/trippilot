@@ -6,7 +6,7 @@ import { getInstallId } from '@/shared/storage/installId';
  * 무엇을 보장하나:
  *  - 자산 메타 shape(`PhotoAssetMeta`) 를 한 곳에서 정의한다 — photoAttach(model)·피커가 함께 문다.
  *    shared 는 features 보다 아래 층이라 여기 두어야 record.model 이 위로 가져다 쓸 수 있다.
- *  - `pickPhotoAsset` 은 앨범에서 1장을 고르게 하고 서버로 보낼 **메타만** 뽑는다(파일 본문은 요청하지
+ *  - `pickPhotoAssets` 는 앨범에서 최대 `limit` 장을 고르게 하고(TRIP-1797 — 고른 순서대로) 서버로 보낼 **메타만** 뽑는다(파일 본문은 요청하지
  *    않는다 — INV-U5-03). 결과는 일곱 갈래이고 reject 하지 않는다(재빌드 전 앱 = 네이티브 모듈 부재도 failed).
  *  - `resolvePhotoUri` 는 자산 번호로 이 기기 앨범의 파일 주소를 찾는다. 권한을 요청하지 않는다(보기만
  *    하는 화면에서 팝업 금지).
@@ -31,7 +31,7 @@ export interface PhotoAssetMeta {
 }
 
 export type PhotoPickResult =
-  | { kind: 'picked'; asset: PhotoAssetMeta }
+  | { kind: 'picked'; assets: PhotoAssetMeta[]; skipped: number }
   | { kind: 'canceled' }
   | { kind: 'denied' }
   | { kind: 'limited' }
@@ -43,43 +43,65 @@ export type PhotoPickResult =
 const loadMediaLibrary = () =>
   require('expo-media-library') as typeof import('expo-media-library');
 
-export async function pickPhotoAsset(): Promise<PhotoPickResult> {
+export async function pickPhotoAssets({
+  limit,
+}: {
+  limit: number;
+}): Promise<PhotoPickResult> {
   try {
     const MediaLibrary = loadMediaLibrary();
     const ImagePicker =
       require('expo-image-picker') as typeof import('expo-image-picker');
     const permission = await MediaLibrary.requestPermissionsAsync();
     if (!permission?.granted) return { kind: 'denied' };
-    // 5.1.1(iii): 사진 한 장 고르는 기능에 전체 접근을 요구하지 않는다 — "선택한 사진만"(limited)이어도 피커를 연다.
+    // 5.1.1(iii): 사진 고르는 기능에 전체 접근을 요구하지 않는다 — "선택한 사진만"(limited)이어도 피커를 연다.
     // 자산 번호를 못 받으면 아래 no-asset-id 로 떨어진다.
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: limit,
+      orderedSelection: true,
     });
     if (result.canceled) return { kind: 'canceled' };
+    // 피커가 한도를 어기고 더 줘도 앞 limit 장까지만(방어). 초과분은 skipped 에 세지 않는다.
+    const chosen = result.assets.slice(0, limit);
     // "선택한 사진만 허용"(limited)이면 assetId 가 null 로 온다 — 나중에 다시 찾을 번호가 없다.
-    const assetId = result.assets[0]?.assetId;
-    if (!assetId) return { kind: 'no-asset-id' };
+    const withId = chosen.filter((a) => !!a.assetId);
+    if (withId.length === 0) return { kind: 'no-asset-id' };
 
+    const deviceId = await getInstallId();
     // 촬영 시각·좌표는 있으면 싣는다. 조회가 실패해도 필수(자산 번호·기기 id)만으로 기록한다.
-    const info = await MediaLibrary.getAssetInfoAsync(assetId).catch(
-      () => undefined
+    const assets = await Promise.all(
+      withId.map(async (picked): Promise<PhotoAssetMeta> => {
+        const assetId = picked.assetId as string;
+        const info = await MediaLibrary.getAssetInfoAsync(assetId).catch(
+          () => undefined
+        );
+        const asset: PhotoAssetMeta = { localAssetId: assetId, deviceId };
+        if (info?.creationTime) {
+          asset.takenAt = new Date(info.creationTime).toISOString();
+        }
+        if (info?.location) {
+          asset.exifLat = info.location.latitude;
+          asset.exifLng = info.location.longitude;
+        }
+        return asset;
+      })
     );
-    const asset: PhotoAssetMeta = {
-      localAssetId: assetId,
-      deviceId: await getInstallId(),
+    return {
+      kind: 'picked',
+      assets,
+      skipped: chosen.length - withId.length,
     };
-    if (info?.creationTime) {
-      asset.takenAt = new Date(info.creationTime).toISOString();
-    }
-    if (info?.location) {
-      asset.exifLat = info.location.latitude;
-      asset.exifLng = info.location.longitude;
-    }
-    return { kind: 'picked', asset };
   } catch {
     return { kind: 'failed' };
   }
+}
+
+/** TRIP-1798 · 이 빌드가 기기 앨범에서 사진 주소를 풀 수 있는가(앱 true · 웹 false — index.web.ts). 앨범 화면 진입 링크의 웹 숨김 판정. */
+export function canResolveDevicePhotos(): boolean {
+  return true;
 }
 
 export async function resolvePhotoUri(

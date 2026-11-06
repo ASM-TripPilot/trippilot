@@ -64,6 +64,7 @@ paths:
 | `app/trips/[tripId]/records/add-visit.tsx` | j01 즉석 방문 장소 피커(TRIP-1072) — `tripId`·`day`만 읽어 `@/pages/record/record-add-visit` 얇은 래퍼(RT1) |
 | `app/trips/[tripId]/records/reflection/[date].tsx` | j03 오늘의 회고 — `tripId`·`date`만 읽어 `@/pages/record/daily-reflection` 얇은 래퍼(G3 스캔이 `@/features/reflection`·조회 훅 직접 import 0을 잠금) |
 | `app/trips/[tripId]/records/summary.tsx` | j04 여행 요약 — `tripId`만 읽어 `@/pages/record/trip-summary` 얇은 래퍼 |
+| `app/trips/[tripId]/records/album.tsx` | (TRIP-1798) 여행 앨범 — `tripId`만 읽어 `@/pages/record/trip-album` 얇은 래퍼. 요약(j04)의 「앨범 보기 ›」에서 push, 하단 바 없음이라 `SplashGate` 의 `BAR_SCREEN_ROUTES`·`NO_SWIPE_ROUTES` 에 **넣지 않았다**(기본 슬라이드·스와이프 뒤로) |
 | `app/trips/[tripId]/records/share.tsx` | j06 공유 카드(전체화면, 탭바 없음) — `tripId`만 읽어 `@/pages/record/share-card` 얇은 래퍼. j04·j03에서 push |
 | `app/records/style.tsx` | j05 여행 스타일 — **계정 단위**라 `[tripId]` 밖(INV-U5-08). params 없이 `@/pages/record/travel-style` 위임. 라우트 `records/index.tsx`는 두지 않는다 — `(tabs)/records.tsx`의 `/records`와 충돌 |
 | `app/trips/[tripId]/planb/draft.tsx` | 재계획 초안 — `tripId`·`sessionId`·`includePoiId`(상황 감지 FE-B — 미포함 안내 재료)만 읽어 `@/pages/live/planb-draft` 얇은 래퍼. 두 라우트의 위임은 `src/__tests__/planbSessionRoutes.test.tsx`(`includePoiId`는 optional이라 tsc가 누락을 못 잡는다 — 2026-11-01 축소에서 지웠다가 되살림) |

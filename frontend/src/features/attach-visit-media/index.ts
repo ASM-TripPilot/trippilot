@@ -3,3 +3,4 @@ export * from './index.view';
 
 export { pickPhotoForVisit } from './model/pickPhotoForVisit';
 export { useSavedVisitMemos, useVisitMemo } from './model/useVisitMemo';
+export { useMultiPhotoAttach } from './model/useMultiPhotoAttach';

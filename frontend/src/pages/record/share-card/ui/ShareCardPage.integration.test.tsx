@@ -14,6 +14,7 @@ import {
 import { formatShareCardPeriod } from '@/entities/trip';
 import { server } from '@/mocks/server';
 import { retryUnlessNotFound } from '@/shared/api';
+import { getGetTripsTripIdQueryKey } from '@/shared/api/index.hooks';
 import type {
   DayHighlight,
   ShareCardCopy,
@@ -1777,5 +1778,144 @@ describe('🔴 TRIP-1781 · 표지 기기 사진 (덱 표지 · 대표 카드 ·
     await user.press(share);
     expect(mockSave).toHaveBeenCalledTimes(1);
     expect(mockShare).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * 🔴 TRIP-1757 · j06 여행 GET 실패 → 공유 차단 (결정 1 = a · INV-4 · US-REC-13). 여행 정보가 빠진 카드가 그대로 외부로 나가지 않게.
+ *
+ * 무엇을 보장하나(3동작 = 준비: 요약 200 ready · 여행 GET 500/404 → 실행: 렌더·[다시 시도] → 단언: 안내 testID·덱 유무·서버 문구 POST 수):
+ *  - J06-1  여행 500(재시도 끝) → 전면 안내 `reflection-share-trip-error` + `-trip-retry`. 덱·저장·공유 버튼은 없고 캡처(저장·공유) 호출 0,
+ *           서버 문구 POST 0 — 호출을 **세는 핸들러**(`serveCopy` + 요청 관찰자)를 깔아 두고 0 을 본다(핸들러 부재면 미처리 요청 에러로 엉뚱하게 red).
+ *  - J06-2  [다시 시도] 후 여행 200 → 안내가 사라지고 덱이 서며 서버 문구 POST 는 정확히 1회(얼굴이 처음 마운트될 때).
+ *  - J06-3  여행 404 → 지금처럼 카드가 선다(여행 없이). 결정 범위 밖.
+ *  - J06-4  여행 데이터가 이미 있고 배경 재조회만 500 → 카드 얼굴 유지(언마운트·문구 POST 재발 없음).
+ *  - J06-5  요약 ready:false · 여행 500 → 「여행이 끝나면 만들 수 있어요」가 이긴다. 요약 500 → 기존 `reflection-share-error`.
+ * 운영과 같은 재시도(404 외 3회)를 쓰는 파일 공용 client 라 500 은 재시도(간격 10ms)가 끝난 뒤에 안내로 선다.
+ * (개념) `userEvent.press` = 실제 Pressability 경로 — `fireEvent.press` 는 조상 prop 으로 새어 거짓 green 이 난다(TRIP-1781 실측).
+ */
+describe('🔴 TRIP-1757 · 여행 조회 실패 → 공유 차단', () => {
+  const TRIP_ERROR = 'reflection-share-trip-error';
+  const TRIP_RETRY = 'reflection-share-trip-retry';
+  const TRIP_HIT = `GET ${new URL(BASE).pathname}/trips/${TRIP_ID}`;
+  const tripHits = () => hitLog.count(TRIP_HIT);
+
+  const tripStatus = (code: number) =>
+    server.use(
+      http.get(`${BASE}/trips/:tripId`, () =>
+        HttpResponse.json(
+          { error: { code: 'X', message: 'x' } },
+          { status: code }
+        )
+      )
+    );
+
+  beforeEach(() => serveCopy(copyOk(AI_COPY)));
+
+  it('J06-1 요약 ready · 여행 500 → 전면 안내 + [다시 시도], 덱·저장·공유·서버 문구 POST·캡처 호출은 0', async () => {
+    tripStatus(500);
+    renderPage();
+
+    expect(await screen.findByTestId(TRIP_ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(TRIP_RETRY)).toBeOnTheScreen();
+    // 앵커: 여행 요청이 실제로 나가 재시도까지 끝났다(첫 + 재시도 3).
+    expect(tripHits()).toBe(4);
+    await quiet();
+    expect(screen.queryByTestId('reflection-share-deck')).toBeNull();
+    expect(screen.queryByTestId('reflection-share-save')).toBeNull();
+    expect(screen.queryByTestId('reflection-share-export')).toBeNull();
+    expect(screen.queryByTestId('reflection-share-pending')).toBeNull();
+    expect(copyHits()).toBe(0);
+    expect(mockSave).not.toHaveBeenCalled();
+    expect(mockShare).not.toHaveBeenCalled();
+  });
+
+  it('J06-2 [다시 시도] 후 여행 200 → 안내가 사라지고 덱이 서며 서버 문구 POST 는 정확히 1회', async () => {
+    tripStatus(500);
+    renderPage();
+    await screen.findByTestId(TRIP_ERROR);
+    expect(copyHits()).toBe(0);
+
+    server.use(tripOk());
+    const user = userEvent.setup();
+    await user.press(screen.getByTestId(TRIP_RETRY));
+
+    await deck();
+    expect(screen.queryByTestId(TRIP_ERROR)).toBeNull();
+    await waitForHits(1);
+    await quiet();
+    expect(copyHits()).toBe(1);
+  });
+
+  it('J06-3 여행 404 → 지금처럼 카드(덱)가 서고 안내는 없다', async () => {
+    tripStatus(404);
+    renderPage();
+
+    await deck();
+    await waitForHits(1);
+    await quiet();
+    expect(screen.queryByTestId(TRIP_ERROR)).toBeNull();
+    expect(copyHits()).toBe(1);
+  });
+
+  it('J06-4 여행 데이터가 이미 있고 배경 재조회만 500 → 카드 얼굴이 유지되고 서버 문구 POST 는 늘지 않는다', async () => {
+    const client = productionLikeClient();
+    render(<ShareCardPage tripId={TRIP_ID} />, {
+      wrapper: createWrapper(client),
+    });
+    await deck();
+    await waitForHits(1);
+    expect(tripHits()).toBe(1);
+
+    tripStatus(500);
+    await act(async () => {
+      await client.invalidateQueries({
+        queryKey: getGetTripsTripIdQueryKey(TRIP_ID),
+      });
+    });
+    // 앵커: 재조회가 실제로 나가 재시도까지 실패했다(둘째 요청부터 4건).
+    await waitFor(() => expect(tripHits()).toBe(5));
+    await quiet();
+
+    expect(screen.getByTestId('reflection-share-deck')).toBeOnTheScreen();
+    expect(screen.queryByTestId(TRIP_ERROR)).toBeNull();
+    expect(copyHits()).toBe(1);
+  });
+
+  it('J06-5a 요약 ready:false · 여행 500 → 「여행이 끝나면 만들 수 있어요」가 이기고 여행 안내는 없다', async () => {
+    tripStatus(500);
+    server.use(
+      http.get(`${BASE}/trips/:tripId/summary`, () =>
+        HttpResponse.json({ ready: false })
+      )
+    );
+    renderPage();
+
+    expect(
+      await screen.findByTestId('reflection-share-not-ready')
+    ).toBeOnTheScreen();
+    await quiet();
+    expect(screen.queryByTestId(TRIP_ERROR)).toBeNull();
+    expect(copyHits()).toBe(0);
+  });
+
+  it('J06-5b 회귀: 요약 500 이면 기존 `reflection-share-error` 가 그대로고 여행 안내는 없다', async () => {
+    tripStatus(500);
+    server.use(
+      http.get(`${BASE}/trips/:tripId/summary`, () =>
+        HttpResponse.json(
+          { error: { code: 'X', message: 'x' } },
+          { status: 500 }
+        )
+      )
+    );
+    renderPage();
+
+    expect(
+      await screen.findByTestId('reflection-share-error')
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId('reflection-share-retry')).toBeOnTheScreen();
+    await quiet();
+    expect(screen.queryByTestId(TRIP_ERROR)).toBeNull();
   });
 });

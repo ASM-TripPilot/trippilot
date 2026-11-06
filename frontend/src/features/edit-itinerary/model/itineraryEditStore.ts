@@ -32,6 +32,11 @@ type Slot = ItineraryDaysItemSlotsItem;
  */
 export type EditorSlot = Omit<ItineraryDaysItemSlotsItem, 'startAt'> & {
   startAt: string | null;
+  /**
+   * TRIP-1793 · 옮김 표식 — 「다른 날로 옮기기」로 온 슬롯이 **처음 있던 날**(`YYYY-MM-DD`). 서버 데이터가 아니라 초안 안의
+   * 꼬리표다: 이력 스냅샷과 함께 되돌아가고, `seed`(저장 성공)가 서버 슬롯으로 덮으면 사라지며, 요청 조립은 5필드만 골라 싣는다.
+   */
+  movedFromDate?: string;
 };
 export type EditorDaysItem = { date: string; slots: EditorSlot[] };
 
@@ -44,6 +49,15 @@ export function removeSlot(slots: Slot[], poiId: string): Slot[] {
   const index = slots.findIndex((s) => s.poiId === poiId);
   if (index === -1) return slots.slice();
   return [...slots.slice(0, index), ...slots.slice(index + 1)];
+}
+
+/**
+ * TRIP-1791 · 고른 poiId 를 **한꺼번에** 뺀 새 배열. `removeSlot` 과 달리 같은 poiId 슬롯을 전부 지운다 —
+ * 선택 체크가 poiId 단위라 화면에서 보이는 대로 빠져야 한다. 원본은 안 건드린다(`filter`).
+ */
+export function removeSlots(slots: Slot[], poiIds: string[]): Slot[] {
+  const gone = new Set(poiIds);
+  return slots.filter((s) => !gone.has(s.poiId));
 }
 
 /**
@@ -65,8 +79,46 @@ export function insertSlotAt(slots: Slot[], slot: Slot, index: number): Slot[] {
   return [...slots.slice(0, at), slot, ...slots.slice(at)];
 }
 
+/**
+ * TRIP-1792 · 되돌리기 이력 한 장 — 편집 **직전** 모습(`days`·`dirty`)과 그 편집이 일어난 날짜. `id` 는 한 번 쓰면 다시
+ * 안 쓰는 번호라 안내 바가 "내가 띄운 그 장"인지 확인하는 표다(길이 비교는 빼기→↶→순서 바꿈 뒤 같은 길이로 속는다).
+ */
+export interface EditHistoryEntry {
+  id: number;
+  date: string;
+  days: ItineraryDaysItem[];
+  dirty: boolean;
+}
+
+/**
+ * 이력 번호 카운터 — 상태가 아니라 모듈 변수다. `seed`·`reset` 으로 되감지 않는다: 안내 바는 저장·화면 이탈 뒤에도 최대 6초
+ * 살아 새 편집의 번호와 겹치면 엉뚱한 편집을 되돌린다.
+ */
+let nextHistoryId = 1;
+
+/** 슬롯 목록이 값으로 같은가(poiId·시각 3필드·순서) — 새 객체여도 같은 값이면 무변화다. */
+function sameSlots(a: Slot[], b: Slot[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((slot, i) => {
+      const other = b[i];
+      return (
+        slot.poiId === other.poiId &&
+        slot.startAt === other.startAt &&
+        slot.endAt === other.endAt &&
+        slot.endsNextDay === other.endsNextDay
+      );
+    })
+  );
+}
+
 export interface ItineraryEditState {
   days: ItineraryDaysItem[];
+  /**
+   * TRIP-1792 · 되돌리기 이력 — **맨 끝 = 맨 위**. 삭제·묶음 삭제·재정렬·시각 조정이 호출당 한 장 쌓고(값이 안 바뀌면 안 쌓음),
+   * `insertSlot`(장소 추가는 서버에 이미 저장됨)·`seed`·`reset` 이 비운다.
+   */
+  history: EditHistoryEntry[];
   /**
    * 사용자가 초안을 바꿨다(삭제·재정렬·시각 조정) — 저장 전 변경이 있다는 표시. 편집기의 "조회 데이터가 바뀌면
    * 시드" 규칙이 남이 바꾼 캐시(예: 장소 추가 응답)로 이 변경을 덮지 않게 하는 가드 재료다(TRIP-1498).
@@ -77,6 +129,8 @@ export interface ItineraryEditState {
   seed(days: ItineraryDaysItem[]): void;
   /** 해당 날에서 첫 일치 슬롯 제거. */
   deleteSlot(date: string, poiId: string): void;
+  /** TRIP-1791 · 해당 날에서 고른 poiId 를 set 1회로 제거(되돌리기 1단계 근거). 다른 날은 안 건드린다. */
+  deleteSlots(date: string, poiIds: string[]): void;
   /** `onDragEnd.data`를 받아 해당 날 슬롯을 그 순서 그대로 반영(고정 슬롯도 재고정하지 않는다). */
   reorderSlots(date: string, reordered: Slot[]): void;
   /**
@@ -96,56 +150,89 @@ export interface ItineraryEditState {
    * **`dirty` 는 건드리지 않는다** — 서버에 이미 저장된 추가분을 초안에 맞춰 넣는 것이지 사용자의 새 변경이 아니다.
    */
   insertSlot(date: string, slot: Slot, index?: number): void;
+  /**
+   * TRIP-1792 · 맨 위 한 장을 꺼내 `days`·`dirty`·`history` 를 **한 번의 set** 으로 되돌리고 그 편집의 날짜를 돌려준다.
+   * 이력이 비었거나 `expectId` 가 주어졌는데 맨 위 번호와 다르면(낡은 안내 바) 아무것도 안 하고 null.
+   */
+  undo(expectId?: number): string | null;
+  /**
+   * TRIP-1793 · 슬롯 하나를 `fromDate` 에서 빼 `toDate` 에 넣고(시각은 `patch`) 대상 날을 시작 시각 순으로 다시 세운다 — **한 번의 set**
+   * (통지 1회 = 이력 1장 = 되돌리기 1단계, 이력 날짜 = 출발 날). `insertSlot` 은 이력을 비우므로 쓰지 않는다. 옮긴 슬롯엔 `movedFromDate`
+   * (이미 있으면 최초 출발 날 유지, 원래 날로 돌아오면 지움). 같은 날·없는 날·없는 장소·대상 날에 같은 장소가 이미 있으면 state 그대로.
+   */
+  moveSlot(
+    fromDate: string,
+    toDate: string,
+    poiId: string,
+    patch: { startAt: string; endAt: string; endsNextDay: boolean }
+  ): void;
   /** 테스트/재진입 초기화(싱글턴 격리). */
   reset(): void;
 }
 
-const INITIAL: Pick<ItineraryEditState, 'days' | 'dirty'> = {
+const INITIAL: Pick<ItineraryEditState, 'days' | 'dirty' | 'history'> = {
   days: [],
   dirty: false,
+  history: [],
 };
 
-const createItineraryEditStore: StateCreator<ItineraryEditState> = (set) => ({
+/**
+ * 그 날 슬롯만 `change` 로 바꾼 새 `days` 를 만들어 이력에 얹는다 — 그 날 슬롯이 값으로 같거나 없는 날이면 state 를 그대로 돌려
+ * (zustand 가 통지·dirty 를 건너뛴다) 안 쌓는다. 바뀌면 `dirty:true` + 직전 `{days, dirty}` 한 장.
+ * ponytail: 이력은 길이 제한이 없다 — 한 편집 세션(저장·이탈에서 비워짐)이라 충분. 길어지면 상한을 둔다.
+ */
+function commit(
+  state: ItineraryEditState,
+  date: string,
+  change: (slots: Slot[]) => Slot[]
+): ItineraryEditState {
+  const before = state.days.find((day) => day.date === date);
+  if (before === undefined) return state;
+  const slots = change(before.slots);
+  if (sameSlots(before.slots, slots)) return state;
+  return {
+    ...state,
+    dirty: true,
+    days: state.days.map((day) => (day === before ? { ...day, slots } : day)),
+    history: [
+      ...state.history,
+      { id: nextHistoryId++, date, days: state.days, dirty: state.dirty },
+    ],
+  };
+}
+
+const createItineraryEditStore: StateCreator<ItineraryEditState> = (
+  set,
+  get
+) => ({
   ...INITIAL,
   seed: (days) =>
     set({
       days: days.map((day) => ({ date: day.date, slots: [...day.slots] })),
       dirty: false,
+      history: [],
     }),
   deleteSlot: (date, poiId) =>
-    set((state) => ({
-      dirty: true,
-      days: state.days.map((day) =>
-        day.date === date
-          ? { ...day, slots: removeSlot(day.slots, poiId) }
-          : day
-      ),
-    })),
+    set((state) => commit(state, date, (slots) => removeSlot(slots, poiId))),
+  deleteSlots: (date, poiIds) =>
+    set((state) => commit(state, date, (slots) => removeSlots(slots, poiIds))),
   reorderSlots: (date, reordered) =>
-    set((state) => ({
-      dirty: true,
-      days: state.days.map((day) =>
-        day.date === date ? { ...day, slots: [...reordered] } : day
-      ),
-    })),
+    set((state) => commit(state, date, () => [...reordered])),
   adjustSlotTime: (date, poiId, patch) =>
-    set((state) => ({
-      dirty: true,
-      days: state.days.map((day) =>
-        day.date === date && day.slots.some((slot) => slot.poiId === poiId)
-          ? {
-              ...day,
-              slots: sortSlotsByStartAt(
-                day.slots.map((slot) =>
-                  slot.poiId === poiId ? { ...slot, ...patch } : slot
-                )
-              ),
-            }
-          : day
-      ),
-    })),
+    set((state) =>
+      commit(state, date, (slots) =>
+        slots.some((slot) => slot.poiId === poiId)
+          ? sortSlotsByStartAt(
+              slots.map((slot) =>
+                slot.poiId === poiId ? { ...slot, ...patch } : slot
+              )
+            )
+          : slots
+      )
+    ),
   insertSlot: (date, slot, index) =>
     set((state) => ({
+      history: [],
       days: state.days.map((day) =>
         day.date === date
           ? {
@@ -158,6 +245,61 @@ const createItineraryEditStore: StateCreator<ItineraryEditState> = (set) => ({
           : day
       ),
     })),
+  moveSlot: (fromDate, toDate, poiId, patch) =>
+    set((state) => {
+      const from = state.days.find((day) => day.date === fromDate);
+      const to = state.days.find((day) => day.date === toDate);
+      const moving = from?.slots.find((slot) => slot.poiId === poiId);
+      if (
+        fromDate === toDate ||
+        from === undefined ||
+        to === undefined ||
+        moving === undefined ||
+        to.slots.some((slot) => slot.poiId === poiId)
+      ) {
+        return state;
+      }
+      const origin = (moving as EditorSlot).movedFromDate ?? fromDate;
+      const { movedFromDate: _stale, ...rest } = moving as EditorSlot;
+      const moved = (
+        origin === toDate
+          ? { ...rest, ...patch }
+          : { ...rest, ...patch, movedFromDate: origin }
+      ) as Slot;
+      return {
+        ...state,
+        dirty: true,
+        days: state.days.map((day) =>
+          day === from
+            ? { ...day, slots: removeSlot(day.slots, poiId) }
+            : day === to
+              ? { ...day, slots: sortSlotsByStartAt([...day.slots, moved]) }
+              : day
+        ),
+        history: [
+          ...state.history,
+          {
+            id: nextHistoryId++,
+            date: fromDate,
+            days: state.days,
+            dirty: state.dirty,
+          },
+        ],
+      };
+    }),
+  undo: (expectId) => {
+    const { history } = get();
+    const top = history[history.length - 1];
+    if (top === undefined || (expectId !== undefined && top.id !== expectId)) {
+      return null;
+    }
+    set({
+      days: top.days,
+      dirty: top.dirty,
+      history: history.slice(0, -1),
+    });
+    return top.date;
+  },
   reset: () => set(INITIAL),
 });
 

@@ -121,3 +121,58 @@ export function SummaryChartGlyph({
     </Svg>
   );
 }
+
+// 되돌리기 ↶(18 격자, 화살촉 + 반원 되돌이선) — 일정 편집 머리 「되돌리기」(Figma 5210:4522 `undo`). 선 굵기 1.65 는 시안 값.
+export function UndoGlyph({ size = 18, color = 'ink', testID }: GlyphProps) {
+  const stroke = {
+    stroke: GLYPH_COLORS[color],
+    strokeWidth: 1.65,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+  } as const;
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 18 18"
+      fill="none"
+    >
+      <Path d="M6.75 10.5L3 6.75L6.75 3" {...stroke} />
+      <Path
+        d="M3 6.75H10.875C11.4167 6.75 11.9531 6.8567 12.4536 7.064C12.954 7.2713 13.4088 7.57514 13.7918 7.95818C14.1749 8.34123 14.4787 8.79596 14.686 9.29643C14.8933 9.7969 15 10.3333 15 10.875C15 11.4167 14.8933 11.9531 14.686 12.4536C14.4787 12.954 14.1749 13.4088 13.7918 13.7918C13.4088 14.1749 12.954 14.4787 12.4536 14.686C11.9531 14.8933 11.4167 15 10.875 15H8.25"
+        {...stroke}
+      />
+    </Svg>
+  );
+}
+
+// ⋯ 더보기(20 격자, 채운 점 셋) — h06 카드 삭제 메뉴(Figma 4682:2624)와 편집기 카드 「다른 날로 옮기기」(TRIP-1793)가 같이 쓴다.
+export function MoreDotsGlyph({
+  size = 20,
+  color = 'ink',
+  testID,
+}: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <Path
+        d="M4.16667 11.25C4.85702 11.25 5.41667 10.6904 5.41667 10C5.41667 9.30964 4.85702 8.75 4.16667 8.75C3.47631 8.75 2.91667 9.30964 2.91667 10C2.91667 10.6904 3.47631 11.25 4.16667 11.25Z"
+        fill={GLYPH_COLORS[color]}
+      />
+      <Path
+        d="M10 11.25C10.6904 11.25 11.25 10.6904 11.25 10C11.25 9.30964 10.6904 8.75 10 8.75C9.30964 8.75 8.75 9.30964 8.75 10C8.75 10.6904 9.30964 11.25 10 11.25Z"
+        fill={GLYPH_COLORS[color]}
+      />
+      <Path
+        d="M15.8333 11.25C16.5237 11.25 17.0833 10.6904 17.0833 10C17.0833 9.30964 16.5237 8.75 15.8333 8.75C15.143 8.75 14.5833 9.30964 14.5833 10C14.5833 10.6904 15.143 11.25 15.8333 11.25Z"
+        fill={GLYPH_COLORS[color]}
+      />
+    </Svg>
+  );
+}

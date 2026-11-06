@@ -10,6 +10,7 @@ import BottomSheet, {
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { deriveEndsNextDay, isValidTimeRange } from '@/entities/itinerary-slot';
+import { openPressGuardWindow } from '@/shared/lib/pressGuard';
 import { CloseGlyph } from '@/shared/ui/glyphs';
 import { SegmentedControl } from '@/shared/ui/SegmentedControl';
 import { HourMinuteWheel } from '@/shared/ui/HourMinuteWheel';
@@ -121,7 +122,9 @@ export function TimeSheet({
   const nextEnd = endConfigured ? `${endHour}:${endMinute}:00` : endAt;
   const rangeInvalid = !isValidTimeRange(nextStart, nextEnd);
 
+  // 시트를 닫는 누름은 연타 창을 연다 — 둘째 탭이 닫힌 시트 아래 버튼(편집기 「일정 저장하기」 등)을 누르지 않게(TRIP-1793 D4).
   function handleApply(): void {
+    openPressGuardWindow();
     onApply({
       startAt: nextStart,
       endAt: nextEnd,
@@ -172,7 +175,10 @@ export function TimeSheet({
             testID={`${testIDPrefix}-close`}
             accessibilityRole="button"
             accessibilityLabel="닫기"
-            onPress={onCancel}
+            onPress={() => {
+              openPressGuardWindow();
+              onCancel();
+            }}
             className="h-[44px] w-[44px] items-center justify-center"
           >
             <CloseGlyph size={24} color="ink" />

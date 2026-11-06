@@ -8,7 +8,10 @@ import { getInstallId } from '@/shared/storage';
 import { showToast } from '@/shared/ui/Toast';
 
 import { photoAvailability } from '../model/photoAvailability';
-import { pickPhotoForVisit } from '@/features/attach-visit-media';
+import {
+  photoProgressLabel,
+  useMultiPhotoAttach,
+} from '@/features/attach-visit-media';
 import { useVisitAttachments } from '../model/useVisitAttachments';
 import { MemoInline } from '@/features/attach-visit-media';
 import { PhotoThumbStrip, type PhotoThumbVM } from './PhotoThumbStrip';
@@ -26,8 +29,9 @@ import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
  * 저장에 성공한 메모(`savedMemo`) — TRIP-1415 부터는 그다음 서버 memo(records), 없으면 ''.
  *
  * TRIP-1070 · 사진:
- *  - `+` → 앨범에서 1장 → `attachPhoto`(POST → 재조회). 못 고른 사유는 카드 안 안내 한 줄
- *    (`record-trip-photo-notice-{id}`), 다음 `+` 에 지운다. 취소는 조용히.
+ *  - `+` → 앨범에서 최대 10장(방문 30장 − 이미 붙은 장수 이내, TRIP-1797) → 차례로 POST → 끝에서 재조회 한 번.
+ *    규칙(남은 칸·진행·부분 실패·[다시 시도]·잠금)은 `useMultiPhotoAttach` 가 쥐고 이 카드는 결과만 그린다.
+ *    안내는 카드 안 한 줄(`record-trip-photo-notice-{id}`) — 못 고른 사유·상한·"N장을 붙이지 못했어요" 모두. 다음 `+` 에 지운다. 취소는 조용히.
  *  - 셀 판정 = `photoAvailability(사진, 이 설치 id, 앨범에서 찾았나)`. 이 설치 id·앨범 주소를 아직 모르는
  *    사진은 셀을 그리지 않는다 — 모르는 동안 "다른 기기"로 깜빡이지 않게(F5). 앨범 주소 조회는 이 기기
  *    사진만, Query 캐시에 한 번(`staleTime: Infinity`).
@@ -51,9 +55,10 @@ export function VisitRecordCardContainer({
 }: VisitRecordCardContainerProps): ReactElement {
   const {
     photos,
-    attachPhoto,
-    failedUploads,
-    retryUpload,
+    photoLoadFailed,
+    photoLoadRetrying,
+    retryPhotoLoad,
+    photoCount,
     saveMemo,
     savedMemo,
     memoReady,
@@ -65,9 +70,14 @@ export function VisitRecordCardContainer({
     tripId,
     visitCheckId: card.visitCheckId,
   });
-  const [photoNotice, setPhotoNotice] = useState<string | null>(null);
+  // TRIP-1797 — 사진 여러 장 한 번에. 장수를 아는 쪽이라 서버 count 를 그대로 넘긴다(허브와 달리 따로 조회하지 않는다).
+  const photoFlow = useMultiPhotoAttach({
+    tripId,
+    toastTestID: 'record-trip-photo-saved-toast',
+  });
+  const photoNotice = photoFlow.notice?.text ?? null;
   // TRIP-1216 — 안내가 권한 거부라 설정에서만 풀릴 때 [설정 열기] 를 함께 그린다.
-  const [photoNeedsSettings, setPhotoNeedsSettings] = useState(false);
+  const photoNeedsSettings = photoFlow.notice?.settings === true;
   const [memoFailed, setMemoFailed] = useState(false);
   // 저장 시도 번호 — 늦게 끝난 옛 시도가 최신 시도의 안내 상태를 덮지 않게 한다(03b 경고 1).
   const memoAttempt = useRef(0);
@@ -100,15 +110,7 @@ export function VisitRecordCardContainer({
     mine.map((p, i) => [p.localAssetId, uriResults[i]?.data])
   );
 
-  const onPressAdd = async () => {
-    setPhotoNotice(null);
-    setPhotoNeedsSettings(false);
-    const picked = await pickPhotoForVisit();
-    if ('notice' in picked) {
-      setPhotoNotice(picked.notice);
-      setPhotoNeedsSettings(picked.settings === true);
-    } else await attachPhoto(picked.asset, picked.gpsConsent);
-  };
+  const onPressAdd = () => photoFlow.attach(card.visitCheckId, photoCount);
 
   // TRIP-1078 · 메모 PUT 실패를 버리지 않는다(INV-4) — 카드 안 안내 한 줄, 다음 시도에 지운다.
   // TRIP-1426 · 성공은 PUT 이 실제로 나갔고(saved) 그 시도가 최신일 때만 공용 토스트로 알린다.
@@ -145,11 +147,13 @@ export function VisitRecordCardContainer({
         },
       ];
     }),
-    ...failedUploads.map((f): PhotoThumbVM => ({
-      visitPhotoMetaId: f.localAssetId,
-      availability: 'upload-failed',
-      uri: null,
-    })),
+    ...(photoFlow.failed?.localAssetIds ?? []).map(
+      (localAssetId): PhotoThumbVM => ({
+        visitPhotoMetaId: localAssetId,
+        availability: 'upload-failed',
+        uri: null,
+      })
+    ),
   ];
 
   return (
@@ -164,6 +168,40 @@ export function VisitRecordCardContainer({
             photos={photoVMs}
             onPressAdd={() => void onPressAdd()}
           />
+          {photoFlow.progress ? (
+            <Text
+              testID={`visit-photo-progress-${card.visitCheckId}`}
+              className="text-caption text-muted"
+            >
+              {photoProgressLabel(
+                photoFlow.progress.current,
+                photoFlow.progress.total
+              )}
+            </Text>
+          ) : null}
+          {/* TRIP-1757 — 목록을 못 받은 채(404 아닌 실패)면 '+' 만 남아 올린 사진이 사라진 것처럼 보인다. 안내만 더하고 '+' 는 살려 둔다. */}
+          {photoLoadFailed ? (
+            <View className="flex-row items-center justify-between gap-sm">
+              <Text
+                testID={`record-trip-photo-load-error-${card.visitCheckId}`}
+                className="shrink text-caption text-muted"
+              >
+                사진을 불러오지 못했어요
+              </Text>
+              <Pressable
+                testID={`record-trip-photo-load-retry-${card.visitCheckId}`}
+                accessibilityRole="button"
+                disabled={photoLoadRetrying}
+                accessibilityState={{ disabled: photoLoadRetrying }}
+                hitSlop={8}
+                onPress={retryPhotoLoad}
+              >
+                <Text className="font-noto-bold text-caption text-primary">
+                  다시 시도
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
           {photoNotice ? (
             <Text
               testID={`record-trip-photo-notice-${card.visitCheckId}`}
@@ -231,14 +269,10 @@ export function VisitRecordCardContainer({
           ) : null}
         </>
       }
-      // 카드-레벨 재시도(01b 결정 1) — 실패 자산 전체를 재발화. 실패가 없으면 버튼 자체를 안 내린다.
+      // 카드-레벨 재시도(01b 결정 1) — 실패한 사진만 다시. 실패가 없거나 붙이는 중이면 버튼 자체를 안 내린다.
       uploadRetry={
-        failedUploads.length > 0
-          ? {
-              onPress: () => {
-                for (const f of failedUploads) void retryUpload(f.localAssetId);
-              },
-            }
+        photoFlow.failed !== null && !photoFlow.busy
+          ? { onPress: () => void photoFlow.retry() }
           : undefined
       }
     />

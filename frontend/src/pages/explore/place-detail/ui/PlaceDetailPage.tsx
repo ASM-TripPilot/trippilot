@@ -27,6 +27,7 @@ import { SAVED_LIST_LOAD_FAILED_TOAST } from '@/shared/ui/savedListLoadToast';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { showToast } from '@/shared/ui/Toast';
 import { canOpenNaverPlace, openNaverPlace } from '@/shared/map';
+import { copyText } from '@/shared/clipboard';
 
 import {
   SAVE_FAILURE_NOTICE,
@@ -38,6 +39,17 @@ import { PlaceDetailScreen } from './PlaceDetailScreen';
 
 const OPEN_NAVER_ERROR =
   '네이버 지도를 열 수 없어요. 잠시 후 다시 시도해 주세요.';
+
+// TRIP-1799 — 주소 복사 결과 토스트. 실패 문구는 Figma 에 없는 발명 카피(에러 톤).
+const ADDRESS_COPIED_TOAST = {
+  testID: 'explore-place-address-copied',
+  message: '주소를 복사했어요',
+} as const;
+const ADDRESS_COPY_FAILED_TOAST = {
+  testID: 'explore-place-address-copy-failed',
+  message: '주소를 복사하지 못했어요',
+  tone: 'error',
+} as const;
 
 // notFound 삽화 — 회색 중립 배지(LivePlacePage 선례, 없는 사진을 지어내지 않는다).
 const NEUTRAL_BADGE = (
@@ -160,6 +172,19 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
     if (result === 'failed') setOpenNaverError(OPEN_NAVER_ERROR);
   }
 
+  // 웹 복사는 사용자 클릭 안에서만 허용되므로 `copyText` 가 첫 동작이다(앞에 await 없음). 복사되지 않았는데 「복사했어요」
+  // 를 띄우지 않는다(INV-4) — false·reject 모두 에러 토스트 하나.
+  const copyableAddress = resolvedPlace.address?.trim() ?? '';
+  async function handleCopyAddress(): Promise<void> {
+    let copied = false;
+    try {
+      copied = await copyText(copyableAddress);
+    } catch {
+      copied = false;
+    }
+    showToast(copied ? ADDRESS_COPIED_TOAST : ADDRESS_COPY_FAILED_TOAST);
+  }
+
   function handlePressSaveErrorAction(): void {
     if (saveError?.action === 'login') {
       router.push('/(auth)/login');
@@ -181,6 +206,9 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
       onToggleSave={() => void attemptToggle()}
       onPressOpenNaver={
         canOpenNaverPlace(place) ? () => void handleOpenNaver() : undefined
+      }
+      onPressCopyAddress={
+        copyableAddress ? () => void handleCopyAddress() : undefined
       }
       openNaverError={openNaverError}
       onPressSaveErrorAction={handlePressSaveErrorAction}

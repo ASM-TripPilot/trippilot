@@ -14,8 +14,10 @@ import {
   useLiveItinerary,
 } from '@/features/execution';
 import { projectSlotProgress } from '@/entities/itinerary-slot';
-import { photoAttach } from '@/features/attach-visit-media';
-import { pickPhotoForVisit } from '@/features/attach-visit-media';
+import {
+  photoProgressLabel,
+  useMultiPhotoAttach,
+} from '@/features/attach-visit-media';
 import {
   useSavedVisitMemos,
   useVisitMemo,
@@ -45,7 +47,6 @@ import { RiskDetailSheet } from './RiskDetailSheet';
 import type { ReplanDiff, Trigger } from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdReplanSessionsSessionIdDiffQueryKey,
-  postTripsTripIdVisitsVisitCheckIdPhotos,
   useGetTripsTripId,
   useGetTripsTripIdVisitsDaysDay,
 } from '@/shared/api/index.hooks';
@@ -102,9 +103,6 @@ const NEUTRAL_BADGE = (
   <View className="h-[72px] w-[72px] rounded-pill bg-surface-strong" />
 );
 
-/** 허브 [사진] 저장 실패 안내(INV-4) — 허브엔 사진 칸이 없어 실패 셀 대신 카드 아래 한 줄로. */
-const PHOTO_SAVE_FAILED = '사진을 기록하지 못했어요. 다시 시도해 주세요';
-
 /** 허브 메모 저장 실패 안내(INV-4) — j01 `VisitRecordCardContainer` 와 같은 문장(TRIP-1117). */
 const MEMO_SAVE_FAILED = '메모를 저장하지 못했어요. 다시 시도해 주세요.';
 // TRIP-1561 — [도착]·[방문 완료] 기록 실패 안내(INV-4).
@@ -113,7 +111,6 @@ const ARRIVE_FAILED = '도착을 기록하지 못했어요. 다시 눌러 주세
 
 /** TRIP-1426 저장 안내(공용 토스트) — 요청이 실제로 나가 성공했을 때만. j01 과 같은 메모 문장. */
 const MEMO_SAVED_TOAST = '메모를 저장했어요';
-const PHOTO_SAVED_TOAST = '사진을 기록했어요';
 
 /** 뒤로 갈 히스토리가 없을 때(딥링크·푸시 직행)의 폴백(INV-4 침묵 금지) · notFound 얼굴 [홈으로] 목적지. */
 const HOME_FALLBACK = '/(tabs)';
@@ -185,13 +182,6 @@ export function LiveItineraryPage({
       setExpandSignal((n) => n + 1);
     }
   }
-  // [사진] 안내 한 줄(TRIP-1070) — 누른 그 카드(poiId, TRIP-1203)에만. 어느 카드든 다음 [사진] 누름에 지운다.
-  // settings(TRIP-1216) = 안내가 권한 거부라 설정에서만 풀릴 때 [설정 열기] 를 함께 그린다.
-  const [photoNotice, setPhotoNotice] = useState<{
-    poiId: string;
-    text: string;
-    settings: boolean;
-  } | null>(null);
   // TRIP-1189 다음 예정지 [길찾기] — 외부 앱을 띄우는 동안 연타를 막는 잠금(ref: 같은 틱 두 번째 press 도 본다)과
   // 앱·웹 모두 실패했을 때의 거리 안내(INV-4).
   const directionsBusy = useRef(false);
@@ -297,6 +287,51 @@ export function LiveItineraryPage({
       : Object.keys(mediaVisitIdByPoiId).find(
           (poiId) => mediaVisitIdByPoiId[poiId] === visitCheckId
         );
+  // TRIP-1797 [사진] — 여러 장 한 번에. 남은 칸·차례 POST·진행·실패·재시도·잠금은 훅이 쥐고(j01 과 같은 규칙), 허브는 방문 id 를
+  // poiId 로 되짚어 누른 그 카드에만 안내·진행·[다시 시도]를 내린다. 허브엔 사진 칸이 없고 마운트 때 사진 목록을 조회하지 않는다(F6) —
+  // 현재 장수는 [사진]을 누른 순간 훅이 한 번만 조회한다. 1장 성공은 현행 토스트 "사진을 기록했어요"를 유지한다.
+  const photoAttachFlow = useMultiPhotoAttach({
+    tripId,
+    toastTestID: 'live-photo-saved-toast',
+    singleSuccessToast: true,
+  });
+  const photoNoticePoiId = poiOfVisit(
+    photoAttachFlow.notice?.visitCheckId ?? null
+  );
+  const photoNotice =
+    photoAttachFlow.notice !== null && photoNoticePoiId !== undefined
+      ? {
+          poiId: photoNoticePoiId,
+          text: photoAttachFlow.notice.text,
+          settings: photoAttachFlow.notice.settings,
+        }
+      : null;
+  const photoProgressPoiId = poiOfVisit(
+    photoAttachFlow.progress?.visitCheckId ?? null
+  );
+  const photoProgress =
+    photoAttachFlow.progress !== null && photoProgressPoiId !== undefined
+      ? {
+          poiId: photoProgressPoiId,
+          text: photoProgressLabel(
+            photoAttachFlow.progress.current,
+            photoAttachFlow.progress.total
+          ),
+        }
+      : null;
+  const photoRetryPoiId = poiOfVisit(
+    photoAttachFlow.failed?.visitCheckId ?? null
+  );
+  const photoRetry =
+    photoAttachFlow.failed !== null &&
+    photoRetryPoiId !== undefined &&
+    !photoAttachFlow.busy
+      ? {
+          poiId: photoRetryPoiId,
+          onPress: () => void photoAttachFlow.retry(),
+        }
+      : null;
+
   // 메모 시트 열림 = "어느 방문으로 열었나"(AC-16). TRIP-1203 Q1 — 그 방문이 이 날의 관람 중·완료 표에 있는 동안
   // 열려 있다(관람 중이 완료로 바뀌어도 남고, 그날 목록에서 사라지면 저절로 빠진다).
   const [memoSheetFor, setMemoSheetFor] = useState<string | null>(null);
@@ -625,35 +660,11 @@ export function LiveItineraryPage({
     }
   };
 
-  // TRIP-1070 [사진] — 누른 카드의 방문(관람 중·TRIP-1203 완료)에 메타만 POST 한다. 사진 목록은 조회하지 않는다
-  // (허브엔 사진 칸이 없다 — useVisitAttachments 는 GET 을 무조건 쏘므로 부르지 않는다, F6).
+  // TRIP-1070 [사진] — 누른 카드의 방문(관람 중·TRIP-1203 완료)에 붙인다. 진행 중 재누름은 훅이 무시한다.
   const attachPhoto = async (poiId: string) => {
     const visitCheckId = mediaVisitIdByPoiId[poiId];
     if (visitCheckId === undefined) return;
-    setPhotoNotice(null);
-    const picked = await pickPhotoForVisit();
-    if ('notice' in picked) {
-      // 취소는 notice null — 조용히 둔다.
-      setPhotoNotice(
-        picked.notice === null
-          ? null
-          : { poiId, text: picked.notice, settings: picked.settings === true }
-      );
-      return;
-    }
-    try {
-      await postTripsTripIdVisitsVisitCheckIdPhotos(
-        tripId,
-        visitCheckId,
-        photoAttach(picked.asset, picked.gpsConsent)
-      );
-      showToast({
-        message: PHOTO_SAVED_TOAST,
-        testID: 'live-photo-saved-toast',
-      });
-    } catch {
-      setPhotoNotice({ poiId, text: PHOTO_SAVE_FAILED, settings: false });
-    }
+    await photoAttachFlow.attach(visitCheckId);
   };
 
   // TRIP-1117 [메모] — 허브 위 메모 시트에서 저장한다(TRIP-1070 결정 1(c) 번복). 닫힘은 저장 성공 뒤(Q1).
@@ -835,6 +846,8 @@ export function LiveItineraryPage({
         }}
         doneMediaPoiIds={new Set(Object.keys(doneVisitIds))}
         photoNotice={photoNotice}
+        photoProgress={photoProgress}
+        photoRetry={photoRetry}
         onPressPhotoSettings={
           photoNotice?.settings ? () => void openAppSettings() : undefined
         }

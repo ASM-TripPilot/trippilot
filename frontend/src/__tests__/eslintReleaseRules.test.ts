@@ -57,6 +57,8 @@ const NO_CONSOLE = 'no-console';
 
 const PROD_PROBE = 'src/features/settings/__release_probe__.ts';
 const PHOTO_PROBE = 'src/shared/photo/__release_probe__.ts';
+// TRIP-1799 — 클립보드 입구(`shared/clipboard`)도 photo 와 같은 "정적 import 금지·호출 시점 require 허용" 계약.
+const CLIPBOARD_PROBE = 'src/shared/clipboard/__release_probe__.ts';
 const REFLECTION_UI_PROBE =
   'src/features/share-trip-card/ui/__release_probe__.ts';
 const REFLECTION_MODEL_PROBE =
@@ -154,6 +156,25 @@ describe('네이티브 사진·캡처 모듈은 정적으로 끌지 않는다 (�
     const ruleIds = await lint(
       "export const probe = () =>\n  // eslint-disable-next-line @typescript-eslint/no-require-imports\n  require('expo-image-picker') as typeof import('expo-image-picker');\n",
       PHOTO_PROBE
+    );
+
+    expect(ruleIds).toEqual([]);
+  });
+
+  // TRIP-1799 — 모듈 없는 옛 dev build 에서 expo-clipboard 는 로드 순간 던진다(`requireNativeModule`). 입구(`@/shared/clipboard`)만 호출 시점에 연다.
+  it('shared/clipboard 입구도 expo-clipboard 를 정적 import 하면 error', async () => {
+    const ruleIds = await lint(
+      "import * as Clipboard from 'expo-clipboard';\nexport const probe = Clipboard;\n",
+      CLIPBOARD_PROBE
+    );
+
+    expect(ruleIds).toContain(RESTRICTED_IMPORTS);
+  });
+
+  it('shared/clipboard 입구가 함수 안에서 require 로 여는 것은 error 0', async () => {
+    const ruleIds = await lint(
+      "export const probe = () =>\n  // eslint-disable-next-line @typescript-eslint/no-require-imports\n  require('expo-clipboard') as typeof import('expo-clipboard');\n",
+      CLIPBOARD_PROBE
     );
 
     expect(ruleIds).toEqual([]);
@@ -281,6 +302,7 @@ describe('네이티브 사진·캡처 모듈은 정적으로 끌지 않는다 (�
     ['expo-media-library/build/MediaLibrary'],
     ['react-native-view-shot/src/index'],
     ['expo-sharing/build/Sharing'],
+    ['expo-clipboard/build/Clipboard'],
   ])('네이티브 모듈의 하위 경로 %s 를 정적 import 하면 error', async (spec) => {
     const ruleIds = await lint(
       `import * as nativeModule from '${spec}';\nexport const probe = nativeModule;\n`,

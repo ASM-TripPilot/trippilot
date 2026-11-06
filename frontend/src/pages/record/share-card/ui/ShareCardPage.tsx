@@ -28,6 +28,7 @@ import {
   useGetTripsTripId,
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
+import { isNotFound } from '@/shared/api';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**
@@ -45,6 +46,10 @@ import { StateNotice } from '@/shared/ui/StateNotice';
  * 용도라 요약이 준비되고 방문이 있을 때만 보내고, 실패해도 얼굴을 안 바꾼다(중립색).
  * 얼굴 판정(조회 중·미준비·카드)은 `ShareCardPage.test.tsx`(TRIP-1071)가 심판한다. 카드 VM·해시태그
  * 조립의 화면 결과는 여전히 6-b 실기·프리뷰 몫이다.
+ *
+ * TRIP-1757 · 여행 조회가 404 아닌 이유로 실패하면(데이터 없음) 제목·기간·지역이 빠진 카드가 외부로 나가므로 공유를 막는다 — 요약 오류 얼굴과 같은 결의
+ * 전면 얼굴(`reflection-share-trip-error`)을 카드 조립 앞에 둔다. 얼굴이 아예 안 마운트되니 덱·내보내기·서버 문구 POST 가 함께 막히고(`exportLocked` 와
+ * 별개 경로), 재시도가 성공해야 `ShareCardFace` 가 처음 마운트돼 POST 가 1회 나간다. 데이터가 이미 있는 배경 재조회 실패·404 는 막지 않는다.
  */
 
 export interface ShareCardPageProps {
@@ -152,6 +157,27 @@ export function ShareCardPage({ tripId }: ShareCardPageProps): ReactElement {
               label: '돌아가기',
               variant: 'outline',
               onPress: handleBack,
+            },
+          ]}
+        />
+      </NoticeFrame>
+    );
+  }
+
+  if (trip.data === undefined && trip.isError && !isNotFound(trip.error)) {
+    return (
+      <NoticeFrame>
+        <StateNotice
+          testID="reflection-share-trip-error"
+          illustration={PENDING_ILLUSTRATION}
+          title="여행 정보를 불러오지 못했어요"
+          description="잠시 후 다시 시도해 주세요"
+          actions={[
+            {
+              testID: 'reflection-share-trip-retry',
+              label: '다시 시도',
+              variant: 'filled',
+              onPress: trip.refetch,
             },
           ]}
         />
