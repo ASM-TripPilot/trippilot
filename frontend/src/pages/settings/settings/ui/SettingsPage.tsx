@@ -37,6 +37,7 @@ import {
   type AccountSettings,
   PersonalizationInfoReason,
 } from '@/shared/api/index.schemas';
+import { deletePhotoCopies } from '@/shared/photo';
 import {
   registerPushIfGranted,
   unregisterStoredPushToken,
@@ -198,6 +199,9 @@ export function SettingsPage(): ReactElement {
         setDeleteRequestError(false);
         // 삭제를 요청한 계정으로 푸시가 가지 않게 이 기기 토큰을 해제한다(TRIP-835 AC-6).
         void unregisterStoredPushToken();
+        // TRIP-1803 · 개인 사진을 앱 안에 남기지 않는다 — 기기 사본을 지우고, 지운 파일을 가리키는 주소 캐시도 낡게 한다.
+        deletePhotoCopies();
+        void queryClient.invalidateQueries({ queryKey: ['photo-uri'] });
       },
       // 5xx·네트워크 오류 모두 — 상태는 active 그대로, 인라인 오류로 알린다(TRIP-935 R5, INV-4).
       onError: () => {

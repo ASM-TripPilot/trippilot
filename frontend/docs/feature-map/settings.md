@@ -25,6 +25,7 @@ routes:
 - `settings-export-truncated` 서버가 일부를 잘랐으면 "일부 항목이 잘렸어요: …".
 - `settings-export-error` 조회 실패 / 공유 모듈 없는 빌드 / 파일 쓰기·공유 실패 각각의 안내 문구.
 - `settings-affiliate` "외부 이동 시 제휴 안내 다시 보기" 토글(낙관 반영, 실패 시 되돌리고 안내). 값을 모르면 토글 비활성.
+- `settings-delete-photo-copies` 계정 삭제 요청이 성공하면 이 기기의 사진 사본도 비운다 — 화면 동작과 확인 방법은 `settings-account.md` 의 `delete-photo-copies`.
 - `settings-nav` 하위 화면 진입: 여행 취향·GPS 이동경로 기록·개인화·알림 설정·약관 3종.
 - `settings-nav-double-tap` 위치·알림·약관·취향·개인화 행을 빠르게 두 번 눌러도 그 화면이 한 번만 열리고, 뒤로 한 번에 설정으로 돌아온다. *(TRIP-1775 · 실화면 미검증 — jest 는 이동 호출 1회까지만 본다)*
 - `settings-footer` 하단 `TripPilot v<버전>`(버전을 알 때만)과 데이터 출처 블록, `© OpenStreetMap contributors` 링크는 외부 브라우저.

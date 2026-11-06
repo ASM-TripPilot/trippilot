@@ -3,9 +3,18 @@
  */
 import {
   canResolveDevicePhotos,
+  deletePhotoCopies,
   pickPhotoAssets,
+  readPhotoAccess,
   resolvePhotoUri,
 } from './index';
+import {
+  cacheFilesIn,
+  documentFileCount,
+  fakeExpoFileSystemModule,
+  resetFakeFs,
+  seedCacheFile,
+} from '@/test-support/fakeExpoFileSystem';
 
 /**
  * TRIP-1070 · AC-2·AC-6·AC-9·AC-10 — 사진 앨범 어댑터(`shared/photo`) 실장.
@@ -49,6 +58,12 @@ jest.mock('expo-media-library', () => ({
 jest.mock('@/shared/storage/installId', () => ({
   getInstallId: () => mockGetInstallId(),
 }));
+jest.mock(
+  'expo-file-system',
+  () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('@/test-support/fakeExpoFileSystem').fakeExpoFileSystemModule
+);
 
 const GRANTED = {
   granted: true,
@@ -108,6 +123,8 @@ beforeEach(() => {
   mockAssetInfo.mockResolvedValue(assetInfo());
   mockGetInstallId.mockResolvedValue('dev-A');
 });
+// 가짜 파일은 모듈 싱글턴이다 — 사본이 다음 테스트로 새지 않게 파일 최상위에서 비운다.
+afterEach(() => resetFakeFs());
 
 describe('🔴 pickPhotoAssets · 고른 사진의 메타만 뽑는다 (AC-2 · BR-U5-11)', () => {
   it('P1 한 장을 고르면 자산 번호·설치 식별자·촬영 시각(ISO)·좌표를 담은 picked 를 돌려준다', async () => {
@@ -330,5 +347,245 @@ describe('🔴 canResolveDevicePhotos · 앨범 화면이 성립하는 빌드인
     expect(mockMlRequest).not.toHaveBeenCalled();
     expect(mockLaunch).not.toHaveBeenCalled();
     expect(mockGetInstallId).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * TRIP-1803 · "선택한 사진만"(limited) — 고른 사진이 허용 목록 밖이면 앨범이 nil 을 준다. 앱이 허용 목록에 넣을 API 가 없어
+ * 고를 때 피커 파일을 앱 문서 폴더로 옮겨 둔다(D1). 사본은 limited 일 때만 쓴다(D2 — 원본 삭제·권한 해제 사진은 INV-U5-05 그대로).
+ *
+ * 무엇을 보장하나: 고른 사진이 사본으로 풀린다 · 번호마다 자기 파일을 찾는다(`/` 포함) · 실패해도 첨부는 막지 않는다 ·
+ *   전체 허용·앨범에서 풀리는 사진은 사본을 안 만든다 · 서버로 나갈 메타에 경로가 안 섞인다.
+ * (개념) 사본 만들기를 경로로 흉내 내지 않고 **limited 로 한 번 고른 뒤** 권한을 바꾼다 — 폴더·파일 이름은 구현 재량이다.
+ * 실제 nil·실제 파일 이동은 jest 사각 → 기능 지도(02).
+ */
+describe('🔴 TRIP-1803 · 고를 때 사본을 둔다', () => {
+  const LIMITED = { ...GRANTED, accessPrivileges: 'limited' };
+  const pickerFile = (id: string) => `${id.replace(/\//g, '-')}.jpg`;
+
+  /** 피커가 넘겨준 캐시 파일(글자 = `bytes-<번호>`)을 깔고 그 주소로 응답한다. */
+  function pickerGives(ids: string[], { missing = [] as string[] } = {}) {
+    for (const id of ids) {
+      if (!missing.includes(id)) {
+        seedCacheFile('ImagePicker', pickerFile(id), `bytes-${id}`);
+      }
+    }
+    mockLaunch.mockResolvedValue({
+      canceled: false,
+      assets: ids.map((assetId) => ({
+        assetId,
+        uri: `file:///cache/ImagePicker/${pickerFile(assetId)}`,
+        width: 1200,
+        height: 900,
+      })),
+    });
+  }
+  const textOf = (uri: string | null) =>
+    new fakeExpoFileSystemModule.File(uri as string).textSync();
+
+  beforeEach(() => {
+    grantAll(LIMITED as typeof GRANTED);
+    mockAssetInfo.mockResolvedValue(null); // 허용 목록 밖 = 앨범이 nil 을 준다.
+  });
+
+  it.each<[string, () => void]>([
+    ['nil', () => mockAssetInfo.mockResolvedValue(null)],
+    ['거절', () => mockAssetInfo.mockRejectedValue(new Error('not allowed'))],
+    [
+      '주소 없는 응답',
+      () => mockAssetInfo.mockResolvedValue(assetInfo({ localUri: undefined })),
+    ],
+  ])(
+    'C1 limited 에서 앨범 응답이 %s 면 고른 사진이 앱 문서 폴더 사본으로 풀리고 캐시 원본은 옮겨진다',
+    async (_label, primeAlbum) => {
+      primeAlbum();
+      pickerGives(['id-1']);
+
+      const result = await pickPhotoAssets({ limit: 10 });
+      const uri = await resolvePhotoUri('id-1');
+
+      expect(result.kind).toBe('picked');
+      expect(uri).toMatch(/^file:\/\/\/document\//); // 캐시 폴더면 OS 가 비워 같은 결함이 돌아온다.
+      expect(textOf(uri)).toBe('bytes-id-1');
+      expect(cacheFilesIn('ImagePicker')).toEqual([]);
+    }
+  );
+
+  it('C2 세 장을 고르면 번호마다 자기 파일을 찾는다', async () => {
+    pickerGives(['a', 'b', 'c']);
+
+    await pickPhotoAssets({ limit: 10 });
+
+    expect(documentFileCount()).toBe(3);
+    expect(textOf(await resolvePhotoUri('a'))).toBe('bytes-a');
+    expect(textOf(await resolvePhotoUri('b'))).toBe('bytes-b');
+    expect(textOf(await resolvePhotoUri('c'))).toBe('bytes-c');
+  });
+
+  it('C3 (E-10) 번호에 `/` 가 있어도 저장과 조회가 같은 파일을 찾고 서로 안 섞인다', async () => {
+    pickerGives(['UUID-1/L0/001', 'UUID-1/L0/002']);
+
+    await pickPhotoAssets({ limit: 10 });
+
+    expect(textOf(await resolvePhotoUri('UUID-1/L0/001'))).toBe(
+      'bytes-UUID-1/L0/001'
+    );
+    expect(textOf(await resolvePhotoUri('UUID-1/L0/002'))).toBe(
+      'bytes-UUID-1/L0/002'
+    );
+  });
+
+  it('C4 (E-1) 한 장의 사본이 실패해도 reject·failed 없이 셋 다 picked 이고, 나머지 두 장은 풀리고 그 장만 null 이다', async () => {
+    pickerGives(['a', 'b', 'c'], { missing: ['b'] });
+
+    const result = await pickPhotoAssets({ limit: 10 });
+
+    expect(result.kind).toBe('picked');
+    const assets = result.kind === 'picked' ? result.assets : [];
+    expect(assets.map((a) => a.localAssetId)).toEqual(['a', 'b', 'c']);
+    expect(textOf(await resolvePhotoUri('a'))).toBe('bytes-a');
+    expect(await resolvePhotoUri('b')).toBeNull();
+    expect(textOf(await resolvePhotoUri('c'))).toBe('bytes-c');
+  });
+
+  it('C5 limited 라도 앨범에서 풀리는 사진(허용 목록 안)은 사본을 만들지 않는다', async () => {
+    pickerGives(['id-1']);
+    mockAssetInfo.mockResolvedValue(assetInfo());
+
+    await pickPhotoAssets({ limit: 10 });
+
+    expect(documentFileCount()).toBe(0);
+    expect(cacheFilesIn('ImagePicker')).toHaveLength(1);
+  });
+
+  it('C6 (E-7) 전체 허용이면 앨범이 못 풀어도 사본을 만들지 않는다', async () => {
+    grantAll(GRANTED);
+    pickerGives(['id-1']);
+
+    await pickPhotoAssets({ limit: 10 });
+
+    expect(documentFileCount()).toBe(0);
+    expect(cacheFilesIn('ImagePicker')).toHaveLength(1);
+  });
+
+  it('C7 같은 사진을 다시 골라도 reject 없이 처음 사본을 유지한다', async () => {
+    pickerGives(['id-1']);
+    await pickPhotoAssets({ limit: 10 });
+
+    seedCacheFile('ImagePicker', pickerFile('id-1'), 'bytes-second');
+    const second = await pickPhotoAssets({ limit: 10 });
+
+    expect(second.kind).toBe('picked');
+    expect(documentFileCount()).toBe(1);
+    expect(textOf(await resolvePhotoUri('id-1'))).toBe('bytes-id-1');
+  });
+
+  it('C8 (E-9) 서버로 보낼 메타에는 번호·기기 id 만 있고 파일 경로가 안 섞인다 (BR-U5-11)', async () => {
+    pickerGives(['id-1']);
+
+    const result = await pickPhotoAssets({ limit: 10 });
+
+    expect(result).toEqual({
+      kind: 'picked',
+      assets: [{ localAssetId: 'id-1', deviceId: 'dev-A' }],
+      skipped: 0,
+    });
+    expect(documentFileCount()).toBe(1); // 사본이 실제로 만들어진 상태에서 잰다.
+  });
+
+  describe('resolvePhotoUri · 앨범 먼저, 사본은 limited 일 때만 (D2 · INV-U5-05)', () => {
+    async function pickedOnce(id = 'id-1') {
+      pickerGives([id]);
+      await pickPhotoAssets({ limit: 10 });
+      expect(documentFileCount()).toBe(1); // 긍정 앵커 — 사본이 있어야 아래 null 이 뜻이 있다.
+    }
+
+    it('R5 limited 에서 앨범이 풀리면 사본이 있어도 앨범 주소를 준다', async () => {
+      await pickedOnce();
+      mockAssetInfo.mockResolvedValue(assetInfo());
+
+      await expect(resolvePhotoUri('id-1')).resolves.toBe(
+        'file:///photos/asset-1.jpg'
+      );
+    });
+
+    it('R6 (E-2) limited 인데 사본이 없는 옛 사진은 null 이다', async () => {
+      await expect(resolvePhotoUri('old-photo')).resolves.toBeNull();
+    });
+
+    it('R7 (E-4) 전체 허용으로 넓힌 뒤 앨범이 못 풀면(원본 삭제) 사본이 있어도 null 이다', async () => {
+      await pickedOnce();
+      grantAll(GRANTED);
+
+      await expect(resolvePhotoUri('id-1')).resolves.toBeNull();
+    });
+
+    it('R8 (E-5) 권한을 거부로 바꾸면 사본이 있어도 null 이고 권한 요청은 0회다', async () => {
+      await pickedOnce();
+      grantAll(DENIED);
+      mockAssetInfo.mockRejectedValue(new Error('no permission'));
+      mockMlRequest.mockClear();
+      mockIpRequest.mockClear();
+
+      await expect(resolvePhotoUri('id-1')).resolves.toBeNull();
+
+      expect(mockMlRequest).not.toHaveBeenCalled();
+      expect(mockIpRequest).not.toHaveBeenCalled();
+    });
+
+    it('R9 권한 조회가 실패하면 모르는 것으로 보고 사본을 쓰지 않는다', async () => {
+      await pickedOnce();
+      mockMlGet.mockRejectedValue(new Error('native'));
+
+      await expect(resolvePhotoUri('id-1')).resolves.toBeNull();
+    });
+  });
+
+  describe('deletePhotoCopies · 계정 삭제 때 사본을 비운다 (E-11)', () => {
+    it('D1 사본은 지우고 문서 폴더의 다른 파일은 남기며, 지운 뒤 limited 조회는 null 이다', async () => {
+      pickerGives(['a', 'b']);
+      await pickPhotoAssets({ limit: 10 });
+      const { File, Paths } = fakeExpoFileSystemModule;
+      new File(Paths.document, 'install-flag-x').create();
+      expect(documentFileCount()).toBe(3);
+
+      deletePhotoCopies();
+
+      expect(documentFileCount()).toBe(1);
+      expect(new File(Paths.document, 'install-flag-x').exists).toBe(true);
+      await expect(resolvePhotoUri('a')).resolves.toBeNull();
+    });
+
+    it('D2 지울 폴더가 없어도 던지지 않는다', () => {
+      expect(() => deletePhotoCopies()).not.toThrow();
+    });
+  });
+});
+
+// TRIP-1803 — 보기만 하는 화면이 안내를 고를 때 쓴다. 요청이 아니라 조회다(팝업 0).
+describe('🔴 TRIP-1803 · readPhotoAccess (D5)', () => {
+  it.each<[string, Record<string, unknown>, string]>([
+    ['선택한 사진만', { ...GRANTED, accessPrivileges: 'limited' }, 'limited'],
+    ['거부', DENIED, 'denied'],
+    ['전체 허용', GRANTED, 'all'],
+    [
+      '아직 안 물어봄',
+      { ...DENIED, status: 'undetermined', canAskAgain: true },
+      'all',
+    ],
+  ])('A1 %s → 권한 요청 없이 답한다', async (_label, permission, expected) => {
+    mockMlGet.mockResolvedValue(permission);
+
+    await expect(readPhotoAccess()).resolves.toBe(expected);
+
+    expect(mockMlGet).toHaveBeenCalledTimes(1);
+    expect(mockMlRequest).not.toHaveBeenCalled();
+    expect(mockIpRequest).not.toHaveBeenCalled();
+  });
+
+  it('A1 조회가 실패하면 all 이다 — 모르면 버튼을 내밀지 않는다', async () => {
+    mockMlGet.mockRejectedValue(new Error('native'));
+
+    await expect(readPhotoAccess()).resolves.toBe('all');
   });
 });

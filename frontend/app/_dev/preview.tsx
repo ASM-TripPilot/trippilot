@@ -5022,6 +5022,38 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-1803 — 격자 아래 못 푼 사진 한 줄. 권한 안내는 이 기기의 실제 권한을 읽어 limited·거부일 때만 선다.
+  {
+    key: 'reflection-photo-unresolved',
+    band: 'j',
+    label: 'j03 · 회고 · 불러올 수 없는 사진 한 줄',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="default"
+        magazine={magazineDay(FOOD_DAY)}
+        editableText="오늘의 회고"
+        stats={{
+          visitCount: 4,
+          distanceKm: 12,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 6,
+        }}
+        distanceDash={false}
+        mapNotice={null}
+        hidePhotoGrid={false}
+        photos={[]}
+        unresolvedPhotoCount={2}
+        dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+        activeDay={2}
+        onSelectDay={noop}
+        recordBar={PREVIEW_RECORD_BAR}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
+      />
+    ),
+  },
   {
     key: 'reflection-magazine-culture',
     band: 'j',

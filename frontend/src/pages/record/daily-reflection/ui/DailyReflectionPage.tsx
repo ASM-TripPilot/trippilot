@@ -104,8 +104,13 @@ export function DailyReflectionPage({
 }: DailyReflectionPageProps): ReactElement {
   const daily = useDailyReflection(tripId, date);
   const res = daily.reflection;
-  const { photos, photoLoadFailed, photoLoadRetrying, retryPhotoLoad } =
-    useReflectionPhotos(tripId, date);
+  const {
+    photos,
+    unresolvedCount,
+    photoLoadFailed,
+    photoLoadRetrying,
+    retryPhotoLoad,
+  } = useReflectionPhotos(tripId, date);
   const sources = useMagazineSources(tripId, date);
 
   // 여행 기간에서 일차 탭을 조립한다(TRIP-762). 회고 계약엔 일차 소스가 없어 여행 조회로 얻는다.
@@ -255,6 +260,7 @@ export function DailyReflectionPage({
       mapNotice={missing.mapNotice}
       hidePhotoGrid={missing.hidePhotoGrid}
       photos={photos}
+      unresolvedPhotoCount={unresolvedCount}
       dayTabs={dayTabs}
       activeDay={activeDay}
       isToday={date === today}

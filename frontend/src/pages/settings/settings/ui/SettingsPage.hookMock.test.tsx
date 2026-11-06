@@ -84,6 +84,11 @@ jest.mock('@/shared/push', () => ({
   unregisterStoredPushToken: jest.fn(() => Promise.resolve()),
 }));
 jest.mock('expo-linking', () => ({ openURL: jest.fn() }));
+// TRIP-1803 — 계정 삭제 때 사진 사본을 비운다(파일 동작은 shared/photo/index.test 가 본다).
+const mockDeletePhotoCopies = jest.fn();
+jest.mock('@/shared/photo', () => ({
+  deletePhotoCopies: () => mockDeletePhotoCopies(),
+}));
 // 옛 `.version` — 게터로 둬 테스트마다 빌드 설정 버전을 바꾼다. 기본은 null(버전 줄 없음).
 let mockExpoConfig: { version?: string } | null = null;
 jest.mock('expo-constants', () => ({
@@ -429,6 +434,69 @@ describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () 
       expect(screen.getByTestId('settings-deletion-pending')).toBeOnTheScreen();
       expect(screen.getByTestId('settings-deletion-cancel')).toBeOnTheScreen();
       expect(screen.getByText(/2026/)).toBeOnTheScreen();
+    });
+
+    /**
+     * TRIP-1803 · E-11 — 계정 삭제 요청이 성공하면 기기 안 사진 사본을 지우고, 지운 파일을 가리키는 캐시 주소도 낡게 만든다.
+     * 실패하면 아무것도 지우지 않는다. 무엇을 보장하나: 성공 1회·실패 0회 · `photo-uri` 캐시 무효화.
+     * (개념) `isInvalidated` = 값은 두고 "다음에 다시 물어라" 표시만 한 상태.
+     */
+    describe('🔴 TRIP-1803 · 기기 안 사진 사본', () => {
+      const confirmDeletion = () => {
+        fireEvent.press(screen.getByTestId('settings-delete-account'));
+        fireEvent.press(screen.getByTestId('settings-delete-confirm'));
+        fireEvent.press(screen.getByTestId('settings-delete-confirm-final'));
+      };
+      function renderWithSeededUri() {
+        const client = newTestQueryClient();
+        client.setQueryData(['photo-uri', 'a'], 'file:///document/a.jpg');
+        render(
+          <QueryClientProvider client={client}>
+            <SettingsPage />
+          </QueryClientProvider>
+        );
+        return client;
+      }
+      beforeEach(() => mockDeletePhotoCopies.mockClear());
+
+      it('S1 삭제 요청이 성공하면 사본을 지우고 photo-uri 캐시를 무효화한다', async () => {
+        primeMutation(mockUsePostMeDeletion, {
+          spy: jest.fn(),
+          onSuccessData: {
+            purgeAt: '2026-09-13T00:00:00Z',
+            cascadeSummary: {},
+          },
+        });
+        const client = renderWithSeededUri();
+
+        confirmDeletion();
+
+        expect(
+          screen.getByTestId('settings-deletion-pending')
+        ).toBeOnTheScreen();
+        expect(mockDeletePhotoCopies).toHaveBeenCalledTimes(1);
+        await waitFor(() =>
+          expect(client.getQueryState(['photo-uri', 'a'])?.isInvalidated).toBe(
+            true
+          )
+        );
+      });
+
+      it('S2 삭제 요청이 실패하면 사본도 캐시도 건드리지 않는다', () => {
+        primeMutation(mockUsePostMeDeletion, {
+          spy: jest.fn(),
+          error: new AxiosError('boom'),
+        });
+        const client = renderWithSeededUri();
+
+        confirmDeletion();
+
+        expect(screen.queryByTestId('settings-deletion-pending')).toBeNull();
+        expect(mockDeletePhotoCopies).not.toHaveBeenCalled();
+        expect(client.getQueryState(['photo-uri', 'a'])?.isInvalidated).toBe(
+          false
+        );
+      });
     });
 
     it('AC-4: 철회 200 → ACTIVE 복귀', () => {
