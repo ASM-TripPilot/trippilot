@@ -1187,6 +1187,25 @@ const coverImage = () =>
 const coverOption = (key: string) =>
   screen.getByTestId(`trip-settings-cover-option-${key}`);
 const openCoverSheet = () => press('trip-settings-cover-change');
+/** jest 엔 레이아웃이 없어 칸이 스스로 안 늘어난다 — 크기를 알려 주고 맨 끝 스크롤 이벤트를 쏜다(칸 높이는 대략값이라 큼직하게). */
+const COVER_GRID_HEIGHT = 8000;
+const scrollCoverGridTo = (y: number) => {
+  const grid = screen.getByTestId('trip-settings-cover-sheet');
+  const layoutMeasurement = { width: 390, height: 600 };
+  const contentSize = { width: 390, height: COVER_GRID_HEIGHT };
+  fireEvent(grid, 'layout', { nativeEvent: { layout: layoutMeasurement } });
+  fireEvent(grid, 'contentSizeChange', contentSize.width, contentSize.height);
+  fireEvent.scroll(grid, {
+    nativeEvent: {
+      contentOffset: { x: 0, y },
+      contentSize,
+      layoutMeasurement,
+    },
+  });
+};
+const scrollCoverGridToEnd = () => scrollCoverGridTo(COVER_GRID_HEIGHT - 600);
+const mountedCoverOptions = () =>
+  screen.queryAllByTestId(/^trip-settings-cover-option-/);
 
 describe('J · 기간 행 잠금·열림 (AC-4)', () => {
   beforeEach(freezeToday);
@@ -1792,7 +1811,7 @@ describe('N · 저장 409 가르기 (AC-5)', () => {
 describe('O · 커버 고르기 (AC-6 · AC-8 · AC-9 · 소비처 ⑥)', () => {
   beforeEach(freezeToday);
 
-  it('「커버 바꾸기」 → 시트: 첫 칸(첫 여행지 그림) + coverChoices() 전부, 라벨이 이름표 그대로', async () => {
+  it('「커버 바꾸기」 → 시트: 첫 칸(첫 여행지 그림)부터 일부만 마운트하고(가상화), 격자가 받은 목록은 첫 칸 + coverChoices() 전부이며 이름표 그대로다', async () => {
     await openPage();
     expect(screen.queryByTestId('trip-settings-cover-sheet')).toBeNull();
 
@@ -1800,18 +1819,22 @@ describe('O · 커버 고르기 (AC-6 · AC-8 · AC-9 · 소비처 ⑥)', () => 
 
     expect(screen.getByTestId('trip-settings-cover-sheet')).toBeOnTheScreen();
     expect(coverOption('auto').props.accessibilityLabel).toBe('첫 여행지 그림');
-    const choices = coverChoices();
-    expect(
-      screen.queryAllByTestId(/^trip-settings-cover-option-(?!auto$)/)
-    ).toHaveLength(choices.length);
-    for (const { key, label } of choices) {
-      expect(coverOption(key).props.accessibilityLabel).toBe(label);
-    }
+    const firstMounted = mountedCoverOptions().length;
+    expect(firstMounted).toBeGreaterThan(1);
+    expect(firstMounted).toBeLessThan(coverChoices().length / 2);
+    // 화면 밖 칸은 마운트돼 있지 않아 글자로 못 본다 — jest 엔 칸 레이아웃이 없어 스크롤로 전수를 돌 수도 없다(y 를 늘려도 34칸에서 멈춘다).
+    // 그래서 격자가 받은 목록을 본다. 목록은 칸을 그리는 입력이고, 그리는 쪽은 첫 칸·끝 칸 단언과 실기 108칸이 맡는다.
+    const cells = screen.getByTestId('trip-settings-cover-sheet').props
+      .data as { id: string; label: string }[];
+    expect(cells.map((cell) => [cell.id, cell.label])).toEqual([
+      ['auto', '첫 여행지 그림'],
+      ...coverChoices().map((one) => [one.key, one.label]),
+    ]);
   });
 
   it.each<[string, Partial<Trip>, string]>([
     ['null(자동)', { coverKey: null }, 'auto'],
-    ['알려진 키', { coverKey: '26350' }, '26350'],
+    ['알려진 키', { coverKey: '26' }, '26'],
     [
       '앱이 모르는 키 — 어느 그림도 선택 표시 없이 첫 칸이 선택',
       { coverKey: 'zz9' },
@@ -1825,13 +1848,39 @@ describe('O · 커버 고르기 (AC-6 · AC-8 · AC-9 · 소비처 ⑥)', () => 
 
       openCoverSheet();
 
-      const keys = ['auto', ...coverChoices().map((one) => one.key)];
-      for (const key of keys) {
-        if (key === selectedKey) expect(coverOption(key)).toBeSelected();
-        else expect(coverOption(key)).not.toBeSelected();
+      for (const option of mountedCoverOptions()) {
+        if (option.props.testID === `trip-settings-cover-option-${selectedKey}`)
+          expect(option).toBeSelected();
+        else expect(option).not.toBeSelected();
       }
+      expect(coverOption(selectedKey)).toBeSelected();
     }
   );
+
+  it('끝까지 스크롤하면 마지막 칸이 나오고 고를 수 있다 — 화면 밖에 있던 서버 값도 선택 표시로 나온다', async () => {
+    const lastKey = coverChoices().at(-1)!.key;
+    serverTrip = baseTrip({ coverKey: lastKey });
+    await openPage();
+    openCoverSheet();
+    expect(
+      screen.queryByTestId(`trip-settings-cover-option-${lastKey}`)
+    ).toBeNull();
+
+    scrollCoverGridToEnd();
+
+    await waitFor(() => expect(coverOption(lastKey)).toBeSelected());
+    expect(coverOption(lastKey).props.accessibilityLabel).toBe(
+      coverChoices().at(-1)!.label
+    );
+    expect(save()).toBeDisabled();
+
+    const otherKey = coverChoices().at(-2)!.key;
+    press(`trip-settings-cover-option-${otherKey}`);
+    expect(coverOption(otherKey)).toBeSelected();
+    expect(coverOption(lastKey)).not.toBeSelected();
+    press('trip-settings-cover-apply');
+    expect(coverImage()).toEqual([coverSourceForKey(otherKey)]);
+  });
 
   it('다른 그림을 골라도 적용 전엔 화면 커버·저장이 그대로이고, [적용] 하면 화면 커버가 바뀌고 저장이 켜진다 → 저장하면 coverKey 만 바뀐 본문', async () => {
     serverTrip = baseTrip({ coverKey: '26350' });
@@ -1880,7 +1929,7 @@ describe('O · 커버 고르기 (AC-6 · AC-8 · AC-9 · 소비처 ⑥)', () => 
   });
 
   it('닫으면(적용 전) 무변화이고, 지금과 같은 그림을 적용하는 건 바뀐 게 아니다', async () => {
-    serverTrip = baseTrip({ coverKey: '26350' });
+    serverTrip = baseTrip({ coverKey: '26' });
     await openPage();
     openCoverSheet();
     press('trip-settings-cover-option-11110');
@@ -1888,12 +1937,12 @@ describe('O · 커버 고르기 (AC-6 · AC-8 · AC-9 · 소비처 ⑥)', () => 
     press('trip-settings-cover-close');
 
     expect(screen.queryByTestId('trip-settings-cover-sheet')).toBeNull();
-    expect(coverImage()).toEqual([coverSourceForKey('26350')]);
+    expect(coverImage()).toEqual([coverSourceForKey('26')]);
     expect(save()).toBeDisabled();
 
     openCoverSheet();
-    expect(coverOption('26350')).toBeSelected(); // 닫은 선택은 버려져 서버 값에서 다시 시작
-    press('trip-settings-cover-option-26350');
+    expect(coverOption('26')).toBeSelected(); // 닫은 선택은 버려져 서버 값에서 다시 시작
+    press('trip-settings-cover-option-26');
     press('trip-settings-cover-apply');
     expect(save()).toBeDisabled();
   });

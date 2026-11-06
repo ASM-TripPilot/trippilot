@@ -82,6 +82,17 @@ describe('tripCoverSource — 고른 키 → 첫 목적지 자동 → null', () 
     }
   );
 
+  it.each([
+    ['강릉', '51150'],
+    ['경주', '47130'],
+    ['통영', '48220'],
+  ])('%s(강원·경상) 여행은 그 시군 그림이 자동 커버다', (_name, code) => {
+    expect(coverSourceForKey(code)).not.toBeNull();
+    expect(tripCoverSource({ destinations: [dest(1, code)] })).toBe(
+      coverSourceForKey(code)
+    );
+  });
+
   it('첫 목적지는 seq 최소이고, 시군구 그림이 없으면 같은 시도 그림이다', () => {
     expect(
       tripCoverSource({ destinations: [dest(2, '26'), dest(1, '50')] })
