@@ -92,8 +92,11 @@ _PARKING = re.compile(r"주차")
 # 얘기였다, 기존 문서 7,537곳 중 이런 URL 사실 327건·그것만으로 된 문서 149곳). 장소 전용 페이지는 질의 문자열이 붙어도
 # 남는다(bluer `/restaurants/…?query=`, 114 `/search/detail?comp_id=`)
 _LISTING_URL = re.compile(r"diningcode\.com/list\.dc|/posts/tag/|/toplist\b|/(?:total-)?search(?:/local-profile)?/?(?:\?|$)"
-                          r"|^https?://[^/]+/?\?(?:query|q|keywords?)=", re.I)
-FINAL =("found", "closed", "not_found", "refused")  # 이 상태면 다시 묻지 않는다
+                          r"|^https?://[^/]+/?\?(?:query|q|keywords?)="
+                          # 순위·이웃 검색·태그·지역 목록(ai-4e 검토: 8,900곳 중 103개가 더 남아 있었다)
+                          r"|diningcode\.com/rank/|daangn\.com/kr/local-profile/?\?[^#]*search=|soonwidot\.co\.kr/rank/"
+                          r"|/tags?/[^/?#]+/?$|/list/geoCategory/|/dir\?[^#]*search=", re.I)
+FINAL = ("found", "closed", "not_found", "refused")  # 이 상태면 다시 묻지 않는다
 
 PROMPT = """당신은 여행 앱의 장소 정보 정리 담당입니다. 웹 검색으로 아래 [장소]를 찾아, 웹 페이지에 적힌 사실만 JSON 하나로 답하세요.
 

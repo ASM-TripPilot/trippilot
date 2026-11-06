@@ -279,7 +279,10 @@ def test_검색_결과_태그_모음_페이지는_근거가_아니다() -> None:
     listing = ["https://www.diningcode.com/list.dc?query=안국동+점심", "https://polle.com/posts/tag/닭도리탕",
                "https://www.siksinhot.com/search?keywords=종로", "https://www.siksinhot.com/toplist/123",
                "https://www.daangn.com/kr/search/local-profile/?q=종로", "https://www.albamon.com/total-search?keyword=x",
-               "https://korea.beautihost.com/seoul/search/?q=sujeong", "https://bizno.net/?query=마작골"]
+               "https://korea.beautihost.com/seoul/search/?q=sujeong", "https://bizno.net/?query=마작골",
+               "https://www.diningcode.com/rank/종로맛집", "https://www.daangn.com/kr/local-profile/?in=종로동&search=냉면",
+               "https://soonwidot.co.kr/rank/detail.php?stx=종로", "https://example.squarespace.com/blog/tag/seoul",
+               "https://wanderlog.com/list/geoCategory/123/best", "https://grandculture.net/dir?search=도해촌"]
     detail = ["https://www.bluer.co.kr/restaurants/12530?query=&foodType=",
               "https://www.114.co.kr/search/detail?comp_id=654490", "https://guide.michelin.com/kr/ko/seoul/restaurant/muoki"]
     rec = _rec(*[(f"사실 {i}", u, None) for i, u in enumerate(listing + detail)], cites=listing + detail)
