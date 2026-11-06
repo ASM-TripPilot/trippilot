@@ -1,12 +1,15 @@
 import { http, HttpResponse } from 'msw';
+import { Linking } from 'react-native';
 import {
+  act,
   fireEvent,
   render,
   screen,
+  userEvent,
   waitFor,
   within,
 } from '@testing-library/react-native';
-import { QueryObserver } from '@tanstack/react-query';
+import { focusManager, QueryObserver } from '@tanstack/react-query';
 import type { ReactTestInstance } from 'react-test-renderer';
 
 import { rememberSpontaneousName } from '@/features/check-visit/index.view';
@@ -58,12 +61,18 @@ jest.mock('@/shared/storage', () => ({
 // `gone` 으로 시작하는 앨범 번호는 이 기기 앨범에 없는(원본 삭제) 사진.
 // `slow` 로 시작하는 번호는 `mockSlowUriGate` 가 열릴 때까지 주소 찾기가 끝나지 않는다(TRIP-1798 5-b 이후 W1).
 let mockSlowUriGate: Promise<void> = Promise.resolve();
+// TRIP-1803 — 번호별 조회 횟수(E-3) · 설정에서 넓힌 뒤 `gone` 도 풀리게 하는 스위치 · 권한 수준.
+const mockUriCalls: string[] = [];
+let mockGoneResolves = false;
+const mockReadPhotoAccess = jest.fn();
 jest.mock('@/shared/photo', () => ({
   canResolveDevicePhotos: () => true,
   resolvePhotoUri: async (id: string) => {
+    mockUriCalls.push(id);
     if (id.startsWith('slow')) await mockSlowUriGate;
-    return id.startsWith('gone') ? null : `file://${id}`;
+    return id.startsWith('gone') && !mockGoneResolves ? null : `file://${id}`;
   },
+  readPhotoAccess: () => mockReadPhotoAccess(),
 }));
 
 const mockBack = jest.fn();
@@ -227,11 +236,15 @@ beforeEach(() => {
   recordsUrls.length = 0;
   mockGetInstallId.mockReset().mockResolvedValue(ME);
   mockSlowUriGate = Promise.resolve();
+  mockUriCalls.length = 0;
+  mockGoneResolves = false;
+  mockReadPhotoAccess.mockReset().mockResolvedValue('all');
   mockRouterState.canGoBack = true;
   setAccessToken('a');
 });
 let refetchSpy: jest.SpyInstance | undefined;
 afterEach(() => {
+  focusManager.setFocused(undefined); // 모듈 싱글턴 — 복귀 흉내가 뒤 테스트로 새지 않게.
   refetchSpy?.mockRestore();
   refetchSpy = undefined;
   resetPressGuard();
@@ -528,6 +541,136 @@ describe('🔴 TRIP-1798 · 여행 앨범 — 빈 앨범·기기 번호 (AC2·3)
       '강남구 여행 · 사진 5장'
     );
     expect(screen.queryByTestId('trip-album-place-v2')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1803 · "선택한 사진만"(limited) — 못 푼 사진이 왜 안 보이는지 알리고, 권한을 넓히고 돌아오면 재시작 없이 풀린다.
+ * 무엇을 보장하나: 권한이 limited·거부면 안내 + 누르는 [설정 열기](팝업 0) · 전체 허용이면 안내 없음 ·
+ *   못 푼 사진이 없으면 권한을 묻지도 않는다 · 복귀 때 못 푼 사진만 다시 묻는다.
+ * (개념) 클라이언트 `staleTime: 30_000` = 앱 기본값과 같은 값. 기본 0 이면 `staleTime` 을 빠뜨린 구현도 복귀에 재조회해 공허 통과한다(02a ★1).
+ * 3동작: 준비(못 푼 사진·권한) → 실행(렌더·누름·복귀) → 단언(안내·셀·조회 횟수).
+ */
+describe('🔴 TRIP-1803 · 못 푼 사진 안내와 복귀', () => {
+  const NOTICE = 'trip-album-photo-access-notice';
+  const SETTINGS = `${NOTICE}-settings`;
+  const UNRESOLVED = 'trip-album-unresolved-notice';
+  const oneGone = () => ({ ...standardPhotos(), v2: () => [photo('gone-b0')] });
+
+  it('AL1 못 푼 사진 + 선택한 사진만 → 안내와 한 줄이 서고, [설정 열기] 누르면 설정이 1회 열린다', async () => {
+    mockReadPhotoAccess.mockResolvedValue('limited');
+    const openSettings = jest
+      .spyOn(Linking, 'openSettings')
+      .mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    serve({ photos: oneGone() });
+
+    renderAlbum();
+
+    expect(await screen.findByTestId(NOTICE)).toBeOnTheScreen();
+    expect(screen.getByTestId(UNRESOLVED)).toHaveTextContent(
+      '불러올 수 없는 사진 1장'
+    );
+    await user.press(screen.getByTestId(SETTINGS));
+    expect(openSettings).toHaveBeenCalledTimes(1);
+    openSettings.mockRestore();
+  });
+
+  it('AL2 (E-5) 못 푼 사진 + 거부 → 안내가 선다', async () => {
+    mockReadPhotoAccess.mockResolvedValue('denied');
+    serve({ photos: oneGone() });
+
+    renderAlbum();
+
+    expect(await screen.findByTestId(SETTINGS)).toBeOnTheScreen();
+  });
+
+  it('AL3 (E-4) 못 푼 사진 + 전체 허용 → 한 줄만 있고 안내·버튼은 없다', async () => {
+    serve({ photos: oneGone() });
+
+    renderAlbum();
+
+    expect(await screen.findByTestId(UNRESOLVED)).toBeOnTheScreen();
+    await waitFor(() => expect(mockReadPhotoAccess).toHaveBeenCalled());
+    await settleScreen();
+    expect(screen.queryByTestId(NOTICE)).toBeNull();
+    expect(screen.queryByTestId(SETTINGS)).toBeNull();
+  });
+
+  it('AL4 다 풀리면 권한을 묻지 않고 안내도 없다', async () => {
+    serve();
+
+    renderAlbum();
+
+    await waitFor(() => expect(cellCount()).toBe(6));
+    await settleScreen();
+    expect(mockReadPhotoAccess).not.toHaveBeenCalled();
+    expect(screen.queryByTestId(NOTICE)).toBeNull();
+  });
+
+  it('AL5 (E-6) 다른 기기 사진만 있으면 앨범도 권한도 묻지 않고 안내도 없다', async () => {
+    serve({
+      photos: {
+        v1: () => [photo('x1', 0, 'other')],
+        v2: () => [photo('x2', 0, 'other')],
+        v3: () => [photo('x3', 0, 'other')],
+      },
+    });
+
+    renderAlbum();
+
+    expect(
+      await screen.findByTestId('trip-album-other-device-notice')
+    ).toBeOnTheScreen();
+    await settleScreen();
+    expect(mockUriCalls).toEqual([]);
+    expect(mockReadPhotoAccess).not.toHaveBeenCalled();
+    expect(screen.queryByTestId(NOTICE)).toBeNull();
+  });
+
+  it('AL6 (E-2) 전부 못 풀어도 빈 안내와 함께 설정 안내가 선다', async () => {
+    mockReadPhotoAccess.mockResolvedValue('limited');
+    serve({
+      photos: {
+        v1: () => [photo('gone-1')],
+        v2: () => [photo('gone-2')],
+        v3: () => [photo('gone-3')],
+      },
+    });
+
+    renderAlbum();
+
+    expect(await screen.findByTestId(SETTINGS)).toBeOnTheScreen();
+    expect(screen.getByTestId(UNRESOLVED)).toHaveTextContent(
+      '불러올 수 없는 사진 3장'
+    );
+    expect(cellCount()).toBe(0);
+  });
+
+  it('AL7 (AC-2 · E-3) 넓히고 복귀하면 못 푼 사진만 다시 물어 셀이 서고 안내가 사라지며, 풀린 사진은 다시 안 묻는다', async () => {
+    mockReadPhotoAccess.mockResolvedValue('limited');
+    serve({ photos: oneGone() });
+    renderAlbum(newTestQueryClient({ staleTime: 30_000 }));
+    expect(await screen.findByTestId(SETTINGS)).toBeOnTheScreen();
+    expect(cell('meta-gone-b0')).toBeNull();
+    const calls = (id: string) => mockUriCalls.filter((c) => c === id).length;
+
+    // 설정에서 넓혔다 — 복귀 전에는 다시 묻지 않는다.
+    mockGoneResolves = true;
+    mockReadPhotoAccess.mockResolvedValue('all');
+    await settleScreen();
+    expect(calls('gone-b0')).toBe(1);
+
+    act(() => focusManager.setFocused(false));
+    act(() => focusManager.setFocused(true));
+
+    expect(
+      await screen.findByTestId('trip-album-photo-meta-gone-b0')
+    ).toBeOnTheScreen();
+    await waitFor(() => expect(screen.queryByTestId(SETTINGS)).toBeNull());
+    expect(screen.queryByTestId(UNRESOLVED)).toBeNull();
+    expect(calls('gone-b0')).toBe(2);
+    expect(calls('a0')).toBe(1);
   });
 });
 

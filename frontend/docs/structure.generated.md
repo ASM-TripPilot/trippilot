@@ -178,6 +178,7 @@
 - `src/__tests__/onboardingEntryGuard.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/onboardingEntryGuard.test.tsx`  →  (export 없음)
 - `src/__tests__/openapiContract.test.ts`  →  (export 없음)
+- `src/__tests__/photoResume.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/photoUploadGuard.test.ts`  →  (export 없음)
 - `src/__tests__/placeRegionParamsRoute.integration.test.tsx`  →  (export 없음)
 - `src/__tests__/planbApplyStack.integration.test.tsx`  →  (export 없음)
@@ -1822,8 +1823,10 @@
 - `src/shared/map/webMarkerHtml.ts`  →  WebMarker · buildWebMarker
 
 ## src/shared/photo/
-- `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAssets · canResolveDevicePhotos · resolvePhotoUri
-- `src/shared/photo/index.web.ts`  →  pickPhotoAssets · resolvePhotoUri · canResolveDevicePhotos
+- `src/shared/photo/index.ts`  →  PhotoAssetMeta · PhotoPickResult · pickPhotoAssets · canResolveDevicePhotos · resolvePhotoUri · PhotoAccess · readPhotoAccess · deletePhotoCopies
+- `src/shared/photo/index.view.tsx`  →  photoUriQueryOptions · PhotoAccessNotice
+- `src/shared/photo/index.web.ts`  →  pickPhotoAssets · resolvePhotoUri · canResolveDevicePhotos · readPhotoAccess · deletePhotoCopies
+- `src/shared/photo/localCopy.ts`  →  moveToLocalCopy · localCopyUri · deleteLocalCopies
 
 ## src/shared/push/
 - `src/shared/push/PushGlyphs.tsx`  →  PushBellHero
@@ -2018,4 +2021,4 @@
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1322개 파일
+합계 1325개 파일

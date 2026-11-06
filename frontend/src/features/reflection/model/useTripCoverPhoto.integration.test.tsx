@@ -1,6 +1,10 @@
-import { onlineManager, type QueryClient } from '@tanstack/react-query';
+import {
+  focusManager,
+  onlineManager,
+  type QueryClient,
+} from '@tanstack/react-query';
 import { HttpResponse } from 'msw';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { getGetTripsTripIdRecordsQueryKey } from '@/shared/api/index.hooks';
@@ -87,6 +91,7 @@ beforeEach(() => {
 afterEach(() => {
   server.resetHandlers();
   onlineManager.setOnline(true); // 모듈 싱글턴 — 오프라인 케이스가 뒤 테스트로 새지 않게 파일 최상위에서 되돌린다.
+  focusManager.setFocused(undefined); // 같은 이유 — 복귀 흉내(TRIP-1803).
 });
 afterAll(() => server.close());
 
@@ -409,5 +414,59 @@ describe('캐시 공유', () => {
     await settle();
 
     expect(hits).toHaveLength(before);
+  });
+});
+
+/**
+ * TRIP-1803 · D4 — 표지를 못 골랐으면(`null`) 바깥 `trip-cover-photo` 쿼리도 바로 낡은 값이라, 권한을 넓히고 30초 안에 돌아와도 표지가 풀린다.
+ * 무엇을 보장하나: 못 고른 표지만 복귀 때 다시 고른다 · 이미 고른 표지는 앨범도 서버도 다시 안 부른다(E-3).
+ * `renderCover` 기본 클라이언트가 `staleTime: 30_000` 이라 앱과 같은 조건이다 — 0 이면 D4 를 빠뜨려도 통과한다(02a ★1).
+ */
+describe('🔴 TRIP-1803 · 앱 복귀', () => {
+  function comeBack() {
+    act(() => focusManager.setFocused(false));
+    act(() => focusManager.setFocused(true));
+  }
+
+  it('T1 (D4 · AC-2) 못 고른 표지는 복귀에 다시 골라 재시작 없이 사진이 된다', async () => {
+    serveCoverPhotos(server, {
+      record: () => recordOf([visitOf('v1', 1)]),
+      photos: { v1: () => [photoOf('gone-a')] },
+    });
+    const { result } = renderCover();
+    await waitFor(() => expect(mockResolve).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(result.current.photo).toBeNull();
+
+    // 설정에서 넓혔다 — 복귀 전에는 다시 안 묻는다.
+    mockResolve.mockImplementation(async (id: string) => `file://${id}`);
+    await settle();
+    expect(mockResolve).toHaveBeenCalledTimes(1);
+
+    comeBack();
+
+    await waitFor(() =>
+      expect(result.current.photo).toEqual({
+        uri: 'file://gone-a',
+        poiId: 'poi-v1',
+      })
+    );
+  });
+
+  it('T2 (E-3) 이미 고른 표지는 복귀에 앨범·서버를 다시 부르지 않는다', async () => {
+    serveCoverPhotos(server, {
+      record: () => recordOf([visitOf('v1', 1)]),
+      photos: { v1: () => [photoOf('a')] },
+    });
+    const { result } = renderCover();
+    await waitFor(() => expect(result.current.photo).not.toBeNull());
+    const hitsBefore = hits.length;
+
+    comeBack();
+    await settle();
+
+    expect(mockResolve).toHaveBeenCalledTimes(1);
+    expect(hits).toHaveLength(hitsBefore);
+    expect(result.current.photo?.uri).toBe('file://a');
   });
 });
