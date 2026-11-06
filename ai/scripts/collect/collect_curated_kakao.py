@@ -62,7 +62,7 @@ SOURCE_NAME = "KAKAO_LOCAL"
 CLUB = "클럽"
 _NIGHT_KIND = {v: k for k, v in NIGHTLIFE_DETAIL.items()}  # 세부 태그 → 원천 카테고리(이름 규칙용)
 _URL = "https://dapi.kakao.com/v2/local/search/keyword.json"
-_MAX_CALLS = 200   # ponytail: 목록 크기 상한 겸 무료 쿼터 보호(일 10만), 목록이 커지면 올린다
+_MAX_CALLS = 1000  # ponytail: 목록 크기 상한 겸 무료 쿼터 보호(일 10만), 목록이 커지면 올린다(11-06 577곳 → 1000)
 
 
 def _norm(s: str) -> str:
