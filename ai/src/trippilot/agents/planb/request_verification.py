@@ -380,6 +380,8 @@ def apply_counts(
                 seen[cat] = seen.get(cat, 0) + 1
         if seen.get(cat, 0) < n:
             notes.append(f"nl_category_short: {cat.value} {seen.get(cat, 0)}/{n}")
+        elif seen[cat] > n:  # 이름으로 집은 곳이 수량을 넘겼다 — 이름이 이기는 건 정책(#1283), 넘긴 사실은 노트로 남긴다
+            notes.append(f"nl_category_over: {cat.value} {seen[cat]}/{n} named")
     return tuple(out), notes
 
 

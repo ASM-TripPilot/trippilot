@@ -431,7 +431,10 @@ def _vector_rag():
     from trippilot.agents.adapters.pgvector_store import PgVectorStore
     from trippilot.llm_gateway.adapters.caching_embedding import CachingEmbedding
 
-    store = PgVectorStore(lambda: psycopg.connect(url))
+    # 요청 스레드에서 돈다(다시 짜기 지시 해석·KB-2·KB-5 검색) — 기억 저장소와 같은 연결 3s·문장 2s. 시한 없이 DB 가 멈추면
+    # `_NL_POOL`(24) 과 요청 스레드가 함께 묶여 자유입력 없는 다시 짜기까지 선다(2026-11-06 Codex 리뷰). 시한 초과는 예외로
+    # 올라와 기존 폴백(번역 LLM·문서 없음)을 탄다. 적재(scripts/load_kb.py)는 자기 store 를 따로 만든다.
+    store = PgVectorStore(lambda: psycopg.connect(url, connect_timeout=3, options="-c statement_timeout=2000"))
     # 요청 경로의 임베딩은 캐시를 거친다. 상황 KB·페르소나 KB 질의는 TriggerKind 4종 ×
     # _REASON_KO 7종 = 28가지 닫힌 집합이라 같은 문자열이 수명 내내 반복된다
     # (ai/docs/임베딩-사이징-근거.md). 키는 **정확일치**다 — 유사도로 벡터를 재사용하면

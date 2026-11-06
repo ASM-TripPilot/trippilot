@@ -121,11 +121,28 @@ class _Client:
 _T = {"name": "가게", "kind": "음식점", "address": "서울"}
 
 
-def _lookup(*outcomes):
+def _lookup(*outcomes, budget=None):
     client = _Client(*outcomes)
     backoff = c._Backoff(rpm=6000)
     backoff.hit = lambda *a, **k: None  # 물러남 대기는 재지 않는다
-    return c.lookup(client, _T, backoff), client.calls
+    return c.lookup(client, _T, backoff, budget=budget), client.calls
+
+
+def test_budget_is_reserved_before_each_call_so_parallel_workers_cannot_overrun() -> None:
+    """응답 뒤에만 차감하면 일꾼 4개가 같은 잔액을 보고 함께 들어가 상한을 넘겼다(2026-11-06 Codex 리뷰: 0.03 상한에 0.08 지출)."""
+    b = c._Budget(0.03)
+    assert [b.reserve(0.02) for _ in range(4)] == [True, True, False, False]  # 0.03→0.01→-0.01: 셋째부터 못 들어간다
+    b.settle(0.02, 0.005), b.settle(0.02, 0.005)
+    assert round(b.left, 5) == 0.02 and not b.exhausted
+    assert c._Budget(None).reserve(1e9)  # 상한 없음
+
+
+def test_lookup_stops_before_asking_when_the_budget_is_gone_and_settles_to_the_real_cost() -> None:
+    res, calls = _lookup('{"found": false, "facts": []}', budget=c._Budget(0.0))
+    assert res["budget"] and calls == 0
+    b = c._Budget(1.0)
+    res, calls = _lookup('{"found": false, "facts": []}', budget=b)
+    assert calls == 1 and 1.0 - b.left == pytest.approx(res["cost"], abs=1e-5)  # 예약분은 실비로 정산된다(결과 cost 는 5자리 반올림)
 
 
 def test_auth_rejection_is_fatal_and_is_not_retried() -> None:

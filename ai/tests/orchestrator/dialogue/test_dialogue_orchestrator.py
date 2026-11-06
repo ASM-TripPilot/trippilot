@@ -1846,6 +1846,18 @@ def test_explore_empty_answer_cannot_invent_a_place_either() -> None:
     assert any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace))
 
 
+def test_general_answer_naming_a_place_the_user_never_said_falls_back_to_the_template() -> None:
+    """날씨·거리 같은 일반 답도 사실·스냅샷·사용자 말에 없는 장소는 지어낸 것 — 후보 답에만 걸던 검사(2026-11-06 Codex 리뷰).
+    사용자가 방금 말한 곳("해운대해수욕장 갈 건데")은 지어낸 게 아니다 — 전체에 `_foreign_place` 를 걸면 그것도 걸린다."""
+    foreign = json.dumps({"text": "오늘은 맑아요. 해운대해수욕장 가 보세요!", "footnote": None}, ensure_ascii=False)
+    b = _build(_canned(Intent.GET_WEATHER, answer=foreign))
+    out = b.orch.turn(_input("오늘 날씨 어때"))
+    assert any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace)) and "해운대해수욕장" not in out.answer.text
+    b = _build(_canned(Intent.GET_WEATHER, answer=foreign))
+    out = b.orch.turn(_input("해운대해수욕장 갈 건데 오늘 날씨 어때"))
+    assert not any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace)) and out.answer.text.startswith("오늘은 맑아요")
+
+
 
 class _RecordingPool(_ExplorePool):
     def __init__(self) -> None:

@@ -55,6 +55,28 @@ def test_축제_목록은_searchFestival2_를_키와_함께_부른다() -> None:
     assert "areaCode" not in params    # KorService2 에서 areaCode 로 거르면 0건(10-18 실측)
 
 
+def test_축제_총건수가_정수가_아니면_한_쪽_수로_대신하지_않고_실패한다() -> None:
+    """totalCount 가 비정수면 len(items) 로 대신해 수집 루프가 1쪽에서 조용히 끝났다(2026-11-06 Codex 리뷰) — 숫자 문자열은 읽는다."""
+    import pytest
+
+    from trippilot.poi_curation.sourcing.tourapi import SourcingError
+
+    class _Odd(_Http):
+        def __init__(self, total):
+            super().__init__()
+            self.total = total
+
+        def get_json(self, url, params):
+            body = super().get_json(url, params)
+            body["response"]["body"]["totalCount"] = self.total
+            return body
+
+    assert TourApiAdapter(_Odd("7"), "K").search_festivals("20261018", 1, 100)[1] == 7
+    for odd in (None, "", "many"):
+        with pytest.raises(SourcingError):
+            TourApiAdapter(_Odd(odd), "K").search_festivals("20261018", 1, 100)
+
+
 def test_지역은_법정동_시도_코드로_읽고_모르는_코드는_지어내지_않는다() -> None:
     assert region_of(_item(lDongRegnCd="50")) == "제주"
     assert region_of(_item(lDongRegnCd="51")) == region_of(_item(lDongRegnCd="42")) == "강원"

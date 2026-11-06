@@ -13,12 +13,15 @@ place_extraction 선례와 동형: 위반 항목은 전체 실패가 아니라 �
 핵심 토큰이 원문 스니펫에 부분 문자열로 실재하지 않으면 지어낸 행사로 보고
 드롭한다 (공백 제거 비교 — 보수적, 과잉 거부는 폴백=결정론 경로로 안전 수렴).
 
-검증 5종 (드롭 사유):
+검증 6종 (드롭 사유):
   ① 스키마 — dict 아님·필드 누락·타입 오류
   ② event_type ∉ {FESTIVAL, PERFORMANCE, EXHIBITION, OTHER} (관대 매핑 금지)
   ③ start·end ISO 파싱 실패 또는 start > end (기간 역전)
   ④ 대상 기간과 하루도 안 겹침
   ⑤ 행사명 핵심 토큰이 원문 스니펫에 부재 (지어낸 행사명 차단)
+  ⑥ 행사명이 걸린 스니펫 줄에 날짜 언급이 없음 — 이름만 원문에 있고 날짜가 없으면 기간은 모델이 만든 것이다
+     (2026-11-06 Codex 리뷰: 날짜 없는 줄 + 대상 기간 안 날짜 출력이 ④·⑤ 를 통과해 저장됐다). 한국어 기간을
+     start/end 와 정확히 대조하는 것은 별도 과제 — 여기선 "근거 날짜가 그 줄에 있다"만 본다.
 좌표는 다루지 않는다 — coord=None 고정 (지오코딩·근접 부착은 코드 몫).
 시각(시·분)·소요시간 필드는 스키마에 자리 자체가 없다 (INV-2·INV-3).
 
@@ -36,6 +39,7 @@ place_extraction 선례와 동형: 위반 항목은 전체 실패가 아니라 �
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from datetime import date, datetime
 
@@ -72,8 +76,12 @@ def _normalize(text: str) -> str:
     return "".join(text.split()).lower()
 
 
-def _name_in_snippets(name: str, snippet_lines: list[str], region: str = "") -> bool:
-    """행사명 핵심 토큰(정규화 2자 이상)이 **전부** 원문 **한 스니펫 줄** 안에 부분 문자열로 존재해야 생존.
+# 정규화(공백 제거) 뒤의 줄에 댄다 — scripts/collect/collect_events.py 의 관측 지표 `_DATE_HINT_RE` 와 같은 꼴
+_DATE_HINT = re.compile(r"\d{1,2}월|\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}|\d{1,2}일")
+
+
+def _lines_with_name(name: str, snippet_lines: list[str], region: str = "") -> list[str]:
+    """행사명 핵심 토큰(정규화 2자 이상)이 **전부** 원문 **한 스니펫 줄** 안에 부분 문자열로 존재하는 그 줄들(없으면 빈 목록).
 
     "부산 불꽃 축제" ↔ 원문 "부산불꽃축제"처럼 띄어쓰기 차이는 흡수하고,
     원문에 없는 토큰이 하나라도 섞인 이름은 지어낸 것으로 본다 (보수적).
@@ -88,8 +96,13 @@ def _name_in_snippets(name: str, snippet_lines: list[str], region: str = "") -> 
         core = [_normalize(name)]
     area = _normalize(region)
     local = [t for t in core if not (area and t in area)] or core
-    return all(any(t in line for line in snippet_lines) for t in core) and any(
-        all(t in line for t in local) for line in snippet_lines)
+    if not all(any(t in line for line in snippet_lines) for t in core):
+        return []
+    return [line for line in snippet_lines if all(t in line for t in local)]
+
+
+def _name_in_snippets(name: str, snippet_lines: list[str], region: str = "") -> bool:
+    return bool(_lines_with_name(name, snippet_lines, region))
 
 
 class EventExtractionGate:
@@ -167,7 +180,11 @@ class EventExtractionGate:
         if address is not None and not isinstance(address, str):
             return None
         # ⑤ 지어낸 행사명 차단 — 원문 스니펫 대조 (closed-set 정신)
-        if not _name_in_snippets(name, snippet_lines, ctx.region):
+        lines = _lines_with_name(name, snippet_lines, ctx.region)
+        if not lines:
+            return None
+        # ⑥ 날짜 근거 — 행사명이 걸린 줄에 날짜 언급이 없으면 기간은 모델이 만든 것
+        if not any(_DATE_HINT.search(line) for line in lines):
             return None
         # event_id는 name+start 결정론 해시 (같은 입력 → 같은 id, 재수집 멱등)
         event_id = "evx-" + hashlib.sha256(

@@ -46,12 +46,13 @@ def build_share_card_copy_vars(request: ReflectionRequest) -> dict[str, str]:
         for e in request.events
     )
     return {
-        "region": request.region.strip() or "미지정",
+        # 자유 문자열 세 칸도 한 줄로 — 지역(여행 편집의 목적지 이름)에 줄바꿈이 들어오면 `[방문 장소]` 골격을 위조한다(2026-11-06 Codex 리뷰)
+        "region": inline(request.region) or "미지정",
         "period": f"{request.start_date.isoformat()} ~ {request.end_date.isoformat()}",
         "visits": visits,  # post-init이 visits ≥ 1 보장 (BR-U6R-15)
         "events": events or "(이벤트 없음)",
-        "persona_summary": request.persona_summary.strip() or "(요약 없음)",
-        "weather_summary": request.weather_summary.strip() or "(요약 없음)",
+        "persona_summary": inline(request.persona_summary) or "(요약 없음)",
+        "weather_summary": inline(request.weather_summary) or "(요약 없음)",
     }
 
 

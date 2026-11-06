@@ -100,7 +100,9 @@ def intro_facts(detail: Mapping[str, object]) -> list[str]:
         out.append("주차 불가")
     if _clean(detail.get("packing")).startswith("가능"):  # '포장 불가능' 에도 '가능' 이 들어 있다
         out.append("포장 가능")
-    if _clean(detail.get("chkpet")).startswith("가능"):
+    pet = next((_clean(detail.get(k)) for k in ("chkpet", "chkpetculture", "chkpetleports", "chkpetshopping")
+                if _clean(detail.get(k))), "")  # 타입별 칸 이름이 다르다(#1827) — 주차와 같은 꼴
+    if pet.startswith("가능"):
         out.append("반려동물 동반 가능")
     baby = _clean(detail.get("chkbabycarriage"))
     if baby.startswith(("가능", "대여")):

@@ -866,6 +866,11 @@
             },
             "title": "Memories",
             "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
           }
         },
         "required": [
