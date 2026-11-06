@@ -147,8 +147,11 @@ interface DialogueMemoryPort {
     fun deleteBySession(sessionId: UUID): Int
     fun deleteByTrip(tripId: UUID): Int
     fun deleteByAccount(accountRef: String): Int
-    fun export(accountRef: String): List<MemoryItem>
+    fun export(accountRef: String): MemoryExport
 }
 
 /** 상대 요약 한 묶음 — 세션 하나의 줄들(≤20줄). 내보내기는 줄 단위로 푼다(DATA-U8-06). */
 data class MemoryItem(val sessionId: String, val tripId: String?, val summary: List<String>, val updatedAt: Instant)
+
+/** 상대 내보내기 응답 — 상대도 세션 수 상한이 있어 넘기면 [truncated] 로 말한다. 받은 것이 전부인 줄 알게 두지 않는다(INV-4). */
+data class MemoryExport(val items: List<MemoryItem>, val truncated: Boolean = false)

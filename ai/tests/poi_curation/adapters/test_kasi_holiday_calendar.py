@@ -158,6 +158,11 @@ def test_0건이면_빈_매핑이고_성공이다() -> None:
     assert _adapter(http).holidays_between(date(2026, 6, 10), date(2026, 6, 20)) == {}
 
 
+def test_숫자_문자열_totalCount_는_정수로_읽는다() -> None:
+    http = _FakeHttp({(2026, 7): _envelope({"item": _item(20260717, "제헌절")}, total="1")})
+    assert _adapter(http).holidays_between(date(2026, 7, 10), date(2026, 7, 20)) == {date(2026, 7, 17): frozenset({"PUBLIC"})}
+
+
 def test_공휴일_아닌_특일은_싣지_않는다() -> None:
     http = _FakeHttp({(2026, 7): _envelope({"item": _item(20260717, "제헌절", holiday="N")})})
     assert _adapter(http).holidays_between(date(2026, 7, 10), date(2026, 7, 20)) == {}
@@ -176,6 +181,10 @@ def test_공휴일_아닌_특일은_싣지_않는다() -> None:
     _envelope(None),                                      # items null
     _envelope({"item": []}),                              # 빈 목록 — 실물 0건은 items == ""
     _envelope("", total=3),                               # 0건 봉투인데 totalCount 3
+    # totalCount 가 없거나 모양이 다르면 모르는 봉투다 — '공휴일 0건' 성공으로 받던 것(2026-11-06 Codex 리뷰)
+    json.dumps({"response": {"header": {"resultCode": "00"}, "body": {"items": ""}}}),
+    _envelope("", total=None).replace('"totalCount": 0', '"totalCount": null'),
+    _envelope("", total=None).replace('"totalCount": 0', '"totalCount": "x"'),
     _envelope({"item": [_item(20270206, "설날"), _item(20270207, "설날")]}, total=3),  # 행이 모자란다
     _envelope({"item": [{"dateName": "설날", "isHoliday": "Y", "locdate": "2027-02-07"}]}),  # 날짜 형식 깨짐
     urllib.error.HTTPError("https://apis.data.go.kr/x", 401, "Unauthorized", {}, None),

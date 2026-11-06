@@ -259,7 +259,12 @@ class TourApiAdapter:
         })
         items = [i for i in self._items(body) if isinstance(i, dict)]
         total = body.get("totalCount")
-        return items, total if isinstance(total, int) else len(items)
+        if isinstance(total, str) and total.isdigit():
+            total = int(total)
+        if not isinstance(total, int):
+            # 건수를 모르면 한 쪽 수로 대신 세지 않는다 — 수집 루프가 1쪽에서 끝나 조용히 부분 완료된다(areaBasedList2 와 같은 규칙)
+            raise SourcingError(f"searchFestival2 totalCount 형식 밖: {total!r}")
+        return items, total
 
     def fetch_detail(self, source_ref: str, kind: str) -> SourcedDetail:
         fields = _INTRO_FIELDS.get(kind)

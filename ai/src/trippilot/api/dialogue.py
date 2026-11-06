@@ -374,7 +374,8 @@ def shadow_meta(renderer: PromptRegistry, bank: Sequence[BankEntry], cfg: Intent
 # 스토어 예외는 여기서 삼키지 않는다 — 500 으로 올려 백엔드가 재시도한다(DATA-U8-02, BR-AO-22 의 의도된 예외).
 
 # 내보내기 상한. 세션은 (계정, 여행) 단위 + 일반 세션 1 이고 90일 TTL 이라 이 수는 실질적으로 전량이다.
-# ponytail: 포트에 "계정 전체" 조회가 없어 `recent_for_account` 를 쓴다 — 페이징 없음, 상한 초과분은 잘린다(측정 뒤).
+# ponytail: 포트에 "계정 전체" 조회가 없어 `recent_for_account` 를 쓴다 — 페이징 없음. 상한 초과분은 잘리되 **잘렸다고 말한다**
+# (`truncated`) — 여행 수에 상한이 없어 구조적으로 열린 길이고, 백엔드는 받은 것이 전부라고 알게 두지 않는다(2026-11-06 Codex 리뷰).
 EXPORT_MAX_SESSIONS = 100
 
 
@@ -400,18 +401,19 @@ def memory_delete(
 def memory_export(
     store: MemoryStorePort, account_ref: str
 ) -> schemas.DialogueMemoryExportResponse:
-    """내보내기(DATA-U8-06) — 그 계정의 세션 기억 전부, updated_at DESC. account_ref 는 항목에 되돌리지 않는다."""
+    """내보내기(DATA-U8-06) — 그 계정의 세션 기억 상한까지, updated_at DESC. 상한을 넘기면 `truncated`. account_ref 는 항목에 되돌리지 않는다."""
     rows = store.recent_for_account(
-        # session_id 는 빈 문자열이 될 수 없다(`DialogueMemory` post-init) → 제외되는 세션 없음
-        account_ref, exclude_session="", limit=EXPORT_MAX_SESSIONS,
+        # session_id 는 빈 문자열이 될 수 없다(`DialogueMemory` post-init) → 제외되는 세션 없음. 하나 더 읽어 잘렸는지 안다
+        account_ref, exclude_session="", limit=EXPORT_MAX_SESSIONS + 1,
     )
     return schemas.DialogueMemoryExportResponse(
+        truncated=len(rows) > EXPORT_MAX_SESSIONS,
         memories=[
             schemas.DialogueMemoryItemSchema(
                 session_id=m.session_id, trip_id=m.trip_id, summary=list(m.summary),
                 summarized_turn_index=m.summarized_turn_index,
                 updated_at=m.updated_at, expires_at=m.expires_at,
             )
-            for m in rows
-        ]
+            for m in rows[:EXPORT_MAX_SESSIONS]
+        ],
     )

@@ -230,16 +230,31 @@ def cost_usd(input_tokens: int, output_tokens: int, searches: int) -> float:
     return input_tokens / 1e6 * PRICE_IN + output_tokens / 1e6 * PRICE_OUT + searches * PRICE_SEARCH
 
 
+EST_CALL_USD = cost_usd(17_000, 600, 1)  # 예약용 어림(한 곳 입력 ≈1.7만·검색 1회) — 응답 뒤 실비로 정산한다
+
+
 class _Budget:
-    """총 지출 상한 — 운영과 같은 크레딧이면 운영 몫을 남긴다(2026-10-30 사용자 결정: 충전되는 200달러 크레딧 안에서만)."""
+    """총 지출 상한 — 운영과 같은 크레딧이면 운영 몫을 남긴다(2026-10-30 사용자 결정: 충전되는 200달러 크레딧 안에서만).
+
+    호출 **전에** 어림값을 잠금 안에서 떼어 두고(`reserve`) 응답 뒤 실비로 정산한다(`settle`) — 응답 뒤에만 차감하면
+    일꾼 4개가 같은 잔액을 보고 함께 들어가 상한을 넘긴다(2026-11-06 Codex 리뷰: 상한 0.03·호출당 0.02 → 0.08 지출).
+    """
 
     def __init__(self, usd: float | None) -> None:
         self._lock, self.left = threading.Lock(), usd
 
-    def charge(self, usd: float) -> None:
+    def reserve(self, est: float) -> bool:
         with self._lock:
             if self.left is not None:
-                self.left -= usd
+                if self.left <= 0:
+                    return False
+                self.left -= est
+            return True
+
+    def settle(self, est: float, usd: float) -> None:
+        with self._lock:
+            if self.left is not None:
+                self.left += est - usd
 
     @property
     def exhausted(self) -> bool:
@@ -299,14 +314,18 @@ def _retry_after(e: Exception) -> float | None:
         return None
 
 
-def lookup(client, t: dict, backoff: _Backoff, ask=ask_openai) -> dict:
+def lookup(client, t: dict, backoff: _Backoff, ask=ask_openai, budget: _Budget | None = None) -> dict:
     refusals, spent = 0, 0.0
     for _ in range(MAX_TRANSIENT):
+        if budget is not None and not budget.reserve(EST_CALL_USD):  # 거절 재질문·일시 오류 재시도도 호출이다 — 매번 예약
+            return {"status": "error", "budget": True, "error": "지출 상한", "cost": round(spent, 5)}
         backoff.wait()
         t0 = time.monotonic()
         try:
             text, cites, tokens_in, tokens_out, searches = ask(client, PROMPT % (t["name"], t["kind"], t["address"]))
         except Exception as e:  # noqa: BLE001 — 수집 배치: 사유를 남기고 이어 간다
+            if budget is not None:
+                budget.settle(EST_CALL_USD, 0.0)
             # 인증 거절·크레딧 바닥은 다음 곳도 똑같다 — 멈춘다(크레딧은 운영과 같을 수 있어 더 부르면 안 된다)
             if getattr(e, "status_code", None) in (401, 403) or "credit balance" in str(e).lower():
                 return {"status": "error", "fatal": True, "error": f"{type(e).__name__}: {str(e)[:160]}", "cost": round(spent, 5)}
@@ -315,7 +334,10 @@ def lookup(client, t: dict, backoff: _Backoff, ask=ask_openai) -> dict:
                 continue
             return {"status": "error", "error": f"{type(e).__name__}: {str(e)[:160]}", "cost": round(spent, 5)}
         backoff.ok()
-        spent += cost_usd(tokens_in, tokens_out, searches)
+        call = cost_usd(tokens_in, tokens_out, searches)
+        if budget is not None:
+            budget.settle(EST_CALL_USD, call)
+        spent += call
         try:
             try:
                 parsed = json.loads(text[text.index("{"): text.rindex("}") + 1])
@@ -375,13 +397,15 @@ def run(state: Path, limit: int | None, workers: int, only: set[str] | None = No
             time.sleep(600)
             transient_in_row[0] = 0
         try:
-            res = lookup(client, t, backoff, ask)
+            res = lookup(client, t, backoff, ask, budget)
         except Exception as e:  # noqa: BLE001 — 한 곳의 버그가 배치를 죽이지 않게
             res = {"status": "error", "error": f"{type(e).__name__}: {str(e)[:160]}"}
+        if res.get("budget"):  # 호출 전에 막혔다 — 그 곳은 안 물은 것이니 기록하지 않는다(다음 실행이 다시 받는다)
+            stop.append(f"지출 상한 {budget_usd} 달러에 닿아 멈춤")
+            return
         rec = {"ref": t["ref"], "source": t["source"], "name": t["name"], "model": MODEL,
                **({"tool": SEARCH_TOOL} if VENDOR == "claude" else {}),
                "at": datetime.now(timezone.utc).isoformat(timespec="seconds"), **res}
-        budget.charge(res.get("cost", 0.0))
         with lock:
             with state.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")

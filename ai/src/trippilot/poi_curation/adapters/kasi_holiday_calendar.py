@@ -153,7 +153,8 @@ def _parse(body: str) -> tuple[tuple[date, str, bool], ...]:
     if not isinstance(payload, Mapping):
         raise _Failed("body 없음")
     # 아는 봉투만 성공이다 — 0건 `""` · 1건 객체 · n건 목록. 성공 코드라도 키가 없거나 null·빈 목록이면 실패
-    # (0건 성공으로 받으면 그 달 휴무가 24시간 지워진다). totalCount 가 정수면 행 수와 맞아야 한다.
+    # (0건 성공으로 받으면 그 달 휴무가 24시간 지워진다). totalCount 는 정수(숫자 문자열 포함)이고 행 수와 맞아야 한다
+    # — 없거나 모양이 다르면 봉투를 모르는 것이지 0건이 아니다(TourAPI 어댑터와 같은 규칙).
     items = payload.get("items")
     raw = items.get("item") if isinstance(items, Mapping) else None
     if items == "":
@@ -165,8 +166,10 @@ def _parse(body: str) -> tuple[tuple[date, str, bool], ...]:
     else:
         raise _Failed("items 모양")
     total = payload.get("totalCount")
-    if isinstance(total, int) and total != len(rows):
-        raise _Failed(f"totalCount={total} 행={len(rows)}")
+    if isinstance(total, str) and total.isdigit():
+        total = int(total)
+    if not isinstance(total, int) or total != len(rows):
+        raise _Failed(f"totalCount={total!r} 행={len(rows)}")
     out: list[tuple[date, str, bool]] = []
     for row in rows:
         try:

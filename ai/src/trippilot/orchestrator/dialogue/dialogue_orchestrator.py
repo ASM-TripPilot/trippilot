@@ -1364,6 +1364,15 @@ class DialogueOrchestrator:
         if closed and any(_foreign_place(part, known) for part in parts):
             self._fallback(inp, "llm", *_ANSWER_MODES, "place_not_in_facts")
             return DialogueAnswer.from_facts(facts)
+        if not closed:
+            # 일반 답(거리·상세·날씨)도 사실·스냅샷·사용자 말 밖의 장소 이름은 지어낸 것이다 — 거리 답에 다른 장소명이 끼어도 통과했다
+            # (2026-11-06 Codex 리뷰). `_foreign_place` 를 그대로 걸면 사용자가 말한 목적지("협재해수욕장까지")·일반명사가 걸리므로
+            # 지식 답(2‴)과 같은 대조 — 한 말은 아는 이름, 남은 이름은 장소 DB 등록 여부로 가른다
+            said = tuple(k for k in (_squash(t) for t in (inp.utterance, *(turn.text for turn in inp.recent_turns), *memory_lines)) if k)
+            unknown = list(dict.fromkeys(n for part in parts for n in _knowledge_unknown_places(part, known, said)))
+            if unknown and not self._registered(inp, unknown):
+                self._fallback(inp, "llm", *_ANSWER_MODES, "place_not_in_facts")
+                return DialogueAnswer.from_facts(facts)
         try:
             # 결정론 각주(웹 확인 '찾는 중'·'웹에서 확인한 정보')가 있으면 그것이 이긴다 — LLM 이 각주를 따로 쓰면 안내가 사라졌다(리뷰 재현)
             return DialogueAnswer.from_facts(facts, text=draft.text,

@@ -52,6 +52,14 @@ def test_gate_drops_only_the_field_out_of_shape(field: str, raw: str) -> None:
     assert getattr(out.value, field) is None and out.value.any()  # 다른 칸은 산다
 
 
+def test_gate_accepts_midnight_only_as_24_00_never_24_30() -> None:
+    """시 `2[0-4]` 와 분이 따로 열려 `24:30` 이 시각으로 통과해 문장에 실렸다(2026-11-06 Codex 리뷰) — 24:00 은 그대로 산다."""
+    assert _apply({"hours": "09:00~24:00"}).value.hours == "09:00~24:00"
+    out = _apply({"hours": "09:00~24:30", "fee": "무료"})
+    assert out.value.hours is None and out.drop_event.dropped_ids == ("hours",)
+    assert _apply({"hours": "09:00~18:00", "last_entry": "24:30"}).value.last_entry is None
+
+
 def test_gate_without_a_citation_stores_nothing_even_with_values() -> None:
     out = _apply({"hours": "09:00~18:00"}, citations=())
     assert out.value is None and out.error == "no_citation"  # 기억으로 짐작한 값을 "찾은 값"으로 저장하지 않는다

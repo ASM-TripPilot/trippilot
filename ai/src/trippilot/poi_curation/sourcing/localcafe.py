@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 
@@ -47,11 +48,12 @@ PER_ANCHOR = 8
 
 
 def facility_size(row: Mapping[str, str]) -> float:
-    """시설총규모(㎡). 비었거나 못 읽거나 음수면 0 — 크기를 모르는 곳은 맨 뒤로 간다."""
+    """시설총규모(㎡). 비었거나 못 읽거나 음수·무한·NaN 이면 0 — 크기를 모르는 곳은 맨 뒤로 간다."""
     try:
-        return max(float((row.get("시설총규모") or "").strip()), 0.0)
+        size = float((row.get("시설총규모") or "").strip())
     except ValueError:
         return 0.0
+    return size if math.isfinite(size) and size > 0 else 0.0  # 'NaN'·'Infinity' 는 float() 가 삼킨다 — 정렬 맨 앞을 차지한다
 
 
 def to_cafe(
