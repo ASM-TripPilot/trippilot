@@ -58,7 +58,7 @@ class TripRepositoryAdapter(
         preferenceSnapshot = preferenceSnapshot.toMutableMap(), status = status.name,
         deletedAt = deletedAt, createdAt = createdAt, updatedAt = updatedAt, endedAt = endedAt,
         dayStartAt = dayWindow.dayStartAt, firstDayStartAt = dayWindow.firstDayStartAt,
-        lastDayEndAt = dayWindow.lastDayEndAt,
+        lastDayEndAt = dayWindow.lastDayEndAt, coverKey = coverKey,
     )
 
     private fun TripEntity.toDomain(): Trip {
@@ -68,7 +68,7 @@ class TripRepositoryAdapter(
             party = party, companionType = companionType?.let { CompanionType.valueOf(it) }, budgetTotal = budgetTotal,
             preferenceSnapshot = preferenceSnapshot, destinations = dests, status = TripStatus.valueOf(status),
             deletedAt = deletedAt, createdAt = createdAt, updatedAt = updatedAt, endedAt = endedAt,
-            dayWindow = TripDayWindow(dayStartAt, firstDayStartAt, lastDayEndAt),
+            dayWindow = TripDayWindow(dayStartAt, firstDayStartAt, lastDayEndAt), coverKey = coverKey,
         )
     }
 }

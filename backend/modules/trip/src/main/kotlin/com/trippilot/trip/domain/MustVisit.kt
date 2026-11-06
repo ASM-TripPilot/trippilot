@@ -25,6 +25,14 @@ class MustVisit private constructor(
     val dwellMin: Int?,
     val createdAt: Instant,
 ) {
+    /** 날짜 고정 꼭 갈 곳을 여행 기간과 함께 민다(TRIP-1789) — 시각은 그대로. 날짜가 없으면(ANYTIME) 그대로다. */
+    fun shiftedBy(days: Long): MustVisit = MustVisit(
+        mustVisitId, tripId, poiSnapshotId, sourcePoiId, type, fixedDate?.plusDays(days), fixedStart, dwellMin, createdAt,
+    )
+
+    /** 날짜·시각을 비운다 — 고정(FIXED)은 둘 다 필수라(INV-U1-17) 자유 배치로 바뀐다. 장소·체류는 남는다. */
+    fun unfixed(): MustVisit = MustVisit(mustVisitId, tripId, poiSnapshotId, sourcePoiId, MustVisitType.ANYTIME, null, null, dwellMin, createdAt)
+
     companion object {
         fun add(
             tripId: UUID,

@@ -12,6 +12,9 @@ import java.util.UUID
  * 필요로 하는 것도 다르다 — 요약이 아니라 **슬롯별 계획 시각**이다.
  */
 interface ItineraryPlanFacade {
+    /** 일정이 있는가 — 기간 변경의 리마인드 재적재가 묻는다(버려진 일정의 "오늘의 일정"이 울리면 안 된다). 대역은 있다고 답한다. */
+    fun hasItinerary(accountId: UUID, tripId: UUID): Boolean = true
+
     /** 소유 여행의 현재 일정 계획 슬롯. 없거나 타 계정이면 빈 목록(존재 은닉은 호출측 몫). */
     fun findPlanSlots(accountId: UUID, tripId: UUID): List<PlannedSlotView>
 

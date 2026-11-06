@@ -1,5 +1,10 @@
 package com.trippilot.app
 
+import com.trippilot.itinerarygeneration.domain.GenerationMode
+import com.trippilot.itinerarygeneration.domain.Itinerary
+import com.trippilot.itinerarygeneration.domain.ItineraryDay
+import com.trippilot.itinerarygeneration.domain.ItineraryRepository
+import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.app.event.OutboxRelay
 import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
@@ -53,6 +58,7 @@ import java.util.UUID
 class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
 
     @Autowired private lateinit var notifications: NotificationRepository
+    @Autowired private lateinit var itineraries: ItineraryRepository
     @Autowired private lateinit var schedules: NotificationScheduleRepository
     @Autowired private lateinit var firing: NotificationFiringService
     @Autowired private lateinit var scheduleService: NotificationScheduleService
@@ -257,17 +263,43 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
     fun `여행 기간을 고치면 운영 경로(이벤트-릴레이)만으로 예약이 새 기간으로 다시 선다`() {
         val accountId = newAccount()
         val tripId = newTrip(accountId) // 2036-08-10 ~ 08-12
+        seedItinerary(tripId)
         scheduleService.reload(tripId)
         schedules.findPendingByTrip(tripId).size shouldBe 4
 
-        tripService.edit(accountId, tripId, editPeriod("2036-08-10", "2036-08-13"))
+        // 일정이 있으면 일수는 못 바꾼다(TRIP-1789) — 날짜를 옮긴다.
+        tripService.edit(accountId, tripId, editPeriod("2036-08-11", "2036-08-13"))
         deliverPeriodEvent(tripId)
 
         periodEvents(tripId, "published_at IS NOT NULL") shouldBe 1 // '배달됐다'를 센다
         val pending = schedules.findPendingByTrip(tripId)
-        pending.size shouldBe 5 // 전날 1 + 4일
+        pending.size shouldBe 4 // 전날 1 + 3일
         pending.last().fireAt shouldBe LocalDate.parse("2036-08-13").atTime(8, 0).atZone(ZoneId.of("Asia/Seoul")).toInstant()
     }
+
+    @Test
+    fun `일정을 버리고 기간을 바꾸면 예약이 비워진다 — 없는 일정의 오늘의 일정이 울리면 안 된다(TRIP-1789)`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        seedItinerary(tripId)
+        scheduleService.reload(tripId)
+        schedules.findPendingByTrip(tripId).size shouldBe 4
+
+        tripService.edit(accountId, tripId, editPeriod("2036-08-10", "2036-08-15").copy(discardItinerary = true))
+        deliverPeriodEvent(tripId)
+
+        periodEvents(tripId, "published_at IS NOT NULL") shouldBe 1
+        schedules.findPendingByTrip(tripId) shouldBe emptyList()
+    }
+
+    private fun seedItinerary(tripId: UUID) = itineraries.replaceForTrip(
+        tripId,
+        Itinerary.create(
+            tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, isFallback = false,
+            days = (0L..2L).map { ItineraryDay.of(LocalDate.parse("2036-08-10").plusDays(it), it.toInt(), emptyList()) },
+            now = Instant.parse("2036-08-01T00:00:00Z"),
+        ),
+    )
 
     /**
      * 일정을 짜기 전에 기간만 고친 여행에 예약을 새로 세우면 없는 일정의 알림이 울린다 — 예약은 일정 생성·재계산 이벤트가 처음 만든다.

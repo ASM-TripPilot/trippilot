@@ -33,6 +33,7 @@ class TripEntity(
     @Column(name = "day_start_at") var dayStartAt: LocalTime? = null,
     @Column(name = "first_day_start_at") var firstDayStartAt: LocalTime? = null,
     @Column(name = "last_day_end_at") var lastDayEndAt: LocalTime? = null,
+    @Column(name = "cover_key") var coverKey: String? = null, // V2.92 — NULL = 첫 목적지 자동
 )
 
 /** trip_destination(V2.3). 다도시 목적지·박수. */
