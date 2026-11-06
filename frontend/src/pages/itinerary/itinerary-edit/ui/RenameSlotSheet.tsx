@@ -10,6 +10,7 @@ import BottomSheet, {
 
 import { COLOR_TOKENS } from '@/shared/config';
 import { PoiCategory } from '@/shared/api/index.schemas';
+import { respectPressGuard } from '@/shared/lib/pressGuard';
 import { CloseGlyph } from '@/shared/ui/glyphs';
 
 /**
@@ -21,6 +22,7 @@ import { CloseGlyph } from '@/shared/ui/glyphs';
  * 분류를 못 고치는 장소(숙소 등 — `categoryEditable=false`)는 칩이 없다. 공백뿐·60 코드포인트 초과면 `적용`이 비활성이고 안내 한 줄이 뜬다
  * (서버가 60자를 코드포인트로 세므로 `[...s].length` — 이모지 한 글자는 1). `원래대로`는 덮어쓴 게 있을 때만 켜진다.
  * 닫기(X·딤·끌어내림)는 전부 `onClose` — 아무것도 알리지 않는다.
+ * 칩·`원래대로`·`적용`·X 는 연타 창을 따른다 — 「이름·분류 고치기」 연타의 둘째 탭이 올라오는 시트의 분류를 바꾸지 않게(통합 QA D3).
  *
  * ★ 입력은 반드시 `BottomSheetTextInput`(시트 밖에서 그리면 실기 throw). 시트 실제 열림·딤·키보드 밀림·칩 줄바꿈은 통과형 목이 못 본다 — 6-b.
  */
@@ -96,7 +98,7 @@ export function RenameSlotSheet({
             testID="editor-rename-close"
             accessibilityRole="button"
             accessibilityLabel="닫기"
-            onPress={onClose}
+            onPress={respectPressGuard(onClose)}
             className="h-[44px] w-[44px] items-center justify-center"
           >
             <CloseGlyph size={24} color="ink" />
@@ -138,7 +140,7 @@ export function RenameSlotSheet({
                     testID={`editor-rename-category-${candidate}`}
                     accessibilityRole="button"
                     accessibilityState={{ selected: isSelected }}
-                    onPress={() => setPicked(candidate)}
+                    onPress={respectPressGuard(() => setPicked(candidate))}
                     className={`rounded-[8px] px-[14px] py-sm ${
                       isSelected ? 'bg-primary-pale' : 'bg-surface-soft'
                     }`}
@@ -169,7 +171,7 @@ export function RenameSlotSheet({
           accessibilityRole="button"
           accessibilityState={{ disabled: !canReset }}
           disabled={!canReset}
-          onPress={onReset}
+          onPress={respectPressGuard(onReset)}
           className="items-center py-xs"
         >
           <Text
@@ -186,12 +188,12 @@ export function RenameSlotSheet({
           accessibilityRole="button"
           accessibilityState={{ disabled: violation !== null }}
           disabled={violation !== null}
-          onPress={() =>
+          onPress={respectPressGuard(() =>
             onApply({
               displayName: draft.trim(),
               displayCategory: categoryEditable ? picked : null,
             })
-          }
+          )}
           className={`h-[52px] w-full items-center justify-center rounded-button ${
             violation === null ? 'bg-primary' : 'bg-hairline-strong'
           }`}

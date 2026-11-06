@@ -253,6 +253,8 @@ export function ItineraryEditPage({
 
   // 저장 뒤 복귀와 헤더 ‹ 공통 — 히스토리가 없으면(딥링크) 얼굴별 목적지로 replace(h12 일정 탭 · i07 라이브 허브).
   function leaveAfterSave(): void {
+    // 저장 연타의 둘째 탭이 돌아간 h16 「돌아가기」까지 눌러 그 화면을 건너뛰지 않게(통합 QA O2).
+    openPressGuardWindow();
     goBackOr(router, {
       pathname: inTrip ? '/trips/[tripId]/live' : '/trips/[tripId]/itinerary',
       params: { tripId },

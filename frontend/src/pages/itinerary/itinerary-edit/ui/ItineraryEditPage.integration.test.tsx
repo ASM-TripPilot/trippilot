@@ -25,7 +25,7 @@ import type {
   ItineraryStatus,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import { resetPressGuard } from '@/shared/lib/pressGuard';
+import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
 import {
   editListData,
   fireEditDragEnd,
@@ -716,6 +716,7 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       expect(screen.getByTestId(RENAME_ROW)).toHaveTextContent(
         '이름·분류 고치기'
       );
+      resetPressGuard(); // ⋯ 가 연 창을 닫는다 — 아래 ⓐ 가 행 누름이 연 창만 재게(안 닫으면 그 줄을 지워도 green, 03b)
       fireEvent.press(screen.getByTestId(RENAME_ROW));
       expect(screen.queryByTestId(SHEET)).toBeNull();
       expect(screen.getByTestId(RENAME_SHEET)).toBeOnTheScreen();
@@ -727,7 +728,14 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       ).toEqual(RENAME_CATEGORIES);
       expect(screen.getByTestId('editor-rename-category-명소')).toBeSelected();
       expect(screen.getByTestId('editor-rename-reset')).toBeDisabled(); // 덮어쓴 게 없다
-      // ⓐ AC-15 — 행 누름 직후의 둘째 탭이 새 시트 자리 아래 「일정 저장하기」에 닿아도 저장하지 않는다.
+      // ⓐ 통합 QA D3 — 행 누름 직후의 둘째 탭이 올라오는 시트의 분류 칩에 닿아도 지금 분류가 그대로다(행이 연 창을 칩이 따른다).
+      //   저장 단언(50ms 대기)보다 앞에 둔다 — 실제 시간 400ms 창이라 대기 뒤로 가면 느린 CI 에서 거짓 red 가 날 수 있다.
+      fireEvent.press(screen.getByTestId('editor-rename-category-미술'));
+      expect(screen.getByTestId('editor-rename-category-명소')).toBeSelected();
+      expect(
+        screen.getByTestId('editor-rename-category-미술')
+      ).not.toBeSelected();
+      // ⓐ-2 AC-15 — 같은 둘째 탭이 새 시트 자리 아래 「일정 저장하기」에 닿아도 저장하지 않는다.
       await pressSaveAndSettle();
       expect(putCalls).toBe(0);
       resetPressGuard();
@@ -790,8 +798,8 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       fireEvent.press(screen.getByTestId(MORE('poi-a')));
       fireEvent.press(await screen.findByTestId(RENAME_ROW));
       fireEvent.changeText(screen.getByTestId(RENAME_INPUT), NAME);
+      resetPressGuard(); // 행 누름이 연 창이 지난 것과 같다 — 칩·`적용` 이 첫 누름으로 선다
       fireEvent.press(screen.getByTestId('editor-rename-category-카페'));
-      resetPressGuard(); // 행 누름이 연 창이 지난 것과 같다 — `적용` 이 첫 누름으로 선다
       fireEvent.press(screen.getByTestId('editor-rename-apply'));
       resetPressGuard();
       expect(screen.getByTestId(nameOfA)).toHaveTextContent(NAME);
@@ -1116,6 +1124,9 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
 
       expect(screen.getByTestId(SAVE)).toHaveTextContent('일정 저장하기');
       await visitsSettled();
+      // 복귀 순간 돌아간 화면의 버튼이 눌린 것과 같다 — 실제 「돌아가기」와 같은 `guardPress` 판정. 창은 이동 **전에** 열려 있어야 한다.
+      const nextScreenPress = jest.fn();
+      mockBack.mockImplementationOnce(() => guardPress(nextScreenPress)());
       fireEvent.press(screen.getByTestId(SAVE));
       await waitFor(() => expect(putCalls).toBe(1));
       // 확정이 따라 나갔다면 여기까지 흘려 보낸 뒤 잡힌다(요청은 비동기).
@@ -1126,6 +1137,8 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       expect(confirmCalls).toBe(0);
       expect(mockBack).toHaveBeenCalledTimes(1);
       expect(mockReplace).not.toHaveBeenCalled();
+      // 통합 QA O2 — 저장 뒤 복귀 직전에 창을 열어, 연타의 둘째 탭이 돌아간 화면의 「돌아가기」(`guardPress`)를 누르지 않는다.
+      expect(nextScreenPress).not.toHaveBeenCalled();
     });
   });
 });
@@ -2688,12 +2701,16 @@ describe('저장 뒤 위반 요약 게이트', () => {
       // ★ 01b Q1 ⓔ — 게이트가 토스트보다 앞선다. PUT 성공 즉시 토스트를 띄우면 여기서 red(02a ★12).
       expect(screen.queryByTestId(SAVED)).toBeNull();
 
+      // 통합 QA O2 — 게이트 복귀도 이동 전에 창을 연다(복귀 순간 돌아간 화면의 `guardPress` 누름이 무시된다).
+      const nextScreenPress = jest.fn();
+      mockBack.mockImplementationOnce(() => guardPress(nextScreenPress)());
       fireEvent.press(screen.getByTestId(ASIS));
 
       expect(await screen.findByTestId(SAVED)).toHaveTextContent(
         '일정을 저장했어요'
       );
       await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
+      expect(nextScreenPress).not.toHaveBeenCalled();
       expect(screen.queryByTestId(GATE)).toBeNull();
       await settle();
       expect(mockReplace).not.toHaveBeenCalled();

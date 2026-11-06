@@ -285,6 +285,8 @@ afterEach(() => {
   // 토스트·편집 스토어는 모듈 싱글턴이다 — describe 안이 아니라 파일 최상위에서 비운다(02a ★6·★7).
   resetToast();
   useItineraryEditStore.getState().reset();
+  // 저장 뒤 복귀가 연 연타 창(모듈 전역)이 다음 테스트의 첫 누름을 삼키지 않게(통합 QA O2).
+  resetPressGuard();
 });
 
 afterAll(() => server.close());

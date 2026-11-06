@@ -6,6 +6,9 @@ import {
 } from '../model/moveDayOptions';
 import { MoveDaySheet } from './MoveDaySheet';
 import { RenameSlotSheet } from './RenameSlotSheet';
+import { openPressGuardWindow, resetPressGuard } from '@/shared/lib/pressGuard';
+
+afterEach(resetPressGuard);
 
 /**
  * TRIP-1793 · 「다른 날로 옮기기」 장소 시트 — 입력을 만드는 순수 함수 `buildMoveDayOptions` 와 시트 `MoveDaySheet` 단독 (AC-5·9).
@@ -478,5 +481,35 @@ describe('RenameSlotSheet · RS — 이름·분류 고치기 시트 (TRIP-1795 A
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onApply).not.toHaveBeenCalled();
     expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
+  // 통합 QA D3 — 「이름·분류 고치기」 연타의 둘째 탭이 올라오는 시트에 닿는다. 어느 버튼에 닿을지는 시트 위치에 달렸으니 전부 창을 따른다.
+  it('RS5 · 연타 창이 열려 있으면 칩·원래대로·적용·X 가 모두 무반응이고, 창이 지나면 다시 동작한다', () => {
+    const { onApply, onReset, onClose } = renderRename({ canReset: true });
+    expect(chip('맛집')).toBeSelected(); // 앵커
+
+    openPressGuardWindow();
+    fireEvent.press(chip('미술'));
+    fireEvent.press(screen.getByTestId(RESET));
+    fireEvent.press(screen.getByTestId(APPLY));
+    fireEvent.press(screen.getByTestId('editor-rename-close'));
+    expect(chip('맛집')).toBeSelected();
+    expect(chip('미술')).not.toBeSelected();
+    expect(onReset).not.toHaveBeenCalled();
+    expect(onApply).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+
+    resetPressGuard();
+    fireEvent.press(chip('미술'));
+    expect(chip('미술')).toBeSelected();
+    fireEvent.press(screen.getByTestId(RESET));
+    expect(onReset).toHaveBeenCalledTimes(1);
+    fireEvent.press(screen.getByTestId(APPLY));
+    expect(onApply).toHaveBeenCalledWith({
+      displayName: '웨이브온 카페',
+      displayCategory: '미술',
+    });
+    fireEvent.press(screen.getByTestId('editor-rename-close'));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
