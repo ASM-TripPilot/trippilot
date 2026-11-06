@@ -13,7 +13,7 @@ import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { formatTripDateRange } from '@/entities/trip';
 import { classifyTripPhase, tripItinerarySummary } from '@/entities/trip';
 import { PastTripRow } from '@/entities/trip';
-import { pickRegionCover } from '@/entities/trip';
+import { tripCoverSource } from '@/entities/trip';
 import { cumulativeStats, RECORDS_LIMIT } from '../model/cumulativeStats';
 import { buildStyleCardModel } from '../model/styleCardModel';
 import { bucketTrips, type TripBucket } from '../model/tripBuckets';
@@ -172,7 +172,7 @@ export function MyPage(): ReactElement {
             dateRangeLabel: formatTripDateRange(trip.startDate, trip.endDate),
             nightsLabel: null,
             photoLabel: photoLabelOf(trip.tripId),
-            coverSource: pickRegionCover(trip.destinations),
+            coverSource: tripCoverSource(trip),
           }}
           onPress={() => router.push(`/trips/${trip.tripId}/records` as Href)}
           trailing={<ChevronRightGlyph size={20} />}

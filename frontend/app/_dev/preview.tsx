@@ -127,6 +127,7 @@ import {
   PastTripRow,
   TripCard,
   TripDeleteDialog,
+  pickRegionCover,
   type MyTripCardVM,
 } from '@/entities/trip';
 import type { PastTripCardVM } from '@/entities/trip';
@@ -137,6 +138,9 @@ import { TimeSheet } from '@/widgets/time-sheet';
 import { MoveDaySheet } from '@/pages/itinerary/itinerary-edit/ui/MoveDaySheet';
 import { MethodPickerScreen } from '@/pages/itinerary/itinerary-method/ui/MethodPickerScreen';
 import { MyTripsListScreen } from '@/pages/itinerary/itinerary-list/ui/MyTripsListScreen';
+import { periodHint } from '@/pages/trip/trip-settings/model/periodRules';
+import { CoverPickSheet } from '@/pages/trip/trip-settings/ui/CoverPickSheet';
+import { PeriodLengthDialog } from '@/pages/trip/trip-settings/ui/PeriodLengthDialog';
 import { TripSettingsView } from '@/pages/trip/trip-settings/ui/TripSettingsView';
 import { MyTripsSortSheet } from '@/pages/itinerary/itinerary-list/ui/MyTripsSortSheet';
 import {
@@ -204,9 +208,9 @@ import {
 import {
   CompanionEditSheet,
   DayWindowEditSheet,
+  PeriodEditSheet,
 } from '@/widgets/trip-edit-sheets';
 import { DestinationEditSheet } from '@/pages/trip/trip-new-step1/ui/DestinationEditSheet';
-import { PeriodEditSheet } from '@/pages/trip/trip-new-step1/ui/PeriodEditSheet';
 import {
   StaySelectSheet,
   type StaySelectCandidate,
@@ -317,6 +321,8 @@ const noop = () => {};
 
 // g03 여행 설정(TRIP-1787, Figma `5151:3550`) — 순수 뷰만 태운다(컨테이너는 조회·저장 훅을 문다). 기본 얼굴(바꿀 수 있고 삭제 노출)과
 // 끝난 여행 잠금 얼굴(이유 한 줄·삭제 없음)을 Figma 와 대조한다. 시트·삭제 다이얼로그 개폐·키보드는 jest 가 못 봐서 6-b 몫이다.
+// TRIP-1788: 기간 행(chevron·보조문)·「커버 바꾸기」 버튼이 얹혔다 — 기간 잠금·서버 거절 안내·일수 변경 확인창·커버 시트·기간 시트 설정판은
+// 아래 `trip-settings-*` 키들(기간·커버 시트는 Figma 프레임이 없어 기존 어휘로 만든 것이라 육안 대조 대상이 없고 모양만 본다).
 const TRIP_SETTINGS_VIEW = {
   title: '제주 가족 여행',
   titleInvalid: false,
@@ -327,6 +333,9 @@ const TRIP_SETTINGS_VIEW = {
   dayEndLabel: '마지막 날 18:00까지',
   periodLabel: '6월 10일(수) – 13일(토)',
   nightsLabel: '3박 4일',
+  periodHint: periodHint(null),
+  onPressPeriod: noop,
+  onPressCover: noop,
   destinationsLabel: '제주시 · 서귀포시',
   cover: null,
   canSave: false,
@@ -6227,7 +6236,122 @@ export const PREVIEW_STATES: PreviewState[] = [
     label: 'g03 · 여행 설정 · 끝난 여행 잠금',
     login: null,
     render: () => (
-      <TripSettingsView {...TRIP_SETTINGS_VIEW} locked deletable={false} />
+      <TripSettingsView
+        {...TRIP_SETTINGS_VIEW}
+        locked
+        deletable={false}
+        periodHint={periodHint('ended')}
+        onPressPeriod={undefined}
+        onPressCover={undefined}
+      />
+    ),
+  },
+  // TRIP-1788 — 여행이 시작돼 기간이 잠긴 얼굴(chevron 없음·이유 보조문) + 서버 거절 안내 줄. 커버·이름은 계속 열려 있다.
+  {
+    key: 'trip-settings-period-locked',
+    band: 'g',
+    label: 'g03 · 여행 설정 · 기간 잠금(시작됨) + 거절 안내',
+    login: null,
+    render: () => (
+      <TripSettingsView
+        {...TRIP_SETTINGS_VIEW}
+        periodHint={periodHint('started')}
+        periodNotice="여행이 시작돼 기간을 바꾸지 못했어요"
+        onPressPeriod={undefined}
+      />
+    ),
+  },
+  // TRIP-1788 — 기간 시트 설정판: 기본 모드(시작만 옮김 + 「일수 바꾸기」)와 끝일 모드(버튼 없음·안내 문구 교체).
+  {
+    key: 'trip-settings-period-sheet',
+    band: 'g',
+    label: 'g03 · 기간 시트 · 날짜 옮기기(설정판)',
+    login: null,
+    render: () => (
+      <PeriodEditSheet
+        today="2026-06-01"
+        month="2026-06"
+        range={{ start: '2026-06-10', end: '2026-06-13' }}
+        note="일수는 그대로 두고 시작일만 옮겨요"
+        onPressChangeLength={noop}
+        onPickDate={noop}
+        onPrevMonth={noop}
+        onNextMonth={noop}
+        onApply={noop}
+        onClose={noop}
+      />
+    ),
+  },
+  {
+    key: 'trip-settings-period-sheet-length',
+    band: 'g',
+    label: 'g03 · 기간 시트 · 일수 바꾸기 모드',
+    login: null,
+    render: () => (
+      <PeriodEditSheet
+        today="2026-06-01"
+        month="2026-06"
+        range={{ start: '2026-06-10', end: '2026-06-20' }}
+        note="끝나는 날을 골라요 · 일수가 바뀌면 일정을 다시 짜요"
+        onPickDate={noop}
+        onPrevMonth={noop}
+        onNextMonth={noop}
+        onApply={noop}
+        onClose={noop}
+      />
+    ),
+  },
+  // TRIP-1788 — 일수 변경 확인창(일정 있음 / 없음 / 실패). 딤·중앙 정렬은 jest 사각이라 이 키가 육안 자리다.
+  {
+    key: 'trip-settings-length-dialog',
+    band: 'g',
+    label: 'g03 · 일수 변경 확인창 · 일정 있음',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <TripSettingsView {...TRIP_SETTINGS_VIEW} canSave />
+        <PeriodLengthDialog
+          hasItinerary
+          failed={false}
+          onCancel={noop}
+          onConfirm={noop}
+        />
+      </View>
+    ),
+  },
+  {
+    key: 'trip-settings-length-dialog-failed',
+    band: 'g',
+    label: 'g03 · 일수 변경 확인창 · 일정 없음 + 실패',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <TripSettingsView {...TRIP_SETTINGS_VIEW} />
+        <PeriodLengthDialog
+          hasItinerary={false}
+          failed
+          onCancel={noop}
+          onConfirm={noop}
+        />
+      </View>
+    ),
+  },
+  // TRIP-1788 — 커버 고르기 시트(46장 격자·첫 칸 선택). 격자 스크롤·썸네일 메모리는 jest 가 못 본다(6-b).
+  {
+    key: 'trip-settings-cover-sheet',
+    band: 'g',
+    label: 'g03 · 커버 고르기 시트',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <TripSettingsView {...TRIP_SETTINGS_VIEW} />
+        <CoverPickSheet
+          value="26350"
+          autoSource={pickRegionCover([{ seq: 1, regionCode: '50' }])}
+          onApply={noop}
+          onClose={noop}
+        />
+      </View>
     ),
   },
   // g01 동행 편집 시트(TRIP-668, Figma `3642:2068`) — 친구 선택·인원 2명 열린 상태.

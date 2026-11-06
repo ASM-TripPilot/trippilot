@@ -30,7 +30,12 @@ export {
 export { COVER_GRADIENTS } from './config/coverGradients';
 export type { CoverTone } from './config/coverGradients';
 export { pickCoverCity } from './lib/coverCity';
-export { pickRegionCover } from './lib/regionCover';
+export {
+  coverChoices,
+  coverSourceForKey,
+  pickRegionCover,
+  tripCoverSource,
+} from './lib/regionCover';
 export { SERVICE_REGIONS } from './config/serviceRegions';
 export { PastTripRow } from './ui/PastTripRow';
 export { TripCard } from './ui/TripCard';

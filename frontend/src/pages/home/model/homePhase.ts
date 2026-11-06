@@ -1,4 +1,4 @@
-import { pickRegionCover } from '@/entities/trip';
+import { tripCoverSource } from '@/entities/trip';
 
 import type { HomePhase } from './homeTypes';
 
@@ -24,6 +24,8 @@ export interface HomeTripInput {
   party: number;
   /** TripStatus 리터럴('PLANNED'|'CONFIRMED'|'ACTIVE'|'ENDED') — 서버 스키마 미참조를 위해 string 으로 넓힘 */
   status: string;
+  /** 고른 커버 키(null·없음이면 첫 목적지 자동) — 서버 Trip.coverKey 가 구조적으로 대입된다. */
+  coverKey?: string | null;
   /** 첫 목적지의 regionCode 로 지역 커버 이미지를 고른다 — 서버 Trip.destinations 가 구조적으로 대입된다. */
   destinations?: readonly { seq: number; regionCode?: string | null }[];
 }
@@ -139,7 +141,7 @@ function resolvePostTripPhase(
       ctaLabel: '회고 보기',
       title: trip.title,
       meta: formatTripMeta(trip),
-      coverSource: pickRegionCover(trip.destinations),
+      coverSource: tripCoverSource(trip),
     },
     recommendationTitle: '다음엔 여기 어때요',
     // 추천 카드는 서버 장소가 소스라 화면이 컬렉션 레인(collectionsLane)으로 그린다 — 여기선 비운다.
@@ -223,7 +225,7 @@ export function resolveHomePhase(
       ctaLabel: ctaLabelForStatus(dominant.status),
       title: dominant.title,
       meta: formatTripMeta(dominant),
-      coverSource: pickRegionCover(dominant.destinations),
+      coverSource: tripCoverSource(dominant),
     },
     bridge: {
       title: `담은 곳 ${savedCount}곳이 아직 일정에 없어요`,

@@ -1,6 +1,7 @@
 import { act, fireEvent, screen } from '@testing-library/react-native';
 
 import type { Trip } from '@/shared/api/index.schemas';
+import { coverSourceForKey } from '@/entities/trip';
 import {
   getGetTripsTripIdItineraryQueryOptions,
   useGetTripsTripIdItinerary,
@@ -828,4 +829,39 @@ describe('🔴 TRIP-1786 · ⋯ 메뉴 항목 — 노출 조건 · 설정 이동
       expect(screen.queryByTestId('my-trip-pinned-t1')).toBeNull();
     }
   );
+});
+
+/**
+ * TRIP-1788 · 커버 소비처 ① — 내 여행 목록 카드가 사용자가 고른 `coverKey` 그림을 쓴다.
+ * 고른 키(서울 종로구)와 첫 목적지(부산 해운대구)를 **다른 지역**으로 둬서, 첫 목적지 그림이 나오면 red 가 되게 한다.
+ * 그림 비교는 `coverSourceForKey` 값으로(jest 의 번들 이미지는 `require` 한 파일 기준 경로라 직접 `require` 하면 어긋난다).
+ */
+describe('TRIP-1788 · 카드 커버 = 고른 그림', () => {
+  const FIRST = [
+    { seq: 1, region: '해운대구', nights: 2, regionCode: '26350' },
+  ];
+  const cover = () => screen.getByTestId('my-trip-cover-t1').props.source;
+
+  it('coverKey 가 있으면 첫 목적지가 달라도 그 그림이다', () => {
+    renderCard(
+      <TripCardContainer
+        trip={trip({ coverKey: '11110', destinations: FIRST })}
+      />
+    );
+
+    expect(coverSourceForKey('11110')).not.toBe(coverSourceForKey('26350'));
+    expect(cover()).toEqual([coverSourceForKey('11110')]);
+  });
+
+  it.each<[string, Partial<Trip>]>([
+    ['null(자동)', { coverKey: null }],
+    ['칸 없음(옛 서버)', {}],
+    ['앱이 모르는 키', { coverKey: 'zz9' }],
+  ])('coverKey 가 %s 면 첫 목적지 그림 — 지금까지와 같다', (_label, over) => {
+    renderCard(
+      <TripCardContainer trip={trip({ destinations: FIRST, ...over })} />
+    );
+
+    expect(cover()).toEqual([coverSourceForKey('26350')]);
+  });
 });
