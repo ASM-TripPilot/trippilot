@@ -777,6 +777,18 @@ paths:
             해석해 **접두사**로 조회하므로 시도를 고르면 그 안 시군구가 전부 잡힌다.
             동명이지역(`동구` 는 대전·대구·광주·부산에 있다)은 **그 이름을 가진 지역 전부**가 대상이다 —
             하나를 고르면 거짓이 된다. 카탈로그에 없는 이름은 **빈 목록**이다(전국으로 넓히지 않는다).
+            한 곳을 집어야 하면 `regionCode` 를 쓴다.
+        - name: regionCode
+          in: query
+          required: false
+          schema: { type: string, pattern: '^([0-9]{2}|[0-9]{5})$' }
+          example: '11140'
+          description: >
+            지역 **코드**(`GET /regions` 의 `regionCode` — 시도 2자리·시군구 5자리, TRIP-1808). 그 코드 **접두사**로만
+            조회하므로 동명이지역이 섞이지 않는다(`11140` = 서울 중구만, `51820` = 강원 고성군만, `51` = 강원 전체).
+            **`region` 과 함께 오면 이 값이 이기고 `region` 은 무시한다** — 코드가 더 좁고 정확하다.
+            형식이 틀리면(빈 값 포함) **400** 이다(지역 조건을 떨어뜨리면 전국이 나간다). 형식만 맞고 카탈로그에 없는
+            코드는 **빈 목록**이다. 시도 코드만 가진 장소(`regionCode: "11"`)는 시군구 코드 조회에 잡히지 않는다.
         - { name: category, in: query, required: false, schema: { $ref: '#/components/schemas/PoiCategory' } }
         - name: q
           in: query
