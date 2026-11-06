@@ -18,6 +18,7 @@ routes:
 - `places-search` 검색어 입력 → 300ms 멈춘 뒤 서버 `q` 재조회.
 - `places-category` 카테고리 칩(「전체」·「명소」·「맛집」·「카페」·「야경」·「자연」·「쇼핑」·「문화」·「액티비티」·「미술」·「술집」) 선택 → 서버 재조회.
 - `places-region-chip` 지역 칩(「전체 지역」 / 한 곳 이름 / `{첫 지역} 외 N곳`) press → 지역 선택(purpose=places) → 고른 지역 하나로 교체.
+- `places-same-name` 이름이 같은 지역(경남·강원 고성군, 서울·부산 중구)을 코드로 갈라 그 지역 장소만 보여 준다. 같은 이름 2곳이면 칩은 「중구 외 1곳」. *(TRIP-1809 · 실화면 미검증 — 서버 TRIP-1808 필요)*
 - `places-loading` 「장소를 모으는 중」 스켈레톤.
 - `places-error` 「지금 장소 정보를 불러올 수 없어요」 + 「다시 시도」(카드가 남아 있어도 헤더에 뜬다).
 - `places-partial-failure` 여러 지역 중 일부 실패 → 「일부 지역을 불러오지 못했어요」 + 「다시 시도」.
@@ -45,11 +46,11 @@ routes:
 
 - 장소 탐색 `/explore/places`:
   - 홈 「지금 뜨는 장소」 「더 보기」 — home.md.
-  - 탐색 랜딩 장소 레인 「모두 보기 ›」·빈 레인 「가볼 만한 장소 둘러보기」(필터 중이면 `?region={이름}`) — explore-destination.md.
+  - 탐색 랜딩 장소 레인 「모두 보기 ›」·빈 레인 「가볼 만한 장소 둘러보기」(필터 중이면 `?region={이름}&regionCode={코드}`) — explore-destination.md.
   - 지역 선택 purpose=places 에서 지역 선택 → 쌓인 화면을 걷고 그 지역으로 거른 장소 탐색으로 돌아온다.
   - 담은 장소 빈 상태 「장소 둘러보기」, 지역 빈 상태 「장소 둘러보기」 — saved-places.md.
-  - 꼭 갈 곳 고르기(d02 select) 「+ 탐색에서 더 담기」·빈 상태 버튼 → `?region={여행 지역들}&from=wizard` — saved-places.md.
-  - 딥링크 `trippilot:///explore/places`, `trippilot:///explore/places?region=부산`(가드 밖 — 미인증도 열린다).
+  - 꼭 갈 곳 고르기(d02 select) 「+ 탐색에서 더 담기」·빈 상태 버튼 → `?region={이름들}&regionCode={코드들}&from=wizard`(둘 다 쉼표로 이어 붙는다, 코드 없는 여행지가 있으면 `regionCode` 없음) — saved-places.md.
+  - 딥링크 `trippilot:///explore/places`, `trippilot:///explore/places?region=부산`, `trippilot:///explore/places?region=고성군&regionCode=48820`(가드 밖 — 미인증도 열린다).
 - 장소 상세 `/explore/places/{poiId}`:
   - 홈 「지금 뜨는 장소」·「요즘 사람들이 담는 곳」 카드.
   - 탐색 랜딩 장소 레인 카드.
@@ -75,6 +76,7 @@ Preconditions:
 - **오류.** 네트워크를 끊고 진입. testID: `explore-places-error` 「지금 장소 정보를 불러올 수 없어요」, testID: `explore-places-error-retry` 「다시 시도」.
 - **부분 실패.** 지역 0곳 또는 2곳 이상 진입에서 한 지역만 실패하면 testID: `explore-places-partialfailure`(「일부 지역을 불러오지 못했어요」)와 testID: `explore-places-partialfailure-retry` 「다시 시도」.
 - **더 받기.** 단일 지역(`?region=부산`)에서 끝까지 스크롤. testID: `explore-places-loading-more` 가 잠깐 뜨고 카드가 늘어난다.
+- **동명 지역.** `?region=고성군&regionCode=48820` 으로 연다. 칩이 「고성군」이고 경남 고성 장소만 나온다. 여행 지역이 서울 중구·부산 중구인 위저드에서 꼭 갈 곳 고르기 → `mustvisit-pick-addmore` 로 오면 칩이 「중구 외 1곳」이고 두 중구 장소가 번갈아 나온다. 서버에 TRIP-1808 이 없으면 이름으로 조회돼 동명이 섞인다.
 - **담기.** 카드 하트 testID: `explore-places-save-${poiId}` 를 누른다. 응답 전 비활성, 응답 후 담김. 담은 장소(`/explore/saved-places`)에서 그 장소가 목록 맨 아래(담은 순서 오름차순)에 있는지 다시 읽는다.
 - **담기 실패.** testID: `explore-places-saveerror` 배너(예 「연결이 불안정해 담지 못했어요」) + testID: `explore-places-saveerror-retry` 「다시 시도」, 게스트면 testID: `explore-places-saveerror-login` 「로그인하기」 → `/(auth)/login`. 배너는 다음 조작(검색·칩·재시도·새 하트)에서 사라진다.
 - **FAB.** testID: `explore-places-saved-fab`(「담은 장소」) → `/explore/saved-places`. testID: `explore-places-create-fab`(「여행 만들기」) → `/trips/new/step1`. 둘의 묶음 testID: `explore-places-fab-stack`.
@@ -93,7 +95,8 @@ Preconditions:
 - 목록 순서는 진입마다 새 무작위 seed 다 — 같은 카드 위치를 두 진입에 걸쳐 기대하지 않는다. 칩·검색·재시도 동안은 같은 seed 를 쓴다.
 - 지역 0곳·2곳 이상 진입은 병렬 병합 경로라 무한 스크롤 동작이 단일 지역과 다를 수 있다(어느 쪽이 그려지는지 6-b 실기 확인 필요).
 - 위저드 출처(`from=wizard`)면 ＋ FAB 가 없고 ♥ 는 직전 화면(위저드)으로 돌아간다 — 딥링크로 `from=wizard` 를 붙여 들어오면 ♥ 가 스택 밖으로 나가거나 무반응일 수 있다(미확인). 위저드 출처에서 지역 칩으로 지역을 바꾸면 `from` 이 지워져 ＋ 가 다시 생기고 누르면 위저드 입력이 초기화된다(알려진 함정).
-- 지역 칩으로 고른 지역은 이름 하나로 교체된다 — `{첫 지역} 외 N곳` 다지역 상태는 칩 선택 후 사라진다.
+- 지역 칩으로 고른 지역은 이름·코드 한 쌍으로 교체된다 — `{첫 지역} 외 N곳` 다지역 상태는 칩 선택 후 사라진다.
+- 코드 없이 저장된 옛 여행(이름만으로 코드를 못 정한 `중구` 등)은 이름으로 묻어 동명 지역이 계속 섞인다.
 - 서버 지역 필터는 `poi.region` 이 NULL 인 장소를 못 건다(QA: 「익선동」이 종로구 칩에서 0건). 0건 안내는 검색어 탓으로 지목하고 지역 해제 버튼은 없다.
 - 지역 미지정 진입은 서울·부산·제주만 묻는다 — 「전체 지역」이 전국이 아니다.
 - 미인증 딥링크에서 담기 하트·상세 저장을 누르면 「로그인하기」가 로그인 화면을 여는데, 상황에 따라 로그인 화면이 열리지 않을 수 있다(확인 필요).

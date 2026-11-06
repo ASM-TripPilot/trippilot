@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { getPlaces } from '@/shared/api/index.places';
-import type { PoiCategory } from '@/shared/api/index.schemas';
+import type { GetPlacesParams, PoiCategory } from '@/shared/api/index.schemas';
 
 import { interleavePlacesByRegion, mergePlacesByPoiId } from './mergePlaces';
 
@@ -31,7 +31,8 @@ import { interleavePlacesByRegion, mergePlacesByPoiId } from './mergePlaces';
 const PER_REGION_LIMIT = 200;
 
 export function useMultiRegionPlaces(
-  regions: string[],
+  // 이름 문자열 또는 이름+코드(동명 지역을 가르는 여행지 조회, TRIP-1809).
+  regions: readonly (string | Pick<GetPlacesParams, 'region' | 'regionCode'>)[],
   filters: { category?: PoiCategory | null; q?: string; seed?: string } = {},
   options: { staleTime?: number } = {}
 ) {
@@ -55,7 +56,7 @@ export function useMultiRegionPlaces(
         regions.map((region) =>
           getPlaces(
             {
-              region,
+              ...(typeof region === 'string' ? { region } : region),
               limit: PER_REGION_LIMIT,
               ...(category ? { category } : {}),
               ...(q ? { q } : {}),

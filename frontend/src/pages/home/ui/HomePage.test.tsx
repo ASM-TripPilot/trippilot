@@ -974,6 +974,27 @@ describe('지금 뜨는 장소', () => {
       expect(lastPlacesParams()).toEqual({ region: '부산', limit: 200 });
     });
 
+    it('여행지에 코드가 있으면 이름과 함께 묻는다 (TRIP-1809)', () => {
+      mockUseGetTrips.mockReturnValue(
+        tripsOk([
+          {
+            ...travelingTrip(),
+            destinations: [
+              { seq: 1, region: '중구', nights: 2, regionCode: '11140' },
+            ],
+          },
+        ])
+      );
+
+      render(<HomePage />);
+
+      expect(lastPlacesParams()).toEqual({
+        region: '중구',
+        regionCode: '11140',
+        limit: 200,
+      });
+    });
+
     it('담긴 수 많은 순 앞 4장(동점은 서버 순서) — 태그가 있으면 #태그, 없으면 #카테고리', () => {
       render(<HomePage />);
 
