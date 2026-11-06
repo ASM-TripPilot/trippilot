@@ -142,7 +142,8 @@ def test_pbt_실제_공유본_원문에서_합성_왕복이_성립한다(hours: 
     if outcome == RESTORED:
         assert parse_opening_hours_raw(raw) == _hours(stored)
         assert len(raw) <= OPENING_HOURS_MAX
-        assert split_opening_hours_raw(raw)[1] == rest_phrase(closed)
+        # 원문이 이미 뺀 요일(`월\n정기휴무 (매주 월요일)` 같은 요일별 원문, 2026-11-06)은 다시 적지 않는다
+        assert split_opening_hours_raw(raw)[1] == rest_phrase(closed & {h.day_of_week for h in parsed})
         assert backfill_one(p) == "same"
     elif outcome == "same":
         # **원문이 휴무를 이미 글로 적고 있는 경우다.** `split_opening_hours_raw` 는 우리가
