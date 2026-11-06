@@ -103,12 +103,14 @@ const POPULAR_TAGLINE: Record<string, string> = {
   '11': '도심 · 감성',
   '26': '바다 · 야경',
   '28': '항구 · 근대',
+  '47': '고도 · 역사',
+  '48': '남해 · 섬',
   '50': '섬 · 자연',
   '51': '산 · 휴식',
   '43': '내륙 · 힐링',
 };
 
-/** 카드 윗면 — 번들 커버 그림(서울·부산·제주, 시군구 그림이 없으면 같은 시도 그림)이 있으면 그림을,
+/** 카드 윗면 — 번들 커버 그림(시군구 그림이 없으면 같은 시도 그림)이 있으면 그림을,
  * 없으면 `regionTint` 그라데이션을 그린다(인기 카드와 같은 규칙). 글자는 그림 아래 흰 칸에 있어
  * 스크림이 필요 없다. 선택 불가 카드의 흐림은 카드 전체 `opacity` 라 그림에도 똑같이 걸린다. */
 function RegionCardImage({ region }: { region: Region }): ReactElement {
@@ -367,7 +369,7 @@ function PopularStrip({
       {popular.map((group, index) => {
         const [from, to] = regionTint(group.sidoCode);
         const tagline = POPULAR_TAGLINE[group.sidoCode];
-        // 서울·부산·제주는 번들 커버 그림, 그 밖의 시도는 지금처럼 그라데이션.
+        // 번들 커버 그림이 있는 시도는 그림, 그 밖의 시도는 지금처럼 그라데이션.
         const cover = pickRegionCover([{ seq: 1, regionCode: group.sidoCode }]);
         return (
           <Pressable

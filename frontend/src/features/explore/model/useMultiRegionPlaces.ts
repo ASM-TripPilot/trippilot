@@ -9,7 +9,7 @@ import { interleavePlacesByRegion, mergePlacesByPoiId } from './mergePlaces';
  * 다지역 '꼭 갈 곳 더 담기'(2개 이상 지역)의 병렬 조회 훅(TRIP-687).
  *
  * 지역당 단발 `getPlaces`(한 장 최대 `limit`)를 `Promise.allSettled` 로 병렬 조회해(TRIP-691)
- * `mergePlacesByPoiId` 로 합친다 — 여행 지역 수가 적어(보통 1~3) 지역당 한 장이면 실용상 충분하다.
+ * `mergePlacesByPoiId` 로 합친다 — 여행 지역 수가 적어(보통 1~3, 서비스 지역 전체는 6) 지역당 한 장이면 실용상 충분하다.
  * 한 지역이 실패해도 나머지는 살리고(부분 성공), 전부 실패면 throw(전부 성공/부분 실패만 통과).
  * 무한 스크롤은 포기하므로(단일지역 경로가 담당) `fetchNextPage`/`hasNextPage` 는 no-op·false 다.
  *
