@@ -469,6 +469,9 @@ def self_check_close_missing(write, item):
         # 같은 출처 문서가 둘이면 보내기 전에 거부한다.
         code, paths = run(doc, write({"source": "LOCALDATA", "proposals": items[:1]}), "--close-missing")
         assert code != 0 and paths == [], (code, paths)
+        # 닫기 없이는 준 순서대로 보낸다 — 배포의 [공유본, 지역 문서] 에서 겹치는 행은 뒤가 이긴다(TRIP-1810).
+        code, _ = run(doc, write({"source": "LOCALDATA", "proposals": items[:1]}))
+        assert code == 0 and [len(body["proposals"]) for _path, body in calls] == [3, 1], (code, calls)
 
         # 병합 공유본: 최상단은 한 출처인데 항목이 섞여 있다 — 항목 출처마다 따로 보내고 따로 닫는다.
         # 최상단 출처로 몰아 보내면 다른 출처 항목이 한 벌 더 생긴다(유일키가 (source, content_id)).
