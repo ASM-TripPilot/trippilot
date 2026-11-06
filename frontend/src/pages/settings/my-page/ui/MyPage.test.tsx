@@ -802,6 +802,40 @@ describe('지난 여행 카드 (옛 .l03empty)', () => {
     });
   });
 
+  // TRIP-1806 · 마이 탭 compact 행 — 64 칸엔 안 들어가 글자 줄에 쓰고, 행 라벨을 직접 주므로 낭독 라벨에도 넣는다.
+  describe('TRIP-1806 · 지난 여행 행 = 다른 지역 커버 이름', () => {
+    const ROOT = 'my-trip-reflection-e-jeju';
+    const NAME = `${ROOT}-cover-label`;
+    const JEJU_FIRST = [
+      { seq: 1, region: '제주시', nights: 2, regionCode: '50110' },
+    ];
+
+    it('첫 목적지와 다른 시도의 그림이면 행에 이름이 보이고 낭독 라벨에도 있다', async () => {
+      setTrips([
+        ended('e-jeju', { destinations: JEJU_FIRST, coverKey: '26350' }),
+      ]);
+
+      await renderPage();
+
+      expect(screen.getByTestId(NAME)).toHaveTextContent('그림 · 해운대');
+      expect(screen.getByTestId(ROOT).props.accessibilityLabel).toBe(
+        '제주 여행, 2026.5.1–5.3, 그림 · 해운대'
+      );
+    });
+
+    it.each<[string, Partial<Trip>]>([
+      ['자동(null)', { coverKey: null }],
+      ['같은 시도의 다른 곳', { coverKey: '50130' }],
+    ])('%s 면 행은 있고 이름은 없다', async (_label, over) => {
+      setTrips([ended('e-jeju', { destinations: JEJU_FIRST, ...over })]);
+
+      await renderPage();
+
+      expect(screen.getByTestId(`${ROOT}-cover`)).toBeOnTheScreen();
+      expect(screen.queryByTestId(NAME)).toBeNull();
+    });
+  });
+
   describe('🔴 AC-3 · 지난 여행은 썸네일형 카드', () => {
     it('제목 · 날짜 2026.5.1–5.3 · 썸네일 자리 · chevron 이 있고, 옛 칩 카드는 없다', async () => {
       // 준비: 예정 0 · 종료 1 → "지난 여행" 섹션이 보이는 조건(775 §F-3 A안).

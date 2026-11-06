@@ -23,6 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { COLOR_TOKENS } from '@/shared/config';
 import { PhotoGlyph } from '@/entities/itinerary-slot';
+import { CoverLabel } from '@/entities/trip';
 import { BackChevronGlyph, ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import { Image } from '@/shared/ui/Image';
 
@@ -54,6 +55,8 @@ export interface TripSettingsViewProps {
   destinationsLabel: string;
   /** 지역 커버 — 없으면 회색 자리. */
   cover: ImageSourcePropType | null;
+  /** 첫 여행지와 다른 시도의 그림이면 그 이름(`tripCoverLabel`). 없으면 안 그린다. */
+  coverLabel?: string | null;
   canSave: boolean;
   /** 저장 실패(5xx·네트워크) — 오류 줄 + 다시 시도. */
   saveFailed: boolean;
@@ -158,6 +161,7 @@ export function TripSettingsView({
   onPressCover,
   destinationsLabel,
   cover,
+  coverLabel,
   canSave,
   saveFailed,
   deletable,
@@ -196,6 +200,12 @@ export function TripSettingsView({
                 />
               ) : null}
             </View>
+            {/* 왼쪽 아래 — 오른쪽 아래 「커버 바꾸기」와 겹치지 않게 폭을 묶는다(넘치면 말줄임). */}
+            <CoverLabel
+              label={coverLabel}
+              testID="trip-settings-cover-label"
+              className="absolute bottom-md left-md max-w-[45%]"
+            />
             {onPressCover ? (
               <Pressable
                 testID="trip-settings-cover-change"

@@ -127,6 +127,7 @@ import {
   PastTripRow,
   TripCard,
   TripDeleteDialog,
+  coverSourceForKey,
   pickRegionCover,
   type MyTripCardVM,
 } from '@/entities/trip';
@@ -1789,6 +1790,23 @@ const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
     extra: null,
   },
 ];
+
+// TRIP-1806 · 다른 지역 커버 이름 프리뷰 공용 — 가장 밝은 그림(강원 화천군 51790) + 긴 이름. 글자 대비·겹침은 jest 가 못 봐 6-b 육안 자리다.
+const COVER_LABEL_PREVIEW = {
+  coverSource: coverSourceForKey('51790'),
+  coverLabel: '그림 · 서울 강서구',
+};
+
+function homeWithCoverLabel(
+  props: ComponentProps<typeof HomeScreen>
+): ComponentProps<typeof HomeScreen> {
+  const { phase } = props;
+  if (!phase || phase.kind === 'discovery') return props;
+  return {
+    ...props,
+    phase: { ...phase, trip: { ...phase.trip, ...COVER_LABEL_PREVIEW } },
+  };
+}
 
 // h06 삭제 프리뷰(TRIP-1055) — 작성중 '부산 여행'(⋯ 있음) + 완성 '서귀포시 여행'(⋯ 없음 — 지난 여행 가정) 순서, Figma 4682:2573. TRIP-1441 · 확정이어도 시작 전(upcoming)이면 ⋯ 가 열린다(실앱 판정은 TripCardContainer).
 // TRIP-1271 · `generating` — 생성 중 '제주 여행'에도 ⋯ 를 연다(결정 1=A, 세션이 돌아도 작성중이면 삭제 가능).
@@ -4134,6 +4152,26 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_POST_TRIP_PROPS} />),
   },
+  {
+    key: 'home-planning-cover-label',
+    band: 'a',
+    label: 'a01 · 계획 중 · 다른 지역 커버 이름',
+    login: null,
+    render: () =>
+      withShellTabBar(
+        <HomeScreen {...homeWithCoverLabel(HOME_PLANNING_PROPS)} />
+      ),
+  },
+  {
+    key: 'home-post-trip-cover-label',
+    band: 'a',
+    label: 'a01 · 여행 후 · 다른 지역 커버 이름',
+    login: null,
+    render: () =>
+      withShellTabBar(
+        <HomeScreen {...homeWithCoverLabel(HOME_POST_TRIP_PROPS)} />
+      ),
+  },
   // ── 홈 담은 곳 메뉴 배지 3얼굴(TRIP-695) — 육안 대조: 무배지 · 7/3 · 99+/24. savedMenuOpen 은
   //    prop 이라 프리뷰가 강제 true 로 연다. 배지 지름·흰 테두리·flush 위치는 6-b 육안 전용. ──
   {
@@ -6232,6 +6270,19 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => <TripSettingsView {...TRIP_SETTINGS_VIEW} />,
   },
   {
+    key: 'trip-settings-cover-label',
+    band: 'g',
+    label: 'g03 · 여행 설정 · 다른 지역 커버 이름',
+    login: null,
+    render: () => (
+      <TripSettingsView
+        {...TRIP_SETTINGS_VIEW}
+        cover={COVER_LABEL_PREVIEW.coverSource}
+        coverLabel={COVER_LABEL_PREVIEW.coverLabel}
+      />
+    ),
+  },
+  {
     key: 'trip-settings-locked',
     band: 'g',
     label: 'g03 · 여행 설정 · 끝난 여행 잠금',
@@ -7478,6 +7529,60 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-1806 — 작성중(좌하 CTA) + 긴 이름 + 밝은 그림 · 확정 + 짧은 이름 · ⋯ 메뉴가 이름을 덮는 카드.
+  {
+    key: 'h06-my-trips-cover-label',
+    band: 'h',
+    label: 'h06 · 내 여행 목록 · 다른 지역 커버 이름',
+    login: null,
+    render: () => {
+      const [done, , draft] = MY_TRIPS_PREVIEW_VMS;
+      return (
+        <MyTripsListScreen
+          mode="list"
+          onPressCreateTrip={noop}
+          cards={[
+            <TripCard
+              testIDPrefix="my-trip"
+              key={draft.tripId}
+              vm={{ ...draft, coverCity: '제주시', ...COVER_LABEL_PREVIEW }}
+              onPress={noop}
+              onPressMenu={noop}
+            />,
+            <TripCard
+              testIDPrefix="my-trip"
+              key={done.tripId}
+              vm={{
+                ...done,
+                imageUrl: null,
+                coverCity: '서귀포시',
+                coverSource: coverSourceForKey('26350'),
+                coverLabel: '그림 · 해운대',
+              }}
+              onPress={noop}
+              onPressMenu={noop}
+            />,
+            <TripCard
+              testIDPrefix="my-trip"
+              key="demo-menu"
+              vm={{
+                ...draft,
+                tripId: 'demo-menu',
+                coverCity: '제주시',
+                ...COVER_LABEL_PREVIEW,
+              }}
+              onPress={noop}
+              menuOpen
+              onPressMenu={noop}
+              onPressSettings={noop}
+              onTogglePin={noop}
+              onPressDelete={noop}
+            />,
+          ]}
+        />
+      );
+    },
+  },
   {
     key: 'h05-my-trips-done-bar',
     band: 'h',
@@ -7724,6 +7829,38 @@ export const PREVIEW_STATES: PreviewState[] = [
               compact
               testID={`my-trip-reflection-${vm.tripId}`}
               vm={vm}
+              onPress={noop}
+              trailing={<ChevronRightGlyph size={20} />}
+            />
+          ))}
+          pastEmpty={false}
+          onPressCalendar={noop}
+          onPressSettings={noop}
+          onPressStays={noop}
+          onPressStyleAnalysis={noop}
+        />,
+        'my'
+      ),
+  },
+  {
+    key: 'my-page-cover-label',
+    band: 'l',
+    label: 'l03 · 마이페이지 · 다른 지역 커버 이름',
+    login: null,
+    render: () =>
+      withShellTabBar(
+        <MyPageScreen
+          nickname="여행자123"
+          email="trippilot@email.com"
+          counts={{ upcoming: 0, active: 0, ended: 3 }}
+          onPressCount={noop}
+          showPast
+          pastCards={MY_PAGE_PAST_VMS.map((vm) => (
+            <PastTripRow
+              key={vm.tripId}
+              compact
+              testID={`my-trip-reflection-${vm.tripId}`}
+              vm={{ ...vm, imageUrl: null, ...COVER_LABEL_PREVIEW }}
               onPress={noop}
               trailing={<ChevronRightGlyph size={20} />}
             />
@@ -10142,6 +10279,49 @@ export const PREVIEW_STATES: PreviewState[] = [
             title: '부산 여행',
             dateRangeLabel: '2025.11.1–11.3',
             nightsLabel: '2박 3일',
+          },
+        ]}
+        isEmpty={false}
+        onPressPrevMonth={noop}
+        onPressNextMonth={noop}
+        onSelectTrip={noop}
+        onPressCreateTrip={noop}
+      />
+    ),
+  },
+  // TRIP-1806 — 지난 여행 행 글자 줄에 그림 이름 한 줄. 제목이 두 줄이어도 행이 썸네일을 밀지 않는지가 6-b 육안 자리다.
+  {
+    key: 'records-calendar-cover-label',
+    band: 'j',
+    label: 'j07 · 여행 캘린더 · 다른 지역 커버 이름',
+    login: null,
+    render: () => (
+      <RecordsCalendarScreen
+        monthLabel="2026년 6월"
+        grid={buildMonthGrid('2026-06')}
+        markedDays={[]}
+        pastTrips={[
+          {
+            tripId: 't-jeju',
+            title: '제주 여행',
+            dateRangeLabel: '2026.5.1–5.3',
+            nightsLabel: '2박 3일',
+            ...COVER_LABEL_PREVIEW,
+          },
+          {
+            tripId: 't-long',
+            title: '가족과 함께 떠나는 제주 한 바퀴 일주 여행 두 번째',
+            dateRangeLabel: '2026.4.18–4.20',
+            nightsLabel: '2박 3일',
+            coverSource: coverSourceForKey('26350'),
+            coverLabel: '그림 · 해운대',
+          },
+          {
+            tripId: 't-auto',
+            title: '부산 여행',
+            dateRangeLabel: '2025.11.1–11.3',
+            nightsLabel: '2박 3일',
+            coverSource: coverSourceForKey('26350'),
           },
         ]}
         isEmpty={false}

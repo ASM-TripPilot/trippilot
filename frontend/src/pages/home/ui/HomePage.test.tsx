@@ -1927,3 +1927,51 @@ describe('TRIP-1754 · 저장 목록 실패 표식 — 배지 `–` · 토스트
     expect(screen.queryByTestId(TOAST)).toBeNull();
   });
 });
+
+/**
+ * TRIP-1806 · 여행 목록 → 판정 → 히어로까지 실물로 돌려 「그림 · 해운대」 가 그려지는지 본다.
+ * 히어로의 구석 위치·알약 색·대비는 jest 사각이다(실화면 QA).
+ */
+describe('히어로 — 다른 지역 커버 이름', () => {
+  const NAME = 'home-trip-hero-cover-label';
+  const JEJU = [{ seq: 1, region: '제주시', nights: 3, regionCode: '50110' }];
+
+  it.each<[string, Partial<Trip>]>([
+    [
+      '계획 중',
+      { status: 'PLANNED', startDate: '2099-06-10', endDate: '2099-06-13' },
+    ],
+    [
+      '여행 중',
+      { status: 'ACTIVE', startDate: '2020-01-01', endDate: '2099-12-31' },
+    ],
+    [
+      '여행 후',
+      {
+        status: 'ENDED',
+        startDate: addDays(seoulDate(new Date()), -3),
+        endDate: addDays(seoulDate(new Date()), -1),
+      },
+    ],
+  ])('%s: 첫 목적지와 다른 시도의 그림이면 이름이 그려진다', (_face, over) => {
+    mockUseGetTrips.mockReturnValue(
+      tripsOk([trip({ destinations: JEJU, coverKey: '26350', ...over })])
+    );
+
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
+    expect(screen.getByTestId(NAME)).toHaveTextContent('그림 · 해운대');
+  });
+
+  it('자동 커버면 히어로는 있고 이름은 없다', () => {
+    mockUseGetTrips.mockReturnValue(
+      tripsOk([trip({ status: 'PLANNED', destinations: JEJU, coverKey: null })])
+    );
+
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
+    expect(screen.queryByTestId(NAME)).toBeNull();
+  });
+});

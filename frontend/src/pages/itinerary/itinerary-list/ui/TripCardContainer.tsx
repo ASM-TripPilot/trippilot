@@ -17,6 +17,7 @@ import {
 import {
   formatConfirmedDateRange,
   isTripOngoing,
+  tripCoverLabel,
   tripCoverSource,
 } from '@/entities/trip';
 import {
@@ -108,6 +109,7 @@ export function TripCardContainer({
     // TRIP-1208 · 커버 — 첫 목적지 도시 + 단계 톤(확정 × 오늘: 여행 중=live · 종료=ended · 그 외=upcoming).
     coverCity: pickCoverCity(trip.destinations),
     coverSource: tripCoverSource(trip),
+    coverLabel: tripCoverLabel(trip),
     coverTone: coverTone(trip, summary.status, today),
   };
 

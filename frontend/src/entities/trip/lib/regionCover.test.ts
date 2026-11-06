@@ -8,6 +8,7 @@ import {
   coverChoices,
   coverSourceForKey,
   pickRegionCover,
+  tripCoverLabel,
   tripCoverSource,
 } from './regionCover';
 
@@ -166,5 +167,252 @@ describe('pickRegionCover — 컴파일 가드', () => {
     };
 
     expect(typeof call).toBe('function');
+  });
+});
+
+/**
+ * TRIP-1806 · 첫 목적지와 다른 시도의 그림을 고른 여행에만 「그림 · 해운대」 를 작게 붙인다.
+ * "같은 시도"는 첫 목적지(seq 최소) `regionCode` 와 `coverKey` 의 앞 2자리가 같다는 뜻이다.
+ *
+ * 기대 글자는 전부 리터럴이다 — 이 함수 결과로 기대값을 만들면 함수가 틀려도 같이 움직여 통과한다.
+ */
+describe('tripCoverLabel — 다른 시도 그림이면 이름, 아니면 null', () => {
+  describe('경우표 — 고른 키 × 첫 목적지 코드', () => {
+    it.each<[string, string | null | undefined, string | null, string | null]>([
+      ['자동(null)', null, '50110', null],
+      ['자동(칸 없음·옛 서버)', undefined, '50110', null],
+      ['자동(빈 문자열)', '', '50110', null],
+      ['앱이 모르는 키 — 실제 그림은 자동 커버', 'zz9', '50110', null],
+      ['객체 기본 속성 이름', 'constructor', '50110', null],
+      ['객체 기본 속성 이름', '__proto__', '50110', null],
+      ['같은 그림', '26350', '26350', null],
+      ['같은 시도 다른 구', '26110', '26350', null],
+      ['그림이 시도 대표(2자리)', '26', '26350', null],
+      ['목적지가 시도 전체(2자리)', '26350', '26', null],
+      ['AC 원문', '26350', '50110', '그림 · 해운대'],
+      ['시도 대표 그림', '26', '50110', '그림 · 부산'],
+      ['제주 대표', '50', '26350', '그림 · 제주'],
+      ['강원 대표', '51', '50110', '그림 · 강원'],
+      ['경북 대표', '47', '50110', '그림 · 경북'],
+      ['경남 대표', '48', '50110', '그림 · 경남'],
+      [
+        '동명 — 서울 중구 여행 위 부산 중구',
+        '26110',
+        '11140',
+        '그림 · 부산 중구',
+      ],
+      ['동명 — 그림은 부산뿐이어도', '26170', '27140', '그림 · 부산 동구'],
+      ['동명 고성군', '51820', '48820', '그림 · 강원 고성군'],
+      ['동명 강서구', '11500', '26440', '그림 · 서울 강서구'],
+      ['세종은 항상 다른 시도', '26350', '36', '그림 · 해운대'],
+      ['제주시는 접미를 떼면 제주', '50110', '26350', '그림 · 제주'],
+    ])('%s: coverKey=%j · 첫 목적지=%j', (_why, coverKey, code, expected) => {
+      // 준비 → 실행
+      const label = tripCoverLabel({
+        coverKey,
+        destinations: [dest(1, code)],
+      });
+
+      // 단언
+      expect(label).toBe(expected);
+    });
+
+    it.each<
+      [string, { seq: number; regionCode?: string | null }[] | undefined]
+    >([
+      ['코드 null', [dest(1, null)]],
+      ['코드 공백', [dest(1, ' ')]],
+      ['코드 칸 없음', [{ seq: 1 }]],
+      ['목적지 없음', []],
+      ['목적지 칸 없음', undefined],
+    ])(
+      '첫 목적지 코드를 몰라 판정할 수 없으면(%s) 이름을 붙인다 — 같은 지역이어도 "그림 · 해운대"는 참이다',
+      (_why, destinations) => {
+        expect(tripCoverLabel({ coverKey: '26350', destinations })).toBe(
+          '그림 · 해운대'
+        );
+      }
+    );
+  });
+
+  describe('첫 목적지는 seq 최소 — 배열 앞이 아니다', () => {
+    it('배열 앞이 다른 시도여도 seq 최소가 같은 시도면 없다', () => {
+      expect(
+        tripCoverLabel({
+          coverKey: '26350',
+          destinations: [dest(2, '50110'), dest(1, '26110')],
+        })
+      ).toBeNull();
+    });
+
+    it('배열 앞이 같은 시도여도 seq 최소가 다른 시도면 있다', () => {
+      expect(
+        tripCoverLabel({
+          coverKey: '26350',
+          destinations: [dest(2, '26110'), dest(1, '50110')],
+        })
+      ).toBe('그림 · 해운대');
+    });
+
+    it('첫 목적지가 아닌 다른 목적지의 그림이어도 첫 목적지와 다르면 붙인다', () => {
+      expect(
+        tripCoverLabel({
+          coverKey: '26350',
+          destinations: [dest(1, '50110'), dest(2, '26350')],
+        })
+      ).toBe('그림 · 해운대');
+    });
+  });
+
+  // 전수 검사는 그림 목록 안의 겹침만 본다 — 부산 동구는 그림이 한 장이라 「동구」로 나와도 거기선 안 걸린다(02a ★7).
+  describe('이름표 변환 — 세종(자동 그림 없음) 위에서 글자를 본다', () => {
+    it.each([
+      // 시도 대표 → 시도 짧은 이름
+      ['11', '그림 · 서울'],
+      ['26', '그림 · 부산'],
+      ['47', '그림 · 경북'],
+      ['48', '그림 · 경남'],
+      ['50', '그림 · 제주'],
+      ['51', '그림 · 강원'],
+      // 다른 시도에 같은 이름이 있는 시군구 → 시도 + 시군구(접미 안 뗌)
+      ['11140', '그림 · 서울 중구'],
+      ['11500', '그림 · 서울 강서구'],
+      ['26110', '그림 · 부산 중구'],
+      ['26140', '그림 · 부산 서구'],
+      ['26170', '그림 · 부산 동구'],
+      ['26290', '그림 · 부산 남구'],
+      ['26320', '그림 · 부산 북구'],
+      ['26440', '그림 · 부산 강서구'],
+      ['48820', '그림 · 경남 고성군'],
+      ['51820', '그림 · 강원 고성군'],
+      // 그 밖 → 끝의 구·군·시 하나만 뗀다
+      ['11110', '그림 · 종로'],
+      ['11230', '그림 · 동대문'],
+      ['11305', '그림 · 강북'],
+      ['26230', '그림 · 부산진'],
+      ['26350', '그림 · 해운대'],
+      ['26710', '그림 · 기장'],
+      ['47110', '그림 · 포항'],
+      ['47130', '그림 · 경주'],
+      ['48220', '그림 · 통영'],
+      ['50110', '그림 · 제주'],
+      ['50130', '그림 · 서귀포'],
+      ['51150', '그림 · 강릉'],
+    ])('%s → %s', (coverKey, expected) => {
+      expect(tripCoverLabel({ coverKey, destinations: [dest(1, '36')] })).toBe(
+        expected
+      );
+    });
+  });
+
+  describe('전수 — 번들 그림 전부', () => {
+    const labelOf = (key: string) =>
+      tripCoverLabel({ coverKey: key, destinations: [dest(1, '36')] });
+
+    it('모두 「그림 · 」 로 시작하고 이름이 두 글자 이상이며 정식 명칭·undefined 가 새지 않는다', () => {
+      const keys = coverChoices().map((choice) => choice.key);
+      expect(keys.length).toBeGreaterThan(0);
+
+      for (const key of keys) {
+        const label = labelOf(key);
+
+        expect(label).toMatch(/^그림 · .{2,}$/);
+        expect(label).not.toMatch(/undefined|광역시|특별/);
+      }
+    });
+
+    it('같은 문구가 서로 다른 시도의 키에서 나오지 않는다 — 새 지역을 더할 때 동명을 잡는 그물', () => {
+      const sidoByLabel = new Map<string, Set<string>>();
+      for (const { key } of coverChoices()) {
+        const label = String(labelOf(key));
+        const sidos = sidoByLabel.get(label) ?? new Set<string>();
+        sidos.add(key.slice(0, 2));
+        sidoByLabel.set(label, sidos);
+      }
+
+      expect(sidoByLabel.size).toBeGreaterThan(0);
+      for (const [label, sidos] of sidoByLabel) {
+        expect([label, sidos.size]).toEqual([label, 1]);
+      }
+    });
+  });
+
+  describe('PBT — 어떤 입력에도 성립해야 하는 성질', () => {
+    const known = coverChoices().map((choice) => choice.key);
+    const knownSet = new Set(known);
+    const PROTOTYPE_KEYS = ['constructor', '__proto__', 'toString', ''];
+    // 앞 2자리가 전부 다르다 — 시도마다 한 곳씩(세종 36·전남광주 12 는 그림이 없는 시도).
+    const OTHER_CODES = [
+      '11110',
+      '26350',
+      '47110',
+      '48120',
+      '50110',
+      '51110',
+      '36',
+      '12110',
+    ];
+
+    it('P1 · 모르는 키는 항상 null', () => {
+      fc.assert(
+        fc.property(
+          fc.string({ maxLength: 12 }),
+          fc.constantFrom(...OTHER_CODES),
+          (key, code) => {
+            fc.pre(!knownSet.has(key));
+            expect(
+              tripCoverLabel({ coverKey: key, destinations: [dest(1, code)] })
+            ).toBeNull();
+          }
+        ),
+        { examples: PROTOTYPE_KEYS.map((key) => [key, '50110']) }
+      );
+    });
+
+    it('P2 · 아는 키 + 같은 시도 코드는 항상 null', () => {
+      fc.assert(
+        fc.property(
+          fc.constantFrom(...known),
+          fc.constantFrom('', '110', '350', '999'),
+          (key, rest) => {
+            const code = `${key.slice(0, 2)}${rest}`;
+            expect(
+              tripCoverLabel({ coverKey: key, destinations: [dest(1, code)] })
+            ).toBeNull();
+          }
+        )
+      );
+    });
+
+    it('P3 · 아는 키 + 다른 시도 코드는 항상 이름 문자열', () => {
+      fc.assert(
+        fc.property(
+          fc.constantFrom(...known),
+          fc.constantFrom(...OTHER_CODES),
+          (key, code) => {
+            fc.pre(key.slice(0, 2) !== code.slice(0, 2));
+            expect(
+              tripCoverLabel({ coverKey: key, destinations: [dest(1, code)] })
+            ).toMatch(/^그림 · /);
+          }
+        )
+      );
+    });
+
+    // 자동 그림도 같은 시도도 없는 세종 위에서는 "고른 그림이 실제로 보인다" ⟺ "이름이 있다" 다.
+    it('P4 · 세종 위에서 그림이 없는 입력과 이름이 없는 입력이 정확히 같다', () => {
+      fc.assert(
+        fc.property(
+          fc.oneof(fc.constantFrom(...known), fc.string({ maxLength: 12 })),
+          (key) => {
+            const trip = { coverKey: key, destinations: [dest(1, '36')] };
+            expect(tripCoverLabel(trip) === null).toBe(
+              tripCoverSource(trip) === null
+            );
+          }
+        ),
+        { examples: [...PROTOTYPE_KEYS, '26350', '26'].map((key) => [key]) }
+      );
+    });
   });
 });

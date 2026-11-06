@@ -865,3 +865,47 @@ describe('TRIP-1788 · 카드 커버 = 고른 그림', () => {
     expect(cover()).toEqual([coverSourceForKey('26350')]);
   });
 });
+
+/**
+ * TRIP-1806 · 카드 — 제주 여행에 부산 해운대 그림을 고르면 「제주시」 는 그대로 두고 「그림 · 해운대」 를 얹는다.
+ * 기대 글자는 리터럴이다(판정 함수 결과로 만들면 함수가 틀려도 같이 움직인다).
+ */
+describe('TRIP-1806 · 다른 지역 커버 이름', () => {
+  const NAME = 'my-trip-cover-label-t1';
+  const destination = (region: string, regionCode: string) => [
+    { seq: 1, region, nights: 2, regionCode },
+  ];
+
+  it('첫 목적지와 다른 시도의 그림이면 도시 글자 그대로 + 그림 이름', () => {
+    renderCard(
+      <TripCardContainer
+        trip={trip({
+          coverKey: '26350',
+          destinations: destination('제주시', '50110'),
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('my-trip-city-t1')).toHaveTextContent('제주시');
+    expect(screen.getByTestId(NAME)).toHaveTextContent('그림 · 해운대');
+  });
+
+  it.each<[string, Partial<Trip>]>([
+    ['자동(null)', { coverKey: null }],
+    ['자동(칸 없음·옛 서버)', {}],
+    ['앱이 모르는 키 — 보이는 그림은 자동 커버', { coverKey: 'zz9' }],
+    ['같은 시도의 다른 구', { coverKey: '26110' }],
+  ])('%s 면 그림만 있고 이름은 없다', (_label, over) => {
+    renderCard(
+      <TripCardContainer
+        trip={trip({
+          destinations: destination('해운대구', '26350'),
+          ...over,
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('my-trip-cover-t1')).toBeOnTheScreen();
+    expect(screen.queryByTestId(NAME)).toBeNull();
+  });
+});

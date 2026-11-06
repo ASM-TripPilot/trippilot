@@ -2,6 +2,7 @@ import type { Trip } from '@/shared/api/index.schemas';
 import { coverSourceForKey } from '@/entities/trip';
 
 import {
+  buildMonthLegends,
   buildPastTripCards,
   formatTripDateRange,
   markedDaysOfMonth,
@@ -205,6 +206,7 @@ describe('buildPastTripCards — 지난 여행만(ENDED 또는 endDate<오늘), 
       dateRangeLabel: null,
       nightsLabel: null,
       coverSource: null,
+      coverLabel: null,
     });
   });
 });
@@ -277,5 +279,38 @@ describe('buildPastTripCards — 고른 커버(coverKey)', () => {
     const [card] = buildPastTripCards([ended(over)], '2026-09-01');
 
     expect(card.coverSource).toBe(coverSourceForKey('26350'));
+  });
+
+  // TRIP-1806 — 지난 여행 행의 그림 이름. 이름이 없으면 null 이다(02a 「오케 정정」).
+  it('첫 목적지와 다른 시도의 그림이면 이름이 실린다', () => {
+    const [card] = buildPastTripCards(
+      [ended({ coverKey: '50110' })],
+      '2026-09-01'
+    );
+
+    expect(card.coverLabel).toBe('그림 · 제주');
+  });
+
+  it.each<[string, Partial<Trip>]>([
+    ['null(자동)', { coverKey: null }],
+    ['칸 없음(옛 서버)', {}],
+    ['앱이 모르는 키', { coverKey: 'zz9' }],
+    ['같은 시도의 다른 구', { coverKey: '26110' }],
+  ])('coverKey 가 %s 면 그림은 있고 이름은 없다', (_label, over) => {
+    const [card] = buildPastTripCards([ended(over)], '2026-09-01');
+
+    expect(card.coverSource).not.toBeNull();
+    expect(card.coverLabel).toBeNull();
+  });
+
+  it('달력 범례 VM 은 그림이 없어 이름을 싣지 않는다 — 같은 여행의 지난 여행 행에는 있다', () => {
+    const same = ended({ coverKey: '50110' });
+
+    const [card] = buildPastTripCards([same], '2026-09-01');
+    const { rows } = buildMonthLegends([same], '2026-05');
+
+    expect(card.coverLabel).toBe('그림 · 제주');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).not.toHaveProperty('coverLabel');
   });
 });

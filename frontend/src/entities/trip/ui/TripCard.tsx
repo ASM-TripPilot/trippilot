@@ -14,6 +14,7 @@ import {
   COVER_START,
 } from '../config/coverGradients';
 
+import { CoverLabel } from './CoverLabel';
 import { TripGearGlyph, PushpinGlyph } from './TripGlyphs';
 import type { MyTripCardVM } from '../model';
 import { COLOR_TOKENS } from '@/shared/config';
@@ -124,6 +125,7 @@ export function TripCard({
     imageUrl,
     coverCity,
     coverSource,
+    coverLabel,
     coverTone = 'upcoming',
   } = vm;
   const city = coverCity?.trim() ? coverCity.trim() : null;
@@ -168,6 +170,11 @@ export function TripCard({
                   start={COVER_SCRIM_START}
                   end={COVER_SCRIM_END}
                   style={FILL}
+                />
+                <CoverLabel
+                  label={coverLabel}
+                  testID={`${testIDPrefix}-cover-label-${tripId}`}
+                  className="absolute bottom-[14px] right-[14px] max-w-[40%]"
                 />
               </>
             ) : (

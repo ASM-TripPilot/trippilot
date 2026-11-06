@@ -28,6 +28,7 @@ routes:
 - `my-past` 예정 여행이 0건일 때만 "지난 여행" 섹션과 `캘린더 ›` 링크가 열린다.
 - `my-past-empty` 섹션이 열렸는데 종료 여행이 0건이면 "아직 종료된 여행이 없어요".
 - `my-past-row` 지난 여행 행(제목·기간·`사진 N`) → 그 여행의 기록 화면.
+- `my-past-cover-label` 첫 목적지와 다른 시도의 그림을 고른 행은 글자 줄에 「그림 · 해운대」 한 줄(testID: `my-trip-reflection-${tripId}-cover-label`)이 더 있다. **[실화면 프리뷰]** *(TRIP-1806 · 2026-11-07 프리뷰 `my-page-cover-label`)*
 - `my-menu-stays` `등록 숙소` 행 → 등록 숙소 목록(상세는 `stay-register.md`).
 - `my-menu-style` `여행 스타일 분석` 행 → 스타일 분석 화면(상세는 `record-style.md`).
 - `my-menu-settings` 헤더 톱니와 하단 `설정` 행 → 설정(`settings.md`).
