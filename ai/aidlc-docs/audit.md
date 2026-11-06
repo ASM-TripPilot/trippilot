@@ -769,3 +769,10 @@
 - **무엇을 했나**: `data/transit_hubs.json` 160곳(KTX·SRT 정차역·공항 전부·시군 주요 터미널·여객터미널 — 이름·별칭은 사람이, 좌표·상호·주소는 `scripts/collect/refresh_transit_hubs.py` 가 카카오 키워드 검색에서, 거점 분류 + 상호가 query 와 같거나 그걸로 시작하는 첫 건) · `domain/poi/transit_hubs.py` `transit_hub(said)`(공백 무시·끝 조사 하나, 부분 일치 없음) · `_known_end` 순서 슬롯 → 거점 → 지역 → 등록 장소, `_End.area` 로 "(지역 중심 기준)"은 지역에만.
 - **검증**: 표 테스트(별칭·조사·부분 일치 거부·서울역 좌표가 시청이 아님·표 전 항목 좌표·별칭 중복 없음) · 핸들러 "서울역→경복궁"이 거점 좌표·어림 표기 없음 · 2507 통과. 개발 서버 확인은 배포 뒤.
 - **남긴 것**: 날씨 앵커·장소 정보("서울역 몇 시까지 해?")에는 안 쓴다 — 필요해지면 그때.
+
+## 2026-11-06 — ai/ 전체 Codex 리뷰 2회차 수리 (11건)
+
+- **왜**: 사용자 "codex code review 를 ai 쪽 전체로". develop 2005a8e9e 기준 src 52,7백 줄 + scripts/collect·mlops·main.py 를 15영역(3~5천 줄)으로 쪼개 Codex `--effort xhigh`(파일을 끝까지 실제 출력한 메모 없으면 무효) → 지적 14건 → 검증 에이전트 5묶음이 재현·반박: 확정·부분 11, 기각 2(ODsay 반올림 캐시 키 — 셀 1.45m·1m 단위 반올림, 음식점 chkpetfood — 원천 필드 근거 0), 의도된 설계 1(이름이 수량을 이김 #1283). "운영 미도달" 기각은 호출 전제가 코드로 막힌 것만(11-05 #1977 교훈).
+- **무엇을 했나**: 벡터 스토어 연결 시한(main.py — 형제 3곳만 있었음, 다시 짜기 지시 해석·KB-2·KB-5 공통) · 기억 내보내기 `truncated`(AI+BE) · 일반 답 장소명 검사(지식 답과 같은 대조) · 행사 게이트 ⑥ 날짜 근거 · 영업시간 24:00 만 · 공유 카드 `inline()` · 수량 초과 노트 · 반려동물 타입별 키 · 카페 규모 NaN · SidoVeto 최근접 · KASI totalCount 필수 · 축제 totalCount 비정수=실패(검증자가 범위 밖에서 찾음 — 수집 루프 1쪽 조기 종료) · 웹 확인 예산 호출 전 예약.
+- **검증**: 건드린 모듈 테스트 + 전체 pytest, BE `:modules:assistant:test` 20건(계약 게이트 `DialogueMemoryExportResponse` 키 집합 갱신). 재현 스크립트는 리뷰 세션 scratchpad `codex-full/verify/`.
+- **남긴 것**: 서빙 판정 GPU 비용 귀속(r15)은 CE AccessDenied 로 0→HOLD 이고 거를 태그가 없어 GPU 노드풀(TRIP-961) 때 · 행사 날짜는 "그 줄에 날짜 언급" 까지만(한국어 기간 ↔ start/end 정확 대조는 별도).
