@@ -6320,6 +6320,24 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   {
+    key: 'trip-settings-length-dialog-dropped',
+    band: 'g',
+    label: 'g03 · 일수 변경 확인창 · 빠지는 여행지',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <TripSettingsView {...TRIP_SETTINGS_VIEW} canSave />
+        <PeriodLengthDialog
+          hasItinerary
+          droppedNotice="부산·서울이 여행지에서 빠져요"
+          failed={false}
+          onCancel={noop}
+          onConfirm={noop}
+        />
+      </View>
+    ),
+  },
+  {
     key: 'trip-settings-length-dialog-failed',
     band: 'g',
     label: 'g03 · 일수 변경 확인창 · 일정 없음 + 실패',

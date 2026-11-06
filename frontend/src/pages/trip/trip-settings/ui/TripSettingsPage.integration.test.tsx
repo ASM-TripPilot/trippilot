@@ -9,7 +9,11 @@ import {
 } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { EditTripRequest, Trip } from '@/shared/api/index.schemas';
-import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
+import {
+  guardPress,
+  openPressGuardWindow,
+  resetPressGuard,
+} from '@/shared/lib/pressGuard';
 import {
   coverChoices,
   coverSourceForKey,
@@ -1125,7 +1129,7 @@ describe('I · 5-b 보강 — 응답 전에 떠나기 · 같은 틱 이중 저�
 // ════════════════════════════════════════════════════════════════════════════
 
 const TODAY_ISO = '2099-05-20T03:00:00Z';
-const HINT_OPEN = '일정은 그대로 두고 날짜만 옮겨요 · 일수는 바꿀 수 없어요';
+const HINT_OPEN = '날짜를 옮기거나 일수를 바꿀 수 있어요';
 const HINT_STARTED = '여행이 시작돼 기간은 바꿀 수 없어요';
 const HINT_GENERATING = '일정을 만드는 중이에요. 끝난 뒤 바꿀 수 있어요';
 const HINT_ENDED = '끝난 여행은 바꿀 수 없어요';
@@ -1517,9 +1521,9 @@ describe('M · 일수 변경 확인창과 확정 (AC-3 · AC-11)', () => {
     expect(body.title).toBe('다시 만들 이름');
     expect(body.coverKey).toBe('26350');
     expect(body.budgetTotal).toBe(1500000);
+    // 3박 → 1박: 서귀포시(1박)가 0박이 돼 빠지고 제주시만 남는다(사용자 결정 2026-11-06).
     expect(body.destinations).toEqual([
       { seq: 1, region: '제주시', nights: 1, regionCode: '50110' },
-      { seq: 2, region: '서귀포시', nights: 0, regionCode: '50130' },
     ]);
     expect(hrefOf(routerSpies.replace.mock.calls[0][0])).toBe(METHOD_HREF);
     expect(routerSpies.back).not.toHaveBeenCalled();
@@ -2157,4 +2161,168 @@ describe('Q · 연타 (AC-11)', () => {
       expect(pressWindowOpen()).toBe(true);
     }
   );
+});
+
+/**
+ * 통합 QA(2026-11-06) D1·D2·D4·D5·D6·O1 — 첫 탭으로 시트·창이 닫히거나 화면이 바뀐 직후, 둘째 탭이 그 자리의 다른 요소를 누른다.
+ * `tap` 은 `press` 와 달리 **창을 닫지 않고** 누른다 — 연타의 둘째 탭을 흉내 낸다. 실제 손가락·딤 관통은 실화면 몫이고, 여기서는
+ * "표적 핸들러가 창을 따르는가 · 앞 탭이 창을 여는가"만 본다.
+ */
+describe('R · 통합 QA 연타·0박 여행지', () => {
+  beforeEach(freezeToday);
+
+  const tap = (testID: string) => fireEvent.press(screen.getByTestId(testID));
+
+  it('D1 동행 시트 [적용] 연타 — 둘째 탭이 저장을 누르지 않는다. 창이 닫힌 뒤 저장은 된다', async () => {
+    await openPage();
+    press('trip-settings-companion');
+    press('trip-wizard-companion-chip-partner');
+
+    tap('trip-wizard-companion-apply');
+    expect(screen.queryByTestId('trip-wizard-companion-sheet')).toBeNull(); // 앞 탭은 먹었다(앵커)
+    expect(save()).toBeEnabled();
+    tap('trip-settings-save');
+    await settle();
+
+    expect(patchHits()).toBe(0);
+    expect(routerSpies.back).not.toHaveBeenCalled();
+
+    press('trip-settings-save');
+    await waitFor(() => expect(patchHits()).toBe(1));
+  });
+
+  it('D2 일과 시트 [적용] 연타 — 둘째 탭이 저장을 누르지 않는다', async () => {
+    await openPage();
+    press('trip-settings-day-start');
+    press('trip-wizard-daywindow-wheel-h-11');
+    press('trip-wizard-daywindow-wheel-m-00');
+
+    tap('trip-wizard-daywindow-apply');
+    expect(screen.queryByTestId('trip-wizard-daywindow-sheet')).toBeNull();
+    expect(save()).toBeEnabled();
+    tap('trip-settings-save');
+    await settle();
+
+    expect(patchHits()).toBe(0);
+    expect(routerSpies.back).not.toHaveBeenCalled();
+  });
+
+  it('D4 일수 확인창 [취소] 연타 — 둘째 탭이 뒤 기간 행을 다시 열지 않는다', async () => {
+    await openPage();
+    changeLengthAndApply('2099-06-20');
+    expect(lengthDialog()).toBeOnTheScreen();
+    resetPressGuard(); // 앞 [적용]이 연 창을 닫는다 — 창은 [취소]가 열어야 한다
+
+    tap('trip-settings-length-cancel');
+    expect(lengthDialog()).toBeNull();
+    tap('trip-settings-period');
+
+    expect(periodSheet()).toBeNull();
+    expect(patchHits()).toBe(0);
+  });
+
+  it('삭제 확인창 [취소] 연타도 같다 — 둘째 탭이 뒤 행을 열지 않는다', async () => {
+    await openPage();
+    press('trip-settings-delete');
+    resetPressGuard(); // 「여행 삭제」가 연 창을 닫는다(시계가 고정이라 저절로 안 닫힌다) — 창은 [취소]가 열어야 한다
+
+    tap('my-trip-delete-cancel');
+    expect(screen.queryByTestId('my-trip-delete-dialog')).toBeNull();
+    tap('trip-settings-period');
+
+    expect(periodSheet()).toBeNull();
+  });
+
+  it.each<[string, string, string]>([
+    ['여행 삭제', 'trip-settings-delete', 'my-trip-delete-dialog'],
+    ['동행 행', 'trip-settings-companion', 'trip-wizard-companion-sheet'],
+    ['일과 행', 'trip-settings-day-start', 'trip-wizard-daywindow-sheet'],
+  ])(
+    'O1 앞 화면에서 넘어온 연타 창 안이면 %s 은(는) 무시된다 — 창이 닫히면 열린다',
+    async (_label, target, opened) => {
+      await openPage();
+
+      openPressGuardWindow(); // 목록 ⋯ 「여행 설정」이 연 창
+      tap(target);
+      expect(screen.queryByTestId(opened)).toBeNull();
+
+      press(target);
+      expect(screen.getByTestId(opened)).toBeOnTheScreen();
+    }
+  );
+
+  describe('D5 — 일수를 줄여 0박이 된 여행지는 뺀다', () => {
+    const threeCities = () =>
+      baseTrip({
+        startDate: '2099-06-10',
+        endDate: '2099-06-13',
+        destinations: [
+          { seq: 1, region: '제주', nights: 1, regionCode: '50' },
+          { seq: 2, region: '부산', nights: 1, regionCode: '26' },
+          { seq: 3, region: '서울', nights: 1, regionCode: '11' },
+        ],
+      });
+    const dropped = () => screen.queryByTestId('trip-settings-length-dropped');
+
+    it('확인창이 빠지는 도시를 한 줄로 말하고, 확정 전엔 아무것도 안 나간다. 확정 본문엔 남는 도시만 실린다', async () => {
+      serverTrip = threeCities();
+      await openPage();
+
+      changeLengthAndApply('2099-06-11'); // 3박 → 1박
+
+      expect(dropped()).toHaveTextContent('부산·서울이 여행지에서 빠져요');
+      expect(patchHits()).toBe(0);
+
+      confirmLength();
+      await waitFor(() => expect(routerSpies.replace).toHaveBeenCalledTimes(1));
+      expect(patchBodies[0].discardItinerary).toBe(true);
+      expect(patchBodies[0].destinations).toEqual([
+        { seq: 1, region: '제주', nights: 1, regionCode: '50' },
+      ]);
+    });
+
+    it('한 곳만 빠지면 그 곳만 말한다(2박으로 줄이면 서울)', async () => {
+      serverTrip = threeCities();
+      await openPage();
+
+      changeLengthAndApply('2099-06-12');
+
+      expect(dropped()).toHaveTextContent('서울이 여행지에서 빠져요');
+    });
+
+    it('당일치기까지 줄여도 첫 도시는 남는다 — 박수 0 으로 실린다', async () => {
+      serverTrip = threeCities();
+      await openPage();
+
+      changeLengthAndApply('2099-06-10');
+      expect(dropped()).toHaveTextContent('부산·서울이 여행지에서 빠져요');
+
+      confirmLength();
+      await waitFor(() => expect(routerSpies.replace).toHaveBeenCalledTimes(1));
+      expect(patchBodies[0].destinations).toEqual([
+        { seq: 1, region: '제주', nights: 0, regionCode: '50' },
+      ]);
+    });
+
+    it('늘릴 때는 그 줄이 없다', async () => {
+      await openPage();
+
+      changeLengthAndApply('2099-06-20'); // 3박 → 10박
+
+      expect(lengthDialog()).toBeOnTheScreen();
+      expect(dropped()).toBeNull();
+    });
+
+    it('한 도시 여행을 줄이면 빠지는 도시가 없다', async () => {
+      serverTrip = baseTrip({
+        destinations: [{ seq: 1, region: '제주', nights: 3, regionCode: '50' }],
+      });
+      await openPage();
+
+      changeLengthAndApply('2099-06-11');
+
+      expect(lengthDialog()).toBeOnTheScreen();
+      expect(dropped()).toBeNull();
+    });
+  });
 });

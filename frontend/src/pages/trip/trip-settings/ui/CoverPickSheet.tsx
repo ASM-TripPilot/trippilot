@@ -28,6 +28,9 @@ const SNAP_POINTS = ['88%'];
  *   스크롤 영역의 높이가 정해지지 않는다. 격자는 전부 마운트한다 —
  *   // ponytail: 썸네일이 늘어 메모리가 부담되면 BottomSheetFlatList 로 가상화(그때 jest 는 앞 10개만 마운트한다).
  *
+ * - **딤 탭은 시트가 다 올라온 뒤에만 닫는다.** 「커버 바꾸기」 연타의 둘째 탭이 올라오는 중인 딤에 떨어져 시트가 바로 닫혔다(통합 QA D7 —
+ *   실기 로그로 확인, 첫 렌더 뒤 약 380ms). 46장을 그리느라 늦어 누름 가드 창(400ms)으로는 경계라 도착(`onChange`)을 기준으로 본다.
+ *
  * ⚠️ 시트 실제 열림·딤·스크롤 중첩 제스처·격자 생김새·[적용] 고정은 jest 사각(통과형 목) — 6-b.
  */
 export function CoverPickSheet({
@@ -47,6 +50,7 @@ export function CoverPickSheet({
   const [picked, setPicked] = useState<string | null | undefined>(undefined);
   // 시트 윗변이 상태바 아래에서 멈추게 한다(ReplanRequestSheet 선례). Provider 가 없으면(jest) 0.
   const topInset = useContext(SafeAreaInsetsContext)?.top ?? 0;
+  const [arrived, setArrived] = useState(false);
   const choices = coverChoices();
   const current =
     picked !== undefined
@@ -62,9 +66,12 @@ export function CoverPickSheet({
       enableDynamicSizing={false}
       enablePanDownToClose
       topInset={topInset}
+      onChange={(index) => {
+        if (index >= 0) setArrived(true);
+      }}
       onClose={onClose}
       handleIndicatorStyle={SHEET_HANDLE_INDICATOR_STYLE}
-      backdropComponent={renderBackdrop}
+      backdropComponent={arrived ? renderBackdrop : renderOpeningBackdrop}
     >
       <View className="w-full flex-row items-center justify-between px-lg pb-lg pt-sm">
         <Text className="font-noto-bold text-[20px] font-bold text-ink">
@@ -124,6 +131,18 @@ export function CoverPickSheet({
 function renderBackdrop(props: BottomSheetBackdropProps): ReactElement {
   return (
     <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
+  );
+}
+
+/** 올라오는 동안의 딤 — 탭해도 안 닫힌다(`pressBehavior="none"` 이면 라이브러리가 탭 제스처를 달지 않는다). */
+function renderOpeningBackdrop(props: BottomSheetBackdropProps): ReactElement {
+  return (
+    <BottomSheetBackdrop
+      {...props}
+      appearsOnIndex={0}
+      disappearsOnIndex={-1}
+      pressBehavior="none"
+    />
   );
 }
 

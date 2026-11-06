@@ -73,6 +73,8 @@ import {
 
 import { toEditTripRequest, type TripEdits } from '../model/editTripRequest';
 import {
+  droppedDestinations,
+  droppedNotice,
   isTripChildKey,
   nightsBetween,
   periodConflictCode,
@@ -422,6 +424,18 @@ function TripSettingsBody({
     );
   };
 
+  // 일수 확정이 뺄 여행지 한 줄 — 본문을 만드는 함수(`fitDestinationNights`)를 그대로 지나 말과 실제가 안 갈린다.
+  const lengthDropNotice =
+    lengthConfirm === undefined
+      ? null
+      : droppedNotice(
+          droppedDestinations(
+            trip.destinations,
+            nightsBetween(trip.startDate, trip.endDate),
+            nightsBetween(lengthConfirm.startDate, lengthConfirm.endDate)
+          )
+        );
+
   const openPeriodSheet = (): void => {
     setDraftRange({ start: period.startDate, end: period.endDate });
     setPeriodMonth(period.startDate.slice(0, 7));
@@ -569,14 +583,15 @@ function TripSettingsBody({
         deletable={deletable}
         onBack={onBack}
         onChangeTitle={setTitleEdit}
-        onPressCompanion={openCompanionSheet}
-        onPressDayWindow={() => setDayWindowSheetOpen(true)}
+        // 행·「여행 삭제」는 창을 따른다 — 목록 ⋯ 「여행 설정」 연타의 둘째 탭이 여기 떨어진다(통합 QA O1).
+        onPressCompanion={guardPress(openCompanionSheet)}
+        onPressDayWindow={guardPress(() => setDayWindowSheetOpen(true))}
         // `save` 는 ref 를 읽는 함수라 렌더 중에 `respectPressGuard(save)` 로 감싸면 컴파일러 린트가 막는다 — 누르는 순간 감싼다.
         onSave={() => respectPressGuard(save)()}
-        onPressDelete={() => {
+        onPressDelete={guardPress(() => {
           setDeleteFailed(false);
           setDeleteOpen(true);
-        }}
+        })}
       />
       {companionSheetOpen ? (
         <CompanionEditSheet
@@ -584,7 +599,8 @@ function TripSettingsBody({
           companionType={draftCompanion}
           onChangeParty={(next) => setDraftParty(Math.max(1, next))}
           onSelectCompanion={pickCompanion}
-          onApply={applyCompanion}
+          // 시트가 닫힌 자리에 [저장]이 있다 — 연타 둘째 탭이 저장으로 가지 않게 창을 연다(통합 QA D1·D2).
+          onApply={guardPress(applyCompanion)}
           onClose={() => setCompanionSheetOpen(false)}
         />
       ) : null}
@@ -592,10 +608,10 @@ function TripSettingsBody({
         <DayWindowEditSheet
           value={dayWindow}
           sameDay={sameDay}
-          onApply={(next) => {
+          onApply={guardPress((next: DayWindow) => {
             setDayWindowEdit(next);
             setDayWindowSheetOpen(false);
-          }}
+          })}
           onClose={() => setDayWindowSheetOpen(false)}
         />
       ) : null}
@@ -626,11 +642,13 @@ function TripSettingsBody({
       {lengthConfirm !== undefined ? (
         <PeriodLengthDialog
           hasItinerary={trip.itineraryDayCount > 0}
+          droppedNotice={lengthDropNotice}
           failed={lengthFailed}
-          onCancel={() => {
+          // 창이 닫히면 뒤 행이 드러난다 — 연타 둘째 탭이 그 행을 열지 않게 한다(통합 QA D4).
+          onCancel={guardPress(() => {
             setLengthConfirm(undefined);
             setLengthFailed(false);
-          }}
+          })}
           onConfirm={confirmLength}
         />
       ) : null}
@@ -638,7 +656,7 @@ function TripSettingsBody({
         <TripDeleteDialog
           failed={deleteFailed}
           confirmed={summary.status === 'CONFIRMED'}
-          onCancel={() => setDeleteOpen(false)}
+          onCancel={guardPress(() => setDeleteOpen(false))}
           onConfirm={confirmDelete}
         />
       ) : null}

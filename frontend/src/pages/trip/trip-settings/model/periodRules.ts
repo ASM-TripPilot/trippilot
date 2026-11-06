@@ -67,7 +67,7 @@ export function periodHint(lock: PeriodLock): string {
     case 'ended':
       return '끝난 여행은 바꿀 수 없어요';
     case null:
-      return '일정은 그대로 두고 날짜만 옮겨요 · 일수는 바꿀 수 없어요';
+      return '날짜를 옮기거나 일수를 바꿀 수 있어요';
   }
 }
 
@@ -89,9 +89,10 @@ export function isTripChildKey(
 }
 
 /**
- * 일수가 바뀔 때 박수 합(INV-U1-14: Σ ≤ 기간)을 새 박수에 맞춘다. 늘면 마지막(seq 최대) 여행지에 차이를 더하고,
- * 줄면 합이 새 박수를 넘는 만큼 마지막부터 0 까지 깎고 앞으로 간다(0박 여행지가 남을 수 있다). 합이 이미 새 박수 이하면
- * 줄여도 안 깎는다. 입력은 안 바꾸고 배열 순서·seq·다른 칸은 그대로다.
+ * 일수가 바뀔 때 박수 합(INV-U1-14: Σ ≤ 기간)을 새 박수에 맞춘다. 늘면 마지막(seq 최대) 여행지에 차이를 더하고, 줄면 합이 새 박수를
+ * 넘는 만큼 마지막부터 깎고 앞으로 간다. **이번에 깎여 0박이 된 여행지는 뺀다**(사용자 결정 2026-11-06 — 남겨 두면 그날 후보가 안 머무는
+ * 도시로 잡힌다). 첫 여행지(seq 최소)는 0박이어도 남긴다(서버는 목적지 0개를 거절한다). 깎이지 않은 0박 여행지는 건드리지 않는다.
+ * 합이 이미 새 박수 이하면 줄여도 안 깎는다. 입력은 안 바꾸고 남는 여행지의 순서·seq·다른 칸은 그대로다.
  */
 export function fitDestinationNights(
   destinations: readonly TripDestination[],
@@ -108,6 +109,8 @@ export function fitDestinationNights(
     result[lastFirst[0]].nights += newNights - oldNights;
     return result;
   }
+  const first = lastFirst[lastFirst.length - 1];
+  const emptied = new Set<number>();
   let excess = Math.max(
     0,
     result.reduce((sum, one) => sum + one.nights, 0) - newNights
@@ -116,6 +119,41 @@ export function fitDestinationNights(
     const cut = Math.min(excess, result[index].nights);
     result[index].nights -= cut;
     excess -= cut;
+    if (cut > 0 && result[index].nights === 0 && index !== first) {
+      emptied.add(index);
+    }
   }
-  return result;
+  return result.filter((_, index) => !emptied.has(index));
+}
+
+/** `fitDestinationNights` 가 뺄 여행지(seq 순) — 확인창이 미리 말한다. 본문 조립과 같은 함수를 지나 말과 실제가 안 갈린다. */
+export function droppedDestinations(
+  destinations: readonly TripDestination[],
+  oldNights: number,
+  newNights: number
+): TripDestination[] {
+  const kept = new Set(
+    fitDestinationNights(destinations, oldNights, newNights).map(
+      (one) => one.seq
+    )
+  );
+  return destinations
+    .filter((one) => !kept.has(one.seq))
+    .sort((a, b) => a.seq - b.seq);
+}
+
+/** 끝 글자 받침으로 주격 조사(이/가), 한글이 아니면 병기(틀린 조사보다 안전). */
+function subjectParticle(word: string): string {
+  const code = word.charCodeAt(word.length - 1) - 0xac00;
+  if (code < 0 || code > 11171) return '이(가)';
+  return code % 28 === 0 ? '가' : '이';
+}
+
+/** 확인창의 「빠지는 도시」 한 줄 — 빠지는 곳이 없으면 null. */
+export function droppedNotice(
+  dropped: readonly TripDestination[]
+): string | null {
+  if (dropped.length === 0) return null;
+  const names = dropped.map((one) => one.region).join('·');
+  return `${names}${subjectParticle(names)} 여행지에서 빠져요`;
 }
