@@ -31,6 +31,10 @@
 
 - **`border-hairline`은 색(#EDEDED)과 NativeWind 프리셋 두께(hairlineWidth)를 동시에 의미한다** → 한쪽 변만 의도해 `border-t border-hairline`·`border-b border-hairline`을 써도 프리셋이 네 변 두께를 함께 건드리는 리포 전역 관례라, 카드처럼 `overflow-hidden`/radius 없는 조상에 얹으면 둥근 모서리 밖으로 반대 변·옆 변의 선이 각지게 삐져나올 수 있다(실측 1건 — 카드 하단 두 모서리). 한 변짜리 구분선이 필요하면 `border`가 아니라 `h-px bg-hairline`/`w-px bg-hairline` 막대 View로 그린다. `grep -rln "border-hairline" src`가 사정거리 — 전역 수정(프리셋 무력화·색 토큰 개명)은 모든 화면 픽셀에 영향을 준다.
 
+## 크기 클래스 (NativeWind rem 14)
+
+- **숫자 스케일 크기 클래스는 rem 14 기준이라 Figma px 와 다르게 그려진다 — `h-12`·`min-h-12` = 42pt(48 아님), `h-14` = 49, `h-8` = 28** → 값 = 숫자 × 0.25 × 14. Figma 에서 잰 px 는 임의값 `h-[48px]`·`min-h-[48px]` 로 쓴다(`px-md`·`rounded-button` 같은 테마 토큰은 px 로 정의돼 무관). jest 는 className 문자열만 봐서 원리적으로 못 잡고 6-b 실측만 잡는다 — TRIP-1828 공용 `Button` md 가 `min-h-12` 로 42 가 돼 확인창·검색 버튼 4곳이 줄었고 6-b 가 잡았다(개념 노트가 있었는데도 다시 밟음). 화면 className 에 남은 숫자 스케일 높이 클래스는 `grep -rlE '(^|[ "`])(min-h|h)-(1[0-9]|[5-9])( |"|`)' src app --include='*.tsx'` 로 센다(2026-11-08 비테스트 27파일 — 의도한 값인지 미확인).
+
 ## features 경계
 
 - **층 방향 린트는 전 feature를 강제하지만 전방(app→features)은 막지 않는다** → `eslint.config.js`의 층 zone이 `src/features` 디렉토리를 읽어 feature 전부에 형제 feature·상위 층(widgets·pages·app) import를 error로 잡는다. feature별 문자열 소스 스캔은 TRIP-1145에서 지웠다 — `require()` 문자열·`jest.mock` 경로는 린트 사각이다. 남은 사각은 **app·app-shell이 features를 직접 import하는 전방 방향** — `src/app/**`에서 features를 무는 것은 lint가 침묵한다. 테스트 파일 여러 곳의 "FEATURES 배열이 onboarding·home뿐" 주석은 낡았다(단언 무영향).
