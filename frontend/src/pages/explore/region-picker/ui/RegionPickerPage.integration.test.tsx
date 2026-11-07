@@ -838,10 +838,12 @@ describe('서비스 지역 — 지역 피커는 서비스 지역 6곳만 보인�
       }
     });
 
-    it('인기 여행지 스트립도 서비스 시도 6장뿐이다 (전남광주 카드 없음)', () => {
+    it('인기 여행지 스트립은 서비스 시도 6장을 고정 순서(서울·부산·제주·강원·경북·경남)로 보인다 (전남광주 카드 없음)', () => {
       renderPickerFor(purpose);
 
-      expect(popularCodes()).toEqual(['11', '26', '47', '48', '50', '51']);
+      // 준비: 서버 순서는 코드 오름차순(11·26·47·48·50·51) — 아래 지역별 목록은 그 순서 그대로다.
+      // 단언: 띠만 고정 순서라, 첫 화면 세 장에 서울·부산·제주가 든다(TRIP-1817).
+      expect(popularCodes()).toEqual(['11', '26', '50', '51', '47', '48']);
       expect(screen.queryByTestId('explore-region-popular-12')).toBeNull();
     });
 
@@ -918,6 +920,8 @@ describe('서비스 지역 — 지역 피커는 서비스 지역 6곳만 보인�
     render(<RegionPickerPage />);
 
     expect(sidoRowCodes()).toEqual(['26', '11', '50', '51']);
+    // 인기 띠만 고정 순서다 — 서버 순서를 따르지 않는다(TRIP-1817).
+    expect(popularCodes()).toEqual(['11', '26', '50', '51']);
   });
 
   it("검색 '강남'이면 서울 강남구 카드가 보인다", () => {
@@ -1035,7 +1039,7 @@ describe('화면 동작 — 카피 · 드릴다운 · 뒤로 · 카드 갈래 ·
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
-  it('선택 불가 시/도의 "전체" 자리는 보이되 눌러도 아무 데도 안 가고, 그 안 구/군은 골라진다', () => {
+  it('선택 불가 시/도는 「전체」도 회색 칸도 없이 이름만 보이고, 그 안 구/군은 골라진다', () => {
     mockRegionsResult = {
       ...mockRegionsResult,
       data: [{ ...SEOUL, selectable: false }, JONGNO],
@@ -1043,8 +1047,9 @@ describe('화면 동작 — 카피 · 드릴다운 · 뒤로 · 카드 갈래 ·
     render(<RegionPickerPage />);
     drillInto('11');
 
-    fireEvent.press(screen.getByTestId('explore-region-11'));
-    expect(mockDismissTo).not.toHaveBeenCalled();
+    expect(screen.getByText('서울특별시')).toBeOnTheScreen();
+    expect(screen.queryByText('서울특별시 전체')).toBeNull();
+    expect(screen.queryByTestId('explore-region-11')).toBeNull();
 
     fireEvent.press(screen.getByTestId('explore-region-11110'));
     expect(mockDismissTo).toHaveBeenCalledTimes(1);
@@ -1110,7 +1115,7 @@ describe('화면 동작 — 카피 · 드릴다운 · 뒤로 · 카드 갈래 ·
     expect(within(busan).queryByText('서울특별시')).toBeNull();
   });
 
-  it('선택 불가 묶음 행도 검색 결과에선 시도명 부제를 단다', () => {
+  it('선택 불가 묶음 행도 검색 결과에선 시도명 부제를 달고, 눌러도 아무 데도 안 간다', () => {
     mockRegionsResult = {
       ...mockRegionsResult,
       data: [SEOUL, { ...SEOUL_JUNG, selectable: false }],
@@ -1121,6 +1126,19 @@ describe('화면 동작 — 카피 · 드릴다운 · 뒤로 · 카드 갈래 ·
     const jung = screen.getByTestId('explore-region-11140');
     expect(within(jung).getByText('중구')).toBeOnTheScreen();
     expect(within(jung).getByText('서울특별시')).toBeOnTheScreen();
+
+    fireEvent.press(jung);
+    expect(mockDismissTo).not.toHaveBeenCalled();
+  });
+
+  it('카탈로그에 시/도 행이 없으면 눌릴 「전체」가 없으니 머리줄도 이름만이다', () => {
+    mockRegionsResult = { ...mockRegionsResult, data: [JONGNO] };
+    render(<RegionPickerPage />);
+    drillInto('11');
+
+    expect(screen.getByText(JONGNO.sidoName)).toBeOnTheScreen();
+    expect(screen.queryByText(`${JONGNO.sidoName} 전체`)).toBeNull();
+    expect(screen.getByTestId('explore-region-11110')).toBeOnTheScreen();
   });
 
   it('부제를 안 다는 자리 — 검색 결과의 시도 카드, 상세의 구/군 카드, 인기 카드는 시도명이 한 번뿐이다', () => {

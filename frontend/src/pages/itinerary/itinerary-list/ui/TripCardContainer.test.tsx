@@ -1,3 +1,5 @@
+import { cloneElement, useState, type ReactElement } from 'react';
+import { Dimensions } from 'react-native';
 import { act, fireEvent, screen } from '@testing-library/react-native';
 
 import type { Trip } from '@/shared/api/index.schemas';
@@ -8,12 +10,17 @@ import {
 } from '@/shared/api/index.hooks';
 import { openPressGuardWindow, resetPressGuard } from '@/shared/lib/pressGuard';
 import { renderWithQueryClient } from '@/test-support/queryRender';
+import { registerToastBottom } from '@/shared/ui/toastBottom';
 import {
   NO_ITINERARY,
   type ItineraryCols,
 } from '@/test-support/tripItineraryCols';
 
-import { TripCardContainer } from './TripCardContainer';
+import { menuOpensAbove } from '../model/menuPlacement';
+import {
+  TripCardContainer,
+  type TripCardContainerProps,
+} from './TripCardContainer';
 
 /**
  * TRIP-788 · TRIP-1677 — `TripCardContainer` 의 VM 조립(상태문·배지·resume·삭제 진입점·누름 목적지)을 심판한다.
@@ -37,6 +44,9 @@ import { TripCardContainer } from './TripCardContainer';
  */
 
 const mockPush = jest.fn();
+jest.mock('../model/menuPlacement', () => ({
+  menuOpensAbove: jest.fn(),
+}));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
@@ -89,12 +99,40 @@ function trip(over: Partial<Trip> = {}): Trip {
   };
 }
 
-function renderCard(ui: Parameters<typeof renderWithQueryClient>[0]) {
-  return renderWithQueryClient(ui);
+/** 메뉴 열림은 페이지가 쥔다(TRIP-1819) — 카드 하나만 볼 때 그 자리를 대신한다. */
+function MenuHost({ card }: { card: ReactElement<TripCardContainerProps> }) {
+  const [open, setOpen] = useState(false);
+  return cloneElement(card, { menuOpen: open, onMenuOpenChange: setOpen });
+}
+
+function renderCard(ui: ReactElement<TripCardContainerProps>) {
+  return renderWithQueryClient(<MenuHost card={ui} />);
 }
 
 /** 실시계 오늘을 항상 포함하는 여행 기간(fake timers 없이 "여행 중"을 만든다). */
 const DURING = { startDate: '2020-01-01', endDate: '2099-12-31' } as const;
+
+describe('⋯ 를 누르면 버튼 자리를 재서 방향을 정한다 (TRIP-1819)', () => {
+  it('판정 재료는 ⋯ 아랫변 · 창 높이 · 신고된 막힘 + 간격이다', () => {
+    // 준비 — 카드를 그리고, 탭바처럼 윗변 70 을 신고한다. jest 의 네이티브 재기는 답을 안 주므로 받은 콜백을 직접 부른다.
+    renderCard(<TripCardContainer trip={trip()} />);
+    const unregister = registerToastBottom(70);
+    const button = screen.getByTestId('my-trip-menu-t1');
+    const measure = button.parent?.instance.measureInWindow as jest.Mock;
+
+    // 실행 — ⋯ 를 누르고, 재기 답(버튼 y 756 · 높이 36)을 돌려준다.
+    fireEvent.press(button);
+    act(() => measure.mock.calls.at(-1)[0](0, 756, 36, 36));
+    unregister();
+
+    // 단언 — 아랫변 792 · 창 높이 · 70+12 로 판정을 묻는다. 패널의 실제 자리는 실화면 몫(기능 지도).
+    expect(menuOpensAbove).toHaveBeenLastCalledWith(
+      792,
+      Dimensions.get('window').height,
+      82
+    );
+  });
+});
 
 describe('🔴 얼굴 표 — 목록 네 칸 → 상태문 · 배지 · resume (AC-2)', () => {
   it.each<[string, ItineraryCols, string, string, boolean]>([

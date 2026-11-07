@@ -1,10 +1,12 @@
 import { useRef, useState, type ReactElement } from 'react';
+import { useWindowDimensions, type View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
 import type { Trip } from '@/shared/api/index.schemas';
 import { guardPress } from '@/shared/lib/pressGuard';
 import { showToast } from '@/shared/ui/Toast';
+import { getToastBottoms, resolveToastBottom } from '@/shared/ui/toastBottom';
 import {
   TripCard,
   classifyTripPhase,
@@ -27,6 +29,7 @@ import {
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary';
+import { menuOpensAbove } from '../model/menuPlacement';
 import { deriveTripCardFace } from '../model/tripCardFace';
 
 /**
@@ -50,6 +53,9 @@ export interface TripCardContainerProps {
   pinned?: boolean;
   pinDisabled?: boolean;
   onTogglePin?: () => void;
+  /** TRIP-1819 · ⋯ 메뉴 열림 — 한 번에 하나만 열리고 화면을 떠나면 닫혀야 해서 페이지가 쥔다. */
+  menuOpen?: boolean;
+  onMenuOpenChange?: (open: boolean) => void;
   /** TRIP-1121 · 오늘(서울 'YYYY-MM-DD') — 페이지가 정렬과 같은 값을 넘긴다. 없으면 여행 중 판정을 안 한다
    * (컨테이너는 시계를 읽지 않는다, TRIP-986). */
   today?: string;
@@ -81,11 +87,35 @@ export function TripCardContainer({
   pinned,
   pinDisabled,
   onTogglePin,
+  menuOpen = false,
+  onMenuOpenChange,
   today,
 }: TripCardContainerProps): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const { height: windowHeight } = useWindowDimensions();
+  const menuButtonRef = useRef<View>(null);
+  const [menuAbove, setMenuAbove] = useState(false);
+  const setMenuOpen = (open: boolean): void => onMenuOpenChange?.(open);
+
+  // TRIP-1819 — 아래 공간이 모자라면(탭바·완료 배너에 가리면) 위로 연다. 답을 기다리지 않고 먼저 연 뒤 뒤집는다.
+  const onPressMenu = (): void => {
+    if (menuOpen) {
+      setMenuOpen(false);
+      return;
+    }
+    setMenuAbove(false);
+    setMenuOpen(true);
+    menuButtonRef.current?.measureInWindow((_x, y, _width, height) => {
+      setMenuAbove(
+        menuOpensAbove(
+          y + height,
+          windowHeight,
+          resolveToastBottom(getToastBottoms(), 0)
+        )
+      );
+    });
+  };
   // copick 누름이 일정 응답을 기다리는 동안의 잠금 — isPending 은 다음 렌더에야 알려져 같은 틱 두 번째 누름을 못 막는다.
   const openingRef = useRef(false);
 
@@ -180,7 +210,9 @@ export function TripCardContainer({
           : undefined
       }
       menuOpen={menuOpen}
-      onPressMenu={() => setMenuOpen((open) => !open)}
+      menuAbove={menuAbove}
+      menuButtonRef={menuButtonRef}
+      onPressMenu={onPressMenu}
       onPressSettings={onPressSettings}
       pinned={pinned}
       pinDisabled={pinDisabled}

@@ -3842,6 +3842,64 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
       expect(await screen.findByTestId(SETTINGS_1803)).toBeOnTheScreen();
     });
 
+    it('TRIP-1820 · [설정 열기] 는 사진 줄 위에 있다 — 시트 중간 칸은 안쪽이 스크롤되지 않아 아래에 두면 하단 바에 가린다', async () => {
+      mockReadPhotoAccess.mockResolvedValue('limited');
+      const card = await renderCard();
+      await within(card).findByTestId(SETTINGS_1803);
+
+      // 트리 순서대로 돌려준다 — 위치 픽셀은 실화면 몫(기능 지도).
+      const order = within(card)
+        .getAllByTestId(
+          new RegExp(`^(${SETTINGS_1803}|record-trip-photo-strip)$`)
+        )
+        .map((node) => node.props.testID);
+      expect(order).toEqual([SETTINGS_1803, 'record-trip-photo-strip']);
+    });
+
+    it('TRIP-1820 · 첨부 안내의 [설정 열기] 도 사진 줄 위에 있다', async () => {
+      serverPhotos = [];
+      mockPick.mockResolvedValue({ kind: 'denied' });
+      const card = await renderCard();
+
+      fireEvent.press(await within(card).findByTestId('record-trip-photo-add'));
+      await within(card).findByTestId('record-trip-photo-settings');
+
+      const order = within(card)
+        .getAllByTestId(/^record-trip-photo-(notice-v-a|settings|strip)$/)
+        .map((node) => node.props.testID);
+      expect(order).toEqual([
+        'record-trip-photo-notice-v-a',
+        'record-trip-photo-settings',
+        'record-trip-photo-strip',
+      ]);
+    });
+
+    it('TRIP-1820 · 거부 상태에서 `+` 를 연타해도 둘째 탭이 그 자리로 내려온 [설정 열기] 를 관통하지 않는다', async () => {
+      // 준비 — 사진 0장 · 거부. 시각을 멈춰 400ms 창 안의 연타를 만든다.
+      serverPhotos = [];
+      mockPick.mockResolvedValue({ kind: 'denied' });
+      const openSettings = jest
+        .spyOn(Linking, 'openSettings')
+        .mockResolvedValue(undefined);
+      const card = await renderCard();
+      const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+
+      // 실행 — `+` 를 눌러 안내가 뜨고, 같은 창 안에 그 자리 버튼을 누른다.
+      fireEvent.press(await within(card).findByTestId('record-trip-photo-add'));
+      const settings = await within(card).findByTestId(
+        'record-trip-photo-settings'
+      );
+      fireEvent.press(settings);
+
+      // 단언 — 설정 앱이 안 열린다. 창이 지나면 정상으로 열린다.
+      expect(openSettings).not.toHaveBeenCalled();
+      now.mockReturnValue(1_000_400);
+      fireEvent.press(settings);
+      expect(openSettings).toHaveBeenCalledTimes(1);
+      now.mockRestore();
+      openSettings.mockRestore();
+    });
+
     it('J3 (E-4) 못 푼 사진 + 전체 허용 → 셀 문구만 있고 안내·버튼은 없다', async () => {
       await renderCard();
 
@@ -3980,7 +4038,8 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
         await settle();
         expect(hitCount(PHOTOS_POST)).toBe(0);
 
-        // 실행 — 다시 `+`(이번엔 취소).
+        // 실행 — 시간이 지나(연타 창 닫힘) 다시 `+`(이번엔 취소).
+        resetPressGuard();
         mockPick.mockResolvedValueOnce({ kind: 'canceled' });
         fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
         await waitFor(() => expect(mockPick).toHaveBeenCalledTimes(2));
@@ -4003,11 +4062,14 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
         within(card).queryByTestId('record-trip-photo-settings')
       ).toBeNull();
 
+      resetPressGuard();
       mockPick.mockResolvedValueOnce({ kind: 'denied' });
       fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
-      fireEvent.press(
-        await within(card).findByTestId('record-trip-photo-settings')
+      const settings = await within(card).findByTestId(
+        'record-trip-photo-settings'
       );
+      resetPressGuard();
+      fireEvent.press(settings);
 
       expect(openSettings).toHaveBeenCalledTimes(1);
       openSettings.mockRestore();
