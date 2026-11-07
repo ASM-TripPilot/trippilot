@@ -63,8 +63,6 @@ export interface PeriodEditSheetProps {
   onClose: () => void;
   /** 안내 줄 문구 — 없으면 위저드 문구. 여행 설정 화면이 모드에 맞는 문구를 넘긴다(TRIP-1788). */
   note?: string;
-  /** 범위가 완성돼도 [적용]을 막는다 — 여행 설정이 못 줄이는 일수에서 쓴다(이유는 `note` 로). */
-  applyDisabled?: boolean;
   /** 있으면 안내 줄 아래에 「일수 바꾸기」 버튼을 그린다(여행 설정 전용) — 없으면 버튼 자체가 없다. */
   onPressChangeLength?: () => void;
 }
@@ -183,7 +181,6 @@ export function PeriodEditSheet({
   onApply,
   onClose,
   note,
-  applyDisabled = false,
   onPressChangeLength,
 }: PeriodEditSheetProps): ReactElement {
   const [year, monthNum] = month.split('-').map(Number);
@@ -213,7 +210,7 @@ export function PeriodEditSheet({
       apply={{
         testID: 'trip-wizard-period-apply',
         onPress: onApply,
-        disabled: !rangeComplete || applyDisabled,
+        disabled: !rangeComplete,
       }}
     >
       {/* 선택 요약 — 완성 범위에서만 */}

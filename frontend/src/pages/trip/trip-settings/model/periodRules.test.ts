@@ -4,6 +4,8 @@ import fc from 'fast-check';
 import type { TripDestination } from '@/shared/api/index.schemas';
 
 import {
+  droppedDestinations,
+  droppedNotice,
   fitDestinationNights,
   isTripChildKey,
   periodConflictCode,
@@ -11,7 +13,6 @@ import {
   periodLock,
   pickLengthRange,
   shiftedEndDate,
-  shrinkBlockNotice,
 } from './periodRules';
 
 /**
@@ -28,8 +29,7 @@ import {
  *  - `periodLock`/`periodHint`: 끝남 > 시작됨(오늘 포함) > 생성 중 > 열림 우선순위와 문구.
  *  - `periodConflictCode`: 409 응답의 `error.code` 만 꺼낸다.
  *  - `isTripChildKey`: `/trips/{id}/…` 자식 키만 참(단건·다른 여행·접두가 같은 다른 id 는 거짓).
- *  - `fitDestinationNights`: 새 박수에 박수 합을 맞춘다(늘리면 마지막만, 줄이면 많은 곳부터·동률이면 뒤 곳 — 곳이 둘 이상이면 1박 아래로 안 깎는다).
- *  - `shrinkBlockNotice`: 곳 수보다 못 줄이는 일수의 안내(한 곳은 당일치기까지 된다).
+ *  - `fitDestinationNights`: 새 박수에 박수 합을 맞춘다(늘리면 마지막만, 줄이면 마지막부터 — 0박이 되면 뺀다, 첫 여행지는 남긴다).
  */
 
 const DAY_MS = 86_400_000;
@@ -293,31 +293,33 @@ describe('fitDestinationNights — 새 박수에 박수 합을 맞춘다', () =>
     expect(result[0]).toEqual(place(1, 2));
   });
 
-  it('줄이면 박수가 가장 많은 곳부터 깎고, 동률이면 뒤 곳이다 — 곳은 빠지지 않는다', () => {
-    expect(
-      fitDestinationNights([place(1, 2), place(2, 2), place(3, 1)], 5, 4)
-    ).toEqual([place(1, 2), place(2, 1), place(3, 1)]);
-    expect(
-      fitDestinationNights([place(1, 2), place(2, 2), place(3, 1)], 5, 3)
-    ).toEqual([place(1, 1), place(2, 1), place(3, 1)]);
-    expect(fitDestinationNights([place(1, 5), place(2, 1)], 6, 3)).toEqual([
+  it('줄이면 마지막부터 깎고, 0박이 된 여행지는 뺀다 — 일부만 깎인 여행지는 남는다', () => {
+    expect(fitDestinationNights([place(1, 2), place(2, 2)], 4, 3)).toEqual([
       place(1, 2),
       place(2, 1),
     ]);
-  });
-
-  it('한 곳 여행은 당일치기(0박)까지 줄어든다', () => {
-    expect(fitDestinationNights([place(1, 1)], 1, 0)).toEqual([place(1, 0)]);
-  });
-
-  it('곳이 둘 이상이면 1박 아래로 안 깎는다 — 막아야 할 입력이 와도 도시를 0박으로 만들지 않는다', () => {
-    expect(fitDestinationNights([place(1, 1), place(2, 1)], 2, 1)).toEqual([
+    expect(fitDestinationNights([place(1, 2), place(2, 1)], 3, 2)).toEqual([
+      place(1, 2),
+    ]);
+    expect(fitDestinationNights([place(1, 2), place(2, 1)], 3, 1)).toEqual([
       place(1, 1),
-      place(2, 1),
+    ]);
+    expect(
+      fitDestinationNights([place(1, 1), place(2, 1), place(3, 1)], 3, 1)
+    ).toEqual([place(1, 1)]);
+  });
+
+  it('첫 여행지(seq 최소)는 0박이 돼도 남는다 — 당일치기로 줄여도 여행지가 0개가 되지 않는다', () => {
+    expect(fitDestinationNights([place(1, 2), place(2, 1)], 3, 0)).toEqual([
+      place(1, 0),
+    ]);
+    expect(fitDestinationNights([place(1, 1)], 1, 0)).toEqual([place(1, 0)]);
+    expect(fitDestinationNights([place(2, 1), place(1, 1)], 2, 0)).toEqual([
+      place(1, 0),
     ]);
   });
 
-  it('옛 0박 도시는 그대로 두고 나머지에서 깎는다', () => {
+  it('이번에 깎이지 않은 0박 여행지는 건드리지 않는다 — 사용자가 뺀 적 없는 곳을 조용히 지우지 않는다', () => {
     expect(fitDestinationNights([place(1, 2), place(2, 0)], 2, 1)).toEqual([
       place(1, 1),
       place(2, 0),
@@ -349,7 +351,7 @@ describe('fitDestinationNights — 새 박수에 박수 합을 맞춘다', () =>
     expect(() => fitDestinationNights(input, 3, 1)).not.toThrow();
   });
 
-  it('PBT — 합은 새 박수에 맞고, 곳이 둘 이상이면 모두 1박 이상, 깎인 곳은 늘 그때 가장 많던 곳이다', () => {
+  it('PBT — 박수 합이 새 박수 이하·음수 없음·seq/순서/다른 칸 보존·늘릴 때 마지막만 변함', () => {
     const destinationsArb = fc
       .uniqueArray(fc.integer({ min: 1, max: 9 }), {
         minLength: 1,
@@ -357,7 +359,7 @@ describe('fitDestinationNights — 새 박수에 박수 합을 맞춘다', () =>
       })
       .chain((seqs) =>
         fc
-          .array(fc.integer({ min: 1, max: 6 }), {
+          .array(fc.integer({ min: 0, max: 6 }), {
             minLength: seqs.length,
             maxLength: seqs.length,
           })
@@ -368,92 +370,102 @@ describe('fitDestinationNights — 새 박수에 박수 합을 맞춘다', () =>
         destinationsArb,
         fc.integer({ min: 0, max: 20 }),
         fc.integer({ min: 0, max: 30 }),
-        (destinations, slack, wanted) => {
-          const count = destinations.length;
-          // 화면이 막는 줄이기는 입력이 아니다(`shrinkBlockNotice`).
-          const newNights = count > 1 ? Math.max(wanted, count) : wanted;
+        (destinations, slack, newNights) => {
+          // 옛 박수 = 박수 합 이상(INV-U1-14 가 Σ ≤ 기간을 보장한다)
           const oldNights = sum(destinations) + slack;
-          fc.pre(
-            shrinkBlockNotice(destinations, oldNights, newNights) === null
-          );
-
           const result = fitDestinationNights(
             destinations,
             oldNights,
             newNights
           );
 
-          // 곳·순서·seq·이름·코드 보존 — 빠지는 곳이 없다.
-          expect(
-            result.map(({ seq, region, regionCode }) => ({
-              seq,
-              region,
-              regionCode,
-            }))
-          ).toEqual(
-            destinations.map(({ seq, region, regionCode }) => ({
-              seq,
-              region,
-              regionCode,
-            }))
-          );
-          expect(result.every((one) => one.nights >= (count > 1 ? 1 : 0))).toBe(
-            true
-          );
+          const firstSeq = Math.min(...destinations.map((one) => one.seq));
+          const before = new Map(destinations.map((one) => [one.seq, one]));
 
+          expect(sum(result)).toBeLessThanOrEqual(newNights);
+          expect(result.every((one) => one.nights >= 0)).toBe(true);
+          // 첫 여행지는 늘 남아 0개가 되지 않는다.
+          expect(result.some((one) => one.seq === firstSeq)).toBe(true);
+          // 남은 곳은 입력 순서 그대로, seq·이름·코드 보존.
+          expect(result.map((one) => one.seq)).toEqual(
+            destinations
+              .filter((one) => result.some((kept) => kept.seq === one.seq))
+              .map((one) => one.seq)
+          );
+          result.forEach((one) => {
+            const origin = before.get(one.seq) as TripDestination;
+            expect(one.region).toBe(origin.region);
+            expect(one.regionCode).toBe(origin.regionCode);
+          });
+          // 빠진 곳은 박수가 있던 곳이고, 깎인 끝에 0 이 된 것뿐이다(줄일 때만 빠진다).
+          destinations
+            .filter((one) => !result.some((kept) => kept.seq === one.seq))
+            .forEach((gone) => {
+              expect(gone.seq).not.toBe(firstSeq);
+              expect(gone.nights).toBeGreaterThan(0);
+              expect(newNights).toBeLessThan(oldNights);
+            });
+          // 깎은 합은 넘친 만큼뿐이다(필요 이상 안 뺀다).
+          if (newNights <= oldNights) {
+            expect(sum(result)).toBe(Math.min(sum(destinations), newNights));
+          }
           if (newNights > oldNights) {
+            expect(result).toHaveLength(destinations.length);
             const lastSeq = Math.max(...destinations.map((one) => one.seq));
             result.forEach((one, i) => {
-              expect(one.nights).toBe(
-                destinations[i].nights +
-                  (one.seq === lastSeq ? newNights - oldNights : 0)
-              );
+              if (one.seq === lastSeq)
+                expect(one.nights).toBe(
+                  destinations[i].nights + (newNights - oldNights)
+                );
+              else expect(one.nights).toBe(destinations[i].nights);
             });
-            return;
           }
-          // 넘친 만큼만 깎는다 — 박수 합 = 기간이던 여행이면 결과 합이 새 기간이다.
-          expect(sum(result)).toBe(Math.min(sum(destinations), newNights));
-          // 많은 곳부터: 깎인 곳의 마지막 값보다 1박 넘게 많은 곳이 남아 있으면 안 된다.
-          result.forEach((one, i) => {
-            if (one.nights === destinations[i].nights) return;
-            result.forEach((other) => {
-              expect(other.nights).toBeLessThanOrEqual(one.nights + 1);
-            });
-          });
         }
       )
     );
   });
 });
 
-describe('shrinkBlockNotice — 곳 수보다 못 줄인다', () => {
-  const place = (seq: number, nights: number): TripDestination => ({
+describe('droppedDestinations · droppedNotice — 확인창의 「빠지는 도시」 한 줄', () => {
+  const place = (
+    seq: number,
+    region: string,
+    nights: number
+  ): TripDestination => ({
     seq,
-    region: `지역${seq}`,
+    region,
     nights,
     regionCode: null,
   });
-  const three = [place(1, 1), place(2, 1), place(3, 1)];
+  const jeju = place(1, '제주', 1);
+  const busan = place(2, '부산', 1);
+  const seoul = place(3, '서울', 1);
 
-  it('3곳 3박 → 2박은 막고 곳 수를 말한다', () => {
-    expect(shrinkBlockNotice(three, 3, 2)).toBe(
-      '여행지가 3곳이라 3박보다 줄일 수 없어요'
+  it('fitDestinationNights 가 뺀 곳만 seq 순으로 돌려준다 — 줄지 않으면 없음', () => {
+    expect(droppedDestinations([jeju, busan, seoul], 3, 2)).toEqual([seoul]);
+    expect(droppedDestinations([seoul, jeju, busan], 3, 1)).toEqual([
+      busan,
+      seoul,
+    ]);
+    expect(droppedDestinations([jeju, busan, seoul], 3, 3)).toEqual([]);
+    expect(droppedDestinations([jeju, busan, seoul], 3, 5)).toEqual([]);
+  });
+
+  it('받침 있으면 「이」, 없으면 「가」, 여러 곳은 끝 도시 받침을 따른다', () => {
+    expect(droppedNotice([seoul])).toBe('서울이 여행지에서 빠져요');
+    expect(droppedNotice([place(2, '제주', 0)])).toBe(
+      '제주가 여행지에서 빠져요'
     );
-    expect(shrinkBlockNotice(three, 3, 0)).toBe(
-      '여행지가 3곳이라 3박보다 줄일 수 없어요'
+    expect(droppedNotice([busan, seoul])).toBe('부산·서울이 여행지에서 빠져요');
+    expect(droppedNotice([seoul, place(4, '속초시', 0)])).toBe(
+      '서울·속초시가 여행지에서 빠져요'
     );
   });
 
-  it('곳 수까지는 줄일 수 있고, 늘리거나 그대로면 안 막는다', () => {
-    expect(shrinkBlockNotice(three, 5, 3)).toBeNull();
-    expect(shrinkBlockNotice(three, 3, 3)).toBeNull();
-    expect(shrinkBlockNotice(three, 3, 10)).toBeNull();
-    // 옛 여행: 곳 수보다 짧은 기간이어도 일수가 안 줄면 안 막는다.
-    expect(shrinkBlockNotice(three, 2, 2)).toBeNull();
-    expect(shrinkBlockNotice(three, 1, 2)).toBeNull();
-  });
-
-  it('한 곳은 당일치기까지 된다', () => {
-    expect(shrinkBlockNotice([place(1, 2)], 2, 0)).toBeNull();
+  it('한글이 아니면 조사를 병기하고, 빠지는 곳이 없으면 null', () => {
+    expect(droppedNotice([place(1, 'Busan', 1)])).toBe(
+      'Busan이(가) 여행지에서 빠져요'
+    );
+    expect(droppedNotice([])).toBeNull();
   });
 });

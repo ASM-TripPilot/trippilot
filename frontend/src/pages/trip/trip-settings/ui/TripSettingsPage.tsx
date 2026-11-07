@@ -74,6 +74,8 @@ import {
 
 import { toEditTripRequest, type TripEdits } from '../model/editTripRequest';
 import {
+  droppedDestinations,
+  droppedNotice,
   isTripChildKey,
   nightsBetween,
   periodConflictCode,
@@ -81,7 +83,6 @@ import {
   periodLock,
   pickLengthRange,
   shiftedEndDate,
-  shrinkBlockNotice,
   type PeriodLock,
 } from '../model/periodRules';
 import { titleViolation } from '../model/titleRule';
@@ -424,14 +425,17 @@ function TripSettingsBody({
     );
   };
 
-  // 일수 모드에서 도시 수보다 못 줄인다(곳마다 최소 1박) — [적용]을 막고 안내 줄로 이유를 말한다.
-  const lengthBlock = lengthMode
-    ? shrinkBlockNotice(
-        trip.destinations,
-        nightsBetween(trip.startDate, trip.endDate),
-        nightsBetween(draftRange.start, draftRange.end)
-      )
-    : null;
+  // 일수 확정이 뺄 여행지 한 줄 — 본문을 만드는 함수(`fitDestinationNights`)를 그대로 지나 말과 실제가 안 갈린다.
+  const lengthDropNotice =
+    lengthConfirm === undefined
+      ? null
+      : droppedNotice(
+          droppedDestinations(
+            trip.destinations,
+            nightsBetween(trip.startDate, trip.endDate),
+            nightsBetween(lengthConfirm.startDate, lengthConfirm.endDate)
+          )
+        );
 
   const openPeriodSheet = (): void => {
     setDraftRange({ start: period.startDate, end: period.endDate });
@@ -621,8 +625,7 @@ function TripSettingsBody({
           today={today}
           month={periodMonth}
           range={draftRange}
-          note={lengthBlock ?? (lengthMode ? NOTE_LENGTH : NOTE_SHIFT)}
-          applyDisabled={lengthBlock !== null}
+          note={lengthMode ? NOTE_LENGTH : NOTE_SHIFT}
           onPressChangeLength={
             lengthMode ? undefined : () => setLengthMode(true)
           }
@@ -644,6 +647,7 @@ function TripSettingsBody({
       {lengthConfirm !== undefined ? (
         <PeriodLengthDialog
           hasItinerary={trip.itineraryDayCount > 0}
+          droppedNotice={lengthDropNotice}
           failed={lengthFailed}
           // 창이 닫히면 뒤 행이 드러난다 — 연타 둘째 탭이 그 행을 열지 않게 한다(통합 QA D4).
           onCancel={guardPress(() => {

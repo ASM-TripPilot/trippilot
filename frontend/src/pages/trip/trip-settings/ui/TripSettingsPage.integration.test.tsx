@@ -1525,7 +1525,7 @@ describe('M · 일수 변경 확인창과 확정 (AC-3 · AC-11)', () => {
     serverTrip = baseTrip({ coverKey: '26350', ...CONFIRMED_COLS });
     await openPage();
     typeTitle('다시 만들 이름');
-    changeLengthAndApply('2099-06-12'); // 3박 → 2박
+    changeLengthAndApply('2099-06-11'); // 3박 → 1박
     expect(patchHits()).toBe(0);
     expect(routerSpies.replace).not.toHaveBeenCalled();
 
@@ -1536,14 +1536,13 @@ describe('M · 일수 변경 확인창과 확정 (AC-3 · AC-11)', () => {
     const body = patchBodies[0];
     expect(body.discardItinerary).toBe(true);
     expect(body.startDate).toBe('2099-06-10');
-    expect(body.endDate).toBe('2099-06-12');
+    expect(body.endDate).toBe('2099-06-11');
     expect(body.title).toBe('다시 만들 이름');
     expect(body.coverKey).toBe('26350');
     expect(body.budgetTotal).toBe(1500000);
-    // 3박 → 2박: 박수가 많은 제주시에서 깎고 서귀포시는 그대로다(TRIP-1822).
+    // 3박 → 1박: 서귀포시(1박)가 0박이 돼 빠지고 제주시만 남는다(사용자 결정 2026-11-06).
     expect(body.destinations).toEqual([
       { seq: 1, region: '제주시', nights: 1, regionCode: '50110' },
-      { seq: 2, region: '서귀포시', nights: 1, regionCode: '50130' },
     ]);
     expect(hrefOf(routerSpies.replace.mock.calls[0][0])).toBe(METHOD_HREF);
     expect(routerSpies.back).not.toHaveBeenCalled();
@@ -2154,7 +2153,7 @@ describe('P · 캐시 (AC-1 · D11) — 그 여행 하위 조회만, 훅 옵션�
     });
     await openPage();
     seedCaches();
-    changeLengthAndApply('2099-06-12');
+    changeLengthAndApply('2099-06-11');
     confirmLength();
     await waitFor(() => expect(patchHits()).toBe(1));
     for (const key of CHILD_KEYS) {
@@ -2175,14 +2174,14 @@ describe('P · 캐시 (AC-1 · D11) — 그 여행 하위 조회만, 훅 옵션�
     }
     expect(
       client.getQueryData<Trip>(getGetTripsTripIdQueryKey(TRIP_ID))?.endDate
-    ).toBe('2099-06-12');
+    ).toBe('2099-06-11');
   });
 
   it('확정이 실패하면 자식 조회의 데이터가 그대로다', async () => {
     patchQueue = [ERROR_500];
     await openPage();
     seedCaches();
-    changeLengthAndApply('2099-06-12');
+    changeLengthAndApply('2099-06-11');
 
     confirmLength();
 
@@ -2348,67 +2347,78 @@ describe('R · 통합 QA 연타·0박 여행지', () => {
     }
   );
 
-  describe('TRIP-1822 — 일수를 줄여도 도시마다 최소 1박', () => {
-    const cities = (nights: number[]) =>
+  describe('D5 — 일수를 줄여 0박이 된 여행지는 뺀다', () => {
+    const threeCities = () =>
       baseTrip({
         startDate: '2099-06-10',
-        endDate: `2099-06-${10 + nights.reduce((sum, one) => sum + one, 0)}`,
-        destinations: nights.map((one, index) => ({
-          seq: index + 1,
-          region: ['제주', '부산', '서울'][index],
-          nights: one,
-          regionCode: ['50', '26', '11'][index],
-        })),
+        endDate: '2099-06-13',
+        destinations: [
+          { seq: 1, region: '제주', nights: 1, regionCode: '50' },
+          { seq: 2, region: '부산', nights: 1, regionCode: '26' },
+          { seq: 3, region: '서울', nights: 1, regionCode: '11' },
+        ],
       });
-    const note = () => screen.getByTestId('trip-wizard-period-note');
-    const apply = () => screen.getByTestId('trip-wizard-period-apply');
+    const dropped = () => screen.queryByTestId('trip-settings-length-dropped');
 
-    it('3곳 3박 → 2박: [적용]이 막히고 안내가 뜬다. 눌러도 확인창·요청이 없고, 3박으로 되돌리면 풀린다', async () => {
-      serverTrip = cities([1, 1, 1]);
+    it('확인창이 빠지는 도시를 한 줄로 말하고, 확정 전엔 아무것도 안 나간다. 확정 본문엔 남는 도시만 실린다', async () => {
+      serverTrip = threeCities();
       await openPage();
-      openPeriodSheet();
-      press('trip-wizard-period-change-length');
 
-      pickDate('2099-06-12');
+      changeLengthAndApply('2099-06-11'); // 3박 → 1박
 
-      expect(note()).toHaveTextContent(
-        '여행지가 3곳이라 3박보다 줄일 수 없어요'
-      );
-      expect(apply()).toBeDisabled();
-      press('trip-wizard-period-apply');
-      expect(lengthDialog()).toBeNull();
+      expect(dropped()).toHaveTextContent('부산·서울이 여행지에서 빠져요');
       expect(patchHits()).toBe(0);
 
-      pickDate('2099-06-13');
-
-      expect(note()).toHaveTextContent(
-        '끝나는 날을 골라요 · 일수가 바뀌면 일정을 다시 짜요'
-      );
-      expect(apply()).toBeEnabled();
-    });
-
-    it('[2,2,1] 5박 → 4박 확정: 뒤쪽 2박 도시(부산)에서 깎고 도시는 안 빠진다', async () => {
-      serverTrip = cities([2, 2, 1]);
-      await openPage();
-
-      changeLengthAndApply('2099-06-14');
       confirmLength();
-
       await waitFor(() => expect(routerSpies.replace).toHaveBeenCalledTimes(1));
-      expect(patchBodies[0].destinations.map((one) => one.nights)).toEqual([
-        2, 1, 1,
+      expect(patchBodies[0].discardItinerary).toBe(true);
+      expect(patchBodies[0].destinations).toEqual([
+        { seq: 1, region: '제주', nights: 1, regionCode: '50' },
       ]);
     });
 
-    it('한 곳 여행은 당일치기까지 줄어든다', async () => {
-      serverTrip = cities([3]);
+    it('한 곳만 빠지면 그 곳만 말한다(2박으로 줄이면 서울)', async () => {
+      serverTrip = threeCities();
+      await openPage();
+
+      changeLengthAndApply('2099-06-12');
+
+      expect(dropped()).toHaveTextContent('서울이 여행지에서 빠져요');
+    });
+
+    it('당일치기까지 줄여도 첫 도시는 남는다 — 박수 0 으로 실린다', async () => {
+      serverTrip = threeCities();
       await openPage();
 
       changeLengthAndApply('2099-06-10');
-      confirmLength();
+      expect(dropped()).toHaveTextContent('부산·서울이 여행지에서 빠져요');
 
+      confirmLength();
       await waitFor(() => expect(routerSpies.replace).toHaveBeenCalledTimes(1));
-      expect(patchBodies[0].destinations.map((one) => one.nights)).toEqual([0]);
+      expect(patchBodies[0].destinations).toEqual([
+        { seq: 1, region: '제주', nights: 0, regionCode: '50' },
+      ]);
+    });
+
+    it('늘릴 때는 그 줄이 없다', async () => {
+      await openPage();
+
+      changeLengthAndApply('2099-06-20'); // 3박 → 10박
+
+      expect(lengthDialog()).toBeOnTheScreen();
+      expect(dropped()).toBeNull();
+    });
+
+    it('한 도시 여행을 줄이면 빠지는 도시가 없다', async () => {
+      serverTrip = baseTrip({
+        destinations: [{ seq: 1, region: '제주', nights: 3, regionCode: '50' }],
+      });
+      await openPage();
+
+      changeLengthAndApply('2099-06-11');
+
+      expect(lengthDialog()).toBeOnTheScreen();
+      expect(dropped()).toBeNull();
     });
   });
 });

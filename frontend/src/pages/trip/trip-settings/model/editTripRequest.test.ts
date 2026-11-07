@@ -372,16 +372,15 @@ describe('toEditTripRequest — 기간 이동·일수 변경·커버 (TRIP-1788)
 
   it('일수를 줄이는 확정은 박수 합이 새 박수 이하로 맞춰지고 discardItinerary: true 가 실린다', () => {
     const body = toEditTripRequest(BASE, {
-      period: { startDate: '2099-06-10', endDate: '2099-06-12' },
+      period: { startDate: '2099-06-10', endDate: '2099-06-11' },
       discardItinerary: true,
     });
 
     expect(body.discardItinerary).toBe(true);
-    expect(sum(body)).toBeLessThanOrEqual(2);
-    // 3박 → 2박: 박수가 많은 제주시에서 깎고, 서귀포시는 1박으로 남는다.
+    expect(sum(body)).toBeLessThanOrEqual(1);
+    // 서귀포시(1박)는 0박이 돼 빠지고 제주시만 1박으로 남는다.
     expect(body.destinations).toEqual([
       { seq: 1, region: '제주시', nights: 1, regionCode: '50110' },
-      { seq: 2, region: '서귀포시', nights: 1, regionCode: '50130' },
     ]);
   });
 
@@ -466,12 +465,7 @@ describe('toEditTripRequest — 기간 이동·일수 변경·커버 (TRIP-1788)
         nightsArb,
         coverArb,
         coverArb,
-        (destinations, slack, wanted, gotKey, pickedKey) => {
-          // 곳 수보다 짧은 일수는 화면이 막아 본문이 안 만들어진다(TRIP-1822).
-          const newNights =
-            destinations.length > 1
-              ? Math.max(wanted, destinations.length)
-              : wanted;
+        (destinations, slack, newNights, gotKey, pickedKey) => {
           const oldNights =
             destinations.reduce((acc, one) => acc + one.nights, 0) + slack;
           const trip = makeTrip({
@@ -492,9 +486,15 @@ describe('toEditTripRequest — 기간 이동·일수 변경·커버 (TRIP-1788)
           });
 
           expect(sum(body)).toBeLessThanOrEqual(newNights);
-          // 곳은 빠지지도 뒤섞이지도 않는다(TRIP-1822).
-          expect(body.destinations.map((one) => one.seq)).toEqual(
-            destinations.map((one) => one.seq)
+          // 남은 곳은 입력 순서 그대로(빠질 수는 있어도 뒤섞이지 않는다), 첫 여행지는 늘 남는다.
+          const kept = body.destinations.map((one) => one.seq);
+          expect(kept).toEqual(
+            destinations
+              .map((one) => one.seq)
+              .filter((seq) => kept.includes(seq))
+          );
+          expect(kept).toContain(
+            Math.min(...destinations.map((one) => one.seq))
           );
           expect(body.destinations.every((one) => one.nights >= 0)).toBe(true);
           const expected = pickedKey === undefined ? gotKey : pickedKey;
