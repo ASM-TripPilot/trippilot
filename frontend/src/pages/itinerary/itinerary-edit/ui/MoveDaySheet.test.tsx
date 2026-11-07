@@ -469,6 +469,24 @@ describe('RenameSlotSheet · RS — 이름·분류 고치기 시트 (TRIP-1795 A
     });
   });
 
+  it('RS3c · 붙여넣기로 들어온 줄바꿈(\\r\\n·줄 구분자 포함)은 공백 하나가 된다 — 칸이 여러 줄로 늘어도 이름엔 줄바꿈이 없다 (TRIP-1824)', () => {
+    const cb = renderRename();
+
+    fireEvent.changeText(
+      screen.getByTestId(INPUT),
+      '웨이브온\r\n카페\u20282층\n\n창가\u2029자리'
+    );
+    fireEvent.press(screen.getByTestId(APPLY));
+
+    expect(screen.getByTestId(INPUT).props.value).toBe(
+      '웨이브온 카페 2층 창가 자리'
+    );
+    expect(cb.onApply).toHaveBeenCalledWith({
+      displayName: '웨이브온 카페 2층 창가 자리',
+      displayCategory: '맛집',
+    });
+  });
+
   it('RS4 · 원래대로는 덮어쓴 게 있을 때만 켜져 onReset 1회, X 는 onClose 만 부르고 아무것도 알리지 않는다', () => {
     const { onApply, onReset, onClose } = renderRename({ canReset: true });
 
