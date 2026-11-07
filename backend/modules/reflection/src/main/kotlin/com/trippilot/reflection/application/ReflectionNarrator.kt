@@ -42,7 +42,7 @@ object ReflectionNarrator {
         val title = dailyTitle(placeNames, stats)
         val subtitle = daily(placeNames, stats)
         val scenes = placeNames.map { name ->
-            """{"layout":"TEXT","caption":${quote("$name 을(를) 다녀왔어요.")}}"""
+            """{"layout":"TEXT","caption":${quote("${withObjectParticle(name)} 다녀왔어요.")}}"""
         }
         val template = if (stats.visitCount == 0) BASIC_TEMPLATE else RULE_TEMPLATE
         val payload = """{"template_id":${quote(template)},"format":"CARD",""" +
@@ -81,12 +81,28 @@ object ReflectionNarrator {
             else -> placeNames.take(3).joinToString("·") + " 외 ${placeNames.size - 3}곳"
         }
         return buildString {
-            append("$places 을(를) 다녀왔어요.")
+            append("${withObjectParticle(places)} 다녀왔어요.")
             // 근사값을 실측처럼 쓰지 않는다 — 어림임을 문장에도 남긴다(BR-U5-43).
             if (stats.distanceKm > 0) append(" 이동 거리는 약 ${"%.1f".format(stats.distanceKm)}km 였어요.")
             append(if (stats.photoCount > 0) " 사진 ${stats.photoCount}장을 남겼어요." else " 사진은 남기지 않았어요.")
         }
     }
+
+    /**
+     * 목적격 조사 — 끝 글자의 받침으로 을/를(TRIP-1815). AI 가 실패한 날 이 문장이 그대로 보인다.
+     * 한글 음절로 끝나지 않으면 읽는 법을 몰라 `을(를)` 을 남긴다(앱 `objectParticle.ts` 와 같은 규칙).
+     */
+    private fun withObjectParticle(word: String): String {
+        val last = word.lastOrNull()
+        return word + when {
+            last == null || last !in '가'..'힣' -> "을(를)"
+            (last - '가') % JONGSEONG_COUNT == 0 -> "를"
+            else -> "을"
+        }
+    }
+
+    /** 한글 음절의 종성 경우의 수(받침 없음 포함) — 음절 코드 = 0xAC00 + (초성 × 21 + 중성) × 28 + 종성. */
+    private const val JONGSEONG_COUNT = 28
 
     /**
      * 근거가 하나도 없을 때의 기본 카드(BR-U5-32 3단 · PBT-U5-1).
