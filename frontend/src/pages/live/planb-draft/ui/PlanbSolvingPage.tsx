@@ -38,6 +38,7 @@ import {
   useGetTripsTripIdVisitsDaysDay,
   usePostTripsTripIdReplanSessionsSessionIdCancel,
 } from '@/shared/api/index.hooks';
+import { usePressLock } from '@/shared/lib/pressGuard';
 
 import { ReplanLeaveDialog } from './ReplanLeaveDialog';
 import { ReplanNoticeFace } from './ReplanNoticeFace';
@@ -109,7 +110,7 @@ export function PlanbSolvingPage({
   const router = useRouter();
   const startReplan = useStartReplan();
   // [다시 시도] 재누름 잠금 — 같은 틱 두 번째 누름은 옛 state 를 본다(ref). 실패에서만 푼다(새 POST 는 방금 연 세션을 닫는다).
-  const retryRef = useRef(false);
+  const retryLock = usePressLock();
   const [capped, setCapped] = useState<CappedSession | undefined>(undefined);
   if (capped !== undefined) {
     // 본문이 내려가 세션 폴링도 끝났다. [다시 시도]는 상한에 닿은 세션의 입력·트리거로 바로 다시 짠다. 응답을 한 번도
@@ -118,8 +119,7 @@ export function PlanbSolvingPage({
       capped === null
         ? () => router.replace(`/trips/${tripId}/planb`)
         : () => {
-            if (retryRef.current) return;
-            retryRef.current = true;
+            if (!retryLock.acquire()) return;
             startReplan.mutate(
               {
                 tripId,
@@ -134,7 +134,7 @@ export function PlanbSolvingPage({
                       : { tripId, sessionId: next.sessionId },
                   }),
                 onError: () => {
-                  retryRef.current = false;
+                  retryLock.release();
                 },
               }
             );
@@ -183,7 +183,7 @@ function PlanbSolvingBody({
   const cancel = usePostTripsTripIdReplanSessionsSessionIdCancel();
   const itinerary = useLiveItinerary(tripId);
   const [leaveOpen, setLeaveOpen] = useState(false);
-  const leavingRef = useRef(false);
+  const leavingLock = usePressLock();
 
   const data = session.data;
   const kind =
@@ -238,7 +238,7 @@ function PlanbSolvingBody({
   const solvingFace = data === undefined ? !errorFace : kind === 'solving';
   usePreventRemove(solvingFace, ({ data: { action } }) => {
     const isBack = action.type === 'GO_BACK' || action.type === 'POP';
-    if (!isBack || leavingRef.current) {
+    if (!isBack || leavingLock.isHeld()) {
       navigation.dispatch(action);
       return;
     }
@@ -258,8 +258,8 @@ function PlanbSolvingBody({
 
   // 서버 호출 없이 나간다 — 뒤로 갈 곳이 없으면(딥링크 착지) 허브로.
   const leaveWithoutServer = () => {
-    if (leavingRef.current) return;
-    leavingRef.current = true;
+    // [취소] 응답 뒤(흐름 안)에도 불린다 — 전환 중이라고 빠지면 취소됐는데 화면이 남는다.
+    if (!leavingLock.acquire({ transition: 'ignore' })) return;
     goBackOr(router, `/trips/${tripId}/live`);
   };
 

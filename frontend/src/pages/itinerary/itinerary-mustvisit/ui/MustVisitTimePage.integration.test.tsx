@@ -319,6 +319,51 @@ describe('🔴🔴 I8 · 01b D1 의 위험 — DELETE 성공 후 POST 가 실패
   });
 });
 
+// TRIP-1827 5-b W4 — 같은 틱 연타는 `guardPress` 400ms 창이 막아 잠금(`submitLock`)이 안 보인다.
+// 잠금의 몫은 "창이 닫힌 뒤, 응답을 기다리는 동안" 들어온 둘째 누름이다 — 그 길을 밟는다.
+describe('TRIP-1827 W4 · 응답 전, 창이 닫힌 뒤 다시 눌러도 DELETE·POST 는 각 1회다', () => {
+  it('DELETE 응답을 붙잡은 채 창을 닫고 [이 시각으로 고정]을 다시 누르면, 요청이 늘지 않고 풀린 뒤 한 번만 되돌아간다', async () => {
+    // 준비 — DELETE 응답을 손으로 붙잡는다. 둘째 DELETE 가 나가도 매달리지 않게 문을 전부 모은다.
+    const releases: (() => void)[] = [];
+    server.use(
+      http.delete(
+        `${BASE}/trips/:tripId/must-visits/:mustVisitId`,
+        async () => {
+          await new Promise<void>((resolve) => releases.push(resolve));
+          return new HttpResponse(null, { status: 204 });
+        }
+      )
+    );
+    renderPage();
+    await ready();
+    ensureFixed(true);
+    pickDateAndStart();
+
+    // 실행 ① — 첫 저장, DELETE 가 출발했지만 응답은 붙잡혀 있다.
+    submit();
+    await waitFor(() => expect(releases).toHaveLength(1));
+
+    // 실행 ② — 400ms 창이 닫힌 것과 같게 만든 뒤 다시 누른다.
+    resetPressGuard();
+    submit();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    // 단언 ① — 응답 전에는 DELETE 1건뿐이다.
+    expect(mustVisitWrites()).toEqual([DELETE_HIT]);
+
+    // 실행 ③ — 붙잡은 응답을 전부 푼다.
+    await act(async () => {
+      releases.forEach((release) => release());
+    });
+
+    // 단언 ② — DELETE·POST 각 1회, 되돌아가기 1회.
+    await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
+    expect(mustVisitWrites()).toEqual([DELETE_HIT, POST_HIT]);
+  });
+});
+
 describe('I9 · AC-5 — 값이 비면 요청이 한 건도 안 나간다 (INV-U1-17)', () => {
   it('시각을 고르지 않고 저장을 누르면 쓰기 요청 0건이고 사유가 보인다', async () => {
     renderPage();

@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactElement,
-} from 'react';
+import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { Pressable } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { goBackOr } from '@/shared/lib/goBackOr';
@@ -12,7 +6,7 @@ import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { isNotFound } from '@/shared/api';
-import { guardPress } from '@/shared/lib/pressGuard';
+import { guardPress, usePressLock } from '@/shared/lib/pressGuard';
 import { getGetTripsTripIdItineraryQueryOptions } from '@/shared/api/index.hooks';
 import { openNewTripWizard } from '@/features/create-trip';
 import {
@@ -66,10 +60,10 @@ import { HistoryView } from './HistoryView';
  * - 세션 생성 401 이면 시트를 닫는다(`/assistant` 는 `(tabs)` 밖이라 guard 에 안 걸린다 — frontend-components §1).
  * - next action: 갈 수 있는 것만 그리고(`displayActions`), 누르면 시트 자리를 그 화면으로 **replace** 한다 —
  *   모달을 닫고 push 하는 두 걸음 대신 한 걸음(FD §4-5 와 다름, 개정 블록). 단 상세·요약류(`mode: 'push'`)는
- *   시트를 둔 채 그 위에 push 한다 — 뒤로 오면 같은 대화(TRIP-1565). 이때 `closingRef` 는 읽기만 하고,
+ *   시트를 둔 채 그 위에 push 한다 — 뒤로 오면 같은 대화(TRIP-1565). 이때 `closingLock` 은 읽기만 하고,
  *   연타는 `guardPress` 가 막는다(돌아와 다시 누르면 다시 이동).
  * - 「일정 보기」(`kind: 'itinerary'`)는 누른 시점에 일정을 조회해 앱 공통 판정으로 목적지를 정한다(TRIP-1566) —
- *   조회 중·실패엔 이동하지 않고 상태 줄로 알린다(INV-4). 확인 중 잠금은 `closingRef` 와 따로다(확인 중에도 ✕ 가 눌려야 한다).
+ *   조회 중·실패엔 이동하지 않고 상태 줄로 알린다(INV-4). 확인 중 잠금은 `closingLock` 과 따로다(확인 중에도 ✕ 가 눌려야 한다).
  * - "내가 할 수 있는 것 보기" 상시 칩: 서버가 그 quick reply 를 줬으면 그것을 ACTION 으로, 아니면 라벨을
  *   TEXT 턴으로 보낸다 — 클라가 quick reply id 를 지어내지 않는다(위조 차단 규칙).
  * - 답 평가(US-ASSIST-09): 도우미 답 아래 엄지 줄. 평가 값은 메시지 캐시(낙관 갱신·실패 롤백), 펼친 이유 칸·
@@ -104,7 +98,7 @@ export function AssistantSheetPage({
   const sessions = useAssistantSessions();
   // 적용 중인 제안 id — 화면 비활성과 ref 잠금 둘 다. 이중 적용의 최종 차단은 서버 상태기계(INV-U8-08).
   const [applyingId, setApplyingId] = useState<string | null>(null);
-  const applyingRef = useRef(false);
+  const applyingLock = usePressLock();
   const [proposalErrors, setProposalErrors] = useState<Record<string, string>>(
     {}
   );
@@ -119,16 +113,16 @@ export function AssistantSheetPage({
   const [itineraryCheck, setItineraryCheck] = useState<
     'CHECKING' | 'FAILED' | null
   >(null);
-  const checkingRef = useRef(false);
+  const checkingLock = usePressLock();
 
-  const closingRef = useRef(false);
+  const closingLock = usePressLock();
   const handleClose = useCallback((): void => {
-    if (closingRef.current) return;
-    closingRef.current = true;
+    // 401 effect·시트 끌어 닫기도 여기로 온다 — 전환 중이라고 건너뛰면 닫을 곳이 없다.
+    if (!closingLock.acquire({ transition: 'ignore' })) return;
     goBackOr(router, shellTabHref('home'));
-  }, [router]);
+  }, [router, closingLock]);
 
-  // 401 — 열 수 없는 사람에게 빈 시트를 남기지 않는다. handleClose 는 ref 로 한 번만 동작한다.
+  // 401 — 열 수 없는 사람에게 빈 시트를 남기지 않는다. handleClose 는 잠금으로 한 번만 동작한다.
   useEffect(() => {
     if (state === 'UNAUTHORIZED') handleClose();
   }, [state, handleClose]);
@@ -203,8 +197,7 @@ export function AssistantSheetPage({
   }
 
   function handleApply(proposalId: string): void {
-    if (applyingRef.current) return;
-    applyingRef.current = true;
+    if (!applyingLock.acquire()) return;
     setApplyingId(proposalId);
     applyProposal.mutate(proposalId, {
       onError: (error) => {
@@ -225,14 +218,14 @@ export function AssistantSheetPage({
         }));
       },
       onSettled: () => {
-        applyingRef.current = false;
+        applyingLock.release();
         setApplyingId(null);
       },
     });
   }
 
   function handleDismiss(proposalId: string): void {
-    if (applyingRef.current || dismissProposal.isPending) return;
+    if (applyingLock.isHeld() || dismissProposal.isPending) return;
     dismissProposal.mutate(proposalId);
   }
 
@@ -267,13 +260,12 @@ export function AssistantSheetPage({
   }
 
   function replaceTo(href: string): void {
-    closingRef.current = true;
+    closingLock.acquire({ transition: 'ignore' });
     router.replace(href as Href);
   }
 
   async function openItinerary(trip: string): Promise<void> {
-    if (closingRef.current || checkingRef.current) return;
-    checkingRef.current = true;
+    if (closingLock.isHeld() || !checkingLock.acquire()) return;
     setItineraryCheck('CHECKING');
     let href: string;
     try {
@@ -294,16 +286,16 @@ export function AssistantSheetPage({
       );
     } catch (error) {
       if (!isNotFound(error)) {
-        checkingRef.current = false;
+        checkingLock.release();
         setItineraryCheck('FAILED');
         return;
       }
       href = itineraryDestinationHref(trip, 'method', undefined);
     }
-    checkingRef.current = false;
+    checkingLock.release();
     setItineraryCheck(null);
     // 응답을 기다리는 사이 ✕ 로 닫았거나 다른 이동이 시작됐으면 늦은 응답이 이동시키지 않는다.
-    if (closingRef.current) return;
+    if (closingLock.isHeld()) return;
     replaceTo(href);
   }
 
@@ -319,16 +311,16 @@ export function AssistantSheetPage({
       return;
     }
     if (target.kind === 'route') {
-      if (closingRef.current) return;
+      if (closingLock.isHeld()) return;
       if (target.mode === 'push') {
         // 일정 확인 중엔 push 하지 않는다 — 확인 뒤 replace 가 방금 연 상세를 갈아치운다.
-        if (!checkingRef.current) pushTo(target.href);
+        if (!checkingLock.isHeld()) pushTo(target.href);
         return;
       }
       if (action.type === 'CREATE_TRIP') {
         // 새 여행은 위저드 진입이다 — 직전 여행 값을 이동 전에 비우는 한 진입점을 거친다(TRIP-1776).
         // 이동은 다른 흐름 목적지처럼 시트 자리를 갈아끼우고, 닫는 중 잠금도 `replaceTo` 와 같이 세운다.
-        closingRef.current = true;
+        closingLock.acquire({ transition: 'ignore' });
         openNewTripWizard(router, undefined, 'replace');
         return;
       }

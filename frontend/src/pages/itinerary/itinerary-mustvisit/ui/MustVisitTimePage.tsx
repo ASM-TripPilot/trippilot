@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { goBackOr } from '@/shared/lib/goBackOr';
@@ -26,8 +26,12 @@ import {
   useGetTripsTripId,
   useGetTripsTripIdMustVisits,
 } from '@/shared/api/index.hooks';
-import { getAccessToken } from '@/shared/api';
-import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
+import { useAccessToken } from '@/shared/api';
+import {
+  guardPress,
+  openPressGuardWindow,
+  usePressLock,
+} from '@/shared/lib/pressGuard';
 
 /**
  * h07 배선(TRIP-296) — `ANYTIME` 항목을 시각 고정 블록으로 **승격**한다.
@@ -79,7 +83,8 @@ export function MustVisitTimePage({
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const isAuthed = getAccessToken() !== null;
+  // 구독으로 읽는다(TRIP-1364) — 렌더 중 `getAccessToken()` 은 컴파일러가 memo 해 로그인·로그아웃을 놓친다.
+  const isAuthed = useAccessToken() !== null;
   const trip = useGetTripsTripId(tripId);
   const mustVisits = useGetTripsTripIdMustVisits(tripId);
   const savedPlaces = useSavedPlaces({ isAuthed });
@@ -89,9 +94,9 @@ export function MustVisitTimePage({
   const [duplicate, setDuplicate] = useState(false);
   const [leaveWarned, setLeaveWarned] = useState(false);
   // 응답이 오기 전 두 번째 누름이 두 번째 승격을 만들면 DELETE 가 두 번 나간다. 상태 갱신은
-  // 다음 렌더에야 보이므로 같은 틱의 두 번째 누름을 못 막는다 — ref 는 쓰는 즉시 보인다
-  // (`TripNewStep1Page.submitLockedRef` 와 같은 이유).
-  const submitLockedRef = useRef(false);
+  // 다음 렌더에야 보이므로 같은 틱의 두 번째 누름을 못 막는다 — 잠금은 쓰는 즉시 보인다
+  // (`TripNewStep1Page.submitLock` 과 같은 이유).
+  const submitLock = usePressLock();
 
   const registered = (mustVisits.data ?? []).find(
     (entry) => entry.sourcePoiId === sourcePoiId
@@ -155,13 +160,13 @@ export function MustVisitTimePage({
       if (!isAlreadyRegistered(error)) {
         // DELETE 는 이미 성공했다 — 되돌리려면 이 요청을 그대로 다시 내야 한다.
         setFailure({ kind: 'lost', request });
-        submitLockedRef.current = false;
+        submitLock.release();
         return;
       }
       // 409 = 목표 상태와 결과 상태가 같다. 실패로 세지 않되 침묵하지도 않는다.
       duplicated = true;
       setDuplicate(true);
-      submitLockedRef.current = false;
+      submitLock.release();
     }
     setFailure(null);
     void queryClient.invalidateQueries({
@@ -176,7 +181,7 @@ export function MustVisitTimePage({
   }
 
   async function submit(): Promise<void> {
-    if (!ready || submitLockedRef.current) return;
+    if (!ready || submitLock.isHeld()) return;
     // 화면의 `disabled` 는 접근성 상태만으로도 매처를 통과할 수 있으므로 배선도 스스로 문을
     // 잠근다. 여기서는 그 이상이다 — **되돌릴 수 없는 DELETE 를 검증 전에 보내지 않는 것**이
     // 이 한 줄의 실질이다. OFF 는 ANYTIME 최소본, FIXED 는 완성 시에만 본문이 만들어진다(null=중단).
@@ -185,7 +190,7 @@ export function MustVisitTimePage({
       : buildAnytimeMustVisitRequest({ poiId: sourcePoiId });
     if (request === null) return;
 
-    submitLockedRef.current = true;
+    if (!submitLock.acquire()) return;
     setDuplicate(false);
 
     if (registered !== undefined) {
@@ -197,7 +202,7 @@ export function MustVisitTimePage({
       } catch {
         // 항목은 그대로다 — POST 를 보내지 않는다(보내면 409로 막히고 요청만 는다).
         setFailure({ kind: 'kept' });
-        submitLockedRef.current = false;
+        submitLock.release();
         return;
       }
     }
@@ -206,8 +211,7 @@ export function MustVisitTimePage({
   }
 
   function retry(): void {
-    if (failure?.kind !== 'lost' || submitLockedRef.current) return;
-    submitLockedRef.current = true;
+    if (failure?.kind !== 'lost' || !submitLock.acquire()) return;
     void sendPost(failure.request);
   }
 

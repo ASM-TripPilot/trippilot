@@ -21,7 +21,7 @@
  *    삭제는 목록 캐시에서 그 여행을 바로 뺀다(무효화만 하면 재조회 전까지 지운 카드가 남아 눌린다).
  */
 import { isAxiosError } from 'axios';
-import { type ReactElement, useRef, useState } from 'react';
+import { type ReactElement, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { type QueryClient, useQueryClient } from '@tanstack/react-query';
@@ -46,6 +46,7 @@ import {
   guardPress,
   openPressGuardWindow,
   respectPressGuard,
+  usePressLock,
 } from '@/shared/lib/pressGuard';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
@@ -277,10 +278,10 @@ function TripSettingsBody({
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteFailed, setDeleteFailed] = useState(false);
-  // 연타 잠금은 ref — isPending 은 한 틱 늦게 알려져 같은 틱 두 번째 press 를 못 막는다.
-  const deletingRef = useRef(false);
+  // 연타 잠금은 usePressLock — isPending 은 한 틱 늦게 알려져 같은 틱 두 번째 press 를 못 막는다.
+  const deletingLock = usePressLock();
   // PATCH(저장·일수 확인) 진행 잠금 하나 — 같은 뮤테이션을 겹쳐 부르면 앞 호출의 개별 콜백이 버려져(TanStack Query) 잠금이 안 풀린다.
-  const patchingRef = useRef(false);
+  const patchingLock = usePressLock();
 
   // 캐시 갱신은 훅 옵션에 둔다 — 호출별 콜백(`mutate(…, {onSuccess})`)은 응답 전에 화면을 떠나면 안 불린다(TRIP-1677 선례).
   const patch = usePatchTripsTripId({
@@ -399,8 +400,7 @@ function TripSettingsBody({
   };
 
   const save = (): void => {
-    if (!canSave || patchingRef.current) return;
-    patchingRef.current = true;
+    if (!canSave || !patchingLock.acquire()) return;
     setSaveFailed(false);
     setPeriodNotice(undefined);
     const data = buildBody({ period: periodEdit });
@@ -419,7 +419,7 @@ function TripSettingsBody({
           if (!handleConflict(error)) setSaveFailed(true);
         },
         onSettled: () => {
-          patchingRef.current = false;
+          patchingLock.release();
         },
       }
     );
@@ -470,8 +470,7 @@ function TripSettingsBody({
     setPeriodEdit(same ? undefined : next);
   };
   const confirmLength = (): void => {
-    if (lengthConfirm === undefined || patchingRef.current) return;
-    patchingRef.current = true;
+    if (lengthConfirm === undefined || !patchingLock.acquire()) return;
     setLengthFailed(false);
     setPeriodNotice(undefined);
     patch.mutate(
@@ -489,7 +488,7 @@ function TripSettingsBody({
           if (!handleConflict(error)) setLengthFailed(true);
         },
         onSettled: () => {
-          patchingRef.current = false;
+          patchingLock.release();
         },
       }
     );
@@ -517,8 +516,7 @@ function TripSettingsBody({
   };
 
   const confirmDelete = (): void => {
-    if (deletingRef.current) return;
-    deletingRef.current = true;
+    if (!deletingLock.acquire()) return;
     setDeleteFailed(false);
     const done = (): void => {
       openPressGuardWindow();
@@ -532,7 +530,7 @@ function TripSettingsBody({
         onError: (error) =>
           isNotFound(error) ? done() : setDeleteFailed(true),
         onSettled: () => {
-          deletingRef.current = false;
+          deletingLock.release();
         },
       }
     );

@@ -6,7 +6,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { InfoCircleGlyph, AlertCircleGlyph } from '@/shared/ui/glyphs';
 import { goBackOr } from '@/shared/lib/goBackOr';
-import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
+import {
+  guardPress,
+  openPressGuardWindow,
+  usePressLock,
+} from '@/shared/lib/pressGuard';
 
 import { buildEditItineraryRequest } from '@/features/edit-itinerary';
 import { buildDraftPins, formatCoPickDayHeader } from '@/features/itinerary';
@@ -166,7 +170,7 @@ export function ItineraryEditPage({
   } | null>(null);
   // 저장 연타 잠금 — isPending 은 다음 렌더에야 참이라 같은 틱 연타를 못 막는다(ManualPlanPage 선례).
   // 떠나는 성공에선 풀지 않는다(늦게 온 두 번째 응답이 back 을 한 번 더 부르지 않게).
-  const inFlightRef = useRef(false);
+  const inFlightLock = usePressLock();
   // 위반 요약 게이트(null = 닫힘) — 버튼을 누른 뒤 띄울 토스트 문구를 함께 든다. gateRef 는 그 버튼 연타
   // 잠금(같은 틱 두 누름은 state 로 못 막는다).
   const [conflict, setConflict] = useState<{
@@ -270,7 +274,7 @@ export function ItineraryEditPage({
   }
 
   function handleSave(): void {
-    if (inFlightRef.current) return;
+    if (inFlightLock.isHeld()) return;
     // 완료 여부를 모르는 날이 있으면 저장하지 않고 그 날로 옮긴다(TRIP-1748) — 보고 있는 날이면 제자리(실패면 안내가 이유를
     // 말하고, 조회 중이면 곧 풀린다), 다른 날이면 그 날의 안내·다시 시도를 보인다. 보지 않은 날은 편집할 수도 없었다.
     // 보고 있는 날은 누른 순간의 캐시 상태로 본다 — 렌더 값·기억(effect)은 응답 직후 화면이 다시 그려지기 전까지
@@ -299,7 +303,7 @@ export function ItineraryEditPage({
     // 장소 추가 PUT 이 응답 전이면 무반응 — 지금 초안엔 그 장소가 없어 전체 교체 PUT 이 추가분을 지운다(TRIP-1519).
     // 응답이 오면 편집기 초안이 갱신돼(시드/삽입) 이어 누른 저장은 추가분을 싣는다. 진행 표시는 Figma 공백.
     if (queryClient.isMutating({ mutationKey: PUT_MUTATION_KEY }) > 0) return;
-    inFlightRef.current = true;
+    if (!inFlightLock.acquire()) return;
     setSaveError(null);
     // 미지정(startAt null) 슬롯은 buildEditItineraryRequest 가 요청에서 뺀다 — 몇 곳이 빠지는지 미리
     // 세어 안내한다(INV-4 침묵 금지). 스토어 상태 타입은 서버(non-nullable)지만 런타임엔 null 이 흐른다
@@ -340,7 +344,7 @@ export function ItineraryEditPage({
           leaveAfterSave();
         },
         onError: (error) => {
-          inFlightRef.current = false;
+          inFlightLock.release();
           if (droppedCount > 0) {
             setUnspecifiedNotice(
               `시간대를 정하지 않은 ${droppedCount}곳은 저장에서 빠졌어요`
@@ -380,7 +384,7 @@ export function ItineraryEditPage({
       leaveAfterSave();
       return;
     }
-    inFlightRef.current = false;
+    inFlightLock.release();
   }
 
   const state = resolvePlanState({

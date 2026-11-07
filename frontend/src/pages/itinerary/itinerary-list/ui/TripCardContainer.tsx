@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
 import type { Trip } from '@/shared/api/index.schemas';
-import { guardPress } from '@/shared/lib/pressGuard';
+import { guardPress, usePressLock } from '@/shared/lib/pressGuard';
 import { showToast } from '@/shared/ui/Toast';
 import { getToastBottoms, resolveToastBottom } from '@/shared/ui/toastBottom';
 import {
@@ -117,7 +117,7 @@ export function TripCardContainer({
     });
   };
   // copick 누름이 일정 응답을 기다리는 동안의 잠금 — isPending 은 다음 렌더에야 알려져 같은 틱 두 번째 누름을 못 막는다.
-  const openingRef = useRef(false);
+  const openingLock = usePressLock();
 
   const summary = tripItinerarySummary(trip);
   const face = deriveTripCardFace(
@@ -153,8 +153,7 @@ export function TripCardContainer({
       return;
     }
     // 같이 짜기 생성 중 — 첫 비고정 슬롯 키가 일정 days 에만 있어 누르는 순간 한 번 받는다. 실패하면 이동하지 않고 알린다(INV-4).
-    if (openingRef.current) return;
-    openingRef.current = true;
+    if (!openingLock.acquire()) return;
     fetchTripItineraryHref(queryClient, trip.tripId)
       .then(
         (href) => router.push(href),
@@ -166,7 +165,7 @@ export function TripCardContainer({
           })
       )
       .finally(() => {
-        openingRef.current = false;
+        openingLock.release();
       });
   });
 
