@@ -45,13 +45,13 @@ export interface SocialLoginBody {
   ageConfirmation?: AgeConfirmation;
 }
 
-/** `/auth/social/{provider}/token`(네이티브 SDK access token 경로, TRIP-210) 요청 바디.
+/** `/auth/social/{provider}/token`(네이티브 SDK access token 경로) 요청 바디.
  * 선택 필드 deviceId 는 호출부가 아니라 `postSocialLogin`·`postSocialTokenLogin` 이 `loginDeviceId()`
- * (`{플랫폼}-{설치 id}`)로 붙인다 — 서버가 refresh_session.device_id 에 저장해 앱/웹 가입자를 가른다
- * (2026-11-02, 옛 D7 "미전송·서버 임의 부여"를 대체). 못 읽으면 빼고 보낸다. */
+ * (`{플랫폼}-{설치 id}`)로 붙인다 — 서버가 refresh_session.device_id 에 저장해 앱/웹 가입자를 가른다.
+ * `loginDeviceId()` 가 못 읽으면 빼고 보낸다. */
 export interface SocialTokenLoginBody {
   accessToken: string;
-  // 애플만 보낸다(TRIP-933 선택 필드).
+  // 애플만 보낸다(선택 필드).
   authorizationCode?: string;
   ageConfirmation?: AgeConfirmation;
 }
@@ -78,7 +78,7 @@ export interface NormalizedApiError {
   code: string;
   status: number;
   existingProvider?: string | null;
-  /** VALIDATION_ERROR 의 어느 필드가 문제였는지(선택). TRIP-248 — 연령확인 누락 거절을 다른
+  /** VALIDATION_ERROR 의 어느 필드가 문제였는지(선택). 연령확인 누락 거절을 다른
    * 400 과 구분하는 유일한 단서라, status 가 아니라 이 값으로 판정한다. 원소의 `field`·`reason`
    * 은 openapi 상 둘 다 required 가 아니다 — 읽는 쪽이 부재를 견뎌야 한다. */
   fields?: ErrorResponseErrorFieldsItem[];
@@ -109,7 +109,6 @@ export interface ConsentInput {
   action: ConsentAction;
 }
 
-/** `GET /me/consents` 한 행 — 약관 종류별 현재 동의 상태(openapi `ConsentState`). */
 export interface ConsentState {
   termsType: string;
   granted: boolean;
@@ -127,27 +126,20 @@ export interface NicknameCheckResult {
 /**
  * 요청 하나를 기다리는 상한(ms) — 넘으면 axios 가 `ECONNABORTED` 로 끊고, 응답 없는 실패라 네트워크 오류와
  * 같은 길(401 리프레시 미개입 → 화면 isError)을 탄다. 서버가 포트만 잡고 답을 안 주면 이 값이 없을 때
- * 스켈레톤이 끝나지 않았다(TRIP-935). 15초 = 서버의 비-AI 외부 호출 1회 상한(카카오·소셜·기상 연결 3s+읽기 5s)
- * 위로 여유. 예외: 소셜 code 로그인은 서버가 토큰 교환·프로필 조회를 연달아 불러 최악 16초라 넘길 수 있다
- * (두 호출이 각각 7.5초 넘게 걸리는 극단 — 잘리면 일회용 code 라 로그인을 처음부터 다시 한다).
+ * 스켈레톤이 끝나지 않았다. 15초 = 서버의 비-AI 외부 호출 1회 상한(연결 3s+읽기 5s) 위로 여유.
+ * 예외: 소셜 code 로그인은 서버가 두 호출을 연달아 불러 최악 16초라 넘길 수 있다. 두 호출이 각각 7.5초를 넘는 극단이라 감수했다(잘리면 일회용 code 라 처음부터 다시).
  * AI 를 동기로 부르는 요청은 이 값으로 자르면 안 된다 — 예외는 `mutator.ts`.
  */
 const API_TIMEOUT_MS = 15_000;
 
-/** 재시도 여부를 요청 자체에 표시하는 내부 마커 — 요청당 정확히 1회만 리프레시를 태운다(A4). */
+/** 재시도 여부를 요청 자체에 표시하는 내부 마커 — 요청당 정확히 1회만 리프레시를 태운다. */
 interface RetriableRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
 }
 
 /**
- * 팩토리 — 토큰 부착 요청 인터셉터 + 401 리프레시 응답 인터셉터를 단 axios 인스턴스를 만든다.
- * 순수 주입식(DI)이라 유닛테스트가 실제 네트워크 없이 adapter 만 바꿔 검증할 수 있다.
- *
- * 401 을 만나면: 이미 재시도한 요청(_retry)이면 그대로 거부(A4, 두 번째 리프레시 없음) — 아니면
- * 재시도 표시 후 리프레시를 태운다. 동시에 여러 요청이 401 을 만나도 리프레시는 refreshPromise
- * 하나로 합쳐 1회만 실행되고(single-flight), 성공·실패 어느 쪽이든 finally 로 슬롯을 비워
- * 다음 401 이 새 리프레시를 다시 탈 수 있게 한다(A6). 리프레시 자체가 실패하면(원인 불문)
- * onSessionExpired 를 부르고 원 요청은 거부로 끝난다.
+ * 토큰 부착 + 401 리프레시 인터셉터를 단 axios 인스턴스. 주입식이라 유닛테스트가 adapter 만 바꿔 검증한다.
+ * 동시 401 은 refreshPromise 하나로 합친다(single-flight) — 회전이 두 번 일어나면 서버가 재사용으로 오탐한다.
  */
 export function createAuthedApiClient(
   options: AuthedApiClientOptions
@@ -199,7 +191,7 @@ export function createAuthedApiClient(
 }
 
 // 점 표기로만 읽는다 — 출시 번들은 `process.env.EXPO_PUBLIC_*` 점 표기만 값으로 치환한다.
-// 운영 빌드에서 비어 있으면 localhost 로 조용히 붙지 않고 로드 시점에 실패한다(INV-4, TRIP-936).
+// 운영 빌드에서 비어 있으면 localhost 로 조용히 붙지 않고 로드 시점에 실패한다(INV-4).
 const envApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
 if (!__DEV__ && !envApiBaseUrl) {
   throw new Error(
@@ -215,7 +207,7 @@ const baseClient = createAxiosInstance({
   timeout: API_TIMEOUT_MS,
 });
 
-/** 서버 실코드 → 프론트 계약 코드 번역표. TRIP-172 — AGE_REQUIREMENT_NOT_MET 1건, 테스트 없이 이관. */
+/** 서버 실코드 → 프론트 계약 코드 번역표. */
 const SERVER_ERROR_CODE_TRANSLATIONS: Record<string, string> = {
   AGE_REQUIREMENT_NOT_MET: 'AGE_NOT_MET',
 };
@@ -242,7 +234,6 @@ function statusToSocialErrorCode(status: number): string {
   }
 }
 
-/** axios 에러 → NormalizedApiError. 서버 body 에 에러코드가 있으면 그걸 번역표를 거쳐 우선 쓰고, 없을 때만 상태 매핑으로 추측한다. 응답 자체가 없으면(네트워크 실패) NETWORK_ERROR. */
 function normalizeSocialError(error: unknown): NormalizedApiError {
   if (!isAxiosError(error) || !error.response) {
     return { code: 'NETWORK_ERROR', status: 0, existingProvider: null };
@@ -288,9 +279,9 @@ export async function postSocialLogin(
   }
 }
 
-/** 네이티브 SDK가 발급한 access token으로 로그인/가입(TRIP-210 · BR-U0-02). code 경로와
+/** 네이티브 SDK가 발급한 access token으로 로그인/가입(BR-U0-02). code 경로와
  * 에러 집합이 완전히 같아(openapi 실측) normalizeSocialError를 그대로 재사용한다. 로그인 전
- * 호출이라 무인증 baseClient를 탄다(AC-6 · SEC-04). */
+ * 호출이라 무인증 baseClient를 탄다(SEC-04). */
 export async function postSocialTokenLogin(
   provider: SocialProvider,
   body: SocialTokenLoginBody
@@ -309,7 +300,6 @@ export async function postSocialTokenLogin(
 /** 로그아웃마다 1 증가 — 로그아웃 전에 출발한 리프레시 응답이 지운 토큰을 되살리지 못하게 한다. */
 let logoutEpoch = 0;
 
-/** 저장소의 refresh 토큰으로 회전 요청 → 새 쌍을 저장소·홀더에 반영 → 새 access 반환. */
 export async function refreshTokens(): Promise<string> {
   const epoch = logoutEpoch;
   const stored = await getTokens();
@@ -324,7 +314,7 @@ export async function refreshTokens(): Promise<string> {
 }
 
 /**
- * 로그아웃(TRIP-938 · BR-U0-09) — 이 기기 refresh 체인만 서버에 폐기 요청하고 기기·메모리 토큰을 지운다.
+ * 로그아웃(BR-U0-09) — 이 기기 refresh 체인만 서버에 폐기 요청하고 기기·메모리 토큰을 지운다.
  * 서버 요청은 **기다리지 않고 실패도 삼킨다**: 결과와 무관하게 사용자는 로그아웃돼야 한다. refresh 는
  * 지우기 **전에** 읽어야 바디에 실린다. 무인증 baseClient 인 이유 — authedClient 면 만료 access 의 401 이
  * 폐기하려는 refresh 를 회전시킨다. 실서버는 `{ refreshToken }` 필수(openapi 의 "바디 없음"과 드리프트).
@@ -344,7 +334,7 @@ export async function fetchTerms(): Promise<TermsVersion[]> {
   return response.data;
 }
 
-/** 단건 약관 현행판(TRIP-937 열람 화면). `/terms` 와 같이 무인증이다(openapi `security: []`). 없는 타입은 404. */
+/** 단건 약관 현행판(약관 열람 화면). `/terms` 와 같이 무인증이다(openapi `security: []`). 없는 타입은 404. */
 export async function fetchTermsByType(
   termsType: string
 ): Promise<TermsVersion> {
@@ -358,7 +348,7 @@ function onSessionExpired(): void {
   void clearTokens();
 }
 
-/** orval mutator(`./mutator.ts`)가 타는 인증 계층 — export는 그 mutator 전용(TRIP-179 D3). */
+/** orval mutator(`./mutator.ts`)가 타는 인증 계층 — export는 그 mutator 전용. */
 export const authedClient = createAuthedApiClient({
   baseURL: API_BASE_URL,
   getAccessToken,
@@ -373,7 +363,7 @@ if (__DEV__ && process.env.NODE_ENV !== 'test') {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('@/shared/dev-fault') as typeof import('@/shared/dev-fault');
   devFault.installFaultInjection(authedClient, devFault.faultStore);
-  // 요청 카운터(TRIP-1714) — 두 클라이언트 모두 센다.
+  // 요청 카운터 — 두 클라이언트 모두 센다.
   for (const client of [authedClient, baseClient]) {
     client.interceptors.request.use((config) => {
       devFault.requestCount.hit();
@@ -392,9 +382,9 @@ export async function submitConsents(consents: ConsentInput[]): Promise<void> {
 }
 
 /**
- * 단건 약관 동의 상태 변경(PATCH) — 개인화 동의 토글(TRIP-612) 등. `termsType` 은 **URL 경로**에만 들어가고,
+ * 단건 약관 동의 상태 변경(PATCH) — 개인화 동의 토글 등. `termsType` 은 **URL 경로**에만 들어가고,
  * body 는 `{ action, termsVersion }` 두 필드뿐이다(openapi `PATCH /me/consents/{termsType}`).
- * ⚠️ body 에 `termsType` 을 실으면 계약 위반이다(D5 — `submitConsents` 의 `ConsentInput` 을 재사용하지 않는 이유).
+ * ⚠️ body 에 `termsType` 을 실으면 계약 위반이다(`submitConsents` 의 `ConsentInput` 을 재사용하지 않는 이유).
  */
 export async function patchConsent(
   termsType: string,

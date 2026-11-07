@@ -5,7 +5,7 @@ const FILTERED = '[Filtered]';
 
 /**
  * 값을 지울 키 — 비교는 소문자로, `-`·`_`·`.` 를 떼고 한다(`access_token`·`Access-Token`·`accessToken` 이 같다).
- * 이름이 `token` 으로 끝나는 키(`pushToken`·`deviceToken`)도 지운다. 기본값(TRIP-1742 M-1) — 사용자 확인 대상.
+ * 이름이 `token` 으로 끝나는 키(`pushToken`·`deviceToken`)도 지운다.
  */
 const SENSITIVE_KEYS = new Set([
   'token',
@@ -61,14 +61,13 @@ function scrubQuery(query: string): string {
     .join('&');
 }
 
-/** `?…` 로 시작해도 되는 쿼리 문자열(`http.query`·`query_string`). */
 function scrubQueryString(value: string): string {
   return value.startsWith('?')
     ? `?${scrubQuery(value.slice(1))}`
     : scrubQuery(value);
 }
 
-/** URL 의 `#…`(fragment)를 떼고(TRIP-1650) 쿼리의 민감 값을 지운다. 문자열이 아니면 그대로 둔다. */
+/** URL 의 `#…`(fragment)를 떼고 쿼리의 민감 값을 지운다. 문자열이 아니면 그대로 둔다. */
 function scrubUrl(value: unknown): unknown {
   if (typeof value !== 'string') return value;
   const withoutFragment = value.split('#', 1)[0];
@@ -84,7 +83,6 @@ const BEARER = /\b(bearer)\s+[^\s"',;]+/gi;
 const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
 const QUERY_PAIR = /([?&#;])([^=&#\s?]+)=([^&#\s]*)/g;
 
-/** 글(오류 문구·breadcrumb 메시지) 속 JWT·`Bearer …`·이메일·`?키=값` 꼴 민감 쿼리 부분만 지운다. */
 function scrubText(text: string): string {
   return text
     .replace(JWT, FILTERED)
@@ -173,12 +171,9 @@ function safely(step: () => void): void {
 }
 
 /**
- * 이벤트가 나가기 직전에 토큰·개인정보를 `[Filtered]` 로 바꾼다(TRIP-1742 M-1 — README 「토큰: 크래시 리포트 미포함」의 집행 지점).
- * - 주소: `request.url`·breadcrumb `from`·`to`·`url` 의 fragment 를 떼고(TRIP-1650 — 네이버 implicit `#access_token=…`) 쿼리의 민감 값을 지운다.
- * - 쿼리: `request.query_string`(문자열·객체·쌍 배열)·breadcrumb `http.query` 의 민감 값, `http.fragment` 는 통째로.
- * - 글: `message`·`logentry.message`·예외 값·breadcrumb 메시지 속 JWT·`Bearer …`·이메일·민감 쿼리.
- * - 객체: `extra`·`contexts`·`request.data`·`request.headers`·breadcrumb `data` 의 민감 키 값.
- * 이벤트는 버리지 않고 그대로 돌려준다. 오류 이벤트와 성능 이벤트(M-2 `beforeSendTransaction`)에 같이 걸 수 있게 `Event` 일반형이다.
+ * 이벤트가 나가기 직전에 토큰·개인정보를 `[Filtered]` 로 바꾼다(README 「토큰: 크래시 리포트 미포함」의 집행 지점).
+ * 주소의 fragment 까지 떼는 이유: 네이버 implicit 이 `#access_token=…` 로 돌려준다.
+ * 이벤트는 버리지 않고 그대로 돌려준다. 오류 이벤트와 성능 이벤트(`beforeSendTransaction`)에 같이 걸 수 있게 `Event` 일반형이다.
  */
 function scrubEvent<T extends Sentry.Event>(event: T): T {
   safely(() => {
@@ -190,7 +185,7 @@ function scrubEvent<T extends Sentry.Event>(event: T): T {
           request.query_string
         ) as typeof request.query_string;
       }
-      // 본문이 문자열이면 폼(`a=1&access_token=…`)일 수 있어 쿼리처럼 먼저 지운 뒤 글 스크럽을 거친다(5-b W1).
+      // 본문이 문자열이면 폼(`a=1&access_token=…`)일 수 있어 쿼리처럼 먼저 지운 뒤 글 스크럽을 거친다.
       request.data =
         typeof request.data === 'string'
           ? scrubText(scrubQueryString(request.data))
@@ -219,7 +214,7 @@ function scrubEvent<T extends Sentry.Event>(event: T): T {
       if (breadcrumb.data) scrubBreadcrumbData(breadcrumb.data);
     }
   });
-  // 성능 이벤트(M-2) 칸 — 오류 이벤트에는 없어 그때는 그냥 지나간다. `contexts.trace.data` 는 아래 contexts 칸이 이미 훑는다.
+  // 성능 이벤트 칸 — 오류 이벤트에는 없어 그때는 그냥 지나간다. `contexts.trace.data` 는 아래 contexts 칸이 이미 훑는다.
   safely(() => {
     if (typeof event.transaction === 'string')
       event.transaction = scrubText(event.transaction);
@@ -257,7 +252,7 @@ export type SentryTracing = {
 };
 
 /**
- * 크래시 수집 초기화(TRIP-935) + 성능 추적(TRIP-1743 M-2). DSN(`EXPO_PUBLIC_SENTRY_DSN`)이 있을 때만 init 한다.
+ * 크래시 수집 초기화 + 성능 추적. DSN(`EXPO_PUBLIC_SENTRY_DSN`)이 있을 때만 init 한다.
  * DSN 이 없으면 init 하지 않는다 — 개발/CI 에서 조용히 비활성되는 것은 의도다(EAS env 에 등록한 빌드만 수집).
  * `sendDefaultPii` 는 켜지 않는다 — 위치·토큰 같은 개인정보를 이벤트에 싣지 않는다. 나가기 직전 `beforeSend` 로 한 번 더 지운다.
  * 성능 추적은 네이티브에서만 켠다(웹은 오류 수집만, null 반환). XHR/fetch 스팬은 끄고 `tracePropagationTargets: []` 로 추적 헤더를 어디에도 붙이지 않는다 —
