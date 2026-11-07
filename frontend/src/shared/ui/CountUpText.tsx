@@ -21,19 +21,22 @@ export const COUNT_UP_DURATION_MS = 900;
  * 그대로라 형식이 흔들리지 않는다. 0·`—`(측정 못 함) 같은 값은 애니메이션 없이 그대로(가짜 숫자 금지).
  * 동작 줄이기면 처음부터 최종값. 답이 오기 전엔 안 보이게 두어 0 → 최종값으로 번쩍이는 것을 막는다.
  * 목표 문자열이 바뀌지 않는 한 한 번만 재생한다. 끝 값은 항상 입력 문자열 그대로(INV-2).
+ * `revealing` 이 꺼지면(TRIP-1831 — 이미 본 요약) 동작 줄이기와 같게 처음부터 최종값이고 답 대기 중에도 숨기지 않는다.
  * TRIP-1736 — 시계는 reanimated(UI 스레드)가 돌리고, 표시 문자열이 실제로 바뀔 때만 JS 로 넘겨 다시 그린다.
  */
 export function CountUpText({
   value,
   className,
+  revealing = true,
 }: {
   value: string;
   className?: string;
+  revealing?: boolean;
 }): ReactElement {
   const reduce = useReduceMotion();
   const clock = useSharedValue(0);
   const [shown, setShown] = useState(() => countUpText(value, 0));
-  const animate = reduce === false && isCountable(value);
+  const animate = revealing && reduce === false && isCountable(value);
 
   useEffect(() => {
     if (!animate) return;
@@ -59,7 +62,11 @@ export function CountUpText({
 
   return (
     <Text
-      className={reduce === null ? `${className ?? ''} opacity-0` : className}
+      className={
+        revealing && reduce === null
+          ? `${className ?? ''} opacity-0`
+          : className
+      }
     >
       {animate ? shown : value}
     </Text>
