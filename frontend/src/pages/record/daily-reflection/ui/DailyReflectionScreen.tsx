@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { formatDayLabel } from '@/entities/trip';
 import { MapView, type MapCenter, type MapPin } from '@/shared/map';
+import { PhotoAccessNotice } from '@/shared/photo/index.view';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { RecordNavBar } from '@/widgets/bottom-nav-bar';
 import type { ReflectionStats } from '@/shared/api/index.schemas';
@@ -99,6 +100,8 @@ export interface DailyReflectionScreenProps {
   hidePhotoGrid: boolean;
   // photos 는 읽기만 하므로 readonly — 호출자가 `[] as const` 로 넘겨도 받는다(가변 배열도 그대로 할당됨).
   photos: readonly { uri: string }[];
+  /** TRIP-1803 — 이 기기에서 못 푼 사진 장수. 1 이상이면 격자 아래 한 줄 + 권한 안내. 미주입 = 없음. */
+  unresolvedPhotoCount?: number;
   changeSummary?: string | null;
   mapCenter?: MapCenter;
   mapPins?: MapPin[];
@@ -147,6 +150,7 @@ export function DailyReflectionScreen({
   mapNotice,
   hidePhotoGrid,
   photos,
+  unresolvedPhotoCount = 0,
   changeSummary,
   mapCenter,
   mapPins,
@@ -538,6 +542,18 @@ export function DailyReflectionScreen({
               ) : (
                 <ReflectionPhotoGrid photos={photos} />
               )}
+
+              {unresolvedPhotoCount > 0 ? (
+                <>
+                  <Text
+                    testID="reflection-daily-photo-unresolved"
+                    className="font-noto text-caption text-muted"
+                  >
+                    {`불러올 수 없는 사진 ${unresolvedPhotoCount}장`}
+                  </Text>
+                  <PhotoAccessNotice testID="reflection-daily-photo-access-notice" />
+                </>
+              ) : null}
 
               {/* changeSummary 는 data-insufficient 에서만 그린다(default 에선 prop 만 무회귀로 유지). */}
               {face === 'data-insufficient' && changeSummary ? (

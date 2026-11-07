@@ -14,25 +14,58 @@
  * ISO 날짜·UUID 강제는 어느 정본에도 없다(넣으면 요구사항 발명이다). 그 자리를 대신하는 것이
  * 구분자 `#`다: `('2026-09-1','4abc')`와 `('2026-09-14','abc')`는 그냥 이으면 같은 문자열이
  * 되지만 구분자가 있으면 갈라진다.
+ *
+ * TRIP-1812 · 같은 날 같은 장소가 둘이면 `ordinal`(앞선 같은 장소 수)을 접미로 붙인다(BR-U2-04 `#{ordinal}` 확장). 첫 슬롯은 접미가 없어
+ * 같은 장소가 없는 일정의 키는 글자까지 그대로다. **편집기 안에서만 쓴다** — 서버 slotKey 는 여전히 `{date}#{poiId}` 라 요청에 싣지 않는다.
+ * 자리 번호가 아닌 이유: 다른 장소를 끌거나 빼도 눌린 카드를 계속 가리켜야 한다.
  */
-export function buildSlotKey(date: string, poiId: string): string {
-  return `${date}#${poiId}`;
+export function buildSlotKey(date: string, poiId: string, ordinal = 0): string {
+  return ordinal > 0 ? `${date}#${poiId}#${ordinal}` : `${date}#${poiId}`;
 }
 
 export type ParsedSlotKey =
-  { kind: 'ok'; date: string; poiId: string } | { kind: 'invalid' };
+  | { kind: 'ok'; date: string; poiId: string; ordinal?: number }
+  | { kind: 'invalid' };
 
 /**
- * 키를 다시 두 값으로 가른다. 구분자가 정확히 한 번 들어간 키만 `ok`다 — `#`이 없거나 둘
- * 이상이면 어느 조각이 날짜인지 원리적으로 정해지지 않아 왕복이 성립하지 않는다.
+ * 키를 다시 값으로 가른다. `{date}#{poiId}` 와 1 이상 ordinal 접미(`#N`)만 `ok`다 — 그 밖은 어느 조각이 무엇인지
+ * 정해지지 않아 왕복이 성립하지 않는다. `#0` 이 invalid 인 이유는 접미 없는 키와 같은 슬롯이 두 이름을 갖게 되기 때문이다.
  */
 export function parseSlotKey(key: string): ParsedSlotKey {
   const parts = key.split('#');
-  if (parts.length !== 2) {
-    return { kind: 'invalid' };
+  if (parts.length === 2) {
+    return { kind: 'ok', date: parts[0], poiId: parts[1] };
+  }
+  if (parts.length === 3 && /^[1-9]\d*$/.test(parts[2])) {
+    return {
+      kind: 'ok',
+      date: parts[0],
+      poiId: parts[1],
+      ordinal: Number(parts[2]),
+    };
   }
 
-  return { kind: 'ok', date: parts[0], poiId: parts[1] };
+  return { kind: 'invalid' };
+}
+
+/** `slots[index]` 앞에 같은 장소가 몇 곳인가 — 같은 날 같은 장소 카드를 가르는 번호(TRIP-1812). */
+export function slotOrdinal(
+  slots: readonly { poiId: string }[],
+  index: number
+): number {
+  return slots
+    .slice(0, index)
+    .filter((slot) => slot.poiId === slots[index]?.poiId).length;
+}
+
+/** 그 장소의 `ordinal` 번째 슬롯 자리. 없으면 -1. `slotOrdinal` 의 역. */
+export function findSlotIndex(
+  slots: readonly { poiId: string }[],
+  poiId: string,
+  ordinal = 0
+): number {
+  let seen = 0;
+  return slots.findIndex((slot) => slot.poiId === poiId && seen++ === ordinal);
 }
 
 export type SlotKeySet =

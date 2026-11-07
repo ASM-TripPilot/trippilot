@@ -4,8 +4,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
 
-import { buildSlotKey } from '@/entities/itinerary-slot';
-import { buildStatePins } from '@/entities/itinerary-slot';
+import {
+  buildSlotKey,
+  buildStatePins,
+  slotDisplayName,
+} from '@/entities/itinerary-slot';
 import { formatDayLabel } from '@/entities/trip';
 import { deriveStayAttribution } from '../model/stayAttribution';
 import { failedUnlessNotFound } from '../model/failedUnlessNotFound';
@@ -167,7 +170,7 @@ export function TripRecordsPage({
   const nameByPoi = new Map(
     days
       .flatMap((d) => d.slots)
-      .map((slot) => [slot.poiId, slot.nameKo ?? slot.poiId])
+      .map((slot) => [slot.poiId, slotDisplayName(slot) ?? slot.poiId])
   );
 
   const activeSlots = days.find((d) => d.date === activeDay)?.slots ?? [];
@@ -250,13 +253,12 @@ export function TripRecordsPage({
   );
   const planRows: RecordPlanRowVM[] = visitsOfDay
     ? activeSlots
-        .map((slot) => ({
+        .map((slot, index) => ({
           slotKey: buildSlotKey(activeDay, slot.poiId),
           poiId: slot.poiId,
-          nameKo: slot.nameKo ?? slot.poiId,
-          planOrder: planOrderBySlotKey.get(
-            buildSlotKey(activeDay, slot.poiId)
-          ),
+          nameKo: slotDisplayName(slot) ?? slot.poiId,
+          // 자리로 센다 — 슬롯 키로 찾으면 같은 날 같은 장소 행이 같은 번호를 받는다(TRIP-1812).
+          planOrder: index + 1,
         }))
         .filter((row) => !recordedSlotKeys.has(row.slotKey))
     : [];

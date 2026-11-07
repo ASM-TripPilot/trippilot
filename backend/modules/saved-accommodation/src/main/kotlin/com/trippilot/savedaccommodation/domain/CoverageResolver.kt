@@ -97,4 +97,10 @@ interface TripBaseDayRepository {
 
     /** 하루 1행(PK = trip_id, day_date) — 다시 고르면 덮어쓴다. */
     fun save(day: TripBaseDay): TripBaseDay
+
+    /** 그 여행의 날짜별 거점을 [days] 칸 민다(TRIP-1789). */
+    fun shiftDates(tripId: UUID, days: Long)
+
+    /** 새 기간 [start, end] 밖의 날짜별 거점을 지운다. */
+    fun deleteOutside(tripId: UUID, start: LocalDate, end: LocalDate)
 }

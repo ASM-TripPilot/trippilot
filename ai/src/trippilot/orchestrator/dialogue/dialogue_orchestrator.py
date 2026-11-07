@@ -521,7 +521,9 @@ def _squash(text: str) -> str:
 # "이 근처"·"여기 주변"·"숙소 근처" 같은 지시어는 지역 이름이 아니다 — 분류가 region 칸에 담아도(2026-10-21 실측 "근처·주변" 다섯 말
 # 40회 중 0.2.3 9회·0.2.4 5회) 핸들러에는 없는 것으로 넘긴다. 탐색은 일정 근처로 가고, 여행도 없으면 지역을 되묻는다 — 지역 표에서
 # 못 찾아 "그 지역은 아직 찾아 줄 수 없어요"로 끝나지 않게. 날씨도 같은 칸을 읽는다(일정 장소로 간다)
-_DEICTIC_REGION = re.compile(r"(?:(?:이|그|저|여기|거기|숙소|호텔|지금)\s*)?(?:근처|주변|부근|인근|가까이|여기|거기)(?:\s*(?:근처|주변|부근))?")
+# "현재 위치"·"내 위치"도 지역이 아니다 — 지역 칸에 담기면 표에서 못 찾아 앵커가 없다(위치가 실려 와도 말한 지역이 이긴다, 2026-11-06)
+_DEICTIC_REGION = re.compile(r"(?:(?:이|그|저|여기|거기|숙소|호텔|지금)\s*)?(?:근처|주변|부근|인근|가까이|여기|거기)(?:\s*(?:근처|주변|부근))?"
+                             r"|(?:현재|지금|내|제)\s*위치(?:\s*(?:근처|주변|부근))?")
 
 
 def _without_deictic_region(args: Mapping[str, str]) -> dict[str, str]:
@@ -1364,6 +1366,15 @@ class DialogueOrchestrator:
         if closed and any(_foreign_place(part, known) for part in parts):
             self._fallback(inp, "llm", *_ANSWER_MODES, "place_not_in_facts")
             return DialogueAnswer.from_facts(facts)
+        if not closed:
+            # 일반 답(거리·상세·날씨)도 사실·스냅샷·사용자 말 밖의 장소 이름은 지어낸 것이다 — 거리 답에 다른 장소명이 끼어도 통과했다
+            # (2026-11-06 Codex 리뷰). `_foreign_place` 를 그대로 걸면 사용자가 말한 목적지("협재해수욕장까지")·일반명사가 걸리므로
+            # 지식 답(2‴)과 같은 대조 — 한 말은 아는 이름, 남은 이름은 장소 DB 등록 여부로 가른다
+            said = tuple(k for k in (_squash(t) for t in (inp.utterance, *(turn.text for turn in inp.recent_turns), *memory_lines)) if k)
+            unknown = list(dict.fromkeys(n for part in parts for n in _knowledge_unknown_places(part, known, said)))
+            if unknown and not self._registered(inp, unknown):
+                self._fallback(inp, "llm", *_ANSWER_MODES, "place_not_in_facts")
+                return DialogueAnswer.from_facts(facts)
         try:
             # 결정론 각주(웹 확인 '찾는 중'·'웹에서 확인한 정보')가 있으면 그것이 이긴다 — LLM 이 각주를 따로 쓰면 안내가 사라졌다(리뷰 재현)
             return DialogueAnswer.from_facts(facts, text=draft.text,

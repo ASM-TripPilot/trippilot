@@ -1,6 +1,10 @@
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
-import { formatOpeningHoursLabel } from '@/entities/itinerary-slot';
-import { parseSlotKey } from '@/entities/itinerary-slot';
+import {
+  formatOpeningHoursLabel,
+  parseSlotKey,
+  slotDisplayCategory,
+  slotDisplayName,
+} from '@/entities/itinerary-slot';
 
 /**
  * TRIP-749 · 트리거 slotKey → i03 위험 상세 시트 "영향 장소" 행.
@@ -26,15 +30,16 @@ export function riskAffectedRow(
   const slots = days.find((day) => day.date === parsed.date)?.slots ?? [];
   const index = slots.findIndex((slot) => slot.poiId === parsed.poiId);
   const slot = slots[index];
-  if (!slot?.nameKo) return null;
+  const name = slot ? slotDisplayName(slot) : null;
+  if (!slot || !name) return null;
 
   const meta = [
     `${index + 1}번째`,
-    slot.category,
+    slotDisplayCategory(slot),
     formatOpeningHoursLabel(slot.openingHours),
   ]
     .filter((part) => part)
     .join(' · ');
 
-  return { time: slot.startAt.slice(0, 5), name: slot.nameKo, meta };
+  return { time: slot.startAt.slice(0, 5), name, meta };
 }

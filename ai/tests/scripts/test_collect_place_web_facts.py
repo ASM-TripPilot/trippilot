@@ -121,11 +121,28 @@ class _Client:
 _T = {"name": "가게", "kind": "음식점", "address": "서울"}
 
 
-def _lookup(*outcomes):
+def _lookup(*outcomes, budget=None):
     client = _Client(*outcomes)
     backoff = c._Backoff(rpm=6000)
     backoff.hit = lambda *a, **k: None  # 물러남 대기는 재지 않는다
-    return c.lookup(client, _T, backoff), client.calls
+    return c.lookup(client, _T, backoff, budget=budget), client.calls
+
+
+def test_budget_is_reserved_before_each_call_so_parallel_workers_cannot_overrun() -> None:
+    """응답 뒤에만 차감하면 일꾼 4개가 같은 잔액을 보고 함께 들어가 상한을 넘겼다(2026-11-06 Codex 리뷰: 0.03 상한에 0.08 지출)."""
+    b = c._Budget(0.03)
+    assert [b.reserve(0.02) for _ in range(4)] == [True, True, False, False]  # 0.03→0.01→-0.01: 셋째부터 못 들어간다
+    b.settle(0.02, 0.005), b.settle(0.02, 0.005)
+    assert round(b.left, 5) == 0.02 and not b.exhausted
+    assert c._Budget(None).reserve(1e9)  # 상한 없음
+
+
+def test_lookup_stops_before_asking_when_the_budget_is_gone_and_settles_to_the_real_cost() -> None:
+    res, calls = _lookup('{"found": false, "facts": []}', budget=c._Budget(0.0))
+    assert res["budget"] and calls == 0
+    b = c._Budget(1.0)
+    res, calls = _lookup('{"found": false, "facts": []}', budget=b)
+    assert calls == 1 and 1.0 - b.left == pytest.approx(res["cost"], abs=1e-5)  # 예약분은 실비로 정산된다(결과 cost 는 5자리 반올림)
 
 
 def test_auth_rejection_is_fatal_and_is_not_retried() -> None:
@@ -254,3 +271,19 @@ def test_thinking_low_is_the_default_and_raises_the_output_cap(monkeypatch) -> N
     assert c.THINKING == "low"  # 11-02 시험: 지시문을 조이고 effort low — 근거 없음 4%·지원 90%(사고 끔은 지원 81%)
     c.ask_claude(_Client(), "질문")
     assert seen[0]["output_config"] == {"effort": "low"} and "thinking" not in seen[0] and seen[0]["max_tokens"] == 8000
+
+
+def test_검색_결과_태그_모음_페이지는_근거가_아니다() -> None:
+    """여러 가게가 섞인 목록은 그 장소의 근거가 아니다 — 11-06 표본 40건 중 polle 태그 페이지가 다른 가게 얘기였다.
+    장소 전용 페이지는 질의 문자열이 붙어도 남는다(bluer `/restaurants/…?query=`, 114 `/search/detail?comp_id=`)."""
+    listing = ["https://www.diningcode.com/list.dc?query=안국동+점심", "https://polle.com/posts/tag/닭도리탕",
+               "https://www.siksinhot.com/search?keywords=종로", "https://www.siksinhot.com/toplist/123",
+               "https://www.daangn.com/kr/search/local-profile/?q=종로", "https://www.albamon.com/total-search?keyword=x",
+               "https://korea.beautihost.com/seoul/search/?q=sujeong", "https://bizno.net/?query=마작골",
+               "https://www.diningcode.com/rank/종로맛집", "https://www.daangn.com/kr/local-profile/?in=종로동&search=냉면",
+               "https://soonwidot.co.kr/rank/detail.php?stx=종로", "https://example.squarespace.com/blog/tag/seoul",
+               "https://wanderlog.com/list/geoCategory/123/best", "https://grandculture.net/dir?search=도해촌"]
+    detail = ["https://www.bluer.co.kr/restaurants/12530?query=&foodType=",
+              "https://www.114.co.kr/search/detail?comp_id=654490", "https://guide.michelin.com/kr/ko/seoul/restaurant/muoki"]
+    rec = _rec(*[(f"사실 {i}", u, None) for i, u in enumerate(listing + detail)], cites=listing + detail)
+    assert [f["url"] for f in c.clean_facts(rec)] == detail

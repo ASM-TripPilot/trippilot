@@ -40,6 +40,16 @@
 
 > **[관측 · TRIP-302, 2026-08-13] `VisitSlot`에 "필수 방문지" 여부를 직접 나타내는 필드가 없다.** 위 필드 목록의 `isFixed`(앵커·시각 고정)는 "시각이 고정됐는가"를 뜻할 뿐, "이 슬롯이 사용자가 등록한 필수 방문지(`must_visit`, U1/C6 소유 — §5 소유 경계)인가"와 동치가 아니다 — 시각 고정 없이 등록된 필수 방문지(순서만 강제, 시각 자유)는 `isFixed=false`로 저장돼 다른후보 교체(BR-U3-23~26)를 막을 근거가 슬롯 레벨에 없다. 실제 계약(근거: `backend/docs/design/openapi.yaml:1379` `slots[]` required `[poiId, startAt, endAt, isFixed, endsNextDay, hasViolation, tags]` 실측)에도 must-visit 플래그가 없다. TRIP-302 h24 슬라이스3(시각조정)은 이 공백과 무관하지만, 같은 티켓의 "다른 후보" 슬라이스는 필수 슬롯에서 교체 진입점을 억제해야 하는데 `isFixed`를 근사값으로 쓸 수밖에 없어 **이연했다**(근거: TRIP-302 이연 결정(가), 2026-08-13). 백엔드 인지가 필요한 계약 공백 — 다음 착수 시 슬롯에 `sourceMustVisitId`(nullable) 또는 별도 `isMustVisit` 플래그 추가를 검토해야 한다. **요구사항 근거가 아니라 관측이다** — 다음 사이클이 이 문단을 `isFixed`의 확정된 의미 확장으로 인용하지 말 것.
 
+
+> **[개정 · 2026-11-07 · TRIP-1816 — TRIP-1795·1801 구현 반영]** §1.3 `VisitSlot` — 필드 2개가 더 있다(`V2.93__visit_slot_display_override.sql`).
+>
+> | 필드 | 규칙 |
+> |---|---|
+> | `displayName` | 이 여행에서만 쓰는 표시 이름. nullable(`varchar(60)`) — null = 덮어쓰기 없음. 규칙은 `business-rules.md` BR-U3-36 |
+> | `displayCategory` | 이 여행에서만 쓰는 표시 분류. nullable(`varchar(12)`). 어휘는 place-data 소유라 DB CHECK 를 두지 않고 앱이 판정한다(400) |
+>
+> `sourcePoiId`·`poiSnapshotId`가 가리키는 장소 원본은 바뀌지 않는다(INV-1). 리비전 스냅숏(`ItineraryRevision`)도 두 값을 함께 담는다.
+
 ---
 
 ## 2. 신설 엔티티

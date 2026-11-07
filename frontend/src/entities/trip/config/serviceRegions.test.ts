@@ -6,11 +6,14 @@ import { SERVICE_REGIONS } from '@/entities/trip';
  * 이름은 서버 별칭(짧은 이름) — `/places?region=` 은 이름을 받는다.
  */
 describe('SERVICE_REGIONS', () => {
-  it('SR1 · 서울 11 · 부산 26 · 제주 50, 이 순서다', () => {
+  it('SR1 · 서울 11 · 부산 26 · 제주 50 · 강원 51 · 경북 47 · 경남 48, 이 순서다 (TRIP-1807)', () => {
     expect(SERVICE_REGIONS).toEqual([
       { code: '11', name: '서울' },
       { code: '26', name: '부산' },
       { code: '50', name: '제주' },
+      { code: '51', name: '강원' },
+      { code: '47', name: '경북' },
+      { code: '48', name: '경남' },
     ]);
   });
 });

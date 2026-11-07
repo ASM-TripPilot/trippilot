@@ -36,6 +36,7 @@ Overture 주소 칸은 자유 문자열이라 제각각이다 — 실측(서울�
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from collections import Counter, defaultdict
@@ -245,17 +246,16 @@ class SidoVeto:
         gy, gx = round(lat / _CELL), round(lng / _CELL)
         best: str | None = None
         best_d = _VETO_RADIUS_M
-        # 고리를 넓히며 찾고, 뭔가 찾은 고리에서 멈춘다 — 한 칸이 1.1km 라 충분하다
-        for radius in (1, 2, 3, 4):
-            for dy in range(-radius, radius + 1):
-                for dx in range(-radius, radius + 1):
-                    for point, sido in self._grid.get((gy + dy, gx + dx), ()):
-                        d = _haversine_m(here, point)
-                        if d < best_d:
-                            best, best_d = sido, d
-            if best is not None:
-                return best
-        return None
+        # 반경 안 칸을 전부 훑는다 — 뭔가 찾은 고리에서 멈추면 대각 칸의 먼 POI(최대 1.55km)가
+        # 바깥 고리의 가까운 POI 를 가려 다른 시도를 돌려준다(2026-11-06 Codex 리뷰). 121칸이라 비용은 없다.
+        reach = math.ceil(_VETO_RADIUS_M / (_CELL * 111_000)) + 1
+        for dy in range(-reach, reach + 1):
+            for dx in range(-reach, reach + 1):
+                for point, sido in self._grid.get((gy + dy, gx + dx), ()):
+                    d = _haversine_m(here, point)
+                    if d < best_d:
+                        best, best_d = sido, d
+        return best
 
     def rejects(self, address: str, lat: float, lng: float) -> bool:
         """복원한 주소의 시도가 좌표와 어긋나면 True. 아는 POI 가 없으면 False(보류)."""

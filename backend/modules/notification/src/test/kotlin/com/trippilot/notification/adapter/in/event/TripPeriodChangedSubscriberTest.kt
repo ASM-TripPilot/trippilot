@@ -1,6 +1,7 @@
 package com.trippilot.notification.adapter.`in`.event
 
 import com.trippilot.core.event.EventEnvelope
+import com.trippilot.itinerarygeneration.api.ItineraryPlanFacade
 import com.trippilot.notification.application.FakePlans
 import com.trippilot.notification.application.FakeSchedules
 import com.trippilot.notification.application.FakeTripOwner
@@ -48,14 +49,30 @@ class TripPeriodChangedSubscriberTest : StringSpec({
         aggregateId = aggregateId, correlationId = null, occurredAt = clock.instant(), payload = payload,
     )
 
-    class Fixture(clock: Clock) {
+    class Fixture(clock: Clock, hasItinerary: () -> Boolean = { true }) {
         val schedules = FakeSchedules()
         val trips = FakeTripOwner()
-        val service = NotificationScheduleService(trips, schedules, NoCopies(), FakePlans(), clock, ReminderCopyRetries(listOf(180_000L)), NoDeletionPending)
+        private val plans = object : ItineraryPlanFacade by FakePlans() {
+            override fun hasItinerary(accountId: UUID, tripId: UUID) = hasItinerary()
+        }
+        val service = NotificationScheduleService(trips, schedules, NoCopies(), plans, clock, ReminderCopyRetries(listOf(180_000L)), NoDeletionPending)
         val subscriber = TripPeriodChangedSubscriber(service)
     }
 
     fun Fixture.period(start: String, end: String) = trips.put(tripId, acc, LocalDate.parse(start), LocalDate.parse(end))
+
+    "일정을 버린 여행 — 예약을 다시 세우지 않고 비운다(TRIP-1789 · 없는 일정의 오늘의 일정이 울리면 안 된다)" {
+        var kept = true
+        val f = Fixture(clock) { kept }
+        f.period("2026-08-10", "2026-08-12")
+        f.service.reload(tripId)
+        kept = false
+        f.period("2026-08-11", "2026-08-15")
+
+        f.subscriber.handle(envelope(tripId.toString()))
+
+        f.schedules.findPendingByTrip(tripId) shouldBe emptyList()
+    }
 
     "예약이 있는 여행 — 기간이 바뀌면 새 기간으로 다시 선다" {
         val f = Fixture(clock)

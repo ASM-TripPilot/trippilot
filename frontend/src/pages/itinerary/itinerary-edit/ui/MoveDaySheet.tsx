@@ -7,12 +7,20 @@ import BottomSheet, {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
-import { CloseGlyph } from '@/shared/ui/glyphs';
+import {
+  ChevronRight24Glyph,
+  CloseGlyph,
+  PencilGlyph,
+} from '@/shared/ui/glyphs';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 
 import type { MoveDayOption } from '../model/moveDayOptions';
 
 /**
+ * TRIP-1795 · 이 시트는 이제 「장소 시트」다 — 날짜 섹션(`move`)은 옮길 수 있는 장소(고정·방문 완료·하루 일정이 아닌)에만 있고, 어느 장소든
+ * 「이름·분류 고치기」 행(`onPressRename`)이 있다. `move === null` 이면 날짜 라벨·일차 칩·힌트·옮기기 CTA 가 전부 없다 — `moveSlot` 은 고정 슬롯을
+ * 막지 않으므로 이 `null` 이 옮기기의 유일한 방어선이다(판정은 페이지의 `canMove`). 행 누름은 고치기 시트가 이 시트를 대신하게 만든다(페이지).
+ *
  * TRIP-1793 · 「다른 날로 옮기기」 장소 시트(Figma A3 ① `5191:3909`) — 어느 일차로 옮길지 칩으로 고르고 「N일차로 옮기기」로 확정한다.
  * 선택 상태는 시트가 쥔다(페이지가 조건부로 마운트하므로 열 때마다 `initialDate` 에서 새로 시작). 막힌 칩(현재 날·이미 그 장소가 있는 날)은
  * `Pressable disabled` 라 눌려도 아무 일이 없다. 확정은 고른 날짜를 `onConfirm` 으로 알릴 뿐 옮기는 일은 페이지(시각 시트 → 스토어)가 한다.
@@ -27,9 +35,14 @@ export interface MoveDaySheetProps {
   photo?: { imageUrl: string | null; poiId: string; category?: string | null };
   /** 이름 아래 한 줄(예: `1일차 · 14:30–15:15`) — 페이지가 조립한다. */
   subtitle?: string;
-  options: MoveDayOption[];
-  initialDate: string | null;
-  onConfirm: (toDate: string) => void;
+  /** 옮기기 섹션 입력 — null 이면 날짜 섹션 전체가 없다(고정·방문 완료·하루 일정). */
+  move: {
+    options: MoveDayOption[];
+    initialDate: string | null;
+    onConfirm: (toDate: string) => void;
+  } | null;
+  /** 「이름·분류 고치기」 행 누름 — 시트 교체는 페이지가 한다. */
+  onPressRename: () => void;
   onClose: () => void;
 }
 
@@ -43,12 +56,12 @@ export function MoveDaySheet({
   name,
   photo,
   subtitle,
-  options,
-  initialDate,
-  onConfirm,
+  move,
+  onPressRename,
   onClose,
 }: MoveDaySheetProps): ReactElement {
-  const [selected, setSelected] = useState(initialDate);
+  const options = move?.options ?? [];
+  const [selected, setSelected] = useState(move?.initialDate ?? null);
   const target = options.find((option) => option.date === selected);
   const hasDuplicate = options.some((option) => option.blocked === 'duplicate');
 
@@ -103,81 +116,100 @@ export function MoveDaySheet({
           </Pressable>
         </View>
 
-        <Text className="font-noto-bold text-label font-bold text-ink">
-          날짜
-        </Text>
-        <View className="w-full flex-row flex-wrap gap-sm">
-          {options.map((option) => {
-            const isSelected = option.date === selected;
-            return (
-              <Pressable
-                key={option.date}
-                testID={`editor-move-day-${option.dayIndex}`}
-                accessibilityRole="button"
-                accessibilityState={{
-                  selected: isSelected,
-                  disabled: option.blocked !== null,
-                }}
-                disabled={option.blocked !== null}
-                onPress={() => setSelected(option.date)}
-                className={`rounded-pill px-[14px] py-sm ${
-                  isSelected
-                    ? 'bg-primary'
-                    : option.blocked !== null
-                      ? 'border border-hairline bg-surface-strong'
-                      : 'border border-hairline-strong bg-canvas'
-                }`}
+        {move === null ? null : (
+          <>
+            <Text className="font-noto-bold text-label font-bold text-ink">
+              날짜
+            </Text>
+            <View className="w-full flex-row flex-wrap gap-sm">
+              {options.map((option) => {
+                const isSelected = option.date === selected;
+                return (
+                  <Pressable
+                    key={option.date}
+                    testID={`editor-move-day-${option.dayIndex}`}
+                    accessibilityRole="button"
+                    accessibilityState={{
+                      selected: isSelected,
+                      disabled: option.blocked !== null,
+                    }}
+                    disabled={option.blocked !== null}
+                    onPress={() => setSelected(option.date)}
+                    className={`rounded-pill px-[14px] py-sm ${
+                      isSelected
+                        ? 'bg-primary'
+                        : option.blocked !== null
+                          ? 'border border-hairline bg-surface-strong'
+                          : 'border border-hairline-strong bg-canvas'
+                    }`}
+                  >
+                    <Text
+                      className={`font-noto-bold text-body font-bold ${
+                        isSelected
+                          ? 'text-on-primary'
+                          : option.blocked !== null
+                            ? 'text-muted-soft'
+                            : 'text-body'
+                      }`}
+                    >
+                      {`${option.dayIndex}일차`}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {target === undefined ? null : (
+              <Text
+                testID="editor-move-hint"
+                className="font-noto text-caption text-muted"
               >
-                <Text
-                  className={`font-noto-bold text-body font-bold ${
-                    isSelected
-                      ? 'text-on-primary'
-                      : option.blocked !== null
-                        ? 'text-muted-soft'
-                        : 'text-body'
-                  }`}
-                >
-                  {`${option.dayIndex}일차`}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {target === undefined ? null : (
-          <Text
-            testID="editor-move-hint"
-            className="font-noto text-caption text-muted"
-          >
-            {`${target.dayIndex}일차 마지막에 넣어요 · 다음 단계에서 시각을 골라요`}
-          </Text>
+                {`${target.dayIndex}일차 마지막에 넣어요 · 다음 단계에서 시각을 골라요`}
+              </Text>
+            )}
+            {hasDuplicate ? (
+              <Text
+                testID="editor-move-duplicate-hint"
+                className="font-noto text-caption text-muted"
+              >
+                이미 이 날에 있는 장소예요
+              </Text>
+            ) : null}
+          </>
         )}
-        {hasDuplicate ? (
-          <Text
-            testID="editor-move-duplicate-hint"
-            className="font-noto text-caption text-muted"
-          >
-            이미 이 날에 있는 장소예요
-          </Text>
-        ) : null}
-
+        {/* TRIP-1795 · 이름·분류 고치기 진입 행(Figma 5223:4455) — 연한 회색 박스, 연필 18 · 쉐브론 16. */}
         <Pressable
-          testID="editor-move-confirm"
+          testID="editor-move-rename"
           accessibilityRole="button"
-          disabled={target === undefined}
-          onPress={() => {
-            if (target !== undefined) onConfirm(target.date);
-          }}
-          className={`h-[52px] w-full items-center justify-center rounded-button ${
-            target === undefined ? 'bg-hairline-strong' : 'bg-primary'
-          }`}
+          onPress={onPressRename}
+          className="h-[48px] w-full flex-row items-center gap-sm rounded-button bg-surface-soft px-lg"
         >
-          <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-            {target === undefined
-              ? '옮기기'
-              : `${target.dayIndex}일차로 옮기기`}
+          <PencilGlyph size={18} color="ink" />
+          <Text className="flex-1 font-noto-bold text-body font-bold text-ink">
+            이름·분류 고치기
           </Text>
+          <ChevronRight24Glyph size={16} color="muted" />
         </Pressable>
+
+        {move === null ? null : (
+          <Pressable
+            testID="editor-move-confirm"
+            accessibilityRole="button"
+            disabled={target === undefined}
+            onPress={() => {
+              if (target !== undefined) move?.onConfirm(target.date);
+            }}
+            className={`h-[52px] w-full items-center justify-center rounded-button ${
+              target === undefined ? 'bg-hairline-strong' : 'bg-primary'
+            }`}
+          >
+            <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
+              {target === undefined
+                ? '옮기기'
+                : `${target.dayIndex}일차로 옮기기`}
+            </Text>
+          </Pressable>
+        )}
       </BottomSheetView>
     </BottomSheet>
   );

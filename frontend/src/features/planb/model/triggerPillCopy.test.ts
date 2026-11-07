@@ -150,3 +150,16 @@ describe('triggerPillCopy — P5 변형·날짜어 (상황 감지 FE-B)', () => 
     }
   });
 });
+
+describe('triggerPillCopy — 고친 이름 (TRIP-1795 AC-3)', () => {
+  // 변수로 만들어 넘긴다 — 슬롯 타입에 새 칸이 없어도 객체 리터럴 초과 속성 검사에 안 걸린다(구현이 칸을 더한다).
+  const renamed = { ...HAEUNDAE, displayName: '우리 아지트' };
+
+  it.each([
+    ['WEATHER', '비 예보 · 우리 아지트 17시'],
+    ['DELAY', '이동 지연 · 우리 아지트 방면'],
+    ['CLOSURE', '휴무 · 우리 아지트 주변 시설'],
+  ] as const)('%s 문구의 대상이 고친 이름이다 → "%s"', (kind, expected) => {
+    expect(triggerPillCopy(kind, renamed)).toBe(expected);
+  });
+});

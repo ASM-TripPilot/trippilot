@@ -75,7 +75,7 @@ def test_gate_drops_an_overlong_day_but_keeps_the_place() -> None:
 def test_extraction_prompt_asks_for_the_day_as_said() -> None:
     prompt, ref = PromptRegistry(_PROMPTS).render(
         LlmFeature.REPLAN_REQUEST_EXTRACTION, build_extraction_vars("서울광장 꼭, 2일차에", "11월 5일 (목)", "06:00~21:00"))
-    assert ref.version == "0.5.0"  # 0.4.1 + places[].day
+    assert ref.version == "0.6.0"  # 0.5.0(places[].day) + 창 밖 시각 그대로
     assert '"day": "string|null"' in prompt  # 출력 스키마
     assert '"day":"2일차"' in prompt          # 사용자 보고 문장의 예시 — 빼 달라는 날(1일차)이 아니라 가고 싶은 날
     assert "지어내지" in prompt

@@ -1533,3 +1533,35 @@ describe('SlotProgressCard · 사진 붙이는 중 줄·다시 시도 (TRIP-1797
     }
   );
 });
+
+// ── TRIP-1795 · i01 허브 카드 이름이 "이 여행에서 부르는 이름"을 따른다(AC-3) ─────────────────────────
+// 3동작 뼈대: 준비=덮어쓴 슬롯 × 세 상태 → 실행=렌더 → 단언=이름 leaf 문자열. 덮어쓰기 없으면 원본.
+describe('SlotProgressCard · SD — 고친 이름 표시 (TRIP-1795)', () => {
+  it.each(['done', 'active', 'upcoming'] as const)(
+    'SD-%s · 고친 이름이 이름 leaf 에 그려지고 원본 이름은 안 보인다',
+    (state) => {
+      render(
+        <SlotProgressCard
+          slot={mkSlot({ displayName: '우리 아지트' })}
+          date={DATE}
+          state={state}
+        />
+      );
+
+      expect(screen.getByTestId(id('name'))).toHaveTextContent('우리 아지트');
+      expect(screen.queryByText('감천문화마을')).toBeNull();
+    }
+  );
+
+  it('SD-none · 덮어쓰기가 없으면(null 포함) 원본 이름 그대로다', () => {
+    render(
+      <SlotProgressCard
+        slot={mkSlot({ displayName: null })}
+        date={DATE}
+        state="upcoming"
+      />
+    );
+
+    expect(screen.getByTestId(id('name'))).toHaveTextContent('감천문화마을');
+  });
+});

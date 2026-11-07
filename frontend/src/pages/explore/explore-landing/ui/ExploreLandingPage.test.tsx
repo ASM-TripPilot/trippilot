@@ -71,7 +71,7 @@ jest.mock('@/shared/api/generated/places/places', () => ({
   useGetPlaces: (...args: unknown[]) => mockUseGetPlaces(...args),
 }));
 
-// TRIP-1432 — 전국 d01 장소 레인은 서비스 지역 3곳 병렬 조회다(`useQuery` 직접 — QueryClient 없는 버킷이라 목).
+// TRIP-1432 — 전국 d01 장소 레인은 서비스 지역 병렬 조회다(`useQuery` 직접 — QueryClient 없는 버킷이라 목).
 const mockUseMultiRegionPlaces = jest.fn();
 jest.mock('@/features/explore/model/useMultiRegionPlaces', () => ({
   useMultiRegionPlaces: (...args: unknown[]) =>
@@ -162,7 +162,7 @@ function placesOk(items: unknown[]) {
   };
 }
 
-const SERVICE_REGION_NAMES = ['서울', '부산', '제주'];
+const SERVICE_REGION_NAMES = ['서울', '부산', '제주', '강원', '경북', '경남'];
 /** 다지역 훅은 지역 2곳 미만이면 꺼진다 — 꺼진 조회는 데이터 없음 · 영원히 대기. */
 const MULTI_DISABLED = {
   items: [],
@@ -422,9 +422,9 @@ describe('전국 d01 — 구획·검색·레인', () => {
   });
 });
 
-// TRIP-1432 — 전국 d01 은 서비스 지역(서울·부산·제주)만 보인다. 장소는 사진 있는 곳 먼저·지역 번갈아 8장,
-// 숙소는 요청은 그대로(전국 1회) 두고 주소로 3지역만 남긴다(주소 없으면 뺀다).
-describe('전국 d01 — 서비스 지역 3곳', () => {
+// TRIP-1432·1807 — 전국 d01 은 서비스 지역 6곳만 보인다. 장소는 사진 있는 곳 먼저·지역 번갈아 8장,
+// 숙소는 요청은 그대로(전국 1회) 두고 주소로 6지역만 남긴다(주소 없으면 뺀다).
+describe('전국 d01 — 서비스 지역', () => {
   function lanePlace(poiId: string, regionCode: string, photo: boolean) {
     return {
       poiId,
@@ -474,7 +474,7 @@ describe('전국 d01 — 서비스 지역 3곳', () => {
     expect(screen.queryByTestId('explore-lane-place-retry')).toBeNull();
   });
 
-  it('숙소는 주소가 서울·부산·제주인 것만 남기고, 주소를 모르면 뺀다 — 요청은 지역 없이 그대로다', () => {
+  it('숙소는 주소가 서비스 지역인 것만 남기고(강원·경북·경남 포함), 주소를 모르면 뺀다 — 요청은 지역 없이 그대로다', () => {
     const busanShort: StayItem = {
       ...stayItem('NAVER', 'b', '해운대', '해운대 호텔', null),
       address: '부산 해운대구 해운대해변로 296',
@@ -482,6 +482,18 @@ describe('전국 d01 — 서비스 지역 3곳', () => {
     const miryang: StayItem = {
       ...stayItem('NAVER', 'm', '밀양', '밀양 호텔', null),
       address: '경상남도 밀양시 삼문동 1',
+    };
+    const gangneung: StayItem = {
+      ...stayItem('NAVER', 'g', '강릉', '강릉 호텔', null),
+      address: '강원특별자치도 강릉시 창해로 307',
+    };
+    const gyeongju: StayItem = {
+      ...stayItem('NAVER', 'j', '경주', '경주 호텔', null),
+      address: '경북 경주시 보문로 1',
+    };
+    const daegu: StayItem = {
+      ...stayItem('NAVER', 'd', '대구', '대구 호텔', null),
+      address: '대구광역시 중구 동성로 1',
     };
     const nullAddress: StayItem = {
       ...stayItem('NAVER', 'n', '어딘가', '주소 없는 호텔', null),
@@ -495,17 +507,34 @@ describe('전국 d01 — 서비스 지역 3곳', () => {
       null
     );
     mockUseStaySearch.mockReturnValue(
-      stayOk([CARD_A, CARD_B, busanShort, miryang, nullAddress, noAddressKey])
+      stayOk([
+        CARD_A,
+        CARD_B,
+        busanShort,
+        miryang,
+        gangneung,
+        gyeongju,
+        daegu,
+        nullAddress,
+        noAddressKey,
+      ])
     );
 
     render(<ExploreLandingPage />);
 
-    for (const item of [CARD_A, CARD_B, busanShort]) {
+    for (const item of [
+      CARD_A,
+      CARD_B,
+      busanShort,
+      miryang,
+      gangneung,
+      gyeongju,
+    ]) {
       expect(
         screen.getByTestId(`explore-stay-card-${stayKey(item)}`)
       ).toBeOnTheScreen();
     }
-    for (const item of [miryang, nullAddress, noAddressKey]) {
+    for (const item of [daegu, nullAddress, noAddressKey]) {
       expect(
         screen.queryByTestId(`explore-stay-card-${stayKey(item)}`)
       ).toBeNull();
@@ -761,8 +790,8 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(screen.queryAllByTestId(/^destination-detail-/)).toHaveLength(0);
     });
 
-    // TRIP-1432 Q8 — 지역 필터 갈래엔 서비스 지역 3곳 조회·사진 우선을 덧씌우지 않는다.
-    it('지역 필터 중엔 서비스 지역 3곳 조회가 켜지지 않는다', () => {
+    // TRIP-1432 Q8 — 지역 필터 갈래엔 서비스 지역 조회·사진 우선을 덧씌우지 않는다.
+    it('지역 필터 중엔 서비스 지역 조회가 켜지지 않는다', () => {
       render(<ExploreLandingPage />);
 
       expect(enabledMultiCalls()).toHaveLength(0);
@@ -776,7 +805,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
         { enabled: true }
       );
       expect(mockUseGetPlaces).toHaveBeenLastCalledWith(
-        { region: '부산광역시', limit: 8 },
+        { region: '부산광역시', regionCode: '26', limit: 8 },
         { query: { enabled: true } }
       );
     });
@@ -789,7 +818,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(screen.queryByText('도시 검색')).toBeNull();
     });
 
-    it('칩 ✕ 는 region 키를 비우는 setParams 1회이고, 다시 그리면 칩이 없고 전국 d01 조회(숙소 region 없음·장소 서비스 지역 3곳)로 돌아간다', () => {
+    it('칩 ✕ 는 region 키를 비우는 setParams 1회이고, 다시 그리면 칩이 없고 전국 d01 조회(숙소 region 없음·장소 서비스 지역)로 돌아간다', () => {
       const { rerender } = render(<ExploreLandingPage />);
 
       fireEvent.press(screen.getByTestId('explore-region-chip-clear'));
@@ -809,7 +838,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
 
       expect(screen.queryByTestId('explore-region-chip')).toBeNull();
       expect(screen.getByText('도시 검색')).toBeOnTheScreen();
-      // 전국 d01 과 같은 호출 — 장소는 서비스 지역 3곳, 숙소는 region 없이 켜져 있다.
+      // 전국 d01 과 같은 호출 — 장소는 서비스 지역, 숙소는 region 없이 켜져 있다.
       expect(enabledMultiCalls(multiFrom).length).toBeGreaterThan(0);
       for (const [regions] of enabledMultiCalls(multiFrom)) {
         expect(regions).toEqual(SERVICE_REGION_NAMES);
@@ -954,7 +983,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       ]);
     });
 
-    it('장소 모두 보기를 누르면 /explore/places?region=부산광역시 로 간다', () => {
+    it('장소 모두 보기를 누르면 d04 로 이름과 코드를 싣고 간다', () => {
       render(<ExploreLandingPage />);
 
       fireEvent.press(screen.getByTestId('explore-lane-place-cta'));
@@ -962,11 +991,11 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(mockPush).toHaveBeenCalledTimes(1);
       expect(targetOf(mockPush.mock.calls[0][0])).toEqual({
         path: '/explore/places',
-        params: { region: '부산광역시' },
+        params: { region: '부산광역시', regionCode: '26' },
       });
     });
 
-    it('장소 0건 폴백을 눌러도 같은 곳(/explore/places?region=부산광역시)으로 간다', () => {
+    it('장소 0건 폴백을 눌러도 같은 곳으로 간다', () => {
       placesResult = placesOk([]);
       render(<ExploreLandingPage />);
 
@@ -975,7 +1004,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(mockPush).toHaveBeenCalledTimes(1);
       expect(targetOf(mockPush.mock.calls[0][0])).toEqual({
         path: '/explore/places',
-        params: { region: '부산광역시' },
+        params: { region: '부산광역시', regionCode: '26' },
       });
     });
   });
@@ -1113,7 +1142,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       );
     });
 
-    it('장소 모두 보기는 지금처럼 이름만 싣는다(/explore/places?region=강서구)', () => {
+    it('장소 모두 보기는 동명 구를 가르도록 코드도 싣는다 (TRIP-1809)', () => {
       mockParams = { region: SEOUL_GANGSEO.regionCode };
       render(<ExploreLandingPage />);
 
@@ -1122,7 +1151,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(mockPush).toHaveBeenCalledTimes(1);
       expect(targetOf(mockPush.mock.calls[0][0])).toEqual({
         path: '/explore/places',
-        params: { region: '강서구' },
+        params: { region: '강서구', regionCode: SEOUL_GANGSEO.regionCode },
       });
     });
 

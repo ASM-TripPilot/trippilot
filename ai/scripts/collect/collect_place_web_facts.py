@@ -88,6 +88,14 @@ _KIND_ONLY = re.compile(r"(?:으로|로)\s?(?:등록|분류)(?:된|되어)|^(?:(
 # 주차 사실은 웹 글에서 틀리기 쉽다 — 인용 원문 대조(2026-11-03, 열린 페이지 기준 확인 284건): 근거 없음·다른 말이 주차 4/25(16%), 그 밖 12/259(5%).
 # 틀린 주차 안내는 차로 간 사람이 겪는다 — 웹 사실에서는 뺀다(관광공사 카드의 주차는 공식 상세라 그대로 싣는다)
 _PARKING = re.compile(r"주차")
+# 여러 가게가 섞인 검색 결과·태그 모음 페이지는 그 장소의 근거가 아니다(2026-11-06 표본 40건: polle 태그 페이지가 다른 가게
+# 얘기였다, 기존 문서 7,537곳 중 이런 URL 사실 327건·그것만으로 된 문서 149곳). 장소 전용 페이지는 질의 문자열이 붙어도
+# 남는다(bluer `/restaurants/…?query=`, 114 `/search/detail?comp_id=`)
+_LISTING_URL = re.compile(r"diningcode\.com/list\.dc|/posts/tag/|/toplist\b|/(?:total-)?search(?:/local-profile)?/?(?:\?|$)"
+                          r"|^https?://[^/]+/?\?(?:query|q|keywords?)="
+                          # 순위·이웃 검색·태그·지역 목록(ai-4e 검토: 8,900곳 중 103개가 더 남아 있었다)
+                          r"|diningcode\.com/rank/|daangn\.com/kr/local-profile/?\?[^#]*search=|soonwidot\.co\.kr/rank/"
+                          r"|/tags?/[^/?#]+/?$|/list/geoCategory/|/dir\?[^#]*search=", re.I)
 FINAL = ("found", "closed", "not_found", "refused")  # 이 상태면 다시 묻지 않는다
 
 PROMPT = """당신은 여행 앱의 장소 정보 정리 담당입니다. 웹 검색으로 아래 [장소]를 찾아, 웹 페이지에 적힌 사실만 JSON 하나로 답하세요.
@@ -230,16 +238,31 @@ def cost_usd(input_tokens: int, output_tokens: int, searches: int) -> float:
     return input_tokens / 1e6 * PRICE_IN + output_tokens / 1e6 * PRICE_OUT + searches * PRICE_SEARCH
 
 
+EST_CALL_USD = cost_usd(17_000, 600, 1)  # 예약용 어림(한 곳 입력 ≈1.7만·검색 1회) — 응답 뒤 실비로 정산한다
+
+
 class _Budget:
-    """총 지출 상한 — 운영과 같은 크레딧이면 운영 몫을 남긴다(2026-10-30 사용자 결정: 충전되는 200달러 크레딧 안에서만)."""
+    """총 지출 상한 — 운영과 같은 크레딧이면 운영 몫을 남긴다(2026-10-30 사용자 결정: 충전되는 200달러 크레딧 안에서만).
+
+    호출 **전에** 어림값을 잠금 안에서 떼어 두고(`reserve`) 응답 뒤 실비로 정산한다(`settle`) — 응답 뒤에만 차감하면
+    일꾼 4개가 같은 잔액을 보고 함께 들어가 상한을 넘긴다(2026-11-06 Codex 리뷰: 상한 0.03·호출당 0.02 → 0.08 지출).
+    """
 
     def __init__(self, usd: float | None) -> None:
         self._lock, self.left = threading.Lock(), usd
 
-    def charge(self, usd: float) -> None:
+    def reserve(self, est: float) -> bool:
         with self._lock:
             if self.left is not None:
-                self.left -= usd
+                if self.left <= 0:
+                    return False
+                self.left -= est
+            return True
+
+    def settle(self, est: float, usd: float) -> None:
+        with self._lock:
+            if self.left is not None:
+                self.left += est - usd
 
     @property
     def exhausted(self) -> bool:
@@ -299,14 +322,18 @@ def _retry_after(e: Exception) -> float | None:
         return None
 
 
-def lookup(client, t: dict, backoff: _Backoff, ask=ask_openai) -> dict:
+def lookup(client, t: dict, backoff: _Backoff, ask=ask_openai, budget: _Budget | None = None) -> dict:
     refusals, spent = 0, 0.0
     for _ in range(MAX_TRANSIENT):
+        if budget is not None and not budget.reserve(EST_CALL_USD):  # 거절 재질문·일시 오류 재시도도 호출이다 — 매번 예약
+            return {"status": "error", "budget": True, "error": "지출 상한", "cost": round(spent, 5)}
         backoff.wait()
         t0 = time.monotonic()
         try:
             text, cites, tokens_in, tokens_out, searches = ask(client, PROMPT % (t["name"], t["kind"], t["address"]))
         except Exception as e:  # noqa: BLE001 — 수집 배치: 사유를 남기고 이어 간다
+            if budget is not None:
+                budget.settle(EST_CALL_USD, 0.0)
             # 인증 거절·크레딧 바닥은 다음 곳도 똑같다 — 멈춘다(크레딧은 운영과 같을 수 있어 더 부르면 안 된다)
             if getattr(e, "status_code", None) in (401, 403) or "credit balance" in str(e).lower():
                 return {"status": "error", "fatal": True, "error": f"{type(e).__name__}: {str(e)[:160]}", "cost": round(spent, 5)}
@@ -315,7 +342,10 @@ def lookup(client, t: dict, backoff: _Backoff, ask=ask_openai) -> dict:
                 continue
             return {"status": "error", "error": f"{type(e).__name__}: {str(e)[:160]}", "cost": round(spent, 5)}
         backoff.ok()
-        spent += cost_usd(tokens_in, tokens_out, searches)
+        call = cost_usd(tokens_in, tokens_out, searches)
+        if budget is not None:
+            budget.settle(EST_CALL_USD, call)
+        spent += call
         try:
             try:
                 parsed = json.loads(text[text.index("{"): text.rindex("}") + 1])
@@ -375,13 +405,15 @@ def run(state: Path, limit: int | None, workers: int, only: set[str] | None = No
             time.sleep(600)
             transient_in_row[0] = 0
         try:
-            res = lookup(client, t, backoff, ask)
+            res = lookup(client, t, backoff, ask, budget)
         except Exception as e:  # noqa: BLE001 — 한 곳의 버그가 배치를 죽이지 않게
             res = {"status": "error", "error": f"{type(e).__name__}: {str(e)[:160]}"}
+        if res.get("budget"):  # 호출 전에 막혔다 — 그 곳은 안 물은 것이니 기록하지 않는다(다음 실행이 다시 받는다)
+            stop.append(f"지출 상한 {budget_usd} 달러에 닿아 멈춤")
+            return
         rec = {"ref": t["ref"], "source": t["source"], "name": t["name"], "model": MODEL,
                **({"tool": SEARCH_TOOL} if VENDOR == "claude" else {}),
                "at": datetime.now(timezone.utc).isoformat(timespec="seconds"), **res}
-        budget.charge(res.get("cost", 0.0))
         with lock:
             with state.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
@@ -415,7 +447,7 @@ def clean_facts(rec: dict) -> list[dict]:
     cites, out, seen = {_url_key(u) for u in rec.get("citations") or ()}, [], set()
     for f in rec.get("facts") or ():
         text, url = f.get("text") or "", f.get("url") or ""
-        if _url_key(url) not in cites or not (4 <= len(text) <= MAX_FACT_CHARS):
+        if _url_key(url) not in cites or _LISTING_URL.search(url) or not (4 <= len(text) <= MAX_FACT_CHARS):
             continue
         if _BANNED.search(text) or _EVAL.search(text) or _KIND_ONLY.search(text) or _PARKING.search(text) or has_contact_like(text) \
                 or has_injection_like(text) or clean_intro(text) != text:  # 진짜 문서·소개와 같은 게이트(시각·소요·연락처·주입)

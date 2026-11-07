@@ -5,6 +5,10 @@ import {
   type MoveDayOption,
 } from '../model/moveDayOptions';
 import { MoveDaySheet } from './MoveDaySheet';
+import { RenameSlotSheet } from './RenameSlotSheet';
+import { openPressGuardWindow, resetPressGuard } from '@/shared/lib/pressGuard';
+
+afterEach(resetPressGuard);
 
 /**
  * TRIP-1793 · 「다른 날로 옮기기」 장소 시트 — 입력을 만드는 순수 함수 `buildMoveDayOptions` 와 시트 `MoveDaySheet` 단독 (AC-5·9).
@@ -112,17 +116,35 @@ describe('MoveDaySheet — 일차 칩·확정·닫기 (TRIP-1793 AC-5·9)', () =
   const HINT = 'editor-move-hint';
   const DUP_HINT = 'editor-move-duplicate-hint';
 
+  // TRIP-1795 — 날짜·옮기기 CTA 는 `move` 한 덩어리로 받는다(null 이면 고치기 행만). 이 헬퍼는 종전 호출 모양(options·initialDate)을 그대로 받아 `move` 로 묶는다.
   function renderSheet(
-    over: Partial<Parameters<typeof MoveDaySheet>[0]> = {}
-  ): { onConfirm: jest.Mock; onClose: jest.Mock } {
-    const cb = { onConfirm: jest.fn(), onClose: jest.fn() };
+    over: {
+      options?: MoveDayOption[];
+      initialDate?: string | null;
+      move?: null;
+      onPressRename?: jest.Mock;
+    } = {}
+  ): { onConfirm: jest.Mock; onClose: jest.Mock; onPressRename: jest.Mock } {
+    const cb = {
+      onConfirm: jest.fn(),
+      onClose: jest.fn(),
+      onPressRename: over.onPressRename ?? jest.fn(),
+    };
     render(
       <MoveDaySheet
         name="부산시립미술관"
-        options={THREE}
-        initialDate={D2}
-        {...cb}
-        {...over}
+        move={
+          over.move === null
+            ? null
+            : {
+                options: over.options ?? THREE,
+                initialDate:
+                  over.initialDate === undefined ? D2 : over.initialDate,
+                onConfirm: cb.onConfirm,
+              }
+        }
+        onPressRename={cb.onPressRename}
+        onClose={cb.onClose}
       />
     );
     return cb;
@@ -222,5 +244,290 @@ describe('MoveDaySheet — 일차 칩·확정·닫기 (TRIP-1793 AC-5·9)', () =
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onConfirm).not.toHaveBeenCalled();
+  });
+});
+
+describe('MoveDaySheet · SH6 — 이름·분류 고치기 행과 옮길 수 없는 장소 (TRIP-1795 AC-10)', () => {
+  const RENAME = 'editor-move-rename';
+  const opt = (
+    dayIndex: number,
+    date: string,
+    blocked: MoveDayOption['blocked']
+  ): MoveDayOption => ({ dayIndex, date, blocked });
+
+  function renderSheet(move: Parameters<typeof MoveDaySheet>[0]['move']): {
+    onPressRename: jest.Mock;
+    onClose: jest.Mock;
+  } {
+    const cb = { onPressRename: jest.fn(), onClose: jest.fn() };
+    render(<MoveDaySheet name="부산시립미술관" move={move} {...cb} />);
+    return cb;
+  }
+
+  it('SH6a · move 가 null(고정·방문 완료·하루 일정)이면 이름·X·고치기 행만 있고 날짜 라벨·일차 칩·힌트·옮기기 CTA 는 없다 — 행을 누르면 onPressRename 1회', () => {
+    const { onPressRename, onClose } = renderSheet(null);
+
+    expect(screen.getByTestId('editor-move-sheet')).toBeOnTheScreen();
+    expect(screen.getByText('부산시립미술관')).toBeOnTheScreen();
+    expect(screen.getByTestId(RENAME)).toHaveTextContent('이름·분류 고치기');
+    // 짝(부정) — 날짜 섹션 전부가 없다. 옮기기는 이 모드에서 불가능해야 한다(moveSlot 은 고정을 안 막는다 — 이 게이트가 유일한 방어선).
+    expect(screen.queryByText('날짜')).toBeNull();
+    expect(screen.queryByTestId('editor-move-day-1')).toBeNull();
+    expect(screen.queryByTestId('editor-move-hint')).toBeNull();
+    expect(screen.queryByTestId('editor-move-confirm')).toBeNull();
+
+    fireEvent.press(screen.getByTestId(RENAME));
+    expect(onPressRename).toHaveBeenCalledTimes(1);
+    fireEvent.press(screen.getByTestId('editor-move-close'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('SH6b · move 가 있으면 날짜 섹션과 함께 고치기 행도 있고, 둘은 서로의 콜백을 부르지 않는다', () => {
+    const onConfirm = jest.fn();
+    const { onPressRename } = renderSheet({
+      options: [opt(1, D1, 'current'), opt(2, D2, null)],
+      initialDate: D2,
+      onConfirm,
+    });
+
+    expect(screen.getByText('날짜')).toBeOnTheScreen();
+    expect(screen.getByTestId('editor-move-confirm')).toHaveTextContent(
+      '2일차로 옮기기'
+    );
+    fireEvent.press(screen.getByTestId(RENAME));
+    expect(onPressRename).toHaveBeenCalledTimes(1);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+});
+
+// TRIP-1795 · 「이름·분류 고치기」 시트(Figma 5225:4083 — 확정 라벨은 `적용`, Figma `저장하기` 와 다름: 서버 저장은 `일정 저장하기` 뿐).
+//
+// 무엇을 보장하나: 입력은 현재 표시 이름으로 시작, 분류 칩은 서버 닫힌 10종(생성 상수 순서)이고 현재 분류만 선택 표식,
+// 숙소처럼 분류를 못 고치는 장소는 칩이 없다. `적용`은 고른 값을 한 덩이로 알리고 공백뿐·60코드포인트 초과면 비활성+안내.
+// `원래대로`는 덮어쓴 게 있을 때만 켜진다. 닫기는 아무것도 알리지 않는다.
+//
+// > *(개념)* **코드포인트** — 사람이 한 글자로 세는 단위. 이모지 `😀` 는 JS `.length` 로는 2, `[...문자열].length` 로는 1 이다.
+// > 서버가 60자를 코드포인트로 세므로 클라도 그렇게 세야 이모지가 섞인 이름이 잘못 막히거나 통과하지 않는다.
+// ★ 시트 실제 열림·딤·키보드 밀림·칩 줄바꿈은 통과형 목이 못 본다 — 6-b(기능 지도 edit-rename).
+//
+// 3동작 뼈대: 준비=name·category·콜백 주입 렌더 → 실행=입력·칩·버튼 → 단언=값·선택 표식·disabled·콜백 인자.
+describe('RenameSlotSheet · RS — 이름·분류 고치기 시트 (TRIP-1795 AC-11~13·15)', () => {
+  const CATEGORIES = [
+    '명소',
+    '맛집',
+    '카페',
+    '야경',
+    '자연',
+    '쇼핑',
+    '문화',
+    '액티비티',
+    '미술',
+    '술집',
+  ];
+  const chip = (c: string) => screen.getByTestId(`editor-rename-category-${c}`);
+  const INPUT = 'editor-rename-input';
+  const APPLY = 'editor-rename-apply';
+  const RESET = 'editor-rename-reset';
+
+  function renderRename(
+    over: Partial<Parameters<typeof RenameSlotSheet>[0]> = {}
+  ) {
+    const cb = {
+      onApply: jest.fn(),
+      onReset: jest.fn(),
+      onClose: jest.fn(),
+    };
+    render(
+      <RenameSlotSheet
+        name="웨이브온 카페"
+        category="맛집"
+        categoryEditable
+        canReset={false}
+        {...cb}
+        {...over}
+      />
+    );
+    return cb;
+  }
+
+  it('RS1 · 열린 모양 — 입력은 현재 이름, 칩 10종은 서버 순서·현재 분류만 선택, 보조문은 완전일치, 덮어쓴 게 없으면 원래대로 비활성', () => {
+    renderRename();
+
+    expect(screen.getByTestId('editor-rename-sheet')).toBeOnTheScreen();
+    // 제어(value)·비제어(defaultValue) 어느 쪽으로 시드해도 보이는 값으로 잰다.
+    expect(screen.getByTestId(INPUT)).toHaveDisplayValue('웨이브온 카페');
+    const chips = screen
+      .getAllByTestId(/^editor-rename-category-/)
+      .map((node) => node.props.testID.replace('editor-rename-category-', ''));
+    expect(chips).toEqual(CATEGORIES);
+    expect(chip('맛집')).toBeSelected();
+    expect(chip('카페')).not.toBeSelected();
+    expect(screen.getByTestId('editor-rename-hint')).toHaveTextContent(
+      '이 여행에서만 바뀌어요 · 장소 정보 자체는 그대로예요'
+    );
+    expect(screen.getByTestId(APPLY)).toHaveTextContent('적용');
+    expect(screen.getByTestId(RESET)).toHaveTextContent('원래대로');
+    expect(screen.getByTestId(RESET)).toBeDisabled();
+    expect(screen.queryByTestId('editor-rename-error')).toBeNull();
+  });
+
+  it('RS1b · 분류를 못 고치는 장소(categoryEditable=false — 숙소 등)는 칩이 하나도 없고 이름만 고친다', () => {
+    const { onApply } = renderRename({
+      category: '숙소',
+      categoryEditable: false,
+    });
+
+    expect(screen.queryAllByTestId(/^editor-rename-category-/)).toHaveLength(0);
+    fireEvent.changeText(screen.getByTestId(INPUT), '우리 숙소');
+    fireEvent.press(screen.getByTestId(APPLY));
+
+    expect(onApply).toHaveBeenCalledTimes(1);
+    expect(onApply).toHaveBeenCalledWith({
+      displayName: '우리 숙소',
+      displayCategory: null,
+    });
+  });
+
+  it('RS2 · 이름·분류를 바꿔 적용하면 고른 값이 한 덩이로 1회 알려지고, 분류를 안 건드리면 현재 분류가 그대로 실린다 · 칩은 하나만 선택된다', () => {
+    const { onApply, onClose } = renderRename();
+
+    fireEvent.changeText(screen.getByTestId(INPUT), '우리 아지트');
+    fireEvent.press(chip('카페'));
+    expect(chip('카페')).toBeSelected();
+    expect(chip('맛집')).not.toBeSelected();
+    expect(onApply).not.toHaveBeenCalled(); // 앵커 — 입력·칩 선택만으로는 알리지 않는다
+
+    fireEvent.press(screen.getByTestId(APPLY));
+    expect(onApply).toHaveBeenCalledTimes(1);
+    expect(onApply).toHaveBeenCalledWith({
+      displayName: '우리 아지트',
+      displayCategory: '카페',
+    });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('RS2b · 이름만 고치면 분류는 현재 분류(맛집) 그대로 실린다', () => {
+    const { onApply } = renderRename();
+
+    fireEvent.changeText(screen.getByTestId(INPUT), '우리 아지트');
+    fireEvent.press(screen.getByTestId(APPLY));
+
+    expect(onApply).toHaveBeenCalledWith({
+      displayName: '우리 아지트',
+      displayCategory: '맛집',
+    });
+  });
+
+  it('RS3 · 공백뿐인 이름·60코드포인트 초과는 적용이 비활성이고 안내가 뜨며 눌러도 알리지 않는다, 60코드포인트는 통과한다 (이모지는 한 글자로 센다)', () => {
+    // 앵커 — JS 길이와 코드포인트 길이가 다르다.
+    expect('😀'.length).toBe(2);
+    expect([...'😀'].length).toBe(1);
+
+    const { onApply } = renderRename();
+    expect(screen.queryByTestId('editor-rename-error')).toBeNull();
+
+    // 공백뿐
+    fireEvent.changeText(screen.getByTestId(INPUT), '    ');
+    expect(screen.getByTestId(APPLY)).toBeDisabled();
+    fireEvent.press(screen.getByTestId(APPLY));
+    expect(onApply).not.toHaveBeenCalled();
+
+    // 이모지 30개 = JS 길이 60 이지만 코드포인트 30 → 통과(`.length` 로 세면 61 이상일 때 막히는 쪽이 아니라, 아래 61개 케이스와 쌍으로 잡는다)
+    fireEvent.changeText(screen.getByTestId(INPUT), '😀'.repeat(60));
+    expect(screen.getByTestId(APPLY)).not.toBeDisabled();
+    expect(screen.queryByTestId('editor-rename-error')).toBeNull();
+
+    // 61 코드포인트
+    fireEvent.changeText(screen.getByTestId(INPUT), '😀'.repeat(61));
+    expect(screen.getByTestId(APPLY)).toBeDisabled();
+    expect(screen.getByTestId('editor-rename-error')).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId(APPLY));
+    expect(onApply).not.toHaveBeenCalled();
+
+    // 60 코드포인트(영문)는 통과 → 알림 1회
+    fireEvent.changeText(screen.getByTestId(INPUT), 'a'.repeat(60));
+    expect(screen.getByTestId(APPLY)).not.toBeDisabled();
+    fireEvent.press(screen.getByTestId(APPLY));
+    expect(onApply).toHaveBeenCalledTimes(1);
+  });
+
+  // N2 (5-b 참고) — 서버·스토어는 이름을 **앞뒤 공백을 자른 뒤** 60 코드포인트로 센다. 시트가 공백 포함 길이로 막으면 사용자가 붙여 넣은
+  // 60자 이름(뒤에 공백 하나)이 괜히 막힌다. 막는 쪽으로 틀려 데이터 위험은 없지만 `적용` 이 켜져야 맞다.
+  // ⚠️ 구현 전엔 이 케이스가 red 다 — implementer 가 검사를 trim 뒤 길이로 고치면 green (02 map 「5-b 보강」 N2).
+  it('RS3b · N2 — 이름이 60 코드포인트이고 앞뒤 공백이 붙어 있어도(trim 하면 60) 적용이 켜지고 자른 이름이 알려진다', () => {
+    const { onApply } = renderRename();
+    fireEvent.changeText(screen.getByTestId(INPUT), ` ${'a'.repeat(60)} `);
+
+    expect(screen.getByTestId(APPLY)).not.toBeDisabled();
+    expect(screen.queryByTestId('editor-rename-error')).toBeNull();
+    fireEvent.press(screen.getByTestId(APPLY));
+
+    expect(onApply).toHaveBeenCalledTimes(1);
+    expect(onApply).toHaveBeenCalledWith({
+      displayName: 'a'.repeat(60),
+      displayCategory: '맛집',
+    });
+  });
+
+  it('RS3c · 붙여넣기로 들어온 줄바꿈(\\r\\n·줄 구분자 포함)은 공백 하나가 된다 — 칸이 여러 줄로 늘어도 이름엔 줄바꿈이 없다 (TRIP-1824)', () => {
+    const cb = renderRename();
+
+    fireEvent.changeText(
+      screen.getByTestId(INPUT),
+      '웨이브온\r\n카페\u20282층\n\n창가\u2029자리'
+    );
+    fireEvent.press(screen.getByTestId(APPLY));
+
+    expect(screen.getByTestId(INPUT).props.value).toBe(
+      '웨이브온 카페 2층 창가 자리'
+    );
+    expect(cb.onApply).toHaveBeenCalledWith({
+      displayName: '웨이브온 카페 2층 창가 자리',
+      displayCategory: '맛집',
+    });
+  });
+
+  it('RS4 · 원래대로는 덮어쓴 게 있을 때만 켜져 onReset 1회, X 는 onClose 만 부르고 아무것도 알리지 않는다', () => {
+    const { onApply, onReset, onClose } = renderRename({ canReset: true });
+
+    expect(screen.getByTestId(RESET)).not.toBeDisabled();
+    fireEvent.press(screen.getByTestId(RESET));
+    expect(onReset).toHaveBeenCalledTimes(1);
+    expect(onApply).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('editor-rename-close'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onApply).not.toHaveBeenCalled();
+    expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
+  // 통합 QA D3 — 「이름·분류 고치기」 연타의 둘째 탭이 올라오는 시트에 닿는다. 어느 버튼에 닿을지는 시트 위치에 달렸으니 전부 창을 따른다.
+  it('RS5 · 연타 창이 열려 있으면 칩·원래대로·적용·X 가 모두 무반응이고, 창이 지나면 다시 동작한다', () => {
+    const { onApply, onReset, onClose } = renderRename({ canReset: true });
+    expect(chip('맛집')).toBeSelected(); // 앵커
+
+    openPressGuardWindow();
+    fireEvent.press(chip('미술'));
+    fireEvent.press(screen.getByTestId(RESET));
+    fireEvent.press(screen.getByTestId(APPLY));
+    fireEvent.press(screen.getByTestId('editor-rename-close'));
+    expect(chip('맛집')).toBeSelected();
+    expect(chip('미술')).not.toBeSelected();
+    expect(onReset).not.toHaveBeenCalled();
+    expect(onApply).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+
+    resetPressGuard();
+    fireEvent.press(chip('미술'));
+    expect(chip('미술')).toBeSelected();
+    fireEvent.press(screen.getByTestId(RESET));
+    expect(onReset).toHaveBeenCalledTimes(1);
+    fireEvent.press(screen.getByTestId(APPLY));
+    expect(onApply).toHaveBeenCalledWith({
+      displayName: '웨이브온 카페',
+      displayCategory: '미술',
+    });
+    fireEvent.press(screen.getByTestId('editor-rename-close'));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

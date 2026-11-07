@@ -117,8 +117,10 @@ export interface TripHeroData {
   ctaLabel: string;
   /** '부산 여행' — 여행명 타이틀 */
   title: string;
-  /** 지역 커버 이미지(번들) — 있으면 히어로 배경으로 쓴다. 서울·부산·제주 밖이면 없음(매거진 사진 폴백). */
+  /** 지역 커버 이미지(번들) — 있으면 히어로 배경으로 쓴다. 번들에 없는 지역이면 없음(매거진 사진 폴백). */
   coverSource?: ImageSourcePropType | null;
+  /** TRIP-1806 · 첫 목적지와 다른 시도의 그림을 골랐을 때 그 이름(`tripCoverLabel`). */
+  coverLabel?: string | null;
   /** '6월 10일 – 6월 13일 · 3박 4일 · 2명' — 기간·박수·인원(소요시간 아님, INV-3) */
   meta: string;
 }

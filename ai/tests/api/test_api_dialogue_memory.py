@@ -137,7 +137,21 @@ def test_export_returns_that_account_newest_first_in_fd_item_shape() -> None:
 def test_export_unknown_account_is_empty_list_not_error() -> None:
     res = _client(_seeded_store()).get(URL, params={"account_ref": "nobody"})
     assert res.status_code == 200
-    assert res.json() == {"memories": []}
+    assert res.json() == {"memories": [], "truncated": False}
+
+
+def test_export_beyond_the_session_cap_says_so_instead_of_silently_dropping() -> None:
+    """여행 수에 상한이 없어 세션이 상한을 넘길 수 있다 — 101번째가 조용히 사라지던 것(2026-11-06 Codex 리뷰). 백엔드가 이 표지를 OR 한다."""
+    from trippilot.api.dialogue import EXPORT_MAX_SESSIONS
+
+    store = InMemoryDialogueMemoryStore(now=lambda: _T0)
+    for i in range(EXPORT_MAX_SESSIONS + 1):
+        store.put(_memory(f"s-{i:03}", trip_id=f"trip-{i}", at=_T0 - timedelta(minutes=i)))
+    body = _client(store).get(URL, params={"account_ref": "acct-a"}).json()
+    assert body["truncated"] is True and len(body["memories"]) == EXPORT_MAX_SESSIONS
+    assert body["memories"][0]["session_id"] == "s-000"  # 최신부터 상한까지
+    store.delete(session_id="s-100", trip_id=None, account_ref=None)
+    assert _client(store).get(URL, params={"account_ref": "acct-a"}).json()["truncated"] is False
 
 
 def test_export_requires_account_ref() -> None:

@@ -62,6 +62,7 @@ import {
   seedMustVisits,
 } from '@/features/create-trip';
 import { placeLocationLabel, regionCodeInTrip, sidoKey } from '@/features/trip';
+import { placeRegionParams } from '@/entities/trip';
 import { useTripWizardStore } from '@/features/create-trip';
 
 /** 실패 시 재시도가 다시 밟아야 할 마지막 조작 — 해제냐 되돌리기냐를 함께 기억한다. */
@@ -115,7 +116,7 @@ function MustVisitPickSection({
   state: PlaceListState;
   orderedList: SavedPlace[];
   onRetry: () => void;
-  /** 여행 지역 — 판정 키는 `regionCode`, 표시·d04 파라미터는 `region` 이름. */
+  /** 여행 지역 — 판정 키는 `regionCode`, 표시는 `region` 이름, d04 파라미터는 둘 다. */
   destinations: readonly { region: string; regionCode?: string | null }[];
   /** 마운트 때 한 번 읽는 초기 선택. */
   initialSelectedPoiIds: () => string[];
@@ -170,14 +171,11 @@ function MustVisitPickSection({
       hasRow(insideList, id) ||
       (hasRow(outsideRegionPlaces, id) && !lockedPoiIds.includes(id))
   );
-  // d04 로 가는 세 버튼은 여행 지역 **이름**을 싣는다(TRIP-1042 AC-7 — d04 는 이름을 받는다). 목적지가
-  // 없으면 region 키를 싣지 않는다. 위저드 출처는 d04 가 ＋(새 여행 = reset)를 숨기는 신호다(TRIP-1026).
+  // d04 로 가는 세 버튼은 여행 지역 이름과 코드를 싣는다(TRIP-1042 AC-7 · TRIP-1809). 목적지가
+  // 없으면 지역 키를 싣지 않는다. 위저드 출처는 d04 가 ＋(새 여행 = reset)를 숨기는 신호다(TRIP-1026).
   const exploreHref = {
     pathname: '/explore/places',
-    params:
-      destinationNames.length > 0
-        ? { region: destinationNames, ...wizardOriginParams() }
-        : wizardOriginParams(),
+    params: { ...placeRegionParams(destinations), ...wizardOriginParams() },
   } as const;
   return (
     <MustVisitPickScreen

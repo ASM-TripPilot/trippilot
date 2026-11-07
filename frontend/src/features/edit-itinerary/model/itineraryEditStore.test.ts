@@ -103,6 +103,111 @@ describe('S2 · reorderSlots — 고정 슬롯도 끌기 결과 자리로 간다
   });
 });
 
+describe('S2b · reorderSlots — 시각은 자리에 남는다 (TRIP-1821)', () => {
+  const at = (id: string, hour: number, over: Partial<Slot> = {}): Slot =>
+    slot(id, {
+      startAt: `${String(hour).padStart(2, '0')}:00:00`,
+      endAt: `${String(hour).padStart(2, '0')}:30:00`,
+      ...over,
+    });
+  const times = (): (string | null)[] =>
+    useItineraryEditStore.getState().days[0].slots.map((s) => s.startAt);
+  const seedDay = (slots: Slot[]): void =>
+    useItineraryEditStore.getState().seed([{ date: DAY1, slots }]);
+
+  it('셋째를 둘째 자리로 끌면 장소 순서는 끌기 결과, 시각 블록은 위에서부터 오름차순이다', () => {
+    const [a, b, c] = [
+      at('a', 12),
+      at('b', 13),
+      at('c', 14, { endAt: '00:30:00', endsNextDay: true }),
+    ];
+    seedDay([a, b, c]);
+
+    useItineraryEditStore.getState().reorderSlots(DAY1, [a, c, b]);
+
+    const stored = useItineraryEditStore.getState().days[0].slots;
+    expect(poiIds(stored)).toEqual(['a', 'c', 'b']);
+    expect(times()).toEqual(['12:00:00', '13:00:00', '14:00:00']);
+    // 블록 통째 — 끝 시각·다음날 넘김도 자리에 남는다(b 가 맨 뒤 자리의 자정 넘김을 받는다).
+    expect(stored[1]).toMatchObject({ endAt: '13:30:00', endsNextDay: false });
+    expect(stored[2]).toMatchObject({ endAt: '00:30:00', endsNextDay: true });
+    // 원본 객체는 안 바뀐다(시드 비파괴).
+    expect(b.startAt).toBe('13:00:00');
+  });
+
+  it('고정 슬롯이 끼면 — 순서는 끌기 결과 그대로, 고정은 자기 시각, 나머지만 오름차순으로 받는다', () => {
+    const [a, F, b] = [
+      at('a', 12),
+      at('F', 13, { isFixed: true }),
+      at('b', 14),
+    ];
+    seedDay([a, F, b]);
+
+    // b 를 고정 앞으로 — 도로 튀지 않는다(TRIP-1250). 12·14 를 a·b 가 나눠 갖고, F 는 13 그대로라 [12,14,13] 이 남는다
+    // (지어낼 시각이 없다 — 서버 표시 BR-U3-12·13 몫).
+    useItineraryEditStore.getState().reorderSlots(DAY1, [a, b, F]);
+
+    const stored = useItineraryEditStore.getState().days[0].slots;
+    expect(poiIds(stored)).toEqual(['a', 'b', 'F']);
+    expect(times()).toEqual(['12:00:00', '14:00:00', '13:00:00']);
+    expect(stored[2].isFixed).toBe(true);
+  });
+
+  it('방문 완료 슬롯(세 번째 인자)은 자기 시각을 지키고, 나머지만 오름차순으로 받는다', () => {
+    const [F, L, a, b] = [
+      at('F', 9, { isFixed: true }),
+      at('L', 10),
+      at('a', 11),
+      at('b', 12),
+    ];
+    seedDay([F, L, a, b]);
+
+    useItineraryEditStore.getState().reorderSlots(DAY1, [b, L, a, F], ['L']);
+
+    expect(poiIds(useItineraryEditStore.getState().days[0].slots)).toEqual([
+      'b',
+      'L',
+      'a',
+      'F',
+    ]);
+    expect(times()).toEqual(['11:00:00', '10:00:00', '12:00:00', '09:00:00']);
+  });
+
+  it('시각 미지정 슬롯은 미지정으로 남고, 시각 있는 슬롯끼리 나눠 갖는다', () => {
+    const none = slot('n', { startAt: null as unknown as string });
+    const [a, b] = [at('a', 12), at('b', 13)];
+    seedDay([a, none, b]);
+
+    useItineraryEditStore.getState().reorderSlots(DAY1, [b, none, a]);
+
+    expect(times()).toEqual(['12:00:00', null, '13:00:00']);
+  });
+
+  it('되돌리기 한 번에 순서·시각이 함께 돌아오고, 값이 그대로인 놓기는 이력을 안 만든다', () => {
+    const [a, b] = [at('a', 12), at('b', 13)];
+    seedDay([a, b]);
+
+    useItineraryEditStore.getState().reorderSlots(DAY1, [a, b]);
+    expect(useItineraryEditStore.getState().history).toHaveLength(0);
+
+    useItineraryEditStore.getState().reorderSlots(DAY1, [b, a]);
+    expect(useItineraryEditStore.getState().history).toHaveLength(1);
+    const startOf = (id: string): string | null | undefined =>
+      useItineraryEditStore.getState().days[0].slots.find((s) => s.poiId === id)
+        ?.startAt;
+    // 자리별로 재면 끌기 전후가 같아 안 갈린다 — 장소 기준으로 잰다(5-b W1).
+    expect(startOf('a')).toBe('13:00:00');
+
+    useItineraryEditStore.getState().undo();
+
+    expect(poiIds(useItineraryEditStore.getState().days[0].slots)).toEqual([
+      'a',
+      'b',
+    ]);
+    expect(startOf('a')).toBe('12:00:00');
+  });
+});
+
 describe('S3 · seed — GET 결과로 편집 드래프트를 채운다 (AC5 · AC1)', () => {
   it('시드한 days 가 스토어에 그대로 담긴다', () => {
     const days: ItineraryDaysItem[] = [
@@ -307,6 +412,14 @@ describe('M1 · removeSlots 순수 — 고른 poiId 를 전부 뺀다, 원본 �
     // 짝 — 원본은 안 바뀌고, 결과는 새 배열이다.
     expect(poiIds(slots)).toEqual(['a', 'b', 'c', 'b']);
     expect(result).not.toBe(slots);
+  });
+
+  it('고정 슬롯은 같은 장소를 골라도 남는다 — 체크가 잠겨 있어 화면에 안 고른 카드다 (TRIP-1812 5-b W2)', () => {
+    const fixed = slot('a', { isFixed: true });
+
+    const result = removeSlots([fixed, slot('b'), slot('a')], ['a']);
+
+    expect(result).toEqual([fixed, slot('b')]);
   });
 
   it('빈 poiIds 는 같은 내용의 새 배열이다', () => {
@@ -902,5 +1015,392 @@ describe('MV · moveSlot — 다른 날로 옮기기 (TRIP-1793)', () => {
     ).toEqual([]);
     expect(st().history).toHaveLength(0);
     expect(st().dirty).toBe(false);
+  });
+});
+
+/**
+ * TRIP-1795 · 이 여행에서만 장소 이름·분류 고치기 — 스토어 `renameSlot(date, poiId, patch)` (Seed AC-9·AC-14).
+ *
+ * 무엇을 보장하나: 슬롯의 표시 이름·표시 분류(`displayName`·`displayCategory`)를 **두 칸 통째로** 바꾼다.
+ * 값이 실제로 바뀌면 `dirty` + 이력 1장(↶ 1번에 복귀) + 통지 1회, 같은 값이면 state·이력·통지가 그대로다.
+ * 장소 원본(`nameKo`·`category`)은 절대 안 바뀌고 다른 슬롯·다른 날도 안 바뀐다.
+ *
+ * > *(개념)* **정규화** — 사용자가 원본과 똑같은 이름을 입력하면 "덮어쓰기"를 만들지 않는다(null 로 저장). 그래야
+ * > `원래대로` 버튼을 "덮어쓴 게 있나"로 켜고 끌 수 있다. 이름은 앞뒤 공백을 자르고 공백뿐이면 null.
+ * > *(개념)* `undefined` 와 `null` 은 둘 다 "덮어쓰기 없음"이다 — 서버가 키를 빼든 null 을 주든 같은 값으로 본다.
+ *
+ * 3동작 뼈대: 준비=reset+시드(원본 이름·분류 있는 슬롯) → 실행=renameSlot(+undo) → 단언=getState() 의 days·dirty·history·통지 횟수.
+ */
+describe('RN · renameSlot — 표시 이름·분류 덮어쓰기 (TRIP-1795)', () => {
+  const st = () => useItineraryEditStore.getState();
+  const slotOf = (date: string, poiId: string): Slot =>
+    st()
+      .days.find((d) => d.date === date)!
+      .slots.find((s) => s.poiId === poiId)!;
+  const NONE = { displayName: null, displayCategory: null } as const;
+
+  function seeded(): { d1: Slot[]; d2: Slot[] } {
+    const input = {
+      d1: [
+        slot('a', { nameKo: '웨이브온', category: '맛집' }),
+        slot('b', { nameKo: '광안리', category: '자연' }),
+      ],
+      // 같은 poiId 'a' 가 2일차에도 있다 — 고친 날만 바뀌어야 한다.
+      d2: [slot('a', { nameKo: '웨이브온', category: '맛집' })],
+    };
+    st().seed([
+      { date: DAY1, slots: input.d1 },
+      { date: DAY2, slots: input.d2 },
+    ]);
+    return input;
+  }
+
+  it('RN1 · 이름·분류를 바꾸면 그 슬롯만 바뀌고 dirty·이력 1장·통지 1회, 원본 칸·이웃·다른 날은 그대로, ↶ 1번에 복귀한다', () => {
+    seeded();
+    expect(st().history).toHaveLength(0); // 앵커 — 고치기 전엔 이력 없음
+    expect(st().dirty).toBe(false);
+    const before = st().days;
+    const listener = jest.fn();
+    const unsubscribe = useItineraryEditStore.subscribe(listener);
+
+    st().renameSlot(DAY1, 'a', {
+      displayName: '우리 아지트',
+      displayCategory: '카페',
+    });
+    unsubscribe();
+
+    const a = slotOf(DAY1, 'a');
+    expect(a.displayName).toBe('우리 아지트');
+    expect(a.displayCategory).toBe('카페');
+    expect(a.nameKo).toBe('웨이브온'); // 장소 원본은 안 바뀐다(INV-1)
+    expect(a.category).toBe('맛집');
+    expect(slotOf(DAY1, 'b').displayName ?? null).toBeNull(); // 이웃 불변
+    expect(slotOf(DAY2, 'a').displayName ?? null).toBeNull(); // 같은 poiId 다른 날 불변
+    expect(st().dirty).toBe(true);
+    expect(st().history).toHaveLength(1);
+    expect(st().history[0].date).toBe(DAY1);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    expect(st().undo()).toBe(DAY1);
+    expect(st().days).toBe(before);
+    expect(slotOf(DAY1, 'a').displayName ?? null).toBeNull();
+    expect(st().dirty).toBe(false);
+  });
+
+  it('RN2 · 같은 값 재적용·undefined↔null 만 다른 입력은 state 참조·이력·통지가 전혀 안 바뀐다 (sameSlots 가 두 칸을 ?? null 로 비교)', () => {
+    st().seed([
+      {
+        date: DAY1,
+        slots: [
+          slot('a', {
+            nameKo: '웨이브온',
+            category: '맛집',
+            displayName: '우리 아지트',
+            displayCategory: '카페',
+          }),
+          // 서버가 null 을 명시한 슬롯과 키가 없는 슬롯 — 둘 다 "덮어쓰기 없음".
+          slot('b', {
+            nameKo: '광안리',
+            category: '자연',
+            displayName: null,
+            displayCategory: null,
+          }),
+          slot('c', { nameKo: '해운대', category: '자연' }),
+        ],
+      },
+    ]);
+    const before = st().days;
+    const listener = jest.fn();
+    const unsubscribe = useItineraryEditStore.subscribe(listener);
+
+    st().renameSlot(DAY1, 'a', {
+      displayName: '우리 아지트',
+      displayCategory: '카페',
+    }); // 같은 값
+    st().renameSlot(DAY1, 'b', NONE); // null → null
+    st().renameSlot(DAY1, 'c', NONE); // undefined → null
+    unsubscribe();
+
+    expect(st().days).toBe(before);
+    expect(st().history).toHaveLength(0);
+    expect(st().dirty).toBe(false);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('RN3 · 정규화 — 이름이 원본과 같으면(앞뒤 공백 포함) null, 분류가 원본과 같으면 null, 이미 덮어쓴 슬롯에 원본값을 적용하면 해제로 이력 1장', () => {
+    seeded();
+
+    // 이름만 원본과 같음 + 분류는 진짜 바뀜 → 이름은 null·분류는 저장.
+    st().renameSlot(DAY1, 'a', {
+      displayName: ' 웨이브온 ',
+      displayCategory: '카페',
+    });
+    expect(slotOf(DAY1, 'a').displayName ?? null).toBeNull();
+    expect(slotOf(DAY1, 'a').displayCategory).toBe('카페');
+    expect(st().history).toHaveLength(1);
+
+    // 분류가 원본(맛집)과 같고 이름이 바뀜 → 분류는 null.
+    st().renameSlot(DAY1, 'b', {
+      displayName: '내 바다',
+      displayCategory: '자연',
+    });
+    expect(slotOf(DAY1, 'b').displayName).toBe('내 바다');
+    expect(slotOf(DAY1, 'b').displayCategory ?? null).toBeNull();
+    expect(st().history).toHaveLength(2);
+
+    // 이미 덮어쓴 a 에 원본값(이름·분류)을 적용 = 두 칸 해제 → 값이 바뀐 것이니 이력 1장.
+    st().renameSlot(DAY1, 'a', {
+      displayName: '웨이브온',
+      displayCategory: '맛집',
+    });
+    expect(slotOf(DAY1, 'a').displayName ?? null).toBeNull();
+    expect(slotOf(DAY1, 'a').displayCategory ?? null).toBeNull();
+    expect(st().history).toHaveLength(3);
+  });
+
+  it('RN4 · 이름은 앞뒤 공백을 잘라 저장하고, 공백뿐인 이름은 null 이다', () => {
+    seeded();
+
+    st().renameSlot(DAY1, 'a', {
+      displayName: '  우리 아지트  ',
+      displayCategory: null,
+    });
+    expect(slotOf(DAY1, 'a').displayName).toBe('우리 아지트');
+
+    st().renameSlot(DAY1, 'a', { displayName: '   ', displayCategory: null });
+    expect(slotOf(DAY1, 'a').displayName ?? null).toBeNull();
+  });
+
+  it('RN5 · 분류만 바꿔도 dirty·이력 1장 · 원래대로(두 칸 null)는 덮어쓴 슬롯에서만 이력이 쌓이고 덮어쓴 게 없으면 무변화', () => {
+    seeded();
+
+    st().renameSlot(DAY1, 'a', { displayName: null, displayCategory: '야경' });
+    expect(slotOf(DAY1, 'a').displayCategory).toBe('야경');
+    expect(st().dirty).toBe(true);
+    expect(st().history).toHaveLength(1);
+
+    st().renameSlot(DAY1, 'a', NONE); // 원래대로
+    expect(slotOf(DAY1, 'a').displayCategory ?? null).toBeNull();
+    expect(st().history).toHaveLength(2);
+
+    st().renameSlot(DAY1, 'a', NONE); // 덮어쓴 게 없는 슬롯에 원래대로
+    expect(st().history).toHaveLength(2);
+  });
+
+  it('RN6 · 없는 날짜·없는 poiId 는 아무것도 안 한다 · 같은 poiId 가 여러 날에 있어도 지정한 날만 바뀐다', () => {
+    seeded();
+    const before = st().days;
+
+    st().renameSlot('2099-01-01', 'a', {
+      displayName: '유령',
+      displayCategory: null,
+    });
+    st().renameSlot(DAY1, 'zzz', {
+      displayName: '유령',
+      displayCategory: null,
+    });
+    expect(st().days).toBe(before);
+    expect(st().history).toHaveLength(0);
+
+    st().renameSlot(DAY2, 'a', {
+      displayName: '이튿날 이름',
+      displayCategory: null,
+    });
+    expect(slotOf(DAY2, 'a').displayName).toBe('이튿날 이름');
+    expect(slotOf(DAY1, 'a').displayName ?? null).toBeNull();
+  });
+
+  it('RN7 · seed 는 서버가 준 두 칸을 보존하고 입력 배열을 안 바꾼다 · moveSlot 으로 다른 날로 옮겨도 두 칸이 따라간다', () => {
+    const input = [
+      slot('a', {
+        nameKo: '웨이브온',
+        category: '맛집',
+        displayName: '우리 아지트',
+        displayCategory: '카페',
+      }),
+    ];
+    const snapshot = JSON.stringify(input);
+    st().seed([
+      { date: DAY1, slots: input },
+      { date: DAY2, slots: [] },
+    ]);
+
+    expect(slotOf(DAY1, 'a').displayName).toBe('우리 아지트');
+    expect(slotOf(DAY1, 'a').displayCategory).toBe('카페');
+
+    st().renameSlot(DAY1, 'a', {
+      displayName: '바뀐 이름',
+      displayCategory: '카페',
+    });
+    expect(JSON.stringify(input)).toBe(snapshot); // 시드 원본 비파괴
+
+    st().moveSlot(DAY1, DAY2, 'a', {
+      startAt: '15:00:00',
+      endAt: '16:00:00',
+      endsNextDay: false,
+    });
+    expect(slotOf(DAY2, 'a').displayName).toBe('바뀐 이름');
+    expect(slotOf(DAY2, 'a').displayCategory).toBe('카페');
+  });
+});
+
+/**
+ * TRIP-1812 · 같은 날 같은 장소 — 끝 인자 `ordinal`(앞선 같은 장소 수)로 **눌린 그 카드**만 다룬다.
+ * 인자를 안 주면 0 이라 같은 장소가 없는 일정은 지금과 같다(위 S·MV·RN 이 그 그물이다, AC-6).
+ * 시각 조정은 `itineraryEditStore.adjustTime.test.ts` SA12.
+ *
+ * 3동작: 준비(같은 장소가 낀·붙은 날 시드) → 실행(액션 + ordinal) → 단언(남은 시각·표시 이름·다른 날·이력).
+ */
+describe('SP · 같은 장소의 ordinal 자리 (TRIP-1812)', () => {
+  const st = () => useItineraryEditStore.getState();
+  const at = (poiId: string, startAt: string, over: Partial<Slot> = {}): Slot =>
+    slot(poiId, { startAt, ...over });
+  const starts = (slots: Slot[]): string[] => slots.map((s) => s.startAt);
+  const day = (date: string): Slot[] =>
+    st().days.find((d) => d.date === date)?.slots ?? [];
+  /** [p1 09, p2 12, p1 14, p1 16] — 가운데 p1(ordinal 1)이 첫 일치·마지막 일치 어느 쪽도 아니다. */
+  const woven = () => [
+    at('p1', '09:00:00'),
+    at('p2', '12:00:00'),
+    at('p1', '14:00:00'),
+    at('p1', '16:00:00'),
+  ];
+  const adjacent = () => [
+    at('p1', '09:00:00'),
+    at('p1', '11:00:00'),
+    at('p2', '14:00:00'),
+  ];
+  const P = { startAt: '15:00:00', endAt: '16:00:00', endsNextDay: false };
+
+  it('SP1 · removeSlot 은 ordinal 자리만 뺀다 — 없는 ordinal 은 값이 같은 새 배열, 원본은 안 바뀐다', () => {
+    const slots = woven();
+
+    expect(starts(removeSlot(slots, 'p1', 1))).toEqual([
+      '09:00:00',
+      '12:00:00',
+      '16:00:00',
+    ]);
+    expect(starts(removeSlot(slots, 'p1', 2))).toEqual([
+      '09:00:00',
+      '12:00:00',
+      '14:00:00',
+    ]);
+    expect(starts(removeSlot(slots, 'p1', 0))).toEqual([
+      '12:00:00',
+      '14:00:00',
+      '16:00:00',
+    ]);
+    expect(starts(removeSlot(adjacent(), 'p1', 1))).toEqual([
+      '09:00:00',
+      '14:00:00',
+    ]);
+
+    const missing = removeSlot(slots, 'p1', 3);
+    expect(missing).not.toBe(slots);
+    expect(missing).toEqual(slots);
+    expect(slots).toHaveLength(4);
+  });
+
+  it('SP2 · deleteSlot(AC-3) — 그 날 ordinal 자리만 빠지고 되돌리기 1단계로 돌아온다, 없는 ordinal 은 state 그대로', () => {
+    st().seed([
+      { date: DAY1, slots: woven() },
+      { date: DAY2, slots: [at('p1', '10:00:00')] },
+    ]);
+    const before = st().days;
+
+    st().deleteSlot(DAY1, 'p1', 5);
+    expect(st().days).toBe(before);
+    expect(st().history).toHaveLength(0);
+
+    st().deleteSlot(DAY1, 'p1', 1);
+    expect(starts(day(DAY1))).toEqual(['09:00:00', '12:00:00', '16:00:00']);
+    expect(starts(day(DAY2))).toEqual(['10:00:00']);
+    expect(st().dirty).toBe(true);
+    expect(st().history).toHaveLength(1);
+
+    expect(st().undo()).toBe(DAY1);
+    expect(starts(day(DAY1))).toEqual([
+      '09:00:00',
+      '12:00:00',
+      '14:00:00',
+      '16:00:00',
+    ]);
+    expect(st().history).toHaveLength(0);
+  });
+
+  it('SP3 · moveSlot(AC-4) — ordinal 자리의 슬롯이 옮겨 가고 첫째는 남는다, 없는 ordinal 은 state 그대로', () => {
+    st().seed([
+      {
+        date: DAY1,
+        slots: [
+          at('p1', '09:00:00', { displayName: '첫째' }),
+          at('p2', '12:00:00'),
+          at('p1', '14:00:00', { displayName: '둘째' }),
+        ],
+      },
+      { date: DAY2, slots: [at('x', '10:00:00')] },
+    ]);
+    const before = st().days;
+
+    st().moveSlot(DAY1, DAY2, 'p1', P, 5);
+    expect(st().days).toBe(before);
+
+    st().moveSlot(DAY1, DAY2, 'p1', P, 1);
+    expect(day(DAY1).map((s) => s.displayName ?? s.poiId)).toEqual([
+      '첫째',
+      'p2',
+    ]);
+    expect(day(DAY2).map((s) => [s.displayName ?? s.poiId, s.startAt])).toEqual(
+      [
+        ['x', '10:00:00'],
+        ['둘째', '15:00:00'],
+      ]
+    );
+    expect(st().history).toHaveLength(1);
+  });
+
+  it('SP3b · moveSlot 은 ordinal 을 안 주면 첫째가 옮겨 간다 — 시드의 뒤 카드는 남는다', () => {
+    st().seed([
+      {
+        date: DAY1,
+        slots: [
+          at('p1', '09:00:00', { displayName: '첫째' }),
+          at('p1', '14:00:00', { displayName: '둘째' }),
+        ],
+      },
+      { date: DAY2, slots: [] },
+    ]);
+
+    st().moveSlot(DAY1, DAY2, 'p1', P);
+
+    expect(day(DAY1).map((s) => s.displayName)).toEqual(['둘째']);
+    expect(day(DAY2).map((s) => s.displayName)).toEqual(['첫째']);
+  });
+
+  it('SP4 · renameSlot(AC-4) — ordinal 자리만 표시 이름이 바뀐다, 없는 ordinal 은 state 그대로', () => {
+    st().seed([{ date: DAY1, slots: woven() }]);
+    const before = st().days;
+    const PATCH = { displayName: '뒤 카드', displayCategory: null };
+
+    st().renameSlot(DAY1, 'p1', PATCH, 5);
+    expect(st().days).toBe(before);
+
+    st().renameSlot(DAY1, 'p1', PATCH, 1);
+    expect(day(DAY1).map((s) => s.displayName ?? null)).toEqual([
+      null,
+      null,
+      '뒤 카드',
+      null,
+    ]);
+    expect(st().history).toHaveLength(1);
+  });
+
+  it('SP5 · deleteSlots(AC-11) 는 장소 단위 그대로다 — ["p1","p1"] 을 받아도 p1 전부가 빠지고 이력 1장', () => {
+    st().seed([{ date: DAY1, slots: woven() }]);
+
+    st().deleteSlots(DAY1, ['p1', 'p1', 'p1']);
+
+    expect(day(DAY1).map((s) => s.poiId)).toEqual(['p2']);
+    expect(st().history).toHaveLength(1);
   });
 });

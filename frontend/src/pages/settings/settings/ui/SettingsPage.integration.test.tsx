@@ -59,6 +59,12 @@ import Constants from 'expo-constants';
  *    예상 밖 `DELETE /me/push-tokens/…` 를 낸다(msw 미처리 요청은 단언을 안 깨므로 조용하다).
  */
 
+// TRIP-1803 — 로그아웃은 기기 안 사진 사본을 지우지 않는다(D8).
+const mockDeletePhotoCopies = jest.fn();
+jest.mock('@/shared/photo', () => ({
+  deletePhotoCopies: () => mockDeletePhotoCopies(),
+}));
+
 jest.mock('@/shared/api/generated/account/account');
 jest.mock('@/shared/api/generated/profile/profile');
 jest.mock('@/shared/api/generated/preferences/preferences');
@@ -1295,6 +1301,19 @@ describe('로그아웃 순서 · 게이트 대기 (옛 .logout)', () => {
       expect(getAccessToken()).toBeNull();
       expect(queryClient.getQueryData(CACHED_KEY)).toBeUndefined();
     });
+  });
+
+  // TRIP-1803 · D8 — 다른 계정은 메타가 없어 사본에 닿지 못하므로 지우지 않는다. 다시 로그인하면 그대로 보인다.
+  it('🔴 S3 로그아웃은 사진 사본을 지우지 않는다', async () => {
+    captureLogout(() => new HttpResponse(null, { status: 204 }));
+    startFakeGate();
+    mockDeletePhotoCopies.mockClear();
+    renderPage();
+
+    confirmLogout();
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/login'));
+    expect(mockDeletePhotoCopies).not.toHaveBeenCalled();
   });
 
   describe('TRIP-938 · 서버가 실패해도 로그아웃 (AC-2)', () => {

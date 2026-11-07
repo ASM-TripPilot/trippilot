@@ -25,6 +25,7 @@ import {
   watchMotion,
 } from '@/test-support/barMotionProbe';
 import * as probe from '@/test-support/fabAnchorProbe';
+import { guardKeyWarnings } from '@/test-support/keyWarnings';
 
 import { BAR_EXIT_MS } from '@/widgets/bottom-nav-bar';
 import { NAV_BAR_RESERVE } from '@/shared/ui/navBarLayout';
@@ -127,6 +128,9 @@ const SLOTS: LiveHubSlot[] = [
 ];
 
 const CARD_ROOT = /^execution-live-slot-2026-06-11#[^#]+$/;
+
+// TRIP-1812 — React 는 겹친 key 를 console.error 로만 알린다. 파일 최상위에서 걸어 모든 테스트 뒤에 0 을 단언한다(02a ★6).
+const keyWarnings = guardKeyWarnings();
 
 type Overrides = Partial<Parameters<typeof LiveHubView>[0]>;
 
@@ -1946,6 +1950,40 @@ describe('LiveHubView · HP 카드 번호와 핀 탭 (TRIP-1558)', () => {
       rowY(0),
       rowY(4),
     ]);
+  });
+
+  // TRIP-1812 AC-9 — 같은 장소 두 행. 행 y 를 slotKey 로 쥐면 마지막 layout 이 덮여 뒤 핀만 우연히 맞는다 — 앞 핀 단언이 판별자다(02a ★5).
+  it('HP9 같은 장소 두 행은 key 가 안 겹치고, 뒤 핀은 뒤 행 y · 앞 핀은 앞 행 y 로 스크롤한다', () => {
+    // 준비 — [광안 p, 다른 곳, 광안 p] 전부 좌표 있음 → 핀 ①②③, 펼침 칸이라 탭이 곧바로 스크롤이다.
+    const samePoi = SLOTS[0].slot.poiId;
+    renderHub({
+      slots: [
+        SLOTS[0],
+        SLOTS[1],
+        { ...SLOTS[2], slot: { ...SLOTS[2].slot, poiId: samePoi } },
+      ],
+      initialSnapIndex: 1,
+    });
+    const samePoiKey = `${DATE}#${samePoi}`;
+    const rows = screen.getAllByTestId(`execution-live-slot-row-${samePoiKey}`);
+    expect(rows).toHaveLength(2); // 앵커 — 같은 장소 행이 정말 둘 그려졌다(경고 0 이 공짜가 아니게)
+
+    fireLayoutAt('execution-live-timeline', TIMELINE_Y);
+    fireLayoutAt(`execution-live-slot-row-${KEYS[1]}`, ROW_YS[1]);
+    fireEvent(rows[0], 'layout', {
+      nativeEvent: { layout: { x: 0, y: ROW_YS[0], width: 320, height: 120 } },
+    });
+    fireEvent(rows[1], 'layout', {
+      nativeEvent: { layout: { x: 0, y: ROW_YS[2], width: 320, height: 120 } },
+    });
+
+    // 실행 — 뒤 핀(③) 다음 앞 핀(①).
+    firePinTap(2);
+    firePinTap(0);
+
+    // 단언 — 각자 자기 행으로 간다. 겹친 key 경고도 없다.
+    expect(scrollYs()).toEqual([rowY(2), rowY(0)]);
+    expect(keyWarnings.keys()).toEqual([]);
   });
 
   it('HP5 (금지) 행 y 를 아직 못 쟀으면 핀 탭이 던지지 않고, 시트가 도착해도 스크롤을 요청하지 않는다', () => {

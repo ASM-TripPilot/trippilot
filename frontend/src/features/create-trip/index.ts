@@ -12,6 +12,7 @@ export {
   summaryDestinations,
   summaryPeriod,
   summaryPreferences,
+  destinationLabel,
 } from './model/tripSummary';
 export type { PreferenceSummary, SummaryLine } from './model/tripSummary';
 export {

@@ -392,7 +392,7 @@ describe('TRIP-220 AC-10 · 장소 계약 앵커 (A-4, 선제 green)', () => {
    * 보는 테스트(B-10·B-11)도 아무 말을 하지 않는다.** 그 사각지대를 여기서 메운다
    * (같은 파일 A-1·A-3 앵커와 같은 취지 · 01b Seed Q5).
    */
-  it('/places의 쿼리 파라미터가 정확히 이 일곱 개뿐이다', () => {
+  it('/places의 쿼리 파라미터가 정확히 이 여덟 개뿐이다', () => {
     const source = readOpenapiSource();
     const block = extractPathBlock(source, '/places');
     const paramNames = extractParamNames(block);
@@ -403,9 +403,11 @@ describe('TRIP-220 AC-10 · 장소 계약 앵커 (A-4, 선제 green)', () => {
 
     // 완전 일치(순서 포함). TRIP-503 에서 목록 계약이 늘었다 — 상한·지점·서버검색이 붙었다.
     // TRIP-1570 에서 order·seed(시드 기반 무작위 정렬)가 limit 과 cursor 사이에 붙어 일곱 개가 됐다.
+    // TRIP-1808 에서 regionCode(동명 시군구를 코드로 집는다)가 region 다음에 붙어 여덟 개가 됐다.
     // 이 단정을 유지하는 이유는 그대로다: 파라미터가 조용히 하나 더 늘면 즉시 red 여야 한다.
     expect(paramNames).toEqual([
       'region',
+      'regionCode',
       'category',
       'q',
       'limit',

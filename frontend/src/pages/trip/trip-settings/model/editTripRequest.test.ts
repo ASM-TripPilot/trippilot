@@ -24,7 +24,10 @@ import { toEditTripRequest } from './editTripRequest';
  *    서버도 트림하지 않고 길이는 원문 코드포인트 기준).
  *  - 일과를 시트로 바꿨으면(`edits.dayWindow` 가 있으면) 시트 결과(`HH:mm`)를 따르고, **정한 값만 키가 있다**(위저드
  *    생성 요청과 같은 규약 — 기본으로 돌아간 칸은 키가 없다). 시트를 안 열었으면 3칸 모두 GET 원문 그대로.
- *  - 기간(startDate·endDate)은 어떤 edits 로도 바뀌지 않는다(AC-2).
+ *  - 기간(startDate·endDate)은 `edits.period` 를 안 주면 바뀌지 않는다(TRIP-1788 이 1787 의 "어떤 edits 로도 불변"을 이 한 칸만 뒤집었다).
+ *  - (TRIP-1788) `edits.period` 를 주면 날짜가 그 값이고 `destinations` 박수 합이 새 박수 이하로 맞춰진다. `coverKey` 는
+ *    `edits.coverKey === undefined ? trip.coverKey : edits.coverKey` 이고 결과가 undefined 면 키가 없다(null 은 null). `discardItinerary`
+ *    는 `edits.discardItinerary` 가 있을 때만 `true` 로 실리고 평소엔 키가 없다.
  *
  * 3동작: 준비(GET 여행 + edits) → 실행(toEditTripRequest) → 단언(본문).
  */
@@ -76,6 +79,8 @@ const ALLOWED_KEYS = [
   'dayStartAt',
   'firstDayStartAt',
   'lastDayEndAt',
+  'coverKey',
+  'discardItinerary',
 ];
 
 describe('toEditTripRequest — 예시', () => {
@@ -282,7 +287,7 @@ describe('toEditTripRequest — 속성(PBT)', () => {
     );
   });
 
-  it('어떤 edits 를 줘도 기간·예산·목적지(regionCode·박수)는 GET 값이고, 본문 키는 EditTripRequest 칸뿐이다', () => {
+  it('period 를 안 준 edits 는 기간·예산·목적지(regionCode·박수)를 GET 값 그대로 두고, 본문 키는 EditTripRequest 칸뿐이다', () => {
     fc.assert(
       fc.property(tripArb, editsArb, (trip, edits) => {
         const body = toEditTripRequest(trip, edits);
@@ -334,6 +339,170 @@ describe('toEditTripRequest — 속성(PBT)', () => {
           }
         }
       })
+    );
+  });
+});
+
+describe('toEditTripRequest — 기간 이동·일수 변경·커버 (TRIP-1788)', () => {
+  /** 기간 3박 4일 · 박수 합 3. */
+  const BASE: Trip = makeTrip({
+    startDate: '2099-06-10',
+    endDate: '2099-06-13',
+    destinations: [
+      { seq: 1, region: '제주시', nights: 2, regionCode: '50110' },
+      { seq: 2, region: '서귀포시', nights: 1, regionCode: '50130' },
+    ],
+    dayStartAt: null,
+    firstDayStartAt: null,
+    lastDayEndAt: null,
+  });
+  const sum = (body: EditTripRequest) =>
+    body.destinations.reduce((acc, one) => acc + one.nights, 0);
+
+  it('일수가 같은 기간 이동은 날짜만 바뀌고 목적지는 그대로이며 discardItinerary 키가 없다', () => {
+    const body = toEditTripRequest(BASE, {
+      period: { startDate: '2099-06-20', endDate: '2099-06-23' },
+    });
+
+    expect(body.startDate).toBe('2099-06-20');
+    expect(body.endDate).toBe('2099-06-23');
+    expect(body.destinations).toEqual(BASE.destinations);
+    expect('discardItinerary' in body).toBe(false);
+  });
+
+  it('일수를 줄이는 확정은 박수 합이 새 박수 이하로 맞춰지고 discardItinerary: true 가 실린다', () => {
+    const body = toEditTripRequest(BASE, {
+      period: { startDate: '2099-06-10', endDate: '2099-06-11' },
+      discardItinerary: true,
+    });
+
+    expect(body.discardItinerary).toBe(true);
+    expect(sum(body)).toBeLessThanOrEqual(1);
+    // 서귀포시(1박)는 0박이 돼 빠지고 제주시만 1박으로 남는다.
+    expect(body.destinations).toEqual([
+      { seq: 1, region: '제주시', nights: 1, regionCode: '50110' },
+    ]);
+  });
+
+  it('일수를 늘리는 확정은 마지막 여행지만 늘어난다', () => {
+    const body = toEditTripRequest(BASE, {
+      period: { startDate: '2099-06-10', endDate: '2099-06-20' },
+      discardItinerary: true,
+    });
+
+    expect(body.destinations.map((one) => one.nights)).toEqual([2, 8]);
+    expect(body.discardItinerary).toBe(true);
+  });
+
+  it('discardItinerary 는 edits 에 줄 때만 키가 있다 — 아무것도 안 주면 키가 없다', () => {
+    expect('discardItinerary' in toEditTripRequest(BASE, {})).toBe(false);
+    expect(
+      'discardItinerary' in toEditTripRequest(BASE, { title: '바꿈' })
+    ).toBe(false);
+  });
+
+  it.each<
+    [
+      string,
+      string | null | undefined,
+      string | null | undefined,
+      string | null | undefined,
+    ]
+  >([
+    [
+      '안 건드림 + GET 에 키 있음 → 현재 키 그대로(없으면 지워지니까)',
+      '26350',
+      undefined,
+      '26350',
+    ],
+    ['안 건드림 + 앱이 모르는 키 → 원문 그대로', 'zz9', undefined, 'zz9'],
+    ['고름 → 고른 키', '26350', '11110', '11110'],
+    ['첫 칸(자동)을 고름 → null', '26350', null, null],
+    ['GET 이 null + 안 건드림 → null 을 되돌려 보낸다', null, undefined, null],
+  ])('coverKey — %s', (_label, got, picked, expected) => {
+    const trip = makeTrip({ coverKey: got });
+    const body = toEditTripRequest(
+      trip,
+      picked === undefined ? {} : { coverKey: picked }
+    );
+
+    expect(body.coverKey).toBe(expected);
+    expect('coverKey' in body).toBe(true);
+  });
+
+  it('옛 서버(GET 에 coverKey 칸 자체가 없음)면 안 건드렸을 때 본문에도 키가 없다 — 고르면 그 키가 실린다', () => {
+    const old = makeTrip();
+
+    expect('coverKey' in old).toBe(false);
+    expect('coverKey' in toEditTripRequest(old, {})).toBe(false);
+    expect('coverKey' in toEditTripRequest(old, { title: '이름' })).toBe(false);
+    expect(toEditTripRequest(old, { coverKey: '26350' }).coverKey).toBe(
+      '26350'
+    );
+  });
+
+  it('PBT — 기간을 주면 박수 합이 새 박수 이하이고 seq·순서가 그대로다, coverKey 규칙이 어떤 조합에도 성립한다', () => {
+    const nightsArb = fc.integer({ min: 0, max: 30 });
+    const coverArb = fc.oneof(
+      fc.constant(undefined),
+      fc.constant(null),
+      fc.constantFrom('11', '26350', 'zz9')
+    );
+    const destinationsArb = fc
+      .array(fc.integer({ min: 0, max: 4 }), { minLength: 1, maxLength: 4 })
+      .map((nights) =>
+        nights.map((n, i) => ({
+          seq: i + 1,
+          region: `지역${i}`,
+          nights: n,
+          regionCode: null,
+        }))
+      );
+    fc.assert(
+      fc.property(
+        destinationsArb,
+        fc.integer({ min: 0, max: 6 }),
+        nightsArb,
+        coverArb,
+        coverArb,
+        (destinations, slack, newNights, gotKey, pickedKey) => {
+          const oldNights =
+            destinations.reduce((acc, one) => acc + one.nights, 0) + slack;
+          const trip = makeTrip({
+            startDate: '2099-06-10',
+            endDate: new Date(Date.UTC(2099, 5, 10) + oldNights * 86_400_000)
+              .toISOString()
+              .slice(0, 10),
+            destinations,
+            ...(gotKey === undefined ? {} : { coverKey: gotKey }),
+          });
+          const end = new Date(Date.UTC(2099, 5, 10) + newNights * 86_400_000)
+            .toISOString()
+            .slice(0, 10);
+          const body = toEditTripRequest(trip, {
+            period: { startDate: '2099-06-10', endDate: end },
+            discardItinerary: true,
+            ...(pickedKey === undefined ? {} : { coverKey: pickedKey }),
+          });
+
+          expect(sum(body)).toBeLessThanOrEqual(newNights);
+          // 남은 곳은 입력 순서 그대로(빠질 수는 있어도 뒤섞이지 않는다), 첫 여행지는 늘 남는다.
+          const kept = body.destinations.map((one) => one.seq);
+          expect(kept).toEqual(
+            destinations
+              .map((one) => one.seq)
+              .filter((seq) => kept.includes(seq))
+          );
+          expect(kept).toContain(
+            Math.min(...destinations.map((one) => one.seq))
+          );
+          expect(body.destinations.every((one) => one.nights >= 0)).toBe(true);
+          const expected = pickedKey === undefined ? gotKey : pickedKey;
+          if (expected === undefined) expect('coverKey' in body).toBe(false);
+          else expect(body.coverKey).toBe(expected);
+          expect(body.discardItinerary).toBe(true);
+        }
+      )
     );
   });
 });

@@ -36,6 +36,14 @@ describe('AC-5 · sidoKey — 정식 명칭과 약칭이 같은 키로 접힌다
   ])('sidoKey(%s) === %s', (input, expected) => {
     expect(sidoKey(input)).toBe(expected);
   });
+
+  // TRIP-1806 — 본체는 shared 로 이사했고 여기는 재수출만 남는다(사본이면 한쪽만 고쳐도 아무도 모른다).
+  // 정적 import 면 이사 전에 이 파일 전체가 죽어 나머지 케이스의 무회귀를 못 본다 — 그래서 이 it 안에서만 불러온다.
+  it('shared/lib/sidoKey 와 같은 함수다', async () => {
+    const shared = await import('@/shared/lib/sidoKey');
+
+    expect(sidoKey).toBe(shared.sidoKey);
+  });
 });
 
 describe('AC-5 · addressInRegion — 예시 표 (브리프 AC-5 네 줄 + 보강)', () => {

@@ -50,7 +50,7 @@ internal object ConfirmedSnapshots {
                         VisitSlot.of(
                             s.sourcePoiId, snapshot, s.orderIndex, s.startAt, s.endAt, s.isFixed,
                             s.hasViolation, s.endsNextDay, s.distanceRange, s.placementReason,
-                            s.violationReason, s.alternatives,
+                            s.violationReason, s.alternatives, s.displayName, s.displayCategory,
                         )
                     }
                 },

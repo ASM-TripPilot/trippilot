@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { focusManager, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { useReflectionPhotos } from './useReflectionPhotos';
-import { newTestQueryClient } from '@/test-support/queryRender';
+import { resolvePhotoUri } from '@/shared/photo';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
 
 const mockVisits = jest.fn();
 const mockPhotos = jest.fn();
@@ -17,9 +18,10 @@ jest.mock('@/shared/api/index.hooks', () => ({
 jest.mock('@/shared/storage', () => ({
   getInstallId: jest.fn().mockResolvedValue('me'),
 }));
+let mockGoneResolves = false; // TRIP-1803 — 설정에서 넓힌 뒤 복귀 흉내.
 jest.mock('@/shared/photo', () => ({
   resolvePhotoUri: jest.fn(async (id: string) =>
-    id === 'gone' ? null : `file://${id}`
+    id === 'gone' && !mockGoneResolves ? null : `file://${id}`
   ),
 }));
 
@@ -164,5 +166,90 @@ describe('TRIP-1757 · 방문별 사진 GET 실패', () => {
     await waitFor(() => expect(calls('v2')).toBe(1));
     await act(async () => {});
     expect(result.current.photoLoadFailed).toBe(false);
+  });
+});
+
+/**
+ * TRIP-1803 · 못 푼 사진을 조용히 빼지 않는다 — 칸은 계속 빼고 장수를 돌려줘 화면이 한 줄로 알린다(D6 · BR-U5-14·34).
+ * 무엇을 보장하나: `unresolvedCount` 는 내 기기 사진 중 앨범이 `null` 이라 답한 것만 센다(다른 기기·아직 모름 제외) ·
+ *   앱 복귀에 못 푼 사진만 다시 묻는다(AC-2 · E-3).
+ * (개념) `staleTime: 30_000` = 앱 기본값. 기본 0 이면 공허 통과한다(02a ★1).
+ */
+describe('🔴 TRIP-1803 · 못 푼 사진 장수와 복귀', () => {
+  const uriCalls = (id: string) =>
+    (resolvePhotoUri as jest.Mock).mock.calls.filter(([arg]) => arg === id)
+      .length;
+  const servePhotos = (items: ReturnType<typeof photo>[]) => {
+    mockVisits.mockReset().mockReturnValue({
+      data: { visits: [{ visitCheckId: 'v1', poiId: 'p1' }] },
+    });
+    mockPhotos.mockReset().mockResolvedValue({ items });
+  };
+  const wrapper = createWrapper(newTestQueryClient({ staleTime: 30_000 }));
+
+  beforeEach(() => (resolvePhotoUri as jest.Mock).mockClear());
+  afterEach(() => {
+    mockGoneResolves = false;
+    focusManager.setFocused(undefined); // 모듈 싱글턴.
+  });
+
+  it('H1 내 기기 사진 중 앨범이 못 찾은 것만 센다 — 다른 기기 사진은 세지 않는다', async () => {
+    servePhotos([
+      photo('a', 'me'),
+      photo('gone', 'me'),
+      photo('other', 'not-me'),
+    ]);
+
+    const { result } = renderHook(() => useReflectionPhotos('t1', 'd1'), {
+      wrapper: tree,
+    });
+
+    await waitFor(() => expect(result.current.unresolvedCount).toBe(1));
+    expect(result.current.photos.map((p) => p.uri)).toEqual(['file://a']);
+  });
+
+  it('H2 앨범 조회가 끝나기 전에는 세지 않는다 — 로딩 중 한 줄이 깜빡이지 않게', async () => {
+    let finish: (uri: null) => void = () => {};
+    (resolvePhotoUri as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    servePhotos([photo('gone', 'me')]);
+
+    const { result } = renderHook(() => useReflectionPhotos('t1', 'd2'), {
+      wrapper: tree,
+    });
+    await waitFor(() =>
+      expect(resolvePhotoUri as jest.Mock).toHaveBeenCalledTimes(1)
+    );
+    expect(result.current.unresolvedCount).toBe(0);
+
+    await act(async () => finish(null));
+
+    await waitFor(() => expect(result.current.unresolvedCount).toBe(1));
+  });
+
+  it('H3 (AC-2 · E-3) 넓히고 복귀하면 못 푼 사진만 다시 물어 칸이 나오고 장수가 0이 되며, 풀린 사진은 다시 안 묻는다', async () => {
+    servePhotos([photo('a', 'me'), photo('gone', 'me')]);
+    const { result } = renderHook(() => useReflectionPhotos('t1', 'd3'), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.unresolvedCount).toBe(1));
+
+    mockGoneResolves = true;
+    expect(uriCalls('gone')).toBe(1); // 복귀 전에는 다시 묻지 않는다.
+
+    act(() => focusManager.setFocused(false));
+    act(() => focusManager.setFocused(true));
+
+    await waitFor(() => expect(result.current.unresolvedCount).toBe(0));
+    expect(result.current.photos.map((p) => p.uri)).toEqual([
+      'file://a',
+      'file://gone',
+    ]);
+    expect(uriCalls('gone')).toBe(2);
+    expect(uriCalls('a')).toBe(1);
   });
 });

@@ -55,6 +55,9 @@ import com.trippilot.trip.api.TripFacade
 import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripPeriod
 import io.kotest.property.Arb
+import io.kotest.property.arbitrary.list
+import io.kotest.property.arbitrary.map
+import io.kotest.property.arbitrary.of
 import io.kotest.property.arbitrary.shuffle
 import io.kotest.property.checkAll
 import io.kotest.assertions.throwables.shouldThrow
@@ -1196,6 +1199,102 @@ class EditItineraryServiceTest : StringSpec({
         ctx.transportModes shouldBe emptyList() // 수단은 종전 규칙 그대로(자차만)
         ctx.preferenceProfile shouldBe profileWith(listOf("대중교통"))
         repairContexts(null).forRevalidation(acc, tripId) shouldBe RepairContext.NONE // 여행 컨텍스트가 없으면 종전(빈 컨텍스트)
+    }
+
+    // ---- 이 여행 전용 표시값(TRIP-1801)
+    fun displayService(repo: EditFakeItineraries, agent: EditFakeAgent = EditFakeAgent()) =
+        EditItineraryService(trips(true), repo, agent, revisionSvc(FakeRevisions(), repo, NOOP_TX, clock), CapturingChangeLogs(), FreezeAllSnapshots(), NOOP_TX, FakeRejectionStore(), clock, NO_CONTEXTS)
+
+    fun slotA(name: String? = null, category: String? = null, start: String = "09:00", end: String = "10:00") =
+        EditSlot(poiA, LocalTime.parse(start), LocalTime.parse(end), isFixed = false, endsNextDay = false, displayName = name, displayCategory = category)
+
+    "표시값을 실은 PUT — 슬롯에 남고 재검증에 싣지 않는다" {
+        val repo = repoWith(current())
+
+        val saved = displayService(repo).edit(acc, tripId, EditItinerary(listOf(EditDay(day, listOf(slotA("할머니 국밥", "맛집"))))))
+
+        saved.days.single().slots.single().displayName shouldBe "할머니 국밥"
+        saved.days.single().slots.single().displayCategory shouldBe "맛집"
+    }
+
+    "순서만 바꿔 두 칸을 그대로 실으면 유지되고, 안 실으면 지워진다(전체 교체)" {
+        val repo = repoWith(current())
+        val svc = displayService(repo)
+        val named = EditSlot(poiB, LocalTime.parse("11:00"), LocalTime.parse("12:00"), false, false, displayName = "새 이름", displayCategory = "카페")
+        svc.edit(acc, tripId, EditItinerary(listOf(EditDay(day, listOf(slotA(), named)))))
+
+        val reordered = svc.edit(acc, tripId, EditItinerary(listOf(EditDay(day, listOf(named.copy(startAt = LocalTime.parse("08:00"), endAt = LocalTime.parse("08:30")), slotA())))))
+        reordered.days.single().slots.first { it.sourcePoiId == poiB }.displayName shouldBe "새 이름"
+
+        val cleared = svc.edit(acc, tripId, EditItinerary(listOf(EditDay(day, listOf(slotA())))))
+        cleared.days.single().slots.single().displayName shouldBe null
+    }
+
+    "닫힌 집합 밖 분류는 400 이고 아무것도 안 바뀐다" {
+        val repo = repoWith(current())
+        val before = repo.findByTrip(tripId).single()
+
+        shouldThrow<ValidationFailed> { displayService(repo).edit(acc, tripId, EditItinerary(listOf(EditDay(day, listOf(slotA(category = "FOOD")))))) }
+
+        repo.findByTrip(tripId).single() shouldBe before
+    }
+
+    "PBT: 임의의 덮어쓰기 조합을 PUT 하면 값이 그대로다 — 공백뿐인 이름은 null, 앞뒤 공백은 지운다" {
+        val categories = listOf("명소", "맛집", "카페", "야경", "자연", "쇼핑", "문화", "액티비티", "미술", "술집")
+        checkAll(Arb.list(Arb.of("가", "a", " ", "\n", "\u3000", "😀"), 0..60).map { it.joinToString("") }, Arb.of(categories + listOf<String?>(null))) { name, category ->
+            val repo = repoWith(current())
+
+            val slot = displayService(repo).edit(acc, tripId, EditItinerary(listOf(EditDay(day, listOf(slotA(name, category)))))).days.single().slots.single()
+
+            slot.displayName shouldBe name.trim().takeIf { it.isNotEmpty() }
+            slot.displayCategory shouldBe category
+            repo.findByTrip(tripId).single().days.single().slots.single().displayName shouldBe slot.displayName
+        }
+    }
+
+    "이름·분류만 고치면 AI 를 안 부르고 위반 표시를 잇는다 — 시각도 바꾸면 부른다" {
+        val flagged = Itinerary.reconstitute(
+            UUID.randomUUID(), tripId, ItineraryStatus.PLANNED, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, false, GenerationState.COMPLETE,
+            listOf(ItineraryDay.of(day, 0, listOf(VisitSlot.of(poiA, null, 0, LocalTime.parse("09:00"), LocalTime.parse("10:00"), hasViolation = true, violationReason = "휴무")))),
+            clock.instant(), clock.instant(), null, emptyList(), ScoringSignal.UNKNOWN,
+        )
+        val repo = repoWith(flagged)
+        val agent = EditFakeAgent()
+
+        val renamed = displayService(repo, agent).edit(acc, tripId, EditItinerary(listOf(EditDay(day, listOf(slotA("새 이름"))))))
+
+        agent.validateCalls shouldBe 0
+        renamed.days.single().slots.single().hasViolation shouldBe true
+        renamed.days.single().slots.single().violationReason shouldBe "휴무"
+
+        displayService(repo, agent).edit(acc, tripId, EditItinerary(listOf(EditDay(day, listOf(slotA("새 이름", start = "09:30"))))))
+        agent.validateCalls shouldBe 1
+    }
+
+    "도우미 [적용]은 표시값을 몰라도 같은 장소의 값을 잇는다 — 다른 날로 옮겨도" {
+        val repo = repoWith(current())
+        val svc = displayService(repo)
+        svc.edit(acc, tripId, EditItinerary(listOf(EditDay(day, listOf(slotA("새 이름", "카페"))))))
+
+        svc.edit(
+            acc, tripId,
+            listOf(
+                EditDayCommand(day, emptyList()),
+                EditDayCommand(day.plusDays(1), listOf(EditSlotCommand(poiA, LocalTime.parse("10:00"), LocalTime.parse("11:00"), false, false))),
+            ),
+            null, ItineraryEditSource.ASSISTANT,
+        )
+
+        val moved = repo.findByTrip(tripId).single().days.last().slots.single()
+        moved.displayName shouldBe "새 이름"
+        moved.displayCategory shouldBe "카페"
+    }
+
+    "확정 일정 편집의 동결 승계가 표시값을 잃지 않는다" {
+        val repo = repoWith(current { it.confirm(clock.instant()) })
+        val saved = displayService(repo).edit(acc, tripId, EditItinerary(listOf(EditDay(day, listOf(slotA("새 이름", "카페"))))))
+        saved.days.single().slots.single().displayName shouldBe "새 이름"
+        saved.days.single().slots.single().poiSnapshotId shouldNotBe null
     }
 
     "재검증 수단 조회가 깨지면 수단 없이(대중교통) 재검증한다 — 판정 보류로 섞지 않는다" {

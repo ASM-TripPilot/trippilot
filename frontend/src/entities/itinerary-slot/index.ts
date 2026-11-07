@@ -1,7 +1,13 @@
 export { deriveEndsNextDay, isValidTimeRange } from './lib/endsNextDay';
 export { normalizeOpeningHours } from './lib/normalizeOpeningHours';
 export { formatOpeningHoursLabel } from './lib/openingHoursLabel';
-export { buildSlotKey, parseSlotKey } from './lib/slotKey';
+export { slotDisplayCategory, slotDisplayName } from './lib/slotDisplay';
+export {
+  buildSlotKey,
+  findSlotIndex,
+  parseSlotKey,
+  slotOrdinal,
+} from './lib/slotKey';
 export { buildStatePins } from './lib/slotMapPin';
 export type { SlotProgressState } from './lib/slotMapPin';
 export { projectSlotProgress } from './lib/slotProgress';
@@ -21,6 +27,7 @@ export {
   CategoryImageGlyph,
   CategoryShoppingBagGlyph,
   CategoryTreeGlyph,
+  PhotoGlyph,
 } from './ui/SlotGlyphs';
 export { SlotProgressCard } from './ui/SlotProgressCard';
 export { SlotStopCard } from './ui/SlotStopCard';

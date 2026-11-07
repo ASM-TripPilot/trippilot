@@ -292,7 +292,7 @@ export function TripRecordsView({
           keyExtractor: (item) =>
             item.kind === 'card'
               ? item.card.visitCheckId
-              : `plan-${item.row.slotKey}`,
+              : `plan-${item.row.slotKey}-${item.row.planOrder}`,
           ListFooterComponent: (
             <View
               className="px-lg"

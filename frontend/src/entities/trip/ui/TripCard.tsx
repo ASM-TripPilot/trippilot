@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, Ref } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import {
   TrashGlyph,
@@ -14,6 +14,7 @@ import {
   COVER_START,
 } from '../config/coverGradients';
 
+import { CoverLabel } from './CoverLabel';
 import { TripGearGlyph, PushpinGlyph } from './TripGlyphs';
 import type { MyTripCardVM } from '../model';
 import { COLOR_TOKENS } from '@/shared/config';
@@ -45,6 +46,10 @@ export interface TripCardProps {
   menuOpen?: boolean;
   /** TRIP-1786 · 주어지면 ⋯ 버튼을 그린다(삭제 콜백과 무관 — 항목은 각자 자기 콜백이 있을 때만 뜬다). */
   onPressMenu?: () => void;
+  /** TRIP-1819 · ⋯ 버튼 자리 재기용 — 소비처가 잰다(카드는 무상태). */
+  menuButtonRef?: Ref<View>;
+  /** TRIP-1819 · 아래 공간이 모자랄 때 메뉴를 카드 위로 연다. */
+  menuAbove?: boolean;
   /** TRIP-1786 · 「여행 설정」 항목. */
   onPressSettings?: () => void;
   /** TRIP-1786 · 「맨 위에 고정」(pinned 면 「고정 해제」) 항목. 고정 상태·저장은 소비처가 쥔다. */
@@ -108,6 +113,8 @@ export function TripCard({
   onPressDelete,
   menuOpen = false,
   onPressMenu,
+  menuButtonRef,
+  menuAbove = false,
   onPressSettings,
   onTogglePin,
   pinned = false,
@@ -124,6 +131,7 @@ export function TripCard({
     imageUrl,
     coverCity,
     coverSource,
+    coverLabel,
     coverTone = 'upcoming',
   } = vm;
   const city = coverCity?.trim() ? coverCity.trim() : null;
@@ -139,11 +147,11 @@ export function TripCard({
       testID={`${testIDPrefix}-card-${tripId}`}
       accessibilityRole="button"
       onPress={onPress}
-      className="w-full overflow-hidden rounded-card border border-hairline bg-canvas"
+      className="w-full rounded-card border border-hairline bg-canvas"
     >
       {/* 사진 자리 — imageUrl(픽스처 전용, AC-6 G7) 있으면 Image, 없으면 톤별 그라데이션 + 도시 이름
           (Trip 에 사진 필드 없음, INV-1). 배지·resume 는 이 위에 얹는다. */}
-      <View className="h-[178px] w-full overflow-hidden">
+      <View className="h-[178px] w-full overflow-hidden rounded-t-card">
         {imageUrl ? (
           <Image
             testID={`${testIDPrefix}-photo-${tripId}`}
@@ -168,6 +176,11 @@ export function TripCard({
                   start={COVER_SCRIM_START}
                   end={COVER_SCRIM_END}
                   style={FILL}
+                />
+                <CoverLabel
+                  label={coverLabel}
+                  testID={`${testIDPrefix}-cover-label-${tripId}`}
+                  className="absolute bottom-[14px] right-[14px] max-w-[40%]"
                 />
               </>
             ) : (
@@ -220,6 +233,7 @@ export function TripCard({
           ) : null}
           {showMore ? (
             <Pressable
+              ref={menuButtonRef}
               testID={`${testIDPrefix}-menu-${tripId}`}
               accessibilityRole="button"
               accessibilityLabel="여행 메뉴"
@@ -295,12 +309,15 @@ export function TripCard({
 
       {/* 팝오버 — ⋯ 아래 3px(14+36+3), 오른쪽 끝 맞춤. 사진 자리(h178, overflow-hidden)의 자식이 아니라 카드 루트의 자식이다:
           항목이 셋이면 높이가 151 이라 53+151=204 > 178 로 사진 상자에 「삭제」 행이 잘린다. 루트 높이는 사진+정보로 ≈270 이라 안에 든다.
-          형제 중 마지막이라 정보 영역 위에 얹힌다. */}
+          형제 중 마지막이라 정보 영역 위에 얹힌다. `menuAbove` 면 카드 윗변 위로 나간다(TRIP-1819 — 뒤 카드가 앞 카드 위에 그려져 패널이 보인다,
+          그래서 루트에 overflow-hidden 을 두지 않고 사진 상자가 윗 모서리를 스스로 둥글린다). */}
       {showMenu ? (
         <View
           testID={`${testIDPrefix}-menu-panel-${tripId}`}
           style={MENU_SHADOW}
-          className="absolute right-[14px] top-[53px] w-[160px] rounded-button border border-hairline bg-canvas py-xs"
+          className={`absolute right-[14px] w-[160px] rounded-button border border-hairline bg-canvas py-xs ${
+            menuAbove ? 'bottom-full' : 'top-[53px]'
+          }`}
         >
           {onPressSettings !== undefined ? (
             <Pressable

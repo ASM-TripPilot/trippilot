@@ -2017,3 +2017,11 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **User Input**: (다른 세션이 전한 사용자 원문, 2026-11-03) "위치추적해서 날씨 찾으면 되잖아." — 도우미에 "오늘 날씨"가 답이 없던 것. 결정 자체는 2026-10-20 사용자 결정 O-U8-5("포그라운드 현재 위치를 턴 컨텍스트에 싣는다")다.
 **AI Response**: `construction/u8-conversational-assistant/functional-design/business-rules.md` 의 `[정정 · 2026-10-21 · TRIP-1524]` 블록 뒤, `[개정 · 2026-10-22 · TRIP-1553]` 앞에 `[개정 · 2026-11-04 · O-U8-5 구현]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 와이어 칸·서버 동의 재확인·법정 로그 USE(이용으로 판단)·AI 날씨 앵커 순서·FE 후속.
 **Context**: CONSTRUCTION — U8 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — U3 슬롯 표시 이름·분류 덮어쓰기 (BR-U3-36 · §1.3 VisitSlot · TRIP-1816)
+**Timestamp**: 2026-11-07T12:40:00+09:00 (작업 시점)
+**User Input**: (TRIP-1816 본문 인용) "u3 functional-design 에 「일정 슬롯 표시 이름·분류를 이 여행에서만 고치기」(TRIP-1795·1801) 규칙을 반영" · "기능 지도의 「시작 전 확정 일정 저장 = 409」 문장이 BR-U3-28(TRIP-1710 개정)과 어긋남 → 고친다". 근거는 TRIP-1795 끝 보고 결정 5. 사용자 지시(2026-11-07, 배치 인덱스) "ㄱㄱ".
+**AI Response**: `construction/u3-ai-itinerary/functional-design/business-rules.md` §3 끝(§4 앞)에 `[신설 · 2026-11-07 · TRIP-1816]` BR-U3-36 블록, `domain-entities.md` §1.3 끝에 `[개정 · 2026-11-07 · TRIP-1816]` 블록을 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용은 이미 develop 에 있는 구현(#2012 TRIP-1801 · #2016 TRIP-1795)을 코드·계약과 대조해 옮긴 것이고 새 결정은 없다. 패키지 문서 `frontend/docs/feature-map/itinerary-edit.md`·`itinerary-view.md` 의 시작 전 확정 일정 409 서술도 BR-U3-28 TRIP-1710 블록에 맞게 고쳤다.
+**Context**: CONSTRUCTION — U3 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.

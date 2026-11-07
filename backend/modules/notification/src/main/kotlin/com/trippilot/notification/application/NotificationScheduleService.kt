@@ -84,6 +84,13 @@ class NotificationScheduleService(
             log.info("삭제 유예 중인 계정이라 리마인드 예약을 만들지 않았습니다. tripId={}", tripId)
             return
         }
+        if (onlyIfScheduled && !plans.hasItinerary(trip.accountId, tripId)) {
+            // 기간을 바꾸며 일정을 버렸다(TRIP-1789) — 예약은 있었는데 일정이 없다. 다시 세우면 없는 일정의 "오늘의 일정"이 울린다.
+            // 일정을 다시 짜면 생성 이벤트가 세운다.
+            schedules.replacePending(tripId, emptyList())
+            log.info("일정이 없어 리마인드 예약을 비웠습니다. tripId={}", tripId)
+            return
+        }
         val rows = plan(tripId, trip, now)
         val planned = if (fillCopies) withCopies(tripId, trip, rows) else rows
         schedules.replacePending(tripId, planned)

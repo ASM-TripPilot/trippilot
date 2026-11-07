@@ -2,9 +2,9 @@
  * TRIP-1787 · g03 여행 설정 순수 뷰(Figma `5151:3550`) — props 만 받는다(조회·저장·라우터를 모른다). 프리뷰
  * (`app/_dev/preview.tsx`)가 네트워크 계층을 전이 로드하지 않고 이 파일만 문다.
  *
- * 고칠 수 있는 칸은 이름(입력)·동행·일과 시간(눌러 시트)뿐이고, 커버·기간·여행지는 **보기만**이라 chevron 도
- * 「커버 바꾸기」도 그리지 않는다(Figma g03 는 바꿀 수 있는 화면으로 그렸지만 서버가 받는 칸이 아니다).
- * 「여행 삭제」는 카드 밖 뉴트럴 텍스트 버튼(Figma 값 #6a6a6a — primary 아님).
+ * 고칠 수 있는 칸은 이름(입력)·기간·동행·일과 시간(눌러 시트)과 커버(오른쪽 아래 「커버 바꾸기」)다. 눌림은 콜백이 있을 때만
+ * 열린다 — 기간은 `onPressPeriod` 가 없으면(시작됨·생성 중·끝남) chevron 도 눌림도 없고 보조문이 이유로 바뀐다(TRIP-1788).
+ * 여행지는 보기만(1787 그대로). 「여행 삭제」는 카드 밖 뉴트럴 텍스트 버튼(Figma 값 #6a6a6a — primary 아님).
  *
  * ⚠️ 시트 열림·삭제 다이얼로그 딤·키보드·생김새는 jest 사각 — 프리뷰/6-b 몫.
  */
@@ -22,6 +22,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { COLOR_TOKENS } from '@/shared/config';
+import { PhotoGlyph } from '@/entities/itinerary-slot';
+import { CoverLabel } from '@/entities/trip';
 import { BackChevronGlyph, ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import { Image } from '@/shared/ui/Image';
 
@@ -42,9 +44,19 @@ export interface TripSettingsViewProps {
   periodLabel: string;
   /** `3박 4일`. */
   nightsLabel: string;
+  /** 기간 행 보조문(열림이면 날짜만 옮긴다는 안내, 잠금이면 그 이유 — `periodHint`). */
+  periodHint: string;
+  /** 서버가 기간 변경을 거절한 사유 안내(없으면 줄 자체가 없다). */
+  periodNotice?: string;
+  /** 있으면 기간 행이 눌려 시트가 열린다(chevron). 없으면 보기 행. */
+  onPressPeriod?: () => void;
+  /** 있으면 커버 오른쪽 아래에 「커버 바꾸기」 버튼. 끝난 여행엔 안 넘긴다. */
+  onPressCover?: () => void;
   destinationsLabel: string;
   /** 지역 커버 — 없으면 회색 자리. */
   cover: ImageSourcePropType | null;
+  /** 첫 여행지와 다른 시도의 그림이면 그 이름(`tripCoverLabel`). 없으면 안 그린다. */
+  coverLabel?: string | null;
   canSave: boolean;
   /** 저장 실패(5xx·네트워크) — 오류 줄 + 다시 시도. */
   saveFailed: boolean;
@@ -96,12 +108,14 @@ function Row({
   label,
   testID,
   onPress,
+  chevronTestID,
   children,
 }: {
   label: string;
   testID?: string;
   /** 있으면 눌러서 고치는 행(우측 chevron). 없으면 보기 행. */
   onPress?: () => void;
+  chevronTestID?: string;
   children: ReactNode;
 }): ReactElement {
   const body = (
@@ -110,7 +124,7 @@ function Row({
         <Text className="font-noto text-caption text-muted">{label}</Text>
         {children}
       </View>
-      {onPress ? <ChevronRight24Glyph /> : null}
+      {onPress ? <ChevronRight24Glyph testID={chevronTestID} /> : null}
     </View>
   );
   return onPress ? (
@@ -141,8 +155,13 @@ export function TripSettingsView({
   dayEndLabel,
   periodLabel,
   nightsLabel,
+  periodHint,
+  periodNotice,
+  onPressPeriod,
+  onPressCover,
   destinationsLabel,
   cover,
+  coverLabel,
   canSave,
   saveFailed,
   deletable,
@@ -168,18 +187,38 @@ export function TripSettingsView({
           keyboardShouldPersistTaps="handled"
           contentContainerClassName="gap-lg px-lg pb-xl pt-sm"
         >
-          {/* 커버 — 첫 목적지 자동(보기만) */}
-          <View
-            testID="trip-settings-cover"
-            className="h-[201px] overflow-hidden rounded-button bg-surface-strong"
-          >
-            {cover ? (
-              <Image
-                source={cover}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                className="h-[201px] w-full"
-              />
+          {/* 커버 — 고른 그림 또는 첫 목적지 자동. 버튼은 그림 위(overflow 밖) 오른쪽 아래 */}
+          <View testID="trip-settings-cover">
+            <View className="h-[201px] overflow-hidden rounded-button bg-surface-strong">
+              {cover ? (
+                <Image
+                  testID="trip-settings-cover-image"
+                  source={cover}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  className="h-[201px] w-full"
+                />
+              ) : null}
+            </View>
+            {/* 왼쪽 아래 — 오른쪽 아래 「커버 바꾸기」와 겹치지 않게 폭을 묶는다(넘치면 말줄임). */}
+            <CoverLabel
+              label={coverLabel}
+              testID="trip-settings-cover-label"
+              className="absolute bottom-md left-md max-w-[45%]"
+            />
+            {onPressCover ? (
+              <Pressable
+                testID="trip-settings-cover-change"
+                accessibilityRole="button"
+                onPress={onPressCover}
+                style={CARD_SHADOW}
+                className="absolute bottom-md right-md h-[36px] flex-row items-center gap-xs rounded-button bg-canvas px-md"
+              >
+                <PhotoGlyph size={16} />
+                <Text className="font-noto-bold text-label font-bold text-ink">
+                  커버 바꾸기
+                </Text>
+              </Pressable>
             ) : null}
           </View>
 
@@ -221,11 +260,32 @@ export function TripSettingsView({
               <Text className={VALUE}>{destinationsLabel}</Text>
             </Row>
             {DIVIDER}
-            <Row label="기간" testID="trip-settings-period">
-              <Text className={VALUE}>{periodLabel}</Text>
-              <Text className="font-noto text-caption text-muted">
-                {nightsLabel}
+            <Row
+              label="기간"
+              testID="trip-settings-period"
+              onPress={onPressPeriod}
+              chevronTestID="trip-settings-period-chevron"
+            >
+              <View className="flex-row items-center gap-sm">
+                <Text className={VALUE}>{periodLabel}</Text>
+                <Text className="font-noto text-caption text-muted">
+                  {nightsLabel}
+                </Text>
+              </View>
+              <Text
+                testID="trip-settings-period-hint"
+                className="font-noto text-caption text-muted"
+              >
+                {periodHint}
               </Text>
+              {periodNotice !== undefined ? (
+                <Text
+                  testID="trip-settings-period-notice"
+                  className="font-noto text-caption text-primary-text"
+                >
+                  {periodNotice}
+                </Text>
+              ) : null}
             </Row>
             {DIVIDER}
             <Row

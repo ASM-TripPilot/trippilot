@@ -1846,6 +1846,18 @@ def test_explore_empty_answer_cannot_invent_a_place_either() -> None:
     assert any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace))
 
 
+def test_general_answer_naming_a_place_the_user_never_said_falls_back_to_the_template() -> None:
+    """날씨·거리 같은 일반 답도 사실·스냅샷·사용자 말에 없는 장소는 지어낸 것 — 후보 답에만 걸던 검사(2026-11-06 Codex 리뷰).
+    사용자가 방금 말한 곳("해운대해수욕장 갈 건데")은 지어낸 게 아니다 — 전체에 `_foreign_place` 를 걸면 그것도 걸린다."""
+    foreign = json.dumps({"text": "오늘은 맑아요. 해운대해수욕장 가 보세요!", "footnote": None}, ensure_ascii=False)
+    b = _build(_canned(Intent.GET_WEATHER, answer=foreign))
+    out = b.orch.turn(_input("오늘 날씨 어때"))
+    assert any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace)) and "해운대해수욕장" not in out.answer.text
+    b = _build(_canned(Intent.GET_WEATHER, answer=foreign))
+    out = b.orch.turn(_input("해운대해수욕장 갈 건데 오늘 날씨 어때"))
+    assert not any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace)) and out.answer.text.startswith("오늘은 맑아요")
+
+
 
 class _RecordingPool(_ExplorePool):
     def __init__(self) -> None:
@@ -1951,6 +1963,24 @@ def test_weather_without_a_trip_but_with_a_location_answers_without_asking() -> 
     out = _build(_canned(Intent.GET_WEATHER), ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)).orch.turn(
         _input("오늘 날씨", snapshot=here))
     assert out.outcome == "ANSWER" and weather.calls[0]["anchor"] == here.here
+
+
+def test_weather_today_before_the_trip_without_a_location_asks_instead_of_guessing_the_itinerary() -> None:
+    """수원에 있는데 일정의 청계천 날씨를 냈다(사용자 2026-11-06) — 여행 전 "오늘 날씨"는 위치가 없으면 여행지·일정으로 짐작하지 않고 묻는다."""
+    weather = _Weather(pop=30)
+    before = datetime(2026, 10, 10, 9, 0, tzinfo=_KST)
+    out = _build(_canned(Intent.GET_WEATHER, date="오늘"), ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)).orch.turn(
+        _input("오늘 날씨", now=before))
+    assert out.outcome == "ARGUMENT_CLARIFY" and out.clarify.argument == "region" and weather.calls == []
+
+
+def test_current_location_put_in_the_region_slot_uses_the_device_location() -> None:
+    """분류가 "현재 위치"를 region 칸에 담아도 지역이 아니다 — 표에서 못 찾아 앵커가 없었다. 실린 위치로 답한다."""
+    weather = _Weather(pop=30)
+    here = replace(_SNAP, here=GeoPoint(37.2636, 127.0286))  # 수원
+    out = _build(_canned(Intent.GET_WEATHER, region="현재 위치"), ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)).orch.turn(
+        _input("현재 위치 날씨", snapshot=here))
+    assert out.outcome == "ANSWER" and weather.calls[0]["anchor"] == here.here and out.answer.payload["title"] == "수원 날씨"
 
 
 def test_a_request_shaped_reply_to_a_pending_question_is_classified_not_swallowed() -> None:

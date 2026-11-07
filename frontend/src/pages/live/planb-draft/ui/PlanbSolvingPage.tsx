@@ -8,6 +8,10 @@ import { View } from 'react-native';
 
 import type { ReplanSlotVM } from '@/entities/itinerary-slot';
 import { buildSlotKey } from '@/entities/itinerary-slot';
+import {
+  slotDisplayCategory,
+  slotDisplayName,
+} from '@/entities/itinerary-slot';
 import { buildStatePins } from '@/entities/itinerary-slot';
 import { projectSlotProgress } from '@/entities/itinerary-slot';
 import { useLiveItinerary } from '@/features/execution';
@@ -316,10 +320,10 @@ function PlanbSolvingBody({
     const { slot } = projected[index];
     return {
       slotKey: slotKeyAt(index),
-      placeName: slot.nameKo ?? '',
+      placeName: slotDisplayName(slot) ?? '',
       tone: 'visited',
       photo: slot.imageUrl ? { uri: slot.imageUrl } : null,
-      category: slot.category ?? null,
+      category: slotDisplayCategory(slot),
       // 서버 값을 읽기만 한다 — 실제 도착(arrivedAt) 또는 검증된 계획 시각(INV-2).
       timeLabel:
         visitedLabels[slot.poiId] !== undefined

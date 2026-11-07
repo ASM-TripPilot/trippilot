@@ -1123,6 +1123,8 @@ class DialogueMemoryItemSchema(BoundaryModel):
 
 class DialogueMemoryExportResponse(BoundaryModel):
     memories: list[DialogueMemoryItemSchema]  # updated_at DESC
+    # 상한(`dialogue.EXPORT_MAX_SESSIONS`)을 넘겨 잘렸다 — 백엔드가 자기 줄 상한의 truncated 와 OR 한다(받은 것이 전부인 줄 알게 두지 않는다, INV-4)
+    truncated: bool = False
 
 
 # ───────── 기회 카드 (`/ai/v1/planb/opportunities` — situation-awareness BR-SA-22 · DEC-SA-6) ─────────

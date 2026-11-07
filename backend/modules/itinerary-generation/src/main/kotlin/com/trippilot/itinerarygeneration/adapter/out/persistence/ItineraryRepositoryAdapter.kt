@@ -48,7 +48,7 @@ class ItineraryRepositoryAdapter(
                     VisitSlotEntity(
                         UUID.randomUUID(), dayId, s.sourcePoiId, s.poiSnapshotId,
                         s.orderIndex, s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay, s.distanceRange,
-                        s.placementReason, s.violationReason, s.alternatives.toRows(),
+                        s.placementReason, s.violationReason, s.alternatives.toRows(), s.displayName, s.displayCategory,
                     ),
                 )
             }
@@ -61,6 +61,9 @@ class ItineraryRepositoryAdapter(
         itineraries.deleteByTripId(tripId) // 기존 일정 제거(day/slot은 DB FK cascade) — 여행당 1개
         return save(itinerary)
     }
+
+    @Transactional
+    override fun deleteForTrip(tripId: UUID) = itineraries.deleteByTripId(tripId)
 
     @Transactional
     override fun replaceIfCurrent(tripId: UUID, expectedItineraryId: UUID, itinerary: Itinerary): Boolean {
@@ -105,7 +108,7 @@ class ItineraryRepositoryAdapter(
                     VisitSlot.of(
                         s.sourcePoiId, s.poiSnapshotId, s.orderIndex, s.startAt, s.endAt, s.isFixed, s.hasViolation,
                         s.endsNextDay, s.distanceRange, s.placementReason, s.violationReason,
-                        s.alternatives.toAlternatives(),
+                        s.alternatives.toAlternatives(), s.displayName, s.displayCategory,
                     )
                 },
             )

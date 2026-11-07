@@ -11,8 +11,8 @@
 | 장소명 | 등록 POI(받은 후보 풀에서 정확 일치 먼저, 없으면 place-data 반경 50km 조회) | 이름이 맞는 등록 장소가 있다 — **후보 자격은 여기서만 생긴다**(INV-1) |
 | 〃 | 지도 실재 포트(Kakao·Google) | NOT_FOUND 가 아니다(UNVERIFIED 는 통과 — 장애를 폐업으로 읽지 않는다) |
 | 〃 | 그날 영업시간 | 휴무가 증명되지 않았다(정보 없음은 막지 않는다 — HC1 과 같은 판정) |
-| 시각 제약 | 그날 남은 시간창 | 창 안이고 지금 이후다 — 창을 **좁히기만** 한다(넓히면 백엔드 창을 어긴다) |
-| 방문 시각("3시에 카페") | 〃 | 창 안이고 지금 이후다 — 하루 시작이 아니라 그 곳·종류의 방문 시각이다 |
+| 시각 제약 | 지금·그날 끝(23:59) | 지금 이후·그날 안이면 **말한 대로** 그날 창이 된다 — 받은 창(BE 기본 09:00~21:00 류)은 말이 없을 때의 값이다(사용자 2026-11-06 "그대로 적용"). 지난 시각·자정 넘김·60분도 안 남는 창은 버린다 |
+| 방문 시각("3시에 카페") | 〃 | 지금 이후·그날 안이면 그 시각에 잠근다 — 하루 시작이 아니라 그 곳·종류의 방문 시각이고, 창은 그 방문이 들도록 늘어난다 |
 | 날씨 주장 | 기상청 강수확률(수집 패킷) | 비 주장이면 임계 이상일 때만 실내 쪽으로 기운다 |
 | 지역("강남에서") | 등록 POI 이름 | 그 이름이 든 곳이 `AREA_MIN_MATCHES` 이상 — 중심은 그 좌표들의 중앙값(후보가 아니라 기준점) |
 | 장소의 날("2일차에") | 여행 날짜(시작~끝)·오늘 | 다시 짜는 날이어야 이 날에 쓴다 — 다른 날이면 이 날엔 넣지도 빼지도 않는다(노트). 못 환산하면 종전처럼 이 날 |
@@ -53,6 +53,14 @@ from trippilot.ports.place_existence_port import (
 NAME_SEARCH_RADIUS_KM = 50.0
 # 지정 시각이 남은 창에서 이만큼은 남겨야 의미가 있다 — 10분 남기고 "6시까지"는 무효.
 MIN_WINDOW_MINUTES = 60
+# 말한 시각이 닿을 수 있는 그날의 끝 — 재계획 경계는 자정 넘김을 못 나른다(BE 슬롯 시각이 그날 것이라 "새벽 1시까지"의 01:00 은
+# 표현이 없다). 와이어의 밤에 놀기 창(`_NIGHT_END`)과 같은 값이다.
+DAY_END = timedelta(hours=23, minutes=59)
+# "저녁 8시 반 이후"처럼 시작만 말했는데 받은 창 끝(21:00 류)까지 이만큼이 안 남으면 끝을 시작+이만큼(≤23:59)으로 늘린다 — 늦게
+# 시작하겠다는 말에 한 곳도 못 넣는 창을 주지 않기 위해서다. BE 저녁 생성의 '시작+4시간'(`TodayWindow.EVENING_REACH_MIN`)과 같은 값.
+# 다른 날(지금이 없는 날)의 시작·방문 시각 하한도 받은 창 시작에서 이만큼 앞까지다 — "내일 새벽 1시에"가 그날 01:00 으로 읽히지 않게
+# (끝 쪽의 자정 넘김 거절과 짝, 검토 2026-11-06).
+START_REACH = timedelta(hours=4)
 # 이름 대조 최소 길이 — 한 글자 키("산"·"역")가 그 글자를 품은 모든 이름에 붙지 않게. "카페" 같은 종류 단어를
 # 막는 것은 이 문턱이 아니라 추출 프롬프트다(places 는 "이름으로 콕 집은 장소만", 종류는 categories). 3 으로 올리면
 # 두 글자 지역·상호(강남·홍대·명동·성수, 카페 '해림')가 빠진다.
@@ -109,6 +117,7 @@ class VerifiedRequest:
     avoid: frozenset[PoiId] = frozenset()
     window_start: datetime | None = None
     window_end: datetime | None = None
+    end_said: bool = False  # `window_end` 가 사용자가 말한 끝인가(코드가 늘린 끝이 아니라) — 말한 끝은 밤 창·잠금도 못 넘는다
     rain_confirmed: bool = False
     # 종류 조건 — 후보 풀에 그 종류가 있는 것만. `only` 가 비면 제한 없음, `counts` 는 그 종류를 정확히 몇 곳.
     only: frozenset[PoiCategory] = frozenset()
@@ -281,32 +290,53 @@ def verify_window(
     not_before: datetime | None,
     tz: tzinfo,
 ) -> tuple[datetime | None, datetime | None, list[str]]:
-    """시각 주장 → 좁힌 창. 창 밖·지난 시각·너무 좁아지는 것은 버린다."""
+    """시각 주장 → 그날 창. 받은 창은 말이 없을 때의 값이다 — 말한 시각이 지금 이후·그날 안(23:59)이면 창 밖이어도 **그대로** 쓴다
+    (사용자 2026-11-06 "말한 대로 적용"; 종전엔 창 안으로 좁히기만 해 "밤 10시까지"·"아침 7시부터"가 노트만 남기고 무시됐다).
+    지난 시각은 '지금이 이미 그 이후'라 창을 안 움직이고(버린 것이 아니다), 자정 넘김·시작보다 앞인 끝·60분도 안 남는 창은 버린다.
+    시작만 말해 받은 창 끝까지 4시간이 안 남으면 끝을 시작+4시간(≤23:59)으로 늘린다(`START_REACH`) — 노트는 `extended`."""
     notes: list[str] = []
+    day_start = datetime.combine(on, time(0, 0), tzinfo=tz)
+    day_end = day_start + DAY_END
     floor = max(window_start, not_before) if not_before else window_start
     start = end = None
+    said_start = False
     if start_after is not None:
         at = datetime.combine(on, start_after, tzinfo=tz)
-        if floor <= at < window_end:
-            start = at
-        else:
+        if not_before is not None and at < not_before:
+            notes.append(f"nl_time_satisfied: start_after {at:%H:%M}")
+            if not_before < window_start:
+                start = not_before  # 받은 창이 지금보다 늦게 시작하면 '그 이후'는 지금부터다 — 창 시작(09:00)이 아니라
+        elif at < early_bound(day_start, window_start, not_before):
             notes.append("nl_time_rejected: start_after_outside_window")
+        else:
+            start, said_start = at, True  # 23:59 시작은 아래 60분 규칙이 버린다
     if end_by is not None:
-        at = datetime.combine(on, end_by, tzinfo=tz)
+        # "자정까지"는 그날 끝(23:59)이다 — 00:00 은 자정 넘김이 아니라 자정 그 자체로 읽는다
+        at = day_end if end_by == time(0, 0) else datetime.combine(on, end_by, tzinfo=tz)
         lo = start or floor
-        if lo < at <= window_end:
+        if lo < at <= day_end:
             end = at
         else:
             notes.append("nl_time_rejected: end_by_outside_window")
+    extended = False
+    if start is not None and end is None:
+        reach = min(start + START_REACH, day_end)
+        if reach > window_end:  # 받은 창 끝까지 4시간이 안 남을 때만 늘어난다
+            end, extended = reach, True
     lo, hi = start or floor, end or window_end
     if (start or end) and hi - lo < timedelta(minutes=MIN_WINDOW_MINUTES):
         notes.append("nl_time_rejected: window_too_narrow")
         return None, None, notes
-    if start:
+    if said_start:
         notes.append(f"nl_time_accepted: start_after {start:%H:%M}")
     if end:
-        notes.append(f"nl_time_accepted: end_by {end:%H:%M}")
+        notes.append(f"nl_time_{'extended' if extended else 'accepted'}: end_by {end:%H:%M}")
     return start, end, notes
+
+
+def early_bound(day_start: datetime, window_start: datetime, not_before: datetime | None) -> datetime:
+    """시작·방문 시각의 하한 — 오늘이면 지금, 다른 날이면 받은 창 시작에서 `START_REACH` 앞(그날 0시 아래로는 안 간다)."""
+    return not_before or max(day_start, window_start - START_REACH)
 
 
 def verify_weather(claim: str | None, rain_prob: int | None, threshold: int) -> tuple[bool, list[str]]:
@@ -380,6 +410,8 @@ def apply_counts(
                 seen[cat] = seen.get(cat, 0) + 1
         if seen.get(cat, 0) < n:
             notes.append(f"nl_category_short: {cat.value} {seen.get(cat, 0)}/{n}")
+        elif seen[cat] > n:  # 이름으로 집은 곳이 수량을 넘겼다 — 이름이 이기는 건 정책(#1283), 넘긴 사실은 노트로 남긴다
+            notes.append(f"nl_category_over: {cat.value} {seen[cat]}/{n} named")
     return tuple(out), notes
 
 
@@ -475,11 +507,23 @@ def verify(
     if extracted.start_after in times:
         extracted = replace(extracted, start_after=None)
         notes.append("nl_time_dropped: start_after_is_visit_time")
-    floor = max(window_start, not_before) if not_before else window_start
+    start, end, n = verify_window(
+        on, extracted.start_after, extracted.end_by, window_start, window_end, not_before, tz)
+    notes += n
+    # 사용자가 끝을 **말했나** — 시작만 말해 코드가 늘린 끝(`nl_time_extended`)은 아니다. 배선이 밤에 놀기 창·방문 잠금으로
+    # 더 늘릴 수 있는 쪽을 가른다(말한 끝은 아무것도 못 넘는다).
+    end_said = end is not None and not any(x.startswith("nl_time_extended: end_by") for x in n)
+    day_start = datetime.combine(on, time(0, 0), tzinfo=tz)
+    day_end = day_start + DAY_END
+    # 방문 시각의 하한 — 오늘이면 지금, 다른 날이면 받은 창 시작 4시간 앞까지(`verify_window` 와 같은 규칙). 받은 창 밖이어도
+    # 말한 대로 잠근다 — 창을 그 방문까지 늘리는 것은 **실제로 잠근 뒤** 배선이 한다(잠그지 못한 방문을 위해 창만 벌리지 않게).
+    # 사용자가 말한 시작·끝("3시 이후로"·"6시까지")은 방문 시각도 못 넘는다 — "6시까지, 7시에 카페"는 모순이라 방문 쪽을 버린다.
+    floor = start or early_bound(day_start, window_start, not_before)
+    ceiling = end if end_said else day_end
 
     def at_in_window(t: time, label: str) -> datetime | None:
         at = datetime.combine(on, t, tzinfo=tz)
-        if floor <= at < window_end:
+        if floor <= at < ceiling:
             return at
         notes.append(f"nl_at_rejected: {label} outside_window")
         return None
@@ -490,9 +534,6 @@ def verify(
         poi = match_place(ep.name, pool, anchor)[0] if ep.at else None
         if poi is not None and poi.poi_id in kept and (at := at_in_window(ep.at, str(poi.poi_id))):
             visit_at.append((poi.poi_id, at))
-    start, end, n = verify_window(
-        on, extracted.start_after, extracted.end_by, window_start, window_end, not_before, tz)
-    notes += n
     rain, n = verify_weather(extracted.weather, rain_by_date.get(on), rain_threshold)
     notes += n
     only, counts, n = verify_categories(extracted, available)
@@ -501,7 +542,7 @@ def verify(
     for c in extracted.categories:
         if c.at and PoiCategory(c.category) in available and (at := at_in_window(c.at, c.category)):
             category_at.append((PoiCategory(c.category), at))
-    return VerifiedRequest(visit=visit, avoid=avoid, window_start=start, window_end=end,
+    return VerifiedRequest(visit=visit, avoid=avoid, window_start=start, window_end=end, end_said=end_said,
                            rain_confirmed=rain, only=only, counts=counts,
                            visit_at=tuple(visit_at), category_at=tuple(category_at), area_center=center,
                            other_day=frozenset(other) - {p.poi_id for p in visit},

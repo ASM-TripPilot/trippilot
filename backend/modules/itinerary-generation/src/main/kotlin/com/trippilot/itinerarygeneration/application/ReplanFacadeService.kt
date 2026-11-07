@@ -354,7 +354,7 @@ class ReplanFacadeService(
         actor: RevisionActor, revisionSummary: String, sourceType: ChangeSourceType, reason: String,
     ) {
         val replaced = current.days.map { day ->
-            if (day.date != date) day else ItineraryDay.of(day.date, day.dayOrder, slots.toSlots())
+            if (day.date != date) day else ItineraryDay.of(day.date, day.dayOrder, slots.toSlots(day.slots.associateBy { it.sourcePoiId }))
         }
         val next = Itinerary.reconstitute(
             itineraryId = current.itineraryId, tripId = current.tripId, status = current.status,
@@ -389,14 +389,18 @@ class ReplanFacadeService(
         poiId = sourcePoiId, startAt = startAt, endAt = endAt, isFixed = isFixed, endsNextDay = endsNextDay,
         distanceRange = distanceRange, placementReason = placementReason,
         hasViolation = hasViolation, violationReason = violationReason, poiSnapshotId = poiSnapshotId,
+        displayName = displayName, displayCategory = displayCategory,
     )
 
-    private fun List<ReplanSlot>.toSlots(): List<VisitSlot> = mapIndexed { i, s ->
+    /** [kept] = 그 날의 현행 슬롯 — 같은 장소가 남으면 사용자가 고친 표시값을 잇는다(TRIP-1801). AI 초안은 표시값을 모른다. */
+    private fun List<ReplanSlot>.toSlots(kept: Map<UUID, VisitSlot>): List<VisitSlot> = mapIndexed { i, s ->
         VisitSlot.of(
             sourcePoiId = s.poiId, poiSnapshotId = s.poiSnapshotId, orderIndex = i,
             startAt = s.startAt, endAt = s.endAt, isFixed = s.isFixed, endsNextDay = s.endsNextDay,
             distanceRange = s.distanceRange, placementReason = s.placementReason,
             hasViolation = s.hasViolation, violationReason = s.violationReason,
+            displayName = s.displayName ?: kept[s.poiId]?.displayName,
+            displayCategory = s.displayCategory ?: kept[s.poiId]?.displayCategory,
         )
     }
 

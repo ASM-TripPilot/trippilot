@@ -588,6 +588,74 @@ describe('조회 중·실패·지연', () => {
   }
 
   describe('🔴 TRIP-1109 · 응답 전·도착 (L1·L2·N1·N2)', () => {
+    it('C1d · TRIP-1795 AC-3·7·8 — 시트 제목·부제·현재 행(이름·사진 분류)이 고친 값을 따르고, 후보로 교체하면 바뀐 슬롯의 별칭은 비고 이웃 슬롯의 별칭은 PUT 에 실린다', async () => {
+      const base = itinerary();
+      const slotA = base.days[0].slots[0];
+      const aliased: Itinerary = {
+        ...base,
+        days: [
+          {
+            ...base.days[0],
+            slots: [
+              {
+                ...slotA, // 원본 분류는 문화 — 고친 분류 카페가 보여야 한다
+                displayName: '우리 아지트',
+                displayCategory: '카페' as const,
+              },
+              {
+                ...slotA,
+                poiId: 'b',
+                nameKo: '이웃 원본',
+                startAt: '13:00:00',
+                endAt: '14:00:00',
+                displayName: '이웃 별칭',
+                displayCategory: '야경' as const,
+              },
+            ],
+          },
+        ],
+      };
+      serveItinerary(server, { itinerary: () => aliased });
+      let sent: unknown = null;
+      server.use(
+        http.put(`${BASE}/trips/:tripId/itinerary`, async ({ request }) => {
+          sent = await request.json();
+          return HttpResponse.json(aliased);
+        })
+      );
+      postPlan = ['ok'];
+      renderContainer();
+
+      // ① AC-3 — 제목 `{고친 이름} 대신`·부제 `{고친 분류}의 다른 후보`·현재 행 이름·현재 행 사진 분류. 원본(경복궁·문화)은 안 보인다.
+      await waitFor(() =>
+        expect(screen.getByTestId(ID.title)).toHaveTextContent(
+          '우리 아지트 대신'
+        )
+      );
+      const subtitle = screen.getByTestId('itinerary-candidate-sheet-subtitle');
+      expect(subtitle).toHaveTextContent(/카페의 다른 후보/);
+      expect(subtitle).not.toHaveTextContent(/문화/);
+      expect(screen.getByTestId(ID.current)).toHaveTextContent(/우리 아지트/);
+      expect(screen.queryByText(/경복궁/)).toBeNull();
+      expect(
+        screen.getByTestId('itinerary-candidate-image-current').props.source
+      ).toEqual([coverFor('카페', 'a')]); // 원본 분류(문화) 그림이 아니다
+
+      // ② AC-7·8 — 후보 X 로 교체하면 바뀐 슬롯(a→X)의 별칭 두 키는 없고, 이웃 b 의 별칭은 그대로 PUT 에 실린다.
+      fireEvent.press(await screen.findByTestId('itinerary-candidate-radio-X'));
+      fireEvent.press(screen.getByTestId(ID.confirm));
+      await waitFor(() => expect(sent).not.toBeNull());
+      const [swapped, neighbor] = (sent as EditItineraryRequest).days[0].slots;
+      expect(swapped.poiId).toBe('X');
+      expect(Object.keys(swapped)).not.toContain('displayName');
+      expect(Object.keys(swapped)).not.toContain('displayCategory');
+      expect(neighbor).toMatchObject({
+        poiId: 'b',
+        displayName: '이웃 별칭',
+        displayCategory: '야경',
+      });
+    });
+
     it('C1 · L1·L2 — 응답 전엔 스켈레톤, 0건 얼굴은 없다. 헤더·현재 행은 GET 값, 교체하기는 비활성', async () => {
       postPlan = ['hang'];
       renderContainer();

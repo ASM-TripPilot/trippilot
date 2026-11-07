@@ -41,6 +41,8 @@ data class SlotSnapshot(
     val endsNextDay: Boolean,
     val distanceRange: String?,
     val placementReason: String?,
+    val displayName: String? = null,
+    val displayCategory: String? = null,
 )
 
 /**

@@ -9,9 +9,12 @@
 # 0.5.0 (2026-11-05): 장소의 날(places[].day) — "서울광장 꼭, 1일차 말고 2일차에". 종전엔 날 칸이 없어 통과한 장소가
 #   무조건 다시 짜는 그날 필수 방문이 됐다(운영 trip 8311ac19). 날은 말 그대로 받고, 여행 날짜 환산은 코드가 한다 —
 #   다른 날이면 이 날엔 넣지 않고 노트로 밝힌다. 장소·시각·종류·지역 규칙은 0.4.1 그대로.
+# 0.6.0 (2026-11-06): 시각을 남은 시간 밖이어도 그대로 — "밤 10시까지"·"아침 7시부터"·"저녁 8시 반 이후". 종전엔 남은 시간
+#   안으로 옮기거나 비울 여지가 있었고, 코드도 창 밖 시각을 버려 사용자 말이 조용히 무시됐다(사용자 "그대로 적용"). 저녁·밤은 오후,
+#   "2시부터 5시까지"는 start_after·end_by 를 함께. 쓸 수 있는지(지금 이후·그날 안)는 코드가 정한다. 장소·종류·지역·날 규칙은 그대로.
 # semver는 반드시 따옴표.
 feature: REPLAN_REQUEST_EXTRACTION
-version: "0.5.0"
+version: "0.6.0"
 template: |
   여행 중 일정을 다시 짜 달라는 사용자의 말에서 아래 정보를 뽑으세요.
 
@@ -21,6 +24,11 @@ template: |
     - "을지로 말고 강남에서 놀고 싶어" → area "강남" (빼 달라는 지역은 넣지 않습니다)
   - 가고 싶다는 곳은 want "visit", 빼 달라는 곳은 want "avoid"
   - 시각은 24시간 "HH:MM" 으로. "6시까지 숙소" → end_by "18:00", "2시 이후에" → start_after "14:00". 오전·오후가 불분명하면 남은 시간($window) 안에 드는 쪽으로
+    - "저녁"·"밤"이 붙으면 오후, "아침"·"새벽"이 붙으면 오전 — "저녁 8시 반 이후로" → start_after "20:30", "밤 10시까지" → end_by "22:00", "아침 7시부터" → start_after "07:00"
+    - "자정까지"·"밤 12시까지" → end_by "23:59" (00:00·24:00 은 쓰지 않습니다)
+    - 말한 시각이 남은 시간 밖이어도 **그대로** 적으세요 — 남은 시간 안으로 옮기거나 비우지 마세요. 쓸 수 있는지는 코드가 정합니다
+    - 오전·오후가 둘 다 남은 시간 밖이면: 끝("N시까지")은 지난 시각일 수 없으니 뒤쪽("12시까지" → end_by "23:59", 오후에 "10시까지" → "22:00"), 시작("N시부터"·"N시 이후")은 남은 시간에 가까운 쪽
+    - "2시부터 5시까지"처럼 하루의 시간대를 말하면 start_after "14:00" 과 end_by "17:00" 을 함께. 장소·종류에 붙은 시간대("2시부터 5시까지 카페에서")는 그 방문의 at "14:00" 이고 start_after·end_by 가 아니에요
   - 장소나 종류에 붙은 시각은 그 방문의 at 이에요 — 하루 시작(start_after)이 아니에요
     - "성심당은 5시에" → places [{"name":"성심당","want":"visit","at":"17:00"}]
     - "3시에 카페 가고 싶어" → categories [{"category":"CAFE","count":null,"at":"15:00"}], start_after null
@@ -46,4 +54,4 @@ template: |
   - $user_request
 
   [출력 JSON 스키마]
-  {"places": [{"name": "string", "want": "visit|avoid", "at": "HH:MM|null", "day": "string|null"}], "start_after": "HH:MM|null", "end_by": "HH:MM|null", "weather": "rain|clear|null", "categories": [{"category": "FOOD|CAFE|SIGHT|NIGHT_VIEW|NATURE|CULTURE|ACTIVITY|SHOPPING", "count": "1~8|null", "at": "HH:MM|null"}], "only": "true|false", "area": "string|null"}
+  {"places": [{"name": "string", "want": "visit|avoid", "at": "HH:MM|null", "day": "string|null"}], "start_after": "HH:MM|null", "end_by": "HH:MM|null", "weather": "rain|clear|null", "categories": [{"category": "FOOD|CAFE|SIGHT|NIGHT_VIEW|NATURE|CULTURE|ART|ACTIVITY|SHOPPING|BAR", "count": "1~8|null", "at": "HH:MM|null"}], "only": "true|false", "area": "string|null"}

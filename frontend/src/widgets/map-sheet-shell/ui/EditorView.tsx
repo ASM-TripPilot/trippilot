@@ -22,10 +22,11 @@ import {
 } from '@/shared/ui/glyphs';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import type { MapCenter, MapPin } from '@/shared/map';
-import { buildSlotKey } from '@/entities/itinerary-slot';
+import { buildSlotKey, slotOrdinal } from '@/entities/itinerary-slot';
 import { respectPressGuard } from '@/shared/lib/pressGuard';
 import { overlapAwareNotice } from '@/entities/itinerary-slot';
 import { SlotStopCard } from '@/entities/itinerary-slot';
+import { slotDisplayName } from '@/entities/itinerary-slot';
 
 import { CTA_BAR_HEIGHT, type CtaButton } from './CtaBar';
 import { DayChipScroller } from './DayChipScroller';
@@ -86,8 +87,8 @@ export interface EditorViewProps {
   saveLabel?: string;
   /** 끌어 바꾼 새 순서(센티널 제외). 완료 행 재고정은 페이지 사슬 몫(고정 행은 재고정 없음, TRIP-1250). */
   onReorder?: (slots: EditorViewSlot[]) => void;
-  /** 드롭존(센티널 뒤)에 놓인 카드. 고정·완료 카드는 부르지 않는다. */
-  onDeleteViaDrag?: (poiId: string) => void;
+  /** 드롭존(센티널 뒤)에 놓인 카드 — `ordinal` 은 끌기 전 자리의 앞선 같은 장소 수. 고정·완료 카드는 부르지 않는다. */
+  onDeleteViaDrag?: (poiId: string, ordinal: number) => void;
   /** TRIP-1791 · 「선택」으로 골라 한 번에 빼기 — 확정된 poiId(슬롯 순서)를 준다. **없으면 「선택」 버튼 자체가 없다**
    *  (직접 짜기 = 지금 화면). 선택 모드·고른 곳·확인창 상태는 이 뷰 안에 산다. */
   onDeleteSelected?: (poiIds: string[]) => void;
@@ -96,7 +97,7 @@ export interface EditorViewProps {
   undo?: { enabled: boolean; onPress: () => void };
   /** TRIP-1793 · 카드 ⋯ → 「다른 날로 옮기기」(페이지가 시트를 소유). **없으면 ⋯ 자체가 없다**(직접 짜기 = 지금 화면). 줘도 고정·방문 완료 카드·
    *  선택 모드·일정이 하루뿐일 때는 ⋯ 가 없다. */
-  onPressMore?: (poiId: string) => void;
+  onPressMore?: (poiId: string, ordinal: number) => void;
   /** 드래그 중 얼굴 강제(프리뷰 `h12-editor-dragging`). 실제 끌기는 내부 상태가 켠다. */
   isDragging?: boolean;
   /** 방문 완료 잠금(AC-11). */
@@ -165,11 +166,8 @@ export function EditorView({
   const hasUnlocked = slots.some((slot) => !isPinned(slot));
   const pickedSlots: EditorViewSlot[] = [];
   for (const slot of slots) {
-    if (
-      selected.includes(slot.poiId) &&
-      !isPinned(slot) &&
-      !pickedSlots.some((p) => p.poiId === slot.poiId)
-    ) {
+    // 체크는 장소 단위라 같은 장소 카드가 함께 빠진다 — 숫자도 빠지는 카드 수로 센다(TRIP-1812).
+    if (selected.includes(slot.poiId) && !isPinned(slot)) {
       pickedSlots.push(slot);
     }
   }
@@ -201,15 +199,21 @@ export function EditorView({
     },
   });
 
-  function handleDragEnd({ data, to }: DragEndParams<EditorViewSlot>): void {
+  function handleDragEnd({
+    data,
+    from,
+    to,
+  }: DragEndParams<EditorViewSlot>): void {
     setDragging(false);
     setDragEpoch((e) => e + 1);
     const overZone = overZoneRef.current;
     overZoneRef.current = false;
     // 고정·완료 카드는 제스처가 막혀도 판정에서 한 번 더 거른다(심층 방어).
     const decision = decideDragEnd({ data, to, overZone, isPinned });
-    if (decision.kind === 'delete') onDeleteViaDrag?.(decision.moved.poiId);
-    else if (decision.kind === 'reorder') onReorder?.(decision.slots);
+    // 몇 번째 같은 장소인지는 끌기 전 순서(`slots`·`from`)로 센다 — 놓인 뒤 `data` 로 세면 다른 카드를 가리킨다(TRIP-1812).
+    if (decision.kind === 'delete') {
+      onDeleteViaDrag?.(decision.moved.poiId, slotOrdinal(slots, from));
+    } else if (decision.kind === 'reorder') onReorder?.(decision.slots);
   }
 
   // TRIP-1793 · 옮김 배지 문구 — 출발 날짜가 이 일정의 몇 일차인지 `days` 에서 찾는다(없으면 지어내지 않는다).
@@ -225,7 +229,8 @@ export function EditorView({
     isActive,
   }: RenderItemParams<EditorViewSlot>): ReactElement | null {
     const index = getIndex() ?? 0;
-    const slotKey = buildSlotKey(activeDate, item.poiId);
+    const ordinal = slotOrdinal(slots, index);
+    const slotKey = buildSlotKey(activeDate, item.poiId, ordinal);
     const locked = isLocked(item);
     const fixed = item.isFixed === true;
     // 시각 편집: 숙소(고정)는 변경 불가(BR-U3-07), 꼭 갈 곳 고정은 사용자가 시각을 고친다(INV-U3-03
@@ -259,12 +264,10 @@ export function EditorView({
                 : undefined
             }
             more={
-              onPressMore !== undefined &&
-              !selecting &&
-              !isPinned(item) &&
-              days.length > 1
+              // TRIP-1795 · 고정·방문 완료·하루 일정에서도 연다 — 이름·분류 고치기는 일수·고정과 무관하다. 옮기기 가능 여부는 페이지(`canMove`)가 정한다.
+              onPressMore !== undefined && !selecting
                 ? {
-                    onPress: () => onPressMore(item.poiId),
+                    onPress: () => onPressMore(item.poiId, ordinal),
                     testID: `editor-slot-more-${item.poiId}`,
                   }
                 : undefined
@@ -479,7 +482,10 @@ export function EditorView({
               <NestableDraggableFlatList
                 testID="itinerary-edit-list"
                 data={slots}
-                keyExtractor={(item) => `card-${item.poiId}-${dragEpoch}`}
+                // 같은 날 같은 장소가 둘일 수 있어(TRIP-1804) 앞선 같은 장소 수를 붙인다 — 라이브러리가 이 키로 카드 자리를 잰다.
+                keyExtractor={(item, index) =>
+                  `card-${item.poiId}-${slotOrdinal(slots, index)}-${dragEpoch}`
+                }
                 renderItem={renderItem}
                 // 끌던 카드가 목록 밖(하단 삭제 영역)까지 손가락을 따라가게 한다 — 기본은 목록 경계에 묶여 영역에 못 닿는다.
                 dragItemOverflow
@@ -557,7 +563,7 @@ export function EditorView({
       {/* TRIP-1791 · 빼기 확인창 — 시트 위를 덮으려 셸 형제로 둔다(소비처 루트가 flex-1 View). 조건부 absolute 오버레이라 덮임은 6-b. */}
       {confirming && picked.length > 0 ? (
         <RemoveSelectedDialog
-          names={pickedSlots.map((slot) => slot.nameKo ?? '')}
+          names={pickedSlots.map((slot) => slotDisplayName(slot) ?? '')}
           onConfirm={confirmDelete}
           onCancel={() => setConfirming(false)}
         />

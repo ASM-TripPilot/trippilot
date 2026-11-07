@@ -118,6 +118,8 @@ export function MyTripsListPage(): ReactElement {
   // TRIP-1618 · 생성 중 여행의 폴링은 이 페이지가 아니라 앱 셸(`useGenerationWatch`)이 한다 — 이 페이지는 목록 칸을 읽기만 한다.
   // `focused` 는 완료 배너 판정(TRIP-1286)이 쓴다 — 목록이 보이는 동안만 판정, 첫 렌더는 안 보임으로 시작해 포커스 effect 가 켠다.
   const [focused, setFocused] = useState(false);
+  // TRIP-1819 — 열린 ⋯ 메뉴의 여행. 값 하나라 메뉴가 둘 뜰 수 없고, 화면을 떠날 때(blur 정리) 닫는다.
+  const [menuTripId, setMenuTripId] = useState<string | null>(null);
   const [seen, setSeen] = useState<readonly string[] | null>(null);
   const [shown, setShown] = useState<Trip | null>(null);
   // TRIP-1241 — 닫음. shown 을 비우면 seen state 가 옛 값이라 pick 이 다시 계산돼 재표시되므로 별도 플래그로 든다.
@@ -141,6 +143,7 @@ export function MyTripsListPage(): ReactElement {
       return () => {
         active = false;
         setFocused(false);
+        setMenuTripId(null);
         setSeen(null);
         setShown(null);
         setBarDismissed(false);
@@ -317,6 +320,7 @@ export function MyTripsListPage(): ReactElement {
   const onSelectSegment = (next: MyTripsSegment): void => {
     segmentPickedRef.current = true;
     setSegment(next);
+    setMenuTripId(null);
     // 저장 실패는 삼킨다 — 정렬 쓰기와 같다.
     writeStringValue(SEGMENT_KEY, next).catch(() => {});
   };
@@ -387,7 +391,10 @@ export function MyTripsListPage(): ReactElement {
         mode="list"
         onPressCreateTrip={onPressCreateTrip}
         sortKey={sortKey}
-        onPressSort={() => setSortOpen(true)}
+        onPressSort={() => {
+          setMenuTripId(null);
+          setSortOpen(true);
+        }}
         segment={segment}
         onSelectSegment={onSelectSegment}
         segmentEmpty={sorted.length === 0}
@@ -400,6 +407,10 @@ export function MyTripsListPage(): ReactElement {
             pinned={pinned.has(trip.tripId)}
             pinDisabled={!pinnedReady}
             onTogglePin={() => onTogglePin(trip.tripId)}
+            menuOpen={menuTripId === trip.tripId}
+            onMenuOpenChange={(open) =>
+              setMenuTripId(open ? trip.tripId : null)
+            }
             onPressDelete={() => {
               setDeleteFailedId(null);
               setDeleteTargetId(trip.tripId);

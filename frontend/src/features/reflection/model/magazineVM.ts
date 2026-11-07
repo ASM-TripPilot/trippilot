@@ -1,3 +1,8 @@
+import {
+  slotDisplayCategory,
+  slotDisplayName,
+} from '@/entities/itinerary-slot';
+
 import type { ReflectionStats, VisitCheck } from '@/shared/api/index.schemas';
 
 import {
@@ -31,6 +36,8 @@ export interface MagazineSlot {
   poiId: string;
   nameKo?: string | null;
   category?: string | null;
+  displayName?: string | null;
+  displayCategory?: string | null;
 }
 export interface MagazineInput {
   date: string;
@@ -130,7 +137,8 @@ export function buildMagazineVM(input: MagazineInput): MagazineVM {
     if (!slotOf.has(s.poiId)) slotOf.set(s.poiId, s);
 
   const nameOf = (poiId: string): string | undefined => {
-    const fromSlot = slotOf.get(poiId)?.nameKo;
+    const found = slotOf.get(poiId);
+    const fromSlot = found ? (slotDisplayName(found) ?? undefined) : undefined;
     if (text(fromSlot)) return fromSlot;
     const own = Object.prototype.hasOwnProperty.call(
       input.spontaneousNames,
@@ -141,7 +149,8 @@ export function buildMagazineVM(input: MagazineInput): MagazineVM {
     return text(own) ? own : undefined;
   };
   const categoryOf = (poiId: string): string | undefined => {
-    const category = slotOf.get(poiId)?.category;
+    const found = slotOf.get(poiId);
+    const category = found ? slotDisplayCategory(found) : undefined;
     return text(category) ? category : undefined;
   };
 

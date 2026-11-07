@@ -721,6 +721,31 @@ class ReplanFacadeServiceTest : StringSpec({
         )
     }
 
+    "재계획 반영 — 같은 장소가 남으면 사용자가 고친 표시값을 잇고, 새 장소는 없다. 되돌리기 지점에도 실린다(TRIP-1801)" {
+        val f = fixture(Agent(proposal(evening, replacement)))
+        val named = f.repo.byTrip.getValue(trip)
+        f.repo.byTrip[trip] = Itinerary.reconstitute(
+            named.itineraryId, trip, named.status, named.solveMode, named.generationMode, named.isFallback, named.generationState,
+            named.days.map { d ->
+                ItineraryDay.of(
+                    d.date, d.dayOrder,
+                    d.slots.map { s -> VisitSlot.of(s.sourcePoiId, s.poiSnapshotId, s.orderIndex, s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay, s.distanceRange, s.placementReason, s.violationReason, s.alternatives, "새 이름", "카페") },
+                )
+            },
+            named.createdAt, named.updatedAt, named.candidatesSummary, named.unplacedMustVisits, named.scoring,
+        )
+        val proposal = f.svc.propose(command())!!
+
+        val restore = f.svc.apply(acc, trip, proposal, REASON)
+
+        val slots = f.repo.byTrip.getValue(trip).days.first { it.date == today }.slots
+        slots.first { it.sourcePoiId == evening }.displayName shouldBe "새 이름"
+        slots.first { it.sourcePoiId == replacement }.displayName shouldBe null
+        restore.slots.map { it.displayName }.toSet() shouldBe setOf("새 이름")
+        // 세션 jsonb 왕복에서도 살아야 되돌리기가 값을 돌려놓는다
+        ReplanSlot.fromMap(restore.slots.first().toMap()).displayCategory shouldBe "카페"
+    }
+
     "반영은 그 날의 반영 직전 모습을 돌려준다 — 동결 참조·위반 표시까지" {
         val f = fixture(Agent(proposal(replacement)))
         val frozen = f.confirmed()

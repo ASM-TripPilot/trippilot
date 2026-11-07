@@ -181,6 +181,9 @@ data class ReplanSlot(
      * 되돌린 날이 반영 전과 같은 스냅숏을 가리키게 하는 값이다 — 없으면 빠졌던 장소가 지금 값으로 새로 동결된다.
      */
     val poiSnapshotId: UUID? = null,
+    /** 이 여행 전용 표시값(TRIP-1801) — 되돌리기 지점만 싣는다. AI 초안은 null 이고 반영이 같은 장소의 현행 값을 잇는다. */
+    val displayName: String? = null,
+    val displayCategory: String? = null,
 ) {
     fun toMap(): Map<String, Any> = buildMap {
         put("poiId", poiId.toString())
@@ -193,6 +196,8 @@ data class ReplanSlot(
         put("hasViolation", hasViolation)
         violationReason?.let { put("violationReason", it) }
         poiSnapshotId?.let { put("poiSnapshotId", it.toString()) }
+        displayName?.let { put("displayName", it) }
+        displayCategory?.let { put("displayCategory", it) }
     }
 
     companion object {
@@ -208,6 +213,8 @@ data class ReplanSlot(
             hasViolation = raw["hasViolation"] as? Boolean ?: false,
             violationReason = raw["violationReason"] as? String,
             poiSnapshotId = (raw["poiSnapshotId"] as? String)?.let(UUID::fromString),
+            displayName = raw["displayName"] as? String,
+            displayCategory = raw["displayCategory"] as? String,
         )
     }
 }

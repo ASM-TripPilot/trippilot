@@ -85,4 +85,33 @@ describe('출시 게이트 ① · 버튼 역할 집합 == 배선 CTA 집합', ()
     fireEvent.press(screen.getByTestId('home-past-trips-more'));
     expect(onPressPastTripsMore).toHaveBeenCalledTimes(1);
   });
+
+  // TRIP-1806 — 그림 이름은 글자일 뿐이다. 버튼이 되면 심사 2.1 의 "눌러도 반응 없는 버튼"이 된다.
+  it.each([
+    ['planning', HOME_PLANNING_PROPS],
+    ['postTrip', HOME_POST_TRIP_PROPS],
+  ])('%s — 그림 이름이 있어도 버튼 집합은 그대로다', (_face, props) => {
+    const { phase } = props;
+    if (!phase || phase.kind === 'discovery')
+      throw new Error('여행 얼굴 픽스처여야 한다');
+
+    render(
+      <HomeScreen
+        {...props}
+        phase={{
+          ...phase,
+          trip: {
+            ...phase.trip,
+            coverSource: { uri: 'cover://26350' },
+            coverLabel: '그림 · 해운대',
+          },
+        }}
+      />
+    );
+
+    expect(screen.getByTestId('home-trip-hero-cover-label')).toHaveTextContent(
+      '그림 · 해운대'
+    );
+    expect(buttonIds()).toEqual([...TRIP_FACE_BUTTONS].sort());
+  });
 });

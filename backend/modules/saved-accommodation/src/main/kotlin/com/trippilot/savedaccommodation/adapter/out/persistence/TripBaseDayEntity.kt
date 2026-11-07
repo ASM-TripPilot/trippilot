@@ -9,7 +9,11 @@ import jakarta.persistence.EmbeddedId
 import jakarta.persistence.Entity
 import jakarta.persistence.Table
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Transactional
 import java.io.Serializable
 import java.time.LocalDate
 import java.util.UUID
@@ -38,6 +42,15 @@ class TripBaseDayEntity(
 
 interface TripBaseDayJpaRepository : JpaRepository<TripBaseDayEntity, TripBaseDayId> {
     fun findByIdTripId(tripId: UUID): List<TripBaseDayEntity>
+
+    // flush 먼저 — 같은 트랜잭션의 앞선 쓰기(일정 이동)가 clear 에 버려지면 안 된다.
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("delete from TripBaseDayEntity d where d.id.tripId = :tripId")
+    fun deleteByTripId(@Param("tripId") tripId: UUID)
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("delete from TripBaseDayEntity d where d.id.tripId = :tripId and (d.id.dayDate < :start or d.id.dayDate > :end)")
+    fun deleteOutside(@Param("tripId") tripId: UUID, @Param("start") start: LocalDate, @Param("end") end: LocalDate)
 }
 
 @Component
@@ -51,6 +64,23 @@ class TripBaseDayRepositoryAdapter(
     override fun save(day: TripBaseDay): TripBaseDay = jpa.save(
         TripBaseDayEntity(TripBaseDayId(day.tripId, day.dayDate), day.savedStayId, day.resolution.wire()),
     ).toDomain()
+
+    /**
+     * 지우고 다시 넣는다 — 날짜가 PK 라 `UPDATE day_date + k` 는 겹치는 칸수에서 아직 안 옮긴 행과 부딪힌다(PK 는 행마다 즉시 검사).
+     * 행을 먼저 복사해 둔다 — [TripBaseDayJpaRepository.deleteByTripId] 의 clear 뒤엔 엔티티가 준영속이다.
+     */
+    @Transactional
+    override fun shiftDates(tripId: UUID, days: Long) {
+        val moved = jpa.findByIdTripId(tripId).map {
+            TripBaseDayEntity(TripBaseDayId(tripId, it.id.dayDate.plusDays(days)), it.savedStayId, it.resolution)
+        }
+        if (moved.isEmpty()) return
+        jpa.deleteByTripId(tripId)
+        jpa.saveAllAndFlush(moved)
+    }
+
+    @Transactional
+    override fun deleteOutside(tripId: UUID, start: LocalDate, end: LocalDate) = jpa.deleteOutside(tripId, start, end)
 
     private fun TripBaseDayEntity.toDomain() = TripBaseDay(
         id.tripId, id.dayDate, savedStayId, BaseResolution.valueOf(resolution.uppercase()),
