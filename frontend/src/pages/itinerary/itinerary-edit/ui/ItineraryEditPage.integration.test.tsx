@@ -375,8 +375,11 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       expect(Object.keys(body.days[0].slots[0]).sort()).toEqual(
         ['poiId', 'startAt', 'endAt', 'isFixed', 'endsNextDay'].sort()
       );
-      // 시각은 전체 정밀도(초 보존) — 표시용 slice(0,5) 절단값이 아니다(재정렬 후 첫 슬롯 poi-b=13:00:00).
-      expect(body.days[0].slots[0].startAt).toBe('13:00:00');
+      // 시각은 자리에 남고(TRIP-1821 — 첫 자리는 09:30, 둘째 자리는 13:00) 전체 정밀도다(초 보존 — 표시용 slice(0,5) 절단값이 아니다).
+      expect(body.days[0].slots.map((s) => s.startAt)).toEqual([
+        '09:30:00',
+        '13:00:00',
+      ]);
       // endsNextDay 실어나르기 — day2 poi-c 의 자정 넘김 플래그가 그대로 실린다.
       expect(body.days[1].slots[0].endsNextDay).toBe(true);
 
@@ -2617,7 +2620,18 @@ describe('여행 중 직접 수정(i07)', () => {
   });
 
   describe('🔴 P3 · AC-8 — 끌기 결과가 와도 방문 완료 행은 제자리로 저장된다', () => {
-    it('p5 를 맨 앞으로 끌면(4→0) 리스트는 [p5,p1,p2,p3,p4] 지만 저장 PUT 순서는 [p1,p2,p5,p3,p4]', async () => {
+    it('p5 를 맨 앞으로 끌면(4→0) 리스트는 [p5,p1,p2,p3,p4] 지만 저장 PUT 순서는 [p1,p2,p5,p3,p4] · 완료 행은 시각도 제 값이다 (TRIP-1821)', async () => {
+      // 어긋난 날(완료 p2 가 19:00) — 완료 행을 안 지키면 p2 가 13:00 을 받아 여기서 죽는다(시각 순인 날이면 안 갈린다).
+      const mixed = SLOTS.map((one) =>
+        one.poiId === 'p2'
+          ? { ...one, startAt: '19:00:00', endAt: '20:00:00' }
+          : one
+      );
+      getHandler = () =>
+        HttpResponse.json({
+          ...itinerary(),
+          days: [{ date: DAY, slots: mixed }],
+        });
       renderPage();
       await waitForLocked();
 
@@ -2631,6 +2645,10 @@ describe('여행 중 직접 수정(i07)', () => {
 
       // 완료 p1·p2 는 index 0·1 그대로, 나머지 칸이 끌기 순서(p5,p3,p4)로 채워진다.
       expect(putOrder()).toEqual(['p1', 'p2', 'p5', 'p3', 'p4']);
+      // 시각은 자리에 남는다 — p5 가 셋째 자리의 13:00 을 받고, 완료 p2 는 자기 19:00 이다.
+      expect(
+        (putBody as EditItineraryRequest).days[0].slots.map((s) => s.startAt)
+      ).toEqual(['09:30:00', '19:00:00', '13:00:00', '15:00:00', '17:00:00']);
     });
   });
 

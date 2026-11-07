@@ -80,7 +80,9 @@ export function RenameSlotSheet({
 
   return (
     // 스와이프·딤 탭 닫힘도 `onClose` 로 알린다 — 안 그러면 시트만 사라지고 페이지의 "열림" 상태가 남는다(MoveDaySheet 선례).
+    // `accessible={false}` — gorhom 기본(true)은 시트 안 글자·입력칸을 접근성 트리에서 묶어 낭독기·자동화가 못 찾는다(SheetShell 선례).
     <BottomSheet
+      accessible={false}
       backdropComponent={renderBackdrop}
       enablePanDownToClose
       keyboardBlurBehavior="restore"
@@ -112,10 +114,17 @@ export function RenameSlotSheet({
           testID="editor-rename-input"
           accessibilityLabel="이름"
           value={draft}
-          onChangeText={setDraft}
+          // 칸이 내용 따라 는다 — 한 줄 칸(UITextField)은 포커스가 없으면 긴 이름을 두 줄로 접어 잘랐고 접근성 트리에도 안 잡혔다(TRIP-1824).
+          multiline
+          scrollEnabled={false}
+          submitBehavior="blurAndSubmit"
+          // 이름에 줄바꿈은 없다 — 붙여넣기로 들어온 줄바꿈은 공백으로.
+          onChangeText={(text) =>
+            setDraft(text.replace(/[\n\r\v\f\u2028\u2029]+/g, ' '))
+          }
           placeholderTextColor={COLOR_TOKENS['muted-soft']}
           // `maxLength` 를 걸지 않는다 — 걸면 초과 입력이 잘려 안내를 띄울 수 없다.
-          className="h-[48px] w-full rounded-input border border-hairline-strong px-lg font-noto text-card-title text-ink"
+          className="min-h-[48px] w-full rounded-input border border-hairline-strong px-lg py-[13px] font-noto text-card-title text-ink"
         />
         {violation === null ? null : (
           <Text

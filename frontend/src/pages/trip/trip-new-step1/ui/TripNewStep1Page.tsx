@@ -25,7 +25,11 @@ import type {
 import { isAlreadyRegistered } from '@/shared/api';
 import { isNotFound } from '@/shared/api';
 import { getAccessToken } from '@/shared/api';
-import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
+import {
+  guardPress,
+  openPressGuardWindow,
+  respectPressGuard,
+} from '@/shared/lib/pressGuard';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { shiftMonth } from '@/shared/lib/monthGrid';
 import { goBackOr } from '@/shared/lib/goBackOr';
@@ -50,6 +54,7 @@ import {
   dayWindowFields,
   summaryCompanion,
   summaryDayWindow,
+  type DayWindow,
   validateDayWindow,
   summaryDestinations,
   summaryPeriod,
@@ -791,7 +796,8 @@ export function TripNewStep1Page({
         // 전체 보기도 더 담기와 같은 인자다(TRIP-706 · TRIP-1093).
         onPressSeeAll={() => router.push(mustVisitSelectHref)}
         canProceed={canProceed}
-        onNext={submit}
+        // 시트 [적용]이 닫힌 자리에 [다음]이 있다 — 연타 둘째 탭이 여행을 만들지 않게 창을 따른다(TRIP-1823). `submit` 은 ref 를 읽어 누르는 순간 감싼다.
+        onNext={() => respectPressGuard(submit)()}
         // 여행을 안 만들었으면 지금처럼 바로 나간다(01b Q5). 스와이프·하드웨어 뒤로는 위 usePreventRemove 가 같은 다이얼로그로 보낸다(TRIP-1272).
         onBack={() =>
           createdTripId === undefined
@@ -821,7 +827,7 @@ export function TripNewStep1Page({
           onChangeNights={setNights}
           onRemove={removeDestination}
           onAddCity={() => router.push(regionPickerHref('trip'))}
-          onApply={() => setDestinationSheetOpen(false)}
+          onApply={guardPress(() => setDestinationSheetOpen(false))}
           onClose={() => setDestinationSheetOpen(false)}
           mustVisitCount={mustVisits.length}
           outsideRegionCount={outsidePoiIds.length}
@@ -848,7 +854,7 @@ export function TripNewStep1Page({
           onNextMonth={() =>
             setPeriodMonth((current) => shiftMonth(current, 1))
           }
-          onApply={applyPeriod}
+          onApply={guardPress(applyPeriod)}
           onClose={() => setPeriodSheetOpen(false)}
         />
       ) : null}
@@ -858,10 +864,10 @@ export function TripNewStep1Page({
           value={dayWindow}
           sameDay={sameDay}
           periodUnset={!periodFilled}
-          onApply={(next) => {
+          onApply={guardPress((next: DayWindow) => {
             setDayWindow(next);
             setDayWindowSheetOpen(false);
-          }}
+          })}
           onClose={() => setDayWindowSheetOpen(false)}
         />
       ) : null}
@@ -873,7 +879,7 @@ export function TripNewStep1Page({
           companionType={draftCompanion}
           onChangeParty={(next) => setDraftParty(Math.max(1, next))}
           onSelectCompanion={pickCompanion}
-          onApply={applyCompanion}
+          onApply={guardPress(applyCompanion)}
           onClose={() => setCompanionSheetOpen(false)}
         />
       ) : null}
@@ -885,7 +891,7 @@ export function TripNewStep1Page({
           onToggle={togglePrefStyle}
           selectedActivities={prefDraftActivities}
           onToggleActivity={togglePrefActivity}
-          onApply={applyPrefSheet}
+          onApply={guardPress(applyPrefSheet)}
           onClose={() => setPrefSheetOpen(false)}
           fromOnboarding={prefFromOnboarding}
         />

@@ -13,6 +13,7 @@ paths:
 ## 여행 만들기 위저드 (g01)
 
 - **기간 포맷터 6벌의 정본은 `entities/trip/lib/formatTripPeriod.ts`다(`tripSummary.ts`·`tripWizardStep1.ts`는 내부 사용 `import`만 남았다)** → 6벌(`formatDateRange`·`formatSectionRange`·`formatTripRange`·`formatConfirmedDateRange`·`formatTripDateRange`·`formatDateRangeWithDow`)은 en dash(U+2013)·미들닷(U+00B7)·공백 유무가 서로 달라 하나로 통합하면 회귀한다.
+- **위저드 시트 5종(여행지·기간·일과·동행·취향) [적용]은 `guardPress` 로 창을 열고 [다음]은 `respectPressGuard` 로 창을 따른다** → 시트 [적용]과 [다음]이 같은 하단 자리라, 창이 없으면 [적용] 연타의 둘째 탭이 [다음]에 떨어져 **여행이 실제로 생겼다**(옛 코드를 되돌려 측정 — 여행 11→12·`/trips/new/step2`, TRIP-1823). 설정 화면(`TripSettingsPage`)은 이미 `guardPress`·`respectPressGuard` 라 R D1·D2 가 지킨다 — 티켓이 짚은 쪽이 아니라 위저드가 뚫려 있었다. 대가·사각: ① 창 안의 [적용]은 삼켜진다(직전 400ms 안에 다른 가드 누름이 있으면 시트가 안 닫힌다 — 손으론 드묾, 설정 화면과 같은 모양) ② 시트를 [적용]이 아닌 길로 닫는 `onClose`(딤·끌어내림)는 창을 안 연다(딤 탭 연타는 실화면 측정으로 요청 0) ③ [다음]은 `submit` 이 ref 를 읽으므로 **누르는 순간** 감싼다(렌더 중 감싸면 컴파일러 린트). 하네스 `next()` 가 창을 닫는 사정은 `layer-test.md` `wizardStep1Harness`.
 
 ## 거점 숙소 단일 카드 (g02)
 

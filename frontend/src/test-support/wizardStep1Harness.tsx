@@ -9,6 +9,7 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import type { PreferenceView, Trip } from '@/shared/api/index.schemas';
 import { useTripWizardStore } from '@/features/create-trip';
 import { TripNewStep1Page } from '@/pages/trip/trip-new-step1';
@@ -156,7 +157,9 @@ export function wizardStep1Harness({
     });
   }
 
+  /** [다음]을 집는다 — 사람이 따로 누르는 탭이라 앞 누름(시트 [적용] 등)이 연 400ms 창을 닫는다. 연타를 재려면 testID 로 직접 누른다(TRIP-1823). */
   function next() {
+    resetPressGuard();
     return screen.getByTestId('trip-wizard-step1-next');
   }
 

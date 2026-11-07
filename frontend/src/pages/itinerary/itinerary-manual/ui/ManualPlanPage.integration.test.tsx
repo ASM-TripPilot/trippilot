@@ -708,6 +708,9 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
 
       const body = await save();
       expect(ids(body)).toEqual(['c', 'a', 'b']);
+      // TRIP-1821 — 직접 짜기도 같은 스토어라 시각은 자리에 남는다(위에서부터 오름차순).
+      const times = body.days[0].slots.map((s) => s.startAt);
+      expect(times).toEqual([...times].sort());
       expect(body.days[0].slots.find((s) => s.poiId === 'a')).toMatchObject({
         displayName: '우리 아지트',
         displayCategory: '카페',
