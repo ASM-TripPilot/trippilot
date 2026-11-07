@@ -11,7 +11,7 @@ import { StateNotice } from '@/shared/ui/StateNotice';
 import { Image } from '@/shared/ui/Image';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
-import { pickRegionCover } from '@/entities/trip';
+import { pickRegionCover, SERVICE_REGIONS } from '@/entities/trip';
 
 import { groupRegionsBySido, regionTint } from '@/features/explore/index.view';
 import type { RegionGroup } from '@/features/explore/index.view';
@@ -37,7 +37,7 @@ import { COLOR_TOKENS } from '@/shared/config';
  * 미추홀구(구/군)가 한 평면에 뒤섞이지 않게. 세 갈래 렌더 모드:
  *  · 검색 중(`query` 있음) → 드릴다운을 **우회**하고 페이지가 좁힌 결과를 평면 카드로.
  *  · 빈 검색어·미드릴인 → **1단**: 시/도 행(`explore-region-sido-{code}`)만, 누르면 드릴인.
- *  · 빈 검색어·드릴인 → **2단**: 그 시/도의 '전체' 행(SIDO Region) + 구/군 카드 + 상세 뒤로.
+ *  · 빈 검색어·드릴인 → **2단**: 그 시/도의 '전체' 행(SIDO Region, 고를 수 있을 때만) + 구/군 카드 + 상세 뒤로.
  * 드릴다운 상태(`openSidoCode`)는 화면 로컬 뷰 상태다 — 프롭 시그니처는 그대로다.
  *
  * ⚠️ `@/shared/api`·쿼리 훅·`expo-location`을 **전이 의존으로라도** 물면 안 된다 —
@@ -297,10 +297,10 @@ function SidoRow({
 }
 
 /**
- * 2단 상세 — 최상단 '전체' 행(그 시/도의 SIDO Region) + 하위 구/군 카드. '전체' 행은 기존
- * `RegionCard` 3갈래를 그대로 탄다: selectable=true 면 선택 카드('인천 전체' 선택 가능),
- * false 면 묶음 행(선택 불가). 상세 뒤로(`explore-region-drilldown-back`)는 1단 복귀지
- * 라우터 이탈이 아니다(앱바 뒤로와 분리, ★3).
+ * 2단 상세 — 최상단 '전체' 행(그 시/도의 SIDO Region) + 하위 구/군 카드. 시/도를 고를 수 있을 때만
+ * 머리줄이 '○○ 전체'이고 그 카드가 그려진다. selectable=false(강원·경북·경남)면 눌릴 것이 없으니
+ * 「전체」도 묶음 칸도 없이 이름만 둔다(TRIP-1817). 상세 뒤로(`explore-region-drilldown-back`)는
+ * 1단 복귀지 라우터 이탈이 아니다(앱바 뒤로와 분리, ★3).
  */
 function RegionDetail({
   group,
@@ -311,7 +311,7 @@ function RegionDetail({
   onBack(): void;
   onSelectRegion(region: Region): void;
 }): ReactElement {
-  const sido = group.sido;
+  const sido = group.sido?.selectable === false ? null : group.sido;
   return (
     <View>
       <Pressable
@@ -326,7 +326,7 @@ function RegionDetail({
       </Pressable>
 
       <Text className="mb-sm font-noto-bold text-card-title font-bold text-ink">
-        {group.sidoName} 전체
+        {sido === null ? group.sidoName : `${group.sidoName} 전체`}
       </Text>
 
       <View className="flex-row flex-wrap justify-between">
@@ -345,8 +345,15 @@ function RegionDetail({
   );
 }
 
+/** `SERVICE_REGIONS` 배열 순서 = 인기 띠 순서(TRIP-1817). 그 밖의 시/도는 뒤로. */
+function popularRank(sidoCode: string): number {
+  const rank = SERVICE_REGIONS.findIndex(({ code }) => code === sidoCode);
+  return rank === -1 ? SERVICE_REGIONS.length : rank;
+}
+
 /** 인기 여행지 가로 스트립(TRIP-650) — 시/도(여행지) 단위를 가로 스크롤 카드로 보여준다. 집계·사진은
- *  계약 부재라 tint 그라디언트+이름만(SelectableCard 규율 계승). 서버 순서 그대로 앞 8개(정렬 금지). ★시/도 단위라 드릴다운 불변식("1단은 시/도만, 구/군 접힘")을 안 깬다.
+ *  계약 부재라 tint 그라디언트+이름만(SelectableCard 규율 계승). 고정 순서로 앞 8개 — 서버 순서로는 코드 오름차순이라
+ *  첫 화면에 제주가 안 보였다(TRIP-1817, 아래 지역별 목록은 서버 순서 그대로). ★시/도 단위라 드릴다운 불변식("1단은 시/도만, 구/군 접힘")을 안 깬다.
  *  누르면 그 시/도로 드릴인(하단 목록의 SidoRow 와 동일 동작). 기본(1단·비검색·정상) 뷰 상단 전용. */
 function PopularStrip({
   groups,
@@ -355,7 +362,9 @@ function PopularStrip({
   groups: readonly RegionGroup[];
   onOpenSido(sidoCode: string): void;
 }): ReactElement | null {
-  const popular = groups.slice(0, 8);
+  const popular = [...groups]
+    .sort((a, b) => popularRank(a.sidoCode) - popularRank(b.sidoCode))
+    .slice(0, 8);
   if (popular.length === 0) {
     return null;
   }

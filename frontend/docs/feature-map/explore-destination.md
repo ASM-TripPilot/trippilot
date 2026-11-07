@@ -30,7 +30,7 @@ routes:
 - `explore-saved-menu` ♥ FAB → 「담은 장소」·「저장한 숙소」 미니 FAB + 딤.
 - `explore-create-trip` ＋ FAB → 위저드 1/4(드래프트 초기화).
 - `region-picker-render` 앱바(목적별 「지역 선택」/「여행지 선택」), 헤딩, 검색 입력, 「인기 지역」/「인기 여행지」 스트립, 「지역별 둘러보기」 시도 행 목록.
-- `region-picker-drilldown` 시도 행·인기 카드 press → 「{시도} 전체」 + 구군 카드, 「지역 목록」으로 1단 복귀.
+- `region-picker-drilldown` 시도 행·인기 카드 press → 「{시도} 전체」 + 구군 카드(안 눌리는 시도 — 강원·경북·경남 — 는 머리줄이 시도 이름뿐이고 시도 카드가 없다. 행정구는 경북·경남에서 안 눌리는 회색 줄로 남는다), 「지역 목록」으로 1단 복귀.
 - `region-picker-search` 검색어 입력 → 「검색 결과」 평면 카드(구군엔 시도명 부제), 0건이면 「검색 결과가 없어요」.
 - `region-picker-select` 선택 가능 카드 press → 목적별 복귀(explore = 탐색 탭 필터).
 - `region-picker-disabled` 장소 0곳 지역 = 흐린 카드 「추천 장소 없음」(눌러도 무반응), 묶음(선택 불가) 지역 = 회색 행.
@@ -69,7 +69,7 @@ Preconditions:
 - **여행 만들기.** testID: `explore-create-trip-fab`(「여행 만들기」) → `/trips/new/step1`.
 - **지역 선택 진입.** `explore-landing-search` 를 누른다. testID: `explore-region-back` 옆 앱바 「여행지 선택」, 헤딩 「어디로 떠날까요?」·「가고 싶은 도시를 먼저 골라요」, 입력 testID: `explore-region-search`(placeholder 「도시·지역 검색」), 「인기 여행지」 스트립 testID: `explore-region-popular-strip`.
 - **로딩·오류.** 카탈로그 대기 중 testID: `explore-region-loading`, 실패면 testID: `explore-region-error`(「지역을 불러오지 못했어요」·「잠시 후 다시 시도해 주세요」)와 testID: `explore-region-error-retry` 「다시 시도」.
-- **시도 드릴다운.** 「지역별 둘러보기」의 시도 행 testID: `explore-region-sido-${group.sidoCode}`(예: 부산 `26`)나 인기 카드 testID: `explore-region-popular-${group.sidoCode}`(라벨 `{시도}, {태그라인}` 예 「부산광역시, 바다 · 야경」 — 시도명은 서버 값)을 누른다. 「{시도} 전체」 제목과 구군 카드 testID: `explore-region-${region.regionCode}`, 1단 복귀 testID: `explore-region-drilldown-back`(「지역 목록」).
+- **시도 드릴다운.** 「지역별 둘러보기」의 시도 행 testID: `explore-region-sido-${group.sidoCode}`(예: 부산 `26`)나 인기 카드 testID: `explore-region-popular-${group.sidoCode}`(라벨 `{시도}, {태그라인}` 예 「부산광역시, 바다 · 야경」 — 시도명은 서버 값)을 누른다. 「{시도} 전체」 제목(안 눌리는 시도는 시도 이름만)과 구군 카드 testID: `explore-region-${region.regionCode}`, 1단 복귀 testID: `explore-region-drilldown-back`(「지역 목록」).
 - **앱바 뒤로 두 단계.** 드릴다운이 열린 채 `explore-region-back`(라벨 「뒤로」)을 누르면 시도 목록으로만 돌아가고, 한 번 더 누르면 지역 선택을 나간다.
 - **검색.** `explore-region-search` 에 「해운대」를 `fill` 한다. 제목이 「검색 결과」로 바뀌고 평면 카드(구군은 시도명 부제)가 뜬다. 「경복궁」 같은 장소명은 「검색 결과가 없어요」 — 지역 이름만 걸린다.
 - **선택 → 필터.** 「부산 전체」 카드(부산 SIDO 행, `explore-region-${region.regionCode}`)를 누른다. 지역 선택이 걷히고 탐색 탭에 칩 testID: `explore-region-chip`(지역 이름), 레인 제목 「{이름} 숙소」(또는 「인기 숙소」)·「{이름} 장소」가 뜬다. 「모두 보기」는 `/stays` 에 `region`·`regionCode`·`sido` 를, 장소 「모두 보기」는 `/explore/places?region={이름}&regionCode={코드}` 를 싣는다.
