@@ -18,6 +18,7 @@ routes:
 - `mytrips-card` 카드 커버(첫 도시 그림)·배지·제목·메타줄(「M월 D일 ~ M월 D일 · N박 M일 · N명」 꼴)·상태문을 그린다. 배지·상태문은 목록(`GET /trips`)이 여행마다 싣는 일정 상태 칸으로 첫 프레임부터 그린다 — 여행별 일정 조회는 없다(TRIP-1677, jest 기준·실화면 미검증).
 - `mytrips-card-face` 상태문 4종 — 「아직 일정이 없어요」·「AI가 일정을 짜는 중」(직접/같이면 「직접 짜는 중」·「같이 짜는 중」)·「일정 확정」·「추천안 준비 중」. 초안에만 「일정 이어서 짜기」가 붙는다.
 - `mytrips-open` 카드 탭(또는 「일정 이어서 짜기」)이 일정 상태에 맞는 화면을 연다.
+- `mytrips-web-press-through` 웹에서 추천안 [완성 일정 보기] 연타가 확정 요청을 안 내고 콘솔 오류가 없다(웹은 화면 전환 이벤트가 없어 400ms 시간 창만 남는다). **[실화면 전용] 웹 미확인**(TRIP-1827 — 배포 웹은 개발·운영 서버라 그 사이클 지시가 금지).
 - `mytrips-segments` 목록 맨 위 왼쪽에 「예정」·「지난」 칩 두 개(testID: `my-trips-seg-upcoming`·`my-trips-seg-past`, 선택은 접근성 selected). 지난 = 일정 확정 ∧ 오늘 > 종료일, 나머지(작성중이면 날짜가 지났어도)는 예정. 처음엔 「예정」으로 열린다. 칩을 오가도 서버 호출은 없다. 고른 칩은 기기에 저장되어(SecureStore `itinerary.myTrips.segment`, 값 `upcoming`/`past`) 다시 열어도 남고, 읽기 실패·모르는 값은 예정이다. 누르기 전에 늦게 도착한 저장값만 반영되고 이미 누른 뒤엔 무시된다. 한 칩이 비면 한 줄 안내(testID: `my-trips-upcoming-empty`「예정된 여행이 없어요」·`my-trips-past-empty`「지난 여행이 아직 없어요」)가 카드 자리에 뜨고 「여행 만들기」는 없다. 전체 0건·loading·error·offline 얼굴엔 칩이 없다. 자정을 넘기면 끝난 여행이 예정에서 지난으로 옮겨 간다. *(TRIP-1785 · jest 기준, 실화면 미검증)*
 - `mytrips-records-link` 지난 여행 카드는 상태문 자리에 「기록 보기 ›」 링크(testID: `my-trip-records-link-${tripId}`)가 뜨고 상태문(「일정 확정」)은 없다. 누르면 `/trips/{tripId}/records/summary`(여행 요약)로 가고 카드 본문 탭은 그대로 `/trips/{id}/live`다. 예정 카드엔 링크가 없다. *(TRIP-1785 · jest 기준 — 링크 탭이 카드 본문 이동으로 새지 않는지·터치 영역·칩 모양은 실화면 전용)*
 - `mytrips-sort` 정렬 줄을 눌러 시트에서 최신순·출발일순·이름순을 고른다. 고른 값은 기기에 저장되어 다시 열어도 남는다.
