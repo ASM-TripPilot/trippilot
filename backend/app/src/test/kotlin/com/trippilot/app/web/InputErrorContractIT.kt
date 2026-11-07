@@ -155,6 +155,43 @@ class InputErrorContractIT : AbstractPostgresIntegrationTest() {
     }
 
 
+    // ── TRIP-1814 · 없는 메서드 405 · 날짜 아닌 경로 400 ─────────────────────────────────────────
+    //
+    // 실측(수정 전): `GET /trips/{id}/visits` · `GET /trips/{id}/reflections/summary` 가 500 INTERNAL + ERROR 로그였다.
+
+    /** `/visits` 는 POST 만 있다. 없는 메서드는 클라이언트 오류고, 장애 알림을 울리면 안 된다. */
+    @Test
+    fun `있는 경로에 없는 메서드로 부르면 405 와 Allow 다`() {
+        val res = RestClient.builder().baseUrl("http://localhost:$port").build()
+            .get().uri("/api/v1/trips/${UUID.randomUUID()}/visits").header("Authorization", "Bearer ${newToken()}")
+            .retrieve().onStatus({ it.is4xxClientError || it.is5xxServerError }, { _, _ -> })
+            .toEntity(String::class.java)
+        val body = parse(res.body)
+
+        res.statusCode.value() shouldBe 405
+        (HttpMethod.POST in res.headers.allow) shouldBe true
+        body["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
+        body["error"]["traceId"].asText().shouldNotBeBlank()
+    }
+
+    /** `/reflections/{dayDate}` 는 POST·PUT 만 있어, GET 은 값이 무엇이든 날짜를 해석하기 전에 405 다. */
+    @Test
+    fun `회고 하위 경로를 GET 으로 부르면 값과 무관하게 405 다`() {
+        val (status, body) = asUser("/api/v1/trips/${UUID.randomUUID()}/reflections/summary")
+
+        status shouldBe 405
+        body["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
+    }
+
+    @Test
+    fun `날짜 자리에 날짜가 아닌 값을 보내면 400 이다`() {
+        val (status, body) = send(HttpMethod.POST, "/api/v1/trips/${UUID.randomUUID()}/reflections/summary", "{}")
+
+        status shouldBe 400
+        body["error"]["code"].asText() shouldBe "VALIDATION_ERROR"
+        body["error"]["fields"][0]["field"].asText() shouldBe "dayDate"
+    }
+
     // ── TRIP-1473 · NUL(U+0000) — 요청을 읽는 자리에서 400 ──────────────────────────────────────
     //
     // 실측(수정 전): 값·키·질의의 NUL 이 전부 500 INTERNAL 이었다 — PostgreSQL 이 text 에 NUL 을 못 넣고 jsonb 도

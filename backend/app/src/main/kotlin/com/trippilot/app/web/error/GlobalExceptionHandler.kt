@@ -22,6 +22,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.security.web.firewall.RequestRejectedException
+import org.springframework.web.HttpRequestMethodNotSupportedException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
@@ -160,6 +161,23 @@ class GlobalExceptionHandler {
             ErrorResponse.Body(ErrorCode.RESOURCE_NOT_FOUND.name, "요청한 경로를 찾을 수 없습니다.", traceId(), null),
         )
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body)
+    }
+
+    /**
+     * 경로는 있는데 그 메서드가 없다 → **405** + `Allow`(TRIP-1814).
+     *
+     * [handleNoResource] 와 같은 실패 형태다 — 이 핸들러가 없으면 `Exception` 갈래로 떨어져 500 + ERROR 로그였다
+     * (실측: `GET /trips/{id}/visits`, `GET /trips/{id}/reflections/summary` — 후자도 `/{dayDate}` 에 GET 이 없어 이 갈래다.
+     * 날짜 해석까지 간 POST 는 [handleTypeMismatch] 가 이미 400 으로 낸다). 코드는 방화벽의 메서드 거부([requestRejectedBody])와
+     * 같은 `VALIDATION_ERROR` 다 — 이 코드로 분기하는 클라이언트가 없어 새 코드를 만들지 않았다.
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException::class)
+    fun handleMethodNotAllowed(ex: HttpRequestMethodNotSupportedException): ResponseEntity<ErrorResponse> {
+        log.warn("지원하지 않는 메서드: {}", ex.method)
+        val body = ErrorResponse(
+            ErrorResponse.Body(ErrorCode.VALIDATION_ERROR.name, "허용되지 않는 요청 방식입니다.", traceId(), null),
+        )
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).headers(ex.headers).body(body)
     }
 
     /**
