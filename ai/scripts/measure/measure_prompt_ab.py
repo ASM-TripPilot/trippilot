@@ -372,7 +372,7 @@ def run_intent(prompts: Path, repeat: int) -> None:
     print(json.dumps(dict(prompts=str(prompts), model=MODEL, n=len(rows), eval_acc=acc("eval"),
                           context_acc=acc("context"), accept_acc=acc("accept"), explore_acc=acc("explore"),
                           compound_acc=acc("compound"), single_acc=acc("single"), event_acc=acc("event"),
-                          late_null=late_null, recommend_acc=acc("recommend"), region_acc=acc("region"), knowledge_acc=acc("knowledge"), **_timing(rows)),
+                          late_null=late_null, recommend_acc=acc("recommend"), region_acc=acc("region"), knowledge_acc=acc("knowledge"), time_window_acc=acc("time_window"), **_timing(rows)),
                      ensure_ascii=False))
     for r in rows:
         if not r["ok"]:

@@ -379,7 +379,9 @@ class RuleFallbackAssembler:
                                 problem.anchor, poi.coord, problem.transport
                             ).internal_minutes
                     else:
-                        depart = last.end_at
+                        # 앞선 잠금이 창 앞에 끝나도 자유 방문은 창 안에서 시작한다(HC4) — 그대로 두면 "3시 이후로" + 09:20 까지 진행 중 곳에서
+                        # 09:44 에 놓여 체인이 통째로 무효가 되고 하루가 비었다(검토 2026-11-06).
+                        depart = max(last.end_at, problem.window_on(day).start)
                         travel_min = self._est.estimate(
                             last_poi.coord, poi.coord, problem.transport
                         ).internal_minutes

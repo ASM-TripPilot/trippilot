@@ -489,26 +489,54 @@ def test_handoff_intents_are_text_with_the_dispatcher_action(intent: Intent, act
     assert facts.template_text == fallback_answer_text(intent, {})
 
 
-def test_replan_carries_what_was_said_and_the_day_to_the_replan_screen() -> None:
-    """"3시 이후로 바꿔줘"가 버튼만 남으면 시각이 사라진다 — 말은 입력 칸 초기값으로, 오늘이 아닌 여행 날은 그 날로 싣는다."""
-    said = replace(_ctx(arguments={"target_date": "내일"}), utterance="내일 일정 3시 이후로 바꿔줘")
-    on = said.today + timedelta(days=1)
-    trip = TripInfo("trip-1", ("제주",), said.today, on, "IN_TRIP")
-    action = _run(HANDLERS[Intent.REPLAN], replace(said, snapshot=replace(_SNAP, trip=trip))).next_actions[0]
-    assert action.params == {"prefill": "내일 일정 3시 이후로 바꿔줘", "targetDate": on.isoformat()}
-    # 오늘을 말했거나 여행 밖의 날이면 날은 싣지 않는다 — 앱이 오늘로 연다(여행 밖이면 시작이 409 다)
-    today = replace(said, arguments={"target_date": "오늘"}, snapshot=replace(_SNAP, trip=trip))
-    assert "targetDate" not in _run(HANDLERS[Intent.REPLAN], today).next_actions[0].params
-    last = TripInfo("trip-1", ("제주",), said.today, said.today, "IN_TRIP")
-    outside = replace(said, snapshot=replace(_SNAP, trip=last))
-    assert "targetDate" not in _run(HANDLERS[Intent.REPLAN], outside).next_actions[0].params
-    # 말이 없으면(버튼 턴) 비운다 · 너무 길면 앱 시작 요청이 400 이니 자른다
-    assert _run(HANDLERS[Intent.REPLAN], _ctx()).next_actions[0].params == {}
-    for ack in ("응", "네 부탁해요", "그래 그렇게 해줘"):
-        assert _run(HANDLERS[Intent.REPLAN], replace(_ctx(), utterance=ack)).next_actions[0].params == {}, ack
-    assert _run(HANDLERS[Intent.REPLAN], replace(_ctx(), utterance="좋아 저녁부터 다시 짜줘")).next_actions[0].params != {}
-    long = replace(_ctx(), utterance="가" * 501)
-    assert len(_run(HANDLERS[Intent.REPLAN], long).next_actions[0].params["prefill"]) == 500
+def _replan_action(utterance: str, target_date: str | None = None, snapshot: TurnSnapshot = _SNAP) -> dict[str, str]:
+    args = {"target_date": target_date} if target_date else {}
+    return _run(HANDLERS[Intent.REPLAN], replace(_ctx(snapshot, args), utterance=utterance)).next_actions[0].params
+
+
+def test_replan_carries_what_was_said_to_the_replan_screen() -> None:
+    """"3시 이후로 바꿔줘"가 버튼만 남으면 시각이 사라진다 — 말은 입력 칸 초기값으로."""
+    assert _replan_action("3시 이후로 바꿔줘") == {"prefill": "3시 이후로 바꿔줘"}
+    assert _replan_action("오늘 일정 저녁부터 짜줘", "오늘") == {"prefill": "오늘 일정 저녁부터 짜줘"}
+    assert _run(HANDLERS[Intent.REPLAN], _ctx()).next_actions[0].params == {}  # 말이 없는 턴
+    assert len(_replan_action("가" * 501)["prefill"]) == 500  # 앱 시작 요청이 400 이 되지 않게
+
+
+def test_replan_opens_the_future_day_that_was_said_without_the_day_word() -> None:
+    """(_NOW = 둘째 날) 날 말은 칸에서 뗀다 — 지난 메시지의 버튼을 다음 날 누르면 "내일"이 하루 밀린다."""
+    assert _replan_action("내일 일정 3시 이후로 바꿔줘", "내일") == {"prefill": "일정 3시 이후로 바꿔줘", "targetDate": _D3.isoformat()}
+    assert _replan_action("내일 일정 3시 이후로 바꿔줘") == {"prefill": "일정 3시 이후로 바꿔줘", "targetDate": _D3.isoformat()}  # 분류가 칸을 안 채워도
+    assert _replan_action("3시 이후로 바꿔줘", "내일") == {"prefill": "3시 이후로 바꿔줘", "targetDate": _D3.isoformat()}  # 말에 날 말이 없다
+
+
+@pytest.mark.parametrize("said,day", [
+    ("어제 일정 3시 이후로 바꿔줘", "어제"),      # 지난 날 — 앱 시작이 409
+    ("첫날 일정 3시 이후로 바꿔줘", "첫날"),
+    ("다음 날 일정 3시 이후로 바꿔줘", "다음 날"),  # 못 읽는 날 — 오늘로 열면 다른 날 요청이 오늘을 바꾼다
+    ("주말 일정 3시 이후로 바꿔줘", "주말"),
+])
+def test_replan_does_not_carry_a_request_for_a_day_it_cannot_open(said, day) -> None:
+    assert _replan_action(said, day) == {}
+
+
+def test_replan_does_not_open_a_day_outside_the_trip_or_without_a_schedule() -> None:
+    ends_today = replace(_SNAP, trip=TripInfo("trip-1", ("제주",), _D1, _D2, "IN_TRIP"))
+    assert _replan_action("내일 일정 3시 이후로 바꿔줘", "내일", ends_today) == {}
+    partial = _snapshot(tuple((d.date, d.slots) for d in _SNAP.days if d.date != _D3))  # 내일 일정이 아직 없다
+    assert _replan_action("내일 일정 3시 이후로 바꿔줘", "내일", partial) == {}
+
+
+@pytest.mark.parametrize("ack", ["응", "웅", "넹", "네", "네 부탁해요", "네, 부탁해요", "그래 그렇게 해줘", "응, 그렇게 해줘", "좋아요!", "ok", "오키", "넵 ㅎㅎ", "네~^^", "해주세요"])
+def test_replan_does_not_carry_a_short_acceptance(ack) -> None:
+    assert _replan_action(ack) == {}
+
+
+@pytest.mark.parametrize("said", [
+    "네시 이후로", "네시부터 해줘", "네시까지만", "네 시까지", "응 저녁부터", "네 오전에만", "어 저녁부터", "그래 밤까지", "좋아 저녁부터 짜줘", "그렇게 말고 저녁부터",
+    "오케이 오후부터", "그래도 저녁부터", "예약 취소됐어", "어제 너무 피곤해", "좋아 저녁부터 다시 짜줘",
+])
+def test_replan_does_not_swallow_a_request_that_starts_like_an_acceptance(said) -> None:
+    assert _replan_action(said).get("prefill"), said
 
 
 def test_replan_goes_to_replan_in_trip_and_regenerate_otherwise() -> None:

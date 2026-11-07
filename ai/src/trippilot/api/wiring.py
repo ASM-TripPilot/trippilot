@@ -1948,26 +1948,34 @@ def _spoken_nightlife(request: schemas.ReplanRequest, resolved: list[str], notes
     return [k for k in resolved if k != "NIGHTLIFE"]
 
 
-# 끝내기·늘리기 낱말 — 말로 온 END_DAY·EXTEND_DAY 는 이게 있어야 남는다(`_spoken_layout`). 다시 짜 달라는 말이 같이 있으면 끝내기가 아니다.
-_END_WORDS = re.compile(r"취소|끝|그만|여기까지|마치|마칠")
-_RESHAPE_WORDS = re.compile(r"다시|새로|바꿔|대신|맞춰|조정")
-_MORE_WORDS = re.compile(r"(?:^|\s)더(?:\s|$)|추가|늘려|늘리|늦게|밤")
+# 끝내기·늘리기 낱말 — 말로 온 END_DAY·EXTEND_DAY 는 이게 있어야 남는다(`_spoken_layout`). 칩이 없는 지시라 말이 유일한 입구여서 넓게 잡는다.
+_END_WORDS = re.compile(r"취소|끝|그만|여기까지|마치|마칠|마무리|종료|이만|없애|지워|삭제|날려|접(?:을|자|어|고|는)|스톱|파기")
+# 다시 짜 달라는 말 — 있으면 끝말이 같이 있어도 끝내기가 아니다("오늘 일정 취소하고 다시 짜줘"). "내일 다시 올게"·"숙소로 다시 돌아갈래"의 다시는 아니다.
+_RESHAPE_WORDS = re.compile(r"다시\s*(?:짜|맞|잡|계획|일정|부탁)|새로\s*(?:짜|잡)|바꿔|변경|수정|조정|대신")
+_MORE_WORDS = re.compile(r"더(?![워운위웠블])|오래|계속|실컷|아직|새벽|자정|추가|늘려|늘리|늦게|밤")
+# 시각을 말해도 지키는 지시 — 원 저녁을 그대로 두라는 말·시간만 당기라는 말·숙소로 돌아간다는 말
+_DINNER_KEEP_WORDS = re.compile(r"(?:저녁|석식|디너)[^.?!]*(?:그대로|유지|두고|건드리|예약|지켜|고정)")
+_EARLIER_WORDS = re.compile(r"당겨|당기|몰아|시간만|그대로")
+_STAY_WORDS = re.compile(r"숙소|호텔|집|돌아가|돌아갈|들어가|들어갈")
 
 
 def _spoken_layout(request: schemas.ReplanRequest, resolved: list[str], notes: list[str]) -> list[str]:
     """말로 온 "오늘은 여기까지"(END_DAY)·"더 늦게까지"(EXTEND_DAY)는 문장에 그 낱말이 있을 때만 남긴다. 칩으로 고른 것은 그대로.
 
-    "오늘 남은 일정 다시 맞춰줘"가 임베딩에서 alias "남은 일정 취소"·"일정 더 추가해줘"에 붙어 하루가 통째로 끝났고(개발 실측 2026-11-06,
-    `end_day_nothing_kept`), "저녁 8시 반 이후로 바꿔줘"도 EXTEND_DAY 에 붙었다. `_spoken_nightlife` 와 같은 처방이다 — alias 를 줄여도
-    옛 벡터가 남는다(적재는 upsert 뿐). 방향을 뒤집는 지시는 결정론으로 막는다.
+    별칭 "남은 일정 취소"·"일정 더 추가해줘"는 "남은 일정"·"일정" 낱말만으로 흔한 다시 짜기 말 전반에 임계(0.74)를 넘는다 — KURE 실측
+    (2026-11-06): "남은 일정 다시 짜줘" END_DAY 0.822·EXTEND_DAY 0.876, "일정 좀 바꿔줘" 0.750·0.845, "남은 일정 줄여줘" 0.821·0.819.
+    걸리면 남은 하루가 통째로 사라진다(개발 실측 `end_day_nothing_kept`). `_spoken_nightlife` 와 같은 처방이다 — 별칭을 줄여도 옛 벡터가 남는다
+    (적재는 upsert 뿐). 방향을 뒤집는 지시는 결정론으로 막고, 놓치면 하루를 다시 짤 뿐이라 잘못 끝내는 쪽보다 낫다.
     """
     said = request.free_text or ""
     out = list(resolved)
-    if ("END_DAY" in out and "END_DAY" not in request.directives
-            and (not _END_WORDS.search(said) or _RESHAPE_WORDS.search(said))):
-        out.remove("END_DAY")
-        notes.append("end_day_dropped: no_end_word")
-    if "EXTEND_DAY" in out and "EXTEND_DAY" not in request.directives and not _MORE_WORDS.search(said):
+    if "END_DAY" in out and "END_DAY" not in request.directives:
+        why = "no_end_word" if not _END_WORDS.search(said) else "reshape_word" if _RESHAPE_WORDS.search(said) else None
+        if why:
+            out.remove("END_DAY")
+            notes.append(f"end_day_dropped: {why}")
+    if ("EXTEND_DAY" in out and "EXTEND_DAY" not in request.directives
+            and not (_MORE_WORDS.search(said) or _EXTEND.search(said))):
         out.remove("EXTEND_DAY")
         notes.append("extend_day_dropped: no_more_word")
     return out
@@ -1977,21 +1985,33 @@ def _said_time_wins(request: schemas.ReplanRequest, resolved: list[str], nl: nl_
                     notes: list[str]) -> list[str]:
     """말한 시각이 자유입력에서 **추정한** 모양 지시를 대신한다 — 칩은 사용자 선택이라 둔다.
 
-    "6시까지 숙소로 돌아갈래"가 일찍 마무리(새 방문 한 곳)로, "저녁부터 일정 짜줘"도 낱말 "저녁"으로 같은 지시에 붙어 상한 2곳으로,
-    "아침 7시부터 시작하고 싶어"·"오전에만 다니고 싶어"가 시간만 당기기(장소 그대로 — 새 곳을 못 넣어 창이 빈다)로 읽혔다(실모델 실측 2026-11-06:
-    09~18시 창에 한 곳). 시각을 말했으면 창은 그 시각이 정한다. 끝을 말했으면 숙소 쪽 마무리만 남긴다.
+    시각을 말했으면 하루의 창은 그 시각이 정한다. 그런데 낱말 하나로 붙은 지시가 그 창을 비우거나 넘었다(실모델 실측 2026-11-06):
+    - SHORTER_DAY — "6시까지 숙소로 돌아갈래"·"저녁부터 일정 짜줘"가 새 방문 한 곳 상한으로 09~18시 창에 한 곳
+    - EARLIER — "아침 7시부터"·"오전에만"이 장소 그대로라 새 곳을 못 넣어 창이 빈다. "앞으로 당겨줘 2시부터"처럼 당기라고 했으면 둔다
+    - KEEP_DINNER — "오후에만"(0.755)이 18:30 저녁을 잠가 말한 창을 넘긴다. "저녁은 그대로 두고"라고 했으면 둔다
+    - END_DAY — "오늘 일정 6시에 끝낼래"(0.858)가 18시 창이 아니라 지금 하루를 끝낸다. 끝을 말했을 때만 뺀다
+    끝을 말했고 숙소로 돌아간다는 말이 있으면 숙소 쪽 마무리만 남긴다(숙소를 말하지 않았으면 안 붙인다).
     """
+    said = nl.end_said or nl.start_said
+    if not said:
+        return resolved
+    text = request.free_text or ""
+    chips = set(request.directives)
     out = list(resolved)
     gone: list[str] = []
-    said = nl.end_said or nl.window_start is not None
-    if said and "SHORTER_DAY" in out and "SHORTER_DAY" not in request.directives:
-        out.remove("SHORTER_DAY")
-        gone.append("SHORTER_DAY")
-        if nl.end_said and "END_NEAR_STAY" not in out:
+
+    def drop(key: str, *, keep_if: re.Pattern[str] | None = None) -> None:
+        if key in out and key not in chips and not (keep_if and keep_if.search(text)):
+            out.remove(key)
+            gone.append(key)
+
+    drop("SHORTER_DAY")
+    drop("EARLIER", keep_if=_EARLIER_WORDS)
+    drop("KEEP_DINNER", keep_if=_DINNER_KEEP_WORDS)
+    if nl.end_said:
+        drop("END_DAY")
+        if gone and _STAY_WORDS.search(text) and "END_NEAR_STAY" not in out:
             out.append("END_NEAR_STAY")
-    if said and "EARLIER" in out and "EARLIER" not in request.directives:
-        out.remove("EARLIER")
-        gone.append("EARLIER")
     if gone:
         notes.append(f"nl_time_over_directive: {','.join(gone)}")
     return out
@@ -2826,6 +2846,13 @@ class WiredItineraryOrchestrator:
             notes.append(f"directive_no_candidates: {','.join(absent)}")
 
         not_before = _replan_not_before(request, self._tz)
+        # ── 자연어 요청 — 뽑고, **검증한 것만** 쓴다 ─────────────────────
+        nl = self._verified_request(request, anchor, not_before, daily_rain, notes, nl_pending,
+                                    available=frozenset(p.category for p in pool.pois), nearby=pool.pois)
+        resolved = _said_time_wins(request, resolved, nl, notes)
+        # 사용자가 말한 창(없으면 지금)으로 원 일정을 거르는 하한 — 시간만 당기기·더 늦게까지·원 일정 지키기·앞 요청 기억이 같이 본다(상한은
+        # `nl.window_end`). "3시 이후로"면 하루가 15시에 시작한다는 말이라, 15시 전에 끝난 원 일정을 15시 뒤 창에 몰아넣지 않는다(검토 2026-11-06).
+        nl_floor = max(filter(None, (not_before, nl.window_start)), default=None)
         blocks = _replan_fixed_blocks(request, self._tz)
         blocks += _dinner_blocks(request, resolved, pool, blocks, self._tz, not_before, notes, holidays)  # 저녁은 그대로
         in_progress = _in_progress_blocks(request, not_before, self._tz, blocks)  # 진행 중은 그대로
@@ -2840,13 +2867,6 @@ class WiredItineraryOrchestrator:
             notes.append(f"locked_overlap: {','.join(str(b.poi_id) for b in overlapped)}")
         if "END_DAY" in resolved:
             return self._replan_end_day(request, blocks, notes, resolved, unknown, now, t0)
-        # ── 자연어 요청 — 뽑고, **검증한 것만** 쓴다 ─────────────────────
-        nl = self._verified_request(request, anchor, not_before, daily_rain, notes, nl_pending,
-                                    available=frozenset(p.category for p in pool.pois), nearby=pool.pois)
-        resolved = _said_time_wins(request, resolved, nl, notes)
-        # 사용자가 말한 창(없으면 지금)으로 원 일정을 거르는 하한 — 시간만 당기기·더 늦게까지·원 일정 지키기·앞 요청 기억이 같이 본다(상한은
-        # `nl.window_end`). "3시 이후로"면 하루가 15시에 시작한다는 말이라, 15시 전에 끝난 원 일정을 15시 뒤 창에 몰아넣지 않는다(검토 2026-11-06).
-        nl_floor = max(filter(None, (not_before, nl.window_start)), default=None)
         # 시간만 당기기 — 원 일정의 남은 방문이 그대로 필수 방문이다. 장소를 안 바꾸므로 구성 LLM 도,
         # 방문을 줄이는 상한도, 회피 카테고리 제외도 타지 않는다(사용자가 "시간만"이라 했다).
         earlier = _earlier_visits(request, resolved, blocks, nl_floor, notes, until=nl.window_end,
@@ -3389,13 +3409,17 @@ class WiredItineraryOrchestrator:
         window = request.time_window
         # 프롬프트의 '남은 시간'은 오늘이면 **지금부터**다 — 받은 창은 06:00 류로 시작해(원 일정 첫 슬롯) 오후에 "3시 이후"를 03:00 쪽으로,
         # 06:30 의 "7시부터"를 19:00 쪽으로 읽을 여지가 있었다(검토 2026-11-06). '지금'은 "한 시간 뒤부터"의 셈 재료다 — 다른 날엔 없다.
+        # 지금이 받은 창 끝을 지났으면 남은 시간은 그날 끝까지다(뒤집힌 창을 프롬프트에 싣지 않는다).
         nb = _replan_not_before(request, self._tz)
-        today = nb is not None and nb.time() < window.end
         label = composition.date_label(datetime.combine(request.target_date, clock_time()))
+        if nb is None:
+            spans = f"{window.start:%H:%M}~{window.end:%H:%M}"
+        else:
+            label += f" · 지금 {nb:%H:%M}"
+            spans = f"{nb:%H:%M}~{window.end if nb.time() < window.end else clock_time(23, 59):%H:%M}"
         return _NL_POOL.submit(
             self._extract_then_lookup, GeoPoint(request.anchor.lat, request.anchor.lng),
-            text, f"{label} · 지금 {nb:%H:%M}" if today else label,
-            f"{nb if today else window.start:%H:%M}~{window.end:%H:%M}", trace_id, now, timeout_sec=timeout)
+            text, label, spans, trace_id, now, timeout_sec=timeout)
 
     def _extract_then_lookup(self, anchor: GeoPoint, *args, **kwargs) -> "tuple[TypedResult, Future | None]":
         """추출 → 대조에 등록 POI(반경 50km)가 쓰일 수 있으면 그 조회를 **곧바로** 띄운다 — 본 스레드의 장소 수집과
