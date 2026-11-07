@@ -61,6 +61,7 @@ import {
   tripRecord,
 } from '@/test-support/tripRecordsFixtures';
 import { tripRecordsTrip } from '@/test-support/tripRecordsTrip';
+import { guardKeyWarnings } from '@/test-support/keyWarnings';
 
 import { TripRecordsPage } from './TripRecordsPage';
 import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
@@ -150,6 +151,9 @@ jest.mock('@/shared/storage/installId', () => {
       mockPhotoSeam ? mockGetInstallId() : actual.getInstallId(),
   };
 });
+
+// TRIP-1812 AC-10 — React 는 겹친 key 를 console.error 로만 알린다. 파일 최상위에서 걸어 모든 테스트 뒤에 0 을 단언한다.
+guardKeyWarnings();
 
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = 't1';
@@ -2380,6 +2384,43 @@ describe('계획 행 — 조인·「방문 체크」 도착·조회 실패·오�
   });
 
   describe('TripRecordsPage · 계획 행 조인 (TRIP-1021 AC-10·AC-13)', () => {
+    // TRIP-1812 AC-10 — 번호는 그 행의 자리다. slotKey 로 찾으면 같은 장소 두 행이 뒤 자리 번호로 겹친다.
+    it('R11 같은 장소 두 계획 행은 각자 자기 자리 번호를 그린다 — p3 1·3, p4 2', async () => {
+      // 준비 — 그날 [p3, p4, p3], 방문 0건.
+      mockGetForeground.mockResolvedValue(DENIED);
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+          HttpResponse.json(
+            tripItinerary(
+              [
+                {
+                  date: DAY,
+                  slots: [
+                    daySlotAt('p3', '○○ 카페', '10:00:00'),
+                    daySlotAt('p4', '△△ 미술관', '13:00:00'),
+                    daySlotAt('p3', '○○ 카페', '15:00:00'),
+                  ],
+                },
+              ],
+              TRIP_ID
+            )
+          )
+        )
+      );
+
+      // 실행
+      render(<TripRecordsPage tripId={TRIP_ID} today={DAY} />, { wrapper });
+
+      // 단언 — 앵커: 행이 정말 둘. 번호는 각자.
+      expect(await screen.findAllByTestId(rowId(KEY_P3))).toHaveLength(2);
+      const orders = screen.getAllByTestId(`record-trip-plan-order-${KEY_P3}`);
+      expect(orders[0]).toHaveTextContent('1');
+      expect(orders[1]).toHaveTextContent('3');
+      expect(
+        screen.getByTestId(`record-trip-plan-order-${KEY_P4}`)
+      ).toHaveTextContent('2');
+    });
+
     it('R1 방문 0건 → 빈 상태 안내 + 계획 2곳 행, 수동 모드 부제(법 문구)도 그대로 있다', async () => {
       mockGetForeground.mockResolvedValue(DENIED);
 

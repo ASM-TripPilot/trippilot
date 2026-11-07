@@ -3342,6 +3342,14 @@ describe('같은 날 같은 장소 두 번', () => {
 
       expect(cards).toHaveLength(4);
       expect(keyWarnings.keys()).toEqual([]);
+
+      // TRIP-1812 AC-8 — 같은 장소 두 카드가 각자 자기 시각을 그린다(회귀 잠금, 자기 slot 을 그려 지금도 맞다).
+      const times = screen.getAllByTestId(
+        `slot-stopcard-time-${buildSlotKey(DAY1, 'p-a')}`
+      );
+      expect(times).toHaveLength(2);
+      expect(times[0]).toHaveTextContent(/10:00/);
+      expect(times[1]).toHaveTextContent(/13:00/);
     }
   );
 });

@@ -1,5 +1,7 @@
 import { create, type StateCreator } from 'zustand';
 
+import { findSlotIndex } from '@/entities/itinerary-slot';
+
 import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
@@ -42,23 +44,24 @@ export type EditorSlot = Omit<ItineraryDaysItemSlotsItem, 'startAt'> & {
 export type EditorDaysItem = { date: string; slots: EditorSlot[] };
 
 /**
- * 첫 일치 슬롯 하나만 뺀 **새 배열**. `filter`는 같은 poiId가 둘이면 전부 지운다(wizard
- * `removeDestination`과 같은 함정) — `findIndex`로 그 한 자리만 잘라낸다. 원본은 `slice`라 안
+ * 그 장소의 `ordinal` 번째 슬롯(기본 첫 슬롯) 하나만 뺀 **새 배열**. `filter`는 같은 poiId가 둘이면 전부 지운다(wizard
+ * `removeDestination`과 같은 함정) — 그 한 자리만 잘라낸다. 원본은 `slice`라 안
  * 바뀐다(비파괴 — 시드한 GET 배열을 건드리지 않기 위함, 엣지5).
  */
-export function removeSlot(slots: Slot[], poiId: string): Slot[] {
-  const index = slots.findIndex((s) => s.poiId === poiId);
+export function removeSlot(slots: Slot[], poiId: string, ordinal = 0): Slot[] {
+  const index = findSlotIndex(slots, poiId, ordinal);
   if (index === -1) return slots.slice();
   return [...slots.slice(0, index), ...slots.slice(index + 1)];
 }
 
 /**
  * TRIP-1791 · 고른 poiId 를 **한꺼번에** 뺀 새 배열. `removeSlot` 과 달리 같은 poiId 슬롯을 전부 지운다 —
- * 선택 체크가 poiId 단위라 화면에서 보이는 대로 빠져야 한다. 원본은 안 건드린다(`filter`).
+ * 선택 체크가 poiId 단위라 화면에서 보이는 대로 빠져야 한다. 고정 슬롯은 체크가 잠겨 있으니 같은 장소여도 남긴다(TRIP-1812).
+ * 원본은 안 건드린다(`filter`).
  */
 export function removeSlots(slots: Slot[], poiIds: string[]): Slot[] {
   const gone = new Set(poiIds);
-  return slots.filter((s) => !gone.has(s.poiId));
+  return slots.filter((s) => s.isFixed || !gone.has(s.poiId));
 }
 
 /**
@@ -130,8 +133,8 @@ export interface ItineraryEditState {
   dirty: boolean;
   /** GET 결과로 1회 시드 — 원본 배열과 독립하도록 얕게 복사해 담는다(비파괴). */
   seed(days: ItineraryDaysItem[]): void;
-  /** 해당 날에서 첫 일치 슬롯 제거. */
-  deleteSlot(date: string, poiId: string): void;
+  /** 해당 날에서 그 장소의 `ordinal` 번째 슬롯(기본 첫 슬롯) 제거. */
+  deleteSlot(date: string, poiId: string, ordinal?: number): void;
   /** TRIP-1791 · 해당 날에서 고른 poiId 를 set 1회로 제거(되돌리기 1단계 근거). 다른 날은 안 건드린다. */
   deleteSlots(date: string, poiIds: string[]): void;
   /** `onDragEnd.data`를 받아 해당 날 슬롯을 그 순서 그대로 반영(고정 슬롯도 재고정하지 않는다). */
@@ -140,13 +143,15 @@ export interface ItineraryEditState {
    * 대상 슬롯의 시각 3필드(startAt·endAt·endsNextDay)를 갱신한 뒤 **그 날** 슬롯을 시작 시각 순으로
    * 다시 세운다(`sortSlotsByStartAt` — 서버가 시각 순이 아니면 422, TRIP-1674). 이웃을 넘지 않는
    * 변경은 순서가 그대로다. 시드 원본은 안 건드린다(비파괴). `deleteSlot`·`reorderSlots`와 같은
-   * "해당 날에만 얹는 얇은 래퍼"다. 없는 poiId 는 무해(어느 것도 안 바뀜 — 정렬도 안 한다).
+   * "해당 날에만 얹는 얇은 래퍼"다. 없는 poiId·ordinal 은 무해(어느 것도 안 바뀜 — 정렬도 안 한다).
+   * 같은 날 같은 장소가 둘이면 `ordinal` 번째만 바꾼다(TRIP-1812).
    * `endsNextDay`는 시트가 유도한 값을 그대로 싣는다 — 여기서 재판정하지 않는다(§3·★10).
    */
   adjustSlotTime(
     date: string,
     poiId: string,
-    patch: { startAt: string; endAt: string; endsNextDay: boolean }
+    patch: { startAt: string; endAt: string; endsNextDay: boolean },
+    ordinal?: number
   ): void;
   /**
    * 그 날의 `index` 자리에 슬롯을 끼운다(`insertSlotAt` 규칙 — 없으면 말미). 없는 날짜는 무해.
@@ -162,22 +167,25 @@ export interface ItineraryEditState {
    * TRIP-1793 · 슬롯 하나를 `fromDate` 에서 빼 `toDate` 에 넣고(시각은 `patch`) 대상 날을 시작 시각 순으로 다시 세운다 — **한 번의 set**
    * (통지 1회 = 이력 1장 = 되돌리기 1단계, 이력 날짜 = 출발 날). `insertSlot` 은 이력을 비우므로 쓰지 않는다. 옮긴 슬롯엔 `movedFromDate`
    * (이미 있으면 최초 출발 날 유지, 원래 날로 돌아오면 지움). 같은 날·없는 날·없는 장소·대상 날에 같은 장소가 이미 있으면 state 그대로.
+   * 출발 날에 같은 장소가 둘이면 `ordinal` 번째만 옮긴다(TRIP-1812).
    */
   moveSlot(
     fromDate: string,
     toDate: string,
     poiId: string,
-    patch: { startAt: string; endAt: string; endsNextDay: boolean }
+    patch: { startAt: string; endAt: string; endsNextDay: boolean },
+    ordinal?: number
   ): void;
   /**
    * TRIP-1795 · 슬롯의 이 여행 표시 이름·분류를 **두 칸 통째로** 바꾼다(`null` = 덮어쓰기 없음). 정규화는 여기서 한다 — 이름은 앞뒤 공백을
    * 자르고 공백뿐이거나 원본(`nameKo`)과 같으면 null, 분류가 원본(`category`)과 같으면 null — 그래야 "덮어쓴 게 있나"가 `원래대로` 활성과 맞는다.
-   * 값이 실제로 바뀔 때만 `dirty` + 이력 1장. 없는 날·없는 poiId 는 state 그대로.
+   * 값이 실제로 바뀔 때만 `dirty` + 이력 1장. 없는 날·없는 poiId·ordinal 은 state 그대로.
    */
   renameSlot(
     date: string,
     poiId: string,
-    patch: { displayName: string | null; displayCategory: PoiCategory | null }
+    patch: { displayName: string | null; displayCategory: PoiCategory | null },
+    ordinal?: number
   ): void;
   /** 테스트/재진입 초기화(싱글턴 격리). */
   reset(): void;
@@ -225,23 +233,26 @@ const createItineraryEditStore: StateCreator<ItineraryEditState> = (
       dirty: false,
       history: [],
     }),
-  deleteSlot: (date, poiId) =>
-    set((state) => commit(state, date, (slots) => removeSlot(slots, poiId))),
+  deleteSlot: (date, poiId, ordinal) =>
+    set((state) =>
+      commit(state, date, (slots) => removeSlot(slots, poiId, ordinal))
+    ),
   deleteSlots: (date, poiIds) =>
     set((state) => commit(state, date, (slots) => removeSlots(slots, poiIds))),
   reorderSlots: (date, reordered) =>
     set((state) => commit(state, date, () => [...reordered])),
-  adjustSlotTime: (date, poiId, patch) =>
+  adjustSlotTime: (date, poiId, patch, ordinal) =>
     set((state) =>
-      commit(state, date, (slots) =>
-        slots.some((slot) => slot.poiId === poiId)
-          ? sortSlotsByStartAt(
-              slots.map((slot) =>
-                slot.poiId === poiId ? { ...slot, ...patch } : slot
+      commit(state, date, (slots) => {
+        const index = findSlotIndex(slots, poiId, ordinal);
+        return index === -1
+          ? slots
+          : sortSlotsByStartAt(
+              slots.map((slot, i) =>
+                i === index ? { ...slot, ...patch } : slot
               )
-            )
-          : slots
-      )
+            );
+      })
     ),
   insertSlot: (date, slot, index) =>
     set((state) => ({
@@ -258,11 +269,11 @@ const createItineraryEditStore: StateCreator<ItineraryEditState> = (
           : day
       ),
     })),
-  moveSlot: (fromDate, toDate, poiId, patch) =>
+  moveSlot: (fromDate, toDate, poiId, patch, ordinal) =>
     set((state) => {
       const from = state.days.find((day) => day.date === fromDate);
       const to = state.days.find((day) => day.date === toDate);
-      const moving = from?.slots.find((slot) => slot.poiId === poiId);
+      const moving = from?.slots[findSlotIndex(from.slots, poiId, ordinal)];
       if (
         fromDate === toDate ||
         from === undefined ||
@@ -284,7 +295,7 @@ const createItineraryEditStore: StateCreator<ItineraryEditState> = (
         dirty: true,
         days: state.days.map((day) =>
           day === from
-            ? { ...day, slots: removeSlot(day.slots, poiId) }
+            ? { ...day, slots: removeSlot(day.slots, poiId, ordinal) }
             : day === to
               ? { ...day, slots: sortSlotsByStartAt([...day.slots, moved]) }
               : day
@@ -300,10 +311,10 @@ const createItineraryEditStore: StateCreator<ItineraryEditState> = (
         ],
       };
     }),
-  renameSlot: (date, poiId, patch) =>
+  renameSlot: (date, poiId, patch, ordinal) =>
     set((state) =>
       commit(state, date, (slots) => {
-        const index = slots.findIndex((slot) => slot.poiId === poiId);
+        const index = findSlotIndex(slots, poiId, ordinal);
         if (index === -1) return slots;
         const slot = slots[index];
         const name = patch.displayName?.trim() || null;

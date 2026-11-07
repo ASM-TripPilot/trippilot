@@ -323,3 +323,101 @@ describe('SA11 · C9 — 없는 poiId 는 어긋난 날이어도 정렬하지 �
     expect(day1Ids()).toEqual(['b', 'a']);
   });
 });
+
+/**
+ * TRIP-1812 · 같은 날 같은 장소 — 시각 조정은 **그 자리만** 바꾼다(옛 구현은 같은 poiId 전부). 재정렬 규칙은 그대로다.
+ * 3동작: 준비(같은 장소가 낀·붙은 날 시드) → 실행(adjustSlotTime + ordinal) → 단언(그날 [장소, 시작, 끝] 전부).
+ */
+describe('SA12 · TRIP-1812 — ordinal 자리만 바뀌고, 재정렬은 그대로다', () => {
+  const at = (poiId: string, startAt: string, endAt: string): Slot =>
+    slot(poiId, { startAt, endAt });
+  const state = () => useItineraryEditStore.getState();
+  const rows = () =>
+    state().days[0].slots.map((s) => [s.poiId, s.startAt, s.endAt]);
+  /** [p1 09, p2 12, p1 14, p1 16] — 가운데 p1(ordinal 1)을 겨눈다. 첫 일치·마지막 일치 구현이 둘 다 틀린다. */
+  const woven = () => [
+    at('p1', '09:00:00', '10:00:00'),
+    at('p2', '12:00:00', '13:00:00'),
+    at('p1', '14:00:00', '15:00:00'),
+    at('p1', '16:00:00', '17:00:00'),
+  ];
+
+  it('이웃을 안 넘으면 ordinal 1 자리만 바뀐다 — 첫째·셋째·순서 불변', () => {
+    seedDay1(woven());
+
+    state().adjustSlotTime(DAY1, 'p1', T('14:30:00', '15:30:00'), 1);
+
+    expect(rows()).toEqual([
+      ['p1', '09:00:00', '10:00:00'],
+      ['p2', '12:00:00', '13:00:00'],
+      ['p1', '14:30:00', '15:30:00'],
+      ['p1', '16:00:00', '17:00:00'],
+    ]);
+  });
+
+  it('이웃을 넘으면 그 자리 값이 바뀐 뒤 시각 순으로 다시 선다 — 나머지 시각은 그대로', () => {
+    seedDay1(woven());
+
+    state().adjustSlotTime(DAY1, 'p1', T('10:30:00', '11:30:00'), 1);
+
+    expect(rows()).toEqual([
+      ['p1', '09:00:00', '10:00:00'],
+      ['p1', '10:30:00', '11:30:00'],
+      ['p2', '12:00:00', '13:00:00'],
+      ['p1', '16:00:00', '17:00:00'],
+    ]);
+  });
+
+  it('붙어 있는 같은 장소도 뒤 카드만 바뀐다', () => {
+    seedDay1([
+      at('p1', '09:00:00', '10:00:00'),
+      at('p1', '11:00:00', '12:00:00'),
+      at('p2', '14:00:00', '15:00:00'),
+    ]);
+
+    state().adjustSlotTime(DAY1, 'p1', T('12:00:00', '13:00:00'), 1);
+
+    expect(rows()).toEqual([
+      ['p1', '09:00:00', '10:00:00'],
+      ['p1', '12:00:00', '13:00:00'],
+      ['p2', '14:00:00', '15:00:00'],
+    ]);
+  });
+
+  it('ordinal 을 안 주면 첫 카드만 바뀐다 — 같은 장소가 함께 바뀌지 않는다', () => {
+    seedDay1(woven());
+
+    state().adjustSlotTime(DAY1, 'p1', T('08:00:00', '08:30:00'));
+
+    expect(rows()).toEqual([
+      ['p1', '08:00:00', '08:30:00'],
+      ['p2', '12:00:00', '13:00:00'],
+      ['p1', '14:00:00', '15:00:00'],
+      ['p1', '16:00:00', '17:00:00'],
+    ]);
+  });
+
+  it('D1 · 자기 값 그대로 [적용]이면 아무것도 안 변한다 — 이력·dirty 0', () => {
+    seedDay1(woven());
+    const before = state().days;
+
+    state().adjustSlotTime(DAY1, 'p1', T('14:00:00', '15:00:00'), 1);
+
+    expect(state().days).toBe(before);
+    expect(state().history).toHaveLength(0);
+    expect(state().dirty).toBe(false);
+  });
+
+  it('없는 ordinal 은 없는 poiId 와 같다 — 어긋난 날이어도 정렬하지 않고 이력도 없다', () => {
+    seedDay1([
+      at('p1', '14:00:00', '15:00:00'),
+      at('p2', '09:00:00', '10:00:00'),
+    ]);
+    const before = state().days;
+
+    state().adjustSlotTime(DAY1, 'p1', T('01:00:00', '02:00:00'), 5);
+
+    expect(state().days).toBe(before);
+    expect(state().history).toHaveLength(0);
+  });
+});
