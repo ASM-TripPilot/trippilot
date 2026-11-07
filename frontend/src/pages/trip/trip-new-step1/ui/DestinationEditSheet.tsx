@@ -28,6 +28,7 @@ import { SheetShell } from '@/shared/ui/SheetShell';
 
 import { nightsOnlyLabel } from '@/entities/trip';
 import {
+  destinationLabel,
   MAX_TRIP_NIGHTS,
   minNightsFor,
   nightsSum,
@@ -64,12 +65,15 @@ export interface DestinationEditSheetProps {
 
 function DestinationRow({
   destination,
+  label,
   minNights,
   atMaxNights,
   onChangeNights,
   onRemove,
 }: {
   destination: TripDestination;
+  /** 표시 이름 — 동명 지역이면 시도가 붙는다(`destinationLabel`, TRIP-1818). */
+  label: string;
   /** 박수 합이 상한(`MAX_TRIP_NIGHTS`)이면 [+]를 죽인다(TRIP-1219 a). */
   atMaxNights: boolean;
   /** 박수 하한 — 도시 하나면 0(당일치기), 여럿이면 1. */
@@ -77,20 +81,20 @@ function DestinationRow({
   onChangeNights: (seq: number, nights: number) => void;
   onRemove: (seq: number) => void;
 }): ReactElement {
-  const { seq, region, nights } = destination;
+  const { seq, nights } = destination;
   return (
     <View
       testID={`trip-wizard-destination-row-${seq}`}
       className="flex-row items-center justify-between py-md pl-lg pr-md"
     >
       <Text className="font-noto-bold text-card-title font-bold text-ink">
-        {region}
+        {label}
       </Text>
       <View className="flex-row items-center gap-md">
         <View className="flex-row items-center gap-[10px]">
           <StepperButton
             testID={`trip-wizard-destination-nights-dec-${seq}`}
-            accessibilityLabel={`${region} 1박 줄이기`}
+            accessibilityLabel={`${label} 1박 줄이기`}
             disabled={nights <= minNights}
             onPress={() => onChangeNights(seq, nights - 1)}
           >
@@ -101,7 +105,7 @@ function DestinationRow({
           </Text>
           <StepperButton
             testID={`trip-wizard-destination-nights-inc-${seq}`}
-            accessibilityLabel={`${region} 1박 늘리기`}
+            accessibilityLabel={`${label} 1박 늘리기`}
             disabled={atMaxNights}
             onPress={() => onChangeNights(seq, nights + 1)}
           >
@@ -111,7 +115,7 @@ function DestinationRow({
         <Pressable
           testID={`trip-wizard-destination-remove-${seq}`}
           accessibilityRole="button"
-          accessibilityLabel={`${region} 빼기`}
+          accessibilityLabel={`${label} 빼기`}
           onPress={() => onRemove(seq)}
           className="h-8 w-8 items-center justify-center"
           hitSlop={6}
@@ -157,6 +161,7 @@ export function DestinationEditSheet({
               {index > 0 ? <View className="h-[1px] bg-hairline" /> : null}
               <DestinationRow
                 destination={destination}
+                label={destinationLabel(destination, destinations)}
                 minNights={minNightsFor(destinations.length)}
                 atMaxNights={atMaxNights}
                 onChangeNights={onChangeNights}

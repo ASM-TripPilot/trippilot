@@ -2,7 +2,7 @@ import type {
   CompanionType,
   TripDestination,
 } from '@/shared/api/index.schemas';
-import { formatDateRangeWithDow } from '@/entities/trip';
+import { formatDateRangeWithDow, SERVICE_REGIONS } from '@/entities/trip';
 import { nightsCountLabel, nightsOnlyLabel } from '@/entities/trip';
 
 /**
@@ -61,7 +61,22 @@ export interface PreferenceSummary {
   onboarding: boolean;
 }
 
-/** 여행지 요약 — main=첫 도시 지역명, sub=첫 도시 박수 + 나머지 도시(`${region} ${nights}박`)를
+/** 여행지 표시 이름 — 같은 이름의 다른 지역이 함께 담겼으면 시도를 앞에 붙여 가른다(`강원 고성군`, TRIP-1818).
+ *  코드 앞자리로 `SERVICE_REGIONS` 를 찾는다 — 위저드는 지역 카탈로그를 받지 않는다. 못 찾으면 이름 그대로. */
+export function destinationLabel(
+  destination: TripDestination,
+  destinations: readonly TripDestination[]
+): string {
+  const { region, regionCode } = destination;
+  const hasNamesake = destinations.some(
+    (other) => other.region === region && other.regionCode !== regionCode
+  );
+  if (!hasNamesake) return region;
+  const sido = SERVICE_REGIONS.find(({ code }) => regionCode?.startsWith(code));
+  return sido === undefined ? region : `${sido.name} ${region}`;
+}
+
+/** 여행지 요약 — main=첫 도시 지역명, sub=첫 도시 박수 + 나머지 도시(`${이름} ${nights}박`)를
  *  ` · `로 조인. 0개면 null(미선택). TRIP-732: 문자열 하나 → 2톤 객체(main/sub) 분리. */
 export function summaryDestinations(
   destinations: TripDestination[]
@@ -72,10 +87,13 @@ export function summaryDestinations(
     nightsOnlyLabel(first.nights),
     ...rest.map(
       (destination) =>
-        `${destination.region} ${nightsOnlyLabel(destination.nights)}`
+        `${destinationLabel(destination, destinations)} ${nightsOnlyLabel(destination.nights)}`
     ),
   ];
-  return { main: first.region, sub: subParts.join(DOT) };
+  return {
+    main: destinationLabel(first, destinations),
+    sub: subParts.join(DOT),
+  };
 }
 
 /** 기간 요약 — main="6월 10일(수) – 13일(토)"(요일삽입 날짜범위), sub="3박 4일"(박수 라벨).
