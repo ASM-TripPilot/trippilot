@@ -10,8 +10,10 @@
  *  - `File.create` 는 이미 있으면 던진다(`overwrite: true` 면 비우고 다시 만든다).
  *  - `Directory.create` 는 이미 있으면 던진다 — `idempotent`·`overwrite` 면 그대로 둔다(**안을 비우지 않는다**).
  *  - `delete()`·`list()` 는 없는 경로에서 던진다. 폴더 `delete()` 는 안의 것까지 지운다.
+ *  - `File.move` 는 `FileManager.moveItem` 이다 — 원본 없음·대상 이미 있음·대상 부모 폴더 없음에서 던지고 원본을 건드리지 않는다.
+ *    대상이 `Directory` 면 `그 폴더/원본 이름` 으로 옮기고, 성공하면 **자기 `uri` 가 새 위치로 바뀐다**(TRIP-1803).
  * 흉내 내는 범위: `Paths.cache`·`Paths.document` · `Directory`(uri·name·exists·create·delete·list·createFile) ·
- * `File`(uri·name·exists·create·write·text·textSync·delete). 이 밖의 API 는 없다(부르면 TypeError).
+ * `File`(uri·name·exists·create·write·text·textSync·delete·move). 이 밖의 API 는 없다(부르면 TypeError).
  */
 
 const CACHE_PATH = 'file:///cache';
@@ -125,12 +127,14 @@ class FakeDirectory {
 }
 
 class FakeFile {
-  readonly uri: string;
-  private readonly path: string;
+  private path: string;
 
   constructor(...parts: UriPart[]) {
     this.path = joinPath(parts);
-    this.uri = this.path;
+  }
+
+  get uri(): string {
+    return this.path;
   }
 
   get name(): string {
@@ -186,6 +190,26 @@ class FakeFile {
   delete(): void {
     if (!this.exists) throw new Error(`path does not exist: ${this.uri}`);
     state.files.delete(this.path);
+  }
+
+  move(destination: FakeDirectory | FakeFile): void {
+    const target =
+      destination instanceof FakeDirectory
+        ? joinPath([destination, this.name])
+        : destination.uri;
+    const content = state.files.get(this.path);
+    if (content === undefined) {
+      throw new Error(`file missing: ${this.uri}`);
+    }
+    if (state.files.has(target) || state.dirs.has(target)) {
+      throw new Error(`destination already exists: ${target}`);
+    }
+    if (!state.dirs.has(parentOf(target))) {
+      throw new Error(`parent directory missing: ${target}`);
+    }
+    state.files.delete(this.path);
+    state.files.set(target, content);
+    this.path = target;
   }
 }
 

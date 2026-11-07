@@ -17,7 +17,9 @@
 
 import {
   canResolveDevicePhotos,
+  deletePhotoCopies,
   pickPhotoAssets,
+  readPhotoAccess,
   resolvePhotoUri,
 } from './index.web';
 
@@ -42,6 +44,25 @@ describe('웹 사진 앨범 스텁', () => {
 
   it('canResolveDevicePhotos 는 false 다 — 앨범 화면(TRIP-1798)이 성립하지 않아 링크를 숨기는 근거', () => {
     expect(canResolveDevicePhotos()).toBe(false);
+  });
+
+  // TRIP-1803 (E-8) — 웹은 사본도 권한 안내도 없다. `all` 이면 안내 컴포넌트가 아무것도 그리지 않는다.
+  it('readPhotoAccess 는 all 이고 deletePhotoCopies 는 아무것도 하지 않는다', async () => {
+    await expect(readPhotoAccess()).resolves.toBe('all');
+    expect(() => deletePhotoCopies()).not.toThrow();
+  });
+
+  it('웹 파일은 expo-file-system 을 불러오지 않는다', () => {
+    // 맨 위 정적 import 가 그 모듈의 목을 캐시에 넣어 두면 아래 던지는 목이 불리지 않아 누출을 못 잡는다 — 캐시부터 비운다.
+    jest.resetModules();
+    jest.isolateModules(() => {
+      jest.doMock('expo-file-system', () => {
+        throw new Error('expo-file-system must not load on web');
+      });
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      expect(() => require('./index.web')).not.toThrow();
+      jest.dontMock('expo-file-system');
+    });
   });
 
   it('네이티브·웹 파일은 같은 이름만 내보낸다', () => {

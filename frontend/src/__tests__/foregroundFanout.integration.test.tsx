@@ -77,8 +77,8 @@ jest.mock('expo-router', () => {
 });
 
 const MIN = 60_000;
-/** 부팅→홈 요청 수 상한 — 하네스 1회 실측값(AC9) — 여행 없음 7 = /bootstrap 1 + /trips 1 + /saved-places 1 + /saved-stays 1 + /places 3, 여행 중 6 = /places 1 + 지배 여행 일정 1. */
-const BOOT_BUDGET = { noTrip: 7, inTrip: 5 };
+/** 부팅→홈 요청 수 상한 — 하네스 1회 실측값(AC9) — 여행 없음 10 = /bootstrap 1 + /trips 1 + /saved-places 1 + /saved-stays 1 + /places 6(TRIP-1807), 여행 중 6 = /places 1 + 지배 여행 일정 1. */
+const BOOT_BUDGET = { noTrip: 10, inTrip: 5 };
 const log = createHitLog(server);
 
 const trip = (over: Partial<Trip> & Pick<Trip, 'tripId'>): Trip =>
@@ -308,7 +308,7 @@ describe('TRIP-1714 · 탭 5개 복귀 팬아웃 — 전/후 요청 수 (AC1~AC4
       '여행 없음 · 11분(레인도 10분 밖)',
       'noTrip',
       11 * MIN,
-      { ...REFRESHED, ...DENIED_AT_5M, 'GET /places': 3 },
+      { ...REFRESHED, ...DENIED_AT_5M, 'GET /places': 6 },
       REFRESHED,
     ],
     ['여행 중 · 10초(전부 30초 안)', 'inTrip', 10_000, {}, {}],
@@ -323,7 +323,7 @@ describe('TRIP-1714 · 탭 5개 복귀 팬아웃 — 전/후 요청 수 (AC1~AC4
       '여행 중 · 11분(레인도 10분 밖)',
       'inTrip',
       11 * MIN,
-      { ...REFRESHED, ...DENIED_AT_5M, 'GET /places': 4 },
+      { ...REFRESHED, ...DENIED_AT_5M, 'GET /places': 7 },
       REFRESHED,
     ],
   ] as [

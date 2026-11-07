@@ -171,3 +171,63 @@ describe('🔴 swapSlotPoi — 대상 슬롯의 poiId만 바꾼다 (AC1)', () =>
     }
   });
 });
+
+/**
+ * TRIP-1795 · AC-8·7 — 장소를 교체하면 그 슬롯의 **이 여행 별칭(표시 이름·분류)이 끝난다**.
+ *
+ * 무엇을 보장하나: `swapSlotPoi` 는 옛 슬롯의 모든 필드를 새 장소 슬롯에 복사하는 모양이라, 별칭을 안 비우면 다른 장소(해운대)가
+ * 옛 장소의 고친 이름("우리 아지트")을 달고 저장된다(거짓 표시). 바뀐 슬롯의 두 칸만 비우고 이웃 슬롯·다른 날은 건드리지 않는다.
+ * 같은 요청 조립(`buildEditItineraryRequest`)을 태우면 교체·채우기·장소 추가 경로의 PUT 본문이 어떤 모양인지까지 한 번에 보인다.
+ *
+ * 3동작 뼈대: 준비=별칭 있는 슬롯 둘 → 실행=swapSlotPoi(+빌더) → 단언=두 칸 비움·이웃 보존·요청 키.
+ */
+describe('🔴 TRIP-1795 · 교체하면 별칭이 끝난다 (AC-8)', () => {
+  function withAliases(): ItineraryDaysItem[] {
+    const days = fixture();
+    days[0].slots[0] = {
+      ...days[0].slots[0],
+      nameKo: '광안리',
+      category: '자연',
+      displayName: '우리 아지트',
+      displayCategory: '카페',
+    };
+    days[0].slots[1] = {
+      ...days[0].slots[1],
+      nameKo: '해운대',
+      displayName: '이웃 별칭',
+      displayCategory: '야경',
+    };
+    days[1].slots[0] = { ...days[1].slots[0], displayName: '다른 날 별칭' };
+    return days;
+  }
+
+  it('SW1 · 교체된 슬롯의 두 칸은 비고(?? null 이 null), 이웃·다른 날의 별칭은 그대로, 입력은 안 바뀐다', () => {
+    const days = withAliases();
+    const snapshot = JSON.stringify(days);
+
+    const next = swapSlotPoi(days, { date: DAY1, poiId: 'a' }, 'x');
+
+    expect(next[0].slots[0].poiId).toBe('x');
+    expect(next[0].slots[0].displayName ?? null).toBeNull();
+    expect(next[0].slots[0].displayCategory ?? null).toBeNull();
+    expect(next[0].slots[1].displayName).toBe('이웃 별칭');
+    expect(next[0].slots[1].displayCategory).toBe('야경');
+    expect(next[1].slots[0].displayName).toBe('다른 날 별칭');
+    expect(JSON.stringify(days)).toBe(snapshot);
+  });
+
+  it('SW2 · 교체 결과를 요청으로 조립하면 교체 슬롯엔 두 키가 없고 이웃엔 있다 (교체·채우기·추가 경로가 같은 빌더를 지난다)', () => {
+    const next = swapSlotPoi(withAliases(), { date: DAY1, poiId: 'a' }, 'x');
+
+    const body = buildEditItineraryRequest(next);
+
+    const swapped = body.days[0].slots[0];
+    expect(swapped.poiId).toBe('x');
+    expect(Object.keys(swapped)).not.toContain('displayName');
+    expect(Object.keys(swapped)).not.toContain('displayCategory');
+    expect(body.days[0].slots[1]).toMatchObject({
+      displayName: '이웃 별칭',
+      displayCategory: '야경',
+    });
+  });
+});

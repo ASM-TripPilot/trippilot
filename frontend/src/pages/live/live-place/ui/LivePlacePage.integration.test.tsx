@@ -605,6 +605,38 @@ describe('I11 · 네이버 지도에서 보기', () => {
     );
   });
 
+  // TRIP-1795 · AC-3·AC-5 — 화면에는 이 여행에서 고쳐 부르는 이름이 보이되, 네이버 지도 검색어는 장소 원본 이름이다.
+  // (고친 이름 "우리 아지트" 로 검색하면 장소를 못 찾는다.)
+  it('TRIP-1795 · 이름을 고친 슬롯은 화면에 고친 이름이 보이고, 네이버 열기는 원본 이름으로 연다', async () => {
+    mockOpenURL.mockResolvedValue(undefined);
+    const renamed = itinerary();
+    const first = renamed.days[0].slots[0] as unknown as Record<
+      string,
+      unknown
+    >;
+    first.displayName = '우리 아지트';
+    server.use(
+      http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+        HttpResponse.json(renamed)
+      )
+    );
+    render(<LivePlacePage tripId={TRIP_ID} poiId="p1" />, { wrapper });
+    await waitFor(() =>
+      expect(screen.getByTestId('execution-place-open-naver')).toBeTruthy()
+    );
+
+    expect(screen.getByText('우리 아지트')).toBeOnTheScreen();
+    expect(screen.queryByText('광안리 해수욕장')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('execution-place-open-naver'));
+
+    await waitFor(() => expect(mockOpenURL).toHaveBeenCalledTimes(1));
+    expect(mockOpenURL).toHaveBeenCalledWith(WEB_URL); // 원본 이름 '광안리 해수욕장' 검색
+    expect(mockOpenURL).not.toHaveBeenCalledWith(
+      expect.stringContaining(encodeURIComponent('우리 아지트'))
+    );
+  });
+
   it('이름도 좌표도 없는 슬롯은 버튼을 그리지 않는다', async () => {
     const noInfo = itinerary();
     const first = noInfo.days[0].slots[0] as unknown as Record<string, unknown>;

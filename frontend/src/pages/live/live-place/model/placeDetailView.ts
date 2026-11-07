@@ -1,4 +1,8 @@
-import { normalizeOpeningHours } from '@/entities/itinerary-slot';
+import {
+  normalizeOpeningHours,
+  slotDisplayCategory,
+  slotDisplayName,
+} from '@/entities/itinerary-slot';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
 /**
@@ -49,8 +53,8 @@ export function buildPlaceDetailView(
 
   return {
     poiId: slot.poiId,
-    name: slot.nameKo ?? MISSING,
-    category: slot.category ?? null,
+    name: slotDisplayName(slot) ?? MISSING,
+    category: slotDisplayCategory(slot),
     tags: slot.tags,
     imageUrl: slot.imageUrl ?? null,
     galleryUrls: slot.imageUrl ? [slot.imageUrl] : [],

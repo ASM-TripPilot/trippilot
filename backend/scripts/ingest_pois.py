@@ -101,11 +101,15 @@ def present_refs(proposals):
     return refs
 
 
-def repeated_sources(documents):
-    """두 문서 이상에 나온 출처. `--close-missing` 은 문서 한 장을 그 출처의 전부로 읽어서,
-    같은 출처 문서가 둘이면 둘째 문서가 첫째 문서에만 있던 행을 닫는다."""
-    counts = Counter(source for _path, _doc, source, _proposals in documents)
-    return sorted(source for source, n in counts.items() if n > 1)
+def proposals_by_source(documents):
+    """`--close-missing` 이 대조할 목록 — 문서들을 합쳐 출처마다 하나로. 준 문서 전체가 그 출처의 전부다.
+
+    문서마다 따로 물으면 둘째 문서가 첫째 문서에만 있는 행을 닫는다([공유본, 지역 문서] 의 공유본 수만 건).
+    """
+    groups = {}
+    for _path, _doc, source, proposals in documents:
+        groups.setdefault(source, []).extend(proposals)
+    return groups
 
 
 def chunked(items, size):
@@ -246,40 +250,37 @@ def main(argv=None):
             print(f"문서를 읽지 못했다: {e}", file=sys.stderr)
             return 1
 
-    if args.close_missing and repeated_sources(documents):
-        print(f"--close-missing 은 출처마다 문서 한 장만 받는다(겹친 출처: {', '.join(repeated_sources(documents))}) — "
-              "문서 한 장을 그 출처의 전부로 읽으므로 둘째 문서가 첫째 문서의 행을 닫는다. 합본 한 장으로 줄 것.",
-              file=sys.stderr)
-        return 1
+    to_close = proposals_by_source(documents) if args.close_missing else {}
 
     if args.dry_run:
         print(f"대상: {args.base_url}{INGEST_PATH} (토큰 {'설정됨' if token else '미설정'})")
         for path, _doc, source, proposals in documents:
             batches = len(chunked(proposals, args.chunk_size))
             print(f"  {path}: source={source} 제안={len(proposals)}건 → 요청 {batches}회")
-            # 서버가 계산만 하고 쓰지 않는다. 실제 실행도 적재 전에 지금 상태로 대조하므로 이 숫자가 그대로 닫힌다
-            # (그 사이 다른 적재가 끼지 않는 한). 실제 실행이 거부될 문서면 여기서도 409 다.
-            if args.close_missing and request_close(args, token, source, proposals, dry_run=True) is None:
+        # 서버가 계산만 하고 쓰지 않는다. 실제 실행도 적재 전에 지금 상태로 대조하므로 이 숫자가 그대로 닫힌다
+        # (그 사이 다른 적재가 끼지 않는 한). 실제 실행이 거부될 문서면 여기서도 409 다.
+        for source, proposals in to_close.items():
+            if request_close(args, token, source, proposals, dry_run=True) is None:
                 return 2
         print(f"합계 제안 {sum(len(p) for *_, p in documents)}건 — 드라이런이라 적재는 보내지 않았다")
         return 0
 
     totals = empty_totals()
-    if args.close_missing and len(documents) > 1:
+    if len(to_close) > 1:
         # 출처가 둘 이상이면 **쓰기 전에** 전부의 가드를 먼저 묻는다 — 문서 순서대로 닫고 적재하다 둘째 출처가
         # 409 면 첫째 출처는 이미 닫히고 부어진 뒤라 "닫힌 행도, 적재된 행도 없다"가 거짓이 된다(병합 공유본).
-        for _path, _doc, source, proposals in documents:
+        for source, proposals in to_close.items():
             if request_close(args, token, source, proposals, dry_run=True) is None:
                 report(totals)
                 return 2
     for path, doc, source, proposals in documents:
         batches = chunked(proposals, args.chunk_size)
         print(f"{path}: source={source} 제안={len(proposals)}건 → 요청 {len(batches)}회")
-        if args.close_missing:
+        if source in to_close:  # 출처마다 한 번, 그 출처의 첫 문서를 붓기 전에 — 합친 목록으로
             # **적재 전에** 대조한다. 적재 뒤에 부르면 방금 만든 행이 스스로를 "목록에 있음"으로 세어, 식별자 형식이
             # 바뀐 문서·출처 라벨이 틀린 문서를 비율 가드가 못 막는다. 닫히는 집합은 전후가 같다(적재는 목록 안의
             # 행만 건드린다) — 그래서 뒤의 청크가 실패해도 닫은 것은 맞고, 같은 명령을 다시 돌리면 닫기 0·적재 나머지다.
-            result = request_close(args, token, source, proposals, dry_run=False)
+            result = request_close(args, token, source, to_close.pop(source), dry_run=False)
             if result is None:
                 report(totals)
                 return 2
@@ -361,8 +362,8 @@ def self_check():
 
     # 닫기 목록은 문서 값 그대로 — 식별자 없는 제안만 빠지고, 숫자도 문자열로 바꾸지 않는다(수신 매퍼가 같은 규칙으로 읽는다).
     assert present_refs([item, {"provenance": {}}, {"poi": {}}, {"provenance": {"content_id": 7}}]) == ["1884191", 7]
-    docs = [("a", {}, "TOURAPI", []), ("b", {}, "LOCALDATA", []), ("c", {}, "TOURAPI", [])]
-    assert repeated_sources(docs) == ["TOURAPI"] and repeated_sources(docs[:2]) == []
+    docs = [("a", {}, "TOURAPI", [1]), ("b", {}, "LOCALDATA", [2]), ("c", {}, "TOURAPI", [3])]
+    assert proposals_by_source(docs) == {"TOURAPI": [1, 3], "LOCALDATA": [2]}
 
     self_check_close_missing(write, item)
 
@@ -466,9 +467,17 @@ def self_check_close_missing(write, item):
         code, paths = run(doc, "--close-missing", "--dry-run", close=409)
         assert code != 0 and paths == [CLOSE_PATH], (code, paths)
 
-        # 같은 출처 문서가 둘이면 보내기 전에 거부한다.
-        code, paths = run(doc, write({"source": "LOCALDATA", "proposals": items[:1]}), "--close-missing")
-        assert code != 0 and paths == [], (code, paths)
+        # 같은 출처 문서가 둘이면 합친 목록으로 **한 번만** 닫는다 — 문서마다 물으면 둘째가 첫째의 행을 닫는다(TRIP-1811).
+        extra = [dict(item, provenance={"content_id": "R9"})]
+        code, paths = run(doc, write({"source": "LOCALDATA", "proposals": extra}), "--close-missing")
+        assert code == 0 and paths == [CLOSE_PATH, INGEST_PATH, INGEST_PATH], (code, paths)
+        assert calls[0][1]["present_source_refs"] == ["R0", "R1", "R2", "R9"], calls[0]
+        code, paths = run(doc, write({"source": "LOCALDATA", "proposals": extra}), "--close-missing", "--dry-run")
+        assert code == 0 and paths == [CLOSE_PATH] and calls[0][1]["present_source_refs"] == ["R0", "R1", "R2", "R9"], calls
+        assert calls[0][1]["dry_run"] is True, calls[0]
+        # 닫기 없이는 준 순서대로 보낸다 — 배포의 [공유본, 지역 문서] 에서 겹치는 행은 뒤가 이긴다(TRIP-1810).
+        code, _ = run(doc, write({"source": "LOCALDATA", "proposals": items[:1]}))
+        assert code == 0 and [len(body["proposals"]) for _path, body in calls] == [3, 1], (code, calls)
 
         # 병합 공유본: 최상단은 한 출처인데 항목이 섞여 있다 — 항목 출처마다 따로 보내고 따로 닫는다.
         # 최상단 출처로 몰아 보내면 다른 출처 항목이 한 벌 더 생긴다(유일키가 (source, content_id)).
@@ -492,9 +501,15 @@ def self_check_close_missing(write, item):
         # 단일 출처 문서는 종전 그대로 — 사전 확인 없이 닫기 1회 → 적재.
         code, paths = run(doc, "--close-missing")
         assert code == 0 and paths == [CLOSE_PATH, INGEST_PATH] and calls[0][1]["dry_run"] is False, (code, paths)
-        # 병합본과 같은 출처 문서를 함께 주면 겹친 출처로 거부한다(둘째가 첫째의 행을 닫는다).
-        code, paths = run(merged, doc, "--close-missing")
-        assert code != 0 and paths == [], (code, paths)
+        # 병합본 + 같은 출처 문서([공유본, 지역 문서] 모양): 쓰기 전 가드를 출처마다, 닫기도 출처마다 한 번, 합친 목록으로.
+        code, paths = run(merged, doc, "--close-missing", "--chunk-size", "500")
+        assert code == 0 and paths == [CLOSE_PATH, CLOSE_PATH, CLOSE_PATH, INGEST_PATH, CLOSE_PATH, INGEST_PATH, INGEST_PATH], (code, paths)
+        closes = [body for path, body in calls if path == CLOSE_PATH and not body["dry_run"]]
+        assert [(b["source"], b["present_source_refs"]) for b in closes] == [
+            ("TOURAPI", ["T0", "T1"]), ("LOCALDATA", ["L0", "L1", "L2", "R0", "R1", "R2"])], closes
+        # 그 모양에서 둘째 출처가 가드에 걸려도 아무것도 쓰지 않는다.
+        code, paths = run(merged, doc, "--close-missing", refused={"LOCALDATA"})
+        assert code != 0 and paths == [CLOSE_PATH, CLOSE_PATH] and all(b["dry_run"] for _p, b in calls), (code, calls)
         # 항목에 source 가 없으면 최상단을 따른다 — 기존 단일 출처 문서는 그대로.
         assert split_by_source("p", {"source": "TOURAPI"}, "TOURAPI", [item])[0][1:3] == (
             {"source": "TOURAPI"}, "TOURAPI")

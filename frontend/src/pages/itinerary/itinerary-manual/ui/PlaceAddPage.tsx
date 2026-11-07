@@ -20,7 +20,7 @@ import { PlaceAddHeader, PlaceAddRow } from '@/features/itinerary';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { TimeSheet } from '@/widgets/time-sheet';
 import { suggestNextSlotTime } from '@/entities/itinerary-slot';
-import { regionForDay } from '@/entities/trip';
+import { destinationForDay, placeRegionQuery } from '@/entities/trip';
 import { isNotFound } from '@/shared/api';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import {
@@ -79,7 +79,7 @@ const UNSAVED_EDITS_TAIL = ' · 다른 수정은 저장해야 남아요';
  * 추가 저장(TRIP-338 무심판 해소 — AC-6 통합 심판이 이 플로우를 잠근다): "추가" → `TimeSheet` 로 시각
  * 자유입력 → **삽입 index 분기**(AC-7): 라우트 `insertAfter`(선행 슬롯 index)가 있으면
  * `insertSlotAt(slots, slot, Number(insertAfter) + 1)`(797 "카드 사이 +" 가 넘긴 선행 index 의 다음
- * 자리 — 같은 화면에서 연달아 담으면 성공한 추가 수만큼 뒤로 민다, TRIP-1640), 없으면 `addSlot`(말미 append, 후방호환) → `buildEditItineraryRequest`(5필드 픽) →
+ * 자리 — 같은 화면에서 연달아 담으면 성공한 추가 수만큼 뒤로 민다, TRIP-1640), 없으면 `addSlot`(말미 append, 후방호환) → `buildEditItineraryRequest`(서버 칸만 픽) →
  * `PUT /trips/{tripId}/itinerary`(전체 교체) → 성공 시 일정 GET 캐시 무효화로 h19 가 갱신 재조회한다
  * (없으면 추가가 화면에 영영 안 보인다, W-1). 서버 재검증 결과(`hasViolation`)는 그 재조회가 표시한다
  * (INV-2 — 클라는 시각 타당성을 판정하지 않는다). 일정 GET 미도착·실패(`notReady`)면 추가를 조용히
@@ -169,13 +169,16 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
           (day) => day.date === added.date
         )?.slots;
         if (hasUnsavedEdits) {
-          added.slots.forEach((slot, i) =>
+          added.slots.forEach((slot, i) => {
+            // 끼운 자리의 응답 슬롯을 쓴다(장소 순서는 요청과 같다 — comparePlaceAdd 와 같은 규칙). poiId 로 찾으면 그날 이미 있는
+            // 같은 장소의 옛 시각이 들어가 고른 시각이 사라진다(TRIP-1804). 자리가 어긋나면 고른 시각 그대로.
+            const placed = responseSlots?.[added.addedIndex + i];
             draft.insertSlot(
               added.date,
-              responseSlots?.find((one) => one.poiId === slot.poiId) ?? slot,
+              placed?.poiId === slot.poiId ? placed : slot,
               added.insertAt === undefined ? undefined : added.insertAt + i
-            )
-          );
+            );
+          });
         }
         // 서버가 이동을 반영해 시각을 밀었으면 응답 시각 그대로 말한다(INV-2). 응답엔 "밀었다" 필드가 없어
         // 요청과 같은 자리의 슬롯을 견준다(BR-U3-13·14 §3 개정 — 장소·순서는 요청 그대로일 때만 repair 를 쓴다).
@@ -223,7 +226,7 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
   // 후보 지역 = 담을 날(헤더 N일차)의 지역 하나(TRIP-1233 AC-3 — 옛 다지역 병합은 1일차 지역을 앞에
   // 세워 2일차를 못 채웠다). 다지역이면 N 을 알려면 일정이 와야 하므로 그때까지 조회를 미룬다.
   const destinations = trip.data?.destinations ?? [];
-  const region = regionForDay(destinations, dayNumber);
+  const destination = destinationForDay(destinations, dayNumber);
   const {
     items,
     fetchNextPage,
@@ -234,7 +237,7 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
     refetch: refetchList,
   } = usePlacesInfinite(
     {
-      ...(region !== null ? { region } : {}),
+      ...(destination ? placeRegionQuery(destination) : {}),
       ...(selectedCategory ? { category: selectedCategory } : {}),
       ...(trimmedQuery ? { q: trimmedQuery } : {}),
     },

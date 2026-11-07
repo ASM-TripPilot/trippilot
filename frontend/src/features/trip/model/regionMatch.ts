@@ -7,16 +7,9 @@
  */
 
 import type { Region } from '@/shared/api/index.schemas';
+import { sidoKey } from '@/shared/lib/sidoKey';
 
-// 긴 것부터 — `도` 를 먼저 떼면 `…특별자치도` 가 `…특별자치` 로 남는다.
-const SIDO_SUFFIXES = ['특별자치시', '특별자치도', '특별시', '광역시', '도'];
-
-export function sidoKey(name: string): string {
-  const suffix = SIDO_SUFFIXES.find((one) => name.endsWith(one));
-  const stem = suffix === undefined ? name : name.slice(0, -suffix.length);
-  // 접기는 시도 끝 명칭을 뗀 경우에만(`충청북도`→`충북`). 시군구(`대덕구`)를 접으면 `대구`가 된다(03b 경고-1).
-  return suffix !== undefined && stem.length === 3 ? stem[0] + stem[2] : stem;
-}
+export { sidoKey };
 
 /** 주소 앞 3토막 중 하나가 지역 이름과 같거나(시군구 여행지) 시도 키가 같으면(시도 여행지) true. */
 export function addressInRegion(address: string, region: string): boolean {

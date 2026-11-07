@@ -449,6 +449,38 @@ describe('요청 조립(buildBulkAddRequest) — D4·D5', () => {
     expect(built.addedIndex).toBe(2);
   });
 
+  it('BB-3b · TRIP-1795 AC-7 — 일정에 이미 있던 슬롯의 이 여행 별칭(표시 이름·분류)은 장소를 더해 저장해도 그대로 실리고, 새로 담은 슬롯엔 별칭 키가 없다', () => {
+    // 빌더가 5필드만 고르면 장소를 하나 더하는 저장이 기존 슬롯의 별칭을 조용히 지운다(전체 교체 PUT).
+    const aliased = (): ItineraryDaysItem[] => [
+      {
+        date: D1,
+        slots: [
+          { ...SA, displayName: '우리 아지트', displayCategory: '카페' },
+          SB,
+        ],
+      },
+      { date: D2, slots: [TA] },
+    ];
+
+    const built = buildBulkAddRequest({
+      days: aliased(),
+      targetDate: D1,
+      insertAt: undefined,
+      places: picks,
+      times,
+    });
+
+    const [first, second, added] = built.request.days[0].slots;
+    expect(first).toMatchObject({
+      poiId: 'sA',
+      displayName: '우리 아지트',
+      displayCategory: '카페',
+    });
+    expect(Object.keys(second)).not.toContain('displayName');
+    expect(Object.keys(added)).not.toContain('displayName');
+    expect(Object.keys(added)).not.toContain('displayCategory');
+  });
+
   it('BB-4 · 새 슬롯은 확정한 시각 그대로 실린다 — 요청엔 서버가 받는 5필드만(isFixed false), 자정 넘김 플래그도 그대로', () => {
     const built = buildBulkAddRequest({
       days: days(),

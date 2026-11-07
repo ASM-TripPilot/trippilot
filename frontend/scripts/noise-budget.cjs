@@ -51,7 +51,7 @@ const BUDGETS = {
     // node 버킷은 MSW 서버를 쓰지 않는다.
     'msw-unhandled': 0,
     // jest 환경 산물(EditorView 의 animatedRef 경고) — 숨기지 않고 정확값 고정. 새 사용처가 늘면 red.
-    reanimated: 59,
+    reanimated: 58,
     // 남은 act 는 타이머가 늦게 도착하는 비결정 갈래(assistantQueries·useVisitMemo·HomePage 등 TanStack notifyManager) —
     // 천장이다. 로컬 실측 17·21 / CI before 194 − 고친 결정적 174(동작 줄이기 답 144 + zustand reset 30) = 20 → max(21, 20) × 1.25 올림.
     act: 27,

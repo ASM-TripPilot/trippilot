@@ -48,7 +48,7 @@ import { useMultiRegionPlaces } from '@/features/explore';
 import { useSavedPlaces } from '@/features/save-place';
 import { regionPickerHref } from '@/features/explore';
 import { isWizardOrigin } from '@/features/create-trip';
-import { SERVICE_REGIONS } from '@/entities/trip';
+import { placeRegionQueries, SERVICE_REGIONS } from '@/entities/trip';
 import { PlaceExploreScreen } from './PlaceExploreScreen';
 import { openNewTripWizard } from '@/features/create-trip';
 
@@ -56,18 +56,21 @@ import { openNewTripWizard } from '@/features/create-trip';
 const SERVICE_REGION_NAMES = SERVICE_REGIONS.map((r) => r.name);
 
 export function PlaceExplorePage(): ReactElement {
-  const params = useLocalSearchParams<{ region?: string | string[] }>();
-  const { region } = params;
+  const params = useLocalSearchParams<{
+    region?: string | string[];
+    regionCode?: string | string[];
+  }>();
+  const { region, regionCode } = params;
   // 위저드에서 들른 d04 는 ＋(새 여행 = reset)를 그리지 않는다 — 진행 중 입력 보존(TRIP-1026).
   const fromWizard = isWizardOrigin(params);
-  // '더 담기'가 여행 지역들을 배열로 실어 보낸다(TRIP-687, 같은 키 반복 → 배열). 1지역은 기존
+  // '더 담기'가 여행 지역들을 실어 보낸다(TRIP-687 — 실제 주소엔 쉼표로 합쳐 온다, `placeRegionQueries`). 1지역은 기존
   // 무한스크롤 경로를, 0지역(서비스 지역 전체, TRIP-1560)·2+지역은 지역별 병렬 조회 후 병합 경로를
   // 탄다(어느 쪽이 그려지는지는 6-b 실기). 칩 라벨은 라우트 `regions` 그대로라 0지역이면 '전체 지역'이다.
-  const regions = Array.isArray(region) ? region : region ? [region] : [];
+  const regionQueries = placeRegionQueries(region, regionCode);
+  const regions = regionQueries.map((query) => query.region);
   const isMultiRegion = regions.length !== 1;
-  const singleRegion = regions.length === 1 ? regions[0] : undefined;
   const multiQueryRegions =
-    regions.length === 0 ? SERVICE_REGION_NAMES : regions;
+    regions.length === 0 ? SERVICE_REGION_NAMES : regionQueries;
 
   // 진입마다 한 번 정하는 무작위 순서 번호표(TRIP-1563) — 칩·검색·이어받기·재시도·지역 바꾸기에도 그대로다.
   // 지연 초기값이라 마운트 때 1회만 만들고, 첫 렌더에 이미 있어야 seed 없는 random 요청이 안 나간다(INV-4).
@@ -90,7 +93,7 @@ export function PlaceExplorePage(): ReactElement {
   // 헛조회를 막고, 단일/0지역이면 병합 조회를 끈다.
   const infinite = usePlacesInfinite(
     {
-      ...(singleRegion ? { region: singleRegion } : {}),
+      ...(regions.length === 1 ? regionQueries[0] : {}),
       ...(selectedCategory ? { category: selectedCategory } : {}),
       ...(trimmedQuery ? { q: trimmedQuery } : {}),
       order: 'random',

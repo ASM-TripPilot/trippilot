@@ -108,6 +108,8 @@ class ItineraryRevisionRepositoryAdapter(
                         put("endsNextDay", s.endsNextDay)
                         s.distanceRange?.let { put("distanceRange", it) }
                         s.placementReason?.let { put("placementReason", it) }
+                        s.displayName?.let { put("displayName", it) }
+                        s.displayCategory?.let { put("displayCategory", it) }
                     }
                 },
             )
@@ -142,6 +144,8 @@ class ItineraryRevisionRepositoryAdapter(
             this["endsNextDay"] as? Boolean ?: false,
             this["distanceRange"] as? String,
             this["placementReason"] as? String,
+            this["displayName"] as? String,
+            this["displayCategory"] as? String,
         )
     }
 }

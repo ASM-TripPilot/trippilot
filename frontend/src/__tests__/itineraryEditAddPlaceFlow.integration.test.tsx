@@ -36,6 +36,7 @@ import {
   fireEditDropOnZone,
 } from '@/test-support/editDragList';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
+import { guardKeyWarnings } from '@/test-support/keyWarnings';
 import { newTestQueryClient, settle } from '@/test-support/queryRender';
 
 /**
@@ -70,6 +71,9 @@ import { newTestQueryClient, settle } from '@/test-support/queryRender';
  */
 
 jest.setTimeout(30000);
+
+// TRIP-1804 — 같은 날 같은 장소 카드도 키가 겹치면 안 된다(드래그 리스트가 이 키로 카드 자리를 잰다).
+guardKeyWarnings();
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('@/shared/storage', () => require('@/test-support/storageMock'));
@@ -285,6 +289,8 @@ afterEach(() => {
   // 토스트·편집 스토어는 모듈 싱글턴이다 — describe 안이 아니라 파일 최상위에서 비운다(02a ★6·★7).
   resetToast();
   useItineraryEditStore.getState().reset();
+  // 저장 뒤 복귀가 연 연타 창(모듈 전역)이 다음 테스트의 첫 누름을 삼키지 않게(통합 QA O2).
+  resetPressGuard();
 });
 
 afterAll(() => server.close());
@@ -396,7 +402,7 @@ describe.each([
   ['ItineraryEditPage', 'edit'],
   ['ManualPlanPage', 'manual'],
 ] as const)('%s — 로컬 변경 뒤 장소 추가', (_name, kind) => {
-  it('F1 · AC-a1·a3 — 순서를 바꾼 뒤 「카드 사이 +」로 추가해도 로컬 순서가 남고, 추가한 장소는 누른 카드 바로 뒤에 들어간다', async () => {
+  it('F1·F2 · AC-a1·a2·a3 — 순서를 바꾼 뒤 「카드 사이 +」로 추가해도 로컬 순서가 남고 추가한 장소는 누른 카드 바로 뒤이며, 이어 누른 [저장]의 PUT 에 둘 다 실린다', async () => {
     // 준비 — 서버 [a,b,c]. 편집기에서 c 를 맨 앞으로 끌어 로컬 [c,a,b].
     renderFlow(kind);
     await ready();
@@ -418,14 +424,6 @@ describe.each([
     expect(putBodies).toHaveLength(1);
     expect(sentIds(0, D1)).toContain('p1');
     expect(sentIds(0, D1).filter((id) => id !== 'p1')).toEqual(['a', 'b', 'c']);
-  });
-
-  it('F2 · AC-a2 — 이어서 편집기 [저장]을 누르면 PUT 에 로컬 순서와 추가한 장소가 둘 다 실린다', async () => {
-    renderFlow(kind);
-    await ready();
-    fireEditDragEnd(2, 0);
-    await openAdd('itinerary-edit-insert-0');
-    await addPlaceAndWait('p1');
 
     // 실행 — 장소 추가 화면에서 돌아와 [저장].
     fireEvent.press(
@@ -459,6 +457,108 @@ describe.each([
       )
     ).toBeOnTheScreen();
     expect(draftIds(D1)).toEqual(['c', 'a', 'b']);
+  });
+});
+
+/**
+ * TRIP-1804 · 저장 안 한 변경이 있을 때 그날 이미 있는 장소를 또 담으면 — 고른 시각이 초안을 지나 **이어 누른 [저장]의 PUT** 까지 간다.
+ * 초안에 끼울 슬롯을 poiId 로 찾으면 기존 슬롯(옛 시각)이 들어가 [저장]이 고른 시각을 지운다(QA N1).
+ */
+// 편집기 렌더 하나가 소음 예산 reanimated 1건이라 두 페이지를 곱하지 않는다 — 고친 곳은 장소 추가 쪽이고 저장 경로는 F1·F2 가 두 페이지 다 본다.
+describe('같은 날 같은 장소 저장 (TRIP-1804)', () => {
+  const sentTimes = (index: number): [string, string][] =>
+    (putBodies[index]?.days.find((day) => day.date === D1)?.slots ?? []).map(
+      (one) => [one.poiId, one.startAt]
+    );
+
+  function serveD1(slots: ItineraryDaysItemSlotsItem[]): void {
+    serverDays = [{ date: D1, slots }, ...initialDays().slice(1)];
+  }
+
+  async function backToEditorAndSave(): Promise<void> {
+    fireEvent.press(
+      within(screen.getByTestId(ADD)).getByTestId('sheet-daychip-back')
+    );
+    fireEvent.press(editor().getByTestId(SAVE));
+    await waitFor(() => expect(putBodies).toHaveLength(2));
+  }
+
+  it('F7 · AC-2 · 일정 편집 — 이미 있는 두 곳을 각각 다른 시각에 담고 [저장]하면 각자 고른 시각으로 저장된다', async () => {
+    // 준비 — QA 재현: 서버 [p1 09:00, p2 12:00], p1 을 빼서 저장 안 한 변경을 만든다.
+    serveD1([
+      slot('p1', '09:00:00', '10:00:00'),
+      slot('p2', '12:00:00', '13:00:00'),
+    ]);
+    renderFlow('edit');
+    await screen.findByTestId(cardId(D1, 'p2'));
+    useItineraryEditStore.getState().deleteSlot(D1, 'p1');
+
+    // 실행 — 말미 「장소 추가」 → p1 13시·p2 14시 → 돌아와 [저장].
+    await openAdd('itinerary-edit-add-place');
+    const add = within(screen.getByTestId(ADD));
+    resetPressGuard();
+    fireEvent.press(await add.findByTestId('place-add-check-p1'));
+    fireEvent.press(add.getByTestId('place-add-check-p2'));
+    fireEvent.press(screen.getByTestId('place-add-bulk-confirm'));
+    fireEvent.press(
+      await screen.findByTestId('itinerary-edit-time-wheel-h-13')
+    );
+    fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('itinerary-edit-time-place-summary')
+      ).toHaveTextContent(NAMES.p2)
+    );
+    fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-14'));
+    fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
+    await screen.findByTestId(TOAST);
+    await settle();
+    resetPressGuard();
+    await backToEditorAndSave();
+
+    // 단언 — 저장 PUT: 뺀 p1(09:00)은 없고 있던 p2 는 12:00, 담은 둘은 고른 시각.
+    const [, addedP1, addedP2] = sentTimes(1);
+    expect(sentTimes(1)).toHaveLength(3);
+    expect(sentTimes(1)[0]).toEqual(['p2', '12:00:00']);
+    expect(addedP1[0]).toBe('p1');
+    expect(addedP1[1].slice(0, 2)).toBe('13');
+    expect(addedP2[0]).toBe('p2');
+    expect(addedP2[1].slice(0, 2)).toBe('14');
+  });
+
+  it('F8 · AC-1 · 직접 짜기 — 카드 사이 「+」로 뒤쪽에 이미 있는 장소를 담아도 끼운 자리의 시각으로 저장된다', async () => {
+    // 준비 — 서버 [p2 08:00, p1 14:00], p2 시각을 바꿔 저장 안 한 변경. 새 p1 은 기존 p1 **앞**에 끼므로
+    // "그 장소의 마지막 일치"로 집어도 틀리다(말미 추가로는 첫·마지막 일치 말고는 못 가른다).
+    serveD1([
+      slot('p2', '08:00:00', '09:00:00'),
+      slot('p1', '14:00:00', '15:00:00'),
+    ]);
+    renderFlow('manual');
+    await screen.findByTestId(cardId(D1, 'p2'));
+    useItineraryEditStore.getState().adjustSlotTime(D1, 'p2', {
+      startAt: '08:30:00',
+      endAt: '09:00:00',
+      endsNextDay: false,
+    });
+
+    // 실행 — 0번 카드 뒤 「+」 → p1 을 09:14 로(기본 09:00~10:00 에서 분만) → 돌아와 [저장].
+    await openAdd('itinerary-edit-insert-0');
+    const add = within(screen.getByTestId(ADD));
+    fireEvent.press(await add.findByTestId('itinerary-place-add-p1'));
+    fireEvent.press(
+      await screen.findByTestId('itinerary-edit-time-wheel-m-14')
+    );
+    fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
+    await screen.findByTestId(TOAST);
+    await settle();
+    resetPressGuard();
+    await backToEditorAndSave();
+
+    expect(sentTimes(1)).toEqual([
+      ['p2', '08:30:00'],
+      ['p1', '09:14:00'],
+      ['p1', '14:00:00'],
+    ]);
   });
 });
 

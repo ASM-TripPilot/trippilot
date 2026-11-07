@@ -11,6 +11,7 @@ import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
 import { ALT_LABEL } from '../config/altLabel';
+import { slotDisplayCategory, slotDisplayName } from '../lib/slotDisplay';
 import { buildSlotKey } from '../lib/slotKey';
 import { COLOR_TOKENS } from '@/shared/config';
 
@@ -129,6 +130,10 @@ export function SlotStopCard({
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string => `slot-stopcard-${role}-${slotKey}`;
   const hasTime = timeLabel !== null && timeLabel !== undefined;
+  // TRIP-1795 · 이 여행에서 분류를 고친 슬롯만 메타 줄 맨 앞에 그 분류를 붙인다(안 그러면 고쳐도 카드가 안 변해 보인다). 덮어쓰기 없으면 태그만 — 종전과 같다.
+  const metaParts = slot.displayCategory?.trim()
+    ? [slot.displayCategory, ...slot.tags]
+    : slot.tags;
   // 잠긴 슬롯은 편집 어포던스를 안 붙인다(INV-U3-03) — onPressTimeChip 을 줬어도 누름 칩 부재.
   const editable = onPressTimeChip !== undefined && locked !== true;
   const chipClass =
@@ -168,7 +173,7 @@ export function SlotStopCard({
       {selection ? (
         <Pressable
           accessibilityRole="checkbox"
-          accessibilityLabel={`${slot.nameKo ?? ''} 선택`}
+          accessibilityLabel={`${slotDisplayName(slot) ?? ''} 선택`}
           accessibilityState={{
             checked: selection.state === 'on',
             selected: selection.state === 'on',
@@ -196,7 +201,7 @@ export function SlotStopCard({
       <PlacePhoto
         testID={fieldId('photo')}
         imageUrl={slot.imageUrl}
-        category={slot.category}
+        category={slotDisplayCategory(slot)}
         poiId={slot.poiId}
         contentFit="cover"
         cachePolicy="memory-disk"
@@ -290,7 +295,7 @@ export function SlotStopCard({
                   numberOfLines={1}
                   className="font-noto-bold text-card-title font-bold text-ink"
                 >
-                  {slot.nameKo ?? ''}
+                  {slotDisplayName(slot) ?? ''}
                 </Text>
                 <ChevronRight24Glyph size={14} color="muted" />
               </Pressable>
@@ -303,7 +308,7 @@ export function SlotStopCard({
                   numberOfLines={1}
                   className="font-noto-bold text-card-title font-bold text-ink"
                 >
-                  {slot.nameKo ?? ''}
+                  {slotDisplayName(slot) ?? ''}
                 </Text>
               </View>
             )}
@@ -354,12 +359,12 @@ export function SlotStopCard({
           </View>
         )}
 
-        {slot.tags.length > 0 ? (
+        {metaParts.length > 0 ? (
           <Text
             testID={fieldId('tags')}
             className="font-noto text-caption text-muted"
           >
-            {slot.tags.join(' · ')}
+            {metaParts.join(' · ')}
           </Text>
         ) : null}
 

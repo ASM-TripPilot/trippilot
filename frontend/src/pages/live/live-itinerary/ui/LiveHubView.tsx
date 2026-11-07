@@ -40,6 +40,7 @@ import {
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import {
   buildStatePins,
+  slotOrdinal,
   type SlotProgressState,
 } from '@/entities/itinerary-slot';
 import { SlotProgressCard } from '@/entities/itinerary-slot';
@@ -295,6 +296,16 @@ export function LiveHubView({
   // 필요 없어 ref). 못 쟀으면(첫 레이아웃 전) 스크롤 요청을 안 낸다.
   const timelineYRef = useRef<number | undefined>(undefined);
   const rowYsRef = useRef<Record<string, number>>({});
+  // 행의 신원 — 같은 날 같은 장소 행이 key·y 를 서로 덮지 않게 ordinal 을 붙인다. 없는 일정은 slotKey 그대로다(TRIP-1812).
+  const rowKeyAt = (index: number): string =>
+    buildSlotKey(
+      activeDate,
+      slots[index].slot.poiId,
+      slotOrdinal(
+        slots.map((hubSlot) => hubSlot.slot),
+        index
+      )
+    );
   const [scrollRequest, setScrollRequest] = useState<
     { id: number; y: number } | undefined
   >(undefined);
@@ -397,7 +408,7 @@ export function LiveHubView({
     closeFloating();
     if (!target) return;
     const timelineY = timelineYRef.current;
-    const rowY = rowYsRef.current[buildSlotKey(activeDate, target.slot.poiId)];
+    const rowY = rowYsRef.current[rowKeyAt(pin.number - 1)];
     if (timelineY === undefined || rowY === undefined) return;
     const y = timelineY + rowY;
     if (arrivedIndexRef.current === expandedSnapIndex) {
@@ -608,10 +619,10 @@ export function LiveHubView({
                 : undefined;
             return (
               <View
-                key={slotKey}
+                key={rowKeyAt(index)}
                 testID={`execution-live-slot-row-${slotKey}`}
                 onLayout={(e) => {
-                  rowYsRef.current[slotKey] = e.nativeEvent.layout.y;
+                  rowYsRef.current[rowKeyAt(index)] = e.nativeEvent.layout.y;
                 }}
                 className="flex-row"
               >

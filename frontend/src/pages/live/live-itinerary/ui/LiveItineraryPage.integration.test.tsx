@@ -2458,12 +2458,14 @@ describe('메모 시트', () => {
   const CARD_MEMO = `execution-live-slot-memo-${TODAY}#p1`;
   const CARD_NOTICE = 'execution-arrive-memo-notice';
 
+  // TRIP-1795 — M2 만 p1 을 이 여행에서 고친 이름으로 부른다(다른 케이스는 원본 이름 단언이 많다).
+  let p1Over: Record<string, unknown> = {};
   const itinerary = (): Itinerary =>
     liveItinerary([
       {
         date: TODAY,
         slots: [
-          liveSlot('p1', '감천문화마을', '13:00:00'),
+          liveSlot('p1', '감천문화마을', '13:00:00', p1Over),
           liveSlot('p2', '광안리 해변', '15:00:00'),
         ],
       },
@@ -2512,6 +2514,7 @@ describe('메모 시트', () => {
     });
   }
   beforeEach(() => {
+    p1Over = {};
     memoBodies = [];
     memoStatus = 200;
     memoGate = Promise.resolve();
@@ -2585,12 +2588,13 @@ describe('메모 시트', () => {
 
   // AC-1([메모] → 이동·저장 없이 시트)은 아래 「관람 중 카드 [사진]·[메모]」 L3 가 본다 — 같은 동작이던 M1 은 합치며 지웠다(TRIP-1152).
   describe('🔴 AC-11·AC-12 · 제목과 글자 수', () => {
-    it('M2 제목은 "감천문화마을 · 메모", 글자 수는 0/2000 에서 입력하면 바로 7/2000 이 된다', async () => {
+    it('M2 제목은 "{장소} · 메모"(이 여행에서 고친 이름이 있으면 그 이름 — TRIP-1795), 글자 수는 0/2000 에서 입력하면 바로 7/2000 이 된다', async () => {
+      p1Over = { displayName: '우리 아지트' };
       await renderHub();
       const input = await openSheet();
 
       expect(screen.getByTestId('live-memo-title')).toHaveTextContent(
-        '감천문화마을 · 메모'
+        '우리 아지트 · 메모'
       );
       expect(screen.getByTestId('live-memo-count')).toHaveTextContent('0/2000');
 

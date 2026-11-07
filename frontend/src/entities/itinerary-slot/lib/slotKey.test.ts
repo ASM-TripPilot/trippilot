@@ -1,6 +1,12 @@
 import fc from 'fast-check';
 
-import { buildSlotKey, buildSlotKeys, parseSlotKey } from './slotKey';
+import {
+  buildSlotKey,
+  buildSlotKeys,
+  findSlotIndex,
+  parseSlotKey,
+  slotOrdinal,
+} from './slotKey';
 
 /**
  * TRIP-295 · BR-U2-04 · PBT-U3-4 · PBT-U2-B3 (01b D1 · D2) — slotKey 키 규약.
@@ -218,5 +224,125 @@ describe('parseSlotKey — 깨진 입력 분류 (AC-11)', () => {
     // 준비 = 표의 한 행 · 실행 = parseSlotKey · 단언 = 갈래가 invalid다.
     // 왕복이 성립하지 않는 입력을 조용히 통과시키지 않는다.
     expect(parseSlotKey(key)).toEqual({ kind: 'invalid' });
+  });
+});
+
+/**
+ * TRIP-1812 · BR-U2-04 `#{ordinal}` 확장 — 같은 날 같은 장소가 둘 이상일 때 편집기 안에서 카드를 가리키는 이름.
+ *
+ * 무엇을 보장하나: ordinal(앞선 같은 장소 수)이 0 이면 키가 서버 키 `d#p` 와 글자까지 같고, 1 이상이면 `d#p#1` 이다.
+ * 되읽으면 원래 자리로 돌아오고, 같은 키가 둘이 되지 않는다(왕복·단사).
+ *
+ * > *(개념)* **ordinal** — "이 장소의 몇 번째 카드인가". 배열 index 와 달리 앞에 다른 장소가 끼어도 값이 그대로다
+ * > (BR-U2-04: 인덱스 기반 키는 순서가 바뀌면 깨진다).
+ *
+ * 3동작: 준비(값 표·슬롯 배열) → 실행(build/parse/slotOrdinal/findSlotIndex) → 단언(글자·값).
+ */
+describe('ordinal 키 — 같은 날 같은 장소 (TRIP-1812 AC-6·AC-7)', () => {
+  const D = '2026-09-14';
+  const slotsOf = (...poiIds: string[]) => poiIds.map((poiId) => ({ poiId }));
+  // 낀 것: 말미·첫 일치·마지막 일치가 전부 갈린다. 붙은 것: 앞선 수가 곧 바로 앞 카드다.
+  const WOVEN = slotsOf('p1', 'p2', 'p1', 'p1');
+  const ADJACENT = slotsOf('p1', 'p1', 'p2');
+
+  it.each<[string, number | undefined, string]>([
+    ['인자 없음 — 지금과 글자까지 같다', undefined, `${D}#p`],
+    ['ordinal 0 — 서버 키와 같다', 0, `${D}#p`],
+    ['ordinal 1', 1, `${D}#p#1`],
+    ['ordinal 12 — 두 자리', 12, `${D}#p#12`],
+  ])('buildSlotKey · %s', (_name, ordinal, expected) => {
+    expect(buildSlotKey(D, 'p', ordinal)).toBe(expected);
+  });
+
+  it('parseSlotKey · `d#p` 는 ordinal 키가 없다 — 서버 키 소비처가 받는 모양이 그대로다', () => {
+    expect(parseSlotKey(`${D}#p`)).toStrictEqual({
+      kind: 'ok',
+      date: D,
+      poiId: 'p',
+    });
+  });
+
+  it.each<[string, number]>([
+    [`${D}#p#1`, 1],
+    [`${D}#p#12`, 12],
+  ])('parseSlotKey · %s 는 ordinal 이 숫자로 실린다', (key, ordinal) => {
+    expect(parseSlotKey(key)).toStrictEqual({
+      kind: 'ok',
+      date: D,
+      poiId: 'p',
+      ordinal,
+    });
+  });
+
+  // 단사성: `d#p` 와 `d#p#0` 이 둘 다 ok 면 한 자리에 이름이 둘이다. 숫자 꼴이 아닌 접미도 읽지 않는다.
+  it.each(['#0', '#01', '#-1', '#1.5', '#extra', '#', '#1#2'])(
+    'parseSlotKey · 접미 %s 는 invalid',
+    (suffix) => {
+      expect(parseSlotKey(`${D}#p${suffix}`)).toEqual({ kind: 'invalid' });
+    }
+  );
+
+  it('slotOrdinal — 그 자리 앞에 같은 장소가 몇 개인가', () => {
+    expect(WOVEN.map((_, index) => slotOrdinal(WOVEN, index))).toEqual([
+      0, 0, 1, 2,
+    ]);
+    expect(ADJACENT.map((_, index) => slotOrdinal(ADJACENT, index))).toEqual([
+      0, 1, 0,
+    ]);
+  });
+
+  it.each<[string, number | undefined, number]>([
+    ['p1', undefined, 0],
+    ['p1', 0, 0],
+    ['p1', 1, 2],
+    ['p1', 2, 3],
+    ['p2', 0, 1],
+    ['p1', 3, -1], // 없는 ordinal
+    ['p2', 1, -1],
+    ['p9', 0, -1], // 없는 장소
+  ])(
+    'findSlotIndex · %s 의 ordinal %s → 자리 %i',
+    (poiId, ordinal, expected) => {
+      expect(findSlotIndex(WOVEN, poiId, ordinal)).toBe(expected);
+    }
+  );
+
+  it('임의 배열에서 모든 자리의 키가 다르고, 되읽으면 원래 자리로 돌아온다 (AC-7, PBT)', () => {
+    const poiIdsArb = fc.array(fc.constantFrom('p1', 'p2', 'p3'), {
+      minLength: 1,
+      maxLength: 8,
+    });
+    fc.assert(
+      fc.property(poiIdsArb, (poiIds) => {
+        // 준비 — 같은 장소가 자주 겹치도록 풀을 셋으로 좁혔다.
+        const slots = slotsOf(...poiIds);
+
+        // 실행
+        const keys = slots.map((slot, index) =>
+          buildSlotKey(D, slot.poiId, slotOrdinal(slots, index))
+        );
+
+        // 단언 — 단사: 키가 전부 다르다.
+        expect(new Set(keys).size).toBe(keys.length);
+        keys.forEach((key, index) => {
+          const parsed = parseSlotKey(key);
+          if (parsed.kind !== 'ok') throw new Error(`깨진 키: ${key}`);
+          // 단언 — 왕복: 파싱한 장소·ordinal 로 찾으면 그 자리다.
+          expect(parsed.date).toBe(D);
+          expect(parsed.poiId).toBe(poiIds[index]);
+          expect(findSlotIndex(slots, parsed.poiId, parsed.ordinal)).toBe(
+            index
+          );
+          // 단언 — 첫 카드의 키는 서버 키 글자 그대로다.
+          if (poiIds.indexOf(poiIds[index]) === index) {
+            expect(key).toBe(`${D}#${poiIds[index]}`);
+          }
+        });
+      }),
+      {
+        numRuns: 300,
+        examples: [[['p1', 'p2', 'p1', 'p1']], [['p1', 'p1', 'p2']]],
+      }
+    );
   });
 });

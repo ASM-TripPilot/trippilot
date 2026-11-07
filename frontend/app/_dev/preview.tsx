@@ -127,6 +127,8 @@ import {
   PastTripRow,
   TripCard,
   TripDeleteDialog,
+  coverSourceForKey,
+  pickRegionCover,
   type MyTripCardVM,
 } from '@/entities/trip';
 import type { PastTripCardVM } from '@/entities/trip';
@@ -135,8 +137,12 @@ import { buildSlotKey } from '@/entities/itinerary-slot';
 import { buildStatePins } from '@/entities/itinerary-slot';
 import { TimeSheet } from '@/widgets/time-sheet';
 import { MoveDaySheet } from '@/pages/itinerary/itinerary-edit/ui/MoveDaySheet';
+import { RenameSlotSheet } from '@/pages/itinerary/itinerary-edit/ui/RenameSlotSheet';
 import { MethodPickerScreen } from '@/pages/itinerary/itinerary-method/ui/MethodPickerScreen';
 import { MyTripsListScreen } from '@/pages/itinerary/itinerary-list/ui/MyTripsListScreen';
+import { periodHint } from '@/pages/trip/trip-settings/model/periodRules';
+import { CoverPickSheet } from '@/pages/trip/trip-settings/ui/CoverPickSheet';
+import { PeriodLengthDialog } from '@/pages/trip/trip-settings/ui/PeriodLengthDialog';
 import { TripSettingsView } from '@/pages/trip/trip-settings/ui/TripSettingsView';
 import { MyTripsSortSheet } from '@/pages/itinerary/itinerary-list/ui/MyTripsSortSheet';
 import {
@@ -204,9 +210,9 @@ import {
 import {
   CompanionEditSheet,
   DayWindowEditSheet,
+  PeriodEditSheet,
 } from '@/widgets/trip-edit-sheets';
 import { DestinationEditSheet } from '@/pages/trip/trip-new-step1/ui/DestinationEditSheet';
-import { PeriodEditSheet } from '@/pages/trip/trip-new-step1/ui/PeriodEditSheet';
 import {
   StaySelectSheet,
   type StaySelectCandidate,
@@ -317,6 +323,8 @@ const noop = () => {};
 
 // g03 여행 설정(TRIP-1787, Figma `5151:3550`) — 순수 뷰만 태운다(컨테이너는 조회·저장 훅을 문다). 기본 얼굴(바꿀 수 있고 삭제 노출)과
 // 끝난 여행 잠금 얼굴(이유 한 줄·삭제 없음)을 Figma 와 대조한다. 시트·삭제 다이얼로그 개폐·키보드는 jest 가 못 봐서 6-b 몫이다.
+// TRIP-1788: 기간 행(chevron·보조문)·「커버 바꾸기」 버튼이 얹혔다 — 기간 잠금·서버 거절 안내·일수 변경 확인창·커버 시트·기간 시트 설정판은
+// 아래 `trip-settings-*` 키들(기간·커버 시트는 Figma 프레임이 없어 기존 어휘로 만든 것이라 육안 대조 대상이 없고 모양만 본다).
 const TRIP_SETTINGS_VIEW = {
   title: '제주 가족 여행',
   titleInvalid: false,
@@ -327,6 +335,9 @@ const TRIP_SETTINGS_VIEW = {
   dayEndLabel: '마지막 날 18:00까지',
   periodLabel: '6월 10일(수) – 13일(토)',
   nightsLabel: '3박 4일',
+  periodHint: periodHint(null),
+  onPressPeriod: noop,
+  onPressCover: noop,
   destinationsLabel: '제주시 · 서귀포시',
   cover: null,
   canSave: false,
@@ -1779,6 +1790,23 @@ const MY_TRIPS_PREVIEW_VMS: MyTripCardVM[] = [
     extra: null,
   },
 ];
+
+// TRIP-1806 · 다른 지역 커버 이름 프리뷰 공용 — 가장 밝은 그림(강원 화천군 51790) + 긴 이름. 글자 대비·겹침은 jest 가 못 봐 6-b 육안 자리다.
+const COVER_LABEL_PREVIEW = {
+  coverSource: coverSourceForKey('51790'),
+  coverLabel: '그림 · 서울 강서구',
+};
+
+function homeWithCoverLabel(
+  props: ComponentProps<typeof HomeScreen>
+): ComponentProps<typeof HomeScreen> {
+  const { phase } = props;
+  if (!phase || phase.kind === 'discovery') return props;
+  return {
+    ...props,
+    phase: { ...phase, trip: { ...phase.trip, ...COVER_LABEL_PREVIEW } },
+  };
+}
 
 // h06 삭제 프리뷰(TRIP-1055) — 작성중 '부산 여행'(⋯ 있음) + 완성 '서귀포시 여행'(⋯ 없음 — 지난 여행 가정) 순서, Figma 4682:2573. TRIP-1441 · 확정이어도 시작 전(upcoming)이면 ⋯ 가 열린다(실앱 판정은 TripCardContainer).
 // TRIP-1271 · `generating` — 생성 중 '제주 여행'에도 ⋯ 를 연다(결정 1=A, 세션이 돌아도 작성중이면 삭제 가능).
@@ -4124,6 +4152,26 @@ export const PREVIEW_STATES: PreviewState[] = [
     login: null,
     render: () => withShellTabBar(<HomeScreen {...HOME_POST_TRIP_PROPS} />),
   },
+  {
+    key: 'home-planning-cover-label',
+    band: 'a',
+    label: 'a01 · 계획 중 · 다른 지역 커버 이름',
+    login: null,
+    render: () =>
+      withShellTabBar(
+        <HomeScreen {...homeWithCoverLabel(HOME_PLANNING_PROPS)} />
+      ),
+  },
+  {
+    key: 'home-post-trip-cover-label',
+    band: 'a',
+    label: 'a01 · 여행 후 · 다른 지역 커버 이름',
+    login: null,
+    render: () =>
+      withShellTabBar(
+        <HomeScreen {...homeWithCoverLabel(HOME_POST_TRIP_PROPS)} />
+      ),
+  },
   // ── 홈 담은 곳 메뉴 배지 3얼굴(TRIP-695) — 육안 대조: 무배지 · 7/3 · 99+/24. savedMenuOpen 은
   //    prop 이라 프리뷰가 강제 true 로 연다. 배지 지름·흰 테두리·flush 위치는 6-b 육안 전용. ──
   {
@@ -4964,6 +5012,38 @@ export const PREVIEW_STATES: PreviewState[] = [
         mapNotice={null}
         hidePhotoGrid={false}
         photos={[]}
+        dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
+        activeDay={2}
+        onSelectDay={noop}
+        recordBar={PREVIEW_RECORD_BAR}
+        onEnterEdit={noop}
+        onConfirm={noop}
+        onSaveEdit={noop}
+      />
+    ),
+  },
+  // TRIP-1803 — 격자 아래 못 푼 사진 한 줄. 권한 안내는 이 기기의 실제 권한을 읽어 limited·거부일 때만 선다.
+  {
+    key: 'reflection-photo-unresolved',
+    band: 'j',
+    label: 'j03 · 회고 · 불러올 수 없는 사진 한 줄',
+    login: null,
+    render: () => (
+      <DailyReflectionScreen
+        face="default"
+        magazine={magazineDay(FOOD_DAY)}
+        editableText="오늘의 회고"
+        stats={{
+          visitCount: 4,
+          distanceKm: 12,
+          distanceSource: 'VISIT_LINE',
+          photoCount: 6,
+        }}
+        distanceDash={false}
+        mapNotice={null}
+        hidePhotoGrid={false}
+        photos={[]}
+        unresolvedPhotoCount={2}
         dayTabs={[{ day: 1 }, { day: 2, today: true }, { day: 3 }]}
         activeDay={2}
         onSelectDay={noop}
@@ -6222,12 +6302,158 @@ export const PREVIEW_STATES: PreviewState[] = [
     render: () => <TripSettingsView {...TRIP_SETTINGS_VIEW} />,
   },
   {
+    key: 'trip-settings-cover-label',
+    band: 'g',
+    label: 'g03 · 여행 설정 · 다른 지역 커버 이름',
+    login: null,
+    render: () => (
+      <TripSettingsView
+        {...TRIP_SETTINGS_VIEW}
+        cover={COVER_LABEL_PREVIEW.coverSource}
+        coverLabel={COVER_LABEL_PREVIEW.coverLabel}
+      />
+    ),
+  },
+  {
     key: 'trip-settings-locked',
     band: 'g',
     label: 'g03 · 여행 설정 · 끝난 여행 잠금',
     login: null,
     render: () => (
-      <TripSettingsView {...TRIP_SETTINGS_VIEW} locked deletable={false} />
+      <TripSettingsView
+        {...TRIP_SETTINGS_VIEW}
+        locked
+        deletable={false}
+        periodHint={periodHint('ended')}
+        onPressPeriod={undefined}
+        onPressCover={undefined}
+      />
+    ),
+  },
+  // TRIP-1788 — 여행이 시작돼 기간이 잠긴 얼굴(chevron 없음·이유 보조문) + 서버 거절 안내 줄. 커버·이름은 계속 열려 있다.
+  {
+    key: 'trip-settings-period-locked',
+    band: 'g',
+    label: 'g03 · 여행 설정 · 기간 잠금(시작됨) + 거절 안내',
+    login: null,
+    render: () => (
+      <TripSettingsView
+        {...TRIP_SETTINGS_VIEW}
+        periodHint={periodHint('started')}
+        periodNotice="여행이 시작돼 기간을 바꾸지 못했어요"
+        onPressPeriod={undefined}
+      />
+    ),
+  },
+  // TRIP-1788 — 기간 시트 설정판: 기본 모드(시작만 옮김 + 「일수 바꾸기」)와 끝일 모드(버튼 없음·안내 문구 교체).
+  {
+    key: 'trip-settings-period-sheet',
+    band: 'g',
+    label: 'g03 · 기간 시트 · 날짜 옮기기(설정판)',
+    login: null,
+    render: () => (
+      <PeriodEditSheet
+        today="2026-06-01"
+        month="2026-06"
+        range={{ start: '2026-06-10', end: '2026-06-13' }}
+        note="일수는 그대로 두고 시작일만 옮겨요"
+        onPressChangeLength={noop}
+        onPickDate={noop}
+        onPrevMonth={noop}
+        onNextMonth={noop}
+        onApply={noop}
+        onClose={noop}
+      />
+    ),
+  },
+  {
+    key: 'trip-settings-period-sheet-length',
+    band: 'g',
+    label: 'g03 · 기간 시트 · 일수 바꾸기 모드',
+    login: null,
+    render: () => (
+      <PeriodEditSheet
+        today="2026-06-01"
+        month="2026-06"
+        range={{ start: '2026-06-10', end: '2026-06-20' }}
+        note="끝나는 날을 골라요 · 일수가 바뀌면 일정을 다시 짜요"
+        onPickDate={noop}
+        onPrevMonth={noop}
+        onNextMonth={noop}
+        onApply={noop}
+        onClose={noop}
+      />
+    ),
+  },
+  // TRIP-1788 — 일수 변경 확인창(일정 있음 / 없음 / 실패). 딤·중앙 정렬은 jest 사각이라 이 키가 육안 자리다.
+  {
+    key: 'trip-settings-length-dialog',
+    band: 'g',
+    label: 'g03 · 일수 변경 확인창 · 일정 있음',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <TripSettingsView {...TRIP_SETTINGS_VIEW} canSave />
+        <PeriodLengthDialog
+          hasItinerary
+          failed={false}
+          onCancel={noop}
+          onConfirm={noop}
+        />
+      </View>
+    ),
+  },
+  {
+    key: 'trip-settings-length-dialog-dropped',
+    band: 'g',
+    label: 'g03 · 일수 변경 확인창 · 빠지는 여행지',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <TripSettingsView {...TRIP_SETTINGS_VIEW} canSave />
+        <PeriodLengthDialog
+          hasItinerary
+          droppedNotice="부산·서울이 여행지에서 빠져요"
+          failed={false}
+          onCancel={noop}
+          onConfirm={noop}
+        />
+      </View>
+    ),
+  },
+  {
+    key: 'trip-settings-length-dialog-failed',
+    band: 'g',
+    label: 'g03 · 일수 변경 확인창 · 일정 없음 + 실패',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <TripSettingsView {...TRIP_SETTINGS_VIEW} />
+        <PeriodLengthDialog
+          hasItinerary={false}
+          failed
+          onCancel={noop}
+          onConfirm={noop}
+        />
+      </View>
+    ),
+  },
+  // TRIP-1788 — 커버 고르기 시트(46장 격자·첫 칸 선택). 격자 스크롤·썸네일 메모리는 jest 가 못 본다(6-b).
+  {
+    key: 'trip-settings-cover-sheet',
+    band: 'g',
+    label: 'g03 · 커버 고르기 시트',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <TripSettingsView {...TRIP_SETTINGS_VIEW} />
+        <CoverPickSheet
+          value="26350"
+          autoSource={pickRegionCover([{ seq: 1, regionCode: '50' }])}
+          onApply={noop}
+          onClose={noop}
+        />
+      </View>
     ),
   },
   // g01 동행 편집 시트(TRIP-668, Figma `3642:2068`) — 친구 선택·인원 2명 열린 상태.
@@ -7335,6 +7561,60 @@ export const PREVIEW_STATES: PreviewState[] = [
       />
     ),
   },
+  // TRIP-1806 — 작성중(좌하 CTA) + 긴 이름 + 밝은 그림 · 확정 + 짧은 이름 · ⋯ 메뉴가 이름을 덮는 카드.
+  {
+    key: 'h06-my-trips-cover-label',
+    band: 'h',
+    label: 'h06 · 내 여행 목록 · 다른 지역 커버 이름',
+    login: null,
+    render: () => {
+      const [done, , draft] = MY_TRIPS_PREVIEW_VMS;
+      return (
+        <MyTripsListScreen
+          mode="list"
+          onPressCreateTrip={noop}
+          cards={[
+            <TripCard
+              testIDPrefix="my-trip"
+              key={draft.tripId}
+              vm={{ ...draft, coverCity: '제주시', ...COVER_LABEL_PREVIEW }}
+              onPress={noop}
+              onPressMenu={noop}
+            />,
+            <TripCard
+              testIDPrefix="my-trip"
+              key={done.tripId}
+              vm={{
+                ...done,
+                imageUrl: null,
+                coverCity: '서귀포시',
+                coverSource: coverSourceForKey('26350'),
+                coverLabel: '그림 · 해운대',
+              }}
+              onPress={noop}
+              onPressMenu={noop}
+            />,
+            <TripCard
+              testIDPrefix="my-trip"
+              key="demo-menu"
+              vm={{
+                ...draft,
+                tripId: 'demo-menu',
+                coverCity: '제주시',
+                ...COVER_LABEL_PREVIEW,
+              }}
+              onPress={noop}
+              menuOpen
+              onPressMenu={noop}
+              onPressSettings={noop}
+              onTogglePin={noop}
+              onPressDelete={noop}
+            />,
+          ]}
+        />
+      );
+    },
+  },
   {
     key: 'h05-my-trips-done-bar',
     band: 'h',
@@ -7581,6 +7861,38 @@ export const PREVIEW_STATES: PreviewState[] = [
               compact
               testID={`my-trip-reflection-${vm.tripId}`}
               vm={vm}
+              onPress={noop}
+              trailing={<ChevronRightGlyph size={20} />}
+            />
+          ))}
+          pastEmpty={false}
+          onPressCalendar={noop}
+          onPressSettings={noop}
+          onPressStays={noop}
+          onPressStyleAnalysis={noop}
+        />,
+        'my'
+      ),
+  },
+  {
+    key: 'my-page-cover-label',
+    band: 'l',
+    label: 'l03 · 마이페이지 · 다른 지역 커버 이름',
+    login: null,
+    render: () =>
+      withShellTabBar(
+        <MyPageScreen
+          nickname="여행자123"
+          email="trippilot@email.com"
+          counts={{ upcoming: 0, active: 0, ended: 3 }}
+          onPressCount={noop}
+          showPast
+          pastCards={MY_PAGE_PAST_VMS.map((vm) => (
+            <PastTripRow
+              key={vm.tripId}
+              compact
+              testID={`my-trip-reflection-${vm.tripId}`}
+              vm={{ ...vm, imageUrl: null, ...COVER_LABEL_PREVIEW }}
               onPress={noop}
               trailing={<ChevronRightGlyph size={20} />}
             />
@@ -8360,13 +8672,94 @@ export const PREVIEW_STATES: PreviewState[] = [
           name="부산시립미술관"
           photo={{ imageUrl: null, poiId: 'poi-a', category: '문화' }}
           subtitle="1일차 · 14:30–15:15 · 감성 · 브런치"
-          options={[
-            { dayIndex: 1, date: '2026-06-10', blocked: 'current' },
-            { dayIndex: 2, date: '2026-06-11', blocked: 'duplicate' },
-            { dayIndex: 3, date: '2026-06-12', blocked: null },
-          ]}
-          initialDate="2026-06-12"
-          onConfirm={noop}
+          move={{
+            options: [
+              { dayIndex: 1, date: '2026-06-10', blocked: 'current' },
+              { dayIndex: 2, date: '2026-06-11', blocked: 'duplicate' },
+              { dayIndex: 3, date: '2026-06-12', blocked: null },
+            ],
+            initialDate: '2026-06-12',
+            onConfirm: noop,
+          }}
+          onPressRename={noop}
+          onClose={noop}
+        />
+      </View>
+    ),
+  },
+  // TRIP-1795 — 고정·방문 완료·하루 일정 장소의 장소 시트: 날짜 섹션·옮기기 CTA 없이 「이름·분류 고치기」 행만.
+  {
+    key: 'h12-editor-place-sheet-nomove',
+    band: 'h',
+    label: 'h12 · 편집기 장소 시트(옮길 수 없음)',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <MoveDaySheet
+          name="부산시립미술관"
+          photo={{ imageUrl: null, poiId: 'poi-a', category: '문화' }}
+          subtitle="1일차 · 14:30–15:15 · 감성 · 브런치"
+          move={null}
+          onPressRename={noop}
+          onClose={noop}
+        />
+      </View>
+    ),
+  },
+  // TRIP-1795 — 「이름·분류 고치기」 시트(Figma 5225:4083). 시트 실제 열림·키보드 밀림·딤·칩 10종 줄바꿈은 통과형 목이 못 봐서 이 키가 6-b 육안 자리다.
+  {
+    key: 'h12-editor-rename-sheet',
+    band: 'h',
+    label: 'h12 · 편집기 이름·분류 고치기 시트(덮어쓴 상태)',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <RenameSlotSheet
+          name="웨이브온 카페 (2층 창가)"
+          category="카페"
+          categoryEditable
+          canReset
+          onApply={noop}
+          onReset={noop}
+          onClose={noop}
+        />
+      </View>
+    ),
+  },
+  // 엣지 — 60 코드포인트 초과(적용 비활성 + 안내 한 줄) · 분류를 못 고치는 장소(숙소 — 칩 없음, 덮어쓴 게 없어 원래대로 비활성).
+  {
+    key: 'h12-editor-rename-sheet-over',
+    band: 'h',
+    label: 'h12 · 이름·분류 고치기 시트(60자 초과)',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <RenameSlotSheet
+          name={'아주 긴 이름 '.repeat(12)}
+          category="맛집"
+          categoryEditable
+          canReset={false}
+          onApply={noop}
+          onReset={noop}
+          onClose={noop}
+        />
+      </View>
+    ),
+  },
+  {
+    key: 'h12-editor-rename-sheet-stay',
+    band: 'h',
+    label: 'h12 · 이름·분류 고치기 시트(숙소 — 이름만)',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <RenameSlotSheet
+          name="해운대 그랜드 호텔"
+          category="숙소"
+          categoryEditable={false}
+          canReset={false}
+          onApply={noop}
+          onReset={noop}
           onClose={noop}
         />
       </View>
@@ -9918,6 +10311,49 @@ export const PREVIEW_STATES: PreviewState[] = [
             title: '부산 여행',
             dateRangeLabel: '2025.11.1–11.3',
             nightsLabel: '2박 3일',
+          },
+        ]}
+        isEmpty={false}
+        onPressPrevMonth={noop}
+        onPressNextMonth={noop}
+        onSelectTrip={noop}
+        onPressCreateTrip={noop}
+      />
+    ),
+  },
+  // TRIP-1806 — 지난 여행 행 글자 줄에 그림 이름 한 줄. 제목이 두 줄이어도 행이 썸네일을 밀지 않는지가 6-b 육안 자리다.
+  {
+    key: 'records-calendar-cover-label',
+    band: 'j',
+    label: 'j07 · 여행 캘린더 · 다른 지역 커버 이름',
+    login: null,
+    render: () => (
+      <RecordsCalendarScreen
+        monthLabel="2026년 6월"
+        grid={buildMonthGrid('2026-06')}
+        markedDays={[]}
+        pastTrips={[
+          {
+            tripId: 't-jeju',
+            title: '제주 여행',
+            dateRangeLabel: '2026.5.1–5.3',
+            nightsLabel: '2박 3일',
+            ...COVER_LABEL_PREVIEW,
+          },
+          {
+            tripId: 't-long',
+            title: '가족과 함께 떠나는 제주 한 바퀴 일주 여행 두 번째',
+            dateRangeLabel: '2026.4.18–4.20',
+            nightsLabel: '2박 3일',
+            coverSource: coverSourceForKey('26350'),
+            coverLabel: '그림 · 해운대',
+          },
+          {
+            tripId: 't-auto',
+            title: '부산 여행',
+            dateRangeLabel: '2025.11.1–11.3',
+            nightsLabel: '2박 3일',
+            coverSource: coverSourceForKey('26350'),
           },
         ]}
         isEmpty={false}

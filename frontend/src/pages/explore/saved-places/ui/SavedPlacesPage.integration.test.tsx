@@ -2065,6 +2065,7 @@ describe('select › 위저드', () => {
             pathname: '/explore/places',
             params: {
               region: ['서울특별시', '부산광역시'],
+              regionCode: ['11', '26'],
               ...wizardOriginParams(),
             },
           },
@@ -2090,7 +2091,11 @@ describe('select › 위저드', () => {
   /** d04 로 갈 때 실어야 할 파라미터 — 기대값은 헬퍼 출력으로 만든다(철자 손복제 금지, 1026 관례). */
   const SEOUL_TO_EXPLORE = {
     pathname: '/explore/places',
-    params: { region: ['서울특별시'], ...wizardOriginParams() },
+    params: {
+      region: ['서울특별시'],
+      regionCode: ['11'],
+      ...wizardOriginParams(),
+    },
   };
 
   describe('🔴 TRIP-1042 R6 · d04 로 가는 세 버튼이 여행 지역 이름을 싣는다 (AC-7)', () => {
@@ -3144,7 +3149,11 @@ describe('select › 여행', () => {
         [
           {
             pathname: '/explore/places',
-            params: { region: ['부산광역시'], ...wizardOriginParams() },
+            params: {
+              region: ['부산광역시'],
+              regionCode: ['26'],
+              ...wizardOriginParams(),
+            },
           },
         ],
       ]);

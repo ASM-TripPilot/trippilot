@@ -23,9 +23,12 @@ export function swapSlotPoi(
     if (index === -1) return day;
     return {
       ...day,
-      slots: day.slots.map((slot, i) =>
-        i === index ? { ...slot, poiId: nextPoiId } : slot
-      ),
+      slots: day.slots.map((slot, i) => {
+        if (i !== index) return slot;
+        // TRIP-1795 · 다른 장소가 되면 이 여행 별칭(표시 이름·분류)은 거짓이 되므로 두 칸을 비운다.
+        const { displayName: _name, displayCategory: _cat, ...rest } = slot;
+        return { ...rest, poiId: nextPoiId };
+      }),
     };
   });
 }

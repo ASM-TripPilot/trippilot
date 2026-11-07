@@ -3,7 +3,11 @@ import { Pressable, Text, View } from 'react-native';
 import { useQueries } from '@tanstack/react-query';
 
 import { openAppSettings } from '@/shared/external-link';
-import { resolvePhotoUri } from '@/shared/photo';
+import { guardPress, respectPressGuard } from '@/shared/lib/pressGuard';
+import {
+  PhotoAccessNotice,
+  photoUriQueryOptions,
+} from '@/shared/photo/index.view';
 import { getInstallId } from '@/shared/storage';
 import { showToast } from '@/shared/ui/Toast';
 
@@ -34,7 +38,8 @@ import { VisitRecordCard, type VisitRecordCardVM } from './VisitRecordCard';
  *    안내는 카드 안 한 줄(`record-trip-photo-notice-{id}`) — 못 고른 사유·상한·"N장을 붙이지 못했어요" 모두. 다음 `+` 에 지운다. 취소는 조용히.
  *  - 셀 판정 = `photoAvailability(사진, 이 설치 id, 앨범에서 찾았나)`. 이 설치 id·앨범 주소를 아직 모르는
  *    사진은 셀을 그리지 않는다 — 모르는 동안 "다른 기기"로 깜빡이지 않게(F5). 앨범 주소 조회는 이 기기
- *    사진만, Query 캐시에 한 번(`staleTime: Infinity`).
+ *    사진만, 풀린 주소는 Query 캐시에 한 번(못 푼 사진은 앱 복귀 때 다시 묻는다 — TRIP-1803 `photoUriQueryOptions`).
+ *  - TRIP-1803 · 못 푼 이 기기 사진이 있으면 카드에 권한 안내(`PhotoAccessNotice`) — 첨부 안내의 [설정 열기] 가 떠 있으면 숨겨 버튼이 둘이 되지 않는다.
  */
 
 export interface VisitRecordCardContainerProps {
@@ -100,17 +105,17 @@ export function VisitRecordCardContainer({
   const mine =
     installId === null ? [] : photos.filter((p) => p.deviceId === installId);
   const uriResults = useQueries({
-    queries: mine.map((p) => ({
-      queryKey: ['photo-uri', p.localAssetId],
-      queryFn: () => resolvePhotoUri(p.localAssetId),
-      staleTime: Infinity,
-    })),
+    queries: mine.map((p) => photoUriQueryOptions(p.localAssetId)),
   });
+  const hasUnresolvedPhoto = uriResults.some((q) => q.data === null);
   const uriByAsset = new Map(
     mine.map((p, i) => [p.localAssetId, uriResults[i]?.data])
   );
 
-  const onPressAdd = () => photoFlow.attach(card.visitCheckId, photoCount);
+  // TRIP-1820 — 거부면 안내가 `+` 위에 생겨 그 자리로 [설정 열기] 가 내려온다. 연타 둘째 탭이 관통하지 않게 창을 연다(표적은 아래 respectPressGuard).
+  const onPressAdd = guardPress(
+    () => void photoFlow.attach(card.visitCheckId, photoCount)
+  );
 
   // TRIP-1078 · 메모 PUT 실패를 버리지 않는다(INV-4) — 카드 안 안내 한 줄, 다음 시도에 지운다.
   // TRIP-1426 · 성공은 PUT 이 실제로 나갔고(saved) 그 시도가 최신일 때만 공용 토스트로 알린다.
@@ -164,10 +169,34 @@ export function VisitRecordCardContainer({
       onPressEditTime={onPressEditTime}
       photoSlot={
         <>
-          <PhotoThumbStrip
-            photos={photoVMs}
-            onPressAdd={() => void onPressAdd()}
-          />
+          {/* TRIP-1820 — 안내는 사진 줄 위. 시트 중간 칸은 안쪽이 스크롤되지 않아 아래에 두면 [설정 열기] 가 하단 바에 가린다(여백으론 안 풀린다). */}
+          {photoNotice ? (
+            <Text
+              testID={`record-trip-photo-notice-${card.visitCheckId}`}
+              className="text-caption text-muted"
+            >
+              {photoNotice}
+            </Text>
+          ) : null}
+          {photoNotice && photoNeedsSettings ? (
+            <Pressable
+              testID="record-trip-photo-settings"
+              accessibilityRole="button"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              onPress={respectPressGuard(() => void openAppSettings())}
+              className="self-start"
+            >
+              <Text className="font-noto-bold text-caption text-primary">
+                설정 열기
+              </Text>
+            </Pressable>
+          ) : null}
+          {hasUnresolvedPhoto && !(photoNotice && photoNeedsSettings) ? (
+            <PhotoAccessNotice
+              testID={`record-trip-photo-access-notice-${card.visitCheckId}`}
+            />
+          ) : null}
+          <PhotoThumbStrip photos={photoVMs} onPressAdd={onPressAdd} />
           {photoFlow.progress ? (
             <Text
               testID={`visit-photo-progress-${card.visitCheckId}`}
@@ -201,27 +230,6 @@ export function VisitRecordCardContainer({
                 </Text>
               </Pressable>
             </View>
-          ) : null}
-          {photoNotice ? (
-            <Text
-              testID={`record-trip-photo-notice-${card.visitCheckId}`}
-              className="text-caption text-muted"
-            >
-              {photoNotice}
-            </Text>
-          ) : null}
-          {photoNotice && photoNeedsSettings ? (
-            <Pressable
-              testID="record-trip-photo-settings"
-              accessibilityRole="button"
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              onPress={() => void openAppSettings()}
-              className="self-start"
-            >
-              <Text className="font-noto-bold text-caption text-primary">
-                설정 열기
-              </Text>
-            </Pressable>
           ) : null}
         </>
       }

@@ -24,7 +24,7 @@ internal object ItineraryContent {
             listOf(
                 s.sourcePoiId, s.poiSnapshotId, s.orderIndex, s.startAt, s.endAt,
                 s.isFixed, s.endsNextDay, s.hasViolation, s.violationReason,
-                s.distanceRange, s.placementReason,
+                s.distanceRange, s.placementReason, s.displayName, s.displayCategory,
             )
         }
     }

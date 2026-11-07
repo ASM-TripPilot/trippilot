@@ -8,6 +8,7 @@
  *
  * OpenAPI spec version: 0.1.0-draft
  */
+import type { PoiCategory } from './poiCategory';
 
 export type EditItineraryRequestDaysItemSlotsItem = {
   poiId: string;
@@ -17,4 +18,11 @@ export type EditItineraryRequestDaysItemSlotsItem = {
   isFixed: boolean;
   /** 자정 넘김(HC4) — 전체 교체 편집이라 조회 응답의 현행 값을 그대로 실어야 플래그가 소실되지 않음 */
   endsNextDay?: boolean;
+  /**
+   * 이 여행에서만 쓰는 표시 이름(TRIP-1801). 상한은 코드 포인트 기준이고 앞뒤 공백까지 센다(넘으면 400). 앞뒤 공백을 지우고, 공백뿐이면 null 로 저장한다. 장소 원본(`nameKo` · /places)은 안 바뀐다. **전체 교체라 조회 응답의 현행 값을 그대로 실어야 안 사라진다.**
+   * @maxLength 60
+   */
+  displayName?: string | null;
+  /** 이 여행에서만 쓰는 표시 분류(TRIP-1801). 닫힌 집합 밖이면 400. 장소 원본(`category`)은 안 바뀐다. **전체 교체라 조회 응답의 현행 값을 그대로 실어야 안 사라진다.** */
+  displayCategory?: PoiCategory | null;
 };

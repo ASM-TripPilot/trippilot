@@ -113,7 +113,12 @@ const PLACES: Place[] = [
 ];
 
 function tripJson(
-  destinations: { seq: number; region: string; nights: number }[]
+  destinations: {
+    seq: number;
+    region: string;
+    nights: number;
+    regionCode?: string;
+  }[]
 ) {
   return {
     tripId: TRIP_ID,
@@ -415,6 +420,46 @@ describe('🔴 AC-5 · 후보는 GET /places 결과만, 여행 목적지로 좁�
     ]);
     expect(randomKeysOf(placeHits())).toHaveLength(0);
   });
+
+  it.each([
+    [
+      '1곳',
+      [{ seq: 1, region: '부산', nights: 2, regionCode: '26350' }],
+      ['26350'],
+    ],
+    [
+      '2곳',
+      [
+        { seq: 1, region: '부산', nights: 1, regionCode: '26350' },
+        { seq: 2, region: '경주', nights: 1, regionCode: '47130' },
+      ],
+      ['26350', '47130'],
+    ],
+  ])(
+    'TRIP-1809 · 목적지 %s 이면 이름과 함께 코드를 싣는다',
+    async (_name, destinations, codes) => {
+      // 준비
+      server.use(
+        http.get(`${BASE}/trips/:tripId`, () =>
+          HttpResponse.json(tripJson(destinations))
+        )
+      );
+
+      // 실행
+      render(<RecordAddVisitPage tripId={TRIP_ID} day={DAY} />, {
+        wrapper: wrapperFor(makeClient()),
+      });
+      await waitFor(() => expect(placeHits().length).toBe(codes.length));
+
+      // 단언
+      expect(
+        placeHits()
+          .map((hit) => new URL(hit.url).searchParams.get('regionCode'))
+          .sort()
+      ).toEqual(codes);
+      expect(regionsOf(placeHits())).not.toContain(null);
+    }
+  );
 
   it.each([
     [

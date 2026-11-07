@@ -9,8 +9,18 @@ import {
 } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type { EditTripRequest, Trip } from '@/shared/api/index.schemas';
-import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
+import {
+  guardPress,
+  openPressGuardWindow,
+  resetPressGuard,
+} from '@/shared/lib/pressGuard';
+import {
+  coverChoices,
+  coverSourceForKey,
+  tripCoverSource,
+} from '@/entities/trip';
 import { BASE } from '@/test-support/apiBase';
+import { freezeDate } from '@/test-support/freezeDate';
 import { makeTrip } from '@/test-support/mustVisitFixtures';
 import { createRequestLog } from '@/test-support/mswItinerary';
 import {
@@ -34,15 +44,22 @@ import { TripSettingsPage } from './TripSettingsPage';
  *  - **마운트 스냅샷 함정**: 화면이 열릴 때 값을 한 번 굳혀 두고 저장하면, 그 사이 다른 곳에서 바뀐 칸을 되돌린다.
  *
  * 무엇을 보장하나(AC-1~7):
- *  A. 화면: GET 값으로 칸을 채운다(이름 입력·동행·인원·일과 `HH:mm`), 기간·여행지·커버는 보기만(눌러도 아무 일 없다).
+ *  A. 화면: GET 값으로 칸을 채운다(이름 입력·동행·인원·일과 `HH:mm`), 여행지는 보기만(눌러도 아무 일 없다).
+ *     (TRIP-1788 이 1787 의 "기간·커버도 보기만"을 뒤집었다 — 기간·커버는 아래 J~Q 가 맡는다.)
  *  B. 이름 저장(AC-1·2): 바뀐 값이 있을 때만 저장이 켜지고, PATCH 는 정확히 1번 · 본문은 GET 의 나머지 칸 그대로(취향 스냅샷 키 없음)
  *     · 성공하면 목록 다시 받기 + 토스트 + 뒤로. 본문은 누르는 순간의 입력 + 그 순간의 최신 여행으로 만든다.
- *  C. 동행·일과 시트(AC-7): 시트로 바꾼 값이 PATCH 에 실리고, 안 건드린 일과는 `HH:mm:ss` 원문 그대로 나간다.
+ *  C. 동행·일과 시트(AC-7): 시트로 바꾼 값이 PATCH 에 실리고, 안 건드린 일과는 `HH:mm:ss` 원문 그대로 나간다. 기간을 안 건드리면 기간은 그대로.
  *  D. 이름 검증(AC-3): 121 코드포인트·공백·빈 이름은 막힘 + 안내. 막힘 = 비활성 + 실제 누름 + 요청 0회 세 겹.
  *  E. 끝난 여행(AC-4): GET `status==='ENDED'` 면 열리되 잠금 + 이유 한 줄. 저장 응답 409 도 같은 잠금 얼굴.
  *  F. 실패(AC-5): 5xx·네트워크 → 입력 유지 + 오류 + 다시 시도(INV-4). 연타는 PATCH 1번.
  *  G. 삭제(AC-6): 확인 전 DELETE 0 · 성공(204·404) 뒤 일정 탭으로. 노출 조건은 내 여행 목록의 ⋯ 삭제와 같다.
  *  H. 조회 얼굴: 로딩 · 실패(다시 시도) · 404.
+ *
+ *  --- TRIP-1788 (기간 날짜 이동 · 일수 변경 재생성 · 커버 고르기) — 아래 describe J~Q, 시계는 서울 2099-05-20 로 고정 ---
+ *  J. 기간 행 잠금·열림(AC-4)  K. 기간 시트 기본 모드(AC-1·2)  L. 끝일 모드(AC-3·D10)  M. 일수 변경 확인창·확정(AC-3·11)
+ *  N. 409 가르기(AC-5)  O. 커버 고르기(AC-6·8·9, 소비처 ⑥)  P. 캐시(AC-1·D11)  Q. 연타(AC-11)
+ *  새 개념 — **누름 가드 창**: 한 번 누르면 400ms 동안 다른 누름을 무시하는 전역 창. 화면이 바뀌는 순간(적용·이동)에 열어 둬야 연타 둘째
+ *  탭이 뒤 화면 버튼을 못 누른다. 시계(`Date`)를 고정하면 창이 안 닫히므로 이 파일은 누르기 전 `resetPressGuard()`(=`press()`)를 쓴다.
  *
  * ⚠️ jest 가 원리적으로 못 보는 것(기능 지도 몫): 시트가 실제로 열리고 딤이 덮이는지 · 삭제 다이얼로그 딤·중앙 정렬 · 키보드 ·
  * 휠 제스처 · 생김새(Figma 픽셀, 삭제 버튼 색). 이름 입력에 `maxLength` 를 걸어도 `fireEvent.changeText` 는 길이를 안 자르므로
@@ -186,6 +203,7 @@ beforeEach(() => {
 
 // 모듈 싱글턴(토스트·누름 가드)은 파일 최상위에서 비운다 — describe 안에만 걸면 앞 테스트 상태가 샌다.
 afterEach(() => {
+  jest.useRealTimers(); // J~Q 가 `freezeDate` 로 고정한 시계를 되돌린다 — 파일 최상위 한 곳
   clearAccessToken();
   resetPressGuard();
   resetToast();
@@ -236,7 +254,7 @@ async function expectSaveBlocked(): Promise<void> {
   expect(patchHits()).toBe(before);
 }
 
-describe('A · 화면 — GET 값으로 채우고, 기간·여행지·커버는 보기만', () => {
+describe('A · 화면 — GET 값으로 채우고, 여행지는 보기만', () => {
   it('이름 입력·동행·인원·일과(앞 5글자 HH:mm)·기간·여행지·커버가 GET 값으로 보이고, 저장은 꺼져 있다', async () => {
     await openPage();
 
@@ -299,21 +317,15 @@ describe('A · 화면 — GET 값으로 채우고, 기간·여행지·커버는 
     }
   });
 
-  it('기간·여행지·커버 행은 눌러도 아무 일이 없다 — 시트·이동·요청 0', async () => {
+  it('여행지 행은 눌러도 아무 일이 없다 — 시트·이동·요청 0 (여행지 변경은 이번 범위 밖)', async () => {
     await openPage();
 
-    for (const id of [
-      'trip-settings-period',
-      'trip-settings-destinations',
-      'trip-settings-cover',
-    ]) {
-      press(id);
-    }
+    press('trip-settings-destinations');
     await settle();
 
     expect(screen.queryByTestId('trip-wizard-companion-sheet')).toBeNull();
     expect(screen.queryByTestId('trip-wizard-daywindow-sheet')).toBeNull();
-    expect(screen.queryByText('커버 바꾸기')).toBeNull();
+    expect(screen.queryByTestId('trip-wizard-period-sheet')).toBeNull();
     expect(routerSpies.push).not.toHaveBeenCalled();
     expect(routerSpies.replace).not.toHaveBeenCalled();
     expect(patchHits()).toBe(0);
@@ -454,7 +466,7 @@ describe('B · 이름 저장 (AC-1 · AC-2)', () => {
   });
 });
 
-describe('C · 동행·일과 시트 (AC-7) — 바꾼 값이 본문에 실리고, 어떤 조작에도 기간은 그대로 (AC-2)', () => {
+describe('C · 동행·일과 시트 (AC-7) — 바꾼 값이 본문에 실리고, 기간을 안 건드리면 기간은 그대로', () => {
   it('동행 시트: 시드는 GET 값, 연인 칩을 고르면 인원이 2명으로 맞춰지고, 적용하면 행이 바뀌며 저장 본문에 party·companionType 이 실린다', async () => {
     await openPage();
     expect(screen.queryByTestId('trip-wizard-companion-sheet')).toBeNull();
@@ -562,7 +574,7 @@ describe('C · 동행·일과 시트 (AC-7) — 바꾼 값이 본문에 실리�
     await expectSaveBlocked();
   });
 
-  it('이름·동행·일과를 모두 바꿔 저장해도 기간(startDate·endDate)·예산·목적지는 GET 값 그대로다(AC-2)', async () => {
+  it('이름·동행·일과를 모두 바꿔 저장해도(기간 시트는 안 엶) 기간(startDate·endDate)·예산·목적지는 GET 값 그대로다', async () => {
     await openPage();
 
     typeTitle('전부 바꾼 이름');
@@ -1108,5 +1120,1305 @@ describe('I · 5-b 보강 — 응답 전에 떠나기 · 같은 틱 이중 저�
     release();
     await waitFor(() => expect(routerSpies.back).toHaveBeenCalledTimes(1));
     expect(patchHits()).toBe(1);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// TRIP-1788 · 기간 날짜 이동 · 일수 변경(일정 버리고 다시) · 커버 고르기
+// 시계는 서울 2099-05-20(정오)로 고정한다 — 시작일 2099-06-10 은 "시작 전", 달 넘김·다음 달 이동(오늘+24개월 상한 안)이 된다.
+// ════════════════════════════════════════════════════════════════════════════
+
+const TODAY_ISO = '2099-05-20T03:00:00Z';
+const HINT_OPEN = '날짜를 옮기거나 일수를 바꿀 수 있어요';
+const HINT_STARTED = '여행이 시작돼 기간은 바꿀 수 없어요';
+const HINT_GENERATING = '일정을 만드는 중이에요. 끝난 뒤 바꿀 수 있어요';
+const HINT_ENDED = '끝난 여행은 바꿀 수 없어요';
+const NOTE_SHIFT = '일수는 그대로 두고 시작일만 옮겨요';
+const NOTE_LENGTH = '끝나는 날을 골라요 · 일수가 바뀌면 일정을 다시 짜요';
+const METHOD_HREF = `/trips/${TRIP_ID}/itinerary/method`;
+
+const freezeToday = () => freezeDate(TODAY_ISO);
+/** 시계를 앞으로 돌린다(고정된 `Date` 는 저절로 안 흐른다). */
+const advanceClock = (ms: number) => jest.setSystemTime(Date.now() + ms);
+
+const hint = () => screen.getByTestId('trip-settings-period-hint');
+const periodChevron = () =>
+  screen.queryByTestId('trip-settings-period-chevron');
+const periodSheet = () => screen.queryByTestId('trip-wizard-period-sheet');
+const startMark = (date: string) =>
+  screen.queryByTestId(`trip-wizard-period-cell-start-${date}`);
+const endMark = (date: string) =>
+  screen.queryByTestId(`trip-wizard-period-cell-end-${date}`);
+const lengthDialog = () => screen.queryByTestId('trip-settings-length-dialog');
+
+const openPeriodSheet = () => press('trip-settings-period');
+const pickDate = (date: string) => press(`trip-wizard-period-cell-${date}`);
+const applyPeriod = () => press('trip-wizard-period-apply');
+const nextMonth = () => press('trip-wizard-period-next');
+const prevMonth = () => press('trip-wizard-period-prev');
+/** 「일수 바꾸기」 → 끝일 모드로 `tapped` 를 눌러 [적용] — 일수가 달라지면 확인창이 뜬다. */
+function changeLengthAndApply(tapped: string): void {
+  openPeriodSheet();
+  press('trip-wizard-period-change-length');
+  pickDate(tapped);
+  applyPeriod();
+}
+const confirmLength = () => press('trip-settings-length-confirm');
+const periodText = () => screen.getByTestId('trip-settings-period');
+
+/** `router.replace` 인자(문자열 또는 `{pathname, params}`)를 실제 주소로 읽는다. */
+function hrefOf(arg: unknown): string {
+  if (typeof arg === 'string') return arg;
+  const { pathname, params } = arg as {
+    pathname: string;
+    params: Record<string, string>;
+  };
+  return pathname.replace(/\[(\w+)\]/g, (_m, key: string) => params[key]);
+}
+
+const error409 = (code: string) => () =>
+  HttpResponse.json(
+    { error: { code, message: '기간을 바꿀 수 없습니다.' } },
+    { status: 409 }
+  );
+
+const coverImage = () =>
+  screen.getByTestId('trip-settings-cover-image').props.source;
+const coverOption = (key: string) =>
+  screen.getByTestId(`trip-settings-cover-option-${key}`);
+const openCoverSheet = () => press('trip-settings-cover-change');
+/** jest 엔 레이아웃이 없어 칸이 스스로 안 늘어난다 — 크기를 알려 주고 맨 끝 스크롤 이벤트를 쏜다(칸 높이는 대략값이라 큼직하게). */
+const COVER_GRID_HEIGHT = 8000;
+const scrollCoverGridTo = (y: number) => {
+  const grid = screen.getByTestId('trip-settings-cover-sheet');
+  const layoutMeasurement = { width: 390, height: 600 };
+  const contentSize = { width: 390, height: COVER_GRID_HEIGHT };
+  fireEvent(grid, 'layout', { nativeEvent: { layout: layoutMeasurement } });
+  fireEvent(grid, 'contentSizeChange', contentSize.width, contentSize.height);
+  fireEvent.scroll(grid, {
+    nativeEvent: {
+      contentOffset: { x: 0, y },
+      contentSize,
+      layoutMeasurement,
+    },
+  });
+};
+const scrollCoverGridToEnd = () => scrollCoverGridTo(COVER_GRID_HEIGHT - 600);
+const mountedCoverOptions = () =>
+  screen.queryAllByTestId(/^trip-settings-cover-option-/);
+
+describe('J · 기간 행 잠금·열림 (AC-4)', () => {
+  beforeEach(freezeToday);
+
+  it('시작 전 여행은 기간 행에 chevron 과 보조문이 있고, 눌러서 시트가 열린다', async () => {
+    await openPage();
+
+    expect(periodChevron()).toBeOnTheScreen();
+    expect(hint()).toHaveTextContent(HINT_OPEN);
+    expect(periodSheet()).toBeNull(); // 아직 안 열림(앵커)
+    openPeriodSheet();
+    expect(periodSheet()).toBeOnTheScreen();
+  });
+
+  it.each<[string, Partial<Trip>, string]>([
+    [
+      '시작일이 오늘(서버는 < 라 FE 가 하루 더 보수적 — 사용자 결정 "여행 중 잠금")',
+      { startDate: '2099-05-20', endDate: '2099-05-23', status: 'ACTIVE' },
+      HINT_STARTED,
+    ],
+    [
+      '시작일이 지남',
+      { startDate: '2099-05-01', endDate: '2099-05-30', status: 'ACTIVE' },
+      HINT_STARTED,
+    ],
+    [
+      '끝난 여행',
+      { status: 'ENDED', startDate: '2099-04-01', endDate: '2099-04-03' },
+      HINT_ENDED,
+    ],
+    [
+      '일정 생성 중',
+      {
+        itineraryGenerating: true,
+        itineraryStatus: 'PLANNED',
+        itineraryGenerationState: 'PARTIAL',
+        itineraryGenerationMode: 'FULLY_AI',
+      },
+      HINT_GENERATING,
+    ],
+  ])(
+    '%s → chevron 없음 · 눌러도 시트 안 열림 · 이유 보조문',
+    async (_label, over, expectedHint) => {
+      serverTrip = baseTrip(over);
+      await openPage();
+
+      expect(periodChevron()).toBeNull();
+      expect(hint()).toHaveTextContent(expectedHint);
+      press('trip-settings-period');
+      await settle();
+      expect(periodSheet()).toBeNull();
+      expect(patchHits()).toBe(0);
+    }
+  );
+
+  it('경계 짝 — 시작일이 오늘이면 잠기고 오늘+1 이면 열린다', async () => {
+    serverTrip = baseTrip({
+      startDate: '2099-05-20',
+      endDate: '2099-05-23',
+      status: 'ACTIVE',
+    });
+    await openPage();
+    expect(periodChevron()).toBeNull();
+    screen.unmount();
+
+    serverTrip = baseTrip({ startDate: '2099-05-21', endDate: '2099-05-24' });
+    await openPage();
+    expect(periodChevron()).toBeOnTheScreen();
+    openPeriodSheet();
+    expect(periodSheet()).toBeOnTheScreen();
+  });
+
+  it('시작이 지난(끝나지 않은) 여행도 이름 저장과 커버는 계속 열려 있고, 끝난 여행은 커버 버튼이 없다', async () => {
+    serverTrip = baseTrip({
+      startDate: '2099-05-01',
+      endDate: '2099-05-30',
+      status: 'ACTIVE',
+    });
+    await openPage();
+
+    expect(screen.queryByTestId('trip-settings-locked')).toBeNull();
+    expect(screen.getByTestId('trip-settings-cover-change')).toBeOnTheScreen();
+    typeTitle('여행 중에도 이름은');
+    expect(save()).toBeEnabled();
+    screen.unmount();
+
+    serverTrip = baseTrip({
+      status: 'ENDED',
+      startDate: '2099-04-01',
+      endDate: '2099-04-03',
+    });
+    await openPage();
+    expect(screen.getByTestId('trip-settings-locked')).toBeOnTheScreen();
+    expect(screen.queryByTestId('trip-settings-cover-change')).toBeNull();
+  });
+});
+
+describe('K · 기간 시트 기본 모드 — 시작을 옮기면 끝이 같은 일수로 따라온다 (AC-1 · AC-2)', () => {
+  beforeEach(freezeToday);
+
+  it('열면 서버 기간이 시작·끝 표식으로 보이고, 기본 안내 문구와 「일수 바꾸기」 버튼이 있다', async () => {
+    await openPage();
+
+    openPeriodSheet();
+
+    expect(startMark('2099-06-10')).toBeOnTheScreen();
+    expect(endMark('2099-06-13')).toBeOnTheScreen();
+    expect(screen.getByTestId('trip-wizard-period-note')).toHaveTextContent(
+      NOTE_SHIFT
+    );
+    expect(
+      screen.getByTestId('trip-wizard-period-change-length')
+    ).toHaveTextContent('일수 바꾸기');
+  });
+
+  it('날짜를 누르면 그 날이 새 시작이 되고 끝은 같은 일수(3박)로 따라온다 — 달을 넘겨도', async () => {
+    await openPage();
+    openPeriodSheet();
+
+    pickDate('2099-06-20');
+    expect(startMark('2099-06-20')).toBeOnTheScreen();
+    expect(endMark('2099-06-23')).toBeOnTheScreen();
+    expect(startMark('2099-06-10')).toBeNull();
+    expect(endMark('2099-06-13')).toBeNull();
+
+    pickDate('2099-06-29'); // 끝이 다음 달(7월 2일)로 넘어간다
+    expect(startMark('2099-06-29')).toBeOnTheScreen();
+    nextMonth();
+    expect(endMark('2099-07-02')).toBeOnTheScreen();
+    prevMonth();
+    expect(startMark('2099-06-29')).toBeOnTheScreen();
+  });
+
+  it('고르는 동안(적용 전)은 화면의 기간·저장 버튼이 그대로이고, [적용] 하면 시트가 닫히고 기간 줄이 바뀌며 저장이 켜진다 — 서버 요청은 0', async () => {
+    await openPage();
+    openPeriodSheet();
+    pickDate('2099-06-20');
+
+    expect(periodText()).toHaveTextContent(/6월 10일.*13일/);
+    expect(save()).toBeDisabled();
+
+    applyPeriod();
+
+    expect(periodSheet()).toBeNull();
+    expect(periodText()).toHaveTextContent(/6월 20일.*23일/);
+    expect(screen.getByTestId('trip-settings-period')).toHaveTextContent(
+      /3박 4일/
+    );
+    expect(save()).toBeEnabled();
+    expect(patchHits()).toBe(0);
+    expect(lengthDialog()).toBeNull();
+  });
+
+  it('저장하면 PATCH 1번 — 새 시작·같은 일수·목적지 그대로, 일정을 버리라는 플래그와 커버 키는 없다 → 토스트·뒤로', async () => {
+    await openPage();
+    openPeriodSheet();
+    pickDate('2099-06-20');
+    applyPeriod();
+
+    press('trip-settings-save');
+
+    await waitFor(() => expect(routerSpies.back).toHaveBeenCalledTimes(1));
+    expect(patchHits()).toBe(1);
+    expect(patchBodies[0]).toEqual({
+      title: '제주 가족 여행',
+      startDate: '2099-06-20',
+      endDate: '2099-06-23',
+      party: 3,
+      companionType: '가족',
+      budgetTotal: 1500000,
+      destinations: [
+        { seq: 1, region: '제주시', nights: 2, regionCode: '50110' },
+        { seq: 2, region: '서귀포시', nights: 1, regionCode: '50130' },
+      ],
+      dayStartAt: '09:30:00',
+      firstDayStartAt: null,
+      lastDayEndAt: '18:00:00',
+    });
+    expect('discardItinerary' in patchBodies[0]).toBe(false);
+    expect('coverKey' in patchBodies[0]).toBe(false);
+    expect(routerSpies.replace).not.toHaveBeenCalled();
+  });
+
+  it('[적용] 한 기간으로 시트를 다시 열면 그 값에서 시작하고, 두 번 고쳐도 PATCH 는 마지막 값 하나다', async () => {
+    await openPage();
+    openPeriodSheet();
+    pickDate('2099-06-20');
+    applyPeriod();
+
+    openPeriodSheet();
+    expect(startMark('2099-06-20')).toBeOnTheScreen();
+    expect(endMark('2099-06-23')).toBeOnTheScreen();
+    pickDate('2099-06-25');
+    applyPeriod();
+    press('trip-settings-save');
+
+    await waitFor(() => expect(routerSpies.back).toHaveBeenCalledTimes(1));
+    expect(patchHits()).toBe(1);
+    expect(patchBodies[0].startDate).toBe('2099-06-25');
+    expect(patchBodies[0].endDate).toBe('2099-06-28');
+  });
+});
+
+describe('L · 끝일 모드 — 「일수 바꾸기」 (AC-3 · D10)', () => {
+  beforeEach(freezeToday);
+
+  async function openLengthMode(): Promise<void> {
+    await openPage();
+    openPeriodSheet();
+    press('trip-wizard-period-change-length');
+  }
+
+  it('「일수 바꾸기」를 누르면 그 버튼이 사라지고 안내 문구가 끝일 모드로 바뀐다(기간은 그대로)', async () => {
+    await openPage();
+    openPeriodSheet();
+    expect(screen.getByTestId('trip-wizard-period-note')).toHaveTextContent(
+      NOTE_SHIFT
+    );
+
+    press('trip-wizard-period-change-length');
+
+    expect(screen.queryByTestId('trip-wizard-period-change-length')).toBeNull();
+    expect(screen.getByTestId('trip-wizard-period-note')).toHaveTextContent(
+      NOTE_LENGTH
+    );
+    expect(startMark('2099-06-10')).toBeOnTheScreen();
+    expect(endMark('2099-06-13')).toBeOnTheScreen();
+  });
+
+  it('시작 이후 날짜를 누르면 끝이 바뀐다(시작 유지)', async () => {
+    await openLengthMode();
+
+    pickDate('2099-06-20');
+
+    expect(startMark('2099-06-10')).toBeOnTheScreen();
+    expect(endMark('2099-06-20')).toBeOnTheScreen();
+    expect(endMark('2099-06-13')).toBeNull();
+  });
+
+  it('시작 이전 날짜를 누르면 시작이 바뀌고 끝은 그대로다', async () => {
+    await openLengthMode();
+
+    pickDate('2099-06-05');
+
+    expect(startMark('2099-06-05')).toBeOnTheScreen();
+    expect(endMark('2099-06-13')).toBeOnTheScreen();
+    expect(startMark('2099-06-10')).toBeNull();
+  });
+
+  it('시작일 자신을 누르면 당일치기가 된다(끝 표식 없음)', async () => {
+    await openLengthMode();
+
+    pickDate('2099-06-10');
+
+    expect(startMark('2099-06-10')).toBeOnTheScreen();
+    expect(endMark('2099-06-10')).toBeNull();
+    expect(endMark('2099-06-13')).toBeNull();
+  });
+
+  it('시작+30일보다 먼 날을 누르면 끝이 시작+30일(7월 10일)로 잘려 달력에 보인다', async () => {
+    await openLengthMode();
+    nextMonth();
+
+    pickDate('2099-07-25');
+
+    expect(endMark('2099-07-10')).toBeOnTheScreen();
+    expect(endMark('2099-07-25')).toBeNull();
+  });
+
+  it('일수가 달라지는 [적용] 은 시트를 닫고 확인창을 띄운다 — 서버 요청도 이동도 아직 0', async () => {
+    await openLengthMode();
+    pickDate('2099-06-20');
+    expect(lengthDialog()).toBeNull(); // 앵커 — 적용 전엔 창이 없다
+
+    applyPeriod();
+
+    expect(periodSheet()).toBeNull();
+    expect(lengthDialog()).toBeOnTheScreen();
+    expect(screen.getByTestId('trip-settings-length-title')).toHaveTextContent(
+      '일수가 바뀌면 일정을 다시 짜야 해요'
+    );
+    expect(patchHits()).toBe(0);
+    expect(routerSpies.replace).not.toHaveBeenCalled();
+  });
+
+  it('끝일 모드여도 결과 일수가 그대로면 확인창 없이 드래프트로 닫힌다(저장도 안 켜진다 — 바뀐 게 없다)', async () => {
+    await openLengthMode();
+    pickDate('2099-06-13'); // 원래 끝일
+
+    applyPeriod();
+
+    expect(periodSheet()).toBeNull();
+    expect(lengthDialog()).toBeNull();
+    expect(save()).toBeDisabled();
+    expect(patchHits()).toBe(0);
+  });
+});
+
+describe('M · 일수 변경 확인창과 확정 (AC-3 · AC-11)', () => {
+  beforeEach(freezeToday);
+
+  it('[취소] → 창이 닫히고 PATCH·이동 0, 기간도 저장 버튼도 그대로다', async () => {
+    await openPage();
+    changeLengthAndApply('2099-06-20');
+    expect(lengthDialog()).toBeOnTheScreen();
+
+    press('trip-settings-length-cancel');
+
+    expect(lengthDialog()).toBeNull();
+    expect(patchHits()).toBe(0);
+    expect(routerSpies.replace).not.toHaveBeenCalled();
+    expect(periodText()).toHaveTextContent(/6월 10일.*13일/);
+    expect(save()).toBeDisabled();
+  });
+
+  it('줄이는 확정 → PATCH 1번(일정 버림 플래그·새 기간·고친 이름·현재 커버·박수 합 ≤ 새 박수) → 같은 여행의 일정 방식 선택으로 replace 1번', async () => {
+    serverTrip = baseTrip({ coverKey: '26350', ...CONFIRMED_COLS });
+    await openPage();
+    typeTitle('다시 만들 이름');
+    changeLengthAndApply('2099-06-11'); // 3박 → 1박
+    expect(patchHits()).toBe(0);
+    expect(routerSpies.replace).not.toHaveBeenCalled();
+
+    confirmLength();
+
+    await waitFor(() => expect(routerSpies.replace).toHaveBeenCalledTimes(1));
+    expect(patchHits()).toBe(1);
+    const body = patchBodies[0];
+    expect(body.discardItinerary).toBe(true);
+    expect(body.startDate).toBe('2099-06-10');
+    expect(body.endDate).toBe('2099-06-11');
+    expect(body.title).toBe('다시 만들 이름');
+    expect(body.coverKey).toBe('26350');
+    expect(body.budgetTotal).toBe(1500000);
+    // 3박 → 1박: 서귀포시(1박)가 0박이 돼 빠지고 제주시만 남는다(사용자 결정 2026-11-06).
+    expect(body.destinations).toEqual([
+      { seq: 1, region: '제주시', nights: 1, regionCode: '50110' },
+    ]);
+    expect(hrefOf(routerSpies.replace.mock.calls[0][0])).toBe(METHOD_HREF);
+    expect(routerSpies.back).not.toHaveBeenCalled();
+  });
+
+  it('늘리는 확정 → 박수 합이 새 박수 이하이고 마지막 여행지만 늘어난다', async () => {
+    await openPage();
+    changeLengthAndApply('2099-06-20'); // 3박 → 10박
+
+    confirmLength();
+
+    await waitFor(() => expect(routerSpies.replace).toHaveBeenCalledTimes(1));
+    const body = patchBodies[0];
+    expect(body.endDate).toBe('2099-06-20');
+    expect(body.discardItinerary).toBe(true);
+    expect(body.destinations.map((one) => one.nights)).toEqual([2, 8]);
+    expect(body.destinations[0]).toEqual({
+      seq: 1,
+      region: '제주시',
+      nights: 2,
+      regionCode: '50110',
+    });
+  });
+
+  it('본문 문구가 일정이 있는지(itineraryDayCount)로 갈린다 — 없는 일정이 사라진다고 말하지 않는다', async () => {
+    serverTrip = baseTrip({ ...CONFIRMED_COLS });
+    await openPage();
+    changeLengthAndApply('2099-06-20');
+    expect(screen.getByTestId('trip-settings-length-body')).toHaveTextContent(
+      '지금 일정은 사라지고 이 여행에서 새로 짜요.'
+    );
+    expect(
+      screen.getByTestId('trip-settings-length-confirm')
+    ).toHaveTextContent('다시 만들기');
+    expect(screen.getByTestId('trip-settings-length-cancel')).toHaveTextContent(
+      '취소'
+    );
+    screen.unmount();
+
+    serverTrip = baseTrip(); // itineraryDayCount 0
+    await openPage();
+    changeLengthAndApply('2099-06-20');
+    expect(screen.getByTestId('trip-settings-length-body')).toHaveTextContent(
+      '이 여행에서 일정을 새로 짜요.'
+    );
+    expect(screen.getByTestId('trip-settings-length-title')).toHaveTextContent(
+      '일수가 바뀌면 일정을 다시 짜야 해요'
+    );
+  });
+
+  it('응답을 기다리는 동안 확정을 연타해도 PATCH 는 1번이고, 이동도 1번이다', async () => {
+    let release: () => void = () => {};
+    patchGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await openPage();
+    changeLengthAndApply('2099-06-20');
+
+    const button = screen.getByTestId('trip-settings-length-confirm');
+    resetPressGuard();
+    fireEvent.press(button);
+    fireEvent.press(button);
+    fireEvent.press(button);
+    await settle();
+    expect(patchHits()).toBe(1);
+
+    release();
+    await waitFor(() => expect(routerSpies.replace).toHaveBeenCalledTimes(1));
+    expect(patchHits()).toBe(1);
+  });
+
+  it.each([
+    ['서버 5xx', ERROR_500],
+    ['네트워크 오류', NETWORK_ERROR],
+  ])(
+    '%s → 창이 안 닫히고 안에 오류가 뜨며 이동·토스트가 없다. 다시 확정하면 성공한다',
+    async (_label, failure) => {
+      patchQueue = [failure];
+      await openPage();
+      changeLengthAndApply('2099-06-20');
+      expect(screen.queryByTestId('trip-settings-length-error')).toBeNull(); // 앵커
+
+      confirmLength();
+
+      expect(
+        await screen.findByTestId('trip-settings-length-error')
+      ).toHaveTextContent('다시 만들지 못했어요. 다시 시도해 주세요.');
+      expect(lengthDialog()).toBeOnTheScreen();
+      expect(routerSpies.replace).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('trip-settings-saved-toast')).toBeNull();
+      expect(patchHits()).toBe(1);
+
+      confirmLength();
+
+      await waitFor(() => expect(routerSpies.replace).toHaveBeenCalledTimes(1));
+      expect(patchHits()).toBe(2);
+      expect(patchBodies[1].discardItinerary).toBe(true);
+      expect(patchBodies[1].endDate).toBe('2099-06-20');
+    }
+  );
+
+  it('이동하는 순간 연타 창이 열려 있다 — 확정 누름이 연 창이 닫힌 뒤에도 (이동 직전 openPressGuardWindow)', async () => {
+    let openAtReplace: boolean | null = null;
+    routerSpies.replace.mockImplementationOnce(() => {
+      openAtReplace = pressWindowOpen();
+    });
+    let release: () => void = () => {};
+    patchGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await openPage();
+    changeLengthAndApply('2099-06-20');
+    confirmLength();
+    await waitFor(() => expect(patchHits()).toBe(1));
+
+    // 앵커 — 시계를 돌리면 어떤 누름이 연 창도 닫혀 있다(이 탐침이 창을 열므로 바로 닫는다).
+    advanceClock(1000);
+    expect(pressWindowOpen()).toBe(false);
+    resetPressGuard();
+    release();
+
+    await waitFor(() => expect(routerSpies.replace).toHaveBeenCalledTimes(1));
+    expect(openAtReplace).toBe(true);
+  });
+
+  // 5-b 경고-1: 같은 뮤테이션을 겹쳐 부르면 앞 호출의 개별 콜백이 버려져 잠금이 영영 안 풀렸다.
+  it('저장 응답을 기다리는 동안 확정을 눌러도 둘째 PATCH 가 안 나가고, 저장이 실패하면 다시 저장할 수 있다', async () => {
+    let release: () => void = () => {};
+    patchGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    patchQueue = [ERROR_500];
+    await openPage();
+    typeTitle('겹쳐 저장');
+    press('trip-settings-save');
+    await waitFor(() => expect(patchHits()).toBe(1));
+
+    changeLengthAndApply('2099-06-20');
+    confirmLength();
+
+    release();
+    expect(await screen.findByTestId('trip-settings-error')).toBeOnTheScreen();
+    expect(patchHits()).toBe(1);
+    expect(routerSpies.replace).not.toHaveBeenCalled();
+
+    press('trip-settings-length-cancel');
+    press('trip-settings-save');
+
+    await waitFor(() => expect(routerSpies.back).toHaveBeenCalledTimes(1));
+    expect(patchHits()).toBe(2);
+    expect(patchBodies[1].title).toBe('겹쳐 저장');
+  });
+
+  // 5-b 참고-2: 창을 안 닫으면 전체 잠금 화면 위에 창이 남아 같은 409 를 반복해서 맞는다.
+  it('확정이 일반 409(끝난 여행)로 끝나면 창이 닫히고 화면 전체가 잠기며 이동하지 않는다', async () => {
+    patchQueue = [CONFLICT_409];
+    await openPage();
+    changeLengthAndApply('2099-06-20');
+
+    confirmLength();
+
+    expect(await screen.findByTestId('trip-settings-locked')).toBeOnTheScreen();
+    expect(lengthDialog()).toBeNull();
+    expect(routerSpies.replace).not.toHaveBeenCalled();
+  });
+});
+
+describe('N · 저장 409 가르기 (AC-5)', () => {
+  beforeEach(freezeToday);
+
+  it.each<[string, string, string, boolean]>([
+    [
+      'TRIP_PERIOD_STARTED',
+      '여행이 시작돼 기간을 바꾸지 못했어요',
+      HINT_STARTED,
+      false,
+    ],
+    [
+      'TRIP_PERIOD_GENERATING',
+      '일정을 만드는 중이라 기간을 바꾸지 못했어요',
+      HINT_GENERATING,
+      false,
+    ],
+    [
+      'TRIP_PERIOD_LENGTH_CHANGED',
+      '일수가 달라져 기간을 바꾸지 못했어요',
+      HINT_OPEN,
+      true,
+    ],
+  ])(
+    '%s → 화면은 안 잠기고 기간 편집만 버려 서버 원값으로 돌아가며 안내가 뜬다. 이름 편집은 남아 다시 저장하면 서버 원값 기간으로 성공한다',
+    async (code, notice, expectedHint, rowStaysOpen) => {
+      patchQueue = [error409(code)];
+      await openPage();
+      typeTitle('이름은 지킨다');
+      openPeriodSheet();
+      pickDate('2099-06-20');
+      applyPeriod();
+      expect(screen.queryByTestId('trip-settings-period-notice')).toBeNull(); // 앵커
+
+      press('trip-settings-save');
+
+      expect(
+        await screen.findByTestId('trip-settings-period-notice')
+      ).toHaveTextContent(notice);
+      expect(screen.queryByTestId('trip-settings-locked')).toBeNull();
+      expect(periodText()).toHaveTextContent(/6월 10일.*13일/);
+      expect(screen.getByTestId('trip-settings-title')).toHaveDisplayValue(
+        '이름은 지킨다'
+      );
+      expect(hint()).toHaveTextContent(expectedHint);
+      if (rowStaysOpen) expect(periodChevron()).toBeOnTheScreen();
+      else expect(periodChevron()).toBeNull();
+      expect(patchHits()).toBe(1);
+      expect(screen.queryByTestId('trip-settings-error')).toBeNull();
+
+      expect(save()).toBeEnabled();
+      press('trip-settings-save');
+
+      await waitFor(() => expect(routerSpies.back).toHaveBeenCalledTimes(1));
+      expect(patchHits()).toBe(2);
+      expect(patchBodies[1].title).toBe('이름은 지킨다');
+      expect(patchBodies[1].startDate).toBe('2099-06-10');
+      expect(patchBodies[1].endDate).toBe('2099-06-13');
+      expect('discardItinerary' in patchBodies[1]).toBe(false);
+    }
+  );
+
+  it.each<[string, () => Response]>([
+    ['CONFLICT 코드(종료·삭제)', error409('CONFLICT')],
+    ['본문 없는 409', () => new HttpResponse(null, { status: 409 })],
+  ])(
+    '%s → 종전처럼 화면 전체 잠금(끝난 여행 얼굴)이다',
+    async (_label, failure) => {
+      patchQueue = [failure];
+      await openPage();
+      typeTitle('늦은 저장');
+
+      press('trip-settings-save');
+
+      expect(
+        await screen.findByTestId('trip-settings-locked')
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId('trip-settings-period-notice')).toBeNull();
+      await expectSaveBlocked();
+    }
+  );
+
+  it('확인창에서 확정했는데 시작됐다는 409 가 오면 창이 닫히고 이동 없이 기간 편집이 버려진다', async () => {
+    patchQueue = [error409('TRIP_PERIOD_STARTED')];
+    await openPage();
+    changeLengthAndApply('2099-06-20');
+
+    confirmLength();
+
+    await waitFor(() => expect(lengthDialog()).toBeNull());
+    expect(routerSpies.replace).not.toHaveBeenCalled();
+    expect(screen.getByTestId('trip-settings-period-notice')).toHaveTextContent(
+      '여행이 시작돼 기간을 바꾸지 못했어요'
+    );
+    expect(periodText()).toHaveTextContent(/6월 10일.*13일/);
+    expect(periodChevron()).toBeNull();
+  });
+});
+
+describe('O · 커버 고르기 (AC-6 · AC-8 · AC-9 · 소비처 ⑥)', () => {
+  beforeEach(freezeToday);
+
+  it('「커버 바꾸기」 → 시트: 첫 칸(첫 여행지 그림)부터 일부만 마운트하고(가상화), 격자가 받은 목록은 첫 칸 + coverChoices() 전부이며 이름표 그대로다', async () => {
+    await openPage();
+    expect(screen.queryByTestId('trip-settings-cover-sheet')).toBeNull();
+
+    openCoverSheet();
+
+    expect(screen.getByTestId('trip-settings-cover-sheet')).toBeOnTheScreen();
+    expect(coverOption('auto').props.accessibilityLabel).toBe('첫 여행지 그림');
+    const firstMounted = mountedCoverOptions().length;
+    expect(firstMounted).toBeGreaterThan(1);
+    expect(firstMounted).toBeLessThan(coverChoices().length / 2);
+    // 화면 밖 칸은 마운트돼 있지 않아 글자로 못 본다 — jest 엔 칸 레이아웃이 없어 스크롤로 전수를 돌 수도 없다(y 를 늘려도 34칸에서 멈춘다).
+    // 그래서 격자가 받은 목록을 본다. 목록은 칸을 그리는 입력이고, 그리는 쪽은 첫 칸·끝 칸 단언과 실기 108칸이 맡는다.
+    const cells = screen.getByTestId('trip-settings-cover-sheet').props
+      .data as { id: string; label: string }[];
+    expect(cells.map((cell) => [cell.id, cell.label])).toEqual([
+      ['auto', '첫 여행지 그림'],
+      ...coverChoices().map((one) => [one.key, one.label]),
+    ]);
+  });
+
+  it.each<[string, Partial<Trip>, string]>([
+    ['null(자동)', { coverKey: null }, 'auto'],
+    ['알려진 키', { coverKey: '26' }, '26'],
+    [
+      '앱이 모르는 키 — 어느 그림도 선택 표시 없이 첫 칸이 선택',
+      { coverKey: 'zz9' },
+      'auto',
+    ],
+  ])(
+    '시트의 선택 표시: 서버 coverKey 가 %s',
+    async (_label, over, selectedKey) => {
+      serverTrip = baseTrip(over);
+      await openPage();
+
+      openCoverSheet();
+
+      for (const option of mountedCoverOptions()) {
+        if (option.props.testID === `trip-settings-cover-option-${selectedKey}`)
+          expect(option).toBeSelected();
+        else expect(option).not.toBeSelected();
+      }
+      expect(coverOption(selectedKey)).toBeSelected();
+    }
+  );
+
+  it('끝까지 스크롤하면 마지막 칸이 나오고 고를 수 있다 — 화면 밖에 있던 서버 값도 선택 표시로 나온다', async () => {
+    const lastKey = coverChoices().at(-1)!.key;
+    serverTrip = baseTrip({ coverKey: lastKey });
+    await openPage();
+    openCoverSheet();
+    expect(
+      screen.queryByTestId(`trip-settings-cover-option-${lastKey}`)
+    ).toBeNull();
+
+    scrollCoverGridToEnd();
+
+    await waitFor(() => expect(coverOption(lastKey)).toBeSelected());
+    expect(coverOption(lastKey).props.accessibilityLabel).toBe(
+      coverChoices().at(-1)!.label
+    );
+    expect(save()).toBeDisabled();
+
+    const otherKey = coverChoices().at(-2)!.key;
+    press(`trip-settings-cover-option-${otherKey}`);
+    expect(coverOption(otherKey)).toBeSelected();
+    expect(coverOption(lastKey)).not.toBeSelected();
+    press('trip-settings-cover-apply');
+    expect(coverImage()).toEqual([coverSourceForKey(otherKey)]);
+  });
+
+  it('다른 그림을 골라도 적용 전엔 화면 커버·저장이 그대로이고, [적용] 하면 화면 커버가 바뀌고 저장이 켜진다 → 저장하면 coverKey 만 바뀐 본문', async () => {
+    serverTrip = baseTrip({ coverKey: '26350' });
+    await openPage();
+    expect(coverImage()).toEqual([coverSourceForKey('26350')]);
+    expect(coverSourceForKey('11110')).not.toBe(coverSourceForKey('26350'));
+    openCoverSheet();
+
+    press('trip-settings-cover-option-11110');
+    expect(coverImage()).toEqual([coverSourceForKey('26350')]);
+    expect(save()).toBeDisabled();
+    press('trip-settings-cover-apply');
+
+    expect(screen.queryByTestId('trip-settings-cover-sheet')).toBeNull();
+    expect(coverImage()).toEqual([coverSourceForKey('11110')]);
+    expect(save()).toBeEnabled();
+    expect(patchHits()).toBe(0);
+
+    press('trip-settings-save');
+
+    await waitFor(() => expect(routerSpies.back).toHaveBeenCalledTimes(1));
+    expect(patchHits()).toBe(1);
+    expect(patchBodies[0].coverKey).toBe('11110');
+    expect(patchBodies[0].startDate).toBe('2099-06-10');
+    expect(patchBodies[0].endDate).toBe('2099-06-13');
+    expect('discardItinerary' in patchBodies[0]).toBe(false);
+  });
+
+  it('첫 칸(자동)을 고르고 적용하면 PATCH 본문에 coverKey: null 이 실린다(키가 있고 값이 null)', async () => {
+    serverTrip = baseTrip({ coverKey: '26350' });
+    await openPage();
+    openCoverSheet();
+    press('trip-settings-cover-option-auto');
+    press('trip-settings-cover-apply');
+    expect(save()).toBeEnabled();
+
+    press('trip-settings-save');
+
+    await waitFor(() => expect(routerSpies.back).toHaveBeenCalledTimes(1));
+    expect('coverKey' in patchBodies[0]).toBe(true);
+    expect(patchBodies[0].coverKey).toBeNull();
+    // 응답으로 갱신된 단건 캐시에도 null(고른 그림이 지워졌다)
+    expect(
+      client.getQueryData<Trip>(getGetTripsTripIdQueryKey(TRIP_ID))?.coverKey
+    ).toBeNull();
+  });
+
+  it('닫으면(적용 전) 무변화이고, 지금과 같은 그림을 적용하는 건 바뀐 게 아니다', async () => {
+    serverTrip = baseTrip({ coverKey: '26' });
+    await openPage();
+    openCoverSheet();
+    press('trip-settings-cover-option-11110');
+
+    press('trip-settings-cover-close');
+
+    expect(screen.queryByTestId('trip-settings-cover-sheet')).toBeNull();
+    expect(coverImage()).toEqual([coverSourceForKey('26')]);
+    expect(save()).toBeDisabled();
+
+    openCoverSheet();
+    expect(coverOption('26')).toBeSelected(); // 닫은 선택은 버려져 서버 값에서 다시 시작
+    press('trip-settings-cover-option-26');
+    press('trip-settings-cover-apply');
+    expect(save()).toBeDisabled();
+  });
+
+  // 5-b 참고-1: `picked === undefined` 가드가 없으면 앞서 적용한 선택이 사라져 서버 값으로 되돌아간다.
+  it('다른 그림을 적용해 둔 뒤 시트를 다시 열어 아무것도 안 누르고 적용해도 앞의 선택이 남는다', async () => {
+    serverTrip = baseTrip({ coverKey: '26350' });
+    await openPage();
+    openCoverSheet();
+    press('trip-settings-cover-option-11110');
+    press('trip-settings-cover-apply');
+    expect(coverImage()).toEqual([coverSourceForKey('11110')]);
+
+    openCoverSheet();
+    press('trip-settings-cover-apply');
+
+    expect(coverImage()).toEqual([coverSourceForKey('11110')]);
+    expect(save()).toBeEnabled();
+  });
+
+  it('앱이 모르는 서버 키는 시트를 열고 그냥 적용해도 안 지워지고, 이름만 고쳐 저장하면 원문 그대로 실린다', async () => {
+    serverTrip = baseTrip({ coverKey: 'zz9' });
+    await openPage();
+    openCoverSheet();
+
+    press('trip-settings-cover-apply');
+    expect(save()).toBeDisabled();
+    typeTitle('모르는 키 보존');
+    press('trip-settings-save');
+
+    await waitFor(() => expect(routerSpies.back).toHaveBeenCalledTimes(1));
+    expect(patchBodies[0].coverKey).toBe('zz9');
+  });
+
+  it('앱이 모르는 서버 키에서 첫 칸(자동)을 직접 눌러 적용하면 그건 사용자의 선택이라 coverKey: null 이 실린다', async () => {
+    serverTrip = baseTrip({ coverKey: 'zz9' });
+    await openPage();
+    openCoverSheet();
+
+    press('trip-settings-cover-option-auto');
+    press('trip-settings-cover-apply');
+    expect(save()).toBeEnabled();
+    press('trip-settings-save');
+
+    await waitFor(() => expect(routerSpies.back).toHaveBeenCalledTimes(1));
+    expect(patchBodies[0].coverKey).toBeNull();
+  });
+
+  it('이름만 고쳐 저장해도 현재 coverKey 가 본문에 그대로 실린다(PATCH 는 통째 교체라 안 실으면 지워진다)', async () => {
+    serverTrip = baseTrip({ coverKey: '26350' });
+    await openPage();
+    typeTitle('커버는 지킨다');
+
+    press('trip-settings-save');
+
+    await waitFor(() => expect(routerSpies.back).toHaveBeenCalledTimes(1));
+    expect(patchBodies[0].coverKey).toBe('26350');
+    expect(patchBodies[0].title).toBe('커버는 지킨다');
+  });
+
+  it('옛 서버(응답에 coverKey 칸이 없음)면 본문에도 키가 생기지 않고, 커버는 첫 목적지 자동 그림이다', async () => {
+    expect('coverKey' in serverTrip).toBe(false);
+    await openPage();
+
+    expect(coverImage()).toEqual([tripCoverSource(serverTrip)]);
+    expect(tripCoverSource(serverTrip)).not.toBeNull();
+    typeTitle('옛 서버');
+    press('trip-settings-save');
+
+    await waitFor(() => expect(routerSpies.back).toHaveBeenCalledTimes(1));
+    expect('coverKey' in patchBodies[0]).toBe(false);
+  });
+
+  it('소비처 ⑥ — 고른 키가 첫 목적지(제주)와 다르면 설정 화면 커버는 고른 그림, null 이면 첫 목적지 그림이다', async () => {
+    serverTrip = baseTrip({ coverKey: '11110' });
+    await openPage();
+
+    expect(coverImage()).toEqual([coverSourceForKey('11110')]);
+    expect(coverImage()).not.toEqual([
+      tripCoverSource({ destinations: serverTrip.destinations }),
+    ]);
+    screen.unmount();
+
+    serverTrip = baseTrip({ coverKey: null });
+    await openPage();
+    expect(coverImage()).toEqual([
+      tripCoverSource({ destinations: serverTrip.destinations }),
+    ]);
+  });
+});
+
+// TRIP-1806 · 설정은 방금 고른 화면이라 저장 전 드래프트로 판정한다. 시트 첫 창에 있는 종로로 잰다 —
+// 숫자 모양 키는 오름차순이고 jest 는 칸 레이아웃이 없어 해운대(26350) 칸은 첫 창에 없다(02a ★3).
+describe('O2 · 다른 지역 커버 이름 (TRIP-1806 AC-8)', () => {
+  beforeEach(freezeToday);
+
+  const coverLabel = () => screen.queryByTestId('trip-settings-cover-label');
+
+  it('서버 키가 첫 여행지(제주)와 다른 시도면 열자마자 이름이 보인다', async () => {
+    serverTrip = baseTrip({ coverKey: '26350' });
+
+    await openPage();
+
+    expect(coverLabel()).toHaveTextContent('그림 · 해운대');
+  });
+
+  it.each<[string, Partial<Trip>]>([
+    ['같은 시도의 다른 곳', { coverKey: '50130' }],
+    ['자동(null)', { coverKey: null }],
+    ['앱이 모르는 서버 키 — 보이는 그림은 자동 커버', { coverKey: 'zz9' }],
+  ])('%s 면 그림은 있고 이름은 없다', async (_label, over) => {
+    serverTrip = baseTrip(over);
+
+    await openPage();
+
+    expect(screen.getByTestId('trip-settings-cover-image')).toBeOnTheScreen();
+    expect(coverLabel()).toBeNull();
+  });
+
+  it('저장 전에도 드래프트를 따른다: 다른 지역 그림 [적용] → 이름 등장, 「첫 여행지 그림」 [적용] → 사라짐, PATCH 0건', async () => {
+    serverTrip = baseTrip({ coverKey: null });
+    await openPage();
+    expect(coverLabel()).toBeNull();
+
+    openCoverSheet();
+    press('trip-settings-cover-option-11110');
+    expect(coverLabel()).toBeNull(); // 고르기만 해선 아직 아니다
+    press('trip-settings-cover-apply');
+    expect(coverLabel()).toHaveTextContent('그림 · 종로');
+
+    openCoverSheet();
+    press('trip-settings-cover-option-auto');
+    press('trip-settings-cover-apply');
+    expect(coverLabel()).toBeNull();
+    expect(patchHits()).toBe(0);
+  });
+});
+
+describe('P · 캐시 (AC-1 · D11) — 그 여행 하위 조회만, 훅 옵션이라 화면을 떠나도', () => {
+  beforeEach(freezeToday);
+
+  const CHILD_KEYS = [
+    `/trips/${TRIP_ID}/itinerary`,
+    `/trips/${TRIP_ID}/bases`,
+    `/trips/${TRIP_ID}/must-visits`,
+  ];
+  /** 다른 여행·접두만 같은 다른 id — 건드리면 안 된다. */
+  const OTHER_KEYS = [
+    '/trips/other-trip/itinerary',
+    `/trips/${TRIP_ID}x/itinerary`,
+  ];
+
+  function seedCaches(): void {
+    for (const key of [...CHILD_KEYS, ...OTHER_KEYS]) {
+      client.setQueryData([key], { marker: key });
+    }
+  }
+  const invalidated = (key: string) =>
+    client.getQueryState([key])?.isInvalidated === true;
+
+  it('날짜 이동 저장은 응답 전에 화면을 떠나도 그 여행의 자식 조회를 낡음 처리한다 — 단건·다른 여행·접두만 같은 id 는 아니다', async () => {
+    let release: () => void = () => {};
+    patchGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await openPage();
+    seedCaches();
+    for (const key of [...CHILD_KEYS, ...OTHER_KEYS]) {
+      expect(invalidated(key)).toBe(false); // 앵커
+    }
+    openPeriodSheet();
+    pickDate('2099-06-20');
+    applyPeriod();
+    press('trip-settings-save');
+    await waitFor(() => expect(patchHits()).toBe(1));
+
+    screen.unmount();
+    release();
+
+    await waitFor(() => expect(invalidated(CHILD_KEYS[0])).toBe(true));
+    for (const key of CHILD_KEYS) expect(invalidated(key)).toBe(true);
+    for (const key of OTHER_KEYS) expect(invalidated(key)).toBe(false);
+    const detail = client.getQueryState(getGetTripsTripIdQueryKey(TRIP_ID));
+    expect(detail?.isInvalidated).toBe(false);
+    expect(
+      client.getQueryData<Trip>(getGetTripsTripIdQueryKey(TRIP_ID))?.startDate
+    ).toBe('2099-06-20');
+  });
+
+  it('기간을 안 바꾼 저장(이름만)은 자식 조회를 건드리지 않는다', async () => {
+    await openPage();
+    seedCaches();
+    typeTitle('이름만');
+
+    press('trip-settings-save');
+
+    await waitFor(() => expect(routerSpies.back).toHaveBeenCalledTimes(1));
+    for (const key of [...CHILD_KEYS, ...OTHER_KEYS]) {
+      expect(invalidated(key)).toBe(false);
+      expect(client.getQueryData([key])).toEqual({ marker: key });
+    }
+  });
+
+  it('일정을 버리는 확정이 성공하면(화면을 떠난 뒤에도) 자식 조회의 데이터가 비워지고, 단건은 새 기간·다른 여행은 그대로다', async () => {
+    let release: () => void = () => {};
+    patchGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await openPage();
+    seedCaches();
+    changeLengthAndApply('2099-06-11');
+    confirmLength();
+    await waitFor(() => expect(patchHits()).toBe(1));
+    for (const key of CHILD_KEYS) {
+      expect(client.getQueryData([key])).toEqual({ marker: key }); // 앵커 — 응답 전엔 옛 데이터
+    }
+
+    screen.unmount();
+    release();
+
+    await waitFor(() =>
+      expect(client.getQueryData([CHILD_KEYS[0]])).toBeUndefined()
+    );
+    for (const key of CHILD_KEYS) {
+      expect(client.getQueryData([key])).toBeUndefined();
+    }
+    for (const key of OTHER_KEYS) {
+      expect(client.getQueryData([key])).toEqual({ marker: key });
+    }
+    expect(
+      client.getQueryData<Trip>(getGetTripsTripIdQueryKey(TRIP_ID))?.endDate
+    ).toBe('2099-06-11');
+  });
+
+  it('확정이 실패하면 자식 조회의 데이터가 그대로다', async () => {
+    patchQueue = [ERROR_500];
+    await openPage();
+    seedCaches();
+    changeLengthAndApply('2099-06-11');
+
+    confirmLength();
+
+    await screen.findByTestId('trip-settings-length-error');
+    for (const key of CHILD_KEYS) {
+      expect(client.getQueryData([key])).toEqual({ marker: key });
+      expect(invalidated(key)).toBe(false);
+    }
+  });
+});
+
+describe('Q · 연타 (AC-11)', () => {
+  beforeEach(freezeToday);
+
+  it('기간 [적용] 직후 같은 틱의 저장 누름은 PATCH 를 안 내고, 창이 닫힌 뒤의 저장은 나간다', async () => {
+    await openPage();
+    typeTitle('연타 방지');
+    openPeriodSheet();
+    pickDate('2099-06-20');
+    expect(save()).toBeEnabled();
+
+    resetPressGuard();
+    fireEvent.press(screen.getByTestId('trip-wizard-period-apply'));
+    fireEvent.press(save());
+    await settle();
+
+    expect(periodSheet()).toBeNull(); // 적용은 됐다
+    expect(patchHits()).toBe(0);
+
+    advanceClock(500);
+    fireEvent.press(save());
+
+    await waitFor(() => expect(patchHits()).toBe(1));
+    expect(patchBodies[0].startDate).toBe('2099-06-20');
+  });
+
+  it('커버 [적용] 직후 같은 틱의 저장 누름도 PATCH 를 안 낸다', async () => {
+    await openPage();
+    typeTitle('커버 연타');
+    openCoverSheet();
+    press('trip-settings-cover-option-11110');
+    expect(save()).toBeEnabled();
+
+    resetPressGuard();
+    fireEvent.press(screen.getByTestId('trip-settings-cover-apply'));
+    fireEvent.press(save());
+    await settle();
+
+    expect(screen.queryByTestId('trip-settings-cover-sheet')).toBeNull();
+    expect(patchHits()).toBe(0);
+  });
+
+  it('저장이 실패하면 바로 다시 눌러 재시도할 수 있다 — 저장 자신은 창을 열지 않는다', async () => {
+    patchQueue = [ERROR_500];
+    await openPage();
+    typeTitle('재시도');
+    press('trip-settings-save');
+    await screen.findByTestId('trip-settings-error');
+
+    fireEvent.press(screen.getByTestId('trip-settings-retry'));
+
+    await waitFor(() => expect(patchHits()).toBe(2));
+    await waitFor(() => expect(routerSpies.back).toHaveBeenCalledTimes(1));
+  });
+
+  it.each(['trip-settings-period', 'trip-settings-cover-change'])(
+    '%s 를 누르면 연타 창이 열린다(guardPress)',
+    async (testID) => {
+      await openPage();
+
+      press(testID);
+
+      expect(pressWindowOpen()).toBe(true);
+    }
+  );
+});
+
+/**
+ * 통합 QA(2026-11-06) D1·D2·D4·D5·D6·O1 — 첫 탭으로 시트·창이 닫히거나 화면이 바뀐 직후, 둘째 탭이 그 자리의 다른 요소를 누른다.
+ * `tap` 은 `press` 와 달리 **창을 닫지 않고** 누른다 — 연타의 둘째 탭을 흉내 낸다. 실제 손가락·딤 관통은 실화면 몫이고, 여기서는
+ * "표적 핸들러가 창을 따르는가 · 앞 탭이 창을 여는가"만 본다.
+ */
+describe('R · 통합 QA 연타·0박 여행지', () => {
+  beforeEach(freezeToday);
+
+  const tap = (testID: string) => fireEvent.press(screen.getByTestId(testID));
+
+  it('D1 동행 시트 [적용] 연타 — 둘째 탭이 저장을 누르지 않는다. 창이 닫힌 뒤 저장은 된다', async () => {
+    await openPage();
+    press('trip-settings-companion');
+    press('trip-wizard-companion-chip-partner');
+
+    tap('trip-wizard-companion-apply');
+    expect(screen.queryByTestId('trip-wizard-companion-sheet')).toBeNull(); // 앞 탭은 먹었다(앵커)
+    expect(save()).toBeEnabled();
+    tap('trip-settings-save');
+    await settle();
+
+    expect(patchHits()).toBe(0);
+    expect(routerSpies.back).not.toHaveBeenCalled();
+
+    press('trip-settings-save');
+    await waitFor(() => expect(patchHits()).toBe(1));
+  });
+
+  it('D2 일과 시트 [적용] 연타 — 둘째 탭이 저장을 누르지 않는다', async () => {
+    await openPage();
+    press('trip-settings-day-start');
+    press('trip-wizard-daywindow-wheel-h-11');
+    press('trip-wizard-daywindow-wheel-m-00');
+
+    tap('trip-wizard-daywindow-apply');
+    expect(screen.queryByTestId('trip-wizard-daywindow-sheet')).toBeNull();
+    expect(save()).toBeEnabled();
+    tap('trip-settings-save');
+    await settle();
+
+    expect(patchHits()).toBe(0);
+    expect(routerSpies.back).not.toHaveBeenCalled();
+  });
+
+  it('D4 일수 확인창 [취소] 연타 — 둘째 탭이 뒤 기간 행을 다시 열지 않는다', async () => {
+    await openPage();
+    changeLengthAndApply('2099-06-20');
+    expect(lengthDialog()).toBeOnTheScreen();
+    resetPressGuard(); // 앞 [적용]이 연 창을 닫는다 — 창은 [취소]가 열어야 한다
+
+    tap('trip-settings-length-cancel');
+    expect(lengthDialog()).toBeNull();
+    tap('trip-settings-period');
+
+    expect(periodSheet()).toBeNull();
+    expect(patchHits()).toBe(0);
+  });
+
+  it('삭제 확인창 [취소] 연타도 같다 — 둘째 탭이 뒤 행을 열지 않는다', async () => {
+    await openPage();
+    press('trip-settings-delete');
+    resetPressGuard(); // 「여행 삭제」가 연 창을 닫는다(시계가 고정이라 저절로 안 닫힌다) — 창은 [취소]가 열어야 한다
+
+    tap('my-trip-delete-cancel');
+    expect(screen.queryByTestId('my-trip-delete-dialog')).toBeNull();
+    tap('trip-settings-period');
+
+    expect(periodSheet()).toBeNull();
+  });
+
+  it.each<[string, string, string]>([
+    ['여행 삭제', 'trip-settings-delete', 'my-trip-delete-dialog'],
+    ['동행 행', 'trip-settings-companion', 'trip-wizard-companion-sheet'],
+    ['일과 행', 'trip-settings-day-start', 'trip-wizard-daywindow-sheet'],
+  ])(
+    'O1 앞 화면에서 넘어온 연타 창 안이면 %s 은(는) 무시된다 — 창이 닫히면 열린다',
+    async (_label, target, opened) => {
+      await openPage();
+
+      openPressGuardWindow(); // 목록 ⋯ 「여행 설정」이 연 창
+      tap(target);
+      expect(screen.queryByTestId(opened)).toBeNull();
+
+      press(target);
+      expect(screen.getByTestId(opened)).toBeOnTheScreen();
+    }
+  );
+
+  describe('D5 — 일수를 줄여 0박이 된 여행지는 뺀다', () => {
+    const threeCities = () =>
+      baseTrip({
+        startDate: '2099-06-10',
+        endDate: '2099-06-13',
+        destinations: [
+          { seq: 1, region: '제주', nights: 1, regionCode: '50' },
+          { seq: 2, region: '부산', nights: 1, regionCode: '26' },
+          { seq: 3, region: '서울', nights: 1, regionCode: '11' },
+        ],
+      });
+    const dropped = () => screen.queryByTestId('trip-settings-length-dropped');
+
+    it('확인창이 빠지는 도시를 한 줄로 말하고, 확정 전엔 아무것도 안 나간다. 확정 본문엔 남는 도시만 실린다', async () => {
+      serverTrip = threeCities();
+      await openPage();
+
+      changeLengthAndApply('2099-06-11'); // 3박 → 1박
+
+      expect(dropped()).toHaveTextContent('부산·서울이 여행지에서 빠져요');
+      expect(patchHits()).toBe(0);
+
+      confirmLength();
+      await waitFor(() => expect(routerSpies.replace).toHaveBeenCalledTimes(1));
+      expect(patchBodies[0].discardItinerary).toBe(true);
+      expect(patchBodies[0].destinations).toEqual([
+        { seq: 1, region: '제주', nights: 1, regionCode: '50' },
+      ]);
+    });
+
+    it('한 곳만 빠지면 그 곳만 말한다(2박으로 줄이면 서울)', async () => {
+      serverTrip = threeCities();
+      await openPage();
+
+      changeLengthAndApply('2099-06-12');
+
+      expect(dropped()).toHaveTextContent('서울이 여행지에서 빠져요');
+    });
+
+    it('당일치기까지 줄여도 첫 도시는 남는다 — 박수 0 으로 실린다', async () => {
+      serverTrip = threeCities();
+      await openPage();
+
+      changeLengthAndApply('2099-06-10');
+      expect(dropped()).toHaveTextContent('부산·서울이 여행지에서 빠져요');
+
+      confirmLength();
+      await waitFor(() => expect(routerSpies.replace).toHaveBeenCalledTimes(1));
+      expect(patchBodies[0].destinations).toEqual([
+        { seq: 1, region: '제주', nights: 0, regionCode: '50' },
+      ]);
+    });
+
+    it('늘릴 때는 그 줄이 없다', async () => {
+      await openPage();
+
+      changeLengthAndApply('2099-06-20'); // 3박 → 10박
+
+      expect(lengthDialog()).toBeOnTheScreen();
+      expect(dropped()).toBeNull();
+    });
+
+    it('한 도시 여행을 줄이면 빠지는 도시가 없다', async () => {
+      serverTrip = baseTrip({
+        destinations: [{ seq: 1, region: '제주', nights: 3, regionCode: '50' }],
+      });
+      await openPage();
+
+      changeLengthAndApply('2099-06-11');
+
+      expect(lengthDialog()).toBeOnTheScreen();
+      expect(dropped()).toBeNull();
+    });
   });
 });

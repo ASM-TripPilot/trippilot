@@ -57,6 +57,7 @@ jest.mock('../model/useReflectionPhotos', () => ({
   // 거울은 실물과 같은 모양이어야 한다(TRIP-1757) — 배열이 아니라 객체.
   useReflectionPhotos: jest.fn(() => ({
     photos: [],
+    unresolvedCount: 0,
     photoLoadFailed: false,
     photoLoadRetrying: false,
     retryPhotoLoad: () => {},

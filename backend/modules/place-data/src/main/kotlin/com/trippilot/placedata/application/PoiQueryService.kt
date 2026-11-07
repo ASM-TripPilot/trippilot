@@ -33,6 +33,7 @@ class PoiQueryService(
      * @param limit 요청 상한. 미지정·초과는 [MAX_LIMIT] 로 맞춘다.
      * @param order `name`(기본, TRIP-1003) | `random`(TRIP-1570). random 이면 [seed] 가 필수다.
      * @param seed 무작위 정렬 시드 — 화면이 한 진입 동안 고정해 장을 이어 받는다. 같은 seed 면 같은 순서.
+     * @param regionCode 지역 코드(TRIP-1808) — 동명이지역을 하나로 집는 길이다. 있으면 [region] 은 보지 않는다.
      */
     fun search(
         region: String?,
@@ -42,9 +43,11 @@ class PoiQueryService(
         limit: Int? = null,
         order: String? = null,
         seed: String? = null,
+        regionCode: String? = null,
     ): PoiPage {
         val randomSeed = resolveSeed(order, seed)
-        val codes = resolveRegion(region) ?: return PoiPage(emptyList(), null)
+        val codes = if (regionCode != null) listOf(requireRegionCode(regionCode))
+        else resolveRegion(region) ?: return PoiPage(emptyList(), null)
         val size = (limit ?: MAX_LIMIT).coerceIn(1, MAX_LIMIT)
 
         // 상한보다 **하나 더** 물어본다 — 그 하나가 오면 뒤가 있다는 뜻이다.
@@ -121,6 +124,14 @@ class PoiQueryService(
     }
 
     /**
+     * 형식이 틀리면 거절한다. 빈 값도 그렇다 — 이름 쪽처럼 "안 걸렀다"로 읽으면 전국이 나가는데, 코드를 보낸
+     * 화면은 그것을 그 지역 장소로 그린다. 카탈로그 대조는 안 한다 — 없는 코드는 어차피 빈 목록이다(`region_code` FK).
+     */
+    private fun requireRegionCode(code: String): String =
+        code.takeIf { REGION_CODE_PATTERN.matches(it) }
+            ?: throw ValidationFailed(listOf(FieldError("regionCode", "2자리 또는 5자리 숫자 지역 코드여야 합니다.")))
+
+    /**
      * 커서는 **불투명 문자열**이다. 정렬 키를 그대로 노출하면 클라가 그 모양에 기대게 되고,
      * 정렬 기준을 바꾸는 순간 남의 코드가 깨진다.
      */
@@ -155,6 +166,7 @@ class PoiQueryService(
         private const val ORDER_NAME = "name"
         private const val ORDER_RANDOM = "random"
         private val SEED_PATTERN = Regex("[A-Za-z0-9_-]{1,64}")
+        private val REGION_CODE_PATTERN = Regex("[0-9]{2}|[0-9]{5}")
     }
 }
 

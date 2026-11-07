@@ -198,3 +198,27 @@ describe('buildPlaceShareMessage — OS 공유 문구 (TRIP-755 AC-5)', () => {
     ).toBe('부산시립미술관\n부산 부산진구 ○○로 12');
   });
 });
+
+describe('buildPlaceDetailView — 고친 이름·분류 (TRIP-1795 AC-3)', () => {
+  it('V-D · 뷰의 이름·분류가 고친 값이고 원본 이름은 안 나온다 · 덮어쓰기 없으면 원본', () => {
+    const view = buildPlaceDetailView(
+      [
+        slot({
+          nameKo: '광안리 해수욕장',
+          category: '자연',
+          displayName: '우리 아지트',
+          displayCategory: '카페',
+        }),
+      ],
+      'p1'
+    );
+
+    expect(view?.name).toBe('우리 아지트');
+    expect(view?.category).toBe('카페');
+    expect(JSON.stringify(view)).not.toContain('광안리 해수욕장');
+
+    const plain = buildPlaceDetailView([slot({ displayName: null })], 'p1');
+    expect(plain?.name).toBe('광안리 해수욕장');
+    expect(plain?.category).toBe('해변');
+  });
+});

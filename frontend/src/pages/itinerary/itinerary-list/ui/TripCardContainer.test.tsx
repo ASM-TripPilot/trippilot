@@ -1,18 +1,26 @@
+import { cloneElement, useState, type ReactElement } from 'react';
+import { Dimensions } from 'react-native';
 import { act, fireEvent, screen } from '@testing-library/react-native';
 
 import type { Trip } from '@/shared/api/index.schemas';
+import { coverSourceForKey } from '@/entities/trip';
 import {
   getGetTripsTripIdItineraryQueryOptions,
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import { openPressGuardWindow, resetPressGuard } from '@/shared/lib/pressGuard';
 import { renderWithQueryClient } from '@/test-support/queryRender';
+import { registerToastBottom } from '@/shared/ui/toastBottom';
 import {
   NO_ITINERARY,
   type ItineraryCols,
 } from '@/test-support/tripItineraryCols';
 
-import { TripCardContainer } from './TripCardContainer';
+import { menuOpensAbove } from '../model/menuPlacement';
+import {
+  TripCardContainer,
+  type TripCardContainerProps,
+} from './TripCardContainer';
 
 /**
  * TRIP-788 · TRIP-1677 — `TripCardContainer` 의 VM 조립(상태문·배지·resume·삭제 진입점·누름 목적지)을 심판한다.
@@ -36,6 +44,9 @@ import { TripCardContainer } from './TripCardContainer';
  */
 
 const mockPush = jest.fn();
+jest.mock('../model/menuPlacement', () => ({
+  menuOpensAbove: jest.fn(),
+}));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
@@ -88,12 +99,40 @@ function trip(over: Partial<Trip> = {}): Trip {
   };
 }
 
-function renderCard(ui: Parameters<typeof renderWithQueryClient>[0]) {
-  return renderWithQueryClient(ui);
+/** 메뉴 열림은 페이지가 쥔다(TRIP-1819) — 카드 하나만 볼 때 그 자리를 대신한다. */
+function MenuHost({ card }: { card: ReactElement<TripCardContainerProps> }) {
+  const [open, setOpen] = useState(false);
+  return cloneElement(card, { menuOpen: open, onMenuOpenChange: setOpen });
+}
+
+function renderCard(ui: ReactElement<TripCardContainerProps>) {
+  return renderWithQueryClient(<MenuHost card={ui} />);
 }
 
 /** 실시계 오늘을 항상 포함하는 여행 기간(fake timers 없이 "여행 중"을 만든다). */
 const DURING = { startDate: '2020-01-01', endDate: '2099-12-31' } as const;
+
+describe('⋯ 를 누르면 버튼 자리를 재서 방향을 정한다 (TRIP-1819)', () => {
+  it('판정 재료는 ⋯ 아랫변 · 창 높이 · 신고된 막힘 + 간격이다', () => {
+    // 준비 — 카드를 그리고, 탭바처럼 윗변 70 을 신고한다. jest 의 네이티브 재기는 답을 안 주므로 받은 콜백을 직접 부른다.
+    renderCard(<TripCardContainer trip={trip()} />);
+    const unregister = registerToastBottom(70);
+    const button = screen.getByTestId('my-trip-menu-t1');
+    const measure = button.parent?.instance.measureInWindow as jest.Mock;
+
+    // 실행 — ⋯ 를 누르고, 재기 답(버튼 y 756 · 높이 36)을 돌려준다.
+    fireEvent.press(button);
+    act(() => measure.mock.calls.at(-1)[0](0, 756, 36, 36));
+    unregister();
+
+    // 단언 — 아랫변 792 · 창 높이 · 70+12 로 판정을 묻는다. 패널의 실제 자리는 실화면 몫(기능 지도).
+    expect(menuOpensAbove).toHaveBeenLastCalledWith(
+      792,
+      Dimensions.get('window').height,
+      82
+    );
+  });
+});
 
 describe('🔴 얼굴 표 — 목록 네 칸 → 상태문 · 배지 · resume (AC-2)', () => {
   it.each<[string, ItineraryCols, string, string, boolean]>([
@@ -828,4 +867,83 @@ describe('🔴 TRIP-1786 · ⋯ 메뉴 항목 — 노출 조건 · 설정 이동
       expect(screen.queryByTestId('my-trip-pinned-t1')).toBeNull();
     }
   );
+});
+
+/**
+ * TRIP-1788 · 커버 소비처 ① — 내 여행 목록 카드가 사용자가 고른 `coverKey` 그림을 쓴다.
+ * 고른 키(서울 종로구)와 첫 목적지(부산 해운대구)를 **다른 지역**으로 둬서, 첫 목적지 그림이 나오면 red 가 되게 한다.
+ * 그림 비교는 `coverSourceForKey` 값으로(jest 의 번들 이미지는 `require` 한 파일 기준 경로라 직접 `require` 하면 어긋난다).
+ */
+describe('TRIP-1788 · 카드 커버 = 고른 그림', () => {
+  const FIRST = [
+    { seq: 1, region: '해운대구', nights: 2, regionCode: '26350' },
+  ];
+  const cover = () => screen.getByTestId('my-trip-cover-t1').props.source;
+
+  it('coverKey 가 있으면 첫 목적지가 달라도 그 그림이다', () => {
+    renderCard(
+      <TripCardContainer
+        trip={trip({ coverKey: '11110', destinations: FIRST })}
+      />
+    );
+
+    expect(coverSourceForKey('11110')).not.toBe(coverSourceForKey('26350'));
+    expect(cover()).toEqual([coverSourceForKey('11110')]);
+  });
+
+  it.each<[string, Partial<Trip>]>([
+    ['null(자동)', { coverKey: null }],
+    ['칸 없음(옛 서버)', {}],
+    ['앱이 모르는 키', { coverKey: 'zz9' }],
+  ])('coverKey 가 %s 면 첫 목적지 그림 — 지금까지와 같다', (_label, over) => {
+    renderCard(
+      <TripCardContainer trip={trip({ destinations: FIRST, ...over })} />
+    );
+
+    expect(cover()).toEqual([coverSourceForKey('26350')]);
+  });
+});
+
+/**
+ * TRIP-1806 · 카드 — 제주 여행에 부산 해운대 그림을 고르면 「제주시」 는 그대로 두고 「그림 · 해운대」 를 얹는다.
+ * 기대 글자는 리터럴이다(판정 함수 결과로 만들면 함수가 틀려도 같이 움직인다).
+ */
+describe('TRIP-1806 · 다른 지역 커버 이름', () => {
+  const NAME = 'my-trip-cover-label-t1';
+  const destination = (region: string, regionCode: string) => [
+    { seq: 1, region, nights: 2, regionCode },
+  ];
+
+  it('첫 목적지와 다른 시도의 그림이면 도시 글자 그대로 + 그림 이름', () => {
+    renderCard(
+      <TripCardContainer
+        trip={trip({
+          coverKey: '26350',
+          destinations: destination('제주시', '50110'),
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('my-trip-city-t1')).toHaveTextContent('제주시');
+    expect(screen.getByTestId(NAME)).toHaveTextContent('그림 · 해운대');
+  });
+
+  it.each<[string, Partial<Trip>]>([
+    ['자동(null)', { coverKey: null }],
+    ['자동(칸 없음·옛 서버)', {}],
+    ['앱이 모르는 키 — 보이는 그림은 자동 커버', { coverKey: 'zz9' }],
+    ['같은 시도의 다른 구', { coverKey: '26110' }],
+  ])('%s 면 그림만 있고 이름은 없다', (_label, over) => {
+    renderCard(
+      <TripCardContainer
+        trip={trip({
+          destinations: destination('해운대구', '26350'),
+          ...over,
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('my-trip-cover-t1')).toBeOnTheScreen();
+    expect(screen.queryByTestId(NAME)).toBeNull();
+  });
 });

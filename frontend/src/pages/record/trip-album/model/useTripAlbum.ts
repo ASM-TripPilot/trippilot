@@ -7,7 +7,7 @@ import {
   useGetTripsTripIdRecords,
 } from '@/shared/api/index.hooks';
 import type { VisitPhoto } from '@/shared/api/index.schemas';
-import { resolvePhotoUri } from '@/shared/photo';
+import { photoUriQueryOptions } from '@/shared/photo/index.view';
 import { getInstallId } from '@/shared/storage';
 
 import { failedUnlessNotFound } from './failedUnlessNotFound';
@@ -75,11 +75,7 @@ export function useTripAlbum(tripId: string): TripAlbumState {
     ),
   ];
   const uris = useQueries({
-    queries: assetIds.map((id) => ({
-      queryKey: ['photo-uri', id],
-      queryFn: () => resolvePhotoUri(id),
-      staleTime: Infinity,
-    })),
+    queries: assetIds.map((id) => photoUriQueryOptions(id)),
   });
   const uriByAssetId: Record<string, string | null | undefined> = {};
   assetIds.forEach((id, i) => {

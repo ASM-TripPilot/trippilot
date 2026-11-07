@@ -10,6 +10,8 @@ import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripStatus
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Pattern
+import jakarta.validation.constraints.Size
 import org.hibernate.validator.constraints.CodePointLength
 import java.time.Instant
 import java.time.LocalDate
@@ -89,10 +91,16 @@ data class EditTripRequest(
     val dayStartAt: LocalTime? = null,
     val firstDayStartAt: LocalTime? = null,
     val lastDayEndAt: LocalTime? = null,
+    /** 앱 번들 지역 그림 키(TRIP-1789) — 형식만 본다. 목록은 앱이 소유하고, 모르는 키는 앱이 자동으로 폴백한다. `trip.cover_key varchar(40)`. */
+    @field:Size(max = 40, message = "커버 키는 40자 이하입니다.")
+    @field:Pattern(regexp = "^[A-Za-z0-9_-]+$", message = "커버 키 형식이 올바르지 않습니다.")
+    val coverKey: String? = null,
+    /** 기간을 바꾸며 일정을 버린다(일수가 달라도) — 사용자 결정 2026-11-06. 저장되는 값이 아니다. */
+    val discardItinerary: Boolean = false,
 ) {
     fun toCommand() = EditTripCommand(
         title, startDate!!, endDate!!, party, companionType, budgetTotal, destinations.map { it.toDomain() },
-        TripDayWindow(dayStartAt, firstDayStartAt, lastDayEndAt),
+        TripDayWindow(dayStartAt, firstDayStartAt, lastDayEndAt), coverKey, discardItinerary,
     )
 }
 
@@ -144,6 +152,8 @@ data class TripResponse(
     val dayStartAt: LocalTime?,
     val firstDayStartAt: LocalTime?,
     val lastDayEndAt: LocalTime?,
+    /** 커버 — 편집은 대체라 [dayStartAt] 과 같은 이유로 응답에 실어야 한다(안 실으면 다른 칸을 고칠 때 지워진다). */
+    val coverKey: String?,
 ) {
     companion object {
         /**
@@ -163,6 +173,7 @@ data class TripResponse(
             dayStartAt = t.dayWindow.dayStartAt,
             firstDayStartAt = t.dayWindow.firstDayStartAt,
             lastDayEndAt = t.dayWindow.lastDayEndAt,
+            coverKey = t.coverKey,
         )
     }
 }

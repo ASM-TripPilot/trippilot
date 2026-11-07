@@ -829,8 +829,24 @@ def _weather_default_day(snap: TurnSnapshot, today: date) -> date:
 _HERE_LABEL = "현재 위치"  # 현재 위치가 표의 어느 지역 반경에도 안 들 때의 제목
 
 
+_TODAY_WORD = re.compile(r"오늘|지금")
+
+
+def _weather_day(ctx: TurnContext) -> tuple[date | None, date | None]:
+    """(말한 날, 물은 날). 말한 날을 못 풀면 (None, None). 날짜 칸이 비었어도 말에 '오늘'·'지금'이 있으면 오늘이다 — 비면 여행 전엔
+    여행 첫날로 갔다. 그 밖엔 기본(여행 전이면 첫날, 아니면 오늘)."""
+    snap, today = ctx.snapshot, ctx.today
+    said_day = ctx.arguments.get("date")
+    if said_day:
+        on = resolve_day(said_day, snap, today)
+        return on, on
+    if _TODAY_WORD.search(ctx.utterance):
+        return today, today
+    return None, _weather_default_day(snap, today)
+
+
 def _weather_anchor(ctx: TurnContext) -> _WeatherAnchor | None:
-    """① 말한 지역(`region`)의 중심 → ② 그 날(또는 오늘 이후 첫) 슬롯 → ③′ 오늘이면 현재 위치 → ③ 여행 지역 중심.
+    """① 말한 지역(`region`)의 중심 → ② 오늘이면 현재 위치 → ③ 그 날(또는 오늘 이후 첫) 슬롯 → ④ 여행 지역 중심.
     넷 다 없으면 None(EMPTY).
 
     ②만 있던 동안 일정이 없거나 오늘이 여행일이 아니면 "지금 날씨를 확인할 수 없어요" 만 나갔다 — 좌표는 지역 중심표
@@ -838,13 +854,16 @@ def _weather_anchor(ctx: TurnContext) -> _WeatherAnchor | None:
     않고 None("부산 날씨" 에 제주 값을 내지 않는다). `region` 은 도우미 분류에서만 묻는다(인자표 `dialogue_only`).
     """
     snap, today = ctx.snapshot, ctx.today
-    said_day = ctx.arguments.get("date")
-    on = resolve_day(said_day, snap, today) if said_day else None
-    if said_day and on is None:
+    on, day = _weather_day(ctx)
+    if day is None:
         return None
     said_region = ctx.arguments.get("region")
     if said_region:
-        return region_weather_anchor(said_region, on if on is not None else _weather_default_day(snap, today))
+        return region_weather_anchor(said_region, day)
+    if snap.here is not None and day == today:
+        # ② 오늘 날씨는 지금 있는 곳이다 — 그날 일정 장소보다 먼저(수원에 있는데 일정의 청계천 날씨를 냈다, 사용자 2026-11-06).
+        # 현재 위치는 '오늘'만 대신한다(여행 전 "오늘 날씨" 는 서울에 있는데 제주 값을 냈다, O-U8-5)
+        return _WeatherAnchor(today, covering_region(snap.here) or _HERE_LABEL, coord=snap.here)
     if on is not None:
         slot = next((s for s in snap.on(on) if s.poi_id), None)
         if slot is not None:
@@ -854,15 +873,23 @@ def _weather_anchor(ctx: TurnContext) -> _WeatherAnchor | None:
         if found is not None:
             return _WeatherAnchor(found[0], found[1].name or "여행지", slot=found[1])
     trip = snap.trip
-    fallback_day = on if on is not None else _weather_default_day(snap, today)
-    if snap.here is not None and fallback_day == today:
-        # ③′ 오늘 여기 — 현재 위치는 '오늘'만 대신한다(여행 전 "오늘 날씨" 는 서울에 있는데 제주 값을 냈다, O-U8-5)
-        return _WeatherAnchor(today, covering_region(snap.here) or _HERE_LABEL, coord=snap.here)
     for region in (trip.regions if trip is not None else ()):
-        anchor = region_weather_anchor(region, fallback_day)
+        anchor = region_weather_anchor(region, day)
         if anchor is not None:
             return anchor
     return None
+
+
+def weather_needs_region(ctx: TurnContext) -> bool:
+    """지역을 되물을까 — 말한 지역이 없고 ① 앵커가 아예 없거나 ② 현재 위치 없이 **여행 날이 아닌** 오늘 날씨를 물을 때. 여행 전 "오늘
+    날씨"를 여행 일정·여행지로 짐작하면 수원에 있는 사람에게 청계천 날씨를 냈다(사용자 2026-11-06). 여행 중이면 대개 일정 근처라
+    오늘 일정 장소 그대로다 — 위치를 못 싣는 폰(새 빌드 전)으로 여행하는 사람이 매번 질문을 받지 않게."""
+    if ctx.arguments.get("region"):
+        return False
+    snap, today = ctx.snapshot, ctx.today
+    trip = snap.trip
+    traveling = trip is not None and trip.start_date <= today <= trip.end_date
+    return (snap.here is None and _weather_day(ctx)[1] == today and not traveling) or _weather_anchor(ctx) is None
 
 
 def region_weather_anchor(region: str, on: date) -> _WeatherAnchor | None:
@@ -2501,9 +2528,7 @@ HANDLERS: Mapping[Intent, Handler] = {
                                  # 현재 위치도 여행 없이 묻는 갈래다 — 없으면 "오늘 날씨" 가 "먼저 여행을 만들어"로 끝났다(운영 11-03)
                                  free_when=lambda ctx: bool(ctx.arguments.get("region")) or ctx.snapshot.here is not None,
                                  # 그것도 없으면 지역을 묻는다 — 앱이 위치를 못 실은 턴(권한·옛 빌드)도 날씨에 닿는다(운영 11-04)
-                                 ask=lambda ctx: ("region", WEATHER_ASK_REGION_TEXT) if (
-                                     ctx.snapshot.trip is None and not ctx.arguments.get("region") and _weather_anchor(ctx) is None
-                                 ) else None),
+                                 ask=lambda ctx: ("region", WEATHER_ASK_REGION_TEXT) if weather_needs_region(ctx) else None),
     Intent.GET_DISTANCE: _handler(Intent.GET_DISTANCE, _assemble_distance, _plan_distance,
                                   free_when=lambda ctx: bool(ctx.arguments.get("origin") and ctx.arguments.get("destination"))),
     Intent.GET_POI_INFO: _handler(Intent.GET_POI_INFO, _assemble_poi_info, _plan_poi_info,

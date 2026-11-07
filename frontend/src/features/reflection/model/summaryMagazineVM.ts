@@ -1,3 +1,4 @@
+import { slotDisplayCategory } from '@/entities/itinerary-slot';
 import { formatDayLabel, formatShareCardPeriod } from '@/entities/trip';
 import { dominantPaletteKey } from './categoryPalette';
 import type { CoverPhoto } from './coverPhoto';
@@ -77,7 +78,8 @@ export function buildSummaryMagazineVM(
       .filter((d) => d.date === date)
       .flatMap((d) => d.slots)
       .filter((s) => typeof s.nameKo === 'string' && places.includes(s.nameKo))
-      .map((s) => s.category);
+      // 조인 키는 서버 방문지 이름(= 장소 원본 `nameKo`)이라 원본으로 거르고, 색의 재료인 분류만 이 여행에서 고친 값을 따른다.
+      .map((s) => slotDisplayCategory(s));
 
   const days: SummaryDayCardVM[] = summary.highlights.map((h) => {
     const source =

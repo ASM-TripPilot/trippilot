@@ -3,5 +3,7 @@ export { CompanionEditSheet } from './ui/CompanionEditSheet';
 export type { CompanionEditSheetProps } from './ui/CompanionEditSheet';
 export { DayWindowEditSheet } from './ui/DayWindowEditSheet';
 export type { DayWindowEditSheetProps } from './ui/DayWindowEditSheet';
+export { PeriodEditSheet } from './ui/PeriodEditSheet';
+export type { PeriodEditSheetProps } from './ui/PeriodEditSheet';
 export { StepperButton } from './ui/StepperButton';
 export { clampParty, partyRangeFor } from './model/partyRange';

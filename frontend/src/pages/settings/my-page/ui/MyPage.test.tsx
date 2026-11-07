@@ -27,6 +27,7 @@ import {
 import { renderWithQueryClient, settle } from '@/test-support/queryRender';
 import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
 import { MyPage } from './MyPage';
+import { coverSourceForKey } from '@/entities/trip';
 import { ChevronRight24Glyph, ChevronRightGlyph } from '@/shared/ui/glyphs';
 import {
   SettingsBookmarkGlyph,
@@ -766,6 +767,73 @@ describe('지난 여행 카드 (옛 .l03empty)', () => {
     );
     // 기본 = 응답 전(사진 수 모름).
     setRecords({ data: undefined, isPending: true, isError: false });
+  });
+
+  /**
+   * TRIP-1788 · 커버 소비처 ⑤ — 마이 탭 지난 여행 행의 썸네일이 사용자가 고른 `coverKey` 그림을 쓴다.
+   * 고른 키(서울 종로구)와 첫 목적지(부산 해운대구)는 다른 지역 — 첫 목적지 그림이 나오면 red.
+   */
+  describe('TRIP-1788 · 지난 여행 썸네일 = 고른 커버', () => {
+    const FIRST = [
+      { seq: 1, region: '해운대구', nights: 2, regionCode: '26350' },
+    ];
+    const thumb = () =>
+      screen.getByTestId('my-trip-reflection-e-jeju-cover').props.source;
+
+    it('coverKey 가 있으면 첫 목적지가 달라도 그 그림이다', async () => {
+      setTrips([ended('e-jeju', { destinations: FIRST, coverKey: '11110' })]);
+
+      await renderPage();
+
+      expect(coverSourceForKey('11110')).not.toBe(coverSourceForKey('26350'));
+      expect(thumb()).toEqual([coverSourceForKey('11110')]);
+    });
+
+    it.each<[string, Partial<Trip>]>([
+      ['null(자동)', { coverKey: null }],
+      ['칸 없음(옛 서버)', {}],
+      ['앱이 모르는 키', { coverKey: 'zz9' }],
+    ])('coverKey 가 %s 면 첫 목적지 그림(폴백)', async (_label, over) => {
+      setTrips([ended('e-jeju', { destinations: FIRST, ...over })]);
+
+      await renderPage();
+
+      expect(thumb()).toEqual([coverSourceForKey('26350')]);
+    });
+  });
+
+  // TRIP-1806 · 마이 탭 compact 행 — 64 칸엔 안 들어가 글자 줄에 쓰고, 행 라벨을 직접 주므로 낭독 라벨에도 넣는다.
+  describe('TRIP-1806 · 지난 여행 행 = 다른 지역 커버 이름', () => {
+    const ROOT = 'my-trip-reflection-e-jeju';
+    const NAME = `${ROOT}-cover-label`;
+    const JEJU_FIRST = [
+      { seq: 1, region: '제주시', nights: 2, regionCode: '50110' },
+    ];
+
+    it('첫 목적지와 다른 시도의 그림이면 행에 이름이 보이고 낭독 라벨에도 있다', async () => {
+      setTrips([
+        ended('e-jeju', { destinations: JEJU_FIRST, coverKey: '26350' }),
+      ]);
+
+      await renderPage();
+
+      expect(screen.getByTestId(NAME)).toHaveTextContent('그림 · 해운대');
+      expect(screen.getByTestId(ROOT).props.accessibilityLabel).toBe(
+        '제주 여행, 2026.5.1–5.3, 그림 · 해운대'
+      );
+    });
+
+    it.each<[string, Partial<Trip>]>([
+      ['자동(null)', { coverKey: null }],
+      ['같은 시도의 다른 곳', { coverKey: '50130' }],
+    ])('%s 면 행은 있고 이름은 없다', async (_label, over) => {
+      setTrips([ended('e-jeju', { destinations: JEJU_FIRST, ...over })]);
+
+      await renderPage();
+
+      expect(screen.getByTestId(`${ROOT}-cover`)).toBeOnTheScreen();
+      expect(screen.queryByTestId(NAME)).toBeNull();
+    });
   });
 
   describe('🔴 AC-3 · 지난 여행은 썸네일형 카드', () => {

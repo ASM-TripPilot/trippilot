@@ -180,3 +180,109 @@ describe('🔴 MV-R1 · TRIP-1793 AC-2 — 옮긴 슬롯은 대상 날에 startA
     expect(JSON.stringify(out)).not.toContain('moved');
   });
 });
+
+/**
+ * TRIP-1795 · AC-6·16 — 이 여행에서만 고친 이름·분류(`displayName`·`displayCategory`)를 저장 때 **다시 실어 보낸다**.
+ *
+ * 무엇을 보장하나: PUT 은 전체 교체라 조회 응답에서 받은 값을 안 실으면 **어느 경로로 저장하든 덮어쓰기가 조용히 사라진다**
+ * (슬롯 5필드만 골라 싣던 옛 구현의 결과). 값이 있는 슬롯만 해당 키를 싣고, 없는 슬롯은 키 자체가 없어 옛 서버·옛 응답에서도
+ * 요청 모양이 종전 5필드 그대로다.
+ *
+ * > *(개념)* `toEqual` 은 `{a:1, b:undefined}` 와 `{a:1}` 을 같다고 본다. "키가 없다"를 재려면 `Object.keys` 로 키 목록을 본다.
+ *
+ * 3동작 뼈대: 준비=덮어쓴/안 쓴 슬롯 섞은 days → 실행=buildEditItineraryRequest → 단언=요청 슬롯의 키 목록·값.
+ */
+describe('🔴 TRIP-1795 · 표시 이름·분류 보존 (AC-6·16)', () => {
+  const FIVE = ['poiId', 'startAt', 'endAt', 'isFixed', 'endsNextDay'];
+  const keysOf = (slot: object): string[] => Object.keys(slot).sort();
+
+  it('B1 · 두 칸이 다 있으면 5필드 + displayName·displayCategory 가 값 그대로 실린다 (원본 nameKo·category 는 여전히 안 실린다)', () => {
+    const days: ItineraryDaysItem[] = [
+      {
+        date: '2026-06-10',
+        slots: [
+          richSlot({
+            poiId: 'poi-a',
+            displayName: '우리 아지트',
+            displayCategory: '카페',
+          }),
+        ],
+      },
+    ];
+
+    const slot = buildEditItineraryRequest(days).days[0].slots[0];
+
+    expect(keysOf(slot)).toEqual(
+      [...FIVE, 'displayName', 'displayCategory'].sort()
+    );
+    expect(slot).toMatchObject({
+      displayName: '우리 아지트',
+      displayCategory: '카페',
+    });
+    expect(slot).not.toHaveProperty('nameKo');
+    expect(slot).not.toHaveProperty('category');
+  });
+
+  it('B2 · 한 칸만 있으면 그 키만, null·undefined 면 키 자체가 없다 (옛 서버·옛 응답은 종전 5필드 모양)', () => {
+    const days: ItineraryDaysItem[] = [
+      {
+        date: '2026-06-10',
+        slots: [
+          richSlot({ poiId: 'name-only', displayName: '이름만' }),
+          richSlot({ poiId: 'cat-only', displayCategory: '야경' }),
+          richSlot({
+            poiId: 'nulls',
+            displayName: null,
+            displayCategory: null,
+          }),
+          richSlot({ poiId: 'absent' }),
+        ],
+      },
+    ];
+
+    const [nameOnly, catOnly, nulls, absent] =
+      buildEditItineraryRequest(days).days[0].slots;
+
+    expect(keysOf(nameOnly)).toEqual([...FIVE, 'displayName'].sort());
+    expect(keysOf(catOnly)).toEqual([...FIVE, 'displayCategory'].sort());
+    // `null` 을 명시 키로 싣지 않는다 — 서버가 키 생략 = 덮어쓰기 없음으로 읽는다(계약).
+    expect(keysOf(nulls)).toEqual([...FIVE].sort());
+    expect(keysOf(absent)).toEqual([...FIVE].sort());
+  });
+
+  it('B3 · 여러 날·섞인 슬롯 — 값 있는 슬롯만 키를 달고 순서·시각 미지정 제외 규칙은 그대로, 제외된 슬롯의 덮어쓰기는 어디에도 새지 않는다', () => {
+    const unspecified = {
+      ...richSlot({ poiId: 'gone', displayName: '시각 없는 곳' }),
+      startAt: null,
+    };
+    const days = [
+      {
+        date: '2026-06-10',
+        slots: [
+          richSlot({ poiId: 'a', displayName: '첫째' }),
+          unspecified,
+          richSlot({ poiId: 'b' }),
+        ],
+      },
+      {
+        date: '2026-06-11',
+        slots: [richSlot({ poiId: 'c', displayCategory: '쇼핑' })],
+      },
+    ];
+
+    const out = buildEditItineraryRequest(days);
+
+    expect(out.days.map((d) => d.slots.map((s) => s.poiId))).toEqual([
+      ['a', 'b'],
+      ['c'],
+    ]);
+    expect(keysOf(out.days[0].slots[0])).toEqual(
+      [...FIVE, 'displayName'].sort()
+    );
+    expect(keysOf(out.days[0].slots[1])).toEqual([...FIVE].sort());
+    expect(keysOf(out.days[1].slots[0])).toEqual(
+      [...FIVE, 'displayCategory'].sort()
+    );
+    expect(JSON.stringify(out)).not.toContain('시각 없는 곳');
+  });
+});

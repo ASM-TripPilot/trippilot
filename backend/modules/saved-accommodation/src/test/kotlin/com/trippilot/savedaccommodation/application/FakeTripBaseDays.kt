@@ -17,6 +17,16 @@ internal class FakeTripBaseDays : TripBaseDayRepository {
         rows[day.tripId to day.dayDate] = day
         return day
     }
+
+    override fun shiftDates(tripId: UUID, days: Long) {
+        val moved = findByTrip(tripId).map { it.copy(dayDate = it.dayDate.plusDays(days)) }
+        rows.keys.removeAll { it.first == tripId }
+        moved.forEach(::save)
+    }
+
+    override fun deleteOutside(tripId: UUID, start: LocalDate, end: LocalDate) {
+        rows.keys.removeAll { (trip, date) -> trip == tripId && (date < start || date > end) }
+    }
 }
 
 internal class CapturingEvents : DomainEventPublisher {

@@ -235,6 +235,13 @@ def test_main이_폐업_건수를_stats에_남기고_0이면_키를_안_만든�
     assert merged["stats"]["unique_proposals"] == 2 and "closed_dropped" not in merged["stats"]
 
 
+def test_정제_제외_목록도_폐업_필터에_합쳐진다() -> None:
+    """병합이 소급 제거에 쓰는 집합에 들어 있어야 일일 수집이 그 행을 되돌려 넣지 못한다(TRIP-1811)."""
+    doc = json.loads((_DATA / "poi_excluded_filtered.json").read_text(encoding="utf-8"))
+    refs = {(e["source"], e["ref"]) for e in doc["excluded"]}
+    assert refs and refs <= load_closed_refs(_DATA / "poi_business_status.json")
+
+
 def test_공유본에_폐업_확인분이_남아_있지_않다() -> None:
     """⚠️ 픽스처가 아니라 **리포에 커밋된 실데이터 둘**(poi_business_status.json·collected_pois.json)을 읽는다.
 

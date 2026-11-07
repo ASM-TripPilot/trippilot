@@ -506,9 +506,9 @@ describe('숙소 하트 — 담기·롤백·연타', () => {
   });
 });
 
-// TRIP-1432 — 전국 d01 장소 레인은 실제 다지역 훅으로 서울·부산·제주를 지역당 200곳씩 따로 묻는다. 지역 없는
+// TRIP-1432·1807 — 전국 d01 장소 레인은 실제 다지역 훅으로 서비스 지역 6곳을 지역당 200곳씩 따로 묻는다. 지역 없는
 // 전국 조회는 안 나가고, 한두 곳이 실패해도 남은 지역 카드로 레인을 채운다(전부 실패만 재시도).
-describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
+describe('전국 d01 장소 레인 — 서비스 지역 6곳 조회', () => {
   function lanePlace(poiId: string, regionCode: string, photo: boolean): Place {
     return {
       poiId,
@@ -531,6 +531,9 @@ describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
     ),
     부산: [lanePlace('b0', '26350', true)],
     제주: [lanePlace('j0', '50110', false)],
+    강원: [lanePlace('g0', '51110', true)],
+    경북: [lanePlace('k0', '47130', true)],
+    경남: [lanePlace('n0', '48120', true)],
   };
 
   let placesQueries: {
@@ -572,7 +575,7 @@ describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
     );
   });
 
-  it('지역마다 200곳씩 3번 묻고 지역 없는 조회는 0건 — 레인 8장은 사진 먼저·지역 번갈아다', async () => {
+  it('지역마다 200곳씩 6번 묻고 지역 없는 조회는 0건 — 레인 8장은 사진 먼저·지역 번갈아로 강원·경북·경남이 섞인다', async () => {
     servePlaces();
     renderPage();
 
@@ -583,17 +586,18 @@ describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
     );
 
     expect(placesQueries.map((q) => q.region).sort()).toEqual(
-      ['부산', '서울', '제주'].sort()
+      ['강원', '경남', '경북', '부산', '서울', '제주'].sort()
     );
     expect(placesQueries.every((q) => q.limit === '200')).toBe(true);
     // TRIP-1563 — 무작위 시드는 d04 만 쓴다: d01 은 order·seed 를 안 보내 홈과 같은 이름순·같은 캐시를 유지한다.
     expect(
       placesQueries.every((q) => q.order === null && q.seed === null)
     ).toBe(true);
-    for (const id of ['s0', 's1', 's2', 's3', 's4', 's5', 's6']) {
+    // 사진 있는 5지역을 한 바퀴(서울·부산·강원·경북·경남) → 남은 사진 있는 서울로 8장. 사진 없는 제주는 밀린다.
+    for (const id of ['s0', 'b0', 'g0', 'k0', 'n0', 's1', 's2', 's3']) {
       expect(screen.getByTestId(`explore-place-card-${id}`)).toBeOnTheScreen();
     }
-    for (const id of ['s7', 's8', 'j0']) {
+    for (const id of ['s4', 's8', 'j0']) {
       expect(screen.queryByTestId(`explore-place-card-${id}`)).toBeNull();
     }
   });
@@ -614,8 +618,8 @@ describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
     expect(screen.queryByTestId('explore-lane-place-retry')).toBeNull();
   });
 
-  it('세 곳이 다 실패하면 장소 레인 자리에 재시도를 띄운다(빈 목록으로 위장하지 않는다)', async () => {
-    servePlaces(['서울', '부산', '제주']);
+  it('여섯 곳이 다 실패하면 장소 레인 자리에 재시도를 띄운다(빈 목록으로 위장하지 않는다)', async () => {
+    servePlaces(['서울', '부산', '제주', '강원', '경북', '경남']);
     renderPage();
 
     await waitFor(
@@ -651,7 +655,7 @@ describe('TRIP-1713 · 탐색 전국 장소 레인 캐시 정책', () => {
     server.use(
       http.get(`${BASE}/saved-places`, () => HttpResponse.json([])),
       http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
-      // 서비스 지역 3곳 × 3곳 = 9곳 — 레인은 8장만 그린다.
+      // 서비스 지역마다 3곳(표에 있는 지역만) — 레인은 8장만 그린다.
       http.get(`${BASE}/places`, ({ request }) => {
         const region = new URL(request.url).searchParams.get('region') ?? '';
         const items: Place[] = [0, 1, 2].map((i) => ({
@@ -698,10 +702,10 @@ describe('TRIP-1713 · 탐색 전국 장소 레인 캐시 정책', () => {
   const newClient = () => newTestQueryClient({ staleTime: 30_000 });
 
   it('EC1 30초는 넘고 10분 안에 전국 탐색을 다시 열면 GET /places 를 다시 받지 않고 카드 8장을 캐시로 그린다', async () => {
-    // 준비 — 처음 열어 3지역을 받아 둔다(앵커: 3건).
+    // 준비 — 처음 열어 서비스 지역을 받아 둔다(앵커: 6건).
     const client = newClient();
     await openAndClose(client);
-    expect(hitCount(PLACES_GET)).toBe(3);
+    expect(hitCount(PLACES_GET)).toBe(6);
 
     // 실행 — 5분 뒤 다시 연다.
     clock.advance(5 * MIN);
@@ -711,7 +715,7 @@ describe('TRIP-1713 · 탐색 전국 장소 레인 캐시 정책', () => {
     expect(hitCount(PLACES_GET)).toBe(0);
   });
 
-  it('EC2 (선제 green) 10분을 넘기고 다시 열면 3지역을 다시 받는다 — 무한 캐시가 아니다', async () => {
+  it('EC2 10분을 넘기고 다시 열면 6지역을 다시 받는다 — 무한 캐시가 아니다', async () => {
     // 준비
     const client = newClient();
     await openAndClose(client);
@@ -721,7 +725,72 @@ describe('TRIP-1713 · 탐색 전국 장소 레인 캐시 정책', () => {
     await reopen(client);
 
     // 단언
-    expect(hitCount(PLACES_GET)).toBe(3);
+    expect(hitCount(PLACES_GET)).toBe(6);
+  });
+});
+
+// TRIP-1809 — 피커에서 고른 시군구는 코드로 묻는다. 고성군은 경남(48820)·강원(51820) 둘이다.
+describe('TRIP-1809 · 동명 시군구 — 경상남도 고성군', () => {
+  function goseong(poiId: string, regionCode: string): Place {
+    return {
+      poiId,
+      nameKo: poiId,
+      category: '명소',
+      lat: 35,
+      lng: 128,
+      region: '고성군',
+      regionCode,
+      openingHours: null,
+      imageUrl: null,
+      tags: [],
+      savedCount: 0,
+      dataStatus: 'ACTIVE',
+    };
+  }
+
+  it('경남 고성군을 고르면 서버 코드 조회로 경남 장소만 그린다', async () => {
+    // 준비 — 새 서버 흉내: 코드가 있으면 접두사로만 거른다(코드를 안 보내면 두 고성군이 다 온다).
+    mockParams = { region: '48820' };
+    server.use(
+      http.get(`${BASE}/regions`, () =>
+        HttpResponse.json([
+          {
+            regionCode: '48820',
+            name: '고성군',
+            sidoName: '경상남도',
+            level: 'SIGUNGU',
+            selectable: true,
+            poiCount: 1,
+          },
+        ])
+      ),
+      http.get(`${BASE}/stays/curated`, () =>
+        HttpResponse.json({ city: '고성군', items: [] })
+      ),
+      http.get(`${BASE}/saved-places`, () => HttpResponse.json([])),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
+      http.get(`${BASE}/places`, ({ request }) => {
+        const code = new URL(request.url).searchParams.get('regionCode');
+        return HttpResponse.json({
+          items: [goseong('gn', '48820'), goseong('gw', '51820')].filter(
+            (place) => code === null || place.regionCode?.startsWith(code)
+          ),
+          nextCursor: null,
+        });
+      })
+    );
+    mockUseStaySearch.mockReturnValue(stayResults([]));
+
+    // 실행
+    renderPage();
+
+    // 단언
+    await waitFor(
+      () =>
+        expect(screen.getByTestId('explore-place-card-gn')).toBeOnTheScreen(),
+      WAIT
+    );
+    expect(screen.queryByTestId('explore-place-card-gw')).toBeNull();
   });
 });
 

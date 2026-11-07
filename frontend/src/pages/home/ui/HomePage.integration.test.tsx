@@ -88,7 +88,7 @@ const TITLE_OFFLINE = '인터넷에 연결되어 있지 않아요';
 const DESC_OFFLINE = '연결되면 자동으로 불러올게요';
 const TRIPS_GET = 'GET /api/v1/trips';
 
-/** 서비스 지역(서울·부산·제주) 각 4곳 = 12곳 — 앞 4장은 '지금 뜨는 장소', 다음 3장은 컬렉션 레인을 채우고도 남는다. */
+/** 서울·부산·제주 각 4곳 = 12곳(새 3시도는 0건) — 앞 4장은 '지금 뜨는 장소', 다음 3장은 컬렉션 레인을 채우고도 남는다. */
 function place(poiId: string, region: string, savedCount: number): Place {
   return {
     poiId,
@@ -409,16 +409,60 @@ describe('TRIP-1713 · 홈 장소 레인 캐시 정책', () => {
   }
   const newClient = () => newTestQueryClient({ staleTime: GLOBAL_STALE });
 
-  it('HC1 (선제 green) 여행이 없으면 첫 진입에 GET /places 는 서울·부산·제주 3건, 각 limit=200', async () => {
+  it('HC1 여행이 없으면 첫 진입에 GET /places 는 서비스 지역 6건, 각 limit=200 (TRIP-1807)', async () => {
     // 준비 → 실행
     await openAndClose(newClient());
 
     // 단언 — 변경 전후 같은 측정값(PR 표에 쓸 값).
-    expect(count(PLACES_GET)).toBe(3);
+    expect(count(PLACES_GET)).toBe(6);
     expect(placeQueries.map((q) => q.region).sort()).toEqual(
-      ['부산', '서울', '제주'].sort()
+      ['강원', '경남', '경북', '부산', '서울', '제주'].sort()
     );
     expect(placeQueries.every((q) => q.limit === '200')).toBe(true);
+  });
+
+  it('HC1b 담긴 수가 같으면 뜨는 장소·컬렉션 7장이 6지역을 번갈아 강원·경북·경남도 나온다 (TRIP-1807)', async () => {
+    // 준비 — 6지역 모두 사진 있는 장소 2곳, 담긴 수 0.
+    const CODE: Record<string, string> = {
+      서울: '11110',
+      부산: '26350',
+      제주: '50110',
+      강원: '51110',
+      경북: '47130',
+      경남: '48120',
+    };
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const region = new URL(request.url).searchParams.get('region') ?? '';
+        return HttpResponse.json({
+          items: [0, 1].map((i) => ({
+            ...place(`${region}-${i}`, region, 0),
+            regionCode: CODE[region],
+            imageUrl: `https://img.example/${region}-${i}.jpg`,
+          })),
+          nextCursor: null,
+        });
+      })
+    );
+
+    // 실행
+    renderWithQueryClient(<HomePage />, newClient());
+    await screen.findByTestId('home-collection-card-2');
+
+    // 단언 — 뜨는 장소 4칸의 마지막이 강원, 컬렉션 앞 두 칸이 경북·경남이다.
+    expect(
+      within(screen.getByTestId('home-spot-card-3')).getByText('장소 강원-0')
+    ).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('home-collection-card-0')).getByText(
+        '장소 경북-0'
+      )
+    ).toBeOnTheScreen();
+    expect(
+      within(screen.getByTestId('home-collection-card-1')).getByText(
+        '장소 경남-0'
+      )
+    ).toBeOnTheScreen();
   });
 
   it('HC2 (선제 green) 여행 중이면 첫 진입에 GET /places 는 첫 목적지(부산) 1건, limit=200', async () => {
@@ -434,10 +478,10 @@ describe('TRIP-1713 · 홈 장소 레인 캐시 정책', () => {
   });
 
   it('HC3 30초는 넘고 10분 안에 홈을 다시 열면 GET /places 를 다시 받지 않고 카드 4+3장을 캐시로 그린다', async () => {
-    // 준비 — 첫 진입으로 3지역을 받아 둔다(앵커: 3건).
+    // 준비 — 첫 진입으로 서비스 지역을 받아 둔다(앵커: 6건).
     const client = newClient();
     await openAndClose(client);
-    expect(count(PLACES_GET)).toBe(3);
+    expect(count(PLACES_GET)).toBe(6);
 
     // 실행 — 5분 뒤 다시 연다.
     clock.advance(5 * MIN);
@@ -449,7 +493,7 @@ describe('TRIP-1713 · 홈 장소 레인 캐시 정책', () => {
     expect(screen.getAllByTestId(/^home-collection-card-\d+$/)).toHaveLength(3);
   });
 
-  it('HC4 (선제 green) 10분을 넘기고 다시 열면 3지역을 다시 받는다 — 무한 캐시가 아니다', async () => {
+  it('HC4 10분을 넘기고 다시 열면 6지역을 다시 받는다 — 무한 캐시가 아니다', async () => {
     // 준비
     const client = newClient();
     await openAndClose(client);
@@ -459,7 +503,7 @@ describe('TRIP-1713 · 홈 장소 레인 캐시 정책', () => {
     await reopen(client);
 
     // 단언
-    expect(count(PLACES_GET)).toBe(3);
+    expect(count(PLACES_GET)).toBe(6);
   });
 
   it('HC5 여행 중 1지역도 같은 정책이다 — 10분 안에는 0건, 10분을 넘기면 1건', async () => {

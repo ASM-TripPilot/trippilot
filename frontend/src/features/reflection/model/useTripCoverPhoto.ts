@@ -4,7 +4,7 @@ import {
   getGetTripsTripIdVisitsVisitCheckIdPhotosQueryOptions,
   useGetTripsTripIdRecords,
 } from '@/shared/api/index.hooks';
-import { resolvePhotoUri } from '@/shared/photo';
+import { photoUriQueryOptions } from '@/shared/photo/index.view';
 import { getInstallId } from '@/shared/storage';
 
 import {
@@ -54,6 +54,9 @@ export function useTripCoverPhoto({
       candidates.map((v) => v.visitCheckId),
     ],
     enabled: on && candidates.length > 0,
+    // TRIP-1803 — 못 고른 표지(null)는 바로 낡은 값이라 앱 복귀 때 다시 고른다. 고른 표지는 앱 기본값 30초 그대로
+    // (함수가 undefined 를 돌려주면 react-query 는 "늘 낡음"으로 읽어 복귀마다 다시 고른다).
+    staleTime: (query) => (query.state.data === null ? 0 : 30_000),
     queryFn: async (): Promise<CoverPhoto | null> => {
       const installId = await getInstallId().catch(() => null);
       if (installId === null) return null; // 모르면 그리지 않는다(남의 기기 사진을 내 것으로 그리는 것보다 낫다).
@@ -67,11 +70,9 @@ export function useTripCoverPhoto({
           );
           const assetId = firstDevicePhotoId(list.items, installId);
           if (assetId === null) continue;
-          const uri = await queryClient.fetchQuery({
-            queryKey: ['photo-uri', assetId],
-            queryFn: () => resolvePhotoUri(assetId),
-            staleTime: Infinity,
-          });
+          const uri = await queryClient.fetchQuery(
+            photoUriQueryOptions(assetId)
+          );
           if (uri) return { uri, poiId: v.poiId };
         } catch {
           // 이 후보는 포기하고 다음 후보로.

@@ -46,6 +46,23 @@ function renderSheet(destinations: TripDestination[]) {
 }
 
 describe('AC-1 · 도시 행 렌더', () => {
+  it('이름이 같은 다른 지역은 행 이름·낭독 이름에 시도가 붙어 구별된다 (TRIP-1818)', () => {
+    renderSheet([
+      { seq: 1, region: '고성군', nights: 1, regionCode: '51820' },
+      { seq: 2, region: '고성군', nights: 1, regionCode: '48820' },
+    ]);
+
+    const row1 = screen.getByTestId('trip-wizard-destination-row-1');
+    const row2 = screen.getByTestId('trip-wizard-destination-row-2');
+    expect(within(row1).getByText('강원 고성군')).toBeOnTheScreen();
+    expect(within(row2).getByText('경남 고성군')).toBeOnTheScreen();
+    for (const action of ['1박 줄이기', '1박 늘리기', '빼기']) {
+      expect(
+        screen.getByRole('button', { name: `경남 고성군 ${action}` })
+      ).toBeOnTheScreen();
+    }
+  });
+
   it('행마다 도시명·"N박"·+/−·삭제× 를 그리고, 도시 추가·적용 버튼이 있다', () => {
     renderSheet(BUSAN2_GYEONGJU1);
 

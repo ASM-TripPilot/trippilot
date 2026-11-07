@@ -6,7 +6,8 @@
  * 그린다(시작=`-cell-start-`, 사이=`-cell-between-`, 종료=`-cell-end-`) — 색 fill 만으로 구분하면
  * jest 렌더 트리에서 관찰되지 않아 셋이 뒤바뀌어도 심판이 못 본다(repo-traps "글리프 fill 무심판").
  *
- * 이 시트는 **상태를 안 가진다**(무상태 D5) — 보는 달·고른 범위·개폐는 전부 배선(`TripNewStep1Page`)이
+ * 이 시트는 **상태를 안 가진다**(무상태 D5) — 보는 달·고른 범위·개폐는 전부 배선(위저드 `TripNewStep1Page`·
+ * 여행 설정 `TripSettingsPage`가 위젯으로 같이 쓴다, TRIP-1788 — 옵셔널 `note`·`onPressChangeLength`는 설정 화면 전용)이
  * 소유·갱신하고(TRIP-1027부터 셀 탭 = 새 시작, 끝 = 시작 + Σnights 파생), 시트는 완성형 props 를
  * 받아 그린 뒤 press 를 콜백으로 그대로 올린다. 그래서 "셀 탭 → 표식 변화"(전이)는 이 컴포넌트가 아니라 배선이 재렌더할 때 일어난다
  * (통합 테스트가 잡는다). 옛 `TripDateSheet`(로컬 `selected`/`month`)와 다른 결정이다.
@@ -60,6 +61,10 @@ export interface PeriodEditSheetProps {
   onApply: () => void;
   /** 딤 바깥 탭·아래로 스와이프 → 배선: 시트 닫기(TRIP-683 AC-2·AC-3). */
   onClose: () => void;
+  /** 안내 줄 문구 — 없으면 위저드 문구. 여행 설정 화면이 모드에 맞는 문구를 넘긴다(TRIP-1788). */
+  note?: string;
+  /** 있으면 안내 줄 아래에 「일수 바꾸기」 버튼을 그린다(여행 설정 전용) — 없으면 버튼 자체가 없다. */
+  onPressChangeLength?: () => void;
 }
 
 /** 셀 하나의 범위 상태. start·end 를 먼저 가르므로 `between`은 자연히 양 끝을 뺀 사이만이 된다. */
@@ -175,6 +180,8 @@ export function PeriodEditSheet({
   onNextMonth,
   onApply,
   onClose,
+  note,
+  onPressChangeLength,
 }: PeriodEditSheetProps): ReactElement {
   const [year, monthNum] = month.split('-').map(Number);
   const totalDays = daysInMonth(year, monthNum);
@@ -294,8 +301,20 @@ export function PeriodEditSheet({
         testID="trip-wizard-period-note"
         className="font-noto text-caption text-muted"
       >
-        종료일은 여행지에서 정한 박수로 정해져요
+        {note ?? '종료일은 여행지에서 정한 박수로 정해져요'}
       </Text>
+      {onPressChangeLength ? (
+        <Pressable
+          testID="trip-wizard-period-change-length"
+          accessibilityRole="button"
+          onPress={onPressChangeLength}
+          className="h-[40px] items-center justify-center rounded-button border border-hairline-strong"
+        >
+          <Text className="font-noto-bold text-label font-bold text-ink">
+            일수 바꾸기
+          </Text>
+        </Pressable>
+      ) : null}
     </SheetShell>
   );
 }

@@ -4,7 +4,11 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { FlatList, Linking } from 'react-native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -17,6 +21,7 @@ import {
 import type { ReactTestInstance } from 'react-test-renderer';
 import { router } from 'expo-router';
 
+import { buildSlotKey } from '@/entities/itinerary-slot';
 import { PlusGlyph } from '@/shared/ui/glyphs';
 import { server } from '@/mocks/server';
 import {
@@ -56,6 +61,7 @@ import {
   tripRecord,
 } from '@/test-support/tripRecordsFixtures';
 import { tripRecordsTrip } from '@/test-support/tripRecordsTrip';
+import { guardKeyWarnings } from '@/test-support/keyWarnings';
 
 import { TripRecordsPage } from './TripRecordsPage';
 import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
@@ -131,6 +137,8 @@ jest.mock('@/shared/photo', () => {
       mockPhotoSeam ? mockPick(opts) : actual.pickPhotoAssets(opts),
     resolvePhotoUri: (id: string) =>
       mockPhotoSeam ? mockResolveUri(id) : actual.resolvePhotoUri(id),
+    readPhotoAccess: () =>
+      mockPhotoSeam ? mockReadPhotoAccess() : actual.readPhotoAccess(),
   };
 });
 
@@ -143,6 +151,9 @@ jest.mock('@/shared/storage/installId', () => {
       mockPhotoSeam ? mockGetInstallId() : actual.getInstallId(),
   };
 });
+
+// TRIP-1812 AC-10 — React 는 겹친 key 를 console.error 로만 알린다. 파일 최상위에서 걸어 모든 테스트 뒤에 0 을 단언한다.
+guardKeyWarnings();
 
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = 't1';
@@ -173,6 +184,7 @@ const hitCount = (needle: string) =>
   observedHits.filter((hit) => hit === needle).length;
 const mockPick = jest.fn();
 const mockResolveUri = jest.fn();
+const mockReadPhotoAccess = jest.fn();
 const mockGetInstallId = jest.fn();
 
 beforeAll(() => {
@@ -321,6 +333,45 @@ describe('기본 — 일자 탭·사진/메모 슬롯·[방문 추가]·메모 �
 
       // 부정 — 옛 영문 라벨은 사라진다(구현 전엔 present 라 red).
       expect(screen.queryByText('Day1')).toBeNull();
+    });
+  });
+
+  describe('TRIP-1795 · Q5 — 이 여행에서 고친 이름이 방문 기록 카드에도 보인다', () => {
+    it('일정 슬롯의 고친 이름이 완료 방문 카드 제목이 되고(원본은 안 보인다), 고치지 않은 슬롯은 원본 이름 그대로다', async () => {
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+          HttpResponse.json(
+            tripItinerary(
+              [
+                {
+                  date: '2026-08-20',
+                  slots: [
+                    daySlot('p1', '광안리 해변', {
+                      displayName: '우리 아지트',
+                    }),
+                    // 방문 기록이 없는 슬롯 — 「계획 행」(`nameKo: slotDisplayName(slot)`)에도 고친 이름이 보인다.
+                    daySlot('p9', '송정 해변', { displayName: '내 해변' }),
+                  ],
+                },
+                {
+                  date: '2026-08-21',
+                  slots: [daySlot('p2', '부산시립미술관')],
+                },
+              ],
+              TRIP_ID
+            )
+          )
+        )
+      );
+      render(<TripRecordsPage tripId={TRIP_ID} />, { wrapper });
+
+      await screen.findByText('우리 아지트');
+      expect(screen.queryByText('광안리 해변')).toBeNull();
+      const planRow = await screen.findByTestId(
+        `record-trip-plan-row-${buildSlotKey('2026-08-20', 'p9')}`
+      );
+      expect(within(planRow).getByText('내 해변')).toBeOnTheScreen();
+      expect(screen.queryByText('송정 해변')).toBeNull();
     });
   });
 
@@ -2333,6 +2384,43 @@ describe('계획 행 — 조인·「방문 체크」 도착·조회 실패·오�
   });
 
   describe('TripRecordsPage · 계획 행 조인 (TRIP-1021 AC-10·AC-13)', () => {
+    // TRIP-1812 AC-10 — 번호는 그 행의 자리다. slotKey 로 찾으면 같은 장소 두 행이 뒤 자리 번호로 겹친다.
+    it('R11 같은 장소 두 계획 행은 각자 자기 자리 번호를 그린다 — p3 1·3, p4 2', async () => {
+      // 준비 — 그날 [p3, p4, p3], 방문 0건.
+      mockGetForeground.mockResolvedValue(DENIED);
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+          HttpResponse.json(
+            tripItinerary(
+              [
+                {
+                  date: DAY,
+                  slots: [
+                    daySlotAt('p3', '○○ 카페', '10:00:00'),
+                    daySlotAt('p4', '△△ 미술관', '13:00:00'),
+                    daySlotAt('p3', '○○ 카페', '15:00:00'),
+                  ],
+                },
+              ],
+              TRIP_ID
+            )
+          )
+        )
+      );
+
+      // 실행
+      render(<TripRecordsPage tripId={TRIP_ID} today={DAY} />, { wrapper });
+
+      // 단언 — 앵커: 행이 정말 둘. 번호는 각자.
+      expect(await screen.findAllByTestId(rowId(KEY_P3))).toHaveLength(2);
+      const orders = screen.getAllByTestId(`record-trip-plan-order-${KEY_P3}`);
+      expect(orders[0]).toHaveTextContent('1');
+      expect(orders[1]).toHaveTextContent('3');
+      expect(
+        screen.getByTestId(`record-trip-plan-order-${KEY_P4}`)
+      ).toHaveTextContent('2');
+    });
+
     it('R1 방문 0건 → 빈 상태 안내 + 계획 2곳 행, 수동 모드 부제(법 문구)도 그대로 있다', async () => {
       mockGetForeground.mockResolvedValue(DENIED);
 
@@ -3555,6 +3643,7 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
       .mockReset()
       .mockImplementation(async (id: string) => `file:///photos/${id}.jpg`);
     mockGetInstallId.mockReset().mockResolvedValue('dev-A');
+    mockReadPhotoAccess.mockReset().mockResolvedValue('all');
     setAccessToken('a');
     server.use(
       // TRIP-1085 — 페이지가 시트 헤더 여행명을 GET /trips/{tripId} 로 얻는다.
@@ -3703,6 +3792,198 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
     });
   });
 
+  /**
+   * TRIP-1803 · 셀 문구만으로는 왜 안 보이는지 모른다 — 권한이 limited·거부면 카드에 안내 한 줄 + 사용자가 누르는 [설정 열기](팝업 0).
+   * 무엇을 보장하나: 안내는 못 푼 **내 기기** 사진이 있고 권한이 limited·거부일 때만 · 다 풀리면 권한을 묻지 않는다 ·
+   *   첨부 안내의 [설정 열기] 가 떠 있으면 숨겨 버튼이 둘이 되지 않는다 · 복귀 때 못 푼 사진만 다시 묻는다.
+   * (개념) `staleTime: 30_000` = 앱 기본값. 기본 0 이면 공허 통과한다(02a ★1).
+   */
+  describe('🔴 TRIP-1803 · 못 푼 사진 안내와 복귀', () => {
+    const NOTICE_1803 = 'record-trip-photo-access-notice-v-a';
+    const SETTINGS_1803 = `${NOTICE_1803}-settings`;
+    const uriCalls = (id: string) =>
+      mockResolveUri.mock.calls.filter(([arg]) => arg === id).length;
+    const goneIs3 = async (id: string) =>
+      id === 'asset-3' ? null : `file:///photos/${id}.jpg`;
+
+    beforeEach(() => {
+      serverPhotos = [
+        serverPhoto('ph1', 'asset-1', 'dev-A'),
+        serverPhoto('ph-gone', 'asset-3', 'dev-A'),
+      ];
+      mockResolveUri.mockImplementation(goneIs3);
+    });
+    afterEach(() => focusManager.setFocused(undefined)); // 모듈 싱글턴.
+
+    it('J1 못 푼 사진 + 선택한 사진만 → 셀 문구와 안내, [설정 열기] 누르면 설정 1회, 피커는 안 연다', async () => {
+      mockReadPhotoAccess.mockResolvedValue('limited');
+      const openSettings = jest
+        .spyOn(Linking, 'openSettings')
+        .mockResolvedValue(undefined);
+      const user = userEvent.setup();
+
+      await renderCard();
+
+      expect(
+        await screen.findByTestId('record-photo-unavailable-ph-gone')
+      ).toBeOnTheScreen();
+      expect(await screen.findByTestId(NOTICE_1803)).toBeOnTheScreen();
+      await user.press(screen.getByTestId(SETTINGS_1803));
+      expect(openSettings).toHaveBeenCalledTimes(1);
+      expect(mockPick).not.toHaveBeenCalled();
+      openSettings.mockRestore();
+    });
+
+    it('J2 (E-5) 못 푼 사진 + 거부 → 안내가 선다', async () => {
+      mockReadPhotoAccess.mockResolvedValue('denied');
+
+      await renderCard();
+
+      expect(await screen.findByTestId(SETTINGS_1803)).toBeOnTheScreen();
+    });
+
+    it('TRIP-1820 · [설정 열기] 는 사진 줄 위에 있다 — 시트 중간 칸은 안쪽이 스크롤되지 않아 아래에 두면 하단 바에 가린다', async () => {
+      mockReadPhotoAccess.mockResolvedValue('limited');
+      const card = await renderCard();
+      await within(card).findByTestId(SETTINGS_1803);
+
+      // 트리 순서대로 돌려준다 — 위치 픽셀은 실화면 몫(기능 지도).
+      const order = within(card)
+        .getAllByTestId(
+          new RegExp(`^(${SETTINGS_1803}|record-trip-photo-strip)$`)
+        )
+        .map((node) => node.props.testID);
+      expect(order).toEqual([SETTINGS_1803, 'record-trip-photo-strip']);
+    });
+
+    it('TRIP-1820 · 첨부 안내의 [설정 열기] 도 사진 줄 위에 있다', async () => {
+      serverPhotos = [];
+      mockPick.mockResolvedValue({ kind: 'denied' });
+      const card = await renderCard();
+
+      fireEvent.press(await within(card).findByTestId('record-trip-photo-add'));
+      await within(card).findByTestId('record-trip-photo-settings');
+
+      const order = within(card)
+        .getAllByTestId(/^record-trip-photo-(notice-v-a|settings|strip)$/)
+        .map((node) => node.props.testID);
+      expect(order).toEqual([
+        'record-trip-photo-notice-v-a',
+        'record-trip-photo-settings',
+        'record-trip-photo-strip',
+      ]);
+    });
+
+    it('TRIP-1820 · 거부 상태에서 `+` 를 연타해도 둘째 탭이 그 자리로 내려온 [설정 열기] 를 관통하지 않는다', async () => {
+      // 준비 — 사진 0장 · 거부. 시각을 멈춰 400ms 창 안의 연타를 만든다.
+      serverPhotos = [];
+      mockPick.mockResolvedValue({ kind: 'denied' });
+      const openSettings = jest
+        .spyOn(Linking, 'openSettings')
+        .mockResolvedValue(undefined);
+      const card = await renderCard();
+      const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+
+      // 실행 — `+` 를 눌러 안내가 뜨고, 같은 창 안에 그 자리 버튼을 누른다.
+      fireEvent.press(await within(card).findByTestId('record-trip-photo-add'));
+      const settings = await within(card).findByTestId(
+        'record-trip-photo-settings'
+      );
+      fireEvent.press(settings);
+
+      // 단언 — 설정 앱이 안 열린다. 창이 지나면 정상으로 열린다.
+      expect(openSettings).not.toHaveBeenCalled();
+      now.mockReturnValue(1_000_400);
+      fireEvent.press(settings);
+      expect(openSettings).toHaveBeenCalledTimes(1);
+      now.mockRestore();
+      openSettings.mockRestore();
+    });
+
+    it('J3 (E-4) 못 푼 사진 + 전체 허용 → 셀 문구만 있고 안내·버튼은 없다', async () => {
+      await renderCard();
+
+      expect(
+        await screen.findByTestId('record-photo-unavailable-ph-gone')
+      ).toBeOnTheScreen();
+      await waitFor(() => expect(mockReadPhotoAccess).toHaveBeenCalled());
+      await settle();
+      expect(screen.queryByTestId(NOTICE_1803)).toBeNull();
+      expect(screen.queryByTestId(SETTINGS_1803)).toBeNull();
+    });
+
+    it('J4 다 풀리면 권한을 묻지 않고 안내도 없다', async () => {
+      serverPhotos = [serverPhoto('ph1', 'asset-1', 'dev-A')];
+
+      await renderCard();
+
+      expect(
+        await screen.findByTestId('record-photo-available-ph1')
+      ).toBeOnTheScreen();
+      await settle();
+      expect(mockReadPhotoAccess).not.toHaveBeenCalled();
+      expect(screen.queryByTestId(NOTICE_1803)).toBeNull();
+    });
+
+    it('J5 (E-6) 다른 기기 사진만 있으면 앨범도 권한도 묻지 않는다', async () => {
+      serverPhotos = [serverPhoto('ph-other', 'asset-2', 'dev-B')];
+
+      await renderCard();
+
+      expect(
+        await screen.findByTestId('record-photo-other-device-ph-other')
+      ).toBeOnTheScreen();
+      await settle();
+      expect(mockResolveUri).not.toHaveBeenCalled();
+      expect(mockReadPhotoAccess).not.toHaveBeenCalled();
+      expect(screen.queryByTestId(NOTICE_1803)).toBeNull();
+    });
+
+    it('J6 (AC-2 · E-3) 넓히고 복귀하면 못 푼 사진만 다시 물어 썸네일이 되고 안내가 사라지며, 풀린 사진은 다시 안 묻는다', async () => {
+      mockReadPhotoAccess.mockResolvedValue('limited');
+      render(<TripRecordsPage tripId={TRIP_ID} today={DAY} />, {
+        wrapper: createWrapper(
+          newTestQueryClient({ gcTime: 0, staleTime: 30_000 })
+        ),
+      });
+      expect(await screen.findByTestId(SETTINGS_1803)).toBeOnTheScreen();
+
+      // 설정에서 넓혔다 — 복귀 전에는 다시 안 묻는다.
+      mockResolveUri.mockImplementation(
+        async (id: string) => `file:///photos/${id}.jpg`
+      );
+      mockReadPhotoAccess.mockResolvedValue('all');
+      await settle();
+      expect(uriCalls('asset-3')).toBe(1);
+
+      act(() => focusManager.setFocused(false));
+      act(() => focusManager.setFocused(true));
+
+      expect(
+        await screen.findByTestId('record-photo-thumb-image-ph-gone')
+      ).toBeOnTheScreen();
+      await waitFor(() =>
+        expect(screen.queryByTestId(SETTINGS_1803)).toBeNull()
+      );
+      expect(uriCalls('asset-3')).toBe(2);
+      expect(uriCalls('asset-1')).toBe(1);
+    });
+
+    it('J7 첨부 안내의 [설정 열기] 가 떠 있으면 새 안내를 숨겨 버튼이 하나다', async () => {
+      mockReadPhotoAccess.mockResolvedValue('denied');
+      mockPick.mockResolvedValue({ kind: 'denied' });
+      const card = await renderCard();
+      expect(await screen.findByTestId(SETTINGS_1803)).toBeOnTheScreen();
+
+      fireEvent.press(await within(card).findByTestId('record-trip-photo-add'));
+
+      expect(
+        await within(card).findByTestId('record-trip-photo-settings')
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId(SETTINGS_1803)).toBeNull();
+    });
+  });
+
   describe('🔴 AC-8 · j01 에서도 좌표는 GPS 기록 동의가 켜졌을 때만 (BR-U5-12)', () => {
     // 허브 L4 의 "동의 조회 실패(500) → 끈 것으로 보고 좌표 없음"을 옮겨 왔다(TRIP-1354) — 같은 pickPhotoForVisit 이다.
     it.each<[string, boolean | 'error']>([
@@ -3757,7 +4038,8 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
         await settle();
         expect(hitCount(PHOTOS_POST)).toBe(0);
 
-        // 실행 — 다시 `+`(이번엔 취소).
+        // 실행 — 시간이 지나(연타 창 닫힘) 다시 `+`(이번엔 취소).
+        resetPressGuard();
         mockPick.mockResolvedValueOnce({ kind: 'canceled' });
         fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
         await waitFor(() => expect(mockPick).toHaveBeenCalledTimes(2));
@@ -3780,11 +4062,14 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
         within(card).queryByTestId('record-trip-photo-settings')
       ).toBeNull();
 
+      resetPressGuard();
       mockPick.mockResolvedValueOnce({ kind: 'denied' });
       fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
-      fireEvent.press(
-        await within(card).findByTestId('record-trip-photo-settings')
+      const settings = await within(card).findByTestId(
+        'record-trip-photo-settings'
       );
+      resetPressGuard();
+      fireEvent.press(settings);
 
       expect(openSettings).toHaveBeenCalledTimes(1);
       openSettings.mockRestore();

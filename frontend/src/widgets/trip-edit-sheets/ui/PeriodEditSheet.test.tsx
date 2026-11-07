@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import type { TripDateRange } from '@/pages/trip/trip-new-step1/model/tripDatePicker';
+import type { TripDateRange } from '../model/tripDatePicker';
 
 import { PeriodEditSheet } from './PeriodEditSheet';
 
@@ -52,6 +52,8 @@ interface PeriodEditSheetPropsForTest {
   onNextMonth: () => void;
   onApply: () => void;
   onClose: () => void;
+  note?: string;
+  onPressChangeLength?: () => void;
 }
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -457,5 +459,46 @@ describe('요약줄 — 올해가 아니면 연도를 붙인다 (TRIP-1285 결�
     expect(screen.getByTestId('trip-wizard-period-summary')).toHaveTextContent(
       '5월 15일(화) – 17일(목)'
     );
+  });
+});
+
+/**
+ * TRIP-1788 · 여행 설정 화면이 이 시트를 재사용한다(위저드 위치에서 `widgets/trip-edit-sheets` 로 승격).
+ * 설정판은 옵셔널 prop 둘로만 위저드판과 다르다 — 안내 문구(`note`)와 「일수 바꾸기」 버튼(`onPressChangeLength`).
+ * 안 주면 위저드 그대로(문구·버튼 없음)가 무회귀 앵커이고, 주면 문구가 바뀌고 버튼이 생긴다.
+ */
+describe('설정판 옵셔널 prop (note · onPressChangeLength)', () => {
+  const CHANGE = 'trip-wizard-period-change-length';
+
+  it('새 prop 을 안 주면 위저드 문구 그대로이고 「일수 바꾸기」 버튼은 없다(무회귀)', () => {
+    renderSheet({ range: { start: '2026-06-10', end: '2026-06-13' } });
+
+    expect(screen.getByTestId('trip-wizard-period-note')).toHaveTextContent(
+      '종료일은 여행지에서 정한 박수로 정해져요'
+    );
+    expect(screen.queryByTestId(CHANGE)).toBeNull();
+    expect(screen.queryByText('일수 바꾸기')).toBeNull();
+  });
+
+  it('note 를 주면 안내 줄의 글자가 그 값으로 바뀐다(testID 는 그대로)', () => {
+    renderSheet({ note: '일수는 그대로 두고 시작일만 옮겨요' });
+
+    expect(screen.getByTestId('trip-wizard-period-note')).toHaveTextContent(
+      '일수는 그대로 두고 시작일만 옮겨요'
+    );
+    expect(
+      screen.queryByText('종료일은 여행지에서 정한 박수로 정해져요')
+    ).toBeNull();
+  });
+
+  it('onPressChangeLength 를 주면 「일수 바꾸기」 버튼이 생기고 누르면 그 콜백이 1번 불린다', () => {
+    const onPressChangeLength = jest.fn();
+    renderSheet({ onPressChangeLength });
+
+    expect(onPressChangeLength).not.toHaveBeenCalled();
+    expect(screen.getByTestId(CHANGE)).toHaveTextContent('일수 바꾸기');
+    fireEvent.press(screen.getByTestId(CHANGE));
+
+    expect(onPressChangeLength).toHaveBeenCalledTimes(1);
   });
 });

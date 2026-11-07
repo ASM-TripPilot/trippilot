@@ -1109,7 +1109,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
         container = pod["containers"][0]
         self.assertEqual(container["image"], "123.dkr.ecr/ai:sha-1")
         shell = container["command"][2]
-        self.assertIn("/scripts/ingest_pois.py --base-url http://backend:8080 /app/data/collected_pois.json", shell)
+        self.assertIn('/scripts/ingest_pois.py --base-url http://backend:8080 "$@"', shell)
         self.assertNotIn("--close-missing", shell)
         self.assertEqual(container["workingDir"], "/tmp")  # 되돌리기 SQL 이 쓰이는 곳(루트는 읽기 전용)
         env = {e["name"]: e for e in container["env"]}
@@ -1125,15 +1125,66 @@ class RuntimeIntegrationTests(unittest.TestCase):
         # 드라이런은 "닫힐 수"만 묻고 **그 다음 평소대로 upsert** — 드라이런이 upsert 를 대신하면 그 배포는 공유본을 안 붓는다.
         probing = runtime_pois.manifest("trippilot", "img", "x", close_missing_dry_run=True)
         probing_shell = probing["items"][1]["spec"]["template"]["spec"]["containers"][0]["command"][2]
-        dry, _, real = probing_shell.partition("; ")
-        self.assertIn("--dry-run --close-missing", dry)
-        self.assertNotIn("&&", probing_shell)  # 드라이런이 409 로 끝나도 적재는 간다 — 정보용이지 게이트가 아니다
-        self.assertIn("/app/data/collected_pois.json;", real)
-        self.assertNotIn("--close-missing", real.split(";")[0])
+        dry, real = [part for part in probing_shell.split("; ") if "ingest_pois.py" in part]
+        self.assertIn('--dry-run --close-missing "$@"', dry)
+        self.assertNotIn("&& /app/.venv", probing_shell)  # 드라이런이 409 로 끝나도 적재는 간다 — 정보용이지 게이트가 아니다
+        self.assertTrue(real.endswith('"$@"'), real)
+        self.assertNotIn("--close-missing", real)
         self.assertNotIn("--allow-mass-close", probing_shell)
         # 실제 close_missing 이 켜져 있으면 드라이런은 뜻이 없어 건너뛴다
         both = runtime_pois.manifest("trippilot", "img", "x", close_missing=True, close_missing_dry_run=True)
         self.assertNotIn("--dry-run", both["items"][1]["spec"]["template"]["spec"]["containers"][0]["command"][2])
+
+    def _run_load_shell(self, *, regions, exit_code=0, **flags):
+        """Job 의 셸을 실제 `sh` 로 돌린다 — 파이썬 자리에 인자를 적는 가짜, `/app/data` 자리에 임시 폴더.
+        문자열만 보면 `set --`·`"$@"` 를 잘못 이어도 통과한다(셸이 그렇게 풀어 주는지가 계약이다)."""
+        import os
+        import stat
+        import subprocess
+        import tempfile
+        import runtime_pois
+        with tempfile.TemporaryDirectory() as folder:
+            data = os.path.join(folder, "data")
+            os.mkdir(data)
+            open(os.path.join(data, "collected_pois.json"), "w", encoding="utf-8").close()
+            if regions:
+                open(os.path.join(data, "collected_pois_regions.json"), "w", encoding="utf-8").close()
+            calls = os.path.join(folder, "calls")
+            fake = os.path.join(folder, "python")
+            with open(fake, "w", encoding="utf-8") as stream:
+                stream.write(f'#!/bin/sh\necho "$*" >> {calls}\nexit {exit_code}\n')
+            os.chmod(fake, os.stat(fake).st_mode | stat.S_IXUSR)
+            bundle = runtime_pois.manifest("trippilot", "img", "x", **flags)
+            shell = bundle["items"][1]["spec"]["template"]["spec"]["containers"][0]["command"][2]
+            shell = shell.replace("/app/.venv/bin/python", fake).replace("/app/data", data)
+            done = subprocess.run(["/bin/sh", "-c", shell], capture_output=True, text=True, timeout=30, check=False)
+            with open(calls, encoding="utf-8") as stream:
+                lines = stream.read().replace(data, "/app/data").splitlines()
+        return done.returncode, lines
+
+    def test_load_pois_without_regions_document_runs_the_same_command_as_before(self):
+        """지역 문서가 없는 이미지는 지금과 같다 — 공유본 한 장, 종료 코드는 스크립트의 것."""
+        one = "/scripts/ingest_pois.py --base-url http://backend:8080 /app/data/collected_pois.json"
+        self.assertEqual(self._run_load_shell(regions=False), (0, [one]))
+        self.assertEqual(self._run_load_shell(regions=False, exit_code=2), (2, [one]))
+        self.assertEqual(self._run_load_shell(regions=False, close_missing=True)[1],
+                         ["/scripts/ingest_pois.py --base-url http://backend:8080 --close-missing /app/data/collected_pois.json"])
+        self.assertEqual(self._run_load_shell(regions=False, close_missing_dry_run=True)[1],
+                         ["/scripts/ingest_pois.py --base-url http://backend:8080 --dry-run --close-missing /app/data/collected_pois.json", one])
+
+    def test_load_pois_with_regions_document_sends_it_after_the_shared_one(self):
+        """순서가 곧 결정이다 — 겹치는 행은 뒤가 덮으므로 지역 문서가 공유본 뒤에 가야 지역 값이 남는다."""
+        both = ("/scripts/ingest_pois.py --base-url http://backend:8080 "
+                "/app/data/collected_pois.json /app/data/collected_pois_regions.json")
+        self.assertEqual(self._run_load_shell(regions=True), (0, [both]))
+        self.assertEqual(self._run_load_shell(regions=True, exit_code=2), (2, [both]))
+        # 닫기·드라이런도 두 문서를 함께 넘긴다 — 스크립트가 합쳐서 대조한다(하나만 넘기면 지역 문서 행이 닫힌다).
+        self.assertIn("--close-missing /app/data/collected_pois.json /app/data/collected_pois_regions.json",
+                      self._run_load_shell(regions=True, close_missing=True)[1][0])
+        code, lines = self._run_load_shell(regions=True, close_missing_dry_run=True)
+        self.assertEqual(code, 0)
+        self.assertEqual(lines[1], both)
+        self.assertIn("--dry-run --close-missing /app/data/collected_pois.json /app/data/collected_pois_regions.json", lines[0])
 
     def test_load_pois_runs_waits_prints_the_summary_and_cleans_up(self):
         summary = "합계 — 접수=19084 신규=689 갱신=18395 지역코드미상=0\n탈락 없음"

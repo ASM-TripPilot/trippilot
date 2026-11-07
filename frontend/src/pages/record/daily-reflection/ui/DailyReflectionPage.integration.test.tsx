@@ -1,6 +1,11 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Linking } from 'react-native';
+import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -60,8 +65,14 @@ jest.mock('@/shared/storage', () => ({
 }));
 
 // TRIP-1757 — 앨범 주소 조회. 실물 사진 훅을 켠 describe 에서만 불린다.
+// TRIP-1803 — `gone` 으로 시작하는 번호는 앨범이 못 푼다. 안내가 권한 수준을 묻는다.
+const mockReadPhotoAccess = jest.fn();
+let mockGoneResolves = false;
 jest.mock('@/shared/photo', () => ({
-  resolvePhotoUri: jest.fn(async (id: string) => `file://${id}`),
+  resolvePhotoUri: jest.fn(async (id: string) =>
+    id.startsWith('gone') && !mockGoneResolves ? null : `file://${id}`
+  ),
+  readPhotoAccess: () => mockReadPhotoAccess(),
 }));
 
 // TRIP-1584 — 하단 바가 `useTripSummary`(GET /summary)를 읽는다. `onUnhandledRequest:'error'` 라 스텁(조회 중)으로 막는다.
@@ -90,6 +101,7 @@ jest.mock('../model/useReflectionPhotos', () => {
         ? actual.useReflectionPhotos(tripId, date)
         : {
             photos: [],
+            unresolvedCount: 0,
             photoLoadFailed: false,
             photoLoadRetrying: false,
             retryPhotoLoad: () => {},
@@ -2432,5 +2444,133 @@ describe('TRIP-1757 · 보조 조회(여행·그날 방문·방문별 사진) �
 
     fireEvent.press(screen.getByTestId(`${P}-edit-cancel`));
     expect(await screen.findByTestId(LINE)).toBeOnTheScreen();
+  });
+
+  /**
+   * TRIP-1803 · 회고 격자는 칸을 빼되 조용히 지우지 않는다 — 격자 곁에 「불러올 수 없는 사진 N장」 + 권한 안내(D5·D6 · BR-U5-14·34).
+   * 무엇을 보장하나: 한 줄은 못 푼 장수만큼 · 전부 못 풀어도 「사진 없음」으로 접지 않는다(사진은 있다) ·
+   *   안내·[설정 열기]는 권한이 limited·거부일 때만 · 다 풀리면 권한을 묻지 않는다 · 복귀에 풀린다.
+   * 격자 "아래"라는 위치는 생김새라 기능 지도 몫이다.
+   * 3동작: 준비(서버 사진·권한) → 실행(렌더·누름·복귀) → 단언(줄·안내·칸 없음).
+   */
+  describe('🔴 TRIP-1803 · 못 푼 사진 한 줄과 권한 안내', () => {
+    const UNRESOLVED = `${P}-photo-unresolved`;
+    const NOTICE = `${P}-photo-access-notice`;
+    const SETTINGS = `${NOTICE}-settings`;
+    const GRID = `${P}-photo-grid`;
+
+    function servePhotos(items: Record<string, string[]>) {
+      server.use(
+        http.get(
+          `${BASE}/trips/:tripId/visits/:visitCheckId/photos`,
+          ({ params }) => {
+            const ids = items[String(params.visitCheckId)] ?? [];
+            return HttpResponse.json({
+              items: ids.map((localAssetId, sortOrder) => ({
+                visitPhotoMetaId: `meta-${localAssetId}`,
+                localAssetId,
+                deviceId: 'me',
+                sortOrder,
+              })),
+              count: ids.length,
+            });
+          }
+        )
+      );
+    }
+
+    beforeEach(() => {
+      mockGoneResolves = false;
+      mockReadPhotoAccess.mockReset().mockResolvedValue('all');
+    });
+    afterEach(() => {
+      mockGoneResolves = false;
+      focusManager.setFocused(undefined); // 모듈 싱글턴.
+    });
+
+    it('G1 한 장 못 풀고 선택한 사진만 → 한 줄 + 안내, [설정 열기] 누르면 설정 1회, 풀린 칸은 격자에 남는다', async () => {
+      mockReadPhotoAccess.mockResolvedValue('limited');
+      servePhotos({ v1: ['a', 'gone-1'] });
+      const openSettings = jest
+        .spyOn(Linking, 'openSettings')
+        .mockResolvedValue(undefined);
+      const user = userEvent.setup();
+
+      renderPage();
+
+      expect(await screen.findByTestId(UNRESOLVED)).toHaveTextContent(
+        '불러올 수 없는 사진 1장'
+      );
+      expect(await screen.findByTestId(SETTINGS)).toBeOnTheScreen();
+      expect(screen.getByTestId(NOTICE)).toBeOnTheScreen();
+      expect(screen.getByTestId(GRID)).toBeOnTheScreen();
+      await user.press(screen.getByTestId(SETTINGS));
+      expect(openSettings).toHaveBeenCalledTimes(1);
+      openSettings.mockRestore();
+    });
+
+    it('G2 전부 못 풀어도 「사진 없음」으로 접지 않고 장수를 말한다', async () => {
+      servePhotos({ v1: ['gone-1'], v2: ['gone-2'] });
+
+      renderPage();
+
+      expect(await screen.findByTestId(UNRESOLVED)).toHaveTextContent(
+        '불러올 수 없는 사진 2장'
+      );
+      expect(screen.queryByTestId(`${P}-photo-empty`)).toBeNull();
+    });
+
+    it('G3 (E-4) 전체 허용 → 한 줄만 있고 안내·버튼은 없다', async () => {
+      servePhotos({ v1: ['gone-1'] });
+
+      renderPage();
+
+      expect(await screen.findByTestId(UNRESOLVED)).toBeOnTheScreen();
+      await waitFor(() => expect(mockReadPhotoAccess).toHaveBeenCalled());
+      await settle();
+      expect(screen.queryByTestId(NOTICE)).toBeNull();
+      expect(screen.queryByTestId(SETTINGS)).toBeNull();
+    });
+
+    it('G4 다 풀리면 한 줄도 안내도 없고 권한을 묻지 않는다', async () => {
+      servePhotos({ v1: ['a'] });
+
+      renderPage();
+
+      expect(await screen.findByTestId(GRID)).toBeOnTheScreen();
+      await settle();
+      expect(screen.queryByTestId(UNRESOLVED)).toBeNull();
+      expect(screen.queryByTestId(NOTICE)).toBeNull();
+      expect(mockReadPhotoAccess).not.toHaveBeenCalled();
+    });
+
+    it('G5 (E-5) 거부 → 안내와 버튼이 선다', async () => {
+      mockReadPhotoAccess.mockResolvedValue('denied');
+      servePhotos({ v1: ['gone-1'] });
+
+      renderPage();
+
+      expect(await screen.findByTestId(SETTINGS)).toBeOnTheScreen();
+    });
+
+    it('G6 (AC-2) 넓히고 복귀하면 한 줄과 안내가 사라진다', async () => {
+      mockReadPhotoAccess.mockResolvedValue('limited');
+      servePhotos({ v1: ['gone-1'] });
+      render(
+        <DailyReflectionPage tripId={TRIP_ID} date={DAY} today={TODAY} />,
+        {
+          wrapper: createWrapper(newTestQueryClient({ staleTime: 30_000 })),
+        }
+      );
+      expect(await screen.findByTestId(SETTINGS)).toBeOnTheScreen();
+
+      mockGoneResolves = true;
+      mockReadPhotoAccess.mockResolvedValue('all');
+      act(() => focusManager.setFocused(false));
+      act(() => focusManager.setFocused(true));
+
+      await waitFor(() => expect(screen.queryByTestId(UNRESOLVED)).toBeNull());
+      await waitFor(() => expect(screen.queryByTestId(SETTINGS)).toBeNull());
+    });
   });
 });

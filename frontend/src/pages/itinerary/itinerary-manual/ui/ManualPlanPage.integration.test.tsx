@@ -30,6 +30,7 @@ import {
   EDIT_LIST,
   fireEditDragEnd,
   fireEditDropOnZone,
+  hoverOverDeleteZone,
 } from '@/test-support/editDragList';
 import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
 import { watchTripsList } from '@/test-support/tripItineraryCols';
@@ -689,13 +690,32 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
   });
 
   describe('🔴 M2 · AC-9 — 끌어서 바꾼 순서가 저장 PUT 순서가 된다 (INV-U3-02)', () => {
-    it('c 를 맨 앞으로(2→0) 끌고 저장하면 PUT 순서가 [c,a,b] 다', async () => {
+    it('c 를 맨 앞으로(2→0) 끌고 저장하면 PUT 순서가 [c,a,b] 다 · 이 여행에서 고친 a 의 이름·분류는 저장에서 그대로 실린다 (TRIP-1795 AC-7)', async () => {
+      // 일정(GET)에 a 의 별칭이 있다 — 직접 짜기 저장 PUT 도 같은 빌더를 지나 두 칸을 실어야 한다(옛 구현은 5필드만 실어 지웠다).
+      daySlots = PLAIN.map((s) =>
+        s.poiId === 'a'
+          ? {
+              ...s,
+              displayName: '우리 아지트',
+              displayCategory: '카페' as const,
+            }
+          : s
+      );
       renderPage();
       await ready();
 
       fireEditDragEnd(2, 0);
 
-      expect(ids(await save())).toEqual(['c', 'a', 'b']);
+      const body = await save();
+      expect(ids(body)).toEqual(['c', 'a', 'b']);
+      // TRIP-1821 — 직접 짜기도 같은 스토어라 시각은 자리에 남는다(위에서부터 오름차순).
+      const times = body.days[0].slots.map((s) => s.startAt);
+      expect(times).toEqual([...times].sort());
+      expect(body.days[0].slots.find((s) => s.poiId === 'a')).toMatchObject({
+        displayName: '우리 아지트',
+        displayCategory: '카페',
+      });
+      expect(Object.keys(body.days[0].slots[0])).not.toContain('displayName'); // 안 고친 c 에는 키가 없다
     });
   });
 
@@ -814,9 +834,30 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
 
   // TRIP-1417 (Q-101) — 시트 머리 X 도 딤 닫힘과 같은 길(onCancel)이다. 바꿔 둔 휠 값은 드래프트에 안 들어간다.
   describe('🔴 MX · 시각 시트 머리 X 로 닫으면 시트가 빠지고 드래프트는 그대로다', () => {
-    it('c 시작을 14시로 굴려 둔 채 X 를 누르면 시트가 사라지고, 저장하면 c 는 13:00–14:30 그대로다', async () => {
+    // MC1 · TRIP-981 을 앞에 합쳤다(소음 예산 — 마운트 1을 TRIP-1812 SP 가 쓴다): 시트를 딤으로 닫아도 다시 열린다.
+    it('MC1 · c 칩 시트를 딤으로 닫으면 트리에서 빠지고 a 칩을 누르면 a 의 09시로 새로 열린다 · c 시작을 14시로 굴려 둔 채 X 를 누르면 시트가 사라지고, 저장하면 c 는 13:00–14:30 그대로다', async () => {
       renderPage();
       await ready();
+
+      fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
+      const sheet = await screen.findByTestId(SHEET);
+      // TRIP-1437 — 24시간 표기(옛 `/오후 1:00/`). 시작 칸만 본다.
+      expect(
+        screen.getByTestId('itinerary-manual-time-readout')
+      ).toHaveTextContent(/^시작 13:00 · /);
+
+      // 딤 탭 닫힘 대리 — 시트의 onClose 를 부른다(없으면 조용히 아무 일도 안 일어난다).
+      fireEvent(sheet, 'close');
+      await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+
+      fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('a')}`));
+      expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+      const readout = screen.getByTestId('itinerary-manual-time-readout');
+      expect(readout).toHaveTextContent(/^시작 09:00 · /);
+      expect(readout).not.toHaveTextContent(/^시작 13:00/);
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-close'));
+      resetPressGuard();
+      await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
       fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
       expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
@@ -1196,27 +1237,58 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
    *
    * 3동작 뼈대: 준비=c(13:00)·a(09:00) 초안 → 실행=c 칩 → close → a 칩 → 단언=시트 사라짐·재등장·a 시각 시드.
    */
-  describe('🔴 MC · TRIP-981 — 직접 짜기 시각 시트도 딤으로 닫히면 다시 열린다', () => {
-    it('MC1 · c 칩 시트를 딤으로 닫으면 트리에서 빠지고, a 칩을 누르면 a 의 09시로 새로 열린다', async () => {
+  /**
+   * TRIP-1812 · AC-5 — 직접 짜기도 같은 뷰·스토어다. 페이지가 시각 시트와 끌어 지우기에 자리를 넘기는지 본다.
+   * 준비 = GET [p1 12, p2 13, p1 14] → 실행 = 둘째 칩·[적용]·끌어 지우기·저장 → 단언 = 시트 초기값·초안·PUT.
+   */
+  describe('🔴 SP · TRIP-1812 AC-5·AC-6 — 같은 장소 둘째 카드만 편집된다', () => {
+    it('둘째 칩 시트는 14시로 열리고 [적용]해도 그대로이며, 둘째를 끌어 지우면 첫째가 남고 PUT 은 그 2곳이다', async () => {
+      daySlots = [
+        slot('p1', '12:00:00', '13:00:00'),
+        slot('p2', '13:00:00', '14:00:00'),
+        slot('p1', '14:00:00', '15:00:00'),
+      ];
+      const draft = (): string[][] =>
+        useItineraryEditStore
+          .getState()
+          .days[0].slots.map((s) => [s.poiId, s.startAt, s.endAt]);
       renderPage();
-      await ready();
+      const chips = await screen.findAllByTestId(
+        `slot-stopcard-timechip-${k('p1')}`
+      );
+      expect(chips).toHaveLength(2);
 
-      fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
-      const sheet = await screen.findByTestId(SHEET);
-      // TRIP-1437 — 24시간 표기(옛 `/오후 1:00/`). 시작 칸만 본다.
+      // AC-1 — 시트가 둘째 값으로 열리고, 안 돌리고 [적용]하면 아무것도 안 변한다.
+      fireEvent.press(chips[1]);
+      await screen.findByTestId(SHEET);
       expect(
         screen.getByTestId('itinerary-manual-time-readout')
-      ).toHaveTextContent(/^시작 13:00 · /);
-
-      // 딤 탭 닫힘 대리 — 시트의 onClose 를 부른다(없으면 조용히 아무 일도 안 일어난다).
-      fireEvent(sheet, 'close');
+      ).toHaveTextContent('시작 14:00 · 종료 15:00');
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-apply'));
+      resetPressGuard();
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+      expect(draft()).toEqual([
+        ['p1', '12:00:00', '13:00:00'],
+        ['p2', '13:00:00', '14:00:00'],
+        ['p1', '14:00:00', '15:00:00'],
+      ]);
 
-      fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('a')}`));
-      expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
-      const readout = screen.getByTestId('itinerary-manual-time-readout');
-      expect(readout).toHaveTextContent(/^시작 09:00 · /);
-      expect(readout).not.toHaveTextContent(/^시작 13:00/);
+      // AC-3 — 둘째를 끌어 맨 앞 칸으로 옮겼다 삭제 영역에 놓는다(from≠to, 자리는 원래 자리 기준).
+      await hoverOverDeleteZone(true);
+      fireEditDragEnd(2, 0);
+      expect(draft()).toEqual([
+        ['p1', '12:00:00', '13:00:00'],
+        ['p2', '13:00:00', '14:00:00'],
+      ]);
+      expect(screen.getByTestId(META)).toHaveTextContent('2곳');
+
+      // AC-6 — PUT 엔 슬롯마다 자기 시각, 편집기 키(`#`)는 없다.
+      const body = await save();
+      expect(body.days[0].slots.map((s) => [s.poiId, s.startAt])).toEqual([
+        ['p1', '12:00:00'],
+        ['p2', '13:00:00'],
+      ]);
+      expect(JSON.stringify(body)).not.toContain('#');
     });
   });
 });

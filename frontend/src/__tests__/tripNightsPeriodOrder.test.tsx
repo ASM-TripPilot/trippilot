@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { PreferenceView, Region } from '@/shared/api/index.schemas';
 import { RegionLevel } from '@/shared/api/index.schemas';
 import { useTripWizardStore } from '@/features/create-trip';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { RegionPickerPage } from '@/pages/explore/region-picker';
 import { TripNewStep1Page } from '@/pages/trip/trip-new-step1';
 
@@ -114,6 +115,7 @@ function store() {
 
 /** 지역 선택 화면을 열고 검색으로 좁혀 카드 하나를 누른 뒤 닫는다(= 위저드로 복귀). */
 function pickRegion(query: string, regionCode: string): void {
+  resetPressGuard(); // 앞 화면의 [적용]이 연 연타 창 — 사람이 따로 누른 탭이다.
   const view = render(<RegionPickerPage />);
   fireEvent.changeText(screen.getByTestId('explore-region-search'), query);
   fireEvent.press(screen.getByTestId(`explore-region-${regionCode}`));
@@ -122,6 +124,7 @@ function pickRegion(query: string, regionCode: string): void {
 
 /** 1/4 를 열어 기간 시트에서 시작 날짜 **한 번만** 누르고 적용한 뒤 닫는다. */
 function pickStart(date: string): void {
+  resetPressGuard(); // 앞 테스트·앞 화면이 연 연타 창 — 사람이 따로 누른 탭이다.
   const view = render(<TripNewStep1Page baseDate={BASE} />);
   fireEvent.press(screen.getByTestId('trip-wizard-summary-period'));
   fireEvent.press(screen.getByTestId(`trip-wizard-period-cell-${date}`));

@@ -5,11 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
+import com.trippilot.placedata.application.PoiProposalIngestService
 import com.trippilot.security.AccessTokenIssuer
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -80,22 +82,44 @@ class PoiProposalRealDocumentIT : AbstractPostgresIntegrationTest() {
 
     /**
      * 리포 루트를 위로 걸어 찾는다 — Gradle 테스트의 작업 디렉토리는 모듈마다 다르다.
-     * **없으면 실패시킨다.** 건너뛰면 공유본이 사라져도 아무도 모른다(조용한 통과 금지).
      */
-    private fun sharedDocument(): Path {
+    private fun findDocument(relative: String): Path? {
         var dir: Path? = Path.of("").toAbsolutePath()
         while (dir != null) {
-            val candidate = dir.resolve("ai/data/collected_pois.json")
+            val candidate = dir.resolve(relative)
             if (Files.exists(candidate)) return candidate
             dir = dir.parent
         }
-        error("팀 공유 수집본을 찾지 못했습니다: ai/data/collected_pois.json")
+        return null
     }
 
+    /** **없으면 실패시킨다.** 건너뛰면 공유본이 사라져도 아무도 모른다(조용한 통과 금지). */
     @Test
     fun `실 수집본이 그대로 들어가고 다시 넣어도 행이 늘지 않는다`() {
+        val path = findDocument("ai/data/collected_pois.json")
+            ?: error("팀 공유 수집본을 찾지 못했습니다: ai/data/collected_pois.json")
+
+        ingestsByContract(Files.readString(path))
+    }
+
+    /**
+     * 지역 문서(TRIP-1810)는 **아직 리포에 없을 수 있다** — 레포 비공개 전환 뒤 데이터 PR 로 들어온다.
+     * 그때까지만 건너뛴다. 들어오면 같은 계약을 그대로 받고, 카테고리는 한 건도 못 잃는다 — 술집·미술은
+     * 이 문서의 큰 몫이라 경계가 모르면 문서가 통째로 조용히 준다.
+     */
+    @Test
+    fun `지역 문서도 같은 계약으로 들어간다`() {
+        val path = findDocument("ai/data/collected_pois_regions.json")
+        Assumptions.assumeTrue(path != null, "지역 문서가 아직 없다 — 데이터 PR 전이다")
+
+        val first = ingestsByContract(Files.readString(path!!))
+
+        first["dropped"].has(PoiProposalIngestService.DROP_UNKNOWN_CATEGORY) shouldBe false
+    }
+
+    /** 문서 하나를 두 번 넣어 계약을 본다. 첫 응답을 돌려준다. */
+    private fun ingestsByContract(document: String): JsonNode {
         val token = SERVICE_TOKEN
-        val document = Files.readString(sharedDocument())
 
         val (rc, first) = post("/internal/pois/proposals", token, document)
 
@@ -125,5 +149,6 @@ class PoiProposalRealDocumentIT : AbstractPostgresIntegrationTest() {
         val (_, second) = post("/internal/pois/proposals", token, document)
         second["registered"].asInt() shouldBe 0
         second["updated"].asInt() shouldBe first["registered"].asInt()
+        return first
     }
 }

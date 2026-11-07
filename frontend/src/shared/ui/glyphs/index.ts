@@ -37,6 +37,7 @@ export {
 export {
   MoreDotsGlyph,
   NoteGlyph,
+  PencilGlyph,
   SearchGlyph,
   SummaryChartGlyph,
   TrashGlyph,

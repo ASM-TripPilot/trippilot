@@ -8,6 +8,7 @@ import type {
 import {
   formatWizardStep,
   summaryCompanion,
+  destinationLabel,
   summaryDestinations,
   summaryPeriod,
   summaryPreferences,
@@ -110,11 +111,64 @@ describe('summaryDestinations — 여행지 요약 행 (AC-1·2, 2톤 분리)', 
     expect(summaryDestinations([])).toBeNull();
   });
 
+  it('이름이 같은 다른 지역은 시도를 붙여 가르고, 나머지 도시는 그대로다 (TRIP-1818)', () => {
+    // 준비 — 강원 고성군(51820)·경남 고성군(48820)·강릉시(51150).
+    const destinations = [
+      { seq: 1, region: '고성군', nights: 1, regionCode: '51820' },
+      { seq: 2, region: '고성군', nights: 1, regionCode: '48820' },
+      { seq: 3, region: '강릉시', nights: 1, regionCode: '51150' },
+    ];
+
+    // 실행 + 단언
+    expect(summaryDestinations(destinations)).toEqual({
+      main: '강원 고성군',
+      sub: `1박${DOT}경남 고성군 1박${DOT}강릉시 1박`,
+    });
+  });
+
   it('0박(도시 하나)이면 sub 가 "0박"이 아니라 "당일치기"다', () => {
     expect(summaryDestinations([dest('부산', 0)])).toEqual({
       main: '부산',
       sub: '당일치기',
     });
+  });
+});
+
+describe('destinationLabel — 동명 지역 표기 (TRIP-1818)', () => {
+  const gangwon = { seq: 1, region: '고성군', nights: 1, regionCode: '51820' };
+  const gyeongnam = {
+    seq: 2,
+    region: '고성군',
+    nights: 1,
+    regionCode: '48820',
+  };
+
+  it('한 곳뿐이면 시도를 안 붙인다', () => {
+    expect(destinationLabel(gangwon, [gangwon])).toBe('고성군');
+  });
+
+  it('같은 코드가 다시 담긴 것(A→B→A)은 같은 곳이라 안 붙인다', () => {
+    const again = { ...gangwon, seq: 3 };
+    expect(destinationLabel(again, [gangwon, again])).toBe('고성군');
+  });
+
+  it('이름이 같고 코드가 다르면 양쪽 다 시도를 붙인다', () => {
+    const all = [gangwon, gyeongnam];
+    expect(destinationLabel(gangwon, all)).toBe('강원 고성군');
+    expect(destinationLabel(gyeongnam, all)).toBe('경남 고성군');
+  });
+
+  it('시도는 코드 앞자리로 찾는다 — 부산 중구(26110) 안의 11 을 서울로 읽지 않는다', () => {
+    const seoul = { seq: 1, region: '중구', nights: 1, regionCode: '11140' };
+    const busan = { seq: 2, region: '중구', nights: 1, regionCode: '26110' };
+    expect(destinationLabel(busan, [seoul, busan])).toBe('부산 중구');
+  });
+
+  it('코드가 없거나 서비스 지역 밖이면 시도를 지어내지 않고 이름만 둔다', () => {
+    const noCode = { seq: 3, region: '고성군', nights: 1 };
+    const outside = { ...noCode, seq: 4, regionCode: '99999' };
+    expect(destinationLabel(noCode, [gangwon, noCode])).toBe('고성군');
+    expect(destinationLabel(outside, [gangwon, outside])).toBe('고성군');
   });
 });
 

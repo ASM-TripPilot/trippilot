@@ -777,6 +777,18 @@ paths:
             해석해 **접두사**로 조회하므로 시도를 고르면 그 안 시군구가 전부 잡힌다.
             동명이지역(`동구` 는 대전·대구·광주·부산에 있다)은 **그 이름을 가진 지역 전부**가 대상이다 —
             하나를 고르면 거짓이 된다. 카탈로그에 없는 이름은 **빈 목록**이다(전국으로 넓히지 않는다).
+            한 곳을 집어야 하면 `regionCode` 를 쓴다.
+        - name: regionCode
+          in: query
+          required: false
+          schema: { type: string, pattern: '^([0-9]{2}|[0-9]{5})$' }
+          example: '11140'
+          description: >
+            지역 **코드**(`GET /regions` 의 `regionCode` — 시도 2자리·시군구 5자리, TRIP-1808). 그 코드 **접두사**로만
+            조회하므로 동명이지역이 섞이지 않는다(`11140` = 서울 중구만, `51820` = 강원 고성군만, `51` = 강원 전체).
+            **`region` 과 함께 오면 이 값이 이기고 `region` 은 무시한다** — 코드가 더 좁고 정확하다.
+            형식이 틀리면(빈 값 포함) **400** 이다(지역 조건을 떨어뜨리면 전국이 나간다). 형식만 맞고 카탈로그에 없는
+            코드는 **빈 목록**이다. 시도 코드만 가진 장소(`regionCode: "11"`)는 시군구 코드 조회에 잡히지 않는다.
         - { name: category, in: query, required: false, schema: { $ref: '#/components/schemas/PoiCategory' } }
         - name: q
           in: query
@@ -966,6 +978,21 @@ paths:
     patch:
       tags: [trips]
       summary: 여행 편집(가변 필드 대체 · 종료·삭제 후 불가)
+      description: >
+        **기간을 바꾸면 일정째 날짜만 옮긴다(TRIP-1789).** 일수가 같고 여행 시작 전이면 일정 일차 · 거점 숙소 배정 ·
+        날짜 고정 꼭 갈 곳의 날짜를 같은 칸수만큼 함께 민다 — 장소 · 순서 · 시각은 그대로이고 재계산 · AI 호출이 없다.
+        요일이 바뀌니 휴무 위반 표시만 새 날짜로 다시 계산한다.
+
+
+        일정이 아직 없는 여행은 시작 뒤에도 일수까지 바꿀 수 있다(거점 · 꼭 갈 곳은 일수가 같을 때만 함께 밀린다).
+
+
+        **일수를 바꾸려면 `discardItinerary: true`** — 일정을 버리고 기간을 바꾼다. 재생성 · AI 호출은 없고, 앱이 이어서 같은 여행의
+        일정 짜는 방법 화면으로 간다. 날짜 고정 꼭 갈 곳이 새 기간 밖이면 장소는 남고 날짜 · 시각만 비워진다(자유 배치로 바뀐다).
+        거점 배정은 새 기간에 맞춰 잘리고, 전부 밖이면 지워진다. 버린 일정은 되돌리기 목록에 남는다(새 기간보다 길면 그 버전은 복원 불가 409).
+
+
+        휴무 위반 표시는 응답 뒤 비동기로 새 날짜 기준이 된다 — 이 PATCH 는 AI 를 부르지 않는다.
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/EditTripRequest' } } }
@@ -973,6 +1000,15 @@ paths:
         '200': { description: 수정됨, content: { application/json: { schema: { $ref: '#/components/schemas/Trip' } } } }
         '400': { $ref: '#/components/responses/ValidationError' }
         '404': { description: 없음/타 계정 }
+        '409':
+          description: >
+            기간 변경 거절 — 아무 날짜도 바뀌지 않는다. `error.code` 로 갈린다:
+            `TRIP_PERIOD_STARTED`(일정이 있는 여행이 시작됐거나 — 시작일이 오늘 이전, KST — 방문 기록이 있어 기간을 못 바꾼다.
+            `discardItinerary: true` 는 일정이 없어도 시작 뒤면 이 코드다) ·
+            `TRIP_PERIOD_LENGTH_CHANGED`(일정이 있는 여행의 일수가 바뀐다 — `discardItinerary: true` 를 실어 다시 보낸다) ·
+            `TRIP_PERIOD_GENERATING`(일정 생성 중이라 날짜를 옮기지 못한다 — 끝난 뒤 다시) ·
+            `CONFLICT`(종료 · 삭제된 여행).
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
     delete:
       tags: [trips]
       summary: 여행 삭제(소프트)
@@ -991,6 +1027,7 @@ paths:
         기간이 바뀌면 일정·커버리지·필수 방문지가 모두 영향을 받으므로, 늘릴지는 사용자가 정한다.
         US-TRIP-03 의 "여행 기간 자동 확장 여부를 묻는다"는 **클라이언트 2단계**로 만족한다 —
         400 을 받아 확인을 띄우고, `PATCH /trips/{tripId}` 로 기간을 고친 뒤 다시 배정한다.
+        (일정이 있는 여행은 일수를 바꾸는 PATCH 가 409 다 — TRIP-1789. `discardItinerary` 로 일정을 버려야 늘릴 수 있다.)
 
         그래서 400 의 `error.fields` 는 **어느 칸이 왜 틀렸는지**를 담는다:
         시작일이 앞서면 `dateFrom`, 종료일이 넘으면 `dateTo` 이며 reason 에 여행 시작일·종료일이 들어간다
@@ -2760,6 +2797,10 @@ components:
             규칙) 생략하면 지워진다 — 다른 칸만 고치려면 이 값을 그대로 돌려보내야 한다.
         firstDayStartAt: { type: string, format: time, nullable: true, description: 첫날만 다른 시작(도착 후) }
         lastDayEndAt: { type: string, format: time, nullable: true, description: 마지막날만 다른 종료(출발 전) }
+        coverKey:
+          type: string
+          nullable: true
+          description: 사용자가 고른 커버 — 앱 번들 지역 그림 키(TRIP-1789). null 이면 첫 목적지로 자동. 서버는 키 목록을 모른다(형식만 검증).
 
     CreateTripRequest:
       type: object
@@ -2846,6 +2887,23 @@ components:
           description: >
             **마지막날만** 다른 종료 시각(출발·귀가 전). 생략하면 기본 21:00.
             당일치기는 첫날이자 마지막날이라 둘 다 걸리고, 그때는 시작 < 종료여야 한다(아니면 400).
+        coverKey:
+          type: string
+          nullable: true
+          maxLength: 40
+          pattern: '^[A-Za-z0-9_-]+$'
+          description: >
+            커버로 고른 앱 번들 지역 그림 키(TRIP-1789). null · 생략 = 첫 목적지 자동.
+            형식만 검증하고(밖이면 400) 목록은 앱이 소유한다 — 앱이 모르는 키면 앱이 자동으로 폴백한다.
+
+            **편집 전에 반드시 읽어라.** 다른 가변 필드처럼 **대체**라 생략하면 지워진다 — 다른 칸만 고치려면 이 값을 그대로 돌려보낸다.
+        discardItinerary:
+          type: boolean
+          default: false
+          description: >
+            기간을 바꾸며 지금 일정을 버린다(TRIP-1789 · 사용자 결정 2026-11-06). 일수가 달라도 된다. 응답에 저장되는 칸이 아니라 이 요청의 지시다.
+            기간이 그대로면 아무것도 버리지 않는다. false 면 일수 변경은 `TRIP_PERIOD_LENGTH_CHANGED`, 일수가 같으면 일정째 날짜만 민다.
+            시작 뒤 · 방문 기록 있음 · 생성 중이면 true 여도 409 다.
 
 
     AssignBaseRequest:
@@ -2968,6 +3026,20 @@ components:
                       type: boolean
                       default: false
                       description: 자정 넘김(HC4) — 전체 교체 편집이라 조회 응답의 현행 값을 그대로 실어야 플래그가 소실되지 않음
+                    displayName:
+                      type: string
+                      nullable: true
+                      maxLength: 60
+                      description: >
+                        이 여행에서만 쓰는 표시 이름(TRIP-1801). 상한은 코드 포인트 기준이고 앞뒤 공백까지 센다(넘으면 400).
+                        앞뒤 공백을 지우고, 공백뿐이면 null 로 저장한다.
+                        장소 원본(`nameKo` · /places)은 안 바뀐다. **전체 교체라 조회 응답의 현행 값을 그대로 실어야 안 사라진다.**
+                    displayCategory:
+                      nullable: true
+                      allOf: [{ $ref: '#/components/schemas/PoiCategory' }]
+                      description: >
+                        이 여행에서만 쓰는 표시 분류(TRIP-1801). 닫힌 집합 밖이면 400.
+                        장소 원본(`category`)은 안 바뀐다. **전체 교체라 조회 응답의 현행 값을 그대로 실어야 안 사라진다.**
 
     ChangeLog:
       type: object
@@ -3781,6 +3853,14 @@ components:
                     lat: { type: number, format: double, nullable: true }
                     lng: { type: number, format: double, nullable: true }
                     category: { type: string, nullable: true }
+                    displayName:
+                      type: string
+                      nullable: true
+                      description: 이 여행에서만 쓰는 표시 이름(TRIP-1801). null = 덮어쓰기 없음 — 클라가 `nameKo` 로 폴백한다. `nameKo` 는 계속 장소 원본 값이다.
+                    displayCategory:
+                      nullable: true
+                      allOf: [{ $ref: '#/components/schemas/PoiCategory' }]
+                      description: 이 여행에서만 쓰는 표시 분류(TRIP-1801). null = 덮어쓰기 없음 — 클라가 `category` 로 폴백한다. `category` 는 계속 장소 원본 값이다.
                     openingHours:
                       type: string
                       nullable: true

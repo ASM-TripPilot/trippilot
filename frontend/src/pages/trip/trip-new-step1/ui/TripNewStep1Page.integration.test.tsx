@@ -871,11 +871,13 @@ describe('기간 편집 시트 (W-1~W-5)', () => {
       fireEvent.press(
         await screen.findByTestId('trip-wizard-destination-nights-inc-2')
       );
+      resetPressGuard(); // 앞 시트 [적용]이 연 연타 창 — 사람이 따로 누른 탭이다.
       fireEvent.press(screen.getByTestId('trip-wizard-destination-apply'));
 
       // 실행 — 프리필 도착(로딩 해제) 뒤 다음.
       const next = screen.getByTestId('trip-wizard-step1-next');
       await waitFor(() => expect(next).toBeEnabled());
+      resetPressGuard();
       fireEvent.press(next);
 
       // 단언 — 요청 모양은 그대로, 끝 날짜만 파생값이다.
@@ -4007,4 +4009,55 @@ describe('일과 시간 (TRIP-1308)', () => {
     fireEvent.press(screen.getByTestId('trip-wizard-daywindow-apply'));
     await waitFor(() => expect(next()).toBeEnabled());
   });
+});
+
+describe('TRIP-1823 · 시트 [적용] 연타 — 둘째 탭이 [다음]으로 가서 여행을 만들지 않는다', () => {
+  const { tracker, renderPage, seedValidDraft, openSheet, waitForPrefill } =
+    wizardStep1Harness();
+  const createHits = (): number =>
+    tracker.hits.filter((hit) => hit === 'POST /api/v1/trips').length;
+  const NEXT = 'trip-wizard-step1-next';
+
+  beforeEach(() => {
+    act(() => useTripWizardStore.getState().reset());
+    server.use(
+      http.post(`${BASE}/trips`, () => HttpResponse.json(TRIP, { status: 201 }))
+    );
+  });
+
+  it.each([
+    ['companion', 'trip-wizard-companion-apply', 'trip-wizard-companion-sheet'],
+    ['daywindow', 'trip-wizard-daywindow-apply', 'trip-wizard-daywindow-sheet'],
+    [
+      'destination',
+      'trip-wizard-destination-apply',
+      'trip-wizard-destination-sheet',
+    ],
+    ['period', 'trip-wizard-period-apply', 'trip-wizard-period-sheet'],
+    ['preference', 'trip-wizard-pref-sheet-apply', 'trip-wizard-pref-sheet'],
+  ] as const)(
+    '%s 시트 — 연타는 시트만 닫고 요청 0건, 창이 닫힌 뒤 [다음]은 여행을 만든다',
+    async (kind, apply, sheet) => {
+      seedValidDraft();
+      renderPage();
+      await waitForPrefill();
+      await openSheet(kind);
+      // 기간 시트는 시작일을 고른 뒤에야 [적용]이 켜진다(시드는 스토어뿐 — 시트 드래프트는 비어 있다).
+      if (kind === 'period')
+        fireEvent.press(
+          screen.getByTestId('trip-wizard-period-cell-2026-06-10')
+        );
+
+      fireEvent.press(screen.getByTestId(apply));
+      expect(screen.queryByTestId(sheet)).toBeNull(); // 앞 탭은 먹었다(앵커)
+      fireEvent.press(screen.getByTestId(NEXT));
+      await act(() => new Promise((r) => setTimeout(r, 30)));
+
+      expect(createHits()).toBe(0);
+
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId(NEXT));
+      await waitFor(() => expect(createHits()).toBe(1));
+    }
+  );
 });

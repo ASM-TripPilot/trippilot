@@ -23,6 +23,7 @@ import {
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
+import { placeRegionQuery } from '@/entities/trip';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { ArriveRequestSource } from '@/shared/api/index.schemas';
 import type { Place, PoiCategory } from '@/shared/api/index.schemas';
@@ -76,11 +77,11 @@ export function RecordAddVisitPage({
   // 입력칸은 즉시, 서버 조회 키는 300ms 멈춘 값(TRIP-1617).
   const trimmedQuery = useDebouncedValue(searchText.trim(), SEARCH_DEBOUNCE_MS);
   const trip = useGetTripsTripId(tripId, { query: { retry: false } });
-  const regions = (trip.data?.destinations ?? []).map((dest) => dest.region);
+  const regions = (trip.data?.destinations ?? []).map(placeRegionQuery);
   const isMultiRegion = regions.length >= 2;
   const infinite = usePlacesInfinite(
     {
-      ...(regions.length === 1 ? { region: regions[0] } : {}),
+      ...(regions.length === 1 ? regions[0] : {}),
       ...(selectedCategory ? { category: selectedCategory } : {}),
       ...(trimmedQuery ? { q: trimmedQuery } : {}),
     },

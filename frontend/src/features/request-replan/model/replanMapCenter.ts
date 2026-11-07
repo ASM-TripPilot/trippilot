@@ -1,3 +1,5 @@
+import { slotDisplayName } from '@/entities/itinerary-slot';
+
 import type {
   ItineraryDaysItem,
   ItineraryDaysItemSlotsItem,
@@ -36,7 +38,11 @@ function firstCoordSlot(
 ): ReplanMapAnchor | null {
   for (const slot of slots) {
     const center = coordsOf(slot);
-    if (center) return { center, placeName: slot.nameKo ?? null };
+    if (center)
+      return {
+        center,
+        placeName: slotDisplayName(slot) ?? slot.nameKo ?? null,
+      };
   }
   return null;
 }

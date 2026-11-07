@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PhotoAccessNotice } from '@/shared/photo/index.view';
 import {
   BackChevronGlyph,
   InfoGlyph,
@@ -126,6 +127,9 @@ function Body({ face }: { face: TripAlbumFace }): ReactElement {
           >
             {`불러올 수 없는 사진 ${vm.unresolvedCount}장`}
           </Text>
+        ) : null}
+        {vm.unresolvedCount > 0 ? (
+          <PhotoAccessNotice testID="trip-album-photo-access-notice" />
         ) : null}
       </View>
 
