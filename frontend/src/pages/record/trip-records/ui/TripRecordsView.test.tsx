@@ -21,8 +21,12 @@ import {
   renderedText,
   treeIndexOf,
 } from '@/test-support/sheetTree';
+import { guardKeyWarnings } from '@/test-support/keyWarnings';
 
 import { TripRecordsView, type TripRecordsViewProps } from './TripRecordsView';
+
+// TRIP-1812 — React 는 겹친 key 를 console.error 로만 알린다. 파일 최상위에서 걸어 모든 테스트 뒤에 0 을 단언한다.
+const keyWarnings = guardKeyWarnings();
 
 // 셸이 네이버 네이티브 MapView 를 태우므로 관찰 목으로 갈아끼운다(LiveHubView·옛 TripRecordsScreen 선례).
 // 시트는 `__mocks__/@gorhom/bottom-sheet` 통과형 목이 자동으로 쓰인다.
@@ -927,6 +931,28 @@ const sheetSnapSpy = () =>
 beforeEach(() => sheetSnapSpy().mockClear());
 
 describe('TripRecordsView · 계획 번호 (TRIP-1558 AC-5)', () => {
+  // TRIP-1812 AC-10 — 서버 slotKey 가 `d#p` 라 같은 장소 두 행의 slotKey 가 같다. 번호(자리)로 갈려 key 가 안 겹친다.
+  it('PN1b 같은 slotKey 계획 행 둘은 각자 번호를 그리고 중복 key 경고가 없다', () => {
+    // 준비 — 같은 장소가 1번·3번 자리인 계획 행 둘.
+    renderView({
+      planRows: [
+        { ...ROW_P3, planOrder: 1 },
+        { ...ROW_P3, planOrder: 3 },
+      ],
+    });
+
+    // 단언 — 행이 정말 둘이고(앵커) 번호가 각자 자기 자리이며 겹친 key 경고가 없다.
+    expect(
+      screen.getAllByTestId(`record-trip-plan-row-${ROW_P3.slotKey}`)
+    ).toHaveLength(2);
+    const orders = screen.getAllByTestId(
+      `record-trip-plan-order-${ROW_P3.slotKey}`
+    );
+    expect(orders[0]).toHaveTextContent('1');
+    expect(orders[1]).toHaveTextContent('3');
+    expect(keyWarnings.keys()).toEqual([]);
+  });
+
   it('PN1 planOrder 를 가진 계획 행만 번호 leaf 가 서고, 없으면 노드가 없다', () => {
     renderView({
       planRows: [{ ...ROW_P3, planOrder: 3 }, ROW_P4],

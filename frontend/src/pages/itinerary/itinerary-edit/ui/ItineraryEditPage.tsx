@@ -24,7 +24,7 @@ import {
 } from '@/entities/itinerary-slot';
 import { buildMoveDayOptions } from '../model/moveDayOptions';
 import { reorderKeepingLocked } from '../model/reorderKeepingLocked';
-import { buildSlotKey } from '@/entities/itinerary-slot';
+import { buildSlotKey, findSlotIndex } from '@/entities/itinerary-slot';
 import {
   PoiCategory,
   type ItineraryDaysItemSlotsItem,
@@ -149,10 +149,12 @@ export function ItineraryEditPage({
   const [moving, setMoving] = useState<{
     fromDate: string;
     poiId: string;
+    ordinal: number;
   } | null>(null);
   const [pendingMove, setPendingMove] = useState<{
     fromDate: string;
     poiId: string;
+    ordinal: number;
     toDate: string;
   } | null>(null);
   // TRIP-1795 · 「이름·분류 고치기」 — 장소 시트의 행을 누르면 `moving` 을 비우고 이 시트가 **대신** 열린다(조건부 마운트, 둘이 동시에 안 보인다).
@@ -160,6 +162,7 @@ export function ItineraryEditPage({
   const [renaming, setRenaming] = useState<{
     date: string;
     poiId: string;
+    ordinal: number;
   } | null>(null);
   // 저장 연타 잠금 — isPending 은 다음 렌더에야 참이라 같은 틱 연타를 못 막는다(ManualPlanPage 선례).
   // 떠나는 성공에선 풀지 않는다(늦게 온 두 번째 응답이 back 을 한 번 더 부르지 않게).
@@ -233,6 +236,11 @@ export function ItineraryEditPage({
   function undoTo(expectId?: number): void {
     const date = undo(expectId);
     if (date === null) return;
+    // 열린 시트가 쥔 ordinal 은 되살아난 같은 장소 때문에 다른 카드를 가리킬 수 있다 — 안내 바는 시트 위에 떠 있어 눌린다(TRIP-1812).
+    setEditingSlotKey(null);
+    setMoving(null);
+    setPendingMove(null);
+    setRenaming(null);
     const index = days.findIndex((day) => day.date === date);
     if (index !== -1) setActiveDayIndex(index);
   }
@@ -428,10 +436,14 @@ export function ItineraryEditPage({
   );
 
   // TRIP-1793 · 옮기기 시트 재료 — 열린 시트의 슬롯이 드래프트에 실재할 때만 시트를 마운트한다(조건부, 위 시각 시트와 같은 방식).
-  const slotIn = (date: string, poiId: string) =>
-    days.find((day) => day.date === date)?.slots.find((s) => s.poiId === poiId);
+  const slotIn = (date: string, poiId: string, ordinal: number) => {
+    const slots = days.find((day) => day.date === date)?.slots ?? [];
+    return slots[findSlotIndex(slots, poiId, ordinal)];
+  };
   const movingSlot =
-    moving === null ? undefined : slotIn(moving.fromDate, moving.poiId);
+    moving === null
+      ? undefined
+      : slotIn(moving.fromDate, moving.poiId, moving.ordinal);
   const movingDayNumber =
     moving === null ? 0 : days.findIndex((d) => d.date === moving.fromDate) + 1;
   const moveOptions =
@@ -446,25 +458,26 @@ export function ItineraryEditPage({
     !completedSlotKeys.includes(buildSlotKey(moving.fromDate, moving.poiId)) &&
     days.length > 1;
   const renamingSlot =
-    renaming === null ? undefined : slotIn(renaming.date, renaming.poiId);
+    renaming === null
+      ? undefined
+      : slotIn(renaming.date, renaming.poiId, renaming.ordinal);
   function closeRename(): void {
     // 시트가 사라진 자리 아래 「일정 저장하기」에 둘째 탭이 닿지 않게(TRIP-1793 D4 와 같은 처방).
     openPressGuardWindow();
     setRenaming(null);
   }
   function applyRename(
-    date: string,
-    poiId: string,
+    target: { date: string; poiId: string; ordinal: number },
     patch: Parameters<typeof renameSlot>[2]
   ): void {
     openPressGuardWindow();
-    renameSlot(date, poiId, patch);
+    renameSlot(target.date, target.poiId, patch, target.ordinal);
     setRenaming(null);
   }
   const pendingSlot =
     pendingMove === null
       ? undefined
-      : slotIn(pendingMove.fromDate, pendingMove.poiId);
+      : slotIn(pendingMove.fromDate, pendingMove.poiId, pendingMove.ordinal);
   const pendingTargetSlots =
     pendingMove === null
       ? []
@@ -520,8 +533,8 @@ export function ItineraryEditPage({
             )
           )
         }
-        onDeleteViaDrag={(poiId) =>
-          removeWithUndoBar(() => deleteSlot(activeDate, poiId), 1)
+        onDeleteViaDrag={(poiId, ordinal) =>
+          removeWithUndoBar(() => deleteSlot(activeDate, poiId, ordinal), 1)
         }
         onDeleteSelected={(poiIds) =>
           removeWithUndoBar(
@@ -535,7 +548,8 @@ export function ItineraryEditPage({
         onPressMore={
           activeUnknown
             ? undefined
-            : (poiId) => setMoving({ fromDate: activeDate, poiId })
+            : (poiId, ordinal) =>
+                setMoving({ fromDate: activeDate, poiId, ordinal })
         }
         completedSlotKeys={completedSlotKeys}
         inTrip={inTrip}
@@ -606,7 +620,7 @@ export function ItineraryEditPage({
             name: slotDisplayName(editingSlot) ?? '',
           }}
           onApply={(patch) => {
-            adjustSlotTime(editing.date, editing.poiId, patch);
+            adjustSlotTime(editing.date, editing.poiId, patch, editing.ordinal);
             setEditingSlotKey(null);
           }}
           onCancel={() => setEditingSlotKey(null)}
@@ -645,7 +659,11 @@ export function ItineraryEditPage({
           onPressRename={() => {
             // 행 누름 직후의 둘째 탭이 새 시트 자리 아래 「일정 저장하기」에 닿지 않게 — 시트 교체 직전에 창을 연다(TRIP-1795 AC-15).
             openPressGuardWindow();
-            setRenaming({ date: moving.fromDate, poiId: moving.poiId });
+            setRenaming({
+              date: moving.fromDate,
+              poiId: moving.poiId,
+              ordinal: moving.ordinal,
+            });
             setMoving(null);
           }}
           onClose={() => {
@@ -669,7 +687,7 @@ export function ItineraryEditPage({
             !!renamingSlot.displayCategory?.trim()
           }
           onApply={(patch) =>
-            applyRename(renaming.date, renaming.poiId, {
+            applyRename(renaming, {
               displayName: patch.displayName,
               // 분류를 못 고치는 장소는 서버가 준 표시 분류를 건드리지 않고 그대로 둔다.
               displayCategory:
@@ -677,7 +695,7 @@ export function ItineraryEditPage({
             })
           }
           onReset={() =>
-            applyRename(renaming.date, renaming.poiId, {
+            applyRename(renaming, {
               displayName: null,
               displayCategory: null,
             })
@@ -703,7 +721,8 @@ export function ItineraryEditPage({
               pendingMove.fromDate,
               pendingMove.toDate,
               pendingMove.poiId,
-              patch
+              patch,
+              pendingMove.ordinal
             );
             const toIndex = days.findIndex(
               (day) => day.date === pendingMove.toDate

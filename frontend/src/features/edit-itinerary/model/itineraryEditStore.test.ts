@@ -309,6 +309,14 @@ describe('M1 · removeSlots 순수 — 고른 poiId 를 전부 뺀다, 원본 �
     expect(result).not.toBe(slots);
   });
 
+  it('고정 슬롯은 같은 장소를 골라도 남는다 — 체크가 잠겨 있어 화면에 안 고른 카드다 (TRIP-1812 5-b W2)', () => {
+    const fixed = slot('a', { isFixed: true });
+
+    const result = removeSlots([fixed, slot('b'), slot('a')], ['a']);
+
+    expect(result).toEqual([fixed, slot('b')]);
+  });
+
   it('빈 poiIds 는 같은 내용의 새 배열이다', () => {
     const slots = [slot('a'), slot('b')];
 
@@ -1128,5 +1136,166 @@ describe('RN · renameSlot — 표시 이름·분류 덮어쓰기 (TRIP-1795)', 
     });
     expect(slotOf(DAY2, 'a').displayName).toBe('바뀐 이름');
     expect(slotOf(DAY2, 'a').displayCategory).toBe('카페');
+  });
+});
+
+/**
+ * TRIP-1812 · 같은 날 같은 장소 — 끝 인자 `ordinal`(앞선 같은 장소 수)로 **눌린 그 카드**만 다룬다.
+ * 인자를 안 주면 0 이라 같은 장소가 없는 일정은 지금과 같다(위 S·MV·RN 이 그 그물이다, AC-6).
+ * 시각 조정은 `itineraryEditStore.adjustTime.test.ts` SA12.
+ *
+ * 3동작: 준비(같은 장소가 낀·붙은 날 시드) → 실행(액션 + ordinal) → 단언(남은 시각·표시 이름·다른 날·이력).
+ */
+describe('SP · 같은 장소의 ordinal 자리 (TRIP-1812)', () => {
+  const st = () => useItineraryEditStore.getState();
+  const at = (poiId: string, startAt: string, over: Partial<Slot> = {}): Slot =>
+    slot(poiId, { startAt, ...over });
+  const starts = (slots: Slot[]): string[] => slots.map((s) => s.startAt);
+  const day = (date: string): Slot[] =>
+    st().days.find((d) => d.date === date)?.slots ?? [];
+  /** [p1 09, p2 12, p1 14, p1 16] — 가운데 p1(ordinal 1)이 첫 일치·마지막 일치 어느 쪽도 아니다. */
+  const woven = () => [
+    at('p1', '09:00:00'),
+    at('p2', '12:00:00'),
+    at('p1', '14:00:00'),
+    at('p1', '16:00:00'),
+  ];
+  const adjacent = () => [
+    at('p1', '09:00:00'),
+    at('p1', '11:00:00'),
+    at('p2', '14:00:00'),
+  ];
+  const P = { startAt: '15:00:00', endAt: '16:00:00', endsNextDay: false };
+
+  it('SP1 · removeSlot 은 ordinal 자리만 뺀다 — 없는 ordinal 은 값이 같은 새 배열, 원본은 안 바뀐다', () => {
+    const slots = woven();
+
+    expect(starts(removeSlot(slots, 'p1', 1))).toEqual([
+      '09:00:00',
+      '12:00:00',
+      '16:00:00',
+    ]);
+    expect(starts(removeSlot(slots, 'p1', 2))).toEqual([
+      '09:00:00',
+      '12:00:00',
+      '14:00:00',
+    ]);
+    expect(starts(removeSlot(slots, 'p1', 0))).toEqual([
+      '12:00:00',
+      '14:00:00',
+      '16:00:00',
+    ]);
+    expect(starts(removeSlot(adjacent(), 'p1', 1))).toEqual([
+      '09:00:00',
+      '14:00:00',
+    ]);
+
+    const missing = removeSlot(slots, 'p1', 3);
+    expect(missing).not.toBe(slots);
+    expect(missing).toEqual(slots);
+    expect(slots).toHaveLength(4);
+  });
+
+  it('SP2 · deleteSlot(AC-3) — 그 날 ordinal 자리만 빠지고 되돌리기 1단계로 돌아온다, 없는 ordinal 은 state 그대로', () => {
+    st().seed([
+      { date: DAY1, slots: woven() },
+      { date: DAY2, slots: [at('p1', '10:00:00')] },
+    ]);
+    const before = st().days;
+
+    st().deleteSlot(DAY1, 'p1', 5);
+    expect(st().days).toBe(before);
+    expect(st().history).toHaveLength(0);
+
+    st().deleteSlot(DAY1, 'p1', 1);
+    expect(starts(day(DAY1))).toEqual(['09:00:00', '12:00:00', '16:00:00']);
+    expect(starts(day(DAY2))).toEqual(['10:00:00']);
+    expect(st().dirty).toBe(true);
+    expect(st().history).toHaveLength(1);
+
+    expect(st().undo()).toBe(DAY1);
+    expect(starts(day(DAY1))).toEqual([
+      '09:00:00',
+      '12:00:00',
+      '14:00:00',
+      '16:00:00',
+    ]);
+    expect(st().history).toHaveLength(0);
+  });
+
+  it('SP3 · moveSlot(AC-4) — ordinal 자리의 슬롯이 옮겨 가고 첫째는 남는다, 없는 ordinal 은 state 그대로', () => {
+    st().seed([
+      {
+        date: DAY1,
+        slots: [
+          at('p1', '09:00:00', { displayName: '첫째' }),
+          at('p2', '12:00:00'),
+          at('p1', '14:00:00', { displayName: '둘째' }),
+        ],
+      },
+      { date: DAY2, slots: [at('x', '10:00:00')] },
+    ]);
+    const before = st().days;
+
+    st().moveSlot(DAY1, DAY2, 'p1', P, 5);
+    expect(st().days).toBe(before);
+
+    st().moveSlot(DAY1, DAY2, 'p1', P, 1);
+    expect(day(DAY1).map((s) => s.displayName ?? s.poiId)).toEqual([
+      '첫째',
+      'p2',
+    ]);
+    expect(day(DAY2).map((s) => [s.displayName ?? s.poiId, s.startAt])).toEqual(
+      [
+        ['x', '10:00:00'],
+        ['둘째', '15:00:00'],
+      ]
+    );
+    expect(st().history).toHaveLength(1);
+  });
+
+  it('SP3b · moveSlot 은 ordinal 을 안 주면 첫째가 옮겨 간다 — 시드의 뒤 카드는 남는다', () => {
+    st().seed([
+      {
+        date: DAY1,
+        slots: [
+          at('p1', '09:00:00', { displayName: '첫째' }),
+          at('p1', '14:00:00', { displayName: '둘째' }),
+        ],
+      },
+      { date: DAY2, slots: [] },
+    ]);
+
+    st().moveSlot(DAY1, DAY2, 'p1', P);
+
+    expect(day(DAY1).map((s) => s.displayName)).toEqual(['둘째']);
+    expect(day(DAY2).map((s) => s.displayName)).toEqual(['첫째']);
+  });
+
+  it('SP4 · renameSlot(AC-4) — ordinal 자리만 표시 이름이 바뀐다, 없는 ordinal 은 state 그대로', () => {
+    st().seed([{ date: DAY1, slots: woven() }]);
+    const before = st().days;
+    const PATCH = { displayName: '뒤 카드', displayCategory: null };
+
+    st().renameSlot(DAY1, 'p1', PATCH, 5);
+    expect(st().days).toBe(before);
+
+    st().renameSlot(DAY1, 'p1', PATCH, 1);
+    expect(day(DAY1).map((s) => s.displayName ?? null)).toEqual([
+      null,
+      null,
+      '뒤 카드',
+      null,
+    ]);
+    expect(st().history).toHaveLength(1);
+  });
+
+  it('SP5 · deleteSlots(AC-11) 는 장소 단위 그대로다 — ["p1","p1"] 을 받아도 p1 전부가 빠지고 이력 1장', () => {
+    st().seed([{ date: DAY1, slots: woven() }]);
+
+    st().deleteSlots(DAY1, ['p1', 'p1', 'p1']);
+
+    expect(day(DAY1).map((s) => s.poiId)).toEqual(['p2']);
+    expect(st().history).toHaveLength(1);
   });
 });

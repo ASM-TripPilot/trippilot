@@ -253,13 +253,12 @@ export function TripRecordsPage({
   );
   const planRows: RecordPlanRowVM[] = visitsOfDay
     ? activeSlots
-        .map((slot) => ({
+        .map((slot, index) => ({
           slotKey: buildSlotKey(activeDay, slot.poiId),
           poiId: slot.poiId,
           nameKo: slotDisplayName(slot) ?? slot.poiId,
-          planOrder: planOrderBySlotKey.get(
-            buildSlotKey(activeDay, slot.poiId)
-          ),
+          // 자리로 센다 — 슬롯 키로 찾으면 같은 날 같은 장소 행이 같은 번호를 받는다(TRIP-1812).
+          planOrder: index + 1,
         }))
         .filter((row) => !recordedSlotKeys.has(row.slotKey))
     : [];

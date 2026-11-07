@@ -349,7 +349,9 @@ export function ManualPlanPage({
         onReorder={(data) =>
           reorderSlots(activeDate, data as ItineraryDaysItemSlotsItem[])
         }
-        onDeleteViaDrag={(poiId) => deleteSlot(activeDate, poiId)}
+        onDeleteViaDrag={(poiId, ordinal) =>
+          deleteSlot(activeDate, poiId, ordinal)
+        }
       />
 
       {/* 뷰가 못 가진 인라인 안내 — 저장 실패·확정 실패·미지정 제외(모두 INV-4). 편집 페이지 배너와 같은 모양. */}
@@ -432,7 +434,7 @@ export function ManualPlanPage({
           startAt={editingSlot.startAt}
           endAt={editingSlot.endAt}
           onApply={(patch) => {
-            adjustSlotTime(editing.date, editing.poiId, patch);
+            adjustSlotTime(editing.date, editing.poiId, patch, editing.ordinal);
             setEditingSlotKey(null);
           }}
           onCancel={() => setEditingSlotKey(null)}
