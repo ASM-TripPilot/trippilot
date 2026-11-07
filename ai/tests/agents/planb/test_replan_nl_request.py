@@ -225,6 +225,15 @@ def test_extraction_prompt_keeps_times_outside_the_window_as_said() -> None:
         LlmFeature.REPLAN_REQUEST_EXTRACTION,
         build_extraction_vars("밤 10시까지 놀고 싶어", "11월 6일 (금)", "09:00~21:00"))
     assert "남은 시간 밖이어도" in prompt and '"22:00"' in prompt and '"20:30"' in prompt
+    # 시간대·끝내는 시각·지금 기준 말과, 장소와 같이 말한 때는 제한이 아니라는 줄
+    for rule in ('오전에만·오전 중으로 → end_by "12:00"', '오후에만 → start_after "12:00", end_by "18:00"', '저녁부터·저녁 시간대·해 지고 나서 → start_after "17:00"',
+                 '밤에만·밤부터 → start_after "20:00"', '"3시 이후 일정 취소해줘" → end_by "15:00"', '"6시에 끝낼래"', '"한 시간 뒤부터" → start_after 지금+1시간',
+                 '"지금"이 없으면 비웁니다', '하루를 제한하는 말이 아니에요', '1~6시는 "새벽"·"오전"을 붙이지 않았으면 오후'):
+        assert rule in prompt, rule
+    # 호출측이 라벨에 실은 지금이 프롬프트까지 닿는다
+    with_now, _ = PromptRegistry(_PROMPTS).render(
+        LlmFeature.REPLAN_REQUEST_EXTRACTION, build_extraction_vars("한 시간 뒤부터", "2026-11-06 (금) · 지금 10:30", "10:30~21:00"))
+    assert "지금 10:30" in with_now
     assert '"23:59"' in prompt and "그 방문의 at" in prompt  # 자정 · 장소에 붙은 시간대는 at
     assert "ART|ACTIVITY|SHOPPING|BAR" in prompt  # 출력 스키마가 규칙·게이트와 같은 10종
 
@@ -309,6 +318,41 @@ def test_end_by_reaches_the_solver_window(hh, mm, text) -> None:
         body = client.post("/ai/v1/planb/replan", json=_body(free_text=text)).json()
     assert f"nl_time_accepted: end_by {hh:02d}:{mm:02d}" in body["notes"]
     assert seen and (seen[0].end.hour, seen[0].end.minute) == (hh, mm)
+
+
+def test_extending_another_day_does_not_crash() -> None:
+    """다른 날(지금이 없는 날)의 "더 늦게까지"가 `not_before.hour` 에서 500 이었다(개발 실측 2026-11-06 "밤 10시까지 놀고 싶어")."""
+    app = build_dev_app(directives=_DIRECTIVES)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.post("/ai/v1/planb/replan", json=_body(
+            directives=["EXTEND_DAY"], from_instant="2026-09-20T20:00:00+09:00",
+            request_meta={"request_id": "x", "requested_at": "2026-09-20T20:00:00+09:00", "deadline_ms": 25000}))
+    assert r.status_code == 200, r.text[:300]
+
+
+@pytest.mark.parametrize("from_instant,date_tail,window", [
+    ("2026-09-21T10:30:00+09:00", " · 지금 10:30", "10:30~21:00"),  # 오늘 — 남은 시간은 지금부터, 받은 창 시작이 아니다
+    ("2026-09-21T07:10:00+09:00", " · 지금 07:10", "07:10~21:00"),  # 창 시작(09:00)보다 이른 지금도 그대로
+    ("2026-09-21T21:30:00+09:00", " · 지금 21:30", "21:30~23:59"),  # 받은 창 끝을 지났다 — 뒤집힌 창을 싣지 않고 그날 끝까지
+    ("2026-09-21T21:00:00+09:00", " · 지금 21:00", "21:00~23:59"),
+    ("2026-09-20T20:00:00+09:00", "", "09:00~21:00"),               # 다른 날 — 지금은 뜻이 없다
+])
+def test_extraction_gets_now_only_on_the_day_being_replanned(from_instant, date_tail, window) -> None:
+    app = build_dev_app(directives=_DIRECTIVES)
+    orch = app.state.orchestrator
+    calls = []
+
+    class _Capture(_StubExtractor):
+        def extract(self, *a, **kw):
+            calls.append(a)
+            return super().extract(*a, **kw)
+
+    orch._request_extractor = _Capture(ExtractedRequest())
+    with TestClient(app, raise_server_exceptions=False) as client:
+        client.post("/ai/v1/planb/replan", json=_body(free_text="한 시간 뒤부터", from_instant=from_instant))
+    _, date_label, win = calls[0][:3]
+    assert date_label.endswith(date_tail) and win == window, calls[0]
+    assert ("지금" in date_label) is bool(date_tail)
 
 
 def test_extractor_failure_keeps_the_old_path() -> None:

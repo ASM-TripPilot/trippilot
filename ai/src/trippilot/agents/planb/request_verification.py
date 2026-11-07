@@ -118,6 +118,7 @@ class VerifiedRequest:
     window_start: datetime | None = None
     window_end: datetime | None = None
     end_said: bool = False  # `window_end` 가 사용자가 말한 끝인가(코드가 늘린 끝이 아니라) — 말한 끝은 밤 창·잠금도 못 넘는다
+    start_said: bool = False  # 시작을 말했나 — 이미 지난 시각("3시 이후로"를 15:30 에)도 말한 것이다. `window_start` 는 그때 비어 있다
     rain_confirmed: bool = False
     # 종류 조건 — 후보 풀에 그 종류가 있는 것만. `only` 가 비면 제한 없음, `counts` 는 그 종류를 정확히 몇 곳.
     only: frozenset[PoiCategory] = frozenset()
@@ -513,6 +514,7 @@ def verify(
     # 사용자가 끝을 **말했나** — 시작만 말해 코드가 늘린 끝(`nl_time_extended`)은 아니다. 배선이 밤에 놀기 창·방문 잠금으로
     # 더 늘릴 수 있는 쪽을 가른다(말한 끝은 아무것도 못 넘는다).
     end_said = end is not None and not any(x.startswith("nl_time_extended: end_by") for x in n)
+    start_said = any(x.startswith(("nl_time_accepted: start_after", "nl_time_satisfied")) for x in n)
     day_start = datetime.combine(on, time(0, 0), tzinfo=tz)
     day_end = day_start + DAY_END
     # 방문 시각의 하한 — 오늘이면 지금, 다른 날이면 받은 창 시작 4시간 앞까지(`verify_window` 와 같은 규칙). 받은 창 밖이어도
@@ -542,7 +544,7 @@ def verify(
     for c in extracted.categories:
         if c.at and PoiCategory(c.category) in available and (at := at_in_window(c.at, c.category)):
             category_at.append((PoiCategory(c.category), at))
-    return VerifiedRequest(visit=visit, avoid=avoid, window_start=start, window_end=end, end_said=end_said,
+    return VerifiedRequest(visit=visit, avoid=avoid, window_start=start, window_end=end, end_said=end_said, start_said=start_said,
                            rain_confirmed=rain, only=only, counts=counts,
                            visit_at=tuple(visit_at), category_at=tuple(category_at), area_center=center,
                            other_day=frozenset(other) - {p.poi_id for p in visit},

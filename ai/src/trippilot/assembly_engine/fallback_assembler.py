@@ -306,8 +306,9 @@ class RuleFallbackAssembler:
                     k = len(slots) - 1
                 last = slots[k] if k >= 0 else None
                 nxt = slots[k + 1] if k + 1 < len(slots) else None
-                ref = last.end_at if last is not None \
-                    else problem.window_on(day).start
+                ref = problem.window_on(day).start
+                if last is not None and last.end_at > ref:
+                    ref = last.end_at
                 if not_before is not None and ref < not_before:
                     ref = not_before  # 식사 창 판정도 실제로 놓일 수 있는 시각 기준
                 ref_mod = ref.hour * 60 + ref.minute
@@ -383,7 +384,9 @@ class RuleFallbackAssembler:
                         travel_min = self._est.estimate(
                             last_poi.coord, poi.coord, problem.transport
                         ).internal_minutes
-                    start = depart + timedelta(minutes=travel_min)
+                    # 앞선 잠금이 창 앞에 끝나도 자유 방문은 창 안에서 시작한다(HC4, `_required_start` 와 같은 규칙) — 그대로 두면 "3시 이후로" +
+                    # 09:20 까지 진행 중 곳에서 09:44 에 놓여 체인이 통째로 무효가 되고 하루가 비었다(검토 2026-11-06).
+                    start = max(depart + timedelta(minutes=travel_min), problem.window_on(day).start)
                     if not_before is not None:
                         # 하한 시각에 지금 위치(앵커)에서 출발 (OR 노드 lo 와 같은 규칙)
                         start = max(start, not_before + timedelta(
