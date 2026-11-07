@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
@@ -192,23 +193,18 @@ export function MoveDaySheet({
         </Pressable>
 
         {move === null ? null : (
-          <Pressable
+          <Button
             testID="editor-move-confirm"
-            accessibilityRole="button"
             disabled={target === undefined}
             onPress={() => {
               if (target !== undefined) move?.onConfirm(target.date);
             }}
-            className={`h-[52px] w-full items-center justify-center rounded-button ${
-              target === undefined ? 'bg-hairline-strong' : 'bg-primary'
-            }`}
+            className="w-full"
           >
-            <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-              {target === undefined
-                ? '옮기기'
-                : `${target.dayIndex}일차로 옮기기`}
-            </Text>
-          </Pressable>
+            {target === undefined
+              ? '옮기기'
+              : `${target.dayIndex}일차로 옮기기`}
+          </Button>
         )}
       </BottomSheetView>
     </BottomSheet>

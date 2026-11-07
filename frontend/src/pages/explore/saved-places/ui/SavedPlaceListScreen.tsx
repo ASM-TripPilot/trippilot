@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { WarningTriangleGlyph, MapPinGlyph } from '@/shared/ui/glyphs';
@@ -311,24 +312,14 @@ function CtaBar({
   return (
     <View className="w-full bg-canvas px-lg pb-lg pt-md">
       <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
-      <Pressable
+      <Button
         testID="explore-saved-createtrip"
-        accessibilityRole="button"
-        accessibilityState={{ disabled }}
         disabled={disabled}
         onPress={onPress}
-        className={`h-[54px] w-full items-center justify-center rounded-[14px] ${
-          disabled ? 'bg-surface-strong' : 'bg-primary'
-        }`}
+        className="w-full"
       >
-        <Text
-          className={`font-noto-bold text-[16px] font-bold ${
-            disabled ? 'text-muted' : 'text-on-primary'
-          }`}
-        >
-          이 장소들로 여행 만들기
-        </Text>
-      </Pressable>
+        이 장소들로 여행 만들기
+      </Button>
     </View>
   );
 }

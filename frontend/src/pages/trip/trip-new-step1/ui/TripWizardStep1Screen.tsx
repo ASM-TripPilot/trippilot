@@ -1,6 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { AlertCircleGlyph } from '@/shared/ui/glyphs';
+import { Button, buttonClasses } from '@/shared/ui/Button';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -358,6 +359,7 @@ export function TripWizardStep1Screen({
 }: TripWizardStep1ScreenProps): ReactElement {
   // loading 이면 게이트가 참이어도 [다음]을 막는다(TRIP-671 D4) — 화면이 isLoading 을 next 에 물린다.
   const nextDisabled = !canProceed || Boolean(isLoading);
+  const nextButton = buttonClasses({ disabled: nextDisabled });
   // empty 얼굴(Figma 3652) 판정 — 여행지·기간만 미선택이고 나머지(동행·취향)는 프리필로 채워진
   // 상태. 네 행이 전부 null 인 퇴화 상태(프리필 미도착)는 "나머지는 채워둘게요" 문구가 거짓이라
   // empty 로 치지 않는다. 승인 테스트 두 축이 이 경계를 함께 고정한다(TRIP-732 AC-6): summary2tone
@@ -592,25 +594,16 @@ export function TripWizardStep1Screen({
               </Pressable>
             </View>
           ) : null}
-          {/* 비활성(!canProceed || isLoading)은 opacity-40 이 아니라 연회색 채움(#E9E9EB) + 회색
-              글자(muted-soft)로 갈린다(TRIP-732 AC-8). 실제 색 정합은 6-b(스크린샷). */}
+          {/* 글자 + 화살표 글리프 행이라 Button 대신 같은 모양 클래스만 빌린다(TRIP-1828 탈출구).
+              비활성(!canProceed || isLoading)은 공용 회색 한 종(hairline + muted-soft). */}
           <Pressable
             testID="trip-wizard-step1-next"
             accessibilityRole="button"
             disabled={nextDisabled}
             onPress={onNext}
-            className={`w-full flex-row items-center justify-center gap-sm rounded-button py-[15px] ${
-              // eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill(비활성 버튼), 토큰 없음
-              nextDisabled ? 'bg-[#E9E9EB]' : 'bg-primary'
-            }`}
+            className={`${nextButton.box} w-full flex-row gap-sm`}
           >
-            <Text
-              className={`text-[16px] font-noto-bold font-bold ${
-                nextDisabled ? 'text-muted-soft' : 'text-on-primary'
-              }`}
-            >
-              다음
-            </Text>
+            <Text className={nextButton.label}>다음</Text>
             <TripChevronRightGlyph
               tone={nextDisabled ? 'muted' : 'onPrimary'}
             />
@@ -642,16 +635,13 @@ export function TripWizardStep1Screen({
                   국내 도시로 만들어볼까요?
                 </Text>
               </View>
-              <Pressable
+              <Button
                 testID="trip-wizard-overseas-dialog-confirm"
-                accessibilityRole="button"
                 onPress={onPickDomesticRegion}
-                className="w-full items-center justify-center rounded-button bg-primary py-[13px]"
+                className="w-full"
               >
-                <Text className="text-[15.5px] font-noto-bold font-bold text-on-primary">
-                  국내 도시 고르기
-                </Text>
-              </Pressable>
+                국내 도시 고르기
+              </Button>
               <Pressable
                 testID="trip-wizard-overseas-dialog-close"
                 accessibilityRole="button"

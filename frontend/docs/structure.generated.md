@@ -1855,6 +1855,7 @@
 ## src/shared/ui/
 - `src/shared/ui/AppBar.tsx`  →  AppBarBack · AppBar
 - `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · TAB_BAR_MIN_HEIGHT · TAB_BAR_PADDING_TOP · TAB_BAR_TOP · BottomTabBarProps · ItineraryIconActive · ItineraryIconInactive · RecordsIconActive · RecordsIconInactive · TAB_CONFIG · NavBarLabel · BottomTabBar
+- `src/shared/ui/Button.tsx`  →  ButtonSize · ButtonVariant · buttonClasses · Button
 - `src/shared/ui/CollageEmptyState.tsx`  →  CollageEmptyStateProps · CollageEmptyState
 - `src/shared/ui/ConfirmDialog.tsx`  →  ConfirmTone · ConfirmButton · ConfirmDialogProps · ConfirmDialog
 - `src/shared/ui/CountUpText.tsx`  →  COUNT_UP_DURATION_MS · CountUpText
@@ -2022,4 +2023,4 @@
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1326개 파일
+합계 1327개 파일

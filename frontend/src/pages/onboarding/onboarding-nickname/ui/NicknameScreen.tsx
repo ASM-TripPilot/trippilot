@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PositiveCheckGlyph, RegenerateGlyph } from '@/features/onboarding';
@@ -166,19 +167,13 @@ export function NicknameScreen({
 
           <View className="px-2xl pb-[30px] pt-md">
             <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
-            <Pressable
-              accessibilityRole="button"
+            <Button
               testID="onboarding-nickname-next"
               disabled={!canProceed}
               onPress={onNext}
-              className={`h-[52px] items-center justify-center rounded-button bg-primary ${
-                canProceed ? '' : 'opacity-40'
-              }`}
             >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                다음
-              </Text>
-            </Pressable>
+              다음
+            </Button>
           </View>
         </View>
       </KeyboardAvoidingView>

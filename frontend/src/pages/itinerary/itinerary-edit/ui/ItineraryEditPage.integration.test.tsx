@@ -645,7 +645,9 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       // ③ AC-5 — 확정하면 시각 시트가 열리고(장소 시트는 닫힘), 기본 시각은 1일차 마지막(poi-b 13:00–14:00)이 끝나는 14:00 부터 1시간.
       //    시각 시트를 닫으면 시각 없는 슬롯을 만들지 않고 아무것도 안 옮겨진다.
       fireEvent.press(screen.getByTestId(MORE('poi-c')));
-      fireEvent.press(await screen.findByTestId('editor-move-confirm'));
+      const confirmMove = await screen.findByTestId('editor-move-confirm');
+      resetPressGuard(); // 시트를 보고 따로 누른다 — ⋯ 가 연 창은 지났다([옮기기]는 창을 따르는 Button, TRIP-1828)
+      fireEvent.press(confirmMove);
       expect(await screen.findByTestId(`${TIME}-sheet`)).toBeOnTheScreen();
       expect(screen.queryByTestId(SHEET)).toBeNull();
       expect(screen.getByTestId(`${TIME}-readout`)).toHaveTextContent(
@@ -661,12 +663,16 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       // ④ AC-1·10·7 — 이번엔 [적용]. 뒷날(2일차)에서 앞날(1일차)로 옮겨지고 화면이 1일차를 따라간다 — 1일차 마지막에 14:00 으로.
       resetPressGuard(); // ③ 의 X 가 연 연타 창이 지난 것과 같다 — 아래 D4 단언이 [옮기기] 한 동작만 재게
       fireEvent.press(screen.getByTestId(MORE('poi-c')));
-      fireEvent.press(await screen.findByTestId('editor-move-confirm'));
+      const confirmMove2 = await screen.findByTestId('editor-move-confirm');
+      resetPressGuard(); // ⋯ 의 창을 닫는다 — 아래 D4 가 [옮기기]가 연 창만 재게(TRIP-1828)
+      fireEvent.press(confirmMove2);
       //  D4 — 장소 시트 [옮기기] 연타의 둘째 탭이 시각 시트가 올라오기 전 아래 「일정 저장하기」에 닿아도 저장하지 않는다.
       fireEvent.press(screen.getByTestId(SAVE));
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(putCalls).toBe(0);
-      fireEvent.press(await screen.findByTestId(`${TIME}-apply`));
+      const timeApply = await screen.findByTestId(`${TIME}-apply`);
+      resetPressGuard(); // 시각 시트를 보고 따로 누른다 — [옮기기]의 창은 지났다(TRIP-1828)
+      fireEvent.press(timeApply);
       expect(screen.queryByTestId(`${TIME}-sheet`)).toBeNull();
       expect(screen.getByTestId('itinerary-edit-day-1')).toBeSelected();
       expect(listOrder()).toEqual(['poi-a', 'poi-b', 'poi-c']);
@@ -1929,7 +1935,9 @@ describe('드래그 실배선', () => {
       await openSecondMore();
       resetPressGuard();
       fireEvent.press(screen.getByTestId('editor-move-confirm'));
-      fireEvent.press(await screen.findByTestId('editor-move-time-apply'));
+      const moveTimeApply = await screen.findByTestId('editor-move-time-apply');
+      resetPressGuard(); // 시각 시트를 보고 따로 누른다 — [옮기기]의 창은 지났다(TRIP-1828)
+      fireEvent.press(moveTimeApply);
       expect(draft()).toEqual([
         ['p1', '12:00:00', '13:00:00'],
         ['p2', '13:00:00', '14:00:00'],

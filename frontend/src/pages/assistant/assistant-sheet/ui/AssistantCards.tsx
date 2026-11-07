@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 
 import type {
   ActionLogPayload,
@@ -309,17 +310,12 @@ export function FallbackNotice({
               </Text>
             ) : null}
             {retryAction ? (
-              <Pressable
+              <Button
                 testID="assistant-fallback-retry"
-                accessibilityRole="button"
                 onPress={() => onPressAction(retryAction)}
-                className="h-[52px] items-center justify-center rounded-button bg-primary"
               >
-                {/* 킷 Button: 높이 52 · 글자 Bold 16 — 토큰에 없는 값이라 브래킷(Figma 5027:4816) */}
-                <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                  {retryAction.label}
-                </Text>
-              </Pressable>
+                {retryAction.label}
+              </Button>
             ) : null}
           </View>
         </OutlineCard>

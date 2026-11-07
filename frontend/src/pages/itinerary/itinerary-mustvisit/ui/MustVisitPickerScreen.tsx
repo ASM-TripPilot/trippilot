@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import {
   PlusGlyph,
   InfoCircleGlyph,
@@ -549,23 +550,14 @@ export function MustVisitPickerScreen({
                 {proceedBlockedReason}
               </Text>
             )}
-            <Pressable
+            <Button
               testID="itinerary-mustvisit-screen-proceed"
-              accessibilityRole="button"
               disabled={blocked}
               onPress={onProceed}
-              className={`w-full items-center justify-center rounded-button py-lg ${
-                blocked ? 'bg-hairline-strong' : 'bg-primary'
-              }`}
+              className="w-full"
             >
-              <Text
-                className={`font-noto-bold text-[16px] font-bold ${
-                  blocked ? 'text-muted' : 'text-on-primary'
-                }`}
-              >
-                {PROCEED_LABEL}
-              </Text>
-            </Pressable>
+              {PROCEED_LABEL}
+            </Button>
           </View>
         </ScrollView>
       </View>

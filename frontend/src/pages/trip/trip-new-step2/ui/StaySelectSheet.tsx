@@ -29,6 +29,7 @@
 import { SearchGlyph } from '@/shared/ui/glyphs';
 import { type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 
 import { SheetShell } from '@/shared/ui/SheetShell';
 
@@ -218,19 +219,14 @@ export function StaySelectSheet({
 
       {/* 지정(primary) — 후보가 있을 때만. 미선택이면 진짜 disabled 라 눌러도 발화 0(★3). */}
       {empty ? null : (
-        <Pressable
+        <Button
           testID="trip-base-staysheet-assign"
-          accessibilityRole="button"
           disabled={assignDisabled}
           onPress={onAssign}
-          className={`h-[52px] w-full items-center justify-center rounded-button bg-primary ${
-            assignDisabled ? 'opacity-40' : ''
-          }`}
+          className="w-full"
         >
-          <Text className="text-[16px] font-noto-bold font-bold text-on-primary">
-            이 밤 거점으로 지정
-          </Text>
-        </Pressable>
+          이 밤 거점으로 지정
+        </Button>
       )}
     </SheetShell>
   );

@@ -1,5 +1,6 @@
 import { useContext, useState, type ReactElement } from 'react';
 import { Pressable, Text, View, type ImageSourcePropType } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import BottomSheet, {
   BottomSheetBackdrop,
@@ -128,16 +129,12 @@ export function CoverPickSheet({
         )}
       />
       <View className="w-full px-lg pb-[34px] pt-md">
-        <Pressable
+        <Button
           testID="trip-settings-cover-apply"
-          accessibilityRole="button"
           onPress={() => onApply(picked)}
-          className="h-[52px] items-center justify-center rounded-button bg-primary"
         >
-          <Text className="text-[16px] font-noto-bold font-bold text-on-primary">
-            적용
-          </Text>
-        </Pressable>
+          적용
+        </Button>
       </View>
     </BottomSheet>
   );

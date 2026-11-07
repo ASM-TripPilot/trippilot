@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { useContext, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import {
   ChevronDownGlyph,
   InfoCircleGlyph,
@@ -401,19 +402,14 @@ export function MustVisitTimeScreen({
               </View>
             )}
 
-            <Pressable
+            <Button
               testID="itinerary-mustvisit-time-submit"
-              accessibilityRole="button"
               disabled={!canSubmit}
               onPress={onSubmit}
-              className={`w-full items-center justify-center rounded-button py-lg ${
-                canSubmit ? 'bg-primary' : 'bg-hairline-strong'
-              }`}
+              className="w-full"
             >
-              <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                {form.fixed ? SUBMIT_LABEL_FIXED : SUBMIT_LABEL_ANYTIME}
-              </Text>
-            </Pressable>
+              {form.fixed ? SUBMIT_LABEL_FIXED : SUBMIT_LABEL_ANYTIME}
+            </Button>
           </ScrollView>
         </View>
       </SafeAreaView>

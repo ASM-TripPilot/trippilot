@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import { MemoInline } from '@/features/attach-visit-media/index.view';
@@ -188,19 +189,13 @@ export function MemoSheet({
         ) : null}
 
         {/* [저장] — SheetShell [적용] 버튼 모양(52 · rounded-button · primary · 비활성 opacity-40). */}
-        <Pressable
+        <Button
           testID="live-memo-save"
-          accessibilityRole="button"
           disabled={saveDisabled}
           onPress={() => onSubmit(draft.trim(), seed)}
-          className={`h-[52px] items-center justify-center rounded-button bg-primary ${
-            saveDisabled ? 'opacity-40' : ''
-          }`}
         >
-          <Text className="text-[16px] font-noto-bold font-bold text-on-primary">
-            저장
-          </Text>
-        </Pressable>
+          저장
+        </Button>
       </BottomSheetView>
     </BottomSheet>
   );

@@ -1,5 +1,6 @@
 import { Fragment, type ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -362,28 +363,22 @@ export function TripWizardStep2Screen({
             <View className="bg-canvas px-lg pb-[18px] pt-md gap-md">
               <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
               {onDone !== undefined ? (
-                <Pressable
+                <Button
                   testID="trip-base-edit-done"
-                  accessibilityRole="button"
                   onPress={onDone}
-                  className="w-full items-center justify-center rounded-button bg-primary p-lg"
+                  className="w-full"
                 >
-                  <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                    완료
-                  </Text>
-                </Pressable>
+                  완료
+                </Button>
               ) : empty ? (
                 <>
-                  <Pressable
+                  <Button
                     testID="trip-base-nostay-start"
-                    accessibilityRole="button"
                     onPress={onNoStayStart}
-                    className="w-full items-center justify-center rounded-button bg-primary p-lg"
+                    className="w-full"
                   >
-                    <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                      숙소 없이 계속
-                    </Text>
-                  </Pressable>
+                    숙소 없이 계속
+                  </Button>
                   <Pressable
                     testID="trip-base-browse"
                     accessibilityRole="button"
@@ -397,18 +392,15 @@ export function TripWizardStep2Screen({
                 </>
               ) : (
                 <>
-                  <Pressable
+                  <Button
                     testID="trip-base-generate"
-                    accessibilityRole="button"
                     onPress={onGenerate}
-                    className="w-full items-center justify-center rounded-button bg-primary p-lg"
+                    className="w-full"
                   >
-                    <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                      {cards.some((card) => card.stayName)
-                        ? '이 거점으로 일정 만들기'
-                        : '일정 만들기'}
-                    </Text>
-                  </Pressable>
+                    {cards.some((card) => card.stayName)
+                      ? '이 거점으로 일정 만들기'
+                      : '일정 만들기'}
+                  </Button>
                   <Pressable
                     testID="trip-base-nostay-start"
                     accessibilityRole="button"

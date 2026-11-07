@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 
 import type { Proposal, ProposalDiffItem } from '../api/assistantContract';
 import { slotFaceLine } from '../model/cardModel';
@@ -216,19 +217,14 @@ export function ProposalCard({
       {open ? (
         <View className="flex-row gap-sm">
           {applicable ? (
-            <Pressable
+            <Button
               testID="assistant-proposal-apply"
-              accessibilityRole="button"
-              accessibilityState={{ disabled: applying }}
               disabled={applying}
               onPress={() => onApply(proposal.id)}
-              className={`h-[52px] flex-1 items-center justify-center rounded-button bg-primary${applying ? ' opacity-40' : ''}`}
+              className="flex-1"
             >
-              {/* 킷 Button: 높이 52 · 글자 Bold 16 — 토큰에 없는 값이라 브래킷(Figma 5026:3490) */}
-              <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                적용
-              </Text>
-            </Pressable>
+              적용
+            </Button>
           ) : null}
           <Pressable
             testID="assistant-proposal-dismiss"

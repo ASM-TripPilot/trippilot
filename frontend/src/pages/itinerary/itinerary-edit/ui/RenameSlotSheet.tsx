@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetTextInput,
@@ -192,10 +193,8 @@ export function RenameSlotSheet({
           </Text>
         </Pressable>
 
-        <Pressable
+        <Button
           testID="editor-rename-apply"
-          accessibilityRole="button"
-          accessibilityState={{ disabled: violation !== null }}
           disabled={violation !== null}
           onPress={respectPressGuard(() =>
             onApply({
@@ -203,14 +202,10 @@ export function RenameSlotSheet({
               displayCategory: categoryEditable ? picked : null,
             })
           )}
-          className={`h-[52px] w-full items-center justify-center rounded-button ${
-            violation === null ? 'bg-primary' : 'bg-hairline-strong'
-          }`}
+          className="w-full"
         >
-          <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-            적용
-          </Text>
-        </Pressable>
+          적용
+        </Button>
       </BottomSheetView>
     </BottomSheet>
   );

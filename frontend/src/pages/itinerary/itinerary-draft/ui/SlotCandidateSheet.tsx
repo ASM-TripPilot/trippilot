@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import { SlotCandidateCard } from '@/entities/place';
@@ -255,16 +256,13 @@ export function SlotCandidateSheet({
             </View>
 
             {/* 0건 CTA "장소 검색" — 교체하기 자리를 대체(h13). */}
-            <Pressable
+            <Button
               testID="itinerary-candidate-empty-search"
-              accessibilityRole="button"
               onPress={onPressPlaceSearch}
-              className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
+              className="w-full"
             >
-              <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                {PLACE_SEARCH_LABEL}
-              </Text>
-            </Pressable>
+              {PLACE_SEARCH_LABEL}
+            </Button>
           </>
         ) : (
           <>
@@ -411,34 +409,22 @@ export function SlotCandidateSheet({
             {/* 조회 실패면 교체하기 자리를 [다시 시도]가 대신한다(0건에서 [장소 검색]이 대신하는 것과 같다).
                 아니면 CTA "교체하기"(고정 라벨) — 선택 전/pending/조회 중 비활성. pending 라벨은 "바꾸는 중이에요". */}
             {isFetchError ? (
-              <Pressable
+              <Button
                 testID="itinerary-candidate-fetch-retry"
-                accessibilityRole="button"
                 onPress={onRetryFetch}
-                className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
+                className="w-full"
               >
-                <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                  {RETRY_LABEL}
-                </Text>
-              </Pressable>
+                {RETRY_LABEL}
+              </Button>
             ) : (
-              <Pressable
+              <Button
                 testID="itinerary-candidate-confirm"
-                accessibilityRole="button"
                 disabled={confirmDisabled}
                 onPress={onConfirm}
-                className={`h-[52px] w-full items-center justify-center rounded-button ${
-                  confirmDisabled ? 'bg-surface-strong' : 'bg-primary'
-                }`}
+                className="w-full"
               >
-                <Text
-                  className={`font-noto-bold text-[16px] font-bold ${
-                    confirmDisabled ? 'text-muted' : 'text-on-primary'
-                  }`}
-                >
-                  {isPending ? PENDING_LABEL : CONFIRM_LABEL}
-                </Text>
-              </Pressable>
+                {isPending ? PENDING_LABEL : CONFIRM_LABEL}
+              </Button>
             )}
           </>
         )}
