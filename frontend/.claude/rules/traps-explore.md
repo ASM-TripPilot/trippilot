@@ -37,6 +37,11 @@ paths:
 - **위저드 출처 d04의 ♥는 `router.back()`이라 "스택 바로 아래가 d02 select"라는 전제에 기댄다 — 그 전제를 지키는 심판이 없다** → "`from=wizard`를 달고 d04를 여는 곳은 `SavedPlacesPage` 하나"를 세던 소스 스캔은 TRIP-1145에서 지웠고, jest는 라우터가 목이라 `back`이 실제로 d02 select로 돌아가는지는 못 본다(`mockBack` 호출까지). 딥링크·알림으로 `from=wizard`가 붙은 d04에 직접 들어오면 ♥가 스택 밖으로 나가거나 무반응일 수 있다(미확인, 화면의 `onBack`도 같은 `back()`이라 새 위험은 아니다). 근거: TRIP-1093 구현 결정 — 요구사항 근거로 인용 금지. 6-b 실기 전용.
 - **d04 의 `region`·`regionCode` 는 배열이 아니라 쉼표 문자열로 도착한다(TRIP-1809)** → expo-router 는 객체 href 의 `params` 배열을 `toString()` 으로 합쳐 주소에 싣는다(`expo-router/build/link/href.js`). 그래서 `placeRegionQueries` 가 쉼표로 나눈다. `jest.mock('expo-router')` 테스트는 배열을 그대로 넘겨 이 일을 못 보니, 받는 쪽 왕복은 `src/__tests__/placeRegionParamsRoute.integration.test.tsx`(실제 라우터)가 본다. **이름에 쉼표가 들어오면 갈라진다** — 지금 카탈로그 이름 284행·별칭 186행엔 0건이고, 이를 지키는 심판은 없다. **같은 모양이 하나 더 있다** — 위저드 1/4 `mustVisitSelectHref` 가 d02 select 로 `region` 배열을 싣지만 select 모드는 이 값을 판정에 안 써서 지금은 무해하다. 객체 href 에 배열을 싣는 새 화면은 받는 쪽에서 나눠야 한다.
 
+## 사진 메모리 (d04, TRIP-1813)
+
+- **`Image.clearMemoryCache()` 는 부른 화면 것이 아니라 앱 공용 메모리 캐시 전체를 비운다** → 마운트된 뷰의 그림과 디스크 사본은 안 지워진다(뷰가 그림을 직접 쥐고, iOS 구현은 `SDImageCache.shared.clearMemory()` 만 부른다). 비운 뒤 다른 화면은 다음에 그릴 때 디스크에서 읽어 잠깐 회색일 수 있고(시뮬 실측은 칸 하나에 못 미침, 저사양 실기기는 안 잼), 렌더마다 부르면 공용 캐시가 매번 빈다. 웹은 아무 일도 안 하고 안드로이드는 메인 스레드에서 Glide 를 비운다(안 잼).
+- **`cachePolicy="disk"` 를 "메모리를 아끼는 값"으로 읽지 마라** → d04 에서 비우기 없이 `disk` + 창 5 는 3번 재진입에 1,731MB 까지 쌓였다(CG image 1,015MB). 원인은 못 찾았다(SDWebImage 소스로 설명 안 됨). `none` 은 메모리는 낮지만 원격 사진을 다시 받는다(위로 40회 53MB, 시뮬 `nettop`).
+
 ## 장소 상세 (explore, d06)
 
 - **d06 상세는 `GET /places/{poiId}` 단건이다(TRIP-1372) — 캐시 전용이 아니다.** 404(없음·UNVERIFIED)만 notFound, 그 밖의 실패는 오류 얼굴(`explore-place-error`·`-retry`)이다. 단건은 CLOSED·LOST 도 주므로 `dataStatus` 배지(`explore-place-status-badge`)를 화면이 그린다 — `SAVED_PLACE_BADGE`(d02)와 같은 문구표가 두 군데 따로 있다. `imageUrls`·`admissionFee`·`description` 은 서버에 아직 없어 그리지 않는다(TRIP-824 잔여).

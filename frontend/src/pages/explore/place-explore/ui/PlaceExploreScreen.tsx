@@ -15,6 +15,7 @@ import { WarningTriangleGlyph, MapPinGlyph } from '@/shared/ui/glyphs';
 import type { Place } from '@/shared/api/index.schemas';
 import { PoiCategory } from '@/shared/api/index.schemas';
 import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
+import { Image } from '@/shared/ui/Image';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
@@ -462,6 +463,19 @@ function GridRowSeparator(): ReactElement {
   return <View style={GRID_ROW_SEPARATOR_STYLE} />;
 }
 
+/**
+ * TRIP-1813 — 끝까지 내려도 메모리가 크게 늘지 않게 하는 두 장치. 숫자는 시뮬·개발 번들 `footprint` 이고 기능 지도 `explore-places` 에 있다.
+ * - 창(`GRID_WINDOW_SCREENS`): 보이는 화면과 위아래 두 화면만 마운트한다(기본 21 은 카드 180장).
+ * - 캐시 비우기(`releaseDecodedPhotos`): `memory-disk` 는 칸이 사라져도 풀린 그림을 메모리에 쥐고, 상한이 없어 3번 다시 들어가면 2.3GB 까지 갔다.
+ *   `none` 은 메모리는 같지만 위로 돌아갈 때마다 다시 받고, `disk` 는 1.7GB 까지 늘었다. 비우면 디스크 사본은 남아 다시 안 받는다.
+ *   마운트된 칸은 그림을 직접 쥐고 있어 사라지지 않는다. 캐시는 앱 공용이라 다른 화면의 그림도 다음에 그릴 때 디스크에서 다시 읽는다.
+ */
+const GRID_WINDOW_SCREENS = 5;
+
+function releaseDecodedPhotos(): void {
+  void Image.clearMemoryCache();
+}
+
 export function PlaceExploreScreen({
   places,
   savedPoiIds,
@@ -490,6 +504,7 @@ export function PlaceExploreScreen({
 }: PlaceExploreScreenProps): ReactElement {
   useToastBottom(FAB_STACK_TOP); // 토스트가 FAB 스택 위로 뜬다(TRIP-1559)
   const { hidden: fabsHidden, onScroll } = useScrollHide();
+  useEffect(() => releaseDecodedPhotos, []);
   const savedSet = useMemo(() => new Set(savedPoiIds), [savedPoiIds]);
   const pendingSet = useMemo(() => new Set(pendingPoiIds), [pendingPoiIds]);
 
@@ -503,6 +518,9 @@ export function PlaceExploreScreen({
           className="flex-1"
           scrollEventThrottle={16}
           onScroll={onScroll}
+          onScrollEndDrag={releaseDecodedPhotos}
+          onMomentumScrollEnd={releaseDecodedPhotos}
+          windowSize={GRID_WINDOW_SCREENS}
           data={places}
           keyExtractor={(place) => place.poiId}
           numColumns={2}
