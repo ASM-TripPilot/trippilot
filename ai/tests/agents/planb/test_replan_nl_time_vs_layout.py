@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 
 from trippilot.api.wiring import _spoken_layout, build_dev_app, demo_poi_seed
 from trippilot.domain.llm.llm import TypedResult
-from trippilot.llm_gateway.gates.replan.replan_request_extraction import ExtractedRequest
+from trippilot.llm_gateway.gates.replan.replan_request_extraction import ExtractedPlace, ExtractedRequest
 
 from tests.api.test_api_replan_wired import _DIRECTIVES, _body
 
@@ -85,9 +85,32 @@ def test_ordinary_replan_words_never_end_or_extend_the_day(said) -> None:
     "전부 취소", "다 취소해줘", "남은 일정 취소", "오늘 일정 끝", "오늘은 여기까지 할래", "오늘 일정 종료", "오늘 일정 마무리할래", "오늘은 여기서 마무리할게",
     "남은 일정 없애줘", "남은 일정 삭제해줘", "오늘은 이만 할래", "오늘 일정 접을래", "남은 일정 지워줘", "일정 끝내고 싶어",
     "오늘은 여기까지 할래 내일 다시 올게", "전부 취소하고 숙소로 다시 돌아갈래",  # 이 '다시'는 다시 짜 달라는 말이 아니다
+    "이쯤에서 마무리하자", "오늘은 여기에서 마무리할게", "오늘은 이걸로 끝", "비 와서 오늘 일정 취소할래", "피곤해서 그만할래", "일정 취소하고 싶어",
+    "일정 다 취소하고 쉴래", "남은 일정 취소하고 호텔로 들어갈래", "춥고 피곤해서 오늘은 끝낼래",
 ])
 def test_real_ending_words_still_end_the_day(said) -> None:
     assert _layout(said, ["END_DAY"])[0] == ["END_DAY"]
+
+
+@pytest.mark.parametrize("said,why", [
+    # 다시 짜 달라는 말의 다른 꼴 (실측 0.75~0.89)
+    ("남은 일정 취소하고 다시 만들어줘", "reshape_word"), ("남은 일정 취소하고 다시 구성해줘", "reshape_word"),
+    ("오늘 일정 취소하고 새로 만들어줘", "reshape_word"), ("오늘 일정 삭제하고 다른 곳 추천해줘", "reshape_word"),
+    ("남은 일정 없애고 맛집 위주로 짜줘", "reshape_word"), ("남은 일정 취소하고 저녁에 맞춰줘", "reshape_word"),
+    ("오늘 일정 지워줘 다시 만들고 싶어", "reshape_word"),
+    # 그것으로 끝낸다는 말
+    ("오늘 일정 맛집으로 마무리해줘", "goes_on"), ("오늘 일정 마지막은 바다로 마무리해줘", "goes_on"),
+    ("오늘 일정 바다 보면서 마무리하고 싶어", "goes_on"), ("오늘 일정 숙소 근처에서 마무리해줘", "goes_on"),
+    # 다른 일로 이어지는 말
+    ("오늘 일정 종료하고 카페 가자", "goes_on"), ("오늘 일정 야경 보고 마무리할래", "goes_on"), ("오늘 일정 저녁 먹고 마무리할래", "goes_on"),
+    # 끝말이 아니다
+    ("오늘 일정 끝내주는 맛집으로 해줘", "no_end_word"), ("남은 일정 이만원 이하로 해줘", "no_end_word"),
+    # 그곳만
+    ("남은 일정 중에 박물관만 취소해줘", "goes_on"), ("남은 일정 중 하나만 없애줘", "goes_on"),
+])
+def test_end_words_that_do_not_end_the_day(said, why) -> None:
+    out, notes = _layout(said, ["END_DAY"])
+    assert out == [] and f"end_day_dropped: {why}" in notes
 
 
 @pytest.mark.parametrize("said", [
@@ -98,7 +121,11 @@ def test_real_extending_words_stay(said) -> None:
     assert _layout(said, ["EXTEND_DAY"])[0] == ["EXTEND_DAY"]
 
 
-@pytest.mark.parametrize("said", ["저녁 8시 반 이후로 바꿔줘", "3시 이후로 다시 짜줘", "남은 일정 다시 짜줘", "남은 일정 없애줘", "너무 더워서 실내로", "더블룸 있는 곳으로"])
+@pytest.mark.parametrize("said", [
+    "저녁 8시 반 이후로 바꿔줘", "3시 이후로 다시 짜줘", "남은 일정 다시 짜줘", "남은 일정 없애줘", "너무 더워서 실내로", "더블룸 있는 곳으로",
+    "남은 일정 더현대로 바꿔줘", "날이 더울 것 같아서 일정 좀 바꿔줘", "비가 계속 오니까 남은 일정 다시 짜줘", "아직 점심 전인데 남은 일정 다시 짜줘",
+    "아직 못 본 곳 위주로 일정 바꿔줘", "좀더 짧게 일정 줄여줘", "남은 일정 더는 못 걷겠어", "더 못 걷겠어 일정 바꿔줘",
+])
 def test_words_without_asking_for_more_drop_extending(said) -> None:
     out, notes = _layout(said, ["EXTEND_DAY"])
     assert out == [] and "extend_day_dropped: no_more_word" in notes
@@ -113,6 +140,13 @@ def test_rearrange_words_do_not_end_the_day_through_replan(monkeypatch) -> None:
     body, _ = _replan(monkeypatch, ExtractedRequest(), "오늘 남은 일정 다시 맞춰줘", "END_DAY", "EXTEND_DAY")
     assert "end_day_dropped: no_end_word" in body["notes"] and "extend_day_dropped: no_more_word" in body["notes"], body["notes"]
     assert body["empty_reason"] is None and body["itinerary"], body["notes"]
+
+
+def test_naming_a_place_does_not_end_the_day(monkeypatch) -> None:
+    """낱말 가드를 지난 말이라도 뺄 곳을 말했으면 그곳만 뺀다 — 하루를 끝내면 남은 일정이 다 사라진다."""
+    body, seen = _replan(monkeypatch, ExtractedRequest(places=(ExtractedPlace("제주 흑돼지거리", "avoid"),)), "제주 흑돼지거리 취소해줘", "END_DAY")
+    assert "nl_place_over_directive: END_DAY" in body["notes"] and seen, body["notes"]
+    assert "END_DAY" not in body["resolved_directives"]
 
 
 def test_a_real_ending_still_ends_the_day_through_replan(monkeypatch) -> None:
@@ -180,11 +214,50 @@ def test_an_inferred_dinner_lock_does_not_cross_the_said_window(monkeypatch) -> 
     """"오후에만 돌아다닐래"(KEEP_DINNER 0.755) — 18:30 저녁을 잠가 말한 끝 18:00 을 넘겼다."""
     body, seen = _replan(monkeypatch, ExtractedRequest(start_after=time(12, 0), end_by=time(18, 0)), "오후에만 돌아다닐래", "KEEP_DINNER",
                          from_instant=_OTHER_DAY, current_slots=_dinner_slot("18:30", "19:30"), reasons=["none"])
-    assert "nl_time_over_directive: KEEP_DINNER" in body["notes"], body["notes"]
-    assert not any(n.startswith("keep_dinner") for n in body["notes"]), body["notes"]
+    assert any(n.startswith("keep_dinner_skipped") for n in body["notes"]), body["notes"]
     assert not any(b.reason == "keep_dinner" for b in seen[-1].fixed_blocks)
     assert all(s["end_at"][:5] <= "18:00" for d in body["itinerary"]["days"] for s in d["slots"]), [
         (s["poi_id"][-4:], s["start_at"], s["end_at"]) for d in body["itinerary"]["days"] for s in d["slots"]]
+
+
+def test_an_inferred_dinner_lock_inside_the_said_window_stays(monkeypatch) -> None:
+    """"저녁 약속 있으니까 3시 이후로 짜줘"(0.775) — 창 안의 18:30 저녁을 옮기면 약속을 놓친다."""
+    body, seen = _replan(monkeypatch, ExtractedRequest(start_after=time(15, 0)), "저녁 약속 있으니까 3시 이후로 짜줘", "KEEP_DINNER",
+                         from_instant=_OTHER_DAY, current_slots=_dinner_slot("18:30", "19:30"), reasons=["none"])
+    assert any(n.startswith("keep_dinner:") for n in body["notes"]), body["notes"]
+    assert any(b.reason == "keep_dinner" for b in seen[-1].fixed_blocks)
+
+
+def test_a_cancelled_dinner_is_not_kept_by_the_word_reservation(monkeypatch) -> None:
+    body, seen = _replan(monkeypatch, ExtractedRequest(end_by=time(18, 0)), "저녁 예약 취소돼서 6시까지만 돌래", "KEEP_DINNER",
+                         from_instant=_OTHER_DAY, current_slots=_dinner_slot("18:30", "19:30"), reasons=["none"])
+    assert not any(b.reason == "keep_dinner" for b in seen[-1].fixed_blocks), body["notes"]
+
+
+def test_a_dinner_before_the_said_start_is_not_locked(monkeypatch) -> None:
+    body, seen = _replan(monkeypatch, ExtractedRequest(start_after=time(20, 0)), "저녁 먹고 8시 이후로 바꿔줘", "KEEP_DINNER",
+                         from_instant=_OTHER_DAY, current_slots=_dinner_slot("18:30", "19:30"), reasons=["none"])
+    assert not any(b.reason == "keep_dinner" for b in seen[-1].fixed_blocks), body["notes"]
+
+
+@pytest.mark.parametrize("said,stay", [("오후에만 맛집 다닐래", False), ("오후 6시까지만 빵집 투어", False), ("6시까지 집에 갈래", True)])
+def test_a_said_end_adds_end_near_stay_only_when_going_back(monkeypatch, said, stay) -> None:
+    body, _ = _replan(monkeypatch, ExtractedRequest(end_by=time(18, 0)), said, "SHORTER_DAY", from_instant=_OTHER_DAY, reasons=["none"])
+    assert ("END_NEAR_STAY" in body["resolved_directives"]) is stay, body["resolved_directives"]
+
+
+@pytest.mark.parametrize("said,kept", [("오전에 3시간만 돌래", False), ("오전에 두 시간만 돌래", False), ("시간만 3시로 옮겨줘", True)])
+def test_three_hours_is_not_keep_the_places(monkeypatch, said, kept) -> None:
+    """"3시간만"의 시간만은 길이다 — EARLIER(장소 그대로)로 남으면 새 곳 없이 창이 비었다."""
+    body, _ = _replan(monkeypatch, ExtractedRequest(end_by=time(12, 0)), said, "EARLIER", from_instant=_OTHER_DAY, reasons=["none"])
+    assert ("EARLIER" in body["resolved_directives"]) is kept, body["notes"]
+
+
+def test_a_said_end_with_an_empty_pool_is_no_candidate(monkeypatch) -> None:
+    """풀이 비었는데 END_DAY 라 조기 반환을 지나쳤고 말한 끝이 그것을 뺐다 — 빈 풀로 조립하지 않는다."""
+    body, seen = _replan(monkeypatch, ExtractedRequest(end_by=time(18, 0)), "오늘 일정 6시에 끝낼래", "END_DAY", from_instant=_OTHER_DAY,
+                         anchor={"lat": 37.5665, "lng": 126.9780}, transport_mode="CAR")
+    assert body["empty_reason"]["code"] == "NO_CANDIDATE" and not seen, body["notes"]
 
 
 @pytest.mark.parametrize("said", ["저녁은 그대로 두고 오후에만 다닐래", "저녁은 유지하고 3시 이후로 짜줘", "저녁 예약은 그대로 하고 2시부터 짜줘"])

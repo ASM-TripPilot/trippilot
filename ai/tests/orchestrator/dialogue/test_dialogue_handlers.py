@@ -539,6 +539,25 @@ def test_replan_does_not_swallow_a_request_that_starts_like_an_acceptance(said) 
     assert _replan_action(said).get("prefill"), said
 
 
+def test_replan_keeps_the_day_of_an_accepted_offer() -> None:
+    """"응" + 분류가 수락한 제안에서 실은 날 — 실을 말은 없어도 그 날을 연다."""
+    assert _replan_action("응", "내일") == {"targetDate": _D3.isoformat()}
+    assert _replan_action("네 부탁해요", "오늘") == {}
+
+
+@pytest.mark.parametrize("said", [
+    "두 번째 일정부터 다시 짜줘", "마지막 장소 빼고 다시 짜줘", "세 번째 코스부터 3시 이후로 바꿔줘",  # 순번은 장소다
+    "내일 등산이라 오늘은 일찍 끝낼래", "내일 일찍 일어나야 해서 일찍 끝낼래", "내일 비 온대서 일정 바꿔줘", "오늘 일찍 끝내고 내일 더 놀래",  # 사유·오늘 얘기
+])
+def test_replan_without_a_day_slot_does_not_read_a_day_from_other_words(said) -> None:
+    assert _replan_action(said) == {"prefill": said}
+
+
+def test_replan_without_a_day_slot_reads_the_day_at_the_head_of_the_sentence() -> None:
+    """분류는 날을 말한 문장의 10% 에서 칸을 비운다(실측 2026-11-07) — 그중 흔한 꼴이 "내일은"이다."""
+    assert _replan_action("내일은 3시 이후로 바꿔줘") == {"prefill": "3시 이후로 바꿔줘", "targetDate": _D3.isoformat()}
+
+
 def test_replan_goes_to_replan_in_trip_and_regenerate_otherwise() -> None:
     in_trip = _run(HANDLERS[Intent.REPLAN], _ctx())
     assert _types(in_trip) == ["OPEN_REPLAN"] and in_trip.next_actions[0].label == "다시 짜기"

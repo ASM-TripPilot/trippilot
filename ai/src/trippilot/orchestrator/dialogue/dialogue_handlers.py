@@ -2307,6 +2307,9 @@ _REPLAN_PREFILL_MAX = 500
 _ACK_TOKENS = (r"응|웅|어|네|넹|넵|예|그래|그럼|그럼요|좋아|좋아요|좋습니다|ㅇㅇ|ㅇㅋ|오케이|오키|ok|okay|"
                r"부탁해|부탁해요|부탁합니다|부탁드려요|해줘|해 줘|해주세요|해 주세요|그렇게 해줘|그렇게 해 줘|그렇게 해주세요|그렇게 하자|그렇게 해")
 _ACK_ONLY = re.compile(rf"^(?:(?:{_ACK_TOKENS})[\s,.!~^ㅎㅋ]*)+$", re.IGNORECASE)
+# 날 칸이 비었을 때 말에서 찾은 날을 믿지 않는 말 — 오늘 얘기("오늘은")·사유("내일 등산이라 …", "내일 일찍 일어나야 해서 …")
+_NOT_THAT_DAY = re.compile(r"오늘|남은|[가-힣](?:서|니까)\s|이라\s")
+_DAY_PARTICLE = re.compile(r"^(내일\s?모레|내일|모레|글피|[월화수목금토일]요일|\d{1,2}월\s*\d{1,2}일)(?:은|는|도|에|의)(?=\s)")
 
 
 def _replan_params(ctx: TurnContext, trip: TripInfo) -> dict[str, str]:
@@ -2316,19 +2319,28 @@ def _replan_params(ctx: TurnContext, trip: TripInfo) -> dict[str, str]:
     **날을 말했는데 그 날을 열 수 없으면 말도 싣지 않는다** — 지난 날·일정 없는 날·못 읽은 날("다음 날")의 말을 오늘 화면에 실으면 다른 날 요청이
     오늘 일정을 바꾼다. 빈 칸으로 오늘을 여는 것이 낫다. 날 말은 칸에서 뗀다 — 지난 메시지의 버튼을 다음 날 누르면 "내일"이 하루 밀린다(F-7 과 같은 함정)."""
     said = (ctx.heard or ctx.utterance).strip()
-    if not said or _ACK_ONLY.match(said):
-        return {}
+    if _ACK_ONLY.match(said):  # 수락에는 실을 말이 없다 — 수락한 제안의 날(분류가 칸에 싣는다)만 남는다
+        said = ""
     day_word = ctx.arguments.get("target_date")
-    spoken, rest = _split_day(said, ctx.snapshot, ctx.today)
-    on = resolve_day(day_word, ctx.snapshot, ctx.today) if day_word else spoken
-    if on is None and day_word:
-        return {}
-    # 분류가 날 칸을 안 채웠을 때 말에서 찾은 지난 날은 요청의 날이 아니다("어제 늦게 자서 오늘은 천천히")
+    bare = _DAY_PARTICLE.sub(r"\1", said)  # 날 표현 추출은 조사 붙은 꼴("내일은")을 안 읽는다
+    spoken, rest = _split_day(bare, ctx.snapshot, ctx.today)
+    if day_word:
+        on = resolve_day(day_word, ctx.snapshot, ctx.today)
+        if on is None:
+            return {}
+    else:
+        # 분류는 날을 말한 문장의 10% 에서 칸을 비운다(실측 2026-11-07, "내일은 3시 이후로 바꿔줘"·"토요일 일정 6시까지만"). 그때만 말 머리의 날 표현을
+        # 본다 — 순번은 안 믿는다("두 번째 일정부터"·"마지막 장소 빼고"는 장소다).
+        word = extract_kind(bare, ArgumentKind.DATE)
+        head = word and bare.startswith(word) and not _NOT_THAT_DAY.search(said)
+        on = spoken if head and resolve_day(word, ctx.snapshot, ctx.today) == spoken else None
+    # 칸 없이 말에서 찾은 지난 날은 요청의 날이 아니다("어제 피곤했어")
     if on is None or on == ctx.today or (not day_word and on < ctx.today):
-        return {"prefill": said[:_REPLAN_PREFILL_MAX]}
+        return {"prefill": said[:_REPLAN_PREFILL_MAX]} if said else {}
     if not (ctx.today < on <= trip.end_date and ctx.snapshot.on(on)):
         return {}
-    return {"prefill": (rest if spoken == on else said)[:_REPLAN_PREFILL_MAX], "targetDate": on.isoformat()}
+    text = rest if spoken == on else said
+    return {"targetDate": on.isoformat(), **({"prefill": text[:_REPLAN_PREFILL_MAX]} if text else {})}
 
 
 def _assemble_replan(ctx: TurnContext, results: Mapping[str, TaskResult]) -> Facts:

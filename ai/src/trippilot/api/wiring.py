@@ -1377,7 +1377,7 @@ def _timed_blocks(
 def _dinner_blocks(
     request: schemas.ReplanRequest, resolved: Sequence[str], pool: CandidatePool,
     blocks: tuple[FixedBlock, ...], tz: timezone, not_before: datetime | None, notes: list[str],
-    holidays: Mapping[date, frozenset[str]] | None = None,
+    holidays: Mapping[date, frozenset[str]] | None = None, *, nl: nl_verify.VerifiedRequest | None = None,
 ) -> tuple[FixedBlock, ...]:
     """KEEP_DINNER("저녁은 그대로") — 원 일정에서 저녁 식사창에 걸친 식당 슬롯을 원 시각 그대로 잠근다.
 
@@ -1387,9 +1387,14 @@ def _dinner_blocks(
     **저녁은 한 끼다** — 창에 걸친 식당이 여럿이면 가장 이른 하나만 잠근다. 둘을 잠그면 둘 사이 이동이
     안 맞을 때(18–19시 흑돼지거리 → 19:30 월정리 28km) 모든 조립 단계가 해 없음이었다(리뷰 재현).
     잠글 것이 없으면 노트로 밝힌다(침묵 금지).
+
+    말한 창을 벗어난 저녁은 잠그지 않는다 — "오후에만"(임베딩 0.755)이 18:30 저녁을 잠가 말한 끝을 넘겼다. 창 안이면 잠근다("저녁 약속 있으니까
+    3시 이후로"). 칩으로 골랐거나 "저녁은 그대로 두고"라고 했으면 창과 상관없이 잠근다.
     """
     if "KEEP_DINNER" not in resolved:
         return ()
+    if "KEEP_DINNER" in request.directives or _DINNER_KEEP_WORDS.search(request.free_text or ""):
+        nl = None
     index = {p.poi_id: p for p in pool.pois}
     seen = {(b.poi_id, b.window.start) for b in blocks}
     excluded = set(request.excluded_poi_ids)
@@ -1411,7 +1416,9 @@ def _dinner_blocks(
             continue
         if ((not_before is not None and end <= not_before)
                 or not open_hours_ok(poi, start, end, holidays)  # HC1 과 같은 판정 — 공휴일 휴무 포함(상황 감지 H1)
-                or any(start < b.window.end and b.window.start < end for b in blocks)):
+                or any(start < b.window.end and b.window.start < end for b in blocks)
+                or (nl is not None and ((nl.window_start is not None and start < nl.window_start)
+                                        or (nl.end_said and end > nl.window_end)))):
             notes.append(f"keep_dinner_skipped: {slot.poi_id}")
             continue
         out.append(FixedBlock(poi_id=PoiId(slot.poi_id), window=TimeWindow(start=start, end=end),
@@ -1949,14 +1956,32 @@ def _spoken_nightlife(request: schemas.ReplanRequest, resolved: list[str], notes
 
 
 # 끝내기·늘리기 낱말 — 말로 온 END_DAY·EXTEND_DAY 는 이게 있어야 남는다(`_spoken_layout`). 칩이 없는 지시라 말이 유일한 입구여서 넓게 잡는다.
-_END_WORDS = re.compile(r"취소|끝|그만|여기까지|마치|마칠|마무리|종료|이만|없애|지워|삭제|날려|접(?:을|자|어|고|는)|스톱|파기")
-# 다시 짜 달라는 말 — 있으면 끝말이 같이 있어도 끝내기가 아니다("오늘 일정 취소하고 다시 짜줘"). "내일 다시 올게"·"숙소로 다시 돌아갈래"의 다시는 아니다.
-_RESHAPE_WORDS = re.compile(r"다시\s*(?:짜|맞|잡|계획|일정|부탁)|새로\s*(?:짜|잡)|바꿔|변경|수정|조정|대신")
-_MORE_WORDS = re.compile(r"더(?![워운위웠블])|오래|계속|실컷|아직|새벽|자정|추가|늘려|늘리|늦게|밤")
-# 시각을 말해도 지키는 지시 — 원 저녁을 그대로 두라는 말·시간만 당기라는 말·숙소로 돌아간다는 말
-_DINNER_KEEP_WORDS = re.compile(r"(?:저녁|석식|디너)[^.?!]*(?:그대로|유지|두고|건드리|예약|지켜|고정)")
-_EARLIER_WORDS = re.compile(r"당겨|당기|몰아|시간만|그대로")
-_STAY_WORDS = re.compile(r"숙소|호텔|집|돌아가|돌아갈|들어가|들어갈")
+_END_WORDS = re.compile(r"취소|끝(?!내주)|그만|여기까지|마치|마칠|마무리|종료|이만(?!\s*원)|없애|지워|삭제|날려|접(?:을|자|어|고|는)|스톱|파기")
+# 끝말이 있어도 끝내기가 아닌 말 — 놓치면 하루를 다시 짤 뿐이고, 잘못 잡으면 남은 하루가 사라진다.
+# ① 다시 짜 달라는 말("취소하고 새로 만들어줘"). "내일 다시 올게"·"숙소로 다시 돌아갈래"의 다시는 아니다
+_RESHAPE_WORDS = re.compile(r"다시(?!\s*(?:올|오|와|돌아|갈|가))|새로|바꿔|변경|수정|조정|대신|짜[줘주자봐]|추천|만들|구성|세워|다른|위주|맞춰")
+# ② 그것으로 끝낸다는 말("맛집으로 마무리해줘"·"바다 보면서 마무리"·"숙소 근처에서 마무리") — 갈 곳을 말한 것이다. "박물관만 취소해줘"는 그곳만이다
+_END_WITH = re.compile(r"(?<!이쯤)(?<!이걸)(?<!여기)(?:으?로|에서|면서)\s*(?:끝|마무리|마치|마칠)|만\s*(?:취소|없애|지워|삭제)")
+# ③ 다른 일로 이어지는 말("취소하고 카페 가자"·"야경 보고 마무리할래"). "끝내고 싶어"는 끝내는 말이고, 쉬러 들어간다는 말도 끝내는 말이다
+_THEN = re.compile(r"[가-힣]고\s+(?!싶)")
+_STAY_WORDS = re.compile(r"숙소|호텔|(?<![가-힣])집|돌아가|돌아갈|들어가|들어갈")
+_REST_WORDS = re.compile(r"쉬|쉴|자러|잘래|피곤|힘들|지쳐|여기까지")
+_MORE_WORDS = re.compile(r"(?:^|\s|좀)더(?=\s|$|놀|돌|가|있)(?!\s*못)|(?:오래|계속|아직|실컷)\s*(?:더\s*)?(?:놀|돌|있|다니)|(?:새벽|자정)\s*까지|추가|늘려|늘리|늦게|밤")
+_LESS_WORDS = re.compile(r"줄여|줄이|짧|일찍")
+# 시각을 말해도 지키는 지시 — 원 저녁을 그대로 두라는 말·시간만 당기라는 말. "3시간만"의 시간만은 길이다
+_DINNER_KEEP_WORDS = re.compile(r"(?:저녁|석식|디너)[^.?!]*(?:그대로|유지|두고|건드리|지켜|고정)")
+_EARLIER_WORDS = re.compile(r"당겨|당기|몰아|(?<![\d한두세네섯])(?<![\d한두세네섯]\s)시간만|그대로")
+
+
+def _end_day_dropped(said: str) -> str | None:
+    """말로 온 END_DAY 를 뺄 이유 — 끝내기로 읽어도 되면 None."""
+    if not _END_WORDS.search(said):
+        return "no_end_word"
+    if _RESHAPE_WORDS.search(said):
+        return "reshape_word"
+    if _END_WITH.search(said) or (_THEN.search(said) and not (_STAY_WORDS.search(said) or _REST_WORDS.search(said))):
+        return "goes_on"
+    return None
 
 
 def _spoken_layout(request: schemas.ReplanRequest, resolved: list[str], notes: list[str]) -> list[str]:
@@ -1970,12 +1995,12 @@ def _spoken_layout(request: schemas.ReplanRequest, resolved: list[str], notes: l
     said = request.free_text or ""
     out = list(resolved)
     if "END_DAY" in out and "END_DAY" not in request.directives:
-        why = "no_end_word" if not _END_WORDS.search(said) else "reshape_word" if _RESHAPE_WORDS.search(said) else None
+        why = _end_day_dropped(said)
         if why:
             out.remove("END_DAY")
             notes.append(f"end_day_dropped: {why}")
     if ("EXTEND_DAY" in out and "EXTEND_DAY" not in request.directives
-            and not (_MORE_WORDS.search(said) or _EXTEND.search(said))):
+            and not ((_MORE_WORDS.search(said) and not _LESS_WORDS.search(said)) or _EXTEND.search(said))):
         out.remove("EXTEND_DAY")
         notes.append("extend_day_dropped: no_more_word")
     return out
@@ -1983,17 +2008,19 @@ def _spoken_layout(request: schemas.ReplanRequest, resolved: list[str], notes: l
 
 def _said_time_wins(request: schemas.ReplanRequest, resolved: list[str], nl: nl_verify.VerifiedRequest,
                     notes: list[str]) -> list[str]:
-    """말한 시각이 자유입력에서 **추정한** 모양 지시를 대신한다 — 칩은 사용자 선택이라 둔다.
+    """말한 시각·장소가 자유입력에서 **추정한** 모양 지시를 대신한다 — 칩은 사용자 선택이라 둔다.
 
     시각을 말했으면 하루의 창은 그 시각이 정한다. 그런데 낱말 하나로 붙은 지시가 그 창을 비우거나 넘었다(실모델 실측 2026-11-06):
     - SHORTER_DAY — "6시까지 숙소로 돌아갈래"·"저녁부터 일정 짜줘"가 새 방문 한 곳 상한으로 09~18시 창에 한 곳
     - EARLIER — "아침 7시부터"·"오전에만"이 장소 그대로라 새 곳을 못 넣어 창이 빈다. "앞으로 당겨줘 2시부터"처럼 당기라고 했으면 둔다
-    - KEEP_DINNER — "오후에만"(0.755)이 18:30 저녁을 잠가 말한 창을 넘긴다. "저녁은 그대로 두고"라고 했으면 둔다
     - END_DAY — "오늘 일정 6시에 끝낼래"(0.858)가 18시 창이 아니라 지금 하루를 끝낸다. 끝을 말했을 때만 뺀다
     끝을 말했고 숙소로 돌아간다는 말이 있으면 숙소 쪽 마무리만 남긴다(숙소를 말하지 않았으면 안 붙인다).
+
+    갈 곳·뺄 곳·종류·동네를 말했으면 END_DAY 도 뺀다 — 낱말 가드(`_spoken_layout`)를 지난 "경복궁 취소해줘"가 하루를 끝내면 안 된다.
     """
-    said = nl.end_said or nl.start_said
-    if not said:
+    timed = nl.end_said or nl.start_said
+    placed = nl.visit or nl.avoid or nl.only or nl.counts or nl.category_at or nl.area_center
+    if not (timed or placed):
         return resolved
     text = request.free_text or ""
     chips = set(request.directives)
@@ -2005,15 +2032,15 @@ def _said_time_wins(request: schemas.ReplanRequest, resolved: list[str], nl: nl_
             out.remove(key)
             gone.append(key)
 
-    drop("SHORTER_DAY")
-    drop("EARLIER", keep_if=_EARLIER_WORDS)
-    drop("KEEP_DINNER", keep_if=_DINNER_KEEP_WORDS)
-    if nl.end_said:
+    if timed:
+        drop("SHORTER_DAY")
+        drop("EARLIER", keep_if=_EARLIER_WORDS)
+    if nl.end_said or placed:
         drop("END_DAY")
-        if gone and _STAY_WORDS.search(text) and "END_NEAR_STAY" not in out:
-            out.append("END_NEAR_STAY")
+    if nl.end_said and gone and _STAY_WORDS.search(text) and "END_NEAR_STAY" not in out:
+        out.append("END_NEAR_STAY")
     if gone:
-        notes.append(f"nl_time_over_directive: {','.join(gone)}")
+        notes.append(f"nl_{'time' if timed else 'place'}_over_directive: {','.join(gone)}")
     return out
 
 
@@ -2850,11 +2877,13 @@ class WiredItineraryOrchestrator:
         nl = self._verified_request(request, anchor, not_before, daily_rain, notes, nl_pending,
                                     available=frozenset(p.category for p in pool.pois), nearby=pool.pois)
         resolved = _said_time_wins(request, resolved, nl, notes)
+        if not pool.pois and "END_DAY" not in resolved:  # 위 조기 반환이 END_DAY 라 지나쳤는데 말한 끝이 그것을 뺐다
+            return self._replan_empty("NO_CANDIDATE", notes, resolved, unknown)
         # 사용자가 말한 창(없으면 지금)으로 원 일정을 거르는 하한 — 시간만 당기기·더 늦게까지·원 일정 지키기·앞 요청 기억이 같이 본다(상한은
         # `nl.window_end`). "3시 이후로"면 하루가 15시에 시작한다는 말이라, 15시 전에 끝난 원 일정을 15시 뒤 창에 몰아넣지 않는다(검토 2026-11-06).
         nl_floor = max(filter(None, (not_before, nl.window_start)), default=None)
         blocks = _replan_fixed_blocks(request, self._tz)
-        blocks += _dinner_blocks(request, resolved, pool, blocks, self._tz, not_before, notes, holidays)  # 저녁은 그대로
+        blocks += _dinner_blocks(request, resolved, pool, blocks, self._tz, not_before, notes, holidays, nl=nl)  # 저녁은 그대로
         in_progress = _in_progress_blocks(request, not_before, self._tz, blocks)  # 진행 중은 그대로
         if in_progress:
             blocks += in_progress
