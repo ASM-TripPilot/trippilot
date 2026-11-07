@@ -1,5 +1,4 @@
 import { type ReactElement } from 'react';
-import { Text } from 'react-native';
 
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 
@@ -10,15 +9,12 @@ import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
  */
 export function PeriodLengthDialog({
   hasItinerary,
-  droppedNotice,
   failed,
   onCancel,
   onConfirm,
 }: {
   /** 지울 일정이 있나(`itineraryDayCount > 0`) — 없는 일정이 사라진다고 말하지 않는다. */
   hasItinerary: boolean;
-  /** 일수를 줄여 빠지는 여행지 한 줄(`droppedNotice`). 없으면 줄 자체가 없다. */
-  droppedNotice?: string | null;
   failed: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -53,15 +49,6 @@ export function PeriodLengthDialog({
           onPress: onConfirm,
         },
       ]}
-    >
-      {droppedNotice ? (
-        <Text
-          testID="trip-settings-length-dropped"
-          className="mt-sm font-noto text-label text-ink"
-        >
-          {droppedNotice}
-        </Text>
-      ) : null}
-    </ConfirmDialog>
+    />
   );
 }

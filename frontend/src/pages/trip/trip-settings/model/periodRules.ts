@@ -89,10 +89,23 @@ export function isTripChildKey(
 }
 
 /**
- * 일수가 바뀔 때 박수 합(INV-U1-14: Σ ≤ 기간)을 새 박수에 맞춘다. 늘면 마지막(seq 최대) 여행지에 차이를 더하고, 줄면 합이 새 박수를
- * 넘는 만큼 마지막부터 깎고 앞으로 간다. **이번에 깎여 0박이 된 여행지는 뺀다**(사용자 결정 2026-11-06 — 남겨 두면 그날 후보가 안 머무는
- * 도시로 잡힌다). 첫 여행지(seq 최소)는 0박이어도 남긴다(서버는 목적지 0개를 거절한다). 깎이지 않은 0박 여행지는 건드리지 않는다.
- * 합이 이미 새 박수 이하면 줄여도 안 깎는다. 입력은 안 바꾸고 남는 여행지의 순서·seq·다른 칸은 그대로다.
+ * 일수를 이만큼 못 줄이면 그 이유 — 여행지가 둘 이상이면 곳마다 최소 1박이다(위저드 하한과 같다 · 한 곳은 당일치기까지 된다).
+ * 늘리거나 그대로면 null(옛 0박 도시가 있는 여행도 일수가 안 줄면 안 막는다).
+ */
+export function shrinkBlockNotice(
+  destinations: readonly TripDestination[],
+  oldNights: number,
+  newNights: number
+): string | null {
+  const count = destinations.length;
+  if (count < 2 || newNights >= oldNights || newNights >= count) return null;
+  return `여행지가 ${count}곳이라 ${count}박보다 줄일 수 없어요`;
+}
+
+/**
+ * 일수가 바뀔 때 박수 합(INV-U1-14: Σ ≤ 기간)을 새 박수에 맞춘다. 늘면 마지막(seq 최대) 여행지에 차이를 더하고, 줄면 넘치는 만큼
+ * **박수가 가장 많은 곳부터(동률이면 뒤 곳)** 1박씩 깎는다. 곳이 둘 이상이면 1박 아래로 안 깎고, 옛 0박 도시는 그대로 둔다 — 그래서 합이
+ * 안 맞을 수 있는 입력(`shrinkBlockNotice` 가 막는 줄이기)은 화면이 먼저 막는다. 합이 이미 새 박수 이하면 줄여도 안 깎는다. 입력은 안 바꾼다.
  */
 export function fitDestinationNights(
   destinations: readonly TripDestination[],
@@ -100,60 +113,22 @@ export function fitDestinationNights(
   newNights: number
 ): TripDestination[] {
   const result = destinations.map((one) => ({ ...one }));
-  const lastFirst = result
-    .map((_, index) => index)
-    .sort((a, b) => result[b].seq - result[a].seq);
-  if (lastFirst.length === 0) return result;
+  if (result.length === 0) return result;
 
   if (newNights > oldNights) {
-    result[lastFirst[0]].nights += newNights - oldNights;
+    const last = result.reduce((a, b) => (b.seq > a.seq ? b : a));
+    last.nights += newNights - oldNights;
     return result;
   }
-  const first = lastFirst[lastFirst.length - 1];
-  const emptied = new Set<number>();
-  let excess = Math.max(
-    0,
-    result.reduce((sum, one) => sum + one.nights, 0) - newNights
-  );
-  for (const index of lastFirst) {
-    const cut = Math.min(excess, result[index].nights);
-    result[index].nights -= cut;
-    excess -= cut;
-    if (cut > 0 && result[index].nights === 0 && index !== first) {
-      emptied.add(index);
-    }
+  const floor = result.length > 1 ? 1 : 0;
+  let excess = result.reduce((sum, one) => sum + one.nights, 0) - newNights;
+  while (excess > 0) {
+    const most = result.reduce((a, b) =>
+      b.nights > a.nights || (b.nights === a.nights && b.seq > a.seq) ? b : a
+    );
+    if (most.nights <= floor) break;
+    most.nights -= 1;
+    excess -= 1;
   }
-  return result.filter((_, index) => !emptied.has(index));
-}
-
-/** `fitDestinationNights` 가 뺄 여행지(seq 순) — 확인창이 미리 말한다. 본문 조립과 같은 함수를 지나 말과 실제가 안 갈린다. */
-export function droppedDestinations(
-  destinations: readonly TripDestination[],
-  oldNights: number,
-  newNights: number
-): TripDestination[] {
-  const kept = new Set(
-    fitDestinationNights(destinations, oldNights, newNights).map(
-      (one) => one.seq
-    )
-  );
-  return destinations
-    .filter((one) => !kept.has(one.seq))
-    .sort((a, b) => a.seq - b.seq);
-}
-
-/** 끝 글자 받침으로 주격 조사(이/가), 한글이 아니면 병기(틀린 조사보다 안전). */
-function subjectParticle(word: string): string {
-  const code = word.charCodeAt(word.length - 1) - 0xac00;
-  if (code < 0 || code > 11171) return '이(가)';
-  return code % 28 === 0 ? '가' : '이';
-}
-
-/** 확인창의 「빠지는 도시」 한 줄 — 빠지는 곳이 없으면 null. */
-export function droppedNotice(
-  dropped: readonly TripDestination[]
-): string | null {
-  if (dropped.length === 0) return null;
-  const names = dropped.map((one) => one.region).join('·');
-  return `${names}${subjectParticle(names)} 여행지에서 빠져요`;
+  return result;
 }

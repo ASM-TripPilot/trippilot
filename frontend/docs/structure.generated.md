@@ -1399,7 +1399,7 @@
 
 ## src/pages/trip/trip-settings/model/
 - `src/pages/trip/trip-settings/model/editTripRequest.ts`  →  TripEdits · toEditTripRequest
-- `src/pages/trip/trip-settings/model/periodRules.ts`  →  nightsBetween · shiftedEndDate · pickLengthRange · PeriodLock · periodLock · periodHint · periodConflictCode · isTripChildKey · fitDestinationNights · droppedDestinations · droppedNotice
+- `src/pages/trip/trip-settings/model/periodRules.ts`  →  nightsBetween · shiftedEndDate · pickLengthRange · PeriodLock · periodLock · periodHint · periodConflictCode · isTripChildKey · shrinkBlockNotice · fitDestinationNights
 - `src/pages/trip/trip-settings/model/titleRule.ts`  →  titleViolation
 
 ## src/pages/trip/trip-settings/ui/

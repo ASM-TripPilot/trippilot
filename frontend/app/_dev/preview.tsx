@@ -6386,6 +6386,27 @@ export const PREVIEW_STATES: PreviewState[] = [
     ),
   },
   // TRIP-1788 — 일수 변경 확인창(일정 있음 / 없음 / 실패). 딤·중앙 정렬은 jest 사각이라 이 키가 육안 자리다.
+  // TRIP-1822 — 곳 수보다 못 줄이는 일수: 안내 줄이 이유를 말하고 [적용]이 막힌다.
+  {
+    key: 'trip-settings-period-sheet-length-blocked',
+    band: 'g',
+    label: 'g03 · 기간 시트 · 일수 바꾸기 막힘',
+    login: null,
+    render: () => (
+      <PeriodEditSheet
+        today="2026-06-01"
+        month="2026-06"
+        range={{ start: '2026-06-10', end: '2026-06-12' }}
+        note="여행지가 3곳이라 3박보다 줄일 수 없어요"
+        applyDisabled
+        onPickDate={noop}
+        onPrevMonth={noop}
+        onNextMonth={noop}
+        onApply={noop}
+        onClose={noop}
+      />
+    ),
+  },
   {
     key: 'trip-settings-length-dialog',
     band: 'g',
@@ -6396,24 +6417,6 @@ export const PREVIEW_STATES: PreviewState[] = [
         <TripSettingsView {...TRIP_SETTINGS_VIEW} canSave />
         <PeriodLengthDialog
           hasItinerary
-          failed={false}
-          onCancel={noop}
-          onConfirm={noop}
-        />
-      </View>
-    ),
-  },
-  {
-    key: 'trip-settings-length-dialog-dropped',
-    band: 'g',
-    label: 'g03 · 일수 변경 확인창 · 빠지는 여행지',
-    login: null,
-    render: () => (
-      <View className="flex-1">
-        <TripSettingsView {...TRIP_SETTINGS_VIEW} canSave />
-        <PeriodLengthDialog
-          hasItinerary
-          droppedNotice="부산·서울이 여행지에서 빠져요"
           failed={false}
           onCancel={noop}
           onConfirm={noop}
