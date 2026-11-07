@@ -36,6 +36,7 @@ import {
 import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
 
 import { PlaceExplorePage } from './PlaceExplorePage';
+import { Image } from '@/shared/ui/Image';
 import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
@@ -2243,6 +2244,51 @@ describe('카드 → 상세 push', () => {
 
       expect(mockPush.mock.calls).toEqual([['/explore/places/p2']]);
     });
+  });
+});
+
+/**
+ * TRIP-1813 — 스크롤로 푼 사진을 메모리 캐시에 쌓지 않는다. 캐시는 앱 공용이라 다시 그릴 때마다 비우면 다른 화면 그림까지 디스크에서 다시 읽는다.
+ * 실제로 메모리가 줄어드는지·`windowSize` 효과는 jest 가 못 본다 — 기능 지도 `explore-places` 의 실화면 수치가 맡는다.
+ */
+describe('사진 메모리 캐시 비우기', () => {
+  let clear: jest.SpiedFunction<typeof Image.clearMemoryCache>;
+
+  beforeEach(() => {
+    clear = jest.spyOn(Image, 'clearMemoryCache').mockResolvedValue(true);
+  });
+  afterEach(() => clear.mockRestore());
+
+  it('그리거나 검색어로 다시 그려도 비우지 않는다', async () => {
+    await renderPage();
+    fireEvent.changeText(screen.getByTestId('explore-places-search'), '해변');
+    await settle();
+    expect(screen.getByTestId('explore-places-search')).toHaveProp(
+      'value',
+      '해변'
+    );
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  it('손을 뗄 때 비운다', async () => {
+    await renderPage();
+    // FlatList 가 손 뗀 순간의 속도를 읽으므로 빈 이벤트로는 던진다.
+    fireEvent(screen.getByTestId('explore-places-grid'), 'scrollEndDrag', {
+      nativeEvent: { velocity: { x: 0, y: 0 } },
+    });
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it('관성이 멈출 때 비운다', async () => {
+    await renderPage();
+    fireEvent(screen.getByTestId('explore-places-grid'), 'momentumScrollEnd');
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it('화면을 나갈 때 비운다', async () => {
+    await renderPage();
+    screen.unmount();
+    expect(clear).toHaveBeenCalledTimes(1);
   });
 });
 
