@@ -103,6 +103,111 @@ describe('S2 · reorderSlots — 고정 슬롯도 끌기 결과 자리로 간다
   });
 });
 
+describe('S2b · reorderSlots — 시각은 자리에 남는다 (TRIP-1821)', () => {
+  const at = (id: string, hour: number, over: Partial<Slot> = {}): Slot =>
+    slot(id, {
+      startAt: `${String(hour).padStart(2, '0')}:00:00`,
+      endAt: `${String(hour).padStart(2, '0')}:30:00`,
+      ...over,
+    });
+  const times = (): (string | null)[] =>
+    useItineraryEditStore.getState().days[0].slots.map((s) => s.startAt);
+  const seedDay = (slots: Slot[]): void =>
+    useItineraryEditStore.getState().seed([{ date: DAY1, slots }]);
+
+  it('셋째를 둘째 자리로 끌면 장소 순서는 끌기 결과, 시각 블록은 위에서부터 오름차순이다', () => {
+    const [a, b, c] = [
+      at('a', 12),
+      at('b', 13),
+      at('c', 14, { endAt: '00:30:00', endsNextDay: true }),
+    ];
+    seedDay([a, b, c]);
+
+    useItineraryEditStore.getState().reorderSlots(DAY1, [a, c, b]);
+
+    const stored = useItineraryEditStore.getState().days[0].slots;
+    expect(poiIds(stored)).toEqual(['a', 'c', 'b']);
+    expect(times()).toEqual(['12:00:00', '13:00:00', '14:00:00']);
+    // 블록 통째 — 끝 시각·다음날 넘김도 자리에 남는다(b 가 맨 뒤 자리의 자정 넘김을 받는다).
+    expect(stored[1]).toMatchObject({ endAt: '13:30:00', endsNextDay: false });
+    expect(stored[2]).toMatchObject({ endAt: '00:30:00', endsNextDay: true });
+    // 원본 객체는 안 바뀐다(시드 비파괴).
+    expect(b.startAt).toBe('13:00:00');
+  });
+
+  it('고정 슬롯이 끼면 — 순서는 끌기 결과 그대로, 고정은 자기 시각, 나머지만 오름차순으로 받는다', () => {
+    const [a, F, b] = [
+      at('a', 12),
+      at('F', 13, { isFixed: true }),
+      at('b', 14),
+    ];
+    seedDay([a, F, b]);
+
+    // b 를 고정 앞으로 — 도로 튀지 않는다(TRIP-1250). 12·14 를 a·b 가 나눠 갖고, F 는 13 그대로라 [12,14,13] 이 남는다
+    // (지어낼 시각이 없다 — 서버 표시 BR-U3-12·13 몫).
+    useItineraryEditStore.getState().reorderSlots(DAY1, [a, b, F]);
+
+    const stored = useItineraryEditStore.getState().days[0].slots;
+    expect(poiIds(stored)).toEqual(['a', 'b', 'F']);
+    expect(times()).toEqual(['12:00:00', '14:00:00', '13:00:00']);
+    expect(stored[2].isFixed).toBe(true);
+  });
+
+  it('방문 완료 슬롯(세 번째 인자)은 자기 시각을 지키고, 나머지만 오름차순으로 받는다', () => {
+    const [F, L, a, b] = [
+      at('F', 9, { isFixed: true }),
+      at('L', 10),
+      at('a', 11),
+      at('b', 12),
+    ];
+    seedDay([F, L, a, b]);
+
+    useItineraryEditStore.getState().reorderSlots(DAY1, [b, L, a, F], ['L']);
+
+    expect(poiIds(useItineraryEditStore.getState().days[0].slots)).toEqual([
+      'b',
+      'L',
+      'a',
+      'F',
+    ]);
+    expect(times()).toEqual(['11:00:00', '10:00:00', '12:00:00', '09:00:00']);
+  });
+
+  it('시각 미지정 슬롯은 미지정으로 남고, 시각 있는 슬롯끼리 나눠 갖는다', () => {
+    const none = slot('n', { startAt: null as unknown as string });
+    const [a, b] = [at('a', 12), at('b', 13)];
+    seedDay([a, none, b]);
+
+    useItineraryEditStore.getState().reorderSlots(DAY1, [b, none, a]);
+
+    expect(times()).toEqual(['12:00:00', null, '13:00:00']);
+  });
+
+  it('되돌리기 한 번에 순서·시각이 함께 돌아오고, 값이 그대로인 놓기는 이력을 안 만든다', () => {
+    const [a, b] = [at('a', 12), at('b', 13)];
+    seedDay([a, b]);
+
+    useItineraryEditStore.getState().reorderSlots(DAY1, [a, b]);
+    expect(useItineraryEditStore.getState().history).toHaveLength(0);
+
+    useItineraryEditStore.getState().reorderSlots(DAY1, [b, a]);
+    expect(useItineraryEditStore.getState().history).toHaveLength(1);
+    const startOf = (id: string): string | null | undefined =>
+      useItineraryEditStore.getState().days[0].slots.find((s) => s.poiId === id)
+        ?.startAt;
+    // 자리별로 재면 끌기 전후가 같아 안 갈린다 — 장소 기준으로 잰다(5-b W1).
+    expect(startOf('a')).toBe('13:00:00');
+
+    useItineraryEditStore.getState().undo();
+
+    expect(poiIds(useItineraryEditStore.getState().days[0].slots)).toEqual([
+      'a',
+      'b',
+    ]);
+    expect(startOf('a')).toBe('12:00:00');
+  });
+});
+
 describe('S3 · seed — GET 결과로 편집 드래프트를 채운다 (AC5 · AC1)', () => {
   it('시드한 days 가 스토어에 그대로 담긴다', () => {
     const days: ItineraryDaysItem[] = [

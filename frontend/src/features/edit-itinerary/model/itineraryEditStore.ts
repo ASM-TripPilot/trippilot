@@ -18,8 +18,8 @@ import { sortSlotsByStartAt } from './sortSlotsByStartAt';
  *
  * 삭제·추가 수학은 **순수 헬퍼**로 뺐다 — 드래그 제스처는 jest로 못 태우니(reanimated 네이티브)
  * 규칙을 렌더 없이 직접 태워 잠근다(02a ★1·★2). 스토어 액션은 그 헬퍼를 "해당 날에만" 얹는 얇은
- * 래퍼다. 재정렬은 끌기 결과 순서를 그대로 쓴다 — 시각 고정(`isFixed`)은 순서 자리가 아니라 시각만
- * 지킨다(INV-U3-03, 서버가 저장 때 지킴 · TRIP-1250).
+ * 래퍼다. 재정렬은 끌기 결과 순서를 그대로 쓰고 시각은 자리에 남는다(`keepTimesInPlace`, TRIP-1821) — 시각
+ * 고정(`isFixed`)은 순서 자리가 아니라 시각만 지킨다(INV-U3-03, 서버가 저장 때 지킴 · TRIP-1250).
  *
  * `create(` 리터럴 표기는 `tripWizardStore` 선례대로 — 타입을 `StateCreator` 변수로 먼저 확정하고
  * `create(그변수)`로 부른다(구조 가드 정규식이 `create<T>(...)` 제네릭을 오탐하지 않게).
@@ -84,6 +84,26 @@ export function insertSlotAt(slots: Slot[], slot: Slot, index: number): Slot[] {
 }
 
 /**
+ * TRIP-1821 · 끌어 옮긴 뒤 시각은 자리에 남는다 — 장소 순서는 그대로 두고, 시각 블록(시작·끝·다음날 넘김)을 위에서부터 오름차순으로
+ * 다시 붙인다. 고정(`isFixed`)·`keepPoiIds`(방문 완료)는 자기 값을 지키고 나머지끼리 나눠 갖는다(미지정은 `sortSlotsByStartAt` 이 제자리에 둔다). 다시 정렬하지 않는다 —
+ * 고정 앞으로 끈 카드가 도로 튀면 TRIP-1250 이 재발한다. 그래서 고정이 끼면 [12,14,13] 이 남을 수 있고(지어낼 시각이 없다) 서버 표시 몫이다(BR-U3-12·13).
+ */
+function keepTimesInPlace(
+  slots: Slot[],
+  keepPoiIds: readonly string[] = []
+): Slot[] {
+  const movable = (slot: Slot): boolean =>
+    !slot.isFixed && !keepPoiIds.includes(slot.poiId);
+  const blocks = sortSlotsByStartAt(slots.filter(movable));
+  let next = 0;
+  return slots.map((slot) => {
+    if (!movable(slot)) return slot;
+    const { startAt, endAt, endsNextDay } = blocks[next++];
+    return { ...slot, startAt, endAt, endsNextDay };
+  });
+}
+
+/**
  * TRIP-1792 · 되돌리기 이력 한 장 — 편집 **직전** 모습(`days`·`dirty`)과 그 편집이 일어난 날짜. `id` 는 한 번 쓰면 다시
  * 안 쓰는 번호라 안내 바가 "내가 띄운 그 장"인지 확인하는 표다(길이 비교는 빼기→↶→순서 바꿈 뒤 같은 길이로 속는다).
  */
@@ -137,8 +157,15 @@ export interface ItineraryEditState {
   deleteSlot(date: string, poiId: string, ordinal?: number): void;
   /** TRIP-1791 · 해당 날에서 고른 poiId 를 set 1회로 제거(되돌리기 1단계 근거). 다른 날은 안 건드린다. */
   deleteSlots(date: string, poiIds: string[]): void;
-  /** `onDragEnd.data`를 받아 해당 날 슬롯을 그 순서 그대로 반영(고정 슬롯도 재고정하지 않는다). */
-  reorderSlots(date: string, reordered: Slot[]): void;
+  /**
+   * `onDragEnd.data`를 받아 해당 날 슬롯을 그 순서 그대로 반영한다(고정 슬롯도 재고정하지 않는다). 시각은 자리에 남는다(`keepTimesInPlace`) —
+   * `keepTimePoiIds`(방문 완료)는 자기 시각을 지킨다.
+   */
+  reorderSlots(
+    date: string,
+    reordered: Slot[],
+    keepTimePoiIds?: readonly string[]
+  ): void;
   /**
    * 대상 슬롯의 시각 3필드(startAt·endAt·endsNextDay)를 갱신한 뒤 **그 날** 슬롯을 시작 시각 순으로
    * 다시 세운다(`sortSlotsByStartAt` — 서버가 시각 순이 아니면 422, TRIP-1674). 이웃을 넘지 않는
@@ -239,8 +266,10 @@ const createItineraryEditStore: StateCreator<ItineraryEditState> = (
     ),
   deleteSlots: (date, poiIds) =>
     set((state) => commit(state, date, (slots) => removeSlots(slots, poiIds))),
-  reorderSlots: (date, reordered) =>
-    set((state) => commit(state, date, () => [...reordered])),
+  reorderSlots: (date, reordered, keepTimePoiIds) =>
+    set((state) =>
+      commit(state, date, () => keepTimesInPlace(reordered, keepTimePoiIds))
+    ),
   adjustSlotTime: (date, poiId, patch, ordinal) =>
     set((state) =>
       commit(state, date, (slots) => {

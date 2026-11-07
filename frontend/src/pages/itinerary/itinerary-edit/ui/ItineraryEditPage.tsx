@@ -530,7 +530,8 @@ export function ItineraryEditPage({
               activeSlots,
               data as ItineraryDaysItemSlotsItem[],
               completedPoiIds
-            )
+            ),
+            completedPoiIds
           )
         }
         onDeleteViaDrag={(poiId, ordinal) =>
