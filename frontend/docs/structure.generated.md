@@ -881,6 +881,7 @@
 
 ## src/pages/itinerary/itinerary-list/model/
 - `src/pages/itinerary/itinerary-list/model/doneBar.ts`  →  DoneBarEntry · DoneBarPick · pickDoneBar
+- `src/pages/itinerary/itinerary-list/model/menuPlacement.ts`  →  menuOpensAbove
 - `src/pages/itinerary/itinerary-list/model/myTripsOrder.ts`  →  MyTripsSortKey · byLatest · byStart · byTitle · parseMyTripsSortKey · orderMyTrips
 - `src/pages/itinerary/itinerary-list/model/myTripsSegment.ts`  →  MyTripsSegment · parseMyTripsSegment · splitMyTripsBySegment
 - `src/pages/itinerary/itinerary-list/model/tripCardFace.ts`  →  TripCardFace · deriveTripCardFace
@@ -2021,4 +2022,4 @@
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1325개 파일
+합계 1326개 파일

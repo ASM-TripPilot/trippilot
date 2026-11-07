@@ -439,6 +439,50 @@ async function openDialogForB(): Promise<ReactTestInstance> {
   return screen.getByTestId('my-trip-delete-dialog');
 }
 
+describe('카드 메뉴는 한 번에 하나만, 화면을 떠나면 닫힌다 (TRIP-1819)', () => {
+  it('다른 카드의 ⋯ 를 누르면 앞 메뉴가 닫힌다', async () => {
+    renderPage();
+    fireEvent.press(await screen.findByTestId(`my-trip-menu-${A}`));
+    expect(screen.getByTestId(`my-trip-menu-panel-${A}`)).toBeOnTheScreen();
+
+    fireEvent.press(screen.getByTestId(`my-trip-menu-${B}`));
+
+    expect(screen.getByTestId(`my-trip-menu-panel-${B}`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(`my-trip-menu-panel-${A}`)).toBeNull();
+  });
+
+  it('탭을 떠났다 돌아오면 메뉴가 닫혀 있다', async () => {
+    renderPage();
+    fireEvent.press(await screen.findByTestId(`my-trip-menu-${A}`));
+    expect(screen.getByTestId(`my-trip-menu-panel-${A}`)).toBeOnTheScreen();
+
+    leaveTab();
+    returnToTab();
+
+    expect(screen.queryByTestId(`my-trip-menu-panel-${A}`)).toBeNull();
+  });
+
+  it('정렬 시트를 열면 메뉴가 닫힌다 — 카드 자리가 바뀌면 잰 방향이 낡는다', async () => {
+    renderPage();
+    fireEvent.press(await screen.findByTestId(`my-trip-menu-${A}`));
+
+    fireEvent.press(screen.getByTestId('my-trips-sort'));
+
+    expect(screen.queryByTestId(`my-trip-menu-panel-${A}`)).toBeNull();
+  });
+
+  it('세그먼트를 옮겼다 돌아오면 메뉴가 닫혀 있다', async () => {
+    renderPage();
+    fireEvent.press(await screen.findByTestId(`my-trip-menu-${A}`));
+
+    fireEvent.press(screen.getByTestId('my-trips-seg-past'));
+    fireEvent.press(screen.getByTestId('my-trips-seg-upcoming'));
+
+    expect(await screen.findByTestId(`my-trip-menu-${A}`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(`my-trip-menu-panel-${A}`)).toBeNull();
+  });
+});
+
 describe('🔴 TRIP-1055 AC-2·3 · 확인 전에는 아무것도 지우지 않는다', () => {
   it('⋯ 와 "삭제" 항목을 눌러도 DELETE 0번 · 화면 이동 0번, 다이얼로그가 제목·본문과 함께 뜬다', async () => {
     // 준비 — 목록이 뜨고 A 카드의 ⋯ 가 보인다.
