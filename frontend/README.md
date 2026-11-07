@@ -2,6 +2,12 @@
 
 React Native + Expo (TypeScript strict) 클라이언트.
 
+**[App Store](https://apps.apple.com/kr/app/id6819041997)** · **[웹](https://app.trippilot.co.kr)** · 담당 범위·AI 사용 방식·로컬 실행은 [루트 README](../README.md)
+
+| 장소 탐색 | 일정 | 여행 중 |
+|---|---|---|
+| <img src="../docs/readme/explore.gif" width="240" alt="장소 탐색 화면 녹화"> | <img src="../docs/readme/itinerary.gif" width="240" alt="일정 화면 녹화"> | <img src="../docs/readme/live.gif" width="240" alt="여행 중 화면 녹화"> |
+
 서버 공개 REST API만 소비하며, 비즈니스 규칙 권위는 항상 서버에 있다 — 클라이언트 검증은 UX용 사본이며 저장을 차단하지 않는다(`aidlc/aidlc-docs/inception/application-design/application-design.md`).
 
 > **기획 참조 기준**: `aidlc/aidlc-docs/inception/` (requirements·user-stories·application-design). 화면 명세는 Figma(라이브 정본 — 밴드 맵은 `.claude/skills/spec-perception/reference/figma-structure.md`), API 스키마는 `backend/docs/design/openapi.yaml`, AI 계층 계약은 `ai/README.md`. 그 외 라이브러리·구조 결정은 이 문서가 정본이다.
