@@ -1,0 +1,136 @@
+# 새 여행 위저드 → AI 일정 생성(백엔드 fake 모드) → 확정. 확정 뒤 일정 탭에서 한 번 더 읽는다.
+appId: com.trippilot.travel
+name: 새 여행 → AI 일정 생성 → 확정
+tags:
+  - view-confirm
+  - home-create-trip
+  - step1-destination
+  - step1-period
+  - step1-next-gate
+  - step1-submit
+  - step2-exit
+  - method-full-ai
+  - mv-proceed
+  - draft-listed
+  - view-planned
+  - view-confirmed
+  - view-back
+---
+- runFlow: _common/launch.yaml
+- tapOn:
+    id: 'home-create-trip-fab'
+- extendedWaitUntil:
+    visible:
+      id: 'trip-wizard-step1-root'
+    timeout: 15000
+
+# 1/4 — 여행지 1곳(제주 1박) + 출발일. 고르기 전엔 [다음]이 꺼져 있다.
+- assertVisible:
+    id: 'trip-wizard-step1-next'
+    enabled: false
+- tapOn:
+    id: 'trip-wizard-summary-destination'
+- tapOn:
+    id: 'trip-wizard-destination-add'
+- extendedWaitUntil:
+    visible:
+      id: 'explore-region-sido-50'
+    timeout: 15000
+- tapOn:
+    id: 'explore-region-sido-50'
+- extendedWaitUntil:
+    visible:
+      id: 'explore-region-50'
+    timeout: 15000
+- tapOn:
+    id: 'explore-region-50'
+- extendedWaitUntil:
+    visible:
+      id: 'trip-wizard-destination-row-.+'
+    timeout: 15000
+- tapOn:
+    id: 'trip-wizard-destination-apply'
+- tapOn:
+    id: 'trip-wizard-summary-period'
+- tapOn:
+    id: 'trip-wizard-period-next'
+- tapOn:
+    id: 'trip-wizard-period-cell-${WIZARD_DATE}'
+- tapOn:
+    id: 'trip-wizard-period-apply'
+- extendedWaitUntil:
+    visible:
+      id: 'trip-wizard-step1-next'
+      enabled: true
+    timeout: 15000
+- tapOn:
+    id: 'trip-wizard-step1-next'
+
+# 2/4 — 거점 없이 3/4 로
+- extendedWaitUntil:
+    visible:
+      id: 'trip-base-nostay-start'
+    timeout: 15000
+- tapOn:
+    id: 'trip-base-nostay-start'
+
+# 3/4 → 꼭 갈 곳 → 생성
+- extendedWaitUntil:
+    visible:
+      id: 'itinerary-method-fullai'
+    timeout: 15000
+- tapOn:
+    id: 'itinerary-method-fullai'
+- extendedWaitUntil:
+    visible:
+      id: 'itinerary-mustvisit-screen-proceed'
+      enabled: true
+    timeout: 15000
+- tapOn:
+    id: 'itinerary-mustvisit-screen-proceed'
+
+# 추천안(h08) → [완성 일정 보기]. fake 모드라 금방 끝나지만 실 폴링 주기(2초·5초)를 그대로 기다린다.
+- extendedWaitUntil:
+    visible:
+      id: 'sheet-cta-button-1'
+    timeout: 120000
+- assertVisible:
+    id: 'sheet-header-title'
+    text: 'AI 추천안'
+- assertVisible:
+    id: 'slot-stopcard-.+'
+- tapOn:
+    id: 'sheet-cta-button-1'
+
+# 완성 일정(h14) → 확정 → 같은 화면이 확정 얼굴(h16)로
+- extendedWaitUntil:
+    visible:
+      id: 'sheet-cta-button-0'
+      text: '.*일정 확정하기.*'
+    timeout: 15000
+- tapOn:
+    id: 'sheet-cta-button-0'
+- extendedWaitUntil:
+    visible: '일정이 확정됐어요'
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: 'sheet-cta-button-1'
+      text: '.*돌아가기.*'
+    timeout: 15000
+- assertVisible:
+    id: 'sheet-header-meta'
+    text: '확정됨.*'
+- takeScreenshot: view-confirm
+
+# 다른 화면에서 한 번 더 읽기 — [돌아가기] → 일정 탭의 **이 여행** 카드. 고른 날짜(다음 달 15일 1박)와 확정 상태를 함께 본다.
+# 카드 하나의 접근성 글자로 묶어 본다 — 시드 여행 「E2E 편집」도 앞 흐름에서 확정돼 있어 아무 카드나 보면 헛돈다.
+- tapOn:
+    id: 'sheet-cta-button-1'
+- extendedWaitUntil:
+    visible:
+      id: 'my-trips-sort'
+    timeout: 15000
+- assertVisible:
+    id: 'my-trip-card-.+'
+    text: '.*제주특별자치도 여행, ${WIZARD_MONTH}월 15일 ~ 16일.*일정 확정.*'
