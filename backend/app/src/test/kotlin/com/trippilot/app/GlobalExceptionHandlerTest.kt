@@ -19,6 +19,7 @@ import org.springframework.http.HttpStatus
 import org.junit.jupiter.api.Test
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
+import org.springframework.web.HttpRequestMethodNotSupportedException
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
@@ -210,6 +211,17 @@ class GlobalExceptionHandlerTest {
 
         res!!.statusCode.value() shouldBe 500
         logs.single { it.level == Level.ERROR }.formattedMessage shouldBe "미처리 예외"
+    }
+
+    /** 클라이언트 오류를 ERROR 로 남기면 장애 알림이 오염된다(TRIP-1814). */
+    @Test
+    fun `없는 메서드는 405 + Allow 고 ERROR 로그를 남기지 않는다`() {
+        val ex = HttpRequestMethodNotSupportedException("GET", listOf("POST"))
+        val (res, logs) = captured { handler.handleMethodNotAllowed(ex) }
+
+        res.statusCode.value() shouldBe 405
+        res.headers.getFirst("Allow") shouldBe "POST"
+        logs.filter { it.level == Level.ERROR }.shouldBeEmpty()
     }
 
     private fun <T> captured(block: () -> T): Pair<T, List<ILoggingEvent>> {
