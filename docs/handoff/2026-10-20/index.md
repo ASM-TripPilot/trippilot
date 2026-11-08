@@ -29,7 +29,7 @@ weekly_limit_resets: "2026-10-24 08:00 KST"
 
 | # | 문서 | 역할/이름 | 상태 | 다음 한 줄 |
 |---|---|---|---|---|
-| 1 | [root-1b098b1e-planb-situation-awareness](root-1b098b1e-planb-situation-awareness.md) | 상황 감지 에픽(**종료**, 10-30 운영 전원 on) → 알림(리마인드·푸시) 끝에서 끝(11-04~) | **진행중(알림 갈래)** | 위 상황 감지 WIP 브랜치 표는 무효. 알림 갈래는 그 문서의 "다음에 이어서 할 일"(첫 발화 AI 문구 비율·첫 실기기 시험 로그·열린 결정) |
+| 1 | [root-1b098b1e-planb-situation-awareness](root-1b098b1e-planb-situation-awareness.md) | 상황 감지 에픽(**종료**, 10-30 운영 전원 on) → 알림(리마인드·푸시) 끝에서 끝(11-04~) | 확인-대기(11-09 종료) | 위 상황 감지 WIP 브랜치 표는 무효. 이어지는 상태·할 일은 [2026-11-09/root-1b098b1e-situation-push-daily](../2026-11-09/root-1b098b1e-situation-push-daily.md) — 3b 가 이어받음 |
 | 2 | [root-f916bf14-chatbot-nl2sql-place-info](root-f916bf14-chatbot-nl2sql-place-info.md) | 챗봇 NL2SQL·장소 정보 | 완료(10-21 #1500 머지) | 개발 앱에서 NL2SQL DB 권한 실기 확인만 |
 | 3 | [root-bb335bd9-decisions-codex-review-recommend](root-bb335bd9-decisions-codex-review-recommend.md) | 결정 수집·Codex 리뷰·추천 의도 | 리뷰-대기(10-21 #1504 OPEN) | #1504 리뷰·머지, `integ-recommend` 정리 |
 | 4 | [ai-895e45c9-dialogue-plan-intent](ai-895e45c9-dialogue-plan-intent.md) | ai-e3 · 계획 단계·분류 프롬프트 | 리뷰-대기 | #1463 머지됨·#1476 닫힘(→#1502) → #1485 CI 유발, #1505 리뷰 |
