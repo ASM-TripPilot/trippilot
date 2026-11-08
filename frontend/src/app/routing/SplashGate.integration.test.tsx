@@ -739,6 +739,7 @@ describe('권한 안내는 진짜 라우터에서 홈보다 먼저, 한 번만 (
       expect(router.canGoBack()).toBe(false);
 
       // 실행 2 — 위치 [계속] → OS 가 허용
+      resetPressGuard(); // 카드를 읽고 누른다 — 도착(전환 끝)이 연 창은 지났다([계속]은 창을 따르는 Button, TRIP-1828)
       fireEvent.press(screen.getByTestId('onboarding-location-allow'));
       await settle();
 
@@ -766,6 +767,7 @@ describe('권한 안내는 진짜 라우터에서 홈보다 먼저, 한 번만 (
       const app = await openCatchUp();
       expect(app.getPathname()).toBe('/permission-location');
 
+      resetPressGuard();
       fireEvent.press(screen.getByTestId('onboarding-location-allow'));
       await settle();
 
@@ -796,6 +798,7 @@ describe('권한 안내는 진짜 라우터에서 홈보다 먼저, 한 번만 (
       primeLocation('undetermined', 'denied');
       primeOsPermission(Notifications, 'undetermined', 'granted');
       const app = await openCatchUp();
+      resetPressGuard();
       fireEvent.press(screen.getByTestId('onboarding-location-allow'));
       await settle();
 
@@ -821,6 +824,7 @@ describe('권한 안내는 진짜 라우터에서 홈보다 먼저, 한 번만 (
       primeLocation('undetermined', 'denied');
       primeOsPermission(Notifications, 'denied');
       const app = await openCatchUp();
+      resetPressGuard();
       fireEvent.press(screen.getByTestId('onboarding-location-allow'));
       await settle();
       resetPressGuard();
@@ -942,6 +946,7 @@ describe('권한 안내는 진짜 라우터에서 홈보다 먼저, 한 번만 (
       // 실행
       const app = await openCatchUp();
       expect(app.getPathname()).toBe('/permission-location');
+      resetPressGuard();
       fireEvent.press(screen.getByTestId('onboarding-location-allow'));
       await settle();
 
@@ -965,6 +970,7 @@ describe('권한 안내는 진짜 라우터에서 홈보다 먼저, 한 번만 (
       expect(app.getPathname()).toBe('/permission-location');
 
       // 실행 2 — 끝까지 진행
+      resetPressGuard();
       fireEvent.press(screen.getByTestId('onboarding-location-allow'));
       await settle();
       resetPressGuard();

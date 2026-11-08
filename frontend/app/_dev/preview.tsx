@@ -270,6 +270,7 @@ import {
 import { MapView, type MapPin } from '@/shared/map';
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { Button } from '@/shared/ui/Button';
 
 /**
  * expo-router 의 `useLocalSearchParams` 를 모듈 로드 시점에 딱 한 번 안전하게 구해온다.
@@ -4351,6 +4352,40 @@ export const PREVIEW_STATES: PreviewState[] = [
         pins={MAP_STATE_PREVIEW_PINS}
         showMyLocation
       />
+    ),
+  },
+  {
+    key: 'button-states',
+    band: '기타',
+    label: '기타 · 공용 버튼(TRIP-1828)',
+    login: null,
+    // TRIP-1828 — 공용 Button 의 크기 2 · 변형 3 · 비활성 · 로딩(스피너, 폭 유지)을 한 화면에서 6-b 육안 대조.
+    // jest 는 회색·스피너·높이를 못 본다(README 판정 4). Figma DS Button 4473:2884 와 비교한다.
+    render: () => (
+      <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+        <Button onPress={noop}>다음</Button>
+        <Button variant="secondary" onPress={noop}>
+          다시 짜기
+        </Button>
+        <Button variant="ink" onPress={noop}>
+          2곳 빼기
+        </Button>
+        <Button size="md" onPress={noop}>
+          다시 시도
+        </Button>
+        <Button disabled onPress={noop}>
+          비활성(primary)
+        </Button>
+        <Button variant="secondary" disabled onPress={noop}>
+          비활성(secondary)
+        </Button>
+        <Button loading onPress={noop}>
+          저장
+        </Button>
+        <Button variant="secondary" loading onPress={noop}>
+          저장
+        </Button>
+      </ScrollView>
     ),
   },
   {

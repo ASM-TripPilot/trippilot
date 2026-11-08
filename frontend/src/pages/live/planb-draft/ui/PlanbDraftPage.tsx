@@ -2,7 +2,7 @@ import { usePreventRemove } from '@react-navigation/native';
 import { useNavigation, useRouter } from 'expo-router';
 import { goBackOr } from '@/shared/lib/goBackOr';
 import type { ReactElement } from 'react';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { View } from 'react-native';
 
 import type { ReplanSlotVM } from '@/entities/itinerary-slot';
@@ -32,6 +32,7 @@ import { isNotFound } from '@/shared/api';
 
 import { seoulDate } from '@/shared/lib/seoulDate';
 import type { MapCenter, MapPin } from '@/shared/map';
+import { usePressLock } from '@/shared/lib/pressGuard';
 
 import { ReplanDraftView, type ReplanRemovedVM } from './ReplanDraftView';
 import { DRAFT_LEAVE_COPY, ReplanLeaveDialog } from './ReplanLeaveDialog';
@@ -80,14 +81,14 @@ import { ReplanNoticeFace } from './ReplanNoticeFace';
  *  - 뒤로 계열(GO_BACK·POP)만 붙잡는다. 대기 중이면 삼킨다(대기 중 언마운트 → onSuccess 의 허브 dismissTo·applied
  *    신호가 사라지는 창을 닫는다). 그 밖(적용 성공 dismissTo 의 POP_TO 등)은 받은 액션 객체를 **그대로** 다시 보낸다 —
  *    처음부터 새로 만든 액션은 또 붙잡혀 무한 반복이다. 직접 수정 PUSH 는 화면을 스택에서 빼지 않아 애초에 붙잡히지 않는다.
- *  - [나가기](오류 얼굴·이탈 확인 공통 `leave()`)는 `leavingRef` 를 세운 뒤 뒤가 있으면 `router.back()`, 없으면
+ *  - [나가기](오류 얼굴·이탈 확인 공통 `leave()`)는 `leavingLock` 을 쥔 뒤 뒤가 있으면 `router.back()`, 없으면
  *    (딥링크 착지) 허브로 replace — 그 back 이 다시 콜백으로 오면 ref 를 보고 통과시킨다.
  *    ref 라서 같은 틱 연타도 한 번만 나간다(state 는 다음 렌더 전까지 옛 값이다).
  *
  * 상황 감지 FE-B(frontend-components §3.6) — 판정은 `model/draftNotice`, 여기는 배선만:
  *  - 세션 `initiatedBy = SYSTEM` 이고 초안 얼굴이면 머리에 `미리 준비한 대안` 표식(대안 없음·실패 얼굴엔 달지 않는다).
  *  - 적용 409 `EXPIRED`·`STALE` → 낡음 얼굴(일반 실패로 접지 않는다) + [새 대안 보기] = 같은 입력으로 새 세션 → i05 replace.
- *    재누름 잠금은 `retryRef`(실패에서만 푼다 — 새 POST 는 방금 연 세션을 닫는다, INV-U4-06).
+ *    재누름 잠금은 `retryLock`(실패에서만 푼다 — 새 POST 는 방금 연 세션을 닫는다, INV-U4-06).
  *  - `includePoiId`(기회 카드에서 넣으려던 장소)가 초안 after 에 없으면 그 이름(`useIncludedPlaceName`)으로 미포함 안내.
  */
 
@@ -182,7 +183,7 @@ export function PlanbDraftPage({
   const itinerary = useLiveItinerary(tripId);
   const navigation = useNavigation();
   const [leaveOpen, setLeaveOpen] = useState(false);
-  const leavingRef = useRef(false);
+  const leavingLock = usePressLock();
 
   const data = session.data;
   const state =
@@ -198,14 +199,14 @@ export function PlanbDraftPage({
       ? (includePoiId ?? null)
       : null;
   const includedName = useIncludedPlaceName(missingPoiId);
-  // [새 대안 보기]·실패 [다시 시도] 재누름 잠금 — 같은 틱 두 번째 누름은 옛 state 를 본다(ref).
-  const retryRef = useRef(false);
+  // [새 대안 보기]·실패 [다시 시도] 재누름 잠금 — 같은 틱 두 번째 누름은 옛 state 를 본다(그래서 잠금 객체).
+  const retryLock = usePressLock();
 
   const isDraft = state?.kind === 'draft';
   const busy = apply.isPending || startReplan.isPending;
   usePreventRemove(isDraft || busy, ({ data: { action } }) => {
     const isBack = action.type === 'GO_BACK' || action.type === 'POP';
-    if (!isBack || leavingRef.current) {
+    if (!isBack || leavingLock.isHeld()) {
       navigation.dispatch(action);
       return;
     }
@@ -214,8 +215,7 @@ export function PlanbDraftPage({
 
   // 서버 호출 없이 나간다 — 뒤로 갈 곳이 없으면(딥링크 착지) 허브로.
   const leave = () => {
-    if (leavingRef.current) return;
-    leavingRef.current = true;
+    if (!leavingLock.acquire()) return;
     goBackOr(router, `/trips/${tripId}/live`);
   };
 
@@ -279,8 +279,7 @@ export function PlanbDraftPage({
   const canRetryStale = !data.targetDate || data.targetDate >= today;
   // 같은 입력(사유·지시·제외·범위·날짜·트리거)으로 새 세션 → i05 — 낡음 얼굴 [새 대안 보기]와 실패 얼굴 [다시 시도] 공용.
   const retrySameInput = () => {
-    if (retryRef.current) return;
-    retryRef.current = true;
+    if (!retryLock.acquire()) return;
     startReplan.mutate(
       { tripId, data: staleRetryRequest(data, seoulDate(new Date())) },
       {
@@ -292,7 +291,7 @@ export function PlanbDraftPage({
               : { tripId, sessionId: next.sessionId },
           }),
         onError: () => {
-          retryRef.current = false;
+          retryLock.release();
         },
       }
     );

@@ -43,6 +43,7 @@ routes:
 - `places-chip-follow` 카테고리 칩을 고르면 칩 줄이 그 칩이 보이도록 가로로 따라간다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
 - `places-fab-scroll-hide` 목록을 세로로 스크롤하는 동안 ♥·＋ 묶음이 투명·터치 불가가 되고, 멈춘 뒤 250ms 에 돌아온다(위저드 출처라 ♥ 만 있어도 같다). *(2026-11-01 B안으로 실화면 전용 · 2026-11-03 실화면 pass — TRIP-1733)*
 - `places-grid-deep` 그리드를 깊게 내려도 2열이 유지되고 여백이 그대로다. *(2026-11-03 실화면 pass — 30번 끌기, TRIP-1733 목록 교체 뒤)*
+- `place-header-glyph-shape` 장소 상세(d06) 헤더의 뒤로·공유·하트, 담은 장소·지역 선택의 뒤로 아이콘이 통합 전과 같은 모양·크기다. *(TRIP-1829 · 실화면 전용 · 2026-11-08 d06 실화면·`place-detail-default`·`places-default` 전후 0px pass · 지역 선택·담은 장소 뒤로는 프리뷰 토글 바에 가려 판정 제외, 화면 전체 0px)*
 
 ## How to get to it (user POV)
 

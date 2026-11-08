@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { ImageLicense } from '@/shared/api/index.schemas';
+import { Button } from '@/shared/ui/Button';
 import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 import BottomSheet, {
   BottomSheetBackdrop,
@@ -312,19 +313,14 @@ export function TimeSheet({
           </Text>
         ) : null}
 
-        <Pressable
+        <Button
           testID={`${testIDPrefix}-apply`}
-          accessibilityRole="button"
-          onPress={handleApply}
           disabled={rangeInvalid}
-          className={`w-full items-center justify-center rounded-button py-lg ${
-            rangeInvalid ? 'bg-hairline-strong' : 'bg-primary'
-          }`}
+          onPress={handleApply}
+          className="w-full"
         >
-          <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-            {APPLY_LABEL}
-          </Text>
-        </Pressable>
+          {APPLY_LABEL}
+        </Button>
       </BottomSheetView>
     </BottomSheet>
   );

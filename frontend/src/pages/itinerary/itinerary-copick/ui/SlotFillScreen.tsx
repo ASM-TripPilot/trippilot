@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AlertCircleGlyph, BackChevronGlyph } from '@/shared/ui/glyphs';
@@ -543,16 +544,14 @@ export function SlotFillScreen({
                     <Text className="text-center font-noto text-label text-muted">
                       {ALL_IN_ITINERARY_HINT}
                     </Text>
-                    <Pressable
+                    <Button
                       testID="itinerary-copick-zero-search"
-                      accessibilityRole="button"
+                      size="md"
                       onPress={onPressPlaceSearch}
-                      className="h-12 w-full items-center justify-center rounded-button bg-primary"
+                      className="w-full"
                     >
-                      <Text className="font-noto-bold text-label font-bold text-on-primary">
-                        {PLACE_SEARCH_LABEL}
-                      </Text>
-                    </Pressable>
+                      {PLACE_SEARCH_LABEL}
+                    </Button>
                   </>
                 ) : (
                   <>
@@ -584,16 +583,14 @@ export function SlotFillScreen({
                           {ZERO_RADIUS_LABEL}
                         </Text>
                       </Pressable>
-                      <Pressable
+                      <Button
                         testID="itinerary-copick-zero-concept"
-                        accessibilityRole="button"
+                        size="md"
                         onPress={onChangeConcept}
-                        className="h-12 w-full items-center justify-center rounded-button bg-primary"
+                        className="w-full"
                       >
-                        <Text className="font-noto-bold text-label font-bold text-on-primary">
-                          {ZERO_CONCEPT_LABEL}
-                        </Text>
-                      </Pressable>
+                        {ZERO_CONCEPT_LABEL}
+                      </Button>
                     </View>
                   </>
                 )}
@@ -673,23 +670,15 @@ export function SlotFillScreen({
                 {canExpandRadius ? EXPAND_RADIUS_LABEL : SHRINK_RADIUS_LABEL}
               </Text>
             </Pressable>
-            <Pressable
+            <Button
               testID="itinerary-copick-slotfill-confirm"
-              accessibilityRole="button"
+              size="md"
               disabled={confirmDisabled}
               onPress={confirmDisabled ? undefined : onConfirm}
-              className={`h-12 flex-1 items-center justify-center rounded-button ${
-                confirmDisabled ? 'bg-surface-strong' : 'bg-primary'
-              }`}
+              className="flex-1"
             >
-              <Text
-                className={`font-noto-bold text-[16px] font-bold ${
-                  confirmDisabled ? 'text-muted' : 'text-on-primary'
-                }`}
-              >
-                {confirmLabel}
-              </Text>
-            </Pressable>
+              {confirmLabel}
+            </Button>
           </View>
         )}
       </View>

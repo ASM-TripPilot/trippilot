@@ -3,7 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import type { ImageLicense } from '@/shared/api/index.schemas';
 import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 
-import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
+import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/glyphs';
 
 /**
  * TRIP-806 · AC-M2 — 썸네일 + 이름 + 부제 행 카드(중립 접두 자기 계약).

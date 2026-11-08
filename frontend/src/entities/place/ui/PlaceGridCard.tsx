@@ -9,7 +9,7 @@ import {
   HeartBadgeGlyph,
   HeartFilledGlyph,
   HeartOutlineGlyph,
-} from '@/shared/ui/HeartGlyphs';
+} from '@/shared/ui/glyphs';
 import { PlaceSubtitle } from './PlaceSubtitle';
 
 /**

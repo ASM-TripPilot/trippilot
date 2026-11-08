@@ -1,6 +1,8 @@
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import {
+  CloseGlyph,
   PlusGlyph,
   InfoCircleGlyph,
   BackChevronGlyph,
@@ -19,7 +21,6 @@ import {
   type MustVisitListView,
 } from '@/features/itinerary/index.view';
 import {
-  ItineraryCloseGlyph,
   ItineraryLockGlyph,
   ItineraryPencilGlyph,
 } from '@/features/itinerary/index.view';
@@ -303,7 +304,7 @@ function MustVisitCard({
           }
           hitSlop={8}
         >
-          <ItineraryCloseGlyph />
+          <CloseGlyph size={20} color="mutedSoft" />
         </Pressable>
       )}
     </Pressable>
@@ -550,23 +551,14 @@ export function MustVisitPickerScreen({
                 {proceedBlockedReason}
               </Text>
             )}
-            <Pressable
+            <Button
               testID="itinerary-mustvisit-screen-proceed"
-              accessibilityRole="button"
               disabled={blocked}
               onPress={onProceed}
-              className={`w-full items-center justify-center rounded-button py-lg ${
-                blocked ? 'bg-hairline-strong' : 'bg-primary'
-              }`}
+              className="w-full"
             >
-              <Text
-                className={`font-noto-bold text-[16px] font-bold ${
-                  blocked ? 'text-muted' : 'text-on-primary'
-                }`}
-              >
-                {PROCEED_LABEL}
-              </Text>
-            </Pressable>
+              {PROCEED_LABEL}
+            </Button>
           </View>
         </ScrollView>
       </View>

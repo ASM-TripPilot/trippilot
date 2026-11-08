@@ -13,6 +13,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OnboardingCheckGlyph } from '@/features/onboarding';
@@ -123,19 +124,9 @@ export function ReconsentScreen({
 
       <View className="px-2xl pb-[30px] pt-md">
         <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
-        <Pressable
-          accessibilityRole="button"
-          testID="reconsent-agree"
-          disabled={!canAgree}
-          onPress={onAgree}
-          className={`h-[52px] items-center justify-center rounded-button bg-primary ${
-            canAgree ? '' : 'opacity-40'
-          }`}
-        >
-          <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-            동의하고 계속하기
-          </Text>
-        </Pressable>
+        <Button testID="reconsent-agree" disabled={!canAgree} onPress={onAgree}>
+          동의하고 계속하기
+        </Button>
       </View>
     </SafeAreaView>
   );

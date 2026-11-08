@@ -101,6 +101,8 @@ beforeEach(() => {
   onApply.mockClear();
   onCancel.mockClear();
 });
+// [적용]이 연 400ms 창(D4)이 다음 테스트로 새지 않게 — [적용]이 그 창을 따르는 Button 이다(TRIP-1828).
+afterEach(resetPressGuard);
 
 describe.each(CONFIGS)(
   '🔴 widgets/time-sheet · 접두=$prefix — 기본 소비처도 휠',

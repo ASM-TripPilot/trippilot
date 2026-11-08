@@ -31,6 +31,7 @@ import {
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
 import { showToast } from '@/shared/ui/Toast';
+import { usePressLock } from '@/shared/lib/pressGuard';
 import { EditorView } from '@/widgets/map-sheet-shell';
 import { TimeSheet } from '@/widgets/time-sheet';
 
@@ -104,7 +105,7 @@ export function ManualPlanPage({
     useTripWizardStore.getState().reset()
   );
   // 저장+확정 2왕복 잠금 — isPending 은 다음 렌더에야 참이라 같은 틱 연타·PUT~확정 틈을 못 막는다.
-  const inFlightRef = useRef(false);
+  const inFlightLock = usePressLock();
   // 위반 요약 게이트(null = 닫힘)와 그 버튼 연타 잠금 — 같은 틱 두 누름은 state 로 못 막는다.
   const [conflictCount, setConflictCount] = useState<number | null>(null);
   const gateRef = useRef(false);
@@ -204,8 +205,7 @@ export function ManualPlanPage({
   }, [itinerary.data, seedUnlessDirty]);
 
   function handleSave(): void {
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
+    if (!inFlightLock.acquire()) return;
     setSaveError(null);
     setConfirmError(null);
     // 미지정(startAt null) 슬롯은 buildEditItineraryRequest 가 요청에서 뺀다 — 미리 세어 알린다(INV-4).
@@ -243,7 +243,7 @@ export function ManualPlanPage({
           runConfirm();
         },
         onError: () => {
-          inFlightRef.current = false;
+          inFlightLock.release();
           setSaveError(SAVE_ERROR_NOTE);
         },
       }
@@ -266,7 +266,7 @@ export function ManualPlanPage({
           });
         },
         onError: () => {
-          inFlightRef.current = false;
+          inFlightLock.release();
           setConfirmError(CONFIRM_ERROR_NOTE);
         },
       }
@@ -284,7 +284,7 @@ export function ManualPlanPage({
     if (!gateRef.current) return;
     gateRef.current = false;
     setConflictCount(null);
-    inFlightRef.current = false;
+    inFlightLock.release();
   }
 
   // 조회 전엔 빈 편집기(스토어 싱글턴의 이전 드래프트를 그리지 않는다). startFresh 로 비우는 중이면

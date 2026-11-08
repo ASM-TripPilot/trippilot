@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
 import { useGetMeLocationConsent } from '@/shared/api/index.hooks';
+import { usePressLock } from '@/shared/lib/pressGuard';
 import { readDevicePosition } from '@/shared/location';
 
 import type { AssistantSurface, TurnInput } from '../api/assistantContract';
@@ -54,7 +55,7 @@ export function useTurnFlow(
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [rateLimitedUntil, setRateLimitedUntil] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const inFlightRef = useRef(false);
+  const inFlightLock = usePressLock();
   const abortRef = useRef<AbortController | null>(null);
 
   // 위치 동의는 서버 값만 본다 — 조회 중·실패는 꺼짐이다. 켜지는 순간 한 번만 읽는다(같은 마운트에서 다시 안 읽음).
@@ -95,8 +96,8 @@ export function useTurnFlow(
   }, [rateLimitedUntil, rateLimitedSeconds]);
 
   function dispatch(turn: PendingTurn): void {
-    if (!sessionId || inFlightRef.current) return;
-    inFlightRef.current = true;
+    // 전환은 안 본다 — 호출부가 입력칸을 비운 뒤라 전환 때문에 빠지면 쓴 글이 사라진다. 연타는 잠금이 막는다.
+    if (!sessionId || !inFlightLock.acquire({ transition: 'ignore' })) return;
     const controller = new AbortController();
     abortRef.current = controller;
     setPending({ ...turn, status: 'SENDING' });
@@ -141,7 +142,7 @@ export function useTurnFlow(
             setPending({ ...turn, status: 'FAILED' });
           },
           onSettled: () => {
-            inFlightRef.current = false;
+            inFlightLock.release();
             abortRef.current = null;
             setStartedAt(null);
           },

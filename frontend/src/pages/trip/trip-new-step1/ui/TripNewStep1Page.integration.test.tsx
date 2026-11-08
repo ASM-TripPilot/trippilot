@@ -14,7 +14,11 @@ import {
   getAccessToken,
   setAccessToken,
 } from '@/shared/api/tokenManager';
-import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
+import {
+  guardPress,
+  PRESS_GUARD_SCREEN_LISTENERS,
+  resetPressGuard,
+} from '@/shared/lib/pressGuard';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 import {
   BASE,
@@ -3828,6 +3832,37 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     expect(mustVisitPosts).toEqual([{ poiId: GYEONGBOK, type: 'ANYTIME' }]);
   });
 
+  // TRIP-1827 5-b W1 — 꼭 갈 곳 등록은 [다음] 누름이 아니라 생성 응답 뒤 흐름이다(`transition:'ignore'`).
+  // 응답을 기다리는 사이 화면 전환이 시작돼도(위저드 안쪽 Stack push 등) 등록이 빠지면 여행만 생기고
+  // 꼭 갈 곳 0건 · 배너도 없다(INV-4 침묵). 전환 표시는 최상위 beforeEach 의 resetPressGuard 가 지운다.
+  it('P-12 · 생성 응답 대기 중 화면 전환이 시작돼도, 응답 뒤 시드 두 곳이 모두 등록되고 step2 로 간다', async () => {
+    // 준비
+    seedSeoulWithNamwon();
+    holdCreate = { release: () => {}, started: false };
+    renderPage();
+    await waitForPrefill();
+
+    // 실행 — [다음], 생성 응답이 붙잡힌 사이 오는 화면의 전환이 시작된다(끝 이벤트는 아직 없다).
+    pressNext();
+    await waitFor(() => expect(holdCreate?.started).toBe(true));
+    PRESS_GUARD_SCREEN_LISTENERS.transitionStart({
+      target: 'inner-stack-route',
+      data: { closing: false },
+    });
+    await act(async () => {
+      holdCreate?.release();
+    });
+
+    // 단언 — 등록 수 = 시드 수.
+    await waitFor(() => expect(mustVisitPosts).toHaveLength(2));
+    expect(mustVisitPosts.map((body) => body.poiId).sort()).toEqual(
+      [GWANGHALLU, GYEONGBOK].sort()
+    );
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith('/trips/new/step2')
+    );
+  });
+
   // AC-4 PATCH 재진입 경로 — 이미 만든 여행의 서버 꼭 갈 곳도 [빼기]를 따른다(★11).
   it('P-11 · 재진입에서 [빼기] 뒤 [다음]이면 남원 꼭 갈 곳만 DELETE 되고 새 등록은 없다', async () => {
     // 준비 — 서버에 경복궁·광한루원이 이미 등록돼 있고, 시드도 같다.
@@ -4026,7 +4061,7 @@ describe('TRIP-1823 · 시트 [적용] 연타 — 둘째 탭이 [다음]으로 �
     );
   });
 
-  it.each([
+  const SHEETS = [
     ['companion', 'trip-wizard-companion-apply', 'trip-wizard-companion-sheet'],
     ['daywindow', 'trip-wizard-daywindow-apply', 'trip-wizard-daywindow-sheet'],
     [
@@ -4036,7 +4071,9 @@ describe('TRIP-1823 · 시트 [적용] 연타 — 둘째 탭이 [다음]으로 �
     ],
     ['period', 'trip-wizard-period-apply', 'trip-wizard-period-sheet'],
     ['preference', 'trip-wizard-pref-sheet-apply', 'trip-wizard-pref-sheet'],
-  ] as const)(
+  ] as const;
+
+  it.each(SHEETS)(
     '%s 시트 — 연타는 시트만 닫고 요청 0건, 창이 닫힌 뒤 [다음]은 여행을 만든다',
     async (kind, apply, sheet) => {
       seedValidDraft();
@@ -4061,4 +4098,44 @@ describe('TRIP-1823 · 시트 [적용] 연타 — 둘째 탭이 [다음]으로 �
       await waitFor(() => expect(createHits()).toBe(1));
     }
   );
+
+  // TRIP-1827 L1 — 간격 0.6초의 둘째 탭이 400ms 창을 지나 여행을 만들었다(QA L1). 시트는 조건부 렌더라 전환 이벤트가
+  // 없어 [적용] 전용 긴 창(800ms)이 막는다. 하네스 `next()` 는 창을 닫으므로 testID 로 직접 누른다.
+  // 시계는 시트가 열린 뒤에 멈춘다 — 그 전의 프리필 응답은 기다려야 한다.
+  describe('[적용] 은 800ms 창을 연다', () => {
+    let clock: jest.SpyInstance | undefined;
+    afterEach(() => clock?.mockRestore());
+
+    it.each(SHEETS)(
+      '%s 시트 — [적용] 600ms 뒤 [다음]은 요청 0건, 800ms 뒤 [다음]은 1건',
+      async (kind, apply, sheet) => {
+        // 준비
+        seedValidDraft();
+        renderPage();
+        await waitForPrefill();
+        await openSheet(kind);
+        if (kind === 'period')
+          fireEvent.press(
+            screen.getByTestId('trip-wizard-period-cell-2026-06-10')
+          );
+        const FROZEN_NOW = Date.now() + 10_000;
+        clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+
+        // 실행 — [적용] 뒤 0.6초에 떨어진 둘째 탭
+        fireEvent.press(screen.getByTestId(apply));
+        expect(screen.queryByTestId(sheet)).toBeNull();
+        clock.mockReturnValue(FROZEN_NOW + 600);
+        fireEvent.press(screen.getByTestId(NEXT));
+        await act(() => new Promise((r) => setTimeout(r, 30)));
+
+        // 단언
+        expect(createHits()).toBe(0);
+
+        // 실행·단언 — 창이 지난 뒤의 [다음]은 삼키지 않는다
+        clock.mockReturnValue(FROZEN_NOW + 800);
+        fireEvent.press(screen.getByTestId(NEXT));
+        await waitFor(() => expect(createHits()).toBe(1));
+      }
+    );
+  });
 });

@@ -23,11 +23,11 @@
  * 배너는 타이머 없이 다음 조작에서 지운다(01b Seed Q9) — 매 조작 시작에서 `removeError`를 비운다.
  */
 import type { ReactElement } from 'react';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBackOr } from '@/shared/lib/goBackOr';
-import { guardPress } from '@/shared/lib/pressGuard';
+import { guardPress, usePressLock } from '@/shared/lib/pressGuard';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -225,9 +225,9 @@ function WizardMustVisitPick(props: PickWrapperProps): ReactElement {
   const destinations = useTripWizardStore((s) => s.destinations);
   // 선택된 밖 행이 있을 때 완료가 멈춰 선 자리(TRIP-1106 AC-6) — 있으면 확인 다이얼로그가 뜬다.
   const [pending, setPending] = useState<WizardCompletion | null>(null);
-  // 다이얼로그 버튼 잠금 — 상태가 아니라 ref 라 같은 틱 두 번째 누름도 이미 켜진 값을 읽는다(AC-11,
-  // TRIP-1114 `lockedRef` 선례).
-  const lockedRef = useRef(false);
+  // 다이얼로그 버튼 잠금 — 상태가 아니라 잠금 객체라 같은 틱 두 번째 누름도 이미 켜진 값을 읽는다(AC-11,
+  // TRIP-1114 `lock` 선례).
+  const lock = usePressLock();
 
   // 시드 → 재진입 표식 → 1/4 이동. 두 버튼·곧장 완료가 모두 이 한 곳을 지난다(step1 리터럴 하나).
   function finish(
@@ -255,8 +255,7 @@ function WizardMustVisitPick(props: PickWrapperProps): ReactElement {
   }
 
   function resolve(exclude: boolean): void {
-    if (!pending || lockedRef.current) return;
-    lockedRef.current = true;
+    if (!pending || !lock.acquire()) return;
     setPending(null);
     finish(pending, exclude ? pending.outsideSelectedIds : []);
   }
@@ -281,7 +280,7 @@ function WizardMustVisitPick(props: PickWrapperProps): ReactElement {
           // 선택된 밖 행이 있으면 시드·표식·이동 전에 묻는다(AC-6 · INV-4 — 조용히 넣지 않는다). 떠 있는 동안
           // 완료를 또 눌러도 같은 다이얼로그를 다시 세울 뿐이다(AC-11).
           if (completion.outsideSelectedIds.length > 0) {
-            lockedRef.current = false;
+            lock.release();
             setPending(completion);
             return;
           }
@@ -315,7 +314,7 @@ function TripMustVisitPick({
   const registered = useGetTripsTripIdMustVisits(tripId);
   const [completeError, setCompleteError] = useState<string | null>(null);
   // 요청 중 잠금 — 응답 전 연타가 POST 를 겹쳐 내지 않게(AC-12).
-  const submittingRef = useRef(false);
+  const submittingLock = usePressLock();
 
   const lockedPoiIds = (registered.data ?? []).map((m) => m.sourcePoiId);
   // 여행·등록 목록이 오기 전엔 결과를 그리지 않는다 — 목적지가 빈 채 판정하면 "전부 안"으로
@@ -331,7 +330,7 @@ function TripMustVisitPick({
     selectedPoiIds: string[],
     insideList: SavedPlace[]
   ): Promise<void> {
-    if (submittingRef.current) return;
+    if (submittingLock.isHeld()) return;
     const poiIds = insideList
       .map((saved) => saved.place.poiId)
       .filter(
@@ -339,7 +338,7 @@ function TripMustVisitPick({
           selectedPoiIds.includes(poiId) && !lockedPoiIds.includes(poiId)
       );
     if (poiIds.length === 0) return;
-    submittingRef.current = true;
+    if (!submittingLock.acquire()) return;
     setCompleteError(null);
 
     // allSettled — "N곳 중 M곳 실패"를 세야 해서 all(첫 실패에 던짐)로는 안 된다(TripNewStep1Page 선례).
@@ -361,7 +360,7 @@ function TripMustVisitPick({
       queryKey: getGetTripsTripIdMustVisitsQueryKey(tripId),
     });
     if (failed > 0) {
-      submittingRef.current = false;
+      submittingLock.release();
       setCompleteError(mustVisitFailureNotice(poiIds.length, failed));
       return;
     }

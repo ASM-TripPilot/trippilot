@@ -56,6 +56,7 @@ import {
 } from '@/test-support/mswItinerary';
 import { savedPlace } from '@/test-support/mustVisitFixtures';
 import { resetToast } from '@/test-support/toastHarness';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { freezeDate } from '@/test-support/freezeDate';
 import { revealValues } from '@/test-support/revealProbe';
@@ -205,6 +206,7 @@ afterAll(() => server.close());
 // TRIP-1498 (c) RG10 이 `Date` 를 고정한다 — 앞 테스트의 고정 시계가 뒤 테스트의 `seoulDate(new Date())` 로 새지 않게 파일 최상위에서 푼다.
 afterEach(() => {
   jest.useRealTimers();
+  resetPressGuard();
 });
 
 // TRIP-466 · 옛 DraftPage.integration.test.tsx(본 파일)
@@ -553,6 +555,27 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       };
       expect(dest.pathname).toBe('/trips/[tripId]/itinerary');
       expect(dest.params?.tripId).toBe(TRIP_ID);
+    });
+
+    // TRIP-1827 M1 — 둘째 탭이 도착지(h14)의 [일정 확정하기]에 떨어져 되돌릴 수 없는 확정이 나갔다(QA M1).
+    // 도착지 반쪽은 네이티브 전환이 있어야 보이므로 여기선 트리거가 창을 여는 것까지 잰다.
+    it('연타해도 한 번만 이동하고, 창이 지나면 다시 누를 수 있다(스택에 남은 화면으로 돌아온 경우)', async () => {
+      renderPage();
+      const confirm = await screen.findByTestId('sheet-cta-button-1');
+      const FROZEN_NOW = Date.now() + 10_000;
+      const clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+
+      try {
+        fireEvent.press(confirm);
+        fireEvent.press(confirm);
+        expect(mockPush).toHaveBeenCalledTimes(1);
+
+        clock.mockReturnValue(FROZEN_NOW + 400);
+        fireEvent.press(confirm);
+        expect(mockPush).toHaveBeenCalledTimes(2);
+      } finally {
+        clock.mockRestore();
+      }
     });
   });
 
