@@ -12,6 +12,10 @@
     // knip expo 플러그인이 app.config 에 updates.enabled=false 가 없으면 있다고 추정한다. 앱은 expo-updates 를 안 쓴다.
     "expo-updates",
   ],
+  "ignoreBinaries": [
+    // e2e/run.mjs 가 부르는 Maestro CLI — npm 패키지가 아니라 로컬에 따로 설치한 도구다(TRIP-1830).
+    "maestro",
+  ],
   "ignoreUnresolved": [
     // jest 설정의 transform 이름 — jest 가 자기 쪽에서 푼다.
     "babel-jest",
