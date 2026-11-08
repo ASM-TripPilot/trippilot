@@ -1,7 +1,7 @@
 import { LockGlyph, ClockGlyph } from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 
 import { ALT_LABEL } from '../config/altLabel';
 import { parseSlotKey } from '../lib/slotKey';
@@ -52,13 +52,14 @@ export function ReplanSlotRow({
     placeName,
     tone,
     photo,
+    imageLicense,
     category,
     timeLabel,
     categoryLabel,
   } = vm;
   const fieldId = (role: string): string =>
     `planb-draft-slot-${role}-${slotKey}`;
-  // VM 의 photo 는 `{uri}`·`require()` 둘 다 받는 RN 원천 타입이지만 생산자는 `{uri}` 만 넣는다 — uri 를 꺼내 PlacePhoto 로.
+  // VM 의 photo 는 `{uri}`·`require()` 둘 다 받는 RN 원천 타입이지만 생산자는 `{uri}` 만 넣는다 — uri 를 꺼내 PoiPhoto 로.
   const imageUrl =
     photo !== null && typeof photo === 'object' && 'uri' in photo
       ? photo.uri
@@ -86,12 +87,13 @@ export function ReplanSlotRow({
         </Text>
       </View>
 
-      <PlacePhoto
+      <PoiPhoto
         testID={fieldId('photo')}
         imageUrl={imageUrl}
+        imageLicense={imageLicense}
+        surface="thumb"
         category={category}
         poiId={poiId}
-        contentFit="cover"
         cachePolicy="memory-disk"
         className="h-[72px] w-[72px] rounded-thumb"
       />

@@ -121,6 +121,7 @@ function buildDraftSheet(diff: ReplanDiff): {
     // diff 엔 방문 여부가 없다 — 전 행 예정 톤(Seed Q6).
     tone: 'planned',
     photo: slot.imageUrl ? { uri: slot.imageUrl } : null,
+    imageLicense: slot.imageLicense,
     category: slot.category ?? null,
     timeLabel: `${slot.startAt.slice(0, 5)}–${slot.endAt.slice(0, 5)}`,
     categoryLabel: null,

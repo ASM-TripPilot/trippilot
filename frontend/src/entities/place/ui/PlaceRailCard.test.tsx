@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react-native';
 
 import type { PlaceCardVM } from '@/entities/place/model';
 import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 
 import { PlaceRailCard } from './PlaceRailCard';
 
@@ -26,6 +27,7 @@ const VM: PlaceCardVM = {
   name: '감천문화마을',
   region: '부산 사하구',
   imageUrl: 'https://example.com/gamcheon.jpg',
+  imageLicense: null,
 };
 
 describe('🔴 PlaceRailCard (AC-M2·M4 d01·d05)', () => {
@@ -208,6 +210,23 @@ describe('저장 하트·카드 접근성 라벨 (d01 장소 레인)', () => {
     // 라벨 없이 글자만 이어 붙여도 위 이름은 같아진다 — 카드 자신의 명시 라벨인지 따로 본다.
     expect(screen.getByLabelText('감천문화마을').props.testID).toBe(
       'explore-place-card-p1'
+    );
+  });
+});
+
+// TRIP-1740 AC-7(T4) — 카드 VM 의 imageLicense(필수 키)가 레인 사진 칸까지 간다.
+describe('PlaceRailCard · 관광공사 사진 유형이 사진 칸에 닿는다', () => {
+  it('TYPE1 서버 사진은 cover 이고 출처 글자가 붙는다', () => {
+    render(
+      <PlaceRailCard
+        card={{ ...VM, imageLicense: 'TYPE1' }}
+        onPress={jest.fn()}
+      />
+    );
+
+    expectTypeOnePhotoDelivered(
+      'explore-place-card-image-p1',
+      'https://example.com/gamcheon.jpg'
     );
   });
 });

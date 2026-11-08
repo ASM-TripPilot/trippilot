@@ -213,6 +213,7 @@ export function SlotCandidatePanelContainer({
         nameKo: currentSlot ? slotDisplayName(currentSlot) : undefined,
         tags: currentSlot?.tags,
         imageUrl: currentSlot?.imageUrl,
+        imageLicense: currentSlot?.imageLicense,
         category: currentSlot ? slotDisplayCategory(currentSlot) : undefined,
         distanceRange: currentSlot?.distanceRange,
       }}

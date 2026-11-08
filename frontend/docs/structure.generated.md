@@ -1748,6 +1748,7 @@
 - `src/shared/lib/goBackOr.ts`  →  BackRouter · goBackOr
 - `src/shared/lib/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
 - `src/shared/lib/nicknameFormat.ts`  →  NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
+- `src/shared/lib/photoLicense.ts`  →  PHOTO_CREDIT · resolvePhotoPolicy
 - `src/shared/lib/placeCover.ts`  →  fnv1a32 · placeCoverSource
 - `src/shared/lib/pressGuard.ts`  →  guardPress · respectPressGuard · openPressGuardWindow · resetPressGuard
 - `src/shared/lib/reduceMotion.ts`  →  onReduceMotionAnswer · startUnlessReduceMotion · useReduceMotion · resetReduceMotionForTests
@@ -1759,6 +1760,7 @@
 - `src/shared/lib/useDebouncedValue.ts`  →  SEARCH_DEBOUNCE_MS · useDebouncedValue
 - `src/shared/lib/useElapsedFlag.ts`  →  useElapsedFlag
 - `src/shared/lib/useKeyboardVisible.ts`  →  useKeyboardVisible
+- `src/shared/lib/usePlacePhotoSource.ts`  →  usePlacePhotoSource
 - `src/shared/lib/useQueryDataUpdateCount.ts`  →  useQueryDataUpdateCount
 - `src/shared/lib/useScrollHide.ts`  →  useScrollHide
 - `src/shared/lib/useSeoulToday.ts`  →  useSeoulToday
@@ -1866,6 +1868,7 @@
 - `src/shared/ui/NoticeBanner.tsx`  →  NoticeBannerNotice · NoticeBanner · DismissNotice
 - `src/shared/ui/OpenNaverMapButton.tsx`  →  OpenNaverMapButton
 - `src/shared/ui/PlacePhoto.tsx`  →  PlacePhoto
+- `src/shared/ui/PoiPhoto.tsx`  →  PoiPhoto
 - `src/shared/ui/RevealItem.tsx`  →  RevealItem
 - `src/shared/ui/SegmentedControl.tsx`  →  SegmentedOption · SegmentedControlProps · SegmentedControl
 - `src/shared/ui/SheetShell.tsx`  →  SheetShellProps · SheetShell
@@ -1940,6 +1943,7 @@
 - `src/test-support/navigationThemeMock.tsx`  →  DefaultTheme · ThemeProvider
 - `src/test-support/onboardingScenarios.ts`  →  OnboardingScenario · OnboardingScenarioKey · setOnboardingScenario · getOnboardingScenario · resetOnboardingScenario
 - `src/test-support/placeCoverFixtures.ts`  →  CoverSlug · COVER_SLUGS · COVER · FALLBACK_COVER · SLUG_OF · UUID_V1 · UUID_V2 · UUID_V3 · VARIANT_OF · STAY_COVER · STAY_VARIANT_OF · stayCoverFor · coverFor
+- `src/test-support/poiPhotoProbe.ts`  →  expectTypeOnePhotoDelivered
 - `src/test-support/preventRemoveMock.ts`  →  mockNavigation · useNavigation · usePreventRemove
 - `src/test-support/pushOsFake.ts`  →  OsPermission · primeOsPermission · primeExpoToken · fakePushNotification · fakePushResponse · lastPushTapListener · primeOsLastResponse · lastPushReceiveListener
 - `src/test-support/queryClientProbe.tsx`  →  SplashGate · getObservedQueryClient · resetObservedQueryClient
@@ -2022,4 +2026,4 @@
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1326개 파일
+합계 1330개 파일

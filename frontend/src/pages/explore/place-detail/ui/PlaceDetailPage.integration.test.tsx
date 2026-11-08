@@ -25,6 +25,7 @@ import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
 import { getGetSavedPlacesQueryKey } from '@/shared/api/index.hooks';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 import { copyText } from '@/shared/clipboard';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 
 /**
  * TRIP-1372(TRIP-824 단건 조회) · d06 장소 상세 배선(페이지 층).
@@ -86,6 +87,7 @@ function makePlace(overrides: Partial<Place> = {}): Place {
     region: '부산 부산진구',
     openingHours: '10:00~18:00 (월 휴관)',
     imageUrl: null,
+    imageLicense: null,
     tags: ['미술', '실내'],
     savedCount: 12,
     dataStatus: 'ACTIVE',
@@ -167,6 +169,23 @@ function renderDetail(poiId: string): void {
 }
 
 describe('D1 · d06 상세 표면 렌더 — 캐시 없이 단건으로', () => {
+  // TRIP-1740 AC-7(T7) — 단건 응답의 imageLicense 가 d06 히어로 사진 칸까지 간다(Place 통째 전달 출구).
+  it('TYPE1 서버 사진이면 히어로까지 유형이 닿아 cover 이고 출처 글자가 붙는다', async () => {
+    detailReply = makePlace({
+      imageUrl: 'https://img.example/hero.jpg',
+      imageLicense: 'TYPE1',
+    });
+    renderDetail('p1');
+
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-place-hero')).toBeOnTheScreen()
+    );
+    expectTypeOnePhotoDelivered(
+      'explore-place-hero-photo',
+      'https://img.example/hero.jpg'
+    );
+  });
+
   it('앞 화면 캐시가 비어 있어도 GET /places/{poiId} 로 그린다 — 목록은 부르지 않는다', async () => {
     renderDetail('p1');
 

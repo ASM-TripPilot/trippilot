@@ -6,6 +6,8 @@
 // 재수출하고, 나머지 둘은 타입만 재수출한다(place/model 의 PoiCategory·Place 배치와 동형).
 import type { ImageSourcePropType } from 'react-native';
 
+import type { ImageLicense } from '@/shared/api/index.schemas';
+
 export type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
 /**
@@ -24,6 +26,8 @@ export interface ReplanSlotVM {
   placeName: string;
   tone: ReplanSlotTone;
   photo: ImageSourcePropType | null;
+  /** `photo` 의 공공누리 유형 — 필수 키(끊기면 tsc). null·undefined(미수집)는 자르지 않는다. */
+  imageLicense: ImageLicense | null | undefined;
   category: string | null;
   timeLabel: string | null;
   categoryLabel: string | null;

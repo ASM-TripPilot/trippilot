@@ -27,6 +27,7 @@ import type {
   Place,
 } from '@/shared/api/index.schemas';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 
 import { PlaceAddPage } from './PlaceAddPage';
@@ -183,7 +184,11 @@ const PLACES: Place[] = [
   makePlace('p1', '감천문화마을', '명소', 12),
   makePlace('p2', '해운대 해수욕장', '야경', 30),
   makePlace('p3', '전포 카페거리', '카페', 7),
-  makePlace('p5', '자갈치 시장', '맛집', 21),
+  {
+    ...makePlace('p5', '자갈치 시장', '맛집', 21),
+    imageUrl: 'https://example.com/jagalchi.jpg',
+    imageLicense: 'TYPE1',
+  },
 ];
 
 let observed: { method: string; url: string }[] = [];
@@ -768,6 +773,7 @@ describe('🔴 C1·C2·C3 · TRIP-798 — 카드 (아웃라인 +추가 · PlaceR
             {
               ...makePlace('pimg', '사진장소', '명소', 3),
               imageUrl: 'https://example.com/x.jpg',
+              imageLicense: 'TYPE1',
             },
           ],
           nextCursor: null,
@@ -780,6 +786,11 @@ describe('🔴 C1·C2·C3 · TRIP-798 — 카드 (아웃라인 +추가 · PlaceR
     expect(
       screen.getByTestId('itinerary-place-card-photo-pimg')
     ).toBeOnTheScreen();
+    // TRIP-1740 AC-7(T5) — `Place` 의 imageLicense(TYPE1)가 `PlaceAddScreen` 행 조립을 지나 사진 칸까지 간다.
+    expectTypeOnePhotoDelivered(
+      'itinerary-place-card-photo-pimg',
+      'https://example.com/x.jpg'
+    );
   });
 
   it('C3 · 거리 데이터가 없으면 거리줄을 그리지 않는다 (지어내기 금지, INV-3)', async () => {
@@ -2530,6 +2541,22 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
       },
       SLOW
     );
+
+    it('B1b · TRIP-1740 AC-7(T15) — 체크한 장소(p5, TYPE1 서버 사진)의 imageLicense 가 `bulkSheet` 조립을 지나 시각 시트 요약 썸네일까지 간다', async () => {
+      const { client } = renderTree();
+      await ready(client);
+
+      await pick('p5');
+      fireEvent.press(screen.getByTestId(CTA));
+      await waitFor(() =>
+        expect(screen.getByTestId(SUMMARY)).toHaveTextContent(/자갈치 시장/)
+      );
+
+      expectTypeOnePhotoDelivered(
+        'itinerary-edit-time-place-thumb-image',
+        'https://example.com/jagalchi.jpg'
+      );
+    });
 
     it(
       '🔴 B2 · AC-7 — 둘째 시트 기본값은 첫 곳 확정 끝 시각부터 1시간, 셋째는 둘째 확정 끝부터다 (첫 시트의 값을 재사용하지 않는다 · 사용자가 바꾼 시각이 PUT 에 그대로)',

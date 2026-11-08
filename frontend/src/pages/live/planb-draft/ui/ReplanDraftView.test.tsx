@@ -25,6 +25,7 @@ const photo = (name: string) => ({ uri: `file:///${name}.jpg` });
 
 const SLOTS: ReplanSlotVM[] = [
   {
+    imageLicense: null,
     slotKey: 's1',
     placeName: '감천문화마을',
     tone: 'visited',
@@ -36,6 +37,7 @@ const SLOTS: ReplanSlotVM[] = [
     isFixed: false,
   },
   {
+    imageLicense: null,
     slotKey: 's2',
     placeName: '광안리 해변',
     tone: 'visited',
@@ -47,6 +49,7 @@ const SLOTS: ReplanSlotVM[] = [
     isFixed: false,
   },
   {
+    imageLicense: null,
     slotKey: 's3',
     placeName: '부산시립미술관',
     tone: 'visited',
@@ -58,6 +61,7 @@ const SLOTS: ReplanSlotVM[] = [
     isFixed: false,
   },
   {
+    imageLicense: null,
     slotKey: 's4',
     placeName: '전포 카페거리',
     tone: 'planned',
@@ -69,6 +73,7 @@ const SLOTS: ReplanSlotVM[] = [
     isFixed: false,
   },
   {
+    imageLicense: null,
     slotKey: 's5',
     placeName: 'F1963 복합문화공간',
     tone: 'planned',

@@ -34,6 +34,7 @@ import { SlotCandidateSheet } from './SlotCandidateSheet';
 /** 현재 장소 행(회색 "현재" 칩, 탭 불가). Figma 값. */
 const CURRENT = {
   poiId: 'cur',
+  imageLicense: null,
   nameKo: '부산시립미술관',
   tags: ['미술', '실내'],
   distanceRange: '560m',
@@ -43,12 +44,14 @@ const CURRENT = {
 const CANDIDATES = [
   {
     poiId: 'p2',
+    imageLicense: null,
     nameKo: 'F1963 복합문화공간',
     tags: ['카페', '갤러리'],
     distanceRange: '1.1km',
   },
   {
     poiId: 'p3',
+    imageLicense: null,
     nameKo: '부산근대역사관',
     tags: ['지역', '무료'],
     distanceRange: '1.8km',

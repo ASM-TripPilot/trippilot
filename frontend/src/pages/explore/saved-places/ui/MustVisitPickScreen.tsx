@@ -6,7 +6,7 @@ import type { PlaceListState } from '@/features/explore/index.view';
 import { MapPinGlyph } from '@/shared/ui/glyphs';
 import type { SavedPlace } from '@/shared/api/index.schemas';
 import { EmptyCollage } from './EmptyCollage';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
@@ -144,12 +144,13 @@ const PickRow = memo(function PickRow({
       )}
 
       <View className="h-20 w-[104px] overflow-hidden rounded-thumb bg-surface-strong">
-        <PlacePhoto
+        <PoiPhoto
           testID={`mustvisit-pick-photo-${place.poiId}`}
           imageUrl={place.imageUrl}
+          imageLicense={place.imageLicense}
+          surface="thumb"
           category={place.category}
           poiId={place.poiId}
-          contentFit="cover"
           className="h-full w-full"
         />
       </View>

@@ -37,6 +37,7 @@ routes:
 - `place-detail-loading` 조회 중 빈 화면 / `place-detail-notfound` 404 / `place-detail-error` 비-404 실패 + 「다시 시도」.
 - `place-detail-back` 뒤로 — 히스토리 없으면 홈으로 교체.
 - `place-detail-hero` 히어로는 서버 사진(없으면 그 장소 카테고리의 생성 이미지)이고, 부제 앞에 흰 핀이 선다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
+- `places-photo-credit` 서버 장소 사진(2열 그리드 카드·장소 상세 히어로)에는 우하단에 「사진: 한국관광공사」 칩이 붙는다(접근성 라벨 「사진 출처 한국관광공사」). 관광공사 3유형 사진과 유형을 모르는 사진은 **자르지 않고** 칸 안에 전체가 보이며 남는 곳은 여백(그리드 연회색 · 히어로 어두운색), 1유형 사진만 칸을 꽉 채운다. 사진이 없어 카테고리 그림이 깔리거나 사진을 못 불러오면 칩이 없고 그림은 꽉 채운다. d01 탐색 랜딩의 장소 레인 카드도 같다(레인은 `explore-destination`). *(TRIP-1740 · 2026-11-08 프리뷰 캡처 pass(d01 레인·상세 히어로) · 실화면 미검증 — d04 그리드·실데이터는 Gotchas)*
 - `place-detail-minimap` 미니맵은 그 장소 위치에 핀 하나를 찍고 손으로 움직이지 않는다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
 - `places-toast-above-fab` FAB 가 있는 화면에서 토스트는 FAB 묶음 위에 떠서 가려지지 않는다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
 - `places-chip-follow` 카테고리 칩을 고르면 칩 줄이 그 칩이 보이도록 가로로 따라간다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
@@ -70,6 +71,7 @@ Preconditions:
 - **진입.** 홈 「더 보기」 `home-spots-more` 를 누른다. testID: `explore-places-root`, 앱바 「장소 탐색」, 검색 testID: `explore-places-search`(placeholder 「장소 · 명소 · 맛집 검색」), 지역 칩 testID: `explore-places-region` 「전체 지역」, 그리드 testID: `explore-places-grid`.
 - **로딩.** 첫 조회 중 testID: `explore-places-loading` 에 「장소를 모으는 중」과 스켈레톤 testID: `explore-places-skeleton-${index}`.
 - **카드.** 카드 testID: `explore-places-card-${poiId}`, 사진 testID: `explore-places-photo-${poiId}`. 카드 press → 장소 상세.
+- **출처 칩.** 서버 사진이 있는 카드는 사진 testID: `explore-places-photo-${poiId}` 옆에 testID: `explore-places-photo-${poiId}-credit`(「사진: 한국관광공사」)가 사진 우하단에 있고 우상단 하트와 안 겹친다. 상세 히어로 testID: `explore-place-hero-photo` 에는 testID: `explore-place-hero-photo-credit`. 카테고리 그림이 깔린 카드·히어로에는 이 노드가 없다. 3유형·유형 모름 사진은 칸에 여백이 생기며 전체가 보이고 1유형만 꽉 찬다 — 화면만으로 유형을 알 수 없으니 서버 응답의 `imageLicense` 와 대조한다(확인 필요).
 - **카테고리.** 칩 testID: `explore-places-category-${code}`(code: `all`·`attraction`·`food`·`cafe`·`nightview`·`nature`·`shopping`·`culture`·`activity`·`art`·`bar`) 중 `food`(「맛집」)를 누른다. 그 칩 `selected` true, 목록이 다시 로딩된 뒤 바뀐다.
 - **검색.** `explore-places-search` 에 「해운대」 `fill`. 300ms 뒤 목록이 서버 결과로 바뀐다. 「zzqq」처럼 없는 말이면 testID: `explore-places-filterzero` 에 「‘zzqq’ 때문에 0건이에요」, testID: `explore-places-filterzero-clear` 「검색어 지우기」. 카테고리도 걸려 있으면 testID: `explore-places-filterzero-clear-all` 「조건 모두 해제」가 더해진다.
 - **지역 바꾸기.** `explore-places-region` 을 누른다. 「여행지 선택」 지역 선택이 열리고, 시도→구군 카드(예 부산 해운대구)를 고르면 장소 탐색으로 돌아와 칩이 그 이름이 된다(누적 화면 없음).
@@ -93,6 +95,7 @@ Preconditions:
 
 ## Gotchas
 
+- **[미확인 · 실화면 전용] 2026-11-08 TRIP-1740** — 출처 칩·안 자름은 프리뷰 캡처로만 봤다(d01 레인 카드 2장·상세 히어로 pass). 실화면 확인이 비어 있다: ① d04 2열 그리드 카드의 칩 위치·연회색 여백(프리뷰 키 밖) ② 실데이터 3유형 사진, 특히 **세로형 사진**의 좌우 여백 모양(프리뷰 사진은 에셋 3장뿐이고 상세 프리뷰는 유형 없는 자리표시 사진이라 「유형 모름」 경로다) ③ VoiceOver 가 카드 제목보다 「사진 출처 한국관광공사」를 먼저 읽는지(라벨 없는 카드에서의 가설). 칩 색·여백색·위치는 Figma 시안 없이 코드 토큰으로 그렸다 — Figma 대조는 따로 한다.
 - 목록 순서는 진입마다 새 무작위 seed 다 — 같은 카드 위치를 두 진입에 걸쳐 기대하지 않는다. 칩·검색·재시도 동안은 같은 seed 를 쓴다.
 - 지역 0곳·2곳 이상 진입은 병렬 병합 경로라 무한 스크롤 동작이 단일 지역과 다를 수 있다(어느 쪽이 그려지는지 6-b 실기 확인 필요).
 - 위저드 출처(`from=wizard`)면 ＋ FAB 가 없고 ♥ 는 직전 화면(위저드)으로 돌아간다 — 딥링크로 `from=wizard` 를 붙여 들어오면 ♥ 가 스택 밖으로 나가거나 무반응일 수 있다(미확인). 위저드 출처에서 지역 칩으로 지역을 바꾸면 `from` 이 지워져 ＋ 가 다시 생기고 누르면 위저드 입력이 초기화된다(알려진 함정).
