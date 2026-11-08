@@ -4,6 +4,7 @@ export type { GlyphProps } from './types';
 export {
   BackArrowGlyph,
   BackChevronGlyph,
+  BackChevronWideGlyph,
   Check24Glyph,
   CheckGlyph,
   ChevronDownGlyph,
@@ -38,9 +39,17 @@ export {
   MoreDotsGlyph,
   NoteGlyph,
   PencilGlyph,
+  RetryGlyph,
   SearchGlyph,
+  ShareGlyph,
   SummaryChartGlyph,
   TrashGlyph,
   UndoGlyph,
 } from './ActionGlyphs';
-export { HeartStrokeFilledGlyph, HeartStrokeOutlineGlyph } from './HeartGlyphs';
+export {
+  HeartBadgeGlyph,
+  HeartFilledGlyph,
+  HeartOutlineGlyph,
+  HeartStrokeFilledGlyph,
+  HeartStrokeOutlineGlyph,
+} from './HeartGlyphs';

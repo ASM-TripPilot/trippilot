@@ -67,34 +67,6 @@ export function TripPinGlyph({ size = 14, testID }: GlyphProps) {
   );
 }
 
-// 여행지 칩 제거 ×(14) — Figma `1860:2316`.
-export function RemoveGlyph({ size = 14, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 14 14"
-      fill="none"
-    >
-      <Path
-        d="M3.5 3.5L10.5 10.5"
-        stroke={MUTED}
-        strokeWidth={1.16667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M10.5 3.5L3.5 10.5"
-        stroke={MUTED}
-        strokeWidth={1.16667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 // 도시 추가 칩 +(14) — Figma `1860:2329`. 텍스트는 primary-text지만 아이콘은 primary다.
 // '꼭 갈 곳' 점선 박스의 +(20, `1740:1110`)는 같은 도형의 정비례 확대라 size로 겸한다.
 export function TripPlusGlyph({ size = 14, testID }: GlyphProps) {
@@ -594,42 +566,6 @@ export function TripCheckGlyph({
         d="M11.6667 3.5L5.25 9.91667L2.33333 7"
         stroke={tone === 'primary' ? PRIMARY : PRIMARY_TEXT}
         strokeWidth={1.75}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// g02 경고 삼각형 — error 배지 32px(`2456:1502`)과 blocked 안내행 20px(`2456:1514`)이 **같은
-// 노드**다(좌표·획이 32:20으로 정비례 — 실측). `TripBedGlyph` 선례대로 size prop 하나로 겸한다.
-export function TripWarningTriangleGlyph({ size = 32, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 32 32"
-      fill="none"
-    >
-      <Path
-        d="M16 4L29.3333 26.6667H2.66667L16 4Z"
-        stroke={PRIMARY}
-        strokeWidth={2.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M16 12V18.6667"
-        stroke={PRIMARY}
-        strokeWidth={2.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M16 22.6667H16.0133"
-        stroke={PRIMARY}
-        strokeWidth={2.8}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

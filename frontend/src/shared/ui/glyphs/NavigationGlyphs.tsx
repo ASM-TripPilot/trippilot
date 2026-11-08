@@ -36,6 +36,32 @@ export function BackArrowGlyph({
   return <BackChevronGlyph size={size} color={color} testID={testID} />;
 }
 
+// 넓은 뒤로 꺾쇠(‹, 높이 14 · 획 2) — BackChevronGlyph(높이 12 · 획 2.2)와 그림이 다르다.
+// 장소 상세(d06·i10)·탐색 앱바가 쓴다(TRIP-1829 에서 explore·execution 사본을 모음).
+export function BackChevronWideGlyph({
+  size = 24,
+  color = 'ink',
+  testID,
+}: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M15 5L8 12L15 19"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // 아래 쉐브론 — 소비처마다 stroke 굵기가 달라(1.83/2) strokeWidth 를 열어 둔다.
 export function ChevronDownGlyph({
   size = 20,

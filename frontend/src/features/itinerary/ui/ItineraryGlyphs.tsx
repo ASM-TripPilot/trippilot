@@ -221,34 +221,6 @@ export function ItinerarySearchGlyph({ size = 20, testID }: GlyphProps) {
   );
 }
 
-// 카드 우측 해제 ×(20) — Figma `1876:1111`. ANYTIME 항목에만 붙는다.
-export function ItineraryCloseGlyph({ size = 20, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M5 5L15 15"
-        stroke={MUTED_SOFT}
-        strokeWidth={1.66667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M15 5L5 15"
-        stroke={MUTED_SOFT}
-        strokeWidth={1.66667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 // h06 빈 목록 얼굴 캘린더(30) — Figma `3994:2575`. 회색 원(surface-soft) 위에 얹는 muted-soft 달력.
 // 프레임(둥근 사각)+상단 구분선+걸이 2개 4-path. 브리프 §에셋 벡터 실측.
 export function ItineraryCalendarGlyph({ size = 30, testID }: GlyphProps) {

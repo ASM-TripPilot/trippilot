@@ -59,7 +59,6 @@ export { resolveUnplacedNames } from './model/unplacedMustVisits';
 export {
   ItineraryCalendarGlyph,
   CheckCircleGlyph,
-  ItineraryCloseGlyph,
   CoPickGlyph,
   DashGlyph,
   DiamondGlyph,

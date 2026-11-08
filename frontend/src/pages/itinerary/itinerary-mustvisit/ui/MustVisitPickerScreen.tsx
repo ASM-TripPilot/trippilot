@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Button } from '@/shared/ui/Button';
 import {
+  CloseGlyph,
   PlusGlyph,
   InfoCircleGlyph,
   BackChevronGlyph,
@@ -20,7 +21,6 @@ import {
   type MustVisitListView,
 } from '@/features/itinerary/index.view';
 import {
-  ItineraryCloseGlyph,
   ItineraryLockGlyph,
   ItineraryPencilGlyph,
 } from '@/features/itinerary/index.view';
@@ -303,7 +303,7 @@ function MustVisitCard({
           }
           hitSlop={8}
         >
-          <ItineraryCloseGlyph />
+          <CloseGlyph size={20} color="mutedSoft" />
         </Pressable>
       )}
     </Pressable>

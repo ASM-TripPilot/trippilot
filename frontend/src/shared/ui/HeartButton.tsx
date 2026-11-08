@@ -3,7 +3,7 @@ import { Animated, Pressable } from 'react-native';
 
 import { startUnlessReduceMotion } from '@/shared/lib/reduceMotion';
 
-import { HeartFilledGlyph, HeartOutlineGlyph } from './HeartGlyphs';
+import { HeartFilledGlyph, HeartOutlineGlyph } from './glyphs';
 
 /**
  * 카드 사진 위 저장 하트(TRIP-1049) — Figma HeartButton `4462:1407`: 32 흰 원 + 18 하트.

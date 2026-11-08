@@ -445,18 +445,18 @@
 
 ## src/features/execution/
 - `src/features/execution/index.ts`  →  useLiveItinerary · buildAppNavUrl · buildWebNavUrl · openNextNav · resolveNextDest · resolveSlotDests · type NavDest
-- `src/features/execution/index.view.ts`  →  ExecutionBackArrowGlyph · EventGlyph · HeroPhotoGlyph · RailActiveGlyph · RailDoneGlyph · RailUpcomingGlyph · ExecutionShareGlyph
+- `src/features/execution/index.view.ts`  →  EventGlyph · HeroPhotoGlyph · RailActiveGlyph · RailDoneGlyph · RailUpcomingGlyph
 
 ## src/features/execution/model/
 - `src/features/execution/model/nextNav.ts`  →  NavOrigin · NavDest · buildAppNavUrl · buildWebNavUrl · resolveSlotDests · resolveNextDest · openNextNav
 - `src/features/execution/model/useLiveItinerary.ts`  →  useLiveItinerary
 
 ## src/features/execution/ui/
-- `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · ExecutionBackArrowGlyph · ExecutionShareGlyph · WeatherCloudGlyph · EventGlyph · HeroPhotoGlyph
+- `src/features/execution/ui/ExecutionGlyphs.tsx`  →  RailDoneGlyph · RailActiveGlyph · RailUpcomingGlyph · WeatherCloudGlyph · EventGlyph · HeroPhotoGlyph
 
 ## src/features/explore/
 - `src/features/explore/index.ts`  →  PLACE_LANE_STALE_TIME · useMultiRegionPlaces · usePlacesInfinite
-- `src/features/explore/index.view.ts`  →  resolvePlaceListState · regionPickerHref · filterRegions · groupRegionsBySido · regionTint · useRegions · ExploreBackChevronGlyph · ExploreCopyGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · ExploreFilterSlidersGlyph · ExploreInfoGlyph · ExplorePlusGlyph · ExploreSearchGlyph · ExploreShareGlyph
+- `src/features/explore/index.view.ts`  →  resolvePlaceListState · regionPickerHref · filterRegions · groupRegionsBySido · regionTint · useRegions · ExploreCopyGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · ExploreFilterSlidersGlyph · ExploreInfoGlyph · ExplorePlusGlyph · ExploreSearchGlyph
 
 ## src/features/explore/model/
 - `src/features/explore/model/mergePlaces.ts`  →  mergePlacesByPoiId · interleavePlacesByRegion
@@ -468,14 +468,14 @@
 - `src/features/explore/model/usePlacesInfinite.ts`  →  usePlacesInfinite
 
 ## src/features/explore/ui/
-- `src/features/explore/ui/ExploreGlyphs.tsx`  →  ExplorePlusGlyph · ExploreBackChevronGlyph · ExploreShareGlyph · ExploreCopyGlyph · ExploreSearchGlyph · ExploreFilterSlidersGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · ExploreInfoGlyph
+- `src/features/explore/ui/ExploreGlyphs.tsx`  →  ExplorePlusGlyph · ExploreCopyGlyph · ExploreSearchGlyph · ExploreFilterSlidersGlyph · CheckCircleFilledGlyph · CheckCircleOutlineGlyph · CircleExclaimGlyph · ExploreInfoGlyph
 
 ## src/features/itinerary/config/
 - `src/features/itinerary/config/placeCategoryChips.ts`  →  PlaceCategoryChip · PLACE_CATEGORY_CHIPS
 
 ## src/features/itinerary/
 - `src/features/itinerary/index.ts`  →  isGenerationRunning · useGenerationBusy · ITINERARY_OPEN_FAILED_MESSAGE · ITINERARY_OPEN_FAILED_TOAST_ID · fetchTripItineraryHref
-- `src/features/itinerary/index.view.ts`  →  countPickedCoPickSlots · firstCoPickSlotKey · nextCoPickSlotKey · ALL_IN_ITINERARY_HINT · ALL_IN_ITINERARY_TITLE · resolveSlotEmptyFace · DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_SLOW_INTERVAL_MS · buildDraftDayTabs · buildDraftPins · buildGenerationGauge · foldGenerationGauge · formatCoPickDayHeader · formatDraftDayHeader · pollIntervalMs · resolveDraftView · resolveFallbackNotice · resolveShortfallNotice · shouldKeepPollingDraft · MUST_VISIT_NAME_PLACEHOLDER · buildMustVisitPins · fixedTimeLabel · joinMustVisits · resolveMustVisitListView · buildPlanDayTabs · isConfirmLocked · itineraryDestinationHref · resolveItineraryDestination · resolvePlanState · resolvePlanMapCenter · isFixedStay · sheetMeta · sheetRowKeys · placeAddSubtitle · resolveUnplacedNames · ItineraryCalendarGlyph · CheckCircleGlyph · ItineraryCloseGlyph · CoPickGlyph · DashGlyph · DiamondGlyph · ItineraryLocationOffGlyph · ItineraryLockGlyph · ManualGlyph · ItineraryPencilGlyph · SortCheckGlyph · ItineraryWarningTriangleGlyph · PlaceAddHeader · PlaceAddRow · UnplacedMustVisitNotice
+- `src/features/itinerary/index.view.ts`  →  countPickedCoPickSlots · firstCoPickSlotKey · nextCoPickSlotKey · ALL_IN_ITINERARY_HINT · ALL_IN_ITINERARY_TITLE · resolveSlotEmptyFace · DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_SLOW_INTERVAL_MS · buildDraftDayTabs · buildDraftPins · buildGenerationGauge · foldGenerationGauge · formatCoPickDayHeader · formatDraftDayHeader · pollIntervalMs · resolveDraftView · resolveFallbackNotice · resolveShortfallNotice · shouldKeepPollingDraft · MUST_VISIT_NAME_PLACEHOLDER · buildMustVisitPins · fixedTimeLabel · joinMustVisits · resolveMustVisitListView · buildPlanDayTabs · isConfirmLocked · itineraryDestinationHref · resolveItineraryDestination · resolvePlanState · resolvePlanMapCenter · isFixedStay · sheetMeta · sheetRowKeys · placeAddSubtitle · resolveUnplacedNames · ItineraryCalendarGlyph · CheckCircleGlyph · CoPickGlyph · DashGlyph · DiamondGlyph · ItineraryLocationOffGlyph · ItineraryLockGlyph · ManualGlyph · ItineraryPencilGlyph · SortCheckGlyph · ItineraryWarningTriangleGlyph · PlaceAddHeader · PlaceAddRow · UnplacedMustVisitNotice
 
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey · countPickedCoPickSlots
@@ -491,12 +491,12 @@
 - `src/features/itinerary/model/useGenerationBusy.ts`  →  isGenerationRunning · GenerationBusy · useGenerationBusy
 
 ## src/features/itinerary/ui/
-- `src/features/itinerary/ui/ItineraryGlyphs.tsx`  →  ItineraryLockGlyph · SortCheckGlyph · DashGlyph · DiamondGlyph · CheckCircleGlyph · ItineraryPencilGlyph · ItinerarySearchGlyph · ItineraryCloseGlyph · ItineraryCalendarGlyph · ItineraryLocationOffGlyph · CircleGlyphTone · ItineraryWarningTriangleGlyph · ItineraryShareGlyph · ItineraryRefreshGlyph · CoPickGlyph · ManualGlyph
+- `src/features/itinerary/ui/ItineraryGlyphs.tsx`  →  ItineraryLockGlyph · SortCheckGlyph · DashGlyph · DiamondGlyph · CheckCircleGlyph · ItineraryPencilGlyph · ItinerarySearchGlyph · ItineraryCalendarGlyph · ItineraryLocationOffGlyph · CircleGlyphTone · ItineraryWarningTriangleGlyph · ItineraryShareGlyph · ItineraryRefreshGlyph · CoPickGlyph · ManualGlyph
 - `src/features/itinerary/ui/PlaceAddScreen.tsx`  →  PlaceAddHeaderProps · PlaceAddHeader · PlaceAddRowProps · PlaceAddRow
 - `src/features/itinerary/ui/UnplacedMustVisitNotice.tsx`  →  UnplacedMustVisitNotice
 
 ## src/features/onboarding/
-- `src/features/onboarding/index.ts`  →  ONBOARDING_TERMS_TYPES · resolveOnboardingStep · termsDocumentTitle · ActivityGlyph · ArtGlyph · BalanceGlyph · BikeGlyph · CameraGlyph · OnboardingCarGlyph · OnboardingCheckGlyph · CoffeeCupGlyph · OnboardingFamilyGlyph · FerrisWheelGlyph · OnboardingForkKnifeGlyph · OnboardingFriendsGlyph · OnboardingHeartGlyph · OnboardingInfoCircleGlyph · LandmarkGlyph · LightningGlyph · MoonGlyph · MountainGlyph · ParentsGlyph · PetGlyph · PositiveCheckGlyph · RegenerateGlyph · OnboardingShoppingBagGlyph · SkipChevronGlyph · SoloPersonGlyph · SunGlyph · TaxiGlyph · OnboardingTransitGlyph · OnboardingWalkGlyph
+- `src/features/onboarding/index.ts`  →  ONBOARDING_TERMS_TYPES · resolveOnboardingStep · termsDocumentTitle · ActivityGlyph · ArtGlyph · BalanceGlyph · BikeGlyph · CameraGlyph · OnboardingCarGlyph · OnboardingCheckGlyph · CoffeeCupGlyph · OnboardingFamilyGlyph · FerrisWheelGlyph · OnboardingForkKnifeGlyph · OnboardingFriendsGlyph · OnboardingHeartGlyph · OnboardingInfoCircleGlyph · LandmarkGlyph · LightningGlyph · MoonGlyph · MountainGlyph · ParentsGlyph · PetGlyph · PositiveCheckGlyph · OnboardingShoppingBagGlyph · SkipChevronGlyph · SoloPersonGlyph · SunGlyph · TaxiGlyph · OnboardingTransitGlyph · OnboardingWalkGlyph
 
 ## src/features/onboarding/model/
 - `src/features/onboarding/model/onboardingTermsTypes.ts`  →  ONBOARDING_TERMS_TYPES
@@ -504,7 +504,7 @@
 - `src/features/onboarding/model/termsDocumentTitle.ts`  →  termsDocumentTitle
 
 ## src/features/onboarding/ui/
-- `src/features/onboarding/ui/OnboardingGlyphs.tsx`  →  OnboardingCheckGlyph · RegenerateGlyph · PositiveCheckGlyph · GlyphComponent · SunGlyph · OnboardingForkKnifeGlyph · MountainGlyph · ArtGlyph · ActivityGlyph · CameraGlyph · OnboardingShoppingBagGlyph · LandmarkGlyph · FerrisWheelGlyph · CoffeeCupGlyph · MoonGlyph · BalanceGlyph · LightningGlyph · SoloPersonGlyph · OnboardingFriendsGlyph · OnboardingHeartGlyph · OnboardingFamilyGlyph · ParentsGlyph · PetGlyph · OnboardingWalkGlyph · OnboardingTransitGlyph · OnboardingCarGlyph · TaxiGlyph · BikeGlyph · SkipChevronGlyph · OnboardingInfoCircleGlyph
+- `src/features/onboarding/ui/OnboardingGlyphs.tsx`  →  OnboardingCheckGlyph · PositiveCheckGlyph · GlyphComponent · SunGlyph · OnboardingForkKnifeGlyph · MountainGlyph · ArtGlyph · ActivityGlyph · CameraGlyph · OnboardingShoppingBagGlyph · LandmarkGlyph · FerrisWheelGlyph · CoffeeCupGlyph · MoonGlyph · BalanceGlyph · LightningGlyph · SoloPersonGlyph · OnboardingFriendsGlyph · OnboardingHeartGlyph · OnboardingFamilyGlyph · ParentsGlyph · PetGlyph · OnboardingWalkGlyph · OnboardingTransitGlyph · OnboardingCarGlyph · TaxiGlyph · BikeGlyph · SkipChevronGlyph · OnboardingInfoCircleGlyph
 
 ## src/features/open-assistant/
 - `src/features/open-assistant/index.ts`  →  assistantHref · type AssistantHref · type AssistantSurface · ChatBubbleGlyph · AssistantSparkleGlyph
@@ -530,10 +530,10 @@
 - `src/features/planb/model/useActiveTriggers.ts`  →  useActiveTriggers
 
 ## src/features/record/
-- `src/features/record/index.ts`  →  RecordBookmarkGlyph · RecordCalendarGlyph · RecordChevronDownGlyph · RecordChevronRightGlyph · RecordCloseGlyph · GpsOffGlyph · RecordInfoCircleGlyph · LegendChevronGlyph · RecordRetryGlyph · VisitCheckActiveGlyph · VisitCheckDoneGlyph · VisitCheckSkippedGlyph · VisitCheckUpcomingGlyph · RecordWarningTriangleGlyph
+- `src/features/record/index.ts`  →  RecordBookmarkGlyph · RecordCalendarGlyph · RecordChevronDownGlyph · RecordChevronRightGlyph · GpsOffGlyph · RecordInfoCircleGlyph · LegendChevronGlyph · RecordRetryGlyph · VisitCheckActiveGlyph · VisitCheckDoneGlyph · VisitCheckSkippedGlyph · VisitCheckUpcomingGlyph · RecordWarningTriangleGlyph
 
 ## src/features/record/ui/
-- `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · RecordWarningTriangleGlyph · RecordRetryGlyph · RecordChevronRightGlyph · LegendChevronGlyph · RecordChevronDownGlyph · RecordInfoCircleGlyph · GpsOffGlyph · RecordCalendarGlyph · RecordBookmarkGlyph · RecordCloseGlyph
+- `src/features/record/ui/RecordGlyphs.tsx`  →  VisitCheckDoneGlyph · VisitCheckActiveGlyph · VisitCheckUpcomingGlyph · VisitCheckSkippedGlyph · RecordWarningTriangleGlyph · RecordRetryGlyph · RecordChevronRightGlyph · LegendChevronGlyph · RecordChevronDownGlyph · RecordInfoCircleGlyph · GpsOffGlyph · RecordCalendarGlyph · RecordBookmarkGlyph
 
 ## src/features/reflection/
 - `src/features/reflection/index.ts`  →  useTripSummary · useRecordBarNav · useTripCoverPhoto
@@ -630,7 +630,7 @@
 
 ## src/features/trip/
 - `src/features/trip/index.ts`  →  useSavedStays
-- `src/features/trip/index.view.ts`  →  SHEET_HANDLE_INDICATOR_STYLE · addressInRegion · placeLocationLabel · regionCodeInTrip · sidoKey · sigunguLabel · TripBedGlyph · TripCheckGlyph · TripChevronRightGlyph · TripFamilyGlyph · TripFriendsGlyph · GlobeGlyph · TripHeartGlyph · TripPlusGlyph · RemoveGlyph · SoloGlyph · TripSparkleGlyph · StepperMinusGlyph · StepperPlusGlyph · TripWarningTriangleGlyph
+- `src/features/trip/index.view.ts`  →  SHEET_HANDLE_INDICATOR_STYLE · addressInRegion · placeLocationLabel · regionCodeInTrip · sidoKey · sigunguLabel · TripBedGlyph · TripCheckGlyph · TripChevronRightGlyph · TripFamilyGlyph · TripFriendsGlyph · GlobeGlyph · TripHeartGlyph · TripPlusGlyph · SoloGlyph · TripSparkleGlyph · StepperMinusGlyph · StepperPlusGlyph
 
 ## src/features/trip/lib/
 - `src/features/trip/lib/sheetHandle.ts`  →  SHEET_HANDLE_INDICATOR_STYLE
@@ -640,7 +640,7 @@
 - `src/features/trip/model/useSavedStays.ts`  →  useSavedStays
 
 ## src/features/trip/ui/
-- `src/features/trip/ui/TripGlyphs.tsx`  →  GlyphComponent · TripPinGlyph · RemoveGlyph · TripPlusGlyph · TripCalendarGlyph · StepperMinusGlyph · StepperPlusGlyph · SoloGlyph · TripFriendsGlyph · TripHeartGlyph · TripFamilyGlyph · TripSparkleGlyph · GlobeGlyph · BedTone · TripBedGlyph · TripChevronRightGlyph · BaseBadgePinGlyph · TripHeartFilledGlyph · TripCheckGlyph · TripWarningTriangleGlyph
+- `src/features/trip/ui/TripGlyphs.tsx`  →  GlyphComponent · TripPinGlyph · TripPlusGlyph · TripCalendarGlyph · StepperMinusGlyph · StepperPlusGlyph · SoloGlyph · TripFriendsGlyph · TripHeartGlyph · TripFamilyGlyph · TripSparkleGlyph · GlobeGlyph · BedTone · TripBedGlyph · TripChevronRightGlyph · BaseBadgePinGlyph · TripHeartFilledGlyph · TripCheckGlyph
 
 ## src/mocks/
 - `src/mocks/handlers.ts`  →  handlers
@@ -1861,7 +1861,6 @@
 - `src/shared/ui/CountUpText.tsx`  →  COUNT_UP_DURATION_MS · CountUpText
 - `src/shared/ui/GlassSurface.tsx`  →  GlassSurfaceProps · GlassSurface
 - `src/shared/ui/HeartButton.tsx`  →  HeartButtonProps · heartSaveLabel · HeartButton
-- `src/shared/ui/HeartGlyphs.tsx`  →  HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
 - `src/shared/ui/HourMinuteWheel.tsx`  →  HourMinuteWheelProps · HourMinuteWheel
 - `src/shared/ui/Image.tsx`  →  Image
 - `src/shared/ui/NoticeBanner.tsx`  →  NoticeBannerNotice · NoticeBanner · DismissNotice
@@ -1878,13 +1877,13 @@
 - `src/shared/ui/WheelPicker.tsx`  →  WHEEL_CELL_HEIGHT · WheelPickerProps · WheelPicker
 
 ## src/shared/ui/glyphs/
-- `src/shared/ui/glyphs/ActionGlyphs.tsx`  →  SearchGlyph · TrashGlyph · NoteGlyph · SummaryChartGlyph · UndoGlyph · MoreDotsGlyph · PencilGlyph
-- `src/shared/ui/glyphs/HeartGlyphs.tsx`  →  HeartStrokeFilledGlyph · HeartStrokeOutlineGlyph
-- `src/shared/ui/glyphs/NavigationGlyphs.tsx`  →  BackChevronGlyph · BackArrowGlyph · ChevronDownGlyph · ChevronRightGlyph · ChevronRight24Glyph · ChevronRight16Glyph · CloseGlyph · PlusGlyph · CheckGlyph · Check24Glyph
+- `src/shared/ui/glyphs/ActionGlyphs.tsx`  →  SearchGlyph · TrashGlyph · NoteGlyph · SummaryChartGlyph · UndoGlyph · MoreDotsGlyph · PencilGlyph · ShareGlyph · RetryGlyph
+- `src/shared/ui/glyphs/HeartGlyphs.tsx`  →  HeartStrokeFilledGlyph · HeartStrokeOutlineGlyph · HeartOutlineGlyph · HeartFilledGlyph · HeartBadgeGlyph
+- `src/shared/ui/glyphs/NavigationGlyphs.tsx`  →  BackChevronGlyph · BackArrowGlyph · BackChevronWideGlyph · ChevronDownGlyph · ChevronRightGlyph · ChevronRight24Glyph · ChevronRight16Glyph · CloseGlyph · PlusGlyph · CheckGlyph · Check24Glyph
 - `src/shared/ui/glyphs/PlaceGlyphs.tsx`  →  MapPinGlyph · SuitcaseGlyph · WalkGlyph · CarGlyph · ForkKnifeGlyph · ShoppingBagGlyph · TransitGlyph
 - `src/shared/ui/glyphs/StatusGlyphs.tsx`  →  AlertCircleGlyph · WarningTriangleGlyph · InfoCircleGlyph · LockGlyph · ClockGlyph · FullAiGlyph · WarningFilledGlyph · InfoGlyph · InfoCircle18Glyph · WarningTriangle24Glyph
 - `src/shared/ui/glyphs/colors.ts`  →  GLYPH_COLORS · GlyphColor
-- `src/shared/ui/glyphs/index.ts`  →  GLYPH_COLORS · BackArrowGlyph · BackChevronGlyph · Check24Glyph · CheckGlyph · ChevronDownGlyph · ChevronRight16Glyph · ChevronRight24Glyph · ChevronRightGlyph · CloseGlyph · PlusGlyph · AlertCircleGlyph · ClockGlyph · FullAiGlyph · InfoCircle18Glyph · InfoCircleGlyph · InfoGlyph · LockGlyph · WarningFilledGlyph · WarningTriangle24Glyph · WarningTriangleGlyph · CarGlyph · ForkKnifeGlyph · MapPinGlyph · ShoppingBagGlyph · SuitcaseGlyph · TransitGlyph · WalkGlyph · MoreDotsGlyph · NoteGlyph · PencilGlyph · SearchGlyph · SummaryChartGlyph · TrashGlyph · UndoGlyph · HeartStrokeFilledGlyph · HeartStrokeOutlineGlyph
+- `src/shared/ui/glyphs/index.ts`  →  GLYPH_COLORS · BackArrowGlyph · BackChevronGlyph · BackChevronWideGlyph · Check24Glyph · CheckGlyph · ChevronDownGlyph · ChevronRight16Glyph · ChevronRight24Glyph · ChevronRightGlyph · CloseGlyph · PlusGlyph · AlertCircleGlyph · ClockGlyph · FullAiGlyph · InfoCircle18Glyph · InfoCircleGlyph · InfoGlyph · LockGlyph · WarningFilledGlyph · WarningTriangle24Glyph · WarningTriangleGlyph · CarGlyph · ForkKnifeGlyph · MapPinGlyph · ShoppingBagGlyph · SuitcaseGlyph · TransitGlyph · WalkGlyph · MoreDotsGlyph · NoteGlyph · PencilGlyph · RetryGlyph · SearchGlyph · ShareGlyph · SummaryChartGlyph · TrashGlyph · UndoGlyph · HeartBadgeGlyph · HeartFilledGlyph · HeartOutlineGlyph · HeartStrokeFilledGlyph · HeartStrokeOutlineGlyph
 - `src/shared/ui/glyphs/types.ts`  →  GlyphProps
 
 ## src/shared/ui/
@@ -1990,7 +1989,7 @@
 - `src/widgets/map-sheet-shell/ui/GenerationProgressCard.tsx`  →  GenerationProgressCell · GenerationProgressCardProps · GenerationProgressCard
 - `src/widgets/map-sheet-shell/ui/IndeterminateBar.tsx`  →  IndeterminateBar
 - `src/widgets/map-sheet-shell/ui/MapFallbackBar.tsx`  →  MapFallbackBar
-- `src/widgets/map-sheet-shell/ui/MapSheetGlyphs.tsx`  →  MapPinOffGlyph · MapSheetRetryGlyph
+- `src/widgets/map-sheet-shell/ui/MapSheetGlyphs.tsx`  →  MapPinOffGlyph
 - `src/widgets/map-sheet-shell/ui/MapSheetShell.tsx`  →  MapSheetListSlot · MapSheetShellProps · MapSheetShell
 - `src/widgets/map-sheet-shell/ui/RemoveSelectedDialog.tsx`  →  RemoveSelectedDialog
 - `src/widgets/map-sheet-shell/ui/SheetHeader.tsx`  →  SheetHeaderProps · SheetHeader
@@ -2023,4 +2022,4 @@
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1327개 파일
+합계 1326개 파일

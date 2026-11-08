@@ -12,8 +12,8 @@
  * 클램프한다(이중 방어). `−`는 `nights === 1`이면 **진짜 `disabled` prop**이다
  * (accessibilityState만 세운 가짜는 press가 그대로 발화한다 — [[disabled prop과 accessibilityState]]).
  *
- * 아이콘은 전부 `TripGlyphs`를 재사용한다(신규 글리프·에셋 0): 스테퍼 −/+는 `StepperMinusGlyph`
- * ·`StepperPlusGlyph`(둘 다 20px, Figma `1675:1244`·`1675:1248`), 삭제 ×는 `RemoveGlyph`(18px),
+ * 아이콘은 `TripGlyphs`와 공용 글리프를 재사용한다(신규 글리프·에셋 0): 스테퍼 −/+는 `StepperMinusGlyph`
+ * ·`StepperPlusGlyph`(둘 다 20px, Figma `1675:1244`·`1675:1248`), 삭제 ×는 공용 `CloseGlyph`(18px, muted),
  * 도시 추가 +는 `TripPlusGlyph`(16px, 아이콘은 primary·텍스트는 primary-text).
  *
  * ⚠️ 실제 개폐·딤·중앙정렬·터치차단은 `@gorhom/bottom-sheet` 통과형 목이라 jest가 원리적으로
@@ -35,9 +35,9 @@ import {
 } from '@/features/create-trip';
 import type { TripDestination } from '@/shared/api/index.schemas';
 
+import { CloseGlyph } from '@/shared/ui/glyphs';
 import {
   TripPlusGlyph,
-  RemoveGlyph,
   StepperMinusGlyph,
   StepperPlusGlyph,
 } from '@/features/trip/index.view';
@@ -120,7 +120,7 @@ function DestinationRow({
           className="h-8 w-8 items-center justify-center"
           hitSlop={6}
         >
-          <RemoveGlyph size={18} />
+          <CloseGlyph size={18} color="muted" />
         </Pressable>
       </View>
     </View>

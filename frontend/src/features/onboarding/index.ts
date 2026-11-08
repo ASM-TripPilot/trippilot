@@ -27,7 +27,6 @@ export {
   ParentsGlyph,
   PetGlyph,
   PositiveCheckGlyph,
-  RegenerateGlyph,
   OnboardingShoppingBagGlyph,
   SkipChevronGlyph,
   SoloPersonGlyph,

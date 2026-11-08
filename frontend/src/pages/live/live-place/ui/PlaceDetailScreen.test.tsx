@@ -5,10 +5,7 @@ import {
   within,
 } from '@testing-library/react-native';
 
-import {
-  ExecutionBackArrowGlyph,
-  ExecutionShareGlyph,
-} from '@/features/execution/index.view';
+import { BackChevronWideGlyph, ShareGlyph } from '@/shared/ui/glyphs';
 import { coverFor } from '@/test-support/placeCoverFixtures';
 
 import type { PlaceDetailView } from '../model/placeDetailView';
@@ -168,10 +165,8 @@ describe('PlaceDetailScreen (i10)', () => {
     const { rerender } = render(<PlaceDetailScreen view={view()} />);
     expect(screen.queryByTestId('execution-place-back')).toBeNull();
     expect(screen.queryByTestId('execution-place-share')).toBeNull();
-    expect(screen.UNSAFE_queryAllByType(ExecutionBackArrowGlyph)).toHaveLength(
-      0
-    );
-    expect(screen.UNSAFE_queryAllByType(ExecutionShareGlyph)).toHaveLength(0);
+    expect(screen.UNSAFE_queryAllByType(BackChevronWideGlyph)).toHaveLength(0);
+    expect(screen.UNSAFE_queryAllByType(ShareGlyph)).toHaveLength(0);
     // 하트는 콜백 유무와 무관하게 없다(2026-09-25 결정).
     expect(screen.queryByTestId('execution-place-save')).toBeNull();
 

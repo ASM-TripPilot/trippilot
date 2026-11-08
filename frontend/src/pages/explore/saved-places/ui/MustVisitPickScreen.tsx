@@ -4,14 +4,13 @@ import { Button, buttonClasses } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PlaceListState } from '@/features/explore/index.view';
-import { MapPinGlyph } from '@/shared/ui/glyphs';
+import { BackChevronWideGlyph, MapPinGlyph } from '@/shared/ui/glyphs';
 import type { SavedPlace } from '@/shared/api/index.schemas';
 import { EmptyCollage } from './EmptyCollage';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
-  ExploreBackChevronGlyph,
   CheckCircleFilledGlyph,
   CheckCircleOutlineGlyph,
   CircleExclaimGlyph,
@@ -77,7 +76,7 @@ function AppBar({
         onPress={onBack}
         className="h-10 w-10 items-center justify-center"
       >
-        <ExploreBackChevronGlyph size={24} />
+        <BackChevronWideGlyph size={24} />
       </Pressable>
       <View className="gap-xs">
         <Text className="font-noto-bold text-[18px] font-bold text-ink">

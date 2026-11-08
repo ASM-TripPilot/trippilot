@@ -14,7 +14,8 @@ import {
 import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PositiveCheckGlyph, RegenerateGlyph } from '@/features/onboarding';
+import { RetryGlyph } from '@/shared/ui/glyphs';
+import { PositiveCheckGlyph } from '@/features/onboarding';
 
 /**
  * 오류 사유. TOO_SHORT/TOO_LONG 은 클라 형식 검증(UX 사본)에서,
@@ -112,7 +113,7 @@ export function NicknameScreen({
                   onPress={onRegenerate}
                   hitSlop={8}
                 >
-                  <RegenerateGlyph size={22} />
+                  <RetryGlyph size={22} color="primary" />
                 </Pressable>
               </View>
 

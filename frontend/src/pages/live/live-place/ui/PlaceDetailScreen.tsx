@@ -7,18 +7,18 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { MapPinGlyph } from '@/shared/ui/glyphs';
+import {
+  BackChevronWideGlyph,
+  ShareGlyph,
+  MapPinGlyph,
+} from '@/shared/ui/glyphs';
 import { Image } from '@/shared/ui/Image';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { PlaceSubtitle } from '@/entities/place';
-import {
-  ExecutionBackArrowGlyph,
-  HeroPhotoGlyph,
-  ExecutionShareGlyph,
-} from '@/features/execution/index.view';
+import { HeroPhotoGlyph } from '@/features/execution/index.view';
 import { MapView } from '@/shared/map';
 import { NoticeBanner } from '@/shared/ui/NoticeBanner';
 import { OpenNaverMapButton } from '@/shared/ui/OpenNaverMapButton';
@@ -204,7 +204,7 @@ export function PlaceDetailScreen({
           >
             {onPressBack ? (
               <CircleButton testID="execution-place-back" onPress={onPressBack}>
-                <ExecutionBackArrowGlyph size={20} />
+                <BackChevronWideGlyph size={20} />
               </CircleButton>
             ) : null}
             <View pointerEvents="none" className="flex-1" />
@@ -213,7 +213,7 @@ export function PlaceDetailScreen({
                 testID="execution-place-share"
                 onPress={onPressShare}
               >
-                <ExecutionShareGlyph size={19} />
+                <ShareGlyph size={19} />
               </CircleButton>
             ) : null}
           </View>

@@ -5,7 +5,7 @@ import { Button } from '@/shared/ui/Button';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import { MemoInline } from '@/features/attach-visit-media/index.view';
-import { RecordCloseGlyph } from '@/features/record';
+import { CloseGlyph } from '@/shared/ui/glyphs';
 import { COLOR_TOKENS } from '@/shared/config';
 
 /**
@@ -126,7 +126,7 @@ export function MemoSheet({
             onPress={onClose}
             className="h-[44px] w-[44px] items-center justify-center"
           >
-            <RecordCloseGlyph size={24} />
+            <CloseGlyph size={24} color="ink" />
           </Pressable>
         </View>
 

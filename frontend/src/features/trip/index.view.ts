@@ -18,11 +18,9 @@ export {
   GlobeGlyph,
   TripHeartGlyph,
   TripPlusGlyph,
-  RemoveGlyph,
   SoloGlyph,
   TripSparkleGlyph,
   StepperMinusGlyph,
   StepperPlusGlyph,
-  TripWarningTriangleGlyph,
 } from './ui/TripGlyphs';
 export type { GlyphComponent } from './ui/TripGlyphs';

@@ -1,11 +1,16 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { MapPinGlyph } from '@/shared/ui/glyphs';
+import {
+  BackChevronWideGlyph,
+  ShareGlyph,
+  MapPinGlyph,
+  HeartFilledGlyph,
+  HeartOutlineGlyph,
+} from '@/shared/ui/glyphs';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { heartSaveLabel } from '@/shared/ui/HeartButton';
-import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 import { MapView } from '@/shared/map';
 import { PlaceSubtitle } from '@/entities/place';
 import { normalizeOpeningHours } from '@/entities/itinerary-slot';
@@ -13,10 +18,8 @@ import type { Place } from '@/shared/api/index.schemas';
 
 import type { PlaceSaveNotice } from '@/features/save-place/index.view';
 import {
-  ExploreBackChevronGlyph,
   ExploreCopyGlyph,
   ExploreInfoGlyph,
-  ExploreShareGlyph,
 } from '@/features/explore/index.view';
 import { NoticeBanner } from '@/shared/ui/NoticeBanner';
 import { OpenNaverMapButton } from '@/shared/ui/OpenNaverMapButton';
@@ -308,7 +311,7 @@ export function PlaceDetailScreen({
           onPress={onPressBack}
           className="h-[38px] w-[38px] items-center justify-center rounded-pill bg-on-primary"
         >
-          <ExploreBackChevronGlyph size={20} />
+          <BackChevronWideGlyph size={20} />
         </Pressable>
         <View pointerEvents="none" className="flex-1" />
         <Pressable
@@ -318,7 +321,7 @@ export function PlaceDetailScreen({
           onPress={onPressShare}
           className="h-[38px] w-[38px] items-center justify-center rounded-pill bg-on-primary"
         >
-          <ExploreShareGlyph size={19} />
+          <ShareGlyph size={19} />
         </Pressable>
         <Pressable
           testID="explore-place-save"

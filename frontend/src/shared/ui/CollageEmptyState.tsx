@@ -2,7 +2,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { buttonClasses } from './Button';
-import { HeartFilledGlyph } from './HeartGlyphs';
+import { HeartFilledGlyph } from './glyphs';
 import { COLOR_TOKENS } from '../config';
 
 /**

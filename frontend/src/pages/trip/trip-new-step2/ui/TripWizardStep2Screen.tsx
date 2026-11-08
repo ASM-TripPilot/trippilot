@@ -5,10 +5,10 @@ import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
 import {
   TripBedGlyph,
   TripChevronRightGlyph,
-  TripWarningTriangleGlyph,
 } from '@/features/trip/index.view';
 import { formatWizardStep } from '@/features/create-trip';
 import { Skeleton } from '@/shared/ui/Skeleton';
@@ -242,7 +242,7 @@ export function TripWizardStep2Screen({
           <View className="flex-1 items-center justify-center px-lg">
             <StateNotice
               testID="trip-base-error"
-              icon={<TripWarningTriangleGlyph />}
+              icon={<WarningTriangleGlyph size={32} color="primary" />}
               title={LOAD_ERROR_TITLE}
               description={LOAD_ERROR_DESCRIPTION}
               actions={[
@@ -271,7 +271,7 @@ export function TripWizardStep2Screen({
           <View className="flex-1 items-center justify-center px-lg">
             <StateNotice
               testID="trip-base-notrip"
-              icon={<TripWarningTriangleGlyph />}
+              icon={<WarningTriangleGlyph size={32} color="primary" />}
               title={NO_TRIP_TITLE}
               description={NO_TRIP_DESCRIPTION}
               actions={[
