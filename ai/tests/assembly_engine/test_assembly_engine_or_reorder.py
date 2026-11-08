@@ -266,7 +266,8 @@ def _depart(day_sol, index, problem):
     if not day_sol.slots:
         return None
     first = day_sol.slots[0]
-    pinned = any(fb.poi_id == first.poi_id and fb.window.start == first.start_at for fb in day_sol.fixed_blocks)
+    # 핀은 문제의 고정 블록이다 — 해의 fixed_blocks 에는 놓인 필수 방문도 실려(`placed_fixed_blocks`) 조립과 다르게 센다
+    pinned = any(fb.poi_id == first.poi_id and fb.window.start == first.start_at for fb in problem.fixed_blocks)
     if problem.anchor is None or pinned:
         return first.start_at
     t = _EST.estimate(problem.anchor, index[first.poi_id].coord, problem.transport).internal_minutes
