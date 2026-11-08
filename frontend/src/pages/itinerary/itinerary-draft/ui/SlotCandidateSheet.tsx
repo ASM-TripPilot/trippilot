@@ -101,6 +101,8 @@ export interface SlotCandidateSheetProps {
   onPressPlaceSearch: () => void;
   /** scrim press. */
   onClose: () => void;
+  /** 후보 사진·이름 → 장소 상세(TRIP-1840). 행의 나머지는 그대로 라디오 선택. 현재 장소 행엔 없다. */
+  onPressPlace?: (poiId: string) => void;
   /** 후보 조회 상태. 생략 = 'ready'(응답 도착) — 기존 호출·0건 얼굴은 그대로다. */
   fetchState?: 'loading' | 'slow' | 'error' | 'ready';
   /** fetchState==='error' 일 때 점선 카드에 그대로 보일 문구. */
@@ -144,6 +146,7 @@ export function SlotCandidateSheet({
   errorMessage,
   onPressPlaceSearch,
   onClose,
+  onPressPlace,
   fetchState = 'ready',
   fetchErrorMessage,
   onRetryFetch,
@@ -385,6 +388,11 @@ export function SlotCandidateSheet({
                     rationaleSentence
                     distanceTone="muted"
                     selected={isSelected}
+                    onPressPlace={
+                      onPressPlace
+                        ? () => onPressPlace(candidate.poiId)
+                        : undefined
+                    }
                     trailing={
                       isSelected ? (
                         <CheckGlyph

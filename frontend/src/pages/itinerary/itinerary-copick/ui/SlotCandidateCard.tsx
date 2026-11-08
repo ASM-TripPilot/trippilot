@@ -36,6 +36,8 @@ export interface SlotCandidateCardProps {
   category?: string | null;
   coverPoiId?: string | null;
   dimmed?: boolean;
+  /** TRIP-1840 사진·이름 → 장소 상세 — 그대로 관통. */
+  onPressPlace?: () => void;
 }
 
 export function SlotCandidateCard({
@@ -50,6 +52,7 @@ export function SlotCandidateCard({
   category,
   coverPoiId,
   dimmed,
+  onPressPlace,
 }: SlotCandidateCardProps): ReactElement {
   return (
     <PlaceSlotCandidateCard
@@ -69,6 +72,7 @@ export function SlotCandidateCard({
       nameKo={nameKo}
       tags={tags}
       dimmed={dimmed}
+      onPressPlace={onPressPlace}
     />
   );
 }

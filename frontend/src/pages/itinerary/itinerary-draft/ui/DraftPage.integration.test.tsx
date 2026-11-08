@@ -1829,6 +1829,35 @@ describe('다른 후보 시트 배선', () => {
         buildSlotKey(DAY1, 'poi-a')
       );
     });
+
+    it('🔴 TRIP-1840 · 시트 후보 사진·이름 → /explore/places/{poiId} push, 고른 라디오는 그대로 · 시트도 그대로', async () => {
+      // 준비 — 시트를 열고 후보 Y 를 라디오로 고른다.
+      renderShell();
+      fireEvent.press(await screen.findByTestId(stopcardAltId('poi-a')));
+      fireEvent.press(
+        await screen.findByTestId('itinerary-candidate-radio-Y', {}, WAIT)
+      );
+      expect(screen.getByTestId('itinerary-candidate-radio-Y')).toBeSelected();
+      mockPush.mockClear();
+      resetPressGuard();
+
+      // 실행 — 다른 후보 X 의 사진, 이어서(따로) Y 의 이름을 누른다.
+      fireEvent.press(screen.getByTestId('itinerary-candidate-image-open-X'));
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId('itinerary-candidate-name-open-Y'));
+
+      // 단언 — 상세로 각각 push, 선택(Y)·시트·POST 횟수는 그대로(돌아오면 같은 상태).
+      expect(mockPush.mock.calls).toEqual([
+        ['/explore/places/X'],
+        ['/explore/places/Y'],
+      ]);
+      expect(screen.getByTestId('itinerary-candidate-radio-Y')).toBeSelected();
+      expect(
+        screen.getByTestId('itinerary-candidate-radio-X')
+      ).not.toBeSelected();
+      expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
+      expect(postCalls).toBe(1);
+    });
   });
 
   // ─── 경로3: 폴백 dismiss → 셸 (TRIP-983 · QA #024 재현 · TRIP-1039 AC-11) ─────────────
@@ -2139,6 +2168,46 @@ describe('h08 셸 기본 얼굴', () => {
       expect(
         screen.queryByTestId(`slot-stopcard-alt-${DAY1}#poi-b`)
       ).toBeNull();
+    });
+  });
+
+  describe('🔴 TRIP-1840 · 카드 이름·사진 → 장소 상세(d06) push, 「다른 후보 ›」는 그대로 시트', () => {
+    it('poi-b(고정 포함) 이름·poi-a 사진을 누르면 각각 /explore/places/{poiId} push, 시트는 안 뜬다', async () => {
+      // 준비 — 깨끗한 COMPLETE 셸.
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      mockPush.mockClear();
+
+      // 실행 — 고정 슬롯 이름, 비고정 슬롯 사진을 차례로(연타 창은 사이에 닫는다 — 사람의 따로 누름).
+      fireEvent.press(screen.getByTestId(`slot-stopcard-name-${DAY1}#poi-b`));
+      resetPressGuard();
+      fireEvent.press(
+        screen.getByTestId(`slot-stopcard-photo-open-${DAY1}#poi-a`)
+      );
+
+      // 단언 — 기존 d06 라우트로 두 번, 후보 시트는 안 열렸다.
+      expect(mockPush.mock.calls).toEqual([
+        ['/explore/places/poi-b'],
+        ['/explore/places/poi-a'],
+      ]);
+      expect(screen.queryByTestId('itinerary-candidate-sheet')).toBeNull();
+    });
+
+    it('같은 틱 연타는 push 1회(guardPress) · 「다른 후보 ›」는 상세가 아니라 시트를 연다', async () => {
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      mockPush.mockClear();
+
+      fireEvent.press(screen.getByTestId(`slot-stopcard-name-${DAY1}#poi-a`));
+      fireEvent.press(screen.getByTestId(`slot-stopcard-name-${DAY1}#poi-a`));
+      expect(mockPush).toHaveBeenCalledTimes(1);
+
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId(`slot-stopcard-alt-${DAY1}#poi-a`));
+      expect(
+        await screen.findByTestId('itinerary-candidate-sheet')
+      ).toBeOnTheScreen();
+      expect(mockPush).toHaveBeenCalledTimes(1);
     });
   });
 

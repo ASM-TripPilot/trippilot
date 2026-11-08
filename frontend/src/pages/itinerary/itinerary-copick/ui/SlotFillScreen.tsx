@@ -283,6 +283,8 @@ export interface SlotFillScreenProps {
   };
   onSelectRadius: (key: string) => void;
   onSelectRadio: (poiId: string) => void;
+  /** 후보 사진·이름 → 장소 상세(TRIP-1840). 행의 나머지는 그대로 라디오. 미주입이면 상세 칸 없음. */
+  onPressPlace?: (poiId: string) => void;
   onConfirm: () => void;
   onExpandRadius: () => void;
   /** 신규(D10) — 마지막 단계에서 반경 좁히기(한 단계 뒤). */
@@ -318,6 +320,7 @@ export function SlotFillScreen({
   mapView,
   onSelectRadius,
   onSelectRadio,
+  onPressPlace,
   onConfirm,
   onExpandRadius,
   onShrinkRadius,
@@ -622,6 +625,11 @@ export function SlotFillScreen({
                       category={candidate.category}
                       coverPoiId={candidate.poiId}
                       dimmed={view?.dimmed}
+                      onPressPlace={
+                        onPressPlace
+                          ? () => onPressPlace(candidate.poiId)
+                          : undefined
+                      }
                       trailing={
                         <View className="h-[24px] w-[24px] items-center justify-center">
                           <View

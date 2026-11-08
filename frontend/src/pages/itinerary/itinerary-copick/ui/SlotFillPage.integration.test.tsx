@@ -10,6 +10,7 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { coverFor } from '@/test-support/placeCoverFixtures';
 import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 import { buildSlotKey } from '@/entities/itinerary-slot';
@@ -86,6 +87,8 @@ beforeEach(() => {
   mockPush.mockClear();
   mockReplace.mockClear();
   mockDismissTo.mockClear();
+  // 연타 창(guardPress)은 모듈 전역이라 앞 테스트의 상세 누름이 다음 테스트의 [확정]을 삼킨다(TRIP-1840).
+  resetPressGuard();
 });
 
 afterAll(() => server.close());
@@ -273,6 +276,30 @@ describe('컨셉·후보·확정 순회 배선', () => {
         .map((node) => node.props.testID.replace('itinerary-candidate-', ''))
         .sort();
       expect(poiIds).toEqual(['X', 'Y']);
+    });
+
+    it('🔴 TRIP-1840 · 후보 사진·이름 → /explore/places/{poiId} push, 고른 후보·PUT 은 그대로', async () => {
+      // 준비 — 후보 얼굴에서 Y 를 고른다(첫 도착은 A=X 자동 선택).
+      renderPage();
+      await pickConcept('culture');
+      fireEvent.press(await screen.findByTestId('itinerary-candidate-radio-Y'));
+      expect(screen.getByTestId('itinerary-candidate-radio-Y')).toBeSelected();
+      mockPush.mockClear();
+      resetPressGuard();
+
+      // 실행 — X 의 사진을 같은 틱에 두 번, 이어서(따로) Y 의 이름.
+      fireEvent.press(screen.getByTestId('itinerary-candidate-image-open-X'));
+      fireEvent.press(screen.getByTestId('itinerary-candidate-image-open-X'));
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId('itinerary-candidate-name-open-Y'));
+
+      // 단언 — 연타 둘째는 무시, 상세로 각각 1회. 선택(Y)·PUT 0 그대로라 돌아오면 같은 상태다.
+      expect(mockPush.mock.calls).toEqual([
+        ['/explore/places/X'],
+        ['/explore/places/Y'],
+      ]);
+      expect(screen.getByTestId('itinerary-candidate-radio-Y')).toBeSelected();
+      expect(putCalls).toBe(0);
     });
 
     it('C5 · AC-7 라디오 → "A로 선택" → PUT 1건(a→X) → 다음 비고정 슬롯으로 replace(허브 복귀 폐기)', async () => {

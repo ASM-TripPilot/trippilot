@@ -53,7 +53,7 @@ import {
   usePutTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
-import { usePressLock } from '@/shared/lib/pressGuard';
+import { guardPress, usePressLock } from '@/shared/lib/pressGuard';
 import { CoPickStepper, type CoPickStep } from './CoPickStepper';
 
 /**
@@ -663,6 +663,10 @@ export function SlotFillPage({
         mapView={mapView}
         onSelectRadius={handleSelectRadius}
         onSelectRadio={setTappedPoiId}
+        // TRIP-1840 — 후보 사진·이름 → d06 장소 상세. push 라 돌아오면 고른 후보·반경·스크롤 그대로다.
+        onPressPlace={guardPress((poiId: string) =>
+          router.push(`/explore/places/${poiId}`)
+        )}
         onConfirm={handleConfirm}
         onExpandRadius={handleExpandRadius}
         onShrinkRadius={handleShrinkRadius}

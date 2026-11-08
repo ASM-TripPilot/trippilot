@@ -195,6 +195,10 @@ function MustVisitPickSection({
             : [...prev, poiId]
         );
       }}
+      // TRIP-1840 — 사진·이름 칸 → d06 장소 상세. 아래에 남은 이 화면이 선택·스크롤을 그대로 쥔다.
+      onPressPlace={guardPress((poiId: string) =>
+        router.push(`/explore/places/${poiId}`)
+      )}
       onComplete={() =>
         onComplete(selectedPoiIds, insideList, outsideRegionPlaces)
       }
