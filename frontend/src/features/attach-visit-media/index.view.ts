@@ -3,11 +3,5 @@
 
 export { photoAttach } from './model/photoAttach';
 export type { PhotoAssetMeta } from './model/photoAttach';
-export {
-  PHOTO_LIMIT_FULL_TEXT,
-  PHOTO_SAVED_SINGLE_TEXT,
-  photoFailedText,
-  photoProgressLabel,
-  photoSavedText,
-} from './model/photoBatchCopy';
+export { photoFailedText, photoProgressLabel } from './model/photoBatchCopy';
 export { MemoInline } from './ui/MemoInline';

@@ -1,6 +1,9 @@
-// knip — 안 쓰는 의존성 게이트(TRIP-1715). CI 는 `pnpm knip`(= knip --dependencies)만 실패시킨다.
-// 안 쓰는 파일·export 는 집계용(`pnpm exec knip`)이고 게이트가 아니다.
+// knip — 안 쓰는 의존성·export·type 게이트(TRIP-1715 의존성, TRIP-1727 export·type). CI 는 `pnpm knip`
+// (= knip --include dependencies,exports,types)이 1건이라도 찾으면 실패시킨다. 안 쓰는 파일은 집계용(`pnpm exec knip`)이고 게이트가 아니다.
 // 아래 예외는 knip 이 import 그래프로 못 보는 실제 사용처다 — 하나씩 이유를 단다.
+// 새 export 가 걸리면 먼저 지울 수 있는지 본다: 파일 안에서만 쓰면 `export` 만 떼고, 아무도 안 쓰면 선언째 지운다.
+// 예외는 `require()`/`jest.mock` 팩토리처럼 이름이 문자열·속성 접근으로만 나오는 자리에만 단다 — tsc 도 `as {...}` 캐스트 뒤 접근은 못 잡는다.
+// 사각: `require('경로')`·`jest.requireActual('경로')` 로 통째로 물린 모듈은 knip 이 export 를 전부 쓰는 것으로 본다(거기엔 새 안 쓰는 export 가 걸리지 않는다).
 {
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
   // steiger.config.ts 는 `pnpm fsd`(steiger)가 읽는 설정인데 knip 이 진입점으로 모른다 → @feature-sliced/steiger-plugin 오탐.
@@ -12,6 +15,20 @@
     // knip expo 플러그인이 app.config 에 updates.enabled=false 가 없으면 있다고 추정한다. 앱은 expo-updates 를 안 쓴다.
     "expo-updates",
   ],
+  "ignoreIssues": {
+    // jest.mock 팩토리가 `require('@/test-support/…Mock')` 로 속성을 끌어 쓰는 모의 표면 — 이름이 import 그래프에 안 나온다.
+    // 모의는 실물 모듈 API 를 거울해야 하므로 지금 안 부르는 이름도 지우지 않는다.
+    "src/test-support/*Mock.{ts,tsx}": ["exports", "types"],
+    "src/test-support/fakePreventRemoveNavigator.tsx": ["exports", "types"],
+    // AppProviders 테스트가 SplashGate 자리에 `require('@/test-support/queryClientProbe')` 의 속성을 꽂는다(jest.mock 팩토리).
+    "src/test-support/queryClientProbe.tsx": ["exports"],
+    // 개발 빌드 전용 모듈은 `if (__DEV__) require('@/shared/dev-fault')` 로만 물어 운영 번들에서 사라지게 한다 — 정적 import 로 바꾸면 의미가 없다.
+    "src/shared/dev-fault/**": ["exports"],
+    // 위치 자동화 deps.ts 가 expo-file-system 을 지연 `require('./expoFs')` 로 불러 웹·테스트 그래프에서 뗀다.
+    "src/shared/location/automation/expoFs.ts": ["exports"],
+    // 하네스 스킬 스크립트(앱 코드 아님) — statechart 가 TLA+ 변환 모듈 사이 공유 API 를 넓게 내보낸다.
+    ".claude/skills/statechart/**": ["exports", "types"],
+  },
   "ignoreUnresolved": [
     // jest 설정의 transform 이름 — jest 가 자기 쪽에서 푼다.
     "babel-jest",

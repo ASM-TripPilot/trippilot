@@ -125,7 +125,7 @@ function CandidatesSkeleton(): ReactElement {
 }
 
 /** '찾는 중심' 영역 — 주지 않으면 영역이 없다(기존 호출·프리뷰 무회귀). */
-export interface CenterChoiceProps {
+interface CenterChoiceProps {
   selected: CenterChoiceKey;
   expanded: boolean;
   /** false 면 '숙소 근처'만 그리지 않는다(등록 숙소 0곳). */

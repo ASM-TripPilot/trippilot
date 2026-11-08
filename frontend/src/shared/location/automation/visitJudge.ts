@@ -16,10 +16,10 @@ import type { AutomationConfig } from './config';
  * INV-3: emit 에는 시각(occurredAt)만 있고 체류 시간·소요시간을 싣지 않는다.
  */
 
-export type SlotPhase =
+type SlotPhase =
   'IDLE' | 'ENTERED' | 'HELD' | 'ARRIVED' | 'EXIT_PENDING' | 'LEFT' | 'DONE';
 
-export interface SlotJudgeState {
+interface SlotJudgeState {
   phase: SlotPhase;
   enterAt?: number;
   arrivedAt?: number;

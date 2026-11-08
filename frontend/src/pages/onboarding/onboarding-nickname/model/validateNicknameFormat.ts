@@ -10,6 +10,4 @@ export {
   validateNicknameFormat,
   NICKNAME_MIN_LENGTH,
   NICKNAME_MAX_LENGTH,
-  type NicknameFormatReason,
-  type NicknameFormatResult,
 } from '@/shared/lib/nicknameFormat';

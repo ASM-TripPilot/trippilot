@@ -1,9 +1,6 @@
 export { ONBOARDING_TERMS_TYPES } from './model/onboardingTermsTypes';
 export { resolveOnboardingStep } from './model/resolveOnboardingStep';
-export type {
-  OnboardingProgress,
-  OnboardingStep,
-} from './model/resolveOnboardingStep';
+export type { OnboardingProgress } from './model/resolveOnboardingStep';
 export { termsDocumentTitle } from './model/termsDocumentTitle';
 export {
   ActivityGlyph,

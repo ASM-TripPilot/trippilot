@@ -136,7 +136,7 @@ export interface PastTrip {
 }
 
 /** planning 브릿지행 / postTrip 공유행 — 같은 softNote 슬롯, 카피·버튼만 다름. */
-export interface HomeSoftNote {
+interface HomeSoftNote {
   /** '담은 곳 3곳이 아직 일정에 없어요' / '공유 카드로 남기기' */
   title: string;
   /** '남은 자리에 넣어볼까요' / '사진·동선을 카드 한 장으로' */

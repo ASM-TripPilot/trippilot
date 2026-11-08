@@ -12,10 +12,9 @@ import { COLOR_TOKENS } from '@/shared/config';
  */
 
 const INK = COLOR_TOKENS.ink;
-export const MUTED = COLOR_TOKENS.muted;
 // l03 메뉴·헤더 아이콘(Figma 1602:2388 — #3F3F3F stroke 2, 메뉴 chevron #9AA1AB). 토큰 body·muted-soft 와 같은 값.
 const BODY = COLOR_TOKENS.body;
-export const MUTED_SOFT = COLOR_TOKENS['muted-soft'];
+const MUTED_SOFT = COLOR_TOKENS['muted-soft'];
 
 type GlyphProps = {
   size?: number;
@@ -188,26 +187,6 @@ export function GearGlyph({ size = 22, testID }: GlyphProps) {
         stroke={BODY}
         strokeWidth={2}
         strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-/** 편집 버튼 안의 연필 — 프로필 편집. */
-export function SettingsPencilGlyph({ size = 14, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M16 4L20 8L8 20H4V16L16 4Z"
-        stroke={MUTED}
-        strokeWidth={1.7}
         strokeLinejoin="round"
       />
     </Svg>
