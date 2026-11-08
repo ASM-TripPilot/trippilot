@@ -79,6 +79,7 @@ from trippilot.api.cost import CostLedger
 from trippilot.api.route_budget import (
     LegRecorder, RouteReport, measure_within, post_assembly_budget_ms,
 )
+from trippilot.api.routes import PlacedViolation
 from trippilot.llm_gateway.adapters.backend_persona import _to_summary as _persona_to_summary
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver, ContextStore
@@ -1049,28 +1050,37 @@ def _render_change(change: RepairChange) -> str:
 # ── validate/repair — 와이어 일정 복원 ───────────────────────────────
 
 
-SLOT_ORDER = "SLOT_ORDER"  # 위반 코드 — 화면 순서(배열)상 위 카드보다 일찍 시작하는 카드
+SLOT_ORDER = "SLOT_ORDER"  # 위반 코드 — 같은 날 화면 순서(배열)와 시각 순서가 어긋난 카드
 
 
-def _slot_order_violations(payload: schemas.ItineraryPayload) -> tuple[Violation, ...]:
-    """시각이 거꾸로 든 카드 — 같은 날 화면 순서(배열)에서 위의 어느 카드보다 일찍 시작한다.
+def _slot_order_violations(payload: schemas.ItineraryPayload) -> tuple[PlacedViolation, ...]:
+    """시각이 거꾸로 든 카드 — 같은 날 화면 순서(배열)에서 위의 어느 카드보다 일찍 시작하는 카드.
 
     편집은 '순서 = 배열'이라(BE INV-U3-02) 이런 날이 저장될 수 있다 — 고정·방문 완료 카드를 사이에 둔
-    끌어 옮기기, 시각을 골라 끝에 넣은 추가. 도메인 해는 시간순이 불변식이라 종전에는 422 로 새어 나가
-    BE 가 판정 보류로 저장했고 배지가 뜨지 않았다. 위반(200, IO-7)으로 돌려줘야 앱이 그 칸에 배지를 단다.
-    시각 없는 카드는 시각 주장이 없어 비교 밖이다. 위치는 `routes.locate_slot` 이 요청 배열에서 찾는다.
+    끌어 옮기기, 시각을 골라 넣은 추가(끝이든 카드 사이든). 도메인 해는 시간순이 불변식이라 종전에는 422 로
+    새어 나가 BE 가 판정 보류로 저장했고 배지가 뜨지 않았다. 위반(200, IO-7)으로 돌려줘야 앱이 그 칸에 배지를 단다.
+
+    배지는 그 이른 카드에 단다. 다만 그 카드가 고정이고 그 위의 늦은 카드가 모두 고정이 아니면, 그 늦은 카드들에
+    단다 — 고정은 못 옮기고 끌어 옮긴 쪽이 그 카드들이다(고정 카드에 달면 다시 짜기가 그 표시를 물려받는다).
+    시각 없는 카드는 시각 주장이 없어 비교 밖이다. 위치는 받은 배열의 칸이다(`PlacedViolation`) — 같은 장소가
+    두 번 든 일정에서 첫 일치가 다른 칸을 짚지 않게.
     """
-    out: list[Violation] = []
-    for day in payload.days:
-        latest = None
-        for slot in day.slots:
-            if slot.start_at is None:
+    out: list[PlacedViolation] = []
+    for d, day in enumerate(payload.days):
+        timed = [(i, s) for i, s in enumerate(day.slots) if s.start_at is not None]
+        flagged: dict[int, str] = {}
+        for k, (i, s) in enumerate(timed):
+            later = [(j, t) for j, t in timed[:k] if t.start_at > s.start_at]
+            if not later:
                 continue
-            if latest is not None and slot.start_at < latest:
-                out.append(Violation(SLOT_ORDER, PoiId(slot.poi_id),
-                                     f"{slot.start_at:%H:%M} 시작이 위 일정 {latest:%H:%M} 보다 이르다"))
+            if s.is_fixed and not any(t.is_fixed for _, t in later):
+                for j, t in later:
+                    flagged.setdefault(j, f"{t.start_at:%H:%M} 시작이 아래 고정 일정 {s.start_at:%H:%M} 보다 늦다")
             else:
-                latest = slot.start_at
+                top = max(t.start_at for _, t in later)
+                flagged.setdefault(i, f"{s.start_at:%H:%M} 시작이 위 일정 {top:%H:%M} 보다 이르다")
+        out += [PlacedViolation(SLOT_ORDER, PoiId(day.slots[i].poi_id), detail, day_index=d, slot_index=i)
+                for i, detail in sorted(flagged.items())]
     return tuple(out)
 
 
@@ -2599,9 +2609,10 @@ class WiredItineraryOrchestrator:
             order="sort",  # 형식 검사만 지나게 — 거꾸로 든 날은 바로 아래에서 수리 불가로 답한다
         )
         if order_breaks := _slot_order_violations(request.itinerary):
-            # 수리는 앞으로만 밀고 순서를 바꾸지 않는다(TIME_SHIFT_ONLY) — 위 카드보다 이른 카드는 순서를 지키며 못 고친다.
-            # 사용자가 고른 시각을 뒤로 밀어 맞추지도 않는다(시각만 바꾼 편집은 수리하지 않는 규칙과 같은 까닭).
-            # 수리 불가(200, IO-7) → BE 는 재검증으로 가고 재검증이 SLOT_ORDER 배지를 낸다.
+            # 늦은 카드 아래의 고정 카드는 앞으로만 미는 수리(TIME_SHIFT_ONLY)로 못 고친다. 고정이 아닌 이른 카드는 뒤로 밀면
+            # 맞출 수 있지만, 사용자가 고른 시각을 덮는 일이라 하지 않는다(시각만 바꾼 편집은 수리하지 않는 규칙과 같은 까닭).
+            # 그래서 수리 불가(200, IO-7)로 답한다 — BE 편집 저장은 재검증으로 가서 SLOT_ORDER 배지를 받고,
+            # 슬롯 후보 판정은 그 후보를 '맞지 않음'으로 센다(돌려주는 목록은 원래 목록).
             _logger.info("itinerary_order_break %s", json.dumps({
                 "request_id": request.request_meta.request_id, "slots": len(order_breaks)}))
             return WiredRepairOutcome(repaired=None, changes=(), unverified=unverified)

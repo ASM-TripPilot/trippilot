@@ -17,6 +17,7 @@ notification=TRIP-836 · replan=재계획 연동 설계(A-4).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date as date_type
 from typing import Callable, Sequence, TypeVar
 
@@ -201,10 +202,25 @@ def locate_slot(
     return (None, None)
 
 
+@dataclass(frozen=True, slots=True)
+class PlacedViolation(Violation):
+    """받은 일정의 칸을 이미 아는 위반 — `to_violation` 이 `locate_slot`(첫 일치) 대신 이 위치를 싣는다.
+
+    같은 장소가 일정에 두 번 들면 첫 일치는 다른 칸·다른 날을 짚는다. 받은 배열을 걸으며 만드는 위반
+    (`SLOT_ORDER`)은 정확한 칸을 알고 있으니 그대로 싣는다.
+    """
+
+    day_index: int | None = None
+    slot_index: int | None = None
+
+
 def to_violation(
     violation: Violation, days: Sequence[DayScheduleSchema] = ()
 ) -> ViolationSchema:
-    day_index, slot_index = locate_slot(days, violation.slot_ref)
+    if isinstance(violation, PlacedViolation):
+        day_index, slot_index = violation.day_index, violation.slot_index
+    else:
+        day_index, slot_index = locate_slot(days, violation.slot_ref)
     return ViolationSchema(
         code=violation.code,
         slot_ref=str(violation.slot_ref) if violation.slot_ref is not None else None,
@@ -241,7 +257,7 @@ def validate(
     body: ValidateItineraryRequest,
     orchestrator: ItineraryOrchestrator = Depends(get_orchestrator),
 ) -> ValidateItineraryResponse:
-    """편집 재검증(HC1~4). 위반은 정상 응답 200 — 변경 차단 판단은 백엔드 몫이다.
+    """편집 재검증(HC1~4 · 시각이 거꾸로 든 카드 `SLOT_ORDER`). 위반은 정상 응답 200 — 변경 차단 판단은 백엔드 몫이다.
 
     `unverified_slots`는 위반이 **아니다** — POI 정본을 못 찾아 HC1·HC2를 아예 못
     본 슬롯(TRIP-537)과 영업 창을 몰라 HC1을 못 본 슬롯(`HOURS_UNKNOWN`)이다.
@@ -266,7 +282,7 @@ def repair(
     body: RepairItineraryRequest,
     orchestrator: ItineraryOrchestrator = Depends(get_orchestrator),
 ) -> RepairItineraryResponse:
-    """Plan-B 최소 조정(시각·순서만, POI 불변). 수리 불가면 `repaired=null` + 200(IO-7)."""
+    """Plan-B 최소 조정(시각·순서만, POI 불변). 수리 불가면(시각이 거꾸로 든 날 포함) `repaired=null` + 200(IO-7)."""
 
     def run() -> RepairItineraryResponse:
         outcome = orchestrator.repair(body)
