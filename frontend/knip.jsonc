@@ -15,6 +15,10 @@
     // knip expo 플러그인이 app.config 에 updates.enabled=false 가 없으면 있다고 추정한다. 앱은 expo-updates 를 안 쓴다.
     "expo-updates",
   ],
+  "ignoreBinaries": [
+    // e2e/run.mjs 가 부르는 Maestro CLI — npm 패키지가 아니라 로컬에 따로 설치한 도구다(TRIP-1830).
+    "maestro",
+  ],
   "ignoreIssues": {
     // jest.mock 팩토리가 `require('@/test-support/…Mock')` 로 속성을 끌어 쓰는 모의 표면 — 이름이 import 그래프에 안 나온다.
     // 모의는 실물 모듈 API 를 거울해야 하므로 지금 안 부르는 이름도 지우지 않는다.
