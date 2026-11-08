@@ -42,7 +42,7 @@ export interface AutomationContext {
   visits: AutomationVisitRef[];
 }
 
-export interface OpenInterval {
+interface OpenInterval {
   intervalId: string;
   kind: 'GEOFENCE_ARMED' | 'ROUTE_RECORDING';
   startedAt: string;

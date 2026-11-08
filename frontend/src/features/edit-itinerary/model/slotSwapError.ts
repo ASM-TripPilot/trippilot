@@ -25,7 +25,7 @@ export const SLOT_SWAP_CONFLICT_CODES = {
   ambiguous: 'SLOT_AMBIGUOUS',
 } as const;
 
-export type SlotSwapErrorKind =
+type SlotSwapErrorKind =
   | 'confirmed'
   | 'generating'
   | 'ambiguous'

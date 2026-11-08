@@ -50,7 +50,7 @@ export type StaySelectCandidate = SavedStay & {
 };
 
 /** TRIP-1011 — 후보를 나눠 그릴 섹션 하나(헤더 제목 + 그 섹션의 후보). */
-export interface StaySelectSection {
+interface StaySelectSection {
   key: 'here' | 'other';
   title: string;
   candidates: StaySelectCandidate[];

@@ -203,6 +203,8 @@ def test_executor_wraps_read_only_with_timeout_and_cap_and_returns_only_display_
     assert statements[1] == f"SET LOCAL statement_timeout = {STATEMENT_TIMEOUT_MS}"
     assert statements[2] == f"SELECT q.poi_id FROM ({_OK[0]}) AS q LIMIT {ROW_CAP}" and conn.log[2][1] is None  # 모델 SQL 엔 인자 없음
     assert conn.log[3][1] == (["b", "a"],) and conn.rolled_back
+    # 칸 조회는 uuid 같음으로 — `poi_id::text` 로 견주면 보안 장벽 뷰가 모든 행의 태그를 만든 뒤 거른다(로컬 85ms → 0.2ms)
+    assert statements[3].endswith("WHERE poi_id = ANY(%s::uuid[])")
     # 모델 순서는 b, a 지만 '요즘 인기'·정보 충실한 a 가 앞으로(안정 정렬)
     assert [(r.poi_id, r.name, r.trending, r.nightlife) for r in rows] == [("a", "경복궁", True, False), ("b", "클럽 X", False, True)]
     assert set(rows[0].__slots__) == {"poi_id", "name", "category", "sido", "sigungu", "trending", "nightlife", "rich"}  # 주소·저장 수·태그 원문은 안 나간다
@@ -229,8 +231,9 @@ def test_executor_keeps_the_model_order_when_it_ends_with_both_signals_else_puts
     assert ids("SELECT poi_id, name FROM poi_public WHERE sido LIKE '서울%' LIMIT 20") == ["m", "v"]  # 정렬이 없다
 
 
-class _OneQueryConn(_Conn):
-    """find_by_name 용 — fetchall 한 번."""
+def _name_conn(hits: list[tuple]) -> _Conn:
+    """find_by_name 용 — 첫 조회는 id 만, 둘째 조회가 그 id 의 칸(맞은 곳이 없으면 둘째 조회 없음)."""
+    return _Conn([[(h[0],) for h in hits], hits])
 
 
 def _hit(pid: str, sido: str, sigungu: str = "종로구", rich: bool = True, category: str = "쇼핑") -> tuple:
@@ -261,15 +264,21 @@ def _hit(pid: str, sido: str, sigungu: str = "종로구", rich: bool = True, cat
      None, None),
 ])
 def test_find_by_name_is_exact_and_never_guesses_among_many(hits, sido, expected) -> None:
-    conn = _OneQueryConn([hits])
+    conn = _name_conn(hits)
     found = PgPlaceSql(lambda: conn).find_by_name("광장 시장", sido)
     assert (found.poi_id if found else None) == expected and conn.rolled_back
     sql, params = conn.log[2]
     assert "replace(name, ' ', '') = %(key)s" in sql and "ILIKE" not in sql and params["key"] == "광장시장"  # 완전 일치만
+    # 이름으로 거르는 조회는 id 만 — 칸(태그)까지 고르면 보안 장벽 뷰가 모든 행의 태그를 만든 뒤 거른다(로컬 80ms → 11ms)
+    assert sql.startswith("SELECT poi_id FROM poi_public ")
+    assert len(conn.log) == (4 if hits else 3)
+    if hits:
+        assert conn.log[3] == ("SELECT poi_id::text, name, category, sido, sigungu, tags, rich FROM poi_public"
+                               " WHERE poi_id = ANY(%s::uuid[])", ([h[0] for h in hits],))
 
 
 def test_find_by_name_skips_one_letter_names_without_a_query() -> None:
-    conn = _OneQueryConn([])
+    conn = _name_conn([])
     assert PgPlaceSql(lambda: conn).find_by_name(" 가 ", "서울") is None and conn.log == []
 
 
@@ -290,7 +299,7 @@ def test_rich_column_is_allowed_in_place_selects() -> None:
 
 def test_find_by_name_narrows_by_a_city_inside_a_province_too() -> None:
     # 강릉 여행 — 시·도("강원특별자치도")가 아니라 구·군("강릉시")이 지역 표 이름으로 시작한다
-    conn = _OneQueryConn([[_hit("a", "강원특별자치도", "강릉시"), _hit("b", "강원특별자치도", "속초시")]])
+    conn = _name_conn([_hit("a", "강원특별자치도", "강릉시"), _hit("b", "강원특별자치도", "속초시")])
     found = PgPlaceSql(lambda: conn).find_by_name("광장시장", "강릉")
     assert found is not None and found.poi_id == "a"
     assert "sigungu LIKE %(area)s" in conn.log[2][0] and conn.log[2][1]["area"] == "강릉%"

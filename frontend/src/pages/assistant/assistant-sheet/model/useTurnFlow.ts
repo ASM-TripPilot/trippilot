@@ -22,7 +22,7 @@ import { isSlowTurn, secondsLeft } from './turnTiming';
  *   `deviceLocation` 으로 싣는다. 아직 안 왔으면 기다리지 않고 위치 없이 보낸다 — "오늘 날씨" 가 여행 없이도 답하게 하는 재료다.
  */
 
-export interface PendingTurn {
+interface PendingTurn {
   clientTurnId: string;
   input: TurnInput;
   /** 말풍선에 보일 문구(TEXT 는 원문, ACTION 은 quick reply 라벨). */

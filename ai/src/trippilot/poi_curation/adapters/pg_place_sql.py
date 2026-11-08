@@ -56,6 +56,10 @@ class PlaceRow:
 
 
 _ROW_COLUMNS = "poi_id::text, name, category, sido, sigungu, tags, rich"
+# 보안 장벽 뷰(V2.77 security_barrier)는 누수 안전(leakproof)하지 않은 술어 — `poi_id::text` 변환·`replace(name, …)` — 를 장벽 아래로
+# 내리지 못한다. 그런 술어로 칸까지 고르면 거르기 전에 모든 행의 태그 배열을 만든다(로컬 11.2만 행 80~85ms, SubPlan 이 행마다).
+# 그래서 세 조회 모두 거르는 조회는 **id 만** 받고 칸은 이 둘째 조회로 받는다 — uuid 같음은 leakproof 라 기본키 색인을 탄다(0.2ms).
+_BY_IDS_SQL = f"SELECT {_ROW_COLUMNS} FROM poi_public WHERE poi_id = ANY(%s::uuid[])"
 
 
 def _row(r: tuple) -> PlaceRow:
@@ -84,8 +88,7 @@ def _pick_one(hits: Sequence[PlaceRow], area: str | None) -> PlaceRow | None:
 # 한 낱말 말은 이름의 띄어쓰기를 무시하고, 여러 낱말 말은 이름의 띄어쓰기 그대로다(편집 번역 `_named_beyond_cap` 과 같은 규칙 —
 # 이름에 없는 띄어쓰기를 건너 붙이지 않는다). 지역 접두가 정말 그 곳의 지역인지는 SQL 이 아니라 `said_matches` 가 본다.
 # 이름 그대로 맞은 행을 앞에 둔다 — 상한에 잘려도 그쪽은 남는다(`pick_said` 가 잘림을 안다).
-# 첫 조회는 **id 만** 받는다 — 칸(`_ROW_COLUMNS`)을 여기서 고르면 보안 장벽 뷰가 거르기 전에 모든 행의 태그 배열을 만든다(로컬 실측
-# 11.2만 행: 칸까지 154ms · id 만 38ms). 칸은 둘째 조회가 id 로 받는다 — uuid 같음은 leakproof 라 장벽 아래 기본키 색인을 탄다(0.4ms).
+# 첫 조회는 **id 만** 받고 칸은 `_BY_IDS_SQL` 로 받는다(그 註 — 로컬 실측 11.2만 행: 칸까지 154ms · id 만 38ms).
 _N = "lower(name)"  # 위치·자르기를 모두 소문자 이름 위에서 센다 — `said_matches` 가 같은 글을 가른다
 _SAID_SQL = (
     "SELECT poi_id FROM poi_public WHERE"
@@ -175,14 +178,18 @@ class PgPlaceSql:
                     cur.execute("SET TRANSACTION READ ONLY")
                     cur.execute(f"SET LOCAL statement_timeout = {STATEMENT_TIMEOUT_MS}")
                     cur.execute(
-                        f"SELECT {_ROW_COLUMNS} FROM poi_public WHERE replace(name, ' ', '') = %(key)s "
+                        "SELECT poi_id FROM poi_public WHERE replace(name, ' ', '') = %(key)s "
                         f"ORDER BY (sido LIKE %(area)s OR sigungu LIKE %(area)s) DESC, rich DESC, poi_id LIMIT {ROW_CAP}",
                         {"key": key, "area": f"{area}%" if area else "%"},
                     )
-                    hits = [_row(r) for r in cur.fetchall()]
+                    ids = [str(r[0]) for r in cur.fetchall()]
+                    if not ids:
+                        return None
+                    cur.execute(_BY_IDS_SQL, (ids,))
+                    by_id = {r[0]: r for r in cur.fetchall()}
             finally:
                 conn.rollback()
-        return _pick_one(hits, area)
+        return _pick_one([_row(by_id[i]) for i in ids if i in by_id], area)
 
     def find_said(self, words: Sequence[str], spans: Sequence[str]) -> list[PlaceRow]:
         """편집 이름 조회 — 발화의 이름 말(`said_name_keys`)과 맞는 등록 장소 행(≤ `SAID_CAP` + 1, 넘었는지는 `pick_said` 가 본다).
@@ -199,7 +206,7 @@ class PgPlaceSql:
                     ids = [r[0] for r in cur.fetchall()]
                     if not ids:
                         return []
-                    cur.execute(f"SELECT {_ROW_COLUMNS} FROM poi_public WHERE poi_id = ANY(%s::uuid[])", (ids,))
+                    cur.execute(_BY_IDS_SQL, (ids,))
                     by_id = {r[0]: r for r in cur.fetchall()}
             finally:
                 conn.rollback()
@@ -216,7 +223,7 @@ class PgPlaceSql:
                     ids = list(dict.fromkeys(str(r[0]) for r in cur.fetchall()))
                     if not ids:
                         return []
-                    cur.execute(f"SELECT {_ROW_COLUMNS} FROM poi_public WHERE poi_id::text = ANY(%s)", (ids,))
+                    cur.execute(_BY_IDS_SQL, (ids,))
                     by_id = {r[0]: r for r in cur.fetchall()}
             finally:
                 conn.rollback()

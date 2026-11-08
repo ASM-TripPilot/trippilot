@@ -1,6 +1,5 @@
 export { GLYPH_COLORS } from './colors';
 export type { GlyphColor } from './colors';
-export type { GlyphProps } from './types';
 export {
   BackArrowGlyph,
   BackChevronGlyph,
