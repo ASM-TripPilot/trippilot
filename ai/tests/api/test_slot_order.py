@@ -91,8 +91,9 @@ def test_validate_flags_the_card_earlier_than_one_above_it() -> None:
     assert _details(body) == ["10:00 시작이 위 일정 12:00 보다 이르다"]  # 시각만, 소요시간 없음(INV-3)
     flagged = next(v for v in body["violations"] if v["code"] == "SLOT_ORDER")
     assert flagged["reason_code"] is None  # HC1 하위 코드가 아니다 — 장소 감지가 알림으로 읽지 않는다
-    # 나머지 판정은 그대로 돈다 — 시각 순(흑돼지 → 월정리 → 한라산)으로 본 이동이 빠듯하다
-    assert "HC2" in {v["code"] for v in body["violations"]}, body["violations"]
+    # 나머지 판정은 그대로 돈다 — 시각 순(흑돼지 → 월정리 → 한라산)으로 본 이동이 빠듯하다. 이동 위반은 시각상 다음 장소에
+    # 붙는다(월정리·한라산) — 화면의 바로 위 카드 기준이 아니며, 순서를 고친 뒤의 판정과 같다
+    assert sorted(v["slot_index"] for v in body["violations"] if v["code"] == "HC2") == [1, 2], body["violations"]
 
 
 def test_validate_flags_the_dragged_card_not_the_fixed_one_below_it() -> None:
