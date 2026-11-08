@@ -14,6 +14,7 @@ session_name: PlanB RAG·KB-5·열린 검색·다시 짜기 일관성 세션(tri
 handed_to:
   - "trippilot-79(상황 감지·다시 짜기 시각 세션) — 아래 1~5"
   - "trippilot-3b(도우미 세션) — 아래 6"
+picked_up_by: "claude-code trippilot-3b 2026-11-09 01:33 KST — 6(열린 검색 운영 켜기: 개발 5일 14건 판정 뒤 배포 담당에 운영 스위치 요청) · 1~5(79 도 닫혀 7f 요청으로 함께)"
 ---
 # 다시 짜기 일관성·요청 기억과 KB-5 열린 검색 — 코드는 다 운영, 남은 것은 실사용 확인과 백로그
 
