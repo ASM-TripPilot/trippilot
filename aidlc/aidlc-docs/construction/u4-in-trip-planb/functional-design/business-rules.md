@@ -54,6 +54,8 @@
 > - **BR-U4-13**: "텍스트에서 뽑은 장소를 후보로 승격하지 않는다"는 AI 재계획 실장과 어긋난다 — 뽑은 장소명은 등록 POI 이름 대조·지도 실재·그날 영업을 모두 통과한 것만 필수 방문이 되고 풀에 합류한다(`ai/src/trippilot/agents/planb/request_verification.py` · `ai/src/trippilot/api/wiring.py:2316-2329`). 후보는 여전히 등록 POI 뿐이다(INV-1). 기회 카드의 [넣어서 다시 짜기]가 이 경로를 쓴다. → [BR-SA-22](../../situation-awareness/functional-design/business-rules.md)
 > - **BR-U4-15**: [끄기] 억제는 끈 트리거의 날짜·심각도까지 적는다 — 주의를 끈 것이 같은 날 위험 격상을, 오늘을 끈 것이 내일 대상을 막지 않는다. 허브 알약의 ×는 서버 억제가 아니라 기기 로컬 숨김(TRIP-748 D3)이다. → [BR-SA-09](../../situation-awareness/functional-design/business-rules.md)
 
+> **[개정 · 2026-11-08 · TRIP-1841] BR-U4-10** — 수동 재계획은 **여행이 끝나기 전**이면 시작할 수 있다. 여행 시작 전에는 앞으로 올 여행 날짜 하루 전체(`FULL_DAY`, 일정에 있는 날)만이고, 지난 날·끝난 여행·일정 없는 날은 그대로 막는다(409). 확정 일정 허브 [수정] → 'AI에게 맡기기'가 시작 전에도 보는 날을 대상으로 연다. 트리거 진입의 여행 전 규칙(전날 창)은 그대로다. → [BR-SA-20 2026-11-08 블록](../../situation-awareness/functional-design/business-rules.md)
+
 ## 3. 재계획 산출·검증 (US-PLANB-03·04·05·07)
 
 | ID | 규칙 |
