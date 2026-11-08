@@ -8,7 +8,6 @@ import { COLOR_TOKENS } from '@/shared/config';
 // 스캔 가드 제외 관례, `docs/structure.md` §지금 작업하려면). SVG `stroke`/`fill` 은
 // className 을 못 받는다.
 
-const INK = COLOR_TOKENS.ink;
 const PRIMARY = COLOR_TOKENS.primary;
 const BODY = COLOR_TOKENS.body;
 const MUTED = COLOR_TOKENS.muted;
@@ -363,72 +362,6 @@ export function ItineraryWarningTriangleGlyph({
         d="M12 16.8H12.008"
         stroke={MUTED}
         strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// h34 appbar 공유 아이콘(22) — TRIP-354 Q3. Figma `1884:1083` 우상단. iOS 공유(상자+위 화살표)
-// 형태를 손으로 재구성했다(Figma 벡터 실측 아님 — `AlertCircleGlyph` 선례처럼 도형만 맞춤). 정적
-// 스텁이라 탭 동작은 없다(실동작은 후속 TRIP-300). 앱바 제목과 같은 ink.
-export function ItineraryShareGlyph({ size = 22, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <Path
-        d="M12 3V15"
-        stroke={INK}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M8 6.5L12 3L16 6.5"
-        stroke={INK}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M8 10H6C4.89543 10 4 10.8954 4 12V19C4 20.1046 4.89543 21 6 21H18C19.1046 21 20 20.1046 20 19V12C20 10.8954 19.1046 10 18 10H16"
-        stroke={INK}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// h31 지도 폴백 재시도 새로고침(18) — Figma `1912:1083`. 호(arc)+화살촉 한 벌. 재시도 버튼
-// 글자와 같은 muted 로 은은한 어포던스.
-export function ItineraryRefreshGlyph({ size = 18, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-    >
-      <Path
-        d="M15.8 8.5C15.2 5.65 12.85 3.75 10 3.75C6.55 3.75 3.75 6.55 3.75 10C3.75 13.45 6.55 16.25 10 16.25C12.6 16.25 14.85 14.65 15.75 12.3"
-        stroke={MUTED}
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M15.5 4.5V8.5H11.5"
-        stroke={MUTED}
-        strokeWidth={1.6}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
