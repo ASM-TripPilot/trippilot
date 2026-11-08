@@ -1049,11 +1049,36 @@ def _render_change(change: RepairChange) -> str:
 # ── validate/repair — 와이어 일정 복원 ───────────────────────────────
 
 
+SLOT_ORDER = "SLOT_ORDER"  # 위반 코드 — 화면 순서(배열)상 위 카드보다 일찍 시작하는 카드
+
+
+def _slot_order_violations(payload: schemas.ItineraryPayload) -> tuple[Violation, ...]:
+    """시각이 거꾸로 든 카드 — 같은 날 화면 순서(배열)에서 위의 어느 카드보다 일찍 시작한다.
+
+    편집은 '순서 = 배열'이라(BE INV-U3-02) 이런 날이 저장될 수 있다 — 고정·방문 완료 카드를 사이에 둔
+    끌어 옮기기, 시각을 골라 끝에 넣은 추가. 도메인 해는 시간순이 불변식이라 종전에는 422 로 새어 나가
+    BE 가 판정 보류로 저장했고 배지가 뜨지 않았다. 위반(200, IO-7)으로 돌려줘야 앱이 그 칸에 배지를 단다.
+    시각 없는 카드는 시각 주장이 없어 비교 밖이다. 위치는 `routes.locate_slot` 이 요청 배열에서 찾는다.
+    """
+    out: list[Violation] = []
+    for day in payload.days:
+        latest = None
+        for slot in day.slots:
+            if slot.start_at is None:
+                continue
+            if latest is not None and slot.start_at < latest:
+                out.append(Violation(SLOT_ORDER, PoiId(slot.poi_id),
+                                     f"{slot.start_at:%H:%M} 시작이 위 일정 {latest:%H:%M} 보다 이르다"))
+            else:
+                latest = slot.start_at
+    return tuple(out)
+
+
 def _solution_from_payload(
     payload: schemas.ItineraryPayload, schedule_id: ScheduleId, tz: timezone,
-    *, untimed: str,
+    *, untimed: str, order: str,
 ) -> ItinerarySolution:
-    """ItineraryPayload → 도메인 해. 도메인 불변식 위반(역순 슬롯 등)은 ValueError→422.
+    """ItineraryPayload → 도메인 해. 도메인 불변식 위반은 ValueError→422.
 
     `untimed` — **시간 미정 슬롯**(start_at·end_at 둘 다 null, TRIP-827) 정책.
     기본값이 없는 것은 의도다: 새 호출자는 자기 정책을 말해야 한다.
@@ -1063,6 +1088,12 @@ def _solution_from_payload(
                 건너뛰면 응답 일정에서 사용자 저장 슬롯이 조용히 사라진다.
                 시간 미정 슬롯의 배치는 별건이다(미지원을 숨기지 않는다).
     반쪽 시각(둘 중 하나만 null)은 정책과 무관하게 기형이라 항상 422 다.
+
+    `order` — **시각이 거꾸로 든 날**(`_slot_order_violations`) 정책. 기본값이 없는 이유는 위와 같다.
+    - "sort":   시작 시각 순으로 세워 해를 만든다 — HC 는 실제로 지나갈 순서로 본다. 거꾸로 든 사실은
+                호출자가 `_slot_order_violations` 로 따로 말한다 — validate·repair·explanations 용.
+    - "reject": 422(종전). 위치 지시('두 번째 장소')를 화면 순서로 해석하는 경계(edit)용 —
+                세우면 사용자가 보는 것과 다른 칸을 고친다.
     """
     days: list[DaySolution] = []
     for day_schema in payload.days:
@@ -1099,6 +1130,8 @@ def _solution_from_payload(
                     window=TimeWindow(start=start, end=end),
                     reason="wire_fixed",
                 ))
+        if order == "sort":
+            slots.sort(key=lambda s: s.start_at)  # 안정 정렬 — 같은 시작은 화면 순서 그대로
         days.append(DaySolution(
             date=day_schema.date, slots=tuple(slots), fixed_blocks=tuple(day_fixed)
         ))
@@ -2543,6 +2576,7 @@ class WiredItineraryOrchestrator:
         solution, problem, poi_index, unverified = self._reconstruct(
             request.itinerary, request.request_meta,
             untimed="skip",  # 미정 슬롯은 시각 주장이 없다 — 배치분만 검증
+            order="sort",  # 거꾸로 든 카드는 SLOT_ORDER 위반으로 말하고, HC 는 시각 순으로 본다
         )
         # 수단은 선택 필드(2026-10-30) — repair 와 같은 칸·규칙. 없으면 종전(PUBLIC).
         problem = replace(problem, transport=_transport_of(request.transport_modes))
@@ -2550,7 +2584,7 @@ class WiredItineraryOrchestrator:
         walk_cap = _plan_less_walk_cap(_inline_persona(request.preference_profile, None), problem.transport)
         facade = self._assembly_provider.for_pool(poi_index, walk_max_km=walk_cap)
         return WiredValidateOutcome(
-            violations=tuple(facade.validate(
+            violations=_slot_order_violations(request.itinerary) + tuple(facade.validate(
                 solution, problem, _deadline_budget(request.request_meta),
                 TraceId(request.request_meta.request_id),
             )),
@@ -2562,7 +2596,15 @@ class WiredItineraryOrchestrator:
         solution, problem, poi_index, unverified = self._reconstruct(
             request.itinerary, request.request_meta,
             untimed="reject",  # 수리 결과가 곧 응답 일정 — 건너뛰면 저장 슬롯 소실
+            order="sort",  # 형식 검사만 지나게 — 거꾸로 든 날은 바로 아래에서 수리 불가로 답한다
         )
+        if order_breaks := _slot_order_violations(request.itinerary):
+            # 수리는 앞으로만 밀고 순서를 바꾸지 않는다(TIME_SHIFT_ONLY) — 위 카드보다 이른 카드는 순서를 지키며 못 고친다.
+            # 사용자가 고른 시각을 뒤로 밀어 맞추지도 않는다(시각만 바꾼 편집은 수리하지 않는 규칙과 같은 까닭).
+            # 수리 불가(200, IO-7) → BE 는 재검증으로 가고 재검증이 SLOT_ORDER 배지를 낸다.
+            _logger.info("itinerary_order_break %s", json.dumps({
+                "request_id": request.request_meta.request_id, "slots": len(order_breaks)}))
+            return WiredRepairOutcome(repaired=None, changes=(), unverified=unverified)
         # 앵커·창·수단은 선택 필드(2026-10-05) — 없으면 종전(첫 구간 null·첫 슬롯 하한 없음·PUBLIC).
         problem = replace(problem, transport=_transport_of(request.transport_modes))
         anchors = {a.date: GeoPoint(a.lat, a.lng) for a in request.anchors}
@@ -2598,13 +2640,13 @@ class WiredItineraryOrchestrator:
 
     def _reconstruct(
         self, payload: schemas.ItineraryPayload, meta: schemas.RequestMetaSchema,
-        *, untimed: str, lookup_holidays: bool = True,
+        *, untimed: str, order: str, lookup_holidays: bool = True,
     ) -> tuple[
         ItinerarySolution, ItineraryProblem, dict[PoiId, Poi],
         tuple[WiredUnverifiedSlot, ...],
     ]:
         solution = _solution_from_payload(
-            payload, ScheduleId(meta.request_id), self._tz, untimed=untimed)
+            payload, ScheduleId(meta.request_id), self._tz, untimed=untimed, order=order)
         problem = _problem_for(  # 공휴일 달력 — 요청당 1회(상황 감지 H1)
             solution, self._tz, self._holidays if lookup_holidays else None)
         ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
@@ -4443,7 +4485,8 @@ class WiredItineraryOrchestrator:
         trace_id = TraceId(meta.request_id)
         solution = _solution_from_payload(
             request.itinerary, ScheduleId(request.trip_id), self._tz,
-            untimed="skip")  # 설명은 배치분 대상 — 미정 슬롯은 설명할 배치가 없다
+            untimed="skip",  # 설명은 배치분 대상 — 미정 슬롯은 설명할 배치가 없다
+            order="sort")  # 설명은 날짜#장소 키라 순서와 무관 — 거꾸로 든 날도 설명은 낸다
         ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
         # 차선책(TRIP-887) — payload 의 슬롯별 alternatives 를 (날짜, 슬롯 POI, 선택지 POI)로.
         # 좌표·풀 조립은 배치 POI 와 한 번의 재조회로 합친다.
@@ -4586,6 +4629,7 @@ class WiredItineraryOrchestrator:
         solution, _, poi_index, _ = self._reconstruct(
             request.itinerary, meta,
             untimed="reject",  # 편집 결과가 곧 응답 일정 — 건너뛰면 저장 슬롯 소실
+            order="reject",  # 위치 지시('두 번째 장소')는 화면 순서다 — 세우면 다른 칸을 고친다
             lookup_holidays=False,  # 이 문제는 버린다 — 달력은 에이전트 검증(`_problem_for`)이 1회 묻는다
         )
         transport = _token_or(
