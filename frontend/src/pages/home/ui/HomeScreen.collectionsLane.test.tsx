@@ -8,9 +8,27 @@ import { HomeScreen } from './HomeScreen';
  * 그린다. 모양(카드 testID·배지·지역)은 그대로, 데이터 소스와 3상태만 갈린다.
  */
 const CARDS = [
-  { poiId: 'a', title: '가 장소', region: '서울 종로구', badge: '명소' },
-  { poiId: 'b', title: '나 장소', region: '서울 중구', badge: '카페' },
-  { poiId: 'c', title: '다 장소', region: '서울 마포구', badge: '야경' },
+  {
+    imageLicense: null,
+    poiId: 'a',
+    title: '가 장소',
+    region: '서울 종로구',
+    badge: '명소',
+  },
+  {
+    imageLicense: null,
+    poiId: 'b',
+    title: '나 장소',
+    region: '서울 중구',
+    badge: '카페',
+  },
+  {
+    imageLicense: null,
+    poiId: 'c',
+    title: '다 장소',
+    region: '서울 마포구',
+    badge: '야경',
+  },
 ];
 
 describe('HomeScreen · collectionsLane', () => {

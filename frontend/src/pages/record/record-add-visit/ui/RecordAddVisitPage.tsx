@@ -196,6 +196,7 @@ export function RecordAddVisitPage({
                 id={item.poiId}
                 name={item.nameKo}
                 imageUrl={item.imageUrl}
+                imageLicense={item.imageLicense}
                 category={item.category}
                 subtitle={
                   <View className="gap-[2px]">

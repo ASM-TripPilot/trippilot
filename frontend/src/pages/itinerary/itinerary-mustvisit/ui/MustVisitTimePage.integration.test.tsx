@@ -19,6 +19,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 
 import { MustVisitTimePage } from './MustVisitTimePage';
 import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
@@ -985,6 +986,36 @@ describe('h07 화면 얼굴 — 장소 카드 · 칩 · 시트 · 잠금 · 실�
       expect(
         screen.getByTestId('itinerary-mustvisit-time-photo').props.source
       ).toEqual([{ uri: 'https://img.example.com/a.jpg' }])
+    );
+  });
+
+  // TRIP-1740 AC-7(T12) — 담은 장소의 imageLicense 가 페이지의 place 조립을 지나 h03 요약 사진 칸까지 간다.
+  it('TYPE1 서버 사진이면 사진 칸까지 유형이 닿아 cover 이고 출처 글자가 붙는다', async () => {
+    server.use(
+      http.get(`${BASE}/saved-places`, () =>
+        HttpResponse.json([
+          {
+            ...SAVED[0],
+            place: {
+              ...SAVED[0].place,
+              imageUrl: 'https://img.example.com/a.jpg',
+              imageLicense: 'TYPE1',
+            },
+          },
+        ])
+      )
+    );
+    renderPage();
+    await ready();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('itinerary-mustvisit-time-photo').props.source
+      ).toEqual([{ uri: 'https://img.example.com/a.jpg' }])
+    );
+    expectTypeOnePhotoDelivered(
+      'itinerary-mustvisit-time-photo',
+      'https://img.example.com/a.jpg'
     );
   });
 

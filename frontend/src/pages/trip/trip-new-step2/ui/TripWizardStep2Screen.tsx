@@ -123,6 +123,7 @@ function NightCard({
       <View className="w-full flex-row items-center gap-md">
         {assigned ? (
           <View className="h-[48px] w-[48px] overflow-hidden rounded-thumb bg-surface-strong">
+            {/* eslint-disable-next-line no-restricted-syntax -- 숙소 그림 — 관광공사 POI 사진 아님 */}
             <PlacePhoto
               testID={`trip-base-night-thumb-${card.nightNumber}`}
               imageUrl={card.imageUrl}

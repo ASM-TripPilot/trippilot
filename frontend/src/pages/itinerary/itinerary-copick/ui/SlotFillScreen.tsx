@@ -6,7 +6,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AlertCircleGlyph, BackChevronGlyph } from '@/shared/ui/glyphs';
 import { MapView } from '@/shared/map';
 import type { MapCenter, MapPin } from '@/shared/map';
-import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
+import type {
+  ImageLicense,
+  SlotCandidatesCandidatesItem,
+} from '@/shared/api/index.schemas';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import type { ConceptProgress } from './ConceptPickerScreen';
@@ -266,6 +269,7 @@ export interface SlotFillScreenProps {
       nameKo?: string | null;
       tags?: string[];
       imageUrl?: string | null;
+      imageLicense: ImageLicense | null | undefined;
       dimmed?: boolean;
     }
   >;
@@ -614,6 +618,7 @@ export function SlotFillScreen({
                       nameKo={view?.nameKo}
                       tags={view?.tags}
                       imageUrl={view?.imageUrl}
+                      imageLicense={view?.imageLicense}
                       category={candidate.category}
                       coverPoiId={candidate.poiId}
                       dimmed={view?.dimmed}

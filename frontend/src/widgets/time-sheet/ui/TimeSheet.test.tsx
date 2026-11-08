@@ -406,6 +406,7 @@ const hid = (suffix: string): string => `${H04_PREFIX}-${suffix}`;
 
 // Q2 region·Q3 badgeLabel 프리뷰 픽스처(Figma context-card 값).
 const FIXTURE: TimeSheetPlaceSummary = {
+  imageLicense: null,
   imageUrl: 'https://example.com/gwangalli.jpg',
   name: '광안리 해변',
   badgeLabel: '필수',
@@ -461,6 +462,28 @@ function hExpectBlocked(): void {
 function hExpectOpen(): void {
   expect(screen.queryByTestId(hid('error'))).toBeNull();
   expect(screen.getByTestId(hid('apply'))).not.toBeDisabled();
+}
+
+/**
+ * 요약 행에서 **출처 글자(`…-credit`)를 뺀** 보이는 글자들 — 호스트 `Text` 노드마다 하나. 서버 사진이면 출처 글자가 같은
+ * 서브트리에 들어와 `toHaveTextContent` 완전 일치가 `한국관광공사광안리 해변` 이 되므로, 출처 노드만 제외하고 나머지는
+ * 그대로(완전 일치) 본다 — 부분 일치로 풀면 배지·지역 같은 다른 글자가 끼어도 통과한다.
+ */
+function visibleTextsExceptCredit(summary: ReactTestInstance): string[] {
+  const credit = screen.queryByTestId(hid('place-thumb-image-credit'));
+  const inCredit = (n: ReactTestInstance): boolean => {
+    for (let cur: ReactTestInstance | null = n; cur; cur = cur.parent) {
+      if (cur === credit) return true;
+    }
+    return false;
+  };
+  return summary
+    .findAll((n) => (n.type as unknown) === 'Text' && !inCredit(n))
+    .map((n) =>
+      (Array.isArray(n.props.children) ? n.props.children : [n.props.children])
+        .filter((child: unknown) => typeof child === 'string')
+        .join('')
+    );
 }
 
 function pinkPills(node: ReactTestInstance): ReactTestInstance[] {
@@ -627,12 +650,19 @@ describe('AC-2 · 종료를 설정하고 적용하면 endAt·endsNextDay(end <= 
 
 describe('🔴 AC-6 · 배지·지역을 안 주면 요약 행은 썸네일+이름뿐이다', () => {
   it('H6 · 배지 알약·"꼭 갈 곳" 줄이 없다 (짝: 둘 다 주면 둘 다 있다)', () => {
-    renderH04({ imageUrl: 'https://example.com/a.jpg', name: '광안리 해변' });
+    renderH04({
+      imageLicense: null,
+      imageUrl: 'https://example.com/a.jpg',
+      name: '광안리 해변',
+    });
 
     const summary = screen.getByTestId(hid('place-summary'));
     expect(screen.getByTestId(hid('place-thumb-image'))).toBeOnTheScreen();
-    // 완전일치 — 이름 말고 아무 텍스트도 없다(배지 라벨·둘째 줄 부재).
-    expect(summary).toHaveTextContent('광안리 해변');
+    // 완전일치 — 이름 말고 아무 텍스트도 없다(배지 라벨·둘째 줄 부재). 출처 글자는 서버 사진이면 붙으므로 그 노드만 뺀다.
+    expect(visibleTextsExceptCredit(summary)).toEqual(['광안리 해변']);
+    expect(
+      screen.getByTestId(hid('place-thumb-image-credit'))
+    ).toBeOnTheScreen();
     expect(pinkPills(summary)).toHaveLength(0);
     expect(textsIn(summary).filter((t) => t.includes('꼭 갈 곳'))).toEqual([]);
     expect(textsIn(summary).filter((t) => t.includes('undefined'))).toEqual([]);
@@ -640,6 +670,7 @@ describe('🔴 AC-6 · 배지·지역을 안 주면 요약 행은 썸네일+이�
     // 탐지기 짝 — 배지·지역을 주면 같은 탐지기가 알약과 둘째 줄을 잡는다.
     screen.unmount();
     renderH04({
+      imageLicense: null,
       imageUrl: 'https://example.com/a.jpg',
       name: '광안리 해변',
       badgeLabel: '필수',
@@ -647,7 +678,9 @@ describe('🔴 AC-6 · 배지·지역을 안 주면 요약 행은 썸네일+이�
     });
     const full = screen.getByTestId(hid('place-summary'));
     expect(pinkPills(full).length).toBeGreaterThan(0);
-    expect(full).toHaveTextContent('광안리 해변필수부산 부산진구 · 꼭 갈 곳');
+    expect(visibleTextsExceptCredit(full).join('')).toBe(
+      '광안리 해변필수부산 부산진구 · 꼭 갈 곳'
+    );
   });
 });
 

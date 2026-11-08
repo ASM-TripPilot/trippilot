@@ -21,6 +21,7 @@ import type { Place } from '@/shared/api/index.schemas';
 import { RecordAddVisitPage } from '@/pages/record/record-add-visit';
 import { TripRecordsPage } from '@/pages/record/trip-records';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 import {
   recordsHandler,
   summaryHandler,
@@ -108,7 +109,11 @@ function makePlace(
 const PLACES: Place[] = [
   makePlace('p1', '감천문화마을', '명소', '부산'),
   makePlace('p2', '해운대 해수욕장', '야경', '부산'),
-  makePlace('p3', '전포 카페거리', '카페', '부산'),
+  {
+    ...makePlace('p3', '전포 카페거리', '카페', '부산'),
+    imageUrl: 'https://example.com/jeonpo.jpg',
+    imageLicense: 'TYPE1',
+  },
   makePlace('g1', '불국사', '명소', '경주'),
 ];
 
@@ -513,6 +518,16 @@ describe('후보 행 사진 칸 — 사진 없는 장소는 카테고리 생성 
     expect(
       screen.getByTestId('record-add-visit-row-photo-p2').props.source
     ).toEqual([coverFor('야경', 'p2')]);
+  });
+
+  // TRIP-1740 AC-7(T5) — 후보 응답 `Place` 의 imageLicense(TYPE1)가 `RecordAddVisitPage` 행 조립을 지나 사진 칸까지 간다.
+  it('P5-f: TYPE1 서버 사진 후보(p3)는 사진 칸까지 유형이 닿아 cover 이고 출처 글자가 붙는다', async () => {
+    await renderPicker();
+
+    expectTypeOnePhotoDelivered(
+      'record-add-visit-row-photo-p3',
+      'https://example.com/jeonpo.jpg'
+    );
   });
 });
 

@@ -1,7 +1,10 @@
 import type { ReactElement, ReactNode } from 'react';
 
 import { SlotCandidateCard as PlaceSlotCandidateCard } from '@/entities/place';
-import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
+import type {
+  ImageLicense,
+  SlotCandidatesCandidatesItem,
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-335 · 후보 카드(h12 시트·h18 화면 공용) → TRIP-806 으로 entities/place 카드에 위임.
@@ -27,6 +30,8 @@ export interface SlotCandidateCardProps {
   tags?: string[];
   /** TRIP-1024 사진 URL — 없거나 '' 면 생성 이미지. h10 사진은 78(Figma `3849:2272`). */
   imageUrl?: string | null;
+  /** `imageUrl` 의 공공누리 유형 — 필수 키(끊기면 tsc). */
+  imageLicense: ImageLicense | null | undefined;
   /** 사진이 없을 때 고르는 생성 이미지의 카테고리·진짜 poiId(해시용) — 그대로 관통. */
   category?: string | null;
   coverPoiId?: string | null;
@@ -41,6 +46,7 @@ export function SlotCandidateCard({
   nameKo,
   tags,
   imageUrl,
+  imageLicense,
   category,
   coverPoiId,
   dimmed,
@@ -53,6 +59,7 @@ export function SlotCandidateCard({
       showNameTestId
       showImage
       imageUrl={imageUrl}
+      imageLicense={imageLicense}
       category={category}
       coverPoiId={coverPoiId}
       imageSize={78}

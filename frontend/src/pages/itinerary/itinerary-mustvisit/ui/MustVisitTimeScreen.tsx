@@ -9,7 +9,8 @@ import {
   BackChevronGlyph,
   ClockGlyph,
 } from '@/shared/ui/glyphs';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import type { ImageLicense } from '@/shared/api/index.schemas';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 import {
   SafeAreaInsetsContext,
   SafeAreaView,
@@ -78,6 +79,8 @@ export interface MustVisitTimeScreenProps {
   placeName: string | null;
   region?: string | null;
   imageUrl?: string | null;
+  /** `imageUrl` 의 공공누리 유형 — 필수 키(끊기면 tsc). */
+  imageLicense: ImageLicense | null | undefined;
   /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본). */
   category?: string | null;
   dayChips: { date: string; label: string }[];
@@ -159,6 +162,7 @@ export function MustVisitTimeScreen({
   placeName,
   region,
   imageUrl,
+  imageLicense,
   category,
   dayChips,
   startOptions,
@@ -217,12 +221,13 @@ export function MustVisitTimeScreen({
               className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas py-md pl-md pr-[14px]"
             >
               <View className="h-[64px] w-[64px] overflow-hidden rounded-thumb bg-surface-strong">
-                <PlacePhoto
+                <PoiPhoto
                   testID="itinerary-mustvisit-time-photo"
                   imageUrl={imageUrl}
+                  imageLicense={imageLicense}
+                  surface="thumb"
                   category={category}
                   poiId={sourcePoiId}
-                  contentFit="cover"
                   cachePolicy="memory-disk"
                   className="h-full w-full"
                 />

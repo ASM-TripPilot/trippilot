@@ -1,6 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import type { ImageLicense } from '@/shared/api/index.schemas';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 
 import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/glyphs';
 
@@ -17,6 +18,8 @@ export interface PlaceRowCardProps {
   id: string;
   name: string;
   imageUrl?: string | null;
+  /** `imageUrl` 의 공공누리 유형 — 필수 키(끊기면 tsc). */
+  imageLicense: ImageLicense | null | undefined;
   /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본). */
   category?: string | null;
   subtitle?: ReactNode;
@@ -39,6 +42,7 @@ export function PlaceRowCard({
   id,
   name,
   imageUrl,
+  imageLicense,
   category,
   subtitle,
   save,
@@ -51,12 +55,13 @@ export function PlaceRowCard({
       accessibilityState={selected === undefined ? undefined : { selected }}
       className={selected === true ? ROW_SELECTED_CLASS : ROW_CLASS}
     >
-      <PlacePhoto
+      <PoiPhoto
         testID={`${testIDPrefix}-photo-${id}`}
         imageUrl={imageUrl}
+        imageLicense={imageLicense}
+        surface="thumb"
         category={category}
         poiId={id}
-        contentFit="cover"
         cachePolicy="memory-disk"
         recyclingKey={id}
         className="h-[64px] w-[64px] rounded-[12px]"

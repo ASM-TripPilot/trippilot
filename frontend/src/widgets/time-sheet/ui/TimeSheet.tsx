@@ -1,8 +1,9 @@
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import type { ImageLicense } from '@/shared/api/index.schemas';
 import { Button } from '@/shared/ui/Button';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
@@ -51,6 +52,8 @@ const RANGE_ERROR = '종료 시각은 시작보다 늦어야 해요';
  */
 export interface TimeSheetPlaceSummary {
   imageUrl: string | null;
+  /** `imageUrl` 의 공공누리 유형 — 필수 키(끊기면 tsc). */
+  imageLicense: ImageLicense | null | undefined;
   /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본)·변형을 해시할 poiId. */
   poiId?: string;
   category?: string | null;
@@ -192,12 +195,13 @@ export function TimeSheet({
             className="w-full flex-row items-center gap-md rounded-button bg-surface-soft p-md"
           >
             <View className="h-[48px] w-[48px] overflow-hidden rounded-thumb bg-surface-strong">
-              <PlacePhoto
+              <PoiPhoto
                 testID={`${testIDPrefix}-place-thumb-image`}
                 imageUrl={placeSummary.imageUrl}
+                imageLicense={placeSummary.imageLicense}
+                surface="thumb"
                 category={placeSummary.category}
                 poiId={placeSummary.poiId}
-                contentFit="cover"
                 cachePolicy="memory-disk"
                 className="h-full w-full"
               />

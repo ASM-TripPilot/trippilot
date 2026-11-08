@@ -1,4 +1,5 @@
 import type {
+  ImageLicense,
   MustVisit,
   MustVisitType,
   SavedPlace,
@@ -24,6 +25,8 @@ export interface MustVisitListItem {
   /** 조인 실패면 `null` — 목록에서 빼지 않는다. */
   name: string | null;
   imageUrl: string | null;
+  /** `imageUrl` 의 공공누리 유형 — 필수 키(끊기면 tsc). 조인 실패면 `null`(사진 자체가 없어 번들 표지). */
+  imageLicense: ImageLicense | null | undefined;
   /** 사진이 없을 때 고르는 생성 이미지의 카테고리 — 조인 실패면 `undefined`(중립 폴백). */
   category?: string;
   type: MustVisitType;
@@ -58,6 +61,7 @@ export function joinMustVisits(input: {
       sourcePoiId: entry.sourcePoiId,
       name: place?.nameKo ?? null,
       imageUrl: place?.imageUrl ?? null,
+      imageLicense: place?.imageLicense ?? null,
       category: place?.category,
       type: entry.type,
       fixedDate: entry.fixedDate ?? undefined,

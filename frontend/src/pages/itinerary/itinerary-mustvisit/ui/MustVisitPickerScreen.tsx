@@ -7,7 +7,7 @@ import {
   InfoCircleGlyph,
   BackChevronGlyph,
 } from '@/shared/ui/glyphs';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MapView, type MapPin } from '@/shared/map';
@@ -220,12 +220,13 @@ function MustVisitCard({
         </Text>
       </View>
       <View className="h-[78px] w-[78px] overflow-hidden rounded-thumb bg-surface-strong">
-        <PlacePhoto
+        <PoiPhoto
           testID={`itinerary-mustvisit-image-${item.sourcePoiId}`}
           imageUrl={item.imageUrl}
+          imageLicense={item.imageLicense}
+          surface="thumb"
           category={item.category}
           poiId={item.sourcePoiId}
-          contentFit="cover"
           cachePolicy="memory-disk"
           className="h-full w-full"
         />

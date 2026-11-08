@@ -47,12 +47,14 @@ export function leavePreviousTripDraft(): void {
   store.keepCreatedTripIdOnce();
   store.seedMustVisitsFromD02([
     {
+      imageLicense: null,
       sourcePoiId: 'poi-prev-1',
       name: '예전 곳 1',
       imageUrl: null,
       region: null,
     },
     {
+      imageLicense: null,
       sourcePoiId: 'poi-prev-2',
       name: '예전 곳 2',
       imageUrl: null,

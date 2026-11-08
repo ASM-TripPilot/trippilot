@@ -2,7 +2,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { AlertCircleGlyph } from '@/shared/ui/glyphs';
 import { Button, buttonClasses } from '@/shared/ui/Button';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Skeleton } from '@/shared/ui/Skeleton';
@@ -202,7 +202,7 @@ function SummaryRow({
 /**
  * 꼭 갈 곳 가로 스트립 — 헤더("꼭 갈 곳 {N}" + 전체 보기) + 스크롤 행([더 담기 첫 위치] + 담은
  * 곳 카드들). 카드는 이미지 자리 + 이름 + (region 있으면) 지역 한 줄이다(TRIP-685). 이미지는
- * `PlacePhoto` 가 그린다 — `imageUrl` 이 없으면 `category` 로 고른 생성 이미지.
+ * `PoiPhoto` 가 그린다 — `imageUrl` 이 없으면 `category` 로 고른 생성 이미지.
  * 0곳도 스트립을 감추지 않는다(empty 일러스트 얼굴은 S7).
  */
 function MustVisitStrip({
@@ -263,12 +263,13 @@ function MustVisitStrip({
             className="w-[112px] gap-[6px]"
           >
             <View className="h-[88px] w-[112px] overflow-hidden rounded-[14px] bg-surface-strong">
-              <PlacePhoto
+              <PoiPhoto
                 testID={`trip-wizard-mustvisit-image-${item.sourcePoiId}`}
                 imageUrl={item.imageUrl}
+                imageLicense={item.imageLicense}
+                surface="thumb"
                 category={item.category}
                 poiId={item.sourcePoiId}
-                contentFit="cover"
                 cachePolicy="memory-disk"
                 className="h-full w-full"
               />

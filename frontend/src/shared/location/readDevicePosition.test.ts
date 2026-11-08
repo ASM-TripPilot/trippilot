@@ -233,3 +233,111 @@ describe('🔴 RD6 · 지금 측위는 시스템 위치 설정 대화상자를 �
     );
   });
 });
+
+// 웹 위치 묻기(2026-11-08 · O-U8-5 웹 예외) — `{ ask: true }` 는 권한이 아직 안 정해졌을 때(undetermined)만 창을 띄우고,
+// 사람이 창에 답할 시간을 주려고 상한을 20초로 늘린다. 인자 없는 호출은 위 RD1~RD6 그대로다.
+describe('🔴 RD7 · ask: 권한을 아직 안 정했을 때만 한 번 묻는다 (AC3·AC4)', () => {
+  // expo-location 19 웹 구현은 거부 상태에서도 canAskAgain: true 를 돌려준다 — canAskAgain 으로 가르면 거부한 사람에게 매번 묻는다.
+  const WEB_DENIED = { status: 'denied', granted: false, canAskAgain: true };
+
+  it('RD7a 아직 안 정했으면 권한을 묻고, 허용되면 좌표를 돌려준다', async () => {
+    mockGetForeground.mockResolvedValue(UNDETERMINED);
+    mockRequestForeground.mockResolvedValue(GRANTED);
+
+    const result = await readDevicePosition({ ask: true });
+
+    expect(result).toStrictEqual(CURRENT);
+    expect(mockRequestForeground).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['거부로 답함', () => mockRequestForeground.mockResolvedValue(DENIED)],
+    [
+      '묻기가 throw',
+      () => mockRequestForeground.mockRejectedValue(new Error('ask')),
+    ],
+  ])(
+    'RD7b 물었는데 %s → null 로 resolve, 위치는 읽지 않는다',
+    async (_label, arrange) => {
+      mockGetForeground.mockResolvedValue(UNDETERMINED);
+      arrange();
+
+      await expect(readDevicePosition({ ask: true })).resolves.toBeNull();
+      expect(mockRequestForeground).toHaveBeenCalledTimes(1);
+      expect(mockGetLastKnown).not.toHaveBeenCalled();
+      expect(mockGetCurrent).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    ['웹 모양(canAskAgain: true)', WEB_DENIED],
+    ['네이티브 모양(canAskAgain: false)', DENIED],
+  ])(
+    'RD7c 이미 거부했으면 %s 이라도 다시 묻지 않고 null',
+    async (_label, perm) => {
+      mockGetForeground.mockResolvedValue(perm);
+
+      const result = await readDevicePosition({ ask: true });
+
+      expect(result).toBeNull();
+      expect(mockRequestForeground).not.toHaveBeenCalled();
+      expect(mockGetLastKnown).not.toHaveBeenCalled();
+      expect(mockGetCurrent).not.toHaveBeenCalled();
+    }
+  );
+
+  it('RD7d 이미 허용했으면 묻지 않고 바로 읽는다', async () => {
+    mockGetLastKnown.mockResolvedValue(position(LAST));
+
+    const result = await readDevicePosition({ ask: true });
+
+    expect(result).toStrictEqual(LAST);
+    expect(mockRequestForeground).not.toHaveBeenCalled();
+  });
+
+  it('RD7e 사람이 12초 뒤에 허용해도 좌표를 돌려준다 — 기본 5초 상한이 아니다', async () => {
+    mockGetForeground.mockResolvedValue(UNDETERMINED);
+    mockRequestForeground.mockImplementation(after(12_000, GRANTED));
+
+    const { box, done } = track(readDevicePosition({ ask: true }));
+
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(box.settled).toBe(false);
+    await jest.advanceTimersByTimeAsync(7000);
+    expect(box.settled).toBe(true);
+    await expect(done).resolves.toStrictEqual(CURRENT);
+  });
+
+  it('RD7f 창에 답이 없으면 19999ms 까진 기다리고 20000ms 에 null 로 끝난다', async () => {
+    mockGetForeground.mockResolvedValue(UNDETERMINED);
+    mockRequestForeground.mockImplementation(never);
+
+    const { box, done } = track(readDevicePosition({ ask: true }));
+
+    await jest.advanceTimersByTimeAsync(19_999);
+    expect(box.settled).toBe(false);
+    await jest.advanceTimersByTimeAsync(1);
+    expect(box.settled).toBe(true);
+    await expect(done).resolves.toBeNull();
+    expect(mockGetLastKnown).not.toHaveBeenCalled();
+    expect(mockGetCurrent).not.toHaveBeenCalled();
+  });
+
+  it('RD7g 20초도 합산이다 — 허용 15초 + 측위 6초면 null, 늦은 좌표는 버린다', async () => {
+    mockGetForeground.mockResolvedValue(UNDETERMINED);
+    mockRequestForeground.mockImplementation(after(15_000, GRANTED));
+    mockGetCurrent.mockImplementation(after(6000, position(CURRENT)));
+
+    const { box, done } = track(readDevicePosition({ ask: true }));
+
+    // 허용(15초)이 와도 측위가 진행 중이라 19999ms 까진 미결, 20000ms 에 상한으로 끝난다.
+    await jest.advanceTimersByTimeAsync(19_999);
+    expect(box.settled).toBe(false);
+    await jest.advanceTimersByTimeAsync(1);
+    expect(box.settled).toBe(true);
+    // current 가 21초에 좌표를 내놓아도 결과는 이미 null 로 굳었다.
+    await jest.advanceTimersByTimeAsync(2000);
+    await expect(done).resolves.toBeNull();
+    expect(mockGetCurrent).toHaveBeenCalledTimes(1);
+  });
+});

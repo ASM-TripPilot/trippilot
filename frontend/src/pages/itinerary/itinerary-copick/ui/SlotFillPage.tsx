@@ -655,9 +655,9 @@ export function SlotFillPage({
         stepperSlot={conceptStepper()}
         // 후보 응답의 이름·태그·사진을 카드까지 내린다(TRIP-1024, QA #070 "이름 준비 중"·회색 사진).
         candidateViews={Object.fromEntries(
-          candidates.map(({ poiId, nameKo, tags, imageUrl }) => [
+          candidates.map(({ poiId, nameKo, tags, imageUrl, imageLicense }) => [
             poiId,
-            { nameKo, tags, imageUrl },
+            { nameKo, tags, imageUrl, imageLicense },
           ])
         )}
         mapView={mapView}

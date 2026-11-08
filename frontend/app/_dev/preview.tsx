@@ -121,6 +121,7 @@ import type { GenerationProgressCell } from '@/widgets/map-sheet-shell';
 import { MapFallbackBar } from '@/widgets/map-sheet-shell/ui/MapFallbackBar';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { SheetHeader } from '@/widgets/map-sheet-shell';
+import type { PlaceCardVM } from '@/entities/place';
 import { SlotStopCard } from '@/entities/itinerary-slot';
 import { violationNotice } from '@/entities/itinerary-slot';
 import {
@@ -253,7 +254,10 @@ import type {
   TriggerKind,
   TripSummary,
 } from '@/shared/api/index.schemas';
-import { PersonalizationInfoReason } from '@/shared/api/index.schemas';
+import {
+  type ImageLicense,
+  PersonalizationInfoReason,
+} from '@/shared/api/index.schemas';
 import { buildMonthGrid } from '@/shared/lib/monthGrid';
 import { LocationPreprompt } from '@/shared/location/index.view';
 // 딥 경로 — 배럴(`@/shared/push`)로 끌면 권한 루틴(expo-notifications)까지 실린다(TRIP-1108 R10).
@@ -567,15 +571,44 @@ const STAY_DETAIL_PREVIEW_STATE = {
 // 장소 가로 레인(TRIP-470) — 프리뷰 표본 카드. TRIP-703 으로 Figma d01(1672:1183) 정합상 5장.
 // `imageUrl`·`category` 미지정(=중립 생성 이미지 place.webp, INV-1 — 실사진 소싱은 6-b·후속). `as const` 밖에 둬야 cards 가
 // readonly 튜플로 안 굳는다(placeLane.cards 는 PlaceCardVM[] 요구).
+// TRIP-1740 — 앞 3장은 사진 + 공공누리 유형(TYPE3·TYPE1·null)을 줘 레인 카드의 안 자름·출처 칩을 눈으로 본다. 뒤 2장은 사진 없는 번들 표지.
+// (DRAFT_PREVIEW_PHOTOS 는 이 줄보다 아래에서 만들어져 쓸 수 없어 같은 에셋을 여기서 푼다.)
+const EXPLORE_LANE_PHOTO: string | null =
+  Image.resolveAssetSource?.(require('./assets/itinerary/draft-preview-1.jpg'))
+    ?.uri ?? null;
+const EXPLORE_LANE_CARDS: PlaceCardVM[] = [
+  {
+    poiId: 'p1',
+    name: '감천문화마을',
+    region: '사하구',
+    imageUrl: EXPLORE_LANE_PHOTO,
+    imageLicense: 'TYPE3',
+  },
+  {
+    poiId: 'p2',
+    name: '광안리 해변',
+    region: '수영구',
+    imageUrl: EXPLORE_LANE_PHOTO,
+    imageLicense: 'TYPE1',
+  },
+  {
+    poiId: 'p3',
+    name: '전포 카페거리',
+    region: '부산진구',
+    imageUrl: EXPLORE_LANE_PHOTO,
+    imageLicense: null,
+  },
+  { poiId: 'p4', name: '자갈치시장', region: '중구', imageLicense: null },
+  {
+    poiId: 'p5',
+    name: '해운대 블루라인',
+    region: '해운대구',
+    imageLicense: null,
+  },
+];
 const EXPLORE_LANDING_PLACE_LANE = {
   error: false,
-  cards: [
-    { poiId: 'p1', name: '감천문화마을', region: '사하구' },
-    { poiId: 'p2', name: '광안리 해변', region: '수영구' },
-    { poiId: 'p3', name: '전포 카페거리', region: '부산진구' },
-    { poiId: 'p4', name: '자갈치시장', region: '중구' },
-    { poiId: 'p5', name: '해운대 블루라인', region: '해운대구' },
-  ],
+  cards: EXPLORE_LANE_CARDS,
   onRetry: noop,
   onPressCard: noop,
 };
@@ -632,6 +665,7 @@ function MustVisitEmptyStartPreview() {
       placeName="부산시립미술관"
       region="부산 부산진구"
       imageUrl={DRAFT_PREVIEW_PHOTOS[0]}
+      imageLicense={DRAFT_PREVIEW_LICENSES[0]}
       dayChips={tripDayChips({
         startDate: '2026-06-10',
         endDate: '2026-06-13',
@@ -751,6 +785,7 @@ const MUST_VISIT_PREVIEW_ITEMS: MustVisitListItem[] = [
     sourcePoiId: 'poi-a',
     name: '부산시립미술관',
     imageUrl: null,
+    imageLicense: null,
     type: 'FIXED',
     fixedDate: '2026-06-11',
     // 서버 원문 모양(`HH:mm:ss`) — 카드는 초를 떼고 `6.11 · 13:00` 으로 그린다(TRIP-988).
@@ -761,6 +796,7 @@ const MUST_VISIT_PREVIEW_ITEMS: MustVisitListItem[] = [
     sourcePoiId: 'poi-b',
     name: '해운대 블루라인파크',
     imageUrl: null,
+    imageLicense: null,
     type: 'ANYTIME',
   },
   {
@@ -768,6 +804,7 @@ const MUST_VISIT_PREVIEW_ITEMS: MustVisitListItem[] = [
     sourcePoiId: 'poi-c',
     name: '감천문화마을',
     imageUrl: null,
+    imageLicense: null,
     type: 'ANYTIME',
   },
 ];
@@ -822,6 +859,12 @@ const DRAFT_PREVIEW_PHOTOS: (string | null)[] = [
   require('./assets/itinerary/draft-preview-3.jpg'),
 ].map((source) => Image.resolveAssetSource?.(source)?.uri ?? null); // 웹에는 이 API 가 없다(네이티브 전용) — 옵셔널 호출로 웹은 null(사진 없는 카드)
 
+/**
+ * TRIP-1740 · `DRAFT_PREVIEW_PHOTOS` 와 같은 순서의 공공누리 유형 — 사진 0=TYPE3(안 자름 → 여백·출처 칩), 1=TYPE1(꽉 채움 + 출처),
+ * 2=null(유형 미수집 → TYPE3 처럼 자르지 않음). 프리뷰 사진은 가로형·세로형을 섞지 못해(에셋 3장) contain 여백 차이는 칸 비율로 본다.
+ */
+const DRAFT_PREVIEW_LICENSES = ['TYPE3', 'TYPE1', null] as const;
+
 // TRIP-710 d06 프리뷰 히어로 — 로컬 라이선스 에셋 재사용(assets/home/hero-view.jpg, CREDITS.md 有).
 // DRAFT_PREVIEW_PHOTOS 와 같은 패턴: jest 는 .uri 가 undefined 라 생성 이미지, 실기만 사진(INV-1 안전).
 const PLACE_DETAIL_PREVIEW_IMAGE: string | null =
@@ -840,6 +883,7 @@ const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     alternatives: [],
     nameKo: '성산일출봉',
     imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+    imageLicense: DRAFT_PREVIEW_LICENSES[0],
     tags: ['바다', '포토'],
     distanceRange: '약 1.2km · 도보 추정',
     lat: 33.458,
@@ -869,6 +913,7 @@ const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     alternatives: [],
     nameKo: '카페 그레이',
     imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+    imageLicense: DRAFT_PREVIEW_LICENSES[1],
     tags: ['카페'],
     lat: 33.4664,
     lng: 126.9276,
@@ -883,6 +928,7 @@ const DRAFT_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     alternatives: [],
     nameKo: '제주 신라스테이',
     imageUrl: DRAFT_PREVIEW_PHOTOS[2],
+    imageLicense: DRAFT_PREVIEW_LICENSES[2],
     tags: [],
     lat: 33.4741,
     lng: 126.9316,
@@ -914,6 +960,7 @@ const H08_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     category: '자연',
     tags: ['바다', '산책'],
     imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+    imageLicense: DRAFT_PREVIEW_LICENSES[0],
     lat: 35.1532,
     lng: 129.1188,
   },
@@ -929,6 +976,7 @@ const H08_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     category: '자연',
     tags: ['전망', '야경'],
     imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+    imageLicense: DRAFT_PREVIEW_LICENSES[1],
     lat: 35.1372,
     lng: 129.1005,
   },
@@ -959,6 +1007,7 @@ const H08_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     category: '카페',
     tags: ['카페', '오션뷰'],
     imageUrl: DRAFT_PREVIEW_PHOTOS[2],
+    imageLicense: DRAFT_PREVIEW_LICENSES[2],
     lat: 35.1889,
     lng: 129.2088,
   },
@@ -1258,6 +1307,7 @@ const H11_COPICK_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     category: '자연',
     tags: ['바다', '산책'],
     imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+    imageLicense: DRAFT_PREVIEW_LICENSES[0],
     distanceRange: null,
     lat: 35.1532,
     lng: 129.1188,
@@ -1274,6 +1324,7 @@ const H11_COPICK_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     category: '자연',
     tags: ['전망', '야경'],
     imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+    imageLicense: DRAFT_PREVIEW_LICENSES[1],
     distanceRange: '차량 · 2.1km',
     lat: 35.1372,
     lng: 129.1005,
@@ -1306,6 +1357,7 @@ const H11_COPICK_PREVIEW_SLOTS: ItineraryDaysItemSlotsItem[] = [
     category: '카페',
     tags: ['카페', '오션뷰'],
     imageUrl: DRAFT_PREVIEW_PHOTOS[2],
+    imageLicense: DRAFT_PREVIEW_LICENSES[2],
     distanceRange: '0.6km',
     lat: 35.1889,
     lng: 129.2088,
@@ -1362,6 +1414,7 @@ type H10View = {
   nameKo?: string | null;
   tags?: string[];
   imageUrl?: string | null;
+  imageLicense: ImageLicense | null | undefined;
   dimmed?: boolean;
 };
 const H10_DEFAULT_VIEWS: Record<string, H10View> = {
@@ -1369,17 +1422,25 @@ const H10_DEFAULT_VIEWS: Record<string, H10View> = {
     nameKo: '부산시립미술관',
     tags: ['미술', '실내', '취향매칭'],
     imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+    imageLicense: DRAFT_PREVIEW_LICENSES[0],
   },
   B2: {
     nameKo: 'F1963 복합문화공간',
     tags: ['갤러리', '카페'],
     imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+    imageLicense: DRAFT_PREVIEW_LICENSES[1],
   },
-  C3: { nameKo: '부산현대미술관', tags: ['미술', '자연'], imageUrl: null },
+  C3: {
+    nameKo: '부산현대미술관',
+    tags: ['미술', '자연'],
+    imageUrl: null,
+    imageLicense: null,
+  },
   D4: {
     nameKo: '감천문화마을',
     tags: ['전시', '포토'],
     imageUrl: DRAFT_PREVIEW_PHOTOS[2],
+    imageLicense: DRAFT_PREVIEW_LICENSES[2],
     dimmed: true,
   },
 };
@@ -1651,36 +1712,42 @@ export const MUST_VISIT_THUMBNAILS = [
     sourcePoiId: 'poi-1',
     name: '감천문화마을',
     imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+    imageLicense: DRAFT_PREVIEW_LICENSES[0],
     region: '사하구',
   },
   {
     sourcePoiId: 'poi-2',
     name: '광안리 해변',
     imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+    imageLicense: DRAFT_PREVIEW_LICENSES[1],
     region: '수영구',
   },
   {
     sourcePoiId: 'poi-3',
     name: '전포 카페거리',
     imageUrl: DRAFT_PREVIEW_PHOTOS[2],
+    imageLicense: DRAFT_PREVIEW_LICENSES[2],
     region: '부산진구',
   },
   {
     sourcePoiId: 'poi-4',
     name: '해운대 해변',
     imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+    imageLicense: DRAFT_PREVIEW_LICENSES[0],
     region: '해운대구',
   },
   {
     sourcePoiId: 'poi-5',
     name: '해동용궁사',
     imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+    imageLicense: DRAFT_PREVIEW_LICENSES[1],
     region: '기장군',
   },
   {
     sourcePoiId: 'poi-6',
     name: '자갈치 시장',
     imageUrl: DRAFT_PREVIEW_PHOTOS[2],
+    imageLicense: DRAFT_PREVIEW_LICENSES[2],
     region: '중구',
   },
 ];
@@ -2201,6 +2268,7 @@ const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
     placeName: '감천문화마을',
     tone: 'visited',
     photo: previewPhoto(require('./assets/execution/live-gamcheon-1.jpg')),
+    imageLicense: 'TYPE3',
     category: '명소',
     timeLabel: '09:30 방문',
     categoryLabel: '마을 · 벽화',
@@ -2212,6 +2280,7 @@ const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
     placeName: '광안리 해변',
     tone: 'visited',
     photo: previewPhoto(require('./assets/execution/live-gwangalli-1.jpg')),
+    imageLicense: 'TYPE1',
     category: '자연',
     timeLabel: '11:00 방문',
     categoryLabel: '바다 · 산책',
@@ -2223,6 +2292,7 @@ const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
     placeName: '부산시립미술관',
     tone: 'visited',
     photo: previewPhoto(require('./assets/execution/replan-night-1.jpg')),
+    imageLicense: null,
     category: '미술',
     timeLabel: '13:00 도착 · 관람 중',
     categoryLabel: '미술 · 실내',
@@ -2234,6 +2304,7 @@ const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
     placeName: '전포 카페거리',
     tone: 'planned',
     photo: previewPhoto(require('./assets/execution/live-gamcheon-2.jpg')),
+    imageLicense: 'TYPE3',
     category: '카페',
     timeLabel: '15:00–16:30',
     categoryLabel: '카페 · 실내',
@@ -2245,6 +2316,7 @@ const REPLAN_DRAFT_PREVIEW_SLOTS: ReplanSlotVM[] = [
     placeName: 'F1963 복합문화공간',
     tone: 'planned',
     photo: previewPhoto(require('./assets/execution/replan-night-1.jpg')),
+    imageLicense: null,
     category: '문화',
     timeLabel: '17:00–18:30',
     categoryLabel: '전시 · 실내',
@@ -2314,6 +2386,7 @@ const LIVE_PLACE_PREVIEW_VIEW: PlaceDetailView = {
   category: '미술관 · 전시',
   tags: ['미술', '실내', '취향매칭', '비와도좋음'],
   imageUrl: null,
+  imageLicense: 'TYPE3', // 갤러리 대표 1장의 유형(다중 사진 계약 없음 — 1장만 쓴다)
   galleryUrls: DRAFT_PREVIEW_PHOTOS.filter(
     (uri): uri is string => uri !== null
   ),
@@ -6874,6 +6947,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         placeName="부산시립미술관"
         region="부산 부산진구"
         imageUrl={DRAFT_PREVIEW_PHOTOS[0]}
+        imageLicense={DRAFT_PREVIEW_LICENSES[0]}
         dayChips={tripDayChips({
           startDate: '2026-06-10',
           endDate: '2026-06-13',
@@ -6900,6 +6974,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         placeName="부산시립미술관"
         region="부산 부산진구"
         imageUrl={DRAFT_PREVIEW_PHOTOS[0]}
+        imageLicense={DRAFT_PREVIEW_LICENSES[0]}
         dayChips={tripDayChips({
           startDate: '2026-06-10',
           endDate: '2026-06-13',
@@ -6926,6 +7001,7 @@ export const PREVIEW_STATES: PreviewState[] = [
         placeName="부산시립미술관"
         region="부산 부산진구"
         imageUrl={DRAFT_PREVIEW_PHOTOS[0]}
+        imageLicense={DRAFT_PREVIEW_LICENSES[0]}
         dayChips={tripDayChips({
           startDate: '2026-06-10',
           endDate: '2026-06-13',
@@ -8091,6 +8167,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           endAt="14:30:00"
           placeSummary={{
             imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+            imageLicense: DRAFT_PREVIEW_LICENSES[0],
             name: '부산시립미술관',
             badgeLabel: '필수',
             region: '부산 부산진구',
@@ -8230,6 +8307,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           nameKo: '부산시립미술관',
           tags: ['미술', '실내'],
           imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+          imageLicense: DRAFT_PREVIEW_LICENSES[0],
           distanceRange: '560m',
         }}
         candidates={[
@@ -8238,6 +8316,7 @@ export const PREVIEW_STATES: PreviewState[] = [
             nameKo: 'F1963 복합문화공간',
             tags: ['카페', '갤러리'],
             imageUrl: DRAFT_PREVIEW_PHOTOS[1],
+            imageLicense: DRAFT_PREVIEW_LICENSES[1],
             distanceRange: '1.1km',
             // 2줄을 넘어 말줄임이 나는 장문(6-b 육안용).
             rationale:
@@ -8247,6 +8326,7 @@ export const PREVIEW_STATES: PreviewState[] = [
             poiId: 'p3',
             nameKo: '부산근대역사관',
             tags: ['지역', '무료'],
+            imageLicense: null,
             distanceRange: '1.8km',
             rationale: '역사 전시를 무료로 볼 수 있어요',
           },
@@ -8274,6 +8354,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           poiId: 'cur',
           nameKo: '부산시립미술관',
           tags: ['미술', '실내'],
+          imageLicense: null,
           distanceRange: '560m',
         }}
         candidates={[]}
@@ -8303,6 +8384,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           nameKo: '부산시립미술관',
           tags: ['미술', '실내'],
           imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+          imageLicense: DRAFT_PREVIEW_LICENSES[0],
           distanceRange: '560m',
         }}
         candidates={[]}
@@ -8331,6 +8413,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           nameKo: '부산시립미술관',
           tags: ['미술', '실내'],
           imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+          imageLicense: DRAFT_PREVIEW_LICENSES[0],
           distanceRange: '560m',
         }}
         candidates={[]}
@@ -8360,6 +8443,7 @@ export const PREVIEW_STATES: PreviewState[] = [
           nameKo: '부산시립미술관',
           tags: ['미술', '실내'],
           imageUrl: DRAFT_PREVIEW_PHOTOS[0],
+          imageLicense: DRAFT_PREVIEW_LICENSES[0],
           distanceRange: '560m',
         }}
         candidates={[]}
@@ -8705,7 +8789,12 @@ export const PREVIEW_STATES: PreviewState[] = [
       <View className="flex-1">
         <MoveDaySheet
           name="부산시립미술관"
-          photo={{ imageUrl: null, poiId: 'poi-a', category: '문화' }}
+          photo={{
+            imageUrl: null,
+            imageLicense: null,
+            poiId: 'poi-a',
+            category: '문화',
+          }}
           subtitle="1일차 · 14:30–15:15 · 감성 · 브런치"
           move={{
             options: [
@@ -8732,7 +8821,12 @@ export const PREVIEW_STATES: PreviewState[] = [
       <View className="flex-1">
         <MoveDaySheet
           name="부산시립미술관"
-          photo={{ imageUrl: null, poiId: 'poi-a', category: '문화' }}
+          photo={{
+            imageUrl: null,
+            imageLicense: null,
+            poiId: 'poi-a',
+            category: '문화',
+          }}
           subtitle="1일차 · 14:30–15:15 · 감성 · 브런치"
           move={null}
           onPressRename={noop}

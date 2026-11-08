@@ -620,6 +620,7 @@ export function ItineraryEditPage({
           endAt={editingSlot.endAt}
           placeSummary={{
             imageUrl: editingSlot.imageUrl ?? null,
+            imageLicense: editingSlot.imageLicense,
             poiId: editingSlot.poiId,
             category: slotDisplayCategory(editingSlot),
             name: slotDisplayName(editingSlot) ?? '',
@@ -639,6 +640,7 @@ export function ItineraryEditPage({
           name={slotDisplayName(movingSlot) ?? ''}
           photo={{
             imageUrl: movingSlot.imageUrl ?? null,
+            imageLicense: movingSlot.imageLicense,
             poiId: movingSlot.poiId,
             category: slotDisplayCategory(movingSlot),
           }}
@@ -717,6 +719,7 @@ export function ItineraryEditPage({
           endAt={pendingDefault.endAt}
           placeSummary={{
             imageUrl: pendingSlot.imageUrl ?? null,
+            imageLicense: pendingSlot.imageLicense,
             poiId: pendingSlot.poiId,
             category: slotDisplayCategory(pendingSlot),
             name: slotDisplayName(pendingSlot) ?? '',

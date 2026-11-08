@@ -7,6 +7,7 @@ import {
 
 import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 
 import {
   MustVisitPickScreen,
@@ -581,6 +582,7 @@ describe('CS-17 · 사진 칸 (사이클 20261022-place-category-covers)', () =>
         saved('sp-b', 'p4', {
           category: '자연',
           imageUrl: 'https://cdn.example.com/p4.jpg',
+          imageLicense: 'TYPE1',
         }),
         saved('sp-c', 'p1', { category: '명소', imageUrl: '' }),
       ],
@@ -593,6 +595,11 @@ describe('CS-17 · 사진 칸 (사이클 20261022-place-category-covers)', () =>
     expect(screen.getByTestId('mustvisit-pick-photo-p4').props.source).toEqual([
       { uri: 'https://cdn.example.com/p4.jpg' },
     ]);
+    // TRIP-1740 AC-7(T10) — d02 select 모드 행도 `Place` 의 imageLicense(TYPE1)를 사진 칸까지 나른다.
+    expectTypeOnePhotoDelivered(
+      'mustvisit-pick-photo-p4',
+      'https://cdn.example.com/p4.jpg'
+    );
     // 빈 문자열 URL 도 "사진 없음" — p1 은 변형 2 → sight-2.
     expect(screen.getByTestId('mustvisit-pick-photo-p1').props.source).toEqual([
       coverFor('명소', 'p1'),

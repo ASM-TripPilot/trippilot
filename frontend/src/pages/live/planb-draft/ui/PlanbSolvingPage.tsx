@@ -323,6 +323,7 @@ function PlanbSolvingBody({
       placeName: slotDisplayName(slot) ?? '',
       tone: 'visited',
       photo: slot.imageUrl ? { uri: slot.imageUrl } : null,
+      imageLicense: slot.imageLicense,
       category: slotDisplayCategory(slot),
       // 서버 값을 읽기만 한다 — 실제 도착(arrivedAt) 또는 검증된 계획 시각(INV-2).
       timeLabel:

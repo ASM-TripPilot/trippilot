@@ -15,7 +15,7 @@ import { CollageEmptyState } from '@/shared/ui/CollageEmptyState';
 import { heartSaveLabel } from '@/shared/ui/HeartButton';
 import { EmptyCollage } from './EmptyCollage';
 import { StateNotice } from '@/shared/ui/StateNotice';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import type { PlaceListState } from '@/features/explore/index.view';
@@ -164,12 +164,13 @@ function SavedPlaceRow({
       <View
         className={`h-20 w-[104px] overflow-hidden rounded-thumb bg-surface-strong${dim}`}
       >
-        <PlacePhoto
+        <PoiPhoto
           testID={`explore-saved-photo-${saved.savedPlaceId}`}
           imageUrl={place.imageUrl}
+          imageLicense={place.imageLicense}
+          surface="thumb"
           category={place.category}
           poiId={place.poiId}
-          contentFit="cover"
           className="h-full w-full"
         />
         {badge ? (

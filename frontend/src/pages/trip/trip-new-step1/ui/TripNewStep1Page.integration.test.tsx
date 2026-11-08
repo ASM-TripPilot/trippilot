@@ -2124,6 +2124,7 @@ describe('재진입 — 만든 여행 고치기 (AC-1~AC-11)', () => {
 
   function seedItem(sourcePoiId: string): MustVisitSeedItem {
     return {
+      imageLicense: null,
       sourcePoiId,
       name: `장소 ${sourcePoiId}`,
       imageUrl: null,

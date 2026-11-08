@@ -235,6 +235,7 @@ export function MustVisitTimePage({
       placeName={place?.nameKo ?? null}
       region={place?.region ?? null}
       imageUrl={place?.imageUrl ?? null}
+      imageLicense={place?.imageLicense}
       category={place?.category}
       dayChips={dayChips}
       startOptions={startTimeOptions()}

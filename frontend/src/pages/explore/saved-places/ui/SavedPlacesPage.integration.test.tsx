@@ -589,6 +589,7 @@ describe('save', () => {
       useTripWizardStore.setState({
         mustVisits: [
           {
+            imageLicense: null,
             sourcePoiId: 'poi-x',
             name: '남겨진 곳',
             imageUrl: null,
@@ -1607,7 +1608,7 @@ describe('select › 위저드', () => {
     name = `장소 ${sourcePoiId}`,
     region: string | null = null
   ): MustVisitSeedItem {
-    return { sourcePoiId, name, imageUrl: null, region };
+    return { imageLicense: null, sourcePoiId, name, imageUrl: null, region };
   }
 
   function seededIds(): string[] {
@@ -2746,6 +2747,7 @@ describe('select › 여행', () => {
       ],
       mustVisits: [
         {
+          imageLicense: null,
           sourcePoiId: 'bs2',
           name: '장소 bs2',
           imageUrl: null,
