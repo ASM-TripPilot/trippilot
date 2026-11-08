@@ -3342,3 +3342,67 @@ def test_night_view_sentences_keep_the_sql_answer_with_open_search_on(utterance,
                       place_sql=_PlaceSql(_night_sql_rows(arguments["region"])))
     assert on == off and _names_of(on) == [f"{arguments['region']} 전망 A", f"{arguments['region']} 전망 B"]
     assert store.calls == [] and embedding.calls == [] and "doc" not in results["explore"].value  # 검색을 돌지도 않는다
+
+
+# ── 후보 답의 미리 찾기 (UnknownHandlingAgent, 2026-11-08 사용자 결정 "찾다가 나온 장소의 빈 칸은 웹으로 채우자") ─────────────
+
+
+class _Prefetcher:
+    """UnknownHandlingAgent 대역 — 넘겨받은 일만 모은다(뒤에서 도는 일은 에이전트 테스트 몫)."""
+
+    def __init__(self) -> None:
+        self.tasks: list = []
+
+    def run(self, task):
+        self.tasks.append(task)
+        return UnknownOutcome()
+
+
+class _PrefetchRows:
+    """POI_INFO 대역 — 준 행 그대로(종류·영업시간 문구·입장료만 본다)."""
+
+    def __init__(self, rows: list[dict]) -> None:
+        self.rows, self.calls = rows, []
+
+    def fetch(self, params: dict) -> InfoPacket:
+        self.calls.append(params)
+        pois = [r for r in self.rows if PoiId(r["poi_id"]) in params["poi_ids"]]
+        return InfoPacket(ProviderKind.POI_INFO, ProviderStatus.OK, {"pois": pois, "misses": []}, _fresh(params["now"]))
+
+
+def _prefetch_candidates(*places: dh.FactPlace) -> Facts:
+    payload = {"candidates": [{"poiId": p.poi_id, "name": p.name, "reason": "근처의 대안"} for p in places]}
+    return Facts(Intent.EXPLORE_PLACES, FactStatus.OK, AnswerKind.CANDIDATES, rows=(), places=places, notes=(), payload=payload,
+                 next_actions=(dh._action("OPEN_ITINERARY"),), quick_replies=(), template_text="가 볼 만한 곳을 찾아봤어요.")
+
+
+_PREFETCH_PLACES = (("s1", "해동용궁사", "명소"), ("f1", "돼지국밥집", "맛집"), ("s2", "감천문화마을", "명소"), ("m1", "신세계센텀시티", "쇼핑"))
+_PREFETCH_ROWS = [
+    {"poi_id": "s1", "category": "SIGHT", "hours_label": "영업시간 정보 없음", "fee": None},
+    {"poi_id": "f1", "category": "FOOD", "hours_label": "영업시간 정보 없음", "fee": None},
+    {"poi_id": "s2", "category": "SIGHT", "hours_label": "09:00~18:00", "fee": 3000},
+    {"poi_id": "m1", "category": "SHOPPING", "hours_label": "영업시간 정보 없음", "fee": None},
+]
+
+
+def test_prefetch_hands_the_first_shown_places_to_the_agent_and_finds_gaps_only_behind() -> None:
+    """후보 답 앞쪽 세 곳만, 이름 + 지역으로 넘긴다(답에는 손대지 않는다). 빈 칸은 미리 찾기가 뒤에서 등록 정보로 가른다 — 관광 종류만
+    (맛집·카페·술집은 물을 때만), 영업시간이 없으면 영업시간·입장 마감·휴무일, 쇼핑 밖에 입장료가 없으면 입장료."""
+    agent, rows = _Prefetcher(), _PrefetchRows(_PREFETCH_ROWS)
+    ctx = _ctx(arguments={"region": "부산"}, ports=HandlerPorts(poi_info=rows, unknown=agent))
+    dh.prefetch_unknown(ctx, _prefetch_candidates(*(dh.FactPlace(p, n, c) for p, n, c in _PREFETCH_PLACES)))
+    (task,) = agent.tasks
+    assert task.places == (("s1", "해동용궁사 부산"), ("f1", "돼지국밥집 부산"), ("s2", "감천문화마을 부산"))  # 네 번째는 넘기지 않는다
+    assert rows.calls == []  # 등록 정보 조회는 이번 턴에 하지 않는다 — 미리 찾기가 뒤에서 부른다
+    assert task.gaps(("s1", "f1", "s2")) == {"s1": ("hours", "last_entry", "closed", "fee")}  # 맛집·빈 칸 없는 곳은 빠진다
+    assert task.gaps(("m1",)) == {"m1": ("hours", "last_entry", "closed")}  # 쇼핑에는 입장료를 묻지 않는다
+    assert (task.on, task.trace_id, task.now) == (ctx.today, ctx.trace_id, ctx.now)
+
+
+def test_prefetch_skips_answers_without_candidates_and_a_missing_agent() -> None:
+    agent = _Prefetcher()
+    places = tuple(dh.FactPlace(p, n, c) for p, n, c in _PREFETCH_PLACES)
+    info = dh.need_trip_facts(Intent.GET_POI_INFO)  # 후보 답이 아니다(장소 정보·일정·날씨 답은 물을 때 찾는다)
+    dh.prefetch_unknown(_ctx(ports=HandlerPorts(poi_info=_PrefetchRows(_PREFETCH_ROWS), unknown=agent)), info)
+    assert agent.tasks == []
+    dh.prefetch_unknown(_ctx(ports=HandlerPorts(poi_info=_PrefetchRows(_PREFETCH_ROWS))), _prefetch_candidates(*places))  # 에이전트 미배선 — 조용히 넘어간다
