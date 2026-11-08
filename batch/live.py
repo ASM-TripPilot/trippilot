@@ -111,7 +111,7 @@ def collect(repo: Path, script: str, *args: str, env: dict[str, str] | None = No
 
 def plain_env() -> dict[str, str]:
     """**수집기**(`uv run python scripts/collect/…`)에 주는 환경 — 파드 환경에서 GH_TOKEN 만 뺀다. 수집기는 API 키·상한
-    (TOUR_API_KEY·NAVER_*·OPENAI_* …)이 필요해 나머지는 그대로 넘긴다. 메타 DB 접속 문자열 같은 Airflow 설정도 남는다 —
+    (TOUR_API_KEY·NAVER_*·ANTHROPIC_* …)이 필요해 나머지는 그대로 넘긴다. 메타 DB 접속 문자열 같은 Airflow 설정도 남는다 —
     수집기는 리포 코드라 믿는 범위다. 의존성 설치는 `install_env()`(허용 목록)를 쓴다."""
     return {k: v for k, v in os.environ.items() if k != "GH_TOKEN"}
 
