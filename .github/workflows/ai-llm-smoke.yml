@@ -10,15 +10,17 @@
 # 그대로 유지된다 — 실모델 호출은 일일 스케줄 1건 + 사람이 Run workflow를 눌렀을 때만.
 #
 # schedule 이벤트에는 inputs가 없어 `inputs.*`가 전부 빈 값 — env 매핑의
-# `inputs.x || '기본값'` 폴백이 스케줄 실행의 기본 구성(openai · gpt-5.6-terra ·
-# responses)을 보장한다. endpoint는 repo Variable AZURE_OPENAI_ENDPOINT 폴백.
+# `inputs.x || '기본값'` 폴백이 스케줄 실행의 기본 구성(anthropic · claude-opus-5-5)을
+# 보장한다. 기능별 모델은 아래 .env.example 배정(전부 claude-*)을 따른다.
 #
-# 키는 Repository Secret `AZUREAPIKEY`에서만 온다: 등록 후 값은 누구도 다시 볼 수 없고,
-# 로그에 찍히면 자동 마스킹되며, 포크 PR에는 전달되지 않는다.
+# 기본 키는 Repository Secret `ANTHROPIC_API_KEY`(CI 전용): 등록 후 값은 누구도 다시 볼 수
+# 없고, 로그에 찍히면 자동 마스킹되며, 포크 PR에는 전달되지 않는다.
 #
-# 멘토 제공 엔드포인트는 Azure **v1 API 표면**(…services.ai.azure.com/openai/v1) — 표준
-# OpenAI 클라이언트 + base_url 방식이라 api-version이 필요 없다 → 기본 provider는 openai.
-# azure(구식 AzureOpenAI + api-version) 선택지는 다른 엔드포인트 대비용으로만 남긴다.
+# 기본이 anthropic 인 이유(TRIP-1833): 서비스는 10-30 에 Claude 로 통일됐고(#1692), 종전 기본
+# (openai·mixed)이 쓰던 멘토 Azure 게이트웨이 키(`AZUREAPIKEY`)는 10-24 부터 401 이라 이 스모크가
+# 매일 빨갰다 — mixed 도 OpenAI 어댑터를 함께 조립해 같은 401 이다. 스모크는 운영이 실제로 부르는
+# 제공자를 봐야 한다. openai·azure·mixed 는 다른 게이트웨이를 확인할 때 수동 선택지로만 남긴다
+# (Azure v1 표면 …/openai/v1 = openai, 구식 AzureOpenAI + api-version = azure).
 #
 # 엔드포인트처럼 비밀 아닌 설정은 Repository **Variables**
 # (Settings → Secrets and variables → Actions → Variables 탭)에 두면 매번 입력을 생략할 수
@@ -38,10 +40,12 @@ on:
   workflow_dispatch:
     inputs:
       provider:
-        description: 'LLM 제공자 (v1 표면 = openai)'
+        # 기본은 운영과 같은 anthropic — 수동 실행에도 이 기본값이 채워지므로, 아래
+        # `inputs.provider || 'anthropic'` 폴백과 같아야 "수동과 스케줄"이 갈라지지 않는다(실측: run 33523506956).
+        description: 'LLM 제공자 (운영과 동일한 anthropic 권장 · openai·azure·mixed 는 Azure 게이트웨이 확인용)'
         type: choice
-        options: [openai, azure]
-        default: openai
+        options: [anthropic, mixed, openai, azure]
+        default: anthropic
       endpoint:
         description: 'base_url — /openai/v1 까지만, /responses 등 경로 제외 (비우면 repo Variable AZURE_OPENAI_ENDPOINT)'
         required: false
@@ -51,7 +55,7 @@ on:
         required: false
         type: string
       model:
-        description: '배포 이름 (gpt-5.6-terra | gpt-5.6-sol | gpt-5.6-luna)'
+        description: 'openai·azure·mixed 전용 배포 이름 (gpt-5.6-terra | gpt-5.6-sol | gpt-5.6-luna)'
         default: 'gpt-5.6-terra'
         type: string
       api:
@@ -76,7 +80,7 @@ jobs:
       run:
         working-directory: ai
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: develop   # 실행 코드는 develop (main의 ai/는 구버전)
       - uses: astral-sh/setup-uv@v6
@@ -84,10 +88,23 @@ jobs:
           enable-cache: true
           cache-dependency-glob: ai/uv.lock
       - run: uv sync --locked
+      # 모델 배정의 정본은 .env.example 한 곳 — 여기에 값을 복사해 두면
+      # "운영은 sol/claude, 리허설은 terra" 가 조용히 갈라진다(실제로 갈라져 있었다).
+      # working-directory 가 ai/ 라 정본은 상위에 있다.
+      - name: 기능별 모델 배정 로드 (.env.example = 정본)
+        run: |
+          v=$(sed -n 's/^AI_LLM_FEATURE_MODELS=//p' ../.env.example | head -1)
+          [ -n "$v" ] || { echo "::error::.env.example 에 AI_LLM_FEATURE_MODELS 가 비어 있다"; exit 1; }
+          echo "TRIPPILOT_LLM_FEATURE_MODELS=$v" >> "$GITHUB_ENV"
+          echo "::notice::리허설 모델 배정 = $v"
       - name: 실모델 스모크 1건 (프롬프트 렌더 → 호출 → 게이트 파싱)
         env:
           # schedule 실행에선 inputs.*가 전부 빈 값 — || 기본값이 성립해야 한다
-          LLM_PROVIDER: ${{ inputs.provider || 'openai' }}
+          LLM_PROVIDER: ${{ inputs.provider || 'anthropic' }}
+          # anthropic·mixed 가 쓰는 CI 전용 키 — 개인·팀 볼트 키와 별개.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # 미배정 기능·INTENT 스모크의 기본 모델 = 운영 기본(.env.example 의 운영 주석과 같다)
+          ANTHROPIC_MODEL: claude-opus-5-5
           # 같은 시크릿을 두 이름으로 노출 — 제공자 선택에 따라 스크립트가 맞는 쪽을 읽는다
           AZURE_OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
           OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
@@ -160,7 +177,11 @@ jobs:
         if: steps.fetch-pois.outputs.skipped != 'true'
         env:
           # LLM env는 위 INTENT 스모크 스텝과 동일 매핑
-          LLM_PROVIDER: ${{ inputs.provider || 'openai' }}
+          LLM_PROVIDER: ${{ inputs.provider || 'anthropic' }}
+          # anthropic·mixed 가 쓰는 CI 전용 키 — 개인·팀 볼트 키와 별개.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # 미배정 기능·INTENT 스모크의 기본 모델 = 운영 기본(.env.example 의 운영 주석과 같다)
+          ANTHROPIC_MODEL: claude-opus-5-5
           AZURE_OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
           OPENAI_API_KEY: ${{ secrets.AZUREAPIKEY }}
           AZURE_OPENAI_ENDPOINT: ${{ inputs.endpoint || vars.AZURE_OPENAI_ENDPOINT }}
@@ -179,6 +200,10 @@ jobs:
           EVENTS_STORE: collected_events.json
           # TRIP-524 — 있으면 품질 floors 게이트(FAIL)·3σ 회귀(WARNING), 없으면 무게이트
           SMOKE_BASELINE_JSON: rehearsal_baseline.json
+          # TRIP-869 후속 — 리허설 결과에 LLM 비용을 실어 rehearsal_log.jsonl 시계열에
+          # 누적한다. 없으면 cost=null(모름). Claude 배정은 금액이 잡히고, 멘토 게이트웨이
+          # (openai·azure 수동 실행)는 unpriced 가 정상이다.
+          TRIPPILOT_LLM_PRICE_FILE: config/llm-prices.json
         run: uv run python scripts/smoke/smoke_itinerary.py
       # 후속 3스텝은 !cancelled() — 품질 게이트 FAIL(exit 1)로 잡이 붉어도 그날
       # 기록·artifact는 남긴다 (TRIP-524): 회귀가 처음 발생한 날의 증빙이 가장 귀하다.
@@ -224,7 +249,7 @@ jobs:
           ) || echo "::warning::리허설 로그 push 실패 — 기록만 유실 (리허설 자체는 성공)"
       - name: 리허설 결과 artifact 보존 (30일)
         if: steps.fetch-pois.outputs.skipped != 'true' && !cancelled()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: rehearsal-result
           path: ai/rehearsal_result.json
