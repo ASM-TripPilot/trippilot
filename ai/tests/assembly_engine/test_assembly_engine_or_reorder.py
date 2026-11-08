@@ -16,7 +16,8 @@ B = A 의 visit 고정 + A 목적식 ≥ A 목적값(사전식) 아래에서 도
   ⑦ A 가 결정론으로 끝났으면 일자 몫(벽시계)이 다 써졌어도 B 를 돌린다 — 부하가 순서를 정하지 않게
   ⑧ B 미채택은 WARNING 으로 남는다(침묵 금지)
   ⑨ B 는 시각에 대기를 끼워 넣지 않는다 — 거리 동률이면 이른 시각(Σstart 타이브레이크)
-  ⑩ B 는 숙소를 나서는 시각(첫 방문 시작 − 앵커 이동)을 A 보다 늦추지 않는다(2026-11-09) — ⑥ 에도 걸었다
+  ⑩ B 는 A 의 하루 틀 안에서만 순서를 바꾼다(2026-11-09) — 숙소를 나서는 시각(첫 방문 시작 − 앵커 이동)과
+     마지막 방문 끝이 A 보다 늦지 않다(⑥ 에도 걸었다). 거리 다음은 하루 길이 — 이른 아침 한 곳 뒤 긴 대기를 끼우지 않는다
 """
 
 from __future__ import annotations
@@ -258,7 +259,7 @@ def test_reorder_adds_no_idle_wait() -> None:
     assert _idle_min(b.days[0].slots, index, problem) == 0
 
 
-# ⑩ 출발을 늦추지 않는다 — 숙소를 나서는 시각 = 첫 방문 시작 − 앵커 이동(고정 블록이 첫 방문이면 이동 0, 조립과 같다)
+# ⑩ 하루 틀 — 숙소를 나서는 시각 = 첫 방문 시작 − 앵커 이동(고정 블록이 첫 방문이면 이동 0, 조립과 같다)
 def _depart(day_sol, index, problem):
     if not day_sol.slots:
         return None
@@ -300,6 +301,10 @@ def test_reorder_does_not_delay_departure() -> None:
     b = _solve(_CFG, problem, index, remaining_ms=5000)
     assert {s.poi_id for s in b.days[0].slots} == {s.poi_id for s in a.days[0].slots}
     assert _depart(b.days[0], index, problem) <= _depart(a.days[0], index, problem)
+    sa, sb = a.days[0].slots, b.days[0].slots
+    assert sb[-1].end_at <= sa[-1].end_at
+    # 하루 길이 순위 — Σ시작만 두면 출발 상한 안에서 첫 방문을 06:33 카페로 당기고 다음 곳(11:00)까지 200분을 기다렸다
+    assert sb[-1].end_at - sb[0].start_at <= sa[-1].end_at - sa[0].start_at
     assert _road_km(b.days[0].slots, index, problem) <= _road_km(a.days[0].slots, index, problem) + 0.01
     assert check_all(b, problem, index, _EST) == []
 
@@ -358,5 +363,6 @@ def test_reorder_property_same_set_score_and_no_longer(setup) -> None:
         # B 는 미터 정수로 푼다 — 반올림 몫(구간당 0.5m)만 허용
         tol = 0.001 * (len(db.slots) + 1)
         assert _road_km(db.slots, index, problem) <= _road_km(da.slots, index, problem) + tol
-        if da.slots:  # ⑩ 출발을 늦추지 않는다
+        if da.slots:  # ⑩ 하루 틀 — 출발도 끝도 A 보다 늦지 않다
             assert _depart(db, index, problem) <= _depart(da, index, problem)
+            assert db.slots[-1].end_at <= da.slots[-1].end_at
