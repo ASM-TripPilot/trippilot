@@ -159,6 +159,8 @@ export interface MapViewProps {
 
 /** 네이버 초기 줌. ponytail: 카카오 기본 level 3 에 대응하는 대략값, 정확 캘리브레이션은 실기(6-b). */
 const INITIAL_ZOOM = 14;
+/** 내 위치 점을 켜도 되는 수평 오차 상한(m) — 첫 측위는 기지국·와이파이라 수십 km 빗나갈 수 있다(TRIP-1832 티켓 권고값). */
+const MY_LOCATION_MAX_ACCURACY_M = 100;
 
 /**
  * 물방울 핀 한 개(상태별). current·기본 = 분홍 채움 + 흰 번호, upcoming = 흰 채움 + 회색 테두리·회색
@@ -545,25 +547,51 @@ function MapViewImpl({
 
   // TRIP-1535 — 내 위치. 추적 모드는 prop 이 아니라 ref 호출이다. 맞춤↔카메라 전환으로 지도가 다시 마운트되면
   // (key 변경) 새 지도에 다시 건다.
+  // TRIP-1832 — SDK 기본 현위치는 정확도로 거를 수 없어(첫 측위가 수십 km 빗나간 채 그려진다) 켜는 시점을 늦춘다:
+  // 우리가 위치를 감시하다 오차가 상한 안으로 들어오면 켜고 감시를 푼다(배터리).
+  // ponytail: 끝내 정확해지지 않으면(실내·iOS 「정확한 위치」 끔) 점이 안 뜬다 — 먼 곳에 뜨는 것보다 낫다는 티켓 판단. 불만이 나오면 시간 상한을 더한다.
   const regionMode = region !== null;
   useEffect(() => {
     if (showMyLocation !== true) return;
     let alive = true;
     let applied = false;
+    let watching = false; // 감시를 걸었거나 거는 중 — 앱 복귀 재확인이 감시를 또 걸지 않게.
+    let watch: { remove: () => void } | null = null;
     let armedMap: NaverMapViewRef | null = null; // 켠 그 지도를 기억해 끌 때 같은 지도에 끈다(ref 는 그새 바뀔 수 있다).
+    const onFix = (location: Location.LocationObject): void => {
+      // OS 가 오차를 안 주면(null) 판단할 수 없으니 통과시킨다 — 점이 영영 안 뜨는 쪽이 더 나쁘다.
+      const { accuracy } = location.coords;
+      if (!alive || applied) return;
+      if (accuracy != null && accuracy > MY_LOCATION_MAX_ACCURACY_M) return;
+      armedMap = mapRef.current;
+      armedMap?.setLocationTrackingMode('NoFollow');
+      applied = true;
+      watch?.remove();
+      watch = null;
+    };
     const tryApply = (): void => {
-      if (applied) return;
+      if (applied || watching) return;
+      watching = true;
       // Promise.resolve 로 감싸 조회가 동기로 던져도(목·미설치) 렌더를 깨지 않고 '안 보임'으로 접는다.
       Promise.resolve()
         .then(() => Location.getForegroundPermissionsAsync())
-        .then((permission) => {
-          if (!alive || applied || permission?.status !== 'granted') return;
-          armedMap = mapRef.current;
-          armedMap?.setLocationTrackingMode('NoFollow');
-          applied = true;
+        .then((permission) =>
+          alive && permission?.status === 'granted'
+            ? Location.watchPositionAsync(
+                { accuracy: Location.Accuracy.High },
+                onFix
+              )
+            : null
+        )
+        .then((subscription) => {
+          // 권한이 없으면 다음 복귀 때 다시 본다. 약속이 풀리기 전에 켜졌거나 화면을 끄면 곧장 푼다.
+          if (subscription === null) watching = false;
+          else if (alive && !applied) watch = subscription;
+          else subscription.remove();
         })
         .catch(() => {
-          // 권한 조회 실패 = 안 보인다(안내 없음).
+          // 권한 조회·감시 실패 = 안 보인다(안내 없음). 복귀 때 다시 시도한다.
+          watching = false;
         });
     };
     tryApply();
@@ -574,6 +602,7 @@ function MapViewImpl({
     return () => {
       alive = false;
       subscription?.remove(); // jest RN 목은 구독 객체를 안 돌려준다
+      watch?.remove();
       if (applied) armedMap?.setLocationTrackingMode('None');
     };
   }, [showMyLocation, regionMode]);

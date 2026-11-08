@@ -12,7 +12,7 @@ import {
 
 import { useBootstrapGate, type BootstrapDestination } from '@/features/auth';
 import {
-  documentFileCount,
+  documentFileNames,
   failFileReads,
   failFileWrites,
   resetFakeFs,
@@ -121,6 +121,17 @@ jest.mock('expo-secure-store', () => ({
   },
 }));
 
+// 하한 기준점(JS 모듈 로드 시각)은 모듈 최상위 값이라 테스트가 못 바꾼다 — 기본은 실물 그대로 두고(기존 케이스는 시계를 하한만큼 흘려 통과), `mockBootAsNow` 를 켠 describe 만
+// "마운트 시각"으로 읽게 한다(TRIP-1831 「스플래시 설치 표식」).
+let mockBootAsNow = false;
+jest.mock('./bootClock', () => ({
+  get BOOT_MODULE_LOADED_AT() {
+    return mockBootAsNow
+      ? Date.now()
+      : jest.requireActual('./bootClock').BOOT_MODULE_LOADED_AT;
+  },
+}));
+
 const mockUseBootstrapGate = useBootstrapGate as jest.MockedFunction<
   typeof useBootstrapGate
 >;
@@ -200,6 +211,9 @@ const ROUTES = {
 };
 
 type RouterApp = ReturnType<typeof renderRouter>;
+
+/** TRIP-1831 — 스플래시를 끝까지 봤다는 설치 표식 파일(문서 폴더, `install-flag-` 접두는 `installFlag.ts` 가 붙인다). */
+const SPLASH_FLAG = 'install-flag-splash-seen';
 
 /** 루트 스택에 남은 라우트 이름들(스와이프 뒤로가 되짚을 화면). 최상위는 expo-router 의 래퍼라 그 안을 읽는다. */
 function rootStackNames(app: RouterApp): string[] {
@@ -704,9 +718,14 @@ describe('권한 안내는 진짜 라우터에서 홈보다 먼저, 한 번만 (
     primeOsPermission(Notifications, push, 'granted');
   }
 
-  /** "봤음" 기록이 어디에도 안 남았다 — 문서 폴더에도, 키체인에도. */
+  /**
+   * "봤음" 기록이 어디에도 안 남았다 — 문서 폴더에도, 키체인에도. 스플래시 표식(`install-flag-splash-seen`, TRIP-1831)은 같은 폴더에
+   * 하한이 울린 뒤 쓰이지만 이 안내와 무관하니 센 것에서 뺀다(그 표식은 아래 「스플래시 설치 표식」 describe 가 따로 본다).
+   */
   function expectNoFlag(): void {
-    expect(documentFileCount()).toBe(0);
+    expect(documentFileNames().filter((name) => name !== SPLASH_FLAG)).toEqual(
+      []
+    );
     expect(mockVault.size).toBe(0);
   }
 
@@ -1121,7 +1140,7 @@ describe('권한 안내는 진짜 라우터에서 홈보다 먼저, 한 번만 (
       osState('undetermined', 'undetermined');
       const first = await openCatchUp();
       expect(first.getPathname()).toBe('/permission-location');
-      expect(documentFileCount()).toBeGreaterThan(0);
+      expect(documentFileNames()).toContain('install-flag-permission-catchup');
       expect(mockVault.size).toBe(0); // 키체인에는 쓰지 않는다
 
       // 실행 — 앱을 껐다 켠다(OS 권한은 여전히 미결정: iOS "한 번만 허용" 같은 경우)
@@ -1318,5 +1337,115 @@ describe('SplashGate → 생성 완료 감지 배선 (TRIP-1618)', () => {
 
     // 단언 2
     expect(toast).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── TRIP-1831 · 스플래시 설치 표식 ────────────────────────────────────────────────────────────────────────────────────────
+// 진짜 라우터 + 메모리 파일 대역으로 두 번의 실행을 흉내 낸다: 첫 실행은 하한 1300ms 를 지키고 끝나면 표식 파일을 남기며,
+// 표식이 있는 다음 실행(같은 샌드박스)은 하한 없이 부트스트랩이 준비되는 즉시 걷힌다. 앱을 지우면(샌드박스 비움) 다시 첫 실행이다.
+// 노드 단위(마운트 직후 타이머 구조·답이 늦게 오는 순서·붙잡기 연동)는 `SplashGate.test` 가 본다.
+describe('스플래시 설치 표식 (TRIP-1831)', () => {
+  // 하한 기준점은 JS 모듈 로드 시각(`BOOT_MODULE_LOADED_AT`)이라 실물을 쓰면 이 파일이 늦게 돌수록 이미 흐른 시간만큼 하한이 짧아지고 `renderRouter` 는 가짜 시계를 새로 깐다
+  // (기준점을 "마운트 시각"으로 읽게 파일 위 목을 켠다 — 경과 0 에서 시작해 1300ms 경계를 잴 수 있다).
+  beforeEach(() => {
+    mockBootAsNow = true;
+  });
+  afterEach(() => {
+    mockBootAsNow = false;
+  });
+  async function settle(): Promise<void> {
+    for (let i = 0; i < 6; i += 1) {
+      await act(async () => {});
+    }
+  }
+  const advance = (ms: number) =>
+    act(() => {
+      jest.advanceTimersByTime(ms);
+    });
+  const splashUp = () => screen.queryByTestId('shell-splash-root') !== null;
+  const homeUp = () => screen.queryByTestId('home-root') !== null;
+
+  /** 앱을 열고 하한 직전까지 스플래시임을 확인한 뒤 하한을 넘긴다 — 첫 실행의 모양. */
+  async function firstLaunch(): Promise<RouterApp> {
+    const app = renderRouter(ROUTES, { initialUrl: '/' });
+    await settle();
+    advance(SPLASH_MIN_VISIBLE_MS - 1);
+    await settle();
+    expect(splashUp()).toBe(true);
+    advance(1);
+    await settle();
+    expect(homeUp()).toBe(true);
+    return app;
+  }
+
+  it('E1 첫 실행: 하한 직전까지 스플래시, 1300ms 에 홈이 열리고 그 뒤 표식 파일이 남는다 (직전엔 없다)', async () => {
+    const app = renderRouter(ROUTES, { initialUrl: '/' });
+    await settle();
+    advance(SPLASH_MIN_VISIBLE_MS - 1);
+    await settle();
+    expect(splashUp()).toBe(true);
+    expect(documentFileNames()).not.toContain(SPLASH_FLAG); // 비행을 다 보여 주기 전엔 안 쓴다
+
+    advance(1);
+    await settle();
+
+    expect(homeUp()).toBe(true);
+    expect(documentFileNames()).toContain(SPLASH_FLAG);
+    expect(mockVault.size).toBe(0); // 키체인에는 쓰지 않는다(재설치해도 남는 저장소라 "설치 단위" 가 아니다)
+    app.unmount();
+  });
+
+  it('E2 재방문(표식이 남은 샌드박스): 하한을 기다리지 않고 부트스트랩이 준비되자마자 홈이 열린다 — 시계는 한 틱도 안 흘렸다', async () => {
+    // 준비: 첫 실행을 끝내고 앱을 끈다.
+    const first = await firstLaunch();
+    first.unmount();
+
+    // 실행: 같은 샌드박스로 다시 연다 — 시계를 흘리지 않고 약속만 푼다.
+    renderRouter(ROUTES, { initialUrl: '/' });
+    await settle();
+
+    // 단언: 하한(1300ms)을 기다리지 않고 이미 홈이다.
+    expect(homeUp()).toBe(true);
+    expect(splashUp()).toBe(false);
+  });
+
+  it('E3 앱을 지웠다 다시 깔면(샌드박스 비움) 다시 첫 실행이다 — 하한 1300ms 를 지킨다', async () => {
+    const first = await firstLaunch();
+    first.unmount();
+    resetFakeFs(); // 앱 삭제 = 문서 폴더가 비워진다
+
+    renderRouter(ROUTES, { initialUrl: '/' });
+    await settle();
+    advance(SPLASH_MIN_VISIBLE_MS - 1);
+    await settle();
+
+    expect(splashUp()).toBe(true);
+    advance(1);
+    await settle();
+    expect(homeUp()).toBe(true);
+  });
+
+  it('E4 표식 쓰기가 실패해도(디스크 가득) 앱은 그대로 열린다 — 하한 뒤 홈이 열리고 오류가 번지지 않는다', async () => {
+    failFileWrites();
+
+    const app = await firstLaunch(); // 하한 직전 스플래시 → 하한 뒤 홈(헬퍼 안 단언)
+
+    expect(homeUp()).toBe(true);
+    expect(splashUp()).toBe(false);
+    app.unmount();
+  });
+
+  it('E5 표식 읽기가 실패하면 첫 실행으로 접는다 — 하한 1300ms 를 지킨다 (INV-4)', async () => {
+    failFileReads();
+
+    renderRouter(ROUTES, { initialUrl: '/' });
+    await settle();
+    advance(SPLASH_MIN_VISIBLE_MS - 1);
+    await settle();
+    expect(splashUp()).toBe(true);
+
+    advance(1);
+    await settle();
+    expect(homeUp()).toBe(true);
   });
 });

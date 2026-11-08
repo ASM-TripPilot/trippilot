@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useEffect, useState, type ReactElement } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 
@@ -11,6 +11,7 @@ import {
   useTripCoverPhoto,
   useTripSummary,
 } from '@/features/reflection';
+import { hasSeenSummary, markSummarySeen } from '../model/seenSummaries';
 import { TripSummaryScreen } from './TripSummaryScreen';
 import { tripDayChips } from '@/features/add-must-visit';
 import { formatDayLabel } from '@/entities/trip';
@@ -85,6 +86,13 @@ export function TripSummaryPage({
     tripId,
     totalPhotos: summaryReady ? data?.stats.totalPhotos : undefined,
   });
+  // TRIP-1831 · 이 세션에서 이미 본 요약이면 연출 없이 바로 보인다 — 판정은 **첫 렌더에 굳힌다**(재생 도중 뒤집히면 `RevealItem` 이 끝으로 점프한다).
+  // 렌더 본문이 아니라 `useState` 초기화 함수에서만 읽는다(React Compiler 가 모듈 Set 읽기를 첫 값으로 메모할 수 있다 — jest 는 컴파일러를 안 태운다).
+  const [revealing] = useState(() => !hasSeenSummary(tripId));
+  // "봤음" 은 요약 얼굴이 처음 서는 순간 적는다 — 대기·실패 얼굴만 보고 나간 요약을 봤다고 치지 않는다.
+  useEffect(() => {
+    if (summaryReady) markSummarySeen(tripId);
+  }, [summaryReady, tripId]);
   const automationOn = isLocationAutomationEnabled();
   const routes = useTripRoutes(automationOn ? tripId : null);
   const tripDays = trip.data ? tripDayChips(trip.data) : [];
@@ -177,6 +185,7 @@ export function TripSummaryPage({
       vm={vm}
       view={resolveSummaryView(data.stats)}
       shareEnabled={shareEnabled(envelope)}
+      revealing={revealing}
       // TRIP-939 Q2: 공유 카드의 저장·공유가 미장전이면 진입점([공유])을 넘기지 않는다(막다른 화면 차단).
       onShare={
         isShareCaptureArmed()

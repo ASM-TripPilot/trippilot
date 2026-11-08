@@ -275,6 +275,14 @@ export function documentFileCount(): number {
   ).length;
 }
 
+/** 문서 폴더 바로 아래 파일 이름들(이름순) — 어떤 "한 번 했음" 표식이 남았는지 이름으로 본다(TRIP-1831 — 스플래시 표식과 권한 안내 표식이 같은 폴더를 쓴다). */
+export function documentFileNames(): string[] {
+  return [...state.files.keys()]
+    .filter((path) => parentOf(path) === DOCUMENT_PATH)
+    .map(nameOf)
+    .sort();
+}
+
 /** 이후 모든 `File.exists`·`text`·`textSync` 가 이 오류로 던진다. `resetFakeFs()` 로 끈다. */
 export function failFileReads(error: Error = new Error('read failed')): void {
   state.readError = error;

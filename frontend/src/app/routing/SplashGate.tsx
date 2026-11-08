@@ -11,16 +11,21 @@ import { SplashScreen } from '@/features/auth';
 import { flushMarks, mark } from '@/shared/lib/startupMarks';
 import { registerPushIfGranted } from '@/shared/push';
 import { PRESS_GUARD_SCREEN_LISTENERS } from '@/shared/lib/pressGuard';
+import { readInstallFlag, writeInstallFlag } from '@/shared/storage';
 
 import { BOOT_MODULE_LOADED_AT } from './bootClock';
 
 /**
  * 스플래시 최소 노출 하한(ms). 정본 근거 없는 발명값 — 비행 모션 1.3초(SPLASH_FLIGHT_MS)가 끝까지 보이게 맞춘다(TRIP-1383).
  * TRIP-1720 실측(Release 시뮬·dev-api·10회, `pnpm bench:startup` — 실기기 절대값은 다르다): 부트스트랩은 JS 진입 후 p50 488ms
- * (p90 570)에 끝나고 하한이 그 뒤 p50 882ms(p90 978)를 더 붙잡는다 — 콜드스타트 합계를 정하는 값이 이것이다. 브랜드 노출 판단으로
- * 1300 유지 결정(사용자, 2026-11-03). 줄이면 비행 모션도 같이 줄여야 하고(M-52), 가려져 있던 prefetch·inlineRequires 차이가 드러난다.
+ * (p90 570)에 끝나고 하한이 그 뒤 p50 882ms(p90 978)를 더 붙잡는다 — 콜드스타트 합계를 정하는 값이 이것이다.
+ * 1300 유지 결정(사용자, 2026-11-03)은 TRIP-1831(2026-11-08)이 **첫 실행에만** 좁혔다: 이 설치에서 하한을 끝까지 채운 적이 있으면(`SPLASH_SEEN_FLAG` 표식)
+ * 하한 없이 부트스트랩이 준비되는 즉시 걷힌다 — 재방문은 비행이 중간에 끊긴다(수용, 비행 길이 조정은 M-52). 하한을 안 채운 첫 실행·표식 읽기 실패는 종전 1300 그대로다.
  */
 export const SPLASH_MIN_VISIBLE_MS = 1300;
+
+/** 설치 단위 "스플래시를 끝까지 봤음" 표식 이름 — `readInstallFlag`/`writeInstallFlag` 의 고정 상수(파일명 조각). */
+const SPLASH_SEEN_FLAG = 'splash-seen';
 
 /**
  * HOME 진입 뒤 푸시 토큰 재등록까지 미루는 시간(ms) — exp.host 외부 호출이 홈 첫 요청들과 경쟁하지 않게 한다(TRIP-1362).
@@ -63,6 +68,7 @@ const NO_SWIPE_ROUTES: ReadonlySet<string> = new Set([
  * floor 는 한 번만 흐르는 하한이다. 기준점은 마운트가 아니라 JS 모듈 로드 시각(`BOOT_MODULE_LOADED_AT`)이라 번들 평가·부팅에
  * 쓴 시간이 하한에 흡수된다(TRIP-1362). 경과 깃발은 true 로 굳고 다시 false 로 안 돈다 — 캐시
  * 토큰으로 즉시 resolve 돼도 첫 화면이 한 프레임은 보이고, 그 뒤의 목적지 교정은 지연시키지 않는다.
+ * 하한 타이머는 표식 읽기를 기다리지 않고 마운트 때 만든다(TRIP-1831) — 표식이 있다는 답이 오면 그 타이머를 끄고 깃발을 바로 올린다(재방문).
  */
 export function SplashGate() {
   const { phase, destination, isProvisional } = useBootstrapGate();
@@ -83,17 +89,34 @@ export function SplashGate() {
   useEffect(() => {
     // 이미 흐른 시간만큼 덜어 낸다. 시계가 뒤로 가도(음수 경과) 하한을 넘겨 기다리지 않게 SPLASH_MIN_VISIBLE_MS 로 막는다.
     const elapsed = Date.now() - BOOT_MODULE_LOADED_AT;
+    let alive = true;
     const timer = setTimeout(
       () => {
         mark('floorElapsed');
         setFloorElapsed(true);
+        // 비행을 끝까지 보여 준 뒤에 적는다(시작하자마자 쓰면 200ms 만에 앱을 끈 사용자가 다음엔 비행을 못 본다). 실패는 삼킨다 — 다음에도 첫 실행으로 보일 뿐이다.
+        void writeInstallFlag(SPLASH_SEEN_FLAG).catch(() => {});
       },
       Math.min(
         SPLASH_MIN_VISIBLE_MS,
         Math.max(0, SPLASH_MIN_VISIBLE_MS - elapsed)
       )
     );
-    return () => clearTimeout(timer);
+    void readInstallFlag(SPLASH_SEEN_FLAG).then(
+      (seen) => {
+        // 언마운트 뒤 답은 아무것도 바꾸지 않는다. 표식이 있으면 하한을 건너뛴다(이미 울렸으면 둘 다 무해).
+        if (!seen || !alive) return;
+        clearTimeout(timer);
+        mark('floorElapsed');
+        setFloorElapsed(true);
+      },
+      // 읽기 실패 = 첫 실행으로 접는다 — 종전 하한 1300 이 그대로 돈다(INV-4 결정적 폴백).
+      () => {}
+    );
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
   }, []);
 
   // 인증된 진입(로그인·재로그인 포함)마다 조용히 토큰을 다시 올린다 — 조회만, 절대 묻지 않는다(TRIP-835).
