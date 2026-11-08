@@ -1,14 +1,22 @@
 /**
  * @jest-environment node
  */
-import type { ReplanDiffSlot, ReplanSession } from '@/shared/api/index.schemas';
+import type {
+  ReplanDeferredPlace,
+  ReplanDiffSlot,
+  ReplanSession,
+} from '@/shared/api/index.schemas';
 
 import {
+  buildDeferredRows,
+  deferredFailureText,
   includeMissingText,
   isIncludeMissing,
   isPastDayRetryConflict,
   isStaleApplyError,
   reopenRequestParams,
+  RETRY_FAILED,
+  RETRY_PAST_DAY,
   staleRetryRequest,
 } from './draftNotice';
 
@@ -284,5 +292,204 @@ describe('🔴 includeMissingText — 받침에 맞춘 조사', () => {
     expect(includeMissingText(null)).toBe(
       '넣으려던 장소는 이번 안에 넣지 못했어요.'
     );
+  });
+});
+
+/**
+ * TRIP-1782 — 다른 날로 집은 곳(`deferredPlaces`) 안내 줄·버튼·요청 바디(순수).
+ *
+ * 무엇을 보장하나:
+ *  - 항목마다 한 줄·한 버튼(같은 날이어도 묶지 않는다). 줄 key 는 poiId(서버가 같은 곳을 두 날로 말하면 처음 날만 싣는다).
+ *  - 문구 `‘{name}’{은|는} {M}월 {D}일({N}일차) 요청이라 이번엔 넣지 않았어요` · 버튼 `{N}일차에 넣어 다시 짜기`.
+ *    `M월 D일` 은 0 패딩·요일 없음, N일차는 달력 산술(월·해 넘김 안전). 시작일을 모르면 일차만 빠진다(줄·버튼은 남는다).
+ *  - 요청 바디는 `{scope:'FULL_DAY', targetDate:<그 항목 날>, freeText:'<name> 꼭', …빈 배열·null}` 정확히 — 원 세션의
+ *    사유·문장·트리거를 받지 않으므로 "내일" 같은 날 말이 섞일 길이 없다(받는 인자가 장소·시작일뿐).
+ *  - 실패 문구는 상태 코드로만 가른다(409 → 지난 날/기간 밖 안내, 그 밖 → 시작 실패) — 세션 날짜를 안 본다.
+ */
+describe('🔴 buildDeferredRows — 항목마다 한 줄·한 버튼', () => {
+  const place = (
+    name: string,
+    date: string,
+    poiId = `poi-${name}`
+  ): ReplanDeferredPlace => ({ poiId, name, date });
+
+  it('X1 줄·버튼 문구와 key(poiId) — 받침 있는 이름은 은, 같은 달', () => {
+    const rows = buildDeferredRows(
+      [place('서울광장', '2026-11-06')],
+      '2026-11-05'
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].key).toBe('poi-서울광장');
+    expect(rows[0].text).toBe(
+      '‘서울광장’은 11월 6일(2일차) 요청이라 이번엔 넣지 않았어요'
+    );
+    expect(rows[0].buttonLabel).toBe('2일차에 넣어 다시 짜기');
+  });
+
+  it.each([
+    ['서울광장', '은'],
+    ['광안리 해변', '은'],
+    ['남산타워', '는'],
+    ['해운대 바다', '는'],
+    ['Cafe', '은(는)'],
+  ])(
+    'X2 이름 ‘%s’ → 조사 %s (끝 글자 받침 기준, 한글 아니면 병기)',
+    (name, particle) => {
+      const [row] = buildDeferredRows(
+        [place(name, '2026-11-06')],
+        '2026-11-05'
+      );
+
+      expect(row.text.startsWith(`‘${name}’${particle} 11월 6일(2일차)`)).toBe(
+        true
+      );
+    }
+  );
+
+  it.each([
+    ['같은 달', '2026-11-05', '2026-11-06', '11월 6일', '2일차'],
+    ['시작 당일', '2026-11-05', '2026-11-05', '11월 5일', '1일차'],
+    ['월 넘김', '2026-10-30', '2026-11-02', '11월 2일', '4일차'],
+    ['해 넘김', '2026-12-30', '2027-01-02', '1월 2일', '4일차'],
+    ['0 패딩 없음', '2026-03-01', '2026-03-05', '3월 5일', '5일차'],
+  ])('X3 %s — %s → %s (요일·0 패딩 없음)', (_name, start, date, md, nth) => {
+    const [row] = buildDeferredRows([place('서울광장', date)], start);
+
+    expect(row.text).toBe(
+      `‘서울광장’은 ${md}(${nth}) 요청이라 이번엔 넣지 않았어요`
+    );
+    expect(row.buttonLabel).toBe(`${nth}에 넣어 다시 짜기`);
+  });
+
+  it('X4 시작일을 모르면 일차만 빠진다 — 줄은 남고 버튼은 「그날 넣어 다시 짜기」', () => {
+    const [row] = buildDeferredRows(
+      [place('서울광장', '2026-11-06')],
+      undefined
+    );
+
+    expect(row.text).toBe(
+      '‘서울광장’은 11월 6일 요청이라 이번엔 넣지 않았어요'
+    );
+    expect(row.buttonLabel).toBe('그날 넣어 다시 짜기');
+    // 시작일을 몰라도 요청은 같은 모양이다(버튼은 동작한다).
+    expect(row.request.targetDate).toBe('2026-11-06');
+  });
+
+  it('X5 요청 바디 — FULL_DAY · 그 항목의 날 · "<name> 꼭" · 나머지는 빈 값, 날 말·다른 키 없음', () => {
+    const [row] = buildDeferredRows(
+      [place('서울광장', '2026-11-06')],
+      '2026-11-05'
+    );
+
+    expect(row.request).toStrictEqual({
+      scope: 'FULL_DAY',
+      targetDate: '2026-11-06',
+      originKind: null,
+      reasons: [],
+      directives: [],
+      freeText: '서울광장 꼭',
+      excludedPoiIds: [],
+      triggerId: null,
+    });
+  });
+
+  it('X6 항목이 여럿이면 순서대로 한 줄씩 — 같은 날이어도 묶지 않고 각자 자기 이름·날로 요청한다', () => {
+    const rows = buildDeferredRows(
+      [
+        place('서울광장', '2026-11-06'),
+        place('남산타워', '2026-11-06'),
+        place('경복궁', '2026-11-07'),
+      ],
+      '2026-11-05'
+    );
+
+    expect(rows.map((r) => r.key)).toEqual([
+      'poi-서울광장',
+      'poi-남산타워',
+      'poi-경복궁',
+    ]);
+    expect(rows.map((r) => r.request.freeText)).toEqual([
+      '서울광장 꼭',
+      '남산타워 꼭',
+      '경복궁 꼭',
+    ]);
+    expect(rows.map((r) => r.request.targetDate)).toEqual([
+      '2026-11-06',
+      '2026-11-06',
+      '2026-11-07',
+    ]);
+    expect(rows.map((r) => r.buttonLabel)).toEqual([
+      '2일차에 넣어 다시 짜기',
+      '2일차에 넣어 다시 짜기',
+      '3일차에 넣어 다시 짜기',
+    ]);
+  });
+
+  it('X6b 같은 poiId 가 두 날짜로 오면 처음 것 하나만 — 서버 「처음 말한 날」 규칙과 같다(줄 key 가 겹치지 않는다)', () => {
+    const rows = buildDeferredRows(
+      [
+        place('서울광장', '2026-11-06', 'poi-dup'),
+        place('서울광장', '2026-11-08', 'poi-dup'),
+        place('남산타워', '2026-11-07'),
+      ],
+      '2026-11-05'
+    );
+
+    expect(rows.map((r) => r.key)).toEqual(['poi-dup', 'poi-남산타워']);
+    expect(rows[0].request.targetDate).toBe('2026-11-06');
+    expect(rows[0].buttonLabel).toBe('2일차에 넣어 다시 짜기');
+  });
+
+  it.each([
+    ['undefined', undefined],
+    ['빈 배열', []],
+  ])('X7 %s 이면 줄이 없다', (_name, places) => {
+    expect(buildDeferredRows(places, '2026-11-05')).toEqual([]);
+  });
+
+  it('X8 줄·버튼 어디에도 소요시간 표현이 없다(INV-3)', () => {
+    const rows = buildDeferredRows(
+      [place('서울광장', '2026-11-06'), place('남산타워', '2026-11-07')],
+      '2026-11-05'
+    );
+
+    for (const row of rows) {
+      expect(`${row.text} ${row.buttonLabel}`).not.toMatch(
+        /(\d+\s*분|\d+\s*시간|소요)/
+      );
+    }
+  });
+});
+
+describe('🔴 deferredFailureText — 실패 문구는 상태 코드로 가른다', () => {
+  it('Y1 두 문구는 뷰가 쓰던 값 그대로다(세 번째 사본을 만들지 않고 한 곳으로 모았다)', () => {
+    expect(RETRY_FAILED).toBe(
+      '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요'
+    );
+    expect(RETRY_PAST_DAY).toBe(
+      '아직 일정이 없는 날이거나 여행 기간이 아니라서 AI가 다시 짤 수 없어요'
+    );
+  });
+
+  it('Y2 409 → 지난 날/기간 밖 안내 (오류 코드·세션 날짜 없이 상태 코드만으로)', () => {
+    expect(deferredFailureText(axios409())).toBe(RETRY_PAST_DAY);
+    expect(deferredFailureText(axios409('CONFLICT'))).toBe(RETRY_PAST_DAY);
+  });
+
+  it.each([
+    [
+      '500',
+      {
+        isAxiosError: true,
+        response: { status: 500, data: {} },
+      },
+    ],
+    ['네트워크(응답 없음)', { isAxiosError: true, message: 'Network Error' }],
+    ['axios 아님', new Error('409')],
+    ['없음', null],
+    ['undefined', undefined],
+  ])('Y3 %s → 시작 실패 문장', (_name, error) => {
+    expect(deferredFailureText(error)).toBe(RETRY_FAILED);
   });
 });

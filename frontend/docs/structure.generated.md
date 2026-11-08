@@ -992,10 +992,11 @@
 - `src/pages/live/planb-draft/index.ts`  →  PlanbSolvingPage · PlanbDraftPage
 
 ## src/pages/live/planb-draft/model/
-- `src/pages/live/planb-draft/model/draftNotice.ts`  →  isStaleApplyError · staleRetryRequest · isPastDayRetryConflict · reopenRequestParams · isIncludeMissing · includeMissingText
+- `src/pages/live/planb-draft/model/draftNotice.ts`  →  isStaleApplyError · staleRetryRequest · isPastDayRetryConflict · reopenRequestParams · isIncludeMissing · includeMissingText · DeferredLineVM · DeferredRowVM · buildDeferredRows · deferredFailureText · RETRY_FAILED · RETRY_PAST_DAY
 - `src/pages/live/planb-draft/model/replanFromInstant.ts`  →  readFromInstant
 - `src/pages/live/planb-draft/model/replanPollCap.ts`  →  REPLAN_POLL_CAP_MS · replanCapDeadlineMs · isReplanPollCapped
 - `src/pages/live/planb-draft/model/replanState.ts`  →  ReplanState · resolveReplanState
+- `src/pages/live/planb-draft/model/retryCopy.ts`  →  RETRY_FAILED · RETRY_PAST_DAY
 - `src/pages/live/planb-draft/model/useIncludedPlaceName.ts`  →  useIncludedPlaceName
 - `src/pages/live/planb-draft/model/useReplanDiff.ts`  →  useReplanDiff
 - `src/pages/live/planb-draft/model/useReplanSession.ts`  →  useReplanSession
@@ -1003,6 +1004,7 @@
 ## src/pages/live/planb-draft/ui/
 - `src/pages/live/planb-draft/ui/PlanbDraftPage.tsx`  →  PlanbDraftPageProps · PlanbDraftPage
 - `src/pages/live/planb-draft/ui/PlanbSolvingPage.tsx`  →  PlanbSolvingPageProps · PlanbSolvingPage
+- `src/pages/live/planb-draft/ui/ReplanDeferredDialog.tsx`  →  ReplanDeferredDialog
 - `src/pages/live/planb-draft/ui/ReplanDraftView.tsx`  →  ReplanRemovedVM · ReplanDraftViewProps · ReplanDraftView
 - `src/pages/live/planb-draft/ui/ReplanLeaveDialog.tsx`  →  ReplanLeaveDialogProps · DRAFT_LEAVE_COPY · ReplanLeaveDialog
 - `src/pages/live/planb-draft/ui/ReplanNoticeFace.tsx`  →  ReplanNoticeFaceProps · ReplanNoticeFace
@@ -2033,4 +2035,4 @@
 ## src/widgets/trip-wizard-header/ui/
 - `src/widgets/trip-wizard-header/ui/TripWizardHeader.tsx`  →  TripWizardHeaderProps · TripWizardHeader
 
-합계 1335개 파일
+합계 1337개 파일

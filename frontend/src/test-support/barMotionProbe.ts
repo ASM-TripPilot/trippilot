@@ -196,7 +196,6 @@ export const moved = (watch: MotionWatch): boolean =>
 
 /**
  * 루트가 모든 프레임에서 하나이고 일정 칸이 **같은 노드**(리마운트 없음).
- * @public 열린 PR #2044 의 LiveBottomBar·RecordNavBar 테스트가 이 이름을 import 한다 — 그 PR 이 머지돼 쓰는 곳이 생기면 이 태그를 뗀다.
  */
 export const structureSteady = (watch: MotionWatch): boolean =>
   watch.rootCounts.every((count) => count === 1) &&
