@@ -1372,10 +1372,36 @@ _LAYOUT_KEYS = frozenset({"EARLIER", "KEEP_DINNER", "END_NEAR_STAY", "SHORTER_DA
 _DINNER_WINDOW_MIN = AssemblyConfig().dinner_window_min
 
 
+LockTravel = Callable[[PoiId, PoiId], int | None]
+
+
+def _unreachable_from(
+    poi_id: PoiId, start: datetime, end: datetime, locks: Sequence[FixedBlock], travel: LockTravel | None,
+) -> FixedBlock | None:
+    """새 잠금(poi, start~end)과 시간은 안 겹치지만 **이동이 안 닿는** 기존 잠금 — 없으면 None(겹침은 부르는 쪽이 본다).
+
+    조립은 핀 사이 이동을 지킨다(OR 아크 제약·HC2 와 같은 산식). 시간 안에 못 오가는 잠금 쌍을 솔버에 넣으면 모든 조립
+    단계가 해 없음이라 하루 전체가 '재계획 대안 없음'이 된다(2026-11-08 운영: '저녁은 그대로' 잠금이 앞 사용자 잠금에서 시간
+    안에 못 오는 곳이라 다시 짜기 두 번이 실패). AI 가 거는 잠금(저녁·말한 시각)은 그런 자리에 걸지 않는다. `travel` 이 모르면 판정하지 않는다.
+    """
+    if travel is None:
+        return None
+    for b in locks:
+        if b.window.end <= start:
+            minutes = travel(b.poi_id, poi_id)
+            if minutes is not None and b.window.end + timedelta(minutes=minutes) > start:
+                return b
+        elif end <= b.window.start:
+            minutes = travel(poi_id, b.poi_id)
+            if minutes is not None and end + timedelta(minutes=minutes) > b.window.start:
+                return b
+    return None
+
+
 def _timed_blocks(
     request: schemas.ReplanRequest, nl: nl_verify.VerifiedRequest, pool: CandidatePool,
     blocks: tuple[FixedBlock, ...], anchor: GeoPoint, pace: Pace | None, tz: timezone, notes: list[str],
-    holidays: Mapping[date, frozenset[str]] | None = None,
+    holidays: Mapping[date, frozenset[str]] | None = None, travel: LockTravel | None = None,
 ) -> tuple[FixedBlock, ...]:
     """"성심당은 5시에"·"3시에 카페" — 말한 시각에 그 곳을 잠근다(HC3, `_dinner_blocks` 와 같은 잠금).
 
@@ -1394,7 +1420,8 @@ def _timed_blocks(
         if (str(poi.poi_id) in excluded
                 or any(b.poi_id == poi.poi_id or (at < b.window.end and b.window.start < end)
                        for b in (*blocks, *out))
-                or not open_hours_ok(poi, at, end, holidays)):  # HC1 과 같은 판정 — 공휴일 휴무 포함(상황 감지 H1)
+                or not open_hours_ok(poi, at, end, holidays)  # HC1 과 같은 판정 — 공휴일 휴무 포함(상황 감지 H1)
+                or _unreachable_from(poi.poi_id, at, end, (*blocks, *out), travel) is not None):  # 앞뒤 잠금과 이동이 안 닿음
             return None
         return FixedBlock(poi_id=poi.poi_id, window=TimeWindow(start=at, end=end), reason="nl_at")
 
@@ -1421,6 +1448,7 @@ def _dinner_blocks(
     request: schemas.ReplanRequest, resolved: Sequence[str], pool: CandidatePool,
     blocks: tuple[FixedBlock, ...], tz: timezone, not_before: datetime | None, notes: list[str],
     holidays: Mapping[date, frozenset[str]] | None = None, *, nl: nl_verify.VerifiedRequest | None = None,
+    travel: LockTravel | None = None,
 ) -> tuple[FixedBlock, ...]:
     """KEEP_DINNER("저녁은 그대로") — 원 일정에서 저녁 식사창에 걸친 식당 슬롯을 원 시각 그대로 잠근다.
 
@@ -1463,6 +1491,11 @@ def _dinner_blocks(
                 or (nl is not None and ((nl.window_start is not None and start < nl.window_start)
                                         or (nl.end_said and end > nl.window_end)))):
             notes.append(f"keep_dinner_skipped: {slot.poi_id}")
+            continue
+        far = _unreachable_from(PoiId(slot.poi_id), start, end, blocks, travel)
+        if far is not None:  # 앞뒤 잠금에서 시간 안에 못 오가는 저녁 — 잠그면 하루 전체가 해 없음이다
+            notes.append(f"keep_dinner_skipped: {slot.poi_id}")
+            notes.append(f"keep_dinner_unreachable: {slot.poi_id} ({far.poi_id} 와 사이 이동이 안 닿음)")
             continue
         out.append(FixedBlock(poi_id=PoiId(slot.poi_id), window=TimeWindow(start=start, end=end),
                               reason="keep_dinner"))
@@ -2135,44 +2168,20 @@ def _nightlife_candidates(
 _SOFT_LOCKS = frozenset({"in_progress", "keep_dinner"})  # AI 가 건 잠금 — 사용자 잠금에 양보한다
 
 
-def _overlapping_locks(
-    blocks: Sequence[FixedBlock],
-    travel: Callable[[PoiId, PoiId], int | None] | None = None,
-    notes: list[str] | None = None,
-) -> tuple[FixedBlock, ...]:
-    """서로 겹치거나 **시간 안에 오갈 수 없는** 잠금 중 솔버에서 뺄 것 (TRIP-1397) — 둘 다 넣으면 모든 조립 단계가 실패한다.
+def _overlapping_locks(blocks: Sequence[FixedBlock]) -> tuple[FixedBlock, ...]:
+    """서로 겹치는 잠금 중 솔버에서 뺄 것 (TRIP-1397) — 둘 다 넣으면 모든 조립 단계가 실패한다.
 
     사용자 잠금을 먼저, 시각 순으로 담고 이미 담은 것과 겹치면 뺀다. 뺀 사용자 잠금은 사영에서
     원 시각 그대로 되싣는다(`_echo_locks`) — 사용자가 둔 것을 지우지 않는다.
-
-    `travel(앞, 뒤)` 는 조립이 두 잠금 사이에 쓰는 이동(분, 좌표를 모르면 None)이다. 앞 잠금이 끝나고 이동해 뒤 잠금
-    시작에 못 닿으면 겹친 것과 같다 — 조립의 핀 사이 이동 제약·HC2 와 같은 산식이라, 넣으면 OR 해 없음 → 규칙 폴백
-    HC2 → 하루 전체 '대안 없음'이다(2026-11-08 운영: '저녁은 그대로' 잠금이 앞 사용자 잠금에서 시간 안에 못 오는 곳이라
-    다시 짜기 두 번이 통째로 실패). 이 까닭으로 뺀 것은 `locked_unreachable` 노트로 밝힌다.
     """
     kept: list[FixedBlock] = []
     out: list[FixedBlock] = []
     for b in sorted(blocks, key=lambda b: (b.reason in _SOFT_LOCKS, b.window.start)):
         if any(b.window.start < k.window.end and k.window.start < b.window.end for k in kept):
             out.append(b)
-            continue
-        far = next((k for k in kept if _unreachable(b, k, travel)), None)
-        if far is not None:
-            out.append(b)
-            if notes is not None:
-                notes.append(f"locked_unreachable: {b.poi_id} ({far.poi_id} 와 사이 이동이 안 닿음)")
-            continue
-        kept.append(b)
+        else:
+            kept.append(b)
     return tuple(out)
-
-
-def _unreachable(a: FixedBlock, b: FixedBlock, travel) -> bool:
-    """겹치지 않는 두 잠금 중 앞 것이 끝나고 이동해 뒤 것 시작에 못 닿는가."""
-    if travel is None:
-        return False
-    first, second = (a, b) if a.window.start < b.window.start else (b, a)
-    minutes = travel(first.poi_id, second.poi_id)
-    return minutes is not None and first.window.end + timedelta(minutes=minutes) > second.window.start
 
 
 def _echo_locks(
@@ -2673,6 +2682,26 @@ class WiredItineraryOrchestrator:
             unverified=unverified,
         )
 
+    def _lock_travel(self, pool: CandidatePool, persona: PersonaSummary | None,
+                     transport: TransportMode) -> LockTravel:
+        """두 잠금 사이 이동(분) — 조립(`ScheduleAgent` ④)과 같은 추정기: 취향 도보 상한, 자차면 이 풀로 묶은 주차 계획.
+
+        자차 주차 거점은 부르는 시점의 풀로 묶는다 — 뒤에 풀이 바뀌면(지역 옮기기·이름으로 집은 곳 둘레) 조립의 거점과
+        달라질 수 있다(알려진 한계). 풀에 없는 잠금(좌표 모름)은 None — 에이전트도 그 잠금을 빼고 푼다.
+        """
+        walk_cap = activity_walk_cap(persona)
+        index = {p.poi_id: p for p in pool.pois}
+        walker = self._assembly_provider.walker(
+            walk_cap, self._assembly_provider.parking_for(index, walk_cap)
+            if transport is TransportMode.CAR else None)
+
+        def travel(a: PoiId, b: PoiId) -> int | None:
+            if a not in index or b not in index:
+                return None
+            return walker.estimate(index[a].coord, index[b].coord, transport).internal_minutes
+
+        return travel
+
     def _reconstruct(
         self, payload: schemas.ItineraryPayload, meta: schemas.RequestMetaSchema,
         *, untimed: str, order: str, lookup_holidays: bool = True,
@@ -2960,27 +2989,16 @@ class WiredItineraryOrchestrator:
         # `nl.window_end`). "3시 이후로"면 하루가 15시에 시작한다는 말이라, 15시 전에 끝난 원 일정을 15시 뒤 창에 몰아넣지 않는다(검토 2026-11-06).
         nl_floor = max(filter(None, (not_before, nl.window_start)), default=None)
         blocks = _replan_fixed_blocks(request, self._tz)
-        blocks += _dinner_blocks(request, resolved, pool, blocks, self._tz, not_before, notes, holidays, nl=nl)  # 저녁은 그대로
+        blocks += _dinner_blocks(request, resolved, pool, blocks, self._tz, not_before, notes, holidays, nl=nl,
+                                 travel=self._lock_travel(pool, persona, transport))  # 저녁은 그대로
         in_progress = _in_progress_blocks(request, not_before, self._tz, blocks)  # 진행 중은 그대로
         if in_progress:
             blocks += in_progress
             notes.append(f"in_progress_kept: {len(in_progress)}")
         past = _past_blocks(blocks, not_before)
         # 서로 겹치는 잠금은 솔버에 하나만 — 둘 다 넣으면 모든 단계가 실패해 하루가 통째로 비었다(TRIP-1397).
-        # 뺀 사용자 잠금은 사영에서 원 시각 그대로 되싣는다. 시간 안에 못 오가는 쌍도 같다 — 이동은 조립(`ScheduleAgent` ④)과
-        # 같은 추정기로 잰다(취향 도보 상한, 자차면 주차 계획).
-        walk_cap = activity_walk_cap(persona)
-        lock_index = {p.poi_id: p for p in pool.pois}
-        walker = self._assembly_provider.walker(
-            walk_cap, self._assembly_provider.parking_for(lock_index, walk_cap)
-            if transport is TransportMode.CAR else None)
-
-        def lock_travel(a: PoiId, b: PoiId) -> int | None:
-            if a not in lock_index or b not in lock_index:
-                return None  # 좌표를 모르는 잠금은 에이전트가 빼고 푼다 — 여기서 판정하지 않는다
-            return walker.estimate(lock_index[a].coord, lock_index[b].coord, transport).internal_minutes
-
-        overlapped = _overlapping_locks(tuple(b for b in blocks if b not in past), lock_travel, notes)
+        # 뺀 사용자 잠금은 사영에서 원 시각 그대로 되싣는다.
+        overlapped = _overlapping_locks(tuple(b for b in blocks if b not in past))
         if overlapped:
             notes.append(f"locked_overlap: {','.join(str(b.poi_id) for b in overlapped)}")
         if "END_DAY" in resolved:
@@ -3043,7 +3061,8 @@ class WiredItineraryOrchestrator:
             notes.append(f"nl_nearby_added: {p.poi_id} +{len(around)}")
         # "3시에 카페" — 말한 시각에 잠근다. 시간만 당기기는 장소·순서를 안 바꾼다는 요청이라 걸지 않는다.
         if earlier is None:
-            timed = _timed_blocks(request, nl, pool, blocks, anchor, pace, self._tz, notes, holidays)
+            timed = _timed_blocks(request, nl, pool, blocks, anchor, pace, self._tz, notes, holidays,
+                                  travel=self._lock_travel(pool, persona, transport))
             blocks += timed
             # 받은 창 밖에 **실제로 잠근** 방문("밤 10시에 클럽"·"아침 8시에 카페")까지 창을 늘린다 — 잠그지 못한 방문(영업시간·
             # 겹침·제외)을 위해 창만 벌리지 않게 잠금 뒤에 한다. 사용자가 말한 시작·끝은 넘지 않는다(그 말이 이긴다).

@@ -7,7 +7,11 @@
 
 from __future__ import annotations
 
+from datetime import time as clock
+
 from trippilot.api.wiring import demo_poi_seed
+from trippilot.llm_gateway.gates.replan.replan_request_extraction import ExtractedCategory, ExtractedRequest
+from trippilot.domain.llm.llm import TypedResult
 
 from tests.agents.planb.test_replan_natural_language import _replan
 
@@ -15,6 +19,16 @@ _SEED = {p.name: str(p.poi_id) for p in demo_poi_seed()}
 _PORK = _SEED["제주 흑돼지거리"]   # FOOD
 _HALLA = _SEED["한라산"]          # NATURE
 _STAY = {"lat": 33.50, "lng": 126.52}
+
+
+class _StubExtractor:
+    """자유입력 추출을 고정한다 — 실 LLM 없이 '말한 시각' 경로를 탄다."""
+
+    def __init__(self, value: ExtractedRequest) -> None:
+        self.value = value
+
+    def extract(self, *a, **kw) -> TypedResult:
+        return TypedResult(value=self.value, is_fallback=False, error=None, call_record=None)
 
 
 def _slot(poi: str, start: str, end: str) -> dict:
@@ -72,32 +86,34 @@ def test_앞_잠금에서_시간_안에_못_오는_저녁은_잠그지_않고_�
     """시간은 안 겹치지만 이동이 안 닿는 잠금 쌍 — 둘 다 솔버에 넣으면 모든 조립 단계가 해 없음이었다.
 
     2026-11-08 운영: '저녁은 그대로' 잠금이 앞 사용자 잠금에서 시간 안에 못 오는 곳이라 다시 짜기 두 번이 통째로
-    '재계획 대안 없음'이었다(OR 해 없음 → 규칙 폴백 HC2 → assembly_conflict). AI 가 건 저녁 잠금이 사용자 잠금에 양보한다.
+    '재계획 대안 없음'이었다(OR 해 없음 → 규칙 폴백 HC2 → assembly_conflict). 겹치는 저녁처럼 잠그지 않는다 — 식당은
+    제외하지 않으므로 닿는 시각에 다시 놓일 수 있다.
     """
     cafe_street = _SEED["월정리 카페거리"]  # 흑돼지거리에서 28km — 10분 만에 못 온다
     slots = [{**_slot(cafe_street, "17:00", "17:50"), "is_fixed": True}, _slot(_PORK, "18:00", "19:00")]
     body, seen = _replan(directives=["KEEP_DINNER"], reasons=["none"], current_slots=slots)
 
     assert body["itinerary"] is not None, body["notes"]
-    held = [(str(b.poi_id), b.reason) for b in seen["agent"][0].fixed_blocks]
-    assert (_PORK, "keep_dinner") not in held, held
-    assert any(n.startswith(f"locked_unreachable: {_PORK}") for n in body["notes"]), body["notes"]
+    req = seen["agent"][0]
+    assert all(b.reason != "keep_dinner" for b in req.fixed_blocks), req.fixed_blocks
+    assert _PORK not in {str(p) for p in req.excluded_poi_ids}
+    assert f"keep_dinner_skipped: {_PORK}" in body["notes"], body["notes"]
+    assert any(n.startswith(f"keep_dinner_unreachable: {_PORK}") for n in body["notes"]), body["notes"]
     kept = [s for s in _placed(body) if s["poi_id"] == cafe_street]
     assert [(s["start_at"][:5], s["end_at"][:5]) for s in kept] == [("17:00", "17:50")]  # 사용자 잠금은 그대로
 
 
-def test_사용자_잠금끼리_시간_안에_못_오가면_뒤_잠금을_솔버에서_빼고_원_시각으로_되싣는다() -> None:
-    """사용자가 둘 다 고정했으면 둘 다 지운다/옮긴다는 없다 — 겹친 잠금과 같은 길(TRIP-1397)로 하루를 낸다."""
-    cafe_street = _SEED["월정리 카페거리"]
-    slots = [{**_slot(cafe_street, "17:00", "17:50"), "is_fixed": True},
-             {**_slot(_PORK, "18:00", "19:00"), "is_fixed": True}]
-    body, seen = _replan(reasons=["none"], current_slots=slots)
+def test_말한_시각의_곳이_앞_잠금에서_못_오면_그_시각에_잠그지_않는다() -> None:
+    """"3시에 자연" — 그 시각에 잠글 곳이 앞 사용자 잠금에서 이동으로 못 닿으면 잠그지 않고(nl_at_none) 하루를 낸다."""
+    cafe_street = _SEED["월정리 카페거리"]  # 한라산(풀의 유일한 자연)에서 30km 넘게 떨어졌다
+    slots = [{**_slot(cafe_street, "14:00", "14:50"), "is_fixed": True}, _slot(_PORK, "18:00", "19:00")]
+    extracted = ExtractedRequest(categories=(ExtractedCategory("NATURE", at=clock(15, 0)),))
+    body, seen = _replan(reasons=["none"], current_slots=slots, free_text="3시에 자연",
+                         tweak_app=lambda orch: setattr(orch, "_request_extractor", _StubExtractor(extracted)))
 
     assert body["itinerary"] is not None, body["notes"]
-    assert [str(b.poi_id) for b in seen["agent"][0].fixed_blocks] == [cafe_street]
-    assert any(n.startswith(f"locked_unreachable: {_PORK}") for n in body["notes"]), body["notes"]
-    placed = {(s["poi_id"], s["start_at"][:5]) for s in _placed(body)}
-    assert {(cafe_street, "17:00"), (_PORK, "18:00")} <= placed  # 둘 다 원 시각 그대로 남는다
+    assert all(b.reason != "nl_at" for b in seen["agent"][0].fixed_blocks), seen["agent"][0].fixed_blocks
+    assert any(n.startswith("nl_at_none: NATURE 15:00") for n in body["notes"]), body["notes"]
 
 
 def test_이미_끝난_저녁은_잠그지_않는다() -> None:
