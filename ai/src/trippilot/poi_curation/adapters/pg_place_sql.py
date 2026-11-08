@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from trippilot.domain.poi.poi import NIGHTLIFE_TAG, TRENDING_TAG
-from trippilot.domain.poi.region_centers import bare_region, in_sido, region_area
+from trippilot.domain.poi.region_centers import GWANGJU_GU, MERGED_SIDO, bare_region, in_sido, region_area
 
 ROW_CAP = 20  # 핸들러는 ≤5 를 쓴다 — 표시 불가 이름·나이트라이프를 거르고도 남게 넉넉히
 STATEMENT_TIMEOUT_MS = 1500  # 팬아웃 작업 예산(≤3s) 안에서 LLM(~1.5s) 뒤에 남는 몫
@@ -65,6 +65,20 @@ _BY_IDS_SQL = f"SELECT {_ROW_COLUMNS} FROM poi_public WHERE poi_id = ANY(%s::uui
 def _row(r: tuple) -> PlaceRow:
     return PlaceRow(poi_id=r[0], name=r[1], category=r[2], sido=r[3], sigungu=r[4],
                     trending=TRENDING_TAG in (r[5] or ()), nightlife=NIGHTLIFE_TAG in (r[5] or ()), rich=bool(r[6]))
+
+
+def _name_order(area: str | None) -> tuple[str, dict[str, Any]]:
+    """`find_by_name` ORDER BY 선순위 술어 — `_pick_one` 의 지역 안 판정(이 바로 아래)과 같은 꼴이어야 한다.
+    다르면 SQL 이 앞세운 행과 `_pick_one` 이 지역 안으로 보는 행이 달라, `ROW_CAP` 에 잘리는 쪽이 사실은 지역 안 행일 수 있다.
+    시·도 이름(area 가 시·도 그 자체)이면 `sido LIKE` 만(광주는 통합 특별시 다섯 구도) — 시·군이면 `sigungu LIKE` 만."""
+    if area is None:
+        return "sido LIKE %(area)s", {"area": "%"}
+    if region_area(area) == (area, ()):  # 시·도 이름(앞글자만) — `_pick_one` 의 sido_level
+        if area == "광주":
+            return ("(sido LIKE %(area)s OR (sido = %(merged)s AND sigungu = ANY(%(gu)s::text[])))",
+                    {"area": f"{area}%", "merged": MERGED_SIDO, "gu": list(GWANGJU_GU)})
+        return "sido LIKE %(area)s", {"area": f"{area}%"}
+    return "sigungu LIKE %(area)s", {"area": f"{area}%"}
 
 
 def _pick_one(hits: Sequence[PlaceRow], area: str | None) -> PlaceRow | None:
@@ -177,10 +191,11 @@ class PgPlaceSql:
                 with conn.cursor() as cur:
                     cur.execute("SET TRANSACTION READ ONLY")
                     cur.execute(f"SET LOCAL statement_timeout = {STATEMENT_TIMEOUT_MS}")
+                    order_sql, order_params = _name_order(area)
                     cur.execute(
                         "SELECT poi_id FROM poi_public WHERE replace(name, ' ', '') = %(key)s "
-                        f"ORDER BY (sido LIKE %(area)s OR sigungu LIKE %(area)s) DESC, rich DESC, poi_id LIMIT {ROW_CAP}",
-                        {"key": key, "area": f"{area}%" if area else "%"},
+                        f"ORDER BY {order_sql} DESC, rich DESC, poi_id LIMIT {ROW_CAP}",
+                        {"key": key, **order_params},
                     )
                     ids = [str(r[0]) for r in cur.fetchall()]
                     if not ids:
