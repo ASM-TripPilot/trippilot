@@ -489,6 +489,75 @@ def test_handoff_intents_are_text_with_the_dispatcher_action(intent: Intent, act
     assert facts.template_text == fallback_answer_text(intent, {})
 
 
+def _replan_action(utterance: str, target_date: str | None = None, snapshot: TurnSnapshot = _SNAP) -> dict[str, str]:
+    args = {"target_date": target_date} if target_date else {}
+    return _run(HANDLERS[Intent.REPLAN], replace(_ctx(snapshot, args), utterance=utterance)).next_actions[0].params
+
+
+def test_replan_carries_what_was_said_to_the_replan_screen() -> None:
+    """"3시 이후로 바꿔줘"가 버튼만 남으면 시각이 사라진다 — 말은 입력 칸 초기값으로."""
+    assert _replan_action("3시 이후로 바꿔줘") == {"prefill": "3시 이후로 바꿔줘"}
+    assert _replan_action("오늘 일정 저녁부터 짜줘", "오늘") == {"prefill": "오늘 일정 저녁부터 짜줘"}
+    assert _run(HANDLERS[Intent.REPLAN], _ctx()).next_actions[0].params == {}  # 말이 없는 턴
+    assert len(_replan_action("가" * 501)["prefill"]) == 500  # 앱 시작 요청이 400 이 되지 않게
+
+
+def test_replan_opens_the_future_day_that_was_said_without_the_day_word() -> None:
+    """(_NOW = 둘째 날) 날 말은 칸에서 뗀다 — 지난 메시지의 버튼을 다음 날 누르면 "내일"이 하루 밀린다."""
+    assert _replan_action("내일 일정 3시 이후로 바꿔줘", "내일") == {"prefill": "일정 3시 이후로 바꿔줘", "targetDate": _D3.isoformat()}
+    assert _replan_action("내일 일정 3시 이후로 바꿔줘") == {"prefill": "일정 3시 이후로 바꿔줘", "targetDate": _D3.isoformat()}  # 분류가 칸을 안 채워도
+    assert _replan_action("3시 이후로 바꿔줘", "내일") == {"prefill": "3시 이후로 바꿔줘", "targetDate": _D3.isoformat()}  # 말에 날 말이 없다
+
+
+@pytest.mark.parametrize("said,day", [
+    ("어제 일정 3시 이후로 바꿔줘", "어제"),      # 지난 날 — 앱 시작이 409
+    ("첫날 일정 3시 이후로 바꿔줘", "첫날"),
+    ("다음 날 일정 3시 이후로 바꿔줘", "다음 날"),  # 못 읽는 날 — 오늘로 열면 다른 날 요청이 오늘을 바꾼다
+    ("주말 일정 3시 이후로 바꿔줘", "주말"),
+])
+def test_replan_does_not_carry_a_request_for_a_day_it_cannot_open(said, day) -> None:
+    assert _replan_action(said, day) == {}
+
+
+def test_replan_does_not_open_a_day_outside_the_trip_or_without_a_schedule() -> None:
+    ends_today = replace(_SNAP, trip=TripInfo("trip-1", ("제주",), _D1, _D2, "IN_TRIP"))
+    assert _replan_action("내일 일정 3시 이후로 바꿔줘", "내일", ends_today) == {}
+    partial = _snapshot(tuple((d.date, d.slots) for d in _SNAP.days if d.date != _D3))  # 내일 일정이 아직 없다
+    assert _replan_action("내일 일정 3시 이후로 바꿔줘", "내일", partial) == {}
+
+
+@pytest.mark.parametrize("ack", ["응", "웅", "넹", "네", "네 부탁해요", "네, 부탁해요", "그래 그렇게 해줘", "응, 그렇게 해줘", "좋아요!", "ok", "오키", "넵 ㅎㅎ", "네~^^", "해주세요"])
+def test_replan_does_not_carry_a_short_acceptance(ack) -> None:
+    assert _replan_action(ack) == {}
+
+
+@pytest.mark.parametrize("said", [
+    "네시 이후로", "네시부터 해줘", "네시까지만", "네 시까지", "응 저녁부터", "네 오전에만", "어 저녁부터", "그래 밤까지", "좋아 저녁부터 짜줘", "그렇게 말고 저녁부터",
+    "오케이 오후부터", "그래도 저녁부터", "예약 취소됐어", "어제 너무 피곤해", "좋아 저녁부터 다시 짜줘",
+])
+def test_replan_does_not_swallow_a_request_that_starts_like_an_acceptance(said) -> None:
+    assert _replan_action(said).get("prefill"), said
+
+
+def test_replan_keeps_the_day_of_an_accepted_offer() -> None:
+    """"응" + 분류가 수락한 제안에서 실은 날 — 실을 말은 없어도 그 날을 연다."""
+    assert _replan_action("응", "내일") == {"targetDate": _D3.isoformat()}
+    assert _replan_action("네 부탁해요", "오늘") == {}
+
+
+@pytest.mark.parametrize("said", [
+    "두 번째 일정부터 다시 짜줘", "마지막 장소 빼고 다시 짜줘", "세 번째 코스부터 3시 이후로 바꿔줘",  # 순번은 장소다
+    "내일 등산이라 오늘은 일찍 끝낼래", "내일 일찍 일어나야 해서 일찍 끝낼래", "내일 비 온대서 일정 바꿔줘", "오늘 일찍 끝내고 내일 더 놀래",  # 사유·오늘 얘기
+])
+def test_replan_without_a_day_slot_does_not_read_a_day_from_other_words(said) -> None:
+    assert _replan_action(said) == {"prefill": said}
+
+
+def test_replan_without_a_day_slot_reads_the_day_at_the_head_of_the_sentence() -> None:
+    """분류는 날을 말한 문장의 10% 에서 칸을 비운다(실측 2026-11-07) — 그중 흔한 꼴이 "내일은"이다."""
+    assert _replan_action("내일은 3시 이후로 바꿔줘") == {"prefill": "3시 이후로 바꿔줘", "targetDate": _D3.isoformat()}
+
+
 def test_replan_goes_to_replan_in_trip_and_regenerate_otherwise() -> None:
     in_trip = _run(HANDLERS[Intent.REPLAN], _ctx())
     assert _types(in_trip) == ["OPEN_REPLAN"] and in_trip.next_actions[0].label == "다시 짜기"

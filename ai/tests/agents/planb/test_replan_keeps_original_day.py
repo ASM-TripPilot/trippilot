@@ -189,13 +189,40 @@ def test_더_늦게까지도_말한_시각_창_밖의_원_일정은_두지_않�
     종전엔 kept 가 nl 창보다 앞에서 계산돼 오전 7곳이 15시 뒤 창에 우선 필수로 몰렸다."""
     body, req, _ = _run(_ComposeTimesOut(), monkeypatch, extracted=ExtractedRequest(start_after=time(15, 0)),
                         free_text="3시 이후로 더 늦게까지 놀고 싶어", directives=["EXTEND_DAY"])
-    assert "extend_day_window: kept 4" in body["notes"], body["notes"]
+    assert "extend_day: kept 4" in body["notes"], body["notes"]
     kept = {str(v.poi_id) for v in req.required_visits if v.reason == "extend_keep"}
     assert kept == set(_IDS[7:]), body["notes"]
     assert (req.day_window.start.hour, req.day_window.start.minute) == (15, 0)
     # 오전 원 일정은 우선 필수가 아니다 — 후보로 남아 규칙 점수로 15시 뒤에 들 수는 있다(다른 후보와 같은 자격)
     assert not any(str(v.poi_id) in _IDS[:7] for v in req.required_visits), req.required_visits
     assert all(s["start_at"] >= "15:00" for d in body["itinerary"]["days"] for s in d["slots"]), body
+
+
+@pytest.mark.parametrize("extracted,free_text,kept", [
+    (ExtractedRequest(start_after=time(15, 0)), "3시 이후로", _IDS[7:]),
+    (ExtractedRequest(end_by=time(15, 0)), "3시까지만", _IDS[:8]),
+])
+def test_시간만_당기기_칩도_말한_창_밖의_원_일정은_두지_않는다(monkeypatch, extracted, free_text, kept) -> None:
+    body, req, _ = _run(_ComposeTimesOut(), monkeypatch, extracted=extracted, free_text=free_text, directives=["EARLIER"])
+    assert "EARLIER" in body["resolved_directives"], body["notes"]
+    assert {str(v.poi_id) for v in req.required_visits} == set(kept), body["notes"]
+
+
+def test_더_늦게까지_칩도_말한_끝_뒤의_원_일정은_두지_않는다(monkeypatch) -> None:
+    body, req, _ = _run(_ComposeTimesOut(), monkeypatch, extracted=ExtractedRequest(end_by=time(15, 0)),
+                        free_text="3시까지만", directives=["EXTEND_DAY"])
+    assert {str(v.poi_id) for v in req.required_visits if v.reason == "extend_keep"} == set(_IDS[:8]), body["notes"]
+
+
+def test_말한_시작_앞에_진행_중인_곳이_있어도_하루가_비지_않는다(monkeypatch) -> None:
+    """09:00 의 "3시 이후로 더 늦게까지" + 08:05~09:20 진행 중 + 구성 타임아웃 — 규칙 폴백이 앞 곳 끝(09:20)에서 출발해 창 앞에 놓아
+    HC4 위반으로 체인이 무효가 되고 NO_FEASIBLE_SLOT 이었다(검토 2026-11-06)."""
+    body, _, _ = _run(_ComposeTimesOut(), monkeypatch, extracted=ExtractedRequest(start_after=time(15, 0)),
+                      free_text="3시 이후로 더 늦게까지", directives=["EXTEND_DAY"], from_instant="2026-09-21T09:00:00+09:00")
+    assert "in_progress_kept: 1" in body["notes"] and body["itinerary"] is not None, body["notes"]
+    slots = [s for d in body["itinerary"]["days"] for s in d["slots"]]
+    assert slots[0]["poi_id"] == _IDS[2] and slots[0]["start_at"].startswith("08:05"), slots
+    assert len(slots) > 1 and all(s["start_at"] >= "15:00" for s in slots[1:]), slots
 
 
 # ── ② 이번 요청이 이긴다 ──────────────────────────────────────────────
