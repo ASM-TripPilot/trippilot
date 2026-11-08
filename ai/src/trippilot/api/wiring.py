@@ -1448,7 +1448,7 @@ def _dinner_blocks(
     request: schemas.ReplanRequest, resolved: Sequence[str], pool: CandidatePool,
     blocks: tuple[FixedBlock, ...], tz: timezone, not_before: datetime | None, notes: list[str],
     holidays: Mapping[date, frozenset[str]] | None = None, *, nl: nl_verify.VerifiedRequest | None = None,
-    travel: LockTravel | None = None,
+    travel: LockTravel | None = None, neighbours: Sequence[FixedBlock] = (),
 ) -> tuple[FixedBlock, ...]:
     """KEEP_DINNER("저녁은 그대로") — 원 일정에서 저녁 식사창에 걸친 식당 슬롯을 원 시각 그대로 잠근다.
 
@@ -1485,18 +1485,37 @@ def _dinner_blocks(
         end = datetime.combine(request.target_date, slot.end_at, tzinfo=tz)
         if not (s_min < hi and e_min > lo) or (slot.poi_id, start) in seen:
             continue
-        if ((not_before is not None and end <= not_before)
-                or not open_hours_ok(poi, start, end, holidays)  # HC1 과 같은 판정 — 공휴일 휴무 포함(상황 감지 H1)
-                or any(start < b.window.end and b.window.start < end for b in blocks)
-                or (nl is not None and ((nl.window_start is not None and start < nl.window_start)
-                                        or (nl.end_said and end > nl.window_end)))):
+        def fits(start: datetime, end: datetime) -> bool:
+            return not ((not_before is not None and end <= not_before)
+                        or not open_hours_ok(poi, start, end, holidays)  # HC1 과 같은 판정 — 공휴일 휴무 포함(상황 감지 H1)
+                        or any(start < b.window.end and b.window.start < end for b in blocks)
+                        or (nl is not None and ((nl.window_start is not None and start < nl.window_start)
+                                                or (nl.end_said and end > nl.window_end))))
+
+        if not fits(start, end):
             notes.append(f"keep_dinner_skipped: {slot.poi_id}")
             continue
-        far = _unreachable_from(PoiId(slot.poi_id), start, end, blocks, travel)
-        if far is not None:  # 앞뒤 잠금에서 시간 안에 못 오가는 저녁 — 잠그면 하루 전체가 해 없음이다
-            notes.append(f"keep_dinner_skipped: {slot.poi_id}")
-            notes.append(f"keep_dinner_unreachable: {slot.poi_id} ({far.poi_id} 와 사이 이동이 안 닿음)")
-            continue
+        # 앞뒤 잠금과 이동이 안 닿는 저녁 — 그대로 잠그면 하루 전체가 해 없음이다. 진행 중 방문도 이웃으로 본다(잠금은 뒤에서).
+        others = (*blocks, *(n for n in neighbours if (n.poi_id, n.window.start) != (PoiId(slot.poi_id), start)))
+        far = _unreachable_from(PoiId(slot.poi_id), start, end, others, travel)
+        if far is not None:
+            # 앞 잠금 때문이면 닿는 가장 이른 시각(5분 올림)으로 옮겨 잠근다 — 저녁 창·영업·말한 창·하루 끝·뒤 잠금을 지킬 때만
+            earliest = max((b.window.end + timedelta(minutes=travel(b.poi_id, PoiId(slot.poi_id)) or 0)
+                            for b in others if b.window.end <= start), default=start)
+            moved = earliest + timedelta(minutes=-(earliest.minute % 5) % 5) - timedelta(
+                seconds=earliest.second, microseconds=earliest.microsecond)
+            day_end = (datetime.combine(request.target_date, request.time_window.end, tzinfo=tz)
+                       if request.time_window is not None else None)
+            moved_end = moved + (end - start)
+            if (moved > start and moved.hour * 60 + moved.minute < hi and fits(moved, moved_end)
+                    and (day_end is None or moved_end <= day_end)
+                    and _unreachable_from(PoiId(slot.poi_id), moved, moved_end, others, travel) is None):
+                notes.append(f"keep_dinner_shifted: {slot.poi_id} {start:%H:%M}→{moved:%H:%M} ({far.poi_id} 에서 이동)")
+                start, end = moved, moved_end
+            else:
+                notes.append(f"keep_dinner_skipped: {slot.poi_id}")
+                notes.append(f"keep_dinner_unreachable: {slot.poi_id} ({far.poi_id} 와 사이 이동이 안 닿음)")
+                continue
         out.append(FixedBlock(poi_id=PoiId(slot.poi_id), window=TimeWindow(start=start, end=end),
                               reason="keep_dinner"))
     notes.append(f"keep_dinner: {','.join(str(b.poi_id) for b in out)}" if out
@@ -2683,14 +2702,21 @@ class WiredItineraryOrchestrator:
         )
 
     def _lock_travel(self, pool: CandidatePool, persona: PersonaSummary | None,
-                     transport: TransportMode) -> LockTravel:
+                     transport: TransportMode, locks: Sequence[FixedBlock] = ()) -> LockTravel:
         """두 잠금 사이 이동(분) — 조립(`ScheduleAgent` ④)과 같은 추정기: 취향 도보 상한, 자차면 이 풀로 묶은 주차 계획.
 
-        자차 주차 거점은 부르는 시점의 풀로 묶는다 — 뒤에 풀이 바뀌면(지역 옮기기·이름으로 집은 곳 둘레) 조립의 거점과
-        달라질 수 있다(알려진 한계). 풀에 없는 잠금(좌표 모름)은 None — 에이전트도 그 잠금을 빼고 푼다.
+        풀에 없는 잠금 장소는 에이전트처럼 정본에서 좌표를 받는다(`fixed_pois` — 제외 요청과 무관하게 잠금은 지킨다). 정본에도
+        없으면 None 이고 판정하지 않는다(에이전트도 좌표 없는 잠금은 빼고 푼다). 자차 주차 거점은 부르는 시점의 풀로 묶는다 —
+        뒤에 풀이 바뀌면(지역 옮기기·이름으로 집은 곳 둘레) 조립의 거점과 달라질 수 있다(알려진 한계).
         """
         walk_cap = activity_walk_cap(persona)
         index = {p.poi_id: p for p in pool.pois}
+        missing = frozenset(b.poi_id for b in locks if b.poi_id not in index)
+        if missing:
+            try:
+                index.update({p.poi_id: p for p in self._poi_db.find_by_ids(missing)})
+            except Exception as e:  # 정본 조회 실패 — 그 잠금은 판정하지 않는다(덤이다, 조립은 그대로 지킨다)
+                _logger.warning("lock_travel lookup_failed %s", type(e).__name__)
         walker = self._assembly_provider.walker(
             walk_cap, self._assembly_provider.parking_for(index, walk_cap)
             if transport is TransportMode.CAR else None)
@@ -2989,8 +3015,12 @@ class WiredItineraryOrchestrator:
         # `nl.window_end`). "3시 이후로"면 하루가 15시에 시작한다는 말이라, 15시 전에 끝난 원 일정을 15시 뒤 창에 몰아넣지 않는다(검토 2026-11-06).
         nl_floor = max(filter(None, (not_before, nl.window_start)), default=None)
         blocks = _replan_fixed_blocks(request, self._tz)
-        blocks += _dinner_blocks(request, resolved, pool, blocks, self._tz, not_before, notes, holidays, nl=nl,
-                                 travel=self._lock_travel(pool, persona, transport))  # 저녁은 그대로
+        # 하루 끝내기는 솔버를 안 부른다(`_replan_end_day` 가 잠금을 원 시각 그대로 낸다) — 이동 판정은 솔버에 가는 날만.
+        # 저녁의 이웃에는 진행 중 방문도 든다(그 잠금은 바로 아래에서 종전대로 만든다).
+        blocks += _dinner_blocks(
+            request, resolved, pool, blocks, self._tz, not_before, notes, holidays, nl=nl,
+            travel=None if "END_DAY" in resolved else self._lock_travel(pool, persona, transport, blocks),
+            neighbours=_in_progress_blocks(request, not_before, self._tz, blocks))  # 저녁은 그대로
         in_progress = _in_progress_blocks(request, not_before, self._tz, blocks)  # 진행 중은 그대로
         if in_progress:
             blocks += in_progress
@@ -3062,7 +3092,7 @@ class WiredItineraryOrchestrator:
         # "3시에 카페" — 말한 시각에 잠근다. 시간만 당기기는 장소·순서를 안 바꾼다는 요청이라 걸지 않는다.
         if earlier is None:
             timed = _timed_blocks(request, nl, pool, blocks, anchor, pace, self._tz, notes, holidays,
-                                  travel=self._lock_travel(pool, persona, transport))
+                                  travel=self._lock_travel(pool, persona, transport, blocks))
             blocks += timed
             # 받은 창 밖에 **실제로 잠근** 방문("밤 10시에 클럽"·"아침 8시에 카페")까지 창을 늘린다 — 잠그지 못한 방문(영업시간·
             # 겹침·제외)을 위해 창만 벌리지 않게 잠금 뒤에 한다. 사용자가 말한 시작·끝은 넘지 않는다(그 말이 이긴다).
