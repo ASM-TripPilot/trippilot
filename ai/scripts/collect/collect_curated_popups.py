@@ -36,8 +36,9 @@ KST = dt.timezone(dt.timedelta(hours=9))
 
 
 def region_of(event: EventInfo) -> str:
-    """주소 첫 낱말 = 행사 저장소의 지역 이름("서울 성동구 …" → 서울). 목록은 그 꼴로만 적는다."""
-    return (event.address or "").split()[0]
+    """주소 첫 낱말 = 행사 저장소의 지역 이름("서울 성동구 …" → 서울). 주소가 비면 미분류(빈 문자열)."""
+    parts = (event.address or "").split()
+    return parts[0] if parts else ""
 
 
 def to_events(popups: list[dict], today: dt.date) -> list[EventInfo]:
@@ -65,9 +66,19 @@ def main(argv: list[str]) -> int:
     key = os.environ.get("KAKAO_REST_API_KEY") or os.environ.get("KAKAO_CLIENT_ID")
     if key:
         kakao = KakaoLocalClient(UrllibHttpClient(), key, max_calls=len(events))
-        events = [e if (c := kakao.address_to_coord(e.address or "")) is None
-                  else EventInfo(e.event_id, e.name, e.event_type, e.start, e.end, c, e.address)
-                  for e in events]
+        geocoded = []
+        for e in events:
+            try:
+                c = kakao.address_to_coord(e.address or "")
+            except Exception as ex:
+                # 카카오 HTTP 오류(403 등)는 collect 스텝 전체를 죽이면 안 된다 — 좌표만
+                # 포기하고 다음 팝업으로 (collect_events._geocode 와 같은 규칙).
+                print(f"[popups] 좌표 조회 실패({type(ex).__name__}: {ex}) — 좌표 없이 싣는다",
+                      file=sys.stderr)
+                c = None
+            geocoded.append(e if c is None
+                            else EventInfo(e.event_id, e.name, e.event_type, e.start, e.end, c, e.address))
+        events = geocoded
     else:
         print("[popups] 카카오 키 없음 — 좌표 없이 싣는다(근처 가산점은 빠진다)", file=sys.stderr)
 

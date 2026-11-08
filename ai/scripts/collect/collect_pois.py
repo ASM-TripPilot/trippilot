@@ -152,10 +152,13 @@ def load_closed_refs(path: Path = _BIZ_STATUS) -> frozenset[tuple[str, str]]:
     `poi_business_status.json` 을 다시 만들면 손으로 적은 것이 지워지므로 파일을 따로 둔다.
     정제 필터가 뺀 기존 행(`poi_excluded_filtered.json`, TRIP-1811)도 같은 이유로 합친다.
     """
+    # 조기 반환(파일 없음·깨짐) 두 경로도 수동 제외 2종은 그대로 돌려줘야 한다 — 폐업 근거가
+    # 없다고 손으로 적은 것까지 같이 사라지면 안 된다.
+    extra = _load_excluded() | _load_excluded(_EXCLUDED_FILTERED)
     if not path.exists():
         print(f"[collect] NOTICE 폐업 목록 없음({path.name}) — 폐업 필터 없이 진행",
               file=sys.stderr)
-        return frozenset()
+        return extra
     try:
         doc = json.loads(path.read_text(encoding="utf-8"))
         closed = frozenset(
@@ -166,10 +169,10 @@ def load_closed_refs(path: Path = _BIZ_STATUS) -> frozenset[tuple[str, str]]:
     except (OSError, json.JSONDecodeError, AttributeError) as e:
         print(f"[collect] WARNING 폐업 목록을 못 읽었다({type(e).__name__}) — 필터 없이 진행",
               file=sys.stderr)
-        return frozenset()
+        return extra
     print(f"[collect] 폐업 필터 {len(closed):,}건 (기준 {doc.get('generated_at', '?')})",
           file=sys.stderr)
-    return closed | _load_excluded() | _load_excluded(_EXCLUDED_FILTERED)
+    return closed | extra
 
 
 def _load_excluded(path: Path = _EXCLUDED) -> frozenset[tuple[str, str]]:
