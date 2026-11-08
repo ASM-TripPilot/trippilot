@@ -512,7 +512,8 @@ def test_judged_nothing_reasons_enter_the_plan(step: str, truncated: bool) -> No
 @pytest.mark.parametrize(("step", "truncated"), [
     ('{"intent": "MAKE_COFFEE"}', True),  # 절단된 목록 밖 라벨 — 판단이 아니라 잘린 것
     ("not json", False),
-    ('{"intent": "GET_WEATHER", "slots": {"closed_set_violation": {"a": 1}}}', False),  # 슬롯 모양 — 키 메아리에 속지 않는다
+    # `date` 는 GET_WEATHER 의 표 안 인자 — 표 밖 키였다면 #4 수정 뒤로 그 키만 버려지고 계획에 든다
+    ('{"intent": "GET_WEATHER", "slots": {"date": {"a": 1}}}', False),  # 슬롯 모양
     ('{"intent": "GET_WEATHER", "slots": {}, "confidence": 87}', False),  # confidence 범위 밖
     (RuntimeError("vendor down"), False),  # llm_error
 ])

@@ -153,7 +153,16 @@ class IntentGate:
             raise ValueError("slots가 객체가 아님")
         by_name = {s.name: s for s in asked_specs_of(intent)}
         plural = {n for n, s in by_name.items() if s.multiple}
-        for key, value in raw.items():
+        # ⑤ 표 밖 키는 모양이 뭐든(목록·객체·None 이어도) 그 키만 버린다 — 모양 검사가 그 전에
+        # 돌면 표 밖 키 하나의 TypeError 로 의도 전체가 죽는다. null·공백뿐인 값도 여기서
+        # "안 준 것"으로 걸러야 `missing_arguments()` 가 되묻기를 제대로 잡는다(빈 문자열이
+        # "채워짐"으로 살아남으면 분류 LLM 의 빈 필수 인자가 되묻기 없이 조회 실패로 샌다) —
+        # `dialogue_plan.py` 의 같은 패턴(§표 밖·숨긴 키).
+        present = {
+            k: v for k, v in raw.items()
+            if k in by_name and v is not None and not (isinstance(v, str) and not v.strip())
+        }
+        for key, value in present.items():
             if key in plural:
                 if not isinstance(value, list) or not all(
                     isinstance(v, _SCALAR) for v in value
@@ -162,10 +171,8 @@ class IntentGate:
             elif not isinstance(value, _SCALAR):
                 raise ValueError(f"slots[{key!r}]가 평면 스칼라가 아님")
         kept: dict = {}
-        for key, value in raw.items():
-            spec = by_name.get(key)
-            if spec is None:  # ⑤ 표 밖 이름
-                continue
+        for key, value in present.items():
+            spec = by_name[key]
             value = tuple(value) if spec.multiple else value
             # ⑥ 어휘 closed-set — 프롬프트가 enum 을 광고했으면 게이트도 그 목록으로 본다.
             # 어긴 값은 **그 칸만** 버린다: 틀린 어휘는 없는 것보다 나쁘다(하류가 엉뚱한

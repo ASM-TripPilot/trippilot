@@ -33,7 +33,7 @@ def _as_index(value: object) -> int | None:
         return None
     if isinstance(value, int):
         return value
-    if isinstance(value, str) and value.strip().isdigit():
+    if isinstance(value, str) and value.strip().isdecimal():  # isdigit() 는 "①"도 True 인데 int() 가 못 읽는다
         return int(value.strip())
     return None
 

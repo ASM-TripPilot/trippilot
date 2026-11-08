@@ -585,7 +585,9 @@ _INJECTIONS = (
 )
 _BROKEN_INTENT_OUTPUTS = (
     '{"intent": "MAKE_COFFEE"}', "not json at all", '{"nope": 1}', "[]",
-    '{"intent": "GET_WEATHER", "slots": {"x": {"y": 1}}}', '{"intent": "GET_WEATHER", "confidence": 87}',
+    # `date` 는 GET_WEATHER 의 **표 안** 인자다 — #4 수정 뒤로 표 밖 키의 중첩 값은 그 키만
+    # 버려지고 의도가 살아남으므로, "슬롯 모양이 전체를 깨뜨린다"를 보이려면 표 안 키라야 한다.
+    '{"intent": "GET_WEATHER", "slots": {"date": {"y": 1}}}', '{"intent": "GET_WEATHER", "confidence": 87}',
 )
 
 
