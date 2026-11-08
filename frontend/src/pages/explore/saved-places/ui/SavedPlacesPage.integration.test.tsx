@@ -589,6 +589,7 @@ describe('save', () => {
       useTripWizardStore.setState({
         mustVisits: [
           {
+            imageLicense: null,
             sourcePoiId: 'poi-x',
             name: '남겨진 곳',
             imageUrl: null,
@@ -1324,6 +1325,29 @@ describe('select › 위저드', () => {
     });
   });
 
+  describe('🔴 TRIP-1840 · 사진·이름 칸 → d06 장소 상세 push, 선택은 그대로', () => {
+    it('p3 를 고른 뒤 p2 칸을 누르면 /explore/places/p2 push 1회 · 연타 둘째는 무시 · 선택 수는 1곳 그대로', async () => {
+      // 준비 — 6곳 그린 뒤 p3 하나 선택.
+      await renderSelectLoaded();
+      fireEvent.press(screen.getByTestId('mustvisit-pick-check-p3'));
+      expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+        '담은 곳 6곳 · 1곳 선택됨'
+      );
+      mockPush.mockClear();
+      resetPressGuard();
+
+      // 실행 — p2 사진·이름 칸을 같은 틱에 두 번 누른다.
+      fireEvent.press(screen.getByTestId('mustvisit-pick-open-p2'));
+      fireEvent.press(screen.getByTestId('mustvisit-pick-open-p2'));
+
+      // 단언 — 상세(기존 d06 라우트)로 한 번만, 선택은 바뀌지 않았다.
+      expect(mockPush.mock.calls).toEqual([['/explore/places/p2']]);
+      expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+        '담은 곳 6곳 · 1곳 선택됨'
+      );
+    });
+  });
+
   describe('IS-2 · 선택한 곳만 시드된다 (AC-1 · TRIP-491 재현)', () => {
     it('6곳 중 3곳만 골라 완료하면 그 3곳만 위저드 스토어에 들어간다', async () => {
       await renderSelectLoaded();
@@ -1607,7 +1631,7 @@ describe('select › 위저드', () => {
     name = `장소 ${sourcePoiId}`,
     region: string | null = null
   ): MustVisitSeedItem {
-    return { sourcePoiId, name, imageUrl: null, region };
+    return { imageLicense: null, sourcePoiId, name, imageUrl: null, region };
   }
 
   function seededIds(): string[] {
@@ -2746,6 +2770,7 @@ describe('select › 여행', () => {
       ],
       mustVisits: [
         {
+          imageLicense: null,
           sourcePoiId: 'bs2',
           name: '장소 bs2',
           imageUrl: null,

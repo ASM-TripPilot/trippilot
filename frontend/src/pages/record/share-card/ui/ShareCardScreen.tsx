@@ -9,6 +9,8 @@ import { FormatSegment } from './FormatSegment';
 import { ShareCardDownloadGlyph, ShareCardShareGlyph } from './ShareCardGlyphs';
 import { ShareCardPreview } from './ShareCardPreview';
 import { Skeleton } from '@/shared/ui/Skeleton';
+import { buttonClasses } from '@/shared/ui/Button';
+import { COLOR_TOKENS } from '@/shared/config';
 import {
   HASHTAG_MAX_COUNT,
   validateHashtags,
@@ -94,7 +96,13 @@ export function ShareCardScreen({
   const selectedFormat =
     formats.find((format) => format.id === selectedFormatId) ?? formats[0];
   const exportArmed = isShareCaptureArmed();
-  const lockedDim = exportLocked ? 'opacity-50' : '';
+  // 글리프 + 글자 행이라 Button 대신 같은 모양 클래스만 빌린다(TRIP-1828 탈출구). 잠김은 공용 회색 한 종.
+  const saveButton = buttonClasses({
+    variant: 'secondary',
+    disabled: exportLocked,
+  });
+  const shareButton = buttonClasses({ disabled: exportLocked });
+  const lockedGlyph = exportLocked ? COLOR_TOKENS['muted-soft'] : undefined;
 
   // 실행 함수는 reject 하지 않는 계약이지만, 뜻밖의 예외도 실패로 드러낸다(INV-4 — 침묵 금지).
   const handleSave = async () => {
@@ -296,12 +304,10 @@ export function ShareCardScreen({
             onPress={() => {
               void handleSave();
             }}
-            className={`h-[50px] flex-1 flex-row items-center justify-center gap-sm rounded-button border border-hairline-strong bg-canvas ${lockedDim}`}
+            className={`${saveButton.box} flex-1 flex-row gap-sm`}
           >
-            <ShareCardDownloadGlyph size={18} />
-            <Text className="font-noto-bold text-card-title text-ink">
-              이미지 저장
-            </Text>
+            <ShareCardDownloadGlyph size={18} color={lockedGlyph} />
+            <Text className={saveButton.label}>이미지 저장</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -311,12 +317,10 @@ export function ShareCardScreen({
             onPress={() => {
               void handleShare();
             }}
-            className={`h-[50px] flex-1 flex-row items-center justify-center gap-sm rounded-button bg-primary ${lockedDim}`}
+            className={`${shareButton.box} flex-1 flex-row gap-sm`}
           >
-            <ShareCardShareGlyph size={18} />
-            <Text className="font-noto-bold text-card-title text-on-primary">
-              공유하기
-            </Text>
+            <ShareCardShareGlyph size={18} color={lockedGlyph} />
+            <Text className={shareButton.label}>공유하기</Text>
           </Pressable>
         </View>
       ) : null}

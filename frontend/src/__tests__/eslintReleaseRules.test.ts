@@ -1219,3 +1219,99 @@ describe('raw hex 는 토큰으로 (TRIP-1774) — trippilot/no-raw-hex', () => 
     });
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP-1740 · 서버 POI 사진은 `PoiPhoto` 로만 그린다 — `<PlacePhoto imageUrl=…>`·`<Image source={{ uri }}>` 직접 사용은 error.
+//
+// 왜 린트인가: 관광공사 3유형 사진은 자르면 안 되고(변경금지) 출처를 달아야 한다. 새 출구가 옛 부품으로 그리면 tsc 도 jest 도
+// 침묵하므로(필수 prop 은 `PoiPhoto` 에만 있다) 우회 통로를 린트로 막는다. 예외(기기 사진·타사 숙소 사진)는 윗줄 사유 주석.
+// 규칙 소스는 `no-restricted-syntax` 라서 다른 금지 항목이 같은 룰 ID 로 울려도 이 탐침이 green 이 되지 않도록
+// **메시지 태그 `TRIP-1740`** 인 error 만 센다(worklet 절과 같은 방식 — 구현자 계약: 메시지에 `TRIP-1740` 을 넣는다).
+// ⚠️ 덮어쓰기 함정: `.tsx` 블록이 셋(전체·pages·app 포함)이라 각 블록에서 따로 울리는지 파일군별로 본다.
+describe('서버 사진은 PoiPhoto 로만 (TRIP-1740) — PlacePhoto imageUrl·Image source uri 직접 사용 금지', () => {
+  const TAG = 'TRIP-1740';
+  const tagged = async (code: string, filePath: string): Promise<number> => {
+    const [result] = await eslint.lintText(code, {
+      filePath: path.resolve(filePath),
+    });
+    return result.messages.filter(
+      (m) => m.severity === 2 && m.message.includes(TAG)
+    ).length;
+  };
+
+  const PLACE_PHOTO_IMPORT =
+    "import { PlacePhoto } from '@/shared/ui/PlacePhoto';";
+  const IMAGE_IMPORT = "import { Image } from '@/shared/ui/Image';";
+  const placePhotoWithUrl = [
+    PLACE_PHOTO_IMPORT,
+    'export const Probe = () => <PlacePhoto imageUrl="https://img.example/a.jpg" category="맛집" />;',
+    '',
+  ].join('\n');
+  const imageWithUri = [
+    IMAGE_IMPORT,
+    "export const Probe = () => <Image source={{ uri: 'https://img.example/a.jpg' }} />;",
+    '',
+  ].join('\n');
+  // imageUrl 이 없는 PlacePhoto 는 번들 표지·숙소 그림 전용이라 통과해야 한다(과잉 매칭 방지).
+  const bundleOnly = [
+    PLACE_PHOTO_IMPORT,
+    'export const Probe = () => <PlacePhoto category="숙소" poiId="stay-1" />;',
+    '',
+  ].join('\n');
+
+  // 파일군 — 층 4곳(pages·widgets·entities·features) + 라우트. 덮어쓰기 블록마다 하나씩 걸린다.
+  const TARGETS: [string, string][] = [
+    ['pages (pages 블록)', PAGE_PROBE],
+    ['features (전체 .tsx 블록)', WORKLET_TSX_PROBE],
+    ['entities', 'src/entities/place/ui/__release_probe__.tsx'],
+    ['widgets', 'src/widgets/time-sheet/ui/__release_probe__.tsx'],
+    ['app 라우트', ROUTE_PROBE],
+  ];
+
+  it.each(TARGETS)(
+    '%s — <PlacePhoto imageUrl=…> 는 error, imageUrl 없는 번들 전용 PlacePhoto 는 통과',
+    async (_label, filePath) => {
+      expect(await tagged(placePhotoWithUrl, filePath)).toBeGreaterThanOrEqual(
+        1
+      );
+      expect(await tagged(bundleOnly, filePath)).toBe(0);
+    }
+  );
+
+  it.each(TARGETS)(
+    '%s — <Image source={{ uri }}> 직접 사용은 error',
+    async (_label, filePath) => {
+      expect(await tagged(imageWithUri, filePath)).toBeGreaterThanOrEqual(1);
+    }
+  );
+
+  it('예외는 윗줄 사유 주석 한 줄이면 열린다 — 같은 코드가 주석 없이는 error, 있으면 0', async () => {
+    const withReason = [
+      PLACE_PHOTO_IMPORT,
+      '// eslint-disable-next-line no-restricted-syntax -- 기기 사진(서버 POI 사진 아님)',
+      'export const Probe = () => <PlacePhoto imageUrl="file:///device.jpg" />;',
+      '',
+    ].join('\n');
+    const withoutReason = withReason.replace(
+      /^\/\/ eslint-disable-next-line.*\n/m,
+      ''
+    );
+
+    expect(
+      await tagged(withoutReason, WORKLET_TSX_PROBE)
+    ).toBeGreaterThanOrEqual(1);
+    expect(await tagged(withReason, WORKLET_TSX_PROBE)).toBe(0);
+  });
+
+  it('테스트 파일은 이 금지의 대상이 아니다 — 같은 코드가 앱 파일에선 error, 테스트에선 0', async () => {
+    expect(
+      await tagged(placePhotoWithUrl, WORKLET_TSX_PROBE)
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      await tagged(
+        placePhotoWithUrl,
+        'src/features/auth/ui/__release_probe__.test.tsx'
+      )
+    ).toBe(0);
+  });
+});

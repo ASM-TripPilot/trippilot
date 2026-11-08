@@ -522,6 +522,7 @@ export function PlaceAddPage({ tripId }: { tripId: string }): ReactElement {
           labels={{ start: '시작', end: '종료' }}
           placeSummary={{
             imageUrl: bulkSheet.place.imageUrl ?? null,
+            imageLicense: bulkSheet.place.imageLicense,
             poiId: bulkSheet.place.poiId,
             category: bulkSheet.place.category,
             name: bulkSheet.place.nameKo,

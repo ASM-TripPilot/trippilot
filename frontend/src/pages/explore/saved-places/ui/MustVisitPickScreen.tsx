@@ -1,16 +1,16 @@
 import { Fragment, memo, useMemo, type ReactElement } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
+import { Button, buttonClasses } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PlaceListState } from '@/features/explore/index.view';
-import { MapPinGlyph } from '@/shared/ui/glyphs';
+import { BackChevronWideGlyph, MapPinGlyph } from '@/shared/ui/glyphs';
 import type { SavedPlace } from '@/shared/api/index.schemas';
 import { EmptyCollage } from './EmptyCollage';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
-  ExploreBackChevronGlyph,
   CheckCircleFilledGlyph,
   CheckCircleOutlineGlyph,
   CircleExclaimGlyph,
@@ -49,6 +49,8 @@ export interface MustVisitPickScreenProps {
   /** 완료 실패 안내(TRIP-1093 · INV-4) — 있으면 완료 버튼 위에 한 줄. 재시도는 완료를 다시 누르는 것이다. */
   completeError?: string | null;
   onToggleSelect: (poiId: string) => void;
+  /** 사진·이름 칸 누름 → 장소 상세(TRIP-1840 — 체크 원은 선택, 칸은 상세). 안 주면 칸은 누를 수 없다. */
+  onPressPlace?: (poiId: string) => void;
   onComplete: () => void;
   /** 리스트 하단 '+ 탐색에서 더 담기' → d04. */
   onPressAddMore: () => void;
@@ -76,7 +78,7 @@ function AppBar({
         onPress={onBack}
         className="h-10 w-10 items-center justify-center"
       >
-        <ExploreBackChevronGlyph size={24} />
+        <BackChevronWideGlyph size={24} />
       </Pressable>
       <View className="gap-xs">
         <Text className="font-noto-bold text-[18px] font-bold text-ink">
@@ -94,6 +96,9 @@ function AppBar({
   );
 }
 
+// 사진+글 칸 — 상세 칸이든 아니든 같은 배치(안쪽 간격은 행 간격과 같다).
+const BODY_CLASS = 'flex-1 flex-row items-center gap-md';
+
 const PickRow = memo(function PickRow({
   saved,
   rank,
@@ -103,6 +108,7 @@ const PickRow = memo(function PickRow({
   outside,
   location,
   onToggleSelect,
+  onPressPlace,
 }: {
   saved: SavedPlace;
   /** 지역 안 행의 순번. 밖 행은 없다(TRIP-1106 결정 1-A — "선택 번호"로 읽혔다). */
@@ -117,9 +123,44 @@ const PickRow = memo(function PickRow({
   outside: boolean;
   location: string | null | undefined;
   onToggleSelect: (poiId: string) => void;
+  onPressPlace?: (poiId: string) => void;
 }): ReactElement {
   const { place } = saved;
   const tag = place.tags[0];
+  const body = (
+    <>
+      <View className="h-20 w-[104px] overflow-hidden rounded-thumb bg-surface-strong">
+        <PoiPhoto
+          testID={`mustvisit-pick-photo-${place.poiId}`}
+          imageUrl={place.imageUrl}
+          imageLicense={place.imageLicense}
+          surface="thumb"
+          category={place.category}
+          poiId={place.poiId}
+          className="h-full w-full"
+        />
+      </View>
+
+      <View className="flex-1 gap-xs">
+        <Text className="font-noto-bold text-card-title font-bold text-ink">
+          {place.nameKo}
+        </Text>
+        {location ? (
+          <View className="flex-row items-center gap-xs">
+            <MapPinGlyph size={13} color="muted" />
+            <Text className="font-noto text-caption text-muted">
+              {location}
+            </Text>
+          </View>
+        ) : null}
+        {tag ? (
+          <View className="self-start rounded-pill bg-surface-strong px-sm py-xs">
+            <Text className="font-noto text-micro text-body">{tag}</Text>
+          </View>
+        ) : null}
+      </View>
+    </>
+  );
 
   return (
     <View
@@ -143,35 +184,20 @@ const PickRow = memo(function PickRow({
         </View>
       )}
 
-      <View className="h-20 w-[104px] overflow-hidden rounded-thumb bg-surface-strong">
-        <PlacePhoto
-          testID={`mustvisit-pick-photo-${place.poiId}`}
-          imageUrl={place.imageUrl}
-          category={place.category}
-          poiId={place.poiId}
-          contentFit="cover"
-          className="h-full w-full"
-        />
-      </View>
-
-      <View className="flex-1 gap-xs">
-        <Text className="font-noto-bold text-card-title font-bold text-ink">
-          {place.nameKo}
-        </Text>
-        {location ? (
-          <View className="flex-row items-center gap-xs">
-            <MapPinGlyph size={13} color="muted" />
-            <Text className="font-noto text-caption text-muted">
-              {location}
-            </Text>
-          </View>
-        ) : null}
-        {tag ? (
-          <View className="self-start rounded-pill bg-surface-strong px-sm py-xs">
-            <Text className="font-noto text-micro text-body">{tag}</Text>
-          </View>
-        ) : null}
-      </View>
+      {onPressPlace ? (
+        // 사진·이름 칸 = 상세(TRIP-1840). 체크 원은 형제 Pressable 이라 누름이 서로 새지 않는다.
+        <Pressable
+          testID={`mustvisit-pick-open-${place.poiId}`}
+          accessibilityRole="button"
+          accessibilityLabel={`${place.nameKo} 상세 보기`}
+          onPress={() => onPressPlace(place.poiId)}
+          className={BODY_CLASS}
+        >
+          {body}
+        </Pressable>
+      ) : (
+        <View className={BODY_CLASS}>{body}</View>
+      )}
 
       {outside && !selected ? null : (
         <Pressable
@@ -226,24 +252,14 @@ function CompleteBar({
           </Text>
         </View>
       ) : null}
-      <Pressable
+      <Button
         testID="mustvisit-pick-complete"
-        accessibilityRole="button"
-        accessibilityState={{ disabled }}
         disabled={disabled}
         onPress={onPress}
-        className={`h-[54px] w-full items-center justify-center rounded-button ${
-          disabled ? 'bg-surface-strong' : 'bg-primary'
-        }`}
+        className="w-full"
       >
-        <Text
-          className={`font-noto-bold text-[16px] font-bold ${
-            disabled ? 'text-muted' : 'text-on-primary'
-          }`}
-        >
-          완료
-        </Text>
-      </Pressable>
+        완료
+      </Button>
     </View>
   );
 }
@@ -265,19 +281,18 @@ function RegionEmptyBlock({
       <Text className="font-noto-bold text-section font-bold text-ink">
         {`${label}에 담은 곳이 없어요`}
       </Text>
-      <Pressable
+      <Button
         testID="mustvisit-pick-region-empty-browse"
-        accessibilityRole="button"
         onPress={onPressBrowse}
-        className="h-[52px] items-center justify-center rounded-button bg-primary px-2xl"
       >
-        <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-          {`탐색에서 ${label} 장소 담기`}
-        </Text>
-      </Pressable>
+        {`탐색에서 ${label} 장소 담기`}
+      </Button>
     </View>
   );
 }
+
+// 글리프 + 글자 행이라 Button 대신 같은 모양 클래스만 빌린다(TRIP-1828 탈출구).
+const BROWSE = buttonClasses({ size: 'md' });
 
 const RESULTS_CONTENT_STYLE = {
   paddingHorizontal: 16,
@@ -297,6 +312,7 @@ function ResultsBody({
   lockedPoiIds,
   completeError,
   onToggleSelect,
+  onPressPlace,
   onComplete,
   onPressAddMore,
 }: {
@@ -308,6 +324,7 @@ function ResultsBody({
   lockedPoiIds: string[];
   completeError: string | null | undefined;
   onToggleSelect: (poiId: string) => void;
+  onPressPlace: ((poiId: string) => void) | undefined;
   onComplete: () => void;
   onPressAddMore: () => void;
 }): ReactElement {
@@ -358,6 +375,7 @@ function ResultsBody({
                 locationLabels?.[saved.place.poiId] ?? saved.place.region
               }
               onToggleSelect={onToggleSelect}
+              onPressPlace={onPressPlace}
             />
           </Fragment>
         )}
@@ -440,12 +458,10 @@ function EmptyBody({
         testID="mustvisit-pick-browse"
         accessibilityRole="button"
         onPress={onPressBrowse}
-        className="mt-sm h-[48px] flex-row items-center gap-sm self-center rounded-button bg-primary px-xl"
+        className={`${BROWSE.box} mt-sm flex-row gap-sm self-center px-xl`}
       >
         <ExploreSearchGlyph size={18} />
-        <Text className="font-noto-bold text-[15px] font-bold text-on-primary">
-          장소 둘러보기
-        </Text>
+        <Text className={BROWSE.label}>장소 둘러보기</Text>
       </Pressable>
     </View>
   );
@@ -468,16 +484,13 @@ function ErrorBody({ onRetry }: { onRetry: () => void }): ReactElement {
       <Text className="text-center font-noto text-body text-muted">
         네트워크를 확인하고 다시 시도해 주세요
       </Text>
-      <Pressable
+      <Button
         testID="mustvisit-pick-error-retry"
-        accessibilityRole="button"
         onPress={onRetry}
-        className="mt-sm h-[54px] items-center justify-center rounded-button bg-primary px-[28px]"
+        className="mt-sm"
       >
-        <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-          다시 시도
-        </Text>
-      </Pressable>
+        다시 시도
+      </Button>
     </View>
   );
 }
@@ -492,6 +505,7 @@ export function MustVisitPickScreen({
   lockedPoiIds = [],
   completeError,
   onToggleSelect,
+  onPressPlace,
   onComplete,
   onPressAddMore,
   onRetry,
@@ -537,6 +551,7 @@ export function MustVisitPickScreen({
             lockedPoiIds={lockedPoiIds}
             completeError={completeError}
             onToggleSelect={onToggleSelect}
+            onPressPlace={onPressPlace}
             onComplete={onComplete}
             onPressAddMore={onPressAddMore}
           />

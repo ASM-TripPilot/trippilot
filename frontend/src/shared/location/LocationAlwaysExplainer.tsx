@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 
 import {
   LocationClockGlyph,
@@ -101,17 +102,13 @@ export function LocationAlwaysExplainer({
             body="설정 › 위치정보 동의에서 언제든 끌 수 있어요."
           />
         </View>
-        <Pressable
+        <Button
           testID="location-explainer-enable"
-          accessibilityRole="button"
           disabled={busy}
           onPress={onEnable}
-          className="h-[52px] items-center justify-center rounded-[12px] bg-primary"
         >
-          <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-            자동 기록 켜기
-          </Text>
-        </Pressable>
+          자동 기록 켜기
+        </Button>
         <Pressable
           testID="location-explainer-later"
           accessibilityRole="button"

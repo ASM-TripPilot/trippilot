@@ -14,6 +14,7 @@
 import { BackChevronGlyph, InfoCircle18Glyph } from '@/shared/ui/glyphs';
 import { useState, type ReactElement } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { isEstimatedOrigin } from '@/features/request-replan/index.view';
@@ -162,18 +163,14 @@ export function LiveLocationView({
 
           {/* 주 CTA — 지도를 움직여 맞춘 중심 좌표(없으면 받은 center)를 확정 콜백으로 올린다(AC-9).
               중심을 아직 모르면(로딩) 아무것도 올리지 않는다. */}
-          <Pressable
+          <Button
             testID="live-location-confirm"
-            accessibilityRole="button"
             onPress={() => {
               if (center) onConfirm?.(pickedCoord ?? center);
             }}
-            className="h-[52px] items-center justify-center rounded-button bg-primary"
           >
-            <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-              이 위치로 계속
-            </Text>
-          </Pressable>
+            이 위치로 계속
+          </Button>
 
           {/* 건너뛰기 어포던스 — 서버 사다리(마지막 방문지/등록 숙소)로 위임, 클라가 재판정 안 함.
               중립 가정 문구를 캡션으로 밝힌다(AC-2). 배선은 범위 밖(Q8). */}

@@ -43,6 +43,7 @@ frontmatter(`id`·`band`·`status`·`live_verified_at`·`routes`) 다음 H1 제�
 
 - 라우트(`app/**`)를 더하거나 지우면 이 지도의 해당 파일 `routes`도 고친다 — `node docs/feature-map/check.mjs`가 어느 기능에도 속하지 않는 라우트와 코드에 없는 testID를 잡는다.
 - 재QA로 실화면을 돌면 그 기능 파일의 `status`·`live_verified_at`을 갱신한다.
+- E2E 흐름(`e2e/*.yaml`)은 파일 이름·`tags`에 이 지도의 ID(기능 파일 `id`·`Sub-features` ID)를 쓴다 — `check.mjs`가 없는 ID를 잡고 덮인 기능 수를 보고한다. 태그는 그 흐름이 실제로 단언하는 ID만 단다.
 
 ## 기능 목록
 

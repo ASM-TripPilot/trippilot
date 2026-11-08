@@ -1,4 +1,5 @@
 import { Profiler } from 'react';
+import { getAnimatedStyle } from 'react-native-reanimated';
 import { act, render, screen, within } from '@testing-library/react-native';
 
 import { countUpText } from '@/shared/lib/countUp';
@@ -146,36 +147,103 @@ describe('TRIP-1386 · 모션', () => {
     expect(statTexts()).toEqual(['0', '0', '—']);
   });
 
-  // 등장 래퍼는 `shared/ui/RevealItem` 이 한 벌로 맡는다 — 곡선·지연 계산은 그쪽 테스트, 여기는 이 화면이 넘기는 첫 지연(1050 = 경로 0.15+0.9초 뒤)과
-  // 카드 순번(내레이션이 있으면 일차 카드가 한 칸 뒤)만 잰다. TRIP-1666: 인용문 testID 노드가 등장 래퍼의 직접 자식이어야 `revealValues` 가 래퍼를 읽는다(구현 쪽 Fragment 루트 계약). 1050 대신 h14 의 500 을 넘기면 1000ms 시점에 이미 보여 red.
-  it('내레이션·일차 카드는 경로가 다 그려진 뒤(1050ms) 차례로(150ms 간격) 등장한다', async () => {
-    probe.setReduceMotion(false);
-    renderScreen({
-      vm: vmOf({
-        narrative: '3일 동안 12곳을 다녀왔어요.',
-        highlights: [
-          hl('2026-06-11', 1, ['광안리 해변']),
-          hl('2026-06-12', 2, ['전포 카페거리']),
-        ],
-      }),
+  // 등장 래퍼는 `shared/ui/RevealItem` 이 한 벌로 맡는다 — 곡선·지연 계산은 그쪽 테스트, 여기는 이 화면이 넘기는 첫 지연(TRIP-1831 — 0. 종전 1050 은 "지도 경로가
+  // 다 그려진 뒤"였는데 지도 분기가 늘 비어 빈 대기였다)과 순번(내레이션이 있으면 일차 카드가 한 칸 뒤, 동선 정류장은 카드 뒤에서 이어짐)만 잰다.
+  // TRIP-1666: 인용문 testID 노드가 등장 래퍼의 직접 자식이어야 `revealValues` 가 래퍼를 읽는다(구현 쪽 Fragment 루트 계약).
+  const SUMMARY_VM = () =>
+    vmOf({
+      narrative: '3일 동안 12곳을 다녀왔어요.',
+      highlights: [
+        hl('2026-06-11', 1, ['광안리 해변']),
+        hl('2026-06-12', 2, ['전포 카페거리']),
+      ],
     });
+  /** 내레이션·일차 카드 둘·동선 정류장 둘 — 화면 순서(= 등장 순번 0~4)대로. */
+  const revealNodes = () => [
+    screen.getByTestId('reflection-summary-narrative'),
+    ...screen.getAllByTestId('reflection-summary-day-card'),
+    ...screen.getAllByTestId('reflection-summary-visit-item'),
+  ];
+  const opacities = () => revealNodes().map((n) => revealValues(n).opacity);
+  /** 표지 스티커(StickerPop) 래퍼의 지금 투명도 — 스티커 첫 줄 글자에서 위로 올라가 처음 만나는 투명도 있는 호스트. */
+  const stickerOpacity = (): number => {
+    let node = screen.getByText('여행').parent;
+    while (node) {
+      if (typeof node.type === 'string') {
+        const style = getAnimatedStyle(node) as { opacity?: unknown };
+        if (typeof style.opacity === 'number') return style.opacity;
+      }
+      node = node.parent;
+    }
+    return Number.NaN;
+  };
+
+  it('첫 방문: 내레이션은 지연 없이 곧장 등장을 시작하고, 일차 카드·동선 정류장이 150ms 간격으로 이어서 올라와 모두 보인다 (TRIP-1831 — 첫 지연 0)', async () => {
+    // 준비: 동작 줄이기 끔 + 첫 방문(기본 — `revealing` 을 안 주면 켜짐).
+    probe.setReduceMotion(false);
+    renderScreen({ vm: SUMMARY_VM() });
     await advance(0);
-    const narrative = screen.getByTestId('reflection-summary-narrative');
-    const [day1, day2] = screen.getAllByTestId('reflection-summary-day-card');
-    const opacities = () =>
-      [narrative, day1, day2].map((node) => revealValues(node).opacity);
+    expect(revealNodes()).toHaveLength(5); // 앵커 — 내레이션 1 + 일차 카드 2 + 정류장 2
 
-    await advance(1000);
-    expect(opacities()).toEqual([0, 0, 0]); // 경로가 그려지는 동안(첫 카드 1050ms 전) 모두 대기
+    // 실행 + 단언: 60ms — 내레이션만 시작(옛 1050ms 지연이면 0 이라 red), 나머지는 대기.
+    await advance(60);
+    let [narrative, day1, day2, stop1, stop2] = opacities();
+    expect(narrative).toBeGreaterThan(0);
+    expect([day1, day2, stop1, stop2]).toEqual([0, 0, 0, 0]);
 
-    await advance(130); // 1130ms — 내레이션(1050)만 시작, 1일차(1200)·2일차(1350)는 아직
-    const [first, second, third] = opacities();
-    expect(first).toBeGreaterThan(0);
-    expect(second).toBe(0);
-    expect(third).toBe(0);
+    // 220ms — 1일차 카드(순번 1, 150ms 시차)까지 시작, 2일차(300)·정류장(450·600)은 아직.
+    await advance(160);
+    [narrative, day1, day2, stop1, stop2] = opacities();
+    expect(day1).toBeGreaterThan(0);
+    expect([day2, stop1, stop2]).toEqual([0, 0, 0]);
 
-    await advance(770); // 1900ms — 마지막 카드(1350+450)까지 끝
-    expect(opacities()).toEqual([1, 1, 1]);
+    // 500ms — 첫 정류장(순번 3 = 450ms 시작)이 시작했고 둘째(600)는 아직. 정류장 지연도 0 기준이다(옛 1050 이면 0).
+    await advance(280);
+    [narrative, day1, day2, stop1, stop2] = opacities();
+    expect(day2).toBeGreaterThan(0);
+    expect(stop1).toBeGreaterThan(0);
+    expect(stop2).toBe(0);
+
+    // 1200ms — 마지막 정류장(600 + 450)까지 끝.
+    await advance(700);
+    expect(opacities()).toEqual([1, 1, 1, 1, 1]);
+  });
+
+  it('재방문(revealing=false): 첫 렌더부터 내레이션·일차 카드·동선 정류장이 전부 보이고(투명 구간 없음) 숫자도 처음부터 최종값이며 시간이 흘러도 안 바뀐다 (TRIP-1831)', async () => {
+    // 준비: 동작 줄이기 끔 + 이미 본 요약.
+    probe.setReduceMotion(false);
+    renderScreen({ vm: SUMMARY_VM(), revealing: false });
+
+    // 실행 + 단언 1: 아직 시계를 안 흘렸다(0ms) — 전부 불투명·제자리, 숫자는 최종값.
+    await advance(0);
+    revealNodes().forEach((node) =>
+      expect(revealValues(node)).toEqual({ opacity: 1, translateY: 0 })
+    );
+    expect(statTexts()).toEqual(['12', '24', '38km']);
+
+    // 단언 2: 100ms 뒤에도 그대로(카운트업이 0 에서 다시 시작하지 않는다).
+    await advance(100);
+    expect(opacities()).toEqual([1, 1, 1, 1, 1]);
+    expect(statTexts()).toEqual(['12', '24', '38km']);
+    // 단언 3: 표지 스티커(첫 방문은 350ms 뒤 팝)도 이미 끝 모습이다(6-b 실측으로 보강). 형광펜 색은 style 단언 금지(README 판정 4)라 실화면 몫.
+    expect(stickerOpacity()).toBe(1);
+  });
+
+  it('첫 방문이면 100ms 에는 스티커가 아직 시작 전이다 — 위 재방문 단언 3 이 공허하지 않다는 짝', async () => {
+    probe.setReduceMotion(false);
+    renderScreen({ vm: SUMMARY_VM() });
+    await advance(100);
+    expect(stickerOpacity()).toBe(0);
+  });
+
+  it('동작 줄이기 켜짐이면 첫 방문이어도 첫 렌더부터 전부 보인다 (종전 그대로)', async () => {
+    probe.setReduceMotion(true);
+    renderScreen({ vm: SUMMARY_VM() });
+
+    await advance(0);
+
+    expect(opacities()).toEqual([1, 1, 1, 1, 1]);
+    expect(statTexts()).toEqual(['12', '24', '38km']);
   });
 });
 

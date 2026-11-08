@@ -2,7 +2,8 @@
 
 `PgDialogueMemoryStore` 와 같은 규칙: **DML 만** 한다 — DDL 정본은 `ai/docker/vector-init/03-place-fact-cache.sql` +
 `deploy/eks/bootstrap.sql`(ai_user 는 CREATE 권한이 없다). 커넥션은 팩토리 주입이고 드라이버 패키지를 import 하지 않는다.
-만료 행 정리는 쓰기 때 같은 트랜잭션에서 한 번(백스톱) — 읽기는 만료 전 것만 본다.
+행은 지우지 않고 쌓는다(2026-11-08) — `expires_at` 은 다시 찾을 때라 읽기는 만료와 무관하게 마지막 기록을 돌려준다. 장소마다 한 행이라
+표는 찾아본 장소 수만큼만 자란다.
 
 # ponytail: 호출마다 커넥션 열고 닫음 — 장소 정보 질문 1회에 읽기 1·(뒤에서) 쓰기 ≤1 이라 충분.
 """
@@ -35,8 +36,7 @@ class PgPlaceFactStore:
 
     def get(self, poi_id: str, now: datetime) -> FactRecord | None:
         with self._connect() as conn, conn.cursor() as cur:
-            cur.execute(f"SELECT poi_id, facts, fetched_at, expires_at FROM {_TABLE} WHERE poi_id = %s AND expires_at > %s",
-                        (poi_id, now))
+            cur.execute(f"SELECT poi_id, facts, fetched_at, expires_at FROM {_TABLE} WHERE poi_id = %s", (poi_id,))
             row = cur.fetchone()
         return _record(row) if row else None
 
@@ -45,7 +45,6 @@ class PgPlaceFactStore:
         found = {} if f is None else {**{k: getattr(f, k) for k in FIELDS}, "source_url": f.source_url, "source_host": f.source_host}
         doc = json.dumps({**found, "searched": list(record.searched)}, ensure_ascii=False)
         with self._connect() as conn, conn.cursor() as cur:
-            cur.execute(f"DELETE FROM {_TABLE} WHERE expires_at <= %s", (record.fetched_at,))
             cur.execute(
                 f"INSERT INTO {_TABLE} (poi_id, facts, fetched_at, expires_at) VALUES (%s, %s::jsonb, %s, %s) "
                 "ON CONFLICT (poi_id) DO UPDATE SET facts = EXCLUDED.facts, fetched_at = EXCLUDED.fetched_at, "

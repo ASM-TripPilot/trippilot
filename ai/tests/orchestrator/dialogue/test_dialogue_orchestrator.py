@@ -101,7 +101,7 @@ from trippilot.orchestrator.dialogue.dialogue_orchestrator import (
 from trippilot.llm_gateway.gates.dialogue.dialogue_plan import DialoguePlanGate
 from trippilot.llm_gateway.workers.dialogue.dialogue_plan import DialoguePlanWorker
 from trippilot.llm_gateway.workers.dialogue.dialogue_smalltalk import DialogueSmalltalkWorker
-from trippilot.agents.unknown_handling.agent import KnowledgeTask, UnknownHandlingAgent, UnknownOutcome
+from trippilot.agents.unknown_handling.agent import KnowledgeTask, PrefetchTask, UnknownHandlingAgent, UnknownOutcome
 from trippilot.llm_gateway.gates.dialogue.dialogue_knowledge import DialogueKnowledgeGate
 from trippilot.llm_gateway.workers.dialogue.dialogue_knowledge import DialogueKnowledgeWorker
 from trippilot.domain.dialogue.plan_tools import plan_tool_specs_json
@@ -2135,3 +2135,44 @@ def test_intro_web_footnote_rides_only_on_an_llm_answer(monkeypatch, answer, foo
     b = _build(_canned(Intent.GET_POI_INFO, place="우도", aspect="어떤 곳", answer=answer), ports=ports)
     out = b.orch.turn(_input("우도 어떤 곳이야?"))
     assert out.outcome == "ANSWER" and (out.answer.footnote == INTRO_WEB_TEXT) is footnoted
+
+
+# ── 후보 답의 미리 찾기 — 답에는 손대지 않는다 (UnknownHandlingAgent, 2026-11-08) ─────────────────────────────
+
+
+class _PrefetchSpy:
+    """UnknownHandlingAgent 대역 — 받은 일을 모은다. `boom` 이면 던진다(미리 찾기가 터져도 답은 같아야 한다)."""
+
+    knows_general = False
+
+    def __init__(self, *, boom: bool = False) -> None:
+        self.tasks: list = []
+        self._boom = boom
+
+    def run(self, task):
+        if self._boom:
+            raise RuntimeError("prefetch down")
+        self.tasks.append(task)
+        return UnknownOutcome()
+
+
+def _explore_with(agent) -> tuple[object, SimpleNamespace]:
+    answer = json.dumps({"text": "부산에서 요즘 인기 있는 감천문화마을과 흰여울 카페를 추천해요.", "footnote": None}, ensure_ascii=False)
+    b = _build(_canned(Intent.EXPLORE_PLACES, answer=answer, region="부산", theme="요즘 핫한"),
+               ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool(), unknown=agent))
+    return b.orch.turn(_input("부산 요즘 핫한 곳 알려줘", snapshot=_NO_TRIP)), b
+
+
+def test_a_candidates_answer_hands_its_shown_places_to_prefetch() -> None:
+    spy = _PrefetchSpy()
+    out, _ = _explore_with(spy)
+    assert out.outcome == "ANSWER" and out.answer.kind is AnswerKind.CANDIDATES
+    (task,) = spy.tasks
+    # 관광 종류만 넘긴다 — 카페는 근거가 블로그뿐이라 미리 찾지 않는다(물을 때만)
+    assert isinstance(task, PrefetchTask) and task.poi_ids == (str(uuid.uuid5(uuid.NAMESPACE_DNS, "감천문화마을")),)
+
+
+def test_a_failing_prefetch_leaves_the_answer_as_it_was() -> None:
+    quiet, _ = _explore_with(_PrefetchSpy())
+    loud, _ = _explore_with(_PrefetchSpy(boom=True))
+    assert loud.outcome == "ANSWER" and loud.answer == quiet.answer  # 미리 찾기는 덧붙임이다 — 빠져도 답이 같다(INV-4)

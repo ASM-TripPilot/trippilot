@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { formatDayLabel } from '@/entities/trip';
@@ -576,24 +577,15 @@ export function DailyReflectionScreen({
                   취소
                 </Text>
               </Pressable>
-              <Pressable
-                accessibilityRole="button"
+              <Button
                 testID="reflection-daily-edit-save"
+                size="md"
                 disabled={!canSave}
-                accessibilityState={{ disabled: !canSave }}
                 onPress={handleSave}
-                className={`h-12 flex-1 items-center justify-center rounded-button ${
-                  canSave ? 'bg-primary' : 'bg-surface-strong'
-                }`}
+                className="flex-1"
               >
-                <Text
-                  className={`font-noto-bold text-card-title font-bold ${
-                    canSave ? 'text-on-primary' : 'text-muted-soft'
-                  }`}
-                >
-                  저장
-                </Text>
-              </Pressable>
+                저장
+              </Button>
             </View>
           </View>
         ) : face === 'empty' || face === 'error' ? (
@@ -601,16 +593,13 @@ export function DailyReflectionScreen({
           // 회피 컨테이너 안·스크롤 뒤에 둬야 한 줄 입력 중 키보드에 밀려 올라와 CTA 가 안 가린다(실기 6-b).
           // pb-[104px] 는 탭바(96) 위에 앉히는 여백 — 키보드가 떠도 남는 빈 띠는 그대로 둔다(Seed Q4).
           <View className="w-full bg-canvas px-lg pb-[104px] pt-[8px]">
-            <Pressable
-              accessibilityRole="button"
+            <Button
               testID="reflection-daily-compose"
               onPress={handleEnterEdit}
-              className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
+              className="w-full"
             >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                직접 회고 작성
-              </Text>
-            </Pressable>
+              직접 회고 작성
+            </Button>
           </View>
         ) : null}
       </KeyboardAvoidingView>

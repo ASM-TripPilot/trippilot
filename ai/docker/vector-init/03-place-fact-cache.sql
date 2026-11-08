@@ -6,5 +6,5 @@ CREATE TABLE IF NOT EXISTS public.place_fact_cache (
   poi_id     text PRIMARY KEY,       -- 등록 POI id (BE poi.poi_id)
   facts      jsonb,                  -- {hours,last_entry,closed,fee,source_url,source_host,searched=찾아본 칸} · {searched} 만 = 찾아봤지만 출처 있는 값 없음(2026-10-30 전 행은 null)
   fetched_at timestamptz NOT NULL,
-  expires_at timestamptz NOT NULL    -- 찾음 +7일 · 못 찾음 +1일
+  expires_at timestamptz NOT NULL    -- 다시 찾을 때: 찾음 +7일 · 못 찾음 +1일 (행은 지우지 않고 쌓는다)
 );

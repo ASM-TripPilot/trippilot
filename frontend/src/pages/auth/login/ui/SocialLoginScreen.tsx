@@ -1,5 +1,6 @@
 import { Fragment, type ComponentType, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { LinearGradient } from 'expo-linear-gradient';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
@@ -130,14 +131,9 @@ function SheetCta({
   onPress: () => void;
 }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      testID={testID}
-      onPress={onPress}
-      className="h-[52px] items-center justify-center rounded-button bg-primary"
-    >
-      <Text className="font-noto-bold font-bold text-on-primary">{label}</Text>
-    </Pressable>
+    <Button testID={testID} onPress={onPress}>
+      {label}
+    </Button>
   );
 }
 

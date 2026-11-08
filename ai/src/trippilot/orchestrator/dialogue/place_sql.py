@@ -161,6 +161,15 @@ class PlaceSqlLookup:
             log.warning("place_find db_error trace=%s error=%s", trace_id, type(e).__name__)
             return None
 
+    def areas(self, poi_ids: Sequence[str], trace_id: TraceId) -> dict[str, str]:
+        """등록 장소의 '시·도 시군구' — 미리 찾기가 조회 이름에 붙인다(여행 지역이 아니라 그곳의 지역). LLM 없음·기본키 조회 한 번.
+        DB 오류는 빈 dict(그곳은 미리 찾지 않는다, INV-4) + 한 줄 — `find_place` 와 같은 접기."""
+        try:
+            return {r.poi_id: " ".join(x for x in (r.sido, r.sigungu) if x) for r in self._executor.rows(poi_ids)}
+        except Exception as e:  # noqa: BLE001 — 사유는 예외 타입까지
+            log.warning("place_areas db_error trace=%s error=%s", trace_id, type(e).__name__)
+            return {}
+
     def find_said(self, words: Sequence[str], spans: Sequence[str], trace_id: TraceId) -> list[PlaceRow]:
         """편집 번역의 풀 밖 이름 장소(F9) — 발화의 이름 말 여럿을 한 번에(`PgPlaceSql.find_said`, LLM 없음). 고르기는 부르는 쪽
         (`pick_said`). DB 오류는 빈 목록(번역은 받은 풀로 그대로, INV-4) + 한 줄 — `find_place` 와 같은 접기."""

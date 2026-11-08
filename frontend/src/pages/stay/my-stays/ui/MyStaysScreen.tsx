@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CARD_SHADOW } from '@/features/settings';
@@ -225,16 +226,13 @@ export function MyStaysScreen({
               <Text className="text-center font-noto text-body leading-[21px] text-muted">
                 {'숙소를 탐색하고 등록하면\n일정을 만들 수 있어요'}
               </Text>
-              <Pressable
+              <Button
                 testID="my-stays-explore"
-                accessibilityRole="button"
+                size="md"
                 onPress={onPressExplore}
-                className="h-[44px] items-center justify-center rounded-button bg-primary px-[22px]"
               >
-                <Text className="font-noto-bold text-card-title text-on-primary">
-                  숙소 탐색
-                </Text>
-              </Pressable>
+                숙소 탐색
+              </Button>
             </View>
           </View>
         ) : (

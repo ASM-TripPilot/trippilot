@@ -2,8 +2,7 @@
 
 테스트 대역이자 **ai_kb DSN 없는 로컬 기동의 실 구현**이다(`api/dialogue.py` 가 `place_fact_store` 미주입이면 이걸 쓴다 —
 `memory_memory_store.py` 와 같은 자리). 프로세스가 죽으면 저장도 사라지고 파드 사이에 공유되지 않는다 — 운영은 `PgPlaceFactStore`.
-`put` 은 upsert, `get` 은 만료 전 것만(만료 행은 없는 것과 같다 — Pg 와 같은 `expires_at > now` 경계). Pg 가 쓰기 때 하는 만료 행
-정리(백스톱)는 거울하지 않는다 — 읽기가 만료를 거르고 장소마다 한 행이라 프로세스 수명 안에서 쌓이지 않는다.
+`put` 은 upsert, `get` 은 만료와 무관하게 마지막 기록(Pg 와 같다 — `expires_at` 은 다시 찾을 때, 2026-11-08 쌓기).
 """
 
 from __future__ import annotations
@@ -21,8 +20,7 @@ class InMemoryPlaceFactStore:
 
     def get(self, poi_id: str, now: datetime) -> FactRecord | None:
         with self._lock:
-            row = self._rows.get(poi_id)
-        return row if row is not None and row.expires_at > now else None
+            return self._rows.get(poi_id)
 
     def put(self, record: FactRecord) -> None:
         with self._lock:

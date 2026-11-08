@@ -43,16 +43,18 @@ export function KenBurns({ children }: { children: ReactNode }): ReactElement {
   );
 }
 
-/** 표지 스티커가 작게 시작해 살짝 부풀었다가(1.14) 자리를 잡는다. 답 전엔 안 보인다. */
+/** 표지 스티커가 작게 시작해 살짝 부풀었다가(1.14) 자리를 잡는다. 답 전엔 안 보인다. `revealing` 이 꺼지면(j04 재방문, TRIP-1831) 처음부터 끝 모습. */
 export function StickerPop({
   children,
+  revealing = true,
 }: {
   children: ReactNode;
+  revealing?: boolean;
 }): ReactElement {
   const reduce = useReduceMotion();
-  const pop = useSharedValue(0);
+  const pop = useSharedValue(revealing ? 0 : 1);
   useEffect(() => {
-    if (reduce === true) pop.value = 1;
+    if (!revealing || reduce === true) pop.value = 1;
     else if (reduce === false)
       pop.value = withDelay(
         350,
@@ -61,7 +63,7 @@ export function StickerPop({
           withTiming(1, { duration: 160 })
         )
       );
-  }, [reduce, pop]);
+  }, [reduce, pop, revealing]);
   const style = useAnimatedStyle(() => ({
     opacity: Math.min(1, pop.value),
     transform: [
@@ -79,18 +81,21 @@ export function StickerPop({
 export function Highlight({
   color,
   children,
+  revealing = true,
 }: {
   color: string;
   children: string;
+  /** 꺼지면(j04 재방문, TRIP-1831) 처음부터 칠해져 있다. */
+  revealing?: boolean;
 }): ReactElement {
   const reduce = useReduceMotion();
   const [armed, setArmed] = useState(false);
   useEffect(() => {
-    if (reduce !== false) return;
+    if (!revealing || reduce !== false) return;
     const id = setTimeout(() => setArmed(true), 900);
     return () => clearTimeout(id);
-  }, [reduce]);
-  const on = reduce === true || armed;
+  }, [reduce, revealing]);
+  const on = !revealing || reduce === true || armed;
   return (
     <Text style={{ backgroundColor: on ? color : 'transparent' }}>
       {children}

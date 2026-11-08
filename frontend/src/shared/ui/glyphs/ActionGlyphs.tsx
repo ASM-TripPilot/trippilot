@@ -1,4 +1,4 @@
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 import { GLYPH_COLORS } from './colors';
 import type { GlyphProps } from './types';
@@ -191,6 +191,59 @@ export function PencilGlyph({ size = 18, color = 'ink', testID }: GlyphProps) {
         d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"
         stroke={GLYPH_COLORS[color]}
         strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 공유(세 점 + 잇는 선, 24 격자) — 장소 상세(d06·i10) 헤더. TRIP-1829 에서 explore·execution 사본을 모음.
+export function ShareGlyph({ size = 24, color = 'ink', testID }: GlyphProps) {
+  const stroke = GLYPH_COLORS[color];
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Circle cx={18} cy={5} r={2.4} stroke={stroke} strokeWidth={1.8} />
+      <Circle cx={6} cy={12} r={2.4} stroke={stroke} strokeWidth={1.8} />
+      <Circle cx={18} cy={19} r={2.4} stroke={stroke} strokeWidth={1.8} />
+      <Path
+        d="M8.1 10.9L15.9 6.1M8.1 13.1L15.9 17.9"
+        stroke={stroke}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+// 다시 하기 ↻(16 격자, 원호 + 꺾인 화살촉) — 닉네임 다시 뽑기·지도 폴백 바 [다시 시도].
+// TRIP-1829 에서 onboarding(22 격자)·map-sheet(16 격자) 사본을 모음 — 획폭/격자 비율이 같아 축척만 다르다.
+export function RetryGlyph({ size = 16, color = 'ink', testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+    >
+      <Path
+        d="M13.3333 7.33333C13.2818 6.07284 12.7851 4.87144 11.9314 3.94255C11.0778 3.01367 9.92255 2.41745 8.6709 2.25981C7.41924 2.10217 6.15222 2.39332 5.09494 3.08153C4.03765 3.76975 3.25855 4.81047 2.89605 6.01882C2.53355 7.22716 2.61111 8.52488 3.11497 9.68144C3.61882 10.838 4.51634 11.7785 5.64807 12.3359C6.77981 12.8933 8.07248 13.0314 9.29645 12.7258C10.5204 12.4202 11.5964 11.6906 12.3333 10.6667"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={1.33333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M13.3333 2.66667V7.33333H8.66667"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={1.33333}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

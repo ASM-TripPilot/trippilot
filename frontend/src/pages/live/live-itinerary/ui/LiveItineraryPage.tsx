@@ -69,6 +69,7 @@ import {
   useLocationAutomation,
   useTripRoutes,
 } from '@/shared/location';
+import { usePressLock } from '@/shared/lib/pressGuard';
 import { automationVisitRefs } from '../model/automationInput';
 import { useVisitCheck } from '@/features/check-visit';
 
@@ -183,9 +184,9 @@ export function LiveItineraryPage({
       setExpandSignal((n) => n + 1);
     }
   }
-  // TRIP-1189 다음 예정지 [길찾기] — 외부 앱을 띄우는 동안 연타를 막는 잠금(ref: 같은 틱 두 번째 press 도 본다)과
+  // TRIP-1189 다음 예정지 [길찾기] — 외부 앱을 띄우는 동안 연타를 막는 잠금(같은 틱 두 번째 press 도 본다)과
   // 앱·웹 모두 실패했을 때의 거리 안내(INV-4).
-  const directionsBusy = useRef(false);
+  const directionsLock = usePressLock();
   const [directionsNotice, setDirectionsNotice] = useState<{
     poiId: string;
     text: string;
@@ -350,7 +351,7 @@ export function LiveItineraryPage({
   // (다른 방문의 저장이 이 방문의 응답을 "옛 것"으로 만들지 않는다).
   const memoAttempt = useRef<Record<string, number>>({});
   // TRIP-1426 [저장] 잠금 — ref 는 같은 틱 두 번째 누름을 막고(렌더 전이라 disabled 가 아직 안 섰다), state 는
-  // 응답을 기다리는 동안 [저장]을 비활성으로 그린다(directionsBusy 선례). TRIP-1493 — 방문(visitCheckId)별이다:
+  // 응답을 기다리는 동안 [저장]을 비활성으로 그린다(directionsLock 선례). TRIP-1493 — 방문(visitCheckId)별이다:
   // 한 방문의 PUT 보류가 다른 방문의 메모를 막지 않는다(BR-U5-14). 같은 방문의 재누름만 막는다.
   const memoSaving = useRef(new Set<string>());
   const [memoSavingShown, setMemoSavingShown] = useState<ReadonlySet<string>>(
@@ -594,8 +595,7 @@ export function LiveItineraryPage({
   const directionsPoiIds = new Set(slotDests.keys());
   const pressDirections = async (poiId: string) => {
     const dest = slotDests.get(poiId);
-    if (!dest || directionsBusy.current) return;
-    directionsBusy.current = true;
+    if (!dest || !directionsLock.acquire()) return;
     setDirectionsNotice(null);
     try {
       await openNextNav(dest, (distanceRange) =>
@@ -607,7 +607,7 @@ export function LiveItineraryPage({
         })
       );
     } finally {
-      directionsBusy.current = false;
+      directionsLock.release();
     }
   };
 
@@ -814,10 +814,10 @@ export function LiveItineraryPage({
         // TRIP-1195 — 바라보는 날이 오늘이 아니면 그 날짜를 쿼리로 넘긴다(오늘이면 쿼리 없음 = 종전과 같은 경로).
         // 이미 지난 날은 서버가 409 로 막는 막다른 길이라 진입 자체를 숨긴다(결정 3). 여행 구간 밖이라 보는 날이
         // 없으면(activeDate '') 종전 그대로 — 서버가 기간 밖을 판정한다.
-        // TRIP-1214 — 여행 시작 전(오늘이 첫날보다 앞)에도 서버가 "여행 기간이 아니다"로 막으므로 처음부터 숨긴다.
+        // TRIP-1841 — 여행 시작 전에도 연다(종전 TRIP-1214 숨김 폐지): 보는 날은 오늘이 아니라 위 규칙대로
+        // targetDate 로 실리고, 서버가 앞으로 올 여행 날 하루 전체를 연다.
         onPressAiReplan={
-          (activeDate !== '' && activeDate < today) ||
-          today < (itinerary.days[0]?.date ?? '')
+          activeDate !== '' && activeDate < today
             ? undefined
             : () =>
                 router.push(

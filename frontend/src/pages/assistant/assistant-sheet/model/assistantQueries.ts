@@ -16,6 +16,7 @@ import type {
   ProposalStatus,
   SendTurnRequest,
 } from '../api/assistantContract';
+import { usePressLock } from '@/shared/lib/pressGuard';
 
 /**
  * 도우미 서버 상태 훅(TRIP-1319, frontend-components §3·§6). 서버 정본은 Query 캐시 하나다 —
@@ -163,22 +164,22 @@ export function useLoadOlderMessages(sessionId: string | undefined): {
     queryFn: skipToken,
   });
   const [status, setStatus] = useState<OlderStatus>('idle');
-  const busy = useRef(false);
+  const busyLock = usePressLock();
   const current = useRef(sessionId);
   const hasMore = typeof data?.nextBefore === 'string';
 
   // 같은 Page 인스턴스에서 세션이 바뀌면(이력 → router.replace) 진행 표식·상태를 새로 시작한다(03b N1).
   useEffect(() => {
     current.current = sessionId;
-    busy.current = false;
+    busyLock.release();
     setStatus('idle');
-  }, [sessionId]);
+  }, [sessionId, busyLock]);
 
   function loadOlder(): void {
-    if (!sessionId || busy.current) return;
+    if (!sessionId || busyLock.isHeld()) return;
     const before = queryClient.getQueryData<MessagesPage>(key)?.nextBefore;
     if (typeof before !== 'string') return;
-    busy.current = true;
+    if (!busyLock.acquire()) return;
     setStatus('loading');
     assistantPort()
       .getMessages(sessionId, { before })
@@ -201,7 +202,7 @@ export function useLoadOlderMessages(sessionId: string | undefined): {
       )
       .finally(() => {
         // 세션이 바뀐 뒤 늦게 끝난 이전 요청이 새 세션의 진행 표식을 풀지 않게 한다.
-        if (current.current === sessionId) busy.current = false;
+        if (current.current === sessionId) busyLock.release();
       });
   }
 

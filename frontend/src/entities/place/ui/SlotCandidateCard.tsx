@@ -1,8 +1,11 @@
 import type { ReactElement, ReactNode } from 'react';
-import { Text, View } from 'react-native';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { Pressable, Text, View } from 'react-native';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 
-import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
+import type {
+  ImageLicense,
+  SlotCandidatesCandidatesItem,
+} from '@/shared/api/index.schemas';
 import { COLOR_TOKENS } from '@/shared/config';
 
 /**
@@ -59,6 +62,8 @@ export interface SlotCandidateCardProps {
   showImage?: boolean;
   /** 사진 URL — showImage 일 때만 쓴다. null·undefined·'' 면 생성 이미지. */
   imageUrl?: string | null;
+  /** `imageUrl` 의 공공누리 유형 — 필수 키(끊기면 tsc). */
+  imageLicense: ImageLicense | null | undefined;
   /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본) — 없으면 중립 폴백. */
   category?: string | null;
   /**
@@ -79,6 +84,10 @@ export interface SlotCandidateCardProps {
   /** TRIP-795 h10 반경 밖 톤다운(기본 off). 참이면 이름 글자·배지를 회색(muted/non-primary)으로
    * 낮춘다. 미전달=기존 렌더 불변(planb i14·h08 무회귀). 톤다운 판정은 계약에 없어 프롭 전용(D1·D8). */
   dimmed?: boolean;
+  /** TRIP-1840 · 사진·이름 → 장소 상세. 주면 사진과 이름 글자만 각자 누름 칸(`{prefix}-image-open-{poiId}`·
+   * `{prefix}-name-open-{poiId}`)이 된다 — 행의 나머지(태그·거리·빈 곳)는 바깥 라디오가 그대로 받는다.
+   * `image-`·`name-` 접두라 소비처의 후보 루트 셀렉터(`(?!…name-|image-…)`)에 새지 않는다. 미전달=기존 렌더 불변. */
+  onPressPlace?: () => void;
 }
 
 // NativeWind 는 소스의 클래스 문자열을 정적으로 스캔한다 — 크기 클래스를 조립하지 말고 통째로 둔다.
@@ -109,6 +118,7 @@ export function SlotCandidateCard({
   showNameTestId = false,
   showImage = false,
   imageUrl,
+  imageLicense,
   category,
   coverPoiId,
   imageSize = 56,
@@ -117,6 +127,7 @@ export function SlotCandidateCard({
   slack,
   trailing,
   dimmed = false,
+  onPressPlace,
 }: SlotCandidateCardProps): ReactElement {
   const { poiId } = candidate;
   const leafId = (role: string): string => `${testIDPrefix}-${role}-${poiId}`;
@@ -128,6 +139,27 @@ export function SlotCandidateCard({
   // 태그가 길면 태그만 한 줄로 줄어들고 거리는 끝까지 보인다(TRIP-1043 #043 — 거리 leaf 는 자르지 않는다, INV-3).
   const tagLine =
     tags !== undefined && tags.length > 0 ? `#${tags.join(' · ')}` : null;
+  // 사진·이름을 상세 칸으로 감싼다 — onPressPlace 가 없으면 노드를 그대로 둬 기존 트리와 같다(h08 시트·h10 무회귀).
+  // 이름 칸만 self-start(글자 폭만 — 옆 빈 곳은 바깥 라디오가 받는다). 사진 칸은 행의 세로 가운데 정렬을 그대로 따른다.
+  const wrapOpen = (
+    testID: string,
+    label: string,
+    node: ReactElement,
+    className?: string
+  ): ReactElement =>
+    onPressPlace ? (
+      <Pressable
+        testID={testID}
+        accessibilityRole="button"
+        accessibilityLabel={`${label} 상세 보기`}
+        onPress={onPressPlace}
+        className={className}
+      >
+        {node}
+      </Pressable>
+    ) : (
+      node
+    );
   const distanceClass =
     distanceTone === 'muted'
       ? 'font-noto text-caption text-muted'
@@ -157,29 +189,39 @@ export function SlotCandidateCard({
         </View>
       ) : null}
 
-      {showImage ? (
-        <PlacePhoto
-          testID={leafId('image')}
-          imageUrl={imageUrl}
-          category={category}
-          poiId={coverPoiId}
-          contentFit="cover"
-          cachePolicy="memory-disk"
-          recyclingKey={poiId}
-          className={`${IMAGE_SIZE_CLASS[imageSize]} rounded-thumb bg-surface-soft`}
-        />
-      ) : null}
+      {showImage
+        ? wrapOpen(
+            leafId('image-open'),
+            `${nameLabel} 사진`,
+            <PoiPhoto
+              testID={leafId('image')}
+              imageUrl={imageUrl}
+              imageLicense={imageLicense}
+              surface="thumb"
+              category={category}
+              poiId={coverPoiId}
+              cachePolicy="memory-disk"
+              recyclingKey={poiId}
+              className={`${IMAGE_SIZE_CLASS[imageSize]} rounded-thumb`}
+            />
+          )
+        : null}
 
       <View className="min-w-0 flex-1 gap-[3px]">
-        <Text
-          testID={showNameTestId ? leafId('name') : undefined}
-          numberOfLines={1}
-          className={`font-noto-bold text-card-title font-bold ${
-            dimmed ? 'text-muted' : 'text-ink'
-          }`}
-        >
-          {nameLabel}
-        </Text>
+        {wrapOpen(
+          leafId('name-open'),
+          nameLabel,
+          <Text
+            testID={showNameTestId ? leafId('name') : undefined}
+            numberOfLines={1}
+            className={`font-noto-bold text-card-title font-bold ${
+              dimmed ? 'text-muted' : 'text-ink'
+            }`}
+          >
+            {nameLabel}
+          </Text>,
+          'self-start'
+        )}
 
         {showRationale && !rationaleSentence ? (
           <Text

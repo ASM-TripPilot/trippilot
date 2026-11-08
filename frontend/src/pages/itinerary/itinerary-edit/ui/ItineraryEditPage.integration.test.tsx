@@ -12,6 +12,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 import { useItineraryEditStore } from '@/features/edit-itinerary';
 import { buildSlotKey } from '@/entities/itinerary-slot';
@@ -219,6 +220,8 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
             alternatives: [],
             tags: [],
             nameKo: '제주공항',
+            imageUrl: 'https://example.com/jeju-airport.jpg',
+            imageLicense: 'TYPE1',
           },
         ],
       },
@@ -630,6 +633,11 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       expect(screen.getByTestId('editor-move-confirm')).toHaveTextContent(
         '1일차로 옮기기'
       );
+      // TRIP-1740 AC-7(T16) — 슬롯(`movingSlot`)의 imageLicense(TYPE1)가 페이지의 `photo` 조립을 지나 장소 시트 썸네일까지 간다.
+      expectTypeOnePhotoDelivered(
+        'editor-move-photo',
+        'https://example.com/jeju-airport.jpg'
+      );
 
       // ② AC-5 — 장소 시트를 닫으면 아무것도 안 옮겨진다.
       fireEvent.press(screen.getByTestId('editor-move-close'));
@@ -645,9 +653,16 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       // ③ AC-5 — 확정하면 시각 시트가 열리고(장소 시트는 닫힘), 기본 시각은 1일차 마지막(poi-b 13:00–14:00)이 끝나는 14:00 부터 1시간.
       //    시각 시트를 닫으면 시각 없는 슬롯을 만들지 않고 아무것도 안 옮겨진다.
       fireEvent.press(screen.getByTestId(MORE('poi-c')));
-      fireEvent.press(await screen.findByTestId('editor-move-confirm'));
+      const confirmMove = await screen.findByTestId('editor-move-confirm');
+      resetPressGuard(); // 시트를 보고 따로 누른다 — ⋯ 가 연 창은 지났다([옮기기]는 창을 따르는 Button, TRIP-1828)
+      fireEvent.press(confirmMove);
       expect(await screen.findByTestId(`${TIME}-sheet`)).toBeOnTheScreen();
       expect(screen.queryByTestId(SHEET)).toBeNull();
+      // TRIP-1740 AC-7(T15) — `pendingSlot` 조립(placeSummary)을 지나 시각 시트 요약 썸네일까지 간다.
+      expectTypeOnePhotoDelivered(
+        `${TIME}-place-thumb-image`,
+        'https://example.com/jeju-airport.jpg'
+      );
       expect(screen.getByTestId(`${TIME}-readout`)).toHaveTextContent(
         '시작 14:00 · 종료 15:00'
       );
@@ -661,12 +676,16 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       // ④ AC-1·10·7 — 이번엔 [적용]. 뒷날(2일차)에서 앞날(1일차)로 옮겨지고 화면이 1일차를 따라간다 — 1일차 마지막에 14:00 으로.
       resetPressGuard(); // ③ 의 X 가 연 연타 창이 지난 것과 같다 — 아래 D4 단언이 [옮기기] 한 동작만 재게
       fireEvent.press(screen.getByTestId(MORE('poi-c')));
-      fireEvent.press(await screen.findByTestId('editor-move-confirm'));
+      const confirmMove2 = await screen.findByTestId('editor-move-confirm');
+      resetPressGuard(); // ⋯ 의 창을 닫는다 — 아래 D4 가 [옮기기]가 연 창만 재게(TRIP-1828)
+      fireEvent.press(confirmMove2);
       //  D4 — 장소 시트 [옮기기] 연타의 둘째 탭이 시각 시트가 올라오기 전 아래 「일정 저장하기」에 닿아도 저장하지 않는다.
       fireEvent.press(screen.getByTestId(SAVE));
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(putCalls).toBe(0);
-      fireEvent.press(await screen.findByTestId(`${TIME}-apply`));
+      const timeApply = await screen.findByTestId(`${TIME}-apply`);
+      resetPressGuard(); // 시각 시트를 보고 따로 누른다 — [옮기기]의 창은 지났다(TRIP-1828)
+      fireEvent.press(timeApply);
       expect(screen.queryByTestId(`${TIME}-sheet`)).toBeNull();
       expect(screen.getByTestId('itinerary-edit-day-1')).toBeSelected();
       expect(listOrder()).toEqual(['poi-a', 'poi-b', 'poi-c']);
@@ -1929,7 +1948,9 @@ describe('드래그 실배선', () => {
       await openSecondMore();
       resetPressGuard();
       fireEvent.press(screen.getByTestId('editor-move-confirm'));
-      fireEvent.press(await screen.findByTestId('editor-move-time-apply'));
+      const moveTimeApply = await screen.findByTestId('editor-move-time-apply');
+      resetPressGuard(); // 시각 시트를 보고 따로 누른다 — [옮기기]의 창은 지났다(TRIP-1828)
+      fireEvent.press(moveTimeApply);
       expect(draft()).toEqual([
         ['p1', '12:00:00', '13:00:00'],
         ['p2', '13:00:00', '14:00:00'],
@@ -3591,6 +3612,7 @@ describe('시각 조정 시트', () => {
             tags: [],
             nameKo: '해운대 블루라인파크',
             imageUrl: B_IMAGE,
+            imageLicense: 'TYPE1',
           },
           {
             poiId: 'poi-must',
@@ -3729,6 +3751,34 @@ describe('시각 조정 시트', () => {
     });
   });
 
+  /** 시간 시트 요약 행의 보이는 글자들(호스트 `Text` 하나당 한 항목) — 사진 출처 노드(`place-thumb-image-credit`)와 그 안쪽은 뺀다. */
+  const summaryTextsExceptCredit = (): string[] => {
+    const credit = screen.queryByTestId(t('place-thumb-image-credit'));
+    const insideCredit = (node: { parent: unknown }): boolean => {
+      for (
+        let cur: unknown = node;
+        cur;
+        cur = (cur as { parent: unknown }).parent
+      ) {
+        if (cur === credit) return true;
+      }
+      return false;
+    };
+    return screen
+      .getByTestId(t('place-summary'))
+      .findAll(
+        (node) => (node.type as unknown) === 'Text' && !insideCredit(node)
+      )
+      .map((node) =>
+        (Array.isArray(node.props.children)
+          ? node.props.children
+          : [node.props.children]
+        )
+          .filter((child: unknown) => typeof child === 'string')
+          .join('')
+      );
+  };
+
   describe('🔴 IT3b · AC-9 — 요약 행은 슬롯 이름·사진뿐이다', () => {
     it('사진 없는 a: 이름만(배지·지역 줄 없음), 썸네일 칸에는 슬롯의 카테고리(야경)·poiId(poi-a)로 고른 생성 이미지', async () => {
       renderPage();
@@ -3748,12 +3798,14 @@ describe('시각 조정 시트', () => {
       renderPage();
       await openSheetFor('poi-b');
 
-      expect(screen.getByTestId(t('place-summary'))).toHaveTextContent(
-        '해운대 블루라인파크'
-      );
+      // 완전일치 — 이름 말고 아무 텍스트도 없다. 서버 사진이면 출처 글자가 같은 서브트리에 붙으므로 그 노드(`…-credit`)만 뺀다.
+      expect(summaryTextsExceptCredit()).toEqual(['해운대 블루라인파크']);
       expect(screen.getByTestId(t('place-thumb-image')).props.source).toEqual([
         { uri: B_IMAGE },
       ]);
+      // TRIP-1740 AC-7(T15) — 슬롯의 imageLicense(TYPE1)가 페이지의 placeSummary 조립을 지나 썸네일까지 간다.
+      // 같은 시트를 또 열면 reanimated 경고가 늘어 소음 예산(174)을 넘기므로 이 `it` 에 얹는다.
+      expectTypeOnePhotoDelivered(t('place-thumb-image'), B_IMAGE);
     });
   });
 

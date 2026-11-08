@@ -67,6 +67,7 @@ export function ShareCardPreview({
     >
       {picture ? (
         <>
+          {/* eslint-disable-next-line no-restricted-syntax -- 기기 사진(공유 카드) — 관광공사 POI 사진 아님 */}
           <PlacePhoto
             testID="reflection-share-preview-photo"
             imageUrl={picture.uri}

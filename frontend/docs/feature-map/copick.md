@@ -33,6 +33,7 @@ AI가 먼저 초안(`CO_PLAN`)을 만들고, 사용자는 고정되지 않은 �
 - `copick-complete-error` 완성 화면 조회 실패 → `일정을 불러올 수 없어요` + [다시 시도].
 - `copick-to-plan` [완성 일정 보기] → 완성 일정 보기 화면 push.
 - `copick-stepper` 지금 고르는 칸만 빨강으로 강조되고, 이전·다음 칸의 상태 글자는 회색이다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
+- `copick-candidate-photo-credit` 후보 행의 작은 사진 칸(56·78)은 서버(관광공사) 사진이면 칸 아래 가로 띠 「한국관광공사」가 붙는다. 3유형·유형 모름은 자르지 않고 여백과 함께 전체가 보이고 1유형만 꽉 채운다. 사진 없는 후보(카테고리 그림)엔 띠가 없다. 띠는 선택 테두리(빨강)·체크와 겹치지 않아야 하고 반경 밖으로 흐려진(dimmed) 행에서도 읽혀야 한다. *(TRIP-1740 · 2026-11-08 프리뷰 캡처 pass — 같은 후보 카드를 쓰는 일정 후보 시트(`h08-candidate-sheet`, 56px)로 대체 확인 · 같이 짜기 화면(`h10-copick-candidates`, 78px)은 실화면·프리뷰 모두 미확인 — Gotchas)*
 - `copick-slot-fill` 후보를 기다리는 동안 글자 없는 스켈레톤 카드 3장이 은은히 깜빡이며(공용 펄스) 보인다. 반경 밖 후보만 이름이 흐리게 보이고, 반경 밖 표지가 없으면 거리 문자열이 멀어 보여도 흐리지 않다. 칸 채우기 지도는 보기 전용이고 핀 사이 연결선이 없다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass(일부 — Gotchas))*
 
 ## How to get to it (user POV)
@@ -56,6 +57,7 @@ Preconditions:
 - **테마 고르기.** `itinerary-copick-concept-meal`을 누른다. testID: `itinerary-copick-slotfill-root`(앱바 `식사 후보 고르기`)로 바뀌고 로딩 중 testID: `itinerary-copick-slotfill-skeleton`이 보인다.
 - **건너뛰기.** 테마 화면에서 testID: `itinerary-copick-concept-skip`(`테마 없이 건너뛰기 · AI가 알아서 추천`)을 누른다. 앱바가 `후보 고르기`(테마 없음)로 뜬다.
 - **후보 목록.** 후보가 오면 행 testID: `itinerary-candidate-radio-${poiId}`가 A부터 보이고 첫 후보가 자동 선택돼 있다. 지도 testID: `itinerary-copick-slotfill-map`에 기준 핀·반경 원·후보 A/B/C 핀이 보인다. 후보 행에는 거리만 있고 소요 시간이 없다(INV-3).
+- **출처 띠.** 서버 사진이 있는 후보는 사진 `itinerary-candidate-image-{poiId}` 아래에 `itinerary-candidate-image-{poiId}-credit`(「한국관광공사」) 띠가 붙는다. 사진 없는 후보엔 이 노드가 없다. 선택(빨강 테두리·체크)과 흐려진 행에서 띠 글자가 읽히는지 스크린샷으로 본다.
 - **반경 바꾸기.** testID: `itinerary-copick-radius-seg-${key}`(`near` `700m` / `mid` `1.1km`(기본) / `max` `최대`)를 누른다. 고른 칸이 접근성 selected가 되고 후보를 다시 묻는다. 서버가 더 넓혔으면 testID: `itinerary-copick-radius-used`에 `… 안에 없어 약 …까지 넓혔어요`가 보인다. `최대`를 고르면 셋째 칸 라벨이 서버가 쓴 반경(`약 10.0km` 꼴)으로 바뀐다.
 - **반경 넓히기/좁히기.** 하단 testID: `itinerary-copick-slotfill-radius`가 최대 전엔 `반경 넓히기`, 최대에선 `반경 좁히기`다. 누르면 한 단계 바뀐다.
 - **다른 후보 고르기.** 다른 후보 행을 누른다. 확정 버튼 testID: `itinerary-copick-slotfill-confirm`의 라벨이 `B로 선택`처럼 바뀐다.
@@ -73,6 +75,7 @@ Preconditions:
 
 ## Gotchas
 
+- **[미확인 · 실화면 전용] 2026-11-08 TRIP-1740** — 후보 행 출처 띠는 이 화면에서 본 적이 없다. 일정 후보 시트(같은 카드 부품, 56px)의 프리뷰 캡처만 pass 였고 같이 짜기 키(78px 칸)는 프리뷰 키 밖이다. 서버 사진이 있는 후보를 돌려 띠 글자·선택 테두리 겹침·흐린 행 가독성을 실화면으로 본다(후보 응답에 사진이 실리는지부터 확인 필요).
 - [실화면 전용] 칸 채우기 지도(반경 원·A/B/C 핀·핀 맞춤)와 완성 화면 지도·바텀시트 칸 높이는 실화면으로만 확인된다.
 - 칸 이동은 모두 `replace`다 — 이전 칸으로 돌아가는 뒤로가 없다. 고친 칸을 다시 고르려면 완성 일정 보기 → 편집(`itinerary-view.md`)으로 간다.
 - 재진입은 진행 위치를 기억하지 않는다 — PARTIAL 재진입은 늘 "첫 비고정 칸"으로 간다. 이미 고른 칸을 다시 보여 주는 것이 정상 동작이다.

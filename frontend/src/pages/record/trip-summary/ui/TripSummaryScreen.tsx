@@ -30,7 +30,8 @@ import { DayHighlightCard } from './DayHighlightCard';
  * 무엇을 보장하나(승인 계약):
  *  - AC-2(BR-U5-39): view VISIT_LIST → 지도 노드 부재 + 점선 안내. 일차 카드·동선은 두 얼굴 공통(위치 기록이 없어도 방문 기록은 있다).
  *  - AC-5(BR-U5-48): shareEnabled:false → 공유 버튼 비활성 + press 콜백 0회(종료·요약 전 공유 불가).
- *  - 등장: 인용문 0 → 일차 카드 1.. → 동선 정류장이 이어서, 첫 지연 1050ms(경로 그리기 0.15+0.9초가 끝난 뒤).
+ *  - 등장: 인용문 0 → 일차 카드 1.. → 동선 정류장이 이어서, 첫 지연 0(TRIP-1831 — 종전 1050ms 는 지도 경로 그리기가 끝난 뒤였으나 지도 분기가 늘 비어 빈 대기였다).
+ *    `revealing` 이 꺼지면(이미 본 요약 — 페이지가 정한다) 이 연출 전부와 숫자 카운트업이 없이 첫 렌더부터 최종 상태다.
  *
  * 지도는 `shared/map/MapView`(viewOnly 글랜스) — 실 좌표(mapCenter+mapPins)가 있을 때만 렌더하고 없으면 그 자리를 비운다
  * (가짜 기본 센터 지도 금지, 571 경고-2 동형 · 자리표시 제거 TRIP-939). `DayHighlight` 계약에 좌표가 없어 런타임은 늘 빈 가지다.
@@ -59,13 +60,15 @@ export interface TripSummaryScreenProps {
   /** TRIP-987 — 여행 기간 전체 일차의 회고 진입(j03). 비었으면 칩 줄을 그리지 않는다. */
   dayReflections?: DayReflectionVM[];
   onPressDayReflection?: (day: number) => void;
+  /** TRIP-1831 — 꺼져 있으면 인용문·일차 카드·동선 정류장 등장과 숫자 카운트업을 건너뛴다(재방문). 기본 켜짐. 페이지가 첫 렌더에 정해 내린다. */
+  revealing?: boolean;
 }
 
 /** TRIP-1386 · 다녀온 길 다시 그리기 — 0.15초 뒤 0.9초(모션 명세 「여행 요약」). 모듈 상수라 렌더마다 같은 참조. */
 const DRAW_PATH = { durationMs: 900, delayMs: 150 };
 
-/** 첫 카드가 나오기까지의 지연(ms) — 경로 그리기(0.15초 지연 + 0.9초)가 끝난 뒤. */
-const FIRST_REVEAL_DELAY_MS = 1050;
+/** 첫 카드가 나오기까지의 지연(ms) — 0. 카드 간 150ms 시차는 `RevealItem` 이 갖는다. */
+const FIRST_REVEAL_DELAY_MS = 0;
 
 export function TripSummaryScreen({
   vm,
@@ -78,6 +81,7 @@ export function TripSummaryScreen({
   recordBar,
   dayReflections = [],
   onPressDayReflection,
+  revealing = true,
 }: TripSummaryScreenProps): ReactElement {
   // disabled 는 fireEvent.press 를 항상 막지는 않으므로(RNTL) 콜백 게이트를 한 번 더 둔다(571 저장버튼 동형).
   const handleShare = () => {
@@ -127,6 +131,7 @@ export function TripSummaryScreen({
         <MagazineCover
           cover={vm.cover}
           testID="reflection-summary-cover"
+          revealing={revealing}
           titleTestID={
             vm.tripTitleKnown ? 'reflection-summary-trip-title' : undefined
           }
@@ -150,11 +155,16 @@ export function TripSummaryScreen({
         ) : null}
 
         {vm.quote ? (
-          <RevealItem index={0} firstDelayMs={FIRST_REVEAL_DELAY_MS}>
+          <RevealItem
+            index={0}
+            firstDelayMs={FIRST_REVEAL_DELAY_MS}
+            revealing={revealing}
+          >
             <MagazineQuote
               quote={vm.quote}
               heading="이번 여행"
               testID="reflection-summary-narrative"
+              revealing={revealing}
             />
           </RevealItem>
         ) : null}
@@ -166,6 +176,7 @@ export function TripSummaryScreen({
                 key={day.key}
                 index={index + quoteCount}
                 firstDelayMs={FIRST_REVEAL_DELAY_MS}
+                revealing={revealing}
               >
                 <DayHighlightCard day={day} />
               </RevealItem>
@@ -173,7 +184,11 @@ export function TripSummaryScreen({
           </View>
         ) : null}
 
-        <MagazineStats stats={vm.stats} testID="reflection-summary-stats" />
+        <MagazineStats
+          stats={vm.stats}
+          testID="reflection-summary-stats"
+          revealing={revealing}
+        />
 
         {onPressAlbum ? (
           <View className="items-end px-xl pt-sm">
@@ -227,6 +242,7 @@ export function TripSummaryScreen({
               stopTestID="reflection-summary-visit-item"
               firstIndex={routeFirstIndex}
               firstDelayMs={FIRST_REVEAL_DELAY_MS}
+              revealing={revealing}
             />
           </View>
         ) : null}

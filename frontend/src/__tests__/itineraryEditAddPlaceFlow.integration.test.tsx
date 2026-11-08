@@ -510,6 +510,7 @@ describe('같은 날 같은 장소 저장 (TRIP-1804)', () => {
       ).toHaveTextContent(NAMES.p2)
     );
     fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-14'));
+    resetPressGuard(); // 새 시트를 보고 따로 누른다 — 첫 [적용]의 창은 지났다(TRIP-1828)
     fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
     await screen.findByTestId(TOAST);
     await settle();

@@ -2,11 +2,9 @@
 // 그려야 하는 소비자용. index.ts 를 물면 슬라이스 전체가 평가돼 devPreviewReleaseGate 지뢰가 터진다(TRIP-1157).
 
 export {
-  ExecutionBackArrowGlyph,
   EventGlyph,
   HeroPhotoGlyph,
   RailActiveGlyph,
   RailDoneGlyph,
   RailUpcomingGlyph,
-  ExecutionShareGlyph,
 } from './ui/ExecutionGlyphs';

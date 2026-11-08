@@ -1,11 +1,15 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AlertCircleGlyph, BackChevronGlyph } from '@/shared/ui/glyphs';
 import { MapView } from '@/shared/map';
 import type { MapCenter, MapPin } from '@/shared/map';
-import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
+import type {
+  ImageLicense,
+  SlotCandidatesCandidatesItem,
+} from '@/shared/api/index.schemas';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import type { ConceptProgress } from './ConceptPickerScreen';
@@ -265,6 +269,7 @@ export interface SlotFillScreenProps {
       nameKo?: string | null;
       tags?: string[];
       imageUrl?: string | null;
+      imageLicense: ImageLicense | null | undefined;
       dimmed?: boolean;
     }
   >;
@@ -278,6 +283,8 @@ export interface SlotFillScreenProps {
   };
   onSelectRadius: (key: string) => void;
   onSelectRadio: (poiId: string) => void;
+  /** 후보 사진·이름 → 장소 상세(TRIP-1840). 행의 나머지는 그대로 라디오. 미주입이면 상세 칸 없음. */
+  onPressPlace?: (poiId: string) => void;
   onConfirm: () => void;
   onExpandRadius: () => void;
   /** 신규(D10) — 마지막 단계에서 반경 좁히기(한 단계 뒤). */
@@ -313,6 +320,7 @@ export function SlotFillScreen({
   mapView,
   onSelectRadius,
   onSelectRadio,
+  onPressPlace,
   onConfirm,
   onExpandRadius,
   onShrinkRadius,
@@ -539,16 +547,14 @@ export function SlotFillScreen({
                     <Text className="text-center font-noto text-label text-muted">
                       {ALL_IN_ITINERARY_HINT}
                     </Text>
-                    <Pressable
+                    <Button
                       testID="itinerary-copick-zero-search"
-                      accessibilityRole="button"
+                      size="md"
                       onPress={onPressPlaceSearch}
-                      className="h-12 w-full items-center justify-center rounded-button bg-primary"
+                      className="w-full"
                     >
-                      <Text className="font-noto-bold text-label font-bold text-on-primary">
-                        {PLACE_SEARCH_LABEL}
-                      </Text>
-                    </Pressable>
+                      {PLACE_SEARCH_LABEL}
+                    </Button>
                   </>
                 ) : (
                   <>
@@ -580,16 +586,14 @@ export function SlotFillScreen({
                           {ZERO_RADIUS_LABEL}
                         </Text>
                       </Pressable>
-                      <Pressable
+                      <Button
                         testID="itinerary-copick-zero-concept"
-                        accessibilityRole="button"
+                        size="md"
                         onPress={onChangeConcept}
-                        className="h-12 w-full items-center justify-center rounded-button bg-primary"
+                        className="w-full"
                       >
-                        <Text className="font-noto-bold text-label font-bold text-on-primary">
-                          {ZERO_CONCEPT_LABEL}
-                        </Text>
-                      </Pressable>
+                        {ZERO_CONCEPT_LABEL}
+                      </Button>
                     </View>
                   </>
                 )}
@@ -617,9 +621,15 @@ export function SlotFillScreen({
                       nameKo={view?.nameKo}
                       tags={view?.tags}
                       imageUrl={view?.imageUrl}
+                      imageLicense={view?.imageLicense}
                       category={candidate.category}
                       coverPoiId={candidate.poiId}
                       dimmed={view?.dimmed}
+                      onPressPlace={
+                        onPressPlace
+                          ? () => onPressPlace(candidate.poiId)
+                          : undefined
+                      }
                       trailing={
                         <View className="h-[24px] w-[24px] items-center justify-center">
                           <View
@@ -668,23 +678,15 @@ export function SlotFillScreen({
                 {canExpandRadius ? EXPAND_RADIUS_LABEL : SHRINK_RADIUS_LABEL}
               </Text>
             </Pressable>
-            <Pressable
+            <Button
               testID="itinerary-copick-slotfill-confirm"
-              accessibilityRole="button"
+              size="md"
               disabled={confirmDisabled}
               onPress={confirmDisabled ? undefined : onConfirm}
-              className={`h-12 flex-1 items-center justify-center rounded-button ${
-                confirmDisabled ? 'bg-surface-strong' : 'bg-primary'
-              }`}
+              className="flex-1"
             >
-              <Text
-                className={`font-noto-bold text-[16px] font-bold ${
-                  confirmDisabled ? 'text-muted' : 'text-on-primary'
-                }`}
-              >
-                {confirmLabel}
-              </Text>
-            </Pressable>
+              {confirmLabel}
+            </Button>
           </View>
         )}
       </View>

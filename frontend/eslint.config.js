@@ -395,6 +395,25 @@ const PRESS_NAV_GATE = [
   },
 ];
 
+// 서버 POI 사진은 `PoiPhoto` 로만(TRIP-1740) — 관광공사 3유형 사진은 자르면 안 되고 출처를 달아야 한다(공공누리 이용 조건).
+// `<PlacePhoto imageUrl=…>`·`<Image source={{ uri }}>` 직접 사용을 막는다(imageUrl 없는 번들 전용 PlacePhoto 는 통과).
+// 기기 사진·타사 숙소 사진·여행 카드 같은 대상 밖은 윗줄 `eslint-disable-next-line no-restricted-syntax -- 사유` 로 연다.
+// 유지 판정: 3사이클 — 이 게이트가 막은 건수와 오탐 수를 센다. 막음 0·오탐 1 이상이면 뗀다.
+const POI_PHOTO_MESSAGE =
+  '서버 POI 사진(관광공사)은 `PoiPhoto` 로 그린다(TRIP-1740) — 3유형 안 자름·출처 표시. 기기 사진·타사 사진이면 `// eslint-disable-next-line no-restricted-syntax -- <사유>`.';
+const POI_PHOTO_GATE = [
+  {
+    selector:
+      "JSXOpeningElement[name.name='PlacePhoto']:has(> JSXAttribute[name.name='imageUrl'])",
+    message: POI_PHOTO_MESSAGE,
+  },
+  {
+    selector:
+      "JSXOpeningElement[name.name='Image']:has(JSXAttribute[name.name='source'] Property[key.name='uri'])",
+    message: POI_PHOTO_MESSAGE,
+  },
+];
+
 // 누름 요소 역할 필수(TRIP-1765 · M-99) — role 없는 Pressable·Touchable* 은 낭독기·XCUITest 에 버튼으로 안 보인다.
 // 속성 존재만 본다(값이 `{x}` 로 비면 못 잡는다 — AppBar 처럼 선택 prop 으로 넘기는 래퍼는 사용처가 챙긴다).
 // `{...props}` 펼치기도 예외로 두지 않는다(안에 role 이 있는지 정적으로 못 본다 — 직접 단다).
@@ -610,6 +629,7 @@ module.exports = defineConfig([
         ...WORKLET_DEFAULT_PARAM_GATE,
         ...PRESS_NAV_GATE,
         ...PRESS_ROLE_GATE,
+        ...POI_PHOTO_GATE,
       ],
     },
   },
@@ -625,6 +645,7 @@ module.exports = defineConfig([
         ...WORKLET_DEFAULT_PARAM_GATE,
         ...PRESS_NAV_GATE,
         ...PRESS_ROLE_GATE,
+        ...POI_PHOTO_GATE,
       ],
     },
   },
@@ -656,7 +677,7 @@ module.exports = defineConfig([
   // ── 테스트 재팽창 방지(2026-11-01 jest 축소 · README §테스트 전략 판정 3~6) ───────────────
   // 기존 위반은 eslint-suppressions.json 에 얼려 두고 "늘어날 때만" 실패한다(ESLint bulk suppressions).
   // 테스트를 지워 위반이 줄면 `pnpm exec eslint . --prune-suppressions` 를 같은 커밋에 싣는다(파일 손편집 금지).
-  // 출시 게이트 생김새 5건(README 판정 3)은 그 줄에 `// eslint-disable-next-line <규칙> -- 출시 게이트 ②` 처럼 사유를 단다.
+  // 출시 게이트 생김새 6건(README 판정 3)은 그 줄에 `// eslint-disable-next-line <규칙> -- 출시 게이트 ②` 처럼 사유를 단다.
   {
     files: TEST_FILES,
     rules: {

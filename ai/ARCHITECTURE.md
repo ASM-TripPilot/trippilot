@@ -223,7 +223,7 @@ flowchart TD
 | KB-4 지시 | 재계획 칩·자유 발화 사전 | 시드 YAML |
 | KB-5 장소 | 장소 지식(위키 본문·관광공사 개요 조각) | 적재·증분 진행. 후보 전원이 아니라 숏리스트 후보만 검색. 대체 문서(장소 카드·웹 확인 사실)는 기본 켜짐 — 2026-11-03, `TRIPPILOT_KB5_FALLBACK=off` 로 끈다. 도우미 장소 탐색·추천의 열린 검색(반경 후보 안 조각의 BM25+임베딩 순위를 규칙 순서에 RRF 로 섞는다, BR-AO-36)은 기본 꺼짐 — `TRIPPILOT_KB5_OPEN_SEARCH=on` 으로 켠다. 같은 스위치가 PlanB 다시 짜기 후보 순위(구성 LLM 이 받는 앞 20)에도 문서 순위를 섞는다(`rag.fuse_rule_ranking`, U4 FD 2026-11-04) |
 
-**그 밖의 AI DB 표**: `dialogue_memory`·`dialogue_memory_vectors`(대화 기억, 90일), `place_fact_cache`(웹 확인 사실 캐시). **질문뱅크**는 미리 계산한 벡터로 기동 때 메모리에 색인한다(DB 적재 없음).
+**그 밖의 AI DB 표**: `dialogue_memory`·`dialogue_memory_vectors`(대화 기억, 90일), `place_fact_cache`(웹 확인 사실 — 지우지 않고 쌓는다, `expires_at` 은 다시 찾을 때). **질문뱅크**는 미리 계산한 벡터로 기동 때 메모리에 색인한다(DB 적재 없음).
 
 ## 11. 배치와 배포
 
