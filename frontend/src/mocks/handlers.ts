@@ -458,6 +458,10 @@ export const handlers = [
    */
   http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
 
+  // TRIP-1783 — 홈 종 미읽음 배지가 홈을 렌더하는 모든 통합 테스트에서 `GET /me/notifications?unreadOnly=true&limit=100` 을 묻는다.
+  // `/saved-stays` 와 같은 이유(onUnhandledRequest:'error')로 무해한 기본값 = 미읽음 없음(배지 없음). 숫자가 필요한 테스트는 `server.use(...)` 로 덮는다.
+  http.get(`${BASE}/me/notifications`, () => HttpResponse.json({ items: [] })),
+
   // TRIP-1581 — 인기 숙소 줄(`widgets/curated-stays`)이 e02 등 여러 page 에 붙어, 로그인 상태면 인기 숙소·제휴 고지
   // 설정을 묻는다. `/saved-stays` 와 같은 이유(통합 버킷 onUnhandledRequest:'error')로 무해한 기본값을 둔다 —
   // 인기 숙소 없음(줄 숨김) · 고지 다시 보기(시트를 거친다). 얼굴별 응답은 `server.use(...)`로 덮는다.

@@ -4317,6 +4317,23 @@ export const PREVIEW_STATES: PreviewState[] = [
         />
       ),
   },
+  // 홈 종 미읽음 배지(TRIP-1783) — 육안 대조: 종 우상단 숫자 3 · 99+. 배지 위치·테두리는 6-b 육안 전용(jest 사각).
+  {
+    key: 'home-bell-unread',
+    band: 'a',
+    label: 'a01 · 종 미읽음 배지(3, TRIP-1783)',
+    login: null,
+    render: () =>
+      withShellTabBar(<HomeScreen {...HOME_DEFAULT_PROPS} unreadCount={3} />),
+  },
+  {
+    key: 'home-bell-unread-99',
+    band: 'a',
+    label: 'a01 · 종 미읽음 배지(99+, TRIP-1783)',
+    login: null,
+    render: () =>
+      withShellTabBar(<HomeScreen {...HOME_DEFAULT_PROPS} unreadCount={100} />),
+  },
   // 저장 목록 조회 실패(TRIP-1754) — 모름(null)은 0 이 아니라 `–` 배지.
   {
     key: 'home-saved-menu-badge-unknown',

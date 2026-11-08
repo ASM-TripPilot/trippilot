@@ -806,7 +806,7 @@
 - `src/pages/home/model/homeTypes.ts`  →  HomeCollectionCard · HomeCollectionsLane · HomeSpotCard · HomeSpotsLane · HomeMagazineHero · HomeSections · TripHeroData · PastTrip · HomePhase · HomeScreenProps
 
 ## src/pages/home/ui/
-- `src/pages/home/ui/HomeFabs.tsx`  →  CreateTripFab · SavedMenuFab
+- `src/pages/home/ui/HomeFabs.tsx`  →  CreateTripFab · CountBadge · SavedMenuFab
 - `src/pages/home/ui/HomeGlyphs.tsx`  →  HomeBellGlyph · HomeSearchGlyph · HomeSparkleGlyph · HomeLocationPinGlyph · HomePlusGlyph · HomeMapPinGlyph
 - `src/pages/home/ui/HomeHeader.tsx`  →  GreetingHeader · homeGreeting · SearchBarBlock · TripsLoadError · TripsOfflineNotice
 - `src/pages/home/ui/HomeHeroes.tsx`  →  DiscoveryHeroCarousel · PlanningHeroCarousel
