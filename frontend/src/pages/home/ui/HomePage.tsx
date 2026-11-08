@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { Trip } from '@/shared/api/index.schemas';
 import { useGetTrips } from '@/shared/api/index.trips';
 import { useGetPlaces } from '@/shared/api/index.places';
+import { useGetMeNotifications } from '@/shared/api/index.notification';
 import { isOfflineWaiting } from '@/shared/api';
 import { guardPress, usePressLock } from '@/shared/lib/pressGuard';
 import { flushMarks, mark } from '@/shared/lib/startupMarks';
@@ -54,6 +55,8 @@ interface HomeNav {
   // null = 목록을 못 받아 모름(TRIP-1754) — 배지가 `–` 를 그린다.
   savedPlacesCount: number | null;
   savedStaysCount: number | null;
+  // 읽지 않은 알림 개수(TRIP-1783) — null = 아직 못 받았거나 실패(배지 없음).
+  unreadCount: number | null;
   savedMenuOpen: boolean;
   onToggleSavedMenu: () => void;
   spotsLane: HomeSpotsLane;
@@ -148,6 +151,13 @@ export function HomePage() {
   // TRIP-1754 — 담은 목록을 못 받았으면 0 이 아니라 모름(null)이다. 새 필드가 없는 옛 훅 목은 truthy 판정이라 실패 아님.
   const savedStaysCount = savedStays.loadFailed ? null : savedStays.savedCount;
   const savedPlacesCount = savedPlaces.loadFailed ? null : savedPoiIds.length;
+  // 종 미읽음 배지(TRIP-1783) — 알림함과 같은 접두 키(`['/me/notifications']`)라 읽음 처리·푸시 수신 무효화에 올라타 숫자가 줄고,
+  // limit 100 이라 99+ 를 판정한다(서버 기본 50 이면 안 나온다). 재조회만 실패해도 직전 숫자(data)는 남는다.
+  const unreadCount =
+    useGetMeNotifications(
+      { unreadOnly: true, limit: 100 },
+      { query: { select: (res) => res.items.length } }
+    ).data ?? null;
   // 확정 실패가 켜지는 순간 토스트 1회 — 전이는 TanStack 이 관찰자별로 기억하는 훅 플래그가 정한다.
   const savedListFailed = Boolean(
     savedPlaces.loadFailureConfirmed || savedStays.loadFailureConfirmed
@@ -319,6 +329,7 @@ export function HomePage() {
       ),
     savedPlacesCount,
     savedStaysCount,
+    unreadCount,
     savedMenuOpen,
     onToggleSavedMenu: () => setSavedMenuOpen((v) => !v),
     spotsLane,

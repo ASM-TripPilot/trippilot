@@ -47,6 +47,7 @@ export function HomeScreen({
   onPressAssistant,
   savedPlacesCount,
   savedStaysCount,
+  unreadCount,
   savedMenuOpen,
   onToggleSavedMenu,
 }: HomeScreenProps): ReactElement {
@@ -72,6 +73,7 @@ export function HomeScreen({
             title={greeting.title}
             subtitle={greeting.subtitle}
             name={greeting.name}
+            unreadCount={unreadCount}
             onPressBell={onPressBell}
             onPressAssistant={onPressAssistant}
           />

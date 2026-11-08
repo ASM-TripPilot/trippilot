@@ -14,12 +14,14 @@ import { ITINERARY_OPEN_FAILED_TOAST_ID } from '@/features/itinerary';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import {
+  getGetMeNotificationsQueryKey,
   getGetPlacesQueryKey,
   getGetSavedPlacesQueryKey,
   getGetTripsQueryKey,
 } from '@/shared/api/index.hooks';
 import type {
   Itinerary,
+  Notification,
   Place,
   SavedPlace,
   SavedStay,
@@ -1157,5 +1159,236 @@ describe('홈 레인 · 관광공사 사진 유형이 카드 사진 칸에 닿�
     expect(await screen.findByTestId('home-spot-card-0')).toBeOnTheScreen();
     expectTypeOnePhotoDelivered('home-spot-photo-0', PHOTO);
     expectTypeOnePhotoDelivered('home-collection-photo-0', PHOTO);
+  });
+});
+
+/**
+ * TRIP-1783 · 홈 종 미읽음 배지 — 서버의 `GET /me/notifications?unreadOnly=true&limit=100` 응답 길이가 종 안 숫자가 된다.
+ *
+ * 무엇을 보장하나:
+ *  - 미읽음 N건이면 종(`home-dashboard-bell`) 안 배지(`home-dashboard-bell-badge`)에 N, 종의 낭독 이름이 개수를 말한다.
+ *  - 요청에 `unreadOnly=true`·`limit=100` 이 실린다 — 가짜 서버가 실서버처럼 limit 생략을 50으로 자르므로, 빠지면 `99+` 가 영영 안 난다.
+ *    홈을 열 때 요청은 정확히 1건(관찰자가 둘이어도·다시 그려도 늘지 않는다).
+ *  - 0건·조회 실패·오프라인 보류에서는 배지가 없고(이름은 종전 `알림`) 종은 계속 알림함으로 간다. 이미 받은 숫자는 재조회가 실패해도 남는다.
+ *  - 모양(색·크기·위치)은 jest 사각 — 6-b. 읽음 처리 뒤 숫자가 줄어드는 것은 실제 알림함과 한 클라이언트에서
+ *    `src/__tests__/foregroundFanout.integration.test.tsx` 가 잰다.
+ *
+ * 개념(처음 나오는 것만): **unreadOnly** = 서버에게 "읽지 않은 것만 줘"라고 시키는 쿼리 값. 총계 API 가 없어 앱은 이 목록의 길이를 센다
+ * (그래서 `limit` 이 곧 숫자의 상한이다).
+ */
+describe('TRIP-1783 · 홈 종 미읽음 배지', () => {
+  const BELL = 'home-dashboard-bell';
+  const BADGE = 'home-dashboard-bell-badge';
+  const NOTIF_GET = 'GET /api/v1/me/notifications';
+  const KEY = getGetMeNotificationsQueryKey({ unreadOnly: true, limit: 100 });
+  const { push: mockPush } = routerSpies;
+
+  /** 서버가 쥔 미읽음 건수. */
+  let unread = 0;
+  let requests: URLSearchParams[] = [];
+  let replies: (200 | 500)[] = [];
+
+  function notification(i: number, read: boolean): Notification {
+    return {
+      notificationId: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+      kind: 'SYSTEM',
+      title: `알림 ${i}`,
+      body: '',
+      occurredAt: '2026-11-09T00:00:00.000Z',
+      readAt: read ? '2026-11-09T01:00:00.000Z' : null,
+    };
+  }
+
+  beforeEach(() => {
+    unread = 0;
+    requests = [];
+    replies = [];
+    mockPush.mockClear();
+    // 실서버처럼 답한다: limit 기본 50·최대 200, unreadOnly 가 아니면 읽은 알림 5건이 섞여 온다.
+    server.use(
+      http.get(`${BASE}/me/notifications`, ({ request }) => {
+        const query = new URL(request.url).searchParams;
+        requests.push(query);
+        if (replies.shift() === 500) {
+          return HttpResponse.json(
+            { error: { code: 'INTERNAL', message: '서버 오류' } },
+            { status: 500 }
+          );
+        }
+        const limit = Math.min(Number(query.get('limit') ?? 50), 200);
+        const unreadItems = Array.from({ length: unread }, (_, i) =>
+          notification(i, false)
+        );
+        const readItems =
+          query.get('unreadOnly') === 'true'
+            ? []
+            : [100, 101, 102, 103, 104].map((i) => notification(i, true));
+        return HttpResponse.json({
+          items: [...unreadItems, ...readItems].slice(0, limit),
+        });
+      })
+    );
+  });
+
+  /** 종 *안*의 배지 — 낭독 중복을 막으려 구현이 접근성 트리에서 숨겨도 찾는다. */
+  const badge = () =>
+    within(screen.getByTestId(BELL)).queryByTestId(BADGE, {
+      includeHiddenElements: true,
+    });
+  /** 알림 조회가 끝났다(성공이든 실패든) — "배지 없음" 단언이 요청 도착 전의 공허한 통과가 아니게 하는 앵커. */
+  const answered = (client: ReturnType<typeof renderPage>['client']) =>
+    expect(client.getQueryState(KEY)?.fetchStatus).toBe('idle');
+
+  it('N1 미읽음 3건이면 종 안에 3이 뜨고 종의 낭독 이름이 개수를 말한다', async () => {
+    // 준비
+    unread = 3;
+
+    // 실행
+    renderPage();
+
+    // 단언
+    await waitFor(() => expect(badge()).toHaveTextContent('3'));
+    expect(
+      screen.getByRole('button', { name: '알림, 읽지 않은 알림 3개' })
+    ).toHaveProp('testID', BELL);
+  });
+
+  it('N2 요청에 unreadOnly=true · limit=100 이 실리고 홈을 열 때 정확히 1건이다', async () => {
+    // 준비
+    unread = 2;
+
+    // 실행
+    renderPage();
+    await waitFor(() => expect(badge()).toHaveTextContent('2'));
+    await settle();
+
+    // 단언 — 앵커: 배지가 떴다(= 요청이 응답됐다). 그 요청의 쿼리와 건수.
+    expect(count(NOTIF_GET)).toBe(1);
+    expect(requests[0].get('unreadOnly')).toBe('true');
+    expect(requests[0].get('limit')).toBe('100');
+  });
+
+  it('N3 미읽음이 100건 넘게 쌓여 있으면 99+ 이고 이름은 99개 이상이라 말한다 (limit 이 빠지면 50 에서 잘려 안 난다)', async () => {
+    // 준비
+    unread = 130;
+
+    // 실행
+    renderPage();
+
+    // 단언
+    await waitFor(() => expect(badge()).toHaveTextContent('99+'));
+    expect(
+      screen.getByRole('button', { name: '알림, 읽지 않은 알림 99개 이상' })
+    ).toHaveProp('testID', BELL);
+  });
+
+  it('N4 0건이면 배지가 없고 이름은 종전 그대로 알림이다', async () => {
+    // 준비
+    unread = 0;
+
+    // 실행
+    const { client } = renderPage();
+
+    // 단언 — 앵커: 요청이 응답돼 끝났고 종은 그려져 있다. 알림은 setTimeout(0) 뒤에 화면에 닿으니 흘려보낸 뒤 본다.
+    await waitFor(() => answered(client));
+    await settle();
+    expect(client.getQueryState(KEY)?.status).toBe('success');
+    expect(screen.getByRole('button', { name: '알림' })).toHaveProp(
+      'testID',
+      BELL
+    );
+    expect(badge()).toBeNull();
+  });
+
+  it('N5 조회가 500 이면 배지는 없고 종은 눌려 알림함으로 간다', async () => {
+    // 준비
+    unread = 3;
+    replies = [500];
+
+    // 실행
+    const { client } = renderPage();
+    await waitFor(() =>
+      expect(client.getQueryState(KEY)?.status).toBe('error')
+    );
+    await settle();
+    fireEvent.press(screen.getByTestId(BELL));
+
+    // 단언 — 서버는 3건을 갖고 있지만 못 받았으니 모른다(거짓 경보 대신 침묵).
+    expect(badge()).toBeNull();
+    expect(screen.getByRole('button', { name: '알림' })).toBeOnTheScreen();
+    expect(mockPush.mock.calls).toEqual([['/notifications']]);
+  });
+
+  it('N6 이미 받은 숫자는 재조회가 실패해도 직전 값 그대로 남는다', async () => {
+    // 준비 — 3건을 받아 배지가 뜬 상태가 출발점.
+    unread = 3;
+    const { client } = renderPage();
+    await waitFor(() => expect(badge()).toHaveTextContent('3'));
+
+    // 실행 — 알림함의 읽음 처리가 하는 것과 같은 접두 키 무효화 → 재조회가 500.
+    replies = [500];
+    await act(async () => {
+      await client.invalidateQueries({
+        queryKey: getGetMeNotificationsQueryKey(),
+      });
+    });
+    await settle();
+
+    // 단언 — 앵커: 재조회가 실제로 실패로 끝났다(옛 값은 캐시에 남은 채).
+    const state = client.getQueryState(KEY);
+    expect(state?.status).toBe('error');
+    expect(state?.data).toBeDefined();
+    expect(count(NOTIF_GET)).toBe(2);
+    expect(badge()).toHaveTextContent('3');
+  });
+
+  it('N7 오프라인으로 처음 켜면 요청은 보류되고 배지는 없다가, 연결이 돌아오면 스스로 뜬다', async () => {
+    // 준비
+    unread = 3;
+    goOffline();
+
+    // 실행
+    const { client } = renderPage();
+    await screen.findByTestId(OFFLINE);
+
+    // 단언 — 알림 조회가 만들어져 보류 중이고(앵커), 요청은 한 건도 안 나갔고, 배지는 없다.
+    expect(client.getQueryState(KEY)).toMatchObject({
+      status: 'pending',
+      fetchStatus: 'paused',
+    });
+    expect(count(NOTIF_GET)).toBe(0);
+    expect(badge()).toBeNull();
+
+    // 실행 — 입력 없이 연결만 돌아온다.
+    act(() => {
+      onlineManager.setOnline(true);
+    });
+
+    // 단언
+    await waitFor(() => expect(badge()).toHaveTextContent('3'));
+    await settle();
+    expect(count(NOTIF_GET)).toBe(1);
+  });
+
+  it('N8 여행이 있는 얼굴(계획 중)에서도 같은 배지가 뜬다', async () => {
+    // 준비
+    unread = 2;
+    tripsBody = [
+      tripFixture({
+        tripId: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+        title: '부산 여행',
+        startDate: '2099-06-10',
+        endDate: '2099-06-13',
+        status: 'PLANNED',
+        destinations: [{ seq: 1, region: '부산', nights: 3 }],
+      }),
+    ];
+
+    // 실행
+    renderPage();
+
+    // 단언 — 앵커: 여행 카드 얼굴이 섰다.
+    expect(await screen.findByTestId('home-trip-hero-cta')).toBeOnTheScreen();
+    await waitFor(() => expect(badge()).toHaveTextContent('2'));
   });
 });
