@@ -406,8 +406,12 @@ def drop_rejected_verdicts(proposals: list[dict],
     rejected = {ref for ref, v in verdicts.items() if v.get("verdict") == "reject"}
     if not rejected:
         return 0
+    # 판정 파일은 Overture 비식당만 담는다(위 docstring) — content_id 만으로 대조하면 다른 출처의
+    # 같은 번호(TOURAPI·LOCALDATA 꼴이 숫자·관리번호라 겹칠 수 있다)까지 지워진다. 형제 함수
+    # drop_closed 와 같은 꼴로 출처를 같이 본다.
     kept = [p for p in proposals
-            if p["provenance"]["content_id"] not in rejected]
+            if not (str(p.get("source") or "").upper() == "OVERTURE"
+                    and p["provenance"]["content_id"] in rejected)]
     n = len(proposals) - len(kept)
     proposals[:] = kept
     return n
@@ -532,20 +536,6 @@ def drop_closed(proposals: list[dict], closed_refs: frozenset[tuple[str, str]]) 
     return n
 
 
-def _self_check() -> None:
-    """덮어쓰기 방향 — 나중 수집분이 이긴다."""
-    def doc(at, name):
-        return {
-            "schema_version": 1, "source": "TOURAPI", "collected_at": at,
-            "area_code": "1", "content_types": ["12"], "stats": {},
-            "proposals": [{"provenance": {"content_id": "x"}, "poi": {"name": name}}],
-        }
-    out = merge([doc("2026-08-02T00:00:00+00:00", "새것"), doc("2026-08-01T00:00:00+00:00", "옛것")])
-    assert out["proposals"][0]["poi"]["name"] == "새것", out
-    assert out["stats"] == {"merged_runs": 2, "unique_proposals": 1}, out
-    print("[merge] self-check 통과")
-
-
 def _survives_retro_drops(p: dict) -> bool:
     """이 판본 하나가 소급 제거를 통과하는가 — 되돌릴 후보 판정용. **순수 판정이다**: 사본으로 보고(재파싱이 원본을
     고치지 않게), 판정 로그는 삼킨다(실제로 뺀 게 아니다). 되돌린 판본의 재파싱은 `main` 이 따로 한다."""
@@ -609,7 +599,6 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("files", nargs="*", help="collected_pois.json 경로들")
     parser.add_argument("-o", "--output", help="합본 저장 경로 (생략 시 표준출력)")
-    parser.add_argument("--self-check", action="store_true", help="병합 규칙 자체 검증만")
     parser.add_argument("--allow-mixed", action="store_true",
                         help="출처가 다른 문서도 합친다. 소비자가 **항목별 source 로 갈라** 보내야 한다 — 문서 레벨 source 는 하나뿐이다")
     parser.add_argument("--max-quarantined", type=int, default=MAX_QUARANTINED,
@@ -618,10 +607,6 @@ def main(argv: list[str]) -> int:
                         "행을 격리하고 그 TourAPI 행을 기제안 색인에서 지운다. -o 가 입력 중 하나(덮어쓸 공유본)여야 하고, "
                         "상태가 없거나 형식이 틀리면 아무것도 쓰지 않고 실패한다. 안 주면 격리 없이 경고·stats 만 남긴다(구 워크플로 호환)")
     args = parser.parse_args(argv)
-
-    if args.self_check:
-        _self_check()
-        return 0
 
     docs = []
     before: dict | None = None   # `-o` 가 입력 중 하나면 그게 덮어쓰기 전 공유본이다(축소 가드의 BEFORE)

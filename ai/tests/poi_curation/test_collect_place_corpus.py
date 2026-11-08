@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import gzip
 import importlib.util
+import json
 from pathlib import Path
+
+import pytest
 
 _SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "collect" / "collect_place_docs.py"
 
@@ -77,3 +81,37 @@ def test_redirect_to_a_different_subject_is_rejected_even_if_the_region_matches(
     pages = {"가마오름": ("한라산", "한라산은 제주특별자치도 제주시와 서귀포시에 걸쳐 있는 산이다."),
              "고내포구": ("고내항 (제주시)", "고내항은 제주특별자치도 제주시 애월읍 고내리에 있는 항구이다.")}
     assert m.accept(pages, by_title) == [("고내항 (제주시)", "r6")]
+
+
+def test_판정_묶음_실패가_계속되면_코퍼스를_줄이지_않고_SystemExit() -> None:
+    """판정 묶음 실패는 accepted 에 안 들어가 본문 실패(failed/len(accepted)) 가드를 비껴간다 —
+    judge_failed 를 len(titles) 대비로 따로 세어 코퍼스를 건드리기 전에 멈춰야 한다(코드 리뷰 지적)."""
+    import tempfile
+
+    m = _mod()
+    with tempfile.TemporaryDirectory() as td:
+        corpus = Path(td) / "place_corpus_wiki.jsonl.gz"
+        with gzip.open(corpus, "wt", encoding="utf-8") as f:
+            for i in range(40):
+                f.write(json.dumps({"doc_id": f"wiki:ref{i}"}) + "\n")
+        m._CORPUS = corpus
+        m._WIKI_SLEEP = 0
+        m._RETRY_SLEEPS = ()
+
+        props = [_p(f"장소{i:02d}", ref=f"ref{i}") for i in range(40)]
+        first_batch = {f"장소{i:02d}" for i in range(20)}
+
+        def fake_mapped(titles):
+            if set(titles) == first_batch:
+                raise ConnectionResetError("Connection reset by peer")
+            return {t: (t, "서울특별시 강동구에 있는 공원이다.") for t in titles}
+
+        m._wiki_fetch_mapped = fake_mapped
+        m.accept = lambda pages, by_title: [(t, m._ref(by_title[a])) for a, (t, _) in pages.items()]
+        m._wiki_full = lambda title: "== 개요 ==\n" + f"{title}은 공원이다. " * 4
+
+        with pytest.raises(SystemExit):
+            m._wiki_corpus(props)
+
+        after = sum(1 for _ in gzip.open(corpus, "rt", encoding="utf-8"))
+        assert after == 40, "가드가 막기 전에 코퍼스가 이미 줄었다"
