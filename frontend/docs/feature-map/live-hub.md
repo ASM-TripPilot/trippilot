@@ -24,7 +24,8 @@ routes:
 - `hub-slot-name` 카드 이름 `›` press → 장소 상세(`live-place`).
 - `hub-directions` 예정·진행 중 카드 [길찾기] → 외부 지도 앱/웹. 둘 다 실패하면 그 카드 아래 「지도를 열 수 없어요.」(+거리).
 - `hub-edit-popup` `수정` 칸 → 팝업 「AI에게 맡기기」·「직접 수정」. 다시 누르거나 다른 칸·지도 탭·시트 이동으로 닫힌다.
-- `hub-ai-disabled` 보는 날이 이미 지난 날이거나 여행 시작 전이면 「AI에게 맡기기」가 흐리게 비활성.
+- `hub-ai-disabled` 보는 날이 이미 지난 날이면 「AI에게 맡기기」가 흐리게 비활성(여행 시작 전엔 산다 — `hub-ai-pretrip`).
+- `hub-ai-pretrip` 여행 시작 전 확정 일정에서 「AI에게 맡기기」 → 보는 날짜(`targetDate`) 하루 전체로 재계획 요청이 열린다(TRIP-1841). 끝난 여행은 허브가 마지막 날(지난 날)을 보여 줘 `hub-ai-disabled` 로 꺼진다.
 - `hub-ai-other-day` 오늘이 아닌(미래) 일차를 보며 「AI에게 맡기기」 → 재계획 요청이 그 날짜(`targetDate`)로 열린다.
 - `hub-manual-edit` 「직접 수정」 → 보고 있는 날짜로 편집기(`planb/manual?date=`).
 - `hub-chatbot` `챗봇` 칸 → AI 도우미(LIVE 문맥).

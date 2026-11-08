@@ -341,7 +341,7 @@ afterAll(() => server.close());
  *    조용히 멈추지 않고 `/(tabs)` 로 replace(INV-4 · ItineraryPlanPage 관례).
  *  - I7·I7b 수동 재계획 진입(BR-U4-10) — TRIP-1522 v2: 하단 바의 "수정" 칸은 이동하지 않고 칸 위 세로 팝업을 연다.
  *    팝업 항목이 진입을 맡는다: [AI에게 맡기기] → `/trips/{id}/planb`, [직접 수정] → `/trips/{id}/planb/manual`
- *    (US-PLANB-12 두 방식). AI 항목은 지난 날·시작 전이면 비활성(눌러도 이동 없음)이다.
+ *    (US-PLANB-12 두 방식). AI 항목은 지난 날이면 비활성(눌러도 이동 없음)이다 — 시작 전엔 산다(TRIP-1841).
  *    TRIP-1233 부터 [직접 수정]은 보고 있는 날을 `?date=` 로 늘 싣는다(I7b·I7h·I7i).
  *  - I8 실앱 done 카드는 사진·후기 칸이 없다 — `GET /visits/days` 계약에 photo/memo 가 없어서
  *    page 가 photos=[]·memo=null 로 넘긴다(맹점③ · G6). 시각은 계획값 "10:00" + "방문".
@@ -1587,7 +1587,8 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
       expect(mockPush).toHaveBeenCalledTimes(1);
     });
 
-    it('I7g 🔴 TRIP-1214 시작 전 여행(오늘이 1일차 전)이면 팝업의 [AI에게 맡기기]는 비활성(눌러도 이동 없음)이고 [직접 수정]은 산다', async () => {
+    // TRIP-1841 — 시작 전에도 서버가 앞으로 올 여행 날 하루 전체를 연다(종전 TRIP-1214 숨김 폐지).
+    it('I7g 🔴 TRIP-1841 시작 전 여행(오늘이 1일차 전)이면 [AI에게 맡기기]가 살아 있고 보는 날(1일차)을 targetDate 로 싣는다', async () => {
       server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
 
       render(<LiveItineraryPage tripId={TRIP_ID} today="2026-08-10" />, {
@@ -1597,7 +1598,45 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
         expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
       );
 
-      expect(screen.getByTestId(BAR)).toBeOnTheScreen();
+      openEditPopup();
+      expect(screen.getByTestId(POPUP_AI)).toBeEnabled();
+      fireEvent.press(screen.getByTestId(POPUP_AI));
+
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith(
+        `/trips/${TRIP_ID}/planb?targetDate=${TODAY}`
+      );
+    });
+
+    it('I7j 🔴 TRIP-1841 시작 전 여행에서 2일차를 보면 그 날짜를 targetDate 로 싣는다', async () => {
+      server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today="2026-08-10" />, {
+        wrapper,
+      });
+      await waitFor(() =>
+        expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
+      );
+      fireEvent.press(screen.getByTestId('execution-live-daychip-1'));
+      openEditPopup();
+      fireEvent.press(screen.getByTestId(POPUP_AI));
+
+      expect(mockPush).toHaveBeenCalledWith(
+        `/trips/${TRIP_ID}/planb?targetDate=2026-08-21`
+      );
+    });
+
+    // 5-b 경고 1 — 끝난 여행은 허브가 마지막 날을 보여 주는데, 그 날이 지난 날이라 AI 가 꺼진다(서버도 409).
+    it('I7k 🔴 TRIP-1841 끝난 여행(오늘이 마지막 날 뒤)이면 [AI에게 맡기기]는 비활성이고 [직접 수정]은 산다', async () => {
+      server.use(twoDayItineraryOk(), tripHandler(), visitsHandler());
+
+      render(<LiveItineraryPage tripId={TRIP_ID} today="2026-08-25" />, {
+        wrapper,
+      });
+      await waitFor(() =>
+        expect(screen.getByTestId('execution-live-screen')).toBeTruthy()
+      );
+
       openEditPopup();
       expect(screen.getByTestId(POPUP_AI)).toBeDisabled();
       fireEvent.press(screen.getByTestId(POPUP_AI));
