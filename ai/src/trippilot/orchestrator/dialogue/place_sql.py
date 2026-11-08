@@ -45,6 +45,17 @@ def asks_for_places(text: str) -> bool:
     return _PLACE_ASK.search(text) is not None
 
 
+def _prefetch_miss(said: str) -> str:
+    """분류 뒤에 SQL 을 새로 쓴 턴에서 미리 받기가 없었던 까닭 — 원문 대신 라벨만 로그에 싣는다. 탐색 핸들러는 분류 인자의 지역으로
+    SQL 을 쓰지만 미리 받기는 발화의 지역 표 이름만 보므로, 앞 대화의 지역·표에 없는 지역이면 늘 분류 뒤에 쓴다. 2026-11-04 운영 실사용
+    SQL 4턴이 모두 분류 뒤에 썼는데 원문이 없어 까닭을 가르지 못했다 — 이 라벨로 센다."""
+    if not said:
+        return "plan"  # 계획 경로 — 발화 없이 인자만
+    if region_center(said) is None:
+        return "no_region"
+    return "other" if asks_for_places(said) else "no_place_word"  # other = 두 곳 사이 짝·미리 받은 말과 다름
+
+
 def looks_like_place_query(utterance: str) -> bool:
     """지역 표 이름 + 장소 찾기 말 — 분류를 기다리지 않고 SQL 작성을 미리 시작할 만한가. 탐색 핸들러도 지역을 말했을 때만 SQL 을 쓴다.
     두 곳 사이("홍대와 이태원 사이")는 SQL 을 쓰지 않으니(위치가 아니라 이름을 읽는다 — 너무 먼 짝도 답하지 않는다) 미리 쓰지 않는다.
@@ -107,6 +118,7 @@ class PlaceSqlLookup:
         args = tuple(sorted((k, v) for k, v in arguments.items() if v))
         key = (said, *args) if args else ()  # 계획 경로(발화 "")는 인자만 — 발화 키와 따로 산다
         sql = self._cached(key) if key else None
+        src = "cache"  # 로그 라벨 — SQL 을 어디서 얻었나(prefetch·cache·write:<미리 받기가 없었던 까닭>)
         pending = self._take_prefetch(trace_id, said)
         if sql is None and pending is not None:
             try:
@@ -117,7 +129,7 @@ class PlaceSqlLookup:
             if result.is_fallback or not result.value:
                 log.info("place_sql skip trace=%s reason=%s", trace_id, result.error or "not_a_place_query")
                 return None
-            sql = result.value
+            sql, src = result.value, "prefetch"
             self._remember((said,), sql)
             if key:
                 self._remember(key, sql)
@@ -130,7 +142,7 @@ class PlaceSqlLookup:
             if result.is_fallback or not result.value:
                 log.info("place_sql skip trace=%s reason=%s", trace_id, result.error or "not_a_place_query")
                 return None
-            sql = result.value
+            sql, src = result.value, f"write:{_prefetch_miss(said)}"
             if key:
                 self._remember(key, sql)
         try:
@@ -138,7 +150,7 @@ class PlaceSqlLookup:
         except Exception as e:  # noqa: BLE001 — DB 오류·시한은 반경 탐색으로 수렴(INV-4), 사유는 예외 타입까지(키·SQL 비노출)
             log.warning("place_sql db_error trace=%s error=%s — 반경 탐색으로", trace_id, type(e).__name__)
             return None
-        log.info("place_sql ok trace=%s rows=%d ms=%d", trace_id, len(rows), int((time.monotonic() - started) * 1000))
+        log.info("place_sql ok trace=%s rows=%d ms=%d src=%s", trace_id, len(rows), int((time.monotonic() - started) * 1000), src)
         return rows
 
     def find_place(self, name: str, area: str | None, trace_id: TraceId) -> PlaceRow | None:
