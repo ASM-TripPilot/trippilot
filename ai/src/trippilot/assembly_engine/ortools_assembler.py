@@ -591,19 +591,20 @@ class OrToolsAssembler:
         (LLM 유사 점수)에서도 서울 −19.9%·부산 −14.3%.
 
         거리만 최소화하면 시각은 여유 안에서 아무 값이나 돼 대기가 끼었다(실 덤프 39일 대기
-        18 → 514분, 하루 최대 80분 — 전부 09시 영업이라 강제된 대기가 아니다). 그래서 시각을 사전식
-        타이브레이크로 둔다: 거리 1m 가 시각 항의 최대치보다 무거워(W) km 최적은 그대로다.
+        18 → 514분, 하루 최대 80분 — 전부 09시 영업이라 강제된 대기가 아니다). 그래서 Σ시작
+        시각을 사전식 타이브레이크로 둔다: 거리 1m 가 Σ시작의 최대치보다 무거워(W) km 최적은
+        그대로고, 같은 km 안에서 이른 시각을 고른다(측정: km 동일, 대기 514 → 35분).
 
         **B 는 A 가 잡은 하루 틀 안에서만 순서를 바꾼다**(2026-11-09). 거리만 보면 B 가 아침을 비우고 출발을
         미루거나(06:05 출발 → 08:28) 여는 시각을 기다리며 하루를 늘렸다. 공유본 실장소 80일(앵커 5 × 시드 8 ×
         09·06시 창) 실측: 출발이 A 보다 늦은 날 11, 끝이 A 보다 늦은 날 21, 하루 중간 대기 합 A 646분 → B 2,766분.
         - 숙소를 나서는 시각(첫 방문 시작 − 앵커 이동, 핀은 이동 0)은 A 보다 늦지 않다. 첫 장소가 바뀌어 앵커 이동만큼
           도착이 늦는 것은 허용한다.
-        - 마지막 방문의 끝은 A 보다 늦지 않다.
-        - 거리 다음 순위는 하루 길이(첫 시작~마지막 끝), 그다음 Σ시작이다. Σ시작만 두면 출발 상한 안에서 첫 방문을
-          끝까지 앞당겨 이른 아침 한 곳 뒤에 몇 시간 대기를 끼웠다(06:33 카페 뒤 200분).
+        - 마지막 방문의 끝은 A 보다 늦지 않다. 출발 상한만 두면 Σ시작이 첫 방문을 상한 안에서 끝까지 앞당겨, 이른
+          아침 한 곳 뒤에 몇 시간 대기를 끼우고 하루를 늘렸다(06:33 카페 뒤 200분). 끝 상한이 그 순서를 막는다.
         A 해가 이 조건을 만족하므로 B 는 늘 실행 가능하고 거리는 A 이하다. 같은 80일 결과: 늦은 출발·늦은 끝 0,
-        대기 합 1,900분, 도로 km 는 A 대비 09시 창 −16.9%·06시 창 −30.2%(종전 B −18.2%·−31.3%). A 에는 출발을
+        대기 합 1,912분, 도로 km 는 A 대비 09시 창 −16.9%·06시 창 −30.2%(종전 B −18.2%·−31.3%). 거리 다음 순위를
+        하루 길이로 두는 것도 재 봤으나 끝 상한이 있으면 대기 차이가 40일 12분이라 두지 않았다. A 에는 출발을
         당기는 항이 없어서 이 규칙은 '가장 이른 출발'이 아니라 'A 보다 늦지 않은 출발'이다.
 
         **OPTIMAL 일 때만 채택한다** — 결정론 한도·벽시계에 끊긴 FEASIBLE 은 부하에 따라
@@ -623,15 +624,8 @@ class OrToolsAssembler:
         for i, j, lit in arcs:
             if i == 0 and j >= 1 and vals[j - 1]:  # 앵커 → 첫 방문 아크
                 m.Add(start[j - 1] - from_anchor[j - 1] <= depart).OnlyEnforceIf(lit)
-        ends = []
         for i in order:
-            e = m.NewIntVar(0, max(a_ends), f"b_end{i}")  # 마지막 방문 끝 ≤ A 의 끝 (도메인 상한)
-            m.Add(e == start[i] + stays[i])
-            ends.append(e)
-        first = m.NewIntVar(0, max(a_ends), "b_first")
-        m.AddMinEquality(first, [start[i] for i in order])
-        last = m.NewIntVar(0, max(a_ends), "b_last")
-        m.AddMaxEquality(last, ends)
+            m.Add(start[i] + stays[i] <= max(a_ends))
         # 이동 감점(`_travel_terms`)은 여기 들지 않는다 — 넣으면 B 가 줄인 거리만큼 식사창 등
         # 다른 소프트 항을 내줄 수 있다(A 가 FEASIBLE 이면 여유가 있다). 감점이 없으면 이 값이
         # A 목적값 그대로다.
@@ -639,11 +633,8 @@ class OrToolsAssembler:
         on = {0, *(i + 1 for i in order)}  # 비방문 노드의 아크는 회로상 0 — 항이 필요 없다
         meters = [int(round(d)) * lit for i, j, lit, d in self._arc_meters(problem, arcs, coords)
                   if i in on and j in on]
-        # 사전식: 거리 ≫ 하루 길이 ≫ Σ시작. 각 무게가 아랫 항 최대치보다 크다(분 축 상한 = A 의 끝).
-        top = max(a_ends)
-        w_span = top * len(order) + 1  # > Σ시작 최대
-        w = w_span * top + top * len(order) + 1  # > 하루 길이 항 + Σ시작 최대
-        m.Minimize(w * sum(meters) + w_span * (last - first) + sum(start[i] for i in order))
+        w = 24 * 60 * len(order) + 1  # > Σ시작 최대(분) — 시각은 거리 동률일 때만 가른다
+        m.Minimize(w * sum(meters) + sum(start[i] for i in order))
         solver = cp_model.CpSolver()
         solver.parameters.max_deterministic_time = _REORDER_DET_LIMIT
         solver.parameters.max_time_in_seconds = wall_ms / 1000.0
