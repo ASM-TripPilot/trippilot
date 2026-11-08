@@ -30,6 +30,7 @@ routes:
 - `stay-search-tabbar` 하단 탭바 복제본의 탭을 누르면 스택 밑 `(tabs)`의 해당 탭으로 돌아간다.
 - `stay-toast-above-fab` FAB 가 있는 화면에서 토스트는 FAB 묶음 위에 떠서 가려지지 않는다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
 - `stay-price-chip` 가격대를 고르면 칩이 연핑크·선택됨으로 바뀌고, 가격대 시트는 아래로 끌어 닫을 수 있다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 도달 불가 — Gotchas)*
+- `stay-card-heart-shape` 숙소 검색 카드 하트(18 하트)가 파일 이동(`shared/ui/glyphs/HeartGlyphs`) 뒤에도 같은 모양이다 — 상세·저장 목록의 22 하트와는 원래 다르다. *(TRIP-1829 · 실화면 전용 · 2026-11-08 `stay-search-default` 전후 0px pass)*
 
 ## How to get to it (user POV)
 

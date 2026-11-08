@@ -21,6 +21,7 @@ routes:
 - `place-back` 뒤로 원형 버튼 → 이전 화면, 히스토리가 없으면(콜드 딥링크) 그 여행의 허브로 replace.
 - `place-notfound` 일정 어느 날에도 없는 poiId 또는 404 → 「장소를 찾을 수 없어요」·「이 장소는 일정에 없어요」 + 앱바 뒤로.
 - `place-error` 404 아닌 조회 실패 → 「일정을 불러오지 못했어요」 + 「다시 시도」(뒤로 버튼 없음).
+- `place-header-glyph-shape` 장소 상세(i10) 헤더의 뒤로·공유 아이콘이 d06 장소 상세와 같은 모양이다(둘 다 공용 `BackChevronWideGlyph`·`ShareGlyph`). *(TRIP-1829 글리프 통합 · 생김새라 실화면 전용 · 2026-11-08 프리뷰 `live-place` 전후 0px pass)*
 
 ## How to get to it (user POV)
 
