@@ -18,6 +18,13 @@
      입력에 같은 판정 (TRIP-527 / TRIP-431 수렴 결정)
   ⑫ APPLIED 응답은 편집한 날의 구간 거리를 싣는다(BE 제안 카드 diff) — 손 안 댄 날은 재지
      않고, 시한이 없으면 실경로 없이 추정, 렌더가 터지면 거리 없이 사유를 남긴다. 거절·확인 요청은 그대로
+  ⑬ 아무것도 바꾸지 않는 명령(빈 REMOVE·같은 순열 REORDER·빈 날 CLEAR_DAY, 구조화·자연어
+     양쪽)은 재타이밍으로 시각만 바뀐 일정을 APPLIED 로 내보내지 않는다 — REJECTED("바뀌는
+     것이 없음", INV-4 '반영됨' 위장 금지)
+  ⑭ REPLACE_SLOT의 새 장소가 이미 그 날에 있으면 REJECTED — 같은 POI 슬롯 둘을 내보내지
+     않는다(HC엔 중복 검사가 없음)
+  ⑮ 구조화 명령의 affected_slots는 대상 일자 범위만 본다 — 다른 날 슬롯 id는 자연어와
+     같은 판정으로 REJECTED (전엔 전 일자 합집합이라 구조화만 통과했다)
 """
 
 from __future__ import annotations
@@ -376,12 +383,14 @@ def test_add_next_to_unknown_coord_poi_is_rejected(fixed: bool) -> None:
 
 
 def test_unknown_coord_poi_alone_on_day_passes() -> None:
-    """인접 구간이 없으면 좌표가 없어도 이동시간이 필요 없다 — 통과."""
+    """인접 구간이 없으면 좌표가 없어도 이동시간이 필요 없다 — 통과(PORK 제거로 UNKNOWN 혼자 남는 경우).
+
+    단일 슬롯 REORDER(무변경)로 재타이밍만 태우던 종전 픽스처는 '바뀌는 것이 없음'
+    가드(⑬)에 걸려 REJECTED 로 바뀐다 — 실제 변경(REMOVE)으로 같은 결말(인접 없음)을 낸다."""
     with _client() as client:
         response = _post(client, _body(
-            slots=[_slot(_UNKNOWN, "10:00:00", "11:00:00")],
-            # 슬롯 1개 하루의 재타이밍 — MOVE 는 기준 슬롯이 없어 성립 안 해 순열로 태운다
-            command={"op": "REORDER_DAY", "params": {}, "affected_slots": [_UNKNOWN]},
+            slots=[_slot(_UNKNOWN, "10:00:00", "11:00:00"), _slot(_PORK, "13:00:00", "14:00:00")],
+            command={"op": "REMOVE_SLOT", "params": {}, "affected_slots": [_PORK]},
             confirm=True))
     body = response.json()
     assert body["status"] == "APPLIED", body
@@ -527,3 +536,77 @@ def test_not_applied_responses_stay_as_before_and_measure_nothing(command: dict,
         plain = _post(client, _body(command=command)).json()
     assert routed["status"] == status and routed["itinerary"] is None
     assert routed == plain and route.legs == []
+
+
+# ── ⑬ 아무것도 바꾸지 않는 명령 → REJECTED("바뀌는 것이 없음") ────────────
+
+
+@pytest.mark.parametrize("command", [
+    {"op": "REMOVE_SLOT", "params": {}, "affected_slots": []},
+    {"op": "REORDER_DAY", "params": {}, "affected_slots": [_PORK, _HALLASAN]},
+], ids=["remove_empty", "reorder_same_order"])
+def test_noop_structured_command_rejected(command: dict) -> None:
+    """빈 REMOVE·현재와 같은 순열의 REORDER — 재타이밍만으로 시각이 바뀐 일정을 APPLIED 로
+    내보내지 않는다(INV-4 '반영됨' 위장 금지). 수정 전엔 둘 다 시각만 바뀌어 APPLIED 였다."""
+    with _client() as client:
+        response = _post(client, _body(command=command, confirm=True))
+    body = response.json()
+    assert body["status"] == "REJECTED" and "바뀌는 것이 없음" in body["reason"], body
+    assert body["itinerary"] is None
+
+
+def test_noop_clear_day_on_empty_day_rejected() -> None:
+    """빈 날에 CLEAR_DAY — 전후 둘 다 빈 날이라 바뀌는 것이 없다."""
+    with _client() as client:
+        response = _post(client, _body(
+            slots=[], command={"op": "CLEAR_DAY", "params": {}, "affected_slots": []}, confirm=True))
+    body = response.json()
+    assert body["status"] == "REJECTED" and "바뀌는 것이 없음" in body["reason"], body
+
+
+def test_noop_canned_natural_language_rejected() -> None:
+    """자연어 진입도 같은 길목(`edited_solution`)을 탄다 — REMOVE_SLOT affectedSlots=[] 류."""
+    canned = '{"editCommand": {"op": "REMOVE_SLOT", "params": {}, "affectedSlots": []}}'
+    with _fake_llm_client(canned) as client:
+        response = _post(client, _body(utterance="아무것도 빼지 말고 그냥 둬", confirm=True))
+    body = response.json()
+    assert body["status"] == "REJECTED" and "바뀌는 것이 없음" in body["reason"], body
+
+
+# ── ⑭ REPLACE_SLOT — 새 장소가 이미 그 날에 있으면 REJECTED ────────────
+
+
+def test_replace_with_poi_already_in_day_rejected() -> None:
+    """한라산→흑돼지거리(이미 그 날에 있음) — ADD 와 같은 규칙으로 같은 POI 슬롯 둘을 막는다
+    (HC 엔 중복 검사가 없어 조립이 걸러주지 않는다)."""
+    with _client() as client:
+        response = _post(client, _body(command={
+            "op": "REPLACE_SLOT", "params": {"targetPoiId": _PORK},
+            "affected_slots": [_HALLASAN]}, confirm=True))
+    body = response.json()
+    assert body["status"] == "REJECTED" and "이미 그 날 일정에 있음" in body["reason"], body
+
+
+def test_replace_with_poi_already_in_day_rejected_canned() -> None:
+    canned = (f'{{"editCommand": {{"op": "REPLACE_SLOT", "params": {{"targetPoiId": "{_PORK}"}},'
+              f' "affectedSlots": ["{_HALLASAN}"]}}}}')
+    with _fake_llm_client(canned) as client:
+        response = _post(client, _body(utterance="한라산 대신 흑돼지거리로 해줘", confirm=True))
+    body = response.json()
+    assert body["status"] == "REJECTED" and "이미 그 날 일정에 있음" in body["reason"], body
+
+
+# ── ⑮ 구조화 명령의 affected_slots는 대상 일자 범위만 (다른 날 슬롯 id 거부) ──
+
+
+def test_structured_command_cannot_reference_other_day_slot() -> None:
+    """구조화 진입이 전 일자 합집합으로 current_ids를 모으면 다른 날 슬롯 id도 검증을
+    지나던 결함 — 자연어 게이트(`current_slots`)와 같은 범위로 좁힌다."""
+    body = _body(command={"op": "REMOVE_SLOT", "params": {}, "affected_slots": [_WOLJEONG]}, confirm=True)
+    body["itinerary"]["days"].append(
+        {"date": "2026-09-02", "slots": [_slot(_WOLJEONG, "10:00:00", "11:00:00")]})
+    with _client() as client:
+        response = _post(client, body)
+    body_resp = response.json()
+    assert body_resp["status"] == "REJECTED", body_resp
+    assert body_resp["itinerary"] is None

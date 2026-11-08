@@ -114,6 +114,8 @@ def apply_command(
         if len(command.affected_slots) != 1:
             raise EditRejected("REPLACE_SLOT은 대상 슬롯 정확히 1개")
         old, new = command.affected_slots[0], _target_poi(command)
+        if new in order:  # ADD 와 같은 규칙 — 같은 곳이 둘인 하루를 '반영됨'으로 내보내지 않는다(HC 에 중복 검사 없음)
+            raise EditRejected(f"{new}는 이미 그 날 일정에 있음")
         if old not in order:
             raise EditRejected(f"교체 대상 {old}가 그 날 일정에 없음")
         return tuple(new if p == old else p for p in order)
@@ -285,6 +287,9 @@ def edited_solution(
     for i, day in enumerate(solution.days):
         if day.date == target_date:
             new_order = apply_command(day, command)
+            # 순서가 그대로면(빈 REMOVE·같은 순열·빈 날 CLEAR 등) 재타이밍으로 시각만 바뀐 일정이 APPLIED 로 나간다 — '반영됨' 위장(INV-4). 모든 op 의 단일 길목
+            if list(new_order) == [s.poi_id for s in day.slots]:
+                raise EditRejected("바뀌는 것이 없음 — 지금 순서와 같다")
             # 기준점 있는 추가만 — 끝 추가(기준 없음)는 종전대로 하루를 다시 흘린다(저녁 늦게 HC1·HC4 거부가 늘지 않게). 여행 당일은
             # 어느 편집이든 지금 전에 시작한 곳은 닻이고 그 뒤만 지금 이후로 흘린다(`retime_day`)
             # 새 곳이 맨 끝이면(마지막 슬롯 뒤 기준점) 끝 추가와 같다 — 번역이 "마지막에"를 afterPoiId 로 적어도 같은 하루가 나온다(2026-11-04 리뷰)
