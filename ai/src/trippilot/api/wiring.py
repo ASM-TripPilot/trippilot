@@ -2135,20 +2135,44 @@ def _nightlife_candidates(
 _SOFT_LOCKS = frozenset({"in_progress", "keep_dinner"})  # AI 가 건 잠금 — 사용자 잠금에 양보한다
 
 
-def _overlapping_locks(blocks: Sequence[FixedBlock]) -> tuple[FixedBlock, ...]:
-    """서로 겹치는 잠금 중 솔버에서 뺄 것 (TRIP-1397) — 둘 다 넣으면 모든 조립 단계가 실패한다.
+def _overlapping_locks(
+    blocks: Sequence[FixedBlock],
+    travel: Callable[[PoiId, PoiId], int | None] | None = None,
+    notes: list[str] | None = None,
+) -> tuple[FixedBlock, ...]:
+    """서로 겹치거나 **시간 안에 오갈 수 없는** 잠금 중 솔버에서 뺄 것 (TRIP-1397) — 둘 다 넣으면 모든 조립 단계가 실패한다.
 
     사용자 잠금을 먼저, 시각 순으로 담고 이미 담은 것과 겹치면 뺀다. 뺀 사용자 잠금은 사영에서
     원 시각 그대로 되싣는다(`_echo_locks`) — 사용자가 둔 것을 지우지 않는다.
+
+    `travel(앞, 뒤)` 는 조립이 두 잠금 사이에 쓰는 이동(분, 좌표를 모르면 None)이다. 앞 잠금이 끝나고 이동해 뒤 잠금
+    시작에 못 닿으면 겹친 것과 같다 — 조립의 핀 사이 이동 제약·HC2 와 같은 산식이라, 넣으면 OR 해 없음 → 규칙 폴백
+    HC2 → 하루 전체 '대안 없음'이다(2026-11-08 운영: '저녁은 그대로' 잠금이 앞 사용자 잠금에서 시간 안에 못 오는 곳이라
+    다시 짜기 두 번이 통째로 실패). 이 까닭으로 뺀 것은 `locked_unreachable` 노트로 밝힌다.
     """
     kept: list[FixedBlock] = []
     out: list[FixedBlock] = []
     for b in sorted(blocks, key=lambda b: (b.reason in _SOFT_LOCKS, b.window.start)):
         if any(b.window.start < k.window.end and k.window.start < b.window.end for k in kept):
             out.append(b)
-        else:
-            kept.append(b)
+            continue
+        far = next((k for k in kept if _unreachable(b, k, travel)), None)
+        if far is not None:
+            out.append(b)
+            if notes is not None:
+                notes.append(f"locked_unreachable: {b.poi_id} ({far.poi_id} 와 사이 이동이 안 닿음)")
+            continue
+        kept.append(b)
     return tuple(out)
+
+
+def _unreachable(a: FixedBlock, b: FixedBlock, travel) -> bool:
+    """겹치지 않는 두 잠금 중 앞 것이 끝나고 이동해 뒤 것 시작에 못 닿는가."""
+    if travel is None:
+        return False
+    first, second = (a, b) if a.window.start < b.window.start else (b, a)
+    minutes = travel(first.poi_id, second.poi_id)
+    return minutes is not None and first.window.end + timedelta(minutes=minutes) > second.window.start
 
 
 def _echo_locks(
@@ -2943,8 +2967,20 @@ class WiredItineraryOrchestrator:
             notes.append(f"in_progress_kept: {len(in_progress)}")
         past = _past_blocks(blocks, not_before)
         # 서로 겹치는 잠금은 솔버에 하나만 — 둘 다 넣으면 모든 단계가 실패해 하루가 통째로 비었다(TRIP-1397).
-        # 뺀 사용자 잠금은 사영에서 원 시각 그대로 되싣는다.
-        overlapped = _overlapping_locks(tuple(b for b in blocks if b not in past))
+        # 뺀 사용자 잠금은 사영에서 원 시각 그대로 되싣는다. 시간 안에 못 오가는 쌍도 같다 — 이동은 조립(`ScheduleAgent` ④)과
+        # 같은 추정기로 잰다(취향 도보 상한, 자차면 주차 계획).
+        walk_cap = activity_walk_cap(persona)
+        lock_index = {p.poi_id: p for p in pool.pois}
+        walker = self._assembly_provider.walker(
+            walk_cap, self._assembly_provider.parking_for(lock_index, walk_cap)
+            if transport is TransportMode.CAR else None)
+
+        def lock_travel(a: PoiId, b: PoiId) -> int | None:
+            if a not in lock_index or b not in lock_index:
+                return None  # 좌표를 모르는 잠금은 에이전트가 빼고 푼다 — 여기서 판정하지 않는다
+            return walker.estimate(lock_index[a].coord, lock_index[b].coord, transport).internal_minutes
+
+        overlapped = _overlapping_locks(tuple(b for b in blocks if b not in past), lock_travel, notes)
         if overlapped:
             notes.append(f"locked_overlap: {','.join(str(b.poi_id) for b in overlapped)}")
         if "END_DAY" in resolved:

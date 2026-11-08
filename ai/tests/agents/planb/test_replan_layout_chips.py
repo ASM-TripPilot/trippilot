@@ -68,6 +68,38 @@ def test_저녁은_한_끼만_잠근다() -> None:
     assert body["itinerary"] is not None, body["notes"]
 
 
+def test_앞_잠금에서_시간_안에_못_오는_저녁은_잠그지_않고_하루를_낸다() -> None:
+    """시간은 안 겹치지만 이동이 안 닿는 잠금 쌍 — 둘 다 솔버에 넣으면 모든 조립 단계가 해 없음이었다.
+
+    2026-11-08 운영: '저녁은 그대로' 잠금이 앞 사용자 잠금에서 시간 안에 못 오는 곳이라 다시 짜기 두 번이 통째로
+    '재계획 대안 없음'이었다(OR 해 없음 → 규칙 폴백 HC2 → assembly_conflict). AI 가 건 저녁 잠금이 사용자 잠금에 양보한다.
+    """
+    cafe_street = _SEED["월정리 카페거리"]  # 흑돼지거리에서 28km — 10분 만에 못 온다
+    slots = [{**_slot(cafe_street, "17:00", "17:50"), "is_fixed": True}, _slot(_PORK, "18:00", "19:00")]
+    body, seen = _replan(directives=["KEEP_DINNER"], reasons=["none"], current_slots=slots)
+
+    assert body["itinerary"] is not None, body["notes"]
+    held = [(str(b.poi_id), b.reason) for b in seen["agent"][0].fixed_blocks]
+    assert (_PORK, "keep_dinner") not in held, held
+    assert any(n.startswith(f"locked_unreachable: {_PORK}") for n in body["notes"]), body["notes"]
+    kept = [s for s in _placed(body) if s["poi_id"] == cafe_street]
+    assert [(s["start_at"][:5], s["end_at"][:5]) for s in kept] == [("17:00", "17:50")]  # 사용자 잠금은 그대로
+
+
+def test_사용자_잠금끼리_시간_안에_못_오가면_뒤_잠금을_솔버에서_빼고_원_시각으로_되싣는다() -> None:
+    """사용자가 둘 다 고정했으면 둘 다 지운다/옮긴다는 없다 — 겹친 잠금과 같은 길(TRIP-1397)로 하루를 낸다."""
+    cafe_street = _SEED["월정리 카페거리"]
+    slots = [{**_slot(cafe_street, "17:00", "17:50"), "is_fixed": True},
+             {**_slot(_PORK, "18:00", "19:00"), "is_fixed": True}]
+    body, seen = _replan(reasons=["none"], current_slots=slots)
+
+    assert body["itinerary"] is not None, body["notes"]
+    assert [str(b.poi_id) for b in seen["agent"][0].fixed_blocks] == [cafe_street]
+    assert any(n.startswith(f"locked_unreachable: {_PORK}") for n in body["notes"]), body["notes"]
+    placed = {(s["poi_id"], s["start_at"][:5]) for s in _placed(body)}
+    assert {(cafe_street, "17:00"), (_PORK, "18:00")} <= placed  # 둘 다 원 시각 그대로 남는다
+
+
 def test_이미_끝난_저녁은_잠그지_않는다() -> None:
     """되실으면 고정으로 나가 BE 가 영구히 잠근다 — 지난 저녁은 잠글 대상이 아니다."""
     slots = [_slot(_PORK, "18:00", "19:00")]
