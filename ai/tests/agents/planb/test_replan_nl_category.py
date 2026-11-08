@@ -6,6 +6,7 @@ LLM 이 뽑고(게이트가 모양만), 후보 풀로 검증하고, **코드가 
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -16,7 +17,7 @@ from trippilot.domain.common import GeoPoint, PoiId, TraceId
 from trippilot.domain.llm.llm import LlmFeature, TypedResult
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.llm_gateway.gates.replan.replan_request_extraction import (
-    ExtractedCategory, ExtractedRequest, ReplanRequestExtractionGate,
+    ExtractedCategory, ExtractedPlace, ExtractedRequest, ReplanRequestExtractionGate,
 )
 
 from tests.api.test_api_replan_wired import _DIRECTIVES, _body
@@ -45,6 +46,18 @@ def test_gate_drops_unknown_category_and_bad_count_and_only_without_categories()
                 ' {"category": "SIGHT", "count": true}], "only": true}').value
     assert out.categories == () and out.only is False  # 종류가 하나도 없으면 "only" 도 없다
     assert out.empty
+
+
+def test_malformed_category_shape_drops_only_that_item_not_the_whole_response() -> None:
+    """`category` 값이 list/dict/int 면 `in frozenset` 가 TypeError — 항목 격리 설계상 그 항목만
+    버리고 나머지 카테고리·장소 주장은 살아야 한다(종전엔 예외가 새서 전체가 날아갔다)."""
+    out = _gate(json.dumps({
+        "places": [{"name": "경복궁", "want": "visit"}],
+        "categories": [{"category": ["CAFE"]}, {"category": {"a": 1}}, {"category": 3},
+                       {"category": "FOOD", "count": 2}],
+    })).value
+    assert out.places == (ExtractedPlace(name="경복궁", want="visit"),)  # 장소 주장은 산다
+    assert out.categories == (ExtractedCategory("FOOD", 2),)  # 모양이 맞는 카테고리만 산다
 
 
 # ── ② 검증 — 후보 풀에 그 종류가 있는가 ──────────────────────────────
