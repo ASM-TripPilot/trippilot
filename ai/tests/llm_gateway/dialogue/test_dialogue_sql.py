@@ -305,6 +305,20 @@ def test_find_by_name_narrows_by_a_city_inside_a_province_too() -> None:
     assert "sigungu LIKE %(area)s" in conn.log[2][0] and conn.log[2][1]["area"] == "강릉%"
 
 
+def test_find_by_name_orders_a_sido_area_like_in_sido_so_gyeonggi_gwangju_is_not_put_first() -> None:
+    """SQL 선순위 술어는 `_pick_one` 의 지역 안 판정과 같아야 한다 — 다르면 LIMIT 에 잘리는 쪽이 지역 안 행이다.
+    종전 `sido LIKE OR sigungu LIKE '광주%'` 는 경기 광주시를 앞세우고 통합 특별시의 광주 다섯 구는 못 잡았다(리뷰 1109)."""
+    from trippilot.domain.poi.region_centers import GWANGJU_GU, MERGED_SIDO
+
+    conn = _name_conn([_hit("a", "경기도", "광주시"), _hit("b", MERGED_SIDO, "동구", rich=False)])
+    PgPlaceSql(lambda: conn).find_by_name("광장시장", "광주")
+    sql, params = conn.log[2]
+    order = sql.split("ORDER BY", 1)[1]
+    assert "sigungu LIKE" not in order  # 구·군 앞글자 '광주%' 가 경기 광주시를 앞세웠다
+    assert "sido LIKE %(area)s" in order and "(sido = %(merged)s AND sigungu = ANY(%(gu)s::text[]))" in order
+    assert params["area"] == "광주%" and params["merged"] == MERGED_SIDO and set(params["gu"]) == GWANGJU_GU
+
+
 def test_rows_by_ids_is_one_read_only_primary_key_query_and_skips_empty_input() -> None:
     """미리 찾기의 지역 조회 — 우리가 쓴 매개변수 SQL 한 번, 칸 조회와 같은 uuid 같음(기본키 색인)."""
     conn = _Conn([[_hit("a", "부산광역시", "기장군")]])
