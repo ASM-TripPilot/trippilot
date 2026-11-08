@@ -15,6 +15,7 @@ routes:
 
 - `place-loading` 일정 조회 중 → 빈 로딩 면.
 - `place-detail` 일정에 있는 poiId → 히어로·태그·정보 카드·미니맵.
+- `place-photo-credit` 히어로 대표 사진 우하단에 「사진: 한국관광공사」 칩이 선다(접근성 라벨 「사진 출처 한국관광공사」). 관광공사 3유형·유형 모름 사진은 자르지 않고 어두운 여백 위에 전체가 보이며 1유형만 꽉 채운다. 유형은 대표 1장(갤러리 첫 장)에만 붙고 나머지 사진은 유형을 몰라 늘 자르지 않는다. 사진이 없어 카테고리 그림이 깔리면 칩이 없다. *(TRIP-1740 · 2026-11-08 프리뷰 캡처 pass(주의 — 칩이 사진 수 칩 「1 / 42」 바로 아래라 간격이 좁다) · 실화면 미검증)*
 - `place-missing-fields` 영업시간·주소가 없으면 「미확인」, 영업시간을 모르면 캡션 「확인 필요」.
 - `place-open-naver` 이름·좌표가 있으면 「네이버 지도에서 보기」 → 네이버 지도 앱(없으면 웹). 실패하면 「네이버 지도를 열 수 없어요. 잠시 후 다시 시도해 주세요.」.
 - `place-share` 공유 원형 버튼 → OS 공유 시트(`{장소명}` + 줄바꿈 + `{주소}`, 주소 없으면 이름만).
@@ -36,6 +37,7 @@ Preconditions:
 - 공유·네이버 지도 앱 동작은 시뮬레이터에 해당 앱이 없으면 웹/공유 시트로 대신 뜬다.
 
 - **허브에서 진입.** 허브 카드 이름(testID: `execution-live-slot-name-${slotKey}` — 옆에 `chevron`)을 누른다. 상세 루트(testID: `execution-place-detail`)가 뜨고 제목(testID: `execution-place-title`)이 카드 이름과 같다.
+- **출처 칩.** 서버 사진이 있는 장소는 히어로 사진 testID: `execution-place-gallery-${index}`(대표 = 0) 옆에 testID: `execution-place-gallery-${index}-credit`(「사진: 한국관광공사」)가 우하단에 있다. 「이곳의 사진」 썸네일(사진 3장 이상일 때만 — 운영 응답은 대표 1장뿐이라 사실상 안 뜬다)은 testID: `execution-place-photo-thumb-${index}-credit` 이 칸 아래 띠(「한국관광공사」)로 붙는다. 사진 없는 장소엔 이 노드가 없다.
 - **정보 카드.** 정보 카드(testID: `execution-place-info`)에 「영업시간」 행 값(testID: `execution-place-openhours`, 결측이면 testID: `execution-place-unknown-openhours` 「미확인」)과 「주소」 행(결측이면 testID: `execution-place-unknown-address` 「미확인」)이 있다. 영업시간을 모르면 캡션(testID: `execution-place-hours-caption`) 「확인 필요」.
 - **네이버 지도.** 「네이버 지도에서 보기」(testID: `execution-place-open-naver`). 네이버 지도 앱 또는 Safari 가 열린다. 실패하면 안내(testID: `execution-place-opennaver-error`).
 - **공유.** 히어로 우상단 공유 원(testID: `execution-place-share`). iOS 공유 시트에 장소명(+주소)이 실린다. 공유 시트를 닫으면 같은 상세다.
@@ -47,6 +49,7 @@ Preconditions:
 
 ## Gotchas
 
+- **[미확인 · 실화면 전용] 2026-11-08 TRIP-1740** — 출처 칩은 프리뷰 `live-place` 캡처로만 봤다: 어두운 히어로 우하단에 읽히지만 사진 수 칩 「1 / 42」 바로 아래라 간격이 좁다(겹치지 않음 — Figma 대조 몫). 실데이터 사진(특히 세로형)의 여백 모양, VoiceOver 읽는 순서는 미확인이다.
 - **[실화면 전용]** 히어로 사진·미니맵 타일·핀 위치는 실화면으로만 확인된다. 네이버 지도 Client ID 가 없는 빌드면 미니맵이 지도 실패 표면으로 접힌다.
 - 데이터 출처가 일정 슬롯이라 같은 이름의 탐색 장소 상세(d06)와 사진·영업시간·주소가 다를 수 있다 — 일정이 정보가 빈 중복 POI 를 골랐을 때(QA 2026-10-21 N-018). 탐색 화면 값과 대조해 "틀렸다"로 판정하지 않는다.
 - 저장 하트·「이곳의 사진 · 모두 보기 ›」는 의도적으로 없다(사진 뷰어·장소 저장 계약 없음). 사진 섹션은 갤러리 사진이 썸네일 개수 이상일 때만 서는데 운영 응답은 대표 1장뿐이라 사실상 안 뜬다.
