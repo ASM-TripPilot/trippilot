@@ -67,14 +67,17 @@ def check_hc1(solution: ItinerarySolution, poi_index: Mapping[PoiId, Poi],
                 continue
             dow = slot.start_at.weekday()
             if poi.open_hours and not any(oh.day_of_week == dow for oh in poi.open_hours):
-                out.append(Violation("HC1", slot.poi_id, f"{dow}요일 휴무", CLOSED_DAY))
+                out.append(Violation("HC1", slot.poi_id, f"{dow}요일 휴무", CLOSED_DAY,
+                                     slot_start=slot.start_at))
                 continue
             if closed_by_holiday(poi, slot.start_at.date(), holidays):
-                out.append(Violation("HC1", slot.poi_id, "공휴일 휴무", HOLIDAY))
+                out.append(Violation("HC1", slot.poi_id, "공휴일 휴무", HOLIDAY,
+                                     slot_start=slot.start_at))
                 continue
             start_m = _min_of_day(slot.start_at)
             end_m = start_m + int((slot.end_at - slot.start_at).total_seconds() // 60)
-            out.append(Violation("HC1", slot.poi_id, f"영업시간 밖: {start_m}~{end_m}", OUT_OF_HOURS))
+            out.append(Violation("HC1", slot.poi_id, f"영업시간 밖: {start_m}~{end_m}", OUT_OF_HOURS,
+                                 slot_start=slot.start_at))
     return out
 
 
@@ -113,7 +116,8 @@ def check_hc2(solution: ItinerarySolution, poi_index: Mapping[PoiId, Poi],
             gap = int((nxt.start_at - prev.end_at).total_seconds() // 60)
             if gap < travel.internal_minutes:
                 out.append(Violation("HC2", nxt.poi_id,
-                                     f"이동 {travel.internal_minutes}분 필요, 간격 {gap}분"))
+                                     f"이동 {travel.internal_minutes}분 필요, 간격 {gap}분",
+                                     slot_start=nxt.start_at))
     return out
 
 
@@ -129,7 +133,8 @@ def check_hc2_coords_known(solution: ItinerarySolution,
     for day in solution.days:
         for prev, nxt in zip(day.slots, day.slots[1:]):
             if prev.poi_id not in poi_index or nxt.poi_id not in poi_index:
-                out.append(Violation("HC2", nxt.poi_id, "좌표 미상 — 이동 검증 불가"))
+                out.append(Violation("HC2", nxt.poi_id, "좌표 미상 — 이동 검증 불가",
+                                     slot_start=nxt.start_at))
     return out
 
 
@@ -206,7 +211,8 @@ def check_not_before(solution: ItinerarySolution, problem: ItineraryProblem,
             if slot.start_at < lo:
                 out.append(Violation("HC4", slot.poi_id,
                                      f"시작 하한({lo.isoformat()}) 이전: "
-                                     f"{slot.start_at.isoformat()}"))
+                                     f"{slot.start_at.isoformat()}",
+                                     slot_start=slot.start_at))
     return out
 
 
@@ -249,7 +255,8 @@ def check_hc4(solution: ItinerarySolution, problem: ItineraryProblem) -> list[Vi
             # 시작은 그날 안(자정 넘는 창에서도 끝만 넘는다 — 슬롯은 시작 시각 + ends_next_day 로 나간다)
             if start_m < ws or end_m > we or start_m > 24 * 60 - 1:
                 out.append(Violation("HC4", slot.poi_id,
-                                     f"day window({ws}~{we}) 밖: {start_m}~{end_m}"))
+                                     f"day window({ws}~{we}) 밖: {start_m}~{end_m}",
+                                     slot_start=slot.start_at))
     return out
 
 
