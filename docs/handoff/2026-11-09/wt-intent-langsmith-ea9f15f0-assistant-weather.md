@@ -32,7 +32,8 @@ picked_up_by: "claude-code trippilot-3b 2026-11-09 01:28 KST — 1 은 사용자
 | #2052 | **웹**에서 날씨를 처음 물을 때 브라우저 위치 권한을 한 번 묻고 그 위치를 싣는다(FE 경량 사이클 `20261108-assistant-web-location-ask`) | 반영(11-08 17:04 KST) |
 | #2053 | 정본: U8 BR-U8-22 개정 블록·audit·openapi 설명 | 문서 |
 
-## 멈춘 지점 (11-09)
+## 멈춘 지점 (11-09 05:55 — 이어받은 3b 가 갱신)
+- 3b 가 이어받아 4번을 운영 로그로 쟀다(결과는 아래 4). 1번은 사용자가 다시 물었다고 할 때까지 대기, 2·3번은 손대지 않았다.
 - 코드는 전부 운영에 있다. **웹 권한 창이 실제로 뜨는지는 아직 아무도 못 봤다**(로컬 백엔드가 `deviceLocation` 이전 이미지라 실기 스모크 실행불가). 사용자 확인 대기 — 「내가 할 일」 `todo-weather-location-check`.
 - 위치 사용 법정 로그를 '제3자 제공'이 아니라 '이용'으로 남기는 판단은 추천안대로 정함(「내가 할 일」 `dec-assistant-location-use-log`).
 
@@ -40,7 +41,9 @@ picked_up_by: "claude-code trippilot-3b 2026-11-09 01:28 KST — 1 은 사용자
 1. **[3b] 사용자가 웹에서 "오늘 날씨"를 다시 물었다고 하면 그 턴을 찾는다** — 운영 AI 로그에서 `dialogue_turn` 줄의 `intent`·`outcome`·`clarify`·`trip`·`here` 를 본다(로컬 전용 — `gh workflow run aws-dev-logs.yml --ref develop -f source=cloudwatch -f since=6h -f namespace=trippilot -f component=ai -f 'pattern=dialogue_turn'`, 아티팩트 `ai.log`). `here: false` 면 앱이 위치를 못 보낸 것 — 웹이면 브라우저가 이 사이트 위치를 차단해 뒀는지, 폰이면 새 빌드인지부터 본다.
 2. **[3b · 백로그] 시트 시작 버튼 "오늘 날씨"(여행 있을 때)는 AI 를 안 거친다** — BE `QueryCards.weather` 가 여행 첫 목적지 지역만 쓰고 현재 위치·되묻기가 없다. 말로 물으면 지금 있는 곳, 버튼을 누르면 여행지라 둘이 갈린다. 고친다면 버튼을 말 경로(AI)로 보내거나, 버튼 경로에도 `ContextSnapshot.here` 를 넘겨 같은 순서를 쓴다(BE 몫).
 3. **[3b · 백로그] 여행 중 + 위치 없음이면 지금도 오늘 일정 장소로 답한다**(의도한 보수안 — 위치를 못 싣는 폰으로 여행하는 사람이 매번 질문받지 않게). 사용자가 "여행 중에도 물어라"고 하면 `ai/src/trippilot/orchestrator/dialogue/dialogue_handlers.py` `weather_needs_region` 의 여행 중 조건을 빼면 되는데, 대화 테스트 40여 건이 "여행 중 오늘 날씨 → 일정 장소"를 기본 쓰임으로 전제한다(같이 고칠 것).
-4. **[3b · 백로그] 계획 경로(DIALOGUE_PLAN 도구)는 지역 되묻기를 안 한다** — `Handler.ask` 는 분류 경로 전용이다. 계획 경로로 온 날씨 질문은 앵커 순서만 바뀐다.
+4. **[3b · 쟀음 — 손대지 않음] 계획 경로(DIALOGUE_PLAN 도구)는 지역 되묻기를 안 한다** — `Handler.ask` 는 분류 경로 전용이다. 계획 경로로 온 날씨 질문은 앵커 순서만 바뀐다.
+   - 11-09 운영 14일 실측(덤프 런 42521608285): 계획 경로 14회 — NO_TOOL 12·FALLBACK 1·TOOLS 1(EXPLORE_PLACES), 날씨 0회. 실영향이 없어 바꾸지 않았다.
+   - 계획 경로로 날씨가 실제로 오면 그때 단독 날씨 호출만 분류 경로처럼 되묻게 한다.
 
 ## 함정 / 주의
 - **웹 브라우저 권한은 거부해도 `canAskAgain: true`**(expo-location 웹 구현) — 물을지는 상태(`undetermined`)로만 가른다(`readDevicePosition({ask:true})`). 폰은 권한 창을 띄우지 않는다(O-U8-5 그대로).
