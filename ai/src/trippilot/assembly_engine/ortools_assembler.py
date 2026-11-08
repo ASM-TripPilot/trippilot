@@ -558,7 +558,7 @@ class OrToolsAssembler:
             left_ms = budget_ms - int((time.monotonic() - day_started) * 1000)
             reorder_ms = min(reorder_ms, left_ms)
         cp_solver = self._reorder(m, cp_solver, problem, visit, start, arcs,
-                                  obj_terms, coords, reorder_ms)
+                                  obj_terms, coords, from_anchor, reorder_ms)
 
         slots = []
         base = datetime(day.year, day.month, day.day, tzinfo=tz)
@@ -578,7 +578,7 @@ class OrToolsAssembler:
         return slots
 
     def _reorder(self, m: cp_model.CpModel, a_solver: cp_model.CpSolver, problem,
-                 visit, start, arcs, obj_terms, coords, wall_ms: int) -> cp_model.CpSolver:
+                 visit, start, arcs, obj_terms, coords, from_anchor, wall_ms: int) -> cp_model.CpSolver:
         """B 단계 — A 해의 방문 집합을 고정하고 이동 거리만 줄인다 (TRIP-1178).
 
         목적함수에 이동 비용이 없어(이동은 HC2 시각 제약뿐) 같은 집합 안의 순서가 탐색 경로로
@@ -594,6 +594,12 @@ class OrToolsAssembler:
         시각을 사전식 타이브레이크로 둔다: 거리 1m 가 Σ시작의 최대치보다 무거워(W) km 최적은
         그대로고, 같은 km 안에서 이른 시각을 고른다(측정: km 동일, 대기 514 → 35분).
 
+        **숙소를 나서는 시각(첫 방문 시작 − 앵커 이동)은 A 보다 늦추지 않는다**(2026-11-09). 거리만 보면
+        B 가 아침을 비우고 출발을 미뤘다 — 06:00 시작 하루가 06:05 출발에서 08:28 출발로(무작위 30일 중 3일,
+        시험 설정). 첫 장소가 바뀌어 앵커 이동만큼 도착이 늦는 것은 그대로 허용한다. A 해가 이 조건을
+        만족하므로 B 는 늘 실행 가능하고 거리는 A 이하다. A 에는 출발을 당기는 항이 없어서 이 규칙은
+        '가장 이른 출발'이 아니라 'A 보다 늦지 않은 출발'이다.
+
         **OPTIMAL 일 때만 채택한다** — 결정론 한도·벽시계에 끊긴 FEASIBLE 은 부하에 따라
         달라질 수 있어서다. 못 쓰면 A 해 그대로(강등 아님 — OR_TOOLS 그대로) + WARNING.
         `wall_ms` ≤ 0 이면 돌리지 않는다(설정 0, 또는 A 가 백스톱에 끊기고 일자 몫도 없음).
@@ -605,6 +611,10 @@ class OrToolsAssembler:
                        key=lambda i: (a_solver.Value(start[i]), i))
         for v, val in zip(visit, vals):
             m.Add(v == val)
+        depart = a_solver.Value(start[order[0]]) - from_anchor[order[0]]  # A 의 출발(핀은 앵커 이동 0)
+        for i, j, lit in arcs:
+            if i == 0 and j >= 1 and vals[j - 1]:  # 앵커 → 첫 방문 아크
+                m.Add(start[j - 1] - from_anchor[j - 1] <= depart).OnlyEnforceIf(lit)
         # 이동 감점(`_travel_terms`)은 여기 들지 않는다 — 넣으면 B 가 줄인 거리만큼 식사창 등
         # 다른 소프트 항을 내줄 수 있다(A 가 FEASIBLE 이면 여유가 있다). 감점이 없으면 이 값이
         # A 목적값 그대로다.

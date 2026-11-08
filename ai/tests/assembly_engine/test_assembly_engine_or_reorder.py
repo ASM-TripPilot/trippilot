@@ -16,6 +16,7 @@ B = A 의 visit 고정 + A 목적식 ≥ A 목적값(사전식) 아래에서 도
   ⑦ A 가 결정론으로 끝났으면 일자 몫(벽시계)이 다 써졌어도 B 를 돌린다 — 부하가 순서를 정하지 않게
   ⑧ B 미채택은 WARNING 으로 남는다(침묵 금지)
   ⑨ B 는 시각에 대기를 끼워 넣지 않는다 — 거리 동률이면 이른 시각(Σstart 타이브레이크)
+  ⑩ B 는 숙소를 나서는 시각(첫 방문 시작 − 앵커 이동)을 A 보다 늦추지 않는다(2026-11-09) — ⑥ 에도 걸었다
 """
 
 from __future__ import annotations
@@ -257,6 +258,52 @@ def test_reorder_adds_no_idle_wait() -> None:
     assert _idle_min(b.days[0].slots, index, problem) == 0
 
 
+# ⑩ 출발을 늦추지 않는다 — 숙소를 나서는 시각 = 첫 방문 시작 − 앵커 이동(고정 블록이 첫 방문이면 이동 0, 조립과 같다)
+def _depart(day_sol, index, problem):
+    if not day_sol.slots:
+        return None
+    first = day_sol.slots[0]
+    pinned = any(fb.poi_id == first.poi_id and fb.window.start == first.start_at for fb in day_sol.fixed_blocks)
+    if problem.anchor is None or pinned:
+        return first.start_at
+    t = _EST.estimate(problem.anchor, index[first.poi_id].coord, problem.transport).internal_minutes
+    return first.start_at - timedelta(minutes=t)
+
+
+# 06:00 에 시작하는 서울 하루(무작위 실험 시드 2) — 수정 전 B 는 거리를 줄이려고 출발을 08:40 → 09:27 로 미뤘다
+_SEOUL_DAY = date(2026, 10, 10)
+_SEOUL_ANCHOR = GeoPoint(37.5665, 126.9780)
+_SEOUL = (  # (id, 위도, 경도, 분류, 영업(분) 또는 None, 점수)
+    ("d0", 37.5730, 127.0110, PoiCategory.CAFE, (600, 1200), 0.639),
+    ("d1", 37.5401, 126.9494, PoiCategory.CAFE, (600, 1200), 0.524),
+    ("d2", 37.5743, 126.9718, PoiCategory.CULTURE, (540, 1080), 0.867),
+    ("d3", 37.5400, 126.9721, PoiCategory.CAFE, None, 0.611),
+    ("d4", 37.5818, 126.9623, PoiCategory.NATURE, (600, 1320), 0.666),
+    ("d5", 37.5875, 126.9521, PoiCategory.CULTURE, (600, 1320), 0.57),
+    ("f0", 37.5439, 126.9587, PoiCategory.FOOD, (660, 1260), 0.745),
+    ("f1", 37.5653, 126.9610, PoiCategory.FOOD, (1020, 1320), 0.601),
+)
+
+
+def test_reorder_does_not_delay_departure() -> None:
+    dow = _SEOUL_DAY.weekday()
+    pois = [_poi(pid, lat, lng, cat, () if h is None else (OpenHour(dow, *h),))
+            for pid, lat, lng, cat, h, _ in _SEOUL]
+    index = {p.poi_id: p for p in pois}
+    d = _SEOUL_DAY
+    problem = replace(
+        _problem([ScoredPoi(PoiId(pid), sc, True) for pid, *_, sc in _SEOUL], days=(d,),
+                 anchor=_SEOUL_ANCHOR, seed=2),
+        day_window=TimeWindow(datetime(d.year, d.month, d.day, 6, tzinfo=_KST),
+                              datetime(d.year, d.month, d.day, 21, tzinfo=_KST)))
+    a = _solve(_CFG_A, problem, index, remaining_ms=5000)
+    b = _solve(_CFG, problem, index, remaining_ms=5000)
+    assert {s.poi_id for s in b.days[0].slots} == {s.poi_id for s in a.days[0].slots}
+    assert _depart(b.days[0], index, problem) <= _depart(a.days[0], index, problem)
+    assert _road_km(b.days[0].slots, index, problem) <= _road_km(a.days[0].slots, index, problem) + 0.01
+    assert check_all(b, problem, index, _EST) == []
+
+
 # ⑥ PBT — 임의 좌표·영업시간 풀
 @st.composite
 def _pools(draw):
@@ -311,3 +358,5 @@ def test_reorder_property_same_set_score_and_no_longer(setup) -> None:
         # B 는 미터 정수로 푼다 — 반올림 몫(구간당 0.5m)만 허용
         tol = 0.001 * (len(db.slots) + 1)
         assert _road_km(db.slots, index, problem) <= _road_km(da.slots, index, problem) + tol
+        if da.slots:  # ⑩ 출발을 늦추지 않는다
+            assert _depart(db, index, problem) <= _depart(da, index, problem)
