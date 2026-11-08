@@ -1,12 +1,18 @@
 import { isAxiosError } from 'axios';
 
 import { parseSlotKey } from '@/entities/itinerary-slot';
+import { tripDayNumber } from '@/entities/trip';
 import { buildStartReplanRequest } from '@/features/request-replan';
 import type {
+  ReplanDeferredPlace,
   ReplanDiffSlot,
   ReplanSession,
   StartReplanRequest,
 } from '@/shared/api/index.schemas';
+
+import { RETRY_FAILED, RETRY_PAST_DAY } from './retryCopy';
+
+export { RETRY_FAILED, RETRY_PAST_DAY };
 
 /**
  * 상황 감지 FE-B · frontend-components §3.6 — i06 최소 변경의 판정(순수, 페이지는 배선만).
@@ -123,4 +129,59 @@ export function includeMissingText(name: string | null): string {
   return name
     ? `‘${name}’${topicParticle(name)} 이번 안에 넣지 못했어요.`
     : '넣으려던 장소는 이번 안에 넣지 못했어요.';
+}
+
+/** 다른 날로 집은 곳 한 줄 — 뷰는 이 모양만 받는다(요청 바디는 페이지 몫이라 여기 없다). */
+export interface DeferredLineVM {
+  key: string;
+  text: string;
+  buttonLabel: string;
+}
+
+export interface DeferredRowVM extends DeferredLineVM {
+  request: StartReplanRequest;
+}
+
+/**
+ * 「다른 날 요청이라 이번엔 넣지 않은 곳」 줄·버튼·요청(항목마다 하나, 같은 날이어도 묶지 않는다). 서버가 같은 곳을 두 날로
+ * 말하면 처음 날만 싣는다(key=poiId 가 겹치지 않게). 시작일을 모르면 일차만 빠진다 — 줄·버튼은 남는다.
+ * 요청은 원 세션의 사유·문장·트리거를 받지 않고(그래서 "내일" 같은 날 말이 섞일 길이 없다) 그 날 하루 전체 + `<이름> 꼭`.
+ */
+export function buildDeferredRows(
+  places: readonly ReplanDeferredPlace[] | undefined,
+  startDate: string | undefined
+): DeferredRowVM[] {
+  const seen = new Set<string>();
+  const rows: DeferredRowVM[] = [];
+  for (const place of places ?? []) {
+    if (seen.has(place.poiId)) continue;
+    seen.add(place.poiId);
+    const [, month, day] = place.date.split('-').map(Number);
+    const nth =
+      startDate === undefined
+        ? null
+        : `${tripDayNumber(startDate, place.date)}일차`;
+    rows.push({
+      key: place.poiId,
+      text: `‘${place.name}’${topicParticle(place.name)} ${month}월 ${day}일${nth === null ? '' : `(${nth})`} 요청이라 이번엔 넣지 않았어요`,
+      buttonLabel:
+        nth === null ? '그날 넣어 다시 짜기' : `${nth}에 넣어 다시 짜기`,
+      request: buildStartReplanRequest({
+        scope: 'FULL_DAY',
+        targetDate: place.date,
+        reasons: [],
+        directives: [],
+        freeText: `${place.name} 꼭`,
+        triggerId: null,
+      }),
+    });
+  }
+  return rows;
+}
+
+/** 새 세션 시작 실패 문구 — 상태 코드 409(지난 날·기간 밖)만 날짜 안내, 그 밖은 시작 실패. 세션 날짜는 보지 않는다. */
+export function deferredFailureText(error: unknown): string {
+  return isAxiosError(error) && error.response?.status === 409
+    ? RETRY_PAST_DAY
+    : RETRY_FAILED;
 }

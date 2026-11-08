@@ -3,12 +3,14 @@ import {
   fireEvent,
   render,
   screen,
+  userEvent,
   within,
 } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
 
 import type { Itinerary, ReplanDiff } from '@/shared/api/index.schemas';
 
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { seoulDate } from '@/shared/lib/seoulDate';
 
 import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
@@ -132,14 +134,63 @@ const mockStart: { isPending: boolean; isError: boolean; error: unknown } = {
   isError: false,
   error: null,
 };
+// TRIP-1782 — 실물 `reset()` 처럼 실패 이력(isError·error)을 비운다. 다른 날 확인창을 닫을 때 부르는 seam 이고, 이걸 비워야
+// 같은 인스턴스를 쓰는 [새 대안 보기]·낡음 얼굴의 실패 문구가 오염되지 않는다.
+const mockStartReset = jest.fn(() => {
+  mockStart.isError = false;
+  mockStart.error = null;
+});
 jest.mock('@/features/request-replan/model/useStartReplan', () => ({
   useStartReplan: () => ({
     mutate: mockStartMutate,
+    reset: mockStartReset,
     isPending: mockStart.isPending,
     isError: mockStart.isError,
     error: mockStart.error,
   }),
 }));
+
+// TRIP-1782 — 여행 시작일(N일차 계산). 부분 목이라 같은 모듈의 다른 훅은 실물이다 — 페이지가 어느 진입점(index.hooks·generated)으로
+// 불러도 이 파일의 훅이 걸린다. 기본은 도착(시작일 6/10 → 6/11 이 2일차, 일정 픽스처와 같다).
+const mockTrip: {
+  state: 'ok' | 'pending' | 'error';
+  startDate: string;
+  status: number;
+  calls: string[];
+} = { state: 'ok', startDate: '2026-06-10', status: 500, calls: [] };
+jest.mock('@/shared/api/generated/trips/trips', () => {
+  const { AxiosError } = jest.requireActual('axios');
+  return {
+    ...jest.requireActual('@/shared/api/generated/trips/trips'),
+    useGetTripsTripId: (tripId: string) => {
+      mockTrip.calls.push(tripId);
+      if (mockTrip.state === 'pending') {
+        return {
+          data: undefined,
+          isPending: true,
+          isError: false,
+          error: null,
+        };
+      }
+      if (mockTrip.state === 'error') {
+        return {
+          data: undefined,
+          isPending: false,
+          isError: true,
+          error: new AxiosError('x', 'ERR', undefined, undefined, {
+            status: mockTrip.status,
+          }),
+        };
+      }
+      return {
+        data: { tripId, startDate: mockTrip.startDate },
+        isPending: false,
+        isError: false,
+        error: null,
+      };
+    },
+  };
+});
 
 // TRIP-979 B — 출발 좌표 없는 세션의 지도 중심을 일정에서 고르려고 페이지가 일정을 읽는다.
 // 기본은 미도착(undefined) — 기존 케이스는 세션 좌표가 있어 일정과 무관하다.
@@ -443,9 +494,15 @@ beforeEach(() => {
   mockIncludedName.value = undefined;
   mockIncludedName.calls = [];
   mockStartMutate.mockClear();
+  mockStartReset.mockClear();
   mockStart.isPending = false;
   mockStart.isError = false;
   mockStart.error = null;
+  mockTrip.state = 'ok';
+  mockTrip.startDate = '2026-06-10';
+  mockTrip.status = 500;
+  mockTrip.calls = [];
+  resetPressGuard();
   mockSession.data = undefined;
   mockItinerary = undefined;
   mockItineraryFail.status = null;
@@ -2630,4 +2687,592 @@ describe('🔴 상황 감지 FE-B · 지난 날 낡은 초안엔 [새 대안 보
       expect(mockStartMutate).toHaveBeenCalledTimes(1);
     }
   );
+});
+
+/**
+ * 🔴 TRIP-1782 · 다시 짜기 초안의 "다른 날로 집은 곳"(`deferredPlaces`) 안내 줄 + [N일차에 넣어 다시 짜기].
+ *
+ * 무엇을 보장하나(준비: 세션 DRAFT + deferredPlaces + 여행 시작일 → 실행: 렌더·실제 누름 → 단언: 줄·확인창·POST 바디·잠금):
+ *  - T1~T4  초안 얼굴에서만, 값이 있을 때만 항목마다 한 줄·한 버튼이 선다(N일차는 여행 시작일 기준, 모르면 일차만 빠지고 버튼은 동작).
+ *  - T5~T6  버튼은 바로 POST 하지 않는다 — 새 세션이 열린 초안을 닫기 때문에(INV-U4-06) 확인창이 먼저고, 취소하면 요청 0·초안 유지.
+ *  - T7~T8  확정하면 POST 1회(바디 = 그 항목의 날·"<name> 꼭" 정확 일치, 원 세션의 문장·사유가 섞이지 않는다), 성공하면 i05 로 replace.
+ *  - T9~T11 확정 연타·여러 항목·요청 중에는 POST 1회로 묶이고 [적용하기]·[직접 수정]·뒤로·확인창 버튼이 잠긴다(교차 잠금).
+ *  - T12~T14 실패(INV-4)는 확인창 안에 사유(409 는 상태 코드로), 창은 유지돼 재시도할 수 있다. 문구 출처는 이 흐름뿐이다.
+ *  - T15    뒤로 확인창과 다른 날 확인창은 동시에 뜨지 않는다.
+ * 누름은 `userEvent.press`(실제 Pressability 경로) — `fireEvent.press` 는 비활성 버튼의 조상 prop 으로 새어 잠금이 거짓 green 이 된다.
+ * 딤·중앙 정렬·실제 터치 차단은 jest 원리적 사각(repo-traps 오버레이 다이얼로그)이라 존재·콜백·잠금만 본다.
+ */
+const deferredPlace = (name: string, date: string) => ({
+  poiId: `poi-${name}`,
+  name,
+  date,
+});
+const SEOUL_PLAZA = deferredPlace('서울광장', '2026-06-12'); // 3일차 · 받침 있음
+const NAMSAN = deferredPlace('남산타워', '2026-06-12'); // 3일차 · 받침 없음(같은 날 둘째)
+const GYEONGBOK = deferredPlace('경복궁', '2026-06-13'); // 4일차
+// 원 세션 입력 — 날 말("내일"·"모레")이 든 문장·사유·트리거가 새 요청에 새지 않음을 증명하는 재료.
+const ORIGIN_INPUTS = {
+  freeText: '내일 서울광장은 빼고 모레 부산에 가고 싶어요',
+  reasons: ['WEATHER'],
+  directives: ['INDOOR'],
+  excludedPoiIds: ['poi-out'],
+  triggerId: 'trg-1',
+};
+
+const DEFERRED_TEXT = /^planb-draft-deferred-text-/;
+const DEFERRED_BUTTON = /^planb-draft-deferred-button-/;
+const buttonId = (place: { poiId: string }) =>
+  `planb-draft-deferred-button-${place.poiId}`;
+const DEFERRED_DIALOG = 'planb-draft-deferred-confirm';
+const DIALOG_TITLE = `${DEFERRED_DIALOG}-title`;
+const DIALOG_BODY = `${DEFERRED_DIALOG}-body`;
+const DIALOG_ERROR = `${DEFERRED_DIALOG}-error`;
+const DIALOG_CANCEL = `${DEFERRED_DIALOG}-cancel`;
+const DIALOG_CONFIRM = `${DEFERRED_DIALOG}-confirm`;
+const RETRY_FAILED_TEXT =
+  '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요';
+const RETRY_PAST_DAY_TEXT =
+  '아직 일정이 없는 날이거나 여행 기간이 아니라서 AI가 다시 짤 수 없어요';
+const STATUS_409 = { isAxiosError: true, response: { status: 409, data: {} } };
+
+function deferredPage(includePoiId?: string): ReactElement {
+  return (
+    <PlanbDraftPage
+      tripId={TRIP_ID}
+      sessionId={SESSION_ID}
+      includePoiId={includePoiId}
+    />
+  );
+}
+
+/** 초안 얼굴 + 다른 날로 집은 곳. 원 세션은 문장·사유·트리거를 든 채다. */
+function renderDeferred(
+  places: ReturnType<typeof deferredPlace>[] = [SEOUL_PLAZA, NAMSAN, GYEONGBOK],
+  includePoiId?: string
+) {
+  mockItinerary = DRAFT_ITINERARY;
+  mockSession.data = session('DRAFT', {
+    ...ORIGIN_INPUTS,
+    deferredPlaces: places,
+  });
+  mockDiff.data = READY_DIFF;
+  return render(deferredPage(includePoiId));
+}
+
+/** 누름 사이에 모듈 전역 400ms 연타 창을 지운다 — 이 파일이 재려는 것은 페이지의 잠금이지 창이 아니다. */
+async function press(user: ReturnType<typeof userEvent.setup>, testID: string) {
+  resetPressGuard();
+  await user.press(screen.getByTestId(testID));
+}
+
+function expectLines(expected: string[]): void {
+  const nodes = screen.queryAllByTestId(DEFERRED_TEXT);
+  expect(nodes).toHaveLength(expected.length);
+  expected.forEach((text, index) =>
+    expect(nodes[index]).toHaveTextContent(text)
+  );
+}
+
+type MutateArgs = [
+  { tripId: string; data: Record<string, unknown> },
+  {
+    onSuccess: (next: { sessionId: string }) => void;
+    onError: (error: unknown) => void;
+  },
+];
+const lastStart = () =>
+  mockStartMutate.mock.calls[
+    mockStartMutate.mock.calls.length - 1
+  ] as MutateArgs;
+
+const requestFor = (place: { name: string; date: string }) => ({
+  scope: 'FULL_DAY',
+  targetDate: place.date,
+  originKind: null,
+  reasons: [],
+  directives: [],
+  freeText: `${place.name} 꼭`,
+  excludedPoiIds: [],
+  triggerId: null,
+});
+
+describe('🔴 TRIP-1782 AC-1·AC-9 · 초안 얼굴 — 항목마다 한 줄·한 버튼', () => {
+  it('T1 줄은 `‘이름’은/는 M월 D일(N일차) 요청이라 이번엔 넣지 않았어요`, 버튼은 `N일차에 넣어 다시 짜기` — 그리기만으로 요청·이동 0, 같은 날 둘도 묶지 않는다', () => {
+    renderDeferred();
+
+    expectLines([
+      '‘서울광장’은 6월 12일(3일차) 요청이라 이번엔 넣지 않았어요',
+      '‘남산타워’는 6월 12일(3일차) 요청이라 이번엔 넣지 않았어요',
+      '‘경복궁’은 6월 13일(4일차) 요청이라 이번엔 넣지 않았어요',
+    ]);
+    const buttons = screen.getAllByTestId(DEFERRED_BUTTON);
+    expect(buttons).toHaveLength(3);
+    expect(screen.getByTestId(buttonId(SEOUL_PLAZA))).toHaveTextContent(
+      '3일차에 넣어 다시 짜기'
+    );
+    expect(screen.getByTestId(buttonId(NAMSAN))).toHaveTextContent(
+      '3일차에 넣어 다시 짜기'
+    );
+    expect(screen.getByTestId(buttonId(GYEONGBOK))).toHaveTextContent(
+      '4일차에 넣어 다시 짜기'
+    );
+    // INV-3 — 줄·버튼 어디에도 소요시간 표기가 없다.
+    for (const node of [...screen.getAllByTestId(DEFERRED_TEXT), ...buttons]) {
+      expect(node).not.toHaveTextContent(DURATION_TEXT);
+    }
+    // 시작일은 이 페이지의 tripId 로 물었다(허브·다른 화면과 캐시를 같이 쓴다).
+    expect(mockTrip.calls.length).toBeGreaterThan(0);
+    expect(new Set(mockTrip.calls)).toEqual(new Set([TRIP_ID]));
+    // 앵커 — 기존 초안 얼굴은 그대로다. 확인창은 아직 없다.
+    expect(screen.getByTestId('sheet-cta-button-1')).toHaveTextContent(
+      '적용하기'
+    );
+    expect(screen.getByTestId('sheet-cta-button-1')).toBeEnabled();
+    expect(screen.queryByTestId(DEFERRED_DIALOG)).toBeNull();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1782 AC-2·AC-3 · 값이 없거나 초안 얼굴이 아니면 아무것도 없다', () => {
+  it.each([
+    ['undefined', undefined],
+    ['빈 배열', []],
+  ])(
+    'T2 deferredPlaces %s → 줄·버튼 0 (기존 초안 얼굴은 그대로)',
+    (_name, places) => {
+      mockItinerary = DRAFT_ITINERARY;
+      mockSession.data = session('DRAFT', {
+        ...(places === undefined ? {} : { deferredPlaces: places }),
+      });
+      renderPage();
+
+      // 앵커 — 초안 얼굴은 그려졌다(빈 렌더라서 없는 게 아니다).
+      expect(screen.getByTestId('sheet-cta-button-1')).toHaveTextContent(
+        '적용하기'
+      );
+      expect(textsOf(/^planb-draft-slot-name-/)).toHaveLength(4);
+      expect(screen.queryAllByTestId(DEFERRED_TEXT)).toHaveLength(0);
+      expect(screen.queryAllByTestId(DEFERRED_BUTTON)).toHaveLength(0);
+    }
+  );
+
+  it.each([
+    ['대안 없음', 'NO_SOLUTION', 'planb-draft-notice-title'],
+    ['실패', 'FAILED', 'planb-draft-notice-title'],
+    ['종료(CANCELED)', 'CANCELED', 'planb-draft-closed'],
+    ['종료(APPLIED)', 'APPLIED', 'planb-draft-closed'],
+  ])('T3 %s 얼굴은 값이 있어도 그리지 않는다', (_name, status, anchor) => {
+    mockItinerary = DRAFT_ITINERARY;
+    mockSession.data = session(status, { deferredPlaces: [SEOUL_PLAZA] });
+    renderPage();
+
+    expect(screen.getByTestId(anchor)).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(DEFERRED_TEXT)).toHaveLength(0);
+    expect(screen.queryAllByTestId(DEFERRED_BUTTON)).toHaveLength(0);
+  });
+
+  it('T3b 낡은 초안(적용 409 STALE)에서도 그리지 않는다 — 낡음 얼굴의 [새 대안 보기]만 남는다', () => {
+    renderStaleDraft('STALE', { deferredPlaces: [SEOUL_PLAZA] });
+    renderPage();
+
+    expect(screen.getByTestId('planb-draft-stale')).toBeOnTheScreen();
+    expect(screen.getByTestId('planb-draft-stale-retry')).toBeOnTheScreen();
+    expect(screen.queryAllByTestId(DEFERRED_TEXT)).toHaveLength(0);
+    expect(screen.queryAllByTestId(DEFERRED_BUTTON)).toHaveLength(0);
+  });
+});
+
+describe('🔴 TRIP-1782 AC-12 · 여행 시작일을 모르면 일차만 빠진다 — 줄·버튼은 남고 버튼은 동작한다', () => {
+  it.each([
+    ['아직 안 왔다', 'pending', 0],
+    ['조회 실패(500)', 'error', 500],
+    ['조회 실패(404)', 'error', 404],
+  ] as const)(
+    'T4 시작일 %s → 일차 없는 줄 + 「그날 넣어 다시 짜기」, 확정하면 같은 요청',
+    async (_name, state, status) => {
+      mockTrip.state = state;
+      mockTrip.status = status;
+      renderDeferred([SEOUL_PLAZA]);
+
+      expectLines(['‘서울광장’은 6월 12일 요청이라 이번엔 넣지 않았어요']);
+      expect(screen.getByTestId(buttonId(SEOUL_PLAZA))).toHaveTextContent(
+        '그날 넣어 다시 짜기'
+      );
+
+      const user = userEvent.setup();
+      await press(user, buttonId(SEOUL_PLAZA));
+      await press(user, DIALOG_CONFIRM);
+
+      expect(mockStartMutate).toHaveBeenCalledTimes(1);
+      expect(lastStart()[0]).toStrictEqual({
+        tripId: TRIP_ID,
+        data: requestFor(SEOUL_PLAZA),
+      });
+    }
+  );
+
+  it('T4b 시작일이 나중에 도착하면 그 자리에서 일차가 붙는다(줄·버튼 둘 다)', () => {
+    mockTrip.state = 'pending';
+    const { rerender } = renderDeferred([SEOUL_PLAZA]);
+    expect(screen.getByTestId(buttonId(SEOUL_PLAZA))).toHaveTextContent(
+      '그날 넣어 다시 짜기'
+    );
+
+    mockTrip.state = 'ok';
+    rerender(deferredPage());
+
+    expectLines(['‘서울광장’은 6월 12일(3일차) 요청이라 이번엔 넣지 않았어요']);
+    expect(screen.getByTestId(buttonId(SEOUL_PLAZA))).toHaveTextContent(
+      '3일차에 넣어 다시 짜기'
+    );
+  });
+});
+
+describe('🔴 TRIP-1782 AC-10 · Q1 — 버튼은 확인창을 먼저 연다(새 세션이 지금 초안을 닫는다, INV-U4-06)', () => {
+  it('T5 누르면 확인창(제목·본문·[취소]·[닫고 다시 짜기])이 뜨고 "지금 초안은 적용되지 않고 닫힌다"를 말한다 — 요청·이동 0, 초안은 그대로', async () => {
+    renderDeferred();
+    const user = userEvent.setup();
+
+    await press(user, buttonId(SEOUL_PLAZA));
+
+    expect(screen.getByTestId(DEFERRED_DIALOG)).toBeOnTheScreen();
+    expect(screen.getByTestId(DIALOG_TITLE)).toHaveTextContent(
+      '지금 초안은 적용되지 않고 닫혀요'
+    );
+    expect(screen.getByTestId(DIALOG_BODY)).toHaveTextContent(
+      '다른 날을 새로 다시 짜면 지금 보던 초안은 다시 볼 수 없어요. 원래 일정은 그대로예요'
+    );
+    expect(screen.getByTestId(DIALOG_CANCEL)).toHaveTextContent('취소');
+    expect(screen.getByTestId(DIALOG_CONFIRM)).toHaveTextContent(
+      '닫고 다시 짜기'
+    );
+    // 이 흐름의 실패 사유는 아직 없다(INV-4 는 실패 뒤의 일).
+    expect(screen.queryByTestId(DIALOG_ERROR)).toBeNull();
+    for (const id of [DIALOG_TITLE, DIALOG_BODY]) {
+      expect(screen.getByTestId(id)).not.toHaveTextContent(DURATION_TEXT);
+    }
+    expect(mockStartMutate).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockMutate).not.toHaveBeenCalled();
+    // 앵커 — 초안 얼굴은 그대로 서 있다.
+    expect(screen.getByTestId('sheet-cta-button-1')).toHaveTextContent(
+      '적용하기'
+    );
+    expect(screen.getAllByTestId(DEFERRED_TEXT)).toHaveLength(3);
+  });
+
+  it('T6 [취소] → 확인창이 닫히고 요청 0, 실패 이력을 비우고(reset 1), 줄·초안은 그대로며 다시 누르면 다시 열린다', async () => {
+    renderDeferred();
+    const user = userEvent.setup();
+    await press(user, buttonId(SEOUL_PLAZA));
+    expect(screen.getByTestId(DEFERRED_DIALOG)).toBeOnTheScreen();
+
+    await press(user, DIALOG_CANCEL);
+
+    expect(screen.queryByTestId(DEFERRED_DIALOG)).toBeNull();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+    expect(mockStartReset).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(screen.getAllByTestId(DEFERRED_TEXT)).toHaveLength(3);
+    expect(screen.getByTestId('sheet-cta-button-1')).toBeEnabled();
+
+    await press(user, buttonId(GYEONGBOK));
+    expect(screen.getByTestId(DEFERRED_DIALOG)).toBeOnTheScreen();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1782 AC-5·AC-6 · 확정 → 그 항목의 날로 새 세션, 성공하면 i05', () => {
+  it('T7 확정하면 POST 1회 — 바디는 그 항목의 날·"<name> 꼭" 정확 일치, 원 세션의 날 말·사유·트리거는 섞이지 않는다', async () => {
+    renderDeferred();
+    const user = userEvent.setup();
+
+    // 같은 날 둘째(남산타워)를 눌러 줄과 요청이 짝지어졌는지 본다.
+    await press(user, buttonId(NAMSAN));
+    await press(user, DIALOG_CONFIRM);
+
+    expect(mockStartMutate).toHaveBeenCalledTimes(1);
+    const [variables] = lastStart();
+    expect(variables).toStrictEqual({
+      tripId: TRIP_ID,
+      data: requestFor(NAMSAN),
+    });
+    const sent = JSON.stringify(variables);
+    for (const leaked of [
+      '내일',
+      '모레',
+      '빠',
+      'trg-1',
+      'WEATHER',
+      'INDOOR',
+      'poi-out',
+    ]) {
+      expect(sent).not.toContain(leaked);
+    }
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
+
+  it('T8 성공하면 새 sessionId 의 i05 로 replace 한다 — 넣으려던 POI(includePoiId)는 원래 날 것이라 잇지 않는다', async () => {
+    renderDeferred([SEOUL_PLAZA], 'poi-sky');
+    const user = userEvent.setup();
+    await press(user, buttonId(SEOUL_PLAZA));
+    await press(user, DIALOG_CONFIRM);
+
+    act(() => lastStart()[1].onSuccess({ sessionId: 's10' }));
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenLastCalledWith({
+      pathname: '/trips/[tripId]/planb/solving',
+      params: { tripId: TRIP_ID, sessionId: 's10' },
+    });
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1782 AC-7 · 한 ref·한 pending — 확정 연타·여러 항목·요청 중 교차 잠금', () => {
+  it('T9 확정을 연타하고 다른 항목을 눌러 확정해도 POST 는 1회다(둘째 POST 가 첫 세션을 닫는다)', async () => {
+    renderDeferred();
+    const user = userEvent.setup();
+    await press(user, buttonId(SEOUL_PLAZA));
+    await press(user, DIALOG_CONFIRM);
+    await press(user, DIALOG_CONFIRM);
+    expect(mockStartMutate).toHaveBeenCalledTimes(1);
+
+    await press(user, buttonId(GYEONGBOK));
+    await press(user, DIALOG_CONFIRM);
+
+    expect(mockStartMutate).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('T9b 성공 응답(onSuccess)이 와도 잠금은 풀리지 않는다 — replace 전환이 끝나기 전 [닫고 다시 짜기] 재누름이 둘째 POST 를 내지 않는다', async () => {
+    // 이 케이스만 목의 mutate 가 호출 옵션의 onSuccess 를 부른다(다른 케이스의 목은 콜백을 안 불러 성공 뒤 잠금을 못 본다).
+    mockStartMutate.mockImplementationOnce(
+      (_variables: unknown, options: MutateArgs[1]) =>
+        options.onSuccess({ sessionId: 's10' })
+    );
+    renderDeferred();
+    const user = userEvent.setup();
+    await press(user, buttonId(SEOUL_PLAZA));
+    await press(user, DIALOG_CONFIRM);
+    // 앵커 — 성공 콜백이 실제로 불렸다(replace 1).
+    expect(mockStartMutate).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+
+    await press(user, DIALOG_CONFIRM);
+
+    expect(mockStartMutate).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+  });
+
+  it('T10 요청 중엔 확인창 두 버튼·다른 항목 버튼·[적용하기]·[직접 수정]·뒤로가 모두 잠긴다 — 눌러도 아무 일이 없다', async () => {
+    const { rerender } = renderDeferred();
+    const user = userEvent.setup();
+    await press(user, buttonId(SEOUL_PLAZA));
+    await press(user, DIALOG_CONFIRM);
+    expect(mockStartMutate).toHaveBeenCalledTimes(1);
+
+    mockStart.isPending = true;
+    rerender(deferredPage());
+
+    for (const id of [
+      DIALOG_CANCEL,
+      DIALOG_CONFIRM,
+      buttonId(SEOUL_PLAZA),
+      buttonId(NAMSAN),
+      buttonId(GYEONGBOK),
+      'sheet-cta-button-0',
+      'sheet-cta-button-1',
+    ]) {
+      expect(screen.getByTestId(id)).toBeDisabled();
+    }
+    expect(screen.getByTestId('sheet-cta-button-0')).toHaveTextContent(
+      '직접 수정'
+    );
+    expect(screen.getByTestId('sheet-cta-button-1')).toHaveTextContent(
+      '적용하기'
+    );
+    for (const id of [
+      DIALOG_CANCEL,
+      buttonId(NAMSAN),
+      'sheet-cta-button-0',
+      'sheet-cta-button-1',
+      'sheet-daychip-back',
+    ]) {
+      await press(user, id);
+    }
+
+    expect(screen.getByTestId(DEFERRED_DIALOG)).toBeOnTheScreen();
+    expect(screen.queryByTestId(DRAFT_LEAVE)).toBeNull();
+    expect(mockStartReset).not.toHaveBeenCalled();
+    expect(mockStartMutate).toHaveBeenCalledTimes(1);
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockExits).toEqual([]);
+  });
+
+  it('T11 새 세션 요청 중엔 [적용하기]도 잠긴다 — 옛 세션 apply 가 새 POST 와 겹치지 않는다(기존 빈틈)', async () => {
+    mockStart.isPending = true;
+    renderDraft();
+    const user = userEvent.setup();
+
+    expect(screen.getByTestId('sheet-cta-button-1')).toHaveTextContent(
+      '적용하기'
+    );
+    expect(screen.getByTestId('sheet-cta-button-1')).toBeDisabled();
+    await press(user, 'sheet-cta-button-1');
+
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
+});
+
+describe('🔴 TRIP-1782 AC-8 · INV-4 — 실패는 확인창 안 사유 한 줄, 창은 남아 재시도할 수 있다', () => {
+  it('T12 시작 실패(500) → 창 안에 "시작하지 못했어요" 사유 · 창 유지 · 버튼이 풀려 다시 확정하면 POST 2회', async () => {
+    const { rerender } = renderDeferred();
+    const user = userEvent.setup();
+    await press(user, buttonId(SEOUL_PLAZA));
+    await press(user, DIALOG_CONFIRM);
+    expect(screen.queryByTestId(DIALOG_ERROR)).toBeNull();
+
+    mockStart.isError = true;
+    mockStart.error = new Error('500');
+    act(() => lastStart()[1].onError(new Error('500')));
+    rerender(deferredPage());
+
+    expect(screen.getByTestId(DEFERRED_DIALOG)).toBeOnTheScreen();
+    expect(screen.getByTestId(DIALOG_ERROR)).toHaveTextContent(
+      RETRY_FAILED_TEXT
+    );
+    expect(screen.getByTestId(DIALOG_CONFIRM)).toBeEnabled();
+    expect(screen.getByTestId(DIALOG_CANCEL)).toBeEnabled();
+    expect(mockReplace).not.toHaveBeenCalled();
+    // 초안은 그대로다.
+    expect(screen.getByTestId('sheet-cta-button-1')).toBeEnabled();
+
+    await press(user, DIALOG_CONFIRM);
+    expect(mockStartMutate).toHaveBeenCalledTimes(2);
+    // 재시도 응답을 기다리는 동안(목의 mutate 는 응답을 붙잡는다) 이전 실패 사유는 지워져 있다.
+    expect(screen.queryByTestId(DIALOG_ERROR)).toBeNull();
+    expect(screen.getByTestId(DEFERRED_DIALOG)).toBeOnTheScreen();
+  });
+
+  it('T12b 409 → 상태 코드로 가려 "일정이 없는 날이거나 여행 기간이 아니라서" 안내 — 이 세션의 날짜와 무관하다', async () => {
+    const { rerender } = renderDeferred();
+    const user = userEvent.setup();
+    await press(user, buttonId(SEOUL_PLAZA));
+    await press(user, DIALOG_CONFIRM);
+
+    mockStart.isError = true;
+    mockStart.error = STATUS_409;
+    act(() => lastStart()[1].onError(STATUS_409));
+    rerender(deferredPage());
+
+    expect(screen.getByTestId(DIALOG_ERROR)).toHaveTextContent(
+      RETRY_PAST_DAY_TEXT
+    );
+    expect(screen.queryByText(RETRY_FAILED_TEXT)).toBeNull();
+  });
+
+  it('T13 같은 인스턴스의 낡은 실패(isError)가 남아 있어도 확인창은 사유 없이 열린다 — 문구 출처는 이 흐름의 onError 뿐', async () => {
+    mockStart.isError = true;
+    mockStart.error = new Error('다른 경로의 실패');
+    renderDeferred();
+    const user = userEvent.setup();
+
+    await press(user, buttonId(SEOUL_PLAZA));
+
+    expect(screen.getByTestId(DEFERRED_DIALOG)).toBeOnTheScreen();
+    expect(screen.queryByTestId(DIALOG_ERROR)).toBeNull();
+    expect(screen.queryByText(RETRY_FAILED_TEXT)).toBeNull();
+  });
+
+  it('T14 실패 → [취소] 뒤 낡음 얼굴로 가도 "다시 짜기를 시작하지 못했어요"가 새지 않는다(짝: 같은 실패가 창 안에선 보였다)', async () => {
+    const { rerender } = renderDeferred();
+    const user = userEvent.setup();
+    await press(user, buttonId(SEOUL_PLAZA));
+    await press(user, DIALOG_CONFIRM);
+    mockStart.isError = true;
+    mockStart.error = new Error('500');
+    act(() => lastStart()[1].onError(new Error('500')));
+    rerender(deferredPage());
+    // 짝 앵커 — 실패는 창 안에 보였다.
+    expect(screen.getByTestId(DIALOG_ERROR)).toHaveTextContent(
+      RETRY_FAILED_TEXT
+    );
+
+    await press(user, DIALOG_CANCEL);
+    expect(mockStartReset).toHaveBeenCalledTimes(1);
+    mockApply.isError = true;
+    mockApply.error = STALE_409('STALE');
+    rerender(deferredPage());
+
+    expect(screen.queryByTestId(DEFERRED_DIALOG)).toBeNull();
+    expect(screen.getByTestId('planb-draft-stale')).toBeOnTheScreen();
+    expect(screen.queryByTestId('planb-draft-stale-failed')).toBeNull();
+    expect(screen.queryByText(RETRY_FAILED_TEXT)).toBeNull();
+  });
+});
+
+describe('🔴 TRIP-1782 AC-8 · 실패 뒤 닫고 다시 열면 이전 사유가 남지 않는다', () => {
+  it.each([
+    ['같은 줄', SEOUL_PLAZA],
+    ['다른 줄', GYEONGBOK],
+  ])(
+    'T14b 실패(창 안 사유 보임) → [취소] → %s 다시 열기 — 열리자마자 이전 사유가 없다',
+    async (_name, reopen) => {
+      const { rerender } = renderDeferred();
+      const user = userEvent.setup();
+      await press(user, buttonId(SEOUL_PLAZA));
+      await press(user, DIALOG_CONFIRM);
+      mockStart.isError = true;
+      mockStart.error = new Error('500');
+      act(() => lastStart()[1].onError(new Error('500')));
+      rerender(deferredPage());
+      // 짝 앵커 — 이전 실패는 창 안에 보였다.
+      expect(screen.getByTestId(DIALOG_ERROR)).toHaveTextContent(
+        RETRY_FAILED_TEXT
+      );
+      await press(user, DIALOG_CANCEL);
+      expect(screen.queryByTestId(DEFERRED_DIALOG)).toBeNull();
+
+      await press(user, buttonId(reopen));
+
+      expect(screen.getByTestId(DEFERRED_DIALOG)).toBeOnTheScreen();
+      expect(screen.queryByTestId(DIALOG_ERROR)).toBeNull();
+      expect(screen.queryByText(RETRY_FAILED_TEXT)).toBeNull();
+    }
+  );
+});
+
+describe('🔴 TRIP-1782 · 뒤로 확인창과 다른 날 확인창은 동시에 뜨지 않는다', () => {
+  it('T15 다른 날 확인창이 떠 있다가 ‹ 를 누르면 뒤로 확인창만 남는다 — 요청 0', async () => {
+    renderDeferred();
+    const user = userEvent.setup();
+    await press(user, buttonId(SEOUL_PLAZA));
+    expect(screen.getByTestId(DEFERRED_DIALOG)).toBeOnTheScreen();
+
+    await press(user, 'sheet-daychip-back');
+
+    expect(screen.getByTestId(DRAFT_LEAVE)).toBeOnTheScreen();
+    expect(screen.queryByTestId(DEFERRED_DIALOG)).toBeNull();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+    expect(mockExits).toEqual([]);
+  });
+
+  it('T15b 뒤로 확인창이 떠 있을 땐 줄 버튼을 눌러도 다른 날 확인창을 겹쳐 그리지 않는다', async () => {
+    renderDeferred();
+    const user = userEvent.setup();
+    await press(user, 'sheet-daychip-back');
+    expect(screen.getByTestId(DRAFT_LEAVE)).toBeOnTheScreen();
+
+    await press(user, buttonId(SEOUL_PLAZA));
+
+    expect(screen.getByTestId(DRAFT_LEAVE)).toBeOnTheScreen();
+    expect(screen.queryByTestId(DEFERRED_DIALOG)).toBeNull();
+    expect(mockStartMutate).not.toHaveBeenCalled();
+  });
 });

@@ -189,6 +189,7 @@ import {
   DRAFT_LEAVE_COPY,
   ReplanLeaveDialog,
 } from '@/pages/live/planb-draft/ui/ReplanLeaveDialog';
+import { ReplanDeferredDialog } from '@/pages/live/planb-draft/ui/ReplanDeferredDialog';
 import { RiskDetailSheet } from '@/pages/live/live-itinerary/ui/RiskDetailSheet';
 import { NicknameScreen } from '@/pages/onboarding/onboarding-nickname/ui/NicknameScreen';
 import {
@@ -2334,6 +2335,20 @@ const REPLAN_NOALT_PREVIEW_SLOTS: ReplanSlotVM[] = [
     category: '자연',
     categoryLabel: '바다 · 해변',
     distanceRange: '8km',
+  },
+];
+
+// TRIP-1782 — 다른 날 요청이라 이번엔 못 넣은 곳(같은 날 둘, 받침 있음 은 · 없음 는). 문장은 draftNotice 가 만드는 값을 손으로 베낀 사본.
+const REPLAN_DEFERRED_PREVIEW_ROWS = [
+  {
+    key: 'poi-1',
+    text: '‘서울광장’은 6월 12일(3일차) 요청이라 이번엔 넣지 않았어요',
+    buttonLabel: '3일차에 넣어 다시 짜기',
+  },
+  {
+    key: 'poi-2',
+    text: '‘남산타워’는 6월 12일(3일차) 요청이라 이번엔 넣지 않았어요',
+    buttonLabel: '3일차에 넣어 다시 짜기',
   },
 ];
 
@@ -9699,6 +9714,45 @@ export const PREVIEW_STATES: PreviewState[] = [
         slots={REPLAN_DRAFT_PREVIEW_SLOTS}
         {...REPLAN_PREVIEW_BASE}
       />
+    ),
+  },
+  {
+    key: 'planb-replan-draft-deferred',
+    band: 'i',
+    label: 'i06 · 재계획안 · 다른 날로 집은 곳',
+    login: null,
+    render: () => (
+      <ReplanDraftView
+        variant="draft"
+        slots={REPLAN_DRAFT_PREVIEW_SLOTS}
+        deferredRows={REPLAN_DEFERRED_PREVIEW_ROWS}
+        onPressDeferred={noop}
+        {...REPLAN_PREVIEW_BASE}
+      />
+    ),
+  },
+  // TRIP-1782 — 확인창(페이지처럼 뷰의 형제). 딤 덮임·z-order·실패 사유 줄 모양은 육안 몫.
+  {
+    key: 'planb-replan-draft-deferred-confirm',
+    band: 'i',
+    label: 'i06 · 재계획안 · 다른 날 확인창',
+    login: null,
+    render: () => (
+      <View className="flex-1">
+        <ReplanDraftView
+          variant="draft"
+          slots={REPLAN_DRAFT_PREVIEW_SLOTS}
+          deferredRows={REPLAN_DEFERRED_PREVIEW_ROWS}
+          onPressDeferred={noop}
+          {...REPLAN_PREVIEW_BASE}
+        />
+        <ReplanDeferredDialog
+          pending={false}
+          failureText="다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요"
+          onCancel={noop}
+          onConfirm={noop}
+        />
+      </View>
     ),
   },
   {

@@ -11,6 +11,9 @@ import { DistanceConnector } from '@/widgets/map-sheet-shell';
 import { CTA_BAR_HEIGHT, MapSheetShell } from '@/widgets/map-sheet-shell';
 import { SheetHeader } from '@/widgets/map-sheet-shell';
 
+import type { DeferredLineVM } from '../model/draftNotice';
+import { RETRY_FAILED, RETRY_PAST_DAY } from '../model/retryCopy';
+
 /**
  * TRIP-751 · i06 재계획안 **순수 뷰**(pages · api import 0 — preview 가 파일 경로로 직접 import, TRIP-610).
  * Figma `4314:1923`(펼침) · `4335:1923`(대안 없음). 지도+시트 셸 위에 헤더 · 번호 행 · 거리 커넥터 · CTA.
@@ -44,12 +47,6 @@ const TITLE = 'AI 재계획안';
 const PREPARED_MARK = '미리 준비한 대안';
 const STALE_TITLE = '시간이 지나 이 대안은 지금 일정과 맞지 않아요';
 const STALE_RETRY_LABEL = '새 대안 보기';
-const RETRY_FAILED =
-  '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요';
-// 실패 얼굴 [다시 시도]가 지난 날이라 막혔다(409) — 다시 눌러도 같은 거절이라 '잠시 후 다시 시도'라고 하지 않는다. i04 가
-// 같은 409 에 보이는 날짜 안내(`NO_ITINERARY_DAY_TEXT`)와 같은 문장이다.
-const RETRY_PAST_DAY =
-  '아직 일정이 없는 날이거나 여행 기간이 아니라서 AI가 다시 짤 수 없어요';
 // TRIP-1214 — 셸 기본 배열의 닫힘 칸(28)은 CTA 바를 뺀다. 초안은 시트를 내리고 지도를 보다 바로 [적용하기]를
 // 눌러야 하므로, 가장 낮은 칸을 CTA 바 위(손잡이 28 + 바 높이 + 하단 안전 영역)로 직접 준다 — 직접 준 배열은
 // 닫힘 규칙이 안 걸려 버튼이 항상 남고, 손잡이는 바 위에 보인다. 셸 기본값은 안 건드린다(다른 소비처 영향).
@@ -123,6 +120,9 @@ export interface ReplanDraftViewProps {
   retryPastDay?: boolean;
   /** 넣으려던 장소가 초안에 없다는 문장(페이지가 만든다) — 없으면 안 그린다. */
   includeMissingText?: string | null;
+  /** 다른 날 요청이라 이번엔 넣지 않은 곳(TRIP-1782) — 초안 얼굴에만 줄+버튼으로 그린다. 누르면 확인창은 페이지 몫. */
+  deferredRows?: readonly DeferredLineVM[];
+  onPressDeferred?: (key: string) => void;
   onBack: () => void;
   onManualEdit: () => void;
   onApply: () => void;
@@ -159,6 +159,8 @@ export function ReplanDraftView({
   retryFailed = false,
   retryPastDay = false,
   includeMissingText = null,
+  deferredRows = [],
+  onPressDeferred,
   onBack,
   onManualEdit,
   onApply,
@@ -324,6 +326,30 @@ export function ReplanDraftView({
               {includeMissingText}
             </Text>
           ) : null}
+          {isDraft
+            ? deferredRows.map((row) => (
+                <View key={row.key} className="items-start gap-xs px-lg pb-md">
+                  <Text
+                    testID={`planb-draft-deferred-text-${row.key}`}
+                    className="font-noto text-label text-muted"
+                  >
+                    {row.text}
+                  </Text>
+                  {/* 보조 버튼 모양은 [내일 일정 다시 짜기]와 같다. 새 세션 요청 중엔 잠근다(교차 잠금). */}
+                  <Pressable
+                    testID={`planb-draft-deferred-button-${row.key}`}
+                    accessibilityRole="button"
+                    onPress={() => onPressDeferred?.(row.key)}
+                    disabled={applyPending || replanNextDayPending}
+                    className="rounded-pill border border-hairline-strong bg-canvas px-lg py-sm"
+                  >
+                    <Text className="font-noto-bold text-label font-bold text-ink">
+                      {row.buttonLabel}
+                    </Text>
+                  </Pressable>
+                </View>
+              ))
+            : null}
         </>
       }
       cta={[manualButton, primaryButton]}
