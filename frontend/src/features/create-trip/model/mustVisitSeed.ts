@@ -1,4 +1,4 @@
-import type { SavedPlace } from '@/shared/api/index.schemas';
+import type { ImageLicense, SavedPlace } from '@/shared/api/index.schemas';
 
 /**
  * TRIP-209 g01 '꼭 갈 곳' — 담은 장소를 시드로 옮기고, 섹션의 얼굴을 정하는 순수 판정 3종.
@@ -23,6 +23,8 @@ export interface MustVisitSeedItem {
   name: string;
   /** 값이 없으면 `null` — 서버가 기본 이미지를 지어내지 않는다(`Place.imageUrl` 계약). 칸은 `category` 로 고른 생성 이미지로 채운다. */
   imageUrl: string | null;
+  /** `imageUrl` 의 공공누리 유형 — 필수 키(끊기면 tsc). 담은 장소의 값을 그대로 옮긴다. */
+  imageLicense: ImageLicense | null | undefined;
   /** 담은 장소의 지역(서버 원문 무가공). 값이 없으면 `null` — `imageUrl`과 동형(발명 금지). */
   region: string | null;
   /** 담은 장소의 행정구역 코드 — 지역 밖 판정(BR-U1-58, 판정은 page 가 `regionCodeInTrip`으로).
@@ -41,8 +43,15 @@ export function seedMustVisits(savedPlaces: SavedPlace[]): MustVisitSeedItem[] {
   const seeds: MustVisitSeedItem[] = [];
 
   for (const entry of savedPlaces) {
-    const { poiId, nameKo, imageUrl, region, regionCode, category } =
-      entry.place;
+    const {
+      poiId,
+      nameKo,
+      imageUrl,
+      imageLicense,
+      region,
+      regionCode,
+      category,
+    } = entry.place;
     if (seen.has(poiId)) {
       continue;
     }
@@ -51,6 +60,7 @@ export function seedMustVisits(savedPlaces: SavedPlace[]): MustVisitSeedItem[] {
       sourcePoiId: poiId,
       name: nameKo,
       imageUrl: imageUrl ?? null,
+      imageLicense,
       region: region ?? null,
       regionCode: regionCode ?? null,
       category,

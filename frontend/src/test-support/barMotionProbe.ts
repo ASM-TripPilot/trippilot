@@ -73,6 +73,20 @@ export function withBarIds(ids: BarIds): void {
     current = HUB_IDS;
   });
 }
+
+/**
+ * TRIP-1831 · 퇴장 호스트(`BarExitHost`)는 낭독기에서 숨겨진 채 바를 그린다(진짜 탭 바가 낭독 대상이라 같은 바를 두 번 읽지 않게).
+ * 그 바를 재려면 접근성 숨김 요소도 읽어야 한다 — describe 본문에서 한 번 부르면 그 describe 동안 이 파일의 관측 함수들이 숨김 요소까지 읽는다.
+ */
+let includeHidden = false;
+export function withHiddenBars(): void {
+  beforeEach(() => {
+    includeHidden = true;
+  });
+  afterEach(() => {
+    includeHidden = false;
+  });
+}
 const tracked = (): string[] => [
   ...new Set([...current.start5, ...current.final]),
 ];
@@ -85,13 +99,21 @@ export function visibleIds(): string[] {
         typeof node.type === 'string' && tracked().includes(node.props.testID)
     )
     .map((node) => node.props.testID as string);
-  return [...new Set(inTree)].filter((id) => screen.queryByTestId(id) !== null);
+  return [...new Set(inTree)].filter(
+    (id) =>
+      screen.queryByTestId(id, { includeHiddenElements: includeHidden }) !==
+      null
+  );
 }
 
 /** 한 장의 지문 = 캡슐 래퍼의 reanimated 스타일 + 보이는 칸. 움직임은 지문이 달라지는 것으로 읽는다. */
 const frameSample = (): string =>
   JSON.stringify([
-    getAnimatedStyle(screen.getByTestId(current.capsule)),
+    getAnimatedStyle(
+      screen.getByTestId(current.capsule, {
+        includeHiddenElements: includeHidden,
+      })
+    ),
     visibleIds(),
   ]);
 
@@ -125,7 +147,11 @@ export function watchMotion(
   const take = (ms: number) => {
     watch.samples.push(frameSample());
     watch.shapes.push(visibleIds());
-    watch.rootCounts.push(screen.queryAllByTestId(current.root).length);
+    watch.rootCounts.push(
+      screen.queryAllByTestId(current.root, {
+        includeHiddenElements: includeHidden,
+      }).length
+    );
     watch.schedules.push(scheduleNode());
     watch.scheduleSelected.push(
       scheduleNode()?.props.accessibilityState?.selected === true
@@ -269,7 +295,9 @@ interface RowReading {
 }
 
 function readRow(): RowReading {
-  const root = screen.getByTestId(current.root);
+  const root = screen.getByTestId(current.root, {
+    includeHiddenElements: includeHidden,
+  });
   const branches = directHostChildren(root);
   const branchWith = (id: string) =>
     branches.find(
@@ -328,7 +356,9 @@ const transformsOf = (style: Style): Record<string, unknown>[] =>
 /** 칸 `id` 에서 캡슐 래퍼 앞까지의 조상 효과(없으면 불투명도 1·확대 1·이동 0). */
 export function slotEffect(id: string): SlotEffect {
   const effect: SlotEffect = { opacity: 1, scale: 1, translateX: 0 };
-  const capsule = screen.getByTestId(current.capsule);
+  const capsule = screen.getByTestId(current.capsule, {
+    includeHiddenElements: includeHidden,
+  });
   let node: ReactTestInstance | null = screen.getByTestId(id, {
     includeHiddenElements: true,
   });
@@ -347,7 +377,11 @@ export function slotEffect(id: string): SlotEffect {
 
 /** 바 루트의 바 전체 확대. */
 export const rootScale = (): number =>
-  transformsOf(layoutStyle(screen.getByTestId(current.root))).reduce(
+  transformsOf(
+    layoutStyle(
+      screen.getByTestId(current.root, { includeHiddenElements: includeHidden })
+    )
+  ).reduce(
     (scale, entry) =>
       typeof entry.scale === 'number' ? scale * entry.scale : scale,
     1

@@ -21,11 +21,12 @@ import {
   usePostTripsTripIdItinerarySlotCandidates,
   usePutTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
+import { usePressLock } from '@/shared/lib/pressGuard';
 
 /**
  * TRIP-793 · h08 슬롯 교체 배선(초안 아래·h08 셸 둘 다 마운트하는 컨테이너, 이름 유지). 세 조각을
  * 잇는다 — 프레젠테이션이 인라인 패널→바텀시트로, 확정이 즉시확정 1단계→라디오 2단계로 바뀌었어도
- * 배선 로직은 재사용이다(조회·치환·PUT·firedRef·콜드캐시):
+ * 배선 로직은 재사용이다(조회·치환·PUT·firedLock·콜드캐시):
  *  1. **조회** — 열 때 경로를 한 번 정한다(TRIP-1258). 생성 때 받은 차선책(GET 슬롯 `alternatives`)
  *     에서 일정(전 일자)에 이미 있는 poiId 를 거르고 1건 이상 남으면 그 목록이 최종이다(POST 없음).
  *     0건·GET 미도착·PLANNED 아님이면 마운트 시 `slot-candidates` POST 1회(`slotKey` 만 · BR-U3-24).
@@ -36,7 +37,7 @@ import {
  *
  * ★ PARTIAL 게이트가 `handleConfirm` 으로 이전됐다(TRIP-793) — 라디오 2단계라 확정이 여기로 옮겨왔고,
  *   가드를 함께 옮겨야 2차 생성 중 day1-only 전체교체 PUT 이 뒷날을 덮어쓰지 않는다(traps-itinerary
- *   TRIP-467/483 잔여). 콜드캐시(GET 미도착)·PARTIAL·중복발사(firedRef) 셋을 handleConfirm 이 진다.
+ *   TRIP-467/483 잔여). 콜드캐시(GET 미도착)·PARTIAL·중복발사(firedLock) 셋을 handleConfirm 이 진다.
  *
  * 조회 상태(TRIP-1109)도 여기가 정한다 — 응답 전(idle 포함)=loading, 10초 넘으면 slow, 실패=error,
  * 도착=ready. 차선책 경로는 처음부터 ready 고 지연 판정을 켜지 않는다(POST 가 없어 응답도 없다).
@@ -77,8 +78,8 @@ export function SlotCandidatePanelContainer({
   const [selectedPoiId, setSelectedPoiId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // useState 잠금은 같은 틱의 둘째 탭이 옛 값을 읽어 못 막는다 — useRef 는 즉시 읽혀 펜딩 전파 전
-  // 이중발사를 막는다(리포 함정 h09 firedRef · TripNewStep1 submitLockedRef 선례).
-  const firedRef = useRef(false);
+  // 이중발사를 막는다(리포 함정 h09 firedRef · TripNewStep1 submitLock 선례).
+  const firedLock = usePressLock();
   // [다시 시도] 한 틱 연타 잠금 — 같은 이유로 ref. isPending 으로 막으면 slow(=pending 중) 재시도가
   // 죽는다. 잠금은 [다시 시도]가 다시 보일 때(error 재등장·slow 재등장) 푼다 — 응답(settle) 때만 풀면
   // 두 번째 요청이 또 10초를 넘겨 뜬 버튼이 눌러도 아무 일 없는 침묵 실패가 된다.
@@ -170,15 +171,14 @@ export function SlotCandidatePanelContainer({
     // POST 경로의 응답 전·실패엔 rows 가 비어 selected === null 이 먼저 막는다 — fetchState 검사는
     // rows 갈래가 바뀔 때를 위한 방어 겹이다. 차선책 경로는 처음부터 ready 라 그냥 지난다.
     if (
-      firedRef.current ||
       fetchState !== 'ready' ||
       selected === null ||
       parsed.kind !== 'ok' ||
       itinerary.data === undefined ||
-      isConfirmLocked(itinerary.data.generationState)
+      isConfirmLocked(itinerary.data.generationState) ||
+      !firedLock.acquire()
     )
       return;
-    firedRef.current = true;
     setErrorMessage(null);
     const nextDays = swapSlotPoi(
       itinerary.data.days,
@@ -199,7 +199,7 @@ export function SlotCandidatePanelContainer({
         },
         onError: (error) => {
           // 실패엔 안 닫는다 — 잠금을 풀어 재시도가 다시 타게 하고 인라인 오류를 세운다(INV-4).
-          firedRef.current = false;
+          firedLock.release();
           setErrorMessage(resolveSlotSwapError(error).message);
         },
       }
@@ -213,6 +213,7 @@ export function SlotCandidatePanelContainer({
         nameKo: currentSlot ? slotDisplayName(currentSlot) : undefined,
         tags: currentSlot?.tags,
         imageUrl: currentSlot?.imageUrl,
+        imageLicense: currentSlot?.imageLicense,
         category: currentSlot ? slotDisplayCategory(currentSlot) : undefined,
         distanceRange: currentSlot?.distanceRange,
       }}

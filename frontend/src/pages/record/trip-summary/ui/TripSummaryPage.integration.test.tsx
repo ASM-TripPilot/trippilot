@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -32,7 +33,9 @@ import {
   flushOsAnswer,
   holdReduceMotionOn,
 } from '@/test-support/barMotionProbe';
+import { revealValues } from '@/test-support/revealProbe';
 
+import { resetSeenSummariesForTests } from '../model/seenSummaries';
 import { TripSummaryPage } from './TripSummaryPage';
 
 /**
@@ -155,7 +158,7 @@ const tripFails = () =>
     () => new HttpResponse(null, { status: 500 })
   );
 
-function renderPage(today?: string): QueryClient {
+function renderPage(today?: string, tripId: string = TRIP_ID): QueryClient {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: 0 },
@@ -167,7 +170,7 @@ function renderPage(today?: string): QueryClient {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
   }
-  render(<TripSummaryPage tripId={TRIP_ID} today={today} />, { wrapper });
+  render(<TripSummaryPage tripId={tripId} today={today} />, { wrapper });
   return client;
 }
 
@@ -218,6 +221,8 @@ beforeEach(() => {
 });
 // 칸 이동은 연타 가드(모듈 전역 400ms 창)를 지난다 — 앞 테스트의 누름이 뒤 테스트를 막지 않게 파일 최상위에서 닫는다.
 afterEach(() => {
+  // TRIP-1831 — "이 실행에서 본 요약" 기억은 모듈 싱글턴이다. 앞 테스트가 연 여행이 뒤 테스트의 "첫 방문"을 재방문으로 바꾸지 않게 파일 최상위에서 비운다.
+  resetSeenSummariesForTests();
   resetPressGuard();
   server.resetHandlers();
   clearAccessToken();
@@ -983,5 +988,111 @@ describe('🔴 TRIP-1798 · 앨범 보기 링크', () => {
 
     await screen.findByTestId('reflection-summary-error');
     expect(screen.queryByTestId('trip-album-link')).toBeNull();
+  });
+});
+
+// ── TRIP-1831 · 같은 앱 실행 안에서 다시 연 여행 요약은 등장·카운트업 없이 보인다 ──────────────────────────────────────────────
+// 첫 방문은 카드가 지연 없이 차례로 올라오고(화면 단위 시각은 `TripSummaryScreen.test`), 같은 앱 실행 안에서 **같은 tripId** 를 다시 열면 첫 렌더부터 전부 보인다.
+// "봤음" 판정은 페이지가 첫 렌더에 굳힌다 — 요약이 늦게 도착해 얼굴이 바뀌거나 다른 조회가 와서 다시 그려져도 재생 도중 뒤집히지 않는다(뒤집히면 카드가 순간 끝으로 점프한다).
+// 동작 줄이기는 끔으로 돌려야 첫 방문 모션이 보인다(파일 기본은 켬). 가짜 시계 + MSW 는 `advanceTimersByTimeAsync` 로 응답 약속까지 함께 푼다.
+describe('TRIP-1831 · 재방문 요약은 연출 없이 보인다', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    answerReduceMotionSynchronously(false);
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  async function advance(ms: number): Promise<void> {
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  /** 요약 응답을 깔고 페이지를 연 뒤 본문(숫자 타일)이 나타날 때까지 25ms 씩 흘린다. */
+  async function openSummary(tripId: string = TRIP_ID): Promise<void> {
+    server.use(
+      summaryHandler({
+        ready: true,
+        summary: summary(true, ['코엑스', '봉은사']),
+      }),
+      tripOk()
+    );
+    renderPage(undefined, tripId);
+    for (
+      let i = 0;
+      i < 80 && screen.queryByTestId('reflection-summary-stats') === null;
+      i += 1
+    ) {
+      await advance(25);
+    }
+    expect(screen.getByTestId('reflection-summary-stats')).toBeOnTheScreen();
+  }
+
+  /** 내레이션·일차 카드·동선 정류장 둘 — 화면 순서(등장 순번 0~3)대로의 투명도. */
+  const opacities = () =>
+    [
+      screen.getByTestId('reflection-summary-narrative'),
+      ...screen.getAllByTestId('reflection-summary-day-card'),
+      ...screen.getAllByTestId('reflection-summary-visit-item'),
+    ].map((node) => revealValues(node).opacity);
+
+  it('첫 방문: 본문이 도착한 직후 마지막 카드는 아직 투명하고, 그 뒤 여행·일정 조회가 도착해 다시 그려져도 모션이 도중에 끝으로 점프하지 않으며, 끝까지 재생돼 전부 보인다', async () => {
+    // 준비·실행: 요약을 열고, 다른 조회(여행·일정)가 도착해 페이지가 다시 그려질 시간을 준다(100ms — 마지막 정류장 시작 450ms 전).
+    await openSummary();
+    await advance(100);
+
+    // 단언 1: 마지막 정류장(순번 3, 450ms 시작)은 아직 투명 — 재방문으로 오판했거나 다시 그리며 뒤집혔으면 1 이라 red.
+    const [narrative, , , lastStop] = opacities();
+    expect(lastStop).toBeLessThan(1);
+    expect(narrative).toBeLessThan(1);
+
+    // 단언 2: 끝까지 재생되면 전부 보인다(연출이 영영 안 끝나는 회귀 방지 + 단언 1 이 공허하지 않다는 앵커).
+    await advance(2000);
+    expect(opacities()).toEqual([1, 1, 1, 1]);
+  });
+
+  it('같은 여행 요약을 다시 열면(같은 tripId 재마운트) 본문 도착 직후부터 전부 보인다 — 등장 모션 없음', async () => {
+    // 준비: 첫 방문을 끝까지 보고 닫는다.
+    await openSummary();
+    await advance(2000);
+    screen.unmount();
+
+    // 실행: 같은 여행을 다시 연다.
+    await openSummary();
+
+    // 단언: 도착 직후(재생 시간이 거의 안 흐른 시점)에 모두 불투명 — 첫 방문이었다면 마지막 정류장은 0.
+    expect(opacities()).toEqual([1, 1, 1, 1]);
+  });
+
+  it('요약이 준비되기 전(대기 얼굴)에 닫고 다시 열면 아직 첫 방문이다 — 본문을 본 적이 없으면 "봤음" 이 아니다', async () => {
+    // 준비: 요약이 아직 준비 안 된 응답으로 열고(대기 얼굴), 본문 없이 닫는다.
+    server.use(summaryHandler({ ready: false }), tripOk());
+    renderPage(undefined, TRIP_ID);
+    await advance(500);
+    expect(screen.queryByTestId('reflection-summary-stats')).toBeNull(); // 앵커 — 본문은 한 번도 안 섰다
+    screen.unmount();
+
+    // 실행: 준비된 요약으로 다시 연다.
+    await openSummary(TRIP_ID);
+    await advance(100);
+
+    // 단언: 마지막 정류장은 아직 투명 — 대기 얼굴만 본 첫 열기를 "봤음" 으로 쳤다면 1 이라 red.
+    expect(opacities()[3]).toBeLessThan(1);
+  });
+
+  it('다른 여행 요약은 첫 방문이라 연출이 재생된다 — 재방문 기억은 여행 단위다', async () => {
+    // 준비: trip-1 을 보고 닫는다.
+    await openSummary(TRIP_ID);
+    await advance(2000);
+    screen.unmount();
+
+    // 실행: 다른 여행을 연다.
+    await openSummary('trip-2');
+    await advance(100);
+
+    // 단언: 마지막 정류장은 아직 투명(첫 방문 연출 중).
+    expect(opacities()[3]).toBeLessThan(1);
   });
 });

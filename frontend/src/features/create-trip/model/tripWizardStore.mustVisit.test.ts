@@ -35,7 +35,13 @@ function seed(
   name = `장소-${sourcePoiId}`
 ): MustVisitSeedItem {
   // region 은 이 파일 단언과 무관(전부 sourcePoiId 매핑) — 필수 필드(TRIP-685) 컴파일 유지용 null.
-  return { sourcePoiId, name, imageUrl: null, region: null };
+  return {
+    imageLicense: null,
+    sourcePoiId,
+    name,
+    imageUrl: null,
+    region: null,
+  };
 }
 
 beforeEach(() => {

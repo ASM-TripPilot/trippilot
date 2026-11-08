@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 
 import type {
   ActionLogPayload,
@@ -190,18 +191,14 @@ export function HistoryView({
                   취소
                 </Text>
               </Pressable>
-              <Pressable
+              <Button
                 testID="assistant-history-clear-confirm"
-                accessibilityRole="button"
-                accessibilityState={{ disabled: clearing }}
                 disabled={clearing}
                 onPress={onConfirmClear}
-                className="flex-1 items-center rounded-button bg-primary py-[13px]"
+                className="flex-1"
               >
-                <Text className="font-noto-bold text-label font-bold text-on-primary">
-                  지우기
-                </Text>
-              </Pressable>
+                지우기
+              </Button>
             </View>
           </View>
         </View>

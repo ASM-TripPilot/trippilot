@@ -11,6 +11,7 @@
 import { InfoCircle18Glyph } from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { LocationOffGlyph, LocationRadarHero } from './LocationGlyphs';
@@ -101,16 +102,9 @@ export function LocationPreprompt({
           <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
           {denied ? (
             <>
-              <Pressable
-                accessibilityRole="button"
-                testID="onboarding-location-continue"
-                onPress={onProceed}
-                className="h-[52px] items-center justify-center rounded-button bg-primary"
-              >
-                <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                  계속
-                </Text>
-              </Pressable>
+              <Button testID="onboarding-location-continue" onPress={onProceed}>
+                계속
+              </Button>
               <Pressable
                 accessibilityRole="button"
                 testID="onboarding-location-settings"
@@ -124,17 +118,10 @@ export function LocationPreprompt({
             </>
           ) : (
             <>
-              <Pressable
-                accessibilityRole="button"
-                testID="onboarding-location-allow"
-                onPress={onProceed}
-                className="h-[52px] items-center justify-center rounded-button bg-primary"
-              >
-                {/* 5.1.1(iv): 권한 창 앞 안내는 건너뛸 수 없다 — "계속" 하나뿐이고 항상 OS 창으로 간다. "허용" 문구도 쓰지 않는다(TRIP-935 R8). */}
-                <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                  계속
-                </Text>
-              </Pressable>
+              {/* 5.1.1(iv): 권한 창 앞 안내는 건너뛸 수 없다 — "계속" 하나뿐이고 항상 OS 창으로 간다. "허용" 문구도 쓰지 않는다(TRIP-935 R8). */}
+              <Button testID="onboarding-location-allow" onPress={onProceed}>
+                계속
+              </Button>
             </>
           )}
         </View>

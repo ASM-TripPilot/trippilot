@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -6,7 +6,7 @@ import type { Trip } from '@/shared/api/index.schemas';
 import { useGetTrips } from '@/shared/api/index.trips';
 import { useGetPlaces } from '@/shared/api/index.places';
 import { isOfflineWaiting } from '@/shared/api';
-import { guardPress } from '@/shared/lib/pressGuard';
+import { guardPress, usePressLock } from '@/shared/lib/pressGuard';
 import { flushMarks, mark } from '@/shared/lib/startupMarks';
 import { SAVED_LIST_LOAD_FAILED_TOAST } from '@/shared/ui/savedListLoadToast';
 import { showToast } from '@/shared/ui/Toast';
@@ -81,7 +81,7 @@ function PlanningHome({
   const router = useRouter();
   const queryClient = useQueryClient();
   // 슬롯 채우기(copick) 목적지가 일정 응답을 기다리는 동안의 잠금 — 같은 틱 두 번째 누름을 막는다.
-  const openingRef = useRef(false);
+  const openingLock = usePressLock();
 
   // 지배 여행 일정 상태 → 목적지. 홈 카드 CTA 가 그 화면으로 push 하고(일정 탭과 같은
   // resolveItineraryDestination 규칙 공유), 라벨·부제도 같은 목적지로 덮어쓴다(TRIP-986 D1 — 한 판정).
@@ -97,8 +97,7 @@ function PlanningHome({
       );
       return;
     }
-    if (openingRef.current) return;
-    openingRef.current = true;
+    if (!openingLock.acquire()) return;
     fetchTripItineraryHref(queryClient, trip.tripId)
       .then(
         (href) => router.push(href),
@@ -110,7 +109,7 @@ function PlanningHome({
           })
       )
       .finally(() => {
-        openingRef.current = false;
+        openingLock.release();
       });
   });
 
@@ -252,6 +251,7 @@ export function HomePage() {
       tag: `#${place.tags[0] || place.category}`,
       category: place.category,
       imageUrl: place.imageUrl,
+      imageLicense: place.imageLicense,
     })),
     onRetry: () => void places.refetch(),
     onPressCard: openPlace,
@@ -276,6 +276,7 @@ export function HomePage() {
             badge: place.category,
             category: place.category,
             imageUrl: place.imageUrl,
+            imageLicense: place.imageLicense,
           }))
         : [],
     onRetry: () => void places.refetch(),

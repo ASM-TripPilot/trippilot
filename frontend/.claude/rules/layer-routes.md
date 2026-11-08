@@ -25,7 +25,7 @@ paths:
 | `app/(onboarding)/push.tsx` | 온보딩 푸시 안내 카드 라우트(TRIP-1108) — `PushPage` 얇은 래퍼. 체인 location → push → pref1. 파일 이름이 `notifications`가 아닌 이유: 괄호 그룹은 URL에 안 들어가 `/notifications`(알림함 `app/notifications.tsx`)와 충돌 |
 | `app/(onboarding)/pref1.tsx` | 취향 1/2 라우트(c09) — `PrefStep1Page` 얇은 래퍼 |
 | `app/(onboarding)/pref2.tsx` | 취향 2/2 라우트(c09b) — `PrefStep2Page` 얇은 래퍼 |
-| `app/(tabs)/_layout.tsx` | 탭 네비게이터 — `tabBar` 렌더프롭 + `BottomTabBar` 어댑터(`routeNameToTabKey` index→home · `handlePressTab` home→index). `screenOptions.tabBarStyle`의 `position:'absolute'` 등은 **커스텀 `tabBar` 렌더프롭엔 무효**(react-navigation이 적용 안 함)인 죽은 문자열 — 실제 오버레이는 `shared/ui/BottomTabBar.tsx` 루트의 `absolute bottom-0`이 진다. |
+| `app/(tabs)/_layout.tsx` | **(TRIP-1831) `tabBar` 안 자식 `TabBarWithExit` 가 `useBarExit()` 을 구독해 `<BottomTabBar ghost={exit !== null}/>` + `<BarExitHost/>` 를 그린다 — 허브·기록 ‹ 의 퇴장 모프 호스트 자리(`widgets/bottom-nav-bar/index.exit.ts` 입구만 문다).** 탭 네비게이터 — `tabBar` 렌더프롭 + `BottomTabBar` 어댑터(`routeNameToTabKey` index→home · `handlePressTab` home→index). `screenOptions.tabBarStyle`의 `position:'absolute'` 등은 **커스텀 `tabBar` 렌더프롭엔 무효**(react-navigation이 적용 안 함)인 죽은 문자열 — 실제 오버레이는 `shared/ui/BottomTabBar.tsx` 루트의 `absolute bottom-0`이 진다. |
 | `app/(tabs)/index.tsx` | 홈 탭 — `<HomePage/>`만 렌더하는 10줄 얇은 래퍼(TRIP-1142). 조회·판정·항법은 `pages/home` 소관(`layer-pages.md`). 래퍼 연결은 `tabsShell` 홈 래퍼 it가 심판 |
 | `app/(tabs)/explore.tsx` | 탐색 탭 — `<ExploreLandingPage/>`만 렌더하는 11줄 얇은 래퍼(TRIP-1142). `region` 주소 파라미터는 래퍼가 아니라 page가 `useLocalSearchParams`로 직접 읽는다. 조회·조립·항법은 `pages/explore/explore-landing` 소관. 래퍼 연결은 `tabsShell` 탐색 래퍼 it가 심판 |
 | `app/(tabs)/itinerary.tsx` | 일정 탭 — `<MyTripsListPage/>`만 렌더(리다이렉트 없음). 조회·정렬·카드별 목적지 판정은 `pages/itinerary/itinerary-list` 소관. |

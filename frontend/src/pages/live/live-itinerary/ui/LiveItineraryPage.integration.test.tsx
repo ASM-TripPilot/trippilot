@@ -151,10 +151,19 @@ jest.mock('@/shared/photo', () => ({
 const mockGetForeground = jest.fn();
 const mockRequestForeground = jest.fn();
 jest.mock('expo-location', () => ({
+  Accuracy: { High: 4 },
   getForegroundPermissionsAsync: (...args: unknown[]) =>
     mockGetForeground(...args),
   requestForegroundPermissionsAsync: (...args: unknown[]) =>
     mockRequestForeground(...args),
+  // TRIP-1832 — 지도는 정확한 값이 와야 내 위치를 켠다. 허브 테스트가 재는 것은 켜는 조건뿐이라 곧장 정확한 값을 준다.
+  watchPositionAsync: async (
+    _options: unknown,
+    callback: (location: { coords: { accuracy: number } }) => void
+  ) => {
+    callback({ coords: { accuracy: 10 } });
+    return { remove: () => {} };
+  },
 }));
 
 // TRIP-1339 — U10 자동 기록 훅을 테스트마다 갈아 끼운다. 기본(null)이면 실물 그대로(플래그 OFF → 효과 0) — 기존 관점 무변경.
@@ -1318,7 +1327,7 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
           expect(hitCount(ITINERARY_GET)).toBe(2);
         });
 
-        it('E3b 받은 일정이 있다가 재조회가 실패해 오류 얼굴이 된 뒤 [다시 시도]를 누르면, 응답 대기 동안 오류 얼굴은 남고 [다시 시도]만 비활성·흐림 — 또 눌러도 GET 이 더 안 나가고, 끝나면(또 실패) 다시 활성 (AC-3)', async () => {
+        it('E3b 받은 일정이 있다가 재조회가 실패해 오류 얼굴이 된 뒤 [다시 시도]를 누르면, 응답 대기 동안 오류 얼굴은 남고 [다시 시도]만 비활성 — 또 눌러도 GET 이 더 안 나가고, 끝나면(또 실패) 다시 활성 (AC-3)', async () => {
           server.use(
             itineraryResponses([200, 500, 500], { nth: 3, until: holdGate() }),
             tripHandler(),
@@ -1357,9 +1366,6 @@ describe('허브 — 얼굴·뒤로가기·재계획 진입·장소 이동', () 
           );
           expect(hitCount(ITINERARY_GET)).toBe(3);
           expect(screen.getByTestId('execution-live-error')).toBeTruthy();
-          expect(
-            tokens(screen.getByTestId('execution-live-error-retry'))
-          ).toContain('opacity-40');
           expect(screen.getByTestId('execution-live-error-back')).toBeEnabled();
 
           fireEvent.press(screen.getByTestId('execution-live-error-retry'));

@@ -4,6 +4,7 @@ import { render, screen, within } from '@testing-library/react-native';
 
 import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
 import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 
 import { SlotCandidateCard } from './SlotCandidateCard';
 
@@ -40,6 +41,7 @@ describe('🔴 SlotCandidateCard — itinerary 구성(h08·h10)', () => {
   it('CC1 · 배지·이미지·이름 testID·trailing + 거리 라벨 "이동"', () => {
     render(
       <SlotCandidateCard
+        imageLicense={null}
         candidate={CAND}
         testIDPrefix="itinerary-candidate"
         distanceLabel="이동"
@@ -72,6 +74,7 @@ describe('🔴 SlotCandidateCard — planb 구성(i14)', () => {
   it('CC2 · slack leaf 있음, image·name testID 없음(★6-a) + 거리 라벨 "지금 위치서"', () => {
     render(
       <SlotCandidateCard
+        imageLicense={null}
         candidate={CAND}
         testIDPrefix="planb-candidate"
         distanceLabel="지금 위치서"
@@ -104,6 +107,7 @@ describe('🔴 SlotCandidateCard — 불변식(INV-3·INV-1)', () => {
   it('CC3 · 거리·근거 leaf 에 소요시간 단위 0(INV-3)', () => {
     render(
       <SlotCandidateCard
+        imageLicense={null}
         candidate={CAND}
         testIDPrefix="itinerary-candidate"
         distanceLabel="이동"
@@ -125,6 +129,7 @@ describe('🔴 SlotCandidateCard — 불변식(INV-3·INV-1)', () => {
   it('CC4 · poiId 원문은 카드 텍스트로 새지 않는다(INV-1)', () => {
     render(
       <SlotCandidateCard
+        imageLicense={null}
         candidate={{ ...CAND, poiId: 'hidden-poi' }}
         testIDPrefix="planb-candidate"
         distanceLabel="지금 위치서"
@@ -153,6 +158,7 @@ describe('🔴 SlotCandidateCard — 사진 칸 생성 이미지(coverPoiId·cat
   ): void => {
     render(
       <SlotCandidateCard
+        imageLicense={null}
         candidate={{ ...CAND, poiId: 'current' }}
         testIDPrefix="itinerary-candidate"
         distanceLabel="이동"
@@ -239,6 +245,7 @@ describe('🔴 SlotCandidateCard — TRIP-1780 rationaleSentence', () => {
   ): void => {
     render(
       <SlotCandidateCard
+        imageLicense={null}
         candidate={{ ...CAND, rationale }}
         testIDPrefix="itinerary-candidate"
         tags={['카페', '갤러리']}
@@ -301,6 +308,7 @@ describe('🔴 SlotCandidateCard — TRIP-1780 rationaleSentence', () => {
   it('RS4 · 안 켜면 지금과 같다 — 문장은 그대로, 빈 문자열도 빈 leaf 로 그려진다(숨김은 켠 쪽만)', () => {
     const { unmount } = render(
       <SlotCandidateCard
+        imageLicense={null}
         candidate={{ ...CAND, rationale: SENTENCE }}
         testIDPrefix="itinerary-candidate"
       />
@@ -312,6 +320,7 @@ describe('🔴 SlotCandidateCard — TRIP-1780 rationaleSentence', () => {
 
     render(
       <SlotCandidateCard
+        imageLicense={null}
         candidate={{ ...CAND, rationale: '' }}
         testIDPrefix="itinerary-candidate"
       />
@@ -322,5 +331,26 @@ describe('🔴 SlotCandidateCard — TRIP-1780 rationaleSentence', () => {
     expect(
       screen.getByTestId('itinerary-candidate-rationale-p1')
     ).toHaveTextContent('');
+  });
+});
+
+// TRIP-1740 AC-7(T6) — props 의 imageLicense(필수 키)가 후보 사진 칸까지 간다.
+describe('SlotCandidateCard · 관광공사 사진 유형이 사진 칸에 닿는다', () => {
+  it('TYPE1 서버 사진은 cover 이고 출처 글자가 붙는다', () => {
+    render(
+      <SlotCandidateCard
+        candidate={CAND}
+        testIDPrefix="itinerary-candidate"
+        distanceLabel="이동"
+        showImage
+        imageUrl="https://img.example/c.jpg"
+        imageLicense="TYPE1"
+      />
+    );
+
+    expectTypeOnePhotoDelivered(
+      'itinerary-candidate-image-p1',
+      'https://img.example/c.jpg'
+    );
   });
 });

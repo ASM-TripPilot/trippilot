@@ -12,7 +12,6 @@ import { COLOR_TOKENS } from '@/shared/config';
  */
 
 const CORAL = COLOR_TOKENS.primary;
-const INK = COLOR_TOKENS.ink;
 // eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill(예정 원), 토큰 없음
 const CIRCLE_UPCOMING = '#C2C7CE';
 const CIRCLE_SKIPPED = COLOR_TOKENS['muted-soft'];
@@ -277,17 +276,6 @@ export function RecordBookmarkGlyph({ size = 24 }: GlyphProps): ReactElement {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-    </Svg>
-  );
-}
-
-/** ✕ 닫기 — i01 허브 메모 시트 머리(Figma 4741:2993 · Icon close 1237:1058). ink 선이라 home·explore
- *  ✕(흰·on-primary)를 못 쓰고, features 경계로 가져올 수도 없어 벡터만 옮겼다. */
-export function RecordCloseGlyph({ size = 24 }: GlyphProps): ReactElement {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d="M6 6L18 18" stroke={INK} strokeWidth={2} strokeLinecap="round" />
-      <Path d="M18 6L6 18" stroke={INK} strokeWidth={2} strokeLinecap="round" />
     </Svg>
   );
 }

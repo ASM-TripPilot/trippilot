@@ -15,6 +15,7 @@
  */
 import { type ReactElement, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
@@ -221,16 +222,9 @@ export function PreferencesEditView({
             </ScrollView>
 
             <View className="px-lg pb-[26px] pt-md">
-              <Pressable
-                testID="settings-pref-save"
-                accessibilityRole="button"
-                onPress={onSave}
-                className="h-[52px] items-center justify-center rounded-button bg-primary"
-              >
-                <Text className="font-noto-bold text-section font-bold text-on-primary">
-                  저장
-                </Text>
-              </Pressable>
+              <Button testID="settings-pref-save" onPress={onSave}>
+                저장
+              </Button>
             </View>
           </>
         ) : loadFailed ? (

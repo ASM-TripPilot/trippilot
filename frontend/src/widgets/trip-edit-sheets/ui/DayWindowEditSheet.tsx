@@ -17,6 +17,7 @@
  */
 import { type ReactElement, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
@@ -311,19 +312,13 @@ export function DayWindowEditSheet({
           </Text>
         </Pressable>
 
-        <Pressable
+        <Button
           testID="trip-wizard-daywindow-apply"
-          accessibilityRole="button"
           disabled={invalid}
           onPress={apply}
-          className={`h-[52px] items-center justify-center rounded-button bg-primary ${
-            invalid ? 'opacity-40' : ''
-          }`}
         >
-          <Text className="text-[16px] font-noto-bold font-bold text-on-primary">
-            적용
-          </Text>
-        </Pressable>
+          적용
+        </Button>
       </BottomSheetView>
     </BottomSheet>
   );

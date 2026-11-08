@@ -33,6 +33,7 @@ export function MagazinePhoto({
 }): ReactElement {
   return (
     <KenBurns>
+      {/* eslint-disable-next-line no-restricted-syntax -- 기기 사진(회고 매거진) — 관광공사 POI 사진 아님 */}
       <PlacePhoto
         testID={testID}
         imageUrl={picture.uri}
@@ -50,9 +51,12 @@ export function MagazineCover({
   cover,
   testID,
   titleTestID,
+  revealing = true,
 }: {
   cover: MagazineCoverVM;
   testID: string;
+  /** 꺼지면(j04 재방문, TRIP-1831) 스티커가 처음부터 자리에 있다. */
+  revealing?: boolean;
   /** 있으면 제목 글자만 담은 Text 에 단다(j04 — 지역·기간과 한 노드로 섞지 않는다). */
   titleTestID?: string;
 }): ReactElement {
@@ -95,7 +99,7 @@ export function MagazineCover({
       </View>
 
       <View className="absolute right-xl top-[68px]">
-        <StickerPop>
+        <StickerPop revealing={revealing}>
           <View
             className="h-[84px] w-[84px] items-center justify-center rounded-full"
             style={{ backgroundColor: MAGAZINE_TONES.highlight }}
@@ -140,6 +144,7 @@ export function MagazineQuote({
   heading,
   onEdit,
   editTestID,
+  revealing = true,
 }: {
   quote: MagazineQuoteVM;
   testID: string;
@@ -148,6 +153,8 @@ export function MagazineQuote({
   /** 있을 때만 "수정" 링크를 그린다. */
   onEdit?: () => void;
   editTestID?: string;
+  /** 꺼지면(j04 재방문, TRIP-1831) 형광펜이 처음부터 칠해져 있다. */
+  revealing?: boolean;
 }): ReactElement {
   const { head, mark } = quote;
   return (
@@ -179,7 +186,9 @@ export function MagazineQuote({
         >
           {head}
           {mark !== '' ? (
-            <Highlight color={MAGAZINE_TONES.highlight}>{mark}</Highlight>
+            <Highlight color={MAGAZINE_TONES.highlight} revealing={revealing}>
+              {mark}
+            </Highlight>
           ) : null}
         </Text>
       </View>
@@ -273,7 +282,8 @@ export function MagazinePlanChange({
 
 /**
  * 동선 — `MapView` 가 아니라 번호 목록. 한 곳씩 차례로 나타난다(RevealItem). `firstIndex` 는 이 박스가 시작하는 등장 순번,
- * `firstDelayMs` 는 첫 정류장이 나오기까지의 지연(j03 300 기본, j04 는 경로 그리기가 끝난 뒤 1050).
+ * `firstDelayMs` 는 첫 정류장이 나오기까지의 지연(j03 300 기본, j04 는 0).
+ * `revealing` 이 꺼지면(j04 재방문) 등장 없이 첫 렌더부터 보인다 — 기본 켜짐이라 j03 은 그대로다.
  * `stopTestID` 를 주면 모든 정류장이 그 testID 를 쓴다(j04), 없으면 `{testID}-stop-{N}`(j03).
  * 정류장에 `dayLabel` 이 있으면 이름 오른쪽에 별도 Text 로 그린다.
  */
@@ -285,6 +295,7 @@ export function MagazineRoute({
   firstIndex,
   firstDelayMs = 300,
   stopTestID,
+  revealing = true,
 }: {
   route: readonly MagazineRouteStop[];
   palette: MagazineVM['cover']['palette'];
@@ -294,6 +305,7 @@ export function MagazineRoute({
   firstIndex: number;
   firstDelayMs?: number;
   stopTestID?: string;
+  revealing?: boolean;
 }): ReactElement {
   const palette = CATEGORY_PALETTES[key];
   return (
@@ -313,6 +325,7 @@ export function MagazineRoute({
           key={stop.order}
           index={firstIndex + i}
           firstDelayMs={firstDelayMs}
+          revealing={revealing}
         >
           <View
             testID={stopTestID ?? `${testID}-stop-${stop.order}`}
@@ -353,9 +366,12 @@ export function MagazineRoute({
 export function MagazineStats({
   stats,
   testID,
+  revealing = true,
 }: {
   stats: readonly MagazineStatTile[];
   testID: string;
+  /** 꺼지면 숫자가 카운트업 없이 처음부터 최종값이다(j04 재방문). 기본 켜짐. */
+  revealing?: boolean;
 }): ReactElement {
   const tile = (key: MagazineStatTile['key']) =>
     stats.find((s) => s.key === key);
@@ -375,6 +391,7 @@ export function MagazineStats({
             </Text>
             <CountUpText
               value={visits.value}
+              revealing={revealing}
               className="font-noto-bold text-[64px] leading-[70px] text-ink"
             />
           </View>
@@ -386,6 +403,7 @@ export function MagazineStats({
             </Text>
             <CountUpText
               value={photos.value}
+              revealing={revealing}
               className="font-noto-bold text-[64px] leading-[70px] text-white"
             />
           </View>
@@ -405,6 +423,7 @@ export function MagazineStats({
           </View>
           <CountUpText
             value={distance.value}
+            revealing={revealing}
             className="font-noto-bold text-[40px] leading-[46px] text-ink"
           />
         </View>

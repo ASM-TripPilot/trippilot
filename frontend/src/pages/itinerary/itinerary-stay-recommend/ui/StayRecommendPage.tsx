@@ -1,4 +1,4 @@
-import { type ReactElement, useEffect, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -11,6 +11,7 @@ import { useGetTripsTripId } from '@/shared/api/index.hooks';
 import { SAVED_LIST_LOAD_FAILED_TOAST } from '@/shared/ui/savedListLoadToast';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { showToast } from '@/shared/ui/Toast';
+import { usePressLock } from '@/shared/lib/pressGuard';
 import {
   CuratedStaysSection,
   CuratedStaysSheet,
@@ -88,7 +89,7 @@ export function StayRecommendPage({
   const [assignFailed, setAssignFailed] = useState(false);
   // in-flight 잠금 — `isPending` 은 다음 렌더에야 반영돼 같은 틱 이중탭을 못 막는다(TripNewStep2 선례).
   // 성공은 화면을 떠나므로 잠근 채 두고, 실패만 풀어 재시도를 연다.
-  const assignLockRef = useRef(false);
+  const assignLock = usePressLock();
 
   function goBack(): void {
     goBackOr(router, `/trips/${tripId}/itinerary`);
@@ -180,14 +181,13 @@ export function StayRecommendPage({
 
   function handleConfirm(): void {
     if (
-      assignLockRef.current ||
       startDate === undefined ||
       endDate === undefined ||
-      sameDay
+      sameDay ||
+      !assignLock.acquire()
     ) {
       return;
     }
-    assignLockRef.current = true;
     setAssignFailed(false);
     assignBase.mutate(
       {
@@ -201,7 +201,7 @@ export function StayRecommendPage({
       {
         onSuccess: goBack,
         onError: () => {
-          assignLockRef.current = false;
+          assignLock.release();
           setAssignFailed(true);
         },
       }

@@ -396,7 +396,10 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
   /** 가드 판정용으로 멈춰 둘 시각(값 자체는 의미 없다 — 흐르지 않는 것이 요점). */
   const FROZEN_NOW = 1_790_000_000_000;
 
-  describe('TRIP-1013 AC-S · 여행 단위 화면의 출구는 연타 가드 밖이다 (가드는 관찰된 5곳에만)', () => {
+  // TRIP-1013 AC-S(「여행 단위 화면의 출구는 가드 밖 — 가드는 관찰된 5곳에만」)는 TRIP-1828 이 대체했다:
+  // 주 CTA 가 공용 Button 이 되며 늘 연타 창을 따른다(01b Q10). 그래서 [지정] 연타의 둘째 탭이 닫힌 시트 아래
+  // 복귀 CTA 를 관통하지 않고, 사람이 잠시 뒤 누른 탭은 그대로 1회 돌아간다.
+  describe('TRIP-1828 · 여행 단위 화면의 복귀 CTA 도 연타 창을 따른다 (옛 TRIP-1013 AC-S 를 대체)', () => {
     // 시계를 멈춘다 — 화면을 그리고 응답을 기다리는 동안 실제 시간이 흘러 "창 안"이 400ms 를 넘기면
     // 판정이 흔들린다(02a ★2). "창 밖"은 resetPressGuard() 로만 만든다.
     let clock: jest.SpyInstance;
@@ -405,7 +408,7 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
     });
     afterEach(() => clock.mockRestore());
 
-    it('지정 성공 직후 주 CTA 를 한 번 누르면 back() 이 정확히 1회다', async () => {
+    it('지정 직후 같은 순간의 주 CTA 는 무시되고(관통 차단), 정착한 뒤 한 번 누르면 back() 이 정확히 1회다', async () => {
       mockCanGoBack.mockReturnValue(true);
       await renderTripBases();
       assignNight(1, 'stay-b');
@@ -413,9 +416,13 @@ describe('여행 단위 거점 화면 · 밤 교체 (TRIP-1011 C)', () => {
       // 앵커 — 지정이 실제로 끝났다(시트 닫힘은 성공 경로에서만).
       expect(screen.queryByTestId('trip-base-staysheet')).toBeNull();
 
+      // [지정](guardPress)이 연 창 안 — 연타의 둘째 탭이 아래 CTA 에 닿은 것과 같다.
       fireEvent.press(screen.getByTestId('trip-base-generate'));
+      expect(mockBack).not.toHaveBeenCalled();
 
-      // 위저드 2/4 의 같은 CTA 는 창 안이면 무시되지만(#038), 이 화면의 복귀는 가드를 안 탄다.
+      // 정착 — 사람이 카드를 보고 잠시 뒤 누른다.
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId('trip-base-generate'));
       expect(mockBack).toHaveBeenCalledTimes(1);
     });
   });
@@ -954,8 +961,8 @@ describe('편집 모드 (TRIP-1082)', () => {
   // 모듈 싱글턴(연타 가드 창)·가짜 서버 상태는 파일 최상위에서 매번 되돌린다(앞 테스트 누수 차단).
   beforeEach(() => {
     resetPressGuard();
-    // 시계를 멈춘다 — 지정 성공이 여는 400ms 창 안에서 [완료]를 누르게 된다. [완료]를 연타 가드로 감싸면
-    // 그 누름이 삼켜져 결정론적으로 red(TRIP-1013 AC-S: 여행 단위 출구는 가드 밖).
+    // 시계를 멈춘다 — 지정 성공이 여는 400ms 창이 테스트 안에서 닫히지 않는다. [완료]는 그 창을 따르는 Button 이라
+    // (TRIP-1828 — 옛 TRIP-1013 AC-S 「출구는 가드 밖」을 대체) `pressDone()` 이 창을 닫고 누른다(사람의 간격).
     clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
     fake.reset({ serverBases: [...A_BOTH_NIGHTS], serverTrip: trip() });
     mockPush.mockClear();
@@ -1012,7 +1019,9 @@ describe('편집 모드 (TRIP-1082)', () => {
     await night1Shows(/메리어트 동대문/);
   }
 
+  /** [완료] — 사람은 카드가 바뀐 걸 보고 누르므로 앞 누름([지정])이 연 창은 지났다(TRIP-1828). 편집 얼굴 [완료]가 창 안에서 무시되는지는 이 파일의 어떤 `it` 도 재지 않는다 — 위 TRIP-1828 describe 는 위저드 얼굴 `trip-base-generate` 만 누르고, 창 따르기 일반은 `Button.test` 가 맡는다. */
   function pressDone(): void {
+    resetPressGuard();
     fireEvent.press(screen.getByTestId('trip-base-edit-done'));
   }
 
@@ -1093,7 +1102,7 @@ describe('편집 모드 (TRIP-1082)', () => {
 
       await changeNight1ToB();
       // 시계가 멈춰 있어 방금 지정이 연 400ms 창이 닫히지 않는다 — 시트 [지정]은 연타 가드를 타므로(#038)
-      // "사용자가 잠시 뒤 다시 지정한다"를 창 닫기로 만든다(★7). [완료]는 그 뒤 지정이 다시 연 창 안에서 누른다.
+      // "사용자가 잠시 뒤 다시 지정한다"를 창 닫기로 만든다(★7). [완료]도 `pressDone()` 이 창을 닫고 누른다.
       resetPressGuard();
       assignNight(1, 'stay-a');
       await sheetClosed();

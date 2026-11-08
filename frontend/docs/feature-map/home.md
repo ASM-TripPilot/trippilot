@@ -34,6 +34,7 @@ routes:
 - `home-spot-save-error` ♥ 실패 — 섹션 위 안내 행(누르면 닫힘).
 - `home-fab-scroll-hide` 세로 스크롤 중 FAB 묶음이 투명·터치 불가가 되고 멈춘 뒤 250ms에 돌아온다(메뉴가 열려 있으면 유지). 가로로 도시 카드 캐러셀을 밀 때는 안 숨고(컬렉션 가로 줄은 미확인), 스크롤하는 동안·멈춘 뒤 앱이 죽지 않는다. *(2026-11-03 실화면 pass — TRIP-1733 스크롤 처리 이관 뒤)*
 - `home-look` 스팟·컬렉션 카드 사진 칸은 서버 사진(없으면 카테고리 생성 그림), 여행 카드 배경은 그 여행 지역 그림(없으면 도시 그림을 대신 깔지 않는다), 카드 위엔 장식 하트가 없고, 토스트는 FAB 묶음 위에 떠서 가려지지 않는다. *(2026-11-01 B안으로 실화면 전용)*
+- `home-photo-credit` 스팟·컬렉션 카드의 서버 사진도 같은 규칙이다 — 관광공사 3유형·유형 모름 사진은 자르지 않고 **어두운 여백** 위에 전체가 보이며, 1유형만 카드를 꽉 채운다. 서버 사진 우하단에 「사진: 한국관광공사」 칩이 붙고 카테고리 그림 카드엔 없다. 칩이 카드 아래쪽 어두운 막·흰 제목·뱃지와 겹치지 않아야 한다. *(TRIP-1740 · 2026-11-08 프리뷰 캡처는 카드 윗부분까지만 봄 · 칩이 붙는 아랫부분은 실화면 미확인 — Gotchas)*
 - `home-cover-label` 여행 카드에 첫 목적지와 다른 시도의 그림을 고른 여행이면 CTA 줄 오른쪽(카드 오른쪽 아래)에 어두운 알약 「그림 · 해운대」(testID: `home-trip-hero-cover-label`)가 보이고 CTA·도트와 겹치지 않는다. 이름이 없는 여행은 알약이 없고 CTA 는 왼쪽 정렬·같은 크기다. 계획 중·여행 후 **[실화면 프리뷰]** *(TRIP-1806 · 2026-11-07 프리뷰 `home-planning-cover-label`·`home-post-trip-cover-label`·`home-planning`, 값은 jest)* 여행 중은 같은 컴포넌트라 따로 안 찍었다 **[실화면 전용 — 미확인]**. 큰 글자는 `my-trips.md` `mytrips-cover-label-legibility`.
 - `home-lane-fresh-10min` 홈 장소 레인을 본 뒤 30초~10분 안에 탐색 탭을 처음 열어도 `GET /places` 가 안 나간다(TRIP-1713, 여행 없음 얼굴 — 3지역 키 공유). 실기 미검증: TRIP-1714 6-b 계정이 여행 중 얼굴이라 못 봤다.
 
@@ -67,6 +68,7 @@ Preconditions:
 - **도우미.** testID: `home-dashboard-assistant`(라벨 「AI 도우미」)를 누른다. `/assistant?surface=HOME`(계획 중·여행 중이면 `tripId` 추가) 시트가 뜬다.
 - **지금 뜨는 장소.** 카드 testID: `home-spot-card-${index}`(라벨 `{이름}, #{태그}`)를 누르면 장소 상세 `/explore/places/{poiId}`. 하트 testID: `home-spot-save-${poiId}`(라벨 `{이름} 저장`)를 누르면 담김 — `accessibilityState.selected` 가 true 로, 글리프가 testID: `home-spot-heart-filled-${poiId}` 로 바뀐다. 결과는 담은 장소(saved-places.md)에서 한 번 더 읽는다. 「더 보기」 testID: `home-spots-more` → 장소 탐색 `/explore/places`.
 - **요즘 사람들이 담는 곳.** 카드 testID: `home-collection-card-${index}` 를 누르면 장소 상세. 이 섹션엔 「더 보기」가 없다.
+- **출처 칩.** 서버 사진이 있는 카드는 사진 testID: `home-spot-photo-${index}`·`home-collection-photo-${index}` 옆에 testID: `home-spot-photo-${index}-credit`·`home-collection-photo-${index}-credit`(「사진: 한국관광공사」)가 있다. 카테고리 그림 카드엔 없다. 칩 아랫부분이 보이도록 카드를 화면 안으로 스크롤해 어두운 막·제목·뱃지와 겹치는지 스크린샷으로 본다.
 - **담은 곳 메뉴.** testID: `home-saved-menu-toggle`(라벨 「담은 곳」)를 누른다. 라벨이 「담은 곳 메뉴 닫기」로 바뀌고 딤 testID: `home-saved-menu-backdrop`, 미니 FAB testID: `home-saved-places-fab`(「담은 장소」)·`home-saved-stays-fab`(「저장한 숙소」)이 뜬다. 개수 ≥1 이면 배지 testID: `home-saved-places-badge`·`home-saved-stays-badge`(100 이상은 「99+」). 「담은 장소」 → `/explore/saved-places`, 「저장한 숙소」 → `/stays/saved`, 딤 탭 → 닫힘.
 - **여행 만들기.** testID: `home-create-trip-fab`(라벨 「여행 만들기」)를 누른다. `/trips/new/step1` 이 빈 드래프트로 열린다.
 - **로딩.** 여행 조회 대기 중 testID: `home-hero-skeleton`·`home-collections-skeleton`·`home-spots-skeleton` 이 보이고 `home-fab-layer` 가 없다.
@@ -76,6 +78,7 @@ Preconditions:
 
 ## Gotchas
 
+- **[미확인 · 실화면 전용] 2026-11-08 TRIP-1740** — 홈 카드(230×300 포트레이트·풀블리드)의 출처 칩은 **어두운 막(스크림)·제목보다 아래층**에 그려져 가려지거나 겹칠 수 있는데 프리뷰 캡처가 카드 윗부분까지만 찍혀(스크롤 도구 없음) 보지 못했다 — 이번 변경에서 가장 크게 바뀌는 곳이라 새 빌드 실화면 1순위. 실데이터 세로형 사진의 여백 모양과 VoiceOver 읽는 순서(제목보다 「사진 출처 한국관광공사」가 먼저 읽히는지)도 미확인이다.
 - 얼굴은 서버 단계값이 아니라 클라가 `status`+날짜(KST)로 파생한다. 계정에 진행 중 여행이 하나라도 있으면 발견·여행 후 얼굴은 실화면에서 못 본다(과거 QA 실측). 여행 후 창 「7일째 포함」은 해석값이다.
 - 여행 카드 CTA 라벨은 처음엔 여행 상태 폴백(「일정 이어서 짜기」·「확정 일정 보기」·「여행 일정 보기」)으로 그려졌다가 일정 응답 뒤 목적지 기준으로 덮어써진다. 응답 전 누름은 무시된다 — 라벨이 바뀐 뒤 누른다.
 - 프리뷰 픽스처의 CTA 문구는 꺾쇠(›)가 붙어 라이브와 다르다 — 프리뷰로 문구를 증명하지 않는다.

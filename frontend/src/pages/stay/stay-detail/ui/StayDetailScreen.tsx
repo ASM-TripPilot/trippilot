@@ -29,6 +29,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Button, buttonClasses } from '@/shared/ui/Button';
 
 import type { StayDetail } from '@/shared/api/index.schemas';
 
@@ -129,6 +130,9 @@ function Divider(): ReactElement {
 }
 
 /** Figma e03 편의시설 행은 4칸 균등이다 — 이보다 많으면 줄바꿈 격자로 넘긴다(TRIP-918). */
+// 글리프 + 글자 행이라 Button 대신 같은 모양 클래스만 빌린다(TRIP-1828 탈출구).
+const BOOK = buttonClasses({});
+
 const AMENITY_COLUMNS = 4;
 
 function AmenityChip({
@@ -202,16 +206,14 @@ export function StayDetailScreen({
             </Text>
             {/* 재시도는 네트워크 오류에만 — 404·400 은 다시 해도 결과가 같다. */}
             {state.kind === 'error' ? (
-              <Pressable
+              <Button
                 testID="stay-detail-retry"
-                accessibilityRole="button"
+                size="md"
                 onPress={onRetry}
-                className="h-12 w-[200px] items-center justify-center rounded-button bg-primary"
+                className="w-[200px]"
               >
-                <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                  다시 시도
-                </Text>
-              </Pressable>
+                다시 시도
+              </Button>
             ) : null}
           </>
         )}
@@ -373,12 +375,10 @@ export function StayDetailScreen({
               testID="stay-detail-book"
               accessibilityRole="button"
               onPress={onPressBook}
-              className="h-[52px] flex-row items-center justify-center gap-sm rounded-button bg-primary"
+              className={`${BOOK.box} flex-row gap-sm`}
             >
               <StayExternalLinkGlyph size={19} />
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                외부에서 예약하기
-              </Text>
+              <Text className={BOOK.label}>외부에서 예약하기</Text>
             </Pressable>
           </View>
         </View>

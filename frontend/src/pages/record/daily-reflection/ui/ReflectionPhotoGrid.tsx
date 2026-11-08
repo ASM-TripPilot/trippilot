@@ -26,6 +26,7 @@ export function ReflectionPhotoGrid({
       className="w-full flex-row gap-sm"
     >
       {photos.map((photo, index) => (
+        // eslint-disable-next-line no-restricted-syntax -- 기기 사진(회고) — 관광공사 POI 사진 아님
         <Image
           key={`${photo.uri}-${index}`}
           source={{ uri: photo.uri }}

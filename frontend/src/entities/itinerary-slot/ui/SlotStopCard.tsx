@@ -6,7 +6,7 @@ import {
   ClockGlyph,
   MoreDotsGlyph,
 } from '@/shared/ui/glyphs';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
@@ -198,12 +198,13 @@ export function SlotStopCard({
       ) : null}
 
       {/* 사진 72×72 — 없으면 카테고리 생성 이미지로 대체(엣지 E1). */}
-      <PlacePhoto
+      <PoiPhoto
         testID={fieldId('photo')}
         imageUrl={slot.imageUrl}
+        imageLicense={slot.imageLicense}
+        surface="thumb"
         category={slotDisplayCategory(slot)}
         poiId={slot.poiId}
-        contentFit="cover"
         cachePolicy="memory-disk"
         recyclingKey={slot.poiId}
         className="h-[72px] w-[72px] rounded-thumb"

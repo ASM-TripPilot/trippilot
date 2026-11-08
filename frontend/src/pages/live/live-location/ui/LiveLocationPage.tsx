@@ -1,6 +1,6 @@
 import { isAxiosError } from 'axios';
 import { useRouter } from 'expo-router';
-import { useRef, useState, type ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 
 import { useLiveItinerary } from '@/features/execution';
 import { useReplanFormStore } from '@/features/request-replan';
@@ -10,6 +10,7 @@ import { buildStartReplanRequest } from '@/features/request-replan';
 import { useStartReplan } from '@/features/request-replan';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import type { MapCenter } from '@/shared/map';
+import { usePressLock } from '@/shared/lib/pressGuard';
 
 import { LiveLocationView } from './LiveLocationView';
 
@@ -45,7 +46,7 @@ export function LiveLocationPage({
   const startReplan = useStartReplan();
   const [errorText, setErrorText] = useState<string | null>(null);
   // 요청이 끝나기(settle) 전 재누름은 무시한다. 실패하면 풀어 재시도를 막지 않는다.
-  const submittingRef = useRef(false);
+  const submittingLock = usePressLock();
 
   const anchor = itinerary.isPending
     ? null
@@ -55,8 +56,7 @@ export function LiveLocationPage({
       });
 
   function handleConfirm(center: MapCenter): void {
-    if (submittingRef.current) return;
-    submittingRef.current = true;
+    if (!submittingLock.acquire()) return;
     setErrorText(null);
     // 이벤트 시점의 최신값을 스토어에서 직접 읽는다(렌더 클로저 stale 회피).
     const form = useReplanFormStore.getState();
@@ -85,7 +85,7 @@ export function LiveLocationPage({
               : '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요'
           ),
         onSettled: () => {
-          submittingRef.current = false;
+          submittingLock.release();
         },
       }
     );
