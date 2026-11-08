@@ -55,12 +55,15 @@ export interface SlotCandidatePanelContainerProps {
   tripId: string;
   slotKey: string;
   onClose: () => void;
+  /** 후보 사진·이름 → 장소 상세(TRIP-1840). 이동·연타 잠금은 소비처(DraftPage) 몫. */
+  onPressPlace?: (poiId: string) => void;
 }
 
 export function SlotCandidatePanelContainer({
   tripId,
   slotKey,
   onClose,
+  onPressPlace,
 }: SlotCandidatePanelContainerProps): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -236,6 +239,7 @@ export function SlotCandidatePanelContainer({
         })
       }
       onClose={onClose}
+      onPressPlace={onPressPlace}
       fetchState={fetchState}
       fetchErrorMessage={
         candidatesFailed ? resolveSlotSwapError(candidatesError).message : null

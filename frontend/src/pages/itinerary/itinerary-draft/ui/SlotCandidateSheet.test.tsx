@@ -635,3 +635,57 @@ describe('🔴 SlotCandidateSheet — TRIP-1780 후보 행 추천 이유 문장'
     });
   });
 });
+
+/**
+ * TRIP-1840 · 후보 사진·이름 → 장소 상세, 그 밖의 행 → 라디오 선택(종전).
+ * 행 전체가 라디오라 "카드 전체 → 상세"면 고를 길이 사라진다 — h05 결정(사진·이름 → 상세)과 같은 규칙.
+ * 준비=onPressPlace 주입 → 실행=사진·이름·행 누름 → 단언=두 콜백이 서로 새지 않는다(안쪽 Pressable 이 먹는다).
+ */
+describe('🔴 TRIP-1840 · 후보 사진·이름 → 상세, 행 나머지 → 선택', () => {
+  it('SD1 · 사진·이름을 누르면 onPressPlace(poiId) — 라디오 선택 0회', () => {
+    const onPressPlace = jest.fn();
+    const onSelectRadio = jest.fn();
+    renderSheet({ onPressPlace, onSelectRadio });
+
+    fireEvent.press(screen.getByTestId('itinerary-candidate-image-open-p2'));
+    fireEvent.press(screen.getByTestId('itinerary-candidate-name-open-p3'));
+
+    expect(onPressPlace.mock.calls).toEqual([['p2'], ['p3']]);
+    expect(onSelectRadio).not.toHaveBeenCalled();
+  });
+
+  it('SD2 · 행(라디오)을 누르면 선택만 — 상세 0회 · 칸은 그 후보의 사진·이름을 품는다', () => {
+    const onPressPlace = jest.fn();
+    const onSelectRadio = jest.fn();
+    renderSheet({ onPressPlace, onSelectRadio });
+
+    fireEvent.press(screen.getByTestId('itinerary-candidate-radio-p2'));
+
+    expect(onSelectRadio.mock.calls).toEqual([['p2']]);
+    expect(onPressPlace).not.toHaveBeenCalled();
+    expect(
+      within(
+        screen.getByTestId('itinerary-candidate-image-open-p2')
+      ).getByTestId('itinerary-candidate-image-p2')
+    ).toBeOnTheScreen();
+    expect(
+      within(
+        screen.getByTestId('itinerary-candidate-name-open-p2')
+      ).getByTestId('itinerary-candidate-name-p2')
+    ).toBeOnTheScreen();
+  });
+
+  it('SD3 · onPressPlace 가 없으면 상세 칸이 없고, 현재 장소 행엔 주입돼도 없다 · 후보 수는 그대로', () => {
+    renderSheet();
+    expect(screen.queryAllByTestId(/-(image|name)-open-/)).toHaveLength(0);
+    expect(renderedCandidatePoiIds()).toEqual(['p2', 'p3']);
+
+    screen.unmount();
+    renderSheet({ onPressPlace: jest.fn() });
+    expect(
+      screen.queryByTestId('itinerary-candidate-image-open-current')
+    ).toBeNull();
+    // 새 testID 가 후보 루트 셀렉터에 새지 않는다(후보 수 그대로).
+    expect(renderedCandidatePoiIds()).toEqual(['p2', 'p3']);
+  });
+});

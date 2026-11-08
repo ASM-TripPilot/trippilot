@@ -49,6 +49,8 @@ export interface MustVisitPickScreenProps {
   /** 완료 실패 안내(TRIP-1093 · INV-4) — 있으면 완료 버튼 위에 한 줄. 재시도는 완료를 다시 누르는 것이다. */
   completeError?: string | null;
   onToggleSelect: (poiId: string) => void;
+  /** 사진·이름 칸 누름 → 장소 상세(TRIP-1840 — 체크 원은 선택, 칸은 상세). 안 주면 칸은 누를 수 없다. */
+  onPressPlace?: (poiId: string) => void;
   onComplete: () => void;
   /** 리스트 하단 '+ 탐색에서 더 담기' → d04. */
   onPressAddMore: () => void;
@@ -94,6 +96,9 @@ function AppBar({
   );
 }
 
+// 사진+글 칸 — 상세 칸이든 아니든 같은 배치(안쪽 간격은 행 간격과 같다).
+const BODY_CLASS = 'flex-1 flex-row items-center gap-md';
+
 const PickRow = memo(function PickRow({
   saved,
   rank,
@@ -103,6 +108,7 @@ const PickRow = memo(function PickRow({
   outside,
   location,
   onToggleSelect,
+  onPressPlace,
 }: {
   saved: SavedPlace;
   /** 지역 안 행의 순번. 밖 행은 없다(TRIP-1106 결정 1-A — "선택 번호"로 읽혔다). */
@@ -117,32 +123,12 @@ const PickRow = memo(function PickRow({
   outside: boolean;
   location: string | null | undefined;
   onToggleSelect: (poiId: string) => void;
+  onPressPlace?: (poiId: string) => void;
 }): ReactElement {
   const { place } = saved;
   const tag = place.tags[0];
-
-  return (
-    <View
-      testID={`mustvisit-pick-row-${place.poiId}`}
-      accessibilityState={{ disabled: outside }}
-      className={`w-full flex-row items-center gap-md py-md ${
-        outside ? 'opacity-40' : ''
-      }`}
-    >
-      {isLast ? null : (
-        <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
-      )}
-      {rank === null ? null : (
-        <View
-          testID={`mustvisit-pick-rank-${place.poiId}`}
-          className="h-[26px] w-[26px] items-center justify-center rounded-pill bg-primary"
-        >
-          <Text className="font-inter-bold text-label font-bold text-on-primary">
-            {rank}
-          </Text>
-        </View>
-      )}
-
+  const body = (
+    <>
       <View className="h-20 w-[104px] overflow-hidden rounded-thumb bg-surface-strong">
         <PoiPhoto
           testID={`mustvisit-pick-photo-${place.poiId}`}
@@ -173,6 +159,45 @@ const PickRow = memo(function PickRow({
           </View>
         ) : null}
       </View>
+    </>
+  );
+
+  return (
+    <View
+      testID={`mustvisit-pick-row-${place.poiId}`}
+      accessibilityState={{ disabled: outside }}
+      className={`w-full flex-row items-center gap-md py-md ${
+        outside ? 'opacity-40' : ''
+      }`}
+    >
+      {isLast ? null : (
+        <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
+      )}
+      {rank === null ? null : (
+        <View
+          testID={`mustvisit-pick-rank-${place.poiId}`}
+          className="h-[26px] w-[26px] items-center justify-center rounded-pill bg-primary"
+        >
+          <Text className="font-inter-bold text-label font-bold text-on-primary">
+            {rank}
+          </Text>
+        </View>
+      )}
+
+      {onPressPlace ? (
+        // 사진·이름 칸 = 상세(TRIP-1840). 체크 원은 형제 Pressable 이라 누름이 서로 새지 않는다.
+        <Pressable
+          testID={`mustvisit-pick-open-${place.poiId}`}
+          accessibilityRole="button"
+          accessibilityLabel={`${place.nameKo} 상세 보기`}
+          onPress={() => onPressPlace(place.poiId)}
+          className={BODY_CLASS}
+        >
+          {body}
+        </Pressable>
+      ) : (
+        <View className={BODY_CLASS}>{body}</View>
+      )}
 
       {outside && !selected ? null : (
         <Pressable
@@ -287,6 +312,7 @@ function ResultsBody({
   lockedPoiIds,
   completeError,
   onToggleSelect,
+  onPressPlace,
   onComplete,
   onPressAddMore,
 }: {
@@ -298,6 +324,7 @@ function ResultsBody({
   lockedPoiIds: string[];
   completeError: string | null | undefined;
   onToggleSelect: (poiId: string) => void;
+  onPressPlace: ((poiId: string) => void) | undefined;
   onComplete: () => void;
   onPressAddMore: () => void;
 }): ReactElement {
@@ -348,6 +375,7 @@ function ResultsBody({
                 locationLabels?.[saved.place.poiId] ?? saved.place.region
               }
               onToggleSelect={onToggleSelect}
+              onPressPlace={onPressPlace}
             />
           </Fragment>
         )}
@@ -477,6 +505,7 @@ export function MustVisitPickScreen({
   lockedPoiIds = [],
   completeError,
   onToggleSelect,
+  onPressPlace,
   onComplete,
   onPressAddMore,
   onRetry,
@@ -522,6 +551,7 @@ export function MustVisitPickScreen({
             lockedPoiIds={lockedPoiIds}
             completeError={completeError}
             onToggleSelect={onToggleSelect}
+            onPressPlace={onPressPlace}
             onComplete={onComplete}
             onPressAddMore={onPressAddMore}
           />

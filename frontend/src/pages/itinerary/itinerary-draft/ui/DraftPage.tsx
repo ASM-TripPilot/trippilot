@@ -699,6 +699,11 @@ export function DraftPage({
     );
   }
 
+  // TRIP-1840 — 장소 카드(완성 셸·다른 후보 시트) → 기존 d06 장소 상세. push 라 돌아오면 이 화면 그대로다.
+  const openPlace = guardPress((poiId: string) =>
+    router.push(`/explore/places/${poiId}`)
+  );
+
   // 슬롯 교체 시트 — 셸·DraftScreen 두 갈래가 같은 JSX 를 공유해 각자 화면의 뒤 형제로 둔다.
   const candidateSheet =
     editingSlotKey !== null ? (
@@ -708,6 +713,7 @@ export function DraftPage({
         tripId={tripId}
         slotKey={editingSlotKey}
         onClose={() => setEditingSlotKey(null)}
+        onPressPlace={openPlace}
       />
     ) : null;
 
@@ -851,6 +857,8 @@ export function DraftPage({
                     }
                     violation={violationNotice(slot)}
                     reasonTags={parseReasonTags(slot.placementReason)}
+                    // TRIP-1840 — 이름·사진 → d06 장소 상세. 이 화면은 스택 아래에 남아 날짜·시트 상태를 그대로 쥔다.
+                    onPressName={() => openPlace(slot.poiId)}
                   />
                 </RevealItem>,
               ];
