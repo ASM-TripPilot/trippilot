@@ -10,6 +10,7 @@ import {
   ExecutionShareGlyph,
 } from '@/features/execution/index.view';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 
 import type { PlaceDetailView } from '../model/placeDetailView';
 import { PlaceDetailScreen } from './PlaceDetailScreen';
@@ -35,6 +36,7 @@ import { PlaceDetailScreen } from './PlaceDetailScreen';
 const DURATION = /(\d+\s*분|\d+\s*시간|소요)/;
 
 const view = (over: Partial<PlaceDetailView> = {}): PlaceDetailView => ({
+  imageLicense: null,
   poiId: 'poi-a',
   name: '광안리 해수욕장',
   category: '해변',
@@ -201,7 +203,11 @@ describe('PlaceDetailScreen (i10)', () => {
     // ① 사진 3장 + 전체 42장 — 준비·실행
     const { rerender } = render(
       <PlaceDetailScreen
-        view={view({ galleryUrls: PHOTOS.slice(0, 3), photoTotal: 42 })}
+        view={view({
+          galleryUrls: PHOTOS.slice(0, 3),
+          photoTotal: 42,
+          imageLicense: 'TYPE1',
+        })}
       />
     );
 
@@ -218,6 +224,9 @@ describe('PlaceDetailScreen (i10)', () => {
     expect(screen.getByTestId('execution-place-photo-count')).toHaveTextContent(
       '1 / 42'
     );
+    // TRIP-1740 AC-7(T8)·AC-9 — 대표 1장(index 0)에만 뷰의 imageLicense(TYPE1)가 닿는다: 히어로 갤러리 첫 장과 「이곳의 사진」 첫 썸네일.
+    expectTypeOnePhotoDelivered('execution-place-gallery-0', PHOTOS[0]);
+    expectTypeOnePhotoDelivered('execution-place-photo-thumb-0', PHOTOS[0]);
 
     // 사진이 있을 땐 생성 이미지 히어로가 없다(갤러리가 히어로를 채운다).
     expect(screen.queryByTestId('execution-place-hero-photo')).toBeNull();

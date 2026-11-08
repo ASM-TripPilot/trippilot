@@ -153,6 +153,7 @@ export function TripCard({
           (Trip 에 사진 필드 없음, INV-1). 배지·resume 는 이 위에 얹는다. */}
       <View className="h-[178px] w-full overflow-hidden rounded-t-card">
         {imageUrl ? (
+          // eslint-disable-next-line no-restricted-syntax -- 여행 커버 — 관광공사 POI 사진 아님(브리프 §3-2)
           <Image
             testID={`${testIDPrefix}-photo-${tripId}`}
             source={{ uri: imageUrl }}

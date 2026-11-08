@@ -27,12 +27,14 @@ import { HomeScreen } from './HomeScreen';
  */
 
 const SPOT_A: HomeSpotCard = {
+  imageLicense: null,
   poiId: 'poi-a',
   title: '해운대 해수욕장',
   tag: '#해변',
   imageUrl: null,
 };
 const SPOT_B: HomeSpotCard = {
+  imageLicense: null,
   poiId: 'poi-b',
   title: '감천문화마을',
   tag: '#명소',
@@ -121,7 +123,14 @@ describe('TRIP-1049 · 홈 지금 뜨는 장소 — 저장 하트', () => {
       <HomeScreen
         {...HOME_DEFAULT_PROPS}
         spotsLane={lane({
-          cards: [{ title: '이름만 있는 곳', tag: '#태그', imageUrl: null }],
+          cards: [
+            {
+              imageLicense: null,
+              title: '이름만 있는 곳',
+              tag: '#태그',
+              imageUrl: null,
+            },
+          ],
         })}
       />
     );

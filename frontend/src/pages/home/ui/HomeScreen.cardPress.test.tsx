@@ -13,7 +13,7 @@ describe('홈 카드 press → 장소 상세', () => {
         {...HOME_DEFAULT_PROPS}
         spotsLane={{
           status: 'ready',
-          cards: [{ poiId: 's1', title: 'A', tag: '#a' }],
+          cards: [{ imageLicense: null, poiId: 's1', title: 'A', tag: '#a' }],
           onRetry: jest.fn(),
           onToggleSave,
           onPressCard,
@@ -35,7 +35,15 @@ describe('홈 카드 press → 장소 상세', () => {
         {...HOME_DEFAULT_PROPS}
         collectionsLane={{
           status: 'ready',
-          cards: [{ poiId: 'c1', title: 'C', region: '서울', badge: '명소' }],
+          cards: [
+            {
+              imageLicense: null,
+              poiId: 'c1',
+              title: 'C',
+              region: '서울',
+              badge: '명소',
+            },
+          ],
           onRetry: jest.fn(),
           onPressCard,
         }}

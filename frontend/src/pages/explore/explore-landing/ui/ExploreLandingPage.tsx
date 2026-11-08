@@ -265,6 +265,7 @@ function ExploreLanding({
       name: place.nameKo,
       region: place.region ?? '',
       imageUrl: place.imageUrl ?? null,
+      imageLicense: place.imageLicense,
       category: place.category,
     }));
 

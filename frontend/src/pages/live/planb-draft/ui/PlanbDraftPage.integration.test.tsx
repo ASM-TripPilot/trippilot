@@ -12,6 +12,7 @@ import type { Itinerary, ReplanDiff } from '@/shared/api/index.schemas';
 import { seoulDate } from '@/shared/lib/seoulDate';
 
 import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 import {
   mockExits,
   mockNavigation,
@@ -312,6 +313,7 @@ const diffSlot = (
     lat?: number | null;
     lng?: number | null;
     imageUrl?: string | null;
+    imageLicense?: 'TYPE1' | 'TYPE3' | null;
     category?: string | null;
   } = {}
 ) => ({
@@ -604,13 +606,37 @@ describe('🔴 D1b · TRIP-1044 — 행의 이름·사진은 일정 캐시가 �
 
     const sourceOf = (poiId: string) =>
       screen.getByTestId(`planb-draft-slot-photo-${key(poiId)}`).props.source;
-    expect(screen.getAllByTestId(/^planb-draft-slot-photo-/)).toHaveLength(4);
+    // 사진 칸만 센다 — 서버 사진 행에 붙는 출처 노드(`…-credit`)는 사진 칸이 아니라서 뺀다.
+    expect(
+      screen.getAllByTestId(/^planb-draft-slot-photo-(?!.*-credit$)/)
+    ).toHaveLength(4);
     // p1: 서버 사진이 카테고리를 이긴다(맛집 그림이 아니다).
     expect(sourceOf('p1')).toEqual([{ uri: 'https://example.test/a.jpg' }]);
     // p3(미술, 변형 1)·p2(술집, 변형 3) — 행마다 자기 카테고리·자기 poiId. px 는 카테고리 없음 → 폴백.
     expect(sourceOf('p3')).toEqual([coverFor('미술', 'p3')]);
     expect(sourceOf('p2')).toEqual([coverFor('술집', 'p2')]);
     expect(sourceOf('px')).toEqual([FALLBACK_COVER]);
+  });
+
+  // TRIP-1740 AC-7(T2) — 응답 슬롯의 imageLicense 가 페이지의 VM 조립(`photo: {uri}`)을 지나 행 사진 칸까지 간다.
+  it('TYPE1 서버 사진 행은 사진 칸까지 유형이 닿아 cover 이고 출처 글자가 붙는다', () => {
+    renderDraft({
+      ...READY_DIFF,
+      after: READY_DIFF.after.map((slot) =>
+        slot.slotKey === key('p1')
+          ? {
+              ...slot,
+              imageUrl: 'https://example.test/a.jpg',
+              imageLicense: 'TYPE1',
+            }
+          : slot
+      ),
+    });
+
+    expectTypeOnePhotoDelivered(
+      `planb-draft-slot-photo-${key('p1')}`,
+      'https://example.test/a.jpg'
+    );
   });
 
   // 5-b 경고-1 — 값이 비었을 때 가는 길. 빠지는 곳 이름이 before 에도 없으면 장소 ID·캐시 이름이 아니라 폴백 문구.
@@ -647,7 +673,9 @@ describe('🔴 D1b · TRIP-1044 — 행의 이름·사진은 일정 캐시가 �
 
     renderPage();
 
-    const rows = screen.getAllByTestId(/^planb-draft-slot-photo-/);
+    const rows = screen.getAllByTestId(
+      /^planb-draft-slot-photo-(?!.*-credit$)/
+    );
     expect(rows).toHaveLength(4);
     // 캐시 사진 URL 이 어느 칸에도 안 새고, 카테고리가 없으니 모두 중립 폴백이다.
     rows.forEach((row) => expect(row.props.source).toEqual([FALLBACK_COVER]));

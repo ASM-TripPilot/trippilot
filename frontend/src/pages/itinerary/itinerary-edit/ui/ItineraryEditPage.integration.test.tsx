@@ -12,6 +12,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 import { useItineraryEditStore } from '@/features/edit-itinerary';
 import { buildSlotKey } from '@/entities/itinerary-slot';
@@ -219,6 +220,8 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
             alternatives: [],
             tags: [],
             nameKo: '제주공항',
+            imageUrl: 'https://example.com/jeju-airport.jpg',
+            imageLicense: 'TYPE1',
           },
         ],
       },
@@ -630,6 +633,11 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       expect(screen.getByTestId('editor-move-confirm')).toHaveTextContent(
         '1일차로 옮기기'
       );
+      // TRIP-1740 AC-7(T16) — 슬롯(`movingSlot`)의 imageLicense(TYPE1)가 페이지의 `photo` 조립을 지나 장소 시트 썸네일까지 간다.
+      expectTypeOnePhotoDelivered(
+        'editor-move-photo',
+        'https://example.com/jeju-airport.jpg'
+      );
 
       // ② AC-5 — 장소 시트를 닫으면 아무것도 안 옮겨진다.
       fireEvent.press(screen.getByTestId('editor-move-close'));
@@ -648,6 +656,11 @@ describe('편집기 진입·저장 PUT·409 재조회 문구', () => {
       fireEvent.press(await screen.findByTestId('editor-move-confirm'));
       expect(await screen.findByTestId(`${TIME}-sheet`)).toBeOnTheScreen();
       expect(screen.queryByTestId(SHEET)).toBeNull();
+      // TRIP-1740 AC-7(T15) — `pendingSlot` 조립(placeSummary)을 지나 시각 시트 요약 썸네일까지 간다.
+      expectTypeOnePhotoDelivered(
+        `${TIME}-place-thumb-image`,
+        'https://example.com/jeju-airport.jpg'
+      );
       expect(screen.getByTestId(`${TIME}-readout`)).toHaveTextContent(
         '시작 14:00 · 종료 15:00'
       );
@@ -3591,6 +3604,7 @@ describe('시각 조정 시트', () => {
             tags: [],
             nameKo: '해운대 블루라인파크',
             imageUrl: B_IMAGE,
+            imageLicense: 'TYPE1',
           },
           {
             poiId: 'poi-must',
@@ -3729,6 +3743,34 @@ describe('시각 조정 시트', () => {
     });
   });
 
+  /** 시간 시트 요약 행의 보이는 글자들(호스트 `Text` 하나당 한 항목) — 사진 출처 노드(`place-thumb-image-credit`)와 그 안쪽은 뺀다. */
+  const summaryTextsExceptCredit = (): string[] => {
+    const credit = screen.queryByTestId(t('place-thumb-image-credit'));
+    const insideCredit = (node: { parent: unknown }): boolean => {
+      for (
+        let cur: unknown = node;
+        cur;
+        cur = (cur as { parent: unknown }).parent
+      ) {
+        if (cur === credit) return true;
+      }
+      return false;
+    };
+    return screen
+      .getByTestId(t('place-summary'))
+      .findAll(
+        (node) => (node.type as unknown) === 'Text' && !insideCredit(node)
+      )
+      .map((node) =>
+        (Array.isArray(node.props.children)
+          ? node.props.children
+          : [node.props.children]
+        )
+          .filter((child: unknown) => typeof child === 'string')
+          .join('')
+      );
+  };
+
   describe('🔴 IT3b · AC-9 — 요약 행은 슬롯 이름·사진뿐이다', () => {
     it('사진 없는 a: 이름만(배지·지역 줄 없음), 썸네일 칸에는 슬롯의 카테고리(야경)·poiId(poi-a)로 고른 생성 이미지', async () => {
       renderPage();
@@ -3748,12 +3790,14 @@ describe('시각 조정 시트', () => {
       renderPage();
       await openSheetFor('poi-b');
 
-      expect(screen.getByTestId(t('place-summary'))).toHaveTextContent(
-        '해운대 블루라인파크'
-      );
+      // 완전일치 — 이름 말고 아무 텍스트도 없다. 서버 사진이면 출처 글자가 같은 서브트리에 붙으므로 그 노드(`…-credit`)만 뺀다.
+      expect(summaryTextsExceptCredit()).toEqual(['해운대 블루라인파크']);
       expect(screen.getByTestId(t('place-thumb-image')).props.source).toEqual([
         { uri: B_IMAGE },
       ]);
+      // TRIP-1740 AC-7(T15) — 슬롯의 imageLicense(TYPE1)가 페이지의 placeSummary 조립을 지나 썸네일까지 간다.
+      // 같은 시트를 또 열면 reanimated 경고가 늘어 소음 예산(174)을 넘기므로 이 `it` 에 얹는다.
+      expectTypeOnePhotoDelivered(t('place-thumb-image'), B_IMAGE);
     });
   });
 

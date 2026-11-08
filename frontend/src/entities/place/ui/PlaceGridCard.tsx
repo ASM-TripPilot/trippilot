@@ -1,6 +1,6 @@
 import { memo, type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 
 import type { Place } from '../model';
 
@@ -17,7 +17,7 @@ import { PlaceSubtitle } from './PlaceSubtitle';
  *
  * 담김/미담김은 색이 아니라 저장 하트의 `accessibilityState.selected` + 서로 다른 글리프로 잰다
  * (글리프 fill 함정 회피). 담기면 "담음" 배지가 함께 뜬다. pending 이면 하트 disabled(연타 가드).
- * 사진은 `PlacePhoto` — `imageUrl` 이 없으면 카테고리 생성 이미지. 부제는 `카테고리 · 지역`(지역 없으면
+ * 사진은 `PoiPhoto` — `imageUrl` 이 없으면 카테고리 생성 이미지. 부제는 `카테고리 · 지역`(지역 없으면
  * 카테고리만).
  */
 export interface PlaceGridCardProps {
@@ -56,12 +56,13 @@ function PlaceGridCardImpl({
       className="w-[48%] gap-[7px]"
     >
       <View className="h-[132px] w-full overflow-hidden rounded-[14px] bg-surface-soft">
-        <PlacePhoto
+        <PoiPhoto
           testID={`explore-places-photo-${place.poiId}`}
           imageUrl={place.imageUrl}
+          imageLicense={place.imageLicense}
+          surface="card"
           category={place.category}
           poiId={place.poiId}
-          contentFit="cover"
           cachePolicy="memory-disk"
           recyclingKey={place.poiId}
           transition={120}

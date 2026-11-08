@@ -110,6 +110,7 @@ export function SavedStayCard({
         }`}
       >
         {/* 사진 — 지정 시 그 사진, 미지정이면 숙소 그림(계약 공백, INV-1 · TRIP-1588). */}
+        {/* eslint-disable-next-line no-restricted-syntax -- 숙소 사진 아님 — 번들 숙소 그림 또는 지정 숙소 사진(관광공사 POI 사진 아님) */}
         <PlacePhoto
           testID={`${testID}-photo`}
           imageUrl={imageUrl}

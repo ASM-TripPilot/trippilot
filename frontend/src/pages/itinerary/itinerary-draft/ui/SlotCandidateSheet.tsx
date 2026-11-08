@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import { SlotCandidateCard } from '@/entities/place';
+import type { ImageLicense } from '@/shared/api/index.schemas';
 import {
   CheckGlyph,
   AlertCircleGlyph,
@@ -70,6 +71,8 @@ export interface SlotCandidateSheetRow {
   tags?: string[];
   /** 없거나 '' 면 `category` 로 고른 생성 이미지(TRIP-1024). */
   imageUrl?: string | null;
+  /** `imageUrl` 의 공공누리 유형 — 이 행은 응답(후보·차선책)을 그대로 받으므로 응답 타입과 같은 선택 키다. 카드까지는 필수 prop 으로 넘어간다. */
+  imageLicense?: ImageLicense | null;
   /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본). */
   category?: string | null;
   /** 후보 행 추천 이유 문장(TRIP-1780) — 없거나 빈·공백이면 문장 줄 생략. 현재 행은 넘겨도 안 그린다. */
@@ -281,6 +284,7 @@ export function SlotCandidateSheet({
               tags={current.tags}
               showImage
               imageUrl={current.imageUrl}
+              imageLicense={current.imageLicense}
               category={current.category}
               coverPoiId={current.poiId}
               showRationale={false}
@@ -376,6 +380,7 @@ export function SlotCandidateSheet({
                     tags={candidate.tags}
                     showImage
                     imageUrl={candidate.imageUrl}
+                    imageLicense={candidate.imageLicense}
                     category={candidate.category}
                     coverPoiId={candidate.poiId}
                     showNameTestId

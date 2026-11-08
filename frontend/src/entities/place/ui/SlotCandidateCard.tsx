@@ -1,8 +1,11 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Text, View } from 'react-native';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 
-import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
+import type {
+  ImageLicense,
+  SlotCandidatesCandidatesItem,
+} from '@/shared/api/index.schemas';
 import { COLOR_TOKENS } from '@/shared/config';
 
 /**
@@ -59,6 +62,8 @@ export interface SlotCandidateCardProps {
   showImage?: boolean;
   /** 사진 URL — showImage 일 때만 쓴다. null·undefined·'' 면 생성 이미지. */
   imageUrl?: string | null;
+  /** `imageUrl` 의 공공누리 유형 — 필수 키(끊기면 tsc). */
+  imageLicense: ImageLicense | null | undefined;
   /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본) — 없으면 중립 폴백. */
   category?: string | null;
   /**
@@ -109,6 +114,7 @@ export function SlotCandidateCard({
   showNameTestId = false,
   showImage = false,
   imageUrl,
+  imageLicense,
   category,
   coverPoiId,
   imageSize = 56,
@@ -158,15 +164,16 @@ export function SlotCandidateCard({
       ) : null}
 
       {showImage ? (
-        <PlacePhoto
+        <PoiPhoto
           testID={leafId('image')}
           imageUrl={imageUrl}
+          imageLicense={imageLicense}
+          surface="thumb"
           category={category}
           poiId={coverPoiId}
-          contentFit="cover"
           cachePolicy="memory-disk"
           recyclingKey={poiId}
-          className={`${IMAGE_SIZE_CLASS[imageSize]} rounded-thumb bg-surface-soft`}
+          className={`${IMAGE_SIZE_CLASS[imageSize]} rounded-thumb`}
         />
       ) : null}
 

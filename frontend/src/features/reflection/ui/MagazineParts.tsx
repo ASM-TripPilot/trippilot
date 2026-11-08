@@ -33,6 +33,7 @@ export function MagazinePhoto({
 }): ReactElement {
   return (
     <KenBurns>
+      {/* eslint-disable-next-line no-restricted-syntax -- 기기 사진(회고 매거진) — 관광공사 POI 사진 아님 */}
       <PlacePhoto
         testID={testID}
         imageUrl={picture.uri}

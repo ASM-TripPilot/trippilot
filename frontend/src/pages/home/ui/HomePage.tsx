@@ -252,6 +252,7 @@ export function HomePage() {
       tag: `#${place.tags[0] || place.category}`,
       category: place.category,
       imageUrl: place.imageUrl,
+      imageLicense: place.imageLicense,
     })),
     onRetry: () => void places.refetch(),
     onPressCard: openPlace,
@@ -276,6 +277,7 @@ export function HomePage() {
             badge: place.category,
             category: place.category,
             imageUrl: place.imageUrl,
+            imageLicense: place.imageLicense,
           }))
         : [],
     onRetry: () => void places.refetch(),

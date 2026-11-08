@@ -43,6 +43,7 @@ export function CuratedStayCard({
       className="w-[160px]"
     >
       <View>
+        {/* eslint-disable-next-line no-restricted-syntax -- 타사(Trip.com) 숙소 사진 — 관광공사 POI 사진 아님 */}
         <Image
           testID={`curated-stay-photo-${id}`}
           source={{ uri: stay.imageUrl }}
