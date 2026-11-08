@@ -11,20 +11,22 @@
 
 ```
 UnknownTask ─▶ ① 저장된 결과 조회   물은 칸을 다 찾아봤으면 찾음 → facts(다시 찾을 때가 지났으면 뒤에서 새로 찾아 덮는다)
-                                   / 못 찾음(다시 찾을 때 전) → 없음
+                                   (물은 칸에 값이 있을 때 — 없으면 ②) / 못 찾음(다시 찾을 때 전) → 없음
                                    안 찾아본 칸이 있거나 묵은 못 찾음이면 저장된 칸까지 함께 ② / 저장소 장애 → 없는 것으로 보고 ② (INV-4)
             ─▶ ② 뒤에서 찾기 제출   냈거나 이미 찾는 중 → pending / 하루 상한·제출 실패 → 없음 (이번 턴은 기다리지 않는다)
             ─▶ (뒤에서) 워커 lookup → 1차 실패(벤더 장애·unsupported·timeout)면 2차(Claude)로 한 번 더(2026-10-30, 벤더 폴백) →
-               출처 있는 값만 저장 · 기록은 지우지 않고 쌓는다(다시 찾을 때: 찾음 7일·못 찾음 1일·미리 찾기 못 찾음 30일) ·
-               쌓아 둔 값을 새 조회가 하나도 못 건지면 그 값을 그대로 둔다 · 시한·형식·출처 없음은 저장하지 않고 다음에 다시 찾는다
-PrefetchTask ─▶ (뒤에서) 다시 찾을 때가 된 곳만 등록 정보의 빈 칸을 묻고 → 빈 칸이 있으면 ② (미리 찾기 몫 상한) / 이번 턴 답은 없음
+               출처 있는 값만 저장 · 기록은 지우지 않고 쌓는다(다시 찾을 때: 찾음 7일·못 찾음 1일) ·
+               쌓아 둔 값을 새 조회가 하나도 못 건지면 그 값을 그대로 두고 하루 뒤 다시 찾는다 ·
+               시한·형식·출처 없음은 저장하지 않고 다음에 다시 찾는다(미리 찾기는 같은 곳을 다시 사지 않게 '찾아본 칸 없음' 표지만)
+PrefetchTask ─▶ (뒤에서) 기록이 아직 없는 곳만 빈 칸과 그곳의 지역을 묻고 → 빈 칸이 있으면 ② (미리 찾기 몫 상한) / 이번 턴 답은 없음
 KnowledgeTask ─▶ 지식 워커 answer(이번 턴, 웹 검색 없음) → answer / 모른다고 닫음·실패·미배선 → 없음
 ```
 
 **쌓기와 미리 찾기**(2026-11-08 사용자 결정 — "사용자가 찾다가 나온 장소의 빈 칸은 웹으로 채우고, 검색 결과는 우리 DB 에 쌓고"):
 찾은 값은 지우지 않는다(`expires_at` 은 다시 찾을 때). 다시 찾을 때가 지난 값도 답에 쓰고 뒤에서 새로 찾는다 — 웹 확인 값이라는 각주가 늘
-붙는다. 검색·추천·대신 갈 곳 답에 나온 앞쪽 장소는 묻기 전에 미리 찾는다(`PrefetchTask`). 묻지 않은 조회라 하루 상한을 따로 작게 두고
-(`PROACTIVE_DAILY_CAP`), 사용자가 물은 조회 몫 한 자리를 남긴다. 어떤 장소·칸을 미리 찾을지는 상류(핸들러)가 고른다 — 20곳 실측에서
+붙는다. 찾은 지 `DISPLAY_MAX_AGE` 를 넘긴 값은 답에 쓰지 않는다. 검색·추천·대신 갈 곳 답에 나온 앞쪽 장소 가운데 **한 번도 찾아본 적 없는
+곳**은 묻기 전에 미리 찾는다(`PrefetchTask`) — 묵은 값을 새로 찾는 일은 사용자가 물을 때만 한다. 묻지 않은 조회라 하루 상한을 따로 작게
+두고(`PROACTIVE_DAILY_CAP`), 사용자가 물은 조회 몫 한 자리를 남긴다. 어떤 장소·칸을 미리 찾을지는 상류(핸들러)가 고른다 — 20곳 실측에서
 맛집·카페·술집은 11곳 중 영업시간 1곳(블로그뿐이라 게이트가 버린다), 명소·문화·자연은 7곳 중 6곳이 무언가를 찾았다.
 
 **일반 지식 즉답**(2026-10-23 사용자 결정 — "이런 건 우리가 모르는 거니까 unknown handling agent 로"): "부산은 언제 가는 게 좋아?"처럼
@@ -55,11 +57,12 @@ from trippilot.ports.place_fact_store_port import FIELDS, FactRecord, PlaceFacts
 
 log = logging.getLogger(__name__)
 
-# 다시 찾을 때 — 찾은 값은 일주일, 물은 곳의 못 찾음은 하루, 미리 찾은 곳의 못 찾음은 30일(맛집처럼 블로그뿐인 곳을 매일 다시 사지 않게)
-FOUND_TTL, MISS_TTL, PROACTIVE_MISS_TTL = timedelta(days=7), timedelta(days=1), timedelta(days=30)
-# ponytail: 프로세스당 상한·중복 제거 — 파드 둘이면 상한도 둘(운영 HPA 최대 4). 비용이 문제면 저장소에 하루 사용량 행을 둔다.
+# 다시 찾을 때 — 찾은 값은 일주일, 못 찾음은 하루(사용자가 물을 때). 미리 찾기는 기록이 있는 곳을 다시 사지 않는다(`_prefetch`)
+FOUND_TTL, MISS_TTL = timedelta(days=7), timedelta(days=1)
+# ponytail: 프로세스당 상한·중복 제거 — 프로세스는 파드 × uvicorn 워커 2(운영 파드 2, HPA 최대 4)라 실제 한도는 그 배수다.
+# 비용이 문제면 저장소에 하루 사용량 행을 둔다.
 DAILY_CAP, MAX_INFLIGHT, LOOKUP_TIMEOUT_S = 300, 2, 25.0
-PROACTIVE_DAILY_CAP = 10  # 미리 찾기(묻지 않은 조회) 몫 — 조회당 토큰 약 3센트 + 검색료(2026-11-08 20곳 실측)
+PROACTIVE_DAILY_CAP = 5  # 미리 찾기(묻지 않은 조회) 몫 — 조회당 토큰 약 3센트 + 검색료(2026-11-08 20곳 실측), 운영 4프로세스면 하루 20건
 DISPLAY_MAX_AGE = timedelta(days=90)  # 찾은 지 이보다 오래된 값은 답에 쓰지 않는다(`_usable`) — 기록은 남는다
 
 
@@ -69,7 +72,7 @@ class UnknownTask:
 
     - `fields`: 물은 칸 중 카드가 모르는 것만(`hours`·`last_entry`·`closed`·`fee`) — 고르는 건 상류(핸들러)다.
     - `on`: 영업 여부를 물은 날 — 워커가 그날 기준으로 찾는다.
-    - `proactive`: 묻지 않고 미리 찾는 조회(`PrefetchTask` 가 낸다) — 하루 상한·못 찾음 보관이 따로다.
+    - `proactive`: 묻지 않고 미리 찾는 조회(`PrefetchTask` 가 낸다) — 하루 상한이 따로고, 폴백이면 표지를 남긴다.
     """
 
     poi_id: str
@@ -85,12 +88,13 @@ class UnknownTask:
 class PrefetchTask:
     """검색·추천·대신 갈 곳 답에 나온 등록 장소들 — 빈 칸이 있으면 뒤에서 미리 찾는다. 이번 턴 답에는 아무것도 하지 않는다.
 
-    - `places`: (poi_id, 조회에 쓸 이름 + 지역) — 화면 앞쪽 몇 곳(상류가 고른다)
-    - `gaps`: poi_id 들 → 그곳의 빈 칸(`FIELDS` 부분집합). 등록 정보 조회(DB)라 **뒤에서** 부른다 — 빈 칸이 없거나 대상 종류가 아니면 빠진다
+    - `poi_ids`: 화면 앞쪽 몇 곳(상류가 고른다)
+    - `gaps`: 기록이 없는 poi_id 들 → (조회에 쓸 이름 + 그곳의 지역, 빈 칸). 등록 정보 조회(DB)라 **뒤에서** 부른다 — 빈 칸이 없거나
+      대상 종류가 아니거나 그곳의 지역을 모르면 빠진다
     """
 
-    places: tuple[tuple[str, str], ...]
-    gaps: Callable[[tuple[str, ...]], Mapping[str, tuple[str, ...]]]
+    poi_ids: tuple[str, ...]
+    gaps: Callable[[tuple[str, ...]], Mapping[str, tuple[str, tuple[str, ...]]]]
     on: date
     trace_id: TraceId
     now: datetime
@@ -179,10 +183,10 @@ class UnknownHandlingAgent:
         stored = self._usable(self._known(task.poi_id, task.now), task.now)
         seen = _seen(stored) if stored is not None else frozenset()
         if stored is not None and seen >= set(task.fields):  # 물은 칸을 다 찾아봤다
-            # 다시 찾을 때 전이면 그대로 — 못 찾음이면 "미확인". 미리 찾기의 못 찾음(30일)도 사용자가 물으면 종전처럼 하루 뒤 다시 찾는다
-            if stored.expires_at > task.now and not (stored.facts is None and task.now - stored.fetched_at >= MISS_TTL):
+            if stored.expires_at > task.now:  # 다시 찾을 때 전 — 못 찾음이면 그대로 "미확인"(못 찾음은 하루 뒤 다시 찾는다)
                 return UnknownOutcome(facts=stored.facts)
-            if stored.facts is not None:  # 쌓아 둔 값이 묵었다 — 이번 답은 그 값으로 하고 뒤에서 새로 찾아 덮는다
+            if stored.facts is not None and any(getattr(stored.facts, f) for f in task.fields):
+                # 쌓아 둔 값이 묵었다 — 물은 칸에 값이 있으면 그 값으로 답하고 뒤에서 새로 찾아 덮는다(없으면 아래서 "찾는 중")
                 self._request(replace(task, fields=tuple(f for f in FIELDS if f in seen)))
                 return UnknownOutcome(facts=stored.facts)
         # 기록이 없거나·안 찾아본 칸이 있거나·묵은 못 찾음 — 저장된 칸까지 함께 찾아 한 번에 덮는다(출처 칸이 하나라 두 조회의 값을 섞지 않는다)
@@ -260,24 +264,17 @@ class UnknownHandlingAgent:
             # 게이트웨이가 종전처럼 1회만 시도한다.
             result = self._worker.lookup(task.place, task.fields, task.on, task.trace_id, task.now,
                                           timeout_sec=LOOKUP_TIMEOUT_S, retry_timeout_sec=LOOKUP_TIMEOUT_S)
+            # 이전 기록은 저장소에서 바로 읽는다 — 읽기가 실패하면 쌓아 둔 값을 못 찾음으로 덮지 않게 아무것도 쓰지 않는다(밖 except)
+            prev = self._store.get(task.poi_id, task.now)
             if result.is_fallback:  # 시한·형식·출처 없음 — 저장하지 않고 다음에 물으면 다시 찾는다
-                log.info("unknown_handling lookup_failed trace=%s reason=%s", task.trace_id, result.error)
+                if task.proactive and prev is None:
+                    # 미리 찾기는 같은 곳을 다음 후보 답마다 다시 사지 않게 '찾아본 칸 없음' 표지만 남긴다 — 물은 조회는 찾아본 칸이
+                    # 없어 종전처럼 바로 다시 찾는다(블로그뿐인 곳이 하루 몫을 혼자 다 쓰던 것, 2026-11-08 검토)
+                    self._store.put(FactRecord(task.poi_id, None, task.now, task.now + MISS_TTL, ()))
+                log.info("unknown_handling lookup_failed trace=%s reason=%s proactive=%s", task.trace_id, result.error, task.proactive)
                 return
             facts = result.value if isinstance(result.value, PlaceFacts) and result.value.any() else None
-            prev = self._known(task.poi_id, task.now)
-            retry = task.now + (PROACTIVE_MISS_TTL if task.proactive else MISS_TTL)
-            if facts is None and prev is not None and prev.facts is not None:
-                # 쌓아 둔 값을 이번 조회가 하나도 못 건졌다 — 지우지 않고 그대로 두고 다시 찾을 때만 늦춘다(쌓기, 2026-11-08).
-                # 찾은 날(fetched_at)은 그 값의 날이라 그대로다 — 오래되면 답에서 빠진다(`_usable`)
-                record = replace(prev, expires_at=retry, searched=tuple(f for f in FIELDS if f in prev.searched or f in task.fields))
-            else:
-                # 전에 찾은 칸을 이번 조회가 잃었으면(게이트가 그 칸만 버림 등) "찾아봤다"에서 뺀다 — 덮인 기록이 그 칸을 7일간
-                # 미확인으로 굳히지 않고 다음 물음에 다시 찾는다(두 조회의 값을 한 기록에 섞지는 않는다)
-                lost = {f for f in FIELDS if prev is not None and prev.facts is not None and getattr(prev.facts, f)
-                        and not (facts is not None and getattr(facts, f))}
-                searched = tuple(f for f in task.fields if f not in lost)
-                record = FactRecord(task.poi_id, facts, task.now, task.now + FOUND_TTL if facts else retry, searched)
-            self._store.put(record)
+            self._store.put(_next_record(task, prev, facts))
             log.info("unknown_handling lookup_done trace=%s found=%s source=%s proactive=%s", task.trace_id, facts is not None,
                      facts.source_host if facts else "-", task.proactive)
         except Exception as e:  # noqa: BLE001 — 뒤에서 도는 일이라 위로 던질 곳이 없다. 사유만 남긴다
@@ -287,30 +284,47 @@ class UnknownHandlingAgent:
                 self._inflight.discard(task.poi_id)
 
     def _prefetch_later(self, task: PrefetchTask) -> None:
-        """미리 찾기를 뒤로 넘긴다 — 등록 정보 조회(DB)도 뒤에서 돌아 이번 턴은 아무것도 기다리지 않는다."""
-        if not task.places:
+        """미리 찾기를 뒤로 넘긴다 — 등록 정보 조회(DB)도 뒤에서 돌아 이번 턴은 아무것도 기다리지 않는다. 오늘 몫을 다 썼으면 그 조회도
+        내지 않는다(몫이 찬 뒤에도 후보 답마다 DB·백엔드를 부르던 것, 2026-11-08 검토)."""
+        if not task.poi_ids:
             return
+        with self._lock:
+            if self._proactive[0] == task.now.date() and self._proactive[1] >= PROACTIVE_DAILY_CAP:
+                return
         try:
             self._submit(self._prefetch, task)
         except Exception as e:  # noqa: BLE001 — 풀이 닫혔다 등. 미리 찾기는 빠져도 답은 같다
             log.warning("unknown_handling prefetch_submit_failed error=%s", type(e).__name__)
 
     def _prefetch(self, task: PrefetchTask) -> None:
-        """다시 찾을 때가 된 곳(기록 없음·묵은 기록)만 빈 칸을 묻고, 빈 칸이 있는 곳을 미리 찾기 몫으로 낸다. 저장된 칸은 함께 찾는다
-        (`run` 과 같은 까닭 — 출처 칸이 하나라 한 기록을 한 조회로 덮는다)."""
+        """기록이 아직 없는 곳만 빈 칸과 그곳의 지역을 묻고, 빈 칸이 있는 곳을 미리 찾기 몫으로 낸다. 기록이 있는 곳(찾음·못 찾음·표지)은
+        건드리지 않는다 — 묵은 값을 새로 찾는 일은 사용자가 물을 때만 한다(미리 찾기의 못 찾음이 찾은 기록 위에 얹혀 사용자 재조회를
+        막던 것, 2026-11-08 검토). 저장소 읽기가 실패하면 아무것도 내지 않는다."""
         try:
-            due: list[tuple[str, str, frozenset[str]]] = []
-            for poi_id, place in task.places:
-                stored = self._known(poi_id, task.now)
-                if stored is None or stored.expires_at <= task.now:
-                    due.append((poi_id, place, _seen(stored) if stored is not None else frozenset()))
-            gaps = task.gaps(tuple(poi_id for poi_id, _, _ in due)) if due else {}
-            started = 0
-            for poi_id, place, seen in due:
-                if gaps.get(poi_id):
-                    fields = tuple(f for f in FIELDS if f in seen or f in gaps[poi_id])
-                    started += self._request(UnknownTask(poi_id, place, fields, task.on, task.trace_id, task.now, proactive=True))
-            log.info("unknown_handling prefetch trace=%s shown=%d due=%d gaps=%d started=%d", task.trace_id, len(task.places),
-                     len(due), sum(1 for poi_id, _, _ in due if gaps.get(poi_id)), started)
+            due = tuple(poi_id for poi_id in task.poi_ids if self._store.get(poi_id, task.now) is None)
+            gaps = task.gaps(due) if due else {}
+            started = sum(self._request(UnknownTask(poi_id, place, fields, task.on, task.trace_id, task.now, proactive=True))
+                          for poi_id, (place, fields) in gaps.items() if poi_id in due and fields)
+            log.info("unknown_handling prefetch trace=%s shown=%d due=%d gaps=%d started=%d", task.trace_id, len(task.poi_ids),
+                     len(due), len(gaps), started)
         except Exception as e:  # noqa: BLE001 — 뒤에서 도는 일이라 위로 던질 곳이 없다(등록 정보 조회 실패 등). 사유만 남긴다
             log.warning("unknown_handling prefetch_error trace=%s error=%s", task.trace_id, type(e).__name__)
+
+
+def _next_record(task: UnknownTask, prev: FactRecord | None, facts: PlaceFacts | None) -> FactRecord:
+    """조회 결과로 저장할 기록 — 쌓기 규칙(2026-11-08).
+
+    - 찾았다: 한 조회의 값으로 덮는다(출처 칸이 하나라 두 조회의 값을 섞지 않는다). 전에 찾은 칸을 잃었으면 "찾아봤다"에서 빼 다음 물음에
+      다시 찾는다(덮인 기록이 그 칸을 7일간 미확인으로 굳히지 않게)
+    - 하나도 못 건졌고 쌓아 둔 값이 있다: 값은 두고(지우지 않고 쌓는다) 다시 찾을 때만 하루 뒤로 늦춘다(앞당기지 않는다) — 찾은 날은 그
+      값의 날이라 그대로라 오래되면 답에서 빠지고(`_usable`), 그래도 하루 안에는 다시 사지 않는다(90일 넘은 값 위에서 매 물음 재조회가 돌던
+      것, 2026-11-08 검토). 이번에 찾아본 칸은 "찾아봤다"에 더한다
+    - 그 밖(처음 못 찾음·못 찾음 위의 못 찾음): 찾아본 날을 지금으로 한 못 찾음 — 하루를 막는다
+    """
+    if facts is not None:
+        lost = {f for f in FIELDS if prev is not None and prev.facts is not None and getattr(prev.facts, f) and not getattr(facts, f)}
+        return FactRecord(task.poi_id, facts, task.now, task.now + FOUND_TTL, tuple(f for f in task.fields if f not in lost))
+    if prev is not None and prev.facts is not None:
+        return replace(prev, expires_at=max(prev.expires_at, task.now + MISS_TTL),
+                       searched=tuple(f for f in FIELDS if f in prev.searched or f in task.fields))
+    return FactRecord(task.poi_id, None, task.now, task.now + MISS_TTL, task.fields)

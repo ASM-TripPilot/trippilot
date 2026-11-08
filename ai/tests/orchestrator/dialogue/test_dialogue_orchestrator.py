@@ -2168,7 +2168,8 @@ def test_a_candidates_answer_hands_its_shown_places_to_prefetch() -> None:
     out, _ = _explore_with(spy)
     assert out.outcome == "ANSWER" and out.answer.kind is AnswerKind.CANDIDATES
     (task,) = spy.tasks
-    assert isinstance(task, PrefetchTask) and [place for _, place in task.places] == ["감천문화마을 부산", "흰여울 카페 부산"]
+    # 관광 종류만 넘긴다 — 카페는 근거가 블로그뿐이라 미리 찾지 않는다(물을 때만)
+    assert isinstance(task, PrefetchTask) and task.poi_ids == (str(uuid.uuid5(uuid.NAMESPACE_DNS, "감천문화마을")),)
 
 
 def test_a_failing_prefetch_leaves_the_answer_as_it_was() -> None:

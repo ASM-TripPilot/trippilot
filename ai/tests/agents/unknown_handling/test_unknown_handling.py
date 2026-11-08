@@ -208,13 +208,17 @@ def test_outcome_cannot_be_found_and_pending_at_once() -> None:
 # ── 쌓기·미리 찾기 (2026-11-08 사용자 결정 "찾다가 나온 장소의 빈 칸은 웹으로 채우고, 검색 결과는 우리 DB 에 쌓고") ──
 
 
-def _prefetch(places, gaps, *, now=_NOW, trace="p") -> uh.PrefetchTask:
-    return uh.PrefetchTask(tuple(places), gaps, _ON, TraceId(trace), now)
+def _prefetch(ids, gaps, *, now=_NOW, trace="p") -> uh.PrefetchTask:
+    return uh.PrefetchTask(tuple(ids), gaps, _ON, TraceId(trace), now)
+
+
+def _every(ids):
+    return {i: (f"{i} 서울특별시 종로구", ("hours",)) for i in ids}
 
 
 def test_a_stale_value_still_answers_is_refreshed_behind_and_a_refresh_miss_keeps_it() -> None:
     """다시 찾을 때가 지난 값도 답에 쓰고 뒤에서 새로 찾는다 · 새 조회가 하나도 못 건지면 쌓아 둔 값을 지우지 않는다 · 찾은 지
-    DISPLAY_MAX_AGE 를 넘긴 값은 답에 쓰지 않는다(영업시간은 가장 빨리 낡는 값 — KB-5 담당 권고)."""
+    DISPLAY_MAX_AGE 를 넘긴 값은 답에 쓰지 않고, 그 위의 못 찾음은 지금 날짜로 하루를 막는다(물을 때마다 다시 사지 않는다 — 2026-11-08 검토)."""
     worker = _AskedOnly(hours="09:00~18:00", last_entry="17:00")
     agent, later = _asking(worker)
     agent.run(_task())
@@ -227,68 +231,106 @@ def test_a_stale_value_still_answers_is_refreshed_behind_and_a_refresh_miss_keep
     assert kept.facts.hours == "09:00~18:00" and later.jobs == []  # 지우지 않았고, 다시 찾을 때(하루)까지 다시 사지 않는다
     old = _NOW + uh.DISPLAY_MAX_AGE + timedelta(days=1)
     assert agent.run(_task(now=old)) == UnknownOutcome(pending=True)  # 너무 오래된 값은 답에 쓰지 않고 새로 찾는다
+    later.run()  # 또 못 찾았다
+    calls = len(worker.calls)
+    assert agent.run(_task(now=old + timedelta(minutes=5))) == UnknownOutcome() and later.jobs == []  # '미확인' — 다시 사지 않는다
+    assert agent.run(_task(now=old + uh.MISS_TTL)) == UnknownOutcome(pending=True) and len(worker.calls) == calls  # 하루 뒤 한 번
 
 
-def test_prefetch_looks_up_only_due_places_with_gaps_behind_and_answers_nothing_now() -> None:
+def test_a_stale_record_without_a_value_for_the_asked_field_says_pending_not_unknown() -> None:
+    worker = _AskedOnly(hours="09:00~18:00")  # 입장료는 웹에도 없다
+    agent, later = _asking(worker)
+    agent.run(_task(fields=("hours", "fee")))
+    later.run()
+    stale = _NOW + uh.FOUND_TTL
+    assert agent.run(_task(fields=("fee",), now=stale)) == UnknownOutcome(pending=True)  # 묵은 기록에 물은 칸 값이 없다 — 찾는 중
+    assert agent.run(_task(fields=("hours",), now=stale, trace="t2")).facts.hours == "09:00~18:00"  # 값이 있는 칸은 그대로 답한다
+
+
+def test_a_refresh_miss_never_pulls_a_fresher_retry_time_earlier() -> None:
+    prev = FactRecord("p1", _FACTS, _NOW, _NOW + uh.FOUND_TTL, ("hours",))
+    later_miss = uh._next_record(replace(_task(fields=("fee",)), now=_NOW + timedelta(hours=1)), prev, None)
+    assert later_miss.facts == _FACTS and later_miss.expires_at == _NOW + uh.FOUND_TTL  # 앞당기지 않는다(다른 칸 조회·다른 파드)
+    assert set(later_miss.searched) == {"hours", "fee"} and later_miss.fetched_at == _NOW  # 찾아본 칸은 더하고, 찾은 날은 그대로
+
+
+def test_a_store_read_failure_after_the_lookup_writes_nothing() -> None:
+    class _ReadFails(InMemoryPlaceFactStore):
+        def get(self, poi_id, now):
+            raise ConnectionError("db blip")
+
+    store, later = _ReadFails(), _Later()
+    store.put(FactRecord("p1", _FACTS, _NOW, _NOW + uh.FOUND_TTL, ("hours",)))
+    agent = UnknownHandlingAgent(_Worker(_ok(None)), store, submit=later)
+    agent.run(_task())  # 읽기 실패는 "없음" → 뒤에서 찾기
+    later.run()  # 찾은 뒤 이전 기록을 못 읽었다 — 쌓아 둔 값을 못 찾음으로 덮지 않는다
+    assert store._rows["p1"].facts == _FACTS
+
+
+def test_prefetch_buys_only_places_without_any_record_behind_and_answers_nothing_now() -> None:
     worker = _AskedOnly(hours="10:00~18:00", closed="매주 월요일", fee="무료")
     store = InMemoryPlaceFactStore()
-    store.put(FactRecord("fresh", _FACTS, _NOW, _NOW + uh.FOUND_TTL, FIELDS))  # 아직 다시 찾을 때가 아니다
+    store.put(FactRecord("stale", _FACTS, _NOW - timedelta(days=30), _NOW - timedelta(days=23), FIELDS))  # 묵었어도 기록이 있다
     agent, later = _asking(worker, store)
     asked: list[tuple[str, ...]] = []
 
     def gaps(ids):
         asked.append(ids)
-        return {"a": ("hours", "last_entry", "closed", "fee")}  # b 는 빈 칸이 없다
+        return {"a": ("국립중앙박물관 서울특별시 용산구", ("hours", "last_entry", "closed", "fee"))}  # b 는 빈 칸이 없다
 
-    task = _prefetch((("fresh", "x"), ("a", "국립중앙박물관 서울"), ("b", "y")), gaps)
-    assert agent.run(task) == UnknownOutcome() and worker.calls == [] and asked == []  # 이번 턴은 아무것도 — 빈 칸 묻기(DB)도 뒤에서
+    assert agent.run(_prefetch(("stale", "a", "b"), gaps)) == UnknownOutcome()
+    assert worker.calls == [] and asked == []  # 이번 턴은 아무것도 — 빈 칸 묻기(DB)도 뒤에서
     later.run()
-    assert asked == [("a", "b")] and len(later.jobs) == 1  # 다시 찾을 때가 된 곳만 묻고, 빈 칸이 있는 a 만 낸다
+    assert asked == [("a", "b")] and len(later.jobs) == 1  # 기록이 없는 곳만 묻고(묵은 값 새로 찾기는 물을 때만), 빈 칸이 있는 a 만 낸다
     later.run()
     assert worker.calls == [("hours", "last_entry", "closed", "fee")]
     # 그곳을 물으면 "찾는 중" 없이 바로 답이 된다
-    assert agent.run(_task("a", "국립중앙박물관 서울", ("hours",), now=_NOW + timedelta(minutes=1))).facts.hours == "10:00~18:00"
+    assert agent.run(_task("a", "국립중앙박물관", ("hours",), now=_NOW + timedelta(minutes=1))).facts.hours == "10:00~18:00"
 
 
 def test_prefetch_runs_one_at_a_time_within_its_own_daily_cap(monkeypatch) -> None:
     monkeypatch.setattr(uh, "PROACTIVE_DAILY_CAP", 2)
     agent, later, _, _ = _agent(_ok(_FACTS))
-
-    def every(ids):
-        return {i: ("hours",) for i in ids}
-
-    agent.run(_prefetch((("a", "a"), ("b", "b")), every))
+    agent.run(_prefetch(("a", "b"), _every))
     later.run()
     assert len(later.jobs) == 1  # a 를 내면 b 는 내지 않는다 — 사용자가 물은 조회 몫 한 자리를 남긴다
     assert agent.run(_task("c", "c", ("hours",))).pending and len(later.jobs) == 2  # 그 자리로 물은 조회는 낸다
     later.run()
-    agent.run(_prefetch((("b", "b"),), every, trace="p2"))
+    agent.run(_prefetch(("b",), _every, trace="p2"))
     later.run()
     assert len(later.jobs) == 1  # 오늘 두 번째 미리 찾기
     later.run()
-    agent.run(_prefetch((("d", "d"),), every, trace="p3"))
-    later.run()
-    assert later.jobs == []  # 오늘 몫을 다 썼다 — 묻지 않은 조회는 더 내지 않는다
-    agent.run(_prefetch((("d", "d"),), every, now=_NOW + timedelta(days=1), trace="p4"))
+    agent.run(_prefetch(("d",), _every, trace="p3"))
+    assert later.jobs == []  # 오늘 몫을 다 썼다 — 빈 칸 묻기(DB·백엔드)조차 내지 않는다
+    agent.run(_prefetch(("d",), _every, now=_NOW + timedelta(days=1), trace="p4"))
     later.run()
     assert len(later.jobs) == 1  # 다음 날 다시
 
 
-def test_a_prefetch_miss_is_not_bought_again_for_a_month_but_an_ask_still_retries_after_a_day() -> None:
+def test_a_prefetch_miss_is_not_bought_again_by_prefetch_but_an_ask_still_retries_after_a_day() -> None:
     agent, later, _, worker = _agent(_ok(None))
-
-    def every(ids):
-        return {i: ("hours",) for i in ids}
-
-    agent.run(_prefetch((("a", "a"),), every))
+    agent.run(_prefetch(("a",), _every))
     later.run()
     later.run()
     assert len(worker.calls) == 1
-    agent.run(_prefetch((("a", "a"),), every, now=_NOW + timedelta(days=29), trace="p2"))
+    agent.run(_prefetch(("a",), _every, now=_NOW + timedelta(days=29), trace="p2"))
     later.run()
-    assert later.jobs == []  # 미리 찾아 못 찾은 곳은 30일 동안 다시 사지 않는다(맛집처럼 근거가 블로그뿐인 곳)
+    assert later.jobs == []  # 미리 찾아 못 찾은 곳은 미리 찾기가 다시 사지 않는다(맛집처럼 근거가 블로그뿐인 곳)
     assert agent.run(_task("a", "a", ("hours",), now=_NOW + timedelta(hours=1))) == UnknownOutcome()  # 하루 안에 물으면 '미확인'
     assert agent.run(_task("a", "a", ("hours",), now=_NOW + uh.MISS_TTL)).pending  # 물은 조회는 종전처럼 하루 뒤 다시 찾는다
+
+
+def test_a_prefetch_fallback_leaves_only_a_marker_so_it_is_not_bought_again_and_an_ask_is_not_blocked() -> None:
+    """출처 없음·시한 같은 폴백은 저장하지 않는다 — 미리 찾기는 같은 곳을 다음 후보 답마다 다시 사지 않게 '찾아본 칸 없음' 표지만 남긴다."""
+    agent, later, store, worker = _agent(TypedResult(value=None, is_fallback=True, error="no_citation", call_record=None))
+    agent.run(_prefetch(("a",), _every))
+    later.run()
+    later.run()
+    agent.run(_prefetch(("a",), _every, now=_NOW + timedelta(days=1), trace="p2"))
+    later.run()
+    assert later.jobs == [] and len(worker.calls) == 1  # 다시 사지 않는다
+    assert store._rows["a"].searched == () and store._rows["a"].facts is None
+    assert agent.run(_task("a", "a", ("hours",), now=_NOW + timedelta(minutes=1))).pending  # 물은 조회는 막지 않는다(찾아본 칸 없음)
 
 
 def test_prefetch_failures_stay_behind_and_an_unwired_agent_does_nothing() -> None:
@@ -297,14 +339,11 @@ def test_prefetch_failures_stay_behind_and_an_unwired_agent_does_nothing() -> No
     def broken(ids):
         raise ConnectionError("backend down")
 
-    assert agent.run(_prefetch((("a", "a"),), broken)) == UnknownOutcome()
+    assert agent.run(_prefetch(("a",), broken)) == UnknownOutcome()
     later.run()  # 등록 정보 조회 실패는 밖으로 새지 않는다 — 사유만 남긴다
     assert later.jobs == [] and worker.calls == []
     unwired = UnknownHandlingAgent(None, None, submit=later)  # 지식만 켜진 조립 — 장소 사실 웹 확인 미배선
-    assert unwired.run(_prefetch((("a", "a"),), broken)) == UnknownOutcome() and later.jobs == []
-
-
-# ── 일반 지식 즉답 (KnowledgeTask, BR-AO-32 · 2026-10-23 사용자 결정) ─────────────────────────────
+    assert unwired.run(_prefetch(("a",), broken)) == UnknownOutcome() and later.jobs == []
 
 
 class _Knowing:

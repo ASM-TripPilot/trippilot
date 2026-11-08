@@ -79,6 +79,6 @@ CREATE TABLE IF NOT EXISTS public.place_fact_cache (
   poi_id     text PRIMARY KEY,       -- registered POI id (backend poi.poi_id)
   facts      jsonb,                  -- {hours,last_entry,closed,fee,source_url,source_host,searched=fields looked up} | {searched} only = looked up, nothing sourced (null before 2026-10-30)
   fetched_at timestamptz NOT NULL,
-  expires_at timestamptz NOT NULL    -- refresh after: found +7d | not found +1d | prefetch miss +30d (rows are kept, not deleted)
+  expires_at timestamptz NOT NULL    -- refresh after: found +7d | not found +1d (rows are kept, not deleted)
 );
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.place_fact_cache TO ai_user;

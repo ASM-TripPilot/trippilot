@@ -1263,25 +1263,30 @@ def _web_facts(ctx: TurnContext, packet: Mapping[str, object], poi_id: str, plac
 # 나온 장소의 빈 칸은 웹으로 채우자"). 웹에 공식 정보가 있는 종류만 — 20곳 실측에서 맛집·카페·술집은 11곳 중 영업시간 1곳(근거가 블로그뿐이라
 # 게이트가 버린다), 명소·문화·자연은 7곳 중 6곳이 무언가를 찾았다. 맛집·카페·술집은 종전대로 사용자가 물을 때만 찾는다(`_web_facts`).
 _PREFETCH_KINDS = frozenset({"SIGHT", "NATURE", "CULTURE", "ART", "SHOPPING"})
+_PREFETCH_LABELS = _PREFETCH_KINDS | {_CATEGORY_KO[k] for k in _PREFETCH_KINDS}  # 후보의 종류는 한글 표지('명소')로 온다
 _PREFETCH_SHOWN = 3  # 화면 앞쪽 몇 곳 — 묻지 않은 조회라 넓히지 않는다(에이전트의 미리 찾기 하루 상한이 한 번 더 묶는다)
 
 
 def prefetch_unknown(ctx: TurnContext, facts: Facts) -> None:
-    """후보 답의 앞쪽 장소를 미리 찾기로 넘긴다 — 답에는 손대지 않는다. 빈 칸 판단(등록 정보 조회)도 에이전트가 뒤에서 한다."""
+    """후보 답의 앞쪽 관광 종류 장소를 미리 찾기로 넘긴다 — 답에는 손대지 않는다. 빈 칸·지역 판단(등록 정보·장소 DB)은 에이전트가 뒤에서 한다."""
     agent = ctx.ports.unknown
     if agent is None or facts.kind is not AnswerKind.CANDIDATES:
         return
-    area = ctx.arguments.get("region") or _trip_area(ctx)
-    places = tuple((p.poi_id, " ".join(x for x in (p.name, area) if x)) for p in facts.places[:_PREFETCH_SHOWN] if p.poi_id)
-    if places:
-        agent.run(PrefetchTask(places, lambda ids: _fact_gaps(ctx, ids), ctx.today, ctx.trace_id, ctx.now))
+    ids = tuple(p.poi_id for p in facts.places[:_PREFETCH_SHOWN] if p.poi_id and p.category in _PREFETCH_LABELS)
+    if ids:
+        agent.run(PrefetchTask(ids, lambda due: _fact_gaps(ctx, due), ctx.today, ctx.trace_id, ctx.now))
 
 
-def _fact_gaps(ctx: TurnContext, poi_ids: tuple[str, ...]) -> dict[str, tuple[str, ...]]:
-    """등록 정보의 빈 칸 — 영업시간이 없으면 영업시간·입장 마감·휴무일, 쇼핑 밖의 관광 종류에 입장료가 없으면 입장료. 대상 종류가 아니거나
-    빈 칸이 없으면 빠진다. 미리 찾기가 뒤에서 부른다(POI_INFO 배치 조회 — 이번 턴의 시한과 무관)."""
-    gaps: dict[str, tuple[str, ...]] = {}
-    for poi_id, row in _lookup(ctx, poi_ids, ctx.today).items():
+def _fact_gaps(ctx: TurnContext, poi_ids: tuple[str, ...]) -> dict[str, tuple[str, tuple[str, ...]]]:
+    """poi_id → (조회에 쓸 '이름 시·도 시군구', 빈 칸). 빈 칸은 영업시간이 없으면 영업시간·입장 마감·휴무일, 쇼핑 밖의 관광 종류에 입장료가
+    없으면 입장료. 지역은 여행 지역이 아니라 **그곳의** 시·도·시군구(장소 DB) — 이어 묻기·여러 지역 여행·계획 경로에서 여행 지역을 붙이면
+    같은 이름의 다른 곳 값이 그 poi_id 에 붙을 수 있다(2026-11-08 검토). 그곳의 지역을 모르면 찾지 않는다. 미리 찾기가 뒤에서 부른다."""
+    finder = ctx.ports.place_sql
+    if finder is None:
+        return {}
+    rows = _lookup(ctx, poi_ids, ctx.today)
+    wanted: dict[str, tuple[str, ...]] = {}
+    for poi_id, row in rows.items():
         kind = row.get("category")
         if kind not in _PREFETCH_KINDS:
             continue
@@ -1289,8 +1294,9 @@ def _fact_gaps(ctx: TurnContext, poi_ids: tuple[str, ...]) -> dict[str, tuple[st
         if kind != "SHOPPING" and row.get("fee") is None:
             want.add("fee")
         if want:
-            gaps[poi_id] = tuple(f for f in FACT_FIELDS if f in want)
-    return gaps
+            wanted[poi_id] = tuple(f for f in FACT_FIELDS if f in want)
+    areas = finder.areas(tuple(wanted), ctx.trace_id) if wanted else {}
+    return {poi_id: (f"{rows[poi_id]['name']} {areas[poi_id]}", fields) for poi_id, fields in wanted.items() if areas.get(poi_id)}
 
 
 def _plan_poi_info(ctx: TurnContext) -> tuple[HandlerTask, ...]:

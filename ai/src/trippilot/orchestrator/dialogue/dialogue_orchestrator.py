@@ -1500,7 +1500,7 @@ class DialogueOrchestrator:
         results = self._fanout(inp, step_tasks([h.plan(ctx) for h, ctx in zip(handlers, ctxs, strict=True)]))
         facts = merge_facts([h.assemble(ctx, step_results(results, i, n))
                              for i, (h, ctx) in enumerate(zip(handlers, ctxs, strict=True))])
-        self._prefetch(ctxs[0], facts)
+        self._prefetch(ctxs[0], facts)  # 조회 이름의 지역은 장소 DB 에서 온다 — 어느 문맥이든 포트·날짜·추적만 쓴다
         answer = self._compose(inp, facts.intent, facts, memory(), trip_summary, closed=True)
         self._log_plan(inp, "TOOLS", calls=draft.calls, arg_keys=[sorted(ctx.arguments) for ctx in ctxs], primary=facts.intent,
                        plan_ms=plan_ms,

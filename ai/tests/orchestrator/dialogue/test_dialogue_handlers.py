@@ -3359,7 +3359,7 @@ class _Prefetcher:
 
 
 class _PrefetchRows:
-    """POI_INFO 대역 — 준 행 그대로(종류·영업시간 문구·입장료만 본다)."""
+    """POI_INFO 대역 — 준 행 그대로(이름·종류·영업시간 문구·입장료만 본다 — 실물 providers.poi_info 의 칸 이름)."""
 
     def __init__(self, rows: list[dict]) -> None:
         self.rows, self.calls = rows, []
@@ -3370,6 +3370,17 @@ class _PrefetchRows:
         return InfoPacket(ProviderKind.POI_INFO, ProviderStatus.OK, {"pois": pois, "misses": []}, _fresh(params["now"]))
 
 
+class _Areas:
+    """PlaceSqlLookup 대역 — 등록 장소의 '시·도 시군구'(실물은 장소 DB 기본키 조회)."""
+
+    def __init__(self, areas: dict[str, str]) -> None:
+        self._areas, self.calls = areas, []
+
+    def areas(self, poi_ids, trace_id):
+        self.calls.append(tuple(poi_ids))
+        return {i: self._areas[i] for i in poi_ids if i in self._areas}
+
+
 def _prefetch_candidates(*places: dh.FactPlace) -> Facts:
     payload = {"candidates": [{"poiId": p.poi_id, "name": p.name, "reason": "근처의 대안"} for p in places]}
     return Facts(Intent.EXPLORE_PLACES, FactStatus.OK, AnswerKind.CANDIDATES, rows=(), places=places, notes=(), payload=payload,
@@ -3378,31 +3389,52 @@ def _prefetch_candidates(*places: dh.FactPlace) -> Facts:
 
 _PREFETCH_PLACES = (("s1", "해동용궁사", "명소"), ("f1", "돼지국밥집", "맛집"), ("s2", "감천문화마을", "명소"), ("m1", "신세계센텀시티", "쇼핑"))
 _PREFETCH_ROWS = [
-    {"poi_id": "s1", "category": "SIGHT", "hours_label": "영업시간 정보 없음", "fee": None},
-    {"poi_id": "f1", "category": "FOOD", "hours_label": "영업시간 정보 없음", "fee": None},
-    {"poi_id": "s2", "category": "SIGHT", "hours_label": "09:00~18:00", "fee": 3000},
-    {"poi_id": "m1", "category": "SHOPPING", "hours_label": "영업시간 정보 없음", "fee": None},
+    {"poi_id": "s1", "name": "해동용궁사", "category": "SIGHT", "hours_label": "영업시간 정보 없음", "fee": None},
+    {"poi_id": "f1", "name": "돼지국밥집", "category": "FOOD", "hours_label": "영업시간 정보 없음", "fee": None},
+    {"poi_id": "s2", "name": "감천문화마을", "category": "SIGHT", "hours_label": "09:00~18:00", "fee": 3000},
+    {"poi_id": "m1", "name": "신세계센텀시티", "category": "SHOPPING", "hours_label": "영업시간 정보 없음", "fee": None},
 ]
+_PREFETCH_AREAS = {"s1": "부산광역시 기장군", "f1": "부산광역시 서구", "s2": "부산광역시 사하구", "m1": "부산광역시 해운대구"}
 
 
-def test_prefetch_hands_the_first_shown_places_to_the_agent_and_finds_gaps_only_behind() -> None:
-    """후보 답 앞쪽 세 곳만, 이름 + 지역으로 넘긴다(답에는 손대지 않는다). 빈 칸은 미리 찾기가 뒤에서 등록 정보로 가른다 — 관광 종류만
-    (맛집·카페·술집은 물을 때만), 영업시간이 없으면 영업시간·입장 마감·휴무일, 쇼핑 밖에 입장료가 없으면 입장료."""
-    agent, rows = _Prefetcher(), _PrefetchRows(_PREFETCH_ROWS)
-    ctx = _ctx(arguments={"region": "부산"}, ports=HandlerPorts(poi_info=rows, unknown=agent))
+def _prefetch_ctx(agent, *, areas: dict[str, str] | None = _PREFETCH_AREAS, arguments=None):
+    rows = _PrefetchRows(_PREFETCH_ROWS)
+    finder = _Areas(areas) if areas is not None else None
+    return _ctx(arguments=arguments or {"region": "서울"}, ports=HandlerPorts(poi_info=rows, unknown=agent, place_sql=finder)), rows, finder
+
+
+def test_prefetch_hands_the_first_shown_sights_to_the_agent_and_finds_gaps_only_behind() -> None:
+    """후보 답 앞쪽 세 곳 중 관광 종류만 넘긴다(답에는 손대지 않는다). 빈 칸과 지역은 미리 찾기가 뒤에서 등록 정보·장소 DB 로 가른다 —
+    영업시간이 없으면 영업시간·입장 마감·휴무일, 쇼핑 밖에 입장료가 없으면 입장료. 조회 이름의 지역은 여행·말의 지역(여기선 서울)이 아니라
+    그곳의 시·도 시군구다(2026-11-08 검토 — 같은 이름의 다른 곳 값이 붙지 않게)."""
+    agent = _Prefetcher()
+    ctx, rows, finder = _prefetch_ctx(agent)
     dh.prefetch_unknown(ctx, _prefetch_candidates(*(dh.FactPlace(p, n, c) for p, n, c in _PREFETCH_PLACES)))
     (task,) = agent.tasks
-    assert task.places == (("s1", "해동용궁사 부산"), ("f1", "돼지국밥집 부산"), ("s2", "감천문화마을 부산"))  # 네 번째는 넘기지 않는다
-    assert rows.calls == []  # 등록 정보 조회는 이번 턴에 하지 않는다 — 미리 찾기가 뒤에서 부른다
-    assert task.gaps(("s1", "f1", "s2")) == {"s1": ("hours", "last_entry", "closed", "fee")}  # 맛집·빈 칸 없는 곳은 빠진다
-    assert task.gaps(("m1",)) == {"m1": ("hours", "last_entry", "closed")}  # 쇼핑에는 입장료를 묻지 않는다
+    assert task.poi_ids == ("s1", "s2")  # 맛집은 응답 때 거르고, 네 번째(쇼핑)는 넘기지 않는다
+    assert rows.calls == [] and finder.calls == []  # 등록 정보·지역 조회는 이번 턴에 하지 않는다 — 미리 찾기가 뒤에서 부른다
+    assert task.gaps(("s1", "s2")) == {"s1": ("해동용궁사 부산광역시 기장군", ("hours", "last_entry", "closed", "fee"))}
+    assert finder.calls == [("s1",)]  # 지역은 빈 칸이 있는 곳만 묻는다
+    assert task.gaps(("m1",)) == {"m1": ("신세계센텀시티 부산광역시 해운대구", ("hours", "last_entry", "closed"))}  # 쇼핑은 입장료 없음
+    assert task.gaps(("f1",)) == {}  # 지역을 알아도 등록 정보의 종류(맛집)로 한 번 더 거른다
     assert (task.on, task.trace_id, task.now) == (ctx.today, ctx.trace_id, ctx.now)
+
+
+def test_prefetch_does_not_look_up_a_place_whose_own_region_is_unknown() -> None:
+    agent = _Prefetcher()
+    ctx, _, _ = _prefetch_ctx(agent, areas={"s2": "부산광역시 사하구"})  # s1 의 지역을 모른다
+    dh.prefetch_unknown(ctx, _prefetch_candidates(*(dh.FactPlace(p, n, c) for p, n, c in _PREFETCH_PLACES)))
+    assert agent.tasks[0].gaps(("s1",)) == {}  # 여행 지역을 대신 붙이지 않는다
+    unwired, _, _ = _prefetch_ctx(agent, areas=None)  # 장소 DB 미배선(로컬) — 지역을 알 길이 없어 찾지 않는다
+    assert dh._fact_gaps(unwired, ("s1",)) == {}
 
 
 def test_prefetch_skips_answers_without_candidates_and_a_missing_agent() -> None:
     agent = _Prefetcher()
     places = tuple(dh.FactPlace(p, n, c) for p, n, c in _PREFETCH_PLACES)
-    info = dh.need_trip_facts(Intent.GET_POI_INFO)  # 후보 답이 아니다(장소 정보·일정·날씨 답은 물을 때 찾는다)
-    dh.prefetch_unknown(_ctx(ports=HandlerPorts(poi_info=_PrefetchRows(_PREFETCH_ROWS), unknown=agent)), info)
+    ctx, _, _ = _prefetch_ctx(agent)
+    dh.prefetch_unknown(ctx, dh.need_trip_facts(Intent.GET_POI_INFO))  # 후보 답이 아니다(장소 정보·일정·날씨 답은 물을 때 찾는다)
+    dh.prefetch_unknown(ctx, _prefetch_candidates(dh.FactPlace("f1", "돼지국밥집", "맛집")))  # 관광 종류가 없다
     assert agent.tasks == []
-    dh.prefetch_unknown(_ctx(ports=HandlerPorts(poi_info=_PrefetchRows(_PREFETCH_ROWS))), _prefetch_candidates(*places))  # 에이전트 미배선 — 조용히 넘어간다
+    no_agent, _, _ = _prefetch_ctx(None)
+    dh.prefetch_unknown(no_agent, _prefetch_candidates(*places))  # 에이전트 미배선 — 조용히 넘어간다
