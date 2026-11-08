@@ -171,6 +171,24 @@ def test_a_prefetch_that_does_not_finish_in_time_falls_back_to_the_radius_pool()
     assert worker.calls == 0  # 다시 쓰지 않는다 — 남은 시간이 없다
 
 
+def test_ok_line_says_where_the_sql_came_from_but_never_the_utterance(caplog) -> None:
+    """미리 받기가 빗나간 턴을 셀 수 있게 — 출처(prefetch·cache·write)와 빗나간 까닭 라벨만 싣고 발화 원문은 싣지 않는다."""
+    import logging
+
+    caplog.set_level(logging.INFO, logger=ps.__name__)
+    lookup = PlaceSqlLookup(_Worker(_ok(), _ok(), _ok(), _ok()), _Executor())
+    lookup.prefetch("서울 요즘 핫한 곳", TraceId("a"), _NOW, _now_submit)
+    lookup.lookup("서울 요즘 핫한 곳", {"region": "서울"}, TraceId("a"), _NOW, timeout_sec=2.0)
+    lookup.lookup("서울 요즘 핫한 곳", {"region": "서울"}, TraceId("b"), _NOW, timeout_sec=2.0)  # 같은 말·같은 조건
+    lookup.lookup("근처 카페 알려줘", {"region": "서울"}, TraceId("c"), _NOW, timeout_sec=2.0)  # 지역은 앞 대화에서 — 말에 없다
+    lookup.lookup("서울은 어때?", {"region": "서울"}, TraceId("d"), _NOW, timeout_sec=2.0)  # 장소 찾기 말이 없다
+    lookup.lookup("", {"region": "서울"}, TraceId("e"), _NOW, timeout_sec=2.0)  # 계획 경로 — 인자만
+    lines = [r.getMessage() for r in caplog.records if "place_sql ok" in r.getMessage()]
+    assert [line.rsplit("src=", 1)[1] for line in lines] == [
+        "prefetch", "cache", "write:no_region", "write:no_place_word", "write:plan"]
+    assert not any(word in line for line in lines for word in ("핫한", "카페", "어때"))
+
+
 def test_orchestrator_submit_carries_the_llm_call_counter_into_pool_threads() -> None:
     from trippilot.orchestrator.dialogue.dialogue_interpreter import _llm_calls, llm_call_counter
     from trippilot.orchestrator.dialogue.dialogue_orchestrator import DialogueOrchestrator
