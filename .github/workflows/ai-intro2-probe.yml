@@ -1,3 +1,6 @@
+# [main 등록용 사본] GitHub은 schedule(cron)·workflow_dispatch를 기본 브랜치의
+# 워크플로만 등록한다. main의 ai/ 는 구버전이므로 checkout을 develop으로 고정 —
+# 이 파일(트리거 등록)은 main, 실행 코드는 항상 develop. develop 쪽 원본 갱신 시 이 사본도 동기화할 것.
 # detailIntro2 응답 관측 — 필드명·채움률 (TRIP-683)
 #
 # `fetch_detail()` 는 이 엔드포인트를 항목당 1콜 부르면서 응답에서 **채택 목록의
@@ -51,6 +54,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: develop   # 실측 대상 스크립트는 develop (main의 ai/는 구버전)
 
       - uses: astral-sh/setup-uv@v5
         with:
