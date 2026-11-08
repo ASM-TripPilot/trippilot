@@ -1,6 +1,5 @@
 export { CTA_BAR_HEIGHT } from './ui/CtaBar';
 export type { CtaButton } from './ui/CtaBar';
-export { DayChipOverlay } from './ui/DayChipOverlay';
 export type { DayChip } from './ui/DayChipOverlay';
 export { DayChipScroller } from './ui/DayChipScroller';
 export { DistanceConnector } from './ui/DistanceConnector';

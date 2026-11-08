@@ -2,8 +2,4 @@
 
 export { curatedKey } from './model/curatedKey';
 export { BrowseAllButton } from './ui/BrowseAllButton';
-export {
-  CuratedStayCard,
-  type CuratedStayCardProps,
-} from './ui/CuratedStayCard';
-export { CuratedStayRow, type CuratedStayRowProps } from './ui/CuratedStayRow';
+export { CuratedStayRow } from './ui/CuratedStayRow';

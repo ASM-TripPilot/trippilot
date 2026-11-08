@@ -16,7 +16,7 @@ import { buildSlotKey } from '../lib/slotKey';
 import { COLOR_TOKENS } from '@/shared/config';
 
 /** TRIP-797 · 미지정(startAt 없는) 슬롯 칩 문구 — 정본 공백 발명 카피(Figma 근거 6-b 이연). */
-export const UNSPECIFIED_CHIP_LABEL = '시간대 설정';
+const UNSPECIFIED_CHIP_LABEL = '시간대 설정';
 
 /**
  * TRIP-783 · 결과 화면 공용 슬롯 카드 — h07·h08·h11·h14·h16 6종이 공유할 부품(신설·병존,

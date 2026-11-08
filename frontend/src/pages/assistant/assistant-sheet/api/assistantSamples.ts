@@ -34,9 +34,9 @@ export type AssistantScenario =
   | 'capabilities'
   | 'unknown';
 
-export const SAMPLE_TRIP_ID = 'trip-busan';
-export const SAMPLE_TRIP_CHIP = '부산 2박 3일 · 등록 숙소 서면';
-export const SAMPLE_CREATED_AT = '2026-10-12T05:00:00.000Z';
+const SAMPLE_TRIP_ID = 'trip-busan';
+const SAMPLE_TRIP_CHIP = '부산 2박 3일 · 등록 숙소 서면';
+const SAMPLE_CREATED_AT = '2026-10-12T05:00:00.000Z';
 
 function action(
   type: string,
@@ -395,7 +395,7 @@ export function assistantSample(
 }
 
 /** 샘플 시나리오의 대표 사용자 발화(Figma 말풍선) — 가짜 어댑터 라우팅과 프리뷰 대화가 같이 쓴다. */
-export const SCENARIO_UTTERANCE: Record<AssistantScenario, string> = {
+const SCENARIO_UTTERANCE: Record<AssistantScenario, string> = {
   greeting: '',
   review: '지금까지 짠 일정 검토해줘',
   candidates: '둘째 날 오후 카페 다른 곳 추천해줘',

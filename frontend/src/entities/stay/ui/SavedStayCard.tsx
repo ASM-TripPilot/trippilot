@@ -47,7 +47,7 @@ export interface SavedStayCardProps {
 }
 
 // 거점 배지 핀(TRIP-729, Figma 1701:1195) — entities→features import 금지라 features 글리프
-// (TripGlyphs.BaseBadgePinGlyph·StayGlyphs.MapPinGlyph)를 못 써 카드에 인라인으로 그린다. entities 는
+// (StayGlyphs.MapPinGlyph 등)를 못 써 카드에 인라인으로 그린다. entities 는
 // raw-hex 미스캔(카드 `#000000` shadow 선례와 동형)이라 흰색 리터럴이 안전하다. 색·모양은 어느 심판도
 // 안 본다(*Glyphs fill 무심판 계열, ★1) — 6-b/TRIP-831 육안. MapPinGlyph 와 같은 벡터를 흰색·13px 로.
 function BaseBadgePinGlyph(): ReactElement {

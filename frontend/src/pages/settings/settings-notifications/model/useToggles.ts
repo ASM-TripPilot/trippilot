@@ -25,7 +25,7 @@ import type {
  * ⚠ 이 파일은 [테스트 작성]이 낸 red-phase 스텁이다 — 구현은 implementer 몫(throw 로 red 보장).
  */
 
-export type ToggleChannel = 'push' | 'inapp';
+type ToggleChannel = 'push' | 'inapp';
 
 export type ToggleOutcome = { kind: 'ok' } | { kind: 'failed' };
 
