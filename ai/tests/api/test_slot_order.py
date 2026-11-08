@@ -103,10 +103,14 @@ def test_validate_flags_the_dragged_card_not_the_fixed_one_below_it() -> None:
 
 
 def test_validate_flags_the_fixed_card_when_the_later_one_above_is_fixed_too() -> None:
-    """둘 다 고정이면 옮길 쪽이 없다 — 이른 고정 카드에 단다(표시를 빼먹지 않는다)."""
-    body = _validate((_DAY, [_slot(_HALLASAN, "12:00:00", "13:00:00", fixed=True),
-                             _slot(_WOLJEONG, "10:30:00", "11:00:00", fixed=True)]))
-    assert _order(body) == [(0, 1, _WOLJEONG)]
+    """위의 늦은 카드에 고정이 있으면 옮겨서 풀 수 없다 — 이른 고정 카드에 단다(표시를 빼먹지 않는다)."""
+    both_fixed = _validate((_DAY, [_slot(_HALLASAN, "12:00:00", "13:00:00", fixed=True),
+                                   _slot(_WOLJEONG, "10:30:00", "11:00:00", fixed=True)]))
+    assert _order(both_fixed) == [(0, 1, _WOLJEONG)]
+    mixed = _validate((_DAY, [_slot(_HALLASAN, "12:00:00", "13:00:00", fixed=True),
+                              _slot(_PORK, "13:00:00", "14:00:00"),
+                              _slot(_WOLJEONG, "10:30:00", "11:00:00", fixed=True)]))
+    assert _order(mixed) == [(0, 2, _WOLJEONG)]
 
 
 def test_validate_flags_every_card_below_a_later_one_not_just_neighbours() -> None:
