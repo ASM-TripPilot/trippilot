@@ -60,6 +60,10 @@ class Violation:
     slot_ref: PoiId | None
     detail: str
     reason_code: str | None = None
+    # 같은 POI 가 여러 날/같은 날 여러 번 있을 때 slot_ref(POI id) 만으로는 어느 슬롯인지
+    # 모른다 — 날짜·시각까지 실어 API 계층이 정확한 슬롯을 가리키게 한다. 내부 계산 전용,
+    # 와이어(to_dict/ViolationSchema)로는 안 나간다.
+    slot_start: datetime | None = None
 
     def __post_init__(self) -> None:
         if self.reason_code is not None and self.reason_code not in HC1_REASON_CODES:

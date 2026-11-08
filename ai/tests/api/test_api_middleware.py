@@ -408,3 +408,23 @@ def test_whitespace_only_token_fails_at_startup() -> None:
     """
     with pytest.raises(ValueError, match="공백"):
         MiddlewareSettings(service_auth_token="   ")
+
+
+def test_nonascii_service_token_header_is_401_not_500() -> None:
+    """`X-Service-Token` 에 비ASCII 바이트가 오면 401 — latin-1 복호 + str 비교였다면
+    `hmac.compare_digest` 가 bytes·str 불일치로 TypeError(500) 였다."""
+    c = client(settings=_AUTHED)
+
+    res = c.post(
+        GENERATE, content=b"{}",
+        headers={b"x-service-token": b"\xc3\xa9", b"content-type": b"application/json"},
+    )
+
+    assert res.status_code == 401
+
+
+def test_nonascii_service_auth_token_fails_at_startup() -> None:
+    """운영자가 비ASCII 토큰을 넣으면 기동을 죽인다 — 조용히 늘 거부하는 토큰으로
+    띄우는 대신 설정 오류로 드러낸다."""
+    with pytest.raises(ValueError, match="ASCII"):
+        MiddlewareSettings(service_auth_token="비밀토큰")

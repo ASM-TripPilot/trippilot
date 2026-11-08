@@ -292,3 +292,36 @@ def test_trip_totals_come_from_log_lines_alone(caplog) -> None:
     assert [line["trip_id"] for line in lines].count("trip-B") == 1
     # 금지 — 발화·메모 같은 자유서술은 어떤 로그 줄에도 없다
     assert not [m for m in caplog.messages if "비 와서" in m]
+
+
+# ── 7. bind_trip 은 인증 앞(TraceMiddleware)에서도 돈다 — 끝나면 정리 ─────
+
+
+def test_unauthenticated_request_does_not_leave_trip_binding() -> None:
+    """TraceMiddleware 는 인증보다 먼저 돌아 401 로 끝날 요청도 bind_trip 한다 —
+    끝나면 지워야 미인증 요청이 LRU(1024)를 채워 정상 요청의 trip_id 를 밀어내지 않는다."""
+    from trippilot.api import cost as cost_module
+
+    cost_module._TRIP_BY_TRACE.clear()
+    guarded_client = TestClient(
+        create_app(None, MiddlewareSettings(service_auth_token="secret")),
+        raise_server_exceptions=False,
+    )
+
+    res = guarded_client.post("/ai/v1/itinerary/generate", json={
+        **BACKEND_REQUEST,
+        "request_meta": {**BACKEND_REQUEST["request_meta"], "request_id": "preauth-leak"},
+    })
+
+    assert res.status_code == 401
+    assert "preauth-leak" not in cost_module._TRIP_BY_TRACE
+
+
+def test_oversized_request_id_is_dropped_not_truncated() -> None:
+    """128자 넘는 request_id 는 통째로 버린다 — 잘라 쓰면 호출 기록에 실제로 찍히는
+    원본 request_id 와 더는 안 맞는 키가 된다(trip_id 의 128자 상한과 같은 수)."""
+    ok = parse_wire_meta(json.dumps({"request_meta": {"request_id": "x" * 128}}).encode())
+    assert ok.request_id is not None and len(ok.request_id) == 128
+
+    too_long = parse_wire_meta(json.dumps({"request_meta": {"request_id": "x" * 129}}).encode())
+    assert too_long.request_id is None

@@ -45,7 +45,7 @@ from typing import Any, Awaitable, Callable, Mapping
 
 from fastapi import FastAPI
 
-from trippilot.api.cost import bind_trip
+from trippilot.api.cost import bind_trip, unbind_trip
 from trippilot.api.schemas import ErrorBody
 
 _Scope = dict[str, Any]
@@ -134,6 +134,10 @@ class MiddlewareSettings:
             # 공백만 있는 토큰은 `"   " == "   "` 로 **통과해 버린다** — 미설정으로 보고
             # 조용히 여는 대신 기동을 죽인다(설정 오류를 은폐하지 않는다).
             raise ValueError("service_auth_token이 공백뿐이다 — 미설정이면 값을 비워라")
+        if self.service_auth_token is not None and not self.service_auth_token.isascii():
+            # 비ASCII 토큰은 헤더 비교가 bytes 대 str 복호 방식에 따라 영영 못 맞을 수
+            # 있다 — 조용히 늘 거부하는 토큰으로 기동하는 대신 기동을 죽인다.
+            raise ValueError("service_auth_token은 ASCII 문자만 허용한다")
         if self.require_service_auth and self.service_auth_token is None:
             raise ValueError(
                 "require_service_auth=True인데 SERVICE_AUTH_TOKEN이 없다 — "
@@ -197,6 +201,11 @@ def parse_wire_meta(body: bytes) -> WireMeta:
     request_id = meta.get("request_id")
     deadline = meta.get("deadline_ms")
     trip_id = doc.get("trip_id")
+    # 128자 넘으면 통째로 버린다(자르지 않는다) — 잘라 쓰면 호출 기록에 실제로 찍히는
+    # 원본 request_id 와 더는 안 맞는 키가 되어 bind_trip 묶기가 더 틀어진다.
+    # trip_id 의 _sanitize_trace_id 상한(128)과 같은 수.
+    if isinstance(request_id, str) and len(request_id) > 128:
+        request_id = None
     return WireMeta(
         request_id=request_id if isinstance(request_id, str) and request_id else None,
         deadline_ms=(
@@ -334,6 +343,11 @@ class TraceMiddleware:
                 "status": status,  # None = 응답 미발신(연결 단절 등) — 그것도 사실대로
                 "elapsed_ms": elapsed_ms,
             }, ensure_ascii=False))
+            # Trace 는 최외곽(인증·유량 제한보다 먼저) 이라 401·429 로 끝날 요청도 미리
+            # bind_trip 했다 — 끝나면 지운다. 안 지우면 미인증 요청도 LRU(1024)를 채워
+            # 정상 요청의 trip_id 를 밀어낸다.
+            if meta.request_id is not None:
+                unbind_trip(meta.request_id)
 
 
 async def _reject_too_large(scope: _Scope, receive: _Receive, send: _Send) -> None:
@@ -390,7 +404,8 @@ class ServiceAuthMiddleware:
 
         presented = _header_value(scope, self.HEADER)
         # 상수 시간 비교 — 토큰은 시크릿이라 길이·접두사가 타이밍으로 새면 안 된다.
-        if presented is not None and hmac.compare_digest(presented, self._token):
+        # bytes 대 bytes — presented 가 비ASCII 면 str 비교가 TypeError(500) 로 샌다.
+        if presented is not None and hmac.compare_digest(presented, self._token.encode("utf-8")):
             await self.app(scope, receive, send)
             return
 
@@ -403,11 +418,15 @@ class ServiceAuthMiddleware:
         await _send_error(send, 401, CODE_UNAUTHORIZED, "인증에 실패했습니다.")
 
 
-def _header_value(scope: _Scope, name: bytes) -> str | None:
-    """ASGI 헤더에서 값 하나. 헤더 이름은 소문자로 온다(ASGI 규약)."""
+def _header_value(scope: _Scope, name: bytes) -> bytes | None:
+    """ASGI 헤더에서 값 하나, raw bytes 그대로. 헤더 이름은 소문자로 온다(ASGI 규약).
+
+    `str` 로 복호(latin-1)해 돌려주면 비ASCII 바이트가 들어왔을 때 `compare_digest`가
+    str·str 비교를 기대해 TypeError(500) 가 난다 — 토큰 비교는 bytes 로 한다.
+    """
     for key, value in scope.get("headers", ()):
         if key == name:
-            return value.decode("latin-1")
+            return value
     return None
 
 
