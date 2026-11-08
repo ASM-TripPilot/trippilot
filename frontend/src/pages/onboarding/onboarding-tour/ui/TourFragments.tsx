@@ -5,8 +5,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { pickRegionCover } from '@/entities/trip';
 import { APP_ICON_COLORS, AppIconGlyph } from '@/features/auth/index.view';
 import { AssistantSparkleGlyph } from '@/features/open-assistant';
-import { ChevronRightGlyph, GLYPH_COLORS } from '@/shared/ui/glyphs';
-import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
+import {
+  ChevronRightGlyph,
+  GLYPH_COLORS,
+  HeartFilledGlyph,
+  HeartOutlineGlyph,
+} from '@/shared/ui/glyphs';
 import { Image } from '@/shared/ui/Image';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
 

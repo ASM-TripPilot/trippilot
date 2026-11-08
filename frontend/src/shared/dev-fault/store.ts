@@ -58,8 +58,6 @@ export function createFaultStore(storage: FaultStorage) {
   };
 }
 
-export type FaultStore = ReturnType<typeof createFaultStore>;
-
 export const faultStore = createFaultStore({
   read: () => readStringValue('devFaultRules'),
   write: (value) => writeStringValue('devFaultRules', value),

@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
 import { goBackOr } from '@/shared/lib/goBackOr';
 import type { ReactElement } from 'react';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { PlaceRowCard } from '@/entities/place';
@@ -31,6 +31,7 @@ import {
   SEARCH_DEBOUNCE_MS,
   useDebouncedValue,
 } from '@/shared/lib/useDebouncedValue';
+import { usePressLock } from '@/shared/lib/pressGuard';
 
 // 그날 좌표 핀도 후보도 없을 때 지도 중심 — 서울 시청(PlaceAddPage 선례).
 const FALLBACK_CENTER = { lat: 37.5665, lng: 126.978 };
@@ -72,7 +73,7 @@ export function RecordAddVisitPage({
   const [searchText, setSearchText] = useState('');
   const [failed, setFailed] = useState(false);
   // 동기 가드 — 같은 틱 연타도 두 번째 요청을 못 내게 state 가 아니라 ref 로 쥔다.
-  const picking = useRef(false);
+  const pickingLock = usePressLock();
 
   // 입력칸은 즉시, 서버 조회 키는 300ms 멈춘 값(TRIP-1617).
   const trimmedQuery = useDebouncedValue(searchText.trim(), SEARCH_DEBOUNCE_MS);
@@ -116,8 +117,7 @@ export function RecordAddVisitPage({
       : FALLBACK_CENTER;
 
   async function handlePick(place: Place): Promise<void> {
-    if (picking.current) return;
-    picking.current = true;
+    if (!pickingLock.acquire()) return;
     setFailed(false);
     rememberSpontaneousName(queryClient, tripId, place.poiId, place.nameKo);
     const outcome = await visitCheck.arrive({
@@ -131,7 +131,7 @@ export function RecordAddVisitPage({
       goBackOr(router, `/trips/${tripId}/records`);
       return;
     }
-    picking.current = false;
+    pickingLock.release();
     // conflict 는 훅의 로컬 연타 신호다(즉석 방문엔 서버 409 가 없다) — 안내하지 않는다.
     if (outcome.kind === 'failed' && outcome.reason !== 'conflict') {
       setFailed(true);
@@ -196,6 +196,7 @@ export function RecordAddVisitPage({
                 id={item.poiId}
                 name={item.nameKo}
                 imageUrl={item.imageUrl}
+                imageLicense={item.imageLicense}
                 category={item.category}
                 subtitle={
                   <View className="gap-[2px]">

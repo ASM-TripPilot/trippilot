@@ -7,6 +7,7 @@ import {
 
 import type { MapPin } from '@/shared/map';
 import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 
 import {
   MUST_VISIT_NAME_PLACEHOLDER,
@@ -138,6 +139,7 @@ function item(
   over: Partial<MustVisitListItem> & { sourcePoiId: string }
 ): MustVisitListItem {
   return {
+    imageLicense: null,
     mustVisitId: `mv-${over.sourcePoiId}`,
     name: '감천문화마을',
     imageUrl: null,
@@ -150,6 +152,7 @@ const FIXED_A = item({
   sourcePoiId: 'poi-a',
   name: '부산시립미술관',
   imageUrl: 'https://img.example.com/a.jpg',
+  imageLicense: 'TYPE1',
   type: 'FIXED',
   fixedDate: '2026-06-11',
   fixedStart: '13:00',
@@ -229,6 +232,11 @@ describe('C18b · 사진 칸 — 서버 사진 우선, 없으면 카테고리 �
     // poi-b 는 변형 3 → cafe-3. 항목에 category 가 안 실리면(조인 실패 poi-z) 폴백 — 이름·사진·카테고리가 같이 없다.
     expect(sourceOf('poi-b')).toEqual([coverFor('카페', 'poi-b')]);
     expect(sourceOf('poi-z')).toEqual([FALLBACK_COVER]);
+    // TRIP-1740 AC-7(T11) — 항목의 imageLicense(TYPE1)가 화면 조립을 지나 78px 썸네일까지 간다.
+    expectTypeOnePhotoDelivered(
+      'itinerary-mustvisit-image-poi-a',
+      'https://img.example.com/a.jpg'
+    );
   });
 });
 

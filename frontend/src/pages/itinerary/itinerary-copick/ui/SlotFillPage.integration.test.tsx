@@ -11,6 +11,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import type {
   EditItineraryRequest,
@@ -2675,6 +2676,7 @@ describe('후보 카드 이름·태그·사진', () => {
         category: '카페',
         tags: ['교회', '야외'],
         imageUrl: X_IMG,
+        imageLicense: 'TYPE1',
       },
       {
         poiId: RAW_ID,
@@ -2769,6 +2771,13 @@ describe('후보 카드 이름·태그·사진', () => {
       expect(
         screen.getByTestId('itinerary-candidate-image-Z').props.source
       ).toEqual([coverFor('자연', 'Z')]);
+    });
+
+    // TRIP-1740 AC-7(T6) — 후보 응답의 imageLicense 가 페이지의 후보 카드 조립(`candidates.map`)을 지나 사진 칸까지 간다.
+    it('F2b · 후보 X(TYPE1 서버 사진)는 사진 칸까지 유형이 닿아 cover 이고 출처 글자가 붙는다', async () => {
+      await renderAndPickConcept();
+
+      expectTypeOnePhotoDelivered('itinerary-candidate-image-X', X_IMG);
     });
 
     it('F3 · AC-6·INV-1 — nameKo null 이면 플레이스홀더, poiId 원문은 화면 어디에도 없다', async () => {

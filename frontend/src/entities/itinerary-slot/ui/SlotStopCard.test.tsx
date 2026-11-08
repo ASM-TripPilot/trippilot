@@ -8,6 +8,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 
 import { ALT_LABEL } from '../config/altLabel';
 import { buildSlotKey } from '../lib/slotKey';
@@ -762,5 +763,19 @@ describe('SlotStopCard · SD — 고친 이름·분류 표시 (TRIP-1795 AC-2)',
       );
       screen.unmount();
     }
+  });
+});
+
+// TRIP-1740 AC-7(T1) — 슬롯이 직접 싣는 imageLicense 가 72px 사진 칸까지 간다(입력은 TYPE1: 끊기면 contain 이 된다).
+describe('SlotStopCard · 관광공사 사진 유형이 사진 칸에 닿는다', () => {
+  it('TYPE1 서버 사진은 지금처럼 칸에 꽉 채우고(cover) 출처 글자가 붙는다', () => {
+    const { slotKey } = renderCard({
+      slot: makeSlot({ imageLicense: 'TYPE1' }),
+    });
+
+    expectTypeOnePhotoDelivered(
+      id(slotKey)('photo'),
+      'https://cdn.example.com/gwangalli.jpg'
+    );
   });
 });

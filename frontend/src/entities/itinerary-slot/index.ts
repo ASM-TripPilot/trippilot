@@ -15,7 +15,7 @@ export type { ProjectedSlot } from './lib/slotProgress';
 export { suggestNextSlotTime } from './lib/suggestNextSlotTime';
 export { timeBandLabel } from './lib/timeBandLabel';
 export { overlapAwareNotice } from './lib/overlapNotice';
-export { VIOLATION_NOTICE, violationNotice } from './lib/violationLabel';
+export { violationNotice } from './lib/violationLabel';
 export { deriveSkippedPoiIds, deriveVisitProgress } from './lib/visitProgress';
 export { arrivedLabel, visitedLabelByPoiId } from './lib/visitedLabels';
 export type { ItineraryDaysItemSlotsItem, ReplanSlotVM } from './model';

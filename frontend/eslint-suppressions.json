@@ -157,18 +157,10 @@
   "src/pages/home/ui/HomePage.tsx": {
     "no-restricted-syntax": {
       "count": 5
-    },
-    "react-hooks/refs": {
-      "count": 1
     }
   },
   "src/pages/home/ui/HomeScreen.heroMemo.test.tsx": {
     "no-restricted-properties": {
-      "count": 2
-    }
-  },
-  "src/pages/itinerary/itinerary-copick/ui/CoPickCompletePage.tsx": {
-    "no-restricted-syntax": {
       "count": 2
     }
   },
@@ -180,11 +172,6 @@
   "src/pages/itinerary/itinerary-draft/ui/DraftPage.integration.test.tsx": {
     "no-restricted-properties": {
       "count": 5
-    }
-  },
-  "src/pages/itinerary/itinerary-draft/ui/DraftPage.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
     }
   },
   "src/pages/itinerary/itinerary-draft/ui/SlotCandidatePanelContainer.tsx": {
@@ -235,11 +222,6 @@
       "count": 1
     }
   },
-  "src/pages/itinerary/itinerary-list/ui/TripCardContainer.tsx": {
-    "react-hooks/refs": {
-      "count": 1
-    }
-  },
   "src/pages/itinerary/itinerary-manual/ui/ManualPlanPage.integration.test.tsx": {
     "no-restricted-syntax": {
       "count": 2
@@ -282,11 +264,6 @@
   "src/pages/itinerary/itinerary-mustvisit/ui/MustVisitListPage.tsx": {
     "no-restricted-syntax": {
       "count": 2
-    }
-  },
-  "src/pages/itinerary/itinerary-mustvisit/ui/MustVisitTimePage.tsx": {
-    "react-hooks/refs": {
-      "count": 1
     }
   },
   "src/pages/live/live-itinerary/ui/LiveBottomBar.test.tsx": {
@@ -379,16 +356,6 @@
     },
     "no-restricted-syntax": {
       "count": 2
-    }
-  },
-  "src/pages/onboarding/onboarding-pref1/ui/PrefStep1Page.tsx": {
-    "react-hooks/refs": {
-      "count": 1
-    }
-  },
-  "src/pages/onboarding/onboarding-pref2/ui/PrefStep2Page.tsx": {
-    "react-hooks/refs": {
-      "count": 1
     }
   },
   "src/pages/onboarding/onboarding-terms/model/useTermsConsent.ts": {
@@ -574,7 +541,7 @@
       "count": 4
     },
     "react-hooks/refs": {
-      "count": 2
+      "count": 1
     },
     "react-hooks/set-state-in-effect": {
       "count": 1
@@ -593,9 +560,6 @@
   "src/pages/trip/trip-new-step2/ui/TripNewStep2Page.tsx": {
     "no-restricted-syntax": {
       "count": 2
-    },
-    "react-hooks/refs": {
-      "count": 1
     }
   },
   "src/shared/lib/useDeadlineFlag.ts": {
@@ -663,7 +627,7 @@
   },
   "src/test-support/barMotionProbe.ts": {
     "no-restricted-properties": {
-      "count": 3
+      "count": 1
     }
   },
   "src/test-support/editDragList.ts": {

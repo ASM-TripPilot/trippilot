@@ -51,11 +51,7 @@ export interface MessageListProps {
   older?: OlderMessagesProps | null;
 }
 
-export function UserBubble({
-  message,
-}: {
-  message: AssistantMessage;
-}): ReactElement {
+function UserBubble({ message }: { message: AssistantMessage }): ReactElement {
   return (
     <View className="items-end">
       <View
@@ -71,7 +67,7 @@ export function UserBubble({
   );
 }
 
-export function NextActionButton({
+function NextActionButton({
   action,
   onPress,
   withIcon = false,

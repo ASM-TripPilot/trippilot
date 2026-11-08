@@ -6,7 +6,7 @@
  * granted 면 다음 단계(푸시 안내 카드 — TRIP-1108), 아니면 denied 프레임으로 전환한다. 거부도 온보딩을 막지 않는다.
  */
 import type { ReactElement } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import { openAppSettings } from '@/shared/external-link';
 import * as Location from 'expo-location';
@@ -16,7 +16,11 @@ import {
   LocationPreprompt,
   type LocationPrepromptState,
 } from '@/shared/location/index.view';
-import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
+import {
+  guardPress,
+  openPressGuardWindow,
+  usePressLock,
+} from '@/shared/lib/pressGuard';
 
 /** c08 default 목적 문단에 주입하는 Figma 온보딩 문구(4975:3306). 사용자 가시 텍스트라
  * 자구가 곧 계약이다 — 바꾸려면 게이트① 논의 대상. */
@@ -90,12 +94,11 @@ export function LocationPage({
   // TRIP-1688 FV-TAP-02 — 한 번 누르면 잠근다. 이미 허용된 기기는 OS 창 없이 곧장 granted 라 연타가 요청·이동을
   // 두 번 냈다. 풀지 않는다 — 결과는 이동 아니면 거부 프레임이고, 거부 프레임엔 이 버튼이 없다([계속]이 대신한다).
   // guardPress 로 감싸지 않는다 — 창이 탭 시점에 열려 OS 창 응답이 빠르면 거부 프레임 [계속]을 삼킨다(TRIP-1108).
-  const allowLockRef = useRef(false);
+  const allowLock = usePressLock();
 
   // 허용 → OS 포그라운드 권한 요청 1회. granted 면 다음 단계, 아니면 denied 프레임으로 전환(무중단).
   const handleAllow = () => {
-    if (allowLockRef.current) return;
-    allowLockRef.current = true;
+    if (!allowLock.acquire()) return;
     void (async () => {
       try {
         const result = await Location.requestForegroundPermissionsAsync();

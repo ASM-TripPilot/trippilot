@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -237,27 +238,23 @@ export function GenerationFallbackScreen({
         <View className="w-full gap-sm bg-canvas px-md pb-xl pt-md">
           <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
           {failed ? (
-            <Pressable
+            <Button
               testID="itinerary-fallback-retry"
-              accessibilityRole="button"
+              size="md"
               onPress={onRetry}
-              className="w-full items-center justify-center rounded-button bg-primary py-[15px]"
+              className="w-full"
             >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                {GENERATION_FALLBACK_RETRY}
-              </Text>
-            </Pressable>
+              {GENERATION_FALLBACK_RETRY}
+            </Button>
           ) : (
-            <Pressable
+            <Button
               testID="itinerary-fallback-view-plan"
-              accessibilityRole="button"
+              size="md"
               onPress={onViewPlan}
-              className="w-full items-center justify-center rounded-button bg-primary py-[15px]"
+              className="w-full"
             >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                {GENERATION_FALLBACK_VIEW_PLAN}
-              </Text>
-            </Pressable>
+              {GENERATION_FALLBACK_VIEW_PLAN}
+            </Button>
           )}
           <Pressable
             testID="itinerary-fallback-manual"

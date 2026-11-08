@@ -7,6 +7,7 @@ import {
 
 import type { MustVisitSeedItem } from '@/features/create-trip';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 import { TripWizardStep1Screen } from './TripWizardStep1Screen';
 import type { TripWizardStep1ScreenProps } from './TripWizardStep1Screen';
 
@@ -33,7 +34,7 @@ function seed(
   imageUrl: string | null = null,
   region: string | null = null
 ): MustVisitSeedItem {
-  return { sourcePoiId, name, imageUrl, region };
+  return { imageLicense: null, sourcePoiId, name, imageUrl, region };
 }
 
 /** 초기(빈) 상태 — 요약 4행이 전부 null(플레이스홀더), 스트립 0곳, 게이트 닫힘. (TRIP-732: 요약을 안 보는 describe 는 null 이
@@ -609,7 +610,10 @@ describe('꼭 갈 곳 가로 스트립', () => {
         <TripWizardStep1Screen
           {...props({
             mustVisits: [
-              seed('poi-1', '감천마을', 'https://cdn.example.com/a.jpg'),
+              {
+                ...seed('poi-1', '감천마을', 'https://cdn.example.com/a.jpg'),
+                imageLicense: 'TYPE1',
+              },
               { ...seed('poi-2', '광안리', null), category: '야경' },
             ],
           })}
@@ -620,6 +624,11 @@ describe('꼭 갈 곳 가로 스트립', () => {
       expect(
         screen.getByTestId('trip-wizard-mustvisit-image-poi-1').props.source
       ).toEqual([{ uri: 'https://cdn.example.com/a.jpg' }]);
+      // TRIP-1740 AC-7(T17) — 시드 항목의 imageLicense(TYPE1)가 화면 조립을 지나 112×88 스트립 썸네일까지 간다.
+      expectTypeOnePhotoDelivered(
+        'trip-wizard-mustvisit-image-poi-1',
+        'https://cdn.example.com/a.jpg'
+      );
       // poi-2 는 변형 3 → night_view-3.
       expect(
         screen.getByTestId('trip-wizard-mustvisit-image-poi-2').props.source

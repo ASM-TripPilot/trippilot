@@ -10,6 +10,7 @@ import { useBootstrapGate } from '@/features/auth';
 import { SplashScreen } from '@/features/auth';
 import { flushMarks, mark } from '@/shared/lib/startupMarks';
 import { registerPushIfGranted } from '@/shared/push';
+import { PRESS_GUARD_SCREEN_LISTENERS } from '@/shared/lib/pressGuard';
 import { readInstallFlag, writeInstallFlag } from '@/shared/storage';
 
 import { BOOT_MODULE_LOADED_AT } from './bootClock';
@@ -162,7 +163,10 @@ export function SplashGate() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack
+      screenOptions={{ headerShown: false }}
+      screenListeners={PRESS_GUARD_SCREEN_LISTENERS}
+    >
       <Stack.Protected guard={destination === 'FORCE_UPDATE'}>
         <Stack.Screen name="force-update" />
       </Stack.Protected>

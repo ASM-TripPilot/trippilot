@@ -37,9 +37,9 @@ import { DayHighlightCard } from './DayHighlightCard';
  * (가짜 기본 센터 지도 금지, 571 경고-2 동형 · 자리표시 제거 TRIP-939). `DayHighlight` 계약에 좌표가 없어 런타임은 늘 빈 가지다.
  */
 
-export type SummaryViewMode = 'MAP' | 'VISIT_LIST';
+type SummaryViewMode = 'MAP' | 'VISIT_LIST';
 
-export interface DayReflectionVM {
+interface DayReflectionVM {
   /** 1-기반 여행 일차 — j03 일차 탭과 같은 번호. */
   day: number;
   label: string;

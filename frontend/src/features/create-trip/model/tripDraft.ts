@@ -49,7 +49,7 @@ function toEpochDay(date: string): number {
  * 많아요`)의 M이 이 값이고, 그 문구는 화면이 아니라 `TripNewStep1Page`가 조립한다(01b D1).
  * 판정 로직은 그대로 `validateTripDraft` 하나뿐이고, 이 함수는 그 계산을 그대로 재사용할
  * 뿐이다 — 같은 식을 컨테이너에 다시 적으면 두 계산이 갈라질 수 있다. */
-export function tripLength(draft: TripDraft): number {
+function tripLength(draft: TripDraft): number {
   return toEpochDay(draft.endDate) - toEpochDay(draft.startDate);
 }
 

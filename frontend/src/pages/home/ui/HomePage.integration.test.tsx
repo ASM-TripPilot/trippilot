@@ -27,6 +27,7 @@ import type {
 } from '@/shared/api/index.schemas';
 import { BASE } from '@/test-support/apiBase';
 import { createGate } from '@/test-support/mswHookHarness';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 import { routerSpies } from '@/test-support/expoRouterMock';
 import {
   day,
@@ -1129,4 +1130,32 @@ describe('TRIP-1754 · 저장 목록 조회 실패 — 토스트 · 배지 `–`
       });
     }
   );
+});
+
+// TRIP-1740 AC-7(T13·T14) — 응답의 imageLicense(TYPE1)가 홈 두 레인(지금 뜨는 장소·요즘 담는 곳)의 카드 사진 칸까지 간다.
+// 두 카드 VM 은 HomePage 가 Place 에서 골라 담는 곳(끊기는 곳)이라 여기서 한 번에 본다.
+describe('홈 레인 · 관광공사 사진 유형이 카드 사진 칸에 닿는다', () => {
+  const PHOTO = 'https://img.example/home-lane.jpg';
+
+  it('TYPE1 서버 사진은 두 레인 모두 cover 이고 출처 글자가 붙는다', async () => {
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const region = new URL(request.url).searchParams.get('region') ?? '';
+        return HttpResponse.json({
+          items: (PLACES_BY_REGION[region] ?? []).map((item) => ({
+            ...item,
+            imageUrl: PHOTO,
+            imageLicense: 'TYPE1',
+          })),
+          nextCursor: null,
+        });
+      })
+    );
+
+    renderPage();
+
+    expect(await screen.findByTestId('home-spot-card-0')).toBeOnTheScreen();
+    expectTypeOnePhotoDelivered('home-spot-photo-0', PHOTO);
+    expectTypeOnePhotoDelivered('home-collection-photo-0', PHOTO);
+  });
 });

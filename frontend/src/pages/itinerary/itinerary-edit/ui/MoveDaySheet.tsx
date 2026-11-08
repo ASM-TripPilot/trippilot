@@ -1,18 +1,20 @@
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 
+import type { ImageLicense } from '@/shared/api/index.schemas';
 import {
   ChevronRight24Glyph,
   CloseGlyph,
   PencilGlyph,
 } from '@/shared/ui/glyphs';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 
 import type { MoveDayOption } from '../model/moveDayOptions';
 
@@ -31,8 +33,13 @@ import type { MoveDayOption } from '../model/moveDayOptions';
 
 export interface MoveDaySheetProps {
   name: string;
-  /** 장소 썸네일(없으면 썸네일 칸을 안 그린다) — 사진이 없으면 `PlacePhoto` 가 카테고리 그림을 고른다. */
-  photo?: { imageUrl: string | null; poiId: string; category?: string | null };
+  /** 장소 썸네일(없으면 썸네일 칸을 안 그린다) — 사진이 없으면 `PoiPhoto` 가 카테고리 그림을 고른다. */
+  photo?: {
+    imageUrl: string | null;
+    imageLicense: ImageLicense | null | undefined;
+    poiId: string;
+    category?: string | null;
+  };
   /** 이름 아래 한 줄(예: `1일차 · 14:30–15:15`) — 페이지가 조립한다. */
   subtitle?: string;
   /** 옮기기 섹션 입력 — null 이면 날짜 섹션 전체가 없다(고정·방문 완료·하루 일정). */
@@ -78,12 +85,13 @@ export function MoveDaySheet({
       >
         <View className="w-full flex-row items-center gap-md">
           {photo === undefined ? null : (
-            <PlacePhoto
+            <PoiPhoto
               testID="editor-move-photo"
               imageUrl={photo.imageUrl}
+              imageLicense={photo.imageLicense}
+              surface="thumb"
               category={photo.category}
               poiId={photo.poiId}
-              contentFit="cover"
               cachePolicy="memory-disk"
               className="h-[72px] w-[72px] rounded-thumb"
             />
@@ -192,23 +200,18 @@ export function MoveDaySheet({
         </Pressable>
 
         {move === null ? null : (
-          <Pressable
+          <Button
             testID="editor-move-confirm"
-            accessibilityRole="button"
             disabled={target === undefined}
             onPress={() => {
               if (target !== undefined) move?.onConfirm(target.date);
             }}
-            className={`h-[52px] w-full items-center justify-center rounded-button ${
-              target === undefined ? 'bg-hairline-strong' : 'bg-primary'
-            }`}
+            className="w-full"
           >
-            <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-              {target === undefined
-                ? '옮기기'
-                : `${target.dayIndex}일차로 옮기기`}
-            </Text>
-          </Pressable>
+            {target === undefined
+              ? '옮기기'
+              : `${target.dayIndex}일차로 옮기기`}
+          </Button>
         )}
       </BottomSheetView>
     </BottomSheet>

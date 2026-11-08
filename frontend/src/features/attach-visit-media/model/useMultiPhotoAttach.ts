@@ -8,6 +8,7 @@ import {
 } from '@/shared/api/index.hooks';
 import type { PhotoAssetMeta } from '@/shared/photo';
 import { showToast } from '@/shared/ui/Toast';
+import { usePressLock } from '@/shared/lib/pressGuard';
 
 import { attachPhotosInOrder } from './attachPhotosInOrder';
 import {
@@ -47,7 +48,7 @@ export function useMultiPhotoAttach({
   singleSuccessToast?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const lock = useRef(false);
+  const lock = usePressLock();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{
     visitCheckId: string;
@@ -118,8 +119,7 @@ export function useMultiPhotoAttach({
     visitCheckId: string,
     knownCount?: number | null
   ): Promise<void> => {
-    if (lock.current) return;
-    lock.current = true;
+    if (!lock.acquire()) return;
     setBusy(true);
     setNotice(null);
     setFailed(null);
@@ -167,7 +167,7 @@ export function useMultiPhotoAttach({
           showToast({ message: PHOTO_SAVED_SINGLE_TEXT, testID: toastTestID });
       }
     } finally {
-      lock.current = false;
+      lock.release();
       setBusy(false);
       setProgress(null);
     }
@@ -175,8 +175,7 @@ export function useMultiPhotoAttach({
 
   const retry = async (): Promise<void> => {
     const context = retryContext.current;
-    if (lock.current || context === null || failed === null) return;
-    lock.current = true;
+    if (context === null || failed === null || !lock.acquire()) return;
     setBusy(true);
     try {
       const retryable = context.assets.filter((a) =>
@@ -189,7 +188,7 @@ export function useMultiPhotoAttach({
       );
       showResult(context.visitCheckId, result.failed, context.skipped);
     } finally {
-      lock.current = false;
+      lock.release();
       setBusy(false);
       setProgress(null);
     }

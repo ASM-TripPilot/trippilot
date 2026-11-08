@@ -7,16 +7,17 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 
 import { SHEET_HANDLE_INDICATOR_STYLE } from '@/shared/lib/sheetHandle';
+import { Button } from '@/shared/ui/Button';
 
 // 편집/선택 바텀시트의 공용 틀(TRIP-1360) — 개폐 틀(index 0 · 아래로 닫기 · 딤) + 본문 컨테이너 + 머리글 + 적용 버튼.
 // ⚠️ gorhom 통과형 목은 어떤 prop 을 줘도 children 을 그린다 — 이 틀이 prop 을 떨어뜨려도 jest 는 green 이다.
 // 실제 개폐·딤·키보드 올림/내림은 6-b 실기가 유일한 그물이다(repo-traps 바텀시트 절). 소비처가 handle·keyboard·
 // dismissKeyboardOnBodyTap 을 **명시적으로** 넘기고, 기본값에 기대어 값이 뭉개지지 않게 한다.
 
-export interface SheetApply {
+interface SheetApply {
   testID: string;
   onPress: () => void;
-  /** 넘기면 진짜 `disabled` + `opacity-40`. 안 넘기면 항상 활성. */
+  /** 넘기면 진짜 `disabled`(공용 Button 회색). 안 넘기면 항상 활성. */
   disabled?: boolean;
 }
 
@@ -102,19 +103,13 @@ export function SheetShell({
       )}
       {children}
       {apply === undefined ? null : (
-        <Pressable
+        <Button
           testID={apply.testID}
-          accessibilityRole="button"
           disabled={apply.disabled}
           onPress={apply.onPress}
-          className={`h-[52px] items-center justify-center rounded-button bg-primary ${
-            apply.disabled ? 'opacity-40' : ''
-          }`}
         >
-          <Text className="text-[16px] font-noto-bold font-bold text-on-primary">
-            적용
-          </Text>
-        </Pressable>
+          적용
+        </Button>
       )}
     </>
   );

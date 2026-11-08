@@ -26,6 +26,7 @@ import {
   CloseGlyph,
   MapPinGlyph,
   SuitcaseGlyph,
+  HeartFilledGlyph,
 } from '@/shared/ui/glyphs';
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
@@ -37,7 +38,6 @@ import { PlaceRailCard, type PlaceRailCardSave } from '@/entities/place';
 import type { StayCardVM } from '@/entities/stay';
 import { StaySearchCard } from '@/entities/stay';
 import { useScrollHide } from '@/shared/lib/useScrollHide';
-import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 
 import {
   ExploreInfoGlyph,

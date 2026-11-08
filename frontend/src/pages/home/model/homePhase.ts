@@ -13,7 +13,7 @@ import type { HomePhase } from './homeTypes';
  */
 
 /** resolveHomePhase 가 지배 여행 판정에 쓰는 최소 필드(Trip 의 구조적 부분집합). */
-export interface HomeTripInput {
+interface HomeTripInput {
   /** 서버 Trip.tripId 스루 — 지배 여행 식별자(TRIP-401, 스키마 미참조 로컬 필드). */
   tripId: string;
   title: string;

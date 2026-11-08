@@ -18,10 +18,8 @@ export const SPLASH_DOT_STAGGER_MS = 200;
 
 export type Point = { x: number; y: number };
 
-/** 항로 제어점 4개(고정값). */
+/** 항로 시작·끝점(고정값). 곡선 가운데 제어점 둘(138.333,103.333 · 230,81.6668)은 아래 `flightPoint`·`flightRotationDeg` 식에 숫자로 들어 있다(워크릿 안). */
 export const FLIGHT_P0: Point = { x: 55, y: 230 };
-export const FLIGHT_P1: Point = { x: 138.333, y: 103.333 };
-export const FLIGHT_P2: Point = { x: 230, y: 81.6668 };
 export const FLIGHT_P3: Point = { x: 330, y: 165 };
 
 /** 진행률 t(0~1)에서의 항로 위 좌표. */

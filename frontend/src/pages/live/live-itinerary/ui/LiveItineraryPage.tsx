@@ -69,6 +69,7 @@ import {
   useLocationAutomation,
   useTripRoutes,
 } from '@/shared/location';
+import { usePressLock } from '@/shared/lib/pressGuard';
 import { automationVisitRefs } from '../model/automationInput';
 import { useVisitCheck } from '@/features/check-visit';
 
@@ -183,9 +184,9 @@ export function LiveItineraryPage({
       setExpandSignal((n) => n + 1);
     }
   }
-  // TRIP-1189 다음 예정지 [길찾기] — 외부 앱을 띄우는 동안 연타를 막는 잠금(ref: 같은 틱 두 번째 press 도 본다)과
+  // TRIP-1189 다음 예정지 [길찾기] — 외부 앱을 띄우는 동안 연타를 막는 잠금(같은 틱 두 번째 press 도 본다)과
   // 앱·웹 모두 실패했을 때의 거리 안내(INV-4).
-  const directionsBusy = useRef(false);
+  const directionsLock = usePressLock();
   const [directionsNotice, setDirectionsNotice] = useState<{
     poiId: string;
     text: string;
@@ -350,7 +351,7 @@ export function LiveItineraryPage({
   // (다른 방문의 저장이 이 방문의 응답을 "옛 것"으로 만들지 않는다).
   const memoAttempt = useRef<Record<string, number>>({});
   // TRIP-1426 [저장] 잠금 — ref 는 같은 틱 두 번째 누름을 막고(렌더 전이라 disabled 가 아직 안 섰다), state 는
-  // 응답을 기다리는 동안 [저장]을 비활성으로 그린다(directionsBusy 선례). TRIP-1493 — 방문(visitCheckId)별이다:
+  // 응답을 기다리는 동안 [저장]을 비활성으로 그린다(directionsLock 선례). TRIP-1493 — 방문(visitCheckId)별이다:
   // 한 방문의 PUT 보류가 다른 방문의 메모를 막지 않는다(BR-U5-14). 같은 방문의 재누름만 막는다.
   const memoSaving = useRef(new Set<string>());
   const [memoSavingShown, setMemoSavingShown] = useState<ReadonlySet<string>>(
@@ -594,8 +595,7 @@ export function LiveItineraryPage({
   const directionsPoiIds = new Set(slotDests.keys());
   const pressDirections = async (poiId: string) => {
     const dest = slotDests.get(poiId);
-    if (!dest || directionsBusy.current) return;
-    directionsBusy.current = true;
+    if (!dest || !directionsLock.acquire()) return;
     setDirectionsNotice(null);
     try {
       await openNextNav(dest, (distanceRange) =>
@@ -607,7 +607,7 @@ export function LiveItineraryPage({
         })
       );
     } finally {
-      directionsBusy.current = false;
+      directionsLock.release();
     }
   };
 

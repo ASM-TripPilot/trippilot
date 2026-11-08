@@ -16,7 +16,6 @@ const SUCCESS = COLOR_TOKENS.success;
 // eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill(비활성), 토큰 없음
 const DISABLED = '#C2CCD6';
 const WHITE = COLOR_TOKENS.canvas;
-const INK = COLOR_TOKENS.ink;
 const MUTED = COLOR_TOKENS.muted;
 // 비구름 글리프 기본색(text-primary-text 토큰의 raw 값).
 const PRIMARY_TEXT = COLOR_TOKENS['primary-text'];
@@ -87,44 +86,6 @@ export function RailUpcomingGlyph({ size = 12 }: GlyphProps) {
         fill={WHITE}
         stroke={DISABLED}
         strokeWidth={2}
-      />
-    </Svg>
-  );
-}
-
-// i10 원형 버튼 뒤로가기(‹) — 화살표 없이 굵은 셰브론. 흰 원 위 먹색이 기본(TRIP-755).
-export function ExecutionBackArrowGlyph({
-  size = 24,
-  color = INK,
-}: TintGlyphProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M15 5L8 12L15 19"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// i10 원형 버튼 공유 — 세 점 + 잇는 선. 흰 원 위 먹색이 기본(TRIP-755).
-export function ExecutionShareGlyph({
-  size = 24,
-  color = INK,
-}: TintGlyphProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Circle cx={18} cy={5} r={2.4} stroke={color} strokeWidth={1.8} />
-      <Circle cx={6} cy={12} r={2.4} stroke={color} strokeWidth={1.8} />
-      <Circle cx={18} cy={19} r={2.4} stroke={color} strokeWidth={1.8} />
-      <Path
-        d="M8.1 10.9L15.9 6.1M8.1 13.1L15.9 17.9"
-        stroke={color}
-        strokeWidth={1.8}
-        strokeLinecap="round"
       />
     </Svg>
   );

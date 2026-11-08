@@ -1,16 +1,16 @@
 import { Fragment, memo, useMemo, type ReactElement } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
+import { Button, buttonClasses } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PlaceListState } from '@/features/explore/index.view';
-import { MapPinGlyph } from '@/shared/ui/glyphs';
+import { BackChevronWideGlyph, MapPinGlyph } from '@/shared/ui/glyphs';
 import type { SavedPlace } from '@/shared/api/index.schemas';
 import { EmptyCollage } from './EmptyCollage';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
-  ExploreBackChevronGlyph,
   CheckCircleFilledGlyph,
   CheckCircleOutlineGlyph,
   CircleExclaimGlyph,
@@ -76,7 +76,7 @@ function AppBar({
         onPress={onBack}
         className="h-10 w-10 items-center justify-center"
       >
-        <ExploreBackChevronGlyph size={24} />
+        <BackChevronWideGlyph size={24} />
       </Pressable>
       <View className="gap-xs">
         <Text className="font-noto-bold text-[18px] font-bold text-ink">
@@ -144,12 +144,13 @@ const PickRow = memo(function PickRow({
       )}
 
       <View className="h-20 w-[104px] overflow-hidden rounded-thumb bg-surface-strong">
-        <PlacePhoto
+        <PoiPhoto
           testID={`mustvisit-pick-photo-${place.poiId}`}
           imageUrl={place.imageUrl}
+          imageLicense={place.imageLicense}
+          surface="thumb"
           category={place.category}
           poiId={place.poiId}
-          contentFit="cover"
           className="h-full w-full"
         />
       </View>
@@ -226,24 +227,14 @@ function CompleteBar({
           </Text>
         </View>
       ) : null}
-      <Pressable
+      <Button
         testID="mustvisit-pick-complete"
-        accessibilityRole="button"
-        accessibilityState={{ disabled }}
         disabled={disabled}
         onPress={onPress}
-        className={`h-[54px] w-full items-center justify-center rounded-button ${
-          disabled ? 'bg-surface-strong' : 'bg-primary'
-        }`}
+        className="w-full"
       >
-        <Text
-          className={`font-noto-bold text-[16px] font-bold ${
-            disabled ? 'text-muted' : 'text-on-primary'
-          }`}
-        >
-          완료
-        </Text>
-      </Pressable>
+        완료
+      </Button>
     </View>
   );
 }
@@ -265,19 +256,18 @@ function RegionEmptyBlock({
       <Text className="font-noto-bold text-section font-bold text-ink">
         {`${label}에 담은 곳이 없어요`}
       </Text>
-      <Pressable
+      <Button
         testID="mustvisit-pick-region-empty-browse"
-        accessibilityRole="button"
         onPress={onPressBrowse}
-        className="h-[52px] items-center justify-center rounded-button bg-primary px-2xl"
       >
-        <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-          {`탐색에서 ${label} 장소 담기`}
-        </Text>
-      </Pressable>
+        {`탐색에서 ${label} 장소 담기`}
+      </Button>
     </View>
   );
 }
+
+// 글리프 + 글자 행이라 Button 대신 같은 모양 클래스만 빌린다(TRIP-1828 탈출구).
+const BROWSE = buttonClasses({ size: 'md' });
 
 const RESULTS_CONTENT_STYLE = {
   paddingHorizontal: 16,
@@ -440,12 +430,10 @@ function EmptyBody({
         testID="mustvisit-pick-browse"
         accessibilityRole="button"
         onPress={onPressBrowse}
-        className="mt-sm h-[48px] flex-row items-center gap-sm self-center rounded-button bg-primary px-xl"
+        className={`${BROWSE.box} mt-sm flex-row gap-sm self-center px-xl`}
       >
         <ExploreSearchGlyph size={18} />
-        <Text className="font-noto-bold text-[15px] font-bold text-on-primary">
-          장소 둘러보기
-        </Text>
+        <Text className={BROWSE.label}>장소 둘러보기</Text>
       </Pressable>
     </View>
   );
@@ -468,16 +456,13 @@ function ErrorBody({ onRetry }: { onRetry: () => void }): ReactElement {
       <Text className="text-center font-noto text-body text-muted">
         네트워크를 확인하고 다시 시도해 주세요
       </Text>
-      <Pressable
+      <Button
         testID="mustvisit-pick-error-retry"
-        accessibilityRole="button"
         onPress={onRetry}
-        className="mt-sm h-[54px] items-center justify-center rounded-button bg-primary px-[28px]"
+        className="mt-sm"
       >
-        <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-          다시 시도
-        </Text>
-      </Pressable>
+        다시 시도
+      </Button>
     </View>
   );
 }

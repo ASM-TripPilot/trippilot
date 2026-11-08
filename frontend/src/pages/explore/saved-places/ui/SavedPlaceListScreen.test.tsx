@@ -9,6 +9,7 @@ import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 
 import { optimisticSavedPlaceId } from '@/features/save-place/index.view';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 import {
   SavedPlaceListScreen,
   type SavedPlaceListScreenProps,
@@ -78,6 +79,7 @@ const SAVED: SavedPlace[] = [
       region: '수영구',
       tags: ['야경', '산책'],
       imageUrl: 'https://cdn.example.com/p2.jpg',
+      imageLicense: 'TYPE1',
       dataStatus: 'UNVERIFIED',
     }),
   },
@@ -235,6 +237,11 @@ describe('T-4 · 썸네일 (A-4 · 계약 imageUrl nullable)', () => {
     // 긍정 — 계약이 준 값이 있으면 그 사진 그대로.
     expect(screen.getByTestId('explore-saved-photo-sp-2').props.source).toEqual(
       [{ uri: 'https://cdn.example.com/p2.jpg' }]
+    );
+    // TRIP-1740 AC-7(T9) — `Place` 통째로 받는 화면이 imageLicense(TYPE1)를 사진 칸까지 나른다.
+    expectTypeOnePhotoDelivered(
+      'explore-saved-photo-sp-2',
+      'https://cdn.example.com/p2.jpg'
     );
 
     // 짝 — NULL 이면 칸이 비지 않고 그 장소의 생성 이미지가 들어온다. 행마다 자기 카테고리·poiId 다
