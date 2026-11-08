@@ -229,7 +229,7 @@
 - `src/entities/itinerary-slot/config/altLabel.ts`  →  ALT_LABEL
 
 ## src/entities/itinerary-slot/
-- `src/entities/itinerary-slot/index.ts`  →  deriveEndsNextDay · isValidTimeRange · normalizeOpeningHours · formatOpeningHoursLabel · slotDisplayCategory · slotDisplayName · buildSlotKey · findSlotIndex · parseSlotKey · slotOrdinal · buildStatePins · projectSlotProgress · suggestNextSlotTime · timeBandLabel · overlapAwareNotice · VIOLATION_NOTICE · violationNotice · deriveSkippedPoiIds · deriveVisitProgress · arrivedLabel · visitedLabelByPoiId · ReplanSlotRow · CategoryBuildingGlyph · CategoryCupGlyph · CategoryForkKnifeGlyph · CategoryImageGlyph · CategoryShoppingBagGlyph · CategoryTreeGlyph · PhotoGlyph · SlotProgressCard · SlotStopCard
+- `src/entities/itinerary-slot/index.ts`  →  deriveEndsNextDay · isValidTimeRange · normalizeOpeningHours · formatOpeningHoursLabel · slotDisplayCategory · slotDisplayName · buildSlotKey · findSlotIndex · parseSlotKey · slotOrdinal · buildStatePins · projectSlotProgress · suggestNextSlotTime · timeBandLabel · overlapAwareNotice · violationNotice · deriveSkippedPoiIds · deriveVisitProgress · arrivedLabel · visitedLabelByPoiId · ReplanSlotRow · CategoryBuildingGlyph · CategoryCupGlyph · CategoryForkKnifeGlyph · CategoryImageGlyph · CategoryShoppingBagGlyph · CategoryTreeGlyph · PhotoGlyph · SlotProgressCard · SlotStopCard
 
 ## src/entities/itinerary-slot/lib/
 - `src/entities/itinerary-slot/lib/endsNextDay.ts`  →  deriveEndsNextDay · isValidTimeRange
@@ -247,13 +247,13 @@
 - `src/entities/itinerary-slot/lib/visitedLabels.ts`  →  arrivedLabel · visitedLabelByPoiId
 
 ## src/entities/itinerary-slot/model/
-- `src/entities/itinerary-slot/model/index.ts`  →  ReplanSlotTone · ReplanSlotVM · PoiCategory
+- `src/entities/itinerary-slot/model/index.ts`  →  ReplanSlotVM
 
 ## src/entities/itinerary-slot/ui/
 - `src/entities/itinerary-slot/ui/ReplanSlotRow.tsx`  →  ReplanSlotRowProps · ReplanSlotRow
 - `src/entities/itinerary-slot/ui/SlotGlyphs.tsx`  →  CategoryForkKnifeGlyph · CategoryCupGlyph · CategoryTreeGlyph · CategoryShoppingBagGlyph · CategoryBuildingGlyph · CategoryImageGlyph · PhotoGlyph · MemoGlyph · SlotCheckGlyph
 - `src/entities/itinerary-slot/ui/SlotProgressCard.tsx`  →  SlotProgressCardProps · SlotProgressCard
-- `src/entities/itinerary-slot/ui/SlotStopCard.tsx`  →  UNSPECIFIED_CHIP_LABEL · SlotStopCardProps · SlotStopCard
+- `src/entities/itinerary-slot/ui/SlotStopCard.tsx`  →  SlotStopCardProps · SlotStopCard
 
 ## src/entities/place/
 - `src/entities/place/index.ts`  →  formatDistance · orderLanePlaces · legDistance · pickTrendingPlaces · PlaceGridCard · PlaceRailCard · PlaceRowCard · PlaceSubtitle · SlotCandidateCard
@@ -265,7 +265,7 @@
 - `src/entities/place/lib/trendingPlaces.ts`  →  pickTrendingPlaces
 
 ## src/entities/place/model/
-- `src/entities/place/model/index.ts`  →  PlaceCardVM · PoiCategory
+- `src/entities/place/model/index.ts`  →  PlaceCardVM
 
 ## src/entities/place/ui/
 - `src/entities/place/ui/PlaceGridCard.tsx`  →  PlaceGridCardProps · PlaceGridCard
@@ -289,7 +289,7 @@
 ## src/entities/stay/ui/
 - `src/entities/stay/ui/SavedStayCard.tsx`  →  SavedStayCardProps · SavedStayCard
 - `src/entities/stay/ui/StayRecommendCard.tsx`  →  StayRecommendCardProps · StayRecommendCard
-- `src/entities/stay/ui/StaySearchCard.tsx`  →  StaySearchCardSave · StaySearchCardProps · StaySearchCard
+- `src/entities/stay/ui/StaySearchCard.tsx`  →  StaySearchCardProps · StaySearchCard
 
 ## src/entities/style-analysis/
 - `src/entities/style-analysis/index.ts`  →  resolveStyleFace · resolveStyleProgress
@@ -304,7 +304,7 @@
 - `src/entities/trip/config/serviceRegions.ts`  →  SERVICE_REGIONS
 
 ## src/entities/trip/
-- `src/entities/trip/index.ts`  →  formatDayLabel · formatNightsLabel · nightsCountLabel · nightsLabel · nightsOnlyLabel · formatShareCardPeriod · dayOfWeek · formatBaseNightRange · formatConfirmedDateRange · formatDateRangeWithDow · formatLegendDateRange · formatTripDateRange · formatTripRange · destinationForDay · placeRegionParams · placeRegionQueries · placeRegionQuery · regionForDay · tripDayNumber · tripItinerarySummary · classifyTripPhase · isTripOngoing · markDoneBarSeen · readDoneBarSeen · writeDoneBarSeen · COVER_GRADIENTS · pickCoverCity · coverChoices · coverSourceForKey · pickRegionCover · tripCoverLabel · tripCoverSource · SERVICE_REGIONS · CoverLabel · PastTripRow · TripCard · TripDeleteDialog
+- `src/entities/trip/index.ts`  →  formatDayLabel · formatNightsLabel · nightsCountLabel · nightsLabel · nightsOnlyLabel · formatShareCardPeriod · dayOfWeek · formatBaseNightRange · formatConfirmedDateRange · formatDateRangeWithDow · formatLegendDateRange · formatTripDateRange · formatTripRange · destinationForDay · placeRegionParams · placeRegionQueries · placeRegionQuery · regionForDay · tripDayNumber · tripItinerarySummary · classifyTripPhase · isTripOngoing · markDoneBarSeen · readDoneBarSeen · writeDoneBarSeen · pickCoverCity · coverChoices · coverSourceForKey · pickRegionCover · tripCoverLabel · tripCoverSource · SERVICE_REGIONS · CoverLabel · PastTripRow · TripCard · TripDeleteDialog
 
 ## src/entities/trip/lib/
 - `src/entities/trip/lib/coverCity.ts`  →  pickCoverCity
@@ -320,7 +320,7 @@
 
 ## src/entities/trip/model/
 - `src/entities/trip/model/doneBarSeen.ts`  →  readDoneBarSeen · writeDoneBarSeen · markDoneBarSeen
-- `src/entities/trip/model/index.ts`  →  MyTripBadge · MyTripCardVM · PastTripCardVM
+- `src/entities/trip/model/index.ts`  →  MyTripCardVM · PastTripCardVM
 
 ## src/entities/trip/ui/
 - `src/entities/trip/ui/CoverLabel.tsx`  →  CoverLabel
@@ -349,8 +349,8 @@
 - `src/features/assign-trip-base/model/useTripBases.ts`  →  useTripBases · useAssignBase
 
 ## src/features/attach-visit-media/
-- `src/features/attach-visit-media/index.ts`  →  pickPhotoForVisit · useSavedVisitMemos · useVisitMemo · useMultiPhotoAttach
-- `src/features/attach-visit-media/index.view.ts`  →  photoAttach · PHOTO_LIMIT_FULL_TEXT · PHOTO_SAVED_SINGLE_TEXT · photoFailedText · photoProgressLabel · photoSavedText · MemoInline
+- `src/features/attach-visit-media/index.ts`  →  useSavedVisitMemos · useVisitMemo · useMultiPhotoAttach
+- `src/features/attach-visit-media/index.view.ts`  →  photoAttach · photoFailedText · photoProgressLabel · MemoInline
 
 ## src/features/attach-visit-media/model/
 - `src/features/attach-visit-media/model/attachPhotosInOrder.ts`  →  attachPhotosInOrder
@@ -366,7 +366,7 @@
 
 ## src/features/auth/config/
 - `src/features/auth/config/gradients.ts`  →  SPLASH_BACKGROUND_COLORS · SPLASH_BACKGROUND_LOCATIONS · APP_ICON_COLORS · AUTH_ICON_COLORS
-- `src/features/auth/config/splashFlight.ts`  →  SPLASH_FLIGHT_MS · SPLASH_RIPPLE_MS · SPLASH_DOT_PERIOD_MS · SPLASH_DOT_STAGGER_MS · Point · FLIGHT_P0 · FLIGHT_P1 · FLIGHT_P2 · FLIGHT_P3 · flightPoint · flightRotationDeg
+- `src/features/auth/config/splashFlight.ts`  →  SPLASH_FLIGHT_MS · SPLASH_RIPPLE_MS · SPLASH_DOT_PERIOD_MS · SPLASH_DOT_STAGGER_MS · Point · FLIGHT_P0 · FLIGHT_P3 · flightPoint · flightRotationDeg
 
 ## src/features/auth/
 - `src/features/auth/index.ts`  →  getGateDestination · useBootstrapGate
@@ -379,7 +379,7 @@
 - `src/features/auth/model/useBootstrapGate.ts`  →  BOOTSTRAP_TIMEOUT_MS · useBootstrapGate
 
 ## src/features/auth/ui/
-- `src/features/auth/ui/AuthGlyphs.tsx`  →  AppIconGlyph · GoogleIcon · AppleLogoGlyph · KakaoIcon · NaverIcon · AuthWarningTriangleGlyph
+- `src/features/auth/ui/AuthGlyphs.tsx`  →  AppIconGlyph · GoogleIcon · AppleLogoGlyph · KakaoIcon · NaverIcon
 - `src/features/auth/ui/SplashIllustration.tsx`  →  SplashIllustration
 - `src/features/auth/ui/SplashProgressDot.tsx`  →  SplashProgressDot
 - `src/features/auth/ui/SplashScreen.tsx`  →  SplashScreen
@@ -400,7 +400,7 @@
 - `src/features/create-trip/model/dayWindow.ts`  →  DayWindow · DEFAULT_DAY_START · DEFAULT_DAY_END · DEFAULT_FIRST_DAY_START · DEFAULT_LAST_DAY_END · WHEEL_HOURS · WHEEL_MINUTES · DayWindowViolation · normalizeDayWindow · isDefaultDayWindow · dayWindowFields · validateDayWindow · summaryDayWindow
 - `src/features/create-trip/model/mustVisitSeed.ts`  →  MustVisitSeedItem · MUST_VISIT_THUMBNAIL_LIMIT · seedMustVisits · mergeMustVisitSeeds · MustVisitSectionView · resolveMustVisitSection · mustVisitFailureNotice
 - `src/features/create-trip/model/openNewTripWizard.ts`  →  openNewTripWizard
-- `src/features/create-trip/model/tripDraft.ts`  →  TripViolationCode · TripDraft · tripLength · MAX_TRIP_NIGHTS · nightsSum · validateTripDraft · toCompanionType
+- `src/features/create-trip/model/tripDraft.ts`  →  TripViolationCode · TripDraft · MAX_TRIP_NIGHTS · nightsSum · validateTripDraft · toCompanionType
 - `src/features/create-trip/model/tripSummary.ts`  →  wizardProgress · formatWizardStep · SummaryLine · PreferenceSummary · destinationLabel · summaryDestinations · summaryPeriod · summaryCompanion · summaryPreferences
 - `src/features/create-trip/model/tripWizardStep1.ts`  →  PeriodPresetCode · CompanionCode · PERIOD_PRESETS · COMPANION_OPTIONS · fromEpochDay · presetRange · deriveEndDate
 - `src/features/create-trip/model/tripWizardStore.ts`  →  TripWizardField · TripWizardDraft · minNightsFor · useTripWizardStore
@@ -408,7 +408,7 @@
 
 ## src/features/curated-stay/
 - `src/features/curated-stay/index.ts`  →  useCuratedStays
-- `src/features/curated-stay/index.view.ts`  →  curatedKey · BrowseAllButton · CuratedStayCard · type CuratedStayCardProps · CuratedStayRow · type CuratedStayRowProps
+- `src/features/curated-stay/index.view.ts`  →  curatedKey · BrowseAllButton · CuratedStayRow
 
 ## src/features/curated-stay/model/
 - `src/features/curated-stay/model/curatedKey.ts`  →  curatedKey
@@ -424,8 +424,8 @@
 
 ## src/features/edit-itinerary/model/
 - `src/features/edit-itinerary/model/buildEditItineraryRequest.ts`  →  buildEditItineraryRequest
-- `src/features/edit-itinerary/model/itineraryEditStore.ts`  →  EditorSlot · EditorDaysItem · removeSlot · removeSlots · addSlot · insertSlotAt · EditHistoryEntry · ItineraryEditState · useItineraryEditStore
-- `src/features/edit-itinerary/model/slotSwapError.ts`  →  SLOT_SWAP_CONFLICT_CODES · SlotSwapErrorKind · SlotSwapError · resolveSlotSwapError
+- `src/features/edit-itinerary/model/itineraryEditStore.ts`  →  EditorSlot · EditorDaysItem · removeSlot · removeSlots · addSlot · insertSlotAt · ItineraryEditState · useItineraryEditStore
+- `src/features/edit-itinerary/model/slotSwapError.ts`  →  SLOT_SWAP_CONFLICT_CODES · SlotSwapError · resolveSlotSwapError
 - `src/features/edit-itinerary/model/sortSlotsByStartAt.ts`  →  sortSlotsByStartAt
 - `src/features/edit-itinerary/model/swapSlotPoi.ts`  →  swapSlotPoi
 - `src/features/edit-itinerary/model/useConfirmItinerary.ts`  →  useConfirmItinerary
@@ -444,11 +444,11 @@
 - `src/features/edit-preferences/model/preferenceStore.ts`  →  PreferenceDraft · usePreferenceStore
 
 ## src/features/execution/
-- `src/features/execution/index.ts`  →  useLiveItinerary · buildAppNavUrl · buildWebNavUrl · openNextNav · resolveNextDest · resolveSlotDests · type NavDest
+- `src/features/execution/index.ts`  →  useLiveItinerary · buildAppNavUrl · buildWebNavUrl · openNextNav · resolveSlotDests
 - `src/features/execution/index.view.ts`  →  EventGlyph · HeroPhotoGlyph · RailActiveGlyph · RailDoneGlyph · RailUpcomingGlyph
 
 ## src/features/execution/model/
-- `src/features/execution/model/nextNav.ts`  →  NavOrigin · NavDest · buildAppNavUrl · buildWebNavUrl · resolveSlotDests · resolveNextDest · openNextNav
+- `src/features/execution/model/nextNav.ts`  →  NavDest · buildAppNavUrl · buildWebNavUrl · resolveSlotDests · resolveNextDest · openNextNav
 - `src/features/execution/model/useLiveItinerary.ts`  →  useLiveItinerary
 
 ## src/features/execution/ui/
@@ -475,11 +475,11 @@
 
 ## src/features/itinerary/
 - `src/features/itinerary/index.ts`  →  isGenerationRunning · useGenerationBusy · ITINERARY_OPEN_FAILED_MESSAGE · ITINERARY_OPEN_FAILED_TOAST_ID · fetchTripItineraryHref
-- `src/features/itinerary/index.view.ts`  →  countPickedCoPickSlots · firstCoPickSlotKey · nextCoPickSlotKey · ALL_IN_ITINERARY_HINT · ALL_IN_ITINERARY_TITLE · resolveSlotEmptyFace · DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_SLOW_INTERVAL_MS · buildDraftDayTabs · buildDraftPins · buildGenerationGauge · foldGenerationGauge · formatCoPickDayHeader · formatDraftDayHeader · pollIntervalMs · resolveDraftView · resolveFallbackNotice · resolveShortfallNotice · shouldKeepPollingDraft · MUST_VISIT_NAME_PLACEHOLDER · buildMustVisitPins · fixedTimeLabel · joinMustVisits · resolveMustVisitListView · buildPlanDayTabs · isConfirmLocked · itineraryDestinationHref · resolveItineraryDestination · resolvePlanState · resolvePlanMapCenter · isFixedStay · sheetMeta · sheetRowKeys · placeAddSubtitle · resolveUnplacedNames · ItineraryCalendarGlyph · CheckCircleGlyph · CoPickGlyph · DashGlyph · DiamondGlyph · ItineraryLocationOffGlyph · ItineraryLockGlyph · ManualGlyph · ItineraryPencilGlyph · SortCheckGlyph · ItineraryWarningTriangleGlyph · PlaceAddHeader · PlaceAddRow · UnplacedMustVisitNotice
+- `src/features/itinerary/index.view.ts`  →  countPickedCoPickSlots · firstCoPickSlotKey · nextCoPickSlotKey · ALL_IN_ITINERARY_HINT · ALL_IN_ITINERARY_TITLE · resolveSlotEmptyFace · DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_SLOW_INTERVAL_MS · buildDraftDayTabs · buildDraftPins · buildGenerationGauge · foldGenerationGauge · formatCoPickDayHeader · formatDraftDayHeader · pollIntervalMs · resolveDraftView · resolveFallbackNotice · resolveShortfallNotice · shouldKeepPollingDraft · MUST_VISIT_NAME_PLACEHOLDER · buildMustVisitPins · fixedTimeLabel · joinMustVisits · resolveMustVisitListView · buildPlanDayTabs · isConfirmLocked · itineraryDestinationHref · resolveItineraryDestination · resolvePlanState · resolvePlanMapCenter · sheetMeta · sheetRowKeys · placeAddSubtitle · resolveUnplacedNames · ItineraryCalendarGlyph · CheckCircleGlyph · CoPickGlyph · DashGlyph · DiamondGlyph · ItineraryLocationOffGlyph · ItineraryLockGlyph · ManualGlyph · ItineraryPencilGlyph · SortCheckGlyph · ItineraryWarningTriangleGlyph · PlaceAddHeader · PlaceAddRow · UnplacedMustVisitNotice
 
 ## src/features/itinerary/model/
 - `src/features/itinerary/model/coPickSlots.ts`  →  firstCoPickSlotKey · nextCoPickSlotKey · countPickedCoPickSlots
-- `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DRAFT_POLL_SLOW_INTERVAL_MS · DRAFT_POLL_FAST_COUNT · pollIntervalMs · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · GenerationGaugeFold · FoldedGenerationGaugeCell · foldGenerationGauge · formatDraftDayHeader · formatCoPickDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveShortfallNotice · resolveDraftView
+- `src/features/itinerary/model/draftView.ts`  →  DRAFT_POLL_INTERVAL_MS · DRAFT_POLL_MAX_COUNT · DRAFT_POLL_SLOW_INTERVAL_MS · pollIntervalMs · DraftDayTab · buildDraftDayTabs · GenerationDayState · GenerationGaugeCell · buildGenerationGauge · GenerationGaugeFold · FoldedGenerationGaugeCell · foldGenerationGauge · formatDraftDayHeader · formatCoPickDayHeader · DraftPin · buildDraftPins · shouldKeepPollingDraft · DraftView · isCandidatesDemoted · FallbackNotice · resolveFallbackNotice · resolveShortfallNotice · resolveDraftView
 - `src/features/itinerary/model/fetchTripItineraryHref.ts`  →  ITINERARY_OPEN_FAILED_MESSAGE · ITINERARY_OPEN_FAILED_TOAST_ID · fetchTripItineraryHref
 - `src/features/itinerary/model/mustVisitList.ts`  →  MUST_VISIT_NAME_PLACEHOLDER · MustVisitListItem · MustVisitListView · joinMustVisits · fixedTimeLabel · buildMustVisitPins · resolveMustVisitListView
 - `src/features/itinerary/model/placeAddSubtitle.ts`  →  PlaceAddSubtitleInput · PlaceAddSubtitle · placeAddSubtitle
@@ -491,7 +491,7 @@
 - `src/features/itinerary/model/useGenerationBusy.ts`  →  isGenerationRunning · GenerationBusy · useGenerationBusy
 
 ## src/features/itinerary/ui/
-- `src/features/itinerary/ui/ItineraryGlyphs.tsx`  →  ItineraryLockGlyph · SortCheckGlyph · DashGlyph · DiamondGlyph · CheckCircleGlyph · ItineraryPencilGlyph · ItinerarySearchGlyph · ItineraryCalendarGlyph · ItineraryLocationOffGlyph · CircleGlyphTone · ItineraryWarningTriangleGlyph · ItineraryShareGlyph · ItineraryRefreshGlyph · CoPickGlyph · ManualGlyph
+- `src/features/itinerary/ui/ItineraryGlyphs.tsx`  →  ItineraryLockGlyph · SortCheckGlyph · DashGlyph · DiamondGlyph · CheckCircleGlyph · ItineraryPencilGlyph · ItinerarySearchGlyph · ItineraryCalendarGlyph · ItineraryLocationOffGlyph · CircleGlyphTone · ItineraryWarningTriangleGlyph · CoPickGlyph · ManualGlyph
 - `src/features/itinerary/ui/PlaceAddScreen.tsx`  →  PlaceAddHeaderProps · PlaceAddHeader · PlaceAddRowProps · PlaceAddRow
 - `src/features/itinerary/ui/UnplacedMustVisitNotice.tsx`  →  UnplacedMustVisitNotice
 
@@ -507,7 +507,7 @@
 - `src/features/onboarding/ui/OnboardingGlyphs.tsx`  →  OnboardingCheckGlyph · PositiveCheckGlyph · GlyphComponent · SunGlyph · OnboardingForkKnifeGlyph · MountainGlyph · ArtGlyph · ActivityGlyph · CameraGlyph · OnboardingShoppingBagGlyph · LandmarkGlyph · FerrisWheelGlyph · CoffeeCupGlyph · MoonGlyph · BalanceGlyph · LightningGlyph · SoloPersonGlyph · OnboardingFriendsGlyph · OnboardingHeartGlyph · OnboardingFamilyGlyph · ParentsGlyph · PetGlyph · OnboardingWalkGlyph · OnboardingTransitGlyph · OnboardingCarGlyph · TaxiGlyph · BikeGlyph · SkipChevronGlyph · OnboardingInfoCircleGlyph
 
 ## src/features/open-assistant/
-- `src/features/open-assistant/index.ts`  →  assistantHref · type AssistantHref · type AssistantSurface · ChatBubbleGlyph · AssistantSparkleGlyph
+- `src/features/open-assistant/index.ts`  →  assistantHref · type AssistantSurface · ChatBubbleGlyph · AssistantSparkleGlyph
 
 ## src/features/open-assistant/model/
 - `src/features/open-assistant/model/assistantHref.ts`  →  AssistantSurface · AssistantHref · assistantHref
@@ -589,14 +589,14 @@
 ## src/features/save-stay/model/
 - `src/features/save-stay/model/buildSaveStayRequest.ts`  →  SavableStay · coordsOf · buildSaveStayRequest
 - `src/features/save-stay/model/savedStayIndex.ts`  →  findSavedStayId · optimisticSavedStayId · isOptimisticSavedStayId
-- `src/features/save-stay/model/savedStays.ts`  →  SavedStaysFailureReason · SavedStaysOutcome · useSavedStays
+- `src/features/save-stay/model/savedStays.ts`  →  SavedStaysOutcome · useSavedStays
 - `src/features/save-stay/model/stayKey.ts`  →  stayKey · savedStayKey
 
 ## src/features/settings/
-- `src/features/settings/index.ts`  →  BarChartGlyph · SettingsBedGlyph · SettingsBellGlyph · ChevronLeftGlyph · ContrastGlyph · DocumentGlyph · SettingsDownloadGlyph · SettingsExternalLinkGlyph · EyeOffGlyph · GearGlyph · SettingsListGlyph · LogoutGlyph · MUTED · MUTED_SOFT · MenuBedGlyph · PersonGlyph · SettingsPinGlyph · ShareNodesGlyph · SettingsSparkleGlyph · SettingsTrashGlyph · CARD_SHADOW
+- `src/features/settings/index.ts`  →  BarChartGlyph · SettingsBedGlyph · SettingsBellGlyph · ChevronLeftGlyph · ContrastGlyph · DocumentGlyph · SettingsDownloadGlyph · SettingsExternalLinkGlyph · EyeOffGlyph · GearGlyph · SettingsListGlyph · LogoutGlyph · MenuBedGlyph · PersonGlyph · SettingsPinGlyph · ShareNodesGlyph · SettingsSparkleGlyph · SettingsTrashGlyph · CARD_SHADOW
 
 ## src/features/settings/ui/
-- `src/features/settings/ui/SettingsGlyphs.tsx`  →  MUTED · MUTED_SOFT · SettingsBookmarkGlyph · BarChartGlyph · ShareNodesGlyph · SettingsListGlyph · EyeOffGlyph · GearGlyph · SettingsPencilGlyph · SettingsHeartGlyph · ChevronLeftGlyph · PersonGlyph · SettingsDownloadGlyph · ContrastGlyph · SettingsPinGlyph · SettingsBellGlyph · SettingsSparkleGlyph · SettingsExternalLinkGlyph · SettingsBedGlyph · MenuBedGlyph · SettingsTrashGlyph · DocumentGlyph · LogoutGlyph
+- `src/features/settings/ui/SettingsGlyphs.tsx`  →  SettingsBookmarkGlyph · BarChartGlyph · ShareNodesGlyph · SettingsListGlyph · EyeOffGlyph · GearGlyph · SettingsHeartGlyph · ChevronLeftGlyph · PersonGlyph · SettingsDownloadGlyph · ContrastGlyph · SettingsPinGlyph · SettingsBellGlyph · SettingsSparkleGlyph · SettingsExternalLinkGlyph · SettingsBedGlyph · MenuBedGlyph · SettingsTrashGlyph · DocumentGlyph · LogoutGlyph
 - `src/features/settings/ui/cardShadow.ts`  →  CARD_SHADOW
 
 ## src/features/share-trip-card/
@@ -608,7 +608,7 @@
 - `src/features/share-trip-card/model/shareCaptureNative.ts`  →  captureRef · requestPermissionsAsync · saveToLibraryAsync · shareAsync
 
 ## src/features/stay-outbound/
-- `src/features/stay-outbound/index.ts`  →  useStayOutboundFlow · type OutboundTarget
+- `src/features/stay-outbound/index.ts`  →  useStayOutboundFlow
 - `src/features/stay-outbound/index.view.ts`  →  OtaChoiceSheet · type OtaChoiceSheetProps
 
 ## src/features/stay-outbound/model/
@@ -630,34 +630,34 @@
 
 ## src/features/trip/
 - `src/features/trip/index.ts`  →  useSavedStays
-- `src/features/trip/index.view.ts`  →  SHEET_HANDLE_INDICATOR_STYLE · addressInRegion · placeLocationLabel · regionCodeInTrip · sidoKey · sigunguLabel · TripBedGlyph · TripCheckGlyph · TripChevronRightGlyph · TripFamilyGlyph · TripFriendsGlyph · GlobeGlyph · TripHeartGlyph · TripPlusGlyph · SoloGlyph · TripSparkleGlyph · StepperMinusGlyph · StepperPlusGlyph
+- `src/features/trip/index.view.ts`  →  addressInRegion · placeLocationLabel · regionCodeInTrip · sidoKey · sigunguLabel · TripBedGlyph · TripCheckGlyph · TripChevronRightGlyph · TripFamilyGlyph · TripFriendsGlyph · GlobeGlyph · TripHeartGlyph · TripPlusGlyph · SoloGlyph · TripSparkleGlyph · StepperMinusGlyph · StepperPlusGlyph
 
 ## src/features/trip/lib/
-- `src/features/trip/lib/sheetHandle.ts`  →  SHEET_HANDLE_INDICATOR_STYLE
+- `src/features/trip/lib/sheetHandle.ts`  →  (export 없음)
 
 ## src/features/trip/model/
 - `src/features/trip/model/regionMatch.ts`  →  addressInRegion · regionCodeInTrip · placeLocationLabel · sigunguLabel · sidoKey
 - `src/features/trip/model/useSavedStays.ts`  →  useSavedStays
 
 ## src/features/trip/ui/
-- `src/features/trip/ui/TripGlyphs.tsx`  →  GlyphComponent · TripPinGlyph · TripPlusGlyph · TripCalendarGlyph · StepperMinusGlyph · StepperPlusGlyph · SoloGlyph · TripFriendsGlyph · TripHeartGlyph · TripFamilyGlyph · TripSparkleGlyph · GlobeGlyph · BedTone · TripBedGlyph · TripChevronRightGlyph · BaseBadgePinGlyph · TripHeartFilledGlyph · TripCheckGlyph
+- `src/features/trip/ui/TripGlyphs.tsx`  →  GlyphComponent · TripPlusGlyph · StepperMinusGlyph · StepperPlusGlyph · SoloGlyph · TripFriendsGlyph · TripHeartGlyph · TripFamilyGlyph · TripSparkleGlyph · GlobeGlyph · BedTone · TripBedGlyph · TripChevronRightGlyph · TripCheckGlyph
 
 ## src/mocks/
 - `src/mocks/handlers.ts`  →  handlers
-- `src/mocks/scenarios.ts`  →  AuthOutcome · SocialServerBehavior · BootstrapBehavior · MockScenario · SCENARIOS · ScenarioKey · setScenario · getScenario · resetScenario
+- `src/mocks/scenarios.ts`  →  MockScenario · ScenarioKey · setScenario · getScenario · resetScenario
 - `src/mocks/server.ts`  →  server
 
 ## src/pages/assistant/assistant-sheet/api/
 - `src/pages/assistant/assistant-sheet/api/assistantClient.ts`  →  assistantPort · setAssistantPort
 - `src/pages/assistant/assistant-sheet/api/assistantContract.ts`  →  ASSISTANT_SURFACES · MessageRole · MessageKind · NEXT_ACTION_TYPES · NextActionType · NextAction · QuickReplyAction · QuickReply · ProposalStatus · ProposalChange · ProposalSlotFace · ProposalDiffItem · Proposal · LabeledValue · ReviewProblem · ReviewPayload · CandidateItem · CandidatesPayload · InfoKind · InfoPayload · ScopePayload · RefusalPayload · FallbackCause · FallbackPayload · ActionLogTag · ActionLogPayload · ClarifyPayload · MessagePayload · AssistantMessage · FeedbackRating · FEEDBACK_REASONS · FeedbackReason · FEEDBACK_COMMENT_LIMIT · FeedbackRequest · FeedbackResponse · AssistantSession · OpenSessionResponse · AssistantSessionSummary · MessagesPage · TurnInput · SendTurnRequest · SendTurnResponse · ApplyProposalResponse · DismissProposalResponse
 - `src/pages/assistant/assistant-sheet/api/assistantPort.ts`  →  AssistantPort · AssistantErrorCode · AssistantApiError · isAssistantApiError
-- `src/pages/assistant/assistant-sheet/api/assistantSamples.ts`  →  AssistantScenario · SAMPLE_TRIP_ID · SAMPLE_TRIP_CHIP · SAMPLE_CREATED_AT · startQuickReplies · sampleSession · userMessage · assistantSample · SCENARIO_UTTERANCE · sampleTranscript · sampleLongConversation · sampleActionLogs
-- `src/pages/assistant/assistant-sheet/api/fakeAssistantAdapter.ts`  →  FakeAssistantOptions · routeUtterance · FakeAssistantAdapter · fakeWithHistory
+- `src/pages/assistant/assistant-sheet/api/assistantSamples.ts`  →  AssistantScenario · startQuickReplies · sampleSession · userMessage · assistantSample · sampleTranscript · sampleLongConversation · sampleActionLogs
+- `src/pages/assistant/assistant-sheet/api/fakeAssistantAdapter.ts`  →  FakeAssistantOptions · FakeAssistantAdapter · fakeWithHistory
 - `src/pages/assistant/assistant-sheet/api/httpAssistantAdapter.ts`  →  toAssistantError · HttpAssistantAdapter
 
 ## src/pages/assistant/assistant-sheet/
 - `src/pages/assistant/assistant-sheet/index.ts`  →  AssistantSheetPage · type AssistantSheetPageProps · AssistantApiError · isAssistantApiError · type AssistantErrorCode · type AssistantPort · assistantPort · setAssistantPort · assistantKeys · useApplyProposal · useAssistantMessages · useAssistantSession · useAssistantSessions · useClearSession · useDismissProposal · useSendTurn
-- `src/pages/assistant/assistant-sheet/index.view.ts`  →  sampleActionLogs · sampleLongConversation · sampleTranscript · type AssistantScenario · AssistantSheetView · type AssistantSheetViewProps · MessageCard · TurnStatusRow · HistoryView · displayMessage · currentQuickReplies · needsCapabilitiesChip
+- `src/pages/assistant/assistant-sheet/index.view.ts`  →  sampleActionLogs · sampleLongConversation · sampleTranscript · type AssistantScenario · AssistantSheetView · MessageCard · TurnStatusRow · HistoryView · displayMessage · currentQuickReplies · needsCapabilitiesChip
 
 ## src/pages/assistant/assistant-sheet/model/
 - `src/pages/assistant/assistant-sheet/model/answerFeedback.ts`  →  toggleRating · normalizeComment · canSubmitComment · FEEDBACK_THANKS · FeedbackPanel
@@ -666,27 +666,27 @@
 - `src/pages/assistant/assistant-sheet/model/clientTurnId.ts`  →  newClientTurnId
 - `src/pages/assistant/assistant-sheet/model/composerLimit.ts`  →  COMPOSER_LIMIT
 - `src/pages/assistant/assistant-sheet/model/displayActions.ts`  →  CAPABILITIES_LABEL · CAPABILITIES_ACTION · displayActions · displayMessage · noContextActionIcon
-- `src/pages/assistant/assistant-sheet/model/nextActionRoute.ts`  →  InternalAction · RouteMode · NextActionTarget · NextActionContext · nextActionRoute
+- `src/pages/assistant/assistant-sheet/model/nextActionRoute.ts`  →  NextActionTarget · NextActionContext · nextActionRoute
 - `src/pages/assistant/assistant-sheet/model/resolveSheetState.ts`  →  SheetState · SheetSessionQuery · resolveSheetState
 - `src/pages/assistant/assistant-sheet/model/sheetModel.ts`  →  currentQuickReplies · SplitQuickReplies · splitQuickReplies · needsCapabilitiesChip · isSendableText · contextChipLabel
 - `src/pages/assistant/assistant-sheet/model/turnTiming.ts`  →  SLOW_TURN_MS · isSlowTurn · secondsLeft
 - `src/pages/assistant/assistant-sheet/model/useAnswerFeedback.ts`  →  AnswerFeedbackFlow · useAnswerFeedback
-- `src/pages/assistant/assistant-sheet/model/useTurnFlow.ts`  →  PendingTurn · TurnFlow · useTurnFlow
+- `src/pages/assistant/assistant-sheet/model/useTurnFlow.ts`  →  TurnFlow · useTurnFlow
 
 ## src/pages/assistant/assistant-sheet/ui/
 - `src/pages/assistant/assistant-sheet/ui/AnswerFeedback.tsx`  →  AnswerFeedbackProps · AnswerFeedback
-- `src/pages/assistant/assistant-sheet/ui/AssistantCards.tsx`  →  MessageCardHandlers · ReviewCard · CandidateCard · InfoCard · ScopeCard · RefusalNotice · FallbackNotice · ActionLogRow · cardConsumes · MessageCard
+- `src/pages/assistant/assistant-sheet/ui/AssistantCards.tsx`  →  MessageCardHandlers · ActionLogRow · cardConsumes · MessageCard
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetChrome.tsx`  →  AssistantSheetHeader · QuickReplyBar · Composer · ItineraryStatusRow · TurnStatusRow
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetGlyphs.tsx`  →  SendArrowGlyph · AssistantSheetChevronRightGlyph · WarningGlyph · AssistantSheetInfoGlyph · AssistantSheetRetryGlyph · AssistantSheetCheckGlyph · ThumbGlyph · MoreVGlyph · AssistantSheetListGlyph · ReplyGlyph · ArrowDownGlyph · AssistantSheetExternalLinkGlyph
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetPage.tsx`  →  AssistantSheetPageProps · AssistantSheetPage
 - `src/pages/assistant/assistant-sheet/ui/AssistantSheetView.tsx`  →  AssistantSheetViewProps · AssistantSheetView
 - `src/pages/assistant/assistant-sheet/ui/HistoryView.tsx`  →  HistoryViewProps · HistoryView
-- `src/pages/assistant/assistant-sheet/ui/MessageList.tsx`  →  OlderMessagesProps · MessageListProps · UserBubble · NextActionButton · MessageList
+- `src/pages/assistant/assistant-sheet/ui/MessageList.tsx`  →  OlderMessagesProps · MessageListProps · MessageList
 - `src/pages/assistant/assistant-sheet/ui/OutlineCard.tsx`  →  OutlineCard · ActionRow
 - `src/pages/assistant/assistant-sheet/ui/ProposalCard.tsx`  →  ProposalCardProps · ProposalCard
 
 ## src/pages/auth/login/config/
-- `src/pages/auth/login/config/oauthConfig.ts`  →  OAuthDiscovery · OAuthProviderConfig · getOAuthConfig
+- `src/pages/auth/login/config/oauthConfig.ts`  →  OAuthProviderConfig · getOAuthConfig
 
 ## src/pages/auth/login/
 - `src/pages/auth/login/index.ts`  →  LoginPage
@@ -729,7 +729,7 @@
 
 ## src/pages/auth/reconsent/ui/
 - `src/pages/auth/reconsent/ui/ReconsentPage.tsx`  →  ReconsentPage
-- `src/pages/auth/reconsent/ui/ReconsentScreen.tsx`  →  ReconsentItemView · ReconsentScreenProps · ReconsentScreen
+- `src/pages/auth/reconsent/ui/ReconsentScreen.tsx`  →  ReconsentScreenProps · ReconsentScreen
 
 ## src/pages/auth/terms-viewer/
 - `src/pages/auth/terms-viewer/index.ts`  →  TermsViewerPage
@@ -802,8 +802,8 @@
 
 ## src/pages/home/model/
 - `src/pages/home/model/homeFixtures.ts`  →  HOME_DEFAULT_PROPS
-- `src/pages/home/model/homePhase.ts`  →  HomeTripInput · ResolveHomePhaseInput · formatDday · resolveHomePhase · HomeItineraryTarget · applyItineraryTarget
-- `src/pages/home/model/homeTypes.ts`  →  HomeCollectionCard · HomeCollectionsLane · HomeSpotCard · HomeSpotsLane · HomeMagazineHero · HomeSections · TripHeroData · PastTrip · HomeSoftNote · HomePhase · HomeScreenProps
+- `src/pages/home/model/homePhase.ts`  →  ResolveHomePhaseInput · formatDday · resolveHomePhase · HomeItineraryTarget · applyItineraryTarget
+- `src/pages/home/model/homeTypes.ts`  →  HomeCollectionCard · HomeCollectionsLane · HomeSpotCard · HomeSpotsLane · HomeMagazineHero · HomeSections · TripHeroData · PastTrip · HomePhase · HomeScreenProps
 
 ## src/pages/home/ui/
 - `src/pages/home/ui/HomeFabs.tsx`  →  CreateTripFab · SavedMenuFab
@@ -836,7 +836,7 @@
 - `src/pages/itinerary/itinerary-copick/ui/ConceptPickerScreen.tsx`  →  ConceptProgress · ConceptPickerScreenProps · ConceptPickerScreen
 - `src/pages/itinerary/itinerary-copick/ui/SlotCandidateCard.tsx`  →  SlotCandidateCardProps · SlotCandidateCard
 - `src/pages/itinerary/itinerary-copick/ui/SlotFillPage.tsx`  →  SlotFillPageProps · SlotFillPage
-- `src/pages/itinerary/itinerary-copick/ui/SlotFillScreen.tsx`  →  CenterChoiceProps · SlotFillScreenProps · SlotFillScreen
+- `src/pages/itinerary/itinerary-copick/ui/SlotFillScreen.tsx`  →  SlotFillScreenProps · SlotFillScreen
 
 ## src/pages/itinerary/itinerary-draft/config/
 - `src/pages/itinerary/itinerary-draft/config/generationFallback.ts`  →  GENERATION_FALLBACK_PROGRESS · GENERATION_FALLBACK_TITLE · GENERATION_FALLBACK_MAP_PILL · GENERATION_FALLBACK_MESSAGE_TITLE · GENERATION_FALLBACK_MESSAGE_BODY · GENERATION_FALLBACK_CHECK_ROUTE · GENERATION_FALLBACK_CHECK_SKIPPED · GENERATION_FALLBACK_CHECK_DONE · GENERATION_FALLBACK_VIEW_PLAN · GENERATION_FALLBACK_MANUAL · GENERATION_FALLBACK_FAILED_TITLE · GENERATION_FALLBACK_FAILED_NOTE · GENERATION_FALLBACK_RETRY
@@ -860,7 +860,7 @@
 - `src/pages/itinerary/itinerary-edit/index.ts`  →  ItineraryEditPage
 
 ## src/pages/itinerary/itinerary-edit/model/
-- `src/pages/itinerary/itinerary-edit/model/moveDayOptions.ts`  →  MoveDayBlocked · MoveDayOption · buildMoveDayOptions
+- `src/pages/itinerary/itinerary-edit/model/moveDayOptions.ts`  →  MoveDayOption · buildMoveDayOptions
 - `src/pages/itinerary/itinerary-edit/model/reorderKeepingLocked.ts`  →  reorderKeepingLocked
 
 ## src/pages/itinerary/itinerary-edit/ui/
@@ -889,7 +889,7 @@
 ## src/pages/itinerary/itinerary-list/ui/
 - `src/pages/itinerary/itinerary-list/ui/GenerationDoneBar.tsx`  →  GenerationDoneBarProps · DONE_BAR_BOTTOM · DONE_BAR_MIN_HEIGHT · GenerationDoneBar
 - `src/pages/itinerary/itinerary-list/ui/MyTripsListPage.tsx`  →  MyTripsListPage
-- `src/pages/itinerary/itinerary-list/ui/MyTripsListScreen.tsx`  →  MyTripsListMode · MyTripsListScreenProps · MyTripsListScreen
+- `src/pages/itinerary/itinerary-list/ui/MyTripsListScreen.tsx`  →  MyTripsListScreenProps · MyTripsListScreen
 - `src/pages/itinerary/itinerary-list/ui/MyTripsSortSheet.tsx`  →  MyTripsSortSheetProps · MyTripsSortSheet
 - `src/pages/itinerary/itinerary-list/ui/TripCardContainer.tsx`  →  TripCardContainerProps · TripCardContainer
 
@@ -913,7 +913,7 @@
 
 ## src/pages/itinerary/itinerary-method/ui/
 - `src/pages/itinerary/itinerary-method/ui/ItineraryMethodPage.tsx`  →  ItineraryMethodPage
-- `src/pages/itinerary/itinerary-method/ui/MethodPickerScreen.tsx`  →  ActiveGeneration · MethodPickerScreenProps · MethodPickerScreen
+- `src/pages/itinerary/itinerary-method/ui/MethodPickerScreen.tsx`  →  MethodPickerScreenProps · MethodPickerScreen
 
 ## src/pages/itinerary/itinerary-mustvisit/
 - `src/pages/itinerary/itinerary-mustvisit/index.ts`  →  MustVisitListPage · MustVisitTimePage
@@ -960,13 +960,13 @@
 - `src/pages/live/live-itinerary/model/visitedLabels.ts`  →  doneVisitCheckIdByPoiId
 
 ## src/pages/live/live-itinerary/ui/
-- `src/pages/live/live-itinerary/ui/LiveBottomBar.tsx`  →  LiveBarActive · LiveBottomBarProps · LiveBottomBar
+- `src/pages/live/live-itinerary/ui/LiveBottomBar.tsx`  →  LiveBottomBarProps · LiveBottomBar
 - `src/pages/live/live-itinerary/ui/LiveEditPopup.tsx`  →  LiveEditPopupProps · LiveEditPopup
 - `src/pages/live/live-itinerary/ui/LiveHubView.tsx`  →  LiveHubSlot · LiveHubViewProps · LiveHubView
 - `src/pages/live/live-itinerary/ui/LiveItineraryPage.tsx`  →  LiveItineraryPageProps · LiveItineraryPage
 - `src/pages/live/live-itinerary/ui/MemoSheet.tsx`  →  MemoSheetProps · MemoSheet
 - `src/pages/live/live-itinerary/ui/OpportunityCard.tsx`  →  OpportunityCardProps · OpportunityCard
-- `src/pages/live/live-itinerary/ui/ReplanAppliedSheet.tsx`  →  AppliedDiffKind · AppliedDiffRow · ReplanAppliedSheetProps · ReplanAppliedSheet
+- `src/pages/live/live-itinerary/ui/ReplanAppliedSheet.tsx`  →  AppliedDiffRow · ReplanAppliedSheetProps · ReplanAppliedSheet
 - `src/pages/live/live-itinerary/ui/RiskDetailSheet.tsx`  →  RiskDetailSheetProps · RiskDetailSheet
 - `src/pages/live/live-itinerary/ui/TriggerChip.tsx`  →  TriggerChipProps · TriggerChip
 
@@ -1016,14 +1016,14 @@
 - `src/pages/live/planb-request/index.ts`  →  PlanbEntryGate · PlanbRequestPage
 
 ## src/pages/live/planb-request/model/
-- `src/pages/live/planb-request/model/entryRoute.ts`  →  EntryLookup · EntryRouteInput · EntrySeed · EntryRoute · entryRoute
-- `src/pages/live/planb-request/model/usePlanbEntryRoute.ts`  →  ENTRY_WAIT_MS · usePlanbEntryRoute
+- `src/pages/live/planb-request/model/entryRoute.ts`  →  EntryLookup · EntryRouteInput · EntryRoute · entryRoute
+- `src/pages/live/planb-request/model/usePlanbEntryRoute.ts`  →  usePlanbEntryRoute
 - `src/pages/live/planb-request/model/useReplanGpsOrigin.ts`  →  ReadReplanGpsOrigin · useReplanGpsOrigin
 
 ## src/pages/live/planb-request/ui/
 - `src/pages/live/planb-request/ui/PlanbEntryGate.tsx`  →  PlanbEntryGateProps · PlanbEntryGate
 - `src/pages/live/planb-request/ui/PlanbRequestPage.tsx`  →  PlanbRequestPageProps · PlanbRequestPage
-- `src/pages/live/planb-request/ui/ReplanRequestSheet.tsx`  →  ReplanDetectedChip · ReplanRequestSheetProps · ReplanRequestSheet
+- `src/pages/live/planb-request/ui/ReplanRequestSheet.tsx`  →  ReplanRequestSheetProps · ReplanRequestSheet
 
 ## src/pages/onboarding/onboarding-entry/
 - `src/pages/onboarding/onboarding-entry/index.ts`  →  OnboardingEntryPage
@@ -1045,7 +1045,7 @@
 
 ## src/pages/onboarding/onboarding-nickname/model/
 - `src/pages/onboarding/onboarding-nickname/model/useNickname.ts`  →  UseNickname · useNickname
-- `src/pages/onboarding/onboarding-nickname/model/validateNicknameFormat.ts`  →  validateNicknameFormat · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · type NicknameFormatReason · type NicknameFormatResult
+- `src/pages/onboarding/onboarding-nickname/model/validateNicknameFormat.ts`  →  validateNicknameFormat · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH
 
 ## src/pages/onboarding/onboarding-nickname/ui/
 - `src/pages/onboarding/onboarding-nickname/ui/NicknamePage.tsx`  →  NicknamePage
@@ -1103,7 +1103,7 @@
 - `src/pages/record/daily-reflection/model/editCard.ts`  →  buildEditCard
 - `src/pages/record/daily-reflection/model/failedUnlessNotFound.ts`  →  failedUnlessNotFound
 - `src/pages/record/daily-reflection/model/fillTemplate.ts`  →  TemplateContext · GUIDE_TEXTS · isGuideText · isTemplateOnly · fillTemplate
-- `src/pages/record/daily-reflection/model/missingParts.ts`  →  LocationPermissionState · MapNoticeReason · MapNotice · MissingParts · missingParts
+- `src/pages/record/daily-reflection/model/missingParts.ts`  →  LocationPermissionState · MapNotice · MissingParts · missingParts
 - `src/pages/record/daily-reflection/model/reflectionFallback.ts`  →  resolveDisplayNarrative · basicNarrative
 - `src/pages/record/daily-reflection/model/statsCard.ts`  →  statsCard
 - `src/pages/record/daily-reflection/model/useDailyReflection.ts`  →  UseDailyReflectionResult · useDailyReflection
@@ -1140,7 +1140,7 @@
 - `src/pages/record/share-card/index.ts`  →  ShareCardPage
 
 ## src/pages/record/share-card/model/
-- `src/pages/record/share-card/model/shareStory.ts`  →  STORY_DAY_LIMIT · SHARE_ROUTE_LIMIT · StorySlide · buildStorySlides · resolveShareText
+- `src/pages/record/share-card/model/shareStory.ts`  →  SHARE_ROUTE_LIMIT · StorySlide · buildStorySlides · resolveShareText
 - `src/pages/record/share-card/model/storyDeck.ts`  →  SLIDE_MS · HOLD_DELAY_MS · DeckState · DeckEvent · initDeck · isRunning · deckReducer · segmentState
 - `src/pages/record/share-card/model/useShareCardCopy.ts`  →  useShareCardCopy
 - `src/pages/record/share-card/model/useStoryDeck.ts`  →  useStoryDeck
@@ -1173,7 +1173,7 @@
 
 ## src/pages/record/trip-album/model/
 - `src/pages/record/trip-album/model/failedUnlessNotFound.ts`  →  failedUnlessNotFound
-- `src/pages/record/trip-album/model/tripAlbumVM.ts`  →  TripAlbumInput · TripAlbumPlace · TripAlbumDay · TripAlbumVM · buildTripAlbumVM
+- `src/pages/record/trip-album/model/tripAlbumVM.ts`  →  TripAlbumInput · TripAlbumVM · buildTripAlbumVM
 - `src/pages/record/trip-album/model/useTripAlbum.ts`  →  TripAlbumState · useTripAlbum
 
 ## src/pages/record/trip-album/ui/
@@ -1185,10 +1185,10 @@
 - `src/pages/record/trip-records/index.ts`  →  TripRecordsPage
 
 ## src/pages/record/trip-records/model/
-- `src/pages/record/trip-records/model/adjustTimesDraft.ts`  →  AdjustTimesViolation · AdjustTimesDraftResult · adjustTimesDraft
+- `src/pages/record/trip-records/model/adjustTimesDraft.ts`  →  AdjustTimesDraftResult · adjustTimesDraft
 - `src/pages/record/trip-records/model/failedUnlessNotFound.ts`  →  failedUnlessNotFound
 - `src/pages/record/trip-records/model/photoAvailability.ts`  →  PhotoAvailability · photoAvailability
-- `src/pages/record/trip-records/model/stayAttribution.ts`  →  AttributedStay · DayAttribution · deriveStayAttribution
+- `src/pages/record/trip-records/model/stayAttribution.ts`  →  DayAttribution · deriveStayAttribution
 - `src/pages/record/trip-records/model/useAdjustVisitTimes.ts`  →  VISIT_CONFLICT_NOTICE · AdjustVisitTimesOutcome · useAdjustVisitTimes
 - `src/pages/record/trip-records/model/useTripRecords.ts`  →  useTripRecords · useRecordBases · useRecordSavedStays
 - `src/pages/record/trip-records/model/useVisitAttachments.ts`  →  useVisitAttachments
@@ -1198,7 +1198,7 @@
 - `src/pages/record/trip-records/ui/SkipVisitDialog.tsx`  →  SkipVisitDialog
 - `src/pages/record/trip-records/ui/SpontaneousVisitButton.tsx`  →  SpontaneousVisitButtonProps · SpontaneousVisitButton
 - `src/pages/record/trip-records/ui/TripRecordsPage.tsx`  →  TripRecordsPageProps · TripRecordsPage
-- `src/pages/record/trip-records/ui/TripRecordsView.tsx`  →  TripRecordsDayTab · DayAttributionHeader · RecordPlanRowVM · TripRecordsViewProps · TripRecordsView
+- `src/pages/record/trip-records/ui/TripRecordsView.tsx`  →  RecordPlanRowVM · TripRecordsViewProps · TripRecordsView
 - `src/pages/record/trip-records/ui/VisitRecordCard.tsx`  →  VisitRecordCardVM · VisitRecordCardProps · VisitRecordCard · PlanOrderBadge
 - `src/pages/record/trip-records/ui/VisitRecordCardContainer.tsx`  →  VisitRecordCardContainerProps · VisitRecordCardContainer
 - `src/pages/record/trip-records/ui/VisitTimeSheet.tsx`  →  VisitTimeSheetProps · VisitTimeSheet
@@ -1209,7 +1209,7 @@
 ## src/pages/record/trip-summary/ui/
 - `src/pages/record/trip-summary/ui/DayHighlightCard.tsx`  →  DayHighlightCard
 - `src/pages/record/trip-summary/ui/TripSummaryPage.tsx`  →  TripSummaryPageProps · TripSummaryPage
-- `src/pages/record/trip-summary/ui/TripSummaryScreen.tsx`  →  SummaryViewMode · DayReflectionVM · TripSummaryScreenProps · TripSummaryScreen
+- `src/pages/record/trip-summary/ui/TripSummaryScreen.tsx`  →  TripSummaryScreenProps · TripSummaryScreen
 
 ## src/pages/settings/my-page/
 - `src/pages/settings/my-page/index.ts`  →  MyPage
@@ -1256,7 +1256,7 @@
 
 ## src/pages/settings/settings-notifications/model/
 - `src/pages/settings/settings-notifications/model/channelAvailability.ts`  →  PushPermission · PushColumnState · resolvePushColumn
-- `src/pages/settings/settings-notifications/model/useToggles.ts`  →  ToggleChannel · ToggleOutcome · UseTogglesResult · useToggles
+- `src/pages/settings/settings-notifications/model/useToggles.ts`  →  ToggleOutcome · UseTogglesResult · useToggles
 
 ## src/pages/settings/settings-notifications/ui/
 - `src/pages/settings/settings-notifications/ui/NotificationSettingsPage.tsx`  →  NotificationSettingsPage
@@ -1390,7 +1390,7 @@
 
 ## src/pages/trip/trip-new-step2/ui/
 - `src/pages/trip/trip-new-step2/ui/BaseRegenerateDialog.tsx`  →  BaseRegenerateDialog
-- `src/pages/trip/trip-new-step2/ui/StaySelectSheet.tsx`  →  StaySelectCandidate · StaySelectSection · AssignFailure · StaySelectSheetProps · StaySelectSheet
+- `src/pages/trip/trip-new-step2/ui/StaySelectSheet.tsx`  →  StaySelectCandidate · AssignFailure · StaySelectSheetProps · StaySelectSheet
 - `src/pages/trip/trip-new-step2/ui/TripBasesPage.tsx`  →  TripBasesPage
 - `src/pages/trip/trip-new-step2/ui/TripNewStep2Page.tsx`  →  TripNewStep2Page · BaseNightsFlowProps · BaseNightsFlow
 - `src/pages/trip/trip-new-step2/ui/TripWizardStep2Screen.tsx`  →  NightlyBaseCardVM · Step2Variant · TripWizardStep2ScreenProps · TripWizardStep2Screen
@@ -1728,11 +1728,11 @@
 ## src/shared/dev-fault/
 - `src/shared/dev-fault/FaultInjectionBadge.tsx`  →  FaultInjectionBadge
 - `src/shared/dev-fault/RequestCountBadge.tsx`  →  RequestCountBadge
-- `src/shared/dev-fault/index.ts`  →  FaultInjectionBadge · installFaultInjection · RequestCountBadge · requestCount · faultStore
+- `src/shared/dev-fault/index.ts`  →  faultStore · FaultInjectionBadge · installFaultInjection · RequestCountBadge · requestCount
 - `src/shared/dev-fault/interceptor.ts`  →  installFaultInjection
 - `src/shared/dev-fault/requestCount.ts`  →  RequestCountSnapshot · createRequestCount · requestCount
 - `src/shared/dev-fault/rules.ts`  →  FaultRule · FaultLinkAction · FaultLinkParams · matchesPath · findRule · isFaultRule · parseFaultLink · applyFaultAction · faultErrorBody
-- `src/shared/dev-fault/store.ts`  →  FaultStorage · createFaultStore · FaultStore · faultStore
+- `src/shared/dev-fault/store.ts`  →  FaultStorage · createFaultStore · faultStore
 
 ## src/shared/external-link/
 - `src/shared/external-link/index.ts`  →  openExternal · openAppSettings
@@ -1747,7 +1747,7 @@
 - `src/shared/lib/formatRelativeTime.ts`  →  formatRelativeTime
 - `src/shared/lib/goBackOr.ts`  →  BackRouter · goBackOr
 - `src/shared/lib/monthGrid.ts`  →  MonthCell · daysInMonth · firstWeekdayOfMonth · shiftMonth · isDateInRange · buildMonthGrid
-- `src/shared/lib/nicknameFormat.ts`  →  NicknameFormatReason · NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
+- `src/shared/lib/nicknameFormat.ts`  →  NicknameFormatResult · NICKNAME_MIN_LENGTH · NICKNAME_MAX_LENGTH · validateNicknameFormat
 - `src/shared/lib/placeCover.ts`  →  fnv1a32 · placeCoverSource
 - `src/shared/lib/pressGuard.ts`  →  SHEET_APPLY_WINDOW_MS · guardPress · respectPressGuard · openPressGuardWindow · resetPressGuard · PressLock · createPressLock · usePressLock · PRESS_GUARD_SCREEN_LISTENERS
 - `src/shared/lib/reduceMotion.ts`  →  onReduceMotionAnswer · startUnlessReduceMotion · useReduceMotion · resetReduceMotionForTests
@@ -1771,11 +1771,11 @@
 
 ## src/shared/location/automation/
 - `src/shared/location/automation/arming.ts`  →  OsPermission · ArmingInput · ArmingState · ArmingReason · ArmingResult · resolveArming
-- `src/shared/location/automation/autoEventQueue.ts`  →  AutoQueueItem · AutoVisitEventBody · AutoVisitEventBatch · BatchOutcome · BatchItemResult · MAX_BATCH_EVENTS · toQueueItem · enqueue · dropStale · buildBatch · applyBatchResults · IntervalReport · serializeIntervalReport · PendingReport · ReportRejection · ReportOutcome · ReportDemote · enqueueReport · settleHeadReport
+- `src/shared/location/automation/autoEventQueue.ts`  →  AutoQueueItem · AutoVisitEventBatch · BatchOutcome · BatchItemResult · toQueueItem · enqueue · dropStale · buildBatch · applyBatchResults · IntervalReport · serializeIntervalReport · PendingReport · ReportRejection · ReportOutcome · ReportDemote · enqueueReport · settleHeadReport
 - `src/shared/location/automation/config.ts`  →  AUTOMATION_CONFIG · AutomationConfig
 - `src/shared/location/automation/deps.ts`  →  getEngineDeps · overrideEngineDeps
 - `src/shared/location/automation/distanceSource.ts`  →  DistanceSource · distanceSourceByDate
-- `src/shared/location/automation/engine.ts`  →  EngineDeps · EngineReason · EngineStatus · ArmingCallInput · noticeFor · setContext · evaluate · handleGeofence · handleLocations · handleWake · flushQueue · uploadPendingRoutes · markExplainerAsked · clearNotice · wipeAutomation
+- `src/shared/location/automation/engine.ts`  →  EngineDeps · EngineStatus · ArmingCallInput · noticeFor · setContext · evaluate · handleGeofence · handleLocations · handleWake · flushQueue · uploadPendingRoutes · markExplainerAsked · clearNotice · wipeAutomation
 - `src/shared/location/automation/expoFs.ts`  →  createExpoFs
 - `src/shared/location/automation/flag.ts`  →  isLocationAutomationEnabled
 - `src/shared/location/automation/flag.web.ts`  →  isLocationAutomationEnabled
@@ -1789,12 +1789,12 @@
 - `src/shared/location/automation/routeLayer.ts`  →  routeDayToSegments · routeDayForDate
 - `src/shared/location/automation/sink.ts`  →  RouteDay · UploadResult · AutomationSinkPort · FakeSinkOptions · FakeSinkCall · createFakeAutomationSink · getAutomationSink · setAutomationSink
 - `src/shared/location/automation/statusView.ts`  →  AutomationStatusView · automationStatusView
-- `src/shared/location/automation/store.ts`  →  AutomationSlotRef · AutomationVisitRef · AutomationContext · OpenInterval · AutomationNotice · AutomationState · EMPTY_STATE · StoreFs · pickLatest · AutomationStore · createAutomationStore · createMemoryFs · withStore
+- `src/shared/location/automation/store.ts`  →  AutomationSlotRef · AutomationVisitRef · AutomationContext · AutomationNotice · AutomationState · EMPTY_STATE · StoreFs · pickLatest · AutomationStore · createAutomationStore · createMemoryFs · withStore
 - `src/shared/location/automation/tasks.ts`  →  (export 없음)
 - `src/shared/location/automation/useAutomationStatus.ts`  →  useAutomationStatus
 - `src/shared/location/automation/useLocationAutomation.ts`  →  LocationAutomationInput · LocationAutomationResult · useLocationAutomation
 - `src/shared/location/automation/useTripRoutes.ts`  →  useTripRoutes
-- `src/shared/location/automation/visitJudge.ts`  →  SlotPhase · SlotJudgeState · JudgeState · JudgeEvent · CompletionSource · JudgeEmit · initialJudgeState · judge
+- `src/shared/location/automation/visitJudge.ts`  →  JudgeState · JudgeEvent · CompletionSource · JudgeEmit · initialJudgeState · judge
 
 ## src/shared/location/
 - `src/shared/location/consentPutBody.ts`  →  consentPutBody
@@ -1814,8 +1814,8 @@
 - `src/shared/map/MapView.tsx`  →  MapCenter · MapPinState · MapPinKind · MapPin · MapViewProps · MapView
 - `src/shared/map/MapView.web.tsx`  →  MapView
 - `src/shared/map/fitRegion.ts`  →  FitBand · buildFitRegion · buildCircleRegion
-- `src/shared/map/index.ts`  →  MapView · CenterPinPicker · buildNaverPlaceAppUrl · buildNaverPlaceWebUrl · canOpenNaverPlace · openNaverPlace
-- `src/shared/map/naverMapsLoader.ts`  →  NaverLatLng · NaverPoint · NaverBounds · NaverOverlay · NaverMarker · NaverMap · NaverMapsApi · LoaderScript · LoaderDoc · LoaderWin · NaverMapsLoader · createNaverMapsLoader · getNaverMapsLoader
+- `src/shared/map/index.ts`  →  MapView · CenterPinPicker · canOpenNaverPlace · openNaverPlace
+- `src/shared/map/naverMapsLoader.ts`  →  NaverOverlay · NaverMarker · NaverMap · NaverMapsApi · LoaderScript · LoaderDoc · LoaderWin · NaverMapsLoader · createNaverMapsLoader · getNaverMapsLoader
 - `src/shared/map/naverPlaceLink.ts`  →  NaverPlaceTarget · canOpenNaverPlace · buildNaverPlaceAppUrl · buildNaverPlaceWebUrl · openNaverPlace
 - `src/shared/map/pathLines.ts`  →  PathLines · buildPathLines
 - `src/shared/map/pinShapes.ts`  →  PIN_PRIMARY · PIN_SUCCESS · PIN_MUTED_SOFT · PIN_WHITE · TEARDROP_LARGE · TEARDROP_SMALL · DONE_CHECK · STAY_PIN · DROP_LARGE_SIZE · DROP_SMALL_SIZE · RECORD_DIMS
@@ -1857,7 +1857,7 @@
 - `src/shared/ui/BottomTabBar.tsx`  →  ShellTabKey · shellTabHref · TAB_BAR_MIN_HEIGHT · TAB_BAR_PADDING_TOP · TAB_BAR_TOP · BottomTabBarProps · ItineraryIconActive · ItineraryIconInactive · RecordsIconActive · RecordsIconInactive · TAB_CONFIG · NavBarLabel · BottomTabBar
 - `src/shared/ui/Button.tsx`  →  ButtonSize · ButtonVariant · buttonClasses · Button
 - `src/shared/ui/CollageEmptyState.tsx`  →  CollageEmptyStateProps · CollageEmptyState
-- `src/shared/ui/ConfirmDialog.tsx`  →  ConfirmTone · ConfirmButton · ConfirmDialogProps · ConfirmDialog
+- `src/shared/ui/ConfirmDialog.tsx`  →  ConfirmDialogProps · ConfirmDialog
 - `src/shared/ui/CountUpText.tsx`  →  COUNT_UP_DURATION_MS · CountUpText
 - `src/shared/ui/GlassSurface.tsx`  →  GlassSurfaceProps · GlassSurface
 - `src/shared/ui/HeartButton.tsx`  →  HeartButtonProps · heartSaveLabel · HeartButton
@@ -1868,7 +1868,7 @@
 - `src/shared/ui/PlacePhoto.tsx`  →  PlacePhoto
 - `src/shared/ui/RevealItem.tsx`  →  RevealItem
 - `src/shared/ui/SegmentedControl.tsx`  →  SegmentedOption · SegmentedControlProps · SegmentedControl
-- `src/shared/ui/SheetShell.tsx`  →  SheetApply · SheetShellProps · SheetShell
+- `src/shared/ui/SheetShell.tsx`  →  SheetShellProps · SheetShell
 - `src/shared/ui/Skeleton.tsx`  →  SkeletonProps · Skeleton
 - `src/shared/ui/StateNotice.tsx`  →  StateNoticeAction · StateNoticeProps · StateNotice
 - `src/shared/ui/Toast.tsx`  →  TOAST_VISIBLE_MS · TOAST_ACTION_VISIBLE_MS · showToast · hideToast · ToastHost
@@ -1907,10 +1907,10 @@
 ## src/test-support/
 - `src/test-support/animatedProbe.ts`  →  AnimatedProbe · useAnimatedProbe · hostNodes · answerReduceMotionSynchronously · emitReduceMotionChange
 - `src/test-support/apiBase.ts`  →  BASE
-- `src/test-support/barMotionProbe.ts`  →  BAR_ROOT · SCHEDULE · START_HOME · START_EXPLORE · START_RECORDS · START_MY · START_CELLS · FINAL_IDS · START5_IDS · NEW_CELLS · BarIds · HUB_IDS · withBarIds · visibleIds · frameSample · MotionWatch · watchMotion · joinWatches · advance · moved · structureSteady · lastSample · firstSeen · firstGone · staysOnceSeen · staysOnceGone · deferOsAnswer · flushOsAnswer · holdReduceMotionOn · layoutStyle · hiddenSpacingClasses · RowReading · readRow · setWindowWidth · SlotEffect · slotEffect · rootScale · isMounted · scheduleVisibleCenter · InteractionGate · useInteractionGate
+- `src/test-support/barMotionProbe.ts`  →  BAR_ROOT · SCHEDULE · START_HOME · START_EXPLORE · START_RECORDS · START_MY · START_CELLS · FINAL_IDS · START5_IDS · NEW_CELLS · BarIds · withBarIds · visibleIds · MotionWatch · watchMotion · joinWatches · advance · moved · structureSteady · firstGone · staysOnceSeen · staysOnceGone · deferOsAnswer · flushOsAnswer · holdReduceMotionOn · setWindowWidth · SlotEffect · slotEffect · rootScale · scheduleVisibleCenter · InteractionGate · useInteractionGate
 - `src/test-support/basesFakeServer.ts`  →  basesStay · STAY_A · STAY_B · basesAssignment · basesTrip · NETWORK_WAIT · assignNight · sheetClosed · settle · BasesFakeInit · createBasesFakeServer
 - `src/test-support/coverPhotoFixtures.ts`  →  COVER_TRIP_ID · THIS_DEVICE · OTHER_DEVICE · visitOf · recordOf · photoOf · Reply · serveCoverPhotos
-- `src/test-support/editDragList.ts`  →  EDIT_LIST · editListData · moveItem · fireEditDragEnd · hoverOverDeleteZone · fireEditDropOnZone · fireEditDragBegin
+- `src/test-support/editDragList.ts`  →  EDIT_LIST · editListData · fireEditDragEnd · hoverOverDeleteZone · fireEditDropOnZone · fireEditDragBegin
 - `src/test-support/envSandbox.ts`  →  sandboxEnv
 - `src/test-support/expoAppleAuthenticationMock.tsx`  →  appleSignInAsyncSpy · appleIsAvailableAsyncSpy · expoAppleAuthenticationModule · resetExpoAppleAuthenticationMock
 - `src/test-support/expoAuthSessionMock.ts`  →  MockPromptResult · promptAsyncSpy · authRequestConstructorSpy · makeRedirectUriSpy · expoAuthSessionModule · expoWebBrowserModule · expoCryptoModule · setPromptResult · setCodeVerifier · resetExpoAuthSessionMock
@@ -1918,7 +1918,7 @@
 - `src/test-support/expoRouterRedirectMock.tsx`  →  Redirect · Stack
 - `src/test-support/expoRouterStackMock.tsx`  →  Stack
 - `src/test-support/expoRouterTabsMock.tsx`  →  capturedTabsProps · Tabs · useRouter
-- `src/test-support/fabAnchorProbe.ts`  →  FRAME_MS · sheetHost · sheetPosition · flushFrames · moveSheet · layoutOverlay · anchorStyle · anchorTop
+- `src/test-support/fabAnchorProbe.ts`  →  sheetHost
 - `src/test-support/fakeBrowserWindow.ts`  →  FakeBrowser · installFakeBrowser · removeFakeBrowser
 - `src/test-support/fakeExpoFileSystem.ts`  →  fakeExpoFileSystemModule · resetFakeFs · seedCacheFile · cacheFilesIn · cacheFileCount · failFileWrites · documentFileCount · failFileReads
 - `src/test-support/fakeLocalStorage.ts`  →  FakeStorage · createFakeStorage · defineLocalStorage · installFakeLocalStorage · removeLocalStorage
@@ -1926,11 +1926,11 @@
 - `src/test-support/fitBandAsserts.ts`  →  NativeRegion · LatLng · expectPinsInBand · expectHeightLimited
 - `src/test-support/flushNotifications.ts`  →  flushNotifications
 - `src/test-support/fontScale.ts`  →  FONT_SCALE_MATRIX · setFontScale · describeAtFontScales
-- `src/test-support/freezeDate.ts`  →  REAL_TIMER_APIS · freezeDate
+- `src/test-support/freezeDate.ts`  →  freezeDate
 - `src/test-support/integrationSetup.ts`  →  (export 없음)
 - `src/test-support/itineraryFixtures.ts`  →  TRIP_ID · DAY1 · DAY2 · DAY3 · trip · slot · day · itinerary · daysOf · threeStopSlots · threeStopDays · oneStopDay · planTrip · twoDayItinerary · busanPoi · busanHotel · busanFourPois · busanTrip
 - `src/test-support/keyWarnings.ts`  →  KeyWarnings · guardKeyWarnings
-- `src/test-support/liveHubFixtures.ts`  →  LIVE_TRIP_ID · LIVE_TODAY · liveSlot · liveItinerary · liveTrip · liveVisit · liveHubHandlers
+- `src/test-support/liveHubFixtures.ts`  →  liveSlot · liveItinerary · liveTrip · liveVisit · liveHubHandlers
 - `src/test-support/mapViewMock.tsx`  →  MapCenter · MapPin · MapView · CenterPinPicker
 - `src/test-support/mswHookHarness.tsx`  →  createWrapper · createGate · createHitLog
 - `src/test-support/mswItinerary.ts`  →  BASE · createRequestLog · ServeItineraryOptions · serveItinerary
@@ -1938,7 +1938,7 @@
 - `src/test-support/myPageItineraries.tsx`  →  DURING · PAST · FUTURE · CONFIRMED_COLS · PLANNED_COLS · myPageTrip
 - `src/test-support/nativeSocialSdkMock.ts`  →  kakaoLoginSpy · naverLoginSpy · naverInitializeSpy · kakaoLogoutSpy · kakaoLoginModule · naverLoginModule · resetNativeSocialSdkMock
 - `src/test-support/navigationThemeMock.tsx`  →  DefaultTheme · ThemeProvider
-- `src/test-support/onboardingScenarios.ts`  →  ConsentBehavior · NicknameBehavior · OnboardingScenario · ONBOARDING_SCENARIOS · OnboardingScenarioKey · setOnboardingScenario · getOnboardingScenario · resetOnboardingScenario
+- `src/test-support/onboardingScenarios.ts`  →  OnboardingScenario · OnboardingScenarioKey · setOnboardingScenario · getOnboardingScenario · resetOnboardingScenario
 - `src/test-support/placeCoverFixtures.ts`  →  CoverSlug · COVER_SLUGS · COVER · FALLBACK_COVER · SLUG_OF · UUID_V1 · UUID_V2 · UUID_V3 · VARIANT_OF · STAY_COVER · STAY_VARIANT_OF · stayCoverFor · coverFor
 - `src/test-support/preventRemoveMock.ts`  →  mockNavigation · useNavigation · usePreventRemove
 - `src/test-support/pushOsFake.ts`  →  OsPermission · primeOsPermission · primeExpoToken · fakePushNotification · fakePushResponse · lastPushTapListener · primeOsLastResponse · lastPushReceiveListener
@@ -1946,21 +1946,21 @@
 - `src/test-support/queryRender.tsx`  →  newTestQueryClient · createWrapper · createGcZeroWrapper · renderWithQueryClient · settle · createClockSkew
 - `src/test-support/queryTimersUnref.ts`  →  (export 없음)
 - `src/test-support/reduceMotionReset.ts`  →  (export 없음)
-- `src/test-support/revealProbe.ts`  →  revealWrapper · RevealValues · revealValues
+- `src/test-support/revealProbe.ts`  →  RevealValues · revealValues
 - `src/test-support/sentryReactNativeMock.tsx`  →  init · reactNavigationIntegration · reactNativeTracingIntegration · wrap · CapturedEvent · addBreadcrumb · withScope · captureException · capturedEvents · resetSentryReportMock
 - `src/test-support/settingsHandlers.ts`  →  API_BASE · SettingsBodies · settingsHandlers · createNetworkTracker
-- `src/test-support/sheetTree.ts`  →  closestAncestor · isInsideSheet · sheetScrollOf · treeIndexOf · renderedText · closestScrollView · stubScrollTo · fireChipLayout
+- `src/test-support/sheetTree.ts`  →  closestAncestor · isInsideSheet · treeIndexOf · renderedText · closestScrollView · stubScrollTo · fireChipLayout
 - `src/test-support/splashGateRoutes.tsx`  →  SPLASH_GATE_STUB_ROUTES
 - `src/test-support/storageMock.ts`  →  saveTokens · getTokens · clearTokens · hasStoredToken
 - `src/test-support/toastHarness.tsx`  →  WithToastHost · resetToast
-- `src/test-support/tripItineraryCols.ts`  →  ItineraryCols · NO_ITINERARY · itineraryCols · colsOf · watchTripsList · TRIPS_LIST_HIT · listHits · itineraryHits
+- `src/test-support/tripItineraryCols.ts`  →  ItineraryCols · NO_ITINERARY · itineraryCols · watchTripsList · listHits · itineraryHits
 - `src/test-support/tripRecordsFixtures.ts`  →  DaySlotFixture · daySlot · daySlotAt · tripItinerary · completedVisitOn · actualVisit · tripRecord · recordsHandler · summaryHandler
 - `src/test-support/tripRecordsTrip.ts`  →  tripRecordsTrip
 - `src/test-support/wizardDraftFixture.ts`  →  WizardDraftData · wizardDraftData · freshWizardDraft · withoutSeedFields · leavePreviousTripDraft · captureDraftAtNextCall · resetWizardDraft
-- `src/test-support/wizardStep1Harness.tsx`  →  BASE · PREFERENCE · TRIP_ID · TRIP · makePreference · makeTrip · WizardStep1HarnessOptions · wizardStep1Harness
+- `src/test-support/wizardStep1Harness.tsx`  →  BASE · TRIP_ID · TRIP · makePreference · makeTrip · WizardStep1HarnessOptions · wizardStep1Harness
 
 ## src/widgets/bottom-nav-bar/
-- `src/widgets/bottom-nav-bar/index.ts`  →  NavBarBackButton · NavBarCapsule · NavBarCell · MorphNavBar · RecordNavBar · useDepartureTab · BAR_ENTER_DELAY_MS · BAR_ENTER_MS · BAR_EXIT_MS · barMorphFrame · HUB_BAR_SHAPE · RECORD_BAR_SHAPE
+- `src/widgets/bottom-nav-bar/index.ts`  →  NavBarCell · MorphNavBar · RecordNavBar · useDepartureTab · BAR_ENTER_DELAY_MS · BAR_ENTER_MS · BAR_EXIT_MS · barMorphFrame · RECORD_BAR_SHAPE
 
 ## src/widgets/bottom-nav-bar/model/
 - `src/widgets/bottom-nav-bar/model/barMorph.ts`  →  BarMorphDirection · MorphCell · BarMorphFrame · BarMorphShape · HUB_BAR_SHAPE · RECORD_BAR_SHAPE · BAR_ENTER_MS · BAR_EXIT_MS · BAR_ENTER_DELAY_MS · BAR_ENTER_CUT_MS · BAR_EXIT_SWAP_MS · BAR_DEFAULT_WIDTH · barMorphFrame
@@ -1978,19 +1978,19 @@
 - `src/widgets/curated-stays/ui/CuratedStaysSection.tsx`  →  CuratedStaysProps · CuratedStaysController · useCuratedStaysController · CuratedStaysSection · CuratedStaysSheet
 
 ## src/widgets/map-sheet-shell/
-- `src/widgets/map-sheet-shell/index.ts`  →  CTA_BAR_HEIGHT · DayChipOverlay · DayChipScroller · DistanceConnector · EditorView · GenerationProgressCard · MapSheetShell · SheetHeader
+- `src/widgets/map-sheet-shell/index.ts`  →  CTA_BAR_HEIGHT · DayChipScroller · DistanceConnector · EditorView · GenerationProgressCard · MapSheetShell · SheetHeader
 
 ## src/widgets/map-sheet-shell/ui/
 - `src/widgets/map-sheet-shell/ui/CtaBar.tsx`  →  CtaButton · CtaBarProps · CTA_BAR_HEIGHT · CtaBar
 - `src/widgets/map-sheet-shell/ui/DayChipOverlay.tsx`  →  DayChip · DayChipOverlayProps · DayChipOverlay
 - `src/widgets/map-sheet-shell/ui/DayChipScroller.tsx`  →  DayChipScrollerProps · DayChipScroller
 - `src/widgets/map-sheet-shell/ui/DistanceConnector.tsx`  →  isZeroDistance · DistanceConnectorProps · DistanceConnector
-- `src/widgets/map-sheet-shell/ui/EditorView.tsx`  →  EditorViewSlot · EditorViewProps · EditorView
+- `src/widgets/map-sheet-shell/ui/EditorView.tsx`  →  EditorViewProps · EditorView
 - `src/widgets/map-sheet-shell/ui/GenerationProgressCard.tsx`  →  GenerationProgressCell · GenerationProgressCardProps · GenerationProgressCard
 - `src/widgets/map-sheet-shell/ui/IndeterminateBar.tsx`  →  IndeterminateBar
 - `src/widgets/map-sheet-shell/ui/MapFallbackBar.tsx`  →  MapFallbackBar
 - `src/widgets/map-sheet-shell/ui/MapSheetGlyphs.tsx`  →  MapPinOffGlyph
-- `src/widgets/map-sheet-shell/ui/MapSheetShell.tsx`  →  MapSheetListSlot · MapSheetShellProps · MapSheetShell
+- `src/widgets/map-sheet-shell/ui/MapSheetShell.tsx`  →  MapSheetShellProps · MapSheetShell
 - `src/widgets/map-sheet-shell/ui/RemoveSelectedDialog.tsx`  →  RemoveSelectedDialog
 - `src/widgets/map-sheet-shell/ui/SheetHeader.tsx`  →  SheetHeaderProps · SheetHeader
 - `src/widgets/map-sheet-shell/ui/SlotDropZone.tsx`  →  SlotDropZoneProps · SlotDropZone
@@ -2004,7 +2004,7 @@
 - `src/widgets/time-sheet/ui/TimeSheet.tsx`  →  TimeSheetPlaceSummary · TimeSheetProps · TimeSheet
 
 ## src/widgets/trip-edit-sheets/
-- `src/widgets/trip-edit-sheets/index.ts`  →  CompanionEditSheet · DayWindowEditSheet · PeriodEditSheet · StepperButton · clampParty · partyRangeFor
+- `src/widgets/trip-edit-sheets/index.ts`  →  CompanionEditSheet · DayWindowEditSheet · PeriodEditSheet · StepperButton · clampParty
 
 ## src/widgets/trip-edit-sheets/model/
 - `src/widgets/trip-edit-sheets/model/partyRange.ts`  →  partyRangeFor · clampParty

@@ -48,7 +48,7 @@ const SHEET_BACKGROUND = {
 } as const;
 
 /** 감지 트리거 1개를 사유 칩 1개로 보여 줄 재료(문구 + 이 칩이 켜고 끄는 사유 key). */
-export interface ReplanDetectedChip {
+interface ReplanDetectedChip {
   label: string;
   reasonKey: string;
 }

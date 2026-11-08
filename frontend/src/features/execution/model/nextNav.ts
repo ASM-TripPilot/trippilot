@@ -14,7 +14,7 @@ import type { ProjectedSlot } from '@/entities/itinerary-slot';
  */
 
 /** 출발지 — 없으면(생략) 네이버 지도 앱이 현재 위치를 쓴다. */
-export interface NavOrigin {
+interface NavOrigin {
   lat: number;
   lng: number;
   nameKo: string | null;

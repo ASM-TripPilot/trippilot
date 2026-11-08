@@ -27,7 +27,7 @@ import { MorphNavBar, NavBarCell } from '@/widgets/bottom-nav-bar';
  * 옮겼다. 이 파일은 허브의 칸 4개와 id 만 정해 넘기는 얇은 래퍼다. 일정 칸이 생존 칸이다(홈 탭 바의 3번째 자리).
  */
 
-export type LiveBarActive = 'schedule' | 'edit' | 'event';
+type LiveBarActive = 'schedule' | 'edit' | 'event';
 
 export interface LiveBottomBarProps {
   onBack: () => void;

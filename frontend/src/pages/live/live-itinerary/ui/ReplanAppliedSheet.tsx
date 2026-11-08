@@ -14,7 +14,7 @@ import { COLOR_TOKENS } from '@/shared/config';
  * ★ 바텀시트 목 통과형(repo-traps): 실제 딤 전면 커버·끌어 닫기는 jest 사각(6-b 실기).
  */
 
-export type AppliedDiffKind = 'added' | 'removed';
+type AppliedDiffKind = 'added' | 'removed';
 
 export interface AppliedDiffRow {
   kind: AppliedDiffKind;

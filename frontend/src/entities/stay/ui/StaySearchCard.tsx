@@ -22,7 +22,7 @@ import { COLOR_TOKENS } from '@/shared/config';
  * 카드 루트가 Pressable, 저장이 그 자식 Pressable — 하트 press 는 findEventHandler 가 하트에서
  * 멈춰 카드 push(onPress)를 삼키지 않는다(★F-4).
  */
-export interface StaySearchCardSave {
+interface StaySearchCardSave {
   saved: boolean;
   pending?: boolean;
   onToggle: () => void;

@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OnboardingCheckGlyph } from '@/features/onboarding';
 
-export interface ReconsentItemView {
+interface ReconsentItemView {
   termsType: string;
   label: string;
   checked: boolean;

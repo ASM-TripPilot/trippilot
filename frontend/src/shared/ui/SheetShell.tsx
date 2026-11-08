@@ -14,7 +14,7 @@ import { Button } from '@/shared/ui/Button';
 // 실제 개폐·딤·키보드 올림/내림은 6-b 실기가 유일한 그물이다(repo-traps 바텀시트 절). 소비처가 handle·keyboard·
 // dismissKeyboardOnBodyTap 을 **명시적으로** 넘기고, 기본값에 기대어 값이 뭉개지지 않게 한다.
 
-export interface SheetApply {
+interface SheetApply {
   testID: string;
   onPress: () => void;
   /** 넘기면 진짜 `disabled`(공용 Button 회색). 안 넘기면 항상 활성. */

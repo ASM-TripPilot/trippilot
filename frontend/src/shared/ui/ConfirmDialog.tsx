@@ -9,10 +9,10 @@ import { Button } from '@/shared/ui/Button';
 // 확정 재누름은 **래퍼/페이지의 잠금 ref(lockedRef·inFlightRef·deletingRef·pending)** 가 막는다 — 잠금은 해제
 // 시점이 페이지마다 달라 이 틀로 옮기지 않는다. 값은 래퍼가 prop 으로 넘긴다(드리프트를 한 벌로 뭉개지 않는다).
 
-export type ConfirmTone =
+type ConfirmTone =
   'primary' | 'primaryOn' | 'ink' | 'outline' | 'outlineBody' | 'text';
 
-export type ConfirmButton = {
+type ConfirmButton = {
   testID: string;
   label: string;
   onPress: () => void;

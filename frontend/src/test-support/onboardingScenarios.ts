@@ -14,7 +14,7 @@
  */
 
 /** POST /me/consents 거동 (TRIP-162 · AC A7·A8) */
-export type ConsentBehavior =
+type ConsentBehavior =
   | 'ok' // 200 반영 완료
   | 'server-error'; // 500 — 다음 단계로 넘어가면 안 된다(INV-4)
 
@@ -23,7 +23,7 @@ export type ConsentBehavior =
  * 금칙어(banned-word)·중복(taken) 판정은 **서버 권한**이라 시나리오로만 주입한다 —
  * 클라이언트에는 같은 규칙을 심지 않는다(루트 CLAUDE.md).
  */
-export type NicknameBehavior =
+type NicknameBehavior =
   | 'ok' // check: available, PATCH: 200
   | 'taken' // check: {available:false, reason:'TAKEN'}
   | 'banned-word' // check: {available:false, reason:'BANNED_WORD'}
@@ -36,7 +36,7 @@ export interface OnboardingScenario {
   nickname: NicknameBehavior;
 }
 
-export const ONBOARDING_SCENARIOS = {
+const ONBOARDING_SCENARIOS = {
   'onboarding-happy': {
     key: 'onboarding-happy',
     label: '온보딩: 약관·닉네임 정상 통과',

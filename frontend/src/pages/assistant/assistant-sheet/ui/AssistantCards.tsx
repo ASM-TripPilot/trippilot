@@ -91,7 +91,7 @@ function LinkLine({
 const ICON_CARD = 'flex-row items-start gap-[10px] px-[14px] py-md';
 const WARN = COLOR_TOKENS.primary;
 
-export function ReviewCard({
+function ReviewCard({
   payload,
   onPressAction,
 }: {
@@ -142,7 +142,7 @@ export function ReviewCard({
   );
 }
 
-export function CandidateCard({
+function CandidateCard({
   message,
   payload,
   onPick,
@@ -205,7 +205,7 @@ export function CandidateCard({
   );
 }
 
-export function InfoCard({ payload }: { payload: InfoPayload }): ReactElement {
+function InfoCard({ payload }: { payload: InfoPayload }): ReactElement {
   return (
     <OutlineCard testID="assistant-info-card" className="gap-sm px-lg py-md">
       <Text className="font-noto-bold text-card-title font-bold text-ink">
@@ -225,7 +225,7 @@ export function InfoCard({ payload }: { payload: InfoPayload }): ReactElement {
   );
 }
 
-export function ScopeCard({
+function ScopeCard({
   payload,
   otaAction,
   onPressAction,
@@ -268,11 +268,7 @@ export function ScopeCard({
   );
 }
 
-export function RefusalNotice({
-  payload,
-}: {
-  payload: RefusalPayload;
-}): ReactElement {
+function RefusalNotice({ payload }: { payload: RefusalPayload }): ReactElement {
   return (
     <OutlineCard testID="assistant-refusal" className={ICON_CARD}>
       <AssistantSheetInfoGlyph size={20} />
@@ -286,7 +282,7 @@ export function RefusalNotice({
   );
 }
 
-export function FallbackNotice({
+function FallbackNotice({
   payload,
   retryAction,
   continueAction,

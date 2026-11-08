@@ -627,7 +627,7 @@
   },
   "src/test-support/barMotionProbe.ts": {
     "no-restricted-properties": {
-      "count": 3
+      "count": 1
     }
   },
   "src/test-support/editDragList.ts": {

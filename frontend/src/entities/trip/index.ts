@@ -24,16 +24,14 @@ export {
 } from './lib/regionForDay';
 export { tripDayNumber } from './lib/tripDayNumber';
 export { tripItinerarySummary } from './lib/tripItinerarySummary';
-export type { TripItinerarySummary } from './lib/tripItinerarySummary';
 export { classifyTripPhase, isTripOngoing } from './lib/tripPhase';
 export type { TripPhase } from './lib/tripPhase';
-export type { MyTripBadge, MyTripCardVM, PastTripCardVM } from './model';
+export type { MyTripCardVM, PastTripCardVM } from './model';
 export {
   markDoneBarSeen,
   readDoneBarSeen,
   writeDoneBarSeen,
 } from './model/doneBarSeen';
-export { COVER_GRADIENTS } from './config/coverGradients';
 export type { CoverTone } from './config/coverGradients';
 export { pickCoverCity } from './lib/coverCity';
 export {

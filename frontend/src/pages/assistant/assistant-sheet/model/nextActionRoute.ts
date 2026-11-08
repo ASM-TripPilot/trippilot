@@ -14,10 +14,10 @@ import type { AssistantSurface, NextAction } from '../api/assistantContract';
  * - `RESTORE_REVISION` 은 FE 에 리비전 화면(h36)이 없어 null(→ 능력 목록) — FD 개정 블록에 갭으로 남긴다.
  */
 
-export type InternalAction =
+type InternalAction =
   'RETRY_TURN' | 'CONTINUE_WITHOUT_ASSISTANT' | 'SHOW_CAPABILITIES';
 
-export type RouteMode = 'push' | 'replace';
+type RouteMode = 'push' | 'replace';
 
 export type NextActionTarget =
   | { kind: 'route'; href: string; mode: RouteMode }
