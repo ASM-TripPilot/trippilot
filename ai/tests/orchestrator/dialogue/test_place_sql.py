@@ -197,3 +197,21 @@ def test_orchestrator_submit_carries_the_llm_call_counter_into_pool_threads() ->
     with llm_call_counter() as counter:
         seen = DialogueOrchestrator._submit(fake, _llm_calls.get).result(timeout=2)
     assert seen is counter  # 팬아웃·미리 받기 안의 LLM 호출도 턴의 llm_calls 에 든다
+
+
+def test_areas_join_sido_and_sigungu_and_a_db_error_is_empty(caplog) -> None:
+    import logging
+
+    class _Rows:
+        def __init__(self, fail: bool = False) -> None:
+            self.fail = fail
+
+        def rows(self, poi_ids):
+            if self.fail:
+                raise TimeoutError("statement timeout")
+            return [PlaceRow(i, "곳", "명소", "부산광역시", "기장군" if i == "a" else None, False, False) for i in poi_ids]
+
+    assert PlaceSqlLookup(None, _Rows()).areas(("a", "b"), TraceId("t")) == {"a": "부산광역시 기장군", "b": "부산광역시"}
+    caplog.set_level(logging.WARNING, logger=ps.__name__)
+    assert PlaceSqlLookup(None, _Rows(fail=True)).areas(("a",), TraceId("t")) == {}  # 그곳은 미리 찾지 않는다(INV-4)
+    assert any("place_areas db_error" in r.getMessage() and "TimeoutError" in r.getMessage() for r in caplog.records)

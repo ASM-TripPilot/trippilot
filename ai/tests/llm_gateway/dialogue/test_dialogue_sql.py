@@ -303,3 +303,15 @@ def test_find_by_name_narrows_by_a_city_inside_a_province_too() -> None:
     found = PgPlaceSql(lambda: conn).find_by_name("광장시장", "강릉")
     assert found is not None and found.poi_id == "a"
     assert "sigungu LIKE %(area)s" in conn.log[2][0] and conn.log[2][1]["area"] == "강릉%"
+
+
+def test_rows_by_ids_is_one_read_only_primary_key_query_and_skips_empty_input() -> None:
+    """미리 찾기의 지역 조회 — 우리가 쓴 매개변수 SQL 한 번, 칸 조회와 같은 uuid 같음(기본키 색인)."""
+    conn = _Conn([[_hit("a", "부산광역시", "기장군")]])
+    rows = PgPlaceSql(lambda: conn).rows(("a",))
+    assert [(r.poi_id, r.sido, r.sigungu) for r in rows] == [("a", "부산광역시", "기장군")] and conn.rolled_back
+    assert [s for s, _ in conn.log][:2] == ["SET TRANSACTION READ ONLY", f"SET LOCAL statement_timeout = {STATEMENT_TIMEOUT_MS}"]
+    assert conn.log[2] == ("SELECT poi_id::text, name, category, sido, sigungu, tags, rich FROM poi_public"
+                           " WHERE poi_id = ANY(%s::uuid[])", (["a"],))
+    empty = _Conn([])
+    assert PgPlaceSql(lambda: empty).rows(()) == [] and empty.log == []

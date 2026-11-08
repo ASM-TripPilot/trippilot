@@ -41,7 +41,7 @@ from trippilot.agents.edit.insert_between import SlotRef, parse_insert_place, re
 from trippilot.agents.planb.place_search import PlaceSearch
 from trippilot.agents.planb.rag import _REASON_KO, PlanBAgent, PlanBRagRequest
 from trippilot.agents.recommendation.agent import PLACES, REGIONS, RecommendationAgent, RecommendTask
-from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent, UnknownTask
+from trippilot.agents.unknown_handling.agent import PrefetchTask, UnknownHandlingAgent, UnknownTask
 from trippilot.assembly_engine.travel import haversine_km
 from trippilot.domain.common import (
     BudgetLevel,
@@ -71,7 +71,7 @@ from trippilot.orchestrator.arguments import extract_kind
 from trippilot.orchestrator.intent.intent_router import normalize
 from trippilot.orchestrator.dialogue.opportunity import _displayable, shown_event
 from trippilot.orchestrator.dialogue.place_intro import PlaceIntro, clean_intro
-from trippilot.ports.place_fact_store_port import PlaceFacts
+from trippilot.ports.place_fact_store_port import FIELDS as FACT_FIELDS, PlaceFacts
 from trippilot.orchestrator.dialogue.place_sql import PlaceSqlLookup, asks_for_places
 from trippilot.poi_curation import hybrid_rank, place_fallback
 from trippilot.poi_curation.pool_builder import CandidatePoolBuilder, restrict_pool_to_target_role
@@ -1257,6 +1257,46 @@ def _web_facts(ctx: TurnContext, packet: Mapping[str, object], poi_id: str, plac
     if out.facts is not None:  # 저장된 값 — 이번 턴에 찾은 것이 아니다
         return {"web": out.facts}
     return {"web_pending": True} if out.pending else {}  # 없음(못 찾음 저장·하루 상한)이면 종전대로 "미확인"
+
+
+# 후보 답(탐색·추천·대신 갈 곳)에 나온 앞쪽 장소의 빈 칸을 묻기 전에 뒤에서 찾는다(UnknownHandlingAgent, 2026-11-08 사용자 결정 "찾다가
+# 나온 장소의 빈 칸은 웹으로 채우자"). 웹에 공식 정보가 있는 종류만 — 20곳 실측에서 맛집·카페·술집은 11곳 중 영업시간 1곳(근거가 블로그뿐이라
+# 게이트가 버린다), 명소·문화·자연은 7곳 중 6곳이 무언가를 찾았다. 맛집·카페·술집은 종전대로 사용자가 물을 때만 찾는다(`_web_facts`).
+_PREFETCH_KINDS = frozenset({"SIGHT", "NATURE", "CULTURE", "ART", "SHOPPING"})
+_PREFETCH_LABELS = _PREFETCH_KINDS | {_CATEGORY_KO[k] for k in _PREFETCH_KINDS}  # 후보의 종류는 한글 표지('명소')로 온다
+_PREFETCH_SHOWN = 3  # 화면 앞쪽 몇 곳 — 묻지 않은 조회라 넓히지 않는다(에이전트의 미리 찾기 하루 상한이 한 번 더 묶는다)
+
+
+def prefetch_unknown(ctx: TurnContext, facts: Facts) -> None:
+    """후보 답의 앞쪽 관광 종류 장소를 미리 찾기로 넘긴다 — 답에는 손대지 않는다. 빈 칸·지역 판단(등록 정보·장소 DB)은 에이전트가 뒤에서 한다."""
+    agent = ctx.ports.unknown
+    if agent is None or facts.kind is not AnswerKind.CANDIDATES:
+        return
+    ids = tuple(p.poi_id for p in facts.places[:_PREFETCH_SHOWN] if p.poi_id and p.category in _PREFETCH_LABELS)
+    if ids:
+        agent.run(PrefetchTask(ids, lambda due: _fact_gaps(ctx, due), ctx.today, ctx.trace_id, ctx.now))
+
+
+def _fact_gaps(ctx: TurnContext, poi_ids: tuple[str, ...]) -> dict[str, tuple[str, tuple[str, ...]]]:
+    """poi_id → (조회에 쓸 '이름 시·도 시군구', 빈 칸). 빈 칸은 영업시간이 없으면 영업시간·입장 마감·휴무일, 쇼핑 밖의 관광 종류에 입장료가
+    없으면 입장료. 지역은 여행 지역이 아니라 **그곳의** 시·도·시군구(장소 DB) — 이어 묻기·여러 지역 여행·계획 경로에서 여행 지역을 붙이면
+    같은 이름의 다른 곳 값이 그 poi_id 에 붙을 수 있다(2026-11-08 검토). 그곳의 지역을 모르면 찾지 않는다. 미리 찾기가 뒤에서 부른다."""
+    finder = ctx.ports.place_sql
+    if finder is None:
+        return {}
+    rows = _lookup(ctx, poi_ids, ctx.today)
+    wanted: dict[str, tuple[str, ...]] = {}
+    for poi_id, row in rows.items():
+        kind = row.get("category")
+        if kind not in _PREFETCH_KINDS:
+            continue
+        want = {"hours", "last_entry", "closed"} if row.get("hours_label") == _NO_HOURS else set()
+        if kind != "SHOPPING" and row.get("fee") is None:
+            want.add("fee")
+        if want:
+            wanted[poi_id] = tuple(f for f in FACT_FIELDS if f in want)
+    areas = finder.areas(tuple(wanted), ctx.trace_id) if wanted else {}
+    return {poi_id: (f"{rows[poi_id]['name']} {areas[poi_id]}", fields) for poi_id, fields in wanted.items() if areas.get(poi_id)}
 
 
 def _plan_poi_info(ctx: TurnContext) -> tuple[HandlerTask, ...]:

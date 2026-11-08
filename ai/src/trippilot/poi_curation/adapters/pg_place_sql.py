@@ -212,6 +212,20 @@ class PgPlaceSql:
                 conn.rollback()
         return [_row(by_id[str(i)]) for i in ids if str(i) in by_id]  # 첫 조회 순서(이름 그대로 먼저) 그대로
 
+    def rows(self, poi_ids: Sequence[str]) -> list[PlaceRow]:
+        """id 로 보여 줄 칸 — **우리가 쓴** 매개변수 SQL 한 번(`_BY_IDS_SQL`, 기본키 색인). 없는 id 는 빠진다. 미리 찾기의 지역 조회가 쓴다."""
+        if not poi_ids:
+            return []
+        with self._connect() as conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SET TRANSACTION READ ONLY")
+                    cur.execute(f"SET LOCAL statement_timeout = {STATEMENT_TIMEOUT_MS}")
+                    cur.execute(_BY_IDS_SQL, (list(poi_ids),))
+                    return [_row(r) for r in cur.fetchall()]
+            finally:
+                conn.rollback()
+
     def run(self, sql: str) -> list[PlaceRow]:
         """검사를 통과한 SELECT → 그 순서의 `PlaceRow` (≤ `ROW_CAP`). DB 오류·시한은 예외로 올라간다."""
         with self._connect() as conn:
