@@ -252,6 +252,8 @@ export interface HomeScreenProps {
    */
   savedPlacesCount?: number | null;
   savedStaysCount?: number | null;
+  /** 홈 종 미읽음 개수(TRIP-1783, 옵셔널·additive) — 1 이상이면 종 안에 숫자 배지. 0/null(모름)/미지정은 배지 없음. */
+  unreadCount?: number | null;
   /** 담은 곳 saved-menu 열림 상태(TRIP-494) — 라우트 소유(화면 useState 0건). 미지정=닫힘 */
   savedMenuOpen?: boolean;
   /** 담은 곳 saved-menu 하트/닫기 토글 press → 라우트가 open 을 뒤집는다 */

@@ -1,4 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 
 import { HOME_DEFAULT_PROPS } from '../model/homeFixtures';
 import {
@@ -113,5 +118,48 @@ describe('출시 게이트 ① · 버튼 역할 집합 == 배선 CTA 집합', ()
       '그림 · 해운대'
     );
     expect(buttonIds()).toEqual([...TRIP_FACE_BUTTONS].sort());
+  });
+});
+
+/**
+ * TRIP-1783 · 홈 종 미읽음 배지 — 숫자(`unreadCount`) → 글자·낭독 이름의 변환만 잰다(데이터가 어디서 오는지는
+ * `HomePage.integration.test.tsx`). 콜백을 안 넘겨도 되는 순수 뷰 단위다.
+ *
+ * 무엇을 보장하나: 미읽음 N(1~99)이면 종 *안*에 N, 100 이상이면 `99+`. 종의 낭독 이름은 미읽음이 있을 때만 바뀌고
+ * (`알림, 읽지 않은 알림 N개` · 100 이상 `…99개 이상`) 0건·모름·미지정이면 종전 그대로 `알림`이다. 배지는 버튼이 아니다
+ * (버튼 census 불변). 배지의 색·크기·위치는 jest 사각 — 6-b 실화면.
+ */
+describe('TRIP-1783 · 종 미읽음 배지', () => {
+  const BADGE = 'home-dashboard-bell-badge';
+  // 낭독 중복을 막으려 구현이 배지를 접근성 트리에서 숨겨도 되므로 숨김 요소도 찾는다.
+  const badgeIn = () =>
+    within(screen.getByTestId('home-dashboard-bell')).queryByTestId(BADGE, {
+      includeHiddenElements: true,
+    });
+
+  // [unreadCount, 배지 글자(null=배지 없음), 종의 낭독 이름]
+  it.each<[number | null | undefined, string | null, string]>([
+    [undefined, null, '알림'],
+    [null, null, '알림'],
+    [0, null, '알림'],
+    [1, '1', '알림, 읽지 않은 알림 1개'],
+    [3, '3', '알림, 읽지 않은 알림 3개'],
+    [99, '99', '알림, 읽지 않은 알림 99개'],
+    [100, '99+', '알림, 읽지 않은 알림 99개 이상'],
+  ])('unreadCount=%s → 배지 %s · 이름 "%s"', (unreadCount, text, name) => {
+    render(<HomeScreen {...HOME_DEFAULT_PROPS} unreadCount={unreadCount} />);
+
+    // 앵커 — 종은 늘 그려지고 그 이름이 아래 기대와 정확히 같다(부분 일치 아님).
+    expect(screen.getByRole('button', { name })).toHaveProp(
+      'testID',
+      'home-dashboard-bell'
+    );
+    if (text === null) {
+      expect(badgeIn()).toBeNull();
+    } else {
+      expect(badgeIn()).toHaveTextContent(text);
+    }
+    // 배지는 눌리는 요소가 아니다 — 숫자가 붙어도 버튼 집합은 그대로.
+    expect(buttonIds()).toEqual([...DISCOVERY_BUTTONS].sort());
   });
 });

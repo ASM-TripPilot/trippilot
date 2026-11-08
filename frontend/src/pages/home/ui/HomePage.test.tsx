@@ -102,6 +102,20 @@ jest.mock('@/features/save-stay/model/savedStays', () => ({
   useSavedStays: (...args: unknown[]) => mockUseSavedStays(...args),
 }));
 
+// TRIP-1783 — 홈이 종 미읽음 배지를 위해 부르는 알림 조회 훅. 이 버킷엔 서버가 없으니 무해한 스텁(조회 전 = data 없음 → 배지 없음)이다.
+// 개수·요청 쿼리·재조회·실패는 `HomePage.integration.test.tsx` 가 실훅 + msw 로 잰다. 여기서 data 를 주지 않는 이유: 훅 결과 모양
+// (`select` 로 개수를 받는지 `items` 를 받는지)을 이 목이 못박으면 구현 선택을 막고, 목이 구현과 갈라져도 green 이 된다.
+jest.mock('@/shared/api/generated/notification/notification', () => ({
+  ...jest.requireActual('@/shared/api/generated/notification/notification'),
+  useGetMeNotifications: () => ({
+    data: undefined,
+    status: 'pending',
+    isPending: true,
+    isError: false,
+    isFetching: false,
+  }),
+}));
+
 const TRIP_ID = '33333333-3333-3333-3333-333333333333';
 
 function trip(overrides: Partial<Trip> = {}): Trip {
