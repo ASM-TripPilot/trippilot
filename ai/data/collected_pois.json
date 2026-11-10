@@ -37,33 +37,8 @@
   "stats": {
     "merged_runs": 2,
     "unique_proposals": 108021,
-    "cpyrht_applied": 14458,
-    "retro_dropped_existing": 0,
-    "sido_quarantined": 3,
-    "sido_quarantined_refs": [
-      {
-        "source": "TOURAPI",
-        "content_id": "2614541",
-        "address": "닫기 경상북도 영덕군 영해면 대진리 222"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "4054732",
-        "address": "김제시 죽산면 죽산리 948-20"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "2929425",
-        "address": "전북특별자치시 군산시 미장안7길 9"
-      }
-    ],
-    "sido_restored_previous_refs": [
-      {
-        "source": "TOURAPI",
-        "content_id": "3082730",
-        "address": "전라북도 정읍시 산내면 종성리 516"
-      }
-    ]
+    "cpyrht_applied": 0,
+    "retro_dropped_existing": 0
   },
   "merged_from": [
     {
@@ -143,116 +118,37 @@
     },
     {
       "collected_at": "2026-11-10T02:29:15.378877+00:00",
-      "proposals": 422,
+      "proposals": 108021,
       "stats": {
-        "http_calls": 2322,
-        "listed": 2195,
-        "page_failures": 59,
-        "detail_failures": 49,
-        "category_unmapped": 17,
-        "address_missing": 2,
-        "merged": 0,
-        "passed": 422,
-        "skipped_unchanged": 17916,
-        "rest_unparsed": 4,
-        "raw_reparse_mismatch": 0,
-        "gate_drops": {
-          "existence_out_of_service_region": 13,
-          "existence_closed_business": 11,
-          "policy_non_travel:shop_in_mall": 964,
-          "policy_non_travel:chain_store": 679,
-          "policy_non_travel:hypermarket": 71,
-          "policy_non_travel:convenience_store": 12,
-          "policy_non_travel:dealership": 2,
-          "policy_non_travel:franchise": 2
-        },
-        "leports_lcls": {
-          "LS/LS01": 1,
-          "AC/AC05": 16
-        },
-        "budget_exhausted": false,
-        "per_area": {
-          "1": {
-            "calls": 1430,
-            "passed": 130,
-            "skipped": 4631
+        "merged_runs": 2,
+        "unique_proposals": 108021,
+        "cpyrht_applied": 14458,
+        "retro_dropped_existing": 0,
+        "sido_quarantined": 3,
+        "sido_quarantined_refs": [
+          {
+            "source": "TOURAPI",
+            "content_id": "2614541",
+            "address": "닫기 경상북도 영덕군 영해면 대진리 222"
           },
-          "2": {
-            "calls": 95,
-            "passed": 2,
-            "skipped": 827
+          {
+            "source": "TOURAPI",
+            "content_id": "4054732",
+            "address": "김제시 죽산면 죽산리 948-20"
           },
-          "3": {
-            "calls": 5,
-            "passed": 0,
-            "skipped": 0
-          },
-          "4": {
-            "calls": 5,
-            "passed": 0,
-            "skipped": 0
-          },
-          "6": {
-            "calls": 5,
-            "passed": 0,
-            "skipped": 0
-          },
-          "7": {
-            "calls": 5,
-            "passed": 0,
-            "skipped": 0
-          },
-          "8": {
-            "calls": 5,
-            "passed": 0,
-            "skipped": 0
-          },
-          "31": {
-            "calls": 462,
-            "passed": 117,
-            "skipped": 5651
-          },
-          "32": {
-            "calls": 5,
-            "passed": 0,
-            "skipped": 0
-          },
-          "33": {
-            "calls": 5,
-            "passed": 0,
-            "skipped": 0
-          },
-          "34": {
-            "calls": 84,
-            "passed": 45,
-            "skipped": 2112
-          },
-          "35": {
-            "calls": 114,
-            "passed": 74,
-            "skipped": 2647
-          },
-          "36": {
-            "calls": 5,
-            "passed": 0,
-            "skipped": 0
-          },
-          "37": {
-            "calls": 87,
-            "passed": 54,
-            "skipped": 2048
-          },
-          "38": {
-            "calls": 5,
-            "passed": 0,
-            "skipped": 0
-          },
-          "39": {
-            "calls": 5,
-            "passed": 0,
-            "skipped": 0
+          {
+            "source": "TOURAPI",
+            "content_id": "2929425",
+            "address": "전북특별자치시 군산시 미장안7길 9"
           }
-        }
+        ],
+        "sido_restored_previous_refs": [
+          {
+            "source": "TOURAPI",
+            "content_id": "3082730",
+            "address": "전라북도 정읍시 산내면 종성리 516"
+          }
+        ]
       }
     }
   ],
