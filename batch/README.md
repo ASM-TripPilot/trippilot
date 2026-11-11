@@ -103,7 +103,25 @@ docker compose --profile batch down
 - 전 지역 LLM 폴백 판정(extraction)도 영속 뒤다 — Actions 판의 마지막 스텝과 같다(TRIP-1745). 신선도는 `max_age_days` 가 지나야
   키 고장을 잡으므로, 이 판정이 첫날 빨갛게 한다.
 - 신규율 정체 경보는 Actions 판처럼 병합을 막지 않는다 — 곁가지 태스크라 빨개져도 게시·커서 저장은 기다리지 않는다.
-- 배포 초안은 `deploy/airflow/values.yaml`(적용 전 결정 목록이 그 머리에 있다).
+
+### 운영 적용 — 2단계
+
+손으로 helm 을 돌리지 않는다. **Actions → `airflow-deploy` → Run workflow(develop)** 하나로 한다.
+
+| 입력 | 하는 일 |
+|---|---|
+| `action=install` | 메타 DB(운영 RDS 장비의 `airflow` DB·롤)·시크릿(`deploy/airflow/bootstrap.py`) → `helm upgrade --install`(`deploy/airflow/values.yaml`) |
+| `build_image` | `deploy/airflow/Dockerfile`(공식 3.3.2 + git·gh·uv)을 GHCR 로 — 처음·Dockerfile 이 바뀐 뒤 |
+| `batch_live` | `batch-collect` 시크릿의 `BATCH_LIVE`. **Actions 수집 스케줄을 끈 뒤에만 true** |
+| `action=uninstall` | helm 해제 → 메타 DB·롤 삭제 → 네임스페이스 삭제(인프라 종료 전 정리) |
+
+- 수집 키는 리포 시크릿에서만 온다 — 워크플로가 `batch-collect` 로 옮기므로 값이 사람 손·로그를 거치지 않는다. 공유본 PR 용
+  토큰은 리포 시크릿 **`BATCH_GH_TOKEN`**(fine-grained PAT, 이 리포만, contents·pull-requests 쓰기).
+- fernet·API·JWT 키와 관리자 비밀번호는 처음 한 번 만든 `airflow-keys` 를 계속 쓴다(차트 기본값은 upgrade 마다 바꿔 저장된
+  연결·도는 태스크를 깬다). 메타 DB 비밀번호도 재사용한다.
+- UI 는 밖에 열지 않는다: `kubectl -n trippilot-batch port-forward svc/airflow-api-server 8080:8080`(admin / `airflow-keys` 의
+  `admin-password`). 수동 실행은 UI 의 Trigger 로.
+- 전용 노드가 없다 — 스케줄러(태스크가 여기서 돈다) 1.5Gi·API 768Mi·DAG 처리기 384Mi 요청. 자리가 없으면 Karpenter 가 노드를 더 띄운다.
 
 ## 한계
 

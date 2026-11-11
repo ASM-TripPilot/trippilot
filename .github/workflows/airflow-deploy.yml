@@ -1,0 +1,137 @@
+# Airflow 실 수집 DAG 의 운영 적용·해제 (TRIP-1725 2단계).
+#
+# 수동 실행만 — push·스케줄 없음. 대상은 운영 클러스터(trippilot-dev)의 trippilot-batch 네임스페이스, 메타 DB 는
+# 운영 RDS 장비의 airflow DB(앱 DB 와 별도). 순서:
+#   install   (이미지 빌드) → 메타 DB·시크릿(deploy/airflow/bootstrap.py) → helm upgrade --install → 파드 확인
+#   uninstall helm uninstall → 메타 DB·롤 삭제 → 네임스페이스 삭제 (인프라 종료 전 정리)
+#
+# 수집 키는 리포 시크릿에만 있고 다시 꺼낼 수 없다 — 이 워크플로가 그 값을 batch-collect k8s 시크릿으로 옮긴다
+# (사람 손·로그를 거치지 않는다). 실 수집 스위치 batch_live 는 Actions 수집 스케줄을 끈 뒤에만 true 로.
+name: airflow-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: install(설치·갱신) / uninstall(해제·정리)
+        type: choice
+        options: [install, uninstall]
+        default: install
+      build_image:
+        description: Airflow 이미지를 다시 빌드한다(deploy/airflow/Dockerfile 이 바뀌었거나 처음일 때)
+        type: boolean
+        default: false
+      batch_live:
+        description: 실 수집(BATCH_LIVE=1) — ai-poi-collect·ai-event-collect 스케줄을 끈 뒤에만
+        type: boolean
+        default: false
+
+concurrency:
+  group: airflow-deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-2
+  CLUSTER_NAME: trippilot-dev
+  NAMESPACE: trippilot-batch
+  CHART_VERSION: 1.22.0
+  IMAGE: ghcr.io/${{ github.repository_owner }}/trippilot-airflow
+  IMAGE_TAG: 3.3.2-python3.12          # values.yaml images.airflow.tag 와 같게
+  # 운영 RDS — 식별자일 뿐 비밀이 아니다(값은 마스터 시크릿 안에 있다).
+  DB_HOST: trippilot-dev.cnaciyq4kjmx.ap-northeast-2.rds.amazonaws.com
+  DB_MASTER_SECRET_ARN: arn:aws:secretsmanager:ap-northeast-2:223767249602:secret:rds!db-67f5abad-5bb2-4adc-94f0-0a3f0ecd31bd-ttc2V7
+
+jobs:
+  image:
+    if: inputs.action == 'install' && inputs.build_image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./deploy/airflow
+          push: true
+          platforms: linux/amd64
+          tags: ${{ env.IMAGE }}:${{ env.IMAGE_TAG }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+  deploy:
+    needs: image
+    # 이미지 잡은 build_image=false 면 건너뛴다 — 건너뜀은 통과로, 실패는 멈춤으로.
+    if: ${{ !cancelled() && needs.image.result != 'failure' }}
+    runs-on: ubuntu-latest
+    environment: dev            # AWS_ROLE_ARN·AWS_ACCOUNT_ID 가 이 환경에 있다(develop·main 만 실행 가능)
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-session-name: trippilot-airflow-${{ github.run_id }}
+      - run: aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - name: 메타 DB·시크릿 준비
+        if: inputs.action == 'install'
+        env:
+          GH_TOKEN: ${{ secrets.BATCH_GH_TOKEN }}
+          TOUR_API_KEY: ${{ secrets.TOUR_API_KEY }}
+          TOUR_API_KEY2: ${{ secrets.TOUR_API_KEY2 }}
+          TOUR_API_KEY3: ${{ secrets.TOUR_API_KEY3 }}
+          NAVER_SEARCH_CLIENT_ID: ${{ secrets.NAVER_SEARCH_CLIENT_ID }}
+          NAVER_SEARCH_CLIENT_SECRET: ${{ secrets.NAVER_SEARCH_CLIENT_SECRET }}
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY_AI }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BATCH_LIVE: ${{ inputs.batch_live && '1' || '0' }}
+        run: >-
+          python3 deploy/airflow/bootstrap.py install --namespace "$NAMESPACE" --db-host "$DB_HOST"
+          --master-secret-arn "$DB_MASTER_SECRET_ARN" --region "$AWS_REGION" --run-id "${{ github.run_id }}"
+
+      - name: helm upgrade --install
+        if: inputs.action == 'install'
+        run: |
+          helm repo add apache-airflow https://airflow.apache.org
+          # 관리자 비밀번호는 airflow-keys 에서 — 명령 인자·로그에 싣지 않고 0600 값 파일로 넘긴다.
+          umask 077
+          pw=$(kubectl -n "$NAMESPACE" get secret airflow-keys -o jsonpath='{.data.admin-password}' | base64 -d)
+          echo "::add-mask::$pw"
+          printf 'createUserJob:\n  defaultUser:\n    password: "%s"\n' "$pw" > "$RUNNER_TEMP/admin.yaml"
+          # 시크릿만 바뀐 재실행(batch_live 전환)도 파드가 새 값을 읽게 — envFrom 은 파드를 다시 띄워야 반영된다.
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          helm upgrade --install airflow apache-airflow/airflow --version "$CHART_VERSION" \
+            --namespace "$NAMESPACE" -f deploy/airflow/values.yaml -f "$RUNNER_TEMP/admin.yaml" \
+            --set-string "airflowPodAnnotations.trippilot/deployed-at=$stamp" \
+            --wait --timeout 20m
+          rm -f "$RUNNER_TEMP/admin.yaml"
+
+      - name: 상태
+        if: inputs.action == 'install'
+        run: |
+          kubectl -n "$NAMESPACE" get pods -o wide
+          live=$(kubectl -n "$NAMESPACE" get secret batch-collect -o jsonpath='{.data.BATCH_LIVE}' | base64 -d)
+          echo "### Airflow 적용 — BATCH_LIVE=$live" >> "$GITHUB_STEP_SUMMARY"
+          echo "UI: \`kubectl -n $NAMESPACE port-forward svc/airflow-api-server 8080:8080\` (admin / airflow-keys 의 admin-password)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 해제
+        if: inputs.action == 'uninstall'
+        run: |
+          helm uninstall airflow --namespace "$NAMESPACE" --wait --ignore-not-found
+          python3 deploy/airflow/bootstrap.py uninstall --namespace "$NAMESPACE" --db-host "$DB_HOST" \
+            --master-secret-arn "$DB_MASTER_SECRET_ARN" --region "$AWS_REGION" --run-id "${{ github.run_id }}"
+          kubectl delete namespace "$NAMESPACE" --ignore-not-found --wait=true --timeout=5m

@@ -51,6 +51,7 @@ jobs:
           python -m coverage report --rcfile=infra/.coveragerc
           python -m unittest discover -s infra/bootstrap/tests -v
           python -m unittest discover -s deploy/eks/chart/tests -v
+          python -m unittest discover -s deploy/airflow -p "test_*.py" -v
           for environment in dev prd; do
             helm lint --strict deploy/eks/chart -f "deploy/eks/chart/values-$environment.yaml" \
               --set images.backend.repository=example/backend,images.backend.tag=sha123 \

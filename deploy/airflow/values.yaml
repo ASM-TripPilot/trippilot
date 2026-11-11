@@ -1,27 +1,29 @@
-# Airflow 운영 이전 2단계 **초안** — 공식 차트(apache-airflow/airflow) 값 파일. TRIP-1725.
+# Airflow 운영 적용 — 공식 차트(apache-airflow/airflow 1.22.0) 값 파일. TRIP-1725 2단계.
 #
-# ⚠️ 아직 적용하지 않는다. 적용 전에 사람이 정할 것(PR 본문 "남은 결정"):
-#   - 노드: EKS Auto(Karpenter)가 노드를 고른다. 수집 전용 노드를 둘지(m5a.large 1 ≈ 월 15만원) — 두면 아래
-#     nodeSelector 의 NodePool 이름을 그것으로. 안 두면 nodeSelector 를 지운다.
-#   - 메타 DB: 기존 RDS 에 `airflow` DB·역할을 따로 만든다(앱 DB 와 섞지 않는다). 접속 문자열은 시크릿으로만.
-#   - GitHub 토큰: 공유본 PR·머지·collect-state push 용(contents·pull-requests 쓰기만, 이 리포 한정 — backend-ci 를 디스패치하지 않으므로 actions 는 필요 없다).
-#   - Actions 스케줄 끄기: `BATCH_LIVE=1` 은 그 뒤에만 — 둘이 함께 실 수집하면 한도를 두 번 쓰고 collect-state 를 덮는다.
+# 적용·해제는 손으로 하지 않는다 — `.github/workflows/airflow-deploy.yml`(수동 실행, develop·main 만)이
+# 메타 DB·시크릿(deploy/airflow/bootstrap.py)을 만들고 이 파일로 helm upgrade --install 한다.
+#   - 노드: 전용 NodePool 없음. 메모리 요청을 적어 두면 자리가 없을 때 Karpenter(general-purpose)가 노드를 더 띄운다.
+#   - 메타 DB: 운영 RDS(trippilot-dev) 장비에 `airflow` DB·롤을 따로(앱 DB 와 섞지 않는다).
+#   - 실 수집 스위치 BATCH_LIVE 는 batch-collect 시크릿에 있다(워크플로 입력 `batch_live`). Actions 스케줄을 끈 뒤에만 1.
+#   - UI 는 밖에 열지 않는다: kubectl -n trippilot-batch port-forward svc/airflow-api-server 8080:8080
+#     (관리자 admin, 비밀번호는 airflow-keys 시크릿의 admin-password)
 #
-#   helm repo add apache-airflow https://airflow.apache.org
 #   helm template airflow apache-airflow/airflow --version 1.22.0 -n trippilot-batch -f deploy/airflow/values.yaml
 #
-# 시크릿(값은 여기 두지 않는다 — 클러스터에 사람이 만든다):
-#   airflow-metadata   connection=postgresql://airflow:<pw>@<rds-endpoint>:5432/airflow
-#   batch-collect      GH_TOKEN · TOUR_API_KEY·TOUR_API_KEY2·TOUR_API_KEY3 · NAVER_SEARCH_CLIENT_ID·NAVER_SEARCH_CLIENT_SECRET ·
-#                      KAKAO_REST_API_KEY(← secrets.KAKAO_REST_API_KEY_AI) · ANTHROPIC_API_KEY(← secrets.ANTHROPIC_API_KEY)
+# 시크릿(값은 여기 두지 않는다 — bootstrap.py 가 만든다):
+#   airflow-metadata   connection=postgresql://airflow:<pw>@<rds-endpoint>:5432/airflow?sslmode=require
+#   airflow-keys       fernet-key · api-secret-key · jwt-secret · admin-password (처음 한 번만 — upgrade 마다 바뀌면 연결·JWT 가 깨진다)
+#   batch-collect      GH_TOKEN(← secrets.BATCH_GH_TOKEN) · TOUR_API_KEY·TOUR_API_KEY2·TOUR_API_KEY3 · NAVER_SEARCH_CLIENT_ID·
+#                      NAVER_SEARCH_CLIENT_SECRET · KAKAO_REST_API_KEY(← secrets.KAKAO_REST_API_KEY_AI) · ANTHROPIC_API_KEY · BATCH_LIVE
 
 executor: LocalExecutor   # 하루 DAG 2개·태스크 11개 — 스케줄러 한 파드 안에서 돈다. 태스크 사이 파일(복제본)도 같은 디스크에 있다.
 
 # 이미지: 공식 이미지 + git·gh·uv. 수집기(ai/)는 실행마다 develop 을 복제해 `uv sync --locked` 로 깐다.
 images:
   airflow:
-    repository: ghcr.io/asm-trippilot/trippilot-airflow   # 아직 없다 — 이미지 빌드는 적용 단계에서
+    repository: ghcr.io/asm-trippilot/trippilot-airflow   # deploy/airflow/Dockerfile — airflow-deploy.yml 이 빌드한다
     tag: 3.3.2-python3.12
+    pullPolicy: Always   # 같은 태그로 다시 빌드한다 — 노드 캐시의 옛 이미지를 쓰지 않게
 
 # 메타 DB 는 기존 RDS — 차트의 내장 PostgreSQL 은 끈다.
 postgresql:
@@ -46,9 +48,6 @@ env:
     value: "False"
   - name: BATCH_OUTPUT
     value: /opt/airflow/batch-out
-  # 그림자(기본) → 실 수집 전환 스위치. Actions 스케줄을 끈 뒤 "1" 로.
-  - name: BATCH_LIVE
-    value: "0"
   # 비밀 아닌 수집 설정 — ai-poi-collect·ai-event-collect 가 Repository Variables 로 주는 값과 같게(`gh variable list` 2026-11-03).
   # 리포 변수가 바뀌면 여기도. 리포에 없는 변수는 넣지 않는다 — 수집기 기본값이 Actions 와 같은 값이 된다:
   #   TOURAPI_AREA_CODES·TOURAPI_AREA_CODE 미설정(→ 광역 17개 전부 공평 순회), EVENT_REGIONS 미설정(→ 17개 로테이션).
@@ -74,8 +73,10 @@ extraEnvFrom: |
 # 실행 폴더(복제본·후보) — 실패한 실행의 후보를 원인 보라고 남기므로 디스크가 필요하다.
 scheduler:
   replicas: 1
-  nodeSelector:
-    karpenter.sh/nodepool: batch   # 미정 — 위 "노드" 결정
+  # 태스크(복제·uv sync·수집기)가 이 파드 안에서 돈다 — 공유본(10만여 건 JSON) 병합이 가장 무겁다.
+  resources:
+    requests: {cpu: 250m, memory: 1536Mi}
+    limits: {memory: 3Gi}
   extraVolumes:
     - name: batch-out
       emptyDir:
@@ -90,4 +91,20 @@ workers:
 triggerer:
   enabled: false
 redis:
+  enabled: false
+
+# 키는 처음 한 번 만든 시크릿을 쓴다(차트 기본값은 upgrade 마다 새로 만든다).
+fernetKeySecretName: airflow-keys
+apiSecretKeySecretName: airflow-keys
+jwtSecretName: airflow-keys
+
+apiServer:
+  resources:
+    requests: {cpu: 100m, memory: 768Mi}
+    limits: {memory: 1536Mi}
+dagProcessor:
+  resources:
+    requests: {cpu: 100m, memory: 384Mi}
+    limits: {memory: 1Gi}
+statsd:
   enabled: false
