@@ -66,17 +66,45 @@ env:
     value: anthropic
   - name: ANTHROPIC_MODEL
     value: claude-haiku-5-5
-extraEnvFrom: |
-  - secretRef:
-      name: batch-collect
+  # 메타 DB 연결 상한 — 운영 RDS(db.t4g.small, max_connections≈190, 경보 150)를 앱과 같이 쓴다.
+  # 상주 프로세스 3개(scheduler·dag-processor·api-server) × (2+3) = 최대 15.
+  - name: AIRFLOW__DATABASE__SQL_ALCHEMY_POOL_SIZE
+    value: "2"
+  - name: AIRFLOW__DATABASE__SQL_ALCHEMY_MAX_OVERFLOW
+    value: "3"
+
+# 마이그레이션·관리자 생성 Job 을 helm 훅으로 돌리지 않는다 — 워크플로가 helm --wait 를 쓰는데, Helm 은 리소스가 Ready 가 된
+# **뒤에** post-install 훅을 돌리고, 파드의 wait-for-airflow-migrations init 은 마이그레이션이 끝나야 Ready 가 된다(서로 기다림).
+# 일반 Job 으로 두면 파드와 함께 떠서 마이그레이션이 끝나는 대로 파드가 일어난다(차트 문서: wait 하는 설치는 false 필수).
+migrateDatabaseJob:
+  useHelmHooks: false
+  applyCustomEnv: false
+createUserJob:
+  useHelmHooks: false
+  applyCustomEnv: false
 
 # 실행 폴더(복제본·후보) — 실패한 실행의 후보를 원인 보라고 남기므로 디스크가 필요하다.
 scheduler:
   replicas: 1
-  # 태스크(복제·uv sync·수집기)가 이 파드 안에서 돈다 — 공유본(10만여 건 JSON) 병합이 가장 무겁다.
+  # 스케줄러가 둘이 겹치지 않게 — 배포 때 옛 파드를 먼저 내린다(LocalExecutor 라 태스크가 이 파드 안에서 돈다).
+  # 수집 시간대(KST 04:00~05:00)에 배포하면 도는 태스크가 죽는다 — 그 시간대엔 배포하지 않는다.
+  strategy:
+    type: Recreate
+  # 태스크(복제·uv sync·수집기)가 이 파드 안에서 돈다 — 공유본(10만여 건 JSON) 병합이 가장 무겁다. 피크는 limit 이 받는다.
   resources:
-    requests: {cpu: 250m, memory: 1536Mi}
+    requests: {cpu: 250m, memory: 1280Mi}
     limits: {memory: 3Gi}
+  # 수집 키·GH_TOKEN 은 태스크가 도는 스케줄러에만 — api-server·dag-processor·Job 에는 넣지 않는다(DAG 파일은 모듈 수준에서 env 를 읽지 않는다).
+  env:
+    - {name: GH_TOKEN, valueFrom: {secretKeyRef: {name: batch-collect, key: GH_TOKEN, optional: true}}}
+    - {name: TOUR_API_KEY, valueFrom: {secretKeyRef: {name: batch-collect, key: TOUR_API_KEY}}}
+    - {name: TOUR_API_KEY2, valueFrom: {secretKeyRef: {name: batch-collect, key: TOUR_API_KEY2}}}
+    - {name: TOUR_API_KEY3, valueFrom: {secretKeyRef: {name: batch-collect, key: TOUR_API_KEY3}}}
+    - {name: NAVER_SEARCH_CLIENT_ID, valueFrom: {secretKeyRef: {name: batch-collect, key: NAVER_SEARCH_CLIENT_ID}}}
+    - {name: NAVER_SEARCH_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: batch-collect, key: NAVER_SEARCH_CLIENT_SECRET}}}
+    - {name: KAKAO_REST_API_KEY, valueFrom: {secretKeyRef: {name: batch-collect, key: KAKAO_REST_API_KEY}}}
+    - {name: ANTHROPIC_API_KEY, valueFrom: {secretKeyRef: {name: batch-collect, key: ANTHROPIC_API_KEY}}}
+    - {name: BATCH_LIVE, valueFrom: {secretKeyRef: {name: batch-collect, key: BATCH_LIVE}}}
   extraVolumes:
     - name: batch-out
       emptyDir:
@@ -88,6 +116,13 @@ scheduler:
 # LocalExecutor 라 워커·트리거러·Redis 가 필요 없다.
 workers:
   replicas: 0
+  # 차트 기본은 워커 로그 PVC(100Gi) 를 켜 스케줄러를 StatefulSet 으로 만든다 — 클러스터에 기본 StorageClass 가 없어 Pending 이고,
+  # 있어도 안 쓰는 디스크 값이다. 끄면 스케줄러가 Deployment 가 되고 로그는 emptyDir(batch-out 도 emptyDir).
+  persistence:
+    enabled: false
+  celery:
+    persistence:
+      enabled: false
 triggerer:
   enabled: false
 redis:
@@ -100,7 +135,7 @@ jwtSecretName: airflow-keys
 
 apiServer:
   resources:
-    requests: {cpu: 100m, memory: 768Mi}
+    requests: {cpu: 100m, memory: 512Mi}   # 워커 1개, UI 만 — 거의 논다
     limits: {memory: 1536Mi}
 dagProcessor:
   resources:

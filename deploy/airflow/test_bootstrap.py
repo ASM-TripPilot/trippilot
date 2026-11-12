@@ -76,5 +76,31 @@ class BootstrapTest(unittest.TestCase):
         self.assertEqual(cluster.argv, [])
 
 
+class ShadowAndNamespaceTest(unittest.TestCase):
+    def test_그림자는_GH_TOKEN_없이도_준비된다(self):
+        cluster = FakeCluster()
+        keys = {k: v for k, v in KEYS.items() if k != "GH_TOKEN"}
+        args = mock.Mock(namespace="trippilot-batch", db_host="db.example", run_id="1")
+        with mock.patch.object(bootstrap, "command", cluster.command), mock.patch.object(bootstrap, "wait_job"), \
+             mock.patch.dict(os.environ, {**keys, "BATCH_LIVE": "0"}, clear=True):
+            bootstrap.install(args, MASTER)
+        self.assertNotIn("GH_TOKEN", cluster.secrets["batch-collect"])
+
+    def test_실_수집은_GH_TOKEN_없으면_아무것도_건드리지_않고_멈춘다(self):
+        cluster = FakeCluster()
+        keys = {k: v for k, v in KEYS.items() if k != "GH_TOKEN"}
+        args = mock.Mock(namespace="trippilot-batch", db_host="db.example", run_id="1")
+        with mock.patch.object(bootstrap, "command", cluster.command), mock.patch.object(bootstrap, "wait_job"), \
+             mock.patch.dict(os.environ, {**keys, "BATCH_LIVE": "1"}, clear=True):
+            with self.assertRaises(SystemExit):
+                bootstrap.install(args, MASTER)
+        self.assertEqual(cluster.argv, [])
+
+    def test_네임스페이스는_PodSecurity_baseline_을_강제한다(self):
+        labels = bootstrap.namespace("trippilot-batch")["metadata"]["labels"]
+        self.assertEqual(labels["pod-security.kubernetes.io/enforce"], "baseline")
+        self.assertEqual(labels["pod-security.kubernetes.io/warn"], "restricted")
+
+
 if __name__ == "__main__":
     unittest.main()

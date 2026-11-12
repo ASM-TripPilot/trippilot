@@ -60,6 +60,14 @@ def read_secret(namespace, name):
     return {k: base64.b64decode(v).decode() for k, v in (json.loads(raw).get("data") or {}).items()}
 
 
+def namespace(name):
+    """수집 키·GH_TOKEN 이 사는 네임스페이스 — PodSecurity 를 baseline 으로 강제한다(특권·호스트 경로 금지).
+    Airflow 차트 파드는 seccomp·runAsNonRoot 를 적지 않아 restricted 는 통과하지 못한다 — restricted 는 경고·감사로만 남긴다."""
+    labels = {"pod-security.kubernetes.io/enforce": "baseline",
+              "pod-security.kubernetes.io/warn": "restricted", "pod-security.kubernetes.io/audit": "restricted"}
+    return {"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": name, "labels": labels}}
+
+
 def secret(namespace, name, values):
     return {"apiVersion": "v1", "kind": "Secret", "type": "Opaque",
             "metadata": {"name": name, "namespace": namespace}, "stringData": values}
@@ -105,13 +113,15 @@ def run_sql(namespace, host, master, sql, run_id, extra=None):
 def install(args, master):
     ns = args.namespace
     # 입력부터 본다 — 빠진 키로 멈출 거면 DB·시크릿을 건드리기 전에 멈춘다.
-    missing = [k for k in COLLECT_KEYS if not os.environ.get(k)]
-    if missing:
-        raise SystemExit(f"batch-collect 에 넣을 값이 없다: {', '.join(missing)} — 리포 시크릿을 확인할 것")
     live = os.environ.get("BATCH_LIVE", "0")
     if live not in ("0", "1"):
         raise SystemExit("BATCH_LIVE 는 0 또는 1")
-    kubectl_apply({"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": ns}})
+    # GH_TOKEN 은 실 수집(공유본 PR·collect-state 영속)에만 쓴다 — 그림자는 공개 리포를 토큰 없이 복제한다.
+    required = COLLECT_KEYS if live == "1" else tuple(k for k in COLLECT_KEYS if k != "GH_TOKEN")
+    missing = [k for k in required if not os.environ.get(k)]
+    if missing:
+        raise SystemExit(f"batch-collect 에 넣을 값이 없다: {', '.join(missing)} — 리포 시크릿을 확인할 것")
+    kubectl_apply(namespace(ns))
 
     password = read_secret(ns, "airflow-metadata").get("password") or secrets.token_urlsafe(32)
     run_sql(ns, args.db_host, master, CREATE_SQL, args.run_id, {"AIRFLOW_DB_PASSWORD": scram_verifier(password)})
@@ -124,13 +134,14 @@ def install(args, master):
             "api-secret-key": secrets.token_urlsafe(32), "jwt-secret": secrets.token_urlsafe(32),
             "admin-password": secrets.token_urlsafe(18)}))
 
-    kubectl_apply(secret(ns, "batch-collect", {**{k: os.environ[k] for k in COLLECT_KEYS}, "BATCH_LIVE": live}))
+    kubectl_apply(secret(ns, "batch-collect", {**{k: os.environ[k] for k in COLLECT_KEYS if os.environ.get(k)},
+                                               "BATCH_LIVE": live}))
     print(f"준비 끝 — namespace={ns} BATCH_LIVE={live}")
 
 
 def uninstall(args, master):
     # 설치한 적 없거나 반쯤 지워진 상태에서도 DB 정리 Job 이 설 자리 — 네임스페이스는 워크플로가 마지막에 지운다.
-    kubectl_apply({"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": args.namespace}})
+    kubectl_apply(namespace(args.namespace))
     run_sql(args.namespace, args.db_host, master, DROP_SQL, args.run_id)
     print("메타 DB·롤 삭제 끝")
 
