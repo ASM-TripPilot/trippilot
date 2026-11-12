@@ -35,6 +35,12 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: trippilot-poi-load
+        {{- if $.Values.loadTest.allow }}
+        # 부하 테스트 Job(deploy/loadtest/run.py) — 개발 대상에서만 연다(values-dev-target.yaml). 운영 네임스페이스엔 렌더하지 않는다.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: trippilot-loadtest
+        {{- end }}
         {{- else if eq $component "ai" }}
         - podSelector:
             matchLabels:

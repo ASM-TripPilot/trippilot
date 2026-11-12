@@ -78,3 +78,6 @@ gateway:
     limits: { cpu: 500m, memory: 128Mi }
 podDisruptionBudget:
   enabled: false
+# 부하 테스트 Job 이 backend:8080 에 닿게 NetworkPolicy 를 연다 — 개발 대상(values-dev-target.yaml)만 true.
+loadTest:
+  allow: false
