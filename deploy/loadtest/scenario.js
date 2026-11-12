@@ -28,7 +28,8 @@ for (const name of ['bootstrap', 'me', 'trips', 'places_region', 'places_search'
 }
 
 const REGIONS = ['제주', '서울', '부산', '강원', '경주'];
-const CATEGORIES = ['FOOD', 'CAFE', 'ATTRACTION'];
+// PoiCategory 는 한글 값이다(place-data Poi.kt) — 영문 경계 코드를 넣으면 400 이다.
+const CATEGORIES = ['맛집', '카페', '명소'];
 const WORDS = ['카페', '해변', '시장', '박물관', '공원'];
 
 function get(path, name, token) {
@@ -49,7 +50,7 @@ export default function () {
   get('/api/v1/trips', 'trips', token);
   sleep(1);
   // 장소 둘러보기 — DB 가 가장 무거운 경로
-  get(`/api/v1/places?region=${encodeURIComponent(region)}&category=${CATEGORIES[__ITER % 3]}&limit=20`, 'places_region', token);
+  get(`/api/v1/places?region=${encodeURIComponent(region)}&category=${encodeURIComponent(CATEGORIES[__ITER % 3])}&limit=20`, 'places_region', token);
   get(`/api/v1/places?q=${encodeURIComponent(WORDS[__ITER % WORDS.length])}&limit=20`, 'places_search', token);
   get(`/api/v1/regions?q=${encodeURIComponent(region)}`, 'regions', token);
   sleep(1);
