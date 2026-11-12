@@ -28,16 +28,19 @@ cleanup() {
     if aws rds delete-db-instance --db-instance-identifier "$DRILL" --skip-final-snapshot --delete-automated-backups >/dev/null 2>&1; then
       echo "삭제 요청 완료"; return 0
     fi
-    aws rds describe-db-instances --db-instance-identifier "$DRILL" >/dev/null 2>&1 || { echo "이미 없다"; return 0; }
+    # "없다"는 DBInstanceNotFound 일 때만 — 자격 증명 만료·네트워크 오류로 describe 가 실패한 것을 삭제 완료로 읽지 않는다.
+    if ! out=$(aws rds describe-db-instances --db-instance-identifier "$DRILL" 2>&1); then
+      grep -q DBInstanceNotFound <<<"$out" && { echo "이미 없다"; return 0; }
+    fi
     sleep 60
   done
   echo "!!! $DRILL 삭제 실패 — 운영 데이터 사본이 남아 있다. 콘솔에서 바로 지울 것 !!!" >&2
   return 1
 }
 trap cleanup EXIT
-# aws rds wait 는 30분(30초 × 60회)에서 포기한다 — PITR 이 더 걸릴 수 있어 2시간까지 다시 기다린다.
-for _ in 1 2 3 4; do aws rds wait db-instance-available --db-instance-identifier "$DRILL" && break; done
-aws rds wait db-instance-available --db-instance-identifier "$DRILL"   # 네 번 다 넘겼으면 여기서 실패로 끝난다(trap 이 지운다)
+# aws rds wait 는 30분(30초 × 60회)에서 포기한다 — PITR 이 더 걸릴 수 있어 최대 2시간(30분 × 4)까지 기다린다.
+for _ in 1 2 3; do aws rds wait db-instance-available --db-instance-identifier "$DRILL" && break; done
+aws rds wait db-instance-available --db-instance-identifier "$DRILL"   # 네 번째 — 이것도 넘기면 실패로 끝난다(trap 이 지운다)
 T1=$(date +%s)
 
 RESTORED=$(aws rds describe-db-instances --db-instance-identifier "$DRILL" --query 'DBInstances[0].[DBInstanceStatus,Endpoint.Address]' --output text)
