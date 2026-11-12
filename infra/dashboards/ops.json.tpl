@@ -5,7 +5,7 @@
     {
       "type": "alarm", "x": 0, "y": 0, "width": 24, "height": 3,
       "properties": {
-        "title": "운영 알람 13개 (→ SNS → Slack)",
+        "title": "운영 알람 (→ SNS → Slack)",
         "alarms": ${alarm_arns},
         "sortBy": "stateUpdatedTimestamp",
         "states": []
@@ -17,7 +17,7 @@
         "title": "API 응답 시간 p50·p95·p99 (gateway request_time, 4xx 제외)",
         "region": "${region}",
         "view": "timeSeries",
-        "query": "SOURCE '${app_log_group}' | filter kubernetes.namespace_name=\"trippilot\" and kubernetes.container_name=\"gateway\" and log like / \\/api/ | parse log /^(?<ip>\\S+) (?<method>\\S+) (?<uri>\\S+) (?<status>\\d{3}) (?<bytes>\\d+) (?<rt>[\\d.]+)/ | filter ispresent(rt) and status not like /^4/ | stats pct(rt,50) as p50, pct(rt,95) as p95, pct(rt,99) as p99 by bin(1h)"
+        "query": "SOURCE '${app_log_group}' | filter kubernetes.namespace_name=\"trippilot\" and kubernetes.container_name=\"gateway\" and log like / \\/api/ | parse log / (?<status>\\d{3}) (?<bytes>\\d+) (?<rt>[\\d.]+)$$/ | filter ispresent(rt) and status not like /^4/ | stats pct(rt,50) as p50, pct(rt,95) as p95, pct(rt,99) as p99 by bin(1h)"
       }
     },
     {
@@ -27,7 +27,7 @@
         "region": "${region}",
         "view": "timeSeries",
         "stacked": true,
-        "query": "SOURCE '${app_log_group}' | filter kubernetes.namespace_name=\"trippilot\" and kubernetes.container_name=\"gateway\" and log like / \\/api/ | parse log /^(?<ip>\\S+) (?<method>\\S+) (?<uri>\\S+) (?<status>\\d)\\d\\d / | stats count(*) by status, bin(1h)"
+        "query": "SOURCE '${app_log_group}' | filter kubernetes.namespace_name=\"trippilot\" and kubernetes.container_name=\"gateway\" and log like / \\/api/ | parse log / (?<status>\\d)\\d\\d \\d+ [\\d.]+$$/ | stats count(*) by status, bin(1h)"
       }
     },
     {

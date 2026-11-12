@@ -22,7 +22,8 @@ permissions:
   contents: read
 
 env:
-  TRIVY: aquasec/trivy:0.76.2
+  # 태그도 바꿔치기될 수 있다 — 다이제스트로 고정한다(0.76.2).
+  TRIVY: aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb
 
 jobs:
   scan:
@@ -55,6 +56,9 @@ jobs:
             echo "## $1 $2" >> "$GITHUB_STEP_SUMMARY"
             run "$1" --severity CRITICAL,HIGH --format table "$2" | tee -a scan.txt
             { echo '```'; tail -n 60 scan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"; : > scan.txt
-            run "$1" --severity CRITICAL --exit-code 1 --format table -q "$2" >/dev/null || { status=1; echo "::error::$1 $2 에 수정판이 있는 CRITICAL 취약점이 있다"; }
+            # 취약점은 종료 코드 3 으로 구분한다 — Trivy 자체 오류(DB 다운로드·레이트 리밋)는 1 이라 섞이지 않게.
+            rc=0; run "$1" --severity CRITICAL --exit-code 3 --format table -q "$2" >/dev/null || rc=$?
+            if [ "$rc" = 3 ]; then status=1; echo "::error::$1 $2 에 수정판이 있는 CRITICAL 취약점이 있다"
+            elif [ "$rc" != 0 ]; then status=1; echo "::error::$1 $2 스캔 자체가 실패했다(Trivy 종료 코드 $rc) — 로그를 본다"; fi
           done
           exit $status
