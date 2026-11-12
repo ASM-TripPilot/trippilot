@@ -58,3 +58,4 @@ ai/data/overture/
 
 # 로컬 Airflow 수집 파이프라인 산출물(TRIP-1468)
 batch/.out/
+deploy/loadtest/last-result.json
