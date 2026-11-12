@@ -4,7 +4,7 @@
 [versions]
 shedlock = "6.10.0"
 kotlin = "2.2.20"
-springBoot = "4.0.1"
+springBoot = "4.0.9"
 springDependencyManagement = "1.1.7"
 kotest = "5.9.1"
 mockk = "1.13.13"

@@ -13,7 +13,7 @@ images:
     tag: ""
   gateway:
     repository: nginxinc/nginx-unprivileged
-    tag: 1.30.5-alpine-slim
+    tag: 1.30.6-alpine-slim
 imagePullPolicy: IfNotPresent
 config:
   databaseHost: ""

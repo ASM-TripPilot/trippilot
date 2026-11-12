@@ -1,0 +1,60 @@
+name: security-scan
+
+# 서버 쪽 의존성 취약점 점검(Trivy). ECR 의 scan-on-push 는 켜져 있지만 결과가 남지 않아(멀티 아키텍처 인덱스 —
+# 상태 None) 여기서 직접 본다. 대상은 운영에 나가는 세 가지다:
+#   backend — 빌드한 bootJar(Gradle 은 잠금 파일이 없어 jar 안의 실제 라이브러리를 본다)
+#   ai      — uv.lock
+#   gateway — Helm values 에 고정한 nginx 이미지 태그
+# CRITICAL(수정판이 있는 것)이면 잡을 실패시키고, HIGH 는 표로만 남긴다. frontend 는 frontend-ci 소관이라 넣지 않았다.
+# Trivy 는 액션 대신 태그 고정 공식 이미지로 돌린다 — 서드파티 액션 태그가 바꿔치기된 전례가 있다.
+on:
+  pull_request:
+    branches: [develop, main]
+    paths: ['backend/gradle/**', 'backend/**/build.gradle.kts', 'ai/uv.lock', 'deploy/eks/chart/values.yaml', '.github/workflows/security-scan.yml']
+  push:
+    branches: [develop]
+    paths: ['backend/gradle/**', 'backend/**/build.gradle.kts', 'ai/uv.lock', 'deploy/eks/chart/values.yaml', '.github/workflows/security-scan.yml']
+  schedule:
+    - cron: '0 0 * * 1'  # 월 09:00 KST — 코드가 그대로여도 새 CVE 가 나온다
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TRIVY: aquasec/trivy:0.76.2
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - name: backend bootJar
+        working-directory: backend
+        run: ./gradlew :app:bootJar --no-daemon -q
+      - name: Trivy — CRITICAL 이면 실패, HIGH 는 표로
+        run: |
+          set -u
+          gateway_image="$(python3 - <<'EOF'
+          import re
+          v = open("deploy/eks/chart/values.yaml").read()
+          m = re.search(r"gateway:\s*\n\s*repository:\s*(\S+)\s*\n\s*tag:\s*(\S+)", v)
+          print(f"{m.group(1)}:{m.group(2)}")
+          EOF
+          )"
+          jar="$(ls backend/app/build/libs/*.jar | grep -v plain | head -1)"
+          run() { docker run --rm -v "$PWD:/src" -w /src -v trivy-cache:/root/.cache "$TRIVY" "$@" --scanners vuln --ignore-unfixed --no-progress; }
+          status=0
+          for target in "rootfs $jar" "fs ai/uv.lock" "image $gateway_image"; do
+            set -- $target
+            echo "## $1 $2" >> "$GITHUB_STEP_SUMMARY"
+            run "$1" --severity CRITICAL,HIGH --format table "$2" | tee -a scan.txt
+            { echo '```'; tail -n 60 scan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"; : > scan.txt
+            run "$1" --severity CRITICAL --exit-code 1 --format table -q "$2" >/dev/null || { status=1; echo "::error::$1 $2 에 수정판이 있는 CRITICAL 취약점이 있다"; }
+          done
+          exit $status
