@@ -56,6 +56,7 @@ function makePlace(poiId: string, overrides: Partial<Place> = {}): Place {
     region: '수영구',
     openingHours: null,
     imageUrl: null,
+    imageLicense: null,
     tags: [],
     savedCount: 0,
     dataStatus: 'ACTIVE',
@@ -76,7 +77,13 @@ function savedPlace(
 }
 
 function seedItem(sourcePoiId: string, name = `장소-${sourcePoiId}`) {
-  return { sourcePoiId, name, imageUrl: null, region: null };
+  return {
+    sourcePoiId,
+    name,
+    imageUrl: null,
+    imageLicense: null,
+    region: null,
+  };
 }
 
 /** 값 스냅숏 — 호출 전후 비교용(참조가 아니라 **값**이 그대로인지 본다). */
@@ -110,6 +117,7 @@ describe('N1 · seedMustVisits — 예제 (AC-1 · AC-3 · BR-U1-37)', () => {
         sourcePoiId: 'poi-1',
         name: '감천마을',
         imageUrl: 'https://cdn.example.com/a.jpg',
+        imageLicense: null,
         region: '수영구',
         regionCode: null,
         category: '명소',
@@ -118,6 +126,7 @@ describe('N1 · seedMustVisits — 예제 (AC-1 · AC-3 · BR-U1-37)', () => {
         sourcePoiId: 'poi-2',
         name: '광안리',
         imageUrl: null,
+        imageLicense: null,
         region: '수영구',
         regionCode: null,
         category: '명소',
@@ -126,6 +135,7 @@ describe('N1 · seedMustVisits — 예제 (AC-1 · AC-3 · BR-U1-37)', () => {
         sourcePoiId: 'poi-3',
         name: '전포',
         imageUrl: null,
+        imageLicense: null,
         region: '수영구',
         regionCode: null,
         category: '명소',
@@ -148,6 +158,7 @@ describe('N1 · seedMustVisits — 예제 (AC-1 · AC-3 · BR-U1-37)', () => {
         sourcePoiId: 'poi-1',
         name: '감천마을',
         imageUrl: null,
+        imageLicense: null,
         region: null,
         regionCode: null,
         category: '명소',
@@ -156,6 +167,7 @@ describe('N1 · seedMustVisits — 예제 (AC-1 · AC-3 · BR-U1-37)', () => {
         sourcePoiId: 'poi-2',
         name: '광안리',
         imageUrl: null,
+        imageLicense: null,
         region: null,
         regionCode: null,
         category: '명소',
@@ -543,5 +555,29 @@ describe('N1 · mustVisitFailureNotice — 등록 실패 배너 본문 (01b D4 �
 
     // 짝 — 숫자가 바뀌면 문구도 따라 바뀐다(고정 문자열을 돌려주는 구현 차단).
     expect(mustVisitFailureNotice(5, 2)).not.toBe(notice);
+  });
+});
+
+// TRIP-1740 AC-7(T17) — 담은 장소의 imageLicense 가 g01 꼭 갈 곳 스트립 시드까지 간다.
+// 입력은 TYPE1: 시드가 키를 떨구면 null 이 되고, 부품은 null 을 TYPE3 처럼 contain 으로 그려 TYPE3 입력으로는 끊김이 안 보인다.
+describe('seedMustVisits · 관광공사 사진 유형을 시드로 옮긴다', () => {
+  it('TYPE1·TYPE3·null 이 담은 장소마다 자기 값 그대로 시드 항목에 실린다', () => {
+    const seeds = seedMustVisits([
+      savedPlace('sp-1', 'poi-1', {
+        imageUrl: 'https://cdn.example.com/a.jpg',
+        imageLicense: 'TYPE1',
+      }),
+      savedPlace('sp-2', 'poi-2', {
+        imageUrl: 'https://cdn.example.com/b.jpg',
+        imageLicense: 'TYPE3',
+      }),
+      savedPlace('sp-3', 'poi-3', { imageLicense: null }),
+    ]);
+
+    expect(seeds.map((seed) => seed.imageLicense)).toEqual([
+      'TYPE1',
+      'TYPE3',
+      null,
+    ]);
   });
 });

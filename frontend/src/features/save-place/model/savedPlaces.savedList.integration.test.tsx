@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { onlineManager } from '@tanstack/react-query';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -7,7 +8,12 @@ import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 
 import { useSavedPlaces } from './savedPlaces';
 import { BASE } from '@/test-support/apiBase';
-import { createWrapper } from '@/test-support/mswHookHarness';
+import { createGate, createWrapper } from '@/test-support/mswHookHarness';
+import {
+  createWrapper as createClientWrapper,
+  newTestQueryClient,
+} from '@/test-support/queryRender';
+import { getGetSavedPlacesQueryKey } from '@/shared/api/index.places';
 
 /**
  * 01b Seed Q1 — `useSavedPlaces` 가 **담은 목록 원본과 조회 상태**를 함께 준다.
@@ -79,6 +85,8 @@ beforeEach(() => {
 });
 
 afterEach(() => server.resetHandlers());
+// onlineManager 는 모듈 싱글턴 — 오프라인 케이스(L6)가 어떻게 끝나든 다음 케이스는 온라인으로 시작한다(파일 최상위).
+afterEach(() => onlineManager.setOnline(true));
 afterAll(() => server.close());
 
 describe('H-1 · 담은 목록 원본을 준다 (01b Seed Q1)', () => {
@@ -117,5 +125,237 @@ describe('H-2 · 미로그인이면 아무것도 보내지 않는다 (BR-U1-03)'
     // `isPending: true` 로 **영원히** 남는다(fetchStatus 는 idle). 이 값을 그대로
     // `resolvePlaceListState` 에 태우면 게스트가 끝나지 않는 스켈레톤을 본다.
     expect(result.current.isPending).toBe(true);
+    // TRIP-1754 — 게스트는 "조회 실패"가 아니다(요청을 안 보낸 것). 표식이 켜지면 게스트에게 거짓 토스트가 뜬다.
+    expect(result.current.loadFailed).toBe(false);
+  });
+});
+
+/**
+ * TRIP-1754 · 저장 목록 조회가 **실패했는데 "안 담김"처럼 보이는** 문제 — 훅이 "모름" 표식을 더한다(기존 필드는 그대로).
+ *
+ * 무엇을 보장하나(3동작 = 준비 → 실행 → 단언):
+ *  - **L1** 로그인 · `GET` 500 → `loadFailed`·`loadFailureConfirmed` 둘 다 true. `savedPoiIds`·`savedPlaces` `[]`·`isError` true 는 그대로.
+ *  - **L2** 성공이면 둘 다 false, 실패 뒤 재조회가 성공하면 다시 false.
+ *  - **L3** 게스트는 실패가 아니다. **L4** 로그인 중 실패한 캐시가 남은 채 로그아웃해도 false.
+ *  - **L5** 실패 캐시 위에 다시 마운트해 **재조회가 진행 중**이면 `loadFailed` 는 유지(v5 가 그때 `isError` 를 끄므로),
+ *    `loadFailureConfirmed` 는 그 재조회가 끝나 실패로 굳기 전엔 false → 실패로 굳으면 true, 성공하면 둘 다 false.
+ *  - **L6** 오프라인 콜드스타트(요청이 나가지도 못함)도 실패다(true·true). **L7** 받은 목록이 있으면 재조회 실패에도 false(Seed Q5 ⓐ).
+ *
+ * *(개념 — isFetchedAfterMount)* TanStack 이 "이 구독자가 마운트된 뒤에 응답(성공·실패)이 한 번이라도 왔나"를 기억하는 값.
+ * 마운트 때 이미 실패 캐시를 만났다면 그 옛 실패는 세지 않는다 → 옛 실패만 보고 토스트를 쏘지 않게 해 주는 신호다.
+ */
+describe('TRIP-1754 · 저장 목록 조회 실패 표식 (loadFailed)', () => {
+  type Reply = 'ok' | 500 | 'hold' | 'hold500';
+  let replies: Reply[] = [];
+  let gate = createGate();
+
+  function listGets(): number {
+    return observed.filter(
+      (hit) =>
+        hit.method === 'GET' &&
+        new URL(hit.url).pathname === '/api/v1/saved-places'
+    ).length;
+  }
+
+  beforeEach(() => {
+    replies = [];
+    gate = createGate();
+    setAccessToken('valid-access');
+    // 파일 최상위 beforeEach 의 평소 응답(ROWS) 위에 응답 큐를 얹는다(server.use 는 앞에 끼운다).
+    server.use(
+      http.get(`${BASE}/saved-places`, async () => {
+        const reply = replies.shift() ?? 'ok';
+        if (reply === 'hold' || reply === 'hold500') await gate.opened;
+        if (reply === 500 || reply === 'hold500') {
+          return HttpResponse.json(
+            { error: { code: 'INTERNAL', message: '서버 오류' } },
+            { status: 500 }
+          );
+        }
+        return HttpResponse.json(ROWS);
+      })
+    );
+  });
+
+  // 실패해 중간에 죽은 케이스가 보류 요청을 남기지 않게.
+  afterEach(() => gate.release());
+
+  async function pause(ms = 30): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+    });
+  }
+
+  it('L1 로그인 · 500 이면 둘 다 true, 기존 필드는 그대로다', async () => {
+    // 준비
+    replies = [500];
+
+    // 실행
+    const { result } = renderHook(() => useSavedPlaces({ isAuthed: true }), {
+      wrapper: createClientWrapper(newTestQueryClient()),
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    // 단언
+    expect(result.current.loadFailed).toBe(true);
+    expect(result.current.loadFailureConfirmed).toBe(true);
+    expect(result.current.savedPoiIds).toEqual([]);
+    expect(result.current.savedPlaces).toEqual([]);
+  });
+
+  it('L2 성공이면 둘 다 false, 실패 뒤 재조회가 성공하면 다시 false 다', async () => {
+    // 준비 — 성공 한 번.
+    const ok = renderHook(() => useSavedPlaces({ isAuthed: true }), {
+      wrapper: createClientWrapper(newTestQueryClient()),
+    });
+    await waitFor(() => expect(ok.result.current.savedPlaces).toHaveLength(2));
+    expect(ok.result.current.loadFailed).toBe(false);
+    expect(ok.result.current.loadFailureConfirmed).toBe(false);
+    ok.unmount();
+
+    // 준비 — 이번엔 첫 응답만 실패.
+    replies = [500];
+    const { result } = renderHook(() => useSavedPlaces({ isAuthed: true }), {
+      wrapper: createClientWrapper(newTestQueryClient()),
+    });
+    await waitFor(() => expect(result.current.loadFailed).toBe(true));
+
+    // 실행
+    await act(async () => {
+      await result.current.refetch();
+    });
+
+    // 단언
+    await waitFor(() => expect(result.current.savedPlaces).toHaveLength(2));
+    expect(result.current.loadFailed).toBe(false);
+    expect(result.current.loadFailureConfirmed).toBe(false);
+  });
+
+  it('L3 게스트는 실패가 아니다 — 둘 다 false · isError false · 요청 0건', async () => {
+    // 실행
+    const { result } = renderHook(() => useSavedPlaces({ isAuthed: false }), {
+      wrapper: createClientWrapper(newTestQueryClient()),
+    });
+    await pause();
+
+    // 단언
+    expect(result.current.loadFailed).toBe(false);
+    expect(result.current.loadFailureConfirmed).toBe(false);
+    expect(result.current.isError).toBe(false);
+    expect(listGets()).toBe(0);
+  });
+
+  it('L4 로그인 중 실패한 캐시가 남은 채 isAuthed 가 false 가 되면 둘 다 false 다', async () => {
+    // 준비 — 로그인으로 실패 캐시를 만든다.
+    replies = [500];
+    const client = newTestQueryClient();
+    const { result, rerender } = renderHook(
+      ({ authed }: { authed: boolean }) => useSavedPlaces({ isAuthed: authed }),
+      { wrapper: createClientWrapper(client), initialProps: { authed: true } }
+    );
+    await waitFor(() => expect(result.current.loadFailed).toBe(true));
+
+    // 실행 — 세션 만료(같은 캐시, 이제 게스트).
+    rerender({ authed: false });
+
+    // 단언 — 앵커: 캐시에 실패가 정말 남아 있다(isError true). 그래도 게스트에겐 표식이 없다.
+    expect(result.current.isError).toBe(true);
+    expect(result.current.loadFailed).toBe(false);
+    expect(result.current.loadFailureConfirmed).toBe(false);
+  });
+
+  it('L5 실패 캐시 위 재조회가 진행 중이면 loadFailed 는 유지되고 confirmed 는 아직 false, 실패로 굳으면 true', async () => {
+    // 준비 — 첫 마운트에서 실패하고 닫는다. 캐시(gcTime 무한)에 실패 이력이 남는다. 두 번째 응답은 문 뒤.
+    replies = [500, 'hold500'];
+    const client = newTestQueryClient();
+    const first = renderHook(() => useSavedPlaces({ isAuthed: true }), {
+      wrapper: createClientWrapper(client),
+    });
+    await waitFor(() => expect(first.result.current.isError).toBe(true));
+    first.unmount();
+
+    // 실행 — 다시 마운트(재조회가 시작되고 문 앞에서 멈춘다).
+    const { result } = renderHook(() => useSavedPlaces({ isAuthed: true }), {
+      wrapper: createClientWrapper(client),
+    });
+    await waitFor(() => expect(listGets()).toBe(2));
+    await pause();
+
+    // 단언 ① — 보류 중: v5 가 isError 를 껐지만(앵커) loadFailed 는 유지, confirmed 는 아직 아니다.
+    expect(result.current.isError).toBe(false);
+    expect(result.current.isPending).toBe(true);
+    expect(result.current.loadFailed).toBe(true);
+    expect(result.current.loadFailureConfirmed).toBe(false);
+
+    // 실행 ② — 문을 열면 두 번째도 500.
+    gate.release();
+
+    // 단언 ②
+    await waitFor(() => expect(result.current.loadFailureConfirmed).toBe(true));
+    expect(result.current.loadFailed).toBe(true);
+  });
+
+  it('L5b 재조회가 성공으로 끝나면 둘 다 false 로 끝난다(보류 중 confirmed 가 켜진 적도 없다)', async () => {
+    // 준비
+    replies = [500, 'hold'];
+    const client = newTestQueryClient();
+    const first = renderHook(() => useSavedPlaces({ isAuthed: true }), {
+      wrapper: createClientWrapper(client),
+    });
+    await waitFor(() => expect(first.result.current.isError).toBe(true));
+    first.unmount();
+    const { result } = renderHook(() => useSavedPlaces({ isAuthed: true }), {
+      wrapper: createClientWrapper(client),
+    });
+    await waitFor(() => expect(listGets()).toBe(2));
+    await pause();
+    expect(result.current.loadFailureConfirmed).toBe(false);
+
+    // 실행
+    gate.release();
+
+    // 단언
+    await waitFor(() => expect(result.current.savedPlaces).toHaveLength(2));
+    expect(result.current.loadFailed).toBe(false);
+    expect(result.current.loadFailureConfirmed).toBe(false);
+  });
+
+  it('L6 오프라인 콜드스타트(요청이 나가지도 못함)도 실패다 — true·true, 요청 0건', async () => {
+    // 준비 — 앞 케이스의 오프라인이 새지 않았다는 앵커.
+    expect(onlineManager.isOnline()).toBe(true);
+    onlineManager.setOnline(false);
+
+    // 실행
+    const { result } = renderHook(() => useSavedPlaces({ isAuthed: true }), {
+      wrapper: createClientWrapper(newTestQueryClient()),
+    });
+    await pause();
+
+    // 단언 — isError 도 errorUpdateCount 도 없는 보류 상태(pending·paused)라 이 판독만이 잡는다.
+    expect(result.current.isError).toBe(false);
+    expect(result.current.loadFailed).toBe(true);
+    expect(result.current.loadFailureConfirmed).toBe(true);
+    expect(listGets()).toBe(0);
+  });
+
+  it('L7 목록을 받은 뒤 재조회가 실패해도(데이터가 남아 있으니) loadFailed 는 false 다 (Seed Q5 ⓐ)', async () => {
+    // 준비 — 첫 응답 성공, 두 번째 500.
+    replies = ['ok', 500];
+    const client = newTestQueryClient();
+    const { result } = renderHook(() => useSavedPlaces({ isAuthed: true }), {
+      wrapper: createClientWrapper(client),
+    });
+    await waitFor(() => expect(result.current.savedPlaces).toHaveLength(2));
+
+    // 실행 — 무효화로 다시 받는데 서버가 500.
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: getGetSavedPlacesQueryKey() });
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    // 단언 — 진짜 목록이 그대로이니 "모름"이 아니다.
+    expect(result.current.savedPoiIds).toEqual(['p1', 'p2']);
+    expect(result.current.loadFailed).toBe(false);
+    expect(result.current.loadFailureConfirmed).toBe(false);
   });
 });

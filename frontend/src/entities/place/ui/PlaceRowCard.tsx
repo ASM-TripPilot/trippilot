@@ -1,8 +1,9 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import type { ImageLicense } from '@/shared/api/index.schemas';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 
-import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
+import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/glyphs';
 
 /**
  * TRIP-806 · AC-M2 — 썸네일 + 이름 + 부제 행 카드(중립 접두 자기 계약).
@@ -17,6 +18,8 @@ export interface PlaceRowCardProps {
   id: string;
   name: string;
   imageUrl?: string | null;
+  /** `imageUrl` 의 공공누리 유형 — 필수 키(끊기면 tsc). */
+  imageLicense: ImageLicense | null | undefined;
   /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본). */
   category?: string | null;
   subtitle?: ReactNode;
@@ -24,29 +27,41 @@ export interface PlaceRowCardProps {
   save?: { saved: boolean; onToggle: () => void };
   /** 오른쪽 슬롯(h13 추가 버튼 등). */
   trailing?: ReactNode;
+  /** TRIP-1794 · 여러 곳 체크 선택 표시 — 주면 루트에 `accessibilityState.selected` + 선택 테두리. 안 주면 접근성 상태도 없다(다른 소비처 무변경). */
+  selected?: boolean;
 }
+
+const ROW_CLASS =
+  'w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas p-md';
+// 1791 SlotStopCard 선례 — 선택은 1.5 primary 테두리.
+const ROW_SELECTED_CLASS =
+  'w-full flex-row items-center gap-md rounded-card border-[1.5px] border-primary bg-canvas p-md';
 
 export function PlaceRowCard({
   testIDPrefix,
   id,
   name,
   imageUrl,
+  imageLicense,
   category,
   subtitle,
   save,
   trailing,
+  selected,
 }: PlaceRowCardProps): ReactElement {
   return (
     <View
       testID={`${testIDPrefix}-${id}`}
-      className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas p-md"
+      accessibilityState={selected === undefined ? undefined : { selected }}
+      className={selected === true ? ROW_SELECTED_CLASS : ROW_CLASS}
     >
-      <PlacePhoto
+      <PoiPhoto
         testID={`${testIDPrefix}-photo-${id}`}
         imageUrl={imageUrl}
+        imageLicense={imageLicense}
+        surface="thumb"
         category={category}
         poiId={id}
-        contentFit="cover"
         cachePolicy="memory-disk"
         recyclingKey={id}
         className="h-[64px] w-[64px] rounded-[12px]"

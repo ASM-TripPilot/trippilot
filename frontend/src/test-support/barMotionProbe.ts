@@ -1,5 +1,4 @@
 import { act, screen } from '@testing-library/react-native';
-import { BlurView } from 'expo-blur';
 import {
   AccessibilityInfo,
   Dimensions,
@@ -54,7 +53,7 @@ export interface BarIds {
   /** 최종 구조에서 새로 나타나는 것(뒤로 포함). */
   fresh: string[];
 }
-export const HUB_IDS: BarIds = {
+const HUB_IDS: BarIds = {
   root: BAR_ROOT,
   capsule: CAPSULE_WRAP,
   back: BACK,
@@ -74,6 +73,20 @@ export function withBarIds(ids: BarIds): void {
     current = HUB_IDS;
   });
 }
+
+/**
+ * TRIP-1831 · 퇴장 호스트(`BarExitHost`)는 낭독기에서 숨겨진 채 바를 그린다(진짜 탭 바가 낭독 대상이라 같은 바를 두 번 읽지 않게).
+ * 그 바를 재려면 접근성 숨김 요소도 읽어야 한다 — describe 본문에서 한 번 부르면 그 describe 동안 이 파일의 관측 함수들이 숨김 요소까지 읽는다.
+ */
+let includeHidden = false;
+export function withHiddenBars(): void {
+  beforeEach(() => {
+    includeHidden = true;
+  });
+  afterEach(() => {
+    includeHidden = false;
+  });
+}
 const tracked = (): string[] => [
   ...new Set([...current.start5, ...current.final]),
 ];
@@ -86,13 +99,21 @@ export function visibleIds(): string[] {
         typeof node.type === 'string' && tracked().includes(node.props.testID)
     )
     .map((node) => node.props.testID as string);
-  return [...new Set(inTree)].filter((id) => screen.queryByTestId(id) !== null);
+  return [...new Set(inTree)].filter(
+    (id) =>
+      screen.queryByTestId(id, { includeHiddenElements: includeHidden }) !==
+      null
+  );
 }
 
 /** 한 장의 지문 = 캡슐 래퍼의 reanimated 스타일 + 보이는 칸. 움직임은 지문이 달라지는 것으로 읽는다. */
-export const frameSample = (): string =>
+const frameSample = (): string =>
   JSON.stringify([
-    getAnimatedStyle(screen.getByTestId(current.capsule)),
+    getAnimatedStyle(
+      screen.getByTestId(current.capsule, {
+        includeHiddenElements: includeHidden,
+      })
+    ),
     visibleIds(),
   ]);
 
@@ -126,7 +147,11 @@ export function watchMotion(
   const take = (ms: number) => {
     watch.samples.push(frameSample());
     watch.shapes.push(visibleIds());
-    watch.rootCounts.push(screen.queryAllByTestId(current.root).length);
+    watch.rootCounts.push(
+      screen.queryAllByTestId(current.root, {
+        includeHiddenElements: includeHidden,
+      }).length
+    );
     watch.schedules.push(scheduleNode());
     watch.scheduleSelected.push(
       scheduleNode()?.props.accessibilityState?.selected === true
@@ -169,22 +194,15 @@ export function advance(ms: number): void {
 export const moved = (watch: MotionWatch): boolean =>
   new Set(watch.samples).size > 1;
 
-/** 루트가 모든 프레임에서 하나이고 일정 칸이 **같은 노드**(리마운트 없음). */
+/**
+ * 루트가 모든 프레임에서 하나이고 일정 칸이 **같은 노드**(리마운트 없음).
+ */
 export const structureSteady = (watch: MotionWatch): boolean =>
   watch.rootCounts.every((count) => count === 1) &&
   watch.schedules.every((node) => node !== null && node === watch.schedules[0]);
 
-export const lastSample = (watch: MotionWatch): string =>
-  watch.samples[watch.samples.length - 1];
-
 const seenAt = (watch: MotionWatch, id: string) =>
   watch.shapes.findIndex((shape) => shape.includes(id));
-
-/** `id` 가 처음 보인 시각(없으면 null). */
-export function firstSeen(watch: MotionWatch, id: string): number | null {
-  const index = seenAt(watch, id);
-  return index < 0 ? null : watch.at[index];
-}
 
 /** `id` 가 보이다가 처음 안 보이게 된 시각(없으면 null). */
 export function firstGone(watch: MotionWatch, id: string): number | null {
@@ -239,7 +257,7 @@ type Style = Record<string, unknown>;
 const num = (value: unknown): number => (typeof value === 'number' ? value : 0);
 
 /** 고정 style 과 reanimated 보간 값을 합친 지금 스타일. */
-export function layoutStyle(node: ReactTestInstance): Style {
+function layoutStyle(node: ReactTestInstance): Style {
   return {
     ...(StyleSheet.flatten(node.props.style) as Style | undefined),
     ...(getAnimatedStyle(node) as Style),
@@ -257,29 +275,6 @@ function directHostChildren(node: ReactTestInstance): ReactTestInstance[] {
   );
 }
 
-/** 루트에서 **유리(BlurView) 바깥**의 host 노드만 — 루트·모션 래퍼·그림자 래퍼. */
-function hostsOutsideGlass(node: ReactTestInstance): ReactTestInstance[] {
-  if (node.type === (BlurView as unknown)) return [];
-  const own = typeof node.type === 'string' ? [node] : [];
-  const kids = node.children.filter(
-    (child): child is ReactTestInstance => typeof child !== 'string'
-  );
-  return [...own, ...kids.flatMap(hostsOutsideGlass)];
-}
-
-const H_SPACING_CLASS =
-  /(?:^|\s)(?:gap|gap-x|space-x|m|ml|mr|mx|ms|me|p|pl|pr|px|ps|pe)-/;
-
-/** 가로 간격 className 을 가진 유리 바깥 노드들 — 비어 있어야 한다. */
-export function hiddenSpacingClasses(): string[] {
-  return hostsOutsideGlass(screen.getByTestId(current.root))
-    .filter((node) => H_SPACING_CLASS.test(String(node.props.className ?? '')))
-    .map(
-      (node) =>
-        `testID=${String(node.props.testID)} className=${String(node.props.className)}`
-    );
-}
-
 // 허용 키(행 gap · 뒤로 marginRight · 캡슐 marginLeft) 밖의 가로 간격·오프셋 style 은 0/없음이어야 한다.
 const STRAY_KEYS = [
   ...['margin', 'marginHorizontal', 'marginStart', 'marginEnd'],
@@ -287,7 +282,7 @@ const STRAY_KEYS = [
   ...['paddingStart', 'paddingEnd', 'left', 'right', 'start', 'end'],
 ];
 
-export interface RowReading {
+interface RowReading {
   /** 뒤로 가지 폭(가지가 없으면 0). */
   backWidth: number | undefined;
   /** 뒤로–캡슐 간격 = 행 gap + 뒤로 marginRight + 캡슐 marginLeft. */
@@ -298,8 +293,10 @@ export interface RowReading {
   strayKeys: string[];
 }
 
-export function readRow(): RowReading {
-  const root = screen.getByTestId(current.root);
+function readRow(): RowReading {
+  const root = screen.getByTestId(current.root, {
+    includeHiddenElements: includeHidden,
+  });
   const branches = directHostChildren(root);
   const branchWith = (id: string) =>
     branches.find(
@@ -358,7 +355,9 @@ const transformsOf = (style: Style): Record<string, unknown>[] =>
 /** 칸 `id` 에서 캡슐 래퍼 앞까지의 조상 효과(없으면 불투명도 1·확대 1·이동 0). */
 export function slotEffect(id: string): SlotEffect {
   const effect: SlotEffect = { opacity: 1, scale: 1, translateX: 0 };
-  const capsule = screen.getByTestId(current.capsule);
+  const capsule = screen.getByTestId(current.capsule, {
+    includeHiddenElements: includeHidden,
+  });
   let node: ReactTestInstance | null = screen.getByTestId(id, {
     includeHiddenElements: true,
   });
@@ -377,15 +376,15 @@ export function slotEffect(id: string): SlotEffect {
 
 /** 바 루트의 바 전체 확대. */
 export const rootScale = (): number =>
-  transformsOf(layoutStyle(screen.getByTestId(current.root))).reduce(
+  transformsOf(
+    layoutStyle(
+      screen.getByTestId(current.root, { includeHiddenElements: includeHidden })
+    )
+  ).reduce(
     (scale, entry) =>
       typeof entry.scale === 'number' ? scale * entry.scale : scale,
     1
   );
-
-/** 마운트돼 있는가(접근성 숨김 포함). */
-export const isMounted = (id: string): boolean =>
-  screen.queryByTestId(id, { includeHiddenElements: true }) !== null;
 
 /**
  * 일정 칸이 **지금 화면에서 보이는 중심 x**(바 앵커 왼쪽 = 0) = 레이아웃 자리 + 칸에 걸린 translateX. 레이아웃 자리는 flex 를 못 돌리므로

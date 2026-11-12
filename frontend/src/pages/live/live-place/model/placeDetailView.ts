@@ -1,5 +1,12 @@
-import { normalizeOpeningHours } from '@/entities/itinerary-slot';
-import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
+import {
+  normalizeOpeningHours,
+  slotDisplayCategory,
+  slotDisplayName,
+} from '@/entities/itinerary-slot';
+import type {
+  ImageLicense,
+  ItineraryDaysItemSlotsItem,
+} from '@/shared/api/index.schemas';
 
 /**
  * TRIP-398 · i05 현재 장소 상세 — 순수 도출. 슬롯 POI 합성 필드에서 화면 표시용 뷰를 만든다.
@@ -18,6 +25,8 @@ export interface PlaceDetailView {
   category: string | null;
   tags: string[];
   imageUrl: string | null;
+  /** 대표 사진(`imageUrl`)의 공공누리 유형 — 필수 키(끊기면 tsc). 갤러리는 대표 1장뿐이라 그 1장에만 쓴다(AC-9). */
+  imageLicense: ImageLicense | null | undefined;
   /** 히어로 갤러리(TRIP-755). 운영은 대표 사진 1장뿐(`imageUrl`), 그 이상은 계약 공백(G6·TRIP-823). */
   galleryUrls: string[];
   /** 전체 사진 수("1 / N" 칩·"+N"). 계약 공백 — 운영은 null(INV-1, 지어내지 않는다). */
@@ -49,10 +58,11 @@ export function buildPlaceDetailView(
 
   return {
     poiId: slot.poiId,
-    name: slot.nameKo ?? MISSING,
-    category: slot.category ?? null,
+    name: slotDisplayName(slot) ?? MISSING,
+    category: slotDisplayCategory(slot),
     tags: slot.tags,
     imageUrl: slot.imageUrl ?? null,
+    imageLicense: slot.imageLicense,
     galleryUrls: slot.imageUrl ? [slot.imageUrl] : [],
     photoTotal: null,
     pitchTitle: null,

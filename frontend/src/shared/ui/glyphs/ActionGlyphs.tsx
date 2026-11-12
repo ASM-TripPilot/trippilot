@@ -1,4 +1,4 @@
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 import { GLYPH_COLORS } from './colors';
 import type { GlyphProps } from './types';
@@ -115,6 +115,135 @@ export function SummaryChartGlyph({
         d="M6.75 22.5V14.625M13.5 22.5V5.625M20.25 22.5V10.125M3.375 22.5H23.625"
         stroke={GLYPH_COLORS[color]}
         strokeWidth={2.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 되돌리기 ↶(18 격자, 화살촉 + 반원 되돌이선) — 일정 편집 머리 「되돌리기」(Figma 5210:4522 `undo`). 선 굵기 1.65 는 시안 값.
+export function UndoGlyph({ size = 18, color = 'ink', testID }: GlyphProps) {
+  const stroke = {
+    stroke: GLYPH_COLORS[color],
+    strokeWidth: 1.65,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+  } as const;
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 18 18"
+      fill="none"
+    >
+      <Path d="M6.75 10.5L3 6.75L6.75 3" {...stroke} />
+      <Path
+        d="M3 6.75H10.875C11.4167 6.75 11.9531 6.8567 12.4536 7.064C12.954 7.2713 13.4088 7.57514 13.7918 7.95818C14.1749 8.34123 14.4787 8.79596 14.686 9.29643C14.8933 9.7969 15 10.3333 15 10.875C15 11.4167 14.8933 11.9531 14.686 12.4536C14.4787 12.954 14.1749 13.4088 13.7918 13.7918C13.4088 14.1749 12.954 14.4787 12.4536 14.686C11.9531 14.8933 11.4167 15 10.875 15H8.25"
+        {...stroke}
+      />
+    </Svg>
+  );
+}
+
+// ⋯ 더보기(20 격자, 채운 점 셋) — h06 카드 삭제 메뉴(Figma 4682:2624)와 편집기 카드 「다른 날로 옮기기」(TRIP-1793)가 같이 쓴다.
+export function MoreDotsGlyph({
+  size = 20,
+  color = 'ink',
+  testID,
+}: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+    >
+      <Path
+        d="M4.16667 11.25C4.85702 11.25 5.41667 10.6904 5.41667 10C5.41667 9.30964 4.85702 8.75 4.16667 8.75C3.47631 8.75 2.91667 9.30964 2.91667 10C2.91667 10.6904 3.47631 11.25 4.16667 11.25Z"
+        fill={GLYPH_COLORS[color]}
+      />
+      <Path
+        d="M10 11.25C10.6904 11.25 11.25 10.6904 11.25 10C11.25 9.30964 10.6904 8.75 10 8.75C9.30964 8.75 8.75 9.30964 8.75 10C8.75 10.6904 9.30964 11.25 10 11.25Z"
+        fill={GLYPH_COLORS[color]}
+      />
+      <Path
+        d="M15.8333 11.25C16.5237 11.25 17.0833 10.6904 17.0833 10C17.0833 9.30964 16.5237 8.75 15.8333 8.75C15.143 8.75 14.5833 9.30964 14.5833 10C14.5833 10.6904 15.143 11.25 15.8333 11.25Z"
+        fill={GLYPH_COLORS[color]}
+      />
+    </Svg>
+  );
+}
+
+// 연필(TRIP-1795) — 18px 격자의 Lucide 풍 선 아이콘, 장소 시트 「이름·분류 고치기」 행 앞에 쓴다.
+export function PencilGlyph({ size = 18, color = 'ink', testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 공유(세 점 + 잇는 선, 24 격자) — 장소 상세(d06·i10) 헤더. TRIP-1829 에서 explore·execution 사본을 모음.
+export function ShareGlyph({ size = 24, color = 'ink', testID }: GlyphProps) {
+  const stroke = GLYPH_COLORS[color];
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Circle cx={18} cy={5} r={2.4} stroke={stroke} strokeWidth={1.8} />
+      <Circle cx={6} cy={12} r={2.4} stroke={stroke} strokeWidth={1.8} />
+      <Circle cx={18} cy={19} r={2.4} stroke={stroke} strokeWidth={1.8} />
+      <Path
+        d="M8.1 10.9L15.9 6.1M8.1 13.1L15.9 17.9"
+        stroke={stroke}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+// 다시 하기 ↻(16 격자, 원호 + 꺾인 화살촉) — 닉네임 다시 뽑기·지도 폴백 바 [다시 시도].
+// TRIP-1829 에서 onboarding(22 격자)·map-sheet(16 격자) 사본을 모음 — 획폭/격자 비율이 같아 축척만 다르다.
+export function RetryGlyph({ size = 16, color = 'ink', testID }: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+    >
+      <Path
+        d="M13.3333 7.33333C13.2818 6.07284 12.7851 4.87144 11.9314 3.94255C11.0778 3.01367 9.92255 2.41745 8.6709 2.25981C7.41924 2.10217 6.15222 2.39332 5.09494 3.08153C4.03765 3.76975 3.25855 4.81047 2.89605 6.01882C2.53355 7.22716 2.61111 8.52488 3.11497 9.68144C3.61882 10.838 4.51634 11.7785 5.64807 12.3359C6.77981 12.8933 8.07248 13.0314 9.29645 12.7258C10.5204 12.4202 11.5964 11.6906 12.3333 10.6667"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={1.33333}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M13.3333 2.66667V7.33333H8.66667"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={1.33333}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

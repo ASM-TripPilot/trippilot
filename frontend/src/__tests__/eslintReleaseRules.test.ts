@@ -57,6 +57,8 @@ const NO_CONSOLE = 'no-console';
 
 const PROD_PROBE = 'src/features/settings/__release_probe__.ts';
 const PHOTO_PROBE = 'src/shared/photo/__release_probe__.ts';
+// TRIP-1799 — 클립보드 입구(`shared/clipboard`)도 photo 와 같은 "정적 import 금지·호출 시점 require 허용" 계약.
+const CLIPBOARD_PROBE = 'src/shared/clipboard/__release_probe__.ts';
 const REFLECTION_UI_PROBE =
   'src/features/share-trip-card/ui/__release_probe__.ts';
 const REFLECTION_MODEL_PROBE =
@@ -154,6 +156,25 @@ describe('네이티브 사진·캡처 모듈은 정적으로 끌지 않는다 (�
     const ruleIds = await lint(
       "export const probe = () =>\n  // eslint-disable-next-line @typescript-eslint/no-require-imports\n  require('expo-image-picker') as typeof import('expo-image-picker');\n",
       PHOTO_PROBE
+    );
+
+    expect(ruleIds).toEqual([]);
+  });
+
+  // TRIP-1799 — 모듈 없는 옛 dev build 에서 expo-clipboard 는 로드 순간 던진다(`requireNativeModule`). 입구(`@/shared/clipboard`)만 호출 시점에 연다.
+  it('shared/clipboard 입구도 expo-clipboard 를 정적 import 하면 error', async () => {
+    const ruleIds = await lint(
+      "import * as Clipboard from 'expo-clipboard';\nexport const probe = Clipboard;\n",
+      CLIPBOARD_PROBE
+    );
+
+    expect(ruleIds).toContain(RESTRICTED_IMPORTS);
+  });
+
+  it('shared/clipboard 입구가 함수 안에서 require 로 여는 것은 error 0', async () => {
+    const ruleIds = await lint(
+      "export const probe = () =>\n  // eslint-disable-next-line @typescript-eslint/no-require-imports\n  require('expo-clipboard') as typeof import('expo-clipboard');\n",
+      CLIPBOARD_PROBE
     );
 
     expect(ruleIds).toEqual([]);
@@ -281,6 +302,7 @@ describe('네이티브 사진·캡처 모듈은 정적으로 끌지 않는다 (�
     ['expo-media-library/build/MediaLibrary'],
     ['react-native-view-shot/src/index'],
     ['expo-sharing/build/Sharing'],
+    ['expo-clipboard/build/Clipboard'],
   ])('네이티브 모듈의 하위 경로 %s 를 정적 import 하면 error', async (spec) => {
     const ruleIds = await lint(
       `import * as nativeModule from '${spec}';\nexport const probe = nativeModule;\n`,
@@ -497,7 +519,8 @@ describe('pages·app 은 아무것도 안 하는 핸들러를 넘기지 않는�
       "import { Pressable } from 'react-native';",
       'declare function go(): void;',
       'declare const onPressTab: (() => void) | undefined;',
-      `export const Probe = () => (\n  <Pressable\n${attr}\n  />\n);`,
+      // TRIP-1765 — role 을 달아 둔다(없으면 role 게이트가 음성까지 울린다).
+      `export const Probe = () => (\n  <Pressable\n    accessibilityRole="button"\n${attr}\n  />\n);`,
       '',
     ].join('\n');
 
@@ -729,7 +752,7 @@ describe('누름 이동 연타 관통 (TRIP-1013) — 인라인 화살표의 rou
       'declare function save(o: { onSuccess: () => void }): void;',
       'export function Probe() {',
       '  const router = useRouter();',
-      `  return <Pressable onPress={${attr}} />;`,
+      `  return <Pressable accessibilityRole="button" onPress={${attr}} />;`,
       '}',
       '',
     ].join('\n');
@@ -804,5 +827,491 @@ describe('테스트 재팽창 방지 (2026-11-01 jest 축소 — README 판정 3
         'src/shared/ui/zzProbe.ts'
       )
     ).toEqual([]);
+  });
+});
+
+// TRIP-1765 · M-99 — 누름 요소(Pressable·Touchable*)에 역할이 없으면 낭독기·XCUITest 가 버튼으로 못 본다.
+// 조각은 role 말고 어떤 게이트에도 안 걸리게 짰다(실제 함수 핸들러·router 이동 없음) — 음성 짝이 [] 로 그것을 보인다.
+// pages·app 블록과 .tsx 전역 블록이 같은 룰을 덮어쓰므로(위 ⚠️) 두 쪽 경로에서 각각 양성을 본다.
+describe('누름 요소엔 역할을 단다 (TRIP-1765) — role 없는 Pressable·Touchable* 은 error', () => {
+  const roleProbe = (tag: string, attr = '') =>
+    [
+      "import { Pressable, TouchableOpacity } from 'react-native';",
+      'declare function go(): void;',
+      `export const Probe = () => <${tag} ${attr}onPress={go} />;`,
+      '',
+    ].join('\n');
+
+  it.each([
+    ['pages', 'Pressable', PAGE_PROBE],
+    ['app 라우트', 'Pressable', ROUTE_PROBE],
+    ['pages 밖 features', 'Pressable', WORKLET_TSX_PROBE],
+    ['pages 밖 features 의 Touchable', 'TouchableOpacity', WORKLET_TSX_PROBE],
+  ])('%s — role 없는 <%s> 는 error', async (_label, tag, filePath) => {
+    const ruleIds = await lint(roleProbe(tag), filePath);
+
+    expect(ruleIds).toContain(RESTRICTED_SYNTAX);
+  });
+
+  it.each([
+    ['accessibilityRole', 'accessibilityRole="button" '],
+    ['role', 'role="button" '],
+  ])('%s 가 있으면 error 0', async (_label, attr) => {
+    const ruleIds = await lint(roleProbe('Pressable', attr), PAGE_PROBE);
+
+    expect(ruleIds).toEqual([]);
+  });
+});
+
+// TRIP-1768 · react-hooks 7.x 컴파일러 규칙(recommended)이 error 로 켜져 있는지 대표 1규칙으로 본다.
+// 기존 위반은 eslint-suppressions.json 에 얼려 있다 — lintText 는 얼림을 적용하지 않아 규칙 발동만 본다.
+describe('React Compiler 규칙은 error (TRIP-1768) — 렌더 중 ref.current 읽기', () => {
+  const refDuringRender = [
+    "import { useRef } from 'react';",
+    '',
+    'export function useProbe(): number {',
+    '  const ref = useRef(0);',
+    '  return ref.current;',
+    '}',
+    '',
+  ].join('\n');
+
+  it.each([
+    ['pages', PAGE_PROBE],
+    ['app 라우트', ROUTE_PROBE],
+  ])('%s — react-hooks/refs 가 error 로 울린다', async (_label, filePath) => {
+    const ruleIds = await lint(refDuringRender, filePath);
+
+    expect(ruleIds).toContain('react-hooks/refs');
+  });
+});
+
+// TRIP-1773 · M-66 — 글리프 파일(`*Glyphs.tsx`) 사이에 같은 이름을 내보내면 error (`no-restricted-exports`).
+// 금지 목록은 설정 로드 때 디스크의 글리프 파일에서 읽는다: 파일 F 에는 "F 가 아닌 다른 글리프 파일이 정의한 이름"이 걸린다.
+// 그래서 가짜 경로(어느 실파일도 아님)에서는 모든 글리프 이름이, 실파일에서는 자기 이름만 빠진 목록이 걸린다.
+// 양성 탐침의 이름은 공용(shared/ui/glyphs)이 계속 들고 있을 `ChevronRightGlyph`·`LockGlyph` 다 — 슬라이스 쪽 이름은 개명되므로 쓰지 않는다.
+// 이 룰은 `export * from`(이름 없는 전체 재수출)을 못 본다 — 그 사각은 탐침으로 굳히지 않고 02a 에 적었다.
+describe('글리프 이름은 파일 사이에 겹치지 않는다 (TRIP-1773) — no-restricted-exports', () => {
+  const NO_RESTRICTED_EXPORTS = 'no-restricted-exports';
+  const SLICE_GLYPH_PROBE = 'src/features/settings/ui/zzProbeGlyphs.tsx';
+  const PAGES_GLYPH_PROBE = 'src/pages/settings/settings/ui/zzProbeGlyphs.tsx';
+  const NAVIGATION_GLYPHS = 'src/shared/ui/glyphs/NavigationGlyphs.tsx';
+  const declare = (name: string) =>
+    `export function ${name}() {\n  return null;\n}\n`;
+
+  it('다른 파일이 이미 정의한 이름을 새 글리프 파일이 내보내면 error', async () => {
+    const ruleIds = await lint(declare('ChevronRightGlyph'), SLICE_GLYPH_PROBE);
+
+    expect(ruleIds).toEqual([NO_RESTRICTED_EXPORTS]);
+  });
+
+  it('고유한 이름이면 error 0', async () => {
+    const ruleIds = await lint(declare('ZzProbeOnlyGlyph'), SLICE_GLYPH_PROBE);
+
+    expect(ruleIds).toEqual([]);
+  });
+
+  it('pages 경로에서도 error (같은 룰을 덮는 pages 블록 뒤에서 살아 있다)', async () => {
+    const ruleIds = await lint(declare('ChevronRightGlyph'), PAGES_GLYPH_PROBE);
+
+    expect(ruleIds).toEqual([NO_RESTRICTED_EXPORTS]);
+  });
+
+  it('`export { A as 겹치는이름 }` 별칭으로 내보내도 error', async () => {
+    const aliased =
+      'function Local() {\n  return null;\n}\nexport { Local as ChevronRightGlyph };\n';
+
+    const ruleIds = await lint(aliased, SLICE_GLYPH_PROBE);
+
+    expect(ruleIds).toEqual([NO_RESTRICTED_EXPORTS]);
+  });
+
+  it('`export const` 화살표 정의도 error', async () => {
+    const arrow = 'export const ChevronRightGlyph = () => null;\n';
+
+    const ruleIds = await lint(arrow, SLICE_GLYPH_PROBE);
+
+    expect(ruleIds).toEqual([NO_RESTRICTED_EXPORTS]);
+  });
+
+  it('실파일은 자기 이름만 통과하고 다른 파일의 이름은 여전히 error (자기를 뺀 덮어쓰기 블록)', async () => {
+    const own = await lint(declare('ChevronRightGlyph'), NAVIGATION_GLYPHS);
+    const other = await lint(declare('LockGlyph'), NAVIGATION_GLYPHS);
+
+    expect(own).toEqual([]);
+    expect(other).toEqual([NO_RESTRICTED_EXPORTS]);
+  });
+
+  it('글리프 파일이 아니면(이름이 *Glyphs.tsx 가 아님) 이 금지를 걸지 않는다', async () => {
+    const ruleIds = await lint(
+      declare('ChevronRightGlyph'),
+      'src/features/settings/ui/zzProbe.tsx'
+    );
+
+    expect(ruleIds).toEqual([]);
+  });
+});
+
+// TRIP-1774 · M-76 — 화면·TS 소스에 raw hex 가 새로 들어오면 error (`trippilot/no-raw-hex`, 로컬 규칙 `scripts/noRawHex.cjs`).
+// 독립 규칙 id 라 `no-restricted-syntax` 덮어쓰기 함정(블록 3개 펼침)이 없고, 면제 파일은 이 규칙만 끄므로 다른 게이트는 그대로 켜져 있다.
+// 이 규칙은 hex 만 본다 — rgba()·이름 색(white·black)·문자열 연결로 만든 hex·`.js/.cjs/.json`·루트 app.config.ts 는 사정거리 밖이다.
+// 정규식·토큰 이름 찾기의 경계는 scripts/noRawHex.test.ts 가 문자열로 직접 잰다. 여기서는 "어느 파일에서 울리나"만 본다.
+// ⚠️ 규칙 정의가 안 보이는 파일의 `eslint-disable trippilot/no-raw-hex` 도 같은 ruleId 로 error("Definition … not found")가 난다 —
+//    그래서 아래 탐침은 ruleId 만이 아니라 줄 번호·메시지까지 본다.
+describe('raw hex 는 토큰으로 (TRIP-1774) — trippilot/no-raw-hex', () => {
+  const NO_RAW_HEX = 'trippilot/no-raw-hex';
+  const TS_PROBE = 'src/features/settings/__hex_probe__.ts';
+  const TSX_PROBE = 'src/features/settings/__hex_probe__.tsx';
+  const PAGES_TSX_PROBE = 'src/pages/settings/settings/ui/__hex_probe__.tsx';
+  const ROUTE_TSX_PROBE = 'app/trips/__hex_probe__.tsx';
+  const DEV_TSX_PROBE = 'app/_dev/__hex_probe__.tsx';
+  // 01b 결정 5 — 토큰 밖 고유 색을 파일 단위로 면제한다(블록 위 주석에 사유).
+  const EXEMPT_FILES = [
+    'src/features/reflection/model/categoryPalette.ts',
+    'src/features/explore/model/regions.ts',
+    'src/features/auth/config/gradients.ts',
+    'src/shared/map/webMapController.ts',
+    'src/features/auth/ui/AuthGlyphs.tsx',
+    'src/pages/onboarding/onboarding-tour/ui/TourGlyphs.tsx',
+  ];
+  const siblingOf = (file: string) =>
+    file.replace(/([^/]+)(\.tsx?)$/, '__hex_sibling__$2');
+  const hexIn = (hex: string) => `export const COLOR = '${hex}';\n`;
+
+  // severity=error 메시지 전체(ruleId·줄·본문). 위 ⚠️ 때문에 ruleId 만 보면 "정의 없음" error 가 양성처럼 보인다.
+  async function errors(code: string, filePath: string) {
+    const [result] = await eslint.lintText(code, {
+      filePath: path.resolve(filePath),
+    });
+    return result.messages
+      .filter((m) => m.severity === 2)
+      .map((m) => ({ ruleId: m.ruleId, line: m.line, message: m.message }));
+  }
+  const hexErrorLines = async (code: string, filePath: string) =>
+    (await errors(code, filePath))
+      .filter((e) => e.ruleId === NO_RAW_HEX)
+      .map((e) => e.line);
+
+  it('.ts 의 hex 문자열은 error', async () => {
+    const found = await errors(hexIn('#C2CCD6'), TS_PROBE);
+
+    expect(found.map((e) => e.ruleId)).toEqual([NO_RAW_HEX]);
+  });
+
+  it('.tsx 의 JSX 속성 문자열 hex 는 error', async () => {
+    const code = [
+      "import Svg, { Path } from 'react-native-svg';",
+      'export const Probe = () => (',
+      '  <Svg>',
+      '    <Path fill="#C2CCD6" />',
+      '  </Svg>',
+      ');',
+      '',
+    ].join('\n');
+
+    const found = await errors(code, TSX_PROBE);
+
+    expect(found.map((e) => e.ruleId)).toEqual([NO_RAW_HEX]);
+  });
+
+  it('pages 경로의 .tsx 도 error (no-restricted-syntax 블록과 달리 pages 만 빠지지 않는다)', async () => {
+    const code = 'export const Probe = () => <view fill="#C2CCD6" />;\n';
+
+    const found = await errors(code, PAGES_TSX_PROBE);
+
+    expect(found.map((e) => e.ruleId)).toContain(NO_RAW_HEX);
+  });
+
+  it.each([
+    ['app 라우트', ROUTE_TSX_PROBE],
+    ['app/_dev 프리뷰 (면제 아님)', DEV_TSX_PROBE],
+  ])('%s 의 hex 도 error', async (_label, filePath) => {
+    const found = await errors(hexIn('#C2CCD6'), filePath);
+
+    expect(found.map((e) => e.ruleId)).toEqual([NO_RAW_HEX]);
+  });
+
+  it('className 임의값 bg-[#ECECEC] 도 error', async () => {
+    const code = [
+      "import { View } from 'react-native';",
+      'export const Probe = () => <View className="items-start bg-[#ECECEC]" />;',
+      '',
+    ].join('\n');
+
+    const found = await errors(code, TSX_PROBE);
+
+    expect(found.map((e) => e.ruleId)).toEqual([NO_RAW_HEX]);
+  });
+
+  it('템플릿 리터럴 안의 hex 도 error (표현식이 섞인 것·없는 것 둘 다)', async () => {
+    const withExpr = 'export const A = `a ${1} b #C2CCD6`;\n';
+    const plain = 'export const B = `border-[#C4C9CF]`;\n';
+
+    expect(await hexErrorLines(withExpr, TS_PROBE)).toEqual([1]);
+    expect(await hexErrorLines(plain, TS_PROBE)).toEqual([1]);
+  });
+
+  it('한 문자열에 hex 가 둘이면 error 도 둘', async () => {
+    const found = await errors(
+      "export const A = 'linear #C2CCD6 #C4C9CF';\n",
+      TS_PROBE
+    );
+
+    expect(found.map((e) => e.ruleId)).toEqual([NO_RAW_HEX, NO_RAW_HEX]);
+  });
+
+  it.each([
+    ['3자리', '#000', true],
+    ['8자리(알파)', '#FFFFFF00', true],
+    ['4자리', '#abcd', false],
+    ['5자리', '#abcde', false],
+  ])('%s %s → error %s', async (_label, hex, flagged) => {
+    const lines = await hexErrorLines(hexIn(hex), TS_PROBE);
+
+    expect(lines).toEqual(flagged ? [1] : []);
+  });
+
+  it('토큰과 같은 값이면 메시지가 그 토큰 이름을 알려준다 (별칭이면 둘 다)', async () => {
+    const canon = jest.requireActual<Record<string, string>>(
+      '../shared/config/colorTokens.cjs'
+    );
+    const primary = await errors(hexIn(canon.primary), TS_PROBE);
+    const white = await errors(
+      hexIn(canon['on-primary'].toLowerCase()),
+      TS_PROBE
+    );
+
+    expect(primary).toHaveLength(1);
+    expect(primary[0].message).toContain('같은 값 토큰:');
+    expect(primary[0].message).toContain('`primary`');
+    expect(white[0].message).toContain('`on-primary`');
+    expect(white[0].message).toContain('`canvas`');
+  });
+
+  it('토큰에 없는 값이면 토큰 안내 없이 hex 만 알려준다', async () => {
+    const [only] = await errors(hexIn('#010203'), TS_PROBE);
+
+    expect(only.ruleId).toBe(NO_RAW_HEX);
+    expect(only.message).toContain('#010203');
+    expect(only.message).not.toContain('같은 값 토큰:');
+  });
+
+  describe('예외는 사유 주석 한 줄이거나 이름 붙인 면제 파일뿐', () => {
+    it('`eslint-disable-next-line` 사유 줄은 바로 다음 줄만 덮는다 — 주석 안 hex 는 안 걸리고, 그다음 줄은 여전히 error', async () => {
+      const code = [
+        '// eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill #C2CCD6, 토큰 없음',
+        "export const DISABLED = '#C2CCD6';",
+        "export const STILL_BAD = '#C2CCD6';",
+        '',
+      ].join('\n');
+
+      const found = await errors(code, TS_PROBE);
+
+      expect(found.map((e) => [e.ruleId, e.line])).toEqual([[NO_RAW_HEX, 3]]);
+    });
+
+    it('JSX 속성 사이의 `//` 사유 줄은 바로 아래 속성만 덮는다', async () => {
+      const code = [
+        "import Svg, { Path } from 'react-native-svg';",
+        'export const Probe = () => (',
+        '  <Svg>',
+        '    <Path',
+        '      // eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill, 토큰 없음',
+        '      fill="#C2CCD6"',
+        '      stroke="#C2CCD6"',
+        '    />',
+        '  </Svg>',
+        ');',
+        '',
+      ].join('\n');
+
+      const found = await errors(code, TSX_PROBE);
+
+      expect(found.map((e) => [e.ruleId, e.line])).toEqual([[NO_RAW_HEX, 7]]);
+    });
+
+    it('템플릿 문자열 안 `${ … }` 표현식 속 리터럴도 윗줄 사유 주석으로 덮인다 (위저드 버튼 className 형태)', async () => {
+      const code = [
+        'export const cls = (off: boolean) =>',
+        '  `w ${',
+        '    // eslint-disable-next-line trippilot/no-raw-hex -- Figma raw fill, 토큰 없음',
+        "    off ? 'bg-[#E9E9EB]' : 'bg-primary'",
+        '  }`;',
+        '',
+      ].join('\n');
+
+      const found = await errors(code, TS_PROBE);
+
+      expect(found).toEqual([]);
+    });
+
+    it.each(EXEMPT_FILES)(
+      '면제 파일 %s 는 통과, 같은 폴더의 형제 파일은 여전히 error (폴더 단위 면제 아님)',
+      async (file) => {
+        const exempt = await errors(hexIn('#C2CCD6'), file);
+        const sibling = await errors(hexIn('#C2CCD6'), siblingOf(file));
+
+        expect(exempt).toEqual([]);
+        expect(sibling.map((e) => e.ruleId)).toEqual([NO_RAW_HEX]);
+      }
+    );
+
+    it('면제 파일에서도 다른 게이트는 켜져 있다 — role 없는 Pressable 은 여전히 error, hex 는 아니다', async () => {
+      const code = [
+        "import { Pressable } from 'react-native';",
+        'declare function go(): void;',
+        'export const Probe = () => <Pressable onPress={go} testID="#C2CCD6" />;',
+        '',
+      ].join('\n');
+      const exemptFile = 'src/features/auth/ui/AuthGlyphs.tsx';
+
+      const exempt = await errors(code, exemptFile);
+      const sibling = await errors(code, siblingOf(exemptFile));
+
+      expect(exempt.map((e) => e.ruleId)).toEqual([RESTRICTED_SYNTAX]);
+      expect(sibling.map((e) => e.ruleId).sort()).toEqual(
+        [NO_RAW_HEX, RESTRICTED_SYNTAX].sort()
+      );
+    });
+  });
+
+  describe('규칙이 닿지 않는 파일', () => {
+    it.each([
+      ['단위 테스트', 'src/features/settings/__hex_probe__.test.ts'],
+      ['__tests__ 폴더', 'src/__tests__/__hex_probe__.ts'],
+      ['__mocks__ 폴더', 'src/shared/__mocks__/__hex_probe__.ts'],
+      ['test-support', 'src/test-support/__hex_probe__.ts'],
+    ])('%s 의 hex 는 error 아님', async (_label, filePath) => {
+      const found = await errors(hexIn('#C2CCD6'), filePath);
+
+      expect(found).toEqual([]);
+    });
+
+    it('정본 폴더에서 `.cjs` 는 면제(블록 files 밖)이고 같은 폴더의 `.ts` 는 면제가 아니다', async () => {
+      const cjs = await errors(
+        "module.exports = { primary: '#FF385C' };\n",
+        'src/shared/config/__hex_probe__.cjs'
+      );
+      const ts = await errors(
+        hexIn('#FF385C'),
+        'src/shared/config/__hex_probe__.ts'
+      );
+
+      expect(cjs).toEqual([]);
+      expect(ts.map((e) => e.ruleId)).toEqual([NO_RAW_HEX]);
+    });
+
+    it('규칙이 꺼진 파일(테스트·.cjs)에 사유 주석이 남아 있어도 "정의 없음" error 는 나지 않는다 — 플러그인이 모든 파일에 등록돼 있다', async () => {
+      const code =
+        '// eslint-disable-next-line trippilot/no-raw-hex -- 사유\nexport const A = 1;\n';
+
+      const inTest = await errors(
+        code,
+        'src/features/settings/__hex_probe__.test.ts'
+      );
+      const inCjs = await errors(
+        '// eslint-disable-next-line trippilot/no-raw-hex -- 사유\nmodule.exports = 1;\n',
+        'src/shared/config/__hex_probe__.cjs'
+      );
+
+      expect(inTest).toEqual([]);
+      expect(inCjs).toEqual([]);
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIP-1740 · 서버 POI 사진은 `PoiPhoto` 로만 그린다 — `<PlacePhoto imageUrl=…>`·`<Image source={{ uri }}>` 직접 사용은 error.
+//
+// 왜 린트인가: 관광공사 3유형 사진은 자르면 안 되고(변경금지) 출처를 달아야 한다. 새 출구가 옛 부품으로 그리면 tsc 도 jest 도
+// 침묵하므로(필수 prop 은 `PoiPhoto` 에만 있다) 우회 통로를 린트로 막는다. 예외(기기 사진·타사 숙소 사진)는 윗줄 사유 주석.
+// 규칙 소스는 `no-restricted-syntax` 라서 다른 금지 항목이 같은 룰 ID 로 울려도 이 탐침이 green 이 되지 않도록
+// **메시지 태그 `TRIP-1740`** 인 error 만 센다(worklet 절과 같은 방식 — 구현자 계약: 메시지에 `TRIP-1740` 을 넣는다).
+// ⚠️ 덮어쓰기 함정: `.tsx` 블록이 셋(전체·pages·app 포함)이라 각 블록에서 따로 울리는지 파일군별로 본다.
+describe('서버 사진은 PoiPhoto 로만 (TRIP-1740) — PlacePhoto imageUrl·Image source uri 직접 사용 금지', () => {
+  const TAG = 'TRIP-1740';
+  const tagged = async (code: string, filePath: string): Promise<number> => {
+    const [result] = await eslint.lintText(code, {
+      filePath: path.resolve(filePath),
+    });
+    return result.messages.filter(
+      (m) => m.severity === 2 && m.message.includes(TAG)
+    ).length;
+  };
+
+  const PLACE_PHOTO_IMPORT =
+    "import { PlacePhoto } from '@/shared/ui/PlacePhoto';";
+  const IMAGE_IMPORT = "import { Image } from '@/shared/ui/Image';";
+  const placePhotoWithUrl = [
+    PLACE_PHOTO_IMPORT,
+    'export const Probe = () => <PlacePhoto imageUrl="https://img.example/a.jpg" category="맛집" />;',
+    '',
+  ].join('\n');
+  const imageWithUri = [
+    IMAGE_IMPORT,
+    "export const Probe = () => <Image source={{ uri: 'https://img.example/a.jpg' }} />;",
+    '',
+  ].join('\n');
+  // imageUrl 이 없는 PlacePhoto 는 번들 표지·숙소 그림 전용이라 통과해야 한다(과잉 매칭 방지).
+  const bundleOnly = [
+    PLACE_PHOTO_IMPORT,
+    'export const Probe = () => <PlacePhoto category="숙소" poiId="stay-1" />;',
+    '',
+  ].join('\n');
+
+  // 파일군 — 층 4곳(pages·widgets·entities·features) + 라우트. 덮어쓰기 블록마다 하나씩 걸린다.
+  const TARGETS: [string, string][] = [
+    ['pages (pages 블록)', PAGE_PROBE],
+    ['features (전체 .tsx 블록)', WORKLET_TSX_PROBE],
+    ['entities', 'src/entities/place/ui/__release_probe__.tsx'],
+    ['widgets', 'src/widgets/time-sheet/ui/__release_probe__.tsx'],
+    ['app 라우트', ROUTE_PROBE],
+  ];
+
+  it.each(TARGETS)(
+    '%s — <PlacePhoto imageUrl=…> 는 error, imageUrl 없는 번들 전용 PlacePhoto 는 통과',
+    async (_label, filePath) => {
+      expect(await tagged(placePhotoWithUrl, filePath)).toBeGreaterThanOrEqual(
+        1
+      );
+      expect(await tagged(bundleOnly, filePath)).toBe(0);
+    }
+  );
+
+  it.each(TARGETS)(
+    '%s — <Image source={{ uri }}> 직접 사용은 error',
+    async (_label, filePath) => {
+      expect(await tagged(imageWithUri, filePath)).toBeGreaterThanOrEqual(1);
+    }
+  );
+
+  it('예외는 윗줄 사유 주석 한 줄이면 열린다 — 같은 코드가 주석 없이는 error, 있으면 0', async () => {
+    const withReason = [
+      PLACE_PHOTO_IMPORT,
+      '// eslint-disable-next-line no-restricted-syntax -- 기기 사진(서버 POI 사진 아님)',
+      'export const Probe = () => <PlacePhoto imageUrl="file:///device.jpg" />;',
+      '',
+    ].join('\n');
+    const withoutReason = withReason.replace(
+      /^\/\/ eslint-disable-next-line.*\n/m,
+      ''
+    );
+
+    expect(
+      await tagged(withoutReason, WORKLET_TSX_PROBE)
+    ).toBeGreaterThanOrEqual(1);
+    expect(await tagged(withReason, WORKLET_TSX_PROBE)).toBe(0);
+  });
+
+  it('테스트 파일은 이 금지의 대상이 아니다 — 같은 코드가 앱 파일에선 error, 테스트에선 0', async () => {
+    expect(
+      await tagged(placePhotoWithUrl, WORKLET_TSX_PROBE)
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      await tagged(
+        placePhotoWithUrl,
+        'src/features/auth/ui/__release_probe__.test.tsx'
+      )
+    ).toBe(0);
   });
 });

@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 
 import type {
   ActionLogPayload,
@@ -21,6 +22,8 @@ export interface HistoryViewProps {
   logs: readonly AssistantMessage[];
   /** 다른 여행(또는 일반) 대화 — 다시 열 수 있다(BR-U8-18). */
   otherSessions: readonly AssistantSessionSummary[];
+  /** TRIP-1757 — 이전 대화 목록 조회가 실패했다. 주면 「이전 대화」 자리에 사유 한 줄 + [다시 시도]. 미주입 = 줄 없음(프리뷰·기존 뷰 테스트 무회귀). */
+  sessionsError?: { onRetry: () => void; retrying: boolean };
   confirmingClear: boolean;
   clearing: boolean;
   onContinue: () => void;
@@ -62,6 +65,7 @@ function ActionButton({
 export function HistoryView({
   logs,
   otherSessions,
+  sessionsError,
   confirmingClear,
   clearing,
   onContinue,
@@ -99,6 +103,28 @@ export function HistoryView({
         <Text className="font-noto text-micro text-muted">
           * 대화는 보조 기록 · 일정 확정값은 솔버 검증 결과
         </Text>
+        {sessionsError ? (
+          <View
+            testID="assistant-history-sessions-error"
+            className="flex-row items-center justify-between gap-sm rounded-[12px] bg-surface-soft px-md py-sm"
+          >
+            <Text className="shrink font-noto-bold text-[13px] font-bold text-ink">
+              지난 대화를 불러오지 못했어요
+            </Text>
+            <Pressable
+              testID="assistant-history-sessions-retry"
+              accessibilityRole="button"
+              onPress={sessionsError.onRetry}
+              disabled={sessionsError.retrying}
+              accessibilityState={{ disabled: sessionsError.retrying }}
+              hitSlop={8}
+            >
+              <Text className="font-noto-bold text-[13px] font-bold text-primary-text">
+                다시 시도
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
         {otherSessions.length > 0 ? (
           <View className="gap-sm pt-sm">
             <Text className="font-noto-bold text-caption font-bold text-muted-soft">
@@ -165,18 +191,14 @@ export function HistoryView({
                   취소
                 </Text>
               </Pressable>
-              <Pressable
+              <Button
                 testID="assistant-history-clear-confirm"
-                accessibilityRole="button"
-                accessibilityState={{ disabled: clearing }}
                 disabled={clearing}
                 onPress={onConfirmClear}
-                className="flex-1 items-center rounded-button bg-primary py-[13px]"
+                className="flex-1"
               >
-                <Text className="font-noto-bold text-label font-bold text-on-primary">
-                  지우기
-                </Text>
-              </Pressable>
+                지우기
+              </Button>
             </View>
           </View>
         </View>

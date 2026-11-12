@@ -1,5 +1,7 @@
 package com.trippilot.notification.application
 
+import com.trippilot.auth.api.AccountStatusFacade
+import com.trippilot.notification.domain.CopyBasis
 import com.trippilot.notification.domain.NotificationKind
 import com.trippilot.notification.domain.NotificationSchedule
 import com.trippilot.notification.domain.NotificationScheduleRepository
@@ -7,17 +9,31 @@ import com.trippilot.notification.domain.ReminderCopyPort
 import com.trippilot.notification.domain.ReminderCopyRequest
 import com.trippilot.notification.domain.ReminderSlot
 import com.trippilot.itinerarygeneration.api.ItineraryPlanFacade
+import com.trippilot.itinerarygeneration.api.PlannedPlaceView
 import com.trippilot.trip.api.OwnedTripPeriod
 import com.trippilot.trip.api.TripOwnerFacade
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.util.UUID
+
+/** [NotificationScheduleService.fillMissing] 의 결과 — 재시도 사슬을 이어 갈지 정한다. */
+sealed interface FillOutcome {
+    /** 채울 행이 더는 없다(전부 문구가 있거나, 기능이 꺼져 있다). */
+    data object Done : FillOutcome
+
+    /** 여행이 없다 — 더 할 일이 없다. */
+    data object Gone : FillOutcome
+
+    /** 문구 없는 행이 [remaining] 건 남았다. [noMaterial] 은 그중 재료(그 날 일정)가 아직 없어 묻지도 못한 수. */
+    data class Retry(val remaining: Int, val noMaterial: Int) : FillOutcome
+}
 
 /**
  * 리마인드 예약 적재·재계산(BR-U6-04 · INV-U6-08).
@@ -35,12 +51,25 @@ class NotificationScheduleService(
     private val clock: Clock,
     // 문구를 하나도 못 받은 적재를 몇 분 뒤 한 번 더 — 모델 콜드스타트 대응([ReminderCopyRetries]).
     private val retries: ReminderCopyRetries,
+    // 삭제 유예 중인 계정에는 예약을 세우지 않는다.
+    private val accounts: AccountStatusFacade,
 ) {
-    /** [retryIfNoCopy] 는 재시도 폴러만 false 로 부른다 — 재시도의 재시도는 없다. */
+    /**
+     * @param fillCopies 문구를 **지금** 묻는가. 사용자 대기가 없는 곳에서도 AI 를 동기로 기다리면 릴레이 스레드가 묶이므로, 되살림(삭제 철회)은
+     * 끄고 재시도 대기열이 곧 채우게 한다(문구 없는 행이 있으면 아래서 대기열에 건다).
+     * @param onlyIfScheduled 예약이 한 번이라도 적재된 여행만 다시 세운다. 일정과 무관한 사건(여행 기간 변경)이 부를 때 켠다 — 예약은 일정 생성·재계산
+     * 이벤트가 처음 만들므로, 일정이 아직 없는 여행에 기간만 바뀌었다고 예약을 새로 세우면 없는 일정의 알림이 울린다. 잠금 **뒤에** 판정하므로 같은 여행의
+     * 첫 적재와 겹쳐도 그 커밋을 보고 가른다. 한계: 일정 생성 때 모든 알림 시각이 이미 지나 행이 한 건도 안 만들어진 여행(마지막 날 아침 이후에 짠 하루 여행)은
+     * 기간 변경만으로는 안 선다 — 다음 일정 생성·재계획이 세운다.
+     */
     @Transactional
-    fun reload(tripId: UUID, retryIfNoCopy: Boolean = true) {
-        // 같은 여행의 다른 적재(릴레이·재시도 폴러)와 겹치지 않게 — 겹치면 하루 리마인드가 두 벌이 된다.
+    fun reload(tripId: UUID, fillCopies: Boolean = true, onlyIfScheduled: Boolean = false) {
+        // 같은 여행의 다른 적재(릴레이)와 겹치지 않게 — 겹치면 하루 리마인드가 두 벌이 된다.
         schedules.lockTrip(tripId)
+        if (onlyIfScheduled && !schedules.existsForTrip(tripId)) {
+            log.debug("리마인드 예약이 만들어진 적 없는 여행이라 다시 세우지 않습니다. tripId={}", tripId)
+            return
+        }
         val now = clock.instant()
         val trip = trips.findOwnedPeriod(tripId)
         if (trip == null) {
@@ -49,16 +78,94 @@ class NotificationScheduleService(
             log.info("여행이 없어 리마인드 예약을 비웠습니다. tripId={}", tripId)
             return
         }
-        val (planned, missed) = withCopies(tripId, trip, plan(tripId, trip, now))
+        if (accounts.isDeletionPending(trip.accountId)) {
+            // 삭제 유예 중 — 요청 뒤에 도착한 일정 생성·재계산 이벤트가 예약을 다시 세우지 않게 한다. 철회하면 [tripsCanceledByDeletion] 이 되살린다.
+            schedules.replacePending(tripId, emptyList())
+            log.info("삭제 유예 중인 계정이라 리마인드 예약을 만들지 않았습니다. tripId={}", tripId)
+            return
+        }
+        if (onlyIfScheduled && !plans.hasItinerary(trip.accountId, tripId)) {
+            // 기간을 바꾸며 일정을 버렸다(TRIP-1789) — 예약은 있었는데 일정이 없다. 다시 세우면 없는 일정의 "오늘의 일정"이 울린다.
+            // 일정을 다시 짜면 생성 이벤트가 세운다.
+            schedules.replacePending(tripId, emptyList())
+            log.info("일정이 없어 리마인드 예약을 비웠습니다. tripId={}", tripId)
+            return
+        }
+        val rows = plan(tripId, trip, now)
+        val planned = if (fillCopies) withCopies(tripId, trip, rows) else rows
         schedules.replacePending(tripId, planned)
         log.info(
             "리마인드 예약 {}건을 적재했습니다. tripId={} AI문구={}건",
-            planned.size, tripId, planned.count { it.title != null },
+            planned.size, tripId, planned.count { it.hasCopy },
         )
-        if (missed && retryIfNoCopy) {
-            retries.later(tripId, now)
-            log.info("리마인드 문구를 하나도 받지 못했습니다 — 잠시 뒤 한 번 더 묻습니다. tripId={}", tripId)
+        if (copies.enabled && planned.any { !it.hasCopy }) {
+            // 문구 없는 행이 남았다 — 모델이 안 떠 있었거나, 일부만 받았거나, 아직 일정이 안 만들어진 날이다.
+            // 잠시 뒤 **제자리에서** 빠진 행만 다시 채운다([ReminderCopyRetries]).
+            retries.later(tripId, now, attempt = 0)
+            log.info("문구 없는 리마인드 예약이 남았습니다 — 잠시 뒤 빠진 행만 다시 채웁니다. tripId={}", tripId)
         }
+    }
+
+    /** 계정 삭제 요청 — 이 계정의 미발화 예약을 전부 취소한다(유예 30일 동안 리마인드가 계속 가지 않게). */
+    @Transactional
+    fun cancelAll(accountId: UUID): Int = schedules.cancelPendingOf(accountId, clock.instant())
+
+    /**
+     * 삭제 철회 — 요청 때 취소된 예약이 아직 울릴 시각 전인 여행들. 호출측이 여행마다 [reload] 를 **프록시를 거쳐** 부른다(이 클래스 안에서
+     * 돌리면 `@Transactional` 이 안 걸려 잠금·교체가 한 트랜잭션이 못 된다).
+     */
+    @Transactional(readOnly = true)
+    fun tripsCanceledByDeletion(accountId: UUID): List<UUID> = schedules.findTripIdsWithCanceledFuture(accountId, clock.instant())
+
+    /**
+     * 가까운 시일([horizon] 안)에 울릴 예약 중 문구가 아직 없는 것이 있는 여행들 — 재시작으로 사라진 채움 대기열을 되살릴 입력.
+     * 기능이 꺼져 있으면 채울 수 없으므로 비어 있다.
+     */
+    fun tripsLackingCopy(now: Instant, horizon: Duration, limit: Int): List<UUID> =
+        if (copies.enabled) schedules.findTripsLackingCopy(now, now.plus(horizon), limit) else emptyList()
+
+    /**
+     * 문구가 **아직 없는** 미발화 예약만 골라 제자리에서 채운다 — 재시도 전용(TRIP-836 후속).
+     *
+     * [reload] 와 달리 **행을 지우고 다시 만들지 않는다.** 그래서 (1) 앞서 받은 문구를 잃지 않고 빠진 행만 메우며,
+     * (2) 일부만 받은 적재도 안전하게 재시도할 수 있고, (3) 같은 여행의 적재와 겹쳐도 조건부 쓰기([attachCopy])라
+     * 지워진 행엔 아무 일도 안 일어난다. 트랜잭션도 안 건다 — AI 호출이 DB 트랜잭션·잠금을 쥐고 기다리지 않는다.
+     *
+     * 재료(그 날 갈 곳)는 **지금 일정에서 다시 읽는다** — 적재 때 비어 있던 날(다일 여행은 1차 저장 직후라 2일차 이후가 비었다)이
+     * 그 사이 생겼으면 이제 물을 수 있다. 재료가 아직 없는 행은 안 묻고 [FillOutcome.Retry] 의 `noMaterial` 로 센다 — 빈 재료로
+     * 물으면 상대가 "일정 없음"을 지어낸다(어댑터가 거른다).
+     */
+    fun fillMissing(tripId: UUID): FillOutcome {
+        if (!copies.enabled) return FillOutcome.Done
+        val now = clock.instant()
+        val trip = trips.findOwnedPeriod(tripId) ?: return FillOutcome.Gone
+        // 이미 시각이 지난 행은 발화기가 곧 집는다 — 지금 채워도 의미가 없다.
+        val lacking = schedules.findPendingByTrip(tripId).filter { it.fireAt.isAfter(now) && !it.hasCopy }
+        if (lacking.isEmpty()) return FillOutcome.Done
+
+        val placesByDate = plans.findPlannedPlaces(trip.accountId, tripId)
+        val requests = lacking.map { requestOf(it, placesByDate) }
+        val askable = requests.filter { it.slots.isNotEmpty() }
+        val received = if (askable.isEmpty()) {
+            emptyMap()
+        } else {
+            runCatching { copies.copiesFor(tripTitle = null, items = askable) }
+                .onFailure { log.warn("리마인드 문구를 받지 못했습니다 — 다음 기회에 다시 묻습니다. tripId={}", tripId, it) }
+                .getOrDefault(emptyMap())
+        }
+        // 우리 행 id 로만 찾는다 — 상대가 보낸 적 없는 키를 돌려줘도 엉뚱한 행에 붙지 않는다.
+        val attached = lacking.count { row ->
+            // 지문은 **물을 때 실은 재료**로 만든다 — 그 사이 일정이 바뀌었으면 발화가 어긋남을 알아본다.
+            received[row.scheduleId.toString()]?.let {
+                schedules.attachCopy(row.scheduleId, it.title, it.body, basisOf(row, placesByDate))
+            } == true
+        }
+        val remaining = lacking.size - attached
+        log.info(
+            "리마인드 문구 채움 tripId={} 대상={}건 물음={}건 받음={}건 붙임={}건 남음={}건",
+            tripId, lacking.size, askable.size, received.size, attached, remaining,
+        )
+        return if (remaining == 0) FillOutcome.Done else FillOutcome.Retry(remaining, noMaterial = requests.size - askable.size)
     }
 
     private fun plan(tripId: UUID, trip: OwnedTripPeriod, now: Instant): List<NotificationSchedule> {
@@ -66,8 +173,14 @@ class NotificationScheduleService(
         rows += NotificationSchedule.pending(
             trip.accountId, tripId, NotificationKind.TRIP_PRE, fireAt(trip.startDate.minusDays(1)),
         )
+        // 기간 상한 — 서버가 여행 길이를 막지 않아(편집으로 종료일을 9999년까지 보낼 수 있다) 하루 한 건씩 만들면 수백만 행이 한 트랜잭션에 실려
+        // 릴레이 스레드를 묶는다. 현실의 여행은 이 안에 든다(앱은 30박까지만 받는다).
+        val last = minOf(trip.endDate, trip.startDate.plusDays(MAX_PLANNED_DAYS))
+        if (last != trip.endDate) {
+            log.warn("여행 기간이 너무 길어 시작일부터 {}일치만 예약합니다. tripId={} endDate={}", MAX_PLANNED_DAYS, tripId, trip.endDate)
+        }
         var day = trip.startDate
-        while (!day.isAfter(trip.endDate)) {
+        while (!day.isAfter(last)) {
             rows += NotificationSchedule.pending(
                 trip.accountId, tripId, NotificationKind.TRIP_DAY, fireAt(day),
             )
@@ -85,43 +198,45 @@ class NotificationScheduleService(
      *
      * **못 받으면 그대로 간다** — 예외를 잡지 않는 이유는 포트가 이미 빈 맵으로 낮추기 때문이고,
      * 그래도 여기서 한 번 더 감싸는 것은 **문구 때문에 예약 적재가 실패하면 리마인드가 통째로
-     * 사라지기** 때문이다. 밋밋한 문구보다 그쪽이 훨씬 나쁘다(INV-4).
-     *
-     * 둘째 값은 **물을 것이 있었는데 하나도 못 받았는가**다 — 재시도 판단에 쓴다. 재료(슬롯)가 없는
-     * 날만 있으면 어댑터가 애초에 안 물으므로 못 받은 것이 아니다.
+     * 사라지기** 때문이다. 밋밋한 문구보다 그쪽이 훨씬 나쁘다(INV-4). 못 받은 행은 [fillMissing] 이 나중에 메운다.
      */
     private fun withCopies(
         tripId: UUID,
         trip: OwnedTripPeriod,
         planned: List<NotificationSchedule>,
-    ): Pair<List<NotificationSchedule>, Boolean> {
-        if (!copies.enabled || planned.isEmpty()) return planned to false
-        var asked = false
+    ): List<NotificationSchedule> {
+        if (!copies.enabled || planned.isEmpty()) return planned
+        // 한 번만 묻는다 — 예약마다 부르면 여행 일수만큼 조회가 늘고, 그 사이 일정이 바뀌면
+        // 같은 적재 안에서 날짜별로 다른 일정을 말하게 된다.
+        var placesByDate: Map<LocalDate, List<PlannedPlaceView>> = emptyMap()
         val received = runCatching {
-            // 한 번만 묻는다 — 예약마다 부르면 여행 일수만큼 조회가 늘고, 그 사이 일정이 바뀌면
-            // 같은 적재 안에서 날짜별로 다른 일정을 말하게 된다.
-            val placesByDate = plans.findPlannedPlaces(trip.accountId, tripId)
-            val items = planned.map {
-                val subject = subjectDate(it)
-                ReminderCopyRequest(
-                    scheduleKey = it.scheduleId.toString(),
-                    kind = it.kind,
-                    date = subject,
-                    slots = placesByDate[subject].orEmpty().map { p -> ReminderSlot(p.nameKo, p.categoryCode) },
-                )
-            }
-            asked = items.any { it.slots.isNotEmpty() }
+            placesByDate = plans.findPlannedPlaces(trip.accountId, tripId)
             // 여행 제목은 trip.api 가 아직 안 준다 — 상대는 선택 필드로 받는다
-            copies.copiesFor(tripTitle = null, items = items)
+            copies.copiesFor(tripTitle = null, items = planned.map { requestOf(it, placesByDate) })
         }.onFailure { log.warn("리마인드 문구를 받지 못했습니다 — 상수 문구로 갑니다.", it) }
             .getOrDefault(emptyMap())
 
-        if (received.isEmpty()) return planned to asked
+        if (received.isEmpty()) return planned
         return planned.map { row ->
             received[row.scheduleId.toString()]
-                ?.let { row.copy(title = it.title, body = it.body) }
+                // 문구를 만들 때 본 그날 장소 목록의 지문을 같이 남긴다 — 발화가 지금 일정과 대조해 낡은 이름이 나가지 않게 한다.
+                ?.let { row.copy(title = it.title, body = it.body, copyBasis = basisOf(row, placesByDate)) }
                 ?: row
-        } to false
+        }
+    }
+
+    /** 그날 장소 이름 목록의 지문 — 문구에 실리는 순서 그대로(요청의 slots 와 같은 소스다). */
+    private fun basisOf(row: NotificationSchedule, placesByDate: Map<LocalDate, List<PlannedPlaceView>>): String =
+        CopyBasis.of(placesByDate[row.subjectDate()].orEmpty().map { it.nameKo })
+
+    private fun requestOf(row: NotificationSchedule, placesByDate: Map<LocalDate, List<PlannedPlaceView>>): ReminderCopyRequest {
+        val subject = subjectDate(row)
+        return ReminderCopyRequest(
+            scheduleKey = row.scheduleId.toString(),
+            kind = row.kind,
+            date = subject,
+            slots = placesByDate[subject].orEmpty().map { p -> ReminderSlot(p.nameKo, p.categoryCode) },
+        )
     }
 
     /**
@@ -129,10 +244,7 @@ class NotificationScheduleService(
      * 말하므로 여행 첫날을 가리킨다. 발화일을 그대로 넘기면 아직 시작도 안 한 날의 일정을 묻게 되고,
      * 그 날은 슬롯이 없어 **재료가 비어 문구가 통째로 안 나온다**(어댑터가 빈 재료를 거른다).
      */
-    private fun subjectDate(row: NotificationSchedule): LocalDate {
-        val fired = row.fireAt.atZone(TRAVEL_ZONE).toLocalDate()
-        return if (row.kind == NotificationKind.TRIP_PRE) fired.plusDays(1) else fired
-    }
+    private fun subjectDate(row: NotificationSchedule): LocalDate = row.subjectDate()
 
     private fun fireAt(date: LocalDate): Instant = date.atTime(REMIND_TIME).atZone(TRAVEL_ZONE).toInstant()
 
@@ -140,7 +252,7 @@ class NotificationScheduleService(
         private val log = LoggerFactory.getLogger(NotificationScheduleService::class.java)
 
         /** 여행지 기준 시각. 사용자의 기기 시간대가 아니라 여행이 벌어지는 곳의 아침이어야 한다. */
-        private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
+        private val TRAVEL_ZONE: ZoneId = NotificationSchedule.TRAVEL_ZONE
 
         /**
          * BR-U6-04 는 `TRIP_DAY` 를 "당일 오전 기본 8시"로 못박고 `TRIP_PRE` 는 "D-1" 까지만 정한다.
@@ -148,5 +260,8 @@ class NotificationScheduleService(
          * 설정이 붙을 때 고칠 자리가 둘이 된다.
          */
         private val REMIND_TIME: LocalTime = LocalTime.of(8, 0)
+
+        /** 한 번의 적재가 만드는 당일 알림의 상한(시작일부터 며칠). 방어선이지 제품 규칙이 아니다 — 여행 길이 상한은 trip 이 정할 일이다. */
+        private const val MAX_PLANNED_DAYS = 366L
     }
 }

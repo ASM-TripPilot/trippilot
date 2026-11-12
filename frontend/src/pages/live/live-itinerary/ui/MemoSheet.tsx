@@ -1,10 +1,12 @@
 import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import { MemoInline } from '@/features/attach-visit-media/index.view';
-import { CloseGlyph } from '@/features/record';
+import { CloseGlyph } from '@/shared/ui/glyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-1117 · i01 허브 메모 시트(Figma 4952:3098 · 시트 4741:2984) — 순수 바텀시트(props + 콜백만).
@@ -25,6 +27,11 @@ export interface MemoSheetProps {
   text?: string | null;
   /** TRIP-1415 — false 면 입력 잠금(첫 서버 메모 조회 중). 열리는 순간 입력·글자 수를 `text` 로 다시 심는다. 기본 true. */
   editable?: boolean;
+  /**
+   * TRIP-1751 — 서버 메모를 못 불러온 채 입력이 잠긴 상태의 안내(실패·오프라인 보류). 있으면 안내 줄, `onRetry` 가 있을 때만
+   * [다시 시도](보류는 재조회가 대기뿐이라 버튼 없음). `retrying` 이면 안내는 남기고 버튼만 잠근다. 잠금 자체는 `editable`.
+   */
+  loadError?: { onRetry?: () => void; retrying: boolean } | null;
   /** 저장 실패 안내 한 줄(INV-4). 비면 안 그린다. */
   notice?: string | null;
   /** TRIP-1426 — 저장 요청이 진행 중이면 true([저장] 비활성). 같은 틱 중복은 페이지의 ref 잠금이 막는다. */
@@ -38,11 +45,11 @@ export interface MemoSheetProps {
 // gorhom 배경 — canvas(#FFFFFF)·위 라운드 24·위쪽 그림자(Figma 0 -3 16 rgba(0,0,0,.12), i08 자매 값).
 // 그림자 토큰이 없어 스타일 객체(RiskDetailSheet 관례). 내용 컨테이너는 overflow:hidden 이라 여기 단다.
 const SHEET_BACKGROUND = {
-  backgroundColor: '#FFFFFF',
+  backgroundColor: COLOR_TOKENS.canvas,
   borderRadius: 0,
   borderTopLeftRadius: 24,
   borderTopRightRadius: 24,
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: -3 },
   shadowOpacity: 0.12,
   shadowRadius: 16,
@@ -55,6 +62,7 @@ export function MemoSheet({
   placeName,
   text,
   editable = true,
+  loadError,
   notice,
   saving = false,
   onSubmit,
@@ -118,11 +126,12 @@ export function MemoSheet({
             onPress={onClose}
             className="h-[44px] w-[44px] items-center justify-center"
           >
-            <CloseGlyph size={24} />
+            <CloseGlyph size={24} color="ink" />
           </Pressable>
         </View>
 
         {/* 입력 상자 — 배경·테두리는 감싸는 View 에(MemoInline 입력 className 에 bg 를 넣지 않는다). */}
+        {/* eslint-disable-next-line no-restricted-syntax -- 입력칸 포커스용 그릇(accessible={false}) — 실제 컨트롤은 안의 TextInput(TRIP-1765). */}
         <Pressable
           testID="live-memo-box"
           accessible={false}
@@ -145,6 +154,31 @@ export function MemoSheet({
           </Text>
         </Pressable>
 
+        {loadError ? (
+          <View className="flex-row items-center justify-between gap-sm">
+            <Text
+              testID="live-memo-load-error"
+              className="shrink font-noto text-caption text-muted"
+            >
+              메모를 불러오지 못했어요
+            </Text>
+            {loadError.onRetry ? (
+              <Pressable
+                testID="live-memo-load-retry"
+                accessibilityRole="button"
+                disabled={loadError.retrying}
+                accessibilityState={{ disabled: loadError.retrying }}
+                hitSlop={8}
+                onPress={loadError.onRetry}
+              >
+                <Text className="font-noto-bold text-caption font-bold text-primary">
+                  다시 시도
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
         {notice ? (
           <Text
             testID="live-memo-notice"
@@ -155,19 +189,13 @@ export function MemoSheet({
         ) : null}
 
         {/* [저장] — SheetShell [적용] 버튼 모양(52 · rounded-button · primary · 비활성 opacity-40). */}
-        <Pressable
+        <Button
           testID="live-memo-save"
-          accessibilityRole="button"
           disabled={saveDisabled}
           onPress={() => onSubmit(draft.trim(), seed)}
-          className={`h-[52px] items-center justify-center rounded-button bg-primary ${
-            saveDisabled ? 'opacity-40' : ''
-          }`}
         >
-          <Text className="text-[16px] font-noto-bold font-bold text-on-primary">
-            저장
-          </Text>
-        </Pressable>
+          저장
+        </Button>
       </BottomSheetView>
     </BottomSheet>
   );

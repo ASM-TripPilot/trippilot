@@ -1,5 +1,6 @@
 import { Fragment, type ComponentType, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { LinearGradient } from 'expo-linear-gradient';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
@@ -76,6 +77,7 @@ const logoShadow = {
   height: 72,
   alignItems: 'center' as const,
   justifyContent: 'center' as const,
+  // eslint-disable-next-line trippilot/no-raw-hex -- Figma raw 브랜드 그림자색, 토큰 없음
   shadowColor: '#DB2647',
   shadowOffset: { width: 0, height: 2.5 },
   shadowOpacity: 0.28,
@@ -129,13 +131,9 @@ function SheetCta({
   onPress: () => void;
 }) {
   return (
-    <Pressable
-      testID={testID}
-      onPress={onPress}
-      className="h-[52px] items-center justify-center rounded-button bg-primary"
-    >
-      <Text className="font-noto-bold font-bold text-on-primary">{label}</Text>
-    </Pressable>
+    <Button testID={testID} onPress={onPress}>
+      {label}
+    </Button>
   );
 }
 
@@ -149,6 +147,7 @@ function SheetCancel({
 }) {
   return (
     <Pressable
+      accessibilityRole="button"
       testID={testID}
       onPress={onPress}
       className="h-[44px] items-center justify-center"
@@ -231,6 +230,7 @@ export function SocialLoginScreen({
         ).map(({ provider, label, Icon }) => (
           <Fragment key={provider}>
             <Pressable
+              accessibilityRole="button"
               testID={`auth-login-${provider}`}
               onPress={() => onSignIn(provider)}
               className="h-[52px] w-full flex-row items-center justify-center gap-[10px] rounded-button border border-ink bg-canvas"

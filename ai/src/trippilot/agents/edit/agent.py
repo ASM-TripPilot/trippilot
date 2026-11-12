@@ -7,7 +7,8 @@
 ```
 EditTask ─▶ ①b 날마다 동네  "1일차는 종로 2일차는 강남으로" — 그 날들을 그 동네로 다시 짠다(LLM 0회, day_area.py · 재구성 콘센트)
          ─▶ ①a 사이 넣기   "A에서 B로 갈 때 한 군데 더" — 자리·후보를 코드가 고른다(LLM 0회, insert_between.py)
-         ─▶ ① 명령 확보    자연어 → 번역 워커(게이트 검증 포함) / 구조화 → 그대로
+         ─▶ ① 명령 확보    자연어 → (이름 장소 콘센트: 말이 이름으로 집은 등록 POI 를 풀에 합친다, F9) → 번역 워커(게이트 검증 포함)
+                           / 구조화 → 그대로
          ─▶ ② 동등 검증    validate_command (INV-1 — 게이트와 같은 규칙)
          ─▶ ③ 확인 게이트  파괴적 편집은 confirm 전에는 반영하지 않는다
          ─▶ ④ 재타이밍     결정론 (체류 보존 + 이동 추정)
@@ -70,11 +71,12 @@ from trippilot.domain.itinerary.itinerary import (
     Violation,
 )
 from trippilot.domain.llm.llm import CandidatePool
-from trippilot.domain.poi.poi import Poi
+from trippilot.domain.poi.poi import Poi, PoiCategory
 from trippilot.llm_gateway.gates.content.edit_translation import is_anchor_param_key
 from trippilot.llm_gateway.workers.content.edit_translation import (
     EditTranslationInput,
     EditTranslationWorker,
+    said_name_keys,
 )
 
 
@@ -94,9 +96,15 @@ class AssemblyFacade(Protocol):
 
 
 class AssemblyProvider(Protocol):
-    """풀이 요청마다 다르므로 `poi_index` 도 요청 스코프 (ScheduleAgent 와 같은 콘센트)."""
+    """풀이 요청마다 다르므로 `poi_index` 도 요청 스코프 (ScheduleAgent 와 같은 콘센트).
 
-    def for_pool(self, poi_index: Mapping[PoiId, Poi]) -> AssemblyFacade: ...
+    `walk_max_km`·`parking` = 요청별 도보 상한·주차 계획(없으면 공용 추정기) — 생성과 같은 추정기로 재고 검증한다.
+    `walker` 는 같은 상한의 추정기 하나 — ④ 재타이밍이 ⑤ 검증과 같은 값으로 이동을 잰다."""
+
+    def for_pool(self, poi_index: Mapping[PoiId, Poi], walk_max_km: float | None = None,
+                 parking: object | None = None) -> AssemblyFacade: ...
+
+    def walker(self, walk_max_km: float | None, parking: object | None = None) -> object: ...
 
 
 class ProblemBuilder(Protocol):
@@ -137,6 +145,22 @@ class EditTask:
     # 날마다 동네 재구성 콘센트(spec 004 FR-005) — (날, 동네) 짝 → 바뀐 날만 갈아 끼운 해 또는 사유. 경계가 같은 요구표·PlaceProvider 로
     # 동네 풀을 모으고 ScheduleAgent 로 그 날들을 한 번에 푼다(INV-1·2). 에이전트는 말·명령을 확인했을 때만 한 번 부른다. None = 미배선
     rebuild_days: Callable[[tuple[DayArea, ...]], RebuiltDays | str] | None = None
+    # 이름 장소 콘센트(F9) — (붙여 쓴 말, 띄어 쓴 말) → 그 이름의 등록 POI(말마다 한 곳). 경계가 등록 장소 이름 조회(LLM 0)·정본 일괄 조회로
+    # 찾고 풀과 같은 자격(②~④)·여행지 반경으로 거른다. 에이전트는 말이 번역기로 갈 때만 한 번 부르고, 찾은 곳을 번역 후보와 INV-1 풀에
+    # 합친다. None = 미배선(받은 풀만 — 종전)
+    named_places: Callable[[tuple[str, ...], tuple[str, ...]], tuple[Poi, ...]] | None = None
+    # 앞서 제안했던 곳("다른 데는?", spec 003 FR-015) — 이번 편집이 **새로 들이지 않는다**. 받은 풀·구간 풀을 좁힐 뿐이라 INV-1 그대로다.
+    # 일정에 이미 있는 곳은 풀이 아니라 현재 일정으로 판정하므로(빼기·기준점) 영향이 없다. 날마다 동네 콘센트는 경계가 같은 칸을 본다
+    excluded: frozenset[PoiId] = frozenset()
+    # ── 여행 컨텍스트(편집 요청 `preference_profile`·`time_windows`·`trip_start_date`, 2026-11-03) — 없으면 종전 동작 ──
+    # 취향 카테고리(생성 `_wanted_categories`) — ①a 순위에 쓴다(①b 는 콘센트가 같은 취향으로 규칙 점수를 매긴다)
+    taste: frozenset[PoiCategory] = frozenset()
+    # 요청별 도보 상한(액티비티 취향 대중교통 여행 = 생성과 같은 1.0km) — ④ 재타이밍과 ⑤ 검증이 같은 추정기를 쓴다. None = 공용(700m)
+    walk_max_km: float | None = None
+    # 날마다 창의 시작 — 빈 날에 넣는 첫 곳의 시작(없는 날은 10:00)
+    day_starts: Mapping[date, datetime] = field(default_factory=dict)
+    # 여행 첫날 — 'N일차' 셈의 기준(대화와 같은 셈). None = 받은 일정의 첫 날
+    trip_start: date | None = None
 
     def __post_init__(self) -> None:
         if (self.utterance is None) == (self.command is None):
@@ -153,6 +177,10 @@ class RebuiltDays:
     notes: tuple[str, ...] = ()  # 관측 코드(풀이 모드·강등·동네 풀 추가 수집) — 이름은 싣지 않는다
     # 풀이 밖에 두고 그 시각 그대로 되실은 지난 곳(여행 당일, 지금 있는 곳보다 앞선 곳) — ⑤ 는 이것을 재지 않는다
     history: frozenset[PoiId] = frozenset()
+    # 풀이가 쓴 추정기(도보 상한·주차 계획 — `GenerationOutcome` 그대로) — ⑤ 가 같은 추정기로 잰다. 취향이 실리면 액티비티 취향의
+    # 풀이는 1.0km 까지 걷는데, 공용 추정기(700m)로 재면 그 걷기 구간이 HC2 로 떨어진다
+    walk_max_km: float | None = None
+    parking: object | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,6 +223,10 @@ _INSERT_STAY_CAP_MIN = 60
 # 이보다 적은 시한이면 구간 풀을 부르지 않는다(받은 기본 풀만) — 반경 조회 한 번이 시한을 넘기지 않게.
 # ponytail: 정적 예산 기준이다(경과 시간 아님) — 재계획 지역 풀(#1454)처럼 시한 없는 2차 수집. 느려지면 남은 시한으로 가른다
 _SEGMENT_FETCH_MIN_MS = 2_000
+# 이름 장소 조회(F9)도 같은 문턱 — 조회(DB 문장 시한 1.5s + 정본 일괄 조회)가 번역 몫을 다 먹지 않게. 쓴 시간은 번역 시한에서 뺀다
+_NAMED_FETCH_MIN_MS = 2_000
+# 이름 조회로 더하는 곳 상한 — 워커의 상한 밖 이름 지목(`_NAMED_EXTRA`)과 같은 몫(말마다 한 곳이라 보통 1~2곳)
+_NAMED_MAX = 5
 
 
 def _anchored(command: EditCommand) -> bool:
@@ -213,6 +245,12 @@ def _anchors(day, gap: Gap) -> dict[str, str]:
     """틈 → ADD 기준점 params (맨 앞·맨 끝이면 한쪽만)."""
     return {k: str(day.slots[i].poi_id) for k, i in (("afterPoiId", gap.after), ("beforePoiId", gap.before))
             if i is not None}
+
+
+def _without(pool: CandidatePool, ids: frozenset[PoiId]) -> CandidatePool:
+    """[ids] 를 뺀 풀 — 좁히기만 한다(INV-1). 인덱스와 목록을 함께 고친다(`CandidatePool` 불변식)."""
+    kept = tuple(p for p in pool.pois if p.poi_id not in ids)
+    return replace(pool, poi_ids=frozenset(p.poi_id for p in kept), pois=kept)
 
 
 class EditAgent:
@@ -238,6 +276,8 @@ class EditAgent:
 
     def run(self, task: EditTask) -> EditOutcome:
         """재료 → 편집 결과. 예외를 던지지 않는다 (INV-4 · DL-5)."""
+        if task.excluded:  # 앞서 보인 곳은 후보가 아니다 — 번역·② 검증·①a 가 같은 좁힌 닫힌 집합을 본다(INV-1)
+            task = replace(task, pool=_without(task.pool, task.excluded))
         # ①b 날마다 동네 — 말(결정론 해석)이나 구조화 명령이 날·동네를 정했으면 그 날들을 다시 짠다. 아니면 종전 길
         areas = self._day_areas(task)
         if isinstance(areas, str):
@@ -254,29 +294,36 @@ class EditAgent:
             unresolved = gap
         # ① 명령 확보 — 자연어는 번역 워커(게이트 검증 포함), 구조화는 그대로
         if task.utterance is not None:
-            translated = self._translate(task, task.utterance)
+            # 풀 밖 이름 장소(F9) — 말이 이름으로 집은 등록 장소를 번역 후보와 INV-1 풀(게이트·② validate_command)에 합친다
+            task, named, spent_ms = self._with_named(task)
+            translated = self._translate(task, task.utterance, named=named, spent_ms=spent_ms)
             if isinstance(translated, EditOutcome):  # TRANSLATION_FAILED
                 if unresolved is not None:
                     return replace(translated, reason=f"{translated.reason} / insert_between: {unresolved}")
                 return translated
             command, apply_mode = translated
-            # 자리를 말한 추가인데 번역이 기준점을 뺐다 — 끝에 붙이면 '반영됨'으로 위장된다(INV-4). 이름을 콕 집은 말은
-            # 번역이 "무엇", 코드가 "어디"를 맡아 기준점을 채운다(2026-10-22 실측: "효창공원을 경리단길 끝나고"가 맨 끝에 붙었다)
-            place = ask or (parse_insert_place(task.utterance)
-                            if command.op is EditOp.ADD_SLOT and not _anchored(command) else None)
-            if place is None and command.op is EditOp.ADD_SLOT and not _anchored(command) and position_cue(task.utterance):
+            # 자리를 말한 추가 — 번역이 "무엇", 코드가 "어디"를 맡는다. 코드가 말의 자리를 풀면 번역이 실은 기준점보다 코드 기준점이 이긴다:
+            # 번역은 좌표를 못 본다(프롬프트 0.4.0 부터 번역도 기준점을 싣는데, "이태원에서 홍대로 넘어갈 때"를 슬롯 이름으로 짐작하면 이웃 아닌
+            # 짝이 나온다 — 2026-11-04 리뷰). 코드가 못 풀면 번역 기준점을 쓰고, 둘 다 없으면 끝에 붙이지 않는다 — '반영됨' 위장(INV-4,
+            # 2026-10-22 실측: "효창공원을 경리단길 끝나고"가 맨 끝에 붙었다)
+            add = command.op is EditOp.ADD_SLOT
+            place = ask or (parse_insert_place(task.utterance) if add else None)
+            if place is None and add and not _anchored(command) and position_cue(task.utterance):
                 return EditOutcome(status=EditStatus.TRANSLATION_FAILED, reason="insert_between: position_unread")
-            if place is not None and command.op is EditOp.ADD_SLOT and not _anchored(command):
+            if place is not None and add:
                 gap = unresolved if ask is not None else self._resolve(task, place)
-                if isinstance(gap, str):
+                if isinstance(gap, str) and not _anchored(command):
                     return EditOutcome(status=EditStatus.TRANSLATION_FAILED,
                                        reason=f"insert_between: position_dropped ({gap})")
-                day = next(d for d in task.solution.days if d.date == task.target_date)
-                command = EditCommand(command.op, {**command.params, **_anchors(day, gap)}, command.affected_slots)
-                out = self._apply(task, command, apply_mode)
-                self._log(task, place, outcome=f"ANCHORED_{out.status.value}", resolved_by=list(gap.resolved_by),
-                          codes=sorted({v.code for v in out.violations}))
-                return out
+                if not isinstance(gap, str):
+                    day = next(d for d in task.solution.days if d.date == task.target_date)
+                    translated_anchor = _anchored(command)
+                    params = {k: v for k, v in command.params.items() if not is_anchor_param_key(k)}
+                    command = EditCommand(command.op, {**params, **_anchors(day, gap)}, command.affected_slots)
+                    out = self._apply(task, command, apply_mode)
+                    self._log(task, place, outcome=f"ANCHORED_{out.status.value}", resolved_by=list(gap.resolved_by),
+                              translated_anchor=translated_anchor, codes=sorted({v.code for v in out.violations}))
+                    return out
         else:
             assert task.command is not None  # __post_init__ 이 보장
             command, apply_mode = task.command, resolve_apply_mode(task.command)
@@ -320,9 +367,12 @@ class EditAgent:
             ctx = RetimeContext(
                 coords={pid: p.coord for pid, p in merged_index.items()},
                 stay_min={**{s.poi_id: s.stay_min for s in target_day_slots}, **dict(stay or {})},
-                estimator=self._estimator,
+                # 요청별 도보 상한이 있으면 그 추정기(⑤ 와 같다) — 액티비티 취향 여행의 0.7~1.0km 걷기를 대중교통으로 다시 잡지 않는다
+                estimator=(self._estimator if task.walk_max_km is None
+                           else self._assembly_provider.walker(task.walk_max_km)),
                 transport=task.transport,
                 not_before=floor,
+                day_start=task.day_starts.get(task.target_date),
             )
             mutated = edited_solution(
                 task.solution, task.target_date, command, ctx, self._tz)
@@ -336,7 +386,8 @@ class EditAgent:
         #    편집 요청엔 수단이 있다. 안 맞추면 자차 여행은 재타이밍(자차)이 잡은 간격을 검증(대중교통)이 늘 HC2 로 떨어뜨린다(2026-10-22 리뷰 재현)
         #    검증은 고친 날만 — 다른 날 시각은 이 편집이 만든 것이 아니다. 생성이 다른 추정기(액티비티 취향 걷기 1.0km 등)로 잡은 날을
         #    기본 추정기로 다시 재면 손 안 댄 날의 HC2 가 모든 편집을 막았다(develop 부터, 2026-10-22 2차 리뷰 재현). HC1~4 는 날 단위다
-        facade = self._assembly_provider.for_pool(merged_index)
+        #    추정기 = ④ 와 같은 요청별 도보 상한(`task.walk_max_km`)
+        facade = self._assembly_provider.for_pool(merged_index, walk_max_km=task.walk_max_km)
         checked = replace(problem or self._problem_for(mutated), transport=task.transport, days=(task.target_date,))
         edited_day = replace(mutated, days=tuple(d for d in mutated.days if d.date == task.target_date))
         if floor is not None:
@@ -384,7 +435,8 @@ class EditAgent:
         clauses = parse_day_areas(task.utterance or "", self._known_areas)
         if clauses is None:
             return None
-        got = resolve_day_areas(clauses, days, today)
+        # 'N일차'는 여행 첫날부터 센다(요청 `trip_start_date` — 대화와 같은 셈). 고칠 수 있는 날은 여전히 받은 일정의 날뿐이다
+        got = resolve_day_areas(clauses, days, today, first=task.trip_start)
         return f"day_area: {got.code}({got.said})" if isinstance(got, DayAreaIssue) else got
 
     def _rebuild(self, task: EditTask, pairs: tuple[DayArea, ...]) -> EditOutcome:
@@ -422,7 +474,9 @@ class EditAgent:
         edited = replace(got.solution, days=tuple(replace(d, slots=tuple(s for s in d.slots if s.poi_id not in done),
                                                           fixed_blocks=tuple(fb for fb in d.fixed_blocks if fb.poi_id not in done))
                                                   for d in got.solution.days if d.date in changed))
-        violations = tuple(self._assembly_provider.for_pool(index).validate(edited, checked, task.deadline_ms, task.trace_id))
+        # 풀이가 쓴 추정기로 잰다(`RebuiltDays.walk_max_km`·`parking`) — 다른 추정기로 재면 풀이가 맞게 둔 걷기·주차 구간이 HC2 가 된다
+        facade = self._assembly_provider.for_pool(index, walk_max_km=got.walk_max_km, parking=got.parking)
+        violations = tuple(facade.validate(edited, checked, task.deadline_ms, task.trace_id))
         if violations:
             out = EditOutcome(status=EditStatus.REJECTED, command=command, apply_mode=apply_mode, violations=violations,
                               reason="편집 결과가 하드 제약을 위반 — 반영하지 않음")
@@ -484,9 +538,10 @@ class EditAgent:
         problem = self._problem_for(task.solution)  # 사이 넣기는 날짜·예약을 안 바꾼다 — 후보마다 다시 묻지 않는다(달력 I/O)
         current = frozenset(s.poi_id for d in task.solution.days for s in d.slots)
         taken = [p.name for pid in current if (p := task.poi_index.get(pid)) is not None]
-        ranked = rank_on_segment(pool.pois, a, b, slack_km=slack, exclude=current, taken_names=taken, kind=ask.kind,
-                                 not_kinds=ask.not_kinds, night=ask.night, day=task.target_date,
-                                 holidays=problem.holidays)
+        # 앞서 보인 곳도 뺀다 — 기본 풀은 run() 이 이미 좁혔고, 구간 풀은 경계가 새로 모은 것이라 여기서 뺀다
+        ranked = rank_on_segment(pool.pois, a, b, slack_km=slack, exclude=current | task.excluded, taken_names=taken,
+                                 kind=ask.kind, not_kinds=ask.not_kinds, night=ask.night, day=task.target_date,
+                                 holidays=problem.holidays, taste=task.taste)
         log.update(pool=len(pool.pois), within=len(ranked))
         if not ranked:
             return self._rejected(task, ask, "no_candidates", log)
@@ -512,7 +567,11 @@ class EditAgent:
         BE 는 requested_at 을 UTC(…Z)로 보낸다 — 그 객체를 그대로 하한으로 쓰면 슬롯 시각이 UTC 벽시계로 사영되고 HC1·HC4 도 그 시·분으로
         판정한다(2026-10-22 리뷰 재현: 13:10 이 04:10 으로). 분 올림은 조립 `not_before_floor`·재계획 하한과 같은 규칙이다."""
         local = task.now.astimezone(self._tz)
-        if local.date() != task.target_date:
+        # 자정을 넘겨 끝나는 슬롯(바·클럽)이 아직 진행 중이면 다음 날 새벽도 그 날의 "당일"이다 — None 이면 이미 한 곳까지 다시 흘린다
+        day = next((d for d in task.solution.days if d.date == task.target_date), None)
+        inside = (day is not None and bool(day.slots) and local.date() > task.target_date
+                  and local < max(s.end_at for s in day.slots))
+        if local.date() != task.target_date and not inside:
             return None
         minute = local.replace(second=0, microsecond=0)
         return minute if minute == local else minute + timedelta(minutes=1)
@@ -531,12 +590,46 @@ class EditAgent:
         # 발화·이름은 싣지 않는다 — 모양·해소 경로·개수만(운영에서 이 줄로 within·tried 를 센다)
         _log.info("edit_insert %s", json.dumps({
             "event": "edit_insert", "trace_id": str(task.trace_id), "outcome": outcome, "shape": ask.shape.value,
-            "kind": ask.kind.value if ask.kind is not None else None, **fields}, ensure_ascii=False))
+            "kind": ask.kind.value if ask.kind is not None else None, "excluded": len(task.excluded), **fields},
+            ensure_ascii=False))
 
     # ── ① 자연어 번역 ───────────────────────────────────────────────
 
+    def _with_named(self, task: EditTask) -> tuple[EditTask, tuple[Poi, ...], int]:
+        """풀 밖 이름 장소(F9) — 말의 이름 말(`said_name_keys`, 워커의 상한 밖 이름 대조와 같은 규칙)로 콘센트를 한 번 불러 찾은 등록 POI 를
+        풀에 합친 재료·번역에 따로 실을 곳·쓴 시간(ms). 미배선·시한 부족·말 없음·콘센트 오류면 받은 재료 그대로(종전 — INV-4, 사유는 로그).
+
+        합친 풀이 곧 닫힌 집합이다 — 번역 게이트와 ② `validate_command` 가 같은 풀을 본다. 넣는 것은 경계가 등록 장소에서 찾아 풀과 같은
+        자격으로 거른 곳뿐이고, LLM 출력이 이 집합을 넓히는 길은 없다(조회는 번역 **전**, 말과 서버 자료로만)."""
+        if task.named_places is None or task.deadline_ms < _NAMED_FETCH_MIN_MS or task.utterance is None:
+            return task, (), 0
+        day = next((d for d in task.solution.days if d.date == task.target_date), None)
+        slots = tuple(s.poi_id for s in day.slots) if day is not None else ()
+        words, spans = said_name_keys(task.utterance, [p.name for pid in slots if (p := task.poi_index.get(pid))])
+        if not words and not spans:
+            return task, (), 0
+        started = time.monotonic()
+        log: dict = {"keys": len(words) + len(spans)}
+        try:
+            found = tuple(task.named_places(words, spans))
+        except Exception as e:  # 콘센트 결함도 경계 밖으로 던지지 않는다(DL-5) — 받은 풀로 번역한다
+            found, log["error"] = (), type(e).__name__
+        spent = round((time.monotonic() - started) * 1000)
+        # "다른 데는?"으로 뺀 곳(FR-015)은 이름으로 집어도 되돌리지 않는다 — 원 요청을 그대로 다시 태우므로 같은 곳이 또 나온다
+        named = tuple({p.poi_id: p for p in found if p.poi_id not in slots and p.poi_id not in task.excluded}.values())[:_NAMED_MAX]
+        # 풀 안에 같은 이름이 있으면 풀 밖 동명 장소는 합치지 않는다 — 후보에 같은 이름 두 줄이 서고 LLM 이 먼 쪽을 고를 수 있다
+        in_pool = {"".join(q.name.split()) for q in task.pool.pois}
+        added = tuple(p for p in named if not task.pool.contains(p.poi_id) and "".join(p.name.split()) not in in_pool)
+        _log.info("edit_named %s", json.dumps({  # 말·이름은 싣지 않는다 — 개수·시간만
+            "trace_id": str(task.trace_id), **log, "found": len(found), "named": len(named), "added": len(added),
+            "ms": spent}, ensure_ascii=False))
+        if not added:
+            return task, named, spent
+        pool = replace(task.pool, poi_ids=task.pool.poi_ids | {p.poi_id for p in added}, pois=(*task.pool.pois, *added))
+        return replace(task, pool=pool), named, spent
+
     def _translate(
-        self, task: EditTask, utterance: str
+        self, task: EditTask, utterance: str, *, named: tuple[Poi, ...] = (), spent_ms: int = 0,
     ) -> tuple[EditCommand, ApplyMode] | EditOutcome:
         """번역 성공이면 (명령, 적용모드), 실패면 TRANSLATION_FAILED 결과."""
         target_day_ids = tuple(
@@ -554,9 +647,11 @@ class EditAgent:
                     # 경계가 이미 받아온 등록 POI 재사용 (추가 I/O 없음) — 풀 밖
                     # 슬롯의 이름·카테고리는 여기서만 온다 (TRIP-527)
                     slot_pois=dict(task.poi_index),
+                    named=named,  # 이름 조회가 찾은 곳(F9) — 풀(task.pool)에 이미 합쳐져 있다
                 ),
                 task.trace_id, task.now,
-                timeout_sec=task.deadline_ms / 1000.0,
+                # 이름 조회에 쓴 시간은 뺀다 — 둘의 합이 시한을 넘지 않게(조회가 없으면 종전 그대로)
+                timeout_sec=max(1, task.deadline_ms - spent_ms) / 1000.0,
             )
         except Exception as e:  # 설정 버그 등 — explanations()와 같은 정직 보고.
             # 4xx 로 내보내면 백엔드가 MinimalItineraryFallback 을 켜 편집 한 번이

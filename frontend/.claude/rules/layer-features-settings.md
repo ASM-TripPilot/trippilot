@@ -12,7 +12,7 @@ paths:
 
 | 파일 | 역할 |
 |---|---|
-| `ui/SettingsGlyphs.tsx` | 설정·마이 글리프 + `MUTED`·`MUTED_SOFT` hex export(비-글리프 파일이 raw hex 없이 색을 넘기기 위함 — 기계 강제 없음, raw hex 소스 스캔은 TRIP-1145·1154에서 삭제). `BookmarkGlyph`·`PencilGlyph`는 프로덕션 소비처 0이지만 parity 테스트의 부재 단언이 import하므로 남긴다. **TRIP-1051**: 옛 취향 7행 아이콘 6개(`WonGlyph`·`PeopleGlyph`·`StarGlyph`·`ArrowsSwapGlyph`·`ForkKnifeGlyph`·`GaugeGlyph`) 삭제 — 취향 행이 하나로 합쳐지며 고아가 됐다. 취향 행 아이콘은 기존 `ContrastGlyph`(반원) 재사용, 새 글리프 추가 없음 |
+| `ui/SettingsGlyphs.tsx` | 설정·마이 글리프 + `MUTED`·`MUTED_SOFT` 색 export(비-글리프 파일이 색을 넘기기 위함, `COLOR_TOKENS` 파생). `BookmarkGlyph`·`PencilGlyph`는 프로덕션 소비처 0이지만 parity 테스트의 부재 단언이 import하므로 남긴다. **TRIP-1051**: 옛 취향 7행 아이콘 6개(`WonGlyph`·`PeopleGlyph`·`StarGlyph`·`ArrowsSwapGlyph`·`ForkKnifeGlyph`·`GaugeGlyph`) 삭제 — 취향 행이 하나로 합쳐지며 고아가 됐다. 취향 행 아이콘은 기존 `ContrastGlyph`(반원) 재사용, 새 글리프 추가 없음 |
 | `ui/cardShadow.ts` | `CARD_SHADOW`(카드 껍데기 공용). `LocationConsentScreen`에 같은 값의 지역 상수가 있다 |
 
 **관측된 함정**: `enabled:false`로 꺼진 쿼리도 TanStack Query는 캐시에 남은 `data`를 돌려준다 — `SettingsPage`(제휴 토글)·`StayDetailPage`(고지 시트)가 같은 `getGetMeSettingsQueryKey()`를 공유하므로 게스트 판정에 `isAuthed &&`를 명시하지 않으면 이전 계정의 `dismissed:true`가 새어 법정 제휴 고지를 우회한다.

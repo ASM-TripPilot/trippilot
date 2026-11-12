@@ -19,7 +19,7 @@ from trippilot.domain.observability import GateDropEvent
 from trippilot.llm_gateway.gates.base import GateOutcome, has_contact_like, has_injection_like, strip_code_fence
 from trippilot.ports.place_fact_store_port import FIELDS, PlaceFacts
 
-_CLOCK = r"(?:[01]?\d|2[0-4]):[0-5]\d"
+_CLOCK = r"(?:(?:[01]?\d|2[0-3]):[0-5]\d|24:00)"  # 자정은 24:00 만 — 시·분이 따로 열리면 24:30 이 시각으로 통과한다
 _HOURS = re.compile(rf"({_CLOCK})\s*[~\-–]\s*({_CLOCK})")
 _DAY = r"[월화수목금토일]요일"
 _CLOSED = re.compile(rf"연중무휴|매주 {_DAY}(?:\s*[,·]\s*{_DAY})*|매월 (?:첫|둘|셋|넷|마지막)째 주 {_DAY}")

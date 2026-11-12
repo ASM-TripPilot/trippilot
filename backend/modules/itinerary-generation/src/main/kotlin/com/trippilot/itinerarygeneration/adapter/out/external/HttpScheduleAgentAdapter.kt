@@ -9,9 +9,8 @@ import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.FixedBlock
 import com.trippilot.itinerarygeneration.domain.PreferenceProfile
 import com.trippilot.itinerarygeneration.domain.ReplanInput
+import com.trippilot.itinerarygeneration.domain.ReplanDeferredPlace
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentInput
-import com.trippilot.itinerarygeneration.domain.TimeWindow
-import com.trippilot.itinerarygeneration.domain.TodayWindow
 import com.trippilot.itinerarygeneration.domain.TripContext
 import com.trippilot.itinerarygeneration.domain.FreshnessMeta
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
@@ -105,9 +104,13 @@ class HttpScheduleAgentAdapter(
 
     /** 수단을 싣는다 — repair 와 같은 `transport_modes`(목록 그대로, 상대가 아는 첫 값을 고른다). 비면 상대 기본(대중교통). */
     override fun validateWithUnverified(solution: ScheduleAgentOutput, transportModes: List<String>): ValidationResult =
+        validateWithUnverified(solution, transportModes, null)
+
+    /** 취향도 싣는다(2026-11-03) — 상대가 액티비티 취향 대중교통 여행의 도보 상한을 생성과 같게 건다. null 이면 키째 빠진다. */
+    override fun validateWithUnverified(solution: ScheduleAgentOutput, transportModes: List<String>, preference: PreferenceProfile?): ValidationResult =
         post(
             VALIDATE_PATH,
-            AiValidateRequest(solution.toWire(), requestMeta(VALIDATE_DEADLINE_MS), transportModes),
+            AiValidateRequest(solution.toWire(), requestMeta(VALIDATE_DEADLINE_MS), transportModes, preference),
             AiValidateResponse::class.java,
             scheduleAgentBoundedRestClient,
         ).toDomain()
@@ -154,7 +157,7 @@ class HttpScheduleAgentAdapter(
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>): RepairResult =
         repair(solution, violations, RepairContext.NONE)
 
-    /** 앵커가 있는 날의 창은 재계획과 같은 기본 일과 창이다 — 상대는 그 시작을 앵커 출발 시각으로만 쓴다. */
+    /** 창은 컨텍스트가 싣는 앵커 날의 기본 일과 창(여행 설정 — [RepairContext.timeWindows])이다 — 상대는 그 시작을 앵커 출발 시각으로만 쓴다. */
     override fun repair(solution: ScheduleAgentOutput, violations: List<Violation>, context: RepairContext): RepairResult {
         val response = post(
             REPAIR_PATH,
@@ -164,8 +167,9 @@ class HttpScheduleAgentAdapter(
                 violations.map { AiViolation(it.type, it.slotRef, it.detail.orEmpty(), it.dayIndex, it.slotIndex, it.reasonCode) },
                 requestMeta(REPAIR_DEADLINE_MS),
                 anchors = context.anchors,
-                timeWindows = context.anchors.map { TimeWindow(it.date, DAY_START, DAY_END) },
+                timeWindows = context.timeWindows,
                 transportModes = context.transportModes,
+                preferenceProfile = context.preferenceProfile,
             ),
             AiRepairResponse::class.java,
             scheduleAgentBoundedRestClient,
@@ -185,8 +189,9 @@ class HttpScheduleAgentAdapter(
      * **사유·지시·자유입력·원 일정 슬롯·담은 장소가 전부 버려졌다** — 상대는 그것들을 RAG 컨텍스트와
      * 후보 가중치로 쓰므로, 버리는 동안 재계획 품질에 구조적 천장이 있었다(설계 §1).
      *
-     * 이제 열 종을 다 싣는다. 창은 여전히 **하루 전체**이고 '지금 이후만' 은 잠금으로 표현한다
-     * (정본 §3.1) — 창을 좁히면 오전에 잠긴 고정 블록이 창 밖이 되어 상대가 모순으로 거부한다(실측 409).
+     * 이제 열 종을 다 싣는다. 창은 호출측이 정한 그날 창([ReplanInput.windowStart]·[ReplanInput.windowEnd] — 여행 설정·원 일정,
+     * 2026-11-05)을 그대로 싣고 '지금 이후만' 은 잠금으로 표현한다(정본 §3.1) — 창을 '지금부터'로 좁히면 오전에 잠긴 고정 블록이
+     * 창 밖이 되어 상대가 모순으로 거부한다(실측 409).
      *
      * **앵커는 필수다.** 상대가 후보 풀을 좌표에 매단다 — 없으면 422 다(실측). 기준점은 호출측
      * 사다리(현재 위치 → 숙소 앵커 → 목적지 중심, BR-U4-19 · TRIP-963)가 채워 준다. 그래서 여기서
@@ -205,12 +210,13 @@ class HttpScheduleAgentAdapter(
 
         val request = AiReplanRequest(
             tripId = input.tripId.toString(),
+            // 여행 기간 — 상대가 "2일차에"·"내일"을 이 기간으로 환산한다(F-6). 그날 하루만 싣던 동안엔 다른 날 요청이 늘 여행 밖이었다.
             tripContext = TripContext(
-                input.destinations, input.targetDate, input.targetDate,
+                input.destinations, input.tripStartDate, input.tripEndDate,
                 input.companionType, input.budgetLevel,
             ),
             targetDate = input.targetDate,
-            timeWindow = AiTimeWindow(input.targetDate, DAY_START, replanDayEnd(input)),
+            timeWindow = AiTimeWindow(input.targetDate, input.windowStart, input.windowEnd),
             anchor = AiCoord(lat, lng),
             stayAnchor = input.stayLat?.let { sLat -> input.stayLng?.let { sLng -> AiCoord(sLat, sLng) } },
             scope = input.scope.name,
@@ -230,15 +236,25 @@ class HttpScheduleAgentAdapter(
             savedPlaces = input.savedPlaces.map { AiSavedPlace(it.poiId.toString(), it.name) },
             rejections = input.rejections,
             excludedPoiIds = input.excludedPoiIds,
+            transportMode = input.transportMode,
             changeLog = input.changeLog.map {
                 AiChangeLogEntry(
                     it.source, it.reason, it.at,
                     it.removedPoiIds.map(UUID::toString), it.addedPoiIds.map(UUID::toString),
                 )
             },
+            priorRequests = input.priorRequests.map { AiPriorRequest(it.text, it.keptPoiIds.map(UUID::toString)) },
         )
 
-        val res = post(REPLAN_PATH, request, AiReplanResponse::class.java)
+        val res = try {
+            post(REPLAN_PATH, request, AiReplanResponse::class.java)
+        } catch (e: ScheduleAgentCallFailed) {
+            // 이 칸을 모르는 상대(롤링 배포 중 옛 AI 파드·AI 롤백)는 모르는 키를 422 로 거절한다(extra=forbid). 그 칸만 빼고 한 번
+            // 다시 부른다 — 기억은 변경 이력 근사(F-5)로 내려간다. BE·AI 를 한 번에 올리는 배포라 '새 응답 뒤에만 싣는다'로는 못 닫는다.
+            if (request.priorRequests.isEmpty() || e.errorCode != "VALIDATION_ERROR" || e.message?.contains("prior_requests") != true) throw e
+            log.warn("상대가 prior_requests 를 거절했습니다 — 그 칸을 빼고 한 번 다시 부릅니다(옛 AI). {}", e.message)
+            post(REPLAN_PATH, request.copy(priorRequests = emptyList()), AiReplanResponse::class.java)
+        }
 
         // 상대가 못 알아들은 지시는 **드러낸다.** 삼키면 "지시를 넣었는데 왜 안 먹었나"를 못 짚는다.
         if (res.unknownDirectives.isNotEmpty()) {
@@ -262,11 +278,25 @@ class HttpScheduleAgentAdapter(
 
         return try {
             itinerary.toDomain(clock.instant())
-                .copy(totalDistanceKm = res.totalDistanceKm)
+                .copy(
+                    totalDistanceKm = res.totalDistanceKm,
+                    // 칸이 없으면 null 그대로 — "요청한 곳 없음"(빈 목록)과 가른다(다음 재계획의 prior_requests 근거)
+                    requestedPoiIds = res.requestedPoiIds?.mapNotNull { replanPoiUuid(it, "requested_poi_ids") },
+                    deferredPlaces = res.deferredPlaces.mapNotNull { d ->
+                        replanPoiUuid(d.poiId, "deferred_places")?.let { ReplanDeferredPlace(it, d.name, d.date) }
+                    },
+                )
                 .groundAlternatives()
         } catch (e: IllegalArgumentException) {
             throw ScheduleAgentCallFailed(null, retryable = false, message = "AI 재계획 응답 스키마 불일치: ${e.message}", cause = e)
         }
+    }
+
+    /** 재계획 응답의 장소 id — UUID 가 아니면 그 한 건만 버리고 드러낸다(미판정 보고 `poiUuid` 와 같은 처리). */
+    private fun replanPoiUuid(raw: String, field: String): UUID? {
+        val id = runCatching { UUID.fromString(raw) }.getOrNull()
+        if (id == null) log.warn("재계획 응답 {} 의 poi_id 가 UUID 가 아닙니다 — 그 한 건만 버립니다. poiId={}", field, raw)
+        return id
     }
 
     /**
@@ -276,18 +306,6 @@ class HttpScheduleAgentAdapter(
      * 상대가 지어낸 id 가 제안 카드를 거쳐 저장까지 간다. 하나라도 정본에 없으면 응답 전체를 버린다 —
      * 그 한 곳만 빼면 상대가 검증한 시각·순서가 더는 검증값이 아니다(INV-2).
      */
-    /**
-     * 재계획 창 끝 — 오늘을 다시 짜면 생성과 같은 규칙([TodayWindow])으로 **끝만** 늘린다. 종전엔 21:00 고정이라 밤 9시에
-     * [다시 짜기]를 누르면 남은 시간이 0 이어서 "대안 없음"이 됐다. 시작은 하루 전체 그대로(09:00 — 좁히면 오전에 잠긴
-     * 고정 블록이 창 밖이 되어 상대가 409 로 거부한다). 다른 날은 종전 그대로.
-     */
-    private fun replanDayEnd(input: ReplanInput): java.time.LocalTime {
-        val now = input.fromInstant.atZone(TRAVEL_ZONE)
-        if (now.toLocalDate() != input.targetDate) return DAY_END
-        val from = TodayWindow.earliest(now.toLocalTime()) ?: return DAY_END
-        return TodayWindow.eveningEnd(from, DAY_END)
-    }
-
     override fun proposeEdit(input: EditProposalInput): EditProposalOutput {
         val res = post(
             EDIT_PATH,
@@ -302,6 +320,10 @@ class HttpScheduleAgentAdapter(
                 utterance = input.utterance,
                 confirm = true,
                 requestMeta = AiRequestMeta(input.requestMeta.requestId, input.requestMeta.requestedAt, input.requestMeta.deadlineMs),
+                excludedPoiIds = input.excludedPoiIds.map(UUID::toString),
+                preferenceProfile = input.preferenceProfile,
+                timeWindows = input.timeWindows,
+                tripStartDate = input.tripStartDate,
             ),
             AiEditResponse::class.java,
             scheduleAgentBoundedRestClient,
@@ -438,10 +460,6 @@ class HttpScheduleAgentAdapter(
         private const val REPAIR_DEADLINE_MS = 5_000L
         private const val MAX_ERROR_BODY_BYTES = 8 * 1024 // 오류 페이지가 커도 힙을 물지 않게 상한
         private val ERROR_MAPPER = ScheduleAgentConfiguration.boundaryMapper()
-
-        private val DAY_START: java.time.LocalTime = java.time.LocalTime.of(9, 0)
-        private val DAY_END: java.time.LocalTime = java.time.LocalTime.of(21, 0)
-        private val TRAVEL_ZONE: java.time.ZoneId = java.time.ZoneId.of("Asia/Seoul")
     }
 }
 

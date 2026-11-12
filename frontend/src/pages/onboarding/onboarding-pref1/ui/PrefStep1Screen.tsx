@@ -14,17 +14,19 @@ import {
   ArtGlyph,
   BalanceGlyph,
   CameraGlyph,
-  CheckGlyph,
-  ForkKnifeGlyph,
-  InfoCircleGlyph,
+  OnboardingCheckGlyph,
+  OnboardingForkKnifeGlyph,
+  OnboardingInfoCircleGlyph,
   LightningGlyph,
   MoonGlyph,
   MountainGlyph,
-  ShoppingBagGlyph,
+  OnboardingShoppingBagGlyph,
   SkipChevronGlyph,
   SunGlyph,
   type GlyphComponent,
 } from '@/features/onboarding';
+import { COLOR_TOKENS } from '@/shared/config';
+import { buttonClasses } from '@/shared/ui/Button';
 
 export interface PrefStep1ScreenProps {
   selectedStyles: readonly string[] | null;
@@ -38,8 +40,11 @@ export interface PrefStep1ScreenProps {
 }
 
 // CTA 그림자(Figma 0 2px 10px rgba(0,0,0,.06)) — 반투명은 토큰이 아니라 RN shadow prop로.
+// 그림자(style)를 지닌 CTA 라 Button 대신 같은 모양 클래스만 빌린다(TRIP-1828 탈출구).
+const CTA = buttonClasses({});
+
 const ctaShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
@@ -48,12 +53,12 @@ const ctaShadow = {
 
 const STYLE_OPTIONS: { slug: string; label: string; Icon: GlyphComponent }[] = [
   { slug: 'rest', label: '휴양', Icon: SunGlyph },
-  { slug: 'gourmet', label: '미식', Icon: ForkKnifeGlyph },
+  { slug: 'gourmet', label: '미식', Icon: OnboardingForkKnifeGlyph },
   { slug: 'nature', label: '자연', Icon: MountainGlyph },
   { slug: 'art', label: '문화예술', Icon: ArtGlyph },
   { slug: 'activity', label: '액티비티', Icon: ActivityGlyph },
   { slug: 'sightseeing', label: '관광', Icon: CameraGlyph },
-  { slug: 'shopping', label: '쇼핑', Icon: ShoppingBagGlyph },
+  { slug: 'shopping', label: '쇼핑', Icon: OnboardingShoppingBagGlyph },
 ];
 
 const PACE_OPTIONS: { slug: string; label: string; Icon: GlyphComponent }[] = [
@@ -107,7 +112,7 @@ export function PrefStep1Screen({
                     testID={`onboarding-pref1-style-${slug}`}
                     label={label}
                     Icon={Icon}
-                    CheckIcon={CheckGlyph}
+                    CheckIcon={OnboardingCheckGlyph}
                     selected={selectedStyles?.includes(slug) ?? false}
                     onPress={() => onToggleStyle(slug)}
                     className="h-[104px] gap-[10px] py-[14px]"
@@ -145,7 +150,7 @@ export function PrefStep1Screen({
               testID="onboarding-pref1-info"
               className="flex-row gap-[10px] rounded-button bg-surface-soft p-md"
             >
-              <InfoCircleGlyph size={16} />
+              <OnboardingInfoCircleGlyph size={16} />
               <Text className="flex-1 font-noto text-label text-muted">
                 지금 안 정해도 앱을 쓰며 자연스럽게 맞춰가요
               </Text>
@@ -167,11 +172,9 @@ export function PrefStep1Screen({
             accessibilityRole="button"
             onPress={onNext}
             style={ctaShadow}
-            className="h-[52px] items-center justify-center rounded-button bg-primary"
+            className={CTA.box}
           >
-            <Text className="font-noto-bold text-section font-bold text-on-primary">
-              다음
-            </Text>
+            <Text className={CTA.label}>다음</Text>
           </Pressable>
         </View>
       </View>

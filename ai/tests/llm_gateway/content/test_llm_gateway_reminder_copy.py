@@ -46,6 +46,60 @@ def _apply(payload: dict, ctx: ReminderCopyContext = CTX):
     )
 
 
+@pytest.mark.parametrize("name", ["24시간 해장국", "오분자기 식당", "이십사시간 순대국"])
+def test_allowed_place_name_that_looks_like_a_duration_is_not_dropped(name: str) -> None:
+    # 실제 상호가 소요시간 꼴이면("24시간 해장국"·"오분자기 식당") 모델은 이름을 피할 수 없다. 시각 검사처럼 소요시간 검사도
+    # 허용 장소명을 지운 글을 봐야 그 날 문구가 매번 드롭돼 상수로 굳지 않는다(운영 48시간 게이트 전량 탈락 16건 중 일부).
+    ctx = ReminderCopyContext(allowed=(name,), forbidden=())
+    # 이름이 글머리에 오게 한다 — 앞 글자가 한글이면 `_DURATION` 의 앞 한글 배제가 우연히 지나쳐 수정 전에도 통과한다.
+    out = _apply({"title": f"{name} 가는 날", "body": f"{name}에서 든든하게 시작해요", "places": [name]}, ctx)
+    assert out.value is not None and out.drop_event is None
+
+
+@pytest.mark.parametrize(("name", "body"), [("한라산", "한라산이 분명 반겨줄 거예요"), ("동문시장", "동문시장이 시간 가는 줄 몰라요")])
+def test_particle_after_masked_name_is_not_read_as_a_number(name: str, body: str) -> None:
+    # 이름을 공백으로 지우면 뒤 조사 '이'가 글머리가 돼 수사(二)로 읽히고 "이 분"·"이 시간"이 소요시간에 걸렸다.
+    ctx = ReminderCopyContext(allowed=(name,), forbidden=())
+    out = _apply({"title": "오늘의 일정", "body": body, "places": [name]}, ctx)
+    assert out.value is not None and out.drop_event is None
+
+
+def test_real_duration_outside_the_place_name_is_still_dropped() -> None:
+    # 이름을 지우는 것이 소요시간 표시(INV-3)를 풀어 주면 안 된다 — 이름 밖의 "30분"은 그대로 잡는다.
+    ctx = ReminderCopyContext(allowed=("24시간 해장국",), forbidden=())
+    out = _apply({"title": "오늘의 일정", "body": "24시간 해장국까지 30분 걸려요", "places": ["24시간 해장국"]}, ctx)
+    assert out.value is None and out.drop_event is not None
+
+
+def test_drop_logs_which_rules_were_violated(caplog: pytest.LogCaptureFixture) -> None:
+    # 드롭 사유 라벨(`gate_dropped_all`)은 규칙을 가르지 못한다 — 운영에서 전량 탈락이 왜인지 로그로 알 수 있게 규칙 이름을 남긴다.
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="trippilot.llm_gateway.gates.content.reminder_copy"):
+        out = _apply({"title": "오늘의 일정", "body": "오후 3시에 성산일출봉을 둘러보세요", "places": ["성산일출봉"]})
+    assert out.value is None and out.drop_event is not None
+    assert any("reminder_copy.gate_drop rules=" in r.getMessage() and "clock" in r.getMessage() for r in caplog.records)
+
+
+def test_drop_log_does_not_carry_the_copy_text(caplog: pytest.LogCaptureFixture) -> None:
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="trippilot.llm_gateway.gates.content.reminder_copy"):
+        _apply({"title": "한라산 가는 날", "body": "성산일출봉에서 시작하는 하루예요", "places": ["성산일출봉"]})
+    messages = " ".join(r.getMessage() for r in caplog.records)
+    assert "other_day_place" in messages
+    assert "한라산" not in messages and "성산일출봉" not in messages   # 규칙 이름만 — 문구·장소명은 안 싣는다
+
+
+def test_passing_copy_logs_nothing(caplog: pytest.LogCaptureFixture) -> None:
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="trippilot.llm_gateway.gates.content.reminder_copy"):
+        out = _apply({"title": "오늘의 일정", "body": "성산일출봉에서 시작하는 하루예요", "places": ["성산일출봉"]})
+    assert out.value is not None
+    assert not [r for r in caplog.records if "gate_drop" in r.getMessage()]
+
+
 def test_forbidden_place_in_title_is_dropped() -> None:
     # Codex 리뷰(10-20): 다른 날 장소 대조가 본문만 봐서 제목으로 새던 구멍
     out = _apply({"title": "한라산 가는 날", "body": "성산일출봉에서 시작하는 하루예요", "places": ["성산일출봉"]})

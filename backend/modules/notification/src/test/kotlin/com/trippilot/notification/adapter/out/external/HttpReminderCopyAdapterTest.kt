@@ -1,5 +1,9 @@
 package com.trippilot.notification.adapter.out.external
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.sun.net.httpserver.HttpServer
 import com.trippilot.notification.domain.NotificationKind
 import com.trippilot.notification.domain.ReminderCopy
@@ -9,6 +13,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.maps.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import org.slf4j.LoggerFactory
 import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter
 import org.springframework.web.client.RestClient
@@ -47,14 +52,36 @@ class HttpReminderCopyAdapterTest : StringSpec({
     }
 
     /**
-     * **`degraded` 면 하나도 안 쓴다.** 상대가 규칙 문구로 내려간 것이라 우리 상수 문구와 다를 바
-     * 없는데, 저장하면 품질 관측이 거짓이 된다(회고 `source` 선례).
+     * **`degraded` 여도 온 문구는 쓴다.** 계약은 "빠진 항목은 백엔드가 상수로 채운다 — degraded 가 그 증빙"이고,
+     * 상대는 실패·게이트 탈락 항목만 빼고 통과한 문구는 그대로 준다(`fallback_mode=backend_constant`).
+     * 종전엔 degraded 면 전부 버렸다 — 한 항목만 떨어져도 그 묶음의 멀쩡한 문구가 모두 상수가 됐다(운영 48시간 31건).
      */
-    "degraded 응답은 문구가 와도 버린다" {
+    "degraded 응답이라도 온 문구는 쓴다 — 빠진 항목만 상수로 간다" {
         val b = """{"copies":[{"schedule_key":"키-1","title":"제목","body":"본문"}],
-            "degraded":true,"fallback_mode":"rule"}"""
+            "degraded":true,"fallback_mode":"backend_constant"}"""
         withServer(b) { url ->
+            val out = adapterAt(url).copiesFor(null, items)
+
+            out.keys shouldBe setOf("키-1")          // 키-2 는 상대가 빼 먹었다 — 문구 없이 남는다
+            out["키-1"] shouldBe ReminderCopy("제목", "본문")
+        }
+    }
+
+    "degraded 이고 온 문구가 없으면 빈 맵이다 — 전부 상수로 간다" {
+        withServer(body(degraded = true)) { url ->
             adapterAt(url).copiesFor(null, items).shouldBeEmpty()
+        }
+    }
+
+    /** degraded 여도 거르기 규칙은 그대로다 — 보낸 적 없는 키·빈 문구·긴 문구는 안 받는다. */
+    "degraded 응답에서도 남의 키·빈 문구는 버린다" {
+        val b = """{"copies":[
+            {"schedule_key":"남의-키","title":"제목","body":"본문"},
+            {"schedule_key":"키-1","title":"","body":"본문"},
+            {"schedule_key":"키-2","title":"제목","body":"본문"}],
+            "degraded":true,"fallback_mode":"backend_constant"}"""
+        withServer(b) { url ->
+            adapterAt(url).copiesFor(null, items).keys shouldBe setOf("키-2")
         }
     }
 
@@ -165,17 +192,52 @@ class HttpReminderCopyAdapterTest : StringSpec({
         }
     }
 
-    /** 계약 `maxItems: 30` — 넘기면 한 건도 못 받는다. 나눠 보내고 합친다. */
-    "30건을 넘기면 나눠 보낸다" {
+    /**
+     * **경고는 '모르는 종류'만 센다.** 재료가 빈 예약도 보내는 목록에서는 빠지지만 그 사유는 위의 INFO 가 말한다 —
+     * 둘을 한 경고로 세면 "계약 enum 밖"이라는 거짓 경고가 재료 없는 여행마다 뜬다(운영 48시간 51건이 그랬다).
+     */
+    "재료가 빈 예약은 '모르는 알림 종류' 경고를 내지 않고, 모르는 종류만 센다" {
+        val starved = ReminderCopyRequest("키-s", NotificationKind.TRIP_DAY, LocalDate.parse("2026-08-10"))
+        val other = NotificationKind.entries.first { it.name !in HttpReminderCopyAdapter.aiKinds() }
+        val unknown = ReminderCopyRequest("키-u", other, LocalDate.parse("2026-08-10"), listOf(ReminderSlot("우도")))
+
+        warnsFrom { it.copiesFor(null, listOf(starved)) }.none { "모르는 알림 종류" in it } shouldBe true
+
+        // 둘이 섞여도 한 건(모르는 종류)만 센다 — 재료 빈 예약은 세지 않는다.
+        warnsFrom { it.copiesFor(null, listOf(starved, unknown)) }
+            .single { "모르는 알림 종류" in it } shouldContain "1건"
+    }
+
+    /**
+     * **작게 쪼개 보낸다.** 계약 `maxItems: 30` 은 넘기면 한 건도 못 받는 하드 한계지만, 그보다 훨씬 전에 상대의 항목당 예산(마감 ÷
+     * 항목 수)이 학생 모델의 지연보다 짧아진다 — 그래서 상한이 아니라 "마감 안에 끝낼 크기"(`chunkSize`)로 나눈다. 31건이면 3건씩 11번이다.
+     */
+    "묶음을 작게 쪼개 보낸다 — 상한(30)이 아니라 마감 안에 끝낼 크기로" {
         val many = (1..31).map {
             ReminderCopyRequest("키-$it", NotificationKind.TRIP_DAY, LocalDate.parse("2026-08-10"), listOf(ReminderSlot("곳-$it")))
         }
         withCapturingServer(body()) { url, sent ->
             adapterAt(url).copiesFor(null, many)
 
-            sent.size shouldBe 2
-            // 앞 묶음은 상한을 꽉 채운다 — 계약 게이트가 대조하는 값(`maxItems()`)이 실제로 나누는 값이어야 한다.
-            sent.map { Regex("\"schedule_key\"").findAll(it).count() } shouldBe listOf(HttpReminderCopyAdapter.maxItems(), 1)
+            val sizes = sent.map { Regex("\"schedule_key\"").findAll(it).count() }
+            sizes shouldBe List(10) { ReminderCopyProperties().chunkSize } + 1
+            // 쪼갠 크기는 늘 계약 상한 안이다 — 계약 게이트가 대조하는 값(`maxItems()`)이 실제 한계여야 한다.
+            (sizes.max() <= HttpReminderCopyAdapter.maxItems()) shouldBe true
+        }
+    }
+
+    /**
+     * **한 번의 적재가 상대를 오래 붙들지 않는다.** 적재는 릴레이 스레드·DB 트랜잭션 안에서 도므로, 시간 예산을 넘기면 남은 묶음은
+     * 건너뛴다 — 첫 묶음은 늘 보낸다. 건너뛴 행은 제자리 채우기가 나중에 메운다.
+     */
+    "시간 예산을 넘기면 남은 묶음은 건너뛴다 — 첫 묶음은 늘 보낸다" {
+        val seven = (1..7).map {
+            ReminderCopyRequest("키-$it", NotificationKind.TRIP_DAY, LocalDate.parse("2026-08-10"), listOf(ReminderSlot("곳-$it")))
+        }
+        withCapturingServer(body()) { url, sent ->
+            adapterAt(url, ReminderCopyProperties(mode = "http", baseUrl = url, totalBudgetMs = 0)).copiesFor(null, seven)
+
+            sent.size shouldBe 1
         }
     }
 
@@ -219,6 +281,19 @@ class HttpReminderCopyAdapterTest : StringSpec({
         }
     }
 })
+
+/** 어댑터 로거의 WARN 줄을 모은다. 보낼 항목이 없는 입력으로만 쓴다 — 호출이 나가지 않아 주소는 아무 값이어도 된다. */
+private fun warnsFrom(block: (HttpReminderCopyAdapter) -> Unit): List<String> {
+    val appender = ListAppender<ILoggingEvent>().apply { start() }
+    val logger = LoggerFactory.getLogger(HttpReminderCopyAdapter::class.java) as Logger
+    logger.addAppender(appender)
+    try {
+        block(adapterAt("http://127.0.0.1:1"))
+    } finally {
+        logger.detachAppender(appender)
+    }
+    return appender.list.filter { it.level == Level.WARN }.map { it.formattedMessage }
+}
 
 private fun body(copies: String = "", degraded: Boolean = false) =
     """{"copies":[$copies],"degraded":$degraded,"fallback_mode":null}"""

@@ -47,6 +47,7 @@ sys.path.insert(0, str(_AI / "src"))
 from trippilot.llm_gateway.gates.base import has_contact_like, has_injection_like  # noqa: E402
 from trippilot.orchestrator.dialogue.place_intro import clean_intro  # noqa: E402
 from trippilot.poi_curation.place_fallback import WEB_FACTS_PER_DOC as MAX_FACTS  # noqa: E402
+from trippilot.poi_curation.place_fallback import fallback_docs  # noqa: E402
 
 _POIS = _AI / "data" / "collected_pois.json"
 _HAS_DOC = (_AI / "data" / "place_corpus_overview.jsonl.gz", _AI / "data" / "place_corpus_wiki.jsonl.gz")
@@ -63,12 +64,13 @@ PRICE_IN, PRICE_OUT, PRICE_SEARCH = (float(os.environ.get(f"WEB_FACTS_PRICE_{k}"
 # 20260209 이상은 동적 필터링(모델이 코드로 결과를 걸러 필요한 것만 넣는다 — 코드 실행은 따로 과금하지 않는다, 절감률은 미공개)
 SEARCH_TOOL = os.environ.get("WEB_FACTS_SEARCH_TOOL", "web_search_20250305")
 MAX_SEARCHES = 1  # claude — 한 곳에 검색 1회(검색을 늘리면 결과 본문만큼 입력도 같이 는다)
+THINKING = os.environ.get("WEB_FACTS_THINKING", "low")  # low(effort low 로 켠다 — 기본) · off(haiku-5 만 끈다)
 MAX_PAUSES = 2  # 동적 필터링 턴이 `pause_turn` 으로 멈추면 받은 그대로 되돌려 잇는 횟수
 MAX_FACT_CHARS, MAX_TRANSIENT, MAX_RATE_LIMITED, MAX_ERRORS_IN_ROW = 60, 6, 8, 20
 _CAT_KO = {"SIGHT": "명소", "NATURE": "자연", "CULTURE": "문화", "FOOD": "음식점", "CAFE": "카페", "SHOPPING": "쇼핑",
            "ACTIVITY": "액티비티", "BAR": "술집", "ART": "미술관·갤러리", "NIGHT_VIEW": "야경 명소"}
 # 영업시간·가격·전화 — 받지 않는다(날마다 바뀌고, 시각은 INV-2). 시각·소요·연락처·주입은 소개 게이트(`clean_intro`)가 한 번 더 본다.
-# '무료 주차'·'오픈 주방'은 시설 사실이라 막지 않는다 — 시각과 붙은 '오픈'만 영업시간이다.
+# '오픈 주방'은 시설 사실이라 막지 않는다 — 시각과 붙은 '오픈'만 영업시간이다.
 # 때에 묶인 운영(주말에만·저녁에는·매월 2·7일)과 하루 몇 개 한정도 영업 정보다 — 날마다 바뀌고 화면에서 확정값처럼 읽힌다(#1707 리뷰 19건)
 _BANNED = re.compile(r"영업\s?(?:시간|일)|휴무|정기\s?휴|마감|브레이크\s?타임|라스트\s?오더|\d+\s?시\s?(?:에\s?)?오픈|오픈\s?시간|"
                      r"(?:평일|주말|오전|오후|저녁|점심|아침|새벽)(?:에는|에만|엔)|(?:평일|주말)\s?(?:점심|저녁|아침|오전|오후)|"
@@ -83,13 +85,24 @@ _CLOSED = re.compile(r"(?:영업|운영)(?:을|이)?\s?(?:종료|중단)(?:했|�
 _KIND_ONLY = re.compile(r"(?:으로|로)\s?(?:등록|분류)(?:된|되어)|^(?:(?:한식|중식|일식|양식|분식|중국|일본|이탈리안|퓨전|해산물|"
                         r"고기|베이커리|디저트|브런치)\s?)?(?:음식점|식당|중식당|일식당|한식당|양식당|전문점|레스토랑|카페|중국집|주점|"
                         r"술집|매장|가게)(?:이다|입니다|이에요)?\.?$")
+# 주차 사실은 웹 글에서 틀리기 쉽다 — 인용 원문 대조(2026-11-03, 열린 페이지 기준 확인 284건): 근거 없음·다른 말이 주차 4/25(16%), 그 밖 12/259(5%).
+# 틀린 주차 안내는 차로 간 사람이 겪는다 — 웹 사실에서는 뺀다(관광공사 카드의 주차는 공식 상세라 그대로 싣는다)
+_PARKING = re.compile(r"주차")
+# 여러 가게가 섞인 검색 결과·태그 모음 페이지는 그 장소의 근거가 아니다(2026-11-06 표본 40건: polle 태그 페이지가 다른 가게
+# 얘기였다, 기존 문서 7,537곳 중 이런 URL 사실 327건·그것만으로 된 문서 149곳). 장소 전용 페이지는 질의 문자열이 붙어도
+# 남는다(bluer `/restaurants/…?query=`, 114 `/search/detail?comp_id=`)
+_LISTING_URL = re.compile(r"diningcode\.com/list\.dc|/posts/tag/|/toplist\b|/(?:total-)?search(?:/local-profile)?/?(?:\?|$)"
+                          r"|^https?://[^/]+/?\?(?:query|q|keywords?)="
+                          # 순위·이웃 검색·태그·지역 목록(ai-4e 검토: 8,900곳 중 103개가 더 남아 있었다)
+                          r"|diningcode\.com/rank/|daangn\.com/kr/local-profile/?\?[^#]*search=|soonwidot\.co\.kr/rank/"
+                          r"|/tags?/[^/?#]+/?$|/list/geoCategory/|/dir\?[^#]*search=", re.I)
 FINAL = ("found", "closed", "not_found", "refused")  # 이 상태면 다시 묻지 않는다
 
 PROMPT = """당신은 여행 앱의 장소 정보 정리 담당입니다. 웹 검색으로 아래 [장소]를 찾아, 웹 페이지에 적힌 사실만 JSON 하나로 답하세요.
 
 규칙:
-- 반드시 웹 검색으로 본 페이지에 적힌 사실만 쓰세요. 기억으로 짐작하지 마세요
-- [장소]의 주소와 맞는 곳만 보세요. 같은 이름의 다른 지점·다른 지역 가게는 섞지 마세요. 그 장소를 찾지 못하면 found 를 false 로 두세요
+- 반드시 웹 검색으로 본 페이지가 직접 말한 사실만 쓰세요. 기억·짐작·일반화는 쓰지 마세요. 태그·해시태그·검색어·'근처 지역' 목록에만 나오는 말, '~로 보인다' 같은 추측, 예약 필요·옛 상호·위치 관계 같은 짐작은 사실이 아닙니다. 글끼리 어긋나는 내용은 쓰지 마세요
+- [장소]의 주소와 맞는 곳만 보세요. 같은 이름의 다른 지점·다른 지역 가게는 섞지 마세요. 한 페이지에 여러 가게가 나열돼 있으면 [장소] 항목에 적힌 것만 쓰고 옆 가게의 메뉴·시설은 섞지 마세요. 그 장소를 찾지 못하면 found 를 false 로 두세요
 - 공식 누리집·관광공사·지자체·언론을 먼저 보고, 그다음 방문 후기를 보세요. 2020년 이전 글은 근거로 쓰지 마세요. 협찬·체험단 글에서는 메뉴·시설 같은 사실만 가져오세요
 - facts 는 여행자가 고를 때 도움이 되는 사실 최대 5개입니다: 무엇을 하는 곳 · 대표 메뉴나 상품 · 체험 내용 · 공간·시설 특징(좌석·전망·층·실내/야외) · 주차·아이 동반 같은 이용 조건
 - 한 항목에 사실 하나, 40자 이내로 쓰세요. 평가·감상(맛있다·친절하다·분위기 좋다)은 쓰지 마세요
@@ -134,9 +147,11 @@ def records(files: list[Path]):
                 yield rec
 
 
-def targets(proposals: list[dict], has_doc: set[str]) -> list[dict]:
-    """문서 없는 곳 먼저, 그 안에서는 관광지가 많은 시군구 먼저(후보 숏리스트에 자주 오르는 곳 — 며칠 걸리는 배치라 순서가 곧 효과다),
-    같은 시군구 안에서는 해시 순. 이미 개요·위키가 있는 곳은 맨 뒤 — 진짜 문서가 있으니 웹 사실은 보탤 뿐이다."""
+def targets(proposals: list[dict], has_doc: set[str], has_card: frozenset[str] | set[str] = frozenset()) -> list[dict]:
+    """다른 데서 채워지지 않는 곳부터 — ① 문서도 카드도 없고 다른 출처가 없는 곳(LOCALDATA·Overture·카카오: 이 배치뿐이다) ② 관광공사
+    곳(개요 수집이 날마다 채워 간다) ③ 카드만 있는 곳 ④ 이미 개요·위키가 있는 곳(진짜 문서가 있으니 웹 사실은 보탤 뿐이다).
+    같은 단계 안에서는 관광지가 많은 시군구 먼저(후보 숏리스트에 자주 오르는 곳 — 며칠 걸리는 배치라 순서가 곧 효과다), 같은 시군구
+    안에서는 해시 순."""
     def where(p: dict) -> tuple[str, str]:  # (시·도, 시군구) — 시군구 이름만이면 여러 도시의 중구·동구·고성군이 합쳐진다(#1707 리뷰)
         words = str((p.get("provenance") or {}).get("address") or "").split()
         return (words[0] if words else "", p.get("region") or "")
@@ -152,7 +167,7 @@ def targets(proposals: list[dict], has_doc: set[str]) -> list[dict]:
         if not ref or ref in seen or poi.get("category") == "STAY":
             continue
         seen.add(ref)
-        tier = 1 if ref in has_doc else 0
+        tier = 3 if ref in has_doc else 2 if ref in has_card else 1 if p.get("source") == "TOURAPI" else 0
         out.append({"ref": ref, "source": p.get("source"), "name": _one_line(poi.get("name")),
                     "kind": _CAT_KO.get(poi.get("category"), "장소"), "address": _one_line((p.get("provenance") or {}).get("address")),
                     "tier": tier, "dense": density.get(where(p), 0), "h": hashlib.sha1(ref.encode()).hexdigest()})
@@ -204,9 +219,10 @@ def ask_claude(client, prompt: str) -> tuple[str, list[str], int, int, int]:
     수는 이은 응답을 모두 더하고 인용도 모두에서 모은다. haiku-5 는 effort 없이 부르면 깊은 적응형 사고로 돌아 끈다(운영 어댑터
     `_THINKING_OFF` 와 같은 판단 — sonnet-5-5 는 끄기를 400 으로 거부해 그대로 둔다). 상한 4,000 은 코드를 쓸 몫이다."""
     messages, tokens_in, tokens_out, searches, cites = [{"role": "user", "content": prompt}], 0, 0, 0, []
-    extra = {"thinking": {"type": "disabled"}} if MODEL.startswith("claude-haiku-5") else {}
+    extra = ({"output_config": {"effort": "low"}} if THINKING == "low"
+             else {"thinking": {"type": "disabled"}} if MODEL.startswith("claude-haiku-5") else {})
     for _ in range(MAX_PAUSES + 1):
-        resp = client.messages.create(model=MODEL, max_tokens=4000, timeout=120, messages=messages, **extra,
+        resp = client.messages.create(model=MODEL, max_tokens=8000 if THINKING == "low" else 4000, timeout=120, messages=messages, **extra,
                                       tools=[{"type": SEARCH_TOOL, "name": "web_search", "max_uses": MAX_SEARCHES}])
         tokens_in, tokens_out = tokens_in + resp.usage.input_tokens, tokens_out + resp.usage.output_tokens
         searches += getattr(getattr(resp.usage, "server_tool_use", None), "web_search_requests", 0) or 0
@@ -222,16 +238,31 @@ def cost_usd(input_tokens: int, output_tokens: int, searches: int) -> float:
     return input_tokens / 1e6 * PRICE_IN + output_tokens / 1e6 * PRICE_OUT + searches * PRICE_SEARCH
 
 
+EST_CALL_USD = cost_usd(17_000, 600, 1)  # 예약용 어림(한 곳 입력 ≈1.7만·검색 1회) — 응답 뒤 실비로 정산한다
+
+
 class _Budget:
-    """총 지출 상한 — 운영과 같은 크레딧이면 운영 몫을 남긴다(2026-10-30 사용자 결정: 충전되는 200달러 크레딧 안에서만)."""
+    """총 지출 상한 — 운영과 같은 크레딧이면 운영 몫을 남긴다(2026-10-30 사용자 결정: 충전되는 200달러 크레딧 안에서만).
+
+    호출 **전에** 어림값을 잠금 안에서 떼어 두고(`reserve`) 응답 뒤 실비로 정산한다(`settle`) — 응답 뒤에만 차감하면
+    일꾼 4개가 같은 잔액을 보고 함께 들어가 상한을 넘긴다(2026-11-06 Codex 리뷰: 상한 0.03·호출당 0.02 → 0.08 지출).
+    """
 
     def __init__(self, usd: float | None) -> None:
         self._lock, self.left = threading.Lock(), usd
 
-    def charge(self, usd: float) -> None:
+    def reserve(self, est: float) -> bool:
         with self._lock:
             if self.left is not None:
-                self.left -= usd
+                if self.left <= 0:
+                    return False
+                self.left -= est
+            return True
+
+    def settle(self, est: float, usd: float) -> None:
+        with self._lock:
+            if self.left is not None:
+                self.left += est - usd
 
     @property
     def exhausted(self) -> bool:
@@ -291,23 +322,30 @@ def _retry_after(e: Exception) -> float | None:
         return None
 
 
-def lookup(client, t: dict, backoff: _Backoff, ask=ask_openai) -> dict:
+def lookup(client, t: dict, backoff: _Backoff, ask=ask_openai, budget: _Budget | None = None) -> dict:
     refusals, spent = 0, 0.0
     for _ in range(MAX_TRANSIENT):
+        if budget is not None and not budget.reserve(EST_CALL_USD):  # 거절 재질문·일시 오류 재시도도 호출이다 — 매번 예약
+            return {"status": "error", "budget": True, "error": "지출 상한", "cost": round(spent, 5)}
         backoff.wait()
         t0 = time.monotonic()
         try:
             text, cites, tokens_in, tokens_out, searches = ask(client, PROMPT % (t["name"], t["kind"], t["address"]))
         except Exception as e:  # noqa: BLE001 — 수집 배치: 사유를 남기고 이어 간다
+            if budget is not None:
+                budget.settle(EST_CALL_USD, 0.0)
             # 인증 거절·크레딧 바닥은 다음 곳도 똑같다 — 멈춘다(크레딧은 운영과 같을 수 있어 더 부르면 안 된다)
             if getattr(e, "status_code", None) in (401, 403) or "credit balance" in str(e).lower():
-                return {"status": "error", "fatal": True, "error": f"{type(e).__name__}: {str(e)[:160]}"}
+                return {"status": "error", "fatal": True, "error": f"{type(e).__name__}: {str(e)[:160]}", "cost": round(spent, 5)}
             if _transient(e):
                 backoff.hit(_retry_after(e), rate_limited=getattr(e, "status_code", None) == 429)
                 continue
-            return {"status": "error", "error": f"{type(e).__name__}: {str(e)[:160]}"}
+            return {"status": "error", "error": f"{type(e).__name__}: {str(e)[:160]}", "cost": round(spent, 5)}
         backoff.ok()
-        spent += cost_usd(tokens_in, tokens_out, searches)
+        call = cost_usd(tokens_in, tokens_out, searches)
+        if budget is not None:
+            budget.settle(EST_CALL_USD, call)
+        spent += call
         try:
             try:
                 parsed = json.loads(text[text.index("{"): text.rindex("}") + 1])
@@ -327,7 +365,8 @@ def lookup(client, t: dict, backoff: _Backoff, ask=ask_openai) -> dict:
                     "tokens": [tokens_in, tokens_out], "searches": searches, "cost": round(spent, 5)}
         except Exception as e:  # noqa: BLE001 — 응답 모양이 다를 때(facts 가 문자열 등) 그곳만 오류로
             return {"status": "error", "error": f"parse: {type(e).__name__}: {str(e)[:120]}", "cost": round(spent, 5)}
-    return {"status": "error", "transient": True, "error": f"transient: {MAX_TRANSIENT}회 물러났다 다시 해도 실패"}
+    return {"status": "error", "transient": True, "error": f"transient: {MAX_TRANSIENT}회 물러났다 다시 해도 실패",
+            "cost": round(spent, 5)}  # 앞서 거절로 다시 물었으면 그 호출은 이미 냈다 — 예산에 센다
 
 
 def run(state: Path, limit: int | None, workers: int, only: set[str] | None = None, rpm: float = 6.0,
@@ -335,7 +374,7 @@ def run(state: Path, limit: int | None, workers: int, only: set[str] | None = No
     proposals = json.loads(_POIS.read_text(encoding="utf-8"))["proposals"]
     has_doc = {r["poi_ref"] for p in _HAS_DOC if p.exists() for r in _rows(p) if r.get("sections")}
     done = {rec["ref"] for rec in records(state_files(state)) if rec.get("status") in FINAL}
-    todo = [t for t in targets(proposals, has_doc) if t["ref"] not in done and (only is None or t["ref"] in only)]
+    todo = [t for t in targets(proposals, has_doc, set(fallback_docs())) if t["ref"] not in done and (only is None or t["ref"] in only)]
     todo = todo[:limit] if limit is not None else todo
     tool = f" {SEARCH_TOOL}" if VENDOR == "claude" else ""
     print(f"대상 {len(todo)} (이미 받음 {len(done)}) · {VENDOR} {MODEL}{tool} · 일꾼 {workers} · 분당 {rpm} · 상한 {budget_usd} 달러",
@@ -366,13 +405,15 @@ def run(state: Path, limit: int | None, workers: int, only: set[str] | None = No
             time.sleep(600)
             transient_in_row[0] = 0
         try:
-            res = lookup(client, t, backoff, ask)
+            res = lookup(client, t, backoff, ask, budget)
         except Exception as e:  # noqa: BLE001 — 한 곳의 버그가 배치를 죽이지 않게
             res = {"status": "error", "error": f"{type(e).__name__}: {str(e)[:160]}"}
+        if res.get("budget"):  # 호출 전에 막혔다 — 그 곳은 안 물은 것이니 기록하지 않는다(다음 실행이 다시 받는다)
+            stop.append(f"지출 상한 {budget_usd} 달러에 닿아 멈춤")
+            return
         rec = {"ref": t["ref"], "source": t["source"], "name": t["name"], "model": MODEL,
                **({"tool": SEARCH_TOOL} if VENDOR == "claude" else {}),
                "at": datetime.now(timezone.utc).isoformat(timespec="seconds"), **res}
-        budget.charge(res.get("cost", 0.0))
         with lock:
             with state.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
@@ -402,13 +443,13 @@ def _url_key(url: str) -> str:
 
 
 def clean_facts(rec: dict) -> list[dict]:
-    """사실 거름 — 인용 목록에 있는 URL · 길이 · 시각·가격·소요·연락처·주입·평가 꼴 없음 · 중복 없음."""
+    """사실 거름 — 인용 목록에 있는 URL · 길이 · 시각·가격·소요·연락처·주입·평가·주차 꼴 없음 · 중복 없음."""
     cites, out, seen = {_url_key(u) for u in rec.get("citations") or ()}, [], set()
     for f in rec.get("facts") or ():
         text, url = f.get("text") or "", f.get("url") or ""
-        if _url_key(url) not in cites or not (4 <= len(text) <= MAX_FACT_CHARS):
+        if _url_key(url) not in cites or _LISTING_URL.search(url) or not (4 <= len(text) <= MAX_FACT_CHARS):
             continue
-        if _BANNED.search(text) or _EVAL.search(text) or _KIND_ONLY.search(text) or has_contact_like(text) \
+        if _BANNED.search(text) or _EVAL.search(text) or _KIND_ONLY.search(text) or _PARKING.search(text) or has_contact_like(text) \
                 or has_injection_like(text) or clean_intro(text) != text:  # 진짜 문서·소개와 같은 게이트(시각·소요·연락처·주입)
             continue
         key = re.sub(r"\s", "", text)

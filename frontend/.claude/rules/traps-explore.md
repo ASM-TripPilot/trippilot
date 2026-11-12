@@ -22,19 +22,28 @@ paths:
 
 - **`ExploreLandingScreen`을 렌더하는 node-버킷 테스트는 `useGetPlaces`도 목해야 크래시 안 남** → `ExploreLandingPage`(`pages/explore/explore-landing`)가 가볼 곳 레인용으로 `useGetPlaces()`(react-query)를 문다. `QueryClientProvider` 없는 node 버킷에서 이 page(또는 그것을 꽂은 라우트 래퍼)를 렌더하는 새 테스트 파일은 지역 카탈로그의 `useRegions` 함정(위 절)과 동형으로 이 목이 필요하다는 걸 기계가 강제하지 않는다. 지역 필터 갈래(`region` 파라미터)는 인기 숙소 컨트롤러 `useCuratedStaysController`(`widgets/curated-stays`, react-query 셋)도 물어 같은 이유로 목이 필요하다(TRIP-1580 — `ExploreLandingPage.test.tsx`는 숨김 값으로 목한다).
 
+- **홈·탐색 전국 레인만 10분 신선 시간을 쓰고, d04(`PlaceExplorePage`)·기록 방문추가(`RecordAddVisitPage`)가 그 옵션을 새로 받지 않는다는 것을 지키는 심판이 없다**(TRIP-1713) → 훅 기본값(30초)은 `regions.integration.test.tsx` HK2 가 잠그지만, 호출부가 `{ staleTime: PLACE_LANE_STALE_TIME }` 를 넘기도록 바뀌어도 화면 테스트는 전부 green 이다(뮤테이션 M11·M12 실측). 레인 옵션을 다른 호출부로 퍼뜨리기 전에 `grep -rn "useMultiRegionPlaces(" src` 로 호출부 4곳(HomePage·ExploreLandingPage 만 옵션을 넘긴다)을 직접 본다.
+
 ## 하트 글리프 정본
 
-- **하트 저장 글리프(Outline·Filled) 정본은 `shared/ui/HeartGlyphs.tsx`다** — place·stay 검색 카드가 공유한다. 옛 경로(`entities/place/ui/PlaceGlyphs`·`features/explore/ui/ExploreGlyphs`의 동명 함수)는 삭제됐다. 새 하트 소비처가 feature 로컬 글리프에 하트를 다시 그리면 조용히 두 벌로 되돌아간다(`traps-glyphs.md`의 `LocationOffGlyph` 세 벌과 동형, 실측 2건) — raw-hex·fill 스캔은 `*Glyphs.tsx` 제외 관례라 기계가 못 잡는다.
+- **하트 저장 글리프(Outline·Filled) 정본은 `shared/ui/glyphs/HeartGlyphs.tsx`다** — place·stay 검색 카드가 공유한다. 옛 경로(`entities/place/ui/PlaceGlyphs`·`features/explore/ui/ExploreGlyphs`의 동명 함수)는 삭제됐다. 새 하트 소비처가 feature 로컬 글리프에 하트를 다시 그리면 조용히 두 벌로 되돌아간다(동명 복제 계열 — 지금은 `traps-glyphs.md` 의 ESLint 가드가 *같은 이름*은 막지만 접두 붙인 새 하트 사본은 못 막는다, 실측 2건) — raw-hex·fill 스캔은 `*Glyphs.tsx` 제외 관례라 기계가 못 잡는다.
 
 ## 지역 피커 → 결과 화면 복귀 (`dismissTo`)
 
 - **`router.dismissTo(href)`는 재마운트를 안 한다** → expo-router가 `POP_TO` 액션으로 바꾸고(`expo-router/build/global-state/routing.js`), React Navigation `StackRouter`가 처리한다(`@react-navigation/routers`). 스택에 **같은 라우트 이름**이 있으면 그 자리로 올라가 그 화면의 params를 **통째로 교체**(merge 없음, expo가 `merge` 플래그를 안 싣는다) — 없으면 지금 화면(피커)을 그 자리에서 바꿔 끼운다. "같은 화면"은 **이름만**으로 판정한다(루트 Stack에 `getId`·`dangerouslySingular` 없음) — 코드가 다른 지역이어도 같은 라우트 이름이면 같은 인스턴스로 취급된다.
 - **재사용되는 인스턴스는 로컬 `useState`가 이전 params 시절 값을 그대로 들고 있다** → params만 바뀌고 컴포넌트는 새로 안 만들어지므로, 이전 지역에서 세운 배너·대기 표식이 새 지역 화면에 남을 수 있다(탐색 탭 `ExploreLandingPage`(`pages/explore/explore-landing`)가 그래서 지역 부품에 `key={region}` 재마운트를 얹었다 — TRIP-1105로 옛 `DestinationDetailPage`를 통합, 뮤테이션 red 확인 R-1·R-2). **이 화면으로 `dismissTo`가 새로 들어오는 상태를 추가할 때마다 같은 함정이 재발할 수 있다** — `key` 재마운트 없이 상태를 추가하면 지역이 바뀌어도 안 지워진다.
 - **목 라우터 테스트는 이 재사용/재마운트 여부를 못 본다** — 피커 테스트는 `dismissTo`가 어떤 인자로 불렸는지까지만 잠그고, 목은 실제 스택 동작을 실행하지 않는다. 단 실물 라우터(`renderRouter`)는 본다 — `src/__tests__/planbApplyStack.integration.test.tsx`가 스택 모양·허브 인스턴스 유지를 jest 에서 단언한다(TRIP-1418). 시트 실제 펼침 같은 네이티브 동작은 여전히 6-b 몫이다.
-- **같은 params 통째 교체가 기능 신호(`from=wizard`)도 지운다** — 위저드 출처 d04(`PlaceExplorePage`)에서 '지역 바꾸기'로 피커를 거쳐 `dismissTo` 복귀하면 params가 `{ region }`으로 교체되어 `from`이 함께 사라진다. `isWizardOrigin`이 false가 되어 ＋ FAB가 다시 그려지고, 누르면 `reset()`이 돌아 위저드 입력이 소실된다. expo-router `getNavigateAction`(merge 미지원)과 `StackRouter` `POP_TO` 분기(merge 거짓 시 새 params만 씀) 소스 대조로 확정. 기능 신호를 params로 싣는 화면은 `dismissTo` 복귀 인자에 그 신호를 다시 실어야 한다.
+- **같은 params 통째 교체가 기능 신호(`from=wizard`)도 지운다** — 위저드 출처 d04(`PlaceExplorePage`)에서 '지역 바꾸기'로 피커를 거쳐 `dismissTo` 복귀하면 params가 `{ region, regionCode }`로 교체되어 `from`이 함께 사라진다. `isWizardOrigin`이 false가 되어 ＋ FAB가 다시 그려지고, 누르면 `reset()`이 돌아 위저드 입력이 소실된다. expo-router `getNavigateAction`(merge 미지원)과 `StackRouter` `POP_TO` 분기(merge 거짓 시 새 params만 씀) 소스 대조로 확정. 기능 신호를 params로 싣는 화면은 `dismissTo` 복귀 인자에 그 신호를 다시 실어야 한다.
 - **위저드 출처 d04의 ♥는 `router.back()`이라 "스택 바로 아래가 d02 select"라는 전제에 기댄다 — 그 전제를 지키는 심판이 없다** → "`from=wizard`를 달고 d04를 여는 곳은 `SavedPlacesPage` 하나"를 세던 소스 스캔은 TRIP-1145에서 지웠고, jest는 라우터가 목이라 `back`이 실제로 d02 select로 돌아가는지는 못 본다(`mockBack` 호출까지). 딥링크·알림으로 `from=wizard`가 붙은 d04에 직접 들어오면 ♥가 스택 밖으로 나가거나 무반응일 수 있다(미확인, 화면의 `onBack`도 같은 `back()`이라 새 위험은 아니다). 근거: TRIP-1093 구현 결정 — 요구사항 근거로 인용 금지. 6-b 실기 전용.
+- **d04 의 `region`·`regionCode` 는 배열이 아니라 쉼표 문자열로 도착한다(TRIP-1809)** → expo-router 는 객체 href 의 `params` 배열을 `toString()` 으로 합쳐 주소에 싣는다(`expo-router/build/link/href.js`). 그래서 `placeRegionQueries` 가 쉼표로 나눈다. `jest.mock('expo-router')` 테스트는 배열을 그대로 넘겨 이 일을 못 보니, 받는 쪽 왕복은 `src/__tests__/placeRegionParamsRoute.integration.test.tsx`(실제 라우터)가 본다. **이름에 쉼표가 들어오면 갈라진다** — 지금 카탈로그 이름 284행·별칭 186행엔 0건이고, 이를 지키는 심판은 없다. **같은 모양이 하나 더 있다** — 위저드 1/4 `mustVisitSelectHref` 가 d02 select 로 `region` 배열을 싣지만 select 모드는 이 값을 판정에 안 써서 지금은 무해하다. 객체 href 에 배열을 싣는 새 화면은 받는 쪽에서 나눠야 한다.
+
+## 사진 메모리 (d04, TRIP-1813)
+
+- **`Image.clearMemoryCache()` 는 부른 화면 것이 아니라 앱 공용 메모리 캐시 전체를 비운다** → 마운트된 뷰의 그림과 디스크 사본은 안 지워진다(뷰가 그림을 직접 쥐고, iOS 구현은 `SDImageCache.shared.clearMemory()` 만 부른다). 비운 뒤 다른 화면은 다음에 그릴 때 디스크에서 읽어 잠깐 회색일 수 있고(시뮬 실측은 칸 하나에 못 미침, 저사양 실기기는 안 잼), 렌더마다 부르면 공용 캐시가 매번 빈다. 웹은 아무 일도 안 하고 안드로이드는 메인 스레드에서 Glide 를 비운다(안 잼).
+- **`cachePolicy="disk"` 를 "메모리를 아끼는 값"으로 읽지 마라** → d04 에서 비우기 없이 `disk` + 창 5 는 3번 재진입에 1,731MB 까지 쌓였다(CG image 1,015MB). 원인은 못 찾았다(SDWebImage 소스로 설명 안 됨). `none` 은 메모리는 낮지만 원격 사진을 다시 받는다(위로 40회 53MB, 시뮬 `nettop`).
 
 ## 장소 상세 (explore, d06)
 
 - **d06 상세는 `GET /places/{poiId}` 단건이다(TRIP-1372) — 캐시 전용이 아니다.** 404(없음·UNVERIFIED)만 notFound, 그 밖의 실패는 오류 얼굴(`explore-place-error`·`-retry`)이다. 단건은 CLOSED·LOST 도 주므로 `dataStatus` 배지(`explore-place-status-badge`)를 화면이 그린다 — `SAVED_PLACE_BADGE`(d02)와 같은 문구표가 두 군데 따로 있다. `imageUrls`·`admissionFee`·`description` 은 서버에 아직 없어 그리지 않는다(TRIP-824 잔여).
 - **d06 하트 해제(un-save) 경로에 회귀 심판이 없다** → `PlaceDetailPage.tsx`의 `remove(poiId)` 분기(이미 담긴 하트 press)를 누르는 통합테스트가 0이라(목 서버에 DELETE 핸들러는 있다), `remove` 인자를 잘못 바꾸거나 조건을 반전해도 green. 코드는 현재 옳다(`remove(poiId)`가 내부에서 `findSavedPlaceId`로 역인덱스, d02와 같은 함수).
+- **앱 복귀 때 다시 받지 않을 키는 `src/app/entrypoint/queryClient.ts` 의 비공개 거부 목록(`NO_FOCUS_REFETCH`)에 한 줄씩 직접 넣어야 한다**(TRIP-1714) → 목록 밖 키는 기본 `true` 라 새 탐색 카탈로그 쿼리를 추가해도 복귀 때마다 조용히 1건씩 더 나가고, 이를 알려 주는 테스트는 없다(`AppProviders.test` 는 손으로 적은 키 진리표, 통합 하네스는 5탭 기본 경로만 부른다). 지금 빠진 줄: 탐색 인기 숙소 `/stays/curated`(지역 필터를 바꾼 키마다 복귀 1건 — 03b W1, 거부 여부는 사용자 재결정 대기). 정책은 **키 단위**라 탭 밖 화면(숙소 검색·장소 무한 목록)이 같은 키를 읽어도 함께 꺼진다.

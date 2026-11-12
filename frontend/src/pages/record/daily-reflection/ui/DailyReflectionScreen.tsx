@@ -1,4 +1,4 @@
-import type { ReactElement, ReactNode } from 'react';
+import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -9,10 +9,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { formatDayLabel } from '@/entities/trip';
 import { MapView, type MapCenter, type MapPin } from '@/shared/map';
+import { PhotoAccessNotice } from '@/shared/photo/index.view';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { RecordNavBar } from '@/widgets/bottom-nav-bar';
 import type { ReflectionStats } from '@/shared/api/index.schemas';
@@ -20,12 +22,13 @@ import type { ReflectionStats } from '@/shared/api/index.schemas';
 import type { MapNotice } from '../model/missingParts';
 import { ChangeSummaryRow } from './ChangeSummaryRow';
 import { isGuideText } from '../model/fillTemplate';
-import { NarrativeBlock } from './NarrativeBlock';
 import {
   EmptyCircleGlyph,
-  LocationOffGlyph,
+  ReflectionLocationOffGlyph,
   PhotoOffGlyph,
-  RetryGlyph,
+  ReflectionMagazine,
+  ReflectionRetryGlyph,
+  type MagazineVM,
   type RecordBarNav,
 } from '@/features/reflection/index.view';
 import { ReflectionPhotoGrid } from './ReflectionPhotoGrid';
@@ -34,13 +37,13 @@ import { ReflectionStatsRow } from './ReflectionStatsRow';
 /**
  * TRIP-571 · j03 오늘의 회고 화면(순수 프레젠테이션 — VM·콜백 주입, 조회/표시본 조립 0).
  * 조립·조회·표시본 결정은 `pages/record/daily-reflection` 이 진다(이 파일은 `@/shared/*`·`@/entities/*` 만
- * import — 프리뷰 격리 렌더 안전, FSD 경계). 화면은 완성된 `narrative`·`editableText` 를 받고,
+ * import — 프리뷰 격리 렌더 안전, FSD 경계). 화면은 완성된 `magazine`(표시본 포함)·`editableText` 를 받고,
  * `draftNarrative`/`editedNarrative`/`resolveDisplayNarrative` 어느 것도 참조하지 않는다.
  *
  * 5얼굴(TRIP-763: 일차 탭·하단 바·헤더 "편집"은 전 얼굴 공통 크롬. TRIP-1584 — 하단은 홈 5칸 탭바가 아니라 뒤로 + 기록·회고·요약 3칸 바(`RecordNavBar`,
  * 회고 활성)이고 헤더 ‹ 는 그 바의 뒤로가 대신한다. 편집 중엔 바가 빠진다 — 저장·취소 푸터가 키보드 위에 있어야 한다):
- *  - default            : stats · 풀폭 지도(좌표 있을 때만) · 서술 카드 · 사진 그리드 · "확인".
- *  - data-insufficient  : stats(거리 "—") + 지도 자리 사유(제목/본문 2줄) + 서술 + "사진 없음" 자리 · "확인".
+ *  - default            : 매거진(표지·인용문·장면·동선·숫자·해시태그, TRIP-1665) · 풀폭 지도(좌표 있을 때만) · "내 기록"(기분·한 줄 메모·사진 그리드).
+ *  - data-insufficient  : 매거진(숫자 타일의 거리 "—", "수정" 링크 없음) + 지도 자리 사유(제목/본문 2줄) · "내 기록" + "사진 없음" 자리.
  *  - empty              : 빈 원 일러스트 + "오늘 기록된 활동이 없습니다" · 하단 CTA "직접 회고 작성".
  *  - error              : stats 채움(BASIC 카드, INV-U5-07) + 에러 카드(다시 시도) · CTA "직접 회고 작성".
  *  - pending            : (TRIP-1068) 조회·생성 중 안내 본문만 · 하단 CTA 없음(empty 로 접지 않는다, INV-4).
@@ -88,8 +91,8 @@ export interface ReflectionDayTab {
 
 export interface DailyReflectionScreenProps {
   face: ReflectionFace;
-  /** 표시본(reflectionFallback 상류 해소). */
-  narrative: string;
+  /** TRIP-1665 · 매거진 VM(페이지가 `buildMagazineVM` 으로 조립 — 표시본 narrative 도 여기 담긴다). default·data-insufficient 가 그린다. */
+  magazine: MagazineVM;
   /** 편집 시드(페이지 조립, empty 얼굴=''). */
   editableText: string;
   stats: ReflectionStats;
@@ -98,8 +101,8 @@ export interface DailyReflectionScreenProps {
   hidePhotoGrid: boolean;
   // photos 는 읽기만 하므로 readonly — 호출자가 `[] as const` 로 넘겨도 받는다(가변 배열도 그대로 할당됨).
   photos: readonly { uri: string }[];
-  /** TRIP-1445 · AI 장면 블록(없으면 안 그린다). */
-  scenesBlock?: ReactNode;
+  /** TRIP-1803 — 이 기기에서 못 푼 사진 장수. 1 이상이면 격자 아래 한 줄 + 권한 안내. 미주입 = 없음. */
+  unresolvedPhotoCount?: number;
   changeSummary?: string | null;
   mapCenter?: MapCenter;
   mapPins?: MapPin[];
@@ -109,6 +112,8 @@ export interface DailyReflectionScreenProps {
   activeDay?: number;
   /** TRIP-762(default) — 일차 탭 선택. */
   onSelectDay?: (day: number) => void;
+  /** TRIP-1757 — 곁들이 조회(여행·방문·방문별 사진) 중 404 아닌 실패가 있다. 주면 일차 칩 줄 아래에 한 줄 + [다시 시도](편집 중엔 없음). 미주입 = 줄 없음. */
+  partialError?: { onRetry: () => void; retrying: boolean };
   /** TRIP-1584 — 하단 바(기록·회고·요약)의 칸 이동 콜백 묶음. 미주입이면 바를 그리지 않는다(프리뷰·무회귀 테스트). */
   recordBar?: RecordBarNav;
   /**
@@ -139,14 +144,14 @@ export interface DailyReflectionScreenProps {
 
 export function DailyReflectionScreen({
   face,
-  narrative,
+  magazine,
   editableText,
   stats,
   distanceDash,
   mapNotice,
   hidePhotoGrid,
   photos,
-  scenesBlock,
+  unresolvedPhotoCount = 0,
   changeSummary,
   mapCenter,
   mapPins,
@@ -154,6 +159,7 @@ export function DailyReflectionScreen({
   activeDay,
   onSelectDay,
   recordBar,
+  partialError,
   isToday = true,
   mood,
   shortMemo,
@@ -313,7 +319,7 @@ export function DailyReflectionScreen({
       testID="reflection-daily-map-notice"
       className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
     >
-      <LocationOffGlyph size={30} />
+      <ReflectionLocationOffGlyph size={30} />
       {mapNotice ? (
         // 제목·본문을 각각 leaf Text 로 — 객체를 한 슬롯에 넣으면 React child 에러라 2줄로 나눈다.
         <>
@@ -345,6 +351,7 @@ export function DailyReflectionScreen({
         <View className="flex-1" />
         {!editing ? (
           <Pressable
+            accessibilityRole="button"
             testID="reflection-daily-edit"
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             onPress={handleEnterEdit}
@@ -368,6 +375,7 @@ export function DailyReflectionScreen({
               : formatDayLabel(tab.day);
             return (
               <Pressable
+                accessibilityRole="button"
                 key={tab.day}
                 testID={`reflection-daily-day-tab-${tab.day}`}
                 // disabled 는 누름을 막고 RN 이 accessibilityState.disabled 로도 합쳐 싣는다.
@@ -390,6 +398,30 @@ export function DailyReflectionScreen({
               </Pressable>
             );
           })}
+        </View>
+      ) : null}
+
+      {/* TRIP-1757 — 곁들이 조회 실패 한 줄. 얼굴과 무관하게(오류 얼굴 포함) 편집 중이 아닐 때 칩 줄 바로 아래. */}
+      {!editing && partialError ? (
+        <View
+          testID="reflection-daily-partial-error"
+          className="mx-lg mb-sm flex-row items-center justify-between gap-sm rounded-[12px] bg-surface-soft px-md py-sm"
+        >
+          <Text className="shrink font-noto-bold text-[13px] font-bold text-ink">
+            일부 정보를 불러오지 못했어요
+          </Text>
+          <Pressable
+            testID="reflection-daily-partial-retry"
+            accessibilityRole="button"
+            onPress={partialError.onRetry}
+            disabled={partialError.retrying}
+            accessibilityState={{ disabled: partialError.retrying }}
+            hitSlop={8}
+          >
+            <Text className="font-noto-bold text-[13px] font-bold text-primary-text">
+              다시 시도
+            </Text>
+          </Pressable>
         </View>
       ) : null}
 
@@ -467,71 +499,38 @@ export function DailyReflectionScreen({
                   직접 회고를 작성할 수 있어요
                 </Text>
                 <Pressable
+                  accessibilityRole="button"
                   testID="reflection-daily-retry"
                   onPress={onConfirm}
                   className="mt-sm flex-row items-center gap-[6px] rounded-button border border-hairline-strong bg-canvas px-lg py-sm"
                 >
-                  <RetryGlyph size={16} />
+                  <ReflectionRetryGlyph size={16} />
                   <Text className="font-noto-bold text-label font-bold text-ink">
                     다시 시도
                   </Text>
                 </Pressable>
               </View>
             </>
-          ) : face === 'default' ? (
-            <>
-              <ReflectionStatsRow stats={stats} distanceDash={distanceDash} />
-
-              {/* 좌표 없으면 지도 자리 자체를 그리지 않는다(TRIP-935 R7 — 늘 빈 점선 박스였다). */}
-              {hasMap ? mapArea : null}
-
-              {/* 서술 카드 — 헤드 "오늘의 기록" + "수정"(편집 진입, 죽은 링크 아님) + 본문(NarrativeBlock). */}
-              <View className="w-full gap-sm rounded-card bg-surface-soft px-lg py-md">
-                <View className="flex-row items-center">
-                  <Text className="font-noto-bold text-card-title font-bold text-ink">
-                    오늘의 기록
-                  </Text>
-                  <View className="flex-1" />
-                  <Pressable
-                    testID="reflection-daily-narrative-edit"
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    onPress={handleEnterEdit}
-                  >
-                    <Text className="font-noto-bold text-label font-bold text-primary">
-                      수정
-                    </Text>
-                  </Pressable>
-                </View>
-                <NarrativeBlock narrative={narrative} />
-              </View>
-
-              {scenesBlock}
-
-              {hidePhotoGrid ? (
-                <View
-                  testID="reflection-daily-photo-empty"
-                  className="w-full items-center gap-sm rounded-card border-[1.5px] border-dashed border-hairline-strong bg-surface-soft px-lg py-3xl"
-                >
-                  <PhotoOffGlyph size={26} />
-                  <Text className="text-label text-muted">사진 없음</Text>
-                </View>
-              ) : (
-                <ReflectionPhotoGrid photos={photos} />
-              )}
-
-              {extrasBlock}
-
-              {/* changeSummary 는 default 얼굴에서 그리지 않는다(prop 은 무회귀로 유지). */}
-            </>
           ) : (
-            // data-insufficient (무회귀 — 기존 표면 유지).
+            // default · data-insufficient — 매거진(TRIP-1665) 아래에 "내 기록"(기분·한 줄 메모·사진 그리드). 서술 수정은 인용문 옆
+            // "수정"(default 만 — data-insufficient 엔 없다). 방문<2 면 숫자 타일의 거리가 "—", 지도 자리 사유가 매거진 아래에 선다.
             <>
-              <ReflectionStatsRow stats={stats} distanceDash={distanceDash} />
-              {mapArea}
+              <ReflectionMagazine
+                vm={magazine}
+                testIDPrefix="reflection-daily"
+                onEditNarrative={
+                  face === 'default' ? handleEnterEdit : undefined
+                }
+              />
 
-              <NarrativeBlock narrative={narrative} />
+              {/* 좌표 없으면 지도 자리 자체를 그리지 않는다(TRIP-935 R7 — 늘 빈 점선 박스였다). data-insufficient 는 누락 사유를 표기한다. */}
+              {face === 'default' ? (hasMap ? mapArea : null) : mapArea}
 
-              {scenesBlock}
+              <Text className="font-noto-bold text-section font-bold text-ink">
+                내 기록
+              </Text>
+
+              {extrasBlock}
 
               {hidePhotoGrid ? (
                 <View
@@ -545,9 +544,20 @@ export function DailyReflectionScreen({
                 <ReflectionPhotoGrid photos={photos} />
               )}
 
-              {extrasBlock}
+              {unresolvedPhotoCount > 0 ? (
+                <>
+                  <Text
+                    testID="reflection-daily-photo-unresolved"
+                    className="font-noto text-caption text-muted"
+                  >
+                    {`불러올 수 없는 사진 ${unresolvedPhotoCount}장`}
+                  </Text>
+                  <PhotoAccessNotice testID="reflection-daily-photo-access-notice" />
+                </>
+              ) : null}
 
-              {changeSummary ? (
+              {/* changeSummary 는 data-insufficient 에서만 그린다(default 에선 prop 만 무회귀로 유지). */}
+              {face === 'data-insufficient' && changeSummary ? (
                 <ChangeSummaryRow changeSummary={changeSummary} />
               ) : null}
             </>
@@ -558,6 +568,7 @@ export function DailyReflectionScreen({
           <View className="w-full bg-canvas px-lg pb-md pt-sm">
             <View className="flex-row gap-sm">
               <Pressable
+                accessibilityRole="button"
                 testID="reflection-daily-edit-cancel"
                 onPress={handleCancel}
                 className="h-12 flex-1 items-center justify-center rounded-button border border-hairline-strong bg-canvas"
@@ -566,23 +577,15 @@ export function DailyReflectionScreen({
                   취소
                 </Text>
               </Pressable>
-              <Pressable
+              <Button
                 testID="reflection-daily-edit-save"
+                size="md"
                 disabled={!canSave}
-                accessibilityState={{ disabled: !canSave }}
                 onPress={handleSave}
-                className={`h-12 flex-1 items-center justify-center rounded-button ${
-                  canSave ? 'bg-primary' : 'bg-surface-strong'
-                }`}
+                className="flex-1"
               >
-                <Text
-                  className={`font-noto-bold text-card-title font-bold ${
-                    canSave ? 'text-on-primary' : 'text-muted-soft'
-                  }`}
-                >
-                  저장
-                </Text>
-              </Pressable>
+                저장
+              </Button>
             </View>
           </View>
         ) : face === 'empty' || face === 'error' ? (
@@ -590,15 +593,13 @@ export function DailyReflectionScreen({
           // 회피 컨테이너 안·스크롤 뒤에 둬야 한 줄 입력 중 키보드에 밀려 올라와 CTA 가 안 가린다(실기 6-b).
           // pb-[104px] 는 탭바(96) 위에 앉히는 여백 — 키보드가 떠도 남는 빈 띠는 그대로 둔다(Seed Q4).
           <View className="w-full bg-canvas px-lg pb-[104px] pt-[8px]">
-            <Pressable
+            <Button
               testID="reflection-daily-compose"
               onPress={handleEnterEdit}
-              className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
+              className="w-full"
             >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                직접 회고 작성
-              </Text>
-            </Pressable>
+              직접 회고 작성
+            </Button>
           </View>
         ) : null}
       </KeyboardAvoidingView>

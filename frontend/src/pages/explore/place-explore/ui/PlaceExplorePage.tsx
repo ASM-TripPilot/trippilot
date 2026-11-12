@@ -32,6 +32,8 @@ import {
   useDebouncedValue,
 } from '@/shared/lib/useDebouncedValue';
 import { BottomTabBar, shellTabHref } from '@/shared/ui/BottomTabBar';
+import { SAVED_LIST_LOAD_FAILED_TOAST } from '@/shared/ui/savedListLoadToast';
+import { showToast } from '@/shared/ui/Toast';
 import { goBackOr } from '@/shared/lib/goBackOr';
 
 import { resolvePlaceListState } from '@/features/explore';
@@ -46,26 +48,29 @@ import { useMultiRegionPlaces } from '@/features/explore';
 import { useSavedPlaces } from '@/features/save-place';
 import { regionPickerHref } from '@/features/explore';
 import { isWizardOrigin } from '@/features/create-trip';
-import { SERVICE_REGIONS } from '@/entities/trip';
+import { placeRegionQueries, SERVICE_REGIONS } from '@/entities/trip';
 import { PlaceExploreScreen } from './PlaceExploreScreen';
-import { useTripWizardStore } from '@/features/create-trip';
+import { openNewTripWizard } from '@/features/create-trip';
 
 // 지역 미지정이면 서버 전국 조회 대신 서비스 지역을 묻는다(TRIP-1560) — 홈·d01 과 같은 배열·순서지만 d04 는 seed 가 키에 붙어 캐시는 따로다(TRIP-1563).
 const SERVICE_REGION_NAMES = SERVICE_REGIONS.map((r) => r.name);
 
 export function PlaceExplorePage(): ReactElement {
-  const params = useLocalSearchParams<{ region?: string | string[] }>();
-  const { region } = params;
+  const params = useLocalSearchParams<{
+    region?: string | string[];
+    regionCode?: string | string[];
+  }>();
+  const { region, regionCode } = params;
   // 위저드에서 들른 d04 는 ＋(새 여행 = reset)를 그리지 않는다 — 진행 중 입력 보존(TRIP-1026).
   const fromWizard = isWizardOrigin(params);
-  // '더 담기'가 여행 지역들을 배열로 실어 보낸다(TRIP-687, 같은 키 반복 → 배열). 1지역은 기존
+  // '더 담기'가 여행 지역들을 실어 보낸다(TRIP-687 — 실제 주소엔 쉼표로 합쳐 온다, `placeRegionQueries`). 1지역은 기존
   // 무한스크롤 경로를, 0지역(서비스 지역 전체, TRIP-1560)·2+지역은 지역별 병렬 조회 후 병합 경로를
   // 탄다(어느 쪽이 그려지는지는 6-b 실기). 칩 라벨은 라우트 `regions` 그대로라 0지역이면 '전체 지역'이다.
-  const regions = Array.isArray(region) ? region : region ? [region] : [];
+  const regionQueries = placeRegionQueries(region, regionCode);
+  const regions = regionQueries.map((query) => query.region);
   const isMultiRegion = regions.length !== 1;
-  const singleRegion = regions.length === 1 ? regions[0] : undefined;
   const multiQueryRegions =
-    regions.length === 0 ? SERVICE_REGION_NAMES : regions;
+    regions.length === 0 ? SERVICE_REGION_NAMES : regionQueries;
 
   // 진입마다 한 번 정하는 무작위 순서 번호표(TRIP-1563) — 칩·검색·이어받기·재시도·지역 바꾸기에도 그대로다.
   // 지연 초기값이라 마운트 때 1회만 만들고, 첫 렌더에 이미 있어야 seed 없는 random 요청이 안 나간다(INV-4).
@@ -88,7 +93,7 @@ export function PlaceExplorePage(): ReactElement {
   // 헛조회를 막고, 단일/0지역이면 병합 조회를 끈다.
   const infinite = usePlacesInfinite(
     {
-      ...(singleRegion ? { region: singleRegion } : {}),
+      ...(regions.length === 1 ? regionQueries[0] : {}),
       ...(selectedCategory ? { category: selectedCategory } : {}),
       ...(trimmedQuery ? { q: trimmedQuery } : {}),
       order: 'random',
@@ -110,7 +115,13 @@ export function PlaceExplorePage(): ReactElement {
     hasNextPage,
     isFetchingNextPage,
   } = isMultiRegion ? multi : infinite;
-  const { isSaved, save, remove, savedPoiIds } = useSavedPlaces({ isAuthed });
+  const { isSaved, save, remove, savedPoiIds, loadFailureConfirmed } =
+    useSavedPlaces({ isAuthed });
+  // TRIP-1754 — 담은 목록 확정 실패가 켜지는 순간 토스트 1회(하트는 그대로 눌린다).
+  const savedListFailed = Boolean(loadFailureConfirmed);
+  useEffect(() => {
+    if (savedListFailed) showToast(SAVED_LIST_LOAD_FAILED_TOAST);
+  }, [savedListFailed]);
 
   const listState = resolvePlaceListState({
     isPending,
@@ -219,11 +230,10 @@ export function PlaceExplorePage(): ReactElement {
         onChangeSearchText={handleChangeSearchText}
         onToggleSave={handleToggleSave}
         onPressCard={handlePressCard}
-        onPressCreateTrip={() => {
-          // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
-          useTripWizardStore.getState().reset();
-          router.push('/trips/new/step1');
-        }}
+        onPressCreateTrip={guardPress(() => {
+          // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074). 연타는 한 번만(TRIP-1775).
+          openNewTripWizard(router);
+        })}
         hideCreateTrip={fromWizard}
         onPressSavedPlaces={() =>
           // 위저드 출처면 바로 아래가 d02 select 다 — save 모드를 새로 열면 그 CTA 가 드래프트를

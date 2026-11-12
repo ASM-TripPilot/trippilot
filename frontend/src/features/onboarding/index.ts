@@ -1,26 +1,22 @@
 export { ONBOARDING_TERMS_TYPES } from './model/onboardingTermsTypes';
 export { resolveOnboardingStep } from './model/resolveOnboardingStep';
-export type {
-  OnboardingProgress,
-  OnboardingStep,
-} from './model/resolveOnboardingStep';
+export type { OnboardingProgress } from './model/resolveOnboardingStep';
 export { termsDocumentTitle } from './model/termsDocumentTitle';
 export {
   ActivityGlyph,
   ArtGlyph,
-  BackChevronGlyph,
   BalanceGlyph,
   BikeGlyph,
   CameraGlyph,
-  CarGlyph,
-  CheckGlyph,
+  OnboardingCarGlyph,
+  OnboardingCheckGlyph,
   CoffeeCupGlyph,
-  FamilyGlyph,
+  OnboardingFamilyGlyph,
   FerrisWheelGlyph,
-  ForkKnifeGlyph,
-  FriendsGlyph,
-  HeartGlyph,
-  InfoCircleGlyph,
+  OnboardingForkKnifeGlyph,
+  OnboardingFriendsGlyph,
+  OnboardingHeartGlyph,
+  OnboardingInfoCircleGlyph,
   LandmarkGlyph,
   LightningGlyph,
   MoonGlyph,
@@ -28,14 +24,12 @@ export {
   ParentsGlyph,
   PetGlyph,
   PositiveCheckGlyph,
-  RegenerateGlyph,
-  ShoppingBagGlyph,
+  OnboardingShoppingBagGlyph,
   SkipChevronGlyph,
   SoloPersonGlyph,
   SunGlyph,
   TaxiGlyph,
-  TransitGlyph,
-  ViewChevronGlyph,
-  WalkGlyph,
+  OnboardingTransitGlyph,
+  OnboardingWalkGlyph,
 } from './ui/OnboardingGlyphs';
 export type { GlyphComponent } from './ui/OnboardingGlyphs';

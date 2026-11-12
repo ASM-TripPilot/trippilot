@@ -179,6 +179,7 @@ class RequestStringBoundGateTest {
 
         /** 상한이 없어도 되는 필드와 그 사유. 키는 `FQCN.필드`(중첩 클래스는 `바깥$안`). */
         val EXEMPT = mapOf(
+            "com.trippilot.itinerarygeneration.adapter.in.web.EditSlotRequest.displayCategory" to "닫힌 집합 — 서비스가 장소 분류 어휘로 판정해 밖이면 400(TRIP-1801). 길이로 저장까지 갈 수 없다",
             // 어휘·형식 판정이 저장 전에 400 으로 막는다
             "$ASSISTANT.FeedbackRequest.rating" to "enum 판정(어휘 밖 400)",
             "$ASSISTANT.FeedbackRequest.reason" to "enum 판정(어휘 밖 400)",
@@ -194,6 +195,7 @@ class RequestStringBoundGateTest {
             "$REFLECTION.EditReflectionRequest.shortMemo" to "도메인이 60자(코드 포인트)를 판정한다(400)",
             "$TRIP.DestinationDto.regionCode" to "선택 가능한 지역 코드인지 카탈로그와 대조한다(아니면 400)",
             "$PLACE.ProposalPoi.category" to "8종 어휘 판정(밖이면 unknown_category 로 탈락)",
+            "$PLACE.ProposalProvenance.cpyrhtDivCd" to "ImageLicense 어휘 판정(Type1·Type3 밖이면 null) — 원문은 저장하지 않는다",
             // 길이 제한 없는 열에 들어간다
             "$ARCHIVE.RouteDayUploadRequest.segments" to "길이 제한 없는 열 — actual_route_day.segments 는 text[]",
             "$REPLAN.StartReplanRequest.reasons" to "길이 제한 없는 열 — replan_session.reasons 는 text[](@Size 는 원소 수 10)",

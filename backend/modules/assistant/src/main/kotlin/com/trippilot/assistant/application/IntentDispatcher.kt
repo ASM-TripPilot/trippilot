@@ -15,6 +15,8 @@ import java.util.UUID
  * @property utterance 사용자가 한 말(검사를 통과한 것). **일정 변경 제안만 읽는다** — 편집 경계가 말을 받아 편집으로 옮기기
  *   때문이다. 화면에 그리지도 로그에 남기지도 않는다(SEC-U8-06). 버튼을 눌러 온 턴이면 null.
  * @property deadlineMs 이 턴에 남은 시간 중 상대 호출 하나에 줄 수 있는 몫(PERF-U8-01·02).
+ * @property excludedPoiIds "다른 데는?" 다시 묻기에서 앞서 제안했던 곳 — 일정 변경 제안만 읽는다. 해석이 준 값이 아니라 **우리 대화 기록**
+ *   (지난 제안 카드)에서 읽은 값이라 상대가 지어낼 수 없다. 보통은 빈다.
  */
 data class DispatchContext(
     val accountId: UUID,
@@ -26,6 +28,7 @@ data class DispatchContext(
     val now: Instant,
     val utterance: String? = null,
     val deadlineMs: Long = 0,
+    val excludedPoiIds: Set<UUID> = emptySet(),
 ) {
     val hasTrip: Boolean get() = trip != null && tripId != null
 }

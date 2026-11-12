@@ -437,6 +437,32 @@
         "title": "DayScheduleSchema",
         "type": "object"
       },
+      "DeferredPlaceSchema": {
+        "additionalProperties": false,
+        "description": "다른 날 가겠다고 해서 이 날에 넣지 않은 곳 (F-7) — 앱이 '그 날에 넣어 다시 짜기' 한 탭을 그린다.\n\n`name` 은 등록 POI 이름이다(사용자가 쓴 말이 아니다). `date` 는 여행 날짜로 환산한 그 날이다.",
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "poi_id": {
+            "title": "Poi Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "poi_id",
+          "name",
+          "date"
+        ],
+        "title": "DeferredPlaceSchema",
+        "type": "object"
+      },
       "DialogueAnswerSchema": {
         "additionalProperties": false,
         "description": "오케스트레이터가 AI 안에서 끝낸 답 (outcome `ANSWER`, assistant-orchestrator FD DE §2.3·§3.2).\n\n문장의 시각·거리는 facts(Provider·스냅샷 검증값)에서만 온다(INV-2) — 소요시간 필드는 없다(INV-3).\n`text` 상한 600 은 게이트 상한(400) + 와이어 여유다.",
@@ -558,6 +584,16 @@
             },
             "title": "Base Stays",
             "type": "array"
+          },
+          "device_location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CoordSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "itinerary": {
             "anyOf": [
@@ -830,6 +866,11 @@
             },
             "title": "Memories",
             "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1110,8 +1151,25 @@
             "title": "Confirm",
             "type": "boolean"
           },
+          "excluded_poi_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Excluded Poi Ids",
+            "type": "array"
+          },
           "itinerary": {
             "$ref": "#/components/schemas/ItineraryPayload"
+          },
+          "preference_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceProfileSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "request_meta": {
             "$ref": "#/components/schemas/RequestMetaSchema"
@@ -1120,6 +1178,13 @@
             "format": "date",
             "title": "Target Date",
             "type": "string"
+          },
+          "time_windows": {
+            "items": {
+              "$ref": "#/components/schemas/TimeWindowSchema"
+            },
+            "title": "Time Windows",
+            "type": "array"
           },
           "transport_mode": {
             "anyOf": [
@@ -1136,6 +1201,18 @@
             "minLength": 1,
             "title": "Trip Id",
             "type": "string"
+          },
+          "trip_start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trip Start Date"
           },
           "utterance": {
             "anyOf": [
@@ -1272,7 +1349,7 @@
       },
       "ExplanationsResponse": {
         "additionalProperties": false,
-        "description": "slot_key(BR-U2-04: \"날짜#poi_id\") → 추천 이유 해시태그(공백 구분, 최대 5개 — 예 `\"#뷰맛집 #혼자여행\"`).\n실패는 빈 맵 + 사유(침묵 금지). 여러 날은 날마다 따로 설명해, 일부 날만 실패하면 성공한 날 이유 +\n`reason=\"explanation_partial: …\"` 이고 `is_fallback=false` 다(전부 실패해야 빈 맵).\n\n`alternative_explanations`(TRIP-887, additive): 요청 payload 의 슬롯별 차선책\n(`slots[].alternatives[]`)에 대한 \"이 자리 대신 골라도 좋은 이유\" 1문장 — 키는\n`\"{date}#{alt_poi_id}\"`(같은 선택지가 여러 슬롯에 있으면 날짜별 키마다 같은 문장).\n배치 슬롯 설명 **다음의 두 번째 호출**(잔여 예산만 씀)이라 이 맵이 비어도 `explanations`\n는 영향이 없다. 비면 `alternatives_reason` 이 사유를 싣는다(배치 설명이 실패해 시도조차\n못 했으면 `slot_explanations_unavailable`) — 백엔드는 AI 템플릿 rationale 을 그대로 쓴다.\n**전제**: 요청 payload 의 `slots[].alternatives[]` 가 채워져 와야 한다 — 백엔드가 저장한\n차선책을 되돌려 보내기 전(현재 `toWire()` 는 빈 배열)에는 항상 빈 맵 + `null` 이다.",
+        "description": "slot_key(BR-U2-04: \"날짜#poi_id\") → 추천 이유 해시태그(공백 구분, 최대 5개 — 예 `\"#뷰맛집 #혼자여행\"`).\n실패는 빈 맵 + 사유(침묵 금지). 여러 날은 날마다 따로 설명해, 일부 날만 실패하면 성공한 날 이유 +\n`reason=\"explanation_partial: …\"` 이고 `is_fallback=false` 다(전부 실패해야 빈 맵).\n\n`alternative_explanations`(TRIP-887, additive): 요청 payload 의 슬롯별 차선책\n(`slots[].alternatives[]`)에 대한 \"이 자리 대신 골라도 좋은 이유\" 1문장 — 키는\n`\"{date}#{alt_poi_id}\"`(같은 선택지가 여러 슬롯에 있으면 날짜별 키마다 같은 문장).\n배치 슬롯 설명 **다음의 두 번째 호출**(잔여 예산만 씀)이라 이 맵이 비어도 `explanations`\n는 영향이 없다. 비면 `alternatives_reason` 이 사유를 싣는다(배치 설명이 실패해 시도조차\n못 했으면 `slot_explanations_unavailable`) — 백엔드는 AI 템플릿 rationale 을 그대로 쓴다.\n차선책도 날마다 따로 불러, 일부 날만 실패하면 성공한 날 문장 +\n`alternatives_reason=\"alternative_explanation_partial: …\"` 이다(실패한 날은 템플릿 그대로).\n**전제**: 요청 payload 의 `slots[].alternatives[]` 가 채워져 와야 한다 — 백엔드가 저장한\n차선책을 되돌려 보내기 전(현재 `toWire()` 는 빈 배열)에는 항상 빈 맵 + `null` 이다.",
         "properties": {
           "alternative_explanations": {
             "additionalProperties": {
@@ -1875,6 +1952,28 @@
         "title": "PreferenceProfileSchema",
         "type": "object"
       },
+      "PriorRequestSchema": {
+        "additionalProperties": false,
+        "description": "같은 날 반영된(되돌리지 않은) 앞 다시 짜기 한 건 (F-8 — 요청 간 기억 정식안).\n\n`kept_poi_ids` 는 그 회차 응답의 `requested_poi_ids` 를 BE 가 세션에 남겼다가 되싣는 것이다 — 그 회차가 **요청 때문에**\n넣은 곳(이름으로 집은 곳·밤에 놀기·한 곳 추가·그때 이어받은 기억). `text` 는 그 회차의 사유 한 줄(BE `changeReason` —\n칩 키·자유입력을 ` · ` 로 이은 것, `change_log.reason` 과 같은 줄)이다. 읽는 것은 아직 id 뿐이다.",
+        "properties": {
+          "kept_poi_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30,
+            "title": "Kept Poi Ids",
+            "type": "array"
+          },
+          "text": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "title": "PriorRequestSchema",
+        "type": "object"
+      },
       "ReflectionGenerateRequest": {
         "additionalProperties": false,
         "description": "회고 템플릿 생성 요청 — visits ≥ 1 (0건은 트리거 단에서 미발생, 이중 방어는 도메인).",
@@ -2228,7 +2327,7 @@
       },
       "RepairItineraryRequest": {
         "additionalProperties": false,
-        "description": "`POST /ai/v1/itinerary/repair` — 백엔드 포트 `repair(solution, violations)` 대응 + IO-1.",
+        "description": "`POST /ai/v1/itinerary/repair` — 백엔드 포트 `repair(solution, violations)` 대응 + IO-1.\n\n`request_meta.requested_at` 은 '지금'이다 — 그보다 먼저 시작한 곳은 수리·재검증 밖에 두고 원 시각 그대로\n돌려준다(오늘 가장 최근에 시작한 곳만 다음 일정의 출발점으로 남는다, TRIP-1709).",
         "properties": {
           "anchors": {
             "items": {
@@ -2239,6 +2338,16 @@
           },
           "itinerary": {
             "$ref": "#/components/schemas/ItineraryPayload"
+          },
+          "preference_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceProfileSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "request_meta": {
             "$ref": "#/components/schemas/RequestMetaSchema"
@@ -2396,6 +2505,14 @@
           "preference_profile": {
             "$ref": "#/components/schemas/PreferenceProfileSchema"
           },
+          "prior_requests": {
+            "items": {
+              "$ref": "#/components/schemas/PriorRequestSchema"
+            },
+            "maxItems": 20,
+            "title": "Prior Requests",
+            "type": "array"
+          },
           "reasons": {
             "items": {
               "type": "string"
@@ -2494,6 +2611,13 @@
         "additionalProperties": false,
         "description": "재계획안 1안. 못 만들면 `itinerary=null` + `empty_reason` (200, IO-7).\n\n`diff` 는 여기 없다 — `i08` 의 \"바뀐 곳 1 · 이동 −6.9km\" 는 `ReplanDiffService` 가\n이미 백엔드에 있고, 원 일정을 가진 쪽이 만드는 것이 맞다.",
         "properties": {
+          "deferred_places": {
+            "items": {
+              "$ref": "#/components/schemas/DeferredPlaceSchema"
+            },
+            "title": "Deferred Places",
+            "type": "array"
+          },
           "empty_reason": {
             "anyOf": [
               {
@@ -2529,6 +2653,13 @@
               "type": "string"
             },
             "title": "Notes",
+            "type": "array"
+          },
+          "requested_poi_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requested Poi Ids",
             "type": "array"
           },
           "resolved_directives": {
@@ -2989,6 +3120,16 @@
           "itinerary": {
             "$ref": "#/components/schemas/ItineraryPayload"
           },
+          "preference_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreferenceProfileSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "request_meta": {
             "$ref": "#/components/schemas/RequestMetaSchema"
           },
@@ -3071,7 +3212,7 @@
       },
       "ViolationSchema": {
         "additionalProperties": false,
-        "description": "하드 제약 위반 1건 — AI 도메인 표현(`code`/`slot_ref`) + 위치 인덱스 **수퍼셋**.\n\n백엔드 도메인은 `(type, dayIndex, slotIndex)`로 지시한다. AI 도메인 타입에는 위치\n인덱스가 없지만, **직렬화 시점에 일정(days)을 스캔해 계산**해서 함께 실어 보낸다\n(routes.locate_slot) — 백엔드 어댑터는 code→type 매핑만 하면 된다.\n`slot_ref`가 일정 어디에도 없으면(예: HC3 미배치 위반 — 슬롯이 없어서 위반인 것)\n인덱스는 null이다. 지어내지 않는다.\n\n`reason_code`(선택, 상황 감지 H1 · BR-SA-17): HC1 하위 코드 — `CLOSED_DAY`(정기 휴무) ·\n`OUT_OF_HOURS`(그 날 열지만 영업창 밖) · `HOLIDAY`(공휴일·명절·날짜 휴무 — `HOLIDAY_CLOSURE_MODE=on`\n일 때만). 다른 HC 는 null 이다. 백엔드 장소 감지가 알림 변형으로 쓴다 — `detail` 은 파싱하지 않는다.",
+        "description": "하드 제약 위반 1건 — AI 도메인 표현(`code`/`slot_ref`) + 위치 인덱스 **수퍼셋**.\n\n백엔드 도메인은 `(type, dayIndex, slotIndex)`로 지시한다. AI 도메인 타입에는 위치\n인덱스가 없지만, **직렬화 시점에 일정(days)을 스캔해 계산**해서 함께 실어 보낸다\n(routes.locate_slot) — 백엔드 어댑터는 code→type 매핑만 하면 된다.\n`slot_ref`가 일정 어디에도 없으면(예: HC3 미배치 위반 — 슬롯이 없어서 위반인 것)\n인덱스는 null이다. 지어내지 않는다.\n\n`code` 는 `HC1`~`HC4`(하드 제약) 또는 `SLOT_ORDER`(2026-11-09, validate 만 낸다) — 받은 일정의 같은 날에서\n화면 순서(배열)와 시각 순서가 어긋난 카드다. `SLOT_ORDER` 의 인덱스는 받은 배열의 그 칸이다(첫 일치가 아니다).\n\n`reason_code`(선택, 상황 감지 H1 · BR-SA-17): HC1 하위 코드 — `CLOSED_DAY`(정기 휴무) ·\n`OUT_OF_HOURS`(그 날 열지만 영업창 밖) · `HOLIDAY`(공휴일·명절·날짜 휴무 — `HOLIDAY_CLOSURE_MODE=on`\n일 때만). 다른 HC 는 null 이다. 백엔드 장소 감지가 알림 변형으로 쓴다 — `detail` 은 파싱하지 않는다.",
         "properties": {
           "code": {
             "title": "Code",
@@ -3594,7 +3735,7 @@
     },
     "/ai/v1/itinerary/repair": {
       "post": {
-        "description": "Plan-B 최소 조정(시각·순서만, POI 불변). 수리 불가면 `repaired=null` + 200(IO-7).",
+        "description": "Plan-B 최소 조정(시각·순서만, POI 불변). 수리 불가면(시각이 거꾸로 든 날 포함) `repaired=null` + 200(IO-7).",
         "operationId": "repair_ai_v1_itinerary_repair_post",
         "requestBody": {
           "content": {
@@ -3636,7 +3777,7 @@
     },
     "/ai/v1/itinerary/validate": {
       "post": {
-        "description": "편집 재검증(HC1~4). 위반은 정상 응답 200 — 변경 차단 판단은 백엔드 몫이다.\n\n`unverified_slots`는 위반이 **아니다** — POI 정본을 못 찾아 HC1·HC2를 아예 못\n본 슬롯(TRIP-537)과 영업 창을 몰라 HC1을 못 본 슬롯(`HOURS_UNKNOWN`)이다.\n위반 0 + 이 목록 비어 있음 = 진짜 통과.",
+        "description": "편집 재검증(HC1~4 · 시각이 거꾸로 든 카드 `SLOT_ORDER`). 위반은 정상 응답 200 — 변경 차단 판단은 백엔드 몫이다.\n\n`unverified_slots`는 위반이 **아니다** — POI 정본을 못 찾아 HC1·HC2를 아예 못\n본 슬롯(TRIP-537)과 영업 창을 몰라 HC1을 못 본 슬롯(`HOURS_UNKNOWN`)이다.\n위반 0 + 이 목록 비어 있음 = 진짜 통과.",
         "operationId": "validate_ai_v1_itinerary_validate_post",
         "requestBody": {
           "content": {

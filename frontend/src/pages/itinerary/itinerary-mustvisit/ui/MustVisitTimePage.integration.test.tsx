@@ -14,10 +14,12 @@ import type {
   SavedPlace,
   Trip,
 } from '@/shared/api/index.schemas';
+import { getGetSavedPlacesQueryKey } from '@/shared/api/index.places';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 
 import { MustVisitTimePage } from './MustVisitTimePage';
 import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
@@ -315,6 +317,51 @@ describe('🔴🔴 I8 · 01b D1 의 위험 — DELETE 성공 후 POST 가 실패
         []
       )
     );
+  });
+});
+
+// TRIP-1827 5-b W4 — 같은 틱 연타는 `guardPress` 400ms 창이 막아 잠금(`submitLock`)이 안 보인다.
+// 잠금의 몫은 "창이 닫힌 뒤, 응답을 기다리는 동안" 들어온 둘째 누름이다 — 그 길을 밟는다.
+describe('TRIP-1827 W4 · 응답 전, 창이 닫힌 뒤 다시 눌러도 DELETE·POST 는 각 1회다', () => {
+  it('DELETE 응답을 붙잡은 채 창을 닫고 [이 시각으로 고정]을 다시 누르면, 요청이 늘지 않고 풀린 뒤 한 번만 되돌아간다', async () => {
+    // 준비 — DELETE 응답을 손으로 붙잡는다. 둘째 DELETE 가 나가도 매달리지 않게 문을 전부 모은다.
+    const releases: (() => void)[] = [];
+    server.use(
+      http.delete(
+        `${BASE}/trips/:tripId/must-visits/:mustVisitId`,
+        async () => {
+          await new Promise<void>((resolve) => releases.push(resolve));
+          return new HttpResponse(null, { status: 204 });
+        }
+      )
+    );
+    renderPage();
+    await ready();
+    ensureFixed(true);
+    pickDateAndStart();
+
+    // 실행 ① — 첫 저장, DELETE 가 출발했지만 응답은 붙잡혀 있다.
+    submit();
+    await waitFor(() => expect(releases).toHaveLength(1));
+
+    // 실행 ② — 400ms 창이 닫힌 것과 같게 만든 뒤 다시 누른다.
+    resetPressGuard();
+    submit();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    // 단언 ① — 응답 전에는 DELETE 1건뿐이다.
+    expect(mustVisitWrites()).toEqual([DELETE_HIT]);
+
+    // 실행 ③ — 붙잡은 응답을 전부 푼다.
+    await act(async () => {
+      releases.forEach((release) => release());
+    });
+
+    // 단언 ② — DELETE·POST 각 1회, 되돌아가기 1회.
+    await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
+    expect(mustVisitWrites()).toEqual([DELETE_HIT, POST_HIT]);
   });
 });
 
@@ -942,6 +989,36 @@ describe('h07 화면 얼굴 — 장소 카드 · 칩 · 시트 · 잠금 · 실�
     );
   });
 
+  // TRIP-1740 AC-7(T12) — 담은 장소의 imageLicense 가 페이지의 place 조립을 지나 h03 요약 사진 칸까지 간다.
+  it('TYPE1 서버 사진이면 사진 칸까지 유형이 닿아 cover 이고 출처 글자가 붙는다', async () => {
+    server.use(
+      http.get(`${BASE}/saved-places`, () =>
+        HttpResponse.json([
+          {
+            ...SAVED[0],
+            place: {
+              ...SAVED[0].place,
+              imageUrl: 'https://img.example.com/a.jpg',
+              imageLicense: 'TYPE1',
+            },
+          },
+        ])
+      )
+    );
+    renderPage();
+    await ready();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('itinerary-mustvisit-time-photo').props.source
+      ).toEqual([{ uri: 'https://img.example.com/a.jpg' }])
+    );
+    expectTypeOnePhotoDelivered(
+      'itinerary-mustvisit-time-photo',
+      'https://img.example.com/a.jpg'
+    );
+  });
+
   it('켜면 "고정" 배지가 서고 끄면 없다 · 시트는 처음엔 닫혀 있고 칸을 눌러야 열린다', async () => {
     renderPage();
     await ready();
@@ -1015,5 +1092,80 @@ describe('h07 화면 얼굴 — 장소 카드 · 칩 · 시트 · 잠금 · 실�
     expect(
       screen.queryAllByTestId('itinerary-mustvisit-time-retry').length
     ).toBe(0);
+  });
+});
+
+// TRIP-1756 · 담은 장소 목록(saved-places) 조회가 실패하면 장소 이름이 자리표시로만 남는데 안내가 없었다(INV-4).
+// 준비=saved-places 응답 지정(+토큰 유무) → 실행=화면 열기 → 단언=오류 줄 글자·저장 목록 요청 수. 안내는 기존 오류 줄을 쓴다(새 testID 0).
+describe('🔴 TRIP-1756 · 담은 장소 조회가 실패하면 이름이 비어 보이는 이유를 말한다', () => {
+  const ERROR = 'itinerary-mustvisit-time-error';
+  const LOAD_FAILED = '여행 정보를 불러오지 못했어요';
+  const savedHits = (): string[] =>
+    observedHits.filter((hit) => hit.includes('/saved-places'));
+
+  async function settle(): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+  }
+
+  it('H1: 로그인한 채 saved-places 500(여행·꼭 갈 곳은 정상) → 오류 줄에 「여행 정보를 불러오지 못했어요」가 뜨고 장소 이름은 없다', async () => {
+    server.use(
+      http.get(
+        `${BASE}/saved-places`,
+        () => new HttpResponse(null, { status: 500 })
+      )
+    );
+
+    renderPage();
+    await ready();
+
+    expect(await screen.findByTestId(ERROR)).toHaveTextContent(LOAD_FAILED);
+    expect(screen.queryByText('부산시립미술관')).toBeNull();
+  });
+
+  it('H2: 게스트(토큰 없음)는 saved-places 를 묻지 않고 오류 줄도 없다 (무회귀 · 선제 green)', async () => {
+    clearAccessToken();
+
+    renderPage();
+    await ready();
+    await settle();
+
+    expect(savedHits()).toHaveLength(0);
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+  });
+
+  it('H3: 이름이 이미 보이는 상태에서 저장 목록 재조회가 실패해도 이름은 남고 오류 줄은 없다 — 이름이 보이면 거짓 표시가 아니다 (선제 green)', async () => {
+    const client = newTestQueryClient({ gcTime: 0 });
+    render(<MustVisitTimePage tripId={TRIP_ID} sourcePoiId={POI_ID} />, {
+      wrapper: createWrapper(client),
+    });
+    await ready();
+    expect(await screen.findByText('부산시립미술관')).toBeOnTheScreen();
+    expect(savedHits()).toHaveLength(1);
+
+    server.use(
+      http.get(
+        `${BASE}/saved-places`,
+        () => new HttpResponse(null, { status: 500 })
+      )
+    );
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: getGetSavedPlacesQueryKey() });
+    });
+    await settle();
+
+    // 재조회가 실제로 나가 실패했다(앵커) — 그래도 화면은 그대로.
+    expect(savedHits()).toHaveLength(2);
+    expect(screen.getByText('부산시립미술관')).toBeOnTheScreen();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+  });
+
+  it('H4: 세 조회가 모두 정상이면 이름이 보이고 오류 줄은 없다 (짝 · 선제 green)', async () => {
+    renderPage();
+    await ready();
+
+    expect(await screen.findByText('부산시립미술관')).toBeOnTheScreen();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
   });
 });

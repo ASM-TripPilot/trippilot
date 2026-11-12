@@ -2,6 +2,7 @@
 // PushGlyphs 색을 여기 상수로 둔다. shared/location/locationColors.ts 와 같은 이유·같은 패턴이다:
 // 값은 tailwind.config 의 primary 와 정확히 같고, .ts 상수 모듈로 분리해 화면 소스에 hex 리터럴을
 // 박지 않는다.
+import { COLOR_TOKENS } from '../config';
 export const PUSH_ICON_COLORS = {
-  primary: '#FF385C',
+  primary: COLOR_TOKENS.primary,
 } as const;

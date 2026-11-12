@@ -1,6 +1,5 @@
 ---
 paths:
-  - "src/features/notification/**"
   - "src/pages/settings/notification-inbox/**"
   - "src/pages/settings/settings-notifications/**"
 ---

@@ -25,7 +25,7 @@ paths:
 | `app/(onboarding)/push.tsx` | 온보딩 푸시 안내 카드 라우트(TRIP-1108) — `PushPage` 얇은 래퍼. 체인 location → push → pref1. 파일 이름이 `notifications`가 아닌 이유: 괄호 그룹은 URL에 안 들어가 `/notifications`(알림함 `app/notifications.tsx`)와 충돌 |
 | `app/(onboarding)/pref1.tsx` | 취향 1/2 라우트(c09) — `PrefStep1Page` 얇은 래퍼 |
 | `app/(onboarding)/pref2.tsx` | 취향 2/2 라우트(c09b) — `PrefStep2Page` 얇은 래퍼 |
-| `app/(tabs)/_layout.tsx` | 탭 네비게이터 — `tabBar` 렌더프롭 + `BottomTabBar` 어댑터(`routeNameToTabKey` index→home · `handlePressTab` home→index). `screenOptions.tabBarStyle`의 `position:'absolute'` 등은 **커스텀 `tabBar` 렌더프롭엔 무효**(react-navigation이 적용 안 함)인 죽은 문자열 — 실제 오버레이는 `shared/ui/BottomTabBar.tsx` 루트의 `absolute bottom-0`이 진다. |
+| `app/(tabs)/_layout.tsx` | **(TRIP-1831) `tabBar` 안 자식 `TabBarWithExit` 가 `useBarExit()` 을 구독해 `<BottomTabBar ghost={exit !== null}/>` + `<BarExitHost/>` 를 그린다 — 허브·기록 ‹ 의 퇴장 모프 호스트 자리(`widgets/bottom-nav-bar/index.exit.ts` 입구만 문다).** 탭 네비게이터 — `tabBar` 렌더프롭 + `BottomTabBar` 어댑터(`routeNameToTabKey` index→home · `handlePressTab` home→index). `screenOptions.tabBarStyle`의 `position:'absolute'` 등은 **커스텀 `tabBar` 렌더프롭엔 무효**(react-navigation이 적용 안 함)인 죽은 문자열 — 실제 오버레이는 `shared/ui/BottomTabBar.tsx` 루트의 `absolute bottom-0`이 진다. |
 | `app/(tabs)/index.tsx` | 홈 탭 — `<HomePage/>`만 렌더하는 10줄 얇은 래퍼(TRIP-1142). 조회·판정·항법은 `pages/home` 소관(`layer-pages.md`). 래퍼 연결은 `tabsShell` 홈 래퍼 it가 심판 |
 | `app/(tabs)/explore.tsx` | 탐색 탭 — `<ExploreLandingPage/>`만 렌더하는 11줄 얇은 래퍼(TRIP-1142). `region` 주소 파라미터는 래퍼가 아니라 page가 `useLocalSearchParams`로 직접 읽는다. 조회·조립·항법은 `pages/explore/explore-landing` 소관. 래퍼 연결은 `tabsShell` 탐색 래퍼 it가 심판 |
 | `app/(tabs)/itinerary.tsx` | 일정 탭 — `<MyTripsListPage/>`만 렌더(리다이렉트 없음). 조회·정렬·카드별 목적지 판정은 `pages/itinerary/itinerary-list` 소관. |
@@ -64,6 +64,7 @@ paths:
 | `app/trips/[tripId]/records/add-visit.tsx` | j01 즉석 방문 장소 피커(TRIP-1072) — `tripId`·`day`만 읽어 `@/pages/record/record-add-visit` 얇은 래퍼(RT1) |
 | `app/trips/[tripId]/records/reflection/[date].tsx` | j03 오늘의 회고 — `tripId`·`date`만 읽어 `@/pages/record/daily-reflection` 얇은 래퍼(G3 스캔이 `@/features/reflection`·조회 훅 직접 import 0을 잠금) |
 | `app/trips/[tripId]/records/summary.tsx` | j04 여행 요약 — `tripId`만 읽어 `@/pages/record/trip-summary` 얇은 래퍼 |
+| `app/trips/[tripId]/records/album.tsx` | (TRIP-1798) 여행 앨범 — `tripId`만 읽어 `@/pages/record/trip-album` 얇은 래퍼. 요약(j04)의 「앨범 보기 ›」에서 push, 하단 바 없음이라 `SplashGate` 의 `BAR_SCREEN_ROUTES`·`NO_SWIPE_ROUTES` 에 **넣지 않았다**(기본 슬라이드·스와이프 뒤로) |
 | `app/trips/[tripId]/records/share.tsx` | j06 공유 카드(전체화면, 탭바 없음) — `tripId`만 읽어 `@/pages/record/share-card` 얇은 래퍼. j04·j03에서 push |
 | `app/records/style.tsx` | j05 여행 스타일 — **계정 단위**라 `[tripId]` 밖(INV-U5-08). params 없이 `@/pages/record/travel-style` 위임. 라우트 `records/index.tsx`는 두지 않는다 — `(tabs)/records.tsx`의 `/records`와 충돌 |
 | `app/trips/[tripId]/planb/draft.tsx` | 재계획 초안 — `tripId`·`sessionId`·`includePoiId`(상황 감지 FE-B — 미포함 안내 재료)만 읽어 `@/pages/live/planb-draft` 얇은 래퍼. 두 라우트의 위임은 `src/__tests__/planbSessionRoutes.test.tsx`(`includePoiId`는 optional이라 tsc가 누락을 못 잡는다 — 2026-11-01 축소에서 지웠다가 되살림) |

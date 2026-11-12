@@ -16,6 +16,7 @@ import {
   wizardDraftData,
 } from '@/test-support/wizardDraftFixture';
 import { routerSpies } from '@/test-support/expoRouterMock';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 
 /**
  * TRIP-575 · 기록 탭 허브 페이지 배선(항법). 옛 `__tests__/tabsRecordsRoute.test` — 라우트 `(tabs)/records.tsx` 는 이 페이지를
@@ -118,6 +119,43 @@ describe('지난 여행 선택 → 여행 요약 (AC-4)', () => {
   });
 });
 
+// TRIP-1806 · 달력 탭의 지난 여행 행까지 그림 이름이 온다. 판정 경계는 recordsCalendar.test.ts, 낭독은 PastTripRow.test.tsx.
+describe('지난 여행 행 — 다른 지역 커버 이름', () => {
+  const NAME = 'record-calendar-past-trip-t9-cover-label';
+  const ended = (over: Partial<Trip>): Trip => ({
+    ...trip({
+      tripId: 't9',
+      title: '제주 여행',
+      startDate: '2026-05-10',
+      endDate: '2026-05-12',
+      status: 'ENDED',
+    }),
+    destinations: [
+      { seq: 1, region: '제주시', nights: 2, regionCode: '50110' },
+    ],
+    ...over,
+  });
+
+  it('첫 목적지와 다른 시도의 그림이면 행에 이름이 보인다', () => {
+    setTrips([ended({ coverKey: '26350' })]);
+
+    renderPage();
+
+    expect(screen.getByTestId(NAME)).toHaveTextContent('그림 · 해운대');
+  });
+
+  it('자동 커버면 행은 있고 이름은 없다', () => {
+    setTrips([ended({ coverKey: null })]);
+
+    renderPage();
+
+    expect(
+      screen.getByTestId('record-calendar-past-trip-t9')
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId(NAME)).toBeNull();
+  });
+});
+
 describe('빈 상태 → 새 여행 (AC-5 · AC-1)', () => {
   it('저장 여행 0건이면 placeholder가 사라지고 새 여행 버튼이 위저드로 push한다', () => {
     setTrips([]);
@@ -168,6 +206,8 @@ describe('월 이동 상태 전이 (AC-6)', () => {
 // 새지 않게, push 가 불리는 **그 순간** 드래프트가 새 여행의 얼굴(스토어 초기값)인지 잰다.
 // 위저드 안 왕복(더 담기 완료·2/4 '처음부터')은 비우지 않는다 — `tripWizardEntryCensus` 참고.
 afterEach(resetWizardDraft);
+// 새 여행 입구는 모듈 전역 연타 창(400ms)을 연다(TRIP-1775) — 앞 테스트의 창이 뒤 테스트의 첫 누름을 삼키지 않게.
+afterEach(resetPressGuard);
 
 describe('🔴 1012-B1 · 기록 빈 상태 [새 여행] 은 직전 드래프트를 비우고 위저드로 간다', () => {
   it('저장 여행 0건에서 누르면 push 시점의 드래프트가 새 여행의 초기값이고, push 는 step1 로 1회다', () => {

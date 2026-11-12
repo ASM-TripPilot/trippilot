@@ -139,6 +139,75 @@ class ItineraryApiIT : AbstractPostgresIntegrationTest() {
     }
 
     @Test
+    fun `슬롯 표시값 — 이 여행 슬롯만 바뀌고 원본 이름 다른 여행 places 는 그대로다(TRIP-1801)`() {
+        val token = newToken()
+        val trip = tripOneDay(token)
+        val other = tripOneDay(token)
+        val poi = poiId(token)
+        val seed = { t: String ->
+            itineraries.replaceForTrip(
+                UUID.fromString(t),
+                Itinerary.create(UUID.fromString(t), SolveMode.FULL_AI, GenerationMode.FULLY_AI, isFallback = false,
+                    days = listOf(ItineraryDay.of(LocalDate.parse("2026-08-01"), 0, listOf(VisitSlot.of(UUID.fromString(poi), null, 0, LocalTime.parse("09:00"), LocalTime.parse("10:00"))))),
+                    now = Instant.parse("2026-08-01T00:00:00Z"),
+                ),
+            )
+        }
+        seed(trip); seed(other)
+        val original = call(HttpMethod.GET, "/api/v1/places/$poi", token).second
+        fun body(display: String) = """{"days":[{"date":"2026-08-01","slots":[{"poiId":"$poi","startAt":"09:00:00","endAt":"10:00:00","isFixed":false,"endsNextDay":false$display}]}]}"""
+
+        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, body(""","displayName":"  새 이름 ","displayCategory":"맛집"""")).first shouldBe 200
+
+        val slot = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token).second["days"][0]["slots"][0]
+        slot["displayName"].asText() shouldBe "새 이름"
+        slot["displayCategory"].asText() shouldBe "맛집"
+        slot["nameKo"].asText() shouldBe original["nameKo"].asText() // 장소 원본 그대로(INV-1)
+        slot["category"].asText() shouldBe original["category"].asText()
+        call(HttpMethod.GET, "/api/v1/places/$poi", token).second shouldBe original
+        call(HttpMethod.GET, "/api/v1/trips/$other/itinerary", token).second["days"][0]["slots"][0]["displayName"].isNull shouldBe true
+
+        // 거부면 아무것도 안 바뀐다
+        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, body(""","displayName":"다른 이름","displayCategory":"FOOD"""")).first shouldBe 400
+        call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary", token).second["days"][0]["slots"][0]["displayName"].asText() shouldBe "새 이름"
+
+        // 상한은 코드포인트로 잰다 — 이모지 60자는 받고(UTF-16 길이로 재면 거절된다) 61자는 400 이다.
+        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, body(""","displayName":"${"😀".repeat(61)}"""")).first shouldBe 400
+        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, body(""","displayName":"${"😀".repeat(60)}"""")).first shouldBe 200
+        call(HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token, body(""","displayName":"새 이름","displayCategory":"맛집"""")).first shouldBe 200
+
+        // 확정(동결 재조립)도 잃지 않는다
+        call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/confirm", token).second["days"][0]["slots"][0]["displayName"].asText() shouldBe "새 이름"
+    }
+
+    @Test
+    fun `슬롯 표시값 — 리비전 jsonb 왕복으로 되돌리면 돌아온다(TRIP-1801)`() {
+        val token = newToken()
+        val trip = tripOneDay(token)
+        val poi = poiId(token)
+        itineraries.replaceForTrip(
+            UUID.fromString(trip),
+            Itinerary.create(UUID.fromString(trip), SolveMode.FULL_AI, GenerationMode.FULLY_AI, isFallback = false,
+                days = listOf(ItineraryDay.of(LocalDate.parse("2026-08-01"), 0, listOf(VisitSlot.of(UUID.fromString(poi), null, 0, LocalTime.parse("09:00"), LocalTime.parse("10:00"))))),
+                now = Instant.parse("2026-08-01T00:00:00Z"),
+            ),
+        )
+        fun put(display: String) = call(
+            HttpMethod.PUT, "/api/v1/trips/$trip/itinerary", token,
+            """{"days":[{"date":"2026-08-01","slots":[{"poiId":"$poi","startAt":"09:00:00","endAt":"10:00:00","isFixed":false,"endsNextDay":false$display}]}]}""",
+        ).first shouldBe 200
+        put(""","displayName":"새 이름","displayCategory":"맛집"""")
+        put("")
+        val named = call(HttpMethod.GET, "/api/v1/trips/$trip/itinerary/revisions", token).second["revisions"][1] // 최신순 — 0 = 지운 편집, 1 = 이름을 고친 편집(그 앞은 생성이 쌓은 버전)
+
+        val (rc, restored) = call(HttpMethod.POST, "/api/v1/trips/$trip/itinerary/revisions/${named["revisionId"].asText()}/restore", token)
+
+        rc shouldBe 200
+        restored["days"][0]["slots"][0]["displayName"].asText() shouldBe "새 이름"
+        restored["days"][0]["slots"][0]["displayCategory"].asText() shouldBe "맛집"
+    }
+
+    @Test
     fun `자정 넘김 슬롯 저장·조회 — ends_next_day 관통(TRIP-279)`() {
         val token = newToken()
         val trip = newTrip(token)
@@ -673,17 +742,18 @@ fun `차선책이 저장·조회·확정을 관통한다(TRIP-873)`() {
     }
 
     @Test
-    fun `확정 일정 편집 — 여행 시작 전엔 409, 여행 중엔 200(TRIP-999)`() {
+    fun `확정 일정 편집 — 여행 시작 전에도 여행 중에도 200, 확정은 유지(TRIP-999 · TRIP-1710)`() {
         val token = newToken()
 
-        // 여행 전 — 확정 잠금이 산다(BR-U3-28 개정 후에도 남는 절반).
+        // 여행 전 — 확정 잠금이 풀렸다(TRIP-1710). 종전엔 409 라 [직접 수정] 저장이 막다른 길이었다.
         val future = newFutureTrip(token)
         call(HttpMethod.POST, "/api/v1/trips/$future/itinerary", token).first shouldBe 201
         awaitComplete(future, token)
         call(HttpMethod.POST, "/api/v1/trips/$future/itinerary/confirm", token).first shouldBe 200
         val futureStart = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).plusDays(30)
-        call(HttpMethod.PUT, "/api/v1/trips/$future/itinerary", token, """{"days":[{"date":"$futureStart","slots":[]}]}""")
-            .first shouldBe 409
+        val (preRc, preBody) = call(HttpMethod.PUT, "/api/v1/trips/$future/itinerary", token, """{"days":[{"date":"$futureStart","slots":[]}]}""")
+        preRc shouldBe 200
+        preBody["status"].asText() shouldBe "CONFIRMED"
 
         // 여행 중(시작일이 지났다) — 확정 일정도 편집이 열린다(QA #066 회귀 잠금).
         val trip = newTrip(token) // 2026-08-01 시작 — 서버 실 시계 기준 이미 시작됨

@@ -3,11 +3,12 @@
 // 같은 이유·같은 패턴이다: NativeWind 클래스가 아니라 컴포넌트 prop 으로 직접 넘어가는 값이라
 // "토큰"은 아니지만, 값 자체는 tailwind.config 의 primary·ink·body·muted·muted-soft·info 색과 정확히 같다
 // (화면 소스(.tsx)에 hex 리터럴을 직접 박지 않기 위한 의도적 분리).
+import { COLOR_TOKENS } from '../config';
 export const LOCATION_ICON_COLORS = {
-  primary: '#FF385C',
-  ink: '#222222',
-  body: '#3F3F3F',
-  muted: '#6A6A6A',
-  mutedSoft: '#9AA1AB',
-  info: '#0B6E63',
+  primary: COLOR_TOKENS.primary,
+  ink: COLOR_TOKENS.ink,
+  body: COLOR_TOKENS.body,
+  muted: COLOR_TOKENS.muted,
+  mutedSoft: COLOR_TOKENS['muted-soft'],
+  info: COLOR_TOKENS.info,
 } as const;

@@ -21,6 +21,7 @@ routes:
 - `notif-open-settings` 배너 → 미결정이면 OS 권한 창, 이미 거부면 iOS 설정 앱.
 - `notif-return` 설정 앱에서 돌아오면 권한을 다시 읽어 얼굴을 바꾸고, 처음 허용을 읽으면 기기 토큰을 등록한다.
 - `notif-hidden-kinds` 커뮤니티·시스템 종류는 서버가 줘도 표에 없다.
+- `notif-load-error` 알림 설정을 못 받으면 토글 12개 대신 오류 얼굴 "알림 설정을 불러올 수 없어요" + [다시 시도](testID `notification-settings-load-error`·`notification-settings-load-retry`, 재시도 중엔 비활성)가 뜨고 헤더만 남는다. 기기 알림 권한 배너는 이 얼굴에선 안 그린다. 회복하면 토글 12개가 돌아온다. *(TRIP-1755 · 오류 표면·[다시 시도] 회복은 시뮬레이터에서 확인 2026-11-04)*
 - `notif-cold-back` 알림 설정을 링크·푸시로 바로 열어 스택에 이 화면 하나뿐이어도 ‹ 가 살아 있다 — 설정으로, 설정의 ‹ 는 마이 탭으로 간다(FM-L6-01 해소 확인). *(TRIP-1685 · 실화면 미검증 — 오케 실기 몫)*
 
 ## How to get to it (user POV)
@@ -49,12 +50,12 @@ Preconditions:
 ## Gotchas
 
 - 토글 testID는 `notification-settings-toggle-push-${kind}`·`notification-settings-toggle-inapp-${kind}` 꼴이다.
-- 서버 토글 목록을 받기 전·실패면 모든 토글이 **꺼짐으로 그려지고 눌린다** — 오류 표면이 없다. 이때 누르면 실제 값과 무관하게 "켜기" 요청이 나간다(결함 후보). 진입 직후 전부 꺼짐이면 바로 누르지 말고 잠깐 기다려 다시 읽는다.
+- 서버 토글 목록을 못 받으면(TRIP-1755 이후) 토글이 꺼짐으로 그려지는 대신 오류 얼굴이 뜬다. 앱이 조회를 3번까지 다시 해 보므로(약 7초) 실패를 만든 직후엔 오류 얼굴이 늦게 뜰 수 있다. 이미 값을 받아 둔 뒤의 재조회 실패는 오류로 덮지 않고 받아 둔 값을 그대로 둔다.
 - 토글 저장 실패는 칸이 조용히 원래 값으로 돌아갈 뿐 문구가 없다 — "눌렀는데 안 바뀐다"는 실패 신호일 수 있다. 다시 읽기로 확인한다.
 - 푸시 열은 OS 권한이 허용일 때만 켜진 것으로 **보인다** — 서버의 `pushEnabled`가 참이어도 권한 거부면 꺼져 보인다. 거부 얼굴에서 푸시 값을 서버 값으로 읽지 않는다.
 - 권한 창·설정 앱 왕복·복귀 시 재조회(앱 포그라운드 복귀)는 실화면으로만 확인된다. iOS는 권한 창이 닫힐 때도 포그라운드 이벤트가 온다. [실화면 전용]
 - 열이 보인다고 푸시가 도는 것이 아니다 — iOS 푸시 자격·`PUSH_MODE`가 꺼져 있으면 실수신은 없다(traps-notification).
 - 토글 픽셀(회색·thumb 위치)은 생김새라 실화면 몫이다. [실화면 전용]
-- [실화면] 2026-10-31 "조회 전·실패면 전부 꺼짐"(위 결함 후보)은 관찰 불가 — 웜 진입은 캐시로, 콜드 딥링크는 스플래시가 걷히는 첫 관찰부터 이미 서버 값(푸시 `SLOT_PRE`만 꺼짐, 나머지 켜짐)이었다. 실패는 네트워크 차단 없이 만들 수 없었다. 증거 `settings-notifications/02-granted-all.png`.
+- [실화면] 2026-10-31 "조회 전·실패면 전부 꺼짐"(TRIP-1755 로 해소된 옛 결함 후보)은 그때 관찰 불가 — 웜 진입은 캐시로, 콜드 딥링크는 스플래시가 걷히는 첫 관찰부터 이미 서버 값(푸시 `SLOT_PRE`만 꺼짐, 나머지 켜짐)이었다. 실패는 네트워크 차단 없이 만들 수 없었다. 증거 `settings-notifications/02-granted-all.png`.
 - [실화면] 2026-10-31 도달 불가 — `notif-denied`·`notif-checking`·`notif-open-settings`·`notif-return`(시뮬 알림 권한이 허용 상태라 거부 얼굴을 못 만든다), `notif-toggle-fail`(실패 유도 수단 없음).
 - [실화면] 2026-10-31 [결함 의심 FM-L6-01] 콜드 딥링크로 이 화면을 바로 열면(`simctl terminate` → `simctl openurl com.trippilot.travel://…`) 헤더 뒤로가 무반응이고 엣지 스와이프도 안 먹어 화면에 갇힌다 — 개발 콘솔에 `The action 'GO_BACK' was not handled by any navigator`. 뒤로가 `router.back()` 뿐이라 쌓인 화면이 없으면 갈 곳이 없다. 실측: `settings`·`settings/personalization`·`settings/notifications`·`notifications`. 앱이 떠 있을 때(웜) 딥링크는 정상. 증거 `settings/07-cold-deeplink-back.png`, `settings-preferences/08-pers-cold-back.png`.

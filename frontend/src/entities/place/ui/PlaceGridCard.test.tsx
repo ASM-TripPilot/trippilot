@@ -8,6 +8,7 @@ import { View } from 'react-native';
 
 import type { Place } from '@/entities/place/model';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 
 import { PlaceGridCard } from './PlaceGridCard';
 
@@ -222,6 +223,18 @@ describe('저장 하트 접근성 라벨 (d04)', () => {
     );
     expect(screen.getByTestId('explore-places-card-p2')).toHaveAccessibleName(
       LABEL_P2
+    );
+  });
+});
+
+// TRIP-1740 AC-7(T3) — Place 가 직접 싣는 imageLicense 가 d04 그리드 사진 칸까지 간다.
+describe('PlaceGridCard · 관광공사 사진 유형이 사진 칸에 닿는다', () => {
+  it('TYPE1 서버 사진은 cover 이고 출처 글자가 붙는다', () => {
+    renderGrid({ place: { ...PLACE, imageLicense: 'TYPE1' } });
+
+    expectTypeOnePhotoDelivered(
+      'explore-places-photo-p1',
+      'https://example.com/x.jpg'
     );
   });
 });

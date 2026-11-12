@@ -118,7 +118,7 @@ function region(
 }
 
 // 서버 모양 카탈로그(법정동 앞자리 현실값, 서버 순서 = 시도 코드 → 층 → 이름). TRIP-1443 — 서비스
-// 지역(서울 11·부산 26·제주 50)과 그 밖(전남광주 12·대구 27·인천 28·경기 41·강원 51)을 섞었다. 밖 지역은
+// 지역(서울 11·부산 26·경북 47·경남 48·제주 50·강원 51 — TRIP-1807)과 그 밖(전남광주 12·대구 27·인천 28·경기 41)을 섞었다. 밖 지역은
 // 피커가 숨겨야 하므로 **누르는 대상은 전부 서비스 지역 코드**이고, 밖 지역은 "안 보인다"로만 잰다.
 //
 // 함정 표본(02a ★2·★3):
@@ -131,7 +131,7 @@ function region(
 // limit=6)을 걷고 전체 카탈로그를 내리는 것을 지키려면 **테스트가 실제로 누르는 시군구가 화면에 내려가는
 // 목록의 인덱스 6 이상**에 있어야 한다(작은 목록에선 `slice(0, 6)`가 항등이라 상한 회귀를 구분 못 한다 —
 // code-critic 03b 차단-1). 서비스 지역 필터 뒤 목록은 11 · 11110 · 11140 · 11680 · 26 · 26110 · 26350 ·
-// 50 · 50110 · 50130 이고, stay 드릴다운이 누르는 제주시(50110)가 인덱스 8 이다 — 상한이 되살면 잘려 red.
+// 47 · 47130 · 48 · 48820 · 50 · 50110 · 50130 · 51 · 51110 이고, stay 드릴다운이 누르는 제주시(50110)가 인덱스 12 다 — 상한이 되살면 잘려 red.
 const SEOUL = region({
   regionCode: '11',
   name: '서울특별시',
@@ -237,6 +237,34 @@ const SEOGWIPO = region({
   sidoName: '제주특별자치도',
   poiCount: 0,
 });
+const GYEONGBUK = region({
+  regionCode: '47',
+  name: '경상북도',
+  level: RegionLevel.SIDO,
+  sidoName: '경상북도',
+  selectable: false,
+  poiCount: 30,
+});
+const GYEONGJU = region({
+  regionCode: '47130',
+  name: '경주시',
+  sidoName: '경상북도',
+  poiCount: 12,
+});
+const GYEONGNAM = region({
+  regionCode: '48',
+  name: '경상남도',
+  level: RegionLevel.SIDO,
+  sidoName: '경상남도',
+  selectable: false,
+  poiCount: 30,
+});
+const GN_GOSEONG = region({
+  regionCode: '48820',
+  name: '고성군',
+  sidoName: '경상남도',
+  poiCount: 12,
+});
 const GANGWON = region({
   regionCode: '51',
   name: '강원특별자치도',
@@ -267,6 +295,10 @@ const CATALOG: Region[] = [
   MICHUHOL,
   GYEONGGI,
   GYEONGGI_GWANGJU,
+  GYEONGBUK,
+  GYEONGJU,
+  GYEONGNAM,
+  GN_GOSEONG,
   JEJU,
   JEJU_CITY,
   SEOGWIPO,
@@ -280,7 +312,6 @@ const OUTSIDE_SIDO_NAMES = [
   '대구광역시',
   '인천광역시',
   '경기도',
-  '강원특별자치도',
 ];
 
 beforeEach(() => {
@@ -484,7 +515,12 @@ describe('985 · places → d04 로 돌아가며 지역 **이름**을 교체한�
 
     // d04 는 결과 화면과 반대로 이름을 받는다(`PlaceExplorePage` 의 region 파라미터).
     expect(mockDismissTo.mock.calls).toEqual([
-      [{ pathname: '/explore/places', params: { region: '부산광역시' } }],
+      [
+        {
+          pathname: '/explore/places',
+          params: { region: '부산광역시', regionCode: '26' },
+        },
+      ],
     ]);
     expect(mockAddDestination).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
@@ -768,7 +804,7 @@ describe('stay 분기 · 동명 구도 어느 시도인지 실어 보낸다 (F3 
   });
 });
 
-// ── TRIP-1443 · 서비스 지역(서울 11 · 부산 26 · 제주 50) 밖은 숨긴다 ─────────────────────────────
+// ── TRIP-1443·1807 · 서비스 지역(서울 11 · 부산 26 · 경북 47 · 경남 48 · 제주 50 · 강원 51) 밖은 숨긴다 ─────────────────────────────
 // 서버 /regions 는 계속 전국을 주고(필터 파라미터 없음) 피커 페이지가 화면에 내리기 직전에 거른다.
 // 숨김 규칙은 목적과 무관해야 한다(BR-U1-07 — 목적은 카피·다음 목적지만 가른다) → 네 목적을 같은 단언으로 돈다.
 // 코드는 화면 순서대로 testID 접두를 떼어 뽑는다 — "있다"가 아니라 **정확히 이 목록**이라야 밖 지역이 끼어도 잡힌다.
@@ -791,21 +827,23 @@ function renderPickerFor(purpose: (typeof PURPOSES)[number]): void {
   render(<RegionPickerPage />);
 }
 
-describe('서비스 지역 — 지역 피커는 서울·부산·제주만 보인다 (전 목적 · BR-U1-07)', () => {
+describe('서비스 지역 — 지역 피커는 서비스 지역 6곳만 보인다 (전 목적 · BR-U1-07)', () => {
   describe.each(PURPOSES)('purpose=%s', (purpose) => {
-    it('1단 시/도 행은 11·26·50 셋뿐이고 밖 시도 이름은 화면에 없다', () => {
+    it('1단 시/도 행은 서비스 시도 여섯뿐이고 밖 시도 이름은 화면에 없다', () => {
       renderPickerFor(purpose);
 
-      expect(sidoRowCodes()).toEqual(['11', '26', '50']);
+      expect(sidoRowCodes()).toEqual(['11', '26', '47', '48', '50', '51']);
       for (const name of OUTSIDE_SIDO_NAMES) {
         expect(screen.queryByText(name)).toBeNull();
       }
     });
 
-    it('인기 여행지 스트립도 서울·부산·제주 3장뿐이다 (전남광주 카드 없음)', () => {
+    it('인기 여행지 스트립은 서비스 시도 6장을 고정 순서(서울·부산·제주·강원·경북·경남)로 보인다 (전남광주 카드 없음)', () => {
       renderPickerFor(purpose);
 
-      expect(popularCodes()).toEqual(['11', '26', '50']);
+      // 준비: 서버 순서는 코드 오름차순(11·26·47·48·50·51) — 아래 지역별 목록은 그 순서 그대로다.
+      // 단언: 띠만 고정 순서라, 첫 화면 세 장에 서울·부산·제주가 든다(TRIP-1817).
+      expect(popularCodes()).toEqual(['11', '26', '50', '51', '47', '48']);
       expect(screen.queryByTestId('explore-region-popular-12')).toBeNull();
     });
 
@@ -848,7 +886,22 @@ describe('서비스 지역 — 지역 피커는 서울·부산·제주만 보인
     });
   });
 
-  it('서버가 부산을 서울보다 먼저 주면 1단도 부산 → 서울 → 제주다 (재정렬 금지)', () => {
+  it('경상남도로 들어가 고성군을 고르면 그 코드(48820)로 탐색 결과에 돌아간다 (TRIP-1807)', () => {
+    // 준비
+    renderPickerFor('explore');
+
+    // 실행 — 새 서비스 시도 드릴인 → 시군구 press
+    fireEvent.press(screen.getByTestId('explore-region-sido-48'));
+    fireEvent.press(screen.getByTestId('explore-region-48820'));
+
+    // 단언 — 피커가 코드를 넘기는 데까지다. 그 뒤 장소 조회가 코드를 쓰는 것은 TRIP-1809 몫이다.
+    expect(mockDismissTo).toHaveBeenCalledWith({
+      pathname: '/explore',
+      params: { region: '48820' },
+    });
+  });
+
+  it('서버가 부산을 서울보다 먼저 주면 1단도 부산 → 서울 → 제주 → 강원이다 (재정렬 금지)', () => {
     // 준비 — 계약상 서버 순서는 시도 코드 순이지만, 피커가 그 순서를 **따르는지** 보려고 일부러 뒤집는다.
     mockRegionsResult = {
       ...mockRegionsResult,
@@ -866,7 +919,9 @@ describe('서비스 지역 — 지역 피커는 서울·부산·제주만 보인
     };
     render(<RegionPickerPage />);
 
-    expect(sidoRowCodes()).toEqual(['26', '11', '50']);
+    expect(sidoRowCodes()).toEqual(['26', '11', '50', '51']);
+    // 인기 띠만 고정 순서다 — 서버 순서를 따르지 않는다(TRIP-1817).
+    expect(popularCodes()).toEqual(['11', '26', '50', '51']);
   });
 
   it("검색 '강남'이면 서울 강남구 카드가 보인다", () => {
@@ -955,7 +1010,7 @@ describe('화면 동작 — 카피 · 드릴다운 · 뒤로 · 카드 갈래 ·
     expect(screen.getByText('바다 · 야경')).toBeOnTheScreen();
     expect(screen.getByText('섬 · 자연')).toBeOnTheScreen();
 
-    fireEvent.press(screen.getByRole('button', { name: /^제주특별자치도/ }));
+    fireEvent.press(screen.getByRole('button', { name: /^제주특별자치도, / }));
 
     expect(screen.getByText('제주특별자치도 전체')).toBeOnTheScreen();
     expect(regionCardCodes()).toEqual(['50', '50110', '50130']);
@@ -967,7 +1022,7 @@ describe('화면 동작 — 카피 · 드릴다운 · 뒤로 · 카드 갈래 ·
 
     fireEvent.press(screen.getByTestId('explore-region-drilldown-back'));
 
-    expect(sidoRowCodes()).toEqual(['11', '26', '50']);
+    expect(sidoRowCodes()).toEqual(['11', '26', '47', '48', '50', '51']);
     expect(regionCardCodes()).toEqual([]);
     expect(mockBack).not.toHaveBeenCalled();
   });
@@ -977,14 +1032,14 @@ describe('화면 동작 — 카피 · 드릴다운 · 뒤로 · 카드 갈래 ·
     drillInto('11');
 
     fireEvent.press(screen.getByRole('button', { name: '뒤로' }));
-    expect(sidoRowCodes()).toEqual(['11', '26', '50']);
+    expect(sidoRowCodes()).toEqual(['11', '26', '47', '48', '50', '51']);
     expect(mockBack).not.toHaveBeenCalled();
 
     fireEvent.press(screen.getByRole('button', { name: '뒤로' }));
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
-  it('선택 불가 시/도의 "전체" 자리는 보이되 눌러도 아무 데도 안 가고, 그 안 구/군은 골라진다', () => {
+  it('선택 불가 시/도는 「전체」도 회색 칸도 없이 이름만 보이고, 그 안 구/군은 골라진다', () => {
     mockRegionsResult = {
       ...mockRegionsResult,
       data: [{ ...SEOUL, selectable: false }, JONGNO],
@@ -992,8 +1047,9 @@ describe('화면 동작 — 카피 · 드릴다운 · 뒤로 · 카드 갈래 ·
     render(<RegionPickerPage />);
     drillInto('11');
 
-    fireEvent.press(screen.getByTestId('explore-region-11'));
-    expect(mockDismissTo).not.toHaveBeenCalled();
+    expect(screen.getByText('서울특별시')).toBeOnTheScreen();
+    expect(screen.queryByText('서울특별시 전체')).toBeNull();
+    expect(screen.queryByTestId('explore-region-11')).toBeNull();
 
     fireEvent.press(screen.getByTestId('explore-region-11110'));
     expect(mockDismissTo).toHaveBeenCalledTimes(1);
@@ -1039,7 +1095,7 @@ describe('화면 동작 — 카피 · 드릴다운 · 뒤로 · 카드 갈래 ·
     expect(screen.getByText('검색 결과')).toBeOnTheScreen();
 
     search('   ');
-    expect(sidoRowCodes()).toEqual(['11', '26', '50']);
+    expect(sidoRowCodes()).toEqual(['11', '26', '47', '48', '50', '51']);
     expect(screen.getByText('지역별 둘러보기')).toBeOnTheScreen();
     expect(screen.queryByText('검색 결과')).toBeNull();
 
@@ -1059,7 +1115,7 @@ describe('화면 동작 — 카피 · 드릴다운 · 뒤로 · 카드 갈래 ·
     expect(within(busan).queryByText('서울특별시')).toBeNull();
   });
 
-  it('선택 불가 묶음 행도 검색 결과에선 시도명 부제를 단다', () => {
+  it('선택 불가 묶음 행도 검색 결과에선 시도명 부제를 달고, 눌러도 아무 데도 안 간다', () => {
     mockRegionsResult = {
       ...mockRegionsResult,
       data: [SEOUL, { ...SEOUL_JUNG, selectable: false }],
@@ -1070,6 +1126,19 @@ describe('화면 동작 — 카피 · 드릴다운 · 뒤로 · 카드 갈래 ·
     const jung = screen.getByTestId('explore-region-11140');
     expect(within(jung).getByText('중구')).toBeOnTheScreen();
     expect(within(jung).getByText('서울특별시')).toBeOnTheScreen();
+
+    fireEvent.press(jung);
+    expect(mockDismissTo).not.toHaveBeenCalled();
+  });
+
+  it('카탈로그에 시/도 행이 없으면 눌릴 「전체」가 없으니 머리줄도 이름만이다', () => {
+    mockRegionsResult = { ...mockRegionsResult, data: [JONGNO] };
+    render(<RegionPickerPage />);
+    drillInto('11');
+
+    expect(screen.getByText(JONGNO.sidoName)).toBeOnTheScreen();
+    expect(screen.queryByText(`${JONGNO.sidoName} 전체`)).toBeNull();
+    expect(screen.getByTestId('explore-region-11110')).toBeOnTheScreen();
   });
 
   it('부제를 안 다는 자리 — 검색 결과의 시도 카드, 상세의 구/군 카드, 인기 카드는 시도명이 한 번뿐이다', () => {

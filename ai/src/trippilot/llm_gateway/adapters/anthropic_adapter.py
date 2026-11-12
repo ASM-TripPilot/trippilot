@@ -22,7 +22,10 @@ haiku-4-5 는 받는다. 당시 게이트웨이 기본이 0.0 이라 운영 조�
 from __future__ import annotations
 
 import base64
+import itertools
+import logging
 import time
+from collections.abc import Callable, Sequence
 
 import anthropic
 
@@ -38,8 +41,9 @@ _EFFORT_FLOOR = {"none": "low", "minimal": "low"}
 # 사고를 실제로 끌 수 있는 모델 — haiku-5 는 `thinking: {"type": "disabled"}` 를 받는다(2026-10-30 개발 파드 실호출).
 # effort 가 `none`(사고 끔)이거나 표에 없을 때 끈다. 안 끄면 effort low 로도 적응형 사고가 켜져, 정보가 빈 "찾는 중" 사실
 # 묶음에서 도우미 답변이 사고로 상한 512 를 다 쓰고 본문이 비었다(4/4 → 결정론 문장 폴백, 끄면 4/4 정상·1.4~1.7s).
-# 표에 없는 기능은 haiku-4-5(사고 없는 모델) 시절 사고 없이 돌던 것들이라 그 상태로 되돌린다 — haiku-5 는 effort 를
-# 안 보내면 기본(더 깊은) 사고로 돈다. 표가 low 이상을 고른 기능은 그 값대로 둔다(명시한 선택).
+# 표에 없는 기능도 끈다 — haiku-5 는 effort 를 안 보내면 기본(더 깊은) 사고로 돈다. 그래서 **사고가 필요한 기능은 표에 low
+# 이상을 둔다**(명시한 선택은 그 값대로): 편집 번역·공유 카드 문구는 haiku-4-5 에 배정된 적이 없는데 '표에 없음 = 사고 없이 돌던
+# 것'으로 묶여 꺼졌고, 추론을 답 앞에 써 JSON 이 깨지거나 규칙을 놓쳐 카드째 폴백했다(2026-11-04 — 표 안 주석).
 # sonnet-5-5 는 disabled 를 400 으로 거부하고("between_tools" 를 쓰라 한다) opus-5-5 는 끌 수 없어(400) 둘은 종전대로다.
 _THINKING_OFF = ("claude-haiku-5",)
 
@@ -106,11 +110,71 @@ def _content(request: LlmRequest):
     return blocks
 
 
-class AnthropicAdapter:
-    """LlmPort Protocol 구현."""
+_logger = logging.getLogger(__name__)
 
-    def __init__(self, client: anthropic.Anthropic) -> None:
-        self._client = client
+
+def _key_scoped(e: Exception) -> bool:
+    """키(워크스페이스) 쪽 문제라 다른 키로 바꾸면 나을 수 있는 오류 — 한도(429)·인증(401)·권한(403)·크레딧 소진.
+
+    요청 자체가 틀린 400(모델·파라미터 거부)은 어느 키로 보내도 같으므로 제외한다 — 크레딧 소진만 400 으로 오기에
+    메시지로 가른다. 타임아웃·5xx 도 제외(키와 무관하고, 재시도 무익 정책 TRIP-381 그대로).
+    """
+    if isinstance(e, (anthropic.RateLimitError, anthropic.AuthenticationError, anthropic.PermissionDeniedError)):
+        return True
+    if isinstance(e, anthropic.APIStatusError) and e.status_code == 402:  # billing_error — SDK 전용 클래스 없음
+        return True
+    msg = str(e).lower()
+    return isinstance(e, anthropic.BadRequestError) and ("credit balance" in msg or "usage limit" in msg)
+
+
+# 오래 가는 키 문제로 실패한 키를 맨 뒤로 돌려 두는 시간 — 라운드로빈이라 그대로 두면 막힌 키 차례마다(키 셋이면 호출 셋 중 하나)
+# 실패 한 번(~0.3s)이 기능 시한 안에 먼저 얹힌다(2026-11-04 운영 키 1 이 12-01 까지 월 사용 한도). 한도(429)는 분 단위라 넣지 않는다 —
+# 남은 키로 몰면 그쪽도 429 가 난다
+_KEY_REST_S = 600.0
+
+
+def _key_down(e: Exception) -> bool:
+    """한동안 그 키로는 안 되는 오류인가 — 크레딧 소진·월 사용 한도·결제(402)·인증(401)·권한(403). `_key_scoped` 에서 429 를 뺀 것."""
+    return _key_scoped(e) and not isinstance(e, anthropic.RateLimitError)
+
+
+class AnthropicAdapter:
+    """LlmPort Protocol 구현.
+
+    **키 여러 개를 번갈아 쓴다** (2026-11-02 사용자 지시, 운영 Claude 키 3개). client 를 리스트로 주면 호출마다
+    다음 client 부터 시작하는 라운드로빈이고, 그 키가 키 문제(`_key_scoped`)로 실패하면 남은 키를 한 번씩 더
+    돈다. 모든 키가 실패하면 마지막 예외를 그대로 던진다(게이트웨이가 폴백으로 수렴 — INV-4). 하나만 주면 종전과 같다.
+    오래 가는 키 문제(`_key_down`)로 실패한 키는 `_KEY_REST_S` 동안 순서의 맨 뒤다 — 다른 키가 다 실패할 때만 묻는다.
+    """
+
+    def __init__(self, client: "anthropic.Anthropic | Sequence[anthropic.Anthropic]", *,
+                 clock: Callable[[], float] = time.monotonic) -> None:
+        self._clients = tuple(client) if isinstance(client, (list, tuple)) else (client,)
+        if not self._clients:
+            raise ValueError("client 가 하나도 없다")
+        self._client = self._clients[0]  # 단일 키 시절 이름 — 재시도 정책 검사(max_retries)가 읽는다
+        self._turn = itertools.count()  # next() 는 CPython 에서 원자적 — 동시 호출이 같은 키로 몰리지 않게 순번만 가져간다
+        self._clock = clock
+        self._resting: dict[int, float] = {}  # 키 순번 → 쉼이 끝나는 시각. 칸 하나 쓰기라 경합해도 실패 한 번 더일 뿐이다
+
+    def _create(self, kwargs: dict):
+        n = len(self._clients)
+        first = next(self._turn) % n
+        now = self._clock()
+        order = sorted(((first + i) % n for i in range(n)), key=lambda i: self._resting.get(i, 0.0) > now)  # 안정 정렬
+        last: Exception | None = None
+        for i, idx in enumerate(order):
+            try:
+                return self._clients[idx].messages.create(**kwargs)
+            except Exception as e:  # noqa: BLE001 — 키 문제만 다음 키로, 나머지는 그대로
+                if _key_down(e):
+                    self._resting[idx] = self._clock() + _KEY_REST_S
+                if not _key_scoped(e) or i == n - 1:
+                    raise
+                last = e
+                # 사유를 같이 남긴다 — 다음 키가 살리면 FallbackEvent 가 없어 감시(llm_fallback_watch)가 이 줄로만 소진을 본다
+                _logger.warning("anthropic key #%d/%d %s — 다음 키로: %s", idx + 1, n, type(e).__name__, str(e)[:200])
+        raise last  # type: ignore[misc]  # 도달 불가(n>=1 이면 위에서 반환 또는 raise)
 
     def invoke(self, request: LlmRequest) -> LlmResponse:
         # effort 는 지정됐을 때만 — haiku-4-5 처럼 파라미터째 거부하는 모델이 있다.
@@ -124,14 +188,14 @@ class AnthropicAdapter:
             extra["tools"] = [_WEB_SEARCH_TOOL]
         started = time.monotonic()
         try:
-            resp = self._client.messages.create(
+            resp = self._create(dict(
                 model=request.model_id,
                 max_tokens=request.max_tokens,
                 # temperature 미전달 — Claude 5 계열이 파라미터째 거부(400). 모듈 docstring.
                 timeout=request.timeout_sec,
                 messages=[{"role": "user", "content": _content(request)}],
                 **extra,
-            )
+            ))
         except anthropic.APITimeoutError as e:
             raise LlmTimeoutError(f"timeout > {request.timeout_sec}s: {e}") from e
         latency_ms = int((time.monotonic() - started) * 1000)

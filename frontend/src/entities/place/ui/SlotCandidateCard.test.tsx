@@ -4,6 +4,7 @@ import { render, screen, within } from '@testing-library/react-native';
 
 import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
 import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 
 import { SlotCandidateCard } from './SlotCandidateCard';
 
@@ -40,6 +41,7 @@ describe('🔴 SlotCandidateCard — itinerary 구성(h08·h10)', () => {
   it('CC1 · 배지·이미지·이름 testID·trailing + 거리 라벨 "이동"', () => {
     render(
       <SlotCandidateCard
+        imageLicense={null}
         candidate={CAND}
         testIDPrefix="itinerary-candidate"
         distanceLabel="이동"
@@ -72,6 +74,7 @@ describe('🔴 SlotCandidateCard — planb 구성(i14)', () => {
   it('CC2 · slack leaf 있음, image·name testID 없음(★6-a) + 거리 라벨 "지금 위치서"', () => {
     render(
       <SlotCandidateCard
+        imageLicense={null}
         candidate={CAND}
         testIDPrefix="planb-candidate"
         distanceLabel="지금 위치서"
@@ -104,6 +107,7 @@ describe('🔴 SlotCandidateCard — 불변식(INV-3·INV-1)', () => {
   it('CC3 · 거리·근거 leaf 에 소요시간 단위 0(INV-3)', () => {
     render(
       <SlotCandidateCard
+        imageLicense={null}
         candidate={CAND}
         testIDPrefix="itinerary-candidate"
         distanceLabel="이동"
@@ -125,6 +129,7 @@ describe('🔴 SlotCandidateCard — 불변식(INV-3·INV-1)', () => {
   it('CC4 · poiId 원문은 카드 텍스트로 새지 않는다(INV-1)', () => {
     render(
       <SlotCandidateCard
+        imageLicense={null}
         candidate={{ ...CAND, poiId: 'hidden-poi' }}
         testIDPrefix="planb-candidate"
         distanceLabel="지금 위치서"
@@ -153,6 +158,7 @@ describe('🔴 SlotCandidateCard — 사진 칸 생성 이미지(coverPoiId·cat
   ): void => {
     render(
       <SlotCandidateCard
+        imageLicense={null}
         candidate={{ ...CAND, poiId: 'current' }}
         testIDPrefix="itinerary-candidate"
         distanceLabel="이동"
@@ -218,5 +224,133 @@ describe('🔴 SlotCandidateCard — 사진 칸 생성 이미지(coverPoiId·cat
     expect(
       screen.getByTestId('itinerary-candidate-image-current').props.source
     ).toEqual([coverFor('술집', 'poi-a')]);
+  });
+});
+
+/**
+ * TRIP-1780 · h08 후보 행 추천 이유 "문장" 모드(`rationaleSentence`) — opt-in 선택 prop 하나가
+ * 메타 줄 아래·2줄·`text-body` 를 한 세트로 켠다. 세 가지는 생김새라 jest 대상이 아니다(README 판정 4 · 6-b 몫).
+ * 여기서 재는 것은 그 모드의 비시각 계약뿐 — 빈·공백 문장이면 요소 자체가 없다(INV-4)·원문 그대로(변형 금지)·
+ * showRationale=false 가 우선·미주입이면 지금과 똑같다(빈 문자열도 빈 leaf 로 그대로).
+ *
+ * ⚠️ `toHaveTextContent(문자열)` 은 trim·공백 축소를 양쪽에 적용한다 — 원문 보존은 항등 normalizer 로 잰다.
+ */
+describe('🔴 SlotCandidateCard — TRIP-1780 rationaleSentence', () => {
+  const SENTENCE = '조용한 골목 산책을 좋아하는 취향에 맞아요';
+  const RAW = (t: string): string => t;
+
+  const renderSentence = (
+    rationale: string,
+    over: Partial<ComponentProps<typeof SlotCandidateCard>> = {}
+  ): void => {
+    render(
+      <SlotCandidateCard
+        imageLicense={null}
+        candidate={{ ...CAND, rationale }}
+        testIDPrefix="itinerary-candidate"
+        tags={['카페', '갤러리']}
+        showNameTestId
+        rationaleSentence
+        {...over}
+      />
+    );
+  };
+
+  it('RS1 · 켜면 문장 leaf 가 문장 그대로(완전일치) 뜨고 태그·거리는 그대로다', () => {
+    renderSentence(SENTENCE);
+
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-p1')
+    ).toHaveTextContent(SENTENCE);
+    expect(screen.getByTestId('itinerary-candidate-tags-p1')).toHaveTextContent(
+      '#카페 · 갤러리'
+    );
+    expect(
+      screen.getByTestId('itinerary-candidate-distance-p1')
+    ).toHaveTextContent(CAND.distanceRange);
+  });
+
+  it('RS1b · 앞뒤·가운데 공백이 있어도 원문 그대로다 — trim·공백 축소로 변형하지 않는다', () => {
+    const raw = '  조용한  골목 산책  ';
+
+    renderSentence(raw);
+
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-p1')
+    ).toHaveTextContent(raw, { normalizer: RAW });
+  });
+
+  it.each(['', '   ', '\n '])(
+    'RS2 · 켠 채 문장이 빈·공백뿐(%j)이면 문장 요소 자체가 없다 — 카드·태그·거리는 그대로',
+    (blank) => {
+      renderSentence(blank);
+
+      expect(screen.getByTestId('itinerary-candidate-p1')).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('itinerary-candidate-tags-p1')
+      ).toBeOnTheScreen();
+      expect(
+        screen.getByTestId('itinerary-candidate-distance-p1')
+      ).toBeOnTheScreen();
+      expect(
+        screen.queryByTestId('itinerary-candidate-rationale-p1')
+      ).toBeNull();
+    }
+  );
+
+  it('RS3 · showRationale=false 가 우선이다 — 문장 모드를 켜 놔도 leaf 없음', () => {
+    renderSentence(SENTENCE, { showRationale: false });
+
+    expect(screen.getByTestId('itinerary-candidate-p1')).toBeOnTheScreen();
+    expect(screen.queryByTestId('itinerary-candidate-rationale-p1')).toBeNull();
+  });
+
+  it('RS4 · 안 켜면 지금과 같다 — 문장은 그대로, 빈 문자열도 빈 leaf 로 그려진다(숨김은 켠 쪽만)', () => {
+    const { unmount } = render(
+      <SlotCandidateCard
+        imageLicense={null}
+        candidate={{ ...CAND, rationale: SENTENCE }}
+        testIDPrefix="itinerary-candidate"
+      />
+    );
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-p1')
+    ).toHaveTextContent(SENTENCE);
+    unmount();
+
+    render(
+      <SlotCandidateCard
+        imageLicense={null}
+        candidate={{ ...CAND, rationale: '' }}
+        testIDPrefix="itinerary-candidate"
+      />
+    );
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-p1')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-p1')
+    ).toHaveTextContent('');
+  });
+});
+
+// TRIP-1740 AC-7(T6) — props 의 imageLicense(필수 키)가 후보 사진 칸까지 간다.
+describe('SlotCandidateCard · 관광공사 사진 유형이 사진 칸에 닿는다', () => {
+  it('TYPE1 서버 사진은 cover 이고 출처 글자가 붙는다', () => {
+    render(
+      <SlotCandidateCard
+        candidate={CAND}
+        testIDPrefix="itinerary-candidate"
+        distanceLabel="이동"
+        showImage
+        imageUrl="https://img.example/c.jpg"
+        imageLicense="TYPE1"
+      />
+    );
+
+    expectTypeOnePhotoDelivered(
+      'itinerary-candidate-image-p1',
+      'https://img.example/c.jpg'
+    );
   });
 });

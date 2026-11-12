@@ -7,7 +7,14 @@
 
 from __future__ import annotations
 
+from datetime import time as clock
+
 from trippilot.api.wiring import demo_poi_seed
+from trippilot.llm_gateway.gates.replan.replan_request_extraction import ExtractedCategory, ExtractedRequest
+from trippilot.domain.llm.llm import TypedResult
+from trippilot.assembly_engine.config import AssemblyConfig
+from trippilot.assembly_engine.travel import TravelEstimator
+from trippilot.domain.common import TransportMode
 
 from tests.agents.planb.test_replan_natural_language import _replan
 
@@ -15,6 +22,16 @@ _SEED = {p.name: str(p.poi_id) for p in demo_poi_seed()}
 _PORK = _SEED["제주 흑돼지거리"]   # FOOD
 _HALLA = _SEED["한라산"]          # NATURE
 _STAY = {"lat": 33.50, "lng": 126.52}
+
+
+class _StubExtractor:
+    """자유입력 추출을 고정한다 — 실 LLM 없이 '말한 시각' 경로를 탄다."""
+
+    def __init__(self, value: ExtractedRequest) -> None:
+        self.value = value
+
+    def extract(self, *a, **kw) -> TypedResult:
+        return TypedResult(value=self.value, is_fallback=False, error=None, call_record=None)
 
 
 def _slot(poi: str, start: str, end: str) -> dict:
@@ -66,6 +83,98 @@ def test_저녁은_한_끼만_잠근다() -> None:
     held = [str(b.poi_id) for b in seen["agent"][0].fixed_blocks if b.reason == "keep_dinner"]
     assert held == [_PORK]
     assert body["itinerary"] is not None, body["notes"]
+
+
+_CAFE_STREET = _SEED["월정리 카페거리"]
+_SEONGSAN = _SEED["성산일출봉"]
+
+
+def _minutes(a: str, b: str) -> int:
+    """조립과 같은 추정기로 잰 두 데모 장소 사이 이동(분) — 대중교통, 취향 도보 상한 없음(`_replan` 기본)."""
+    seed = {str(p.poi_id): p for p in demo_poi_seed()}
+    return TravelEstimator(AssemblyConfig()).estimate(seed[a].coord, seed[b].coord, TransportMode.PUBLIC).internal_minutes
+
+
+def _dinner_at(body: dict) -> list[tuple[str, str]]:
+    return [(s["start_at"][:5], s["end_at"][:5]) for s in _placed(body) if s["poi_id"] == _PORK]
+
+
+def test_앞_잠금에서_시간_안에_못_오는_저녁은_닿는_시각으로_옮겨_잠근다() -> None:
+    """시간은 안 겹치지만 이동이 안 닿는 잠금 쌍 — 둘 다 솔버에 넣으면 모든 조립 단계가 해 없음이었다.
+
+    2026-11-08 운영: '저녁은 그대로' 잠금이 앞 사용자 잠금에서 시간 안에 못 오는 곳이라 다시 짜기 두 번이 통째로
+    '재계획 대안 없음'이었다(OR 해 없음 → 규칙 폴백 HC2 → assembly_conflict). 저녁 창 안이면 닿는 가장 이른 시각
+    (5분 올림)으로 옮겨 잠근다 — 같은 식당을 저녁으로 지킨다.
+    """
+    slots = [{**_slot(_CAFE_STREET, "17:00", "17:50"), "is_fixed": True}, _slot(_PORK, "18:00", "19:00")]
+    body, seen = _replan(directives=["KEEP_DINNER"], reasons=["none"], current_slots=slots)
+
+    assert body["itinerary"] is not None, body["notes"]
+    assert _minutes(_CAFE_STREET, _PORK) == 116  # 전제: 17:50 + 116분 = 19:46 → 19:50
+    held = [(str(b.poi_id), b.window.start.strftime("%H:%M")) for b in seen["agent"][0].fixed_blocks
+            if b.reason == "keep_dinner"]
+    assert held == [(_PORK, "19:50")]
+    assert _dinner_at(body) == [("19:50", "20:50")]
+    assert any(n.startswith(f"keep_dinner_shifted: {_PORK} 18:00→19:50") for n in body["notes"]), body["notes"]
+    kept = [s for s in _placed(body) if s["poi_id"] == _CAFE_STREET]
+    assert [(s["start_at"][:5], s["end_at"][:5]) for s in kept] == [("17:00", "17:50")]  # 사용자 잠금은 그대로
+
+
+def test_정확히_닿으면_저녁을_그대로_두고_1분_모자라면_옮긴다() -> None:
+    t = _minutes(_CAFE_STREET, _PORK)
+    end_ok = f"{(18 * 60 - t) // 60:02d}:{(18 * 60 - t) % 60:02d}"
+    end_late = f"{(18 * 60 - t + 1) // 60:02d}:{(18 * 60 - t + 1) % 60:02d}"
+    for lock_end, want in ((end_ok, ("18:00", "19:00")), (end_late, ("18:05", "19:05"))):
+        slots = [{**_slot(_CAFE_STREET, "15:00", lock_end), "is_fixed": True}, _slot(_PORK, "18:00", "19:00")]
+        body, _ = _replan(directives=["KEEP_DINNER"], reasons=["none"], current_slots=slots)
+        assert _dinner_at(body) == [want], (lock_end, body["notes"])
+
+
+def test_뒤_잠금에_못_닿는_저녁은_잠그지_않는다() -> None:
+    """뒤로 옮기면 더 못 닿는다 — 잠그지 않고 하루를 낸다(식당은 제외하지 않는다)."""
+    slots = [_slot(_PORK, "18:00", "19:00"), {**_slot(_CAFE_STREET, "19:05", "19:55"), "is_fixed": True}]
+    body, seen = _replan(directives=["KEEP_DINNER"], reasons=["none"], current_slots=slots)
+
+    assert body["itinerary"] is not None, body["notes"]
+    req = seen["agent"][0]
+    assert all(b.reason != "keep_dinner" for b in req.fixed_blocks), req.fixed_blocks
+    assert _PORK not in {str(p) for p in req.excluded_poi_ids}
+    assert f"keep_dinner_skipped: {_PORK}" in body["notes"], body["notes"]
+    assert any(n.startswith(f"keep_dinner_unreachable: {_PORK}") for n in body["notes"]), body["notes"]
+
+
+def test_진행_중_방문에서_못_오는_저녁도_잡는다() -> None:
+    """앞 잠금이 진행 중 방문(지금 거기 있다)이어도 같다 — 성산에서 흑돼지거리는 저녁 창 안에 못 닿아 잠그지 않는다."""
+    slots = [_slot(_SEONGSAN, "17:00", "17:50"), _slot(_PORK, "18:00", "19:00")]
+    body, seen = _replan(directives=["KEEP_DINNER"], reasons=["none"], current_slots=slots,
+                         from_instant="2026-09-21T17:30:00+09:00")
+
+    assert body["itinerary"] is not None, body["notes"]
+    held = [(str(b.poi_id), b.reason) for b in seen["agent"][0].fixed_blocks]
+    assert (_SEONGSAN, "in_progress") in held and all(r != "keep_dinner" for _, r in held), held
+    assert any(n.startswith(f"keep_dinner_unreachable: {_PORK}") for n in body["notes"]), body["notes"]
+
+
+def test_하루_끝내기면_저녁은_원_시각_그대로_둔다() -> None:
+    """하루 끝내기는 솔버를 안 부른다 — 이동 판정 없이 사용자 잠금과 저녁을 원 시각 그대로 낸다(종전대로)."""
+    slots = [{**_slot(_CAFE_STREET, "17:00", "17:50"), "is_fixed": True}, _slot(_PORK, "18:00", "19:00")]
+    body, _ = _replan(directives=["END_DAY", "KEEP_DINNER"], reasons=["none"], current_slots=slots)
+
+    assert _dinner_at(body) == [("18:00", "19:00")], body["notes"]
+    assert not any(n.startswith("keep_dinner_unreachable") for n in body["notes"]), body["notes"]
+
+
+def test_말한_시각의_곳이_앞_잠금에서_못_오면_그_시각에_잠그지_않는다() -> None:
+    """"3시에 자연" — 그 시각에 잠글 곳이 앞 사용자 잠금에서 이동으로 못 닿으면 잠그지 않고(nl_at_none) 하루를 낸다."""
+    cafe_street = _SEED["월정리 카페거리"]  # 한라산(풀의 유일한 자연)에서 30km 넘게 떨어졌다
+    slots = [{**_slot(cafe_street, "14:00", "14:50"), "is_fixed": True}, _slot(_PORK, "18:00", "19:00")]
+    extracted = ExtractedRequest(categories=(ExtractedCategory("NATURE", at=clock(15, 0)),))
+    body, seen = _replan(reasons=["none"], current_slots=slots, free_text="3시에 자연",
+                         tweak_app=lambda orch: setattr(orch, "_request_extractor", _StubExtractor(extracted)))
+
+    assert body["itinerary"] is not None, body["notes"]
+    assert all(b.reason != "nl_at" for b in seen["agent"][0].fixed_blocks), seen["agent"][0].fixed_blocks
+    assert any(n.startswith("nl_at_none: NATURE 15:00") for n in body["notes"]), body["notes"]
 
 
 def test_이미_끝난_저녁은_잠그지_않는다() -> None:

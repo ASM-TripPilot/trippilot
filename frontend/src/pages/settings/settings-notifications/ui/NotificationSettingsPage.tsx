@@ -39,7 +39,7 @@ import {
  */
 export function NotificationSettingsPage(): ReactElement {
   const router = useRouter();
-  const { items, toggle } = useToggles();
+  const { items, toggle, loadFailed, isFetching, refetch } = useToggles();
   // null = 아직 읽는 중. 처음부터 'UNDETERMINED' 로 두면 허용한 사용자에게도 거부 배너가 잠깐 번쩍인다.
   const [permission, setPermission] = useState<PushPermission | null>(null);
   const lastRef = useRef<PushPermission | null>(null);
@@ -91,6 +91,9 @@ export function NotificationSettingsPage(): ReactElement {
   return (
     <NotificationSettingsScreen
       values={values}
+      loadFailed={loadFailed}
+      retrying={isFetching}
+      onRetry={() => void refetch()}
       pushColumnAvailable={available}
       permissionChecking={permission === null}
       onToggle={(kind, channel, next) => {

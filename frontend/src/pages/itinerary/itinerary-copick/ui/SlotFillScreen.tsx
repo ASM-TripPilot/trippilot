@@ -1,10 +1,15 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AlertCircleGlyph, BackChevronGlyph } from '@/shared/ui/glyphs';
 import { MapView } from '@/shared/map';
 import type { MapCenter, MapPin } from '@/shared/map';
-import type { SlotCandidatesCandidatesItem } from '@/shared/api/index.schemas';
+import type {
+  ImageLicense,
+  SlotCandidatesCandidatesItem,
+} from '@/shared/api/index.schemas';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import type { ConceptProgress } from './ConceptPickerScreen';
@@ -12,9 +17,8 @@ import {
   ALL_IN_ITINERARY_HINT,
   ALL_IN_ITINERARY_TITLE,
   resolveSlotEmptyFace,
-  AlertCircleGlyph,
-  BackChevronGlyph,
 } from '@/features/itinerary/index.view';
+import type { CenterChoiceKey } from '../model/centerChoice';
 import { SlotCandidateCard } from './SlotCandidateCard';
 
 /**
@@ -37,6 +41,9 @@ import { SlotCandidateCard } from './SlotCandidateCard';
  *  - INV-1: 렌더된 후보 카드 = 배선이 준 후보 poiId 집합(임의 POI 0).
  *  - 배지 **A부터**: 빈 슬롯 채우기엔 "현재"가 없어 후보가 A/B/C/D 다.
  *  - AC-8: 조회/저장 실패는 `errorMessage` 인라인(빈 문자열 0).
+ *  - TRIP-1669: `centerChoice` 를 주면 반경 세그먼트 아래에 '찾는 중심' 영역이 그려진다(후보 목록·조회 중·0건·
+ *    조회 실패 어느 얼굴에서나). 선택은 색이 아니라 `accessibilityState.selected`, 펼침은 `expanded` 로 관찰한다.
+ *    눌림은 콜백으로 올릴 뿐 요청은 페이지 몫이다. 문구는 Figma 프레임이 없는 발명값(6-b 에서 확정).
  */
 
 const APPBAR_TITLE_BASE = '후보 고르기';
@@ -50,6 +57,22 @@ const ZERO_RADIUS_LABEL = '반경 넓히기';
 const ZERO_CONCEPT_LABEL = '컨셉 변경';
 const PLACE_SEARCH_LABEL = '장소 검색';
 const CONFIRM_LOCKED_TEXT = '나머지 일정을 만드는 중이에요';
+
+// TRIP-1669 · '찾는 중심' 문구 — 정본·Figma 에 없는 발명값(시간·분 표현 없음, INV-3).
+const CENTER_TITLE = '찾는 중심';
+const CENTER_OPEN_LABEL = '다른 기준 보기';
+const CENTER_CLOSE_LABEL = '접기';
+const CENTER_AUTO: { key: CenterChoiceKey; label: string } = {
+  key: 'auto',
+  label: '자동 추천',
+};
+// 접힌 동안은 트리에 없다. 숙소 근처는 `stayAvailable` 일 때만 그린다.
+const CENTER_SECONDARY: readonly { key: CenterChoiceKey; label: string }[] = [
+  { key: 'previous', label: '방금 고른 곳' },
+  { key: 'region', label: '지역 중심' },
+  { key: 'stay', label: '숙소 근처' },
+  { key: 'point', label: '지도에서 찍기' },
+];
 
 /**
  * 후보 카드 배지 문자(**A부터**). 빈 슬롯을 채우는 문맥이라 "현재 선택"이 없어 첫 후보가 A 다
@@ -105,6 +128,111 @@ function CandidatesSkeleton(): ReactElement {
   );
 }
 
+/** '찾는 중심' 영역 — 주지 않으면 영역이 없다(기존 호출·프리뷰 무회귀). */
+interface CenterChoiceProps {
+  selected: CenterChoiceKey;
+  expanded: boolean;
+  /** false 면 '숙소 근처'만 그리지 않는다(등록 숙소 0곳). */
+  stayAvailable: boolean;
+  /** 되돌림 안내 한 줄. null 이면 노드 자체가 없다. */
+  notice: string | null;
+  onToggleExpanded: () => void;
+  /** '지도에서 찍기'도 똑같이 `onSelect('point')` — 선택 화면을 여는 건 페이지 몫이다. */
+  onSelect: (key: CenterChoiceKey) => void;
+}
+
+/** 선택지 칩 — 선택 표시는 색이 아니라 `accessibilityState.selected`(늘 boolean). */
+function CenterChip({
+  option,
+  selected,
+  onSelect,
+}: {
+  option: { key: CenterChoiceKey; label: string };
+  selected: boolean;
+  onSelect: (key: CenterChoiceKey) => void;
+}): ReactElement {
+  return (
+    <Pressable
+      testID={`itinerary-copick-center-opt-${option.key}`}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPress={() => onSelect(option.key)}
+      className={`rounded-pill px-md py-sm ${
+        selected ? 'border border-primary bg-primary-pale' : 'bg-surface-soft'
+      }`}
+    >
+      <Text
+        className={`font-noto-bold text-label font-bold ${
+          selected ? 'text-primary-text' : 'text-muted'
+        }`}
+      >
+        {option.label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function CenterChoiceArea({
+  choice,
+}: {
+  choice: CenterChoiceProps;
+}): ReactElement {
+  const { selected, expanded, stayAvailable, notice } = choice;
+  return (
+    <View testID="itinerary-copick-center-root" className="gap-xs">
+      <View className="flex-row items-center justify-between">
+        <Text
+          testID="itinerary-copick-center-title"
+          className="font-noto text-caption text-muted"
+        >
+          {CENTER_TITLE}
+        </Text>
+        <Pressable
+          testID="itinerary-copick-center-toggle"
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          onPress={choice.onToggleExpanded}
+          hitSlop={8}
+        >
+          <Text className="font-noto text-caption text-primary-text">
+            {expanded ? CENTER_CLOSE_LABEL : CENTER_OPEN_LABEL}
+          </Text>
+        </Pressable>
+      </View>
+      <View className="flex-row flex-wrap gap-xs">
+        <CenterChip
+          option={CENTER_AUTO}
+          selected={selected === CENTER_AUTO.key}
+          onSelect={choice.onSelect}
+        />
+        {expanded
+          ? CENTER_SECONDARY.filter(
+              (option) => option.key !== 'stay' || stayAvailable
+            ).map((option) => (
+              <CenterChip
+                key={option.key}
+                option={option}
+                selected={selected === option.key}
+                onSelect={choice.onSelect}
+              />
+            ))
+          : null}
+      </View>
+      {notice === null ? null : (
+        <View
+          testID="itinerary-copick-center-notice"
+          className="w-full flex-row items-center gap-sm rounded-button bg-primary-pale px-md py-sm"
+        >
+          <AlertCircleGlyph size={20} />
+          <Text className="flex-1 font-noto text-label text-primary-text">
+            {notice}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 export interface SlotFillScreenProps {
   candidates: SlotCandidatesCandidatesItem[];
   radiusSteps: readonly { key: string; label: string }[];
@@ -141,6 +269,7 @@ export interface SlotFillScreenProps {
       nameKo?: string | null;
       tags?: string[];
       imageUrl?: string | null;
+      imageLicense: ImageLicense | null | undefined;
       dimmed?: boolean;
     }
   >;
@@ -154,6 +283,8 @@ export interface SlotFillScreenProps {
   };
   onSelectRadius: (key: string) => void;
   onSelectRadio: (poiId: string) => void;
+  /** 후보 사진·이름 → 장소 상세(TRIP-1840). 행의 나머지는 그대로 라디오. 미주입이면 상세 칸 없음. */
+  onPressPlace?: (poiId: string) => void;
   onConfirm: () => void;
   onExpandRadius: () => void;
   /** 신규(D10) — 마지막 단계에서 반경 좁히기(한 단계 뒤). */
@@ -164,6 +295,8 @@ export interface SlotFillScreenProps {
   emptyReason?: string | null;
   /** 0건 `ALL_IN_ITINERARY` 얼굴의 유일한 CTA "장소 검색". */
   onPressPlaceSearch?: () => void;
+  /** TRIP-1669 — 찾는 중심 영역. 미주입 → 영역 없음. */
+  centerChoice?: CenterChoiceProps;
 }
 
 export function SlotFillScreen({
@@ -187,6 +320,7 @@ export function SlotFillScreen({
   mapView,
   onSelectRadius,
   onSelectRadio,
+  onPressPlace,
   onConfirm,
   onExpandRadius,
   onShrinkRadius,
@@ -194,6 +328,7 @@ export function SlotFillScreen({
   onBack,
   emptyReason,
   onPressPlaceSearch,
+  centerChoice,
 }: SlotFillScreenProps): ReactElement {
   const isEmpty = candidates.length === 0;
   const emptyFace = resolveSlotEmptyFace(emptyReason);
@@ -331,6 +466,12 @@ export function SlotFillScreen({
             )}
           </View>
 
+          {/* 찾는 중심(TRIP-1669) — 얼굴(목록·조회 중·0건·실패)과 무관하게 반경 세그 바로 아래에 있어, 후보가 없을 때도
+              거기서 중심을 바꿔 다시 찾을 수 있다. */}
+          {centerChoice === undefined ? null : (
+            <CenterChoiceArea choice={centerChoice} />
+          )}
+
           {/* 지도 카드 — 기준 핀·반경 원(TRIP-1043)·후보 A/B/C 핀(TRIP-1081). Figma h10 순서대로 반경
               세그 아래. 보여주기 전용(viewOnly)·검증된 동선 아님(connectPins=false). 좌표 없으면 mapView
               미주입이라 이 블록 자체가 안 뜬다. */}
@@ -361,7 +502,7 @@ export function SlotFillScreen({
               testID="itinerary-copick-slotfill-error"
               className="w-full flex-row items-center gap-sm rounded-button bg-primary-pale px-md py-sm"
             >
-              <AlertCircleGlyph size={20} tone="primaryText" />
+              <AlertCircleGlyph size={20} />
               <Text className="flex-1 font-noto text-label text-primary-text">
                 {errorMessage}
               </Text>
@@ -373,7 +514,7 @@ export function SlotFillScreen({
               testID="itinerary-copick-candidates-error"
               className="w-full flex-row items-center gap-sm rounded-button bg-primary-pale px-md py-sm"
             >
-              <AlertCircleGlyph size={20} tone="primaryText" />
+              <AlertCircleGlyph size={20} />
               <Text className="flex-1 font-noto text-label text-primary-text">
                 {candidatesErrorMessage}
               </Text>
@@ -406,16 +547,14 @@ export function SlotFillScreen({
                     <Text className="text-center font-noto text-label text-muted">
                       {ALL_IN_ITINERARY_HINT}
                     </Text>
-                    <Pressable
+                    <Button
                       testID="itinerary-copick-zero-search"
-                      accessibilityRole="button"
+                      size="md"
                       onPress={onPressPlaceSearch}
-                      className="h-12 w-full items-center justify-center rounded-button bg-primary"
+                      className="w-full"
                     >
-                      <Text className="font-noto-bold text-label font-bold text-on-primary">
-                        {PLACE_SEARCH_LABEL}
-                      </Text>
-                    </Pressable>
+                      {PLACE_SEARCH_LABEL}
+                    </Button>
                   </>
                 ) : (
                   <>
@@ -447,16 +586,14 @@ export function SlotFillScreen({
                           {ZERO_RADIUS_LABEL}
                         </Text>
                       </Pressable>
-                      <Pressable
+                      <Button
                         testID="itinerary-copick-zero-concept"
-                        accessibilityRole="button"
+                        size="md"
                         onPress={onChangeConcept}
-                        className="h-12 w-full items-center justify-center rounded-button bg-primary"
+                        className="w-full"
                       >
-                        <Text className="font-noto-bold text-label font-bold text-on-primary">
-                          {ZERO_CONCEPT_LABEL}
-                        </Text>
-                      </Pressable>
+                        {ZERO_CONCEPT_LABEL}
+                      </Button>
                     </View>
                   </>
                 )}
@@ -484,9 +621,15 @@ export function SlotFillScreen({
                       nameKo={view?.nameKo}
                       tags={view?.tags}
                       imageUrl={view?.imageUrl}
+                      imageLicense={view?.imageLicense}
                       category={candidate.category}
                       coverPoiId={candidate.poiId}
                       dimmed={view?.dimmed}
+                      onPressPlace={
+                        onPressPlace
+                          ? () => onPressPlace(candidate.poiId)
+                          : undefined
+                      }
                       trailing={
                         <View className="h-[24px] w-[24px] items-center justify-center">
                           <View
@@ -515,7 +658,7 @@ export function SlotFillScreen({
             testID="itinerary-copick-confirm-locked"
             className="mx-lg flex-row items-center gap-sm rounded-button bg-primary-pale px-md py-sm"
           >
-            <AlertCircleGlyph size={20} tone="primaryText" />
+            <AlertCircleGlyph size={20} />
             <Text className="flex-1 font-noto text-label text-primary-text">
               {CONFIRM_LOCKED_TEXT}
             </Text>
@@ -535,23 +678,15 @@ export function SlotFillScreen({
                 {canExpandRadius ? EXPAND_RADIUS_LABEL : SHRINK_RADIUS_LABEL}
               </Text>
             </Pressable>
-            <Pressable
+            <Button
               testID="itinerary-copick-slotfill-confirm"
-              accessibilityRole="button"
+              size="md"
               disabled={confirmDisabled}
               onPress={confirmDisabled ? undefined : onConfirm}
-              className={`h-12 flex-1 items-center justify-center rounded-button ${
-                confirmDisabled ? 'bg-surface-strong' : 'bg-primary'
-              }`}
+              className="flex-1"
             >
-              <Text
-                className={`font-noto-bold text-[16px] font-bold ${
-                  confirmDisabled ? 'text-muted' : 'text-on-primary'
-                }`}
-              >
-                {confirmLabel}
-              </Text>
-            </Pressable>
+              {confirmLabel}
+            </Button>
           </View>
         )}
       </View>

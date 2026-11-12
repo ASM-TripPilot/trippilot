@@ -17,6 +17,7 @@ import {
   newTestQueryClient,
 } from '@/test-support/queryRender';
 import { server } from '@/mocks/server';
+import { retryUnlessNotFound } from '@/shared/api';
 import { getGetMeNotificationsQueryKey } from '@/shared/api/index.hooks';
 import type { Notification } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
@@ -422,6 +423,109 @@ describe('조회 실패 — "알림 없음"으로 접지 않고 오류 얼굴 + 
       await waitFor(() => expect(screen.getByTestId(RETRY)).toBeEnabled());
       expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
       expect(screen.queryByTestId(EMPTY)).toBeNull();
+    });
+  });
+
+  describe('E4 · 앱 재시도 규칙에서도 [다시 시도] 한 번은 요청 한 번 (TRIP-1766)', () => {
+    /**
+     * 앱 기본과 같은 재시도 규칙(404 빼고 3회 더)을 켜고 지연만 0 으로 — 테스트 클라이언트 기본(retry:false)에선
+     * "누르면 자동 재시도까지 다 돌 때까지 버튼이 잠긴다"는 버그가 원리적으로 안 보인다.
+     */
+    function renderWithAppRetry(gcTime = 0) {
+      const client = newTestQueryClient({ gcTime });
+      const defaults = client.getDefaultOptions();
+      client.setDefaultOptions({
+        ...defaults,
+        queries: {
+          ...defaults.queries,
+          retry: retryUnlessNotFound,
+          retryDelay: 0,
+        },
+      });
+      return render(<NotificationInboxPage />, {
+        wrapper: createWrapper(client),
+      });
+    }
+    const fail = (): ListReply => ({ status: 500 });
+
+    it('첫 조회는 자동 재시도를 다 쓴 뒤 오류 얼굴과 눌리는 [다시 시도]를 보인다', async () => {
+      // 준비 — 첫 조회 1건 + 자동 재시도 3건이 모두 실패.
+      listReplies = [fail(), fail(), fail(), fail()];
+
+      // 실행
+      renderWithAppRetry();
+
+      // 단언
+      expect(await screen.findByTestId(ERROR)).toBeOnTheScreen();
+      expect(listGets()).toBe(4);
+      expect(screen.getByTestId(RETRY)).toBeEnabled();
+    });
+
+    it('[다시 시도]는 요청 1건 — 그동안만 비활성이고 연타해도 안 늘며, 다시 실패하면 곧바로 다시 눌린다', async () => {
+      // 준비 — 첫 조회 4건 실패로 오류 얼굴. 다시 시도의 GET 은 문 뒤에서 실패하고, 뒤에 실패 3건을 더 쌓아
+      // 자동 재시도가 끼면 GET 수로 드러나게 한다.
+      const gate = createGate();
+      listReplies = [
+        fail(),
+        fail(),
+        fail(),
+        fail(),
+        { status: 500, gate },
+        fail(),
+        fail(),
+        fail(),
+      ];
+      renderWithAppRetry();
+      await screen.findByTestId(ERROR);
+      expect(listGets()).toBe(4);
+
+      // 실행 1 — 누르고, 응답이 붙잡힌 채 한 번 더 누른다.
+      fireEvent.press(screen.getByTestId(RETRY));
+      await waitFor(() => expect(listGets()).toBe(5));
+      await waitFor(() => expect(screen.getByTestId(RETRY)).toBeDisabled());
+      fireEvent.press(screen.getByTestId(RETRY));
+      await settle();
+      expect(listGets()).toBe(5);
+
+      // 실행 2 — 그 한 건이 실패로 끝난다.
+      await act(async () => {
+        gate.release();
+      });
+
+      // 단언 — 자동 재시도 없이 바로 다시 눌리고, 오류 얼굴 그대로.
+      await waitFor(() => expect(screen.getByTestId(RETRY)).toBeEnabled());
+      await settle();
+      expect(listGets()).toBe(5);
+      expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+    });
+    it('나갔다 다시 들어오면(오류 캐시가 남음) 들어올 때의 조회도 1건 — 실패하면 곧바로 [다시 시도]가 눌린다', async () => {
+      // 준비 — 첫 방문에서 4건 실패로 오류 얼굴, 캐시를 남기고(gcTime 무한) 화면만 내린다.
+      const gate = createGate();
+      listReplies = [
+        fail(),
+        fail(),
+        fail(),
+        fail(),
+        { status: 500, gate },
+        fail(),
+        fail(),
+        fail(),
+      ];
+      const first = renderWithAppRetry(Infinity);
+      await screen.findByTestId(ERROR);
+      first.rerender(<></>);
+
+      // 실행 — 같은 캐시 위로 다시 들어온다(마운트 조회가 문 뒤에서 실패).
+      first.rerender(<NotificationInboxPage />);
+      await waitFor(() => expect(listGets()).toBe(5));
+      await act(async () => {
+        gate.release();
+      });
+
+      // 단언 — 자동 재시도 없이 1건으로 끝나고 바로 눌린다.
+      await waitFor(() => expect(screen.getByTestId(RETRY)).toBeEnabled());
+      await settle();
+      expect(listGets()).toBe(5);
     });
   });
 

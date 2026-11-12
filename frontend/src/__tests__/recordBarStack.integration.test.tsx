@@ -34,8 +34,20 @@ jest.mock('@/shared/location', () => ({
   useTripRoutes: () => ({ routes: [] }),
   distanceSourceByDate: jest.fn(),
 }));
+// TRIP-1781 — 실물 TripSummaryPage 가 표지 사진 훅을 부른다. 이 파일엔 QueryClient 가 없고 trips 모듈도 두 훅만 남긴 목이라 진짜 훅이 못 돈다 →
+// 배럴을 부분 목으로 막아 "사진 없음·고르는 중 아님"으로 둔다(칸 이동 스택 심판과 무관한 배선이다).
+jest.mock('@/features/reflection', () => ({
+  ...jest.requireActual('@/features/reflection'),
+  useTripCoverPhoto: () => ({ photo: null, picking: false }),
+}));
 jest.mock('@/shared/api/generated/trips/trips', () => ({
   useGetTripsTripId: () => ({
+    data: undefined,
+    isPending: false,
+    isError: false,
+  }),
+  // TRIP-1666 — 실물 TripSummaryPage 가 일정 조회를 물게 되면서 같은 무해 스텁이 필요하다(통째로 갈아 끼운 목이라 없는 훅은 undefined 가 된다).
+  useGetTripsTripIdItinerary: () => ({
     data: undefined,
     isPending: false,
     isError: false,

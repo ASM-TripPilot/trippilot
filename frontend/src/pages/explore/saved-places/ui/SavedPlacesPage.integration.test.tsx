@@ -13,6 +13,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import type {
   MustVisit,
   Place,
@@ -150,6 +151,7 @@ afterEach(() => {
   mockBack.mockReset();
   mockParams = {};
   resetWizardDraft();
+  resetPressGuard();
 });
 
 afterAll(() => server.close());
@@ -587,6 +589,7 @@ describe('save', () => {
       useTripWizardStore.setState({
         mustVisits: [
           {
+            imageLicense: null,
             sourcePoiId: 'poi-x',
             name: '남겨진 곳',
             imageUrl: null,
@@ -805,6 +808,18 @@ describe('save', () => {
       ).toEqual(['p1', 'p2', 'p3', 'p4']);
       expect(atPush?.mustVisitsInitialized).toBe(true);
       expect(atPush?.preserveMustVisitsOnce).toBe(true);
+    });
+
+    // TRIP-1775 — 창 안의 둘째 탭은 위저드를 한 번 더 쌓지 않는다.
+    it('버튼을 빠르게 두 번 눌러도 step1 은 한 번만 쌓인다', async () => {
+      await renderLoaded();
+      await waitFor(() => expect(itemTestIds()).toHaveLength(4));
+      const button = screen.getByTestId('explore-saved-createtrip');
+
+      fireEvent.press(button);
+      fireEvent.press(button);
+
+      expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
     });
   });
 
@@ -1310,6 +1325,29 @@ describe('select › 위저드', () => {
     });
   });
 
+  describe('🔴 TRIP-1840 · 사진·이름 칸 → d06 장소 상세 push, 선택은 그대로', () => {
+    it('p3 를 고른 뒤 p2 칸을 누르면 /explore/places/p2 push 1회 · 연타 둘째는 무시 · 선택 수는 1곳 그대로', async () => {
+      // 준비 — 6곳 그린 뒤 p3 하나 선택.
+      await renderSelectLoaded();
+      fireEvent.press(screen.getByTestId('mustvisit-pick-check-p3'));
+      expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+        '담은 곳 6곳 · 1곳 선택됨'
+      );
+      mockPush.mockClear();
+      resetPressGuard();
+
+      // 실행 — p2 사진·이름 칸을 같은 틱에 두 번 누른다.
+      fireEvent.press(screen.getByTestId('mustvisit-pick-open-p2'));
+      fireEvent.press(screen.getByTestId('mustvisit-pick-open-p2'));
+
+      // 단언 — 상세(기존 d06 라우트)로 한 번만, 선택은 바뀌지 않았다.
+      expect(mockPush.mock.calls).toEqual([['/explore/places/p2']]);
+      expect(screen.getByTestId('mustvisit-pick-subtitle')).toHaveTextContent(
+        '담은 곳 6곳 · 1곳 선택됨'
+      );
+    });
+  });
+
   describe('IS-2 · 선택한 곳만 시드된다 (AC-1 · TRIP-491 재현)', () => {
     it('6곳 중 3곳만 골라 완료하면 그 3곳만 위저드 스토어에 들어간다', async () => {
       await renderSelectLoaded();
@@ -1593,7 +1631,7 @@ describe('select › 위저드', () => {
     name = `장소 ${sourcePoiId}`,
     region: string | null = null
   ): MustVisitSeedItem {
-    return { sourcePoiId, name, imageUrl: null, region };
+    return { imageLicense: null, sourcePoiId, name, imageUrl: null, region };
   }
 
   function seededIds(): string[] {
@@ -2051,6 +2089,7 @@ describe('select › 위저드', () => {
             pathname: '/explore/places',
             params: {
               region: ['서울특별시', '부산광역시'],
+              regionCode: ['11', '26'],
               ...wizardOriginParams(),
             },
           },
@@ -2076,7 +2115,11 @@ describe('select › 위저드', () => {
   /** d04 로 갈 때 실어야 할 파라미터 — 기대값은 헬퍼 출력으로 만든다(철자 손복제 금지, 1026 관례). */
   const SEOUL_TO_EXPLORE = {
     pathname: '/explore/places',
-    params: { region: ['서울특별시'], ...wizardOriginParams() },
+    params: {
+      region: ['서울특별시'],
+      regionCode: ['11'],
+      ...wizardOriginParams(),
+    },
   };
 
   describe('🔴 TRIP-1042 R6 · d04 로 가는 세 버튼이 여행 지역 이름을 싣는다 (AC-7)', () => {
@@ -2727,6 +2770,7 @@ describe('select › 여행', () => {
       ],
       mustVisits: [
         {
+          imageLicense: null,
           sourcePoiId: 'bs2',
           name: '장소 bs2',
           imageUrl: null,
@@ -3130,7 +3174,11 @@ describe('select › 여행', () => {
         [
           {
             pathname: '/explore/places',
-            params: { region: ['부산광역시'], ...wizardOriginParams() },
+            params: {
+              region: ['부산광역시'],
+              regionCode: ['26'],
+              ...wizardOriginParams(),
+            },
           },
         ],
       ]);

@@ -6,7 +6,7 @@ import {
 } from '@testing-library/react-native';
 
 import { HeartButton } from '@/shared/ui/HeartButton';
-import { HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
+import { HeartOutlineGlyph } from '@/shared/ui/glyphs';
 import { stayCoverFor } from '@/test-support/placeCoverFixtures';
 
 import { StaySearchCard } from './StaySearchCard';

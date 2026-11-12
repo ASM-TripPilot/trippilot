@@ -26,8 +26,10 @@
  * ⚠️ 실개폐·딤 전면 커버·중앙정렬·터치 차단은 `@gorhom/bottom-sheet` 통과형 목이라 jest 원리적
  * 사각(repo-traps 바텀시트 함정) — 6-b 실기(`_dev/preview.tsx` 의 시트 열림 키) 몫이다.
  */
+import { SearchGlyph } from '@/shared/ui/glyphs';
 import { type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 
 import { SheetShell } from '@/shared/ui/SheetShell';
 
@@ -35,7 +37,7 @@ import { SavedStayCard } from '@/entities/stay';
 import { formatBaseNightRange } from '@/entities/trip';
 import type { SavedStay } from '@/shared/api/index.schemas';
 
-import { CheckGlyph, SearchGlyph } from '@/features/trip/index.view';
+import { TripCheckGlyph } from '@/features/trip/index.view';
 
 /** 후보 = 저장 숙소 + 표시용 rich 필드(사진·동네·가격·그림 키). 동네는 배선이 주소 시군구 토큰으로 채운다
  *  (TRIP-1074, 주소 모름이면 undefined). 사진·가격은 SavedStay 계약에 없어(실측) 실데이터 경로는
@@ -49,7 +51,7 @@ export type StaySelectCandidate = SavedStay & {
 };
 
 /** TRIP-1011 — 후보를 나눠 그릴 섹션 하나(헤더 제목 + 그 섹션의 후보). */
-export interface StaySelectSection {
+interface StaySelectSection {
   key: 'here' | 'other';
   title: string;
   candidates: StaySelectCandidate[];
@@ -135,7 +137,7 @@ export function StaySelectSheet({
             </Text>
           ) : undefined
         }
-        trailing={selected ? <CheckGlyph size={22} tone="primary" /> : null}
+        trailing={selected ? <TripCheckGlyph size={22} tone="primary" /> : null}
         onPress={() => onSelect(stay.savedStayId)}
       />
     );
@@ -217,19 +219,14 @@ export function StaySelectSheet({
 
       {/* 지정(primary) — 후보가 있을 때만. 미선택이면 진짜 disabled 라 눌러도 발화 0(★3). */}
       {empty ? null : (
-        <Pressable
+        <Button
           testID="trip-base-staysheet-assign"
-          accessibilityRole="button"
           disabled={assignDisabled}
           onPress={onAssign}
-          className={`h-[52px] w-full items-center justify-center rounded-button bg-primary ${
-            assignDisabled ? 'opacity-40' : ''
-          }`}
+          className="w-full"
         >
-          <Text className="text-[16px] font-noto-bold font-bold text-on-primary">
-            이 밤 거점으로 지정
-          </Text>
-        </Pressable>
+          이 밤 거점으로 지정
+        </Button>
       )}
     </SheetShell>
   );

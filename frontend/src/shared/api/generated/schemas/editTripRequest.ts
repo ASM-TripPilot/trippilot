@@ -26,4 +26,13 @@ export interface EditTripRequest {
   firstDayStartAt?: string | null;
   /** **마지막날만** 다른 종료 시각(출발·귀가 전). 생략하면 기본 21:00. 당일치기는 첫날이자 마지막날이라 둘 다 걸리고, 그때는 시작 < 종료여야 한다(아니면 400). */
   lastDayEndAt?: string | null;
+  /**
+   * 커버로 고른 앱 번들 지역 그림 키(TRIP-1789). null · 생략 = 첫 목적지 자동. 형식만 검증하고(밖이면 400) 목록은 앱이 소유한다 — 앱이 모르는 키면 앱이 자동으로 폴백한다.
+   * **편집 전에 반드시 읽어라.** 다른 가변 필드처럼 **대체**라 생략하면 지워진다 — 다른 칸만 고치려면 이 값을 그대로 돌려보낸다.
+   * @maxLength 40
+   * @pattern ^[A-Za-z0-9_-]+$
+   */
+  coverKey?: string | null;
+  /** 기간을 바꾸며 지금 일정을 버린다(TRIP-1789 · 사용자 결정 2026-11-06). 일수가 달라도 된다. 응답에 저장되는 칸이 아니라 이 요청의 지시다. 기간이 그대로면 아무것도 버리지 않는다. false 면 일수 변경은 `TRIP_PERIOD_LENGTH_CHANGED`, 일수가 같으면 일정째 날짜만 민다. 시작 뒤 · 방문 기록 있음 · 생성 중이면 true 여도 409 다. */
+  discardItinerary?: boolean;
 }

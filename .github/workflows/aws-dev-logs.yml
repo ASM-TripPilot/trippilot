@@ -43,12 +43,16 @@ on:
         description: 걸러 낸 사본(<component>.filtered.log)을 만들 정규식(grep -E) — 비우면 생략
         type: string
         default: ''
+      log_filter:
+        description: cloudwatch 전용 — Logs Insights 쪽에서 미리 거르는 정규식(filter log like /…/). 주면 창을 2시간→24시간으로 넓혀 수십 일(예 since=23d)을 한 번에 본다
+        type: string
+        default: ''
 
 jobs:
   dump:
     environment: dev          # 배포 역할의 신뢰 정책이 environment claim 으로 묶여 있다 (aws-deploy.yml 과 같음)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30       # cloudwatch 2시간 창 하나 ≈5s — 10일이면 ≈10분, log_filter 로 24시간 창이면 그보다 짧다
     permissions:
       contents: read
       id-token: write         # AWS 역할 (EKS 파드 로그 읽기)
@@ -59,6 +63,7 @@ jobs:
       NAMESPACE: ${{ inputs.namespace }}
       COMPONENT: ${{ inputs.component }}
       PATTERN: ${{ inputs.pattern }}
+      LOG_FILTER: ${{ inputs.log_filter }}
     steps:
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v5
@@ -98,7 +103,10 @@ jobs:
           GROUP = "/aws/containerinsights/trippilot-dev/application"   # 클러스터 이름이다 — 네임스페이스는 아래 필터로 가른다
           NAMESPACE = os.environ["NAMESPACE"]
           LIMIT = 10_000                       # Logs Insights 한 질의의 결과 상한
-          WINDOW = 2 * 3600                    # 상한에 덜 닿게 시간 창을 나눈다
+          # 서버 쪽 거르기(폴백·경고 줄만 등) — 줄이 드물어지니 창을 넓혀도 상한에 안 닿고, 창 수(질의 수)가 줄어
+          # 수십 일을 한 번에 본다. 정규식에 '/' 는 쓰지 말 것(like /…/ 의 경계).
+          LOG_FILTER = os.environ.get("LOG_FILTER", "").strip()
+          WINDOW = (24 if LOG_FILTER else 2) * 3600   # 상한에 덜 닿게 시간 창을 나눈다
 
           m = re.fullmatch(r"(\d+)([smhd])", os.environ["SINCE"].strip())
           if not m:
@@ -128,10 +136,13 @@ jobs:
               lines = []
               for w0 in range(start, end, WINDOW):
                   w1 = min(end, w0 + WINDOW)
-                  query = ("fields @timestamp, kubernetes.pod_name, kubernetes.container_name, log"
-                           f' | filter kubernetes.namespace_name = "{NAMESPACE}" and kubernetes.container_name = "{c}"'
-                           " | filter log not like /GET \\/health/"
-                           f" | sort @timestamp asc | limit {LIMIT}")
+                  query = (
+                      "fields @timestamp, kubernetes.pod_name, kubernetes.container_name, log"
+                      f' | filter kubernetes.namespace_name = "{NAMESPACE}" and kubernetes.container_name = "{c}"'
+                      " | filter log not like /GET \\/health/"
+                      + (f" | filter log like /{LOG_FILTER}/" if LOG_FILTER else "")
+                      + f" | sort @timestamp asc | limit {LIMIT}"
+                  )
                   qid = aws("start-query", "--log-group-name", GROUP, "--start-time", str(w0),
                             "--end-time", str(w1), "--query-string", query)["queryId"]
                   while True:
@@ -153,7 +164,7 @@ jobs:
               print(f"{c}: {len(lines)} 줄")
           # 상한에 닿은 창이 있으면 그 사실을 남긴다(조용한 절단 금지) — since 를 줄이거나 창을 나눠 다시.
           (out / "pods.txt").write_text(
-              f"source=cloudwatch group={GROUP} namespace={NAMESPACE} since={os.environ['SINCE']}\n"
+              f"source=cloudwatch group={GROUP} namespace={NAMESPACE} since={os.environ['SINCE']} log_filter={LOG_FILTER!r}\n"
               + ("".join(f"TRUNCATED {t}\n" for t in truncated) if truncated else "truncated: none\n"),
               encoding="utf-8")
           if truncated:

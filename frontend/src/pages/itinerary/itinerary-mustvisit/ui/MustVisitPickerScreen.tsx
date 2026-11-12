@@ -1,6 +1,13 @@
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { Button } from '@/shared/ui/Button';
+import {
+  CloseGlyph,
+  PlusGlyph,
+  InfoCircleGlyph,
+  BackChevronGlyph,
+} from '@/shared/ui/glyphs';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MapView, type MapPin } from '@/shared/map';
@@ -14,13 +21,10 @@ import {
   type MustVisitListView,
 } from '@/features/itinerary/index.view';
 import {
-  BackChevronGlyph,
-  CloseGlyph,
-  InfoCircleGlyph,
-  LockGlyph,
-  PencilGlyph,
-  PlusGlyph,
+  ItineraryLockGlyph,
+  ItineraryPencilGlyph,
 } from '@/features/itinerary/index.view';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * h02 필수 방문지 — Figma `3824:2173`(default) · `4294:8292`(error).
@@ -71,7 +75,7 @@ const RETRY_LABEL = '다시 시도';
 // 카드 그림자(Figma `0px 4px 16px rgba(0,0,0,0.08)`). RN 은 box-shadow 가 없어 스타일
 // 프로퍼티로 옮긴다 — 그림자는 토큰 대상이 아니다(`HomeScreen.heroCardShadow` 와 같은 값).
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.08,
   shadowRadius: 16,
@@ -216,12 +220,13 @@ function MustVisitCard({
         </Text>
       </View>
       <View className="h-[78px] w-[78px] overflow-hidden rounded-thumb bg-surface-strong">
-        <PlacePhoto
+        <PoiPhoto
           testID={`itinerary-mustvisit-image-${item.sourcePoiId}`}
           imageUrl={item.imageUrl}
+          imageLicense={item.imageLicense}
+          surface="thumb"
           category={item.category}
           poiId={item.sourcePoiId}
-          contentFit="cover"
           cachePolicy="memory-disk"
           className="h-full w-full"
         />
@@ -231,7 +236,7 @@ function MustVisitCard({
           <Chip
             testID={`itinerary-mustvisit-chip-fixed-${item.sourcePoiId}`}
             label={CHIP_FIXED}
-            icon={<LockGlyph />}
+            icon={<ItineraryLockGlyph />}
           />
         ) : (
           <Chip
@@ -284,7 +289,7 @@ function MustVisitCard({
           onPress={() => onPressItem?.(item.sourcePoiId)}
           hitSlop={8}
         >
-          <PencilGlyph />
+          <ItineraryPencilGlyph />
         </Pressable>
       ) : (
         <Pressable
@@ -299,7 +304,7 @@ function MustVisitCard({
           }
           hitSlop={8}
         >
-          <CloseGlyph />
+          <CloseGlyph size={20} color="mutedSoft" />
         </Pressable>
       )}
     </Pressable>
@@ -321,7 +326,7 @@ function AddButton({
       onPress={onPress}
       className="w-full flex-row items-center justify-center gap-sm rounded-button border-[1.4px] border-hairline-strong bg-canvas py-[14px]"
     >
-      <PlusGlyph tone="primary" />
+      <PlusGlyph color="primary" />
       <Text className="font-noto-bold text-body font-bold text-ink">
         {ADD_LABEL}
       </Text>
@@ -501,7 +506,7 @@ export function MustVisitPickerScreen({
             <StateNotice
               testID="itinerary-mustvisit-screen-empty"
               dashed
-              icon={<InfoCircleGlyph size={32} tone="primaryText" />}
+              icon={<InfoCircleGlyph size={32} color="primaryText" />}
               title={EMPTY_TITLE}
               description={mode === 'CO_PLAN' ? EMPTY_NOTE_CO_PLAN : EMPTY_NOTE}
               actions={[]}
@@ -546,23 +551,14 @@ export function MustVisitPickerScreen({
                 {proceedBlockedReason}
               </Text>
             )}
-            <Pressable
+            <Button
               testID="itinerary-mustvisit-screen-proceed"
-              accessibilityRole="button"
               disabled={blocked}
               onPress={onProceed}
-              className={`w-full items-center justify-center rounded-button py-lg ${
-                blocked ? 'bg-hairline-strong' : 'bg-primary'
-              }`}
+              className="w-full"
             >
-              <Text
-                className={`font-noto-bold text-[16px] font-bold ${
-                  blocked ? 'text-muted' : 'text-on-primary'
-                }`}
-              >
-                {PROCEED_LABEL}
-              </Text>
-            </Pressable>
+              {PROCEED_LABEL}
+            </Button>
           </View>
         </ScrollView>
       </View>

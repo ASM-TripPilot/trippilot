@@ -12,6 +12,7 @@ export {
   summaryDestinations,
   summaryPeriod,
   summaryPreferences,
+  destinationLabel,
 } from './model/tripSummary';
 export type { PreferenceSummary, SummaryLine } from './model/tripSummary';
 export {
@@ -21,6 +22,7 @@ export {
 } from './model/tripWizardStep1';
 export type { CompanionCode } from './model/tripWizardStep1';
 export { minNightsFor, useTripWizardStore } from './model/tripWizardStore';
+export { openNewTripWizard } from './model/openNewTripWizard';
 export { isWizardOrigin, wizardOriginParams } from './model/wizardOrigin';
 export {
   DEFAULT_DAY_END,
@@ -35,4 +37,4 @@ export {
   summaryDayWindow,
   validateDayWindow,
 } from './model/dayWindow';
-export type { DayWindow, DayWindowViolation } from './model/dayWindow';
+export type { DayWindow } from './model/dayWindow';

@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | GitHub Environment | `dev` | `prd` |
 | 기본 배포 브랜치 | 운영 대상 `main` · 개발 대상(`target=dev`) `develop` | `main` |
-| VPC / EKS / ECR / DB / Redis | `trippilot-dev-*` | `trippilot-prd-*` |
+| VPC / EKS / ECR / DB | `trippilot-dev-*` | `trippilot-prd-*` |
 | 가용 영역 | 2 | 3 |
 | NAT Gateway | 1개 | AZ별 1개 |
 | PostgreSQL | RDS, 단일 AZ | RDS Multi-AZ, 삭제 보호 |
@@ -30,7 +30,6 @@ flowchart LR
     Gateway --> Backend[Spring Boot backend]
     Backend <--> AI[FastAPI AI]
     Backend --> DB[(RDS PostgreSQL)]
-    Backend --> Cache[(TLS Redis)]
     AI --> Embed[선택형 임베딩]
     AI --> DB
 ```
@@ -82,7 +81,7 @@ Actions → **AWS / Terraform and EKS deploy** → Run workflow:
 | `embedding_enabled=true` | 임베딩 이미지 빌드·서비스 배포·AI pgvector RAG 연결. 메모리 비용 증가 |
 | `dialogue_orchestrator=on\|off` | 도우미 오케스트레이터 켜기·끄기. 배포 역할이 AI 시크릿 `TRIPPILOT_DIALOGUE_ORCHESTRATOR` 에 써서 다음 배포에도 남는다. `keep`(기본)은 저장값 유지 |
 | `llm_feature_models=FEATURE=model,…` | 기능별 모델 배정(`TRIPPILOT_LLM_FEATURE_MODELS`)에 덧씌울 항목. 같은 기능은 바꾸고 나머지는 그대로 시크릿에 쓴다. 같은 커밋 `LlmFeature` 에 없는 이름은 쓰기 전에 거절. 비우면 유지 |
-| `runtime_switches=KEY=VALUE;…` | 상황 감지 스위치를 시크릿에 쓴다 — backend `PLANB_SITUATION_SWEEP`·`PLANB_SITUATION_HORIZON`·`PLANB_SITUATION_SWEEP_ACCOUNT_IDS`·`PLANB_PREPARED_REPLAN`, ai `HOLIDAY_CLOSURE_MODE` 다섯 키만. 쌍 구분은 `;`(계정 목록 값에 쉼표가 있다), `KEY=` 는 그 키를 지워 앱 기본값으로 되돌린다. 그 밖의 키·형식·값 오류는 배포 실패. 비우면 유지 |
+| `runtime_switches=KEY=VALUE;…` | 상황 감지 스위치를 시크릿에 쓴다 — backend `PLANB_SITUATION_SWEEP`·`PLANB_SITUATION_HORIZON`·`PLANB_SITUATION_SWEEP_ACCOUNT_IDS`·`PLANB_PREPARED_REPLAN`, ai `HOLIDAY_CLOSURE_MODE`·`TRIPPILOT_KB5_FALLBACK`(앱 기본 on — `off` 로 끈다)·`TRIPPILOT_KB5_OPEN_SEARCH`(도우미 열린 검색, 앱 기본 off — `on` 으로 켠다) 일곱 키만. 쌍 구분은 `;`(계정 목록 값에 쉼표가 있다), `KEY=` 는 그 키를 지워 앱 기본값으로 되돌린다. 그 밖의 키·형식·값 오류는 배포 실패. 비우면 유지 |
 
 `dialogue_orchestrator`·`llm_feature_models` 는 `push_mode` 와 같은 이유로 있다 — 로컬 AWS 자격이 만료된 날에도 배포 역할이 시크릿을 고칠 수 있게. **새 기능 이름은 두 번에 나눠 넣는다**: 그 이름을 아는 이미지를 입력 없이 한 번 배포한 다음 런에서 `llm_feature_models` 를 준다. 비밀값 동기화는 Helm 보다 먼저 시크릿과 k8s Secret 을 덮고 Helm 롤백은 그 Secret 을 되돌리지 않으므로, 한 런에 넣었다가 롤백되면 옛 이미지가 재시작 때 모르는 이름으로 기동에서 죽는다. 그래서 동기화 단계는 지금 떠 있는 AI 이미지(`kubectl exec`)가 모르는 이름을 쓰기 전에 거절한다(첫 설치는 대조할 이미지가 없어 통과). 항목을 지우는 문법은 없다 — 빼기는 Secrets Manager 손편집이다. 운영 대상(`target=prod`)은 `TRIPPILOT_DIALOGUE_SHADOW_RATE` 가 비어 있으면 0.2 를 심는다(섀도 분류 측정 비율 — 개발은 AI 기본 1.0). 연결 확인 단계의 `ai-dialogue:` 줄은 AI 파드 안에서 돌린 도우미 한 턴의 결과 모양이다(실 LLM 2~3회, 쓴 기억 행은 곧바로 지운다 — 기록만 하고 배포를 막지 않는다).
 
@@ -115,7 +114,7 @@ DB 초기화 Job은 관리자 자격증명을 임시로 사용해 `app_migrate`,
 
 `SERVICE_AUTH_REQUIRE_TOKEN`과 `JWT_REQUIRE_CONFIGURED_KEY`를 켜서 비밀값 누락 시 시작을 막는다. PRD의 여러 backend replica가 같은 JWT 키를 사용하므로 서로의 액세스 토큰을 검증할 수 있다. 비밀값을 수정한 뒤에는 수동 배포를 다시 실행해야 Pod에 반영된다. DB 암호를 바꾸는 경우 기존 연결에 영향을 줄 수 있으므로 계획된 배포로 수행한다.
 
-HTTPS NLB는 nginx gateway로 연결된다. gateway는 API 경로와 상태 확인 경로만 노출하며 `/internal`·Actuator 등은 외부에 공개하지 않는다. AI·임베딩·DB·Redis는 public LoadBalancer가 없다. RDS 연결에는 TLS를 사용한다. Redis는 TLS를 강제하는 private cache로 준비하며, 현재 backend에는 Redis adapter 구현이 없어 실제 캐시 사용은 해당 어댑터 구현 후 활성화된다.
+HTTPS NLB는 nginx gateway로 연결된다. gateway는 API 경로와 상태 확인 경로만 노출하며 `/internal`·Actuator 등은 외부에 공개하지 않는다. AI·임베딩·DB는 public LoadBalancer가 없다. RDS 연결에는 TLS를 사용한다. Redis(ElastiCache)는 앱이 쓰지 않아 제거했다(TRIP-1784) — 캐시가 필요해지면 어댑터와 함께 다시 둔다.
 
 ## 확인과 복구
 
@@ -127,7 +126,7 @@ Pod 로그는 클러스터 접근 없이 CloudWatch Logs 에서 본다. `amazon-
 
 앱 코드를 되돌리려면 배포 브랜치에 revert commit을 만든 뒤 수동 배포한다. 인프라 변경과 DB migration은 Helm rollback으로 되돌아가지 않는다. 런타임 Secret(`trippilot-ai` 등 — 비밀값 동기화 단계가 Helm 밖에서 쓴다)도 되돌아가지 않는다. destructive DB migration은 별도 복구 계획·백업을 준비한다. PRD RDS는 삭제 보호가 켜져 있고, 전체 destroy나 state 삭제 workflow는 제공하지 않는다.
 
-NLB·RDS·Redis 준비, EKS 노드 생성, 임베딩 모델 빌드는 첫 실행에서 오래 걸릴 수 있다. 테스트 환경이라도 EKS·NAT·RDS 등은 생성 후 계속 과금된다. 임베딩 활성화 시 Pod당 약 5GiB 이상의 메모리를 확보해야 한다. AI KB 벡터 적재는 배포가 한다 — 임베딩이 켜진 배포는 끝에서 `load-kb` Job(`deploy/eks/runtime_kb.py`)이 같은 AI 이미지의 `scripts/load_kb.py` 로 멱등 적재한다. KB 데이터(이미지의 `data/`)가 바뀌면 재배포만 하면 되고, 확인은 배포 로그의 `load_kb` 요약 줄("총 N건 (dim=1024, provider=http, 멱등 upsert)")이다.
+NLB·RDS 준비, EKS 노드 생성, 임베딩 모델 빌드는 첫 실행에서 오래 걸릴 수 있다. 테스트 환경이라도 EKS·NAT·RDS 등은 생성 후 계속 과금된다. 임베딩 활성화 시 Pod당 약 5GiB 이상의 메모리를 확보해야 한다. AI KB 벡터 적재는 배포가 한다 — 임베딩이 켜진 배포는 끝에서 `load-kb` Job(`deploy/eks/runtime_kb.py`)이 같은 AI 이미지의 `scripts/load_kb.py` 로 멱등 적재한다. KB 데이터(이미지의 `data/`)가 바뀌면 재배포만 하면 되고, 확인은 배포 로그의 `load_kb` 요약 줄("총 N건 (dim=1024, provider=http, 멱등 upsert)")이다.
 
 ## 코드 위치와 로컬 검증
 

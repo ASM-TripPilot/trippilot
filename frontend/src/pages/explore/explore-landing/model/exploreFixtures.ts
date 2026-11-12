@@ -150,7 +150,7 @@ export const PREVIEW_SAVED_PLACES: SavedPlace[] = [
  *  · 인천(28) SIDO 선택 가능 + 미추홀구·연수구 → happy path('인천 전체' 선택 가능 + 구/군 카드).
  *  · 서울·부산·제주(SIDO, 하위 없음) → '전체'만(엣지② sigungu 빈 그룹).
  *  · 강원(51*)은 홍천군만·SIDO 행 부재 → 방어(엣지③ sido=null, '전체' 선택 행 없음).
- *  · 충북(43, selectable=false) → '전체'가 묶음 행 + 청주시 상당구 "추천 장소 없음"(선택 불가 두 갈래).
+ *  · 충북(43, selectable=false) → 머리줄은 이름만('전체'·묶음 칸 없음, TRIP-1817) + 청주시 상당구 "추천 장소 없음".
  */
 export const PREVIEW_REGIONS: Region[] = [
   {

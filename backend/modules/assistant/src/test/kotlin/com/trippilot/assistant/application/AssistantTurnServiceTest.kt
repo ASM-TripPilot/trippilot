@@ -20,6 +20,7 @@ import com.trippilot.assistant.domain.DialogueInterpretPort
 import com.trippilot.assistant.domain.Intent
 import com.trippilot.assistant.domain.IntentFrame
 import com.trippilot.assistant.domain.InterpretOutcome
+import com.trippilot.assistant.domain.ContextSnapshot
 import com.trippilot.assistant.domain.InterpretRequest
 import com.trippilot.assistant.domain.Interpretation
 import com.trippilot.assistant.domain.InterpretedAnswer
@@ -29,6 +30,7 @@ import com.trippilot.assistant.domain.MessageRole
 import com.trippilot.assistant.domain.NewMessage
 import com.trippilot.assistant.domain.NextAction
 import com.trippilot.assistant.domain.QuickReplyAction
+import com.trippilot.auth.api.LocationUsePurpose
 import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.RateLimited
 import com.trippilot.itinerarygeneration.api.EditProposal
@@ -53,6 +55,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.property.Arb
 import io.kotest.property.arbitrary.Codepoint
 import io.kotest.property.arbitrary.alphanumeric
@@ -131,6 +134,7 @@ class AssistantTurnServiceTest : StringSpec({
         val interpreter: Interpreter?,
         val data: FakeTripData,
         val editing: FakeEditing = FakeEditing(),
+        val location: FakeLocation = FakeLocation(),
     ) {
         /** 같은 턴의 앞선 처리를 기다리는 동안 일어날 일 — 테스트가 "그 사이 앞선 처리가 끝났다"를 심는다. */
         var onPause: () -> Unit = {}
@@ -149,9 +153,11 @@ class AssistantTurnServiceTest : StringSpec({
         moderation: TextModerationFacade = clean,
         properties: AssistantProperties = AssistantProperties(),
         store: AssistantMessageRepository = messages,
+        baseStays: TripBaseStayFacade = stays,
     ) = AssistantTurnService(
         sessions, store, usage, AccountTurnLock { }, moderation, provider(interpreter), dispatcher(data, editing, properties),
-        TripContextReader(trips, stays), ContextSnapshotBuilder(TripContextReader(trips, stays), data, data, properties), data, data, memory, properties, json, clock, NOOP_TX,
+        TripContextReader(trips, baseStays), ContextSnapshotBuilder(TripContextReader(trips, baseStays), data, data, properties), data, data, memory,
+        location, location, properties, json, clock, NOOP_TX,
     ).also { it.pause = { ms -> clock.now = clock.now.plusMillis(ms); onPause() } } // 기다림은 시계를 민다
 
     fun World.session(withTrip: Boolean = true): AssistantSession =
@@ -706,6 +712,25 @@ class AssistantTurnServiceTest : StringSpec({
         w.usage.llm[acc to today] shouldBe null
     }
 
+    /** TRIP-1705 · DEC-U8-14 — 말로 한 검토 질문은 상대가 FRAME(SHOW_SCHEDULE, LLM_DIRECT)으로 넘기고, 버튼 검토와 같은 진행 검토 카드가 답한다. */
+    "말로 한 일정 검토 질문은 진행 검토 카드로 답한다 — 확인된 문제가 없으면 없다고 말한다" {
+        val w = world(interpreter = Interpreter { r ->
+            Interpretation(InterpretOutcome.FRAME, listOf(IntentFrame(Intent.SHOW_SCHEDULE, emptyMap(), "LLM_DIRECT")), null, r.dialogueContext, 1)
+        })
+        w.data.slots = listOf(plannedSlot(today, 0, "18:00", "카페 모카"), plannedSlot(today.plusDays(1), 0, "10:00", "해변"))
+        val registered = object : TripBaseStayFacade {
+            override fun findBaseStays(tripId: UUID, startDate: LocalDate, endDate: LocalDate) = listOf(DayBaseStayView(startDate, UUID.randomUUID(), "서면 호텔"))
+        }
+        val s = w.session()
+
+        val card = w.say(s, "내일 일정에서 무리한 부분 있어?", service = w.service(baseStays = registered)).messages[1]
+
+        card.kind shouldBe MessageKind.REVIEW
+        card.text shouldBe "지금 일정에서 확인된 문제는 없어요."
+        w.row(2).saved.intent shouldBe "SHOW_SCHEDULE"
+        w.row(2).saved.matchRoute shouldBe "LLM_DIRECT"
+    }
+
     "[다시 시도]는 직전에 못 알아들은 그 말을 다시 태운다 — 연달아 눌러도 '다시 시도'를 해석하지 않는다" {
         var fail = true
         val w = world(interpreter = Interpreter { r -> if (fail) throw DialogueInterpretFailed("down") else framed(Intent.GET_WEATHER)(r) })
@@ -758,6 +783,47 @@ class AssistantTurnServiceTest : StringSpec({
         card.payload!!["title"] shouldBe "카페 모카" // 말한 "모카"가 아니라 저장된 이름
     }
 
+    /**
+     * O-U8-5(2026-10-20 사용자 결정) — 앱이 보낸 현재 위치는 **위치 동의가 켜진 계정만** 해석에 싣고, 실은 턴마다 이용 사실을 남긴다.
+     * 운영 2026-11-03: 여행 없이 "오늘 날씨" → 상대가 앵커를 못 잡아 "먼저 여행을 만들어". 사용자: "위치추적해서 날씨 찾으면 되잖아".
+     */
+    "현재 위치는 위치 동의가 켜진 계정만 해석에 싣고, 실은 턴의 이용 사실을 남긴다" {
+        val here = ContextSnapshot.Here(37.57, 126.982)
+        fun World.ask() = service().send(acc, session(withTrip = false).sessionId, UUID.randomUUID(), TurnInput.Text("오늘 날씨"), AssistantSurface.HOME, here)
+
+        val off = world()
+        off.ask()
+        off.interpreter!!.requests.single().context.here shouldBe null // 동의 꺼짐 — 버린다
+        off.location.uses shouldBe emptyList()
+
+        val on = world().apply { location.consent = true }
+        val result = on.ask()
+        on.interpreter!!.requests.single().context.here shouldBe here
+        on.location.uses shouldContainExactly listOf(Triple(acc, LocationUsePurpose.ASSISTANT_TURN, result.messages[0].messageId))
+
+        val broken = world().apply { location.consent = true; location.failRecord = true }
+        broken.ask().messages[1].kind shouldNotBe MessageKind.FALLBACK // 답은 위치 없이 그대로 나간다
+        broken.interpreter!!.requests.single().context.here shouldBe null // 이용 사실을 못 남기면 싣지 않는다
+    }
+
+    "위치 이용 기록에 쓴 시간도 해석 시한에서 뺀다 — 기록 뒤 남은 예산이 없으면 해석을 부르지 않는다" {
+        val here = ContextSnapshot.Here(37.57, 126.982)
+        fun World.ask(recordMs: Long) = location.run {
+            consent = true
+            onRecord = { clock.now = clock.now.plusMillis(recordMs) } // 느린 법정 로그 쓰기
+            service().send(acc, session(withTrip = false).sessionId, UUID.randomUUID(), TurnInput.Text("오늘 날씨"), AssistantSurface.HOME, here)
+        }
+
+        val slow = world()
+        slow.ask(9_000)
+        // 13초 예산 − 기록 9초 − 왕복 여유 1초 — 기록 전에 잰 단계 상한(5초)을 그대로 주면 턴 예산을 넘겼다
+        slow.interpreter!!.requests.single().deadlineMs shouldBe 3_000
+
+        val late = world()
+        late.ask(12_500).messages[1].kind shouldBe MessageKind.FALLBACK
+        late.interpreter!!.requests shouldBe emptyList()
+    }
+
     /** 버튼에는 다시 태울 "말"이 없다 — [다시 시도]를 주면 엉뚱한 옛 문장이 나간다. */
     "버튼을 눌러 온 턴이 실패하면 다시 시도를 주지 않는다 — 말로 온 턴에는 준다" {
         val w = world()
@@ -770,7 +836,7 @@ class AssistantTurnServiceTest : StringSpec({
         val service = AssistantTurnService(
             w.sessions, w.messages, w.usage, AccountTurnLock { }, clean, provider(w.interpreter), throwing,
             TripContextReader(brokenTrips, stays), ContextSnapshotBuilder(TripContextReader(trips, stays), w.data, w.data, AssistantProperties()),
-            w.data, w.data, w.memory, AssistantProperties(), json, w.clock, NOOP_TX,
+            w.data, w.data, w.memory, w.location, w.location, AssistantProperties(), json, w.clock, NOOP_TX,
         )
 
         val pressed = service.send(acc, s.sessionId, UUID.randomUUID(), TurnInput.Action("qr-review"), AssistantSurface.ITINERARY)
@@ -1331,6 +1397,108 @@ class AssistantTurnServiceTest : StringSpec({
             EditProposalRequest.Utterance("10월 13일 (화) 카페 하나 빼줘"),
             EditProposalRequest.Utterance("10월 14일 (수) 카페 하나 빼줘"),
         )
+    }
+
+    /**
+     * 사이 넣기 대역 — 오늘 저녁 카페 모카 뒤에 한 곳을 넣은 안. 넣을 곳은 [picks] 중 요청이 뺀 곳(앞서 보인 곳)을 건너뛴 첫 곳이고,
+     * 다 빠졌으면 위반 없는 거절이다(상대 `insert_between: no_candidates`).
+     */
+    fun World.offerInsert(vararg picks: UUID) {
+        val moca = data.slots.single()
+        data.surfaces = picks.withIndex().associate { (i, id) -> id to surface(id, listOf("효창공원", "공덕 카페", "마포 식당")[i]) }
+        editing.proposal = {
+            val excluded = (editing.proposed.last().request as EditProposalRequest.Utterance).excludedPoiIds
+            picks.firstOrNull { it !in excluded }?.let { next ->
+                EditProposal.Proposed(
+                    listOf(ProposedDay(today, listOf(proposedSlot(moca.poiId, "18:00", "840m")))),
+                    listOf(ProposedDay(today, listOf(proposedSlot(moca.poiId, "18:00", "840m"), proposedSlot(next, "19:30")))), "AUTO_APPLY",
+                )
+            } ?: EditProposal.Rejected(emptyList())
+        }
+    }
+
+    val insertAsk = "카페 모카 다음에 갈 만한 곳 하나 추가해줘"
+    fun editFrames() = Interpreter { r -> Interpretation(InterpretOutcome.FRAME, listOf(IntentFrame(Intent.EDIT_SCHEDULE, mapOf("day" to "$today"), "LLM_DIRECT")), null, r.dialogueContext, 1) }
+
+    /**
+     * "다른 데는?" — 바로 앞 카드가 한 곳을 더한 제안이면 그 카드를 낳은 말을 **앞서 보인 곳을 빼고** 다시 편집에 태운다. 분류는 거치지 않는다
+     * (이 말을 장소 찾기·대체 후보로도 읽고, 앞서 보인 곳은 우리 기록에만 있다). 거듭 물으면 사슬의 카드가 보인 곳을 전부 뺀다 — 상대 순위는
+     * 결정론이라 마지막 것만 빼면 그 전 것이 되돌아온다. 편집 한 번은 센다(COST-U8-02).
+     */
+    "다른 데는? — 한 곳을 더한 카드 뒤면 그 말을 앞서 보인 곳을 빼고 다시 태운다(분류 없이)" {
+        val w = world(interpreter = editFrames())
+        val s = w.session()
+        val (first, second) = UUID.randomUUID() to UUID.randomUUID()
+        w.offerInsert(first, second)
+
+        w.say(s, insertAsk).messages[1].text shouldBe "카페 모카 다음에 효창공원을 넣은 안이에요. 적용하면 다시 검증한 뒤 반영해요."
+        val again = w.say(s, "다른 데는?")
+        val none = w.say(s, "또 다른 곳은 없어?")
+
+        again.messages[1].proposal!!.diff.single { it.change == "ADDED" }.slotKey shouldBe "$today#$second"
+        none.messages[1].text shouldBe "넣을 만한 다른 곳을 찾지 못했어요. 편집 화면에서 직접 고를 수 있어요."
+        w.editing.proposed.map { it.date to it.request } shouldContainExactly listOf(
+            today to EditProposalRequest.Utterance(insertAsk),
+            today to EditProposalRequest.Utterance(insertAsk, setOf(first)),
+            today to EditProposalRequest.Utterance(insertAsk, setOf(first, second)),
+        )
+        w.interpreter!!.requests.map { it.utterance } shouldContainExactly listOf(insertAsk)
+        w.row(4).saved.let { (it.intent to it.matchRoute) to it.llmCalls } shouldBe (("EDIT_SCHEDULE" to "REASK") to 1)
+        w.usage.llm[acc to today] shouldBe 3
+        w.editing.edits shouldBe emptyList() // 제안일 뿐이다(BR-U8-30)
+    }
+
+    /** 맨 말의 범위 — 묻기·부탁 꼬리까지는 다시 묻기이고, 종류·날·이름·자리·다른 행위가 섞이면(새 요청일 수 있다) 종전처럼 해석으로 간다. */
+    "다른 데는? 맨 말 — 꼬리까지는 다시 묻기, 다른 말이 섞이면 해석으로 간다" {
+        val reasks = listOf(
+            "다른 데는?", "다른 곳은?", "딴 데", "다른데는?", "다른 곳으로", "다른 걸로 바꿔줘", "다른 데 없어?", "다른 곳 추천해 주세요",
+            "또 다른 데는?", "그럼 다른 데는요?", "거기 말고 다른 곳", "다른 장소 보여줘",
+        )
+        val others = listOf("다른데", "다른 카페는?", "다른 날은?", "효창공원 말고 다른 데", "다른 곳에 넣어줘", "다른 데로 옮겨줘", "다른 데 가고 싶어", "다른 일정 보여줘")
+        val w = world(interpreter = editFrames())
+        val s = w.session()
+        w.offerInsert(UUID.randomUUID(), UUID.randomUUID())
+
+        (reasks + others).forEach { said ->
+            w.clock.now = w.clock.now.plusSeconds(10) // 분당 20턴(BR-U8-24) 안으로
+            w.say(s, insertAsk)
+            w.clock.now = w.clock.now.plusSeconds(10)
+            w.say(s, said)
+        }
+
+        w.interpreter!!.requests.map { it.utterance } shouldContainExactly reasks.map { insertAsk } + others.flatMap { listOf(insertAsk, it) }
+    }
+
+    /** 넘겨짚지 않는다 — 맨 말이 아니거나(종류·날·이름이 바뀐 새 요청일 수 있다), 바로 앞이 한 곳을 더한 카드가 아니면 종전처럼 해석으로 간다. */
+    "다른 데는? — 맨 말이 아니거나 바로 앞이 한 곳을 더한 카드가 아니면 해석으로 간다" {
+        val w = world(interpreter = editFrames())
+        val s = w.session()
+        w.offerInsert(UUID.randomUUID())
+
+        w.say(s, "다른 데는?") // 앞선 카드가 없다
+        w.say(s, insertAsk)
+        w.say(s, "다른 카페는?") // 종류를 바꾼 새 요청일 수 있다
+        w.offerBookCafe()
+        w.say(s, "카페 바꿔줘") // 바꾼 안 — 한 곳을 더한 안이 아니다
+        w.say(s, "다른 데는?")
+
+        w.interpreter!!.requests.map { it.utterance } shouldContainExactly listOf("다른 데는?", insertAsk, "다른 카페는?", "카페 바꿔줘", "다른 데는?")
+        w.editing.proposed.map { it.request } shouldContainExactly
+            listOf("다른 데는?", insertAsk, "다른 카페는?", "카페 바꿔줘", "다른 데는?").map { EditProposalRequest.Utterance(it) }
+    }
+
+    /** 원 요청이 되묻기의 답('1일차')이면 편집에 붙여 보낸 말을 여기서 알 수 없다 — 다시 태우지 않고 해석으로 간다(넘겨짚지 않는다). */
+    "다른 데는? — 카드를 낳은 말이 되묻기의 답이면 다시 태우지 않는다" {
+        val w = world(interpreter = askingDay(asks = setOf(insertAsk)))
+        val s = w.session()
+        w.offerInsert(UUID.randomUUID(), UUID.randomUUID())
+
+        w.say(s, insertAsk).messages[1].kind shouldBe MessageKind.CLARIFY
+        w.say(s, "1일차").messages[1].kind shouldBe MessageKind.PROPOSAL
+        w.say(s, "다른 데는?")
+
+        w.interpreter!!.requests.map { it.utterance } shouldContainExactly listOf(insertAsk, "1일차", "다른 데는?")
+        w.editing.proposed.none { (it.request as EditProposalRequest.Utterance).excludedPoiIds.isNotEmpty() } shouldBe true
     }
 
     /**

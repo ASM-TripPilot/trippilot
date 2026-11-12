@@ -6,21 +6,29 @@ import {
   fireEvent,
   render,
   screen,
+  userEvent,
   waitFor,
   within,
 } from '@testing-library/react-native';
+import { Platform } from 'react-native';
 
 import { server } from '@/mocks/server';
 import { BASE } from '@/test-support/apiBase';
 import { day, itinerary, slot } from '@/test-support/itineraryFixtures';
 import { createRequestLog, serveItinerary } from '@/test-support/mswItinerary';
-import { getGetTripsTripIdItineraryQueryKey } from '@/shared/api/index.hooks';
+import {
+  getGetMeLocationConsentQueryKey,
+  getGetTripsTripIdItineraryQueryKey,
+} from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
+import { API_BASE, settingsHandlers } from '@/test-support/settingsHandlers';
 
 import { assistantPort } from '../api/assistantClient';
+import { assistantKeys } from '../model/assistantQueries';
 import type {
   AssistantMessage,
+  AssistantSurface,
   OpenSessionResponse,
   SendTurnRequest,
 } from '../api/assistantContract';
@@ -47,6 +55,7 @@ import { routerSpies } from '@/test-support/expoRouterMock';
  *
  * 「일정 보기」 목적지(TRIP-1566)도 이 파일이다 — 누른 시점에 일정 GET 이 몇 번·어떤 응답으로 나갔는지가 계약이라 요청 횟수를
  * 셀 수 있는 MSW 가 필요하다(node 버킷의 FakeAssistantAdapter 는 일정 서버가 없다).
+ * 턴 본문의 현재 위치(O-U8-5)도 여기다 — 위치 동의가 생성 훅(`GET /me/location-consent`)이라 MSW 가 있어야 한다.
  *
  * 3동작: 준비=MSW 핸들러 → 실행=렌더·입력·press → 단언=나간 요청 본문·횟수와 보이는 것.
  * ⚠️ MSW `onUnhandledRequest:'error'` 는 테스트를 실패시키지 않는다 — "안 나갔다/몇 번 나갔다" 는 요청 로거로 센다.
@@ -77,6 +86,14 @@ jest.mock('expo-crypto', () => ({
   },
 }));
 
+// O-U8-5 — 단말 위치는 expo-location 네이티브라 목으로 갈아 끼운다. 파일 경로로 목하면 `@/shared/location` 배럴로
+// 읽어도 같은 목이 닿는다. 팩토리는 끌어올려지므로 화살표로 감싸 호출 시점에 읽는다.
+// 인자도 그대로 넘긴다 — 마운트 때 읽기(인자 없음)와 웹 위치 묻기(`{ ask: true }`)를 가른다.
+const mockReadDevicePosition = jest.fn();
+jest.mock('@/shared/location/readDevicePosition', () => ({
+  readDevicePosition: (...args: unknown[]) => mockReadDevicePosition(...args),
+}));
+
 const TRIP = '11111111-1111-1111-1111-111111111111';
 const SESSION = sampleSession(TRIP);
 const UTTERANCE = '둘째 날 오후 카페를 더 조용한 곳으로 바꿔줘';
@@ -85,7 +102,13 @@ const log = createRequestLog(server);
 let client: QueryClient;
 let turnBodies: SendTurnRequest[] = [];
 
-function renderPage(queryDefaults: Record<string, unknown> = {}) {
+function renderPage(
+  queryDefaults: Record<string, unknown> = {},
+  props: { surface: AssistantSurface; tripId?: string } = {
+    surface: 'ITINERARY',
+    tripId: TRIP,
+  }
+) {
   client = new QueryClient({
     defaultOptions: {
       queries: { retry: false, ...queryDefaults },
@@ -97,7 +120,7 @@ function renderPage(queryDefaults: Record<string, unknown> = {}) {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
   }
-  render(<AssistantSheetPage surface="ITINERARY" tripId={TRIP} />, {
+  render(<AssistantSheetPage surface={props.surface} tripId={props.tripId} />, {
     wrapper: Wrapper,
   });
 }
@@ -171,6 +194,24 @@ async function typeAndSend(text: string): Promise<void> {
   });
 }
 
+/** 응답을 붙잡아 두는 약속 — `release()` 전엔 끝나지 않는다. */
+function holdResponse() {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { gate, release };
+}
+
+/** 위치 동의 응답(`GET /me/location-consent`). 미러는 늘 GRANTED — 판정은 법정 동의(legalConsent)만 본다. */
+function serveConsent(legalConsent: boolean) {
+  server.use(
+    ...settingsHandlers({
+      locationConsent: () => ({ osPermissionMirror: 'GRANTED', legalConsent }),
+    })
+  );
+}
+
 beforeAll(() => {
   log.attach();
   server.listen({ onUnhandledRequest: 'error' });
@@ -186,6 +227,10 @@ beforeEach(() => {
   // TRIP-1565 — push 갈래가 여는 모듈 전역 연타 창이 테스트 사이에 새지 않게(파일 최상위)
   resetPressGuard();
   setAccessToken('valid-access');
+  // O-U8-5 — 턴 흐름이 위치 동의를 조회한다. 기본은 꺼짐(위치를 안 읽는다) — 위치 describe 가 케이스마다 덮는다.
+  // resetHandlers 가 매번 지우므로 beforeAll 이 아니라 여기서 다시 건다. 목 기록도 테스트 사이에 안 지워져 여기서 비운다.
+  serveConsent(false);
+  mockReadDevicePosition.mockReset().mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -449,6 +494,163 @@ describe('도우미 시트 · 이력 (TRIP-1514 AC-2)', () => {
   });
 });
 
+/**
+ * 🔴 TRIP-1757 · 이력 보기의 「이전 대화」 목록 불러오기 실패 (INV-4 · US-ASSIST-05 · BR-U8-18) — 지난 대화가 사라진 것처럼 비지 않게.
+ *
+ * 무엇을 보장하나(3동작 = 준비: `GET /assistant/sessions` 를 500·404·200 으로 → 실행: 이력 보기 열기·[다시 시도] → 단언: testID·요청 수):
+ *  - AS-1  목록 GET 500 → 「이전 대화」 자리에 `assistant-history-sessions-error` + `-sessions-retry`, 대화 행은 없다.
+ *  - AS-2  [다시 시도] → 목록 GET 1회 더. 재조회 중(v5 가 error 를 비워도 `errorUpdateCount`)에도 줄이 남고 버튼은 잠긴다. 200 이면 줄이 사라지고 행이 선다.
+ *  - AS-3  200 `[]` 는 실패가 아니다(줄 없음). 목록을 받은 뒤 배경 재조회 500 도 줄 없음(받아 둔 행 유지).
+ *  - AS-4  404 도 줄이 **선다** — 계약(openapi)에 404 가 없고 어댑터가 모든 실패를 `AssistantApiError('SERVER')` 로 접어 `isNotFound` 로 가를 수 없다.
+ *  - AS-5  목록 실패는 로그 행·[대화 이어서]·CHAT 보기에 영향이 없다.
+ * `renderPage()` 의 클라이언트는 `retry:false` 라 500 한 번이 곧 실패 확정이다(앱 전역 `retryUnlessNotFound` 의 약 7초 대기 없음).
+ * 시트 실제 열림·딤은 jest 사각(6-b). (개념) `userEvent.press` = 실제 Pressability 경로.
+ */
+describe('도우미 시트 · 이력 — 이전 대화 목록 실패 (TRIP-1757)', () => {
+  const ERROR = 'assistant-history-sessions-error';
+  const RETRY = 'assistant-history-sessions-retry';
+  const OTHER = '22222222-2222-2222-2222-222222222222';
+  const OTHER_SESSION = {
+    id: OTHER,
+    tripId: '33333333-3333-3333-3333-333333333333',
+    tripTitle: '제주 3박 4일',
+    lastTurnAt: '2026-10-10T05:25:00Z',
+  };
+  const SESSIONS_GET = () => log.hitsFor('GET', '/assistant/sessions');
+  const sessionsReply = (reply: () => Response | Promise<Response>) =>
+    server.use(http.get(`${BASE}/assistant/sessions`, reply));
+  const failWith = (code: number) => () =>
+    HttpResponse.json({ error: { code: 'X', message: 'x' } }, { status: code });
+
+  async function openHistory() {
+    fireEvent.press(await screen.findByTestId('assistant-history-toggle'));
+    await screen.findByTestId('assistant-history');
+  }
+
+  it('AS-1 목록 GET 500 → 줄과 [다시 시도]가 서고 대화 행은 없으며 로그 행은 그대로다', async () => {
+    serveOpen(opened(sampleActionLogs(TRIP)));
+    sessionsReply(failWith(500));
+    renderPage();
+    await openHistory();
+
+    expect(await screen.findByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+    expect(screen.queryByTestId(/^assistant-history-session-/)).toBeNull();
+    expect(screen.getByTestId('assistant-history-row-log-1')).toBeOnTheScreen();
+    expect(SESSIONS_GET()).toBe(1);
+  });
+
+  it('AS-2a [다시 시도] → 목록 GET 1회 더, 200 이면 줄이 사라지고 이전 대화 행이 선다', async () => {
+    serveOpen(opened(sampleActionLogs(TRIP)));
+    sessionsReply(failWith(500));
+    renderPage();
+    await openHistory();
+    await screen.findByTestId(ERROR);
+
+    sessionsReply(() => HttpResponse.json([OTHER_SESSION]));
+    const user = userEvent.setup();
+    await user.press(screen.getByTestId(RETRY));
+
+    expect(
+      await screen.findByTestId(`assistant-history-session-${OTHER}`)
+    ).toBeOnTheScreen();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+    expect(SESSIONS_GET()).toBe(2);
+  });
+
+  it('AS-2b 재조회 응답을 붙잡는 동안에도 줄이 남고 [다시 시도]는 잠기며, 응답이 오면 사라진다 (v5 가 error 를 비워도)', async () => {
+    serveOpen(opened(sampleActionLogs(TRIP)));
+    sessionsReply(failWith(500));
+    renderPage();
+    await openHistory();
+    await screen.findByTestId(ERROR);
+
+    const held = holdResponse();
+    sessionsReply(async () => {
+      await held.gate;
+      return HttpResponse.json([OTHER_SESSION]);
+    });
+    const user = userEvent.setup();
+    await user.press(screen.getByTestId(RETRY));
+    await waitFor(() => expect(SESSIONS_GET()).toBe(2));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeDisabled();
+
+    await act(async () => held.release());
+    await waitFor(() => expect(screen.queryByTestId(ERROR)).toBeNull());
+    expect(
+      screen.getByTestId(`assistant-history-session-${OTHER}`)
+    ).toBeOnTheScreen();
+  });
+
+  it('AS-3a 200 [] 는 실패가 아니다 — 줄이 없다', async () => {
+    serveOpen(opened(sampleActionLogs(TRIP)), []);
+    renderPage();
+    await openHistory();
+
+    await waitFor(() => expect(SESSIONS_GET()).toBe(1));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+  });
+
+  it('AS-3b 목록을 받은 뒤 배경 재조회만 500 이어도 줄이 없고 받아 둔 행이 남는다', async () => {
+    serveOpen(opened(sampleActionLogs(TRIP)), [OTHER_SESSION]);
+    renderPage();
+    await openHistory();
+    await screen.findByTestId(`assistant-history-session-${OTHER}`);
+
+    sessionsReply(failWith(500));
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: assistantKeys.sessions() });
+    });
+    // 앵커: 재조회가 실제로 나가 **실패로 끝났다**(요청 2회 + 쿼리 캐시: 실패 1회 누적·진행 중 아님). 이 앵커 뒤에야 화면이 그 실패를
+    // 반영하므로(react-query 알림은 한 틱 뒤) 짧게 흘려보낸 다음 줄 부재를 본다 — 안 그러면 가드를 지워도 반영 전에 평가돼 green 이다(5-b W2).
+    expect(SESSIONS_GET()).toBe(2);
+    const state = client.getQueryState(assistantKeys.sessions());
+    expect(state?.errorUpdateCount).toBe(1);
+    expect(state?.fetchStatus).toBe('idle');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+    expect(
+      screen.getByTestId(`assistant-history-session-${OTHER}`)
+    ).toBeOnTheScreen();
+  });
+
+  it('AS-4 404 도 줄이 선다 — 계약에 404 가 없어 일반 실패와 같다', async () => {
+    serveOpen(opened(sampleActionLogs(TRIP)));
+    sessionsReply(failWith(404));
+    renderPage();
+    await openHistory();
+
+    expect(await screen.findByTestId(ERROR)).toBeOnTheScreen();
+    expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+  });
+
+  it('AS-5 목록이 실패해도 [대화 이어서] 로 CHAT 보기가 열리고 입력이 산다', async () => {
+    serveOpen(opened(sampleActionLogs(TRIP)));
+    sessionsReply(failWith(500));
+    renderPage();
+    await openHistory();
+    await screen.findByTestId(ERROR);
+
+    const user = userEvent.setup();
+    await user.press(screen.getByTestId('assistant-history-continue'));
+
+    expect(await screen.findByTestId('assistant-input')).toBeOnTheScreen();
+    expect(screen.queryByTestId('assistant-history')).toBeNull();
+    expect(screen.queryByTestId(ERROR)).toBeNull();
+  });
+});
+
 // TRIP-1566 — 「일정 보기」(OPEN_ITINERARY)는 고정 라우트가 아니라, 누른 시점에 일정을 조회해 앱 공통 판정
 // (resolveItineraryDestination → itineraryDestinationHref)으로 간다. 조회가 정착하기 전·비-404 실패에는 이동하지 않는다(INV-4).
 describe('도우미 시트 · 일정 보기 목적지', () => {
@@ -462,14 +664,6 @@ describe('도우미 시트 · 일정 보기 목적지', () => {
 
   /** 앱 기본 옵션(retry 켜짐)을 흉내 낸다 — 누름 조회가 retry:false 를 따로 주지 않으면 500 이 3번 나간다. 대기 1ms 라 느려지지 않는다. */
   const RETRYING = { retry: 2, retryDelay: 1 };
-
-  function holdResponse() {
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    return { gate, release };
-  }
 
   async function openedPage(
     queryDefaults: Record<string, unknown> = {},
@@ -784,6 +978,510 @@ describe('도우미 시트 · 일정 보기 목적지', () => {
 
       expect(mockPush.mock.calls).toEqual([['/explore/places/poi-a']]);
       expect(mockReplace).not.toHaveBeenCalled();
+    });
+  });
+});
+
+// O-U8-5(2026-10-20 "싣는다") · 서버 PR #1860 — 턴 본문 선택 칸 `deviceLocation{lat,lng}`. 서버 위치 동의(legalConsent)가 켜졌을 때만
+// 마운트 때 한 번 읽어 두고, 보내는 턴마다 그 순간 쥔 값을 싣는다. 동의 꺼짐·모름·위치 없음이면 칸 자체가 없고, 위치를 기다리지 않는다.
+describe('도우미 시트 · 현재 위치 싣기', () => {
+  const CONSENT_KEY = getGetMeLocationConsentQueryKey();
+  // lat ≠ lng — 축이 뒤바뀌면 잡힌다(부산 해운대).
+  const HERE = { lat: 35.1587, lng: 129.1604 };
+  const WEATHER_Q = '오늘 날씨 어때';
+  const answered = () =>
+    turnOk(assistantSample('weather', { id: 'm-weather', tripId: TRIP }));
+
+  // 호출을 그대로 통과시키는 엿보기 — 직렬화 전 요청 객체라 `deviceLocation: undefined` 같은 빈 키까지 보인다
+  // (MSW 가 받는 JSON 에선 axios 직렬화가 undefined 키를 지워 못 본다).
+  let sendTurnSpy: jest.SpyInstance;
+  beforeEach(() => {
+    sendTurnSpy = jest.spyOn(assistantPort(), 'sendTurn');
+  });
+  afterEach(() => sendTurnSpy.mockRestore());
+
+  /** n번째(0부터) 턴 요청 — 어댑터에 넘어간 그대로. */
+  const sent = (n: number) => sendTurnSpy.mock.calls[n][1];
+
+  const flush = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+  /** 위치 읽기가 1번 시작됐고 그 결과가 훅에 들어갈 때까지 흘렸다 — 보내기 전 앵커. */
+  async function positionRead() {
+    await waitFor(() =>
+      expect(mockReadDevicePosition).toHaveBeenCalledTimes(1)
+    );
+    await flush();
+  }
+
+  /** 동의 답(성공, 또는 첫 실패)이 훅에 왔다 — "안 읽었다"를 말하기 전의 앵커. */
+  async function consentAnswered() {
+    await waitFor(() => {
+      const state = client.getQueryState(CONSENT_KEY);
+      const answered =
+        state?.status === 'success' || (state?.fetchFailureCount ?? 0) > 0;
+      // 실패 문구가 지금 상태를 말하게 — 동의 조회가 아예 없으면 '조회 없음'
+      expect(answered ? '답 옴' : (state?.status ?? '조회 없음')).toBe('답 옴');
+    });
+    await flush();
+  }
+
+  /** 보내고, 그 턴이 서버에 닿아 응답까지 끝났다(보내기 버튼이 `assistant-send` 로 돌아옴). */
+  async function sendAndSettle(text: string, hits: number) {
+    await typeAndSend(text);
+    await waitFor(() => expect(turnHits()).toBe(hits));
+    await screen.findByTestId('assistant-send');
+  }
+
+  function openedWithoutTrip(): OpenSessionResponse {
+    return {
+      session: sampleSession(null),
+      messages: [],
+      quickReplies: startQuickReplies(false),
+      nextBefore: null,
+    };
+  }
+
+  it.each<
+    [
+      string,
+      { surface: AssistantSurface; tripId?: string },
+      () => OpenSessionResponse,
+    ]
+  >([
+    ['일정 화면(여행 있음)', { surface: 'ITINERARY', tripId: TRIP }, opened],
+    ['홈(여행 없음 — 운영 사건 자리)', { surface: 'HOME' }, openedWithoutTrip],
+  ])(
+    'L1 %s — 동의가 켜졌고 단말 위치가 있으면 턴 본문에 deviceLocation 으로 그 좌표를 싣는다 (AC1)',
+    async (_label, props, open) => {
+      serveConsent(true);
+      mockReadDevicePosition.mockResolvedValue(HERE);
+      serveOpen(open());
+      serveTurns(answered());
+      renderPage({}, props);
+      await positionRead();
+
+      await sendAndSettle(WEATHER_Q, 1);
+
+      expect(sent(0)).toHaveProperty('deviceLocation', HERE);
+      // 어댑터가 그대로 HTTP 로 내보낸다 — 서버가 받은 JSON 에도 같은 좌표, 나머지 칸은 종전대로
+      expect(turnBodies[0]).toHaveProperty('deviceLocation', HERE);
+      expect(turnBodies[0]).toMatchObject({
+        input: { type: 'TEXT', text: WEATHER_Q },
+        screen: { surface: props.surface },
+      });
+    }
+  );
+
+  it.each([
+    ['동의 꺼짐(미러는 GRANTED)', () => serveConsent(false)],
+    [
+      '동의 조회 실패(500)',
+      () =>
+        server.use(
+          http.get(
+            `${API_BASE}/me/location-consent`,
+            () => new HttpResponse(null, { status: 500 })
+          )
+        ),
+    ],
+  ])(
+    'L2 %s — 위치를 읽지 않고, 턴 본문에 deviceLocation 키 자체가 없다 (AC2)',
+    async (_label, serve) => {
+      serve();
+      serveOpen();
+      serveTurns(answered());
+      renderPage();
+      await consentAnswered();
+
+      await sendAndSettle(WEATHER_Q, 1);
+
+      expect(mockReadDevicePosition).not.toHaveBeenCalled();
+      expect(sent(0)).not.toHaveProperty('deviceLocation');
+    }
+  );
+
+  it('L3 동의 조회 중에는 위치를 읽지 않고 키 없이 보낸다 — 동의가 켜짐으로 도착하면 그때 한 번 읽는다 (AC2)', async () => {
+    const held = holdResponse();
+    server.use(
+      http.get(`${API_BASE}/me/location-consent`, async () => {
+        await held.gate;
+        return HttpResponse.json({
+          osPermissionMirror: 'GRANTED',
+          legalConsent: true,
+        });
+      })
+    );
+    mockReadDevicePosition.mockResolvedValue(HERE);
+    serveOpen();
+    serveTurns(answered());
+    renderPage();
+    // 앵커 — 동의 요청이 서버에 닿았고 응답은 붙잡혀 있다(지금은 "조회 중")
+    await waitFor(() =>
+      expect(log.hitsFor('GET', '/me/location-consent')).toBe(1)
+    );
+
+    await sendAndSettle(WEATHER_Q, 1);
+
+    expect(sent(0)).not.toHaveProperty('deviceLocation');
+    expect(mockReadDevicePosition).not.toHaveBeenCalled();
+
+    held.release();
+
+    // 짝 — 위 0회가 "아예 안 읽는 구현"의 공허 통과가 아니다
+    await waitFor(() =>
+      expect(mockReadDevicePosition).toHaveBeenCalledTimes(1)
+    );
+  });
+
+  it('L4 동의가 켜졌어도 단말 위치가 없으면(권한 없음·측위 실패 = null) 키 자체가 없고, 보낼 때 다시 읽지도 않는다 (AC3)', async () => {
+    serveConsent(true);
+    // 위치 목 기본값이 null 이다(파일 최상위 beforeEach)
+    serveOpen();
+    serveTurns(answered());
+    renderPage();
+    await positionRead();
+
+    await sendAndSettle(WEATHER_Q, 1);
+
+    expect(sent(0)).not.toHaveProperty('deviceLocation');
+    expect(mockReadDevicePosition).toHaveBeenCalledTimes(1);
+  });
+
+  it('L5 실패 뒤 [다시 보내기]와 다음 턴까지 세 번 보내도 위치는 마운트 때 한 번만 읽고, 세 본문 모두 같은 좌표를 싣는다 (AC4)', async () => {
+    serveConsent(true);
+    mockReadDevicePosition.mockResolvedValue(HERE);
+    serveOpen();
+    serveTurns(() => new HttpResponse(null, { status: 500 }), answered());
+    renderPage();
+    await positionRead();
+
+    await sendAndSettle(WEATHER_Q, 1);
+    // 찾기는 act 밖에서(T1 과 같은 이유)
+    const resend = await screen.findByTestId('assistant-resend');
+    await act(async () => {
+      fireEvent.press(resend);
+    });
+    await waitFor(() => expect(turnHits()).toBe(2));
+    await screen.findByTestId('assistant-send');
+    await sendAndSettle('내일은?', 3);
+
+    expect(mockReadDevicePosition).toHaveBeenCalledTimes(1);
+    expect(sendTurnSpy).toHaveBeenCalledTimes(3);
+    for (const n of [0, 1, 2]) {
+      expect(sent(n)).toHaveProperty('deviceLocation', HERE);
+    }
+    // 둘째는 [다시 보내기] 길(같은 턴 id), 셋째는 새 턴(새 id)이다
+    expect(sent(1).clientTurnId).toBe(sent(0).clientTurnId);
+    expect(sent(2).clientTurnId).not.toBe(sent(0).clientTurnId);
+  });
+
+  it('L6 위치가 아직 안 왔으면 기다리지 않고 그 턴은 키 없이 누른 자리에서 바로 보낸다 — 늦게 온 좌표는 다음 보내기([다시 보내기] 포함)부터 싣는다 (AC5)', async () => {
+    const held = holdResponse();
+    serveConsent(true);
+    // 풀기 전엔 끝나지 않는 측위
+    mockReadDevicePosition.mockReturnValue(held.gate.then(() => HERE));
+    serveOpen();
+    serveTurns(() => new HttpResponse(null, { status: 500 }), answered());
+    renderPage();
+    // 앵커 — 측위가 시작됐고 아직 진행 중이다
+    await waitFor(() =>
+      expect(mockReadDevicePosition).toHaveBeenCalledTimes(1)
+    );
+
+    await typeAndSend(WEATHER_Q);
+
+    // 누른 act 안에서 이미 어댑터에 닿았다 — 위치를 기다리는(타이머) 구현이면 여기서 0
+    expect(sendTurnSpy).toHaveBeenCalledTimes(1);
+    expect(sent(0)).not.toHaveProperty('deviceLocation');
+    await waitFor(() => expect(turnHits()).toBe(1));
+
+    held.release();
+    await flush();
+    // 첫 턴은 서버 오류로 끝났다 — 같은 턴을 다시 보낸다
+    const resend = await screen.findByTestId('assistant-resend');
+    await act(async () => {
+      fireEvent.press(resend);
+    });
+    await waitFor(() => expect(turnHits()).toBe(2));
+
+    // 다시 보낼 때는 그 순간 쥔 값을 싣는다 — 첫 시도 때 만든 본문을 그대로 재사용하면 여기서 키가 없다
+    expect(sent(1).clientTurnId).toBe(sent(0).clientTurnId);
+    expect(sent(1)).toHaveProperty('deviceLocation', HERE);
+    expect(mockReadDevicePosition).toHaveBeenCalledTimes(1);
+  });
+
+  // 웹 위치 묻기(2026-11-08 · O-U8-5 웹 예외) — 브라우저 권한은 출처별이라 폰에서 가입한 사람은 웹에서 한 번도 안 물어졌다.
+  // 웹 · 동의 켜짐 · 실을 위치 없음 · 이 마운트에서 아직 안 물음 · 보내는 글자에 「날씨」 — 전부 참일 때만 `{ ask: true }` 로 한 번 묻고
+  // 답을 기다렸다가 싣는다(잠금·낙관 말풍선이 먼저). 위 L1~L6 은 jest-expo 기본 `Platform.OS === 'ios'` 라 네이티브 경로다.
+  describe('웹 · 날씨를 처음 물으면 위치 권한을 한 번 묻는다', () => {
+    type Here = { lat: number; lng: number } | null;
+    // 수원 — 운영 사건 자리. 마운트 좌표(HERE, 부산)와 달라 어느 경로의 좌표가 실렸는지 갈린다.
+    const ASKED = { lat: 37.2636, lng: 127.0286 };
+
+    // jest 설정에 restoreMocks 가 없다 — 되돌리지 않으면 뒤 테스트까지 그 플랫폼으로 돈다.
+    let restoreOS: (() => void) | undefined;
+    afterEach(() => {
+      restoreOS?.();
+      restoreOS = undefined;
+    });
+    function setOS(os: typeof Platform.OS) {
+      const replaced = jest.replaceProperty(Platform, 'OS', os);
+      restoreOS = () => replaced.restore();
+    }
+
+    /** 마운트 때 읽기(인자 없음)와 묻기(`{ ask: true }`)에 따로 답한다 — 값 또는 붙잡아 둔 약속. */
+    function answerPosition(
+      mount: Here | Promise<Here>,
+      ask: Here | Promise<Here>
+    ) {
+      mockReadDevicePosition.mockImplementation((options?: { ask?: boolean }) =>
+        Promise.resolve(options?.ask ? ask : mount)
+      );
+    }
+    const askCalls = () =>
+      mockReadDevicePosition.mock.calls.filter(
+        ([options]) => options?.ask === true
+      ).length;
+    const mountCalls = () =>
+      mockReadDevicePosition.mock.calls.filter(([options]) => !options?.ask)
+        .length;
+
+    /** 플랫폼·동의 켜짐·열기·턴 핸들러를 깔고 그린 뒤, 마운트 때 읽기가 훅에 들어갈 때까지 흘린다. */
+    async function renderOn(
+      os: typeof Platform.OS,
+      mount: Here | Promise<Here>,
+      ask: Here | Promise<Here>
+    ) {
+      setOS(os);
+      serveConsent(true);
+      answerPosition(mount, ask);
+      serveOpen();
+      serveTurns(answered());
+      renderPage();
+      await positionRead();
+    }
+
+    it('W1 TEXT 에 「날씨」가 있으면 한 번 묻고, 받은 좌표를 그 턴의 deviceLocation 으로 싣는다 (AC1·AC2)', async () => {
+      await renderOn('web', null, ASKED);
+
+      await sendAndSettle(WEATHER_Q, 1);
+
+      expect(askCalls()).toBe(1);
+      expect(sent(0)).toHaveProperty('deviceLocation', ASKED);
+      expect(turnBodies[0]).toHaveProperty('deviceLocation', ASKED);
+      expect(turnBodies[0]).toMatchObject({
+        input: { type: 'TEXT', text: WEATHER_Q },
+      });
+    });
+
+    it('W2 quick reply 「오늘 날씨」(ACTION — 입력엔 글자 없음)도 라벨로 판정해 묻고 싣는다 (AC1·AC2)', async () => {
+      await renderOn('web', null, ASKED);
+      // TRIP-1567 — 시작 quick reply 는 칩 안에 접혀 있다
+      fireEvent.press(await screen.findByTestId('assistant-context-chip'));
+      const weatherChip = screen.getByTestId(
+        'assistant-quick-reply-qr-weather'
+      );
+      expect(weatherChip).toHaveTextContent('오늘 날씨');
+
+      await act(async () => {
+        fireEvent.press(weatherChip);
+      });
+      await waitFor(() => expect(turnHits()).toBe(1));
+      await screen.findByTestId('assistant-send');
+
+      expect(askCalls()).toBe(1);
+      expect(turnBodies[0]).toMatchObject({
+        input: { type: 'ACTION', quickReplyId: 'qr-weather' },
+        deviceLocation: ASKED,
+      });
+    });
+
+    it('W3 묻기가 null(거부·무응답·실패)이면 그 턴은 위치 없이 그대로 나간다 (AC2 · INV-4)', async () => {
+      await renderOn('web', null, null);
+
+      await sendAndSettle(WEATHER_Q, 1);
+
+      expect(askCalls()).toBe(1);
+      expect(sendTurnSpy).toHaveBeenCalledTimes(1);
+      expect(sent(0)).not.toHaveProperty('deviceLocation');
+    });
+
+    it('W4 묻는 동안 말풍선·보내는 중 표시가 먼저 뜨고 요청은 답을 기다린다 — 같은 틱에 두 번 눌러도 묻기·턴은 1번 (AC2·AC6)', async () => {
+      const held = holdResponse();
+      await renderOn(
+        'web',
+        null,
+        held.gate.then(() => ASKED)
+      );
+      fireEvent.changeText(
+        await screen.findByTestId('assistant-input'),
+        WEATHER_Q
+      );
+      const send = screen.getByTestId('assistant-send');
+
+      // 두 번째 누름은 다시 그려지기 전의 핸들러로 훅까지 간다 — 화면 비활성이 아니라 훅 잠금이 막아야 1번
+      await act(async () => {
+        fireEvent.press(send);
+        fireEvent.press(send);
+      });
+
+      expect(askCalls()).toBe(1);
+      expect(sendTurnSpy).not.toHaveBeenCalled();
+      expect(
+        screen.getByTestId('assistant-user-bubble-pending')
+      ).toHaveTextContent(WEATHER_Q, { exact: false });
+      expect(screen.getByTestId('assistant-progress')).toBeOnTheScreen();
+
+      held.release();
+      await waitFor(() => expect(turnHits()).toBe(1));
+      await screen.findByTestId('assistant-send');
+
+      expect(sendTurnSpy).toHaveBeenCalledTimes(1);
+      expect(sent(0)).toHaveProperty('deviceLocation', ASKED);
+    });
+
+    it('W5 같은 마운트에서 두 번 묻지 않는다 — 첫 묻기가 null 이면 다음 날씨 턴은 묻지 않고 바로 위치 없이 나간다 (AC5)', async () => {
+      await renderOn('web', null, null);
+      await sendAndSettle(WEATHER_Q, 1);
+      expect(askCalls()).toBe(1);
+
+      await typeAndSend('내일 날씨는?');
+
+      // 누른 act 안에서 이미 어댑터에 닿았다 — 다시 묻고 기다리는 구현이면 여기서 1
+      expect(sendTurnSpy).toHaveBeenCalledTimes(2);
+      expect(sent(1)).not.toHaveProperty('deviceLocation');
+      expect(askCalls()).toBe(1);
+      await waitFor(() => expect(turnHits()).toBe(2));
+    });
+
+    it('W6 묻기로 받은 좌표는 다음 턴(날씨 아님)에도 싣고, 다시 묻지 않는다 (AC5 · seed D5)', async () => {
+      await renderOn('web', null, ASKED);
+      await sendAndSettle(WEATHER_Q, 1);
+
+      await sendAndSettle('내일은?', 2);
+
+      expect(askCalls()).toBe(1);
+      expect(sent(1)).toHaveProperty('deviceLocation', ASKED);
+    });
+
+    it('W7 「날씨」가 없는 턴은 묻지 않고 누른 자리에서 바로 위치 없이 보낸다 (AC7)', async () => {
+      await renderOn('web', null, ASKED);
+
+      await typeAndSend(UTTERANCE);
+
+      expect(sendTurnSpy).toHaveBeenCalledTimes(1);
+      expect(sent(0)).not.toHaveProperty('deviceLocation');
+      expect(askCalls()).toBe(0);
+      await waitFor(() => expect(turnHits()).toBe(1));
+    });
+
+    it('W8 동의가 꺼져 있으면 웹·날씨여도 위치를 읽지도 묻지도 않는다 (AC1·AC7)', async () => {
+      setOS('web');
+      serveConsent(false);
+      answerPosition(null, ASKED);
+      serveOpen();
+      serveTurns(answered());
+      renderPage();
+      await consentAnswered();
+
+      await sendAndSettle(WEATHER_Q, 1);
+
+      expect(mockReadDevicePosition).not.toHaveBeenCalled();
+      expect(sent(0)).not.toHaveProperty('deviceLocation');
+    });
+
+    it('W9 마운트 때 이미 위치를 읽었으면 묻지 않고 그 좌표를 싣는다 (AC1·AC7)', async () => {
+      await renderOn('web', HERE, ASKED);
+
+      await sendAndSettle(WEATHER_Q, 1);
+
+      expect(askCalls()).toBe(0);
+      expect(sent(0)).toHaveProperty('deviceLocation', HERE);
+    });
+
+    it.each(['ios', 'android'] as const)(
+      'W10 %s 는 날씨 턴이어도 묻지 않고 기다리지 않는다 (AC7 · seed D1)',
+      async (os) => {
+        await renderOn(os, null, ASKED);
+
+        await typeAndSend(WEATHER_Q);
+
+        expect(sendTurnSpy).toHaveBeenCalledTimes(1);
+        expect(sent(0)).not.toHaveProperty('deviceLocation');
+        expect(askCalls()).toBe(0);
+        await waitFor(() => expect(turnHits()).toBe(1));
+      }
+    );
+
+    it('W11 묻는 동안 [대기 취소] → 서버에 닿지 않고 [다시 보내기]로 끝나며, 다시 보내면 묻지 않고 받은 좌표를 싣는다 (AC5·AC6 · seed D5·D6)', async () => {
+      const held = holdResponse();
+      await renderOn(
+        'web',
+        null,
+        held.gate.then(() => ASKED)
+      );
+      await typeAndSend(WEATHER_Q);
+      expect(askCalls()).toBe(1);
+
+      await act(async () => {
+        fireEvent.press(screen.getByTestId('assistant-progress-cancel'));
+      });
+      // 권한 창이 아직 떠 있어도(묻기 미결) 취소는 바로 먹는다 — 진행 줄이 걷히고 [다시 보내기]가 뜬다(03b 경고-1)
+      const resend = await screen.findByTestId('assistant-resend');
+      expect(screen.queryByTestId('assistant-progress')).toBeNull();
+      // 늦게 온 답의 좌표는 담아 둔다 — 아래 [다시 보내기]가 싣는다
+      await act(async () => held.release());
+
+      // 취소한 턴은 서버에 닿지 않는다 — 다시 보내기 요청은 엿보기 순번이 아니라 서버 JSON 으로 본다
+      expect(turnHits()).toBe(0);
+
+      await act(async () => {
+        fireEvent.press(resend);
+      });
+      await waitFor(() => expect(turnHits()).toBe(1));
+
+      expect(turnBodies[0]).toHaveProperty('deviceLocation', ASKED);
+      expect(askCalls()).toBe(1);
+    });
+
+    it('W13 묻는 동안 시트를 닫으면 답이 와도 그 턴은 서버로 나가지 않는다 (03b 경고-2 · 대기 중 언마운트)', async () => {
+      // 준비: 웹·동의 켜짐·마운트 위치 없음, 묻기는 풀기 전까지 끝나지 않는다
+      const held = holdResponse();
+      await renderOn(
+        'web',
+        null,
+        held.gate.then(() => ASKED)
+      );
+      await typeAndSend(WEATHER_Q);
+      expect(askCalls()).toBe(1);
+
+      // 실행: 권한 창이 떠 있는 동안 시트를 닫고, 그 뒤에 답이 온다
+      screen.unmount();
+      held.release();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      // 단언: 닫힌 뒤에 새 요청이 시작되지 않는다
+      expect(turnHits()).toBe(0);
+    });
+
+    it('W12 「한 번」은 마운트마다다 — 시트를 닫았다 다시 열면 다시 묻는다 (AC5 · seed D3)', async () => {
+      await renderOn('web', null, null);
+      await sendAndSettle(WEATHER_Q, 1);
+      expect(askCalls()).toBe(1);
+
+      screen.unmount();
+      // renderPage 가 client 를 갈아 끼운다 — 옛 client 는 파일 afterEach 가 못 비운다
+      client.clear();
+      renderPage();
+      // 둘째 마운트의 마운트 읽기(인자 없는 호출 누적 2번)가 훅에 들어갈 때까지
+      await waitFor(() => expect(mountCalls()).toBe(2));
+      await flush();
+      await sendAndSettle(WEATHER_Q, 2);
+
+      expect(askCalls()).toBe(2);
     });
   });
 });

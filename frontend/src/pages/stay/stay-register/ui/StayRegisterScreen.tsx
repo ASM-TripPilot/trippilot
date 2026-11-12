@@ -17,6 +17,13 @@
  * 픽셀 충실도(간격·그림자·앱바)는 이 계약이 잠그지 않는다(02a §3-3) — figma-screen-impl
  * 루프 몫으로 남긴다.
  */
+import {
+  Check24Glyph,
+  WarningTriangleGlyph,
+  SearchGlyph,
+  InfoGlyph,
+  BackChevronGlyph,
+} from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import {
   Pressable,
@@ -26,6 +33,7 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
+import { Button, buttonClasses } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomSheet, {
   BottomSheetBackdrop,
@@ -53,16 +61,9 @@ import {
   type StayRegisterFlow,
   type StayRegisterTab,
 } from '../model/stayRegisterForm';
-import {
-  BackChevronGlyph,
-  BedGlyph,
-  CheckGlyph,
-  InfoGlyph,
-  RefreshGlyph,
-  SearchGlyph,
-  WarningTriangleGlyph,
-} from '@/features/stay/index.view';
+import { StayBedGlyph, StayRefreshGlyph } from '@/features/stay/index.view';
 import { AppBar } from '@/shared/ui/AppBar';
+import { COLOR_TOKENS } from '@/shared/config';
 
 export interface StayRegisterScreenProps {
   flow: StayRegisterFlow;
@@ -95,7 +96,7 @@ function isSameCandidate(a: GeocodeCandidate, b: GeocodeCandidate): boolean {
 /** 선택 후보 행의 흰 배경을 띄우는 은은한 그림자(Figma multi-candidate 선택 행) — 색 토큰이 아닌
  * 순수 그림자라 className 으로 못 주고 style prop 으로만 준다(SegmentedControl 선택 셀과 동형). */
 const SELECTED_ROW_SHADOW: ViewStyle = {
-  shadowColor: '#000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOpacity: 0.06,
   shadowRadius: 4,
   shadowOffset: { width: 0, height: 1 },
@@ -183,7 +184,7 @@ function SearchFailBlock({
           className="flex-row items-center gap-xs"
         >
           {/* TRIP-730 — Figma 배너 우측 ↻. "다시 시도" 텍스트는 R-6 이 잠근다(제거 금지). */}
-          <RefreshGlyph size={16} />
+          <StayRefreshGlyph size={16} />
           <Text className="font-noto-bold text-label font-bold text-primary">
             다시 시도
           </Text>
@@ -449,16 +450,13 @@ function MapSheet({
                 pins={stayPins(candidate)}
               />
             </View>
-            <Pressable
+            <Button
               testID="stay-register-mapsheet-confirm"
-              accessibilityRole="button"
+              size="md"
               onPress={onConfirmCoord}
-              className="h-12 items-center justify-center rounded-button bg-primary"
             >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                이 위치로 확인
-              </Text>
-            </Pressable>
+              이 위치로 확인
+            </Button>
           </>
         ) : (
           <>
@@ -471,16 +469,13 @@ function MapSheet({
             <Text className="font-noto text-label text-muted">
               {candidate.address}
             </Text>
-            <Pressable
+            <Button
               testID="stay-register-mapsheet-confirm"
-              accessibilityRole="button"
+              size="md"
               onPress={onConfirmCoord}
-              className="h-12 items-center justify-center rounded-button bg-primary"
             >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                이 주소로 확인
-              </Text>
-            </Pressable>
+              이 주소로 확인
+            </Button>
           </>
         )}
       </BottomSheetView>
@@ -508,11 +503,15 @@ export function StayRegisterScreen({
   // 띄운다). 이름 게이트는 제출 경로가 canSubmitStayRegister 로 진다. 「다시 시도」는 범위 밖이라
   // 여전히 canSubmit 으로 잠긴다.
   const canPress = canPressStayRegister(flow);
+  // ✓ 글리프·상태별 글자 행이라 Button 대신 같은 모양 클래스만 빌린다(TRIP-1828 탈출구).
+  const submitButton = buttonClasses({ size: 'md', disabled: !canPress });
   // TRIP-1429 — 검색 키·[검색] 버튼 공용 입구. 검색 중이면 무시(중복 지오코드 요청 방지), 공백 검색어면
   // 버튼을 잠근다(page 조회도 공백이면 꺼져 있어 눌러도 아무 일이 없는 버튼이 된다 — INV-4).
+  // TRIP-1672 — 검색 키도 같은 `canSearch` 를 지나야 한다: 버튼의 `disabled` 만으로는 키보드 경로가 막히지 않아,
+  // 공백 검색어로 검색 키를 누르면 조회는 안 나가는데 골라 둔 후보와 좌표 확정만 풀렸다.
   const canSearch = flow.query.trim() !== '';
   const submitSearch = (): void => {
-    if (flow.searchStatus !== 'loading') onSubmitQuery();
+    if (canSearch && flow.searchStatus !== 'loading') onSubmitQuery();
   };
   // AC-3 문구는 coordConfirmed 하나에만 걸린다(후보 유무를 조건에 넣지 않는다) — 재검색으로
   // 이전 후보가 풀려도(§3-2 초기화) 안내는 그대로 남아야 한다(I-5). 핀 탭 좌표 미확정(P-6,
@@ -622,7 +621,11 @@ export function StayRegisterScreen({
                   </Text>
                   <View className="w-full flex-row items-center gap-sm">
                     <View className="h-12 flex-1 flex-row items-center gap-sm rounded-input border border-hairline-strong px-md">
-                      <SearchGlyph size={20} tone="mutedSoft" />
+                      <SearchGlyph
+                        size={20}
+                        color="mutedSoft"
+                        strokeWidth={1.8}
+                      />
                       <TextInput
                         testID="stay-register-search-input"
                         value={flow.query}
@@ -633,24 +636,15 @@ export function StayRegisterScreen({
                         className="flex-1 font-noto text-body text-ink placeholder:text-muted-soft"
                       />
                     </View>
-                    <Pressable
+                    <Button
                       testID="stay-register-search-submit"
-                      accessibilityRole="button"
                       accessibilityLabel="검색"
+                      size="md"
                       disabled={!canSearch}
                       onPress={submitSearch}
-                      className={`h-12 items-center justify-center rounded-button px-lg ${
-                        canSearch ? 'bg-primary' : 'bg-surface-strong'
-                      }`}
                     >
-                      <Text
-                        className={`font-noto-bold text-body font-bold ${
-                          canSearch ? 'text-on-primary' : 'text-muted-soft'
-                        }`}
-                      >
-                        검색
-                      </Text>
-                    </Pressable>
+                      검색
+                    </Button>
                   </View>
                 </View>
 
@@ -700,7 +694,7 @@ export function StayRegisterScreen({
                 className="flex-row items-center gap-md rounded-card bg-surface-soft p-[14px]"
               >
                 <View className="h-10 w-10 items-center justify-center rounded-[10px] bg-primary-pale">
-                  <BedGlyph size={20} />
+                  <StayBedGlyph size={20} />
                 </View>
                 <View className="flex-1 gap-xs">
                   <Text className="font-noto-bold text-card-title font-bold text-ink">
@@ -723,7 +717,7 @@ export function StayRegisterScreen({
                     testID="stay-register-coordnotice"
                     className="flex-row items-center gap-sm rounded-button border border-info-border bg-canvas px-md py-sm"
                   >
-                    <InfoGlyph size={16} tone="info" />
+                    <InfoGlyph size={16} color="info" />
                     <Text className="flex-1 font-noto text-body text-info">
                       지도에서 위치를 확인해 주세요
                     </Text>
@@ -760,35 +754,19 @@ export function StayRegisterScreen({
               accessibilityRole="button"
               disabled={!canPress}
               onPress={onSubmit}
-              className={`mx-lg h-12 flex-row items-center justify-center gap-xs rounded-button ${
-                canPress ? 'bg-primary' : 'bg-surface-strong'
-              }`}
+              className={`${submitButton.box} mx-lg flex-row gap-xs`}
             >
               {/* TRIP-730 CTA 텍스트 — submitting 우선(R-14 동결), 그다음 확정(✓ 이 숙소 등록), else
                 등록하기. ✓ 는 CheckGlyph(SVG)라 텍스트 노드는 "이 숙소 등록"이다(R-16, 02a ★5·★6). */}
               {flow.submitStatus === 'submitting' ? (
-                <Text className="font-noto-bold text-card-title font-bold text-muted-soft">
-                  등록 중…
-                </Text>
+                <Text className={submitButton.label}>등록 중…</Text>
               ) : flow.coordConfirmed ? (
                 <>
-                  <CheckGlyph size={20} />
-                  <Text
-                    className={`font-noto-bold text-card-title font-bold ${
-                      canPress ? 'text-on-primary' : 'text-muted-soft'
-                    }`}
-                  >
-                    이 숙소 등록
-                  </Text>
+                  <Check24Glyph size={20} />
+                  <Text className={submitButton.label}>이 숙소 등록</Text>
                 </>
               ) : (
-                <Text
-                  className={`font-noto-bold text-card-title font-bold ${
-                    canPress ? 'text-on-primary' : 'text-muted-soft'
-                  }`}
-                >
-                  등록하기
-                </Text>
+                <Text className={submitButton.label}>등록하기</Text>
               )}
             </Pressable>
 

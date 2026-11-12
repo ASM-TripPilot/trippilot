@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { goBackOr } from '@/shared/lib/goBackOr';
+import { guardPress } from '@/shared/lib/pressGuard';
 
 import {
   buildDraftDayTabs,
@@ -14,7 +15,7 @@ import {
   sheetRowKeys,
 } from '@/features/itinerary';
 import { timeBandLabel } from '@/entities/itinerary-slot';
-import { WarningTriangleGlyph } from '@/features/itinerary';
+import { ItineraryWarningTriangleGlyph } from '@/features/itinerary';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { SlotStopCard } from '@/entities/itinerary-slot';
 import {
@@ -65,7 +66,7 @@ export function CoPickCompletePage({
       <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
         <StateNotice
           testID="itinerary-copick-complete-error"
-          icon={<WarningTriangleGlyph />}
+          icon={<ItineraryWarningTriangleGlyph />}
           title="일정을 불러올 수 없어요"
           description="잠시 후 다시 시도해 주세요."
           actions={[
@@ -129,7 +130,7 @@ export function CoPickCompletePage({
       days={dayChips}
       selectedDayIndex={selectedDayIndex < 0 ? 0 : selectedDayIndex}
       onSelectDay={(index) => setPickedDate(tabs[index]?.date ?? null)}
-      onBack={() => goBackOr(router, `/trips/${tripId}/itinerary`)}
+      onBack={guardPress(() => goBackOr(router, `/trips/${tripId}/itinerary`))}
       header={
         <SheetHeader
           title={trip.data.title}
@@ -142,11 +143,13 @@ export function CoPickCompletePage({
         {
           label: '완성 일정 보기',
           variant: 'primary',
-          onPress: () =>
+          // 도착지 h14 의 [일정 저장하기](확정)가 같은 자리다. 창을 열어 둘째 탭을 막는다(QA M1).
+          onPress: guardPress(() =>
             router.push({
               pathname: '/trips/[tripId]/itinerary',
               params: { tripId },
-            }),
+            })
+          ),
         },
       ]}
     >

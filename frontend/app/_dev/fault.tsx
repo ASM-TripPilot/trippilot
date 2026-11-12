@@ -16,11 +16,12 @@ export default function DevFaultRoute() {
   const [result, setResult] = useState<FaultLinkAction | null>(null);
   const rules = useSyncExternalStore(faultStore.subscribe, faultStore.rules);
 
+  // 딥링크 한 번 = 적용 한 번. params 객체는 렌더마다 새로 만들어지므로 내용(문자열)을 deps 로 쓰고
+  // effect 안에서 그 문자열로 되살린다.
+  const paramsKey = JSON.stringify(params);
   useEffect(() => {
-    void faultStore.apply(params).then(setResult);
-    // 딥링크 한 번 = 적용 한 번. params 객체는 렌더마다 새로 만들어진다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(params)]);
+    void faultStore.apply(JSON.parse(paramsKey)).then(setResult);
+  }, [paramsKey]);
 
   return (
     <SafeAreaView testID="dev-fault-root" className="flex-1 bg-white p-4">

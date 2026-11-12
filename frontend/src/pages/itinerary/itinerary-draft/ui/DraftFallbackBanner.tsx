@@ -2,10 +2,10 @@ import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import {
+  InfoCircleGlyph,
   AlertCircleGlyph,
   ChevronRightGlyph,
-  InfoCircleGlyph,
-} from '@/features/itinerary/index.view';
+} from '@/shared/ui/glyphs';
 
 /**
  * TRIP-1039 · h08 셸 시트 맨 위에 얹는 폴백·일부 실패 안내(BR-U3-11 · INV-4). Figma 전용 프레임이 없어
@@ -82,7 +82,7 @@ export function DraftFallbackBanner({
           testID="itinerary-draft-shortfall"
           className="w-full flex-row items-center gap-sm rounded-button border border-hairline bg-canvas px-lg py-md"
         >
-          <InfoCircleGlyph size={16} tone="muted" />
+          <InfoCircleGlyph size={16} />
           <Text className="flex-1 font-noto text-card-title text-ink">
             {shortfall}
           </Text>

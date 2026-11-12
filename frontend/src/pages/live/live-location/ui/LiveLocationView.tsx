@@ -11,16 +11,15 @@
  *    포획하므로 먼저 띄우면 늦게 온 좌표를 못 받는다.
  *  - 확정은 좌표만 올린다 — 역지오코딩 없음(AC-9).
  */
+import { BackChevronGlyph, InfoCircle18Glyph } from '@/shared/ui/glyphs';
 import { useState, type ReactElement } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { isEstimatedOrigin } from '@/features/request-replan/index.view';
-import {
-  LocationBackChevronGlyph,
-  LocationInfoGlyph,
-} from '@/shared/location/index.view';
 import { CenterPinPicker, type MapCenter } from '@/shared/map';
+import { COLOR_TOKENS } from '@/shared/config';
 
 export type LiveLocationState = 'manual' | 'permission-denied';
 
@@ -42,7 +41,7 @@ export interface LiveLocationViewProps {
  * className 을 못 받는 raw 값이다. `#000000` 은 토큰화 9색 밖이라 raw-hex 가드 사정거리 밖(홈
  * fabShadow·탭바 PILL_SHADOW 선례). */
 const CARD_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
@@ -92,7 +91,7 @@ export function LiveLocationView({
       <View testID={face.rootTestID} className="flex-1 bg-canvas">
         <View className="h-[56px] flex-row items-center px-lg">
           <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
-          <LocationBackChevronGlyph />
+          <BackChevronGlyph />
         </View>
 
         <View className="flex-1 gap-md px-lg pt-lg">
@@ -103,7 +102,7 @@ export function LiveLocationView({
           {/* 안내 배너(점선 박스 + info) — 첫 줄은 상태별, subline 은 공통. */}
           <View className="flex-row gap-sm rounded-[14px] border border-dashed border-hairline-strong bg-surface-soft px-lg py-md">
             <View className="pt-[2px]">
-              <LocationInfoGlyph />
+              <InfoCircle18Glyph color="info" />
             </View>
             <View className="flex-1 gap-xs">
               <Text className="font-noto text-body text-ink">
@@ -164,21 +163,18 @@ export function LiveLocationView({
 
           {/* 주 CTA — 지도를 움직여 맞춘 중심 좌표(없으면 받은 center)를 확정 콜백으로 올린다(AC-9).
               중심을 아직 모르면(로딩) 아무것도 올리지 않는다. */}
-          <Pressable
+          <Button
             testID="live-location-confirm"
-            accessibilityRole="button"
             onPress={() => {
               if (center) onConfirm?.(pickedCoord ?? center);
             }}
-            className="h-[52px] items-center justify-center rounded-button bg-primary"
           >
-            <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-              이 위치로 계속
-            </Text>
-          </Pressable>
+            이 위치로 계속
+          </Button>
 
           {/* 건너뛰기 어포던스 — 서버 사다리(마지막 방문지/등록 숙소)로 위임, 클라가 재판정 안 함.
               중립 가정 문구를 캡션으로 밝힌다(AC-2). 배선은 범위 밖(Q8). */}
+          {/* eslint-disable-next-line no-restricted-syntax -- onPress 미배선(Q8) — button 을 달면 죽은 버튼이 낭독기에 드러난다. 배선 때 role 을 단다(TRIP-1765). */}
           <Pressable
             testID="live-location-use-last-visit"
             className="items-center pt-xs"

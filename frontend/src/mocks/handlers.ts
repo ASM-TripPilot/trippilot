@@ -458,6 +458,10 @@ export const handlers = [
    */
   http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
 
+  // TRIP-1783 — 홈 종 미읽음 배지가 홈을 렌더하는 모든 통합 테스트에서 `GET /me/notifications?unreadOnly=true&limit=100` 을 묻는다.
+  // `/saved-stays` 와 같은 이유(onUnhandledRequest:'error')로 무해한 기본값 = 미읽음 없음(배지 없음). 숫자가 필요한 테스트는 `server.use(...)` 로 덮는다.
+  http.get(`${BASE}/me/notifications`, () => HttpResponse.json({ items: [] })),
+
   // TRIP-1581 — 인기 숙소 줄(`widgets/curated-stays`)이 e02 등 여러 page 에 붙어, 로그인 상태면 인기 숙소·제휴 고지
   // 설정을 묻는다. `/saved-stays` 와 같은 이유(통합 버킷 onUnhandledRequest:'error')로 무해한 기본값을 둔다 —
   // 인기 숙소 없음(줄 숨김) · 고지 다시 보기(시트를 거친다). 얼굴별 응답은 `server.use(...)`로 덮는다.
@@ -477,5 +481,11 @@ export const handlers = [
   // 미처리 요청 경고가 찍혔다(LiveItineraryPage.integration 176건). 기본은 빈 목록(트리거 없음) — 필요한 테스트는 `server.use(...)`로 덮는다.
   http.get(`${BASE}/trips/:tripId/triggers`, () =>
     HttpResponse.json({ triggers: [] })
+  ),
+  // TRIP-1781 — 끝난 여행의 표지 사진을 고르는 훅(j04 요약·j06 공유 카드)이 `summary.stats.totalPhotos > 0` 이면 여행 전체 기록을 한 번 묻는다.
+  // 통합 픽스처의 `totalPhotos` 는 0 이 아닌 값이 많아 기본값이 없으면 준비 단계에서 미처리 요청으로 죽는다. 기본은 **빈 기록**(후보 0 = 색 표지,
+  // 이 기기 id·앨범도 안 묻는다). 사진 있는 방문이 필요한 테스트는 `server.use(...)`(`@/test-support/coverPhotoFixtures`)로 덮는다.
+  http.get(`${BASE}/trips/:tripId/records`, ({ params }) =>
+    HttpResponse.json({ tripId: params.tripId, days: [], changes: [] })
   ),
 ];

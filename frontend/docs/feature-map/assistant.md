@@ -37,13 +37,16 @@ routes:
 - `assist-older` 긴 대화는 맨 위 "이전 대화 더 보기" → 로딩 → 실패 시 "이전 대화를 불러오지 못했어요" + 다시 시도.
 - `assist-scroll-down` 위로 올리면 ↓(맨 아래로) 버튼.
 - `assist-history` ⋮ → "이번 여행에서 도우미와 한 대화·변경이에요." + 변경 기록(없으면 "아직 도우미로 바꾼 것이 없어요") + "이전 대화" 목록 + [대화 이어서]/[이력 지우기]/[닫기].
+- `assist-history-sessions-error` 이력 보기의 「이전 대화」 목록(지난 대화 목록)을 못 받으면 — 이유가 무엇이든(이 목록엔 "없음(404)" 응답이 계약에 없고, 앱의 도우미 연결부가 모든 실패를 한 종류로 접어 404 를 가를 수 없다) — 그 자리에 `지난 대화를 불러오지 못했어요` + `다시 시도`가 선다. 지난 대화가 사라진 것과 "원래 없음"을 구별하게 한다. `다시 시도`는 이 목록만 다시 부르고 부르는 동안에도 줄이 남으며 버튼은 잠긴다. 목록이 빈 배열이거나 이미 받은 목록 위에서 배경 재조회만 실패하면 줄이 없다. 변경 기록·`대화 이어서`·`이력 지우기`와는 독립. *(2026-11-05 TRIP-1757 · 결정: 404 에도 띄운다 · 프리뷰 `assistant-history-sessions-error` 는 이력 시트·로그 행만 확인, 줄은 시스템 창에 가려 일부만 확인)*
 - `assist-history-clear` [이력 지우기] → "대화 이력을 지울까요?" [취소]/[지우기].
 - `assist-close` ✕·딤 탭·[닫기] → 시트 닫힘(뒤로 갈 곳이 없으면 홈 탭).
 - `asst-next-action-rows` 여행 없이 연 모드의 다음 행동 행은 앞에 아이콘(검색·+)이 있고, 여행 문맥 모드의 행은 아이콘 없는 링크 행이다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
 - `asst-answer-layout` 도우미 답은 말풍선·✦ 아바타 없는 평문이고, 한 답 안은 본문 → 카드 → 다음 행동 → 각주 → 평가 줄 순서다. 최신 답이 맨 아래다. 이력 보기 안내 문장에도 아바타가 없다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
 - `asst-scroll-down` ↓를 누르면 맨 아래로 내려가고, 위로 올려 둔 채 새 답이 와도 자동으로 내리지 않는다(↓도 그대로 남는다). *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
 - `asst-header` 헤더에는 ✦ 마크·⋮(이력 보기)·✕만 있고, 제목·새 대화·+ 버튼은 없다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 — 지도 정정)*
+- `asst-new-trip-reset` 여행 만들기 화면에 값을 넣다 나온 뒤 도우미에서 "새 여행 만들기"를 누르면 1단계가 빈 채로 뜨고, 뒤로 가도 도우미 시트가 아래에 남지 않는다. *(TRIP-1776 · 실화면 미검증 — jest 는 이동 순간의 초기화까지만 보고 실제 화면 교체는 못 본다)*
 - `assistant-cold-close` 도우미 시트를 링크로 바로 열고 ✕ 를 누르면 시트가 걷히고 홈이 뜬다(투명 모달을 홈으로 replace — jest 로는 실제로 걷히는지 못 본다). *(TRIP-1685 · 실화면 미검증 — 오케 실기 몫)*
+- `assist-web-location-ask` 웹(브라우저)에서 위치 동의를 켠 채, 이 사이트 위치 권한을 아직 정하지 않은 브라우저로 도우미에 「오늘 날씨」를 처음 물으면 브라우저 위치 허용 창이 한 번 뜬다. 허용하면 지금 있는 곳 날씨로 답한다. 거부·무응답이면 위치 없이 보내지고(여행 날이 아니면 지역을 되묻는다), 같은 시트에서 다시 날씨를 물어도 창이 또 뜨지 않는다. 창이 떠 있는 동안 [대기 취소]를 누르면 곧바로 「보내지 못했어요 · 다시 보내기」가 된다. http·iframe 처럼 브라우저가 창 없이 거부하는 환경에서도 답은 나간다. 폰(iOS·Android)은 이 창을 띄우지 않는다. *(2026-11-08 · 실화면 미검증 — 운영 배포 뒤 웹에서 확인, jest 는 브라우저 권한 창을 못 띄운다)*
 
 ## How to get to it (user POV)
 
@@ -70,12 +73,13 @@ Preconditions:
 - **느림·취소.** 15초 넘게 답이 없으면 testID: `assistant-progress-slow` "응답이 늦어지고 있어요". testID: `assistant-progress-cancel` → 입력창에 방금 문구가 돌아오고 "보내지 못했어요 · 임시 보관 중" + testID: `assistant-resend`("다시 보내기"). [다시 보내기]를 누르면 같은 턴이 다시 간다.
 - **429.** 짧은 시간에 여러 번 보내 서버가 막으면 testID: `assistant-rate-limited` "잠시 후 다시 시도해 주세요 (N초)", 초가 줄다 0이면 사라진다. 그동안 보내기·칩 비활성.
 - **능력 보기.** `NO_CONTEXT` 에서 칩 "내가 할 수 있는 것 보기"(testID: `assistant-context-chip`)를 누른다 → 그 문구로 턴이 나가고 능력 안내 답.
-- **다음 행동.** 답 아래 testID: `assistant-next-action-<type>`(예: `assistant-next-action-OPEN_ITINERARY`)을 누른다 → `OPEN_ITINERARY` 는 testID: `assistant-itinerary-checking`("일정을 확인하고 있어요") 뒤 일정 화면으로 시트 자리가 바뀐다(실패면 testID: `assistant-itinerary-failed`). 장소·숙소·회고·요약·스타일은 시트 위에 상세가 쌓이고 뒤로 오면 같은 대화가 남아 있다.
+- **다음 행동.** 답 아래 testID: `assistant-next-action-<type>`(예: `assistant-next-action-OPEN_ITINERARY`)을 누른다 → `OPEN_ITINERARY` 는 testID: `assistant-itinerary-checking`("일정을 확인하고 있어요") 뒤 일정 화면으로 시트 자리가 바뀐다(실패면 testID: `assistant-itinerary-failed`). 장소·숙소·회고·요약·스타일은 시트 위에 상세가 쌓이고 뒤로 오면 같은 대화가 남아 있다. testID: `assistant-next-action-CREATE_TRIP`("새 여행 만들기")은 시트 자리가 여행 만들기 1단계로 바뀌고, 전에 입력하다 만 여행지·기간·인원·취향은 남아 있지 않다(빈 위저드).
 - **제안 카드(서버가 제안할 때).** "남은 일정에서 ○○ 빼줘" 류 요청 → testID: `assistant-proposal-<proposalId>` 에 변경 목록(배지 "지금"/"빠짐"/"추가"/"변경"), 위반이면 testID: `assistant-proposal-violation-<n>` 와 함께 [적용] 없음. testID: `assistant-proposal-dismiss`("취소") → testID: `assistant-proposal-status` "취소했어요". 테스트 여행에서만 testID: `assistant-proposal-apply`("적용") → "적용했어요", 일정 화면에서 바뀐 슬롯을 한 번 더 읽는다. 실패면 testID: `assistant-proposal-error`, 낡은 제안이면 testID: `assistant-proposal-stale` + testID: `assistant-proposal-repropose`("다시 제안").
 - **폴백 카드(서버가 줄 때).** testID: `assistant-fallback`, 다시 시도가 있으면 testID: `assistant-fallback-retry`, 출구 testID: `assistant-fallback-continue`(서버 라벨 또는 "도우미 없이 계속") → 시트가 닫힌다.
 - **답 평가.** 답 아래 testID: `assistant-feedback-down-<messageId>` → 이유 칩 testID: `assistant-feedback-reason-WRONG-<messageId>` 등과 testID: `assistant-feedback-comment-<messageId>`("직접 적기"). 이유를 고르면 testID: `assistant-feedback-thanks-<messageId>` "의견 고마워요". 실패면 testID: `assistant-feedback-error-<messageId>`. 같은 엄지를 다시 누르면 평가가 풀린다.
 - **이전 대화 더 보기.** 긴 세션에서 맨 위로 스크롤 → testID: `assistant-older-more`("이전 대화 더 보기") → testID: `assistant-older-loading` → 옛 메시지가 위에 붙는다. 실패면 testID: `assistant-older-error`. 위로 올린 상태에선 testID: `assistant-scroll-down`(라벨 "맨 아래로").
 - **이력.** testID: `assistant-history-toggle` → testID: `assistant-history`, testID: `assistant-history-intro`, 기록이 없으면 testID: `assistant-history-empty` "아직 도우미로 바꾼 것이 없어요", 있으면 testID: `assistant-history-row-<id>`. 다른 세션은 "이전 대화" 아래 testID: `assistant-history-session-<id>`(제목 없으면 "여행 없이 한 대화"). testID: `assistant-history-continue`("대화 이어서") → 대화로 복귀.
+- **이전 대화 목록 실패.** 실패 주입 `com.trippilot.travel://_dev/fault?path=/assistant/sessions&status=500`(GET 에만 걸림 — 추론, 실측하지 않았다)으로 지난 대화 목록만 실패하게 하고 이력(testID: `assistant-history-toggle`)을 연다. **앱 전역 재시도 때문에 실패가 확정되는 약 7초 뒤에야** testID: `assistant-history-sessions-error`(`지난 대화를 불러오지 못했어요`)가 「이전 대화」 자리에 서고 testID: `assistant-history-sessions-retry`(`다시 시도`)가 같이 선다 — 기다린다. 주입을 풀고 누르면 줄이 사라지고 testID: `assistant-history-session-<id>` 행이 선다. 변경 기록 카드·`assistant-history-continue` 는 그대로 눌린다.
 - **이력 지우기(취소까지만).** testID: `assistant-history-clear`("이력 지우기") → testID: `assistant-history-clear-dialog` "대화 이력을 지울까요?"·"이미 반영한 일정 변경은 그대로 남아요." → testID: `assistant-history-clear-cancel`("취소"). testID: `assistant-history-clear-confirm`("지우기")은 누르지 않는다.
 - **열기 실패.** (서버 장애 때) testID: `assistant-open-failed` 문구와 testID: `assistant-open-retry`("다시 시도") → 재조회.
 - **닫기.** testID: `assistant-sheet-close`, 딤 testID: `assistant-sheet-scrim`(라벨 "도우미 닫기"), 이력의 testID: `assistant-history-close`("닫기") 셋 다 시트 전체를 닫고 연 화면으로 돌아간다.
@@ -97,4 +101,6 @@ Preconditions:
 - [실화면] 2026-10-31 [결함 의심 FM-L6-02] (판단 필요, low) `대기 취소` → `다시 보내기` 로 답이 정상 도착한 뒤에도 입력창에 방금 보낸 문구("부산 날씨 어때")가 그대로 남는다 — 사용자가 그대로 다시 보내 중복 질문이 될 수 있다. 증거 `assistant/14-resend-reply.png`.
 - [실화면] 2026-10-31 "이전 대화"에 지금 여행(제주)의 다른 세션이 함께 보였다 — 위 "확인 필요"는 실화면에서 그렇다. `OPEN_ITINERARY` 는 진행 중 여행이라 여행 중 허브로 갔고 "일정을 확인하고 있어요"는 너무 빨라 못 잡았다.
 - [실화면] 2026-10-31 도달 불가 — `assist-loading`·`assist-open-failed`·`assist-unauthorized`·`assist-slow`·`assist-send-failed`·`assist-rate-limited`(실패·지연 유도 수단 없음, 연타 범위 밖), `assist-cards`·`assist-fallback`·`assist-proposal*`(서버가 글 답만 줌), `assist-older`·`assist-scroll-down`(긴 세션 없음).
+- [실화면] 2026-11-03 대화 목록의 스크롤 처리가 바뀐 뒤(TRIP-1733) `asst-scroll-down`·아래부터 쌓임은 실화면 재확인을 못 했다 — dev 계정 대화가 비어 있어 빈 시트 렌더만 봤다. 다음 재QA 때 아래 2026-11-02 방법(질문 4번)으로 긴 세션을 만들어 ↓ 나타남·누르면 맨 아래·맨 아래면 사라짐을 다시 본다.
 - [실화면] 2026-11-02 질문 4번(홈 ✦, 여행 중 문맥)으로 긴 세션을 만들어 ↓ 를 확인했다 — 위로 올려 둔 채 보낸 새 답은 자동으로 내리지 않았다. 각주·이력 안내 문장은 이번 답에 없었다.
+- **[미검증 · 실화면 전용] 2026-11-05 TRIP-1757 이전 대화 실패 줄** — 프리뷰 `assistant-history-sessions-error`(순수 뷰)로 이력 시트·로그 행은 봤지만 줄 자리가 iOS 「Apple 계정 확인」 암호 창에 가려 오른쪽 끝 빨간 글자 일부만 보였다 — 줄 모양·위치는 미확인(PASS 로 적지 않는다). 실화면에서 볼 것: ① 줄 모양·위치(「이전 대화」 자리) ② 실패 확정까지 약 7초가 걸리는 것(그동안은 「이전 대화」가 비어 보이고 줄이 없다) ③ `다시 시도` 직후 줄이 꺼졌다 켜지지 않는지(React Compiler 는 jest 에 안 붙는다). 이 줄은 실서버 + 실패 주입으로만 만들 수 있다(프리뷰 키는 줄 모양만 보여 준다).

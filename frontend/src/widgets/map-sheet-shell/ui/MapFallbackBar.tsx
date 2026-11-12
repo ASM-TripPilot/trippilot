@@ -2,7 +2,8 @@ import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { MapPinOffGlyph, RetryGlyph } from './MapSheetGlyphs';
+import { RetryGlyph } from '@/shared/ui/glyphs';
+import { MapPinOffGlyph } from './MapSheetGlyphs';
 
 /**
  * TRIP-919 · 지도 폴백 바(widgets · presentation-only) — Figma h14 `4286:2123` `mapfallback`.

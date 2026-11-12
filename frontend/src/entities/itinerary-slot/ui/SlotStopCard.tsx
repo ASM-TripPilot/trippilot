@@ -1,15 +1,22 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import {
+  Check24Glyph,
+  ChevronRight24Glyph,
+  ClockGlyph,
+  MoreDotsGlyph,
+} from '@/shared/ui/glyphs';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
 import { ALT_LABEL } from '../config/altLabel';
+import { slotDisplayCategory, slotDisplayName } from '../lib/slotDisplay';
 import { buildSlotKey } from '../lib/slotKey';
-import { ChevronRightGlyph, ClockGlyph } from './SlotGlyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /** TRIP-797 · 미지정(startAt 없는) 슬롯 칩 문구 — 정본 공백 발명 카피(Figma 근거 6-b 이연). */
-export const UNSPECIFIED_CHIP_LABEL = '시간대 설정';
+const UNSPECIFIED_CHIP_LABEL = '시간대 설정';
 
 /**
  * TRIP-783 · 결과 화면 공용 슬롯 카드 — h07·h08·h11·h14·h16 6종이 공유할 부품(신설·병존,
@@ -30,7 +37,7 @@ export const UNSPECIFIED_CHIP_LABEL = '시간대 설정';
 // 카드 그림자(Figma 0 4 16 rgba(0,0,0,0.08)). RN 은 box-shadow 가 없어 스타일로 옮긴다. `#000000` 은
 // 브랜드 팔레트(raw-hex 가드 목록) 밖이라 그림자 색으로 정당하다(PoiSlotCard·ManualEditShell 선례 동형).
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.08,
   shadowRadius: 16,
@@ -51,7 +58,7 @@ export interface SlotStopCardProps {
   fixed?: boolean;
   /** 고정 슬롯 부제(`저녁 · 숙소 · 변경 불가` 등). */
   subtitle?: string | null;
-  /** 이름 press(슬롯 선택 어포던스). 미주입이면 press 무해(no-op). */
+  /** 이름·사진 press(장소 진입 — 사진은 TRIP-1840 부터 같은 콜백, `slot-stopcard-photo-open-*`). 미주입이면 둘 다 누를 수 없다. */
   onPressName?: () => void;
   /** "다른 후보 ›" press. 미주입이면 링크 자체를 안 그린다(고정 슬롯엔 없음, 엣지 E5). */
   onPressAlt?: () => void;
@@ -79,6 +86,23 @@ export interface SlotStopCardProps {
   /** TRIP-921 · h12 편집기에서 **끌리는 중**인 카드(리스트 `isActive`). true 면 루트 테두리를 primary 로
    *  그린다(Figma 떠 있는 카드). 미주입이면 현행 그대로. */
   dragging?: boolean;
+  /** TRIP-1779 · h08 추천 이유 태그(`#혼자여행` …) — 주면 카테고리 줄 아래에 공백으로 이은 한 줄을 그린다.
+   *  미주입·null·빈 배열이면 줄 요소 자체가 없다. 카드는 `slot.placementReason` 을 스스로 읽지 않는다
+   *  (읽으면 h07·h11·h14 등 다른 소비처가 조용히 줄을 얻는다) — 서버 문자열을 태그로 자르는 일은 소비처가 한다. */
+  reasonTags?: readonly string[] | null;
+  /** TRIP-1791 · 편집기 「여러 곳 골라 빼기」 — 주면 사진 앞에 체크 원(24px)을 그린다. 상태(`off`/`on`/`disabled`)·
+   *  토글 판단은 부모 몫이고 카드는 그릴 뿐이다. `disabled` 는 `Pressable disabled` 로 실제 눌림을 막는다.
+   *  체크 원만 눌리고 카드 몸통은 안 눌린다(킷 §10). 미주입이면 현행 그대로. */
+  selection?: {
+    state: 'off' | 'on' | 'disabled';
+    onToggle: () => void;
+    testID: string;
+  };
+  /** TRIP-1793 · 편집기 「다른 날로 옮기기」 — 주면 카드 오른쪽 위에 ⋯ 버튼(보이는 원 28, 히트 44 는 `hitSlop` — 레이아웃 상자를 키우면 머리 줄이
+   *  처진다)을 그린다. 언제 보일지(고정·완료·1일·선택 모드)는 부모 몫이고, 카드 몸통은 안 눌린다(킷 §10). 미주입이면 현행 그대로. */
+  more?: { onPress: () => void; testID: string };
+  /** TRIP-1793 · 옮김 배지 문구(`3일차에서 옮김`, 이름 옆 연분홍 알약) — 카드는 문구를 안 만든다(`violation` 선례). 미주입·null·빈 문자열이면 요소가 없다. */
+  movedLabel?: string | null;
 }
 
 export function SlotStopCard({
@@ -98,21 +122,55 @@ export function SlotStopCard({
   numberOutside,
   violation,
   dragging,
+  reasonTags,
+  selection,
+  more,
+  movedLabel,
 }: SlotStopCardProps): ReactElement {
   const slotKey = buildSlotKey(date, slot.poiId);
   const fieldId = (role: string): string => `slot-stopcard-${role}-${slotKey}`;
   const hasTime = timeLabel !== null && timeLabel !== undefined;
+  // TRIP-1795 · 이 여행에서 분류를 고친 슬롯만 메타 줄 맨 앞에 그 분류를 붙인다(안 그러면 고쳐도 카드가 안 변해 보인다). 덮어쓰기 없으면 태그만 — 종전과 같다.
+  const metaParts = slot.displayCategory?.trim()
+    ? [slot.displayCategory, ...slot.tags]
+    : slot.tags;
   // 잠긴 슬롯은 편집 어포던스를 안 붙인다(INV-U3-03) — onPressTimeChip 을 줬어도 누름 칩 부재.
   const editable = onPressTimeChip !== undefined && locked !== true;
   const chipClass =
     'flex-row items-center gap-xs self-start rounded-[8px] border border-hairline-strong bg-canvas px-sm py-[3px]';
+  const photo = (
+    <PoiPhoto
+      testID={fieldId('photo')}
+      imageUrl={slot.imageUrl}
+      imageLicense={slot.imageLicense}
+      surface="thumb"
+      category={slotDisplayCategory(slot)}
+      poiId={slot.poiId}
+      cachePolicy="memory-disk"
+      recyclingKey={slot.poiId}
+      className="h-[72px] w-[72px] rounded-thumb"
+    />
+  );
 
   const card = (
     <View
       testID={`slot-stopcard-${slotKey}`}
       style={cardShadow}
-      className={`flex-row gap-[10px] rounded-card border bg-canvas p-md ${dragging ? 'border-primary' : 'border-hairline'} ${numberOutside ? 'flex-1 items-center' : 'items-start'}`}
+      className={`flex-row gap-[10px] rounded-card bg-canvas p-md ${selection?.state === 'on' ? 'border-[1.5px] border-primary' : dragging ? 'border border-primary' : 'border border-hairline'} ${numberOutside ? 'flex-1 items-center' : 'items-start'}`}
     >
+      {more ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="더보기"
+          testID={more.testID}
+          onPress={more.onPress}
+          hitSlop={8}
+          className="absolute right-[10px] top-[10px] h-[28px] w-[28px] items-center justify-center rounded-pill bg-surface-strong"
+        >
+          <MoreDotsGlyph size={20} />
+        </Pressable>
+      ) : null}
+
       {/* 번호 배지 — 24px squircle(rounded-[8px]) primary. numberOutside 면 카드 밖(아래 return)에 그린다. */}
       {numberOutside ? null : (
         <View className="h-[24px] w-[24px] items-center justify-center rounded-[8px] bg-primary">
@@ -125,17 +183,47 @@ export function SlotStopCard({
         </View>
       )}
 
-      {/* 사진 72×72 — 없으면 카테고리 생성 이미지로 대체(엣지 E1). */}
-      <PlacePhoto
-        testID={fieldId('photo')}
-        imageUrl={slot.imageUrl}
-        category={slot.category}
-        poiId={slot.poiId}
-        contentFit="cover"
-        cachePolicy="memory-disk"
-        recyclingKey={slot.poiId}
-        className="h-[72px] w-[72px] rounded-thumb"
-      />
+      {selection ? (
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityLabel={`${slotDisplayName(slot) ?? ''} 선택`}
+          accessibilityState={{
+            checked: selection.state === 'on',
+            selected: selection.state === 'on',
+            disabled: selection.state === 'disabled',
+          }}
+          testID={selection.testID}
+          disabled={selection.state === 'disabled'}
+          onPress={selection.onToggle}
+          hitSlop={8}
+          className={`h-[24px] w-[24px] items-center justify-center rounded-pill border ${
+            selection.state === 'on'
+              ? 'border-primary bg-primary'
+              : selection.state === 'disabled'
+                ? 'border-hairline-strong bg-surface-strong'
+                : 'border-hairline-strong bg-canvas'
+          }`}
+        >
+          {selection.state === 'on' ? (
+            <Check24Glyph size={14} strokeWidth={3} />
+          ) : null}
+        </Pressable>
+      ) : null}
+
+      {/* 사진 72×72 — 없으면 카테고리 생성 이미지로 대체(엣지 E1). 이름 진입이 있으면 사진도 같은 곳으로
+          간다(TRIP-1840 — 사진·이름 → 장소 상세). */}
+      {onPressName ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${slotDisplayName(slot) ?? ''} 사진`}
+          testID={fieldId('photo-open')}
+          onPress={onPressName}
+        >
+          {photo}
+        </Pressable>
+      ) : (
+        photo
+      )}
 
       {/* 텍스트 컬럼 — 각 leaf 는 값 하나. */}
       <View className="flex-1 gap-[6px]">
@@ -144,6 +232,7 @@ export function SlotStopCard({
         {unspecified ? (
           editable ? (
             <Pressable
+              accessibilityRole="button"
               testID={fieldId('unspecified')}
               onPress={onPressTimeChip}
               className={chipClass}
@@ -164,6 +253,7 @@ export function SlotStopCard({
         ) : hasTime ? (
           editable ? (
             <Pressable
+              accessibilityRole="button"
               testID={fieldId('timechip')}
               onPress={onPressTimeChip}
               className={chipClass}
@@ -177,7 +267,7 @@ export function SlotStopCard({
               </Text>
               {/* ⌄ caret — 우향 chevron 을 90° 돌려 아래를 가리키게(신규 글리프 없이 재사용). */}
               <View style={{ transform: [{ rotate: '90deg' }] }}>
-                <ChevronRightGlyph size={14} tone="muted" />
+                <ChevronRight24Glyph size={14} color="muted" />
               </View>
             </Pressable>
           ) : locked ? (
@@ -212,6 +302,7 @@ export function SlotStopCard({
             {/* 이름 진입 목적지가 없으면 누를 수 없는 글자로, `›` 도 뺀다(TRIP-939 A-3·Q4). */}
             {onPressName ? (
               <Pressable
+                accessibilityRole="button"
                 testID={fieldId('name')}
                 onPress={onPressName}
                 className="flex-shrink flex-row items-center gap-[2px]"
@@ -220,9 +311,9 @@ export function SlotStopCard({
                   numberOfLines={1}
                   className="font-noto-bold text-card-title font-bold text-ink"
                 >
-                  {slot.nameKo ?? ''}
+                  {slotDisplayName(slot) ?? ''}
                 </Text>
-                <ChevronRightGlyph size={14} tone="muted" />
+                <ChevronRight24Glyph size={14} color="muted" />
               </Pressable>
             ) : (
               <View
@@ -233,7 +324,7 @@ export function SlotStopCard({
                   numberOfLines={1}
                   className="font-noto-bold text-card-title font-bold text-ink"
                 >
-                  {slot.nameKo ?? ''}
+                  {slotDisplayName(slot) ?? ''}
                 </Text>
               </View>
             )}
@@ -244,6 +335,16 @@ export function SlotStopCard({
               >
                 <Text className="font-noto-bold text-micro font-bold text-primary-text">
                   필수
+                </Text>
+              </View>
+            ) : null}
+            {movedLabel ? (
+              <View
+                testID={fieldId('moved')}
+                className="rounded-[12px] bg-primary-pale px-sm py-[3px]"
+              >
+                <Text className="font-noto-bold text-micro font-bold text-primary">
+                  {movedLabel}
                 </Text>
               </View>
             ) : null}
@@ -274,12 +375,23 @@ export function SlotStopCard({
           </View>
         )}
 
-        {slot.tags.length > 0 ? (
+        {metaParts.length > 0 ? (
           <Text
             testID={fieldId('tags')}
             className="font-noto text-caption text-muted"
           >
-            {slot.tags.join(' · ')}
+            {metaParts.join(' · ')}
+          </Text>
+        ) : null}
+
+        {/* 추천 이유 태그(TRIP-1779) — Figma 5203:3604: Noto Regular 12/16 muted, 한 줄 말줄임. */}
+        {reasonTags && reasonTags.length > 0 ? (
+          <Text
+            testID={fieldId('reason')}
+            numberOfLines={1}
+            className="font-noto text-caption text-muted"
+          >
+            {reasonTags.join(' ')}
           </Text>
         ) : null}
 
@@ -306,6 +418,7 @@ export function SlotStopCard({
 
         {onPressAlt ? (
           <Pressable
+            accessibilityRole="button"
             testID={fieldId('alt')}
             onPress={onPressAlt}
             className="self-start"

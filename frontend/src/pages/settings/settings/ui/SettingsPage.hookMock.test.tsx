@@ -12,6 +12,7 @@ import { AxiosError } from 'axios';
 import { useState } from 'react';
 import { Keyboard, Share } from 'react-native';
 import { DELETION_SCOPE } from '../model/deletionScope';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import {
   useDeleteMeDeletion,
   useGetMe,
@@ -83,6 +84,11 @@ jest.mock('@/shared/push', () => ({
   unregisterStoredPushToken: jest.fn(() => Promise.resolve()),
 }));
 jest.mock('expo-linking', () => ({ openURL: jest.fn() }));
+// TRIP-1803 — 계정 삭제 때 사진 사본을 비운다(파일 동작은 shared/photo/index.test 가 본다).
+const mockDeletePhotoCopies = jest.fn();
+jest.mock('@/shared/photo', () => ({
+  deletePhotoCopies: () => mockDeletePhotoCopies(),
+}));
 // 옛 `.version` — 게터로 둬 테스트마다 빌드 설정 버전을 바꾼다. 기본은 null(버전 줄 없음).
 let mockExpoConfig: { version?: string } | null = null;
 jest.mock('expo-constants', () => ({
@@ -158,6 +164,8 @@ afterEach(() => {
   // 메모리 파일 시스템·"모듈 없음" 집합도 모듈 싱글턴이다 — 앞 테스트가 쓴 파일이 뒤 테스트의 "파일 1개" 단언으로 새지 않게.
   resetFakeFs();
   mockMissingNativeModules.clear();
+  // 행 이동은 모듈 전역 연타 창(400ms)을 연다(TRIP-1775) — 앞 테스트의 창이 뒤 테스트의 첫 누름을 삼키지 않게.
+  resetPressGuard();
 });
 
 /** 뮤테이션 목이 부르는 콜백 모양(react-query 의 훅 옵션 `mutation` 과 `mutate` 호출별 옵션이 같다). */
@@ -426,6 +434,69 @@ describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () 
       expect(screen.getByTestId('settings-deletion-pending')).toBeOnTheScreen();
       expect(screen.getByTestId('settings-deletion-cancel')).toBeOnTheScreen();
       expect(screen.getByText(/2026/)).toBeOnTheScreen();
+    });
+
+    /**
+     * TRIP-1803 · E-11 — 계정 삭제 요청이 성공하면 기기 안 사진 사본을 지우고, 지운 파일을 가리키는 캐시 주소도 낡게 만든다.
+     * 실패하면 아무것도 지우지 않는다. 무엇을 보장하나: 성공 1회·실패 0회 · `photo-uri` 캐시 무효화.
+     * (개념) `isInvalidated` = 값은 두고 "다음에 다시 물어라" 표시만 한 상태.
+     */
+    describe('🔴 TRIP-1803 · 기기 안 사진 사본', () => {
+      const confirmDeletion = () => {
+        fireEvent.press(screen.getByTestId('settings-delete-account'));
+        fireEvent.press(screen.getByTestId('settings-delete-confirm'));
+        fireEvent.press(screen.getByTestId('settings-delete-confirm-final'));
+      };
+      function renderWithSeededUri() {
+        const client = newTestQueryClient();
+        client.setQueryData(['photo-uri', 'a'], 'file:///document/a.jpg');
+        render(
+          <QueryClientProvider client={client}>
+            <SettingsPage />
+          </QueryClientProvider>
+        );
+        return client;
+      }
+      beforeEach(() => mockDeletePhotoCopies.mockClear());
+
+      it('S1 삭제 요청이 성공하면 사본을 지우고 photo-uri 캐시를 무효화한다', async () => {
+        primeMutation(mockUsePostMeDeletion, {
+          spy: jest.fn(),
+          onSuccessData: {
+            purgeAt: '2026-09-13T00:00:00Z',
+            cascadeSummary: {},
+          },
+        });
+        const client = renderWithSeededUri();
+
+        confirmDeletion();
+
+        expect(
+          screen.getByTestId('settings-deletion-pending')
+        ).toBeOnTheScreen();
+        expect(mockDeletePhotoCopies).toHaveBeenCalledTimes(1);
+        await waitFor(() =>
+          expect(client.getQueryState(['photo-uri', 'a'])?.isInvalidated).toBe(
+            true
+          )
+        );
+      });
+
+      it('S2 삭제 요청이 실패하면 사본도 캐시도 건드리지 않는다', () => {
+        primeMutation(mockUsePostMeDeletion, {
+          spy: jest.fn(),
+          error: new AxiosError('boom'),
+        });
+        const client = renderWithSeededUri();
+
+        confirmDeletion();
+
+        expect(screen.queryByTestId('settings-deletion-pending')).toBeNull();
+        expect(mockDeletePhotoCopies).not.toHaveBeenCalled();
+        expect(client.getQueryState(['photo-uri', 'a'])?.isInvalidated).toBe(
+          false
+        );
+      });
     });
 
     it('AC-4: 철회 200 → ACTIVE 복귀', () => {
@@ -1492,6 +1563,262 @@ describe('삭제 게이트·상태기·닉네임·내보내기 (옛 .test)', () 
       openEditor();
 
       expect(screen.queryByTestId('settings-nickname-input')).toBeNull();
+    });
+  });
+
+  /**
+   * TRIP-1755 · 계정(`/me`)·프로필(`/me/profile`) 조회가 실패하면 "active·빈 닉네임"을 그리지 않고 화면 위 한 줄 + 다시 시도(INV-4).
+   *
+   * 왜: `/me` 실패가 상태를 'active' 로 접어 삭제 대기 계정에 [삭제 철회]가 숨고 [계정 삭제]가 다시 떴고, `/me/profile` 실패가
+   * 닉네임 행을 빈 값으로 그렸다. 결정(D1): 둘 중 어느 쪽이든 줄은 **하나**(`settings-account-load-error`)이고 다시 시도는
+   * **실패한 조회만** 다시 받는다. 계정 실패면 삭제 요청·삭제 철회 행 전체(그룹 머리글 "위험 영역" 포함)를 안 그리고,
+   * 프로필 실패면 닉네임 행만 뺀다.
+   *
+   * 생성 훅 목에 값만 갈아 끼워 가장 싸게 잰다. 실패의 세 모양:
+   *  - cold: `isError` 켜짐 · window: 재시도가 시작돼 v5 가 pending 으로 되돌린 틈(`isError` 꺼짐, `errorUpdateCount` 는 남음, 다시 받는 중)
+   *  - offline: 요청이 나가지도 못한 pending+paused(`isError`·`errorUpdateCount` 둘 다 0, `fetchStatus` 만 paused).
+   * 기존 "프로필 `{data: undefined}`(isError 없음)이면 닉네임 편집이 열린다"는 로딩이지 실패가 아니라 그대로다(위 닉네임 describe).
+   * 실제 재시도 전이(응답 게이트)는 `SettingsPage.integration.test.tsx` 의 TRIP-1755 describe 가 잰다.
+   *
+   * 3동작 뼈대: 준비=훅 목 값 → 실행=render(+다시 시도 누름) → 단언=testID 있음/없음·refetch 호출 수.
+   */
+  describe('TRIP-1755 · 계정·프로필 조회 실패 (생성 훅 목)', () => {
+    const ERROR = 'settings-account-load-error';
+    const RETRY = 'settings-account-load-retry';
+    const DELETE_ROW = 'settings-delete-account';
+    const PENDING = 'settings-deletion-pending';
+    const CANCEL = 'settings-deletion-cancel';
+    const NICKNAME = 'settings-nickname-edit';
+
+    type Shape = 'cold' | 'window' | 'offline';
+    function failed(shape: Shape, refetch: jest.Mock = jest.fn()) {
+      const base = { data: undefined, refetch };
+      switch (shape) {
+        case 'cold':
+          return {
+            ...base,
+            isError: true,
+            errorUpdateCount: 1,
+            isFetching: false,
+            fetchStatus: 'idle',
+          };
+        case 'window':
+          return {
+            ...base,
+            isError: false,
+            errorUpdateCount: 1,
+            isFetching: true,
+            fetchStatus: 'fetching',
+          };
+        case 'offline':
+          return {
+            ...base,
+            isError: false,
+            errorUpdateCount: 0,
+            isFetching: false,
+            fetchStatus: 'paused',
+          };
+      }
+    }
+    const SHAPES: Shape[] = ['cold', 'window', 'offline'];
+    const ACCOUNT_DATA = (status: 'ACTIVE' | 'DELETION_PENDING') => ({
+      accountId: 'acc-1',
+      status,
+      email: 'a@b.com',
+      socialProviders: ['KAKAO'],
+      onboardingCompleted: true,
+    });
+
+    /** 정상 쪽·그대로 남아야 하는 행이 실제로 있다는 긍정 앵커(부정 단언의 공허 통과 방지). */
+    function expectUntouchedRows() {
+      expect(screen.getByTestId('settings-row-logout')).toBeOnTheScreen();
+      expect(screen.getByTestId('settings-nav-preferences')).toBeOnTheScreen();
+    }
+
+    it.each(SHAPES)(
+      'HK1 계정 조회가 실패(%s)하면 줄·다시 시도가 있고 삭제 요청·삭제 철회·"위험 영역"은 없다',
+      (shape) => {
+        mockUseGetMe.mockReturnValue(failed(shape));
+
+        renderPage();
+
+        expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+        expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+        expect(screen.queryByTestId(DELETE_ROW)).toBeNull();
+        expect(screen.queryByTestId(PENDING)).toBeNull();
+        expect(screen.queryByTestId(CANCEL)).toBeNull();
+        expect(screen.queryByText('위험 영역')).toBeNull();
+        // 프로필은 멀쩡하니 닉네임 행은 그대로, 로그아웃·취향 행도 그대로.
+        expect(screen.getByTestId(NICKNAME)).toBeOnTheScreen();
+        expectUntouchedRows();
+        // 다시 받는 중일 때만 다시 시도가 잠긴다.
+        if (shape === 'window') {
+          expect(screen.getByTestId(RETRY)).toBeDisabled();
+        } else {
+          expect(screen.getByTestId(RETRY)).toBeEnabled();
+        }
+      }
+    );
+
+    it.each(SHAPES)(
+      'HK2 프로필 조회가 실패(%s)하면 줄·다시 시도가 있고 닉네임 행은 없으며 삭제 행(계정은 멀쩡)은 그대로다',
+      (shape) => {
+        mockUseGetMeProfile.mockReturnValue(failed(shape));
+
+        renderPage();
+
+        expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+        expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+        expect(screen.queryByTestId(NICKNAME)).toBeNull();
+        expect(screen.getByTestId(DELETE_ROW)).toBeOnTheScreen();
+        expectUntouchedRows();
+        if (shape === 'window') {
+          expect(screen.getByTestId(RETRY)).toBeDisabled();
+        } else {
+          expect(screen.getByTestId(RETRY)).toBeEnabled();
+        }
+      }
+    );
+
+    it('HK3 둘 다 실패해도 줄·다시 시도는 하나씩이고, 한 번 누르면 두 조회를 각각 1회 다시 받는다', () => {
+      const accountRefetch = jest.fn();
+      const profileRefetch = jest.fn();
+      mockUseGetMe.mockReturnValue(failed('cold', accountRefetch));
+      mockUseGetMeProfile.mockReturnValue(failed('cold', profileRefetch));
+
+      renderPage();
+
+      expect(screen.getAllByTestId(ERROR)).toHaveLength(1);
+      expect(screen.getAllByTestId(RETRY)).toHaveLength(1);
+      expect(screen.queryByTestId(NICKNAME)).toBeNull();
+      expect(screen.queryByTestId(DELETE_ROW)).toBeNull();
+
+      fireEvent.press(screen.getByTestId(RETRY));
+
+      expect(accountRefetch).toHaveBeenCalledTimes(1);
+      expect(profileRefetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('HK4 계정만 실패면 다시 시도는 계정만 다시 받는다(프로필은 0회)', () => {
+      const accountRefetch = jest.fn();
+      const profileRefetch = jest.fn();
+      mockUseGetMe.mockReturnValue(failed('cold', accountRefetch));
+      mockUseGetMeProfile.mockReturnValue({
+        data: { nickname: '여행자123' },
+        refetch: profileRefetch,
+      });
+      renderPage();
+
+      fireEvent.press(screen.getByTestId(RETRY));
+
+      expect(accountRefetch).toHaveBeenCalledTimes(1);
+      expect(profileRefetch).not.toHaveBeenCalled();
+    });
+
+    it('HK5 프로필만 실패면 다시 시도는 프로필만 다시 받는다(계정은 0회)', () => {
+      const accountRefetch = jest.fn();
+      const profileRefetch = jest.fn();
+      mockUseGetMe.mockReturnValue({
+        data: ACCOUNT_DATA('ACTIVE'),
+        refetch: accountRefetch,
+      });
+      mockUseGetMeProfile.mockReturnValue(failed('cold', profileRefetch));
+      renderPage();
+
+      fireEvent.press(screen.getByTestId(RETRY));
+
+      expect(profileRefetch).toHaveBeenCalledTimes(1);
+      expect(accountRefetch).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['계정 ACTIVE', 'ACTIVE', DELETE_ROW],
+      ['계정 DELETION_PENDING', 'DELETION_PENDING', PENDING],
+    ] as const)(
+      'HK6 받아 둔 값이 있으면(%s) 재조회가 실패(isError)해도 그 값대로 그리고 줄은 없다',
+      (_label, status, expectedTestID) => {
+        mockUseGetMe.mockReturnValue({
+          data: ACCOUNT_DATA(status),
+          isError: true,
+          errorUpdateCount: 1,
+          fetchStatus: 'idle',
+          refetch: jest.fn(),
+        });
+
+        renderPage();
+
+        expect(screen.getByTestId(expectedTestID)).toBeOnTheScreen();
+        expect(screen.queryByTestId(ERROR)).toBeNull();
+      }
+    );
+
+    it('HK6 받아 둔 프로필이 있으면 재조회가 실패해도 닉네임이 그대로이고 줄은 없다', () => {
+      mockUseGetMeProfile.mockReturnValue({
+        data: { nickname: '여행자123' },
+        isError: true,
+        errorUpdateCount: 1,
+        fetchStatus: 'idle',
+        refetch: jest.fn(),
+      });
+
+      renderPage();
+
+      expect(screen.getByTestId(NICKNAME)).toBeOnTheScreen();
+      expect(screen.getByText('여행자123')).toBeOnTheScreen();
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+    });
+
+    it('HK7 (S8) 삭제를 요청한 세션이면 이후 /me 가 실패해도 대기 배너가 유지되고 삭제 요청 행·계정 줄은 없다', () => {
+      // 준비 — 지금 /me 는 정상 ACTIVE. 같은 클라이언트로 다시 그릴 수 있게 트리를 직접 쥔다.
+      const client = newTestQueryClient();
+      const tree = () => (
+        <QueryClientProvider client={client}>
+          <SettingsPage />
+        </QueryClientProvider>
+      );
+      const { rerender } = render(tree());
+
+      // 실행 ① — 삭제 요청 성공(목 뮤테이션이 동기로 onSuccess) → 이 세션이 안다: 대기.
+      fireEvent.press(screen.getByTestId(DELETE_ROW));
+      fireEvent.press(screen.getByTestId('settings-delete-confirm'));
+      fireEvent.press(screen.getByTestId('settings-delete-confirm-final'));
+      expect(screen.getByTestId(PENDING)).toBeOnTheScreen();
+
+      // 실행 ② — 이후 /me 조회가 실패로 바뀐다.
+      mockUseGetMe.mockReturnValue(failed('cold'));
+      rerender(tree());
+
+      // 단언 — 상태를 이 세션이 알고 있으니 "모름"이 아니다.
+      expect(screen.getByTestId(PENDING)).toBeOnTheScreen();
+      expect(screen.getByTestId(CANCEL)).toBeOnTheScreen();
+      expect(screen.queryByTestId(DELETE_ROW)).toBeNull();
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+    });
+
+    it('HK8 계정이 실패해도 D4 행 값(위치 칩·개인화 값)·로그아웃은 그대로 그려진다', () => {
+      (useGetMeLocationConsent as jest.Mock).mockReturnValue({
+        data: { legalConsent: true },
+      });
+      (useGetMePersonalization as jest.Mock).mockReturnValue({
+        data: { applied: true, reason: 'APPLIED', sharedItems: [] },
+      });
+      mockUseGetMe.mockReturnValue(failed('cold'));
+
+      renderPage();
+
+      // 앵커 — 실패 얼굴이 떴다.
+      expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+      expect(
+        within(screen.getByTestId('settings-chip-location-consent')).getByText(
+          '동의'
+        )
+      ).toBeOnTheScreen();
+      expect(
+        within(screen.getByTestId('settings-nav-personalization')).getByText(
+          '사용 중'
+        )
+      ).toBeOnTheScreen();
+      expect(screen.getByTestId('settings-row-logout')).toBeOnTheScreen();
     });
   });
 });

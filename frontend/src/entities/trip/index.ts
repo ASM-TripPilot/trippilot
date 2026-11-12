@@ -15,23 +15,35 @@ export {
   formatTripDateRange,
   formatTripRange,
 } from './lib/formatTripPeriod';
-export { regionForDay } from './lib/regionForDay';
+export {
+  destinationForDay,
+  placeRegionParams,
+  placeRegionQueries,
+  placeRegionQuery,
+  regionForDay,
+} from './lib/regionForDay';
 export { tripDayNumber } from './lib/tripDayNumber';
 export { tripItinerarySummary } from './lib/tripItinerarySummary';
-export type { TripItinerarySummary } from './lib/tripItinerarySummary';
 export { classifyTripPhase, isTripOngoing } from './lib/tripPhase';
 export type { TripPhase } from './lib/tripPhase';
-export type { MyTripBadge, MyTripCardVM, PastTripCardVM } from './model';
+export type { MyTripCardVM, PastTripCardVM } from './model';
 export {
   markDoneBarSeen,
   readDoneBarSeen,
   writeDoneBarSeen,
 } from './model/doneBarSeen';
-export { COVER_GRADIENTS } from './config/coverGradients';
 export type { CoverTone } from './config/coverGradients';
 export { pickCoverCity } from './lib/coverCity';
-export { pickRegionCover } from './lib/regionCover';
+export {
+  coverChoices,
+  coverSourceForKey,
+  pickRegionCover,
+  tripCoverLabel,
+  tripCoverSource,
+} from './lib/regionCover';
 export { SERVICE_REGIONS } from './config/serviceRegions';
+export { CoverLabel } from './ui/CoverLabel';
 export { PastTripRow } from './ui/PastTripRow';
 export { TripCard } from './ui/TripCard';
-export { ChevronRightGlyph } from './ui/TripGlyphs';
+export { TripDeleteDialog } from './ui/TripDeleteDialog';
+export {} from './ui/TripGlyphs';

@@ -67,3 +67,85 @@ describe('🔴 SlotFillScreen — 선택 전 확정 잠금 (페이지가 못 만
     expect(onSelectRadio).toHaveBeenCalledWith('A1');
   });
 });
+
+/**
+ * TRIP-1669 · 찾는 중심 영역(순수 뷰) — 페이지가 못 만드는 것만 남겼다(B안 (c)).
+ *
+ *  - `centerChoice` 를 안 주면 영역이 없다 — 프리뷰(`app/_dev/preview.tsx`)가 이 prop 없이 뷰를 격리 렌더하는 계약.
+ *    페이지는 늘 prop 을 주므로 통합으로는 만들 수 없다.
+ *  - 후보 목록·조회 중(스켈레톤)·0건·조회 실패 네 얼굴 모두에 영역이 붙는다 — 페이지로는 얼굴을 하나씩 만들기 어렵다.
+ *
+ * 나머지(제목·글자·선택 표시·펼침/접기·숙소 근처 유무·안내·눌림·시간 표현 0)는 `SlotFillPage.integration.test.tsx`
+ * 「찾는 중심 고르기」가 실 요청으로 본다(02a §8).
+ */
+describe('🔴 SlotFillScreen — 찾는 중심 영역 (TRIP-1669)', () => {
+  const OPT = (key: string) => `itinerary-copick-center-opt-${key}`;
+
+  function choice() {
+    return {
+      selected: 'auto',
+      expanded: false,
+      stayAvailable: true,
+      notice: null,
+      onToggleExpanded: jest.fn(),
+      onSelect: jest.fn(),
+    };
+  }
+
+  it('SC0 · centerChoice 를 안 주면 영역이 없다(선제 green — 기존 호출·프리뷰 무회귀)', () => {
+    renderScreen();
+
+    expect(screen.queryByTestId('itinerary-copick-center-root')).toBeNull();
+    expect(screen.queryByTestId(OPT('auto'))).toBeNull();
+  });
+
+  it.each([
+    ['후보 목록', {}],
+    ['후보 조회 중(스켈레톤)', { candidates: [], candidatesPending: true }],
+    ['0건 얼굴', { candidates: [] }],
+    [
+      '조회 실패 얼굴',
+      { candidates: [], candidatesErrorMessage: '불러오지 못했어요' },
+    ],
+  ] as const)(
+    'SC7 · %s 에서도 영역이 있다(중심을 거기서 바꿀 수 있다)',
+    (_face, overrides) => {
+      renderScreen({ centerChoice: choice(), ...overrides });
+
+      expect(screen.getByTestId('itinerary-copick-center-root')).toBeTruthy();
+      expect(screen.getByTestId(OPT('auto'))).toBeTruthy();
+    }
+  );
+});
+
+/**
+ * TRIP-1780 범위 그물 — 추천 이유 "문장" 모드(`rationaleSentence`)는 h08 시트만 켠다. 같이 짜기 후보 카드는
+ * 지금 모양 그대로다(이름 아래·제한 없음·muted 는 생김새라 6-b 몫).
+ *
+ * 비시각 판별 신호: 문장 모드는 빈 문장의 요소를 그리지 않는다. copick 이 모드를 받았다면 빈 rationale 후보의 leaf
+ * 가 사라지므로, **rationale 이 빈 후보의 빈 leaf 가 그대로 있다**는 것이 "무변경"의 신호다.
+ * (값이 있는 후보 문장도 같이 단언해 leaf 자체가 안 그려지는 경우와 구별한다.)
+ */
+describe('🔴 SlotFillScreen — TRIP-1780 copick 후보 카드는 무변경', () => {
+  it('CP-1780 · 문장이 있는 후보는 그대로, 문장이 빈 후보도 빈 leaf 로 그려진다(문장 모드 미적용)', () => {
+    renderScreen({
+      candidates: [
+        ...CANDIDATES,
+        { poiId: 'C3', distanceRange: '1.2km', rationale: '' },
+      ],
+    });
+
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-A1')
+    ).toHaveTextContent('가장 가까운 실내 전시');
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-B2')
+    ).toHaveTextContent('전시+카페 한 번에');
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-C3')
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('itinerary-candidate-rationale-C3')
+    ).toHaveTextContent('');
+  });
+});

@@ -13,6 +13,7 @@ import {
   type FeedbackPanel,
 } from '../model/answerFeedback';
 import { ThumbGlyph } from './AssistantSheetGlyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * 답 평가 줄(US-ASSIST-09) — 도우미 답 아래 엄지 둘, 싫어요 뒤엔 이유 칩 셋 + "직접 적기"(300자 입력 + 보내기),
@@ -153,7 +154,7 @@ export function AnswerFeedback({
             value={writing.comment}
             onChangeText={onChangeComment}
             placeholder="어떤 점이 아쉬웠는지 적어 주세요"
-            placeholderTextColor="#9AA1AB"
+            placeholderTextColor={COLOR_TOKENS['muted-soft']}
             maxLength={FEEDBACK_COMMENT_LIMIT}
             multiline
             autoFocus

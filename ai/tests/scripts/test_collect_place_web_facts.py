@@ -42,9 +42,26 @@ def test_targets_put_places_without_documents_first_and_skip_stays() -> None:
     assert [t["ref"] for t in got] == ["2", "1"]
 
 
+def test_targets_fill_what_nothing_else_covers_first() -> None:
+    def prop(ref: str, source: str) -> dict:
+        return {"source": source, "region": "제주시", "poi": {"name": ref, "category": "FOOD"}, "provenance": {"content_id": ref}}
+
+    props = [prop("real", "TOURAPI"), prop("card", "TOURAPI"), prop("tour", "TOURAPI"), prop("local", "LOCALDATA"), prop("map", "OVERTURE")]
+    got = c.targets(props, has_doc={"real"}, has_card={"card"})
+    # 다른 출처가 없는 곳 → 관광공사 곳(개요 수집이 채운다) → 카드만 있는 곳 → 진짜 문서가 있는 곳
+    assert [t["ref"] for t in got][2:] == ["tour", "card", "real"] and {t["ref"] for t in got[:2]} == {"local", "map"}
+
+
 def test_facility_facts_that_only_look_like_hours_or_praise_survive() -> None:
-    ok = ["무료 주차장이 있다", "오픈 주방 구조", "추천 메뉴는 보말칼국수"]
+    ok = ["오픈 주방 구조", "추천 메뉴는 보말칼국수", "창가 좌석이 있다"]
     assert [f["text"] for f in c.clean_facts(_rec(*[(t, "u1", None) for t in ok]))] == ok
+
+
+def test_parking_facts_are_dropped_because_web_pages_get_them_wrong() -> None:
+    """11-03 인용 원문 대조: 주차 4/25 가 근거 없음·다른 말(그 밖 5%) — 웹 사실에서만 뺀다."""
+    bad = ["무료 주차장이 있다", "매장 앞에 주차공간이 있음", "전용 주차장 1대와 인근 골목 주차 이용 가능"]
+    assert c.clean_facts(_rec(*[(t, "u1", None) for t in bad], ("바 좌석이 있음", "u1", None))) == \
+        [{"text": "바 좌석이 있음", "url": "u1", "host": "", }]
 
 
 def test_citation_match_ignores_percent_encoding_and_trailing_slash() -> None:
@@ -104,11 +121,28 @@ class _Client:
 _T = {"name": "가게", "kind": "음식점", "address": "서울"}
 
 
-def _lookup(*outcomes):
+def _lookup(*outcomes, budget=None):
     client = _Client(*outcomes)
     backoff = c._Backoff(rpm=6000)
     backoff.hit = lambda *a, **k: None  # 물러남 대기는 재지 않는다
-    return c.lookup(client, _T, backoff), client.calls
+    return c.lookup(client, _T, backoff, budget=budget), client.calls
+
+
+def test_budget_is_reserved_before_each_call_so_parallel_workers_cannot_overrun() -> None:
+    """응답 뒤에만 차감하면 일꾼 4개가 같은 잔액을 보고 함께 들어가 상한을 넘겼다(2026-11-06 Codex 리뷰: 0.03 상한에 0.08 지출)."""
+    b = c._Budget(0.03)
+    assert [b.reserve(0.02) for _ in range(4)] == [True, True, False, False]  # 0.03→0.01→-0.01: 셋째부터 못 들어간다
+    b.settle(0.02, 0.005), b.settle(0.02, 0.005)
+    assert round(b.left, 5) == 0.02 and not b.exhausted
+    assert c._Budget(None).reserve(1e9)  # 상한 없음
+
+
+def test_lookup_stops_before_asking_when_the_budget_is_gone_and_settles_to_the_real_cost() -> None:
+    res, calls = _lookup('{"found": false, "facts": []}', budget=c._Budget(0.0))
+    assert res["budget"] and calls == 0
+    b = c._Budget(1.0)
+    res, calls = _lookup('{"found": false, "facts": []}', budget=b)
+    assert calls == 1 and 1.0 - b.left == pytest.approx(res["cost"], abs=1e-5)  # 예약분은 실비로 정산된다(결과 cost 는 5자리 반올림)
 
 
 def test_auth_rejection_is_fatal_and_is_not_retried() -> None:
@@ -121,6 +155,14 @@ def test_a_refusal_is_asked_twice_before_it_counts_as_the_answer() -> None:
     assert res["status"] == "not_found" and calls == 2  # 두 번째에 답했다
     res, calls = _lookup("I'm sorry", "Sorry, no.")
     assert res["status"] == "refused" and calls == 2
+
+
+@pytest.mark.parametrize("then", [_Err(None), _Err(401), _Err(503)], ids=["error", "fatal", "transient"])
+def test_a_paid_refusal_is_charged_even_when_the_retry_fails(then) -> None:
+    """거절로 다시 물은 뒤 오류로 끝나도 첫 호출은 이미 냈다 — 결과에 비용이 없으면 예산(`--budget-usd`)이 덜 센다."""
+    after = [then] * (c.MAX_TRANSIENT - 1) if then.status_code == 503 else [then]
+    res, _ = _lookup("I'm sorry", *after)
+    assert res["status"] == "error" and res["cost"] > 0
 
 
 def test_transient_errors_are_retried_then_marked_transient() -> None:
@@ -201,6 +243,7 @@ def test_claude_turn_paused_by_dynamic_filtering_is_continued_and_counted_whole(
             return self.replies[len(self.calls) - 1]
 
     monkeypatch.setattr(c, "MODEL", "claude-haiku-5-5")
+    monkeypatch.setattr(c, "THINKING", "off")
     client = _Client()
     text, cites, tokens_in, tokens_out, searches = c.ask_claude(client, "질문")
     assert (text, tokens_in, tokens_out, searches) == ('{"found": false}', 200, 20, 2)  # 본문은 끝 응답, 셈은 둘 다
@@ -212,3 +255,35 @@ def test_claude_turn_paused_by_dynamic_filtering_is_continued_and_counted_whole(
     client.replies[0] = client.replies[1]
     c.ask_claude(client, "질문")
     assert len(client.calls) == 1 and "thinking" not in client.calls[0]  # sonnet-5-5 는 끄기를 400 으로 거부한다
+
+
+def test_thinking_low_is_the_default_and_raises_the_output_cap(monkeypatch) -> None:
+    from types import SimpleNamespace as N
+
+    seen = []
+
+    class _Client:
+        messages = N(create=lambda **kw: seen.append(kw) or N(
+            stop_reason="end_turn", usage=N(input_tokens=1, output_tokens=1, server_tool_use=N(web_search_requests=1)),
+            content=[N(type="text", text="{}", citations=[])]))
+
+    monkeypatch.setattr(c, "MODEL", "claude-haiku-5-5")
+    assert c.THINKING == "low"  # 11-02 시험: 지시문을 조이고 effort low — 근거 없음 4%·지원 90%(사고 끔은 지원 81%)
+    c.ask_claude(_Client(), "질문")
+    assert seen[0]["output_config"] == {"effort": "low"} and "thinking" not in seen[0] and seen[0]["max_tokens"] == 8000
+
+
+def test_검색_결과_태그_모음_페이지는_근거가_아니다() -> None:
+    """여러 가게가 섞인 목록은 그 장소의 근거가 아니다 — 11-06 표본 40건 중 polle 태그 페이지가 다른 가게 얘기였다.
+    장소 전용 페이지는 질의 문자열이 붙어도 남는다(bluer `/restaurants/…?query=`, 114 `/search/detail?comp_id=`)."""
+    listing = ["https://www.diningcode.com/list.dc?query=안국동+점심", "https://polle.com/posts/tag/닭도리탕",
+               "https://www.siksinhot.com/search?keywords=종로", "https://www.siksinhot.com/toplist/123",
+               "https://www.daangn.com/kr/search/local-profile/?q=종로", "https://www.albamon.com/total-search?keyword=x",
+               "https://korea.beautihost.com/seoul/search/?q=sujeong", "https://bizno.net/?query=마작골",
+               "https://www.diningcode.com/rank/종로맛집", "https://www.daangn.com/kr/local-profile/?in=종로동&search=냉면",
+               "https://soonwidot.co.kr/rank/detail.php?stx=종로", "https://example.squarespace.com/blog/tag/seoul",
+               "https://wanderlog.com/list/geoCategory/123/best", "https://grandculture.net/dir?search=도해촌"]
+    detail = ["https://www.bluer.co.kr/restaurants/12530?query=&foodType=",
+              "https://www.114.co.kr/search/detail?comp_id=654490", "https://guide.michelin.com/kr/ko/seoul/restaurant/muoki"]
+    rec = _rec(*[(f"사실 {i}", u, None) for i, u in enumerate(listing + detail)], cites=listing + detail)
+    assert [f["url"] for f in c.clean_facts(rec)] == detail

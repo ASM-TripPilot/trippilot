@@ -9,6 +9,7 @@ import {
 } from '@testing-library/react-native';
 
 import { server } from '@/mocks/server';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import type { PreferenceView, Trip } from '@/shared/api/index.schemas';
 import { useTripWizardStore } from '@/features/create-trip';
 import { TripNewStep1Page } from '@/pages/trip/trip-new-step1';
@@ -32,7 +33,7 @@ import { newTestQueryClient } from '@/test-support/queryRender';
 export const BASE = 'http://localhost:8080/api/v1';
 
 /** 프리필이 요약 취향 행 + 제출 바디로 흐른다(취향 칩 `미식` 이 프리필 도착의 눈금). `budget` 은 서버에 남은 옛 값 — 예산 입력 기능을 걷어냈으니 화면·요청 어디에도 안 흐르는 것이 정상이다. */
-export const PREFERENCE: PreferenceView = {
+const PREFERENCE: PreferenceView = {
   pace: { value: '균형있게', isNeutralDefault: false },
   budget: { tier: '중간', rawAmount: 800000, isNeutralDefault: false },
   styles: { value: ['미식', '전시'] },
@@ -156,7 +157,9 @@ export function wizardStep1Harness({
     });
   }
 
+  /** [다음]을 집는다 — 사람이 따로 누르는 탭이라 앞 누름(시트 [적용] 등)이 연 400ms 창을 닫는다. 연타를 재려면 testID 로 직접 누른다(TRIP-1823). */
   function next() {
+    resetPressGuard();
     return screen.getByTestId('trip-wizard-step1-next');
   }
 

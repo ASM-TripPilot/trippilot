@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-807 · AC-4 — 저장 숙소 degrade 카드(e04 세로 · g02 시트 행 공용). props-only.
@@ -46,7 +47,7 @@ export interface SavedStayCardProps {
 }
 
 // 거점 배지 핀(TRIP-729, Figma 1701:1195) — entities→features import 금지라 features 글리프
-// (TripGlyphs.BaseBadgePinGlyph·StayGlyphs.MapPinGlyph)를 못 써 카드에 인라인으로 그린다. entities 는
+// (StayGlyphs.MapPinGlyph 등)를 못 써 카드에 인라인으로 그린다. entities 는
 // raw-hex 미스캔(카드 `#000000` shadow 선례와 동형)이라 흰색 리터럴이 안전하다. 색·모양은 어느 심판도
 // 안 본다(*Glyphs fill 무심판 계열, ★1) — 6-b/TRIP-831 육안. MapPinGlyph 와 같은 벡터를 흰색·13px 로.
 function BaseBadgePinGlyph(): ReactElement {
@@ -54,14 +55,14 @@ function BaseBadgePinGlyph(): ReactElement {
     <Svg width={13} height={13} viewBox="0 0 32 32" fill="none">
       <Path
         d="M26.6667 13.3333C26.6667 21.3333 16 29.3333 16 29.3333C16 29.3333 5.33333 21.3333 5.33333 13.3333C5.33333 10.5044 6.45714 7.79125 8.45753 5.79086C10.4579 3.79047 13.171 2.66667 16 2.66667C18.829 2.66667 21.5421 3.79047 23.5425 5.79086C25.5429 7.79125 26.6667 10.5044 26.6667 13.3333Z"
-        stroke="#FFFFFF"
+        stroke={COLOR_TOKENS.canvas}
         strokeWidth={2.8}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
         d="M16 17.3333C18.2091 17.3333 20 15.5425 20 13.3333C20 11.1242 18.2091 9.33333 16 9.33333C13.7909 9.33333 12 11.1242 12 13.3333C12 15.5425 13.7909 17.3333 16 17.3333Z"
-        stroke="#FFFFFF"
+        stroke={COLOR_TOKENS.canvas}
         strokeWidth={2.8}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -73,7 +74,7 @@ function BaseBadgePinGlyph(): ReactElement {
 // e04 세로 카드 그림자 이관값 — className 으로 못 줘 style prop. shadowColor '#000000' 은 토큰화
 // 대상 밖이라 raw-hex 가드 사정거리 밖(HomeScreen softCardShadow 선례).
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.08,
   shadowRadius: 16,
@@ -109,6 +110,7 @@ export function SavedStayCard({
         }`}
       >
         {/* 사진 — 지정 시 그 사진, 미지정이면 숙소 그림(계약 공백, INV-1 · TRIP-1588). */}
+        {/* eslint-disable-next-line no-restricted-syntax -- 숙소 사진 아님 — 번들 숙소 그림 또는 지정 숙소 사진(관광공사 POI 사진 아님) */}
         <PlacePhoto
           testID={`${testID}-photo`}
           imageUrl={imageUrl}

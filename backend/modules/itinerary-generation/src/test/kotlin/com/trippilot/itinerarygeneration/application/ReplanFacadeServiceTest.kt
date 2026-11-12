@@ -11,6 +11,8 @@ import com.trippilot.itinerarygeneration.domain.ScoringSignal
 import io.kotest.matchers.shouldNotBe
 import com.trippilot.placedata.api.RegionCenter
 import com.trippilot.placedata.api.RegionLookupFacade
+import com.trippilot.itinerarygeneration.api.DeferredPlace
+import com.trippilot.itinerarygeneration.api.PriorReplan
 import com.trippilot.itinerarygeneration.api.ReplanCommand
 import com.trippilot.itinerarygeneration.api.ReplanProposal
 import com.trippilot.itinerarygeneration.api.ReplanSlot
@@ -34,6 +36,8 @@ import com.trippilot.trip.api.TripGenerationContext
 import com.trippilot.trip.api.TripPeriod
 import com.trippilot.savedaccommodation.api.DayAnchorView
 import com.trippilot.itinerarygeneration.domain.ReplanInput
+import com.trippilot.itinerarygeneration.domain.ReplanDeferredPlace
+import com.trippilot.itinerarygeneration.domain.ReplanPriorRequest
 import com.trippilot.itinerarygeneration.domain.SavedPlaceRef
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentOutput
 import com.trippilot.itinerarygeneration.domain.SolveMode
@@ -43,6 +47,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import java.time.Clock
@@ -117,7 +122,10 @@ class ReplanFacadeServiceTest : StringSpec({
         scoring = ScoringSignal(ScoringMode.LLM, listOf("weather:weather_error")),
     )
 
-    class Agent(val days: List<DaySchedule>, val totalDistanceKm: Double? = null) : StubScheduleAgent() {
+    class Agent(
+        val days: List<DaySchedule>, val totalDistanceKm: Double? = null,
+        val requestedPoiIds: List<UUID>? = null, val deferredPlaces: List<ReplanDeferredPlace> = emptyList(),
+    ) : StubScheduleAgent() {
         val inputs = mutableListOf<ReplanInput>()
         override fun replan(input: ReplanInput): ScheduleAgentOutput {
             inputs += input
@@ -126,6 +134,8 @@ class ReplanFacadeServiceTest : StringSpec({
                 solveMode = SolveMode.DETERMINISTIC, isFallback = false,
                 freshness = FreshnessMeta(Instant.parse("2026-08-11T06:00:00Z"), degraded = false),
                 totalDistanceKm = totalDistanceKm,
+                requestedPoiIds = requestedPoiIds,
+                deferredPlaces = deferredPlaces,
             )
         }
     }
@@ -199,6 +209,7 @@ class ReplanFacadeServiceTest : StringSpec({
         accountId = acc, tripId = trip, targetDate = today, fromInstant = now, fullDay = fullDay,
         completedSlotKeys = completed, originLat = 33.45, originLng = 126.56,
         reasons = listOf("비가 와요"), directives = listOf("실내로"), freeText = null, excludedPoiIds = emptyList(),
+        skippedPoiIds = emptyList(),
     )
 
     /**
@@ -234,6 +245,125 @@ class ReplanFacadeServiceTest : StringSpec({
         sent.styles shouldBe listOf("힐링")         // 계정(미식) 아님
         sent.activities shouldBe emptyList()        // 비운 축은 비운 채로
         sent.transportModes shouldBe listOf("렌터카") // 여행이 안 정한 축은 계정
+    }
+
+    // TRIP-1709 F7 — 상대는 이 한 값으로 후보 풀 반경·이동 시간을 정한다. 비우면 도보 여행도 대중교통으로 다시 짜고, 뒤이은 편집
+    // 수리(여행 수단으로 잰다)가 그 날을 다시 민다. 고르는 규칙은 생성과 같다 — 상대가 아는 첫 값.
+    "재계획이 그 여행의 수단 중 상대가 아는 첫 값 하나를 싣는다 — 아는 값이 없으면 비운다(상대 기본 대중교통)" {
+        fun tripModes(vararg modes: String) = object : TripFacade {
+            override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(today, today.plusDays(1))
+            override fun findGenerationContext(accountId: UUID, tripId: UUID) = TripGenerationContext(
+                today, today.plusDays(1), refs("제주"), "친구", 500_000, emptyList(),
+                preferenceSnapshot = mapOf("transportModes" to modes.toList()),
+            )
+        }
+        fun sentMode(trips: TripFacade): String? {
+            val agent = Agent(proposal(replacement))
+            fixture(agent, trips = trips).svc.propose(command())
+            return agent.inputs.single().transportMode
+        }
+
+        sentMode(replanTrips) shouldBe "렌터카"             // 여행이 안 정한 축은 계정 값
+        sentMode(tripModes("택시", "도보")) shouldBe "도보" // 여행 값이 이기고, 상대가 모르는 택시는 건너뛴다
+        sentMode(tripModes("택시")).shouldBeNull()          // 아는 값이 없다
+    }
+
+    // ───── 그날 창(상대 time_window) — 2026-11-05 사용자 결정 A+B ─────────────────────
+    // 운영 11-04(trip 8311ac19): 하루 시작 06:00 여행을 다시 짜면 09:00 부터 짰다 — 어댑터가 시작을 09:00 상수로 박았다.
+    // 이제 시작 = min(여행 설정의 그날 시작, 원 일정의 아직 안 지난 첫 슬롯 시작), 끝 = 그날 기본 끝(오늘이면 저녁까지 늘린다).
+
+    fun tripWith(
+        start: LocalDate = today, end: LocalDate = today.plusDays(1),
+        dayStart: LocalTime? = null, firstDayStart: LocalTime? = null, lastDayEnd: LocalTime? = null,
+    ) = object : TripFacade {
+        override fun findPeriod(accountId: UUID, tripId: UUID) = TripPeriod(start, end)
+        override fun findGenerationContext(accountId: UUID, tripId: UUID) = TripGenerationContext(
+            start, end, refs("제주"), "친구", 500_000, emptyList(),
+            dayStartAt = dayStart, firstDayStartAt = firstDayStart, lastDayEndAt = lastDayEnd,
+        )
+    }
+    /** 보낸 창 (시작, 끝). [itinerary] 를 주면 기본 일정 대신 그것을 다시 짠다. */
+    fun windowSent(trips: TripFacade, cmd: ReplanCommand = command(), itinerary: Itinerary? = null): Pair<LocalTime, LocalTime> {
+        val agent = Agent(proposal(replacement))
+        val fx = fixture(agent, trips = trips)
+        itinerary?.let { fx.repo.byTrip[trip] = it }
+        fx.svc.propose(cmd)
+        return agent.inputs.single().let { it.windowStart to it.windowEnd }
+    }
+    fun t(hhmm: String) = LocalTime.parse(hhmm)
+    val tomorrow = today.plusDays(1)
+
+    "여행 설정의 하루 시작(06:00)부터 다시 짠다 — 오늘도 다른 날도(운영 11-04 신고)" {
+        val early = tripWith(dayStart = t("06:00"))
+        // 오늘(지금 15:00): 남은 원 일정 첫 슬롯이 18:00 이라 설정이 이르다. 끝은 지금+4h(19:30)가 21:00 보다 이르니 그대로.
+        windowSent(early) shouldBe (t("06:00") to t("21:00"))
+        // 다른 날: 원 일정 첫 슬롯 10:00 보다 설정이 이르다.
+        windowSent(early, command().copy(targetDate = tomorrow)) shouldBe (t("06:00") to t("21:00"))
+    }
+
+    "첫날 시작(firstDayStartAt)이 매일 시작보다 우선한다 — 그 날에만" {
+        val trips = tripWith(dayStart = t("06:00"), firstDayStart = t("08:00"))
+        windowSent(trips) shouldBe (t("08:00") to t("21:00"))                                      // 오늘 = 첫날
+        windowSent(trips, command().copy(targetDate = tomorrow)) shouldBe (t("06:00") to t("21:00")) // 둘째 날은 매일 시작
+    }
+
+    "설정이 없으면 09:00~21:00 — 종전과 같다" {
+        windowSent(replanTrips) shouldBe (t("09:00") to t("21:00"))
+        windowSent(replanTrips, command().copy(targetDate = tomorrow)) shouldBe (t("09:00") to t("21:00"))
+    }
+
+    "원 일정의 아직 안 지난 슬롯이 설정보다 이르면 그 시작부터 — 지난 슬롯은 세지 않는다" {
+        val dawnTomorrow = Itinerary.create(
+            trip, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(
+                // 오늘 06:00 슬롯은 지금(15:00) 이미 끝났다 — 상대가 지난 잠금을 솔버에 넣지 않으니 창에 넣을 이유가 없다.
+                ItineraryDay.of(today, 0, listOf(slot(morning, "06:00", "07:00", order = 0), slot(evening, "18:00", "19:00", order = 1))),
+                ItineraryDay.of(tomorrow, 1, listOf(slot(UUID.randomUUID(), "06:30", "07:30", order = 0))),
+            ),
+            now, GenerationState.COMPLETE,
+        )
+        val trips = tripWith(dayStart = t("09:00"))
+        windowSent(trips, command().copy(targetDate = tomorrow), dawnTomorrow) shouldBe (t("06:30") to t("21:00"))
+        windowSent(trips, command(), dawnTomorrow) shouldBe (t("09:00") to t("21:00"))
+    }
+
+    // 리뷰 지적(2026-11-05): 이번에 빠지는 이른 슬롯까지 세면, 지킬 곳이 사라지는데도 창이 그 시각으로 당겨져
+    // 설정보다 이른 새 방문이 들어온다(AI 는 비고정 노드의 시각 하한을 창 시작으로 둔다).
+    "이번에 빠지는 이른 슬롯(제외·건너뜀)은 창을 당기지 않는다 — 잠금이 제외를 이기는 고정은 당긴다" {
+        val dawn = UUID.randomUUID()
+        fun dawnTomorrow(fixed: Boolean) = Itinerary.create(
+            trip, SolveMode.FULL_AI, GenerationMode.FULLY_AI, false,
+            listOf(
+                ItineraryDay.of(today, 0, listOf(slot(evening, "18:00", "19:00", order = 0))),
+                ItineraryDay.of(
+                    tomorrow, 1,
+                    listOf(slot(dawn, "06:30", "07:30", isFixed = fixed, order = 0), slot(UUID.randomUUID(), "10:00", "11:00", order = 1)),
+                ),
+            ),
+            now, GenerationState.COMPLETE,
+        )
+        val base = command(fullDay = true).copy(targetDate = tomorrow)
+        // 비고정을 뺐다(상황 감지 시드·앱의 제외) — 사라질 곳이라 지킬 대상이 없다.
+        windowSent(replanTrips, base.copy(excludedPoiIds = listOf(dawn)), dawnTomorrow(false)) shouldBe (t("09:00") to t("21:00"))
+        // 건너뛴 고정 — 잠금이 풀려(TRIP-1711) 제외가 먹는다.
+        windowSent(replanTrips, base.copy(excludedPoiIds = listOf(dawn), skippedPoiIds = listOf(dawn)), dawnTomorrow(true)) shouldBe
+            (t("09:00") to t("21:00"))
+        // 건너뛰지 않은 고정은 제외해도 잠겨 원 시각에 남는다 — 그 시각부터.
+        windowSent(replanTrips, base.copy(excludedPoiIds = listOf(dawn)), dawnTomorrow(true)) shouldBe (t("06:30") to t("21:00"))
+    }
+
+    "오늘 밤에 다시 짜면 끝만 늘린다(23:59) — 마지막 날 사용자가 적은 끝은 늘리지 않는다" {
+        // 21:30 KST — 기본 끝 21:00 이면 남은 시간이 0 이라 "대안 없음"이었다. 시작은 하루 전체 그대로.
+        windowSent(replanTrips, command().copy(fromInstant = Instant.parse("2026-08-11T12:30:00Z"))) shouldBe (t("09:00") to t("23:59"))
+        // 마지막 날(오늘) 귀가 19:00 — 17:00 에 다시 짜도 19:00 에서 끝난다(생성과 같은 규칙).
+        val lastDay = tripWith(start = today.minusDays(1), end = today, lastDayEnd = t("19:00"))
+        windowSent(lastDay, command().copy(fromInstant = Instant.parse("2026-08-11T08:00:00Z"))) shouldBe (t("09:00") to t("19:00"))
+        // 마지막 날이 다른 날이면 그 끝 그대로.
+        windowSent(tripWith(lastDayEnd = t("18:00")), command().copy(targetDate = tomorrow)) shouldBe (t("09:00") to t("18:00"))
+    }
+
+    "설정이 모순(시작 ≥ 끝)이면 설정 없는 날의 창으로 — 창은 필수라 상대에 뒤집힌 창을 보내지 않는다" {
+        windowSent(tripWith(dayStart = t("22:00")), command().copy(targetDate = tomorrow)) shouldBe (t("09:00") to t("21:00"))
     }
 
     // ───── 숙소 근처에서 끝내기의 끝점 ─────────────────────────────────────
@@ -415,6 +545,42 @@ class ReplanFacadeServiceTest : StringSpec({
         agent.inputs.single().lockedBlocks.map { it.poiId } shouldContainExactly listOf(fixedNoon, evening)
     }
 
+    // TRIP-1711 — 건너뛴 곳이 시각 고정이면 잠금(HC3)으로 실려 AI 가 제외보다 먼저 되살렸다(웹 재QA: 「10:00 쩡이네포차 · 고정」).
+    // 다시 들어오면 같은 슬롯 키의 건너뜀 기록과 부딪혀 [도착]이 영원히 409 다(BR-U5-02).
+    "그날 건너뛴 고정 슬롯은 잠그지 않고 원 일정에도 고정 표시 없이 싣는다 — 제외가 먹는다" {
+        // 오늘 전체(15:00) · 지금 이후만(11:00 — 12:00 고정이 아직 앞에 있다) 둘 다.
+        listOf(command(fullDay = true), command().copy(fromInstant = Instant.parse("2026-08-11T02:00:00Z"))).forEach { base ->
+            val agent = Agent(proposal(replacement))
+
+            fixture(agent).svc.propose(base.copy(excludedPoiIds = listOf(fixedNoon), skippedPoiIds = listOf(fixedNoon)))
+
+            val sent = agent.inputs.single()
+            sent.lockedBlocks.map { it.poiId } shouldNotContain fixedNoon
+            sent.currentSlots.first { it.poiId == fixedNoon }.isFixed shouldBe false
+            sent.excludedPoiIds shouldContainExactly listOf(fixedNoon)
+        }
+    }
+
+    // 지난 슬롯 잠금은 '하루의 이력'이다(BR-U4-17 개정 잠금 절) — 원 자리 그대로라 건너뜀 기록과 새로 부딪히지 않는다.
+    "지금 이후만 — 이미 지난 건너뛴 고정은 지난 슬롯으로 잠긴 채 원 자리에 남는다" {
+        val agent = Agent(proposal(replacement))
+
+        fixture(agent).svc.propose(command().copy(excludedPoiIds = listOf(fixedNoon), skippedPoiIds = listOf(fixedNoon)))
+
+        agent.inputs.single().lockedBlocks.map { it.poiId } shouldContainExactly listOf(morning, fixedNoon)
+    }
+
+    "건너뛰지 않은 고정은 그대로 잠긴다 — 앱이 보낸 제외만으로는 고정을 풀지 않는다" {
+        val agent = Agent(proposal(replacement))
+
+        // 다른 날 건너뛴 고정은 C10 이 대상 일자로만 물어 skippedPoiIds 에 안 실린다 — 이 모양이 그 경우다.
+        fixture(agent).svc.propose(command(fullDay = true).copy(excludedPoiIds = listOf(fixedNoon)))
+
+        val sent = agent.inputs.single()
+        sent.lockedBlocks.map { it.poiId } shouldContainExactly listOf(fixedNoon)
+        sent.currentSlots.first { it.poiId == fixedNoon }.isFixed shouldBe true
+    }
+
     "산출은 일정에 손대지 않는다(INV-U4-05)" {
         val agent = Agent(proposal(replacement))
         val f = fixture(agent)
@@ -553,6 +719,31 @@ class ReplanFacadeServiceTest : StringSpec({
             it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay, it.poiSnapshotId,
             it.hasViolation, it.violationReason, it.distanceRange, it.placementReason,
         )
+    }
+
+    "재계획 반영 — 같은 장소가 남으면 사용자가 고친 표시값을 잇고, 새 장소는 없다. 되돌리기 지점에도 실린다(TRIP-1801)" {
+        val f = fixture(Agent(proposal(evening, replacement)))
+        val named = f.repo.byTrip.getValue(trip)
+        f.repo.byTrip[trip] = Itinerary.reconstitute(
+            named.itineraryId, trip, named.status, named.solveMode, named.generationMode, named.isFallback, named.generationState,
+            named.days.map { d ->
+                ItineraryDay.of(
+                    d.date, d.dayOrder,
+                    d.slots.map { s -> VisitSlot.of(s.sourcePoiId, s.poiSnapshotId, s.orderIndex, s.startAt, s.endAt, s.isFixed, s.hasViolation, s.endsNextDay, s.distanceRange, s.placementReason, s.violationReason, s.alternatives, "새 이름", "카페") },
+                )
+            },
+            named.createdAt, named.updatedAt, named.candidatesSummary, named.unplacedMustVisits, named.scoring,
+        )
+        val proposal = f.svc.propose(command())!!
+
+        val restore = f.svc.apply(acc, trip, proposal, REASON)
+
+        val slots = f.repo.byTrip.getValue(trip).days.first { it.date == today }.slots
+        slots.first { it.sourcePoiId == evening }.displayName shouldBe "새 이름"
+        slots.first { it.sourcePoiId == replacement }.displayName shouldBe null
+        restore.slots.map { it.displayName }.toSet() shouldBe setOf("새 이름")
+        // 세션 jsonb 왕복에서도 살아야 되돌리기가 값을 돌려놓는다
+        ReplanSlot.fromMap(restore.slots.first().toMap()).displayCategory shouldBe "카페"
     }
 
     "반영은 그 날의 반영 직전 모습을 돌려준다 — 동결 참조·위반 표시까지" {
@@ -789,6 +980,70 @@ class ReplanFacadeServiceTest : StringSpec({
         val svc = fixture(agent).svc
 
         svc.propose(command())!!.totalDistanceKm shouldBe 6.9
+    }
+
+    // F-6 — AI 는 "2일차에"를 trip_context 기간으로 환산한다. 그날 하루만 보내면 '2일차'가 늘 여행 밖이라 다른 날 요청이 이 날에 들어갔다.
+    // F-8 — 앞 요청은 C10 이 세션에서 모아 명령으로 넘기고, 여기는 그대로 싣는다.
+    "재계획 입력에 여행 기간과 앞 요청이 실린다" {
+        val kept = UUID.randomUUID()
+        val agent = Agent(proposal(replacement))
+
+        fixture(agent).svc.propose(command().copy(priorRequests = listOf(PriorReplan("클럽 넣어줘", listOf(kept)))))
+
+        val sent = agent.inputs.single()
+        sent.tripStartDate shouldBe today
+        sent.tripEndDate shouldBe today.plusDays(1)
+        sent.priorRequests shouldBe listOf(ReplanPriorRequest("클럽 넣어줘", listOf(kept)))
+    }
+
+    /** 요청한 곳은 다음 재계획의 앞 요청이 되고, 미룬 곳은 앱의 '그 날에 넣어 다시 짜기'가 된다 — 초안에서 새면 둘 다 조용히 사라진다. */
+    "AI 가 준 요청한 곳·미룬 곳이 초안까지 간다 — 모르면 null 그대로" {
+        val later = UUID.randomUUID()
+        val deferred = ReplanDeferredPlace(later, "서울광장", today.plusDays(1))
+        val draft = fixture(Agent(proposal(replacement), requestedPoiIds = listOf(replacement), deferredPlaces = listOf(deferred)))
+            .svc.propose(command())!!
+
+        draft.requestedPoiIds shouldBe listOf(replacement)
+        draft.deferredPlaces shouldBe listOf(DeferredPlace(later, "서울광장", today.plusDays(1)))
+        fixture(Agent(proposal(replacement))).svc.propose(command())!!.requestedPoiIds.shouldBeNull()
+    }
+
+    "초안 왕복이 요청한 곳·미룬 곳도 지킨다 — null 과 빈 목록을 가른다" {
+        val base = ReplanProposal(UUID.randomUUID(), today, emptyList())
+        fun throughJsonb(p: ReplanProposal) = ReplanProposal.fromMap(jsonb(p.toMap()))
+        val full = base.copy(
+            requestedPoiIds = listOf(replacement, evening),
+            deferredPlaces = listOf(DeferredPlace(UUID.randomUUID(), "서울광장", today.plusDays(1))),
+        )
+
+        throughJsonb(full) shouldBe full
+        // 빈 목록은 "요청한 곳 없음"이라는 새 AI 의 사실이다 — 키 없음(= AI 가 몰랐다)으로 접히면 다음 재계획이 앞 요청을 못 싣는다
+        throughJsonb(base.copy(requestedPoiIds = emptyList())).requestedPoiIds shouldBe emptyList()
+        throughJsonb(base).requestedPoiIds.shouldBeNull()
+        base.toMap().containsKey("requestedPoiIds") shouldBe false
+        base.toMap().containsKey("deferredPlaces") shouldBe false
+    }
+
+    "옛 초안·손으로 고친 초안도 읽는다 — 틀린 한 건만 버린다" {
+        val ok = UUID.randomUUID()
+        val raw = mapOf<String, Any>(
+            "itineraryId" to UUID.randomUUID().toString(),
+            "date" to today.toString(),
+            "slots" to emptyList<Map<String, Any>>(),
+            "requestedPoiIds" to listOf(ok.toString(), "nope"),
+            "deferredPlaces" to listOf(
+                mapOf("poiId" to ok.toString(), "name" to "서울광장", "date" to "2026-08-12"),
+                mapOf("poiId" to "bad", "name" to "x", "date" to "2026-08-12"),
+                mapOf("poiId" to ok.toString(), "name" to "x", "date" to "언젠가"),
+            ),
+        )
+
+        val read = ReplanProposal.fromMap(raw)
+        read.requestedPoiIds shouldBe listOf(ok)
+        read.deferredPlaces shouldBe listOf(DeferredPlace(ok, "서울광장", LocalDate.parse("2026-08-12")))
+        val legacy = ReplanProposal.fromMap(raw - "requestedPoiIds" - "deferredPlaces")
+        legacy.requestedPoiIds.shouldBeNull()
+        legacy.deferredPlaces shouldBe emptyList()
     }
 
     "재계획 요청이 실제 취향·동반·예산·원 일정·담은 장소를 싣는다 — 중립으로 덮지 않는다(B-1)" {

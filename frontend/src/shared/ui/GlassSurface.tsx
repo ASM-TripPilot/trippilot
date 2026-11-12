@@ -1,11 +1,13 @@
 import { BlurView } from 'expo-blur';
 import type { ReactElement, ReactNode } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { COLOR_TOKENS } from '../config';
 
 /**
  * TRIP-1522 · 유리(glass) 표면 — 흰 반투명 + 흰 테두리 + 뒤 배경 블러 + 그림자를 한 묶음으로 쓰는 공용 부품.
- * 앱 하단 탭 바(`BottomTabBar`)가 같은 값을 인라인으로 구현하고 있고(TRIP-1104·1436 합의 값), 여행 중 허브의 하단 바·수정 팝업·
- * 행사 카드가 같은 값을 써야 해서 한 곳으로 뽑았다. `BottomTabBar` 는 건드리지 않았다(탭 바를 쓰는 화면 영향 0 — 합치는 건 후속).
+ * 유리 값(TRIP-1104·1436 합의)의 유일한 정의다 — 앱 하단 탭 바(`BottomTabBar`, TRIP-1739 부터)·허브/기록 하단 바·수정 팝업·
+ * 행사 카드가 모두 이걸 쓴다. 블러 70 은 24 에서 사진 카드가 알약 뒤로 지날 때 회색 라벨이 무늬에 묻혀 올린 값(QA 5회차,
+ * 합의 범위 60~80 의 중앙)이고, 그래도 부족해 흰 68% 레이어를 더했다. Android 분기(`experimentalBlurMethod`·`elevation`)도 여기 한 곳이다.
  *
  * 구조: `그림자 래퍼 View` → `BlurView(expo-blur)` → `[흰 0.68 레이어(터치를 삼키지 않는다)]` + `children`.
  * 그림자를 BlurView 밖 래퍼가 지는 이유: BlurView 는 블러를 모양에 맞춰 자르려고 `overflow-hidden` 인데 그게 그림자까지 잘라 버린다.
@@ -13,16 +15,16 @@ import { View, type StyleProp, type ViewStyle } from 'react-native';
  * 블러가 실제로 그려지는지(iOS·안드로이드 + 네이티브 지도 위)는 jest 가 못 본다 → 6-b.
  */
 
-// 그림자 색은 토큰이 없다 — `BottomTabBar` PILL_SHADOW_STYLE 과 같은 값(HomeScreen 그림자 관례).
+// 그림자 색은 토큰이 없다(HomeScreen 그림자 관례).
 const GLASS_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.1,
   shadowRadius: 14,
   elevation: 4,
 } as const;
 
-// 테두리 — 50% 반투명 흰색(Figma 실측, 알파는 토큰이 아니라 raw). `BottomTabBar` PILL_BORDER_STYLE 과 같다.
+// 테두리 — 50% 반투명 흰색(Figma 실측, 알파는 토큰이 아니라 raw).
 const GLASS_BORDER = {
   borderWidth: 1,
   borderColor: 'rgba(255,255,255,0.5)',

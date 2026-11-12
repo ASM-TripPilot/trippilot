@@ -1,19 +1,25 @@
 import { useEffect, useMemo, useRef, type ReactElement } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Pressable,
   ScrollView,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PlaceGridCard } from '@/entities/place';
+import {
+  BackChevronWideGlyph,
+  WarningTriangleGlyph,
+  MapPinGlyph,
+  HeartFilledGlyph,
+} from '@/shared/ui/glyphs';
 import type { Place } from '@/shared/api/index.schemas';
 import { PoiCategory } from '@/shared/api/index.schemas';
-import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
+import { Image } from '@/shared/ui/Image';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
@@ -21,13 +27,10 @@ import type { PlaceListState } from '@/features/explore/index.view';
 import type { PlaceSaveNotice } from '@/features/save-place/index.view';
 import { formatRegionChipLabel } from '../model/regionChipLabel';
 import {
-  BackChevronGlyph,
-  FilterSlidersGlyph,
-  InfoGlyph,
-  MapPinGlyph,
-  PlusGlyph,
-  SearchGlyph,
-  WarningTriangleGlyph,
+  ExploreFilterSlidersGlyph,
+  ExploreInfoGlyph,
+  ExplorePlusGlyph,
+  ExploreSearchGlyph,
 } from '@/features/explore/index.view';
 import { PartialFailureBanner } from './PartialFailureBanner';
 import { NoticeBanner } from '@/shared/ui/NoticeBanner';
@@ -35,12 +38,13 @@ import { AppBar } from '@/shared/ui/AppBar';
 import { useScrollHide } from '@/shared/lib/useScrollHide';
 import { FAB_STACK_TOP } from '@/shared/ui/toastBottom';
 import { useToastBottom } from '@/shared/ui/useToastBottom';
+import { COLOR_TOKENS } from '@/shared/config';
 
 // 우하단 FAB 그림자 — `ExploreLandingScreen`의 FAB_SHADOW와 동형
 // (RN에 CSS box-shadow가 없어 style prop으로 옮긴다). `#000000`은 raw-hex 가드
 // 사정거리 밖(TOKENIZED_HEX 9색에 없음, 홈 fabShadow 선례).
 const FAB_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 6 },
   shadowOpacity: 0.22,
   shadowRadius: 12,
@@ -146,7 +150,7 @@ function PlaceExploreAppBar({ onBack }: { onBack?: () => void }): ReactElement {
         accessibilityRole: 'button',
         onPress: onBack,
         className: 'h-10 w-10 items-center justify-center',
-        glyph: <BackChevronGlyph size={24} />,
+        glyph: <BackChevronWideGlyph size={24} />,
       }}
       title="장소 탐색"
       titleClassName="font-noto-bold text-[18px] font-bold text-ink"
@@ -163,7 +167,7 @@ function SearchBar({
 }): ReactElement {
   return (
     <View className="h-[58px] w-full flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas pl-lg pr-lg">
-      <SearchGlyph size={20} />
+      <ExploreSearchGlyph size={20} />
       <TextInput
         testID="explore-places-search"
         value={value}
@@ -191,7 +195,7 @@ function RegionChip({
       onPress={onPress}
       className="flex-row items-center gap-xs self-start rounded-pill border border-hairline-strong bg-canvas px-[15px] py-[9px]"
     >
-      <MapPinGlyph size={14} tone="muted" />
+      <MapPinGlyph size={14} color="muted" />
       <Text className="font-noto-bold text-label font-bold text-ink">
         {label}
       </Text>
@@ -366,7 +370,7 @@ function ListEmptyBlock({
       <View className="w-full items-center justify-center px-lg pt-xl">
         <StateNotice
           testID="explore-places-filterzero"
-          icon={<FilterSlidersGlyph size={32} />}
+          icon={<ExploreFilterSlidersGlyph size={32} />}
           title={`‘${blameLabel}’ 때문에 0건이에요`}
           description={
             searchText.trim() !== '' && selectedCategory !== null
@@ -416,7 +420,7 @@ function ErrorNotice({ onRetry }: { onRetry?: () => void }): ReactElement {
     <View className="w-full items-center justify-center px-lg pt-xl">
       <StateNotice
         testID="explore-places-error"
-        icon={<WarningTriangleGlyph size={32} />}
+        icon={<WarningTriangleGlyph size={32} color="primary" />}
         title="지금 장소 정보를 불러올 수 없어요"
         description="잠시 후 다시 시도해 주세요"
         actions={[
@@ -451,7 +455,7 @@ function SaveErrorBanner({
         retry: 'explore-places-saveerror-retry',
       }}
       onPressAction={onPressAction}
-      icon={<InfoGlyph size={18} />}
+      icon={<ExploreInfoGlyph size={18} />}
     />
   );
 }
@@ -460,6 +464,19 @@ function SaveErrorBanner({
 const GRID_ROW_SEPARATOR_STYLE = { height: 18 } as const;
 function GridRowSeparator(): ReactElement {
   return <View style={GRID_ROW_SEPARATOR_STYLE} />;
+}
+
+/**
+ * TRIP-1813 — 끝까지 내려도 메모리가 크게 늘지 않게 하는 두 장치. 숫자는 시뮬·개발 번들 `footprint` 이고 기능 지도 `explore-places` 에 있다.
+ * - 창(`GRID_WINDOW_SCREENS`): 보이는 화면과 위아래 두 화면만 마운트한다(기본 21 은 카드 180장).
+ * - 캐시 비우기(`releaseDecodedPhotos`): `memory-disk` 는 칸이 사라져도 풀린 그림을 메모리에 쥐고, 상한이 없어 3번 다시 들어가면 2.3GB 까지 갔다.
+ *   `none` 은 메모리는 같지만 위로 돌아갈 때마다 다시 받고, `disk` 는 1.7GB 까지 늘었다. 비우면 디스크 사본은 남아 다시 안 받는다.
+ *   마운트된 칸은 그림을 직접 쥐고 있어 사라지지 않는다. 캐시는 앱 공용이라 다른 화면의 그림도 다음에 그릴 때 디스크에서 다시 읽는다.
+ */
+const GRID_WINDOW_SCREENS = 5;
+
+function releaseDecodedPhotos(): void {
+  void Image.clearMemoryCache();
 }
 
 export function PlaceExploreScreen({
@@ -490,6 +507,7 @@ export function PlaceExploreScreen({
 }: PlaceExploreScreenProps): ReactElement {
   useToastBottom(FAB_STACK_TOP); // 토스트가 FAB 스택 위로 뜬다(TRIP-1559)
   const { hidden: fabsHidden, onScroll } = useScrollHide();
+  useEffect(() => releaseDecodedPhotos, []);
   const savedSet = useMemo(() => new Set(savedPoiIds), [savedPoiIds]);
   const pendingSet = useMemo(() => new Set(pendingPoiIds), [pendingPoiIds]);
 
@@ -498,11 +516,14 @@ export function PlaceExploreScreen({
       <View testID="explore-places-root" className="flex-1 bg-canvas">
         <PlaceExploreAppBar onBack={onBack} />
 
-        <FlatList<Place>
+        <Animated.FlatList<Place>
           testID="explore-places-grid"
           className="flex-1"
           scrollEventThrottle={16}
           onScroll={onScroll}
+          onScrollEndDrag={releaseDecodedPhotos}
+          onMomentumScrollEnd={releaseDecodedPhotos}
+          windowSize={GRID_WINDOW_SCREENS}
           data={places}
           keyExtractor={(place) => place.poiId}
           numColumns={2}
@@ -605,7 +626,7 @@ export function PlaceExploreScreen({
               style={FAB_SHADOW}
               className="h-[56px] w-[56px] items-center justify-center rounded-full bg-primary"
             >
-              <PlusGlyph size={24} />
+              <ExplorePlusGlyph size={24} />
             </Pressable>
           )}
         </View>

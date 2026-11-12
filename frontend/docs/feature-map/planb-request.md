@@ -39,7 +39,7 @@ routes:
 
 ## How to get to it (user POV)
 
-- 허브 `수정` 칸 → 「AI에게 맡기기」(오늘 일차면 `planb`, 미래 일차면 `planb?targetDate=`). 지난 날·여행 전엔 비활성.
+- 허브 `수정` 칸 → 「AI에게 맡기기」(오늘 일차면 `planb`, 미래 일차면 `planb?targetDate=`). 지난 날(끝난 여행 포함)엔 비활성 — 여행 전엔 보는 날로 열린다(TRIP-1841).
 - 허브 지도 위 트리거 알약 → 위험 상세 시트 「대안 보기」 → `planb?scope=…&triggerId=…` (게이트).
 - 푸시 알림 탭(`actionType: PLANB_REPLAN` + `tripId` + `triggerId`) → `planb?triggerId=` (게이트).
 - 알림함(설정 → 알림)의 Plan-B 행 탭 → 같은 경로(게이트).

@@ -1,13 +1,14 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 
 import {
   LocationClockGlyph,
   LocationGearGlyph,
-  LocationInfoGlyph,
   LocationPinGlyph,
 } from './LocationGlyphs';
 import { LOCATION_ICON_COLORS } from './locationColors';
+import { InfoCircle18Glyph } from '@/shared/ui/glyphs';
 
 /**
  * TRIP-1339 · U10 '항상 허용' 승격 설명 1장(DEC-U10-11 · BR-U10-05·06·08 · Figma u10a 4857:2795).
@@ -90,7 +91,7 @@ export function LocationAlwaysExplainer({
             body={`여행 날짜${dateRangeLabel ? `(${dateRangeLabel})` : ''} 동안만 기록하고, 여행이 끝나면 멈춰요.`}
           />
           <Row
-            icon={<LocationInfoGlyph size={20} color={ink} />}
+            icon={<InfoCircle18Glyph size={20} color="ink" />}
             title="보이는 것"
             body="기록하는 동안 화면 위 상태바에 위치 사용 표시가 떠요."
             testID="location-explainer-indicator-note"
@@ -101,17 +102,13 @@ export function LocationAlwaysExplainer({
             body="설정 › 위치정보 동의에서 언제든 끌 수 있어요."
           />
         </View>
-        <Pressable
+        <Button
           testID="location-explainer-enable"
-          accessibilityRole="button"
           disabled={busy}
           onPress={onEnable}
-          className="h-[52px] items-center justify-center rounded-[12px] bg-primary"
         >
-          <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-            자동 기록 켜기
-          </Text>
-        </Pressable>
+          자동 기록 켜기
+        </Button>
         <Pressable
           testID="location-explainer-later"
           accessibilityRole="button"

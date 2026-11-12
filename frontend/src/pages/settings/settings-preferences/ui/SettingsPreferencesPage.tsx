@@ -30,7 +30,8 @@ const PREF_SAVED_TOAST = '취향을 저장했어요';
 
 export function SettingsPreferencesPage(): ReactElement {
   const router = useRouter();
-  const { view, save, saveError } = usePreferences();
+  const { view, save, saveError, loadFailed, isFetching, refetch } =
+    usePreferences();
   const [selection, setSelection] = useState<PreferenceSelection | null>(null);
   // 저장 diff 기준선 = 편집을 시작한 시드 스냅숏(baseline freeze). 살아있는 view 를 기준선으로
   // 쓰면 편집 도중 GET 재요청으로 안 만진 축이 "바뀐 것"처럼 PUT 에 실려 서버 최신값을 덮는다(경고-1).
@@ -77,6 +78,9 @@ export function SettingsPreferencesPage(): ReactElement {
     <PreferencesEditView
       selection={selection}
       saveError={saveError}
+      loadFailed={loadFailed}
+      retrying={isFetching}
+      onRetry={() => void refetch()}
       onToggle={handleToggle}
       onTogglePet={handleTogglePet}
       onSave={handleSave}

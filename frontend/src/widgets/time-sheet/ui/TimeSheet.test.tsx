@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 
+import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
 import { WHEEL_CELL_HEIGHT } from '@/shared/ui/WheelPicker';
 import { coverFor } from '@/test-support/placeCoverFixtures';
 import { closestScrollView, stubScrollTo } from '@/test-support/sheetTree';
@@ -100,6 +101,8 @@ beforeEach(() => {
   onApply.mockClear();
   onCancel.mockClear();
 });
+// [적용]이 연 400ms 창(D4)이 다음 테스트로 새지 않게 — [적용]이 그 창을 따르는 Button 이다(TRIP-1828).
+afterEach(resetPressGuard);
 
 describe.each(CONFIGS)(
   '🔴 widgets/time-sheet · 접두=$prefix — 기본 소비처도 휠',
@@ -403,6 +406,7 @@ const hid = (suffix: string): string => `${H04_PREFIX}-${suffix}`;
 
 // Q2 region·Q3 badgeLabel 프리뷰 픽스처(Figma context-card 값).
 const FIXTURE: TimeSheetPlaceSummary = {
+  imageLicense: null,
   imageUrl: 'https://example.com/gwangalli.jpg',
   name: '광안리 해변',
   badgeLabel: '필수',
@@ -458,6 +462,28 @@ function hExpectBlocked(): void {
 function hExpectOpen(): void {
   expect(screen.queryByTestId(hid('error'))).toBeNull();
   expect(screen.getByTestId(hid('apply'))).not.toBeDisabled();
+}
+
+/**
+ * 요약 행에서 **출처 글자(`…-credit`)를 뺀** 보이는 글자들 — 호스트 `Text` 노드마다 하나. 서버 사진이면 출처 글자가 같은
+ * 서브트리에 들어와 `toHaveTextContent` 완전 일치가 `한국관광공사광안리 해변` 이 되므로, 출처 노드만 제외하고 나머지는
+ * 그대로(완전 일치) 본다 — 부분 일치로 풀면 배지·지역 같은 다른 글자가 끼어도 통과한다.
+ */
+function visibleTextsExceptCredit(summary: ReactTestInstance): string[] {
+  const credit = screen.queryByTestId(hid('place-thumb-image-credit'));
+  const inCredit = (n: ReactTestInstance): boolean => {
+    for (let cur: ReactTestInstance | null = n; cur; cur = cur.parent) {
+      if (cur === credit) return true;
+    }
+    return false;
+  };
+  return summary
+    .findAll((n) => (n.type as unknown) === 'Text' && !inCredit(n))
+    .map((n) =>
+      (Array.isArray(n.props.children) ? n.props.children : [n.props.children])
+        .filter((child: unknown) => typeof child === 'string')
+        .join('')
+    );
 }
 
 function pinkPills(node: ReactTestInstance): ReactTestInstance[] {
@@ -624,12 +650,19 @@ describe('AC-2 · 종료를 설정하고 적용하면 endAt·endsNextDay(end <= 
 
 describe('🔴 AC-6 · 배지·지역을 안 주면 요약 행은 썸네일+이름뿐이다', () => {
   it('H6 · 배지 알약·"꼭 갈 곳" 줄이 없다 (짝: 둘 다 주면 둘 다 있다)', () => {
-    renderH04({ imageUrl: 'https://example.com/a.jpg', name: '광안리 해변' });
+    renderH04({
+      imageLicense: null,
+      imageUrl: 'https://example.com/a.jpg',
+      name: '광안리 해변',
+    });
 
     const summary = screen.getByTestId(hid('place-summary'));
     expect(screen.getByTestId(hid('place-thumb-image'))).toBeOnTheScreen();
-    // 완전일치 — 이름 말고 아무 텍스트도 없다(배지 라벨·둘째 줄 부재).
-    expect(summary).toHaveTextContent('광안리 해변');
+    // 완전일치 — 이름 말고 아무 텍스트도 없다(배지 라벨·둘째 줄 부재). 출처 글자는 서버 사진이면 붙으므로 그 노드만 뺀다.
+    expect(visibleTextsExceptCredit(summary)).toEqual(['광안리 해변']);
+    expect(
+      screen.getByTestId(hid('place-thumb-image-credit'))
+    ).toBeOnTheScreen();
     expect(pinkPills(summary)).toHaveLength(0);
     expect(textsIn(summary).filter((t) => t.includes('꼭 갈 곳'))).toEqual([]);
     expect(textsIn(summary).filter((t) => t.includes('undefined'))).toEqual([]);
@@ -637,6 +670,7 @@ describe('🔴 AC-6 · 배지·지역을 안 주면 요약 행은 썸네일+이�
     // 탐지기 짝 — 배지·지역을 주면 같은 탐지기가 알약과 둘째 줄을 잡는다.
     screen.unmount();
     renderH04({
+      imageLicense: null,
       imageUrl: 'https://example.com/a.jpg',
       name: '광안리 해변',
       badgeLabel: '필수',
@@ -644,7 +678,9 @@ describe('🔴 AC-6 · 배지·지역을 안 주면 요약 행은 썸네일+이�
     });
     const full = screen.getByTestId(hid('place-summary'));
     expect(pinkPills(full).length).toBeGreaterThan(0);
-    expect(full).toHaveTextContent('광안리 해변필수부산 부산진구 · 꼭 갈 곳');
+    expect(visibleTextsExceptCredit(full).join('')).toBe(
+      '광안리 해변필수부산 부산진구 · 꼭 갈 곳'
+    );
   });
 });
 
@@ -810,4 +846,35 @@ describe('🔴 시트 안 종료<시작 막기 — 문구·disabled 가 휠을 �
     expect(appliedPatch()).toStrictEqual(applied);
   });
   // T4(막힘 때 [적용]·문구 색 토큰·raw hex)는 jest-cut 에서 지웠다 — 색 토큰이라 실화면 QA 몫. 막힘 자체는 T1·T2, 소요시간 0건은 INV-3 가 본다.
+});
+
+/**
+ * TRIP-1793 통합 QA D4 — [적용]·머리 X 를 연타하면 시트가 닫힌 뒤 둘째 탭이 그 자리 아래 버튼(편집기의
+ * 「일정 저장하기」 등)을 누른다. 시트가 닫히는 누름은 그 순간 연타 창(`openPressGuardWindow`, 400ms)을 연다 —
+ * 아래 버튼이 `guardPress` 로 감싸져 있으면 그 둘째 탭은 무시된다. 소비처(편집기 시각 칩·옮기기·장소 추가·직접 짜기)
+ * 전부가 이 한 곳을 지난다.
+ *
+ * 3동작 뼈대: 준비=시트 렌더 + 아래 버튼 대역(`guardPress(spy)`) → 실행=[적용]/X press 뒤 곧바로 아래 버튼 →
+ * 단언=아래 버튼 0회 · 창이 지나면(`resetPressGuard`) 1회(짝 — 대역 자체가 눌리는지).
+ */
+describe('🔴 TRIP-1793 D4 · 시트를 닫는 누름은 연타 창을 연다', () => {
+  beforeEach(resetPressGuard);
+  afterEach(resetPressGuard);
+
+  it.each(['apply', 'close'])(
+    'G1 · %s 를 누른 직후 아래 guardPress 버튼은 무시되고, 창이 지나면 불린다',
+    (suffix) => {
+      const below = jest.fn();
+      const pressBelow = guardPress(below);
+      renderSheet(CONFIGS[1], '13:00:00', '14:00:00');
+
+      fireEvent.press(screen.getByTestId(`itinerary-edit-time-${suffix}`));
+      pressBelow(); // 연타의 둘째 탭이 닫힌 시트 아래 버튼에 닿는다
+
+      expect(below).not.toHaveBeenCalled();
+      resetPressGuard(); // 400ms 가 지난 것과 같다
+      pressBelow();
+      expect(below).toHaveBeenCalledTimes(1);
+    }
+  );
 });

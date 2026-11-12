@@ -3,7 +3,7 @@
 from trippilot.domain.common import GeoPoint
 import pytest
 
-from trippilot.domain.poi.region_centers import region_center, region_mentions, region_pair
+from trippilot.domain.poi.region_centers import in_sido, region_center, region_mentions, region_pair
 
 
 def test_most_specific_name_wins_and_unknown_is_none() -> None:
@@ -115,3 +115,14 @@ def test_route_departure_markers_include_after_and_next(text: str) -> None:
 def test_putting_a_place_off_for_next_time_is_not_a_departure(text: str) -> None:
     """'다음에'는 두 이름 사이 글의 끝일 때만 순서다 — 가운데면 미룸이다(#1713 반박 리뷰)."""
     assert region_pair(text) is None
+
+
+@pytest.mark.parametrize(("want", "sido", "sigungu", "inside"), [
+    ("광주", "전남광주통합특별시", "동구", True), ("광주", "전남광주통합특별시", "광산구", True),  # 통합 특별시의 광주 다섯 구
+    ("광주", "전남광주통합특별시", "여수시", False), ("광주", "전남광주통합특별시", None, False),  # 나머지는 전남
+    ("서울", "전남광주통합특별시", "동구", False), ("광주", "경기도", "광주시", False),  # 경기 광주시는 광주가 아니다
+    ("광주", "광주광역시", "동구", True), ("서울", "서울특별시", "종로구", True), ("부산", "서울특별시", None, False),  # 그 밖은 앞글자
+])
+def test_in_sido_splits_the_merged_province_by_district(want: str, sido: str, sigungu: str | None, inside: bool) -> None:
+    """전남·광주는 데이터에서 한 시·도('전남광주통합특별시')다 — 앞글자 대조로는 광주 행이 하나도 안 걸렸다(2026-11-04 개발 DB)."""
+    assert in_sido(want, sido, sigungu) is inside

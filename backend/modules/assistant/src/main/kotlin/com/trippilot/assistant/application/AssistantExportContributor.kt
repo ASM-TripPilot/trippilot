@@ -71,14 +71,16 @@ class AssistantMemoryExportContributor(private val memory: DialogueMemoryPort) :
     override val section = "assistantMemory"
 
     override fun export(accountId: UUID, limit: Int): ExportSection {
-        val items = runCatching { memory.export(accountId.toString()) }.getOrElse { e ->
+        val export = runCatching { memory.export(accountId.toString()) }.getOrElse { e ->
             log.warn("도우미 상대 메모리 내보내기 실패 — 이 몫은 비우고 잘림으로 표시합니다. type={}", e.javaClass.simpleName)
             return ExportSection(section, emptyList(), truncated = true)
         }
-        val rows = items.flatMap { m ->
+        val rows = export.items.flatMap { m ->
             m.summary.map { line -> mapOf("sessionId" to m.sessionId, "tripId" to m.tripId, "line" to line, "updatedAt" to m.updatedAt.toString()) }
         }
-        return ExportSection.of(section, rows, limit)
+        // 상대가 세션 수 상한에서 잘랐으면 줄 수가 우리 상한 안이어도 잘린 것이다
+        val section = ExportSection.of(section, rows, limit)
+        return section.copy(truncated = section.truncated || export.truncated)
     }
 
     private companion object {

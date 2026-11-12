@@ -19,6 +19,7 @@ import com.trippilot.itinerarygeneration.domain.VisitSlot
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
+import org.hibernate.validator.constraints.CodePointLength
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -73,7 +74,7 @@ class ItineraryController(
     fun confirm(principal: Principal, @PathVariable tripId: UUID): ItineraryResponse =
         respond(confirmService.confirm(principal.accountId(), tripId))
 
-    /** 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정된 일정은 409. */
+    /** 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정 일정도 받는다(TRIP-999 · TRIP-1710). */
     @PutMapping
     fun edit(principal: Principal, @PathVariable tripId: UUID, @Valid @RequestBody request: EditItineraryRequest): ItineraryResponse =
         respond(editService.edit(principal.accountId(), tripId, request.toCommand()))
@@ -81,17 +82,17 @@ class ItineraryController(
 
 /** 편집 요청 — 수정된 전체 일자·슬롯 배열(슬롯 순서 = 배열 순서). [reason] 은 선택(변경 이력에 남는다). */
 data class EditItineraryRequest(
-    val days: List<EditDayRequest>,
+    @field:Valid val days: List<EditDayRequest>,
     // 저장 컬럼 상한과 같은 값 — 여기서 막지 않으면 DB 가 22001 로 던져 편집까지 롤백되고 500 이 나간다.
     @field:Size(max = 500, message = "사유는 500자 이하입니다.")
     val reason: String? = null,
 ) {
     fun toCommand() = EditItinerary(
-        days.map { d -> EditDay(d.date, d.slots.map { EditSlot(it.poiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay) }) },
+        days.map { d -> EditDay(d.date, d.slots.map { EditSlot(it.poiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay, it.displayName, it.displayCategory) }) },
         reason,
     )
 }
-data class EditDayRequest(val date: LocalDate, val slots: List<EditSlotRequest>)
+data class EditDayRequest(val date: LocalDate, @field:Valid val slots: List<EditSlotRequest>)
 /** [endsNextDay]: 자정 넘김(HC4). 전체 교체라 조회 응답의 현행 값을 그대로 실어야 플래그가 소실되지 않는다. */
 data class EditSlotRequest(
     val poiId: UUID,
@@ -99,6 +100,13 @@ data class EditSlotRequest(
     val endAt: LocalTime,
     val isFixed: Boolean,
     val endsNextDay: Boolean = false,
+    /**
+     * 이 여행 전용 표시값(TRIP-1801) — 전체 교체라 조회 응답의 현행 값을 그대로 실어야 안 사라진다.
+     * 상한은 `visit_slot.display_name` 폭이고 앞뒤 공백을 포함해 잰다. 공백 정리·분류 어휘 판정은 서비스가 한다.
+     */
+    @field:CodePointLength(max = 60, message = "표시 이름은 60자 이하입니다.")
+    val displayName: String? = null,
+    val displayCategory: String? = null,
 )
 
 /** 생성 요청 — 방식(미지정 시 FULLY_AI). */
@@ -173,6 +181,8 @@ data class SlotAlternativeResponse(
     val category: String?,
     val tags: List<String>,
     val imageUrl: String?,
+    /** [imageUrl] 사진의 공공누리 유형 `TYPE1`·`TYPE3` — TYPE3 이면 화면이 자르지 않고 전체를 보인다. 모르면 null. */
+    val imageLicense: String?,
     /**
      * 후보 핀 좌표 — `SlotCandidateResponse.lat/lng` 와 같은 뜻이다(TRIP-1063 이 온디맨드 후보에만
      * 더해 **두 응답의 모양이 갈려 있었다**). 차선책도 같은 카드·같은 지도에 올라가므로 함께 싣는다.
@@ -190,6 +200,7 @@ data class SlotAlternativeResponse(
             category = surface?.category,
             tags = surface?.tags.orEmpty(),
             imageUrl = surface?.imageUrl,
+            imageLicense = surface?.imageLicense,
             lat = surface?.lat,
             lng = surface?.lng,
         )
@@ -235,6 +246,8 @@ data class SlotResponse(
     val openingHours: String?,
     val openingHoursKnown: Boolean?,
     val imageUrl: String?,
+    /** [imageUrl] 사진의 공공누리 유형 `TYPE1`·`TYPE3` — TYPE3 이면 화면이 자르지 않고 전체를 보인다. 모르면 null. */
+    val imageLicense: String?,
     val tags: List<String>,
     /**
      * 생성 시점에 AI 가 같이 준 **다른 선택지**(TRIP-873) — 슬롯당 ≤2건, 없으면 빈 목록.
@@ -247,6 +260,9 @@ data class SlotResponse(
      * 붙어 거리 문구가 틀려진다. 사라지는 쪽이 틀린 값을 보여주는 쪽보다 낫다.
      */
     val alternatives: List<SlotAlternativeResponse>,
+    /** 이 여행 전용 표시값(TRIP-1801). null = 덮어쓰기 없음 — 화면이 [nameKo]·[category](장소 원본)로 폴백한다. */
+    val displayName: String?,
+    val displayCategory: String?,
 ) {
     companion object {
         fun of(s: VisitSlot, surface: SlotSurface?, status: ItineraryStatus, surfaces: Map<UUID, SlotSurface> = emptyMap()) = SlotResponse(
@@ -270,7 +286,10 @@ data class SlotResponse(
             openingHoursKnown = if (status == ItineraryStatus.CONFIRMED) null else (surface?.openingHoursKnown ?: false),
             alternatives = s.alternatives.map { SlotAlternativeResponse.of(it, surfaces[it.poiId]) },
             imageUrl = surface?.imageUrl,
+            imageLicense = surface?.imageLicense,
             tags = surface?.tags.orEmpty(),
+            displayName = s.displayName,
+            displayCategory = s.displayCategory,
         )
     }
 }

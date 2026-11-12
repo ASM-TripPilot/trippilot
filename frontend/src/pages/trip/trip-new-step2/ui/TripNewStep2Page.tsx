@@ -1,4 +1,4 @@
-import { type ReactElement, useRef, useState } from 'react';
+import { type ReactElement, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { isAxiosError } from 'axios';
 
@@ -21,7 +21,11 @@ import {
   type StaySelectCandidate,
 } from './StaySelectSheet';
 import type { TripDestination } from '@/shared/api/index.schemas';
-import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
+import {
+  guardPress,
+  openPressGuardWindow,
+  usePressLock,
+} from '@/shared/lib/pressGuard';
 import { goBackOr } from '@/shared/lib/goBackOr';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import {
@@ -60,12 +64,10 @@ import {
  */
 export function TripNewStep2Page(): ReactElement {
   const router = useRouter();
-  const {
-    createdTripId: tripId,
-    startDate,
-    endDate,
-    destinations,
-  } = useTripWizardStore();
+  const tripId = useTripWizardStore((state) => state.createdTripId);
+  const startDate = useTripWizardStore((state) => state.startDate);
+  const endDate = useTripWizardStore((state) => state.endDate);
+  const destinations = useTripWizardStore((state) => state.destinations);
 
   /** 두 출구 CTA의 공통 목적지 — 2/4를 걷고(`back`) 방식 선택(h04)을 `push`. 순서가 계약이다:
    * 거꾸로면 back이 방금 얹은 h04를 치운다. `tripId`는 CTA가 보이는 얼굴에선 `notrip`이 먼저 이겨
@@ -149,10 +151,10 @@ export function BaseNightsFlow({
   const [assignFailure, setAssignFailure] = useState<AssignFailure | null>(
     null
   );
-  // in-flight 잠금(useRef — 상태와 달리 같은 틱에 즉시 읽힌다). 지정 요청이 날아가 응답을
+  // in-flight 잠금(usePressLock — 상태와 달리 같은 틱에 즉시 읽힌다). 지정 요청이 날아가 응답을
   // 기다리는 동안 재탭이 잉여 POST 를 만들지 않게 한다. `isPending` 은 다음 렌더에야 반영돼
-  // 같은 틱 이중탭을 못 막으므로, 그 창을 이 ref 가 닫는다(S8 재작성에서 드롭된 잠금 복원).
-  const assignLockRef = useRef(false);
+  // 같은 틱 이중탭을 못 막으므로, 그 창을 이 잠금이 닫는다(S8 재작성에서 드롭된 잠금 복원).
+  const assignLock = usePressLock();
 
   const savedStayList = savedStays.data ?? [];
   const assignments = bases.data ?? [];
@@ -209,7 +211,7 @@ export function BaseNightsFlow({
 
   /** 카드 탭 → 그 밤의 시트를 연다. 새로 여는 밤마다 선택·실패·잠금을 비워 깨끗이 시작한다. */
   function openSheet(nightNumber: number): void {
-    assignLockRef.current = false;
+    assignLock.release();
     setSheetEverOpened(true);
     setOpenNight(nightNumber);
     setSelectedSavedStayId(null);
@@ -217,7 +219,7 @@ export function BaseNightsFlow({
   }
 
   function closeSheet(): void {
-    assignLockRef.current = false;
+    assignLock.release();
     setOpenNight(null);
     setSelectedSavedStayId(null);
     setAssignFailure(null);
@@ -236,7 +238,7 @@ export function BaseNightsFlow({
     }
     // 이미 지정이 날아가는 중이면 즉시 되돌린다(같은 틱 이중탭 차단). 성공은 closeSheet 가
     // 잠금까지 푼다. 실패는 시트를 유지해야 해 여기서 직접 푼다 — 안 풀면 실패 후 영구 잠김.
-    if (assignLockRef.current) return;
+    if (assignLock.isHeld()) return;
     // TRIP-1235 AC-2 — 다시 누르는 순간 직전 실패를 걷는다. 끝나면 이 시도의 결과가 새로 뜬다.
     setAssignFailure(null);
     // AC-5 — 보내면 반드시 400 인 후보(서버가 모르는 낙관 id · 좌표 미확정 INV-U1-08)는 요청 없이 끝낸다.
@@ -258,7 +260,7 @@ export function BaseNightsFlow({
       setAssignFailure('permanent');
       return;
     }
-    assignLockRef.current = true;
+    if (!assignLock.acquire()) return;
     const dateFrom = deriveEndDate(startDate, openNight - 1);
     const dateTo = deriveEndDate(startDate, openNight);
     assignBase.mutate(
@@ -270,7 +272,7 @@ export function BaseNightsFlow({
           closeSheet();
         },
         onError: (error) => {
-          assignLockRef.current = false;
+          assignLock.release();
           setAssignFailure(assignFailureOf(error));
         },
       }

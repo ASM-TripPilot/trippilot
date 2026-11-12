@@ -4,6 +4,7 @@
  * props 만 받고 네트워크를 모른다 — 대상 조회·저장·탈출 배선은 `pages/auth/reconsent` 몫이다.
  * 뒤로가기는 없다 — 재동의 전에는 나갈 곳이 없는 게이트 화면이다(거부 경로는 TRIP-938).
  */
+import { ChevronRight16Glyph } from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import {
   ActivityIndicator,
@@ -12,11 +13,12 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CheckGlyph, ViewChevronGlyph } from '@/features/onboarding';
+import { OnboardingCheckGlyph } from '@/features/onboarding';
 
-export interface ReconsentItemView {
+interface ReconsentItemView {
   termsType: string;
   label: string;
   checked: boolean;
@@ -81,7 +83,7 @@ export function ReconsentScreen({
                     : 'border-[1.5px] border-hairline-strong bg-canvas'
                 }`}
               >
-                {item.checked ? <CheckGlyph /> : null}
+                {item.checked ? <OnboardingCheckGlyph /> : null}
               </View>
               <Text className="font-noto text-body text-ink">{item.label}</Text>
             </Pressable>
@@ -93,7 +95,7 @@ export function ReconsentScreen({
               className="flex-row items-center gap-[2px] py-[15px] pl-md"
             >
               <Text className="font-noto text-label text-muted-soft">보기</Text>
-              <ViewChevronGlyph />
+              <ChevronRight16Glyph color="mutedSoft" />
             </Pressable>
           </View>
         ))}
@@ -122,18 +124,9 @@ export function ReconsentScreen({
 
       <View className="px-2xl pb-[30px] pt-md">
         <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
-        <Pressable
-          testID="reconsent-agree"
-          disabled={!canAgree}
-          onPress={onAgree}
-          className={`h-[52px] items-center justify-center rounded-button bg-primary ${
-            canAgree ? '' : 'opacity-40'
-          }`}
-        >
-          <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-            동의하고 계속하기
-          </Text>
-        </Pressable>
+        <Button testID="reconsent-agree" disabled={!canAgree} onPress={onAgree}>
+          동의하고 계속하기
+        </Button>
       </View>
     </SafeAreaView>
   );

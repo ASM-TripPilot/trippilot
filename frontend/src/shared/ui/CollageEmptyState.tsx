@@ -1,7 +1,9 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { HeartFilledGlyph } from './HeartGlyphs';
+import { buttonClasses } from './Button';
+import { HeartFilledGlyph } from './glyphs';
+import { COLOR_TOKENS } from '../config';
 
 /**
  * 콜라주 빈 상태(TRIP-1050, Figma `1695:1183`·`1702:1183`) — 사진 3장 겹침 + 중앙 하트 원 +
@@ -27,21 +29,24 @@ export type CollageEmptyStateProps = {
 // 그림자 세 벌은 className 으로 못 줘 style prop. shadowColor '#000000' 은 raw-hex 가드의
 // TOKENIZED_HEX 밖이다. 사진 = 킷 §3 작은 그림자, CTA = 카드 그림자, 하트 원 = 두 Figma 프레임 값.
 const photoShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
   elevation: 2,
 };
 const heartShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 6 },
   shadowOpacity: 0.1,
   shadowRadius: 18,
   elevation: 6,
 };
+// 아이콘 + 글자 행이라 Button(글자 children 전용) 대신 같은 모양 클래스만 빌린다(TRIP-1828 탈출구).
+const CTA = buttonClasses({});
+
 const ctaShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.08,
   shadowRadius: 16,
@@ -99,12 +104,10 @@ export function CollageEmptyState({
         accessibilityRole="button"
         onPress={onPressCta}
         style={ctaShadow}
-        className="mt-2xl h-[52px] flex-row items-center justify-center gap-sm rounded-[12px] bg-primary pl-[22px] pr-2xl"
+        className={`${CTA.box} mt-2xl flex-row gap-sm pl-[22px] pr-2xl`}
       >
         {ctaIcon}
-        <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-          {ctaLabel}
-        </Text>
+        <Text className={CTA.label}>{ctaLabel}</Text>
       </Pressable>
     </View>
   );

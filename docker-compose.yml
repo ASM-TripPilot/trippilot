@@ -374,6 +374,8 @@ services:
       # 공휴일 휴무(상황 감지 H1) — on|off. 특일 달력 키는 PUBLIC_DATA_API_KEY(특일 활용신청 계정), 비면
       # WEATHER_API — 그 계정에 특일 활용신청이 없으면 30(키 미등록)이라 날짜 명시형 규칙만 돈다.
       HOLIDAY_CLOSURE_MODE: ${HOLIDAY_CLOSURE_MODE:-off}
+      # 도우미 열린 검색(KB-5 문서 순위, BR-AO-36) — on|off. 벡터 DB·임베딩이 같이 있어야 붙는다(.env.example 참고).
+      TRIPPILOT_KB5_OPEN_SEARCH: ${TRIPPILOT_KB5_OPEN_SEARCH:-off}
       # 임베딩 공급자 — openai(기본) | titan | local. **이 통로가 없어서** 컨테이너가
       # 늘 openai 로 떨어졌고, 멘토 Azure 엔드포인트에는 임베딩 배포가 없어 KB 검색
       # 3종이 전부 404(DeploymentNotFound)로 죽었다(2026-09-01 실측). 규칙 폴백이

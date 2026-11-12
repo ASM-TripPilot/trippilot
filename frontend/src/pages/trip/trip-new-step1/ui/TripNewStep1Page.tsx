@@ -25,7 +25,13 @@ import type {
 import { isAlreadyRegistered } from '@/shared/api';
 import { isNotFound } from '@/shared/api';
 import { getAccessToken } from '@/shared/api';
-import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
+import {
+  guardPress,
+  openPressGuardWindow,
+  respectPressGuard,
+  usePressLock,
+  SHEET_APPLY_WINDOW_MS,
+} from '@/shared/lib/pressGuard';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { shiftMonth } from '@/shared/lib/monthGrid';
 import { goBackOr } from '@/shared/lib/goBackOr';
@@ -46,11 +52,11 @@ import {
 import { deriveEndDate } from '@/features/create-trip';
 import { mustVisitFailureNotice } from '@/features/create-trip';
 import { planMustVisitSync } from '../model/mustVisitSync';
-import { partyRangeFor } from '../model/partyRange';
 import {
   dayWindowFields,
   summaryCompanion,
   summaryDayWindow,
+  type DayWindow,
   validateDayWindow,
   summaryDestinations,
   summaryPeriod,
@@ -59,10 +65,13 @@ import {
 import { useTripWizardStore } from '@/features/create-trip';
 import { useCreateTrip } from '../model/useCreateTrip';
 import { usePreferencePrefill } from '../model/usePreferencePrefill';
-import { CompanionEditSheet } from './CompanionEditSheet';
-import { DayWindowEditSheet } from './DayWindowEditSheet';
+import {
+  clampParty,
+  CompanionEditSheet,
+  DayWindowEditSheet,
+  PeriodEditSheet,
+} from '@/widgets/trip-edit-sheets';
 import { DestinationEditSheet } from './DestinationEditSheet';
-import { PeriodEditSheet } from './PeriodEditSheet';
 import { TripWizardLeaveDialog } from './TripWizardLeaveDialog';
 import { TripWizardStep1Screen } from './TripWizardStep1Screen';
 
@@ -108,6 +117,9 @@ const OVERSEAS_DESTINATION_ERROR_CODE = 'OVERSEAS_DESTINATION';
 /** 이미 만든 여행의 취향 행을 눌렀을 때 — PATCH 계약에 취향 스냅숏이 없어 바꿔도 반영되지 않는다
  * (TRIP-1113 결정 1, 발명 문구). */
 const PREF_LOCKED_MESSAGE = '이미 만든 여행은 취향을 바꿀 수 없어요';
+/** 계정 취향 조회 실패(TRIP-1750) — 빈 칩으로 열면 적용이 온보딩 취향을 지운다. 열지 않고 알린 뒤 다시 받는다. */
+const PREF_LOAD_ERROR_MESSAGE =
+  '취향을 불러오지 못했어요. 잠시 후 다시 눌러 주세요';
 
 /** 제출 실패 배너 본문 — Figma 가 확정한 유일한 문구다(`2226:2128`). 미상 코드·미상 필드·응답
  * 자체 없음도 이 문구로 떨어진다(새 문구를 발명하는 대신 확정된 문구 하나를 재사용). */
@@ -133,7 +145,7 @@ function classifyServerFailure(error: unknown): ServerSubmitFailure {
  * TRIP-1114 · 이탈 확인 다이얼로그의 요청·잠금 배선. 다이얼로그가 열릴 때만 마운트된다 —
  * `useQueryClient` 를 페이지 본체에서 부르면 provider 없이 페이지를 그리는 노드 테스트가 던진다.
  *
- * - 나가기(저장)나 삭제를 누르면 세 버튼을 모두 잠근다(`lockedRef`). 상태가 아니라 ref 라 같은 틱
+ * - 나가기(저장)나 삭제를 누르면 세 버튼을 모두 잠근다(`lock`). 상태가 아니라 잠금 객체라 같은 틱
  *   두 번째 누름에도 이미 켜진 값을 읽고, 누름 가드(400ms)가 닫힌 뒤의 탭도 막는다. 저장 연타(01b Q7)도
  *   이 잠금이 막는다.
  * - 204·404(이미 없음)면 `createdTripId` 만 비우고(드래프트 유지, BR-U1-33) 목록 캐시를 무효화한다.
@@ -152,7 +164,7 @@ function LeaveDialogContainer({
 }): ReactElement {
   const queryClient = useQueryClient();
   const [failed, setFailed] = useState(false);
-  const lockedRef = useRef(false);
+  const lock = usePressLock();
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -163,14 +175,12 @@ function LeaveDialogContainer({
   }, []);
 
   function save(): void {
-    if (lockedRef.current) return;
-    lockedRef.current = true;
+    if (!lock.acquire()) return;
     onExit();
   }
 
   function remove(): void {
-    if (lockedRef.current) return;
-    lockedRef.current = true;
+    if (!lock.acquire()) return;
     setFailed(false);
     // 삭제는 끝났다 — 이동을 먼저 하고 그다음 정리한다. id 비우기는 다음 렌더에서 이 컨테이너를
     // 내리므로 지금 순서를 뒤집어도 이동은 일어난다(5-b 실측) — 순서는 읽기 쉬움을 위한 것이고
@@ -190,7 +200,7 @@ function LeaveDialogContainer({
         done();
         return;
       }
-      lockedRef.current = false;
+      lock.release();
       if (mountedRef.current) setFailed(true);
     });
   }
@@ -198,11 +208,11 @@ function LeaveDialogContainer({
   return (
     <TripWizardLeaveDialog
       failed={failed}
-      // TRIP-1282 — 창을 연다(lockedRef 와 별개 — 그쪽은 요청 중 재누름 방지).
+      // TRIP-1282 — 창을 연다(lock 과 별개 — 그쪽은 요청 중 재누름 방지).
       onSave={guardPress(save)}
       onDelete={guardPress(remove)}
       onStay={() => {
-        if (!lockedRef.current) onStay();
+        if (!lock.isHeld()) onStay();
       }}
     />
   );
@@ -335,10 +345,10 @@ export function TripNewStep1Page({
   const [prefDraftStyles, setPrefDraftStyles] = useState<string[]>([]);
   const [prefDraftActivities, setPrefDraftActivities] = useState<string[]>([]);
 
-  // 제출 경로 잠금(useRef — 상태와 달리 같은 틱에 즉시 읽힌다, 연타 두 번째가 옛 값을 읽지
+  // 제출 경로 잠금(usePressLock — 상태와 달리 같은 틱에 즉시 읽힌다, 연타 두 번째가 옛 값을 읽지
   // 않게). 요청(등록·PATCH·동기화)이 날아가는 동안만 켜진다 — 성공 뒤에는 풀어 둬야 step2 에서
   // 돌아와 값을 바꾼 `[다음]`이 PATCH 로 나간다(TRIP-1113 AC-2b).
-  const submitLockedRef = useRef(false);
+  const submitLock = usePressLock();
   // 서버에 **마지막으로 보낸** 박수 합(POST·PATCH 가 성공한 시점) — 0박이면 거점 단계를 건너뛰는 판정의 기준이다.
   // 꼭 갈 곳 [다시 시도]는 여행을 PATCH 하지 않으므로, 그 사이 화면에서 박수를 바꿔도 서버 여행과 어긋나지 않게
   // 스토어의 지금 값이 아니라 이 값을 본다(없으면 — 재마운트 직후 — 스토어 값으로 폴백).
@@ -427,8 +437,8 @@ export function TripNewStep1Page({
     tripId: string,
     poiIds: string[]
   ): Promise<void> {
-    if (submitLockedRef.current) return;
-    submitLockedRef.current = true;
+    // POST 응답 뒤 흐름 안에서도 불린다 — 전환 중이라고 빠지면 여행만 생기고 꼭 갈 곳 등록이 조용히 유실된다.
+    if (!submitLock.acquire({ transition: 'ignore' })) return;
 
     const results = await Promise.allSettled(
       poiIds.map((poiId) =>
@@ -445,7 +455,7 @@ export function TripNewStep1Page({
     setPendingMustVisits(stillFailed);
     if (stillFailed.length > 0) {
       // 화면에 남아 배너를 보여준다 — 여기서만 잠금을 푼다(배너의 [다시 시도]가 다시 타야 하므로).
-      submitLockedRef.current = false;
+      submitLock.release();
       setMustVisitError(
         mustVisitFailureNotice(poiIds.length, stillFailed.length)
       );
@@ -455,7 +465,7 @@ export function TripNewStep1Page({
     setMustVisitError(undefined);
     // 성공 — 잠금을 푼다. 되돌아와 재탭해도 여행이 또 생기지 않는 것은 이제 `createdTripId`가
     // 막는다(아래 `submit` 이 PATCH 로 보낸다, TRIP-1113).
-    submitLockedRef.current = false;
+    submitLock.release();
     goAfterTripReady(tripId);
   }
 
@@ -481,12 +491,11 @@ export function TripNewStep1Page({
 
   /** 요청이 끝날 때까지(성공·실패 무관) 제출 경로를 잠근다 — 이미 잠겨 있으면 아무것도 안 한다. */
   async function withSubmitLock(task: () => Promise<void>): Promise<void> {
-    if (submitLockedRef.current) return;
-    submitLockedRef.current = true;
+    if (!submitLock.acquire()) return;
     try {
       await task();
     } finally {
-      submitLockedRef.current = false;
+      submitLock.release();
     }
   }
 
@@ -586,7 +595,7 @@ export function TripNewStep1Page({
   }
 
   async function submit(): Promise<void> {
-    if (!canProceed || createTrip.isPending || submitLockedRef.current) return;
+    if (!canProceed || createTrip.isPending || submitLock.isHeld()) return;
 
     // 여행은 이미 만들어졌고 등록만 남았으면(재시도 경로) 여행을 또 안 만들고 남은 등록만 잇는다.
     if (createdTripId !== undefined && pendingMustVisits.length > 0) {
@@ -666,9 +675,8 @@ export function TripNewStep1Page({
   /** 칩을 고르면 draftParty 를 그 유형의 범위 안으로 맞춘다(TRIP-1423 — 혼자 1 · 연인 2 · 친구·가족 2 이상).
    * 시트는 같은 범위로 `disabled` 만 그리고, 값을 옮기는 것은 배선이다(D2). */
   function pickCompanion(type: CompanionType): void {
-    const { min, max } = partyRangeFor(type);
     setDraftCompanion(type);
-    setDraftParty((party) => Math.min(max, Math.max(min, party)));
+    setDraftParty((party) => clampParty(type, party));
   }
 
   /** "적용" — 드래프트를 store 에 커밋(각 1회) + 닫기. 동행 미선택이면 `selectCompanion` 은
@@ -694,8 +702,17 @@ export function TripNewStep1Page({
     }
     // 프리필 미도착이면 열지 않는다(S5G — 데이터 손실 봉합). GET /me/preferences 도착 전 열면
     // 드래프트가 빈 []로 열리고, 적용 시 `[] ?? prefill`(빈 배열은 값이라 ?? 폴백 안 함)로 온보딩
-    // 취향이 영구 유실된다. 신호는 preference.isPending(★3).
-    if (preference.isPending) return;
+    // 취향이 영구 유실된다. 신호는 "데이터 없음" — 로딩(isPending)이면 무반응, 실패면 알리고 다시 받는다(TRIP-1750).
+    if (preference.data === undefined) {
+      if (preference.isError) {
+        showToast({
+          message: PREF_LOAD_ERROR_MESSAGE,
+          testID: 'trip-wizard-pref-load-error',
+        });
+        void preference.refetch();
+      }
+      return;
+    }
     // 두 축 모두 이 가드 안에서 초기화한다 — 밖에서 따로 하면 같은 유실이 활동 축에 생긴다.
     const {
       prefStyleOverride: styleOverride,
@@ -778,7 +795,8 @@ export function TripNewStep1Page({
         // 전체 보기도 더 담기와 같은 인자다(TRIP-706 · TRIP-1093).
         onPressSeeAll={() => router.push(mustVisitSelectHref)}
         canProceed={canProceed}
-        onNext={submit}
+        // 시트 [적용]이 닫힌 자리에 [다음]이 있다 — 연타 둘째 탭이 여행을 만들지 않게 창을 따른다(TRIP-1823). `submit` 은 ref 를 읽어 누르는 순간 감싼다.
+        onNext={() => respectPressGuard(submit)()}
         // 여행을 안 만들었으면 지금처럼 바로 나간다(01b Q5). 스와이프·하드웨어 뒤로는 위 usePreventRemove 가 같은 다이얼로그로 보낸다(TRIP-1272).
         onBack={() =>
           createdTripId === undefined
@@ -808,7 +826,10 @@ export function TripNewStep1Page({
           onChangeNights={setNights}
           onRemove={removeDestination}
           onAddCity={() => router.push(regionPickerHref('trip'))}
-          onApply={() => setDestinationSheetOpen(false)}
+          onApply={guardPress(
+            () => setDestinationSheetOpen(false),
+            SHEET_APPLY_WINDOW_MS
+          )}
           onClose={() => setDestinationSheetOpen(false)}
           mustVisitCount={mustVisits.length}
           outsideRegionCount={outsidePoiIds.length}
@@ -835,7 +856,7 @@ export function TripNewStep1Page({
           onNextMonth={() =>
             setPeriodMonth((current) => shiftMonth(current, 1))
           }
-          onApply={applyPeriod}
+          onApply={guardPress(applyPeriod, SHEET_APPLY_WINDOW_MS)}
           onClose={() => setPeriodSheetOpen(false)}
         />
       ) : null}
@@ -845,10 +866,10 @@ export function TripNewStep1Page({
           value={dayWindow}
           sameDay={sameDay}
           periodUnset={!periodFilled}
-          onApply={(next) => {
+          onApply={guardPress((next: DayWindow) => {
             setDayWindow(next);
             setDayWindowSheetOpen(false);
-          }}
+          }, SHEET_APPLY_WINDOW_MS)}
           onClose={() => setDayWindowSheetOpen(false)}
         />
       ) : null}
@@ -860,7 +881,7 @@ export function TripNewStep1Page({
           companionType={draftCompanion}
           onChangeParty={(next) => setDraftParty(Math.max(1, next))}
           onSelectCompanion={pickCompanion}
-          onApply={applyCompanion}
+          onApply={guardPress(applyCompanion, SHEET_APPLY_WINDOW_MS)}
           onClose={() => setCompanionSheetOpen(false)}
         />
       ) : null}
@@ -872,7 +893,7 @@ export function TripNewStep1Page({
           onToggle={togglePrefStyle}
           selectedActivities={prefDraftActivities}
           onToggleActivity={togglePrefActivity}
-          onApply={applyPrefSheet}
+          onApply={guardPress(applyPrefSheet, SHEET_APPLY_WINDOW_MS)}
           onClose={() => setPrefSheetOpen(false)}
           fromOnboarding={prefFromOnboarding}
         />

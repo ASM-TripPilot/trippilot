@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import { HeartButton } from '@/shared/ui/HeartButton';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-807 · AC-3 — 숙소 검색 풀/레인 카드(e02 세로178 · d01 레인160 공용). props-only.
@@ -21,7 +22,7 @@ import { PlacePhoto } from '@/shared/ui/PlacePhoto';
  * 카드 루트가 Pressable, 저장이 그 자식 Pressable — 하트 press 는 findEventHandler 가 하트에서
  * 멈춰 카드 push(onPress)를 삼키지 않는다(★F-4).
  */
-export interface StaySearchCardSave {
+interface StaySearchCardSave {
   saved: boolean;
   pending?: boolean;
   onToggle: () => void;
@@ -55,7 +56,7 @@ export interface StaySearchCardProps {
 // full variant 카드 그림자(e02 StayCard 이관값) — className 으로 못 줘 style prop 으로 옮긴다.
 // shadowColor '#000000' 은 토큰화 대상 밖이라 raw-hex 가드 사정거리 밖(HomeScreen 선례).
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.08,
   shadowRadius: 16,

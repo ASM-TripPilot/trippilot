@@ -2,13 +2,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import { useRef } from 'react';
 
+import { isOfflineWaiting } from '@/shared/api';
 import {
   deleteSavedPlacesSavedPlaceId,
   getGetPlacesQueryKey,
   getGetSavedPlacesQueryKey,
   postSavedPlaces,
   useGetSavedPlaces,
-} from '@/shared/api/index.hooks';
+} from '@/shared/api/index.places';
 import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 
 import { findSavedPlaceId, optimisticSavedPlaceId } from './savedPlaceIndex';
@@ -69,6 +70,22 @@ export function useSavedPlaces(deps: { isAuthed: boolean }) {
   // isAuthed를 한 번 더 접는다: enabled:false는 새 요청만 막고, 로그인 중 채워진 캐시는
   // 세션 만료 뒤에도 남는다(BR-U1-03).
   const savedPlaces = deps.isAuthed ? (savedListQuery.data ?? []) : [];
+
+  // TRIP-1754 — "목록을 못 받았다"(모름)와 "받았는데 비었다"(없음)를 가른다. 받아 둔 데이터가 있으면
+  // 재조회가 실패해도 그 데이터가 진실에 가까우니 실패가 아니다(Seed Q5). 로그인 중 쌓인 실패 이력은
+  // 세션 만료 뒤에도 캐시에 남으므로 isAuthed 로 한 번 더 접는다. v5 는 데이터 없는 쿼리가 재조회를
+  // 시작하면 isError 를 끄고 errorUpdateCount 만 남기고, 오프라인 콜드스타트는 둘 다 0 이다.
+  const offlineWaiting = isOfflineWaiting(savedListQuery);
+  const loadFailed =
+    deps.isAuthed &&
+    savedListQuery.data === undefined &&
+    (savedListQuery.isError ||
+      savedListQuery.errorUpdateCount > 0 ||
+      offlineWaiting);
+  // 토스트용 "확정" 실패 — 이 마운트에서 응답이 한 번 끝난 뒤(isFetchedAfterMount)이거나 오프라인 대기.
+  // 마운트 때 만난 옛 실패 캐시가 재조회 중인 동안(성공할 수도 있다)엔 false 다.
+  const loadFailureConfirmed =
+    loadFailed && (savedListQuery.isFetchedAfterMount || offlineWaiting);
 
   /**
    * BR-U1-06 — savedCount는 GET /places가 주는 파생 집계라 담기·해제 둘 다 이 쪽도 흔든다.
@@ -174,6 +191,8 @@ export function useSavedPlaces(deps: { isAuthed: boolean }) {
     // 게스트가 끝나지 않는 스켈레톤을 본다. 그래서 게스트 분기는 이 값보다 먼저 판정해야 한다.
     isPending: savedListQuery.isPending,
     isError: savedListQuery.isError,
+    loadFailed,
+    loadFailureConfirmed,
     refetch: savedListQuery.refetch,
   };
 }

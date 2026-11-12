@@ -27,17 +27,34 @@ export function BackChevronGlyph({
   );
 }
 
+// 뒤로 가기 — BackChevronGlyph 와 같은 도형이라 위임한다(testID 는 원래 안 받았다).
 export function BackArrowGlyph({
   size = 24,
   color = 'ink',
   testID,
 }: GlyphProps) {
+  return <BackChevronGlyph size={size} color={color} testID={testID} />;
+}
+
+// 넓은 뒤로 꺾쇠(‹, 높이 14 · 획 2) — BackChevronGlyph(높이 12 · 획 2.2)와 그림이 다르다.
+// 장소 상세(d06·i10)·탐색 앱바가 쓴다(TRIP-1829 에서 explore·execution 사본을 모음).
+export function BackChevronWideGlyph({
+  size = 24,
+  color = 'ink',
+  testID,
+}: GlyphProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
       <Path
-        d="M15 18L9 12L15 6"
+        d="M15 5L8 12L15 19"
         stroke={GLYPH_COLORS[color]}
-        strokeWidth={2.2}
+        strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -74,8 +91,9 @@ export function ChevronDownGlyph({
 export function ChevronRightGlyph({
   size = 20,
   color = 'mutedSoft',
+  strokeWidth = 1.83333,
   testID,
-}: GlyphProps) {
+}: GlyphProps & { strokeWidth?: number }) {
   return (
     <Svg
       testID={testID}
@@ -87,7 +105,58 @@ export function ChevronRightGlyph({
       <Path
         d="M7.5 5L12.5 10L7.5 15"
         stroke={GLYPH_COLORS[color]}
-        strokeWidth={1.83333}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 24-viewBox 오른쪽 쉐브론 — 20-viewBox 판(ChevronRightGlyph)과 도형이 달라 따로 둔다 (TRIP-1773).
+export function ChevronRight24Glyph({
+  size = 16,
+  color = 'primaryText',
+  strokeWidth = 2,
+  testID,
+}: GlyphProps & { strokeWidth?: number }) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M9 6L15 12L9 18"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 16-viewBox 오른쪽 쉐브론(획 1.46667 고정).
+export function ChevronRight16Glyph({
+  size = 16,
+  color = 'primaryText',
+  testID,
+}: GlyphProps) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+    >
+      <Path
+        d="M6 4L10 8L6 12"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={1.46667}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -118,7 +187,12 @@ export function CloseGlyph({
   );
 }
 
-export function PlusGlyph({ size = 18, color = 'ink', testID }: GlyphProps) {
+export function PlusGlyph({
+  size = 18,
+  color = 'ink',
+  strokeWidth = 1.8,
+  testID,
+}: GlyphProps & { strokeWidth?: number }) {
   return (
     <Svg
       testID={testID}
@@ -130,13 +204,13 @@ export function PlusGlyph({ size = 18, color = 'ink', testID }: GlyphProps) {
       <Path
         d="M9 3.75V14.25"
         stroke={GLYPH_COLORS[color]}
-        strokeWidth={1.8}
+        strokeWidth={strokeWidth}
         strokeLinecap="round"
       />
       <Path
         d="M3.75 9H14.25"
         stroke={GLYPH_COLORS[color]}
-        strokeWidth={1.8}
+        strokeWidth={strokeWidth}
         strokeLinecap="round"
       />
     </Svg>
@@ -160,6 +234,32 @@ export function CheckGlyph({
         d="M10 3L4.5 8.5L2 6"
         stroke={GLYPH_COLORS[color]}
         strokeWidth={1.3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 24-viewBox 체크(20 기본 크기) — 12-viewBox 판(CheckGlyph)과 도형이 달라 따로 둔다.
+export function Check24Glyph({
+  size = 20,
+  color = 'onPrimary',
+  strokeWidth = 2.2,
+  testID,
+}: GlyphProps & { strokeWidth?: number }) {
+  return (
+    <Svg
+      testID={testID}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <Path
+        d="M20 6L9 17L4 12"
+        stroke={GLYPH_COLORS[color]}
+        strokeWidth={strokeWidth}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

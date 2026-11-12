@@ -389,6 +389,40 @@ describe('검색 후보로 등록 — 실물 훅 + msw (옛 본 파일)', () => 
     });
   });
 
+  describe('I-5b · 공백 검색어로는 검색 키를 눌러도 선택이 풀리지 않는다 (TRIP-1672)', () => {
+    it.each([
+      ['공백만', '   '],
+      ['빈 칸', ''],
+    ])(
+      '후보를 고르고 좌표까지 확정한 뒤 검색어를 %s 로 두고 키보드 검색 키를 눌러도 선택·확정·등록이 그대로고 요청도 안 나간다',
+      async (_label, blank) => {
+        render(<StayRegisterPage />, { wrapper: createGcZeroWrapper() });
+
+        // 준비: 부산 숙소를 고르고 좌표까지 확정한다 → 등록이 열린다.
+        searchFor('busan');
+        await selectAndConfirm(0);
+        await waitFor(() =>
+          expect(screen.getByTestId('stay-register-submit')).toBeEnabled()
+        );
+        const hitsBefore = geocodeHits().length;
+
+        // 실행: 검색어를 비우고 키보드 검색 키를 누른다([검색] 버튼은 같은 입력에서 잠겨 있다).
+        searchFor(blank);
+
+        // 단언: 버튼은 잠겼고(앵커 — 같은 입력에서 키보드만 뚫리던 것이 증상이다), 선택·확정이 그대로이며 새 요청이 없다.
+        expect(
+          screen.getByTestId('stay-register-search-submit')
+        ).toBeDisabled();
+        expect(screen.getByTestId('stay-register-candidate-0')).toBeChecked();
+        expect(screen.getByTestId('stay-register-submit')).toBeEnabled();
+        expect(screen.queryByTestId('stay-register-coordnotice')).toBeNull();
+        // 이 줄은 이 수정의 증거가 아니다 — 공백에선 고치기 전에도 요청이 안 나간다(페이지 조회가 `enabled: trim() !== ''`).
+        // 페이지 쪽 그 가드가 지워져 `?q=` 요청이 나가는 회귀만 막는다. 이 수정의 판별은 위 세 단언이 진다.
+        expect(geocodeHits()).toHaveLength(hitsBefore);
+      }
+    );
+  });
+
   describe('I-6 · 지도가 안 뜨는 환경에서도 등록할 수 있다 (§3-3 · INV-4)', () => {
     it('카카오 키가 없으면 시트가 이름·주소를 보여주고 "이 주소로 확인"으로 확정된다', async () => {
       // beforeEach가 이미 키를 지웠다 — 이것이 실제 개발 환경의 기본 상태다.

@@ -118,6 +118,16 @@ def test_gate_query_region_prefix_may_come_from_another_snippet() -> None:
     assert EventExtractionGate().apply(raw, no_region, feature=_FEAT, trace_id=_TID, now=_NOW).value == ()
 
 
+def test_gate_drops_an_event_whose_snippet_line_has_no_date_mention() -> None:
+    """행사명은 원문에 있는데 그 줄에 날짜가 없다 → 대상 기간 안 날짜는 모델이 만든 것(2026-11-06 Codex 리뷰). 다른 줄의 날짜도 근거가 아니다."""
+    snippets = (("부산 불꽃축제 개최 안내", "광안리 일원에서 열립니다"), ("부산 소식", "12월 24일 성탄 행사 모음"))
+    text = build_event_extraction_vars("부산", *_PERIOD, snippets)["snippets"]
+    ctx = EventExtractionContext(snippets_text=text, period_start=_PERIOD[0], period_end=_PERIOD[1], region="부산")
+    raw = json.dumps({"events": [_event(name="부산 불꽃축제")]})
+    out = EventExtractionGate().apply(raw, ctx, feature=_FEAT, trace_id=_TID, now=_NOW)
+    assert out.value == () and out.drop_event.dropped_count == 1
+
+
 def test_gate_partial_period_overlap_survives() -> None:
     # 하루라도 겹치면 생존: 기간 끝(10-27)에 시작하는 행사
     raw = json.dumps({"events": [

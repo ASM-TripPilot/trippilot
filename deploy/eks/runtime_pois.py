@@ -22,6 +22,9 @@ NAME = "trippilot-poi-load"
 DEADLINE_SEC = 1200
 SCRIPT = Path(__file__).resolve().parents[2] / "backend" / "scripts" / "ingest_pois.py"
 DOCUMENT = "/app/data/collected_pois.json"  # ai/Dockerfile `COPY data ./data`
+# 있으면 공유본 **뒤에** 붓는다 — 같은 (source, content_id) 는 뒤가 덮으므로 지역 문서가 이긴다(TRIP-1810).
+# 있는지는 문서가 든 **이미지 안에서** 본다 — 러너 체크아웃은 서빙 이미지와 다른 커밋일 수 있다.
+REGIONS_DOCUMENT = "/app/data/collected_pois_regions.json"
 BACKEND = "http://backend:8080"
 
 _CREDENTIAL = re.compile(r"(://)[^\s/@]+@|((?:KEY|TOKEN|SECRET|PASSWORD)[A-Z_]*=)\S+", re.IGNORECASE)
@@ -40,16 +43,19 @@ def manifest(namespace, image, script_source, *, close_missing=False, close_miss
     그 다음 평소대로 upsert 한다 — kubectl 자격이 아무에게도 없어 "몇 건이 닫힐지"를 볼 길이
     배포 로그뿐이다. 드라이런이 upsert 를 대신하면 그 배포는 공유본을 안 붓게 되므로 둘을 잇는다.
     실제 `close_missing` 이 켜져 있으면 드라이런은 뜻이 없어 건너뛴다.
+
+    지역 문서가 있으면 `--close-missing` 은 두 문서를 합쳐 그 출처의 전부로 읽는다 — 어느 쪽에도 없는 행만 닫힌다(TRIP-1811).
     """
-    base = ["/app/.venv/bin/python", "/scripts/ingest_pois.py", "--base-url", BACKEND, DOCUMENT]
-    command = base + (["--close-missing"] if close_missing else [])
+    base = ["/app/.venv/bin/python", "/scripts/ingest_pois.py", "--base-url", BACKEND]
+    documents = f'set -- {DOCUMENT}; [ -f {REGIONS_DOCUMENT} ] && set -- "$@" {REGIONS_DOCUMENT}'
+    command = base + (["--close-missing"] if close_missing else []) + ['"$@"']
     shell = " ".join(command)
     if close_missing_dry_run and not close_missing:
         # `;` 이지 `&&` 가 아니다 — 드라이런도 비율 가드(409)를 받을 수 있고(서버가 dryRun 분기 **앞**에서
         # 판정한다), 그때 upsert 가 건너뛰어지면 "닫힐 수를 물어본 배포"가 공유본을 안 붓는다. 드라이런은
         # 정보용이라 그 결과(409 메시지의 `ACTIVE N건 중 목록에 있는 것 P건`도)는 요약에 실리고 적재는 간다.
-        shell = " ".join(base + ["--dry-run", "--close-missing"]) + "; " + shell
-    shell += "; status=$?; cat /tmp/close-missing-undo-*.sql 2>/dev/null; exit $status"
+        shell = " ".join(base + ["--dry-run", "--close-missing", '"$@"']) + "; " + shell
+    shell = documents + "; " + shell + "; status=$?; cat /tmp/close-missing-undo-*.sql 2>/dev/null; exit $status"
     container = {
         "name": "load", "image": image, "imagePullPolicy": "IfNotPresent",
         "command": ["/bin/sh", "-c", shell], "workingDir": "/tmp",
@@ -61,8 +67,8 @@ def manifest(namespace, image, script_source, *, close_missing=False, close_miss
         ],
         "securityContext": {"allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True,
                             "runAsNonRoot": True, "capabilities": {"drop": ["ALL"]}},
-        # 31MB JSON 을 통째로 파싱한다 — 실측 없음, 파이썬 객체 팽창을 보아 1Gi 상한(ponytail: 실측 뒤 조정).
-        "resources": {"requests": {"cpu": "100m", "memory": "512Mi"}, "limits": {"cpu": "500m", "memory": "1Gi"}},
+        # 문서를 통째로 파싱한다 — 실측 최대 RSS(로컬, 2026-11-07): 공유본만 808MB, 지역 문서까지 939MB. 1Gi 면 여유가 12% 다.
+        "resources": {"requests": {"cpu": "100m", "memory": "1Gi"}, "limits": {"cpu": "500m", "memory": "1536Mi"}},
         "volumeMounts": [{"name": "tmp", "mountPath": "/tmp"},
                          {"name": "script", "mountPath": "/scripts", "readOnly": True}],
     }
@@ -76,7 +82,13 @@ def manifest(namespace, image, script_source, *, close_missing=False, close_miss
         "metadata": {"name": NAME, "namespace": namespace},
         # 멱등(upsert)이라 재시도가 이어받는다. 20분: 19,084건·500건 묶음 39회 — 로컬 수 초, 원격 DB 여유.
         "spec": {"backoffLimit": 1, "activeDeadlineSeconds": DEADLINE_SEC, "ttlSecondsAfterFinished": 3600,
-                 "template": {"metadata": {"labels": {"app.kubernetes.io/name": NAME}},
+                 # Karpenter 노드 통합(consolidation)이 이 파드를 "활용도 낮음"으로 보고 중간에 쫓아낸다
+                 # (2026-11-05 실측 — 66/145 묶음까지 간 뒤 Evicted: Underutilized). 짧게 끝나는 배치
+                 # Job 은 끝까지 가게 막아야 한다 — dev-target Deployment 의 PDB 없음(통합 허용) 결정과는
+                 # 다른 자리다: 거긴 상시 대기하는 복제본이라 통합이 비용을 아끼지만, 이건 한 번 쓰고
+                 # 끝나는 작업이라 중간에 끊기면 배포 전체가 실패한다.
+                 "template": {"metadata": {"labels": {"app.kubernetes.io/name": NAME},
+                                           "annotations": {"karpenter.sh/do-not-disrupt": "true"}},
                               "spec": {
                                   "restartPolicy": "Never", "automountServiceAccountToken": False,
                                   "nodeSelector": {"kubernetes.io/os": "linux", "kubernetes.io/arch": "amd64"},

@@ -1,3 +1,4 @@
+import { slotDisplayName } from './slotDisplay';
 import { VIOLATION_NOTICE, violationNotice } from './violationLabel';
 
 type TimedSlot = {
@@ -5,6 +6,7 @@ type TimedSlot = {
   endAt: string;
   endsNextDay?: boolean;
   nameKo?: string | null;
+  displayName?: string | null;
   hasViolation: boolean;
   violationReason?: string | null;
   distanceRange?: string | null;
@@ -33,7 +35,7 @@ export function overlapAwareNotice(
   const overlaps =
     slot.startAt.slice(0, 5) < prevEnd && prev.startAt.slice(0, 5) < slotEnd;
   if (!overlaps) return notice;
-  const name = prev.nameKo?.trim();
+  const name = slotDisplayName(prev)?.trim();
   // '시각과' — 앞말이 받침 없는 이름이어도 조사가 안 틀리게 이름을 수식어로 둔다.
   return `${name ? `‘${name}’` : '앞 장소'} 시각과 겹쳐요`;
 }

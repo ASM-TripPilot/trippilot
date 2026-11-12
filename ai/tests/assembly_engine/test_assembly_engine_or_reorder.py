@@ -16,6 +16,11 @@ B = A 의 visit 고정 + A 목적식 ≥ A 목적값(사전식) 아래에서 도
   ⑦ A 가 결정론으로 끝났으면 일자 몫(벽시계)이 다 써졌어도 B 를 돌린다 — 부하가 순서를 정하지 않게
   ⑧ B 미채택은 WARNING 으로 남는다(침묵 금지)
   ⑨ B 는 시각에 대기를 끼워 넣지 않는다 — 거리 동률이면 이른 시각(Σstart 타이브레이크)
+  ⑩ B 는 A 의 하루 틀 안에서만 순서를 바꾼다(2026-11-09) — 숙소를 나서는 시각(첫 방문 시작 − 앵커 이동)과
+     마지막 방문 끝이 A 보다 늦지 않다(⑥ 에도 걸었다). 하루 길이·대기는 단언하지 않는다 — 틀 안에서는 플랫폼마다
+     A 의 시한 내 해가 달라 갈린다(CI amd64 실측: 같은 날 B 가 06:33 에 시작)
+  ⑪ 끝 상한만으로는 출발 지연이 남는다 — 출발 상한이 따로 지킨다(합성 5곳, 09:00 → 10:22 이던 날)
+  ⑫ 상한은 도착이 아니라 출발이다 — 더 먼 곳으로 시작하는 최단 순서는 도착이 늦어도 허용한다
 """
 
 from __future__ import annotations
@@ -257,6 +262,106 @@ def test_reorder_adds_no_idle_wait() -> None:
     assert _idle_min(b.days[0].slots, index, problem) == 0
 
 
+# ⑩ 하루 틀 — 숙소를 나서는 시각 = 첫 방문 시작 − 앵커 이동(고정 블록이 첫 방문이면 이동 0, 조립과 같다)
+def _depart(day_sol, index, problem):
+    if not day_sol.slots:
+        return None
+    first = day_sol.slots[0]
+    # 핀은 문제의 고정 블록이다 — 해의 fixed_blocks 에는 놓인 필수 방문도 실려(`placed_fixed_blocks`) 조립과 다르게 센다
+    pinned = any(fb.poi_id == first.poi_id and fb.window.start == first.start_at for fb in problem.fixed_blocks)
+    if problem.anchor is None or pinned:
+        return first.start_at
+    t = _EST.estimate(problem.anchor, index[first.poi_id].coord, problem.transport).internal_minutes
+    return first.start_at - timedelta(minutes=t)
+
+
+# 06:00 에 시작하는 서울 하루(무작위 실험 시드 2) — 수정 전 B 는 거리를 줄이려고 출발을 08:40 → 09:27 로 미뤘다
+_SEOUL_DAY = date(2026, 10, 10)
+_SEOUL_ANCHOR = GeoPoint(37.5665, 126.9780)
+_SEOUL = (  # (id, 위도, 경도, 분류, 영업(분) 또는 None, 점수)
+    ("d0", 37.5730, 127.0110, PoiCategory.CAFE, (600, 1200), 0.639),
+    ("d1", 37.5401, 126.9494, PoiCategory.CAFE, (600, 1200), 0.524),
+    ("d2", 37.5743, 126.9718, PoiCategory.CULTURE, (540, 1080), 0.867),
+    ("d3", 37.5400, 126.9721, PoiCategory.CAFE, None, 0.611),
+    ("d4", 37.5818, 126.9623, PoiCategory.NATURE, (600, 1320), 0.666),
+    ("d5", 37.5875, 126.9521, PoiCategory.CULTURE, (600, 1320), 0.57),
+    ("f0", 37.5439, 126.9587, PoiCategory.FOOD, (660, 1260), 0.745),
+    ("f1", 37.5653, 126.9610, PoiCategory.FOOD, (1020, 1320), 0.601),
+)
+
+
+_BUSAN_SMALL = (  # 끝 상한만 두면 B 가 출발을 09:00 → 10:22 로 미루는 날(합성 탐색) — 출발 상한이 따로 필요한 증거
+    ("p0", 35.1629, 129.0676, PoiCategory.CAFE, None, 0.918),
+    ("p1", 35.1104, 128.9954, PoiCategory.CULTURE, (720, 1080), 0.467),
+    ("p2", 35.1824, 129.0735, PoiCategory.CULTURE, (660, 1200), 0.664),
+    ("p3", 35.1228, 129.0683, PoiCategory.FOOD, (540, 1080), 0.73),
+    ("p4", 35.1917, 129.0186, PoiCategory.SIGHT, None, 0.348),
+)
+
+
+def test_reorder_keeps_departure_even_when_the_day_end_allows_a_later_start() -> None:
+    dow = _DAY.weekday()
+    pois = [_poi(pid, lat, lng, cat, () if h is None else (OpenHour(dow, *h),))
+            for pid, lat, lng, cat, h, _ in _BUSAN_SMALL]
+    index = {p.poi_id: p for p in pois}
+    problem = _problem([ScoredPoi(PoiId(pid), sc, True) for pid, *_, sc in _BUSAN_SMALL], seed=3)
+    a = _solve(_CFG_A, problem, index, remaining_ms=5000)
+    b = _solve(_CFG, problem, index, remaining_ms=5000)
+    assert {s.poi_id for s in b.days[0].slots} == {s.poi_id for s in a.days[0].slots}
+    assert _depart(b.days[0], index, problem) <= _depart(a.days[0], index, problem)
+    assert b.days[0].slots[-1].end_at <= a.days[0].slots[-1].end_at
+    assert check_all(b, problem, index, _EST) == []
+
+
+_BUSAN_FAR_FIRST = (  # 최단 순서가 숙소에서 더 먼 곳으로 시작하는 날(합성 탐색, 07시 창) — 출발 기준이어야 닿는다
+    ("p0", 35.1185, 129.0204, PoiCategory.NATURE, None, 0.72),
+    ("p1", 35.1185, 129.0293, PoiCategory.NATURE, (600, 1200), 0.937),
+    ("p2", 35.1485, 129.0464, PoiCategory.CULTURE, (720, 1200), 0.762),
+    ("p3", 35.1863, 129.0459, PoiCategory.NATURE, (540, 1200), 0.963),
+    ("p4", 35.1795, 129.0984, PoiCategory.SIGHT, (720, 1320), 0.76),
+    ("p5", 35.1011, 129.0562, PoiCategory.CULTURE, None, 0.615),
+)
+
+
+def test_reorder_may_arrive_later_at_a_farther_first_place_if_it_leaves_no_later() -> None:
+    """상한은 '숙소를 나서는 시각'이다 — 첫 장소가 바뀌어 앵커 이동만큼 도착이 늦는 것은 허용한다(도착으로 막으면 더 긴 순서)."""
+    dow = _DAY.weekday()
+    pois = [_poi(pid, lat, lng, cat, () if h is None else (OpenHour(dow, *h),))
+            for pid, lat, lng, cat, h, _ in _BUSAN_FAR_FIRST]
+    index = {p.poi_id: p for p in pois}
+    problem = replace(_problem([ScoredPoi(PoiId(pid), sc, True) for pid, *_, sc in _BUSAN_FAR_FIRST], seed=21),
+                      day_window=TimeWindow(datetime(_DAY.year, _DAY.month, _DAY.day, 7, tzinfo=_KST),
+                                            datetime(_DAY.year, _DAY.month, _DAY.day, 21, tzinfo=_KST)))
+    a = _solve(_CFG_A, problem, index, remaining_ms=5000)
+    b = _solve(_CFG, problem, index, remaining_ms=5000)
+    fa, fb = a.days[0].slots[0], b.days[0].slots[0]
+    assert _depart(b.days[0], index, problem) <= _depart(a.days[0], index, problem)
+    assert fb.poi_id != fa.poi_id and fb.start_at > fa.start_at  # 더 먼 첫 장소 — 도착은 늦다
+    assert _road_km(b.days[0].slots, index, problem) < _road_km(a.days[0].slots, index, problem)
+    assert check_all(b, problem, index, _EST) == []
+
+
+def test_reorder_does_not_delay_departure() -> None:
+    dow = _SEOUL_DAY.weekday()
+    pois = [_poi(pid, lat, lng, cat, () if h is None else (OpenHour(dow, *h),))
+            for pid, lat, lng, cat, h, _ in _SEOUL]
+    index = {p.poi_id: p for p in pois}
+    d = _SEOUL_DAY
+    problem = replace(
+        _problem([ScoredPoi(PoiId(pid), sc, True) for pid, *_, sc in _SEOUL], days=(d,),
+                 anchor=_SEOUL_ANCHOR, seed=2),
+        day_window=TimeWindow(datetime(d.year, d.month, d.day, 6, tzinfo=_KST),
+                              datetime(d.year, d.month, d.day, 21, tzinfo=_KST)))
+    a = _solve(_CFG_A, problem, index, remaining_ms=5000)
+    b = _solve(_CFG, problem, index, remaining_ms=5000)
+    assert {s.poi_id for s in b.days[0].slots} == {s.poi_id for s in a.days[0].slots}
+    assert _depart(b.days[0], index, problem) <= _depart(a.days[0], index, problem)
+    sa, sb = a.days[0].slots, b.days[0].slots
+    assert sb[-1].end_at <= sa[-1].end_at
+    assert _road_km(b.days[0].slots, index, problem) <= _road_km(a.days[0].slots, index, problem) + 0.01
+    assert check_all(b, problem, index, _EST) == []
+
+
 # ⑥ PBT — 임의 좌표·영업시간 풀
 @st.composite
 def _pools(draw):
@@ -311,3 +416,6 @@ def test_reorder_property_same_set_score_and_no_longer(setup) -> None:
         # B 는 미터 정수로 푼다 — 반올림 몫(구간당 0.5m)만 허용
         tol = 0.001 * (len(db.slots) + 1)
         assert _road_km(db.slots, index, problem) <= _road_km(da.slots, index, problem) + tol
+        if da.slots:  # ⑩ 하루 틀 — 출발도 끝도 A 보다 늦지 않다
+            assert _depart(db, index, problem) <= _depart(da, index, problem)
+            assert db.slots[-1].end_at <= da.slots[-1].end_at

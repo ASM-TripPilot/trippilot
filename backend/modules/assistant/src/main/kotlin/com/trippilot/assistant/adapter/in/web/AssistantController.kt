@@ -11,6 +11,7 @@ import com.trippilot.assistant.application.TurnInput
 import com.trippilot.assistant.application.TurnResult
 import com.trippilot.assistant.domain.AssistantMessage
 import com.trippilot.assistant.domain.AssistantSurface
+import com.trippilot.assistant.domain.ContextSnapshot
 import com.trippilot.assistant.domain.FeedbackRating
 import com.trippilot.assistant.domain.FeedbackReason
 import com.trippilot.assistant.domain.NextAction
@@ -71,7 +72,12 @@ class AssistantController(
 
     @PostMapping("/sessions/{sessionId}/turns")
     fun sendTurn(principal: Principal, @PathVariable sessionId: UUID, @RequestBody request: SendTurnRequest): SendTurnResponse =
-        SendTurnResponse.from(turns.send(principal.accountId(), sessionId, request.clientTurnId, request.input.toInput(), request.screen.surface))
+        SendTurnResponse.from(
+            turns.send(
+                principal.accountId(), sessionId, request.clientTurnId, request.input.toInput(), request.screen.surface,
+                request.deviceLocation?.toHere(),
+            ),
+        )
 
     @PostMapping("/proposals/{proposalId}/apply")
     fun applyProposal(principal: Principal, @PathVariable proposalId: UUID): ApplyProposalResponse =
@@ -139,7 +145,19 @@ data class SendTurnRequest(
     val clientTurnId: UUID,
     val input: TurnInputRequest,
     val screen: ScreenRequest,
+    /** 앱의 포그라운드 현재 위치(선택, O-U8-5). 서버가 위치 동의를 확인해야만 쓴다 — 동의가 없으면 버린다. */
+    val deviceLocation: DeviceLocationRequest? = null,
 )
+
+/** 위도·경도 — 범위 밖이면 400. 저장하지 않는다. */
+data class DeviceLocationRequest(val lat: Double, val lng: Double) {
+    fun toHere(): ContextSnapshot.Here {
+        if (lat !in -90.0..90.0 || lng !in -180.0..180.0) {
+            throw ValidationFailed(listOf(FieldError("deviceLocation", "위도·경도 범위를 벗어났습니다.")))
+        }
+        return ContextSnapshot.Here(lat, lng)
+    }
+}
 
 /** `TEXT` 면 [text], `ACTION` 이면 [quickReplyId] 가 있어야 한다. 길이·발급 여부는 서비스가 본다. */
 data class TurnInputRequest(val type: TurnInputType, val text: String? = null, val quickReplyId: String? = null) {

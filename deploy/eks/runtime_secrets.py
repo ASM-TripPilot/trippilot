@@ -27,12 +27,12 @@ GOOGLE_WEB_CLIENT_ID GOOGLE_WEB_CLIENT_SECRET CORS_ALLOWED_ORIGINS
 """.split())
 AI_KEYS = frozenset("""
 TRIPPILOT_LLM_PROVIDER OPENAI_API_KEY OPENAI_BASE_URL OPENAI_MODEL OPENAI_API
-ANTHROPIC_API_KEY ANTHROPIC_MODEL TRIPPILOT_LLM_FEATURE_MODELS TRIPPILOT_LLM_RETRY_MODELS
+ANTHROPIC_API_KEY ANTHROPIC_API_KEYS ANTHROPIC_API_KEY_2 ANTHROPIC_API_KEY_3 ANTHROPIC_API_KEY_4 ANTHROPIC_API_KEY_5 ANTHROPIC_API_KEY_6 ANTHROPIC_API_KEY_7 ANTHROPIC_API_KEY_8 ANTHROPIC_API_KEY_9 ANTHROPIC_MODEL TRIPPILOT_LLM_FEATURE_MODELS TRIPPILOT_LLM_RETRY_MODELS
 TRIPPILOT_LOCAL_LLM_BASE_URL TRIPPILOT_LOCAL_LLM_API_KEY WEATHER_API WEATHER_API_BASE KAKAO_REST_API_KEY
 EXISTENCE_MAX_CALLS TMAP_API_KEY ODSAY_API_KEY TRIPPILOT_EMBEDDING_TIMEOUT_SEC TRIPPILOT_EMBEDDING_MODEL
 TRIPPILOT_BEDROCK_MODEL_ARN TRIPPILOT_BEDROCK_REGION
 TRIPPILOT_DIALOGUE_ORCHESTRATOR TRIPPILOT_DIALOGUE_SHADOW_RATE PUBLIC_DATA_API_KEY
-HOLIDAY_CLOSURE_MODE
+HOLIDAY_CLOSURE_MODE TRIPPILOT_KB5_FALLBACK TRIPPILOT_KB5_OPEN_SEARCH
 """.split())
 GROUP_KEYS = {
     "backend": BACKEND_KEYS, "ai": AI_KEYS,
@@ -51,7 +51,7 @@ BACKEND_DEFAULTS = {
 # 배포 입력 `runtime_switches` 로 쓸 수 있는 키 → 그룹(상황 감지 스위치). 값 검증은 validate_groups 가 이미 한다.
 RUNTIME_SWITCHES = {"PLANB_SITUATION_SWEEP": "backend", "PLANB_SITUATION_HORIZON": "backend",
                     "PLANB_SITUATION_SWEEP_ACCOUNT_IDS": "backend", "PLANB_PREPARED_REPLAN": "backend",
-                    "HOLIDAY_CLOSURE_MODE": "ai"}
+                    "HOLIDAY_CLOSURE_MODE": "ai", "TRIPPILOT_KB5_FALLBACK": "ai", "TRIPPILOT_KB5_OPEN_SEARCH": "ai"}
 
 
 def get_secret(shell, region, arn, *, strings_only=True):
@@ -145,7 +145,13 @@ def known_llm_features(source=FEATURE_SOURCE):
                      and isinstance(stmt.value.value, str))
 
 
-_RUNNING_FEATURES = "from trippilot.domain.llm.llm import LlmFeature; print(' '.join(f.value for f in LlmFeature))"
+# 떠 있는 이미지는 이 커밋보다 옛것일 수 있다 — domain 재배치(#1772) 전 이미지는 `trippilot/domain/llm.py`(모듈)라 새 경로가 없다.
+# 새 경로를 먼저 보고 없으면 옛 경로로 읽는다(운영 배포 run 41399316488 이 옛 이미지에 새 경로를 exec 해 멈췄다).
+_RUNNING_FEATURES = (
+    "try:\n    from trippilot.domain.llm.llm import LlmFeature\n"
+    "except ImportError:\n    from trippilot.domain.llm import LlmFeature\n"
+    "print(' '.join(f.value for f in LlmFeature))"
+)
 
 
 def running_llm_features(namespace, shell):
@@ -317,6 +323,13 @@ def validate_groups(groups):
     # 공휴일 휴무(상황 감지 H1). 없으면 off = 공휴일 규칙 없음. 오타는 AI 가 기동에서 거부하므로(main.py) 같은 두 값만 받는다.
     if ai.get("HOLIDAY_CLOSURE_MODE", "") not in ("", "on", "off"):
         raise ValueError("Unsupported HOLIDAY_CLOSURE_MODE in ai secret; use on or off")
+    # KB-5 대체 문서(장소 카드·웹 확인 사실). 앱 기본은 on(2026-11-03) — 이 키는 끄는 길이다(off). 없으면 앱 기본.
+    if ai.get("TRIPPILOT_KB5_FALLBACK", "") not in ("", "on", "off"):
+        raise ValueError("Unsupported TRIPPILOT_KB5_FALLBACK in ai secret; use on or off")
+    # 도우미 장소 탐색 열린 검색(KB-5 문서 순위, BR-AO-36). 앱 기본은 off — 이 키는 측정 뒤 켜는 길이다(on). 없으면 앱 기본.
+    # 앱은 켜짐 낱말(on·true·yes·1) 밖의 값을 조용히 꺼짐으로 읽는다(`hybrid_rank.enabled`) — 오타가 꺼진 채로 돌지 않게 두 값만 받는다.
+    if ai.get("TRIPPILOT_KB5_OPEN_SEARCH", "") not in ("", "on", "off"):
+        raise ValueError("Unsupported TRIPPILOT_KB5_OPEN_SEARCH in ai secret; use on or off")
     # 섀도 분류 측정의 샘플링 비율 0~1(없으면 1.0 — DEV 전부 · 운영 0.2 권고). 범위 밖·숫자 아님은 기동 실패다.
     rate = ai.get("TRIPPILOT_DIALOGUE_SHADOW_RATE", "")
     if rate:

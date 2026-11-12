@@ -19,6 +19,17 @@ class BaseAssignment private constructor(
     val dateTo: LocalDate,
     val createdAt: Instant,
 ) {
+    /** 여행 기간과 함께 민다(TRIP-1789). 새 기간도 같은 칸수만큼 옮겨 가므로 INV-U1-15 를 다시 볼 필요가 없다. */
+    fun shiftedBy(days: Long): BaseAssignment =
+        BaseAssignment(baseAssignmentId, tripId, savedStayId, dateFrom.plusDays(days), dateTo.plusDays(days), createdAt)
+
+    /** 새 기간에 맞춰 자른 구간. 남는 박이 없으면 null(INV-U1-15 — dateTo > dateFrom). */
+    fun fittedTo(start: LocalDate, end: LocalDate): BaseAssignment? {
+        val from = maxOf(dateFrom, start)
+        val to = minOf(dateTo, end)
+        return if (to.isAfter(from)) BaseAssignment(baseAssignmentId, tripId, savedStayId, from, to, createdAt) else null
+    }
+
     companion object {
         fun assign(
             tripId: UUID,

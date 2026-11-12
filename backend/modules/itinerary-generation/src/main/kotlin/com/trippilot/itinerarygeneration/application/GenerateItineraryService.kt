@@ -324,10 +324,7 @@ class GenerateItineraryService(
      * 당일치기는 첫날이자 마지막날이라 둘 다 걸린다(도메인이 first < last 를 검증한다).
      */
     private fun dayWindowOf(date: LocalDate, ctx: TripGenerationContext, cutDay: LocalDate?): Pair<LocalTime, LocalTime> {
-        val start = (if (date == ctx.startDate) ctx.firstDayStartAt else null)
-            ?: ctx.dayStartAt
-            ?: DEFAULT_START
-        val end = (if (date == ctx.endDate) ctx.lastDayEndAt else null) ?: DEFAULT_END
+        val (start, end) = ctx.baseDayWindow(date) // 편집 제안과 같은 규칙(TripDayWindows)
         // 사용자가 적은 값끼리 모순이면(예: 하루 시작 23:00) 창이 뒤집힌다. 그대로 보내면 조립기가
         // 그 날을 "해 없음"으로 접고 증상은 "AI 가 일정을 못 만든다"로만 보인다 — 여기서 드러낸다.
         if (!start.isBefore(end)) {
@@ -475,8 +472,8 @@ class GenerateItineraryService(
      * `canTransitionTo` 를 부르는 프로덕션 코드가 없다. 상태로 막으면 영원히 발화하지 않는 죽은 가드가 된다.
      * 이 리포가 "여행 중"을 판정하는 방식은 날짜다 — `ReplanSessionService`·`TriggerService` 가 같은 식을 쓴다.
      *
-     * **확정(`CONFIRMED`) 일정은 막지 않는다.** 편집도 복원도 이미 409 라, 재생성까지 막으면 확정한 여행은
-     * 손댈 방법이 하나도 없는 막다른 길이 된다. 확정 해제 API 가 생기기 전까지 재생성이 유일한 탈출구다.
+     * **확정(`CONFIRMED`) 일정은 막지 않는다.** 확정 일정은 복원이 409 라 통째로 다시 짜는 길은 재생성뿐이다
+     * (부분 수정은 편집이 받는다 — TRIP-1710 이 시작 전 확정 잠금을 풀었다). 확정 해제 API 는 없다.
      */
     private fun guardTripPeriod(startDate: LocalDate, endDate: LocalDate) {
         val today = LocalDate.ofInstant(clock.instant(), TRAVEL_ZONE)
@@ -543,8 +540,6 @@ class GenerateItineraryService(
 
     companion object {
         private val log = LoggerFactory.getLogger(GenerateItineraryService::class.java)
-        private val DEFAULT_START = LocalTime.of(9, 0)
-        private val DEFAULT_END = LocalTime.of(21, 0)
 
         /** 오늘 창을 지금에서 얼마나 띄울까 — 화면에서 일정을 보고 첫 장소로 출발할 여유. */
 

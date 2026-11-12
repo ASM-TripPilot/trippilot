@@ -14,40 +14,43 @@ export default defineConfig([
   //   전역 제외라 insignificant-slice 가 프로덕션 참조만 센다(1155 소비처 정의와 같다).
   // 다시 켤 조건: 없음(정본 설계).
   { ignores: ['./src/**/*.test.{ts,tsx}'] },
-  // 예외 2(범위 끄기): features 의 excessive-slicing(슬라이스 25개 > 기준 20, 기준은 바꿀 수 없다).
+  // 예외 2(범위 끄기): features 의 excessive-slicing(슬라이스 수 > 기준 20, 기준은 바꿀 수 없다 — 지금 수는 이 블록을 빼고 `pnpm fsd` 를 돌리면 Steiger 가 낸다).
   // 이유: 공식이 features 그룹화를 "use with caution"이라 하고 자연스러운 묶음 기준이 없다. 옛 도메인 껍데기
   //   정리(TRIP-1159)가 슬라이스 수를 줄이는 정해진 경로다(1155 01d Q3). 끈 동안 features 슬라이스 수는 무감시다.
   // 다시 켤 조건: src/features 슬라이스 ≤ 20(TRIP-1159 뒤) — 이 블록을 지운다.
   { files: ['./src/features/**'], rules: { 'fsd/excessive-slicing': 'off' } },
   // 예외 3(범위 끄기): pages/itinerary·pages/onboarding 그룹의 repetitive-naming(슬라이스 이름 접두 반복).
-  // 이유: 접두를 떼면 16개 슬라이스 개명 + onboarding/location·push 가 shared 세그먼트와 겹쳐 ambiguous-slice-names
+  // 이유: 접두를 떼면 두 그룹 슬라이스 전부 개명 + onboarding/location·push 가 shared 세그먼트와 겹쳐 ambiguous-slice-names
   //   가 새로 뜬다 — 이름 짓기는 사람 판단이라 별 티켓 몫이다(1156 J8·J9). 다른 그룹은 그대로 검사한다.
   // 다시 켤 조건: 두 그룹 슬라이스 이름에서 접두를 뗀 뒤 — 해당 경로를 지운다.
   {
     files: ['./src/pages/itinerary/**', './src/pages/onboarding/**'],
     rules: { 'fsd/repetitive-naming': 'off' },
   },
-  // 예외 4(범위 끄기): shared/lib 의 shared-lib-grouping(모듈 16개 > 기준 15, TRIP-1524a 가 useKeyboardVisible 을 더해 넘음).
-  // 이유: 테스트 계약이 `shared/lib/useKeyboardVisible` 경로를 고정했고, 기존 15개를 묶는 정리는 import 경로를 모두 바꾸는
+  // 예외 4(범위 끄기): shared/lib 의 shared-lib-grouping(모듈 수 > 기준 15 — TRIP-1524a 가 useKeyboardVisible 을 더해 처음 넘었다).
+  // 이유: 테스트 계약이 `shared/lib/useKeyboardVisible` 경로를 고정했고, 기존 모듈을 묶는 정리는 import 경로를 모두 바꾸는
   //   별 티켓 몫이다(드라이브바이 금지). 끈 동안 shared/lib 모듈 수는 무감시다.
   // 다시 켤 조건: shared/lib 를 하위 폴더로 묶어 모듈 ≤ 15 가 된 뒤 — 이 블록을 지운다.
   {
     files: ['./src/shared/lib/**'],
     rules: { 'fsd/shared-lib-grouping': 'off' },
   },
-  // 예외 5(범위 끄기): 인기 숙소 세 슬라이스의 insignificant-slice(TRIP-1579).
-  // 이유: widgets/curated-stays 는 이번 칸에서 만들기만 하고 숙소 탭 배치는 다음 칸 몫이라 아직 참조 0 이다(이 규칙은
-  //   참조 2 미만이면 실패라 page 1곳 배치로도 안 풀린다). features/curated-stay 는 설계(TRIP-1577 스펙 §설계 3)대로
-  //   위젯 하나만 조립해 참조 1 이다. features/stay-outbound 는 실제로 2곳(stay-detail·위젯)이 무는데, 위젯 경로를
-  //   이 규칙에서 빼면 그 참조도 안 세어져(0.7 실측) 함께 뺀다. 끈 동안 세 슬라이스의 참조 수는 무감시다.
-  // 다시 켤 조건: pages 2곳 이상이 CuratedStaysSection 을 물면 위젯·stay-outbound 경로를 지운다. curated-stay 는
-  //   위젯 밖 소비처가 생기거나 위젯 안(model·ui 세그먼트)으로 합치면 지운다.
+  // 예외 5(범위 끄기): features/curated-stay 의 insignificant-slice(TRIP-1579).
+  // 이유: 설계(TRIP-1577 스펙 §설계 3)대로 위젯 widgets/curated-stays 하나만 조립해 참조 1 이다(이 규칙은 참조 2 미만이면
+  //   실패). 끈 동안 이 슬라이스의 참조 수는 무감시다.
+  //   (같은 블록에 있던 widgets/curated-stays·features/stay-outbound 경로는 다시 켤 조건 — pages 2곳 이상이 CuratedStaysSection
+  //   을 문다 — 이 충족돼 TRIP-1772 에서 지웠다 — 두 슬라이스는 예외 없이 `pnpm fsd` 를 통과한다.)
+  // 다시 켤 조건: 위젯 밖 소비처가 생기거나 위젯 안(model·ui 세그먼트)으로 합치면 지운다.
   {
-    files: [
-      './src/widgets/curated-stays/**',
-      './src/features/curated-stay/**',
-      './src/features/stay-outbound/**',
-    ],
+    files: ['./src/features/curated-stay/**'],
     rules: { 'fsd/insignificant-slice': 'off' },
+  },
+  // 예외 6(범위 끄기): pages/trip 그룹의 repetitive-naming(슬라이스 이름에 `trip` 반복 — TRIP-1787 `trip-settings` 가 셋째).
+  // 이유: 규칙은 같은 단어가 슬라이스 이름 3개 이상에 들어가면 낸다. 접두를 떼면 `trip-new-step1/2`·`trip-settings` 개명 +
+  //   라우트 테스트(`routeParamMapping`)·통합 테스트의 import 경로가 모두 바뀌는 별 티켓 몫이다(드라이브바이 금지, 예외 3 과 같은 사정).
+  // 다시 켤 조건: pages/trip 슬라이스 이름에서 `trip` 접두를 뗀 뒤 — 이 블록을 지운다.
+  {
+    files: ['./src/pages/trip/**'],
+    rules: { 'fsd/repetitive-naming': 'off' },
   },
 ]);

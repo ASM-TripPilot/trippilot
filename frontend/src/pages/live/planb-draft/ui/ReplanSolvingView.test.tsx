@@ -24,6 +24,7 @@ const photo = (name: string) => ({ uri: `file:///${name}.jpg` });
 
 const SLOTS: ReplanSlotVM[] = [
   {
+    imageLicense: null,
     slotKey: 'v1',
     placeName: '감천문화마을',
     tone: 'visited',
@@ -35,6 +36,7 @@ const SLOTS: ReplanSlotVM[] = [
     isFixed: false,
   },
   {
+    imageLicense: null,
     slotKey: 'v2',
     placeName: '광안리 해변',
     tone: 'visited',

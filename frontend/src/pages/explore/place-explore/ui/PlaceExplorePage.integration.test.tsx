@@ -8,14 +8,17 @@ import {
   within,
 } from '@testing-library/react-native';
 import { BASE } from '@/test-support/apiBase';
+import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 import { createGate } from '@/test-support/mswHookHarness';
 import {
   createGcZeroWrapper,
   createWrapper,
   newTestQueryClient,
+  settle,
 } from '@/test-support/queryRender';
 
 import { server } from '@/mocks/server';
+import { getGetSavedPlacesQueryKey } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { openPressGuardWindow, resetPressGuard } from '@/shared/lib/pressGuard';
 import type { Place, SavedPlace } from '@/shared/api/index.schemas';
@@ -33,6 +36,7 @@ import {
 import { PlaceSubtitle } from '@/entities/place/ui/PlaceSubtitle';
 
 import { PlaceExplorePage } from './PlaceExplorePage';
+import { Image } from '@/shared/ui/Image';
 import { routerSpies } from '@/test-support/expoRouterMock';
 
 /**
@@ -51,7 +55,7 @@ import { routerSpies } from '@/test-support/expoRouterMock';
  *  - **P-8 (TRIP-502)** 목록 끝에 닿으면 `nextCursor` 로 다음 장을 이어 받는다(무한 스크롤).
  *  - **P-9 (TRIP-687)** 라우트 `region` 이 2곳 이상이면 지역별로 `getPlaces` 를 각 1회 부르고
  *    (fan-out) 병합 결과를 한 목록에 함께 그린다 — 단일지역 경로(P-2)의 무한 스크롤은 안 탄다.
- *  - **P-16 (TRIP-1560)** 지역을 안 고르면 전국 조회(region 없음)가 아니라 서비스 지역(서울·부산·제주)별로
+ *  - **P-16 (TRIP-1560)** 지역을 안 고르면 전국 조회(region 없음)가 아니라 서비스 지역별로
  *    조회한다 — 카테고리·검색어를 걸어도 같고, 일부·전부 실패는 배너·error 얼굴로 갈린다(AC-4·S-4 가 AC-5).
  *  - **P-17 (TRIP-1563)** 목록은 이름순이 아니라 진입마다 새로 뽑는 시드 무작위다 — 모든 `/places` 요청이
  *    `order=random&seed=<이번 진입의 번호표>` 를 싣고, 진입 중에는 고정(칩·검색·다시 시도·이어받기·지역 바꾸기),
@@ -196,7 +200,7 @@ function hitsOf(method: string, pathname: string) {
 /**
  * 지역 미지정일 때 d04 가 묻는 지역 이름 — 서비스 지역 상수(`SERVICE_REGIONS`)에서 파생한다.
  * 빌드 환경값 `EXPO_PUBLIC_TEST_REGIONS`(부천 등)가 있으면 상수 뒤에 붙으므로 이름을 손으로 적지 않는다
- * (jest 환경에는 그 값이 없어 지금은 서울·부산·제주 셋 — P-16 첫 케이스가 앞 셋을 앵커로 굳힌다).
+ * (jest 환경에는 그 값이 없어 지금은 6곳 — P-16 첫 케이스가 앞 셋을 앵커로 굳힌다).
  */
 const SERVICE_REGION_NAMES = SERVICE_REGIONS.map((region) => region.name);
 /** 지역 미지정 조회 한 번(파도)이 내는 `/places` 요청 수 = 서비스 지역 수. 지역별 병렬 발사라 순서는 안 굳힌다. */
@@ -291,6 +295,9 @@ afterEach(() => {
   resetPressGuard();
 });
 
+// TRIP-1754 — 토스트 슬롯은 모듈 싱글턴이라 앞 테스트의 토스트가 샌다. 파일 최상위에서 비운다(describe 안이면 샌다).
+afterEach(resetToast);
+
 afterAll(() => server.close());
 
 /** 목록이 도착해 카드가 그려진 상태까지 만든다 — 이후 증가분이 곧 이 칸의 사정거리다. */
@@ -355,6 +362,50 @@ describe('P-2 · region 라우트 파라미터 (01b Seed Q9)', () => {
     // TRIP-692 AC-4 — 단일/0지역은 usePlacesInfinite 경로라 degraded 개념이 없다
     // (페이지가 항상 false 전달) → 배너 없음. 선제 green 회귀 앵커.
     expect(screen.queryByTestId('explore-places-partialfailure')).toBeNull();
+  });
+
+  const placeQueries = () =>
+    hitsOf('GET', '/api/v1/places').map((hit) => {
+      const params = new URL(hit.url).searchParams;
+      return {
+        region: params.get('region'),
+        regionCode: params.get('regionCode'),
+      };
+    });
+
+  it('TRIP-1809 · 라우트에 코드가 있으면 이름과 함께 싣는다', async () => {
+    setAccessToken('valid-access');
+    mockParams = { region: 'goseong', regionCode: '48820' };
+
+    await renderPage();
+
+    expect(placeQueries()).toEqual([
+      { region: 'goseong', regionCode: '48820' },
+    ]);
+  });
+
+  it('TRIP-1809 · 다지역은 지역마다 자기 코드를 싣는다 (이름이 같아도)', async () => {
+    setAccessToken('valid-access');
+    // 객체 href 의 배열이 실제 라우터를 지나면 이 모양이다(왕복은 placeRegionParamsRoute 테스트).
+    mockParams = { region: 'jung,jung', regionCode: '11140,26110' };
+
+    await renderPage();
+
+    expect(
+      placeQueries()
+        .map((q) => q.regionCode)
+        .sort()
+    ).toEqual(['11140', '26110']);
+    expect(placeQueries().every((q) => q.region === 'jung')).toBe(true);
+  });
+
+  it('TRIP-1809 · 이름과 코드 수가 다르면 코드를 버리고 이름으로만 묻는다 (엉뚱한 지역 금지)', async () => {
+    setAccessToken('valid-access');
+    mockParams = { region: 'busan,gyeongju', regionCode: '26' };
+
+    await renderPage();
+
+    expect(placeQueries().map((q) => q.regionCode)).toEqual([null, null]);
   });
 });
 
@@ -473,6 +524,19 @@ describe('P-6 · ＋ FAB 는 여행 생성 1/2 로 보낸다 (AC-1 · AC-6 · US
     await renderPage();
 
     fireEvent.press(screen.getByTestId('explore-places-create-fab'));
+
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+  });
+
+  // TRIP-1775 — 창 안의 둘째 탭은 위저드를 한 번 더 쌓지 않는다.
+  it('＋ FAB 를 빠르게 두 번 눌러도 step1 은 한 번만 쌓인다', async () => {
+    setAccessToken('valid-access');
+    savedRows = [savedRowOf('p1')];
+
+    await renderPage();
+    const fab = screen.getByTestId('explore-places-create-fab');
+    fireEvent.press(fab);
+    fireEvent.press(fab);
 
     expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
   });
@@ -807,7 +871,7 @@ describe('P-11 · 다지역 부분 실패면 degraded 배너를 얹고 다시 �
   });
 });
 
-describe('P-16 · 지역을 안 고르면 서비스 지역(서울·부산·제주)별로 조회한다 (TRIP-1560 · AC-1 · AC-4)', () => {
+describe('P-16 · 지역을 안 고르면 서비스 지역별로 조회한다 (TRIP-1560 · AC-1 · AC-4)', () => {
   // 기본 핸들러는 region 을 안 보고 같은 5장을 주고 병합이 poiId 중복을 거른다 — 그래서 카드만 봐서는 전국
   // 조회와 서비스 지역 조회가 구분되지 않는다. 지역별로 **다른** 장소를 주는 핸들러를 걸어(P-9 선례),
   // 요청 URL(region)과 "세 지역 결과가 한 목록에 섞인다"를 함께 본다. region 이 없는 요청(전국 누수)은 기본 5장을 받는다 —
@@ -819,7 +883,7 @@ describe('P-16 · 지역을 안 고르면 서비스 지역(서울·부산·제�
   const BUSAN: Place[] = [makePlace('b1', '감천문화마을', '명소', '부산', 12)];
   const JEJU: Place[] = [makePlace('j1', '성산일출봉', '명소', '제주', 60)];
 
-  /** 지역별 응답 — `failing` 에 든 지역은 500. region 없는 요청(전국 누수)은 기본 5장 — 요청 수·region 단언이 잡는다. */
+  /** 지역별 응답 — `failing` 에 든 지역은 500, 표에 없는 서비스 지역은 0건. region 없는 요청(전국 누수)은 기본 5장 — 요청 수·region 단언이 잡는다. */
   function useRegionResponder(failing: string[] = []) {
     server.use(
       http.get(`${BASE}/places`, ({ request }) => {
@@ -833,14 +897,16 @@ describe('P-16 · 지역을 안 고르면 서비스 지역(서울·부산·제�
               ? BUSAN
               : region === '제주'
                 ? JEJU
-                : PLACES;
+                : region === null
+                  ? PLACES
+                  : [];
         return HttpResponse.json({ items, nextCursor: null });
       })
     );
   }
 
   it('서비스 지역 상수의 앞 셋은 서울·부산·제주다 (테스트 기대값의 앵커)', () => {
-    // 아래 케이스는 지역 이름을 SERVICE_REGIONS 에서 파생한다 — 제품 결정(3지역)이 바뀌면 여기서 먼저 red 가 난다.
+    // 아래 케이스는 지역 이름을 SERVICE_REGIONS 에서 파생한다 — 앞 세 지역 순서가 바뀌면 여기서 먼저 red 가 난다.
     expect(SERVICE_REGION_NAMES.slice(0, 3)).toEqual(['서울', '부산', '제주']);
   });
 
@@ -867,6 +933,29 @@ describe('P-16 · 지역을 안 고르면 서비스 지역(서울·부산·제�
     // 전부 성공이면 부분 실패 배너가 없다.
     expect(screen.queryByTestId('explore-places-partialfailure')).toBeNull();
     expect(screen.queryByTestId('explore-places-error')).toBeNull();
+  });
+
+  it('새 서비스 시도(경남)의 장소도 목록에 뜬다 (TRIP-1807)', async () => {
+    // 준비 — 경남만 장소가 있다.
+    setAccessToken('valid-access');
+    server.use(
+      http.get(`${BASE}/places`, ({ request }) => {
+        const region = new URL(request.url).searchParams.get('region');
+        return HttpResponse.json({
+          items:
+            region === '경남'
+              ? [makePlace('n1', '외도 보타니아', '명소', '경남', 5)]
+              : [],
+          nextCursor: null,
+        });
+      })
+    );
+
+    // 실행
+    await renderPage();
+
+    // 단언
+    expect(cardTestIds()).toEqual(['explore-places-card-n1']);
   });
 
   it('카테고리 칩·검색어를 걸어도 그 필터를 실은 채 서비스 지역별로 나간다 (AC-1)', async () => {
@@ -2155,5 +2244,237 @@ describe('카드 → 상세 push', () => {
 
       expect(mockPush.mock.calls).toEqual([['/explore/places/p2']]);
     });
+  });
+});
+
+/**
+ * TRIP-1813 — 스크롤로 푼 사진을 메모리 캐시에 쌓지 않는다. 캐시는 앱 공용이라 다시 그릴 때마다 비우면 다른 화면 그림까지 디스크에서 다시 읽는다.
+ * 실제로 메모리가 줄어드는지·`windowSize` 효과는 jest 가 못 본다 — 기능 지도 `explore-places` 의 실화면 수치가 맡는다.
+ */
+describe('사진 메모리 캐시 비우기', () => {
+  let clear: jest.SpiedFunction<typeof Image.clearMemoryCache>;
+
+  beforeEach(() => {
+    clear = jest.spyOn(Image, 'clearMemoryCache').mockResolvedValue(true);
+  });
+  afterEach(() => clear.mockRestore());
+
+  it('그리거나 검색어로 다시 그려도 비우지 않는다', async () => {
+    await renderPage();
+    fireEvent.changeText(screen.getByTestId('explore-places-search'), '해변');
+    await settle();
+    expect(screen.getByTestId('explore-places-search')).toHaveProp(
+      'value',
+      '해변'
+    );
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  it('손을 뗄 때 비운다', async () => {
+    await renderPage();
+    // FlatList 가 손 뗀 순간의 속도를 읽으므로 빈 이벤트로는 던진다.
+    fireEvent(screen.getByTestId('explore-places-grid'), 'scrollEndDrag', {
+      nativeEvent: { velocity: { x: 0, y: 0 } },
+    });
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it('관성이 멈출 때 비운다', async () => {
+    await renderPage();
+    fireEvent(screen.getByTestId('explore-places-grid'), 'momentumScrollEnd');
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it('화면을 나갈 때 비운다', async () => {
+    await renderPage();
+    screen.unmount();
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+});
+
+// TRIP-1733 — onScroll 을 worklet 으로 옮겨도 장소 그리드 스크롤이 FAB 묶음을 잠깐 숨기는 배선은 그대로다.
+// 정확한 250ms 경계는 `useScrollHide.test.tsx` 몫(실타이머 — MSW 와 가짜 시계를 섞지 않는다).
+describe('스크롤 중 FAB 숨김 배선', () => {
+  it('목록을 스크롤하면 FAB 묶음이 터치를 안 받고, 스크롤이 멈추면 다시 받는다', async () => {
+    // 준비 — 카드가 그려진 상태(파일의 renderPage)까지.
+    await renderPage();
+    await settle();
+    expect(screen.getByTestId('explore-places-fab-stack')).toHaveProp(
+      'pointerEvents',
+      'box-none'
+    );
+
+    // 실행 — FlatList 는 layoutMeasurement 가 없으면 던진다 — 세 필드를 다 싣는다.
+    fireEvent.scroll(screen.getByTestId('explore-places-grid'), {
+      nativeEvent: {
+        contentOffset: { x: 0, y: 200 },
+        contentSize: { width: 390, height: 3000 },
+        layoutMeasurement: { width: 390, height: 800 },
+      },
+    });
+    // runOnJS 가 미룬 상태 변경(마이크로태스크)을 act 안에서 비운다.
+    await act(async () => {});
+
+    // 단언
+    expect(screen.getByTestId('explore-places-fab-stack')).toHaveProp(
+      'pointerEvents',
+      'none'
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-places-fab-stack')).toHaveProp(
+        'pointerEvents',
+        'box-none'
+      )
+    );
+  });
+});
+
+/**
+ * TRIP-1754 · 담은 장소 조회가 **실패했는데 "안 담김"처럼 보이는** 문제(INV-4) — 실제 500 응답으로 잰다.
+ *
+ *  - **PE1** `GET /saved-places` 500 → 카드가 뜬 뒤 토스트(문구·오류 아이콘) · 하트가 눌린다(비활성 아님).
+ *  - **PE2** 성공이면 토스트 없음. **PE3** 게스트는 조회가 0건이라 토스트 없음.
+ */
+describe('TRIP-1754 · 담은 장소 조회 실패 — 토스트 · 하트', () => {
+  const TOAST = 'saved-list-load-error';
+  const TOAST_TEXT = '저장 목록을 불러오지 못했어요';
+
+  async function renderWithToast() {
+    render(
+      <WithToastHost>
+        <PlaceExplorePage />
+      </WithToastHost>,
+      { wrapper: createGcZeroWrapper() }
+    );
+    await waitFor(() =>
+      expect(
+        screen.getAllByTestId(/^explore-places-card-/).length
+      ).toBeGreaterThan(0)
+    );
+  }
+  function failSavedList(): void {
+    server.use(
+      http.get(`${BASE}/saved-places`, () =>
+        HttpResponse.json(
+          { error: { code: 'INTERNAL', message: '서버 오류' } },
+          { status: 500 }
+        )
+      )
+    );
+  }
+
+  it('PE1 담은 장소 500 → 토스트 1개 · 하트는 눌린다(비활성 아님)', async () => {
+    // 준비
+    setAccessToken('valid-access');
+    failSavedList();
+
+    // 실행
+    await renderWithToast();
+    const toast = await screen.findByTestId(TOAST);
+
+    // 단언
+    expect(within(toast).getByText(TOAST_TEXT)).toBeOnTheScreen();
+    expect(screen.getByTestId(`${TOAST}-error-icon`)).toBeOnTheScreen();
+    expect(screen.getByTestId('explore-places-save-p1')).not.toBeDisabled();
+  });
+
+  it('PE2 담은 장소가 성공이면 토스트가 없다', async () => {
+    // 준비
+    setAccessToken('valid-access');
+    savedRows = [savedRowOf('p1')];
+
+    // 실행
+    await renderWithToast();
+    await waitFor(() =>
+      expect(
+        within(screen.getByTestId('explore-places-card-p1')).getByText('담음')
+      ).toBeOnTheScreen()
+    );
+
+    // 단언 — (앞 테스트의 토스트가 샌 거라면 여기서 red 로 드러난다: 파일 최상위 afterEach 가 비운다.)
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+  });
+
+  it('PE3 게스트는 담은 목록을 안 부르니 서버가 500 이어도 토스트가 없다', async () => {
+    // 준비 — 토큰 없음(beforeEach 가 비운다).
+    failSavedList();
+
+    // 실행
+    await renderWithToast();
+
+    // 단언 — 긍정 짝: 목록은 정상으로 떴고(renderWithToast 가 카드를 기다린다), 담은 목록 요청은 0건.
+    expect(hitsOf('GET', '/api/v1/saved-places')).toHaveLength(0);
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+  });
+
+  // 5-b 후 심판 보강(03b W1·W2) — PE1~PE3 는 "새 마운트 + 첫 응답이 곧바로 500"이라 훅의 두 표식(`loadFailed` 모름 ·
+  // `loadFailureConfirmed` 확정)이 같은 값이다. 둘이 갈리는 구간(실패 캐시 위 재마운트의 응답 대기)과 effect 의존 배열(1회)은 아래가 문다.
+  it('PE4 실패 캐시 위에 다시 열면 — 재조회 중엔 토스트 없음 · 실패로 굳으면 1회 · 그 뒤 재조회엔 다시 안 뜬다', async () => {
+    // 준비 — 담은 장소 응답 큐: ① 500 ② 문 뒤에서 500 ③ 500. 캐시가 남는 클라이언트로 두 번 그린다.
+    setAccessToken('valid-access');
+    const gate = createGate();
+    const replies: ('500' | 'hold500')[] = ['500', 'hold500', '500'];
+    server.use(
+      http.get(`${BASE}/saved-places`, async () => {
+        if (replies.shift() === 'hold500') await gate.opened;
+        return HttpResponse.json(
+          { error: { code: 'INTERNAL', message: '서버 오류' } },
+          { status: 500 }
+        );
+      })
+    );
+    const client = newTestQueryClient();
+    const mount = () =>
+      render(
+        <WithToastHost>
+          <PlaceExplorePage />
+        </WithToastHost>,
+        { wrapper: createWrapper(client) }
+      );
+    const savedGets = () => hitsOf('GET', '/api/v1/saved-places').length;
+    const pause = () =>
+      act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      });
+
+    try {
+      // 실행 ① — 첫 마운트: 실패 → 토스트. 닫고(캐시는 남는다) 토스트를 비운다.
+      const first = mount();
+      await screen.findByTestId(TOAST);
+      first.unmount();
+      resetToast();
+
+      // 실행 ② — 다시 열기: 재조회가 문 앞에서 멈춘다.
+      mount();
+      await screen.findByTestId('explore-places-card-p1');
+      await waitFor(() => expect(savedGets()).toBe(2));
+      await pause();
+
+      // 단언 ② — 아직 응답 전이라 "확정 실패"가 아니다 → 옛 실패만 보고 토스트를 쏘지 않는다.
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      // 실행 ③ — 문을 열면 두 번째 응답도 500 → 이번 마운트에서 실패가 굳는다.
+      gate.release();
+
+      // 단언 ③ — 그때 1회.
+      expect(
+        within(await screen.findByTestId(TOAST)).getByText(TOAST_TEXT)
+      ).toBeOnTheScreen();
+
+      // 실행 ④ — 슬롯을 비우고 같은 목록을 다시 받는다(세 번째 500). 화면은 다시 그려진다.
+      resetToast();
+      await act(async () => {
+        await client.invalidateQueries({
+          queryKey: getGetSavedPlacesQueryKey(),
+        });
+      });
+      await waitFor(() => expect(savedGets()).toBe(3));
+      await pause();
+
+      // 단언 ④ — 재조회가 정말 나갔는데도(앵커) 같은 화면에선 또 쏘지 않는다.
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+    } finally {
+      gate.release();
+    }
   });
 });

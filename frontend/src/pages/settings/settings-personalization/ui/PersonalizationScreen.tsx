@@ -2,11 +2,11 @@ import { type ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackChevronGlyph } from '@/shared/ui/glyphs';
 import type {
   PersonalizationInfoReason,
   PersonalizationItem,
 } from '@/shared/api/index.schemas';
-import { LocationBackChevronGlyph } from '@/shared/location/index.view';
 import { Toggle } from '@/shared/ui/Toggle';
 
 import { personalizationCopy } from '../model/personalizationCopy';
@@ -34,6 +34,12 @@ export interface PersonalizationScreenProps {
   sharedItems: PersonalizationItem[];
   /** 마지막 저장 실패 — 토글 카드 아래 안내(위치 l06 `saveFailed` 선례, TRIP-1689). */
   saveFailed?: boolean;
+  /**
+   * 동의 상태 조회 얼굴(TRIP-1755, 위치 l06 동형). 'ready' 가 아니면 토글·안내 문구·목록을 모두 빼고 카드 한 장으로 바꾼다 —
+   * 기본값(동의 없음)으로 OFF 를 그리면 거짓이다. 기본 'ready'(preview·옛 호출부 무파손).
+   */
+  loadState?: 'loading' | 'error' | 'ready';
+  onRetry?: () => void;
   onToggle: () => void;
   onPressBack?: () => void;
 }
@@ -43,6 +49,8 @@ export function PersonalizationScreen({
   reason,
   sharedItems,
   saveFailed = false,
+  loadState = 'ready',
+  onRetry,
   onToggle,
   onPressBack,
 }: PersonalizationScreenProps): ReactElement {
@@ -62,29 +70,59 @@ export function PersonalizationScreen({
           accessibilityRole="button"
           onPress={onPressBack}
         >
-          <LocationBackChevronGlyph />
+          <BackChevronGlyph />
         </Pressable>
         <Text className="text-[18px] font-noto-bold text-ink">개인화</Text>
       </View>
 
       <ScrollView contentContainerClassName="gap-lg px-lg pb-3xl pt-lg">
-        {/* 토글 카드 */}
-        <View className="flex-row items-center gap-md rounded-[20px] bg-canvas px-lg py-lg">
-          <View className="flex-1">
-            <Text className="font-noto-bold text-card-title text-ink">
-              {TOGGLE_TITLE}
-            </Text>
-            <Text className="mt-xs font-noto text-label text-muted">
-              {subtitle}
+        {/* 토글 카드 — 조회 로딩·실패는 "동의 안 함"으로 접지 않고 별도 얼굴(TRIP-1755) */}
+        {loadState === 'loading' ? (
+          <View
+            testID="settings-personalization-load-loading"
+            className="rounded-[20px] bg-canvas px-lg py-lg"
+          >
+            <Text className="font-noto text-label text-muted">
+              동의 상태를 불러오는 중이에요
             </Text>
           </View>
-          <Toggle
-            testID="settings-personalization-toggle"
-            accessibilityLabel={TOGGLE_TITLE}
-            checked={consentOn}
-            onPress={onToggle}
-          />
-        </View>
+        ) : loadState === 'error' ? (
+          <View
+            testID="settings-personalization-load-error"
+            className="gap-md rounded-[20px] bg-canvas px-lg py-lg"
+          >
+            <Text className="font-noto text-label text-body">
+              동의 상태를 불러오지 못했어요
+            </Text>
+            <Pressable
+              testID="settings-personalization-load-retry"
+              accessibilityRole="button"
+              onPress={onRetry}
+              className="self-start rounded-[8px] border border-hairline-strong bg-canvas px-[13px] py-[7px]"
+            >
+              <Text className="text-[12.5px] font-noto-bold text-ink">
+                다시 시도
+              </Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View className="flex-row items-center gap-md rounded-[20px] bg-canvas px-lg py-lg">
+            <View className="flex-1">
+              <Text className="font-noto-bold text-card-title text-ink">
+                {TOGGLE_TITLE}
+              </Text>
+              <Text className="mt-xs font-noto text-label text-muted">
+                {subtitle}
+              </Text>
+            </View>
+            <Toggle
+              testID="settings-personalization-toggle"
+              accessibilityLabel={TOGGLE_TITLE}
+              checked={consentOn}
+              onPress={onToggle}
+            />
+          </View>
+        )}
 
         {saveFailed ? (
           <Text
@@ -97,14 +135,14 @@ export function PersonalizationScreen({
         ) : null}
 
         {/* 안내 문구 — reason 에 따라 있을 때만. APPLIED 는 null 이라 그리지 않는다(목록이 대신 말함). */}
-        {copy !== null ? (
+        {loadState === 'ready' && copy !== null ? (
           <View className="gap-sm rounded-[20px] bg-surface-soft px-lg py-lg">
             <Text className="font-noto text-body text-body">{copy}</Text>
           </View>
         ) : null}
 
         {/* 반영 중인 기록 — sharedItems 만 그린다(하드코딩·placeholder 금지). 빈 배열이면 통째로 안 그림. */}
-        {sharedItems.length > 0 ? (
+        {loadState === 'ready' && sharedItems.length > 0 ? (
           <View className="gap-sm">
             <Text className="font-noto-bold text-label text-muted">
               지금 반영 중인 기록

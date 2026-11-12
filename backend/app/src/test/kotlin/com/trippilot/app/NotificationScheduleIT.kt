@@ -1,10 +1,16 @@
 package com.trippilot.app
 
+import com.trippilot.itinerarygeneration.domain.GenerationMode
+import com.trippilot.itinerarygeneration.domain.Itinerary
+import com.trippilot.itinerarygeneration.domain.ItineraryDay
+import com.trippilot.itinerarygeneration.domain.ItineraryRepository
+import com.trippilot.itinerarygeneration.domain.SolveMode
 import com.trippilot.app.event.OutboxRelay
 import com.trippilot.auth.domain.Account
 import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.core.event.DomainEventPublisher
+import com.trippilot.core.event.OutboxSubscriber
 import com.trippilot.itinerarygeneration.api.event.ItineraryGenerated
 import com.trippilot.recalculation.api.event.ItineraryRecalculated
 import com.trippilot.notification.application.FireOutcome
@@ -17,11 +23,13 @@ import com.trippilot.notification.domain.NotificationRepository
 import com.trippilot.notification.domain.NotificationSchedule
 import com.trippilot.notification.domain.NotificationScheduleRepository
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
+import com.trippilot.trip.application.EditTripCommand
 import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripDestination
 import com.trippilot.trip.domain.TripRepository
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -31,6 +39,7 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 
 /**
@@ -49,11 +58,13 @@ import java.util.UUID
 class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
 
     @Autowired private lateinit var notifications: NotificationRepository
+    @Autowired private lateinit var itineraries: ItineraryRepository
     @Autowired private lateinit var schedules: NotificationScheduleRepository
     @Autowired private lateinit var firing: NotificationFiringService
     @Autowired private lateinit var scheduleService: NotificationScheduleService
     @Autowired private lateinit var publisher: DomainEventPublisher
     @Autowired private lateinit var relay: OutboxRelay
+    @Autowired private lateinit var subscribers: List<OutboxSubscriber>
     @Autowired private lateinit var trips: TripRepository
     @Autowired private lateinit var tripService: com.trippilot.trip.application.TripService
     @Autowired private lateinit var accounts: AccountRepository
@@ -230,6 +241,101 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
         schedules.findPendingByTrip(tripId) shouldBe emptyList()
     }
 
+    private fun editPeriod(start: String, end: String) = EditTripCommand(
+        title = null, startDate = LocalDate.parse(start), endDate = LocalDate.parse(end), party = 2,
+        companionType = null, budgetTotal = null, destinations = listOf(TripDestination(0, "제주", 2)),
+    )
+
+    private fun periodEvents(tripId: UUID, where: String): Int = jdbc.queryForObject(
+        "SELECT count(*) FROM outbox_event WHERE event_type = 'trip.TripPeriodChanged' AND aggregate_id = ? AND $where",
+        Int::class.java, tripId.toString(),
+    )!!
+
+    /** 같은 컨테이너의 다른 IT 가 내 행을 먼저 집어갈 수 있다 — 내 사건이 배달될 때까지 돌린다(이 리포의 관용구). */
+    private fun deliverPeriodEvent(tripId: UUID) =
+        repeat(20) { if (periodEvents(tripId, "published_at IS NULL") > 0) relay.relay() }
+
+    /**
+     * 기간을 고치면 **운영 경로만으로** 예약이 새 기간으로 다시 선다(TRIP-1758) — 편집 → 아웃박스 → 릴레이 → 구독자.
+     * 종전에는 편집이 이벤트를 내지 않아, 일정을 다시 짜기 전까지 예약이 옛 날짜 그대로였다(늘린 날엔 안 울리고 줄인 날엔 울렸다).
+     */
+    @Test
+    fun `여행 기간을 고치면 운영 경로(이벤트-릴레이)만으로 예약이 새 기간으로 다시 선다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId) // 2036-08-10 ~ 08-12
+        seedItinerary(tripId)
+        scheduleService.reload(tripId)
+        schedules.findPendingByTrip(tripId).size shouldBe 4
+
+        // 일정이 있으면 일수는 못 바꾼다(TRIP-1789) — 날짜를 옮긴다.
+        tripService.edit(accountId, tripId, editPeriod("2036-08-11", "2036-08-13"))
+        deliverPeriodEvent(tripId)
+
+        periodEvents(tripId, "published_at IS NOT NULL") shouldBe 1 // '배달됐다'를 센다
+        val pending = schedules.findPendingByTrip(tripId)
+        pending.size shouldBe 4 // 전날 1 + 3일
+        pending.last().fireAt shouldBe LocalDate.parse("2036-08-13").atTime(8, 0).atZone(ZoneId.of("Asia/Seoul")).toInstant()
+    }
+
+    @Test
+    fun `일정을 버리고 기간을 바꾸면 예약이 비워진다 — 없는 일정의 오늘의 일정이 울리면 안 된다(TRIP-1789)`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        seedItinerary(tripId)
+        scheduleService.reload(tripId)
+        schedules.findPendingByTrip(tripId).size shouldBe 4
+
+        tripService.edit(accountId, tripId, editPeriod("2036-08-10", "2036-08-15").copy(discardItinerary = true))
+        deliverPeriodEvent(tripId)
+
+        periodEvents(tripId, "published_at IS NOT NULL") shouldBe 1
+        schedules.findPendingByTrip(tripId) shouldBe emptyList()
+    }
+
+    private fun seedItinerary(tripId: UUID) = itineraries.replaceForTrip(
+        tripId,
+        Itinerary.create(
+            tripId, SolveMode.DETERMINISTIC, GenerationMode.FULLY_AI, isFallback = false,
+            days = (0L..2L).map { ItineraryDay.of(LocalDate.parse("2036-08-10").plusDays(it), it.toInt(), emptyList()) },
+            now = Instant.parse("2036-08-01T00:00:00Z"),
+        ),
+    )
+
+    /**
+     * 일정을 짜기 전에 기간만 고친 여행에 예약을 새로 세우면 없는 일정의 알림이 울린다 — 예약은 일정 생성·재계산 이벤트가 처음 만든다.
+     * **빈 결과만으로는 "가드가 막았다"와 "사건이 배달되지 않았다"를 가를 수 없다** — 사건이 구독자에게 닿았다는 것을 먼저 센다(anti-patterns).
+     */
+    @Test
+    fun `예약이 만들어진 적 없는 여행은 기간을 고쳐도 예약이 생기지 않는다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+
+        tripService.edit(accountId, tripId, editPeriod("2036-08-10", "2036-08-13"))
+        deliverPeriodEvent(tripId)
+
+        // 구독자가 있어야 '구독자 없음으로 닫힘'이 아니라 '구독자가 받고 가드가 막음'이다. 던졌다면 행이 미발행으로 남아 여기서 먼저 깨진다.
+        subscribers.map { it.eventType } shouldContain "trip.TripPeriodChanged"
+        periodEvents(tripId, "published_at IS NOT NULL") shouldBe 1
+        schedules.findPendingByTrip(tripId) shouldBe emptyList()
+    }
+
+    /** 존재 판정 SQL — 대역은 "상태 무관·여행 한정"을 흉내낼 뿐이라 실 DB 에서 한 번 본다. 미발화 조건이 붙으면 발화를 마친 여행이 '예약 없음'으로 읽혀 기간을 늘려도 새 날의 알림이 안 선다. */
+    @Test
+    fun `예약 존재 판정은 발화·취소한 행도 센다 — 다른 여행의 행은 세지 않는다`() {
+        val accountId = newAccount()
+        val used = newTrip(accountId)
+        val untouched = newTrip(accountId)
+        val fired = NotificationSchedule.pending(accountId, used, NotificationKind.TRIP_DAY, now.plusSeconds(3600))
+        val canceled = NotificationSchedule.pending(accountId, used, NotificationKind.TRIP_DAY, now.plusSeconds(7200))
+        schedules.replacePending(used, listOf(fired, canceled))
+        schedules.markFired(fired.scheduleId, now) shouldBe true
+        schedules.markCanceled(canceled.scheduleId, now) shouldBe true
+
+        schedules.findPendingByTrip(used) shouldBe emptyList() // 미발화 행이 하나도 없다
+        schedules.existsForTrip(used) shouldBe true // 그래도 '적재된 적 있음'
+        schedules.existsForTrip(untouched) shouldBe false // 남의 여행 행이 있어도 이 여행은 아니다
+    }
+
     @Test
     fun `일정 생성이 릴레이를 지나 리마인드 예약으로 적재된다`() {
         val accountId = newAccount()
@@ -323,6 +429,22 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
      * 그러면 "저장은 됐는데 알림은 늘 상수 문구"가 되고, 아무 데서도 안 드러난다.
      */
     @Test
+    fun `문구와 함께 적재한 지문이 발화가 읽는 조회로도 나온다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        val due = NotificationSchedule.pending(accountId, tripId, NotificationKind.TRIP_DAY, now.minusSeconds(60))
+            .copy(title = "AI 제목", body = "AI 본문", copyBasis = "0123456789abcdef")
+        val legacy = NotificationSchedule.pending(accountId, tripId, NotificationKind.TRIP_DAY, now.minusSeconds(30))
+            .copy(title = "옛 문구", body = "옛 본문")      // 지문 칸이 생기기 전에 붙은 문구 — NULL 이어야 한다
+        schedules.replacePending(tripId, listOf(due, legacy))
+
+        val picked = schedules.findDue(now, 500).associateBy { it.scheduleId }
+
+        picked.getValue(due.scheduleId).copyBasis shouldBe "0123456789abcdef"
+        picked.getValue(legacy.scheduleId).copyBasis shouldBe null
+    }
+
+    @Test
     fun `적재한 문구가 폴러를 지나 알림 제목이 된다`() {
         val accountId = newAccount()
         val tripId = newTrip(accountId)
@@ -336,6 +458,44 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
 
         picked.toNotification(now).title shouldBe "오늘은 성산일출봉"
         picked.toNotification(now).body shouldBe "해 뜨는 시간에 맞춰 가 보세요."
+    }
+
+    /**
+     * 재시작으로 사라진 문구 채움 대기열을 되살리는 입력 질의의 SQL — 대역은 같은 조건을 **흉내**낼 뿐이라, 실 DB 에서
+     * (1) 시각 범위 (from, until], (2) 제목·본문 둘 중 하나라도 비면 문구 없음, (3) 발화·취소된 행 제외를 한 번 본다.
+     * 같은 컨테이너를 공유하는 다른 테스트의 행이 섞이므로 **이 테스트의 여행**만 포함·제외로 단정한다.
+     */
+    @Test
+    fun `문구 없는 미발화 예약이 범위 안에 있는 여행만 찾는다 — 문구가 붙으면 빠진다`() {
+        val accountId = newAccount()
+        val lacking = newTrip(accountId)
+        val filled = newTrip(accountId)
+        val half = newTrip(accountId)
+        scheduleService.reload(lacking)
+        scheduleService.reload(filled)
+        scheduleService.reload(half)
+        val from = Instant.parse("2036-08-01T00:00:00Z")
+        val until = Instant.parse("2036-08-31T00:00:00Z")
+
+        // 모든 행에 문구를 붙이면 그 여행은 빠진다. 한 행이라도 비면 남는다(여행은 한 번만 나온다).
+        schedules.findPendingByTrip(filled).forEach { schedules.attachCopy(it.scheduleId, "제목", "본문", "basis") }
+        schedules.findPendingByTrip(half).first().let { schedules.attachCopy(it.scheduleId, "제목", "본문", "basis") }
+
+        val found = schedules.findTripsLackingCopy(from, until, 1000)
+        (lacking in found) shouldBe true
+        (filled in found) shouldBe false
+        (half in found) shouldBe true          // 네 행 중 한 행(TRIP_PRE)만 채웠다
+        found.count { it == lacking } shouldBe 1
+
+        // 범위 (from, until] — 경계 밖은 안 나온다.
+        (lacking in schedules.findTripsLackingCopy(Instant.parse("2037-01-01T00:00:00Z"), Instant.parse("2037-02-01T00:00:00Z"), 1000)) shouldBe false
+        (lacking in schedules.findTripsLackingCopy(from, Instant.parse("2036-08-08T00:00:00Z"), 1000)) shouldBe false
+
+        // 발화·취소된 행은 대상이 아니다.
+        schedules.findPendingByTrip(lacking).forEachIndexed { i, row ->
+            if (i % 2 == 0) schedules.markFired(row.scheduleId, now) else schedules.markCanceled(row.scheduleId, now)
+        }
+        (lacking in schedules.findTripsLackingCopy(from, until, 1000)) shouldBe false
     }
 
     /**
@@ -361,5 +521,43 @@ class NotificationScheduleIT : AbstractPostgresIntegrationTest() {
         first.join(10_000); second.join(10_000)
 
         schedules.findPendingByTrip(tripId).size shouldBe 4
+    }
+
+    /**
+     * **제자리 채우기 쓰기(`attachCopy`)의 조건이 SQL 에서 지켜지는가.** 대역으로는 못 본다 — WHERE 절이 느슨하면
+     * 먼저 붙은 문구를 덮거나, 이미 발화한 행을 고치거나, 그 사이 재적재가 새로 만든 행에 옛 문구를 붙인다.
+     * "문구 없음"의 기준은 도메인(`hasCopy` — 제목·본문 둘 다 비어 있지 않음)과 같아서, 한쪽만 있던 행은 채운다.
+     */
+    @Test
+    fun `제자리 채우기는 문구 없는 미발화 행에만 붙는다 — 이미 붙은 문구·발화한 행·없는 행은 건드리지 않는다`() {
+        val accountId = newAccount()
+        val tripId = newTrip(accountId)
+        fun row(kind: NotificationKind, plusSec: Long) = NotificationSchedule.pending(accountId, tripId, kind, now.plusSeconds(plusSec))
+        val lacking = row(NotificationKind.TRIP_DAY, 3600)
+        val halfFilled = row(NotificationKind.TRIP_DAY, 7200).copy(title = "제목만", body = null)
+        val filled = row(NotificationKind.TRIP_PRE, 10800).copy(title = "먼저 붙은 제목", body = "먼저 붙은 본문")
+        val fired = row(NotificationKind.TRIP_DAY, 14400)
+        schedules.replacePending(tripId, listOf(lacking, halfFilled, filled, fired))
+        schedules.markFired(fired.scheduleId, now) shouldBe true
+
+        schedules.attachCopy(lacking.scheduleId, "새 제목", "새 본문", "basis-1") shouldBe true
+        schedules.attachCopy(halfFilled.scheduleId, "새 제목2", "새 본문2", "basis-2") shouldBe true   // 한쪽만 있던 행도 채운다
+        schedules.attachCopy(filled.scheduleId, "덮는 제목", "덮는 본문", "basis-x") shouldBe false       // 먼저 붙은 문구가 이긴다
+        schedules.attachCopy(fired.scheduleId, "x", "y", "b") shouldBe false                       // 이미 발화한 행
+        schedules.attachCopy(UUID.randomUUID(), "x", "y", "b") shouldBe false                      // 없는 행(그 사이 재적재가 지웠다)
+
+        val rows = schedules.findPendingByTrip(tripId).associateBy { it.scheduleId }
+        rows.getValue(lacking.scheduleId).let { it.title to it.body } shouldBe ("새 제목" to "새 본문")
+        rows.getValue(halfFilled.scheduleId).let { it.title to it.body } shouldBe ("새 제목2" to "새 본문2")
+        rows.getValue(filled.scheduleId).let { it.title to it.body } shouldBe ("먼저 붙은 제목" to "먼저 붙은 본문")
+        // **문구와 함께 붙은 지문이 왕복한다**(V2.90) — 발화가 읽는 `findDue` 경로로도 나와야 대조가 된다.
+        rows.getValue(lacking.scheduleId).copyBasis shouldBe "basis-1"
+        rows.getValue(halfFilled.scheduleId).copyBasis shouldBe "basis-2"
+        rows.getValue(filled.scheduleId).copyBasis shouldBe null              // 덮이지 않았으니 지문도 그대로(없음)
+        // 발화한 행은 문구가 안 붙은 채 남는다 — 이미 나간 알림을 고치지 않는다.
+        jdbc.queryForObject(
+            "SELECT title IS NULL AND body IS NULL FROM notification_schedule WHERE schedule_id = ?",
+            Boolean::class.java, fired.scheduleId,
+        ) shouldBe true
     }
 }

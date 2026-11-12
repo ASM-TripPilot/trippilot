@@ -111,6 +111,9 @@ class VisitRecordServiceTest : StringSpec({
             purged += Triple(accountId, scope, purgedCount)
         }
 
+        override fun recordUse(accountId: UUID, purpose: com.trippilot.auth.api.LocationUsePurpose, subjectId: UUID) =
+            error("이 스펙은 1회 이용 로그를 쓰지 않는다")
+
         override fun recordUseInterval(
             accountId: UUID, purpose: com.trippilot.auth.api.LocationUsePurpose, intervalId: UUID, tripId: UUID,
             phase: com.trippilot.auth.api.LocationIntervalPhase, at: java.time.Instant, endReason: String?, regionCount: Int?,

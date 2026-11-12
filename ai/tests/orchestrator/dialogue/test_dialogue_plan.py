@@ -649,7 +649,8 @@ def test_region_the_user_did_not_say_is_dropped_so_explore_stays_near_the_itiner
     def anchor_kind(utterance: str) -> str:
         _, b = _plan_turn(plan, utterance, answer=_answer_json("감천문화마을을 찾아봤어요."))
         (answer_req,) = [r for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_ANSWER"]
-        return "region" if '"anchor_kind": "region"' in answer_req.prompt else "other"
+        facts = answer_req.prompt.split("\n[확인된 사실]\n")[-1]  # 프롬프트 예시에도 같은 꼴 JSON 이 있다 — 실제 사실 칸만 본다
+        return "region" if '"anchor_kind": "region"' in facts else "other"
 
     assert anchor_kind("부산에서 저녁 먹을 데 있어?") == "region"
     assert anchor_kind("저녁 먹을 데 있어?") == "other"  # region 을 버려 일정 근처·여행지로 찾는다
@@ -860,8 +861,8 @@ def test_plan_turn_honours_the_budget_wherever_time_goes(intent_ms: int, plan_ms
        deadline=st.integers(2_000, 12_000))
 @example(intent_ms=0, plan_ms=3_700, knowledge_ms=0, deadline=5_000)  # 계획 뒤 잔여 1.3s — 지식을 부르지 않아야 한다
 def test_knowledge_turn_honours_the_budget_wherever_time_goes(intent_ms: int, plan_ms: int, knowledge_ms: int, deadline: int) -> None:
-    """AO-P5 의 지식 축 — 지식 LLM 은 잔여 ≥1.5s 일 때만, 시한은 min(3.5s, 잔여 − 0.4s)(답변과 같은 자리). 어디서 시간을 써도 응답은
-    deadline 안이다."""
+    """AO-P5 의 지식 축 — 지식 LLM 은 잔여 ≥1.5s 일 때만, 시한은 min(6.0s, 잔여 − 0.4s)(답변과 같은 예약, 상한만 길다). 어디서 시간을
+    써도 응답은 deadline 안이다."""
     started = 1_000
     reply = json.dumps({"text": _KNOW, "footnote": None}, ensure_ascii=False)
     canned = {to._INTENT: '{"intent": null}', to._ANSWER: to._ANSWER_JSON, to._MEMORY: to._MEMORY_JSON,
@@ -875,7 +876,22 @@ def test_knowledge_turn_honours_the_budget_wherever_time_goes(intent_ms: int, pl
         assert req.timeout_sec * 1000 <= remaining_then + 1e-6
         if req.prompt_ref.feature == "DIALOGUE_KNOWLEDGE":
             assert remaining_then >= 1_500
-            assert 0 < req.timeout_sec * 1000 <= min(3_500, remaining_then - 400) + 1e-6
+            assert 0 < req.timeout_sec * 1000 <= min(6_000, remaining_then - 400) + 1e-6
+
+
+def test_knowledge_gets_a_longer_cap_than_the_answer_when_the_turn_has_time() -> None:
+    """지식 시한은 답변 상한 3.5s 에 묶이지 않는다 — 걸리면 범위 밖 카드라서(haiku-5-5 는 말에 따라 3~5s, 2026-11-04 개발 실측).
+    분류 1.0s·계획 0.9s 뒤 잔여 7.1s → min(6.0, 6.7) = 6.0s."""
+    started = 1_000
+    reply = json.dumps({"text": _KNOW, "footnote": None}, ensure_ascii=False)
+    canned = {to._INTENT: '{"intent": null}', to._ANSWER: to._ANSWER_JSON, to._MEMORY: to._MEMORY_JSON,
+              to._PLAN: _plan_json(gap="KNOWLEDGE"), LlmFeature.DIALOGUE_KNOWLEDGE: reply}
+    b = to._build(canned, clock=FakeClock(start_ms=started), ports=_PLAN_PORTS, with_planner=True, with_knowledge=True,
+                  advance={to._INTENT: 1_000, to._PLAN: 900})
+    out = b.orch.turn(to._input(_WHEN, deadline_ms=9_000, started_ms=started))
+    assert out.outcome == "ANSWER"
+    (req,) = [r for r in b.llm.requests if r.prompt_ref.feature == "DIALOGUE_KNOWLEDGE"]
+    assert req.timeout_sec == pytest.approx(6.0)
 
 
 # ── AO-P21 — 인자는 프로세스 밖으로 원문 그대로 나가지 않는다 (PBT) ──────────────────

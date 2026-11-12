@@ -38,6 +38,7 @@ const slot = (
   openingHours: '09:00~22:00 (상시 개방)',
   openingHoursKnown: true,
   imageUrl: null,
+  imageLicense: null,
   tags: ['해변', '포토스팟'],
   ...over,
 });
@@ -196,5 +197,51 @@ describe('buildPlaceShareMessage — OS 공유 문구 (TRIP-755 AC-5)', () => {
         address: '부산 부산진구 ○○로 12',
       })
     ).toBe('부산시립미술관\n부산 부산진구 ○○로 12');
+  });
+});
+
+describe('buildPlaceDetailView — 고친 이름·분류 (TRIP-1795 AC-3)', () => {
+  it('V-D · 뷰의 이름·분류가 고친 값이고 원본 이름은 안 나온다 · 덮어쓰기 없으면 원본', () => {
+    const view = buildPlaceDetailView(
+      [
+        slot({
+          nameKo: '광안리 해수욕장',
+          category: '자연',
+          displayName: '우리 아지트',
+          displayCategory: '카페',
+        }),
+      ],
+      'p1'
+    );
+
+    expect(view?.name).toBe('우리 아지트');
+    expect(view?.category).toBe('카페');
+    expect(JSON.stringify(view)).not.toContain('광안리 해수욕장');
+
+    const plain = buildPlaceDetailView([slot({ displayName: null })], 'p1');
+    expect(plain?.name).toBe('광안리 해수욕장');
+    expect(plain?.category).toBe('해변');
+  });
+});
+
+// TRIP-1740 AC-7(T8)·AC-9 — 슬롯의 imageLicense 가 i10 히어로 뷰까지 간다. 갤러리는 대표 1장이라 그 1장의 값만 쓴다(다중 사진 계약이 없다).
+describe('buildPlaceDetailView · 관광공사 사진 유형', () => {
+  it('대표 사진의 imageLicense(TYPE1)가 뷰에 실리고, 사진이 1장뿐이라 갤러리에도 그 URL 하나다', () => {
+    const view = buildPlaceDetailView(
+      [slot({ imageUrl: 'file:///hero.jpg', imageLicense: 'TYPE1' })],
+      'p1'
+    );
+
+    expect(view?.imageLicense).toBe('TYPE1');
+    expect(view?.galleryUrls).toEqual(['file:///hero.jpg']);
+  });
+
+  it('유형을 모르는 슬롯(null)은 null 로 싣는다 — 값을 지어내지 않는다', () => {
+    const view = buildPlaceDetailView(
+      [slot({ imageUrl: 'file:///hero.jpg', imageLicense: null })],
+      'p1'
+    );
+
+    expect(view?.imageLicense).toBeNull();
   });
 });

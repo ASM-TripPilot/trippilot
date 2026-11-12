@@ -8,10 +8,18 @@ import {
   within,
 } from '@testing-library/react-native';
 import { BASE } from '@/test-support/apiBase';
+import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 import { createGate } from '@/test-support/mswHookHarness';
-import { createGcZeroWrapper } from '@/test-support/queryRender';
+import {
+  createClockSkew,
+  createGcZeroWrapper,
+  createWrapper,
+  newTestQueryClient,
+  settle,
+} from '@/test-support/queryRender';
 
 import { server } from '@/mocks/server';
+import { getGetSavedStaysQueryKey } from '@/shared/api/index.hooks';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import type {
   CuratedStay,
@@ -101,6 +109,8 @@ beforeEach(() => {
 });
 
 afterEach(() => server.resetHandlers());
+// TRIP-1754 — 토스트 슬롯은 모듈 싱글턴이라 앞 테스트의 토스트가 샌다. 파일 최상위에서 비운다(describe 안이면 샌다).
+afterEach(resetToast);
 afterAll(() => server.close());
 
 // TRIP-1049 — 로그인 하트는 응답 전에 칠해지고(낙관), 담은 곳 FAB 수도 같은 캐시라 함께 움직인다.
@@ -496,9 +506,9 @@ describe('숙소 하트 — 담기·롤백·연타', () => {
   });
 });
 
-// TRIP-1432 — 전국 d01 장소 레인은 실제 다지역 훅으로 서울·부산·제주를 지역당 200곳씩 따로 묻는다. 지역 없는
+// TRIP-1432·1807 — 전국 d01 장소 레인은 실제 다지역 훅으로 서비스 지역 6곳을 지역당 200곳씩 따로 묻는다. 지역 없는
 // 전국 조회는 안 나가고, 한두 곳이 실패해도 남은 지역 카드로 레인을 채운다(전부 실패만 재시도).
-describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
+describe('전국 d01 장소 레인 — 서비스 지역 6곳 조회', () => {
   function lanePlace(poiId: string, regionCode: string, photo: boolean): Place {
     return {
       poiId,
@@ -521,6 +531,9 @@ describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
     ),
     부산: [lanePlace('b0', '26350', true)],
     제주: [lanePlace('j0', '50110', false)],
+    강원: [lanePlace('g0', '51110', true)],
+    경북: [lanePlace('k0', '47130', true)],
+    경남: [lanePlace('n0', '48120', true)],
   };
 
   let placesQueries: {
@@ -562,7 +575,7 @@ describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
     );
   });
 
-  it('지역마다 200곳씩 3번 묻고 지역 없는 조회는 0건 — 레인 8장은 사진 먼저·지역 번갈아다', async () => {
+  it('지역마다 200곳씩 6번 묻고 지역 없는 조회는 0건 — 레인 8장은 사진 먼저·지역 번갈아로 강원·경북·경남이 섞인다', async () => {
     servePlaces();
     renderPage();
 
@@ -573,17 +586,18 @@ describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
     );
 
     expect(placesQueries.map((q) => q.region).sort()).toEqual(
-      ['부산', '서울', '제주'].sort()
+      ['강원', '경남', '경북', '부산', '서울', '제주'].sort()
     );
     expect(placesQueries.every((q) => q.limit === '200')).toBe(true);
     // TRIP-1563 — 무작위 시드는 d04 만 쓴다: d01 은 order·seed 를 안 보내 홈과 같은 이름순·같은 캐시를 유지한다.
     expect(
       placesQueries.every((q) => q.order === null && q.seed === null)
     ).toBe(true);
-    for (const id of ['s0', 's1', 's2', 's3', 's4', 's5', 's6']) {
+    // 사진 있는 5지역을 한 바퀴(서울·부산·강원·경북·경남) → 남은 사진 있는 서울로 8장. 사진 없는 제주는 밀린다.
+    for (const id of ['s0', 'b0', 'g0', 'k0', 'n0', 's1', 's2', 's3']) {
       expect(screen.getByTestId(`explore-place-card-${id}`)).toBeOnTheScreen();
     }
-    for (const id of ['s7', 's8', 'j0']) {
+    for (const id of ['s4', 's8', 'j0']) {
       expect(screen.queryByTestId(`explore-place-card-${id}`)).toBeNull();
     }
   });
@@ -604,8 +618,8 @@ describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
     expect(screen.queryByTestId('explore-lane-place-retry')).toBeNull();
   });
 
-  it('세 곳이 다 실패하면 장소 레인 자리에 재시도를 띄운다(빈 목록으로 위장하지 않는다)', async () => {
-    servePlaces(['서울', '부산', '제주']);
+  it('여섯 곳이 다 실패하면 장소 레인 자리에 재시도를 띄운다(빈 목록으로 위장하지 않는다)', async () => {
+    servePlaces(['서울', '부산', '제주', '강원', '경북', '경남']);
     renderPage();
 
     await waitFor(
@@ -616,6 +630,167 @@ describe('전국 d01 장소 레인 — 서비스 지역 3곳 조회', () => {
       WAIT
     );
     expect(screen.queryByTestId('explore-lane-place-empty')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1713 · 탐색 전국 장소 레인 캐시 정책 — 레인 8장을 고르려고 받는 `GET /places` 3건을 10분 동안 재사용한다.
+ *
+ * 무엇을 보장하나: 전국 탐색을 다시 열었을 때(지역 필터 ✕ 로 돌아오거나, 홈이 받아 둔 같은 캐시 위에 처음 열 때) ① 30초는 넘고
+ * 10분은 안 넘었으면 다시 받지 않고 카드 8장을 캐시로 그린다, ② 10분을 넘기면 다시 받는다(무한 캐시 아님).
+ * 개념: **재마운트** = 화면을 닫았다가 같은 캐시 저장소로 다시 여는 것. 새로 붙는 화면의 staleTime(신선 유지 시간)이 "다시 받을지"를
+ * 정한다 — 홈에서 먼저 받았든 탐색 자신이 받았든 새 관찰자 쪽 옵션이 심판이라 탐색 자신의 재마운트로 잠근다(02a ★1).
+ * 전역 기본 30초는 앱과 같게 클라이언트에 심는다(02a ★2). 시계는 `Date.now` 만 감는다(02a ★3).
+ */
+describe('TRIP-1713 · 탐색 전국 장소 레인 캐시 정책', () => {
+  const MIN = 60_000;
+  const PLACES_GET = 'GET /api/v1/places';
+  // 카드 루트만 센다(사진 testID `explore-place-card-image-…` 제외).
+  const LANE_CARDS = /^explore-place-card-(?!image-)/;
+  let clock: ReturnType<typeof createClockSkew>;
+
+  beforeEach(() => {
+    clock = createClockSkew();
+    mockUseStaySearch.mockReturnValue(stayResults([]));
+    server.use(
+      http.get(`${BASE}/saved-places`, () => HttpResponse.json([])),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
+      // 서비스 지역마다 3곳(표에 있는 지역만) — 레인은 8장만 그린다.
+      http.get(`${BASE}/places`, ({ request }) => {
+        const region = new URL(request.url).searchParams.get('region') ?? '';
+        const items: Place[] = [0, 1, 2].map((i) => ({
+          poiId: `${region}-${i}`,
+          nameKo: `${region}-${i}`,
+          category: '명소',
+          lat: 37.5,
+          lng: 127.0,
+          region: null,
+          regionCode: '11110',
+          openingHours: null,
+          imageUrl: null,
+          tags: [],
+          savedCount: 0,
+          dataStatus: 'ACTIVE',
+        }));
+        return HttpResponse.json({ items, nextCursor: null });
+      })
+    );
+  });
+  afterEach(() => clock.restore());
+
+  async function openAndClose(client: ReturnType<typeof newTestQueryClient>) {
+    const view = render(<ExploreLandingPage />, {
+      wrapper: createWrapper(client),
+    });
+    await waitFor(
+      () => expect(screen.getAllByTestId(LANE_CARDS)).toHaveLength(8),
+      WAIT
+    );
+    await settle();
+    view.unmount();
+  }
+  async function reopen(client: ReturnType<typeof newTestQueryClient>) {
+    observedHits = [];
+    render(<ExploreLandingPage />, { wrapper: createWrapper(client) });
+    await waitFor(
+      () => expect(screen.getAllByTestId(LANE_CARDS)).toHaveLength(8),
+      WAIT
+    );
+    await settle();
+  }
+  // AppProviders.tsx 의 전역 staleTime 30초와 같다.
+  const newClient = () => newTestQueryClient({ staleTime: 30_000 });
+
+  it('EC1 30초는 넘고 10분 안에 전국 탐색을 다시 열면 GET /places 를 다시 받지 않고 카드 8장을 캐시로 그린다', async () => {
+    // 준비 — 처음 열어 서비스 지역을 받아 둔다(앵커: 6건).
+    const client = newClient();
+    await openAndClose(client);
+    expect(hitCount(PLACES_GET)).toBe(6);
+
+    // 실행 — 5분 뒤 다시 연다.
+    clock.advance(5 * MIN);
+    await reopen(client);
+
+    // 단언 — 새 요청 0건, 카드 8장은 그대로(reopen 이 8장을 기다렸다).
+    expect(hitCount(PLACES_GET)).toBe(0);
+  });
+
+  it('EC2 10분을 넘기고 다시 열면 6지역을 다시 받는다 — 무한 캐시가 아니다', async () => {
+    // 준비
+    const client = newClient();
+    await openAndClose(client);
+
+    // 실행
+    clock.advance(10 * MIN + 1000);
+    await reopen(client);
+
+    // 단언
+    expect(hitCount(PLACES_GET)).toBe(6);
+  });
+});
+
+// TRIP-1809 — 피커에서 고른 시군구는 코드로 묻는다. 고성군은 경남(48820)·강원(51820) 둘이다.
+describe('TRIP-1809 · 동명 시군구 — 경상남도 고성군', () => {
+  function goseong(poiId: string, regionCode: string): Place {
+    return {
+      poiId,
+      nameKo: poiId,
+      category: '명소',
+      lat: 35,
+      lng: 128,
+      region: '고성군',
+      regionCode,
+      openingHours: null,
+      imageUrl: null,
+      tags: [],
+      savedCount: 0,
+      dataStatus: 'ACTIVE',
+    };
+  }
+
+  it('경남 고성군을 고르면 서버 코드 조회로 경남 장소만 그린다', async () => {
+    // 준비 — 새 서버 흉내: 코드가 있으면 접두사로만 거른다(코드를 안 보내면 두 고성군이 다 온다).
+    mockParams = { region: '48820' };
+    server.use(
+      http.get(`${BASE}/regions`, () =>
+        HttpResponse.json([
+          {
+            regionCode: '48820',
+            name: '고성군',
+            sidoName: '경상남도',
+            level: 'SIGUNGU',
+            selectable: true,
+            poiCount: 1,
+          },
+        ])
+      ),
+      http.get(`${BASE}/stays/curated`, () =>
+        HttpResponse.json({ city: '고성군', items: [] })
+      ),
+      http.get(`${BASE}/saved-places`, () => HttpResponse.json([])),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([])),
+      http.get(`${BASE}/places`, ({ request }) => {
+        const code = new URL(request.url).searchParams.get('regionCode');
+        return HttpResponse.json({
+          items: [goseong('gn', '48820'), goseong('gw', '51820')].filter(
+            (place) => code === null || place.regionCode?.startsWith(code)
+          ),
+          nextCursor: null,
+        });
+      })
+    );
+    mockUseStaySearch.mockReturnValue(stayResults([]));
+
+    // 실행
+    renderPage();
+
+    // 단언
+    await waitFor(
+      () =>
+        expect(screen.getByTestId('explore-place-card-gn')).toBeOnTheScreen(),
+      WAIT
+    );
+    expect(screen.queryByTestId('explore-place-card-gw')).toBeNull();
   });
 });
 
@@ -747,5 +922,273 @@ describe('TRIP-1580 · 지역 필터 숙소 레인 → 인기 숙소', () => {
     await act(async () => {});
     expect(curatedQueries).toHaveLength(0);
     expect(screen.queryByTestId('curated-stay-card-123')).toBeNull();
+  });
+});
+
+// TRIP-1733 — onScroll 을 worklet 으로 옮겨도 탐색 랜딩 세로 스크롤이 FAB 묶음을 잠깐 숨기는 배선은 그대로다.
+// 정확한 250ms 경계는 `useScrollHide.test.tsx` 몫(실타이머 — MSW 와 가짜 시계를 섞지 않는다). 가로 레인 비영향은 6-b.
+describe('스크롤 중 FAB 숨김 배선', () => {
+  beforeEach(() => {
+    mockUseStaySearch.mockReturnValue(stayResults([]));
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: [], nextCursor: null })
+      ),
+      http.get(`${BASE}/saved-places`, () => HttpResponse.json([])),
+      http.get(`${BASE}/saved-stays`, () => HttpResponse.json([]))
+    );
+  });
+
+  it('세로로 스크롤하면 FAB 묶음이 터치를 안 받고, 스크롤이 멈추면 다시 받는다', async () => {
+    // 준비 — 로딩이 끝나야 FAB 묶음이 그려진다.
+    renderPage();
+    await screen.findByTestId('explore-fab-stack', {}, WAIT);
+    await settle();
+    expect(screen.getByTestId('explore-fab-stack')).toHaveProp(
+      'pointerEvents',
+      'box-none'
+    );
+
+    // 실행 — 세 필드를 다 싣는다.
+    fireEvent.scroll(screen.getByTestId('explore-landing-scroll'), {
+      nativeEvent: {
+        contentOffset: { x: 0, y: 200 },
+        contentSize: { width: 390, height: 3000 },
+        layoutMeasurement: { width: 390, height: 800 },
+      },
+    });
+    // runOnJS 가 미룬 상태 변경(마이크로태스크)을 act 안에서 비운다.
+    await act(async () => {});
+
+    // 단언
+    expect(screen.getByTestId('explore-fab-stack')).toHaveProp(
+      'pointerEvents',
+      'none'
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-fab-stack')).toHaveProp(
+        'pointerEvents',
+        'box-none'
+      )
+    );
+  });
+});
+
+/**
+ * TRIP-1754 · 저장 목록 조회가 **실패했는데 "안 담김·0곳"처럼 보이는** 문제(INV-4) — 실제 500 응답으로 잰다.
+ *
+ * 무엇을 보장하나(3동작 = 준비: 서버 응답 → 실행: 그리기 → 단언: 토스트·♥ 이름·하트):
+ *  - **EX1** 장소 목록 500 → 토스트 · ♥ FAB 이름 `담은 장소`(개수 없음) · 장소 하트가 눌린다(비활성 아님).
+ *  - **EX2** 숙소 목록 500 → 토스트 · 숙소 하트가 눌린다.
+ *  - **EX3** 둘 다 성공 → 토스트 없음 · 이름 `담은 장소 1곳`.
+ *  - (게스트 케이스는 없다 — 탐색 랜딩은 탭 화면이라 로그인 뒤에만 열리고 훅을 `isAuthed:true` 고정으로 부른다.)
+ */
+describe('TRIP-1754 · 저장 목록 조회 실패 — 토스트 · 하트', () => {
+  const TOAST = 'saved-list-load-error';
+  const TOAST_TEXT = '저장 목록을 불러오지 못했어요';
+  const POI = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const PLACE: Place = {
+    poiId: POI,
+    nameKo: '감천문화마을',
+    category: '명소',
+    lat: 35.0975,
+    lng: 129.0106,
+    region: '부산',
+    openingHours: null,
+    imageUrl: null,
+    tags: [],
+    savedCount: 0,
+    dataStatus: 'ACTIVE',
+  };
+  const STAY: StayItem = {
+    externalSource: 'NAVER',
+    externalId: 's1',
+    name: '해운대 그랜드 호텔',
+    lat: 35.1587,
+    lng: 129.1604,
+    region: '해운대',
+    amenities: [],
+    stayType: 'HOTEL',
+    price: { amount: 145000, currency: 'KRW' },
+    address: '부산광역시 해운대구 해운대해변로 296',
+  };
+  const STAY_KEY = stayKey(STAY);
+  const SAVED_ROW: SavedPlace = {
+    savedPlaceId: '22222222-2222-2222-2222-222222222222',
+    savedAt: '2026-09-01T00:00:00Z',
+    place: PLACE,
+  };
+
+  function failure(): Response {
+    return HttpResponse.json(
+      { error: { code: 'INTERNAL', message: '서버 오류' } },
+      { status: 500 }
+    );
+  }
+  function serve(saved: { places: 'ok' | 500; stays: 'ok' | 500 }): void {
+    server.use(
+      http.get(`${BASE}/places`, () =>
+        HttpResponse.json({ items: [PLACE], nextCursor: null })
+      ),
+      http.get(`${BASE}/saved-places`, () =>
+        saved.places === 500 ? failure() : HttpResponse.json([SAVED_ROW])
+      ),
+      http.get(`${BASE}/saved-stays`, () =>
+        saved.stays === 500 ? failure() : HttpResponse.json([])
+      )
+    );
+  }
+  function renderWithToast(): void {
+    render(
+      <WithToastHost>
+        <ExploreLandingPage />
+      </WithToastHost>,
+      { wrapper: createGcZeroWrapper() }
+    );
+  }
+
+  it('EX1 장소 목록 500 → 토스트 · ♥ 이름 `담은 장소` · 장소 하트는 눌린다', async () => {
+    // 준비
+    mockUseStaySearch.mockReturnValue(stayResults([]));
+    serve({ places: 500, stays: 'ok' });
+    setAccessToken('valid-access');
+
+    // 실행
+    renderWithToast();
+    const toast = await screen.findByTestId(TOAST, undefined, WAIT);
+
+    // 단언
+    expect(within(toast).getByText(TOAST_TEXT)).toBeOnTheScreen();
+    expect(screen.getByTestId(`${TOAST}-error-icon`)).toBeOnTheScreen();
+    expect(
+      screen.getByTestId('explore-saved-menu-toggle')
+    ).toHaveAccessibleName('담은 장소');
+    const heart = await screen.findByTestId(
+      `explore-place-save-${POI}`,
+      undefined,
+      WAIT
+    );
+    expect(heart).not.toBeDisabled();
+  });
+
+  it('EX2 숙소 목록 500 → 토스트 · 숙소 하트는 눌린다', async () => {
+    // 준비
+    mockUseStaySearch.mockReturnValue(stayResults([STAY]));
+    serve({ places: 'ok', stays: 500 });
+    setAccessToken('valid-access');
+
+    // 실행
+    renderWithToast();
+    const toast = await screen.findByTestId(TOAST, undefined, WAIT);
+
+    // 단언
+    expect(within(toast).getByText(TOAST_TEXT)).toBeOnTheScreen();
+    const heart = await screen.findByTestId(
+      `explore-stay-save-${STAY_KEY}`,
+      undefined,
+      WAIT
+    );
+    expect(heart).not.toBeDisabled();
+  });
+
+  it('EX3 둘 다 성공이면 토스트가 없고 ♥ 이름은 `담은 장소 1곳`이다', async () => {
+    // 준비
+    mockUseStaySearch.mockReturnValue(stayResults([]));
+    serve({ places: 'ok', stays: 'ok' });
+    setAccessToken('valid-access');
+
+    // 실행
+    renderWithToast();
+    await waitFor(
+      () =>
+        expect(
+          screen.getByTestId('explore-saved-menu-toggle')
+        ).toHaveAccessibleName('담은 장소 1곳'),
+      WAIT
+    );
+    await settle();
+
+    // 단언 — (앞 테스트의 토스트가 샌 거라면 여기서 red 로 드러난다: 파일 최상위 afterEach 가 비운다.)
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+  });
+
+  // 5-b 후 심판 보강(03b W1·W2) — EX1~EX3 는 "새 마운트 + 첫 응답이 곧바로 500"이라 훅의 두 표식(`loadFailed` 모름 ·
+  // `loadFailureConfirmed` 확정)이 같은 값이다. 둘이 갈리는 구간(실패 캐시 위 재마운트의 응답 대기)과 effect 의존 배열(1회)은 아래가 문다.
+  it('EX5 실패 캐시 위에 다시 열면 — 재조회 중엔 토스트 없음 · 실패로 굳으면 1회 · 그 뒤 재조회엔 다시 안 뜬다', async () => {
+    // 준비 — 저장 숙소 응답 큐: ① 500 ② 문 뒤에서 500 ③ 500. 캐시가 남는 클라이언트로 두 번 그린다.
+    mockUseStaySearch.mockReturnValue(stayResults([STAY]));
+    serve({ places: 'ok', stays: 'ok' });
+    setAccessToken('valid-access');
+    const gate = createGate();
+    const replies: ('500' | 'hold500')[] = ['500', 'hold500', '500'];
+    let savedGets = 0;
+    server.use(
+      http.get(`${BASE}/saved-stays`, async () => {
+        savedGets += 1;
+        if (replies.shift() === 'hold500') await gate.opened;
+        return HttpResponse.json(
+          { error: { code: 'INTERNAL', message: '서버 오류' } },
+          { status: 500 }
+        );
+      })
+    );
+    const client = newTestQueryClient();
+    const mount = () =>
+      render(
+        <WithToastHost>
+          <ExploreLandingPage />
+        </WithToastHost>,
+        { wrapper: createWrapper(client) }
+      );
+    const pause = () =>
+      act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      });
+
+    try {
+      // 실행 ① — 첫 마운트: 실패 → 토스트. 닫고(캐시는 남는다) 토스트를 비운다.
+      const first = mount();
+      await screen.findByTestId(TOAST, undefined, WAIT);
+      first.unmount();
+      resetToast();
+
+      // 실행 ② — 다시 열기: 재조회가 문 앞에서 멈춘다.
+      mount();
+      await screen.findByTestId(
+        `explore-stay-save-${STAY_KEY}`,
+        undefined,
+        WAIT
+      );
+      await waitFor(() => expect(savedGets).toBe(2));
+      await pause();
+
+      // 단언 ② — 아직 응답 전이라 "확정 실패"가 아니다 → 옛 실패만 보고 토스트를 쏘지 않는다.
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      // 실행 ③ — 문을 열면 두 번째 응답도 500 → 이번 마운트에서 실패가 굳는다.
+      gate.release();
+
+      // 단언 ③ — 그때 1회.
+      expect(
+        within(await screen.findByTestId(TOAST, undefined, WAIT)).getByText(
+          TOAST_TEXT
+        )
+      ).toBeOnTheScreen();
+
+      // 실행 ④ — 슬롯을 비우고 같은 목록을 다시 받는다(세 번째 500). 화면은 다시 그려진다.
+      resetToast();
+      await act(async () => {
+        await client.invalidateQueries({
+          queryKey: getGetSavedStaysQueryKey(),
+        });
+      });
+      await waitFor(() => expect(savedGets).toBe(3));
+      await pause();
+
+      // 단언 ④ — 재조회가 정말 나갔는데도(앵커) 같은 화면에선 또 쏘지 않는다.
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+    } finally {
+      gate.release();
+    }
   });
 });

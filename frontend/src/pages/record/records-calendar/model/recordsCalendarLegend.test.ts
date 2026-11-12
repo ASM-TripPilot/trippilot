@@ -4,7 +4,10 @@ import type { Trip } from '@/shared/api/index.schemas';
 
 import {
   buildMonthLegends,
+  cellColorFor,
   markedDaysOfMonth,
+  TRIP_COLORS,
+  UNLISTED_COLOR,
   type LegendRow,
 } from './recordsCalendar';
 
@@ -414,5 +417,38 @@ describe('TRIP-1436 Q-159 · 여행마다 다른 마킹 색(줄 인덱스 = 칸 
     expect(
       buildMonthLegends(five, '2026-09').rows.map((row) => row.colorIndex)
     ).toEqual([0, 1, 2, 0, 1]);
+  });
+});
+
+describe('TRIP-1671 · 범례 줄이 없는 마킹은 첫 여행 색을 빌리지 않는다 (cellColorFor)', () => {
+  it('줄이 있는 여행의 날은 그 줄 색, 일정 0일 여행의 날(마킹은 되지만 줄이 없다)은 중립색, 범례 맵을 아예 안 받으면 첫 색이다', () => {
+    // 준비: 일정 있는 여행 둘(줄 0·1번) + 일정 0일 작성 중 여행 하나(마킹은 되지만 줄이 없다)
+    const trips = [
+      trip('first', '서울 여행', '2026-11-03', '2026-11-04'),
+      trip('second', '부산 여행', '2026-11-07', '2026-11-08'),
+      trip('draft', '작성 중 여행', '2026-11-20', '2026-11-21', 0),
+    ];
+    const { dayColors } = buildMonthLegends(trips, '2026-11');
+
+    // 앵커: 작성 중 여행의 날도 달력에는 마킹되고, 범례 맵에는 없다 — 색만 빌리지 않는 것이 본론
+    expect(markedDaysOfMonth(trips, '2026-11')).toContain('2026-11-20');
+    expect(dayColors?.['2026-11-20']).toBeUndefined();
+
+    // 실행·단언
+    expect(cellColorFor(dayColors, '2026-11-03')).toBe(TRIP_COLORS[0]);
+    expect(cellColorFor(dayColors, '2026-11-07')).toBe(TRIP_COLORS[1]);
+    expect(cellColorFor(dayColors, '2026-11-20')).toBe(UNLISTED_COLOR);
+    expect(cellColorFor(undefined, '2026-11-20')).toBe(TRIP_COLORS[0]);
+
+    // 중립색이 여행 색 중 하나와 같은 칸 색이면 범례 밖 마킹이 다시 여행 색으로 보인다 — 이 티켓의 증상이 상수 쪽에서 되살아나는 길
+    expect(TRIP_COLORS.map((color) => color.cell)).not.toContain(
+      UNLISTED_COLOR.cell
+    );
+  });
+
+  it('색 인덱스가 색 개수를 넘으면 순환한다(맵에 넘치는 값이 와도 칸은 항상 여행 색 중 하나)', () => {
+    expect(cellColorFor({ '2026-11-03': 4 }, '2026-11-03')).toBe(
+      TRIP_COLORS[1]
+    );
   });
 });

@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import Constants from 'expo-constants';
 import { openExternal } from '@/shared/external-link';
-import { type ReactElement, useRef, useState } from 'react';
+import { type ReactElement, useState } from 'react';
 import { Keyboard } from 'react-native';
 
 import { waitForGateDestination } from '@/features/auth';
@@ -15,7 +15,7 @@ import {
   filterReadySettingsSections,
 } from '../model/settingsSections';
 import { SettingsScreen } from './SettingsScreen';
-import { logout } from '@/shared/api';
+import { isOfflineWaiting, logout } from '@/shared/api';
 import {
   useDeleteMeDeletion,
   useGetMe,
@@ -37,6 +37,7 @@ import {
   type AccountSettings,
   PersonalizationInfoReason,
 } from '@/shared/api/index.schemas';
+import { deletePhotoCopies } from '@/shared/photo';
 import {
   registerPushIfGranted,
   unregisterStoredPushToken,
@@ -45,7 +46,7 @@ import { isPushSupported } from '@/shared/push/index.support';
 import { showToast } from '@/shared/ui/Toast';
 import { validateNicknameFormat } from '@/shared/lib/nicknameFormat';
 import { goBackOr } from '@/shared/lib/goBackOr';
-import { guardPress } from '@/shared/lib/pressGuard';
+import { guardPress, usePressLock } from '@/shared/lib/pressGuard';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 const NICKNAME_SAVED_TOAST = '닉네임을 바꿨어요';
@@ -55,7 +56,12 @@ const NICKNAME_SAVED_TOAST = '닉네임을 바꿨어요';
  * no-op). 처음 근거였던 두 테스트(expo-router 미목 node 테스트 · 팩토리가 `mockPush` 를 직접 무는
  * nav 테스트)는 TRIP-1154 합치기로 사라졌다. 지금 이 page 를 그리는 테스트는 모두 `router` 를
  * 화살표 래퍼로 목하고, `SettingsPage.hookMock.test.tsx` 의 목엔 `useRouter` 가 없다 — `useRouter()`
- * 로 바꾸면 그 파일이 깨진다. 정적 import 로 되돌려도 되는지는 재측정 전이다.
+ * 로 바꾸면 그 파일이 깨진다.
+ * TRIP-1770 재측정: `import { router } from 'expo-router'` 로 바꿔도 settings 테스트는 전부 green 이다 — 남은 근거는 테스트가
+ * 아니라 린트다. 정적 `router.push` 가 되면 TRIP-1013 규칙(`guardPress` 없는 인라인 이동 금지)이 아래 행 이동 5곳을 error 로
+ * 잡는다(지금은 `loadRouter()` 호출이라 그 규칙의 사각).
+ * TRIP-1775: 그 5곳은 `guardPress` 로 직접 감쌌다. 린트가 `loadRouter()?.push` 는 안 보니 새 행을 더할 때도 직접 감싸야 한다
+ * (정적 import 전환은 동작 변경이라 아직 안 했다).
  */
 function loadRouter(): typeof import('expo-router').router | null {
   try {
@@ -64,6 +70,22 @@ function loadRouter(): typeof import('expo-router').router | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * TRIP-1755 · 받아 본 값이 없는데 실패했거나(재시도로 `isError` 가 꺼진 틈 포함: `errorUpdateCount`) 오프라인에서 보류 중이면 true.
+ * 받아 둔 값이 있으면 재조회가 실패해도 false — 그 값을 오류로 덮지 않는다. 로딩(`{data: undefined}` 만)도 false.
+ */
+function queryLoadFailed(query: {
+  data: unknown;
+  isError: boolean;
+  errorUpdateCount: number;
+  fetchStatus?: 'fetching' | 'paused' | 'idle';
+}): boolean {
+  return (
+    query.data === undefined &&
+    (query.isError || query.errorUpdateCount > 0 || isOfflineWaiting(query))
+  );
 }
 
 /**
@@ -91,6 +113,10 @@ export function SettingsPage(): ReactElement {
   const deletionState =
     deletionOverride ??
     (account.data?.status === 'DELETION_PENDING' ? 'pending' : 'active');
+  // 삭제 요청·철회를 이 세션에서 한 뒤(override)에는 상태를 알고 있으니 /me 실패가 "모름"이 아니다.
+  const accountLoadFailed =
+    deletionOverride === null && queryLoadFailed(account);
+  const profileLoadFailed = queryLoadFailed(profile);
   const [purgeAt, setPurgeAt] = useState<string | null>(null);
   const [cancelDeletionError, setCancelDeletionError] = useState(false);
   const [deleteRequestError, setDeleteRequestError] = useState(false);
@@ -137,12 +163,12 @@ export function SettingsPage(): ReactElement {
   });
 
   // TRIP-1305 — 저장 요청 잠금. isPending 은 다음 렌더에야 true 라 같은 렌더 안 연타(실기 더블탭)를 못 막는다 —
-  // ref 는 누르는 즉시 바뀐다. 응답이 끝나면(성공·실패 모두 onSettled) 푼다 — 실패 뒤 먹통 금지.
-  const nicknameInFlightRef = useRef(false);
+  // 잠금은 누르는 즉시 바뀐다. 응답이 끝나면(성공·실패 모두 onSettled) 푼다 — 실패 뒤 먹통 금지.
+  const nicknameInFlightLock = usePressLock();
   const patchNickname = usePatchMeProfileNickname({
     mutation: {
       onSettled: () => {
-        nicknameInFlightRef.current = false;
+        nicknameInFlightLock.release();
       },
       onSuccess: (data, variables) => {
         // 서버 응답 닉네임을 우선하되, 없으면 방금 보낸 값으로 요약을 갱신한다.
@@ -173,6 +199,9 @@ export function SettingsPage(): ReactElement {
         setDeleteRequestError(false);
         // 삭제를 요청한 계정으로 푸시가 가지 않게 이 기기 토큰을 해제한다(TRIP-835 AC-6).
         void unregisterStoredPushToken();
+        // TRIP-1803 · 개인 사진을 앱 안에 남기지 않는다 — 기기 사본을 지우고, 지운 파일을 가리키는 주소 캐시도 낡게 한다.
+        deletePhotoCopies();
+        void queryClient.invalidateQueries({ queryKey: ['photo-uri'] });
       },
       // 5xx·네트워크 오류 모두 — 상태는 active 그대로, 인라인 오류로 알린다(TRIP-935 R5, INV-4).
       onError: () => {
@@ -201,7 +230,7 @@ export function SettingsPage(): ReactElement {
 
   /** `true` = 행을 접어라. 앞뒤 공백을 걷은 값으로 검증·전송한다(U0 FE §5 "공백 트림"). */
   const submitNickname = (raw: string): boolean => {
-    if (nicknameInFlightRef.current) return false;
+    if (nicknameInFlightLock.isHeld()) return false;
     const draft = raw.trim();
     const check = validateNicknameFormat(draft);
     if (!check.valid) {
@@ -216,17 +245,16 @@ export function SettingsPage(): ReactElement {
     // 같은 값은 서버가 본인 행을 중복으로 봐 409 를 낸다 — 보내지 않고 닫는다. 길이 검증 뒤여야
     // 프로필 로딩 전(현재값 '')에 빈 입력이 "같다"로 빠지지 않는다. 대소문자는 구분한다(변경이 버려지지 않게).
     if (draft === currentNickname) return true;
-    nicknameInFlightRef.current = true;
+    if (!nicknameInFlightLock.acquire()) return false;
     patchNickname.mutate({ data: { nickname: draft } });
     return false;
   };
 
   // TRIP-1422 — 내보내기 잠금. 공유 시트가 닫힐 때까지 쥔다(iOS 는 시트가 떠 있을 때 또 부르면 reject 해
-  // "시트는 떠 있는데 오류 문구"가 된다). ref 라 같은 렌더 안 연타도 막고, 어떤 끝에서든 finally 로 푼다.
-  const exportInFlightRef = useRef(false);
+  // "시트는 떠 있는데 오류 문구"가 된다). 잠금이라 같은 렌더 안 연타도 막고, 어떤 끝에서든 finally 로 푼다.
+  const exportInFlightLock = usePressLock();
   const runExport = async (): Promise<void> => {
-    if (exportInFlightRef.current) return;
-    exportInFlightRef.current = true;
+    if (!exportInFlightLock.acquire()) return;
     try {
       // refetch 는 실패해도 throw 하지 않고 { data, error } 를 resolve 한다(react-query) — data 가
       // 없으면 조용히 삼키지 않고 인라인 오류로 표면화한다(INV-4).
@@ -253,7 +281,7 @@ export function SettingsPage(): ReactElement {
         setExportError('내보내기 파일을 만들지 못했어요. 다시 시도해 주세요.');
       }
     } finally {
-      exportInFlightRef.current = false;
+      exportInFlightLock.release();
     }
   };
 
@@ -285,6 +313,8 @@ export function SettingsPage(): ReactElement {
             ? undefined
             : locationConsent.data?.legalConsent,
           pushAvailable: isPushSupported(),
+          accountLoadFailed,
+          profileLoadFailed,
           personalizationOn:
             personalizationReason === undefined
               ? undefined
@@ -293,6 +323,16 @@ export function SettingsPage(): ReactElement {
         })
       )}
       deletionState={deletionState}
+      accountLoadFailed={accountLoadFailed || profileLoadFailed}
+      accountLoadRetrying={
+        (accountLoadFailed && account.isFetching) ||
+        (profileLoadFailed && profile.isFetching)
+      }
+      // 실패한 조회만 다시 받는다 — 멀쩡한 쪽까지 다시 부르지 않는다.
+      onRetryAccountLoad={() => {
+        if (accountLoadFailed) void account.refetch();
+        if (profileLoadFailed) void profile.refetch();
+      }}
       purgeAt={purgeAt}
       currentNickname={currentNickname}
       nicknameError={nicknameError}
@@ -310,14 +350,22 @@ export function SettingsPage(): ReactElement {
       onPressExport={() => void runExport()}
       onPressDeleteAccount={() => postDeletion.mutate()}
       onPressCancelDeletion={() => cancelDeletion.mutate()}
-      onPressLocation={() => loadRouter()?.push('/settings/location')}
-      onPressNotifications={() => loadRouter()?.push('/settings/notifications')}
-      onPressTerms={(termsType) => loadRouter()?.push(`/terms/${termsType}`)}
+      onPressLocation={guardPress(() =>
+        loadRouter()?.push('/settings/location')
+      )}
+      onPressNotifications={guardPress(() =>
+        loadRouter()?.push('/settings/notifications')
+      )}
+      onPressTerms={guardPress((termsType) =>
+        loadRouter()?.push(`/terms/${termsType}`)
+      )}
       onPressLogout={() => void runLogout()}
-      onPressPreferences={() => loadRouter()?.push('/settings/preferences')}
-      onPressPersonalization={() =>
+      onPressPreferences={guardPress(() =>
+        loadRouter()?.push('/settings/preferences')
+      )}
+      onPressPersonalization={guardPress(() =>
         loadRouter()?.push('/settings/personalization')
-      }
+      )}
       affiliateNoticeOn={dismissed === undefined ? null : !dismissed}
       affiliateNoticeError={affiliateNoticeError}
       onToggleAffiliateNotice={() => {

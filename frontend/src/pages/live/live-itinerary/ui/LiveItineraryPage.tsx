@@ -14,8 +14,11 @@ import {
   useLiveItinerary,
 } from '@/features/execution';
 import { projectSlotProgress } from '@/entities/itinerary-slot';
-import { photoAttach } from '@/features/attach-visit-media';
-import { pickPhotoForVisit } from '@/features/attach-visit-media';
+import { slotDisplayName } from '@/entities/itinerary-slot';
+import {
+  photoProgressLabel,
+  useMultiPhotoAttach,
+} from '@/features/attach-visit-media';
 import {
   useSavedVisitMemos,
   useVisitMemo,
@@ -45,7 +48,6 @@ import { RiskDetailSheet } from './RiskDetailSheet';
 import type { ReplanDiff, Trigger } from '@/shared/api/index.schemas';
 import {
   getGetTripsTripIdReplanSessionsSessionIdDiffQueryKey,
-  postTripsTripIdVisitsVisitCheckIdPhotos,
   useGetTripsTripId,
   useGetTripsTripIdVisitsDaysDay,
 } from '@/shared/api/index.hooks';
@@ -67,6 +69,7 @@ import {
   useLocationAutomation,
   useTripRoutes,
 } from '@/shared/location';
+import { usePressLock } from '@/shared/lib/pressGuard';
 import { automationVisitRefs } from '../model/automationInput';
 import { useVisitCheck } from '@/features/check-visit';
 
@@ -102,9 +105,6 @@ const NEUTRAL_BADGE = (
   <View className="h-[72px] w-[72px] rounded-pill bg-surface-strong" />
 );
 
-/** 허브 [사진] 저장 실패 안내(INV-4) — 허브엔 사진 칸이 없어 실패 셀 대신 카드 아래 한 줄로. */
-const PHOTO_SAVE_FAILED = '사진을 기록하지 못했어요. 다시 시도해 주세요';
-
 /** 허브 메모 저장 실패 안내(INV-4) — j01 `VisitRecordCardContainer` 와 같은 문장(TRIP-1117). */
 const MEMO_SAVE_FAILED = '메모를 저장하지 못했어요. 다시 시도해 주세요.';
 // TRIP-1561 — [도착]·[방문 완료] 기록 실패 안내(INV-4).
@@ -113,10 +113,25 @@ const ARRIVE_FAILED = '도착을 기록하지 못했어요. 다시 눌러 주세
 
 /** TRIP-1426 저장 안내(공용 토스트) — 요청이 실제로 나가 성공했을 때만. j01 과 같은 메모 문장. */
 const MEMO_SAVED_TOAST = '메모를 저장했어요';
-const PHOTO_SAVED_TOAST = '사진을 기록했어요';
 
 /** 뒤로 갈 히스토리가 없을 때(딥링크·푸시 직행)의 폴백(INV-4 침묵 금지) · notFound 얼굴 [홈으로] 목적지. */
 const HOME_FALLBACK = '/(tabs)';
+
+/**
+ * TRIP-1753 — 보조 조회가 404 아닌 이유로 실패했나(INV-4). 404(여행 없음)는 '없음' 그대로 둔다 — 그땐 일정도 404 라
+ * 허브가 notFound 얼굴로 먼저 선다. 데이터 없는 재조회 중엔 v5 가 isError 를 풀므로 실패 이력(errorUpdateCount)으로
+ * 잇는다 — 안 그러면 [다시 시도] 동안 안내가 꺼지고 "모두 예정" 화면으로 돌아간다(MyStaysPage 선례).
+ * ponytail: 404 뒤 재조회(복귀 등) 중엔 error 가 비어 안내가 잠깐 설 수 있다 — 그 404 는 일정 404 와 함께라 얼굴이 바뀐다.
+ */
+function failedUnlessNotFound(query: {
+  data: unknown;
+  isError: boolean;
+  error: unknown;
+  errorUpdateCount: number;
+}): boolean {
+  if (query.data !== undefined) return false;
+  return query.isError ? !isNotFound(query.error) : query.errorUpdateCount > 0;
+}
 
 export function LiveItineraryPage({
   tripId,
@@ -169,16 +184,9 @@ export function LiveItineraryPage({
       setExpandSignal((n) => n + 1);
     }
   }
-  // [사진] 안내 한 줄(TRIP-1070) — 누른 그 카드(poiId, TRIP-1203)에만. 어느 카드든 다음 [사진] 누름에 지운다.
-  // settings(TRIP-1216) = 안내가 권한 거부라 설정에서만 풀릴 때 [설정 열기] 를 함께 그린다.
-  const [photoNotice, setPhotoNotice] = useState<{
-    poiId: string;
-    text: string;
-    settings: boolean;
-  } | null>(null);
-  // TRIP-1189 다음 예정지 [길찾기] — 외부 앱을 띄우는 동안 연타를 막는 잠금(ref: 같은 틱 두 번째 press 도 본다)과
+  // TRIP-1189 다음 예정지 [길찾기] — 외부 앱을 띄우는 동안 연타를 막는 잠금(같은 틱 두 번째 press 도 본다)과
   // 앱·웹 모두 실패했을 때의 거리 안내(INV-4).
-  const directionsBusy = useRef(false);
+  const directionsLock = usePressLock();
   const [directionsNotice, setDirectionsNotice] = useState<{
     poiId: string;
     text: string;
@@ -281,6 +289,51 @@ export function LiveItineraryPage({
       : Object.keys(mediaVisitIdByPoiId).find(
           (poiId) => mediaVisitIdByPoiId[poiId] === visitCheckId
         );
+  // TRIP-1797 [사진] — 여러 장 한 번에. 남은 칸·차례 POST·진행·실패·재시도·잠금은 훅이 쥐고(j01 과 같은 규칙), 허브는 방문 id 를
+  // poiId 로 되짚어 누른 그 카드에만 안내·진행·[다시 시도]를 내린다. 허브엔 사진 칸이 없고 마운트 때 사진 목록을 조회하지 않는다(F6) —
+  // 현재 장수는 [사진]을 누른 순간 훅이 한 번만 조회한다. 1장 성공은 현행 토스트 "사진을 기록했어요"를 유지한다.
+  const photoAttachFlow = useMultiPhotoAttach({
+    tripId,
+    toastTestID: 'live-photo-saved-toast',
+    singleSuccessToast: true,
+  });
+  const photoNoticePoiId = poiOfVisit(
+    photoAttachFlow.notice?.visitCheckId ?? null
+  );
+  const photoNotice =
+    photoAttachFlow.notice !== null && photoNoticePoiId !== undefined
+      ? {
+          poiId: photoNoticePoiId,
+          text: photoAttachFlow.notice.text,
+          settings: photoAttachFlow.notice.settings,
+        }
+      : null;
+  const photoProgressPoiId = poiOfVisit(
+    photoAttachFlow.progress?.visitCheckId ?? null
+  );
+  const photoProgress =
+    photoAttachFlow.progress !== null && photoProgressPoiId !== undefined
+      ? {
+          poiId: photoProgressPoiId,
+          text: photoProgressLabel(
+            photoAttachFlow.progress.current,
+            photoAttachFlow.progress.total
+          ),
+        }
+      : null;
+  const photoRetryPoiId = poiOfVisit(
+    photoAttachFlow.failed?.visitCheckId ?? null
+  );
+  const photoRetry =
+    photoAttachFlow.failed !== null &&
+    photoRetryPoiId !== undefined &&
+    !photoAttachFlow.busy
+      ? {
+          poiId: photoRetryPoiId,
+          onPress: () => void photoAttachFlow.retry(),
+        }
+      : null;
+
   // 메모 시트 열림 = "어느 방문으로 열었나"(AC-16). TRIP-1203 Q1 — 그 방문이 이 날의 관람 중·완료 표에 있는 동안
   // 열려 있다(관람 중이 완료로 바뀌어도 남고, 그날 목록에서 사라지면 저절로 빠진다).
   const [memoSheetFor, setMemoSheetFor] = useState<string | null>(null);
@@ -298,7 +351,7 @@ export function LiveItineraryPage({
   // (다른 방문의 저장이 이 방문의 응답을 "옛 것"으로 만들지 않는다).
   const memoAttempt = useRef<Record<string, number>>({});
   // TRIP-1426 [저장] 잠금 — ref 는 같은 틱 두 번째 누름을 막고(렌더 전이라 disabled 가 아직 안 섰다), state 는
-  // 응답을 기다리는 동안 [저장]을 비활성으로 그린다(directionsBusy 선례). TRIP-1493 — 방문(visitCheckId)별이다:
+  // 응답을 기다리는 동안 [저장]을 비활성으로 그린다(directionsLock 선례). TRIP-1493 — 방문(visitCheckId)별이다:
   // 한 방문의 PUT 보류가 다른 방문의 메모를 막지 않는다(BR-U5-14). 같은 방문의 재누름만 막는다.
   const memoSaving = useRef(new Set<string>());
   const [memoSavingShown, setMemoSavingShown] = useState<ReadonlySet<string>>(
@@ -345,10 +398,14 @@ export function LiveItineraryPage({
   const routes = useTripRoutes(automationOn ? tripId : null);
   const dayRoute = routeDayForDate(routes.routes, liveDate);
   const consentOn = locationConsent.data?.legalConsent === true;
-  const actualRoute =
-    automationOn && consentOn && dayRoute
-      ? routeDayToSegments(dayRoute)
-      : undefined;
+  // TRIP-1737 — 지도(memo(MapView))로 가는 경로 좌표는 입력이 같으면 같은 배열이다(useTripRoutes 가 state 로 쥔 dayRoute 참조 기준).
+  const actualRoute = useMemo(
+    () =>
+      automationOn && consentOn && dayRoute
+        ? routeDayToSegments(dayRoute)
+        : undefined,
+    [automationOn, consentOn, dayRoute]
+  );
 
   // 허브 ‹ 와 같은 규칙 — 딥링크 직행이라 돌아갈 곳이 없으면 홈으로(INV-4 침묵 금지).
   const goBackOrHome = (): void => {
@@ -509,19 +566,24 @@ export function LiveItineraryPage({
     const visitCheckId = mediaVisitIdByPoiId[poiId];
     return visitCheckId === undefined
       ? null
-      : (savedMemos[visitCheckId] ?? null);
+      : (savedMemos.memos[visitCheckId] ?? null);
   };
+  // TRIP-1751 — 서버 메모를 못 받은 카드 표식. 방문 id 를 아는(= 메모 자리가 있는) 카드에만. 메모가 있으면 카드가 이 값을 안 본다.
+  const memoFailedOf = (poiId: string): boolean =>
+    savedMemos.loadFailed && mediaVisitIdByPoiId[poiId] !== undefined;
   const hubSlots = projected.map((entry) =>
     entry.state === 'active'
       ? {
           ...entry,
           memo: memoOf(entry.slot.poiId),
+          memoLoadFailed: memoFailedOf(entry.slot.poiId),
           visitedLabel: activeArrivedLabel,
         }
       : entry.state === 'done'
         ? {
             ...entry,
             memo: memoOf(entry.slot.poiId),
+            memoLoadFailed: memoFailedOf(entry.slot.poiId),
             visitedLabel: visitedLabels[entry.slot.poiId] ?? null,
           }
         : entry
@@ -533,8 +595,7 @@ export function LiveItineraryPage({
   const directionsPoiIds = new Set(slotDests.keys());
   const pressDirections = async (poiId: string) => {
     const dest = slotDests.get(poiId);
-    if (!dest || directionsBusy.current) return;
-    directionsBusy.current = true;
+    if (!dest || !directionsLock.acquire()) return;
     setDirectionsNotice(null);
     try {
       await openNextNav(dest, (distanceRange) =>
@@ -546,7 +607,7 @@ export function LiveItineraryPage({
         })
       );
     } finally {
-      directionsBusy.current = false;
+      directionsLock.release();
     }
   };
 
@@ -600,35 +661,11 @@ export function LiveItineraryPage({
     }
   };
 
-  // TRIP-1070 [사진] — 누른 카드의 방문(관람 중·TRIP-1203 완료)에 메타만 POST 한다. 사진 목록은 조회하지 않는다
-  // (허브엔 사진 칸이 없다 — useVisitAttachments 는 GET 을 무조건 쏘므로 부르지 않는다, F6).
+  // TRIP-1070 [사진] — 누른 카드의 방문(관람 중·TRIP-1203 완료)에 붙인다. 진행 중 재누름은 훅이 무시한다.
   const attachPhoto = async (poiId: string) => {
     const visitCheckId = mediaVisitIdByPoiId[poiId];
     if (visitCheckId === undefined) return;
-    setPhotoNotice(null);
-    const picked = await pickPhotoForVisit();
-    if ('notice' in picked) {
-      // 취소는 notice null — 조용히 둔다.
-      setPhotoNotice(
-        picked.notice === null
-          ? null
-          : { poiId, text: picked.notice, settings: picked.settings === true }
-      );
-      return;
-    }
-    try {
-      await postTripsTripIdVisitsVisitCheckIdPhotos(
-        tripId,
-        visitCheckId,
-        photoAttach(picked.asset, picked.gpsConsent)
-      );
-      showToast({
-        message: PHOTO_SAVED_TOAST,
-        testID: 'live-photo-saved-toast',
-      });
-    } catch {
-      setPhotoNotice({ poiId, text: PHOTO_SAVE_FAILED, settings: false });
-    }
+    await photoAttachFlow.attach(visitCheckId);
   };
 
   // TRIP-1117 [메모] — 허브 위 메모 시트에서 저장한다(TRIP-1070 결정 1(c) 번복). 닫힘은 저장 성공 뒤(Q1).
@@ -669,11 +706,22 @@ export function LiveItineraryPage({
     memoSheetOpen && memoSheetFor !== null ? (
       <MemoSheet
         placeName={
-          activeSlots.find((slot) => slot.poiId === memoSheetPoiId)?.nameKo ??
-          ''
+          slotDisplayName(
+            activeSlots.find((slot) => slot.poiId === memoSheetPoiId) ?? {}
+          ) ?? ''
         }
         text={visitMemo.savedMemo}
         editable={visitMemo.memoReady}
+        loadError={
+          visitMemo.memoLoadFailed || visitMemo.memoLoadOffline
+            ? {
+                onRetry: visitMemo.memoLoadFailed
+                  ? visitMemo.retryMemoLoad
+                  : undefined,
+                retrying: visitMemo.memoLoadRetrying,
+              }
+            : null
+        }
         notice={memoFailedFor === memoSheetFor ? MEMO_SAVE_FAILED : null}
         saving={memoSavingShown.has(memoSheetFor)}
         onSubmit={(text, seed) => submitMemo(memoSheetFor, text, seed)}
@@ -712,6 +760,23 @@ export function LiveItineraryPage({
     return match ? triggerLabel(match.kind, match.variant).label : null;
   };
 
+  // TRIP-1753 — 방문 실패면 카드가 전부 '예정'·[도착] 숨김, 트리거 실패면 알약·배지·위험 시트가 없다. 둘 다 '없음'과
+  // 구별되지 않으므로 한 줄로 말하고, [다시 시도]는 실패한 쿼리만 다시 묻는다.
+  const visitsFailed = failedUnlessNotFound(visits);
+  const triggersFailed = failedUnlessNotFound(triggers);
+  const partialErrorNotice =
+    visitsFailed || triggersFailed
+      ? {
+          retrying:
+            (visitsFailed && visits.isFetching) ||
+            (triggersFailed && triggers.isFetching),
+          onRetry: () => {
+            if (visitsFailed) void visits.refetch();
+            if (triggersFailed) void triggers.refetch();
+          },
+        }
+      : null;
+
   // 시트는 허브의 형제로 조건부 마운트한다 — 딤이 FAB·알약까지 전면을 덮고, 닫힘 = 트리에서 사라짐.
   const riskTrigger = displayTriggers.find(
     (trigger) => trigger.triggerId === riskTriggerId
@@ -749,10 +814,10 @@ export function LiveItineraryPage({
         // TRIP-1195 — 바라보는 날이 오늘이 아니면 그 날짜를 쿼리로 넘긴다(오늘이면 쿼리 없음 = 종전과 같은 경로).
         // 이미 지난 날은 서버가 409 로 막는 막다른 길이라 진입 자체를 숨긴다(결정 3). 여행 구간 밖이라 보는 날이
         // 없으면(activeDate '') 종전 그대로 — 서버가 기간 밖을 판정한다.
-        // TRIP-1214 — 여행 시작 전(오늘이 첫날보다 앞)에도 서버가 "여행 기간이 아니다"로 막으므로 처음부터 숨긴다.
+        // TRIP-1841 — 여행 시작 전에도 연다(종전 TRIP-1214 숨김 폐지): 보는 날은 오늘이 아니라 위 규칙대로
+        // targetDate 로 실리고, 서버가 앞으로 올 여행 날 하루 전체를 연다.
         onPressAiReplan={
-          (activeDate !== '' && activeDate < today) ||
-          today < (itinerary.days[0]?.date ?? '')
+          activeDate !== '' && activeDate < today
             ? undefined
             : () =>
                 router.push(
@@ -783,6 +848,8 @@ export function LiveItineraryPage({
         }}
         doneMediaPoiIds={new Set(Object.keys(doneVisitIds))}
         photoNotice={photoNotice}
+        photoProgress={photoProgress}
+        photoRetry={photoRetry}
         onPressPhotoSettings={
           photoNotice?.settings ? () => void openAppSettings() : undefined
         }
@@ -834,6 +901,7 @@ export function LiveItineraryPage({
         directionsPoiIds={directionsPoiIds}
         onPressDirections={(poiId) => void pressDirections(poiId)}
         directionsNotice={directionsNotice}
+        partialErrorNotice={partialErrorNotice}
         initialSnapIndex={initialSnapIndex}
         expandSignal={expandSignal}
         actualRoute={actualRoute}

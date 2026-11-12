@@ -1,22 +1,28 @@
 package com.trippilot.trip.application
 
+import com.trippilot.core.error.ConflictDetected
+import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.FieldError
 import com.trippilot.core.error.ResourceNotFound
 import com.trippilot.core.error.ValidationFailed
 import com.trippilot.core.event.DomainEventPublisher
 import com.trippilot.trip.api.event.TripDeleted
+import com.trippilot.trip.api.event.TripPeriodChanged
 import org.springframework.transaction.annotation.Transactional
 import com.trippilot.placedata.api.DestinationCheck
 import com.trippilot.placedata.api.DestinationFacade
 import com.trippilot.placedata.api.RegionLookupFacade
 import com.trippilot.trip.domain.CompanionType
+import com.trippilot.trip.domain.MustVisitRepository
 import com.trippilot.trip.domain.Trip
 import com.trippilot.trip.domain.TripDayWindow
 import com.trippilot.trip.domain.TripDestination
+import com.trippilot.trip.domain.TripPeriodShiftPort
 import com.trippilot.trip.domain.TripRepository
 import org.springframework.stereotype.Service
 import java.time.Clock
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 data class CreateTripCommand(
@@ -41,6 +47,10 @@ data class EditTripCommand(
     val budgetTotal: Long?,
     val destinations: List<TripDestination>,
     val dayWindow: TripDayWindow = TripDayWindow.UNSET,
+    /** 앱 번들 지역 그림 키. 다른 가변 필드처럼 **대체**라 null 이면 지운다(첫 목적지 자동). */
+    val coverKey: String? = null,
+    /** 기간을 바꾸며 일정을 버린다(일수가 달라도). 저장되는 값이 아니라 이 편집의 지시다. */
+    val discardItinerary: Boolean = false,
 )
 
 /**
@@ -53,6 +63,8 @@ class TripService(
     private val regions: RegionLookupFacade,
     private val events: DomainEventPublisher,
     private val clock: Clock,
+    private val periodShift: TripPeriodShiftPort,
+    private val mustVisits: MustVisitRepository,
 ) {
     fun create(accountId: UUID, cmd: CreateTripCommand): Trip {
         requireSupportedDestinations(cmd.destinations)
@@ -120,14 +132,67 @@ class TripService(
 
     fun get(accountId: UUID, tripId: UUID): Trip = ownedOrNotFound(accountId, tripId)
 
+    /**
+     * 편집. **기간이 바뀐 편집만** [TripPeriodChanged] 를 낸다(TRIP-1758) — 알림 예약 같은 파생물이 새 기간으로 다시 서게.
+     * 발행은 저장과 같은 트랜잭션(아웃박스)이다 — 밖에서 내면 롤백된 편집의 사건이 나간다([delete] 와 같다).
+     */
+    @Transactional
     fun edit(accountId: UUID, tripId: UUID, cmd: EditTripCommand): Trip {
-        val trip = ownedOrNotFound(accountId, tripId)
-        return repo.save(
-            trip.edit(
-                cmd.title, cmd.startDate, cmd.endDate, cmd.party, cmd.companionType,
-                cmd.budgetTotal, withRegionCodes(cmd.destinations), clock.instant(), cmd.dayWindow,
-            ),
+        val before = ownedOrNotFound(accountId, tripId)
+        val edited = before.edit(
+            cmd.title, cmd.startDate, cmd.endDate, cmd.party, cmd.companionType,
+            cmd.budgetTotal, withRegionCodes(cmd.destinations), clock.instant(), cmd.dayWindow, cmd.coverKey,
         )
+        val periodChanged = edited.startDate != before.startDate || edited.endDate != before.endDate
+        if (periodChanged) movePlanWithPeriod(accountId, before, edited, cmd.discardItinerary)
+        val saved = repo.save(edited)
+        if (periodChanged) {
+            events.publish(TripPeriodChanged(tripId.toString(), tripId.toString(), saved.startDate.toString(), saved.endDate.toString()))
+        }
+        return saved
+    }
+
+    /**
+     * 기간 변경 = 일정째 날짜만 이동(TRIP-1789, 사용자 결정 2026-11-04). 일정은 날짜로 찾으므로 기간만 바꾸면 옛 날짜에 남는다.
+     * 같은 트랜잭션이라 여기서 던지면 아무 날짜도 안 바뀐다.
+     *
+     * **일정이 없으면 시작 뒤·일수 변경도 막지 않는다** — 지킬 일정이 없고, 막으면 오늘 출발로 만든 여행을 위저드에서
+     * 되돌아가 고칠 때 409 가 된다. 일수가 바뀌면 거점·꼭 갈 곳은 옮길 칸수가 정해지지 않아 그대로 둔다(종전 동작).
+     * 방문 기록이 있으면 시작된 것으로 본다 — 기록은 옛 날짜 슬롯 키로 남아 옮기면 고아가 된다.
+     *
+     * [discard] = 일수 변경은 같은 여행에서 일정만 다시 짠다(사용자 결정 2026-11-06). 여기는 버리기만 하고 재생성·AI 호출은 없다 —
+     * 앱이 이어서 일정 짜는 방법 화면으로 간다. 일정이 없어도 시작 뒤면 409 다(그 경로의 앱은 일정 없이 이 값을 보내지 않는다).
+     */
+    private fun movePlanWithPeriod(accountId: UUID, before: Trip, edited: Trip, discard: Boolean) {
+        val plan = periodShift.lockPlan(accountId, before.tripId)
+        if (plan.generating) {
+            throw ConflictDetected(message = "일정을 만드는 중이라 날짜를 옮길 수 없어요. 끝난 뒤 다시 시도해 주세요.", errorCode = ErrorCode.TRIP_PERIOD_GENERATING)
+        }
+        if (discard) {
+            if (before.hasStarted(clock.instant()) || plan.hasVisits) {
+                throw ConflictDetected(message = "이미 시작한 여행은 일정을 버리고 기간을 바꿀 수 없어요.", errorCode = ErrorCode.TRIP_PERIOD_STARTED)
+            }
+            periodShift.discardPlan(before.tripId, edited.startDate, edited.endDate)
+            // 꼭 갈 곳은 사용자가 고른 장소라 남긴다 — 새 기간 밖 날짜만 비운다(새 기간 안이면 그 날 고정을 지킨다).
+            mustVisits.findByTrip(before.tripId)
+                .filter { it.fixedDate != null && it.fixedDate !in edited.startDate..edited.endDate }
+                .forEach { mustVisits.save(it.unfixed()) }
+            return
+        }
+        val nights = ChronoUnit.DAYS.between(before.startDate, before.endDate)
+        val sameLength = ChronoUnit.DAYS.between(edited.startDate, edited.endDate) == nights
+        if (plan.hasItinerary) {
+            if (before.hasStarted(clock.instant()) || plan.hasVisits) {
+                throw ConflictDetected(message = "이미 시작한 여행은 날짜를 옮길 수 없어요.", errorCode = ErrorCode.TRIP_PERIOD_STARTED)
+            }
+            if (!sameLength) {
+                throw ConflictDetected(message = "일정이 있는 여행은 일수를 바꿀 수 없어요. 날짜만 옮길 수 있어요.", errorCode = ErrorCode.TRIP_PERIOD_LENGTH_CHANGED)
+            }
+        }
+        if (!sameLength) return
+        val days = ChronoUnit.DAYS.between(before.startDate, edited.startDate)
+        periodShift.shiftDates(before.tripId, days)
+        mustVisits.findByTrip(before.tripId).filter { it.fixedDate != null }.forEach { mustVisits.save(it.shiftedBy(days)) }
     }
 
     /**

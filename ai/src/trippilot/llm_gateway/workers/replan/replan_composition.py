@@ -57,6 +57,8 @@ class ComposeDayInput:
     gaps: tuple[str, ...] = ()
     # KB-5 장소 지식 `{source_ref: 문서}` — 있는 후보만 줄 끝에 붙는다(0.8.0). 대체지 선택과 같은 키·같은 문서.
     place_knowledge: Mapping[str, str] = field(default_factory=dict)
+    # KB-3 상황 대처 원칙(이번 사유와 같은 문서, `composition.situation_lines`, 2026-11-04) — 일반 지침이라 참고만(0.10.0).
+    situation: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.max_visits < 1:
@@ -92,6 +94,7 @@ def build_compose_vars(pool: CandidatePool, inp: ComposeDayInput) -> dict[str, s
         "max_visits": str(inp.max_visits),
         "change_rule": inp.change_rule,
         "recent_changes": _bullets(inp.recent_changes, "(없음)"),
+        "situation": _bullets(tuple(inline(t) for t in inp.situation), "(없음)"),
         # 늘 싣는다 — `Template.substitute` 는 없는 변수에 죽는다(1차 전부가 `llm_compose_error`).
         "repair": "" if not inp.unplaced else (
             "[못 넣은 곳] (방금 고른 곳 중 동선·영업시간 검증에서 빠진 곳과 까닭 — 후보에서 뺐습니다)\n"

@@ -570,8 +570,11 @@ describe('BUDGETS (예산 표는 느슨해지지 않는다 — 올리려면 이 
       BEFORE.integration.act
     );
     expect(lib.BUDGETS.node.other).toBeLessThanOrEqual(BEFORE.node.other);
+    // TRIP-1667: 통합 other 는 before(1) + StrictMode×reanimated findNodeHandle 1건(ShareCardPage.integration — 사유는 noise-budget.cjs 주석).
+    // 더 올리려면 여기 허용분을 또 고쳐야 한다.
+    const STRICT_MODE_REANIMATED_ALLOWANCE = 1;
     expect(lib.BUDGETS.integration.other).toBeLessThanOrEqual(
-      BEFORE.integration.other
+      BEFORE.integration.other + STRICT_MODE_REANIMATED_ALLOWANCE
     );
   });
 });

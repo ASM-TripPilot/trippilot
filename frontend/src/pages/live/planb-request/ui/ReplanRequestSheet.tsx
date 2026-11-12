@@ -1,5 +1,6 @@
 import { useContext, type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import BottomSheet, {
   BottomSheetScrollView,
@@ -15,9 +16,9 @@ import {
   REPLAN_SCOPES,
   type ReplanScopeOption,
 } from '@/features/request-replan/index.view';
+import { WarningFilledGlyph } from '@/shared/ui/glyphs';
 import type { StartReplanRequestScope } from '@/shared/api/index.schemas';
-
-import { RiskWarningGlyph } from '@/features/planb/index.view';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-750 · i04 재계획 요청 시트("AI에게 맡길게요", Figma 4067:2427). 순수 시트 — props+콜백만 받고
@@ -47,7 +48,7 @@ const SHEET_BACKGROUND = {
 } as const;
 
 /** 감지 트리거 1개를 사유 칩 1개로 보여 줄 재료(문구 + 이 칩이 켜고 끄는 사유 key). */
-export interface ReplanDetectedChip {
+interface ReplanDetectedChip {
   label: string;
   reasonKey: string;
 }
@@ -245,7 +246,7 @@ export function ReplanRequestSheet({
                 selected={selectedReasons.includes(detected.reasonKey)}
                 size="small"
                 onToggle={() => onToggleReason(detected.reasonKey)}
-                icon={<RiskWarningGlyph size={11} />}
+                icon={<WarningFilledGlyph size={11} />}
               />
             ) : null}
             {renderChoices(
@@ -297,7 +298,7 @@ export function ReplanRequestSheet({
             value={freeText}
             onChangeText={onChangeFreeText}
             placeholder={FREETEXT_PLACEHOLDER}
-            placeholderTextColor="#9AA1AB"
+            placeholderTextColor={COLOR_TOKENS['muted-soft']}
             maxLength={FREETEXT_MAX}
             className="h-[44px] rounded-input border border-hairline-strong bg-surface-soft px-[14px] font-noto text-label text-ink"
           />
@@ -324,19 +325,14 @@ export function ReplanRequestSheet({
           </Pressable>
         ) : null}
 
-        <Pressable
+        {/* TRIP-1294 — POST 대기 중엔 회색 + 눌림 막음. 막기의 진짜 그물은 페이지 ref 잠금. */}
+        <Button
           testID="planb-request-submit"
-          accessibilityRole="button"
-          // TRIP-1294 — POST 대기 중엔 흐리게 + 눌림 막음(StateNotice disabled 관례). 막기의 진짜 그물은 페이지 ref 잠금.
           disabled={submitting}
-          accessibilityState={{ disabled: submitting }}
           onPress={onSubmit}
-          className={`items-center justify-center rounded-button bg-primary py-[17px]${submitting ? ' opacity-40' : ''}`}
         >
-          <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-            {SUBMIT_LABEL}
-          </Text>
-        </Pressable>
+          {SUBMIT_LABEL}
+        </Button>
       </BottomSheetScrollView>
     </BottomSheet>
   );

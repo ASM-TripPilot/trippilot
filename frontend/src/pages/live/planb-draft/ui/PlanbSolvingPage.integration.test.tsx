@@ -10,6 +10,7 @@ import type { ReactElement } from 'react';
 import type { Itinerary, VisitCheckList } from '@/shared/api/index.schemas';
 
 import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 import {
   mockExits,
   mockNavigation,
@@ -477,6 +478,39 @@ describe('🔴 P1 · AC-6(a)·9·11 — 짜는 중: 진행 카드 + 오늘 방�
     // 커넥터 거리는 서버 distanceRange 를 그대로 흘린다(INV-2·INV-3).
     expect(textsOf(/^sheet-connector-distance-/)).toEqual(['1.4km']);
     expect(screen.queryAllByTestId(/^sheet-cta/)).toHaveLength(0);
+  });
+});
+
+describe('TRIP-1795 · AC-3 — 방문 완료 행의 이름은 이 여행에서 고친 이름을 따른다', () => {
+  it('P1d · 일정 슬롯의 고친 이름이 완료 행 이름이 되고(원본은 안 보인다), 고치지 않은 행은 원본이다', () => {
+    const renamed = {
+      ...ITINERARY,
+      days: ITINERARY.days.map((day) => ({
+        ...day,
+        slots: day.slots.map((s) =>
+          s.poiId === 'p1'
+            ? {
+                ...s,
+                category: '문화', // 원본 분류 — 고친 분류(카페)의 그림이 보여야 한다
+                displayName: '우리 아지트',
+                displayCategory: '카페',
+              }
+            : s
+        ),
+      })),
+    };
+    mockItinerary = { data: renamed as unknown as Itinerary, isPending: false };
+
+    renderPage();
+
+    expect(textsOf(/^planb-draft-slot-name-/)).toEqual([
+      '우리 아지트',
+      '광안리 해변',
+    ]);
+    // 완료 행 사진 칸의 그림 키(분류)도 고친 분류다 — 원본(문화) 그림이 아니다.
+    expect(
+      screen.getByTestId(`planb-draft-slot-photo-${DAY}#p1`).props.source
+    ).toEqual([coverFor('카페', 'p1')]);
   });
 });
 
@@ -2036,11 +2070,42 @@ describe('🔴 장소 카테고리 생성 이미지 — 완료 행 사진 칸은
 
     const sourceOf = (poiId: string) =>
       screen.getByTestId(`planb-draft-slot-photo-${DAY}#${poiId}`).props.source;
-    expect(screen.getAllByTestId(/^planb-draft-slot-photo-/)).toHaveLength(2);
+    expect(
+      screen.getAllByTestId(/^planb-draft-slot-photo-(?!.*-credit$)/)
+    ).toHaveLength(2);
     // p1 은 변형 2 → food-2, p2 는 변형 3 → bar-3. 카테고리를 버리면(null) 둘 다 FALLBACK 이라 red.
     expect(sourceOf('p1')).toEqual([coverFor('맛집', 'p1')]);
     expect(sourceOf('p2')).toEqual([coverFor('술집', 'p2')]);
     expect(sourceOf('p1')).not.toEqual([FALLBACK_COVER]);
+  });
+
+  // TRIP-1740 AC-7(T2) — 일정 캐시 슬롯의 imageLicense(TYPE1)가 이 페이지의 VM 조립(`photo: {uri}`)을 지나 완료 행 사진 칸까지 간다.
+  it('TYPE1 서버 사진 슬롯(p1)은 사진 칸까지 유형이 닿아 cover 이고 출처 글자가 붙는다', () => {
+    mockItinerary = {
+      data: {
+        ...ITINERARY,
+        days: ITINERARY.days.map((day) => ({
+          ...day,
+          slots: day.slots.map((s) =>
+            s.poiId === 'p1'
+              ? {
+                  ...s,
+                  imageUrl: 'https://example.test/solving-p1.jpg',
+                  imageLicense: 'TYPE1',
+                }
+              : s
+          ),
+        })),
+      } as unknown as Itinerary,
+      isPending: false,
+    };
+
+    renderPage();
+
+    expectTypeOnePhotoDelivered(
+      `planb-draft-slot-photo-${DAY}#p1`,
+      'https://example.test/solving-p1.jpg'
+    );
   });
 });
 

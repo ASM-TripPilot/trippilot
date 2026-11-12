@@ -257,8 +257,9 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
       - ALTERNATIVE_SELECTION — replan(시한 25s)에서 1차 몫이 ~4s 로 내려와 high(3.5~7s)가
         타임아웃 → 규칙 랭킹. low: ~3.5s, 게이트 드롭 0. 단 low 에서도 사유 `none` 이면 사고가
         켜져 7~9s 였다(2026-10-14) — 프롬프트 0.5.0 의 "바로 고르세요" 줄이 끈다(3.8~5.2s).
-    low 를 전 기능에 쓰지 않는 이유: EDIT_TRANSLATION·SHARE_CARD_COPY 가 low 에서 게이트
-    위반(대체 장소를 영향 슬롯에 넣음·근거 없는 해시태그)으로 전량 드롭됐다 — high 에선 통과.
+    low 를 전 기능에 쓰지 않는 이유: fable-5-1 에선 EDIT_TRANSLATION·SHARE_CARD_COPY 가 low 에서 게이트
+    위반(대체 장소를 영향 슬롯에 넣음·근거 없는 해시태그)으로 전량 드롭됐다 — high 에선 통과. 같은 값이 모델마다
+    다르게 듣는다: haiku-5-5 에선 그 둘이 low 에서 통과하고 사고를 끄면 깨진다(2026-11-04, 표 안 주석).
     시한 없는 경계(`/explanations` 등)는 high 그대로 둔다.
 
     GPT(responses 표면)에도 `reasoning.effort` 로 같은 값이 실린다 — gpt-5.6-sol·terra·luna 는
@@ -286,6 +287,14 @@ def default_feature_effort() -> Mapping[LlmFeature, str]:
             # 자유 발화 → 지시 키(닫힌 목록). 미지정(기본 추론)이라 DEV 에서 시한 3.75s 를 2/2 넘겼다
             # (2026-10-14) — 같은 원문을 읽는 추출은 low 로 2/2 성공했다. 출력은 사전 키만 통과(게이트).
             LlmFeature.REPLAN_DIRECTIVE_TRANSLATION: "low",
+            # 편집 번역·공유 카드 문구 — 표에 없으면 haiku-5 는 사고가 꺼진다(어댑터 `_THINKING_OFF`). 끄면 편집 번역은 판단이 필요한
+            # 말("미술관 말고 야외로"·자리를 말한 추가)에서 추론을 답 앞에 글로 쓰고 JSON 을 붙여 게이트가 통째로 버렸고, 공유 카드는
+            # 지역·장소 이름 없는 해시태그(#느긋한여행·#국내여행)를 붙여 카드째 정적 문구로 떨어졌다. 2026-11-04 로컬 실경로(haiku-5-5): 편집 /edit
+            # 12발화×2(프롬프트 0.4.0) 끔 22/24(JSON 깨짐 2)·p50 1.3s → low 48회 모두 정답·p50 2.7s·p90 3.8s·최대 7.1s(출력 459 — API 흔들림,
+            # 편집 예산 ≈7.5s)·출력 ≤592/1024(high 는 0.3.0 에서 1024 에 5번 잘렸다) · 공유 /share-card 3여행×3(0.1.2) 폴백 끔 5/9 → low 0/9,
+            # 카탈로그 지역('부산광역시' 꼴)·고친 게이트에서 low 18/18·4.3~6.4s(백엔드 마감 15s)·출력 ≤1389/2048
+            LlmFeature.EDIT_TRANSLATION: "low",
+            LlmFeature.SHARE_CARD_COPY: "low",
             # 도우미 턴 — 백엔드 해석 시한 9s 안에서 분류 ≤4.0s·답변 ≤3.5s·요약 ≤2.0s(2026-10-18 실측 개정)라 사고를 낮춘다
             # (assistant-orchestrator FD domain-entities §2.10 · BLM 시한표). 분류·답변은 사고를 끈다(none) — 2026-10-20
             # luna·같은 시각 A/B(동시 2, 분류 0.2.3 고정·effort 만): 분류 238회 p50 1.53 → 1.24s·p90 2.51 → 1.93s, 평가셋 판단 오답은

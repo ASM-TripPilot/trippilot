@@ -189,6 +189,43 @@ def test_weather_turn_fans_out_to_poi_info_then_weather_port(caplog: pytest.LogC
     assert days == (_D2,)
 
 
+def test_weather_turn_without_a_trip_asks_at_the_device_location() -> None:
+    """O-U8-5 — 여행 없는 도우미에 "오늘 날씨": 백엔드가 실은 현재 위치(`context.device_location`)로 묻는다.
+    종전엔 "먼저 여행을 만들어"로 끝났다(운영 2026-11-03 16:20, 날씨 조회 0회)."""
+    weather = _Weather()
+    client = _client({_INTENT: _intent_json("GET_WEATHER"),
+                      _ANSWER: _answer_json("오늘 서울은 비 올 확률이 80%예요. 우산을 챙기면 좋겠어요.")}, weather=weather)
+    body = _body("오늘 날씨 어때")
+    body["context"] = {"surface": "HOME", "trip": None, "base_stays": [], "itinerary": None,
+                       "device_location": {"lat": 37.57, "lng": 126.982}}
+    res = client.post(URL, json=body)
+    assert res.status_code == 200, res.text
+    answer = _assert_answer_shape(res.json(), "GET_WEATHER", "INFO")
+    assert answer["payload"]["title"] == "서울 날씨"
+    ((coord, _days),) = weather.calls
+    assert (coord.lat, coord.lng) == (37.57, 126.982)
+    assert "37.57" not in json.dumps(res.json())  # 좌표를 응답(→ 저장되는 도우미 행)으로 되돌려 싣지 않는다
+
+
+def test_each_turn_logs_its_intent_and_outcome_without_the_utterance_or_coordinates(caplog: pytest.LogCaptureFixture) -> None:
+    """운영에서 "오늘 날씨 그대로야"를 두 번 쫓았는데 그 턴이 무슨 의도·결과였는지 로그에 없었다(섀도는 표본만 남긴다, 11-04·05).
+    턴마다 한 줄 — 의도·결과·여행·현재 위치 **유무**만. 발화 원문·account_ref·좌표는 싣지 않는다(SEC-U8-06)."""
+    client = _client({_INTENT: _intent_json("GET_WEATHER"), _ANSWER: _answer_json("오늘 서울은 비 올 확률이 80%예요.")})
+    no_trip = _body("오늘 날씨 어때")
+    no_trip["context"] = {"surface": "HOME", "trip": None, "base_stays": [], "itinerary": None}
+    here = _body("오늘 날씨 어때")
+    here["context"] = {**no_trip["context"], "device_location": {"lat": 37.57, "lng": 126.982}}
+    with caplog.at_level(logging.INFO, logger="trippilot.api.dialogue"):
+        for body in (no_trip, here):
+            assert client.post(URL, json=body).status_code == 200
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("dialogue_turn {")]
+    asked, answered = (json.loads(line.removeprefix("dialogue_turn ")) for line in lines)
+    assert asked == {"event": "dialogue_turn", "trace_id": asked["trace_id"], "outcome": "ARGUMENT_CLARIFY", "intent": "GET_WEATHER",
+                     "route": "LLM_DIRECT", "answer_kind": None, "clarify": "region", "trip": False, "here": False, "llm_calls": 1}
+    assert (answered["outcome"], answered["answer_kind"], answered["here"]) == ("ANSWER", "INFO", True)
+    assert not any(s in line for line in lines for s in ("오늘 날씨", _ACCOUNT, "37.57", "126.98"))
+
+
 def test_alternative_turn_returns_candidates_only_from_the_in_memory_pool() -> None:
     client = _client({_INTENT: _intent_json("SUGGEST_ALTERNATIVE", target="우도"),
                       _ANSWER: _answer_json("우도 대신 갈 만한 곳을 골라 봤어요. 마음에 드는 곳을 눌러 바꿀 수 있어요.")})
@@ -281,6 +318,41 @@ def test_unassigned_plan_is_not_wired_and_says_so_at_startup(caplog) -> None:
     assert any("도우미 계획 단계 off" in r.getMessage() and "미배선" in r.getMessage() for r in caplog.records)
     body = client.post(URL, json=_body("오늘 주식 시장 어때")).json()
     assert body["outcome"] == "OUT_OF_SCOPE" and body["llm_calls"] == 1  # 종전 그대로(위 null 의도 테스트와 같은 값)
+
+
+@pytest.mark.parametrize(("switch", "store", "embedding", "wired", "why"), [
+    (None, True, True, False, "꺼짐"),  # 기본 꺼짐 — 스토어·임베딩이 있어도 붙이지 않는다
+    ("off", True, True, False, "꺼짐"),
+    ("on", False, True, False, "벡터 스토어 없음"),
+    ("on", True, False, False, "임베딩 없음"),  # wiring 이 넣는 UnwiredEmbedding — 매 턴 ERROR 만 남기니 붙이지 않는다
+    ("on", True, True, True, None),
+])
+def test_open_search_is_wired_only_when_switched_on_with_a_store_and_an_embedding(monkeypatch, caplog, switch, store, embedding,
+                                                                                  wired, why) -> None:
+    """BR-AO-36 — 열린 검색은 `TRIPPILOT_KB5_OPEN_SEARCH=on` + 벡터 스토어 + 실 임베딩일 때만 핸들러 포트에 붙고, 기동 로그 한 줄이 그
+    상태를 말한다(꺼짐 줄은 표식 `미배선` — 배포 smoke 의 `ai-wiring:` 이 끌어올린다)."""
+    from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore
+    from trippilot.agents.planb.place_search import PlaceSearch
+    from trippilot.poi_curation import hybrid_rank
+
+    if switch is None:
+        monkeypatch.delenv(hybrid_rank.SWITCH, raising=False)
+    else:
+        monkeypatch.setenv(hybrid_rank.SWITCH, switch)
+    ports: list = []
+    real = projection.HandlerPorts
+    monkeypatch.setattr(projection, "HandlerPorts", lambda **kw: ports.append(real(**kw)) or ports[-1])
+    caplog.set_level(logging.INFO, logger="trippilot.api.dialogue")
+    build_dev_app(llm=FeatureRoutingLlm({}), model_id="m-fake", poi_db=InMemoryPoi(_SCHEDULED + _ALTS), weather=_Weather(),
+                  dialogue_orchestrator_enabled=True, shadow_rate=0.0, shadow_rng=random.Random(1),
+                  vector_store=InMemoryVectorStore() if store else None, embedding=FakeEmbedding() if embedding else None)
+    (port,) = ports
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("도우미 열린 검색")]
+    assert len(lines) == 1
+    if wired:
+        assert isinstance(port.place_search, PlaceSearch) and lines[0].startswith("도우미 열린 검색 on")
+    else:
+        assert port.place_search is None and lines[0].startswith("도우미 열린 검색 off") and why in lines[0] and "미배선" in lines[0]
 
 
 def test_capabilities_literal_answers_without_any_llm_call() -> None:

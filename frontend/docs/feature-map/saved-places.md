@@ -27,6 +27,7 @@ routes:
 - `pick-wizard` `mode=select`(tripId 없음) — 위저드 목적지 기준 안/밖 구분, 체크 후 「완료」 → 드래프트 시드, `/trips/new/step1`.
 - `pick-outside-confirm` 선택에 지역 밖이 섞이면 확인창 `이 여행 지역 밖 {N}곳이 함께 들어가요` — 「빼고 완료」/「그대로 넣기」.
 - `pick-trip` `mode=select&tripId=` — 이미 등록된 곳은 체크 잠금, 「완료」 → 새로 고른 곳마다 꼭 갈 곳 POST 후 뒤로, 일부 실패면 배너.
+- `pick-check-hint` 미선택 체크는 회색 원 안에 옅은 회색 체크가 들어 있어 고를 수 있는 칸임을 보인다(선택은 코랄 채움 + 흰 체크, 지역 밖 미선택 행은 원 자체가 없다). *(TRIP-1796 · 생김새라 실화면 전용)*
 - `pick-states` 지역 안 0건 `{지역}에 담은 곳이 없어요`, 진짜 0곳 「아직 담은 곳이 없어요」, 로딩, 오류 「담은 곳을 불러오지 못했어요」.
 - `saved-released-row` 해제한 행은 번호·사진·글이 흐려지고 하트와 「해제됨」만 또렷하다. select 의 지역 밖 행도 흐리게 보인다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
 - `pick-outside-dialog` 지역 밖 확인창은 화면 전체를 어둡게 덮고 가운데 카드에 [빼고 완료](테두리)·[그대로 넣기](코랄) 두 버튼이 선다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
@@ -60,7 +61,7 @@ Preconditions:
 - **지역 빈 상태.** `com.trippilot.travel://explore/saved-places?region=서울`(그 지역에 담은 곳 없음 — URL 인코딩해서 연다). testID: `explore-saved-region-empty`(「이 여행 지역에 담은 곳이 없어요」) + testID: `explore-saved-region-empty-browse` 「장소 둘러보기」 → `/explore/places`(지역 없이).
 - **게스트.** 로그아웃 후 `trippilot:///explore/saved-places`. testID: `explore-saved-guest`(「로그인하면 담은 장소를 볼 수 있어요」) + testID: `explore-saved-guest-login` 「로그인하기」 → 로그인 화면.
 - **뒤로.** testID: `explore-saved-back`(「뒤로」) → 직전 화면.
-- **꼭 갈 곳 고르기(위저드).** 위저드 1/4 에서 「더 담기」로 들어온다. testID: `mustvisit-pick-root`, 앱바 「꼭 갈 곳 고르기」, 행 testID: `mustvisit-pick-row-${place.poiId}`, 체크 testID: `mustvisit-pick-check-${place.poiId}`(찬 체크 `mustvisit-pick-check-filled-${place.poiId}`). 지역 밖 머리글 testID: `mustvisit-pick-region-outside`(`이 여행 지역 밖 {N}곳`). testID: `mustvisit-pick-complete` 「완료」 → `/trips/new/step1`.
+- **꼭 갈 곳 고르기(위저드).** 위저드 1/4 에서 「더 담기」로 들어온다. testID: `mustvisit-pick-root`, 앱바 「꼭 갈 곳 고르기」, 행 testID: `mustvisit-pick-row-${place.poiId}`, 체크 testID: `mustvisit-pick-check-${place.poiId}`(찬 체크 `mustvisit-pick-check-filled-${place.poiId}`, 빈 체크 `mustvisit-pick-check-outline-${place.poiId}` — 원 안 회색 체크는 캡처로 본다). 지역 밖 머리글 testID: `mustvisit-pick-region-outside`(`이 여행 지역 밖 {N}곳`). testID: `mustvisit-pick-complete` 「완료」 → `/trips/new/step1`.
 - **지역 밖 확인.** 지역 밖 행을 체크하고 「완료」. testID: `mustvisit-pick-outside-confirm` 에 `이 여행 지역 밖 {N}곳이 함께 들어가요`, testID: `mustvisit-pick-outside-exclude` 「빼고 완료」 / testID: `mustvisit-pick-outside-keep` 「그대로 넣기」.
 - **더 담기.** testID: `mustvisit-pick-addmore`(「+ 탐색에서 더 담기」) → `/explore/places?region={여행 지역}&from=wizard`(＋ 없음, ♥ 는 뒤로). 지역 안 0건이면 testID: `mustvisit-pick-region-empty` + testID: `mustvisit-pick-region-empty-browse`(`탐색에서 {지역} 장소 담기`).
 - **꼭 갈 곳 고르기 상태.** 0곳 testID: `mustvisit-pick-empty`(「아직 담은 곳이 없어요」) + testID: `mustvisit-pick-browse` 「장소 둘러보기」, 오류 testID: `mustvisit-pick-error`(「담은 곳을 불러오지 못했어요」) + testID: `mustvisit-pick-error-retry`, 로딩 testID: `mustvisit-pick-skeleton-row-${r}`.

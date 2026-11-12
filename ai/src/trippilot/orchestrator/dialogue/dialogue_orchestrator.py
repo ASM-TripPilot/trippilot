@@ -10,6 +10,8 @@
 0  리터럴 "내가 할 수 있는 것 보기" → 결정론 능력 안내 ANSWER (LLM 0, BR-AO-18)
 1  보류 되묻기가 있으면 그 답으로 먼저 읽는다 (`dialogue_interpreter.answer_pending` 재사용, LLM 0)
 2  `DIALOGUE_INTENT` 1회 → `IntentGate` closed-set → `IntentMatch(LLM_DIRECT)`; 실패는 전부 OUT_OF_SCOPE + 사유 (BR-AO-02)
+2⁗′ 일정 검토 말(`asks_review` — 여행이 없어도, BE 가 이유를 말한다)은 분류가 일정 보기로 골랐거나 판단해서 닫았으면(2‴ 와 같은 입구) 2″·2‴ 보다 먼저
+   `FRAME(SHOW_SCHEDULE)` — BE 진행 검토 카드가 솔버 표기로 답한다(DEC-U8-14 · BR-U8-14, BR-AO-35)
 2″ 분류가 할 일 없음으로 닫았고(null·범위 밖 라벨) 발화가 맞장구·인사 낱말뿐이면 받아 주는 한마디 ANSWER — 범위 밖 카드 대신 (BR-AO-26)
 2‴ 그 밖에 분류가 판단해서 닫은 말(null·범위 밖 라벨·목록 밖 라벨)은 계획 워커가 있으면 `DIALOGUE_PLAN` 1회 → 닫힌 조회 도구(정보
    핸들러) ≤2 → 팬아웃 1회 → `merge_facts` → 5단계 답변(목록 밖 장소 검사 강제) → 프레임 없는 ANSWER. 도구 없음·거절·실패·시한
@@ -90,6 +92,7 @@ from trippilot.orchestrator.dialogue.dialogue_handlers import (
     TurnSnapshot,
     edit_arguments,
     insert_day,
+    prefetch_unknown,
     validate_answer_shape,
     validate_answer_text,
 )
@@ -166,6 +169,10 @@ _FANOUT_CAP_MS, _FANOUT_SHARE = 3_000, 0.40  # 팬아웃 예산
 _ANSWER_CAP_MS = 3_500  # 같은 실측 p50 1.6s·p90 2.4s, 2.5s 에서 17턴 중 2턴이 템플릿으로 떨어졌다
 _ANSWER_RESERVE_MS = 400  # 게이트·사영·직렬화 몫
 _ANSWER_MIN_REMAINING_MS = 1_500  # 미만이면 답변 LLM 을 부르지 않고 템플릿 (> _ANSWER_RESERVE_MS — 아니면 시한이 0 이하)
+# 지식 즉답(2‴ gap KNOWLEDGE): min(cap, 잔여−0.4s) — 시한에 걸리면 답변처럼 템플릿이 아니라 범위 밖 카드다. haiku-5-5 지연은 말에 묶인다
+# (2026-11-04 개발 파드, 시한 없이 여행 일반 질문 15종 96회): 14종은 p50 1.5s·최대 2.5s 인데 "제주 동쪽이랑 서쪽 중에 어디에 숙소 잡는 게
+# 나아?" 하나만 12회 1.9~5.0s(5회가 3.5s 초과, 출력 길이는 같다). 잔여에 묶이므로 턴 9s 는 그대로다(비율 사슬 무변경).
+_KNOWLEDGE_CAP_MS = 6_000
 # 2‴ 계획 LLM(BR-AO-28): min(cap, 잔여×share). 잔여 < 4.6s 면 부르지 않는다 — 계획이 몫(0.45R)을 다 쓰고 팬아웃이 남은 것의
 # 0.40 을 다 써도 답변 앞 잔여 ≥1.5s(답변 시도선)이려면 R ≥ 4,542ms(정수 내림 산술: 4,542 → 계획 2,043 → 2,499 → 팬아웃 999
 # → 1,500). 4,500 이면 1,485 라 늘 템플릿이다(정정본 C1). 상한 3.5s(초판 3.0s) — 2026-10-20 luna·effort none 실측에서 3.0s 는
@@ -515,7 +522,9 @@ def _squash(text: str) -> str:
 # "이 근처"·"여기 주변"·"숙소 근처" 같은 지시어는 지역 이름이 아니다 — 분류가 region 칸에 담아도(2026-10-21 실측 "근처·주변" 다섯 말
 # 40회 중 0.2.3 9회·0.2.4 5회) 핸들러에는 없는 것으로 넘긴다. 탐색은 일정 근처로 가고, 여행도 없으면 지역을 되묻는다 — 지역 표에서
 # 못 찾아 "그 지역은 아직 찾아 줄 수 없어요"로 끝나지 않게. 날씨도 같은 칸을 읽는다(일정 장소로 간다)
-_DEICTIC_REGION = re.compile(r"(?:(?:이|그|저|여기|거기|숙소|호텔|지금)\s*)?(?:근처|주변|부근|인근|가까이|여기|거기)(?:\s*(?:근처|주변|부근))?")
+# "현재 위치"·"내 위치"도 지역이 아니다 — 지역 칸에 담기면 표에서 못 찾아 앵커가 없다(위치가 실려 와도 말한 지역이 이긴다, 2026-11-06)
+_DEICTIC_REGION = re.compile(r"(?:(?:이|그|저|여기|거기|숙소|호텔|지금)\s*)?(?:근처|주변|부근|인근|가까이|여기|거기)(?:\s*(?:근처|주변|부근))?"
+                             r"|(?:현재|지금|내|제)\s*위치(?:\s*(?:근처|주변|부근))?")
 
 
 def _without_deictic_region(args: Mapping[str, str]) -> dict[str, str]:
@@ -593,6 +602,70 @@ def _routed(call: IntentDraft, heard: str, *, seasonal_weather_is_knowledge: boo
     return _region_named(call, heard)
 
 
+# 일정 검토(US-ASSIST-03) — "내일 일정에서 무리한 부분 있어?"·"둘째 날 동선 빠듯하지 않아?"·"일정 검토해줘". 답은 BE 진행 검토 카드
+# (`QueryCards.review`)다(DEC-U8-14: 진행 검토 = SHOW_SCHEDULE 의 BE 처리기) — 문제는 솔버가 표기한 위반·구조적 사실뿐이고(BR-U8-14) AI 스냅샷엔
+# 위반 표기 칸이 없다. 오케스트레이터가 SHOW_SCHEDULE 을 일정 목록 ANSWER 로 끝내면서 말로 한 검토 요청은 카드에 닿지 못했다(TRIP-1705 — 분류
+# null → 계획 gap OTHER → 지식 즉답이 "하루 7곳이라 빡빡"을 지어내거나 범위 밖 카드). 낱말 안에 든 것('마무리'·'코스모스'·'힘들지만')은 표지가 아니다.
+# 강한 표지는 묻거나 부탁하는 꼴이면 혼자로 충분하다("무리한 곳 있어?"·"검토해줘" — "오늘 무리했더니 피곤해"는 아니다). 약한 표지는 일정 표지가 같이
+# 있어야 하고 주제 낱말이 붙으면 그 주제 질문이다("일정 중에 주차 문제는 없어?"). 일반 질문 표지가 있으면 둘 다 아니다 — 여행 일반 지식(BR-AO-34).
+# 반박 리뷰 재현(2026-11-03): '짠 거'(짠 음식)·"일정에 문제가 생겼어"·"계획 없이 가도 괜찮을까?"가 검토 카드로 갔다
+_STRONG_REVIEW = re.compile(r"(?<!마)무리|빠듯|빡빡|빡세|촘촘|검토|점검")
+_ASKING = re.compile(r"[?？]|줘|주세요|봐|(?:있|없|않)(?:어|나|니|을까|아|냐)|아니야|아냐|(?:나|까|니|냐)\s*$")
+_WEAK_REVIEW = re.compile(
+    r"괜찮은\s?(?:지|거야|건가)|괜찮을지|(?<!도)(?<!도\s)괜찮(?:을까|나|니|아요?\s?[?？]|겠)|문제점|문제\s?(?:는|가)?\s?(?:없|있)"
+    r"|체크(?!\s?인|\s?아웃)|힘들(?:지(?!만)|까|겠)")
+_SCHEDULE_CUE = re.compile(
+    r"일정|코스(?!모스)|동선|스케줄|계획|루트|\d{1,2}\s?일\s?차|첫\s?(?:째\s?)?날|(?:둘|셋|넷)째\s?날|마지막\s?날")
+_TOPIC_CUE = re.compile(r"주차|날씨|비\s?(?:와|오)|교통|입장|예약|영업|휴무|쉬는|비용|예산|돈")
+_GENERAL_CUE = re.compile(r"짤\s?때|짜는\s?법|보통|하루에|몇\s?(?:군데|곳)|\d+\s?곳|\d+\s?박|며칠|처음|혼자\s?여행|계획\s?없이")
+# 바꿔 달라는 말·만들어 달라는 말은 그 의도(REPLAN·EDIT·REGENERATE·생성)의 몫이다 — 검토로 가로채지 않는다. '빼곡'은 빼 달라는 말이 아니다
+_CHANGE_CUE = re.compile(
+    r"다시|바꿔|바꾸|바꿀|빼\s?(?:줘|고|자|줄)|넣어|넣고|추가|옮겨|옮기|줄여|줄이|늘려|조정|짜\s?(?:줘|줄|자)|만들어|고쳐|취소|세워"
+    r"|부탁|않게|않도록|조절|여유\s?(?:있게|롭게)|느슨하게|널널하게|덜어")
+# 강한 표지가 저장된 일정을 가리키는 닻 — '검토·점검'은 그 자체로, '무리·빡빡…'은 일정 표지·가까운 날·'곳/부분/구간'·말머리일 때만.
+# "부모님이랑 한라산 등반 무리야?"·"한라산 당일치기 빡세?"는 일정 검토가 아니라 지식 즉답 몫이다(2026-11-04 리뷰 재현)
+_SELF_REVIEW = re.compile(r"검토|점검")
+_REVIEW_ANCHOR = re.compile(
+    r"오늘|내일|모레|곳|부분|구간|(?:무리|빡빡|빠듯|빡센|촘촘)\S*\s?(?:데|거\s?(?:아|없|있))"
+    r"|^\s*(?:(?:너무|좀|혹시)\s?)?(?:무리|빠듯|빡빡|빡세|촘촘)")
+
+
+# 다시 짜기로 고른 말 가운데 상황(날씨·늦음·휴무·몸 상태)이 있으면 그 의도 몫이다 — 진짜 다시 짜기 요청은 상황 낱말이나 바꿔 달라는 말을 싣는다
+# (질문뱅크·평가셋·증강 452문장 중 `asks_review` 에 걸린 것 0, 2026-11-03). "내일 일정 너무 빡빡하지 않아?"는 REPLAN 0.4 로 다시 짜기 안내가 됐다
+_SITUATION_CUE = re.compile(
+    r"비\s?(?:와|오|온|올|내)|눈\s?(?:와|오|온|올)|폭우|태풍|강풍|날씨|더워|덥|추워|춥|아파|아프|피곤|지쳐|늦(?:어|었|게)|막혀|밀렸|휴무|휴관"
+    r"|문\s?닫|취소|힘든|힘들(?:어|었|고|던|다)|힘드")
+# 다시 짜기로 고른 말이 부탁하는 꼴이면 다시 짜기 몫이다("빡빡한데 여유 있게 해 줘") — 살펴봐·알려 달라는 부탁만 검토다
+_REQUEST = re.compile(r"줘|주세요|줄래|주실")
+_REVIEW_REQUEST = re.compile(r"검토|점검|체크|확인|알려|봐\s?(?:줘|주세요|줄래)")
+
+
+def _replan_asks_review(text: str) -> bool:
+    """다시 짜기로 분류된 검토 말인가 — 상황 낱말이 없고, 부탁 꼴이면 살펴봐 달라는 부탁일 때만(`asks_review` 와 함께 본다)."""
+    return not _SITUATION_CUE.search(text) and (not _REQUEST.search(text) or bool(_REVIEW_REQUEST.search(text)))
+
+
+def asks_review(text: str) -> bool:
+    """저장된 일정에 무리·문제가 없는지 묻는 말인가(LLM 0). `text` 는 정리(`normalize`)한 말 — 일반 질문·바꿔 달라는 말이면 아니고,
+    강한 표지(묻는 꼴)는 일정을 가리키는 닻과 함께, 약한 표지는 일정 표지와 함께(주제 낱말 없이)."""
+    if _CHANGE_CUE.search(text) or _GENERAL_CUE.search(text):
+        return False
+    if _STRONG_REVIEW.search(text) and _ASKING.search(text) and (
+            _SELF_REVIEW.search(text) or _SCHEDULE_CUE.search(text) or _REVIEW_ANCHOR.search(text)):
+        return True
+    return bool(_WEAK_REVIEW.search(text) and _SCHEDULE_CUE.search(text) and not _TOPIC_CUE.search(text))
+
+
+def _review_outcome(match: IntentMatch | None, cleared: DialogueContext, reason: str | None) -> TurnOutcome:
+    """일정 검토 → FRAME(SHOW_SCHEDULE) — BE 가 진행 검토 카드로 답한다(위반 표기·빈 일자·숙소·일정 없음·못 읽음 안내, BR-U8-14~16).
+    분류가 일정 보기로 골랐으면 그 인자·신뢰도를, 판단해서 닫았으면 빈 인자로(날마다 동네 `_day_area_outcome` 과 같은 0.9)."""
+    shown = match if match is not None and match.intent is Intent.SHOW_SCHEDULE else None  # 다시 짜기의 칸은 일정 보기 인자가 아니다
+    slots = {k: str(v) for k, v in (shown.slots if shown is not None else {}).items()}
+    frame = Frame(Intent.SHOW_SCHEDULE, slots, (), shown.confidence if shown is not None else 0.9, MatchRoute.LLM_DIRECT.value)
+    return TurnOutcome("FRAME", (frame,), None, None, cleared, 0,
+                       "review_routed" + ("" if shown is not None else f":{reason or match.intent.value}"))
+
+
 def _plannable(reason: str) -> bool:
     """2‴ 진입 — 분류가 판단은 했다: null·범위 밖 라벨(`_judged_nothing`) 또는 목록 밖 라벨을 지어냈다(절단 아님).
     2″ 맞장구는 목록 밖 라벨을 판단으로 보지 않는다(실패에 "알겠어요"로 답하면 수락을 삼킨다, BR-AO-26). 계획은 삼킬 것이 없고 같은
@@ -640,6 +713,12 @@ def _trip_summary(snapshot: TurnSnapshot, today: date) -> str:
         f"여행 {' '.join(trip.regions) or '-'} {trip.start_date.isoformat()}~{trip.end_date.isoformat()} ({trip.phase})"
         f" · 오늘 {today.isoformat()} · 일정 {len(snapshot.days)}일 {slots}곳 · 화면 {snapshot.surface}"
     )
+
+
+def _knowledge_trip(summary: str) -> str:
+    """지식 즉답의 `$trip` — 일정 날·곳 수(와 화면)는 뺀다. 지식 LLM 이 그 수로 "하루 7곳이라 꽤 빡빡한 편이에요"처럼 내 일정을
+    판정했다(TRIP-1705 개발 재현 — 그날은 5곳, BR-U8-14: 문제 판정은 솔버 표기뿐). 지역·기간·오늘은 '거기'·'그때'를 읽는 데 남긴다."""
+    return summary.split(" · 일정 ", 1)[0]
 
 
 def _memory_lines(current: DialogueMemory | None, others: Sequence[DialogueMemory]) -> tuple[str, ...]:
@@ -954,12 +1033,13 @@ class DialogueOrchestrator:
             writable = read and self._open_row(inp, current)
             # 프롬프트·핸들러는 창만 본다 — 요약 재료(`_remember`)는 BE 가 보낸 전부에서 고른다
             windowed = replace(inp, recent_turns=self._window(inp, current, read))
+            classified = [False]  # `_core` 가 의도를 정하면 세운다 — 그 뒤의 버그는 다시 시도, 그 전이면 범위 밖
             try:
-                outcome = self._core(windowed, current, others, counter)
+                outcome = self._core(windowed, current, others, counter, classified)
             except PermissionDeniedError:
                 raise
             except Exception as e:  # noqa: BLE001 — DL-5: 버그도 경계 밖으로 내지 않는다(BR §5 미결 #14 B안)
-                outcome = self._crashed(inp, e, classified=counter[0] > 0)  # LLM 을 한 번이라도 불렀으면 분류는 지났다
+                outcome = self._crashed(inp, e, classified=classified[0])
             outcome = _remember_shown(_not_repeating(outcome, windowed), inp)
             if writable:  # 기억을 못 읽은 턴은 요약을 내지 않는다 — 없는 줄 알고 빈 기억에서 다시 쓰면 이전 줄을 잃는다(다음 차례에)
                 said = (outcome.answer.text if outcome.answer is not None
@@ -981,6 +1061,7 @@ class DialogueOrchestrator:
         current: DialogueMemory | None,
         others: tuple[DialogueMemory, ...],
         counter: list[int],
+        classified: list[bool],
     ) -> TurnOutcome:
         cleared = DialogueContext(turn_index=inp.context.turn_index)  # 보류는 이 턴으로 끝났다 — 턴 번호는 백엔드 몫
         if _accepts_proposal(inp):  # 제안 뒤의 "👍" — 수락이다. "응"으로 분류를 탄다(분류 먼저, BR-AO-26 — 웃음 한마디로 닫으면 수락이 묻힌다)
@@ -1024,11 +1105,21 @@ class DialogueOrchestrator:
         area_turn = check_day_areas(inp.utterance, inp.snapshot, today)
         if inp.context.pending is not None and area_turn is None:
             interp = answer_pending(inp.utterance, inp.context, trip_view, self._confident_intent)
+            classified[0] = interp is not None  # 보류의 답 — 의도가 정해졌다
         if interp is None:
-            # 2 — LLM 직접 분류 (+ 2′ 섀도 submit)
-            match, reason = self._classify(inp, text, memory_lines, trip_summary, counter)
+            # 2 — LLM 직접 분류 (+ 2′ 섀도 submit). 분류 LLM 을 부르면 `classified` 를 세운다
+            match, reason = self._classify(inp, text, memory_lines, trip_summary, counter, classified)
             if area_turn is not None and _takes_day_areas(area_turn, match):  # 2⁗ — 분류가 칸을 뭉개도(12/12) 확인한 해석으로 넘긴다
                 return _day_area_outcome(area_turn, match, cleared)
+            # 2⁗′ — 일정 검토는 BE 진행 검토 카드로(DEC-U8-14). 분류가 일정 보기로 골랐거나 판단해서 닫은 말만(2‴ 와 같은 입구) — 바꾸는 의도는
+            # 그대로, 시한·벤더 실패는 종전 다시 시도. 여행이 없어도 넘긴다 — BE 가 "먼저 여행을 만들거나…"로 이유를 말한다(AC2·INV-4)
+            if asks_review(text) and (_plannable(reason or "") if match is None else match.intent is Intent.SHOW_SCHEDULE
+                                      or match.intent is Intent.REPLAN and _replan_asks_review(text)):
+                log.info("dialogue_review_routed %s", json.dumps({  # 오탐을 운영에서 셀 수 있게(BE 저장 칸은 일정 보기와 같다)
+                    "event": "dialogue_review_routed", "trace_id": inp.trace_id,
+                    "classified": match.intent.value if match is not None else None, "trip": inp.snapshot.trip is not None,
+                }, ensure_ascii=False))
+                return _review_outcome(match, cleared, reason)
             if match is not None and (match.intent is Intent.RECOMMEND_REGION and _not_region_choice(text) or match.intent in (
                     Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES) and _when_not_where(text)):
                 # 시기·철을 묻거나 지역을 이미 말했다 — 지역 고르기는 엉뚱한 지역 목록이나 취향 되묻기를, 장소 찾기는 '언제'에 장소 목록을
@@ -1082,6 +1173,7 @@ class DialogueOrchestrator:
         # 4 — 팬아웃 → Facts (순수 조립)
         results = self._fanout(inp, handler.plan(ctx))
         facts = handler.assemble(ctx, results)
+        self._prefetch(ctx, facts)
         # 5 — 답변 문장
         answer = self._compose(inp, frame.intent, facts, memory(), trip_summary)
         return TurnOutcome("ANSWER", (frame,), None, answer, cleared, 0, interp.reason)
@@ -1090,6 +1182,7 @@ class DialogueOrchestrator:
 
     def _classify(
         self, inp: TurnInput, text: str, memory_lines: Sequence[str], trip_summary: str, counter: list[int],
+        classified: list[bool],
     ) -> tuple[IntentMatch | None, str | None]:
         """`DIALOGUE_INTENT` 1회 → (매치, None) 또는 (None, 사유). 결과를 알게 된 직후 섀도에 넘긴다.
 
@@ -1115,6 +1208,8 @@ class DialogueOrchestrator:
                 result = None
                 reason = f"intent_error: {type(e).__name__}: {e}"
                 self._fallback(inp, "llm", *_INTENT_MODES, reason)
+            # 분류를 불렀다 — 이 뒤(모양 변환·처리)의 버그는 다시 시도. LLM 호출 수로 재면 0″ 미리 부른 SQL 작성 LLM 도 분류로 셌다
+            classified[0] = True
             if result is not None:
                 draft = result.value
                 if result.is_fallback or not isinstance(draft, IntentDraft):
@@ -1208,6 +1303,14 @@ class DialogueOrchestrator:
         self._fallback(inp, "fanout", name, status, reason)
         return TaskResult.failed(name, status)
 
+    def _prefetch(self, ctx: TurnContext, facts: Facts) -> None:
+        """후보 답의 앞쪽 장소 빈 칸을 뒤에서 미리 찾는다(UnknownHandlingAgent, 2026-11-08) — 답에는 손대지 않는다. 미리 찾기는 빠져도
+        답이 같으므로 실패는 한 줄만 남긴다(INV-4 — 강등이 아니라 덧붙임이 빠진 것)."""
+        try:
+            prefetch_unknown(ctx, facts)
+        except Exception as e:  # noqa: BLE001
+            log.warning("dialogue prefetch_failed trace=%s error=%s", ctx.trace_id, type(e).__name__)
+
     # ── 5 답변 ───────────────────────────────────────────────────────────
 
     def _compose(
@@ -1273,9 +1376,19 @@ class DialogueOrchestrator:
         if closed and any(_foreign_place(part, known) for part in parts):
             self._fallback(inp, "llm", *_ANSWER_MODES, "place_not_in_facts")
             return DialogueAnswer.from_facts(facts)
+        if not closed:
+            # 일반 답(거리·상세·날씨)도 사실·스냅샷·사용자 말 밖의 장소 이름은 지어낸 것이다 — 거리 답에 다른 장소명이 끼어도 통과했다
+            # (2026-11-06 Codex 리뷰). `_foreign_place` 를 그대로 걸면 사용자가 말한 목적지("협재해수욕장까지")·일반명사가 걸리므로
+            # 지식 답(2‴)과 같은 대조 — 한 말은 아는 이름, 남은 이름은 장소 DB 등록 여부로 가른다
+            said = tuple(k for k in (_squash(t) for t in (inp.utterance, *(turn.text for turn in inp.recent_turns), *memory_lines)) if k)
+            unknown = list(dict.fromkeys(n for part in parts for n in _knowledge_unknown_places(part, known, said)))
+            if unknown and not self._registered(inp, unknown):
+                self._fallback(inp, "llm", *_ANSWER_MODES, "place_not_in_facts")
+                return DialogueAnswer.from_facts(facts)
         try:
             # 결정론 각주(웹 확인 '찾는 중'·'웹에서 확인한 정보')가 있으면 그것이 이긴다 — LLM 이 각주를 따로 쓰면 안내가 사라졌다(리뷰 재현)
-            return DialogueAnswer.from_facts(facts, text=draft.text, footnote=facts.footnote or draft.footnote)
+            return DialogueAnswer.from_facts(facts, text=draft.text,
+                                             footnote=facts.footnote or facts.intro_footnote or draft.footnote)
         except ValueError as e:  # 게이트와 같은 검사라 여기 오면 게이트가 어긋난 것 — 그래도 템플릿
             self._fallback(inp, "llm", *_ANSWER_MODES, f"answer_shape: {e}")
             return DialogueAnswer.from_facts(facts)
@@ -1387,6 +1500,7 @@ class DialogueOrchestrator:
         results = self._fanout(inp, step_tasks([h.plan(ctx) for h, ctx in zip(handlers, ctxs, strict=True)]))
         facts = merge_facts([h.assemble(ctx, step_results(results, i, n))
                              for i, (h, ctx) in enumerate(zip(handlers, ctxs, strict=True))])
+        self._prefetch(ctxs[0], facts)  # 조회 이름의 지역은 장소 DB 에서 온다 — 어느 문맥이든 포트·날짜·추적만 쓴다
         answer = self._compose(inp, facts.intent, facts, memory(), trip_summary, closed=True)
         self._log_plan(inp, "TOOLS", calls=draft.calls, arg_keys=[sorted(ctx.arguments) for ctx in ctxs], primary=facts.intent,
                        plan_ms=plan_ms,
@@ -1427,8 +1541,8 @@ class DialogueOrchestrator:
             self._fallback(inp, "llm", *_KNOWLEDGE_MODES, f"budget_exhausted(remaining_ms={remaining})")
             return None
         memory_lines = tuple(memory())
-        task = KnowledgeTask(inp.utterance, inp.recent_turns, memory_lines, trip_summary, inp.trace_id, inp.now,
-                             timeout_sec=min(_ANSWER_CAP_MS, self._remaining(inp) - _ANSWER_RESERVE_MS) / 1000)
+        task = KnowledgeTask(inp.utterance, inp.recent_turns, memory_lines, _knowledge_trip(trip_summary), inp.trace_id, inp.now,
+                             timeout_sec=min(_KNOWLEDGE_CAP_MS, self._remaining(inp) - _ANSWER_RESERVE_MS) / 1000)
         outcome = agent.run(task)
         if outcome.error is not None:  # 게이트웨이에 닿기 전 워커 예외 — 게이트웨이가 보고하지 못했다
             self._fallback(inp, "llm", *_KNOWLEDGE_MODES, f"knowledge_error: {outcome.error}")

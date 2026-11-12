@@ -6,11 +6,13 @@ import { Stack } from 'expo-router';
 
 import { usePermissionCatchUp } from '@/app/model/usePermissionCatchUp';
 import { useBootstrapGate } from '@/features/auth';
+import { flushMarks, mark } from '@/shared/lib/startupMarks';
 import {
   promptAndRegisterPush,
   registerPushIfGranted,
   requestPushPermission,
 } from '@/shared/push';
+import { readInstallFlag, writeInstallFlag } from '@/shared/storage';
 
 import {
   PUSH_REGISTER_DELAY_MS,
@@ -76,6 +78,12 @@ jest.mock('./bootClock', () => ({
   },
 }));
 
+// 시작 마크(TRIP-1717)는 부르는 시점·순서만 본다 — 실제 기록·파일 쓰기는 startupMarks.test 가 본다. 호출 기록은 beforeEach 의 clearAllMocks 가 비운다.
+jest.mock('@/shared/lib/startupMarks', () => ({
+  mark: jest.fn(),
+  flushMarks: jest.fn(),
+}));
+
 // 배럴을 통째로 갈지 않는다 — 실물을 먼저 펼쳐야 재수출이 늘어도(수신 입구 등) 형제 export 가 undefined 가 안 된다.
 jest.mock('@/shared/push', () => ({
   ...jest.requireActual('@/shared/push'),
@@ -84,11 +92,23 @@ jest.mock('@/shared/push', () => ({
   requestPushPermission: jest.fn(() => Promise.resolve('UNDETERMINED')),
 }));
 
+// TRIP-1831 — 스플래시 "끝까지 봤음" 표식(설치 단위 파일). 기본은 표식 없음·쓰기 성공 — 나머지 케이스는 종전과 같은 1300ms 하한으로 돈다.
+// 실물 파일 읽기·쓰기는 `installFlag.test`·`SplashGate.integration.test`(메모리 파일 대역)가 본다. 배럴은 통째로 갈지 않는다(requireActual 먼저).
+jest.mock('@/shared/storage', () => ({
+  ...jest.requireActual('@/shared/storage'),
+  readInstallFlag: jest.fn(),
+  writeInstallFlag: jest.fn(),
+}));
+
 const mockUseBootstrapGate = useBootstrapGate as jest.MockedFunction<
   typeof useBootstrapGate
 >;
 const mockRegisterIfGranted = registerPushIfGranted as jest.Mock;
 const mockCatchUp = usePermissionCatchUp as jest.Mock;
+const mockMark = mark as jest.Mock;
+const mockFlush = flushMarks as jest.Mock;
+const mockReadFlag = readInstallFlag as jest.Mock;
+const mockWriteFlag = writeInstallFlag as jest.Mock;
 
 type GateState = ReturnType<typeof useBootstrapGate>;
 
@@ -111,6 +131,10 @@ beforeEach(() => {
   // 앞 케이스가 스플래시를 붙잡게 바꿔 둔 반환값이 새지 않게 — 기본은 "붙잡지 않는다".
   mockCatchUp.mockReset();
   mockCatchUp.mockReturnValue(false);
+  mockReadFlag.mockReset();
+  mockReadFlag.mockResolvedValue(false);
+  mockWriteFlag.mockReset();
+  mockWriteFlag.mockResolvedValue(undefined);
   // TRIP-1624 — 스플래시의 "동작 줄이기" 답을 effect 안에서 동기로 받는다(비동기 답이 act 밖에서 상태를 바꾸는 경고 제거).
   answerReduceMotionSynchronously(false);
 });
@@ -307,6 +331,228 @@ describe('SplashGate — 최소 노출 floor (TRIP-579)', () => {
     // 추가 advance 없이 즉시 라우팅 — floor 는 하한이지 resolve 기준 재대기가 아니다.
     expect(screen.getByTestId('gate-route-(tabs)')).toBeOnTheScreen();
     expect(screen.queryByTestId('shell-splash-root')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1831 · 스플래시 설치 표식 — 첫 실행(표식 없음·읽기 실패)은 하한 1300ms 그대로, 비행을 끝까지 보여 준 뒤 표식을 남긴다.
+ * 표식이 있는 재방문은 하한 없이 부트스트랩(+권한 안내 붙잡기 해제)이 준비되는 즉시 걷힌다 — 단 첫 화면이 한 프레임은 보인다.
+ * 하한 타이머는 표식 읽기를 기다리지 않고 마운트 때 만든다(기존 케이스가 마운트 직후 동기로 시계를 흘린다) — 표식이 있다는 답이 오면 그 하한을 앞당긴다.
+ * 표식 읽기는 `@/shared/storage` 공개 입구의 `readInstallFlag('splash-seen')`, 쓰기는 `writeInstallFlag('splash-seen')` 이다.
+ * 3동작: 준비(게이트·표식 목) → 실행(렌더·시계·약속 흘리기) → 단언(스플래시 마커·표식 쓰기 호출).
+ */
+describe('SplashGate — 설치 표식과 재방문 (TRIP-1831)', () => {
+  const SEEN = 'splash-seen';
+  // 약속(마이크로태스크)을 흘린다 — 가짜 시계는 건드리지 않는다.
+  const flush = () =>
+    act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  // 실제 매크로태스크 경계 — 삼키지 않은 거절은 이 경계에서 터져 jest 가 이 테스트를 실패시킨다(가짜 타이머의 setImmediate 는 쓰지 않는다).
+  const realSetImmediate =
+    jest.requireActual<typeof import('timers')>('timers').setImmediate;
+  const macrotask = () =>
+    new Promise<void>((resolve) => realSetImmediate(resolve));
+  const splash = () => screen.queryByTestId('shell-splash-root');
+  const tabs = () => screen.queryByTestId('gate-route-(tabs)');
+  const advance = (ms: number) =>
+    act(() => {
+      jest.advanceTimersByTime(ms);
+    });
+
+  it('첫 실행(표식 없음): 마운트 때 표식을 읽고, 하한 직전(1299ms)까지 스플래시를 유지하다 1300ms 에 걷히며, 그때 표식을 정확히 1회 쓴다', async () => {
+    // 준비: 표식 없음(기본) · 부트스트랩은 처음부터 준비됨.
+    mockUseBootstrapGate.mockReturnValue(gate());
+
+    // 실행·단언 1: 마운트 직후 표식을 물었고 스플래시다.
+    render(<SplashGate />);
+    await flush();
+    expect(mockReadFlag).toHaveBeenCalledWith(SEEN);
+    expect(splash()).not.toBeNull();
+
+    // 단언 2: 하한 직전까지 스플래시 · 표식 쓰기 0회(비행을 다 보여 주기 전엔 안 쓴다).
+    advance(SPLASH_MIN_VISIBLE_MS - 1);
+    await flush();
+    expect(splash()).not.toBeNull();
+    expect(mockWriteFlag).not.toHaveBeenCalled();
+
+    // 단언 3: 하한이 울리면 걷히고 표식을 쓴다 — 이후 시간이 흘러도 1회.
+    advance(1);
+    await flush();
+    expect(tabs()).not.toBeNull();
+    expect(mockWriteFlag).toHaveBeenCalledTimes(1);
+    expect(mockWriteFlag).toHaveBeenCalledWith(SEEN);
+    advance(10_000);
+    await flush();
+    expect(mockWriteFlag).toHaveBeenCalledTimes(1);
+  });
+
+  it('첫 실행: 표식은 하한이 울린 시점에 쓴다 — 부트스트랩이 아직 안 끝나 스플래시가 남아 있어도', async () => {
+    mockUseBootstrapGate.mockReturnValue(
+      gate({ phase: 'loading', destination: null })
+    );
+    render(<SplashGate />);
+    await flush();
+
+    advance(SPLASH_MIN_VISIBLE_MS - 1);
+    expect(mockWriteFlag).not.toHaveBeenCalled();
+    advance(1);
+    await flush();
+
+    expect(mockWriteFlag).toHaveBeenCalledTimes(1);
+    expect(splash()).not.toBeNull(); // 목적지가 없으니 스플래시는 그대로
+  });
+
+  it('표식 읽기가 실패(reject)하면 첫 실행으로 접는다 — 하한 1300ms 를 지키고 1300ms 뒤 표식을 쓴다 (INV-4 결정적 폴백)', async () => {
+    mockReadFlag.mockRejectedValue(new Error('read failed'));
+    mockUseBootstrapGate.mockReturnValue(gate());
+
+    render(<SplashGate />);
+    await flush();
+    await macrotask(); // 읽기 거절을 삼키지 않았다면 여기서 터진다
+    expect(splash()).not.toBeNull();
+    advance(SPLASH_MIN_VISIBLE_MS - 1);
+    expect(splash()).not.toBeNull();
+    advance(1);
+    await flush();
+
+    expect(tabs()).not.toBeNull();
+    expect(mockWriteFlag).toHaveBeenCalledTimes(1);
+  });
+
+  it('표식 쓰기가 실패해도 삼킨다 — 앱은 그대로 진행하고(다음에도 첫 실행으로 보일 뿐) 재시도로 반복 쓰지 않는다', async () => {
+    mockWriteFlag.mockRejectedValue(new Error('disk full'));
+    mockUseBootstrapGate.mockReturnValue(gate());
+
+    render(<SplashGate />);
+    await flush();
+    advance(SPLASH_MIN_VISIBLE_MS);
+    await flush();
+    await macrotask(); // 쓰기 거절을 삼키지 않았다면 여기서 터진다
+    advance(10_000);
+    await flush();
+
+    expect(tabs()).not.toBeNull();
+    expect(mockWriteFlag).toHaveBeenCalledTimes(1);
+  });
+
+  it('재방문(표식 있음): 첫 렌더는 스플래시(한 프레임)이고, 표식 확인이 끝나면 하한을 안 기다리고 곧장 걷힌다', async () => {
+    mockReadFlag.mockResolvedValue(true);
+    mockUseBootstrapGate.mockReturnValue(gate());
+
+    render(<SplashGate />);
+    // 단언 1: 첫 커밋엔 스플래시가 보인다 — 읽기 답이 오기 전.
+    expect(splash()).not.toBeNull();
+    expect(tabs()).toBeNull();
+
+    // 실행: 시계는 한 틱도 안 흘리고 읽기 답만 받는다.
+    await flush();
+
+    // 단언 2: 하한(1300ms)이 안 지났는데 이미 걷혔다.
+    expect(splash()).toBeNull();
+    expect(tabs()).not.toBeNull();
+  });
+
+  it('재방문: 부트스트랩이 아직 안 끝났으면 표식이 있어도 스플래시를 유지하고, 끝나는 즉시 걷힌다 (목적지 없이 걷지 않는다)', async () => {
+    mockReadFlag.mockResolvedValue(true);
+    mockUseBootstrapGate.mockReturnValue(
+      gate({ phase: 'loading', destination: null })
+    );
+    const { rerender } = render(<SplashGate />);
+    await flush();
+    advance(200);
+    expect(splash()).not.toBeNull();
+
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
+    rerender(<SplashGate />);
+
+    expect(splash()).toBeNull();
+    expect(tabs()).not.toBeNull();
+  });
+
+  it('재방문: 표식 읽기 답이 부트스트랩 준비보다 늦게 와도 그 답이 오는 순간 걷힌다 (하한 전)', async () => {
+    // 준비: 읽기를 붙잡아 둔다 — 부트스트랩은 이미 준비됐다.
+    let answer!: (seen: boolean) => void;
+    mockReadFlag.mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        answer = resolve;
+      })
+    );
+    mockUseBootstrapGate.mockReturnValue(gate());
+    render(<SplashGate />);
+    advance(500);
+    await flush();
+    expect(splash()).not.toBeNull();
+
+    // 실행: 500ms 에 읽기 답(있음)이 온다.
+    await act(async () => {
+      answer(true);
+    });
+
+    // 단언: 하한(1300)을 한참 남기고 걷혔다.
+    expect(splash()).toBeNull();
+    expect(tabs()).not.toBeNull();
+  });
+
+  it('재방문: 권한 안내 조회가 아직 붙잡고 있으면(holdSplash) 걷히지 않고, 풀리면 걷힌다 — 붙잡기 판정은 하한 전에도 준비 신호를 받는다', async () => {
+    mockReadFlag.mockResolvedValue(true);
+    mockCatchUp.mockReturnValue(true);
+    mockUseBootstrapGate.mockReturnValue(gate());
+    const { rerender } = render(<SplashGate />);
+    await flush();
+
+    // 단언 1: 붙잡는 동안 스플래시 · 훅은 "준비됨"(true)을 하한 전에 받았다(이 신호로 그 훅의 1초 상한이 시작한다).
+    expect(splash()).not.toBeNull();
+    expect(mockCatchUp).toHaveBeenLastCalledWith(true, 'HOME');
+
+    // 단언 2: 풀리면 걷힌다.
+    mockCatchUp.mockReturnValue(false);
+    rerender(<SplashGate />);
+    expect(tabs()).not.toBeNull();
+  });
+
+  it('재방문: 걷힌 뒤 목적지 교정(잠정 LOGIN → 서버 HOME)이 와도 스플래시로 되돌아가지 않는다', async () => {
+    mockReadFlag.mockResolvedValue(true);
+    mockUseBootstrapGate.mockReturnValue(
+      gate({ destination: 'LOGIN', isProvisional: true })
+    );
+    const { rerender } = render(<SplashGate />);
+    await flush();
+    expect(screen.queryByTestId('gate-route-(auth)')).not.toBeNull();
+
+    mockUseBootstrapGate.mockReturnValue(
+      gate({ destination: 'HOME', isProvisional: false })
+    );
+    rerender(<SplashGate />);
+
+    expect(tabs()).not.toBeNull();
+    expect(splash()).toBeNull();
+  });
+
+  it('표식 읽기 답이 화면이 사라진 뒤에 와도 경고·오류가 없다 (누수 0)', async () => {
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      let answer!: (seen: boolean) => void;
+      mockReadFlag.mockReturnValue(
+        new Promise<boolean>((resolve) => {
+          answer = resolve;
+        })
+      );
+      mockUseBootstrapGate.mockReturnValue(gate());
+      const { unmount } = render(<SplashGate />);
+
+      unmount();
+      await act(async () => {
+        answer(true);
+      });
+      advance(SPLASH_MIN_VISIBLE_MS);
+      await flush();
+
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+    }
   });
 });
 
@@ -523,4 +769,183 @@ describe('SplashGate · 권한 안내 라우트 선언·스플래시 유지 (TRI
       }
     }
   );
+});
+
+/**
+ * TRIP-1717 · 콜드스타트 시작 마크 배선 — 6구간(P3~P6 + 보조 floorElapsed)이 정해진 시점에 정해진 순서로 한 번씩 찍힌다.
+ *
+ * 무엇을 보장하나: rootMounted(첫 마운트) → bootstrapResolved(phase 가 loading 을 벗어난 첫 순간, 목적지·잠정 여부를 detail 로)
+ * → floorElapsed(하한 타이머 콜백 — 하한 전엔 없다) → splashReleased(스택이 처음 그려진 커밋 — 권한 안내 hold 중엔 없다)
+ * → firstFrame + flushMarks(그 뒤 requestAnimationFrame 콜백에서, 1회). 같은 상태로 다시 그려도 마크가 늘지 않는다.
+ * 무엇을 안 보나: 마크 값·파일 내용(startupMarks.test), index.ts·_layout 모듈 본문 마크(02a §1 — 측정이 잠근다), 실제로 프레임이 그려졌는지.
+ * (개념) rAF = requestAnimationFrame, 다음 화면 갱신 직전에 한 번 불리는 콜백. 가짜 타이머가 16ms 틱으로 흘려 준다.
+ */
+describe('SplashGate · 시작 마크 배선 (TRIP-1717)', () => {
+  const names = (): string[] => mockMark.mock.calls.map((call) => call[0]);
+  const countOf = (name: string): number =>
+    names().filter((n) => n === name).length;
+  const orderOf = (name: string): number =>
+    mockMark.mock.invocationCallOrder[names().indexOf(name)];
+  const passFrame = (): void => {
+    act(() => {
+      jest.advanceTimersByTime(16);
+    });
+  };
+
+  it('W1 정상 흐름 — 마운트 직후 rootMounted·bootstrapResolved, 하한 뒤 floorElapsed·splashReleased, 프레임 뒤 firstFrame·flush 1회', () => {
+    // 준비
+    mockUseBootstrapGate.mockReturnValue(
+      gate({ destination: 'HOME', isProvisional: false })
+    );
+
+    // 실행 1 — 마운트
+    render(<SplashGate />);
+
+    // 단언 1 — 앵커: 스플래시 중이라 뒤 점은 아직 없다
+    expect(names()).toEqual(['rootMounted', 'bootstrapResolved']);
+    expect(mockMark).toHaveBeenCalledWith('bootstrapResolved', {
+      destination: 'HOME',
+      isProvisional: false,
+    });
+    expect(mockFlush).not.toHaveBeenCalled();
+
+    // 실행 2 — 하한 직전
+    act(() => {
+      jest.advanceTimersByTime(SPLASH_MIN_VISIBLE_MS - 1);
+    });
+    expect(names()).toEqual(['rootMounted', 'bootstrapResolved']);
+
+    // 실행 3 — 하한 도달
+    act(() => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(names()).toEqual([
+      'rootMounted',
+      'bootstrapResolved',
+      'floorElapsed',
+      'splashReleased',
+    ]);
+    expect(orderOf('floorElapsed')).toBeLessThan(orderOf('splashReleased'));
+    expect(mockFlush).not.toHaveBeenCalled(); // 아직 프레임 전
+
+    // 실행 4 — 다음 프레임
+    passFrame();
+
+    // 단언 4
+    expect(names()).toEqual([
+      'rootMounted',
+      'bootstrapResolved',
+      'floorElapsed',
+      'splashReleased',
+      'firstFrame',
+    ]);
+    expect(mockFlush).toHaveBeenCalledTimes(1);
+    expect(mockFlush.mock.invocationCallOrder[0]).toBeGreaterThan(
+      orderOf('firstFrame')
+    );
+  });
+
+  it('W2 부트스트랩 확정 — loading 동안엔 bootstrapResolved 가 없고, 확정되면 목적지·잠정 여부와 함께 정확히 1회', () => {
+    // 준비
+    mockUseBootstrapGate.mockReturnValue(
+      gate({ phase: 'loading', destination: null })
+    );
+    const { rerender } = render(<SplashGate />);
+    expect(names()).toEqual(['rootMounted']);
+
+    // 실행 — 3초 타임아웃 잠정 분기로 확정
+    mockUseBootstrapGate.mockReturnValue(
+      gate({ destination: 'HOME', isProvisional: true })
+    );
+    rerender(<SplashGate />);
+
+    // 단언
+    expect(countOf('bootstrapResolved')).toBe(1);
+    expect(mockMark).toHaveBeenCalledWith('bootstrapResolved', {
+      destination: 'HOME',
+      isProvisional: true,
+    });
+    expect(orderOf('rootMounted')).toBeLessThan(orderOf('bootstrapResolved'));
+  });
+
+  it('W3 권한 안내가 스플래시를 붙잡는 동안엔 splashReleased·firstFrame·flush 가 없다 — 풀린 뒤에야 찍힌다', () => {
+    // 준비 — 부트스트랩 확정 + 하한 지남, 그러나 권한 안내가 붙잡음
+    mockCatchUp.mockReturnValue(true);
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
+    const { rerender } = render(<SplashGate />);
+    passFloor();
+    passFrame();
+
+    // 단언 1 — 앵커: 하한은 지났고(floorElapsed 있음) 아직 안 그려졌다
+    expect(countOf('floorElapsed')).toBe(1);
+    expect(countOf('splashReleased')).toBe(0);
+    expect(countOf('firstFrame')).toBe(0);
+    expect(mockFlush).not.toHaveBeenCalled();
+
+    // 실행 — 붙잡기 해제
+    mockCatchUp.mockReturnValue(false);
+    rerender(<SplashGate />);
+    passFrame();
+
+    // 단언 2
+    expect(countOf('splashReleased')).toBe(1);
+    expect(countOf('firstFrame')).toBe(1);
+    expect(mockFlush).toHaveBeenCalledTimes(1);
+  });
+
+  it('W4 같은 상태로 다시 그리고 타이머를 더 흘려도 6구간 마크는 늘지 않는다 — 늘어나는 건 지연 푸시 등록 점(pushRegister) 하나뿐', () => {
+    // 준비 — W1 이 끝난 상태
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
+    const { rerender } = render(<SplashGate />);
+    passFloor();
+    passFrame();
+    const before = names();
+    expect(before).toHaveLength(5); // 앵커: 다섯 마크가 다 찍힌 상태
+
+    // 실행
+    rerender(<SplashGate />);
+    act(() => {
+      jest.advanceTimersByTime(5000);
+    });
+
+    // 단언 — TRIP-1720: 푸시 지연(2500)이 지나 pushRegister 가 한 번 붙고 파일을 한 번 더 쓴다
+    expect(names()).toEqual([...before, 'pushRegister']);
+    expect(mockFlush).toHaveBeenCalledTimes(2);
+  });
+
+  it('W5 pushRegister 는 HOME 진입 뒤 PUSH_REGISTER_DELAY_MS 가 지나 등록 루틴을 부르는 그 자리에서 찍히고 곧바로 파일에 쓴다 — HOME 이 아니면 없다 (TRIP-1720)', () => {
+    // 준비 — HOME, 하한·첫 프레임까지 지난 상태
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'HOME' }));
+    render(<SplashGate />);
+    passFloor();
+    passFrame();
+    expect(countOf('pushRegister')).toBe(0); // 앵커: 지연 전엔 없다
+
+    // 실행
+    passPushDelay();
+
+    // 단언 — 마크 → flush → 등록 루틴 순서, 각 1회
+    expect(countOf('pushRegister')).toBe(1);
+    expect(mockRegisterIfGranted).toHaveBeenCalledTimes(1);
+    const markAt = orderOf('pushRegister');
+    expect(mockFlush.mock.invocationCallOrder.at(-1)).toBeGreaterThan(markAt);
+    expect(mockRegisterIfGranted.mock.invocationCallOrder[0]).toBeGreaterThan(
+      markAt
+    );
+  });
+
+  it('W6 목적지가 HOME 이 아니면 지연이 지나도 pushRegister 가 없다 (TRIP-1720)', () => {
+    // 준비
+    mockUseBootstrapGate.mockReturnValue(gate({ destination: 'LOGIN' }));
+    render(<SplashGate />);
+    passFloor();
+    passFrame();
+
+    // 실행
+    passPushDelay();
+
+    // 단언 — 앵커: 6구간 마크는 찍혔다
+    expect(countOf('firstFrame')).toBe(1);
+    expect(countOf('pushRegister')).toBe(0);
+  });
 });

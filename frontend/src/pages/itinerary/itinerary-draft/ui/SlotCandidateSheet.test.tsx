@@ -17,7 +17,7 @@ import { SlotCandidateSheet } from './SlotCandidateSheet';
  *
  * 무엇을 보장하나:
  *  - 헤더 제목 `{현재 장소명} 대신` + 부제 `{HH:mm}–{HH:mm} · {컨셉} 슬롯의 다른 후보 · 동선은 …`.
- *  - 후보 행: 사진·이름·`#태그 · 태그`·거리 — 배지·추천이유(rationale) leaf·"이동" 라벨은 **없다**.
+ *  - 후보 행: 사진·이름·`#태그 · 태그`·거리 — 배지·"이동" 라벨은 **없다**. 추천 이유 문장은 TRIP-1780 부터 후보 행에만 뜬다.
  *  - 현재 행: 회색 "현재" 칩, 라디오 없음(탭 불가 · BR-U3-24).
  *  - 라디오 2단계: 행 press → onSelectRadio(제어 상태만) / 선택 전 CTA 비활성·무발화 / 선택 후 1회 확정.
  *  - 0건: ◇ 아이콘 + 2줄 문구 + CTA "장소 검색"(h13). "장소 검색 ›" 링크도 h13.
@@ -34,6 +34,7 @@ import { SlotCandidateSheet } from './SlotCandidateSheet';
 /** 현재 장소 행(회색 "현재" 칩, 탭 불가). Figma 값. */
 const CURRENT = {
   poiId: 'cur',
+  imageLicense: null,
   nameKo: '부산시립미술관',
   tags: ['미술', '실내'],
   distanceRange: '560m',
@@ -43,12 +44,14 @@ const CURRENT = {
 const CANDIDATES = [
   {
     poiId: 'p2',
+    imageLicense: null,
     nameKo: 'F1963 복합문화공간',
     tags: ['카페', '갤러리'],
     distanceRange: '1.1km',
   },
   {
     poiId: 'p3',
+    imageLicense: null,
     nameKo: '부산근대역사관',
     tags: ['지역', '무료'],
     distanceRange: '1.8km',
@@ -57,7 +60,7 @@ const CANDIDATES = [
 
 /** 후보 카드 **루트**만 잡는 셀렉터 — 하위·특수 testID 는 부정 룩어헤드로 제외(개명·재설계 반영). */
 const CANDIDATE_ROOT =
-  /^itinerary-candidate-(?!sheet|scrim|current|empty|error|place-search|confirm|name-|image-|distance-|tags-|radio-|check-)/;
+  /^itinerary-candidate-(?!sheet|scrim|current|empty|error|place-search|confirm|name-|image-|distance-|tags-|rationale-|radio-|check-)/;
 
 const renderedCandidatePoiIds = () =>
   screen
@@ -117,7 +120,7 @@ describe('🔴 SlotCandidateSheet — 헤더(AC-1·5·V1)', () => {
 });
 
 describe('🔴 SlotCandidateSheet — 후보 행 재설계(AC-2)', () => {
-  it('S2 · 사진·이름·`#태그 · 태그`·거리 — 배지·추천이유·"이동" 라벨은 없다', () => {
+  it('S2 · 사진·이름·`#태그 · 태그`·거리 — 배지·"이동" 라벨은 없다', () => {
     renderSheet();
 
     // 선택 후보 p2 로 전 요소를 확인한다.
@@ -139,8 +142,7 @@ describe('🔴 SlotCandidateSheet — 후보 행 재설계(AC-2)', () => {
       screen.getByTestId('itinerary-candidate-distance-p2')
     ).toHaveTextContent('1.1km');
 
-    // 재설계로 버린 것: 추천이유 leaf 부재(부정 짝) + "이동" 라벨 부재.
-    expect(screen.queryByTestId('itinerary-candidate-rationale-p2')).toBeNull();
+    // 재설계로 버린 것: "이동" 라벨 부재. (추천 이유 문장은 TRIP-1780 부터 보인다 — 맨 아래 describe.)
     expect(screen.queryByText(/이동/)).toBeNull();
   });
 
@@ -561,5 +563,129 @@ describe('🔴 SlotCandidateSheet — 0건 사유 얼굴(TRIP-948)', () => {
     expect(
       screen.getByTestId('itinerary-candidate-radio-p2')
     ).toBeOnTheScreen();
+  });
+});
+
+/**
+ * TRIP-1780 · 후보 행 추천 이유 문장 — 서버가 준 `rationale` 한 문장을 후보 행에만 보인다.
+ * 메타 줄 아래·2줄·색은 생김새라 jest 대상이 아니다(README 판정 4 · 6-b 몫).
+ *
+ * ★ 현재 행 "문장 없음"은 `current.rationale` 에 문장을 **일부러 실어야** 판정력이 있다(컨테이너가 현재 행엔
+ *   안 채워 값 없는 픽스처로는 코드가 틀려도 green).
+ */
+describe('🔴 SlotCandidateSheet — TRIP-1780 후보 행 추천 이유 문장', () => {
+  const SENT_P2 = '조용한 골목 산책을 좋아하는 취향에 맞아요';
+  const SENT_P3 = '근현대 역사를 한눈에 볼 수 있어 전시 일정에 잘 어울려요';
+  const rationaleOf = (poiId: string) =>
+    `itinerary-candidate-rationale-${poiId}`;
+
+  it('SS1 · 후보마다 자기 문장이 자기 행에 그대로 뜬다(서로 바뀌지 않는다)', () => {
+    renderSheet({
+      candidates: [
+        { ...CANDIDATES[0], rationale: SENT_P2 },
+        { ...CANDIDATES[1], rationale: SENT_P3 },
+      ],
+    });
+
+    expect(screen.getByTestId(rationaleOf('p2'))).toHaveTextContent(SENT_P2);
+    expect(screen.getByTestId(rationaleOf('p3'))).toHaveTextContent(SENT_P3);
+  });
+
+  it('SS2 · 현재 행에 문장을 실어도 현재 행엔 문장이 없다(후보 행은 있다)', () => {
+    renderSheet({
+      current: { ...CURRENT, rationale: '현재 장소에 달린 문장' },
+      candidates: [{ ...CANDIDATES[0], rationale: SENT_P2 }],
+    });
+
+    expect(screen.getByTestId('itinerary-candidate-current')).toBeOnTheScreen();
+    expect(screen.getByTestId(rationaleOf('p2'))).toHaveTextContent(SENT_P2);
+    expect(screen.queryByTestId(rationaleOf('current'))).toBeNull();
+    expect(screen.queryByText('현재 장소에 달린 문장')).toBeNull();
+  });
+
+  it.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['빈 문자열', ''],
+    ['공백뿐', '   '],
+  ])(
+    'SS3 · 문장이 %s 이면 그 행에 문장 요소가 없다 — 다른 행의 문장은 그대로',
+    (_label, blank) => {
+      renderSheet({
+        candidates: [
+          { ...CANDIDATES[0], rationale: blank },
+          { ...CANDIDATES[1], rationale: SENT_P3 },
+        ],
+      });
+
+      expect(screen.getByTestId('itinerary-candidate-p2')).toBeOnTheScreen();
+      expect(screen.queryByTestId(rationaleOf('p2'))).toBeNull();
+      expect(screen.getByTestId(rationaleOf('p3'))).toHaveTextContent(SENT_P3);
+    }
+  );
+
+  it('SS4 · 문장은 원문 그대로다 — 앞뒤·가운데 공백을 trim·축소하지 않는다', () => {
+    const raw = '  앞뒤 공백  두 칸 ';
+
+    renderSheet({ candidates: [{ ...CANDIDATES[0], rationale: raw }] });
+
+    // 기본 매처는 trim·공백 축소를 양쪽에 적용하므로 항등 normalizer 로 원문을 잰다.
+    expect(screen.getByTestId(rationaleOf('p2'))).toHaveTextContent(raw, {
+      normalizer: (text: string) => text,
+    });
+  });
+});
+
+/**
+ * TRIP-1840 · 후보 사진·이름 → 장소 상세, 그 밖의 행 → 라디오 선택(종전).
+ * 행 전체가 라디오라 "카드 전체 → 상세"면 고를 길이 사라진다 — h05 결정(사진·이름 → 상세)과 같은 규칙.
+ * 준비=onPressPlace 주입 → 실행=사진·이름·행 누름 → 단언=두 콜백이 서로 새지 않는다(안쪽 Pressable 이 먹는다).
+ */
+describe('🔴 TRIP-1840 · 후보 사진·이름 → 상세, 행 나머지 → 선택', () => {
+  it('SD1 · 사진·이름을 누르면 onPressPlace(poiId) — 라디오 선택 0회', () => {
+    const onPressPlace = jest.fn();
+    const onSelectRadio = jest.fn();
+    renderSheet({ onPressPlace, onSelectRadio });
+
+    fireEvent.press(screen.getByTestId('itinerary-candidate-image-open-p2'));
+    fireEvent.press(screen.getByTestId('itinerary-candidate-name-open-p3'));
+
+    expect(onPressPlace.mock.calls).toEqual([['p2'], ['p3']]);
+    expect(onSelectRadio).not.toHaveBeenCalled();
+  });
+
+  it('SD2 · 행(라디오)을 누르면 선택만 — 상세 0회 · 칸은 그 후보의 사진·이름을 품는다', () => {
+    const onPressPlace = jest.fn();
+    const onSelectRadio = jest.fn();
+    renderSheet({ onPressPlace, onSelectRadio });
+
+    fireEvent.press(screen.getByTestId('itinerary-candidate-radio-p2'));
+
+    expect(onSelectRadio.mock.calls).toEqual([['p2']]);
+    expect(onPressPlace).not.toHaveBeenCalled();
+    expect(
+      within(
+        screen.getByTestId('itinerary-candidate-image-open-p2')
+      ).getByTestId('itinerary-candidate-image-p2')
+    ).toBeOnTheScreen();
+    expect(
+      within(
+        screen.getByTestId('itinerary-candidate-name-open-p2')
+      ).getByTestId('itinerary-candidate-name-p2')
+    ).toBeOnTheScreen();
+  });
+
+  it('SD3 · onPressPlace 가 없으면 상세 칸이 없고, 현재 장소 행엔 주입돼도 없다 · 후보 수는 그대로', () => {
+    renderSheet();
+    expect(screen.queryAllByTestId(/-(image|name)-open-/)).toHaveLength(0);
+    expect(renderedCandidatePoiIds()).toEqual(['p2', 'p3']);
+
+    screen.unmount();
+    renderSheet({ onPressPlace: jest.fn() });
+    expect(
+      screen.queryByTestId('itinerary-candidate-image-open-current')
+    ).toBeNull();
+    // 새 testID 가 후보 루트 셀렉터에 새지 않는다(후보 수 그대로).
+    expect(renderedCandidatePoiIds()).toEqual(['p2', 'p3']);
   });
 });

@@ -8,6 +8,7 @@ ponytail: 대도시·주요 관광 권역 수십 곳의 손 좌표(시청·번�
 
 from __future__ import annotations
 
+import math
 import re
 
 from trippilot.domain.common import GeoPoint
@@ -39,6 +40,20 @@ _CENTERS: dict[str, tuple[float, float, float]] = {
     "담양": (35.3211, 126.9882, 5.0), "보령": (36.3334, 126.6129, 6.0), "창원": (35.2280, 128.6811, 6.0),
     "청주": (36.6424, 127.4890, 5.0), "천안": (36.8151, 127.1139, 5.0),
 }
+
+
+def covering_region(point: GeoPoint) -> str | None:
+    """좌표 → 그 점을 반경 안에 둔 표 지역 중 **가장 넓은** 이름(시청 근처면 종로·명동이 아니라 서울). 없으면 None.
+
+    현재 위치 날씨의 제목용(O-U8-5) — 날씨는 동네보다 도시 단위로 말한다. 거리는 평면 근사(반경 수 km 라 충분하다).
+    """
+    def km(lat: float, lng: float) -> float:
+        dy = (point.lat - lat) * 111.0
+        dx = (point.lng - lng) * 111.0 * math.cos(math.radians(lat))
+        return math.hypot(dx, dy)
+
+    inside = [(r, name) for name, (lat, lng, r) in _CENTERS.items() if km(lat, lng) <= r]
+    return max(inside)[1] if inside else None
 
 
 def region_center(text: str) -> tuple[str, GeoPoint, float] | None:
@@ -100,8 +115,21 @@ _AREA: dict[str, tuple[str | None, tuple[str, ...]]] = {
 }
 
 
+# 2026 행정 통합 — 전남과 광주가 한 시·도다. 데이터의 sido·주소 첫 낱말이 '전남광주통합특별시'(2026-08 수집본부터)라 시·도 앞글자 대조로는
+# 광주 행이 하나도 안 걸렸다(도우미 장소 SQL 행을 전부 버려 광주 탐색이 늘 반경이었다, 2026-11-04 개발 DB). 광주(옛 광역시)는 그 안의 다섯 구
+MERGED_SIDO = "전남광주통합특별시"
+GWANGJU_GU = frozenset({"동구", "서구", "남구", "북구", "광산구"})
+
+
+def in_sido(want: str, sido: str | None, sigungu: str | None) -> bool:
+    """시·도 앞글자 `want`("광주"·"서울") 안의 행인가 — 통합 특별시 행의 광주는 다섯 구다. 그 밖은 앞글자(옛 '광주광역시'도 맞는다)."""
+    if sido == MERGED_SIDO and want == "광주":
+        return (sigungu or "") in GWANGJU_GU
+    return (sido or "").startswith(want)
+
+
 def region_area(name: str) -> tuple[str | None, tuple[str, ...]]:
-    """표 이름 → (sido 앞글자, sigungu 앞글자들) — (None, ()) 이면 표에 없는 이름(거르지 않는다)."""
+    """표 이름 → (sido 앞글자, sigungu 앞글자들) — (None, ()) 이면 표에 없는 이름(거르지 않는다). 시·도 대조는 `in_sido` 로."""
     if name in _AREA:
         return _AREA[name]
     return (None, (name,)) if name in _CENTERS else (None, ())

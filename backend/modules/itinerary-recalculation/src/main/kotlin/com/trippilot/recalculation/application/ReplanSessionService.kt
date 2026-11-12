@@ -21,6 +21,7 @@ import com.trippilot.recalculation.domain.ReplanSession
 import com.trippilot.recalculation.domain.ReplanSessionRepository
 import com.trippilot.recalculation.domain.Staleness
 import com.trippilot.core.event.DomainEventPublisher
+import com.trippilot.itinerarygeneration.api.DeferredPlace
 import com.trippilot.itinerarygeneration.api.ReplanCommand
 import com.trippilot.itinerarygeneration.api.ReplanFacade
 import com.trippilot.itinerarygeneration.api.ReplanProposal
@@ -85,8 +86,11 @@ sealed interface Prepared {
 /** 선계산을 건너뛴 까닭(BR-SA-18). [BUSY] 는 실행 자리를 못 얻어 세션을 열지도 않은 것이다(상한·트리거당 1회를 쓰지 않는다). */
 enum class PrepareSkip { DUPLICATE, TRIP_CAP, GLOBAL_CAP, INVALID, OPEN_SESSION, EARLIER_OPEN, BUSY }
 
-/** 세션 + 낡음(BR-SA-19) — 화면 응답의 `stale` 과 적용 거절이 같은 판정을 쓴다. */
-data class SessionView(val session: ReplanSession, val stale: Boolean)
+/**
+ * 세션 + 낡음(BR-SA-19) — 화면 응답의 `stale` 과 적용 거절이 같은 판정을 쓴다.
+ * [deferredPlaces] = 초안이 다른 날 요청이라 이 날에 넣지 않은 갈 곳(F-7) — 앱이 '그 날에 넣어 다시 짜기'를 그린다. 초안이 없으면 빈 목록.
+ */
+data class SessionView(val session: ReplanSession, val stale: Boolean, val deferredPlaces: List<DeferredPlace>)
 
 /**
  * 재계획 세션 수명 관리(C10 · LC-U4-4).
@@ -266,7 +270,11 @@ class ReplanSessionService(
     /** 응답용 — 세션과 낡음(BR-SA-19). 사용자 세션은 읽기 없이 늘 낡지 않음이다. */
     @Transactional(readOnly = true)
     fun view(accountId: UUID, session: ReplanSession): SessionView =
-        SessionView(session, stalenessOf(accountId, session, clock.instant()) != null)
+        SessionView(
+            session, stalenessOf(accountId, session, clock.instant()) != null,
+            // 반영 뒤에도 싣는다 — 원탭 [다시 짜기]는 초안을 보자마자 반영해 앱은 반영된 세션으로 결과를 그린다
+            session.draft?.let { runCatching { ReplanProposal.fromMap(it).deferredPlaces }.getOrNull() }.orEmpty(),
+        )
 
     /** 진입 판정 결과 — 시작과 선계산이 같은 값으로 세션을 연다. */
     private class Entry(
@@ -284,7 +292,8 @@ class ReplanSessionService(
      * ① 트리거로 들어오면 대상 날짜는 **그 트리거의 날짜**이고 미래일이면 하루 전체다 — 구 앱(OTA 없음)이 내일 알림으로
      *   오늘을 다시 짜는 길을 서버가 막는다(그 적용은 내일 트리거를 소비하지도 못한다 — 날짜가 다르다). 트리거가 없거나
      *   다른 여행 것이면 409.
-     * ② 여행 기간 밖이면 409 — 단 전날 창([preTripEntry])만 연다.
+     * ② 끝난 여행이면 409. 여행 시작 전이면 — 알림 진입은 전날 창([preTripEntry])만, 알림 없는 진입은 앞으로 올 여행
+     *   날짜 하루 전체만 연다(TRIP-1841 — 사용자가 직접 누르는 여행 전 재계획. 날짜·범위는 [resolveTargetDate] 가 막는다).
      */
     private fun resolveEntry(
         accountId: UUID,
@@ -301,14 +310,15 @@ class ReplanSessionService(
         }
         val requested = triggerDate ?: requestedDate ?: today
         val scope = if (triggerDate != null && requested > today) ReplanScope.FULL_DAY else requestedScope
-        if (today < period.startDate || today > period.endDate) {
+        if (today > period.endDate) throw ConflictDetected(message = "여행 기간에만 재계획할 수 있습니다.")
+        if (today < period.startDate && triggerDate != null) {
             if (!preTripWindowOpen(period, today)) throw ConflictDetected(message = "여행 기간에만 재계획할 수 있습니다.")
-            if (!preTripEntry(period, today, triggerDate != null, requested, scope)) throw ConflictDetected(message = PRE_TRIP_ONLY)
+            if (!preTripEntry(period, today, true, requested, scope)) throw ConflictDetected(message = PRE_TRIP_ONLY)
         }
         // 다시 짤 일정이 있어야 재계획이다. 없으면 그건 '생성'이지 재계획이 아니다.
         val itinerary = itineraries.findCurrent(accountId, tripId)
             ?: throw ResourceNotFound("생성된 일정이 없습니다.")
-        return Entry(period, today, itinerary, resolveTargetDate(requested, scope, today, period.endDate, itinerary.dates), scope)
+        return Entry(period, today, itinerary, resolveTargetDate(requested, scope, today, period, itinerary.dates), scope)
     }
 
     /** 전날 창이 열려 있는가 — 지평 pre-trip ∧ 오늘 = 시작 − 1(DEC-SA-7 — 스윕의 전날 점검과 같은 스위치다). */
@@ -317,11 +327,22 @@ class ReplanSessionService(
 
     /**
      * 전날 창이 받는 것(BR-SA-20 ②③) — **알림으로 들어온 첫날 하루 전체**뿐이다. 진입과 적용이 같은 조건을 본다.
-     * 트리거 없는 진입은 여행 구간 안에서만이다 — 여행 전 확정 일정은 범용 복원이 409 다(INV-U3-04). 반영한 재계획
-     * 하나는 [revert] 로 되돌릴 수 있지만(TRIP-1412), 그것이 여행 전 편집 잠금(BR-U3-28)을 푸는 근거는 아니다.
+     * 트리거 없는 여행 전 진입은 이 창과 무관하다 — [preTripApplicable] 의 다른 갈래다(TRIP-1841).
      */
     private fun preTripEntry(period: TripPeriod, today: LocalDate, fromTrigger: Boolean, target: LocalDate, scope: ReplanScope) =
         preTripWindowOpen(period, today) && fromTrigger && target == period.startDate && scope == ReplanScope.FULL_DAY
+
+    /**
+     * 여행 전 반영 가드(BR-SA-20 ③ · TRIP-1841) — 진입이 연 것만 반영한다. 알림 진입은 전날 창 조건 그대로, 알림 없는
+     * 진입(사용자가 [수정] → AI에게 맡기기)은 여행 날짜 하루 전체다. 여행 전 확정 일정의 사용자 수정은 TRIP-1710 이 열었고,
+     * 반영한 재계획 하나는 [revert] 로 되돌릴 수 있다(TRIP-1412).
+     */
+    private fun preTripApplicable(period: TripPeriod, today: LocalDate, session: ReplanSession) =
+        if (session.triggerId != null) {
+            preTripEntry(period, today, true, session.targetDate, session.scope)
+        } else {
+            session.scope == ReplanScope.FULL_DAY && session.targetDate in period.startDate..period.endDate
+        }
 
     /**
      * 기준점 사다리(BR-U4-19) — 위치를 못 잡았어도 **막지 않는다**, 사다리를 내려가 가정을 밝힌다.
@@ -381,11 +402,12 @@ class ReplanSessionService(
         target: LocalDate,
         scope: ReplanScope,
         today: LocalDate,
-        tripEnd: LocalDate,
+        period: TripPeriod,
         itineraryDates: List<LocalDate>,
     ): LocalDate {
         if (target < today) throw ConflictDetected(message = "지난 날짜는 다시 짤 수 없습니다.")
-        if (target > tripEnd) throw ConflictDetected(message = "여행 기간 안의 날짜만 다시 짤 수 있습니다.")
+        // 시작 전 하한(TRIP-1841) — 여행 전에 날짜를 빼면 오늘이라 여기서 막힌다. 여행 중엔 target ≥ 오늘 ≥ 시작이라 무동작.
+        if (target < period.startDate || target > period.endDate) throw ConflictDetected(message = "여행 기간 안의 날짜만 다시 짤 수 있습니다.")
         if (target !in itineraryDates) throw ConflictDetected(message = "그 날짜의 일정이 아직 없습니다.")
         if (target > today && scope != ReplanScope.FULL_DAY) {
             throw ValidationFailed(
@@ -412,7 +434,7 @@ class ReplanSessionService(
      * 반영 후에는 세션을 닫아 같은 초안이 두 번 반영되지 않게 한다.
      *
      * 선계산 초안이 낡았으면(BR-SA-19) 409 `EXPIRED`·`STALE` 로 거절한다(INV-SA-7) — 시각을 다시 추정해 옮기지 않는다
-     * (DEC-U4-9). 앱이 같은 입력으로 새로 계산한다. 여행 전이면 전날 창의 진입만 반영한다(BR-SA-20 ③).
+     * (DEC-U4-9). 앱이 같은 입력으로 새로 계산한다. 여행 전이면 진입이 연 것만 반영한다(BR-SA-20 ③ · TRIP-1841).
      */
     @Transactional
     fun apply(accountId: UUID, tripId: UUID, sessionId: UUID): ReplanSession {
@@ -426,10 +448,10 @@ class ReplanSessionService(
         }
         val draft = session.draft ?: throw ConflictDetected(message = "재계획안이 비어 있습니다.")
         // 여행 전 반영 가드 — 일정 쪽 적용에는 여행 전 확정 일정 가드가 없다(TRIP-999 — 세션이 여행 중에만 열린다는 전제였다).
-        // 전날 창이 그 전제를 넓히므로 여기서 막는다. 여행 전 확정 일정은 편집이 잠겨 있다(BR-U3-28 · 범용 복원도 409, INV-U3-04).
+        // 진입이 여행 전에도 열리므로(전날 창 · TRIP-1841) 진입이 연 것만 반영한다 — 진입과 같은 조건이다.
         val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
         val today = LocalDate.ofInstant(now, TRAVEL_ZONE)
-        if (today < period.startDate && !preTripEntry(period, today, session.triggerId != null, session.targetDate, session.scope)) {
+        if (today < period.startDate && !preTripApplicable(period, today, session)) {
             throw ConflictDetected(message = PRE_TRIP_ONLY)
         }
         // 반영 직전의 비교 기준을 **일정 쓰기 잠금을 잡은 뒤, 쓰기 전에** 뜬다(TRIP-1412) — 되돌리기 지점과 같은 일정이어야 하고,
@@ -513,27 +535,6 @@ class ReplanSessionService(
         }
     }
 
-    /**
-     * 이력의 `reason` 한 줄(BR-U4-31) — 진입 경로 + 사유 + 방향 지시어 + 자유입력을 ` · ` 로 잇는다.
-     * 예: `자동 감지 · 비 예보 · 실내로`.
-     *
-     * **비워서 넘기지 않는다.** 사유·지시어를 하나도 안 고른 수동 진입이면 최소한 "여행 중 재계획"이라도 남긴다 —
-     * 빈 칸은 이력을 열었을 때 "왜 바꿨는지"를 되짚을 근거를 없앤다(US-PLANB-09 의 목적 자체).
-     *
-     * 트리거 **요약**(예: `날씨(비 예보 70%)`)까지는 싣지 않는다 — 그 문구는 C9(planb-detection) 소유이고, C10 이 C9 에서
-     * 읽는 것은 진입 날짜 강제용 사실(`TriggerLookupFacade` — kind·상태·날짜)뿐이다. 자동 진입이라는 사실만 `triggerId`
-     * 유무로 남긴다(정본 §7 대비 축약 — 문구가 필요해지면 그때 그 계약을 넓힌다).
-     */
-    private fun changeReason(session: ReplanSession): String {
-        val parts = buildList {
-            if (session.triggerId != null) add("자동 감지")
-            addAll(session.reasons)
-            addAll(session.directives)
-            session.freeText?.takeIf { it.isNotBlank() }?.let { add(it.trim()) }
-        }.filter { it.isNotBlank() }
-        return parts.joinToString(REASON_SEPARATOR).ifBlank { DEFAULT_REASON }.take(REASON_MAX)
-    }
-
     @Transactional(readOnly = true)
     fun get(accountId: UUID, tripId: UUID, sessionId: UUID): ReplanSession = owned(accountId, tripId, sessionId, sessions::findById)
 
@@ -576,18 +577,13 @@ class ReplanSessionService(
         /** 여행 "오늘"은 사용자가 있는 곳의 날짜지, 서버 UTC 날짜가 아니다. */
         private val TRAVEL_ZONE: ZoneId = ZoneId.of("Asia/Seoul")
 
-        private const val REASON_SEPARATOR = " · "
-
-        /** 되돌리기 이력의 사유 머리 — 뒤에 무엇을 되돌렸는지(원래 사유)를 잇는다(BR-U4-31 — 비워 두지 않는다). */
+        /**
+         * 되돌리기 이력의 사유 머리 — 뒤에 무엇을 되돌렸는지(원래 사유)를 잇는다(BR-U4-31 — 비워 두지 않는다).
+         * **AI 가 이 머리로 되돌림을 가른다**(`wiring._REVERT_PREFIX` — 되돌린 다시 짜기가 뺀 앞 요청 기억을 되살린다). 바꾸면 같이 고친다.
+         */
         private const val REVERT_PREFIX = "재계획 되돌림"
 
-        /** 사유·지시어를 하나도 안 고른 수동 진입의 최소 문구 — 빈 칸으로 남기지 않는다(BR-U4-31). */
-        private const val DEFAULT_REASON = "여행 중 재계획"
-
-        /** `change_log_entry.reason` 은 varchar(500) — 넘치면 저장이 통째로 실패한다(자유입력이 길 수 있다). */
-        private const val REASON_MAX = 500
-
-        /** 전날 창 밖의 여행 전 진입·적용(BR-SA-20 ②③). */
+        /** 전날 창 밖의 여행 전 알림 진입·적용(BR-SA-20 ②③). 알림 없는 여행 전 진입은 이 문구를 받지 않는다(TRIP-1841). */
         private const val PRE_TRIP_ONLY = "여행 전날에는 알림으로 받은 첫날 일정만 다시 짤 수 있어요."
 
         /** 선계산 하루 상한(O-SA-10 초기값) — 여행당·전체. 실제로 연 세션만 센다. */
@@ -598,3 +594,37 @@ class ReplanSessionService(
         private val USER_GRACE: Duration = Duration.ofMinutes(30)
     }
 }
+
+/**
+ * 이력의 `reason` 한 줄(BR-U4-31) — 진입 경로 + 사유 + 방향 지시어 + 자유입력을 ` · ` 로 잇는다.
+ * 예: `자동 감지 · 비 예보 · 실내로`.
+ *
+ * **비워서 넘기지 않는다.** 사유·지시어를 하나도 안 고른 수동 진입이면 최소한 "여행 중 재계획"이라도 남긴다 —
+ * 빈 칸은 이력을 열었을 때 "왜 바꿨는지"를 되짚을 근거를 없앤다(US-PLANB-09 의 목적 자체).
+ *
+ * 트리거 **요약**(예: `날씨(비 예보 70%)`)까지는 싣지 않는다 — 그 문구는 C9(planb-detection) 소유이고, C10 이 C9 에서
+ * 읽는 것은 진입 날짜 강제용 사실(`TriggerLookupFacade` — kind·상태·날짜)뿐이다. 자동 진입이라는 사실만 `triggerId`
+ * 유무로 남긴다(정본 §7 대비 축약 — 문구가 필요해지면 그때 그 계약을 넓힌다).
+ *
+ * 다음 재계획이 같은 날 반영 세션의 앞 요청(`prior_requests.text`, F-8)으로도 이 줄을 싣는다([ReplanSolver]).
+ *
+ * **AI 가 이 줄을 읽는다**(다음 재계획의 `change_log.reason`) — 같은 날 앞 요청 기억(AI `wiring._prior_requested`)이
+ * ` · ` 로 나눠 칩 키를 찾고 밤 낱말을 본다. 구분자·칩 키(화면 값 그대로)·자유입력 포함을 바꾸면 그쪽도 같이 고친다.
+ */
+internal fun changeReason(session: ReplanSession): String {
+    val parts = buildList {
+        if (session.triggerId != null) add("자동 감지")
+        addAll(session.reasons)
+        addAll(session.directives)
+        session.freeText?.takeIf { it.isNotBlank() }?.let { add(it.trim()) }
+    }.filter { it.isNotBlank() }
+    return parts.joinToString(REASON_SEPARATOR).ifBlank { DEFAULT_REASON }.take(REASON_MAX)
+}
+
+private const val REASON_SEPARATOR = " · "
+
+/** 사유·지시어를 하나도 안 고른 수동 진입의 최소 문구 — 빈 칸으로 남기지 않는다(BR-U4-31). */
+private const val DEFAULT_REASON = "여행 중 재계획"
+
+/** `change_log_entry.reason` 은 varchar(500) — 넘치면 저장이 통째로 실패한다(자유입력이 길 수 있다). */
+private const val REASON_MAX = 500

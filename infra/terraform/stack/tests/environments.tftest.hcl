@@ -45,7 +45,6 @@ run "dev_is_private_and_cost_conscious" {
     container_logs_retention_days = 7
     database_instance_class       = "db.t4g.small"
     database_allocated_storage    = 20
-    redis_node_type               = "cache.t4g.micro"
     alerts_slack_team_id          = "T0000000000"
     alerts_slack_channel_id       = "C0000000000"
     dev_target_enabled            = true
@@ -89,7 +88,7 @@ run "dev_is_private_and_cost_conscious" {
 
   # 로그 지표는 운영 네임스페이스만 센다 — 같은 클러스터·같은 로그 그룹의 개발 서버(trippilot-dev)가 운영 알람을 울리면 안 된다.
   assert {
-    condition = alltrue([for filter in [aws_cloudwatch_log_metric_filter.gateway_5xx[0], aws_cloudwatch_log_metric_filter.refresh_reuse[0]] :
+    condition = alltrue([for filter in [aws_cloudwatch_log_metric_filter.gateway_5xx[0], aws_cloudwatch_log_metric_filter.refresh_reuse[0], aws_cloudwatch_log_metric_filter.push_dispatch_failed[0], aws_cloudwatch_log_metric_filter.push_alert[0], aws_cloudwatch_log_metric_filter.outbox_abandon[0]] :
     startswith(filter.pattern, "{ ($.kubernetes.namespace_name = \"trippilot\") && ")])
     error_message = "Log metric filters must count only the production namespace, never the dev target sharing the log group."
   }
@@ -99,7 +98,7 @@ run "dev_is_private_and_cost_conscious" {
     condition = (
       length(aws_cloudwatch_metric_alarm.pod_restarts) == 3 && length(aws_cloudwatch_metric_alarm.database) == 3 &&
       alltrue([for alarm in concat(
-        [aws_cloudwatch_metric_alarm.gateway_5xx[0], aws_cloudwatch_metric_alarm.refresh_reuse[0], aws_cloudwatch_metric_alarm.failed_nodes[0]],
+        [aws_cloudwatch_metric_alarm.gateway_5xx[0], aws_cloudwatch_metric_alarm.refresh_reuse[0], aws_cloudwatch_metric_alarm.failed_nodes[0], aws_cloudwatch_metric_alarm.push_dispatch_failed[0], aws_cloudwatch_metric_alarm.push_alert[0], aws_cloudwatch_metric_alarm.outbox_abandon[0]],
         values(aws_cloudwatch_metric_alarm.pod_restarts), values(aws_cloudwatch_metric_alarm.database),
       ) : alarm.alarm_actions == toset([aws_sns_topic.alerts[0].arn]) && startswith(alarm.alarm_name, "trippilot-dev-")]) &&
       aws_chatbot_slack_channel_configuration.alerts[0].sns_topic_arns == toset([aws_sns_topic.alerts[0].arn])
@@ -133,11 +132,6 @@ run "dev_is_private_and_cost_conscious" {
   assert {
     condition     = !aws_db_instance.postgres.multi_az
     error_message = "DEV 는 단일 AZ 유지가 의도다(비용). 바꾸려면 결정을 먼저 바꿀 것."
-  }
-
-  assert {
-    condition     = aws_elasticache_replication_group.redis.transit_encryption_enabled && aws_elasticache_replication_group.redis.at_rest_encryption_enabled && aws_elasticache_replication_group.redis.transit_encryption_mode == "required"
-    error_message = "Cache traffic and stored data must always be encrypted."
   }
 
   assert {
@@ -213,7 +207,6 @@ run "prd_has_high_availability_and_data_protection" {
     container_logs_retention_days = 30
     database_instance_class       = "db.t4g.medium"
     database_allocated_storage    = 100
-    redis_node_type               = "cache.t4g.small"
   }
 
   # 받을 채널이 없으면 알람도 없다 — 아무도 못 받는 알람은 요금만 낸다.
@@ -233,13 +226,8 @@ run "prd_has_high_availability_and_data_protection" {
   }
 
   assert {
-    condition     = aws_elasticache_replication_group.redis.automatic_failover_enabled && aws_elasticache_replication_group.redis.multi_az_enabled && aws_elasticache_replication_group.redis.num_cache_clusters == 3 && aws_elasticache_replication_group.redis.snapshot_retention_limit >= 7
-    error_message = "PRD cache requires three replicas/primary nodes, Multi-AZ failover and backups."
-  }
-
-  assert {
     condition     = aws_eks_cluster.this.deletion_protection && aws_cloudwatch_log_group.eks.retention_in_days >= 30
-    error_message = "PRD EKS requires deletion protection and retained audit logs."
+    error_message = "PRD EKS requires deletion protection and retained control-plane logs."
   }
 
   assert {

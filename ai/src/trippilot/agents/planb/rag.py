@@ -38,6 +38,7 @@ from datetime import date, datetime
 from types import MappingProxyType
 
 from trippilot.agents.planb.place_knowledge import fetch_place_knowledge, kb5_counts
+from trippilot.agents.planb.place_search import PlaceSearch
 from trippilot.agents.planb.kb_retrieval import (
     DEFAULT_TOP_K,
     retrieve_persona,
@@ -59,6 +60,7 @@ from trippilot.ports.embedding_port import EmbeddingPort
 from trippilot.ports.vector_store_port import VectorStorePort
 from trippilot.assembly_engine.config import RAIN_OUTDOOR
 from trippilot.assembly_engine.travel import haversine_km
+from trippilot.poi_curation import hybrid_rank
 
 _ALTERNATIVE_LABELS = ("A", "B", "C", "D", "E")
 
@@ -242,6 +244,10 @@ class PlanBRagRequest:
     # False = 선택 LLM 을 부르지 않고 규칙 랭킹만. 다시 짜기는 구성 LLM(REPLAN_COMPOSITION)이
     # 하루를 고르므로 대체지 선택 LLM 은 시한만 먹는다(2026-10-14 DEV 3/3 이 6s 타임아웃 → 구성 몫 부족).
     use_llm: bool = True
+    # True = 규칙 랭킹에 KB-5 문서 순위를 섞는다(`fuse_rule_ranking`, 검색기가 주입됐을 때만). 다시 짜기(구성 LLM 이 이 순위 앞 20 을
+    # 후보로 받는다)만 켠다 — 측정한 경로가 거기뿐이다(2026-11-04 쌍대 판정 42:20). 도우미 대체 제안·대체 카드는 규칙 순위 앞이 곧
+    # 화면이라 '실내포차'('실내' 2-gram) 같은 잡음이 그대로 보인다 — 측정 없이 켜지 않는다
+    fuse_docs: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -312,16 +318,18 @@ class RagContext:
     place_knowledge: Mapping[str, str] = field(default_factory=dict)
     # LLM 에 보일 후보(`_shortlist`). None 이면 풀 전원 — 검색을 건너뛴 직접 조립용.
     shortlist: CandidatePool | None = None
+    # KB-3 를 찾았나 — 선택 LLM 을 안 부르면 찾지 않는다(`retrieve`). 안 찾았으면 SITUATION 키를 싣지 않는다.
+    situation_searched: bool = True
 
     def counts(self) -> dict:
         # SCHEDULE 키가 없다 — 검색하지 않으므로 0 을 싣는 것도 거짓이다(TRIP-972).
-        # 0 은 "찾았는데 없었다"로 읽히고, 사실은 "찾지 않는다"다.
+        # 0 은 "찾았는데 없었다"로 읽히고, 사실은 "찾지 않는다"다. SITUATION 도 안 찾았으면 같다(2026-11-05).
         # POI_DESC = 장소 지식이 붙은 후보 수(KB-5). 이것 없이는 운영에서 KB-5 가 비었는지(적재 전·장애) 볼 길이
         # 없었다(2026-10-18 청킹). 백엔드는 이 맵을 키 그대로 로그에 남긴다(`Map<String, Int>`).
         # 대체 문서(2026-10-23)는 섞지 않는다 — 붙었으면 POI_DESC_FALLBACK 으로 따로(`kb5_counts`).
         return {
             KbKind.PERSONA.value: len(self.persona),
-            KbKind.SITUATION.value: len(self.situation),
+            **({KbKind.SITUATION.value: len(self.situation)} if self.situation_searched else {}),
             **kb5_counts(self.place_knowledge),
         }
 
@@ -360,6 +368,7 @@ class PlanBAgent:
         *,
         alternative_worker: AlternativeSelectionWorker | None = None,
         config: PlanBRagConfig | None = None,
+        place_search: PlaceSearch | None = None,
     ) -> None:
         self._embedding = embedding
         self._store = store
@@ -367,6 +376,8 @@ class PlanBAgent:
         # 안에서 만들지 않는 건 Schedule·Reflect·Edit 와 같은 모양이기 위해서다.
         self._worker = alternative_worker
         self._cfg = config or PlanBRagConfig()
+        # KB-5 열린 검색 — 주입 = 켜짐(스위치·실 스토어 판정은 조립 `place_search.wire`). 요청이 `fuse_docs` 일 때만 쓴다
+        self._place_search = place_search
 
     # ── 공개 API ────────────────────────────────────────────────────────
 
@@ -484,9 +495,12 @@ class PlanBAgent:
             situ_v = persona_v = None
             notes.append(f"embed_batch_degraded: {type(e).__name__}: {e}")
 
+        # KB-3 히트를 읽는 곳은 선택 LLM 프롬프트뿐이다 — 안 부르면(다시 짜기·도우미) 찾지 않는다. 운영 로그의
+        # `SITUATION=4` 가 이 읽히지 않는 검색이었다(2026-11-05). 다시 짜기 구성의 상황 원칙은 사유 표지로 따로 고른다
+        # (`composition.situation_lines` → `retrieved.SITUATION_PROMPT`). KB-2 는 남긴다 — 규칙 랭킹(`_saved_refs`)이 읽는다.
         situation, note = self._safe_retrieve(
             retrieve_situation, situ_q, KbKind.SITUATION, situ_v
-        )
+        ) if request.use_llm else ((), "")
         if note:
             notes.append(note)
         persona, note = self._safe_retrieve(
@@ -514,6 +528,7 @@ class PlanBAgent:
             notes=tuple(notes),
             place_knowledge=knowledge,
             shortlist=shortlist,
+            situation_searched=request.use_llm,
         )
 
     def place_knowledge(
@@ -524,6 +539,17 @@ class PlanBAgent:
         같은 문자열이라 운영 임베딩 캐시(`CachingEmbedding`)에 걸린다. 예외를 올리지 않는다(INV-4).
         """
         return fetch_place_knowledge(pois, _situation_query(request), self._embedding, self._store)
+
+    def warm_docs(self, user_request: str, reason: str) -> None:
+        """다시 짜기 후보 순위에 섞을 문서 질의의 임베딩을 미리 시작한다(`PlaceSearch.warm`) — 요청 진입에서 불러 풀 수집·지시 해석과
+        겹치게. 검색은 그 뒤라 그때서야 임베딩하면 문서 대기(`_doc_wait` ≤1.0s)를 임베딩이 먹는다(개발 2026-11-05 TIMEOUT 1,166ms).
+        질의는 `_select` 와 같은 `_doc_text` → `_doc_query` 라 검색이 이 결과를 기다리거나 임베딩 캐시(`CachingEmbedding`)에서 집는다.
+        검색기가 없거나 게이트가 닫히면 아무것도 하지 않는다. 섞을지(`fuse_docs`)는 호출측이 같은 조건으로 판정한다."""
+        if self._place_search is None:
+            return
+        query = _doc_query(_doc_text(user_request, reason))
+        if query is not None:
+            self._place_search.warm(query)
 
     def _safe_retrieve(
         self, fn, query: str, kb: KbKind, vector: Sequence[float] | None = None
@@ -581,6 +607,11 @@ class PlanBAgent:
         rule_ranked, rule_note = _rule_ranking(
             saved_refs, request.pool, available, request.reason, request.user_request
         )
+        if self._place_search is not None and request.fuse_docs:
+            rule_ranked, status = fuse_rule_ranking(
+                self._place_search, request.pool, rule_ranked, _doc_text(request.user_request, request.reason),
+                _doc_wait(request), trace=f"planb-{request.trace_id}")
+            rule_note = f"{rule_note} · open_search={status}" if rule_note else f"open_search={status}"
 
         def _why(cause: str) -> str:  # 폴백 사유 + 규칙 랭킹이 뭘 했는지 (침묵 조정 금지)
             return f"{cause} · {rule_note}" if rule_note else cause
@@ -687,6 +718,46 @@ def _situation_query(request: PlanBRagRequest) -> str:
     # 앞 100자만 — 긴 글이 트리거·사유 몫을 덮어 비 예보 같은 상황 지식이 밀리지 않게.
     said = f" {request.user_request.strip()[:100]}" if request.user_request.strip() else ""
     return f"{request.trigger.kind.value} {reason} 상황{said}"
+
+
+# 다시 짜기 후보 순위에 섞을 KB-5 문서의 질의 — 사용자 말이 있으면 그 말, 없으면 사유의 필요. 여기 없는 사유는 말이 없으면 섞지 않는다
+# (게이트가 닫힌다). 측정 러너(`measure_doc_quota` open 팔)가 이 표를 그대로 쓴다
+REASON_NEED: Mapping[str, str] = MappingProxyType({
+    "weather": "비를 피해 실내에서 보내기 좋은 곳",
+    "fatigue": "많이 걷지 않고 앉아서 쉬어 갈 수 있는 곳",
+})
+# 문서 순위 대기 상한 — 다시 짜기 예산(`deadline_ms`)의 10% 를 넘지 않는다. 실 pgvector 문서 단계 p95 205ms(2026-11-04 로컬 53,716조각)
+_DOC_WAIT_S, _DOC_WAIT_SHARE = 1.0, 0.1
+
+
+def _doc_text(user_request: str, reason: str) -> str:
+    return user_request.strip() or REASON_NEED.get(reason, "")
+
+
+def _doc_query(text: str) -> hybrid_rank.OpenQuery | None:
+    return hybrid_rank.open_query(text, None, generic=hybrid_rank.GENERIC_WORDS)
+
+
+def _doc_wait(request: PlanBRagRequest) -> float:
+    if not request.deadline_ms or request.deadline_ms <= 0:
+        return _DOC_WAIT_S
+    return min(_DOC_WAIT_S, request.deadline_ms / 1000.0 * _DOC_WAIT_SHARE)
+
+
+def fuse_rule_ranking(place_search: PlaceSearch, pool: CandidatePool, ranked: tuple[str, ...], text: str,
+                      wait_s: float, *, trace: str = "") -> tuple[tuple[str, ...], str]:
+    """규칙 랭킹 → (KB-5 문서 순위를 RRF 로 섞은 랭킹, 상태). 질의 게이트·검색기·융합은 도우미 탐색과 같다(`hybrid_rank`·
+    `PlaceSearch`). 게이트가 닫히면 `GATE_CLOSED`, 검색이 OK 가 아니면 그 상태 — 둘 다 규칙 랭킹 그대로(INV-4).
+    출력은 입력의 순열이다 — 후보 자격을 만들지 않는다(INV-1)."""
+    query = _doc_query(text)
+    if query is None:
+        return ranked, "GATE_CLOSED"
+    by_id = {str(p.poi_id): p for p in pool.pois}
+    order = [by_id[r] for r in ranked]
+    status, ranks = place_search.search(query, [p.source_ref for p in order if p.source_ref], wait_s, trace=trace)
+    if status != "OK":
+        return ranked, status
+    return tuple(str(p.poi_id) for p in hybrid_rank.fuse(order, ranks, named=query.names)), status
 
 
 def _persona_query(request: PlanBRagRequest) -> str:

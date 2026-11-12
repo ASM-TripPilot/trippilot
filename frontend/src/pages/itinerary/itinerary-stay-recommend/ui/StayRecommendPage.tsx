@@ -1,14 +1,17 @@
-import { type ReactElement, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { goBackOr } from '@/shared/lib/goBackOr';
 
 import type { StayRecommendView as StayRecommendViewModel } from '../model/stayRecommend';
-import { LocationOffGlyph } from '@/features/itinerary';
+import { ItineraryLocationOffGlyph } from '@/features/itinerary';
 import { useAssignBase } from '@/features/assign-trip-base';
 import { useGetTripsTripId } from '@/shared/api/index.hooks';
+import { SAVED_LIST_LOAD_FAILED_TOAST } from '@/shared/ui/savedListLoadToast';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { showToast } from '@/shared/ui/Toast';
+import { usePressLock } from '@/shared/lib/pressGuard';
 import {
   CuratedStaysSection,
   CuratedStaysSheet,
@@ -36,6 +39,9 @@ import { StayRecommendView } from './StayRecommendView';
 
 const ASSIGN_FAILED_NOTICE = '거점으로 지정하지 못했어요. 다시 시도해 주세요.';
 const SAME_DAY_NOTICE = '당일 여행은 거점 숙소 없이 동선만 유지해요.';
+/** 여행 조회가 실패해 기간을 모른다(TRIP-1749 결정 3) — 꺼진 CTA 만 남기지 않고 이유를 말한다(INV-4). */
+const TRIP_FAILED_NOTICE =
+  '여행 기간을 불러오지 못했어요. 돌아가서 다시 열어 주세요.';
 const CURATED_NOTICE =
   '이번 동선 기준 추천은 아직 없어요 · 대신 인기 숙소를 보여 드려요';
 
@@ -71,11 +77,19 @@ export function StayRecommendPage({
   });
   const assignBase = useAssignBase();
 
+  // TRIP-1754 — 인기 숙소 하트가 그려지는 얼굴(추천 없음 + 줄 있음 — 추천이 있으면 curated.hidden 이 이미 true)에서만, 저장 목록 확정 실패가 켜지는 순간 토스트 1회.
+  // 조기 return 보다 앞(Rules of Hooks).
+  const heartsShown = !curated.hidden;
+  const savedListFailed = heartsShown && curated.savedListFailureConfirmed;
+  useEffect(() => {
+    if (savedListFailed) showToast(SAVED_LIST_LOAD_FAILED_TOAST);
+  }, [savedListFailed]);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [assignFailed, setAssignFailed] = useState(false);
   // in-flight 잠금 — `isPending` 은 다음 렌더에야 반영돼 같은 틱 이중탭을 못 막는다(TripNewStep2 선례).
   // 성공은 화면을 떠나므로 잠근 채 두고, 실패만 풀어 재시도를 연다.
-  const assignLockRef = useRef(false);
+  const assignLock = usePressLock();
 
   function goBack(): void {
     goBackOr(router, `/trips/${tripId}/itinerary`);
@@ -98,7 +112,7 @@ export function StayRecommendPage({
               <View className="flex-1 items-center justify-center bg-canvas px-lg">
                 <StateNotice
                   testID="stay-recommend-empty"
-                  icon={<LocationOffGlyph />}
+                  icon={<ItineraryLocationOffGlyph />}
                   title="지금은 동선 기준 추천을 보여 드릴 수 없어요"
                   description="숙소를 직접 둘러보고 저장하면 거점으로 지정할 수 있어요."
                   actions={[
@@ -167,14 +181,13 @@ export function StayRecommendPage({
 
   function handleConfirm(): void {
     if (
-      assignLockRef.current ||
       startDate === undefined ||
       endDate === undefined ||
-      sameDay
+      sameDay ||
+      !assignLock.acquire()
     ) {
       return;
     }
-    assignLockRef.current = true;
     setAssignFailed(false);
     assignBase.mutate(
       {
@@ -188,7 +201,7 @@ export function StayRecommendPage({
       {
         onSuccess: goBack,
         onError: () => {
-          assignLockRef.current = false;
+          assignLock.release();
           setAssignFailed(true);
         },
       }
@@ -197,6 +210,8 @@ export function StayRecommendPage({
 
   let notice: string | null = null;
   if (assignFailed) notice = ASSIGN_FAILED_NOTICE;
+  // 기간을 이미 받았으면 재조회 실패는 안내하지 않는다 — [확정]은 켜져 있다(03b 경고-2).
+  else if (trip.isError && endDate === undefined) notice = TRIP_FAILED_NOTICE;
   else if (sameDay) notice = SAME_DAY_NOTICE;
 
   return (

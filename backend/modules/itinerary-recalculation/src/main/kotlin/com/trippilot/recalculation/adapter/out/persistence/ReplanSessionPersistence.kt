@@ -85,6 +85,10 @@ interface ReplanSessionJpaRepository : JpaRepository<ReplanSessionEntity, UUID> 
 
     fun countByInitiatedByAndCreatedAtGreaterThanEqual(initiatedBy: String, since: Instant): Long
 
+    fun findByTripIdAndTargetDateAndStatusAndRevertedAtIsNullOrderByClosedAtDesc(
+        tripId: UUID, targetDate: LocalDate, status: String,
+    ): List<ReplanSessionEntity>
+
     /** 행 잠금 조회 — 비동기 산출과 취소·재진입의 경합을 직렬화한다(`SELECT … FOR UPDATE`). */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from ReplanSessionEntity s where s.sessionId = :sessionId")
@@ -146,6 +150,10 @@ class ReplanSessionPersistence(private val jpa: ReplanSessionJpaRepository) : Re
 
     override fun purgeOrigins(tripIds: List<UUID>): Int =
         if (tripIds.isEmpty()) 0 else jpa.purgeOrigins(tripIds)
+
+    override fun findAppliedOn(tripId: UUID, targetDate: LocalDate): List<ReplanSession> =
+        jpa.findByTripIdAndTargetDateAndStatusAndRevertedAtIsNullOrderByClosedAtDesc(tripId, targetDate, ReplanStatus.APPLIED.name)
+            .map { it.toDomain() }
 
     private fun ReplanSessionEntity.toDomain() = ReplanSession(
         sessionId, tripId, itineraryId, triggerId,
@@ -212,6 +220,7 @@ internal fun ReplanDiff.SlotView.toJsonMap(): Map<String, Any> = buildMap {
     nameKo?.let { put("nameKo", it) }
     category?.let { put("category", it) }
     imageUrl?.let { put("imageUrl", it) }
+    imageLicense?.let { put("imageLicense", it) }
     lat?.let { put("lat", it) }
     lng?.let { put("lng", it) }
 }
@@ -227,6 +236,7 @@ internal fun Map<String, Any>.toSlotView() = ReplanDiff.SlotView(
     nameKo = get("nameKo") as? String,
     category = get("category") as? String,
     imageUrl = get("imageUrl") as? String,
+    imageLicense = get("imageLicense") as? String,
     lat = (get("lat") as? Number)?.toDouble(),
     lng = (get("lng") as? Number)?.toDouble(),
 )

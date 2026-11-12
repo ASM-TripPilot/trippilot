@@ -14,6 +14,8 @@ dependencies {
     // R1: 그 날 갈 곳의 **이름**만 — itinerary-generation.api(ItineraryPlanFacade). 이름 규칙(확정분
     // 동결 우선, INV-U1-03)은 저쪽이 소유하므로 poiId 를 받아 place-data 를 따로 묻지 않는다.
     implementation(project(":modules:itinerary-generation"))
+    // R1: 삭제 유예 중인 계정인가만 — auth.api(AccountStatusFacade). 삭제 요청·철회 이벤트는 순서가 뒤바뀔 수 있어 처리 시점의 상태를 묻는다.
+    implementation(project(":modules:auth"))
     implementation(libs.spring.boot.starter.data.jpa)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.boot.starter.validation)

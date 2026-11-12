@@ -1,3 +1,4 @@
+import { BackArrowGlyph } from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import { useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
@@ -5,15 +6,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { openAppSettings } from '@/shared/external-link';
 
 import { FormatSegment } from './FormatSegment';
-import { BackArrowGlyph } from '@/features/reflection/index.view';
-import { DownloadGlyph, ShareGlyph } from './ShareCardGlyphs';
+import { ShareCardDownloadGlyph, ShareCardShareGlyph } from './ShareCardGlyphs';
 import { ShareCardPreview } from './ShareCardPreview';
 import { Skeleton } from '@/shared/ui/Skeleton';
+import { buttonClasses } from '@/shared/ui/Button';
+import { COLOR_TOKENS } from '@/shared/config';
 import {
-  CAPTION_MAX_LENGTH,
   HASHTAG_MAX_COUNT,
-  validateCaption,
   validateHashtags,
+  type MagazinePicture,
   type ShareCardVM,
   type ShareFormat,
 } from '@/features/reflection/index.view';
@@ -35,7 +36,7 @@ import {
  *  - TRIP-939(심사 2.1): 캡처 미장전(isShareCaptureArmed() false)이면 저장/공유 버튼 줄을 그리지 않는다.
  *  - TRIP-1071: 저장/공유는 프리뷰 프레임을 캡처해 앨범·공유 시트로 보내고 결과를 인라인으로 알린다
  *    (저장 성공·권한 거부·실패, 공유는 실패만 — 공유 시트는 실제 전송 여부를 모른다). 서버 호출 0.
- *    [편집]은 항상 있고 해시태그 줄만 인라인으로 고친다(서버 저장 없음, 한도는 validate* 재사용).
+ *    [편집]은 항상 있고 해시태그 줄만 인라인으로 고친다(서버 저장 없음, 개수 한도는 validateHashtags 재사용 — 줄 길이는 안 본다, TRIP-1664).
  */
 
 // TRIP-1016(D10·INV-4): 지도 히어로가 없으므로(TRIP-634) 카드에 실제로 그린 것만 말한다.
@@ -50,7 +51,6 @@ const RESULT_TEXT: Record<ShareResult, string> = {
   failed: '이미지를 만들지 못했어요. 다시 시도해 주세요',
 };
 const HASHTAG_COUNT_ERROR = `해시태그는 ${HASHTAG_MAX_COUNT}개까지 넣을 수 있어요`;
-const HASHTAG_LENGTH_ERROR = `${CAPTION_MAX_LENGTH}자까지 쓸 수 있어요`;
 const COPY_LIMIT_NOTICE =
   '오늘은 추천 문구를 모두 받았어요. 직접 편집해 쓸 수 있어요';
 
@@ -58,11 +58,18 @@ export interface ShareCardScreenProps {
   card: ShareCardVM;
   formats: ShareFormat[];
   caption: string;
+  /** 보여 줄 해시태그 한 줄 — 고친 값·서버·온디바이스 중 무엇을 보일지는 페이지가 `resolveShareText` 로 정해 내린다(이 화면은 고친 값을 들고 있지 않는다). */
   hashtagText: string;
+  /** [완료]로 고친 해시태그 한 줄을 페이지로 올린다(서버 저장 없음). */
+  onCommitHashtags: (text: string) => void;
   /** 서버 문구를 기다리는 중 — 캡션 자리에 Skeleton(TRIP-1605). 생략하면 기다리지 않는 것. */
   copyPending?: boolean;
   /** 서버 문구의 하루 상한에 닿았다 — 캡션 자리에 한 줄 안내. 생략하면 없음. */
   copyLimitReached?: boolean;
+  /** TRIP-1781 · 대표 카드에 깔 표지 사진 — 덱 표지와 같은 값을 페이지가 내린다. 생략하면 사진 없는 카드. */
+  coverPicture?: MagazinePicture | null;
+  /** TRIP-1781 · 사진을 고르는 동안 저장·공유를 잠근다(고르기 전에 캡처하면 사진 없는 PNG 가 나간다). 생략하면 잠기지 않음. */
+  exportLocked?: boolean;
   onBack: () => void;
 }
 
@@ -71,16 +78,16 @@ export function ShareCardScreen({
   formats,
   caption,
   hashtagText,
+  onCommitHashtags,
   copyPending = false,
   copyLimitReached = false,
+  coverPicture = null,
+  exportLocked = false,
   onBack,
 }: ShareCardScreenProps): ReactElement {
   const [selectedFormatId, setSelectedFormatId] = useState<ShareFormat['id']>(
     formats[0]?.id ?? 'story'
   );
-  // 사용자가 [완료]로 고친 값. null 이면 prop 을 그대로 보인다(서버 문구가 늦게 도착해도 따라간다 — useState 초기값은 첫 렌더에만 읽힌다).
-  const [editedHashtags, setEditedHashtags] = useState<string | null>(null);
-  const hashtags = editedHashtags ?? hashtagText;
   const [draft, setDraft] = useState<string | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [result, setResult] = useState<ShareResult | null>(null);
@@ -89,15 +96,24 @@ export function ShareCardScreen({
   const selectedFormat =
     formats.find((format) => format.id === selectedFormatId) ?? formats[0];
   const exportArmed = isShareCaptureArmed();
+  // 글리프 + 글자 행이라 Button 대신 같은 모양 클래스만 빌린다(TRIP-1828 탈출구). 잠김은 공용 회색 한 종.
+  const saveButton = buttonClasses({
+    variant: 'secondary',
+    disabled: exportLocked,
+  });
+  const shareButton = buttonClasses({ disabled: exportLocked });
+  const lockedGlyph = exportLocked ? COLOR_TOKENS['muted-soft'] : undefined;
 
   // 실행 함수는 reject 하지 않는 계약이지만, 뜻밖의 예외도 실패로 드러낸다(INV-4 — 침묵 금지).
   const handleSave = async () => {
+    if (exportLocked) return;
     const outcome = await saveShareCardImage(frameRef).catch(
       () => ({ status: 'failed' }) as const
     );
     setResult(outcome.status);
   };
   const handleShare = async () => {
+    if (exportLocked) return;
     const outcome = await shareShareCardImage(frameRef).catch(
       () => ({ status: 'failed' }) as const
     );
@@ -105,10 +121,11 @@ export function ShareCardScreen({
   };
 
   const openEditor = () => {
-    setDraft(hashtags);
+    setDraft(hashtagText);
     setDraftError(null);
   };
-  // 공백으로 나눠 빈 토큰을 버린 개수 · 줄 전체 길이로 검사한다. `#` 는 붙이지 않고 입력 그대로 둔다.
+  // 공백으로 나눠 빈 토큰을 버린 개수만 검사한다. `#` 는 붙이지 않고 입력 그대로 둔다.
+  // 줄 길이는 보지 않는다 — 150자는 캡션 상한이고, 서버 계약은 해시태그 개수(≤10)만 정한다(서버가 준 값을 그대로 [완료]할 수 있어야 한다).
   const commitDraft = () => {
     if (draft === null) return;
     const tags = draft.split(/\s+/).filter(Boolean);
@@ -116,11 +133,7 @@ export function ShareCardScreen({
       setDraftError(HASHTAG_COUNT_ERROR);
       return;
     }
-    if (!validateCaption(draft).valid) {
-      setDraftError(HASHTAG_LENGTH_ERROR);
-      return;
-    }
-    setEditedHashtags(draft);
+    onCommitHashtags(draft);
     setDraft(null);
     setDraftError(null);
   };
@@ -130,6 +143,8 @@ export function ShareCardScreen({
       {/* 헤더 — 뒤로 · 제목(현 j06 엔 편집/공유 액션 없음, 하단 버튼이 진다) */}
       <View className="w-full flex-row items-center bg-canvas pb-[12px] pl-[12px] pr-lg pt-[4px]">
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="뒤로"
           testID="reflection-share-back"
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           onPress={onBack}
@@ -159,6 +174,7 @@ export function ShareCardScreen({
           card={card}
           aspectRatio={selectedFormat.aspectRatio}
           frameRef={frameRef}
+          picture={coverPicture}
         />
 
         {card.mode === 'no-photo' ? (
@@ -181,6 +197,7 @@ export function ShareCardScreen({
                 끌어올리면 [완료]도 늘 그 위에 있다(아래 큰 버튼은 커서+15pt 기준 밖이라 키보드 뒤에 남았다). */}
             {draft === null ? (
               <Pressable
+                accessibilityRole="button"
                 testID="reflection-share-caption-edit"
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 onPress={openEditor}
@@ -191,6 +208,7 @@ export function ShareCardScreen({
               </Pressable>
             ) : (
               <Pressable
+                accessibilityRole="button"
                 testID="reflection-share-caption-save"
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 onPress={commitDraft}
@@ -223,7 +241,7 @@ export function ShareCardScreen({
               testID="reflection-share-hashtags"
               className="font-noto text-body text-link"
             >
-              {hashtags}
+              {hashtagText}
             </Text>
           ) : (
             <View className="gap-sm">
@@ -259,6 +277,7 @@ export function ShareCardScreen({
             </Text>
             {result === 'permission-denied' ? (
               <Pressable
+                accessibilityRole="button"
                 testID="reflection-share-open-settings"
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 onPress={() => {
@@ -278,28 +297,30 @@ export function ShareCardScreen({
       {exportArmed ? (
         <View className="w-full flex-row gap-md bg-canvas px-lg pb-[24px] pt-[8px]">
           <Pressable
+            accessibilityRole="button"
             testID="reflection-share-save"
+            disabled={exportLocked}
+            accessibilityState={{ disabled: exportLocked }}
             onPress={() => {
               void handleSave();
             }}
-            className="h-[50px] flex-1 flex-row items-center justify-center gap-sm rounded-button border border-hairline-strong bg-canvas"
+            className={`${saveButton.box} flex-1 flex-row gap-sm`}
           >
-            <DownloadGlyph size={18} />
-            <Text className="font-noto-bold text-card-title text-ink">
-              이미지 저장
-            </Text>
+            <ShareCardDownloadGlyph size={18} color={lockedGlyph} />
+            <Text className={saveButton.label}>이미지 저장</Text>
           </Pressable>
           <Pressable
+            accessibilityRole="button"
             testID="reflection-share-export"
+            disabled={exportLocked}
+            accessibilityState={{ disabled: exportLocked }}
             onPress={() => {
               void handleShare();
             }}
-            className="h-[50px] flex-1 flex-row items-center justify-center gap-sm rounded-button bg-primary"
+            className={`${shareButton.box} flex-1 flex-row gap-sm`}
           >
-            <ShareGlyph size={18} />
-            <Text className="font-noto-bold text-card-title text-on-primary">
-              공유하기
-            </Text>
+            <ShareCardShareGlyph size={18} color={lockedGlyph} />
+            <Text className={shareButton.label}>공유하기</Text>
           </Pressable>
         </View>
       ) : null}

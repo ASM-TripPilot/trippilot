@@ -30,13 +30,26 @@ data class ReminderCopyProperties(
     val mode: String = "off",
     val baseUrl: String = "http://localhost:8000",
     val connectTimeoutMs: Long = 3_000,
-    /** `request_meta.deadline_ms` 로 상대에 실린다. */
-    val deadlineMs: Long = 8_000,
-    val readTimeoutMs: Long = 14_000,
+    /**
+     * `request_meta.deadline_ms` — **한 요청(묶음)의 마감**이다. 상대는 이것을 항목 수로 나눠 **항목마다** 균등 배분하므로
+     * (`budget ÷ N`) 묶음이 크면 항목당 시간이 줄어든다. 학생 모델(Bedrock)의 따뜻한 상태 지연이 p50 1.2초·p90 1.9초·최대 2.4초(운영
+     * 48시간 실측)라, 묶음을 [chunkSize] 건으로 쪼개고 항목당 3.5초 × [chunkSize] 를 마감으로 둔다 — 종전 8초 ÷ 6건 = 1.33초는 p90 보다
+     * 짧아 5일 이상 여행의 항목이 시한 초과로 떨어졌고, 17건 이상은 호출조차 안 했다.
+     */
+    val deadlineMs: Long = 10_500,
+    val readTimeoutMs: Long = 16_000,
+    /** 한 요청에 싣는 항목 수. 계약 상한(`maxItems`)은 따로 지키되, 실제로는 마감 안에 끝낼 수 있는 크기로 쪼갠다. */
+    val chunkSize: Int = 3,
+    /**
+     * 한 번의 문구 요청(여러 묶음)이 쓸 수 있는 **총 시간 예산**. 넘기면 남은 묶음은 건너뛴다 — 적재가 아웃박스 릴레이 스레드·
+     * DB 트랜잭션 안에서 돌아서, 상대가 느릴 때 묶음 수만큼 오래 붙들지 않게 한다. 건너뛴 행은 제자리 채우기가 나중에 메운다.
+     */
+    val totalBudgetMs: Long = 25_000,
     /** 발신 서비스 자격증명(TRIP-856). 비면 헤더를 안 싣고 호출은 그대로 나간다. */
     val serviceToken: String = "",
 ) {
     init {
+        require(chunkSize in 1..HttpReminderCopyAdapter.maxItems()) { "chunkSize($chunkSize)는 1~${HttpReminderCopyAdapter.maxItems()} 여야 합니다." }
         require(readTimeoutMs >= deadlineMs + AI_BACKSTOP_MARGIN_MS) {
             "readTimeoutMs($readTimeoutMs)는 마감+백스톱(${deadlineMs + AI_BACKSTOP_MARGIN_MS})보다 " +
                 "작을 수 없습니다 — 상대가 마감을 넘겨 정리하는 응답을 우리가 먼저 끊게 됩니다."

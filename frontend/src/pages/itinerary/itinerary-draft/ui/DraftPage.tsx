@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
+import { AlertCircleGlyph } from '@/shared/ui/glyphs';
 import { goBackOr } from '@/shared/lib/goBackOr';
 
 import { useSavedPlaces } from '@/features/save-place';
@@ -27,7 +28,6 @@ import type { DraftView, GenerationDayState } from '@/features/itinerary';
 import { resolveUnplacedNames } from '@/features/itinerary';
 import { DraftScreen } from './DraftScreen';
 import { GenerationFallbackScreen } from './GenerationFallbackScreen';
-import { AlertCircleGlyph } from '@/features/itinerary';
 import { UnplacedMustVisitNotice } from '@/features/itinerary';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { violationNotice } from '@/entities/itinerary-slot';
@@ -48,10 +48,12 @@ import type { GenerationProgressCell } from '@/widgets/map-sheet-shell';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 import { SheetHeader } from '@/widgets/map-sheet-shell';
 
+import { parseReasonTags } from '../model/reasonTags';
 import { resolveRegenerateRoute } from '../model/regenerateRoute';
 import type { RegenerateRoute } from '../model/regenerateRoute';
 import { DraftFallbackBanner } from './DraftFallbackBanner';
 import { RevealItem } from '@/shared/ui/RevealItem';
+import { guardPress } from '@/shared/lib/pressGuard';
 import { SlotCandidatePanelContainer } from './SlotCandidatePanelContainer';
 
 /** 진행 게이지 셀 라벨의 상태부 — `{n}일차 {완성|생성 중|대기}`(한글 · AC-6). 위젯은 features 를
@@ -461,13 +463,13 @@ export function DraftPage({
                 testID: 'itinerary-draft-manual-reset-confirm-continue',
                 label: '비우고 시작',
                 variant: 'filled',
-                onPress: () => {
+                onPress: guardPress(() => {
                   setConfirmingReset(false);
                   router.push({
                     pathname: '/trips/[tripId]/itinerary/manual',
                     params: { tripId, fresh: '1' },
                   });
-                },
+                }),
               },
               {
                 testID: 'itinerary-draft-manual-reset-confirm-cancel',
@@ -697,6 +699,11 @@ export function DraftPage({
     );
   }
 
+  // TRIP-1840 — 장소 카드(완성 셸·다른 후보 시트) → 기존 d06 장소 상세. push 라 돌아오면 이 화면 그대로다.
+  const openPlace = guardPress((poiId: string) =>
+    router.push(`/explore/places/${poiId}`)
+  );
+
   // 슬롯 교체 시트 — 셸·DraftScreen 두 갈래가 같은 JSX 를 공유해 각자 화면의 뒤 형제로 둔다.
   const candidateSheet =
     editingSlotKey !== null ? (
@@ -706,6 +713,7 @@ export function DraftPage({
         tripId={tripId}
         slotKey={editingSlotKey}
         onClose={() => setEditingSlotKey(null)}
+        onPressPlace={openPlace}
       />
     ) : null;
 
@@ -795,11 +803,13 @@ export function DraftPage({
             {
               label: '완성 일정 보기',
               variant: 'primary',
-              onPress: () =>
+              // 도착지 h14 의 [일정 저장하기](확정 — 되돌리는 API 없음)가 같은 자리다. 창을 열어 둘째 탭을 막는다(QA M1).
+              onPress: guardPress(() =>
                 router.push({
                   pathname: '/trips/[tripId]/itinerary',
                   params: { tripId },
-                }),
+                })
+              ),
             },
           ]}
         >
@@ -846,6 +856,9 @@ export function DraftPage({
                             )
                     }
                     violation={violationNotice(slot)}
+                    reasonTags={parseReasonTags(slot.placementReason)}
+                    // TRIP-1840 — 이름·사진 → d06 장소 상세. 이 화면은 스택 아래에 남아 날짜·시트 상태를 그대로 쥔다.
+                    onPressName={() => openPlace(slot.poiId)}
                   />
                 </RevealItem>,
               ];

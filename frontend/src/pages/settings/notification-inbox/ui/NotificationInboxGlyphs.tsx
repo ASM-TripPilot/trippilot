@@ -2,12 +2,13 @@ import type { ReactElement } from 'react';
 import Svg, { Path } from 'react-native-svg';
 
 import type { NotificationIconKind } from '../model/notificationKind';
+import { COLOR_TOKENS } from '@/shared/config';
 
 // l01 알림함 kind 아이콘 5종(home·swap·list·document·sun) — Figma 1598:2389 벡터를 인라인 SVG 로.
 // features 간 import 금지라 shared·타 feature 글리프를 재사용하지 못하고 feature-로컬로 그린다(리포 관례).
 // stroke 색은 className 을 못 받아 값이 필요하므로 상수로 둔다(`*Glyphs.tsx` 는 raw-hex 스캔 제외 관례).
 
-const STROKE = '#3F3F3F';
+const STROKE = COLOR_TOKENS.body;
 
 type KindGlyphProps = {
   size?: number;
@@ -134,7 +135,7 @@ export function NotificationKindIcon({
 // strokeWidth 는 24 viewBox 기준이라 size 를 키우면 실제 선도 비례해 굵어진다 — 큰 size 엔 낮춰 준다.
 export function NotifBellGlyph({
   size = 28,
-  color = '#9AA1AB',
+  color = COLOR_TOKENS['muted-soft'],
   strokeWidth = 2,
 }: {
   size?: number;

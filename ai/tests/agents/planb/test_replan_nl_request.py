@@ -3,7 +3,7 @@
 증명하는 것 (실 LLM·실 지도·실 API 0 — D37):
   ① 게이트는 모양만 본다 — 항목 격리, `HH:MM` 아닌 시각은 그 필드만 버린다, 빈 결과는 성공
   ② 장소 주장은 세 출처를 모두 통과해야 한다 — 등록 POI(INV-1) · 지도 실재 · 그날 영업
-  ③ 시각 주장은 남은 시간창 안이어야 하고 창을 **좁히기만** 한다
+  ③ 시각 주장은 지금 이후·그날 안(23:59)이면 받은 창 밖이어도 **말한 대로** 창이 된다 — 지난 시각·자정 넘김·60분 미만은 버린다
   ④ 비 주장은 기상청 강수확률이 임계 이상일 때만 따른다
   ⑤ 통합: 검증 통과한 장소가 **실제로 일정에 들어간다** · 탈락은 노트로 남고 일정은 그대로 나온다
   ⑥ 추출이 실패해도 재계획은 돈다 (INV-4)
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import date, datetime, time, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -29,6 +30,8 @@ from trippilot.llm_gateway.gates.replan.replan_request_extraction import (
     ExtractedRequest,
     ReplanRequestExtractionGate,
 )
+from trippilot.llm_gateway.prompts import PromptRegistry
+from trippilot.llm_gateway.workers.replan.replan_request_extraction import build_extraction_vars
 from trippilot.ports.place_existence_port import ExistenceStatus
 
 from tests.fakes.fake_existence import FakeExistence
@@ -36,6 +39,7 @@ from tests.api.test_api_replan_wired import _DIRECTIVES, _body
 
 KST = timezone(timedelta(hours=9))
 DAY = date(2026, 9, 21)  # 월요일 — `_body` 의 target_date
+_PROMPTS = Path(__file__).resolve().parents[3] / "prompts"
 
 
 def _gate(raw: str):
@@ -155,17 +159,83 @@ def test_times_inside_the_window_narrow_it() -> None:
     assert "nl_time_accepted: end_by 18:00" in notes
 
 
-@pytest.mark.parametrize("start,end,now_h", [
-    (None, time(22, 30), None),    # 창 뒤 — 넓히지 않는다
-    (time(8, 0), None, None),      # 창 앞
-    (time(10, 0), None, 12),       # 이미 지난 시각
-    (None, time(12, 30), 12),      # 남는 창이 60분 미만
+def test_times_outside_the_default_window_are_applied_as_said() -> None:
+    """받은 창(09~21)은 말이 없을 때의 값이다 — "밤 10시 반까지"·"아침 8시부터"는 그대로 창이 된다(사용자 2026-11-06).
+    종전엔 창 밖이라 버려 사용자 말이 노트만 남기고 무시됐다."""
+    s, e, notes = v.verify_window(DAY, None, time(22, 30), _WS, _WE, None, KST)
+    assert (s, e.hour, e.minute) == (None, 22, 30) and "nl_time_accepted: end_by 22:30" in notes
+    s, e, notes = v.verify_window(DAY, time(8, 0), None, _WS, _WE, None, KST)
+    assert (s.hour, e) == (8, None) and "nl_time_accepted: start_after 08:00" in notes
+    s, e, notes = v.verify_window(DAY, time(14, 0), time(23, 0), _WS, _WE, None, KST)
+    assert (s.hour, e.hour) == (14, 23)
+
+
+def test_a_late_start_stretches_the_end_to_four_hours_but_not_past_the_day() -> None:
+    """"저녁 8시 반 이후로"에 기본 끝 21:00 을 그대로 두면 30분짜리 창이다 — 시작+4시간(≤23:59)으로 늘린다(BE 저녁 생성과 같은 값)."""
+    s, e, notes = v.verify_window(DAY, time(19, 0), None, _WS, _WE, None, KST)
+    assert (s.hour, e.hour, e.minute) == (19, 23, 0) and "nl_time_extended: end_by 23:00" in notes
+    s, e, notes = v.verify_window(DAY, time(20, 30), None, _WS, _WE, None, KST)
+    assert (e.hour, e.minute) == (23, 59) and "nl_time_extended: end_by 23:59" in notes
+    s, e, notes = v.verify_window(DAY, time(15, 0), None, _WS, _WE, None, KST)
+    assert (s.hour, e) == (15, None)  # 기본 끝까지 4시간 넘게 남으면 그대로
+    assert not any(n.startswith("nl_time_extended") for n in notes)
+
+
+def test_a_start_already_behind_now_is_satisfied_not_rejected() -> None:
+    """15:30 에 "3시 이후로" — 지금이 이미 그 이후다. 창을 안 움직이되 버린 것으로 적지 않는다.
+    07:10 에 "7시 이후로"인데 받은 창이 09:00 부터면 하루는 09:00 이 아니라 지금(07:10)부터다(검토 2026-11-06)."""
+    nb = datetime(2026, 9, 21, 15, 30, tzinfo=KST)
+    s, e, notes = v.verify_window(DAY, time(15, 0), None, _WS, _WE, nb, KST)
+    assert (s, e) == (None, None) and "nl_time_satisfied: start_after 15:00" in notes
+    assert not any(n.startswith("nl_time_rejected") for n in notes)
+    nb = datetime(2026, 9, 21, 7, 10, tzinfo=KST)
+    s, e, notes = v.verify_window(DAY, time(7, 0), None, _WS, _WE, nb, KST)
+    assert (s, e) == (nb, None) and "nl_time_satisfied: start_after 07:00" in notes
+    assert not any(n.startswith("nl_time_accepted") for n in notes)  # 사용자가 07:10 을 말한 것은 아니다
+
+
+def test_midnight_means_the_end_of_the_day() -> None:
+    s, e, notes = v.verify_window(DAY, None, time(0, 0), _WS, _WE, None, KST)
+    assert (s, e.hour, e.minute) == (None, 23, 59) and "nl_time_accepted: end_by 23:59" in notes
+
+
+@pytest.mark.parametrize("start,end,now_h,why", [
+    (None, time(1, 0), None, "end_by_outside_window"),           # 자정 넘김 — 재계획 경계가 못 나른다
+    (None, time(9, 0), None, "end_by_outside_window"),           # 창 시작보다 앞인 끝
+    (None, time(12, 30), 12, "window_too_narrow"),               # 남는 창이 60분 미만
+    (time(16, 0), time(16, 30), None, "window_too_narrow"),      # 시간대가 60분 미만
+    (time(23, 30), None, None, "window_too_narrow"),             # 끝을 23:59 로 늘려도 29분
+    (time(1, 0), None, None, "start_after_outside_window"),      # 다른 날 "새벽 1시부터" — 받은 창 시작 4시간 앞(05:00)보다 이르다
 ])
-def test_times_outside_the_window_are_rejected(start, end, now_h) -> None:
+def test_times_that_cannot_make_a_day_are_rejected(start, end, now_h, why) -> None:
     nb = datetime(2026, 9, 21, now_h, 0, tzinfo=KST) if now_h else None
     s, e, notes = v.verify_window(DAY, start, end, _WS, _WE, nb, KST)
     assert (s, e) == (None, None)
-    assert any(n.startswith("nl_time_rejected") for n in notes)
+    assert f"nl_time_rejected: {why}" in notes, notes
+
+
+def test_today_a_start_before_the_default_window_but_after_now_is_taken() -> None:
+    nb = datetime(2026, 9, 21, 7, 0, tzinfo=KST)
+    s, e, notes = v.verify_window(DAY, time(8, 0), None, _WS, _WE, nb, KST)
+    assert (s.hour, e) == (8, None) and "nl_time_accepted: start_after 08:00" in notes
+
+
+def test_extraction_prompt_keeps_times_outside_the_window_as_said() -> None:
+    prompt, _ = PromptRegistry(_PROMPTS).render(  # 판 번호 핀은 test_replan_nl_other_day 한 곳에만
+        LlmFeature.REPLAN_REQUEST_EXTRACTION,
+        build_extraction_vars("밤 10시까지 놀고 싶어", "11월 6일 (금)", "09:00~21:00"))
+    assert "남은 시간 밖이어도" in prompt and '"22:00"' in prompt and '"20:30"' in prompt
+    # 시간대·끝내는 시각·지금 기준 말과, 장소와 같이 말한 때는 제한이 아니라는 줄
+    for rule in ('오전에만·오전 중으로 → end_by "12:00"', '오후에만 → start_after "12:00", end_by "18:00"', '저녁부터·저녁 시간대·해 지고 나서 → start_after "17:00"',
+                 '밤에만·밤부터 → start_after "20:00"', '"3시 이후 일정 취소해줘" → end_by "15:00"', '"6시에 끝낼래"', '"한 시간 뒤부터" → start_after 지금+1시간',
+                 '"지금"이 없으면 비웁니다', '하루를 제한하는 말이 아니에요', '1~6시는 "새벽"·"오전"을 붙이지 않았으면 오후'):
+        assert rule in prompt, rule
+    # 호출측이 라벨에 실은 지금이 프롬프트까지 닿는다
+    with_now, _ = PromptRegistry(_PROMPTS).render(
+        LlmFeature.REPLAN_REQUEST_EXTRACTION, build_extraction_vars("한 시간 뒤부터", "2026-11-06 (금) · 지금 10:30", "10:30~21:00"))
+    assert "지금 10:30" in with_now
+    assert '"23:59"' in prompt and "그 방문의 at" in prompt  # 자정 · 장소에 붙은 시간대는 at
+    assert "ART|ACTIVITY|SHOPPING|BAR" in prompt  # 출력 스키마가 규칙·게이트와 같은 10종
 
 
 # ── ④ 날씨 ────────────────────────────────────────────────────────────
@@ -228,12 +298,13 @@ def test_map_rejected_place_stays_out_and_the_day_still_comes_back() -> None:
     assert body["empty_reason"] is None
 
 
-def test_end_by_reaches_the_solver_window() -> None:
-    """좁힌 창이 **어셈블리에 닿는다** — 데모 풀은 작아 하루가 원래 일찍 끝나므로 슬롯 시각으로는
-    못 가른다(역검증 ⑧). 에이전트가 받는 `day_window` 를 직접 본다."""
+@pytest.mark.parametrize("hh,mm,text", [(15, 0, "3시까지만"), (22, 30, "밤 10시 반까지")])
+def test_end_by_reaches_the_solver_window(hh, mm, text) -> None:
+    """좁힌·넓힌 창이 **어셈블리에 닿는다** — 데모 풀은 작아 하루가 원래 일찍 끝나므로 슬롯 시각으로는
+    못 가른다(역검증 ⑧). 에이전트가 받는 `day_window` 를 직접 본다. 22:30 은 받은 창(21:00) 밖이다."""
     app = build_dev_app(directives=_DIRECTIVES)
     orch = app.state.orchestrator
-    orch._request_extractor = _StubExtractor(ExtractedRequest(end_by=time(15, 0)))
+    orch._request_extractor = _StubExtractor(ExtractedRequest(end_by=time(hh, mm)))
     seen = []
     inner = orch._schedule_agent
 
@@ -244,9 +315,44 @@ def test_end_by_reaches_the_solver_window() -> None:
 
     orch._schedule_agent = _Spy()
     with TestClient(app, raise_server_exceptions=False) as client:
-        body = client.post("/ai/v1/planb/replan", json=_body(free_text="3시까지만")).json()
-    assert "nl_time_accepted: end_by 15:00" in body["notes"]
-    assert seen and seen[0].end.hour == 15 and seen[0].end.minute == 0
+        body = client.post("/ai/v1/planb/replan", json=_body(free_text=text)).json()
+    assert f"nl_time_accepted: end_by {hh:02d}:{mm:02d}" in body["notes"]
+    assert seen and (seen[0].end.hour, seen[0].end.minute) == (hh, mm)
+
+
+def test_extending_another_day_does_not_crash() -> None:
+    """다른 날(지금이 없는 날)의 "더 늦게까지"가 `not_before.hour` 에서 500 이었다(개발 실측 2026-11-06 "밤 10시까지 놀고 싶어")."""
+    app = build_dev_app(directives=_DIRECTIVES)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.post("/ai/v1/planb/replan", json=_body(
+            directives=["EXTEND_DAY"], from_instant="2026-09-20T20:00:00+09:00",
+            request_meta={"request_id": "x", "requested_at": "2026-09-20T20:00:00+09:00", "deadline_ms": 25000}))
+    assert r.status_code == 200, r.text[:300]
+
+
+@pytest.mark.parametrize("from_instant,date_tail,window", [
+    ("2026-09-21T10:30:00+09:00", " · 지금 10:30", "10:30~21:00"),  # 오늘 — 남은 시간은 지금부터, 받은 창 시작이 아니다
+    ("2026-09-21T07:10:00+09:00", " · 지금 07:10", "07:10~21:00"),  # 창 시작(09:00)보다 이른 지금도 그대로
+    ("2026-09-21T21:30:00+09:00", " · 지금 21:30", "21:30~23:59"),  # 받은 창 끝을 지났다 — 뒤집힌 창을 싣지 않고 그날 끝까지
+    ("2026-09-21T21:00:00+09:00", " · 지금 21:00", "21:00~23:59"),
+    ("2026-09-20T20:00:00+09:00", "", "09:00~21:00"),               # 다른 날 — 지금은 뜻이 없다
+])
+def test_extraction_gets_now_only_on_the_day_being_replanned(from_instant, date_tail, window) -> None:
+    app = build_dev_app(directives=_DIRECTIVES)
+    orch = app.state.orchestrator
+    calls = []
+
+    class _Capture(_StubExtractor):
+        def extract(self, *a, **kw):
+            calls.append(a)
+            return super().extract(*a, **kw)
+
+    orch._request_extractor = _Capture(ExtractedRequest())
+    with TestClient(app, raise_server_exceptions=False) as client:
+        client.post("/ai/v1/planb/replan", json=_body(free_text="한 시간 뒤부터", from_instant=from_instant))
+    _, date_label, win = calls[0][:3]
+    assert date_label.endswith(date_tail) and win == window, calls[0]
+    assert ("지금" in date_label) is bool(date_tail)
 
 
 def test_extractor_failure_keeps_the_old_path() -> None:
@@ -636,12 +742,61 @@ def test_a_named_place_keeps_its_time() -> None:
     assert r.visit_at == ((PoiId("p1"), datetime(2026, 9, 21, 16, 30, tzinfo=KST)),)
 
 
-@pytest.mark.parametrize("at,now_h", [(time(22, 0), None), (time(8, 0), None), (time(10, 0), 12)])
-def test_a_visit_time_outside_what_is_left_is_rejected(at, now_h) -> None:
-    nb = datetime(2026, 9, 21, now_h, 0, tzinfo=KST) if now_h else None
+@pytest.mark.parametrize("at,now_h", [(time(10, 0), 12), (time(8, 0), 9)])
+def test_a_visit_time_already_behind_now_is_rejected(at, now_h) -> None:
+    nb = datetime(2026, 9, 21, now_h, 0, tzinfo=KST)
     r = _verify(ExtractedRequest(categories=(ExtractedCategory("CAFE", None, at),)), not_before=nb)
     assert r.category_at == ()
     assert "nl_at_rejected: CAFE outside_window" in r.notes
+
+
+def test_a_visit_time_outside_the_default_window_is_kept_as_said() -> None:
+    """"밤 10시에 카페"·"아침 8시에 카페" — 받은 창(09~21) 밖이어도 말한 시각 그대로 받는다. 창은 여기서 안 늘린다 —
+    실제로 잠근 뒤 배선이 늘린다(잠그지 못한 방문을 위해 창만 벌리지 않게). 다른 날 "새벽 1시에"는 하한(05:00) 앞이라 버린다."""
+    r = _verify(ExtractedRequest(categories=(ExtractedCategory("CAFE", None, time(22, 0)),)))
+    assert r.category_at == ((PoiCategory.CAFE, datetime(2026, 9, 21, 22, 0, tzinfo=KST)),)
+    assert (r.window_start, r.window_end) == (None, None)
+    r = _verify(ExtractedRequest(categories=(ExtractedCategory("CAFE", None, time(8, 0)),)))
+    assert r.category_at == ((PoiCategory.CAFE, datetime(2026, 9, 21, 8, 0, tzinfo=KST)),)
+    assert (r.window_start, r.window_end) == (None, None)
+    r = _verify(ExtractedRequest(categories=(ExtractedCategory("CAFE", None, time(1, 0)),)))
+    assert r.category_at == () and "nl_at_rejected: CAFE outside_window" in r.notes
+
+
+def test_a_locked_visit_outside_the_window_stretches_the_day_and_is_logged(caplog) -> None:
+    """"밤 10시에 자연" — 잠금이 되면 창 끝이 그 블록 끝(22:00+90분)까지 늘고, 시각 처리 결과가 `replan_nl_window` 로그에
+    잠금 결과까지 실린다. "6시까지"를 같이 말했으면 그 말이 이겨 창은 18:00 그대로다."""
+    import logging
+
+    app = build_dev_app(directives=_DIRECTIVES)
+    orch = app.state.orchestrator
+    orch._request_extractor = _StubExtractor(ExtractedRequest(categories=(ExtractedCategory("NATURE", None, time(22, 0)),)))
+    seen = []
+    inner = orch._schedule_agent
+
+    class _Spy:
+        def run(self, task):
+            seen.append(task.request.day_window)
+            return inner.run(task)
+
+    orch._schedule_agent = _Spy()
+    with caplog.at_level(logging.INFO), TestClient(app, raise_server_exceptions=False) as client:
+        body = client.post("/ai/v1/planb/replan", json=_body(free_text="밤 10시에 자연")).json()
+    assert f"nl_at_locked: {_HALLA} 22:00" in body["notes"], body["notes"]
+    assert "nl_time_extended: end_by 23:30" in body["notes"], body["notes"]
+    assert seen and (seen[0].end.hour, seen[0].end.minute) == (23, 30)
+    logged = [r.getMessage() for r in caplog.records if r.getMessage().startswith("replan_nl_window")]
+    assert logged and "nl_at_locked" in logged[-1] and '"end": "23:30"' in logged[-1], logged
+    assert "밤 10시에 자연" not in logged[-1]  # 사용자 말은 로그에 없다
+
+    orch._request_extractor = _StubExtractor(ExtractedRequest(
+        end_by=time(18, 0), categories=(ExtractedCategory("NATURE", None, time(17, 30)),)))
+    seen.clear()
+    with TestClient(app, raise_server_exceptions=False) as client:
+        body = client.post("/ai/v1/planb/replan", json=_body(free_text="6시까지, 5시 반에 자연")).json()
+    assert "nl_time_accepted: end_by 18:00" in body["notes"] and not any(
+        n.startswith("nl_time_extended") for n in body["notes"]), body["notes"]
+    assert seen and (seen[0].end.hour, seen[0].end.minute) == (18, 0)
 
 
 def test_a_kind_at_a_time_is_placed_then_and_the_morning_stays() -> None:

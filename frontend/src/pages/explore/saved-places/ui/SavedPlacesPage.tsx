@@ -23,10 +23,11 @@
  * 배너는 타이머 없이 다음 조작에서 지운다(01b Seed Q9) — 매 조작 시작에서 `removeError`를 비운다.
  */
 import type { ReactElement } from 'react';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBackOr } from '@/shared/lib/goBackOr';
+import { guardPress, usePressLock } from '@/shared/lib/pressGuard';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -55,8 +56,13 @@ import { MustVisitOutsideConfirmDialog } from './MustVisitOutsideConfirmDialog';
 import { MustVisitPickScreen } from './MustVisitPickScreen';
 import { SavedPlaceListScreen } from './SavedPlaceListScreen';
 import { buildAnytimeMustVisitRequest } from '@/features/add-must-visit';
-import { mustVisitFailureNotice, seedMustVisits } from '@/features/create-trip';
+import {
+  mustVisitFailureNotice,
+  openNewTripWizard,
+  seedMustVisits,
+} from '@/features/create-trip';
 import { placeLocationLabel, regionCodeInTrip, sidoKey } from '@/features/trip';
+import { placeRegionParams } from '@/entities/trip';
 import { useTripWizardStore } from '@/features/create-trip';
 
 /** 실패 시 재시도가 다시 밟아야 할 마지막 조작 — 해제냐 되돌리기냐를 함께 기억한다. */
@@ -110,7 +116,7 @@ function MustVisitPickSection({
   state: PlaceListState;
   orderedList: SavedPlace[];
   onRetry: () => void;
-  /** 여행 지역 — 판정 키는 `regionCode`, 표시·d04 파라미터는 `region` 이름. */
+  /** 여행 지역 — 판정 키는 `regionCode`, 표시는 `region` 이름, d04 파라미터는 둘 다. */
   destinations: readonly { region: string; regionCode?: string | null }[];
   /** 마운트 때 한 번 읽는 초기 선택. */
   initialSelectedPoiIds: () => string[];
@@ -165,14 +171,11 @@ function MustVisitPickSection({
       hasRow(insideList, id) ||
       (hasRow(outsideRegionPlaces, id) && !lockedPoiIds.includes(id))
   );
-  // d04 로 가는 세 버튼은 여행 지역 **이름**을 싣는다(TRIP-1042 AC-7 — d04 는 이름을 받는다). 목적지가
-  // 없으면 region 키를 싣지 않는다. 위저드 출처는 d04 가 ＋(새 여행 = reset)를 숨기는 신호다(TRIP-1026).
+  // d04 로 가는 세 버튼은 여행 지역 이름과 코드를 싣는다(TRIP-1042 AC-7 · TRIP-1809). 목적지가
+  // 없으면 지역 키를 싣지 않는다. 위저드 출처는 d04 가 ＋(새 여행 = reset)를 숨기는 신호다(TRIP-1026).
   const exploreHref = {
     pathname: '/explore/places',
-    params:
-      destinationNames.length > 0
-        ? { region: destinationNames, ...wizardOriginParams() }
-        : wizardOriginParams(),
+    params: { ...placeRegionParams(destinations), ...wizardOriginParams() },
   } as const;
   return (
     <MustVisitPickScreen
@@ -192,6 +195,10 @@ function MustVisitPickSection({
             : [...prev, poiId]
         );
       }}
+      // TRIP-1840 — 사진·이름 칸 → d06 장소 상세. 아래에 남은 이 화면이 선택·스크롤을 그대로 쥔다.
+      onPressPlace={guardPress((poiId: string) =>
+        router.push(`/explore/places/${poiId}`)
+      )}
       onComplete={() =>
         onComplete(selectedPoiIds, insideList, outsideRegionPlaces)
       }
@@ -222,9 +229,9 @@ function WizardMustVisitPick(props: PickWrapperProps): ReactElement {
   const destinations = useTripWizardStore((s) => s.destinations);
   // 선택된 밖 행이 있을 때 완료가 멈춰 선 자리(TRIP-1106 AC-6) — 있으면 확인 다이얼로그가 뜬다.
   const [pending, setPending] = useState<WizardCompletion | null>(null);
-  // 다이얼로그 버튼 잠금 — 상태가 아니라 ref 라 같은 틱 두 번째 누름도 이미 켜진 값을 읽는다(AC-11,
-  // TRIP-1114 `lockedRef` 선례).
-  const lockedRef = useRef(false);
+  // 다이얼로그 버튼 잠금 — 상태가 아니라 잠금 객체라 같은 틱 두 번째 누름도 이미 켜진 값을 읽는다(AC-11,
+  // TRIP-1114 `lock` 선례).
+  const lock = usePressLock();
 
   // 시드 → 재진입 표식 → 1/4 이동. 두 버튼·곧장 완료가 모두 이 한 곳을 지난다(step1 리터럴 하나).
   function finish(
@@ -252,8 +259,7 @@ function WizardMustVisitPick(props: PickWrapperProps): ReactElement {
   }
 
   function resolve(exclude: boolean): void {
-    if (!pending || lockedRef.current) return;
-    lockedRef.current = true;
+    if (!pending || !lock.acquire()) return;
     setPending(null);
     finish(pending, exclude ? pending.outsideSelectedIds : []);
   }
@@ -278,7 +284,7 @@ function WizardMustVisitPick(props: PickWrapperProps): ReactElement {
           // 선택된 밖 행이 있으면 시드·표식·이동 전에 묻는다(AC-6 · INV-4 — 조용히 넣지 않는다). 떠 있는 동안
           // 완료를 또 눌러도 같은 다이얼로그를 다시 세울 뿐이다(AC-11).
           if (completion.outsideSelectedIds.length > 0) {
-            lockedRef.current = false;
+            lock.release();
             setPending(completion);
             return;
           }
@@ -312,7 +318,7 @@ function TripMustVisitPick({
   const registered = useGetTripsTripIdMustVisits(tripId);
   const [completeError, setCompleteError] = useState<string | null>(null);
   // 요청 중 잠금 — 응답 전 연타가 POST 를 겹쳐 내지 않게(AC-12).
-  const submittingRef = useRef(false);
+  const submittingLock = usePressLock();
 
   const lockedPoiIds = (registered.data ?? []).map((m) => m.sourcePoiId);
   // 여행·등록 목록이 오기 전엔 결과를 그리지 않는다 — 목적지가 빈 채 판정하면 "전부 안"으로
@@ -328,7 +334,7 @@ function TripMustVisitPick({
     selectedPoiIds: string[],
     insideList: SavedPlace[]
   ): Promise<void> {
-    if (submittingRef.current) return;
+    if (submittingLock.isHeld()) return;
     const poiIds = insideList
       .map((saved) => saved.place.poiId)
       .filter(
@@ -336,7 +342,7 @@ function TripMustVisitPick({
           selectedPoiIds.includes(poiId) && !lockedPoiIds.includes(poiId)
       );
     if (poiIds.length === 0) return;
-    submittingRef.current = true;
+    if (!submittingLock.acquire()) return;
     setCompleteError(null);
 
     // allSettled — "N곳 중 M곳 실패"를 세야 해서 all(첫 실패에 던짐)로는 안 된다(TripNewStep1Page 선례).
@@ -358,7 +364,7 @@ function TripMustVisitPick({
       queryKey: getGetTripsTripIdMustVisitsQueryKey(tripId),
     });
     if (failed > 0) {
-      submittingRef.current = false;
+      submittingLock.release();
       setCompleteError(mustVisitFailureNotice(poiIds.length, failed));
       return;
     }
@@ -529,7 +535,7 @@ export function SavedPlacesPage(): ReactElement {
       onPressRow={(saved) =>
         router.push(`/explore/places/${saved.place.poiId}`)
       }
-      onPressCreateTrip={() => {
+      onPressCreateTrip={guardPress(() => {
         // TRIP-458 → 사용자 결정으로 갱신: 위저드 진입마다 도는 자동 시드는 폐지됐지만(다른
         // 진입점 — FAB "여행 만들기" 등 — 은 항상 빈 상태), **이 버튼은 "이 장소들로" 만들겠다는
         // 명시적 선택**이라 여기서 직접 심는다. 지금 화면에 그려진 목록(빈 하트로 해제한 항목은
@@ -538,13 +544,9 @@ export function SavedPlacesPage(): ReactElement {
         const activePlaces = displayList.filter(
           (saved) => !releasedPoiIds.has(saved.place.poiId)
         );
-        // 새 여행 진입이다(TRIP-1012 #031·#074) — 직전 드래프트를 비운 **뒤에** 시드한다. 거꾸로면
-        // reset 이 방금 켠 `preserveMustVisitsOnce` 를 꺼 셸이 시드를 지운다. 여행지는 추정하지 않는다.
-        const store = useTripWizardStore.getState();
-        store.reset();
-        store.seedMustVisitsFromD02(seedMustVisits(activePlaces));
-        router.push('/trips/new/step1');
-      }}
+        // 새 여행 진입(TRIP-1012 #031·#074) — 비우기 → 시드 → push 순서는 `openNewTripWizard` 가 쥔다.
+        openNewTripWizard(router, seedMustVisits(activePlaces));
+      })}
       onPressBrowse={() => router.push('/explore/places')}
       onRetry={handleRetry}
       onPressLogin={() => router.push('/(auth)/login')}

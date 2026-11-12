@@ -11,7 +11,6 @@ export {
   ALL_IN_ITINERARY_TITLE,
   resolveSlotEmptyFace,
 } from './model/slotEmptyFace';
-export type { SlotEmptyFace } from './model/slotEmptyFace';
 export {
   DRAFT_POLL_INTERVAL_MS,
   DRAFT_POLL_SLOW_INTERVAL_MS,
@@ -52,33 +51,21 @@ export {
   resolvePlanState,
 } from './model/planState';
 export { resolvePlanMapCenter } from './model/planMapCenter';
-export { isFixedStay, sheetMeta, sheetRowKeys } from './model/sheetMeta';
-export type { SheetCountRule } from './model/sheetMeta';
+export { sheetMeta, sheetRowKeys } from './model/sheetMeta';
 export { placeAddSubtitle } from './model/placeAddSubtitle';
 export { resolveUnplacedNames } from './model/unplacedMustVisits';
 export {
-  AlertCircleGlyph,
-  BackChevronGlyph,
-  CalendarGlyph,
+  ItineraryCalendarGlyph,
   CheckCircleGlyph,
-  CheckGlyph,
-  ChevronDownGlyph,
-  ChevronRightGlyph,
-  ClockGlyph,
-  CloseGlyph,
   CoPickGlyph,
   DashGlyph,
   DiamondGlyph,
-  FullAiGlyph,
-  InfoCircleGlyph,
-  LinkChevronGlyph,
-  LocationOffGlyph,
-  LockGlyph,
+  ItineraryLocationOffGlyph,
+  ItineraryLockGlyph,
   ManualGlyph,
-  PencilGlyph,
-  PlusGlyph,
+  ItineraryPencilGlyph,
   SortCheckGlyph,
-  WarningTriangleGlyph,
+  ItineraryWarningTriangleGlyph,
 } from './ui/ItineraryGlyphs';
 export { PlaceAddHeader, PlaceAddRow } from './ui/PlaceAddScreen';
 export { UnplacedMustVisitNotice } from './ui/UnplacedMustVisitNotice';

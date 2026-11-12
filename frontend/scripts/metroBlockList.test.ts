@@ -76,6 +76,14 @@ const MUST_BLOCK: [string, string][] = [
   ['기존 app/_dev 프리뷰', 'app/_dev/preview.tsx'],
   ['실패 주입 딥링크 라우트', 'app/_dev/fault.tsx'],
   ['실패 주입 모듈(개발 빌드 전용)', 'src/shared/dev-fault/interceptor.ts'],
+  [
+    '요청 카운터 저장소(개발 빌드 전용)',
+    'src/shared/dev-fault/requestCount.ts',
+  ],
+  [
+    '요청 카운터 배지(개발 빌드 전용)',
+    'src/shared/dev-fault/RequestCountBadge.tsx',
+  ],
 ];
 
 // 막으면 안 되는 것.

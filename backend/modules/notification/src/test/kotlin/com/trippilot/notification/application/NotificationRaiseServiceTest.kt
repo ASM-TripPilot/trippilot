@@ -79,6 +79,7 @@ class NotificationRaiseServiceTest : StringSpec({
             ),
         )
         override fun invalidate(token: String, at: Instant) = false
+        override fun invalidateIfNotSeenSince(token: String, notSeenAfter: Instant, at: Instant) = false
         override fun remove(accountId: UUID, token: String) = false
     }
 
@@ -105,7 +106,7 @@ class NotificationRaiseServiceTest : StringSpec({
         val toggleService = NotificationToggleService(toggles, clock)
         return NotificationRaiseService(
             notifications, toggleService,
-            PushDispatchService(Tokens(), notifications, toggleService, sender, testMetrics(notifications), PushRateLimits(), clock),
+            PushDispatchService(Tokens(), notifications, toggleService, sender, testMetrics(notifications), PushRateLimits(), clock, FakeTickets(), NoDeletionPending),
             trips, metrics ?: testMetrics(notifications), clock,
         )
     }
@@ -154,7 +155,7 @@ class NotificationRaiseServiceTest : StringSpec({
         val toggleService = NotificationToggleService(off, clock)
         val svc = NotificationRaiseService(
             notifications, toggleService,
-            PushDispatchService(Tokens(), notifications, toggleService, sender, testMetrics(notifications), PushRateLimits(), clock),
+            PushDispatchService(Tokens(), notifications, toggleService, sender, testMetrics(notifications), PushRateLimits(), clock, FakeTickets(), NoDeletionPending),
             trips, NotificationMetrics(registry, notifications), clock,
         )
 
@@ -174,7 +175,7 @@ class NotificationRaiseServiceTest : StringSpec({
         val toggleService = NotificationToggleService(toggles, clock)
         val svc = NotificationRaiseService(
             notifications, toggleService,
-            PushDispatchService(Tokens(), notifications, toggleService, Sender(), testMetrics(notifications), PushRateLimits(), clock),
+            PushDispatchService(Tokens(), notifications, toggleService, Sender(), testMetrics(notifications), PushRateLimits(), clock, FakeTickets(), NoDeletionPending),
             deleted, testMetrics(notifications), clock,
         )
 

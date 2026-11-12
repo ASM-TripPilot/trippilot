@@ -11,7 +11,7 @@
   NAVER_MAX_CALLS        일일 호출 하드캡 (기본 300 — "정확히 무료까지만")
   EVENT_REGIONS          쉼표 지역 목록 (기본 광역 17) · EVENT_REGIONS_PER_RUN (기본 3)
   EVENTS_STORE           저장소 경로 (기본 collected_events.json — collect-state 브랜치 영속)
-  LLM_PROVIDER 등        어댑터 조립은 smoke_llm 재사용 (AZUREAPIKEY 등)
+  LLM_PROVIDER 등        어댑터 조립은 smoke_llm 재사용 (anthropic — ANTHROPIC_API_KEY·ANTHROPIC_MODEL)
 
 하드캡 규약: 상한 도달 시 그 자리에서 수집을 멈추고 **정상 종료**한다 — 진행 중이던
 지역은 포인터를 안 넘겨 내일 재시도(중복은 저장소 dedup이 흡수). 상한 초과 호출 0건.
@@ -294,7 +294,7 @@ def collect_region(
     # **캡 안에 무엇을 넣을지**를 정한다. 도착 순서대로 자르면 뒤쪽 쿼리가 가져온
     # 결과가 통째로 버려지고, 그 80칸의 절반은 날짜 없는 스니펫이 차지한다(실측
     # 평균 39/80). 날짜가 없으면 프롬프트 규칙("날짜 불명확 행사 제외, 추측 금지")과
-    # 게이트가 원천 배제하므로 그 칸은 처음부터 값을 만들 수 없다.
+    # 게이트(행사명이 걸린 스니펫 줄에 날짜 언급이 있어야 통과)가 배제하므로 그 칸은 값을 만들 수 없다.
     # 버리는 게 아니라 **순서만** 바꾼다 — 날짜 있는 것을 앞에, 나머지가 남는 칸을
     # 채운다. 토큰은 한 푼도 안 늘고 실효 입력만 오른다. 같은 그룹 안에서는 원래
     # 순서를 유지한다(결정론 — 같은 입력이면 같은 프롬프트).
@@ -303,7 +303,7 @@ def collect_region(
     pairs = pairs[:SNIPPET_CAP]
     # 왜 이 지역이 0건인지 물으면 답할 수 있어야 한다. 스니펫 **개수**만으로는
     # 부족했다 — 대전은 개수(47~49)가 남들과 같은데 입력 토큰이 최저였다(내용이
-    # 빈약). 날짜 문자열이 없는 스니펫은 프롬프트 규칙·게이트가 원천 배제하므로
+    # 빈약). 날짜 문자열이 없는 스니펫은 프롬프트 규칙·게이트(줄 안 날짜 언급 검사)가 배제하므로
     # 그 비율이 곧 추출 가능성이다. (2026-08-25 조사)
     dated = sum(1 for t, d in pairs if _DATE_HINT_RE.search(f"{t} {d}"))
     chars = sum(len(t) + len(d) for t, d in pairs)
@@ -344,7 +344,32 @@ def collect_region(
     return stats
 
 
+def check_extraction(run: dict) -> int:
+    """이번 실행 지역이 전부 LLM 폴백이면 1 — 잡을 빨갛게 한다.
+
+    폴백은 지역 하나의 일시 실패로 보고 수집을 이어 가지만(main), 전 지역 폴백은 키·엔드포인트
+    고장이다. 10-24 부터 401 로 매일 전멸했는데 이 잡은 초록이었다 — 같은 키 고장을 ai-llm-smoke 가
+    빨갛게 알렸지만 "행사 신규 0건"에는 아무 신호가 없었다.
+    main 이 바로 실패하지 않는 것은 뒤 단계(축제·팝업·만료 청소·영속)를 살리기 위해서다 —
+    판정은 영속 뒤 마지막 단계(--check)가 한다. 하드캡 조기 종료로 지역이 0이면 LLM 실패가 아니다.
+    지역 1개만 돈 실행(수동 regions=서울 등)은 그 지역의 일시 실패도 빨강이다 — 한 지역으로는
+    키 고장과 일시 실패를 가를 수 없어 놓치는 쪽보다 알리는 쪽을 고른다(스케줄은 17개 지역).
+    """
+    regions = run.get("regions") or []
+    failed = [r for r in regions if r.get("fallback")]
+    errors = ", ".join(sorted({str(r.get("error")) for r in failed}))
+    if regions and len(failed) == len(regions):
+        print(f"::error::행사 추출이 이번 실행 {len(regions)}개 지역 전부 LLM 폴백(신규 0건) — "
+              f"키·엔드포인트를 확인하라: {errors}")
+        return 1
+    if failed:
+        print(f"::warning::행사 추출 폴백 {len(failed)}/{len(regions)}개 지역: {errors}")
+    return 0
+
+
 def main() -> int:
+    if len(sys.argv) >= 3 and sys.argv[1] == "--check":
+        return check_extraction(json.loads(Path(sys.argv[2]).read_text(encoding="utf-8")))
     if len(sys.argv) >= 3 and sys.argv[1] == "--summary":
         run = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
         print("## 행사 웹소싱 배치 (NAVER API HUB × EVENT_EXTRACTION)")

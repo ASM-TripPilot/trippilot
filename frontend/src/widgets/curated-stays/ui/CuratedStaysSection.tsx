@@ -59,6 +59,8 @@ export interface CuratedStaysController {
   hidden: boolean;
   isSaved: (stay: CuratedStay) => boolean;
   pendingStayId: string | null;
+  /** 저장 목록 조회가 확정 실패(TRIP-1754) — 하트를 그리는 page 가 토스트를 띄울 근거. 위젯은 토스트를 안 부른다. */
+  savedListFailureConfirmed: boolean;
   onPressCard: (stay: CuratedStay) => void;
   onToggleSave: (stay: CuratedStay) => void;
   onPressBrowseAll: () => void;
@@ -81,7 +83,9 @@ export function useCuratedStaysController(
   // 렌더 시점 1회 동기 판정(StayDetailPage 선례).
   const isAuthed = getAccessToken() !== null;
   const { items, hidden } = useCuratedStays({ regionCode, city, isAuthed });
-  const { isSaved, save, remove } = useSavedStays({ isAuthed });
+  const { isSaved, save, remove, loadFailureConfirmed } = useSavedStays({
+    isAuthed,
+  });
   const outbound = useStayOutboundFlow();
   const [pendingStayId, setPendingStayId] = useState<string | null>(null);
 
@@ -101,6 +105,7 @@ export function useCuratedStaysController(
     hidden,
     isSaved: (stay) => isSaved(stayKey(curatedKey(stay))),
     pendingStayId,
+    savedListFailureConfirmed: Boolean(loadFailureConfirmed),
     onPressCard: (stay) =>
       outbound.request(
         {

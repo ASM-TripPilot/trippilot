@@ -8,16 +8,13 @@
  * ⚠️ 라우트로 등록하지 않는다(D7) — 라우트 없는 재사용 컴포넌트다.
  * ⚠️ OS 다이얼로그를 직접 부르지 않는다 — 콜백만 올려보낸다(D2). 발화 시점은 호출자가 정한다.
  */
+import { InfoCircle18Glyph } from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import {
-  LocationInfoGlyph,
-  LocationOffGlyph,
-  LocationRadarHero,
-} from './LocationGlyphs';
-import { LOCATION_ICON_COLORS } from './locationColors';
+import { LocationOffGlyph, LocationRadarHero } from './LocationGlyphs';
 
 export type LocationPrepromptState = 'default' | 'permission-denied';
 
@@ -63,7 +60,7 @@ export function LocationPreprompt({
                 × 와 1회성 숨김 상태(onDismissNotice/noticeDismissed)는 폐기했다. testID 요소는
                 '설정에서' 조각만 감싼다 — 동결 테스트 앵커 패턴 유지. */}
             <View className="w-full flex-row items-start gap-sm rounded-input border border-hairline p-lg">
-              <LocationInfoGlyph color={LOCATION_ICON_COLORS.info} />
+              <InfoCircle18Glyph color="info" />
               <Text
                 className="flex-1 font-noto text-card-title text-ink"
                 lineBreakStrategyIOS="hangul-word"
@@ -105,16 +102,11 @@ export function LocationPreprompt({
           <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
           {denied ? (
             <>
+              <Button testID="onboarding-location-continue" onPress={onProceed}>
+                계속
+              </Button>
               <Pressable
-                testID="onboarding-location-continue"
-                onPress={onProceed}
-                className="h-[52px] items-center justify-center rounded-button bg-primary"
-              >
-                <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                  계속
-                </Text>
-              </Pressable>
-              <Pressable
+                accessibilityRole="button"
                 testID="onboarding-location-settings"
                 onPress={onOpenSettings}
                 className="h-[46px] items-center justify-center"
@@ -126,16 +118,10 @@ export function LocationPreprompt({
             </>
           ) : (
             <>
-              <Pressable
-                testID="onboarding-location-allow"
-                onPress={onProceed}
-                className="h-[52px] items-center justify-center rounded-button bg-primary"
-              >
-                {/* 5.1.1(iv): 권한 창 앞 안내는 건너뛸 수 없다 — "계속" 하나뿐이고 항상 OS 창으로 간다. "허용" 문구도 쓰지 않는다(TRIP-935 R8). */}
-                <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                  계속
-                </Text>
-              </Pressable>
+              {/* 5.1.1(iv): 권한 창 앞 안내는 건너뛸 수 없다 — "계속" 하나뿐이고 항상 OS 창으로 간다. "허용" 문구도 쓰지 않는다(TRIP-935 R8). */}
+              <Button testID="onboarding-location-allow" onPress={onProceed}>
+                계속
+              </Button>
             </>
           )}
         </View>

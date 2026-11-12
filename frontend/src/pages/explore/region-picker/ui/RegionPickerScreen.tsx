@@ -4,21 +4,19 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { BackChevronWideGlyph, WarningTriangleGlyph } from '@/shared/ui/glyphs';
 import type { Region } from '@/shared/api/index.schemas';
 import { RegionLevel } from '@/shared/api/index.schemas';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Image } from '@/shared/ui/Image';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
-import { pickRegionCover } from '@/entities/trip';
+import { pickRegionCover, SERVICE_REGIONS } from '@/entities/trip';
 
 import { groupRegionsBySido, regionTint } from '@/features/explore/index.view';
 import type { RegionGroup } from '@/features/explore/index.view';
-import {
-  BackChevronGlyph,
-  SearchGlyph,
-  WarningTriangleGlyph,
-} from '@/features/explore/index.view';
+import { ExploreSearchGlyph } from '@/features/explore/index.view';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * e00(숙소 지역 선택) · d1b(여행지 선택) 화면 — **props만 받는 프레젠테이션** (TRIP-445).
@@ -36,7 +34,7 @@ import {
  * 미추홀구(구/군)가 한 평면에 뒤섞이지 않게. 세 갈래 렌더 모드:
  *  · 검색 중(`query` 있음) → 드릴다운을 **우회**하고 페이지가 좁힌 결과를 평면 카드로.
  *  · 빈 검색어·미드릴인 → **1단**: 시/도 행(`explore-region-sido-{code}`)만, 누르면 드릴인.
- *  · 빈 검색어·드릴인 → **2단**: 그 시/도의 '전체' 행(SIDO Region) + 구/군 카드 + 상세 뒤로.
+ *  · 빈 검색어·드릴인 → **2단**: 그 시/도의 '전체' 행(SIDO Region, 고를 수 있을 때만) + 구/군 카드 + 상세 뒤로.
  * 드릴다운 상태(`openSidoCode`)는 화면 로컬 뷰 상태다 — 프롭 시그니처는 그대로다.
  *
  * ⚠️ `@/shared/api`·쿼리 훅·`expo-location`을 **전이 의존으로라도** 물면 안 된다 —
@@ -102,12 +100,14 @@ const POPULAR_TAGLINE: Record<string, string> = {
   '11': '도심 · 감성',
   '26': '바다 · 야경',
   '28': '항구 · 근대',
+  '47': '고도 · 역사',
+  '48': '남해 · 섬',
   '50': '섬 · 자연',
   '51': '산 · 휴식',
   '43': '내륙 · 힐링',
 };
 
-/** 카드 윗면 — 번들 커버 그림(서울·부산·제주, 시군구 그림이 없으면 같은 시도 그림)이 있으면 그림을,
+/** 카드 윗면 — 번들 커버 그림(시군구 그림이 없으면 같은 시도 그림)이 있으면 그림을,
  * 없으면 `regionTint` 그라데이션을 그린다(인기 카드와 같은 규칙). 글자는 그림 아래 흰 칸에 있어
  * 스크림이 필요 없다. 선택 불가 카드의 흐림은 카드 전체 `opacity` 라 그림에도 똑같이 걸린다. */
 function RegionCardImage({ region }: { region: Region }): ReactElement {
@@ -144,6 +144,7 @@ function SelectableCard({
 }): ReactElement {
   return (
     <Pressable
+      accessibilityRole="button"
       testID={`explore-region-${region.regionCode}`}
       onPress={onPress}
       className="mb-md w-[48%] overflow-hidden rounded-card bg-canvas"
@@ -277,6 +278,7 @@ function SidoRow({
 }): ReactElement {
   return (
     <Pressable
+      accessibilityRole="button"
       testID={`explore-region-sido-${group.sidoCode}`}
       onPress={onOpen}
       className="mb-sm h-[48px] flex-row items-center justify-between rounded-card bg-surface-soft px-md"
@@ -285,17 +287,17 @@ function SidoRow({
         {group.sidoName}
       </Text>
       <View style={{ transform: [{ scaleX: -1 }] }}>
-        <BackChevronGlyph size={18} />
+        <BackChevronWideGlyph size={18} />
       </View>
     </Pressable>
   );
 }
 
 /**
- * 2단 상세 — 최상단 '전체' 행(그 시/도의 SIDO Region) + 하위 구/군 카드. '전체' 행은 기존
- * `RegionCard` 3갈래를 그대로 탄다: selectable=true 면 선택 카드('인천 전체' 선택 가능),
- * false 면 묶음 행(선택 불가). 상세 뒤로(`explore-region-drilldown-back`)는 1단 복귀지
- * 라우터 이탈이 아니다(앱바 뒤로와 분리, ★3).
+ * 2단 상세 — 최상단 '전체' 행(그 시/도의 SIDO Region) + 하위 구/군 카드. 시/도를 고를 수 있을 때만
+ * 머리줄이 '○○ 전체'이고 그 카드가 그려진다. selectable=false(강원·경북·경남)면 눌릴 것이 없으니
+ * 「전체」도 묶음 칸도 없이 이름만 둔다(TRIP-1817). 상세 뒤로(`explore-region-drilldown-back`)는
+ * 1단 복귀지 라우터 이탈이 아니다(앱바 뒤로와 분리, ★3).
  */
 function RegionDetail({
   group,
@@ -306,21 +308,22 @@ function RegionDetail({
   onBack(): void;
   onSelectRegion(region: Region): void;
 }): ReactElement {
-  const sido = group.sido;
+  const sido = group.sido?.selectable === false ? null : group.sido;
   return (
     <View>
       <Pressable
+        accessibilityRole="button"
         testID="explore-region-drilldown-back"
         onPress={onBack}
         hitSlop={8}
         className="mb-md flex-row items-center gap-xs"
       >
-        <BackChevronGlyph size={18} />
+        <BackChevronWideGlyph size={18} />
         <Text className="font-noto-medium text-body text-muted">지역 목록</Text>
       </Pressable>
 
       <Text className="mb-sm font-noto-bold text-card-title font-bold text-ink">
-        {group.sidoName} 전체
+        {sido === null ? group.sidoName : `${group.sidoName} 전체`}
       </Text>
 
       <View className="flex-row flex-wrap justify-between">
@@ -339,8 +342,15 @@ function RegionDetail({
   );
 }
 
+/** `SERVICE_REGIONS` 배열 순서 = 인기 띠 순서(TRIP-1817). 그 밖의 시/도는 뒤로. */
+function popularRank(sidoCode: string): number {
+  const rank = SERVICE_REGIONS.findIndex(({ code }) => code === sidoCode);
+  return rank === -1 ? SERVICE_REGIONS.length : rank;
+}
+
 /** 인기 여행지 가로 스트립(TRIP-650) — 시/도(여행지) 단위를 가로 스크롤 카드로 보여준다. 집계·사진은
- *  계약 부재라 tint 그라디언트+이름만(SelectableCard 규율 계승). 서버 순서 그대로 앞 8개(정렬 금지). ★시/도 단위라 드릴다운 불변식("1단은 시/도만, 구/군 접힘")을 안 깬다.
+ *  계약 부재라 tint 그라디언트+이름만(SelectableCard 규율 계승). 고정 순서로 앞 8개 — 서버 순서로는 코드 오름차순이라
+ *  첫 화면에 제주가 안 보였다(TRIP-1817, 아래 지역별 목록은 서버 순서 그대로). ★시/도 단위라 드릴다운 불변식("1단은 시/도만, 구/군 접힘")을 안 깬다.
  *  누르면 그 시/도로 드릴인(하단 목록의 SidoRow 와 동일 동작). 기본(1단·비검색·정상) 뷰 상단 전용. */
 function PopularStrip({
   groups,
@@ -349,7 +359,9 @@ function PopularStrip({
   groups: readonly RegionGroup[];
   onOpenSido(sidoCode: string): void;
 }): ReactElement | null {
-  const popular = groups.slice(0, 8);
+  const popular = [...groups]
+    .sort((a, b) => popularRank(a.sidoCode) - popularRank(b.sidoCode))
+    .slice(0, 8);
   if (popular.length === 0) {
     return null;
   }
@@ -363,7 +375,7 @@ function PopularStrip({
       {popular.map((group, index) => {
         const [from, to] = regionTint(group.sidoCode);
         const tagline = POPULAR_TAGLINE[group.sidoCode];
-        // 서울·부산·제주는 번들 커버 그림, 그 밖의 시도는 지금처럼 그라데이션.
+        // 번들 커버 그림이 있는 시도는 그림, 그 밖의 시도는 지금처럼 그라데이션.
         const cover = pickRegionCover([{ seq: 1, regionCode: group.sidoCode }]);
         return (
           <Pressable
@@ -454,7 +466,7 @@ export function RegionPickerScreen({
           onPress={detail ? () => setOpenSidoCode(null) : onBack}
           hitSlop={8}
         >
-          <BackChevronGlyph />
+          <BackChevronWideGlyph />
         </Pressable>
         <Text className="font-noto-bold text-section font-bold text-ink">
           {copy.appBar}
@@ -473,13 +485,13 @@ export function RegionPickerScreen({
         </Text>
 
         <View className="mt-lg h-[58px] flex-row items-center gap-sm rounded-input border border-hairline-strong px-md">
-          <SearchGlyph />
+          <ExploreSearchGlyph />
           <TextInput
             testID="explore-region-search"
             value={query}
             onChangeText={onChangeQuery}
             placeholder={copy.placeholder}
-            placeholderTextColor="#9AA1AB"
+            placeholderTextColor={COLOR_TOKENS['muted-soft']}
             className="flex-1 font-noto text-body text-ink"
           />
         </View>
@@ -501,7 +513,7 @@ export function RegionPickerScreen({
         {isError ? (
           <StateNotice
             testID="explore-region-error"
-            icon={<WarningTriangleGlyph tone="primary" />}
+            icon={<WarningTriangleGlyph size={32} color="primary" />}
             title="지역을 불러오지 못했어요"
             description="잠시 후 다시 시도해 주세요"
             actions={[

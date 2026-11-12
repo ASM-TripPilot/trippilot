@@ -4,6 +4,7 @@ import * as Linking from 'expo-linking';
 import { http, HttpResponse } from 'msw';
 import { QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -19,7 +20,12 @@ import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 
 import { PlaceDetailPage } from './PlaceDetailPage';
-import { newTestQueryClient } from '@/test-support/queryRender';
+import { createGate } from '@/test-support/mswHookHarness';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
+import { getGetSavedPlacesQueryKey } from '@/shared/api/index.hooks';
+import { resetToast, WithToastHost } from '@/test-support/toastHarness';
+import { copyText } from '@/shared/clipboard';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 
 /**
  * TRIP-1372(TRIP-824 단건 조회) · d06 장소 상세 배선(페이지 층).
@@ -54,6 +60,10 @@ jest.mock('@/shared/storage', () => ({
 jest.mock('expo-linking', () => ({ openURL: jest.fn() }));
 const mockOpenURL = Linking.openURL as jest.Mock;
 
+// TRIP-1799 — 클립보드 입구만 목한다(실제 클립보드는 jest 가 못 본다). 입구 자체는 shared/clipboard/index.test.ts 가 잰다.
+jest.mock('@/shared/clipboard', () => ({ copyText: jest.fn() }));
+const mockCopyText = copyText as jest.Mock;
+
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
 const mockCanGoBack = jest.fn();
@@ -77,6 +87,7 @@ function makePlace(overrides: Partial<Place> = {}): Place {
     region: '부산 부산진구',
     openingHours: '10:00~18:00 (월 휴관)',
     imageUrl: null,
+    imageLicense: null,
     tags: ['미술', '실내'],
     savedCount: 12,
     dataStatus: 'ACTIVE',
@@ -99,6 +110,7 @@ beforeEach(() => {
   detailReply = makePlace();
   mockBack.mockClear();
   mockOpenURL.mockReset();
+  mockCopyText.mockReset();
   resetPressGuard();
   mockReplace.mockClear();
   mockCanGoBack.mockReset();
@@ -141,6 +153,8 @@ afterEach(() => {
   server.resetHandlers();
   clearAccessToken();
 });
+// TRIP-1754 — 토스트 슬롯은 모듈 싱글턴이라 앞 테스트의 토스트가 샌다. 파일 최상위에서 비운다(describe 안이면 샌다).
+afterEach(resetToast);
 afterAll(() => server.close());
 
 // 빈 QueryClient 로 그린다 — 앞 화면 캐시가 없는 딥링크 진입 그대로.
@@ -155,6 +169,23 @@ function renderDetail(poiId: string): void {
 }
 
 describe('D1 · d06 상세 표면 렌더 — 캐시 없이 단건으로', () => {
+  // TRIP-1740 AC-7(T7) — 단건 응답의 imageLicense 가 d06 히어로 사진 칸까지 간다(Place 통째 전달 출구).
+  it('TYPE1 서버 사진이면 히어로까지 유형이 닿아 cover 이고 출처 글자가 붙는다', async () => {
+    detailReply = makePlace({
+      imageUrl: 'https://img.example/hero.jpg',
+      imageLicense: 'TYPE1',
+    });
+    renderDetail('p1');
+
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-place-hero')).toBeOnTheScreen()
+    );
+    expectTypeOnePhotoDelivered(
+      'explore-place-hero-photo',
+      'https://img.example/hero.jpg'
+    );
+  });
+
   it('앞 화면 캐시가 비어 있어도 GET /places/{poiId} 로 그린다 — 목록은 부르지 않는다', async () => {
     renderDetail('p1');
 
@@ -542,6 +573,307 @@ describe('화면 동작 — 부제 · 영업시간 줄바꿈 · 원 버튼 이�
     );
     expect(screen.getByTestId('explore-place-save')).toHaveAccessibleName(
       '부산시립미술관 저장'
+    );
+  });
+});
+
+/**
+ * TRIP-1754 · 담은 장소 조회가 **실패했는데 하트가 "안 담김"으로 보이는** 문제(INV-4) — 실제 500 응답으로 잰다.
+ *
+ *  - **PD1** 장소 200 + `GET /saved-places` 500 → 토스트(문구·오류 아이콘) · 하트가 눌린다(비활성 아님).
+ *  - **PD2** 장소 404(없음 얼굴 — 하트가 안 그려진다) + 담은 목록 500 → 토스트 없음(없는 하트 위에 소음을 얹지 않는다).
+ *  - **PD3** 둘 다 성공이면 토스트 없음.
+ */
+describe('TRIP-1754 · 담은 장소 조회 실패 — 토스트 · 하트', () => {
+  const TOAST = 'saved-list-load-error';
+  const TOAST_TEXT = '저장 목록을 불러오지 못했어요';
+
+  function renderDetailWithToast(poiId: string): void {
+    const client = newTestQueryClient({ gcTime: 0 });
+    function wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+    render(
+      <WithToastHost>
+        <PlaceDetailPage poiId={poiId} />
+      </WithToastHost>,
+      { wrapper }
+    );
+  }
+  function failSavedList(): void {
+    server.use(
+      http.get(`${BASE}/saved-places`, () =>
+        HttpResponse.json(
+          { error: { code: 'INTERNAL', message: '서버 오류' } },
+          { status: 500 }
+        )
+      )
+    );
+  }
+
+  it('PD1 장소 200 + 담은 목록 500 → 토스트 · 하트는 눌린다(비활성 아님)', async () => {
+    // 준비
+    failSavedList();
+
+    // 실행
+    renderDetailWithToast('p1');
+    const toast = await screen.findByTestId(TOAST);
+
+    // 단언
+    expect(within(toast).getByText(TOAST_TEXT)).toBeOnTheScreen();
+    expect(screen.getByTestId(`${TOAST}-error-icon`)).toBeOnTheScreen();
+    expect(screen.getByTestId('explore-place-save')).not.toBeDisabled();
+  });
+
+  it('PD2 장소 404(없음 얼굴) + 담은 목록 500 → 하트가 없는 얼굴이라 토스트가 없다', async () => {
+    // 준비
+    detailReply = 404;
+    failSavedList();
+
+    // 실행
+    renderDetailWithToast('p1');
+    await screen.findByTestId('explore-place-notfound');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    // 단언 — 긍정 앵커(없음 얼굴·하트 없음)와 함께 토스트 없음.
+    expect(screen.queryByTestId('explore-place-save')).toBeNull();
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+  });
+
+  it('PD3 장소·담은 목록 모두 성공이면 토스트가 없다', async () => {
+    // 실행
+    renderDetailWithToast('p1');
+    await waitFor(() =>
+      expect(screen.getByTestId('explore-place-save-outline')).toBeOnTheScreen()
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+
+    // 단언 — (앞 테스트의 토스트가 샌 거라면 여기서 red 로 드러난다: 파일 최상위 afterEach 가 비운다.)
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+  });
+
+  // 5-b 후 심판 보강(03b W1·W2) — PD1~PD3 는 "새 마운트 + 첫 응답이 곧바로 500"이라 훅의 두 표식(`loadFailed` 모름 ·
+  // `loadFailureConfirmed` 확정)이 같은 값이다. 둘이 갈리는 구간(실패 캐시 위 재마운트의 응답 대기)과 effect 의존 배열(1회)은 아래가 문다.
+  it('PD4 실패 캐시 위에 다시 열면 — 재조회 중엔 토스트 없음 · 실패로 굳으면 1회 · 그 뒤 재조회엔 다시 안 뜬다', async () => {
+    // 준비 — 담은 장소 응답 큐: ① 500 ② 문 뒤에서 500 ③ 500. 캐시가 남는 클라이언트로 두 번 그린다.
+    const gate = createGate();
+    const replies: ('500' | 'hold500')[] = ['500', 'hold500', '500'];
+    let savedGets = 0;
+    server.use(
+      http.get(`${BASE}/saved-places`, async () => {
+        savedGets += 1;
+        if (replies.shift() === 'hold500') await gate.opened;
+        return HttpResponse.json(
+          { error: { code: 'INTERNAL', message: '서버 오류' } },
+          { status: 500 }
+        );
+      })
+    );
+    const client = newTestQueryClient();
+    const mount = () =>
+      render(
+        <WithToastHost>
+          <PlaceDetailPage poiId="p1" />
+        </WithToastHost>,
+        { wrapper: createWrapper(client) }
+      );
+    const pause = () =>
+      act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      });
+
+    try {
+      // 실행 ① — 첫 마운트: 실패 → 토스트. 닫고(캐시는 남는다) 토스트를 비운다.
+      const first = mount();
+      await screen.findByTestId(TOAST);
+      first.unmount();
+      resetToast();
+
+      // 실행 ② — 다시 열기: 재조회가 문 앞에서 멈춘다.
+      mount();
+      await screen.findByTestId('explore-place-save');
+      await waitFor(() => expect(savedGets).toBe(2));
+      await pause();
+
+      // 단언 ② — 아직 응답 전이라 "확정 실패"가 아니다 → 옛 실패만 보고 토스트를 쏘지 않는다.
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      // 실행 ③ — 문을 열면 두 번째 응답도 500 → 이번 마운트에서 실패가 굳는다.
+      gate.release();
+
+      // 단언 ③ — 그때 1회.
+      expect(
+        within(await screen.findByTestId(TOAST)).getByText(TOAST_TEXT)
+      ).toBeOnTheScreen();
+
+      // 실행 ④ — 슬롯을 비우고 같은 목록을 다시 받는다(세 번째 500). 화면은 다시 그려진다.
+      resetToast();
+      await act(async () => {
+        await client.invalidateQueries({
+          queryKey: getGetSavedPlacesQueryKey(),
+        });
+      });
+      await waitFor(() => expect(savedGets).toBe(3));
+      await pause();
+
+      // 단언 ④ — 재조회가 정말 나갔는데도(앵커) 같은 화면에선 또 쏘지 않는다.
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+    } finally {
+      gate.release();
+    }
+  });
+});
+
+/**
+ * TRIP-1799 · d06 주소 행 — 전체 주소를 보이고(address → region → 미확인), 진짜 주소가 있을 때만 복사 버튼.
+ *
+ *  - **AD1** 도로명 주소가 있으면 지역명이 아니라 주소를 보이고 복사 버튼이 있다.
+ *  - **AD2~AD4** 지역명 폴백·공백 주소·둘 다 없음은 글자만 — 복사 버튼 없음(지역명을 「주소 복사」로 넣어 봐야 쓸모가 없다).
+ *  - **AD5** 누르면 화면에 보이는(trim 한) 주소로 복사 입구가 1회 불리고 「주소를 복사했어요」.
+ *  - **AD6·AD7** 복사가 실패하면(false · reject) 「복사했어요」 대신 에러 토스트(INV-4).
+ *  - **AD8** 아이콘뿐인 버튼이라 접근성 이름 「주소 복사」.
+ *
+ * (개념) 클립보드 = 기기가 임시로 들고 있는 복사 내용. 입구 `copyText` 는 성공이면 true 를 돌려준다.
+ * 3동작: 준비(주소 데이터 · 입구 응답) → 실행(복사 버튼 누름) → 단언(입구 인자 · 토스트).
+ */
+describe('장소 상세 주소 — 보이기 · 복사', () => {
+  const ADDRESS = '부산광역시 해운대구 APEC로 58';
+  const COPY = 'explore-place-address-copy';
+  const COPIED = 'explore-place-address-copied';
+  const FAILED = 'explore-place-address-copy-failed';
+
+  function renderWithToast(): void {
+    const client = newTestQueryClient({ gcTime: 0 });
+    function wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+    render(
+      <WithToastHost>
+        <PlaceDetailPage poiId="p1" />
+      </WithToastHost>,
+      { wrapper }
+    );
+  }
+  async function renderLoaded(): Promise<void> {
+    renderWithToast();
+    await screen.findByTestId('explore-place-detail');
+  }
+
+  it('AD1 주소가 있으면 지역명이 아니라 주소를 보이고 복사 버튼이 있다', async () => {
+    detailReply = makePlace({ address: ADDRESS, region: '부산 해운대구' });
+
+    await renderLoaded();
+
+    expect(screen.getByTestId('explore-place-address')).toHaveTextContent(
+      ADDRESS
+    );
+    expect(screen.getByTestId(COPY)).toBeOnTheScreen();
+  });
+
+  it('AD2 주소가 null 이면 지역명을 보이고 복사 버튼은 없다', async () => {
+    detailReply = makePlace({ address: null, region: '부산 부산진구' });
+
+    await renderLoaded();
+
+    expect(screen.getByTestId('explore-place-address')).toHaveTextContent(
+      '부산 부산진구'
+    );
+    expect(screen.queryByTestId(COPY)).toBeNull();
+  });
+
+  it.each([[''], ['   ']])(
+    'AD3 주소가 %j 이면 null 과 같이 지역명으로 접고 복사 버튼은 없다',
+    async (blank) => {
+      detailReply = makePlace({ address: blank, region: '부산 부산진구' });
+
+      await renderLoaded();
+
+      expect(screen.getByTestId('explore-place-address')).toHaveTextContent(
+        '부산 부산진구'
+      );
+      expect(screen.queryByTestId(COPY)).toBeNull();
+    }
+  );
+
+  it('AD4 주소도 지역명도 없으면 미확인이고 복사 버튼은 없다', async () => {
+    detailReply = makePlace({ address: null, region: null });
+
+    await renderLoaded();
+
+    expect(screen.getByTestId('explore-place-address')).toHaveTextContent(
+      '미확인'
+    );
+    expect(screen.queryByTestId(COPY)).toBeNull();
+  });
+
+  it('AD5 누르면 보이는(trim 한) 주소로 복사 입구가 1회 불리고 「주소를 복사했어요」가 뜬다', async () => {
+    // 준비 — 앞뒤 공백이 섞인 주소(표시 단언은 공백을 접어 trim 유무를 못 가른다 — 입구 인자로 잰다)
+    mockCopyText.mockResolvedValue(true);
+    detailReply = makePlace({
+      address: `  ${ADDRESS} `,
+      region: '부산 해운대구',
+    });
+    await renderLoaded();
+    expect(screen.queryByTestId(COPIED)).toBeNull();
+    expect(screen.queryByTestId(FAILED)).toBeNull();
+
+    // 실행
+    fireEvent.press(screen.getByTestId(COPY));
+
+    // 단언
+    const toast = await screen.findByTestId(COPIED);
+    expect(within(toast).getByText('주소를 복사했어요')).toBeOnTheScreen();
+    expect(screen.getByTestId(`${COPIED}-success-icon`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(FAILED)).toBeNull();
+    expect(mockCopyText).toHaveBeenCalledTimes(1);
+    expect(mockCopyText.mock.calls[0][0]).toBe(ADDRESS);
+  });
+
+  it('AD6 복사가 실패(false)하면 「복사했어요」 없이 에러 토스트가 뜬다 (INV-4)', async () => {
+    mockCopyText.mockResolvedValue(false);
+    detailReply = makePlace({ address: ADDRESS });
+    await renderLoaded();
+    expect(screen.queryByTestId(COPIED)).toBeNull();
+    expect(screen.queryByTestId(FAILED)).toBeNull();
+
+    fireEvent.press(screen.getByTestId(COPY));
+
+    const toast = await screen.findByTestId(FAILED);
+    expect(
+      within(toast).getByText('주소를 복사하지 못했어요')
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId(`${FAILED}-error-icon`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(COPIED)).toBeNull();
+  });
+
+  it('AD7 입구가 reject 해도 화면은 살아 있고 에러 토스트가 뜬다', async () => {
+    mockCopyText.mockRejectedValue(new Error('boom'));
+    detailReply = makePlace({ address: ADDRESS });
+    await renderLoaded();
+
+    fireEvent.press(screen.getByTestId(COPY));
+
+    expect(await screen.findByTestId(FAILED)).toBeOnTheScreen();
+    expect(screen.queryByTestId(COPIED)).toBeNull();
+    expect(screen.getByTestId('explore-place-detail')).toBeOnTheScreen();
+  });
+
+  it('AD8 복사 버튼은 「주소 복사」 이름의 버튼이다', async () => {
+    detailReply = makePlace({ address: ADDRESS });
+
+    await renderLoaded();
+
+    expect(screen.getByRole('button', { name: '주소 복사' })).toHaveProp(
+      'testID',
+      COPY
     );
   });
 });

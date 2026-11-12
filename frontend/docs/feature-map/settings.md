@@ -14,7 +14,8 @@ routes:
 ## Sub-features
 
 - `settings-groups` 그룹이 정본 순서로 그려진다: 계정 → (머리글 없는) 여행 취향 → 위치정보 → 알림 → 제휴 안내 → 앱 정보 → 위험 영역.
-- `settings-summary` 행 요약값: 닉네임, 취향 `N/6 설정됨`, 위치 동의 칩(`동의`/`미동의`), 개인화 `사용 중`. 조회 전·실패면 값·칩을 그리지 않는다.
+- `settings-summary` 행 요약값: 닉네임, 취향 `N/6 설정됨`, 위치 동의 칩(`동의`/`미동의`), 개인화 `사용 중`. 조회 전·실패면 값·칩을 그리지 않는다(개인화 `사용 중` 칩은 실패를 안 보고 옛 캐시 값을 그대로 둘 수 있다).
+- `settings-account-load-error` 계정(`/me`)이나 프로필(`/me/profile`)을 못 받으면 화면 맨 위에 한 줄 "계정 정보를 불러오지 못했어요" + [다시 시도](testID `settings-account-load-error`·`settings-account-load-retry`)가 **하나만** 뜨고, 프로필 실패면 닉네임 행이, 계정 실패면 삭제 요청/철회 행(과 빈 "위험 영역" 그룹)이 빠진다. [다시 시도]는 실패한 쪽만 다시 받는다. *(TRIP-1755 · 프로필 실패는 시뮬레이터에서 확인 2026-11-04, 계정 실패는 실화면 미확인)*
 - `settings-nickname-open` 닉네임 행을 누르면 같은 행 안에 입력칸 + [저장]이 펼쳐진다(다시 누르면 접힘).
 - `settings-nickname-save` 2~20자 새 닉네임 저장 → 행 값이 바뀌고 토스트 "닉네임을 바꿨어요".
 - `settings-nickname-same` 지금과 같은 닉네임이면 요청 없이 행이 접힌다.
@@ -24,7 +25,9 @@ routes:
 - `settings-export-truncated` 서버가 일부를 잘랐으면 "일부 항목이 잘렸어요: …".
 - `settings-export-error` 조회 실패 / 공유 모듈 없는 빌드 / 파일 쓰기·공유 실패 각각의 안내 문구.
 - `settings-affiliate` "외부 이동 시 제휴 안내 다시 보기" 토글(낙관 반영, 실패 시 되돌리고 안내). 값을 모르면 토글 비활성.
+- `settings-delete-photo-copies` 계정 삭제 요청이 성공하면 이 기기의 사진 사본도 비운다 — 화면 동작과 확인 방법은 `settings-account.md` 의 `delete-photo-copies`.
 - `settings-nav` 하위 화면 진입: 여행 취향·GPS 이동경로 기록·개인화·알림 설정·약관 3종.
+- `settings-nav-double-tap` 위치·알림·약관·취향·개인화 행을 빠르게 두 번 눌러도 그 화면이 한 번만 열리고, 뒤로 한 번에 설정으로 돌아온다. *(TRIP-1775 · 실화면 미검증 — jest 는 이동 호출 1회까지만 본다)*
 - `settings-footer` 하단 `TripPilot v<버전>`(버전을 알 때만)과 데이터 출처 블록, `© OpenStreetMap contributors` 링크는 외부 브라우저.
 - `settings-web-no-push` 푸시가 없는 플랫폼(웹)에서는 "알림" 그룹이 통째로 빠진다.
 - `settings-row-look` 위치 동의 칩은 `동의`면 분홍, `미동의`면 회색이고, 여행 취향 행 앞에는 반원 아이콘 하나, 개인화 행 앞에도 아이콘 하나가 있다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass(일부 — Gotchas))*
@@ -55,7 +58,7 @@ Preconditions:
 - **내보내기.** testID: `settings-export-row`("데이터 내보내기")를 누른다 → OS 공유 시트가 뜬다. 시트를 취소로 닫는다. 잘린 계정이면 testID: `settings-export-truncated` "일부 항목이 잘렸어요: …". 실패면 testID: `settings-export-error` 에 "내보내기 정보를 불러오지 못했어요. 다시 시도해 주세요." / "이 앱 버전에서는 파일로 내보낼 수 없어요. 앱을 업데이트해 주세요." / "내보내기 파일을 만들지 못했어요. 다시 시도해 주세요." 중 하나.
 - **제휴 안내 토글.** testID: `settings-affiliate-toggle`(접근성 라벨 "외부 이동 시 제휴 안내 다시 보기")를 누른다 → 즉시 반대 상태. 숙소 상세의 외부 이동 고지 시트가 다시 뜨는지/안 뜨는지로 한 번 더 읽는다(숙소 레인). 실패면 토글이 되돌아가고 testID: `settings-affiliate-error` "설정을 바꾸지 못했어요. 다시 시도해 주세요.". 원래 값으로 되돌린다.
 - **하위 화면 진입.** testID: `settings-nav-preferences` → `settings-preferences.md`, `settings-nav-location-consent` → `settings-location.md`, `settings-nav-personalization` → `settings-preferences.md`, `settings-nav-notifications`("알림 설정") → `settings-notifications.md`, `settings-nav-terms-TERMS_OF_SERVICE`·`settings-nav-terms-PRIVACY_POLICY`·`settings-nav-terms-LOCATION_TERMS` → `terms.md`. 각각 진입 후 그 화면의 뒤로 버튼으로 돌아온다.
-- **하단.** 맨 아래로 스크롤 → `TripPilot v<버전>`, testID: `settings-data-attribution`("데이터 출처"·"한국관광공사 TourAPI · Overture Maps Foundation"), testID: `settings-osm-copyright` 를 누르면 사파리로 `https://www.openstreetmap.org/copyright`. 앱으로 돌아와 설정이 그대로인지 본다.
+- **하단.** 맨 아래로 스크롤 → `TripPilot v<버전>`, testID: `settings-data-attribution`("데이터 출처"·"한국관광공사 TourAPI · 행정안전부 LOCALDATA · Overture Maps Foundation · 위키백과(CC BY-SA 4.0)"), testID: `settings-osm-copyright` 를 누르면 사파리로 `https://www.openstreetmap.org/copyright`. 앱으로 돌아와 설정이 그대로인지 본다.
 - **뒤로.** testID: `settings-back` → 마이 탭.
 
 ## Gotchas
@@ -67,7 +70,7 @@ Preconditions:
 - 금칙어 닉네임이 저장되는 것은 서버 판정 문제로 지난 QA(20261021 N-084)에 남아 있다 — 욕설로 시험했다면 반드시 원복한다.
 - 공유 시트·사파리 이동은 앱 밖 표면이다 — 열렸는지·돌아왔을 때 상태는 실화면 전용. [실화면 전용]
 - 내보내기 파일에 무엇이 담기는지(담은 장소·회고 누락 여부)는 서버 계약이다 — 지난 QA(N-085)는 시뮬 캐시에서 파일을 직접 열어 확인했다.
-- 취향 `N/6`, 위치 칩, 개인화 `사용 중`은 조회 실패 시 **그냥 비어** 보인다(오류 표면 없음) — 비었다고 "미설정"으로 판정하지 않는다.
+- 취향 `N/6`, 위치 칩, 개인화 `사용 중`은 조회 실패 시 **그냥 비어** 보인다(요약 값에는 오류 표면 없음 — 계정·프로필 실패의 맨 위 한 줄은 `settings-account-load-error`) — 비었다고 "미설정"으로 판정하지 않는다.
 - 설정 행 위치 칩은 서버 `gpsRecordingOptIn` 을, 위치정보 동의 화면 토글은 `legalConsent` 를 읽는다 — 두 값이 갈리는 계정이면 칩과 토글이 다르게 보일 수 있다(확인 필요: 두 필드가 항상 함께 바뀌는지는 서버 계약).
 - `/settings` 는 `SplashGate`의 어떤 `Stack.Protected` 가드에도 없다 — 미인증 딥링크로도 화면 틀은 열린다(데이터는 401).
 - [실화면] 2026-10-31 **데이터 내보내기 공유 시트를 바깥(위쪽) 탭으로 닫지 마라** — 시트 위쪽 빈 곳(201,300)을 한 번 눌렀더니 시트가 닫히면서 그 아래 `로그아웃` 행까지 눌려 로그아웃 확인 다이얼로그가 열렸다(취소로 닫음). 공유 시트는 시트 안 닫기·아래로 끌기로 닫는다. 증거 `settings-account/01-logout-dialog.png`.

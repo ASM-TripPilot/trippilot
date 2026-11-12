@@ -1,9 +1,11 @@
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import type { Place, StayItem } from '@/shared/api/index.schemas';
 import { guardPress } from '@/shared/lib/pressGuard';
+import { SAVED_LIST_LOAD_FAILED_TOAST } from '@/shared/ui/savedListLoadToast';
+import { showToast } from '@/shared/ui/Toast';
 import { formatPrice } from '@/entities/stay';
 import { orderLanePlaces } from '@/entities/place';
 import { SERVICE_REGIONS } from '@/entities/trip';
@@ -12,11 +14,15 @@ import { stayKey } from '@/features/save-stay';
 import { useSavedStays } from '@/features/save-stay';
 import { useStaySearch } from '@/features/stay';
 import { usePlaceSaveToggle } from '@/features/save-place';
-import { useMultiRegionPlaces, useRegions } from '@/features/explore';
+import {
+  PLACE_LANE_STALE_TIME,
+  useMultiRegionPlaces,
+  useRegions,
+} from '@/features/explore';
 import { useSavedPlaces } from '@/features/save-place';
 import { regionPickerHref } from '@/features/explore';
 import { useGetPlaces } from '@/shared/api/index.hooks';
-import { useTripWizardStore } from '@/features/create-trip';
+import { openNewTripWizard } from '@/features/create-trip';
 import {
   CuratedStaysSection,
   CuratedStaysSheet,
@@ -80,13 +86,14 @@ type LandingBase = Pick<
 };
 
 // 가볼 곳 가로 레인에 그릴 카드 수 = 지역 필터 갈래가 서버에 요청할 limit(TRIP-500). 레인 개수와 요청 개수의
-// 단일 출처. 전국 갈래는 서비스 지역 3곳을 지역당 200곳 받아(홈과 같은 쿼리 키) 이만큼 골라 그린다(TRIP-1432).
+// 단일 출처. 전국 갈래는 서비스 지역을 지역당 200곳 받아(홈과 같은 쿼리 키) 이만큼 골라 그린다(TRIP-1432·1807).
 const PLACE_LANE_LIMIT = 8;
 
-// 홈 장소 레인과 같은 배열·순서 — 같은 쿼리 키라 홈에서 받은 응답을 그대로 쓴다(TRIP-1432).
+// 홈 장소 레인과 같은 배열·순서 — 홈이 여행 없음 얼굴일 때 같은 쿼리 키라 홈에서 받은 응답을 그대로 쓴다(TRIP-1432).
+// 홈이 여행 중 얼굴이면 키가 달라 공유하지 않는다(TRIP-1713).
 const SERVICE_REGION_NAMES = SERVICE_REGIONS.map((r) => r.name);
 
-/** 주소가 서비스 지역(서울·부산·제주) 안인가 — 주소를 모르면 밖으로 본다(fail-closed, 지역 필터의 fail-open 과 반대). */
+/** 주소가 서비스 지역 안인가 — 주소를 모르면 밖으로 본다(fail-closed, 지역 필터의 fail-open 과 반대). */
 function inServiceRegion(item: StayItem): boolean {
   const address = item.address;
   return (
@@ -124,13 +131,15 @@ export function ExploreLandingPage(): ReactElement {
 }
 
 /**
- * 필터 없는 d01 — 서비스 지역(서울·부산·제주)만 보인다(TRIP-1432). 전국 이름순 앞쪽은 지역 밖(밀양·대구…)이었다.
- * 장소: 3지역 병렬 조회(한 곳 실패는 받은 곳으로 채움) → 사진 먼저·지역 번갈아 8장.
- * 숙소: 요청은 전국 1회 그대로, 응답을 주소로 3지역만 남긴다(지역별 3회는 약 17배라 안 함 — 브리프 Q6).
+ * 필터 없는 d01 — 서비스 지역만 보인다(TRIP-1432·1807). 전국 이름순 앞쪽은 지역 밖(대구…)이었다.
+ * 장소: 서비스 지역 병렬 조회(한 곳 실패는 받은 곳으로 채움) → 사진 먼저·지역 번갈아 8장.
+ * 숙소: 요청은 전국 1회 그대로, 응답을 주소로 서비스 지역만 남긴다(지역별 조회는 수십 배라 안 함 — TRIP-1432 브리프 Q6).
  */
 function NationwideExplore(): ReactElement {
   const stay = useStaySearch();
-  const places = useMultiRegionPlaces(SERVICE_REGION_NAMES);
+  const places = useMultiRegionPlaces(SERVICE_REGION_NAMES, undefined, {
+    staleTime: PLACE_LANE_STALE_TIME,
+  });
   return (
     <ExploreLanding
       stay={{
@@ -163,8 +172,9 @@ function RegionExplore({ regionCode }: { regionCode: string }): ReactElement {
     showBrowseAll: false,
   });
   const stay = useStaySearch({ region: regionName }, { enabled });
+  // 코드를 함께 실어 동명 시군구(경남·강원 고성군)를 서버에서 가른다(TRIP-1809). 이름은 옛 서버 호환으로 남긴다.
   const places = useGetPlaces(
-    { region: regionName, limit: PLACE_LANE_LIMIT },
+    { region: regionName, regionCode, limit: PLACE_LANE_LIMIT },
     { query: { enabled } }
   );
 
@@ -227,6 +237,11 @@ function ExploreLanding({
   const router = useRouter();
   const savedPlaces = useSavedPlaces({ isAuthed: true });
   const { savedPoiIds } = savedPlaces;
+  // TRIP-1754 — 확정 실패가 켜지는 순간 토스트 1회(옛 훅 목은 필드가 없어 실패 아님). 숙소 쪽은 SavableStayLane 이 건다.
+  const placesListFailed = Boolean(savedPlaces.loadFailureConfirmed);
+  useEffect(() => {
+    if (placesListFailed) showToast(SAVED_LIST_LOAD_FAILED_TOAST);
+  }, [placesListFailed]);
   // 장소 담기 하트(TRIP-1049) — base.placeLane 으로 내린다.
   const placeSave = usePlaceSaveToggle({
     isAuthed: true,
@@ -250,6 +265,7 @@ function ExploreLanding({
       name: place.nameKo,
       region: place.region ?? '',
       imageUrl: place.imageUrl ?? null,
+      imageLicense: place.imageLicense,
       category: place.category,
     }));
 
@@ -277,16 +293,15 @@ function ExploreLanding({
     onPressPlaces: () =>
       router.push(
         filter?.regionName
-          ? `/explore/places?region=${encodeURIComponent(filter.regionName)}`
+          ? `/explore/places?region=${encodeURIComponent(filter.regionName)}&regionCode=${encodeURIComponent(filter.regionCode)}`
           : '/explore/places'
       ),
     // ＋ 여행 만들기 FAB → g01 위저드(TRIP-703). 화면은 순수 뷰라 라우터를 모르므로 목적지를
     // 여기(page)가 잇는다.
-    // 새 여행 진입이라 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
-    onPressCreateTrip: () => {
-      useTripWizardStore.getState().reset();
-      router.push('/trips/new/step1');
-    },
+    // 새 여행 진입이라 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074). 연타는 한 번만(TRIP-1775).
+    onPressCreateTrip: guardPress(() => {
+      openNewTripWizard(router);
+    }),
     // 조회 대기 얼굴(TRIP-704) — 숙소·장소 둘 중 하나라도 첫 조회 중이면 로딩 스켈레톤을 보인다.
     isLoading: stay.isPending || places.isPending,
     // 지역 필터 칩(TRIP-1105) — ✕ 는 URL 의 region 을 비운다(키를 직접 실어야 지워진다). 비워지면
@@ -350,7 +365,8 @@ function ExploreLanding({
     // 메뉴를 닫고 이동한다. 0곳이어도 FAB 은 유지돼 d02/e04 빈 상태로 간다(TRIP-448 계승).
     savedMenu: {
       open: savedMenuOpen,
-      savedCount: savedPoiIds.length,
+      // null = 목록을 못 받아 모름 — 접근성 라벨이 `0곳` 으로 읽히지 않게(TRIP-1754)
+      savedCount: savedPlaces.loadFailed ? null : savedPoiIds.length,
       onToggle: () => setSavedMenuOpen((v) => !v),
       onPressSavedPlaces: () => {
         setSavedMenuOpen(false);
@@ -382,9 +398,14 @@ function SavableStayLane({
   base: LandingBase;
   items: StayItem[];
 }): ReactElement {
-  const { isSaved, save, remove, savedKeys } = useSavedStays({
-    isAuthed: true,
-  });
+  const { isSaved, save, remove, savedKeys, loadFailureConfirmed } =
+    useSavedStays({
+      isAuthed: true,
+    });
+  const staysListFailed = Boolean(loadFailureConfirmed);
+  useEffect(() => {
+    if (staysListFailed) showToast(SAVED_LIST_LOAD_FAILED_TOAST);
+  }, [staysListFailed]);
   const [pendingKeys, setPendingKeys] = useState<string[]>([]);
   const [saveError, setSaveError] = useState(false);
 

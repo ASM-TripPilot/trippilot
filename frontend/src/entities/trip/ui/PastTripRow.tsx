@@ -40,12 +40,16 @@ export function PastTripRow({
   const photoLabel = vm.photoLabel ?? null;
   const imageUrl = vm.imageUrl ?? null;
   const coverSource = vm.coverSource ?? null;
+  // TRIP-1806 — 이름은 커버 그림을 설명하는 글자라 사진이 이긴 행엔 없다.
+  const coverLabel = imageUrl === null ? (vm.coverLabel ?? null) : null;
   // 부제 조각 — 날짜·박수·사진 수를 각각 별개 leaf 로, 사이에 " · " 를 끼운다.
   const subtitle = [dateRangeLabel, nightsLabel, photoLabel].filter(
     (label): label is string => label !== null
   );
   // TRIP-1697 — 라벨 없는 Pressable 은 스크린리더가 Text 조각(「 · 」 포함)을 쉼표로 이어 읽는다.
-  const a11yLabel = [title, subtitle.join(' · ')].filter(Boolean).join(', ');
+  const a11yLabel = [title, subtitle.join(' · '), coverLabel]
+    .filter(Boolean)
+    .join(', ');
 
   return (
     <Pressable
@@ -69,6 +73,7 @@ export function PastTripRow({
         }
       >
         {imageUrl !== null ? (
+          // eslint-disable-next-line no-restricted-syntax -- 여행 커버 — 관광공사 POI 사진 아님(브리프 §3-2)
           <Image
             testID={`${testID}-photo`}
             source={{ uri: imageUrl }}
@@ -101,6 +106,15 @@ export function PastTripRow({
               </Fragment>
             ))}
           </View>
+        )}
+        {coverLabel !== null && (
+          <Text
+            testID={`${testID}-cover-label`}
+            numberOfLines={1}
+            className="font-noto text-caption text-muted"
+          >
+            {coverLabel}
+          </Text>
         )}
       </View>
       {trailing}

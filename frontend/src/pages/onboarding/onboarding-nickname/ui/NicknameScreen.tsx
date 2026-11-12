@@ -11,9 +11,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PositiveCheckGlyph, RegenerateGlyph } from '@/features/onboarding';
+import { RetryGlyph } from '@/shared/ui/glyphs';
+import { PositiveCheckGlyph } from '@/features/onboarding';
 
 /**
  * 오류 사유. TOO_SHORT/TOO_LONG 은 클라 형식 검증(UX 사본)에서,
@@ -105,11 +107,13 @@ export function NicknameScreen({
                   className="flex-1 font-noto text-card-title text-ink"
                 />
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="닉네임 다시 추천"
                   testID="onboarding-nickname-regenerate"
                   onPress={onRegenerate}
                   hitSlop={8}
                 >
-                  <RegenerateGlyph size={22} />
+                  <RetryGlyph size={22} color="primary" />
                 </Pressable>
               </View>
 
@@ -139,6 +143,7 @@ export function NicknameScreen({
                 >
                   {suggestions.map((suggestion, index) => (
                     <Pressable
+                      accessibilityRole="button"
                       key={`${index}-${suggestion}`}
                       testID={`onboarding-nickname-suggest-${index}`}
                       onPress={() => onSelectSuggestion(suggestion)}
@@ -163,18 +168,13 @@ export function NicknameScreen({
 
           <View className="px-2xl pb-[30px] pt-md">
             <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
-            <Pressable
+            <Button
               testID="onboarding-nickname-next"
               disabled={!canProceed}
               onPress={onNext}
-              className={`h-[52px] items-center justify-center rounded-button bg-primary ${
-                canProceed ? '' : 'opacity-40'
-              }`}
             >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                다음
-              </Text>
-            </Pressable>
+              다음
+            </Button>
           </View>
         </View>
       </KeyboardAvoidingView>

@@ -9,7 +9,8 @@ import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { ExportRow } from './ExportRow';
 import { LogoutConfirmDialog } from './LogoutConfirmDialog';
 import { NicknameEditRow } from './NicknameEditRow';
-import { ChevronLeftGlyph, TrashGlyph } from '@/features/settings';
+import { ChevronLeftGlyph, SettingsTrashGlyph } from '@/features/settings';
+import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
 import { SettingsGroup } from './SettingsGroup';
 import { NavRow, PreparingRow, RowBody } from './SettingsRow';
 
@@ -28,6 +29,11 @@ const TERMS_ROW_PREFIX = 'terms-';
 export interface SettingsScreenProps {
   groups: SettingsGroupVM[];
   deletionState: 'active' | 'pending';
+  /** 계정·프로필 조회 실패(TRIP-1755) — 화면 맨 위에 안내 한 줄 + 다시 시도. 페이지가 두 조회를 묶어 판정한다. preview 무파손 위해 optional. */
+  accountLoadFailed?: boolean;
+  /** 위 줄의 다시 시도가 진행 중 — 버튼 비활성. */
+  accountLoadRetrying?: boolean;
+  onRetryAccountLoad?: () => void;
   purgeAt?: string | null;
   currentNickname: string;
   nicknameError?: string | null;
@@ -76,6 +82,9 @@ export interface SettingsScreenProps {
 export function SettingsScreen({
   groups,
   deletionState,
+  accountLoadFailed,
+  accountLoadRetrying,
+  onRetryAccountLoad,
   purgeAt,
   currentNickname,
   nicknameError,
@@ -199,6 +208,7 @@ export function SettingsScreen({
       case 'logout':
         return (
           <Pressable
+            accessibilityRole="button"
             testID="settings-row-logout"
             onPress={() => setLogoutOpen(true)}
           >
@@ -215,6 +225,7 @@ export function SettingsScreen({
         ) : (
           <View testID="settings-row">
             <Pressable
+              accessibilityRole="button"
               testID="settings-delete-account"
               onPress={() => setDialogOpen(true)}
             >
@@ -247,6 +258,8 @@ export function SettingsScreen({
           testID="settings-back"
           accessibilityRole="button"
           onPress={onPressBack}
+          // TRIP-1764 — 글리프 24 + 사방 10 = 44(보이는 크기·자리는 그대로).
+          hitSlop={10}
         >
           <ChevronLeftGlyph />
         </Pressable>
@@ -256,6 +269,28 @@ export function SettingsScreen({
       {/* 키보드가 떠 있을 때 닉네임 "저장" 첫 탭이 키보드 닫기에만 먹히지 않게(TRIP-990 D23). */}
       <ScrollView keyboardShouldPersistTaps="handled">
         <View className="gap-[22px] px-lg pb-3xl pt-lg">
+          {accountLoadFailed ? (
+            // TRIP-1755 — 계정·프로필 조회 실패: 삭제 행·닉네임 행을 거짓 값으로 그리지 않고 사유를 한 줄로 밝힌다(INV-4).
+            <View
+              testID="settings-account-load-error"
+              className="flex-row items-center gap-sm rounded-button border border-hairline bg-surface-soft px-md py-sm"
+            >
+              <WarningTriangleGlyph size={20} color="primary" />
+              <Text className="flex-1 font-noto text-label text-body">
+                계정 정보를 불러오지 못했어요
+              </Text>
+              <Pressable
+                testID="settings-account-load-retry"
+                accessibilityRole="button"
+                disabled={accountLoadRetrying}
+                onPress={onRetryAccountLoad}
+              >
+                <Text className="font-noto text-label text-primary">
+                  다시 시도
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
           {groups.map((group) => (
             <SettingsGroup key={group.key} label={group.label}>
               {group.rows.map((row) => (
@@ -312,7 +347,7 @@ function DeletionPendingBanner({
     <View testID="settings-deletion-pending" className="gap-sm px-lg py-lg">
       <View className="flex-row items-center gap-md">
         <View className="w-6 items-center">
-          <TrashGlyph size={22} />
+          <SettingsTrashGlyph size={22} />
         </View>
         <Text className="flex-1 font-noto-bold text-body text-ink">
           계정 삭제가 예정되어 있어요
@@ -346,6 +381,8 @@ function DeletionPendingBanner({
 /**
  * 데이터 출처 고지(TRIP-886) — 버전 문구 바로 아래. 법적 고지라 콜백 유무와 상관없이 항상 보이고,
  * OSM 줄만 링크다(콜백이 주입됐을 때만 누를 자리를 그린다).
+ * 위키백과(CC BY-SA 4.0)는 AI 가 장소 소개에 줄여 쓰므로 출처 표기가 이용 조건이고, 행정안전부
+ * LOCALDATA 는 장소 대부분의 원천이라 출처 표시가 이용 조건이다(TRIP-1678).
  */
 function DataAttribution({
   onPressOsmCopyright,
@@ -357,7 +394,8 @@ function DataAttribution({
     <View testID="settings-data-attribution" className="items-center gap-xs">
       <Text className={textClass}>데이터 출처</Text>
       <Text className={textClass}>
-        한국관광공사 TourAPI · Overture Maps Foundation
+        한국관광공사 TourAPI · 행정안전부 LOCALDATA · Overture Maps Foundation ·
+        위키백과(CC BY-SA 4.0)
       </Text>
       {onPressOsmCopyright ? (
         <Pressable

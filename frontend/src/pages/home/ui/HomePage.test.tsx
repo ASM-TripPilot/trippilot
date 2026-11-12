@@ -32,6 +32,7 @@ import {
 import { HomePage } from '@/pages/home';
 import { routerSpies } from '@/test-support/expoRouterMock';
 import { createWrapper } from '@/test-support/queryRender';
+import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 import { NO_ITINERARY } from '@/test-support/tripItineraryCols';
 
 /**
@@ -80,7 +81,7 @@ jest.mock('@/shared/api/generated/places/places', () => ({
   useGetPlaces: (...args: unknown[]) => mockUseGetPlaces(...args),
 }));
 
-// TRIP-1432 — 여행 중이 아닐 때 장소 레인은 서비스 지역 3곳 병렬 조회다. 이 훅은 `useQuery` 를 직접 써서
+// TRIP-1432 — 여행 중이 아닐 때 장소 레인은 서비스 지역 병렬 조회다. 이 훅은 `useQuery` 를 직접 써서
 // QueryClient 없는 이 버킷에선 실훅이 죽는다 — 깊은 경로로 목한다(묶음째 목하면 regionPickerHref 도 사라진다).
 const mockUseMultiRegionPlaces = jest.fn();
 jest.mock('@/features/explore/model/useMultiRegionPlaces', () => ({
@@ -99,6 +100,20 @@ jest.mock('@/features/save-place/model/savedPlaces', () => ({
 const mockUseSavedStays = jest.fn();
 jest.mock('@/features/save-stay/model/savedStays', () => ({
   useSavedStays: (...args: unknown[]) => mockUseSavedStays(...args),
+}));
+
+// TRIP-1783 — 홈이 종 미읽음 배지를 위해 부르는 알림 조회 훅. 이 버킷엔 서버가 없으니 무해한 스텁(조회 전 = data 없음 → 배지 없음)이다.
+// 개수·요청 쿼리·재조회·실패는 `HomePage.integration.test.tsx` 가 실훅 + msw 로 잰다. 여기서 data 를 주지 않는 이유: 훅 결과 모양
+// (`select` 로 개수를 받는지 `items` 를 받는지)을 이 목이 못박으면 구현 선택을 막고, 목이 구현과 갈라져도 green 이 된다.
+jest.mock('@/shared/api/generated/notification/notification', () => ({
+  ...jest.requireActual('@/shared/api/generated/notification/notification'),
+  useGetMeNotifications: () => ({
+    data: undefined,
+    status: 'pending',
+    isPending: true,
+    isError: false,
+    isFetching: false,
+  }),
 }));
 
 const TRIP_ID = '33333333-3333-3333-3333-333333333333';
@@ -210,7 +225,7 @@ function multiOk(items: Place[], degraded = false) {
   };
 }
 
-const SERVICE_REGION_NAMES = ['서울', '부산', '제주'];
+const SERVICE_REGION_NAMES = ['서울', '부산', '제주', '강원', '경북', '경남'];
 
 // 두 조회 목은 react-query 처럼 꺼진 조회에 "데이터 없음 · 영원히 대기"를 돌려준다 — 고정 반환값이면
 // 꺼진 조회의 상태를 레인에 그리는 구현을 못 본다. 다지역 훅은 지역 2곳 미만이면 꺼진다(훅 내부 규칙).
@@ -230,7 +245,7 @@ const MULTI_DISABLED = {
 let placesResult: Record<string, unknown>;
 let multiResult: Record<string, unknown>;
 
-/** 지역 1곳 조회(여행 중)·3지역 조회(그 밖) 어느 쪽이든 같은 장소를 받는다 — 레인 그리기만 볼 때. */
+/** 지역 1곳 조회(여행 중)·서비스 지역 조회(그 밖) 어느 쪽이든 같은 장소를 받는다 — 레인 그리기만 볼 때. */
 function lanePlaces(items: Place[]): void {
   placesResult = placesOk(items);
   multiResult = multiOk(items);
@@ -273,7 +288,7 @@ function enabledMultiCalls(): MultiCall[] {
     ([regions]) => regions.length >= 2
   );
 }
-/** 장소 레인 = 서비스 지역 3곳(이 순서·필터 없음 → 탐색 탭과 같은 쿼리 키), 지역 없는 전국 조회는 0. */
+/** 장소 레인 = 서비스 지역(이 순서·필터 없음 → 탐색 탭과 같은 쿼리 키), 지역 없는 전국 조회는 0. */
 function expectServiceRegionQuery(): void {
   const calls = enabledMultiCalls();
   expect(calls.length).toBeGreaterThan(0);
@@ -359,6 +374,8 @@ beforeEach(() => {
 afterEach(resetWizardDraft);
 // 연타 가드 창도 모듈 싱글턴이다 — 앞 테스트가 연 창이 다음 테스트의 첫 누름을 먹지 않게 닫는다(TRIP-1282).
 afterEach(() => resetPressGuard());
+// TRIP-1754 — 토스트 슬롯은 모듈 싱글턴이라 앞 테스트가 띄운 토스트가 샌다. 파일 최상위에서 비운다(describe 안이면 샌다).
+afterEach(resetToast);
 
 // TRIP-371 실데이터 판정 · TRIP-699 로딩 히어로 · TRIP-935 AC-5
 describe('얼굴 판정 — 여행 목록으로 discovery·planning·로딩을 가른다', () => {
@@ -655,6 +672,17 @@ describe('진입점 — 누르면 어디로 가나', () => {
     expect(draftAtPush()).toEqual(freshWizardDraft());
   });
 
+  // TRIP-1775 — 창 안의 둘째 탭은 위저드를 한 번 더 쌓지 않는다.
+  it('＋ 여행 만들기 FAB 를 빠르게 두 번 눌러도 step1 은 한 번만 쌓인다', () => {
+    render(<HomePage />);
+    const fab = screen.getByTestId('home-create-trip-fab');
+
+    fireEvent.press(fab);
+    fireEvent.press(fab);
+
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+  });
+
   it('하트 FAB 를 펼치고 담은 장소 미니 FAB 를 누르면 담은 장소로 간다(펼치기는 push 안 함)', () => {
     render(<HomePage />);
 
@@ -749,6 +777,16 @@ describe('진입점 — 누르면 어디로 가나', () => {
     fireEvent.press(screen.getByTestId('home-dashboard-bell'));
 
     expect(mockPush.mock.calls).toEqual([['/notifications']]);
+  });
+
+  // TRIP-1765 — 자식이 글리프뿐이라 라벨이 없으면 낭독기에 이름 없는 버튼이다.
+  it('종은 "알림" 버튼으로 읽힌다', () => {
+    render(<HomePage />);
+
+    expect(screen.getByRole('button', { name: '알림' })).toHaveProp(
+      'testID',
+      'home-dashboard-bell'
+    );
   });
 
   it('planning 얼굴에서도 종을 누르면 알림함으로 1회 간다', () => {
@@ -928,7 +966,7 @@ describe('지금 뜨는 장소', () => {
 
   describe('조회 인자·고르기', () => {
     // TRIP-1432 — 신규 사용자 레인은 서비스 지역(서울·부산·제주) 장소만. 지역 밖 장소를 주는 전국 조회는 안 쓴다.
-    it('여행이 없으면 서울·부산·제주 3곳을 묻고, 지역 없는 전국 조회는 나가지 않는다', () => {
+    it('여행이 없으면 서비스 지역을 묻고, 지역 없는 전국 조회는 나가지 않는다', () => {
       placesResult = placesOk([place('out', '밀양 장소', 99)]);
       multiResult = multiOk([place('in', '해운대 해변', 1)]);
 
@@ -948,6 +986,27 @@ describe('지금 뜨는 장소', () => {
 
       expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
       expect(lastPlacesParams()).toEqual({ region: '부산', limit: 200 });
+    });
+
+    it('여행지에 코드가 있으면 이름과 함께 묻는다 (TRIP-1809)', () => {
+      mockUseGetTrips.mockReturnValue(
+        tripsOk([
+          {
+            ...travelingTrip(),
+            destinations: [
+              { seq: 1, region: '중구', nights: 2, regionCode: '11140' },
+            ],
+          },
+        ])
+      );
+
+      render(<HomePage />);
+
+      expect(lastPlacesParams()).toEqual({
+        region: '중구',
+        regionCode: '11140',
+        limit: 200,
+      });
     });
 
     it('담긴 수 많은 순 앞 4장(동점은 서버 순서) — 태그가 있으면 #태그, 없으면 #카테고리', () => {
@@ -1061,7 +1120,7 @@ describe('지금 뜨는 장소', () => {
   // 안 쓰일 전국 200행을 받는다. 두 번째 인자의 `query.enabled` 가 false 면 요청이 안 나가는 호출이다
   // (react-query 규칙) — 훅을 아예 안 부르는 구현도 통과한다(요청 0 이라는 결과가 같다).
   describe('여행 정보가 확정되기 전엔 장소 조회를 켜지 않는다', () => {
-    it('대기 중엔 켜진 조회 0건 · 여행 없음으로 확정되면 3지역 조회가 켜진다', () => {
+    it('대기 중엔 켜진 조회 0건 · 여행 없음으로 확정되면 서비스 지역 조회가 켜진다', () => {
       mockUseGetTrips.mockReturnValue(TRIPS_PENDING);
       const { rerender } = render(<HomePage />);
 
@@ -1075,7 +1134,7 @@ describe('지금 뜨는 장소', () => {
       expectServiceRegionQuery();
     });
 
-    it('여행 중 사용자는 대기 → 도착 전 과정에서 전국·3지역 조회가 한 번도 켜지지 않는다', () => {
+    it('여행 중 사용자는 대기 → 도착 전 과정에서 전국·서비스 지역 조회가 한 번도 켜지지 않는다', () => {
       mockUseGetTrips.mockReturnValue(TRIPS_PENDING);
       const { rerender } = render(<HomePage />);
       expect(enabledPlacesCalls()).toHaveLength(0);
@@ -1092,7 +1151,7 @@ describe('지금 뜨는 장소', () => {
       expect(enabledMultiCalls()).toHaveLength(0);
     });
 
-    it('여행 조회가 실패해도(발견 얼굴 폴백) 3지역 조회는 켜진다 — 스팟이 영원히 스켈레톤이 되지 않게', () => {
+    it('여행 조회가 실패해도(발견 얼굴 폴백) 서비스 지역 조회는 켜진다 — 스팟이 영원히 스켈레톤이 되지 않게', () => {
       mockUseGetTrips.mockReturnValue(TRIPS_ERROR);
 
       render(<HomePage />);
@@ -1103,9 +1162,9 @@ describe('지금 뜨는 장소', () => {
   });
 });
 
-// TRIP-1432 — 여행 중이 아닌 얼굴(여행 없음·여행 전·여행 후)의 장소 레인은 서비스 지역 3곳 조회이고, 사진 있는
+// TRIP-1432 — 여행 중이 아닌 얼굴(여행 없음·여행 전·여행 후)의 장소 레인은 서비스 지역 조회이고, 사진 있는
 // 곳을 먼저, 그 안에서 지역을 번갈아 세운다(각 지역 안은 담긴 수 순). 여행 중은 그 여행 지역 1곳 조회 그대로다.
-describe('장소 레인 — 서비스 지역 3곳 · 사진 먼저', () => {
+describe('장소 레인 — 서비스 지역 · 사진 먼저', () => {
   /** 담긴 수·사진·시도 코드를 정한 장소. 이름이 곧 poiId 다. */
   function lanePlace(
     nameKo: string,
@@ -1128,7 +1187,7 @@ describe('장소 레인 — 서비스 지역 3곳 · 사진 먼저', () => {
     });
   }
 
-  it('여행 전 얼굴의 컬렉션도 3지역 조회 결과다', () => {
+  it('여행 전 얼굴의 컬렉션도 서비스 지역 조회 결과다', () => {
     mockUseGetTrips.mockReturnValue(tripsOk([beforeTrip()]));
     placesResult = placesOk(rankedPlaces(7));
     multiResult = multiOk(
@@ -1147,7 +1206,7 @@ describe('장소 레인 — 서비스 지역 3곳 · 사진 먼저', () => {
     expect(screen.queryByText('실장소4')).toBeNull();
   });
 
-  it('여행 후 얼굴의 추천도 3지역 조회 결과다', () => {
+  it('여행 후 얼굴의 추천도 서비스 지역 조회 결과다', () => {
     const end = addDays(seoulDate(new Date()), -1);
     mockUseGetTrips.mockReturnValue(
       tripsOk([
@@ -1175,7 +1234,7 @@ describe('장소 레인 — 서비스 지역 3곳 · 사진 먼저', () => {
     ).toBeOnTheScreen();
   });
 
-  it('여행 중이면 그 여행 지역 1곳만 묻고 3지역 조회는 켜지지 않는다 — 카드는 그 지역 장소다', () => {
+  it('여행 중이면 그 여행 지역 1곳만 묻고 서비스 지역 조회는 켜지지 않는다 — 카드는 그 지역 장소다', () => {
     mockUseGetTrips.mockReturnValue(tripsOk([travelingTrip()]));
     placesResult = placesOk([place('busan', '부산 장소', 3)]);
     multiResult = multiOk([place('seoul', '서울 장소', 9)]);
@@ -1749,5 +1808,184 @@ describe('화면 동작 — 인사·문구·이름 · 담은 곳 메뉴 · 얼�
     fireEvent.press(screen.getByTestId('home-spot-save-p4'));
     fireEvent.press(await screen.findByTestId('home-spot-save-error'));
     expect(screen.queryByTestId('home-spot-save-error')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1754 · 담은 장소·저장 숙소 **조회 실패**가 "개수 0"·"배지 없음"으로 접히던 문제 — 훅이 내려 준 표식을 홈이 어떻게 읽나.
+ * (훅 자체는 `savedPlaces.savedList`·`savedStays` 통합 테스트가, 실제 500 응답 연결은 `HomePage.integration` 이 본다.)
+ *
+ * 무엇을 보장하나(3동작 = 준비: 훅 목이 돌려줄 값 → 실행: 그리기·펼치기 → 단언: 배지 글자·토스트):
+ *  - **HN1** `loadFailed` 인 쪽 배지는 `–`(U+2013)이고, 다른 쪽 배지는 제 숫자 그대로다(서로 독립).
+ *  - **HN2** `loadFailureConfirmed` 가 **켜지는 순간** 토스트 1개(문구·오류 아이콘). 같은 값으로 다시 그려져도 다시 안 쏜다.
+ *  - **HN3** 새 필드가 **없는**(옛) 훅 목은 "실패 아님"으로 읽는다 — 훅 목이 새 필드를 안 주는 다른 테스트들이 안 깨지는 계약.
+ */
+describe('TRIP-1754 · 저장 목록 실패 표식 — 배지 `–` · 토스트', () => {
+  const TOAST = 'saved-list-load-error';
+  const TOAST_TEXT = '저장 목록을 불러오지 못했어요';
+
+  function placesFailed(confirmed: boolean): void {
+    mockUseSavedPlaces.mockReturnValue({
+      savedPoiIds: [],
+      isSaved: () => false,
+      save: mockSave,
+      remove: mockRemove,
+      loadFailed: true,
+      loadFailureConfirmed: confirmed,
+    });
+  }
+  function staysFailed(confirmed: boolean): void {
+    mockUseSavedStays.mockReturnValue({
+      savedCount: 0,
+      loadFailed: true,
+      loadFailureConfirmed: confirmed,
+    });
+  }
+  // 같은 JSX 참조를 rerender 에 넘기면 React 가 건너뛴다 — 매번 새 엘리먼트를 만든다.
+  const tree = () => (
+    <WithToastHost>
+      <HomePage />
+    </WithToastHost>
+  );
+  function renderHome() {
+    return { ...render(tree()), tree };
+  }
+  function openSavedMenu(): void {
+    fireEvent.press(screen.getByTestId('home-saved-menu-toggle'));
+  }
+
+  it('HN1 장소 목록이 실패면 장소 배지는 `–`, 숙소 배지는 제 숫자(5)다', () => {
+    // 준비
+    placesFailed(false);
+    mockUseSavedStays.mockReturnValue({ savedCount: 5 });
+
+    // 실행
+    renderHome();
+    openSavedMenu();
+
+    // 단언 — toHaveTextContent(문자열) = 완전 일치(U+2013 en dash).
+    expect(screen.getByTestId('home-saved-places-badge')).toHaveTextContent(
+      '–'
+    );
+    expect(screen.getByTestId('home-saved-stays-badge')).toHaveTextContent('5');
+  });
+
+  it('HN1 숙소 목록이 실패면 숙소 배지는 `–`, 장소 배지는 제 숫자(2)다', () => {
+    // 준비
+    savedPlacesReturns(['p1', 'p2']);
+    staysFailed(false);
+
+    // 실행
+    renderHome();
+    openSavedMenu();
+
+    // 단언
+    expect(screen.getByTestId('home-saved-stays-badge')).toHaveTextContent('–');
+    expect(screen.getByTestId('home-saved-places-badge')).toHaveTextContent(
+      '2'
+    );
+  });
+
+  it('HN2 확정 실패가 켜지는 순간 토스트 1개가 뜨고, 같은 값으로 다시 그려도 다시 안 뜬다', () => {
+    // 준비 — 앵커: 앞 테스트의 토스트가 안 샜고(파일 최상위 리셋), "실패지만 아직 확정 아님"이면 안 뜬다.
+    // (screen 은 render 뒤에만 쓸 수 있어 앵커는 그린 직후에 둔다.)
+    placesFailed(false);
+    const { rerender, tree } = renderHome();
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+
+    // 실행 ① — 확정 실패로 바뀐다.
+    placesFailed(true);
+    rerender(tree());
+
+    // 단언 ①
+    const toast = screen.getByTestId(TOAST);
+    expect(within(toast).getByText(TOAST_TEXT)).toBeOnTheScreen();
+    expect(screen.getByTestId(`${TOAST}-error-icon`)).toBeOnTheScreen();
+
+    // 실행 ② — 슬롯을 비우고(슬롯이 1개라 "보임 1개"로는 1회를 못 잰다) 같은 값으로 다시 그린다.
+    resetToast();
+    rerender(tree());
+
+    // 단언 ②
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+  });
+
+  it('HN2 숙소 목록의 확정 실패도 같은 토스트다', () => {
+    // 준비
+    staysFailed(true);
+
+    // 실행
+    renderHome();
+
+    // 단언
+    expect(
+      within(screen.getByTestId(TOAST)).getByText(TOAST_TEXT)
+    ).toBeOnTheScreen();
+  });
+
+  it('HN3 새 필드가 없는 옛 훅 목은 실패로 읽지 않는다 — 배지 숫자 그대로 · `–` 없음 · 토스트 없음 (계약 잠금)', () => {
+    // 준비 — 기존 목 모양 그대로(loadFailed·loadFailureConfirmed 없음).
+    savedPlacesReturns(['p1', 'p2']);
+    mockUseSavedStays.mockReturnValue({ savedCount: 5 });
+
+    // 실행
+    renderHome();
+    openSavedMenu();
+
+    // 단언
+    expect(screen.getByTestId('home-saved-places-badge')).toHaveTextContent(
+      '2'
+    );
+    expect(screen.getByTestId('home-saved-stays-badge')).toHaveTextContent('5');
+    expect(screen.queryByText('–')).toBeNull();
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1806 · 여행 목록 → 판정 → 히어로까지 실물로 돌려 「그림 · 해운대」 가 그려지는지 본다.
+ * 히어로의 구석 위치·알약 색·대비는 jest 사각이다(실화면 QA).
+ */
+describe('히어로 — 다른 지역 커버 이름', () => {
+  const NAME = 'home-trip-hero-cover-label';
+  const JEJU = [{ seq: 1, region: '제주시', nights: 3, regionCode: '50110' }];
+
+  it.each<[string, Partial<Trip>]>([
+    [
+      '계획 중',
+      { status: 'PLANNED', startDate: '2099-06-10', endDate: '2099-06-13' },
+    ],
+    [
+      '여행 중',
+      { status: 'ACTIVE', startDate: '2020-01-01', endDate: '2099-12-31' },
+    ],
+    [
+      '여행 후',
+      {
+        status: 'ENDED',
+        startDate: addDays(seoulDate(new Date()), -3),
+        endDate: addDays(seoulDate(new Date()), -1),
+      },
+    ],
+  ])('%s: 첫 목적지와 다른 시도의 그림이면 이름이 그려진다', (_face, over) => {
+    mockUseGetTrips.mockReturnValue(
+      tripsOk([trip({ destinations: JEJU, coverKey: '26350', ...over })])
+    );
+
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
+    expect(screen.getByTestId(NAME)).toHaveTextContent('그림 · 해운대');
+  });
+
+  it('자동 커버면 히어로는 있고 이름은 없다', () => {
+    mockUseGetTrips.mockReturnValue(
+      tripsOk([trip({ status: 'PLANNED', destinations: JEJU, coverKey: null })])
+    );
+
+    render(<HomePage />);
+
+    expect(screen.getByTestId('home-trip-hero')).toBeOnTheScreen();
+    expect(screen.queryByTestId(NAME)).toBeNull();
   });
 });

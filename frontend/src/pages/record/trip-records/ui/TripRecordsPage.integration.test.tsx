@@ -4,19 +4,25 @@
 import type { ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { FlatList, Linking } from 'react-native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 import {
   act,
   fireEvent,
   render,
   screen,
+  userEvent,
   waitFor,
   within,
 } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 import { router } from 'expo-router';
 
-import { PlusGlyph } from '@/features/record';
+import { buildSlotKey } from '@/entities/itinerary-slot';
+import { PlusGlyph } from '@/shared/ui/glyphs';
 import { server } from '@/mocks/server';
 import {
   createFakeAutomationSink,
@@ -26,6 +32,8 @@ import {
 import { encodePolyline } from '@/shared/location/automation/polyline';
 import type { VisitPhoto } from '@/shared/api/index.schemas';
 import {
+  getGetTripsTripIdItineraryQueryKey,
+  getGetTripsTripIdQueryKey,
   getGetTripsTripIdSummaryQueryKey,
   getGetTripsTripIdVisitsVisitCheckIdPhotosQueryKey,
 } from '@/shared/api/index.hooks';
@@ -53,9 +61,10 @@ import {
   tripRecord,
 } from '@/test-support/tripRecordsFixtures';
 import { tripRecordsTrip } from '@/test-support/tripRecordsTrip';
+import { guardKeyWarnings } from '@/test-support/keyWarnings';
 
 import { TripRecordsPage } from './TripRecordsPage';
-import { newTestQueryClient } from '@/test-support/queryRender';
+import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
 
 /**
  * j01 방문 기록 페이지 — 실 페이지 + 실제 HTTP(msw) 로 본 사용자 관측 결과. 관점마다 describe 하나(옛 파일 하나).
@@ -124,10 +133,12 @@ jest.mock('@/shared/photo', () => {
   const actual =
     jest.requireActual<typeof import('@/shared/photo')>('@/shared/photo');
   return {
-    pickPhotoAsset: () =>
-      mockPhotoSeam ? mockPick() : actual.pickPhotoAsset(),
+    pickPhotoAssets: (opts: { limit: number }) =>
+      mockPhotoSeam ? mockPick(opts) : actual.pickPhotoAssets(opts),
     resolvePhotoUri: (id: string) =>
       mockPhotoSeam ? mockResolveUri(id) : actual.resolvePhotoUri(id),
+    readPhotoAccess: () =>
+      mockPhotoSeam ? mockReadPhotoAccess() : actual.readPhotoAccess(),
   };
 });
 
@@ -140,6 +151,9 @@ jest.mock('@/shared/storage/installId', () => {
       mockPhotoSeam ? mockGetInstallId() : actual.getInstallId(),
   };
 });
+
+// TRIP-1812 AC-10 — React 는 겹친 key 를 console.error 로만 알린다. 파일 최상위에서 걸어 모든 테스트 뒤에 0 을 단언한다.
+guardKeyWarnings();
 
 const BASE = 'http://localhost:8080/api/v1';
 const TRIP_ID = 't1';
@@ -170,6 +184,7 @@ const hitCount = (needle: string) =>
   observedHits.filter((hit) => hit === needle).length;
 const mockPick = jest.fn();
 const mockResolveUri = jest.fn();
+const mockReadPhotoAccess = jest.fn();
 const mockGetInstallId = jest.fn();
 
 beforeAll(() => {
@@ -321,6 +336,45 @@ describe('기본 — 일자 탭·사진/메모 슬롯·[방문 추가]·메모 �
     });
   });
 
+  describe('TRIP-1795 · Q5 — 이 여행에서 고친 이름이 방문 기록 카드에도 보인다', () => {
+    it('일정 슬롯의 고친 이름이 완료 방문 카드 제목이 되고(원본은 안 보인다), 고치지 않은 슬롯은 원본 이름 그대로다', async () => {
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+          HttpResponse.json(
+            tripItinerary(
+              [
+                {
+                  date: '2026-08-20',
+                  slots: [
+                    daySlot('p1', '광안리 해변', {
+                      displayName: '우리 아지트',
+                    }),
+                    // 방문 기록이 없는 슬롯 — 「계획 행」(`nameKo: slotDisplayName(slot)`)에도 고친 이름이 보인다.
+                    daySlot('p9', '송정 해변', { displayName: '내 해변' }),
+                  ],
+                },
+                {
+                  date: '2026-08-21',
+                  slots: [daySlot('p2', '부산시립미술관')],
+                },
+              ],
+              TRIP_ID
+            )
+          )
+        )
+      );
+      render(<TripRecordsPage tripId={TRIP_ID} />, { wrapper });
+
+      await screen.findByText('우리 아지트');
+      expect(screen.queryByText('광안리 해변')).toBeNull();
+      const planRow = await screen.findByTestId(
+        `record-trip-plan-row-${buildSlotKey('2026-08-20', 'p9')}`
+      );
+      expect(within(planRow).getByText('내 해변')).toBeOnTheScreen();
+      expect(screen.queryByText('송정 해변')).toBeNull();
+    });
+  });
+
   describe('🔴 AC-2·AC-3 · 완료 방문 카드에 사진/메모 슬롯이 실배선된다', () => {
     it('record-trip-photo-strip(PhotoThumbStrip)·record-trip-memo-input(MemoInline)·사진 추가 + 타일이 실데이터 렌더에서 뜬다', async () => {
       render(<TripRecordsPage tripId={TRIP_ID} />, { wrapper });
@@ -438,7 +492,7 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
    * 무엇을 보장하나:
    *  - MS1 (AC-1)   페이지가 새 뷰(`record-trip-view`)를 그리고, 지도는 셸 것 하나 · 탭바 없음 · 카드는 시트 안.
    *  - MS2·3 (AC-12) 시트 헤더 = "여행명 · N일차 · M월 D일(요일) · N곳". 여행명은 GET /trips/{tripId} 에서 온다.
-   *                  그 조회가 실패하면 여행명 조각만 빠지고 오류 표면은 없다(INV-4).
+   *                  그 조회가 404 아닌 이유로 실패하면 조각이 빠지고 화면 한 줄 `record-trip-plan-error` 가 선다(TRIP-1757 J01-2, 옛 MS3 뒤집음).
    *  - MS4~6 (AC-10·11 · 결정 3(c)) 핀 = 그날 계획 슬롯 순서. slotKey 로 맞춘 방문이 **도착했고 건너뛰지
    *                  않았으면** 체크 핀(`done`), 아니면 번호 핀(`upcoming`). 즉석 방문은 핀이 없다. 같은 장소의
    *                  즉석 방문이 계획 핀을 체크하지 않는다(poiId 가 아니라 slotKey). 핀 전부 맞추기·지도 잠금.
@@ -554,8 +608,6 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
 
   let dayHits: string[] = [];
 
-  let tripHits = 0;
-
   const pinsOnMap = () => screen.getByTestId('map-root').props.pins;
 
   beforeEach(() => {
@@ -579,10 +631,8 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
       ],
     };
     dayHits = [];
-    tripHits = 0;
     server.use(
       http.get(`${BASE}/trips/:tripId`, () => {
-        tripHits += 1;
         return HttpResponse.json(tripRecordsTrip('부산 여행', TRIP_ID));
       }),
       http.get(`${BASE}/trips/:tripId/itinerary`, () =>
@@ -635,31 +685,243 @@ describe('셸 조립 — 전면 지도 + 바텀시트·핀·일차 칩·‹', ()
         ).toHaveTextContent('부산 여행 · 1일차 · 8월 20일(목) · 4곳')
       );
     });
+  });
 
-    it('MS3 여행 조회가 실패하면 여행명 조각만 빠지고 오류 표면은 없다 (INV-4)', async () => {
-      server.use(
-        http.get(`${BASE}/trips/:tripId`, () => {
-          tripHits += 1;
-          return HttpResponse.json(
-            { error: { code: 'INTERNAL', message: 'boom' } },
-            { status: 500 }
-          );
-        })
+  /**
+   * 🔴 TRIP-1757 · 보조 조회(일정·여행) 실패 한 줄 — INV-4. 옛 MS3(여행 500 → 오류 표면 없음)을 J01-2 로 뒤집었다.
+   *
+   * 무엇을 보장하나(3동작 = 준비: 일정/여행 GET 을 500·404 로 → 실행: 렌더·[다시 시도] → 단언: testID·요청 수):
+   *  - J01-1/2/3  일정 또는 여행 GET 이 404 아닌 실패면 화면에 `record-trip-plan-error` + `-retry` 가 **하나** 선다.
+   *  - J01-1b     `?day=` 없이 들어오면 방문 조회가 아예 안 나가 이 한 줄이 유일한 신호다.
+   *  - J01-4      [다시 시도]는 **실패한 쿼리만** 다시 부른다. 재조회가 도는 동안(v5 가 error 를 비움)에도 줄이 남고 버튼이 잠긴다.
+   *  - J01-5      404 는 지금 동작(줄 없음). 데이터를 받은 뒤 배경 재조회 실패도 줄 없음.
+   *  - J01-6      records(방문) 500 의 `record-trip-error` 는 그대로, 둘이 함께 뜰 수 있다.
+   * 모든 케이스는 `day` 를 명시한다(없으면 activeDay='' 라 방문 조회가 안 나가 "records 200" 전제가 공허해진다) — J01-1b 만 예외.
+   * (개념) `userEvent.press` = 실제 Pressability 경로로 누름. `fireEvent.press` 는 조상 prop 으로 새어 거짓 green 을 만든다.
+   */
+  describe('🔴 TRIP-1757 · 일정·여행 조회 실패 한 줄', () => {
+    const PLAN_ERROR = 'record-trip-plan-error';
+    const PLAN_RETRY = 'record-trip-plan-retry';
+    const ITINERARY_GET = `GET /api/v1/trips/${TRIP_ID}/itinerary`;
+    const TRIP_GET = `GET /api/v1/trips/${TRIP_ID}`;
+
+    const status = (code: number) => () =>
+      HttpResponse.json(
+        { error: { code: 'X', message: 'x' } },
+        { status: code }
       );
+    const itineraryReply = (reply: () => Response | Promise<Response>) =>
+      server.use(http.get(`${BASE}/trips/:tripId/itinerary`, reply));
+    const tripReply = (reply: () => Response | Promise<Response>) =>
+      server.use(http.get(`${BASE}/trips/:tripId`, reply));
+    const okItinerary = () => HttpResponse.json(itinerary());
+    const okTrip = () =>
+      HttpResponse.json(tripRecordsTrip('부산 여행', TRIP_ID));
 
-      render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
+    beforeEach(() => {
+      observedHits = [];
+    });
 
-      // 앵커 — 여행 요청이 실제로 나가 실패했고 카드도 그려졌다(로딩 중의 공허 통과 차단).
-      await screen.findByTestId('record-trip-visit-card-v1');
-      await waitFor(() => expect(tripHits).toBeGreaterThanOrEqual(1));
+    function renderDay1() {
+      render(<TripRecordsPage tripId={TRIP_ID} day={DAY1} today={DAY1} />, {
+        wrapper,
+      });
+    }
+    async function settleLoose() {
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 30));
       });
+    }
 
+    it('J01-1 일정 GET 500 → 한 줄이 서고 일차 칩은 없다 (방문 카드는 그려짐)', async () => {
+      itineraryReply(status(500));
+      renderDay1();
+
+      expect(await screen.findByTestId(PLAN_ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(PLAN_RETRY)).toBeOnTheScreen();
+      expect(screen.getByTestId('record-trip-visit-card-v1')).toBeOnTheScreen();
+      expect(screen.queryByTestId('sheet-daychip-0')).toBeNull();
+      expect(screen.queryByTestId('record-trip-error')).toBeNull();
+    });
+
+    it('J01-1b ?day= 없이 들어와 일정이 500 이면 방문 조회는 안 나가고 이 한 줄이 유일한 신호다', async () => {
+      itineraryReply(status(500));
+      render(<TripRecordsPage tripId={TRIP_ID} today={DAY1} />, { wrapper });
+
+      expect(await screen.findByTestId(PLAN_ERROR)).toBeOnTheScreen();
+      await settleLoose();
+      expect(dayHits).toEqual([]);
+      expect(screen.queryByTestId('record-trip-empty')).toBeNull();
+    });
+
+    it('J01-2 여행 GET 500 → 같은 한 줄이 서고 제목 조각만 빠진 채다 (옛 MS3 뒤집음)', async () => {
+      tripReply(status(500));
+      renderDay1();
+
+      expect(await screen.findByTestId(PLAN_ERROR)).toBeOnTheScreen();
+      await screen.findByTestId('record-trip-visit-card-v1');
       expect(screen.getByTestId('record-trip-sheet-header')).toHaveTextContent(
         '1일차 · 8월 20일(목) · 4곳'
       );
       expect(screen.queryByTestId('record-trip-error')).toBeNull();
+    });
+
+    it('J01-3 일정·여행 둘 다 500 이어도 줄과 버튼은 정확히 1개다', async () => {
+      itineraryReply(status(500));
+      tripReply(status(500));
+      renderDay1();
+
+      await screen.findByTestId(PLAN_ERROR);
+      await waitFor(() => {
+        expect(hitCount(ITINERARY_GET)).toBe(1);
+        expect(hitCount(TRIP_GET)).toBe(1);
+      });
+      await settleLoose();
+      expect(screen.getAllByTestId(PLAN_ERROR)).toHaveLength(1);
+      expect(screen.getAllByTestId(PLAN_RETRY)).toHaveLength(1);
+    });
+
+    it('J01-4a 일정만 500 → [다시 시도]는 일정 GET 만 다시 부르고, 200 이면 줄이 사라지고 칩·계획 행·장소 이름이 그려진다', async () => {
+      itineraryReply(status(500));
+      renderDay1();
+      await screen.findByTestId(PLAN_ERROR);
+      expect(hitCount(ITINERARY_GET)).toBe(1);
+      expect(hitCount(TRIP_GET)).toBe(1);
+
+      itineraryReply(okItinerary);
+      const user = userEvent.setup();
+      await user.press(screen.getByTestId(PLAN_RETRY));
+
+      await waitFor(() =>
+        expect(screen.queryByTestId(PLAN_ERROR)).not.toBeOnTheScreen()
+      );
+      expect(await screen.findByTestId('sheet-daychip-0')).toBeOnTheScreen();
+      expect(
+        screen.getByTestId(`record-trip-plan-row-${DAY1}#p3`)
+      ).toBeOnTheScreen();
+      expect(
+        within(screen.getByTestId('record-trip-visit-card-v1')).getByText(
+          '광안리 해변'
+        )
+      ).toBeOnTheScreen();
+      expect(hitCount(ITINERARY_GET)).toBe(2);
+      expect(hitCount(TRIP_GET)).toBe(1);
+    });
+
+    it('J01-4b 여행만 500 → [다시 시도]는 여행 GET 만 다시 부르고, 200 이면 줄이 사라지고 제목이 돌아온다', async () => {
+      tripReply(status(500));
+      renderDay1();
+      await screen.findByTestId(PLAN_ERROR);
+
+      tripReply(okTrip);
+      const user = userEvent.setup();
+      await user.press(screen.getByTestId(PLAN_RETRY));
+
+      await waitFor(() =>
+        expect(screen.queryByTestId(PLAN_ERROR)).not.toBeOnTheScreen()
+      );
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('record-trip-sheet-header')
+        ).toHaveTextContent('부산 여행 · 1일차 · 8월 20일(목) · 4곳')
+      );
+      expect(hitCount(TRIP_GET)).toBe(2);
+      expect(hitCount(ITINERARY_GET)).toBe(1);
+    });
+
+    it('J01-4c 재조회 응답을 붙잡는 동안에도 줄이 남고 [다시 시도]는 잠기며, 응답이 오면 사라진다 (v5 가 error 를 비워도)', async () => {
+      itineraryReply(status(500));
+      renderDay1();
+      await screen.findByTestId(PLAN_ERROR);
+
+      const gate = createGate();
+      itineraryReply(async () => {
+        await gate.opened;
+        return okItinerary();
+      });
+      const user = userEvent.setup();
+      await user.press(screen.getByTestId(PLAN_RETRY));
+      await waitFor(() => expect(hitCount(ITINERARY_GET)).toBe(2));
+      await settleLoose();
+
+      // 앵커: 둘째 요청이 나가 응답 대기 중이다. 그래도 줄은 남고 버튼은 잠긴다.
+      expect(screen.getByTestId(PLAN_ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(PLAN_RETRY)).toBeDisabled();
+
+      gate.release();
+      await waitFor(() =>
+        expect(screen.queryByTestId(PLAN_ERROR)).not.toBeOnTheScreen()
+      );
+    });
+
+    it('J01-5a 일정·여행 GET 404 → 줄이 없다 (지금 동작 그대로)', async () => {
+      itineraryReply(status(404));
+      tripReply(status(404));
+      renderDay1();
+
+      await screen.findByTestId('record-trip-visit-card-v1');
+      await waitFor(() => {
+        expect(hitCount(ITINERARY_GET)).toBe(1);
+        expect(hitCount(TRIP_GET)).toBe(1);
+      });
+      await settleLoose();
+      expect(screen.queryByTestId(PLAN_ERROR)).toBeNull();
+    });
+
+    it('J01-5b 데이터를 받은 뒤 배경 재조회가 500 이어도 줄이 없고 받아 둔 화면이 그대로다', async () => {
+      const client = newTestQueryClient({ gcTime: 0 });
+      render(<TripRecordsPage tripId={TRIP_ID} day={DAY1} today={DAY1} />, {
+        wrapper: createWrapper(client),
+      });
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('record-trip-sheet-header')
+        ).toHaveTextContent('부산 여행 · 1일차 · 8월 20일(목) · 4곳')
+      );
+
+      itineraryReply(status(500));
+      tripReply(status(500));
+      await act(async () => {
+        await client.invalidateQueries({
+          queryKey: getGetTripsTripIdItineraryQueryKey(TRIP_ID),
+        });
+        await client.invalidateQueries({
+          queryKey: getGetTripsTripIdQueryKey(TRIP_ID),
+        });
+      });
+      // 앵커: 두 번째 요청이 실제로 나갔다.
+      expect(hitCount(ITINERARY_GET)).toBe(2);
+      expect(hitCount(TRIP_GET)).toBe(2);
+
+      await settleLoose();
+      expect(screen.queryByTestId(PLAN_ERROR)).toBeNull();
+      expect(screen.getByTestId('record-trip-sheet-header')).toHaveTextContent(
+        '부산 여행 · 1일차 · 8월 20일(목) · 4곳'
+      );
+    });
+
+    it('J01-6a 회귀: 방문(records) 500 이면 record-trip-error 가 그대로 뜨고 plan 줄은 없다', async () => {
+      server.use(
+        http.get(`${BASE}/trips/:tripId/visits/days/:day`, status(500))
+      );
+      renderDay1();
+
+      expect(await screen.findByTestId('record-trip-error')).toBeOnTheScreen();
+      expect(screen.getByTestId('record-trip-error-retry')).toBeOnTheScreen();
+      await waitFor(() => expect(hitCount(ITINERARY_GET)).toBe(1));
+      await settleLoose();
+      expect(screen.queryByTestId(PLAN_ERROR)).toBeNull();
+    });
+
+    it('J01-6b 방문 500 + 일정 500 이면 두 안내가 함께 뜬다 (서로 다른 원인)', async () => {
+      server.use(
+        http.get(`${BASE}/trips/:tripId/visits/days/:day`, status(500))
+      );
+      itineraryReply(status(500));
+      renderDay1();
+
+      expect(await screen.findByTestId('record-trip-error')).toBeOnTheScreen();
+      expect(await screen.findByTestId(PLAN_ERROR)).toBeOnTheScreen();
     });
   });
 
@@ -2122,6 +2384,43 @@ describe('계획 행 — 조인·「방문 체크」 도착·조회 실패·오�
   });
 
   describe('TripRecordsPage · 계획 행 조인 (TRIP-1021 AC-10·AC-13)', () => {
+    // TRIP-1812 AC-10 — 번호는 그 행의 자리다. slotKey 로 찾으면 같은 장소 두 행이 뒤 자리 번호로 겹친다.
+    it('R11 같은 장소 두 계획 행은 각자 자기 자리 번호를 그린다 — p3 1·3, p4 2', async () => {
+      // 준비 — 그날 [p3, p4, p3], 방문 0건.
+      mockGetForeground.mockResolvedValue(DENIED);
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+          HttpResponse.json(
+            tripItinerary(
+              [
+                {
+                  date: DAY,
+                  slots: [
+                    daySlotAt('p3', '○○ 카페', '10:00:00'),
+                    daySlotAt('p4', '△△ 미술관', '13:00:00'),
+                    daySlotAt('p3', '○○ 카페', '15:00:00'),
+                  ],
+                },
+              ],
+              TRIP_ID
+            )
+          )
+        )
+      );
+
+      // 실행
+      render(<TripRecordsPage tripId={TRIP_ID} today={DAY} />, { wrapper });
+
+      // 단언 — 앵커: 행이 정말 둘. 번호는 각자.
+      expect(await screen.findAllByTestId(rowId(KEY_P3))).toHaveLength(2);
+      const orders = screen.getAllByTestId(`record-trip-plan-order-${KEY_P3}`);
+      expect(orders[0]).toHaveTextContent('1');
+      expect(orders[1]).toHaveTextContent('3');
+      expect(
+        screen.getByTestId(`record-trip-plan-order-${KEY_P4}`)
+      ).toHaveTextContent('2');
+    });
+
     it('R1 방문 0건 → 빈 상태 안내 + 계획 2곳 행, 수동 모드 부제(법 문구)도 그대로 있다', async () => {
       mockGetForeground.mockResolvedValue(DENIED);
 
@@ -2797,18 +3096,25 @@ describe('메모 저장 실패 안내·세션 캐시 시드', () => {
     });
   });
 
-  // TRIP-1415 · AC-1·3~10·12 — 서버 메모(GET /trips/{id}/records 의 memo)로 카드 입력을 시드한다.
+  // TRIP-1415 · AC-1·3~10 — 서버 메모(GET /trips/{id}/records 의 memo)로 카드 입력을 시드한다.
+  // TRIP-1751 · 개정 AC-12 — 조회가 끝내 실패(500·404, 재시도 1회까지)하면 입력을 막고 "불러오지 못했어요 + [다시 시도]"를 보인다(옛 AC-12 "막히지 않는다"의 반전).
   describe('서버 메모 시드 — records 의 memo', () => {
     /**
      * 무엇을 보장하나: 앱을 다시 켜도(세션 저장본 없음) 서버에 남은 메모가 그 방문 카드 입력칸에 보인다. 순위는
      *   세션 저장본 → 서버 memo → 빈칸이고, 방문 id 로만 찾는다(날짜 묶음 무관). 첫 조회가 끝나기 전엔 입력이 글자를
      *   받지 않고(빈칸에 써서 서버 메모를 덮는 upsert 차단), 한 번 열리면 재조회가 와도 쓰던 초안을 지키며, 조회가
-     *   실패해도 막히지 않는다. 시드된 값 그대로 포커스를 빼면 PUT 은 나가지 않는다.
+     *   끝내 실패하면 입력은 막힌 채 안내 + [다시 시도](성공하면 서버 글로 열림)가 선다. 시드된 값 그대로 포커스를 빼면 PUT 은 나가지 않는다.
      * (개념) `createGate()` = 테스트가 열 때까지 응답을 붙잡는 문(시간 대신 신호) · `client.invalidateQueries()` =
      *   캐시를 낡음으로 표시해 보고 있는 조회를 다시 부르기(앱 복귀 재조회 흉내).
      */
     const RECORDS_GET = `GET /api/v1/trips/${TRIP_ID}/records`;
     const INPUT = 'record-trip-memo-input';
+    // TRIP-1751 — 카드가 여럿이라 방문 id 를 붙인다(한 여행은 records 한 키라 카드 전부가 같이 실패한다 — 02a ★10).
+    const ERROR = 'record-trip-memo-load-error-v-in';
+    const RETRY = 'record-trip-memo-load-retry-v-in';
+    const LOAD_ERROR_COPY = '메모를 불러오지 못했어요';
+    // 안내는 재시도 1회(대기 약 1초) 뒤에 선다. 기본 상한(5초)은 jest 테스트 상한과 같아 끝내 안 뜨면 원인이 가려진다 — 짧게 건다.
+    const LOAD_WAIT = { timeout: 3000 };
     let recordsReply: (call: number) => Response | Promise<Response>;
     let recordsCalls = 0;
 
@@ -2968,8 +3274,10 @@ describe('메모 저장 실패 안내·세션 캐시 시드', () => {
       fireEvent.changeText(locked, '몰래 쓴 글');
       fireEvent(locked, 'blur');
 
-      // 단언 ① — 입력이 바뀌지 않았다.
+      // 단언 ① — 입력이 바뀌지 않았다. 조회 중은 로딩이지 실패가 아니라 "불러오지 못했어요"는 없다(TRIP-1751 ★7).
       expect(valueOf()).toBe('');
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+      expect(screen.queryByTestId(RETRY)).toBeNull();
 
       // 실행 ② — 응답 도착.
       await act(async () => {
@@ -3081,28 +3389,137 @@ describe('메모 저장 실패 안내·세션 캐시 시드', () => {
       ['500', 500],
       ['404', 404],
     ])(
-      'J8 records %s 여도 카드·입력은 막히지 않고 빈칸으로 열려 저장된다 (AC-12)',
+      'J8 records %s 로 끝내 실패하면 카드는 그대로이고 입력은 막힌 채 "불러오지 못했어요 + [다시 시도]"가 서며 글을 써도 PUT 은 0회다 (개정 AC-12)',
       async (_label, status) => {
-        // 준비
+        // 준비 — 재시도 1회까지 같은 응답(404 도 막는다: 결정 3).
         recordsReply = () => HttpResponse.json({ error: 'boom' }, { status });
 
-        // 실행
+        // 실행 ① — 안내가 뜰 때까지 기다린다(막힌 입력은 openedMemoInput 이 영원히 기다린다 — 02a ★9).
         renderPage(newClient());
-        const input = await memoInput();
+        const notice = await screen.findByTestId(ERROR, undefined, LOAD_WAIT);
 
-        // 단언 ① — 카드와 빈 입력.
+        // 단언 ① — 카드·안내 문구·다시 시도 버튼·잠긴 빈 입력.
         expect(cardOf()).toBeOnTheScreen();
-        expect(input.props.value).toBe('');
+        expect(notice).toHaveTextContent(LOAD_ERROR_COPY);
+        expect(screen.getByTestId(RETRY)).toHaveTextContent('다시 시도');
+        expect(screen.getByTestId(RETRY)).toBeEnabled();
+        expect(field()).toBeDisabled();
+        expect(valueOf()).toBe('');
 
-        // 실행 ② — 쓴다.
-        fireEvent.changeText(input, '조회 실패 뒤 메모');
-        fireEvent(input, 'blur');
+        // 실행 ② — 써 본다(잠긴 입력은 이벤트를 버린다).
+        fireEvent.changeText(field(), '조회 실패 뒤 메모');
+        fireEvent(field(), 'blur');
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        });
 
-        // 단언 ② — 저장이 나간다.
-        await waitFor(() => expect(memoBodies).toHaveLength(1));
-        expect(memoBodies).toEqual([{ text: '조회 실패 뒤 메모' }]);
+        // 단언 ② — 아무것도 나가지 않았고(PUT 0), 조회는 최초 + 재시도 1회로 2번이다.
+        expect(valueOf()).toBe('');
+        expect(memoBodies).toEqual([]);
+        expect(hitCount(RECORDS_GET)).toBe(2);
       }
     );
+
+    it('J10 [다시 시도] — 응답 전엔 안내가 남고 버튼은 잠기며, 도착하면 입력이 서버 글로 열리고 안내가 사라지고 그 뒤 저장은 PUT 한다 (개정 AC-12)', async () => {
+      // 준비 — 1·2번째(최초+재시도)는 500, 3번째부터는 문 뒤 '기존 글'.
+      const gate = createGate();
+      recordsReply = async (call) => {
+        if (call <= 2)
+          return HttpResponse.json({ error: 'boom' }, { status: 500 });
+        await gate.opened;
+        return recordsOf([actualVisit('v-in', '기존 글')]);
+      };
+      renderPage(newClient());
+      await screen.findByTestId(ERROR, undefined, LOAD_WAIT);
+
+      // 실행 ① — [다시 시도].
+      fireEvent.press(screen.getByTestId(RETRY));
+      await waitFor(() => expect(hitCount(RECORDS_GET)).toBe(3));
+      await flushNotifications();
+
+      // 단언 ① — 응답 전: v5 가 isError 를 풀어도 안내는 남고(★2), 버튼은 잠기고, 입력은 잠겨 있다.
+      expect(screen.getByTestId(ERROR)).toHaveTextContent(LOAD_ERROR_COPY);
+      expect(screen.getByTestId(RETRY)).toBeDisabled();
+      expect(field()).toBeDisabled();
+
+      // 실행 ② — 잠긴 버튼을 또 눌러도 요청이 늘지 않는다.
+      fireEvent.press(screen.getByTestId(RETRY));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      expect(hitCount(RECORDS_GET)).toBe(3);
+
+      // 실행 ③ — 응답 도착.
+      await act(async () => {
+        gate.release();
+      });
+
+      // 단언 ② — 서버 글로 열리고 안내·버튼이 사라진다.
+      await waitFor(() => expect(valueOf()).toBe('기존 글'));
+      const opened = await memoInput();
+      expect(screen.queryByTestId(ERROR)).toBeNull();
+      expect(screen.queryByTestId(RETRY)).toBeNull();
+
+      // 실행 ④ — 고쳐서 포커스를 뺀다.
+      fireEvent.changeText(opened, '새 글');
+      fireEvent(opened, 'blur');
+
+      // 단언 ③ — 그 뒤 저장은 지금처럼 PUT 1회.
+      await waitFor(() => expect(memoBodies).toHaveLength(1));
+      expect(memoBodies).toEqual([{ text: '새 글' }]);
+    });
+
+    it('J11 카드가 둘이면 같은 실패가 카드마다 안내 하나씩 선다(방문 id 접미 — testID 가 겹치지 않는다) — records GET 은 여행당 한 번(+재시도)이다 (개정 AC-12)', async () => {
+      // 준비 — J1 과 같은 일정(같은 날 카드 둘), records 는 늘 500.
+      server.use(
+        http.get(`${BASE}/trips/:tripId/itinerary`, () =>
+          HttpResponse.json(
+            tripItinerary(
+              [
+                {
+                  date: DAY,
+                  slots: [
+                    daySlot('p1', '광안리 해변'),
+                    daySlot('p2', '부산시립미술관'),
+                  ],
+                },
+              ],
+              TRIP_ID
+            )
+          )
+        ),
+        http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
+          HttpResponse.json({
+            visits: [V_IN, completedVisitOn('v-2', DAY, 'p2')],
+          })
+        )
+      );
+      recordsReply = () =>
+        HttpResponse.json({ error: 'boom' }, { status: 500 });
+
+      // 실행
+      renderPage(newClient());
+      await screen.findByTestId(
+        'record-trip-memo-load-error-v-2',
+        undefined,
+        LOAD_WAIT
+      );
+
+      // 단언 — 카드마다 하나(정규식으로 센 총합 2), 각자 자기 카드 안에 있고 버튼도 카드마다 있다.
+      expect(
+        screen.getAllByTestId(/^record-trip-memo-load-error-/)
+      ).toHaveLength(2);
+      for (const id of ['v-in', 'v-2']) {
+        const card = within(screen.getByTestId(`record-trip-visit-card-${id}`));
+        expect(
+          card.getByTestId(`record-trip-memo-load-error-${id}`)
+        ).toHaveTextContent(LOAD_ERROR_COPY);
+        expect(
+          card.getByTestId(`record-trip-memo-load-retry-${id}`)
+        ).toBeOnTheScreen();
+      }
+      expect(hitCount(RECORDS_GET)).toBe(2);
+    });
   });
 });
 
@@ -3217,11 +3634,16 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
     photoBodies = [];
     photoStatus = 201;
     gpsOptIn = true;
-    mockPick.mockReset().mockResolvedValue({ kind: 'picked', asset: asset() });
+    mockPick.mockReset().mockResolvedValue({
+      kind: 'picked',
+      assets: [asset()],
+      skipped: 0,
+    });
     mockResolveUri
       .mockReset()
       .mockImplementation(async (id: string) => `file:///photos/${id}.jpg`);
     mockGetInstallId.mockReset().mockResolvedValue('dev-A');
+    mockReadPhotoAccess.mockReset().mockResolvedValue('all');
     setAccessToken('a');
     server.use(
       // TRIP-1085 — 페이지가 시트 헤더 여행명을 GET /trips/{tripId} 로 얻는다.
@@ -3370,6 +3792,198 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
     });
   });
 
+  /**
+   * TRIP-1803 · 셀 문구만으로는 왜 안 보이는지 모른다 — 권한이 limited·거부면 카드에 안내 한 줄 + 사용자가 누르는 [설정 열기](팝업 0).
+   * 무엇을 보장하나: 안내는 못 푼 **내 기기** 사진이 있고 권한이 limited·거부일 때만 · 다 풀리면 권한을 묻지 않는다 ·
+   *   첨부 안내의 [설정 열기] 가 떠 있으면 숨겨 버튼이 둘이 되지 않는다 · 복귀 때 못 푼 사진만 다시 묻는다.
+   * (개념) `staleTime: 30_000` = 앱 기본값. 기본 0 이면 공허 통과한다(02a ★1).
+   */
+  describe('🔴 TRIP-1803 · 못 푼 사진 안내와 복귀', () => {
+    const NOTICE_1803 = 'record-trip-photo-access-notice-v-a';
+    const SETTINGS_1803 = `${NOTICE_1803}-settings`;
+    const uriCalls = (id: string) =>
+      mockResolveUri.mock.calls.filter(([arg]) => arg === id).length;
+    const goneIs3 = async (id: string) =>
+      id === 'asset-3' ? null : `file:///photos/${id}.jpg`;
+
+    beforeEach(() => {
+      serverPhotos = [
+        serverPhoto('ph1', 'asset-1', 'dev-A'),
+        serverPhoto('ph-gone', 'asset-3', 'dev-A'),
+      ];
+      mockResolveUri.mockImplementation(goneIs3);
+    });
+    afterEach(() => focusManager.setFocused(undefined)); // 모듈 싱글턴.
+
+    it('J1 못 푼 사진 + 선택한 사진만 → 셀 문구와 안내, [설정 열기] 누르면 설정 1회, 피커는 안 연다', async () => {
+      mockReadPhotoAccess.mockResolvedValue('limited');
+      const openSettings = jest
+        .spyOn(Linking, 'openSettings')
+        .mockResolvedValue(undefined);
+      const user = userEvent.setup();
+
+      await renderCard();
+
+      expect(
+        await screen.findByTestId('record-photo-unavailable-ph-gone')
+      ).toBeOnTheScreen();
+      expect(await screen.findByTestId(NOTICE_1803)).toBeOnTheScreen();
+      await user.press(screen.getByTestId(SETTINGS_1803));
+      expect(openSettings).toHaveBeenCalledTimes(1);
+      expect(mockPick).not.toHaveBeenCalled();
+      openSettings.mockRestore();
+    });
+
+    it('J2 (E-5) 못 푼 사진 + 거부 → 안내가 선다', async () => {
+      mockReadPhotoAccess.mockResolvedValue('denied');
+
+      await renderCard();
+
+      expect(await screen.findByTestId(SETTINGS_1803)).toBeOnTheScreen();
+    });
+
+    it('TRIP-1820 · [설정 열기] 는 사진 줄 위에 있다 — 시트 중간 칸은 안쪽이 스크롤되지 않아 아래에 두면 하단 바에 가린다', async () => {
+      mockReadPhotoAccess.mockResolvedValue('limited');
+      const card = await renderCard();
+      await within(card).findByTestId(SETTINGS_1803);
+
+      // 트리 순서대로 돌려준다 — 위치 픽셀은 실화면 몫(기능 지도).
+      const order = within(card)
+        .getAllByTestId(
+          new RegExp(`^(${SETTINGS_1803}|record-trip-photo-strip)$`)
+        )
+        .map((node) => node.props.testID);
+      expect(order).toEqual([SETTINGS_1803, 'record-trip-photo-strip']);
+    });
+
+    it('TRIP-1820 · 첨부 안내의 [설정 열기] 도 사진 줄 위에 있다', async () => {
+      serverPhotos = [];
+      mockPick.mockResolvedValue({ kind: 'denied' });
+      const card = await renderCard();
+
+      fireEvent.press(await within(card).findByTestId('record-trip-photo-add'));
+      await within(card).findByTestId('record-trip-photo-settings');
+
+      const order = within(card)
+        .getAllByTestId(/^record-trip-photo-(notice-v-a|settings|strip)$/)
+        .map((node) => node.props.testID);
+      expect(order).toEqual([
+        'record-trip-photo-notice-v-a',
+        'record-trip-photo-settings',
+        'record-trip-photo-strip',
+      ]);
+    });
+
+    it('TRIP-1820 · 거부 상태에서 `+` 를 연타해도 둘째 탭이 그 자리로 내려온 [설정 열기] 를 관통하지 않는다', async () => {
+      // 준비 — 사진 0장 · 거부. 시각을 멈춰 400ms 창 안의 연타를 만든다.
+      serverPhotos = [];
+      mockPick.mockResolvedValue({ kind: 'denied' });
+      const openSettings = jest
+        .spyOn(Linking, 'openSettings')
+        .mockResolvedValue(undefined);
+      const card = await renderCard();
+      const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+
+      // 실행 — `+` 를 눌러 안내가 뜨고, 같은 창 안에 그 자리 버튼을 누른다.
+      fireEvent.press(await within(card).findByTestId('record-trip-photo-add'));
+      const settings = await within(card).findByTestId(
+        'record-trip-photo-settings'
+      );
+      fireEvent.press(settings);
+
+      // 단언 — 설정 앱이 안 열린다. 창이 지나면 정상으로 열린다.
+      expect(openSettings).not.toHaveBeenCalled();
+      now.mockReturnValue(1_000_400);
+      fireEvent.press(settings);
+      expect(openSettings).toHaveBeenCalledTimes(1);
+      now.mockRestore();
+      openSettings.mockRestore();
+    });
+
+    it('J3 (E-4) 못 푼 사진 + 전체 허용 → 셀 문구만 있고 안내·버튼은 없다', async () => {
+      await renderCard();
+
+      expect(
+        await screen.findByTestId('record-photo-unavailable-ph-gone')
+      ).toBeOnTheScreen();
+      await waitFor(() => expect(mockReadPhotoAccess).toHaveBeenCalled());
+      await settle();
+      expect(screen.queryByTestId(NOTICE_1803)).toBeNull();
+      expect(screen.queryByTestId(SETTINGS_1803)).toBeNull();
+    });
+
+    it('J4 다 풀리면 권한을 묻지 않고 안내도 없다', async () => {
+      serverPhotos = [serverPhoto('ph1', 'asset-1', 'dev-A')];
+
+      await renderCard();
+
+      expect(
+        await screen.findByTestId('record-photo-available-ph1')
+      ).toBeOnTheScreen();
+      await settle();
+      expect(mockReadPhotoAccess).not.toHaveBeenCalled();
+      expect(screen.queryByTestId(NOTICE_1803)).toBeNull();
+    });
+
+    it('J5 (E-6) 다른 기기 사진만 있으면 앨범도 권한도 묻지 않는다', async () => {
+      serverPhotos = [serverPhoto('ph-other', 'asset-2', 'dev-B')];
+
+      await renderCard();
+
+      expect(
+        await screen.findByTestId('record-photo-other-device-ph-other')
+      ).toBeOnTheScreen();
+      await settle();
+      expect(mockResolveUri).not.toHaveBeenCalled();
+      expect(mockReadPhotoAccess).not.toHaveBeenCalled();
+      expect(screen.queryByTestId(NOTICE_1803)).toBeNull();
+    });
+
+    it('J6 (AC-2 · E-3) 넓히고 복귀하면 못 푼 사진만 다시 물어 썸네일이 되고 안내가 사라지며, 풀린 사진은 다시 안 묻는다', async () => {
+      mockReadPhotoAccess.mockResolvedValue('limited');
+      render(<TripRecordsPage tripId={TRIP_ID} today={DAY} />, {
+        wrapper: createWrapper(
+          newTestQueryClient({ gcTime: 0, staleTime: 30_000 })
+        ),
+      });
+      expect(await screen.findByTestId(SETTINGS_1803)).toBeOnTheScreen();
+
+      // 설정에서 넓혔다 — 복귀 전에는 다시 안 묻는다.
+      mockResolveUri.mockImplementation(
+        async (id: string) => `file:///photos/${id}.jpg`
+      );
+      mockReadPhotoAccess.mockResolvedValue('all');
+      await settle();
+      expect(uriCalls('asset-3')).toBe(1);
+
+      act(() => focusManager.setFocused(false));
+      act(() => focusManager.setFocused(true));
+
+      expect(
+        await screen.findByTestId('record-photo-thumb-image-ph-gone')
+      ).toBeOnTheScreen();
+      await waitFor(() =>
+        expect(screen.queryByTestId(SETTINGS_1803)).toBeNull()
+      );
+      expect(uriCalls('asset-3')).toBe(2);
+      expect(uriCalls('asset-1')).toBe(1);
+    });
+
+    it('J7 첨부 안내의 [설정 열기] 가 떠 있으면 새 안내를 숨겨 버튼이 하나다', async () => {
+      mockReadPhotoAccess.mockResolvedValue('denied');
+      mockPick.mockResolvedValue({ kind: 'denied' });
+      const card = await renderCard();
+      expect(await screen.findByTestId(SETTINGS_1803)).toBeOnTheScreen();
+
+      fireEvent.press(await within(card).findByTestId('record-trip-photo-add'));
+
+      expect(
+        await within(card).findByTestId('record-trip-photo-settings')
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId(SETTINGS_1803)).toBeNull();
+    });
+  });
+
   describe('🔴 AC-8 · j01 에서도 좌표는 GPS 기록 동의가 켜졌을 때만 (BR-U5-12)', () => {
     // 허브 L4 의 "동의 조회 실패(500) → 끈 것으로 보고 좌표 없음"을 옮겨 왔다(TRIP-1354) — 같은 pickPhotoForVisit 이다.
     it.each<[string, boolean | 'error']>([
@@ -3424,7 +4038,8 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
         await settle();
         expect(hitCount(PHOTOS_POST)).toBe(0);
 
-        // 실행 — 다시 `+`(이번엔 취소).
+        // 실행 — 시간이 지나(연타 창 닫힘) 다시 `+`(이번엔 취소).
+        resetPressGuard();
         mockPick.mockResolvedValueOnce({ kind: 'canceled' });
         fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
         await waitFor(() => expect(mockPick).toHaveBeenCalledTimes(2));
@@ -3447,11 +4062,14 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
         within(card).queryByTestId('record-trip-photo-settings')
       ).toBeNull();
 
+      resetPressGuard();
       mockPick.mockResolvedValueOnce({ kind: 'denied' });
       fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
-      fireEvent.press(
-        await within(card).findByTestId('record-trip-photo-settings')
+      const settings = await within(card).findByTestId(
+        'record-trip-photo-settings'
       );
+      resetPressGuard();
+      fireEvent.press(settings);
 
       expect(openSettings).toHaveBeenCalledTimes(1);
       openSettings.mockRestore();
@@ -3476,7 +4094,11 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
 
     it('R8 저장 요청이 실패하면(500) "업로드 실패" 칸과 카드 [다시 시도]가 뜬다', async () => {
       photoStatus = 500;
-      mockPick.mockResolvedValue({ kind: 'picked', asset: asset('asset-9') });
+      mockPick.mockResolvedValue({
+        kind: 'picked',
+        assets: [asset('asset-9')],
+        skipped: 0,
+      });
       const card = await renderCard();
 
       fireEvent.press(await within(card).findByTestId('record-trip-photo-add'));
@@ -3487,6 +4109,412 @@ describe('방문 카드 사진 — `+` 로 붙이고 이 기기 사진은 썸네
       expect(
         within(card).getByTestId('record-trip-upload-retry-v-a')
       ).toBeOnTheScreen();
+    });
+  });
+
+  /**
+   * TRIP-1797 · 여러 장 한 번에 — 한 번 골라 최대 10장(방문 30장 − 이미 붙은 장수 이내)을 차례로 붙인다.
+   *
+   * 무엇을 보장하나:
+   *  - M1  5장을 고르면 피커 한도 10 · POST 5회가 고른 순서대로 · 사진 칸 5개 · 사진 목록은 끝에서 한 번만 다시 받는다(첫 로드 1 + 끝 1)
+   *        · "사진 5장을 붙였어요" 토스트. 1장이면 토스트 없음(현행).
+   *  - M2  이미 26장이면 한도 4, 0장이면 10, 30장이면 피커를 열지 않고 "더 붙일 수 없어요" 한 줄(요청 0).
+   *  - M3·M4  붙이는 동안 "1/3 붙이는 중" → "2/3 …" 줄이 서고 끝나면 사라진다. 그 사이 `+` 를 또 눌러도 피커는 다시 안 열린다.
+   *  - M5  3장 중 2번째가 실패해도 끝 장까지 보낸다 → 성공 칸 2 · 실패 칸 1 · "1장을 붙이지 못했어요" · 토스트 없음 ·
+   *        [다시 시도] 는 실패한 그 장만 보내 성공하면 안내·실패 칸이 사라진다.
+   *  - M6  자산 번호 없는 선택이 섞이면 있는 장만 붙이고 개수 안내만(다시 시도·실패 칸 없음).
+   *
+   * (개념) 문(gate) = 테스트가 풀어 줄 때까지 POST 응답을 붙잡는 장치 — 진행 중 화면을 시간 대기 없이 붙잡아 본다.
+   * 3동작: 준비(서버 사진 수·피커 결과·실패 규칙) → 실행(`+` 누르기) → 단언(요청 순서·횟수·칸·안내 문구·토스트).
+   * ★ 토스트 부재 단언은 호스트가 그려져야 의미가 있다 — M1 의 존재 단언이 짝이다. 사진 칸 id 는 자산별(`ph-{자산}`)로 만든다.
+   */
+  describe('🔴 TRIP-1797 · 여러 장 한 번에 붙이기', () => {
+    const PROGRESS_ID = 'visit-photo-progress-v-a';
+    const TOAST = 'record-trip-photo-saved-toast';
+    const RETRY = 'record-trip-upload-retry-v-a';
+    const COPY_FULL = '이 방문엔 사진을 더 붙일 수 없어요 (최대 30장)';
+    const COPY_ONE_FAILED = '1장을 붙이지 못했어요';
+
+    let failIds: Set<string>;
+    let hold: boolean;
+    let gates: (() => void)[];
+
+    const picks = (...ids: string[]) => ({
+      kind: 'picked',
+      assets: ids.map((id) => asset(id)),
+      skipped: 0,
+    });
+    const others = (count: number) =>
+      Array.from({ length: count }, (_, i) =>
+        serverPhoto(`old-${i}`, `old-asset-${i}`, 'dev-Z')
+      );
+
+    beforeEach(() => {
+      failIds = new Set();
+      hold = false;
+      gates = [];
+      server.use(
+        http.post(
+          `${BASE}/trips/:tripId/visits/:visitCheckId/photos`,
+          async ({ request }) => {
+            const body = (await request.json()) as Record<string, unknown>;
+            photoBodies.push(body);
+            if (hold) await new Promise<void>((resolve) => gates.push(resolve));
+            if (failIds.has(String(body.localAssetId))) {
+              return HttpResponse.json(
+                { error: { code: 'INTERNAL', message: 'boom' } },
+                { status: 500 }
+              );
+            }
+            const created = serverPhoto(
+              `ph-${String(body.localAssetId)}`,
+              String(body.localAssetId),
+              String(body.deviceId)
+            );
+            serverPhotos = [...serverPhotos, created];
+            return HttpResponse.json(created, { status: 201 });
+          }
+        )
+      );
+    });
+
+    async function renderCardWithToast() {
+      const client = newTestQueryClient({ gcTime: 0 });
+      const toastWrapper = ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>
+          <WithToastHost>{children}</WithToastHost>
+        </QueryClientProvider>
+      );
+      render(<TripRecordsPage tripId={TRIP_ID} today={DAY} />, {
+        wrapper: toastWrapper,
+      });
+      const card = await screen.findByTestId(CARD);
+      await within(card).findByTestId('record-trip-photo-add');
+      // 첫 사진 목록이 도착해야 남은 칸 계산이 맞다.
+      await waitFor(() => expect(hitCount(PHOTOS_GET)).toBe(1));
+      await settle();
+      return card;
+    }
+
+    /** 붙잡힌 POST 를 하나씩 풀어 준다(n 번째가 도착하길 기다린 뒤). */
+    async function releaseAll(total: number) {
+      for (let i = 0; i < total; i += 1) {
+        await waitFor(() => expect(gates.length).toBeGreaterThan(i));
+        await act(async () => {
+          gates[i]?.();
+        });
+      }
+    }
+
+    it('M1 5장을 고르면 한도 10 · 고른 순서대로 POST 5회 · 사진 칸 5개 · 목록은 끝에서 한 번만 다시 받고 "사진 5장을 붙였어요"', async () => {
+      mockPick.mockResolvedValue(picks('a1', 'a2', 'a3', 'a4', 'a5'));
+      const card = await renderCardWithToast();
+
+      fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+
+      await waitFor(() =>
+        expect(within(card).queryAllByTestId(ANY_CELL)).toHaveLength(5)
+      );
+      await settle();
+      expect(mockPick).toHaveBeenCalledWith({ limit: 10 });
+      expect(photoBodies.map((b) => b.localAssetId)).toEqual([
+        'a1',
+        'a2',
+        'a3',
+        'a4',
+        'a5',
+      ]);
+      expect(hitCount(PHOTOS_POST)).toBe(5);
+      expect(hitCount(PHOTOS_GET)).toBe(2);
+      expect(await screen.findByTestId(TOAST)).toHaveTextContent(
+        '사진 5장을 붙였어요'
+      );
+    });
+
+    it('M1b 한 장만 붙이면 토스트는 없다 (현행 유지)', async () => {
+      mockPick.mockResolvedValue(picks('a1'));
+      const card = await renderCardWithToast();
+
+      fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+
+      await within(card).findByTestId('record-photo-available-ph-a1');
+      await settle();
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+    });
+
+    it.each([
+      [26, 4],
+      [0, 10],
+    ])(
+      'M2 서버에 이미 %s장이면 피커 한도는 %s장이다',
+      async (existing, limit) => {
+        serverPhotos = others(existing);
+        mockPick.mockResolvedValue({ kind: 'canceled' });
+        const card = await renderCardWithToast();
+
+        fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+
+        await waitFor(() => expect(mockPick).toHaveBeenCalledTimes(1));
+        expect(mockPick).toHaveBeenCalledWith({ limit });
+      }
+    );
+
+    it('M2b 이미 30장이면 피커를 열지 않고 "더 붙일 수 없어요" 한 줄만 남기며 요청은 없다', async () => {
+      serverPhotos = others(30);
+      const card = await renderCardWithToast();
+
+      fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+
+      expect(await within(card).findByTestId(NOTICE)).toHaveTextContent(
+        COPY_FULL
+      );
+      expect(mockPick).not.toHaveBeenCalled();
+      expect(hitCount(PHOTOS_POST)).toBe(0);
+    });
+
+    it('M3 붙이는 동안 "1/3 붙이는 중" → "2/3 붙이는 중" 줄이 서고 끝나면 사라진다', async () => {
+      hold = true;
+      mockPick.mockResolvedValue(picks('a1', 'a2', 'a3'));
+      const card = await renderCardWithToast();
+      expect(within(card).queryByTestId(PROGRESS_ID)).toBeNull();
+
+      fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+
+      await waitFor(() => expect(gates).toHaveLength(1));
+      expect(within(card).getByTestId(PROGRESS_ID)).toHaveTextContent(
+        '1/3 붙이는 중'
+      );
+      await act(async () => {
+        gates[0]?.();
+      });
+      await waitFor(() => expect(gates).toHaveLength(2));
+      expect(within(card).getByTestId(PROGRESS_ID)).toHaveTextContent(
+        '2/3 붙이는 중'
+      );
+      await releaseAll(3);
+      await waitFor(() =>
+        expect(within(card).queryByTestId(PROGRESS_ID)).toBeNull()
+      );
+    });
+
+    it('M4 붙이는 중에 `+` 를 또 눌러도 피커는 다시 열리지 않는다', async () => {
+      hold = true;
+      mockPick.mockResolvedValue(picks('a1', 'a2'));
+      const card = await renderCardWithToast();
+      fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+      await waitFor(() => expect(gates).toHaveLength(1));
+
+      fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+      await settle();
+
+      expect(mockPick).toHaveBeenCalledTimes(1);
+      expect(hitCount(PHOTOS_POST)).toBe(1);
+      await releaseAll(2);
+    });
+
+    it('M5 3장 중 둘째가 실패해도 끝 장까지 붙이고, 실패 안내·[다시 시도] 는 그 한 장만 다시 보낸다', async () => {
+      failIds.add('a2');
+      mockPick.mockResolvedValue(picks('a1', 'a2', 'a3'));
+      const card = await renderCardWithToast();
+
+      fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+
+      expect(
+        await within(card).findByTestId('record-photo-upload-failed-a2')
+      ).toBeOnTheScreen();
+      expect(hitCount(PHOTOS_POST)).toBe(3);
+      expect(
+        await within(card).findByTestId('record-photo-available-ph-a1')
+      ).toBeOnTheScreen();
+      expect(
+        await within(card).findByTestId('record-photo-available-ph-a3')
+      ).toBeOnTheScreen();
+      expect(within(card).getByTestId(NOTICE)).toHaveTextContent(
+        COPY_ONE_FAILED
+      );
+      expect(screen.queryByTestId(TOAST)).toBeNull();
+
+      failIds.clear();
+      fireEvent.press(within(card).getByTestId(RETRY));
+
+      await waitFor(() => expect(hitCount(PHOTOS_POST)).toBe(4));
+      expect(photoBodies[3]).toMatchObject({ localAssetId: 'a2' });
+      expect(
+        await within(card).findByTestId('record-photo-available-ph-a2')
+      ).toBeOnTheScreen();
+      expect(
+        within(card).queryByTestId('record-photo-upload-failed-a2')
+      ).toBeNull();
+      expect(within(card).queryByTestId(NOTICE)).toBeNull();
+      expect(within(card).queryByTestId(RETRY)).toBeNull();
+    });
+
+    it('M6 자산 번호 없는 선택이 섞이면 있는 장만 붙이고 개수 안내만 남긴다 (다시 시도·실패 칸 없음)', async () => {
+      mockPick.mockResolvedValue({
+        kind: 'picked',
+        assets: [asset('a1'), asset('a2')],
+        skipped: 1,
+      });
+      const card = await renderCardWithToast();
+
+      fireEvent.press(within(card).getByTestId('record-trip-photo-add'));
+
+      expect(await within(card).findByTestId(NOTICE)).toHaveTextContent(
+        COPY_ONE_FAILED
+      );
+      expect(hitCount(PHOTOS_POST)).toBe(2);
+      expect(within(card).queryByTestId(RETRY)).toBeNull();
+      expect(
+        within(card).queryAllByTestId(/^record-photo-upload-failed-/)
+      ).toHaveLength(0);
+    });
+  });
+
+  /**
+   * 🔴 TRIP-1757 · 방문 카드 사진 **목록 불러오기** 실패 (INV-4 · BR-U5-14) — 올린 사진이 사라진 것처럼 '+' 만 남지 않게.
+   *
+   * 무엇을 보장하나(3동작 = 준비: 카드 두 장 중 한 장의 사진 GET 만 500 → 실행: 렌더·[다시 시도] → 단언: 카드별 testID·요청 수):
+   *  - J01-7   실패한 카드에만 `record-trip-photo-load-error-{id}` 가 서고, 다른 카드엔 없다(카드마다 따로).
+   *  - J01-8   그 카드 [다시 시도] = 그 방문 사진 GET 만 다시(다른 카드 GET 0). 응답을 붙잡는 동안 줄 유지·버튼 잠김(v5 가 error 를
+   *            비워도 `errorUpdateCount`), 200 이 오면 줄이 사라지고 썸네일이 그려진다.
+   *  - J01-9   404(방문 기록 없음)는 지금 동작(줄 없음). 업로드 실패 칸·`record-trip-photo-notice-*` 와 한 카드에 공존한다.
+   *  - J01-10  목록이 실패한 동안에도 '+'(사진 추가)는 그대로 있고 누르면 POST 가 나간다(Q1 = a).
+   * 기존 「사진을 불러올 수 없어요」(앨범 접근 실패, BR-U5-14)와 한 글자 차이인 「사진을 불러오지 못했어요」(서버 목록 실패)는 의미가 달라 따로 단언한다.
+   */
+  describe('🔴 TRIP-1757 · 사진 목록 불러오기 실패 (카드별)', () => {
+    const LOAD_ERROR_A = 'record-trip-photo-load-error-v-a';
+    const LOAD_RETRY_A = 'record-trip-photo-load-retry-v-a';
+    const LOAD_COPY = '사진을 불러오지 못했어요';
+    const GET_B = `GET /api/v1/trips/${TRIP_ID}/visits/v-b/photos`;
+
+    const fail = (code: number) => () =>
+      HttpResponse.json(
+        { error: { code: 'X', message: 'x' } },
+        { status: code }
+      );
+    /** v-a 의 사진 GET 만 `replyA` 로, v-b 는 늘 200. 카드 둘이 같은 날에 있다(둘 다 도착·완료). */
+    function twoCards(replyA: () => Response | Promise<Response>) {
+      server.use(
+        http.get(`${BASE}/trips/:tripId/visits/days/:day`, () =>
+          HttpResponse.json({
+            visits: [completedVisit(), completedVisitOn('v-b', DAY, 'p2')],
+          })
+        ),
+        http.get(
+          `${BASE}/trips/:tripId/visits/:visitCheckId/photos`,
+          ({ params }) =>
+            params.visitCheckId === 'v-a'
+              ? replyA()
+              : HttpResponse.json({ items: [], count: 0 })
+        )
+      );
+    }
+    async function renderTwo() {
+      render(<TripRecordsPage tripId={TRIP_ID} today={DAY} />, { wrapper });
+      await screen.findByTestId('record-trip-visit-card-v-b');
+      return screen.getByTestId(CARD);
+    }
+
+    it('J01-7 한 카드의 사진 GET 500 → 그 카드에만 안내가 서고 다른 카드엔 없다', async () => {
+      twoCards(fail(500));
+      const card = await renderTwo();
+
+      expect(await within(card).findByTestId(LOAD_ERROR_A)).toHaveTextContent(
+        LOAD_COPY
+      );
+      expect(within(card).getByTestId(LOAD_RETRY_A)).toBeOnTheScreen();
+      await waitFor(() => expect(hitCount(GET_B)).toBe(1));
+      expect(
+        screen.getAllByTestId(/^record-trip-photo-load-error-/)
+      ).toHaveLength(1);
+      expect(
+        within(screen.getByTestId('record-trip-visit-card-v-b')).queryByTestId(
+          'record-trip-photo-load-error-v-b'
+        )
+      ).toBeNull();
+    });
+
+    it('J01-8a [다시 시도] → 그 방문 사진 GET 만 다시, 200 이면 안내가 사라지고 썸네일이 그려진다', async () => {
+      twoCards(fail(500));
+      const card = await renderTwo();
+      await within(card).findByTestId(LOAD_ERROR_A);
+      await waitFor(() => expect(hitCount(GET_B)).toBe(1));
+      expect(hitCount(PHOTOS_GET)).toBe(1);
+
+      serverPhotos = [serverPhoto('ph1', 'asset-1', 'dev-A')];
+      twoCards(() =>
+        HttpResponse.json({ items: serverPhotos, count: serverPhotos.length })
+      );
+      const user = userEvent.setup();
+      await user.press(within(card).getByTestId(LOAD_RETRY_A));
+
+      expect(
+        await within(card).findByTestId('record-photo-available-ph1')
+      ).toBeOnTheScreen();
+      expect(screen.queryByTestId(LOAD_ERROR_A)).toBeNull();
+      expect(hitCount(PHOTOS_GET)).toBe(2);
+      expect(hitCount(GET_B)).toBe(1);
+    });
+
+    it('J01-8b 재조회 응답을 붙잡는 동안에도 안내가 남고 [다시 시도]는 잠긴다 (v5 가 error 를 비워도)', async () => {
+      twoCards(fail(500));
+      const card = await renderTwo();
+      await within(card).findByTestId(LOAD_ERROR_A);
+
+      const gate = createGate();
+      twoCards(async () => {
+        await gate.opened;
+        return HttpResponse.json({ items: [], count: 0 });
+      });
+      const user = userEvent.setup();
+      await user.press(within(card).getByTestId(LOAD_RETRY_A));
+      await waitFor(() => expect(hitCount(PHOTOS_GET)).toBe(2));
+      await settle();
+
+      expect(screen.getByTestId(LOAD_ERROR_A)).toBeOnTheScreen();
+      expect(screen.getByTestId(LOAD_RETRY_A)).toBeDisabled();
+
+      gate.release();
+      await waitFor(() =>
+        expect(screen.queryByTestId(LOAD_ERROR_A)).not.toBeOnTheScreen()
+      );
+    });
+
+    it('J01-9a 사진 GET 404(방문 기록 없음) → 안내 없음 (지금 동작 그대로)', async () => {
+      twoCards(fail(404));
+      await renderTwo();
+
+      await waitFor(() => expect(hitCount(PHOTOS_GET)).toBe(1));
+      await settle();
+      expect(screen.queryByTestId(LOAD_ERROR_A)).toBeNull();
+    });
+
+    it('J01-9b 목록 실패 안내는 같은 카드의 피커 안내(notice)와 함께 선다 — 서로 독립이다', async () => {
+      twoCards(fail(500));
+      mockPick.mockResolvedValue({ kind: 'denied' });
+      const card = await renderTwo();
+      await within(card).findByTestId(LOAD_ERROR_A);
+
+      const user = userEvent.setup();
+      await user.press(within(card).getByTestId('record-trip-photo-add'));
+
+      expect(await within(card).findByTestId(NOTICE)).toHaveTextContent(
+        COPY_DENIED
+      );
+      expect(within(card).getByTestId(LOAD_ERROR_A)).toHaveTextContent(
+        LOAD_COPY
+      );
+    });
+
+    it('J01-10 목록이 실패한 동안에도 `+` 는 그대로 있고 누르면 POST 가 나간다 (Q1 = a)', async () => {
+      twoCards(fail(500));
+      const card = await renderTwo();
+      await within(card).findByTestId(LOAD_ERROR_A);
+
+      const user = userEvent.setup();
+      await user.press(within(card).getByTestId('record-trip-photo-add'));
+
+      await waitFor(() => expect(hitCount(PHOTOS_POST)).toBe(1));
     });
   });
 });

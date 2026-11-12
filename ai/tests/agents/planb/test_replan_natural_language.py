@@ -325,10 +325,11 @@ def test_가까운_데로는_먼_후보를_더_내린다() -> None:
     assert out[0].score > out[1].score
 
 
-def _replan(tweak_task=lambda task: task, **over):
+def _replan(tweak_task=lambda task: task, tweak_app=lambda orchestrator: None, **over):
     app = build_dev_app(directives=_DIRECTIVES, embedding=FakeEmbedding(),
                         vector_store=InMemoryVectorStore())
     orchestrator = app.state.orchestrator
+    tweak_app(orchestrator)  # 추출기 고정 등 — 실 LLM 없이 경로를 탄다
     real_agent, real_rag = orchestrator._schedule_agent, orchestrator._rag
     seen: dict[str, list] = {"agent": [], "rag": []}
 
@@ -341,6 +342,9 @@ def _replan(tweak_task=lambda task: task, **over):
         def run(self, request):
             seen["rag"].append(request)
             return real_rag.run(request)
+
+        def warm_docs(self, user_request, reason):
+            real_rag.warm_docs(user_request, reason)
 
     object.__setattr__(orchestrator, "_schedule_agent", _Spy())
     object.__setattr__(orchestrator, "_rag", _RagSpy())

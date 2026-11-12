@@ -126,6 +126,15 @@ def test_rebuilds_each_day_around_its_area_without_llm(caplog) -> None:
     assert "종로" not in json.dumps(log, ensure_ascii=False)  # 발화·동네 이름은 로그에 싣지 않는다
 
 
+def test_excluded_places_are_not_rebuilt_into_the_days() -> None:
+    """편집 요청의 뺄 곳(spec 003 FR-015)은 날마다 동네도 본다 — 받은 풀·더 모은 동네 풀 어디서 와도 그 날에 들이지 않는다."""
+    gone = [str(JONGNO_SIDE[0].poi_id), str(JONGNO_SIDE[2].poi_id)]  # 빼지 않으면 1일차에 들어오는 곳(기준 실측)
+    body = _post({**_body(), "excluded_poi_ids": gone})
+    assert body["status"] == "APPLIED", body
+    assert not set(gone) & {s["poi_id"] for s in _day(body, D1)}
+    assert _within(_day(body, D1), JONGNO)
+
+
 def test_target_date_does_not_limit_the_days_said() -> None:
     """BE 의 targetDate 는 분류가 실은 날 하나다 — 말이 두 날을 정했으면 두 날 다(spec 004 비판 ③)."""
     body = _post(_body(target=D2))
@@ -285,3 +294,14 @@ def test_a_date_check_failure_is_observed_without_names(caplog) -> None:
     _post(_body(utterance="1일차는 종로로 바꿔줘", at="2026-10-25T09:00:00+09:00"))
     log = _log(caplog)
     assert (log["outcome"], log["reason"]) == ("REJECTED", "day_area: past_day")
+
+
+def test_empty_day_is_rebuilt_inside_the_requested_time_window() -> None:
+    """빈 날은 편집 요청 `time_windows` 의 그 날 창으로 짠다 — 풀이 창 변수가 인자 이름을 가려 요청 창이 버려지고 10:00~18:00 으로 짰다."""
+    body = _body(utterance="2일차 일정을 강남구 쪽으로 바꿔줘", target=D2)
+    body["itinerary"]["days"][1]["slots"] = []  # `day2 or _DAY2` 는 빈 목록을 삼킨다
+    body["time_windows"] = [{"date": D2, "start": "13:00:00", "end": "21:00:00"}]
+    out = _post(body)
+    assert out["status"] == "APPLIED", out
+    slots = _day(out, D2)
+    assert slots and all("13:00:00" <= s["start_at"] and s["end_at"] <= "21:00:00" for s in slots)

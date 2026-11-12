@@ -16,7 +16,7 @@ def render(environment="dev", embedding=False, overrides=None):
          "--set", "images.backend.repository=example/backend,images.backend.tag=sha123",
          "--set", "images.ai.repository=example/ai,images.ai.tag=sha123",
          "--set", "images.embedding.repository=example/embedding,images.embedding.tag=sha123",
-         "--set", "config.databaseHost=database.example.internal,config.redisHost=redis.example.internal",
+         "--set", "config.databaseHost=database.example.internal",
          "--set", "gateway.certificateArn=arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789012",
          "--set", f"embedding.enabled={str(embedding).lower()}",
          "--set-string", "rolloutNonce=run-123"] + (overrides or []),
@@ -33,7 +33,7 @@ def render_default(overrides=None):
          "--set", "images.backend.repository=example/backend,images.backend.tag=sha123",
          "--set", "images.ai.repository=example/ai,images.ai.tag=sha123",
          "--set", "images.embedding.repository=example/embedding,images.embedding.tag=sha123",
-         "--set", "config.databaseHost=database.example.internal,config.redisHost=redis.example.internal",
+         "--set", "config.databaseHost=database.example.internal",
          "--set", "gateway.certificateArn=arn:aws:acm:ap-northeast-2:123456789012:certificate/12345678-1234-1234-1234-123456789012",
          "--set-string", "rolloutNonce=run-123"] + (overrides or []),
         check=True, text=True, capture_output=True,
@@ -167,7 +167,6 @@ class ChartTests(unittest.TestCase):
             backend = next(item for item in deployments if item["metadata"]["name"] == "backend")
             env = {item["name"]: item for item in backend["spec"]["template"]["spec"]["containers"][0]["env"]}
             self.assertIn("sslmode=require", env["DB_URL"]["value"])
-            self.assertEqual(env["SPRING_DATA_REDIS_SSL_ENABLED"]["value"], "true")
             self.assertEqual(env["JWT_REQUIRE_CONFIGURED_KEY"]["value"], "true")
             self.assertEqual(env["SERVICE_AUTH_REQUIRE_TOKEN"]["value"], "true")
             self.assertEqual(env["TRIPPILOT_ASYNC_AWAIT_TERMINATION_SECONDS"]["value"], "630")
@@ -391,6 +390,12 @@ class ChartTests(unittest.TestCase):
             env = {item["name"]: item for item in ai["spec"]["template"]["spec"]["containers"][0]["env"]}
             self.assertEqual(env["HOLIDAY_CLOSURE_MODE"]["valueFrom"]["secretKeyRef"],
                              {"name": "trippilot-ai", "key": "HOLIDAY_CLOSURE_MODE", "optional": True})
+            # KB-5 대체 문서를 끄는 길 — 시크릿의 off 가 파드에 닿지 않으면 끈 줄 알고 켜진 채로 돈다(앱 기본이 켜짐이라 더 나쁘다)
+            self.assertEqual(env["TRIPPILOT_KB5_FALLBACK"]["valueFrom"]["secretKeyRef"],
+                             {"name": "trippilot-ai", "key": "TRIPPILOT_KB5_FALLBACK", "optional": True})
+            # 도우미 열린 검색을 켜는 길 — 시크릿의 on 이 파드에 닿지 않으면 켠 줄 알고 꺼진 채로 돈다(앱 기본이 꺼짐)
+            self.assertEqual(env["TRIPPILOT_KB5_OPEN_SEARCH"]["valueFrom"]["secretKeyRef"],
+                             {"name": "trippilot-ai", "key": "TRIPPILOT_KB5_OPEN_SEARCH", "optional": True})
 
 
 class RequestSizingTests(unittest.TestCase):

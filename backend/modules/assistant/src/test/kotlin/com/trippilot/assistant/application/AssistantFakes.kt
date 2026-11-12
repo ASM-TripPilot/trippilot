@@ -12,6 +12,7 @@ import com.trippilot.assistant.domain.AssistantUsageRepository
 import com.trippilot.assistant.domain.DialogueMemoryPort
 import com.trippilot.assistant.domain.FeedbackRating
 import com.trippilot.assistant.domain.FeedbackTarget
+import com.trippilot.assistant.domain.MemoryExport
 import com.trippilot.assistant.domain.MemoryItem
 import com.trippilot.assistant.domain.MessageFeedback
 import com.trippilot.assistant.domain.MessageRole
@@ -324,7 +325,7 @@ internal fun plannedSlot(
  * 상대 세션 메모리 경계의 대역 — 무엇을 지우라고 했는지([deleted])와 내보내기를 물었는지([exported])를 적는다.
  * [fail] 이면 실 클라이언트처럼 예외로 올린다(5xx·불통).
  */
-internal class FakeDialogueMemory(var items: List<MemoryItem> = emptyList()) : DialogueMemoryPort {
+internal class FakeDialogueMemory(var items: List<MemoryItem> = emptyList(), var truncated: Boolean = false) : DialogueMemoryPort {
     val deleted = mutableListOf<String>()
     val exported = mutableListOf<String>()
     var fail = false
@@ -332,10 +333,10 @@ internal class FakeDialogueMemory(var items: List<MemoryItem> = emptyList()) : D
     override fun deleteBySession(sessionId: UUID) = record("session:$sessionId")
     override fun deleteByTrip(tripId: UUID) = record("trip:$tripId")
     override fun deleteByAccount(accountRef: String) = record("account:$accountRef")
-    override fun export(accountRef: String): List<MemoryItem> {
+    override fun export(accountRef: String): MemoryExport {
         if (fail) throw IllegalStateException("memory down")
         exported += accountRef
-        return items
+        return MemoryExport(items, truncated)
     }
 
     private fun record(key: String): Int {
@@ -349,4 +350,31 @@ internal class FakeDialogueMemory(var items: List<MemoryItem> = emptyList()) : D
 internal class CapturingEvents : com.trippilot.core.event.DomainEventPublisher {
     val published = mutableListOf<com.trippilot.core.event.DomainEvent>()
     override fun publish(event: com.trippilot.core.event.DomainEvent) { published += event }
+}
+
+/** 위치 동의(L2) + 법정 로그 대역(O-U8-5) — 기본은 동의 꺼짐. [uses] 는 1회 이용 기록(계정·목적·대상)이다. */
+internal class FakeLocation(var consent: Boolean = false) :
+    com.trippilot.auth.api.LocationConsentFacade, com.trippilot.auth.api.LocationLegalLogFacade {
+    var failRecord = false
+    var onRecord: () -> Unit = {} // 기록에 드는 시간을 흉내 낸다(시계를 민다)
+    val uses = mutableListOf<Triple<UUID, com.trippilot.auth.api.LocationUsePurpose, UUID>>()
+    override fun hasGpsRecordingOptIn(accountId: UUID) = false
+    override fun hasLocationLegalConsent(accountId: UUID) = consent
+    override fun recordUse(accountId: UUID, purpose: com.trippilot.auth.api.LocationUsePurpose, subjectId: UUID) {
+        check(!failRecord) { "legal log down" }
+        onRecord()
+        uses += Triple(accountId, purpose, subjectId)
+    }
+    override fun recordCollection(accountId: UUID, source: com.trippilot.auth.api.LocationCollectionSource, subjectId: UUID, pointCount: Int?) =
+        error("도우미는 위치를 저장하지 않는다")
+    override fun recordPurge(accountId: UUID, scope: com.trippilot.auth.api.LocationPurgeScope, purgedCount: Int) =
+        error("도우미는 위치를 저장하지 않는다")
+    override fun recordUseInterval(
+        accountId: UUID, purpose: com.trippilot.auth.api.LocationUsePurpose, intervalId: UUID, tripId: UUID,
+        phase: com.trippilot.auth.api.LocationIntervalPhase, at: Instant, endReason: String?, regionCount: Int?,
+    ) = error("도우미는 구간 로그를 쓰지 않는다")
+    override fun recordCollectionInterval(
+        accountId: UUID, source: com.trippilot.auth.api.LocationCollectionSource, intervalId: UUID, tripId: UUID,
+        phase: com.trippilot.auth.api.LocationIntervalPhase, at: Instant, endReason: String?, pointCount: Int?,
+    ) = error("도우미는 구간 로그를 쓰지 않는다")
 }

@@ -173,9 +173,10 @@ class OutboxRelay(
                         return@onFailure
                     }
                     val attempts = bumpAttempts(envelope.eventId)
-                    // 상한에 닿으면 조용히 사라지지 않게 올린다 — dead-letter 테이블 없이 조회로 찾는다.
+                    // 상한에 닿으면 조용히 사라지지 않게 올린다 — dead-letter 테이블 없이 조회로 찾는다. 줄 머리의 `outbox.abandon` 은 CloudWatch
+                    // 경보(alerts.tf outbox_abandon)가 센다 — 필터 패턴이 한글을 못 받아 영어 접두를 둔다. 바꾸면 경보도 바꾼다.
                     if (attempts >= MAX_ATTEMPTS) {
-                        log.error("이벤트 배달을 포기합니다 — eventId={} type={} attempts={}", envelope.eventId, envelope.eventType, attempts, e)
+                        log.error("outbox.abandon eventId={} type={} attempts={} — 이벤트 배달을 포기합니다", envelope.eventId, envelope.eventType, attempts, e)
                     } else {
                         log.warn("이벤트 배달 실패 — 재시도합니다. eventId={} attempts={}", envelope.eventId, attempts, e)
                     }
@@ -212,9 +213,9 @@ class OutboxRelay(
         val rows = jdbc.update("UPDATE outbox_event SET published_at = NULL, attempts = ? WHERE event_id = ?", MAX_ATTEMPTS, eventId)
         if (rows == 0) {
             // 행이 없다(DB 를 초기화했는데 브로커 볼륨은 남은 경우 등) — 포기 조회로는 못 찾는다. 이 로그가 유일한 흔적이다.
-            log.error("이벤트 배달을 포기합니다 — 아웃박스 행이 없어 이 로그로만 남습니다. eventId={} type={}", eventId, eventType, cause)
+            log.error("outbox.abandon eventId={} type={} — 이벤트 배달을 포기합니다. 아웃박스 행이 없어 이 로그로만 남습니다", eventId, eventType, cause)
         } else {
-            log.error("이벤트 배달을 포기합니다 — eventId={} type={} (Kafka 소비)", eventId, eventType, cause)
+            log.error("outbox.abandon eventId={} type={} — 이벤트 배달을 포기합니다(Kafka 소비)", eventId, eventType, cause)
         }
     }
 

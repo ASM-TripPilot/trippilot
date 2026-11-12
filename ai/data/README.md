@@ -528,6 +528,14 @@ uv run python scripts/collect/merge_pois_docs.py --allow-mixed -o data/collected
   data/collected_pois.json data/collected_localcafe.json
 ```
 
+## `poi_excluded_filtered.json` — 정제 필터에서 빠진 기존 행 (TRIP-1811)
+
+부산·강원·경북·경남 정제 1차 필터에서 빠진 기존 LOCALDATA 식당·카페 4,152곳의 `(source, ref)` 목록이다.
+폐업 판정이 아니라 여행 후보로 올리지 않기로 한 행이다. `load_closed_refs` 가 폐업 목록과 합쳐 읽어 수집 게이트와
+병합 소급(`drop_closed`)이 함께 막는다 — 재수집해도 공유본에 돌아오지 않는다.
+**DB 행은 공유본에서 빠져도 그대로다.** `poi_close_missing` 배포로 한 번 LOST 로 내린다.
+목록을 고치면 같은 PR 에서 공유본에 병합을 한 번 돌린다(`test_공유본에_폐업_확인분이_남아_있지_않다` 가 본다).
+
 ## `overture/` — Overture Maps 수집 제안 (지역별)
 
 TourAPI 단일 출처의 구조적 한계를 메우는 **두 번째 POI 출처**다 (TRIP-684).
@@ -678,3 +686,16 @@ Overpass 는 **대량 추출용이 아니다**(공용 인스턴스, 타임아웃
 한 번에 전국 `shop=*` 5.9만을 요청하면 504 가 난다. 엔드포인트는
 `overpass.kumi.systems` 우선 — `overpass-api.de` 가 406·connection refused 로
 불안정했다.
+
+## `transit_hubs.json` — 교통 거점 표 (역·공항·터미널, 거리의 끝 전용)
+
+도우미가 "서울역에서 경복궁까지"처럼 역·공항·터미널을 거리의 **끝**으로 말했을 때 쓰는 좌표 표다(`domain/poi/transit_hubs.py`). 장소 DB 에
+넣지 않는 까닭: 역은 가 볼 곳이 아니라 오가는 곳이라 `poi_public` 에 두면 "서울 가볼 만한 곳"에 서울역 1호선이 섞이고, 지하철역은
+"서울역 1호선"처럼 와서 이름 완전 일치로 찾히지도 않는다. 지역 표(`region_centers`)와 같은 꼴의 닫힌 집합이다.
+
+- 항목: `name`(표시 이름)·`kind`(기차역·공항·버스터미널·여객터미널)·`query`(카카오에 물을 말)·`aliases`(사용자가 부르는 말 — "김포공항"·
+  "고속터미널")는 사람이 적고, `lat`·`lng`·`kakao_name`·`category`·`address` 는 `scripts/collect/refresh_transit_hubs.py` 가 카카오
+  키워드 검색으로 채운다(거점 분류이고 상호가 `query` 와 같거나 그걸로 시작하는 첫 건 — 들어 있기만 하면 "춘천역"이 "남춘천역"에 걸린다).
+- 못 맞춘 항목은 좌표 없이 남고 로더가 건너뛴다(없는 거점을 만들지 않는다). 이름·별칭은 표 전체에서 겹치면 안 된다(테스트가 잡는다).
+- 좌표 저장은 카카오 약관 해석 [[kakao-coord-storage-kept]] 과 같다. 160곳(2026-11-05) — KTX·SRT 정차역, 공항 전부, 시·군 주요 터미널,
+  섬 가는 여객터미널.

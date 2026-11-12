@@ -10,7 +10,7 @@ import logging
 import re
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Future
 from datetime import datetime
 
@@ -43,6 +43,17 @@ Submit = Callable[[Callable[[], object]], Future]
 def asks_for_places(text: str) -> bool:
     """장소 찾기 말인가(가볼·맛집·카페·추천…) — 미리 받기와 탐색의 이어 묻기(앞 요청 찾기)가 같이 쓴다."""
     return _PLACE_ASK.search(text) is not None
+
+
+def _prefetch_miss(said: str) -> str:
+    """분류 뒤에 SQL 을 새로 쓴 턴에서 미리 받기가 없었던 까닭 — 원문 대신 라벨만 로그에 싣는다. 탐색 핸들러는 분류 인자의 지역으로
+    SQL 을 쓰지만 미리 받기는 발화의 지역 표 이름만 보므로, 앞 대화의 지역·표에 없는 지역이면 늘 분류 뒤에 쓴다. 2026-11-04 운영 실사용
+    SQL 4턴이 모두 분류 뒤에 썼는데 원문이 없어 까닭을 가르지 못했다 — 이 라벨로 센다."""
+    if not said:
+        return "plan"  # 계획 경로 — 발화 없이 인자만
+    if region_center(said) is None:
+        return "no_region"
+    return "other" if asks_for_places(said) else "no_place_word"  # other = 두 곳 사이 짝·미리 받은 말과 다름
 
 
 def looks_like_place_query(utterance: str) -> bool:
@@ -107,6 +118,7 @@ class PlaceSqlLookup:
         args = tuple(sorted((k, v) for k, v in arguments.items() if v))
         key = (said, *args) if args else ()  # 계획 경로(발화 "")는 인자만 — 발화 키와 따로 산다
         sql = self._cached(key) if key else None
+        src = "cache"  # 로그 라벨 — SQL 을 어디서 얻었나(prefetch·cache·write:<미리 받기가 없었던 까닭>)
         pending = self._take_prefetch(trace_id, said)
         if sql is None and pending is not None:
             try:
@@ -117,7 +129,7 @@ class PlaceSqlLookup:
             if result.is_fallback or not result.value:
                 log.info("place_sql skip trace=%s reason=%s", trace_id, result.error or "not_a_place_query")
                 return None
-            sql = result.value
+            sql, src = result.value, "prefetch"
             self._remember((said,), sql)
             if key:
                 self._remember(key, sql)
@@ -130,7 +142,7 @@ class PlaceSqlLookup:
             if result.is_fallback or not result.value:
                 log.info("place_sql skip trace=%s reason=%s", trace_id, result.error or "not_a_place_query")
                 return None
-            sql = result.value
+            sql, src = result.value, f"write:{_prefetch_miss(said)}"
             if key:
                 self._remember(key, sql)
         try:
@@ -138,7 +150,7 @@ class PlaceSqlLookup:
         except Exception as e:  # noqa: BLE001 — DB 오류·시한은 반경 탐색으로 수렴(INV-4), 사유는 예외 타입까지(키·SQL 비노출)
             log.warning("place_sql db_error trace=%s error=%s — 반경 탐색으로", trace_id, type(e).__name__)
             return None
-        log.info("place_sql ok trace=%s rows=%d ms=%d", trace_id, len(rows), int((time.monotonic() - started) * 1000))
+        log.info("place_sql ok trace=%s rows=%d ms=%d src=%s", trace_id, len(rows), int((time.monotonic() - started) * 1000), src)
         return rows
 
     def find_place(self, name: str, area: str | None, trace_id: TraceId) -> PlaceRow | None:
@@ -148,3 +160,21 @@ class PlaceSqlLookup:
         except Exception as e:  # noqa: BLE001 — 사유는 예외 타입까지(이름 원문 비노출)
             log.warning("place_find db_error trace=%s error=%s", trace_id, type(e).__name__)
             return None
+
+    def areas(self, poi_ids: Sequence[str], trace_id: TraceId) -> dict[str, str]:
+        """등록 장소의 '시·도 시군구' — 미리 찾기가 조회 이름에 붙인다(여행 지역이 아니라 그곳의 지역). LLM 없음·기본키 조회 한 번.
+        DB 오류는 빈 dict(그곳은 미리 찾지 않는다, INV-4) + 한 줄 — `find_place` 와 같은 접기."""
+        try:
+            return {r.poi_id: " ".join(x for x in (r.sido, r.sigungu) if x) for r in self._executor.rows(poi_ids)}
+        except Exception as e:  # noqa: BLE001 — 사유는 예외 타입까지
+            log.warning("place_areas db_error trace=%s error=%s", trace_id, type(e).__name__)
+            return {}
+
+    def find_said(self, words: Sequence[str], spans: Sequence[str], trace_id: TraceId) -> list[PlaceRow]:
+        """편집 번역의 풀 밖 이름 장소(F9) — 발화의 이름 말 여럿을 한 번에(`PgPlaceSql.find_said`, LLM 없음). 고르기는 부르는 쪽
+        (`pick_said`). DB 오류는 빈 목록(번역은 받은 풀로 그대로, INV-4) + 한 줄 — `find_place` 와 같은 접기."""
+        try:
+            return self._executor.find_said(words, spans)
+        except Exception as e:  # noqa: BLE001 — 사유는 예외 타입까지(말 원문 비노출)
+            log.warning("place_said db_error trace=%s error=%s", trace_id, type(e).__name__)
+            return []

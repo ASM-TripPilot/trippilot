@@ -441,6 +441,13 @@ export function useGetTripsTripId<
 }
 
 /**
+ * **기간을 바꾸면 일정째 날짜만 옮긴다(TRIP-1789).** 일수가 같고 여행 시작 전이면 일정 일차 · 거점 숙소 배정 · 날짜 고정 꼭 갈 곳의 날짜를 같은 칸수만큼 함께 민다 — 장소 · 순서 · 시각은 그대로이고 재계산 · AI 호출이 없다. 요일이 바뀌니 휴무 위반 표시만 새 날짜로 다시 계산한다.
+ *
+ * 일정이 아직 없는 여행은 시작 뒤에도 일수까지 바꿀 수 있다(거점 · 꼭 갈 곳은 일수가 같을 때만 함께 밀린다).
+ *
+ * **일수를 바꾸려면 `discardItinerary: true`** — 일정을 버리고 기간을 바꾼다. 재생성 · AI 호출은 없고, 앱이 이어서 같은 여행의 일정 짜는 방법 화면으로 간다. 날짜 고정 꼭 갈 곳이 새 기간 밖이면 장소는 남고 날짜 · 시각만 비워진다(자유 배치로 바뀐다). 거점 배정은 새 기간에 맞춰 잘리고, 전부 밖이면 지워진다. 버린 일정은 되돌리기 목록에 남는다(새 기간보다 길면 그 버전은 복원 불가 409).
+ *
+ * 휴무 위반 표시는 응답 뒤 비동기로 새 날짜 기준이 된다 — 이 PATCH 는 AI 를 부르지 않는다.
  * @summary 여행 편집(가변 필드 대체 · 종료·삭제 후 불가)
  */
 export const patchTripsTripId = (
@@ -458,7 +465,7 @@ export const patchTripsTripId = (
 };
 
 export const getPatchTripsTripIdMutationOptions = <
-  TError = ValidationErrorResponse | void,
+  TError = ValidationErrorResponse | void | ErrorResponse,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -498,13 +505,14 @@ export type PatchTripsTripIdMutationResult = NonNullable<
   Awaited<ReturnType<typeof patchTripsTripId>>
 >;
 export type PatchTripsTripIdMutationBody = EditTripRequest;
-export type PatchTripsTripIdMutationError = ValidationErrorResponse | void;
+export type PatchTripsTripIdMutationError =
+  ValidationErrorResponse | void | ErrorResponse;
 
 /**
  * @summary 여행 편집(가변 필드 대체 · 종료·삭제 후 불가)
  */
 export const usePatchTripsTripId = <
-  TError = ValidationErrorResponse | void,
+  TError = ValidationErrorResponse | void | ErrorResponse,
   TContext = unknown,
 >(
   options?: {
@@ -600,7 +608,7 @@ export const useDeleteTripsTripId = <TError = void, TContext = unknown>(
   return useMutation(getDeleteTripsTripIdMutationOptions(options), queryClient);
 };
 /**
- * 여행 기간을 벗어나는 구간은 **거부한다**(400) — 서버가 여행 기간을 늘려 주지 않는다. 기간이 바뀌면 일정·커버리지·필수 방문지가 모두 영향을 받으므로, 늘릴지는 사용자가 정한다. US-TRIP-03 의 "여행 기간 자동 확장 여부를 묻는다"는 **클라이언트 2단계**로 만족한다 — 400 을 받아 확인을 띄우고, `PATCH /trips/{tripId}` 로 기간을 고친 뒤 다시 배정한다.
+ * 여행 기간을 벗어나는 구간은 **거부한다**(400) — 서버가 여행 기간을 늘려 주지 않는다. 기간이 바뀌면 일정·커버리지·필수 방문지가 모두 영향을 받으므로, 늘릴지는 사용자가 정한다. US-TRIP-03 의 "여행 기간 자동 확장 여부를 묻는다"는 **클라이언트 2단계**로 만족한다 — 400 을 받아 확인을 띄우고, `PATCH /trips/{tripId}` 로 기간을 고친 뒤 다시 배정한다. (일정이 있는 여행은 일수를 바꾸는 PATCH 가 409 다 — TRIP-1789. `discardItinerary` 로 일정을 버려야 늘릴 수 있다.)
  * 그래서 400 의 `error.fields` 는 **어느 칸이 왜 틀렸는지**를 담는다: 시작일이 앞서면 `dateFrom`, 종료일이 넘으면 `dateTo` 이며 reason 에 여행 시작일·종료일이 들어간다 (화면이 "여행은 8/4까지예요, 늘릴까요?"를 그릴 근거). 양쪽 다 벗어나면 둘 다 담는다.
  * **여행 지역 밖 숙소는 거부한다**(409 `STAY_OUTSIDE_TRIP_REGION`, TRIP-1703). 숙소 좌표의 주소를 행정구역 코드로 바꿔 목적지 코드와 양방향 접두사로 비교한다(INV-U1-21, 다목적지는 하나에라도 들면 안). 판정할 수 없으면(목적지 코드 누락 · 주소 없음 · 주소 조회 장애) 막지 않는다. 400 과 코드를 나눈 이유: 400 은 "기간을 늘릴까요?" 확인으로 읽힌다.
  * @summary 구간 거점 배정(등록 숙소를 [dateFrom, dateTo) 거점으로 · 여행 기간 내 INV-U1-15)
@@ -1690,7 +1698,7 @@ export const usePostTripsTripIdItinerary = <
   );
 };
 /**
- * @summary 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 여행 시작 전 확정·생성 중 일정은 409
+ * @summary 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정 일정도 받는다(TRIP-1710) · 생성 중 아직 없는 일자는 409
  */
 export const putTripsTripIdItinerary = (
   tripId: string,
@@ -1750,7 +1758,7 @@ export type PutTripsTripIdItineraryMutationBody = EditItineraryRequest;
 export type PutTripsTripIdItineraryMutationError = void;
 
 /**
- * @summary 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 여행 시작 전 확정·생성 중 일정은 409
+ * @summary 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정 일정도 받는다(TRIP-1710) · 생성 중 아직 없는 일자는 409
  */
 export const usePutTripsTripIdItinerary = <TError = void, TContext = unknown>(
   options?: {
@@ -4875,7 +4883,7 @@ export const usePostTripsTripIdStayRecommendations = <
   );
 };
 /**
- * 여행 **기간 안**에서만(예외: 지평 pre-trip 의 여행 전날 — 알림으로 받은 첫날 하루 전체, BR-SA-20), **다시 짤 일정이 있을 때만** 연다. 이미 열린 세션이 있으면 **그것을 CANCELED 로 닫고 새로 시작**한다(INV-U4-06) — 막지 않는다. 사용자가 앱을 닫았다 다시 들어오는 것이 정상 흐름이라, 거부하면 영영 못 들어간다. 확정(APPLIED) 전에는 원 일정에 **어떤 쓰기도 발생하지 않는다**(INV-U4-05).
+ * 여행이 **끝나기 전**이고 **다시 짤 일정이 있을 때만** 연다. 여행 시작 전에는 알림 없이(triggerId 없음) 들어온 **앞으로 올 여행 날짜 하루 전체**(`targetDate` 필수 · `FULL_DAY`)를 연다(TRIP-1841). 알림으로 들어온 여행 전 진입은 종전 그대로 지평 pre-trip 의 여행 전날 — 알림으로 받은 첫날 하루 전체만이다(BR-SA-20). 이미 열린 세션이 있으면 **그것을 CANCELED 로 닫고 새로 시작**한다(INV-U4-06) — 막지 않는다. 사용자가 앱을 닫았다 다시 들어오는 것이 정상 흐름이라, 거부하면 영영 못 들어간다. 확정(APPLIED) 전에는 원 일정에 **어떤 쓰기도 발생하지 않는다**(INV-U4-05).
  * @summary 재계획 진입 — 세션을 연다(i10)
  */
 export const postTripsTripIdReplanSessions = (

@@ -1,5 +1,9 @@
 import { http, HttpResponse } from 'msw';
-import { defaultScheduler, notifyManager } from '@tanstack/react-query';
+import {
+  defaultScheduler,
+  notifyManager,
+  onlineManager,
+} from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { BASE } from '@/test-support/apiBase';
 import { createGcZeroWrapper } from '@/test-support/queryRender';
@@ -96,6 +100,8 @@ beforeEach(() => {
 afterEach(() => {
   server.resetHandlers();
   clearAccessToken();
+  // onlineManager 는 모듈 싱글턴 — 오프라인 케이스(TL4)가 어떻게 끝나든 다음 케이스는 온라인으로 시작한다(파일 최상위).
+  onlineManager.setOnline(true);
 });
 
 afterAll(() => {
@@ -241,5 +247,133 @@ describe('정상-3 · PATCH 실패 → kind×채널 롤백 + 실패 통지 + 무
     expect(pushOf(result.current.settings, 'STAY')).toBe(true);
     // 단언 ③ — 실패 경로는 무효화하지 않는다(초기 GET 1건만 유지).
     expect(hitCount('GET /api/v1/me/notification-settings')).toBe(1);
+  });
+});
+
+/**
+ * TRIP-1755 · `loadFailed` — 알림 조회가 "실패했다"고 확정된 순간만 true(INV-4).
+ *
+ * 왜 이 필드가 필요한가: 화면이 `items`(빈 배열)만 읽으면 조회 실패가 "6종 전부 꺼짐"으로 보인다. 그래서 훅이 실패를 알린다.
+ * 판정식 `data===undefined && (isError || errorUpdateCount>0 || 오프라인 보류)`:
+ *  - 받아 둔 값이 있으면(재조회만 실패) false — 받아 둔 값을 오류로 덮지 않는다(TL3).
+ *  - TanStack v5 는 데이터 없는 쿼리를 다시 받기 시작하면 status 를 pending 으로 되돌려 `isError` 가 꺼진다 —
+ *    `errorUpdateCount`(누적 실패 횟수)가 남아 재시도 윈도에도 true 를 유지한다(TL2).
+ *  - 오프라인 첫 진입은 요청이 나가지도 못해 isError·errorUpdateCount 가 모두 0 이라 `isOfflineWaiting` 으로만 잡힌다(TL4).
+ * 기존 필드 `isError`·`isLoading` 은 그대로다.
+ *
+ * 3동작 뼈대: 준비=GET 응답 큐(+게이트) → 실행=renderHook(+refetch) → 단언=훅 반환값·요청 수.
+ */
+describe('TRIP-1755 · useToggles loadFailed', () => {
+  type Reply = { status: 200 | 500; gate?: Promise<void> };
+  let replies: Reply[] = [];
+  let releaseGate: () => void = () => {};
+
+  beforeEach(() => {
+    replies = [];
+    releaseGate = () => {};
+    server.use(
+      http.get(`${BASE}/me/notification-settings`, async () => {
+        const reply = replies.shift() ?? { status: 200 };
+        if (reply.gate) await reply.gate;
+        return reply.status === 500
+          ? HttpResponse.json(
+              { error: { code: 'INTERNAL', message: 'x' } },
+              { status: 500 }
+            )
+          : HttpResponse.json({ items: INITIAL_ITEMS });
+      })
+    );
+  });
+
+  afterEach(() => {
+    releaseGate();
+  });
+
+  const GET_HIT = 'GET /api/v1/me/notification-settings';
+
+  it('TL1 콜드 500 → 처음엔 loadFailed false(로딩은 실패가 아니다), 실패가 도착하면 true · items 빔 · 기존 isError 도 true', async () => {
+    replies = [{ status: 500 }];
+
+    const { result } = renderHook(() => useToggles(), {
+      wrapper: createGcZeroWrapper(),
+    });
+
+    // 로딩 앵커 — 응답 전엔 실패가 아니다.
+    expect(result.current.loadFailed).toBe(false);
+    await waitFor(() => expect(result.current.loadFailed).toBe(true));
+    await flushNotifications();
+    expect(result.current.items).toEqual([]);
+    expect(result.current.isError).toBe(true);
+  });
+
+  it('TL2 다시 받는 중(응답 전)에도 loadFailed 가 true 로 남고 isFetching 이 true, 응답이 오면 false·items 7종', async () => {
+    // 준비 — 첫 500, 둘째는 문 뒤에서 기다린다.
+    const gate = createGate();
+    releaseGate = gate.release;
+    replies = [{ status: 500 }, { status: 200, gate: gate.opened }];
+    const { result } = renderHook(() => useToggles(), {
+      wrapper: createGcZeroWrapper(),
+    });
+    await waitFor(() => expect(result.current.loadFailed).toBe(true));
+
+    // 실행 — 다시 받기. 둘째 요청이 서버에 도착한 뒤가 윈도다.
+    act(() => {
+      void result.current.refetch();
+    });
+    await waitFor(() => expect(hitCount(GET_HIT)).toBe(2));
+    await flushNotifications();
+
+    // 단언 ① — 앵커: v5 는 이 순간 pending 으로 되돌려 isError 가 꺼진다(그래서 isError 만 보면 안 된다).
+    expect(result.current.isError).toBe(false);
+    expect(result.current.loadFailed).toBe(true);
+    expect(result.current.isFetching).toBe(true);
+
+    // 실행 ② — 응답 도착.
+    await act(async () => {
+      gate.release();
+    });
+    await waitFor(() => expect(result.current.items).toHaveLength(7));
+
+    // 단언 ② — 회복.
+    await flushNotifications();
+    expect(result.current.loadFailed).toBe(false);
+    expect(result.current.isFetching).toBe(false);
+  });
+
+  it('TL3 받아 둔 값이 있으면 재조회가 500 이어도 loadFailed 는 false 다(isError 필드는 true)', async () => {
+    replies = [{ status: 200 }, { status: 500 }];
+    const { result } = renderHook(() => useToggles(), {
+      wrapper: createGcZeroWrapper(),
+    });
+    await waitFor(() => expect(result.current.items).toHaveLength(7));
+    expect(result.current.loadFailed).toBe(false);
+
+    await act(async () => {
+      await result.current.refetch();
+    });
+    await flushNotifications();
+
+    // 앵커: 실패가 훅에 실제로 도착했다. 그 위에서 받아 둔 값은 유지된다.
+    expect(result.current.isError).toBe(true);
+    expect(result.current.items).toHaveLength(7);
+    expect(result.current.loadFailed).toBe(false);
+  });
+
+  it('TL4 오프라인으로 처음 켜면(요청이 나가지도 못함) loadFailed 가 true 다 — isError 는 false, 요청 0건', async () => {
+    // 준비 — 앞 케이스의 오프라인이 새지 않았다는 앵커.
+    expect(onlineManager.isOnline()).toBe(true);
+    onlineManager.setOnline(false);
+
+    const { result } = renderHook(() => useToggles(), {
+      wrapper: createGcZeroWrapper(),
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    await flushNotifications();
+
+    expect(result.current.isError).toBe(false);
+    expect(result.current.loadFailed).toBe(true);
+    expect(hitCount(GET_HIT)).toBe(0);
   });
 });

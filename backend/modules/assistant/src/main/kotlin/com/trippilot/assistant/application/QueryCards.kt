@@ -97,7 +97,13 @@ class QueryCards(
             else -> filled
         }
         return AssistantTemplates.review(
-            text = if (partial) "일부 정보를 확인할 수 없어 확인된 범위만 정리했어요." else "지금까지 진행 상태를 정리했어요.",
+            text = when {
+                partial -> "일부 정보를 확인할 수 없어 확인된 범위만 정리했어요."
+                // "무리한 곳 있어?"에 요약만 내면 답하지 않은 것이다(TRIP-1705). '확인된' — 문제는 솔버가 표기한 위반·구조적 사실뿐이라(BR-U8-14)
+                // 표기 전인 슬롯까지 문제없다고 단정하지 않는다. 만드는 중이면 뒤 일자를 아직 못 봤다
+                problems.isEmpty() && !generating -> "지금 일정에서 확인된 문제는 없어요."
+                else -> "지금까지 진행 상태를 정리했어요."
+            },
             summary = listOf("여행" to trip.span(), "숙소" to (trip.baseStayName?.let { "$it (등록됨)" } ?: "미등록"), "일정" to schedule),
             problems = problems,
             next = if (current != null && itinerary == null) makeItinerary else viewItinerary,
@@ -136,11 +142,10 @@ class QueryCards(
             "NEXT_SLOT", "다음 장소예요.", next.nameKo ?: "이름 미확인 장소", rows,
             if (ctx.inTrip) NextAction("OPEN_LIVE", "여행 중 화면 열기") else viewItinerary,
             // 버튼만으로 대체 후보까지 간다 — 해석이 꺼진 버튼 모드(운영 기본값)에서 "어느 장소"를 말로 가리킬 수 없다.
-            // 확정 일정은 여행이 시작돼야 바뀐다(편집·후보 경로가 시작 전 확정을 409 로 막는다) — 그 전에 주면 눌러도 "바꿀 수 없다"만 돌아온다.
+            // 확정 일정도 바뀐다(TRIP-1710 — 편집·후보 경로의 확정 잠금 해제). 상태를 못 읽었으면 주지 않는다.
         ).let { card ->
             val changeable = when (loadCurrent(ctx)?.value?.status) {
-                "PLANNED" -> true
-                "CONFIRMED" -> ctx.trip?.let { today >= it.startDate } == true
+                "PLANNED", "CONFIRMED" -> true
                 else -> false
             }
             if (!changeable) card

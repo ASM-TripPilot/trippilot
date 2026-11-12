@@ -21,8 +21,16 @@
  * 스크롤 콘텐츠 하단 여백을 넉넉히 둬 마지막 항목이 안 가리게 한다. 탭바는 SafeArea 를 모르는
  * 순수 뷰다(repo-trap).
  */
+import {
+  WarningTriangleGlyph,
+  CloseGlyph,
+  MapPinGlyph,
+  SuitcaseGlyph,
+  HeartFilledGlyph,
+} from '@/shared/ui/glyphs';
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { PlaceCardVM } from '@/entities/place';
@@ -30,21 +38,17 @@ import { PlaceRailCard, type PlaceRailCardSave } from '@/entities/place';
 import type { StayCardVM } from '@/entities/stay';
 import { StaySearchCard } from '@/entities/stay';
 import { useScrollHide } from '@/shared/lib/useScrollHide';
-import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 
 import {
-  CloseGlyph,
-  InfoGlyph,
-  MapPinGlyph,
-  PlusGlyph,
-  SearchGlyph,
-  SuitcaseGlyph,
-  WarningTriangleGlyph,
+  ExploreInfoGlyph,
+  ExplorePlusGlyph,
+  ExploreSearchGlyph,
 } from '@/features/explore/index.view';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import { DismissNotice } from '@/shared/ui/NoticeBanner';
 import { FAB_STACK_TOP } from '@/shared/ui/toastBottom';
 import { useToastBottom } from '@/shared/ui/useToastBottom';
+import { COLOR_TOKENS } from '@/shared/config';
 
 // 카드 뷰모델은 entities 로 이관됐다(StayCardVM=807 · PlaceCardVM=806) — 여기서 재수출해 기존
 // 소비처(placePhoto 테스트·라우트)의 `./ExploreLandingScreen`·이 파일 경유
@@ -115,7 +119,8 @@ export interface ExploreLandingScreenProps {
    * 숨김만 화면 안 `useScrollHide` 가 쥔다 — 뷰 로컬 표시 상태). 개수는 접근성 라벨로만 알린다. */
   savedMenu: {
     open: boolean;
-    savedCount: number;
+    /** null = 목록을 못 받아 모름(TRIP-1754) — 라벨이 개수 없이 `담은 장소`로 읽힌다(0곳이라 읽히지 않게). */
+    savedCount: number | null;
     onToggle: () => void;
     onPressSavedPlaces: () => void;
     onPressSavedStays: () => void;
@@ -125,12 +130,14 @@ export interface ExploreLandingScreenProps {
 // 담은 곳 FAB 그림자(홈 SavedPlacesFab 선례) — RN 은 box-shadow 가 없어 style prop 으로 옮긴다.
 // shadowColor '#000000' 은 토큰화 대상이 아니라 raw-hex 가드 사정거리 밖이다(홈 fabShadow 선례).
 const FAB_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 6 },
   shadowOpacity: 0.22,
   shadowRadius: 12,
   elevation: 6,
 } as const;
+
+const SEE_ALL_HIT_SLOP = { top: 14, bottom: 14 };
 
 function LaneHeader({
   title,
@@ -151,6 +158,9 @@ function LaneHeader({
           testID={seeAllTestID}
           accessibilityRole="button"
           onPress={onSeeAll}
+          // TRIP-1764 — 글자 줄 17 + 위아래 14 = 45. 헤더 줄 밖으로 나가도 눌린다(RN 0.81 시뮬 실측). 위는 레인
+          // mt-2xl 여백, 아래는 mb-md 12 안이라 카드와 안 겹친다.
+          hitSlop={SEE_ALL_HIT_SLOP}
           className="flex-row items-center gap-xs"
         >
           <Text className="font-noto text-label text-muted">모두 보기</Text>
@@ -165,7 +175,7 @@ function StayLaneError({ onRetry }: { onRetry: () => void }): ReactElement {
   // 부분 실패 — 침묵하지 않고 자리에 재시도를 띄운다(US-EXPL-01 · INV-4). 나머지 구획은 산다.
   return (
     <View className="items-center gap-sm rounded-card bg-surface-soft px-lg py-2xl">
-      <WarningTriangleGlyph size={28} tone="primary" />
+      <WarningTriangleGlyph size={28} color="primary" />
       <Text className="font-noto text-label text-muted">
         숙소를 불러오지 못했어요
       </Text>
@@ -229,7 +239,7 @@ function StaySaveErrorBanner({
       testID="explore-stay-save-error"
       message="담기에 실패했어요. 잠시 후 다시 시도해 주세요."
       onDismiss={onDismiss}
-      icon={<WarningTriangleGlyph size={18} tone="primary" />}
+      icon={<WarningTriangleGlyph size={18} color="primary" />}
     />
   );
 }
@@ -247,7 +257,7 @@ function PlaceSaveErrorBanner({
       testID="explore-place-save-error"
       message={message}
       onDismiss={onDismiss}
-      icon={<WarningTriangleGlyph size={18} tone="primary" />}
+      icon={<WarningTriangleGlyph size={18} color="primary" />}
     />
   );
 }
@@ -278,7 +288,7 @@ function RegionChip({
         onPress={onClear}
         className="h-5 w-5 items-center justify-center"
       >
-        <CloseGlyph size={12} tone="primary" />
+        <CloseGlyph size={12} color="primary" />
       </Pressable>
     </View>
   );
@@ -288,6 +298,10 @@ function RegionChip({
 // (TRIP-1435 Q-029: 여백 안에서 카드가 잘리던 것).
 const LANE_BLEED_STYLE = { marginHorizontal: -16 } as const;
 const LANE_CONTENT_STYLE = { paddingHorizontal: 16 } as const;
+
+function savedPlacesLabel(count: number | null): string {
+  return count === null ? '담은 장소' : `담은 장소 ${count}곳`;
+}
 
 export function ExploreLandingScreen({
   heading,
@@ -327,7 +341,7 @@ export function ExploreLandingScreen({
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View testID="explore-landing" className="flex-1 bg-canvas">
-        <ScrollView
+        <Animated.ScrollView
           testID="explore-landing-scroll"
           className="flex-1"
           showsVerticalScrollIndicator={false}
@@ -357,7 +371,7 @@ export function ExploreLandingScreen({
             onPress={onPressSearch}
             className="mt-lg h-[58px] flex-row items-center gap-sm rounded-pill border border-hairline-strong bg-canvas px-lg"
           >
-            <SearchGlyph size={20} />
+            <ExploreSearchGlyph size={20} />
             {regionFilter ? (
               <>
                 <RegionChip
@@ -467,7 +481,7 @@ export function ExploreLandingScreen({
                 onPress={placeLane.onRetry}
                 className="flex-row items-center gap-sm rounded-card bg-surface-soft px-lg py-2xl"
               >
-                <InfoGlyph size={18} />
+                <ExploreInfoGlyph size={18} />
                 <Text className="flex-1 font-noto text-label text-muted">
                   장소를 불러오지 못했어요 · 다시 시도
                 </Text>
@@ -497,7 +511,7 @@ export function ExploreLandingScreen({
                 onPress={onPressPlaces}
                 className="flex-row items-center gap-sm rounded-card bg-surface-soft px-lg py-2xl"
               >
-                <SearchGlyph size={18} />
+                <ExploreSearchGlyph size={18} />
                 <Text className="flex-1 font-noto text-label text-muted">
                   가볼 만한 장소 둘러보기
                 </Text>
@@ -505,7 +519,7 @@ export function ExploreLandingScreen({
               </Pressable>
             )}
           </View>
-        </ScrollView>
+        </Animated.ScrollView>
 
         {/* 담은 곳 saved-menu FAB — 우하단 하트 FAB 을 누르면 두 미니 FAB 으로 펼쳐진다(Figma
             a01 3012:1731). 왼→오: 담은 장소(위치핀→d02) · 저장한 숙소(가방→e04) · 하트/닫기.
@@ -536,12 +550,12 @@ export function ExploreLandingScreen({
                   <Pressable
                     testID="explore-saved-places-fab"
                     accessibilityRole="button"
-                    accessibilityLabel={`담은 장소 ${savedMenu.savedCount}곳`}
+                    accessibilityLabel={savedPlacesLabel(savedMenu.savedCount)}
                     onPress={savedMenu.onPressSavedPlaces}
                     style={FAB_SHADOW}
                     className="h-[56px] w-[56px] items-center justify-center rounded-full bg-canvas"
                   >
-                    <MapPinGlyph size={26} tone="primary" />
+                    <MapPinGlyph size={26} />
                   </Pressable>
                   <Pressable
                     testID="explore-saved-stays-fab"
@@ -561,7 +575,7 @@ export function ExploreLandingScreen({
                 accessibilityLabel={
                   savedMenu.open
                     ? '담은 곳 메뉴 닫기'
-                    : `담은 장소 ${savedMenu.savedCount}곳`
+                    : savedPlacesLabel(savedMenu.savedCount)
                 }
                 onPress={savedMenu.onToggle}
                 style={FAB_SHADOW}
@@ -585,7 +599,7 @@ export function ExploreLandingScreen({
               style={FAB_SHADOW}
               className="h-[56px] w-[56px] items-center justify-center rounded-full bg-primary"
             >
-              <PlusGlyph size={26} />
+              <ExplorePlusGlyph size={26} />
             </Pressable>
           </View>
         )}

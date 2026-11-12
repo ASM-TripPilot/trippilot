@@ -22,7 +22,15 @@ import {
   hoverOverDeleteZone,
 } from '@/test-support/editDragList';
 
+import { guardKeyWarnings } from '@/test-support/keyWarnings';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { EditorView } from './EditorView';
+
+// TRIP-1812 — 같은 장소 카드의 칸 키가 겹치면 React 가 console.error 로만 알린다. 파일 최상위에서 걸어 전 케이스 뒤에 0 을 단언한다.
+const keyWarnings = guardKeyWarnings();
+
+// 저장 CTA 는 모듈 전역 연타 창(400ms)을 따른다(TRIP-1793 D4) — 앞 테스트의 누름이 다음 테스트의 첫 저장을 삼키지 않게.
+beforeEach(resetPressGuard);
 
 /**
  * TRIP-797 · AC-1·2·3·4·5·6·8·9·10·12 (OQ-3) — h12 통일 편집기 **순수 뷰** 구조·배선.
@@ -178,19 +186,84 @@ describe('🔴 EditorView · B4-4 — day-chip 다일자(AC-4)', () => {
   });
 });
 
+// TRIP-1674 — 시각 편집 허용 규칙: 숙소가 아닌 고정(꼭 갈 곳)도 누른다. 고정 숙소(BR-U3-07)·방문 완료만 잠긴다.
+// 칩 모양(⌄)은 생김새라 단언하지 않는다 — 칩의 존재와 누름 → 콜백만 본다.
 describe('🔴 EditorView · B4-5 — 시각칩 → 시트 콜백(AC-5 · INV-U3-03)', () => {
-  it('비고정 카드 시각칩 press 는 slotKey 로 콜백, 고정 카드는 누름 칩이 없다', () => {
-    const keyA = buildSlotKey(DATE, 'a');
-    const keyFix = buildSlotKey(DATE, 'fix');
+  const chip = (poiId: string): string =>
+    `slot-stopcard-timechip-${buildSlotKey(DATE, poiId)}`;
+
+  it('비고정 카드 시각칩 press 는 slotKey 로 콜백한다 — 비고정 숙소도 눌린다', () => {
     const cb = renderView({
-      slots: [slot('a'), slot('fix', { isFixed: true })],
+      slots: [slot('a'), slot('stay', { category: '숙소' })],
     });
 
-    fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${keyA}`));
-    expect(cb.onPressTimeChip).toHaveBeenCalledWith(keyA);
+    fireEvent.press(screen.getByTestId(chip('a')));
+    expect(cb.onPressTimeChip).toHaveBeenLastCalledWith(
+      buildSlotKey(DATE, 'a')
+    );
+    // 막는 조건은 "고정 + 숙소"의 곱이다 — 숙소라는 이유만으로 막으면 여기서 red.
+    fireEvent.press(screen.getByTestId(chip('stay')));
+    expect(cb.onPressTimeChip).toHaveBeenLastCalledWith(
+      buildSlotKey(DATE, 'stay')
+    );
+  });
 
-    // 고정 슬롯은 시각 불변(INV-U3-03) — 편집 어포던스 미부착.
-    expect(screen.queryByTestId(`slot-stopcard-timechip-${keyFix}`)).toBeNull();
+  it('고정 비숙소(꼭 갈 곳) 카드도 시각칩 press 가 slotKey 로 콜백한다', () => {
+    const cb = renderView({
+      slots: [slot('must', { isFixed: true, category: '명소' })],
+    });
+
+    fireEvent.press(screen.getByTestId(chip('must')));
+
+    expect(cb.onPressTimeChip).toHaveBeenCalledTimes(1);
+    expect(cb.onPressTimeChip).toHaveBeenCalledWith(buildSlotKey(DATE, 'must'));
+  });
+
+  it('category 가 없는 고정 슬롯도 눌린다 — 숙소임을 알 수 없으면 막지 않는다(3-a ⑤ fail-open 수용)', () => {
+    const cb = renderView({ slots: [slot('fix', { isFixed: true })] });
+
+    fireEvent.press(screen.getByTestId(chip('fix')));
+
+    expect(cb.onPressTimeChip).toHaveBeenCalledWith(buildSlotKey(DATE, 'fix'));
+  });
+
+  it('고정 숙소 카드는 누름 시각칩이 없다 — 시각은 읽기 전용으로 보이고, 같은 화면의 꼭 갈 곳은 눌린다', () => {
+    const stayKey = buildSlotKey(DATE, 'stay');
+    const cb = renderView({
+      slots: [
+        slot('stay', { isFixed: true, category: '숙소' }),
+        slot('must', { isFixed: true, category: '명소' }),
+      ],
+    });
+
+    expect(screen.queryByTestId(chip('stay'))).toBeNull();
+    // 짝 — 숙소 카드는 시각을 숨기지 않고 평평한 알약으로 보인다 / 꼭 갈 곳은 칩이 있다(공허 통과 방지).
+    expect(
+      screen.getByTestId(`slot-stopcard-time-${stayKey}`)
+    ).toBeOnTheScreen();
+    fireEvent.press(screen.getByTestId(chip('must')));
+    expect(cb.onPressTimeChip).toHaveBeenCalledTimes(1);
+    expect(cb.onPressTimeChip).not.toHaveBeenCalledWith(stayKey);
+  });
+
+  it('방문 완료 슬롯은 고정 비숙소여도 잠긴다 — 칩이 없고 잠금 표식만 있다 (i07)', () => {
+    const doneKey = buildSlotKey(DATE, 'done');
+    renderView({
+      slots: [
+        slot('done', { isFixed: true, category: '명소' }),
+        slot('open', { isFixed: true, category: '명소' }),
+        // TRIP-1812 5-b W4 — 방문 기록은 서버 키(`날짜#장소`)라 같은 장소 둘째 카드도 함께 잠근다(안전한 쪽).
+        slot('done', { category: '명소' }),
+      ],
+      completedSlotKeys: [doneKey],
+    });
+
+    expect(
+      screen.getAllByTestId(`slot-stopcard-locked-${doneKey}`)
+    ).toHaveLength(2);
+    expect(screen.queryByTestId(chip('done'))).toBeNull();
+    // 짝 — 완료가 아닌 고정 비숙소는 눌린다.
+    expect(screen.getByTestId(chip('open'))).toBeOnTheScreen();
   });
 });
 
@@ -655,7 +728,8 @@ describe('🔴 EditorView · D1 — 드래그 리스트 계약: 슬롯 n개뿐, 
 });
 
 describe('🔴 EditorView · D2 — 삭제 영역 밖에 놓으면 재정렬 (TRIP-921 AC-1 · TRIP-1246 판정 교체)', () => {
-  it('b 를 맨 앞(1→0)에 놓으면 onReorder 가 [b,a,c] 로 1회, 삭제는 0회', () => {
+  // 두 경우를 한 마운트로 잰다(소음 예산 — 편집기 마운트당 reanimated 경고 1건, TRIP-1812 S-D 자리).
+  it('b 를 맨 앞(1→0)에 놓으면 onReorder 가 [b,a,c] 로 1회, 삭제는 0회 · ★경계 맨 끝(0→2)으로 옮겨도 영역 위가 아니면 재정렬이지 삭제가 아니다', () => {
     const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
 
     fireEditDragEnd(1, 0);
@@ -663,11 +737,8 @@ describe('🔴 EditorView · D2 — 삭제 영역 밖에 놓으면 재정렬 (TR
     expect(cb.onReorder).toHaveBeenCalledTimes(1);
     expect(reorderedIds(cb.onReorder)).toEqual(['b', 'a', 'c']);
     expect(cb.onDeleteViaDrag).not.toHaveBeenCalled();
-  });
 
-  it('★경계 — 맨 끝(0→2)으로 옮겨도 영역 위가 아니면 재정렬이지 삭제가 아니다', () => {
-    const cb = renderView({ slots: [slot('a'), slot('b'), slot('c')] });
-
+    cb.onReorder.mockClear();
     fireEditDragEnd(0, 2);
 
     expect(cb.onReorder).toHaveBeenCalledTimes(1);
@@ -683,7 +754,7 @@ describe('🔴 EditorView · D3 — 삭제 영역 위에서 놓으면 삭제 (TR
     await fireEditDropOnZone(1);
 
     expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
-    expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('b');
+    expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('b', 0);
     expect(cb.onReorder).not.toHaveBeenCalled();
   });
 
@@ -693,7 +764,7 @@ describe('🔴 EditorView · D3 — 삭제 영역 위에서 놓으면 삭제 (TR
     await fireEditDropOnZone(2);
 
     expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
-    expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('c');
+    expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('c', 0);
     expect(cb.onReorder).not.toHaveBeenCalled();
   });
 
@@ -733,7 +804,7 @@ describe('🔴 EditorView · D4 — 고정·완료 카드는 삭제 영역에 �
     // 짝(공허 통과 방지) — 콜백 배선 자체는 살아 있다.
     await fireEditDropOnZone(2);
     expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
-    expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('b');
+    expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('b', 0);
   });
 
   it('방문 완료 카드(p1)를 영역 위에서 강제 발화하면 두 콜백 0회 — 짝: 예정 p3 는 지워진다', async () => {
@@ -745,7 +816,7 @@ describe('🔴 EditorView · D4 — 고정·완료 카드는 삭제 영역에 �
 
     await fireEditDropOnZone(2);
     expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(1);
-    expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('p3');
+    expect(cb.onDeleteViaDrag).toHaveBeenCalledWith('p3', 0);
   });
 });
 
@@ -935,4 +1006,637 @@ describe('🔴 EditorView · H1 — 장소 추가 즉시 저장 안내 한 줄 (
       );
     }
   );
+});
+
+/**
+ * TRIP-1791 · 편집기 「여러 곳 골라 한 번에 빼기」(선택 모드) — 뷰 단위 계약.
+ *
+ * 선택 모드의 상태(모드·고른 poiId·확인창)는 뷰 안에 있고, 뷰는 확정 때 `onDeleteSelected(poiIds)` 로 **슬롯 순서**
+ * 배열만 올린다. 스토어 호출·"저장 전 서버 호출 0" 은 페이지 통합(ItineraryEditPage.integration R8·E5)이 잰다.
+ * `onDeleteSelected` 를 안 넘기는 직접 짜기(ManualPlanPage)는 「선택」 자체가 없다 = 지금 화면.
+ *
+ * ⚠️ mount 예산: EditorView 를 mount 할 때마다 reanimated 환경 경고가 1건 나고 node 버킷 상한(59)의 여유가 4뿐이라,
+ * 이 describe 는 `it` 3개 = mount 3번이다. 한 `it` 안에서 `screen.rerender` 로 prop 을 바꿔 가며 판정한다(재렌더는 경고 0).
+ * `it` 를 더 얹지 마라(02a ★1). 색·모양·딤 덮임·리스트 재마운트 여부는 jest 사각 → 실화면 QA(02a ★10).
+ *
+ * 3동작 뼈대: 준비=슬롯·콜백 주입 렌더 → 실행=토글·체크·하단 버튼·확인창 press → 단언=트리(곳수·라벨·부재/존재)·콜백 인자.
+ */
+describe('🔴 EditorView · 여러 곳 골라 빼기 (TRIP-1791) · 카드 ⋯ 노출 조건 (TRIP-1793)', () => {
+  const CHECK = (poiId: string): string => `editor-select-check-${poiId}`;
+  const CARD = (poiId: string): string =>
+    `slot-stopcard-${buildSlotKey(DATE, poiId)}`;
+  const CONFIRM = 'editor-select-confirm';
+  const press = (testID: string): void =>
+    fireEvent.press(screen.getByTestId(testID));
+  const dialog = () => within(screen.getByTestId(CONFIRM));
+
+  function named(
+    poiId: string,
+    nameKo: string,
+    over: Partial<EditorSlot> = {}
+  ) {
+    return slot(poiId, { nameKo, ...over });
+  }
+
+  /** 렌더하고, 같은 인스턴스에 prop 을 바꿔 다시 그리는 함수를 돌려준다(mount 수 = 1). */
+  function mountPicker(initial: Partial<Parameters<typeof EditorView>[0]>) {
+    const cb = {
+      onSelectDay: jest.fn(),
+      onPressTimeChip: jest.fn(),
+      onPressAddPlace: jest.fn(),
+      onPressAddBetween: jest.fn(),
+      onSave: jest.fn(),
+      onReorder: jest.fn(),
+      onDeleteViaDrag: jest.fn(),
+      onDeleteSelected: jest.fn(),
+    };
+    const element = (over: Partial<Parameters<typeof EditorView>[0]>) => (
+      <EditorView
+        center={CENTER}
+        days={buildPlanDayTabs(daysOf(DATE))}
+        slots={[]}
+        activeDayIndex={0}
+        activeDate={DATE}
+        dateLabel="6월 10일(수)"
+        onBack={jest.fn()}
+        {...cb}
+        {...initial}
+        {...over}
+      />
+    );
+    render(element({}));
+    return {
+      cb,
+      redraw: (over: Partial<Parameters<typeof EditorView>[0]>) =>
+        screen.rerender(element(over)),
+    };
+  }
+
+  it('S-A · 노출 조건 → 선택 얼굴 → 체크·잠금·카드 탭 금지·끌기 불가 → 취소로 일반 얼굴 복귀 (AC-2·3·4·5·7)', () => {
+    const { __dragLog } = DraggableModule as unknown as { __dragLog: number[] };
+    __dragLog.length = 0;
+    const slots = [
+      named('a', '황령산 전망대'),
+      named('b', '부산시립미술관'),
+      named('fix', '감천문화마을', { isFixed: true }),
+      named('done', '광안리 해변'),
+      named('c', '전포 카페거리'),
+    ];
+    const doneKey = buildSlotKey(DATE, 'done');
+
+    // ① 준비 — 선택 콜백을 안 준 화면(직접 짜기): 「선택」이 없다.
+    const { cb, redraw } = mountPicker({
+      slots,
+      completedSlotKeys: [doneKey],
+      onDeleteSelected: undefined,
+    });
+    expect(screen.queryByTestId('editor-select-toggle')).toBeNull();
+    // TRIP-1792 — 되돌리기 prop 도 안 줬으니 머리에 ↶ 가 없다(직접 짜기 = 기능 부재, AC-10).
+    expect(screen.queryByTestId('editor-undo')).toBeNull();
+
+    // ② 콜백을 주면(편집 h24·i07) 「선택」이 생긴다. 아직 선택 얼굴 요소는 없다.
+    redraw({ onDeleteSelected: cb.onDeleteSelected });
+    expect(screen.getByTestId('editor-select-toggle')).toHaveTextContent(
+      '선택'
+    );
+    expect(screen.queryByTestId('editor-select-count')).toBeNull();
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+    expect(screen.getByText('일정 저장하기')).toBeOnTheScreen();
+    expect(
+      screen.getByTestId(`slot-stopcard-timechip-${buildSlotKey(DATE, 'a')}`)
+    ).toBeOnTheScreen();
+
+    // ②b TRIP-1792 · 머리 되돌리기 ↶ — `undo` prop 이 있을 때만 생기고, 「선택」 오른쪽에 선다(AC-5·10).
+    //  `redraw` 는 초기 prop 위에 덮어쓰므로 선택 콜백을 매번 다시 준다.
+    const onUndo = jest.fn();
+    expect(screen.queryByTestId('editor-undo')).toBeNull(); // undo 만 안 줬다 — 선택 콜백이 있어도 ↶ 는 없다
+    redraw({
+      onDeleteSelected: cb.onDeleteSelected,
+      undo: { enabled: false, onPress: onUndo },
+    });
+    expect(screen.getByTestId('editor-undo')).toBeOnTheScreen();
+    expect(screen.getByLabelText('되돌리기')).toHaveProp(
+      'testID',
+      'editor-undo'
+    );
+    expect(
+      screen
+        .getAllByTestId(/^editor-(select-toggle|undo)$/)
+        .map((node) => node.props.testID)
+    ).toEqual(['editor-select-toggle', 'editor-undo']);
+    // 이력이 없으면(enabled=false) 비활성이고 눌러도 아무 일이 없다.
+    expect(screen.getByTestId('editor-undo')).toBeDisabled();
+    press('editor-undo');
+    expect(onUndo).not.toHaveBeenCalled();
+    // 이력이 쌓이면(enabled=true) 눌림이 한 번 전달된다.
+    redraw({
+      onDeleteSelected: cb.onDeleteSelected,
+      undo: { enabled: true, onPress: onUndo },
+    });
+    expect(screen.getByTestId('editor-undo')).not.toBeDisabled();
+    press('editor-undo');
+    expect(onUndo).toHaveBeenCalledTimes(1);
+
+    // ③ 실행 — 「선택」을 누른다. 선택 얼굴로 바뀐다.
+    press('editor-select-toggle');
+    expect(screen.getByTestId('editor-select-count')).toHaveTextContent(
+      '0곳 선택'
+    );
+    expect(screen.queryByTestId('editor-select-toggle')).toBeNull();
+    // 선택 모드 머리에는 ↶ 가 없다(짝: 위에서 같은 prop 으로 있었다).
+    expect(screen.queryByTestId('editor-undo')).toBeNull();
+    expect(screen.queryByTestId('sheet-header-title')).toBeNull();
+    expect(screen.queryByTestId('sheet-header-meta')).toBeNull();
+    // 카드마다 체크 원 — 잠긴 둘(고정·방문 완료)은 비활성, 나머지는 선택 안 됨·활성.
+    expect(screen.getAllByRole('checkbox')).toHaveLength(5);
+    for (const poiId of ['fix', 'done']) {
+      expect(screen.getByTestId(CHECK(poiId))).toBeDisabled();
+    }
+    for (const poiId of ['a', 'b', 'c']) {
+      expect(screen.getByTestId(CHECK(poiId))).not.toBeDisabled();
+      expect(screen.getByTestId(CHECK(poiId))).not.toBeSelected();
+    }
+    // 하단: 취소 + 0곳이면 라벨 `빼기` 비활성.
+    expect(screen.getByTestId('editor-select-cancel')).toHaveTextContent(
+      '취소'
+    );
+    expect(screen.getByTestId('editor-select-delete')).toHaveTextContent(
+      '빼기'
+    );
+    expect(screen.getByTestId('editor-select-delete')).toBeDisabled();
+    // 없어지는 것(AC-7): 저장 CTA·카드 사이 +·장소 추가·안내줄 둘·시각 칩.
+    expect(screen.queryByText('일정 저장하기')).toBeNull();
+    expect(screen.queryByTestId('itinerary-edit-add-place')).toBeNull();
+    expect(screen.queryByTestId('itinerary-edit-guide')).toBeNull();
+    expect(screen.queryByTestId('itinerary-edit-add-saved-hint')).toBeNull();
+    expect(screen.queryAllByTestId(/^itinerary-edit-insert-/)).toHaveLength(0);
+    expect(
+      screen.queryByTestId(`slot-stopcard-timechip-${buildSlotKey(DATE, 'a')}`)
+    ).toBeNull();
+    // 남는 것 — 리스트와 카드(리스트를 갈아 끼우지 않는다는 약한 앵커).
+    expect(screen.getByTestId('itinerary-edit-list')).toBeOnTheScreen();
+    expect(screen.getByTestId(CARD('a'))).toBeOnTheScreen();
+
+    // ④ 0곳에서 「빼기」를 눌러도 확인창이 안 뜬다(AC-4).
+    press('editor-select-delete');
+    expect(screen.queryByTestId(CONFIRM)).toBeNull();
+    expect(cb.onDeleteSelected).not.toHaveBeenCalled();
+
+    // ⑤ 체크 토글 — 머리 곳수와 하단 라벨이 따라온다.
+    press(CHECK('a'));
+    expect(screen.getByTestId('editor-select-count')).toHaveTextContent(
+      '1곳 선택'
+    );
+    expect(screen.getByTestId(CHECK('a'))).toBeSelected();
+    expect(screen.getByTestId('editor-select-delete')).toHaveTextContent(
+      '1곳 빼기'
+    );
+    expect(screen.getByTestId('editor-select-delete')).not.toBeDisabled();
+    press(CHECK('b'));
+    expect(screen.getByTestId('editor-select-count')).toHaveTextContent(
+      '2곳 선택'
+    );
+    expect(screen.getByTestId('editor-select-delete')).toHaveTextContent(
+      '2곳 빼기'
+    );
+    press(CHECK('a')); // 다시 누르면 해제
+    expect(screen.getByTestId(CHECK('a'))).not.toBeSelected();
+    expect(screen.getByTestId(CHECK('b'))).toBeSelected();
+    expect(screen.getByTestId('editor-select-count')).toHaveTextContent(
+      '1곳 선택'
+    );
+
+    // ⑥ 잠긴 카드의 체크는 눌러도 선택 수가 안 변한다(AC-2).
+    press(CHECK('fix'));
+    press(CHECK('done'));
+    expect(screen.getByTestId('editor-select-count')).toHaveTextContent(
+      '1곳 선택'
+    );
+    expect(screen.getByTestId(CHECK('fix'))).not.toBeSelected();
+    expect(screen.getByTestId(CHECK('done'))).not.toBeSelected();
+
+    // ⑦ 카드 전체 탭은 선택이 아니다(체크 원만 눌린다).
+    press(CARD('c'));
+    expect(screen.getByTestId(CHECK('c'))).not.toBeSelected();
+    expect(screen.getByTestId('editor-select-count')).toHaveTextContent(
+      '1곳 선택'
+    );
+
+    // ⑧ 선택 모드에서는 롱프레스가 끌기를 시작하지 않는다(AC-7).
+    fireEvent(screen.getByTestId(CARD('a')), 'longPress');
+    expect(__dragLog).toEqual([]);
+
+    // ⑨ 하단 「취소」 — 일반 얼굴로 복귀, 삭제 콜백은 한 번도 안 불린다(AC-3).
+    press('editor-select-cancel');
+    expect(screen.getByTestId('editor-select-toggle')).toBeOnTheScreen();
+    expect(screen.getByTestId('editor-undo')).not.toBeDisabled(); // ↶ 도 돌아온다(prop 은 그대로)
+    expect(screen.queryByTestId('editor-select-count')).toBeNull();
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+    expect(screen.getByText('일정 저장하기')).toBeOnTheScreen();
+    expect(screen.getByTestId('itinerary-edit-add-place')).toBeOnTheScreen();
+    expect(screen.getByTestId('itinerary-edit-guide')).toBeOnTheScreen();
+    expect(screen.getByTestId('itinerary-edit-insert-0')).toBeOnTheScreen();
+    expect(cb.onDeleteSelected).not.toHaveBeenCalled();
+
+    // ⑩ 다시 들어가면 체크가 비어 있다(취소 전에 b 가 선택돼 있었다). 짝: 일반 얼굴에선 롱프레스가 끌기를 시작한다.
+    press('editor-select-toggle');
+    expect(screen.getByTestId('editor-select-count')).toHaveTextContent(
+      '0곳 선택'
+    );
+    for (const poiId of ['a', 'b', 'c']) {
+      expect(screen.getByTestId(CHECK(poiId))).not.toBeSelected();
+    }
+    press('editor-select-cancel');
+    fireEvent(screen.getByTestId(CARD('a')), 'longPress');
+    expect(__dragLog).toEqual([0]);
+  });
+
+  it('S-B · 확인창: 제목·이름 요약(슬롯 순서·앞 3곳 + 외 N곳) · 취소는 유지 · 확정은 슬롯 순서 콜백 1회 + 모드 즉시 종료 (AC-1·3)', () => {
+    const slots = [
+      named('a', '황령산 전망대'),
+      named('b', '부산시립미술관'),
+      named('c', '감천문화마을'),
+      named('d', '광안리 해변'),
+      named('e', '전포 카페거리'),
+      named('f', '해운대 블루라인'),
+    ];
+    const { cb } = mountPicker({ slots });
+    press('editor-select-toggle');
+
+    // 클릭 순서(d→b)를 슬롯 순서(b,d)와 일부러 뒤집는다.
+    press(CHECK('d'));
+    press(CHECK('b'));
+    press('editor-select-delete');
+    expect(dialog().getByText('2곳을 일정에서 뺄까요?')).toBeOnTheScreen();
+    expect(
+      dialog().getByText('부산시립미술관 · 광안리 해변')
+    ).toBeOnTheScreen();
+    expect(dialog().getByTestId('editor-select-confirm-ok')).toHaveTextContent(
+      '빼기'
+    );
+    expect(
+      dialog().getByTestId('editor-select-confirm-cancel')
+    ).toHaveTextContent('취소');
+    expect(cb.onDeleteSelected).not.toHaveBeenCalled();
+
+    // 확인창 취소 — 아무것도 안 빠지고 선택 모드·체크가 그대로다.
+    press('editor-select-confirm-cancel');
+    expect(screen.queryByTestId(CONFIRM)).toBeNull();
+    expect(cb.onDeleteSelected).not.toHaveBeenCalled();
+    expect(screen.getByTestId('editor-select-count')).toHaveTextContent(
+      '2곳 선택'
+    );
+    expect(screen.getByTestId(CHECK('b'))).toBeSelected();
+    expect(screen.getByTestId(CHECK('d'))).toBeSelected();
+
+    // 3곳: 이름 셋 전부, "외" 없음.
+    press(CHECK('f'));
+    press('editor-select-delete');
+    expect(
+      dialog().getByText('부산시립미술관 · 광안리 해변 · 해운대 블루라인')
+    ).toBeOnTheScreen();
+    press('editor-select-confirm-cancel');
+
+    // 4곳·5곳: 앞 3곳 + " 외 N곳".
+    press(CHECK('a'));
+    press('editor-select-delete');
+    expect(dialog().getByText('4곳을 일정에서 뺄까요?')).toBeOnTheScreen();
+    expect(
+      dialog().getByText('황령산 전망대 · 부산시립미술관 · 광안리 해변 외 1곳')
+    ).toBeOnTheScreen();
+    press('editor-select-confirm-cancel');
+    press(CHECK('e'));
+    press('editor-select-delete');
+    expect(
+      dialog().getByText('황령산 전망대 · 부산시립미술관 · 광안리 해변 외 2곳')
+    ).toBeOnTheScreen();
+    press('editor-select-confirm-cancel');
+
+    // 한 곳만 남기면 제목도 1곳.
+    for (const poiId of ['a', 'b', 'd', 'e']) press(CHECK(poiId));
+    press('editor-select-delete');
+    expect(dialog().getByText('1곳을 일정에서 뺄까요?')).toBeOnTheScreen();
+    expect(dialog().getByText('해운대 블루라인')).toBeOnTheScreen();
+    press('editor-select-confirm-cancel');
+
+    // 확정 — b, d, f 를 고른 채. 콜백은 정확히 1회, 슬롯 순서 배열.
+    press(CHECK('d'));
+    press(CHECK('b'));
+    press('editor-select-delete');
+    press('editor-select-confirm-ok');
+    expect(cb.onDeleteSelected).toHaveBeenCalledTimes(1);
+    expect(cb.onDeleteSelected).toHaveBeenCalledWith(['b', 'd', 'f']);
+    // 모드 종료는 동기 — 확인창도 선택 얼굴도 사라지고 일반 얼굴이다.
+    expect(screen.queryByTestId(CONFIRM)).toBeNull();
+    expect(screen.queryByTestId('editor-select-count')).toBeNull();
+    expect(screen.getByTestId('editor-select-toggle')).toBeOnTheScreen();
+    expect(screen.getByText('일정 저장하기')).toBeOnTheScreen();
+    // 다시 들어가면 선택이 비어 있다.
+    press('editor-select-toggle');
+    expect(screen.getByTestId('editor-select-count')).toHaveTextContent(
+      '0곳 선택'
+    );
+    expect(screen.getByTestId(CHECK('b'))).not.toBeSelected();
+  });
+
+  it('S-C · 체크 뒤에 잠기면 빼기 대상에서 제외(D12) · 일차 칩은 모드를 즉시 끈다(D3) · 안 잠긴 카드가 없으면 「선택」 숨김(D4) · 카드 ⋯ 노출 조건·옮김 배지 (TRIP-1793)', () => {
+    const slots = [
+      named('a', '황령산 전망대'),
+      named('b', '부산시립미술관'),
+      named('c', '감천문화마을'),
+    ];
+    const key = (poiId: string): string => buildSlotKey(DATE, poiId);
+    const { cb, redraw } = mountPicker({
+      days: buildPlanDayTabs(daysOf(DATE, DATE2)),
+      slots,
+    });
+
+    // D12 — a, b 를 체크한 뒤 a 가 방문 완료로 바뀐다(조회가 늦게 도착): a 는 대상에서 빠진다.
+    press('editor-select-toggle');
+    press(CHECK('a'));
+    press(CHECK('b'));
+    redraw({ completedSlotKeys: [key('a')] });
+    expect(screen.getByTestId(CHECK('a'))).toBeDisabled();
+    expect(screen.getByTestId('editor-select-delete')).toHaveTextContent(
+      '1곳 빼기'
+    );
+    press('editor-select-delete');
+    press('editor-select-confirm-ok');
+    expect(cb.onDeleteSelected).toHaveBeenCalledTimes(1);
+    expect(cb.onDeleteSelected).toHaveBeenCalledWith(['b']);
+
+    // 고른 곳이 전부 잠기면 「빼기」는 다시 비활성이고 눌러도 확인창이 없다.
+    redraw({ completedSlotKeys: [] });
+    press('editor-select-toggle');
+    press(CHECK('b'));
+    redraw({ completedSlotKeys: [key('a'), key('b')] });
+    expect(screen.getByTestId('editor-select-delete')).toHaveTextContent(
+      '빼기'
+    );
+    expect(screen.getByTestId('editor-select-delete')).toBeDisabled();
+    press('editor-select-delete');
+    expect(screen.queryByTestId(CONFIRM)).toBeNull();
+
+    // D3 — 선택 모드에서 일차 칩을 누르면 일차 이동 콜백과 함께 모드가 즉시 꺼지고 체크가 비워진다.
+    press('itinerary-edit-day-2');
+    expect(cb.onSelectDay).toHaveBeenCalledTimes(1);
+    expect(cb.onSelectDay).toHaveBeenCalledWith(1);
+    expect(screen.queryByTestId('editor-select-count')).toBeNull();
+    expect(screen.getByTestId('editor-select-toggle')).toBeOnTheScreen();
+    redraw({ completedSlotKeys: [] });
+    press('editor-select-toggle');
+    expect(screen.getByTestId('editor-select-count')).toHaveTextContent(
+      '0곳 선택'
+    );
+    expect(screen.getByTestId(CHECK('b'))).not.toBeSelected();
+    press('editor-select-cancel');
+
+    // D4 — 안 잠긴 카드가 하나도 없는 날은 「선택」을 숨긴다. 하나라도 남으면 다시 나온다.
+    redraw({ completedSlotKeys: [key('a'), key('b'), key('c')] });
+    expect(screen.queryByTestId('editor-select-toggle')).toBeNull();
+    redraw({ completedSlotKeys: [key('a'), key('b')] });
+    expect(screen.getByTestId('editor-select-toggle')).toBeOnTheScreen();
+
+    // ── TRIP-1793 · 카드 ⋯ (다른 날로 옮기기) — 같은 인스턴스에 prop 만 바꿔 노출 조건을 차례로 잰다(새 mount 0, 소음 예산).
+    //  이 `it` 의 준비는 이미 이틀 일정(a·b·c, 둘 다 안 고정)이고 선택 모드는 위에서 취소로 나왔다.
+    const MORE = (poiId: string): string => `editor-slot-more-${poiId}`;
+    const moreIds = (): string[] =>
+      screen
+        .queryAllByTestId(/^editor-slot-more-/)
+        .map((node) => node.props.testID as string);
+    const onPressMore = jest.fn();
+
+    // ① 콜백을 안 준 화면(직접 짜기)은 ⋯ 가 없다 — 카드 3장이 있고 이틀 일정이라 "숨을 이유"가 없는데도.
+    redraw({ completedSlotKeys: [] });
+    expect(moreIds()).toEqual([]);
+
+    // ② 주면 안 잠긴 카드마다 ⋯ 가 슬롯 순서로 서고, 누르면 poiId 로 콜백한다.
+    redraw({ completedSlotKeys: [], onPressMore });
+    expect(moreIds()).toEqual([MORE('a'), MORE('b'), MORE('c')]);
+    press(MORE('b'));
+    expect(onPressMore).toHaveBeenCalledTimes(1);
+    expect(onPressMore).toHaveBeenCalledWith('b', 0);
+
+    // ③ (TRIP-1795 뒤집음) 방문 완료 카드에도 ⋯ 가 있다 — 이름·분류 고치기는 잠금과 무관하다(Q5). 옮기기 가능 여부는 페이지가 정한다.
+    redraw({ completedSlotKeys: [key('a')], onPressMore });
+    expect(moreIds()).toEqual([MORE('a'), MORE('b'), MORE('c')]);
+
+    // ④ (TRIP-1795 뒤집음) 고정(isFixed) 카드에도 ⋯ 가 있다 — 끌기는 isPinned 로 막혀도 이름 고치기는 열려 있다.
+    redraw({
+      completedSlotKeys: [],
+      onPressMore,
+      slots: [
+        named('a', '황령산 전망대'),
+        named('b', '부산시립미술관'),
+        named('c', '감천문화마을', { isFixed: true }),
+      ],
+    });
+    expect(moreIds()).toEqual([MORE('a'), MORE('b'), MORE('c')]);
+    press(MORE('c'));
+    expect(onPressMore).toHaveBeenLastCalledWith('c', 0);
+
+    // ⑤ 선택 모드에서는 전부 사라지고, 취소하면 돌아온다.
+    redraw({ completedSlotKeys: [], onPressMore });
+    press('editor-select-toggle');
+    expect(moreIds()).toEqual([]);
+    press('editor-select-cancel');
+    expect(moreIds()).toEqual([MORE('a'), MORE('b'), MORE('c')]);
+
+    // ⑥ (TRIP-1795 뒤집음) 일정이 하루뿐이어도 ⋯ 가 있다 — 이름·분류 고치기는 옮길 날이 없어도 의미가 있다. 선택 모드는 여전히 숨김.
+    redraw({
+      completedSlotKeys: [],
+      onPressMore,
+      days: buildPlanDayTabs(daysOf(DATE)),
+    });
+    expect(moreIds()).toEqual([MORE('a'), MORE('b'), MORE('c')]);
+    redraw({ completedSlotKeys: [], onPressMore });
+    expect(moreIds()).toEqual([MORE('a'), MORE('b'), MORE('c')]);
+
+    // ⑦ 옮김 배지 — 뷰가 일차 목록(`days`)에서 출발 날짜의 일차를 찾아 「N일차에서 옮김」을 카드에 내린다.
+    const movedId = (poiId: string): string =>
+      `slot-stopcard-moved-${key(poiId)}`;
+    const withMoved = (poiId: string, from: string): EditorSlot =>
+      ({ ...named(poiId, `장소-${poiId}`), movedFromDate: from }) as EditorSlot;
+    redraw({
+      completedSlotKeys: [],
+      onPressMore,
+      slots: [
+        named('a', '황령산 전망대'),
+        withMoved('b', DATE),
+        named('c', '감천문화마을'),
+      ],
+    });
+    expect(screen.getByTestId(movedId('b'))).toHaveTextContent(
+      '1일차에서 옮김'
+    );
+    expect(screen.queryByTestId(movedId('a'))).toBeNull();
+    expect(screen.queryByTestId(movedId('c'))).toBeNull();
+    redraw({
+      completedSlotKeys: [],
+      onPressMore,
+      slots: [
+        named('a', '황령산 전망대'),
+        withMoved('b', DATE2),
+        named('c', '감천문화마을'),
+      ],
+    });
+    expect(screen.getByTestId(movedId('b'))).toHaveTextContent(
+      '2일차에서 옮김'
+    );
+    // 일정에 없는 날짜면 뷰가 일차를 지어내지 않는다 — 배지 없음.
+    redraw({
+      completedSlotKeys: [],
+      onPressMore,
+      slots: [
+        named('a', '황령산 전망대'),
+        withMoved('b', '2099-01-01'),
+        named('c', '감천문화마을'),
+      ],
+    });
+    expect(screen.queryByTestId(movedId('b'))).toBeNull();
+
+    // ── TRIP-1795 · 같은 인스턴스에 prop 만 바꿔 잰다(새 mount 0 — 셸 렌더가 늘면 소음 예산 reanimated 가 넘는다).
+    // ⑧ AC-3 — 「N곳 빼기」 확인창 본문은 고친 이름으로 말하고 원본 이름은 안 나온다 · 고치지 않은 곳은 원본 이름.
+    redraw({
+      completedSlotKeys: [],
+      onPressMore,
+      slots: [
+        named('a', '황령산 전망대', { displayName: '우리 아지트' }),
+        named('b', '부산시립미술관'),
+        named('c', '감천문화마을'),
+      ],
+    });
+    press('editor-select-toggle');
+    press(CHECK('a'));
+    press(CHECK('b'));
+    press('editor-select-delete');
+    expect(screen.getByTestId(CONFIRM)).toBeOnTheScreen(); // 긍정 앵커 — 확인창이 떴다
+    expect(screen.getByText('우리 아지트 · 부산시립미술관')).toBeOnTheScreen();
+    expect(screen.queryByText(/황령산 전망대/)).toBeNull();
+    press('editor-select-confirm-cancel');
+    press('editor-select-cancel');
+
+    // ⑨ AC-4 — 고정 숙소를 이 여행에서 `명소`·다른 이름으로 불러도 시각칩은 여전히 없다(판정은 원본 분류). 카드는 고친 이름으로 보인다.
+    redraw({
+      completedSlotKeys: [],
+      onPressMore,
+      slots: [
+        named('stay', '원래 숙소', {
+          isFixed: true,
+          category: '숙소',
+          displayCategory: '명소',
+          displayName: '우리 숙소',
+        }),
+        named('must', '꼭 갈 곳', { isFixed: true, category: '명소' }),
+      ],
+    });
+    expect(
+      screen.queryByTestId(`slot-stopcard-timechip-${key('stay')}`)
+    ).toBeNull();
+    expect(
+      screen.getByTestId(`slot-stopcard-timechip-${key('must')}`)
+    ).toBeOnTheScreen(); // 짝 — 같은 화면의 꼭 갈 곳은 눌린다(공허 통과 방지)
+    expect(
+      screen.getByTestId(`slot-stopcard-name-${key('stay')}`)
+    ).toHaveTextContent('우리 숙소');
+  });
+
+  /**
+   * TRIP-1812 · 같은 날 같은 장소 — 뷰가 눌린 카드의 자리를 콜백으로 넘기는가. 카드 testID 는 그대로 겹치므로 getAll 로 집는다.
+   * 낀 것 [p1, p2, p1, p1] 은 말미·첫 일치·마지막 일치를 가르고, 끌어 지우기는 from≠to 라 "놓인 칸 data 에서 세기"를 가른다
+   * (02a ★3 · ★4). 한 마운트(소음 예산, redraw) — 준비는 redraw, 실행은 칩·⋯·놓기·체크, 단언은 콜백 인자.
+   */
+  it('S-D · 같은 장소 여럿: 칩은 ordinal 키, ⋯·끌어 지우기는 원래 자리 ordinal, 선택은 장소 단위로 2곳이 세어진다 (TRIP-1812 AC-1·3·4·11)', async () => {
+    const at = (poiId: string, name: string, hour: string) =>
+      named(poiId, name, {
+        startAt: `${hour}:00:00`,
+        endAt: `${hour}:30:00`,
+      });
+    const onPressMore = jest.fn();
+    const { cb, redraw } = mountPicker({
+      onPressMore,
+      slots: [
+        at('p1', '첫째', '09'),
+        at('p2', '가운데', '12'),
+        at('p1', '둘째', '14'),
+        at('p1', '셋째', '16'),
+      ],
+    });
+    const p1Key = buildSlotKey(DATE, 'p1');
+
+    // ① 시각 칩 — 첫 카드는 지금과 같은 키, 뒤 카드부터 #1·#2.
+    const chips = screen.getAllByTestId(`slot-stopcard-timechip-${p1Key}`);
+    expect(chips).toHaveLength(3);
+    chips.forEach((chip) => fireEvent.press(chip));
+    press(`slot-stopcard-timechip-${buildSlotKey(DATE, 'p2')}`);
+    expect(cb.onPressTimeChip.mock.calls.map(([key]) => key)).toEqual([
+      p1Key,
+      `${p1Key}#1`,
+      `${p1Key}#2`,
+      buildSlotKey(DATE, 'p2'),
+    ]);
+
+    // ② ⋯ — 같은 장소 카드마다 자기 ordinal, 다른 장소는 0.
+    const mores = screen.getAllByTestId('editor-slot-more-p1');
+    expect(mores).toHaveLength(3);
+    fireEvent.press(mores[1]);
+    expect(onPressMore).toHaveBeenLastCalledWith('p1', 1);
+    fireEvent.press(mores[2]);
+    expect(onPressMore).toHaveBeenLastCalledWith('p1', 2);
+    press('editor-slot-more-p2');
+    expect(onPressMore).toHaveBeenLastCalledWith('p2', 0);
+
+    // ③ 끌어 지우기 — ordinal 은 끈 카드의 원래 자리(from) 기준. data·to 로 세면 (2,0)=0 · (0,3)=2 · (3,1)=1 이라 갈린다.
+    for (const [from, to, ordinal] of [
+      [2, 0, 1],
+      [0, 3, 0],
+      [3, 1, 2],
+    ]) {
+      await hoverOverDeleteZone(true);
+      fireEditDragEnd(from, to);
+      expect(cb.onDeleteViaDrag).toHaveBeenLastCalledWith('p1', ordinal);
+    }
+    expect(cb.onDeleteViaDrag).toHaveBeenCalledTimes(3);
+    expect(cb.onReorder).not.toHaveBeenCalled();
+
+    // ④ 붙어 있는 같은 장소 — 제자리 놓기·칸 키 유일.
+    redraw({
+      slots: [
+        at('p1', '첫째', '09'),
+        at('p1', '둘째', '11'),
+        at('p2', '가운데', '14'),
+      ],
+    });
+    await fireEditDropOnZone(1);
+    expect(cb.onDeleteViaDrag).toHaveBeenLastCalledWith('p1', 1);
+    expect(screen.getAllByTestId(CARD('p1'))).toHaveLength(2); // 앵커 — 같은 장소 카드가 정말 둘
+    expect(keyWarnings.keys()).toEqual([]); // 목이 keyExtractor 를 Fragment key 로 쓴다 — 칸 키가 겹치면 여기서 잡힌다
+
+    // ⑤ 선택 모드 — 체크는 장소 단위라 하나만 눌러도 둘 다 켜지고, 숫자는 실제로 빠지는 2곳이다(AC-11).
+    redraw({
+      slots: [
+        at('p1', '첫째', '09'),
+        at('p2', '가운데', '12'),
+        at('p1', '둘째', '14'),
+      ],
+    });
+    press('editor-select-toggle');
+    const checks = (): ReturnType<typeof screen.getAllByTestId> =>
+      screen.getAllByTestId(CHECK('p1'));
+    expect(checks()).toHaveLength(2);
+    expect(checks()[0]).not.toBeSelected(); // 앵커 — 누르기 전엔 꺼져 있다
+    fireEvent.press(checks()[1]);
+    expect(checks()[0]).toBeSelected();
+    expect(checks()[1]).toBeSelected();
+    expect(screen.getByTestId('editor-select-count')).toHaveTextContent(
+      '2곳 선택'
+    );
+    expect(screen.getByText('2곳 빼기')).toBeOnTheScreen();
+    press('editor-select-delete');
+    expect(dialog().getByText('2곳을 일정에서 뺄까요?')).toBeOnTheScreen();
+    expect(dialog().getByText('첫째 · 둘째')).toBeOnTheScreen();
+    press('editor-select-confirm-ok');
+    expect(cb.onDeleteSelected).toHaveBeenCalledTimes(1);
+    expect(cb.onDeleteSelected).toHaveBeenCalledWith(['p1', 'p1']);
+  });
 });

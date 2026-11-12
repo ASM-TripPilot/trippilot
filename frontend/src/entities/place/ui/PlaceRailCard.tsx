@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 
 import type { PlaceCardVM } from '../model';
 
@@ -10,7 +10,7 @@ import { HeartButton } from '@/shared/ui/HeartButton';
  * TRIP-806 · AC-M2·M4 — d01 탐색 랜딩의 "가볼 곳" 레인 카드(160폭 · 사진 160×120, 숙소 rail 카드와
  * 같은 폭 — TRIP-1105 QA #7).
  *
- * 사진은 `PlacePhoto` 가 그린다 — `imageUrl` 이 없거나 로드가 실패하면 카테고리 생성 이미지. 카드 press →
+ * 사진은 `PoiPhoto` 가 그린다 — `imageUrl` 이 없거나 로드가 실패하면 카테고리 생성 이미지. 카드 press →
  * `onPress(poiId)`.
  *
  * testID 는 d01 스킴(`explore-place-card-{poiId}`) 고정이다 — 다른 접두를 주입하던 d05 목적지 상세가
@@ -50,16 +50,17 @@ export function PlaceRailCard({
       className="w-[160px]"
     >
       <View>
-        <PlacePhoto
+        <PoiPhoto
           testID={`explore-place-card-image-${card.poiId}`}
           imageUrl={card.imageUrl}
+          imageLicense={card.imageLicense}
+          surface="card"
           category={card.category}
           poiId={card.poiId}
-          contentFit="cover"
           cachePolicy="memory-disk"
           recyclingKey={card.poiId}
           transition={120}
-          className="h-[120px] w-full rounded-card bg-surface-strong"
+          className="h-[120px] w-full rounded-card"
         />
         {save ? (
           <HeartButton

@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import type { ViewStyle } from 'react-native';
 import { Pressable, Text, View } from 'react-native';
+import { COLOR_TOKENS } from '../config';
 
 /**
  * 연결형 세그먼트 컨트롤 — 도메인 무관 공용 부품(shared/ui). 하나의 컨테이너 안에 N개의 셀을
@@ -30,7 +31,7 @@ export interface SegmentedControlProps {
 
 /** 선택 셀 흰 알약의 은은한 그림자 — 색은 토큰이 아닌 순수 그림자라 style prop 으로만 준다. */
 const SELECTED_CELL_SHADOW: ViewStyle = {
-  shadowColor: '#000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOpacity: 0.08,
   shadowRadius: 3,
   shadowOffset: { width: 0, height: 1 },

@@ -9,6 +9,7 @@ import {
 import { server } from '@/mocks/server';
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import {
   DAY1,
   busanTrip,
@@ -184,6 +185,7 @@ beforeEach(() => {
 afterEach(() => {
   server.resetHandlers();
   clearAccessToken();
+  resetPressGuard();
 });
 
 afterAll(() => server.close());
@@ -425,6 +427,26 @@ describe('🔴 A7 · AC-7 — 단일 CTA "완성 일정 보기" → 확정 일�
     expect(dest.pathname).toBe('/trips/[tripId]/itinerary');
     expect(dest.params?.tripId).toBe(TRIP_ID);
   });
+
+  // TRIP-1827 M1 — DraftPage 와 같은 문구·같은 도착지다.
+  it('연타해도 한 번만 이동하고, 창이 지나면 다시 누를 수 있다(스택에 남은 화면으로 돌아온 경우)', async () => {
+    renderPage();
+    const confirm = await screen.findByTestId('sheet-cta-button-0');
+    const FROZEN_NOW = Date.now() + 10_000;
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+
+    try {
+      fireEvent.press(confirm);
+      fireEvent.press(confirm);
+      expect(mockPush).toHaveBeenCalledTimes(1);
+
+      clock.mockReturnValue(FROZEN_NOW + 400);
+      fireEvent.press(confirm);
+      expect(mockPush).toHaveBeenCalledTimes(2);
+    } finally {
+      clock.mockRestore();
+    }
+  });
 });
 
 describe('🔴 A8 · AC-8 — 얼굴 보존 (INV-4 narrow): 도착 얼굴만 셸', () => {
@@ -643,5 +665,39 @@ describe('같은 날 같은 장소 두 번', () => {
       D2_KM,
       D3_KM,
     ]);
+  });
+});
+
+/**
+ * TRIP-1779 · AC-D3 — 추천 이유 태그 줄은 h08 완성 셸 전용이다. 같이 짜기 결과(h11)는 슬롯에 `placementReason` 이
+ * 실제로 있어도 줄을 얻지 않는다(카드가 슬롯 필드를 스스로 읽는 회귀는 카드 단위 R3a 가 소비처 전부를 한 번에 막고,
+ * 여기는 "누가 이 페이지에 파서를 새로 배선하는" 경우를 한 곳에서 지킨다).
+ */
+describe('🔴 TRIP-1779 · h11 카드엔 슬롯에 값이 있어도 추천 이유 줄이 없다', () => {
+  it('유효한 태그를 가진 5슬롯이 카드로 떠도 이유 줄은 0개다', async () => {
+    itineraryHandler = () =>
+      HttpResponse.json(
+        baseItinerary({
+          itineraryId: 'itin-796',
+          tripId: TRIP_ID,
+          generationMode: 'CO_PLAN',
+          days: [
+            day(
+              DAY1,
+              daySlots().map((s) => ({
+                ...s,
+                placementReason: '#혼자여행 #난타공연',
+              }))
+            ),
+          ],
+        })
+      );
+
+    renderPage();
+
+    await screen.findByTestId('map-sheet-shell-root');
+    // 앵커 — 카드 5장이 떠 있다(셸이 안 뜬 채 "줄 0개"로 통과하지 않게).
+    expect(screen.queryAllByTestId(/^slot-stopcard-\d/)).toHaveLength(5);
+    expect(screen.queryAllByTestId(/^slot-stopcard-reason-/)).toHaveLength(0);
   });
 });

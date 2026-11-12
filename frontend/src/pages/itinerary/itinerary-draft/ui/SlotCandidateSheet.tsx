@@ -1,17 +1,21 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import { SlotCandidateCard } from '@/entities/place';
+import type { ImageLicense } from '@/shared/api/index.schemas';
+import {
+  CheckGlyph,
+  AlertCircleGlyph,
+  ChevronRightGlyph,
+} from '@/shared/ui/glyphs';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import {
   ALL_IN_ITINERARY_HINT,
   ALL_IN_ITINERARY_TITLE,
   resolveSlotEmptyFace,
-  AlertCircleGlyph,
-  CheckGlyph,
-  ChevronRightGlyph,
   DiamondGlyph,
 } from '@/features/itinerary/index.view';
 
@@ -26,9 +30,9 @@ import {
  *
  * 무엇을 보장하나:
  *  - 헤더 제목 `{현재 장소명} 대신` + 부제 `{HH:mm}–{HH:mm} · {컨셉} 슬롯의 다른 후보 · 동선은 …`.
- *  - 후보 행(entities 카드 직접 소비 · planb 시트 선례): 사진·이름·`#태그 · 태그`·거리 — 배지·
- *    추천이유(rationale)·"이동" 라벨은 **끈다**(entities opt-in additive). 현재 행은 회색 "현재" 칩·
- *    라디오 없음(BR-U3-24).
+ *  - 후보 행(entities 카드 직접 소비 · planb 시트 선례): 사진·이름·`#태그 · 태그`·거리 + 그 아래
+ *    추천 이유 문장(TRIP-1780, 없으면 생략) — 배지·"이동" 라벨은 **끈다**(entities opt-in additive).
+ *    현재 행은 추천 이유 없이 회색 "현재" 칩·라디오 없음(BR-U3-24).
  *  - 라디오 2단계: 행 press → onSelectRadio(제어 상태만) / 선택 전 CTA 비활성·무발화 / 선택 후 1회 확정.
  *  - 0건: ◇ 아이콘 + 2줄 문구 + CTA "장소 검색"(h13). "장소 검색 ›" 링크도 h13.
  *  - PUT 실패는 인라인 오류(INV-4) — 시트는 안 닫힌다. degraded 전용 표면은 없다(응답 degraded 무표시).
@@ -68,8 +72,12 @@ export interface SlotCandidateSheetRow {
   tags?: string[];
   /** 없거나 '' 면 `category` 로 고른 생성 이미지(TRIP-1024). */
   imageUrl?: string | null;
+  /** `imageUrl` 의 공공누리 유형 — 이 행은 응답(후보·차선책)을 그대로 받으므로 응답 타입과 같은 선택 키다. 카드까지는 필수 prop 으로 넘어간다. */
+  imageLicense?: ImageLicense | null;
   /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본). */
   category?: string | null;
+  /** 후보 행 추천 이유 문장(TRIP-1780) — 없거나 빈·공백이면 문장 줄 생략. 현재 행은 넘겨도 안 그린다. */
+  rationale?: string | null;
 }
 
 export interface SlotCandidateSheetProps {
@@ -93,6 +101,8 @@ export interface SlotCandidateSheetProps {
   onPressPlaceSearch: () => void;
   /** scrim press. */
   onClose: () => void;
+  /** 후보 사진·이름 → 장소 상세(TRIP-1840). 행의 나머지는 그대로 라디오 선택. 현재 장소 행엔 없다. */
+  onPressPlace?: (poiId: string) => void;
   /** 후보 조회 상태. 생략 = 'ready'(응답 도착) — 기존 호출·0건 얼굴은 그대로다. */
   fetchState?: 'loading' | 'slow' | 'error' | 'ready';
   /** fetchState==='error' 일 때 점선 카드에 그대로 보일 문구. */
@@ -136,6 +146,7 @@ export function SlotCandidateSheet({
   errorMessage,
   onPressPlaceSearch,
   onClose,
+  onPressPlace,
   fetchState = 'ready',
   fetchErrorMessage,
   onRetryFetch,
@@ -209,7 +220,7 @@ export function SlotCandidateSheet({
             testID="itinerary-candidate-error"
             className="w-full flex-row items-center gap-sm rounded-button bg-primary-pale px-md py-sm"
           >
-            <AlertCircleGlyph size={20} tone="primaryText" />
+            <AlertCircleGlyph size={20} />
             <Text className="flex-1 font-noto text-label text-primary-text">
               {errorMessage}
             </Text>
@@ -251,16 +262,13 @@ export function SlotCandidateSheet({
             </View>
 
             {/* 0건 CTA "장소 검색" — 교체하기 자리를 대체(h13). */}
-            <Pressable
+            <Button
               testID="itinerary-candidate-empty-search"
-              accessibilityRole="button"
               onPress={onPressPlaceSearch}
-              className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
+              className="w-full"
             >
-              <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                {PLACE_SEARCH_LABEL}
-              </Text>
-            </Pressable>
+              {PLACE_SEARCH_LABEL}
+            </Button>
           </>
         ) : (
           <>
@@ -277,6 +285,7 @@ export function SlotCandidateSheet({
               tags={current.tags}
               showImage
               imageUrl={current.imageUrl}
+              imageLicense={current.imageLicense}
               category={current.category}
               coverPoiId={current.poiId}
               showRationale={false}
@@ -342,7 +351,6 @@ export function SlotCandidateSheet({
               >
                 <AlertCircleGlyph
                   size={24}
-                  tone="primaryText"
                   testID="itinerary-candidate-fetch-error-icon"
                 />
                 <Text className="text-center font-noto-bold text-card-title font-bold text-ink">
@@ -366,24 +374,29 @@ export function SlotCandidateSheet({
                     candidate={{
                       poiId: candidate.poiId,
                       distanceRange: candidate.distanceRange ?? '',
-                      rationale: '',
+                      rationale: candidate.rationale ?? '',
                     }}
                     testIDPrefix="itinerary-candidate"
                     nameKo={candidate.nameKo}
                     tags={candidate.tags}
                     showImage
                     imageUrl={candidate.imageUrl}
+                    imageLicense={candidate.imageLicense}
                     category={candidate.category}
                     coverPoiId={candidate.poiId}
                     showNameTestId
-                    showRationale={false}
+                    rationaleSentence
                     distanceTone="muted"
                     selected={isSelected}
+                    onPressPlace={
+                      onPressPlace
+                        ? () => onPressPlace(candidate.poiId)
+                        : undefined
+                    }
                     trailing={
                       isSelected ? (
                         <CheckGlyph
                           size={22}
-                          tone="primaryText"
                           testID={`itinerary-candidate-check-${candidate.poiId}`}
                         />
                       ) : undefined
@@ -409,34 +422,22 @@ export function SlotCandidateSheet({
             {/* 조회 실패면 교체하기 자리를 [다시 시도]가 대신한다(0건에서 [장소 검색]이 대신하는 것과 같다).
                 아니면 CTA "교체하기"(고정 라벨) — 선택 전/pending/조회 중 비활성. pending 라벨은 "바꾸는 중이에요". */}
             {isFetchError ? (
-              <Pressable
+              <Button
                 testID="itinerary-candidate-fetch-retry"
-                accessibilityRole="button"
                 onPress={onRetryFetch}
-                className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
+                className="w-full"
               >
-                <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                  {RETRY_LABEL}
-                </Text>
-              </Pressable>
+                {RETRY_LABEL}
+              </Button>
             ) : (
-              <Pressable
+              <Button
                 testID="itinerary-candidate-confirm"
-                accessibilityRole="button"
                 disabled={confirmDisabled}
                 onPress={onConfirm}
-                className={`h-[52px] w-full items-center justify-center rounded-button ${
-                  confirmDisabled ? 'bg-surface-strong' : 'bg-primary'
-                }`}
+                className="w-full"
               >
-                <Text
-                  className={`font-noto-bold text-[16px] font-bold ${
-                    confirmDisabled ? 'text-muted' : 'text-on-primary'
-                  }`}
-                >
-                  {isPending ? PENDING_LABEL : CONFIRM_LABEL}
-                </Text>
-              </Pressable>
+                {isPending ? PENDING_LABEL : CONFIRM_LABEL}
+              </Button>
             )}
           </>
         )}

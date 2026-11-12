@@ -101,7 +101,7 @@ from trippilot.orchestrator.dialogue.dialogue_orchestrator import (
 from trippilot.llm_gateway.gates.dialogue.dialogue_plan import DialoguePlanGate
 from trippilot.llm_gateway.workers.dialogue.dialogue_plan import DialoguePlanWorker
 from trippilot.llm_gateway.workers.dialogue.dialogue_smalltalk import DialogueSmalltalkWorker
-from trippilot.agents.unknown_handling.agent import KnowledgeTask, UnknownHandlingAgent, UnknownOutcome
+from trippilot.agents.unknown_handling.agent import KnowledgeTask, PrefetchTask, UnknownHandlingAgent, UnknownOutcome
 from trippilot.llm_gateway.gates.dialogue.dialogue_knowledge import DialogueKnowledgeGate
 from trippilot.llm_gateway.workers.dialogue.dialogue_knowledge import DialogueKnowledgeWorker
 from trippilot.domain.dialogue.plan_tools import plan_tool_specs_json
@@ -1503,6 +1503,28 @@ def test_unexpected_internal_error_converges_to_out_of_scope_not_an_exception() 
     assert any(e.stage == "orchestrator" for e in _fallbacks(b.trace))  # 침묵하지 않는다 (INV-4)
 
 
+def test_a_bug_before_classification_is_out_of_scope_even_after_a_prefetch_llm_call(monkeypatch) -> None:
+    """분류 전 단계의 버그는 범위 밖이다 — 0″ 미리 부른 장소 SQL 작성 LLM 이 호출 수를 올려 "분류를 지났다"로 읽혀 다시 시도가 나갔다
+    (2026-11-04 리뷰 재현). 분류를 지난 뒤의 버그만 다시 시도다(`test_a_failed_recommendation_choice_is_reported_as_a_turn_failure`)."""
+    from trippilot.orchestrator.dialogue import dialogue_interpreter, dialogue_orchestrator
+
+    class _PrefetchingSql:  # PlaceSqlLookup.prefetch 꼴 — 풀에 낸 일 안의 서비스 LLM 이 카운터를 올린다
+        def prefetch(self, utterance, trace_id, now, submit):
+            def write():
+                with dialogue_interpreter._llm_calls_lock:
+                    dialogue_interpreter._llm_calls.get()[0] += 1
+            submit(write)
+
+    def boom(*_a, **_k):
+        raise KeyError("pre-classification bug")
+
+    monkeypatch.setattr(dialogue_orchestrator, "check_day_areas", boom)
+    b = _build(_canned(Intent.EXPLORE_PLACES, region="제주"), ports=replace(_PORTS, place_sql=_PrefetchingSql()),
+               pool=_InlineExecutor())
+    out = b.orch.turn(_input("제주 카페 추천해줘"))
+    assert out.outcome == "OUT_OF_SCOPE" and out.reason.startswith("orchestrator_error: KeyError")
+
+
 def _frame(intent: Intent = Intent.GET_WEATHER, missing: tuple[str, ...] = ()) -> Frame:
     return Frame(intent, {}, missing, 0.9, "LLM_DIRECT")
 
@@ -1824,6 +1846,18 @@ def test_explore_empty_answer_cannot_invent_a_place_either() -> None:
     assert any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace))
 
 
+def test_general_answer_naming_a_place_the_user_never_said_falls_back_to_the_template() -> None:
+    """날씨·거리 같은 일반 답도 사실·스냅샷·사용자 말에 없는 장소는 지어낸 것 — 후보 답에만 걸던 검사(2026-11-06 Codex 리뷰).
+    사용자가 방금 말한 곳("해운대해수욕장 갈 건데")은 지어낸 게 아니다 — 전체에 `_foreign_place` 를 걸면 그것도 걸린다."""
+    foreign = json.dumps({"text": "오늘은 맑아요. 해운대해수욕장 가 보세요!", "footnote": None}, ensure_ascii=False)
+    b = _build(_canned(Intent.GET_WEATHER, answer=foreign))
+    out = b.orch.turn(_input("오늘 날씨 어때"))
+    assert any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace)) and "해운대해수욕장" not in out.answer.text
+    b = _build(_canned(Intent.GET_WEATHER, answer=foreign))
+    out = b.orch.turn(_input("해운대해수욕장 갈 건데 오늘 날씨 어때"))
+    assert not any(e.reason == "place_not_in_facts" for e in _fallbacks(b.trace)) and out.answer.text.startswith("오늘은 맑아요")
+
+
 
 class _RecordingPool(_ExplorePool):
     def __init__(self) -> None:
@@ -1901,6 +1935,52 @@ def test_explore_without_any_anchor_asks_for_the_region_once_and_the_answer_runs
     assert out.outcome == "ANSWER" and out.frames[0].match_route == "CLARIFY_ANSWER"
     assert out.frames[0].arguments == {"theme": "요즘 핫한", "region": "부산"} and "DIALOGUE_INTENT" not in b2.llm.features()
     assert out.answer.kind is AnswerKind.CANDIDATES and out.context.pending is None
+
+
+def test_weather_without_a_trip_or_a_location_asks_for_the_region_and_the_answer_fetches_it() -> None:
+    """여행도 현재 위치도 없는 "오늘 날씨" — "먼저 여행을 만들어"로 끝내지 않고 지역을 되묻는다(운영 2026-11-04 13:18, 위치가 안 실린 턴).
+    다음 턴의 "서울"은 분류 없이 그 답이고(LLM 0), 서울 중심 좌표로 날씨를 묻는다."""
+    from trippilot.domain.poi.region_centers import region_center
+    from trippilot.llm_gateway.workers.dialogue.dialogue_answer import WEATHER_ASK_REGION_TEXT
+
+    weather = _Weather(pop=30)
+    ports = HandlerPorts(poi_info=_PoiInfo(), weather=weather)
+    asked = _build(_canned(Intent.GET_WEATHER), ports=ports).orch.turn(_input("오늘 날씨", snapshot=_NO_TRIP, turn_index=3))
+    assert asked.outcome == "ARGUMENT_CLARIFY" and asked.answer is None and weather.calls == []
+    assert asked.clarify.argument == "region" and asked.clarify.question == WEATHER_ASK_REGION_TEXT
+    assert asked.context.pending.intent is Intent.GET_WEATHER and asked.context.pending.asked == "region"
+
+    b2 = _build(_canned(Intent.EXPLORE_PLACES), ports=ports)  # 분류가 불리면 탐색이 나올 것 — 불리지 않아야 한다
+    out = b2.orch.turn(_input("서울", snapshot=_NO_TRIP, context=asked.context, turn_index=4))
+    assert out.outcome == "ANSWER" and out.frames[0].match_route == "CLARIFY_ANSWER" and "DIALOGUE_INTENT" not in b2.llm.features()
+    assert weather.calls[0]["anchor"] == region_center("서울")[1]
+    assert out.answer.kind is AnswerKind.INFO and out.answer.payload["title"] == "서울 날씨"
+
+
+def test_weather_without_a_trip_but_with_a_location_answers_without_asking() -> None:
+    weather = _Weather(pop=30)
+    here = replace(_NO_TRIP, here=GeoPoint(37.57, 126.982))
+    out = _build(_canned(Intent.GET_WEATHER), ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)).orch.turn(
+        _input("오늘 날씨", snapshot=here))
+    assert out.outcome == "ANSWER" and weather.calls[0]["anchor"] == here.here
+
+
+def test_weather_today_before_the_trip_without_a_location_asks_instead_of_guessing_the_itinerary() -> None:
+    """수원에 있는데 일정의 청계천 날씨를 냈다(사용자 2026-11-06) — 여행 전 "오늘 날씨"는 위치가 없으면 여행지·일정으로 짐작하지 않고 묻는다."""
+    weather = _Weather(pop=30)
+    before = datetime(2026, 10, 10, 9, 0, tzinfo=_KST)
+    out = _build(_canned(Intent.GET_WEATHER, date="오늘"), ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)).orch.turn(
+        _input("오늘 날씨", now=before))
+    assert out.outcome == "ARGUMENT_CLARIFY" and out.clarify.argument == "region" and weather.calls == []
+
+
+def test_current_location_put_in_the_region_slot_uses_the_device_location() -> None:
+    """분류가 "현재 위치"를 region 칸에 담아도 지역이 아니다 — 표에서 못 찾아 앵커가 없었다. 실린 위치로 답한다."""
+    weather = _Weather(pop=30)
+    here = replace(_SNAP, here=GeoPoint(37.2636, 127.0286))  # 수원
+    out = _build(_canned(Intent.GET_WEATHER, region="현재 위치"), ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)).orch.turn(
+        _input("현재 위치 날씨", snapshot=here))
+    assert out.outcome == "ANSWER" and weather.calls[0]["anchor"] == here.here and out.answer.payload["title"] == "수원 날씨"
 
 
 def test_a_request_shaped_reply_to_a_pending_question_is_classified_not_swallowed() -> None:
@@ -2040,3 +2120,59 @@ def test_acceptance_emoji_is_not_the_answer_to_a_pending_question() -> None:
     turns = (RecentTurn("ASSISTANT", "어디까지 거리를 알려 드릴까요?"),)
     out = b.orch.turn(_input("👍", context=_asked_distance(), recent_turns=turns))
     assert out.frames == () and out.answer.text == LAUGH_TEXT and out.llm_calls == 0
+
+
+@pytest.mark.parametrize("answer,footnoted", [(json.dumps({"text": "우도는 제주 동쪽의 섬이에요."}, ensure_ascii=False), True),
+                                              (RuntimeError("vendor down"), False)])
+def test_intro_web_footnote_rides_only_on_an_llm_answer(monkeypatch, answer, footnoted: bool) -> None:
+    """소개(KB-5)의 웹 확인 각주는 소개를 쓴 답변 LLM 답에만 — 템플릿 답에 달면 보이지 않는 소개를 가리켰다(2026-11-04 리뷰 재현)."""
+    from tests.orchestrator.dialogue.test_dialogue_handlers import _Intro, _RefPoiInfo
+    from trippilot.orchestrator.dialogue.dialogue_handlers import INTRO_WEB_TEXT
+    from trippilot.poi_curation import place_fallback
+
+    monkeypatch.setattr(place_fallback, "web_facts", lambda: {"ref-우도": ("땅콩 아이스크림을 판다",)})
+    ports = HandlerPorts(poi_info=_RefPoiInfo(), place_intro=_Intro("우도는 제주 동쪽의 섬이다. 웹 확인: 땅콩 아이스크림을 판다."))
+    b = _build(_canned(Intent.GET_POI_INFO, place="우도", aspect="어떤 곳", answer=answer), ports=ports)
+    out = b.orch.turn(_input("우도 어떤 곳이야?"))
+    assert out.outcome == "ANSWER" and (out.answer.footnote == INTRO_WEB_TEXT) is footnoted
+
+
+# ── 후보 답의 미리 찾기 — 답에는 손대지 않는다 (UnknownHandlingAgent, 2026-11-08) ─────────────────────────────
+
+
+class _PrefetchSpy:
+    """UnknownHandlingAgent 대역 — 받은 일을 모은다. `boom` 이면 던진다(미리 찾기가 터져도 답은 같아야 한다)."""
+
+    knows_general = False
+
+    def __init__(self, *, boom: bool = False) -> None:
+        self.tasks: list = []
+        self._boom = boom
+
+    def run(self, task):
+        if self._boom:
+            raise RuntimeError("prefetch down")
+        self.tasks.append(task)
+        return UnknownOutcome()
+
+
+def _explore_with(agent) -> tuple[object, SimpleNamespace]:
+    answer = json.dumps({"text": "부산에서 요즘 인기 있는 감천문화마을과 흰여울 카페를 추천해요.", "footnote": None}, ensure_ascii=False)
+    b = _build(_canned(Intent.EXPLORE_PLACES, answer=answer, region="부산", theme="요즘 핫한"),
+               ports=HandlerPorts(poi_info=_PoiInfo(), pool_builder=_ExplorePool(), unknown=agent))
+    return b.orch.turn(_input("부산 요즘 핫한 곳 알려줘", snapshot=_NO_TRIP)), b
+
+
+def test_a_candidates_answer_hands_its_shown_places_to_prefetch() -> None:
+    spy = _PrefetchSpy()
+    out, _ = _explore_with(spy)
+    assert out.outcome == "ANSWER" and out.answer.kind is AnswerKind.CANDIDATES
+    (task,) = spy.tasks
+    # 관광 종류만 넘긴다 — 카페는 근거가 블로그뿐이라 미리 찾지 않는다(물을 때만)
+    assert isinstance(task, PrefetchTask) and task.poi_ids == (str(uuid.uuid5(uuid.NAMESPACE_DNS, "감천문화마을")),)
+
+
+def test_a_failing_prefetch_leaves_the_answer_as_it_was() -> None:
+    quiet, _ = _explore_with(_PrefetchSpy())
+    loud, _ = _explore_with(_PrefetchSpy(boom=True))
+    assert loud.outcome == "ANSWER" and loud.answer == quiet.answer  # 미리 찾기는 덧붙임이다 — 빠져도 답이 같다(INV-4)

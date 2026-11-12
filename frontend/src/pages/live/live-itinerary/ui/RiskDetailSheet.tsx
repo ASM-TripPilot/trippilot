@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import {
@@ -9,8 +10,9 @@ import {
 } from '@/features/planb/index.view';
 import type { RiskAffectedRow } from '../model/riskAffectedRow';
 import type { TriggerWatchlistRow } from '../model/triggerWatchlist';
-import { RiskWarningGlyph } from '@/features/planb/index.view';
+import { WarningFilledGlyph } from '@/shared/ui/glyphs';
 import type { TriggerSeverity } from '@/shared/api/index.schemas';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-749 · i03 위험 상세 시트(Figma 4052:2427) — 순수 바텀시트(props + 콜백만).
@@ -46,11 +48,11 @@ export interface RiskDetailSheetProps {
 // `0 -4 16 rgba(0,0,0,.08)`도 여기 단다 — 내용 컨테이너는 overflow:hidden 이라 거기 달면 잘린다.
 // 그림자 토큰이 없어 스타일 객체(리포 관례).
 const SHEET_BACKGROUND = {
-  backgroundColor: '#FFFFFF',
+  backgroundColor: COLOR_TOKENS.canvas,
   borderRadius: 0,
   borderTopLeftRadius: 24,
   borderTopRightRadius: 24,
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: -4 },
   shadowOpacity: 0.08,
   shadowRadius: 16,
@@ -97,7 +99,7 @@ export function RiskDetailSheet({
 
         <View className="gap-xs">
           <View className="flex-row items-center gap-[6px]">
-            <RiskWarningGlyph size={12} testID="planb-risk-warning" />
+            <WarningFilledGlyph size={12} testID="planb-risk-warning" />
             <Text
               testID="planb-risk-eyebrow"
               className="font-noto-bold text-caption font-bold text-primary-text"
@@ -198,16 +200,13 @@ export function RiskDetailSheet({
           </View>
         </View>
 
-        <Pressable
+        <Button
           testID="planb-risk-cta"
-          accessibilityRole="button"
           onPress={onPressAlternative}
-          className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
+          className="w-full"
         >
-          <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-            대안 보기
-          </Text>
-        </Pressable>
+          대안 보기
+        </Button>
       </BottomSheetView>
     </BottomSheet>
   );

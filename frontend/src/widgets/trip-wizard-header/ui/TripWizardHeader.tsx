@@ -1,7 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
-
-import { BackChevronGlyph } from './TripWizardHeaderGlyphs';
+import { BackChevronGlyph } from '@/shared/ui/glyphs';
 
 /**
  * 여행 만들기 위저드 공용 앱바 — 1/4(g01)·2/4(g02)·3/4(h01)이 같이 쓴다(TRIP-1266 · QA F7).

@@ -86,6 +86,14 @@ def test_only_drops_other_kinds_but_a_named_place_stays() -> None:
     assert out == ("c1", "s1", "c2")
 
 
+def test_named_places_beyond_the_count_stay_but_the_overrun_is_noted() -> None:
+    """"카페는 한 곳만, A·B 카페는 꼭" — 이름이 이기되(#1283) 넘긴 사실은 침묵하지 않는다(2026-11-06 Codex 리뷰)."""
+    out, notes = _apply(["c1", "c2", "f1"], counts=((PoiCategory.CAFE, 1),), keep=["c1", "c2"])
+    assert out == ("c1", "c2", "f1") and notes == ["nl_category_over: CAFE 2/1 named"]
+    out, notes = _apply(["c1", "c2", "f1"], counts=((PoiCategory.CAFE, 1),), keep=["c1"])
+    assert out == ("c1", "f1") and notes == []
+
+
 # ── ④ 배선 — 최종 일정 ─────────────────────────────────────────────
 
 def _poi(pid: str, name: str, lat: float, cat: PoiCategory) -> Poi:

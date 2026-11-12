@@ -52,16 +52,6 @@ spec:
               value: "true"
             - name: SERVICE_AUTH_REQUIRE_TOKEN
               value: "true"
-            - name: REDIS_HOST
-              value: {{ required "config.redisHost is required" .Values.config.redisHost | quote }}
-            - name: REDIS_PORT
-              value: {{ .Values.config.redisPort | quote }}
-            - name: SPRING_DATA_REDIS_HOST
-              value: {{ .Values.config.redisHost | quote }}
-            - name: SPRING_DATA_REDIS_PORT
-              value: {{ .Values.config.redisPort | quote }}
-            - name: SPRING_DATA_REDIS_SSL_ENABLED
-              value: "true"
             - name: AI_URL
               value: http://ai:8000
             - name: TRIPPILOT_AI_SCHEDULE_MODE

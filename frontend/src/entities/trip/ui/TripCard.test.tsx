@@ -237,7 +237,7 @@ describe('⋯ 버튼과 삭제 메뉴', () => {
    * TRIP-1055 · h06 작성중 카드의 ⋯ 버튼과 삭제 메뉴 — 카드는 **props 만 받아 그린다**.
    *
    * 무엇을 보장하나:
-   *  - `onPressDelete` 를 받은 카드만 ⋯ 를 그린다(안 받으면 기존 카드 그대로).
+   *  - TRIP-1786 · `onPressMenu` 를 받은 카드만 ⋯ 를 그린다(삭제 콜백과 무관 — 삭제 불가 카드도 ⋯ 로 설정·고정을 연다).
    *  - ⋯ 는 `onPressMenu` 만 올린다 — 카드 이동(`onPress`)도 삭제(`onPressDelete`)도 안 부른다.
    *  - `menuOpen` 이면 메뉴 상자와 '삭제' 항목이 뜨고, 항목은 `onPressDelete` 만 올린다.
    *  - AC-10: ⋯ 는 버튼 역할·"여행 메뉴" 라벨·44 터치(hitSlop). 모양·열림 색·메뉴 치수는 실화면 몫(TRIP-1367).
@@ -274,14 +274,34 @@ describe('⋯ 버튼과 삭제 메뉴', () => {
     return [(s.top ?? 0) + (s.bottom ?? 0), (s.left ?? 0) + (s.right ?? 0)];
   }
 
-  describe('🔴 TRIP-1055 · ⋯ 는 onPressDelete 를 받은 카드에만 있다', () => {
-    it('onPressDelete 를 안 주면 ⋯ 가 없다 (기존 소비처 무변경)', () => {
-      // 준비·실행 — 작성중 카드인데 삭제 콜백 없음.
-      render(<TripCard testIDPrefix="my-trip" vm={vm()} onPress={noop} />);
+  describe('🔴 TRIP-1055 · TRIP-1786 · ⋯ 는 onPressMenu 를 받은 카드에 있다', () => {
+    it('onPressMenu 를 안 주면 삭제 콜백이 있어도 ⋯ 가 없다 (기존 소비처 무변경)', () => {
+      // 준비·실행 — 작성중 카드, 삭제 콜백은 있고 메뉴 콜백은 없다.
+      render(
+        <TripCard
+          testIDPrefix="my-trip"
+          vm={vm()}
+          onPress={noop}
+          onPressDelete={noop}
+        />
+      );
 
       // 단언 — 배지는 뜬다(앵커), ⋯ 는 없다.
       expect(screen.getByTestId('my-trip-badge-t1')).toBeOnTheScreen();
       expect(screen.queryByTestId('my-trip-menu-t1')).toBeNull();
+    });
+
+    it('TRIP-1786 · onPressMenu 만 주고 삭제 콜백이 없어도 ⋯ 가 있다 (여행 중·지난 카드 자리)', () => {
+      render(
+        <TripCard
+          testIDPrefix="my-trip"
+          vm={vm({ badge: 'live' })}
+          onPress={noop}
+          onPressMenu={noop}
+        />
+      );
+
+      expect(screen.getByTestId('my-trip-menu-t1')).toBeOnTheScreen();
     });
 
     it('⋯ 를 누르면 onPressMenu 만 올라가고, 카드 이동·삭제는 안 불린다', () => {
@@ -361,5 +381,218 @@ describe('⋯ 버튼과 삭제 메뉴', () => {
       expect(36 + vertical).toBeGreaterThanOrEqual(44);
       expect(36 + horizontal).toBeGreaterThanOrEqual(44);
     });
+  });
+
+  // TRIP-1786 · 메뉴 항목 — 「여행 설정」 · 「맨 위에 고정/고정 해제」 · 구분선 · 「삭제」, 그리고 고정 표식.
+  describe('🔴 TRIP-1786 · 메뉴 항목과 고정 표식 (카드는 props 만 받아 그린다)', () => {
+    /**
+     * 새 props(모두 선택): `onPressSettings` · `onTogglePin` · `pinned` · `pinDisabled`. 항목은 자기 콜백이 있을 때만 뜨고,
+     * 구분선은 「삭제」가 뜨고 그 위에 다른 항목이 있을 때만 뜬다. testID 는 `my-trip-menu-{settings|pin|divider|delete}-{id}`,
+     * 고정 표식은 `my-trip-pinned-{id}`(글자 「고정」). 압정 모양·팝오버가 사진 영역에 잘리는지는 생김새라 jest 몫이 아니다(6-b).
+     */
+    const ITEM = /^my-trip-menu-(settings|pin|divider|delete)-t1$/;
+
+    function renderOpen(over: Record<string, unknown> = {}) {
+      const handlers = {
+        onPress: jest.fn(),
+        onPressSettings: jest.fn(),
+        onTogglePin: jest.fn(),
+        onPressDelete: jest.fn(),
+      };
+      render(
+        <TripCard
+          testIDPrefix="my-trip"
+          vm={vm()}
+          menuOpen
+          onPressMenu={noop}
+          {...handlers}
+          {...over}
+        />
+      );
+      return handlers;
+    }
+
+    it('세 항목이 「여행 설정」 → 「맨 위에 고정」 → 구분선 → 「삭제」 순서로 뜬다', () => {
+      renderOpen();
+
+      expect(screen.getAllByTestId(ITEM).map((el) => el.props.testID)).toEqual([
+        'my-trip-menu-settings-t1',
+        'my-trip-menu-pin-t1',
+        'my-trip-menu-divider-t1',
+        'my-trip-menu-delete-t1',
+      ]);
+      expect(screen.getByTestId('my-trip-menu-settings-t1')).toHaveTextContent(
+        '여행 설정'
+      );
+      expect(screen.getByTestId('my-trip-menu-pin-t1')).toHaveTextContent(
+        '맨 위에 고정'
+      );
+      expect(screen.getByTestId('my-trip-menu-delete-t1')).toHaveTextContent(
+        '삭제'
+      );
+    });
+
+    it('삭제 콜백이 없으면 「삭제」와 구분선이 없다 — 설정·고정만', () => {
+      renderOpen({ onPressDelete: undefined });
+
+      expect(screen.getAllByTestId(ITEM).map((el) => el.props.testID)).toEqual([
+        'my-trip-menu-settings-t1',
+        'my-trip-menu-pin-t1',
+      ]);
+    });
+
+    it('항목마다 자기 콜백만 1번 올린다 — 카드 이동·다른 항목 콜백은 안 불린다', () => {
+      const h = renderOpen();
+
+      fireEvent.press(screen.getByTestId('my-trip-menu-settings-t1'));
+      expect(h.onPressSettings).toHaveBeenCalledTimes(1);
+      fireEvent.press(screen.getByTestId('my-trip-menu-pin-t1'));
+      expect(h.onTogglePin).toHaveBeenCalledTimes(1);
+
+      expect(h.onPressDelete).not.toHaveBeenCalled();
+      expect(h.onPress).not.toHaveBeenCalled();
+    });
+
+    it('pinned 면 항목 글자가 「고정 해제」, 아니면 「맨 위에 고정」', () => {
+      renderOpen({ pinned: true });
+
+      expect(screen.getByTestId('my-trip-menu-pin-t1')).toHaveTextContent(
+        '고정 해제'
+      );
+    });
+
+    it('pinDisabled 면 고정 항목만 막힌다 — 막힘 표시 · 눌러도 콜백 0 · 설정·삭제는 그대로', () => {
+      const h = renderOpen({ pinDisabled: true });
+      const pin = screen.getByTestId('my-trip-menu-pin-t1');
+
+      expect(pin).toBeDisabled();
+      fireEvent.press(pin);
+      expect(h.onTogglePin).not.toHaveBeenCalled();
+
+      expect(screen.getByTestId('my-trip-menu-settings-t1')).not.toBeDisabled();
+      expect(screen.getByTestId('my-trip-menu-delete-t1')).not.toBeDisabled();
+    });
+
+    it.each<[string, Partial<MyTripCardVM>]>([
+      ['작성중', { badge: 'draft' }],
+      [
+        '여행 중(고정 대상이 아닌 자동 맨 위여도 표식은 그린다)',
+        { badge: 'live' },
+      ],
+    ])(
+      'pinned 카드(%s)는 닫혀 있어도 「고정」 표식이 상태 배지 앞에 뜬다',
+      (_l, over) => {
+        render(
+          <TripCard
+            testIDPrefix="my-trip"
+            vm={vm(over)}
+            onPress={noop}
+            onPressMenu={noop}
+            pinned
+          />
+        );
+
+        expect(screen.getByTestId('my-trip-pinned-t1')).toHaveTextContent(
+          '고정'
+        );
+        expect(
+          screen
+            .getAllByTestId(/^my-trip-(pinned|badge)-t1$/)
+            .map((el) => el.props.testID)
+        ).toEqual(['my-trip-pinned-t1', 'my-trip-badge-t1']);
+      }
+    );
+
+    it('pinned 가 아니면 표식이 없다', () => {
+      render(
+        <TripCard
+          testIDPrefix="my-trip"
+          vm={vm()}
+          onPress={noop}
+          onPressMenu={noop}
+        />
+      );
+
+      expect(screen.getByTestId('my-trip-badge-t1')).toBeOnTheScreen();
+      expect(screen.queryByTestId('my-trip-pinned-t1')).toBeNull();
+    });
+  });
+});
+
+// TRIP-1785 · 지난 카드의 「기록 보기 ›」 — additive 옵셔널 prop `onPressRecords`.
+describe('🔴 TRIP-1785 TC10 · 「기록 보기 ›」 링크 슬롯 — onPressRecords 가 있을 때만, 상태문 자리에', () => {
+  /** hitSlop(숫자 또는 {top,bottom,left,right}) 의 세로 합. */
+  function verticalSlop(value: unknown): number {
+    if (typeof value === 'number') return value * 2;
+    const s = (value ?? {}) as { top?: number; bottom?: number };
+    return (s.top ?? 0) + (s.bottom ?? 0);
+  }
+
+  it('onPressRecords 를 주면 링크가 뜨고, 눌러도 링크 콜백만 1번 — 카드 onPress 는 안 불린다', () => {
+    // 준비
+    const onPress = jest.fn();
+    const onPressRecords = jest.fn();
+    render(
+      <TripCard
+        vm={vm()}
+        onPress={onPress}
+        onPressRecords={onPressRecords}
+        testIDPrefix="my-trip"
+      />
+    );
+
+    // 실행
+    const link = screen.getByTestId('my-trip-records-link-t1');
+    fireEvent.press(link);
+
+    // 단언 — 글자는 「기록 보기」로 시작(뒤 › 는 글리프든 글자든 허용: 정규식)
+    expect(link).toHaveTextContent(/^기록 보기/);
+    expect(link.props.accessibilityRole).toBe('button');
+    expect(onPressRecords).toHaveBeenCalledTimes(1);
+    expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it('링크가 상태문(extra) 자리를 대신한다 — 둘이 함께 뜨지 않는다', () => {
+    render(
+      <TripCard
+        vm={vm({ extra: '일정 확정' })}
+        onPress={noop}
+        onPressRecords={noop}
+        testIDPrefix="my-trip"
+      />
+    );
+
+    expect(screen.getByTestId('my-trip-records-link-t1')).toBeOnTheScreen();
+    expect(screen.queryByTestId('my-trip-extra-t1')).toBeNull();
+  });
+
+  it('onPressRecords 가 없으면 링크가 없고 상태문은 그대로 — 기존 소비처 무회귀 짝', () => {
+    render(
+      <TripCard
+        vm={vm({ extra: '일정 확정' })}
+        onPress={noop}
+        testIDPrefix="my-trip"
+      />
+    );
+
+    expect(screen.queryByTestId('my-trip-records-link-t1')).toBeNull();
+    expect(screen.getByTestId('my-trip-extra-t1')).toHaveTextContent(
+      '일정 확정'
+    );
+  });
+
+  it('터치 영역: 보이는 높이 18(Figma) + hitSlop 세로 합이 44 이상', () => {
+    render(
+      <TripCard
+        vm={vm()}
+        onPress={noop}
+        onPressRecords={noop}
+        testIDPrefix="my-trip"
+      />
+    );
+
+    const link = screen.getByTestId('my-trip-records-link-t1');
+
+    expect(18 + verticalSlop(link.props.hitSlop)).toBeGreaterThanOrEqual(44);
   });
 });

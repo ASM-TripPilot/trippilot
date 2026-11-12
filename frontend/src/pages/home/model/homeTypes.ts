@@ -1,5 +1,7 @@
 import type { ImageSourcePropType } from 'react-native';
 
+import type { ImageLicense } from '@/shared/api/index.schemas';
+
 // 홈 "발견·영감 피드" 프레젠테이션 화면의 prop 계약(TRIP-316 · 라이브 Figma 2091:1357).
 // HomeScreen은 이 타입만 알고 서버·네비게이션을 모른다 — 네트워크·라우팅은 이 계약 밖
 // (repo-trap: 홈 전용 서버 API 없음). 구 세대 "여행 상태 대시보드" 계약(trip·nextPlan·
@@ -15,6 +17,8 @@ export interface HomeCollectionCard {
   badge: string;
   /** 카드 배경 사진 URI(TRIP-694). `resolveAssetSource(...).uri`로 푼 문자열, jest·웹에선 null(사진이 없으면 카테고리 생성 이미지). */
   imageUrl?: string | null;
+  /** `imageUrl` 의 공공누리 유형 — 필수 키(끊기면 tsc). 픽스처는 TYPE1·TYPE3·null 을 섞는다. */
+  imageLicense: ImageLicense | null | undefined;
   /** 실데이터 장소 id(TRIP-1209) — 목록 key 와 생성 이미지 변형 해시에 쓴다(픽스처엔 없다). */
   poiId?: string;
   /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본) — `badge` 는 얼굴마다 뜻이 갈려 쓰지 않는다. 픽스처엔 없다(폴백). */
@@ -39,6 +43,8 @@ export interface HomeSpotCard {
   tag: string;
   /** 카드 배경 사진 URI(TRIP-694). jest·웹에선 null(사진이 없으면 카테고리 생성 이미지). */
   imageUrl?: string | null;
+  /** `imageUrl` 의 공공누리 유형 — 필수 키(끊기면 tsc). */
+  imageLicense: ImageLicense | null | undefined;
   /** 실데이터 장소 id(TRIP-1049) — 있을 때만 저장 하트를 그린다. 생성 이미지 변형 해시에도 쓴다. 픽스처엔 없다. */
   poiId?: string;
   /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본) — `tag` 는 해시태그라 쓰지 않는다. 픽스처엔 없다(폴백). */
@@ -117,8 +123,10 @@ export interface TripHeroData {
   ctaLabel: string;
   /** '부산 여행' — 여행명 타이틀 */
   title: string;
-  /** 지역 커버 이미지(번들) — 있으면 히어로 배경으로 쓴다. 서울·부산·제주 밖이면 없음(매거진 사진 폴백). */
+  /** 지역 커버 이미지(번들) — 있으면 히어로 배경으로 쓴다. 번들에 없는 지역이면 없음(매거진 사진 폴백). */
   coverSource?: ImageSourcePropType | null;
+  /** TRIP-1806 · 첫 목적지와 다른 시도의 그림을 골랐을 때 그 이름(`tripCoverLabel`). */
+  coverLabel?: string | null;
   /** '6월 10일 – 6월 13일 · 3박 4일 · 2명' — 기간·박수·인원(소요시간 아님, INV-3) */
   meta: string;
 }
@@ -134,7 +142,7 @@ export interface PastTrip {
 }
 
 /** planning 브릿지행 / postTrip 공유행 — 같은 softNote 슬롯, 카피·버튼만 다름. */
-export interface HomeSoftNote {
+interface HomeSoftNote {
   /** '담은 곳 3곳이 아직 일정에 없어요' / '공유 카드로 남기기' */
   title: string;
   /** '남은 자리에 넣어볼까요' / '사진·동선을 카드 한 장으로' */
@@ -239,11 +247,13 @@ export interface HomeScreenProps {
   onPressSavedStays?: () => void;
   /**
    * saved-menu 담은 장소·저장 숙소 개수 배지(TRIP-695, 전부 옵셔널·additive) — 열림+count≥1
-   * 일 때만 미니 FAB 우상단에 핑크 배지를 그린다(0/미지정/음수→미표시, BR-U1-06/09). 값은
+   * 일 때만 미니 FAB 우상단에 핑크 배지를 그린다(0/미지정/음수→미표시, BR-U1-06/09). `null`(TRIP-1754)은 목록을 못 받은 "모름"이라 `–` 배지를 그린다. 값은
    * 라우트가 `savedPoiIds.length`·`useSavedStays().savedCount` 에서 뽑아 주입한다.
    */
-  savedPlacesCount?: number;
-  savedStaysCount?: number;
+  savedPlacesCount?: number | null;
+  savedStaysCount?: number | null;
+  /** 홈 종 미읽음 개수(TRIP-1783, 옵셔널·additive) — 1 이상이면 종 안에 숫자 배지. 0/null(모름)/미지정은 배지 없음. */
+  unreadCount?: number | null;
   /** 담은 곳 saved-menu 열림 상태(TRIP-494) — 라우트 소유(화면 useState 0건). 미지정=닫힘 */
   savedMenuOpen?: boolean;
   /** 담은 곳 saved-menu 하트/닫기 토글 press → 라우트가 open 을 뒤집는다 */

@@ -49,6 +49,7 @@ from trippilot.orchestrator.dialogue.dialogue_handlers import (
     _planb_reason,
     CANDIDATE_REASON,
     HANDLERS,
+    INTRO_WEB_TEXT,
     NEXT_ACTION_TYPES,
     AnswerKind,
     DayView,
@@ -371,6 +372,8 @@ def test_resolve_day_reads_a_weekday_only_when_the_trip_has_exactly_one() -> Non
     long_trip = _snapshot((), trip=replace(_TRIP, start_date=date(2026, 10, 18), end_date=date(2026, 10, 26)))
     assert resolve_day("일요일", long_trip, _D2) is None  # 10-18·10-25 — 어느 일요일인지 모른다
     assert resolve_day("수요일", long_trip, _D2) == date(2026, 10, 21)
+    for said in ("다음 주 월요일에 쉬어?", "지난주 월요일", "담주 월요일"):  # 여행 안의 그 요일이 아니다 — 넘겨짚지 않는다
+        assert resolve_day(said, _SNAP, _D2) is None, said
 
 
 def test_resolve_day_reads_a_month_day_inside_a_year_crossing_trip() -> None:
@@ -484,6 +487,75 @@ def test_handoff_intents_are_text_with_the_dispatcher_action(intent: Intent, act
     assert facts.kind is AnswerKind.TEXT and facts.payload is None and facts.quick_replies == ()
     assert [(a.type, a.label) for a in facts.next_actions] == [(action, label)]
     assert facts.template_text == fallback_answer_text(intent, {})
+
+
+def _replan_action(utterance: str, target_date: str | None = None, snapshot: TurnSnapshot = _SNAP) -> dict[str, str]:
+    args = {"target_date": target_date} if target_date else {}
+    return _run(HANDLERS[Intent.REPLAN], replace(_ctx(snapshot, args), utterance=utterance)).next_actions[0].params
+
+
+def test_replan_carries_what_was_said_to_the_replan_screen() -> None:
+    """"3시 이후로 바꿔줘"가 버튼만 남으면 시각이 사라진다 — 말은 입력 칸 초기값으로."""
+    assert _replan_action("3시 이후로 바꿔줘") == {"prefill": "3시 이후로 바꿔줘"}
+    assert _replan_action("오늘 일정 저녁부터 짜줘", "오늘") == {"prefill": "오늘 일정 저녁부터 짜줘"}
+    assert _run(HANDLERS[Intent.REPLAN], _ctx()).next_actions[0].params == {}  # 말이 없는 턴
+    assert len(_replan_action("가" * 501)["prefill"]) == 500  # 앱 시작 요청이 400 이 되지 않게
+
+
+def test_replan_opens_the_future_day_that_was_said_without_the_day_word() -> None:
+    """(_NOW = 둘째 날) 날 말은 칸에서 뗀다 — 지난 메시지의 버튼을 다음 날 누르면 "내일"이 하루 밀린다."""
+    assert _replan_action("내일 일정 3시 이후로 바꿔줘", "내일") == {"prefill": "일정 3시 이후로 바꿔줘", "targetDate": _D3.isoformat()}
+    assert _replan_action("내일 일정 3시 이후로 바꿔줘") == {"prefill": "일정 3시 이후로 바꿔줘", "targetDate": _D3.isoformat()}  # 분류가 칸을 안 채워도
+    assert _replan_action("3시 이후로 바꿔줘", "내일") == {"prefill": "3시 이후로 바꿔줘", "targetDate": _D3.isoformat()}  # 말에 날 말이 없다
+
+
+@pytest.mark.parametrize("said,day", [
+    ("어제 일정 3시 이후로 바꿔줘", "어제"),      # 지난 날 — 앱 시작이 409
+    ("첫날 일정 3시 이후로 바꿔줘", "첫날"),
+    ("다음 날 일정 3시 이후로 바꿔줘", "다음 날"),  # 못 읽는 날 — 오늘로 열면 다른 날 요청이 오늘을 바꾼다
+    ("주말 일정 3시 이후로 바꿔줘", "주말"),
+])
+def test_replan_does_not_carry_a_request_for_a_day_it_cannot_open(said, day) -> None:
+    assert _replan_action(said, day) == {}
+
+
+def test_replan_does_not_open_a_day_outside_the_trip_or_without_a_schedule() -> None:
+    ends_today = replace(_SNAP, trip=TripInfo("trip-1", ("제주",), _D1, _D2, "IN_TRIP"))
+    assert _replan_action("내일 일정 3시 이후로 바꿔줘", "내일", ends_today) == {}
+    partial = _snapshot(tuple((d.date, d.slots) for d in _SNAP.days if d.date != _D3))  # 내일 일정이 아직 없다
+    assert _replan_action("내일 일정 3시 이후로 바꿔줘", "내일", partial) == {}
+
+
+@pytest.mark.parametrize("ack", ["응", "웅", "넹", "네", "네 부탁해요", "네, 부탁해요", "그래 그렇게 해줘", "응, 그렇게 해줘", "좋아요!", "ok", "오키", "넵 ㅎㅎ", "네~^^", "해주세요"])
+def test_replan_does_not_carry_a_short_acceptance(ack) -> None:
+    assert _replan_action(ack) == {}
+
+
+@pytest.mark.parametrize("said", [
+    "네시 이후로", "네시부터 해줘", "네시까지만", "네 시까지", "응 저녁부터", "네 오전에만", "어 저녁부터", "그래 밤까지", "좋아 저녁부터 짜줘", "그렇게 말고 저녁부터",
+    "오케이 오후부터", "그래도 저녁부터", "예약 취소됐어", "어제 너무 피곤해", "좋아 저녁부터 다시 짜줘",
+])
+def test_replan_does_not_swallow_a_request_that_starts_like_an_acceptance(said) -> None:
+    assert _replan_action(said).get("prefill"), said
+
+
+def test_replan_keeps_the_day_of_an_accepted_offer() -> None:
+    """"응" + 분류가 수락한 제안에서 실은 날 — 실을 말은 없어도 그 날을 연다."""
+    assert _replan_action("응", "내일") == {"targetDate": _D3.isoformat()}
+    assert _replan_action("네 부탁해요", "오늘") == {}
+
+
+@pytest.mark.parametrize("said", [
+    "두 번째 일정부터 다시 짜줘", "마지막 장소 빼고 다시 짜줘", "세 번째 코스부터 3시 이후로 바꿔줘",  # 순번은 장소다
+    "내일 등산이라 오늘은 일찍 끝낼래", "내일 일찍 일어나야 해서 일찍 끝낼래", "내일 비 온대서 일정 바꿔줘", "오늘 일찍 끝내고 내일 더 놀래",  # 사유·오늘 얘기
+])
+def test_replan_without_a_day_slot_does_not_read_a_day_from_other_words(said) -> None:
+    assert _replan_action(said) == {"prefill": said}
+
+
+def test_replan_without_a_day_slot_reads_the_day_at_the_head_of_the_sentence() -> None:
+    """분류는 날을 말한 문장의 10% 에서 칸을 비운다(실측 2026-11-07) — 그중 흔한 꼴이 "내일은"이다."""
+    assert _replan_action("내일은 3시 이후로 바꿔줘") == {"prefill": "3시 이후로 바꿔줘", "targetDate": _D3.isoformat()}
 
 
 def test_replan_goes_to_replan_in_trip_and_regenerate_otherwise() -> None:
@@ -763,6 +835,105 @@ def test_weather_unknown_region_and_no_slot_stays_empty() -> None:
     assert facts.status is FactStatus.EMPTY and _types(facts) == ["OPEN_ITINERARY_METHOD"]
 
 
+# ── 현재 위치(O-U8-5 — 2026-10-20 사용자 결정 "포그라운드 현재 위치를 턴 컨텍스트에 싣는다") ──────────────
+# 운영 2026-11-03 16:20: 여행·지역 없이 "오늘 날씨" → 앵커가 없어 날씨를 묻지도 않고 "확인할 수 없어요". 사용자: "위치추적해서
+# 날씨 찾으면 되잖아". 백엔드는 위치 동의가 켜진 턴에만 좌표를 싣는다 — 여기 오는 `here` 는 이미 동의를 거쳤다.
+_HERE_SEOUL = GeoPoint(37.5700, 126.9820)  # 서울 시청 근처
+_HERE_SEA = GeoPoint(36.5, 131.5)  # 동해 한가운데 — 표의 어느 지역과도 멀다
+
+
+def test_weather_without_a_trip_asks_at_the_device_location() -> None:
+    snap = replace(_snapshot((), trip=None, status=None), here=_HERE_SEOUL)
+    weather = _Weather(pop=30)
+    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(snap, ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)))
+    assert weather.calls == [{"anchor": _HERE_SEOUL, "days": (_D2,), "now": _NOW}]
+    assert facts.status is FactStatus.OK and facts.payload["title"] == "서울 날씨"  # 제목은 가장 가까운 표 지역
+    assert facts.detail == {"date": _D2.isoformat(), "anchor": "서울"}
+
+
+def test_weather_device_location_far_from_any_region_is_called_current_location() -> None:
+    snap = replace(_snapshot((), trip=None, status=None), here=_HERE_SEA)
+    weather = _Weather(pop=10)
+    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(snap, ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)))
+    assert weather.calls[0]["anchor"] == _HERE_SEA
+    assert facts.payload["title"] == "현재 위치 날씨" and facts.detail["anchor"] == "현재 위치"
+
+
+def test_weather_another_day_without_a_trip_guides_to_a_trip_even_with_a_location() -> None:
+    """현재 위치는 '오늘'만 대신한다 — 여행 없이 "내일 날씨"면 위치 동의가 꺼진 턴과 같은 여행 만들기 안내다. 위치가 있다는 이유로
+    "지금 날씨를 확인할 수 없어요"로 막혔다(2026-11-04 리뷰 재현)."""
+    weather = _Weather(pop=30)
+    snap = replace(_snapshot((), trip=None, status=None), here=_HERE_SEOUL)
+    facts = _run(HANDLERS[Intent.GET_WEATHER], _ctx(snap, arguments={"date": "내일"},
+                                                    ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)))
+    assert facts.needs_trip and weather.calls == []
+
+
+def test_weather_today_before_the_trip_asks_where_the_user_is_not_the_trip_region() -> None:
+    """여행 전(제주 여행, 지금 서울)에 "오늘 날씨" — 오늘 있는 곳은 제주가 아니다. 현재 위치가 없으면 종전처럼 여행 지역."""
+    before = datetime(2026, 10, 10, 9, 0, tzinfo=_KST)
+    weather = _Weather(pop=20)
+    snap = replace(_snapshot(()), here=_HERE_SEOUL)
+    _run(HANDLERS[Intent.GET_WEATHER], _ctx(snap, arguments={"date": "오늘"}, now=before,
+                                            ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)))
+    assert weather.calls[0]["anchor"] == _HERE_SEOUL and weather.calls[0]["days"] == (date(2026, 10, 10),)
+
+
+def test_weather_asks_for_a_region_only_without_a_trip_a_said_region_or_a_usable_location() -> None:
+    """앱이 위치를 못 실은 턴(권한 없음·옛 빌드)의 "오늘 날씨"가 여행 만들기 안내로 끝났다(운영 2026-11-04) — 그때만 지역을 묻는다."""
+    ask = HANDLERS[Intent.GET_WEATHER].ask
+    no_trip = _snapshot((), trip=None, status=None)
+    assert ask(_ctx(no_trip))[0] == "region"
+    assert ask(_ctx(no_trip, {"region": "부산"})) is None
+    assert ask(_ctx(replace(no_trip, here=_HERE_SEOUL))) is None  # 오늘 여기
+    assert ask(_ctx(replace(no_trip, here=_HERE_SEOUL), {"date": "내일"}))[0] == "region"  # 현재 위치는 '오늘'만 대신한다
+    assert ask(_ctx(_SNAP)) is None and ask(_ctx(_snapshot((), trip=_TRIP))) is None  # 여행이 있으면 그 여행으로
+
+
+def test_weather_today_is_where_the_user_is_before_the_itinerary_but_after_a_said_region() -> None:
+    """오늘 날씨는 지금 있는 곳 — 수원에 있는데 오늘 일정의 청계천 날씨를 냈다(사용자 2026-11-06). 말한 지역은 그보다 먼저고,
+    오늘이 아닌 날(여행 첫날)은 현재 위치가 대신하지 않는다."""
+    said = _Weather(pop=70)
+    _run(HANDLERS[Intent.GET_WEATHER], _ctx(replace(_SNAP, here=_HERE_SEOUL), arguments={"region": "부산"},
+                                            ports=HandlerPorts(poi_info=_PoiInfo(), weather=said)))
+    assert said.calls[0]["anchor"] == region_center("부산")[1]
+    today = _Weather(pop=70)
+    _run(HANDLERS[Intent.GET_WEATHER], _ctx(replace(_SNAP, here=_HERE_SEOUL), ports=HandlerPorts(poi_info=_PoiInfo(), weather=today)))
+    assert today.calls[0]["anchor"] == _HERE_SEOUL  # 오늘 일정의 우도가 아니라
+    tomorrow = _Weather(pop=70)
+    _run(HANDLERS[Intent.GET_WEATHER], _ctx(replace(_SNAP, here=_HERE_SEOUL), arguments={"date": "내일"},
+                                            ports=HandlerPorts(poi_info=_PoiInfo(), weather=tomorrow)))
+    assert tomorrow.calls[0]["anchor"] != _HERE_SEOUL  # 내일은 일정 장소
+    first_day = _Weather(pop=10)
+    before = datetime(2026, 10, 10, 9, 0, tzinfo=_KST)
+    _run(HANDLERS[Intent.GET_WEATHER], _ctx(replace(_snapshot((), status=None), here=_HERE_SEOUL), now=before,
+                                            ports=HandlerPorts(poi_info=_PoiInfo(), weather=first_day)))
+    assert first_day.calls[0]["anchor"] == region_center("제주")[1] and first_day.calls[0]["days"] == (_D1,)
+
+
+def test_weather_before_the_trip_asks_where_the_user_is_today_but_not_while_travelling() -> None:
+    """여행 전 "오늘 날씨"(위치 없음)를 여행지·일정으로 짐작하지 않고 묻는다. 여행 중엔 묻지 않고 오늘 일정 장소 — 위치를 못 싣는 폰으로
+    여행하는 사람이 매번 질문을 받지 않게. 날짜 칸이 비어도 말에 '오늘'이 있으면 오늘이다(비면 여행 첫날로 갔다)."""
+    ask = HANDLERS[Intent.GET_WEATHER].ask
+    before = datetime(2026, 10, 10, 9, 0, tzinfo=_KST)
+    assert ask(_ctx(_SNAP, {"date": "오늘"}, now=before))[0] == "region"
+    assert ask(replace(_ctx(_SNAP, now=before), utterance="오늘 날씨 어때"))[0] == "region"
+    assert ask(_ctx(_SNAP, now=before)) is None  # 날을 안 말한 여행 전 "날씨 어때"는 여행 첫날 일정 질문 그대로
+    assert ask(_ctx(_SNAP, {"date": "오늘"})) is None  # 여행 중 — 오늘 일정 장소로 답한다
+    assert ask(_ctx(replace(_SNAP, here=_HERE_SEOUL), {"date": "오늘"}, now=before)) is None  # 위치가 있으면 그곳
+    ended = datetime(2026, 10, 25, 9, 0, tzinfo=_KST)
+    assert ask(_ctx(_SNAP, {"date": "오늘"}, now=ended))[0] == "region"  # 여행이 끝난 뒤도 여행지에 있지 않다
+
+
+def test_weather_today_word_without_a_date_slot_means_today_not_the_first_trip_day() -> None:
+    weather = _Weather(pop=10)
+    before = datetime(2026, 10, 10, 9, 0, tzinfo=_KST)
+    ctx = replace(_ctx(replace(_SNAP, here=_HERE_SEOUL), now=before, ports=HandlerPorts(poi_info=_PoiInfo(), weather=weather)),
+                  utterance="오늘 날씨 어때")
+    _run(HANDLERS[Intent.GET_WEATHER], ctx)
+    assert weather.calls[0]["anchor"] == _HERE_SEOUL and weather.calls[0]["days"] == (date(2026, 10, 10),)
+
+
 def test_distance_uses_previous_slot_as_origin_and_keeps_only_distance_strings() -> None:
     poi_info, transit = _PoiInfo(), _Transit()
     ctx = _ctx(arguments={"destination": "해녀의집"}, ports=HandlerPorts(poi_info=poi_info, transit=transit))
@@ -849,7 +1020,21 @@ def test_distance_to_a_registered_place_outside_the_itinerary_finds_it_by_exact_
     assert transit.calls[0]["destination"] == _COORD["천지연폭포"] and facts.detail["destination"] == "천지연폭포"
 
 
-@pytest.mark.parametrize("name", ["세종문화회관", "인천공항", "서울대공원", "서울역", "부산 역"])
+def test_distance_from_a_transit_hub_uses_the_hub_point_not_the_city_center() -> None:
+    """"서울역에서 경복궁까지" — 역은 교통 거점 표(카카오 좌표)로 푼다. 지역 표 꼬리 '역'이 서울 중심(시청)을 잡아 약 1.2km(실제 2.8km)가
+    됐었다(2026-11-02 개발). 거점은 어림이 아니라 그 시설의 점이라 "(지역 중심 기준)"을 달지 않는다."""
+    from trippilot.domain.poi.transit_hubs import transit_hub
+
+    found = [PlaceRow(_U["천지연폭포"], "경복궁", "명소", "서울특별시", "종로구", False, False)]
+    facts, transit, finder = _free_distance({"origin": "서울역", "destination": "경복궁"}, found)
+    (call,) = transit.calls
+    assert call["origin"] == transit_hub("서울역").point and call["destination"] == _COORD["천지연폭포"]
+    assert finder.calls == [("find", "경복궁", "제주")]  # 역은 등록 장소에서 찾지 않는다
+    assert facts.status is FactStatus.OK and facts.payload["rows"] == [{"label": "구간", "value": "약 1.2km"}]
+    assert facts.detail["origin"] == "서울역" and "지역 중심" not in json.dumps(facts.notes, ensure_ascii=False)
+
+
+@pytest.mark.parametrize("name", ["세종문화회관", "인천공항철도", "서울대공원", "파주역", "부산 역사관"])
 def test_a_place_name_containing_a_region_name_is_looked_up_not_taken_as_that_region(name: str) -> None:
     """표 이름 뒤에 다른 낱말이 붙으면 지역이 아니다 — "세종문화회관"이 세종시 중심(124km 밖)이 되던 것(2026-10-30 Codex 리뷰).
     시·군 이름의 역도 — "서울역→경복궁"이 서울 중심에서 재 약 1.2km(실제 직선 2.8km, 2026-11-02 개발). 동네 역은 위 강남역처럼 중심."""
@@ -859,9 +1044,17 @@ def test_a_place_name_containing_a_region_name_is_looked_up_not_taken_as_that_re
     assert transit.calls[0]["destination"] == _COORD["천지연폭포"]
 
 
-def test_distance_with_an_unknown_end_stays_empty_and_never_calls_transit() -> None:
-    facts, transit, _ = _free_distance({"origin": "우도", "destination": "롯데월드"}, [])
+@pytest.mark.parametrize("arguments, note", [
+    ({"origin": "우도", "destination": "롯데월드"}, "못 찾은 쪽: 목적지 — 출발지는 '우도'(으)로 찾았다."),
+    ({"origin": "롯데월드", "destination": "우도"}, "못 찾은 쪽: 출발지 — 목적지는 '우도'(으)로 찾았다."),
+    ({"origin": "롯데월드", "destination": "에버랜드"}, "못 찾은 쪽: 출발지·목적지"),
+])
+def test_distance_with_an_unknown_end_stays_empty_and_never_calls_transit(arguments: dict, note: str) -> None:
+    facts, transit, finder = _free_distance(arguments, [])
     assert transit.calls == [] and facts.status is FactStatus.EMPTY
+    # 두 끝을 다 찾아 보고 찾은 쪽을 밝힌다 — "서울역과 경복궁을 찾지 못했어요"(경복궁은 찾힌다, 2026-11-03 개발)
+    assert any(n.startswith(note) for n in facts.notes)
+    assert len(finder.calls) == sum(1 for v in arguments.values() if v in ("롯데월드", "에버랜드"))  # 지역 끝은 찾지 않는다
 
 
 def test_leap_day_looks_at_next_year_when_this_year_has_none() -> None:
@@ -1564,6 +1757,24 @@ def test_poi_info_about_a_place_carries_a_kb5_intro_for_the_answer_only() -> Non
     assert "섬" not in str(facts.payload)  # 카드(payload)에는 싣지 않는다 — 위키 원문 출처 표기
 
 
+def test_poi_info_footnotes_an_intro_that_carries_web_facts_but_not_a_card_only_one(monkeypatch) -> None:
+    from trippilot.orchestrator.dialogue.dialogue_orchestrator import DialogueAnswer
+    from trippilot.poi_curation import place_fallback
+
+    monkeypatch.setattr(place_fallback, "web_facts", lambda: {"ref-우도": ("땅콩 아이스크림을 판다",)})
+    web = replace(_ctx(arguments={"place": "우도", "aspect": "어떤 곳"},
+                       ports=HandlerPorts(poi_info=_RefPoiInfo(), place_intro=_Intro("우도는 제주 동쪽의 섬이다. 웹 확인: 땅콩 아이스크림을 판다.")),
+                       remaining_ms=3000), utterance="우도 어떤 곳이야?")
+    facts = _run(HANDLERS[Intent.GET_POI_INFO], web)
+    assert facts.intro_footnote == INTRO_WEB_TEXT and any("웹 확인:" in n for n in facts.notes)
+    # 소개를 쓰는 것은 답변 LLM 뿐 — 템플릿 답(LLM 실패·시한)에는 소개가 없으니 "소개에는 웹 확인…" 각주도 달지 않는다(2026-11-04 리뷰 재현)
+    assert facts.footnote is None and DialogueAnswer.from_facts(facts).footnote is None
+    card_only, _ = _intro_run({"place": "우도", "aspect": "어떤 곳"}, "우도 어떤 곳이야?")  # 기본 소개 문장에는 웹 사실이 없다
+    assert card_only.intro_footnote is None
+    monkeypatch.setenv(place_fallback.SWITCH, "off")  # 꺼져 있으면 대체 문서가 안 쓰인다
+    assert _run(HANDLERS[Intent.GET_POI_INFO], web).intro_footnote is None
+
+
 def test_poi_info_hours_or_fee_question_does_not_fetch_an_intro() -> None:
     facts, intro = _intro_run({"place": "우도"}, "우도 몇 시까지 해?")
     assert intro.calls == [] and "intro" not in facts.detail
@@ -1968,6 +2179,9 @@ def test_explore_a_classified_region_outside_the_pair_wins() -> None:
     ("애월", [_row("애월 카페", "카페", "제주시", sido="제주특별자치도"), _row("성산 카페", "카페", "서귀포시", sido="제주특별자치도")], ["애월 카페"]),
     ("제주", [_row("애월 카페", "카페", "제주시", sido="제주특별자치도"), _row("성산 카페", "카페", "서귀포시", sido="제주특별자치도")],
      ["애월 카페", "성산 카페"]),  # 시·도는 시·도만
+    # 전남·광주는 한 시·도('전남광주통합특별시') — 광주는 그 안의 다섯 구. 앞글자로 대조하던 판은 광주 행을 전부 버렸다(2026-11-04 개발 DB)
+    ("광주", [_row("양림동 펭귄마을", sigungu="남구", sido="전남광주통합특별시"), _row("여수 낭만포차", "맛집", "여수시", sido="전남광주통합특별시"),
+            _row("광주 옛 이름 거리", sigungu="동구", sido="광주광역시")], ["양림동 펭귄마을", "광주 옛 이름 거리"]),
 ])
 def test_explore_sql_rows_outside_the_anchor_area_are_dropped(region: str, rows, kept) -> None:
     facts, _, _ = _explore_sql({"region": region}, rows, utterance=f"{region} 가볼 만한 곳")
@@ -2204,7 +2418,7 @@ def test_explore_asks_for_a_region_only_when_no_anchor_can_be_found() -> None:
     assert ask(_ctx(_snapshot((), trip=None, status=None), {"region": "강원도"})) is None  # 말했으면 묻지 않는다 — 못 찾으면 EMPTY
     assert ask(_ctx(_SNAP, ports=HandlerPorts(poi_info=_PoiInfo()))) is None  # 일정 근처
     assert ask(_ctx(_snapshot((), trip=_TRIP))) is None  # 여행 목적지
-    assert all(HANDLERS[i].ask is None for i in HANDLERS if i not in (Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES))
+    assert all(HANDLERS[i].ask is None for i in HANDLERS if i not in (Intent.EXPLORE_PLACES, Intent.RECOMMEND_PLACES, Intent.GET_WEATHER))
 
 
 
@@ -2542,6 +2756,18 @@ def test_explore_event_city_level_anchor_filters_by_the_address_city() -> None:
     assert _event_names(facts) == ["제주독서대전", "서귀포칠십리축제"]  # 같은 기간이면 가까운 곳부터
 
 
+def test_explore_event_gwangju_anchor_reads_the_merged_province_by_district() -> None:
+    # 주소의 시·도가 '전남광주통합특별시'면 정규식은 '전남'을 잡아 광주 행사를 버렸다 — 다음 낱말(구·시·군)로 가른다
+    gwangju = (EventInfo("tourapi-g1", "충장축제", EventType.FESTIVAL, date(2026, 10, 24), date(2026, 10, 25),
+                         GeoPoint(35.1486, 126.9177), "전남광주통합특별시 동구 금남로 245 (금남로1가)"),
+               EventInfo("tourapi-g2", "목포항구축제", EventType.FESTIVAL, date(2026, 10, 24), date(2026, 10, 25),
+                         GeoPoint(34.7880, 126.3830), "전남광주통합특별시 목포시 삼학로92번길 6"),
+               EventInfo("tourapi-g3", "봉선동 골목축제", EventType.FESTIVAL, date(2026, 10, 24), date(2026, 10, 25),
+                         GeoPoint(35.1550, 126.8600), "전남광주 남구 봉선로 208"))  # 줄인 꼴 주소도 같다
+    facts, _ = _explore_events_turn({"region": "광주", "theme": "축제"}, "이번 주말 광주 축제", events=gwangju)
+    assert _event_names(facts) == ["봉선동 골목축제", "충장축제"]  # 같은 기간이면 가까운 곳부터
+
+
 @pytest.mark.parametrize(("name", "exhibition"), [
     ("20세기 사진 거장전 - 빛, 시간을 멈추다", True), ("상설 미디어아트전", True), ("국립현대미술관 소장품전", True),
     ("세계유산 조선왕릉축전", False), ("부산돼지국밥대전", False), ("덕수궁 밤의 석조전", False), ("제주독서대전", False),
@@ -2762,3 +2988,453 @@ def test_schedule_anchor_coordinate_is_looked_up_once_for_events_and_places() ->
     _run(_EXPLORE, replace(_ctx(_SNAP, {"theme": "축제"}, ports=ports), utterance="근처에 축제 있어?"))
     anchor_lookups = [c for c in poi_info.calls if len(c["poi_ids"]) == 1]
     assert len(anchor_lookups) == 1, poi_info.calls
+
+
+# ── 장소 탐색 열린 검색(KB-5 문서 순위, 기본 꺼짐) — 규칙 순서에 섞을 뿐 장소를 더하거나 빼지 않는다 ──
+
+import logging  # noqa: E402
+import threading  # noqa: E402
+import time as _wall  # noqa: E402 — 모듈의 `time` 은 datetime.time 이다
+
+from trippilot.agents.adapters.memory_vector_store import InMemoryVectorStore  # noqa: E402
+from trippilot.agents.planb.kb_retrieval import collection_for  # noqa: E402
+from trippilot.agents.planb.place_search import PlaceSearch  # noqa: E402
+from trippilot.domain.kb import KbKind  # noqa: E402
+from trippilot.poi_curation import hybrid_rank as hr  # noqa: E402
+
+
+class _DocEmbedding:
+    dim, model_id = 3, "fake-emb"
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def embed(self, text: str):
+        self.calls.append(text)
+        return (1.0, 0.0, 0.0)
+
+    def embed_batch(self, texts):
+        return tuple(self.embed(t) for t in texts)
+
+
+class _DocStore(InMemoryVectorStore):
+    """InMemoryVectorStore + 호출 기록 · 지연(시한 시험) — 지연은 `release` 로 풀어 뒤에 남은 일꾼이 시험 뒤까지 붙잡히지 않게."""
+
+    def __init__(self, delay: float = 0.0) -> None:
+        super().__init__()
+        self.calls: list[frozenset | None] = []
+        self.delay, self.release = delay, threading.Event()
+
+    def search(self, collection, vector, top_k, *, item_ids=None):
+        self.calls.append(item_ids)
+        if self.delay:
+            self.release.wait(self.delay)
+        return super().search(collection, vector, top_k, item_ids=item_ids)
+
+
+def _cafe(name: str, ref: str, *, saved: int = 0, tags: tuple[str, ...] = ()) -> Poi:
+    return replace(_xpoi(name, PoiCategory.CAFE, tags=tags, saved=saved), source_ref=ref)
+
+
+# 규칙 순서: 인기(태그) → 저장 수. 맨 뒤 '책방 카페'만 "조용한 북카페" 근거가 있다 — 이름·태그에는 그 말이 없다(규칙 정렬이 못 읽는다)
+_DOC_CAFES = (_cafe("인기 카페", "c1", tags=("요즘 인기",)), _cafe("저장 카페", "c2", saved=9), _cafe("둘째 카페", "c3", saved=5),
+              _cafe("셋째 카페", "c4", saved=3), _cafe("책방 카페", "c5"))
+_DOC_TEXTS = {"c1": "넓은 테라스와 바다 전망", "c3": "라이브 공연이 열리는 시끌벅적한 곳", "c5": "조용한 북카페로 책을 읽으며 쉬기 좋다"}
+
+
+def _doc_search(texts: Mapping[str, str] = _DOC_TEXTS, *, delay: float = 0.0) -> tuple[PlaceSearch, _DocStore, _DocEmbedding]:
+    embedding, store = _DocEmbedding(), _DocStore(delay)
+    coll = collection_for(KbKind.POI_DESC, embedding.model_id)
+    index: dict[str, tuple[str, ...]] = {}
+    for n, (ref, text) in enumerate(texts.items()):
+        doc_id = f"overview:{ref}#0"
+        store.upsert(coll, doc_id, (1.0, 0.1 * n, 0.0), {"kb": "POI_DESC", "text": text, "poi_ref": ref, "metadata": {}})
+        index[ref] = (doc_id,)
+    return PlaceSearch(embedding, store, index=lambda: index), store, embedding
+
+
+def _run_doc(arguments: dict, searcher: PlaceSearch | None, *, pool: CandidatePool | None = None, handler=None,
+             remaining_ms: int = 7000, utterance: str = "", earlier: tuple = (), builder: _PoolBuilder | None = None,
+             clock: list[int] | None = None, place_sql=None, shown: frozenset[str] = frozenset()) -> tuple[Facts, dict[str, TaskResult]]:
+    ports = HandlerPorts(poi_info=_PoiInfo(), pool_builder=builder or _PoolBuilder(pool or _pool(*_DOC_CAFES)), place_search=searcher,
+                         place_sql=place_sql)
+    ctx = replace(_ctx(_EMPTY_SNAP, arguments, ports=ports, remaining_ms=remaining_ms), utterance=utterance, earlier=earlier,
+                  shown=shown)
+    if clock is not None:  # 흐르는 시계 — 대역(풀 조립)이 clock[0] 을 줄인다
+        ctx = replace(ctx, remaining_ms=lambda: clock[0])
+    handler = handler or _EXPLORE
+    results = {t.name: TaskResult.ok(t.name, t.fn()) for t in handler.plan(ctx)}
+    return handler.assemble(ctx, results), results
+
+
+_QUIET = {"region": "부산", "category": "CAFE", "theme": "조용한 북카페"}
+
+
+def test_open_search_absent_or_idle_keeps_the_tasks_and_facts_unchanged() -> None:
+    base, base_results = _run_doc(_QUIET, None)
+    assert set(base_results) == {"explore"} and set(base_results["explore"].value) == {"status", "candidates"}  # 종전 모양
+    # 근거 없음(NO_EVIDENCE)·게이트 닫힘(대조군) — 검색기가 있어도 Facts 는 바이트까지 같다
+    idle, idle_results = _run_doc(_QUIET, _doc_search({"c1": "넓은 테라스와 바다 전망"})[0])
+    assert idle == base and idle_results["explore"].value["doc"] == "NO_EVIDENCE"
+    assert idle_results["explore"].value["candidates"] == base_results["explore"].value["candidates"]
+    control = {"region": "부산", "category": "CAFE", "theme": "카페 추천"}
+    searcher, store, embedding = _doc_search()
+    closed, closed_results = _run_doc(control, searcher)
+    assert closed == _run_doc(control, None)[0] and closed_results["explore"].value.keys() == {"status", "candidates"}
+    assert store.calls == [] and embedding.calls == []
+
+
+def test_open_search_only_reorders_the_ranked_pool() -> None:
+    base, _ = _run_doc(_QUIET, None)
+    searcher, store, _ = _doc_search()
+    facts, results = _run_doc(_QUIET, searcher)
+    assert results["explore"].value["doc"] == "OK" and facts.status is FactStatus.OK
+    assert _names_of(base) == ["인기 카페", "저장 카페", "둘째 카페", "셋째 카페", "책방 카페"]  # 전제 — 규칙 순서
+    assert _names_of(facts)[0] == "책방 카페" and set(_names_of(facts)) == set(_names_of(base))  # 순서만 바뀐다
+    assert [p.name for p in facts.places] == _names_of(facts) and _types(facts) == ["OPEN_PLACE"] * 5  # 카드·문장 재료·버튼이 한 벌
+    (ids,) = store.calls
+    assert ids == {"overview:c1#0", "overview:c3#0", "overview:c5#0"}  # 범위의 실재 조각만(풀 밖·문서 없는 곳 제외)
+    pool = _pool(*_DOC_CAFES, _cafe("넷째 카페", "c6", saved=2), _cafe("다섯째 카페", "c7", saved=1))
+    wide, _ = _run_doc(_QUIET, _doc_search()[0], pool=pool)
+    assert _ids_of(wide) <= {str(p.poi_id) for p in pool.pois} and len(_names_of(wide)) == dh.MAX_CANDIDATES  # 후보 ⊆ 풀 (INV-1)
+    assert "책방 카페" in _names_of(wide) and "책방 카페" not in _names_of(_run_doc(_QUIET, None, pool=pool)[0])
+
+
+def test_a_slow_or_late_document_step_leaves_explore_ok_in_rule_order(caplog) -> None:
+    base, _ = _run_doc(_QUIET, None)
+    searcher, store, _ = _doc_search(delay=5.0)
+    try:
+        t0 = _wall.monotonic()
+        facts, results = _run_doc(_QUIET, searcher, remaining_ms=2500)  # 몫 min(2.8, 1.0) − 여유 0.35 = 0.65s 만 기다린다
+        assert _wall.monotonic() - t0 < 2.0
+        assert results["explore"].value["doc"] == "TIMEOUT" and results["explore"].status == "OK" and facts == base
+    finally:
+        store.release.set()
+    searcher, store, _ = _doc_search()
+    caplog.clear()  # 위 TIMEOUT 갈래의 검색기 줄은 빼고 센다(전체 실행에서는 앞 시험의 로그 설정으로 INFO 가 잡힌다)
+    with caplog.at_level(logging.INFO):
+        facts, results = _run_doc(_QUIET, searcher, remaining_ms=1500)  # 몫 0.6 − 여유 0.35 < 0.5 — 묻지도 않는다
+    assert results["explore"].value["doc"] == "BUDGET" and store.calls == [] and facts == base
+    # 묻지 않은 것도 상태 한 줄이 남는다 — 검색기 줄과 같은 꼴(조용한 강등 금지, INV-4)
+    assert [r.getMessage() for r in caplog.records if "place_search" in r.getMessage()] == [
+        f"place_search status=BUDGET left_ms=600 trace={_TRACE}"]
+
+
+class _SpendingPool(_PoolBuilder):
+    """풀 조립이 시계를 `spend_ms` 만큼 먹는다 — 문서 단계 시한이 풀 조립·정렬에 쓴 시간을 빼는지 본다."""
+
+    def __init__(self, pool: CandidatePool, clock: list[int], spend_ms: int) -> None:
+        super().__init__(pool)
+        self._clock, self._spend = clock, spend_ms
+
+    def build(self, request, now):
+        self._clock[0] -= self._spend
+        return super().build(request, now)
+
+
+def test_document_wait_subtracts_the_time_spent_before_the_search() -> None:
+    base, _ = _run_doc(_QUIET, None)
+    # 몫 min(2.8, 2.5×0.4)=1.0 · 풀 조립 0.6s → 남은 0.4 − 여유 0.35 < 0.5 — 묻지 않는다(지난 시간을 안 빼면 0.65s 를 기다린다)
+    searcher, store, _ = _doc_search()
+    clock = [2500]
+    facts, results = _run_doc(_QUIET, searcher, builder=_SpendingPool(_pool(*_DOC_CAFES), clock, 600), clock=clock)
+    assert results["explore"].value["doc"] == "BUDGET" and store.calls == [] and facts == base
+    # 몫 2.8 · 풀 조립 0.3s → 검색에 넘긴 시한 = 2.8 − 0.3 − 0.35
+    searcher, store, _ = _doc_search()
+    waits: list[float] = []
+    real = searcher.search
+    searcher.search = lambda q, refs, wait_s, **kw: waits.append(wait_s) or real(q, refs, wait_s, **kw)
+    clock = [7000]
+    _, results = _run_doc(_QUIET, searcher, builder=_SpendingPool(_pool(*_DOC_CAFES), clock, 300), clock=clock)
+    assert results["explore"].value["doc"] == "OK" and waits == [pytest.approx(2.8 - 0.3 - dh._DOC_MARGIN_S)]
+
+
+def test_document_wait_is_capped_when_sql_runs_beside_the_search() -> None:
+    # SQL 이 나란히 도는 턴은 섞인 순서가 0건·실패 대체용뿐이라 대기를 `_DOC_BESIDE_SQL_S` 로 자른다 — 행사 작업만 붙은 턴(SQL 미배정)은 그대로
+    waits: list[float] = []
+
+    def spying():
+        searcher, _, _ = _doc_search()
+        real = searcher.search
+        searcher.search = lambda q, refs, wait_s, **kw: waits.append(wait_s) or real(q, refs, wait_s, **kw)
+        return searcher
+
+    _run_doc(_QUIET, spying(), place_sql=_PlaceSql(()))
+    _run_doc(_QUIET, spying())
+    assert waits == [dh._DOC_BESIDE_SQL_S, pytest.approx(2.8 - dh._DOC_MARGIN_S)]
+
+
+def test_a_broken_index_leaves_explore_ok_in_rule_order() -> None:
+    def broken():
+        raise TypeError("ids is null")
+
+    base, _ = _run_doc(_QUIET, None)
+    embedding, store = _DocEmbedding(), _DocStore()
+    facts, results = _run_doc(_QUIET, PlaceSearch(embedding, store, index=broken))
+    assert results["explore"].status == "OK" and results["explore"].value["doc"] == "ERROR" and facts == base
+
+
+# 운영 분기 — DIALOGUE_SQL 배정이면 지역 앵커 탐색은 NL2SQL 이 반경 탐색과 나란히 돈다. 행이 있으면 SQL 행이 답이다 — 묘사형 말로 문서
+# 순위가 섞여도(BR-AO-27 — 2026-11-04 '묘사형 말이면 열린 검색 우선' 개정은 실 NL2SQL 쌍대 판정 13사례 SQL 4 : 섞음 5, p=1.0 으로 철회).
+# 섞인 순서는 반경이 답일 때만 쓰인다(SQL 0건·실패)
+_SQL_ROWS = (_row("부산 카페 A", "카페", None, sido="부산광역시"), _row("부산 카페 B", "카페", None, sido="부산광역시"))
+# 근거가 넷(c2·c3·c4·c5) — 보일 다섯 곳 대부분에 문서 순위가 붙는다(철회 전 전환 문턱 3곳을 넘는 꼴)
+_DOC_TEXTS_WIDE = {**_DOC_TEXTS, "c2": "조용한 골목 안쪽의 작은 카페", "c3": "조용한 분위기에서 쉬어 가는 카페", "c4": "조용히 쉬기 좋은 2층 카페"}
+
+
+@pytest.mark.parametrize("rows", [[], None])  # SQL 0건 · SQL 폴백(실패)
+def test_explore_answers_from_the_mixed_radius_order_when_sql_has_no_rows(rows) -> None:
+    """SQL 이 행을 못 내면 반경이 답이다 — 열린 검색이 돌았으면 문서 순위가 섞인 순서(반경이 답인 사례 쌍대 판정 4:0, BR-AO-36)."""
+    base, _ = _run_doc(_QUIET, None, place_sql=_PlaceSql(rows))
+    searcher, store, embedding = _doc_search(_DOC_TEXTS_WIDE)
+    facts, results = _run_doc(_QUIET, searcher, place_sql=_PlaceSql(rows))
+    assert set(results) == {"explore", "explore_sql"} and not (results["explore_sql"].value or {}).get("candidates")  # 전제
+    assert results["explore"].value["doc"] == "OK" and len(store.calls) == 1 and embedding.calls  # SQL 과 나란히 검색이 돈다
+    assert facts.status is FactStatus.OK and _names_of(facts)[:2] == ["둘째 카페", "책방 카페"]  # 근거 있는 곳이 앞으로 — 섞인 순서
+    assert _names_of(facts) == [c["name"] for c in results["explore"].value["candidates"]]  # 반경 결과 그대로
+    assert set(_names_of(facts)) == set(_names_of(base)) and _names_of(facts) != _names_of(base)  # 규칙 순서의 순열
+    assert [p.name for p in facts.places] == _names_of(facts) and _types(facts) == ["OPEN_PLACE"] * 5  # 카드·문장 재료·버튼 한 벌
+    pool = _pool(*_DOC_CAFES, _cafe("넷째 카페", "c6", saved=2), _cafe("다섯째 카페", "c7", saved=1))
+    wide, _ = _run_doc(_QUIET, _doc_search(_DOC_TEXTS_WIDE)[0], pool=pool, place_sql=_PlaceSql(rows))
+    assert _ids_of(wide) <= {str(p.poi_id) for p in pool.pois}  # 후보 ⊆ 반경 풀 (INV-1)
+
+
+@pytest.mark.parametrize(("arguments", "texts", "delay", "remaining_ms", "status"), [
+    ({"region": "부산", "category": "CAFE", "theme": "카페 추천"}, _DOC_TEXTS, 0.0, 7000, None),  # 게이트 닫힘 — 검색을 안 돈다
+    (_QUIET, {"c1": "넓은 테라스와 바다 전망"}, 0.0, 7000, "NO_EVIDENCE"),  # 근거 없음 — 순서가 안 섞였다
+    (_QUIET, _DOC_TEXTS, 0.0, 7000, "OK"),  # 섞였다(근거 한 곳)
+    (_QUIET, _DOC_TEXTS_WIDE, 0.0, 7000, "OK"),  # 섞였다(보일 다섯 곳 중 넷에 근거) — 그래도 SQL 행이다(개정 철회)
+    (_QUIET, _DOC_TEXTS, 5.0, 2500, "TIMEOUT"),  # 시한 — 규칙 순서 그대로다
+])
+def test_explore_with_sql_rows_keeps_the_sql_answer_whatever_the_document_rank(arguments, texts, delay, remaining_ms,
+                                                                                status) -> None:
+    searcher, store, _ = _doc_search(texts, delay=delay)
+    try:
+        facts, results = _run_doc(arguments, searcher, remaining_ms=remaining_ms, place_sql=_PlaceSql(list(_SQL_ROWS)))
+    finally:
+        store.release.set()
+    assert results["explore"].value.get("doc") == status
+    assert _names_of(facts) == ["부산 카페 A", "부산 카페 B"]  # SQL 행이 답이다
+    assert facts == _run_doc(arguments, None, remaining_ms=remaining_ms, place_sql=_PlaceSql(list(_SQL_ROWS)))[0]  # 꺼짐과 바이트 동일
+
+
+def test_explore_with_sql_rows_and_no_searcher_keeps_the_legacy_shape() -> None:
+    """꺼짐(검색기 미배선) — 작업 모양은 종전 그대로(반경 결과에 doc 칸 없음), 답은 SQL 행. 검색기가 있어도 게이트가 닫힌 말은
+    꺼짐과 Facts 가 바이트까지 같다(위 매개 시험의 첫 줄)."""
+    facts, results = _run_doc(_QUIET, None, place_sql=_PlaceSql(list(_SQL_ROWS)))
+    assert set(results) == {"explore", "explore_sql"} and set(results["explore"].value) == {"status", "candidates"}
+    assert _names_of(facts) == ["부산 카페 A", "부산 카페 B"] and facts.detail == {"anchor": "부산", "anchor_kind": "region"}
+
+
+def test_recommend_with_sql_rows_keeps_the_mixed_radius_order() -> None:
+    searcher, store, _ = _doc_search()
+    facts, results = _run_doc({**_QUIET, "count": "2"}, searcher, handler=_RECOMMEND, place_sql=_PlaceSql(list(_SQL_ROWS)))
+    assert set(results) == {"explore", "explore_sql"} and results["explore"].value["doc"] == "OK" and len(store.calls) == 1
+    assert _names_of(facts) == ["책방 카페", "인기 카페"]
+
+
+def test_category_names_are_kind_words_of_the_open_search() -> None:
+    # 분류 종류 한글명은 BM25 낱말·항에서 빠지는 종류 이름이어야 한다(`hybrid_rank._KIND_WORDS`) — 종류가 늘면 거기도 더한다
+    assert set(dh._CATEGORY_KO.values()) <= hr._KIND_WORDS
+
+
+def test_recommend_keeps_its_count_cut_with_open_search() -> None:
+    args = {**_QUIET, "count": "2"}
+    facts, _ = _run_doc(args, _doc_search()[0], handler=_RECOMMEND)
+    assert facts.intent is Intent.RECOMMEND_PLACES and _names_of(facts) == ["책방 카페", "인기 카페"]
+    assert facts.detail["pick_count"] == 2 and _types(facts) == ["OPEN_PLACE"] * 2
+
+
+# (인자, 발화, 앞 대화, 게이트가 열리는 주제인가) — 사이·밤은 게이트가 열리는 주제로만 둔다: 그 가드 하나 때문에만 닫히게
+# ("조용한 바"는 게이트가 먼저 닫아 밤 가드를 지워도 통과했다 — 리뷰 2026-11-04). 이어 묻기는 돈다(아래 사슬 시험)
+@pytest.mark.parametrize(("arguments", "utterance", "earlier", "gate_opens"), [
+    ({"region": "홍대와 이태원 사이", "theme": "조용한 북카페"}, "", (), True),  # 두 곳 사이 — 가운데 순서가 먼저다
+    ({"region": "부산", "theme": "재즈 라이브 바"}, "", (), True),  # 밤 말(주제) — 야경·나이트라이프 순서가 먼저다
+    ({"region": "부산", "theme": "재즈 공연"}, "부산 재즈 바 추천해줘", (), True),  # 밤 말은 발화에서도 읽는다
+    ({"region": "부산", "category": "NIGHT_VIEW", "theme": "재즈 공연"}, "", (), True),  # 밤 분류
+    ({"region": "서울", "theme": "가볼 만한"}, "", (), False),  # 대조군
+    ({"region": "부산", "category": "FOOD", "theme": "맛집"}, "", (), False),
+    ({"region": "제주", "category": "CAFE", "theme": "카페 추천"}, "", (), False),
+    ({"region": "서울", "theme": "핫플레이스"}, "", (), False),
+    ({"region": "서울", "theme": "인기 많은"}, "", (), False),
+    ({"region": "부산", "category": "FOOD", "theme": "먹을 만한"}, "", (), False),
+    ({"region": "제주", "theme": "관광지들"}, "", (), False),
+])
+def test_open_search_does_not_run_between_two_places_at_night_or_for_controls(arguments, utterance, earlier,
+                                                                              gate_opens) -> None:
+    kind = dh._CATEGORY_KO.get(arguments.get("category") or "")
+    assert (hr.open_query(arguments["theme"], kind, generic=dh._GENERIC_WORDS) is not None) is gate_opens  # 전제
+    searcher, store, embedding = _doc_search()
+    _, results = _run_doc(arguments, searcher, utterance=utterance, earlier=earlier)
+    assert store.calls == [] and embedding.calls == [] and "doc" not in results["explore"].value
+
+
+def test_a_place_named_by_the_query_stays_above_document_evidence() -> None:
+    """질의의 이름 낱말('북카페')이 이름에 든 곳은 섞은 순서에서도 개요 2-gram 근거만 있는 곳보다 앞이다(리뷰 2026-11-04: 전주/비빔밥의
+    하숙영가마솥비빔밥이 다섯 곳 밖으로 났다)."""
+    pool = _pool(_cafe("북카페 숨", "c9"), *_DOC_CAFES)  # 이름에 '북카페' — 문서는 없다
+    assert _names_of(_run_doc(_QUIET, None, pool=pool)[0])[0] == "북카페 숨"  # 전제 — 규칙 1위
+    rule: list = []
+    dh._explore_rank(pool.pois, "CAFE", "조용한 북카페", fuse=lambda r: rule.append(r) or r)
+    assert hr.fuse(rule[0], {"c5": 1})[0].name == "책방 카페"  # 전제 — 층 없이 섞으면 이름 적중이 밀린다
+    facts, results = _run_doc(_QUIET, _doc_search()[0], pool=pool)
+    assert results["explore"].value["doc"] == "OK"
+    assert _names_of(facts)[:2] == ["북카페 숨", "책방 카페"]  # 적중 층이 먼저, 그 아래 층 안에서 근거 있는 곳이 앞으로
+
+
+# 이어 묻기 — 규칙은 첫 턴과 같다: SQL 이 도는 턴(분류가 대화에 근거 있는 지역을 채워 `_carry` 가 없다)이면 SQL 행, 앞 요청 지역을
+# 이어받아 SQL 이 돌지 않는 턴이면 섞인 반경 순서(BR-AO-27 · BR-AO-36)
+_TWELVE = tuple(_cafe(f"카페{i:02d}", f"c{i}", saved=100 - i) for i in range(1, 13))
+
+
+def test_follow_up_answers_from_sql_rows_when_sql_runs_and_from_the_mixed_radius_when_the_region_is_carried() -> None:
+    texts = {f"c{i}": "조용한 북카페로 책을 읽으며 쉬기 좋다" for i in range(5, 13)}  # 규칙 순서 뒤쪽에만 근거
+    pool = _pool(*_TWELVE)
+    first, _ = _run_doc(_QUIET, _doc_search(texts)[0], pool=pool, place_sql=_PlaceSql(list(_SQL_ROWS)))
+    assert _names_of(first) == ["부산 카페 A", "부산 카페 B"]  # 첫 턴 — SQL 행
+    earlier = (("USER", "부산 조용한 북카페 알려줘"), ("ASSISTANT", "부산 카페 A가 조용해요."))
+    more = [_row("부산 카페 C", "카페", None, sido="부산광역시")]
+    again, again_results = _run_doc(_QUIET, _doc_search(texts)[0], pool=pool, utterance="더 알려줘", earlier=earlier,
+                                    shown=frozenset(_ids_of(first)), place_sql=_PlaceSql(more))
+    assert set(again_results) == {"explore", "explore_sql"} and _names_of(again) == ["부산 카페 C"]  # 지역을 채웠다 — SQL 이 돈다
+    carried = {"category": "CAFE", "theme": "조용한 북카페"}  # 분류가 지역을 비웠다 — 앞 요청의 부산을 잇는다
+    facts, results = _run_doc(carried, _doc_search(texts)[0], pool=pool, utterance="더 알려줘", earlier=earlier,
+                              shown=frozenset(_ids_of(first)), place_sql=_PlaceSql(more))
+    off, _ = _run_doc(carried, None, pool=pool, utterance="더 알려줘", earlier=earlier, shown=frozenset(_ids_of(first)),
+                      place_sql=_PlaceSql(more))
+    assert set(results) == {"explore"} and results["explore"].value["doc"] == "OK"  # SQL 은 돌지 않는다
+    assert _names_of(facts) == [c["name"] for c in results["explore"].value["candidates"]] and _names_of(facts) != _names_of(off)
+
+
+# 조건 2c — #1915 야경 다섯 문장. 밤 말이라 열린 검색을 돌지 않는다(야경 순서가 먼저 — BR-AO-36): 스위치를 켜도 SQL 행 그대로(Facts 바이트까지
+# 꺼짐과 같다). 풀·문서는 밤 가드만 없으면 반경이 이기게 차려 둔다(야경 셋 + 다른 종류 둘, 다섯 곳 모두 '동네·풍경·보기' 근거) — 가드를 지우면
+# 주제 게이트가 열리는 말부터 깨진다. 인자는 분류가 낼 꼴: 종류 NIGHT_VIEW(한글 이름 '야경') + 주제, 그리고 분류가 종류를 비우고 주제에서
+# 밤 말을 뺀 꼴(발화의 밤 말이 막는다)
+_NIGHT_DOC_POOL = _pool(*(replace(_xpoi(name, category), source_ref=ref) for name, category, ref in (
+    ("남산 야경 전망대", PoiCategory.NIGHT_VIEW, "n1"), ("한강 야경 다리", PoiCategory.NIGHT_VIEW, "n2"),
+    ("언덕 야경 쉼터", PoiCategory.NIGHT_VIEW, "n3"), ("옛 골목 명소", PoiCategory.SIGHT, "n4"),
+    ("강변 공원", PoiCategory.NATURE, "n5"))))
+_NIGHT_DOC_TEXTS = {f"n{i}": "동네 풍경을 내려다보기 좋은 곳으로 해가 지면 풍경이 바뀐다" for i in range(1, 6)}
+
+
+def _night_sql_rows(region: str) -> list[PlaceRow]:
+    sido = "서울특별시" if region == "서울" else "부산광역시"
+    return [_row(f"{region} 전망 A", "야경", None, sido=sido), _row(f"{region} 전망 B", "야경", None, sido=sido)]
+
+
+@pytest.mark.parametrize(("utterance", "arguments"), [
+    ("서울 야경 보기 좋은 동네 있어?", {"region": "서울", "category": "NIGHT_VIEW", "theme": "야경 보기 좋은 동네"}),
+    ("야경 좋은 데 알려줘 서울", {"region": "서울", "category": "NIGHT_VIEW", "theme": "야경 좋은"}),
+    ("부산 야경 명소 알려줘", {"region": "부산", "category": "NIGHT_VIEW", "theme": "야경 명소"}),
+    ("부산 밤 풍경 예쁜 곳 어디야?", {"region": "부산", "category": "NIGHT_VIEW", "theme": "밤 풍경 예쁜"}),
+    ("서울에서 야경 예쁜 동네 추천해줘", {"region": "서울", "category": "NIGHT_VIEW", "theme": "야경 예쁜 동네"}),
+    ("서울 야경 보기 좋은 동네 있어?", {"region": "서울", "theme": "보기 좋은 동네"}),
+    ("야경 좋은 데 알려줘 서울", {"region": "서울", "theme": "좋은 데"}),
+    ("부산 야경 명소 알려줘", {"region": "부산", "theme": "명소"}),
+    ("부산 밤 풍경 예쁜 곳 어디야?", {"region": "부산", "theme": "풍경 예쁜"}),
+    ("서울에서 야경 예쁜 동네 추천해줘", {"region": "서울", "theme": "예쁜 동네"}),
+])
+def test_night_view_sentences_keep_the_sql_answer_with_open_search_on(utterance, arguments) -> None:
+    searcher, store, embedding = _doc_search(_NIGHT_DOC_TEXTS)
+    on, results = _run_doc(arguments, searcher, pool=_NIGHT_DOC_POOL, utterance=utterance,
+                           place_sql=_PlaceSql(_night_sql_rows(arguments["region"])))
+    off, _ = _run_doc(arguments, None, pool=_NIGHT_DOC_POOL, utterance=utterance,
+                      place_sql=_PlaceSql(_night_sql_rows(arguments["region"])))
+    assert on == off and _names_of(on) == [f"{arguments['region']} 전망 A", f"{arguments['region']} 전망 B"]
+    assert store.calls == [] and embedding.calls == [] and "doc" not in results["explore"].value  # 검색을 돌지도 않는다
+
+
+# ── 후보 답의 미리 찾기 (UnknownHandlingAgent, 2026-11-08 사용자 결정 "찾다가 나온 장소의 빈 칸은 웹으로 채우자") ─────────────
+
+
+class _Prefetcher:
+    """UnknownHandlingAgent 대역 — 넘겨받은 일만 모은다(뒤에서 도는 일은 에이전트 테스트 몫)."""
+
+    def __init__(self) -> None:
+        self.tasks: list = []
+
+    def run(self, task):
+        self.tasks.append(task)
+        return UnknownOutcome()
+
+
+class _PrefetchRows:
+    """POI_INFO 대역 — 준 행 그대로(이름·종류·영업시간 문구·입장료만 본다 — 실물 providers.poi_info 의 칸 이름)."""
+
+    def __init__(self, rows: list[dict]) -> None:
+        self.rows, self.calls = rows, []
+
+    def fetch(self, params: dict) -> InfoPacket:
+        self.calls.append(params)
+        pois = [r for r in self.rows if PoiId(r["poi_id"]) in params["poi_ids"]]
+        return InfoPacket(ProviderKind.POI_INFO, ProviderStatus.OK, {"pois": pois, "misses": []}, _fresh(params["now"]))
+
+
+class _Areas:
+    """PlaceSqlLookup 대역 — 등록 장소의 '시·도 시군구'(실물은 장소 DB 기본키 조회)."""
+
+    def __init__(self, areas: dict[str, str]) -> None:
+        self._areas, self.calls = areas, []
+
+    def areas(self, poi_ids, trace_id):
+        self.calls.append(tuple(poi_ids))
+        return {i: self._areas[i] for i in poi_ids if i in self._areas}
+
+
+def _prefetch_candidates(*places: dh.FactPlace) -> Facts:
+    payload = {"candidates": [{"poiId": p.poi_id, "name": p.name, "reason": "근처의 대안"} for p in places]}
+    return Facts(Intent.EXPLORE_PLACES, FactStatus.OK, AnswerKind.CANDIDATES, rows=(), places=places, notes=(), payload=payload,
+                 next_actions=(dh._action("OPEN_ITINERARY"),), quick_replies=(), template_text="가 볼 만한 곳을 찾아봤어요.")
+
+
+_PREFETCH_PLACES = (("s1", "해동용궁사", "명소"), ("f1", "돼지국밥집", "맛집"), ("s2", "감천문화마을", "명소"), ("m1", "신세계센텀시티", "쇼핑"))
+_PREFETCH_ROWS = [
+    {"poi_id": "s1", "name": "해동용궁사", "category": "SIGHT", "hours_label": "영업시간 정보 없음", "fee": None},
+    {"poi_id": "f1", "name": "돼지국밥집", "category": "FOOD", "hours_label": "영업시간 정보 없음", "fee": None},
+    {"poi_id": "s2", "name": "감천문화마을", "category": "SIGHT", "hours_label": "09:00~18:00", "fee": 3000},
+    {"poi_id": "m1", "name": "신세계센텀시티", "category": "SHOPPING", "hours_label": "영업시간 정보 없음", "fee": None},
+]
+_PREFETCH_AREAS = {"s1": "부산광역시 기장군", "f1": "부산광역시 서구", "s2": "부산광역시 사하구", "m1": "부산광역시 해운대구"}
+
+
+def _prefetch_ctx(agent, *, areas: dict[str, str] | None = _PREFETCH_AREAS, arguments=None):
+    rows = _PrefetchRows(_PREFETCH_ROWS)
+    finder = _Areas(areas) if areas is not None else None
+    return _ctx(arguments=arguments or {"region": "서울"}, ports=HandlerPorts(poi_info=rows, unknown=agent, place_sql=finder)), rows, finder
+
+
+def test_prefetch_hands_the_first_shown_sights_to_the_agent_and_finds_gaps_only_behind() -> None:
+    """후보 답 앞쪽 세 곳 중 관광 종류만 넘긴다(답에는 손대지 않는다). 빈 칸과 지역은 미리 찾기가 뒤에서 등록 정보·장소 DB 로 가른다 —
+    영업시간이 없으면 영업시간·입장 마감·휴무일, 쇼핑 밖에 입장료가 없으면 입장료. 조회 이름의 지역은 여행·말의 지역(여기선 서울)이 아니라
+    그곳의 시·도 시군구다(2026-11-08 검토 — 같은 이름의 다른 곳 값이 붙지 않게)."""
+    agent = _Prefetcher()
+    ctx, rows, finder = _prefetch_ctx(agent)
+    dh.prefetch_unknown(ctx, _prefetch_candidates(*(dh.FactPlace(p, n, c) for p, n, c in _PREFETCH_PLACES)))
+    (task,) = agent.tasks
+    assert task.poi_ids == ("s1", "s2")  # 맛집은 응답 때 거르고, 네 번째(쇼핑)는 넘기지 않는다
+    assert rows.calls == [] and finder.calls == []  # 등록 정보·지역 조회는 이번 턴에 하지 않는다 — 미리 찾기가 뒤에서 부른다
+    assert task.gaps(("s1", "s2")) == {"s1": ("해동용궁사 부산광역시 기장군", ("hours", "last_entry", "closed", "fee"))}
+    assert finder.calls == [("s1",)]  # 지역은 빈 칸이 있는 곳만 묻는다
+    assert task.gaps(("m1",)) == {"m1": ("신세계센텀시티 부산광역시 해운대구", ("hours", "last_entry", "closed"))}  # 쇼핑은 입장료 없음
+    assert task.gaps(("f1",)) == {}  # 지역을 알아도 등록 정보의 종류(맛집)로 한 번 더 거른다
+    assert (task.on, task.trace_id, task.now) == (ctx.today, ctx.trace_id, ctx.now)
+
+
+def test_prefetch_does_not_look_up_a_place_whose_own_region_is_unknown() -> None:
+    agent = _Prefetcher()
+    ctx, _, _ = _prefetch_ctx(agent, areas={"s2": "부산광역시 사하구"})  # s1 의 지역을 모른다
+    dh.prefetch_unknown(ctx, _prefetch_candidates(*(dh.FactPlace(p, n, c) for p, n, c in _PREFETCH_PLACES)))
+    assert agent.tasks[0].gaps(("s1",)) == {}  # 여행 지역을 대신 붙이지 않는다
+    unwired, _, _ = _prefetch_ctx(agent, areas=None)  # 장소 DB 미배선(로컬) — 지역을 알 길이 없어 찾지 않는다
+    assert dh._fact_gaps(unwired, ("s1",)) == {}
+
+
+def test_prefetch_skips_answers_without_candidates_and_a_missing_agent() -> None:
+    agent = _Prefetcher()
+    places = tuple(dh.FactPlace(p, n, c) for p, n, c in _PREFETCH_PLACES)
+    ctx, _, _ = _prefetch_ctx(agent)
+    dh.prefetch_unknown(ctx, dh.need_trip_facts(Intent.GET_POI_INFO))  # 후보 답이 아니다(장소 정보·일정·날씨 답은 물을 때 찾는다)
+    dh.prefetch_unknown(ctx, _prefetch_candidates(dh.FactPlace("f1", "돼지국밥집", "맛집")))  # 관광 종류가 없다
+    assert agent.tasks == []
+    no_agent, _, _ = _prefetch_ctx(None)
+    dh.prefetch_unknown(no_agent, _prefetch_candidates(*places))  # 에이전트 미배선 — 조용히 넘어간다

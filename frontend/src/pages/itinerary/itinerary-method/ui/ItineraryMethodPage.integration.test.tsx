@@ -551,3 +551,59 @@ describe('🔴 M5 · 거점 숙소 다시 고르기 링크 (TRIP-1011 C · TRIP-
     expect(screen.getByTestId('itinerary-method-rebase')).toBeOnTheScreen();
   });
 });
+
+describe('🔴 M6 · TRIP-1747 — 일정 조회가 404 아닌 실패면 "덮어쓸 수 있다"고 보고 확인부터 (BR-U3-18 · INV-4)', () => {
+  // 404 만 "일정 없음"이다. 500·네트워크 끊김은 "모름" — 로딩 창(M4·D2a)과 같은 fail-safe 로 확인을 연다.
+  // 확인 없이 h05 로 가면 그 뒤 생성 POST 가 기존(확정일 수도 있는) 일정을 되돌릴 길 없이 덮는다.
+  /** 실패 응답을 걸고 그린 뒤 페이지 재시도(404 아닌 실패는 3회)까지 끝나 오류로 정착할 때까지 기다린다. */
+  async function renderFailed(failure: () => Response): Promise<void> {
+    serveItinerary(server, {
+      itinerary: failure,
+      trip: () => tripFixture({ tripId: TRIP_ID }),
+      post: () => new HttpResponse(null, { status: 201 }),
+    });
+    // 재시도 대기만 줄인다 — 여기선 "재시도가 끝난 뒤(오류 정착)" 상태가 필요하다.
+    renderPage(productionLikeClient({ retryDelay: 1 }));
+    await waitFor(() => {
+      expect(log.hitsFor('GET', '/itinerary')).toBe(4);
+      expect(client.isFetching()).toBe(0);
+    });
+  }
+
+  it.each<[string, () => Response]>([
+    ['500', () => new HttpResponse(null, { status: 500 })],
+    ['네트워크 끊김', () => HttpResponse.error()],
+  ])(
+    'GET %s → 같이 짜기 확인이 뜨고 이동 0 → 계속 → must-visits(CO_PLAN)',
+    async (_label, failure) => {
+      await renderFailed(failure);
+      press('itinerary-method-copick');
+
+      expect(screen.getByTestId(CONFIRM)).toBeOnTheScreen();
+      expect(mockPush).not.toHaveBeenCalled();
+
+      // 알고 고른 것은 막지 않는다 — 계속이면 누른 방식대로 간다.
+      press(`${CONFIRM}-continue`);
+      expect(mockPush).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/trips/[tripId]/itinerary/must-visits',
+        params: { tripId: TRIP_ID, mode: 'CO_PLAN' },
+      });
+    }
+  );
+
+  it('GET 500 → 완전 AI 도 확인이 먼저 뜨고 이동 0 → 계속 → must-visits(CO_PLAN 없음) (결정 1)', async () => {
+    await renderFailed(() => new HttpResponse(null, { status: 500 }));
+    press('itinerary-method-fullai');
+
+    expect(screen.getByTestId(CONFIRM)).toBeOnTheScreen();
+    expect(mockPush).not.toHaveBeenCalled();
+
+    press(`${CONFIRM}-continue`);
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/trips/[tripId]/itinerary/must-visits',
+      params: { tripId: TRIP_ID },
+    });
+  });
+});

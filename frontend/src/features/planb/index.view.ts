@@ -6,5 +6,3 @@ export type { WatchKind, WatchStatus } from './config/watchLabels';
 export { triggerDayLabel } from './model/triggerDayLabel';
 export { triggerLabel } from './model/triggerLabel';
 export { triggerPillCopy } from './model/triggerPillCopy';
-export type { TriggerPillOptions } from './model/triggerPillCopy';
-export { AppliedAlertGlyph, RiskWarningGlyph } from './ui/PlanbGlyphs';

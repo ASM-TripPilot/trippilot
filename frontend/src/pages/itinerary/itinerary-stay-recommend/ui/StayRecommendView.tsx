@@ -5,8 +5,8 @@ import { formatDistance } from '@/entities/place';
 import { formatPrice } from '@/entities/stay';
 import { StayRecommendCard } from '@/entities/stay';
 import { withObjectParticle } from '../lib/objectParticle';
-import { LinkChevronGlyph } from '@/features/itinerary/index.view';
 import type { StayRecommendView as StayRecommendViewModel } from '../model/stayRecommend';
+import { ChevronRight16Glyph } from '@/shared/ui/glyphs';
 import type { MapPin } from '@/shared/map';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 
@@ -134,7 +134,7 @@ export function StayRecommendView({
           <Text className="font-noto-bold text-card-title font-bold text-primary-text">
             {BROWSE_LABEL}
           </Text>
-          <LinkChevronGlyph />
+          <ChevronRight16Glyph />
         </Pressable>
         {notice ? (
           <Text

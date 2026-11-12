@@ -51,7 +51,7 @@ const BUDGETS = {
     // node 버킷은 MSW 서버를 쓰지 않는다.
     'msw-unhandled': 0,
     // jest 환경 산물(EditorView 의 animatedRef 경고) — 숨기지 않고 정확값 고정. 새 사용처가 늘면 red.
-    reanimated: 59,
+    reanimated: 58,
     // 남은 act 는 타이머가 늦게 도착하는 비결정 갈래(assistantQueries·useVisitMemo·HomePage 등 TanStack notifyManager) —
     // 천장이다. 로컬 실측 17·21 / CI before 194 − 고친 결정적 174(동작 줄이기 답 144 + zustand reset 30) = 20 → max(21, 20) × 1.25 올림.
     act: 27,
@@ -70,7 +70,10 @@ const BUDGETS = {
     // 후속: CI 관찰 뒤 내린다.
     act: 228,
     // DraftPage.integration 의 렌더 중 setState 1건(앱 코드 가능성 — 새 티켓 후보, 가리지 않음).
-    other: 1,
+    // + ShareCardPage.integration 「StrictMode」 describe 의 findNodeHandle StrictMode 경고 1건(TRIP-1667) — j06 첫 얼굴이 스토리 덱이 되면서
+    //   덱의 reanimated 래퍼(진행 바·RevealItem)가 StrictMode 아래에서 한 번이라도 다시 그려지면 reanimated 가 jest 에서 findNodeHandle 을 불러
+    //   React 가 파일당 1건 낸다(문구 응답·뮤테이션 상태·일정 도착 어느 것이든 — 피하려면 테스트를 뒤틀어야 해서 node 버킷 GeneratingPage 선례처럼 셌다).
+    other: 2,
   },
 };
 

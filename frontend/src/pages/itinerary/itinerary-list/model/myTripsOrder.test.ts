@@ -576,3 +576,205 @@ describe('정렬 기준 세 가지와 저장값 해석', () => {
     });
   });
 });
+
+// TRIP-1786 · 「맨 위에 고정」 — orderMyTrips 의 네 번째 선택 인자(고정 id 집합).
+describe('TRIP-1786 · 고정 인자 — 여행 중 → 내가 고정 → 나머지, 각 묶음은 같은 비교자', () => {
+  /**
+   * 규칙(01b D2): `orderMyTrips(entries, today, compare, pinnedIds?)`. 세 묶음 — [여행 중] → [고정(여행 중 아님)] → [나머지].
+   * 묶음 안은 모두 `compare`. 인자를 안 주거나 빈 집합이면 지금 결과와 같다. 여행 중이면서 고정인 여행은 한 번만, 여행 중 묶음에 선다.
+   * 목록에 없는 고정 id 는 아무 영향이 없다(다른 기기에서 지운 여행 등). 고정은 사용자가 고른 것이라 일정이 아직 안 온(pending) 여행도 고정될 수 있다.
+   *
+   * *(개념 — 선택 인자)* 인자가 없어도 호출되는 자리. 그래서 지금 호출부·기존 테스트는 손대지 않아도 같은 결과가 나와야 한다.
+   */
+  const live = (id: string, updatedAt: string) => trip(id, updatedAt, IN);
+  const soon = (id: string, updatedAt: string) => trip(id, updatedAt, FUTURE);
+
+  it('고정 C 는 여행 중 A 다음, 나머지(B) 앞 — A, C, B (인자 없으면 A, B, C)', () => {
+    // 준비 — 최신순으로는 B(9/20) > C(9/01); A 는 여행 중(가장 옛).
+    const A = live('A', '2026-07-01T00:00:00.000Z');
+    const B = soon('B', '2026-09-20T00:00:00.000Z');
+    const C = soon('C', '2026-09-01T00:00:00.000Z');
+    const entries = [
+      entry(C, 'CONFIRMED'),
+      entry(B, 'CONFIRMED'),
+      entry(A, 'CONFIRMED'),
+    ];
+
+    // 실행
+    const without = orderMyTrips(entries, TODAY);
+    const withPin = orderMyTrips(entries, TODAY, byLatest, new Set(['C']));
+
+    // 단언
+    expect(ids(without)).toEqual(['A', 'B', 'C']);
+    expect(ids(withPin)).toEqual(['A', 'C', 'B']);
+  });
+
+  it('여행 중이면서 고정인 A 는 한 번만, 여행 중 묶음에 선다 — A, C, B', () => {
+    const A = live('A', '2026-07-01T00:00:00.000Z');
+    const B = soon('B', '2026-09-20T00:00:00.000Z');
+    const C = soon('C', '2026-09-01T00:00:00.000Z');
+
+    const ordered = orderMyTrips(
+      [entry(B, 'CONFIRMED'), entry(A, 'CONFIRMED'), entry(C, 'CONFIRMED')],
+      TODAY,
+      byLatest,
+      new Set(['A', 'C'])
+    );
+
+    expect(ids(ordered)).toEqual(['A', 'C', 'B']);
+  });
+
+  it('고정 묶음 안은 주입한 비교자를 따른다 — 이름순이면 나·다(고정) 다음 가(나머지)', () => {
+    const t1 = trip('T1', '2026-09-20T00:00:00.000Z', FUTURE, '나');
+    const t2 = trip('T2', '2026-07-01T00:00:00.000Z', FUTURE, '가');
+    const t3 = trip('T3', '2026-09-25T00:00:00.000Z', FUTURE, '다');
+
+    const ordered = orderMyTrips(
+      [entry(t3, 'CONFIRMED'), entry(t1, 'CONFIRMED'), entry(t2, 'CONFIRMED')],
+      TODAY,
+      byTitle,
+      new Set(['T1', 'T3'])
+    );
+
+    // 고정 없이 이름순이면 T2(가), T1(나), T3(다) — 고정이 먹어야 T1, T3, T2.
+    expect(ids(ordered)).toEqual(['T1', 'T3', 'T2']);
+  });
+
+  it('일정이 아직 안 온(pending) 여행도 고정하면 고정 묶음에 선다', () => {
+    const B = soon('B', '2026-09-20T00:00:00.000Z');
+    const C = soon('C', '2026-09-01T00:00:00.000Z');
+
+    const ordered = orderMyTrips(
+      [entry(B, 'CONFIRMED'), pendingEntry(C)],
+      TODAY,
+      byLatest,
+      new Set(['C'])
+    );
+
+    expect(ids(ordered)).toEqual(['C', 'B']);
+  });
+
+  it('목록에 없는 고정 id 는 아무 영향이 없고 던지지도 않는다', () => {
+    const B = soon('B', '2026-09-20T00:00:00.000Z');
+    const C = soon('C', '2026-09-01T00:00:00.000Z');
+    const entries = [entry(C, 'CONFIRMED'), entry(B, 'CONFIRMED')];
+
+    const ordered = orderMyTrips(
+      entries,
+      TODAY,
+      byLatest,
+      new Set(['ghost', 'C'])
+    );
+
+    // 없는 id(ghost)는 무시되고 C 만 고정 — 고정 없이는 B, C.
+    expect(ids(ordered)).toEqual(['C', 'B']);
+  });
+
+  describe('PBT · 세 묶음 순서 · 묶음 안 비교자 · 인자 없음 ≡ 빈 집합 · 입력 불변', () => {
+    const pinRowArb = fc.record({
+      startOffset: fc.integer({ min: -10, max: 10 }),
+      length: fc.integer({ min: 0, max: 6 }),
+      updatedMinute: fc.integer({ min: 0, max: 100_000 }),
+      itinerary: fc.constantFrom<'pending' | ItineraryStatus | undefined>(
+        'pending',
+        'CONFIRMED',
+        'PLANNED',
+        undefined
+      ),
+      pinned: fc.boolean(),
+    });
+
+    it.each([
+      ['최신순', byLatest],
+      ['이름순', byTitle],
+    ] as const)(
+      '%s — 임의 목록에서 성질이 모두 성립한다',
+      (_label, compare) => {
+        const hits = { pinnedOnly: 0, pinnedOngoing: 0, ghost: 0, mixed: 0 };
+
+        fc.assert(
+          fc.property(
+            fc.array(pinRowArb, { maxLength: 8 }),
+            fc.array(fc.constantFrom('g1', 'g2'), { maxLength: 2 }),
+            (rows, ghosts) => {
+              // 준비 — 제목은 id 라 이름순에서도 동률이 없다. 목록에 없는 고정 id(g1·g2)를 섞는다.
+              const entries: DoneBarEntry[] = rows.map((r, i) => {
+                const start = TODAY_DAY + r.startOffset;
+                const t = trip(
+                  `t${i}`,
+                  new Date(
+                    Date.UTC(2026, 0, 1) + r.updatedMinute * 60_000
+                  ).toISOString(),
+                  { startDate: isoOf(start), endDate: isoOf(start + r.length) }
+                );
+                return r.itinerary === 'pending'
+                  ? pendingEntry(t)
+                  : entry(t, r.itinerary);
+              });
+              const pinnedIds = new Set([
+                ...rows.flatMap((r, i) => (r.pinned ? [`t${i}`] : [])),
+                ...ghosts,
+              ]);
+              // 오라클 — 정수 오프셋으로 센 여행 중 집합(구현의 날짜 문자열 비교와 다른 길)
+              const isLive = (r: (typeof rows)[number]) =>
+                r.itinerary === 'CONFIRMED' &&
+                r.startOffset <= 0 &&
+                r.startOffset + r.length >= 0;
+              const liveIds = new Set(
+                rows.flatMap((r, i) => (isLive(r) ? [`t${i}`] : []))
+              );
+              const pinOnlyIds = new Set(
+                rows.flatMap((r, i) =>
+                  r.pinned && !isLive(r) ? [`t${i}`] : []
+                )
+              );
+              if (pinOnlyIds.size > 0) hits.pinnedOnly += 1;
+              if (rows.some((r) => r.pinned && isLive(r)))
+                hits.pinnedOngoing += 1;
+              if (ghosts.length > 0) hits.ghost += 1;
+              if (liveIds.size > 0 && pinOnlyIds.size > 0) hits.mixed += 1;
+              const before = entries.map((e) => e.trip.tripId);
+
+              // 실행
+              const ordered = orderMyTrips(entries, TODAY, compare, pinnedIds);
+              const orderedIds = ids(ordered);
+
+              // 단언 — 순열(여행 중 + 고정 여행을 두 번 넣지 않았다)
+              expect([...orderedIds].sort()).toEqual([...before].sort());
+              // 단언 — 앞에서부터 [여행 중][고정][나머지] 세 덩어리가 정확히 그 집합
+              const k1 = liveIds.size;
+              const k2 = k1 + pinOnlyIds.size;
+              expect(new Set(orderedIds.slice(0, k1))).toEqual(liveIds);
+              expect(new Set(orderedIds.slice(k1, k2))).toEqual(pinOnlyIds);
+              // 단언 — 덩어리 안은 각각 비교자 순서
+              for (const group of [
+                ordered.slice(0, k1),
+                ordered.slice(k1, k2),
+                ordered.slice(k2),
+              ]) {
+                for (let i = 1; i < group.length; i += 1) {
+                  expect(compare(group[i - 1], group[i])).toBeLessThanOrEqual(
+                    0
+                  );
+                }
+              }
+              // 단언 — 인자 없음 ≡ 빈 집합 (지금 결과 그대로)
+              expect(ids(orderMyTrips(entries, TODAY, compare))).toEqual(
+                ids(orderMyTrips(entries, TODAY, compare, new Set<string>()))
+              );
+              // 단언 — 입력 불변
+              expect(entries.map((e) => e.trip.tripId)).toEqual(before);
+            }
+          ),
+          { numRuns: 300 }
+        );
+
+        // 생성기가 고정만인 여행·여행 중이면서 고정·없는 id·두 덩어리 섞임을 실제로 만들었다.
+        expect(hits.pinnedOnly).toBeGreaterThan(0);
+        expect(hits.pinnedOngoing).toBeGreaterThan(0);
+        expect(hits.ghost).toBeGreaterThan(0);
+        expect(hits.mixed).toBeGreaterThan(0);
+      }
+    );
+  });
+});

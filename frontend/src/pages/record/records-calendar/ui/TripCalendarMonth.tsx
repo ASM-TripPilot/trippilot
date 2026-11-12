@@ -1,9 +1,9 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { BackArrowGlyph } from '@/features/record';
+import { BackArrowGlyph } from '@/shared/ui/glyphs';
 import type { MonthCell } from '@/shared/lib/monthGrid';
-import { TRIP_COLORS, UNLISTED_COLOR } from '../model/recordsCalendar';
+import { cellColorFor } from '../model/recordsCalendar';
 
 /**
  * TRIP-575 · j07 월 캘린더(무상태 프레젠테이션 — 계산된 그리드·마킹·콜백만 받는다).
@@ -18,13 +18,12 @@ import { TRIP_COLORS, UNLISTED_COLOR } from '../model/recordsCalendar';
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 /** 월 네비 chevron 회색(muted-soft) — Figma 1570:1998 의 얇은 회색. 정확한 값·두께는 6-b(글리프 fill 사각). */
-const CHEVRON_GRAY = '#9AA1AB';
 
 export interface TripCalendarMonthProps {
   monthLabel: string;
   grid: (MonthCell | null)[];
   markedDays: string[];
-  /** 마킹된 날 → 여행 색 인덱스(TRIP-1436 Q-159). 없는 날은 중립색, 미지정이면 첫 색(코랄). */
+  /** 마킹된 날 → 여행 색 인덱스(TRIP-1436 Q-159). 맵에 없는 날은 중립색, 맵 자체가 미지정이면 첫 색(코랄) — 판정은 `cellColorFor`. */
   dayColors?: Record<string, number>;
   onPressPrev: () => void;
   onPressNext: () => void;
@@ -55,7 +54,7 @@ export function TripCalendarMonth({
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           onPress={onPressPrev}
         >
-          <BackArrowGlyph size={16} color={CHEVRON_GRAY} />
+          <BackArrowGlyph size={16} color="mutedSoft" />
         </Pressable>
         <Text
           testID="record-calendar-month-label"
@@ -70,7 +69,7 @@ export function TripCalendarMonth({
           onPress={onPressNext}
         >
           <View style={{ transform: [{ scaleX: -1 }] }}>
-            <BackArrowGlyph size={16} color={CHEVRON_GRAY} />
+            <BackArrowGlyph size={16} color="mutedSoft" />
           </View>
         </Pressable>
       </View>
@@ -97,10 +96,7 @@ export function TripCalendarMonth({
                   return <View key={di} className="flex-1 py-[9px]" />;
                 }
                 const isMarked = markedSet.has(cell.date);
-                const palette =
-                  TRIP_COLORS[
-                    (dayColors?.[cell.date] ?? 0) % TRIP_COLORS.length
-                  ];
+                const palette = cellColorFor(dayColors, cell.date);
                 const prev = week[di - 1];
                 const next = week[di + 1];
                 const roundLeft =
@@ -110,6 +106,8 @@ export function TripCalendarMonth({
                 // testID 와 selected 는 같은 요소에 둔다 — `toBeSelected()` 가 이 요소를 본다.
                 return (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${Number(cell.date.slice(5, 7))}월 ${cell.day}일`}
                     key={di}
                     testID={`record-calendar-day-${cell.date}`}
                     accessibilityState={{ selected: isMarked }}

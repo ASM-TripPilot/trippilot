@@ -40,7 +40,7 @@ class NotificationScheduleServiceTest : StringSpec({
     fun fixture(now: String, start: String, end: String): Triple<NotificationScheduleService, FakeSchedules, FakeTripOwner> {
         val schedules = FakeSchedules()
         val trips = FakeTripOwner().apply { put(tripId, acc, LocalDate.parse(start), LocalDate.parse(end)) }
-        return Triple(NotificationScheduleService(trips, schedules, NoCopies(), FakePlans(), clockAt(now), ReminderCopyRetries(180_000)), schedules, trips)
+        return Triple(NotificationScheduleService(trips, schedules, NoCopies(), FakePlans(), clockAt(now), ReminderCopyRetries(listOf(180_000L)), NoDeletionPending), schedules, trips)
     }
 
     /**
@@ -65,7 +65,7 @@ class NotificationScheduleServiceTest : StringSpec({
             }
         }
         val svc = NotificationScheduleService(
-            trips, ordered, NoCopies(), FakePlans(), clockAt("2026-08-01T00:00:00Z"), ReminderCopyRetries(180_000),
+            trips, ordered, NoCopies(), FakePlans(), clockAt("2026-08-01T00:00:00Z"), ReminderCopyRetries(listOf(180_000L)), NoDeletionPending,
         )
 
         svc.reload(tripId)
@@ -127,6 +127,102 @@ class NotificationScheduleServiceTest : StringSpec({
         svc.reload(tripId)
 
         schedules.findPendingByTrip(tripId).map { it.fireAt } shouldContainExactly first
+    }
+
+    // 서버가 여행 길이를 막지 않아 편집으로 종료일을 9999년까지 보낼 수 있다 — 하루 한 건씩 만들면 수백만 행이 한 트랜잭션에 실린다.
+    "기간이 비정상적으로 길어도 시작일부터 366일치까지만 적재한다" {
+        val (svc, schedules, _) = fixture(now = "2026-08-01T00:00:00Z", start = "2026-08-10", end = "9999-12-31")
+
+        svc.reload(tripId)
+
+        val rows = schedules.findPendingByTrip(tripId)
+        rows.size shouldBe 1 + 367 // 여행 전날 1건 + 시작일부터 366일 뒤까지 367일
+        rows.last().fireAt shouldBe kst("2027-08-11", 8)
+    }
+
+    // ── onlyIfScheduled — 일정과 무관한 사건(여행 기간 변경, TRIP-1758)이 부르는 길 ────────────────────────────
+
+    "onlyIfScheduled — 예약이 한 번도 만들어진 적 없는 여행은 건드리지 않는다" {
+        val (svc, schedules, _) = fixture(now = "2026-08-01T00:00:00Z", start = "2026-08-10", end = "2026-08-12")
+
+        svc.reload(tripId, onlyIfScheduled = true)
+
+        // 일정을 짜기 전에 기간만 고친 여행이다 — 여기서 예약을 세우면 일정도 없는 여행의 "오늘의 일정"이 울린다.
+        schedules.stored shouldBe emptyList()
+    }
+
+    "onlyIfScheduled — 예약이 있던 여행은 새 기간으로 다시 세운다" {
+        val (svc, schedules, trips) = fixture(now = "2026-08-01T00:00:00Z", start = "2026-08-10", end = "2026-08-12")
+        svc.reload(tripId) // 일정 생성이 만든 예약
+        trips.put(tripId, acc, LocalDate.parse("2026-08-11"), LocalDate.parse("2026-08-14")) // 기간 변경
+
+        svc.reload(tripId, onlyIfScheduled = true)
+
+        schedules.findPendingByTrip(tripId).map { it.fireAt } shouldContainExactly listOf(
+            kst("2026-08-10", 8), // 여행 전날
+            kst("2026-08-11", 8), kst("2026-08-12", 8), kst("2026-08-13", 8), kst("2026-08-14", 8),
+        )
+    }
+
+    "onlyIfScheduled — 미발화 행이 없어도 예약 이력(이미 발화한 행)이 있으면 다시 세운다" {
+        // 08-10 21:00 KST — 첫날 아침 알림은 이미 나갔다.
+        val (svc, schedules, trips) = fixture(now = "2026-08-10T12:00:00Z", start = "2026-08-10", end = "2026-08-10")
+        schedules.stored += NotificationSchedule.pending(acc, tripId, NotificationKind.TRIP_DAY, kst("2026-08-10", 8))
+            .copy(firedAt = kst("2026-08-10", 8))
+        trips.put(tripId, acc, LocalDate.parse("2026-08-10"), LocalDate.parse("2026-08-12")) // 이틀 연장
+
+        svc.reload(tripId, onlyIfScheduled = true)
+
+        // 지난 시각은 적지 않는다 — 새로 서는 것은 연장된 날뿐이다.
+        schedules.findPendingByTrip(tripId).map { it.fireAt } shouldContainExactly listOf(kst("2026-08-11", 8), kst("2026-08-12", 8))
+    }
+
+    "onlyIfScheduled 의 판정은 여행을 잠근 뒤에 한다 — 같은 여행의 첫 적재와 겹쳐도 그 커밋을 본다" {
+        val fake = FakeSchedules()
+        val trips = FakeTripOwner().apply { put(tripId, acc, LocalDate.parse("2026-08-10"), LocalDate.parse("2026-08-12")) }
+        val events = mutableListOf<String>()
+        val ordered = object : NotificationScheduleRepository by fake {
+            override fun lockTrip(tripId: UUID) {
+                events += "lock"
+                fake.lockTrip(tripId)
+            }
+
+            override fun existsForTrip(tripId: UUID): Boolean {
+                events += "exists"
+                return fake.existsForTrip(tripId)
+            }
+        }
+        val svc = NotificationScheduleService(
+            trips, ordered, NoCopies(), FakePlans(), clockAt("2026-08-01T00:00:00Z"), ReminderCopyRetries(listOf(180_000L)), NoDeletionPending,
+        )
+
+        svc.reload(tripId, onlyIfScheduled = true)
+
+        events shouldBe listOf("lock", "exists")
+    }
+
+    /**
+     * 삭제를 요청한 계정은 요청 **뒤에** 도착한 일정 생성·재계산 이벤트가 예약을 다시 세우면 안 된다(요청 구독자가 취소한 예약이 되살아난다).
+     * 철회하면 되살림 구독자가 다시 적재한다 — 여기는 "유예 중에는 만들지 않는다"만 본다.
+     */
+    "삭제 유예 중인 계정의 여행은 예약을 만들지 않고 이미 있던 미발화분도 비운다" {
+        val schedules = FakeSchedules()
+        val trips = FakeTripOwner().apply { put(tripId, acc, LocalDate.parse("2026-08-10"), LocalDate.parse("2026-08-12")) }
+        val state = PendingDeletion()
+        val svc = NotificationScheduleService(
+            trips, schedules, NoCopies(), FakePlans(), clockAt("2026-08-01T00:00:00Z"), ReminderCopyRetries(listOf(180_000L)), state,
+        )
+        svc.reload(tripId)
+        schedules.findPendingByTrip(tripId).size shouldBe 4
+
+        state.pending += acc
+        svc.reload(tripId)
+        schedules.findPendingByTrip(tripId) shouldBe emptyList()
+
+        // 철회하면 같은 호출이 다시 만든다.
+        state.pending.clear()
+        svc.reload(tripId)
+        schedules.findPendingByTrip(tripId).size shouldBe 4
     }
 
     "여행이 사라지면 미발화 예약을 비운다 — 없어진 여행의 알림이 울리지 않게" {

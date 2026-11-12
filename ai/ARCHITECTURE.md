@@ -69,6 +69,12 @@ flowchart LR
 | `api` | FastAPI 경계. `routes` 는 검증·위임·투영만 한다. `wiring.py` 는 전부를 조립하는 루트이면서, `WiredItineraryOrchestrator` 가 **다시 짜기·다른 후보·편집·검증·설명을 직접 조율**하고 구성·추출·지시 번역·설명 워커를 에이전트 없이 부른다(`orchestrator` 패키지를 거치는 것은 생성과 도우미뿐) | `create_app`, `routes`, `WiredItineraryOrchestrator`, `schemas`(`extra=forbid`), `errors`, `middleware`(서비스 토큰·본문 상한·속도 제한·시한 백스톱) |
 | `background` | 오프라인 배치용 도우미(네이버 검색·카카오 지오코더·행사 저장소). 런타임은 저장소를 읽기만 | `JsonEventStore` |
 
+**하위 폴더**: 파일이 몰렸던 세 패키지만 기능 묶음으로 나눴다(2026-11-02, import 경로만 바뀜). 층·의존 규칙은 그대로다.
+
+- `domain/` — 공용 타입(`common`·`context`·`edit`·`persona` 등)은 바로 아래에 둔다. 묶음은 `dialogue`(`Intent`·위임·계획 도구), `itinerary`(해·문제·이동), `llm`(`LlmFeature`·`CandidatePool`·프롬프트 참조·평가), `poi`(`Poi`·지역 중심·테마 태그)다.
+- `orchestrator/` — `intent`(의도 라우터·질문뱅크), `dialogue`(`DialogueOrchestrator`·핸들러·계획·기억·장소 SQL), `schedule`(생성 조율·정보 수집).
+- `llm_gateway/{gates,workers}/` — 같은 기능의 게이트와 워커는 같은 이름 폴더에 있다. 묶음은 `content`(편집 번역·리마인드·공유 카드·회고 문구), `dialogue`, `preference`(점수·번호 고르기), `replan`(대안 고르기·설명·지시 번역)이다.
+
 **의존 규칙**은 `ai/tests/test_architecture.py` 가 빌드에서 강제한다. 요지:
 
 - 안쪽 층(`domain`·`ports`·`llm_gateway`·`assembly_engine`·`poi_curation`)은 바깥(`agents`·`orchestrator`·`providers`·`background`)을 import 하지 않는다(L-1).
@@ -107,8 +113,8 @@ flowchart LR
 4. 화면 거리(실경로, 짧은 예산), 꼭 갈 곳 미배치 판정, 응답 봉투.
 
 **다시 짜기** `/planb/replan` — 조율자는 `WiredItineraryOrchestrator` 다.
-1. 자유 발화 추출(`REPLAN_REQUEST_EXTRACTION`)을 먼저 띄운다. 재계획 지시(KB-4 매칭 → `REPLAN_DIRECTIVE_TRANSLATION`).
-2. `InfoCollector`(REPLAN), 잠금 블록(고정·저녁·진행 중·지난 칸), 추출 주장 대조.
+1. 자유 발화 추출(`REPLAN_REQUEST_EXTRACTION`)과 재계획 지시 해석(KB-4 매칭 → `REPLAN_DIRECTIVE_TRANSLATION`)을 배경으로 먼저 띄운다. 추출이 장소 이름을 내면 이름 대조용 등록 POI 조회(반경 50km)도 곧바로 배경으로 띄운다.
+2. `InfoCollector`(REPLAN) — 지시 해석은 풀 확대 판정 직전에 받는다. 잠금 블록(고정·저녁·진행 중·지난 칸), 추출 주장 대조(이름은 받은 후보 풀에서 정확 일치로 먼저 찾고, 없을 때만 그 50km 조회를 기다린다).
 3. `PlanBAgent` 규칙 랭킹 → **구성 LLM 이 남은 하루를 고른다**(`REPLAN_COMPOSITION`, 번호 선택 게이트, KB-5 장소 지식) → `ScheduleAgent` 로 solve → 1회 수리.
 
 **다른 후보** `/planb/alternatives` — `InfoCollector` → `PlanBAgent.run`(KB-3 상황·KB-2 취향·KB-5 장소 검색 → `ALTERNATIVE_SELECTION`, 실패 시 규칙 랭킹) → 닫힌 집합 재확인. 응답에 시각이 없다(배치는 백엔드의 repair 몫).
@@ -141,6 +147,7 @@ flowchart TD
 ```
 
 - 일정 고치기(`EDIT_SCHEDULE`)는 답 대신 `FRAME` 을 돌려 백엔드 제안 경로로 넘긴다.
+- 장소 탐색은 반경 풀(규칙 정렬)과 NL2SQL 이 나란히 돌고 SQL 행이 있으면 그것이 답이다(추천은 반경이 먼저, BR-AO-30) — 묘사형 말("비 오는 날 실내")이면 열린 검색(KB-5 문서 순위, `TRIPPILOT_KB5_OPEN_SEARCH`, 기본 off)이 반경 순서를 섞지만, 그 순서는 반경 결과(SQL 0건·실패·추천·일정 근처)에만 쓰인다(BR-AO-27 · BR-AO-36).
 - 스위치가 off 면 종전 `DialogueInterpreter` → `IntentRouter`(질문뱅크 임베딩 → 바꿔 말하기 투표 → LLM)가 서비스 경로다. 스위치가 on 이어도 질문뱅크 1차 매칭은 보류 되묻기의 답이 "새 요청인가"를 LLM 없이 가를 때 쓰인다 — 그래서 운영에도 뱅크 색인이 필요하다.
 - 개발 서버에는 입구 인젝션 소형 분류기가 그림자로 붙어 판정만 로그에 남긴다(응답 무영향).
 
@@ -214,9 +221,9 @@ flowchart TD
 | KB-2 취향 | 취향 패턴 | 검색은 하나 적재 시드가 없다 |
 | KB-3 상황 | 상황별 조언(비·피로…) | 시드 YAML, 상위 4건 |
 | KB-4 지시 | 재계획 칩·자유 발화 사전 | 시드 YAML |
-| KB-5 장소 | 장소 지식(위키 본문·관광공사 개요 조각) | 적재·증분 진행. 후보 전원이 아니라 숏리스트 후보만 검색. 대체 문서는 기본 꺼짐 |
+| KB-5 장소 | 장소 지식(위키 본문·관광공사 개요 조각) | 적재·증분 진행. 후보 전원이 아니라 숏리스트 후보만 검색. 대체 문서(장소 카드·웹 확인 사실)는 기본 켜짐 — 2026-11-03, `TRIPPILOT_KB5_FALLBACK=off` 로 끈다. 도우미 장소 탐색·추천의 열린 검색(반경 후보 안 조각의 BM25+임베딩 순위를 규칙 순서에 RRF 로 섞는다, BR-AO-36)은 기본 꺼짐 — `TRIPPILOT_KB5_OPEN_SEARCH=on` 으로 켠다. 같은 스위치가 PlanB 다시 짜기 후보 순위(구성 LLM 이 받는 앞 20)에도 문서 순위를 섞는다(`rag.fuse_rule_ranking`, U4 FD 2026-11-04) |
 
-**그 밖의 AI DB 표**: `dialogue_memory`·`dialogue_memory_vectors`(대화 기억, 90일), `place_fact_cache`(웹 확인 사실 캐시). **질문뱅크**는 미리 계산한 벡터로 기동 때 메모리에 색인한다(DB 적재 없음).
+**그 밖의 AI DB 표**: `dialogue_memory`·`dialogue_memory_vectors`(대화 기억, 90일), `place_fact_cache`(웹 확인 사실 — 지우지 않고 쌓는다, `expires_at` 은 다시 찾을 때). **질문뱅크**는 미리 계산한 벡터로 기동 때 메모리에 색인한다(DB 적재 없음).
 
 ## 11. 배치와 배포
 

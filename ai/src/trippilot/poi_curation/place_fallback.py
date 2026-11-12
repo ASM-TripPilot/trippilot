@@ -9,8 +9,9 @@
 진짜 문서를 **점수로 밀어내지 않는다** — 짧은 글은 상황 질의 점수에서 긴 개요 조각을 86~95% 이긴다(2026-10-23 실측). 그래서 벡터에
 넣지 않고, 진짜 문서가 없는 자리에만 키로 바로 붙인다(공개 리포에 벡터 수백 MB 를 쌓지 않는 것도 같은 이유다).
 
-켜기: `TRIPPILOT_KB5_FALLBACK=on` — **기본 꺼짐.** 켜기 전에 KB-5 담당 세션의 조건(2026-10-30)을 채운다:
+**기본 켜짐**(2026-11-03). 끄기: `TRIPPILOT_KB5_FALLBACK=off`. 켜는 조건은 KB-5 담당 세션과 합의한 것(2026-10-30)이었다 —
 `measure_kb5_overview.py` ab 로 '진짜 문서만' 대 '대체 문서 추가'를 재서 같은 입력끼리의 흔들림(≈12:7)보다 확실히 이길 것.
+2026-11-02 실측(선택 opus-5-5 · 판정 sonnet-5-5): 식사 칸 서울·제주(진짜 0곳 → 대체 40곳) **32 : 0**, 명소 칸 15 : 8 : 1(잡음 범위, 해 없음).
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ WEB_FACTS_PER_DOC = 4
 
 
 def enabled() -> bool:
-    return os.environ.get(SWITCH, "off").strip().lower() in ("on", "1", "true", "yes")
+    return os.environ.get(SWITCH, "on").strip().lower() in ("on", "1", "true", "yes")
 
 
 def compose(card: str, facts: list[str]) -> str:
@@ -72,10 +73,30 @@ def fallback_docs() -> Mapping[str, str]:
     return out
 
 
+@lru_cache(maxsize=1)
+def web_facts() -> Mapping[str, tuple[str, ...]]:
+    """{source_ref: 웹 확인 사실들} — 대체 문서 안에서 어느 문장이 웹 페이지에서 온 것인지 알아 소개에 출처 각주를 다는 데 쓴다."""
+    out: dict[str, tuple[str, ...]] = {}
+    try:
+        for r in _rows(WEB_PATH):
+            facts = tuple(f["text"] for f in r.get("facts") or () if f.get("text"))[:WEB_FACTS_PER_DOC]
+            if facts:
+                out[r["poi_ref"]] = facts
+    except Exception as e:  # noqa: BLE001 — 각주를 못 달 뿐 소개는 나간다
+        log.warning("kb5 web facts index unavailable: %s: %s", type(e).__name__, e)
+    return out
+
+
+def web_in(source_ref: str, text: str) -> bool:
+    """소개 `text` 가 그 장소의 웹 확인 사실을 담았는가 — 장소 카드(관광공사 상세)만 쓴 소개는 1차 출처라 False. 꺼져 있으면 False."""
+    return bool(enabled() and text and any(f in text for f in web_facts().get(source_ref, ())))
+
+
 def warm() -> None:
-    """켜져 있으면 기동 때 백그라운드로 표를 읽어 둔다 — 첫 요청이 파일 읽기(약 0.15초)를 떠안지 않게. 꺼져 있으면 읽지 않는다."""
+    """켜져 있으면 기동 때 백그라운드로 표를 읽어 둔다 — 첫 요청이 파일 읽기(약 0.15초)를 떠안지 않게. 꺼져 있으면 읽지 않는다.
+    웹 사실 표(`web_facts`, 각주 판정)도 같이 — 빠지면 첫 소개 턴이 그 파일 파싱을 떠안는다."""
     if enabled():
-        threading.Thread(target=fallback_docs, name="kb5-fallback", daemon=True).start()
+        threading.Thread(target=lambda: (fallback_docs(), web_facts()), name="kb5-fallback", daemon=True).start()
 
 
 def doc(source_ref: str) -> str:

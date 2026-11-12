@@ -1,10 +1,12 @@
 import { useRef, useState, type ReactElement } from 'react';
+import { useWindowDimensions, type View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
 import type { Trip } from '@/shared/api/index.schemas';
-import { guardPress } from '@/shared/lib/pressGuard';
+import { guardPress, usePressLock } from '@/shared/lib/pressGuard';
 import { showToast } from '@/shared/ui/Toast';
+import { getToastBottoms, resolveToastBottom } from '@/shared/ui/toastBottom';
 import {
   TripCard,
   classifyTripPhase,
@@ -17,7 +19,8 @@ import {
 import {
   formatConfirmedDateRange,
   isTripOngoing,
-  pickRegionCover,
+  tripCoverLabel,
+  tripCoverSource,
 } from '@/entities/trip';
 import {
   ITINERARY_OPEN_FAILED_MESSAGE,
@@ -26,6 +29,7 @@ import {
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary';
+import { menuOpensAbove } from '../model/menuPlacement';
 import { deriveTripCardFace } from '../model/tripCardFace';
 
 /**
@@ -43,8 +47,15 @@ import { deriveTripCardFace } from '../model/tripCardFace';
 
 export interface TripCardContainerProps {
   trip: Trip;
-  /** TRIP-1055 · 삭제 요청(다이얼로그 열기) — 페이지가 쥔다. 없으면 ⋯ 도 없다. */
+  /** TRIP-1055 · 삭제 요청(다이얼로그 열기) — 페이지가 쥔다. 없으면 메뉴에 「삭제」가 없다(⋯ 는 TRIP-1786 부터 항상 있다). */
   onPressDelete?: () => void;
+  /** TRIP-1786 · 고정 상태·토글 — 페이지가 쥔다(기기 저장). `onTogglePin` 이 없으면 고정 항목도 없다. */
+  pinned?: boolean;
+  pinDisabled?: boolean;
+  onTogglePin?: () => void;
+  /** TRIP-1819 · ⋯ 메뉴 열림 — 한 번에 하나만 열리고 화면을 떠나면 닫혀야 해서 페이지가 쥔다. */
+  menuOpen?: boolean;
+  onMenuOpenChange?: (open: boolean) => void;
   /** TRIP-1121 · 오늘(서울 'YYYY-MM-DD') — 페이지가 정렬과 같은 값을 넘긴다. 없으면 여행 중 판정을 안 한다
    * (컨테이너는 시계를 읽지 않는다, TRIP-986). */
   today?: string;
@@ -73,13 +84,40 @@ function coverTone(
 export function TripCardContainer({
   trip,
   onPressDelete,
+  pinned,
+  pinDisabled,
+  onTogglePin,
+  menuOpen = false,
+  onMenuOpenChange,
   today,
 }: TripCardContainerProps): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const { height: windowHeight } = useWindowDimensions();
+  const menuButtonRef = useRef<View>(null);
+  const [menuAbove, setMenuAbove] = useState(false);
+  const setMenuOpen = (open: boolean): void => onMenuOpenChange?.(open);
+
+  // TRIP-1819 — 아래 공간이 모자라면(탭바·완료 배너에 가리면) 위로 연다. 답을 기다리지 않고 먼저 연 뒤 뒤집는다.
+  const onPressMenu = (): void => {
+    if (menuOpen) {
+      setMenuOpen(false);
+      return;
+    }
+    setMenuAbove(false);
+    setMenuOpen(true);
+    menuButtonRef.current?.measureInWindow((_x, y, _width, height) => {
+      setMenuAbove(
+        menuOpensAbove(
+          y + height,
+          windowHeight,
+          resolveToastBottom(getToastBottoms(), 0)
+        )
+      );
+    });
+  };
   // copick 누름이 일정 응답을 기다리는 동안의 잠금 — isPending 은 다음 렌더에야 알려져 같은 틱 두 번째 누름을 못 막는다.
-  const openingRef = useRef(false);
+  const openingLock = usePressLock();
 
   const summary = tripItinerarySummary(trip);
   const face = deriveTripCardFace(
@@ -100,7 +138,8 @@ export function TripCardContainer({
     resume: face.resume,
     // TRIP-1208 · 커버 — 첫 목적지 도시 + 단계 톤(확정 × 오늘: 여행 중=live · 종료=ended · 그 외=upcoming).
     coverCity: pickCoverCity(trip.destinations),
-    coverSource: pickRegionCover(trip.destinations),
+    coverSource: tripCoverSource(trip),
+    coverLabel: tripCoverLabel(trip),
     coverTone: coverTone(trip, summary.status, today),
   };
 
@@ -114,8 +153,7 @@ export function TripCardContainer({
       return;
     }
     // 같이 짜기 생성 중 — 첫 비고정 슬롯 키가 일정 days 에만 있어 누르는 순간 한 번 받는다. 실패하면 이동하지 않고 알린다(INV-4).
-    if (openingRef.current) return;
-    openingRef.current = true;
+    if (!openingLock.acquire()) return;
     fetchTripItineraryHref(queryClient, trip.tripId)
       .then(
         (href) => router.push(href),
@@ -127,8 +165,23 @@ export function TripCardContainer({
           })
       )
       .finally(() => {
-        openingRef.current = false;
+        openingLock.release();
       });
+  });
+
+  // TRIP-1785 · 지난 여행(확정 ∧ 오늘 > 종료일) 카드는 상태문 자리에 「기록 보기 ›」 — 기록 탭 지난 카드와 같은 j04 요약으로 간다.
+  // 링크 유무는 세그가 아니라 이 판정이 정한다(지난 세그 카드 = ended 카드). today 가 없으면 판정을 안 한다.
+  const onPressRecords = guardPress((): void => {
+    router.push(`/trips/${trip.tripId}/records/summary`);
+  });
+  const ended =
+    today !== undefined &&
+    classifyTripPhase(trip, summary.status, today) === 'ended';
+
+  // TRIP-1786 · 「여행 설정」 — 메뉴를 닫고 설정 화면으로(연타는 한 번만).
+  const onPressSettings = guardPress((): void => {
+    setMenuOpen(false);
+    router.push(`/trips/${trip.tripId}/settings`);
   });
 
   // TRIP-1055 · 삭제 진입점(UX 사본 — 판정 정본은 서버 BR-U1-57, 상태 가드 TRIP-1061 전까진 이게 유일한
@@ -156,7 +209,22 @@ export function TripCardContainer({
           : undefined
       }
       menuOpen={menuOpen}
-      onPressMenu={() => setMenuOpen((open) => !open)}
+      menuAbove={menuAbove}
+      menuButtonRef={menuButtonRef}
+      onPressMenu={onPressMenu}
+      onPressSettings={onPressSettings}
+      pinned={pinned}
+      pinDisabled={pinDisabled}
+      onTogglePin={
+        onTogglePin
+          ? // 통합 QA D1 — 고정하면 메뉴가 닫히고 순서가 바뀌어 연타 둘째 탭이 그 자리 카드를 연다. 창을 연다.
+            guardPress(() => {
+              setMenuOpen(false);
+              onTogglePin();
+            })
+          : undefined
+      }
+      onPressRecords={ended ? onPressRecords : undefined}
     />
   );
 }

@@ -1,10 +1,11 @@
 import Svg, { Path } from 'react-native-svg';
+import { COLOR_TOKENS } from '../config';
 
 // 공용 토스트 성공 체크 — Figma DS NoticeBar tone=success(4464:1583)의 원 없는 체크. SVG `stroke` 는
 // className 을 못 받아 색은 이 파일에서만 raw hex 로 고정한다(`*Glyphs.tsx` 관례). 완료 도킹 배너
 // (`GenerationDoneBar`, pages)도 이 글리프를 쓴다 — 예전 사본 `DoneCheckGlyph` 는 TRIP-1357 에서 걷었다.
 
-const SUCCESS = '#0E9384';
+const SUCCESS = COLOR_TOKENS.success;
 
 export function ToastSuccessGlyph({
   size = 20,

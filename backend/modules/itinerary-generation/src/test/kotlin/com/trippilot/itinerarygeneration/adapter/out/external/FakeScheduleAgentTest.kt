@@ -128,7 +128,8 @@ class FakeScheduleAgentTest : StringSpec({
             ReplanInput(
                 tripId = UUID.randomUUID(), itineraryId = UUID.randomUUID(),
                 scope = ReplanScope.PARTIAL_SLOTS, destinations = listOf("제주"),
-                fromInstant = lateClock.instant(), targetDate = d1,
+                fromInstant = lateClock.instant(), targetDate = d1, tripStartDate = d1, tripEndDate = d1,
+                windowStart = LocalTime.of(9, 0), windowEnd = LocalTime.of(21, 0),
                 originLat = 33.4, originLng = 126.5, stayLat = null, stayLng = null, lockedBlocks = emptyList(),
                 reasons = emptyList(), directives = emptyList(), freeText = null,
                 excludedPoiIds = emptyList(),
@@ -136,6 +137,7 @@ class FakeScheduleAgentTest : StringSpec({
                 preferenceProfile = PreferenceProfile(emptyList(), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null),
                 currentSlots = emptyList(), savedPlaces = emptyList(),
                 rejections = emptyList(),
+                transportMode = null,
                 requestMeta = RequestMeta("r", lateClock.instant(), 10_000),
             ),
         )
@@ -156,7 +158,8 @@ class FakeScheduleAgentTest : StringSpec({
             ReplanInput(
                 tripId = UUID.randomUUID(), itineraryId = UUID.randomUUID(),
                 scope = ReplanScope.PARTIAL_SLOTS, destinations = listOf("제주"),
-                fromInstant = noonClock.instant(), targetDate = d1,
+                fromInstant = noonClock.instant(), targetDate = d1, tripStartDate = d1, tripEndDate = d1,
+                windowStart = LocalTime.of(9, 0), windowEnd = LocalTime.of(21, 0),
                 originLat = 33.4, originLng = 126.5, stayLat = null, stayLng = null, lockedBlocks = emptyList(),
                 reasons = emptyList(), directives = emptyList(), freeText = null,
                 excludedPoiIds = emptyList(),
@@ -164,6 +167,7 @@ class FakeScheduleAgentTest : StringSpec({
                 preferenceProfile = PreferenceProfile(emptyList(), emptyList(), emptyList(), emptyList(), null, emptyList(), false, null),
                 currentSlots = emptyList(), savedPlaces = emptyList(),
                 rejections = emptyList(),
+                transportMode = null,
                 requestMeta = RequestMeta("r", noonClock.instant(), 10_000),
             ),
         )

@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { isNotFound } from '@/shared/api';
-import { getGetTripsTripIdItineraryQueryOptions } from '@/shared/api/index.hooks';
+import { getGetTripsTripIdItineraryQueryOptions } from '@/shared/api/index.trips';
 
 import {
   itineraryDestinationHref,

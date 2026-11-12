@@ -24,11 +24,13 @@ import type {
   SavedStay,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { promptAndRegisterPush } from '@/shared/push';
 import {
   EDIT_LIST,
   fireEditDragEnd,
   fireEditDropOnZone,
+  hoverOverDeleteZone,
 } from '@/test-support/editDragList';
 import { createWrapper, newTestQueryClient } from '@/test-support/queryRender';
 import { watchTripsList } from '@/test-support/tripItineraryCols';
@@ -640,6 +642,17 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
 
   describe('🔴 M1 · AC-9 — 직접 짜기가 위젯 편집 뷰를 소비하고 헤더 날짜가 괄호형이다', () => {
     it('드래그 리스트가 있고 헤더가 "일정 만들기 · 6월 10일(수) · 3곳" 조각이다', async () => {
+      // TRIP-1793 — 「직접 짜기엔 카드 ⋯(다른 날로 옮기기)가 없다」를 비공허하게 재려고 이틀짜리 초안으로 연다(하루뿐이면 ⋯ 가 어차피 없다).
+      serveItinerary(server, {
+        trip: () => trip(),
+        itinerary: () => ({
+          ...manualDraft(PLAIN),
+          days: [
+            { date: DAY, slots: PLAIN },
+            { date: '2026-06-11', slots: [slot('z', '09:00:00', '10:00:00')] },
+          ],
+        }),
+      });
       renderPage();
       await ready();
 
@@ -651,6 +664,15 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
         '6월 10일(수)'
       );
       expect(screen.getByTestId(META)).toHaveTextContent('3곳');
+      // TRIP-1791 — 같은 편집 뷰지만 직접 짜기는 「선택」(여러 곳 빼기)이 없다: 선택 prop 미주입 = 지금 화면.
+      // 카드 3장이 있는 화면이라 "카드가 없어서 숨음"이 아니다(짝: EditorView.test S-A ②, ItineraryEditPage R1).
+      expect(screen.queryByTestId('editor-select-toggle')).toBeNull();
+      // TRIP-1792 — 저장 전 되돌리기도 마찬가지로 직접 짜기엔 없다(`undo` 미주입 = 기능 부재, D7·AC-10).
+      // 짝은 ItineraryEditPage R1 의 `editor-undo` 비활성 존재 단언 — 같은 뷰·같은 3곳 상태에서 거기엔 있다.
+      expect(screen.queryByTestId('editor-undo')).toBeNull();
+      // TRIP-1793 — 이틀 일정(일차 칩 있음)에 안 잠긴 카드 3장이 있어도 ⋯ 가 없다: `onPressMore` 미주입 = 지금 화면(D2).
+      expect(screen.getByTestId('itinerary-edit-day-2')).toBeOnTheScreen();
+      expect(screen.queryAllByTestId(/^editor-slot-more-/)).toHaveLength(0);
     });
   });
 
@@ -668,13 +690,32 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
   });
 
   describe('🔴 M2 · AC-9 — 끌어서 바꾼 순서가 저장 PUT 순서가 된다 (INV-U3-02)', () => {
-    it('c 를 맨 앞으로(2→0) 끌고 저장하면 PUT 순서가 [c,a,b] 다', async () => {
+    it('c 를 맨 앞으로(2→0) 끌고 저장하면 PUT 순서가 [c,a,b] 다 · 이 여행에서 고친 a 의 이름·분류는 저장에서 그대로 실린다 (TRIP-1795 AC-7)', async () => {
+      // 일정(GET)에 a 의 별칭이 있다 — 직접 짜기 저장 PUT 도 같은 빌더를 지나 두 칸을 실어야 한다(옛 구현은 5필드만 실어 지웠다).
+      daySlots = PLAIN.map((s) =>
+        s.poiId === 'a'
+          ? {
+              ...s,
+              displayName: '우리 아지트',
+              displayCategory: '카페' as const,
+            }
+          : s
+      );
       renderPage();
       await ready();
 
       fireEditDragEnd(2, 0);
 
-      expect(ids(await save())).toEqual(['c', 'a', 'b']);
+      const body = await save();
+      expect(ids(body)).toEqual(['c', 'a', 'b']);
+      // TRIP-1821 — 직접 짜기도 같은 스토어라 시각은 자리에 남는다(위에서부터 오름차순).
+      const times = body.days[0].slots.map((s) => s.startAt);
+      expect(times).toEqual([...times].sort());
+      expect(body.days[0].slots.find((s) => s.poiId === 'a')).toMatchObject({
+        displayName: '우리 아지트',
+        displayCategory: '카페',
+      });
+      expect(Object.keys(body.days[0].slots[0])).not.toContain('displayName'); // 안 고친 c 에는 키가 없다
     });
   });
 
@@ -686,12 +727,27 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       await fireEditDropOnZone(1);
 
       expect(screen.getByTestId(META)).toHaveTextContent('2곳');
+      // TRIP-1792 — 이력이 쌓일 편집을 한 뒤에도 직접 짜기엔 되돌리기 아이콘이 없다.
+      expect(screen.queryByTestId('editor-undo')).toBeNull();
       expect(ids(await save())).toEqual(['a', 'c']);
     });
   });
 
-  describe('🔴 M4 · AC-9 — ⌄ 시각칩 → 시각 시트 → 적용값이 저장 PUT 에 실린다', () => {
-    it('c 를 14:00–15:30 으로 바꿔 저장하면 PUT 의 c 시각이 바뀌고 a 는 그대로다', async () => {
+  // TRIP-1674 — h19 도 같은 편집 뷰·스토어라 꼭 갈 곳(고정, 숙소 아님)의 칩이 눌리고(A5), 이웃(b 14:30)을 넘으면
+  // 시각 순으로 재정렬돼 isFixed:true 로 저장된다(B1·C7). 마운트를 늘리지 않으려고 새 `it` 대신 M4 의 c 를 고정으로,
+  // 시각을 [a 09:00 · b 14:30 · c 16:00–17:30] 으로 바꿨다 — c 를 14시로 옮기면 b 를 넘는다. 기존 단언(c 14:00–15:30,
+  // a 09:00)은 그대로이고, 비고정 c 의 칩·시트는 M4b·M4c·MX·MC1 이 계속 잰다. 서버 422·repair 는 jest 사각(6-b).
+  describe('🔴 M4 · AC-9 + TRIP-1674 — ⌄ 시각칩 → 시각 시트 → 적용값(고정 꼭 갈 곳 포함)이 시각 순으로 저장 PUT 에 실린다', () => {
+    it('고정 c 를 14:00–15:30 으로 바꿔 저장하면 PUT 의 c 시각이 바뀌고 a 는 그대로이며, 이웃 b 를 넘어 [a,c,b] · c 는 isFixed true 다', async () => {
+      daySlots = [
+        slot('a', '09:00:00', '10:00:00'),
+        slot('b', '14:30:00', '15:00:00'),
+        {
+          ...slot('c', '16:00:00', '17:30:00'),
+          isFixed: true,
+          category: '명소',
+        },
+      ];
       renderPage();
       await ready();
 
@@ -704,6 +760,7 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       fireEvent.press(screen.getByTestId('itinerary-manual-time-seg-end'));
       fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-15'));
       fireEvent.press(screen.getByTestId('itinerary-manual-time-apply'));
+      resetPressGuard(); // 연타 창이 지난 것과 같다(TRIP-1793 D4 — 시트를 닫는 누름이 창을 연다)
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
       const body = await save();
@@ -712,6 +769,9 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       expect(c?.startAt).toBe('14:00:00');
       expect(c?.endAt).toBe('15:30:00');
       expect(a?.startAt).toBe('09:00:00');
+      // TRIP-1674 — 이웃 b(14:30)를 넘었으니 시각 순, 고정은 그대로 고정.
+      expect(ids(body)).toEqual(['a', 'c', 'b']);
+      expect(c).toMatchObject({ isFixed: true, endsNextDay: false });
     });
   });
 
@@ -732,6 +792,7 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
       fireEvent.press(screen.getByTestId('itinerary-manual-time-seg-start'));
       fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-14'));
       fireEvent.press(screen.getByTestId('itinerary-manual-time-apply'));
+      resetPressGuard(); // 연타 창이 지난 것과 같다(TRIP-1793 D4 — 시트를 닫는 누름이 창을 연다)
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
       const body = await save();
@@ -773,15 +834,37 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
 
   // TRIP-1417 (Q-101) — 시트 머리 X 도 딤 닫힘과 같은 길(onCancel)이다. 바꿔 둔 휠 값은 드래프트에 안 들어간다.
   describe('🔴 MX · 시각 시트 머리 X 로 닫으면 시트가 빠지고 드래프트는 그대로다', () => {
-    it('c 시작을 14시로 굴려 둔 채 X 를 누르면 시트가 사라지고, 저장하면 c 는 13:00–14:30 그대로다', async () => {
+    // MC1 · TRIP-981 을 앞에 합쳤다(소음 예산 — 마운트 1을 TRIP-1812 SP 가 쓴다): 시트를 딤으로 닫아도 다시 열린다.
+    it('MC1 · c 칩 시트를 딤으로 닫으면 트리에서 빠지고 a 칩을 누르면 a 의 09시로 새로 열린다 · c 시작을 14시로 굴려 둔 채 X 를 누르면 시트가 사라지고, 저장하면 c 는 13:00–14:30 그대로다', async () => {
       renderPage();
       await ready();
+
+      fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
+      const sheet = await screen.findByTestId(SHEET);
+      // TRIP-1437 — 24시간 표기(옛 `/오후 1:00/`). 시작 칸만 본다.
+      expect(
+        screen.getByTestId('itinerary-manual-time-readout')
+      ).toHaveTextContent(/^시작 13:00 · /);
+
+      // 딤 탭 닫힘 대리 — 시트의 onClose 를 부른다(없으면 조용히 아무 일도 안 일어난다).
+      fireEvent(sheet, 'close');
+      await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+
+      fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('a')}`));
+      expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
+      const readout = screen.getByTestId('itinerary-manual-time-readout');
+      expect(readout).toHaveTextContent(/^시작 09:00 · /);
+      expect(readout).not.toHaveTextContent(/^시작 13:00/);
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-close'));
+      resetPressGuard();
+      await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
       fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
       expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
       fireEvent.press(screen.getByTestId('itinerary-manual-time-wheel-h-14'));
 
       fireEvent.press(screen.getByTestId('itinerary-manual-time-close'));
+      resetPressGuard(); // 연타 창이 지난 것과 같다(TRIP-1793 D4 — 시트를 닫는 누름이 창을 연다)
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
 
       const body = await save();
@@ -1154,27 +1237,58 @@ describe('편집 배선 — 순서·시각·저장·장소 추가', () => {
    *
    * 3동작 뼈대: 준비=c(13:00)·a(09:00) 초안 → 실행=c 칩 → close → a 칩 → 단언=시트 사라짐·재등장·a 시각 시드.
    */
-  describe('🔴 MC · TRIP-981 — 직접 짜기 시각 시트도 딤으로 닫히면 다시 열린다', () => {
-    it('MC1 · c 칩 시트를 딤으로 닫으면 트리에서 빠지고, a 칩을 누르면 a 의 09시로 새로 열린다', async () => {
+  /**
+   * TRIP-1812 · AC-5 — 직접 짜기도 같은 뷰·스토어다. 페이지가 시각 시트와 끌어 지우기에 자리를 넘기는지 본다.
+   * 준비 = GET [p1 12, p2 13, p1 14] → 실행 = 둘째 칩·[적용]·끌어 지우기·저장 → 단언 = 시트 초기값·초안·PUT.
+   */
+  describe('🔴 SP · TRIP-1812 AC-5·AC-6 — 같은 장소 둘째 카드만 편집된다', () => {
+    it('둘째 칩 시트는 14시로 열리고 [적용]해도 그대로이며, 둘째를 끌어 지우면 첫째가 남고 PUT 은 그 2곳이다', async () => {
+      daySlots = [
+        slot('p1', '12:00:00', '13:00:00'),
+        slot('p2', '13:00:00', '14:00:00'),
+        slot('p1', '14:00:00', '15:00:00'),
+      ];
+      const draft = (): string[][] =>
+        useItineraryEditStore
+          .getState()
+          .days[0].slots.map((s) => [s.poiId, s.startAt, s.endAt]);
       renderPage();
-      await ready();
+      const chips = await screen.findAllByTestId(
+        `slot-stopcard-timechip-${k('p1')}`
+      );
+      expect(chips).toHaveLength(2);
 
-      fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('c')}`));
-      const sheet = await screen.findByTestId(SHEET);
-      // TRIP-1437 — 24시간 표기(옛 `/오후 1:00/`). 시작 칸만 본다.
+      // AC-1 — 시트가 둘째 값으로 열리고, 안 돌리고 [적용]하면 아무것도 안 변한다.
+      fireEvent.press(chips[1]);
+      await screen.findByTestId(SHEET);
       expect(
         screen.getByTestId('itinerary-manual-time-readout')
-      ).toHaveTextContent(/^시작 13:00 · /);
-
-      // 딤 탭 닫힘 대리 — 시트의 onClose 를 부른다(없으면 조용히 아무 일도 안 일어난다).
-      fireEvent(sheet, 'close');
+      ).toHaveTextContent('시작 14:00 · 종료 15:00');
+      fireEvent.press(screen.getByTestId('itinerary-manual-time-apply'));
+      resetPressGuard();
       await waitFor(() => expect(screen.queryByTestId(SHEET)).toBeNull());
+      expect(draft()).toEqual([
+        ['p1', '12:00:00', '13:00:00'],
+        ['p2', '13:00:00', '14:00:00'],
+        ['p1', '14:00:00', '15:00:00'],
+      ]);
 
-      fireEvent.press(screen.getByTestId(`slot-stopcard-timechip-${k('a')}`));
-      expect(await screen.findByTestId(SHEET)).toBeOnTheScreen();
-      const readout = screen.getByTestId('itinerary-manual-time-readout');
-      expect(readout).toHaveTextContent(/^시작 09:00 · /);
-      expect(readout).not.toHaveTextContent(/^시작 13:00/);
+      // AC-3 — 둘째를 끌어 맨 앞 칸으로 옮겼다 삭제 영역에 놓는다(from≠to, 자리는 원래 자리 기준).
+      await hoverOverDeleteZone(true);
+      fireEditDragEnd(2, 0);
+      expect(draft()).toEqual([
+        ['p1', '12:00:00', '13:00:00'],
+        ['p2', '13:00:00', '14:00:00'],
+      ]);
+      expect(screen.getByTestId(META)).toHaveTextContent('2곳');
+
+      // AC-6 — PUT 엔 슬롯마다 자기 시각, 편집기 키(`#`)는 없다.
+      const body = await save();
+      expect(body.days[0].slots.map((s) => [s.poiId, s.startAt])).toEqual([
+        ['p1', '12:00:00'],
+        ['p2', '13:00:00'],
+      ]);
+      expect(JSON.stringify(body)).not.toContain('#');
     });
   });
 });
@@ -2238,7 +2352,8 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
   });
 
   /** 조회 응답 차례 — 테스트가 바꾼다. `'held'` 는 `openGet` 이 풀 때까지 붙잡는다. */
-  let getReply: 'held' | 'notFound' | Itinerary = 'notFound';
+  let getReply: 'held' | 'notFound' | 'status500' | 'network' | Itinerary =
+    'notFound';
   let openGet: (() => void) | null = null;
   let getCount = 0;
   let postBodies: string[] = [];
@@ -2269,6 +2384,10 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
             openGet = resolve;
           });
         }
+        // TRIP-1747 — 404 아닌 실패(서버 오류·응답 없음).
+        if (getReply === 'status500')
+          return new HttpResponse(null, { status: 500 });
+        if (getReply === 'network') return HttpResponse.error();
         // 풀린 뒤에는 POST 가 일정을 만든 상태다.
         if (getReply === 'notFound' || getReply === 'held') {
           return postBodies.length > 0
@@ -2321,8 +2440,8 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
     });
   };
 
-  describe('🔴 G-a2·a3 · 조회가 끝나기 전엔 POST 를 보류하고, 일정 없음으로 정착하면 MANUAL 한 건만 쏜다', () => {
-    it('조회 중 POST 0 → 404 정착 뒤 POST 1건, 본문은 { generationMode:"MANUAL" } 하나뿐 · 응답 전에 화면을 떠나도 성공하면 목록을 정확히 한 번 다시 받는다 (TRIP-1677 W2)', async () => {
+  describe('🔴 G-a2·a3 · 조회가 끝나기 전엔 POST 를 보류하고, 일정 없음으로 정착하면 MANUAL 한 건만 쏜다 · 404 아닌 실패면 쏘지 않고 알린다 (TRIP-1747)', () => {
+    it('조회 중 POST 0 → 404 아닌 실패(네트워크·500)면 안내·[다시 시도] 하며 POST 0 (TRIP-1747) → 다시 시도로 404 정착 뒤 POST 1건, 본문은 { generationMode:"MANUAL" } 하나뿐 · 응답 전에 화면을 떠나도 성공하면 목록을 정확히 한 번 다시 받는다 (TRIP-1677 W2)', async () => {
       // TRIP-1677 W2 — 목록(`GET /trips`)의 일정 상태 네 칸이 직접 짜기 POST 로 처음 생긴다. 무효화가 빠지면 방금 만든 일정이 목록 카드에
       // "아직 일정이 없어요"로 남는다(첫 생성은 일정 조회도 404 였으므로 다른 갱신 계기가 없다). 그리고 무효화는 "호출별 콜백"이 아니라
       // 훅 옵션에 있어야 한다 — 호출별 `mutate(…, { onSuccess })` 는 그 컴포넌트가 이미 사라졌으면 불리지 않는다(TRIP-1015 와 같은 함정).
@@ -2341,13 +2460,51 @@ describe('진입 POST 가드 · 알림 권한 · 뒤로 가로채기 (옛 hookMo
       await settleMs();
       expect(postBodies).toEqual([]);
 
-      // 일정 없음(404)으로 정착하면 그때 한 번 쏜다.
-      getReply = 'notFound';
+      // TRIP-1747 (BR-U3-06 · INV-4) — 조회가 404 도 성공도 아니면 기존(확정일 수도 있는) 일정이 있는지 모른다. 서버는
+      // 확정 일정 재생성을 막지 않으므로 모른 채 쏘면 되돌릴 수 없다 → POST 0 + 안내 + [다시 시도]. 다시 시도가 404 면
+      // 그때 1회 쏜다(일정이 오면 가드 a 가 막는다 — C6·E2). 편집기를 한 번 더 그리면 reanimated 소음 예산(174, 여유 0)이
+      // 넘어 새 `it` 대신 이 케이스의 "보류 → 정착" 사이에 실패 두 종류와 회복을 끼웠다(04 1차 FAIL 175/174).
+      const LOAD_ERROR = 'itinerary-manual-load-error';
+      const LOAD_RETRY = 'itinerary-manual-load-retry';
+      let putCalls = 0;
+      server.use(
+        http.put(`${BASE}/trips/:tripId/itinerary`, () => {
+          putCalls += 1;
+          return HttpResponse.json(EMPTY_MANUAL);
+        })
+      );
+
+      // 실행 — 붙잡힌 조회가 응답 없음(네트워크 끊김, "모름")으로 끝난다.
+      getReply = 'network';
       await act(async () => {
         openGet?.();
       });
+      // 단언 — 실패를 알리고 다시 시도 손잡이가 있다(빈 편집기만 보이면 위반) · startFresh 안내와 섞이지 않는다 · POST 0.
+      expect(await screen.findByTestId(LOAD_ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(LOAD_RETRY)).toBeOnTheScreen();
+      expect(screen.queryByTestId('itinerary-manual-fresh-error')).toBeNull();
+      await settleMs();
+      expect(postBodies).toEqual([]);
+      // 안내 상태에서 저장을 눌러도 PUT 이 나가지 않는다(슬롯 0 → CTA 비활성 무회귀 표식).
+      fireEvent.press(screen.getByTestId('sheet-cta-button-0'));
+      await settleMs();
+      expect(putCalls).toBe(0);
+
+      // 실행 — 다시 시도, 이번엔 서버 오류(500). 단언 — 다시 알리고 여전히 쏘지 않는다.
+      getReply = 'status500';
+      const beforeRetry = getCount;
+      fireEvent.press(screen.getByTestId(LOAD_RETRY));
+      await waitFor(() => expect(getCount).toBe(beforeRetry + 1));
+      expect(await screen.findByTestId(LOAD_ERROR)).toBeOnTheScreen();
+      await settleMs();
+      expect(postBodies).toEqual([]);
+
+      // 일정 없음(404)으로 정착하면 그때 한 번 쏜다 — 다시 시도로 와도 같다(실패 때 생성을 잠그면 여기서 영영 안 나간다).
+      getReply = 'notFound';
+      fireEvent.press(screen.getByTestId(LOAD_RETRY));
       await waitFor(() => expect(postBodies).toHaveLength(1));
       expect(JSON.parse(postBodies[0])).toEqual({ generationMode: 'MANUAL' });
+      expect(screen.queryByTestId(LOAD_ERROR)).toBeNull();
 
       // 실행 — POST 응답이 오기 전에 화면을 떠난다(언마운트). 그다음 서버가 일정을 만들고 201 을 준다.
       view.unmount();

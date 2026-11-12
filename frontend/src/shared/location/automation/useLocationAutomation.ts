@@ -74,6 +74,7 @@ export function useLocationAutomation(
     input.visits,
   ]);
   // ctxKey 가 같으면 같은 문맥 — 배열 참조가 렌더마다 바뀌어도 효과를 다시 돌리지 않는다.
+  // 억제를 떼면 React Compiler 가 이 내용 키 memo 를 `ctx = input` 으로 지워 refresh effect 가 렌더마다 돈다(TRIP-1768 실측).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const ctx = useMemo(() => input, [ctxKey]);
   const onHub = input.onHub;

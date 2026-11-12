@@ -1993,3 +1993,49 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **User Input**: (사용자 결정 2026-10-30, 재계획 창 티켓 본문 인용) "여행 시작 며칠 전부터도 열기 → 7일 전부터" — 재계획 창을 시작 7일 전으로 넓히는 결정이다. 이어 "결정이 필요한것들은 웬만해서는 다 진행하는 방향으로 하자"(2026-10-30)에 따라 미결은 가장 좁은 안(알림 트리거 진입만 · 첫날만 · FULL_DAY 만 · 사용자 [적용]만)으로 정해 두었다. 그 창을 닫으려던 세션의 종료 인계(2026-11-02)로 점검 쪽을 상황 감지 세션이 이었다.
 **AI Response**: situation-awareness `business-logic-model.md` DEC-SA-7 뒤(§2.1 앞)·§7 끝·§8 끝에, `business-rules.md` BR-SA-01·BR-SA-20 뒤에, `nfr-requirements/tech-stack-decisions.md` 델타 6 뒤에 `[개정 · 2026-11-02 — 사용자 결정 반영]` 블록을 덧붙이고, U3 `business-rules.md` BR-U3-28 · `domain-entities.md` INV-U3-04 에 같은 날 블록을 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 새 스위치 `PLANB_SITUATION_PRE_TRIP_DAYS`(1~7, 기본 1 = 현행) · 지평 `pre-trip` = 오늘 + N일 안에 시작하는 여행의 첫날(첫날만) · 늘어나는 것은 장소 알림뿐(예보는 어댑터가 오늘·내일만 읽어 D-1 까지) · 재계획 쪽 창(별도 변경)이 같은 값을 읽기 전에는 N>1 을 켜지 않는다(점검만 넓으면 D-N 알림 탭과 선계산이 409) · 사용자 직접 진입은 이번 결정에 없다. 코드는 같은 PR 의 점검 쪽(`SweepScope`·`PlaceDetector.wants`·`KmaForecastDetector.wants`·설정)이다. 코드 밖 사실로 남는 것: 재계획 쪽 변경과 배포 배선(허용목록·차트)은 아직 없다.
 **Context**: CONSTRUCTION — situation-awareness Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — 여행 시작 전 확정 일정 직접 수정 허용 (U3 BR-U3-28 · INV-U3-04 · situation-awareness BR-SA-20 · DEC-SA-7)
+**Timestamp**: 2026-11-02T22:00:00+09:00 (작업 시점)
+**User Input**: (사용자 결정 2026-11-02, TRIP-1710 본문 인용) "여행 시작 전 확정(CONFIRMED) 일정도 사용자가 직접 수정할 수 있게 한다 (2026-11-02 사용자 결정 — 확정 잠금 해제)" · "재계획(Plan-B) 시작 창(ReplanSessionService 여행 기간 밖 409)은 이 칸 범위 밖 — 사용자 직접 수정만 연다" · "ItineraryRevisionService 의 확정 일정 리비전 복원 409 는 이 칸에서 함께 판단한다(같은 규칙에서 나온 잠금인지 먼저 확인)"
+**AI Response**: U3 `functional-design/business-rules.md` BR-U3-28 2026-11-02(situation-awareness) 블록 뒤, `domain-entities.md` INV-U3-04 2026-11-02 블록 뒤, situation-awareness `business-rules.md` BR-SA-20 2026-11-02 블록 뒤, `business-logic-model.md` DEC-SA-7 2026-11-02 블록 뒤에 `[개정 · 2026-11-02 — 사용자 결정 반영 · TRIP-1710]` 블록 4개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 편집 저장·도우미 편집 제안·슬롯 후보의 '여행 시작 전 CONFIRMED → 409' 잠금 해제(상태 CONFIRMED 유지 · 동결 승계 · 시작 전 편집은 변경 이력 없이 리비전만) · 범용 리비전 복원 409 는 유지(시작 전 규칙이 아니라 상태 규칙이고 복원이 상태를 PLANNED 로 써 별도 설계 필요 — 권고안으로 판단) · 재계획 창·반영 가드(BR-SA-20 규칙 1~4)는 그대로, 그 근거 중 'INV-U3-04 위반'만 소멸. 코드는 같은 PR(`EditItineraryService`·`EditProposalService`·`SlotCandidateService` 가드 삭제, 도우미 `QueryCards` 다른 곳 추천 버튼 조건, openapi 409 설명). 코드 밖으로 남는 것: BR-U3-30 확정 화면 문구('최종본 잠금') 정리는 FE 후속.
+**Context**: CONSTRUCTION — U3·situation-awareness Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — U4 재계획이 그날 건너뛴 꼭 갈 곳(고정)도 뺀다 (BR-U4-17 · TRIP-1711)
+**Timestamp**: 2026-11-02T23:30:00+09:00 (작업 시점)
+**User Input**: (사용자 원문 발췌) "TRIP-1711 을 처리해라. … 요지: 그날 건너뛴 장소가 꼭 갈 곳(고정, isFixed)이면 재계획 결과에 다시 들어온다(웹 재QA 실측: 쩡이네포차 · 고정). … 서버에서 그날 건너뛴 POI 를 고정 슬롯에서도 빼는 쪽을 우선으로 고친다 … BR-U4-17 개정 블록에 고정 포함을 명시. … 정본 개정은 append-only 블록 + aidlc/aidlc-docs/audit.md 기록."
+**AI Response**: `construction/u4-in-trip-planb/functional-design/business-rules.md` 의 `[개정 · 2026-11-01] BR-U4-17` 블록 바로 뒤에 `[개정 · 2026-11-02 · TRIP-1711]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 건너뛴 곳은 시각 고정이어도 잠그지 않고 원 일정에 고정 표시 없이 싣는다(11-01 블록의 "잠금이 제외를 이긴다"를 건너뛴 곳에 한해 뒤집음) · 앱·트리거가 보낸 제외는 종전대로 고정이 이긴다(`ReplanCommand.skippedPoiIds` 를 따로 둔 이유) · 대상 일자만 · 완료·PARTIAL 의 지난 슬롯 잠금은 그대로. 코드 변경은 같은 브랜치(`fix/TRIP-1711-BE-replan-skip-fixed`)의 `fix(be)` 커밋(`ReplanSolver`·`ReplanFacadeService`)이다. AI 는 고치지 않았다(받은 고정을 지키는 것이 계약).
+**Context**: CONSTRUCTION — U4 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — U8 현재 위치를 턴 컨텍스트에 (O-U8-5 구현 · BR-U8-22)
+**Timestamp**: 2026-11-04T01:40:00+09:00 (작업 시점)
+**User Input**: (다른 세션이 전한 사용자 원문, 2026-11-03) "위치추적해서 날씨 찾으면 되잖아." — 도우미에 "오늘 날씨"가 답이 없던 것. 결정 자체는 2026-10-20 사용자 결정 O-U8-5("포그라운드 현재 위치를 턴 컨텍스트에 싣는다")다.
+**AI Response**: `construction/u8-conversational-assistant/functional-design/business-rules.md` 의 `[정정 · 2026-10-21 · TRIP-1524]` 블록 뒤, `[개정 · 2026-10-22 · TRIP-1553]` 앞에 `[개정 · 2026-11-04 · O-U8-5 구현]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 와이어 칸·서버 동의 재확인·법정 로그 USE(이용으로 판단)·AI 날씨 앵커 순서·FE 후속.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — U3 슬롯 표시 이름·분류 덮어쓰기 (BR-U3-36 · §1.3 VisitSlot · TRIP-1816)
+**Timestamp**: 2026-11-07T12:40:00+09:00 (작업 시점)
+**User Input**: (TRIP-1816 본문 인용) "u3 functional-design 에 「일정 슬롯 표시 이름·분류를 이 여행에서만 고치기」(TRIP-1795·1801) 규칙을 반영" · "기능 지도의 「시작 전 확정 일정 저장 = 409」 문장이 BR-U3-28(TRIP-1710 개정)과 어긋남 → 고친다". 근거는 TRIP-1795 끝 보고 결정 5. 사용자 지시(2026-11-07, 배치 인덱스) "ㄱㄱ".
+**AI Response**: `construction/u3-ai-itinerary/functional-design/business-rules.md` §3 끝(§4 앞)에 `[신설 · 2026-11-07 · TRIP-1816]` BR-U3-36 블록, `domain-entities.md` §1.3 끝에 `[개정 · 2026-11-07 · TRIP-1816]` 블록을 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용은 이미 develop 에 있는 구현(#2012 TRIP-1801 · #2016 TRIP-1795)을 코드·계약과 대조해 옮긴 것이고 새 결정은 없다. 패키지 문서 `frontend/docs/feature-map/itinerary-edit.md`·`itinerary-view.md` 의 시작 전 확정 일정 409 서술도 BR-U3-28 TRIP-1710 블록에 맞게 고쳤다.
+**Context**: CONSTRUCTION — U3 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+## Functional Design 사후 개정 — U8 웹 위치 묻기 · 날씨 앵커 순서 (BR-U8-22 보강 · O-U8-5)
+**Timestamp**: 2026-11-08T22:30:00+09:00 (작업 시점)
+**User Input**: (2026-11-06) "챗봇한테 오늘 날씨 물어봤거든...웹페이지상에서..총3번 물어봤어. 제일 마지막거가 가장 좋았어. 근데 첫번째 오늘날씨 라고 물었을때 나는 지금 수원에 있는데 뜬금없이 청계천 날씨를 알려주더라고. … 두번째 혹은 세번째 처럼 나오게 해줘" · (2026-10-30) "결정이 필요한것들은 웬만해서는 다 진행하는 방향으로 하자".
+**AI Response**: `construction/u8-conversational-assistant/functional-design/business-rules.md` 의 `[개정 · 2026-11-04 · O-U8-5 구현]` 블록 뒤, `[개정 · 2026-10-22 · TRIP-1553]` 앞에 `[개정 · 2026-11-08 · 웹 위치 묻기 · 날씨 앵커 순서]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 웹 한정 첫 날씨 질문 때 브라우저 위치 권한 1회 묻기(#2052) · AI 날씨 앵커 순서 정정(오늘이면 현재 위치가 그날 일정 장소보다 먼저, #2018) · 지역 되묻기 조건(#1927·#2018). 백엔드 openapi `deviceLocation` 설명의 "권한 팝업 없음"에 웹 예외 한 줄을 같은 PR 에서 더했다.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — 수동 재계획을 여행 시작 전에도 (BR-SA-20 · BR-U4-10 · TRIP-1841)
+**Timestamp**: 2026-11-08T23:50:00+09:00 (작업 시점)
+**User Input**: (사용자 원문, 2026-11-08 배치 인덱스) 「확정 일정 수정하는 거에 AI 재계획 planb 있잖아 그거 여행 당일 아니어도 가능하게」.
+**AI Response**: `construction/situation-awareness/functional-design/business-rules.md` 의 `[개정 · 2026-11-02 — 사용자 결정 반영 · TRIP-1710]` BR-SA-20 블록 뒤와 `construction/u4-in-trip-planb/functional-design/business-rules.md` 의 `[개정 · 2026-10-19 · situation-awareness FD]` 블록 뒤에 `[개정 · 2026-11-08 · TRIP-1841]` 블록을 하나씩 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 트리거 없는 진입은 여행이 끝나기 전·지나지 않은 여행 날짜(시작 전엔 일정에 있는 날 하루 전체)에서 연다 · 반영 가드는 진입이 연 것만 · 트리거 쪽 전날 창·선계산 진입 공유는 그대로. 코드·계약은 같은 브랜치(`feat/TRIP-1841-pretrip-replan`)의 서버 `ReplanSessionService`·`openapi.yaml` 과 앱 `LiveItineraryPage` 다.
+**Context**: CONSTRUCTION — situation-awareness·U4 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.

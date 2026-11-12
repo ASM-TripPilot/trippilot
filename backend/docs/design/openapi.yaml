@@ -777,6 +777,18 @@ paths:
             해석해 **접두사**로 조회하므로 시도를 고르면 그 안 시군구가 전부 잡힌다.
             동명이지역(`동구` 는 대전·대구·광주·부산에 있다)은 **그 이름을 가진 지역 전부**가 대상이다 —
             하나를 고르면 거짓이 된다. 카탈로그에 없는 이름은 **빈 목록**이다(전국으로 넓히지 않는다).
+            한 곳을 집어야 하면 `regionCode` 를 쓴다.
+        - name: regionCode
+          in: query
+          required: false
+          schema: { type: string, pattern: '^([0-9]{2}|[0-9]{5})$' }
+          example: '11140'
+          description: >
+            지역 **코드**(`GET /regions` 의 `regionCode` — 시도 2자리·시군구 5자리, TRIP-1808). 그 코드 **접두사**로만
+            조회하므로 동명이지역이 섞이지 않는다(`11140` = 서울 중구만, `51820` = 강원 고성군만, `51` = 강원 전체).
+            **`region` 과 함께 오면 이 값이 이기고 `region` 은 무시한다** — 코드가 더 좁고 정확하다.
+            형식이 틀리면(빈 값 포함) **400** 이다(지역 조건을 떨어뜨리면 전국이 나간다). 형식만 맞고 카탈로그에 없는
+            코드는 **빈 목록**이다. 시도 코드만 가진 장소(`regionCode: "11"`)는 시군구 코드 조회에 잡히지 않는다.
         - { name: category, in: query, required: false, schema: { $ref: '#/components/schemas/PoiCategory' } }
         - name: q
           in: query
@@ -966,6 +978,21 @@ paths:
     patch:
       tags: [trips]
       summary: 여행 편집(가변 필드 대체 · 종료·삭제 후 불가)
+      description: >
+        **기간을 바꾸면 일정째 날짜만 옮긴다(TRIP-1789).** 일수가 같고 여행 시작 전이면 일정 일차 · 거점 숙소 배정 ·
+        날짜 고정 꼭 갈 곳의 날짜를 같은 칸수만큼 함께 민다 — 장소 · 순서 · 시각은 그대로이고 재계산 · AI 호출이 없다.
+        요일이 바뀌니 휴무 위반 표시만 새 날짜로 다시 계산한다.
+
+
+        일정이 아직 없는 여행은 시작 뒤에도 일수까지 바꿀 수 있다(거점 · 꼭 갈 곳은 일수가 같을 때만 함께 밀린다).
+
+
+        **일수를 바꾸려면 `discardItinerary: true`** — 일정을 버리고 기간을 바꾼다. 재생성 · AI 호출은 없고, 앱이 이어서 같은 여행의
+        일정 짜는 방법 화면으로 간다. 날짜 고정 꼭 갈 곳이 새 기간 밖이면 장소는 남고 날짜 · 시각만 비워진다(자유 배치로 바뀐다).
+        거점 배정은 새 기간에 맞춰 잘리고, 전부 밖이면 지워진다. 버린 일정은 되돌리기 목록에 남는다(새 기간보다 길면 그 버전은 복원 불가 409).
+
+
+        휴무 위반 표시는 응답 뒤 비동기로 새 날짜 기준이 된다 — 이 PATCH 는 AI 를 부르지 않는다.
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/EditTripRequest' } } }
@@ -973,6 +1000,15 @@ paths:
         '200': { description: 수정됨, content: { application/json: { schema: { $ref: '#/components/schemas/Trip' } } } }
         '400': { $ref: '#/components/responses/ValidationError' }
         '404': { description: 없음/타 계정 }
+        '409':
+          description: >
+            기간 변경 거절 — 아무 날짜도 바뀌지 않는다. `error.code` 로 갈린다:
+            `TRIP_PERIOD_STARTED`(일정이 있는 여행이 시작됐거나 — 시작일이 오늘 이전, KST — 방문 기록이 있어 기간을 못 바꾼다.
+            `discardItinerary: true` 는 일정이 없어도 시작 뒤면 이 코드다) ·
+            `TRIP_PERIOD_LENGTH_CHANGED`(일정이 있는 여행의 일수가 바뀐다 — `discardItinerary: true` 를 실어 다시 보낸다) ·
+            `TRIP_PERIOD_GENERATING`(일정 생성 중이라 날짜를 옮기지 못한다 — 끝난 뒤 다시) ·
+            `CONFLICT`(종료 · 삭제된 여행).
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
     delete:
       tags: [trips]
       summary: 여행 삭제(소프트)
@@ -991,6 +1027,7 @@ paths:
         기간이 바뀌면 일정·커버리지·필수 방문지가 모두 영향을 받으므로, 늘릴지는 사용자가 정한다.
         US-TRIP-03 의 "여행 기간 자동 확장 여부를 묻는다"는 **클라이언트 2단계**로 만족한다 —
         400 을 받아 확인을 띄우고, `PATCH /trips/{tripId}` 로 기간을 고친 뒤 다시 배정한다.
+        (일정이 있는 여행은 일수를 바꾸는 PATCH 가 409 다 — TRIP-1789. `discardItinerary` 로 일정을 버려야 늘릴 수 있다.)
 
         그래서 400 의 `error.fields` 는 **어느 칸이 왜 틀렸는지**를 담는다:
         시작일이 앞서면 `dateFrom`, 종료일이 넘으면 `dateTo` 이며 reason 에 여행 시작일·종료일이 들어간다
@@ -1145,14 +1182,14 @@ paths:
               schema: { $ref: '#/components/schemas/ErrorResponse' }
     put:
       tags: [trips]
-      summary: 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 여행 시작 전 확정·생성 중 일정은 409
+      summary: 일정 편집(전체 교체) + 재검증 — 비차단(위반은 hasViolation 표시, 저장 허용). 확정 일정도 받는다(TRIP-1710) · 생성 중 아직 없는 일자는 409
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/EditItineraryRequest' } } }
       responses:
         '200': { description: 편집됨, content: { application/json: { schema: { $ref: '#/components/schemas/Itinerary' } } } }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
-        '409': { description: 여행 시작 전 확정 일정은 수정 불가(여행 중에는 허용 — TRIP-999) · 생성 진행 중에는 아직 없는 일자를 싣는 편집만 불가(이미 만들어진 일자는 허용 — TRIP-1000) }
+        '409': { description: 생성 진행 중에는 아직 없는 일자를 싣는 편집만 불가(이미 만들어진 일자는 허용 — TRIP-1000) }
   /trips/{tripId}/generation-sessions/{sessionId}:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1202,7 +1239,7 @@ paths:
         '200': { description: 조회됨, content: { application/json: { schema: { $ref: '#/components/schemas/SlotCandidates' } } } }
         '400': { description: '슬롯 키 형식 오류 · 반경 상한 초과 · `center.mode=POINT` 인데 lat·lng 없음/범위 밖 · 모르는 `center.mode`' }
         '404': { description: 여행 없음/타 계정/생성된 일정 없음/해당 슬롯 없음/장소 좌표 없음 }
-        '409': { description: '여행 시작 전의 확정 일정(시작 뒤에는 허용 — 편집과 같은 잠금, TRIP-999) · 아직 생성 중인 일자(이미 만들어진 일자는 허용 — TRIP-1000) · 같은 날 같은 장소가 둘이라 슬롯 특정 불가 · 고른 중심의 재료 없음(`REGION` 구 중심을 모름 · `STAY` 그 날 숙소 없음 — 다른 중심으로 바꾸지 않는다)' }
+        '409': { description: '아직 생성 중인 일자(이미 만들어진 일자는 허용 — TRIP-1000) · 같은 날 같은 장소가 둘이라 슬롯 특정 불가 · 고른 중심의 재료 없음(`REGION` 구 중심을 모름 · `STAY` 그 날 숙소 없음 — 다른 중심으로 바꾸지 않는다)' }
   /trips/{tripId}/visits:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1832,8 +1869,9 @@ paths:
       tags: [trips]
       summary: 재계획 진입 — 세션을 연다(i10)
       description: >
-        여행 **기간 안**에서만(예외: 지평 pre-trip 의 여행 전날 — 알림으로 받은 첫날 하루 전체, BR-SA-20),
-        **다시 짤 일정이 있을 때만** 연다.
+        여행이 **끝나기 전**이고 **다시 짤 일정이 있을 때만** 연다. 여행 시작 전에는 알림 없이(triggerId 없음) 들어온
+        **앞으로 올 여행 날짜 하루 전체**(`targetDate` 필수 · `FULL_DAY`)를 연다(TRIP-1841). 알림으로 들어온 여행 전 진입은
+        종전 그대로 지평 pre-trip 의 여행 전날 — 알림으로 받은 첫날 하루 전체만이다(BR-SA-20).
         이미 열린 세션이 있으면 **그것을 CANCELED 로 닫고 새로 시작**한다(INV-U4-06) — 막지 않는다.
         사용자가 앱을 닫았다 다시 들어오는 것이 정상 흐름이라, 거부하면 영영 못 들어간다.
         확정(APPLIED) 전에는 원 일정에 **어떤 쓰기도 발생하지 않는다**(INV-U4-05).
@@ -1846,8 +1884,9 @@ paths:
         '404': { description: 여행 없음/타 계정/생성된 일정 없음 }
         '409':
           description: >
-            여행 기간 밖 · 지난 날·기간 밖·일정 없는 날 · triggerId 의 트리거가 없거나 다른 여행 것 ·
-            여행 전날 창(지평 pre-trip)에서 알림으로 받은 첫날 하루 전체가 아닌 진입
+            끝난 여행(`여행 기간에만 재계획할 수 있습니다.`) · 지난 날·기간 밖(여행 전에 날짜를 빼면 오늘이라 기간 밖)·일정 없는 날 ·
+            triggerId 의 트리거가 없거나 다른 여행 것 ·
+            여행 전 알림 진입 중 전날 창(지평 pre-trip)의 알림으로 받은 첫날 하루 전체가 아닌 것
             (`여행 전날에는 알림으로 받은 첫날 일정만 다시 짤 수 있어요.`) ·
             같은 순간 다른 진입이 먼저 열림(`다른 재계획이 막 시작됐어요. 다시 시도해 주세요.`)
   /trips/{tripId}/replan-sessions/prepared:
@@ -1899,7 +1938,7 @@ paths:
             초안 없음(산출 중·대안 없음·이미 끝남) · 그 사이 일정이 교체됨 — 확정 일정은 막지 않는다(여행 중 반영 허용, TRIP-999).
             미리 짠 대안(SYSTEM)이 낡았으면 오류 코드 `EXPIRED`(대상 날이 지남 · 초안이 바꾸는 첫 슬롯의 계획 시작이 지남) 또는
             `STALE`(그 날 다녀온 곳이 초안에 없음 · 새 선계산·사용자 진입에 대체돼 닫힘)이다 — 시각을 다시 추정해 옮기지 않는다
-            (BR-SA-19). 같은 입력으로 새로 계산한다. 여행 시작 전에는 전날 창의 진입(알림으로 받은 첫날 하루 전체)만 반영한다.
+            (BR-SA-19). 같은 입력으로 새로 계산한다. 여행 시작 전에는 알림 없이 연 하루 전체(TRIP-1841)와 전날 창의 진입(알림으로 받은 첫날 하루 전체)만 반영한다.
   /trips/{tripId}/replan-sessions/{sessionId}/diff:
     parameters:
       - { name: tripId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -2432,6 +2471,7 @@ components:
           type: string
           nullable: true
           description: 대표 사진. NULL=미확보 — 서버가 기본 이미지를 지어내지 않는다. 클라는 NULL·빈 문자열·공백·로드 실패면 카테고리 일러스트(번들 에셋 — 실사진이 아님)로 칸을 채운다
+        imageLicense: { nullable: true, allOf: [{ $ref: '#/components/schemas/ImageLicense' }] }
         tags:
           type: array
           items: { type: string }
@@ -2441,6 +2481,14 @@ components:
           type: string
           enum: [ACTIVE, UNVERIFIED, LOST, CLOSED]
           description: 탐색 목록은 항상 ACTIVE. 단건은 폐업(CLOSED)·유실(LOST)도, 담기 목록은 미검증(UNVERIFIED)까지 포함 — 클라 뱃지
+
+    # `imageUrl` 이 나가는 모든 POI 표면(Place·일정 슬롯·차선책·슬롯 후보·재계획 비교·기록 계획 슬롯)이 같은 자리에 싣는다(V2.88).
+    ImageLicense:
+      type: string
+      enum: [TYPE1, TYPE3]
+      description: >
+        `imageUrl` 사진의 공공누리 유형. TYPE3 = 공공누리 3유형(변경금지) — 앱은 자르지 않고 전체를 보인다.
+        TYPE1 = 1유형. null = 모름(관광공사 사진이 아니거나 아직 수집 전)
 
     SavePlaceRequest:
       type: object
@@ -2751,6 +2799,10 @@ components:
             규칙) 생략하면 지워진다 — 다른 칸만 고치려면 이 값을 그대로 돌려보내야 한다.
         firstDayStartAt: { type: string, format: time, nullable: true, description: 첫날만 다른 시작(도착 후) }
         lastDayEndAt: { type: string, format: time, nullable: true, description: 마지막날만 다른 종료(출발 전) }
+        coverKey:
+          type: string
+          nullable: true
+          description: 사용자가 고른 커버 — 앱 번들 지역 그림 키(TRIP-1789). null 이면 첫 목적지로 자동. 서버는 키 목록을 모른다(형식만 검증).
 
     CreateTripRequest:
       type: object
@@ -2837,6 +2889,23 @@ components:
           description: >
             **마지막날만** 다른 종료 시각(출발·귀가 전). 생략하면 기본 21:00.
             당일치기는 첫날이자 마지막날이라 둘 다 걸리고, 그때는 시작 < 종료여야 한다(아니면 400).
+        coverKey:
+          type: string
+          nullable: true
+          maxLength: 40
+          pattern: '^[A-Za-z0-9_-]+$'
+          description: >
+            커버로 고른 앱 번들 지역 그림 키(TRIP-1789). null · 생략 = 첫 목적지 자동.
+            형식만 검증하고(밖이면 400) 목록은 앱이 소유한다 — 앱이 모르는 키면 앱이 자동으로 폴백한다.
+
+            **편집 전에 반드시 읽어라.** 다른 가변 필드처럼 **대체**라 생략하면 지워진다 — 다른 칸만 고치려면 이 값을 그대로 돌려보낸다.
+        discardItinerary:
+          type: boolean
+          default: false
+          description: >
+            기간을 바꾸며 지금 일정을 버린다(TRIP-1789 · 사용자 결정 2026-11-06). 일수가 달라도 된다. 응답에 저장되는 칸이 아니라 이 요청의 지시다.
+            기간이 그대로면 아무것도 버리지 않는다. false 면 일수 변경은 `TRIP_PERIOD_LENGTH_CHANGED`, 일수가 같으면 일정째 날짜만 민다.
+            시작 뒤 · 방문 기록 있음 · 생성 중이면 true 여도 409 다.
 
 
     AssignBaseRequest:
@@ -2959,6 +3028,20 @@ components:
                       type: boolean
                       default: false
                       description: 자정 넘김(HC4) — 전체 교체 편집이라 조회 응답의 현행 값을 그대로 실어야 플래그가 소실되지 않음
+                    displayName:
+                      type: string
+                      nullable: true
+                      maxLength: 60
+                      description: >
+                        이 여행에서만 쓰는 표시 이름(TRIP-1801). 상한은 코드 포인트 기준이고 앞뒤 공백까지 센다(넘으면 400).
+                        앞뒤 공백을 지우고, 공백뿐이면 null 로 저장한다.
+                        장소 원본(`nameKo` · /places)은 안 바뀐다. **전체 교체라 조회 응답의 현행 값을 그대로 실어야 안 사라진다.**
+                    displayCategory:
+                      nullable: true
+                      allOf: [{ $ref: '#/components/schemas/PoiCategory' }]
+                      description: >
+                        이 여행에서만 쓰는 표시 분류(TRIP-1801). 닫힌 집합 밖이면 400.
+                        장소 원본(`category`)은 안 바뀐다. **전체 교체라 조회 응답의 현행 값을 그대로 실어야 안 사라진다.**
 
     ChangeLog:
       type: object
@@ -3377,6 +3460,7 @@ components:
         nameKo: { type: string, nullable: true }
         category: { type: string, nullable: true, description: 한글 정본(맛집·카페 …) — 일정 슬롯과 같은 값 }
         imageUrl: { type: string, nullable: true, description: NULL = 미확보. 대표 1장 }
+        imageLicense: { nullable: true, allOf: [{ $ref: '#/components/schemas/ImageLicense' }] }
         lat: { type: number, format: double, nullable: true }
         lng: { type: number, format: double, nullable: true }
         endsNextDay:
@@ -3476,6 +3560,21 @@ components:
           description: >
             [되돌리기]를 그릴 수 있는가 — 반영됐고, 아직 안 되돌렸고, 되돌리기 지점이 있다(이 기능 이전 반영분은 false).
             true 여도 누르면 409 일 수 있다 — 지난 날·되돌리면 빠지는 곳의 방문 기록·그 사이 바뀐 일정은 누르는 순간에만 판정한다
+        deferredPlaces:
+          type: array
+          items: { $ref: '#/components/schemas/ReplanDeferredPlace' }
+          description: >
+            다른 날 요청이라 이 날에 넣지 않은 갈 곳(자유입력 "서울광장 꼭, 2일차에" — U4 BR [추가 · 2026-11-05]). 앱이
+            "‘서울광장’은 11월 6일(2일차) 요청이라 이번엔 넣지 않았어요 [2일차에 넣어 다시 짜기]"를 그리고, 탭하면 targetDate=그 날 ·
+            FULL_DAY · freeText="{name} 꼭"(날 말 없는 문장)으로 새 세션을 연다 — 원문을 보내면 "내일"이 누르는 날 기준으로 다시 환산돼
+            하루 더 밀린다. 지난 날은 오지 않는다. 초안이 없으면(산출 중·대안 없음) 빈 목록 — 반영 뒤에도 실린다
+    ReplanDeferredPlace:
+      type: object
+      required: [poiId, name, date]
+      properties:
+        poiId: { type: string, format: uuid }
+        name: { type: string, description: 등록 장소 이름(사용자가 쓴 말이 아니다) }
+        date: { type: string, format: date, description: 그 곳을 가겠다고 한 날 — 여행 기간 안 }
     SlotCandidatesRequest:
       type: object
       required: [slotKey]
@@ -3551,6 +3650,7 @@ components:
               category: { type: string, nullable: true, description: 한글 정본(명소·맛집·카페·야경·자연·쇼핑·문화·액티비티·미술·술집) — 일정 슬롯과 같은 값. 클라가 이 값으로 사진 없는 칸의 카테고리 일러스트를 고른다 }
               tags: { type: array, items: { type: string }, description: 미확보 시 빈 배열 }
               imageUrl: { type: string, nullable: true, description: NULL = 미확보. 대표 1장 }
+              imageLicense: { nullable: true, allOf: [{ $ref: '#/components/schemas/ImageLicense' }] }
               # 후보 핀 좌표(TRIP-1063 · QA #044) — '후보 고르기' 지도에 A/B/C 핀을 찍는 값.
               # 표면과 같은 정본 조회에서 온다. 표면이 없으면 null — 지어내지 않는다(BR-U1-06).
               lat: { type: number, format: double, nullable: true }
@@ -3755,6 +3855,14 @@ components:
                     lat: { type: number, format: double, nullable: true }
                     lng: { type: number, format: double, nullable: true }
                     category: { type: string, nullable: true }
+                    displayName:
+                      type: string
+                      nullable: true
+                      description: 이 여행에서만 쓰는 표시 이름(TRIP-1801). null = 덮어쓰기 없음 — 클라가 `nameKo` 로 폴백한다. `nameKo` 는 계속 장소 원본 값이다.
+                    displayCategory:
+                      nullable: true
+                      allOf: [{ $ref: '#/components/schemas/PoiCategory' }]
+                      description: 이 여행에서만 쓰는 표시 분류(TRIP-1801). null = 덮어쓰기 없음 — 클라가 `category` 로 폴백한다. `category` 는 계속 장소 원본 값이다.
                     openingHours:
                       type: string
                       nullable: true
@@ -3773,6 +3881,7 @@ components:
                       type: string
                       nullable: true
                       description: NULL = 미확보. 기본 이미지를 지어내지 않는다(TRIP-219)
+                    imageLicense: { nullable: true, allOf: [{ $ref: '#/components/schemas/ImageLicense' }] }
                     tags: { type: array, items: { type: string }, description: 미확보 시 빈 배열 }
                     alternatives:
                       type: array
@@ -3810,6 +3919,7 @@ components:
                           category: { type: string, nullable: true }
                           tags: { type: array, items: { type: string } }
                           imageUrl: { type: string, nullable: true }
+                          imageLicense: { nullable: true, allOf: [{ $ref: '#/components/schemas/ImageLicense' }] }
                           # 후보 핀 좌표 — SlotCandidate.lat/lng 와 같은 뜻이다. TRIP-1063 이 온디맨드
                           # 후보에만 더해 두 응답의 모양이 갈려 있었다(같은 카드를 재사용하는데).
                           # 표면이 없으면 null — 반경 중심 등으로 지어내지 않는다(BR-U1-06).
@@ -4546,6 +4656,7 @@ components:
         nameKo: { type: string, nullable: true }
         category: { type: string, nullable: true }
         imageUrl: { type: string, nullable: true }
+        imageLicense: { nullable: true, allOf: [{ $ref: '#/components/schemas/ImageLicense' }] }
         lat: { type: number, format: double, nullable: true }
         lng: { type: number, format: double, nullable: true }
         violationReason: { type: string, nullable: true, description: '위반 사유 문구. 없으면 null' }
@@ -4825,6 +4936,15 @@ components:
           required: [surface]
           properties:
             surface: { type: string, enum: [HOME, STAY_SEARCH, ITINERARY, LIVE, STAY_DETAIL] }
+        deviceLocation:
+          type: object
+          description: >-
+            앱의 포그라운드 현재 위치(선택, U8 O-U8-5). 서버가 위치 동의(L2)를 확인한 턴에만 해석에 싣고 이용 사실을 법정 로그에 남긴다 —
+            동의가 없으면 버린다. 저장하지 않는다. 앱은 위치 동의가 켜졌고 단말 권한이 이미 있을 때만 1회 읽어 보낸다(권한 팝업 없음) — 웹만 예외로, 도우미에서 날씨를 처음 물을 때 브라우저 위치 권한을 한 번 묻는다.
+          required: [lat, lng]
+          properties:
+            lat: { type: number, format: double, minimum: -90, maximum: 90 }
+            lng: { type: number, format: double, minimum: -180, maximum: 180 }
     AssistantSendTurnResponse:
       type: object
       required: [messages, quickReplies]

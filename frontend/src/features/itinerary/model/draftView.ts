@@ -21,7 +21,7 @@ export const DRAFT_POLL_INTERVAL_MS = 2000;
 export const DRAFT_POLL_MAX_COUNT = 30;
 /** TRIP-1363 · 폴링 백오프 — 초반 15회는 2초(빠른 응답 체감), 이후는 5초(LTE 라디오 tail 보다 길게). */
 export const DRAFT_POLL_SLOW_INTERVAL_MS = 5000;
-export const DRAFT_POLL_FAST_COUNT = 15;
+const DRAFT_POLL_FAST_COUNT = 15;
 
 /**
  * 폴링 간격 한 벌(TRIP-1363) — `count` 는 TanStack Query 의 `dataUpdateCount`(지금까지 받은 응답 수).

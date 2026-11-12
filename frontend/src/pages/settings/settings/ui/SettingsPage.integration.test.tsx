@@ -38,6 +38,7 @@ import { clearTokens, getTokens, saveTokens } from '@/shared/storage';
 import { registerPushToken } from '@/shared/push';
 import { primeExpoToken, primeOsPermission } from '@/test-support/pushOsFake';
 import { routerSpies } from '@/test-support/expoRouterMock';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import Constants from 'expo-constants';
 
 /**
@@ -57,6 +58,12 @@ import Constants from 'expo-constants';
  *    등록한 토큰을 로그아웃으로 소비하는 지금 모양에 기댄다 — 그 관점 테스트가 중간에 실패하면 다음 로그아웃이
  *    예상 밖 `DELETE /me/push-tokens/…` 를 낸다(msw 미처리 요청은 단언을 안 깨므로 조용하다).
  */
+
+// TRIP-1803 — 로그아웃은 기기 안 사진 사본을 지우지 않는다(D8).
+const mockDeletePhotoCopies = jest.fn();
+jest.mock('@/shared/photo', () => ({
+  deletePhotoCopies: () => mockDeletePhotoCopies(),
+}));
 
 jest.mock('@/shared/api/generated/account/account');
 jest.mock('@/shared/api/generated/profile/profile');
@@ -121,6 +128,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => {
   mockPush.mockReset();
   mockReplace.mockReset();
+  resetPressGuard();
   installHookSwitch();
 });
 afterEach(() => {
@@ -300,7 +308,8 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
   // B안(2026-11-01) — 옛 `SettingsScreen.test.tsx`(뷰 단위)가 보던 화면 동작을 서버 응답만 바꿔 이 페이지 위에서 본다.
   describe('화면 동작 — 그룹·행 분기·이동·버전·출처·유예 (옛 뷰 단위 흡수)', () => {
     const SOURCE_TITLE = '데이터 출처';
-    const SOURCE_DATASETS = '한국관광공사 TourAPI · Overture Maps Foundation';
+    const SOURCE_DATASETS =
+      '한국관광공사 TourAPI · 행정안전부 LOCALDATA · Overture Maps Foundation · 위키백과(CC BY-SA 4.0)';
     const SOURCE_OSM = '© OpenStreetMap contributors';
     const GROUP_LABELS = [
       '계정',
@@ -369,11 +378,17 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
       const { back: mockBack } = routerSpies;
       mockBack.mockReset();
 
-      fireEvent.press(screen.getByTestId('settings-nav-preferences'));
-      fireEvent.press(screen.getByTestId('settings-nav-personalization'));
-      fireEvent.press(screen.getByTestId('settings-nav-notifications'));
-      fireEvent.press(screen.getByTestId('settings-nav-terms-PRIVACY_POLICY'));
-      fireEvent.press(screen.getByTestId('settings-back'));
+      // 연타 창(400ms)은 모듈 전역 하나라 이어 누르면 첫 누름만 간다(TRIP-1775) — 누름마다 창을 닫고 누른다.
+      for (const testID of [
+        'settings-nav-preferences',
+        'settings-nav-personalization',
+        'settings-nav-notifications',
+        'settings-nav-terms-PRIVACY_POLICY',
+        'settings-back',
+      ]) {
+        resetPressGuard();
+        fireEvent.press(screen.getByTestId(testID));
+      }
 
       expect(mockPush.mock.calls).toEqual([
         ['/settings/preferences'],
@@ -383,6 +398,26 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
       ]);
       expect(mockBack).toHaveBeenCalledTimes(1);
     });
+
+    // TRIP-1775 — 행을 빠르게 두 번 눌러도 화면은 한 번만 쌓인다.
+    it.each([
+      ['위치', 'settings-nav-location-consent', '/settings/location'],
+      ['알림', 'settings-nav-notifications', '/settings/notifications'],
+      ['약관', 'settings-nav-terms-PRIVACY_POLICY', '/terms/PRIVACY_POLICY'],
+      ['취향', 'settings-nav-preferences', '/settings/preferences'],
+      ['개인화', 'settings-nav-personalization', '/settings/personalization'],
+    ])(
+      '%s 행을 빠르게 두 번 눌러도 한 번만 이동한다',
+      async (_name, testID, href) => {
+        await renderReady();
+        const row = screen.getByTestId(testID);
+
+        fireEvent.press(row);
+        fireEvent.press(row);
+
+        expect(mockPush.mock.calls).toEqual([[href]]);
+      }
+    );
 
     it('맨 아래 버전 줄 다음에 출처 세 줄이 오고, OSM 줄만 저작권 페이지를 연다', async () => {
       appConfig.version = '1.0.0';
@@ -563,6 +598,185 @@ describe('실 훅 · 서버 값 ↔ 행·토글 (옛 .l05parity)', () => {
       ).toBeOnTheScreen();
       // 단언(부분포함): 어떤 숫자든 "/6" 이 없다 — 실패를 "0/6"로 위장하지 않는다.
       expect(within(row).queryByText(/\/6/)).toBeNull();
+    });
+  });
+
+  /**
+   * TRIP-1755 · 계정(`/me`)·프로필(`/me/profile`) 조회 실패 — 실 훅 + msw 로 보는 재시도 윈도·회복(INV-4 · US-NOTIF-09).
+   *
+   * 왜 훅 목 파일(`hookMock`)과 따로 보나: 목은 값을 내가 주입하므로 "데이터 없는 쿼리를 다시 받으면 TanStack v5 가 status 를
+   * pending 으로 되돌려 `isError` 가 꺼지는" 순간(= 거짓 active·빈 닉네임이 되살아나는 틈)을 재현하지 못한다.
+   *
+   * 무엇을 보장하나(3동작: 준비=GET 응답 큐·게이트 → 실행=렌더·다시 시도 → 단언=삭제 행·닉네임 행·줄·요청 수):
+   *  - 계정: SI1 콜드 500 → 줄·다시 시도, 삭제 요청·삭제 철회 둘 다 없음 / SI2 다시 시도 중(둘째 응답 전)에도 둘 다 없고 다시 시도는
+   *    비활성 / SI3 둘째 응답이 DELETION_PENDING 이면 줄이 사라지고 **삭제 철회가 나타나며** 삭제 요청 행은 없다(원래 사고 시나리오),
+   *    그리고 프로필은 다시 받지 않는다(실패한 조회만 재요청).
+   *  - 프로필: SI4 콜드 500 → 줄·다시 시도, 닉네임 행 없음(삭제 행은 그대로) / SI5 다시 시도 중에도 닉네임 행 없음·비활성 /
+   *    SI6 회복 → 닉네임 복귀, 계정은 다시 받지 않는다.
+   * 줄의 배치(화면 맨 위)·룩, 앱 전역 재시도 3회(≈7초) 뒤의 실제 타이밍은 jest 사각 — 6-b.
+   */
+  describe('TRIP-1755 · 계정·프로필 조회 실패 (실 훅 · msw)', () => {
+    const ERROR = 'settings-account-load-error';
+    const RETRY = 'settings-account-load-retry';
+    const DELETE_ROW = 'settings-delete-account';
+    const PENDING = 'settings-deletion-pending';
+    const CANCEL = 'settings-deletion-cancel';
+    const NICKNAME = 'settings-nickname-edit';
+    const ME = {
+      accountId: 'acc-1',
+      status: 'ACTIVE',
+      email: 'a@b.com',
+      socialProviders: ['KAKAO'],
+      onboardingCompleted: true,
+    };
+    const ME_PENDING = { ...ME, status: 'DELETION_PENDING' };
+    const PROFILE = { nickname: '여행자123' };
+
+    type Reply = { status: 200 | 500; body?: unknown; gate?: Promise<void> };
+    let queues: { me: Reply[]; profile: Reply[] } = { me: [], profile: [] };
+    let hits = { me: 0, profile: 0 };
+    let releaseGate: () => void = () => {};
+
+    /** 큐 맨 앞 응답을 꺼내 돌려준다(큐가 비면 정상 200). 게이트가 있으면 열릴 때까지 답을 미룬다. */
+    async function answer(
+      key: 'me' | 'profile',
+      normal: unknown
+    ): Promise<Response> {
+      hits[key] += 1;
+      const reply = queues[key].shift() ?? { status: 200 };
+      if (reply.gate) await reply.gate;
+      return reply.status === 500
+        ? HttpResponse.json(
+            { error: { code: 'INTERNAL', message: 'x' } },
+            { status: 500 }
+          )
+        : HttpResponse.json((reply.body ?? normal) as never);
+    }
+
+    beforeEach(() => {
+      queues = { me: [], profile: [] };
+      hits = { me: 0, profile: 0 };
+      releaseGate = () => {};
+      installServer({});
+      // 나중에 넣은 핸들러가 이긴다 — 두 조회만 큐로 덮는다.
+      server.use(
+        http.get(`${BASE}/me`, () => answer('me', ME)),
+        http.get(`${BASE}/me/profile`, () => answer('profile', PROFILE))
+      );
+    });
+
+    // 중간에 실패해도 붙잡힌 요청을 남기지 않게.
+    afterEach(() => {
+      releaseGate();
+    });
+
+    function holdSecond(
+      target: 'me' | 'profile',
+      second: Reply = { status: 200 }
+    ) {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      releaseGate = release;
+      queues[target] = [{ status: 500 }, { ...second, gate }];
+    }
+
+    it('SI1 /me 가 500 이면 줄·다시 시도가 있고 삭제 요청·삭제 철회는 둘 다 없다', async () => {
+      queues.me = [{ status: 500 }];
+
+      renderPage();
+
+      // 긍정 앵커 — 실패가 화면에 도착했다. 그 위에서 "없음"을 잰다.
+      expect(await screen.findByTestId(ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+      expect(screen.queryByTestId(DELETE_ROW)).toBeNull();
+      expect(screen.queryByTestId(PENDING)).toBeNull();
+      expect(screen.queryByTestId(CANCEL)).toBeNull();
+      expect(screen.queryByText('위험 영역')).toBeNull();
+      expect(screen.getByTestId('settings-row-logout')).toBeOnTheScreen();
+    });
+
+    it('SI2 다시 시도 중(둘째 /me 응답 전)에도 삭제 요청·삭제 철회가 없고 다시 시도는 비활성이다', async () => {
+      holdSecond('me');
+      renderPage();
+      await screen.findByTestId(ERROR);
+
+      // 실행 — 둘째 요청이 서버에 도착한 뒤가 윈도다(v5 가 pending 으로 되돌려 isError 가 꺼지는 틈).
+      fireEvent.press(screen.getByTestId(RETRY));
+      await waitFor(() => expect(hits.me).toBe(2));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+
+      // 단언 — isError 만 보는 구현이면 이 순간 거짓 active 로 [계정 삭제]가 다시 뜬다.
+      expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(RETRY)).toBeDisabled();
+      expect(screen.queryByTestId(DELETE_ROW)).toBeNull();
+      expect(screen.queryByTestId(PENDING)).toBeNull();
+    });
+
+    it('SI3 다시 시도가 DELETION_PENDING 을 받아 오면 줄이 사라지고 삭제 철회가 나타나며 프로필은 다시 받지 않는다', async () => {
+      queues.me = [{ status: 500 }, { status: 200, body: ME_PENDING }];
+      renderPage();
+      await screen.findByTestId(ERROR);
+      await waitFor(() => expect(hits.profile).toBe(1));
+
+      fireEvent.press(screen.getByTestId(RETRY));
+
+      await waitFor(() => expect(screen.queryByTestId(ERROR)).toBeNull());
+      expect(await screen.findByTestId(PENDING)).toBeOnTheScreen();
+      expect(screen.getByTestId(CANCEL)).toBeOnTheScreen();
+      expect(screen.queryByTestId(DELETE_ROW)).toBeNull();
+      expect(hits.me).toBe(2);
+      // 실패한 조회만 다시 받는다.
+      expect(hits.profile).toBe(1);
+    });
+
+    it('SI4 /me/profile 이 500 이면 줄·다시 시도가 있고 닉네임 행은 없으며 삭제 행은 그대로다', async () => {
+      queues.profile = [{ status: 500 }];
+
+      renderPage();
+
+      expect(await screen.findByTestId(ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(RETRY)).toBeOnTheScreen();
+      expect(screen.queryByTestId(NICKNAME)).toBeNull();
+      await waitFor(() =>
+        expect(screen.getByTestId(DELETE_ROW)).toBeOnTheScreen()
+      );
+    });
+
+    it('SI5 다시 시도 중(둘째 /me/profile 응답 전)에도 닉네임 행이 없고 다시 시도는 비활성이다', async () => {
+      holdSecond('profile');
+      renderPage();
+      await screen.findByTestId(ERROR);
+
+      fireEvent.press(screen.getByTestId(RETRY));
+      await waitFor(() => expect(hits.profile).toBe(2));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+
+      // 단언 — isError 만 보는 구현이면 이 순간 닉네임 행이 빈 값으로 되살아난다.
+      expect(screen.getByTestId(ERROR)).toBeOnTheScreen();
+      expect(screen.getByTestId(RETRY)).toBeDisabled();
+      expect(screen.queryByTestId(NICKNAME)).toBeNull();
+    });
+
+    it('SI6 다시 시도가 성공하면 줄이 사라지고 닉네임이 돌아오며 계정은 다시 받지 않는다', async () => {
+      queues.profile = [{ status: 500 }, { status: 200 }];
+      renderPage();
+      await screen.findByTestId(ERROR);
+      await waitFor(() => expect(hits.me).toBe(1));
+
+      fireEvent.press(screen.getByTestId(RETRY));
+
+      await waitFor(() => expect(screen.queryByTestId(ERROR)).toBeNull());
+      expect(await screen.findByTestId(NICKNAME)).toBeOnTheScreen();
+      expect(screen.getByText('여행자123')).toBeOnTheScreen();
+      expect(hits.profile).toBe(2);
+      // 실패한 조회만 다시 받는다.
+      expect(hits.me).toBe(1);
     });
   });
 
@@ -1087,6 +1301,19 @@ describe('로그아웃 순서 · 게이트 대기 (옛 .logout)', () => {
       expect(getAccessToken()).toBeNull();
       expect(queryClient.getQueryData(CACHED_KEY)).toBeUndefined();
     });
+  });
+
+  // TRIP-1803 · D8 — 다른 계정은 메타가 없어 사본에 닿지 못하므로 지우지 않는다. 다시 로그인하면 그대로 보인다.
+  it('🔴 S3 로그아웃은 사진 사본을 지우지 않는다', async () => {
+    captureLogout(() => new HttpResponse(null, { status: 204 }));
+    startFakeGate();
+    mockDeletePhotoCopies.mockClear();
+    renderPage();
+
+    confirmLogout();
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/login'));
+    expect(mockDeletePhotoCopies).not.toHaveBeenCalled();
   });
 
   describe('TRIP-938 · 서버가 실패해도 로그아웃 (AC-2)', () => {

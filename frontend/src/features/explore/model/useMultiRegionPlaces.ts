@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { getPlaces } from '@/shared/api/index.hooks';
-import type { PoiCategory } from '@/shared/api/index.schemas';
+import { getPlaces } from '@/shared/api/index.places';
+import type { GetPlacesParams, PoiCategory } from '@/shared/api/index.schemas';
 
 import { interleavePlacesByRegion, mergePlacesByPoiId } from './mergePlaces';
 
@@ -9,13 +9,16 @@ import { interleavePlacesByRegion, mergePlacesByPoiId } from './mergePlaces';
  * 다지역 '꼭 갈 곳 더 담기'(2개 이상 지역)의 병렬 조회 훅(TRIP-687).
  *
  * 지역당 단발 `getPlaces`(한 장 최대 `limit`)를 `Promise.allSettled` 로 병렬 조회해(TRIP-691)
- * `mergePlacesByPoiId` 로 합친다 — 여행 지역 수가 적어(보통 1~3) 지역당 한 장이면 실용상 충분하다.
+ * `mergePlacesByPoiId` 로 합친다 — 여행 지역 수가 적어(보통 1~3, 서비스 지역 전체는 6) 지역당 한 장이면 실용상 충분하다.
  * 한 지역이 실패해도 나머지는 살리고(부분 성공), 전부 실패면 throw(전부 성공/부분 실패만 통과).
  * 무한 스크롤은 포기하므로(단일지역 경로가 담당) `fetchNextPage`/`hasNextPage` 는 no-op·false 다.
  *
  * `filters.seed` 가 있으면(d04, TRIP-1563) 지역 요청마다 `order=random&seed` 를 싣고 `interleavePlacesByRegion`
  * 으로 지역을 번갈아 놓는다. 없으면(홈·d01·기록 방문추가) `order`·`seed` 키 자체를 안 보내고 지역 블록 병합 그대로다.
  * queryKey 끝의 `seed ?? null` 이 d04 진입마다 캐시를 가르고, seed 없는 호출부끼리는 계속 공유한다.
+ *
+ * `options.staleTime`(TRIP-1713)은 호출부가 고른 캐시 신선 시간이다 — 홈·탐색 전국 레인만 `PLACE_LANE_STALE_TIME` 을
+ * 넘기고, 안 넘기는 d04·기록 방문추가는 전역 기본(30초) 그대로다.
  *
  * `enabled: regions.length >= 2` — 1지역은 `usePlacesInfinite`(무한 스크롤 보존)가 맡고(d04 의 지역
  * 미지정은 서비스 지역 이름 배열을 넘겨 이 훅을 탄다 — TRIP-1560, 그래서 서비스 지역이 2곳 미만이 되면 꺼진다),
@@ -28,8 +31,10 @@ import { interleavePlacesByRegion, mergePlacesByPoiId } from './mergePlaces';
 const PER_REGION_LIMIT = 200;
 
 export function useMultiRegionPlaces(
-  regions: string[],
-  filters: { category?: PoiCategory | null; q?: string; seed?: string } = {}
+  // 이름 문자열 또는 이름+코드(동명 지역을 가르는 여행지 조회, TRIP-1809).
+  regions: readonly (string | Pick<GetPlacesParams, 'region' | 'regionCode'>)[],
+  filters: { category?: PoiCategory | null; q?: string; seed?: string } = {},
+  options: { staleTime?: number } = {}
 ) {
   const category = filters.category ?? undefined;
   const q = filters.q ?? undefined;
@@ -51,7 +56,7 @@ export function useMultiRegionPlaces(
         regions.map((region) =>
           getPlaces(
             {
-              region,
+              ...(typeof region === 'string' ? { region } : region),
               limit: PER_REGION_LIMIT,
               ...(category ? { category } : {}),
               ...(q ? { q } : {}),
@@ -80,6 +85,10 @@ export function useMultiRegionPlaces(
       };
     },
     enabled: regions.length >= 2,
+    // 안 넘겼을 땐 키 자체를 빼야 한다 — `staleTime: undefined` 를 명시하면 클라이언트 기본값(30초)을 덮어 0 이 된다.
+    ...(options.staleTime !== undefined
+      ? { staleTime: options.staleTime }
+      : {}),
   });
 
   return {

@@ -28,7 +28,7 @@ from trippilot.assembly_engine.constraints import (
     check_not_before,
 )
 from trippilot.assembly_engine.quality import compute_quality
-from trippilot.assembly_engine.repair import MinimalChangePolicy, RepairResult
+from trippilot.assembly_engine.repair import MinimalChangePolicy, RepairResult, hold_started, reattach_started
 from trippilot.assembly_engine.repair import repair as _repair_engine
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
 from trippilot.domain.itinerary.itinerary import (
@@ -95,8 +95,12 @@ class HybridAssemblyFacade:
                deadline_ms: int, trace_id: TraceId | None = None,
                policy: MinimalChangePolicy = MinimalChangePolicy.TIME_SHIFT_ONLY,
                departures: Mapping[date, tuple[GeoPoint, datetime]] | None = None,
+               now: datetime | None = None,
                ) -> RepairResult:
         """HC 위반 해를 최소 변경으로 수리한다. 수리 불가면 `repaired=None`.
+
+        `now`(현지 시각·분 올림)가 오면 그보다 먼저 시작한 슬롯은 수리·재검증 밖에 두었다가 원 시각 그대로
+        되붙인다 — 오늘의 가장 최근 곳만 핀으로 남아 다음 일정의 출발점이 된다(`hold_started`, TRIP-1709 F1).
 
         poi_index·estimator는 퍼사드가 보유한 것을 주입한다 — 호출자(백엔드·U5)가
         어셈블리 내부 자료를 알 필요가 없게 하는 것이 이 승격의 목적이다.
@@ -115,27 +119,29 @@ class HybridAssemblyFacade:
             self._emit_fallback(tid, "repair", "(unrepaired)", "deadline")
             return RepairResult(repaired=None, changes=())
 
-        result = _repair_engine(solution, problem, self._pois, self._est, policy, departures)
+        work, work_problem, held = hold_started(solution, problem, now)
+        result = _repair_engine(work, work_problem, self._pois, self._est, policy, departures)
         if result.repaired is None:
             # 어느 제약을 못 고쳤는지 사유에 싣는다 — 종전엔 건수만 남아(AssemblyRunRecord) 같이 짜기 교체가
             # 왜 위반으로 저장됐는지 로그로 가를 수 없었다(2026-10-13 DEV 2건). 예: `unrepairable:HC1x1,HC2x2`.
-            codes = Counter(v.code for v in check_all(solution, problem, self._pois, self._est))
-            self._finish_repair(tid, solution, problem, t0, deadline_ms, repaired=False,
+            codes = Counter(v.code for v in check_all(work, work_problem, self._pois, self._est))
+            self._finish_repair(tid, work, work_problem, t0, deadline_ms, repaired=False,
                                 reason="unrepairable:" + ",".join(f"{c}x{n}" for c, n in sorted(codes.items())))
             return RepairResult(repaired=None, changes=())
 
-        violations = check_all(result.repaired, problem, self._pois, self._est)
+        violations = check_all(result.repaired, work_problem, self._pois, self._est)
         if violations:  # 수리했지만 여전히 위반 — 반환 금지 (INV-2)
-            self._finish_repair(tid, solution, problem, t0, deadline_ms,
+            self._finish_repair(tid, work, work_problem, t0, deadline_ms,
                                 repaired=False,
                                 reason=f"repair_invalid:{len(violations)}")
             return RepairResult(repaired=None, changes=())
 
-        self._finish_repair(tid, result.repaired, problem, t0, deadline_ms,
+        self._finish_repair(tid, result.repaired, work_problem, t0, deadline_ms,
                             repaired=True, reason=None)
+        repaired = reattach_started(result.repaired, held)  # 점수는 종전처럼 하루 전체로(지난 곳 포함)
         return replace(result, repaired=replace(
-            result.repaired,
-            score=compute_quality(result.repaired, problem, self._pois, self._est),
+            repaired,
+            score=compute_quality(repaired, problem, self._pois, self._est),
         ))
 
     # ── 시한 인지 체인 ──
@@ -147,6 +153,7 @@ class HybridAssemblyFacade:
             return deadline_ms - (self._clock.monotonic_ms() - t0)
 
         tid = trace_id if trace_id is not None else TraceId("assembly")
+        last_invalid: str | None = None  # 마지막으로 거른 해의 위반 요약 — 전 단계 실패 사유에 싣는다
         for idx, stage in enumerate(self._stages):
             next_name = (self._stages[idx + 1].name
                          if idx + 1 < len(self._stages) else "(end)")
@@ -172,8 +179,11 @@ class HybridAssemblyFacade:
                           + check_hc2_coords_known(result, self._pois)
                           + check_not_before(result, problem, self._pois, self._est))
             if violations:  # 유효하지 않은 해는 반환 금지 (INV-2)
-                self._emit_fallback(tid, stage.name, next_name,
-                                    f"invalid:{len(violations)}")
+                # 어느 제약을 어겼는지 사유에 싣는다(repair 의 `unrepairable:HC1x1,HC2x2` 와 같은 꼴) —
+                # 운영 2026-10-29 생성 409 가 `invalid:1` 만 남겨 모순의 종류를 로그로 가릴 수 없었다.
+                codes = Counter(v.code for v in violations)
+                last_invalid = "invalid:" + ",".join(f"{c}x{n}" for c, n in sorted(codes.items()))
+                self._emit_fallback(tid, stage.name, next_name, last_invalid)
                 continue
             # 유일 수렴 반환점 — 모든 경로(OR-Tools·LLM·규칙 폴백)에 품질 점수 부착
             # (§3.7, TRIP-261). regenerate()도 solve() 경유라 함께 커버된다.
@@ -194,7 +204,9 @@ class HybridAssemblyFacade:
             return replace(result, score=score)
         # RuleFallback이 체인에 있으면 시한과 무관하게 도달 불가(TRIP-291).
         # 도달 = 유효 해 자체가 없음(모순 입력) — "시간이 없어서"는 이유가 될 수 없다.
-        raise AssemblyConflictError("모든 단계 실패 — 고정 블록 모순 등 입력 확인 필요")
+        raise AssemblyConflictError(
+            "모든 단계 실패 — 고정 블록 모순 등 입력 확인 필요"
+            + (f" (마지막 단계 {last_invalid})" if last_invalid else ""))
 
     # ── warm-start 재생성 (U5-P2 멱등, 정본 §4.3) ──
     def regenerate(self, problem: ItineraryProblem,

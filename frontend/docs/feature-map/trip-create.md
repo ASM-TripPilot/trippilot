@@ -16,6 +16,7 @@ routes:
 ## Sub-features
 
 - `wizard-entry` 여러 입구(홈 FAB·탐색 FAB·장소 탐색 FAB·담은 장소 CTA·일정 탭 빈 상태·기록 탭 빈 상태·도우미)에서 1/4를 연다.
+- `wizard-entry-double-tap` 도우미를 뺀 여섯 입구를 빠르게 두 번 눌러도 1/4가 한 번만 열리고, 뒤로 한 번에 입구로 돌아온다. *(TRIP-1775 · 실화면 미검증 — jest 는 이동 호출 1회까지만 본다)*
 - `step1-summary` 요약 카드 다섯 행(여행지·기간·일과 시간·동행·취향)과 얼굴 셋(loading·empty·default 부제)을 그린다.
 - `step1-destination` 여행지 시트에서 도시별 박수 −/+, 도시 빼기, 도시 추가(지역 선택으로 이탈 후 1박으로 담고 복귀)를 한다. 박수 합 상한은 30박이다.
 - `step1-period` 기간 시트에서 출발일만 고른다. 종료일은 박수 합으로 정해진다. 과거 날짜와 오늘 달 이전은 막힌다.
@@ -33,6 +34,9 @@ routes:
 - `step2-assign` 밤 카드를 눌러 숙소 선택 시트에서 거점을 지정한다(상세 손잡이는 `trip-bases.md`).
 - `create-progress-bar` 위저드 머리의 진행 막대는 지금 단계까지만 빨강으로 찬다(2/4 거점 편집 얼굴엔 막대가 없다). 1/4 부제는 어절 단위로 줄이 바뀌며 마지막 「수 있어요」가 한 줄에 남는다. 2/4 박별 카드는 한 카드 안에 묶여 보인다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
 - `step1-daywindow-wheel` 일과 시간 시트에서 안 정한 [첫날]·[마지막 날] 탭은 휠이 제안 시각(12시·18시)에 서 있기만 한다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
+- `wizard-next-disabled-gray` 1/4 [다음]은 다 채우기 전엔 연회색 바탕에 흐린 글자의 비활성 버튼이고, 채우면 빨간 52 높이 버튼이 된다(앱의 다른 비활성 버튼과 같은 회색 한 종). *(TRIP-1828 공용 Button · 생김새라 실화면 전용 · 2026-11-08 실화면 pass)*
+- `wizard-sheet-apply-shape` 기간·동행·취향 시트 [적용]과 2/4 거점 [일정 만들기]의 높이(52)·모서리(12)·글자 크기(16)가 1/4 [다음]과 같다. *(TRIP-1828 · 실화면 전용 · 2026-11-08 기간·여행지 시트·2/4 pass, 동행·취향 시트 미확인)*
+- `wizard-glyph-shape` 목적지 편집 시트의 지우기 ✕(회색)와 2/4 배정 실패의 경고 삼각(빨강, 32)이 통합 전과 같다. *(TRIP-1829 · 실화면 전용 · 2026-11-08 ✕ 0px pass · 삼각은 경계 5px·채널 차 1 — 안티앨리어싱, 유지 여부는 05 결정 1)*
 
 ## How to get to it (user POV)
 
@@ -61,7 +65,7 @@ Preconditions:
 - **loading 얼굴.** 진입 직후 취향·담은 장소 조회 중이면 부제 testID: `trip-wizard-step1-subtitle` 가 「여행 정보를 불러오는 중이에요」, 행 값 자리는 스켈레톤 testID: `trip-wizard-summary-skeleton-1` 등, 꼭 갈 곳은 「담아 둔 곳을 불러오는 중이에요」+ testID: `trip-wizard-mustvisit-skeleton-${n}` 이고 [다음]은 꺼져 있다.
 - **empty 얼굴.** 새 진입이면 여행지 행 testID: `trip-wizard-summary-destination` 에 「어디로 갈까요?」, 기간 행 testID: `trip-wizard-summary-period` 에 「기간 선택」, 동행 행은 기본값 「혼자」, 부제는 「여행지와 기간만 정하면 나머지는 채워둘게요 · 행을 누르면 바꿀 수 있어요」다. [다음] testID: `trip-wizard-step1-next` 는 비활성.
 - **여행지 시트 열기.** 여행지 행을 탭한다. 시트 testID: `trip-wizard-destination-sheet`(제목 「여행지」, 부제 「도시와 머무는 밤을 정해요」)가 뜬다. 0곳이면 [적용] testID: `trip-wizard-destination-apply` 는 비활성.
-- **도시 추가.** 「도시 추가」 testID: `trip-wizard-destination-add` 를 탭하면 지역 선택(`/explore/region?purpose=trip`)으로 간다. 인기 카드 testID: `explore-region-popular-${sidoCode}`(또는 시/도 행)를 누르면 시군구 드릴다운이 열리고, 「{시도} 전체」 행 testID: `explore-region-${sidoCode}`(예 `explore-region-26`) 또는 시군구 행 testID: `explore-region-${regionCode}` 를 탭하면 그 도시가 1박으로 담기고 자동으로 1/4로 돌아온다 — 시트는 열린 채다. 도시 행 testID: `trip-wizard-destination-row-${seq}` 에 도시명과 「1박」이 보인다.
+- **도시 추가.** 「도시 추가」 testID: `trip-wizard-destination-add` 를 탭하면 지역 선택(`/explore/region?purpose=trip`)으로 간다. 인기 카드 testID: `explore-region-popular-${sidoCode}`(또는 시/도 행)를 누르면 시군구 드릴다운이 열리고, 「{시도} 전체」 행 testID: `explore-region-${sidoCode}`(예 `explore-region-26`) 또는 시군구 행 testID: `explore-region-${regionCode}` 를 탭하면 그 도시가 1박으로 담기고 자동으로 1/4로 돌아온다 — 시트는 열린 채다. 도시 행 testID: `trip-wizard-destination-row-${seq}` 에 도시명과 「1박」이 보인다. 이름이 같은 다른 지역을 함께 담으면 시트·요약 둘 다 시도가 붙는다(「강원 고성군」·「경남 고성군」, 안 겹치면 이름만).
 - **박수 조절.** 행의 − testID: `trip-wizard-destination-nights-dec-${seq}`(라벨 「{도시} 1박 줄이기」)와 + testID: `trip-wizard-destination-nights-inc-${seq}` 를 누른다. 도시가 하나면 0박까지(당일치기), 둘 이상이면 1박이 하한이다. 합이 30박이면 +·도시 추가가 꺼지고 testID: `trip-wizard-destination-max-note` 「최대 30박까지 정할 수 있어요」가 뜬다. 변경은 [적용] 없이 즉시 요약 행에 반영된다.
 - **도시 빼기.** testID: `trip-wizard-destination-remove-${seq}`(라벨 「{도시} 빼기」)를 누르면 행이 사라진다. 꼭 갈 곳이 있으면 testID: `trip-wizard-destination-note` 에 「꼭 갈 곳 N곳은 여행지를 바꿔도 그대로 남아요」 또는 지역 밖 수가 뜬다.
 - **여행지 요약.** [적용]으로 닫으면 여행지 행 main은 첫 도시명, 보조 testID: `trip-wizard-summary-destination-sub` 는 「N박 · {둘째 도시} M박」 꼴이다.

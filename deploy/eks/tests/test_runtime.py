@@ -22,7 +22,6 @@ def outputs():
         "aws_region": "ap-northeast-2", "cluster_name": "trippilot-dev",
         "database_host": "db.example.rds.amazonaws.com",
         "database_master_secret_arn": "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:master-abc",
-        "redis_host": "redis.example.cache.amazonaws.com",
         "ecr_repositories": {name: f"123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/trippilot-dev/{name}" for name in ("backend", "ai", "embedding")},
         "app_secret_arns": {name: f"arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:{name}-abc" for name in ("backend", "ai", "database", "shared")},
     }
@@ -301,6 +300,35 @@ class SecretTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 runtime_secrets.validate_groups({**base, "ai": {"HOLIDAY_CLOSURE_MODE": bad}})
 
+    def test_kb5_fallback_switch_is_allowlisted_validated_and_a_runtime_switch(self):
+        """KB-5 대체 문서는 앱 기본이 켜짐이다 — 문제가 보이면 코드 되돌리기 없이 배포 입력으로 끈다(`TRIPPILOT_KB5_FALLBACK=off`).
+        허용 목록에 없으면 시크릿에 넣는 순간 배포 전체가 거부되고, 값이 틀리면 조용히 기본(켜짐)으로 돈다 — 여기서 먼저 막는다."""
+        self.assertIn("TRIPPILOT_KB5_FALLBACK", runtime_secrets.AI_KEYS)
+        self.assertEqual(runtime_secrets.RUNTIME_SWITCHES["TRIPPILOT_KB5_FALLBACK"], "ai")
+        base = {name: {} for name in runtime_secrets.GROUP_KEYS}
+        for ok in ("on", "off", ""):
+            with self.subTest(ok=ok):
+                runtime_secrets.validate_groups({**base, "ai": {"TRIPPILOT_KB5_FALLBACK": ok}})
+        for bad in ("true", "ON", "yes", "0", "disabled"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                runtime_secrets.validate_groups({**base, "ai": {"TRIPPILOT_KB5_FALLBACK": bad}})
+        self.assertEqual(runtime_secrets.parse_runtime_switches("TRIPPILOT_KB5_FALLBACK=off"), {"TRIPPILOT_KB5_FALLBACK": "off"})
+
+    def test_kb5_open_search_switch_is_allowlisted_validated_and_a_runtime_switch(self):
+        """도우미 열린 검색은 앱 기본이 꺼짐이다 — 측정 뒤 코드 배포 없이 배포 입력으로 켠다(`TRIPPILOT_KB5_OPEN_SEARCH=on`).
+        앱은 켜짐 낱말 밖의 값을 조용히 꺼짐으로 읽으니(오타 = 켠 줄 알고 꺼진 채) 여기서 두 값만 받는다."""
+        self.assertIn("TRIPPILOT_KB5_OPEN_SEARCH", runtime_secrets.AI_KEYS)
+        self.assertEqual(runtime_secrets.RUNTIME_SWITCHES["TRIPPILOT_KB5_OPEN_SEARCH"], "ai")
+        base = {name: {} for name in runtime_secrets.GROUP_KEYS}
+        for ok in ("on", "off", ""):
+            with self.subTest(ok=ok):
+                runtime_secrets.validate_groups({**base, "ai": {"TRIPPILOT_KB5_OPEN_SEARCH": ok}})
+        for bad in ("true", "ON", "yes", "1", "enabled"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                runtime_secrets.validate_groups({**base, "ai": {"TRIPPILOT_KB5_OPEN_SEARCH": bad}})
+        self.assertEqual(runtime_secrets.parse_runtime_switches("TRIPPILOT_KB5_OPEN_SEARCH=on"),
+                         {"TRIPPILOT_KB5_OPEN_SEARCH": "on"})
+
     def test_runtime_switches_parse_pairs_and_refuse_anything_else(self):
         """배포 입력 `runtime_switches`(KEY=VALUE;…) — 쌍 구분이 `;` 인 것은 카나리 계정 목록 값에 쉼표가 들어 있어서다.
         허용 밖 키·형식 오류·같은 키 두 번은 버리지 않고 배포를 멈춘다 — 조용히 버리면 켠 줄 알고 넘어간다."""
@@ -315,7 +343,7 @@ class SecretTests(unittest.TestCase):
         self.assertEqual(parse("PLANB_PREPARED_REPLAN= "), {"PLANB_PREPARED_REPLAN": ""})  # 빈 값 = 지운다
         self.assertEqual(set(runtime_secrets.RUNTIME_SWITCHES), {
             "PLANB_SITUATION_SWEEP", "PLANB_SITUATION_HORIZON", "PLANB_SITUATION_SWEEP_ACCOUNT_IDS", "PLANB_PREPARED_REPLAN",
-            "HOLIDAY_CLOSURE_MODE"})
+            "HOLIDAY_CLOSURE_MODE", "TRIPPILOT_KB5_FALLBACK", "TRIPPILOT_KB5_OPEN_SEARCH"})
         for key, group in runtime_secrets.RUNTIME_SWITCHES.items():  # 스위치는 제 그룹 허용목록 안이어야 쓸 수 있다
             self.assertIn(key, runtime_secrets.GROUP_KEYS[group])
         bads = ("PUSH_MODE=expo", "OPENAI_API_KEY=sk-x", "planb_situation_sweep=on",  # 허용 밖 — 다른 키는 이 길로 못 쓴다
@@ -431,8 +459,8 @@ class TargetTests(unittest.TestCase):
         self.assertEqual(dev["app_secret_arns"], self.DEV["dev_target_secret_arns"])
         self.assertEqual(dev["database_host"], "dev-target.example.rds.amazonaws.com")
         self.assertIn("rds!db-dev-target", dev["database_master_secret_arn"])
-        # 공유 자원(리전·클러스터·Redis·이미지 저장소)은 같다
-        for key in ("aws_region", "cluster_name", "redis_host", "ecr_repositories"):
+        # 공유 자원(리전·클러스터·이미지 저장소)은 같다
+        for key in ("aws_region", "cluster_name", "ecr_repositories"):
             self.assertEqual(dev[key], prod[key])
 
     def test_dev_target_never_falls_back_to_production(self):
@@ -1081,7 +1109,7 @@ class RuntimeIntegrationTests(unittest.TestCase):
         container = pod["containers"][0]
         self.assertEqual(container["image"], "123.dkr.ecr/ai:sha-1")
         shell = container["command"][2]
-        self.assertIn("/scripts/ingest_pois.py --base-url http://backend:8080 /app/data/collected_pois.json", shell)
+        self.assertIn('/scripts/ingest_pois.py --base-url http://backend:8080 "$@"', shell)
         self.assertNotIn("--close-missing", shell)
         self.assertEqual(container["workingDir"], "/tmp")  # 되돌리기 SQL 이 쓰이는 곳(루트는 읽기 전용)
         env = {e["name"]: e for e in container["env"]}
@@ -1097,15 +1125,66 @@ class RuntimeIntegrationTests(unittest.TestCase):
         # 드라이런은 "닫힐 수"만 묻고 **그 다음 평소대로 upsert** — 드라이런이 upsert 를 대신하면 그 배포는 공유본을 안 붓는다.
         probing = runtime_pois.manifest("trippilot", "img", "x", close_missing_dry_run=True)
         probing_shell = probing["items"][1]["spec"]["template"]["spec"]["containers"][0]["command"][2]
-        dry, _, real = probing_shell.partition("; ")
-        self.assertIn("--dry-run --close-missing", dry)
-        self.assertNotIn("&&", probing_shell)  # 드라이런이 409 로 끝나도 적재는 간다 — 정보용이지 게이트가 아니다
-        self.assertIn("/app/data/collected_pois.json;", real)
-        self.assertNotIn("--close-missing", real.split(";")[0])
+        dry, real = [part for part in probing_shell.split("; ") if "ingest_pois.py" in part]
+        self.assertIn('--dry-run --close-missing "$@"', dry)
+        self.assertNotIn("&& /app/.venv", probing_shell)  # 드라이런이 409 로 끝나도 적재는 간다 — 정보용이지 게이트가 아니다
+        self.assertTrue(real.endswith('"$@"'), real)
+        self.assertNotIn("--close-missing", real)
         self.assertNotIn("--allow-mass-close", probing_shell)
         # 실제 close_missing 이 켜져 있으면 드라이런은 뜻이 없어 건너뛴다
         both = runtime_pois.manifest("trippilot", "img", "x", close_missing=True, close_missing_dry_run=True)
         self.assertNotIn("--dry-run", both["items"][1]["spec"]["template"]["spec"]["containers"][0]["command"][2])
+
+    def _run_load_shell(self, *, regions, exit_code=0, **flags):
+        """Job 의 셸을 실제 `sh` 로 돌린다 — 파이썬 자리에 인자를 적는 가짜, `/app/data` 자리에 임시 폴더.
+        문자열만 보면 `set --`·`"$@"` 를 잘못 이어도 통과한다(셸이 그렇게 풀어 주는지가 계약이다)."""
+        import os
+        import stat
+        import subprocess
+        import tempfile
+        import runtime_pois
+        with tempfile.TemporaryDirectory() as folder:
+            data = os.path.join(folder, "data")
+            os.mkdir(data)
+            open(os.path.join(data, "collected_pois.json"), "w", encoding="utf-8").close()
+            if regions:
+                open(os.path.join(data, "collected_pois_regions.json"), "w", encoding="utf-8").close()
+            calls = os.path.join(folder, "calls")
+            fake = os.path.join(folder, "python")
+            with open(fake, "w", encoding="utf-8") as stream:
+                stream.write(f'#!/bin/sh\necho "$*" >> {calls}\nexit {exit_code}\n')
+            os.chmod(fake, os.stat(fake).st_mode | stat.S_IXUSR)
+            bundle = runtime_pois.manifest("trippilot", "img", "x", **flags)
+            shell = bundle["items"][1]["spec"]["template"]["spec"]["containers"][0]["command"][2]
+            shell = shell.replace("/app/.venv/bin/python", fake).replace("/app/data", data)
+            done = subprocess.run(["/bin/sh", "-c", shell], capture_output=True, text=True, timeout=30, check=False)
+            with open(calls, encoding="utf-8") as stream:
+                lines = stream.read().replace(data, "/app/data").splitlines()
+        return done.returncode, lines
+
+    def test_load_pois_without_regions_document_runs_the_same_command_as_before(self):
+        """지역 문서가 없는 이미지는 지금과 같다 — 공유본 한 장, 종료 코드는 스크립트의 것."""
+        one = "/scripts/ingest_pois.py --base-url http://backend:8080 /app/data/collected_pois.json"
+        self.assertEqual(self._run_load_shell(regions=False), (0, [one]))
+        self.assertEqual(self._run_load_shell(regions=False, exit_code=2), (2, [one]))
+        self.assertEqual(self._run_load_shell(regions=False, close_missing=True)[1],
+                         ["/scripts/ingest_pois.py --base-url http://backend:8080 --close-missing /app/data/collected_pois.json"])
+        self.assertEqual(self._run_load_shell(regions=False, close_missing_dry_run=True)[1],
+                         ["/scripts/ingest_pois.py --base-url http://backend:8080 --dry-run --close-missing /app/data/collected_pois.json", one])
+
+    def test_load_pois_with_regions_document_sends_it_after_the_shared_one(self):
+        """순서가 곧 결정이다 — 겹치는 행은 뒤가 덮으므로 지역 문서가 공유본 뒤에 가야 지역 값이 남는다."""
+        both = ("/scripts/ingest_pois.py --base-url http://backend:8080 "
+                "/app/data/collected_pois.json /app/data/collected_pois_regions.json")
+        self.assertEqual(self._run_load_shell(regions=True), (0, [both]))
+        self.assertEqual(self._run_load_shell(regions=True, exit_code=2), (2, [both]))
+        # 닫기·드라이런도 두 문서를 함께 넘긴다 — 스크립트가 합쳐서 대조한다(하나만 넘기면 지역 문서 행이 닫힌다).
+        self.assertIn("--close-missing /app/data/collected_pois.json /app/data/collected_pois_regions.json",
+                      self._run_load_shell(regions=True, close_missing=True)[1][0])
+        code, lines = self._run_load_shell(regions=True, close_missing_dry_run=True)
+        self.assertEqual(code, 0)
+        self.assertEqual(lines[1], both)
+        self.assertIn("--dry-run --close-missing /app/data/collected_pois.json /app/data/collected_pois_regions.json", lines[0])
 
     def test_load_pois_runs_waits_prints_the_summary_and_cleans_up(self):
         summary = "합계 — 접수=19084 신규=689 갱신=18395 지역코드미상=0\n탈락 없음"
@@ -1463,6 +1542,34 @@ class RefreshEventsTests(unittest.TestCase):
         source = (Path(__file__).resolve().parents[3] / "ai" / "src" / "trippilot" / "background"
                   / "event_store.py").read_text(encoding="utf-8")
         self.assertIn(f"EXPIRE_GRACE_DAYS = {refresh_events.EXPIRE_GRACE_DAYS}", source)
+
+
+class RunningFeaturesScriptTests(unittest.TestCase):
+    """떠 있는 AI 파드에 exec 하는 기능 목록 스크립트는 domain 재배치(#1772) 앞뒤 이미지 둘 다에서 돌아야 한다 —
+    운영 배포(run 41399316488)가 옛 이미지에 새 경로만 exec 해 시크릿 동기화에서 멈췄다."""
+
+    ENUM = "import enum\nclass LlmFeature(enum.Enum):\n    INTENT = 'INTENT'\n    PARAPHRASE = 'PARAPHRASE'\n"
+
+    def _run(self, layout):
+        import subprocess
+        with tempfile.TemporaryDirectory() as root:
+            for rel, text in layout.items():
+                path = Path(root, rel)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text)
+            done = subprocess.run([sys.executable, "-c", runtime_secrets._RUNNING_FEATURES],
+                                  env={**os.environ, "PYTHONPATH": root}, capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout.split()
+
+    def test_reads_features_from_image_before_domain_regroup(self):
+        old = {"trippilot/__init__.py": "", "trippilot/domain/__init__.py": "", "trippilot/domain/llm.py": self.ENUM}
+        self.assertEqual(self._run(old), ["INTENT", "PARAPHRASE"])
+
+    def test_reads_features_from_image_after_domain_regroup(self):
+        new = {"trippilot/__init__.py": "", "trippilot/domain/__init__.py": "",
+               "trippilot/domain/llm/__init__.py": "", "trippilot/domain/llm/llm.py": self.ENUM}
+        self.assertEqual(self._run(new), ["INTENT", "PARAPHRASE"])
 
 
 if __name__ == "__main__":

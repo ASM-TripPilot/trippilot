@@ -28,11 +28,11 @@ Figma 생성 CSS를 그대로 붙이면 두 가지가 망가진다: (1) RN엔 CS
 
 ### 2. 토큰 스냅
 
-**이 단계가 디자인 시스템 강제다.** `tailwind.config`의 토큰은 Figma 변수 컬렉션(파일 `1MTF3dtptIrbg8gld5IdO2`)의 미러이고 `design-tokens.test.ts`가 동기화를 지킨다. 화면 노드에 변수가 안 붙어 있어도(1단계 관측), **raw 값을 토큰으로 스냅하는 것 자체가 "픽셀이 아니라 디자인 시스템을 쓰는" 행위**다 — 스냅퍼는 기계적 폴백이 아니라 이 스킬의 강제 지점이다.
+**이 단계가 디자인 시스템 강제다.** `tailwind.config`의 토큰은 Figma 변수 컬렉션(파일 `1MTF3dtptIrbg8gld5IdO2`)의 미러이고 정본은 `src/shared/config/colorTokens.cjs`(색, `tailwind.config.js`가 읽는다)이고 Figma↔값 일치를 지키는 기계 장치는 없다. 화면 노드에 변수가 안 붙어 있어도(1단계 관측), **raw 값을 토큰으로 스냅하는 것 자체가 "픽셀이 아니라 디자인 시스템을 쓰는" 행위**다 — 스냅퍼는 기계적 폴백이 아니라 이 스킬의 강제 지점이다.
 
 **반경은 예외다** — Figma가 먼저 card 12·선택 칩 8로 바뀌었고 코드는 card 16·pill 999로 동기화 대기다(`figma-build/references/design-kit.md` §3). 반경 스냅 결과를 그대로 쓰지 말고 킷 §3과 대조해 드리프트로 브리프·리포트에 적는다.
 
-> **철칙**: 색·간격·radius·폰트는 **토큰 클래스로만** 쓴다. raw hex/px 하드코딩 = 디자인 시스템 우회 = 금지. 예외는 스냅퍼가 MISS 사유로 raw를 **명시 허용**한 경우뿐(그라디언트·브랜드색·반투명·의도적 일회성).
+> **철칙**: 색·간격·radius·폰트는 **토큰 클래스로만** 쓴다. raw hex/px 하드코딩 = 디자인 시스템 우회 = 금지(hex 는 ESLint `trippilot/no-raw-hex` 가 error — 예외는 윗줄 `eslint-disable-next-line … -- 사유`). 예외는 스냅퍼가 MISS 사유로 raw를 **명시 허용**한 경우뿐(그라디언트·브랜드색·반투명·의도적 일회성).
 
 raw 값을 `[{type,value,role}]` 배열(JSON)로 모아 스냅퍼를 **실행**한다(읽지 말고 돌린다).
 

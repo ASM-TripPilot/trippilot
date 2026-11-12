@@ -6,20 +6,18 @@ import {
   View,
   type ImageSourcePropType,
 } from 'react-native';
+import { ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import { Image } from '@/shared/ui/Image';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import { isLargeText } from '@/shared/lib/fontScale';
 
 import { formatOpeningHoursLabel } from '../lib/openingHoursLabel';
+import { slotDisplayName } from '../lib/slotDisplay';
 import { buildSlotKey } from '../lib/slotKey';
 import type { SlotProgressState } from '../lib/slotMapPin';
-import {
-  CheckGlyph,
-  ChevronRightGlyph,
-  MemoGlyph,
-  PhotoGlyph,
-} from './SlotGlyphs';
+import { SlotCheckGlyph, MemoGlyph, PhotoGlyph } from './SlotGlyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-746 · i01 허브 시트의 슬롯 카드 3상태(entities · presentation-only, useState 0).
@@ -40,14 +38,14 @@ import {
 
 // 그림자 색은 토큰이 없다 — SlotStopCard·DayChipOverlay 의 `#000000` 스타일 객체 관례.
 const DONE_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 5,
   elevation: 2,
 } as const;
 const ACTIVE_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
   shadowOpacity: 0.08,
   shadowRadius: 8,
@@ -68,6 +66,8 @@ export interface SlotProgressCardProps {
   visitedLabel?: string | null;
   /** done·active(TRIP-1117). null/미전달이면 메모 박스를 안 그린다. */
   memo?: string | null;
+  /** TRIP-1751 — done·active. 서버 메모를 못 받았다. `memo` 가 없을 때만 "불러오지 못했어요" 표식(메모 우선 > 표식 > 없음). */
+  memoLoadFailed?: boolean;
   /** active [방문 완료]. 미주입이면 버튼을 그리지 않는다(TRIP-1561 — 허브가 "마지막 장소"에서만 준다). */
   onPressComplete?: () => void;
   /** active·done(TRIP-1203) [사진](TRIP-1070). 미주입이면 버튼을 그리지 않는다. */
@@ -76,6 +76,10 @@ export interface SlotProgressCardProps {
   onPressMemo?: () => void;
   /** active·done 사진 안내 한 줄(권한 거부·저장 실패 등) — 상태는 부모가 가진다. 비면 안 그린다. */
   photoNotice?: string | null;
+  /** TRIP-1797 — active·done. 여러 장을 붙이는 동안의 진행 한 줄("2/3 붙이는 중"). 있으면 그리고, 없거나 null 이면 안 그린다. 상태는 부모가 가진다. */
+  photoProgress?: string | null;
+  /** TRIP-1797 — active·done. 붙이지 못한 사진 [다시 시도]. 주면 그린다(안내 줄 아래). 어느 카드에 줄지는 부모가 정한다. */
+  photoRetry?: { onPress: () => void };
   /** TRIP-1216 — 사진 안내 옆 [설정 열기](권한 거부). 주면 안내가 있을 때만 그린다. 설정을 여는 일은 부모 몫. */
   onPressPhotoSettings?: () => void;
   /** TRIP-1117 — active·done 메모 안내 한 줄(저장 실패, Q3). 상태는 부모가 가진다. 비면 안 그린다. */
@@ -102,11 +106,14 @@ export function SlotProgressCard({
   state,
   photos = [],
   memo,
+  memoLoadFailed,
   visitedLabel,
   onPressComplete,
   onPressPhoto,
   onPressMemo,
   photoNotice,
+  photoProgress,
+  photoRetry,
   onPressPhotoSettings,
   memoNotice,
   badgeLabel,
@@ -132,7 +139,7 @@ export function SlotProgressCard({
         state === 'upcoming' ? 'text-body' : 'text-ink'
       }`}
     >
-      {slot.nameKo ?? ''}
+      {slotDisplayName(slot) ?? ''}
     </Text>
   );
 
@@ -161,7 +168,7 @@ export function SlotProgressCard({
       >
         {nameText()}
         <View testID={fieldId('chevron')}>
-          <ChevronRightGlyph size={18} tone="ink" />
+          <ChevronRight24Glyph size={18} color="ink" />
         </View>
       </Pressable>
     ) : (
@@ -264,6 +271,17 @@ export function SlotProgressCard({
     </View>
   ) : null;
 
+  // TRIP-1751 — 메모가 없고 서버 메모를 못 받았을 때만. "메모 없음"(아무것도 안 그림)과 구별한다.
+  const memoErrorLine =
+    !memo && memoLoadFailed ? (
+      <Text
+        testID={fieldId('memo-error')}
+        className="font-noto text-caption text-muted"
+      >
+        메모를 불러오지 못했어요
+      </Text>
+    ) : null;
+
   // [사진]·[메모] 버튼과 안내 줄 — active 와 done(TRIP-1203)이 같은 모양을 쓴다. testID 만 다르다:
   // active 는 고정 id, done 은 카드가 여러 장이라 slotKey 를 붙인다.
   const mediaButton = (
@@ -296,6 +314,14 @@ export function SlotProgressCard({
     memoNotice: string;
   }): ReactElement => (
     <>
+      {photoProgress ? (
+        <Text
+          testID="visit-photo-progress"
+          className="font-noto text-caption text-muted"
+        >
+          {photoProgress}
+        </Text>
+      ) : null}
       {photoNotice ? (
         <Text
           testID={ids.photoNotice}
@@ -303,6 +329,19 @@ export function SlotProgressCard({
         >
           {photoNotice}
         </Text>
+      ) : null}
+      {photoRetry ? (
+        <Pressable
+          testID="visit-photo-retry"
+          accessibilityRole="button"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          onPress={photoRetry.onPress}
+          className="self-start"
+        >
+          <Text className="font-noto-bold text-caption font-bold text-primary">
+            다시 시도
+          </Text>
+        </Pressable>
       ) : null}
       {photoNotice && onPressPhotoSettings ? (
         <Pressable
@@ -364,6 +403,7 @@ export function SlotProgressCard({
         })}
         {actionNoticeLine}
         {memoBox}
+        {memoErrorLine}
       </View>
     );
   }
@@ -410,13 +450,14 @@ export function SlotProgressCard({
           memoNotice: 'execution-arrive-memo-notice',
         })}
         {memoBox}
+        {memoErrorLine}
       </View>
     );
   }
 
   const hoursLabel = formatOpeningHoursLabel(slot.openingHours);
   const disabledIcons = [
-    { role: 'disabled-check', icon: <CheckGlyph size={15} /> },
+    { role: 'disabled-check', icon: <SlotCheckGlyph size={15} /> },
     { role: 'disabled-photo', icon: <PhotoGlyph size={15} tone="disabled" /> },
     { role: 'disabled-memo', icon: <MemoGlyph size={15} tone="disabled" /> },
   ];
@@ -440,6 +481,7 @@ export function SlotProgressCard({
       <View className="flex-row flex-wrap items-center justify-between gap-sm">
         <View className="flex-row gap-[6px]">
           {disabledIcons.map(({ role, icon }) => (
+            // eslint-disable-next-line no-restricted-syntax -- 모양만 있는 아이콘(disabled·onPress 없음) — button 을 달면 이름 없는 흐린 버튼 3개가 생긴다(TRIP-1765).
             <Pressable
               key={role}
               testID={fieldId(role)}
@@ -461,7 +503,7 @@ export function SlotProgressCard({
                 onPress={onPressArrive}
                 className="flex-row items-center gap-[4px] rounded-button bg-primary px-md py-[6px]"
               >
-                <CheckGlyph size={15} tone="onPrimary" />
+                <SlotCheckGlyph size={15} tone="onPrimary" />
                 <Text className="font-noto-bold text-label font-bold text-on-primary">
                   도착
                 </Text>

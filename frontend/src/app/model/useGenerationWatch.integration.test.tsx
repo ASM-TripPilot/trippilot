@@ -1,5 +1,9 @@
 import type { ReactNode } from 'react';
-import { QueryClientProvider, focusManager } from '@tanstack/react-query';
+import {
+  QueryClient,
+  QueryClientProvider,
+  focusManager,
+} from '@tanstack/react-query';
 import {
   act,
   fireEvent,
@@ -56,7 +60,7 @@ import { useGenerationWatch } from './useGenerationWatch';
  *  - K6~K9·K19 같은 값 반복·처음부터 완료·재생성·로그아웃 뒤 첫 값의 전이 규칙.
  *  - K10~K13 생성 중 0개면 요청 0 · 여러 개여도 목록 1건 · 간격 확대 · 백그라운드 0 · 오류 틱에도 멈추지 않는다.
  *  - K14 "보기" 는 누른 시점의 목록 캐시로 목적지를 정한다(copick 갈래만 일정 GET 1번).
- *  - K15 HOME 이 아니거나 그려지기 전엔 감시도 토스트도 없다 · K17 관찰자가 둘이어도 간격당 1건 · K18 첫 생성은 목록 무효화가 폴링을 시작시킨다.
+ *  - K15 HOME 이 아니거나 그려지기 전엔 감시도 토스트도 없다 · K17 관찰자가 둘이어도 간격당 1건 · K18 첫 생성은 목록 무효화가 폴링을 시작시킨다 · K20 앱 클라이언트(복귀 정책)로도 복귀 때 따라잡는다(TRIP-1714).
  *
  * 어떻게: 실 `QueryClient`(운영 전역과 같은 staleTime 30초) + msw 서버 대본(`serverTrips`) + 가짜 시계 + 실 토스트 호스트. **목록 캐시를 시드해 시작**한다 —
  * 캐시가 비어 있으면 셸 관찰자가 첫 목록 조회를 거는데 그건 이 파일의 대상이 아니다. 경로는 `usePathname` 목 변수로 바꾼다.
@@ -263,6 +267,8 @@ type Gate = { drawn: boolean; destination: BootstrapDestination | null };
 const HOME: Gate = { drawn: true, destination: 'HOME' };
 
 interface MountOptions {
+  /** 안 주면 운영 전역과 같은 staleTime 30초 클라이언트 — K20 은 앱이 실제로 쓰는 클라이언트(`createAppQueryClient`)를 넘긴다(TRIP-1714). */
+  client?: QueryClient;
   /** 훅을 띄우기 전에 목록 캐시에 심는 여행들 — 다른 화면이 이미 받아 둔 목록. 서버 대본도 같은 값으로 시작한다. */
   seed?: Trip[];
   path?: string;
@@ -272,6 +278,7 @@ interface MountOptions {
 }
 
 function mount({
+  client = newClient(),
   seed = [],
   path = '/',
   gate = HOME,
@@ -279,7 +286,6 @@ function mount({
 }: MountOptions = {}) {
   mockPathname = path;
   serverTrips = seed;
-  const client = newClient();
   client.setQueryData(LIST_KEY, seed);
   function Wrapper({ children }: { children: ReactNode }) {
     return (
@@ -1010,6 +1016,75 @@ describe('K19 · 로그아웃(queryClient.clear) 뒤 첫 값은 "처음 본 값"
     // 짝 — 비운 뒤에도 감시 귀는 살아 있어 진짜 전이는 뜬다.
     h.write([running(A)]);
     h.write([complete(A)]);
+    expect(showSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(GENERATION_COMPLETE_TOAST_ID)).toBeOnTheScreen();
+  });
+});
+
+// TRIP-1714 — 복귀 재조회 정책(키 함수)이 생성 감시를 해치지 않는다. 클라이언트가 K12 의 `newClient()` 사본이 아니라 앱이 쓰는 그것이어야
+// 목록 키(`/trips`)가 "복귀 때 부른다" 쪽에 남아 있다는 것이 잠긴다(사본이면 정책이 어떻게 바뀌어도 이 케이스는 green 이다).
+describe('K20 · 생성 중에 백그라운드를 다녀와도 따라잡고 토스트는 한 번, 폴링은 이어진다 (TRIP-1714 AC5)', () => {
+  function appClient(): QueryClient {
+    return jest
+      .requireActual<typeof import('@/app/entrypoint/queryClient')>(
+        '@/app/entrypoint/queryClient'
+      )
+      .createAppQueryClient();
+  }
+
+  it('다른 탭이 같은 목록 칸을 읽는 중, 백그라운드 사이 서버가 끝났으면 복귀 즉시(간격 전에) 1건으로 따라잡고 토스트 1회 — 더 묻지 않는다', async () => {
+    // 준비 — 생성 중인 여행을 셸(감시)과 다른 탭(카드 대역) 둘이 읽는다.
+    const h = mount({
+      client: appClient(),
+      seed: [running(A)],
+      withCard: true,
+    });
+    expect(h.cardState(A)).toBe('PARTIAL');
+
+    // 실행 ① — 백그라운드로 가서 한참 지난다. 그 사이 서버가 완료한다(앵커: 묻지 않았으니 토스트·요청 0).
+    act(() => focusManager.setFocused(false));
+    await advance(119_000);
+    serverTrips = [complete(A)];
+    expect(listHits(log.all())).toBe(0);
+    expect(screen.queryByTestId(GENERATION_COMPLETE_TOAST_ID)).toBeNull();
+
+    // 실행 ② — 복귀. 폴링 간격(2초)이 오기 전 100ms 만 흘린다 — 그 안에 따라잡았다면 복귀 재조회가 목록 키를 "부른다"로 둔 것이다.
+    act(() => focusManager.setFocused(true));
+    await advance(100);
+
+    // 단언 — 요청 1건·카드(다른 탭)도 COMPLETE·토스트 정확히 1회.
+    expect(listHits(log.all())).toBe(1);
+    expect(h.cardState(A)).toBe('COMPLETE');
+    expect(showSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(GENERATION_COMPLETE_TOAST_ID)).toBeOnTheScreen();
+
+    // 끝난 여행은 더 묻지 않고 토스트도 늘지 않는다.
+    await advance(POLL * 3);
+    expect(listHits(log.all())).toBe(1);
+    expect(showSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('복귀했는데 서버가 아직 생성 중이면 복귀 즉시 1건 뒤에도 간격 폴링이 이어지고, 그 뒤 끝나면 토스트 1회', async () => {
+    // 준비
+    mount({ client: appClient(), seed: [running(A)], withCard: true });
+
+    // 실행 ① — 백그라운드 → 복귀(아직 생성 중이다).
+    act(() => focusManager.setFocused(false));
+    await advance(119_000);
+    act(() => focusManager.setFocused(true));
+    await advance(100);
+    expect(listHits(log.all())).toBe(1);
+    expect(showSpy).not.toHaveBeenCalled();
+
+    // 실행 ② — 간격 한 번이 지난다: 폴링이 멈추지 않았다.
+    await advance(POLL + 100);
+    expect(listHits(log.all())).toBe(2);
+
+    // 실행 ③ — 서버가 끝내고 다음 간격이 온다.
+    serverTrips = [complete(A)];
+    await advance(POLL + 100);
+
+    // 단언 — 토스트 정확히 1회.
     expect(showSpy).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId(GENERATION_COMPLETE_TOAST_ID)).toBeOnTheScreen();
   });

@@ -125,6 +125,8 @@ def _print_summary(json_path: str) -> int:
 _BIZ_STATUS = Path(__file__).resolve().parents[2] / "data" / "poi_business_status.json"
 # 사람이 적는 제외 목록 — 인허가 대장이 모르는 것만. 아래 `load_closed_refs` 주석 참조.
 _EXCLUDED = Path(__file__).resolve().parents[2] / "data" / "poi_excluded_manual.json"
+# 정제 필터가 뺀 기존 행(TRIP-1811) — 수천 건이라 사람이 드는 위 목록과 나눈다.
+_EXCLUDED_FILTERED = Path(__file__).resolve().parents[2] / "data" / "poi_excluded_filtered.json"
 
 
 def load_closed_refs(path: Path = _BIZ_STATUS) -> frozenset[tuple[str, str]]:
@@ -148,6 +150,7 @@ def load_closed_refs(path: Path = _BIZ_STATUS) -> frozenset[tuple[str, str]]:
     적는다. 대장은 `일반음식점`·`휴게음식점` 이라 유흥주점으로 허가된 업소(클럽 등)가
     아예 없고, 좌표가 주소와 어긋난 불량 레코드도 대장으로는 못 가린다. 생성기가
     `poi_business_status.json` 을 다시 만들면 손으로 적은 것이 지워지므로 파일을 따로 둔다.
+    정제 필터가 뺀 기존 행(`poi_excluded_filtered.json`, TRIP-1811)도 같은 이유로 합친다.
     """
     if not path.exists():
         print(f"[collect] NOTICE 폐업 목록 없음({path.name}) — 폐업 필터 없이 진행",
@@ -166,7 +169,7 @@ def load_closed_refs(path: Path = _BIZ_STATUS) -> frozenset[tuple[str, str]]:
         return frozenset()
     print(f"[collect] 폐업 필터 {len(closed):,}건 (기준 {doc.get('generated_at', '?')})",
           file=sys.stderr)
-    return closed | _load_excluded()
+    return closed | _load_excluded() | _load_excluded(_EXCLUDED_FILTERED)
 
 
 def _load_excluded(path: Path = _EXCLUDED) -> frozenset[tuple[str, str]]:
@@ -178,9 +181,9 @@ def _load_excluded(path: Path = _EXCLUDED) -> frozenset[tuple[str, str]]:
         out = frozenset((str(e["source"]).lower(), str(e["ref"]))
                         for e in doc.get("excluded", ()))
     except (OSError, json.JSONDecodeError, KeyError, TypeError) as e:  # noqa: BLE001
-        print(f"[collect] WARNING 수동 제외 목록을 못 읽었다({type(e).__name__})", file=sys.stderr)
+        print(f"[collect] WARNING 제외 목록 {path.name} 을 못 읽었다({type(e).__name__})", file=sys.stderr)
         return frozenset()
-    print(f"[collect] 수동 제외 {len(out)}건", file=sys.stderr)
+    print(f"[collect] 제외 목록 {path.name} {len(out)}건", file=sys.stderr)
     return out
 
 

@@ -2,7 +2,13 @@ import fc from 'fast-check';
 
 import type { TripDestination } from '@/shared/api/index.schemas';
 
-import { regionForDay } from './regionForDay';
+import {
+  destinationForDay,
+  placeRegionParams,
+  placeRegionQueries,
+  placeRegionQuery,
+  regionForDay,
+} from './regionForDay';
 
 /**
  * TRIP-1043 · QA #041 — 같이 짜기 진행 줄 앞에 붙일 "그날 여행지"(결정 3).
@@ -167,5 +173,108 @@ describe('🔴 P · 속성 — 어떤 여행지 목록에도 성립', () => {
         }
       )
     );
+  });
+});
+
+/**
+ * TRIP-1809 — 장소 조회의 지역 조건. 이름은 늘 함께 보낸다: 새 서버는 코드로 한 곳만 집고(`region` 무시),
+ * 옛 서버는 모르는 `regionCode` 를 무시하고 이름으로 조회한다. 코드만 보내면 옛 서버에서 전국이 나간다.
+ * 3동작: 준비(여행지) → 실행(함수) → 단언(서버에 보낼 값).
+ */
+describe('TRIP-1809 · 장소 조회 지역 조건', () => {
+  it.each([
+    ['시군구 코드', '11140', { region: '중구', regionCode: '11140' }],
+    ['시도 코드', '48', { region: '중구', regionCode: '48' }],
+    ['코드 없음', undefined, { region: '중구' }],
+    ['코드 null', null, { region: '중구' }],
+    // 서버는 형식이 틀린 코드에 400 을 낸다 — 이름 조회로 내려가 목록을 살린다.
+    ['빈 코드', '', { region: '중구' }],
+    ['3자리 코드', '111', { region: '중구' }],
+    ['문자 코드', 'abcde', { region: '중구' }],
+  ])('placeRegionQuery — %s', (_name, regionCode, expected) => {
+    expect(placeRegionQuery({ region: '중구', regionCode })).toEqual(expected);
+  });
+
+  it('destinationForDay — regionForDay 와 같은 날의 여행지 전체를 돌려준다', () => {
+    const destinations: TripDestination[] = [
+      { seq: 2, region: '중구', nights: 1, regionCode: '26110' },
+      { seq: 1, region: '중구', nights: 1, regionCode: '11140' },
+    ];
+
+    expect(destinationForDay(destinations, 1)?.regionCode).toBe('11140');
+    expect(destinationForDay(destinations, 2)?.regionCode).toBe('26110');
+    expect(destinationForDay(destinations, 9)?.regionCode).toBe('26110');
+    expect(destinationForDay([], 1)).toBeNull();
+  });
+
+  describe('placeRegionQueries — d04 주소 파라미터 읽기', () => {
+    it.each([
+      ['없음', undefined, undefined, []],
+      ['이름만', '부산', undefined, [{ region: '부산' }]],
+      ['빈 조각은 지역이 아니다', '부산,', undefined, [{ region: '부산' }]],
+      [
+        '이름·코드 한 쌍',
+        '고성군',
+        '48820',
+        [{ region: '고성군', regionCode: '48820' }],
+      ],
+      // expo-router 가 객체 href 의 배열을 합친 실제 모양.
+      [
+        '쉼표로 합쳐진 값',
+        '중구,중구',
+        '11140,26110',
+        [
+          { region: '중구', regionCode: '11140' },
+          { region: '중구', regionCode: '26110' },
+        ],
+      ],
+      // 주소에 키를 반복하면 진짜 배열로 온다.
+      [
+        '배열',
+        ['중구', '중구'],
+        ['11140', '26110'],
+        [
+          { region: '중구', regionCode: '11140' },
+          { region: '중구', regionCode: '26110' },
+        ],
+      ],
+      [
+        '수가 다르면 코드를 버린다',
+        '부산,경주',
+        '26',
+        [{ region: '부산' }, { region: '경주' }],
+      ],
+    ])('%s', (_name, region, regionCode, expected) => {
+      expect(placeRegionQueries(region, regionCode)).toEqual(expected);
+    });
+  });
+
+  describe('placeRegionParams — d04 주소 파라미터', () => {
+    it('이름·코드를 같은 순서로 싣고, 이름이 같아도 코드가 다르면 둘 다 남긴다', () => {
+      expect(
+        placeRegionParams([
+          { region: '중구', regionCode: '11140' },
+          { region: '중구', regionCode: '26110' },
+          { region: '중구', regionCode: '11140' },
+        ])
+      ).toEqual({
+        region: ['중구', '중구'],
+        regionCode: ['11140', '26110'],
+      });
+    });
+
+    it('코드 없는 여행지가 하나라도 있으면 코드를 통째로 빼고 이름만 싣는다 (짝이 어긋나지 않게)', () => {
+      expect(
+        placeRegionParams([
+          { region: '서울', regionCode: '11' },
+          { region: '경주' },
+          { region: '경주' },
+        ])
+      ).toEqual({ region: ['서울', '경주'] });
+    });
+
+    it('여행지가 없으면 빈 객체다 — 지역 키를 안 싣는다', () => {
+      expect(placeRegionParams([])).toEqual({});
+    });
   });
 });

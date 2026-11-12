@@ -3,7 +3,7 @@ import { buildMonthGrid, isDateInRange } from '@/shared/lib/monthGrid';
 import { formatDayLabel } from '@/entities/trip';
 import { formatLegendDateRange, formatTripDateRange } from '@/entities/trip';
 import { nightsLabel } from '@/entities/trip';
-import { pickRegionCover } from '@/entities/trip';
+import { tripCoverLabel, tripCoverSource } from '@/entities/trip';
 import { tripDayNumber } from '@/entities/trip';
 import { isTripOngoing } from '@/entities/trip';
 import type { PastTripCardVM } from '@/entities/trip';
@@ -78,7 +78,8 @@ export function buildPastTripCards(
         trip.endDate ?? null
       ),
       nightsLabel: nightsLabel(trip.startDate ?? null, trip.endDate ?? null),
-      coverSource: pickRegionCover(trip.destinations),
+      coverSource: tripCoverSource(trip),
+      coverLabel: tripCoverLabel(trip),
     }));
 }
 
@@ -101,6 +102,21 @@ export const UNLISTED_COLOR = {
   cell: 'bg-surface-strong',
   text: 'text-body',
 } as const;
+
+/**
+ * 마킹된 날의 칸 색을 정하는 곳 한 군데(TRIP-1671). `dayColors` 를 아예 안 받았으면(범례 정보 없이 그리는 호출) 첫 여행 색,
+ * 받았는데 그 날이 없으면 범례 줄이 없는 마킹(일정 0일 여행 등)이라 중립색이다 — 없는 날을 첫 색으로 칠하면 첫 여행과 구분이 안 된다.
+ */
+export function cellColorFor(
+  dayColors: Record<string, number> | undefined,
+  date: string
+) {
+  if (dayColors === undefined) return TRIP_COLORS[0];
+  const index: number | undefined = dayColors[date];
+  return index === undefined
+    ? UNLISTED_COLOR
+    : TRIP_COLORS[index % TRIP_COLORS.length];
+}
 
 /** 캘린더 아래 legend 한 줄 — 여행 하나, 또는 기간(시작·종료)이 같은 여행 2건 이상의 묶음. */
 export type LegendRow =
@@ -243,8 +259,9 @@ export function openableTripIds(
 }
 
 /**
- * 페이지가 여행별 일정 조회를 접은 값 — 확정 여부(`'CONFIRMED'` 등) · 404 = `undefined`(일정 없음,
- * 아는 값) · `'unknown'`(대기·404 아닌 실패 — 모름).
+ * 여행 한 장과 그 일정 상태 — 확정 여부(`'CONFIRMED'` 등) · `undefined`(일정 없음, 아는 값) · `'unknown'`(모름).
+ * 페이지는 목록(`GET /trips`)의 `itineraryStatus` 칸으로 채우므로 `'unknown'` 을 넣지 않는다(TRIP-1677 — 옛 여행별
+ * 일정 조회의 대기·실패 값). `pickOngoingTrip` 의 「모르면 그리지 않는다」 갈래는 그 계약으로 남아 있다.
  */
 export interface OngoingTripEntry {
   trip: Trip;

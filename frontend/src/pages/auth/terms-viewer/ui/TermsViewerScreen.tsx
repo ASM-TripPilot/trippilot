@@ -3,6 +3,7 @@
  * Figma 프레임이 없어 l06 하위 화면 헤더 + 본문 스크롤로 구성했다(Figma 역반영 후속).
  * props 만 받고 네트워크를 모른다 — 조회·재시도 배선은 `pages/auth/terms-viewer` 몫이다.
  */
+import { BackChevronGlyph } from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import {
   ActivityIndicator,
@@ -12,8 +13,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-import { BackChevronGlyph } from '@/features/onboarding';
 
 import {
   parseTermsMarkdown,

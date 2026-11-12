@@ -6,17 +6,15 @@
 // 재수출하고, 나머지 둘은 타입만 재수출한다(place/model 의 PoiCategory·Place 배치와 동형).
 import type { ImageSourcePropType } from 'react-native';
 
-export { PoiCategory } from '@/shared/api/index.schemas';
-export type {
-  ItineraryDaysItemSlotsItem,
-  PlannedSlot,
-} from '@/shared/api/index.schemas';
+import type { ImageLicense } from '@/shared/api/index.schemas';
+
+export type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
 /**
  * i06 재계획안 행 번호 원의 톤(TRIP-751) — 방문·진행 중은 visited(초록), 예정은 planned(빨강).
  * 대안 없음 흐림 규칙도 이 축에서 도출한다(planned 행 전부 흐림, Seed Q3).
  */
-export type ReplanSlotTone = 'visited' | 'planned';
+type ReplanSlotTone = 'visited' | 'planned';
 
 /**
  * i05·i06 재계획안 슬롯 1행 뷰모델(TRIP-751) — 화면이 그대로 그릴 값. 시각·거리는 서버값 통과
@@ -28,6 +26,8 @@ export interface ReplanSlotVM {
   placeName: string;
   tone: ReplanSlotTone;
   photo: ImageSourcePropType | null;
+  /** `photo` 의 공공누리 유형 — 필수 키(끊기면 tsc). null·undefined(미수집)는 자르지 않는다. */
+  imageLicense: ImageLicense | null | undefined;
   category: string | null;
   timeLabel: string | null;
   categoryLabel: string | null;

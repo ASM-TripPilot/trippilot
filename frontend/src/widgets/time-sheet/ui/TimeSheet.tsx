@@ -1,7 +1,9 @@
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import type { ImageLicense } from '@/shared/api/index.schemas';
+import { Button } from '@/shared/ui/Button';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
@@ -10,6 +12,7 @@ import BottomSheet, {
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { deriveEndsNextDay, isValidTimeRange } from '@/entities/itinerary-slot';
+import { openPressGuardWindow } from '@/shared/lib/pressGuard';
 import { CloseGlyph } from '@/shared/ui/glyphs';
 import { SegmentedControl } from '@/shared/ui/SegmentedControl';
 import { HourMinuteWheel } from '@/shared/ui/HourMinuteWheel';
@@ -49,6 +52,8 @@ const RANGE_ERROR = '종료 시각은 시작보다 늦어야 해요';
  */
 export interface TimeSheetPlaceSummary {
   imageUrl: string | null;
+  /** `imageUrl` 의 공공누리 유형 — 필수 키(끊기면 tsc). */
+  imageLicense: ImageLicense | null | undefined;
   /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본)·변형을 해시할 poiId. */
   poiId?: string;
   category?: string | null;
@@ -121,7 +126,9 @@ export function TimeSheet({
   const nextEnd = endConfigured ? `${endHour}:${endMinute}:00` : endAt;
   const rangeInvalid = !isValidTimeRange(nextStart, nextEnd);
 
+  // 시트를 닫는 누름은 연타 창을 연다 — 둘째 탭이 닫힌 시트 아래 버튼(편집기 「일정 저장하기」 등)을 누르지 않게(TRIP-1793 D4).
   function handleApply(): void {
+    openPressGuardWindow();
     onApply({
       startAt: nextStart,
       endAt: nextEnd,
@@ -172,7 +179,10 @@ export function TimeSheet({
             testID={`${testIDPrefix}-close`}
             accessibilityRole="button"
             accessibilityLabel="닫기"
-            onPress={onCancel}
+            onPress={() => {
+              openPressGuardWindow();
+              onCancel();
+            }}
             className="h-[44px] w-[44px] items-center justify-center"
           >
             <CloseGlyph size={24} color="ink" />
@@ -185,12 +195,13 @@ export function TimeSheet({
             className="w-full flex-row items-center gap-md rounded-button bg-surface-soft p-md"
           >
             <View className="h-[48px] w-[48px] overflow-hidden rounded-thumb bg-surface-strong">
-              <PlacePhoto
+              <PoiPhoto
                 testID={`${testIDPrefix}-place-thumb-image`}
                 imageUrl={placeSummary.imageUrl}
+                imageLicense={placeSummary.imageLicense}
+                surface="thumb"
                 category={placeSummary.category}
                 poiId={placeSummary.poiId}
-                contentFit="cover"
                 cachePolicy="memory-disk"
                 className="h-full w-full"
               />
@@ -302,19 +313,14 @@ export function TimeSheet({
           </Text>
         ) : null}
 
-        <Pressable
+        <Button
           testID={`${testIDPrefix}-apply`}
-          accessibilityRole="button"
-          onPress={handleApply}
           disabled={rangeInvalid}
-          className={`w-full items-center justify-center rounded-button py-lg ${
-            rangeInvalid ? 'bg-hairline-strong' : 'bg-primary'
-          }`}
+          onPress={handleApply}
+          className="w-full"
         >
-          <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-            {APPLY_LABEL}
-          </Text>
-        </Pressable>
+          {APPLY_LABEL}
+        </Button>
       </BottomSheetView>
     </BottomSheet>
   );

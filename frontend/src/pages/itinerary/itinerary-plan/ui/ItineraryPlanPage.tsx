@@ -3,6 +3,11 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import {
+  InfoCircleGlyph,
+  AlertCircleGlyph,
+  BackChevronGlyph,
+} from '@/shared/ui/glyphs';
 import { goBackOr } from '@/shared/lib/goBackOr';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
@@ -26,11 +31,6 @@ import {
 } from '@/features/itinerary';
 import { timeBandLabel } from '@/entities/itinerary-slot';
 import { resolveUnplacedNames } from '@/features/itinerary';
-import {
-  AlertCircleGlyph,
-  BackChevronGlyph,
-  InfoCircleGlyph,
-} from '@/features/itinerary';
 import { UnplacedMustVisitNotice } from '@/features/itinerary';
 import { useConfirmItinerary } from '@/features/edit-itinerary';
 import { useTripWizardStore } from '@/features/create-trip';
@@ -247,7 +247,7 @@ export function ItineraryPlanPage({
     return (
       <PlanFace
         testID="itinerary-view-trip-deleted"
-        icon={<InfoCircleGlyph size={32} tone="primaryText" />}
+        icon={<InfoCircleGlyph size={32} color="primaryText" />}
         title="삭제된 여행이에요"
         description="이 여행은 삭제되어 일정을 볼 수 없어요"
         onBack={handleBack}
@@ -270,7 +270,7 @@ export function ItineraryPlanPage({
     return (
       <PlanFace
         testID="itinerary-view-notfound"
-        icon={<InfoCircleGlyph size={32} tone="primaryText" />}
+        icon={<InfoCircleGlyph size={32} color="primaryText" />}
         title="아직 완성된 일정이 없어요"
         description="일정을 만들면 여기에서 볼 수 있어요"
         onBack={handleBack}
@@ -290,7 +290,7 @@ export function ItineraryPlanPage({
     return (
       <PlanFace
         testID="itinerary-view-failed"
-        icon={<AlertCircleGlyph size={32} tone="primaryText" />}
+        icon={<AlertCircleGlyph size={32} />}
         title="일정을 불러오지 못했어요"
         description="네트워크를 확인하고 다시 시도해주세요"
         onBack={handleBack}
@@ -341,12 +341,22 @@ export function ItineraryPlanPage({
 
   // 거점 없음 판정(01b D4) — 선택일 슬롯의 고정 숙소 **또는** 그날 밤을 덮는 거점 배정(TRIP-1704: j01 방문 기록
   // `deriveStayAttribution` 과 같은 근거·같은 구간 dateFrom ≤ D < dateTo — 체크아웃일은 덮지 않는다, 종전처럼 그날 밤
-  // 숙소가 없으면 안내가 뜬다). 거점 조회 대기·실패면 슬롯 판정만 남는다(종전 동작).
+  // 숙소가 없으면 안내가 뜬다). 거점 조회 대기 중이면 슬롯 판정만 남는다(종전 동작).
   const hasBase =
     slots.some((slot) => slot.isFixed && slot.category === '숙소') ||
     (bases.data ?? []).some(
       (base) => base.dateFrom <= selectedDate && selectedDate < base.dateTo
     );
+  // 거점 안내는 세 갈래다(INV-4): 결과를 아는 경우(200 목록·404)만 「없어요」, 404 아닌 실패가 한 번이라도 났으면
+  // 「확인하지 못했어요」, 아직 첫 응답 전이면 아무것도 안 띄운다. 다시 시도 중엔 error 가 비어 isError 가 꺼지므로
+  // 누적 실패 횟수(errorUpdateCount)로 실패 얼굴을 붙든다.
+  const baseNotice: 'none' | 'unknown' | null = hasBase
+    ? null
+    : bases.data !== undefined || isNotFound(bases.error)
+      ? 'none'
+      : bases.isError || bases.errorUpdateCount > 0
+        ? 'unknown'
+        : null;
 
   return (
     <MapSheetShell
@@ -461,7 +471,14 @@ export function ItineraryPlanPage({
           return items;
         })}
         {/* 거점 없음 안내 카드(01b D4) — 시트 children 말미. h15 링크는 숨겼다(TRIP-1428 · 카드 머리 주석). */}
-        {hasBase ? null : <NoBaseNoticeCard />}
+        {baseNotice === null ? null : (
+          <NoBaseNoticeCard
+            unknown={baseNotice === 'unknown'}
+            onRetry={() => {
+              void bases.refetch();
+            }}
+          />
+        )}
       </View>
     </MapSheetShell>
   );

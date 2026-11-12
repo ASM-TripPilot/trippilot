@@ -299,6 +299,11 @@ export interface SendTurnRequest {
   clientTurnId: string;
   input: TurnInput;
   screen: { surface: AssistantSurface };
+  /**
+   * 포그라운드 현재 위치(선택, U8 O-U8-5) — 위치 동의가 켜졌고 단말 위치를 읽었을 때만 싣는다. 없으면 키 자체가 없다.
+   * 서버가 동의를 다시 가르고 이용 사실을 남긴다. 앱은 저장하지 않는다.
+   */
+  deviceLocation?: { lat: number; lng: number };
 }
 
 export interface SendTurnResponse {

@@ -3,7 +3,7 @@ import { Animated, Pressable } from 'react-native';
 
 import { startUnlessReduceMotion } from '@/shared/lib/reduceMotion';
 
-import { HeartFilledGlyph, HeartOutlineGlyph } from './HeartGlyphs';
+import { HeartFilledGlyph, HeartOutlineGlyph } from './glyphs';
 
 /**
  * 카드 사진 위 저장 하트(TRIP-1049) — Figma HeartButton `4462:1407`: 32 흰 원 + 18 하트.
@@ -89,6 +89,9 @@ export function HeartButton({
       accessibilityLabel={heartSaveLabel(name)}
       accessibilityState={{ selected: saved }}
       disabled={pending}
+      // TRIP-1764 — 보이는 원은 28(h-8, rem 14) 그대로, 손가락 영역만 44. 넓힌 8 은 카드 사진 위라 그 띠를 누르면
+      // 카드가 아니라 하트가 눌린다.
+      hitSlop={8}
       onPress={() => {
         pressed.current = true;
         onPress();

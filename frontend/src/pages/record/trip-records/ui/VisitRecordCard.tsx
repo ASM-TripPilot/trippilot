@@ -8,7 +8,7 @@ import {
   isOptimisticVisit,
 } from '@/features/check-visit/index.view';
 import {
-  RetryGlyph,
+  RecordRetryGlyph,
   VisitCheckActiveGlyph,
   VisitCheckDoneGlyph,
   VisitCheckSkippedGlyph,
@@ -141,6 +141,8 @@ function StatusCircle({
     // 완료 발화는 여기(active)에만 있다 — UPCOMING/COMPLETED/SKIPPED 엔 배선이 없다(AC-3 구조).
     return (
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="방문 완료"
         testID={`record-visit-check-active-${visitCheckId}`}
         hitSlop={hit}
         onPress={() => onPressComplete?.(visitCheckId)}
@@ -269,6 +271,7 @@ export function VisitRecordCard({
       {manualCheckin && status === 'UPCOMING' ? (
         <View className="flex-row items-center gap-[10px]">
           <Pressable
+            accessibilityRole="button"
             testID={`record-visit-manual-check-${card.visitCheckId}`}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             onPress={() => onPressManualCheck?.(card.poiId)}
@@ -293,11 +296,12 @@ export function VisitRecordCard({
       {uploadRetry != null ? (
         <View className="w-full gap-[6px]">
           <Pressable
+            accessibilityRole="button"
             testID={`record-trip-upload-retry-${card.visitCheckId}`}
             onPress={uploadRetry.onPress}
             className="w-full flex-row items-center justify-center gap-xs rounded-pill border border-primary py-[10px]"
           >
-            <RetryGlyph size={16} />
+            <RecordRetryGlyph size={16} />
             <Text className="font-noto-bold text-label text-primary">
               다시 시도
             </Text>

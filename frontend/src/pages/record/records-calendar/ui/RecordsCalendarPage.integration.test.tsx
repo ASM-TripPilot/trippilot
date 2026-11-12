@@ -10,6 +10,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { getGetTripsQueryKey } from '@/shared/api/index.hooks';
 import type { Trip } from '@/shared/api/index.schemas';
 import { BASE } from '@/test-support/apiBase';
@@ -129,6 +130,7 @@ beforeEach(() => {
 // onlineManager 는 모듈 싱글턴 — 오프라인 케이스가 어떻게 끝나든 다음 케이스는 온라인으로 시작한다(02a ★1, 파일 최상위).
 afterEach(() => {
   onlineManager.setOnline(true);
+  resetPressGuard();
   // 단언이 문을 열기 전에 실패해도 붙잡힌 요청을 남기지 않는다.
   const waiting = tripsGate;
   tripsGate = [];
@@ -340,6 +342,25 @@ describe('화면 동작 — 캘린더·legend·진행 중 카드·지난 여행�
     expect(screen.queryByTestId('record-past-empty')).toBeNull();
   });
 
+  // TRIP-1765 — 날짜 칸 이름은 그 칸의 날짜뿐(기록 내용은 안 싣는다). `name` 은 라벨·글자 중 하나만 맞아도 찾으므로
+  // 낭독기가 실제로 읽는 한 값(라벨 우선)은 toHaveAccessibleName(완전 일치)로 따로 본다.
+  it('날짜 칸은 그날 날짜만으로 읽히는 버튼이다 — 여행 제목은 이름에 없다', async () => {
+    await renderReady();
+
+    expect(screen.getByRole('button', { name: '6월 5일' })).toHaveProp(
+      'testID',
+      'record-calendar-day-2026-06-05'
+    );
+    expect(
+      screen.getByTestId('record-calendar-day-2026-06-05')
+    ).toHaveAccessibleName('6월 5일');
+    // 기록 없는 날도 버튼이다(누름 동작 불변 — 페이지가 무시한다).
+    expect(screen.getByRole('button', { name: '6월 11일' })).toHaveProp(
+      'testID',
+      'record-calendar-day-2026-06-11'
+    );
+  });
+
   it('legend — 앞 3줄 + "더 보기 2", 누르면 5줄과 "접기", 다시 누르면 접힌다 · 박수가 줄에 붙는다', async () => {
     await renderReady();
 
@@ -478,6 +499,17 @@ describe('화면 동작 — 캘린더·legend·진행 중 카드·지난 여행�
     expect(screen.getByText('아직 기록된 여행이 없어요')).toBeOnTheScreen();
     expect(screen.queryByTestId('record-calendar-month')).toBeNull();
     fireEvent.press(screen.getByTestId('record-calendar-empty-create'));
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
+  });
+
+  // TRIP-1775 — 창 안의 둘째 탭은 위저드를 한 번 더 쌓지 않는다.
+  it('[새 여행 만들기]를 빠르게 두 번 눌러도 step1 은 한 번만 쌓인다', async () => {
+    await renderReady([]);
+    const button = screen.getByTestId('record-calendar-empty-create');
+
+    fireEvent.press(button);
+    fireEvent.press(button);
+
     expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
   });
 });

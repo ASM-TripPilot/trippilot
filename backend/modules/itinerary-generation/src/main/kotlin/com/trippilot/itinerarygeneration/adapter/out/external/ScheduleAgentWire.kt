@@ -277,12 +277,16 @@ private fun JsonNode?.toCandidatesSummary(): CandidatesSummary? {
  * 비면 종전 동작(대중교통) — 자차 여행의 편집·되돌리기 재검증이 HC2 를 잘못 표시하던 자리다.
  * **비면 키째로 뺀다** — 상대는 모르는 키를 422 로 거절하고, 배포는 AI·BE 를 한 번에 굴려 순서를 보장하지 않는다.
  * 빼면 수단을 안 싣는 재검증(도보·대중교통 여행·하루 점검)은 이 칸을 모르는 상대와도 그대로 맞는다.
+ * [preferenceProfile] — 상대 선택 필드(2026-11-03), generate 와 같은 스키마. 액티비티 취향 대중교통 여행이면 상대가 HC2 를 생성과 같은
+ * 도보 상한(1.0km)으로 잰다. 같은 이유로 null 이면 키째 뺀다.
  */
 internal data class AiValidateRequest(
     val itinerary: AiSchedulePayload,
     val requestMeta: AiRequestMeta,
     @param:JsonInclude(JsonInclude.Include.NON_EMPTY)
     val transportModes: List<String> = emptyList(),
+    @param:JsonInclude(JsonInclude.Include.NON_NULL)
+    val preferenceProfile: PreferenceProfile? = null,
 )
 
 /**
@@ -337,6 +341,9 @@ internal data class AiRepairRequest(
     val anchors: List<DayAnchor> = emptyList(),
     val timeWindows: List<TimeWindow> = emptyList(),
     val transportModes: List<String> = emptyList(),
+    // 그 여행의 취향(2026-11-03) — validate 와 같은 칸·규칙(액티비티 취향 대중교통이면 도보 상한 1.0km). null 이면 키째 뺀다(모르는 상대와도 맞는다).
+    @param:JsonInclude(JsonInclude.Include.NON_NULL)
+    val preferenceProfile: PreferenceProfile? = null,
 )
 
 internal data class AiRepairResponse(
@@ -452,9 +459,23 @@ internal data class AiReplanRequest(
      */
     val savedPlaces: List<AiSavedPlace> = emptyList(),
     val excludedPoiIds: List<UUID> = emptyList(),
+    /**
+     * 그 여행의 이동수단 하나(상대가 아는 첫 값, TRIP-1709 F7) — 상대가 후보 풀 반경(도보 2km·대중교통 10km·자차 20km)·조립 이동 시간·
+     * 거리 표기를 이것으로 정한다. null 은 null 로 싣는다 = 상대 기본(대중교통). 상대 계약에 이미 있는 칸이라 배포 순서가 걸리지 않는다.
+     */
+    val transportMode: String? = null,
     /** 이 날짜를 건드린 변경 이력(TRIP-975) — 상대 `ChangeLogEntrySchema`. 비면 종전과 같다. */
     val changeLog: List<AiChangeLogEntry> = emptyList(),
+    /**
+     * 같은 날 반영된 앞 다시 짜기들(F-8) — 상대 `PriorRequestSchema`. **비면 키째로 뺀다** — 이 칸을 모르는 상대는 422 다(extra=forbid).
+     * 채우는 쪽은 상대가 `requested_poi_ids` 를 돌려준 세션이 있을 때만 채우므로, 새 상대가 응답하기 전에는 키가 나가지 않는다.
+     */
+    @param:JsonInclude(JsonInclude.Include.NON_EMPTY)
+    val priorRequests: List<AiPriorRequest> = emptyList(),
 )
+
+/** 앞 다시 짜기 한 건 — 그 회차 사유 한 줄과 그 회차가 요청 때문에 넣은 곳. */
+internal data class AiPriorRequest(val text: String, val keptPoiIds: List<String>)
 
 /** 변경 이력 한 건 — 그날 diff 만(시각·행위자 없음, [com.trippilot.itinerarygeneration.domain.ReplanChange]). */
 internal data class AiChangeLogEntry(
@@ -501,7 +522,16 @@ internal data class AiReplanResponse(
      * "자유입력을 넣었는데 왜 안 먹었나"의 1차 근거가 '검색이 0건이었다'이기 때문이다.
      */
     val retrieved: Map<String, Int> = emptyMap(),
+    /**
+     * 요청 때문에 든 곳(F-8). **null = 상대가 이 칸을 모른다**(옛 상대) — 빈 목록("요청한 곳이 없다")과 가른다. 세션에 이 칸이
+     * 남은 회차만 다음 재계획의 `prior_requests` 가 된다.
+     */
+    val requestedPoiIds: List<String>? = null,
+    /** 다른 날로 집어 이 날에 넣지 않은 갈 곳(F-7) — 앱의 '그 날에 넣어 다시 짜기' 재료. */
+    val deferredPlaces: List<AiDeferredPlace> = emptyList(),
 )
+
+internal data class AiDeferredPlace(val poiId: String, val name: String, val date: LocalDate)
 
 /**
  * 대안 없음 사유(`i06`). **코드와 파라미터로 온다** — 상대가 완성 문장을 주지 않는 것이 맞다.
@@ -529,6 +559,13 @@ internal data class AiCoord(val lat: Double, val lng: Double)
 /**
  * `POST /ai/v1/itinerary/edit` 요청(U8 G-U8-2). `command` 와 `utterance` 는 **정확히 하나** — 둘 다거나 둘 다 없으면 422 다.
  * `confirm` 은 늘 true 로 보낸다(DEC-U8-3) — false 면 상대가 파괴적 편집의 해를 숨기고 확인을 요구한다.
+ * [excludedPoiIds] — 상대 선택 필드(spec 003 FR-015): 앞서 제안했던 곳("다른 데는?")이라 이번 안에 새로 들이지 않는다.
+ * **비면 키째로 뺀다**(`AiValidateRequest.transportModes` 와 같은 이유) — 상대는 모르는 키를 422 로 거절하고, 배포는 AI·BE 를 한 번에
+ * 굴려 순서를 보장하지 않는다. 빼면 다시 묻기가 아닌 편집(거의 전부)은 이 칸을 모르는 상대와도 그대로 맞는다.
+ *
+ * 여행 컨텍스트 세 칸(2026-11-03 — 상대 선택 필드): [preferenceProfile](generate 와 같은 스키마 — 규칙 순위·규칙 점수·액티비티 도보 상한),
+ * [timeWindows](generate 와 같은 스키마 — 빈 날의 시작), [tripStartDate]('N일차' 기준). **비면 키째 뺀다** — 상대는 모르는 키를 422 로
+ * 거절하고 배포는 AI·BE 를 한 번에 굴린다(validate `transport_modes` 와 같은 이유).
  */
 internal data class AiEditRequest(
     val tripId: String,
@@ -541,6 +578,14 @@ internal data class AiEditRequest(
     val utterance: String?,
     val confirm: Boolean,
     val requestMeta: AiRequestMeta,
+    @param:JsonInclude(JsonInclude.Include.NON_EMPTY)
+    val excludedPoiIds: List<String> = emptyList(),
+    @param:JsonInclude(JsonInclude.Include.NON_NULL)
+    val preferenceProfile: PreferenceProfile? = null,
+    @param:JsonInclude(JsonInclude.Include.NON_EMPTY)
+    val timeWindows: List<TimeWindow> = emptyList(),
+    @param:JsonInclude(JsonInclude.Include.NON_NULL)
+    val tripStartDate: LocalDate? = null,
 )
 
 /** 계약 `EditCommandSchema`. `affected_slots` 는 이름과 달리 **POI id** 목록이다(상대 도메인 `EditCommand.affected_slots: PoiId`). */

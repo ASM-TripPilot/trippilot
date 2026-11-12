@@ -1,15 +1,11 @@
 import type { ReactElement } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { FlatList, Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CARD_SHADOW } from '@/features/settings';
-import {
-  BedGlyph,
-  ChevronLeftGlyph,
-  ChevronRightGlyph,
-  MUTED,
-} from '@/features/settings';
-import { WarningTriangleGlyph } from '@/shared/ui/glyphs';
+import { SettingsBedGlyph, ChevronLeftGlyph } from '@/features/settings';
+import { WarningTriangleGlyph, ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import { StateNotice } from '@/shared/ui/StateNotice';
 
 /**
@@ -59,6 +55,12 @@ export interface MyStaysScreenProps {
   onRetry?: () => void;
   /** 다시 시도 진행 중 — [다시 시도] 비활성. */
   retrying?: boolean;
+  /** TRIP-1754 — 일부 여행의 거점 조회가 실패했다(페이지가 판정). 목록 위 한 줄. `loadFailed` 면 안 그린다. */
+  linksFailed?: boolean;
+  /** 한 줄의 [다시 시도] — 실패한 거점 조회만 다시 받는다. */
+  onRetryLinks?: () => void;
+  /** 한 줄의 다시 시도 진행 중 — 버튼 비활성(한 줄은 유지). */
+  retryingLinks?: boolean;
 }
 
 /** 채움/아웃라인 칩 — 날짜·출처·메모 상태를 한 형태로. `filled` 는 채움(surface-strong·body 글자),
@@ -151,12 +153,16 @@ function MyStayRow({
             className="flex-row items-center gap-[2px]"
           >
             <Text className="font-noto text-label text-body">거점 변경</Text>
-            <ChevronRightGlyph size={15} color={MUTED} />
+            <ChevronRight24Glyph size={15} color="muted" />
           </Pressable>
         ) : null}
       </View>
     </View>
   );
+}
+
+function keyOfRow(row: MyStayRowVM): string {
+  return row.savedStayId;
 }
 
 export function MyStaysScreen({
@@ -168,6 +174,9 @@ export function MyStaysScreen({
   loadFailed = false,
   onRetry,
   retrying = false,
+  linksFailed = false,
+  onRetryLinks,
+  retryingLinks = false,
 }: MyStaysScreenProps): ReactElement {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -212,33 +221,58 @@ export function MyStaysScreen({
                 testID="my-stays-empty-icon"
                 className="h-[96px] w-[96px] items-center justify-center rounded-full bg-surface-strong"
               >
-                <BedGlyph size={44} />
+                <SettingsBedGlyph size={44} />
               </View>
               <Text className="text-center font-noto text-body leading-[21px] text-muted">
                 {'숙소를 탐색하고 등록하면\n일정을 만들 수 있어요'}
               </Text>
-              <Pressable
+              <Button
                 testID="my-stays-explore"
-                accessibilityRole="button"
+                size="md"
                 onPress={onPressExplore}
-                className="h-[44px] items-center justify-center rounded-button bg-primary px-[22px]"
               >
-                <Text className="font-noto-bold text-card-title text-on-primary">
-                  숙소 탐색
-                </Text>
-              </Pressable>
+                숙소 탐색
+              </Button>
             </View>
           </View>
         ) : (
-          <ScrollView contentContainerClassName="gap-lg px-lg pb-2xl pt-lg">
-            {rows.map((row) => (
+          // TRIP-1732 — 등록 숙소 수에 상한이 없다. FlatList 로 보이는 행만 마운트한다(TRIP-1363 선례).
+          // getItemLayout·removeClippedSubviews 는 쓰지 않는다(카드 높이가 날짜·메모 유무로 가변).
+          <FlatList
+            contentContainerClassName="gap-lg px-lg pb-2xl pt-lg"
+            data={rows}
+            ListHeaderComponent={
+              linksFailed ? (
+                // TRIP-1754 — 거점 조회가 실패한 여행의 숙소가 「연결된 여행 없음」으로 거짓 표시되는 사유를 밝힌다(INV-4).
+                <View
+                  testID="my-stays-links-error"
+                  className="flex-row items-center gap-sm rounded-button border border-hairline bg-surface-soft px-md py-sm"
+                >
+                  <WarningTriangleGlyph size={20} color="primary" />
+                  <Text className="flex-1 font-noto text-label text-body">
+                    일부 여행의 연결 정보를 불러오지 못했어요
+                  </Text>
+                  <Pressable
+                    testID="my-stays-links-retry"
+                    accessibilityRole="button"
+                    disabled={retryingLinks}
+                    onPress={onRetryLinks}
+                  >
+                    <Text className="font-noto text-label text-primary">
+                      다시 시도
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null
+            }
+            keyExtractor={keyOfRow}
+            renderItem={({ item }) => (
               <MyStayRow
-                key={row.savedStayId}
-                row={row}
+                row={item}
                 onPressToggle={(pressed) => onPressChangeBase?.(pressed)}
               />
-            ))}
-          </ScrollView>
+            )}
+          />
         )}
       </View>
     </SafeAreaView>

@@ -4,9 +4,10 @@ import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 
 import { PlaceRowCard } from '@/entities/place';
 import { PlaceSubtitle } from '@/entities/place';
+import { Check24Glyph, PlusGlyph } from '@/shared/ui/glyphs';
 import type { Place, PoiCategory } from '@/shared/api/index.schemas';
 
-import { PlusGlyph, SearchGlyph } from './ItineraryGlyphs';
+import { ItinerarySearchGlyph } from './ItineraryGlyphs';
 import { PLACE_CATEGORY_CHIPS } from '../config/placeCategoryChips';
 import { placeAddSubtitle } from '../model/placeAddSubtitle';
 
@@ -84,7 +85,7 @@ export function PlaceAddHeader({
   return (
     <View className="w-full gap-md px-lg pb-sm pt-sm">
       <View className="h-[46px] w-full flex-row items-center gap-sm rounded-pill border border-hairline bg-surface-soft pl-lg pr-md">
-        <SearchGlyph size={20} />
+        <ItinerarySearchGlyph size={20} />
         <BottomSheetTextInput
           testID={`${testIDPrefix}-search`}
           value={searchText}
@@ -123,6 +124,13 @@ export interface PlaceAddRowProps {
    */
   distanceLine?: string;
   onPressAdd(): void;
+  /**
+   * TRIP-1794 · 여러 곳 체크 — 주면 오른쪽에 체크 원(`place-add-check-{poiId}`)을 그리고 카드를 선택 표시한다. 안 주면 체크 원이 없다.
+   * 이미 담은 행(`added`)은 주어도 그리지 않는다(같은 곳을 또 체크해 중복 PUT 하는 길 차단).
+   */
+  check?: { checked: boolean; onToggle(): void };
+  /** false 면 「추가」 버튼을 숨긴다(체크가 하나라도 있을 때 페이지가 준다). 「추가됨」은 그대로. 기본 true. */
+  showAdd?: boolean;
 }
 
 /** 후보 카드 한 줄 — 페이지가 `MapSheetShell.list.renderItem` 으로 조립한다(PlaceRowCard 채택). */
@@ -131,6 +139,8 @@ export function PlaceAddRow({
   added,
   distanceLine,
   onPressAdd,
+  check,
+  showAdd = true,
 }: PlaceAddRowProps): ReactElement {
   const subtitle = placeAddSubtitle(place);
   return (
@@ -139,7 +149,9 @@ export function PlaceAddRow({
       id={place.poiId}
       name={place.nameKo}
       imageUrl={place.imageUrl}
+      imageLicense={place.imageLicense}
       category={place.category}
+      selected={check !== undefined && !added ? check.checked : undefined}
       subtitle={
         <View className="gap-[2px]">
           <PlaceSubtitle
@@ -179,17 +191,41 @@ export function PlaceAddRow({
             </Text>
           </View>
         ) : (
-          <Pressable
-            testID={`itinerary-place-add-${place.poiId}`}
-            accessibilityRole="button"
-            onPress={onPressAdd}
-            className="flex-row items-center gap-[3px] rounded-button border border-primary px-md py-sm"
-          >
-            <PlusGlyph size={14} tone="primary" />
-            <Text className="font-noto-bold text-label font-bold text-primary">
-              추가
-            </Text>
-          </Pressable>
+          <View className="flex-row items-center gap-sm">
+            {showAdd ? (
+              <Pressable
+                testID={`itinerary-place-add-${place.poiId}`}
+                accessibilityRole="button"
+                onPress={onPressAdd}
+                className="flex-row items-center gap-[3px] rounded-button border border-primary px-md py-sm"
+              >
+                <PlusGlyph size={14} color="primary" />
+                <Text className="font-noto-bold text-label font-bold text-primary">
+                  추가
+                </Text>
+              </Pressable>
+            ) : null}
+            {check ? (
+              <Pressable
+                testID={`place-add-check-${place.poiId}`}
+                accessibilityRole="checkbox"
+                accessibilityLabel={`${place.nameKo} 선택`}
+                accessibilityState={{ checked: check.checked }}
+                onPress={check.onToggle}
+                // 보이는 원은 24 — 히트만 hitSlop 으로 키운다(레이아웃 상자를 키우면 행이 처진다, TRIP-1792).
+                hitSlop={10}
+                className={`h-[24px] w-[24px] items-center justify-center rounded-pill border ${
+                  check.checked
+                    ? 'border-primary bg-primary'
+                    : 'border-hairline-strong bg-canvas'
+                }`}
+              >
+                {check.checked ? (
+                  <Check24Glyph size={14} strokeWidth={3} />
+                ) : null}
+              </Pressable>
+            ) : null}
+          </View>
         )
       }
     />

@@ -14,7 +14,7 @@
  * 장소 없음·오류 얼굴에도 같은 뒤로를 앱바에 둔다 — notFound 안내엔 행동 버튼 없음(TRIP-1015 D · 결정 3).
  */
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, Share, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { goBackOr } from '@/shared/lib/goBackOr';
@@ -23,19 +23,33 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useGetPlacesPoiId } from '@/shared/api/index.hooks';
 import { getAccessToken, isNotFound } from '@/shared/api';
+import { SAVED_LIST_LOAD_FAILED_TOAST } from '@/shared/ui/savedListLoadToast';
 import { StateNotice } from '@/shared/ui/StateNotice';
+import { showToast } from '@/shared/ui/Toast';
 import { canOpenNaverPlace, openNaverPlace } from '@/shared/map';
+import { copyText } from '@/shared/clipboard';
 
 import {
   SAVE_FAILURE_NOTICE,
   type PlaceSaveNotice,
 } from '@/features/save-place';
 import { useSavedPlaces } from '@/features/save-place';
-import { BackChevronGlyph } from '@/features/explore';
+import { BackChevronWideGlyph } from '@/shared/ui/glyphs';
 import { PlaceDetailScreen } from './PlaceDetailScreen';
 
 const OPEN_NAVER_ERROR =
   '네이버 지도를 열 수 없어요. 잠시 후 다시 시도해 주세요.';
+
+// TRIP-1799 — 주소 복사 결과 토스트. 실패 문구는 Figma 에 없는 발명 카피(에러 톤).
+const ADDRESS_COPIED_TOAST = {
+  testID: 'explore-place-address-copied',
+  message: '주소를 복사했어요',
+} as const;
+const ADDRESS_COPY_FAILED_TOAST = {
+  testID: 'explore-place-address-copy-failed',
+  message: '주소를 복사하지 못했어요',
+  tone: 'error',
+} as const;
 
 // notFound 삽화 — 회색 중립 배지(LivePlacePage 선례, 없는 사진을 지어내지 않는다).
 const NEUTRAL_BADGE = (
@@ -46,11 +60,20 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
   const router = useRouter();
   const isAuthed = getAccessToken() !== null;
   const detail = useGetPlacesPoiId(poiId);
-  const { savedPoiIds, save, remove } = useSavedPlaces({ isAuthed });
+  const { savedPoiIds, save, remove, loadFailureConfirmed } = useSavedPlaces({
+    isAuthed,
+  });
   const [saveError, setSaveError] = useState<PlaceSaveNotice | null>(null);
   const [saving, setSaving] = useState(false);
   const [openNaverError, setOpenNaverError] = useState<string | null>(null);
   const place = detail.data ?? null;
+
+  // TRIP-1754 — 하트가 그려지는 얼굴(장소 도착)에서만, 담은 목록 확정 실패가 켜지는 순간 토스트 1회.
+  // 로딩·오류·없음 얼굴 위에는 소음이라 안 쏜다. 조기 return 보다 앞(Rules of Hooks).
+  const savedListFailed = place !== null && Boolean(loadFailureConfirmed);
+  useEffect(() => {
+    if (savedListFailed) showToast(SAVED_LIST_LOAD_FAILED_TOAST);
+  }, [savedListFailed]);
 
   function handleBack(): void {
     goBackOr(router, shellTabHref('explore'));
@@ -73,7 +96,7 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
               onPress={handleBack}
               hitSlop={8}
             >
-              <BackChevronGlyph />
+              <BackChevronWideGlyph />
             </Pressable>
           </View>
           <View className="flex-1 items-center justify-center px-lg">
@@ -110,7 +133,7 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
               onPress={handleBack}
               hitSlop={8}
             >
-              <BackChevronGlyph />
+              <BackChevronWideGlyph />
             </Pressable>
           </View>
           <View className="flex-1 items-center justify-center px-lg">
@@ -149,6 +172,19 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
     if (result === 'failed') setOpenNaverError(OPEN_NAVER_ERROR);
   }
 
+  // 웹 복사는 사용자 클릭 안에서만 허용되므로 `copyText` 가 첫 동작이다(앞에 await 없음). 복사되지 않았는데 「복사했어요」
+  // 를 띄우지 않는다(INV-4) — false·reject 모두 에러 토스트 하나.
+  const copyableAddress = resolvedPlace.address?.trim() ?? '';
+  async function handleCopyAddress(): Promise<void> {
+    let copied = false;
+    try {
+      copied = await copyText(copyableAddress);
+    } catch {
+      copied = false;
+    }
+    showToast(copied ? ADDRESS_COPIED_TOAST : ADDRESS_COPY_FAILED_TOAST);
+  }
+
   function handlePressSaveErrorAction(): void {
     if (saveError?.action === 'login') {
       router.push('/(auth)/login');
@@ -170,6 +206,9 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
       onToggleSave={() => void attemptToggle()}
       onPressOpenNaver={
         canOpenNaverPlace(place) ? () => void handleOpenNaver() : undefined
+      }
+      onPressCopyAddress={
+        copyableAddress ? () => void handleCopyAddress() : undefined
       }
       openNaverError={openNaverError}
       onPressSaveErrorAction={handlePressSaveErrorAction}

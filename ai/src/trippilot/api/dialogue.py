@@ -12,17 +12,19 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import random
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone, tzinfo
 
 from trippilot.agents.adapters.memory_place_fact_store import InMemoryPlaceFactStore
+from trippilot.agents.planb.place_search import wire as wire_place_search
 from trippilot.agents.planb.rag import PlanBAgent
 from trippilot.agents.schedule.agent import Clock
 from trippilot.agents.unknown_handling.agent import UnknownHandlingAgent
 from trippilot.api import schemas
-from trippilot.domain.common import TraceId
+from trippilot.domain.common import GeoPoint, TraceId
 from trippilot.domain.freshness import ProviderKind
 from trippilot.domain.dialogue.intent import Intent
 from trippilot.domain.llm.llm import LlmFeature
@@ -98,7 +100,7 @@ def _trip_view(snapshot: schemas.DialogueContextSnapshot) -> TripView:
 
 
 def _snapshot(wire: schemas.DialogueContextSnapshot) -> TurnSnapshot:
-    """와이어 스냅샷 → `TurnSnapshot` (DE §2.1). 값은 백엔드 화이트리스트 그대로 — 좌표·가격 칸이 없다."""
+    """와이어 스냅샷 → `TurnSnapshot` (DE §2.1). 값은 백엔드 화이트리스트 그대로 — 가격 칸은 없고 좌표는 현재 위치 하나뿐(O-U8-5)."""
     trip = wire.trip
     itinerary = wire.itinerary
     return TurnSnapshot(
@@ -113,6 +115,7 @@ def _snapshot(wire: schemas.DialogueContextSnapshot) -> TurnSnapshot:
         ),
         tastes=(tuple(wire.preference_profile.styles), tuple(wire.preference_profile.activities))
         if wire.preference_profile is not None else None,
+        here=GeoPoint(wire.device_location.lat, wire.device_location.lng) if wire.device_location is not None else None,
     )
 
 
@@ -185,6 +188,16 @@ def interpret(
         if clock is None:
             raise ValueError("오케스트레이터 경로는 clock 필수 — started_ms 의 시계가 오케스트레이터와 같아야 한다")
         turn = orchestrator.turn(_turn_input(request, now, clock.monotonic_ms()))
+        # 턴마다 한 줄 — 섀도는 표본만 남겨 "그 턴이 무슨 의도·결과였나"를 못 봤다(운영 11-04). 원문·계정·좌표는 싣지 않는다(SEC-U8-06)
+        frame = turn.frames[0] if turn.frames else None
+        log.info("dialogue_turn %s", json.dumps({
+            "event": "dialogue_turn", "trace_id": meta.request_id, "outcome": turn.outcome,
+            "intent": frame.intent.value if frame else None, "route": frame.match_route if frame else None,
+            "answer_kind": turn.answer.kind.value if turn.answer else None,
+            "clarify": turn.clarify.argument if turn.clarify else None,
+            "trip": request.context.trip is not None, "here": request.context.device_location is not None,
+            "llm_calls": turn.llm_calls,
+        }, ensure_ascii=False))
         return _wire(turn.outcome, turn.frames, turn.clarify, turn.context, turn.llm_calls, turn.answer)
     result = interpreter.interpret(
         request.utterance,
@@ -252,6 +265,13 @@ def build_dialogue_orchestrator(
         log.info("도우미 장소 DB off — TRIPPILOT_PLACE_DB_URL 미설정이라 미배선(장소 탐색은 반경 풀, 일정 밖 장소는 못 찾는다)")
     # 장소 소개(KB-5) — PlanB 와 같은 임베딩·벡터 스토어. 스토어가 미배선(Unwired)이면 조회가 빈 결과로 강등될 뿐이라 늘 붙인다
     place_intro = PlaceIntro(embedding, kb_store) if kb_store is not None else None
+    # 장소 탐색·추천 열린 검색(KB-5 문서 순위, BR-AO-36) — 기본 꺼짐, `TRIPPILOT_KB5_OPEN_SEARCH=on` 이고 벡터 스토어·실 임베딩이 있을 때만.
+    # 판정은 PlanB 다시 짜기 후보와 같은 한 곳(`place_search.wire` — 미배선 임베딩은 늘 터져 매 턴 ERROR 로그만 남기니 붙이지 않는다)
+    place_search, off = wire_place_search(embedding, kb_store)
+    if off:
+        log.info("도우미 열린 검색 off — %s이라 미배선(장소 탐색은 규칙 순서)", off)
+    else:
+        log.info("도우미 열린 검색 on — 묘사형 말이면 반경 결과(SQL 0건·실패·추천·일정 근처)에만 KB-5 문서 순위를 섞는다")
     # 미확인 칸 웹 확인(UnknownHandlingAgent) — PLACE_FACT_LOOKUP 배정이 곧 켜기. 조회는 턴 밖(뒤에서)이라 서비스 카운터(`counted`)가
     # 아니라 `llm` 으로 부른다(턴 llm_calls 에 들지 않는다 — 대신 프로세스당 하루 상한, unknown_handling 註)
     # 일반 지식 즉답(BR-AO-32, 2026-10-23) — 같은 에이전트의 둘째 일. DIALOGUE_KNOWLEDGE 배정이 곧 켜기, 턴 안 서비스 호출이라 `counted`
@@ -275,7 +295,7 @@ def build_dialogue_orchestrator(
     ports = HandlerPorts(poi_info=providers[ProviderKind.POI_INFO], weather=providers.get(ProviderKind.WEATHER),
                          transit=providers[ProviderKind.TRANSIT], pool_builder=pool_builder, planb=rag,
                          place_sql=place_lookup, place_intro=place_intro, events=providers.get(ProviderKind.EVENT),
-                         unknown=unknown)
+                         unknown=unknown, place_search=place_search)
     tools = plan_tools(ports)  # 배선된 도구 → 설명(여행 필요 꼬리표 포함) — 게이트 closed-set 과 `$tools` 가 같은 사전에서 나온다
     planner = None
     if LlmFeature.DIALOGUE_PLAN in c1_config.feature_models:  # DEC-AO-18 — 배정이 곧 켜기(env 무증가)
@@ -354,7 +374,8 @@ def shadow_meta(renderer: PromptRegistry, bank: Sequence[BankEntry], cfg: Intent
 # 스토어 예외는 여기서 삼키지 않는다 — 500 으로 올려 백엔드가 재시도한다(DATA-U8-02, BR-AO-22 의 의도된 예외).
 
 # 내보내기 상한. 세션은 (계정, 여행) 단위 + 일반 세션 1 이고 90일 TTL 이라 이 수는 실질적으로 전량이다.
-# ponytail: 포트에 "계정 전체" 조회가 없어 `recent_for_account` 를 쓴다 — 페이징 없음, 상한 초과분은 잘린다(측정 뒤).
+# ponytail: 포트에 "계정 전체" 조회가 없어 `recent_for_account` 를 쓴다 — 페이징 없음. 상한 초과분은 잘리되 **잘렸다고 말한다**
+# (`truncated`) — 여행 수에 상한이 없어 구조적으로 열린 길이고, 백엔드는 받은 것이 전부라고 알게 두지 않는다(2026-11-06 Codex 리뷰).
 EXPORT_MAX_SESSIONS = 100
 
 
@@ -380,18 +401,19 @@ def memory_delete(
 def memory_export(
     store: MemoryStorePort, account_ref: str
 ) -> schemas.DialogueMemoryExportResponse:
-    """내보내기(DATA-U8-06) — 그 계정의 세션 기억 전부, updated_at DESC. account_ref 는 항목에 되돌리지 않는다."""
+    """내보내기(DATA-U8-06) — 그 계정의 세션 기억 상한까지, updated_at DESC. 상한을 넘기면 `truncated`. account_ref 는 항목에 되돌리지 않는다."""
     rows = store.recent_for_account(
-        # session_id 는 빈 문자열이 될 수 없다(`DialogueMemory` post-init) → 제외되는 세션 없음
-        account_ref, exclude_session="", limit=EXPORT_MAX_SESSIONS,
+        # session_id 는 빈 문자열이 될 수 없다(`DialogueMemory` post-init) → 제외되는 세션 없음. 하나 더 읽어 잘렸는지 안다
+        account_ref, exclude_session="", limit=EXPORT_MAX_SESSIONS + 1,
     )
     return schemas.DialogueMemoryExportResponse(
+        truncated=len(rows) > EXPORT_MAX_SESSIONS,
         memories=[
             schemas.DialogueMemoryItemSchema(
                 session_id=m.session_id, trip_id=m.trip_id, summary=list(m.summary),
                 summarized_turn_index=m.summarized_turn_index,
                 updated_at=m.updated_at, expires_at=m.expires_at,
             )
-            for m in rows
-        ]
+            for m in rows[:EXPORT_MAX_SESSIONS]
+        ],
     )

@@ -73,8 +73,8 @@ class KafkaOutboxConfig {
             // 포기 기록이 실패해도(DB 끊김) 던지지 않는다 — 던지면 같은 레코드가 재시도 주기를 처음부터 다시 돌며 파티션을 막는다.
             // 그때 흔적은 이 로그 한 줄(eventId 포함)이다.
             if (eventId != null) runCatching { relay.abandon(eventId, eventType, e) }
-                .onFailure { log.error("포기 기록에 실패했습니다 — 이 이벤트는 로그로만 남습니다. eventId={} type={}", eventId, eventType, it) }
-            else log.error("eventId 도 못 읽은 Kafka 메시지를 버립니다 — key={} offset={} value={}",
+                .onFailure { log.error("outbox.abandon eventId={} type={} — 포기 기록에 실패했습니다. 이 이벤트는 로그로만 남습니다", eventId, eventType, it) }
+            else log.error("outbox.abandon eventId=unreadable — eventId 도 못 읽은 Kafka 메시지를 버립니다. key={} offset={} value={}",
                 record.key(), record.offset(), value?.take(500), e)
         },
         ExponentialBackOffWithMaxRetries(OutboxRelay.MAX_ATTEMPTS - 1).apply {
@@ -160,7 +160,7 @@ class KafkaOutboxListener(private val relay: OutboxRelay, private val broker: Ka
     // ⚠ 폴링 모드에 없던 동시성이다 — 폴링은 ShedLock 으로 한 번에 한 릴레이만 차례로 배달한다. 여기서는 키(aggregateId)가
     // 다른 이벤트가 동시에 구독자를 탄다. (순서 뒤바뀜은 새것이 아니다 — 폴링도 행마다 백오프해 순서가 바뀐다.)
     // TRIP-1469 에서 구독자 전부(OutboxSubscriber 구현 16개)를 동시 호출 기준으로 확인했다:
-    //  - 리마인드 재적재(ItineraryGenerated 키=itineraryId · ItineraryRecalculated·TripDeleted 키=tripId → reload):
+    //  - 리마인드 재적재(ItineraryGenerated 키=itineraryId · ItineraryRecalculated·TripDeleted·TripPeriodChanged 키=tripId → reload):
     //    여행 권고 잠금(lockTrip) 뒤 현재 상태로 다시 계산 — 누가 먼저 오든 마지막 커밋이 최신 상태다.
     //  - 알림 적재(StayRegistered·PlanBTriggered·ReflectionReady → raise): source_event_id UNIQUE(ON CONFLICT). Plan-B 묶음
     //    푸시(같은 여행, 키=triggerId 라 갈린다)만 단일 실행에 기대고 있었다 → lockPushGroup 으로 고쳤다(DomainNotificationIT).
@@ -171,9 +171,13 @@ class KafkaOutboxListener(private val relay: OutboxRelay, private val broker: Ka
     //  - 회고(TripEnded 키=tripId → 요약 생성 · ActualRouteStored 키=routeDayId → 통계 갱신): 같은 여행·같은 날 권고 잠금
     //    (TripSummaryPersistence·ReflectionPersistence.findForUpdate) — 요약이 아직 없어도 잠금이 줄 세운다.
     //  - Plan-B 선계산(PlanBTriggered → onRisk): 부분 유니크 + 자리 세마포어 — 사용자 요청과의 동시성을 이미 견딘다.
+    //  - 기간 이동 뒤 재검증(TripPeriodChanged 키=tripId → 위반 표시 갱신): 일정 쓰기 잠금 뒤 다시 읽어 그 사이 내용이 바뀌었으면 쓰지 않는다.
     //  - 트리거 소비(ItineraryRecalculated → TriggerService.consume): 트리거를 쓰는 구독자는 이것 하나라 구독자끼리 겹치지 않는다.
     //  - 파기(도우미 대화 TripDeleted·AccountDeletionRequested·DialogueForgetRequested · EXIF·경로·기준점 좌표·위치 구간 닫기):
     //    멱등 DELETE·조건부 UPDATE. GpsRecordingOptOut·LocationLegalConsentRevoked 는 키가 같은 accountId 라 한 파티션이다.
+    //  - 알림 중단·되살림(AccountDeletionRequested → 예약 취소: 계정 단위 조건부 UPDATE / AccountDeletionCancelled → 취소 흔적이 있는 여행마다
+    //    reload: lockTrip 뒤 현재 상태 재계산). 둘 다 **이벤트가 아니라 처리 시점의 계정 상태**(AccountStatusFacade)를 따른다 — 폴링 모드는 같은
+    //    타입의 다른 구독자가 실패하면 이벤트를 통째로 백오프 재배달해 순서가 뒤바뀌므로, 순서에 기대지 않는다.
     // 새 구독자는 동시 호출을 전제로 쓴다 — 선검사 후 쓰기에는 잠금·유니크를 둔다.
     @KafkaListener(topics = [KafkaOutboxConfig.TOPIC], groupId = "trippilot-outbox", concurrency = KafkaOutboxConfig.CONSUMERS)
     // 값 없는 레코드(tombstone)는 여기까지 오지 않는다 — 스프링이 인자 변환에서 비재시도 실패로 분류해 회수기로 바로 보낸다

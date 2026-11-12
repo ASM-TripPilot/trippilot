@@ -29,6 +29,8 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 /**
@@ -91,7 +93,7 @@ class ItineraryRevisionService(
      * 고정 블록(숙소·시각 고정 필수 방문지)의 시각은 복원 스냅숏보다 **현행이 이긴다**(BR-U3-33 · INV-U3-03).
      */
     fun restore(accountId: UUID, tripId: UUID, revisionId: UUID): Itinerary {
-        trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
+        val period = trips.findPeriod(accountId, tripId) ?: throw ResourceNotFound()
         val preview = itineraries.findByTrip(tripId).firstOrNull() ?: throw ResourceNotFound("생성된 일정이 없습니다.")
         requireRestorable(preview)
         val target = revisions.findById(revisionId)?.takeIf { it.tripId == tripId }
@@ -104,10 +106,11 @@ class ItineraryRevisionService(
 
         // 복원 결과는 솔버가 만든 적 없는 조합이다(현행 고정 시각 + 과거 스냅숏). 편집과 같은 기준으로 재검증해
         // 위반을 표시한다 — 검증 안 된 시각을 hasViolation=false 로 내보내면 INV-2 를 우회하는 셈이다.
-        val draftDays = target.snapshot.toDays(fixedFrom = preview)
+        val snapshot = target.snapshot.alignedTo(period.startDate, period.endDate)
+        val draftDays = snapshot.toDays(fixedFrom = preview)
         // AI 가 죽어도 되돌리기는 막지 않는다 — 다만 판정을 못 했으면 "위반 없음"이라 말하지 않는다(Revalidation 참고).
         val verdict = Revalidation.attempt(
-            scheduleAgent, draftDays.toOutput(preview, clock.instant()), tripId, repairContexts.transportModes(accountId, tripId),
+            scheduleAgent, draftDays.toOutput(preview, clock.instant()), tripId, repairContexts.forRevalidation(accountId, tripId),
         )
 
         return tx.execute {
@@ -121,7 +124,7 @@ class ItineraryRevisionService(
                 throw ConflictDetected(message = "그 사이 일정이 바뀌었습니다. 다시 시도해 주세요.", errorCode = ErrorCode.STALE)
             }
 
-            val restoredDays = target.snapshot.toDays(fixedFrom = current, verdict = verdict)
+            val restoredDays = snapshot.toDays(fixedFrom = current, verdict = verdict)
             ViolationText.warnUnattached(verdict.violations(), restoredDays, tripId)
             val restored = Itinerary.reconstitute(
                 current.itineraryId, current.tripId, ItineraryStatus.PLANNED, current.solveMode, current.generationMode, current.isFallback,
@@ -155,6 +158,19 @@ class ItineraryRevisionService(
         const val MAX_LIMIT = 500
     }
 
+    /**
+     * 기간을 옮기기 전(TRIP-1789)의 스냅숏을 지금 기간에 맞춘다. 리비전은 UPDATE 권한이 없어(V2.14) 옮길 때 고쳐 쓸 수 없고,
+     * 그대로 복원하면 일정이 여행 기간 밖 날짜로 돌아간다. 일수는 그대로이므로 전 일자를 같은 칸수만큼 민다.
+     * 기간 안에 다 들어가면 손대지 않는다 — 일수를 채운 스냅숏은 옮겼으면 반드시 밖으로 나간다.
+     * 맞춰도 기간을 넘치면(일수를 줄이며 버린 일정의 옛 버전) 복원할 수 없다 — 잘라서 넣으면 사용자가 고른 버전이 아니다.
+     */
+    private fun ItinerarySnapshot.alignedTo(start: LocalDate, end: LocalDate): ItinerarySnapshot {
+        if (days.all { it.date in start..end }) return this
+        val by = ChronoUnit.DAYS.between(days.first().date, start)
+        if (days.last().date.plusDays(by) > end) throw ConflictDetected(message = "여행 기간이 바뀌어 이 버전은 되돌릴 수 없어요.")
+        return ItinerarySnapshot(days.map { DaySnapshot(it.date.plusDays(by), it.slots) })
+    }
+
     private fun ItinerarySnapshot.toDays(
         fixedFrom: Itinerary,
         verdict: Revalidation = Revalidation.Judged(emptyList()),
@@ -177,13 +193,15 @@ class ItineraryRevisionService(
                     endsNextDay = fixed?.endsNextDay ?: s.endsNextDay,
                     distanceRange = s.distanceRange,
                     placementReason = s.placementReason,
+                    displayName = s.displayName,
+                    displayCategory = s.displayCategory,
                 )
             }
             // 지금 고정돼 있는데 스냅숏에 없는 블록은 **되살려 붙인다** — 빠뜨리면 되돌리기가 필수 방문지를 지운다
             // (BR-U3-33 은 고정 블록이 스냅숏을 이긴다고 정한다. 누락도 그 "짐"에 포함된다.)
             val missingFixed = fixedNow.filterKeys { (date, poi) -> date == d.date && (date to poi) !in used }
                 .values.map { f ->
-                    SlotDraft(f.sourcePoiId, f.startAt, f.endAt, true, f.endsNextDay, f.distanceRange, f.placementReason)
+                    SlotDraft(f.sourcePoiId, f.startAt, f.endAt, true, f.endsNextDay, f.distanceRange, f.placementReason, f.displayName, f.displayCategory)
                 }
             (fromSnapshot + missingFixed).sortedBy { it.startAt } to d.date
         }
@@ -201,6 +219,8 @@ class ItineraryRevisionService(
                         placementReason = s.placementReason,
                         // 복원 결과도 편집과 같은 기준으로 사유를 남긴다 — 배지만 켜면 화면이 이유를 못 그린다(BR-U3-13).
                         violationReason = if (prior != null) prior.reasonOf(date, s.poiId, s.startAt, s.endAt) else ViolationText.reasonOf(hit),
+                        displayName = s.displayName,
+                        displayCategory = s.displayCategory,
                     )
                 },
             )
@@ -216,6 +236,8 @@ class ItineraryRevisionService(
         val endsNextDay: Boolean,
         val distanceRange: String?,
         val placementReason: String?,
+        val displayName: String?,
+        val displayCategory: String?,
     )
 
     /** 재검증 입력 — 시각·순서만. 거리·소요시간 없음(INV-3). */
@@ -233,7 +255,7 @@ fun Itinerary.toSnapshot(): ItinerarySnapshot = ItinerarySnapshot(
         DaySnapshot(
             d.date,
             d.slots.map {
-                SlotSnapshot(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay, it.distanceRange, it.placementReason)
+                SlotSnapshot(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay, it.distanceRange, it.placementReason, it.displayName, it.displayCategory)
             },
         )
     },

@@ -32,7 +32,8 @@ import {
   useGetTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import { buildSlotKey } from '@/entities/itinerary-slot';
-import { AlertCircleGlyph, CheckCircleGlyph } from '@/features/itinerary';
+import { CheckCircleGlyph } from '@/features/itinerary';
+import { AlertCircleGlyph } from '@/shared/ui/glyphs';
 import { guardKeyWarnings } from '@/test-support/keyWarnings';
 import {
   DAY1,
@@ -55,6 +56,7 @@ import {
 } from '@/test-support/mswItinerary';
 import { savedPlace } from '@/test-support/mustVisitFixtures';
 import { resetToast } from '@/test-support/toastHarness';
+import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { freezeDate } from '@/test-support/freezeDate';
 import { revealValues } from '@/test-support/revealProbe';
@@ -204,6 +206,7 @@ afterAll(() => server.close());
 // TRIP-1498 (c) RG10 이 `Date` 를 고정한다 — 앞 테스트의 고정 시계가 뒤 테스트의 `seoulDate(new Date())` 로 새지 않게 파일 최상위에서 푼다.
 afterEach(() => {
   jest.useRealTimers();
+  resetPressGuard();
 });
 
 // TRIP-466 · 옛 DraftPage.integration.test.tsx(본 파일)
@@ -552,6 +555,27 @@ describe('2단계 생성 폴링 · 다시 시도 · 폴백 라우팅 · 확정 C
       };
       expect(dest.pathname).toBe('/trips/[tripId]/itinerary');
       expect(dest.params?.tripId).toBe(TRIP_ID);
+    });
+
+    // TRIP-1827 M1 — 둘째 탭이 도착지(h14)의 [일정 확정하기]에 떨어져 되돌릴 수 없는 확정이 나갔다(QA M1).
+    // 도착지 반쪽은 네이티브 전환이 있어야 보이므로 여기선 트리거가 창을 여는 것까지 잰다.
+    it('연타해도 한 번만 이동하고, 창이 지나면 다시 누를 수 있다(스택에 남은 화면으로 돌아온 경우)', async () => {
+      renderPage();
+      const confirm = await screen.findByTestId('sheet-cta-button-1');
+      const FROZEN_NOW = Date.now() + 10_000;
+      const clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+
+      try {
+        fireEvent.press(confirm);
+        fireEvent.press(confirm);
+        expect(mockPush).toHaveBeenCalledTimes(1);
+
+        clock.mockReturnValue(FROZEN_NOW + 400);
+        fireEvent.press(confirm);
+        expect(mockPush).toHaveBeenCalledTimes(2);
+      } finally {
+        clock.mockRestore();
+      }
     });
   });
 
@@ -1805,6 +1829,35 @@ describe('다른 후보 시트 배선', () => {
         buildSlotKey(DAY1, 'poi-a')
       );
     });
+
+    it('🔴 TRIP-1840 · 시트 후보 사진·이름 → /explore/places/{poiId} push, 고른 라디오는 그대로 · 시트도 그대로', async () => {
+      // 준비 — 시트를 열고 후보 Y 를 라디오로 고른다.
+      renderShell();
+      fireEvent.press(await screen.findByTestId(stopcardAltId('poi-a')));
+      fireEvent.press(
+        await screen.findByTestId('itinerary-candidate-radio-Y', {}, WAIT)
+      );
+      expect(screen.getByTestId('itinerary-candidate-radio-Y')).toBeSelected();
+      mockPush.mockClear();
+      resetPressGuard();
+
+      // 실행 — 다른 후보 X 의 사진, 이어서(따로) Y 의 이름을 누른다.
+      fireEvent.press(screen.getByTestId('itinerary-candidate-image-open-X'));
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId('itinerary-candidate-name-open-Y'));
+
+      // 단언 — 상세로 각각 push, 선택(Y)·시트·POST 횟수는 그대로(돌아오면 같은 상태).
+      expect(mockPush.mock.calls).toEqual([
+        ['/explore/places/X'],
+        ['/explore/places/Y'],
+      ]);
+      expect(screen.getByTestId('itinerary-candidate-radio-Y')).toBeSelected();
+      expect(
+        screen.getByTestId('itinerary-candidate-radio-X')
+      ).not.toBeSelected();
+      expect(screen.getByTestId(SHEET)).toBeOnTheScreen();
+      expect(postCalls).toBe(1);
+    });
   });
 
   // ─── 경로3: 폴백 dismiss → 셸 (TRIP-983 · QA #024 재현 · TRIP-1039 AC-11) ─────────────
@@ -2115,6 +2168,103 @@ describe('h08 셸 기본 얼굴', () => {
       expect(
         screen.queryByTestId(`slot-stopcard-alt-${DAY1}#poi-b`)
       ).toBeNull();
+    });
+  });
+
+  describe('🔴 TRIP-1840 · 카드 이름·사진 → 장소 상세(d06) push, 「다른 후보 ›」는 그대로 시트', () => {
+    it('poi-b(고정 포함) 이름·poi-a 사진을 누르면 각각 /explore/places/{poiId} push, 시트는 안 뜬다', async () => {
+      // 준비 — 깨끗한 COMPLETE 셸.
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      mockPush.mockClear();
+
+      // 실행 — 고정 슬롯 이름, 비고정 슬롯 사진을 차례로(연타 창은 사이에 닫는다 — 사람의 따로 누름).
+      fireEvent.press(screen.getByTestId(`slot-stopcard-name-${DAY1}#poi-b`));
+      resetPressGuard();
+      fireEvent.press(
+        screen.getByTestId(`slot-stopcard-photo-open-${DAY1}#poi-a`)
+      );
+
+      // 단언 — 기존 d06 라우트로 두 번, 후보 시트는 안 열렸다.
+      expect(mockPush.mock.calls).toEqual([
+        ['/explore/places/poi-b'],
+        ['/explore/places/poi-a'],
+      ]);
+      expect(screen.queryByTestId('itinerary-candidate-sheet')).toBeNull();
+    });
+
+    it('같은 틱 연타는 push 1회(guardPress) · 「다른 후보 ›」는 상세가 아니라 시트를 연다', async () => {
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      mockPush.mockClear();
+
+      fireEvent.press(screen.getByTestId(`slot-stopcard-name-${DAY1}#poi-a`));
+      fireEvent.press(screen.getByTestId(`slot-stopcard-name-${DAY1}#poi-a`));
+      expect(mockPush).toHaveBeenCalledTimes(1);
+
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId(`slot-stopcard-alt-${DAY1}#poi-a`));
+      expect(
+        await screen.findByTestId('itinerary-candidate-sheet')
+      ).toBeOnTheScreen();
+      expect(mockPush).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /**
+   * TRIP-1779 · AC-D1·D2·D4 — h08 완성 셸 슬롯 카드의 추천 이유 태그 한 줄.
+   * 서버 `placementReason`(해시태그를 공백으로 이은 문자열)을 `parseReasonTags` 로 자른 뒤 카드에 내린다.
+   * 픽스처에 값이 **실제로 있어야** "줄 없음" 단언이 공허하지 않다 — 정상·null·옛 문장 세 슬롯을 섞는다.
+   * 파서 경계(혼재·`#` 단독)는 `model/reasonTags.test.ts` 가 잠그므로 여기서 반복하지 않는다.
+   * 줄 위치·말줄임·색은 jest 가 못 보는 생김새라 6-b 몫(README 판정 4).
+   *
+   * 3동작 뼈대: 준비 = 1일차 슬롯 셋에 서로 다른 placementReason → 실행 = 셸을 연다 → 단언 = 슬롯별 줄 유무·글자.
+   */
+  describe('🔴 A9 · TRIP-1779 — h08 슬롯 카드에 추천 이유 태그가 서버 순서 그대로 한 줄로 뜬다', () => {
+    const REASON = '#혼자여행 #난타공연 #공연관람';
+
+    function withReasons(): Itinerary {
+      const reasons: Record<string, string | null> = {
+        'poi-a': REASON,
+        'poi-b': null,
+        'poi-c': '오전에 들르기 좋아요',
+      };
+      return itinerary({
+        days: threeStopDays(3).map((one) => ({
+          ...one,
+          slots:
+            one.date === DAY1
+              ? one.slots.map((s) => ({
+                  ...s,
+                  placementReason: reasons[s.poiId],
+                }))
+              : one.slots,
+        })),
+      });
+    }
+
+    it('유효한 태그 슬롯만 줄이 있고(원문 순서·글자 그대로), null·옛 문장 슬롯은 줄이 없다', async () => {
+      itineraryHandler = () => HttpResponse.json(withReasons());
+
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+
+      // 앵커 — 세 카드가 다 떠 있다(화면이 안 뜬 채 "줄 0개"로 통과하지 않게).
+      ['poi-a', 'poi-b', 'poi-c'].forEach((poiId) => {
+        expect(
+          screen.getByTestId(`slot-stopcard-${DAY1}#${poiId}`)
+        ).toBeOnTheScreen();
+      });
+      expect(
+        screen.getByTestId(`slot-stopcard-reason-${DAY1}#poi-a`)
+      ).toHaveTextContent(REASON);
+      expect(
+        screen.queryByTestId(`slot-stopcard-reason-${DAY1}#poi-b`)
+      ).toBeNull();
+      expect(
+        screen.queryByTestId(`slot-stopcard-reason-${DAY1}#poi-c`)
+      ).toBeNull();
+      expect(screen.queryAllByTestId(/^slot-stopcard-reason-/)).toHaveLength(1);
     });
   });
 
@@ -4152,6 +4302,36 @@ describe('h07 부분 결과(PARTIAL) 셸', () => {
       expect(
         log.all().filter((hit) => /\/(bases|saved-stays)$/.test(hit))
       ).toEqual([]);
+    });
+  });
+
+  /**
+   * TRIP-1779 · 01b Q1 — 같은 파일의 두 번째 `SlotStopCard` 호출(h07 부분 결과 셸)에는 태그 줄을 주입하지 않는다.
+   * 생성 중 값은 서버가 아직 채우는 중일 수 있고 Figma 검토안(h08)에 없는 얼굴이라서다(결정을 뒤집으려면 이 단언을 반전한다).
+   * 슬롯마다 **유효한** placementReason 을 넣어야 공허 통과가 아니다.
+   */
+  describe('🔴 A8-9 · TRIP-1779 — 부분 결과 셸 카드에는 값이 있어도 추천 이유 줄이 없다', () => {
+    it('유효한 태그를 가진 3슬롯이 카드로 떠도 이유 줄은 0개다', async () => {
+      itineraryHandler = () =>
+        HttpResponse.json(
+          itinerary({
+            generationState: 'PARTIAL',
+            days: threeStopDays(1).map((one) => ({
+              ...one,
+              slots: one.slots.map((s) => ({
+                ...s,
+                placementReason: '#혼자여행 #난타공연 #공연관람',
+              })),
+            })),
+          })
+        );
+
+      renderPage();
+      await screen.findByTestId('generation-progress-card');
+
+      // 앵커 — 부분 셸 카드 3장이 떠 있다.
+      expect(screen.queryAllByTestId(/^slot-stopcard-\d/)).toHaveLength(3);
+      expect(screen.queryAllByTestId(/^slot-stopcard-reason-/)).toHaveLength(0);
     });
   });
 });

@@ -2,6 +2,8 @@ import { act, render, screen } from '@testing-library/react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 import { AccessibilityInfo, Animated, StyleSheet } from 'react-native';
 
+import { emitReduceMotionChange } from '@/test-support/animatedProbe';
+
 import { VisitRecordCard } from './VisitRecordCard';
 
 /**
@@ -215,8 +217,9 @@ describe('🔴 C-4·C-5 (5-b W1·W2) — 등장이 시작 전·도중에 끊기�
     await flush();
     expect(screen.getByTestId(ACTIVE)).toBeOnTheScreen();
 
-    // 다시 완료 — 이번엔 동작 줄이기라 애니메이션이 값을 1 로 되돌려 주지 않는다.
-    reduceMotionMock.mockResolvedValue(true);
+    // 다시 완료 — 그 사이 OS 설정이 동작 줄이기로 바뀌어 애니메이션이 값을 1 로 되돌려 주지 않는다.
+    // 답은 모듈 캐시라(TRIP-1735) 목 교체가 아니라 OS 바뀜 이벤트로 바꾼다.
+    emitReduceMotionChange(true);
     view.rerender(<VisitRecordCard card={card(COMPLETED)} />);
     await flush();
 

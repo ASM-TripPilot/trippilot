@@ -1,25 +1,27 @@
 import type { ReactElement } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import {
+  BackChevronWideGlyph,
+  WarningTriangleGlyph,
+  MapPinGlyph,
+  HeartFilledGlyph,
+  HeartOutlineGlyph,
+} from '@/shared/ui/glyphs';
 import type { SavedPlace } from '@/shared/api/index.schemas';
 import { CollageEmptyState } from '@/shared/ui/CollageEmptyState';
 import { heartSaveLabel } from '@/shared/ui/HeartButton';
-import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 import { EmptyCollage } from './EmptyCollage';
 import { StateNotice } from '@/shared/ui/StateNotice';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 import { Skeleton } from '@/shared/ui/Skeleton';
 
 import type { PlaceListState } from '@/features/explore/index.view';
 import type { PlaceSaveNotice } from '@/features/save-place/index.view';
 import { SAVED_PLACE_BADGE } from '../model/savedPlaceList';
-import {
-  BackChevronGlyph,
-  MapPinGlyph,
-  SearchGlyph,
-  WarningTriangleGlyph,
-} from '@/features/explore/index.view';
+import { ExploreSearchGlyph } from '@/features/explore/index.view';
 import { NoticeBanner } from '@/shared/ui/NoticeBanner';
 
 /**
@@ -86,7 +88,7 @@ function AppBar({
         onPress={onBack}
         className="h-10 w-10 items-center justify-center"
       >
-        <BackChevronGlyph size={24} />
+        <BackChevronWideGlyph size={24} />
       </Pressable>
       <View className="gap-xs">
         <Text className="font-noto-bold text-[18px] font-bold text-ink">
@@ -130,6 +132,7 @@ function SavedPlaceRow({
     // bare Pressable(accessibilityRole 없음) — d04 카드와 같은 규율(role 을 붙이면 개수 심판이
     // 깨질 위험 · 여기 d02 엔 role-count 가드가 없지만 대칭 유지). d02 하트는 disabled 가 없어
     // 항상 활성이라 하트 press 는 부모로 안 샌다(RNTL Probe A, ★2) — `!pending` 가드 불필요.
+    // eslint-disable-next-line no-restricted-syntax -- 의도적 무역할(위 주석·TRIP-1303) — 테스트가 "행은 버튼 역할이 아니다"를 지킨다(TRIP-1765).
     <Pressable
       testID={`explore-saved-item-${saved.savedPlaceId}`}
       // 보이는 글자 그대로(TRIP-1281) — 없으면 iOS 가 자식 하트 라벨을 행에 끌어다 붙인다.
@@ -161,12 +164,13 @@ function SavedPlaceRow({
       <View
         className={`h-20 w-[104px] overflow-hidden rounded-thumb bg-surface-strong${dim}`}
       >
-        <PlacePhoto
+        <PoiPhoto
           testID={`explore-saved-photo-${saved.savedPlaceId}`}
           imageUrl={place.imageUrl}
+          imageLicense={place.imageLicense}
+          surface="thumb"
           category={place.category}
           poiId={place.poiId}
-          contentFit="cover"
           className="h-full w-full"
         />
         {badge ? (
@@ -190,7 +194,7 @@ function SavedPlaceRow({
             testID={`explore-saved-region-${saved.savedPlaceId}`}
             className="flex-row items-center gap-xs"
           >
-            <MapPinGlyph size={13} tone="muted" />
+            <MapPinGlyph size={13} color="muted" />
             <Text className="font-noto text-caption text-muted">
               {place.region}
             </Text>
@@ -311,24 +315,14 @@ function CtaBar({
   return (
     <View className="w-full bg-canvas px-lg pb-lg pt-md">
       <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
-      <Pressable
+      <Button
         testID="explore-saved-createtrip"
-        accessibilityRole="button"
-        accessibilityState={{ disabled }}
         disabled={disabled}
         onPress={onPress}
-        className={`h-[54px] w-full items-center justify-center rounded-[14px] ${
-          disabled ? 'bg-surface-strong' : 'bg-primary'
-        }`}
+        className="w-full"
       >
-        <Text
-          className={`font-noto-bold text-[16px] font-bold ${
-            disabled ? 'text-muted' : 'text-on-primary'
-          }`}
-        >
-          이 장소들로 여행 만들기
-        </Text>
-      </Pressable>
+        이 장소들로 여행 만들기
+      </Button>
     </View>
   );
 }
@@ -366,7 +360,7 @@ function ErrorBlock({ onRetry }: { onRetry?: () => void }): ReactElement {
     <View className="w-full items-center justify-center px-lg pt-xl">
       <StateNotice
         testID="explore-saved-error"
-        icon={<WarningTriangleGlyph size={32} />}
+        icon={<WarningTriangleGlyph size={32} color="primary" />}
         title="담은 장소를 불러올 수 없어요"
         description="잠시 후 다시 시도해 주세요"
         actions={[
@@ -423,7 +417,7 @@ function EmptyBlock({
       ctaTestID="explore-saved-browse"
       ctaLabel="장소 둘러보기"
       ctaIcon={
-        <SearchGlyph
+        <ExploreSearchGlyph
           size={19}
           tone="on-primary"
           testID="explore-saved-browse-icon"

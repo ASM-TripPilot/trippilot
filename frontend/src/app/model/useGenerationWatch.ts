@@ -11,12 +11,13 @@ import {
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary';
-import { getGetTripsQueryKey, useGetTrips } from '@/shared/api/index.hooks';
+import { getGetTripsQueryKey, useGetTrips } from '@/shared/api/index.trips';
 import type {
   ItineraryGenerationState,
   Trip,
 } from '@/shared/api/index.schemas';
 import { showToast } from '@/shared/ui/Toast';
+import { usePressLock } from '@/shared/lib/pressGuard';
 
 import {
   GENERATION_COMPLETE_MESSAGE,
@@ -103,8 +104,8 @@ export function useGenerationWatch(
   });
 
   // "보기" — 누른 시점의 목록 캐시로 목적지를 정한다. 목록에서 밀려났으면 모르는 곳으로 보내지 않는다(INV-4).
-  // 같이 짜기(copick) 생성 중일 때만 슬롯 키를 위해 일정을 한 번 받는다(연타는 한 번 — 잠금 ref).
-  const openingRef = useRef(false);
+  // 같이 짜기(copick) 생성 중일 때만 슬롯 키를 위해 일정을 한 번 받는다(연타는 한 번 — 잠금).
+  const openingLock = usePressLock();
   const open = useCallback(
     (tripId: string) => {
       const trip = queryClient
@@ -123,8 +124,7 @@ export function useGenerationWatch(
         router.push(itineraryDestinationHref(tripId, target, undefined));
         return;
       }
-      if (openingRef.current) return;
-      openingRef.current = true;
+      if (!openingLock.acquire()) return;
       fetchTripItineraryHref(queryClient, tripId)
         .then(
           (href) => router.push(href),
@@ -136,10 +136,10 @@ export function useGenerationWatch(
             })
         )
         .finally(() => {
-          openingRef.current = false;
+          openingLock.release();
         });
     },
-    [queryClient]
+    [queryClient, openingLock]
   );
 
   // 캐시 변경 알림을 듣는다 — 여행별 직전 값을 기억하고 `PARTIAL → COMPLETE|FAILED` 가 되는 순간 알린다.

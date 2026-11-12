@@ -15,6 +15,7 @@ import com.trippilot.assistant.domain.InterpretRequest
 import com.trippilot.assistant.domain.Interpretation
 import com.trippilot.assistant.domain.InterpretedAnswer
 import com.trippilot.assistant.domain.InterpretedQuickReply
+import com.trippilot.assistant.domain.MemoryExport
 import com.trippilot.assistant.domain.MemoryItem
 import com.trippilot.assistant.domain.NextAction
 import com.trippilot.assistant.domain.QuickReplyAction
@@ -106,10 +107,11 @@ class HttpDialogueMemoryClient(private val client: RestClient) : DialogueMemoryP
             .retrieve().body(WireMemoryDeleted::class.java)?.deleted
             ?: throw IllegalStateException("메모리 파기 응답이 비었다")
 
-    override fun export(accountRef: String): List<MemoryItem> =
-        client.get().uri { it.path(HttpDialogueInterpreter.MEMORY_PATH).queryParam("account_ref", accountRef).build() }
-            .retrieve().body(WireMemoryExport::class.java)?.memories.orEmpty()
-            .map { MemoryItem(it.sessionId, it.tripId, it.summary, it.updatedAt) }
+    override fun export(accountRef: String): MemoryExport {
+        val wire = client.get().uri { it.path(HttpDialogueInterpreter.MEMORY_PATH).queryParam("account_ref", accountRef).build() }
+            .retrieve().body(WireMemoryExport::class.java) ?: WireMemoryExport()
+        return MemoryExport(wire.memories.map { MemoryItem(it.sessionId, it.tripId, it.summary, it.updatedAt) }, wire.truncated)
+    }
 }
 
 /** `http` 가 아닌 모드의 메모리 경계 — 상대 메모리가 생기지 않으니 지울 것도 낼 것도 없다. */
@@ -117,7 +119,7 @@ object NoopDialogueMemory : DialogueMemoryPort {
     override fun deleteBySession(sessionId: UUID) = 0
     override fun deleteByTrip(tripId: UUID) = 0
     override fun deleteByAccount(accountRef: String) = 0
-    override fun export(accountRef: String): List<MemoryItem> = emptyList()
+    override fun export(accountRef: String) = MemoryExport(emptyList())
 }
 
 // ── 와이어 (snake_case 매퍼가 이름을 바꾼다) ────────────────────────────────
@@ -134,12 +136,16 @@ internal data class WireTrip(val tripId: UUID, val regions: List<String>, val st
 
 internal data class WirePreference(val styles: List<String>, val activities: List<String>)
 
+internal data class WireCoord(val lat: Double, val lng: Double)
+
 internal data class WireContext(
     val surface: String,
     val trip: WireTrip?,
     val baseStays: List<String>,
     val itinerary: WireItinerary?,
     val preferenceProfile: WirePreference? = null,
+    /** 현재 위치(O-U8-5) — 위치 동의가 켜진 턴에만 실린다. 상대는 날씨 앵커로만 쓴다. */
+    val deviceLocation: WireCoord? = null,
 )
 
 internal data class WireTurn(val role: String, val text: String)
@@ -197,7 +203,8 @@ internal data class WireMemoryItem(
     val expiresAt: Instant,
 )
 
-internal data class WireMemoryExport(val memories: List<WireMemoryItem> = emptyList())
+// truncated: 상대가 세션 수 상한(100)을 넘겨 잘랐다 — 2026-11-06 전에는 없던 칸이라 기본 false(옛 상대 응답도 읽힌다)
+internal data class WireMemoryExport(val memories: List<WireMemoryItem> = emptyList(), val truncated: Boolean = false)
 
 internal fun InterpretRequest.toWire(mapper: JsonMapper) = WireRequest(
     // 상대가 이 값을 trace_id 로 로그에 남긴다 — 호출자가 만든 번호를 그대로 싣는다(같은 값이 그 턴의 도우미 행에 적힌다)
@@ -219,6 +226,7 @@ internal fun ContextSnapshot.toWire() = WireContext(
         WireItinerary(it.status, it.days.map { d -> WireDay(d.date, d.slots.map { s -> WireSlot(s.slotKey, s.name, s.startAt, s.category) }) })
     },
     preferenceProfile = tastes?.let { WirePreference(it.styles, it.activities) },
+    deviceLocation = here?.let { WireCoord(it.lat, it.lng) },
 )
 
 internal fun WireResponse.toDomain(mapper: JsonMapper): Interpretation {

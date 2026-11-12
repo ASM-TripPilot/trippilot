@@ -5,29 +5,31 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
-import {
-  AccessibilityInfo,
-  InteractionManager,
-  Text,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { InteractionManager, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 
-import { TAB_CONFIG, type ShellTabKey } from '@/shared/ui/BottomTabBar';
-
+import { onReduceMotionAnswer } from '@/shared/lib/reduceMotion';
+import {
+  NavBarLabel,
+  TAB_CONFIG,
+  type ShellTabKey,
+} from '@/shared/ui/BottomTabBar';
 import {
   NAV_BAR_CAPSULE_PADDING_X,
+  NAV_BAR_CELL_GAP,
   NAV_BAR_CELL_HEIGHT,
   NAV_BAR_HEIGHT,
   NAV_BAR_SIDE,
-} from '../config/navBarLayout';
+} from '@/shared/ui/navBarLayout';
+
+import { beginBarExit } from '../model/barExitHandoff';
 import {
   BAR_ENTER_CUT_MS,
   BAR_ENTER_DELAY_MS,
@@ -36,6 +38,7 @@ import {
   BAR_EXIT_SWAP_MS,
   barMorphFrame,
   type BarMorphDirection,
+  type BarMorphFrame,
   type BarMorphShape,
 } from '../model/barMorph';
 import { NavBarBackButton, NavBarCapsule } from './BottomNavBar';
@@ -46,12 +49,13 @@ import { NavBarBackButton, NavBarCapsule } from './BottomNavBar';
  *
  * 변신 모션(영상 4단계 모프) — 출발 탭(`departureTab`)이 있으면 홈 탭 바와 같은 5칸(홈·탐색·일정·기록·마이)으로 시작해
  * ① 확대 → ② 생존 칸(허브 일정·기록 기록)만 남기고 컷 → ③ 폭이 줄며 생존 칸이 맨 앞으로 → ④ 뒤로 원 + 새 칸들 등장을 재생하고,
- * 뒤로 **버튼**은 그 역순을 재생한 **뒤**(`BAR_EXIT_MS` 타이머) `onBack` 을 부른다. 값은 순수 함수 `barMorphFrame(방향, 경과 ms, 폭, 칸 구성)` 이 내고,
- * 이 파일은 시간 하나(`time`)를 흘려 각 `useAnimatedStyle` 이 그 함수를 직접 읽게 한다. 구조(어느 칸이 마운트돼 있나)는 React 상태 `layer` 하나 —
+ * 뒤로 **버튼**은 누른 그 순간 `onBack` 을 부르고(이동은 모션을 기다리지 않는다 — TRIP-1831) 같은 이벤트에서 퇴장 인계 저장소(`beginBarExit`)에 이 바의
+ * props 를 적는다 — 누른 화면은 곧 스택에서 빠져 이 바도 사라지므로, 탭 레이아웃의 `BarExitHost` 가 같은 바를 `playExit` 로 마운트해 그 역순을 끝까지 재생한다. 값은 순수 함수 `barMorphFrame(방향, 경과 ms, 폭, 칸 구성)` 이 내고,
+ * 이 파일은 시간 하나(`time`)를 흘리고 `useDerivedValue` 가 프레임마다 그 함수를 **한 번** 불러 둔 값(`frame`)을 각 `useAnimatedStyle` 이 읽는다(TRIP-1738). 구조(어느 칸이 마운트돼 있나)는 React 상태 `layer` 하나 —
  * 'start' = 홈 탭 바 5칸, 'final' = 뒤로 + 생존 칸 + 새 칸들. 생존 칸은 두 구조에서 같은 자리(같은 노드)라 리마운트되지 않는다.
  * 입장은 `entrance` 가 **마운트 순간** true 였을 때만(화면당 한 번 — 호출자가 정한다), OS 동작 줄이기 답이 `false` 로 확인된 뒤에 시작한다
  * (답 대기 중엔 시작 5칸 그대로, `true` 면 모션 없이 최종). 출발 탭이 없으면(탭 바 위가 아닌 진입) 모션 없이 최종 구조이고 뒤로는 즉시 `onBack`.
- * `onBack` 은 모션 완료 콜백이 아니라 **타이머**로 부른다(콜백이 안 와도 이동 — INV-4). 하드웨어·스와이프 뒤로는 가로채지 않는다.
+ * 구조를 바꾸는 시각은 모션 완료 콜백이 아니라 **타이머**로 건다(콜백이 안 와도 구조는 바뀐다 — INV-4). 하드웨어·스와이프 뒤로는 가로채지 않는다.
  * 간격은 style 숫자 한 곳(캡슐 `marginLeft` = 알약 왼쪽 끝 − 뒤로 폭)에서만 난다 — Animated 노드엔 className 대신 style 을 쓴다.
  * 토스트 바닥 신고(`useToastBottom`)는 여기서 하지 않는다 — 호출자 몫이다(허브는 `LiveHubView`, 기록은 `RecordNavBar`).
  */
@@ -97,19 +101,22 @@ export interface MorphNavBarProps {
    * 퇴장 중 시작 5칸의 활성 칸은 이 탭이다. 안 주면 위 `departureTab` 규칙 그대로(허브). 입장 모프는 여전히 `departureTab` 이 있어야 돈다.
    */
   exitTab?: ShellTabKey;
+  /**
+   * 마운트 때 곧장 퇴장(역순) 모프를 재생한다 — `BarExitHost` 전용. 첫 프레임은 끝났던 최종 구조(뒤로 + 칸들)이고 입장·OS 답은 보지 않는다.
+   * `onBack` 은 부르지 않는다(이동은 이미 일어났다).
+   */
+  playExit?: boolean;
 }
 
 type Layer = 'start' | 'final';
 type MorphClock = {
-  dir: SharedValue<BarMorphDirection>;
-  time: SharedValue<number>;
-  /** 바 전체 폭 = 화면 폭 − 좌우 30×2 (바 앵커). 기기마다 다르다. */
-  width: SharedValue<number>;
+  /** 이번 프레임의 모양 — `barMorphFrame(방향, 경과 ms, 바 폭, 칸 구성)` 을 프레임마다 한 번 계산해 둔 값(TRIP-1738). */
+  frame: SharedValue<BarMorphFrame>;
   /** 칸 구성(생존 칸 자리·새 칸 수) — 모션 내내 안 바뀌는 숫자 둘이라 일반 객체다. */
   shape: BarMorphShape;
 };
 
-/** 시작 칸·새 칸 슬롯 — 불투명도·확대를 단계 함수에서 읽는다(`barMorphFrame` 은 각 스타일 본문에서 직접 부른다 — 중첩 헬퍼는 jest 가 구독 못 한다). */
+/** 시작 칸·새 칸 슬롯 — 불투명도·확대를 이번 프레임 값에서 읽는다(스타일 본문이 `frame.value` 를 직접 읽어야 jest 도 구독한다 — 중첩 헬퍼 금지). */
 function MorphSlot({
   clock,
   group,
@@ -122,12 +129,7 @@ function MorphSlot({
   children: ReactNode;
 }): ReactElement {
   const style = useAnimatedStyle(() => {
-    const frame = barMorphFrame(
-      clock.dir.value,
-      clock.time.value,
-      undefined,
-      clock.shape
-    );
+    const frame = clock.frame.value;
     const cell =
       group === 'start' ? frame.startCells[index] : frame.newCells[index];
     return { opacity: cell.opacity, transform: [{ scale: cell.scale }] };
@@ -149,12 +151,7 @@ function SurvivorSlot({
   children: ReactNode;
 }): ReactElement {
   const style = useAnimatedStyle(() => {
-    const frame = barMorphFrame(
-      clock.dir.value,
-      clock.time.value,
-      clock.width.value,
-      clock.shape
-    );
+    const frame = clock.frame.value;
     const inner = frame.barWidth - NAV_BAR_CAPSULE_PADDING_X * 2;
     const layoutCenter =
       frame.barLeft +
@@ -187,21 +184,11 @@ function StartCell({
       accessibilityRole="tab"
       accessibilityLabel={tab.label}
       accessibilityState={{ selected }}
-      style={{ height: NAV_BAR_CELL_HEIGHT }}
-      className="items-center justify-center gap-[3px]"
+      style={{ height: NAV_BAR_CELL_HEIGHT, gap: NAV_BAR_CELL_GAP }}
+      className="items-center justify-center"
     >
-      <Icon size={27} />
-      <Text
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        className={
-          selected
-            ? 'font-noto-bold text-micro font-bold text-primary'
-            : 'font-noto text-micro text-muted'
-        }
-      >
-        {tab.label}
-      </Text>
+      <Icon />
+      <NavBarLabel label={tab.label} selected={selected} />
     </View>
   );
 }
@@ -219,18 +206,21 @@ export function MorphNavBar({
   entrance = false,
   departureTab,
   exitTab,
+  playExit = false,
 }: MorphNavBarProps): ReactElement {
   // 칸 구성 — 생존 칸이 홈 탭 바 몇 번째 자리인지(순서)와 새 칸 수(길이)에서 나온다. 시작 칸은 그 5칸에서 생존 칸을 뺀 4개.
   const startTabs = TAB_CONFIG.filter((tab) => tab.key !== survivorTab);
   const survivorSlot = TAB_CONFIG.findIndex((tab) => tab.key === survivorTab);
   const shape: BarMorphShape = { survivorSlot, newCount: newCells.length };
   // 입장 신호는 마운트 순간의 값만 본다 — 출발 탭이 없으면(탭 바 위가 아닌 진입) 신호가 와도 모션 없이 최종 구조다.
-  const [playEntrance] = useState(entrance && departureTab !== undefined);
+  const [playEntrance] = useState(
+    entrance && departureTab !== undefined && !playExit
+  );
   // 구조: 입장 신호가 있으면 시작 5칸에서 선다(OS 답을 기다리는 동안에도 — 5칸도 완전한 바다), 아니면 처음부터 최종.
   const [layer, setLayer] = useState<Layer>(playEntrance ? 'start' : 'final');
   // 시계 — 방향과 경과 ms. 처음 값이 "그 구조의 모양"이라 모션이 없으면 아무것도 안 움직인다. `layerSv` 는 `layer` 의 UI 스레드 사본(0 = 시작).
-  const dir = useSharedValue<BarMorphDirection>('enter');
-  const time = useSharedValue(playEntrance ? 0 : BAR_ENTER_MS);
+  const dir = useSharedValue<BarMorphDirection>(playExit ? 'exit' : 'enter');
+  const time = useSharedValue(playEntrance || playExit ? 0 : BAR_ENTER_MS);
   const layerSv = useSharedValue(playEntrance ? 0 : 1);
   // 바 폭은 첫 프레임부터 윈도우 폭에서 파생한다(바 앵커 좌우 30) — `onLayout` 을 기다리지 않는다.
   const barWidth = useWindowDimensions().width - NAV_BAR_SIDE * 2;
@@ -238,17 +228,25 @@ export function MorphNavBar({
   useEffect(() => {
     widthSv.value = barWidth;
   }, [barWidth, widthSv]);
-  const clock: MorphClock = { dir, time, width: widthSv, shape };
+  // 프레임마다 단계 함수를 한 번만 부른다 — 예전엔 스타일 8~9개가 각자 불렀다(TRIP-1738). 칸 구성은 숫자 둘로 잡아 worklet 안에서 객체를
+  // 만든다(렌더마다 새 `shape` 객체를 클로저에 넣지 않게). 폭·구성을 다 넣어도 각 스타일이 읽는 칸은 예전과 같은 값이다 — `barScale`·`barLeft`·
+  // `backSize` 는 폭·구성과 무관하고, 칸 불투명도는 폭과 무관하다.
+  const { newCount } = shape;
+  const frame = useDerivedValue(() =>
+    barMorphFrame(dir.value, time.value, widthSv.value, {
+      survivorSlot,
+      newCount,
+    })
+  );
+  const clock: MorphClock = { frame, shape };
   const showLayer = (next: Layer) => {
     layerSv.value = next === 'start' ? 0 : 1;
     setLayer(next);
   };
   // OS "동작 줄이기" 답 — Promise 라 늦게 온다(그 전엔 null). 화면을 다시 그릴 필요가 없어 상태가 아니라 ref 에 둔다.
   const reduceRef = useRef<boolean | null>(null);
-  const leaving = useRef(false);
-  const onBackRef = useRef(onBack);
-  onBackRef.current = onBack;
-  // 구조를 바꾸는 시각·`onBack` 은 타이머로 건다(모션 완료 콜백이 아니라). 언마운트하면 전부 취소 — 화면이 먼저 사라졌는데 `back` 을 한 번 더 부르지 않는다.
+  const leaving = useRef(playExit);
+  // 구조를 바꾸는 시각은 타이머로 건다(모션 완료 콜백이 아니라). 언마운트하면 전부 취소.
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const later = (fn: () => void, ms: number) => {
     timers.current.push(setTimeout(fn, ms));
@@ -257,8 +255,16 @@ export function MorphNavBar({
     const pending = timers;
     return () => pending.current.forEach(clearTimeout);
   }, []);
+  // 퇴장 모프 재생 — 시계를 최종 모양 0ms 에서 400ms 로 흘리고 `BAR_EXIT_SWAP_MS` 에 시작 5칸 구조로 바꾼다. 호스트가 마운트 때 한 번 부른다.
+  const startExitMotion = () => {
+    dir.value = 'exit';
+    time.value = 0;
+    time.value = withTiming(BAR_EXIT_MS, LINEAR(BAR_EXIT_MS));
+    later(() => showLayer('start'), BAR_EXIT_SWAP_MS);
+  };
   useEffect(() => {
-    let alive = true;
+    // 호스트(`playExit`)는 입장 신호가 꺼져 있어 아래 입장 타이머가 안 걸리고, OS 답은 받아 두기만 하며 아무것도 바꾸지 않는다(`leaving` 이 참).
+    if (playExit) startExitMotion();
     // 입장은 화면 첫 렌더가 끝난 뒤에 시작한다(시트 마운트·지도·목록 첫 렌더와 겹치면 프레임이 끊긴다): ① OS 답 false ② interactions 완료
     // ③ 마운트 후 `BAR_ENTER_DELAY_MS` 경과 — 셋 중 가장 늦은 순간. 그 전까지 시작 5칸을 그대로 보인다.
     const ready = { answer: false, interactions: false, delay: false };
@@ -285,8 +291,7 @@ export function MorphNavBar({
         ready.delay = true;
         tryStart();
       }, BAR_ENTER_DELAY_MS);
-    void AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
-      if (!alive) return;
+    const stopAnswer = onReduceMotionAnswer((reduce) => {
       reduceRef.current = reduce;
       // 뒤로를 이미 눌렀다면(퇴장 중) 늦게 온 답이 아무것도 바꾸지 못한다. 입장은 답이 확인된 뒤에만 시작한다.
       if (leaving.current || !playEntrance) return;
@@ -299,7 +304,7 @@ export function MorphNavBar({
       tryStart();
     });
     return () => {
-      alive = false;
+      stopAnswer();
       interactions?.cancel();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 때 한 번(입장 신호도 마운트 순간 값)
@@ -315,25 +320,31 @@ export function MorphNavBar({
       onBack();
       return;
     }
-    // 답이 아직 안 왔어도(null) 퇴장한다. 입장 타이머를 취소하고 역순을 재생한 뒤 `BAR_EXIT_MS` 에 정확히 1회 이동.
-    timers.current.forEach(clearTimeout);
-    timers.current = [];
-    dir.value = 'exit';
-    time.value = 0;
-    time.value = withTiming(BAR_EXIT_MS, LINEAR(BAR_EXIT_MS));
-    later(() => showLayer('start'), BAR_EXIT_SWAP_MS);
-    later(() => onBackRef.current(), BAR_EXIT_MS);
+    // 답이 아직 안 왔어도(null) 퇴장한다. 이동은 지금 정확히 1회(연타는 `leaving` 이 막는다) — 이 바는 곧 빠지므로 역순 재생은 호스트가 이어 간다.
+    beginBarExit({
+      testID,
+      capsuleTestID,
+      backTestID,
+      startCellTestID,
+      survivorTab,
+      survivorSelected,
+      renderSurvivor,
+      newCells,
+      departureTab,
+      exitTab,
+    });
+    onBack();
   };
   // 바 전체 확대(입장 ① 만).
   const rootStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: barMorphFrame(dir.value, time.value).barScale }],
+    transform: [{ scale: frame.value.barScale }],
   }));
   // 뒤로 원: 레이아웃 폭이 0 → 58 로 열린다. 안쪽 원(58×58)은 오른쪽 가장자리를 58 에 둔 채 왼쪽으로 자라도록 옮기고 줄인다.
   const backWrapStyle = useAnimatedStyle(() => ({
-    width: barMorphFrame(dir.value, time.value).backSize,
+    width: frame.value.backSize,
   }));
   const backCircleStyle = useAnimatedStyle(() => {
-    const size = barMorphFrame(dir.value, time.value).backSize;
+    const size = frame.value.backSize;
     return {
       transform: [
         { translateX: NAV_BAR_HEIGHT / 2 - size / 2 },
@@ -344,8 +355,8 @@ export function MorphNavBar({
   // 캡슐: 왼쪽 끝이 `barLeft` 가 되도록 뒤로 폭을 뺀 만큼 왼쪽 여백을 낸다 — 뒤로–캡슐 간격 8 은 **여기 숫자 한 곳에서만** 난다
   // (최종 66 − 58 = 8, 시작 0). 루트에 `gap-*` 같은 className 간격을 또 두면 겹친다(jest 가 className 을 못 읽어 한 번 새어 나갔던 결함).
   const capsuleWrapStyle = useAnimatedStyle(() => {
-    const frame = barMorphFrame(dir.value, time.value, widthSv.value);
-    return { marginLeft: frame.barLeft - frame.backSize };
+    const now = frame.value;
+    return { marginLeft: now.barLeft - now.backSize };
   });
   const start = layer === 'start';
   // 퇴장 중이면 시작 5칸의 활성 칸은 `exitTab` — ref 라 렌더 본문에서 매번 읽는다(`pressBack` 의 `showLayer('start')` 재렌더가 이 값을 바꾼다).

@@ -1,6 +1,8 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { AlertCircleGlyph } from '@/shared/ui/glyphs';
+import { Button, buttonClasses } from '@/shared/ui/Button';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Skeleton } from '@/shared/ui/Skeleton';
@@ -10,12 +12,12 @@ import type { MustVisitSeedItem } from '@/features/create-trip';
 import { formatWizardStep } from '@/features/create-trip';
 import type { PreferenceSummary, SummaryLine } from '@/features/create-trip';
 import {
-  AlertCircleGlyph,
-  ChevronRightGlyph,
+  TripChevronRightGlyph,
   GlobeGlyph,
-  PlusGlyph,
-  SparkleGlyph,
+  TripPlusGlyph,
+  TripSparkleGlyph,
 } from '@/features/trip/index.view';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-665 g01 '여행 만들기' default 재작성 — **props만 받는 프레젠테이션 화면**(Figma `3742:2068`).
@@ -98,7 +100,7 @@ export interface TripWizardStep1ScreenProps {
 /** 요약 카드 그림자 — Figma `0 2 10 rgba(0,0,0,.06)`. 그림자는 토큰 대상이 아니라 raw 가 맞다
  * (`HomeScreen.tsx`·옛 썸네일 제거 버튼 선례). */
 const SUMMARY_CARD_SHADOW = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
@@ -192,7 +194,7 @@ function SummaryRow({
           </View>
         )}
       </View>
-      <ChevronRightGlyph size={20} tone="muted" />
+      <TripChevronRightGlyph size={20} tone="muted" />
     </Pressable>
   );
 }
@@ -200,7 +202,7 @@ function SummaryRow({
 /**
  * 꼭 갈 곳 가로 스트립 — 헤더("꼭 갈 곳 {N}" + 전체 보기) + 스크롤 행([더 담기 첫 위치] + 담은
  * 곳 카드들). 카드는 이미지 자리 + 이름 + (region 있으면) 지역 한 줄이다(TRIP-685). 이미지는
- * `PlacePhoto` 가 그린다 — `imageUrl` 이 없으면 `category` 로 고른 생성 이미지.
+ * `PoiPhoto` 가 그린다 — `imageUrl` 이 없으면 `category` 로 고른 생성 이미지.
  * 0곳도 스트립을 감추지 않는다(empty 일러스트 얼굴은 S7).
  */
 function MustVisitStrip({
@@ -234,7 +236,7 @@ function MustVisitStrip({
             <Text className="font-noto-bold text-label font-bold text-ink">
               전체 보기
             </Text>
-            <ChevronRightGlyph size={16} tone="muted" />
+            <TripChevronRightGlyph size={16} tone="muted" />
           </Pressable>
         ) : null}
       </View>
@@ -249,7 +251,7 @@ function MustVisitStrip({
           onPress={onPressMore}
           className="h-[129px] w-[112px] items-center justify-center gap-[6px] rounded-[14px] border-[1.5px] border-dashed border-hairline-strong"
         >
-          <PlusGlyph size={22} />
+          <TripPlusGlyph size={22} />
           <Text className="font-noto-bold text-label font-bold text-primary-text">
             더 담기
           </Text>
@@ -261,12 +263,13 @@ function MustVisitStrip({
             className="w-[112px] gap-[6px]"
           >
             <View className="h-[88px] w-[112px] overflow-hidden rounded-[14px] bg-surface-strong">
-              <PlacePhoto
+              <PoiPhoto
                 testID={`trip-wizard-mustvisit-image-${item.sourcePoiId}`}
                 imageUrl={item.imageUrl}
+                imageLicense={item.imageLicense}
+                surface="thumb"
                 category={item.category}
                 poiId={item.sourcePoiId}
-                contentFit="cover"
                 cachePolicy="memory-disk"
                 className="h-full w-full"
               />
@@ -357,6 +360,7 @@ export function TripWizardStep1Screen({
 }: TripWizardStep1ScreenProps): ReactElement {
   // loading 이면 게이트가 참이어도 [다음]을 막는다(TRIP-671 D4) — 화면이 isLoading 을 next 에 물린다.
   const nextDisabled = !canProceed || Boolean(isLoading);
+  const nextButton = buttonClasses({ disabled: nextDisabled });
   // empty 얼굴(Figma 3652) 판정 — 여행지·기간만 미선택이고 나머지(동행·취향)는 프리필로 채워진
   // 상태. 네 행이 전부 null 인 퇴화 상태(프리필 미도착)는 "나머지는 채워둘게요" 문구가 거짓이라
   // empty 로 치지 않는다. 승인 테스트 두 축이 이 경계를 함께 고정한다(TRIP-732 AC-6): summary2tone
@@ -472,11 +476,11 @@ export function TripWizardStep1Screen({
                 skeletonTestID="trip-wizard-summary-skeleton-4"
                 skeletonWidths={[110, 48]}
                 trailing={
-                  // 온보딩 상속일 때만 기존 SparkleGlyph + 분홍 "온보딩" 배지(옛 " + 온보딩" 문자열
+                  // 온보딩 상속일 때만 기존 TripSparkleGlyph + 분홍 "온보딩" 배지(옛 " + 온보딩" 문자열
                   // 대체, TRIP-732 AC-5). onboarding=false 면 배지 자체를 안 그린다.
                   summaryPreferences?.onboarding ? (
                     <View className="flex-row items-center gap-[3px]">
-                      <SparkleGlyph
+                      <TripSparkleGlyph
                         testID="trip-wizard-preference-sparkle"
                         size={14}
                       />
@@ -510,7 +514,11 @@ export function TripWizardStep1Screen({
               testID="trip-wizard-submit-banner"
               className="mb-sm flex-row items-center gap-md rounded-button border border-hairline bg-canvas px-lg py-md"
             >
-              <AlertCircleGlyph size={18} />
+              <AlertCircleGlyph
+                size={18}
+                color="primary"
+                strokeWidth={1.83333}
+              />
               {/* §F ⓐ: submitError 는 표시값이 아니라 배너를 켜는 트리거다 — 서버 사유·옛 제목은 안 그린다. */}
               <Text className="flex-1 font-noto text-card-title text-ink">
                 저장하지 못했어요
@@ -532,7 +540,11 @@ export function TripWizardStep1Screen({
               testID="trip-wizard-mustvisit-banner"
               className="mb-sm flex-row items-center gap-md rounded-button border border-hairline bg-canvas px-lg py-md"
             >
-              <AlertCircleGlyph size={18} />
+              <AlertCircleGlyph
+                size={18}
+                color="primary"
+                strokeWidth={1.83333}
+              />
               <Text className="flex-1 font-noto text-[11.5px] text-primary-text">
                 {mustVisitError}
               </Text>
@@ -553,7 +565,11 @@ export function TripWizardStep1Screen({
               testID="trip-wizard-outside-notice"
               className="mb-sm flex-row items-center gap-md rounded-button border border-hairline bg-canvas px-lg py-md"
             >
-              <AlertCircleGlyph size={18} />
+              <AlertCircleGlyph
+                size={18}
+                color="primary"
+                strokeWidth={1.83333}
+              />
               <Text className="flex-1 font-noto text-label text-ink">
                 {`꼭 갈 곳 중 ${outsideRegionCount}곳은 이 여행 지역 밖이에요`}
               </Text>
@@ -579,25 +595,19 @@ export function TripWizardStep1Screen({
               </Pressable>
             </View>
           ) : null}
-          {/* 비활성(!canProceed || isLoading)은 opacity-40 이 아니라 연회색 채움(#E9E9EB) + 회색
-              글자(muted-soft)로 갈린다(TRIP-732 AC-8). 실제 색 정합은 6-b(스크린샷). */}
+          {/* 글자 + 화살표 글리프 행이라 Button 대신 같은 모양 클래스만 빌린다(TRIP-1828 탈출구).
+              비활성(!canProceed || isLoading)은 공용 회색 한 종(hairline + muted-soft). */}
           <Pressable
             testID="trip-wizard-step1-next"
             accessibilityRole="button"
             disabled={nextDisabled}
             onPress={onNext}
-            className={`w-full flex-row items-center justify-center gap-sm rounded-button py-[15px] ${
-              nextDisabled ? 'bg-[#E9E9EB]' : 'bg-primary'
-            }`}
+            className={`${nextButton.box} w-full flex-row gap-sm`}
           >
-            <Text
-              className={`text-[16px] font-noto-bold font-bold ${
-                nextDisabled ? 'text-muted-soft' : 'text-on-primary'
-              }`}
-            >
-              다음
-            </Text>
-            <ChevronRightGlyph tone={nextDisabled ? 'muted' : 'onPrimary'} />
+            <Text className={nextButton.label}>다음</Text>
+            <TripChevronRightGlyph
+              tone={nextDisabled ? 'muted' : 'onPrimary'}
+            />
           </Pressable>
         </View>
 
@@ -605,6 +615,8 @@ export function TripWizardStep1Screen({
         {overseasBlocked ? (
           <View className="absolute inset-0 items-center justify-center px-xl">
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="닫기"
               testID="trip-wizard-overseas-backdrop"
               className="absolute inset-0 bg-scrim/[58%]"
               onPress={onCloseOverseasDialog}
@@ -624,16 +636,13 @@ export function TripWizardStep1Screen({
                   국내 도시로 만들어볼까요?
                 </Text>
               </View>
-              <Pressable
+              <Button
                 testID="trip-wizard-overseas-dialog-confirm"
-                accessibilityRole="button"
                 onPress={onPickDomesticRegion}
-                className="w-full items-center justify-center rounded-button bg-primary py-[13px]"
+                className="w-full"
               >
-                <Text className="text-[15.5px] font-noto-bold font-bold text-on-primary">
-                  국내 도시 고르기
-                </Text>
-              </Pressable>
+                국내 도시 고르기
+              </Button>
               <Pressable
                 testID="trip-wizard-overseas-dialog-close"
                 accessibilityRole="button"

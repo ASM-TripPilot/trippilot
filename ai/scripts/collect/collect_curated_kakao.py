@@ -62,11 +62,17 @@ SOURCE_NAME = "KAKAO_LOCAL"
 CLUB = "클럽"
 _NIGHT_KIND = {v: k for k, v in NIGHTLIFE_DETAIL.items()}  # 세부 태그 → 원천 카테고리(이름 규칙용)
 _URL = "https://dapi.kakao.com/v2/local/search/keyword.json"
-_MAX_CALLS = 200   # ponytail: 목록 크기 상한 겸 무료 쿼터 보호(일 10만), 목록이 커지면 올린다
+_MAX_CALLS = 1000  # ponytail: 목록 크기 상한 겸 무료 쿼터 보호(일 10만), 목록이 커지면 올린다(11-06 577곳 → 1000)
 
 
 def _norm(s: str) -> str:
     return re.sub(r"[\s·.\-_()]", "", s).lower()
+
+
+# 이름이 들어 있어도 그 장소가 아니라 딸린 시설인 건 — 첫 건이 이것이면 다음 건을 본다
+# (실측 11-06 지역 577곳: `테라로사 커피공장 주차장`·`계산성당 연도실`(장례식장)·`…전기차충전소`·`정원드림호매표소`·
+# `메타세쿼이아길 인증센터`·호텔·게스트하우스가 장소 대신 잡혔다)
+_ATTACHED = re.compile(r"주차장|충전소|장례식장|매표소|인증센터|숙박")
 
 
 def pick(docs: list[dict], name: str, sido: str, addr: str | None = None) -> dict | None:
@@ -74,12 +80,15 @@ def pick(docs: list[dict], name: str, sido: str, addr: str | None = None) -> dic
 
     `addr`(출처에 적힌 도로명·지번, 예: "이태원로27가길 8")가 있으면 카카오 주소에도 그게 있어야 한다 —
     `문`·`솔`·`법원` 처럼 짧은 상호는 이름만으로는 엉뚱한 가게가 잡힌다. 번지 뒤 숫자는 막는다(8 ≠ 80).
+    딸린 시설(주차장·매표소·숙박 등, `_ATTACHED`)은 건너뛴다.
     """
     want = _norm(name)
     at = re.compile(re.escape(_norm(addr)) + r"(?!\d)") if addr else None
     for d in docs:
         road = d.get("road_address_name") or d.get("address_name") or ""
         if want not in _norm(d.get("place_name", "")) or not road.startswith(sido):
+            continue
+        if _ATTACHED.search(f"{d.get('place_name', '')} {d.get('category_name') or ''}"):
             continue
         if at and not any(at.search(_norm(d.get(k) or ""))
                           for k in ("road_address_name", "address_name")):
@@ -211,10 +220,18 @@ def main(argv: list[str]) -> int:
     passed: list = []
     merged = 0
     drops: Counter[str] = Counter()
-    for night in (False, True):
-        part = [c for c in cands if (c.kind in _NIGHT_KIND) is night]
+    # 야경(NIGHT_VIEW)은 야경 행하고만 비교한다 — 낮 명소와 다른 축이라 같은 건물의 낮 명소 행(`남산서울타워`
+    # SIGHT)에 주소 키로 병합되면 야경 후보가 사라진다(2026-11-02, 좌표 틀린 Overture `N서울타워` 를 뺀 뒤 실측).
+    night_view = [p for p in others if p["poi"]["category"] == "NIGHT_VIEW"]
+    groups = (
+        (lambda c: c.kind not in _NIGHT_KIND and c.kind != "NIGHT_VIEW", others),
+        (lambda c: c.kind in _NIGHT_KIND, no_food),
+        (lambda c: c.kind == "NIGHT_VIEW", night_view),
+    )
+    for picks, base in groups:
+        part = [c for c in cands if picks(c)]
         o = gate_against_tourapi(
-            shared_tourapi_candidates({**shared_doc, "proposals": no_food if night else others}),
+            shared_tourapi_candidates({**shared_doc, "proposals": base}),
             part, keep_source=SOURCE_NAME.lower())
         passed += o.passed
         merged += o.merged

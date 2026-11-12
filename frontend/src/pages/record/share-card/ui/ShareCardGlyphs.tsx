@@ -1,19 +1,20 @@
 import type { ReactElement } from 'react';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-574 · j06 공유 카드 인라인 아이콘(react-native-svg). `*Glyphs.tsx` raw-hex 스캔 제외 관례
  * (SVG stroke/fill 은 className 을 못 받는다). 카드 코랄·워터마크는 브랜드색(의도적 raw, 토큰화 금지).
  */
 
-const INK = '#222222';
-const WHITE = '#FFFFFF';
-const CORAL = '#FF385C';
+const INK = COLOR_TOKENS.ink;
+const WHITE = COLOR_TOKENS.canvas;
+const CORAL = COLOR_TOKENS.primary;
 
 type GlyphProps = { size?: number; color?: string };
 
 /** ↓ 이미지 저장(다운로드) — 하단 버튼. */
-export function DownloadGlyph({
+export function ShareCardDownloadGlyph({
   size = 18,
   color = INK,
 }: GlyphProps): ReactElement {
@@ -38,7 +39,7 @@ export function DownloadGlyph({
 }
 
 /** ⤴ 공유하기(연결된 세 점) — 하단 버튼(코랄 배경 위 흰색). */
-export function ShareGlyph({
+export function ShareCardShareGlyph({
   size = 18,
   color = WHITE,
 }: GlyphProps): ReactElement {

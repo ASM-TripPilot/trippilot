@@ -1,0 +1,184 @@
+// 홈 인사 헤더·검색바·여행 조회 안내(실패·오프라인) — HomeScreen 이 쓰는 부품.
+import type { ReactElement } from 'react';
+import { Pressable, Text, View } from 'react-native';
+
+import { CountBadge } from './HomeFabs';
+import { HomeBellGlyph, HomeSearchGlyph } from './HomeGlyphs';
+import { softCardShadow } from './homeSurface';
+import { AssistantSparkleGlyph } from '@/features/open-assistant';
+import { GLYPH_COLORS, WarningTriangleGlyph } from '@/shared/ui/glyphs';
+import type { HomePhase } from '../model/homeTypes';
+
+// ── 인사 헤더 ───────────────────────────────────────────────────────────
+// discovery는 고정 카피, 단계 얼굴은 greetTitle/greetSubtitle/greetName을 주입받는다.
+// TRIP-939 AC-9 — 종은 알림함 진입 버튼이다. role 은 콜백 유무가 아니라 구조로 굳힌다(370-AC-4 집합).
+// TRIP-1783 — 종 안 숫자 배지는 읽지 않은 알림 개수(1 이상일 때만, 0·모름은 없음). 읽음 처리는 알림함의 접두 키 무효화로 숫자가 줄어든다.
+// 이름은 숫자를 함께 낭독한다 — 배지 글자는 버튼 label 이 대신하므로 따로 읽히지 않는다.
+// TRIP-1553 — 종 왼쪽 ✦ 는(후속: ✦ 왼쪽·종이 오른쪽 끝) 우하단 FAB 에서 옮겨 온 도우미 진입이다(같은 40 원형·구조 role). 글리프는
+// open-assistant 의 도우미 ✦ (홈 eyebrow 의 같은 이름 별과 다른 것).
+export function GreetingHeader({
+  title,
+  subtitle,
+  name,
+  unreadCount,
+  onPressBell,
+  onPressAssistant,
+}: {
+  title: string;
+  subtitle?: string;
+  name?: string;
+  unreadCount?: number | null;
+  onPressBell?: () => void;
+  onPressAssistant?: () => void;
+}): ReactElement {
+  const unread = unreadCount ?? 0;
+  return (
+    <View className="w-full flex-row items-center gap-sm px-lg pb-[10px] pt-lg">
+      <View testID="home-greeting" className="flex-1 gap-px">
+        {name ? (
+          <Text className="font-noto text-[13.5px] text-muted">{name}</Text>
+        ) : null}
+        <Text className="font-noto-bold text-[21px] font-bold text-ink">
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text className="font-noto text-[12.5px] text-muted">{subtitle}</Text>
+        ) : null}
+      </View>
+      {/* TRIP-1553 후속(2026-10-22 사용자) — ✦ 도우미가 왼쪽, 알림 벨이 행의 오른쪽 끝. */}
+      <Pressable
+        testID="home-dashboard-assistant"
+        accessibilityRole="button"
+        accessibilityLabel="AI 도우미"
+        onPress={onPressAssistant}
+        style={softCardShadow}
+        className="h-[40px] w-[40px] items-center justify-center rounded-full bg-canvas"
+      >
+        <AssistantSparkleGlyph size={20} color={GLYPH_COLORS.primary} />
+      </Pressable>
+      <Pressable
+        testID="home-dashboard-bell"
+        accessibilityRole="button"
+        accessibilityLabel={bellLabel(unread)}
+        onPress={onPressBell}
+        style={softCardShadow}
+        className="h-[40px] w-[40px] items-center justify-center rounded-full bg-canvas"
+      >
+        <HomeBellGlyph size={22} />
+        <CountBadge testID="home-dashboard-bell-badge" count={unread} />
+      </Pressable>
+    </View>
+  );
+}
+
+function bellLabel(unread: number): string {
+  if (unread < 1) return '알림';
+  return unread >= 100
+    ? '알림, 읽지 않은 알림 99개 이상'
+    : `알림, 읽지 않은 알림 ${unread}개`;
+}
+
+// 얼굴별 인사 문구 — 헤더는 HomeScreen 이 얼굴과 무관하게 한 번만 그리고, 문구만 phase 로 고른다(TRIP-1769).
+// phase 없음(로딩 포함)·discovery 는 고정 카피, postTrip 타입엔 이름줄이 없다.
+export function homeGreeting(phase: HomePhase | undefined): {
+  title: string;
+  subtitle?: string;
+  name?: string;
+} {
+  switch (phase?.kind) {
+    case undefined:
+    case 'discovery':
+      return {
+        title: '오늘은 어디를 상상해볼까요',
+        subtitle: '떠나지 않아도, 구경하고 모으는 즐거움',
+      };
+    case 'planning':
+      return {
+        title: phase.greetTitle,
+        subtitle: phase.greetSubtitle,
+        // 이름줄(greetName)은 여행 중 픽스처 전용 — 라이브 resolveHomePhase 는 이름 소스가 없어 미주입.
+        name: phase.greetName,
+      };
+    case 'postTrip':
+      return { title: phase.greetTitle, subtitle: phase.greetSubtitle };
+  }
+}
+
+// ── 검색바(가짜 — Pressable+Text, 실 TextInput 아님 · 02a §4-8) ──────────
+// TRIP-453: 검색바가 목적지(/explore/search)를 얻어 배선 컨트롤이 됐다 — role="button"은 콜백
+// 유무로 파생하지 않고 항상 붙인다(버튼-집합 테스트가 콜백 미주입으로 렌더, FAB 선례). 라우팅은
+// 라우트(`(tabs)/index.tsx`)가 지고 화면은 넘겨받은 onPress만 발화한다.
+export function SearchBarBlock({
+  onPress,
+}: {
+  onPress?: () => void;
+}): ReactElement {
+  return (
+    <View className="w-full px-lg pb-[14px] pt-[4px]">
+      <Pressable
+        testID="home-search-bar"
+        accessibilityRole="button"
+        onPress={onPress}
+        className="w-full flex-row items-center gap-[10px] rounded-pill bg-surface-soft px-lg py-[13px]"
+      >
+        <HomeSearchGlyph size={19} />
+        <Text className="font-noto text-body text-muted-soft">
+          가고 싶은 도시를 검색해보세요
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// ── 여행 조회 실패 안내(TRIP-935) — 탐색 랜딩 레인 오류 카드(StayLaneError)와 같은 모양 ──
+export function TripsLoadError({
+  onRetry,
+  retrying,
+}: {
+  onRetry: () => void;
+  retrying?: boolean;
+}): ReactElement {
+  return (
+    <View
+      testID="home-trips-error"
+      className="mx-lg mb-[14px] items-center gap-sm rounded-card bg-surface-soft px-lg py-2xl"
+    >
+      <WarningTriangleGlyph size={28} color="primary" />
+      <Text className="font-noto text-label text-muted">
+        여행 정보를 불러오지 못했어요
+      </Text>
+      <Pressable
+        testID="home-trips-retry"
+        accessibilityRole="button"
+        onPress={onRetry}
+        disabled={retrying}
+        className={`rounded-button border border-hairline-strong bg-canvas px-lg py-sm${
+          retrying ? ' opacity-40' : ''
+        }`}
+      >
+        <Text className="font-noto-bold text-label font-bold text-ink">
+          다시 시도
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// ── 오프라인 콜드스타트 안내(TRIP-1638) — TripsLoadError 와 같은 슬롯·모양, 버튼만 없다(보류 요청에 다시 시도는 무동작).
+// Figma 프레임 없음 — 코드 선례. 연결이 돌아오면 쿼리가 스스로 재개해 page 가 이 안내를 끈다.
+export function TripsOfflineNotice(): ReactElement {
+  return (
+    <View
+      testID="home-trips-offline"
+      className="mx-lg mb-[14px] items-center gap-sm rounded-card bg-surface-soft px-lg py-2xl"
+    >
+      <WarningTriangleGlyph size={28} color="primary" />
+      <Text className="font-noto-bold text-label font-bold text-ink">
+        인터넷에 연결되어 있지 않아요
+      </Text>
+      <Text className="font-noto text-label text-muted">
+        연결되면 자동으로 불러올게요
+      </Text>
+    </View>
+  );
+}

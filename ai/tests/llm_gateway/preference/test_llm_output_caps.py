@@ -161,6 +161,9 @@ def test_effort_per_feature_reaches_vendor(feature: LlmFeature) -> None:
         LlmFeature.PLACE_FACT_LOOKUP: "low",  # 턴 밖(뒤에서) — 검색 결과에서 값 셋을 고른다
         LlmFeature.DIALOGUE_KNOWLEDGE: "none",  # 답변과 같은 자리(≤3.5s)
         LlmFeature.PREFERENCE_SCORING: "none",  # 닫힌 목록에 점수만 — 사고 없이 묶음 p50 2.46 → 1.73s, 쌍 정합 같음(2026-10-23)
+        # 표에 없으면 haiku-5 는 사고가 꺼진다 — 끄면 편집 번역은 추론을 답 앞에 써 JSON 이 깨지고, 공유 카드는 규칙 밖 태그로 폴백(2026-11-04 실경로)
+        LlmFeature.EDIT_TRANSLATION: "low",
+        LlmFeature.SHARE_CARD_COPY: "low",
     }.get(feature)
     assert [r.effort for r in llm.requests] == [expected]
 

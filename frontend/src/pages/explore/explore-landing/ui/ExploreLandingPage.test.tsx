@@ -16,6 +16,7 @@ import type {
 import { RegionLevel } from '@/shared/api/index.schemas';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 import { formatPrice } from '@/entities/stay';
 import { stayKey } from '@/features/save-stay';
 import { regionPickerHref } from '@/features/explore';
@@ -29,6 +30,7 @@ import {
 } from '@/test-support/wizardDraftFixture';
 import { ExploreLandingPage } from '@/pages/explore/explore-landing';
 import { routerSpies } from '@/test-support/expoRouterMock';
+import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 
 /**
  * 탐색 d01 랜딩 page — 숙소·장소 조회를 물어 카드 VM 을 조립하고 항법 콜백을 순수 화면
@@ -70,7 +72,7 @@ jest.mock('@/shared/api/generated/places/places', () => ({
   useGetPlaces: (...args: unknown[]) => mockUseGetPlaces(...args),
 }));
 
-// TRIP-1432 — 전국 d01 장소 레인은 서비스 지역 3곳 병렬 조회다(`useQuery` 직접 — QueryClient 없는 버킷이라 목).
+// TRIP-1432 — 전국 d01 장소 레인은 서비스 지역 병렬 조회다(`useQuery` 직접 — QueryClient 없는 버킷이라 목).
 const mockUseMultiRegionPlaces = jest.fn();
 jest.mock('@/features/explore/model/useMultiRegionPlaces', () => ({
   useMultiRegionPlaces: (...args: unknown[]) =>
@@ -161,7 +163,7 @@ function placesOk(items: unknown[]) {
   };
 }
 
-const SERVICE_REGION_NAMES = ['서울', '부산', '제주'];
+const SERVICE_REGION_NAMES = ['서울', '부산', '제주', '강원', '경북', '경남'];
 /** 다지역 훅은 지역 2곳 미만이면 꺼진다 — 꺼진 조회는 데이터 없음 · 영원히 대기. */
 const MULTI_DISABLED = {
   items: [],
@@ -239,6 +241,8 @@ beforeEach(() => {
 
 // 위저드 드래프트는 모듈 싱글턴이라 describe 밖에서 비운다 — 안에 걸면 앞 테스트 상태가 샌다.
 afterEach(resetWizardDraft);
+// TRIP-1754 — 토스트 슬롯은 모듈 싱글턴이라 앞 테스트의 토스트가 샌다. 파일 최상위에서 비운다(describe 안이면 샌다).
+afterEach(resetToast);
 
 // TRIP-201 · 447 · 703 · 499/985 · 412 · 453 · 470 · 500 · 704
 describe('전국 d01 — 구획·검색·레인', () => {
@@ -377,6 +381,26 @@ describe('전국 d01 — 구획·검색·레인', () => {
     ).toEqual([{ uri: 'https://img.example/p4.jpg' }]);
   });
 
+  // TRIP-1740 AC-7(T4) — 페이지가 Place 에서 레인 카드 VM 을 골라 담는 곳(끊기는 곳)에서 imageLicense 가 빠지지 않는다.
+  it('TYPE1 서버 사진 장소는 레인 카드 사진 칸까지 유형이 닿아 cover 이고 출처 글자가 붙는다', () => {
+    multiResult = multiOk([
+      {
+        poiId: 'p9',
+        nameKo: '해운대 해변',
+        region: '해운대구',
+        category: '명소',
+        imageUrl: 'https://img.example/p9.jpg',
+        imageLicense: 'TYPE1',
+      },
+    ]);
+    render(<ExploreLandingPage />);
+
+    expectTypeOnePhotoDelivered(
+      'explore-place-card-image-p9',
+      'https://img.example/p9.jpg'
+    );
+  });
+
   it('장소 조회가 전부 실패하면 장소 레인 자리에 재시도를 그리고, 누르면 그 조회를 다시 부른다', () => {
     multiResult = {
       items: [],
@@ -419,9 +443,9 @@ describe('전국 d01 — 구획·검색·레인', () => {
   });
 });
 
-// TRIP-1432 — 전국 d01 은 서비스 지역(서울·부산·제주)만 보인다. 장소는 사진 있는 곳 먼저·지역 번갈아 8장,
-// 숙소는 요청은 그대로(전국 1회) 두고 주소로 3지역만 남긴다(주소 없으면 뺀다).
-describe('전국 d01 — 서비스 지역 3곳', () => {
+// TRIP-1432·1807 — 전국 d01 은 서비스 지역 6곳만 보인다. 장소는 사진 있는 곳 먼저·지역 번갈아 8장,
+// 숙소는 요청은 그대로(전국 1회) 두고 주소로 6지역만 남긴다(주소 없으면 뺀다).
+describe('전국 d01 — 서비스 지역', () => {
   function lanePlace(poiId: string, regionCode: string, photo: boolean) {
     return {
       poiId,
@@ -471,7 +495,7 @@ describe('전국 d01 — 서비스 지역 3곳', () => {
     expect(screen.queryByTestId('explore-lane-place-retry')).toBeNull();
   });
 
-  it('숙소는 주소가 서울·부산·제주인 것만 남기고, 주소를 모르면 뺀다 — 요청은 지역 없이 그대로다', () => {
+  it('숙소는 주소가 서비스 지역인 것만 남기고(강원·경북·경남 포함), 주소를 모르면 뺀다 — 요청은 지역 없이 그대로다', () => {
     const busanShort: StayItem = {
       ...stayItem('NAVER', 'b', '해운대', '해운대 호텔', null),
       address: '부산 해운대구 해운대해변로 296',
@@ -479,6 +503,18 @@ describe('전국 d01 — 서비스 지역 3곳', () => {
     const miryang: StayItem = {
       ...stayItem('NAVER', 'm', '밀양', '밀양 호텔', null),
       address: '경상남도 밀양시 삼문동 1',
+    };
+    const gangneung: StayItem = {
+      ...stayItem('NAVER', 'g', '강릉', '강릉 호텔', null),
+      address: '강원특별자치도 강릉시 창해로 307',
+    };
+    const gyeongju: StayItem = {
+      ...stayItem('NAVER', 'j', '경주', '경주 호텔', null),
+      address: '경북 경주시 보문로 1',
+    };
+    const daegu: StayItem = {
+      ...stayItem('NAVER', 'd', '대구', '대구 호텔', null),
+      address: '대구광역시 중구 동성로 1',
     };
     const nullAddress: StayItem = {
       ...stayItem('NAVER', 'n', '어딘가', '주소 없는 호텔', null),
@@ -492,17 +528,34 @@ describe('전국 d01 — 서비스 지역 3곳', () => {
       null
     );
     mockUseStaySearch.mockReturnValue(
-      stayOk([CARD_A, CARD_B, busanShort, miryang, nullAddress, noAddressKey])
+      stayOk([
+        CARD_A,
+        CARD_B,
+        busanShort,
+        miryang,
+        gangneung,
+        gyeongju,
+        daegu,
+        nullAddress,
+        noAddressKey,
+      ])
     );
 
     render(<ExploreLandingPage />);
 
-    for (const item of [CARD_A, CARD_B, busanShort]) {
+    for (const item of [
+      CARD_A,
+      CARD_B,
+      busanShort,
+      miryang,
+      gangneung,
+      gyeongju,
+    ]) {
       expect(
         screen.getByTestId(`explore-stay-card-${stayKey(item)}`)
       ).toBeOnTheScreen();
     }
-    for (const item of [miryang, nullAddress, noAddressKey]) {
+    for (const item of [daegu, nullAddress, noAddressKey]) {
       expect(
         screen.queryByTestId(`explore-stay-card-${stayKey(item)}`)
       ).toBeNull();
@@ -565,6 +618,17 @@ describe('담은 곳 메뉴 · ＋ 여행 만들기', () => {
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(String(mockPush.mock.calls[0][0])).toBe('/trips/new/step1');
     expect(draftAtPush()).toEqual(freshWizardDraft());
+  });
+
+  // TRIP-1775 — 창 안의 둘째 탭은 위저드를 한 번 더 쌓지 않는다.
+  it('＋ 여행 만들기 FAB 를 빠르게 두 번 눌러도 step1 은 한 번만 쌓인다', () => {
+    render(<ExploreLandingPage />);
+    const fab = screen.getByTestId('explore-create-trip-fab');
+
+    fireEvent.press(fab);
+    fireEvent.press(fab);
+
+    expect(mockPush.mock.calls).toEqual([['/trips/new/step1']]);
   });
 });
 
@@ -747,8 +811,8 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(screen.queryAllByTestId(/^destination-detail-/)).toHaveLength(0);
     });
 
-    // TRIP-1432 Q8 — 지역 필터 갈래엔 서비스 지역 3곳 조회·사진 우선을 덧씌우지 않는다.
-    it('지역 필터 중엔 서비스 지역 3곳 조회가 켜지지 않는다', () => {
+    // TRIP-1432 Q8 — 지역 필터 갈래엔 서비스 지역 조회·사진 우선을 덧씌우지 않는다.
+    it('지역 필터 중엔 서비스 지역 조회가 켜지지 않는다', () => {
       render(<ExploreLandingPage />);
 
       expect(enabledMultiCalls()).toHaveLength(0);
@@ -762,7 +826,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
         { enabled: true }
       );
       expect(mockUseGetPlaces).toHaveBeenLastCalledWith(
-        { region: '부산광역시', limit: 8 },
+        { region: '부산광역시', regionCode: '26', limit: 8 },
         { query: { enabled: true } }
       );
     });
@@ -775,7 +839,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(screen.queryByText('도시 검색')).toBeNull();
     });
 
-    it('칩 ✕ 는 region 키를 비우는 setParams 1회이고, 다시 그리면 칩이 없고 전국 d01 조회(숙소 region 없음·장소 서비스 지역 3곳)로 돌아간다', () => {
+    it('칩 ✕ 는 region 키를 비우는 setParams 1회이고, 다시 그리면 칩이 없고 전국 d01 조회(숙소 region 없음·장소 서비스 지역)로 돌아간다', () => {
       const { rerender } = render(<ExploreLandingPage />);
 
       fireEvent.press(screen.getByTestId('explore-region-chip-clear'));
@@ -795,7 +859,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
 
       expect(screen.queryByTestId('explore-region-chip')).toBeNull();
       expect(screen.getByText('도시 검색')).toBeOnTheScreen();
-      // 전국 d01 과 같은 호출 — 장소는 서비스 지역 3곳, 숙소는 region 없이 켜져 있다.
+      // 전국 d01 과 같은 호출 — 장소는 서비스 지역, 숙소는 region 없이 켜져 있다.
       expect(enabledMultiCalls(multiFrom).length).toBeGreaterThan(0);
       for (const [regions] of enabledMultiCalls(multiFrom)) {
         expect(regions).toEqual(SERVICE_REGION_NAMES);
@@ -940,7 +1004,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       ]);
     });
 
-    it('장소 모두 보기를 누르면 /explore/places?region=부산광역시 로 간다', () => {
+    it('장소 모두 보기를 누르면 d04 로 이름과 코드를 싣고 간다', () => {
       render(<ExploreLandingPage />);
 
       fireEvent.press(screen.getByTestId('explore-lane-place-cta'));
@@ -948,11 +1012,11 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(mockPush).toHaveBeenCalledTimes(1);
       expect(targetOf(mockPush.mock.calls[0][0])).toEqual({
         path: '/explore/places',
-        params: { region: '부산광역시' },
+        params: { region: '부산광역시', regionCode: '26' },
       });
     });
 
-    it('장소 0건 폴백을 눌러도 같은 곳(/explore/places?region=부산광역시)으로 간다', () => {
+    it('장소 0건 폴백을 눌러도 같은 곳으로 간다', () => {
       placesResult = placesOk([]);
       render(<ExploreLandingPage />);
 
@@ -961,7 +1025,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(mockPush).toHaveBeenCalledTimes(1);
       expect(targetOf(mockPush.mock.calls[0][0])).toEqual({
         path: '/explore/places',
-        params: { region: '부산광역시' },
+        params: { region: '부산광역시', regionCode: '26' },
       });
     });
   });
@@ -1099,7 +1163,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       );
     });
 
-    it('장소 모두 보기는 지금처럼 이름만 싣는다(/explore/places?region=강서구)', () => {
+    it('장소 모두 보기는 동명 구를 가르도록 코드도 싣는다 (TRIP-1809)', () => {
       mockParams = { region: SEOUL_GANGSEO.regionCode };
       render(<ExploreLandingPage />);
 
@@ -1108,7 +1172,7 @@ describe('지역 필터 — region 파라미터로 좁힌 d01', () => {
       expect(mockPush).toHaveBeenCalledTimes(1);
       expect(targetOf(mockPush.mock.calls[0][0])).toEqual({
         path: '/explore/places',
-        params: { region: '강서구' },
+        params: { region: '강서구', regionCode: SEOUL_GANGSEO.regionCode },
       });
     });
 
@@ -1248,5 +1312,127 @@ describe('화면 동작 — 레인 제목 · 담은 곳 메뉴 이름 · 로딩 
       screen.getByTestId('explore-landing-skeleton-stay-0')
     ).toBeOnTheScreen();
     expect(screen.queryByTestId('explore-lane-stay-retry')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1754 · 저장 목록 **조회 실패**가 "담은 장소 0곳"·"안 담김"으로 접히던 문제 — 훅이 내려 준 표식을 탐색 랜딩이 어떻게 읽나.
+ * (훅은 `savedPlaces.savedList`·`savedStays` 통합 테스트가, 실제 500 연결은 `ExploreLandingPage.integration` 이 본다.)
+ *
+ * 무엇을 보장하나(3동작 = 준비: 훅 목이 돌려줄 값 → 실행: 그리기 → 단언: 접근성 이름·토스트):
+ *  - **EN1** 장소 목록이 실패면 ♥ FAB 의 접근성 이름이 개수 없이 `담은 장소`다("0곳"이라 읽히지 않는다).
+ *  - **EN2** 장소·숙소 어느 쪽이든 `loadFailureConfirmed` 가 켜지면 같은 토스트 1개(둘 다여도 1개). `loadFailed` 만이면 없다.
+ *  - **EN3** 새 필드가 없는(옛) 훅 목은 실패로 읽지 않는다 — 훅 목이 새 필드를 안 주는 다른 테스트가 안 깨지는 계약.
+ */
+describe('TRIP-1754 · 저장 목록 실패 표식 — ♥ 라벨 · 토스트', () => {
+  const TOAST = 'saved-list-load-error';
+  const TOAST_TEXT = '저장 목록을 불러오지 못했어요';
+
+  function renderLanding() {
+    return render(
+      <WithToastHost>
+        <ExploreLandingPage />
+      </WithToastHost>
+    );
+  }
+  function placesFailed(confirmed: boolean): void {
+    mockUseSavedPlaces.mockReturnValue({
+      savedPoiIds: [],
+      loadFailed: true,
+      loadFailureConfirmed: confirmed,
+    });
+  }
+  function staysFailed(confirmed: boolean): void {
+    mockUseSavedStays.mockReturnValue({
+      isSaved: () => false,
+      save: jest.fn(),
+      remove: jest.fn(),
+      savedKeys: [],
+      loadFailed: true,
+      loadFailureConfirmed: confirmed,
+    });
+  }
+
+  it('EN1 장소 목록이 실패면 ♥ FAB 이름이 `담은 장소`(개수 없음)이고, 정상이면 `담은 장소 2곳`이다', () => {
+    // 준비 — 앵커: 정상일 땐 개수가 붙는다.
+    mockUseSavedPlaces.mockReturnValue({ savedPoiIds: ['p1', 'p2'] });
+    const ok = renderLanding();
+    // toHaveAccessibleName(문자열) = 완전 일치.
+    expect(
+      screen.getByTestId('explore-saved-menu-toggle')
+    ).toHaveAccessibleName('담은 장소 2곳');
+    ok.unmount();
+
+    // 실행
+    placesFailed(false);
+    renderLanding();
+
+    // 단언
+    expect(
+      screen.getByTestId('explore-saved-menu-toggle')
+    ).toHaveAccessibleName('담은 장소');
+  });
+
+  it('EN2 장소 목록의 확정 실패 → 토스트 1개(문구·오류 아이콘), 아직 확정이 아니면 없다', () => {
+    // 준비·실행 ① — 실패지만 확정 아님.
+    placesFailed(false);
+    const notYet = renderLanding();
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+    notYet.unmount();
+
+    // 실행 ②
+    placesFailed(true);
+    renderLanding();
+
+    // 단언
+    expect(
+      within(screen.getByTestId(TOAST)).getByText(TOAST_TEXT)
+    ).toBeOnTheScreen();
+    expect(screen.getByTestId(`${TOAST}-error-icon`)).toBeOnTheScreen();
+  });
+
+  it('EN2 숙소 목록의 확정 실패도 같은 토스트다', () => {
+    // 준비
+    staysFailed(true);
+
+    // 실행
+    renderLanding();
+
+    // 단언
+    expect(
+      within(screen.getByTestId(TOAST)).getByText(TOAST_TEXT)
+    ).toBeOnTheScreen();
+  });
+
+  it('EN2 같은 값으로 다시 그려도 다시 쏘지 않는다 — 슬롯을 비운 뒤 rerender 해도 없다', () => {
+    // 준비
+    placesFailed(true);
+    const tree = () => (
+      <WithToastHost>
+        <ExploreLandingPage />
+      </WithToastHost>
+    );
+    const { rerender } = render(tree());
+    expect(screen.getByTestId(TOAST)).toBeOnTheScreen();
+
+    // 실행 — 슬롯이 1개라 "보임 1개"로는 1회를 못 잰다. 비운 뒤 같은 값으로 다시 그린다(새 엘리먼트).
+    resetToast();
+    rerender(tree());
+
+    // 단언
+    expect(screen.queryByTestId(TOAST)).toBeNull();
+  });
+
+  it('EN3 새 필드가 없는 옛 훅 목은 실패로 읽지 않는다 — 라벨 `담은 장소 1곳` · 토스트 없음 (계약 잠금)', () => {
+    // 준비 — beforeEach 기본 목 그대로(savedPoiIds ['p1'] · loadFailed 없음).
+
+    // 실행
+    renderLanding();
+
+    // 단언
+    expect(
+      screen.getByTestId('explore-saved-menu-toggle')
+    ).toHaveAccessibleName('담은 장소 1곳');
+    expect(screen.queryByTestId(TOAST)).toBeNull();
   });
 });

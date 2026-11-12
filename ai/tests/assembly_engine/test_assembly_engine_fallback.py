@@ -36,6 +36,7 @@ from trippilot.domain.itinerary.itinerary import (
     TimeWindow,
     VisitSlot,
 )
+from trippilot.domain.llm.llm import ScoredPoi
 from trippilot.domain.poi.poi import DataQuality, OpenHour, Poi, PoiCategory, PoiSource
 
 from tests.generators.assembly import assembly_setups
@@ -43,6 +44,48 @@ from tests.generators.assembly import assembly_setups
 _KST = timezone(timedelta(hours=9))
 _CFG = AssemblyConfig()
 _EST = TravelEstimator(_CFG)
+
+
+def _lock_before_window(lock_start: datetime, lock_end: datetime, window_start: datetime) -> tuple[ItineraryProblem, dict]:
+    def poi(name: str, category: PoiCategory, north: float) -> Poi:
+        return Poi(PoiId(name), name, category, GeoPoint(33.45 + north, 126.55), (), None, None, DataQuality.FULL, PoiSource.SEED, None)
+
+    index = {p.poi_id: p for p in (poi("lock", PoiCategory.CULTURE, 0), poi("sight", PoiCategory.SIGHT, .002), poi("food", PoiCategory.FOOD, .004))}
+    problem = ItineraryProblem(
+        schedule_id=ScheduleId("s"), days=(lock_start.date(),), candidates=(ScoredPoi(PoiId("sight"), 0.9, False), ScoredPoi(PoiId("food"), 0.3, False)),
+        fixed_blocks=(FixedBlock(PoiId("lock"), TimeWindow(lock_start, lock_end), "in_progress"),), budget=BudgetLevel.MID, transport=TransportMode.PUBLIC,
+        day_window=TimeWindow(window_start, datetime(2026, 9, 1, 21, 0, tzinfo=_KST)), seed=7, max_visits_per_day=2)
+    return problem, index
+
+
+def test_a_visit_after_a_lock_before_the_window_starts_inside_the_window() -> None:
+    """"3시 이후로" + 09:20 까지 진행 중 — 자유 방문이 창 앞에 놓이면 체인이 무효가 되어 하루가 비었다."""
+    at = lambda h, m=0: datetime(2026, 9, 1, h, m, tzinfo=_KST)
+    problem, index = _lock_before_window(at(8, 20), at(9, 20), at(15))
+    solution = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
+    free = [s for s in solution.days[0].slots if s.poi_id != PoiId("lock")]
+    assert free and free[0].start_at == at(15) and not check_all(solution, problem, index, _EST)
+
+
+def test_travel_from_a_lock_counts_from_its_end_not_from_the_window_start() -> None:
+    """잠금이 창 시작 직전에 끝나면 이동은 잠금 끝부터 잰다 — 창 시작부터 재면 유효했던 해가 뒤로 밀리고 슬롯이 빠졌다(무작위 차등 6,000건 중 104건)."""
+    at = lambda h, m=0: datetime(2026, 9, 1, h, m, tzinfo=_KST)
+    problem, index = _lock_before_window(at(13, 50), at(14, 20), at(14, 30))
+    solution = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
+    first = next(s for s in solution.days[0].slots if s.poi_id != PoiId("lock"))
+    travel = _EST.estimate(index[PoiId("lock")].coord, index[first.poi_id].coord, problem.transport).internal_minutes
+    assert first.start_at == max(at(14, 20) + timedelta(minutes=travel), at(14, 30))
+
+
+def test_the_meal_window_is_judged_from_where_the_visit_can_go() -> None:
+    """잠금이 점심창에 끝나도 창이 15시면 점심이 아니다 — 잠금 끝이 09시일 때와 같은 곳이 들어간다."""
+    at = lambda h, m=0: datetime(2026, 9, 1, h, m, tzinfo=_KST)
+    placed = []
+    for start, end in ((at(11, 30), at(12, 30)), (at(8, 20), at(9, 20))):
+        problem, index = _lock_before_window(start, end, at(15))
+        solution = RuleFallbackAssembler(index, _EST, _CFG).solve(problem)
+        placed.append([str(s.poi_id) for s in solution.days[0].slots if s.poi_id != PoiId("lock")])
+    assert placed[0] == placed[1]
 
 
 # ① 폴백 어셈블리 출력은 항상 HC 통과 (U5-P1 그리디판)

@@ -61,6 +61,13 @@ class PushDispatchPropertyTest : StringSpec({
             invalidated += token
             return true
         }
+        override fun invalidateIfNotSeenSince(token: String, notSeenAfter: Instant, at: Instant): Boolean {
+            val i = rows.indexOfFirst { it.token == token && it.invalidatedAt == null && !it.lastSeenAt.isAfter(notSeenAfter) }
+            if (i < 0) return false
+            rows[i] = rows[i].copy(invalidatedAt = at)
+            invalidated += token
+            return true
+        }
         override fun remove(accountId: UUID, token: String) = rows.removeIf { it.token == token }
     }
 
@@ -133,8 +140,8 @@ class PushDispatchPropertyTest : StringSpec({
         Notification.raise(acc, kind, "제목", "본문", clock.instant())
 
 
-    fun serviceOf(tokens: Tokens, sender: PushPort, notifications: Notifications, pushOn: Boolean = true) =
-        PushDispatchService(tokens, notifications, NotificationToggleService(Toggles(pushOn), clock), sender, testMetrics(notifications), PushRateLimits(), clock)
+    fun serviceOf(tokens: Tokens, sender: PushPort, notifications: Notifications, pushOn: Boolean = true, tickets: FakeTickets = FakeTickets()) =
+        PushDispatchService(tokens, notifications, NotificationToggleService(Toggles(pushOn), clock), sender, testMetrics(notifications), PushRateLimits(), clock, tickets, NoDeletionPending)
 
     /**
      * **"보냈다"와 "보낸 척했다"를 지표가 가른다**(TRIP-834).
@@ -154,7 +161,7 @@ class PushDispatchPropertyTest : StringSpec({
         val svc = PushDispatchService(
             Tokens(listOf(token(deliverable = true))), notifications,
             NotificationToggleService(Toggles(true), clock), notSending,
-            NotificationMetrics(registry, notifications), PushRateLimits(), clock,
+            NotificationMetrics(registry, notifications), PushRateLimits(), clock, FakeTickets(), NoDeletionPending,
         )
 
         svc.dispatch(notification()) shouldBe PushOutcome.SENT
@@ -247,7 +254,7 @@ class PushDispatchPropertyTest : StringSpec({
                 override fun send(tokens: List<String>, message: com.trippilot.notification.domain.PushMessage) =
                     emptyList<com.trippilot.notification.domain.PushReceipt>()
             },
-            NotificationMetrics(registry, notifications), PushRateLimits(), clock,
+            NotificationMetrics(registry, notifications), PushRateLimits(), clock, FakeTickets(), NoDeletionPending,
         )
 
         svc.dispatch(notification())
@@ -267,15 +274,62 @@ class PushDispatchPropertyTest : StringSpec({
         logger.addAppender(appender)
         try {
             serviceOf(Tokens(), Sender(), Notifications()).dispatch(notification())
+            serviceOf(Tokens(listOf(token(deliverable = false))), Sender(), Notifications()).dispatch(notification())
             serviceOf(Tokens(listOf(token(deliverable = true))), Sender(), Notifications()).dispatch(notification())
         } finally {
             logger.detachAppender(appender)
         }
 
+        // "기기 없음"은 원인이 갈려 찍힌다 — 토큰 자체가 없다(NO_TOKEN) / 토큰은 있는데 OS 권한이 허용이 아니다(NOT_GRANTED).
         appender.list.map { it.formattedMessage }.filter { it.startsWith("push.dispatch ") } shouldContainExactly listOf(
-            "push.dispatch outcome=NO_DEVICE kind=TRIP_DAY reason=- real=true",
+            "push.dispatch outcome=NO_DEVICE kind=TRIP_DAY reason=NO_TOKEN real=true",
+            "push.dispatch outcome=NO_DEVICE kind=TRIP_DAY reason=NOT_GRANTED real=true",
             "push.dispatch outcome=SENT kind=TRIP_DAY reason=- real=true",
         )
+    }
+
+    /**
+     * **일부러 안 보낸 것도 이유가 갈려 찍힌다.** 푸시 설정이 꺼져 있는가(`PUSH_OFF`), 삭제 유예 중인 계정인가(`DELETION_PENDING`) —
+     * 둘 다 `MUTED` 라 종전 로그(`reason=-`)로는 "푸시가 안 와요"의 원인을 못 갈랐다(11-04 08:00 운영: 21건 중 1건이 MUTED, 어느 쪽인지 모름).
+     */
+    "일부러 안 보낸 이유가 로그에 남는다 — 설정 끔은 PUSH_OFF, 삭제 유예는 DELETION_PENDING" {
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        val logger = LoggerFactory.getLogger(PushDispatchService::class.java) as Logger
+        logger.addAppender(appender)
+        val registry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
+        try {
+            serviceOf(Tokens(listOf(token(deliverable = true))), Sender(), Notifications(), pushOn = false).dispatch(notification())
+            val notifications = Notifications()
+            PushDispatchService(
+                Tokens(listOf(token(deliverable = true))), notifications, NotificationToggleService(Toggles(true), clock), Sender(),
+                NotificationMetrics(registry, notifications), PushRateLimits(), clock, FakeTickets(), PendingDeletion(acc),
+            ).dispatch(notification())
+        } finally {
+            logger.detachAppender(appender)
+        }
+
+        appender.list.map { it.formattedMessage }.filter { it.startsWith("push.dispatch ") } shouldContainExactly listOf(
+            "push.dispatch outcome=MUTED kind=TRIP_DAY reason=PUSH_OFF real=true",
+            "push.dispatch outcome=MUTED kind=TRIP_DAY reason=DELETION_PENDING real=true",
+        )
+        // 지표 태그도 같은 이유를 싣는다 — OTHER 로 접히지 않는다.
+        registry.find(NotificationMetrics.PUSH_DISPATCH).tag("outcome", "MUTED").tag("reason", "DELETION_PENDING").counter()!!.count() shouldBe 1.0
+    }
+
+    /** **죽은 토큰만 있는 계정도 `NO_TOKEN`** — 활성 토큰이 없다는 뜻이다(무효화는 `findActive` 가 이미 뺀다). */
+    "활성 토큰이 하나도 없으면(무효화된 것만 있어도) NO_TOKEN 이다" {
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        val logger = LoggerFactory.getLogger(PushDispatchService::class.java) as Logger
+        logger.addAppender(appender)
+        try {
+            serviceOf(Tokens(listOf(token(deliverable = true, invalidated = true))), Sender(), Notifications())
+                .dispatch(notification())
+        } finally {
+            logger.detachAppender(appender)
+        }
+
+        appender.list.map { it.formattedMessage }.single { it.startsWith("push.dispatch ") } shouldBe
+            "push.dispatch outcome=NO_DEVICE kind=TRIP_DAY reason=NO_TOKEN real=true"
     }
 
     /**
@@ -437,7 +491,7 @@ class PushDispatchPropertyTest : StringSpec({
             }
             val outcome = PushDispatchService(
                 Tokens(listOf(token(deliverable = true))), notifications, NotificationToggleService(Toggles(true), clock), broken,
-                NotificationMetrics(registry, notifications), PushRateLimits(), clock,
+                NotificationMetrics(registry, notifications), PushRateLimits(), clock, FakeTickets(), NoDeletionPending,
             ).dispatch(notification())
             val tag = registry.find(NotificationMetrics.PUSH_DISPATCH).counters().single().id.getTag("reason")
             return Triple(outcome, notifications.pushResults.single().third, tag)

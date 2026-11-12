@@ -363,9 +363,79 @@ def test_unreadable_position_with_a_cue_is_not_appended() -> None:
     assert body["status"] == "TRANSLATION_FAILED" and "position_unread" in body["reason"], body
 
 
+def test_front_of_day_add_without_an_anchor_is_not_appended() -> None:
+    """맨 앞에 넣으라는 말에 번역이 기준점을 빼면 맨 끝에 붙이지 않는다 — 실 번역 A/B 에서 '반영됨'으로 끝에 붙었다(2026-11-04)."""
+    canned = json.dumps({"editCommand": {"op": "ADD_SLOT", "params": {"targetPoiId": str(HYOCHANG.poi_id)},
+                                         "affectedSlots": []}})
+    body = _post(_body(utterance="효창공원을 맨 앞에 넣어줘"), llm=FakeLlm(canned=canned))
+    assert body["status"] == "TRANSLATION_FAILED" and "position_unread" in body["reason"], body
+
+
+def test_first_day_ordinal_is_not_a_position() -> None:
+    """'첫 번째 날에'는 날이지 자리가 아니다 — 하루 맨 앞 단서가 날 서수까지 잡던 판에선 끝에 붙어야 할 추가가 '알아듣지 못했어요'였다
+    (2026-11-04 리뷰 재현: develop APPLIED → TRANSLATION_FAILED)."""
+    canned = json.dumps({"editCommand": {"op": "ADD_SLOT", "params": {"targetPoiId": str(HYOCHANG.poi_id)},
+                                         "affectedSlots": []}})
+    body = _post(_body(utterance="첫 번째 날에 효창공원 추가해줘"), llm=FakeLlm(canned=canned))
+    assert body["status"] == "APPLIED" and _ids(body)[-1] == str(HYOCHANG.poi_id), body
+
+
+def test_code_resolved_position_wins_over_a_guessed_translation_anchor() -> None:
+    """코드가 말의 자리를 풀면 번역 기준점보다 코드 기준점 — 번역은 좌표를 못 봐 "이태원에서 홍대로"를 슬롯 이름으로 짐작한다(0.4.0 부터 번역도
+    기준점을 싣는다). 짐작한 이웃 아닌 짝을 그대로 쓰면 '이웃이 아님'으로 거부됐다(2026-11-04 리뷰 재현)."""
+    canned = json.dumps({"editCommand": {"op": "ADD_SLOT", "params": {
+        "targetPoiId": str(HYOCHANG.poi_id), "afterPoiId": str(GYEONGNI.poi_id), "beforePoiId": str(MANGWON.poi_id)},
+        "affectedSlots": []}})
+    body = _post(_body(utterance="이태원에서 홍대로 넘어갈 때 효창공원 넣어줘"), llm=FakeLlm(canned=canned))
+    assert body["status"] == "APPLIED", body
+    assert _ids(body) == [str(p.poi_id) for p in (GYEONGBOK, GYEONGNI, HYOCHANG, YEONNAM, MANGWON)]
+    assert body["command"]["params"] == {"targetPoiId": str(HYOCHANG.poi_id),
+                                         "afterPoiId": str(GYEONGNI.poi_id), "beforePoiId": str(YEONNAM.poi_id)}
+
+
 def test_neighbourhood_station_resolves_to_its_neighbourhood() -> None:
     body = _post(_body(utterance="홍대입구역 가기 전에 카페 하나 넣어줘"))
     assert body["status"] == "APPLIED" and _ids(body)[2] == str(GONGDEOK_CAFE.poi_id), body
+
+
+# ── "다른 데는?" — 앞서 보인 곳은 다시 내지 않는다 (FR-015) ─────────────────────
+
+
+def test_excluded_places_are_skipped_until_none_is_left(caplog) -> None:
+    """BE 가 같은 말에 앞서 보인 곳을 실어 다시 부른다. 순위는 결정론이라 빼지 않으면 같은 곳이 또 1등이다. 다 빼면 지어내지 않고
+    사유 있는 거부다(INV-4) — 끝에 붙이지도, 뺀 곳을 되살리지도 않는다. 구간 풀(같은 공급 경로로 다시 모은 풀)에서도 빠진다."""
+    caplog.set_level(logging.INFO)
+    shown: list[str] = []
+    for expected in (GONGDEOK_CAFE, HYOCHANG, MAPO_FOOD):  # 먹는 곳은 다른 게 없을 때만 — 마지막에 나온다
+        body = _post({**_body(utterance=_SAID), "excluded_poi_ids": shown})
+        assert body["status"] == "APPLIED" and _ids(body)[2] == str(expected.poi_id), (shown, body)
+        shown = [*shown, str(expected.poi_id)]
+    caplog.clear()
+    done = _post({**_body(utterance=_SAID), "excluded_poi_ids": shown})
+    assert (done["status"], done["reason"], done["violations"]) == ("REJECTED", "insert_between: no_candidates", [])
+    log = _insert_log(caplog)
+    assert (log["excluded"], log["pool_source"]) == (3, "segment")
+
+
+def test_excluded_place_is_outside_the_closed_pool_on_every_entry() -> None:
+    """번역기(이름 지목)·버튼 진입도 같은 닫힌 집합을 본다 — 뺀 곳을 번역이 골라 와도, 버튼이 실어 와도 풀 밖이라 넣지 않는다(INV-1)."""
+    params = {"targetPoiId": str(HYOCHANG.poi_id), "afterPoiId": str(GYEONGNI.poi_id)}
+    canned = json.dumps({"editCommand": {"op": "ADD_SLOT", "params": params, "affectedSlots": []}})
+    excluded = {"excluded_poi_ids": [str(HYOCHANG.poi_id)]}
+    said = _post({**_body(utterance="효창공원을 경리단길 끝나고 넣어줘"), **excluded}, llm=FakeLlm(canned=canned))
+    button = _post({**_body(command={"op": "ADD_SLOT", "params": params, "affected_slots": []}), **excluded})
+    assert said["status"] == "TRANSLATION_FAILED", said
+    assert button["status"] == "REJECTED" and "후보 풀 밖" in button["reason"], button
+
+
+def test_excluding_planned_places_does_not_block_editing_them() -> None:
+    """빼는 것은 새로 들일 후보뿐이다 — 이미 일정에 있는 곳(빼기·기준점)은 풀이 아니라 현재 일정으로 판정한다."""
+    planned = {"excluded_poi_ids": [str(GYEONGNI.poi_id), str(YEONNAM.poi_id)]}
+    remove = {"op": "REMOVE_SLOT", "params": {}, "affected_slots": [str(YEONNAM.poi_id)]}
+    assert _post({**_body(command=remove), **planned})["status"] == "APPLIED"
+    insert = _post({**_body(utterance=_SAID), **planned})
+    assert insert["status"] == "APPLIED", insert
+    assert _ids(insert)[1:4] == [str(p.poi_id) for p in (GYEONGNI, GONGDEOK_CAFE, YEONNAM)]
 
 
 # ── 여행 당일 편집 — 지난 곳은 그 시각 그대로 ─────────────────────────────

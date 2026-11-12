@@ -1,10 +1,12 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 
 import type { Proposal, ProposalDiffItem } from '../api/assistantContract';
 import { slotFaceLine } from '../model/cardModel';
-import { CheckGlyph, WarningGlyph } from './AssistantSheetGlyphs';
+import { AssistantSheetCheckGlyph, WarningGlyph } from './AssistantSheetGlyphs';
 import { OutlineCard } from './OutlineCard';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * b02 전후 비교 카드(TRIP-1324 · BR-U8-30~35). 도우미 경로의 변경은 전부 제안이다 — [적용]을 눌러야만 저장된다.
@@ -59,7 +61,7 @@ function DiffRow({
       >
         {line}
       </Text>
-      {checked ? <CheckGlyph size={20} /> : null}
+      {checked ? <AssistantSheetCheckGlyph size={20} /> : null}
     </View>
   );
 }
@@ -166,7 +168,7 @@ export function ProposalCard({
           testID={`assistant-proposal-violation-${index}`}
           className="flex-row items-start gap-[10px] px-[14px] py-md"
         >
-          <WarningGlyph size={20} color="#FF385C" />
+          <WarningGlyph size={20} color={COLOR_TOKENS.primary} />
           <Text className="flex-1 font-noto text-body text-ink">
             {violation}
           </Text>
@@ -215,19 +217,14 @@ export function ProposalCard({
       {open ? (
         <View className="flex-row gap-sm">
           {applicable ? (
-            <Pressable
+            <Button
               testID="assistant-proposal-apply"
-              accessibilityRole="button"
-              accessibilityState={{ disabled: applying }}
               disabled={applying}
               onPress={() => onApply(proposal.id)}
-              className={`h-[52px] flex-1 items-center justify-center rounded-button bg-primary${applying ? ' opacity-40' : ''}`}
+              className="flex-1"
             >
-              {/* 킷 Button: 높이 52 · 글자 Bold 16 — 토큰에 없는 값이라 브래킷(Figma 5026:3490) */}
-              <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                적용
-              </Text>
-            </Pressable>
+              적용
+            </Button>
           ) : null}
           <Pressable
             testID="assistant-proposal-dismiss"

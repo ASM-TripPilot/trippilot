@@ -59,6 +59,20 @@ enum class DataStatus { ACTIVE, UNVERIFIED, LOST, CLOSED }
 enum class PoiSource { KAKAO_LOCAL, TOURAPI, MANUAL, LOCALDATA, OVERTURE }
 
 /**
+ * 대표 사진의 공공누리 유형(V2.88 CHECK 와 같은 값). TYPE3 = 3유형(출처표시+변경금지) — 앱은 자르지 않고 전체를 보인다.
+ * TYPE1 = 1유형(출처표시). 모르면 null 로 둔다 — 값을 지어내지 않는다.
+ */
+enum class ImageLicense {
+    TYPE1, TYPE3 ;
+
+    companion object {
+        /** TourAPI `cpyrhtDivCd` 원문("Type1"·"Type3", 대소문자 무관) → 유형. 그 밖·없음은 null. */
+        fun fromCpyrhtDivCd(raw: String?): ImageLicense? =
+            entries.firstOrNull { it.name.equals(raw, ignoreCase = true) }
+    }
+}
+
+/**
  * POI 정본(C7). 다중 지도/장소 API를 단일 표준 스키마로 정규화한 결과.
  * 불변식: INV-U1-02 좌표 필수(lat·lng non-null 타입으로 강제). 이름 필수.
  * 조회 게이트 INV-U1-01(dataStatus=ACTIVE만)은 리포지토리·서비스가 집행.
@@ -89,6 +103,8 @@ class Poi private constructor(
     val address: String? = null,
     /** 940px 상한 WebP 썸네일(CDN, TRIP-1702 — 이전 560px). 미생성 null — 그때 화면에는 원본 [imageUrl] 을 준다. 배치(poi_thumbs.py)가 채운다. */
     val imageThumbUrl: String? = null,
+    /** [imageUrl] 사진의 공공누리 유형(V2.88). 모르면 null — 관광공사 사진이 아니거나 수집본에 값이 없었다. */
+    val imageLicense: ImageLicense? = null,
 ) {
     /** 화면에 내려줄 사진 — 썸네일이 있으면 그것, 없으면 원본. 저장·수집은 항상 [imageUrl] 만 본다. */
     val displayImageUrl: String? get() = imageThumbUrl ?: imageUrl
@@ -115,11 +131,13 @@ class Poi private constructor(
             // 기본값 인자는 **맨 뒤에** — 가운데 끼우면 위치 인자로 부르는 호출이 조용히 어긋난다(실제로 깨졌다).
             regionCode: String? = null,
             address: String? = null,
+            imageLicense: ImageLicense? = null,
         ): Poi {
             if (nameKo.isBlank()) throw ValidationFailed(listOf(FieldError("nameKo", "POI 이름은 필수입니다.")))
             return Poi(
                 UUID.randomUUID(), nameKo, lat, lng, category, region, regionCode, openingHours, dataStatus, source, 0,
                 now, now, imageUrl = imageUrl, tags = tags, sourceRef = sourceRef, address = address,
+                imageLicense = imageLicense,
             )
         }
 
@@ -136,6 +154,7 @@ class Poi private constructor(
             region: String?, openingHours: String?, now: Instant,
             tags: List<String> = emptyList(), imageUrl: String? = null, regionCode: String? = null,
             address: String? = null,
+            imageLicense: ImageLicense? = null,
         ): Poi {
             val image = imageUrl ?: existing.imageUrl
             return Poi(
@@ -160,6 +179,9 @@ class Poi private constructor(
             address ?: existing.address,
             // 썸네일은 **그 원본에서 만든 것일 때만** 지킨다 — 원본이 바뀌었는데 옛 썸네일이 남으면 다른 사진이 나간다.
             imageThumbUrl = existing.imageThumbUrl.takeIf { image == existing.imageUrl },
+            // 유형은 그 사진의 것이다 — 받은 값이 있으면 그것, 없으면 **같은 사진일 때만** 기존 값을 지킨다.
+            // 사진이 바뀌었는데 옛 유형이 남으면 3유형 사진이 잘려 나갈 수 있다.
+            imageLicense = imageLicense ?: existing.imageLicense.takeIf { image == existing.imageUrl },
             )
         }
 
@@ -169,10 +191,10 @@ class Poi private constructor(
             openingHours: String?, dataStatus: DataStatus, source: PoiSource, savedCount: Long,
             createdAt: Instant, updatedAt: Instant, imageUrl: String? = null, tags: List<String> = emptyList(),
             sourceRef: String? = null, regionCode: String? = null, address: String? = null,
-            imageThumbUrl: String? = null,
+            imageThumbUrl: String? = null, imageLicense: ImageLicense? = null,
         ): Poi = Poi(
             poiId, nameKo, lat, lng, category, region, regionCode, openingHours, dataStatus, source, savedCount,
-            createdAt, updatedAt, imageUrl, tags, sourceRef, address, imageThumbUrl,
+            createdAt, updatedAt, imageUrl, tags, sourceRef, address, imageThumbUrl, imageLicense,
         )
     }
 }

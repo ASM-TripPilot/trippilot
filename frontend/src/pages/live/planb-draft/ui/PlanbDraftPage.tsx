@@ -2,7 +2,7 @@ import { usePreventRemove } from '@react-navigation/native';
 import { useNavigation, useRouter } from 'expo-router';
 import { goBackOr } from '@/shared/lib/goBackOr';
 import type { ReactElement } from 'react';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { View } from 'react-native';
 
 import type { ReplanSlotVM } from '@/entities/itinerary-slot';
@@ -17,6 +17,8 @@ import { useStartReplan } from '@/features/request-replan';
 import { resolveReplanState } from '../model/replanState';
 import { useApplyReplan } from '@/features/apply-replan';
 import {
+  buildDeferredRows,
+  deferredFailureText,
   includeMissingText,
   isIncludeMissing,
   isPastDayRetryConflict,
@@ -24,16 +26,20 @@ import {
   reopenRequestParams,
   staleRetryRequest,
 } from '../model/draftNotice';
+import { useGetTripsTripId } from '@/shared/api/index.hooks';
 import { useIncludedPlaceName } from '../model/useIncludedPlaceName';
 import { useReplanDiff } from '../model/useReplanDiff';
 import { useReplanSession } from '../model/useReplanSession';
 import type { ReplanDiff } from '@/shared/api/index.schemas';
+import { isNotFound } from '@/shared/api';
 
 import { seoulDate } from '@/shared/lib/seoulDate';
 import type { MapCenter, MapPin } from '@/shared/map';
+import { usePressLock } from '@/shared/lib/pressGuard';
 
 import { ReplanDraftView, type ReplanRemovedVM } from './ReplanDraftView';
 import { DRAFT_LEAVE_COPY, ReplanLeaveDialog } from './ReplanLeaveDialog';
+import { ReplanDeferredDialog } from './ReplanDeferredDialog';
 import { ReplanNoticeFace } from './ReplanNoticeFace';
 
 /**
@@ -79,15 +85,21 @@ import { ReplanNoticeFace } from './ReplanNoticeFace';
  *  - 뒤로 계열(GO_BACK·POP)만 붙잡는다. 대기 중이면 삼킨다(대기 중 언마운트 → onSuccess 의 허브 dismissTo·applied
  *    신호가 사라지는 창을 닫는다). 그 밖(적용 성공 dismissTo 의 POP_TO 등)은 받은 액션 객체를 **그대로** 다시 보낸다 —
  *    처음부터 새로 만든 액션은 또 붙잡혀 무한 반복이다. 직접 수정 PUSH 는 화면을 스택에서 빼지 않아 애초에 붙잡히지 않는다.
- *  - [나가기](오류 얼굴·이탈 확인 공통 `leave()`)는 `leavingRef` 를 세운 뒤 뒤가 있으면 `router.back()`, 없으면
+ *  - [나가기](오류 얼굴·이탈 확인 공통 `leave()`)는 `leavingLock` 을 쥔 뒤 뒤가 있으면 `router.back()`, 없으면
  *    (딥링크 착지) 허브로 replace — 그 back 이 다시 콜백으로 오면 ref 를 보고 통과시킨다.
  *    ref 라서 같은 틱 연타도 한 번만 나간다(state 는 다음 렌더 전까지 옛 값이다).
  *
  * 상황 감지 FE-B(frontend-components §3.6) — 판정은 `model/draftNotice`, 여기는 배선만:
  *  - 세션 `initiatedBy = SYSTEM` 이고 초안 얼굴이면 머리에 `미리 준비한 대안` 표식(대안 없음·실패 얼굴엔 달지 않는다).
  *  - 적용 409 `EXPIRED`·`STALE` → 낡음 얼굴(일반 실패로 접지 않는다) + [새 대안 보기] = 같은 입력으로 새 세션 → i05 replace.
- *    재누름 잠금은 `retryRef`(실패에서만 푼다 — 새 POST 는 방금 연 세션을 닫는다, INV-U4-06).
+ *    재누름 잠금은 `retryLock`(실패에서만 푼다 — 새 POST 는 방금 연 세션을 닫는다, INV-U4-06).
  *  - `includePoiId`(기회 카드에서 넣으려던 장소)가 초안 after 에 없으면 그 이름(`useIncludedPlaceName`)으로 미포함 안내.
+ *
+ * TRIP-1782 — 세션 `deferredPlaces`(다른 날 요청이라 이번엔 못 넣은 곳)는 초안 얼굴(낡음 아님)에 항목마다 줄 + [N일차에 넣어 다시 짜기].
+ * 버튼은 확인창만 연다 — 새 세션 POST 는 열린 초안을 닫는다(INV-U4-06). 확정은 [새 대안 보기]와 **같은 `retryLock` 하나**와
+ * 같은 `startReplan` 인스턴스를 쓴다(둘이 따로면 동시에 둘이 나가 서로의 세션을 닫는다). 성공은 잠금을 풀지 않고 solving 으로
+ * replace(`includePoiId` 는 원래 날 것이라 잇지 않는다), 실패는 잠금을 풀고 창 안에 사유 — 사유의 출처는 이 흐름의 `onError`
+ * 상태(`deferredFailure`) 뿐이다(`startReplan.isError` 는 다른 경로의 실패도 담는다). 취소는 `reset()` 으로 실패 이력도 비운다.
  */
 
 // 라이브 대안 없음 부제 — Figma 앞 절("17시 이후 …")은 데이터별 사유라 서버가 주기 전엔 쓰지 않는다.
@@ -120,6 +132,7 @@ function buildDraftSheet(diff: ReplanDiff): {
     // diff 엔 방문 여부가 없다 — 전 행 예정 톤(Seed Q6).
     tone: 'planned',
     photo: slot.imageUrl ? { uri: slot.imageUrl } : null,
+    imageLicense: slot.imageLicense,
     category: slot.category ?? null,
     timeLabel: `${slot.startAt.slice(0, 5)}–${slot.endAt.slice(0, 5)}`,
     categoryLabel: null,
@@ -180,7 +193,12 @@ export function PlanbDraftPage({
   const itinerary = useLiveItinerary(tripId);
   const navigation = useNavigation();
   const [leaveOpen, setLeaveOpen] = useState(false);
-  const leavingRef = useRef(false);
+  // TRIP-1782 — 확인창 대상(줄 key = poiId)과 이 흐름의 시작 실패 사유.
+  const [deferredKey, setDeferredKey] = useState<string | null>(null);
+  const [deferredFailure, setDeferredFailure] = useState<string | null>(null);
+  // 일차를 세려면 여행 시작일이 필요하다 — 훅이라 조기 반환 위에서. 못 받으면(undefined) 일차만 빠지고 줄·버튼은 남는다.
+  const trip = useGetTripsTripId(tripId);
+  const leavingLock = usePressLock();
 
   const data = session.data;
   const state =
@@ -196,14 +214,14 @@ export function PlanbDraftPage({
       ? (includePoiId ?? null)
       : null;
   const includedName = useIncludedPlaceName(missingPoiId);
-  // [새 대안 보기]·실패 [다시 시도] 재누름 잠금 — 같은 틱 두 번째 누름은 옛 state 를 본다(ref).
-  const retryRef = useRef(false);
+  // [새 대안 보기]·실패 [다시 시도] 재누름 잠금 — 같은 틱 두 번째 누름은 옛 state 를 본다(그래서 잠금 객체).
+  const retryLock = usePressLock();
 
   const isDraft = state?.kind === 'draft';
   const busy = apply.isPending || startReplan.isPending;
   usePreventRemove(isDraft || busy, ({ data: { action } }) => {
     const isBack = action.type === 'GO_BACK' || action.type === 'POP';
-    if (!isBack || leavingRef.current) {
+    if (!isBack || leavingLock.isHeld()) {
       navigation.dispatch(action);
       return;
     }
@@ -212,8 +230,7 @@ export function PlanbDraftPage({
 
   // 서버 호출 없이 나간다 — 뒤로 갈 곳이 없으면(딥링크 착지) 허브로.
   const leave = () => {
-    if (leavingRef.current) return;
-    leavingRef.current = true;
+    if (!leavingLock.acquire()) return;
     goBackOr(router, `/trips/${tripId}/live`);
   };
 
@@ -254,6 +271,18 @@ export function PlanbDraftPage({
     state.kind === 'noSolution' &&
     data.targetDate === seoulDate(now) &&
     days.some((day) => day.date === tomorrow);
+  // TRIP-1753 — 위 판정은 일정이 있어야 선다. 오늘 대안 없음인데 일정 조회가 404 아닌 이유로 실패했으면 내일이 있는지
+  // 모른다 — 버튼을 거짓으로 띄우지 않고 사유 + [다시 시도]. 데이터 없는 재조회 중엔 v5 가 isError 를 풀어
+  // errorUpdateCount 로 잇는다(깜빡임 방지). 404(일정 없음)는 지금 동작 그대로.
+  const itineraryFailed =
+    itinerary.data === undefined &&
+    (itinerary.isError
+      ? !isNotFound(itinerary.error)
+      : itinerary.errorUpdateCount > 0);
+  const showItineraryError =
+    state.kind === 'noSolution' &&
+    data.targetDate === seoulDate(now) &&
+    itineraryFailed;
   // 세션이 다시 짜던 날 — 대안 없음·실패 얼굴엔 초안(diff)이 없어 draftDate 대신 세션에서 읽는다.
   const sessionDate = data.targetDate ?? readFromInstant(data.fromInstant).date;
   const draft = diff.data?.ready === true ? diff.data : undefined;
@@ -265,8 +294,7 @@ export function PlanbDraftPage({
   const canRetryStale = !data.targetDate || data.targetDate >= today;
   // 같은 입력(사유·지시·제외·범위·날짜·트리거)으로 새 세션 → i05 — 낡음 얼굴 [새 대안 보기]와 실패 얼굴 [다시 시도] 공용.
   const retrySameInput = () => {
-    if (retryRef.current) return;
-    retryRef.current = true;
+    if (!retryLock.acquire()) return;
     startReplan.mutate(
       { tripId, data: staleRetryRequest(data, seoulDate(new Date())) },
       {
@@ -278,10 +306,39 @@ export function PlanbDraftPage({
               : { tripId, sessionId: next.sessionId },
           }),
         onError: () => {
-          retryRef.current = false;
+          retryLock.release();
         },
       }
     );
+  };
+  // TRIP-1782 — 줄·버튼은 초안 얼굴(낡음 아님)에서만. 낡음 얼굴엔 [새 대안 보기]가 있고, 닫으면 낡음 안내가 isError 를 읽는다.
+  const deferredRows =
+    state.kind === 'draft' && !stale
+      ? buildDeferredRows(data.deferredPlaces, trip.data?.startDate)
+      : [];
+  const deferredTarget = deferredRows.find((row) => row.key === deferredKey);
+  const confirmDeferred = () => {
+    if (!deferredTarget || !retryLock.acquire()) return;
+    setDeferredFailure(null);
+    startReplan.mutate(
+      { tripId, data: deferredTarget.request },
+      {
+        onSuccess: (next) =>
+          router.replace({
+            pathname: '/trips/[tripId]/planb/solving',
+            params: { tripId, sessionId: next.sessionId },
+          }),
+        onError: (error) => {
+          retryLock.release();
+          setDeferredFailure(deferredFailureText(error));
+        },
+      }
+    );
+  };
+  const closeDeferred = () => {
+    startReplan.reset();
+    setDeferredKey(null);
+    setDeferredFailure(null);
   };
   const draftDate = draft?.date ?? undefined;
   const dayIndex =
@@ -318,13 +375,22 @@ export function PlanbDraftPage({
               ? DIFF_FAILED_NOTICE
               : DIFF_LOADING_NOTICE
         }
-        applyDisabled={sheet === undefined}
+        // 새 세션 요청 중엔 옛 세션 apply 가 겹치지 않게 잠근다(새 POST 가 이 세션을 닫는다, INV-U4-06).
+        applyDisabled={sheet === undefined || startReplan.isPending}
         noSolutionDescription={
           startReplan.isError
             ? NEXT_DAY_FAILED_DESCRIPTION
             : NO_SOLUTION_DESCRIPTION
         }
         replanNextDayPending={startReplan.isPending}
+        itineraryError={
+          showItineraryError
+            ? {
+                onRetry: () => void itinerary.refetch(),
+                retrying: itinerary.isFetching,
+              }
+            : null
+        }
         onReplanNextDay={
           canReplanNextDay
             ? () =>
@@ -370,6 +436,8 @@ export function PlanbDraftPage({
             ? includeMissingText(includedName)
             : null
         }
+        deferredRows={deferredRows}
+        onPressDeferred={setDeferredKey}
         onBack={() => {
           if (busy) return;
           if (isDraft) setLeaveOpen(true);
@@ -417,6 +485,14 @@ export function PlanbDraftPage({
                 })
         }
       />
+      {deferredTarget && !leaveOpen ? (
+        <ReplanDeferredDialog
+          pending={startReplan.isPending}
+          failureText={deferredFailure}
+          onCancel={closeDeferred}
+          onConfirm={confirmDeferred}
+        />
+      ) : null}
       {leaveOpen ? (
         <ReplanLeaveDialog
           {...DRAFT_LEAVE_COPY}

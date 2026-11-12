@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { buildEditItineraryRequest } from '@/features/edit-itinerary';
@@ -31,6 +31,7 @@ import {
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
 import { showToast } from '@/shared/ui/Toast';
+import { usePressLock } from '@/shared/lib/pressGuard';
 import { EditorView } from '@/widgets/map-sheet-shell';
 import { TimeSheet } from '@/widgets/time-sheet';
 
@@ -72,6 +73,8 @@ const CONFIRM_ERROR_NOTE =
 /** 비우기 실패 3경로(조회 모름·POST 실패·재조회 실패) 공통 — 서버가 비웠는지 화면이 모를 수 있어 단정하지 않는다. */
 const FRESH_ERROR_NOTE =
   '빈 일정으로 시작하지 못했어요. 일정 탭에서 다시 열어 주세요';
+/** 일반 진입 조회가 404 아닌 실패(TRIP-1747) — 기존 일정이 있는지 몰라 만들지 않았다. */
+const LOAD_ERROR_NOTE = '일정을 불러오지 못했어요';
 
 export function ManualPlanPage({
   tripId,
@@ -102,7 +105,7 @@ export function ManualPlanPage({
     useTripWizardStore.getState().reset()
   );
   // 저장+확정 2왕복 잠금 — isPending 은 다음 렌더에야 참이라 같은 틱 연타·PUT~확정 틈을 못 막는다.
-  const inFlightRef = useRef(false);
+  const inFlightLock = usePressLock();
   // 위반 요약 게이트(null = 닫힘)와 그 버튼 연타 잠금 — 같은 틱 두 누름은 state 로 못 막는다.
   const [conflictCount, setConflictCount] = useState<number | null>(null);
   const gateRef = useRef(false);
@@ -137,26 +140,28 @@ export function ManualPlanPage({
   // 직접 고르기 진입이 기존 초안을 빈 MANUAL 로 덮어쓰지 않게 한다(TRIP-601 가드 a · BR-U3-06). 판정 축은
   // `days.length>0` — slots 만 빈 정상 MANUAL 재진입도 보존해 재-POST 를 막는다.
   const hasExisting = (itinerary.data?.days.length ?? 0) > 0;
+  // 조회가 404 도 성공도 아니면 기존(확정일 수도 있는) 일정이 있는지 모른다 — 서버는 확정 일정 재생성을 막지 않아
+  // 쏘면 되돌릴 수 없다(DraftPage handleRetry 의 404 규칙과 같은 판정).
+  const loadFailed =
+    itinerary.data === undefined &&
+    itinerary.isError &&
+    !isNotFound(itinerary.error);
 
   useEffect(() => {
     if (firedRef.current) return;
     // GET 로딩 중엔 보류 — 도착할 기존 초안을 못 보고 쏘면 그대로 덮어쓴다(fail-safe, ItineraryMethodPage 선례).
     if (itinerary.isPending) return;
     if (startFresh) {
-      // 조회가 404 도 성공도 아니면 확정 여부를 모른다 — 서버는 확정 일정 재생성을 막지 않아 쏘면
-      // 되돌릴 수 없다(DraftPage handleRetry 의 404 규칙과 같은 판정 · 03b 경고-3).
-      if (
-        itinerary.data === undefined &&
-        itinerary.isError &&
-        !isNotFound(itinerary.error)
-      ) {
+      // 비우기는 모르면 접는다(잠금 · 03b 경고-3) — 다시 열라고 안내한다.
+      if (loadFailed) {
         firedRef.current = true;
         setFreshFailed(true);
         return;
       }
       // 가드 a 는 건너뛰되 확정 일정은 비우지 않는다(확정 해제 API 없음 · 01 맹점 ⑨).
       if (itinerary.data?.status === 'CONFIRMED') return;
-    } else if (hasExisting) {
+    } else if (hasExisting || loadFailed) {
+      // 일반 진입 실패는 잠그지 않는다(TRIP-1747) — [다시 시도] 결과가 404 면 그때 쏘고, 일정이 오면 가드 a 가 막는다.
       return;
     }
     firedRef.current = true;
@@ -186,10 +191,9 @@ export function ManualPlanPage({
     generate,
     tripId,
     itinerary.isPending,
-    itinerary.isError,
-    itinerary.error,
     itinerary.data,
     hasExisting,
+    loadFailed,
     startFresh,
     queryClient,
   ]);
@@ -201,8 +205,7 @@ export function ManualPlanPage({
   }, [itinerary.data, seedUnlessDirty]);
 
   function handleSave(): void {
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
+    if (!inFlightLock.acquire()) return;
     setSaveError(null);
     setConfirmError(null);
     // 미지정(startAt null) 슬롯은 buildEditItineraryRequest 가 요청에서 뺀다 — 미리 세어 알린다(INV-4).
@@ -240,7 +243,7 @@ export function ManualPlanPage({
           runConfirm();
         },
         onError: () => {
-          inFlightRef.current = false;
+          inFlightLock.release();
           setSaveError(SAVE_ERROR_NOTE);
         },
       }
@@ -263,7 +266,7 @@ export function ManualPlanPage({
           });
         },
         onError: () => {
-          inFlightRef.current = false;
+          inFlightLock.release();
           setConfirmError(CONFIRM_ERROR_NOTE);
         },
       }
@@ -281,7 +284,7 @@ export function ManualPlanPage({
     if (!gateRef.current) return;
     gateRef.current = false;
     setConflictCount(null);
-    inFlightRef.current = false;
+    inFlightLock.release();
   }
 
   // 조회 전엔 빈 편집기(스토어 싱글턴의 이전 드래프트를 그리지 않는다). startFresh 로 비우는 중이면
@@ -291,6 +294,7 @@ export function ManualPlanPage({
     startFresh && !freshDone && itinerary.data?.status !== 'CONFIRMED';
   const loadedDays = itinerary.data === undefined || clearing ? [] : days;
   const freshError = startFresh && freshFailed;
+  const loadError = !startFresh && loadFailed;
   const activeDate = loadedDays[activeDayIndex]?.date ?? '';
   const activeSlots = loadedDays[activeDayIndex]?.slots ?? [];
   const pins = buildDraftPins(activeSlots);
@@ -345,14 +349,17 @@ export function ManualPlanPage({
         onReorder={(data) =>
           reorderSlots(activeDate, data as ItineraryDaysItemSlotsItem[])
         }
-        onDeleteViaDrag={(poiId) => deleteSlot(activeDate, poiId)}
+        onDeleteViaDrag={(poiId, ordinal) =>
+          deleteSlot(activeDate, poiId, ordinal)
+        }
       />
 
       {/* 뷰가 못 가진 인라인 안내 — 저장 실패·확정 실패·미지정 제외(모두 INV-4). 편집 페이지 배너와 같은 모양. */}
       {saveError !== null ||
       confirmError !== null ||
       unspecifiedNotice !== null ||
-      freshError ? (
+      freshError ||
+      loadError ? (
         <View
           pointerEvents="box-none"
           className="absolute left-0 right-0 top-[96px] items-center gap-xs px-lg"
@@ -375,6 +382,25 @@ export function ManualPlanPage({
               <Text className="font-noto text-caption text-primary-text">
                 {FRESH_ERROR_NOTE}
               </Text>
+            </View>
+          ) : null}
+          {loadError ? (
+            <View
+              testID="itinerary-manual-load-error"
+              className="w-full flex-row items-center justify-between gap-sm rounded-card bg-primary-pale px-md py-sm"
+            >
+              <Text className="flex-1 font-noto text-caption text-primary-text">
+                {LOAD_ERROR_NOTE}
+              </Text>
+              <Pressable
+                testID="itinerary-manual-load-retry"
+                accessibilityRole="button"
+                onPress={() => void itinerary.refetch()}
+              >
+                <Text className="font-noto-bold text-caption font-bold text-primary-text">
+                  다시 시도
+                </Text>
+              </Pressable>
             </View>
           ) : null}
           {confirmError !== null ? (
@@ -408,7 +434,7 @@ export function ManualPlanPage({
           startAt={editingSlot.startAt}
           endAt={editingSlot.endAt}
           onApply={(patch) => {
-            adjustSlotTime(editing.date, editing.poiId, patch);
+            adjustSlotTime(editing.date, editing.poiId, patch, editing.ordinal);
             setEditingSlotKey(null);
           }}
           onCancel={() => setEditingSlotKey(null)}

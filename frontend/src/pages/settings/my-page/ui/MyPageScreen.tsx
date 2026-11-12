@@ -4,15 +4,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { TripBucket } from '../model/tripBuckets';
 import { ProfileCard, type ProfileCardCounts } from './ProfileCard';
+import { StatsCard, type StatsVM } from './StatsCard';
+import { ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import { CARD_SHADOW } from '@/features/settings';
 import {
   BarChartGlyph,
-  ChevronRightGlyph,
   EyeOffGlyph,
   GearGlyph,
-  ListGlyph,
+  SettingsListGlyph,
   MenuBedGlyph,
-  MUTED_SOFT,
   ShareNodesGlyph,
 } from '@/features/settings';
 
@@ -72,7 +72,7 @@ const SETTINGS_ROWS: {
   {
     key: 'shared',
     label: '내가 공유한 일정',
-    icon: <ListGlyph />,
+    icon: <SettingsListGlyph />,
     ready: false,
   },
   {
@@ -98,6 +98,10 @@ export interface MyPageScreenProps {
   counts: ProfileCardCounts | null;
   /** 숫자 칸 누름 — 페이지가 탭 이동으로 주입(TRIP-1123). */
   onPressCount?: (bucket: TripBucket) => void;
+  /** 「지금까지」 누적 통계(TRIP-1790) — 프로필 카드 바로 아래. null/미주입이면 카드를 그리지 않는다(알고 0 건). */
+  stats?: StatsVM | null;
+  /** 통계 「다시 시도」 — 페이지가 실패한 조회의 refetch 로 주입. 미주입이면 버튼이 없다. */
+  onRetryStats?: () => void;
   /** 스타일 요약 카드(l03) — 페이지가 조회·조립해 내린다. 프로필 바로 아래 놓인다. */
   styleCard?: ReactNode;
   /** 지난 여행(종료) 섹션 노출 여부 — 판정은 페이지(예정 0건). */
@@ -140,11 +144,16 @@ function SettingsRow({
       <Text className="flex-1 font-noto-bold text-[14.5px] font-bold text-ink">
         {label}
       </Text>
-      <ChevronRightGlyph size={20} color={MUTED_SOFT} />
+      <ChevronRight24Glyph size={20} color="mutedSoft" />
     </>
   );
   return onPress ? (
-    <Pressable testID={testID} onPress={onPress} className={className}>
+    <Pressable
+      accessibilityRole="button"
+      testID={testID}
+      onPress={onPress}
+      className={className}
+    >
       {content}
     </Pressable>
   ) : (
@@ -157,6 +166,8 @@ export function MyPageScreen({
   email,
   counts,
   onPressCount,
+  stats,
+  onRetryStats,
   styleCard,
   showPast,
   pastCards,
@@ -206,6 +217,8 @@ export function MyPageScreen({
             onPressEdit={onPressEdit}
             tags={tags}
           />
+
+          {stats ? <StatsCard stats={stats} onRetry={onRetryStats} /> : null}
 
           {styleCard}
 

@@ -17,10 +17,18 @@ import {
 } from '@/shared/api/index.hooks';
 import { isNotFound, isOfflineWaiting } from '@/shared/api';
 import { isLargeText } from '@/shared/lib/fontScale';
+import { guardPress, usePressLock } from '@/shared/lib/pressGuard';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';
-import { readStringValue, writeStringValue } from '@/shared/storage';
+import {
+  readIdSet,
+  readStringValue,
+  writeIdSet,
+  writeStringValue,
+} from '@/shared/storage';
+import { showToast } from '@/shared/ui/Toast';
 import {
   readDoneBarSeen,
+  TripDeleteDialog,
   tripItinerarySummary,
   writeDoneBarSeen,
 } from '@/entities/trip';
@@ -37,10 +45,14 @@ import {
   itineraryDestinationHref,
   resolveItineraryDestination,
 } from '@/features/itinerary';
+import {
+  parseMyTripsSegment,
+  splitMyTripsBySegment,
+  type MyTripsSegment,
+} from '../model/myTripsSegment';
 import { MyTripsListScreen } from './MyTripsListScreen';
 import { MyTripsSortSheet } from './MyTripsSortSheet';
-import { TripDeleteDialog } from './TripDeleteDialog';
-import { useTripWizardStore } from '@/features/create-trip';
+import { openNewTripWizard } from '@/features/create-trip';
 import { GenerationDoneBar } from './GenerationDoneBar';
 
 import { TripCardContainer } from './TripCardContainer';
@@ -66,6 +78,15 @@ import { TripCardContainer } from './TripCardContainer';
  * 기준, 읽기 실패·모르는 값은 최신순(INV-4). 사용자가 먼저 고르면 늦게 온 저장값은 무시한다. TRIP-1121 · 여행 중
  * (확정 + 오늘이 기간 안)은 어느 기준에서도 맨 위(`orderMyTrips`). 오늘을 여기서 한 번 만들어 정렬과 카드에 같은 값을 넘긴다.
  *
+ * TRIP-1785 · 「예정 / 지난」 세그 — 지난 = 일정 확정 ∧ 오늘 > 종료일(`splitMyTripsBySegment`), 나머지는 예정. 정렬은 세그 안에서(여행 중 고정은
+ * 예정 쪽), 정렬 시트·기준은 두 세그가 공유한다. 고른 세그는 정렬과 같은 꼴로 기기에 남긴다(`itinerary.myTrips.segment`): 읽기 전엔 예정,
+ * 읽기 실패·모르는 값도 예정, 사용자가 먼저 누르면 늦게 온 저장값은 무시한다. 세그 전환은 이미 받은 목록을 나눌 뿐 네트워크 호출이 없다.
+ *
+ * TRIP-1786 · 「맨 위에 고정」 — 고정한 여행 id 집합을 페이지가 쥐고(`itinerary.myTrips.pinned`, 기기 저장 — 서버 필드 없음, 앱·웹 사이엔 안 따라간다)
+ * `orderMyTrips` 의 선택 인자로 흘린다(여행 중 → 고정 → 나머지, 세그마다). 마운트 때 한 번 읽는다: 읽기 전엔 고정 항목을 막고(`pinDisabled`),
+ * 읽기가 실패하면 고정 없이 풀어 시작한다(INV-4). 읽은 값은 그사이 쌓인 것에 더해 넣는다. 토글은 집합 갱신·저장(실패 삼킴)·토스트,
+ * 삭제 성공(404 포함)은 그 id 가 집합에 있을 때만 저장값에서 뺀다.
+ *
  * TRIP-1677 · 일정 상태(확정 여부·생성 상태)는 목록(`GET /trips`)이 여행마다 싣는 네 칸에서 읽는다 — 예전엔 여행마다 일정을
  * 따로 물어(N+1) 도착 전엔 정렬·배너를 보류했다. 이제 목록이 오면 한꺼번에 판정한다. 생성 중 여행의 폴링은 앱 셸이 한다.
  *
@@ -85,6 +106,8 @@ import { TripCardContainer } from './TripCardContainer';
 
 /** SecureStore 키 규칙(영숫자·`.`·`-`·`_`) · 토큰 키와 다른 이름. */
 const SORT_KEY = 'itinerary.myTrips.sort';
+const SEGMENT_KEY = 'itinerary.myTrips.segment';
+const PINNED_KEY = 'itinerary.myTrips.pinned';
 
 export function MyTripsListPage(): ReactElement {
   const router = useRouter();
@@ -95,6 +118,8 @@ export function MyTripsListPage(): ReactElement {
   // TRIP-1618 · 생성 중 여행의 폴링은 이 페이지가 아니라 앱 셸(`useGenerationWatch`)이 한다 — 이 페이지는 목록 칸을 읽기만 한다.
   // `focused` 는 완료 배너 판정(TRIP-1286)이 쓴다 — 목록이 보이는 동안만 판정, 첫 렌더는 안 보임으로 시작해 포커스 effect 가 켠다.
   const [focused, setFocused] = useState(false);
+  // TRIP-1819 — 열린 ⋯ 메뉴의 여행. 값 하나라 메뉴가 둘 뜰 수 없고, 화면을 떠날 때(blur 정리) 닫는다.
+  const [menuTripId, setMenuTripId] = useState<string | null>(null);
   const [seen, setSeen] = useState<readonly string[] | null>(null);
   const [shown, setShown] = useState<Trip | null>(null);
   // TRIP-1241 — 닫음. shown 을 비우면 seen state 가 옛 값이라 pick 이 다시 계산돼 재표시되므로 별도 플래그로 든다.
@@ -118,6 +143,7 @@ export function MyTripsListPage(): ReactElement {
       return () => {
         active = false;
         setFocused(false);
+        setMenuTripId(null);
         setSeen(null);
         setShown(null);
         setBarDismissed(false);
@@ -150,7 +176,7 @@ export function MyTripsListPage(): ReactElement {
   // 실패한 요청의 tripId — 대기 중 취소 뒤 다른 카드를 열면 앞 결과가 새 다이얼로그에 안 떨어지게 id 로 든다.
   const [deleteFailedId, setDeleteFailedId] = useState<string | null>(null);
   // 연타 잠금은 ref — isPending 은 늦게 알려져 같은 틱 두 번째 press 를 못 막는다(02a ★2).
-  const deletingRef = useRef(false);
+  const deletingLock = usePressLock();
 
   // TRIP-1122 · 정렬 — 사용자가 한 번 고르면 뒤늦게 도착한 저장값이 그 선택을 덮지 않게 ref 로 표시한다.
   const [sortKey, setSortKey] = useState<MyTripsSortKey>('recent');
@@ -167,12 +193,33 @@ export function MyTripsListPage(): ReactElement {
     return () => setOptions({ tabBarStyle: undefined });
   }, [hideTabBar, setOptions]);
   const sortPickedRef = useRef(false);
+  // TRIP-1785 · 세그 — 정렬과 같은 꼴(상태 + 사용자 우선 ref + 마운트 읽기).
+  const [segment, setSegment] = useState<MyTripsSegment>('upcoming');
+  const segmentPickedRef = useRef(false);
+
+  // TRIP-1786 · 고정 — 읽기 전(`pinnedReady` false)엔 항목이 막힌다. 읽기 실패도 준비 완료(빈 집합, INV-4).
+  const [pinned, setPinned] = useState<ReadonlySet<string>>(new Set());
+  const [pinnedReady, setPinnedReady] = useState(false);
 
   useEffect(() => {
+    readIdSet(PINNED_KEY).then(
+      (ids) => {
+        setPinned((current) => new Set([...ids, ...current]));
+        setPinnedReady(true);
+      },
+      () => setPinnedReady(true)
+    );
     // 읽기 실패는 최신순 그대로(INV-4 — 목록은 이미 최신순으로 서 있다).
     readStringValue(SORT_KEY).then(
       (raw) => {
         if (!sortPickedRef.current) setSortKey(parseMyTripsSortKey(raw));
+      },
+      () => {}
+    );
+    // 읽기 실패는 예정 그대로(INV-4).
+    readStringValue(SEGMENT_KEY).then(
+      (raw) => {
+        if (!segmentPickedRef.current) setSegment(parseMyTripsSegment(raw));
       },
       () => {}
     );
@@ -191,6 +238,22 @@ export function MyTripsListPage(): ReactElement {
       ? null
       : pickDoneBar(entries, seen);
 
+  // 고정 집합을 바꾸고 기기에 쓴다 — 저장 실패는 삼킨다(이번 화면은 바뀐 대로 남는다, 정렬 쓰기와 같은 선례).
+  const commitPinned = (next: ReadonlySet<string>): void => {
+    setPinned(next);
+    writeIdSet(PINNED_KEY, [...next]).catch(() => {});
+  };
+  const onTogglePin = (tripId: string): void => {
+    const next = new Set(pinned);
+    const adding = !next.delete(tripId);
+    if (adding) next.add(tripId);
+    commitPinned(next);
+    showToast({
+      message: adding ? '맨 위에 고정했어요' : '고정을 풀었어요',
+      testID: 'my-trips-pin-toast',
+    });
+  };
+
   useEffect(() => {
     if (!pick) return;
     setShown(pick.target);
@@ -200,11 +263,10 @@ export function MyTripsListPage(): ReactElement {
     writeDoneBarSeen(pick.seenNext).catch(() => {});
   }, [pick]);
 
-  // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074).
-  const onPressCreateTrip = (): void => {
-    useTripWizardStore.getState().reset();
-    router.push('/trips/new/step1');
-  };
+  // 새 여행 진입 — 직전 드래프트를 이동 전에 비운다(TRIP-1012 #074). 연타는 한 번만(TRIP-1775).
+  const onPressCreateTrip = guardPress((): void => {
+    openNewTripWizard(router);
+  });
 
   if (isOfflineWaiting(trips)) {
     return (
@@ -237,13 +299,14 @@ export function MyTripsListPage(): ReactElement {
   }
 
   const sorted = orderMyTrips(
-    entries,
+    splitMyTripsBySegment(entries, today)[segment],
     today,
     sortKey === 'start'
       ? byStart(today)
       : sortKey === 'title'
         ? byTitle
-        : byLatest
+        : byLatest,
+    pinned
   );
 
   const onSelectSort = (key: MyTripsSortKey): void => {
@@ -254,14 +317,27 @@ export function MyTripsListPage(): ReactElement {
     writeStringValue(SORT_KEY, key).catch(() => {});
   };
 
+  const onSelectSegment = (next: MyTripsSegment): void => {
+    segmentPickedRef.current = true;
+    setSegment(next);
+    setMenuTripId(null);
+    // 저장 실패는 삼킨다 — 정렬 쓰기와 같다.
+    writeStringValue(SEGMENT_KEY, next).catch(() => {});
+  };
+
   const onConfirmDelete = (): void => {
-    if (deleteTargetId === null || deletingRef.current) return;
-    deletingRef.current = true;
+    if (deleteTargetId === null || !deletingLock.acquire()) return;
     setDeleteFailedId(null);
     const tripId = deleteTargetId;
     // 목록은 항상 다시 받고(지워진 건 사실), 다이얼로그는 보낸 여행의 것일 때만 닫는다.
     const done = (): void => {
       setDeleteTargetId((current) => (current === tripId ? null : current));
+      // TRIP-1786 · 지운 여행이 고정돼 있었으면 저장값에서 뺀다(없으면 쓰지 않는다).
+      if (pinned.has(tripId)) {
+        const next = new Set(pinned);
+        next.delete(tripId);
+        commitPinned(next);
+      }
       // TRIP-1441 — 완료 배너가 지운 여행을 가리키면 내린다(확정 여행에도 ⋯ 가 열려 도달 가능해졌다).
       // 함수형 갱신 — 응답이 늦게 와도 그 시점의 shown 이 지운 여행일 때만 비운다. 닫힘 플래그(barDismissed)는
       // 건드리지 않는다: 지운 여행은 seen 에 이미 있어 다시 안 뜨고, 플래그를 세우면 새로 고른 다른 여행의
@@ -278,7 +354,7 @@ export function MyTripsListPage(): ReactElement {
         onError: (error) =>
           isNotFound(error) ? done() : setDeleteFailedId(tripId),
         onSettled: () => {
-          deletingRef.current = false;
+          deletingLock.release();
         },
       }
     );
@@ -314,13 +390,26 @@ export function MyTripsListPage(): ReactElement {
         mode="list"
         onPressCreateTrip={onPressCreateTrip}
         sortKey={sortKey}
-        onPressSort={() => setSortOpen(true)}
+        onPressSort={() => {
+          setMenuTripId(null);
+          setSortOpen(true);
+        }}
+        segment={segment}
+        onSelectSegment={onSelectSegment}
+        segmentEmpty={sorted.length === 0}
         listHeader={largeText ? doneBar : undefined}
         cards={sorted.map((trip) => (
           <TripCardContainer
             key={trip.tripId}
             trip={trip}
             today={today}
+            pinned={pinned.has(trip.tripId)}
+            pinDisabled={!pinnedReady}
+            onTogglePin={() => onTogglePin(trip.tripId)}
+            menuOpen={menuTripId === trip.tripId}
+            onMenuOpenChange={(open) =>
+              setMenuTripId(open ? trip.tripId : null)
+            }
             onPressDelete={() => {
               setDeleteFailedId(null);
               setDeleteTargetId(trip.tripId);

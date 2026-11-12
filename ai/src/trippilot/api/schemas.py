@@ -308,6 +308,9 @@ class ViolationSchema(BoundaryModel):
     `slot_ref`가 일정 어디에도 없으면(예: HC3 미배치 위반 — 슬롯이 없어서 위반인 것)
     인덱스는 null이다. 지어내지 않는다.
 
+    `code` 는 `HC1`~`HC4`(하드 제약) 또는 `SLOT_ORDER`(2026-11-09, validate 만 낸다) — 받은 일정의 같은 날에서
+    화면 순서(배열)와 시각 순서가 어긋난 카드다. `SLOT_ORDER` 의 인덱스는 받은 배열의 그 칸이다(첫 일치가 아니다).
+
     `reason_code`(선택, 상황 감지 H1 · BR-SA-17): HC1 하위 코드 — `CLOSED_DAY`(정기 휴무) ·
     `OUT_OF_HOURS`(그 날 열지만 영업창 밖) · `HOLIDAY`(공휴일·명절·날짜 휴무 — `HOLIDAY_CLOSURE_MODE=on`
     일 때만). 다른 HC 는 null 이다. 백엔드 장소 감지가 알림 변형으로 쓴다 — `detail` 은 파싱하지 않는다.
@@ -353,6 +356,10 @@ class ValidateItineraryRequest(BoundaryModel):
     # HC2(이동 시간)를 이 수단으로 잰다 — 종전엔 칸이 없어 대중교통으로 재 자차 여행의 편집 재검증이 HC2 를 잘못 표시했다.
     # 없으면 종전 동작(PUBLIC).
     transport_modes: list[str] = Field(default_factory=list)
+    # 그 여행의 취향(2026-11-03) — additive optional, generate 의 `preference_profile` 과 같은 스키마·어휘. 액티비티 취향이고
+    # 대중교통으로 재면 HC2 를 생성과 같은 도보 상한(도로 1.0km)으로 잰다 — 종전엔 기본 700m 로 재, 생성이 걸어서 잡은 0.7~0.9km
+    # 구간이 HC2 로 표시됐다. 자차·도보는 바꾸지 않는다(`_plan_less_walk_cap`). 없으면 종전 동작.
+    preference_profile: PreferenceProfileSchema | None = None
 
 
 class ValidateItineraryResponse(BoundaryModel):
@@ -371,7 +378,11 @@ class ValidateItineraryResponse(BoundaryModel):
 
 
 class RepairItineraryRequest(BoundaryModel):
-    """`POST /ai/v1/itinerary/repair` — 백엔드 포트 `repair(solution, violations)` 대응 + IO-1."""
+    """`POST /ai/v1/itinerary/repair` — 백엔드 포트 `repair(solution, violations)` 대응 + IO-1.
+
+    `request_meta.requested_at` 은 '지금'이다 — 그보다 먼저 시작한 곳은 수리·재검증 밖에 두고 원 시각 그대로
+    돌려준다(오늘 가장 최근에 시작한 곳만 다음 일정의 출발점으로 남는다, TRIP-1709).
+    """
 
     itinerary: ItineraryPayload
     violations: list[ViolationSchema] = Field(default_factory=list)
@@ -385,6 +396,9 @@ class RepairItineraryRequest(BoundaryModel):
     anchors: list[DayAnchorSchema] = Field(default_factory=list)
     time_windows: list[TimeWindowSchema] = Field(default_factory=list)
     transport_modes: list[str] = Field(default_factory=list)
+    # 그 여행의 취향(2026-11-03) — validate 와 같은 칸·규칙(액티비티 취향 대중교통이면 도보 상한 1.0km). 수리는 모자란 간격만 앞으로
+    # 밀어서, 종전엔 생성이 걸어서 잡은 0.7~0.9km 구간을 [적용]마다 대중교통 시간으로 밀었다. 없으면 종전 동작.
+    preference_profile: PreferenceProfileSchema | None = None
 
 
 class RepairItineraryResponse(BoundaryModel):
@@ -552,6 +566,18 @@ class ChangeLogEntrySchema(BoundaryModel):
     added_poi_ids: list[str] = Field(default_factory=list)
 
 
+class PriorRequestSchema(BoundaryModel):
+    """같은 날 반영된(되돌리지 않은) 앞 다시 짜기 한 건 (F-8 — 요청 간 기억 정식안).
+
+    `kept_poi_ids` 는 그 회차 응답의 `requested_poi_ids` 를 BE 가 세션에 남겼다가 되싣는 것이다 — 그 회차가 **요청 때문에**
+    넣은 곳(이름으로 집은 곳·밤에 놀기·한 곳 추가·그때 이어받은 기억). `text` 는 그 회차의 사유 한 줄(BE `changeReason` —
+    칩 키·자유입력을 ` · ` 로 이은 것, `change_log.reason` 과 같은 줄)이다. 읽는 것은 아직 id 뿐이다.
+    """
+
+    text: str = Field(default="", max_length=500)
+    kept_poi_ids: list[str] = Field(default_factory=list, max_length=30)
+
+
 class ReplanRequest(BoundaryModel):
     """POST /ai/v1/planb/replan — 하루를 다시 짠다 (i04 → i06). (구 itinerary 경로는 TRIP-960 ④ 에서 삭제)
 
@@ -602,6 +628,10 @@ class ReplanRequest(BoundaryModel):
     # 반복 방지**. 기본 빈 목록이라 백엔드가 안 보내도 종전과 같다. 상한 20 은 백스톱이고 주된
     # 제한은 날짜 필터다(실측이 아니라 프롬프트 예산에서 잡은 값).
     change_log: list[ChangeLogEntrySchema] = Field(default_factory=list, max_length=20)
+    # 같은 날 반영된 앞 다시 짜기들, 최신순 (F-8). **있으면** 앞 요청 기억을 이 칸으로 정하고 `change_log` 근사(F-5)는 쓰지
+    # 않는다 — 기억은 맨 앞 회차의 `kept_poi_ids` 만 읽는다(응답 `requested_poi_ids` 가 이미 사슬이다). BE 는 `requested_poi_ids` 를
+    # 저장한 세션이 있을 때만 싣고, 이 칸을 모르는 AI(롤링 배포 중 옛 파드·롤백)가 422(extra=forbid)면 이 칸을 빼고 한 번 다시 부른다.
+    prior_requests: list[PriorRequestSchema] = Field(default_factory=list, max_length=20)
     request_meta: RequestMetaSchema
 
     @model_validator(mode="after")
@@ -634,6 +664,17 @@ class ReplanEmptyReasonSchema(BoundaryModel):
     params: dict[str, str] = Field(default_factory=dict)
 
 
+class DeferredPlaceSchema(BoundaryModel):
+    """다른 날 가겠다고 해서 이 날에 넣지 않은 곳 (F-7) — 앱이 '그 날에 넣어 다시 짜기' 한 탭을 그린다.
+
+    `name` 은 등록 POI 이름이다(사용자가 쓴 말이 아니다). `date` 는 여행 날짜로 환산한 그 날이다.
+    """
+
+    poi_id: str
+    name: str
+    date: dt.date
+
+
 class ReplanResponse(BoundaryModel):
     """재계획안 1안. 못 만들면 `itinerary=null` + `empty_reason` (200, IO-7).
 
@@ -652,6 +693,11 @@ class ReplanResponse(BoundaryModel):
     # 모르는 지시를 **조용히 무시하지 않는다** — 되돌려 보내 FE 가 알릴 수 있게 한다.
     unknown_directives: list[str] = Field(default_factory=list)
     empty_reason: ReplanEmptyReasonSchema | None = None
+    # 이번 일정에 **요청 때문에** 든 곳(F-8) — 이름으로 집은 곳·밤에 놀기·한 곳 추가(그 종류로 새로 든 곳이 딱 한 곳일 때)·
+    # 앞 요청에서 이어받아 지금도 남은 곳. BE 가 세션에 남겼다가 다음 다시 짜기의 `prior_requests` 로 되싣는다.
+    requested_poi_ids: list[str] = Field(default_factory=list)
+    # 다른 날로 집어 이 날에 넣지 않은 '갈 곳'(F-7) — 빼 달라는 곳·지난 날·결국 이 날 일정에 든 곳은 싣지 않는다.
+    deferred_places: list[DeferredPlaceSchema] = Field(default_factory=list)
 
 
 
@@ -684,6 +730,8 @@ class ExplanationsResponse(BoundaryModel):
     배치 슬롯 설명 **다음의 두 번째 호출**(잔여 예산만 씀)이라 이 맵이 비어도 `explanations`
     는 영향이 없다. 비면 `alternatives_reason` 이 사유를 싣는다(배치 설명이 실패해 시도조차
     못 했으면 `slot_explanations_unavailable`) — 백엔드는 AI 템플릿 rationale 을 그대로 쓴다.
+    차선책도 날마다 따로 불러, 일부 날만 실패하면 성공한 날 문장 +
+    `alternatives_reason="alternative_explanation_partial: …"` 이다(실패한 날은 템플릿 그대로).
     **전제**: 요청 payload 의 `slots[].alternatives[]` 가 채워져 와야 한다 — 백엔드가 저장한
     차선책을 되돌려 보내기 전(현재 `toWire()` 는 빈 배열)에는 항상 빈 맵 + `null` 이다.
     """
@@ -726,7 +774,22 @@ class EditItineraryRequest(BoundaryModel):
     # 먼저 막으면 임베딩·LLM 을 쓰기 전에 422 로 끊긴다. 값의 근거는 그쪽 주석 참조.
     utterance: str | None = Field(default=None, min_length=1, max_length=500)
     confirm: bool = False
+    # 앞서 제안했던 곳("다른 데는?" — spec 003 FR-015) — 이번 편집이 새로 들이지 않는다. 후보 풀을 좁힐 뿐이다(INV-1) — 이미 일정에
+    # 있는 곳을 빼거나 기준점으로 삼는 데는 영향이 없다. 선택 필드(하위호환): BE 는 비면 키째로 뺀다
+    excluded_poi_ids: list[str] = Field(default_factory=list)
     request_meta: RequestMetaSchema
+    # ── 여행 컨텍스트(2026-11-03, additive optional — 셋 다 없으면 종전 동작) ──
+    # 그 여행의 취향 — generate 의 `preference_profile` 과 같은 스키마·어휘(`AlternativesRequest` 와 같은 규칙). 편집은 이것을
+    # **규칙에만** 쓴다: 취향 카테고리(생성과 같은 `_wanted_categories`)로 사이 넣기 순위·날 재구성의 규칙 점수(`taste_fit`)를 매긴다 —
+    # 편집 시한(BE 8s − 왕복 여유) 안에 취향 LLM 점수는 못 든다. 액티비티 취향 대중교통 여행이면 재타이밍·검증을 생성과 같은 도보
+    # 상한(1.0km)으로 잰다.
+    preference_profile: PreferenceProfileSchema | None = None
+    # 날마다 이용 시각 — generate·repair 의 `time_windows` 와 같은 스키마. **빈 날의 시작·창으로만** 쓴다(빈 날에 넣는 첫 곳의
+    # 시작 — 종전 10:00, 날 재구성의 빈 날 창 — 종전 10:00~18:00). HC4 판정 창은 종전(당일 전체) 그대로다 — repair 와 같은 이유로
+    # 사용자가 창 밖에 둔 슬롯 때문에 편집이 막히지 않게 한다.
+    time_windows: list[TimeWindowSchema] = Field(default_factory=list)
+    # 여행 첫날 — 'N일차'를 이 날 + N − 1 로 센다(대화 `trip_dates` 와 같은 셈). 없으면 종전(받은 일정의 첫 날).
+    trip_start_date: dt.date | None = None
 
     @model_validator(mode="after")
     def _exactly_one_entry(self) -> "EditItineraryRequest":
@@ -953,6 +1016,9 @@ class DialogueContextSnapshot(BoundaryModel):
     # 계정 취향(선택, 하위호환) — generate 의 `preference_profile` 과 같은 스키마·어휘. 지역 추천(RECOMMEND_REGION)만 읽는다.
     # AI 가 먼저 배포되고 백엔드가 뒤따라 싣는다(`extra=forbid` — 구 백엔드 요청은 그대로 통과).
     preference_profile: PreferenceProfileSchema | None = None
+    # 앱의 포그라운드 현재 위치(선택, O-U8-5 — 2026-10-20 사용자 결정). 백엔드가 **위치 동의가 켜진 턴에만** 싣고 이용 사실을
+    # 법정 로그에 남긴다. AI 는 저장·로그·프롬프트에 옮기지 않고 날씨 앵커 좌표로만 쓴다. null = 모름(동의 없음·측위 실패).
+    device_location: CoordSchema | None = None
 
 
 class DialogueTurnSchema(BoundaryModel):
@@ -1060,6 +1126,8 @@ class DialogueMemoryItemSchema(BoundaryModel):
 
 class DialogueMemoryExportResponse(BoundaryModel):
     memories: list[DialogueMemoryItemSchema]  # updated_at DESC
+    # 상한(`dialogue.EXPORT_MAX_SESSIONS`)을 넘겨 잘렸다 — 백엔드가 자기 줄 상한의 truncated 와 OR 한다(받은 것이 전부인 줄 알게 두지 않는다, INV-4)
+    truncated: bool = False
 
 
 # ───────── 기회 카드 (`/ai/v1/planb/opportunities` — situation-awareness BR-SA-22 · DEC-SA-6) ─────────

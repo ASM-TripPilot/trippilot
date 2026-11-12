@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 
+import { isOfflineWaiting } from '@/shared/api';
 import {
   getGetMeNotificationSettingsQueryKey,
   patchMeNotificationSettingsKind,
@@ -24,7 +25,7 @@ import type {
  * ⚠ 이 파일은 [테스트 작성]이 낸 red-phase 스텁이다 — 구현은 implementer 몫(throw 로 red 보장).
  */
 
-export type ToggleChannel = 'push' | 'inapp';
+type ToggleChannel = 'push' | 'inapp';
 
 export type ToggleOutcome = { kind: 'ok' } | { kind: 'failed' };
 
@@ -33,6 +34,14 @@ export interface UseTogglesResult {
   items: NotificationToggle[];
   isLoading: boolean;
   isError: boolean;
+  /**
+   * TRIP-1755 · 받아 본 값이 없는데 실패했거나(`errorUpdateCount` — 다시 시도로 `isError` 가 꺼진 틈 포함) 오프라인 보류 중.
+   * 받아 둔 값이 있으면 재조회가 실패해도 false(그 값을 오류로 덮지 않는다).
+   */
+  loadFailed: boolean;
+  /** 다시 받는 중 — 화면이 다시 시도를 잠근다. */
+  isFetching: boolean;
+  refetch: () => unknown;
   toggle: (
     kind: NotificationToggleKind,
     channel: ToggleChannel,
@@ -106,6 +115,11 @@ export function useToggles(): UseTogglesResult {
     items: query.data?.items ?? [],
     isLoading: query.isLoading,
     isError: query.isError,
+    loadFailed:
+      query.data === undefined &&
+      (query.isError || query.errorUpdateCount > 0 || isOfflineWaiting(query)),
+    isFetching: query.isFetching,
+    refetch: query.refetch,
     toggle,
   };
 }

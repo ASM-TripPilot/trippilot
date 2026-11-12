@@ -1,5 +1,5 @@
 import { AppState } from 'react-native';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import type { QueryClient } from '@tanstack/react-query';
 import {
   act,
@@ -27,6 +27,7 @@ import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { readIdSet, writeIdSet } from '@/shared/storage';
 import { showToast } from '@/shared/ui/Toast';
 import {
+  getGetTripsTripIdBasesQueryKey,
   getGetTripsTripIdItineraryQueryKey,
   getGetTripsTripIdQueryKey,
 } from '@/shared/api/index.hooks';
@@ -1909,6 +1910,50 @@ describe('완성 셸(h14) 얼굴', () => {
         screen.queryByTestId(`slot-stopcard-subtitle-${DAY1}#poi-fixed-mv`)
       ).toBeNull();
     });
+
+    it('T2c · TRIP-1795 AC-4 — 고정 숙소를 이 여행에서 `명소`·다른 이름으로 불러도 "숙소 · 변경 불가" 부제·곳 수 제외는 그대로다 (판정은 원본 분류)', async () => {
+      const hotel = {
+        ...busanHotel('0.6km'),
+        displayName: '내 숙소',
+        displayCategory: '명소' as const,
+      };
+      // W6 — 거점 조회가 도착해야 거점 안내 판정이 선다(첫 로딩엔 두 카드 다 없다). 기본 핸들러(빈 목록)를 세는 걸로 덮는다.
+      let basesCalls = 0;
+      server.use(
+        http.get(BASES_DEFAULT_URL, () => {
+          basesCalls += 1;
+          return HttpResponse.json([]);
+        })
+      );
+      useItinerary(() =>
+        HttpResponse.json(
+          itineraryOf('PLANNED', [
+            ...busanFourPois([null, '2.1km', '0.8km', '0.6km']),
+            hotel,
+          ])
+        )
+      );
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      await waitFor(() => expect(basesCalls).toBe(1));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50)); // 응답이 상태로 반영될 틈
+      });
+      // W6 — 고정 숙소 판정(`hasBase` 슬롯 항)도 원본 분류만 읽는다: 표시 분류가 `명소`여도 「거점 숙소가 없어요」가 거짓으로 뜨지 않는다.
+      expect(screen.queryByTestId('itinerary-plan-no-base')).toBeNull();
+
+      // 표시는 고친 이름 — 구현이 헬퍼를 지나는지 보이는 짝(공허 통과 방지).
+      expect(
+        screen.getByTestId(`slot-stopcard-name-${DAY1}#poi-hotel`)
+      ).toHaveTextContent('내 숙소');
+      // 논리는 원본 — 부제·곳 수가 종전(T2 와 같은 일정)과 같다.
+      expect(
+        screen.getByTestId(`slot-stopcard-subtitle-${DAY1}#poi-hotel`)
+      ).toHaveTextContent('저녁 · 숙소 · 변경 불가');
+      expect(screen.getByTestId('sheet-header-meta')).toHaveTextContent(
+        '4곳 · 4.1km'
+      );
+    });
   });
 
   describe('🔴 T3 · AC-3 — 셸 얼굴에 소요시간·% 가 0건이다 (INV-3)', () => {
@@ -2006,7 +2051,7 @@ describe('완성 셸(h14) 얼굴', () => {
       await screen.findByTestId('map-sheet-shell-root');
 
       // 단언 ① 안내 줄은 남는다 — 카드 글자 전체가 이 한 줄과 완전 일치(링크 글자가 남으면 red, 02a §5).
-      const card = screen.getByTestId('itinerary-plan-no-base');
+      const card = await screen.findByTestId('itinerary-plan-no-base');
       expect(card).toHaveTextContent('거점 숙소가 없어요');
       // 단언 ② 링크는 트리에 없다 — testID 와 글자 둘 다(testID 만 떼고 글자를 남기는 구현도 막는다).
       expect(screen.queryByTestId('itinerary-plan-no-base-link')).toBeNull();
@@ -2084,9 +2129,208 @@ describe('완성 셸(h14) 얼굴', () => {
         renderPage();
         await screen.findByTestId('map-sheet-shell-root');
         await waitFor(() => expect(basesCalls).toBe(1));
-        expect(screen.getByTestId('itinerary-plan-no-base')).toBeOnTheScreen();
+        expect(
+          await screen.findByTestId('itinerary-plan-no-base')
+        ).toBeOnTheScreen();
       }
     );
+  });
+
+  // TRIP-1756 · 거점 조회(bases)가 404 아닌 이유로 실패했는데 "거점 숙소가 없어요"라고 단정하지 않는다(결정 2 = b, INV-4).
+  // 준비=고정 숙소 슬롯 없는 일정 + bases 응답 지정 → 실행=화면 열기(+[다시 시도]) → 단언=어느 카드가 서는지·bases 요청 수.
+  describe('🔴 TRIP-1756 · 거점 조회가 실패하면 "없어요"가 아니라 "확인하지 못했어요"로 말한다', () => {
+    const UNKNOWN = 'itinerary-plan-base-unknown';
+    const UNKNOWN_RETRY = 'itinerary-plan-base-unknown-retry';
+    const NO_BASE = 'itinerary-plan-no-base';
+    const FAILURES: [string, () => Response][] = [
+      ['500', () => new HttpResponse(null, { status: 500 })],
+      ['네트워크', () => HttpResponse.error()],
+    ];
+    let basesCalls = 0;
+
+    beforeEach(() => {
+      basesCalls = 0;
+    });
+
+    function serveBases(respond: () => Response): void {
+      server.use(
+        http.get(`${BASE}/trips/${TRIP_ID}/bases`, () => {
+          basesCalls += 1;
+          return respond();
+        })
+      );
+    }
+
+    /** bases 응답이 화면에 반영될 틈 — 부정 단언 앞에서 요청 도착 + 처리를 기다린다. */
+    async function settled(expectedCalls: number): Promise<void> {
+      await waitFor(() => expect(basesCalls).toBe(expectedCalls));
+      await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    }
+
+    it.each(FAILURES)(
+      'B1: 고정 숙소 슬롯이 없고 bases 가 %s 로 실패하면 "확인하지 못했어요" 카드와 다시 시도가 서고 "거점 숙소가 없어요"는 없다 (셸은 그대로)',
+      async (_label, fail) => {
+        useItinerary(() => HttpResponse.json(plannedNoBase()));
+        serveBases(fail);
+
+        renderPage();
+        await screen.findByTestId('map-sheet-shell-root');
+
+        const card = await screen.findByTestId(UNKNOWN);
+        expect(
+          within(card).getByText('거점 숙소를 확인하지 못했어요')
+        ).toBeOnTheScreen();
+        expect(screen.getByTestId(UNKNOWN_RETRY)).toHaveTextContent(
+          '다시 시도'
+        );
+        expect(screen.queryByTestId(NO_BASE)).toBeNull();
+        // 거점 조회 실패는 화면 전체 실패가 아니다(M4 와 같은 약속).
+        expect(screen.queryByTestId('itinerary-view-failed')).toBeNull();
+        expect(screen.getByTestId('map-sheet-shell-root')).toBeOnTheScreen();
+      }
+    );
+
+    it('B1r: bases 가 돌아온 뒤(빈 목록) [다시 시도] → bases 정확히 +1, 확인 못 함 카드가 사라지고 "거점 숙소가 없어요"가 선다', async () => {
+      useItinerary(() => HttpResponse.json(plannedNoBase()));
+      serveBases(() => new HttpResponse(null, { status: 500 }));
+      renderPage();
+      await screen.findByTestId(UNKNOWN);
+      await settled(1);
+
+      serveBases(() => HttpResponse.json([]));
+      fireEvent.press(screen.getByTestId(UNKNOWN_RETRY));
+      await settled(2);
+
+      expect(await screen.findByTestId(NO_BASE)).toBeOnTheScreen();
+      expect(screen.queryByTestId(UNKNOWN)).toBeNull();
+    });
+
+    it('B1c: bases 가 돌아와 그날 밤을 덮는 거점이 있으면 [다시 시도] 뒤 두 카드 모두 없다', async () => {
+      useItinerary(() => HttpResponse.json(plannedNoBase()));
+      serveBases(() => new HttpResponse(null, { status: 500 }));
+      renderPage();
+      await screen.findByTestId(UNKNOWN);
+      await settled(1);
+
+      const covering: BaseAssignment = {
+        baseAssignmentId: 'ba-1756',
+        savedStayId: 's-1756',
+        dateFrom: DAY1,
+        dateTo: DAY2,
+      };
+      serveBases(() => HttpResponse.json([covering]));
+      fireEvent.press(screen.getByTestId(UNKNOWN_RETRY));
+      await settled(2);
+
+      expect(screen.queryByTestId(UNKNOWN)).toBeNull();
+      expect(screen.queryByTestId(NO_BASE)).toBeNull();
+    });
+
+    it('B2: 같은 bases 500 이어도 그날 고정 숙소 슬롯이 있으면 두 카드 모두 없다 — 슬롯 판정이 이긴다 (무회귀 · 선제 green)', async () => {
+      useItinerary(() => HttpResponse.json(plannedDefault()));
+      serveBases(() => new HttpResponse(null, { status: 500 }));
+
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      await settled(1);
+
+      expect(screen.queryByTestId(UNKNOWN)).toBeNull();
+      expect(screen.queryByTestId(NO_BASE)).toBeNull();
+    });
+
+    it('B3: bases 404 는 실패가 아니라 없음이다 — "거점 숙소가 없어요"가 서고 "확인하지 못했어요"는 없다 (무회귀 · 선제 green)', async () => {
+      useItinerary(() => HttpResponse.json(plannedNoBase()));
+      serveBases(() => new HttpResponse(null, { status: 404 }));
+
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      await settled(1);
+
+      expect(screen.getByTestId(NO_BASE)).toBeOnTheScreen();
+      expect(screen.queryByTestId(UNKNOWN)).toBeNull();
+    });
+
+    // 5-c 심판 보강(W1) — "로딩은 실패가 아니다"·"이미 받은 데이터가 있으면 실패가 아니다" 두 조건을 각각 문다.
+    it('W1a: bases 응답이 아직 안 왔으면(로딩) "확인하지 못했어요"는 서지 않는다 — 로딩은 실패가 아니다 (선제 green)', async () => {
+      useItinerary(() => HttpResponse.json(plannedNoBase()));
+      server.use(
+        http.get(`${BASE}/trips/${TRIP_ID}/bases`, async () => {
+          basesCalls += 1;
+          await delay('infinite');
+          return HttpResponse.json([]);
+        })
+      );
+
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      await waitFor(() => expect(basesCalls).toBe(1));
+      await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+      expect(screen.queryByTestId(UNKNOWN)).toBeNull();
+    });
+
+    it('W1b: 거점을 이미 받아 둔 뒤 재조회만 실패하면 "확인하지 못했어요"로 바뀌지 않는다 — 데이터가 있으면 실패가 아니다 (선제 green)', async () => {
+      useItinerary(() => HttpResponse.json(plannedNoBase()));
+      serveBases(() => HttpResponse.json([]));
+      const client = newTestQueryClient({ gcTime: 0 });
+      render(<ItineraryPlanPage tripId={TRIP_ID} />, {
+        wrapper: createWrapper(client),
+      });
+      expect(await screen.findByTestId(NO_BASE)).toBeOnTheScreen();
+      await settled(1);
+
+      serveBases(() => new HttpResponse(null, { status: 500 }));
+      await act(async () => {
+        await client.invalidateQueries({
+          queryKey: getGetTripsTripIdBasesQueryKey(TRIP_ID),
+        });
+      });
+      await settled(2);
+
+      expect(screen.queryByTestId(UNKNOWN)).toBeNull();
+      expect(screen.getByTestId(NO_BASE)).toBeOnTheScreen();
+    });
+
+    // 5-c 오케 결정(W2) — 거점 결과를 아직 모르면 "없어요"로 단정하지 않는다(로딩 중엔 둘 다 없음).
+    it('W2a: bases 응답을 기다리는 동안(로딩)엔 "거점 숙소가 없어요"도 "확인하지 못했어요"도 서지 않는다', async () => {
+      useItinerary(() => HttpResponse.json(plannedNoBase()));
+      server.use(
+        http.get(`${BASE}/trips/${TRIP_ID}/bases`, async () => {
+          basesCalls += 1;
+          await delay('infinite');
+          return HttpResponse.json([]);
+        })
+      );
+
+      renderPage();
+      await screen.findByTestId('map-sheet-shell-root');
+      await waitFor(() => expect(basesCalls).toBe(1));
+      await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+      expect(screen.queryByTestId(NO_BASE)).toBeNull();
+      expect(screen.queryByTestId(UNKNOWN)).toBeNull();
+    });
+
+    it('W2b: 실패 뒤 [다시 시도] 응답을 기다리는 동안에도 "확인하지 못했어요"가 유지되고 "거점 숙소가 없어요"로 뒤집히지 않는다', async () => {
+      useItinerary(() => HttpResponse.json(plannedNoBase()));
+      serveBases(() => new HttpResponse(null, { status: 500 }));
+      renderPage();
+      await screen.findByTestId(UNKNOWN);
+      await settled(1);
+
+      server.use(
+        http.get(`${BASE}/trips/${TRIP_ID}/bases`, async () => {
+          basesCalls += 1;
+          await delay('infinite');
+          return HttpResponse.json([]);
+        })
+      );
+      fireEvent.press(screen.getByTestId(UNKNOWN_RETRY));
+      await settled(2);
+
+      expect(screen.getByTestId(UNKNOWN)).toBeOnTheScreen();
+      expect(screen.queryByTestId(NO_BASE)).toBeNull();
+    });
   });
 
   describe('🔴 T5b · TRIP-1110 AC-4·AC-6 — 커넥터 구간(slice(1))에 null 이 섞이면 meta km 를 접는다', () => {
@@ -3098,6 +3342,14 @@ describe('같은 날 같은 장소 두 번', () => {
 
       expect(cards).toHaveLength(4);
       expect(keyWarnings.keys()).toEqual([]);
+
+      // TRIP-1812 AC-8 — 같은 장소 두 카드가 각자 자기 시각을 그린다(회귀 잠금, 자기 slot 을 그려 지금도 맞다).
+      const times = screen.getAllByTestId(
+        `slot-stopcard-time-${buildSlotKey(DAY1, 'p-a')}`
+      );
+      expect(times).toHaveLength(2);
+      expect(times[0]).toHaveTextContent(/10:00/);
+      expect(times[1]).toHaveTextContent(/13:00/);
     }
   );
 });

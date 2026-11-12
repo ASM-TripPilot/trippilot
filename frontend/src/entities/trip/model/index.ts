@@ -9,14 +9,13 @@ import type { CoverTone } from '../config/coverGradients';
 
 export type {
   Trip,
-  TripStatus,
   TripDestination,
   ItineraryStatus,
 } from '@/shared/api/index.schemas';
 
 /** h06 카드 배지 — 'done'=완성(itinerary CONFIRMED) · 'draft'=작성중 · 'live'=여행 중(확정 + 오늘이 기간 안,
  * TRIP-1121) · null=itinerary 미도착(배지 미정). */
-export type MyTripBadge = 'done' | 'draft' | 'live' | null;
+type MyTripBadge = 'done' | 'draft' | 'live' | null;
 
 /**
  * h06 "내 여행" 카드 뷰모델 — 화면이 그대로 그릴 값(features/itinerary/ui/MyTripCard 로컬 정의에서 이관).
@@ -34,8 +33,10 @@ export interface MyTripCardVM {
   imageUrl?: string | null;
   /** TRIP-1208 · 커버 도시 이름(첫 목적지 region). 없거나 빈 값이면 글자 없이 그라데이션만. */
   coverCity?: string | null;
-  /** 지역 커버 이미지(번들) — 있으면 그라데이션 대신 그린다. 서울·부산·제주 밖이거나 코드가 없으면 null. */
+  /** 지역 커버 이미지(번들) — 있으면 그라데이션 대신 그린다. 번들에 그 지역 그림이 없거나 코드가 없으면 null. */
   coverSource?: ImageSourcePropType | null;
+  /** TRIP-1806 · 첫 목적지와 다른 시도의 그림을 골랐을 때 그 이름(`tripCoverLabel`). 그림 위에 작게. */
+  coverLabel?: string | null;
   /** TRIP-1208 · 커버 그라데이션 톤. 미전달=upcoming. */
   coverTone?: CoverTone;
 }
@@ -54,6 +55,8 @@ export interface PastTripCardVM {
   photoLabel?: string | null;
   /** TRIP-776 · 썸네일 사진(프리뷰 픽스처 전용, G7). 실앱은 사진 원본이 기기 로컬이라 미전달. */
   imageUrl?: string | null;
-  /** 첫 목적지의 번들 지역 커버 그림(서울·부산·제주). 사진이 없을 때 썸네일 자리에 깐다. */
+  /** 고른 그림 또는 첫 목적지의 번들 지역 커버 그림. 사진이 없을 때 썸네일 자리에 깐다. */
   coverSource?: ImageSourcePropType | null;
+  /** TRIP-1806 · 첫 목적지와 다른 시도의 그림을 골랐을 때 그 이름(`tripCoverLabel`). 썸네일이 좁아 글자 줄에 쓴다. */
+  coverLabel?: string | null;
 }

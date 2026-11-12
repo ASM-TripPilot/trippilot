@@ -12,18 +12,18 @@ import {
   basicNarrative,
   resolveDisplayNarrative,
 } from '../model/reflectionFallback';
+import { failedUnlessNotFound } from '../model/failedUnlessNotFound';
 import { statsCard } from '../model/statsCard';
 import { useDailyReflection } from '../model/useDailyReflection';
-import { parseScenes } from '../model/reflectionScenes';
+import { useMagazineSources } from '../model/useMagazineSources';
 import { useReflectionPhotos } from '../model/useReflectionPhotos';
-import { ReflectionScenes } from './ReflectionScenes';
 import {
   DailyReflectionScreen,
   type ReflectionDayTab,
   type ReflectionFace,
 } from './DailyReflectionScreen';
 import { regionForDay } from '@/entities/trip';
-import { useRecordBarNav } from '@/features/reflection';
+import { buildMagazineVM, useRecordBarNav } from '@/features/reflection';
 import { useGetTripsTripId } from '@/shared/api/index.hooks';
 import { seoulDate } from '@/shared/lib/seoulDate';
 import { showToast } from '@/shared/ui/Toast';
@@ -58,6 +58,13 @@ import { showToast } from '@/shared/ui/Toast';
  *
  * TRIP-1444 · 사진은 서버가 URL 을 주지 않는다 — 그 날 방문 사진 메타를 이 기기 앨범에서 꺼낸다(`useReflectionPhotos`).
  * ⚠️ 계약 공백(후속): 지도 핀·changeSummary 는 아직 소스가 없어 미전달.
+ *
+ * TRIP-1665 · 매거진 — 표시본·그날 방문·일정 슬롯·즉석 이름·기기 사진을 `buildMagazineVM` 한 번에 모아 화면에 넘긴다.
+ * 방문·일정 조회(`useMagazineSources`)는 얼굴 판정에 끼지 않는다 — 실패해도 오류 얼굴로 떨어지지 않고 동선 이름만 접힌다.
+ *
+ * TRIP-1757 · 곁들이 조회 셋(여행·그날 방문·방문별 사진)이 404 아닌 이유로 실패하면 조용히 접히던(칩 줄 사라짐·"방문 없음"·사진 빠짐) 것을
+ * 화면 한 줄(`reflection-daily-partial-error`) + [다시 시도]로 말한다(INV-4). [다시 시도]는 실패한 쿼리만 다시 부른다. 일정 조회 실패는 줄을 만들지
+ * 않는다(분류 1 — "N번째 장소" 폴백 그대로).
  */
 
 export interface DailyReflectionPageProps {
@@ -97,10 +104,18 @@ export function DailyReflectionPage({
 }: DailyReflectionPageProps): ReactElement {
   const daily = useDailyReflection(tripId, date);
   const res = daily.reflection;
-  const photos = useReflectionPhotos(tripId, date);
+  const {
+    photos,
+    unresolvedCount,
+    photoLoadFailed,
+    photoLoadRetrying,
+    retryPhotoLoad,
+  } = useReflectionPhotos(tripId, date);
+  const sources = useMagazineSources(tripId, date);
 
   // 여행 기간에서 일차 탭을 조립한다(TRIP-762). 회고 계약엔 일차 소스가 없어 여행 조회로 얻는다.
   const trip = useGetTripsTripId(tripId);
+  const tripFailed = failedUnlessNotFound(trip);
   const startDate = trip.data?.startDate;
   const endDate = trip.data?.endDate;
   const activeDay =
@@ -158,10 +173,29 @@ export function DailyReflectionPage({
     (isTemplateOnly(rawNarrative)
       ? ''
       : fillTemplate(rawNarrative, templateCtx)) || basicNarrative(stats);
+  // 표지 제목 — 서브타이틀과 같은 길(미치환 템플릿은 그날 값으로 채우고, 템플릿뿐이면 지역·날짜 문장으로 대신한다).
+  const rawTitle = res?.card?.title ?? '';
+  const coverTitle =
+    (isTemplateOnly(rawTitle) ? '' : fillTemplate(rawTitle, templateCtx)) ||
+    (templateCtx.region ? `${templateCtx.region}의 하루` : '하루 회고');
   const subtitle = res?.card?.subtitle ?? '';
   const editableText = isTemplateOnly(subtitle)
     ? ''
     : fillTemplate(subtitle, templateCtx);
+  const magazine = buildMagazineVM({
+    date,
+    isToday: date === today,
+    title: coverTitle,
+    region: templateCtx.region,
+    narrative,
+    stats,
+    distanceDash: missing.distanceDash,
+    payload: res?.card?.payload,
+    visits: sources.visits,
+    slots: sources.slots,
+    spontaneousNames: sources.spontaneousNames,
+    photos,
+  });
   // ISO 'YYYY-MM-DD' 는 사전순 = 시간순(monthGrid.isDateInRange 선례).
   const notFuture = date <= today;
 
@@ -201,23 +235,32 @@ export function DailyReflectionPage({
     else daily.refetch();
   };
 
+  const partialError =
+    tripFailed || sources.visitsLoadFailed || photoLoadFailed
+      ? {
+          retrying:
+            (tripFailed && trip.isFetching) ||
+            sources.visitsRetrying ||
+            photoLoadRetrying,
+          onRetry: () => {
+            if (tripFailed) void trip.refetch();
+            if (sources.visitsLoadFailed) sources.retryVisits();
+            if (photoLoadFailed) retryPhotoLoad();
+          },
+        }
+      : undefined;
+
   return (
     <DailyReflectionScreen
       face={face}
-      narrative={narrative}
+      magazine={magazine}
       editableText={editableText}
       stats={stats}
       distanceDash={missing.distanceDash}
       mapNotice={missing.mapNotice}
       hidePhotoGrid={missing.hidePhotoGrid}
       photos={photos}
-      scenesBlock={
-        <ReflectionScenes
-          scenes={parseScenes(res?.card?.payload)}
-          date={date}
-          photos={photos}
-        />
-      }
+      unresolvedPhotoCount={unresolvedCount}
       dayTabs={dayTabs}
       activeDay={activeDay}
       isToday={date === today}
@@ -229,6 +272,7 @@ export function DailyReflectionPage({
         );
       }}
       recordBar={recordBar}
+      partialError={partialError}
       mood={res?.mood}
       shortMemo={res?.shortMemo}
       onChangeMood={daily.saveMood}

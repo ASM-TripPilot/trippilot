@@ -93,6 +93,8 @@ class Trip private constructor(
     val endedAt: Instant? = null,
     /** 일과 창(미설정이면 [TripDayWindow.UNSET]) — 일정 생성이 하루 창을 정할 때 읽는다. */
     val dayWindow: TripDayWindow = TripDayWindow.UNSET,
+    /** 사용자가 고른 커버 — 앱 번들 지역 그림 키(TRIP-1789). null 이면 앱이 첫 목적지로 고른다. 목록은 앱이 소유한다. */
+    val coverKey: String? = null,
 ) {
     /**
      * 편집 가능한가 — **날짜로 판정한다**(TRIP-U1 후속).
@@ -123,6 +125,9 @@ class Trip private constructor(
         else -> status
     }
 
+    /** 여행이 시작됐는가(여행지 기준 오늘이 시작일 이후) — 기간 이동 가드(TRIP-1789). */
+    fun hasStarted(now: Instant): Boolean = !now.atZone(TRAVEL_ZONE).toLocalDate().isBefore(startDate)
+
     fun edit(
         title: String?,
         startDate: LocalDate,
@@ -133,6 +138,7 @@ class Trip private constructor(
         destinations: List<TripDestination>,
         now: Instant,
         dayWindow: TripDayWindow = this.dayWindow,
+        coverKey: String? = this.coverKey,
     ): Trip {
         // 여행지 기준(KST)으로 오늘을 정한다 — 서버가 UTC 면 자정 무렵 하루가 어긋난다.
         if (!editableAt(now.atZone(TRAVEL_ZONE).toLocalDate())) {
@@ -142,7 +148,7 @@ class Trip private constructor(
         return Trip(
             tripId, accountId, resolveTitle(title, destinations), startDate, endDate, party,
             companionType, budgetTotal, preferenceSnapshot, destinations, status, deletedAt, createdAt, now,
-            endedAt, dayWindow,
+            endedAt, dayWindow, coverKey,
         )
     }
 
@@ -150,7 +156,7 @@ class Trip private constructor(
         if (deletedAt != null) throw ConflictDetected(message = "이미 삭제된 여행입니다.")
         return Trip(
             tripId, accountId, title, startDate, endDate, party, companionType, budgetTotal,
-            preferenceSnapshot, destinations, status, now, createdAt, now, endedAt, dayWindow,
+            preferenceSnapshot, destinations, status, now, createdAt, now, endedAt, dayWindow, coverKey,
         )
     }
 
@@ -187,9 +193,10 @@ class Trip private constructor(
             destinations: List<TripDestination>, status: TripStatus, deletedAt: Instant?, createdAt: Instant, updatedAt: Instant,
             endedAt: Instant? = null,
             dayWindow: TripDayWindow = TripDayWindow.UNSET,
+            coverKey: String? = null,
         ): Trip = Trip(
             tripId, accountId, title, startDate, endDate, party, companionType, budgetTotal,
-            preferenceSnapshot, destinations, status, deletedAt, createdAt, updatedAt, endedAt, dayWindow,
+            preferenceSnapshot, destinations, status, deletedAt, createdAt, updatedAt, endedAt, dayWindow, coverKey,
         )
 
         private fun resolveTitle(title: String?, destinations: List<TripDestination>): String =

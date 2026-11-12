@@ -1,11 +1,14 @@
 export { GLYPH_COLORS } from './colors';
 export type { GlyphColor } from './colors';
-export type { GlyphProps } from './types';
 export {
   BackArrowGlyph,
   BackChevronGlyph,
+  BackChevronWideGlyph,
+  Check24Glyph,
   CheckGlyph,
   ChevronDownGlyph,
+  ChevronRight16Glyph,
+  ChevronRight24Glyph,
   ChevronRightGlyph,
   CloseGlyph,
   PlusGlyph,
@@ -14,15 +17,38 @@ export {
   AlertCircleGlyph,
   ClockGlyph,
   FullAiGlyph,
+  InfoCircle18Glyph,
   InfoCircleGlyph,
+  InfoGlyph,
   LockGlyph,
+  WarningFilledGlyph,
+  WarningTriangle24Glyph,
   WarningTriangleGlyph,
 } from './StatusGlyphs';
-export { CarGlyph, MapPinGlyph, SuitcaseGlyph, WalkGlyph } from './PlaceGlyphs';
 export {
+  CarGlyph,
+  ForkKnifeGlyph,
+  MapPinGlyph,
+  ShoppingBagGlyph,
+  SuitcaseGlyph,
+  TransitGlyph,
+  WalkGlyph,
+} from './PlaceGlyphs';
+export {
+  MoreDotsGlyph,
   NoteGlyph,
+  PencilGlyph,
+  RetryGlyph,
   SearchGlyph,
+  ShareGlyph,
   SummaryChartGlyph,
   TrashGlyph,
+  UndoGlyph,
 } from './ActionGlyphs';
-export { HeartStrokeFilledGlyph, HeartStrokeOutlineGlyph } from './HeartGlyphs';
+export {
+  HeartBadgeGlyph,
+  HeartFilledGlyph,
+  HeartOutlineGlyph,
+  HeartStrokeFilledGlyph,
+  HeartStrokeOutlineGlyph,
+} from './HeartGlyphs';

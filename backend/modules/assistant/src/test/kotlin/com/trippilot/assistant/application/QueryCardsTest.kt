@@ -73,7 +73,9 @@ class QueryCardsTest : StringSpec({
     /** BR-U8-14 — 위반 표기가 없으면 문제도 없다. 도우미가 "빠듯해 보여요"를 스스로 말하지 않는다. */
     "진행 검토 — 위반 표기가 없으면 문제 행이 없다. 사유 없는 위반은 사유를 짓지 않는다" {
         val full = listOf(plannedSlot(d1, 0, "10:00", "해변"), plannedSlot(d2, 0, "10:00", "미술관"), plannedSlot(d3, 0, "10:00", "카페"))
-        problems(cards(FakeTripData(acc, slots = full)).review(ctx()).payload) shouldBe emptyList()
+        val clean = cards(FakeTripData(acc, slots = full)).review(ctx())
+        problems(clean.payload) shouldBe emptyList()
+        clean.text shouldBe "지금 일정에서 확인된 문제는 없어요." // "무리한 곳 있어?"의 답 — 요약만으로 끝내지 않는다(TRIP-1705)
 
         val unexplained = full.take(2) + plannedSlot(d3, 0, "10:00", null, hasViolation = true)
         problems(cards(FakeTripData(acc, slots = unexplained)).review(ctx()).payload).single()["reason"] shouldBe
@@ -97,16 +99,16 @@ class QueryCardsTest : StringSpec({
         rows(card.payload, "summary") shouldContainExactly listOf("여행" to "부산 당일", "숙소" to "미등록", "일정" to "1일 중 1일 채움")
     }
 
-    /** 확정 일정은 여행이 시작돼야 바뀐다(편집·후보 경로의 잠금) — 그 전에 버튼을 주면 눌러도 "바꿀 수 없다"만 돌아온다. */
-    "다음 장소 — 다른 곳 추천은 확정 전 일정과 여행이 시작된 확정 일정에 준다" {
+    /** 확정 일정도 시작 전부터 바뀐다(TRIP-1710 — 편집·후보 경로의 확정 잠금 해제). 상태를 못 읽었을 때만 주지 않는다. */
+    "다음 장소 — 다른 곳 추천은 확정 전 일정에도 확정 일정에도 준다" {
         val data = FakeTripData(acc, slots = listOf(plannedSlot(d2, 0, "14:00", "카페 모카")))
         cards(data).nextSlot(ctx()).quickReplies!!.first().let { it.label to it.params["slotKey"] } shouldBe ("다른 곳 추천" to data.slots.single().slotKey)
         data.status = "CONFIRMED"
         cards(data).nextSlot(ctx()).quickReplies?.first()?.label shouldBe "다른 곳 추천" // 여행 이틀째(d1 시작)
         // 여행 첫날이 오늘이면 시작한 것이다(경계)
         cards(data).nextSlot(ctx().let { it.copy(trip = it.trip!!.copy(startDate = d2)) }).quickReplies?.first()?.label shouldBe "다른 곳 추천"
-        // 여행 첫날을 내일로 옮겨 "확정했지만 아직 시작 전"을 만든다
-        cards(data).nextSlot(ctx().let { it.copy(trip = it.trip!!.copy(startDate = d2.plusDays(1))) }).quickReplies shouldBe null
+        // 여행 첫날을 내일로 옮겨 "확정했지만 아직 시작 전"을 만든다 — 이제 막지 않는다
+        cards(data).nextSlot(ctx().let { it.copy(trip = it.trip!!.copy(startDate = d2.plusDays(1))) }).quickReplies?.first()?.label shouldBe "다른 곳 추천"
         // 확정 여부를 못 읽었으면 주지 않는다 — 카드 자체는 그대로 나간다
         cards(data.apply { status = "PLANNED"; failItinerary = true }).nextSlot(ctx()).let { it.kind to it.quickReplies } shouldBe (MessageKind.INFO to null)
     }
@@ -118,6 +120,7 @@ class QueryCardsTest : StringSpec({
         val card = cards(data).review(ctx())
 
         problems(card.payload) shouldBe emptyList()
+        card.text shouldBe "지금까지 진행 상태를 정리했어요." // 뒤 일자를 아직 못 봤다 — 문제없다고 하지 않는다
         rows(card.payload, "summary").last() shouldBe ("일정" to "만드는 중 (3일 중 1일 채움)")
         // 다음 장소도 같다 — 첫 날이 지났다고 "남은 일정이 없다"고 하지 않는다
         cards(data).nextSlot(ctx()).text shouldBe "일정을 만드는 중이에요."

@@ -133,6 +133,10 @@ class DialogueMemoryHooksTest : StringSpec({
         section.truncated shouldBe false
         contributor.export(acc, limit = 1).truncated shouldBe true
 
+        memory.truncated = true // 상대가 세션 수 상한에서 잘랐다 — 줄 수가 우리 상한 안이어도 잘린 것(2026-11-06)
+        contributor.export(acc, limit = 10).truncated shouldBe true
+        memory.truncated = false
+
         memory.fail = true
         val failed = contributor.export(acc, limit = 10)
         failed.items shouldBe emptyList()

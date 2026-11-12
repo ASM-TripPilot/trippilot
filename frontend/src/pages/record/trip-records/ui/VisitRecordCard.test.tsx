@@ -6,7 +6,7 @@ import {
 } from '@testing-library/react-native';
 import { View } from 'react-native';
 
-import { PlusGlyph } from '@/features/record';
+import { PlusGlyph } from '@/shared/ui/glyphs';
 import { VisitRecordCard } from './VisitRecordCard';
 
 /**

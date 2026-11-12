@@ -3,11 +3,34 @@ import { Tabs } from 'expo-router';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
 import { BottomTabBar, type ShellTabKey } from '@/shared/ui/BottomTabBar';
+import { BarExitHost, useBarExit } from '@/widgets/bottom-nav-bar/index.exit';
 
 // expo-router 라우트 이름 → 탭바 key. index 라우트만 이름이 다르다(파일 규약상 홈은 index).
 function routeNameToTabKey(name: string): ShellTabKey {
   if (name === 'index') return 'home';
   return name as ShellTabKey;
+}
+
+// 진짜 탭 바 + 하단 바 퇴장 호스트(TRIP-1831). 뒤로를 누른 허브·기록 화면은 그 순간 스택에서 빠지고 바의 퇴장 모프를 이 호스트가 이어 재생한다 —
+// 모프가 도는 동안 진짜 탭 바는 거의 투명(`ghost`)하게 아래 서 있다가 끝나면 그대로 이어받는다. 구독은 렌더프롭 안이 아니라 자식 컴포넌트가 한다.
+function TabBarWithExit({
+  activeKey,
+  onPressTab,
+}: {
+  activeKey: ShellTabKey;
+  onPressTab: (key: ShellTabKey) => void;
+}) {
+  const exit = useBarExit();
+  return (
+    <>
+      <BottomTabBar
+        activeKey={activeKey}
+        onPressTab={onPressTab}
+        ghost={exit !== null}
+      />
+      <BarExitHost />
+    </>
+  );
 }
 
 // tabBar 렌더프롭(Q4 전면 커스텀) — 네비게이션 상태를 읽어 BottomTabBar에 순수 props로
@@ -28,7 +51,7 @@ function renderTabBar(props: BottomTabBarProps) {
     props.navigation.navigate(targetRouteName);
   }
 
-  return <BottomTabBar activeKey={activeKey} onPressTab={handlePressTab} />;
+  return <TabBarWithExit activeKey={activeKey} onPressTab={handlePressTab} />;
 }
 
 export default function TabsLayout() {
@@ -36,6 +59,10 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        // TRIP-1731 — 안 보이는 탭은 얼린다(react-native-screens `Freeze`): 다른 탭에 있는 동안 홈 쿼리가 갱신돼도
+        // 다시 그리지 않고, 돌아올 때 최신 값으로 한 번 그린다. 쿼리 구독은 그대로라 재조회 요청 수는 안 바뀐다.
+        // 탭 밖에서 반응해야 하는 감시(생성·푸시·계정 경계)는 탭 위 SplashGate 에 있어 안 얼는다.
+        freezeOnBlur: true,
         // AC-O2(동결 계약)가 이 옵션의 존재를 요구한다. 단 react-navigation 은 커스텀 `tabBar`
         // 렌더프롭을 쓸 때 `tabBarStyle` 을 적용하지 않으므로 이 값은 **무효**다(BottomTabView.js
         // 실측 — position 분기 없음). 실제 오버레이는 `BottomTabBar` 루트의 `absolute bottom-0`

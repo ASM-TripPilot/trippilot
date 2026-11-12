@@ -2,12 +2,13 @@
  * c06-terms 프레젠테이션 (US-ONB-02 · AC A1~A8 · C6 · Figma 1293:1208 정합 TRIP-162).
  * props 만 받고 네트워크를 모른다 — 서버 호출은 컨테이너/훅 몫이다.
  */
+import { ChevronRight16Glyph } from '@/shared/ui/glyphs';
 import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CheckGlyph, ViewChevronGlyph } from '@/features/onboarding';
+import { OnboardingCheckGlyph } from '@/features/onboarding';
 
 export interface TermsItemView {
   termsType: string;
@@ -25,6 +26,9 @@ export interface TermsScreenProps {
   missingRequiredLabels: string[];
   /** A8 — 서버 저장 실패 메시지. null 이면 오류 영역을 그리지 않는다. */
   errorMessage: string | null;
+  /** 약관 목록을 못 받았다(TRIP-1752) — 제출 실패(errorMessage)와 다른 표면이다. */
+  loadError?: boolean;
+  onRetryLoad?: () => void;
   onToggle: (termsType: string) => void;
   onToggleAll: () => void;
   onNext: () => void;
@@ -39,6 +43,8 @@ export function TermsScreen({
   canProceed,
   missingRequiredLabels,
   errorMessage,
+  loadError = false,
+  onRetryLoad,
   onToggle,
   onToggleAll,
   onNext,
@@ -86,7 +92,7 @@ export function TermsScreen({
                   : 'border-[1.5px] border-hairline-strong bg-canvas'
               }`}
             >
-              {allChecked ? <CheckGlyph /> : null}
+              {allChecked ? <OnboardingCheckGlyph /> : null}
             </View>
             <Text className="font-noto-bold text-card-title font-bold text-ink">
               약관 전체 동의
@@ -118,7 +124,7 @@ export function TermsScreen({
                         : 'border-[1.5px] border-hairline-strong bg-canvas'
                     }`}
                   >
-                    {item.checked ? <CheckGlyph /> : null}
+                    {item.checked ? <OnboardingCheckGlyph /> : null}
                   </View>
                   <View testID={`onboarding-terms-badge-${item.termsType}`}>
                     <Text
@@ -143,7 +149,7 @@ export function TermsScreen({
                   <Text className="font-noto text-label text-muted-soft">
                     보기
                   </Text>
-                  <ViewChevronGlyph />
+                  <ChevronRight16Glyph color="mutedSoft" />
                 </Pressable>
               </View>
             ))}
@@ -164,6 +170,27 @@ export function TermsScreen({
             </View>
           ) : null}
 
+          {loadError ? (
+            <View className="gap-sm pt-md">
+              <Text
+                testID="onboarding-terms-load-error"
+                className="font-noto text-label text-primary-text"
+              >
+                약관을 불러오지 못했어요. 다시 시도해 주세요.
+              </Text>
+              <Pressable
+                testID="onboarding-terms-load-retry"
+                accessibilityRole="button"
+                onPress={onRetryLoad}
+                className="self-start rounded-button border-[1.5px] border-hairline-strong px-lg py-sm"
+              >
+                <Text className="font-noto-medium text-body font-medium text-ink">
+                  다시 시도
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           {errorMessage ? (
             <View className="gap-sm pt-md">
               <Text
@@ -173,6 +200,7 @@ export function TermsScreen({
                 {errorMessage}
               </Text>
               <Pressable
+                accessibilityRole="button"
                 testID="onboarding-terms-retry"
                 onPress={onRetry}
                 className="self-start rounded-button border-[1.5px] border-hairline-strong px-lg py-sm"
@@ -188,6 +216,7 @@ export function TermsScreen({
         <View className="px-2xl pb-[30px] pt-md">
           <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
           <Pressable
+            accessibilityRole="button"
             testID="onboarding-terms-next"
             // disabled prop 은 탭을 삼킨다 — 비활성 탭이 안내를 켜야 하므로 접근성 상태로만 알린다.
             accessibilityState={{ disabled: !canProceed }}

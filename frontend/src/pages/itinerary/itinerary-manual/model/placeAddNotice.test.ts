@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 
 import {
+  bulkAddToastMessage,
   comparePlaceAdd,
   placeAddToastMessage,
   type PlaceAddShift,
@@ -328,5 +329,57 @@ describe('placeAddToastMessage — 속성', () => {
         ],
       }
     );
+  });
+});
+
+/**
+ * TRIP-1794 · 5-b W1 보강 — 여러 곳 담기 토스트. 준비(요청·응답 그날 슬롯) → 실행(bulkAddToastMessage) → 단언(문구 완전 일치).
+ * 무엇을 보장하나: 응답을 요청과 **같은 자리끼리** 견줄 수 있을 때만(그날 있음·길이 같음·장소 순서 같음) 시각 비교를 하고,
+ * 견줄 수 없으면 "맞췄어요"를 지어내지 않고 저장 문구로 접는다. 시각은 분까지(`HH:mm`)만 본다 — 초 표기 차이는 밀림이 아니다.
+ */
+describe('bulkAddToastMessage — 견줄 수 있을 때만 밀림을 말한다 (TRIP-1794)', () => {
+  const req: PlaceAddSlotLike[] = [
+    { poiId: 'a', startAt: '09:00:00' },
+    { poiId: 'b', startAt: '11:00:00' },
+    { poiId: 'c', startAt: '13:00:00' },
+  ];
+  const SAVED = '3곳을 담았어요 · 일정에 바로 저장됐어요';
+  const SHIFTED = '3곳을 담았어요 · 이동 시간을 반영해 시각을 맞췄어요';
+
+  it.each<[string, PlaceAddSlotLike[] | undefined, string]>([
+    ['응답이 같으면 저장 문구', req, SAVED],
+    [
+      '같은 자리 시각이 밀렸으면 밀림 문구',
+      [req[0], req[1], { poiId: 'c', startAt: '13:20:00' }],
+      SHIFTED,
+    ],
+    ['응답에 그날이 없으면 저장 문구', undefined, SAVED],
+    // 길이가 다르면 같은 자리로 못 견준다 — 검사를 빼면 마지막 자리에서 undefined.startAt 로 터진다.
+    ['응답 길이가 다르면 저장 문구', [req[0], req[1]], SAVED],
+    // 순서가 다르면 시각이 달라 보여도 다른 장소끼리 견준 것 — 밀림이라 말하지 않는다.
+    // (a·b 를 자기 시각째로 맞바꿨다 — 자리끼리 보면 09↔11 로 달라 보이지만 어느 장소도 시각이 안 밀렸다.)
+    [
+      '장소 순서가 다르면 저장 문구',
+      [
+        { poiId: 'b', startAt: '11:00:00' },
+        { poiId: 'a', startAt: '09:00:00' },
+        req[2],
+      ],
+      SAVED,
+    ],
+    // 초만 다른 표기(서버가 "HH:mm" 로 줄 때 등)는 밀림이 아니다.
+    [
+      '초·표기만 다르면 저장 문구',
+      [
+        { poiId: 'a', startAt: '09:00' },
+        { poiId: 'b', startAt: '11:00:30' },
+        req[2],
+      ],
+      SAVED,
+    ],
+  ])('%s', (_label, responseSlots, expected) => {
+    expect(
+      bulkAddToastMessage({ count: 3, requestSlots: req, responseSlots })
+    ).toBe(expected);
   });
 });

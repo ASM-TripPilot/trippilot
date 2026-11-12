@@ -12,7 +12,7 @@ import type { SocialProvider } from '@/shared/api';
  * google·kakao 만 채워진다. 웹(Platform.OS==='web', TRIP-1649)은 같은 팝업 OAuth 를 쓰되 클라이언트·redirect·state 가 iOS 와 다르다 — webOverride. apple(네이티브 SDK)은 빈 슬롯이고,
  * naver 는 iOS 에서 빈 슬롯이다(서버가 code 경로를 닫아 SDK 토큰 경로뿐, TRIP-1371). 웹에서만 implicit(`responseType:'token'`) 팝업 슬롯이 채워진다(TRIP-1650 · webNaverConfig).
  */
-export interface OAuthDiscovery {
+interface OAuthDiscovery {
   authorizationEndpoint: string;
   tokenEndpoint: string;
 }

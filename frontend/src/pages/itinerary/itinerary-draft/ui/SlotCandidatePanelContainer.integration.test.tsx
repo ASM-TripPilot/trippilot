@@ -10,6 +10,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { SLOT_SWAP_CONFLICT_CODES } from '@/features/edit-itinerary/model/slotSwapError';
 import type {
@@ -200,7 +201,7 @@ describe('후보 조회·선택·교체 배선', () => {
 
   /** 후보 카드 루트 셀렉터(재설계 반영 — 하위·특수 testID 부정 룩어헤드 제외). */
   const CANDIDATE_ROOT =
-    /^itinerary-candidate-(?!sheet|scrim|current|empty|error|place-search|confirm|name-|image-|distance-|tags-|radio-|check-)/;
+    /^itinerary-candidate-(?!sheet|scrim|current|empty|error|place-search|confirm|name-|image-|distance-|tags-|rationale-|radio-|check-)/;
 
   /** 라디오 선택 후 "교체하기"를 눌러 확정하는 2단계 헬퍼. */
   async function selectAndConfirm(poiId: string) {
@@ -588,6 +589,74 @@ describe('조회 중·실패·지연', () => {
   }
 
   describe('🔴 TRIP-1109 · 응답 전·도착 (L1·L2·N1·N2)', () => {
+    it('C1d · TRIP-1795 AC-3·7·8 — 시트 제목·부제·현재 행(이름·사진 분류)이 고친 값을 따르고, 후보로 교체하면 바뀐 슬롯의 별칭은 비고 이웃 슬롯의 별칭은 PUT 에 실린다', async () => {
+      const base = itinerary();
+      const slotA = base.days[0].slots[0];
+      const aliased: Itinerary = {
+        ...base,
+        days: [
+          {
+            ...base.days[0],
+            slots: [
+              {
+                ...slotA, // 원본 분류는 문화 — 고친 분류 카페가 보여야 한다
+                displayName: '우리 아지트',
+                displayCategory: '카페' as const,
+              },
+              {
+                ...slotA,
+                poiId: 'b',
+                nameKo: '이웃 원본',
+                startAt: '13:00:00',
+                endAt: '14:00:00',
+                displayName: '이웃 별칭',
+                displayCategory: '야경' as const,
+              },
+            ],
+          },
+        ],
+      };
+      serveItinerary(server, { itinerary: () => aliased });
+      let sent: unknown = null;
+      server.use(
+        http.put(`${BASE}/trips/:tripId/itinerary`, async ({ request }) => {
+          sent = await request.json();
+          return HttpResponse.json(aliased);
+        })
+      );
+      postPlan = ['ok'];
+      renderContainer();
+
+      // ① AC-3 — 제목 `{고친 이름} 대신`·부제 `{고친 분류}의 다른 후보`·현재 행 이름·현재 행 사진 분류. 원본(경복궁·문화)은 안 보인다.
+      await waitFor(() =>
+        expect(screen.getByTestId(ID.title)).toHaveTextContent(
+          '우리 아지트 대신'
+        )
+      );
+      const subtitle = screen.getByTestId('itinerary-candidate-sheet-subtitle');
+      expect(subtitle).toHaveTextContent(/카페의 다른 후보/);
+      expect(subtitle).not.toHaveTextContent(/문화/);
+      expect(screen.getByTestId(ID.current)).toHaveTextContent(/우리 아지트/);
+      expect(screen.queryByText(/경복궁/)).toBeNull();
+      expect(
+        screen.getByTestId('itinerary-candidate-image-current').props.source
+      ).toEqual([coverFor('카페', 'a')]); // 원본 분류(문화) 그림이 아니다
+
+      // ② AC-7·8 — 후보 X 로 교체하면 바뀐 슬롯(a→X)의 별칭 두 키는 없고, 이웃 b 의 별칭은 그대로 PUT 에 실린다.
+      fireEvent.press(await screen.findByTestId('itinerary-candidate-radio-X'));
+      fireEvent.press(screen.getByTestId(ID.confirm));
+      await waitFor(() => expect(sent).not.toBeNull());
+      const [swapped, neighbor] = (sent as EditItineraryRequest).days[0].slots;
+      expect(swapped.poiId).toBe('X');
+      expect(Object.keys(swapped)).not.toContain('displayName');
+      expect(Object.keys(swapped)).not.toContain('displayCategory');
+      expect(neighbor).toMatchObject({
+        poiId: 'b',
+        displayName: '이웃 별칭',
+        displayCategory: '야경',
+      });
+    });
+
     it('C1 · L1·L2 — 응답 전엔 스켈레톤, 0건 얼굴은 없다. 헤더·현재 행은 GET 값, 교체하기는 비활성', async () => {
       postPlan = ['hang'];
       renderContainer();
@@ -869,6 +938,7 @@ describe('후보 이름·태그·사진', () => {
               endAt: '11:00:00',
               category: '문화',
               imageUrl: CURRENT_IMG,
+              imageLicense: 'TYPE1',
               isFixed: false,
               endsNextDay: false,
               hasViolation: false,
@@ -892,6 +962,7 @@ describe('후보 이름·태그·사진', () => {
         category: '카페',
         tags: ['교회', '야외'],
         imageUrl: X_IMG,
+        imageLicense: 'TYPE1',
       },
       {
         poiId: RAW_ID,
@@ -978,6 +1049,8 @@ describe('후보 이름·태그·사진', () => {
       expect(
         screen.getByTestId('itinerary-candidate-image-X').props.source
       ).toEqual([{ uri: X_IMG }]);
+      // TRIP-1740 AC-7(T6) — POST 후보 응답의 imageLicense(TYPE1)가 시트 후보 행 사진 칸까지 간다(`SlotCandidateSheet` candidates 경로).
+      expectTypeOnePhotoDelivered('itinerary-candidate-image-X', X_IMG);
       // 같은 testID 의 칸이 비지 않는다 — 후보마다 자기 카테고리·poiId 다
       // (RAW_ID → 맛집·변형 2, Z → 자연·변형 1). 카테고리를 행에 안 실으면 폴백이다.
       expect(
@@ -996,6 +1069,11 @@ describe('후보 이름·태그·사진', () => {
         expect(
           screen.getByTestId('itinerary-candidate-image-current').props.source
         ).toEqual([{ uri: CURRENT_IMG }])
+      );
+      // TRIP-1740 AC-7(T6) — GET 슬롯의 imageLicense(TYPE1)가 컨테이너의 current 조립을 지나 현재 행 사진 칸까지 간다.
+      expectTypeOnePhotoDelivered(
+        'itinerary-candidate-image-current',
+        CURRENT_IMG
       );
     });
 
@@ -1103,6 +1181,7 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       category: '문화',
       tags: ['전망대', '야경'],
       imageUrl: P_IMG,
+      imageLicense: 'TYPE1',
     },
     {
       poiId: 'Q',
@@ -1133,7 +1212,7 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       {
         poiId: 'Q',
         distanceRange: '약 0.9km',
-        rationale: '주변 문화',
+        rationale: '한옥 골목을 천천히 걷기 좋아요',
         nameKo: '북촌한옥마을',
         tags: ['한옥'],
         imageUrl: null,
@@ -1141,7 +1220,7 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       {
         poiId: 'Z',
         distanceRange: '약 1.5km',
-        rationale: '주변 문화',
+        rationale: '현대 미술을 보며 쉬어 가기 좋아요',
         nameKo: '국립현대미술관',
         tags: ['미술관'],
         imageUrl: null,
@@ -1149,7 +1228,7 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       {
         poiId: 'W',
         distanceRange: '약 2.0km',
-        rationale: '주변 문화',
+        rationale: '궁궐 산책으로 일정에 여유를 줘요',
         nameKo: '덕수궁',
         tags: ['궁궐'],
         imageUrl: null,
@@ -1395,6 +1474,8 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       expect(
         screen.getByTestId('itinerary-candidate-image-P').props.source
       ).toEqual([{ uri: P_IMG }]);
+      // TRIP-1740 AC-7(T6) — 차선책(GET 슬롯 alternatives)의 imageLicense(TYPE1)가 차선책 행 사진 칸까지 간다.
+      expectTypeOnePhotoDelivered('itinerary-candidate-image-P', P_IMG);
       // 사진 없는 차선책 Q 도 같은 칸에 자기 카테고리(문화)·poiId(Q → 변형 3)의 그림이다.
       expect(
         screen.getByTestId('itinerary-candidate-image-Q').props.source
@@ -1402,11 +1483,14 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       expect(
         screen.getByTestId('itinerary-candidate-distance-P')
       ).toHaveTextContent('약 1.2km · 도보 추정');
-      // 추천 이유는 행에서 숨긴다(h08 행 모양 그대로).
+      // TRIP-1780 — 추천 이유 문장은 후보 행에 보인다(옛 "행에서 숨긴다" 단언을 의도적으로 뒤집었다:
+      // US-SCHED-05 미충족 해소). 행마다 자기 문장이다.
       expect(
-        screen.queryByTestId('itinerary-candidate-rationale-P')
-      ).toBeNull();
-      expect(screen.queryByText('야경이 좋은 전망대')).toBeNull();
+        screen.getByTestId('itinerary-candidate-rationale-P')
+      ).toHaveTextContent('야경이 좋은 전망대');
+      expect(
+        screen.getByTestId('itinerary-candidate-rationale-Q')
+      ).toHaveTextContent('조용한 한옥 골목');
 
       for (const id of [
         ID.loading,
@@ -1434,6 +1518,26 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       expect(rowIds()).toEqual(['P']);
       expect(screen.queryByTestId('itinerary-candidate-radio-Q')).toBeNull();
       expect(postBodies).toHaveLength(0);
+    });
+
+    // TRIP-1780 · AC-I3 — 거름으로 첫 행이 빠져도 남은 행은 자기 poiId 의 문장을 보인다(위치로 맞추지 않는다).
+    it('A2b · 앞 차선책(P)이 일정에 있어 빠져도 남은 Q 행은 Q 자기 문장이고 P 의 문장은 없다', async () => {
+      // 준비 — P 가 day2 슬롯에 있다
+      day2PoiId = 'P';
+
+      // 실행
+      renderWithItinerary();
+      await waitMountSettled();
+
+      // 단언
+      expect(rowIds()).toEqual(['Q']);
+      expect(
+        screen.getByTestId('itinerary-candidate-rationale-Q')
+      ).toHaveTextContent('조용한 한옥 골목');
+      expect(
+        screen.queryByTestId('itinerary-candidate-rationale-P')
+      ).toBeNull();
+      expect(screen.queryByText('야경이 좋은 전망대')).toBeNull();
     });
 
     it('A3 · AC-3 — 차선책에 교체 대상 자신이 섞여 있어도 그 행은 없다', async () => {
@@ -1616,6 +1720,37 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       // 단언 — 응답 뒤
       expect(rowIds()).toEqual(['Q', 'W', 'Z']);
       expect(screen.queryAllByTestId(SKELETON_ROW)).toHaveLength(0);
+    });
+
+    // TRIP-1780 · AC-I2·I4 — 온디맨드(POST) 경로도 응답 후보의 문장이 자기 행에 뜬다. 현재 행엔 문장이 없다.
+    it('A4c · POST 경로 — 응답 후보마다 자기 문장이 뜨고 현재 행엔 문장이 없다', async () => {
+      // 준비 — 차선책이 전부 일정에 있어 POST 로 간다
+      alternatives = [alt('a'), alt('d')];
+      postPlan = ['gate'];
+
+      // 실행
+      renderWithItinerary();
+      await waitFor(() => expect(postBodies).toHaveLength(1));
+      await release();
+      await screen.findByTestId('itinerary-candidate-radio-Z');
+
+      // 단언 — 문장이 서로 다른 픽스처라 행 사이 오배선이면 red
+      expect(
+        screen.getByTestId('itinerary-candidate-rationale-Q')
+      ).toHaveTextContent('한옥 골목을 천천히 걷기 좋아요');
+      expect(
+        screen.getByTestId('itinerary-candidate-rationale-Z')
+      ).toHaveTextContent('현대 미술을 보며 쉬어 가기 좋아요');
+      expect(
+        screen.getByTestId('itinerary-candidate-rationale-W')
+      ).toHaveTextContent('궁궐 산책으로 일정에 여유를 줘요');
+      // 현재 행(앵커 present) — 문장 없음
+      expect(
+        screen.getByTestId('itinerary-candidate-current')
+      ).toBeOnTheScreen();
+      expect(
+        screen.queryByTestId('itinerary-candidate-rationale-current')
+      ).toBeNull();
     });
 
     // 5-b W1 — 지워진 P6(0건 응답이면 선표시 행 없음)의 보호를 차선책이 실제로 있는 픽스처로 옮긴다.

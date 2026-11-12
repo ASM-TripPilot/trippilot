@@ -1,21 +1,28 @@
-import { useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
 import type { Trip } from '@/shared/api/index.schemas';
-import { useGetTrips } from '@/shared/api/index.hooks';
-import { useGetPlaces } from '@/shared/api/index.hooks';
+import { useGetTrips } from '@/shared/api/index.trips';
+import { useGetPlaces } from '@/shared/api/index.places';
+import { useGetMeNotifications } from '@/shared/api/index.notification';
 import { isOfflineWaiting } from '@/shared/api';
-import { guardPress } from '@/shared/lib/pressGuard';
+import { guardPress, usePressLock } from '@/shared/lib/pressGuard';
+import { flushMarks, mark } from '@/shared/lib/startupMarks';
+import { SAVED_LIST_LOAD_FAILED_TOAST } from '@/shared/ui/savedListLoadToast';
 import { showToast } from '@/shared/ui/Toast';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import { formatNightsLabel } from '@/entities/trip';
 import { formatTripRange, tripItinerarySummary } from '@/entities/trip';
-import { SERVICE_REGIONS } from '@/entities/trip';
+import { placeRegionQuery, SERVICE_REGIONS } from '@/entities/trip';
 import { orderLanePlaces, pickTrendingPlaces } from '@/entities/place';
 import { usePlaceSaveToggle } from '@/features/save-place';
 import { useSavedPlaces } from '@/features/save-place';
-import { regionPickerHref, useMultiRegionPlaces } from '@/features/explore';
+import {
+  PLACE_LANE_STALE_TIME,
+  regionPickerHref,
+  useMultiRegionPlaces,
+} from '@/features/explore';
 import { useSavedStays } from '@/features/save-stay';
 import {
   ITINERARY_OPEN_FAILED_MESSAGE,
@@ -32,7 +39,7 @@ import type {
   HomeSpotsLane,
 } from '../model/homeTypes';
 import { HomeScreen } from './HomeScreen';
-import { useTripWizardStore } from '@/features/create-trip';
+import { openNewTripWizard } from '@/features/create-trip';
 import { assistantHref } from '@/features/open-assistant';
 
 interface HomeNav {
@@ -45,8 +52,11 @@ interface HomeNav {
   onPressHeroCity: (regionCode: string) => void;
   onPressBell: () => void;
   onPressAssistant: () => void;
-  savedPlacesCount: number;
-  savedStaysCount: number;
+  // null = 목록을 못 받아 모름(TRIP-1754) — 배지가 `–` 를 그린다.
+  savedPlacesCount: number | null;
+  savedStaysCount: number | null;
+  // 읽지 않은 알림 개수(TRIP-1783) — null = 아직 못 받았거나 실패(배지 없음).
+  unreadCount: number | null;
   savedMenuOpen: boolean;
   onToggleSavedMenu: () => void;
   spotsLane: HomeSpotsLane;
@@ -74,7 +84,7 @@ function PlanningHome({
   const router = useRouter();
   const queryClient = useQueryClient();
   // 슬롯 채우기(copick) 목적지가 일정 응답을 기다리는 동안의 잠금 — 같은 틱 두 번째 누름을 막는다.
-  const openingRef = useRef(false);
+  const openingLock = usePressLock();
 
   // 지배 여행 일정 상태 → 목적지. 홈 카드 CTA 가 그 화면으로 push 하고(일정 탭과 같은
   // resolveItineraryDestination 규칙 공유), 라벨·부제도 같은 목적지로 덮어쓴다(TRIP-986 D1 — 한 판정).
@@ -90,8 +100,7 @@ function PlanningHome({
       );
       return;
     }
-    if (openingRef.current) return;
-    openingRef.current = true;
+    if (!openingLock.acquire()) return;
     fetchTripItineraryHref(queryClient, trip.tripId)
       .then(
         (href) => router.push(href),
@@ -103,7 +112,7 @@ function PlanningHome({
           })
       )
       .finally(() => {
-        openingRef.current = false;
+        openingLock.release();
       });
   });
 
@@ -127,12 +136,35 @@ function PlanningHome({
 export function HomePage() {
   const router = useRouter();
   const trips = useGetTrips();
+  // 시작 마크(TRIP-1719) — 여행 데이터가 처음 손에 들어온 커밋 뒤(= 홈 카드가 그려진 시점 근사). 측정 빌드 밖에선 no-op.
+  useEffect(() => {
+    if (trips.data === undefined) return;
+    mark('homeTrips');
+    flushMarks();
+  }, [trips.data]);
   // 홈은 (tabs) 라 로그인 뒤에만 열린다(SplashGate HOME 가드) — 게스트 분기 없이 로그인으로 넘긴다(TRIP-1164).
   const savedPlaces = useSavedPlaces({ isAuthed: true });
   const { savedPoiIds } = savedPlaces;
   // 담은 곳 미니 FAB 개수 배지(TRIP-695) — 담은 장소 수·전체 저장 숙소 수를 실데이터에서 뽑아
   // 화면에 주입한다. useSavedStays 는 features/stay 것(savedCount 노출) — features/trip 동명 훅 아님.
-  const { savedCount: savedStaysCount } = useSavedStays({ isAuthed: true });
+  const savedStays = useSavedStays({ isAuthed: true });
+  // TRIP-1754 — 담은 목록을 못 받았으면 0 이 아니라 모름(null)이다. 새 필드가 없는 옛 훅 목은 truthy 판정이라 실패 아님.
+  const savedStaysCount = savedStays.loadFailed ? null : savedStays.savedCount;
+  const savedPlacesCount = savedPlaces.loadFailed ? null : savedPoiIds.length;
+  // 종 미읽음 배지(TRIP-1783) — 알림함과 같은 접두 키(`['/me/notifications']`)라 읽음 처리·푸시 수신 무효화에 올라타 숫자가 줄고,
+  // limit 100 이라 99+ 를 판정한다(서버 기본 50 이면 안 나온다). 재조회만 실패해도 직전 숫자(data)는 남는다.
+  const unreadCount =
+    useGetMeNotifications(
+      { unreadOnly: true, limit: 100 },
+      { query: { select: (res) => res.items.length } }
+    ).data ?? null;
+  // 확정 실패가 켜지는 순간 토스트 1회 — 전이는 TanStack 이 관찰자별로 기억하는 훅 플래그가 정한다.
+  const savedListFailed = Boolean(
+    savedPlaces.loadFailureConfirmed || savedStays.loadFailureConfirmed
+  );
+  useEffect(() => {
+    if (savedListFailed) showToast(SAVED_LIST_LOAD_FAILED_TOAST);
+  }, [savedListFailed]);
 
   // 담은 곳 saved-menu 열림 상태(TRIP-494) — 순수 화면이 useState 0건이라 page 가 소유한다
   // (탐색 랜딩 선례와 동형). 미니 FAB press 는 메뉴를 닫고 각각 d02/e04 로 이동한다.
@@ -155,29 +187,41 @@ export function HomePage() {
       )} · ${trip.party}명`,
   });
 
-  // '지금 뜨는 장소'(TRIP-1049) — 여행 중이면 지배 여행 첫 목적지 지역 200곳, 아니면 서비스 지역 3곳
-  // (TRIP-1432, 지역당 200곳)을 받아 고른다. 서버엔 인기순 정렬이 없어 클라가 고른다(pickTrendingPlaces).
-  const spotsRegion =
+  // '지금 뜨는 장소'(TRIP-1049) — 여행 중이면 지배 여행 첫 목적지 지역 200곳, 아니면 서비스 지역
+  // (TRIP-1432·1807, 지역당 200곳)을 받아 고른다. 서버엔 인기순 정렬이 없어 클라가 고른다(pickTrendingPlaces).
+  const spotsDestination =
     phase?.kind === 'planning' && phase.showSpots
       ? trips.data?.find((t) => t.tripId === phase.dominantTripId)
-          ?.destinations[0]?.region
+          ?.destinations[0]
       : undefined;
-  // 여행 조회 대기 중엔 어느 쪽인지 모르므로 둘 다 끈다(여행 중 사용자에게 3지역 600행 낭비 방지).
-  // 실패면 발견 얼굴로 폴백하므로 3지역 조회를 켠다(끄면 스팟이 영원히 스켈레톤).
+  const spotsRegion = spotsDestination?.region
+    ? placeRegionQuery(spotsDestination)
+    : undefined;
+  // 여행 조회 대기 중엔 어느 쪽인지 모르므로 둘 다 끈다(여행 중 사용자에게 서비스 지역 조회 낭비 방지).
+  // 실패면 발견 얼굴로 폴백하므로 서비스 지역 조회를 켠다(끄면 스팟이 영원히 스켈레톤).
   // 훅 규칙상 둘 다 늘 부르고 켜짐으로만 고른다 — 꺼진 쪽은 isPending 이 계속 true 라 그 상태를 읽지 않는다.
   const tripsSettled = !trips.isPending;
   // TRIP-1638 · 오프라인 콜드스타트(요청이 보류된 채 isPending) — tripsSettled 는 그대로 false 라 레인 쿼리는 꺼진 채 요청 0이다.
   // 대신 레인 status 를 'ready'(카드 0장)로 덮어 섹션이 통째로 숨게 한다(스켈레톤도, 눌러도 무동작인 레인 오류 카드도 안 남긴다).
   const tripsOffline = isOfflineWaiting(trips);
   const inTrip = Boolean(spotsRegion);
+  // TRIP-1713 · 두 조회 모두 신선 시간 10분 — 10분 안의 재마운트는 다시 받지 않는다(여행 중 1지역 키만 하트 담기 낡음 표시로 재조회).
+  // 여행 중 얼굴(지역 1곳 키)과 여행 없음 얼굴(서비스 지역 키)은 캐시 키가 달라 서로의 응답을 쓰지 않는다.
   const regionPlaces = useGetPlaces(
-    { ...(spotsRegion ? { region: spotsRegion } : {}), limit: 200 },
-    { query: { enabled: tripsSettled && inTrip } }
+    { ...spotsRegion, limit: 200 },
+    {
+      query: {
+        enabled: tripsSettled && inTrip,
+        staleTime: PLACE_LANE_STALE_TIME,
+      },
+    }
   );
   const servicePlaces = useMultiRegionPlaces(
-    tripsSettled && !inTrip ? SERVICE_REGION_NAMES : NO_REGIONS
+    tripsSettled && !inTrip ? SERVICE_REGION_NAMES : NO_REGIONS,
+    undefined,
+    { staleTime: PLACE_LANE_STALE_TIME }
   );
-  // 3지역은 한 곳만 실패해도 받은 곳으로 채운다(degraded) — 셋 다 실패해야 오류다(훅이 판정).
+  // 서비스 지역은 한 곳만 실패해도 받은 곳으로 채운다(degraded) — 전부 실패해야 오류다(훅이 판정).
   const places = inTrip
     ? {
         items: regionPlaces.data?.items ?? [],
@@ -217,6 +261,7 @@ export function HomePage() {
       tag: `#${place.tags[0] || place.category}`,
       category: place.category,
       imageUrl: place.imageUrl,
+      imageLicense: place.imageLicense,
     })),
     onRetry: () => void places.refetch(),
     onPressCard: openPlace,
@@ -241,6 +286,7 @@ export function HomePage() {
             badge: place.category,
             category: place.category,
             imageUrl: place.imageUrl,
+            imageLicense: place.imageLicense,
           }))
         : [],
     onRetry: () => void places.refetch(),
@@ -249,10 +295,10 @@ export function HomePage() {
 
   const nav: HomeNav = {
     // 새 여행 진입 — 직전 여행 드래프트를 이동 전에 비운다(TRIP-1012 #074).
-    onPressCreateTrip: () => {
-      useTripWizardStore.getState().reset();
-      router.push('/trips/new/step1');
-    },
+    // TRIP-1775 — 창을 연다: 둘째 탭이 위저드를 한 번 더 쌓지 않는다.
+    onPressCreateTrip: guardPress(() => {
+      openNewTripWizard(router);
+    }),
     onPressSavedPlaces: () => {
       setSavedMenuOpen(false);
       router.push('/explore/saved-places');
@@ -281,8 +327,9 @@ export function HomePage() {
           phase?.kind === 'planning' ? phase.dominantTripId : undefined
         )
       ),
-    savedPlacesCount: savedPoiIds.length,
+    savedPlacesCount,
     savedStaysCount,
+    unreadCount,
     savedMenuOpen,
     onToggleSavedMenu: () => setSavedMenuOpen((v) => !v),
     spotsLane,

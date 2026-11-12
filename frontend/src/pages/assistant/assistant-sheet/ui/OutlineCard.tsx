@@ -1,7 +1,8 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { ChevronRightGlyph } from './AssistantSheetGlyphs';
+import { AssistantSheetChevronRightGlyph } from './AssistantSheetGlyphs';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * 도우미 시트 카드의 공용 외곽선 껍데기(TRIP-1528) — 흰 바탕 + hairline 1 + 반경 12, 안쪽은 잘라 낸다.
@@ -65,7 +66,10 @@ export function ActionRow({
       >
         {label}
       </Text>
-      <ChevronRightGlyph size={20} color={withIcon ? '#6A6A6A' : '#C13515'} />
+      <AssistantSheetChevronRightGlyph
+        size={20}
+        color={withIcon ? COLOR_TOKENS.muted : COLOR_TOKENS['primary-text']}
+      />
     </Pressable>
   );
 }

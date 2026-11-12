@@ -5,6 +5,7 @@ import com.trippilot.assistant.domain.AnswerKind
 import com.trippilot.assistant.domain.AssistantSurface
 import com.trippilot.assistant.domain.ContextSnapshot
 import com.trippilot.assistant.domain.DialogueInterpretFailed
+import com.trippilot.assistant.domain.MemoryExport
 import com.trippilot.assistant.domain.DialogueMemoryPort
 import com.trippilot.assistant.domain.Intent
 import com.trippilot.assistant.domain.InterpretOutcome
@@ -77,6 +78,7 @@ class HttpDialogueInterpreterTest : StringSpec({
                 listOf(ContextSnapshot.DayBlock(LocalDate.of(2026, 11, 2), listOf(ContextSnapshot.SlotBlock("2026-11-02#p1", "카페 모카", LocalTime.of(14, 0), "CAFE")))),
             ),
             tastes = ContextSnapshot.Tastes(listOf("자연"), listOf("카페")),
+            here = ContextSnapshot.Here(37.57, 126.982),
         ),
         dialogueContext = """{"pending":null,"turn_index":4,"clarify_count":0}""",
         requestedAt = Instant.parse("2026-10-14T03:00:00Z"),
@@ -249,13 +251,23 @@ class HttpDialogueInterpreterTest : StringSpec({
             ),
         )
 
-        val items = client.export("acc-1")
+        val export = client.export("acc-1")
+        val items = export.items
 
+        export.truncated shouldBe false // 칸이 없는 옛 응답은 잘리지 않은 것
         items.map { it.sessionId } shouldContainExactly listOf(sessionId.toString(), "00000000-0000-0000-0000-00000000000b")
         items[0].tripId shouldBe tripId.toString()
         items[0].summary shouldContainExactly listOf("조용한 카페를 좋아한다", "둘째 날 저녁은 비웠다")
         items[0].updatedAt shouldBe Instant.parse("2026-10-17T03:00:00Z")
         items[1].tripId shouldBe null
+    }
+
+    "메모리 내보내기의 truncated 는 그대로 올린다 — 상대가 세션 상한에서 잘랐다는 말" {
+        val (server, client) = memory()
+        server.expect(requestTo("http://ai/ai/v1/dialogue/memory?account_ref=acc-1")).andExpect(method(HttpMethod.GET))
+            .andRespond(ok("""{"memories":[],"truncated":true}"""))
+
+        client.export("acc-1") shouldBe MemoryExport(emptyList(), truncated = true)
     }
 
     // ── 배선 — 메모리 클라이언트는 해석 모드와 따로 간다: 상대가 없는 fake 만 no-op ──
@@ -273,7 +285,7 @@ class HttpDialogueInterpreterTest : StringSpec({
             context.getBean(DialogueMemoryPort::class.java) shouldBe NoopDialogueMemory
         }
         NoopDialogueMemory.deleteBySession(sessionId) shouldBe 0
-        NoopDialogueMemory.export("acc-1") shouldBe emptyList()
+        NoopDialogueMemory.export("acc-1") shouldBe MemoryExport(emptyList())
     }
 
     // ── 상대 계약 파일과 이름 대조 (AiBoundaryOpenApiTest 와 같은 방식) ──
@@ -296,6 +308,7 @@ class HttpDialogueInterpreterTest : StringSpec({
             wire["context"]["itinerary"]["days"][0] to "DialogueDaySchema",
             wire["context"]["itinerary"]["days"][0]["slots"][0] to "DialogueSlotSchema",
             wire["context"]["preference_profile"] to "PreferenceProfileSchema",
+            wire["context"]["device_location"] to "CoordSchema",
             wire["recent_turns"][0] to "DialogueTurnSchema",
         )
         checks.forEach { (node, schema) ->
@@ -323,7 +336,7 @@ class HttpDialogueInterpreterTest : StringSpec({
         memory["delete"]["parameters"].map { it["name"].asString() } shouldContainAll listOf("session_id", "trip_id", "account_ref")
         memory["get"]["parameters"].map { it["name"].asString() } shouldContainAll listOf("account_ref")
         props("DialogueMemoryDeleteResponse") shouldBe setOf("deleted")
-        props("DialogueMemoryExportResponse") shouldBe setOf("memories")
+        props("DialogueMemoryExportResponse") shouldBe setOf("memories", "truncated")
         props("DialogueMemoryItemSchema") shouldBe setOf("session_id", "trip_id", "summary", "summarized_turn_index", "updated_at", "expires_at")
     }
 })

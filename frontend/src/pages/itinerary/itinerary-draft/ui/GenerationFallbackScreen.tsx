@@ -1,7 +1,13 @@
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import {
+  CheckGlyph,
+  AlertCircleGlyph,
+  BackChevronGlyph,
+} from '@/shared/ui/glyphs';
 import { MapView } from '@/shared/map';
 
 import type { DraftPin } from '@/features/itinerary/index.view';
@@ -20,12 +26,8 @@ import {
   GENERATION_FALLBACK_TITLE,
   GENERATION_FALLBACK_VIEW_PLAN,
 } from '../config/generationFallback';
-import {
-  AlertCircleGlyph,
-  BackChevronGlyph,
-  CheckGlyph,
-  DashGlyph,
-} from '@/features/itinerary/index.view';
+import { DashGlyph } from '@/features/itinerary/index.view';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * h07 [완전AI] 일정 생성 · fallback — Figma `3831:2177`.
@@ -46,7 +48,7 @@ import {
 // 카드·pill 그림자(Figma `0px 2px 10px rgba(0,0,0,0.06)`). RN 은 box-shadow 가 없어 스타일
 // 프로퍼티로 옮긴다 — 그림자는 토큰 대상이 아니다(`DraftScreen`·`ZeroCandidateScreen` 선례).
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
@@ -146,7 +148,7 @@ export function GenerationFallbackScreen({
           // 함께 물지 않게 한다(02a §5 · RNTL toHaveTextContent = 완전일치).
           <View className="flex-1 items-center justify-center gap-md px-lg">
             <View className="h-[88px] w-[88px] items-center justify-center rounded-pill bg-primary-pale">
-              <AlertCircleGlyph size={36} tone="primaryText" />
+              <AlertCircleGlyph size={36} />
             </View>
             <Text
               testID="itinerary-fallback-failed"
@@ -208,8 +210,8 @@ export function GenerationFallbackScreen({
                   {row.marker === 'check' ? (
                     <CheckGlyph
                       size={18}
-                      tone="success"
                       testID={`itinerary-fallback-mark-check-${row.n}`}
+                      color="success"
                     />
                   ) : (
                     <DashGlyph
@@ -236,27 +238,23 @@ export function GenerationFallbackScreen({
         <View className="w-full gap-sm bg-canvas px-md pb-xl pt-md">
           <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
           {failed ? (
-            <Pressable
+            <Button
               testID="itinerary-fallback-retry"
-              accessibilityRole="button"
+              size="md"
               onPress={onRetry}
-              className="w-full items-center justify-center rounded-button bg-primary py-[15px]"
+              className="w-full"
             >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                {GENERATION_FALLBACK_RETRY}
-              </Text>
-            </Pressable>
+              {GENERATION_FALLBACK_RETRY}
+            </Button>
           ) : (
-            <Pressable
+            <Button
               testID="itinerary-fallback-view-plan"
-              accessibilityRole="button"
+              size="md"
               onPress={onViewPlan}
-              className="w-full items-center justify-center rounded-button bg-primary py-[15px]"
+              className="w-full"
             >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                {GENERATION_FALLBACK_VIEW_PLAN}
-              </Text>
-            </Pressable>
+              {GENERATION_FALLBACK_VIEW_PLAN}
+            </Button>
           )}
           <Pressable
             testID="itinerary-fallback-manual"

@@ -13,17 +13,12 @@ export {
 } from './model/regions';
 export type { RegionGroup } from './model/regions';
 export {
-  BackChevronGlyph,
+  ExploreCopyGlyph,
   CheckCircleFilledGlyph,
   CheckCircleOutlineGlyph,
   CircleExclaimGlyph,
-  CloseGlyph,
-  FilterSlidersGlyph,
-  InfoGlyph,
-  MapPinGlyph,
-  PlusGlyph,
-  SearchGlyph,
-  ShareGlyph,
-  SuitcaseGlyph,
-  WarningTriangleGlyph,
+  ExploreFilterSlidersGlyph,
+  ExploreInfoGlyph,
+  ExplorePlusGlyph,
+  ExploreSearchGlyph,
 } from './ui/ExploreGlyphs';

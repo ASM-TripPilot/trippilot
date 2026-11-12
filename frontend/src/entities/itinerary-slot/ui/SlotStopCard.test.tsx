@@ -8,10 +8,12 @@ import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 
 import { ALT_LABEL } from '../config/altLabel';
 import { buildSlotKey } from '../lib/slotKey';
-import { ChevronRightGlyph } from './SlotGlyphs';
+import * as SharedGlyphs from '@/shared/ui/glyphs';
+import { ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import { SlotStopCard } from './SlotStopCard';
 
 /** 호스트가 누를 수 있는가 — Pressable 은 onPress 없이도 응답자 핸들러를 단다(02a ★6 · §5-B). */
@@ -240,21 +242,46 @@ describe('🔴 SlotStopCard · CS7 — 이름 press 어포던스', () => {
 
   it('TRIP-939 AC-7: onPressName 미주입이면 이름은 누를 수 없는 글자이고 옆 › 도 없다 (A-3 · Q4)', () => {
     // 준비·실행: 라이브 호출부 6곳의 현재 모양(이름 진입 미주입). 기본 렌더는 편집기 칩이 아니라
-    // 카드 안 ChevronRightGlyph 는 이름 옆 › 하나뿐이다(02a ★11).
+    // 카드 안 ChevronRight24Glyph 는 이름 옆 › 하나뿐이다(02a ★11).
     const { slotKey } = renderCard();
     const name = screen.getByTestId(id(slotKey)('name'));
 
     // 단언: 이름은 그대로 보이되(앵커) 버튼이 아니고, 누를 수 있어 보이는 › 가 없다.
     expect(name).toHaveTextContent('광안리 해변');
     expect(isTouchable(name)).toBe(false);
-    expect(screen.UNSAFE_queryAllByType(ChevronRightGlyph)).toHaveLength(0);
+    expect(screen.UNSAFE_queryAllByType(ChevronRight24Glyph)).toHaveLength(0);
+  });
+
+  it('🔴 TRIP-1840 · onPressName 주입이면 사진도 같은 콜백을 부르고, 미주입이면 사진 누름 칸이 없다', () => {
+    // 준비 — 이름 진입이 있는 카드(초안 h08 이 상세로 보내는 모양).
+    const onPressName = jest.fn();
+    const { slotKey } = renderCard({ onPressName });
+    const photoOpen = screen.getByTestId(`slot-stopcard-photo-open-${slotKey}`);
+
+    // 실행 — 사진 칸을 누른다.
+    fireEvent.press(photoOpen);
+
+    // 단언 — 이름과 같은 콜백 1회, 칸 안에 사진이 있다(그 사진을 누른 것).
+    expect(onPressName).toHaveBeenCalledTimes(1);
+    expect(
+      within(photoOpen).getByTestId(id(slotKey)('photo'))
+    ).toBeOnTheScreen();
+    expect(photoOpen).toHaveProp('accessibilityRole', 'button');
+
+    // 짝 — 미주입이면 칸이 없고 사진은 그대로 그려진다.
+    screen.unmount();
+    const plain = renderCard();
+    expect(
+      screen.queryByTestId(`slot-stopcard-photo-open-${plain.slotKey}`)
+    ).toBeNull();
+    expect(screen.getByTestId(id(plain.slotKey)('photo'))).toBeOnTheScreen();
   });
 
   it('onPressName 주입이면 이름이 버튼이고 › 가 1개다(짝 — 목적지가 생기면 되살림)', () => {
     const { slotKey } = renderCard({ onPressName: jest.fn() });
 
     expect(isTouchable(screen.getByTestId(id(slotKey)('name')))).toBe(true);
-    expect(screen.UNSAFE_queryAllByType(ChevronRightGlyph)).toHaveLength(1);
+    expect(screen.UNSAFE_queryAllByType(ChevronRight24Glyph)).toHaveLength(1);
   });
 });
 
@@ -478,4 +505,302 @@ describe('SlotStopCard 편집 · C5 (회귀앵커) — violation 없거나 null 
       expect(screen.queryByTestId(at('violation'))).toBeNull();
     }
   );
+});
+
+// ── TRIP-1779 · h08 일정 카드 추천 이유 태그 한 줄 ─────────────────────────────────────────────
+//
+// 카드는 `reasonTags`(이미 잘린 태그 목록)를 **받으면** 한 줄을 그린다. 서버 문자열을 태그로 자르는 일은
+// 소비처(DraftPage h08 셸)가 하고, 카드는 `slot.placementReason` 을 스스로 읽지 않는다(`violation` 선례 —
+// 읽으면 다른 소비처 4곳이 조용히 줄을 얻는다). 말줄임(numberOfLines)·색·줄 위치는 jest 가 못 보는 생김새라
+// 6-b 실화면 몫이다(README 판정 4).
+
+describe('🔴 SlotStopCard · R1 — reasonTags 를 주면 태그를 공백으로 이은 한 줄 (TRIP-1779 AC-C1)', () => {
+  it('leaf 하나가 태그 전부를 공백으로 이은 문자열 하나만 담는다', () => {
+    const { slotKey } = renderCard({
+      reasonTags: ['#혼자여행', '#난타공연', '#공연관람'],
+    });
+    const at = id(slotKey);
+
+    const reason = screen.getByTestId(at('reason'));
+    expect(reason).toHaveTextContent('#혼자여행 #난타공연 #공연관람');
+    // 완전일치 잠금 — 부분포함이면 통과, exact 라 실패 → .not 성립(구분자를 ' · ' 등으로 바꾸면 위에서 red).
+    expect(reason).not.toHaveTextContent('#혼자여행 #난타공연');
+    // 카테고리 줄은 그대로(영향 0).
+    expect(screen.getByTestId(at('tags'))).toHaveTextContent('바다 · 산책');
+  });
+});
+
+describe('SlotStopCard · R2 (회귀앵커) — reasonTags 가 없거나 null·빈 배열이면 줄 요소 자체가 없다 (TRIP-1779 AC-C3)', () => {
+  it.each([
+    ['미주입', undefined],
+    ['null', null],
+    ['빈 배열', []],
+  ])('%s 이면 카드·카테고리 줄은 있고 이유 줄은 없다', (_label, reasonTags) => {
+    const { slotKey } = renderCard({ reasonTags });
+    const at = id(slotKey);
+
+    expect(screen.getByTestId(`slot-stopcard-${slotKey}`)).toBeOnTheScreen();
+    expect(screen.getByTestId(at('tags'))).toHaveTextContent('바다 · 산책');
+    expect(screen.queryByTestId(at('reason'))).toBeNull();
+  });
+});
+
+describe('🔴 SlotStopCard · R3 — 카드는 slot.placementReason 을 스스로 읽지 않는다 (TRIP-1779 AC-C4)', () => {
+  const withReason = () => makeSlot({ placementReason: '#혼자여행 #난타공연' });
+
+  it('R3a · 슬롯에 값이 있어도 reasonTags 를 안 주면 줄이 없다(다른 소비처가 조용히 줄을 얻지 않는다)', () => {
+    const { slotKey } = renderCard({ slot: withReason() });
+
+    expect(screen.getByTestId(`slot-stopcard-${slotKey}`)).toBeOnTheScreen();
+    expect(screen.queryByTestId(id(slotKey)('reason'))).toBeNull();
+  });
+
+  it('R3b · 짝 — reasonTags 를 주면 슬롯 원문이 아니라 받은 값을 그린다', () => {
+    const { slotKey } = renderCard({
+      slot: withReason(),
+      reasonTags: ['#주입'],
+    });
+
+    expect(screen.getByTestId(id(slotKey)('reason'))).toHaveTextContent(
+      '#주입'
+    );
+  });
+});
+
+// ── TRIP-1791 · 편집기 「여러 곳 골라 빼기」 체크 원 — `selection` opt-in ─────────────────────────────
+//
+// 카드는 체크 원을 **그릴 뿐** 선택 여부를 정하지 않는다(상태는 부모 몫). 체크 원만 눌리고 카드 전체는
+// 눌리지 않는다(킷 §10 「카드 전체 탭 금지」). 색·테두리·위치는 생김새라 단언하지 않는다(실화면 QA).
+// 3동작 뼈대: 준비=selection 상태별 렌더 → 실행=press → 단언=역할·선택/비활성 표식·onToggle 횟수.
+
+describe('🔴 SlotStopCard · SEL — selection prop (TRIP-1791)', () => {
+  const CHECK = 'editor-select-check-probe';
+
+  function renderWithSelection(
+    state: 'off' | 'on' | 'disabled',
+    slotOverrides: Partial<ItineraryDaysItemSlotsItem> = {}
+  ): { onToggle: jest.Mock; slotKey: string } {
+    const onToggle = jest.fn();
+    const { slotKey } = renderCard({
+      slot: makeSlot(slotOverrides),
+      selection: { state, onToggle, testID: CHECK },
+    });
+    return { onToggle, slotKey };
+  }
+
+  it('SEL-1 · selection 을 안 주면 체크 원이 없다 (결과 화면 5종 회귀 앵커)', () => {
+    renderCard();
+
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+    expect(screen.queryByTestId(CHECK)).toBeNull();
+  });
+
+  it('SEL-2 · off — 호출부 testID 의 checkbox 가 있고 선택·비활성이 아니며, 누르면 onToggle 1회', () => {
+    const { onToggle } = renderWithSelection('off');
+
+    const check = screen.getByTestId(CHECK);
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(check).not.toBeSelected();
+    expect(check).not.toBeDisabled();
+
+    fireEvent.press(check);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('SEL-3 · on — 선택으로 읽히고, 누르면 onToggle 1회 (끄는 판단은 부모 몫)', () => {
+    const { onToggle } = renderWithSelection('on');
+
+    const check = screen.getByTestId(CHECK);
+    expect(check).toBeSelected();
+    expect(check).not.toBeDisabled();
+
+    fireEvent.press(check);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('SEL-4 · disabled — 비활성으로 읽히고 선택은 아니며, 눌러도 onToggle 0회 (표식만이 아니라 실제 눌림 차단)', () => {
+    const { onToggle } = renderWithSelection('disabled');
+
+    const check = screen.getByTestId(CHECK);
+    expect(check).toBeDisabled();
+    expect(check).not.toBeSelected();
+
+    fireEvent.press(check);
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  it.each(['off', 'on', 'disabled'] as const)(
+    'SEL-5 · %s 에서도 카드 루트·사진을 눌러서는 onToggle 이 안 나간다 (카드 전체 탭 금지)',
+    (state) => {
+      const { onToggle, slotKey } = renderWithSelection(state);
+
+      fireEvent.press(screen.getByTestId(`slot-stopcard-${slotKey}`));
+      fireEvent.press(screen.getByTestId(id(slotKey)('photo')));
+
+      expect(onToggle).not.toHaveBeenCalled();
+      // 짝 — 체크 원은 여전히 그 자리에 있다(공허 통과 방지).
+      expect(screen.getByTestId(CHECK)).toBeOnTheScreen();
+    }
+  );
+});
+
+// ── TRIP-1793 · 편집기 「다른 날로 옮기기」 ⋯ 버튼과 옮김 배지 — `more`·`movedLabel` opt-in ─────────────────
+//
+// 카드는 ⋯ 를 **그릴 뿐** 언제 보일지(고정·완료·1일·선택 모드)는 부모(`EditorView`)가 정한다. 배지 문구도 카드가 안 만든다 —
+// 받은 문자열을 그대로 그린다(`violation` 선례). 색·크기·히트는 생김새라 단언하지 않는다(실화면 QA, hitSlop 은 6-b).
+// 3동작 뼈대: 준비=prop 별 렌더 → 실행=press → 단언=역할·콜백 횟수·leaf 문자열.
+
+describe('SlotStopCard · MORE — more·movedLabel prop (TRIP-1793)', () => {
+  const MORE = 'editor-slot-more-probe';
+
+  it('MORE-1 · 둘 다 안 주면 ⋯ 도 배지도 없다 (결과 화면 5종 회귀 앵커)', () => {
+    const { slotKey } = renderCard();
+
+    expect(screen.queryByTestId(MORE)).toBeNull();
+    expect(screen.queryByTestId(id(slotKey)('moved'))).toBeNull();
+  });
+
+  it('MORE-2 · more 를 주면 그 testID 의 버튼이 생기고 누르면 onPress 1회 — 카드 루트·사진은 눌려도 0회 (카드 전체 탭 금지)', () => {
+    const onPress = jest.fn();
+    const { slotKey } = renderCard({ more: { onPress, testID: MORE } });
+
+    const more = screen.getByTestId(MORE);
+    expect(more).toHaveProp('accessibilityRole', 'button');
+    fireEvent.press(more);
+    expect(onPress).toHaveBeenCalledTimes(1);
+
+    fireEvent.press(screen.getByTestId(`slot-stopcard-${slotKey}`));
+    fireEvent.press(screen.getByTestId(id(slotKey)('photo')));
+    expect(onPress).toHaveBeenCalledTimes(1);
+
+    // ⋯ 글리프는 공용 글리프 폴더에 산다 — entities/trip 에서 이사(형제 entities 라 거기서는 못 물었다).
+    expect(typeof SharedGlyphs.MoreDotsGlyph).toBe('function');
+  });
+
+  it('MORE-3 · movedLabel 은 받은 문자열을 leaf 하나에 완전일치로 그리고, null·빈 문자열·미주입이면 요소가 없다', () => {
+    const { slotKey } = renderCard({ movedLabel: '3일차에서 옮김' });
+    const moved = screen.getByTestId(id(slotKey)('moved'));
+    expect(moved).toHaveTextContent('3일차에서 옮김'); // 카드가 문구를 만들지 않는다 — 받은 값 그대로
+    expect(moved).not.toHaveTextContent('3일차'); // 부분 일치면 통과 → 완전일치라 .not 성립
+    screen.unmount();
+
+    for (const empty of [null, '', undefined]) {
+      const again = renderCard({ movedLabel: empty });
+      expect(screen.queryByTestId(id(again.slotKey)('moved'))).toBeNull();
+      screen.unmount();
+    }
+  });
+});
+
+// ── TRIP-1795 · 이 여행에서만 고친 이름·분류가 카드에 보인다 ─────────────────────────────────────────
+//
+// 카드는 7개 화면(h07·h08·h11·h12·h14·h16·i07)이 같이 쓰는 한 곳이라 여기가 가장 넓은 표면이다.
+// 보이는 곳: ① 이름 ② 체크박스 낭독 라벨 ③ 사진 칸(서버 사진 없을 때 분류 일러스트) ④ 메타 줄(분류 + 태그).
+// 메타 줄은 종전엔 서버 태그만 그렸다 — 분류를 고쳐도 카드가 안 바뀌어 "안 됐다"로 읽히지 않게 **덮어쓴 경우에만** 분류를 맨 앞에 붙인다.
+//
+// 3동작 뼈대: 준비=덮어쓴/안 쓴 슬롯 → 실행=렌더 → 단언=이름·낭독 라벨·사진 소스·메타 leaf 문자열.
+describe('SlotStopCard · SD — 고친 이름·분류 표시 (TRIP-1795 AC-2)', () => {
+  const OVERRIDDEN = {
+    displayName: '우리 아지트',
+    displayCategory: '카페',
+  } as const;
+
+  it('SD1 · 고친 이름이 이름 leaf(눌리는·안 눌리는 둘 다)와 체크박스 낭독 라벨에 그려지고 원본 이름은 안 보인다 · 덮어쓰기 없으면 종전', () => {
+    const slot = makeSlot(OVERRIDDEN);
+    const key = buildSlotKey(DATE, slot.poiId);
+    const selection = {
+      state: 'off' as const,
+      onToggle: jest.fn(),
+      testID: 'probe-check',
+    };
+
+    // 눌리지 않는 이름 갈래(onPressName 없음).
+    renderCard({ slot, selection });
+    expect(screen.getByTestId(id(key)('name'))).toHaveTextContent(
+      '우리 아지트'
+    );
+    expect(screen.queryByText('광안리 해변')).toBeNull();
+    expect(screen.getByTestId('probe-check')).toHaveProp(
+      'accessibilityLabel',
+      '우리 아지트 선택'
+    );
+    screen.unmount();
+
+    // 눌리는 이름 갈래(onPressName 있음).
+    renderCard({ slot, onPressName: jest.fn() });
+    expect(screen.getByTestId(id(key)('name'))).toHaveTextContent(
+      '우리 아지트'
+    );
+    expect(screen.queryByText('광안리 해변')).toBeNull();
+    screen.unmount();
+
+    // 짝 — 덮어쓰기가 없으면 원본 이름 그대로.
+    const plain = renderCard({ selection });
+    expect(screen.getByTestId(id(plain.slotKey)('name'))).toHaveTextContent(
+      '광안리 해변'
+    );
+    expect(screen.getByTestId('probe-check')).toHaveProp(
+      'accessibilityLabel',
+      '광안리 해변 선택'
+    );
+  });
+
+  it('SD2 · 서버 사진이 없으면 사진 칸이 고친 분류(카페)의 생성 이미지를 따른다 — 원본 분류(자연) 이미지가 아니다', () => {
+    const slot = makeSlot({ imageUrl: null, category: '자연', ...OVERRIDDEN });
+    const { slotKey } = renderCard({ slot });
+
+    expect(screen.getByTestId(id(slotKey)('photo')).props.source).toEqual([
+      coverFor('카페', 'poi-gwangalli'),
+    ]);
+  });
+
+  it('SD3 · 메타 줄 — 덮어쓰기+태그는 `카페 · 바다 · 산책`, 덮어쓰기+태그 없음도 `카페`가 보이고, 덮어쓰기 없으면 종전(태그 없으면 줄 없음)', () => {
+    // ⓐ 덮어쓰기 + 태그 — 분류가 맨 앞.
+    const a = renderCard({ slot: makeSlot(OVERRIDDEN) });
+    expect(screen.getByTestId(id(a.slotKey)('tags'))).toHaveTextContent(
+      '카페 · 바다 · 산책'
+    );
+    screen.unmount();
+
+    // ⓑ 덮어쓰기 + 태그 없음 — `tags.length>0` 게이트에 막혀 분류가 안 보이던 함정.
+    const b = renderCard({ slot: makeSlot({ ...OVERRIDDEN, tags: [] }) });
+    expect(screen.getByTestId(id(b.slotKey)('tags'))).toHaveTextContent('카페');
+    screen.unmount();
+
+    // ⓒ 덮어쓰기 없음 + 태그 없음 — 줄 자체가 없다(종전).
+    const c = renderCard({ slot: makeSlot({ tags: [] }) });
+    expect(screen.queryByTestId(id(c.slotKey)('tags'))).toBeNull();
+    screen.unmount();
+
+    // ⓓ 덮어쓰기 없음 + 태그 — 종전 그대로(분류를 안 붙인다).
+    const d = renderCard({ slot: makeSlot() });
+    expect(screen.getByTestId(id(d.slotKey)('tags'))).toHaveTextContent(
+      '바다 · 산책'
+    );
+    screen.unmount();
+
+    // ⓔ 빈·공백 분류는 "없음" — 줄이 `· 바다` 처럼 깨지지 않는다. (타입 밖 값이라 변수로 우회)
+    for (const empty of ['', '   ']) {
+      const odd = { ...makeSlot(), displayCategory: empty } as unknown;
+      const e = renderCard({ slot: odd as ItineraryDaysItemSlotsItem });
+      expect(screen.getByTestId(id(e.slotKey)('tags'))).toHaveTextContent(
+        '바다 · 산책'
+      );
+      screen.unmount();
+    }
+  });
+});
+
+// TRIP-1740 AC-7(T1) — 슬롯이 직접 싣는 imageLicense 가 72px 사진 칸까지 간다(입력은 TYPE1: 끊기면 contain 이 된다).
+describe('SlotStopCard · 관광공사 사진 유형이 사진 칸에 닿는다', () => {
+  it('TYPE1 서버 사진은 지금처럼 칸에 꽉 채우고(cover) 출처 글자가 붙는다', () => {
+    const { slotKey } = renderCard({
+      slot: makeSlot({ imageLicense: 'TYPE1' }),
+    });
+
+    expectTypeOnePhotoDelivered(
+      id(slotKey)('photo'),
+      'https://cdn.example.com/gwangalli.jpg'
+    );
+  });
 });

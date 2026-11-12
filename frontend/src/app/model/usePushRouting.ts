@@ -3,11 +3,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { router, type Href } from 'expo-router';
 
 import type { BootstrapDestination } from '@/features/auth/index.view';
-import { notificationAction } from '@/pages/settings/notification-inbox';
-import {
-  getGetMeNotificationsQueryKey,
-  getGetTripsTripIdTriggersQueryKey,
-} from '@/shared/api/index.hooks';
+import { notificationAction } from '@/pages/settings/notification-inbox/index.action';
+import { getGetMeNotificationsQueryKey } from '@/shared/api/index.notification';
+import { getGetTripsTripIdTriggersQueryKey } from '@/shared/api/index.trips';
 import type { Notification } from '@/shared/api/index.schemas';
 import {
   onPushReceived,

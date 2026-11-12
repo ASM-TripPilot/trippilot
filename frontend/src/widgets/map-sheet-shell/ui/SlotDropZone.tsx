@@ -1,7 +1,6 @@
+import { TrashGlyph } from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import { Text, View } from 'react-native';
-
-import { TrashGlyph } from './EditorGlyphs';
 
 /**
  * TRIP-797 · AC-9 — h12 편집기 드래그 삭제 드롭존(presentation-only). TRIP-921 로 편집 뷰와 함께

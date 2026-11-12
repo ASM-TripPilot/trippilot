@@ -8,6 +8,11 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  runOnJS,
+  useAnimatedScrollHandler,
+  useSharedValue,
+} from 'react-native-reanimated';
 
 import { PlusGlyph, SearchGlyph } from '@/shared/ui/glyphs';
 import type {
@@ -20,6 +25,7 @@ import { noContextActionIcon } from '../model/displayActions';
 import { cardConsumes } from './AssistantCards';
 import { ArrowDownGlyph } from './AssistantSheetGlyphs';
 import { ActionRow } from './OutlineCard';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * 대화 목록(TRIP-1322) — 최신이 아래. `inverted` FlatList 라 데이터는 뒤집어 넣는다.
@@ -45,11 +51,7 @@ export interface MessageListProps {
   older?: OlderMessagesProps | null;
 }
 
-export function UserBubble({
-  message,
-}: {
-  message: AssistantMessage;
-}): ReactElement {
+function UserBubble({ message }: { message: AssistantMessage }): ReactElement {
   return (
     <View className="items-end">
       <View
@@ -65,7 +67,7 @@ export function UserBubble({
   );
 }
 
-export function NextActionButton({
+function NextActionButton({
   action,
   onPress,
   withIcon = false,
@@ -173,7 +175,10 @@ function OlderMessagesRow({
       className="items-center gap-xs py-md"
     >
       {loading ? (
-        <ActivityIndicator testID="assistant-older-loading" color="#FF385C" />
+        <ActivityIndicator
+          testID="assistant-older-loading"
+          color={COLOR_TOKENS.primary}
+        />
       ) : status === 'error' ? (
         <>
           <Text
@@ -208,9 +213,19 @@ export function MessageList({
 }: MessageListProps): ReactElement {
   const listRef = useRef<FlatList<AssistantMessage>>(null);
   const [away, setAway] = useState(false);
+  // UI 스레드에서 오프셋을 보고, 40 경계를 넘나드는 순간에만 JS 로 건너온다(TRIP-1733).
+  const awayUI = useSharedValue(false);
+  const onScroll = useAnimatedScrollHandler((event) => {
+    'worklet';
+    const next = event.contentOffset.y > SCROLL_DOWN_THRESHOLD;
+    if (next !== awayUI.value) {
+      awayUI.value = next;
+      runOnJS(setAway)(next);
+    }
+  });
   return (
     <View className="flex-1">
-      <FlatList
+      <Animated.FlatList
         ref={listRef}
         testID="assistant-message-list"
         inverted
@@ -221,9 +236,7 @@ export function MessageList({
         // inverted 라 푸터가 화면 맨 위다.
         ListFooterComponent={older ? <OlderMessagesRow {...older} /> : null}
         scrollEventThrottle={16}
-        onScroll={(event) =>
-          setAway(event.nativeEvent.contentOffset.y > SCROLL_DOWN_THRESHOLD)
-        }
+        onScroll={onScroll}
         renderItem={({ item }) =>
           item.role === 'USER' ? (
             <UserBubble message={item} />
@@ -241,7 +254,8 @@ export function MessageList({
       {/* 위쪽 짧은 페이드 — 글이 위 가장자리에서 갑자기 잘려 보이지 않게(반투명 흰색이라 토큰이 아니다) */}
       <LinearGradient
         pointerEvents="none"
-        colors={['#FFFFFF', '#FFFFFF00']}
+        // eslint-disable-next-line trippilot/no-raw-hex -- 알파 0 흰색(페이드 끝점), 토큰 없음
+        colors={[COLOR_TOKENS.canvas, '#FFFFFF00']}
         className="absolute inset-x-0 top-0 h-[16px]"
       />
       {away ? (
@@ -261,7 +275,7 @@ export function MessageList({
             // 지름 38 · 그림자 0 2 10 6% — 토큰에 없는 일회성 값(Figma 5020:3165)
             className="h-[38px] w-[38px] items-center justify-center rounded-full border border-hairline-strong bg-canvas"
             style={{
-              shadowColor: '#000000',
+              shadowColor: COLOR_TOKENS.scrim,
               shadowOpacity: 0.06,
               shadowRadius: 10,
               shadowOffset: { width: 0, height: 2 },

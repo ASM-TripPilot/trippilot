@@ -7,6 +7,7 @@ import com.trippilot.changelog.api.ChangeSourceType
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.itinerarygeneration.api.DeferredPlace
 import com.trippilot.itinerarygeneration.api.ReplanCommand
 import com.trippilot.itinerarygeneration.api.ReplanFacade
 import com.trippilot.itinerarygeneration.api.ReplanProposal
@@ -18,11 +19,13 @@ import com.trippilot.itinerarygeneration.domain.ItineraryRepository
 import com.trippilot.itinerarygeneration.domain.RejectionStore
 import com.trippilot.itinerarygeneration.domain.ItineraryStatus
 import com.trippilot.itinerarygeneration.domain.ReplanInput
+import com.trippilot.itinerarygeneration.domain.ReplanPriorRequest
 import com.trippilot.itinerarygeneration.domain.ReplanScope
 import com.trippilot.itinerarygeneration.domain.RequestMeta
 import com.trippilot.itinerarygeneration.domain.RevisionActor
 import com.trippilot.itinerarygeneration.domain.RevisionKind
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentPort
+import com.trippilot.itinerarygeneration.domain.TodayWindow
 import com.trippilot.itinerarygeneration.domain.VisitSlot
 import com.trippilot.itinerarygeneration.domain.ScheduleAgentCallFailed
 import com.trippilot.itinerarygeneration.domain.PersonalizationPort
@@ -84,6 +87,7 @@ class ReplanFacadeService(
         // 비교가 성립하지 않는다.
         val prefs = preferences.findPreferences(command.accountId).overriddenBy(ctx.preferenceSnapshot)
         val profile = prefs.toProfile(personalization.hintsFor(command.accountId), ctx.preferenceSnapshot.keys)
+        val (windowStart, windowEnd) = replanWindow(ctx, command, current)
         val output = scheduleAgent.replan(
             ReplanInput(
                 tripId = command.tripId,
@@ -92,6 +96,10 @@ class ReplanFacadeService(
                 destinations = ctx.destinations,
                 fromInstant = command.fromInstant,
                 targetDate = command.targetDate,
+                tripStartDate = ctx.startDate,
+                tripEndDate = ctx.endDate,
+                windowStart = windowStart,
+                windowEnd = windowEnd,
                 originLat = origin.first,
                 originLng = origin.second,
                 stayLat = stay?.lat,
@@ -105,13 +113,19 @@ class ReplanFacadeService(
                 budgetLevel = prefs.budgetTier,
                 preferenceProfile = profile,
                 // 원 일정 슬롯 — KB-1 컨텍스트이자 후보 풀 합류 대상(§4). 대상 일자만.
+                // 건너뛴 곳은 고정 표시를 걷는다 — AI 는 `is_fixed` 도 고정 블록으로 읽어 제외보다 먼저 되살린다(TRIP-1711).
                 currentSlots = current.days.firstOrNull { it.date == command.targetDate }?.slots.orEmpty().map {
-                    ReplanCurrentSlot(it.sourcePoiId, it.startAt, it.endAt, it.isFixed, it.endsNextDay, it.placementReason)
+                    ReplanCurrentSlot(
+                        it.sourcePoiId, it.startAt, it.endAt, it.isFixed && it.sourcePoiId !in command.skippedPoiIds,
+                        it.endsNextDay, it.placementReason,
+                    )
                 },
                 savedPlaces = this.savedPlaces.findSaved(command.accountId).map { SavedPlaceRef(it.poiId, it.nameKo) },
                 // 거절 이력(TRIP-964). '다시 짜줘' 직후의 재계획이 정확히 이 이력의 소비처다 —
                 // 방금 밀어낸 곳을 다시 제안하지 않게 하는 것이 저장의 목적이다.
                 rejections = rejectionStore.findByTrip(command.tripId),
+                // 수단은 위 취향과 같은 출처에서 상대가 아는 첫 값 하나 — 생성(목록 → 상대가 첫 인식 값)과 같은 수단으로 다시 짠다.
+                transportMode = firstAiTransport(prefs.transportModes),
                 requestMeta = RequestMeta(UUID.randomUUID().toString(), clock.instant(), REPLAN_DEADLINE_MS),
                 // 변경 이력(TRIP-975) — 이 날짜를 건드린 것만, diff 로. 조회 실패는 재계획을 막지 않는다:
                 // 이력은 "같은 제안 반복 방지"의 보조 재료라 없으면 종전과 같다.
@@ -121,6 +135,7 @@ class ReplanFacadeService(
                     log.warn("변경 이력 조회 실패 — 이력 없이 재계획합니다. tripId={}", command.tripId, it)
                     emptyList()
                 },
+                priorRequests = command.priorRequests.map { ReplanPriorRequest(it.text, it.keptPoiIds) },
             ),
         )
         // **요청한 날짜만** 받는다. 다른 날을 돌려줬을 때 그것을 오늘 초안으로 삼으면, 확정 순간
@@ -144,7 +159,43 @@ class ReplanFacadeService(
         }
         // 빈 초안은 "해 없음"이다 — 빈 하루를 초안이라고 보여 주면 사용자가 그걸 확정한다.
         if (slots.isEmpty()) return null
-        return ReplanProposal(current.itineraryId, command.targetDate, slots, output.totalDistanceKm)
+        return ReplanProposal(
+            current.itineraryId, command.targetDate, slots, output.totalDistanceKm,
+            requestedPoiIds = output.requestedPoiIds,
+            deferredPlaces = output.deferredPlaces.map { DeferredPlace(it.poiId, it.name, it.date) },
+        )
+    }
+
+    /**
+     * 그날 다시 짤 창(상대 `time_window`) — 2026-11-05 사용자 결정(운영 11-04 신고: 06:00 시작 여행을 09:00 부터 다시 짰다).
+     *
+     * - **시작** = 여행 설정의 그날 시작([baseDayWindow] — 첫날 `firstDayStartAt` → `dayStartAt` → 09:00)과 **원 일정의 아직 안 지난
+     *   첫 슬롯 시작** 중 이른 쪽. 설정보다 이르게 놓인 원 일정(편집으로 당긴 곳·고정 블록에 맞춰 넓힌 생성 창)을 창 밖으로 내몰지 않는다.
+     *   지난 슬롯(오늘, 끝 ≤ 지금 · 자정 넘김 제외)은 세지 않는다 — 상대가 지난 잠금을 솔버에 넣지 않는다(AI `_past_blocks`).
+     *   다른 날은 지난 것이 없어 원 일정 슬롯을 모두 센다. 단 **이번에 빠지는 슬롯**(제외 목록 — 상황 감지 시드·앱의 제외·건너뜀 — 에 들고
+     *   잠기지 않은 곳, 잠금 판정은 [lockedSlots] 와 같다)은 어느 날이든 세지 않는다 — 사라질 곳이라 지킬 것이 없는데 창만 당겨 설정보다
+     *   이른 새 방문이 들어온다. 창은 새 방문이 놓일 범위이지 잠금의 제약이 아니다 — 상대는 창 밖 고정 블록도 그 시각 핀으로 받는다
+     *   (AI `check_hc4` 핀 면제 · TRIP-1390).
+     * - **끝** = 그날 기본 끝(마지막 날 `lastDayEndAt` 포함). 오늘이면 생성과 같은 규칙([TodayWindow.eveningEnd])으로 끝만 늘린다 —
+     *   밤 9시에 누른 [다시 짜기]가 남은 시간 0 으로 "대안 없음"이 되지 않게. 사용자가 적은 끝(마지막 날 귀가)은 사실이라 늘리지 않는다
+     *   (생성 `dayWindowOf` 와 같다).
+     * - '지금부터'로 좁히지 않는다(연동 설계 §1) — 지금 이후는 잠금과 `from_instant` 로 표현한다.
+     * - 설정이 모순(시작 ≥ 끝)이면 설정 없는 날의 창(09:00~21:00) — 생성은 그 모순을 400 으로 드러내지만, 재계획은 창이 필수라 종전 값으로 간다.
+     */
+    private fun replanWindow(ctx: TripGenerationContext, command: ReplanCommand, current: Itinerary): Pair<LocalTime, LocalTime> {
+        val date = command.targetDate
+        val (baseStart, baseEnd) = ctx.baseDayWindow(date).takeIf { (s, e) -> s.isBefore(e) } ?: (DEFAULT_DAY_START to DEFAULT_DAY_END)
+        val now = command.fromInstant.atZone(TRAVEL_ZONE)
+        val today = now.toLocalDate() == date
+        val locked = lockedSlots(current, command)
+        val upcoming = current.days.firstOrNull { it.date == date }?.slots.orEmpty().filterNot {
+            (today && !it.endsNextDay && it.endAt <= now.toLocalTime()) ||
+                (it.sourcePoiId in command.excludedPoiIds && locked.none { l -> l === it })
+        }
+        val start = (upcoming.map { it.startAt } + baseStart).min()
+        val userEnd = date == ctx.endDate && ctx.lastDayEndAt != null
+        val from = if (today && !userEnd) TodayWindow.earliest(now.toLocalTime()) else null
+        return start to (from?.let { TodayWindow.eveningEnd(it, baseEnd) } ?: baseEnd)
     }
 
     /**
@@ -203,6 +254,10 @@ class ReplanFacadeService(
      * 끝난 것으로 보지 않는다.
      *
      * 잠금을 빠뜨리면 이미 다녀온 곳이 일정에서 사라지거나 예약 시각이 밀린다.
+     *
+     * **그날 건너뛴 곳은 시각 고정이어도 잠그지 않는다**(TRIP-1711 · BR-U4-17 개정 2026-11-02). 잠그면 AI 가 고정 블록으로
+     * 되살려 제외를 빠져나가고, 같은 슬롯 키의 건너뜀 기록과 부딪혀 [도착]이 영원히 409 다(BR-U5-02). 시각상 끝난 슬롯·완료는
+     * 종전대로 잠긴다 — 원 자리 그대로라 새 충돌이 아니다.
      */
     private fun lockedBlocks(current: Itinerary, command: ReplanCommand): List<FixedBlock> =
         // 시각을 함께 싣는다 — 시각 없는 고정 블록은 상대가 거부한다(계약 M1).
@@ -215,7 +270,7 @@ class ReplanFacadeService(
         val now = LocalTime.ofInstant(command.fromInstant, TRAVEL_ZONE)
         val completed = command.completedSlotKeys.toSet()
         return day.slots.filter {
-            it.isFixed ||
+            (it.isFixed && it.sourcePoiId !in command.skippedPoiIds) ||
                 (!command.fullDay && !it.endsNextDay && it.endAt <= now) ||
                 "${command.targetDate}#${it.sourcePoiId}" in completed
         }
@@ -241,9 +296,9 @@ class ReplanFacadeService(
             // 그 사이 재생성으로 일정이 교체됐다 — 낡은 초안을 덮어쓰면 방금 만든 일정이 사라진다.
             throw ConflictDetected(message = "그 사이 일정이 바뀌었습니다. 다시 재계획해 주세요.")
         }
-        // CONFIRMED 가드는 없다(TRIP-999 결정 (a), 2026-09-27) — 재계획 세션은 여행 기간 안에서만
-        // 열리므로 여기 오는 확정 일정은 전부 "여행 중"이고, 그때 확정 잠금(BR-U3-28)은 여행 시작 전
-        // 한정으로 개정됐다. 종전 가드는 산출(AI 20초)까지 다 하고 마지막에만 막아 여행 중 일정 변경
+        // CONFIRMED 가드는 없다(TRIP-999 결정 (a), 2026-09-27) — 여행 중 확정 일정은 확정 잠금(BR-U3-28)이
+        // 여행 시작 전 한정으로 개정됐고, 여행 전 확정 일정의 사용자 수정도 TRIP-1710 이 열었다. 여행 전 재계획의
+        // 반영 범위(전날 창 · TRIP-1841 하루 전체)는 C10 이 진입·적용에서 정한다(ReplanSessionService.apply). 종전 가드는 산출(AI 20초)까지 다 하고 마지막에만 막아 여행 중 일정 변경
         // 수단이 0 이었다(QA #063).
         revisions.ensureRestorePoint(current)
 
@@ -299,7 +354,7 @@ class ReplanFacadeService(
         actor: RevisionActor, revisionSummary: String, sourceType: ChangeSourceType, reason: String,
     ) {
         val replaced = current.days.map { day ->
-            if (day.date != date) day else ItineraryDay.of(day.date, day.dayOrder, slots.toSlots())
+            if (day.date != date) day else ItineraryDay.of(day.date, day.dayOrder, slots.toSlots(day.slots.associateBy { it.sourcePoiId }))
         }
         val next = Itinerary.reconstitute(
             itineraryId = current.itineraryId, tripId = current.tripId, status = current.status,
@@ -334,14 +389,18 @@ class ReplanFacadeService(
         poiId = sourcePoiId, startAt = startAt, endAt = endAt, isFixed = isFixed, endsNextDay = endsNextDay,
         distanceRange = distanceRange, placementReason = placementReason,
         hasViolation = hasViolation, violationReason = violationReason, poiSnapshotId = poiSnapshotId,
+        displayName = displayName, displayCategory = displayCategory,
     )
 
-    private fun List<ReplanSlot>.toSlots(): List<VisitSlot> = mapIndexed { i, s ->
+    /** [kept] = 그 날의 현행 슬롯 — 같은 장소가 남으면 사용자가 고친 표시값을 잇는다(TRIP-1801). AI 초안은 표시값을 모른다. */
+    private fun List<ReplanSlot>.toSlots(kept: Map<UUID, VisitSlot>): List<VisitSlot> = mapIndexed { i, s ->
         VisitSlot.of(
             sourcePoiId = s.poiId, poiSnapshotId = s.poiSnapshotId, orderIndex = i,
             startAt = s.startAt, endAt = s.endAt, isFixed = s.isFixed, endsNextDay = s.endsNextDay,
             distanceRange = s.distanceRange, placementReason = s.placementReason,
             hasViolation = s.hasViolation, violationReason = s.violationReason,
+            displayName = s.displayName ?: kept[s.poiId]?.displayName,
+            displayCategory = s.displayCategory ?: kept[s.poiId]?.displayCategory,
         )
     }
 

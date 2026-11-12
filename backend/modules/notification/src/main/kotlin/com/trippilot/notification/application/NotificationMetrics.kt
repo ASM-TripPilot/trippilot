@@ -62,6 +62,19 @@ class NotificationMetrics(
     }
 
     /**
+     * 영수증 판정 결과(TRIP-1707). 발송 시점의 티켓(`SENT`)이 아니라 **15분 뒤 영수증**이 말하는 결과다 — `receipt{OK}` / 발송 `SENT`
+     * 가 접수에서 도착으로 가는 깔때기다. [reason] 은 오류일 때만 의미가 있고 닫힌 집합으로 접힌다. [platform] 은 기기 종류(IOS·ANDROID).
+     */
+    fun pushReceipt(status: String, reason: String?, platform: String) {
+        registry.counter(
+            PUSH_RECEIPT,
+            "outcome", status,
+            "reason", normalizeReason(reason),
+            "platform", platform,
+        ).increment()
+    }
+
+    /**
      * 푸시가 **생략된** 수(OBS-U6-03). 발송 실패와 다른 축이다 — 이쪽은 우리가 일부러 안 보낸 것이고,
      * 그 빈도가 곧 조용시간·상한 정책을 조정할 근거가 된다.
      *
@@ -107,6 +120,7 @@ class NotificationMetrics(
 
     companion object {
         const val PUSH_DISPATCH = "trippilot.push.dispatch"
+        const val PUSH_RECEIPT = "trippilot.push.receipt"
         const val SUPPRESSED = "trippilot.notification.suppressed"
         const val UNREAD_BACKLOG = "trippilot.notification.unread"
 
@@ -115,6 +129,18 @@ class NotificationMetrics(
 
         /** 발송기가 미발송 모드라 아무 데도 안 간 것 — 성공으로 기록되지만 전달은 아니다. */
         const val DELIVERY_NONE = "none"
+
+        /** NO_DEVICE 의 원인 — 활성 토큰이 하나도 없다(앱이 등록을 못 했다: 빌드·APNs/FCM 설정). */
+        const val REASON_NO_TOKEN = "NO_TOKEN"
+
+        /** NO_DEVICE 의 원인 — 활성 토큰은 있는데 OS 알림 권한이 허용이 아니다(사용자 설정·권한 요청 흐름). */
+        const val REASON_NOT_GRANTED = "NOT_GRANTED"
+
+        /** MUTED 의 원인 — 삭제를 요청해 유예 중인 계정이라 어떤 종류도 푸시하지 않는다. */
+        const val REASON_DELETION_PENDING = "DELETION_PENDING"
+
+        /** MUTED 의 원인 — 이 종류의 푸시 설정이 꺼져 있다(사용자가 껐거나 종류의 기본값이 꺼짐). */
+        const val REASON_PUSH_OFF = "PUSH_OFF"
 
         private const val NONE = "none"
         private const val OTHER = "OTHER"
@@ -128,7 +154,15 @@ class NotificationMetrics(
          * 있어 운영의 죽은 토큰이 전부 `OTHER` 로 세어졌다. 죽은 토큰은 `reasonOf` 가 표기 하나로 접어 상태 이름은
          * 여기까지 오지 않는다. `FAILED`·`UNKNOWN` 은 벤더 사유가 없는 실패의 상태·기본값이다.
          */
-        private val KNOWN_REASONS = setOf("DeviceNotRegistered", "MessageRateExceeded", "FAILED", "UNKNOWN")
+        private val KNOWN_REASONS = setOf(
+            "DeviceNotRegistered", "MessageRateExceeded", "FAILED", "UNKNOWN",
+            // 기기 없음의 두 원인(NO_DEVICE) — 토큰 자체가 없는가, 있는데 OS 알림 권한이 허용이 아닌가.
+            REASON_NO_TOKEN, REASON_NOT_GRANTED,
+            // 일부러 보내지 않음(MUTED)의 두 원인 — 삭제 유예 중인 계정인가, 푸시 설정이 꺼져 있는가.
+            REASON_DELETION_PENDING, REASON_PUSH_OFF,
+            // 프로젝트 자격(APNs .p8 · FCM)·발신자·크기 오류 — 지금껏 OTHER 로 접혀, 가장 가능성 높은 원인(자격 누락)이 가장 안 보였다.
+            "InvalidCredentials", "MismatchSenderId", "MessageTooBig",
+        )
     }
 }
 

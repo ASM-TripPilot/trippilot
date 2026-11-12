@@ -8,11 +8,14 @@ import type {
   VisitPhoto,
 } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
-import { createHitLog, createWrapper } from '@/test-support/mswHookHarness';
+import {
+  createGate,
+  createHitLog,
+  createWrapper,
+} from '@/test-support/mswHookHarness';
 import { flushNotifications } from '@/test-support/flushNotifications';
 import { recordsHandler } from '@/test-support/tripRecordsFixtures';
 
-import type { PhotoAssetMeta } from '@/features/attach-visit-media';
 import { useVisitAttachments } from './useVisitAttachments';
 
 /**
@@ -24,6 +27,8 @@ import { useVisitAttachments } from './useVisitAttachments';
  *    photoAttach 를 거쳐 gpsConsent=false 면 exif 가 빠진다(배선이 동의 게이트를 지나는 증거).
  *  - **메모 upsert** saveMemo(유효) → PUT memo 1회(만들기/고치기 안 나눔) · 바디 {text}.
  *  - **공백 무발화** saveMemo(공백만) → PUT 0회(무의미 upsert 방지).
+ *  - (TRIP-1797) 업로드 실패 노출·재시도(옛 TRIP-760 `attachPhoto`·`failedUploads`·`retryUpload`)는 `useMultiPhotoAttach` 로 이사했다 —
+ *    `features/attach-visit-media/model/useMultiPhotoAttach.integration.test.tsx` H4·H5·H5b.
  *
  * 왜 통합 버킷인가: 심판 대상이 "실제로 나간 요청·바디"와 "무효화 후 목록" — msw + 실 QueryClient 로만
  * 관측 가능(useVisitCheck.integration.test.tsx 와 같은 자리·장치). **.integration.test 명명 필수**.
@@ -193,86 +198,6 @@ describe('AC-5 · saveMemo — upsert 1회 · 공백만이면 0회', () => {
 });
 
 /**
- * 🔴 TRIP-760 · AC-4 · BR-U5-11/12 · INV-4 — 업로드(POST) 실패 노출 + 재시도 재호출.
- *
- * 무엇을 보장하나(승인 계약 · 훅 경계에서 관측):
- *  - **실패 노출**: attachPhoto 가 POST 실패(500)를 잡아 실패 자산을 `failedUploads` 로 드러낸다(reject 아님 —
- *    컨테이너의 fire-and-forget `void attachPhoto(...)` 가 unhandled rejection 을 안 낸다). 화면은 이 상태로
- *    upload-failed 셀을 그린다.
- *  - **재시도 재호출**: retryUpload 가 같은 자산으로 POST 를 다시 부른다 → `POST …/photos` **2회**(첫 실패 1 +
- *    재시도 1). 재시도도 `photoAttach` 동의 게이트를 지나 gpsConsent=false 면 exif 가 빠진다(BR-U5-12 무회귀).
- *  - **재실패=재노출**(01b 결정 2): 재시도가 또 500 이어도 `failedUploads.length` 는 **여전히 1**(같은 자산
- *    재노출, 별도 "재시도 중/재실패" 얼굴 없음 · 중복 push 금지).
- *
- * ★ seam 확정(02a §2-d): 실패 상태는 **훅**에 둔다(컨테이너 로컬 아님) — 훅이 POST·무효화를 이미 소유. 신설은
- *   attachPhoto·failedUploads·retryUpload 3멤버뿐이고 기존 `addPhoto`(reject-on-fail) 계약·위 AC-5 테스트는
- *   literally 무변경(additive 무회귀).
- * ★ 조합 실검증(02a §5-B): msw 500 → customInstance(authedClient) → 인터셉터가 401 만 리프레시·그 외는
- *   Promise.reject → 훅 catch → failedUploads. 500 이 reject 로 살아 도달함을 mutator·인터셉터 소스로 확인.
- *
- * (개념) `renderHook`=훅만 마운트 · `result.current`=현재 반환값(매 접근 재조회) · `waitFor`=비동기 상태 대기 ·
- *   msw `HttpResponse.json(body,{status:500})`=서버 500 흉내 · `not.toHaveProperty('exifLat')`=키 부재 단언.
- *   신규 멤버는 아직 없어 `result.current as unknown as UploadFailureApi` 로 계약 타입을 씌운다(구현 전엔
- *   undefined-호출로 red).
- */
-interface UploadFailureApi {
-  failedUploads: { localAssetId: string }[];
-  attachPhoto: (asset: PhotoAssetMeta, gpsConsent: boolean) => Promise<void>;
-  retryUpload: (localAssetId: string) => Promise<void>;
-}
-
-describe('🔴 AC-4 · 업로드 실패 노출 + 재시도 재호출(POST 2회 · 동의 게이트)', () => {
-  it('POST 500 → 실패 노출 → retryUpload → POST 2회 + 재시도도 exif 게이트 + 재노출', async () => {
-    const bodies: AddPhotoRequest[] = [];
-    const { result } = await renderReady([]);
-    const api = () => result.current as unknown as UploadFailureApi;
-
-    // POST 는 항상 500(재실패=재노출) — 나가는 바디를 캡처해 동의 게이트를 검증한다.
-    server.use(
-      http.post(
-        `${BASE}/trips/:tripId/visits/:visitCheckId/photos`,
-        async ({ request }) => {
-          bodies.push((await request.json()) as AddPhotoRequest);
-          return HttpResponse.json({ error: 'upload failed' }, { status: 500 });
-        }
-      )
-    );
-
-    // 실행 ① — 동의 없음 + exif 있는 자산을 attach(POST 500 → 실패로 노출).
-    await act(async () => {
-      await api().attachPhoto(
-        {
-          localAssetId: 'local-b',
-          deviceId: 'dev-1',
-          exifLat: 35.15,
-          exifLng: 129.11,
-        },
-        false
-      );
-    });
-
-    // 단언 ① — POST 1회 + 실패가 상태로 노출된다.
-    expect(hitCount(`POST /api/v1/trips/${TRIP}/visits/${VC}/photos`)).toBe(1);
-    await waitFor(() => expect(api().failedUploads.length).toBe(1));
-
-    // 실행 ② — 같은 자산으로 재시도(POST 재발화).
-    await act(async () => {
-      await api().retryUpload('local-b');
-    });
-
-    // 단언 ② — POST 2회(첫 실패 1 + 재시도 1).
-    expect(hitCount(`POST /api/v1/trips/${TRIP}/visits/${VC}/photos`)).toBe(2);
-    // 단언 ③ — 재시도 바디도 photoAttach 동의 게이트 경유(exif 없음, localAssetId 유지).
-    expect(bodies).toHaveLength(2);
-    expect(bodies[1]).not.toHaveProperty('exifLat');
-    expect(bodies[1]).not.toHaveProperty('exifLng');
-    expect(bodies[1].localAssetId).toBe('local-b');
-    // 단언 ④ — 재실패=재노출(같은 자산 하나로 유지, 중복 push 없음).
-    expect(api().failedUploads.length).toBe(1);
-  });
-});
-
-/**
  * 🔴 TRIP-1078 · AC-4·AC-5·AC-6 — 메모 성공값 캐시(`savedMemo`) + 같은 값 재저장 차단.
  *
  * 무엇을 보장하나(훅 경계):
@@ -371,5 +296,104 @@ describe('🔴 TRIP-1078 · saveMemo 성공값 캐시 + 같은 값 PUT 0', () =>
     expect(memoBodies).toEqual([{ text: '노을' }, { text: '노을' }]);
     await flushNotifications();
     await waitFor(() => expect(api().savedMemo).toBe('노을'));
+  });
+});
+
+/**
+ * 🔴 TRIP-1757 · 사진 목록 불러오기 실패 신호 — 훅이 `photoLoadFailed`·`photoLoadRetrying`·`retryPhotoLoad` 를 내려준다
+ * (메모 선례 `memoLoadFailed`·`memoLoadRetrying`·`retryMemoLoad`). 카드가 이 신호로 「사진을 불러오지 못했어요」 줄을 그린다.
+ *
+ * 무엇을 보장하나(3동작 = 준비: 사진 GET 을 500·404·200 으로 → 실행: 렌더·retryPhotoLoad → 단언: 신호 값·요청 수):
+ *  - 404 아닌 실패(재시도 끝) = `photoLoadFailed` true. 404(방문 기록 없음)·200 = false.
+ *  - `retryPhotoLoad()` = 사진 GET 만 다시(메모의 records GET 은 안 건드린다). 응답을 붙잡는 동안 `photoLoadFailed` 는 true 로
+ *    남고(v5 가 error 를 비워도 `errorUpdateCount`) `photoLoadRetrying` 이 true.
+ *  - 사진을 이미 받았으면 배경 재조회 실패는 신호가 아니다(목록이 화면에 있다).
+ */
+describe('TRIP-1757 · 사진 목록 실패 신호', () => {
+  const PHOTOS_GET = `GET /api/v1/trips/${TRIP}/visits/${VC}/photos`;
+  const RECORDS_GET = `GET /api/v1/trips/${TRIP}/records`;
+  const photosReply = (reply: () => Response | Promise<Response>) =>
+    server.use(
+      http.get(`${BASE}/trips/:tripId/visits/:visitCheckId/photos`, reply)
+    );
+  const status = (code: number) => () =>
+    HttpResponse.json({ error: { code: 'X', message: 'x' } }, { status: code });
+  const renderHook1757 = () =>
+    renderHook(() => useVisitAttachments({ tripId: TRIP, visitCheckId: VC }), {
+      wrapper: createWrapper(),
+    });
+
+  it('P1 사진 GET 500 → photoLoadFailed true · photos 비어 있음 · 재시도 중 아님', async () => {
+    photosReply(status(500));
+    const { result } = renderHook1757();
+
+    await waitFor(() => expect(result.current.photoLoadFailed).toBe(true));
+    expect(result.current.photos).toEqual([]);
+    expect(result.current.photoLoadRetrying).toBe(false);
+  });
+
+  it.each([
+    ['404(방문 기록 없음)', status(404)],
+    ['200', () => HttpResponse.json({ items: [], count: 0 })],
+  ])('P2 사진 GET %s → photoLoadFailed false', async (_label, reply) => {
+    photosReply(reply);
+    const { result } = renderHook1757();
+
+    await waitFor(() => expect(hitCount(PHOTOS_GET)).toBe(1));
+    await flushNotifications();
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.photoLoadFailed).toBe(false);
+  });
+
+  it('P3 retryPhotoLoad → 사진 GET 만 다시(records 는 그대로), 붙잡는 동안 failed·retrying 둘 다 true, 200 이면 둘 다 false', async () => {
+    photosReply(status(500));
+    const { result } = renderHook1757();
+    await waitFor(() => expect(result.current.photoLoadFailed).toBe(true));
+    const recordsBefore = hitCount(RECORDS_GET);
+
+    const gate = createGate();
+    photosReply(async () => {
+      await gate.opened;
+      return HttpResponse.json({
+        items: [photo({ visitPhotoMetaId: 'a' })],
+        count: 1,
+      });
+    });
+    act(() => result.current.retryPhotoLoad());
+    await waitFor(() => expect(hitCount(PHOTOS_GET)).toBe(2));
+    await flushNotifications();
+
+    expect(result.current.photoLoadRetrying).toBe(true);
+    expect(result.current.photoLoadFailed).toBe(true);
+
+    gate.release();
+    await waitFor(() => expect(result.current.photos.length).toBe(1));
+    expect(result.current.photoLoadFailed).toBe(false);
+    expect(result.current.photoLoadRetrying).toBe(false);
+    expect(hitCount(RECORDS_GET)).toBe(recordsBefore);
+  });
+
+  it('P4 이미 받은 목록이 있고 배경 재조회(addPhoto 무효화)만 500 이면 photoLoadFailed false', async () => {
+    const { result } = await renderReady([photo({ visitPhotoMetaId: 'a' })]);
+    await waitFor(() => expect(result.current.photos.length).toBe(1));
+    server.use(
+      http.post(`${BASE}/trips/:tripId/visits/:visitCheckId/photos`, () =>
+        HttpResponse.json(photo({ visitPhotoMetaId: 'b' }), { status: 201 })
+      )
+    );
+    photosReply(status(500));
+
+    await act(async () => {
+      await result.current.addPhoto(
+        { localAssetId: 'local-b', deviceId: 'dev-1' },
+        false
+      );
+    });
+    // 앵커 — 재조회 GET 이 실제로 나가 실패했다.
+    await waitFor(() => expect(hitCount(PHOTOS_GET)).toBe(2));
+    await flushNotifications();
+
+    expect(result.current.photos.length).toBe(1);
+    expect(result.current.photoLoadFailed).toBe(false);
   });
 });

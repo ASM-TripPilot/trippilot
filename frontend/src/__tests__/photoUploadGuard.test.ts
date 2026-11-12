@@ -108,6 +108,8 @@ describe('🔴 G2 · 사진 바이너리 업로드 심볼 0 + 메타 실참조 (
     'pages/record/trip-records',
     'pages/record/records-calendar',
     'pages/record/daily-reflection',
+    // TRIP-1665 · j03 매거진 부품(표지·장면 사진을 그리는 뷰·VM)이 이 폴더로 올라왔다 — 사진이 기기 밖으로 나가는 심볼이 없는지 같은 금칙어로 훑는다.
+    'features/reflection',
     'features/check-visit',
     'features/attach-visit-media',
   ];
@@ -118,6 +120,8 @@ describe('🔴 G2 · 사진 바이너리 업로드 심볼 0 + 메타 실참조 (
     'pages/record/trip-records/model/useVisitAttachments.ts',
     'shared/photo/index.ts',
     'pages/live/live-itinerary/ui/LiveItineraryPage.tsx',
+    // TRIP-1781 · 여행 표지 사진 훅 — 서버 메타에서 앨범 id 만 읽어 이 기기 앨범 주소로 푼다(업로드 아님). 폴더 밖으로 옮겨지면 스캔이 조용히 줄어든다.
+    'features/reflection/model/useTripCoverPhoto.ts',
   ];
 
   it('사진 첨부 경로 그래프에 바이너리 금칙 6종 0건 + AddPhotoRequest 실참조', () => {
@@ -164,6 +168,16 @@ describe('🔴 G2 · 공유 카드 서버 이미지 생성·저장 심볼 0 + �
     'pages/record/share-card/ui/ShareCardPreview.tsx',
     'pages/record/share-card/ui/FormatSegment.tsx',
     'pages/record/share-card/ui/ShareCardPage.tsx',
+    // TRIP-1667 스토리 덱 — 덱 코드의 변수명·주석 밖 문자열에 금칙어(storageKey·base64·FormData 등)가 들어오면 의미와 무관하게 red.
+    // 왜 tsc·ESLint·렌더로 못 잡나: 금칙어는 식별자·문자열 어디에 있어도 타입·린트·렌더가 모른다(고정 목록 밖 새 파일은 스캔을 안 받는다).
+    // j04 와 공용으로 features 로 올라온 빌더도 j06 에서 쓰이는 그래프라 함께 건다.
+    'pages/record/share-card/model/shareStory.ts',
+    'pages/record/share-card/model/storyDeck.ts',
+    'pages/record/share-card/model/useStoryDeck.ts',
+    'pages/record/share-card/ui/StoryDeck.tsx',
+    'pages/record/share-card/ui/StoryDeckView.tsx',
+    'pages/record/share-card/ui/StorySlides.tsx',
+    'features/reflection/model/summaryMagazineVM.ts',
   ];
   const CAPTURE_REL = 'features/share-trip-card/model/shareCapture.ts';
 
@@ -266,5 +280,81 @@ describe('🔴 G2 · 공유 카드 서버 이미지 생성·저장 심볼 0 + �
         token: firstForbidden(SHARE_FORBIDDEN, source),
       }));
     expect(offenders).toEqual([]);
+  });
+});
+
+// TRIP-1781 · 대표 카드(저장·공유되는 PNG 의 원본) 프레임은 정지 화면이어야 한다 — 켄번스·등장·카운트업이 import 되면 PNG 에 중간 프레임이 박힌다.
+// 왜 tsc·ESLint·렌더 테스트로 못 잡는가: 이 import 를 막는 린트 규칙이 없고, jest 는 reanimated 를 목으로 돌려 움직이는 부품과 정지 부품의 렌더 결과가
+// 같아 구분이 안 된다(KenBurns 래퍼는 testID 도 없다). 그래서 import 문만 소스로 본다.
+describe('🔴 AC-13 · 대표 카드 프레임에 움직이는 연출 부품 import 0 (TRIP-1781)', () => {
+  const PREVIEW_REL = 'pages/record/share-card/ui/ShareCardPreview.tsx';
+  /**
+   * 움직이는 부품 이름과 모듈 — import 문 한 덩어리(여러 줄 포함)에서 찾는다.
+   * `Animated` 는 RN 기본 애니메이션이다(`import { Animated, View } from 'react-native'`). 단어 경계(`\b`)로 잡아
+   * `View`·`Text` 같은 정상 import 와 `AnimatedGlyph` 같은 다른 이름은 건드리지 않는다.
+   */
+  const MOVING = [
+    /KenBurns/,
+    /MagazinePhoto/,
+    /RevealItem/,
+    /CountUpText/,
+    /StickerPop/,
+    /Highlight/,
+    /MagazineMotion/,
+    /react-native-reanimated/,
+    /\bAnimated\b/,
+  ];
+  const IMPORT_STATEMENT =
+    /\bimport\s+(?:type\s+)?[\s\S]*?\bfrom\s*['"][^'"]+['"]|\bimport\s*['"][^'"]+['"]|\brequire\(\s*['"][^'"]+['"]\s*\)/g;
+  const movingImports = (source: string): string[] =>
+    (stripComments(source).match(IMPORT_STATEMENT) ?? []).filter((statement) =>
+      MOVING.some((re) => re.test(statement))
+    );
+
+  it('ShareCardPreview 는 움직이는 부품을 import 하지 않고, 사진은 정지 PlacePhoto 로 그린다', () => {
+    // 탐지기 자가 확인(같은 it 의 긍정 앵커): 주석 속 import 는 못 잡고, 진짜 import(한 줄·여러 줄)는 잡는다.
+    expect(
+      movingImports(
+        "// import { KenBurns } from './MagazineMotion';\nconst a = 1;"
+      )
+    ).toEqual([]);
+    expect(
+      movingImports(
+        "import { A } from './a';\nimport { RevealItem } from '@/shared/ui/RevealItem';"
+      )
+    ).toHaveLength(1);
+    expect(
+      movingImports(
+        "import {\n  formatShareCardStats,\n  MagazinePhoto,\n} from '@/features/reflection/index.view';"
+      )
+    ).toHaveLength(1);
+
+    // RN 기본 Animated 도 잡는다(5-b N1). 주석 제거 → import 탐지 조합을 실제 문자열로 태운다: 앞줄에 URL 과 줄 끝 주석이 있어도,
+    // import 가 여러 줄이어도 살아남고, 정상 RN import 는 오탐하지 않는다.
+    expect(
+      movingImports("import { Animated, View } from 'react-native';")
+    ).toHaveLength(1);
+    expect(
+      movingImports(
+        "const u = 'https://x.dev/a'; // 주석\nimport {\n  View,\n  Animated,\n} from 'react-native';"
+      )
+    ).toHaveLength(1);
+    expect(
+      movingImports("import Animated from 'react-native-reanimated';")
+    ).toHaveLength(1);
+    expect(
+      movingImports("import { View, Text, Pressable } from 'react-native';")
+    ).toEqual([]);
+    expect(
+      movingImports("// import { Animated } from 'react-native';\nconst a = 1;")
+    ).toEqual([]);
+    expect(
+      movingImports("import { AnimatedGlyph } from './AnimatedGlyph';")
+    ).toEqual([]);
+
+    const source = readOne(PREVIEW_REL);
+    expect(source.includes('formatShareCardStats')).toBe(true); // 파일을 실제로 읽었다
+    expect(movingImports(source)).toEqual([]);
+    expect(source.includes('PlacePhoto')).toBe(true); // 구현 전엔 red — 사진 칸은 정지 PlacePhoto 여야 한다
   });
 });

@@ -14,7 +14,11 @@ import {
   getAccessToken,
   setAccessToken,
 } from '@/shared/api/tokenManager';
-import { guardPress, resetPressGuard } from '@/shared/lib/pressGuard';
+import {
+  guardPress,
+  PRESS_GUARD_SCREEN_LISTENERS,
+  resetPressGuard,
+} from '@/shared/lib/pressGuard';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 import {
   BASE,
@@ -871,11 +875,13 @@ describe('기간 편집 시트 (W-1~W-5)', () => {
       fireEvent.press(
         await screen.findByTestId('trip-wizard-destination-nights-inc-2')
       );
+      resetPressGuard(); // 앞 시트 [적용]이 연 연타 창 — 사람이 따로 누른 탭이다.
       fireEvent.press(screen.getByTestId('trip-wizard-destination-apply'));
 
       // 실행 — 프리필 도착(로딩 해제) 뒤 다음.
       const next = screen.getByTestId('trip-wizard-step1-next');
       await waitFor(() => expect(next).toBeEnabled());
+      resetPressGuard();
       fireEvent.press(next);
 
       // 단언 — 요청 모양은 그대로, 끝 날짜만 파생값이다.
@@ -1951,6 +1957,111 @@ describe('만든 여행의 취향 잠금 (AC-10)', () => {
 });
 
 /**
+ * TRIP-1750 (S5G 확장 · BR-U1-38 · INV-4) — 계정 취향 조회(`GET /me/preferences`)가 실패하면 프리필이 빈 [] 로 접혀,
+ * 시트가 빈 칩으로 열리고 [적용]이 빈 오버라이드를 커밋한다 → 제출 스냅숏이 styles·activities 를 빈 배열로 실어 이 여행의
+ * 온보딩 취향이 사라진다. 그래서 프리필이 없으면(로딩·실패) 시트를 열지 않고, 실패면 토스트(결정 1 = a)와 함께 다시 받는다.
+ * 이 응답은 404 가 없다(openapi 200 하나) — 모든 실패가 "모름"이다.
+ *
+ * 3동작 뼈대: 준비 = 취향 GET 실패 → 실행 = 취향 행 누름 / [다음] → 단언 = 시트 없음·토스트·제출 본문 키 없음 → 다시 받은 뒤 시트.
+ */
+describe('취향 조회 실패 — 빈 칩 시트를 열지 않는다 (TRIP-1750)', () => {
+  afterEach(expectNoExitWizard);
+
+  const {
+    tracker,
+    createTripHandler,
+    renderPage,
+    next,
+    seedValidDraft,
+    waitForPrefill,
+  } = wizardStep1Harness({ Inner: WithToastHost });
+
+  const LOAD_ERROR = 'trip-wizard-pref-load-error';
+  let prefReply: 'status500' | 'network' | 'ok' = 'status500';
+  let prefGets = 0;
+
+  beforeEach(() => {
+    mockPush.mockClear();
+    useTripWizardStore.getState().reset();
+    prefReply = 'status500';
+    prefGets = 0;
+    server.use(
+      http.get(`${BASE}/me/preferences`, () => {
+        prefGets += 1;
+        if (prefReply === 'status500')
+          return new HttpResponse(null, { status: 500 });
+        if (prefReply === 'network') return HttpResponse.error();
+        return HttpResponse.json(
+          makePreference({ styles: { value: ['자연'] } })
+        );
+      }),
+      createTripHandler()
+    );
+  });
+
+  afterEach(() => {
+    resetToast();
+    server.resetHandlers();
+  });
+
+  function preferenceRow() {
+    return screen.getByTestId('trip-wizard-summary-preference');
+  }
+
+  it.each<[string, 'status500' | 'network']>([
+    ['500', 'status500'],
+    ['네트워크 끊김', 'network'],
+  ])(
+    '🔴 취향 GET %s → 취향 행을 눌러도 시트가 안 열리고 실패 토스트 · 그대로 [다음]이면 스냅숏에 styles·activities 키가 없다',
+    async (_label, failure) => {
+      prefReply = failure;
+      seedValidDraft();
+      renderPage();
+      await waitForPrefill();
+      expect(screen.queryByTestId(LOAD_ERROR)).toBeNull();
+
+      fireEvent.press(preferenceRow());
+
+      // 단언 — 빈 칩 시트가 열리면 위반이다. 이유가 토스트로 보인다.
+      expect(await screen.findByTestId(LOAD_ERROR)).toBeOnTheScreen();
+      expect(screen.queryByTestId('trip-wizard-pref-sheet')).toBeNull();
+
+      // 시트를 거치지 않고 제출 — 모르는 취향은 키를 빼서 서버 쪽 기존 취향이 쓰이게 한다(616~623행 무회귀).
+      // 누름이 띄운 재조회(이번에도 실패)가 끝나기를 기다린다 — 도는 동안은 로딩 얼굴이라 [다음]이 잠긴다(03b N2).
+      await waitFor(() => expect(prefGets).toBe(2));
+      await waitForPrefill();
+      fireEvent.press(next());
+      await waitFor(() => expect(tracker.postedBodies).toHaveLength(1));
+      const snapshot = tracker.postedBodies[0].preferenceSnapshot as Record<
+        string,
+        unknown
+      >;
+      expect(snapshot).not.toHaveProperty('styles');
+      expect(snapshot).not.toHaveProperty('activities');
+    }
+  );
+
+  it('🔴 실패 뒤 취향 행을 누르면 다시 받는다 → 200(자연)이 오면 다음 누름에 시트가 자연 칩 선택으로 열린다', async () => {
+    renderPage();
+    await waitForPrefill();
+    const beforePress = prefGets;
+
+    // 실행 — 실패 상태에서 누른다. 이번 재조회는 성공한다.
+    prefReply = 'ok';
+    fireEvent.press(preferenceRow());
+    expect(await screen.findByTestId(LOAD_ERROR)).toBeOnTheScreen();
+    await waitFor(() => expect(prefGets).toBe(beforePress + 1));
+
+    // 단언 — 도착 뒤 다시 누르면 시트가 프리필(자연)로 열린다.
+    await waitFor(() => {
+      fireEvent.press(preferenceRow());
+      expect(screen.getByTestId('trip-wizard-pref-sheet')).toBeOnTheScreen();
+    });
+    expect(screen.getByTestId('trip-wizard-pref-chip-nature')).toBeSelected();
+  });
+});
+
+/**
  * TRIP-1113 — 이미 만든 여행이 있으면 「다음」은 여행을 새로 만들지 않고 고친다(실 HTTP 심판).
  *
  * 무엇을 보장하나:
@@ -2013,6 +2124,7 @@ describe('재진입 — 만든 여행 고치기 (AC-1~AC-11)', () => {
 
   function seedItem(sourcePoiId: string): MustVisitSeedItem {
     return {
+      imageLicense: null,
       sourcePoiId,
       name: `장소 ${sourcePoiId}`,
       imageUrl: null,
@@ -3720,6 +3832,37 @@ describe('지역 밖 꼭 갈 곳 — 보이고, 고르면 반영된다', () => {
     expect(mustVisitPosts).toEqual([{ poiId: GYEONGBOK, type: 'ANYTIME' }]);
   });
 
+  // TRIP-1827 5-b W1 — 꼭 갈 곳 등록은 [다음] 누름이 아니라 생성 응답 뒤 흐름이다(`transition:'ignore'`).
+  // 응답을 기다리는 사이 화면 전환이 시작돼도(위저드 안쪽 Stack push 등) 등록이 빠지면 여행만 생기고
+  // 꼭 갈 곳 0건 · 배너도 없다(INV-4 침묵). 전환 표시는 최상위 beforeEach 의 resetPressGuard 가 지운다.
+  it('P-12 · 생성 응답 대기 중 화면 전환이 시작돼도, 응답 뒤 시드 두 곳이 모두 등록되고 step2 로 간다', async () => {
+    // 준비
+    seedSeoulWithNamwon();
+    holdCreate = { release: () => {}, started: false };
+    renderPage();
+    await waitForPrefill();
+
+    // 실행 — [다음], 생성 응답이 붙잡힌 사이 오는 화면의 전환이 시작된다(끝 이벤트는 아직 없다).
+    pressNext();
+    await waitFor(() => expect(holdCreate?.started).toBe(true));
+    PRESS_GUARD_SCREEN_LISTENERS.transitionStart({
+      target: 'inner-stack-route',
+      data: { closing: false },
+    });
+    await act(async () => {
+      holdCreate?.release();
+    });
+
+    // 단언 — 등록 수 = 시드 수.
+    await waitFor(() => expect(mustVisitPosts).toHaveLength(2));
+    expect(mustVisitPosts.map((body) => body.poiId).sort()).toEqual(
+      [GWANGHALLU, GYEONGBOK].sort()
+    );
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith('/trips/new/step2')
+    );
+  });
+
   // AC-4 PATCH 재진입 경로 — 이미 만든 여행의 서버 꼭 갈 곳도 [빼기]를 따른다(★11).
   it('P-11 · 재진입에서 [빼기] 뒤 [다음]이면 남원 꼭 갈 곳만 DELETE 되고 새 등록은 없다', async () => {
     // 준비 — 서버에 경복궁·광한루원이 이미 등록돼 있고, 시드도 같다.
@@ -3901,5 +4044,98 @@ describe('일과 시간 (TRIP-1308)', () => {
     fireEvent.press(screen.getByTestId('trip-wizard-daywindow-end-h-20'));
     fireEvent.press(screen.getByTestId('trip-wizard-daywindow-apply'));
     await waitFor(() => expect(next()).toBeEnabled());
+  });
+});
+
+describe('TRIP-1823 · 시트 [적용] 연타 — 둘째 탭이 [다음]으로 가서 여행을 만들지 않는다', () => {
+  const { tracker, renderPage, seedValidDraft, openSheet, waitForPrefill } =
+    wizardStep1Harness();
+  const createHits = (): number =>
+    tracker.hits.filter((hit) => hit === 'POST /api/v1/trips').length;
+  const NEXT = 'trip-wizard-step1-next';
+
+  beforeEach(() => {
+    act(() => useTripWizardStore.getState().reset());
+    server.use(
+      http.post(`${BASE}/trips`, () => HttpResponse.json(TRIP, { status: 201 }))
+    );
+  });
+
+  const SHEETS = [
+    ['companion', 'trip-wizard-companion-apply', 'trip-wizard-companion-sheet'],
+    ['daywindow', 'trip-wizard-daywindow-apply', 'trip-wizard-daywindow-sheet'],
+    [
+      'destination',
+      'trip-wizard-destination-apply',
+      'trip-wizard-destination-sheet',
+    ],
+    ['period', 'trip-wizard-period-apply', 'trip-wizard-period-sheet'],
+    ['preference', 'trip-wizard-pref-sheet-apply', 'trip-wizard-pref-sheet'],
+  ] as const;
+
+  it.each(SHEETS)(
+    '%s 시트 — 연타는 시트만 닫고 요청 0건, 창이 닫힌 뒤 [다음]은 여행을 만든다',
+    async (kind, apply, sheet) => {
+      seedValidDraft();
+      renderPage();
+      await waitForPrefill();
+      await openSheet(kind);
+      // 기간 시트는 시작일을 고른 뒤에야 [적용]이 켜진다(시드는 스토어뿐 — 시트 드래프트는 비어 있다).
+      if (kind === 'period')
+        fireEvent.press(
+          screen.getByTestId('trip-wizard-period-cell-2026-06-10')
+        );
+
+      fireEvent.press(screen.getByTestId(apply));
+      expect(screen.queryByTestId(sheet)).toBeNull(); // 앞 탭은 먹었다(앵커)
+      fireEvent.press(screen.getByTestId(NEXT));
+      await act(() => new Promise((r) => setTimeout(r, 30)));
+
+      expect(createHits()).toBe(0);
+
+      resetPressGuard();
+      fireEvent.press(screen.getByTestId(NEXT));
+      await waitFor(() => expect(createHits()).toBe(1));
+    }
+  );
+
+  // TRIP-1827 L1 — 간격 0.6초의 둘째 탭이 400ms 창을 지나 여행을 만들었다(QA L1). 시트는 조건부 렌더라 전환 이벤트가
+  // 없어 [적용] 전용 긴 창(800ms)이 막는다. 하네스 `next()` 는 창을 닫으므로 testID 로 직접 누른다.
+  // 시계는 시트가 열린 뒤에 멈춘다 — 그 전의 프리필 응답은 기다려야 한다.
+  describe('[적용] 은 800ms 창을 연다', () => {
+    let clock: jest.SpyInstance | undefined;
+    afterEach(() => clock?.mockRestore());
+
+    it.each(SHEETS)(
+      '%s 시트 — [적용] 600ms 뒤 [다음]은 요청 0건, 800ms 뒤 [다음]은 1건',
+      async (kind, apply, sheet) => {
+        // 준비
+        seedValidDraft();
+        renderPage();
+        await waitForPrefill();
+        await openSheet(kind);
+        if (kind === 'period')
+          fireEvent.press(
+            screen.getByTestId('trip-wizard-period-cell-2026-06-10')
+          );
+        const FROZEN_NOW = Date.now() + 10_000;
+        clock = jest.spyOn(Date, 'now').mockReturnValue(FROZEN_NOW);
+
+        // 실행 — [적용] 뒤 0.6초에 떨어진 둘째 탭
+        fireEvent.press(screen.getByTestId(apply));
+        expect(screen.queryByTestId(sheet)).toBeNull();
+        clock.mockReturnValue(FROZEN_NOW + 600);
+        fireEvent.press(screen.getByTestId(NEXT));
+        await act(() => new Promise((r) => setTimeout(r, 30)));
+
+        // 단언
+        expect(createHits()).toBe(0);
+
+        // 실행·단언 — 창이 지난 뒤의 [다음]은 삼키지 않는다
+        clock.mockReturnValue(FROZEN_NOW + 800);
+        fireEvent.press(screen.getByTestId(NEXT));
+        await waitFor(() => expect(createHits()).toBe(1));
+      }
+    );
   });
 });

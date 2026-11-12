@@ -4,9 +4,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { NotificationToggleKind } from '@/shared/api/index.schemas';
 
-import { NotifBackChevronGlyph, NotifInfoGlyph } from '@/features/notification';
+import {
+  WarningTriangleGlyph,
+  BackChevronGlyph,
+  InfoCircle18Glyph,
+} from '@/shared/ui/glyphs';
+import { StateNotice } from '@/shared/ui/StateNotice';
 import { PermissionBanner } from './PermissionBanner';
 import { ToggleRow } from './ToggleRow';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * TRIP-607 · l02 알림 설정 화면 — 순수 프레젠테이션(값·콜백 주입).
@@ -49,6 +55,11 @@ export interface NotificationSettingsScreenProps {
   ) => void;
   onOpenSettings: () => void;
   onPressBack?: () => void;
+  /** 알림 설정 조회 실패(TRIP-1755) — 6행을 꺼짐으로 그리지 않고 오류 얼굴 + 다시 시도. 기본 false(preview·옛 호출부 무파손). */
+  loadFailed?: boolean;
+  /** 다시 받는 중 — 다시 시도 비활성. */
+  retrying?: boolean;
+  onRetry?: () => void;
 }
 
 /** 화면이 소유하는 6종(순서·라벨) — COMMUNITY 는 U7 개통 전까지, SYSTEM 은 계약상 여기 없다. */
@@ -65,7 +76,7 @@ const EMPTY_VALUE = { pushEnabled: false, inAppEnabled: false } as const;
 
 // 카드 그림자(Figma 0,2,10 · 6%) — 그림자는 className 으로 못 준다. l01 cardShadow 와 같은 값('#000000' raw-hex 예외).
 const cardShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
@@ -76,7 +87,7 @@ const cardShadow = {
 function InfoBanner({ text }: { text: string }): ReactElement {
   return (
     <View className="flex-row items-start gap-[10px] rounded-[12px] bg-surface-soft px-[14px] py-md">
-      <NotifInfoGlyph size={18} />
+      <InfoCircle18Glyph size={18} />
       <Text className="flex-1 font-noto text-label text-muted">{text}</Text>
     </View>
   );
@@ -89,21 +100,53 @@ export function NotificationSettingsScreen({
   onToggle,
   onOpenSettings,
   onPressBack,
+  loadFailed = false,
+  retrying = false,
+  onRetry,
 }: NotificationSettingsScreenProps): ReactElement {
   const showPermissionDenied = !pushColumnAvailable && !permissionChecking;
+  const header = (
+    <View className="flex-row items-center gap-sm px-lg pb-md pt-sm">
+      <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
+      <Pressable
+        testID="notification-settings-back"
+        accessibilityRole="button"
+        onPress={onPressBack}
+      >
+        <BackChevronGlyph />
+      </Pressable>
+      <Text className="text-[20px] font-noto-bold text-ink">알림 설정</Text>
+    </View>
+  );
+
+  if (loadFailed) {
+    return (
+      <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
+        {header}
+        <View className="w-full flex-1 items-center justify-center px-lg">
+          <StateNotice
+            testID="notification-settings-load-error"
+            icon={<WarningTriangleGlyph size={32} color="primary" />}
+            title="알림 설정을 불러올 수 없어요"
+            description="잠시 후 다시 시도해 주세요"
+            actions={[
+              {
+                testID: 'notification-settings-load-retry',
+                label: '다시 시도',
+                variant: 'filled',
+                onPress: onRetry,
+                disabled: retrying,
+              },
+            ]}
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-canvas">
-      <View className="flex-row items-center gap-sm px-lg pb-md pt-sm">
-        <View className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
-        <Pressable
-          testID="notification-settings-back"
-          accessibilityRole="button"
-          onPress={onPressBack}
-        >
-          <NotifBackChevronGlyph />
-        </Pressable>
-        <Text className="text-[20px] font-noto-bold text-ink">알림 설정</Text>
-      </View>
+      {header}
 
       <ScrollView contentContainerClassName="gap-lg px-lg pb-[26px] pt-[18px]">
         {showPermissionDenied ? (
@@ -119,7 +162,10 @@ export function NotificationSettingsScreen({
           <View className="flex-row gap-lg">
             <View className="min-w-[46px] items-center">
               {showPermissionDenied ? (
-                <View className="rounded-[8px] border border-dashed border-[#C4C9CF] px-[10px] py-xs">
+                <View
+                  // eslint-disable-next-line trippilot/no-raw-hex -- Figma raw stroke(점선 테두리), 토큰 없음
+                  className="rounded-[8px] border border-dashed border-[#C4C9CF] px-[10px] py-xs"
+                >
                   <Text
                     numberOfLines={1}
                     className="text-[11.5px] font-noto-bold text-muted-soft"

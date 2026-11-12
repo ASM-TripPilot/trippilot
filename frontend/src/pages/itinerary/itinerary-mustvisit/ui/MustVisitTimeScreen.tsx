@@ -1,7 +1,16 @@
 import type { ReactElement } from 'react';
 import { useContext, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { Button } from '@/shared/ui/Button';
+import {
+  ChevronDownGlyph,
+  InfoCircleGlyph,
+  AlertCircleGlyph,
+  BackChevronGlyph,
+  ClockGlyph,
+} from '@/shared/ui/glyphs';
+import type { ImageLicense } from '@/shared/api/index.schemas';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 import {
   SafeAreaInsetsContext,
   SafeAreaView,
@@ -22,13 +31,7 @@ import {
   type MustVisitTimeForm,
   type startTimeOptions,
 } from '@/features/add-must-visit';
-import {
-  AlertCircleGlyph,
-  BackChevronGlyph,
-  ChevronDownGlyph,
-  ClockGlyph,
-  InfoCircleGlyph,
-} from '@/features/itinerary/index.view';
+import { COLOR_TOKENS } from '@/shared/config';
 
 /**
  * h07 방문 시각 지정 — Figma `1904:1083`.
@@ -64,7 +67,7 @@ const BLOCK_REASON_TEXT: Record<'DATE_MISSING' | 'START_MISSING', string> = {
 
 // 카드·세그먼트 그림자(Figma `0px 2px 10px rgba(0,0,0,0.06)`) — 그림자는 토큰 대상이 아니다.
 const softShadow = {
-  shadowColor: '#000000',
+  shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.06,
   shadowRadius: 10,
@@ -76,6 +79,8 @@ export interface MustVisitTimeScreenProps {
   placeName: string | null;
   region?: string | null;
   imageUrl?: string | null;
+  /** `imageUrl` 의 공공누리 유형 — 필수 키(끊기면 tsc). */
+  imageLicense: ImageLicense | null | undefined;
   /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본). */
   category?: string | null;
   dayChips: { date: string; label: string }[];
@@ -157,6 +162,7 @@ export function MustVisitTimeScreen({
   placeName,
   region,
   imageUrl,
+  imageLicense,
   category,
   dayChips,
   startOptions,
@@ -215,12 +221,13 @@ export function MustVisitTimeScreen({
               className="w-full flex-row items-center gap-md rounded-card border border-hairline bg-canvas py-md pl-md pr-[14px]"
             >
               <View className="h-[64px] w-[64px] overflow-hidden rounded-thumb bg-surface-strong">
-                <PlacePhoto
+                <PoiPhoto
                   testID="itinerary-mustvisit-time-photo"
                   imageUrl={imageUrl}
+                  imageLicense={imageLicense}
+                  surface="thumb"
                   category={category}
                   poiId={sourcePoiId}
-                  contentFit="cover"
                   cachePolicy="memory-disk"
                   className="h-full w-full"
                 />
@@ -341,7 +348,7 @@ export function MustVisitTimeScreen({
 
             {duplicateText === undefined ? null : (
               <View className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline bg-primary-pale px-[14px] py-md">
-                <InfoCircleGlyph tone="primaryText" />
+                <InfoCircleGlyph color="primaryText" />
                 <Text
                   testID="itinerary-mustvisit-time-duplicate"
                   className="flex-1 font-noto text-label text-primary-text"
@@ -353,7 +360,7 @@ export function MustVisitTimeScreen({
 
             {leaveWarningText === undefined ? null : (
               <View className="w-full flex-row items-center gap-[10px] rounded-button border border-hairline bg-primary-pale px-[14px] py-md">
-                <InfoCircleGlyph tone="primaryText" />
+                <InfoCircleGlyph color="primaryText" />
                 <Text
                   testID="itinerary-mustvisit-time-leave-warning"
                   className="flex-1 font-noto text-label text-primary-text"
@@ -400,19 +407,14 @@ export function MustVisitTimeScreen({
               </View>
             )}
 
-            <Pressable
+            <Button
               testID="itinerary-mustvisit-time-submit"
-              accessibilityRole="button"
               disabled={!canSubmit}
               onPress={onSubmit}
-              className={`w-full items-center justify-center rounded-button py-lg ${
-                canSubmit ? 'bg-primary' : 'bg-hairline-strong'
-              }`}
+              className="w-full"
             >
-              <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                {form.fixed ? SUBMIT_LABEL_FIXED : SUBMIT_LABEL_ANYTIME}
-              </Text>
-            </Pressable>
+              {form.fixed ? SUBMIT_LABEL_FIXED : SUBMIT_LABEL_ANYTIME}
+            </Button>
           </ScrollView>
         </View>
       </SafeAreaView>

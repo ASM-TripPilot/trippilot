@@ -145,16 +145,32 @@ def _openai_llm_and_model() -> tuple[object, str]:
     return adapter, _env("OPENAI_MODEL") or "gpt-5.6-terra"
 
 
+_ANTHROPIC_NUMBERED_KEYS = range(2, 10)  # ANTHROPIC_API_KEY_2 .. _9
+
+
+def _anthropic_api_keys() -> list[str]:
+    """Claude 키 목록 — 번갈아 쓸 순서대로, 같은 값은 한 번만.
+
+    ① `ANTHROPIC_API_KEY`(기존 단일 키) → ② `ANTHROPIC_API_KEY_2`…`_9` → ③ `ANTHROPIC_API_KEYS`(쉼표 목록).
+    셋을 합친다 — 운영 시크릿은 번호 칸으로 키를 늘리고, 쉼표 목록은 한 칸에 몰아 넣고 싶을 때 쓴다.
+    같은 값이 두 칸에 있어도(키를 옮기다 생기는 중복) 한 번만 센다 — 같은 키를 번갈아 써 봐야 한도는 그대로다.
+    값은 어디에도 찍지 않는다.
+    """
+    raw = [_env("ANTHROPIC_API_KEY"), *(_env(f"ANTHROPIC_API_KEY_{n}") for n in _ANTHROPIC_NUMBERED_KEYS)]
+    raw += (_env("ANTHROPIC_API_KEYS") or "").split(",")
+    return list(dict.fromkeys(k.strip() for k in raw if k and k.strip()))
+
+
 def _anthropic_llm_and_model() -> tuple[object, str]:
     """`TRIPPILOT_LLM_PROVIDER=anthropic` 실배선 조립 (AI-D06 — Claude 직접 호출).
 
     smoke_llm._build_adapter의 anthropic 분기와 동형 — SDK 지연 import,
     max_retries=0(재시도 무익 정책, TRIP-381). 키 누락은 즉시 기동 실패.
     """
-    api_key = _env("ANTHROPIC_API_KEY")
-    if api_key is None:
+    api_keys = _anthropic_api_keys()
+    if not api_keys:
         raise RuntimeError(
-            "TRIPPILOT_LLM_PROVIDER=anthropic 인데 ANTHROPIC_API_KEY 미설정 — "
+            "TRIPPILOT_LLM_PROVIDER=anthropic 인데 ANTHROPIC_API_KEY(_N/S) 미설정 — "
             "실 LLM 조립 불가(빈 문자열도 미설정). silent fallback 금지: 기동 실패."
         )
     import anthropic
@@ -162,10 +178,9 @@ def _anthropic_llm_and_model() -> tuple[object, str]:
     from trippilot.llm_gateway.adapters.anthropic_adapter import AnthropicAdapter
     from trippilot.llm_gateway.adapters.deadline_http import DeadlineTransport
 
-    client = anthropic.Anthropic(
-        api_key=api_key, max_retries=0,
-        http_client=anthropic.DefaultHttpxClient(transport=DeadlineTransport()),  # 총시간 시한
-    )
+    http_client = anthropic.DefaultHttpxClient(transport=DeadlineTransport())  # 총시간 시한 — 키끼리 연결 풀 공유
+    clients = [anthropic.Anthropic(api_key=key, max_retries=0, http_client=http_client) for key in api_keys]
+    client = clients if len(clients) > 1 else clients[0]
     return AnthropicAdapter(client), _env("ANTHROPIC_MODEL") or "claude-haiku-4-5"
 
 
@@ -416,7 +431,10 @@ def _vector_rag():
     from trippilot.agents.adapters.pgvector_store import PgVectorStore
     from trippilot.llm_gateway.adapters.caching_embedding import CachingEmbedding
 
-    store = PgVectorStore(lambda: psycopg.connect(url))
+    # 요청 스레드에서 돈다(다시 짜기 지시 해석·KB-2·KB-5 검색) — 기억 저장소와 같은 연결 3s·문장 2s. 시한 없이 DB 가 멈추면
+    # `_NL_POOL`(24) 과 요청 스레드가 함께 묶여 자유입력 없는 다시 짜기까지 선다(2026-11-06 Codex 리뷰). 시한 초과는 예외로
+    # 올라와 기존 폴백(번역 LLM·문서 없음)을 탄다. 적재(scripts/load_kb.py)는 자기 store 를 따로 만든다.
+    store = PgVectorStore(lambda: psycopg.connect(url, connect_timeout=3, options="-c statement_timeout=2000"))
     # 요청 경로의 임베딩은 캐시를 거친다. 상황 KB·페르소나 KB 질의는 TriggerKind 4종 ×
     # _REASON_KO 7종 = 28가지 닫힌 집합이라 같은 문자열이 수명 내내 반복된다
     # (ai/docs/임베딩-사이징-근거.md). 키는 **정확일치**다 — 유사도로 벡터를 재사용하면
@@ -782,6 +800,24 @@ def _replan_directives() -> tuple:
         return ()
 
 
+_SITUATION_PATH = pathlib.Path(__file__).resolve().parent / "data" / "planb_situation_kb.yaml"
+
+
+def _situation_docs() -> tuple:
+    """KB-3 상황 대처 원칙 (본문, 사유들) — 다시 짜기 구성 프롬프트 [상황 대처 원칙](0.10.0). `_replan_directives` 와 같은
+    이유로 여기서 읽는다(yaml 은 src/ 밖). 없거나 깨지면 빈 튜플 — 그 칸이 "(없음)"인 0.9.0 과 같은 정보로 짠다."""
+    try:
+        import yaml
+
+        from trippilot.agents.planb.kb_retrieval import load_kb_file
+
+        return tuple((d.text, tuple(d.metadata.get("reasons") or ())) for d in load_kb_file(_SITUATION_PATH, yaml.safe_load))
+    except Exception as e:  # 파일 부재·형식 위반 — 원칙 없이도 다시 짜기는 된다
+        logging.getLogger("trippilot.main").warning(
+            "planb_situation_kb 로드 실패 %s: %s — 상황 대처 원칙 없이 기동", type(e).__name__, e)
+        return ()
+
+
 def _warn_unwired(*, weather, embedding, feature_models: Mapping | None, memory=None) -> None:
     """기동은 되고 품질만 조용히 떨어지는 외부 배선 공백을 1회씩 WARN.
 
@@ -918,6 +954,7 @@ def build_app_from_env() -> FastAPI:
                          # 0·음수는 C1Config 검증이 기동 시점에 거부한다.
                          score_max_parallel=int(_env("TRIPPILOT_SCORE_MAX_PARALLEL") or "10"),
                          directives=_replan_directives(),
+                         situation_docs=_situation_docs(),
                          bank=_intent_bank(), bank_embedding=_bank_embedding(),
                          bank_vectors=_bank_vectors(),
                          memory_store=memory_store, place_sql=place_sql, place_fact_store=place_fact_store,

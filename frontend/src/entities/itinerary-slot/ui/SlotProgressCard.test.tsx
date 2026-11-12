@@ -9,7 +9,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import type { ItineraryDaysItemSlotsItem } from '@/entities/itinerary-slot/model';
 import { describeAtFontScales, setFontScale } from '@/test-support/fontScale';
 
-import { ChevronRightGlyph } from './SlotGlyphs';
+import { ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import { SlotProgressCard } from './SlotProgressCard';
 
 /**
@@ -642,7 +642,7 @@ describe('SlotProgressCard · 이름 진입 (TRIP-987 A-1·A-2·A-4)', () => {
       expect(isTouchable(name)).toBe(true);
       // '›' 는 누름 영역 안에 있다 — 글리프만 따로 떠 있으면 눌러도 안 간다.
       const chevron = within(name).getByTestId(id('chevron'));
-      expect(screen.UNSAFE_queryAllByType(ChevronRightGlyph)).toHaveLength(1);
+      expect(screen.UNSAFE_queryAllByType(ChevronRight24Glyph)).toHaveLength(1);
 
       fireEvent.press(name);
       expect(onPressName).toHaveBeenCalledTimes(1);
@@ -660,7 +660,7 @@ describe('SlotProgressCard · 이름 진입 (TRIP-987 A-1·A-2·A-4)', () => {
       expect(name).toHaveTextContent('감천문화마을');
       expect(isTouchable(name)).toBe(false);
       expect(screen.queryByTestId(id('chevron'))).toBeNull();
-      expect(screen.UNSAFE_queryAllByType(ChevronRightGlyph)).toHaveLength(0);
+      expect(screen.UNSAFE_queryAllByType(ChevronRight24Glyph)).toHaveLength(0);
     }
   );
 
@@ -1392,4 +1392,176 @@ describe('SlotProgressCard · [방문 완료]는 콜백을 받을 때만 · 기�
       ).toBeOnTheScreen();
     }
   );
+});
+
+/**
+ * TRIP-1751 · 개정 AC-12 — 허브 카드 메모 자리의 "불러오지 못함" 표식(`memoLoadFailed`, presentation-only).
+ * 준비: done·active 카드를 그린다 → 실행: 표식 prop 을 켜고 끈다 → 단언: 표식 testID·문구·메모 박스 유무.
+ * 메모 박스가 없는 모양("메모 없음")과 같으면 위반이라 표식은 박스와 별 testID 로 선다. 메모가 있으면 메모가 이긴다
+ * (페이지가 own 이 있을 땐 실패 신호를 안 주지만 카드도 이중으로 막는다). 재시도 버튼은 카드엔 없다(시트에서).
+ */
+describe('SlotProgressCard · 메모 불러오지 못함 표식 (TRIP-1751)', () => {
+  const ERROR_ID = id('memo-error');
+  const COPY = '메모를 불러오지 못했어요';
+
+  it.each<['done' | 'active']>([['done'], ['active']])(
+    'K1 %s: memoLoadFailed 면 표식이 문구 그대로 서고 메모 박스는 없으며, 끄면 표식이 없다',
+    (state) => {
+      const { rerender } = render(
+        <SlotProgressCard
+          slot={mkSlot()}
+          date={DATE}
+          state={state}
+          memoLoadFailed
+        />
+      );
+
+      expect(screen.getByTestId(ERROR_ID)).toHaveTextContent(COPY);
+      expect(screen.queryByTestId(id('memo'))).toBeNull();
+
+      rerender(
+        <SlotProgressCard
+          slot={mkSlot()}
+          date={DATE}
+          state={state}
+          memoLoadFailed={false}
+        />
+      );
+      expect(screen.queryByTestId(ERROR_ID)).toBeNull();
+      // 앵커 — 카드는 있다.
+      expect(
+        screen.getByTestId(`execution-live-slot-${KEY}`)
+      ).toBeOnTheScreen();
+    }
+  );
+
+  it.each<['done' | 'active']>([['done'], ['active']])(
+    'K2 %s: 메모와 실패 표식이 함께 오면 메모 박스만 서고 표식은 없다(메모 우선)',
+    (state) => {
+      render(
+        <SlotProgressCard
+          slot={mkSlot()}
+          date={DATE}
+          state={state}
+          memo={MEMO}
+          memoLoadFailed
+        />
+      );
+
+      expect(screen.getByTestId(id('memo'))).toHaveTextContent(MEMO);
+      expect(screen.queryByTestId(ERROR_ID)).toBeNull();
+    }
+  );
+
+  it('K3 upcoming 카드는 memoLoadFailed 를 받아도 표식을 그리지 않는다(메모 자리가 없는 상태)', () => {
+    render(
+      <SlotProgressCard
+        slot={mkSlot()}
+        date={DATE}
+        state="upcoming"
+        memoLoadFailed
+      />
+    );
+
+    expect(screen.queryByTestId(ERROR_ID)).toBeNull();
+    // 앵커 — 카드는 있다.
+    expect(screen.getByTestId(`execution-live-slot-${KEY}`)).toBeOnTheScreen();
+  });
+});
+
+// TRIP-1797 — 사진 여러 장 한 번에: 진행 줄(`visit-photo-progress`)과 [다시 시도](`visit-photo-retry`)는 부모가 문구·콜백을 줄 때만 선다.
+// 두 testID 는 고정 이름이다(역할 접두 없음) — 한 번에 한 카드에서만 배치가 돌아서 화면에 최대 하나다.
+describe('SlotProgressCard · 사진 붙이는 중 줄·다시 시도 (TRIP-1797)', () => {
+  const PROGRESS = 'visit-photo-progress';
+  const RETRY = 'visit-photo-retry';
+
+  it.each<['active' | 'done']>([['active'], ['done']])(
+    'E1 %s 카드: photoProgress 문구를 주면 그 글자 그대로 한 줄이 서고, 안 주거나 null 이면 없다',
+    (state) => {
+      const { rerender } = render(
+        <SlotProgressCard
+          slot={mkSlot()}
+          date={DATE}
+          state={state}
+          onPressPhoto={jest.fn()}
+          photoProgress="2/3 붙이는 중"
+        />
+      );
+
+      expect(screen.getByTestId(PROGRESS)).toHaveTextContent('2/3 붙이는 중');
+
+      rerender(
+        <SlotProgressCard
+          slot={mkSlot()}
+          date={DATE}
+          state={state}
+          onPressPhoto={jest.fn()}
+          photoProgress={null}
+        />
+      );
+      expect(screen.queryByTestId(PROGRESS)).toBeNull();
+    }
+  );
+
+  it.each<['active' | 'done']>([['active'], ['done']])(
+    'E2 %s 카드: photoRetry 를 주면 [다시 시도] 가 서고 누르면 그 콜백 1회, 안 주면 없다',
+    (state) => {
+      const onPress = jest.fn();
+      const { rerender } = render(
+        <SlotProgressCard
+          slot={mkSlot()}
+          date={DATE}
+          state={state}
+          onPressPhoto={jest.fn()}
+          photoRetry={{ onPress }}
+        />
+      );
+
+      fireEvent.press(screen.getByTestId(RETRY));
+
+      expect(onPress).toHaveBeenCalledTimes(1);
+
+      rerender(
+        <SlotProgressCard
+          slot={mkSlot()}
+          date={DATE}
+          state={state}
+          onPressPhoto={jest.fn()}
+        />
+      );
+      expect(screen.queryByTestId(RETRY)).toBeNull();
+    }
+  );
+});
+
+// ── TRIP-1795 · i01 허브 카드 이름이 "이 여행에서 부르는 이름"을 따른다(AC-3) ─────────────────────────
+// 3동작 뼈대: 준비=덮어쓴 슬롯 × 세 상태 → 실행=렌더 → 단언=이름 leaf 문자열. 덮어쓰기 없으면 원본.
+describe('SlotProgressCard · SD — 고친 이름 표시 (TRIP-1795)', () => {
+  it.each(['done', 'active', 'upcoming'] as const)(
+    'SD-%s · 고친 이름이 이름 leaf 에 그려지고 원본 이름은 안 보인다',
+    (state) => {
+      render(
+        <SlotProgressCard
+          slot={mkSlot({ displayName: '우리 아지트' })}
+          date={DATE}
+          state={state}
+        />
+      );
+
+      expect(screen.getByTestId(id('name'))).toHaveTextContent('우리 아지트');
+      expect(screen.queryByText('감천문화마을')).toBeNull();
+    }
+  );
+
+  it('SD-none · 덮어쓰기가 없으면(null 포함) 원본 이름 그대로다', () => {
+    render(
+      <SlotProgressCard
+        slot={mkSlot({ displayName: null })}
+        date={DATE}
+        state="upcoming"
+      />
+    );
+
+    expect(screen.getByTestId(id('name'))).toHaveTextContent('감천문화마을');
+  });
 });

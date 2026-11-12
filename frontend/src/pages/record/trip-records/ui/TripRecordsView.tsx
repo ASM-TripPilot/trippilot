@@ -5,7 +5,7 @@ import { formatDayLabel } from '@/entities/trip';
 import { formatCoPickDayHeader } from '@/features/itinerary/index.view';
 import {
   GpsOffGlyph,
-  InfoCircleGlyph,
+  RecordInfoCircleGlyph,
   VisitCheckUpcomingGlyph,
 } from '@/features/record';
 import { SpontaneousVisitButton } from './SpontaneousVisitButton';
@@ -16,7 +16,8 @@ import {
 } from './VisitRecordCard';
 import type { MapCenter, MapPin } from '@/shared/map';
 import { StateNotice } from '@/shared/ui/StateNotice';
-import { NAV_BAR_RESERVE, RecordNavBar } from '@/widgets/bottom-nav-bar';
+import { NAV_BAR_RESERVE } from '@/shared/ui/navBarLayout';
+import { RecordNavBar } from '@/widgets/bottom-nav-bar';
 import { MapSheetShell } from '@/widgets/map-sheet-shell';
 
 /**
@@ -41,7 +42,7 @@ import { MapSheetShell } from '@/widgets/map-sheet-shell';
  * ⚠️ 원리적 사각(6-b): 시트 실제 스냅·키보드가 시트를 밀어 올리는지·지도 제스처·핀 모양은 통과형 목이 못 본다.
  */
 
-export interface TripRecordsDayTab {
+interface TripRecordsDayTab {
   day: string;
   label: string;
 }
@@ -50,7 +51,7 @@ export interface TripRecordsDayTab {
  * TRIP-569 — 활성 일자의 귀속 헤더 완성값(라벨 조립은 페이지 몫). `stayName` 이 있으면 숙소명
  * 줄을 그리고, null/undefined 면 줄이 없다 — 날짜 귀속은 시트 헤더가 맡는다(TRIP-1097).
  */
-export interface DayAttributionHeader {
+interface DayAttributionHeader {
   dayLabel: string;
   stayName?: string | null;
 }
@@ -94,6 +95,8 @@ export interface TripRecordsViewProps {
   /** TRIP-1021 — 기록 조회 상태. 미주입 = 'ready'. loading 이면 빈 안내 없음, error 면 오류 표면. */
   recordsStatus?: 'ready' | 'loading' | 'error';
   onPressRetryRecords?: () => void;
+  /** TRIP-1757 — 일정·여행 조회가 404 아닌 이유로 실패했다. 주면 화면 한 줄 + [다시 시도]. 미주입 = 줄 없음(프리뷰·기존 뷰 테스트 무회귀). */
+  planError?: { onRetry: () => void; retrying: boolean };
   onPressComplete: (visitCheckId: string) => void;
   onPressSkip: (visitCheckId: string) => void;
   /** 즉석 방문 추가 — 미주입이면 [방문 추가]를 그리지 않는다(TRIP-939). */
@@ -144,6 +147,7 @@ export function TripRecordsView({
   onPressPlanCheck,
   recordsStatus = 'ready',
   onPressRetryRecords,
+  planError,
   onPressComplete,
   onPressSkip,
   onPressSpontaneous,
@@ -288,7 +292,7 @@ export function TripRecordsView({
           keyExtractor: (item) =>
             item.kind === 'card'
               ? item.card.visitCheckId
-              : `plan-${item.row.slotKey}`,
+              : `plan-${item.row.slotKey}-${item.row.planOrder}`,
           ListFooterComponent: (
             <View
               className="px-lg"
@@ -309,7 +313,7 @@ export function TripRecordsView({
               testID="record-gps-banner"
               className="w-full flex-row items-start gap-[10px] rounded-button border-[1.3px] border-dashed border-hairline-strong bg-surface-soft px-[13px] py-md"
             >
-              <InfoCircleGlyph size={20} />
+              <RecordInfoCircleGlyph size={20} />
               <View className="flex-1 gap-[3px]">
                 <Text className="font-noto-bold text-label text-ink">
                   위치 권한 없음 — 수동 체크인으로 기록해요
@@ -341,6 +345,29 @@ export function TripRecordsView({
           <Text className="w-full text-label text-muted">
             {noticeCopy ?? DEFAULT_NOTICE}
           </Text>
+
+          {planError ? (
+            <View
+              testID="record-trip-plan-error"
+              className="w-full flex-row items-center justify-between gap-sm rounded-[12px] bg-surface-soft px-md py-sm"
+            >
+              <Text className="shrink font-noto-bold text-[13px] font-bold text-ink">
+                일부 정보를 불러오지 못했어요
+              </Text>
+              <Pressable
+                testID="record-trip-plan-retry"
+                accessibilityRole="button"
+                onPress={planError.onRetry}
+                disabled={planError.retrying}
+                accessibilityState={{ disabled: planError.retrying }}
+                hitSlop={8}
+              >
+                <Text className="font-noto-bold text-[13px] font-bold text-primary-text">
+                  다시 시도
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           {recordsStatus === 'error' ? (
             <StateNotice

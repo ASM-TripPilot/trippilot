@@ -41,6 +41,9 @@ class ItineraryReadFacade(
         )
     }
 
+    @Transactional(readOnly = true)
+    override fun hasItinerary(accountId: UUID, tripId: UUID): Boolean = findCurrent(accountId, tripId) != null
+
     /** 여행 목록용 일괄 조회 — 빈 목록이면 묻지 않는다. 계정으로 좁혀 남의 세션은 섞이지 않는다. */
     @Transactional(readOnly = true)
     override fun runningGenerationTripIds(accountId: UUID, tripIds: Collection<UUID>): Set<UUID> =
@@ -73,6 +76,7 @@ class ItineraryReadFacade(
                     nameKo = s?.nameKo,
                     category = s?.category,
                     imageUrl = s?.imageUrl,
+                    imageLicense = s?.imageLicense,
                     lat = s?.lat,
                     lng = s?.lng,
                     violationReason = it.violationReason,

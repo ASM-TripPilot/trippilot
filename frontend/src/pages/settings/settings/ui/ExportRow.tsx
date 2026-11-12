@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { ChevronRightGlyph, MUTED_SOFT } from '@/features/settings';
+import { ChevronRight24Glyph } from '@/shared/ui/glyphs';
 import { RowBody } from './SettingsRow';
 
 /**
@@ -23,11 +23,15 @@ export function ExportRow({
 }): ReactElement {
   return (
     <View testID="settings-row">
-      <Pressable testID="settings-export-row" onPress={onPress}>
+      <Pressable
+        accessibilityRole="button"
+        testID="settings-export-row"
+        onPress={onPress}
+      >
         <RowBody
           rowKey="export"
           label="데이터 내보내기"
-          right={<ChevronRightGlyph color={MUTED_SOFT} />}
+          right={<ChevronRight24Glyph size={20} color="mutedSoft" />}
         />
       </Pressable>
       {truncatedLabel ? (

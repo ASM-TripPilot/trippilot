@@ -19,7 +19,10 @@ def manifest(namespace):
         "apiVersion": "batch/v1", "kind": "Job",
         "metadata": {"name": "trippilot-smoke", "namespace": namespace},
         "spec": {"backoffLimit": 0, "activeDeadlineSeconds": 300, "ttlSecondsAfterFinished": 600,
-                 "template": {"metadata": {"labels": {"app.kubernetes.io/name": "trippilot-smoke"}},
+                 # runtime_pois.manifest 와 같은 이유 — Karpenter 노드 통합이 짧은 배치 Job 을
+                 # 중간에 쫓아내지 못하게 막는다.
+                 "template": {"metadata": {"labels": {"app.kubernetes.io/name": "trippilot-smoke"},
+                                           "annotations": {"karpenter.sh/do-not-disrupt": "true"}},
                               "spec": {
                                   "restartPolicy": "Never", "automountServiceAccountToken": False,
                                   "nodeSelector": {"kubernetes.io/os": "linux", "kubernetes.io/arch": "amd64"},

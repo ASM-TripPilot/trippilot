@@ -14,13 +14,15 @@
  * `features/stay-outbound` 의 `useStayOutboundFlow` 가 쥔다 — 인기 숙소 카드·전체 보기와 같은 흐름을 쓴다.
  */
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import { openExternal } from '@/shared/external-link';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { goBackOr } from '@/shared/lib/goBackOr';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
+import { SAVED_LIST_LOAD_FAILED_TOAST } from '@/shared/ui/savedListLoadToast';
+import { showToast } from '@/shared/ui/Toast';
 import { Share } from 'react-native';
 
 import { isNotFound } from '@/shared/api';
@@ -71,7 +73,14 @@ export function StayDetailPage(): ReactElement {
   // isAuthed는 렌더 시점 1회 동기 판정(StaySearchPage·PlaceExplorePage 선례 — "판정 대기" 제3
   // 상태가 안 생긴다). 담김 판정·토글은 useSavedStays 한 곳이 소유한다.
   const isAuthed = getAccessToken() !== null;
-  const { isSaved, save, remove } = useSavedStays({ isAuthed });
+  const { isSaved, save, remove, loadFailureConfirmed } = useSavedStays({
+    isAuthed,
+  });
+  // TRIP-1754 — 하트가 그려지는 ready 얼굴에서만, 저장 목록 확정 실패가 켜지는 순간 토스트 1회.
+  const savedListFailed = item !== null && Boolean(loadFailureConfirmed);
+  useEffect(() => {
+    if (savedListFailed) showToast(SAVED_LIST_LOAD_FAILED_TOAST);
+  }, [savedListFailed]);
 
   const [pending, setPending] = useState(false);
   const outbound = useStayOutboundFlow();
