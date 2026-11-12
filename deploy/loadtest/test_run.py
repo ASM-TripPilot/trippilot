@@ -46,7 +46,18 @@ class ManifestTests(unittest.TestCase):
                          ("db.example.internal", "5432", "trippilot", "app_user"))
 
 
+def no_cluster(*args, **kwargs):
+    raise AssertionError(f"가드 테스트가 kubectl 까지 갔다: {args}")
+
+
 class GuardTests(unittest.TestCase):
+    """가드는 클러스터에 닿기 전에 멈춰야 한다 — kubectl 은 호출되면 실패하는 가짜로 둔다(실제 Job 을 띄우지 않게)."""
+
+    def setUp(self):
+        patcher = mock.patch.object(run, "kubectl", side_effect=no_cluster)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_only_the_dev_namespace_is_allowed(self):
         for ns in ("trippilot", "default", "kube-system", "trippilot-prd", "trippilot-batch"):
             with self.assertRaises(SystemExit):
@@ -56,8 +67,10 @@ class GuardTests(unittest.TestCase):
         self.assertEqual(run.stage_seconds("1m:20,30s:5,1h:0"), 60 + 30 + 3600)
         with self.assertRaises(SystemExit):
             run.stage_seconds("1x:20")
+        limit = run.JOB_DEADLINE_S - run.INIT_BUDGET_S   # 단계 합계가 이 값을 넘으면 거부(같으면 허용)
+        self.assertEqual(run.stage_seconds("50m:100"), limit)
         with self.assertRaises(SystemExit):
-            run.main(["--stages", "50m:100"])   # 3000초 + init 몫 > 시한
+            run.main(["--stages", "50m:100,1s:0"])   # 한도 + 1초
 
     def test_refuses_when_the_policy_does_not_admit_the_job_yet(self):
         with mock.patch.object(run, "kubectl", return_value=json.dumps({"spec": {"ingress": [{"from": []}]}})):
