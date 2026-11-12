@@ -48,7 +48,11 @@ jobs:
           # 수동 실행을 자식으로 오인할 수 있다(Codex 리뷰 지적).
           url=$(gh workflow run ai-llm-fallback-watch.yml -R "$REPO" --ref develop | grep -o 'https://[^ ]*/actions/runs/[0-9]*')
           [ -n "$url" ] || { echo "::error::dispatch 한 실행의 URL 을 받지 못했다"; exit 1; }
-          gh run watch "${url##*/}" -R "$REPO" --exit-status --interval 15 > /dev/null \
+          id=${url##*/}
+          # 막 만든 실행은 몇 초 동안 API 가 404 다(실행·잡 둘 다). 바로 watch 하면 자식이 성공해도
+          # 경보로 끝났다(11-05~11-11 예약 29회 중 4회). 조회가 될 때까지 기다린 뒤 watch 한다.
+          for _ in 1 2 3 4 5 6; do gh run view "$id" -R "$REPO" > /dev/null 2>&1 && break; sleep 5; done
+          gh run watch "$id" -R "$REPO" --exit-status --interval 15 > /dev/null \
             || { echo "::error::dev LLM 대체 경보 — 판정 요약: $url"; exit 1; }
 
   watch:
