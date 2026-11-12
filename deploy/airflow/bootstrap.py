@@ -134,6 +134,8 @@ def install(args, master):
             "api-secret-key": secrets.token_urlsafe(32), "jwt-secret": secrets.token_urlsafe(32),
             "admin-password": secrets.token_urlsafe(18)}))
 
+    # 지우고 다시 만든다 — apply 는 stringData 에서 뺀 키(그림자로 되돌릴 때의 GH_TOKEN)를 저장된 data 에서 지우지 않는다.
+    command(["kubectl", "delete", "secret", "batch-collect", "-n", ns, "--ignore-not-found"])
     kubectl_apply(secret(ns, "batch-collect", {**{k: os.environ[k] for k in COLLECT_KEYS if os.environ.get(k)},
                                                "BATCH_LIVE": live}))
     print(f"준비 끝 — namespace={ns} BATCH_LIVE={live}")

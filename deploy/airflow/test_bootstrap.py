@@ -96,10 +96,43 @@ class ShadowAndNamespaceTest(unittest.TestCase):
                 bootstrap.install(args, MASTER)
         self.assertEqual(cluster.argv, [])
 
-    def test_네임스페이스는_PodSecurity_baseline_을_강제한다(self):
-        labels = bootstrap.namespace("trippilot-batch")["metadata"]["labels"]
-        self.assertEqual(labels["pod-security.kubernetes.io/enforce"], "baseline")
-        self.assertEqual(labels["pod-security.kubernetes.io/warn"], "restricted")
+    def test_install_과_uninstall_은_PodSecurity_baseline_네임스페이스를_적용한다(self):
+        for action in (bootstrap.install, bootstrap.uninstall):
+            applied = []
+
+            def command(argv, payload=None, applied=applied):
+                if argv[:2] == ["kubectl", "apply"]:
+                    applied.append(json.loads(payload))
+                if argv[:3] == ["kubectl", "get", "secret"]:
+                    raise bootstrap.CommandError("kubectl", "NotFound")
+                return ""
+            args = mock.Mock(namespace="trippilot-batch", db_host="db.example", run_id="1")
+            with mock.patch.object(bootstrap, "command", command), mock.patch.object(bootstrap, "wait_job"), \
+                 mock.patch.dict(os.environ, {**KEYS, "BATCH_LIVE": "0"}, clear=True):
+                action(args, MASTER)
+            labels = next(d for d in applied if d["kind"] == "Namespace")["metadata"]["labels"]
+            self.assertEqual(labels["pod-security.kubernetes.io/enforce"], "baseline", action.__name__)
+            self.assertEqual(labels["pod-security.kubernetes.io/warn"], "restricted", action.__name__)
+
+    def test_그림자로_되돌리면_GH_TOKEN_이_시크릿에서_사라진다(self):
+        cluster = FakeCluster()
+        BootstrapTest.run_install(self, cluster, live="1")
+        self.assertIn("GH_TOKEN", cluster.secrets["batch-collect"])
+        deleted = []
+        original = cluster.command
+
+        def command(argv, payload=None):
+            if argv[:4] == ["kubectl", "delete", "secret", "batch-collect"]:
+                cluster.secrets.pop("batch-collect", None)
+                deleted.append(argv)
+            return original(argv, payload)
+        keys = {k: v for k, v in KEYS.items() if k != "GH_TOKEN"}
+        args = mock.Mock(namespace="trippilot-batch", db_host="db.example", run_id="2")
+        with mock.patch.object(bootstrap, "command", command), mock.patch.object(bootstrap, "wait_job"), \
+             mock.patch.dict(os.environ, {**keys, "BATCH_LIVE": "0"}, clear=True):
+            bootstrap.install(args, MASTER)
+        self.assertTrue(deleted)
+        self.assertNotIn("GH_TOKEN", cluster.secrets["batch-collect"])
 
 
 if __name__ == "__main__":
