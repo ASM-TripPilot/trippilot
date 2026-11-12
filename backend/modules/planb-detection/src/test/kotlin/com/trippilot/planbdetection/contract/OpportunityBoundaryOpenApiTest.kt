@@ -63,7 +63,7 @@ class OpportunityBoundaryOpenApiTest : StringSpec({
 
     "요청이 계약 필수 필드를 하나도 빠뜨리지 않는다" {
         val sent = wireKeys(sampleRequest)
-        schema("OpportunitiesRequest")["required"].map { it.asString() }.forEach { sent shouldContain it }
+        schema("OpportunitiesRequest")["required"].values().map { it.asString() }.forEach { sent shouldContain it }
     }
 
     "요청 본문의 값 모양이 계약과 일치한다 — 이름만으로는 못 본다" {
@@ -79,13 +79,13 @@ class OpportunityBoundaryOpenApiTest : StringSpec({
 
     /** 상대가 우리가 필수로 읽는 필드를 선택으로 바꾸면 null 이 와서 매번 예외(빈 목록)다 — 필수 집합을 맞대 본다. */
     "우리가 필수로 읽는 응답 필드가 계약에서도 필수다" {
-        schema("OpportunitySchema")["required"].map { it.asString() }.sorted() shouldContainExactly
+        schema("OpportunitySchema")["required"].values().map { it.asString() }.sorted() shouldContainExactly
             listOf("distance_label", "key", "kind", "near_slot_key", "poi_id", "poi_name")
     }
 
     /** 모르는 종류는 우리가 계약 위반(빈 목록)으로 읽는다 — 상대가 종류를 늘리면 앱 템플릿과 함께 여기부터 고친다. */
     "기회 종류 집합이 계약 enum 과 같다" {
-        val contractKinds = schema("OpportunitySchema")["properties"]["kind"]["enum"].map { it.asString() }.toSet()
+        val contractKinds = schema("OpportunitySchema")["properties"]["kind"]["enum"].values().map { it.asString() }.toSet()
         OpportunityKind.entries.map { it.name }.toSet() shouldBe contractKinds
     }
 
@@ -95,7 +95,7 @@ class OpportunityBoundaryOpenApiTest : StringSpec({
      */
     "행사 유형 집합이 계약 enum 과 같다" {
         val branches = schema("OpportunitySchema")["properties"]["event_type"]["anyOf"]
-        val contractTypes = branches.flatMap { b -> b["enum"]?.map { it.asString() }.orEmpty() }.toSet()
+        val contractTypes = branches.flatMap { b -> b["enum"]?.values()?.map { it.asString() }.orEmpty() }.toSet()
         branches.any { it["type"]?.asString() == "null" } shouldBe true
         OpportunityEventType.entries.map { it.name }.toSet() shouldBe contractTypes
     }
