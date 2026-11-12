@@ -37,43 +37,8 @@
   "stats": {
     "merged_runs": 2,
     "unique_proposals": 108029,
-    "cpyrht_applied": 8802,
-    "retro_dropped_existing": 0,
-    "sido_quarantined": 4,
-    "sido_quarantined_refs": [
-      {
-        "source": "TOURAPI",
-        "content_id": "4054732",
-        "address": "김제시 죽산면 죽산리 948-20"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "2929425",
-        "address": "전북특별자치시 군산시 미장안7길 9"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "2614777",
-        "address": "광주특별시 북구 금곡동 산2"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "2714103",
-        "address": "전남광주 구례군 구례읍 원방리 1"
-      }
-    ],
-    "sido_restored_previous_refs": [
-      {
-        "source": "TOURAPI",
-        "content_id": "579081",
-        "address": "전남광주 고흥군 동일면 봉영리"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "132064",
-        "address": "전남광주 무안군 무안읍 성내리 21-13"
-      }
-    ]
+    "cpyrht_applied": 0,
+    "retro_dropped_existing": 0
   },
   "merged_from": [
     {
@@ -103,119 +68,47 @@
     },
     {
       "collected_at": "2026-11-12T01:47:16.771252+00:00",
-      "proposals": 2065,
+      "proposals": 108029,
       "stats": {
-        "http_calls": 2255,
-        "listed": 2453,
-        "page_failures": 33,
-        "detail_failures": 78,
-        "category_unmapped": 62,
-        "address_missing": 0,
-        "merged": 1,
-        "passed": 2065,
-        "skipped_unchanged": 10829,
-        "rest_unparsed": 26,
-        "raw_reparse_mismatch": 0,
-        "gate_drops": {
-          "policy_non_travel:chain_store": 64,
-          "policy_non_travel:shop_in_mall": 126,
-          "policy_non_travel:convenience_store": 30,
-          "existence_out_of_service_region": 9,
-          "existence_closed_business": 17,
-          "policy_non_travel:hypermarket": 66,
-          "policy_non_travel:dealership": 6,
-          "policy_non_travel:franchise": 7
-        },
-        "leports_lcls": {
-          "AC/AC05": 60,
-          "LS/LS01": 21,
-          "VE/VE10": 19,
-          "LS/LS02": 6,
-          "LS/LS03": 2
-        },
-        "budget_exhausted": true,
-        "per_area": {
-          "1": {
-            "calls": 235,
-            "passed": 226,
-            "skipped": 677
+        "merged_runs": 2,
+        "unique_proposals": 108029,
+        "cpyrht_applied": 8802,
+        "retro_dropped_existing": 0,
+        "sido_quarantined": 4,
+        "sido_quarantined_refs": [
+          {
+            "source": "TOURAPI",
+            "content_id": "4054732",
+            "address": "김제시 죽산면 죽산리 948-20"
           },
-          "2": {
-            "calls": 89,
-            "passed": 116,
-            "skipped": 182
+          {
+            "source": "TOURAPI",
+            "content_id": "2929425",
+            "address": "전북특별자치시 군산시 미장안7길 9"
           },
-          "3": {
-            "calls": 5,
-            "passed": 0,
-            "skipped": 0
+          {
+            "source": "TOURAPI",
+            "content_id": "2614777",
+            "address": "광주특별시 북구 금곡동 산2"
           },
-          "4": {
-            "calls": 5,
-            "passed": 0,
-            "skipped": 0
-          },
-          "6": {
-            "calls": 5,
-            "passed": 0,
-            "skipped": 0
-          },
-          "7": {
-            "calls": 5,
-            "passed": 0,
-            "skipped": 0
-          },
-          "8": {
-            "calls": 5,
-            "passed": 0,
-            "skipped": 0
-          },
-          "31": {
-            "calls": 215,
-            "passed": 164,
-            "skipped": 1343
-          },
-          "32": {
-            "calls": 215,
-            "passed": 240,
-            "skipped": 538
-          },
-          "33": {
-            "calls": 82,
-            "passed": 60,
-            "skipped": 1137
-          },
-          "34": {
-            "calls": 273,
-            "passed": 252,
-            "skipped": 1258
-          },
-          "35": {
-            "calls": 276,
-            "passed": 244,
-            "skipped": 1196
-          },
-          "36": {
-            "calls": 225,
-            "passed": 209,
-            "skipped": 1381
-          },
-          "37": {
-            "calls": 215,
-            "passed": 205,
-            "skipped": 866
-          },
-          "38": {
-            "calls": 205,
-            "passed": 191,
-            "skipped": 1223
-          },
-          "39": {
-            "calls": 200,
-            "passed": 158,
-            "skipped": 1028
+          {
+            "source": "TOURAPI",
+            "content_id": "2714103",
+            "address": "전남광주 구례군 구례읍 원방리 1"
           }
-        }
+        ],
+        "sido_restored_previous_refs": [
+          {
+            "source": "TOURAPI",
+            "content_id": "579081",
+            "address": "전남광주 고흥군 동일면 봉영리"
+          },
+          {
+            "source": "TOURAPI",
+            "content_id": "132064",
+            "address": "전남광주 무안군 무안읍 성내리 21-13"
+          }
+        ]
       }
     }
   ],
