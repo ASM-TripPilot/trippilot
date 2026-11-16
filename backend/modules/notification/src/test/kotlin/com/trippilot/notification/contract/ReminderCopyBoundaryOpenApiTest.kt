@@ -56,7 +56,7 @@ class ReminderCopyBoundaryOpenApiTest : StringSpec({
     }
 
     "요청이 계약 필수 필드를 하나도 빠뜨리지 않는다" {
-        val required = requireNotNull(schemas["ReminderCopyRequest"])["required"].map { it.asText() }
+        val required = requireNotNull(schemas["ReminderCopyRequest"])["required"].values().map { it.asText() }
         val sent = wireKeys(sampleRequest)
         required.forEach { sent shouldContain it }
     }
@@ -91,7 +91,7 @@ class ReminderCopyBoundaryOpenApiTest : StringSpec({
      */
     "우리가 보내기로 한 종류 집합이 계약 enum 과 같다" {
         val contractKinds = requireNotNull(schemas["ReminderCopyItemSchema"])["properties"]["kind"]["enum"]
-            .map { it.asString() }.toSet()
+            .values().map { it.asString() }.toSet()
 
         HttpReminderCopyAdapter.aiKinds() shouldBe contractKinds
     }
