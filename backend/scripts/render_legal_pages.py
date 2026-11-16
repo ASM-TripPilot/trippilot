@@ -222,7 +222,8 @@ def render(entries: list[dict]) -> dict[str, str]:
         previous = ""
         for old in older:
             files[f"{slug}-v{old['version']}.html"] = page(f"{label} (v{old['version']}, 이전 판)", md_to_html(old["body"]), back=True)
-            previous += f' · <a href="{slug}-v{html.escape(old["version"])}.html">이전 판 v{html.escape(old["version"])}</a>'
+            previous += (f' · <a href="{slug}-v{html.escape(old["version"])}.html">직전 판 v{html.escape(old["version"])}</a>'
+                         f' (v{html.escape(entry["version"])} 시행 전까지 적용)')
         links.append(
             f'<li><a href="{slug}.html">{html.escape(label)}</a>'
             f' <small>v{html.escape(entry["version"])} · 시행 {html.escape(entry["effective"][:10])}{previous}</small></li>'
