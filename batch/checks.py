@@ -104,14 +104,27 @@ def check_events(doc: dict, day: date, min_valid: int, max_age_days: int, region
     - **그날 유효한 건수** — 낡은 사본도 전체 건수는 멀쩡하다(cce8c508).
     - **가장 오래된 운영 지역의 마지막 수집 뒤 지난 날수** — 수집이 멈춰도 사본에 미래 행사가 남아 있으면 유효 건수는 몇 주
       동안 하한 위에 머문다(실측: 2026-10-19 사본은 12-07 에야 하한 아래로 떨어진다). 그래서 수집 시각을 따로 본다.
-    `regions` = 운영 수집 지역(`event_regions()`)."""
+    `regions` = 운영 수집 지역(`event_regions()`). 실 수집 DAG 는 둘을 나눠 부른다(`check_event_store` 는 영속 앞,
+    `check_event_freshness` 는 영속 뒤 경보) — 여기는 둘을 한 번에 보는 로컬 DAG 용이다."""
+    if not isinstance(doc.get("events"), list):   # 모양이 바뀐 문서는 그 한 줄만 — 신선도까지 보면 사유가 섞인다
+        return check_event_store(doc, day, min_valid)
+    return check_event_store(doc, day, min_valid) + check_event_freshness(doc, day, max_age_days, regions)
+
+
+def check_event_store(doc: dict, day: date, min_valid: int) -> list[str]:
+    """저장소가 깨졌는가 — 문서 모양과 그날 유효한 건수(cce8c508)."""
     events = doc.get("events")
     if not isinstance(events, list):
         return ["events 목록이 없다 — 문서 모양이 바뀌었다"]
-    failures = []
     valid = sum(1 for e in events if valid_on(e, day))
     if valid < min_valid:
-        failures.append(f"{day} 에 유효한 행사 {valid}건 < 하한 {min_valid}건 (전체 {len(events)}건) — 낡은 사본일 수 있다")
+        return [f"{day} 에 유효한 행사 {valid}건 < 하한 {min_valid}건 (전체 {len(events)}건) — 낡은 사본일 수 있다"]
+    return []
+
+
+def check_event_freshness(doc: dict, day: date, max_age_days: int, regions: tuple[str, ...]) -> list[str]:
+    """수집이 멈췄는가 — 가장 오래된 운영 지역의 마지막 수집 뒤 지난 날수."""
+    failures = []
     coverage = doc.get("coverage") if isinstance(doc.get("coverage"), dict) else {}
     ignored = sorted(set(coverage) - set(regions))
     if ignored:
