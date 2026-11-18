@@ -50,7 +50,7 @@ class ConsentControllerIT : AbstractPostgresIntegrationTest() {
         return res.statusCode.value() to parsed
     }
 
-    /** 현행 약관 판 — 판을 하드코딩하면 개정판 시행일(예: 처리방침 1.1, 2026-11-23)에 테스트가 시계 때문에 깨진다. */
+    /** 현행 약관 판 — 판을 하드코딩하면 개정판 시행일(예: 처리방침 1.1, 2026-11-25)에 테스트가 시계 때문에 깨진다. */
     private fun currentVersion(type: String): String =
         call(HttpMethod.GET, "/api/v1/terms").second.first { it["termsType"].asText() == type }["version"].asText()
 
