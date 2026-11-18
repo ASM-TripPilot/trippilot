@@ -150,7 +150,7 @@ GitHub Actions --(OIDC 배포 역할)--> Terraform apply -> ECR 이미지 push -
 
 | 워크로드 | 이미지 | 복제본 (기본 / dev / prd) | HPA | 요청 → 한도 | 프로브 | 근거 |
 |---|---|---|---|---|---|---|
-| gateway | `nginxinc/nginx-unprivileged:1.30.5-alpine-slim` | 1 / 2 / 2 | 꺼짐(키는 있음) | 100m·64Mi → 500m·128Mi | `/healthz` | `values*.yaml` · `templates/gateway.yaml` |
+| gateway | `nginxinc/nginx-unprivileged:1.30.6-alpine-slim` | 1 / 2 / 2 | 꺼짐(키는 있음) | 100m·64Mi → 500m·128Mi | `/healthz` | `values*.yaml` · `templates/gateway.yaml` |
 | backend | ECR backend | 1 / 2 / 2 | **템플릿 자체가 없음** | 500m·1Gi → 2·2Gi, 힙 `MaxRAMPercentage=75` | startup·liveness `/actuator/health/liveness`, readiness `/actuator/health/readiness` | `templates/backend.yaml` · `templates/hpa.yaml`(ai·gateway 만) |
 | ai | ECR ai | 1 / HPA 2~3 / 2 고정 | dev 만 켜짐(CPU 70%) | 500m·512Mi → 2·2Gi | `/health` | `templates/ai.yaml` · `values-dev.yaml` · `values-prd.yaml`(autoscaling 키 없음 → 기본 false) |
 | embedding | ECR embedding | 1 / 1 / 1 (`embedding.enabled` 일 때만) | 없음(스키마가 거부) | 2·5Gi → 2·6Gi | startup·readiness `/ready`, liveness `/health` | `templates/embedding.yaml` · `templates/hpa.yaml` 주석 |

@@ -325,16 +325,16 @@ class HttpDialogueInterpreterTest : StringSpec({
         props("DialogueNextActionSchema") shouldBe setOf("type", "label", "params")
         props("DialogueQuickReplySchema") shouldBe setOf("label", "action", "params")
         // 상대 enum 과 우리 enum 이 같은 어휘다 — 한쪽이 늘면 여기서 드러난다
-        schemas["DialogueAnswerSchema"]["properties"]["kind"]["enum"].map { it.asString() }.toSet() shouldBe AnswerKind.entries.map { it.name }.toSet()
-        schemas["DialogueTurnSchema"]["properties"]["role"]["enum"].map { it.asString() }.toSet() shouldBe MessageRole.entries.map { it.name }.toSet()
+        schemas["DialogueAnswerSchema"]["properties"]["kind"]["enum"].values().map { it.asString() }.toSet() shouldBe AnswerKind.entries.map { it.name }.toSet()
+        schemas["DialogueTurnSchema"]["properties"]["role"]["enum"].values().map { it.asString() }.toSet() shouldBe MessageRole.entries.map { it.name }.toSet()
     }
 
     "우리가 부르는 대화 경로가 전부 계약에 실재한다 — 메모리는 DELETE·GET 과 쿼리 이름까지" {
         val paths = contract["paths"]
         HttpDialogueInterpreter.DIALOGUE_PATHS.forEach { (paths.has(it)) shouldBe true }
         val memory = paths[HttpDialogueInterpreter.MEMORY_PATH]
-        memory["delete"]["parameters"].map { it["name"].asString() } shouldContainAll listOf("session_id", "trip_id", "account_ref")
-        memory["get"]["parameters"].map { it["name"].asString() } shouldContainAll listOf("account_ref")
+        memory["delete"]["parameters"].values().map { it["name"].asString() } shouldContainAll listOf("session_id", "trip_id", "account_ref")
+        memory["get"]["parameters"].values().map { it["name"].asString() } shouldContainAll listOf("account_ref")
         props("DialogueMemoryDeleteResponse") shouldBe setOf("deleted")
         props("DialogueMemoryExportResponse") shouldBe setOf("memories", "truncated")
         props("DialogueMemoryItemSchema") shouldBe setOf("session_id", "trip_id", "summary", "summarized_turn_index", "updated_at", "expires_at")

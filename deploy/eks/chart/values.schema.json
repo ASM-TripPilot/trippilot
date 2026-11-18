@@ -320,6 +320,15 @@
           "type": "boolean"
         }
       }
+    },
+    "loadTest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allow": {
+          "type": "boolean"
+        }
+      }
     }
   },
   "allOf": [

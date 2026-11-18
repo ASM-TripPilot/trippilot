@@ -325,6 +325,10 @@ jobs:
             if [ "$name" = embedding ] && [ "$EFFECTIVE_EMBEDDING" != true ]; then continue; fi
             kubectl -n "$NAMESPACE" scale "deploy/$name" --replicas=1
           done
+      # 클러스터 전역 설정 — NetworkPolicy 집행 스위치(deploy/eks/cluster/). 같은 내용이면 바뀌는 것이 없다.
+      - name: Apply cluster-wide settings
+        if: steps.config.outputs.deploy_application == 'true'
+        run: kubectl apply -f deploy/eks/cluster/
       - name: Deploy and wait for healthy workloads
         if: steps.config.outputs.deploy_application == 'true'
         run: |
