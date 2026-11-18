@@ -20,7 +20,8 @@
 # (openai·mixed)이 쓰던 멘토 Azure 게이트웨이 키(`AZUREAPIKEY`)는 10-24 부터 401 이라 이 스모크가
 # 매일 빨갰다 — mixed 도 OpenAI 어댑터를 함께 조립해 같은 401 이다. 스모크는 운영이 실제로 부르는
 # 제공자를 봐야 한다. openai·azure·mixed 는 다른 게이트웨이를 확인할 때 수동 선택지로만 남긴다
-# (Azure v1 표면 …/openai/v1 = openai, 구식 AzureOpenAI + api-version = azure).
+# (Azure v1 표면 …/openai/v1 = openai, 구식 AzureOpenAI + api-version = azure). 단 openai·azure 는
+# INTENT 스모크만 유효하다 — 리허설은 아래 모델 배정(전부 claude-*)을 그 게이트웨이로 보내 실패한다.
 #
 # 엔드포인트처럼 비밀 아닌 설정은 Repository **Variables**
 # (Settings → Secrets and variables → Actions → Variables 탭)에 두면 매번 입력을 생략할 수
@@ -42,7 +43,7 @@ on:
       provider:
         # 기본은 운영과 같은 anthropic — 수동 실행에도 이 기본값이 채워지므로, 아래
         # `inputs.provider || 'anthropic'` 폴백과 같아야 "수동과 스케줄"이 갈라지지 않는다(실측: run 33523506956).
-        description: 'LLM 제공자 (운영과 동일한 anthropic 권장 · openai·azure·mixed 는 Azure 게이트웨이 확인용)'
+        description: 'LLM 제공자 (운영과 동일한 anthropic 권장 · openai·azure·mixed 는 Azure 게이트웨이 확인용, openai·azure 는 INTENT 스모크만 유효)'
         type: choice
         options: [anthropic, mixed, openai, azure]
         default: anthropic
@@ -201,8 +202,7 @@ jobs:
           # TRIP-524 — 있으면 품질 floors 게이트(FAIL)·3σ 회귀(WARNING), 없으면 무게이트
           SMOKE_BASELINE_JSON: rehearsal_baseline.json
           # TRIP-869 후속 — 리허설 결과에 LLM 비용을 실어 rehearsal_log.jsonl 시계열에
-          # 누적한다. 없으면 cost=null(모름). Claude 배정은 금액이 잡히고, 멘토 게이트웨이
-          # (openai·azure 수동 실행)는 unpriced 가 정상이다.
+          # 누적한다. 없으면 cost=null(모름). Claude 배정은 금액이 잡힌다.
           TRIPPILOT_LLM_PRICE_FILE: config/llm-prices.json
         run: uv run python scripts/smoke/smoke_itinerary.py
       # 후속 3스텝은 !cancelled() — 품질 게이트 FAIL(exit 1)로 잡이 붉어도 그날
