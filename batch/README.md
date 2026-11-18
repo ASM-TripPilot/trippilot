@@ -111,7 +111,7 @@ docker compose --profile batch down
 | 입력 | 하는 일 |
 |---|---|
 | `action=install` | 메타 DB(운영 RDS 장비의 `airflow` DB·롤)·시크릿(`deploy/airflow/bootstrap.py`) → `helm upgrade --install`(`deploy/airflow/values.yaml`) |
-| `build_image` | `deploy/airflow/Dockerfile`(공식 3.3.2 + git·gh·uv)을 GHCR 로 — 처음·Dockerfile 이 바뀐 뒤 |
+| (이미지) | install 이 `deploy/airflow/Dockerfile`(공식 3.3.2 + git·gh·uv)을 ECR `trippilot-dev/ai:airflow-<Dockerfile 해시>` 로 — 이미 있으면 생략. GHCR 은 조직 정책이 공개 패키지를 막아 쓰지 않는다 |
 | `batch_live` | `batch-collect` 시크릿의 `BATCH_LIVE`. **Actions 수집 스케줄을 끈 뒤에만 true** |
 | `action=uninstall` | helm 해제 → 메타 DB·롤 삭제 → 네임스페이스 삭제(인프라 종료 전 정리) |
 
