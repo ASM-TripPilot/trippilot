@@ -256,7 +256,7 @@ class HttpReminderCopyAdapterTest : StringSpec({
             Instant.parse(meta["requested_at"].asString()) shouldBe Instant.parse("2026-08-01T00:00:00Z")
             meta["deadline_ms"].asLong() shouldBe 6_000L
             // 상대는 종류로 말투를, 날짜로 "오늘/내일"을 정한다 — 비면 422 거나 엉뚱한 날 이야기다.
-            sentTree["items"].map { it["kind"].asString() to it["date"].asString() } shouldBe
+            sentTree["items"].values().map { it["kind"].asString() to it["date"].asString() } shouldBe
                 listOf("TRIP_DAY" to "2026-08-10", "TRIP_PRE" to "2026-08-09")
         }
     }

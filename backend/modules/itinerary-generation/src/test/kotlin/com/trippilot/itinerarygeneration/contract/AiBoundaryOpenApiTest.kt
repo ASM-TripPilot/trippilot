@@ -89,7 +89,7 @@ class AiBoundaryOpenApiTest : StringSpec({
     }
 
     fun required(name: String): List<String> =
-        schemas[name]?.get("required")?.map { it.asString() }?.sorted().orEmpty()
+        schemas[name]?.get("required")?.values()?.map { it.asString() }?.sorted().orEmpty()
 
     /** 우리 타입을 **경계 매퍼 그대로** 직렬화해 실제 와이어 키를 얻는다(이름 규칙을 흉내내지 않는다). */
     fun wireKeys(value: Any): List<String> = mapper.readTree(mapper.writeValueAsString(value)).propertyNames().sorted()
@@ -164,7 +164,7 @@ class AiBoundaryOpenApiTest : StringSpec({
     }
 
     "alternatives 요청이 계약 필수 필드를 하나도 빠뜨리지 않는다" {
-        val required = requireNotNull(schemas["AlternativesRequest"])["required"].map { it.asString() }
+        val required = requireNotNull(schemas["AlternativesRequest"])["required"].values().map { it.asString() }
         val sent = wireKeys(sampleAlternativesRequest)
         required.forEach { sent shouldContain it }
     }
@@ -226,7 +226,7 @@ class AiBoundaryOpenApiTest : StringSpec({
      * 그때 비로소 분기를 걷어낼 수 있다.
      */
     "AI 의 generation_mode 어휘는 우리 것의 부분집합이고 MANUAL 이 없다" {
-        val aiModes = requireNotNull(schemas["GenerationMode"]?.get("enum")).map { it.asString() }
+        val aiModes = requireNotNull(schemas["GenerationMode"]?.get("enum")).values().map { it.asString() }
         val ours = GenerationMode.entries.map { it.name }
         aiModes.forEach { ours shouldContain it }
         aiModes shouldNotContain "MANUAL"
@@ -258,7 +258,7 @@ class AiBoundaryOpenApiTest : StringSpec({
      */
     "위반 하위 코드 어휘가 계약 enum 과 같다" {
         val spec = requireNotNull(schemas["ViolationSchema"]?.get("properties")?.get("reason_code")) { "reason_code 없음" }
-        val values = spec["anyOf"]?.flatMap { it["enum"]?.map { v -> v.asString() }.orEmpty() }.orEmpty()
+        val values = spec["anyOf"]?.flatMap { it["enum"]?.values()?.map { v -> v.asString() }.orEmpty() }.orEmpty()
         values.sorted() shouldContainExactly listOf("CLOSED_DAY", "HOLIDAY", "OUT_OF_HOURS")
     }
 
@@ -278,7 +278,7 @@ class AiBoundaryOpenApiTest : StringSpec({
      */
     "미판정 사유 어휘가 계약 enum 과 같다" {
         val spec = requireNotNull(schemas["UnverifiedSlotSchema"]?.get("properties")?.get("reason_code")) { "reason_code 없음" }
-        spec["enum"].map { it.asString() }.sorted() shouldContainExactly listOf("HOURS_UNKNOWN", "NOT_REGISTERED", "UNMAPPABLE")
+        spec["enum"].values().map { it.asString() }.sorted() shouldContainExactly listOf("HOURS_UNKNOWN", "NOT_REGISTERED", "UNMAPPABLE")
     }
 
     /** repair 응답의 미판정 목록은 **읽지 않는다** — 하루 점검은 validate 만 부른다. 안 읽는 키를 명시적으로 빼고 정확히 맞춘다. */
@@ -346,7 +346,7 @@ class AiBoundaryOpenApiTest : StringSpec({
      */
     "replan scope 어휘가 우리 enum 과 정확히 같다" {
         val contractScopes = requireNotNull(schemas["ReplanRequest"]?.get("properties")?.get("scope")?.get("enum"))
-            .map { it.asString() }.sorted()
+            .values().map { it.asString() }.sorted()
         ReplanScope.entries.map { it.name }.sorted() shouldContainExactly contractScopes
     }
 
