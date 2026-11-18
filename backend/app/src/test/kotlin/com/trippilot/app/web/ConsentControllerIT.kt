@@ -50,6 +50,10 @@ class ConsentControllerIT : AbstractPostgresIntegrationTest() {
         return res.statusCode.value() to parsed
     }
 
+    /** 현행 약관 판 — 판을 하드코딩하면 개정판 시행일(예: 처리방침 1.1, 2026-11-25)에 테스트가 시계 때문에 깨진다. */
+    private fun currentVersion(type: String): String =
+        call(HttpMethod.GET, "/api/v1/terms").second.first { it["termsType"].asText() == type }["version"].asText()
+
     private fun newToken(): String {
         val account = accounts.save(Account.registerViaSocial(null, AgeMethod.SELF_DECLARED, null, now))
         return accessTokenIssuer.issue(account.id.value.toString()).value
@@ -74,8 +78,8 @@ class ConsentControllerIT : AbstractPostgresIntegrationTest() {
         val (submitStatus, _) = call(
             HttpMethod.POST, "/api/v1/me/consents", token,
             """{"consents":[
-                 {"termsType":"TERMS_OF_SERVICE","termsVersion":"1.0","action":"GRANT"},
-                 {"termsType":"PRIVACY_POLICY","termsVersion":"1.0","action":"GRANT"}
+                 {"termsType":"TERMS_OF_SERVICE","termsVersion":"${currentVersion("TERMS_OF_SERVICE")}","action":"GRANT"},
+                 {"termsType":"PRIVACY_POLICY","termsVersion":"${currentVersion("PRIVACY_POLICY")}","action":"GRANT"}
                ]}""",
         )
         submitStatus shouldBe 200
@@ -91,7 +95,7 @@ class ConsentControllerIT : AbstractPostgresIntegrationTest() {
         val token = newToken()
         val (status, _) = call(
             HttpMethod.POST, "/api/v1/me/consents", token,
-            """{"consents":[{"termsType":"TERMS_OF_SERVICE","termsVersion":"1.0","action":"GRANT"}]}""",
+            """{"consents":[{"termsType":"TERMS_OF_SERVICE","termsVersion":"${currentVersion("TERMS_OF_SERVICE")}","action":"GRANT"}]}""",
         )
         status shouldBe 400
     }
