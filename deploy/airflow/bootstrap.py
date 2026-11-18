@@ -136,8 +136,12 @@ def install(args, master):
 
     # 지우고 다시 만든다 — apply 는 stringData 에서 뺀 키(그림자로 되돌릴 때의 GH_TOKEN)를 저장된 data 에서 지우지 않는다.
     command(["kubectl", "delete", "secret", "batch-collect", "-n", ns, "--ignore-not-found"])
-    kubectl_apply(secret(ns, "batch-collect", {**{k: os.environ[k] for k in COLLECT_KEYS if os.environ.get(k)},
-                                               "BATCH_LIVE": live}))
+    # 그림자는 GH_TOKEN 을 빈 값으로 둔다(키는 남긴다) — 차트가 scheduler.env 의 secretKeyRef `optional: true` 를 렌더에서
+    # 떨어뜨려(1.22.0 실측, 11-18 install) 키가 없으면 스케줄러가 CreateContainerConfigError 로 뜨지 못한다. 빈 값은
+    # live.git_env 가 토큰 없음으로 본다.
+    values = {k: os.environ[k] for k in COLLECT_KEYS if k != "GH_TOKEN"}
+    values["GH_TOKEN"] = os.environ["GH_TOKEN"] if live == "1" else ""
+    kubectl_apply(secret(ns, "batch-collect", {**values, "BATCH_LIVE": live}))
     print(f"준비 끝 — namespace={ns} BATCH_LIVE={live}")
 
 
