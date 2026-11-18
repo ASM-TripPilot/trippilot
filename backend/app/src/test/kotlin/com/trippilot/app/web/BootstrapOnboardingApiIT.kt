@@ -52,6 +52,10 @@ class BootstrapOnboardingApiIT : AbstractPostgresIntegrationTest() {
         return res.statusCode.value() to parsed
     }
 
+    /** 현행 약관 판 — 판을 하드코딩하면 개정판 시행일(예: 처리방침 1.1, 2026-11-25)에 테스트가 시계 때문에 깨진다. */
+    private fun currentVersion(type: String): String =
+        call(HttpMethod.GET, "/api/v1/terms").second.first { it["termsType"].asText() == type }["version"].asText()
+
     private fun login(): String {
         val (status, body) = call(
             HttpMethod.POST, "/api/v1/auth/social/kakao", body =
@@ -99,8 +103,8 @@ class BootstrapOnboardingApiIT : AbstractPostgresIntegrationTest() {
         call(
             HttpMethod.POST, "/api/v1/me/consents", token,
             """{"consents":[
-                 {"termsType":"TERMS_OF_SERVICE","termsVersion":"1.0","action":"GRANT"},
-                 {"termsType":"PRIVACY_POLICY","termsVersion":"1.0","action":"GRANT"}
+                 {"termsType":"TERMS_OF_SERVICE","termsVersion":"${currentVersion("TERMS_OF_SERVICE")}","action":"GRANT"},
+                 {"termsType":"PRIVACY_POLICY","termsVersion":"${currentVersion("PRIVACY_POLICY")}","action":"GRANT"}
                ]}""",
         ).first shouldBe 200
         // 닉네임 설정(프로필 생성)

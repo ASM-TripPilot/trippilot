@@ -213,12 +213,20 @@ def render(entries: list[dict]) -> dict[str, str]:
     order = [t for t in KINDS if any(e["type"] == t for e in entries)]
     links = []
     for kind in order:
-        entry = next(e for e in entries if e["type"] == kind)
+        # 판이 여럿이면 시행일이 가장 늦은 판을 대표로 건다 — 시행 전 판이어도 본문에 시행일이 적혀 있어 그대로
+        # 사전 공지가 된다(처리방침 8절 "시행 7일 전 공지"). 이전 판은 동의 당시 원문을 볼 수 있게 따로 남긴다.
+        versions = sorted((e for e in entries if e["type"] == kind), key=lambda e: e["effective"])
+        entry, older = versions[-1], versions[:-1]
         label, slug = KINDS[kind]
         files[f"{slug}.html"] = page(label, md_to_html(entry["body"]), back=True)
+        previous = ""
+        for old in older:
+            files[f"{slug}-v{old['version']}.html"] = page(f"{label} (v{old['version']}, 이전 판)", md_to_html(old["body"]), back=True)
+            previous += (f' · <a href="{slug}-v{html.escape(old["version"])}.html">직전 판 v{html.escape(old["version"])}</a>'
+                         f' (v{html.escape(entry["version"])} 시행 전까지 적용)')
         links.append(
             f'<li><a href="{slug}.html">{html.escape(label)}</a>'
-            f' <small>v{html.escape(entry["version"])} · 시행 {html.escape(entry["effective"][:10])}</small></li>'
+            f' <small>v{html.escape(entry["version"])} · 시행 {html.escape(entry["effective"][:10])}{previous}</small></li>'
         )
     index = (
         "<h1>TripPilot 약관 및 방침</h1>"

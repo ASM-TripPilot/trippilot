@@ -77,8 +77,8 @@ class SchemaMigrationIT {
                 "visit_check", // 방문 실적(V2.21 · US-ONTRIP-01·US-REC-01)
             )
 
-            // R__ 시드 적용 확인 — 약관 6종 + 활성 금칙어 사전 1개
-            c.createStatement().executeQuery("SELECT count(*) FROM terms_version").use { rs ->
+            // R__ 시드 적용 확인 — 약관 6종(판은 여럿일 수 있다 — 처리방침 1.0·1.1) + 활성 금칙어 사전 1개
+            c.createStatement().executeQuery("SELECT count(DISTINCT terms_type) FROM terms_version").use { rs ->
                 rs.next(); rs.getInt(1) shouldBe 6
             }
             c.createStatement().executeQuery(

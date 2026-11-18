@@ -26,12 +26,13 @@ class TermsSeedIT : AbstractPostgresIntegrationTest() {
             "TERMS_OF_SERVICE", "PRIVACY_POLICY", "LOCATION_TERMS",
             "MARKETING", "GPS_RECORDING", "PERSONALIZATION",
         )
-        val rows = jdbc.queryForList(
-            "SELECT terms_type, body FROM terms_version WHERE version = '1.0'",
-        ).associate { it["terms_type"] as String to it["body"] as String }
+        // 판이 여럿이어도(처리방침 1.0·1.1) 모든 판을 본다 — 개정판에만 메모가 섞여 나가는 것도 막는다.
+        val rows = jdbc.queryForList("SELECT terms_type, version, body FROM terms_version")
+            .map { Triple(it["terms_type"] as String, it["version"] as String, it["body"] as String) }
 
-        rows.keys shouldBe required
-        rows.forEach { (type, body) ->
+        rows.map { it.first }.toSet() shouldBe required
+        rows.forEach { (kind, version, body) ->
+            val type = "$kind $version"
             // "[플레이스홀더]" 가 본문 어디에도 없어야 한다 — 접두가 아니라 전체를 훑는다(부분 방치 차단).
             body.contains("플레이스홀더") shouldBe false
             // 법무 검토용 "코드 대조표"(INV-3·TRIP-249 같은 개발 용어)가 이용자 화면에 실려 나간 적이 있다(QA 2026-10-03).
@@ -60,8 +61,9 @@ class TermsSeedIT : AbstractPostgresIntegrationTest() {
             "marketing-consent.md" to "MARKETING",
             "personalization-consent.md" to "PERSONALIZATION",
         )
+        // md 는 최신 판(시행 예정 포함)의 정본이다 — 타입별 시행일이 가장 늦은 판과 비교한다(처리방침 1.1, 2026-11).
         val seeded = jdbc.queryForList(
-            "SELECT terms_type, body FROM terms_version WHERE version = '1.0'",
+            "SELECT DISTINCT ON (terms_type) terms_type, body FROM terms_version ORDER BY terms_type, effective_at DESC",
         ).associate { it["terms_type"] as String to it["body"] as String }
 
         files.forEach { (file, type) ->
