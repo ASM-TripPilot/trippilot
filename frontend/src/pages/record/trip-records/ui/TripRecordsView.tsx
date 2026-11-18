@@ -42,7 +42,7 @@ import { MapSheetShell } from '@/widgets/map-sheet-shell';
  * ⚠️ 원리적 사각(6-b): 시트 실제 스냅·키보드가 시트를 밀어 올리는지·지도 제스처·핀 모양은 통과형 목이 못 본다.
  */
 
-export interface TripRecordsDayTab {
+interface TripRecordsDayTab {
   day: string;
   label: string;
 }
@@ -51,7 +51,7 @@ export interface TripRecordsDayTab {
  * TRIP-569 — 활성 일자의 귀속 헤더 완성값(라벨 조립은 페이지 몫). `stayName` 이 있으면 숙소명
  * 줄을 그리고, null/undefined 면 줄이 없다 — 날짜 귀속은 시트 헤더가 맡는다(TRIP-1097).
  */
-export interface DayAttributionHeader {
+interface DayAttributionHeader {
   dayLabel: string;
   stayName?: string | null;
 }

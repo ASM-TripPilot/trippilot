@@ -24,14 +24,14 @@ export interface TripAlbumInput {
   spontaneousNames: Record<string, string>;
 }
 
-export interface TripAlbumPlace {
+interface TripAlbumPlace {
   visitCheckId: string;
   name: string;
   countLabel: string;
   photos: { visitPhotoMetaId: string; uri: string }[];
 }
 
-export interface TripAlbumDay {
+interface TripAlbumDay {
   dayNumber: number;
   title: string;
   places: TripAlbumPlace[];

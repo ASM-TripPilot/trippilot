@@ -66,32 +66,56 @@ const CITY_HEROES: readonly HomeMagazineHero[] = [
   },
 ];
 
+// 프리뷰에서 관광공사 사진 3유형 안 자름·출처를 눈으로 보도록 imageLicense 를 TYPE1·TYPE3·null 로 섞었다(TRIP-1740, 실데이터 아님).
 const COLLECTIONS: readonly HomeCollectionCard[] = [
   {
     title: '감천문화마을',
     region: '부산 사하구',
     badge: '당일치기',
     imageUrl: COLLECTION_IMAGES[0],
+    imageLicense: 'TYPE3',
   },
   {
     title: '해운대 해변',
     region: '부산 해운대구',
     badge: '1박 2일',
     imageUrl: COLLECTION_IMAGES[1],
+    imageLicense: 'TYPE1',
   },
   {
     title: '해동용궁사',
     region: '부산 기장군',
     badge: '반나절',
     imageUrl: COLLECTION_IMAGES[2],
+    imageLicense: null,
   },
 ];
 
 const SPOTS: readonly HomeSpotCard[] = [
-  { title: '전포 카페거리', tag: '#감성카페', imageUrl: SPOT_IMAGES[0] },
-  { title: '자갈치 시장', tag: '#로컬푸드', imageUrl: SPOT_IMAGES[1] },
-  { title: '광안리 SUP', tag: '#액티비티', imageUrl: SPOT_IMAGES[2] },
-  { title: '황령산 전망대', tag: '#야경명소', imageUrl: SPOT_IMAGES[3] },
+  {
+    title: '전포 카페거리',
+    tag: '#감성카페',
+    imageUrl: SPOT_IMAGES[0],
+    imageLicense: 'TYPE3',
+  },
+  {
+    title: '자갈치 시장',
+    tag: '#로컬푸드',
+    imageUrl: SPOT_IMAGES[1],
+    imageLicense: 'TYPE1',
+  },
+  {
+    title: '광안리 SUP',
+    tag: '#액티비티',
+    imageUrl: SPOT_IMAGES[2],
+    imageLicense: null,
+  },
+  {
+    title: '황령산 전망대',
+    tag: '#야경명소',
+    imageUrl: SPOT_IMAGES[3],
+    imageLicense: 'TYPE3',
+  },
 ];
 
 const READY_SECTIONS: HomeSections = {

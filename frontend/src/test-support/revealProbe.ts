@@ -11,7 +11,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
  */
 
 /** 자식 노드에서 위로 올라가 처음 만나는 호스트 노드(= 래퍼 `Animated.View` 의 호스트). */
-export function revealWrapper(child: ReactTestInstance): ReactTestInstance {
+function revealWrapper(child: ReactTestInstance): ReactTestInstance {
   let node: ReactTestInstance | null = child.parent;
   while (node && typeof node.type !== 'string') node = node.parent;
   if (!node) throw new Error('자식 위에 호스트 래퍼가 없다');

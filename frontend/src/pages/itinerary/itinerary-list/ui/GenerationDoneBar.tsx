@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { ItineraryCloseGlyph } from '@/features/itinerary/index.view';
+import { CloseGlyph } from '@/shared/ui/glyphs';
 import { TAB_BAR_TOP } from '@/shared/ui/BottomTabBar';
 import { ToastSuccessGlyph } from '@/shared/ui/ToastGlyphs';
 import { useToastBottom } from '@/shared/ui/useToastBottom';
@@ -89,7 +89,7 @@ export function GenerationDoneBar({
           onPress={onPressClose}
           className="-my-[12px] -mr-[12px] h-[44px] w-[44px] items-center justify-center"
         >
-          <ItineraryCloseGlyph size={20} />
+          <CloseGlyph size={20} color="mutedSoft" />
         </Pressable>
       ) : null}
     </View>

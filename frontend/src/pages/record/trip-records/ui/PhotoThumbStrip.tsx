@@ -46,6 +46,7 @@ function PhotoCell({ vm }: { vm: PhotoThumbVM }): ReactElement {
         className={`${CELL} overflow-hidden bg-surface-soft`}
       >
         {uri != null ? (
+          // eslint-disable-next-line no-restricted-syntax -- 기기 사진(방문 기록) — 관광공사 POI 사진 아님
           <Image
             testID={`record-photo-thumb-image-${id}`}
             source={{ uri }}

@@ -2,6 +2,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { CountBadge } from './HomeFabs';
 import { HomeBellGlyph, HomeSearchGlyph } from './HomeGlyphs';
 import { softCardShadow } from './homeSurface';
 import { AssistantSparkleGlyph } from '@/features/open-assistant';
@@ -11,22 +12,26 @@ import type { HomePhase } from '../model/homeTypes';
 // ── 인사 헤더 ───────────────────────────────────────────────────────────
 // discovery는 고정 카피, 단계 얼굴은 greetTitle/greetSubtitle/greetName을 주입받는다.
 // TRIP-939 AC-9 — 종은 알림함 진입 버튼이다. role 은 콜백 유무가 아니라 구조로 굳힌다(370-AC-4 집합).
-// 하드코딩 빨간점은 뺐다(Q3 — 읽음 처리 미배선이라 켜지면 꺼지지 않는다).
+// TRIP-1783 — 종 안 숫자 배지는 읽지 않은 알림 개수(1 이상일 때만, 0·모름은 없음). 읽음 처리는 알림함의 접두 키 무효화로 숫자가 줄어든다.
+// 이름은 숫자를 함께 낭독한다 — 배지 글자는 버튼 label 이 대신하므로 따로 읽히지 않는다.
 // TRIP-1553 — 종 왼쪽 ✦ 는(후속: ✦ 왼쪽·종이 오른쪽 끝) 우하단 FAB 에서 옮겨 온 도우미 진입이다(같은 40 원형·구조 role). 글리프는
 // open-assistant 의 도우미 ✦ (홈 eyebrow 의 같은 이름 별과 다른 것).
 export function GreetingHeader({
   title,
   subtitle,
   name,
+  unreadCount,
   onPressBell,
   onPressAssistant,
 }: {
   title: string;
   subtitle?: string;
   name?: string;
+  unreadCount?: number | null;
   onPressBell?: () => void;
   onPressAssistant?: () => void;
 }): ReactElement {
+  const unread = unreadCount ?? 0;
   return (
     <View className="w-full flex-row items-center gap-sm px-lg pb-[10px] pt-lg">
       <View testID="home-greeting" className="flex-1 gap-px">
@@ -54,15 +59,23 @@ export function GreetingHeader({
       <Pressable
         testID="home-dashboard-bell"
         accessibilityRole="button"
-        accessibilityLabel="알림"
+        accessibilityLabel={bellLabel(unread)}
         onPress={onPressBell}
         style={softCardShadow}
         className="h-[40px] w-[40px] items-center justify-center rounded-full bg-canvas"
       >
         <HomeBellGlyph size={22} />
+        <CountBadge testID="home-dashboard-bell-badge" count={unread} />
       </Pressable>
     </View>
   );
+}
+
+function bellLabel(unread: number): string {
+  if (unread < 1) return '알림';
+  return unread >= 100
+    ? '알림, 읽지 않은 알림 99개 이상'
+    : `알림, 읽지 않은 알림 ${unread}개`;
 }
 
 // 얼굴별 인사 문구 — 헤더는 HomeScreen 이 얼굴과 무관하게 한 번만 그리고, 문구만 phase 로 고른다(TRIP-1769).

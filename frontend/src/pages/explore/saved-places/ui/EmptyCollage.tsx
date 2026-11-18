@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { View } from 'react-native';
 
-import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
+import { HeartFilledGlyph } from '@/shared/ui/glyphs';
 
 /**
  * empty 삽화 — Figma 1695:1183 · 2437:1616 의 사진 3장 부채꼴 + 중앙 하트 원. 저장한 장소(`SavedPlaceListScreen`)와

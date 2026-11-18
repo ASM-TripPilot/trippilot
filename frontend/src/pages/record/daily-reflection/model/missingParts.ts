@@ -18,7 +18,7 @@ import type { ReflectionStats } from '@/shared/api/index.schemas';
 /** 단말 위치 권한 3값 — 조회 실패·미결정(undetermined)은 "모름"이라 권한 사유를 말하지 않는다(Seed Q3). */
 export type LocationPermissionState = 'granted' | 'denied' | 'unknown';
 
-export type MapNoticeReason = 'few-visits' | 'permission' | 'no-route';
+type MapNoticeReason = 'few-visits' | 'permission' | 'no-route';
 
 export interface MapNotice {
   reason: MapNoticeReason;

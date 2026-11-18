@@ -2,6 +2,7 @@ import { Text } from 'react-native';
 import { render, screen, fireEvent } from '@testing-library/react-native';
 
 import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 
 import { PlaceRowCard } from './PlaceRowCard';
 
@@ -29,6 +30,7 @@ describe('🔴 PlaceRowCard (AC-M2·M4·M5 — 중립 접두 자기 계약)', ()
     const onToggle = jest.fn();
     render(
       <PlaceRowCard
+        imageLicense={null}
         testIDPrefix="place-row"
         id="p1"
         name="해운대 해변"
@@ -49,6 +51,7 @@ describe('🔴 PlaceRowCard (AC-M2·M4·M5 — 중립 접두 자기 계약)', ()
   it('W2 · save(미담김) → outline 하트 + not selected, filled 부재', () => {
     render(
       <PlaceRowCard
+        imageLicense={null}
         testIDPrefix="place-row"
         id="p1"
         name="해운대 해변"
@@ -65,6 +68,7 @@ describe('🔴 PlaceRowCard (AC-M2·M4·M5 — 중립 접두 자기 계약)', ()
     const onToggle = jest.fn();
     render(
       <PlaceRowCard
+        imageLicense={null}
         testIDPrefix="place-row"
         id="p1"
         name="해운대 해변"
@@ -80,6 +84,7 @@ describe('🔴 PlaceRowCard (AC-M2·M4·M5 — 중립 접두 자기 계약)', ()
   it('W4 · trailing 슬롯을 그린다(h13 추가 버튼 자리), save 없으면 하트 없음', () => {
     render(
       <PlaceRowCard
+        imageLicense={null}
         testIDPrefix="place-row"
         id="p1"
         name="감천문화마을"
@@ -94,6 +99,7 @@ describe('🔴 PlaceRowCard (AC-M2·M4·M5 — 중립 접두 자기 계약)', ()
   it('W5 · imageUrl 있으면 사진 leaf 를 그린다', () => {
     render(
       <PlaceRowCard
+        imageLicense={null}
         testIDPrefix="place-row"
         id="p1"
         name="감천문화마을"
@@ -110,6 +116,7 @@ describe('🔴 PlaceRowCard (AC-M2·M4·M5 — 중립 접두 자기 계약)', ()
   it('W6 · imageUrl 이 없으면 category(카페)·id(p1) 로 고른 생성 이미지를 같은 testID 로 그린다', () => {
     render(
       <PlaceRowCard
+        imageLicense={null}
         testIDPrefix="place-row"
         id="p1"
         name="감천문화마을"
@@ -126,7 +133,12 @@ describe('🔴 PlaceRowCard (AC-M2·M4·M5 — 중립 접두 자기 계약)', ()
 
   it('W6b · category 를 안 주거나 모르는 값이면 중립 폴백 place.webp 이다', () => {
     const { rerender } = render(
-      <PlaceRowCard testIDPrefix="place-row" id="p1" name="감천문화마을" />
+      <PlaceRowCard
+        imageLicense={null}
+        testIDPrefix="place-row"
+        id="p1"
+        name="감천문화마을"
+      />
     );
     expect(screen.getByTestId('place-row-photo-p1').props.source).toEqual([
       FALLBACK_COVER,
@@ -134,6 +146,7 @@ describe('🔴 PlaceRowCard (AC-M2·M4·M5 — 중립 접두 자기 계약)', ()
 
     rerender(
       <PlaceRowCard
+        imageLicense={null}
         testIDPrefix="place-row"
         id="p1"
         name="감천문화마을"
@@ -149,7 +162,12 @@ describe('🔴 PlaceRowCard (AC-M2·M4·M5 — 중립 접두 자기 계약)', ()
   // `toBeSelected()` 는 host 요소의 `accessibilityState.selected` 만 읽는다(RNTL to-be-selected.js 확인 — 접근성 요소 여부 무관).
   it('W7 · selected 를 안 주면 접근성 상태가 아예 없다 — 다른 소비처(d02·j01 방문 추가) 무변경', () => {
     render(
-      <PlaceRowCard testIDPrefix="place-row" id="p1" name="감천문화마을" />
+      <PlaceRowCard
+        imageLicense={null}
+        testIDPrefix="place-row"
+        id="p1"
+        name="감천문화마을"
+      />
     );
 
     expect(
@@ -160,6 +178,7 @@ describe('🔴 PlaceRowCard (AC-M2·M4·M5 — 중립 접두 자기 계약)', ()
   it('W8 · selected=true 면 루트가 선택됨, selected=false 면 선택 아님이다', () => {
     const { rerender } = render(
       <PlaceRowCard
+        imageLicense={null}
         testIDPrefix="place-row"
         id="p1"
         name="감천문화마을"
@@ -170,6 +189,7 @@ describe('🔴 PlaceRowCard (AC-M2·M4·M5 — 중립 접두 자기 계약)', ()
 
     rerender(
       <PlaceRowCard
+        imageLicense={null}
         testIDPrefix="place-row"
         id="p1"
         name="감천문화마을"
@@ -182,6 +202,27 @@ describe('🔴 PlaceRowCard (AC-M2·M4·M5 — 중립 접두 자기 계약)', ()
       {
         selected: false,
       }
+    );
+  });
+});
+
+// TRIP-1740 AC-7(T5) — props 의 imageLicense(필수 키)가 행 사진 칸까지 간다.
+describe('PlaceRowCard · 관광공사 사진 유형이 사진 칸에 닿는다', () => {
+  it('TYPE1 서버 사진은 cover 이고 출처 글자가 붙는다', () => {
+    render(
+      <PlaceRowCard
+        testIDPrefix="place-row"
+        id="p1"
+        name="해운대 해변"
+        imageUrl="https://example.com/x.jpg"
+        imageLicense="TYPE1"
+        subtitle={<Text>부산 · 골목</Text>}
+      />
+    );
+
+    expectTypeOnePhotoDelivered(
+      'place-row-photo-p1',
+      'https://example.com/x.jpg'
     );
   });
 });

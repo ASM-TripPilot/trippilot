@@ -558,7 +558,7 @@ class OrToolsAssembler:
             left_ms = budget_ms - int((time.monotonic() - day_started) * 1000)
             reorder_ms = min(reorder_ms, left_ms)
         cp_solver = self._reorder(m, cp_solver, problem, visit, start, arcs,
-                                  obj_terms, coords, reorder_ms)
+                                  obj_terms, coords, from_anchor, [n["stay"] for n in nodes], reorder_ms)
 
         slots = []
         base = datetime(day.year, day.month, day.day, tzinfo=tz)
@@ -578,7 +578,8 @@ class OrToolsAssembler:
         return slots
 
     def _reorder(self, m: cp_model.CpModel, a_solver: cp_model.CpSolver, problem,
-                 visit, start, arcs, obj_terms, coords, wall_ms: int) -> cp_model.CpSolver:
+                 visit, start, arcs, obj_terms, coords, from_anchor, stays,
+                 wall_ms: int) -> cp_model.CpSolver:
         """B 단계 — A 해의 방문 집합을 고정하고 이동 거리만 줄인다 (TRIP-1178).
 
         목적함수에 이동 비용이 없어(이동은 HC2 시각 제약뿐) 같은 집합 안의 순서가 탐색 경로로
@@ -594,6 +595,20 @@ class OrToolsAssembler:
         시각을 사전식 타이브레이크로 둔다: 거리 1m 가 Σ시작의 최대치보다 무거워(W) km 최적은
         그대로고, 같은 km 안에서 이른 시각을 고른다(측정: km 동일, 대기 514 → 35분).
 
+        **B 는 A 가 잡은 하루 틀 안에서만 순서를 바꾼다**(2026-11-09). 거리만 보면 B 가 아침을 비우고 출발을
+        미루거나(06:05 출발 → 08:28) 여는 시각을 기다리며 하루를 늘렸다. 공유본 실장소 80일(앵커 5 × 시드 8 ×
+        09·06시 창) 실측: 출발이 A 보다 늦은 날 11, 끝이 A 보다 늦은 날 21, 하루 중간 대기 합 A 646분 → B 2,766분.
+        - 숙소를 나서는 시각(첫 방문 시작 − 앵커 이동, 핀은 이동 0)은 A 보다 늦지 않다. 첫 장소가 바뀌어 앵커 이동만큼
+          도착이 늦는 것은 허용한다.
+        - 마지막 방문의 끝은 A 보다 늦지 않다. 출발 상한만 두면 Σ시작이 첫 방문을 상한 안에서 끝까지 앞당겨, 이른
+          아침 한 곳 뒤에 몇 시간 대기를 끼우고 하루를 늘렸다(06:33 카페 뒤 200분). 끝 상한은 하루를 A 의 틀 안에
+          묶는다 — 틀 안의 대기까지 없애지는 않는다(대기는 줄인 이동 시간만큼까지 는다).
+        A 해가 이 조건을 만족하므로 B 는 늘 실행 가능하고 거리는 A 이하다. 같은 80일 결과: 늦은 출발·늦은 끝 0,
+        대기 합 1,912분, 도로 km 는 A 대비 09시 창 −16.9%·06시 창 −30.2%(종전 B −18.2%·−31.3%). 거리 다음 순위를
+        하루 길이로 두는 것도 재 봤으나 끝 상한이 있으면 대기 차이가 40일 12분이라 두지 않았다. 끝 상한만 두면
+        늦은 출발이 80일 중 7일 남아 출발 상한도 둔다. A 에는 출발을
+        당기는 항이 없어서 이 규칙은 '가장 이른 출발'이 아니라 'A 보다 늦지 않은 출발'이다.
+
         **OPTIMAL 일 때만 채택한다** — 결정론 한도·벽시계에 끊긴 FEASIBLE 은 부하에 따라
         달라질 수 있어서다. 못 쓰면 A 해 그대로(강등 아님 — OR_TOOLS 그대로) + WARNING.
         `wall_ms` ≤ 0 이면 돌리지 않는다(설정 0, 또는 A 가 백스톱에 끊기고 일자 몫도 없음).
@@ -605,6 +620,14 @@ class OrToolsAssembler:
                        key=lambda i: (a_solver.Value(start[i]), i))
         for v, val in zip(visit, vals):
             m.Add(v == val)
+        # A 의 하루 틀 — 출발(핀은 앵커 이동 0)과 마지막 방문 끝. B 는 이 안에서만 순서를 바꾼다.
+        depart = a_solver.Value(start[order[0]]) - from_anchor[order[0]]
+        a_ends = [a_solver.Value(start[i]) + stays[i] for i in order]
+        for i, j, lit in arcs:
+            if i == 0 and j >= 1 and vals[j - 1]:  # 앵커 → 첫 방문 아크
+                m.Add(start[j - 1] - from_anchor[j - 1] <= depart).OnlyEnforceIf(lit)
+        for i in order:
+            m.Add(start[i] + stays[i] <= max(a_ends))
         # 이동 감점(`_travel_terms`)은 여기 들지 않는다 — 넣으면 B 가 줄인 거리만큼 식사창 등
         # 다른 소프트 항을 내줄 수 있다(A 가 FEASIBLE 이면 여유가 있다). 감점이 없으면 이 값이
         # A 목적값 그대로다.

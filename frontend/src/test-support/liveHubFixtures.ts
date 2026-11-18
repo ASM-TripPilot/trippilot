@@ -12,8 +12,8 @@ import { recordsHandler, tripRecord } from './tripRecordsFixtures';
  * 시각 문자열의 `Z` 유무가 곧 "기기 시간대로 읽히는가"이므로 빌더는 인자를 가공하지 않는다.
  */
 
-export const LIVE_TRIP_ID = 'trip-1';
-export const LIVE_TODAY = '2026-08-20';
+const LIVE_TRIP_ID = 'trip-1';
+const LIVE_TODAY = '2026-08-20';
 
 /** 일정 한 칸 — 기본은 시작=끝 시각. 끝 시각·카테고리·영업시간 등은 `over` 로 얹는다. */
 export function liveSlot(

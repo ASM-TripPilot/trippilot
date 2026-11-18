@@ -7,7 +7,7 @@ import { HomeLocationPinGlyph } from './HomeGlyphs';
 import { ABSOLUTE_FILL, SCRIM_LOCATIONS } from './homeSurface';
 import { HeartButton } from '@/shared/ui/HeartButton';
 import { Image } from '@/shared/ui/Image';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import type {
   HomeCollectionCard,
@@ -82,13 +82,13 @@ function CollectionCard({
       onPress={onPress}
       className="h-[300px] w-[230px] overflow-hidden rounded-[18px]"
     >
-      <View className="absolute inset-0 bg-surface-strong" />
-      <PlacePhoto
+      <PoiPhoto
         testID={`home-collection-photo-${index}`}
         imageUrl={card.imageUrl}
+        imageLicense={card.imageLicense}
+        surface="overlay"
         category={card.category}
         poiId={poiId}
-        contentFit="cover"
         cachePolicy="memory-disk"
         recyclingKey={poiId ?? card.imageUrl ?? undefined}
         transition={120}
@@ -145,13 +145,13 @@ function SpotCard({
       onPress={poiId && onPressCard ? () => onPressCard(poiId) : undefined}
       className="h-[166px] flex-1 overflow-hidden rounded-card"
     >
-      <View className="absolute inset-0 bg-surface-strong" />
-      <PlacePhoto
+      <PoiPhoto
         testID={`home-spot-photo-${index}`}
         imageUrl={card.imageUrl}
+        imageLicense={card.imageLicense}
+        surface="overlay"
         category={card.category}
         poiId={poiId}
-        contentFit="cover"
         cachePolicy="memory-disk"
         recyclingKey={poiId ?? card.imageUrl ?? undefined}
         transition={120}
@@ -351,6 +351,7 @@ function PastTripCard({
       className="h-[120px] w-[158px] overflow-hidden rounded-[12px]"
     >
       <View className="absolute inset-0 bg-surface-strong" />
+      {/* eslint-disable-next-line no-restricted-syntax -- 지난 여행 커버 — 관광공사 POI 사진 아님 */}
       <Image
         source={trip.imageUrl ? { uri: trip.imageUrl } : undefined}
         contentFit="cover"

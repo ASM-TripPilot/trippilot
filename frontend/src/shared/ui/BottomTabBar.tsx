@@ -56,6 +56,11 @@ export const TAB_BAR_TOP = TAB_BAR_MIN_HEIGHT - TAB_BAR_PADDING_TOP;
 export interface BottomTabBarProps {
   activeKey: ShellTabKey;
   onPressTab: (key: ShellTabKey) => void;
+  /**
+   * 하단 바 퇴장 모프가 이 탭 바 위를 덮는 동안(TRIP-1831) 탭 바를 거의 투명하게 둔다 — 모프가 끝나면 끊김 없이 이어받도록 이미 서 있어야 하고, 칸은 계속 눌려야 한다.
+   * 0 이 아니라 0.02 인 이유: iOS 는 alpha 가 0.01 미만인 뷰에 터치를 주지 않는다. 낭독 숨김·`pointerEvents` 차단·언마운트로 대신하지 마라.
+   */
+  ghost?: boolean;
 }
 
 // 탭바 전용 아이콘 색 — screens/ 스코프 밖(shared/ui)이라 raw hex가 D-3 가드 대상이 아니다.
@@ -318,6 +323,7 @@ const TAB_CELL_STYLE = { gap: NAV_BAR_CELL_GAP } as const;
 export function BottomTabBar({
   activeKey,
   onPressTab,
+  ghost = false,
 }: BottomTabBarProps): ReactElement {
   // 띠 실측 높이 — 첫 레이아웃 전엔 최소 높이로 시작해 신고값이 TAB_BAR_TOP 이다. 글자 배율이 커지면 알약이 자라 띠가 96을 넘는다(TRIP-1642).
   const [bandHeight, setBandHeight] = useState(TAB_BAR_MIN_HEIGHT);
@@ -331,7 +337,10 @@ export function BottomTabBar({
       // (code-critic N1 — RN 순수 View는 투명해도 터치를 흡수한다).
       pointerEvents="box-none"
       className="absolute inset-x-0 bottom-0 min-h-[96px] pt-[26px]"
-      style={{ paddingHorizontal: NAV_BAR_SIDE }}
+      style={{
+        paddingHorizontal: NAV_BAR_SIDE,
+        ...(ghost ? { opacity: 0.02 } : null),
+      }}
     >
       <GlassSurface
         contentClassName="flex-row items-center"

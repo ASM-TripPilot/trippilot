@@ -10,7 +10,7 @@
  * `isNotFound` 승격과 같은 자리·같은 규칙.
  */
 
-export type NicknameFormatReason = 'OK' | 'TOO_SHORT' | 'TOO_LONG';
+type NicknameFormatReason = 'OK' | 'TOO_SHORT' | 'TOO_LONG';
 
 export interface NicknameFormatResult {
   valid: boolean;

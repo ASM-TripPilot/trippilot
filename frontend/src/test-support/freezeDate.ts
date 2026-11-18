@@ -7,7 +7,7 @@
  */
 
 /** `Date` 만 빼고 jest 가 가짜로 만들 수 있는 타이머 API 전부. */
-export const REAL_TIMER_APIS = [
+const REAL_TIMER_APIS = [
   'hrtime',
   'nextTick',
   'performance',

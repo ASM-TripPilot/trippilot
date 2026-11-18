@@ -979,8 +979,11 @@ describe('🔴 TRIP-1195 · targetDate — 허브에서 바라보는 일차로 �
     expect(screen.getByTestId(ERROR)).toHaveTextContent(
       '다시 짜기를 시작하지 못했어요. 잠시 후 다시 시도해 주세요'
     );
-    // 재시도도 같은 날짜로 간다.
+    // 재시도도 같은 날짜로 간다 — 사람은 실패 안내를 보고 버튼이 다시 켜진 뒤 누른다(제출 중 잠금이 풀린 뒤, TRIP-1828).
     mockPhase = 'idle';
+    await waitFor(() =>
+      expect(screen.getByTestId('planb-request-submit')).toBeEnabled()
+    );
     await submit(2);
     expect(
       (mockMutate.mock.calls[1][0] as { data: { targetDate?: string } }).data

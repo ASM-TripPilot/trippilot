@@ -37,4 +37,4 @@ export {
   summaryDayWindow,
   validateDayWindow,
 } from './model/dayWindow';
-export type { DayWindow, DayWindowViolation } from './model/dayWindow';
+export type { DayWindow } from './model/dayWindow';

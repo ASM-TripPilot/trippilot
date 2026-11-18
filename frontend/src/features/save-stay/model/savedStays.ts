@@ -33,7 +33,7 @@ import { stayKey } from './stayKey';
  * 별개다(01b Seed Q7, cross-feature import 금지라 통합 불가·경로로 공존).
  */
 
-export type SavedStaysFailureReason =
+type SavedStaysFailureReason =
   | 'unauthenticated' // BR-U1-03 — 요청을 보내지 않는다
   | 'saved-id-unknown' // Q6 — 담은 목록이 아직 없어 보낼 savedStayId가 없다
   | 'not-found' // 404 — 담기: 없음/비-ACTIVE · 해제: 없음/타 계정(갈래를 나누지 않는다)

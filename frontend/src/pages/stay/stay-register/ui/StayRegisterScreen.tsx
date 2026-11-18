@@ -33,6 +33,7 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
+import { Button, buttonClasses } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomSheet, {
   BottomSheetBackdrop,
@@ -449,16 +450,13 @@ function MapSheet({
                 pins={stayPins(candidate)}
               />
             </View>
-            <Pressable
+            <Button
               testID="stay-register-mapsheet-confirm"
-              accessibilityRole="button"
+              size="md"
               onPress={onConfirmCoord}
-              className="h-12 items-center justify-center rounded-button bg-primary"
             >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                이 위치로 확인
-              </Text>
-            </Pressable>
+              이 위치로 확인
+            </Button>
           </>
         ) : (
           <>
@@ -471,16 +469,13 @@ function MapSheet({
             <Text className="font-noto text-label text-muted">
               {candidate.address}
             </Text>
-            <Pressable
+            <Button
               testID="stay-register-mapsheet-confirm"
-              accessibilityRole="button"
+              size="md"
               onPress={onConfirmCoord}
-              className="h-12 items-center justify-center rounded-button bg-primary"
             >
-              <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-                이 주소로 확인
-              </Text>
-            </Pressable>
+              이 주소로 확인
+            </Button>
           </>
         )}
       </BottomSheetView>
@@ -508,6 +503,8 @@ export function StayRegisterScreen({
   // 띄운다). 이름 게이트는 제출 경로가 canSubmitStayRegister 로 진다. 「다시 시도」는 범위 밖이라
   // 여전히 canSubmit 으로 잠긴다.
   const canPress = canPressStayRegister(flow);
+  // ✓ 글리프·상태별 글자 행이라 Button 대신 같은 모양 클래스만 빌린다(TRIP-1828 탈출구).
+  const submitButton = buttonClasses({ size: 'md', disabled: !canPress });
   // TRIP-1429 — 검색 키·[검색] 버튼 공용 입구. 검색 중이면 무시(중복 지오코드 요청 방지), 공백 검색어면
   // 버튼을 잠근다(page 조회도 공백이면 꺼져 있어 눌러도 아무 일이 없는 버튼이 된다 — INV-4).
   // TRIP-1672 — 검색 키도 같은 `canSearch` 를 지나야 한다: 버튼의 `disabled` 만으로는 키보드 경로가 막히지 않아,
@@ -639,24 +636,15 @@ export function StayRegisterScreen({
                         className="flex-1 font-noto text-body text-ink placeholder:text-muted-soft"
                       />
                     </View>
-                    <Pressable
+                    <Button
                       testID="stay-register-search-submit"
-                      accessibilityRole="button"
                       accessibilityLabel="검색"
+                      size="md"
                       disabled={!canSearch}
                       onPress={submitSearch}
-                      className={`h-12 items-center justify-center rounded-button px-lg ${
-                        canSearch ? 'bg-primary' : 'bg-surface-strong'
-                      }`}
                     >
-                      <Text
-                        className={`font-noto-bold text-body font-bold ${
-                          canSearch ? 'text-on-primary' : 'text-muted-soft'
-                        }`}
-                      >
-                        검색
-                      </Text>
-                    </Pressable>
+                      검색
+                    </Button>
                   </View>
                 </View>
 
@@ -766,35 +754,19 @@ export function StayRegisterScreen({
               accessibilityRole="button"
               disabled={!canPress}
               onPress={onSubmit}
-              className={`mx-lg h-12 flex-row items-center justify-center gap-xs rounded-button ${
-                canPress ? 'bg-primary' : 'bg-surface-strong'
-              }`}
+              className={`${submitButton.box} mx-lg flex-row gap-xs`}
             >
               {/* TRIP-730 CTA 텍스트 — submitting 우선(R-14 동결), 그다음 확정(✓ 이 숙소 등록), else
                 등록하기. ✓ 는 CheckGlyph(SVG)라 텍스트 노드는 "이 숙소 등록"이다(R-16, 02a ★5·★6). */}
               {flow.submitStatus === 'submitting' ? (
-                <Text className="font-noto-bold text-card-title font-bold text-muted-soft">
-                  등록 중…
-                </Text>
+                <Text className={submitButton.label}>등록 중…</Text>
               ) : flow.coordConfirmed ? (
                 <>
                   <Check24Glyph size={20} />
-                  <Text
-                    className={`font-noto-bold text-card-title font-bold ${
-                      canPress ? 'text-on-primary' : 'text-muted-soft'
-                    }`}
-                  >
-                    이 숙소 등록
-                  </Text>
+                  <Text className={submitButton.label}>이 숙소 등록</Text>
                 </>
               ) : (
-                <Text
-                  className={`font-noto-bold text-card-title font-bold ${
-                    canPress ? 'text-on-primary' : 'text-muted-soft'
-                  }`}
-                >
-                  등록하기
-                </Text>
+                <Text className={submitButton.label}>등록하기</Text>
               )}
             </Pressable>
 

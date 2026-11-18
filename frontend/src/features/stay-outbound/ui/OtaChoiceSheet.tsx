@@ -22,6 +22,7 @@ import {
 } from '@/shared/ui/glyphs';
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 
 import type { StayItem } from '@/shared/api/index.schemas';
 
@@ -189,20 +190,17 @@ export function OtaChoiceSheet({
             취소
           </Text>
         </Pressable>
-        <Pressable
+        <Button
           testID={isError ? 'stay-ota-retry' : 'stay-ota-confirm'}
-          accessibilityRole="button"
           onPress={isError ? onRetry : onConfirm}
-          className="h-[50px] flex-1 items-center justify-center rounded-button bg-primary"
+          className="flex-1"
         >
-          <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-            {isError
-              ? '다시 시도'
-              : isAffiliate
-                ? otaConfirmLabel(item.externalSource)
-                : '검색 결과로 이동'}
-          </Text>
-        </Pressable>
+          {isError
+            ? '다시 시도'
+            : isAffiliate
+              ? otaConfirmLabel(item.externalSource)
+              : '검색 결과로 이동'}
+        </Button>
       </View>
     </SheetShell>
   );

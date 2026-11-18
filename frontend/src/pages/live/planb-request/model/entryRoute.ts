@@ -50,7 +50,7 @@ export interface EntryRouteInput {
 }
 
 /** i04 가 처음 켜 둘 입력(§3.3). */
-export interface EntrySeed {
+interface EntrySeed {
   reasons: string[];
   directives: string[];
   excludedPoiIds: string[];

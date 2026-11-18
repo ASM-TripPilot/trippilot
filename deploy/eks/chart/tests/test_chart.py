@@ -206,6 +206,18 @@ class ChartTests(unittest.TestCase):
                 self.assertEqual(sources[0]["podSelector"]["matchLabels"]["app.kubernetes.io/component"], "ai")
                 self.assertEqual(sources[1]["podSelector"]["matchLabels"], {"app.kubernetes.io/name": "trippilot-kb-load"})
 
+    def test_load_test_job_reaches_backend_only_on_the_dev_target(self):
+        # 부하 테스트 Job(deploy/loadtest/run.py)은 개발 대상에서만 backend 에 닿는다 — 운영 네임스페이스 정책은 그대로.
+        def backend_sources(environment):
+            documents = render(environment)
+            policy = next(item for item in documents if item["kind"] == "NetworkPolicy" and item["metadata"]["name"] == "backend")
+            return [source["podSelector"]["matchLabels"] for source in policy["spec"]["ingress"][0]["from"]]
+
+        loadtest = {"app.kubernetes.io/name": "trippilot-loadtest"}
+        self.assertIn(loadtest, backend_sources("dev-target"))
+        self.assertNotIn(loadtest, backend_sources("dev"))
+        self.assertNotIn(loadtest, backend_sources("prd"))
+
     def test_autoscaling_replaces_static_replicas_and_skips_embedding(self):
         # `minReplicas` 는 2 를 쓴다 — 이 테스트가 보려는 것은 "HPA 가 정적 replicas 를
         # 대체하는가"이고, 1 로 두면 PDB 가 켜진 dev 값 위에서 **드레인이 영구히 막히는

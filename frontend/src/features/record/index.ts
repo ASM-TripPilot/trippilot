@@ -3,7 +3,6 @@ export {
   RecordCalendarGlyph,
   RecordChevronDownGlyph,
   RecordChevronRightGlyph,
-  RecordCloseGlyph,
   GpsOffGlyph,
   RecordInfoCircleGlyph,
   LegendChevronGlyph,

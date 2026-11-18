@@ -3,6 +3,7 @@ package com.trippilot.recalculation.application
 import com.trippilot.core.error.ConflictDetected
 import com.trippilot.core.error.ErrorCode
 import com.trippilot.core.error.ResourceNotFound
+import com.trippilot.core.error.ValidationFailed
 import com.trippilot.recalculation.domain.OriginKind
 import com.trippilot.recalculation.domain.ReplanInitiator
 import com.trippilot.recalculation.domain.ReplanOrigin
@@ -15,6 +16,12 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.kotest.property.Arb
+import io.kotest.property.PropTestConfig
+import io.kotest.property.arbitrary.enum
+import io.kotest.property.arbitrary.long
+import io.kotest.property.arbitrary.orNull
+import io.kotest.property.checkAll
 import org.springframework.dao.DataIntegrityViolationException
 import java.time.Duration
 import java.time.LocalDate
@@ -99,16 +106,13 @@ class PreparedReplanPolicyTest : StringSpec({
         shouldThrow<ConflictDetected> { f.startUser(triggerId = t) }.message shouldBe "여행 기간에만 재계획할 수 있습니다."
     }
 
-    "전날 창 — 알림 없이 들어오거나 첫날이 아닌 날을 짜려 하면 409(전날 문구)" {
+    // 알림 없는 여행 전 진입은 전날 창과 무관하다(TRIP-1841) — 아래 '여행 시작 전 수동 재계획' 절.
+    "전날 창 — 알림으로 첫날이 아닌 날을 짜려 하면 409(전날 문구)" {
         val f = Fixture(on = dayBefore, now = "20:20", horizon = ReplanHorizon.PRE_TRIP)
         val second = f.triggers.add(f.tripId, start.plusDays(1))
 
-        listOf(
-            { f.startUser(triggerId = null, target = start, scope = ReplanScope.FULL_DAY) },
-            { f.startUser(triggerId = second) },
-        ).forEach { attempt ->
-            shouldThrow<ConflictDetected> { attempt() }.message shouldBe "여행 전날에는 알림으로 받은 첫날 일정만 다시 짤 수 있어요."
-        }
+        shouldThrow<ConflictDetected> { f.startUser(triggerId = second) }
+            .message shouldBe "여행 전날에는 알림으로 받은 첫날 일정만 다시 짤 수 있어요."
         f.sessions.stored shouldBe emptyMap()
     }
 
@@ -140,7 +144,7 @@ class PreparedReplanPolicyTest : StringSpec({
         f.replans.applied shouldBe emptyList()
     }
 
-    "여행 전 반영 — 트리거 없는·첫날이 아닌·하루 전체가 아닌 초안은 409" {
+    "여행 전 반영 — 알림 진입의 첫날이 아닌·하루 전체가 아닌 초안, 알림 없는 '지금 이후' 초안은 409" {
         val f = Fixture(on = dayBefore, now = "20:20", horizon = ReplanHorizon.PRE_TRIP)
         fun drafted(trigger: UUID?, date: LocalDate, scope: ReplanScope) = f.sessions.save(
             ReplanSession.start(
@@ -150,7 +154,7 @@ class PreparedReplanPolicyTest : StringSpec({
         )
 
         listOf(
-            Triple(null, start, ReplanScope.FULL_DAY),
+            Triple(null, start, ReplanScope.PARTIAL_SLOTS),
             Triple(UUID.randomUUID(), start.plusDays(1), ReplanScope.FULL_DAY),
             Triple(UUID.randomUUID(), start, ReplanScope.PARTIAL_SLOTS),
         ).forEach { (trigger, date, scope) ->
@@ -160,6 +164,67 @@ class PreparedReplanPolicyTest : StringSpec({
             f.sessions.save(s.canceled(f.clock.now)) // 다음 경우를 열 자리(여행당 열린 세션 1개)
         }
         f.replans.applied shouldBe emptyList()
+    }
+
+    // ── 여행 시작 전 수동 재계획(TRIP-1841) ───────────────────────────────
+    // 확정 일정 허브 [수정] → AI에게 맡기기. 막으면 시작 전 사용자는 AI 로 일정을 고칠 길이 없다(직접 편집뿐).
+
+    "여행 시작 전 — 알림 없이 들어온 앞으로 올 여행 날 하루 전체는 지평과 무관하게 열리고 반영된다" {
+        val f = Fixture(on = start.minusDays(5), now = "10:00", horizon = ReplanHorizon.TODAY)
+        val second = start.plusDays(1)
+        f.replans.proposal = FakeReplans.sampleProposal(second)
+
+        val s = f.startUser(target = second, scope = ReplanScope.FULL_DAY)
+
+        s.targetDate shouldBe second
+        s.scope shouldBe ReplanScope.FULL_DAY
+        (s.origin.kind == OriginKind.GPS) shouldBe false // 그 날이 오늘이 아니라 기기 좌표를 쓰지 않는다
+        f.legalLogs.collections shouldBe emptyList()
+        f.service().apply(f.acc, f.tripId, s.sessionId).status shouldBe ReplanStatus.APPLIED
+        f.replans.applied.size shouldBe 1
+    }
+
+    "여행 시작 전 — 날짜를 빼면(오늘) 기간 밖 409, '지금 이후'는 400, 일정 없는 날은 409 — 세션을 열지 않는다" {
+        val f = Fixture(on = start.minusDays(5), now = "10:00")
+
+        shouldThrow<ConflictDetected> { f.startUser(target = null, scope = ReplanScope.FULL_DAY) }
+            .message shouldBe "여행 기간 안의 날짜만 다시 짤 수 있습니다."
+        shouldThrow<ConflictDetected> { f.startUser(target = start.minusDays(1), scope = ReplanScope.FULL_DAY) }
+            .message shouldBe "여행 기간 안의 날짜만 다시 짤 수 있습니다."
+        shouldThrow<ValidationFailed> { f.startUser(target = start, scope = ReplanScope.PARTIAL_SLOTS) }
+        val partialPlan = f.trips.add(start, end, dates = listOf(start))
+        shouldThrow<ConflictDetected> { f.startUser(target = end, scope = ReplanScope.FULL_DAY, tripId = partialPlan) }
+            .message shouldBe "그 날짜의 일정이 아직 없습니다."
+        f.sessions.stored shouldBe emptyMap()
+    }
+
+    "끝난 여행은 알림 없이도 409 — 여행 기간에만" {
+        val f = Fixture(on = end.plusDays(1), now = "10:00")
+
+        shouldThrow<ConflictDetected> { f.startUser(target = end, scope = ReplanScope.FULL_DAY) }
+            .message shouldBe "여행 기간에만 재계획할 수 있습니다."
+    }
+
+    // 진입과 적용이 같은 규칙을 본다 — 열리는데 적용이 409 면 AI 를 다 태운 뒤 막다른 길이다(그 반대면 잠금 우회다).
+    "PBT — 알림 없는 진입: 임의의 오늘·날짜·범위에서 열림 ⇔ 끝나기 전 ∧ 지나지 않은 여행 날 ∧ (오늘이거나 하루 전체), 열린 것은 반영된다" {
+        checkAll(
+            PropTestConfig(iterations = 300),
+            Arb.long(-8L..4L), Arb.long(-3L..4L).orNull(0.2), Arb.enum<ReplanScope>(), Arb.enum<ReplanHorizon>(),
+        ) { todayOffset, targetOffset, scope, horizon ->
+            val on = start.plusDays(todayOffset)
+            val f = Fixture(on = on, now = "10:00", horizon = horizon)
+            val target = targetOffset?.let { start.plusDays(it) }
+            val t = target ?: on
+            val expected = on <= end && t >= on && t in start..end && (t == on || scope == ReplanScope.FULL_DAY)
+            f.replans.proposal = FakeReplans.sampleProposal(t)
+
+            val opened = runCatching { f.startUser(target = target, scope = scope) }
+                .onFailure { (it is ConflictDetected || it is ValidationFailed) shouldBe true }
+                .getOrNull()
+
+            (opened != null) shouldBe expected
+            opened?.let { f.service().apply(f.acc, f.tripId, it.sessionId).status shouldBe ReplanStatus.APPLIED }
+        }
     }
 
     // ── 저장 경합(BR-SA-20 ④) ─────────────────────────────────────────────

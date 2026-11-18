@@ -7,7 +7,8 @@
  * ⚠️ 배럴(`@/shared/push`)에서 재수출하지 않는다 — 딥 경로로만 쓴다(배럴을 통째로 목하는 테스트가 많다).
  */
 import type { ReactElement } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PushBellHero } from './PushGlyphs';
@@ -44,17 +45,10 @@ export function PushPreprompt({ onProceed }: PushPrepromptProps): ReactElement {
 
         <View className="gap-sm px-2xl pb-2xl pt-lg">
           <View className="absolute inset-x-0 top-0 h-px bg-hairline" />
-          <Pressable
-            accessibilityRole="button"
-            testID="onboarding-push-allow"
-            onPress={onProceed}
-            className="h-[52px] items-center justify-center rounded-button bg-primary"
-          >
-            {/* TRIP-935 R8 — 권한 창 앞 안내에 "허용"을 쓰지 않는다(5.1.1(iv)). */}
-            <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-              계속
-            </Text>
-          </Pressable>
+          {/* TRIP-935 R8 — 권한 창 앞 안내에 "허용"을 쓰지 않는다(5.1.1(iv)). */}
+          <Button testID="onboarding-push-allow" onPress={onProceed}>
+            계속
+          </Button>
         </View>
       </View>
     </SafeAreaView>

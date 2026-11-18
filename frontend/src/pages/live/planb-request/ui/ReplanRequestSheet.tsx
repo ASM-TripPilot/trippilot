@@ -1,5 +1,6 @@
 import { useContext, type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import BottomSheet, {
   BottomSheetScrollView,
@@ -47,7 +48,7 @@ const SHEET_BACKGROUND = {
 } as const;
 
 /** 감지 트리거 1개를 사유 칩 1개로 보여 줄 재료(문구 + 이 칩이 켜고 끄는 사유 key). */
-export interface ReplanDetectedChip {
+interface ReplanDetectedChip {
   label: string;
   reasonKey: string;
 }
@@ -324,19 +325,14 @@ export function ReplanRequestSheet({
           </Pressable>
         ) : null}
 
-        <Pressable
+        {/* TRIP-1294 — POST 대기 중엔 회색 + 눌림 막음. 막기의 진짜 그물은 페이지 ref 잠금. */}
+        <Button
           testID="planb-request-submit"
-          accessibilityRole="button"
-          // TRIP-1294 — POST 대기 중엔 흐리게 + 눌림 막음(StateNotice disabled 관례). 막기의 진짜 그물은 페이지 ref 잠금.
           disabled={submitting}
-          accessibilityState={{ disabled: submitting }}
           onPress={onSubmit}
-          className={`items-center justify-center rounded-button bg-primary py-[17px]${submitting ? ' opacity-40' : ''}`}
         >
-          <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-            {SUBMIT_LABEL}
-          </Text>
-        </Pressable>
+          {SUBMIT_LABEL}
+        </Button>
       </BottomSheetScrollView>
     </BottomSheet>
   );

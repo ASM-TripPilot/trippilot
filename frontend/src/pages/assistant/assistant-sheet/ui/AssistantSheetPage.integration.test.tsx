@@ -10,6 +10,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react-native';
+import { Platform } from 'react-native';
 
 import { server } from '@/mocks/server';
 import { BASE } from '@/test-support/apiBase';
@@ -87,9 +88,10 @@ jest.mock('expo-crypto', () => ({
 
 // O-U8-5 — 단말 위치는 expo-location 네이티브라 목으로 갈아 끼운다. 파일 경로로 목하면 `@/shared/location` 배럴로
 // 읽어도 같은 목이 닿는다. 팩토리는 끌어올려지므로 화살표로 감싸 호출 시점에 읽는다.
+// 인자도 그대로 넘긴다 — 마운트 때 읽기(인자 없음)와 웹 위치 묻기(`{ ask: true }`)를 가른다.
 const mockReadDevicePosition = jest.fn();
 jest.mock('@/shared/location/readDevicePosition', () => ({
-  readDevicePosition: () => mockReadDevicePosition(),
+  readDevicePosition: (...args: unknown[]) => mockReadDevicePosition(...args),
 }));
 
 const TRIP = '11111111-1111-1111-1111-111111111111';
@@ -1209,5 +1211,277 @@ describe('도우미 시트 · 현재 위치 싣기', () => {
     expect(sent(1).clientTurnId).toBe(sent(0).clientTurnId);
     expect(sent(1)).toHaveProperty('deviceLocation', HERE);
     expect(mockReadDevicePosition).toHaveBeenCalledTimes(1);
+  });
+
+  // 웹 위치 묻기(2026-11-08 · O-U8-5 웹 예외) — 브라우저 권한은 출처별이라 폰에서 가입한 사람은 웹에서 한 번도 안 물어졌다.
+  // 웹 · 동의 켜짐 · 실을 위치 없음 · 이 마운트에서 아직 안 물음 · 보내는 글자에 「날씨」 — 전부 참일 때만 `{ ask: true }` 로 한 번 묻고
+  // 답을 기다렸다가 싣는다(잠금·낙관 말풍선이 먼저). 위 L1~L6 은 jest-expo 기본 `Platform.OS === 'ios'` 라 네이티브 경로다.
+  describe('웹 · 날씨를 처음 물으면 위치 권한을 한 번 묻는다', () => {
+    type Here = { lat: number; lng: number } | null;
+    // 수원 — 운영 사건 자리. 마운트 좌표(HERE, 부산)와 달라 어느 경로의 좌표가 실렸는지 갈린다.
+    const ASKED = { lat: 37.2636, lng: 127.0286 };
+
+    // jest 설정에 restoreMocks 가 없다 — 되돌리지 않으면 뒤 테스트까지 그 플랫폼으로 돈다.
+    let restoreOS: (() => void) | undefined;
+    afterEach(() => {
+      restoreOS?.();
+      restoreOS = undefined;
+    });
+    function setOS(os: typeof Platform.OS) {
+      const replaced = jest.replaceProperty(Platform, 'OS', os);
+      restoreOS = () => replaced.restore();
+    }
+
+    /** 마운트 때 읽기(인자 없음)와 묻기(`{ ask: true }`)에 따로 답한다 — 값 또는 붙잡아 둔 약속. */
+    function answerPosition(
+      mount: Here | Promise<Here>,
+      ask: Here | Promise<Here>
+    ) {
+      mockReadDevicePosition.mockImplementation((options?: { ask?: boolean }) =>
+        Promise.resolve(options?.ask ? ask : mount)
+      );
+    }
+    const askCalls = () =>
+      mockReadDevicePosition.mock.calls.filter(
+        ([options]) => options?.ask === true
+      ).length;
+    const mountCalls = () =>
+      mockReadDevicePosition.mock.calls.filter(([options]) => !options?.ask)
+        .length;
+
+    /** 플랫폼·동의 켜짐·열기·턴 핸들러를 깔고 그린 뒤, 마운트 때 읽기가 훅에 들어갈 때까지 흘린다. */
+    async function renderOn(
+      os: typeof Platform.OS,
+      mount: Here | Promise<Here>,
+      ask: Here | Promise<Here>
+    ) {
+      setOS(os);
+      serveConsent(true);
+      answerPosition(mount, ask);
+      serveOpen();
+      serveTurns(answered());
+      renderPage();
+      await positionRead();
+    }
+
+    it('W1 TEXT 에 「날씨」가 있으면 한 번 묻고, 받은 좌표를 그 턴의 deviceLocation 으로 싣는다 (AC1·AC2)', async () => {
+      await renderOn('web', null, ASKED);
+
+      await sendAndSettle(WEATHER_Q, 1);
+
+      expect(askCalls()).toBe(1);
+      expect(sent(0)).toHaveProperty('deviceLocation', ASKED);
+      expect(turnBodies[0]).toHaveProperty('deviceLocation', ASKED);
+      expect(turnBodies[0]).toMatchObject({
+        input: { type: 'TEXT', text: WEATHER_Q },
+      });
+    });
+
+    it('W2 quick reply 「오늘 날씨」(ACTION — 입력엔 글자 없음)도 라벨로 판정해 묻고 싣는다 (AC1·AC2)', async () => {
+      await renderOn('web', null, ASKED);
+      // TRIP-1567 — 시작 quick reply 는 칩 안에 접혀 있다
+      fireEvent.press(await screen.findByTestId('assistant-context-chip'));
+      const weatherChip = screen.getByTestId(
+        'assistant-quick-reply-qr-weather'
+      );
+      expect(weatherChip).toHaveTextContent('오늘 날씨');
+
+      await act(async () => {
+        fireEvent.press(weatherChip);
+      });
+      await waitFor(() => expect(turnHits()).toBe(1));
+      await screen.findByTestId('assistant-send');
+
+      expect(askCalls()).toBe(1);
+      expect(turnBodies[0]).toMatchObject({
+        input: { type: 'ACTION', quickReplyId: 'qr-weather' },
+        deviceLocation: ASKED,
+      });
+    });
+
+    it('W3 묻기가 null(거부·무응답·실패)이면 그 턴은 위치 없이 그대로 나간다 (AC2 · INV-4)', async () => {
+      await renderOn('web', null, null);
+
+      await sendAndSettle(WEATHER_Q, 1);
+
+      expect(askCalls()).toBe(1);
+      expect(sendTurnSpy).toHaveBeenCalledTimes(1);
+      expect(sent(0)).not.toHaveProperty('deviceLocation');
+    });
+
+    it('W4 묻는 동안 말풍선·보내는 중 표시가 먼저 뜨고 요청은 답을 기다린다 — 같은 틱에 두 번 눌러도 묻기·턴은 1번 (AC2·AC6)', async () => {
+      const held = holdResponse();
+      await renderOn(
+        'web',
+        null,
+        held.gate.then(() => ASKED)
+      );
+      fireEvent.changeText(
+        await screen.findByTestId('assistant-input'),
+        WEATHER_Q
+      );
+      const send = screen.getByTestId('assistant-send');
+
+      // 두 번째 누름은 다시 그려지기 전의 핸들러로 훅까지 간다 — 화면 비활성이 아니라 훅 잠금이 막아야 1번
+      await act(async () => {
+        fireEvent.press(send);
+        fireEvent.press(send);
+      });
+
+      expect(askCalls()).toBe(1);
+      expect(sendTurnSpy).not.toHaveBeenCalled();
+      expect(
+        screen.getByTestId('assistant-user-bubble-pending')
+      ).toHaveTextContent(WEATHER_Q, { exact: false });
+      expect(screen.getByTestId('assistant-progress')).toBeOnTheScreen();
+
+      held.release();
+      await waitFor(() => expect(turnHits()).toBe(1));
+      await screen.findByTestId('assistant-send');
+
+      expect(sendTurnSpy).toHaveBeenCalledTimes(1);
+      expect(sent(0)).toHaveProperty('deviceLocation', ASKED);
+    });
+
+    it('W5 같은 마운트에서 두 번 묻지 않는다 — 첫 묻기가 null 이면 다음 날씨 턴은 묻지 않고 바로 위치 없이 나간다 (AC5)', async () => {
+      await renderOn('web', null, null);
+      await sendAndSettle(WEATHER_Q, 1);
+      expect(askCalls()).toBe(1);
+
+      await typeAndSend('내일 날씨는?');
+
+      // 누른 act 안에서 이미 어댑터에 닿았다 — 다시 묻고 기다리는 구현이면 여기서 1
+      expect(sendTurnSpy).toHaveBeenCalledTimes(2);
+      expect(sent(1)).not.toHaveProperty('deviceLocation');
+      expect(askCalls()).toBe(1);
+      await waitFor(() => expect(turnHits()).toBe(2));
+    });
+
+    it('W6 묻기로 받은 좌표는 다음 턴(날씨 아님)에도 싣고, 다시 묻지 않는다 (AC5 · seed D5)', async () => {
+      await renderOn('web', null, ASKED);
+      await sendAndSettle(WEATHER_Q, 1);
+
+      await sendAndSettle('내일은?', 2);
+
+      expect(askCalls()).toBe(1);
+      expect(sent(1)).toHaveProperty('deviceLocation', ASKED);
+    });
+
+    it('W7 「날씨」가 없는 턴은 묻지 않고 누른 자리에서 바로 위치 없이 보낸다 (AC7)', async () => {
+      await renderOn('web', null, ASKED);
+
+      await typeAndSend(UTTERANCE);
+
+      expect(sendTurnSpy).toHaveBeenCalledTimes(1);
+      expect(sent(0)).not.toHaveProperty('deviceLocation');
+      expect(askCalls()).toBe(0);
+      await waitFor(() => expect(turnHits()).toBe(1));
+    });
+
+    it('W8 동의가 꺼져 있으면 웹·날씨여도 위치를 읽지도 묻지도 않는다 (AC1·AC7)', async () => {
+      setOS('web');
+      serveConsent(false);
+      answerPosition(null, ASKED);
+      serveOpen();
+      serveTurns(answered());
+      renderPage();
+      await consentAnswered();
+
+      await sendAndSettle(WEATHER_Q, 1);
+
+      expect(mockReadDevicePosition).not.toHaveBeenCalled();
+      expect(sent(0)).not.toHaveProperty('deviceLocation');
+    });
+
+    it('W9 마운트 때 이미 위치를 읽었으면 묻지 않고 그 좌표를 싣는다 (AC1·AC7)', async () => {
+      await renderOn('web', HERE, ASKED);
+
+      await sendAndSettle(WEATHER_Q, 1);
+
+      expect(askCalls()).toBe(0);
+      expect(sent(0)).toHaveProperty('deviceLocation', HERE);
+    });
+
+    it.each(['ios', 'android'] as const)(
+      'W10 %s 는 날씨 턴이어도 묻지 않고 기다리지 않는다 (AC7 · seed D1)',
+      async (os) => {
+        await renderOn(os, null, ASKED);
+
+        await typeAndSend(WEATHER_Q);
+
+        expect(sendTurnSpy).toHaveBeenCalledTimes(1);
+        expect(sent(0)).not.toHaveProperty('deviceLocation');
+        expect(askCalls()).toBe(0);
+        await waitFor(() => expect(turnHits()).toBe(1));
+      }
+    );
+
+    it('W11 묻는 동안 [대기 취소] → 서버에 닿지 않고 [다시 보내기]로 끝나며, 다시 보내면 묻지 않고 받은 좌표를 싣는다 (AC5·AC6 · seed D5·D6)', async () => {
+      const held = holdResponse();
+      await renderOn(
+        'web',
+        null,
+        held.gate.then(() => ASKED)
+      );
+      await typeAndSend(WEATHER_Q);
+      expect(askCalls()).toBe(1);
+
+      await act(async () => {
+        fireEvent.press(screen.getByTestId('assistant-progress-cancel'));
+      });
+      // 권한 창이 아직 떠 있어도(묻기 미결) 취소는 바로 먹는다 — 진행 줄이 걷히고 [다시 보내기]가 뜬다(03b 경고-1)
+      const resend = await screen.findByTestId('assistant-resend');
+      expect(screen.queryByTestId('assistant-progress')).toBeNull();
+      // 늦게 온 답의 좌표는 담아 둔다 — 아래 [다시 보내기]가 싣는다
+      await act(async () => held.release());
+
+      // 취소한 턴은 서버에 닿지 않는다 — 다시 보내기 요청은 엿보기 순번이 아니라 서버 JSON 으로 본다
+      expect(turnHits()).toBe(0);
+
+      await act(async () => {
+        fireEvent.press(resend);
+      });
+      await waitFor(() => expect(turnHits()).toBe(1));
+
+      expect(turnBodies[0]).toHaveProperty('deviceLocation', ASKED);
+      expect(askCalls()).toBe(1);
+    });
+
+    it('W13 묻는 동안 시트를 닫으면 답이 와도 그 턴은 서버로 나가지 않는다 (03b 경고-2 · 대기 중 언마운트)', async () => {
+      // 준비: 웹·동의 켜짐·마운트 위치 없음, 묻기는 풀기 전까지 끝나지 않는다
+      const held = holdResponse();
+      await renderOn(
+        'web',
+        null,
+        held.gate.then(() => ASKED)
+      );
+      await typeAndSend(WEATHER_Q);
+      expect(askCalls()).toBe(1);
+
+      // 실행: 권한 창이 떠 있는 동안 시트를 닫고, 그 뒤에 답이 온다
+      screen.unmount();
+      held.release();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      // 단언: 닫힌 뒤에 새 요청이 시작되지 않는다
+      expect(turnHits()).toBe(0);
+    });
+
+    it('W12 「한 번」은 마운트마다다 — 시트를 닫았다 다시 열면 다시 묻는다 (AC5 · seed D3)', async () => {
+      await renderOn('web', null, null);
+      await sendAndSettle(WEATHER_Q, 1);
+      expect(askCalls()).toBe(1);
+
+      screen.unmount();
+      // renderPage 가 client 를 갈아 끼운다 — 옛 client 는 파일 afterEach 가 못 비운다
+      client.clear();
+      renderPage();
+      // 둘째 마운트의 마운트 읽기(인자 없는 호출 누적 2번)가 훅에 들어갈 때까지
+      await waitFor(() => expect(mountCalls()).toBe(2));
+      await flush();
+      await sendAndSettle(WEATHER_Q, 2);
+
+      expect(askCalls()).toBe(2);
+    });
   });
 });

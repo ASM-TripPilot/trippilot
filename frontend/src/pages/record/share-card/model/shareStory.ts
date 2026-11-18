@@ -20,7 +20,7 @@ import type { ShareCardCopy } from '@/shared/api/index.schemas';
  */
 
 /** 일차 장면 최대 장 수 — 앞 5일차. */
-export const STORY_DAY_LIMIT = 5;
+const STORY_DAY_LIMIT = 5;
 /** 동선 장·대표 카드 방문 순서의 최대 줄 수. */
 export const SHARE_ROUTE_LIMIT = 6;
 

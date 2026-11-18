@@ -83,7 +83,7 @@ function MethodCard({
 
 /** 다른 여행의 생성이 진행 중임을 알리는 서버 판정면(선행 BE 칸이 신설). 권한은 서버 — 화면은
  * 스스로 세지 않고 주입받은 이 값만 그린다. */
-export interface ActiveGeneration {
+interface ActiveGeneration {
   tripId: string;
   label?: string;
 }

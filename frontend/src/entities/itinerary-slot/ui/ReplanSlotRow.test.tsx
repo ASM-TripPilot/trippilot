@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 
 import type { ReplanSlotVM } from '../model';
 import { ReplanSlotRow } from './ReplanSlotRow';
@@ -25,6 +26,7 @@ const PLANNED: ReplanSlotVM = {
   placeName: '전포 카페거리',
   tone: 'planned',
   photo: PHOTO,
+  imageLicense: null,
   category: 'CAFE',
   timeLabel: '15:00–16:30',
   categoryLabel: '카페 · 실내',
@@ -177,5 +179,26 @@ describe('🔴 ReplanSlotRow · INV-3 (AC-13)', () => {
     const tree = JSON.stringify(screen.toJSON());
     expect(tree).toContain('15:00–16:30');
     expect(tree).not.toMatch(/\d+\s*분|\d+\s*시간|소요/);
+  });
+});
+
+// TRIP-1740 AC-7(T2) — VM 의 imageLicense(필수 키, 값은 유형|null|undefined)가 72px 사진 칸까지 간다.
+describe('ReplanSlotRow · 관광공사 사진 유형이 사진 칸에 닿는다', () => {
+  it('TYPE1 서버 사진(VM photo={uri})은 cover 이고 출처 글자가 붙는다', () => {
+    render(
+      <ReplanSlotRow
+        vm={{
+          ...PLANNED,
+          photo: { uri: 'https://img.example/t1.jpg' },
+          imageLicense: 'TYPE1',
+        }}
+        index={3}
+      />
+    );
+
+    expectTypeOnePhotoDelivered(
+      'planb-draft-slot-photo-s4',
+      'https://img.example/t1.jpg'
+    );
   });
 });

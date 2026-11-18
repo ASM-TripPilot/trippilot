@@ -11,8 +11,6 @@ export {
   GearGlyph,
   SettingsListGlyph,
   LogoutGlyph,
-  MUTED,
-  MUTED_SOFT,
   MenuBedGlyph,
   PersonGlyph,
   SettingsPinGlyph,

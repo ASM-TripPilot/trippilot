@@ -7,18 +7,18 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { MapPinGlyph } from '@/shared/ui/glyphs';
-import { Image } from '@/shared/ui/Image';
+import {
+  BackChevronWideGlyph,
+  ShareGlyph,
+  MapPinGlyph,
+} from '@/shared/ui/glyphs';
 import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { PlaceSubtitle } from '@/entities/place';
-import {
-  ExecutionBackArrowGlyph,
-  HeroPhotoGlyph,
-  ExecutionShareGlyph,
-} from '@/features/execution/index.view';
+import { HeroPhotoGlyph } from '@/features/execution/index.view';
 import { MapView } from '@/shared/map';
 import { NoticeBanner } from '@/shared/ui/NoticeBanner';
 import { OpenNaverMapButton } from '@/shared/ui/OpenNaverMapButton';
@@ -156,7 +156,7 @@ export function PlaceDetailScreen({
         {/* 갤러리 히어로(풀블리드 430) — 사진이 없으면 카테고리 생성 이미지 1장(D6). */}
         <View
           testID="execution-place-hero"
-          className="h-[430px] w-full overflow-hidden bg-surface-strong"
+          className="h-[430px] w-full overflow-hidden"
         >
           {view.galleryUrls.length > 0 ? (
             <ScrollView
@@ -166,13 +166,15 @@ export function PlaceDetailScreen({
               showsHorizontalScrollIndicator={false}
             >
               {view.galleryUrls.map((uri, index) => (
-                <PlacePhoto
+                // 유형은 대표 1장(index 0)만 안다 — 나머지는 모르는 사진이라 null(자르지 않음).
+                <PoiPhoto
                   key={`${index}-${uri}`}
                   testID={`execution-place-gallery-${index}`}
                   imageUrl={uri}
+                  imageLicense={index === 0 ? view.imageLicense : null}
+                  surface="overlay"
                   category={view.category}
                   poiId={view.poiId}
-                  contentFit="cover"
                   cachePolicy="memory-disk"
                   className="h-full"
                   style={{ width }}
@@ -204,7 +206,7 @@ export function PlaceDetailScreen({
           >
             {onPressBack ? (
               <CircleButton testID="execution-place-back" onPress={onPressBack}>
-                <ExecutionBackArrowGlyph size={20} />
+                <BackChevronWideGlyph size={20} />
               </CircleButton>
             ) : null}
             <View pointerEvents="none" className="flex-1" />
@@ -213,7 +215,7 @@ export function PlaceDetailScreen({
                 testID="execution-place-share"
                 onPress={onPressShare}
               >
-                <ExecutionShareGlyph size={19} />
+                <ShareGlyph size={19} />
               </CircleButton>
             ) : null}
           </View>
@@ -373,10 +375,13 @@ export function PlaceDetailScreen({
                     key={`${index}-${uri}`}
                     className="h-[110px] flex-1 overflow-hidden rounded-[12px] bg-surface-strong"
                   >
-                    <Image
+                    <PoiPhoto
                       testID={`execution-place-photo-thumb-${index}`}
-                      source={{ uri }}
-                      contentFit="cover"
+                      imageUrl={uri}
+                      imageLicense={index === 0 ? view.imageLicense : null}
+                      surface="thumb"
+                      category={view.category}
+                      poiId={view.poiId}
                       cachePolicy="memory-disk"
                       className="h-full w-full"
                     />

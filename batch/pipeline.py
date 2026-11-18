@@ -6,6 +6,8 @@ import logging
 import os
 import shutil
 import tempfile
+import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -57,18 +59,71 @@ def publish(candidate: Path, target: Path) -> Path:
     except BaseException:
         staging.unlink(missing_ok=True)
         raise
-    run = candidate.parent.resolve()
-    if run.parent.parent == (OUT / "runs").resolve():   # run_dir 이 만든 깊이의 폴더만 — runs/ 나 runs/<dag> 는 지우지 않는다
+    clear_run(candidate.parent)
+    return target
+
+
+def clear_run(run: Path) -> None:
+    """끝난 실행의 후보 폴더를 지운다. run_dir 이 만든 깊이의 폴더만 — runs/ 나 runs/<dag> 는 지우지 않는다."""
+    run = run.resolve()
+    if run.parent.parent == (OUT / "runs").resolve():
         # 게시는 이미 끝났다 — 정리 실패가 게시를 실패로 보이게 하면 안 된다(재실행이 성공한 게시를 다시 하게 된다).
         # 어떤 예외든 로그만 남긴다(onexc 는 3.12+ 라 쓰지 않는다 — 옛 인터프리터에서는 TypeError 가 게시 뒤에 났다).
         try:
             shutil.rmtree(run)
         except Exception as exc:
             log.warning("후보 정리 실패(게시는 끝났다): %s — %s", run, exc)
-    return target
 
 
 def run_day(context: dict, tz) -> datetime:
     """실행의 기준 날짜 — 날짜 없이 수동 트리거하면 Airflow 3 는 logical_date 를 context 에 넣지 않는다(실측)."""
     when = context.get("logical_date") or context["dag_run"].run_after
     return when.astimezone(tz)
+
+
+def keep_run(run: Path, reason: str) -> None:
+    """실패한 실행의 폴더를 남긴다 — 원인을 보고, 실패한 태스크부터 다시 돌릴 수 있게(게시 재시도는 그 복제본을 쓴다).
+    실 수집 DAG 의 마지막 정리(`finish_run`)가 이 표시를 본다."""
+    (run / "KEEP").write_text(reason, encoding="utf-8")
+
+
+@contextmanager
+def keep_on_failure(run: Path):
+    """이 블록이 예외로 끝나면 실행 폴더를 남긴다(collect·validate·publish·persist — 재시도에 복제본이 필요한 태스크).
+    들어올 때 지난 표시를 지운다 — 실패했던 태스크를 다시 돌려 성공하면, 정리(teardown)가 폴더를 지워야 한다."""
+    (run / "KEEP").unlink(missing_ok=True)
+    try:
+        yield
+    except BaseException as exc:
+        try:
+            keep_run(run, f"{type(exc).__name__}: {exc}")
+        except OSError as marker:   # 보존 상한 밖으로 이미 지워진 실행의 재시도 — 표시를 못 남겨도 원래 실패를 보인다
+            log.warning("실패 표시를 남기지 못했다(%s) — 원래 실패를 그대로 올린다", marker)
+        raise
+
+
+def finish_run(run: Path) -> None:
+    """실 수집 DAG 의 마지막 정리(teardown) — 앞 태스크가 어떻게 끝났든 돈다. 실패 표시가 있으면 남기고, 아니면 지운다
+    (복제본이 실행마다 수백 MB 다)."""
+    if (run / "KEEP").is_file():
+        log.warning("실패한 실행 — 폴더를 남긴다: %s", run)
+        return
+    clear_run(run)
+
+
+# ponytail: 남긴 실패 실행은 최근 KEPT_RUNS 개만 — 복제본이 수백 MB 라 매일 실패하면 emptyDir(10Gi)를 넘어 파드가 축출된다.
+# 더 오래 봐야 하면 실패 원인을 태스크 로그로 남기고(이미 남는다) 이 수를 올리기보다 볼륨을 PVC 로 바꾼다.
+KEPT_RUNS = 3
+ORPHAN_AGE_S = 86400
+
+
+def prune_runs(dag_id: str, current: Path) -> None:
+    """새 실행을 시작할 때 같은 DAG 의 지난 실행 폴더를 정리한다. max_active_runs=1 이라 다른 실행이 쓰고 있지 않다.
+    실패 실행은 최근 `KEPT_RUNS` 개만 남긴다. 표시 없는 폴더(정리 전에 파드가 죽은 실행)는 **하루 넘게 손대지 않은 것만**
+    지운다 — `airflow dags test` 는 max_active_runs 를 따지지 않아, 방금 표시 없이 돌고 있는 실행일 수 있다."""
+    root = (OUT / "runs" / dag_id).resolve()
+    others = [d for d in root.iterdir() if d.is_dir() and d.resolve() != current.resolve()] if root.is_dir() else []
+    kept = sorted((d for d in others if (d / "KEEP").is_file()), key=lambda d: (d / "KEEP").stat().st_mtime, reverse=True)
+    stale = time.time() - ORPHAN_AGE_S
+    for d in kept[KEPT_RUNS:] + [d for d in others if d not in kept and d.stat().st_mtime < stale]:
+        clear_run(d)

@@ -6,7 +6,7 @@ import {
   ClockGlyph,
   MoreDotsGlyph,
 } from '@/shared/ui/glyphs';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 
@@ -16,7 +16,7 @@ import { buildSlotKey } from '../lib/slotKey';
 import { COLOR_TOKENS } from '@/shared/config';
 
 /** TRIP-797 · 미지정(startAt 없는) 슬롯 칩 문구 — 정본 공백 발명 카피(Figma 근거 6-b 이연). */
-export const UNSPECIFIED_CHIP_LABEL = '시간대 설정';
+const UNSPECIFIED_CHIP_LABEL = '시간대 설정';
 
 /**
  * TRIP-783 · 결과 화면 공용 슬롯 카드 — h07·h08·h11·h14·h16 6종이 공유할 부품(신설·병존,
@@ -58,7 +58,7 @@ export interface SlotStopCardProps {
   fixed?: boolean;
   /** 고정 슬롯 부제(`저녁 · 숙소 · 변경 불가` 등). */
   subtitle?: string | null;
-  /** 이름 press(슬롯 선택 어포던스). 미주입이면 press 무해(no-op). */
+  /** 이름·사진 press(장소 진입 — 사진은 TRIP-1840 부터 같은 콜백, `slot-stopcard-photo-open-*`). 미주입이면 둘 다 누를 수 없다. */
   onPressName?: () => void;
   /** "다른 후보 ›" press. 미주입이면 링크 자체를 안 그린다(고정 슬롯엔 없음, 엣지 E5). */
   onPressAlt?: () => void;
@@ -138,6 +138,19 @@ export function SlotStopCard({
   const editable = onPressTimeChip !== undefined && locked !== true;
   const chipClass =
     'flex-row items-center gap-xs self-start rounded-[8px] border border-hairline-strong bg-canvas px-sm py-[3px]';
+  const photo = (
+    <PoiPhoto
+      testID={fieldId('photo')}
+      imageUrl={slot.imageUrl}
+      imageLicense={slot.imageLicense}
+      surface="thumb"
+      category={slotDisplayCategory(slot)}
+      poiId={slot.poiId}
+      cachePolicy="memory-disk"
+      recyclingKey={slot.poiId}
+      className="h-[72px] w-[72px] rounded-thumb"
+    />
+  );
 
   const card = (
     <View
@@ -197,17 +210,20 @@ export function SlotStopCard({
         </Pressable>
       ) : null}
 
-      {/* 사진 72×72 — 없으면 카테고리 생성 이미지로 대체(엣지 E1). */}
-      <PlacePhoto
-        testID={fieldId('photo')}
-        imageUrl={slot.imageUrl}
-        category={slotDisplayCategory(slot)}
-        poiId={slot.poiId}
-        contentFit="cover"
-        cachePolicy="memory-disk"
-        recyclingKey={slot.poiId}
-        className="h-[72px] w-[72px] rounded-thumb"
-      />
+      {/* 사진 72×72 — 없으면 카테고리 생성 이미지로 대체(엣지 E1). 이름 진입이 있으면 사진도 같은 곳으로
+          간다(TRIP-1840 — 사진·이름 → 장소 상세). */}
+      {onPressName ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${slotDisplayName(slot) ?? ''} 사진`}
+          testID={fieldId('photo-open')}
+          onPress={onPressName}
+        >
+          {photo}
+        </Pressable>
+      ) : (
+        photo
+      )}
 
       {/* 텍스트 컬럼 — 각 leaf 는 값 하나. */}
       <View className="flex-1 gap-[6px]">

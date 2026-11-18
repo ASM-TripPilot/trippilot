@@ -56,7 +56,7 @@ import { useDeleteZoneHover } from './useDeleteZoneHover';
  */
 
 /** 편집 중 슬롯 — 서버 슬롯에서 startAt 만 미지정(null) 허용(편집 스토어 EditorSlot 과 같은 모양). */
-export type EditorViewSlot = Omit<ItineraryDaysItemSlotsItem, 'startAt'> & {
+type EditorViewSlot = Omit<ItineraryDaysItemSlotsItem, 'startAt'> & {
   startAt: string | null;
   /** TRIP-1793 · 옮김 표식(스토어 `EditorSlot.movedFromDate` 와 같은 값) — 있으면 카드에 「N일차에서 옮김」 배지. */
   movedFromDate?: string;

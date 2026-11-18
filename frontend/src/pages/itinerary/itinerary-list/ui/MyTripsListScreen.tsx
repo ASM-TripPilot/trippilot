@@ -59,8 +59,7 @@ const ERROR_RETRY_LABEL = '다시 시도';
 const OFFLINE_TITLE = '인터넷에 연결되어 있지 않아요';
 const OFFLINE_DESCRIPTION = '연결되면 자동으로 불러올게요';
 
-export type MyTripsListMode =
-  'list' | 'empty' | 'loading' | 'error' | 'offline';
+type MyTripsListMode = 'list' | 'empty' | 'loading' | 'error' | 'offline';
 
 export interface MyTripsListScreenProps {
   mode: MyTripsListMode;

@@ -10,6 +10,7 @@ import {
 
 import { server } from '@/mocks/server';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 import { buildSlotKey } from '@/entities/itinerary-slot';
 import { SLOT_SWAP_CONFLICT_CODES } from '@/features/edit-itinerary/model/slotSwapError';
 import type {
@@ -937,6 +938,7 @@ describe('후보 이름·태그·사진', () => {
               endAt: '11:00:00',
               category: '문화',
               imageUrl: CURRENT_IMG,
+              imageLicense: 'TYPE1',
               isFixed: false,
               endsNextDay: false,
               hasViolation: false,
@@ -960,6 +962,7 @@ describe('후보 이름·태그·사진', () => {
         category: '카페',
         tags: ['교회', '야외'],
         imageUrl: X_IMG,
+        imageLicense: 'TYPE1',
       },
       {
         poiId: RAW_ID,
@@ -1046,6 +1049,8 @@ describe('후보 이름·태그·사진', () => {
       expect(
         screen.getByTestId('itinerary-candidate-image-X').props.source
       ).toEqual([{ uri: X_IMG }]);
+      // TRIP-1740 AC-7(T6) — POST 후보 응답의 imageLicense(TYPE1)가 시트 후보 행 사진 칸까지 간다(`SlotCandidateSheet` candidates 경로).
+      expectTypeOnePhotoDelivered('itinerary-candidate-image-X', X_IMG);
       // 같은 testID 의 칸이 비지 않는다 — 후보마다 자기 카테고리·poiId 다
       // (RAW_ID → 맛집·변형 2, Z → 자연·변형 1). 카테고리를 행에 안 실으면 폴백이다.
       expect(
@@ -1064,6 +1069,11 @@ describe('후보 이름·태그·사진', () => {
         expect(
           screen.getByTestId('itinerary-candidate-image-current').props.source
         ).toEqual([{ uri: CURRENT_IMG }])
+      );
+      // TRIP-1740 AC-7(T6) — GET 슬롯의 imageLicense(TYPE1)가 컨테이너의 current 조립을 지나 현재 행 사진 칸까지 간다.
+      expectTypeOnePhotoDelivered(
+        'itinerary-candidate-image-current',
+        CURRENT_IMG
       );
     });
 
@@ -1171,6 +1181,7 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       category: '문화',
       tags: ['전망대', '야경'],
       imageUrl: P_IMG,
+      imageLicense: 'TYPE1',
     },
     {
       poiId: 'Q',
@@ -1463,6 +1474,8 @@ describe('차선책만 — 생성 때 받은 차선책이 최종 목록', () => 
       expect(
         screen.getByTestId('itinerary-candidate-image-P').props.source
       ).toEqual([{ uri: P_IMG }]);
+      // TRIP-1740 AC-7(T6) — 차선책(GET 슬롯 alternatives)의 imageLicense(TYPE1)가 차선책 행 사진 칸까지 간다.
+      expectTypeOnePhotoDelivered('itinerary-candidate-image-P', P_IMG);
       // 사진 없는 차선책 Q 도 같은 칸에 자기 카테고리(문화)·poiId(Q → 변형 3)의 그림이다.
       expect(
         screen.getByTestId('itinerary-candidate-image-Q').props.source

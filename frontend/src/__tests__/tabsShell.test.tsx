@@ -5,6 +5,11 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { getToastBottoms, resetToastBottoms } from '@/shared/ui/toastBottom';
 import { TAB_BAR_TOP } from '@/shared/ui/BottomTabBar';
 import { capturedTabsProps } from '@/test-support/expoRouterTabsMock';
+import { useAnimatedProbe } from '@/test-support/animatedProbe';
+import { LeavingScreen } from '@/test-support/barExitHarness';
+import { advance, flushOsAnswer } from '@/test-support/barMotionProbe';
+import { BAR_EXIT_MS, RecordNavBar } from '@/widgets/bottom-nav-bar';
+import { resetBarExitForTests } from '@/widgets/bottom-nav-bar/index.exit';
 
 /**
  * AC-6~AC-8 · SC-5 — `(tabs)` 레이아웃·어댑터.
@@ -58,6 +63,8 @@ function makeTabBarProps(activeIndex: number) {
 
 // TRIP-1559 — 토스트 바닥 레지스트리는 모듈 싱글턴이다. 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다.
 afterEach(() => resetToastBottoms());
+// TRIP-1831 — 퇴장 저장소(모듈 싱글턴)도 파일 최상위에서 비운다 — 뒤로를 누른 테스트의 퇴장 값이 새면 다음 테스트에 호스트가 서 있다.
+afterEach(() => resetBarExitForTests());
 
 beforeEach(() => {
   // 이전 테스트의 캡처값이 새 렌더 전에 남아있지 않도록 방어적으로 비운다.
@@ -209,5 +216,84 @@ describe('(tabs)/_layout — 숨김 요청과 토스트 바닥 신고 (TRIP-1559
       <>{tabBar(adapterProps({ tabBarStyle: { display: 'none' } }))}</>
     );
     expect(getToastBottoms()).toEqual([]);
+  });
+});
+
+// ── 퇴장 호스트와 탭 바 (TRIP-1831) ──────────────────────────────────────────────────────────────────────────────────────
+// 허브·기록 바에서 뒤로를 누르면 화면이 곧바로 빠지고, 바의 퇴장 모프는 이 탭 레이아웃 안의 호스트가 같은 바를 이어 재생한다. 그동안 그 아래 진짜 탭 바는
+// 이미 서 있으면서 모프가 끝나는 순간 끊김 없이 이어받는다 — 그래서 모프 중에도 진짜 탭 칸은 눌린다(`ghost`: 거의 투명하지만 터치는 받는다).
+// 호스트가 걷히는 시각(`BAR_EXIT_MS`)·저장소 동작은 `barExitHandoff.test`, 모프 구조는 `RecordNavBar.integration`·`LiveBottomBar.test` 가 잰다.
+// 진짜 탭 바가 호스트 아래서 흐려지는지(`ghost` 배선)·얼마나 투명한지(0.02)·겹침 모양은 생김새라 jest 가 안 본다(README 판정 4) — 실화면 QA(6-b) 몫.
+describe('(tabs)/_layout — 퇴장 호스트와 탭 바 (TRIP-1831)', () => {
+  const probe = useAnimatedProbe();
+
+  /** 탭 바 렌더프롭이 돌려주는 요소(진짜 탭 바 + 호스트 자리) 옆에, 뒤로를 누르면 걷히는 기록 바 화면을 둔다. */
+  function renderShellWithRecordBar() {
+    render(<TabsLayout />);
+    const tabBar = capturedTabsProps.current?.tabBar as (
+      props: BottomTabBarProps
+    ) => ReactElement;
+    const { props, navigate } = makeTabBarProps(0);
+    const onBack = jest.fn();
+    render(
+      <LeavingScreen
+        screen={(leave) => (
+          <RecordNavBar
+            testIDPrefix="rb"
+            active="records"
+            onBack={leave(onBack)}
+          />
+        )}
+      >
+        {tabBar(props)}
+      </LeavingScreen>
+    );
+    return { onBack, navigate };
+  }
+  const hostBars = () =>
+    screen.queryAllByTestId('rb', { includeHiddenElements: true });
+
+  it('퇴장이 없으면 탭 바는 평소대로 5칸이고 호스트 바는 없다', () => {
+    renderShellWithRecordBar();
+
+    ['home', 'explore', 'itinerary', 'records', 'my'].forEach((key) =>
+      expect(screen.getAllByTestId(`shell-tabbar-tab-${key}`)).toHaveLength(1)
+    );
+    // 화면에 선 기록 바 하나뿐 — 호스트가 같은 바를 하나 더 그리지 않는다.
+    expect(hostBars()).toHaveLength(1);
+  });
+
+  it('뒤로를 누르면 이동이 먼저 1회 일어나고, 화면이 빠진 자리에 호스트 바가 하나 서며 진짜 탭 바는 그대로 한 벌이고 모프 중에도 탭 칸이 눌린다', async () => {
+    // 준비: 모션 켬.
+    probe.setReduceMotion(false);
+    const { onBack, navigate } = renderShellWithRecordBar();
+    await flushOsAnswer();
+
+    // 실행: 뒤로 + 모프가 한창일 때(100ms) 진짜 일정 탭 칸을 누른다.
+    fireEvent.press(screen.getByTestId('rb-back'));
+    advance(100);
+    fireEvent.press(screen.getByTestId('shell-tabbar-tab-itinerary'));
+
+    // 단언: 이동 1회 · 바는 호스트 한 벌(원본은 걷힘) · 탭 바 칸은 한 벌씩 · 모프 중 탭 칸이 눌려 navigate.
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(hostBars()).toHaveLength(1);
+    expect(screen.getAllByTestId('shell-tabbar-tab-home')).toHaveLength(1);
+    expect(navigate).toHaveBeenCalledWith('itinerary');
+  });
+
+  it('퇴장 시간(BAR_EXIT_MS)이 지나면 호스트 바가 걷히고 진짜 탭 바만 남아 여전히 눌린다', async () => {
+    probe.setReduceMotion(false);
+    const { onBack, navigate } = renderShellWithRecordBar();
+    await flushOsAnswer();
+    fireEvent.press(screen.getByTestId('rb-back'));
+    advance(BAR_EXIT_MS - 1);
+    expect(hostBars()).toHaveLength(1); // 앵커 — 걷히기 직전까지는 호스트가 서 있다
+
+    advance(1);
+
+    expect(hostBars()).toHaveLength(0);
+    fireEvent.press(screen.getByTestId('shell-tabbar-tab-explore'));
+    expect(navigate).toHaveBeenCalledWith('explore');
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 });

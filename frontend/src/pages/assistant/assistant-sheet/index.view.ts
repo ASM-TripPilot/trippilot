@@ -7,10 +7,7 @@ export {
   sampleTranscript,
   type AssistantScenario,
 } from './api/assistantSamples';
-export {
-  AssistantSheetView,
-  type AssistantSheetViewProps,
-} from './ui/AssistantSheetView';
+export { AssistantSheetView } from './ui/AssistantSheetView';
 export type { SheetState } from './model/resolveSheetState';
 export { MessageCard } from './ui/AssistantCards';
 export { TurnStatusRow } from './ui/AssistantSheetChrome';

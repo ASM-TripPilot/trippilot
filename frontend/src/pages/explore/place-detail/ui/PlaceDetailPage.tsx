@@ -34,7 +34,7 @@ import {
   type PlaceSaveNotice,
 } from '@/features/save-place';
 import { useSavedPlaces } from '@/features/save-place';
-import { ExploreBackChevronGlyph } from '@/features/explore';
+import { BackChevronWideGlyph } from '@/shared/ui/glyphs';
 import { PlaceDetailScreen } from './PlaceDetailScreen';
 
 const OPEN_NAVER_ERROR =
@@ -96,7 +96,7 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
               onPress={handleBack}
               hitSlop={8}
             >
-              <ExploreBackChevronGlyph />
+              <BackChevronWideGlyph />
             </Pressable>
           </View>
           <View className="flex-1 items-center justify-center px-lg">
@@ -133,7 +133,7 @@ export function PlaceDetailPage({ poiId }: { poiId: string }): ReactElement {
               onPress={handleBack}
               hitSlop={8}
             >
-              <ExploreBackChevronGlyph />
+              <BackChevronWideGlyph />
             </Pressable>
           </View>
           <View className="flex-1 items-center justify-center px-lg">

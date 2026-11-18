@@ -19,6 +19,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { COLOR_TOKENS } from '@/shared/config';
@@ -365,19 +366,13 @@ export function TripSettingsView({
               </Pressable>
             </View>
           ) : null}
-          <Pressable
+          <Button
             testID="trip-settings-save"
-            accessibilityRole="button"
             disabled={!canSave}
             onPress={onSave}
-            className={`h-[52px] items-center justify-center rounded-button bg-primary ${
-              canSave ? '' : 'opacity-40'
-            }`}
           >
-            <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-              저장
-            </Text>
-          </Pressable>
+            저장
+          </Button>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

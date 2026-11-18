@@ -21,7 +21,7 @@ import type {
  * 필요 없다.
  */
 
-export interface AttributedStay {
+interface AttributedStay {
   savedStayId: string;
   /** `savedStays` 로 해소한 숙소명. 못 찾으면 undefined(귀속 자체는 살아남는다). */
   name?: string;

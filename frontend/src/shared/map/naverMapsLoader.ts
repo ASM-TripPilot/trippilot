@@ -4,9 +4,9 @@
  */
 
 /** 컨트롤러가 쓰는 `naver.maps` 면만 손으로 선언한다(@types/navermaps 미추가). 이름은 maps.js 3.10.5 로 확인. */
-export type NaverLatLng = object;
-export type NaverPoint = object;
-export type NaverBounds = object;
+type NaverLatLng = object;
+type NaverPoint = object;
+type NaverBounds = object;
 export interface NaverOverlay {
   setMap(map: NaverMap | null): void;
 }

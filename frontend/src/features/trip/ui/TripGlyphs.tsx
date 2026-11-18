@@ -39,62 +39,6 @@ function companionStroke(selected?: boolean): string {
   return selected ? ON_PRIMARY : BODY;
 }
 
-// 여행지 칩 핀(14) — Figma `1860:2311`. 색은 primary가 아니라 primary-text(#C13515)다.
-export function TripPinGlyph({ size = 14, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 14 14"
-      fill="none"
-    >
-      <Path
-        d="M11.6667 5.83333C11.6667 9.33333 7 12.8333 7 12.8333C7 12.8333 2.33333 9.33333 2.33333 5.83333C2.33333 4.59566 2.825 3.40867 3.70017 2.5335C4.57534 1.65833 5.76232 1.16667 7 1.16667C8.23768 1.16667 9.42466 1.65833 10.2998 2.5335C11.175 3.40867 11.6667 4.59566 11.6667 5.83333Z"
-        stroke={PRIMARY_TEXT}
-        strokeWidth={1.16667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M7 7.58333C7.9665 7.58333 8.75 6.79983 8.75 5.83333C8.75 4.86684 7.9665 4.08333 7 4.08333C6.0335 4.08333 5.25 4.86684 5.25 5.83333C5.25 6.79983 6.0335 7.58333 7 7.58333Z"
-        stroke={PRIMARY_TEXT}
-        strokeWidth={1.16667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// 여행지 칩 제거 ×(14) — Figma `1860:2316`.
-export function RemoveGlyph({ size = 14, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 14 14"
-      fill="none"
-    >
-      <Path
-        d="M3.5 3.5L10.5 10.5"
-        stroke={MUTED}
-        strokeWidth={1.16667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M10.5 3.5L3.5 10.5"
-        stroke={MUTED}
-        strokeWidth={1.16667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 // 도시 추가 칩 +(14) — Figma `1860:2329`. 텍스트는 primary-text지만 아이콘은 primary다.
 // '꼭 갈 곳' 점선 박스의 +(20, `1740:1110`)는 같은 도형의 정비례 확대라 size로 겸한다.
 export function TripPlusGlyph({ size = 14, testID }: GlyphProps) {
@@ -117,48 +61,6 @@ export function TripPlusGlyph({ size = 14, testID }: GlyphProps) {
         d="M2.91667 7H11.0833"
         stroke={PRIMARY}
         strokeWidth={1.51667}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// 날짜 카드 캘린더(22) — Figma `1675:1226`.
-export function TripCalendarGlyph({ size = 22, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 22 22"
-      fill="none"
-    >
-      <Path
-        d="M16.9583 4.125H5.04167C3.77601 4.125 2.75 5.15101 2.75 6.41667V16.5C2.75 17.7657 3.77601 18.7917 5.04167 18.7917H16.9583C18.224 18.7917 19.25 17.7657 19.25 16.5V6.41667C19.25 5.15101 18.224 4.125 16.9583 4.125Z"
-        stroke={MUTED}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M2.75 8.25H19.25"
-        stroke={MUTED}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M7.33333 2.29167V5.5"
-        stroke={MUTED}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M14.6667 2.29167V5.5"
-        stroke={MUTED}
-        strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -519,62 +421,6 @@ export function TripChevronRightGlyph({
   );
 }
 
-// g02 후보 카드 `거점` 배지 안 마커(14, 흰색) — Figma `1866:2319`. 위 `TripPinGlyph`(물방울형)와
-// **다른 도형**이라 새로 그린다(근사 금지 규율). 배지 배경이 항상 분홍이라 색 분기가 없다.
-export function BaseBadgePinGlyph({ size = 14, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 14 14"
-      fill="none"
-    >
-      <Path
-        d="M7 12.8333V4.66667"
-        stroke={ON_PRIMARY}
-        strokeWidth={1.225}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M7 4.66667C7.9665 4.66667 8.75 3.88317 8.75 2.91667C8.75 1.95017 7.9665 1.16667 7 1.16667C6.0335 1.16667 5.25 1.95017 5.25 2.91667C5.25 3.88317 6.0335 4.66667 7 4.66667Z"
-        stroke={ON_PRIMARY}
-        strokeWidth={1.225}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M2.91667 7H1.16667C1.16667 8.5471 1.78125 10.0308 2.87521 11.1248C3.96917 12.2188 5.4529 12.8333 7 12.8333C8.5471 12.8333 10.0308 12.2188 11.1248 11.1248C12.2188 10.0308 12.8333 8.5471 12.8333 7H11.0833"
-        stroke={ON_PRIMARY}
-        strokeWidth={1.225}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// g02 후보 카드 우상단 하트(26, 채움) — Figma `1866:2316`. 이 목록의 출처가 `GET /saved-stays`라
-// 카드는 정의상 전부 저장된 숙소다 → 외곽(미저장) 상태가 이 화면에는 없다. 토글은 e04
-// (TRIP-192) 몫이라 이 칸은 그리기만 하고 심판을 걸지 않는다(02a ★16).
-export function TripHeartFilledGlyph({ size = 26, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 26 26"
-      fill="none"
-    >
-      <Path
-        d="M13 23.1292L11.4292 21.6992C5.85 16.64 2.16667 13.3033 2.16667 9.20833C2.16667 5.87167 4.78833 3.25 8.125 3.25C10.01 3.25 11.8192 4.1275 13 5.51417C14.1808 4.1275 15.99 3.25 17.875 3.25C21.2117 3.25 23.8333 5.87167 23.8333 9.20833C23.8333 13.3033 20.15 16.64 14.5708 21.71L13 23.1292Z"
-        fill={PRIMARY}
-      />
-    </Svg>
-  );
-}
-
 // g02 지정됨 pill 안 체크(14) — Figma `1866:2332`. 기본 톤은 primaryText(#C13515) 보존(기존 렌더
 // 불변), g02 후보 선택 체크는 primary(#FF385C)다 — TripChevronRightGlyph tone 확장 선례(좁은 유니온).
 export function TripCheckGlyph({
@@ -594,42 +440,6 @@ export function TripCheckGlyph({
         d="M11.6667 3.5L5.25 9.91667L2.33333 7"
         stroke={tone === 'primary' ? PRIMARY : PRIMARY_TEXT}
         strokeWidth={1.75}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// g02 경고 삼각형 — error 배지 32px(`2456:1502`)과 blocked 안내행 20px(`2456:1514`)이 **같은
-// 노드**다(좌표·획이 32:20으로 정비례 — 실측). `TripBedGlyph` 선례대로 size prop 하나로 겸한다.
-export function TripWarningTriangleGlyph({ size = 32, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 32 32"
-      fill="none"
-    >
-      <Path
-        d="M16 4L29.3333 26.6667H2.66667L16 4Z"
-        stroke={PRIMARY}
-        strokeWidth={2.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M16 12V18.6667"
-        stroke={PRIMARY}
-        strokeWidth={2.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M16 22.6667H16.0133"
-        stroke={PRIMARY}
-        strokeWidth={2.8}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

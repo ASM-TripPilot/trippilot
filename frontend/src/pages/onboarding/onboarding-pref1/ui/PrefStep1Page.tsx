@@ -5,14 +5,18 @@
  * 기능 안내(`/onboarding-tour`)로 replace한다(US-ONB-11 — 미선택 축은 null로 유지).
  * TRIP-1421: skip 은 온보딩 완료를 부르고, 성공한 뒤에만 기능 안내로 간다(TRIP-1595).
  */
-import { useRef, useState, type ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { useRouter } from 'expo-router';
 
 import { usePreferenceStore } from '@/features/edit-preferences';
 import { waitForGateDestination } from '@/features/auth/index.view';
 import { completeOnboarding } from '@/shared/api';
 import { notifyBootstrapReeval } from '@/shared/lib/bootstrapReeval';
-import { guardPress, openPressGuardWindow } from '@/shared/lib/pressGuard';
+import {
+  guardPress,
+  openPressGuardWindow,
+  usePressLock,
+} from '@/shared/lib/pressGuard';
 import { PrefStep1Screen } from './PrefStep1Screen';
 
 export function PrefStep1Page(): ReactElement {
@@ -26,25 +30,24 @@ export function PrefStep1Page(): ReactElement {
 
   // TRIP-1013 #004 — 연타의 두 번째 탭이 2/2 '완료'를 관통하지 않게 창을 연다.
   const handleNext = guardPress(() => {
-    if (inFlightRef.current) return;
+    if (inFlightLock.isHeld()) return;
     router.push('/(onboarding)/pref2');
   });
 
   const [completeFailed, setCompleteFailed] = useState(false);
   // 완료 응답 대기 잠금 — 실패하면 풀어 재탭 = 재시도.
-  const inFlightRef = useRef(false);
+  const inFlightLock = usePressLock();
 
   const handleSkipAll = async (): Promise<void> => {
     // 취향 1/2 탈출도 완료로 취급한다(ticket AC-A · US-ONB-11 — pref2 만 고치면 1/2 에서 탈출한
     // 사용자가 갇힌다). 스토어를 건드리지 않는다 — 미선택 축이 []가 아니라 null로 유지돼야 한다.
     // 완료 성공 → 재평가 신호 → 게이트가 HOME 을 연 뒤 기능 안내(TRIP-1421 — PrefStep2Page 와 같은 순서).
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
+    if (!inFlightLock.acquire()) return;
     setCompleteFailed(false);
     try {
       await completeOnboarding();
     } catch {
-      inFlightRef.current = false;
+      inFlightLock.release();
       setCompleteFailed(true);
       return;
     }

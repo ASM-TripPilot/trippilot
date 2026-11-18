@@ -448,21 +448,41 @@ describe('맞춤·카메라 모드가 바뀌면 네이티브 지도를 새로 �
 // TRIP-1535 · 내 위치(네이버 기본 현위치) — 옵트인. 권한은 조회만 하고 묻지 않는다.
 const mockGetForegroundPermission = jest.fn();
 const mockRequestForegroundPermission = jest.fn();
+const mockWatchPosition = jest.fn();
 jest.mock('expo-location', () => ({
+  Accuracy: { High: 4 },
   getForegroundPermissionsAsync: (...args: unknown[]) =>
     mockGetForegroundPermission(...args),
   requestForegroundPermissionsAsync: (...args: unknown[]) =>
     mockRequestForegroundPermission(...args),
+  watchPositionAsync: (...args: unknown[]) => mockWatchPosition(...args),
 }));
 const trackingModes = (): string[] =>
   (globalThis as { __naverTrackingModes?: string[] }).__naverTrackingModes ??
   [];
+
+// 앱이 마지막으로 건 감시 콜백 — OS 대신 측위 값을 넣는다. remove 는 감시 해제 횟수를 잰다.
+let emitFix: (accuracy: number | null) => void = () => {};
+const removeWatch = jest.fn();
+const fix = (accuracy: number | null) =>
+  act(async () => {
+    emitFix(accuracy);
+  });
 
 describe('TRIP-1535 — showMyLocation: 내 위치 표시(옵트인)', () => {
   beforeEach(() => {
     trackingModes().length = 0;
     mockGetForegroundPermission.mockReset();
     mockRequestForegroundPermission.mockReset();
+    removeWatch.mockReset();
+    mockWatchPosition.mockReset();
+    // 기본: 감시를 걸자마자 정확한 값이 온다(TRIP-1535 케이스들이 재는 것은 켜고 끄는 시점뿐이다).
+    mockWatchPosition.mockImplementation(async (_options, callback) => {
+      emitFix = (accuracy) =>
+        callback({ coords: { latitude: 37, longitude: 127, accuracy } });
+      emitFix(10);
+      return { remove: removeWatch };
+    });
   });
 
   it('MY1 켜고 OS 권한이 granted 면 → 지도 추적 모드 NoFollow(카메라는 안 따라감), 권한 요청 0회', async () => {
@@ -552,5 +572,152 @@ describe('TRIP-1535 — showMyLocation: 내 위치 표시(옵트인)', () => {
     await waitFor(() => expect(trackingModes()).toEqual(['NoFollow']));
     view.rerender(<MapView center={CENTER} showMyLocation={false} />);
     expect(trackingModes()).toEqual(['NoFollow', 'None']);
+  });
+});
+
+// TRIP-1832 · 첫 측위(기지국·와이파이)는 수십 km 빗나갈 수 있다 — 정확해지기 전엔 점을 켜지 않는다.
+describe('TRIP-1832 — 정확도 낮은 첫 측위 점 숨기기', () => {
+  const holdFixes = () =>
+    mockWatchPosition.mockImplementation(async (_options, callback) => {
+      emitFix = (accuracy) =>
+        callback({ coords: { latitude: 37, longitude: 127, accuracy } });
+      return { remove: removeWatch };
+    });
+  const renderWatching = async () => {
+    mockGetForegroundPermission.mockResolvedValue({ status: 'granted' });
+    const view = render(<MapView center={CENTER} showMyLocation />);
+    await waitFor(() => expect(mockWatchPosition).toHaveBeenCalledTimes(1));
+    return view;
+  };
+
+  beforeEach(() => {
+    trackingModes().length = 0;
+    mockGetForegroundPermission.mockReset();
+    removeWatch.mockReset();
+    mockWatchPosition.mockReset();
+    holdFixes();
+  });
+
+  it('GPS1 값이 오기 전엔 → 점을 켜지 않고 감시만 건다(권한 요청 0회)', async () => {
+    await renderWatching();
+    expect(trackingModes()).toEqual([]);
+    expect(mockRequestForegroundPermission).not.toHaveBeenCalled();
+    // 정확한 값을 달라고 건다 — 옵션이 없으면 OS 가 낮은 정확도로 답해 오래 안 뜰 수 있다.
+    expect(mockWatchPosition.mock.calls[0][0]).toEqual({ accuracy: 4 });
+  });
+
+  it('GPS2 큰 오차가 이어지는 동안 안 켜고, 좋아지면 켜고 감시를 푼다', async () => {
+    await renderWatching();
+    await fix(50000);
+    await fix(1400);
+    expect(trackingModes()).toEqual([]);
+    expect(removeWatch).not.toHaveBeenCalled();
+    await fix(30);
+    expect(trackingModes()).toEqual(['NoFollow']);
+    expect(removeWatch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [100, ['NoFollow']],
+    [100.5, []],
+  ])('GPS3 경계 — 오차 %sm', async (accuracy, modes) => {
+    await renderWatching();
+    await fix(accuracy);
+    expect(trackingModes()).toEqual(modes);
+  });
+
+  it('GPS4 OS 가 오차를 안 주면(null) → 판단할 수 없으니 켠다(영영 안 뜨는 것보다 낫다)', async () => {
+    await renderWatching();
+    await fix(null);
+    expect(trackingModes()).toEqual(['NoFollow']);
+  });
+
+  it('GPS5 켜진 뒤 값이 또 와도 → 다시 켜지 않는다', async () => {
+    await renderWatching();
+    await fix(30);
+    await fix(20);
+    expect(trackingModes()).toEqual(['NoFollow']);
+  });
+
+  it('GPS6 권한이 없으면 → 감시를 걸지 않는다', async () => {
+    mockGetForegroundPermission.mockResolvedValue({ status: 'denied' });
+    render(<MapView center={CENTER} showMyLocation />);
+    await waitFor(() => expect(mockGetForegroundPermission).toHaveBeenCalled());
+    await act(async () => {});
+    expect(mockWatchPosition).not.toHaveBeenCalled();
+  });
+
+  it('GPS7 정확해지기 전에 내 위치를 끄면 → 감시를 풀고, 같은 지도에 늦은 값으로 켜지 않는다', async () => {
+    // 화면을 통째로 내리면 지도 ref 가 null 이라 공허하다 — 지도는 남기고 prop 만 끈다.
+    const view = await renderWatching();
+    await act(async () => {});
+    view.rerender(<MapView center={CENTER} showMyLocation={false} />);
+    expect(removeWatch).toHaveBeenCalledTimes(1);
+    emitFix(30);
+    expect(trackingModes()).toEqual([]);
+  });
+
+  it('GPS7b 감시 구독이 돌아오기 전에 정확한 값이 오면 → 켜고 돌아온 구독을 바로 푼다', async () => {
+    mockWatchPosition.mockImplementation(async (_options, callback) => {
+      callback({ coords: { latitude: 37, longitude: 127, accuracy: 10 } });
+      return { remove: removeWatch };
+    });
+    await renderWatching();
+    await waitFor(() => expect(removeWatch).toHaveBeenCalledTimes(1));
+    expect(trackingModes()).toEqual(['NoFollow']);
+  });
+
+  it('GPS8 감시 약속이 풀리기 전에 끄면 → 풀리는 즉시 감시를 푼다(배터리 새는 감시 없음)', async () => {
+    let release: (sub: { remove: () => void }) => void = () => {};
+    mockWatchPosition.mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      })
+    );
+    const view = await renderWatching();
+    view.unmount();
+    await act(async () => {
+      release({ remove: removeWatch });
+    });
+    expect(removeWatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('GPS9 앱 복귀로 다시 확인해도 → 감시를 둘 걸지 않는다', async () => {
+    const listeners: ((state: string) => void)[] = [];
+    const spy = jest
+      .spyOn(AppState, 'addEventListener')
+      .mockImplementation((_type, listener) => {
+        listeners.push(listener as (state: string) => void);
+        return { remove: () => {} } as ReturnType<
+          typeof AppState.addEventListener
+        >;
+      });
+    await renderWatching();
+    await act(async () => {
+      listeners.forEach((listener) => listener('active'));
+    });
+    expect(mockWatchPosition).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+  });
+
+  it('GPS10 감시가 실패해도 → 지도는 그대로고 앱 복귀 때 다시 시도한다', async () => {
+    const listeners: ((state: string) => void)[] = [];
+    const spy = jest
+      .spyOn(AppState, 'addEventListener')
+      .mockImplementation((_type, listener) => {
+        listeners.push(listener as (state: string) => void);
+        return { remove: () => {} } as ReturnType<
+          typeof AppState.addEventListener
+        >;
+      });
+    mockWatchPosition.mockRejectedValueOnce(new Error('location off'));
+    await renderWatching();
+    await act(async () => {});
+    expect(screen.getByTestId('map-native')).toBeTruthy();
+    await act(async () => {
+      listeners.forEach((listener) => listener('active'));
+    });
+    expect(mockWatchPosition).toHaveBeenCalledTimes(2);
+    spy.mockRestore();
   });
 });

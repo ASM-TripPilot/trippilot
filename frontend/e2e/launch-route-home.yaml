@@ -1,0 +1,15 @@
+# 앱 실행 → 로그인 상태 홈. 저장된 토큰으로 콜드 스타트하면 로그인 화면이 아니라 홈 탭 묶음이 열린다.
+appId: com.trippilot.travel
+name: 앱 실행 → 로그인 상태 홈
+tags:
+  - launch-route-home
+  - home-planning
+---
+- runFlow: _common/launch.yaml
+- assertVisible:
+    id: 'home-dashboard-root'
+- assertVisible:
+    id: 'home-create-trip-fab'
+# run.mjs 가 심은 미래 여행 때문에 계획 중 얼굴이다
+- assertVisible: '.*E2E 편집 D-[0-9]+.*'
+- takeScreenshot: launch-route-home

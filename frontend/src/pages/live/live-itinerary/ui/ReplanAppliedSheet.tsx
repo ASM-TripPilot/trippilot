@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { COLOR_TOKENS } from '@/shared/config';
 
@@ -13,7 +14,7 @@ import { COLOR_TOKENS } from '@/shared/config';
  * ★ 바텀시트 목 통과형(repo-traps): 실제 딤 전면 커버·끌어 닫기는 jest 사각(6-b 실기).
  */
 
-export type AppliedDiffKind = 'added' | 'removed';
+type AppliedDiffKind = 'added' | 'removed';
 
 export interface AppliedDiffRow {
   kind: AppliedDiffKind;
@@ -166,16 +167,13 @@ export function ReplanAppliedSheet({
         )}
 
         <View className="flex-row gap-sm">
-          <Pressable
+          <Button
             testID="planb-applied-confirm"
-            accessibilityRole="button"
             onPress={onConfirm}
-            className="h-[52px] flex-1 items-center justify-center rounded-button bg-primary"
+            className="flex-1"
           >
-            <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-              확인
-            </Text>
-          </Pressable>
+            확인
+          </Button>
         </View>
       </BottomSheetView>
     </BottomSheet>

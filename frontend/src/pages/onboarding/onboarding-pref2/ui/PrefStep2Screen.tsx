@@ -36,6 +36,7 @@ import {
   type GlyphComponent,
 } from '@/features/onboarding';
 import { COLOR_TOKENS } from '@/shared/config';
+import { buttonClasses } from '@/shared/ui/Button';
 
 export interface PrefStep2ScreenProps {
   selectedCompanions: readonly string[] | null;
@@ -51,6 +52,9 @@ export interface PrefStep2ScreenProps {
   /** 온보딩 완료 요청이 실패했다 — CTA 위에 오류 한 줄(TRIP-1421). */
   completeFailed?: boolean;
 }
+
+// 그림자(style)를 지닌 CTA 라 Button 대신 같은 모양 클래스만 빌린다(TRIP-1828 탈출구).
+const CTA = buttonClasses({});
 
 const ctaShadow = {
   shadowColor: COLOR_TOKENS.scrim,
@@ -273,11 +277,9 @@ export function PrefStep2Screen({
             accessibilityRole="button"
             onPress={onDone}
             style={ctaShadow}
-            className="h-[52px] items-center justify-center rounded-button bg-primary"
+            className={CTA.box}
           >
-            <Text className="font-noto-bold text-section font-bold text-on-primary">
-              완료
-            </Text>
+            <Text className={CTA.label}>완료</Text>
           </Pressable>
         </View>
       </View>

@@ -50,7 +50,7 @@ class KafkaOutboxConfig {
      * 소비 실패 재시도 — 폴링 모드와 **같은 창**이다: 10회, 2초부터 두 배씩, 간격 상한 5분([OutboxRelay] 의 BACKOFF_*).
      * 대기는 2·4·8·16·32·64·128·256·300초 = 810초(약 13분)로 폴링 모드의 백오프와 한 칸씩 같다.
      *
-     * 상한이 5분이어도 `max.poll.interval.ms` 를 넘지 않는다: spring-kafka 4.0.1 의 DefaultErrorHandler 는 실패 **한 번에
+     * 상한이 5분이어도 `max.poll.interval.ms` 를 넘지 않는다: spring-kafka 4.0.x(지금 4.0.8)의 DefaultErrorHandler 는 실패 **한 번에
      * 간격 하나만** 재우고(FailedRecordTracker.recovered → BackOffHandler.onNextBackOff 1회) 되감은 뒤 다시 poll 한다 —
      * 시도 횟수는 FailedRecordTracker 가 메모리에 센다(jar 의 바이트코드로 확인). 그래서 poll 사이 최대 공백은 간격 상한(5분)
      * + 한 묶음(10건) 처리이고, application.yml 의 `max.poll.interval.ms`(15분)가 그것을 덮는다.

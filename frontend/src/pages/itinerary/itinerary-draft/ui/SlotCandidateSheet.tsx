@@ -1,8 +1,10 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import { SlotCandidateCard } from '@/entities/place';
+import type { ImageLicense } from '@/shared/api/index.schemas';
 import {
   CheckGlyph,
   AlertCircleGlyph,
@@ -70,6 +72,8 @@ export interface SlotCandidateSheetRow {
   tags?: string[];
   /** 없거나 '' 면 `category` 로 고른 생성 이미지(TRIP-1024). */
   imageUrl?: string | null;
+  /** `imageUrl` 의 공공누리 유형 — 이 행은 응답(후보·차선책)을 그대로 받으므로 응답 타입과 같은 선택 키다. 카드까지는 필수 prop 으로 넘어간다. */
+  imageLicense?: ImageLicense | null;
   /** 사진이 없을 때 고르는 생성 이미지의 카테고리(한글 정본). */
   category?: string | null;
   /** 후보 행 추천 이유 문장(TRIP-1780) — 없거나 빈·공백이면 문장 줄 생략. 현재 행은 넘겨도 안 그린다. */
@@ -97,6 +101,8 @@ export interface SlotCandidateSheetProps {
   onPressPlaceSearch: () => void;
   /** scrim press. */
   onClose: () => void;
+  /** 후보 사진·이름 → 장소 상세(TRIP-1840). 행의 나머지는 그대로 라디오 선택. 현재 장소 행엔 없다. */
+  onPressPlace?: (poiId: string) => void;
   /** 후보 조회 상태. 생략 = 'ready'(응답 도착) — 기존 호출·0건 얼굴은 그대로다. */
   fetchState?: 'loading' | 'slow' | 'error' | 'ready';
   /** fetchState==='error' 일 때 점선 카드에 그대로 보일 문구. */
@@ -140,6 +146,7 @@ export function SlotCandidateSheet({
   errorMessage,
   onPressPlaceSearch,
   onClose,
+  onPressPlace,
   fetchState = 'ready',
   fetchErrorMessage,
   onRetryFetch,
@@ -255,16 +262,13 @@ export function SlotCandidateSheet({
             </View>
 
             {/* 0건 CTA "장소 검색" — 교체하기 자리를 대체(h13). */}
-            <Pressable
+            <Button
               testID="itinerary-candidate-empty-search"
-              accessibilityRole="button"
               onPress={onPressPlaceSearch}
-              className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
+              className="w-full"
             >
-              <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                {PLACE_SEARCH_LABEL}
-              </Text>
-            </Pressable>
+              {PLACE_SEARCH_LABEL}
+            </Button>
           </>
         ) : (
           <>
@@ -281,6 +285,7 @@ export function SlotCandidateSheet({
               tags={current.tags}
               showImage
               imageUrl={current.imageUrl}
+              imageLicense={current.imageLicense}
               category={current.category}
               coverPoiId={current.poiId}
               showRationale={false}
@@ -376,12 +381,18 @@ export function SlotCandidateSheet({
                     tags={candidate.tags}
                     showImage
                     imageUrl={candidate.imageUrl}
+                    imageLicense={candidate.imageLicense}
                     category={candidate.category}
                     coverPoiId={candidate.poiId}
                     showNameTestId
                     rationaleSentence
                     distanceTone="muted"
                     selected={isSelected}
+                    onPressPlace={
+                      onPressPlace
+                        ? () => onPressPlace(candidate.poiId)
+                        : undefined
+                    }
                     trailing={
                       isSelected ? (
                         <CheckGlyph
@@ -411,34 +422,22 @@ export function SlotCandidateSheet({
             {/* 조회 실패면 교체하기 자리를 [다시 시도]가 대신한다(0건에서 [장소 검색]이 대신하는 것과 같다).
                 아니면 CTA "교체하기"(고정 라벨) — 선택 전/pending/조회 중 비활성. pending 라벨은 "바꾸는 중이에요". */}
             {isFetchError ? (
-              <Pressable
+              <Button
                 testID="itinerary-candidate-fetch-retry"
-                accessibilityRole="button"
                 onPress={onRetryFetch}
-                className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
+                className="w-full"
               >
-                <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                  {RETRY_LABEL}
-                </Text>
-              </Pressable>
+                {RETRY_LABEL}
+              </Button>
             ) : (
-              <Pressable
+              <Button
                 testID="itinerary-candidate-confirm"
-                accessibilityRole="button"
                 disabled={confirmDisabled}
                 onPress={onConfirm}
-                className={`h-[52px] w-full items-center justify-center rounded-button ${
-                  confirmDisabled ? 'bg-surface-strong' : 'bg-primary'
-                }`}
+                className="w-full"
               >
-                <Text
-                  className={`font-noto-bold text-[16px] font-bold ${
-                    confirmDisabled ? 'text-muted' : 'text-on-primary'
-                  }`}
-                >
-                  {isPending ? PENDING_LABEL : CONFIRM_LABEL}
-                </Text>
-              </Pressable>
+                {isPending ? PENDING_LABEL : CONFIRM_LABEL}
+              </Button>
             )}
           </>
         )}

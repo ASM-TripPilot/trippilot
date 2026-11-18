@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 
 import {
@@ -199,16 +200,13 @@ export function RiskDetailSheet({
           </View>
         </View>
 
-        <Pressable
+        <Button
           testID="planb-risk-cta"
-          accessibilityRole="button"
           onPress={onPressAlternative}
-          className="h-[52px] w-full items-center justify-center rounded-button bg-primary"
+          className="w-full"
         >
-          <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-            대안 보기
-          </Text>
-        </Pressable>
+          대안 보기
+        </Button>
       </BottomSheetView>
     </BottomSheet>
   );

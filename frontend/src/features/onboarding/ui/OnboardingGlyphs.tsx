@@ -37,34 +37,6 @@ export function OnboardingCheckGlyph({ size = 14, testID }: GlyphProps) {
   );
 }
 
-// 닉네임 재생성 원형 화살표(입력창 내부 아이콘, primary tint) — N4.
-export function RegenerateGlyph({ size = 22, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 22 22"
-      fill="none"
-    >
-      <Path
-        d="M18.3334 10.0834C18.2625 8.35022 17.5795 6.69829 16.4058 5.42107C15.232 4.14386 13.6436 3.32405 11.9225 3.1073C10.2015 2.89054 8.45937 3.29088 7.0056 4.23717C5.55183 5.18347 4.48057 6.61447 3.98213 8.27594C3.48369 9.9374 3.59034 11.7218 4.28314 13.312C4.97594 14.9023 6.21002 16.1955 7.76616 16.9619C9.3223 17.7283 11.0997 17.9183 12.7827 17.4981C14.4656 17.0778 15.9452 16.0747 16.9584 14.6667"
-        stroke={COLOR_TOKENS.primary}
-        strokeWidth={1.83333}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M18.3332 3.6665V10.0832H11.9165"
-        stroke={COLOR_TOKENS.primary}
-        strokeWidth={1.83333}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 // 닉네임 긍정 상태 초록 체크(info tint) — N5·AC-N3.
 export function PositiveCheckGlyph({ size = 16, testID }: GlyphProps) {
   return (

@@ -1,0 +1,79 @@
+# 일정 편집 — 카드를 끌어 순서를 바꾸고 저장한다. run.mjs 가 심은 AI 일정(EDIT_*)을 쓴다.
+# 편집기는 확정 얼굴에서만 들어온다: 일정 탭 카드 → 추천안 → 완성 일정 → 확정 → [일정 수정].
+appId: com.trippilot.travel
+name: 일정 편집 — 끌어 순서 바꾸고 저장
+tags:
+  - edit-reorder
+  - edit-save
+  - view-to-edit
+---
+- runFlow: _common/launch.yaml
+- tapOn:
+    id: 'shell-tabbar-tab-itinerary'
+- extendedWaitUntil:
+    visible:
+      id: 'my-trip-card-${EDIT_TRIP_ID}'
+    timeout: 15000
+- tapOn:
+    id: 'my-trip-card-${EDIT_TRIP_ID}'
+- extendedWaitUntil:
+    visible:
+      id: 'sheet-cta-button-1'
+    timeout: 30000
+- tapOn:
+    id: 'sheet-cta-button-1'
+- extendedWaitUntil:
+    visible:
+      id: 'sheet-cta-button-0'
+      text: '.*일정 확정하기.*'
+    timeout: 15000
+- tapOn:
+    id: 'sheet-cta-button-0'
+- extendedWaitUntil:
+    visible:
+      id: 'sheet-cta-button-0'
+      text: '.*일정 수정.*'
+    timeout: 15000
+- tapOn:
+    id: 'sheet-cta-button-0'
+- extendedWaitUntil:
+    visible:
+      id: 'itinerary-edit-list'
+    timeout: 15000
+
+# 순서 바꾸기 — 첫 카드를 길게 눌러 둘째 카드 아래로 끈다
+- assertVisible:
+    id: 'slot-stopcard-${EDIT_SLOT_2}'
+    below:
+      id: 'slot-stopcard-${EDIT_SLOT_1}'
+- takeScreenshot: edit-before
+# ponytail: 좌표 고정 끌기 — 기기·카드 수가 바뀌면 깨진다. Maestro 에 끌기 명령이 생기면 그걸로 바꾼다.
+# Maestro 에는 길게 눌러 끌기가 없다 — 아주 느린 swipe 로 대신한다. 첫 0.5초에 손가락이 거의 안 움직여야
+# 길게 누르기가 먼저 걸린다(빠르면 시트 스크롤이 가져간다). 좌표는 카드 2곳인 날의 iPhone 17 Pro 기준,
+# 끝점은 둘째 카드 아래 · 하단 삭제 영역 위다.
+- swipe:
+    start: '70%, 33%'
+    end: '70%, 56%'
+    duration: 20000
+- takeScreenshot: edit-after
+- assertVisible:
+    id: 'slot-stopcard-${EDIT_SLOT_1}'
+    below:
+      id: 'slot-stopcard-${EDIT_SLOT_2}'
+
+# 저장 → 이전 화면(h16)으로 돌아와 바뀐 순서를 한 번 더 읽는다
+- tapOn:
+    id: 'sheet-cta-button-0'
+- extendedWaitUntil:
+    visible: '일정을 저장했어요'
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: 'sheet-cta-button-1'
+      text: '.*돌아가기.*'
+    timeout: 15000
+- assertVisible:
+    id: 'slot-stopcard-${EDIT_SLOT_1}'
+    below:
+      id: 'slot-stopcard-${EDIT_SLOT_2}'
+- takeScreenshot: edit-saved

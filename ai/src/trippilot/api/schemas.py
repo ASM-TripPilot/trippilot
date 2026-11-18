@@ -308,6 +308,9 @@ class ViolationSchema(BoundaryModel):
     `slot_ref`가 일정 어디에도 없으면(예: HC3 미배치 위반 — 슬롯이 없어서 위반인 것)
     인덱스는 null이다. 지어내지 않는다.
 
+    `code` 는 `HC1`~`HC4`(하드 제약) 또는 `SLOT_ORDER`(2026-11-09, validate 만 낸다) — 받은 일정의 같은 날에서
+    화면 순서(배열)와 시각 순서가 어긋난 카드다. `SLOT_ORDER` 의 인덱스는 받은 배열의 그 칸이다(첫 일치가 아니다).
+
     `reason_code`(선택, 상황 감지 H1 · BR-SA-17): HC1 하위 코드 — `CLOSED_DAY`(정기 휴무) ·
     `OUT_OF_HOURS`(그 날 열지만 영업창 밖) · `HOLIDAY`(공휴일·명절·날짜 휴무 — `HOLIDAY_CLOSURE_MODE=on`
     일 때만). 다른 HC 는 null 이다. 백엔드 장소 감지가 알림 변형으로 쓴다 — `detail` 은 파싱하지 않는다.

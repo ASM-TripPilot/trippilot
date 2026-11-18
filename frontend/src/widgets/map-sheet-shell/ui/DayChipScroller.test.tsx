@@ -14,7 +14,7 @@ import { DayChipScroller } from './DayChipScroller';
  *
  * 무엇을 보장하나:
  *  - 넘겨받은 칩을 손대지 않고 **가로 ScrollView** 안에 순서대로 그린다(AC-1). FlatList 계열이 아니다 —
- *    셸 테스트 도우미 `sheetScrollOf` 가 가장 가까운 FlatList 를 "시트 본문"으로 읽기 때문(02a ★1).
+ *    셸 화면은 가장 가까운 FlatList 를 "시트 본문" 스크롤로 읽기 때문(02a ★1 — 그 읽기 도우미 `sheetScrollOf` 는 소비처가 없어 TRIP-1727 에서 지웠다).
  *  - 선택이 바뀌면 그 칩이 보이도록 `scrollTo` 한다 — 목표 x 는 0 초과·칩 x 이하(AC-3 · 01b D4).
  *    오른쪽으로 갔다가 왼쪽 칩으로 돌아와도 다시 보이게 한다.
  *  - 처음부터 화면 밖 칩이 선택돼 있으면, 그 칩의 위치가 도착할 때 스크롤한다(AC-3b · D3).

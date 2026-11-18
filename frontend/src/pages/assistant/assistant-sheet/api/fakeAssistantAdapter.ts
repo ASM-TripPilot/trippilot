@@ -78,10 +78,7 @@ const KEYWORDS: readonly (readonly [RegExp, AssistantScenario])[] = [
 ];
 
 /** 발화 → 시나리오. 여행 없는 세션에서 일정·동선 요청이면 b07 안내(BR-U8-05). */
-export function routeUtterance(
-  text: string,
-  hasTrip: boolean
-): AssistantScenario {
+function routeUtterance(text: string, hasTrip: boolean): AssistantScenario {
   const hit = KEYWORDS.find(([pattern]) => pattern.test(text))?.[1];
   const generalOk: (AssistantScenario | undefined)[] = [
     'refusal',

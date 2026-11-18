@@ -1,7 +1,8 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { HeartFilledGlyph } from './HeartGlyphs';
+import { buttonClasses } from './Button';
+import { HeartFilledGlyph } from './glyphs';
 import { COLOR_TOKENS } from '../config';
 
 /**
@@ -41,6 +42,9 @@ const heartShadow = {
   shadowRadius: 18,
   elevation: 6,
 };
+// 아이콘 + 글자 행이라 Button(글자 children 전용) 대신 같은 모양 클래스만 빌린다(TRIP-1828 탈출구).
+const CTA = buttonClasses({});
+
 const ctaShadow = {
   shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 4 },
@@ -100,12 +104,10 @@ export function CollageEmptyState({
         accessibilityRole="button"
         onPress={onPressCta}
         style={ctaShadow}
-        className="mt-2xl h-[52px] flex-row items-center justify-center gap-sm rounded-[12px] bg-primary pl-[22px] pr-2xl"
+        className={`${CTA.box} mt-2xl flex-row gap-sm pl-[22px] pr-2xl`}
       >
         {ctaIcon}
-        <Text className="font-noto-bold text-card-title font-bold text-on-primary">
-          {ctaLabel}
-        </Text>
+        <Text className={CTA.label}>{ctaLabel}</Text>
       </Pressable>
     </View>
   );

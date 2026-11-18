@@ -149,6 +149,7 @@ export function PlaceAddRow({
       id={place.poiId}
       name={place.nameKo}
       imageUrl={place.imageUrl}
+      imageLicense={place.imageLicense}
       category={place.category}
       selected={check !== undefined && !added ? check.checked : undefined}
       subtitle={

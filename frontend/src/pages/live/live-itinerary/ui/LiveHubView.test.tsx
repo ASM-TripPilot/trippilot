@@ -23,11 +23,17 @@ import {
   useInteractionGate,
   visibleIds,
   watchMotion,
+  withHiddenBars,
 } from '@/test-support/barMotionProbe';
+import { LeavingScreen } from '@/test-support/barExitHarness';
 import * as probe from '@/test-support/fabAnchorProbe';
 import { guardKeyWarnings } from '@/test-support/keyWarnings';
 
 import { BAR_EXIT_MS } from '@/widgets/bottom-nav-bar';
+import {
+  BarExitHost,
+  resetBarExitForTests,
+} from '@/widgets/bottom-nav-bar/index.exit';
 import { NAV_BAR_RESERVE } from '@/shared/ui/navBarLayout';
 import { getToastBottoms, resetToastBottoms } from '@/shared/ui/toastBottom';
 import { LiveHubView, type LiveHubSlot } from './LiveHubView';
@@ -1221,14 +1227,13 @@ describe('LiveHubView · HC 시트 내림 × 바 유지 (TRIP-1522 v2 AC-6·10)'
   });
 });
 
-/** 프레임(16ms) 격자 위에서 "onBack 이 아직 안 불려야 하는 시각"(총 길이 − 40ms 이전). */
-const BEFORE_DUE_MS = Math.floor((BAR_EXIT_MS - 40) / 16) * 16;
-
 describe('LiveHubView · HM 변신 애니메이션 — 영상 4단계 모프는 허브당 한 번 (TRIP-1522 사이클 4 AC-2·9·11)', () => {
   // 허브 바가 출발 탭 활성인 5칸으로 시작해 모프를 허브당 한 번 재생한다 — barHidden 으로 바가 새로 마운트돼도 다시 안 재생(바 마운트가 아니라 허브
   // 마운트에 연결), `departureTab` 이 없으면(탭 바 위가 아닌 진입) 모션 없이 최종 구조다. 값은 안 묶고 보이는 결과 상태만 본다.
   const probe = useAnimatedProbe();
   useInteractionGate();
+  // TRIP-1831 — HM6 의 퇴장은 화면이 빠진 뒤 호스트가 재생한다. 호스트 바는 낭독기에서 숨겨져 있어 숨김 요소까지 읽는다.
+  withHiddenBars();
 
   it('HM4 모션 도중 barHidden 이 켜지면 바는 시작 칸까지 즉시 통째로 없고 계속 없다 — 풀면 최종 구조로 돌아온다(BR-U8-53 그물이 모션 때문에 비지 않는다)', async () => {
     probe.setReduceMotion(false);
@@ -1265,30 +1270,42 @@ describe('LiveHubView · HM 변신 애니메이션 — 영상 4단계 모프는 
     expect(visibleIds()).toEqual(FINAL_IDS);
   });
 
-  it('HM6 출발 탭이 있는 허브에서 뒤로는 모션이 끝난 뒤 1회 onBack 이고(연타 1회) 끝 모양은 기록이 활성인 시작 5칸이다 — 허브가 다시 그려진 뒤에도 출발 탭이 유지된다', async () => {
+  it('HM6 출발 탭이 있는 허브에서 뒤로는 누르는 즉시 1회 onBack 이고(연타 1회), 허브가 빠진 뒤에도 호스트가 퇴장을 끝까지 이어 끝 모양은 기록이 활성인 시작 5칸이다 — 허브가 다시 그려진 뒤에도 출발 탭이 유지된다 (TRIP-1831)', async () => {
+    // 준비: 출발 탭이 기록인 허브 + 호스트. `LeavingScreen` 이 "onBack 이 불리면 허브를 걷는다"(실제 이동)를 대신한다.
     probe.setReduceMotion(false);
     const base = hubProps({ departureTab: 'records' });
-    const view = render(<LiveHubView {...base} />);
+    const tree = () => (
+      <LeavingScreen
+        screen={(leave) => (
+          <LiveHubView {...base} onBack={leave(base.onBack as () => void)} />
+        )}
+      >
+        <BarExitHost />
+      </LeavingScreen>
+    );
+    const view = render(tree());
     await flushOsAnswer();
     watchMotion(60); // 입장 모션이 끝난 허브
     expect(visibleIds()).toEqual(FINAL_IDS);
     // 허브는 지도·시트 등으로 자주 다시 그려진다 — 입장이 끝난 뒤에도 출발 탭이 바에 계속 가야 퇴장 끝 모양이 맞는다.
-    view.rerender(<LiveHubView {...base} />);
+    view.rerender(tree());
 
+    // 실행: 뒤로 + 연타(허브가 빠졌으니 남은 건 호스트 바뿐이다).
     fireEvent.press(screen.getByTestId(BAR_BACK));
-    expect(base.onBack).not.toHaveBeenCalled();
-    let before = -1;
-    watchMotion(40, 16, (ms) => {
+    expect(base.onBack).toHaveBeenCalledTimes(1); // 같은 틱에 이미 1회
+    watchMotion(Math.floor((BAR_EXIT_MS - 32) / 16), 16, (ms) => {
       if (ms === 112) pressBackIfPresent();
-      if (ms === BEFORE_DUE_MS)
-        before = (base.onBack as jest.Mock).mock.calls.length;
     });
 
-    expect(before).toBe(0);
+    // 단언: 이동은 1회뿐 · 호스트의 끝 모양은 기록이 분홍인 시작 5칸 · 바 루트는 하나.
     expect(base.onBack).toHaveBeenCalledTimes(1);
     expect(visibleIds()).toEqual(START5_IDS);
-    expect(screen.getByTestId(START_RECORDS)).toBeSelected();
-    expect(screen.getAllByTestId(BAR_ROOT)).toHaveLength(1);
+    expect(
+      screen.getByTestId(START_RECORDS, { includeHiddenElements: true })
+    ).toBeSelected();
+    expect(
+      screen.getAllByTestId(BAR_ROOT, { includeHiddenElements: true })
+    ).toHaveLength(1);
   });
 });
 
@@ -2084,6 +2101,8 @@ describe('LiveHubView · HP 카드 번호와 핀 탭 (TRIP-1558)', () => {
 
 // 토스트 바닥 레지스트리는 모듈 싱글턴이다 — 파일 최상위(describe 밖)에서 리셋해야 앞 테스트의 신고가 안 샌다(TRIP-1559).
 afterEach(() => resetToastBottoms());
+// TRIP-1831 — 퇴장 저장소(모듈 싱글턴)는 뒤로를 누른 테스트(HM6)의 값이 다음 테스트로 새지 않게 파일 최상위에서 비운다.
+afterEach(() => resetBarExitForTests());
 
 describe('LiveHubView · 토스트 바닥 신고: 하단 내비 바 (TRIP-1559 이음새 ④)', () => {
   it('허브가 그려지는 동안 하단 내비 바가 차지하는 높이(NAV_BAR_RESERVE)를 신고하고 unmount 로 해제한다', () => {

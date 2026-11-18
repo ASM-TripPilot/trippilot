@@ -19,8 +19,20 @@ import {
 afterEach(resetWizardDraft);
 
 const SEED: MustVisitSeedItem[] = [
-  { sourcePoiId: 'poi-a', name: '광안리', imageUrl: null, region: null },
-  { sourcePoiId: 'poi-b', name: '해운대', imageUrl: null, region: null },
+  {
+    imageLicense: null,
+    sourcePoiId: 'poi-a',
+    name: '광안리',
+    imageUrl: null,
+    region: null,
+  },
+  {
+    imageLicense: null,
+    sourcePoiId: 'poi-b',
+    name: '해운대',
+    imageUrl: null,
+    region: null,
+  },
 ];
 
 function arrangePreviousTrip() {

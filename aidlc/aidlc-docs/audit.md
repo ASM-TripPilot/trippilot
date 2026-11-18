@@ -2025,3 +2025,17 @@ Step 1(유닛 컨텍스트)·1b(기존 자산 실측)·1c(라이브 Figma 밴드
 **User Input**: (TRIP-1816 본문 인용) "u3 functional-design 에 「일정 슬롯 표시 이름·분류를 이 여행에서만 고치기」(TRIP-1795·1801) 규칙을 반영" · "기능 지도의 「시작 전 확정 일정 저장 = 409」 문장이 BR-U3-28(TRIP-1710 개정)과 어긋남 → 고친다". 근거는 TRIP-1795 끝 보고 결정 5. 사용자 지시(2026-11-07, 배치 인덱스) "ㄱㄱ".
 **AI Response**: `construction/u3-ai-itinerary/functional-design/business-rules.md` §3 끝(§4 앞)에 `[신설 · 2026-11-07 · TRIP-1816]` BR-U3-36 블록, `domain-entities.md` §1.3 끝에 `[개정 · 2026-11-07 · TRIP-1816]` 블록을 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용은 이미 develop 에 있는 구현(#2012 TRIP-1801 · #2016 TRIP-1795)을 코드·계약과 대조해 옮긴 것이고 새 결정은 없다. 패키지 문서 `frontend/docs/feature-map/itinerary-edit.md`·`itinerary-view.md` 의 시작 전 확정 일정 409 서술도 BR-U3-28 TRIP-1710 블록에 맞게 고쳤다.
 **Context**: CONSTRUCTION — U3 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+## Functional Design 사후 개정 — U8 웹 위치 묻기 · 날씨 앵커 순서 (BR-U8-22 보강 · O-U8-5)
+**Timestamp**: 2026-11-08T22:30:00+09:00 (작업 시점)
+**User Input**: (2026-11-06) "챗봇한테 오늘 날씨 물어봤거든...웹페이지상에서..총3번 물어봤어. 제일 마지막거가 가장 좋았어. 근데 첫번째 오늘날씨 라고 물었을때 나는 지금 수원에 있는데 뜬금없이 청계천 날씨를 알려주더라고. … 두번째 혹은 세번째 처럼 나오게 해줘" · (2026-10-30) "결정이 필요한것들은 웬만해서는 다 진행하는 방향으로 하자".
+**AI Response**: `construction/u8-conversational-assistant/functional-design/business-rules.md` 의 `[개정 · 2026-11-04 · O-U8-5 구현]` 블록 뒤, `[개정 · 2026-10-22 · TRIP-1553]` 앞에 `[개정 · 2026-11-08 · 웹 위치 묻기 · 날씨 앵커 순서]` 블록 1개를 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 웹 한정 첫 날씨 질문 때 브라우저 위치 권한 1회 묻기(#2052) · AI 날씨 앵커 순서 정정(오늘이면 현재 위치가 그날 일정 장소보다 먼저, #2018) · 지역 되묻기 조건(#1927·#2018). 백엔드 openapi `deviceLocation` 설명의 "권한 팝업 없음"에 웹 예외 한 줄을 같은 PR 에서 더했다.
+**Context**: CONSTRUCTION — U8 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.
+
+---
+
+## Functional Design 사후 개정 — 수동 재계획을 여행 시작 전에도 (BR-SA-20 · BR-U4-10 · TRIP-1841)
+**Timestamp**: 2026-11-08T23:50:00+09:00 (작업 시점)
+**User Input**: (사용자 원문, 2026-11-08 배치 인덱스) 「확정 일정 수정하는 거에 AI 재계획 planb 있잖아 그거 여행 당일 아니어도 가능하게」.
+**AI Response**: `construction/situation-awareness/functional-design/business-rules.md` 의 `[개정 · 2026-11-02 — 사용자 결정 반영 · TRIP-1710]` BR-SA-20 블록 뒤와 `construction/u4-in-trip-planb/functional-design/business-rules.md` 의 `[개정 · 2026-10-19 · situation-awareness FD]` 블록 뒤에 `[개정 · 2026-11-08 · TRIP-1841]` 블록을 하나씩 덧붙였다(원문·기존 블록 삭제·수정 0줄). 내용: 트리거 없는 진입은 여행이 끝나기 전·지나지 않은 여행 날짜(시작 전엔 일정에 있는 날 하루 전체)에서 연다 · 반영 가드는 진입이 연 것만 · 트리거 쪽 전날 창·선계산 진입 공유는 그대로. 코드·계약은 같은 브랜치(`feat/TRIP-1841-pretrip-replan`)의 서버 `ReplanSessionService`·`openapi.yaml` 과 앱 `LiveItineraryPage` 다.
+**Context**: CONSTRUCTION — situation-awareness·U4 Functional Design 사후 개정(구현 반영), 승인 대기(같은 PR 머지 = 승인, #1071 선례). 단계 변화가 없어 `aidlc-state.md`·`docs/SCOPE.md` 는 건드리지 않았다.

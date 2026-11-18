@@ -10,6 +10,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { guardPress } from '@/shared/lib/pressGuard';
@@ -180,27 +181,13 @@ export function OnboardingTourView({
 
         <View className="border-t border-hairline bg-canvas px-2xl pb-[26px] pt-md">
           {isLast ? (
-            <Pressable
-              testID="onboarding-tour-start"
-              accessibilityRole="button"
-              onPress={() => onStart()}
-              className="h-[52px] items-center justify-center rounded-button bg-primary"
-            >
-              <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                시작하기
-              </Text>
-            </Pressable>
+            <Button testID="onboarding-tour-start" onPress={() => onStart()}>
+              시작하기
+            </Button>
           ) : (
-            <Pressable
-              testID="onboarding-tour-next"
-              accessibilityRole="button"
-              onPress={handleNext}
-              className="h-[52px] items-center justify-center rounded-button bg-primary"
-            >
-              <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                다음
-              </Text>
-            </Pressable>
+            <Button testID="onboarding-tour-next" onPress={handleNext}>
+              다음
+            </Button>
           )}
         </View>
       </SafeAreaView>

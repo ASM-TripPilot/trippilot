@@ -30,6 +30,7 @@ routes:
 - `stay-search-tabbar` 하단 탭바 복제본의 탭을 누르면 스택 밑 `(tabs)`의 해당 탭으로 돌아간다.
 - `stay-toast-above-fab` FAB 가 있는 화면에서 토스트는 FAB 묶음 위에 떠서 가려지지 않는다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 pass)*
 - `stay-price-chip` 가격대를 고르면 칩이 연핑크·선택됨으로 바뀌고, 가격대 시트는 아래로 끌어 닫을 수 있다. *(2026-11-01 jest 축소로 실화면 전용 · 2026-11-02 실화면 도달 불가 — Gotchas)*
+- `stay-card-heart-shape` 숙소 검색 카드 하트(18 하트)가 파일 이동(`shared/ui/glyphs/HeartGlyphs`) 뒤에도 같은 모양이다 — 상세·저장 목록의 22 하트와는 원래 다르다. *(TRIP-1829 · 실화면 전용 · 2026-11-08 `stay-search-default` 전후 0px pass)*
 
 ## How to get to it (user POV)
 
@@ -84,7 +85,7 @@ Preconditions:
 - 키보드가 떠 있을 때 칩을 누르면 화면이 먼저 키보드를 내린다. 첫 탭이 키보드 닫기에만 쓰이는지는 sim-qa §2 함정을 따른다.
 - [실화면 전용] 가격대·필터 시트의 실제 열림·딤·드래그 닫기는 실화면으로만 확인된다(gorhom 통과형 목). 카드 하트의 채움 색도 실화면으로만 확인된다 — 찬/빈 하트는 testID 접미사(`-filled`/`-outline`)로 판정하고 색은 스크린샷으로 본다.
 - [실화면 전용] 빈 상태·에러 안내가 화면 가운데 오는지, 0건 카드 버튼이 키보드에 덮이지 않는지는 실화면에서만 보인다.
-- 이 화면의 하트(`shared/ui/HeartGlyphs`)와 상세·저장 목록의 하트(`StayGlyphs`)는 모양이 다르다 — 결함으로 오인하지 마라(traps-stay).
+- 이 화면의 하트(`shared/ui/glyphs/HeartGlyphs` 18 하트)와 상세·저장 목록의 하트(`StayGlyphs`)는 모양이 다르다 — 결함으로 오인하지 마라(traps-stay).
 - 인기 숙소 줄(`stay-search-curated*`)과 「Trip.com에서 전체 숙소 보기」는 `curated-stays.md`에서 검증한다. 그 줄 때문에 목록 첫 카드가 첫 화면 아래로 밀릴 수 있다.
 - **[실화면] 2026-10-31 딥링크는 `com.trippilot.travel://…` 스킴으로만 화면이 바뀐다** — `simctl openurl "trippilot:///…"` 는 앱만 앞으로 오고 라우팅되지 않았다(이 dev build Info.plist 에 `trippilot` 스킴이 네이버 로그인 urlScheme 으로 한 번 더 등록돼 있다, [결함 의심 FM-L1-04]). `stays`·`stays?region=부산` 도 같은 스킴으로 열었다.
 - [실화면] 2026-10-31 도달 불가 — `stay-search-loading`(순간 상태)·`stay-search-error`·`stay-search-partial`(네트워크 차단·`degraded` 응답 없음)·`stay-search-filter-zero`(`filterZeroReasons` 응답 조건 미확보)·`stay-search-price`(dev-api 숙소에 가격이 없어 칩이 숨음 — 숨김은 확인)·`stay-search-empty`(가격대 없이 0곳 조합을 못 만듦, 이름 검색 0건은 별 얼굴).

@@ -23,6 +23,7 @@ export function AlbumPhotoGrid({
   return (
     <View className="flex-row flex-wrap gap-sm">
       {photos.map((photo) => (
+        // eslint-disable-next-line no-restricted-syntax -- 기기 사진(여행 앨범) — 관광공사 POI 사진 아님
         <Image
           key={photo.visitPhotoMetaId}
           testID={`trip-album-photo-${photo.visitPhotoMetaId}`}

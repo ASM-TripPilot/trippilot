@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
@@ -217,16 +218,13 @@ export function VisitTimeSheet({
               {CANCEL_LABEL}
             </Text>
           </Pressable>
-          <Pressable
+          <Button
             testID="record-trip-visit-time-save"
-            accessibilityRole="button"
             onPress={handleSave}
-            className="h-[52px] flex-1 items-center justify-center rounded-button bg-primary"
+            className="flex-1"
           >
-            <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-              {SAVE_LABEL}
-            </Text>
-          </Pressable>
+            {SAVE_LABEL}
+          </Button>
         </View>
       </BottomSheetView>
     </BottomSheet>

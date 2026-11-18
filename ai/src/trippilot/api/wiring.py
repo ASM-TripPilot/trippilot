@@ -79,6 +79,7 @@ from trippilot.api.cost import CostLedger
 from trippilot.api.route_budget import (
     LegRecorder, RouteReport, measure_within, post_assembly_budget_ms,
 )
+from trippilot.api.routes import PlacedViolation
 from trippilot.llm_gateway.adapters.backend_persona import _to_summary as _persona_to_summary
 from trippilot.llm_gateway.config import C1Config
 from trippilot.llm_gateway.context import ContextResolver, ContextStore
@@ -1049,11 +1050,45 @@ def _render_change(change: RepairChange) -> str:
 # ── validate/repair — 와이어 일정 복원 ───────────────────────────────
 
 
+SLOT_ORDER = "SLOT_ORDER"  # 위반 코드 — 같은 날 화면 순서(배열)와 시각 순서가 어긋난 카드
+
+
+def _slot_order_violations(payload: schemas.ItineraryPayload) -> tuple[PlacedViolation, ...]:
+    """시각이 거꾸로 든 카드 — 같은 날 화면 순서(배열)에서 위의 어느 카드보다 일찍 시작하는 카드.
+
+    편집은 '순서 = 배열'이라(BE INV-U3-02) 이런 날이 저장될 수 있다 — 고정·방문 완료 카드를 사이에 둔
+    끌어 옮기기, 시각을 골라 넣은 추가(끝이든 카드 사이든). 도메인 해는 시간순이 불변식이라 종전에는 422 로
+    새어 나가 BE 가 판정 보류로 저장했고 배지가 뜨지 않았다. 위반(200, IO-7)으로 돌려줘야 앱이 그 칸에 배지를 단다.
+
+    배지는 그 이른 카드에 단다. 다만 그 카드가 고정이고 그 위의 늦은 카드가 모두 고정이 아니면, 그 늦은 카드들에
+    단다 — 고정은 못 옮기고 끌어 옮긴 쪽이 그 카드들이다(고정 카드에 달면 다시 짜기가 그 표시를 물려받는다).
+    시각 없는 카드는 시각 주장이 없어 비교 밖이다. 위치는 받은 배열의 칸이다(`PlacedViolation`) — 같은 장소가
+    두 번 든 일정에서 첫 일치가 다른 칸을 짚지 않게.
+    """
+    out: list[PlacedViolation] = []
+    for d, day in enumerate(payload.days):
+        timed = [(i, s) for i, s in enumerate(day.slots) if s.start_at is not None]
+        flagged: dict[int, str] = {}
+        for k, (i, s) in enumerate(timed):
+            later = [(j, t) for j, t in timed[:k] if t.start_at > s.start_at]
+            if not later:
+                continue
+            if s.is_fixed and not any(t.is_fixed for _, t in later):
+                for j, t in later:
+                    flagged.setdefault(j, f"{t.start_at:%H:%M} 시작이 아래 고정 일정 {s.start_at:%H:%M} 보다 늦다")
+            else:
+                top = max(t.start_at for _, t in later)
+                flagged.setdefault(i, f"{s.start_at:%H:%M} 시작이 위 일정 {top:%H:%M} 보다 이르다")
+        out += [PlacedViolation(SLOT_ORDER, PoiId(day.slots[i].poi_id), detail, day_index=d, slot_index=i)
+                for i, detail in sorted(flagged.items())]
+    return tuple(out)
+
+
 def _solution_from_payload(
     payload: schemas.ItineraryPayload, schedule_id: ScheduleId, tz: timezone,
-    *, untimed: str,
+    *, untimed: str, order: str,
 ) -> ItinerarySolution:
-    """ItineraryPayload → 도메인 해. 도메인 불변식 위반(역순 슬롯 등)은 ValueError→422.
+    """ItineraryPayload → 도메인 해. 도메인 불변식 위반은 ValueError→422.
 
     `untimed` — **시간 미정 슬롯**(start_at·end_at 둘 다 null, TRIP-827) 정책.
     기본값이 없는 것은 의도다: 새 호출자는 자기 정책을 말해야 한다.
@@ -1063,6 +1098,12 @@ def _solution_from_payload(
                 건너뛰면 응답 일정에서 사용자 저장 슬롯이 조용히 사라진다.
                 시간 미정 슬롯의 배치는 별건이다(미지원을 숨기지 않는다).
     반쪽 시각(둘 중 하나만 null)은 정책과 무관하게 기형이라 항상 422 다.
+
+    `order` — **시각이 거꾸로 든 날**(`_slot_order_violations`) 정책. 기본값이 없는 이유는 위와 같다.
+    - "sort":   시작 시각 순으로 세워 해를 만든다 — HC 는 실제로 지나갈 순서로 본다. 거꾸로 든 사실은
+                호출자가 `_slot_order_violations` 로 따로 말한다 — validate·repair·explanations 용.
+    - "reject": 422(종전). 위치 지시('두 번째 장소')를 화면 순서로 해석하는 경계(edit)용 —
+                세우면 사용자가 보는 것과 다른 칸을 고친다.
     """
     days: list[DaySolution] = []
     for day_schema in payload.days:
@@ -1099,6 +1140,8 @@ def _solution_from_payload(
                     window=TimeWindow(start=start, end=end),
                     reason="wire_fixed",
                 ))
+        if order == "sort":
+            slots.sort(key=lambda s: s.start_at)  # 안정 정렬 — 같은 시작은 화면 순서 그대로
         days.append(DaySolution(
             date=day_schema.date, slots=tuple(slots), fixed_blocks=tuple(day_fixed)
         ))
@@ -1329,10 +1372,36 @@ _LAYOUT_KEYS = frozenset({"EARLIER", "KEEP_DINNER", "END_NEAR_STAY", "SHORTER_DA
 _DINNER_WINDOW_MIN = AssemblyConfig().dinner_window_min
 
 
+LockTravel = Callable[[PoiId, PoiId], int | None]
+
+
+def _unreachable_from(
+    poi_id: PoiId, start: datetime, end: datetime, locks: Sequence[FixedBlock], travel: LockTravel | None,
+) -> FixedBlock | None:
+    """새 잠금(poi, start~end)과 시간은 안 겹치지만 **이동이 안 닿는** 기존 잠금 — 없으면 None(겹침은 부르는 쪽이 본다).
+
+    조립은 핀 사이 이동을 지킨다(OR 아크 제약·HC2 와 같은 산식). 시간 안에 못 오가는 잠금 쌍을 솔버에 넣으면 모든 조립
+    단계가 해 없음이라 하루 전체가 '재계획 대안 없음'이 된다(2026-11-08 운영: '저녁은 그대로' 잠금이 앞 사용자 잠금에서 시간
+    안에 못 오는 곳이라 다시 짜기 두 번이 실패). AI 가 거는 잠금(저녁·말한 시각)은 그런 자리에 걸지 않는다. `travel` 이 모르면 판정하지 않는다.
+    """
+    if travel is None:
+        return None
+    for b in locks:
+        if b.window.end <= start:
+            minutes = travel(b.poi_id, poi_id)
+            if minutes is not None and b.window.end + timedelta(minutes=minutes) > start:
+                return b
+        elif end <= b.window.start:
+            minutes = travel(poi_id, b.poi_id)
+            if minutes is not None and end + timedelta(minutes=minutes) > b.window.start:
+                return b
+    return None
+
+
 def _timed_blocks(
     request: schemas.ReplanRequest, nl: nl_verify.VerifiedRequest, pool: CandidatePool,
     blocks: tuple[FixedBlock, ...], anchor: GeoPoint, pace: Pace | None, tz: timezone, notes: list[str],
-    holidays: Mapping[date, frozenset[str]] | None = None,
+    holidays: Mapping[date, frozenset[str]] | None = None, travel: LockTravel | None = None,
 ) -> tuple[FixedBlock, ...]:
     """"성심당은 5시에"·"3시에 카페" — 말한 시각에 그 곳을 잠근다(HC3, `_dinner_blocks` 와 같은 잠금).
 
@@ -1351,7 +1420,8 @@ def _timed_blocks(
         if (str(poi.poi_id) in excluded
                 or any(b.poi_id == poi.poi_id or (at < b.window.end and b.window.start < end)
                        for b in (*blocks, *out))
-                or not open_hours_ok(poi, at, end, holidays)):  # HC1 과 같은 판정 — 공휴일 휴무 포함(상황 감지 H1)
+                or not open_hours_ok(poi, at, end, holidays)  # HC1 과 같은 판정 — 공휴일 휴무 포함(상황 감지 H1)
+                or _unreachable_from(poi.poi_id, at, end, (*blocks, *out), travel) is not None):  # 앞뒤 잠금과 이동이 안 닿음
             return None
         return FixedBlock(poi_id=poi.poi_id, window=TimeWindow(start=at, end=end), reason="nl_at")
 
@@ -1378,6 +1448,7 @@ def _dinner_blocks(
     request: schemas.ReplanRequest, resolved: Sequence[str], pool: CandidatePool,
     blocks: tuple[FixedBlock, ...], tz: timezone, not_before: datetime | None, notes: list[str],
     holidays: Mapping[date, frozenset[str]] | None = None, *, nl: nl_verify.VerifiedRequest | None = None,
+    travel: LockTravel | None = None, neighbours: Sequence[FixedBlock] = (),
 ) -> tuple[FixedBlock, ...]:
     """KEEP_DINNER("저녁은 그대로") — 원 일정에서 저녁 식사창에 걸친 식당 슬롯을 원 시각 그대로 잠근다.
 
@@ -1414,13 +1485,37 @@ def _dinner_blocks(
         end = datetime.combine(request.target_date, slot.end_at, tzinfo=tz)
         if not (s_min < hi and e_min > lo) or (slot.poi_id, start) in seen:
             continue
-        if ((not_before is not None and end <= not_before)
-                or not open_hours_ok(poi, start, end, holidays)  # HC1 과 같은 판정 — 공휴일 휴무 포함(상황 감지 H1)
-                or any(start < b.window.end and b.window.start < end for b in blocks)
-                or (nl is not None and ((nl.window_start is not None and start < nl.window_start)
-                                        or (nl.end_said and end > nl.window_end)))):
+        def fits(start: datetime, end: datetime) -> bool:
+            return not ((not_before is not None and end <= not_before)
+                        or not open_hours_ok(poi, start, end, holidays)  # HC1 과 같은 판정 — 공휴일 휴무 포함(상황 감지 H1)
+                        or any(start < b.window.end and b.window.start < end for b in blocks)
+                        or (nl is not None and ((nl.window_start is not None and start < nl.window_start)
+                                                or (nl.end_said and end > nl.window_end))))
+
+        if not fits(start, end):
             notes.append(f"keep_dinner_skipped: {slot.poi_id}")
             continue
+        # 앞뒤 잠금과 이동이 안 닿는 저녁 — 그대로 잠그면 하루 전체가 해 없음이다. 진행 중 방문도 이웃으로 본다(잠금은 뒤에서).
+        others = (*blocks, *(n for n in neighbours if (n.poi_id, n.window.start) != (PoiId(slot.poi_id), start)))
+        far = _unreachable_from(PoiId(slot.poi_id), start, end, others, travel)
+        if far is not None:
+            # 앞 잠금 때문이면 닿는 가장 이른 시각(5분 올림)으로 옮겨 잠근다 — 저녁 창·영업·말한 창·하루 끝·뒤 잠금을 지킬 때만
+            earliest = max((b.window.end + timedelta(minutes=travel(b.poi_id, PoiId(slot.poi_id)) or 0)
+                            for b in others if b.window.end <= start), default=start)
+            moved = earliest + timedelta(minutes=-(earliest.minute % 5) % 5) - timedelta(
+                seconds=earliest.second, microseconds=earliest.microsecond)
+            day_end = (datetime.combine(request.target_date, request.time_window.end, tzinfo=tz)
+                       if request.time_window is not None else None)
+            moved_end = moved + (end - start)
+            if (moved > start and moved.hour * 60 + moved.minute < hi and fits(moved, moved_end)
+                    and (day_end is None or moved_end <= day_end)
+                    and _unreachable_from(PoiId(slot.poi_id), moved, moved_end, others, travel) is None):
+                notes.append(f"keep_dinner_shifted: {slot.poi_id} {start:%H:%M}→{moved:%H:%M} ({far.poi_id} 에서 이동)")
+                start, end = moved, moved_end
+            else:
+                notes.append(f"keep_dinner_skipped: {slot.poi_id}")
+                notes.append(f"keep_dinner_unreachable: {slot.poi_id} ({far.poi_id} 와 사이 이동이 안 닿음)")
+                continue
         out.append(FixedBlock(poi_id=PoiId(slot.poi_id), window=TimeWindow(start=start, end=end),
                               reason="keep_dinner"))
     notes.append(f"keep_dinner: {','.join(str(b.poi_id) for b in out)}" if out
@@ -2543,6 +2638,7 @@ class WiredItineraryOrchestrator:
         solution, problem, poi_index, unverified = self._reconstruct(
             request.itinerary, request.request_meta,
             untimed="skip",  # 미정 슬롯은 시각 주장이 없다 — 배치분만 검증
+            order="sort",  # 거꾸로 든 카드는 SLOT_ORDER 위반으로 말하고, HC 는 시각 순으로 본다
         )
         # 수단은 선택 필드(2026-10-30) — repair 와 같은 칸·규칙. 없으면 종전(PUBLIC).
         problem = replace(problem, transport=_transport_of(request.transport_modes))
@@ -2550,7 +2646,7 @@ class WiredItineraryOrchestrator:
         walk_cap = _plan_less_walk_cap(_inline_persona(request.preference_profile, None), problem.transport)
         facade = self._assembly_provider.for_pool(poi_index, walk_max_km=walk_cap)
         return WiredValidateOutcome(
-            violations=tuple(facade.validate(
+            violations=_slot_order_violations(request.itinerary) + tuple(facade.validate(
                 solution, problem, _deadline_budget(request.request_meta),
                 TraceId(request.request_meta.request_id),
             )),
@@ -2562,7 +2658,16 @@ class WiredItineraryOrchestrator:
         solution, problem, poi_index, unverified = self._reconstruct(
             request.itinerary, request.request_meta,
             untimed="reject",  # 수리 결과가 곧 응답 일정 — 건너뛰면 저장 슬롯 소실
+            order="sort",  # 형식 검사만 지나게 — 거꾸로 든 날은 바로 아래에서 수리 불가로 답한다
         )
+        if order_breaks := _slot_order_violations(request.itinerary):
+            # 늦은 카드 아래의 고정 카드는 앞으로만 미는 수리(TIME_SHIFT_ONLY)로 못 고친다. 고정이 아닌 이른 카드는 뒤로 밀면
+            # 맞출 수 있지만, 사용자가 고른 시각을 덮는 일이라 하지 않는다(시각만 바꾼 편집은 수리하지 않는 규칙과 같은 까닭).
+            # 그래서 수리 불가(200, IO-7)로 답한다 — BE 편집 저장은 재검증으로 가서 SLOT_ORDER 배지를 받고,
+            # 슬롯 후보 판정은 그 후보를 '맞지 않음'으로 센다(돌려주는 목록은 원래 목록).
+            _logger.info("itinerary_order_break %s", json.dumps({
+                "request_id": request.request_meta.request_id, "slots": len(order_breaks)}))
+            return WiredRepairOutcome(repaired=None, changes=(), unverified=unverified)
         # 앵커·창·수단은 선택 필드(2026-10-05) — 없으면 종전(첫 구간 null·첫 슬롯 하한 없음·PUBLIC).
         problem = replace(problem, transport=_transport_of(request.transport_modes))
         anchors = {a.date: GeoPoint(a.lat, a.lng) for a in request.anchors}
@@ -2596,15 +2701,42 @@ class WiredItineraryOrchestrator:
             unverified=unverified,
         )
 
+    def _lock_travel(self, pool: CandidatePool, persona: PersonaSummary | None,
+                     transport: TransportMode, locks: Sequence[FixedBlock] = ()) -> LockTravel:
+        """두 잠금 사이 이동(분) — 조립(`ScheduleAgent` ④)과 같은 추정기: 취향 도보 상한, 자차면 이 풀로 묶은 주차 계획.
+
+        풀에 없는 잠금 장소는 에이전트처럼 정본에서 좌표를 받는다(`fixed_pois` — 제외 요청과 무관하게 잠금은 지킨다). 정본에도
+        없으면 None 이고 판정하지 않는다(에이전트도 좌표 없는 잠금은 빼고 푼다). 자차 주차 거점은 부르는 시점의 풀로 묶는다 —
+        뒤에 풀이 바뀌면(지역 옮기기·이름으로 집은 곳 둘레) 조립의 거점과 달라질 수 있다(알려진 한계).
+        """
+        walk_cap = activity_walk_cap(persona)
+        index = {p.poi_id: p for p in pool.pois}
+        missing = frozenset(b.poi_id for b in locks if b.poi_id not in index)
+        if missing:
+            try:
+                index.update({p.poi_id: p for p in self._poi_db.find_by_ids(missing)})
+            except Exception as e:  # 정본 조회 실패 — 그 잠금은 판정하지 않는다(덤이다, 조립은 그대로 지킨다)
+                _logger.warning("lock_travel lookup_failed %s", type(e).__name__)
+        walker = self._assembly_provider.walker(
+            walk_cap, self._assembly_provider.parking_for(index, walk_cap)
+            if transport is TransportMode.CAR else None)
+
+        def travel(a: PoiId, b: PoiId) -> int | None:
+            if a not in index or b not in index:
+                return None
+            return walker.estimate(index[a].coord, index[b].coord, transport).internal_minutes
+
+        return travel
+
     def _reconstruct(
         self, payload: schemas.ItineraryPayload, meta: schemas.RequestMetaSchema,
-        *, untimed: str, lookup_holidays: bool = True,
+        *, untimed: str, order: str, lookup_holidays: bool = True,
     ) -> tuple[
         ItinerarySolution, ItineraryProblem, dict[PoiId, Poi],
         tuple[WiredUnverifiedSlot, ...],
     ]:
         solution = _solution_from_payload(
-            payload, ScheduleId(meta.request_id), self._tz, untimed=untimed)
+            payload, ScheduleId(meta.request_id), self._tz, untimed=untimed, order=order)
         problem = _problem_for(  # 공휴일 달력 — 요청당 1회(상황 감지 H1)
             solution, self._tz, self._holidays if lookup_holidays else None)
         ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
@@ -2883,7 +3015,12 @@ class WiredItineraryOrchestrator:
         # `nl.window_end`). "3시 이후로"면 하루가 15시에 시작한다는 말이라, 15시 전에 끝난 원 일정을 15시 뒤 창에 몰아넣지 않는다(검토 2026-11-06).
         nl_floor = max(filter(None, (not_before, nl.window_start)), default=None)
         blocks = _replan_fixed_blocks(request, self._tz)
-        blocks += _dinner_blocks(request, resolved, pool, blocks, self._tz, not_before, notes, holidays, nl=nl)  # 저녁은 그대로
+        # 하루 끝내기는 솔버를 안 부른다(`_replan_end_day` 가 잠금을 원 시각 그대로 낸다) — 이동 판정은 솔버에 가는 날만.
+        # 저녁의 이웃에는 진행 중 방문도 든다(그 잠금은 바로 아래에서 종전대로 만든다).
+        blocks += _dinner_blocks(
+            request, resolved, pool, blocks, self._tz, not_before, notes, holidays, nl=nl,
+            travel=None if "END_DAY" in resolved else self._lock_travel(pool, persona, transport, blocks),
+            neighbours=_in_progress_blocks(request, not_before, self._tz, blocks))  # 저녁은 그대로
         in_progress = _in_progress_blocks(request, not_before, self._tz, blocks)  # 진행 중은 그대로
         if in_progress:
             blocks += in_progress
@@ -2954,7 +3091,8 @@ class WiredItineraryOrchestrator:
             notes.append(f"nl_nearby_added: {p.poi_id} +{len(around)}")
         # "3시에 카페" — 말한 시각에 잠근다. 시간만 당기기는 장소·순서를 안 바꾼다는 요청이라 걸지 않는다.
         if earlier is None:
-            timed = _timed_blocks(request, nl, pool, blocks, anchor, pace, self._tz, notes, holidays)
+            timed = _timed_blocks(request, nl, pool, blocks, anchor, pace, self._tz, notes, holidays,
+                                  travel=self._lock_travel(pool, persona, transport, blocks))
             blocks += timed
             # 받은 창 밖에 **실제로 잠근** 방문("밤 10시에 클럽"·"아침 8시에 카페")까지 창을 늘린다 — 잠그지 못한 방문(영업시간·
             # 겹침·제외)을 위해 창만 벌리지 않게 잠금 뒤에 한다. 사용자가 말한 시작·끝은 넘지 않는다(그 말이 이긴다).
@@ -4443,7 +4581,8 @@ class WiredItineraryOrchestrator:
         trace_id = TraceId(meta.request_id)
         solution = _solution_from_payload(
             request.itinerary, ScheduleId(request.trip_id), self._tz,
-            untimed="skip")  # 설명은 배치분 대상 — 미정 슬롯은 설명할 배치가 없다
+            untimed="skip",  # 설명은 배치분 대상 — 미정 슬롯은 설명할 배치가 없다
+            order="sort")  # 설명은 날짜#장소 키라 순서와 무관 — 거꾸로 든 날도 설명은 낸다
         ids = frozenset(s.poi_id for day in solution.days for s in day.slots)
         # 차선책(TRIP-887) — payload 의 슬롯별 alternatives 를 (날짜, 슬롯 POI, 선택지 POI)로.
         # 좌표·풀 조립은 배치 POI 와 한 번의 재조회로 합친다.
@@ -4586,6 +4725,7 @@ class WiredItineraryOrchestrator:
         solution, _, poi_index, _ = self._reconstruct(
             request.itinerary, meta,
             untimed="reject",  # 편집 결과가 곧 응답 일정 — 건너뛰면 저장 슬롯 소실
+            order="reject",  # 위치 지시('두 번째 장소')는 화면 순서다 — 세우면 다른 칸을 고친다
             lookup_holidays=False,  # 이 문제는 버린다 — 달력은 에이전트 검증(`_problem_for`)이 1회 묻는다
         )
         transport = _token_or(

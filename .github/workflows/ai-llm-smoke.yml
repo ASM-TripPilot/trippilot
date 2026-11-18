@@ -1,3 +1,6 @@
+# [main 등록용 사본] GitHub은 schedule(cron)·workflow_dispatch를 기본 브랜치의
+# 워크플로만 등록한다. main의 ai/ 는 구버전이므로 checkout을 develop으로 고정 —
+# 이 파일(트리거 등록)은 main, 실행 코드는 항상 develop. develop 쪽 원본 갱신 시 이 사본도 동기화할 것.
 # 실모델 LLM 스모크 — 일일 스케줄 + 수동 실행 (TRIP-340 K-2, TRIP-346)
 #
 # 목적: 하루 1회(UTC 22시 = KST 아침 7시) 실모델 연결(엔드포인트·키·게이트 파싱)을
@@ -78,6 +81,8 @@ jobs:
         working-directory: ai
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: develop   # 실행 코드는 develop (main의 ai/는 구버전)
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true

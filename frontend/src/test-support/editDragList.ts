@@ -24,7 +24,7 @@ export function editListData(): unknown[] {
 }
 
 /** 라이브러리와 같은 이동 — 원본은 안 건드린다. */
-export function moveItem<T>(data: readonly T[], from: number, to: number): T[] {
+function moveItem<T>(data: readonly T[], from: number, to: number): T[] {
   const next = [...data];
   if (from !== to) {
     next.splice(from, 1);

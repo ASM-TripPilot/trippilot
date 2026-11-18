@@ -73,6 +73,7 @@ export function PastTripRow({
         }
       >
         {imageUrl !== null ? (
+          // eslint-disable-next-line no-restricted-syntax -- 여행 커버 — 관광공사 POI 사진 아님(브리프 §3-2)
           <Image
             testID={`${testID}-photo`}
             source={{ uri: imageUrl }}

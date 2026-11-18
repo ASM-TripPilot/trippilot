@@ -817,7 +817,8 @@ describe('G · 삭제 (AC-6 · D7)', () => {
     await waitFor(() => expect(listHits(log.all())).toBe(1));
 
     press('trip-settings-delete');
-    fireEvent.press(screen.getByTestId('my-trip-delete-confirm'));
+    // 확인 창을 보고 따로 누른 첫 탭(「여행 삭제」가 연 창은 지났다 — 확정은 창을 따르는 Button, TRIP-1828) + 같은 틱 연타.
+    press('my-trip-delete-confirm');
     fireEvent.press(screen.getByTestId('my-trip-delete-confirm'));
 
     await waitFor(() =>

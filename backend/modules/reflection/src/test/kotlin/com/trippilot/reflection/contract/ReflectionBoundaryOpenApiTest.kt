@@ -50,7 +50,7 @@ class ReflectionBoundaryOpenApiTest : StringSpec({
     }
 
     "요청이 계약 필수 필드를 하나도 빠뜨리지 않는다" {
-        val required = requireNotNull(schemas["ReflectionGenerateRequest"])["required"].map { it.asText() }
+        val required = requireNotNull(schemas["ReflectionGenerateRequest"])["required"].values().map { it.asText() }
         val sent = wireKeys(sampleRequest)
         required.forEach { sent shouldContain it }
     }

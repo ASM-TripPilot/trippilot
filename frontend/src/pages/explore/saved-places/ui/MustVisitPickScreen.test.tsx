@@ -7,6 +7,7 @@ import {
 
 import type { Place, SavedPlace } from '@/shared/api/index.schemas';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 
 import {
   MustVisitPickScreen,
@@ -581,6 +582,7 @@ describe('CS-17 · 사진 칸 (사이클 20261022-place-category-covers)', () =>
         saved('sp-b', 'p4', {
           category: '자연',
           imageUrl: 'https://cdn.example.com/p4.jpg',
+          imageLicense: 'TYPE1',
         }),
         saved('sp-c', 'p1', { category: '명소', imageUrl: '' }),
       ],
@@ -593,6 +595,11 @@ describe('CS-17 · 사진 칸 (사이클 20261022-place-category-covers)', () =>
     expect(screen.getByTestId('mustvisit-pick-photo-p4').props.source).toEqual([
       { uri: 'https://cdn.example.com/p4.jpg' },
     ]);
+    // TRIP-1740 AC-7(T10) — d02 select 모드 행도 `Place` 의 imageLicense(TYPE1)를 사진 칸까지 나른다.
+    expectTypeOnePhotoDelivered(
+      'mustvisit-pick-photo-p4',
+      'https://cdn.example.com/p4.jpg'
+    );
     // 빈 문자열 URL 도 "사진 없음" — p1 은 변형 2 → sight-2.
     expect(screen.getByTestId('mustvisit-pick-photo-p1').props.source).toEqual([
       coverFor('명소', 'p1'),
@@ -653,5 +660,48 @@ describe('TRIP-1363 · MustVisitPickScreen FlatList', () => {
     });
     expect(screen.getByTestId('mustvisit-pick-region-empty')).toBeTruthy();
     expect(screen.queryByTestId('mustvisit-pick-addmore')).toBeNull();
+  });
+});
+
+/**
+ * TRIP-1840 · 사진·이름 칸 → 장소 상세, 체크 원 → 선택(사용자 결정 2026-11-08).
+ * 준비=6곳 화면(onPressPlace 주입) → 실행=칸 또는 체크 원 누름 → 단언=두 콜백이 서로 새지 않는다.
+ * 행 안 Pressable 둘은 형제라(겹치지 않음) 한쪽 누름이 다른 쪽으로 가지 않는다 — 그걸 콜백 횟수로 잰다.
+ */
+describe('🔴 TRIP-1840 · 사진·이름 → 상세, 체크 원 → 선택', () => {
+  it('D1 · 사진·이름 칸을 누르면 onPressPlace(poiId) 1회, 선택 콜백 0회', () => {
+    const onPressPlace = jest.fn();
+    const props = renderScreen({ onPressPlace });
+
+    fireEvent.press(screen.getByTestId('mustvisit-pick-open-p2'));
+
+    expect(onPressPlace.mock.calls).toEqual([['p2']]);
+    expect(props.onToggleSelect).not.toHaveBeenCalled();
+  });
+
+  it('D2 · 체크 원을 누르면 선택만 — 상세 콜백 0회', () => {
+    const onPressPlace = jest.fn();
+    const props = renderScreen({ onPressPlace });
+
+    fireEvent.press(screen.getByTestId('mustvisit-pick-check-p2'));
+
+    expect(props.onToggleSelect).toHaveBeenCalledWith('p2');
+    expect(onPressPlace).not.toHaveBeenCalled();
+  });
+
+  it('D3 · 칸은 이름 글자와 사진을 품는다(그 칸을 눌러야 상세) · onPressPlace 가 없으면 칸이 없다', () => {
+    renderScreen({ onPressPlace: jest.fn() });
+    const open = screen.getByTestId('mustvisit-pick-open-p1');
+    expect(within(open).getByText('감천문화마을')).toBeOnTheScreen();
+    expect(
+      within(open).getByTestId('mustvisit-pick-photo-p1')
+    ).toBeOnTheScreen();
+    expect(open).toHaveProp('accessibilityRole', 'button');
+
+    screen.unmount();
+    renderScreen();
+    expect(screen.queryAllByTestId(/^mustvisit-pick-open-/)).toHaveLength(0);
+    // 앵커 — 행 자체는 그대로 그려진다(빈 화면이라 0 인 게 아니다).
+    expect(screen.getAllByTestId(/^mustvisit-pick-row-/)).toHaveLength(6);
   });
 });

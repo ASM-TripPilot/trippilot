@@ -8,6 +8,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 
 import type { ItineraryDaysItemSlotsItem } from '@/shared/api/index.schemas';
 import { coverFor, FALLBACK_COVER } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 
 import { ALT_LABEL } from '../config/altLabel';
 import { buildSlotKey } from '../lib/slotKey';
@@ -249,6 +250,31 @@ describe('🔴 SlotStopCard · CS7 — 이름 press 어포던스', () => {
     expect(name).toHaveTextContent('광안리 해변');
     expect(isTouchable(name)).toBe(false);
     expect(screen.UNSAFE_queryAllByType(ChevronRight24Glyph)).toHaveLength(0);
+  });
+
+  it('🔴 TRIP-1840 · onPressName 주입이면 사진도 같은 콜백을 부르고, 미주입이면 사진 누름 칸이 없다', () => {
+    // 준비 — 이름 진입이 있는 카드(초안 h08 이 상세로 보내는 모양).
+    const onPressName = jest.fn();
+    const { slotKey } = renderCard({ onPressName });
+    const photoOpen = screen.getByTestId(`slot-stopcard-photo-open-${slotKey}`);
+
+    // 실행 — 사진 칸을 누른다.
+    fireEvent.press(photoOpen);
+
+    // 단언 — 이름과 같은 콜백 1회, 칸 안에 사진이 있다(그 사진을 누른 것).
+    expect(onPressName).toHaveBeenCalledTimes(1);
+    expect(
+      within(photoOpen).getByTestId(id(slotKey)('photo'))
+    ).toBeOnTheScreen();
+    expect(photoOpen).toHaveProp('accessibilityRole', 'button');
+
+    // 짝 — 미주입이면 칸이 없고 사진은 그대로 그려진다.
+    screen.unmount();
+    const plain = renderCard();
+    expect(
+      screen.queryByTestId(`slot-stopcard-photo-open-${plain.slotKey}`)
+    ).toBeNull();
+    expect(screen.getByTestId(id(plain.slotKey)('photo'))).toBeOnTheScreen();
   });
 
   it('onPressName 주입이면 이름이 버튼이고 › 가 1개다(짝 — 목적지가 생기면 되살림)', () => {
@@ -762,5 +788,19 @@ describe('SlotStopCard · SD — 고친 이름·분류 표시 (TRIP-1795 AC-2)',
       );
       screen.unmount();
     }
+  });
+});
+
+// TRIP-1740 AC-7(T1) — 슬롯이 직접 싣는 imageLicense 가 72px 사진 칸까지 간다(입력은 TYPE1: 끊기면 contain 이 된다).
+describe('SlotStopCard · 관광공사 사진 유형이 사진 칸에 닿는다', () => {
+  it('TYPE1 서버 사진은 지금처럼 칸에 꽉 채우고(cover) 출처 글자가 붙는다', () => {
+    const { slotKey } = renderCard({
+      slot: makeSlot({ imageLicense: 'TYPE1' }),
+    });
+
+    expectTypeOnePhotoDelivered(
+      id(slotKey)('photo'),
+      'https://cdn.example.com/gwangalli.jpg'
+    );
   });
 });

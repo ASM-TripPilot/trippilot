@@ -17,6 +17,7 @@ import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { liveItinerary, liveSlot } from '@/test-support/liveHubFixtures';
 import PlanbDraftRoute from '@routes/trips/[tripId]/planb/draft';
 import { newTestQueryClient } from '@/test-support/queryRender';
+import { tripRecordsTrip } from '@/test-support/tripRecordsTrip';
 
 /**
  * TRIP-1418 (QA Q-106) · 재계획안 [적용하기] 뒤 허브가 스택에 **한 장**만 남는가.
@@ -173,6 +174,11 @@ beforeEach(() => {
   resetPressGuard();
   setAccessToken('valid-access');
   server.use(
+    // TRIP-1782 — 재계획안이 '다른 날로 집은 곳'의 N일차를 세려고 여행 시작일을 읽는다. 이 파일은 줄이 없는 세션이라 값은 안 쓰이지만
+    // 요청은 나가므로(미처리면 [MSW] 오류가 소음 예산을 먹는다) 응답을 깔아 둔다.
+    http.get(`${BASE}/trips/:tripId`, () =>
+      HttpResponse.json(tripRecordsTrip('부산 여행', TRIP_ID))
+    ),
     http.get(`${BASE}/trips/:tripId/replan-sessions/:sessionId`, () =>
       HttpResponse.json(replanSession('DRAFT'))
     ),

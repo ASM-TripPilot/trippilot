@@ -35,6 +35,7 @@ function makePlace(
     poiId,
     nameKo,
     imageUrl,
+    imageLicense: null,
     category: '명소',
     lat: 35.1587,
     lng: 129.1604,
@@ -74,6 +75,7 @@ function listItem(
   over: Partial<MustVisitListItem> & { sourcePoiId: string }
 ): MustVisitListItem {
   return {
+    imageLicense: null,
     mustVisitId: `mv-${over.sourcePoiId}`,
     name: '감천문화마을',
     imageUrl: null,
@@ -113,6 +115,7 @@ describe('C1 · AC-2 — 담은 장소와 조인해 이름·사진이 채워진�
         sourcePoiId: 'poi-a',
         name: '부산시립미술관',
         imageUrl: 'https://img.example.com/a.jpg',
+        imageLicense: null,
         category: '명소',
         type: 'FIXED',
         fixedDate: '2026-06-11',
@@ -123,6 +126,7 @@ describe('C1 · AC-2 — 담은 장소와 조인해 이름·사진이 채워진�
         sourcePoiId: 'poi-b',
         name: '해운대 블루라인파크',
         imageUrl: null,
+        imageLicense: null,
         category: '명소',
         type: 'ANYTIME',
       },
@@ -131,6 +135,7 @@ describe('C1 · AC-2 — 담은 장소와 조인해 이름·사진이 채워진�
         sourcePoiId: 'poi-c',
         name: '감천문화마을',
         imageUrl: 'https://img.example.com/c.jpg',
+        imageLicense: null,
         category: '명소',
         type: 'ANYTIME',
       },
@@ -323,6 +328,7 @@ describe('C6 · AC-9 · INV-3 — dwellMin 이 화면 층으로 넘어갈 통로
       'category',
       'fixedDate',
       'fixedStart',
+      'imageLicense',
       'imageUrl',
       'mustVisitId',
       'name',
@@ -472,5 +478,27 @@ describe('C8 · 02a ★13 — 조인과 핀이 같은 입력에서 갈라지지 
       .map(({ number }) => number);
     expect(named).toEqual([1, 3]);
     expect(pinNumbers).toEqual(named);
+  });
+});
+
+// TRIP-1740 AC-7(T11) — 담은 장소의 imageLicense 가 h02 꼭 갈 곳 목록 항목까지 간다(입력은 TYPE1 — 끊기면 null 이 된다).
+describe('joinMustVisits · 관광공사 사진 유형을 항목으로 옮긴다', () => {
+  it('조인된 항목은 담은 장소의 imageLicense 를 그대로 싣고, 조인 실패 항목은 null 이다', () => {
+    const typed = savedPlace(
+      'poi-a',
+      '부산시립미술관',
+      'https://img.example.com/a.jpg'
+    );
+    typed.place.imageLicense = 'TYPE1';
+
+    const items = joinMustVisits({
+      mustVisits: [
+        mustVisit({ sourcePoiId: 'poi-a' }),
+        mustVisit({ sourcePoiId: 'poi-orphan' }),
+      ],
+      savedPlaces: [typed],
+    });
+
+    expect(items.map((item) => item.imageLicense)).toEqual(['TYPE1', null]);
   });
 });

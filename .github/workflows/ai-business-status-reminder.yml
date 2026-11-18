@@ -1,3 +1,6 @@
+# [main 등록용 사본] GitHub은 schedule(cron)·workflow_dispatch를 기본 브랜치의
+# 워크플로만 등록한다. main의 ai/ 는 구버전이므로 checkout을 develop으로 고정 —
+# 이 파일(트리거 등록)은 main, 실행 코드는 항상 develop. develop 쪽 원본 갱신 시 이 사본도 동기화할 것.
 # POI 영업상태 데이터 신선도 리마인더 (TRIP-280)
 #
 # `ai/data/poi_business_status.json`(수집 POI 의 폐업 여부·인허가일자)은 **자동 갱신이
@@ -25,6 +28,8 @@ jobs:
       issues: write    # 리마인더 이슈 생성·코멘트 (잡 단위 최소 부여)
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: develop   # 판정 대상 데이터는 develop (main의 ai/는 구버전)
       - name: 신선도 판정 (generated_at 이 기준일수를 넘겼는가)
         id: age
         env:

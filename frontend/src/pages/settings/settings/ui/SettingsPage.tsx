@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import Constants from 'expo-constants';
 import { openExternal } from '@/shared/external-link';
-import { type ReactElement, useRef, useState } from 'react';
+import { type ReactElement, useState } from 'react';
 import { Keyboard } from 'react-native';
 
 import { waitForGateDestination } from '@/features/auth';
@@ -46,7 +46,7 @@ import { isPushSupported } from '@/shared/push/index.support';
 import { showToast } from '@/shared/ui/Toast';
 import { validateNicknameFormat } from '@/shared/lib/nicknameFormat';
 import { goBackOr } from '@/shared/lib/goBackOr';
-import { guardPress } from '@/shared/lib/pressGuard';
+import { guardPress, usePressLock } from '@/shared/lib/pressGuard';
 import { shellTabHref } from '@/shared/ui/BottomTabBar';
 
 const NICKNAME_SAVED_TOAST = '닉네임을 바꿨어요';
@@ -163,12 +163,12 @@ export function SettingsPage(): ReactElement {
   });
 
   // TRIP-1305 — 저장 요청 잠금. isPending 은 다음 렌더에야 true 라 같은 렌더 안 연타(실기 더블탭)를 못 막는다 —
-  // ref 는 누르는 즉시 바뀐다. 응답이 끝나면(성공·실패 모두 onSettled) 푼다 — 실패 뒤 먹통 금지.
-  const nicknameInFlightRef = useRef(false);
+  // 잠금은 누르는 즉시 바뀐다. 응답이 끝나면(성공·실패 모두 onSettled) 푼다 — 실패 뒤 먹통 금지.
+  const nicknameInFlightLock = usePressLock();
   const patchNickname = usePatchMeProfileNickname({
     mutation: {
       onSettled: () => {
-        nicknameInFlightRef.current = false;
+        nicknameInFlightLock.release();
       },
       onSuccess: (data, variables) => {
         // 서버 응답 닉네임을 우선하되, 없으면 방금 보낸 값으로 요약을 갱신한다.
@@ -230,7 +230,7 @@ export function SettingsPage(): ReactElement {
 
   /** `true` = 행을 접어라. 앞뒤 공백을 걷은 값으로 검증·전송한다(U0 FE §5 "공백 트림"). */
   const submitNickname = (raw: string): boolean => {
-    if (nicknameInFlightRef.current) return false;
+    if (nicknameInFlightLock.isHeld()) return false;
     const draft = raw.trim();
     const check = validateNicknameFormat(draft);
     if (!check.valid) {
@@ -245,17 +245,16 @@ export function SettingsPage(): ReactElement {
     // 같은 값은 서버가 본인 행을 중복으로 봐 409 를 낸다 — 보내지 않고 닫는다. 길이 검증 뒤여야
     // 프로필 로딩 전(현재값 '')에 빈 입력이 "같다"로 빠지지 않는다. 대소문자는 구분한다(변경이 버려지지 않게).
     if (draft === currentNickname) return true;
-    nicknameInFlightRef.current = true;
+    if (!nicknameInFlightLock.acquire()) return false;
     patchNickname.mutate({ data: { nickname: draft } });
     return false;
   };
 
   // TRIP-1422 — 내보내기 잠금. 공유 시트가 닫힐 때까지 쥔다(iOS 는 시트가 떠 있을 때 또 부르면 reject 해
-  // "시트는 떠 있는데 오류 문구"가 된다). ref 라 같은 렌더 안 연타도 막고, 어떤 끝에서든 finally 로 푼다.
-  const exportInFlightRef = useRef(false);
+  // "시트는 떠 있는데 오류 문구"가 된다). 잠금이라 같은 렌더 안 연타도 막고, 어떤 끝에서든 finally 로 푼다.
+  const exportInFlightLock = usePressLock();
   const runExport = async (): Promise<void> => {
-    if (exportInFlightRef.current) return;
-    exportInFlightRef.current = true;
+    if (!exportInFlightLock.acquire()) return;
     try {
       // refetch 는 실패해도 throw 하지 않고 { data, error } 를 resolve 한다(react-query) — data 가
       // 없으면 조용히 삼키지 않고 인라인 오류로 표면화한다(INV-4).
@@ -282,7 +281,7 @@ export function SettingsPage(): ReactElement {
         setExportError('내보내기 파일을 만들지 못했어요. 다시 시도해 주세요.');
       }
     } finally {
-      exportInFlightRef.current = false;
+      exportInFlightLock.release();
     }
   };
 

@@ -5,7 +5,6 @@ import { COLOR_TOKENS } from '@/shared/config';
 // 한다(리포 글리프 로컬 복제 관례의 N번째 사본). 색은 이 파일에서만 raw hex 로 고정한다(SVG stroke/fill
 // 은 className 을 못 받고 `*Glyphs.tsx` 는 raw-hex 스캔 제외 관례 · docs/structure.md §지금 작업하려면).
 
-const INK = COLOR_TOKENS.ink;
 const MUTED = COLOR_TOKENS.muted;
 
 type GlyphProps = {
@@ -47,34 +46,6 @@ export function MapPinOffGlyph({ size = 16, testID }: GlyphProps) {
       <Path
         d="M1.33333 1.33333L14.6667 14.6667"
         stroke={MUTED}
-        strokeWidth={1.33333}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-// 새로고침(16) — 지도 폴백 바 [다시 시도] 버튼 표식(TRIP-919, Figma `4287:2133` 벡터 그대로). ink.
-export function MapSheetRetryGlyph({ size = 16, testID }: GlyphProps) {
-  return (
-    <Svg
-      testID={testID}
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-    >
-      <Path
-        d="M13.3333 7.33333C13.2818 6.07284 12.7851 4.87144 11.9314 3.94255C11.0778 3.01367 9.92255 2.41745 8.6709 2.25981C7.41924 2.10217 6.15222 2.39332 5.09494 3.08153C4.03765 3.76975 3.25855 4.81047 2.89605 6.01882C2.53355 7.22716 2.61111 8.52488 3.11497 9.68144C3.61882 10.838 4.51634 11.7785 5.64807 12.3359C6.77981 12.8933 8.07248 13.0314 9.29645 12.7258C10.5204 12.4202 11.5964 11.6906 12.3333 10.6667"
-        stroke={INK}
-        strokeWidth={1.33333}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M13.3333 2.66667V7.33333H8.66667"
-        stroke={INK}
         strokeWidth={1.33333}
         strokeLinecap="round"
         strokeLinejoin="round"

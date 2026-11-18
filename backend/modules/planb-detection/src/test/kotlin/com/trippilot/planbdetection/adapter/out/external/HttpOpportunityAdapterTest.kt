@@ -70,7 +70,7 @@ class HttpOpportunityAdapterTest : StringSpec({
             body["slots"][0]["coord"]["lat"].asDouble() shouldBe 33.4587
             body["slots"][0]["coord"]["lng"].asDouble() shouldBe 126.9427
             body["slots"].size() shouldBe 2
-            body["planned_poi_ids"].map { it.asString() } shouldContainExactly listOf(p1.toString(), p2.toString())
+            body["planned_poi_ids"].values().map { it.asString() } shouldContainExactly listOf(p1.toString(), p2.toString())
             body["request_meta"]["request_id"].asString().shouldNotBeBlank()
             body["request_meta"]["requested_at"].asString() shouldBe "2026-10-20T03:00:00Z"
             // 상대는 이 시한의 70% 안에서 장소 조회를 끊는다(PERF-SA-08) — 빠지면 시한 없이 8회를 다 돈다.

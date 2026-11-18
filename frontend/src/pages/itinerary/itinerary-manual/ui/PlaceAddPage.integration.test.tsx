@@ -27,6 +27,7 @@ import type {
   Place,
 } from '@/shared/api/index.schemas';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 import { resetToast, WithToastHost } from '@/test-support/toastHarness';
 
 import { PlaceAddPage } from './PlaceAddPage';
@@ -183,7 +184,11 @@ const PLACES: Place[] = [
   makePlace('p1', '감천문화마을', '명소', 12),
   makePlace('p2', '해운대 해수욕장', '야경', 30),
   makePlace('p3', '전포 카페거리', '카페', 7),
-  makePlace('p5', '자갈치 시장', '맛집', 21),
+  {
+    ...makePlace('p5', '자갈치 시장', '맛집', 21),
+    imageUrl: 'https://example.com/jagalchi.jpg',
+    imageLicense: 'TYPE1',
+  },
 ];
 
 let observed: { method: string; url: string }[] = [];
@@ -768,6 +773,7 @@ describe('🔴 C1·C2·C3 · TRIP-798 — 카드 (아웃라인 +추가 · PlaceR
             {
               ...makePlace('pimg', '사진장소', '명소', 3),
               imageUrl: 'https://example.com/x.jpg',
+              imageLicense: 'TYPE1',
             },
           ],
           nextCursor: null,
@@ -780,6 +786,11 @@ describe('🔴 C1·C2·C3 · TRIP-798 — 카드 (아웃라인 +추가 · PlaceR
     expect(
       screen.getByTestId('itinerary-place-card-photo-pimg')
     ).toBeOnTheScreen();
+    // TRIP-1740 AC-7(T5) — `Place` 의 imageLicense(TYPE1)가 `PlaceAddScreen` 행 조립을 지나 사진 칸까지 간다.
+    expectTypeOnePhotoDelivered(
+      'itinerary-place-card-photo-pimg',
+      'https://example.com/x.jpg'
+    );
   });
 
   it('C3 · 거리 데이터가 없으면 거리줄을 그리지 않는다 (지어내기 금지, INV-3)', async () => {
@@ -1849,6 +1860,8 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
       fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-h-17'));
       fireEvent.press(screen.getByTestId('itinerary-edit-time-wheel-m-14'));
     }
+    // 사람은 시트를 보고 누른다 — 앞 [적용]이 연 400ms 창은 지났다([적용]은 그 창을 따르는 Button, TRIP-1828).
+    resetPressGuard();
     fireEvent.press(screen.getByTestId('itinerary-edit-time-apply'));
   }
 
@@ -2439,7 +2452,9 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
     /** 시각 시트의 [적용]을 n번 누른다 — 시트는 곳마다 새로 열리므로 매번 다시 찾는다. */
     async function applyTimes(n: number): Promise<void> {
       for (let i = 0; i < n; i += 1) {
-        fireEvent.press(await screen.findByTestId(APPLY));
+        const apply = await screen.findByTestId(APPLY);
+        resetPressGuard(); // 곳마다 새 시트 — 앞 [적용]의 창은 지났다(TRIP-1828)
+        fireEvent.press(apply);
       }
     }
 
@@ -2449,11 +2464,15 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
       });
     }
 
-    /** 지금 열린 시트의 장소 이름 — 다음 시트로 바뀐 뒤 읽도록 기다린다. */
+    /**
+     * 지금 열린 시트의 장소 이름 — 다음 시트로 바뀐 뒤 읽도록 기다린다.
+     * 읽은 뒤 연타 창을 닫는다: 사람은 새 시트를 읽고 누르므로 앞 [적용]이 연 400ms 창은 지났다(TRIP-1828 — [적용]이 창을 따른다).
+     */
     async function expectSheetFor(poiId: string): Promise<void> {
       await waitFor(() =>
         expect(screen.getByTestId(SUMMARY)).toHaveTextContent(NAME[poiId])
       );
+      resetPressGuard();
     }
 
     /** 담기 PUT 이 끝난 것(행이 "추가됨")까지 기다린다 — 끝나기 전 다음 동작은 저장 중 잠금에 막힌다. */
@@ -2531,6 +2550,22 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
       SLOW
     );
 
+    it('B1b · TRIP-1740 AC-7(T15) — 체크한 장소(p5, TYPE1 서버 사진)의 imageLicense 가 `bulkSheet` 조립을 지나 시각 시트 요약 썸네일까지 간다', async () => {
+      const { client } = renderTree();
+      await ready(client);
+
+      await pick('p5');
+      fireEvent.press(screen.getByTestId(CTA));
+      await waitFor(() =>
+        expect(screen.getByTestId(SUMMARY)).toHaveTextContent(/자갈치 시장/)
+      );
+
+      expectTypeOnePhotoDelivered(
+        'itinerary-edit-time-place-thumb-image',
+        'https://example.com/jagalchi.jpg'
+      );
+    });
+
     it(
       '🔴 B2 · AC-7 — 둘째 시트 기본값은 첫 곳 확정 끝 시각부터 1시간, 셋째는 둘째 확정 끝부터다 (첫 시트의 값을 재사용하지 않는다 · 사용자가 바꾼 시각이 PUT 에 그대로)',
       async () => {
@@ -2600,6 +2635,7 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
         expect(screen.getByTestId(checkId('p2'))).toBeChecked();
 
         // 둘째 시트 취소 — 첫 곳은 확정했어도 아무것도 안 담긴다.
+        resetPressGuard(); // X 가 연 창은 지났다 — 따로 누른 CTA(TRIP-1828)
         fireEvent.press(screen.getByTestId(CTA));
         await expectSheetFor('p1');
         fireEvent.press(screen.getByTestId(APPLY));
@@ -2617,6 +2653,7 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
         expect(screen.getByText('1일차에 담기 · 2곳 선택')).toBeOnTheScreen();
 
         // 재시도 — 첫 곳부터, 기본값도 처음 값(옛 확정이 안 샌다).
+        resetPressGuard();
         fireEvent.press(screen.getByTestId(CTA));
         await expectSheetFor('p1');
         expect(screen.getByTestId(READOUT)).toHaveTextContent(
@@ -2629,7 +2666,7 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
     );
 
     it(
-      '🔴 B4 · AC-3a — 마지막 [적용]을 같은 틱에 두 번 눌러도 PUT 은 1회다 (기존 한 곳 추가는 이 연타가 가드 밖이었다)',
+      '🔴 B4 · AC-3a — 마지막 [적용]을 연타 창이 지난 뒤 다시 눌러도, 응답 전이면 PUT 은 1회다 (페이지 저장 잠금)',
       async () => {
         holdPut();
         const { client } = renderTree();
@@ -2641,9 +2678,12 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
         await expectSheetFor('p2');
 
         // 같은 act 안에서 두 번 — 첫 누름의 상태 변경이 반영되기 전이라 둘째는 옛 화면의 핸들러를 부른다.
+        // 사이의 reset 은 [적용]이 연 창(TimeSheet D4)을 지운다 — 그 창이 둘째를 먼저 삼키면 아래의 페이지
+        // 저장 잠금(`inFlightRef`)을 아무도 안 잰다(TRIP-1828 03b 경고-1). 창 자체는 TimeSheet D4·Button 테스트가 잰다.
         const apply = screen.getByTestId(APPLY);
         act(() => {
           fireEvent.press(apply);
+          resetPressGuard();
           fireEvent.press(apply);
         });
 
@@ -2717,7 +2757,8 @@ describe('TRIP-1424 · 장소 추가 결과 안내 — 토스트 · 실패 안�
         expect(screen.getByText('1일차에 담기 · 2곳 선택')).toBeOnTheScreen();
         expect(screen.getByTestId(CTA)).not.toBeDisabled();
 
-        // 재시도.
+        // 재시도 — 실패 줄을 보고 따로 누른다(마지막 [적용]이 연 창은 지났다, TRIP-1828).
+        resetPressGuard();
         fireEvent.press(screen.getByTestId(CTA));
         await applyTimes(2);
         await settleAdded('p1', 'p2');

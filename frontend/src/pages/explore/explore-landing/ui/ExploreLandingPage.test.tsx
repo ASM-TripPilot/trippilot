@@ -16,6 +16,7 @@ import type {
 import { RegionLevel } from '@/shared/api/index.schemas';
 import { resetPressGuard } from '@/shared/lib/pressGuard';
 import { coverFor } from '@/test-support/placeCoverFixtures';
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
 import { formatPrice } from '@/entities/stay';
 import { stayKey } from '@/features/save-stay';
 import { regionPickerHref } from '@/features/explore';
@@ -378,6 +379,26 @@ describe('전국 d01 — 구획·검색·레인', () => {
     expect(
       screen.getByTestId('explore-place-card-image-p4').props.source
     ).toEqual([{ uri: 'https://img.example/p4.jpg' }]);
+  });
+
+  // TRIP-1740 AC-7(T4) — 페이지가 Place 에서 레인 카드 VM 을 골라 담는 곳(끊기는 곳)에서 imageLicense 가 빠지지 않는다.
+  it('TYPE1 서버 사진 장소는 레인 카드 사진 칸까지 유형이 닿아 cover 이고 출처 글자가 붙는다', () => {
+    multiResult = multiOk([
+      {
+        poiId: 'p9',
+        nameKo: '해운대 해변',
+        region: '해운대구',
+        category: '명소',
+        imageUrl: 'https://img.example/p9.jpg',
+        imageLicense: 'TYPE1',
+      },
+    ]);
+    render(<ExploreLandingPage />);
+
+    expectTypeOnePhotoDelivered(
+      'explore-place-card-image-p9',
+      'https://img.example/p9.jpg'
+    );
   });
 
   it('장소 조회가 전부 실패하면 장소 레인 자리에 재시도를 그리고, 누르면 그 조회를 다시 부른다', () => {

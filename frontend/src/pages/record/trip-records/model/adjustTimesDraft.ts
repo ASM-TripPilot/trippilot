@@ -9,8 +9,7 @@
  * 우선순위 완료없이도착 > 순서 > 미래 — 테스트는 단일 위반만 잠근다.
  */
 
-export type AdjustTimesViolation =
-  'order' | 'completed-without-arrived' | 'future';
+type AdjustTimesViolation = 'order' | 'completed-without-arrived' | 'future';
 
 export type AdjustTimesDraftResult =
   { ok: true } | { ok: false; reason: AdjustTimesViolation };

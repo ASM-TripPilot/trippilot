@@ -7,6 +7,8 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { Button } from '@/shared/ui/Button';
+
 export interface StateNoticeAction {
   testID: string;
   label: string;
@@ -14,8 +16,7 @@ export interface StateNoticeAction {
   /** 미지정 = 정직한 스텁(Q7) — 목적지 라우트가 없는 버튼은 onPress를 아예 안 준다. */
   onPress?: () => void;
   /** 미지정=활성(TRIP-726 F-9). 완화할 대상이 없는 등 눌러도 무의미한 버튼을 숨기지 않고
-   * 비활성으로 보여줄 때 true — Pressable `disabled`(=`accessibilityState.disabled`)에 전달하고
-   * opacity-40 으로 흐리게 그린다. explore 소비처는 미지정이라 무회귀. */
+   * 비활성으로 보여줄 때 true — 진짜 `disabled` 로 넘긴다(블록 버튼은 Button 회색, link 는 opacity-40). */
   disabled?: boolean;
 }
 
@@ -35,10 +36,9 @@ export type StateNoticeProps = StateNoticeVisual & {
 };
 
 function ActionButton({ action }: { action: StateNoticeAction }): ReactElement {
-  // disabled 는 룩(opacity-40, 01b)과 실제 비활성(Pressable disabled → accessibilityState) 둘 다 —
-  // className 만 흐리게 하고 disabled 를 빼면 toBeDisabled() 가 red(02a §5 뮤테이션 C).
-  const dimmed = action.disabled ? ' opacity-40' : '';
   if (action.variant === 'link') {
+    // link 는 블록 버튼이 아니라 글자 버튼 — disabled 면 흐림(opacity-40) + 실제 비활성 둘 다.
+    const dimmed = action.disabled ? ' opacity-40' : '';
     return (
       <Pressable
         testID={action.testID}
@@ -53,25 +53,18 @@ function ActionButton({ action }: { action: StateNoticeAction }): ReactElement {
       </Pressable>
     );
   }
-  const filled = action.variant === 'filled';
+  // 블록 버튼은 공용 Button(TRIP-1828) — 비활성은 opacity-40 대신 회색 한 종이다.
   return (
-    <Pressable
+    <Button
       testID={action.testID}
-      accessibilityRole="button"
+      size="md"
+      variant={action.variant === 'filled' ? 'primary' : 'secondary'}
       onPress={action.onPress}
       disabled={action.disabled}
-      className={`min-h-12 w-[200px] items-center justify-center rounded-button ${
-        filled ? 'bg-primary' : 'border border-hairline-strong bg-canvas'
-      }${dimmed}`}
+      className="w-[200px]"
     >
-      <Text
-        className={`font-noto-bold text-card-title font-bold ${
-          filled ? 'text-on-primary' : 'text-ink'
-        }`}
-      >
-        {action.label}
-      </Text>
-    </Pressable>
+      {action.label}
+    </Button>
   );
 }
 

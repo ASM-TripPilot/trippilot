@@ -26,6 +26,7 @@ import {
   type GlyphComponent,
 } from '@/features/onboarding';
 import { COLOR_TOKENS } from '@/shared/config';
+import { buttonClasses } from '@/shared/ui/Button';
 
 export interface PrefStep1ScreenProps {
   selectedStyles: readonly string[] | null;
@@ -39,6 +40,9 @@ export interface PrefStep1ScreenProps {
 }
 
 // CTA 그림자(Figma 0 2px 10px rgba(0,0,0,.06)) — 반투명은 토큰이 아니라 RN shadow prop로.
+// 그림자(style)를 지닌 CTA 라 Button 대신 같은 모양 클래스만 빌린다(TRIP-1828 탈출구).
+const CTA = buttonClasses({});
+
 const ctaShadow = {
   shadowColor: COLOR_TOKENS.scrim,
   shadowOffset: { width: 0, height: 2 },
@@ -168,11 +172,9 @@ export function PrefStep1Screen({
             accessibilityRole="button"
             onPress={onNext}
             style={ctaShadow}
-            className="h-[52px] items-center justify-center rounded-button bg-primary"
+            className={CTA.box}
           >
-            <Text className="font-noto-bold text-section font-bold text-on-primary">
-              다음
-            </Text>
+            <Text className={CTA.label}>다음</Text>
           </Pressable>
         </View>
       </View>

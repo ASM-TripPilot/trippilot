@@ -23,11 +23,11 @@ routes:
 - `inbox-empty` 알림 0건 → 점선 상자 벨 + "아직 받은 알림이 없어요" / "새로운 소식이 오면 여기에서 알려드릴게요".
 - `inbox-error` 목록을 한 번도 못 받고 실패 → "알림을 불러올 수 없어요" / "잠시 후 다시 시도해 주세요" + [다시 시도].
 - `push-tap` 푸시 탭 → 같은 목적지로 push(로그인 전·부팅 중이면 보류했다가 홈이 그려진 뒤 한 번). 목적지가 없으면 이동 없음.
-- `push-receive` 푸시를 받거나 탭하면 알림함 목록을 다시 받게 한다.
+- `push-receive` 푸시를 받거나 탭하면 알림함 목록을 다시 받게 한다(홈 종 배지 숫자도 같은 신호로 다시 센다).
 
 ## How to get to it (user POV)
 
-- 홈 인사 헤더 오른쪽 끝 벨 — testID `home-dashboard-bell`(모든 홈 얼굴 공통).
+- 홈 인사 헤더 오른쪽 끝 벨 — testID `home-dashboard-bell`(모든 홈 얼굴 공통). 벨 오른쪽 위에 읽지 않은 알림 개수 배지(testID `home-dashboard-bell-badge`, 100건 이상은 「99+」)가 뜨고, 이 알림함에서 읽음 처리(행 누르기·「모두 읽음」)를 하거나 푸시를 받으면 홈 배지 숫자도 다시 센다 — 같은 "알림 목록을 다시 받는다" 신호를 알림함 목록과 홈 배지가 함께 따른다(TRIP-1783, 모양·즉시 갱신은 `home.md` `home-bell-unread`).
 - 딥링크 `trippilot:///notifications`.
 - 푸시 알림 탭은 알림함이 아니라 **알림의 목적지 화면**으로 간다 — 알림함 진입 경로가 아니다.
 - 일정 알림(`TRIP_ITINERARY`)으로 연 일정 화면은 `from=notification` 표식을 받아 뒤로가기가 알림함으로 돌아오게 한다(일정 레인 소관).
@@ -46,7 +46,7 @@ Preconditions:
 - **목록.** 묶음 제목 "오늘"/"이전", 행 testID: `notification-inbox-row` 여러 개. 미읽음 행엔 testID: `notification-inbox-unread-dot`, 본문은 testID: `notification-inbox-body`. 메타 문구가 "일정 · 3시간 전" 꼴인지 본다.
 - **행 이동.** 회고 알림 행을 누른다 → `/trips/<tripId>/records/reflection/<dayDate>` 회고 화면. 뒤로 → 알림함에서 그 행의 미읽음 점이 사라졌는지(재조회 뒤) 한 번 더 읽는다. 일정 알림 → 일정 화면, 요약 알림 → 여행 요약, 숙소 알림 → 등록 숙소 목록(상세가 아니라 목록).
 - **재계획 링크.** 재계획 알림 행에 testID: `notification-inbox-action` "대안 일정 보기 ›" → `/trips/<tripId>/planb?triggerId=<id>` 재계획 시트. 행 몸통을 눌러도 이동하지 않는다.
-- **모두 읽음.** 미읽음이 있을 때 testID: `notification-inbox-mark-all`("모두 읽음") → 점이 전부 사라지고 버튼도 사라진다. 실패면 testID: `notification-inbox-mark-all-error` "일부 알림을 읽음 처리하지 못했어요".
+- **모두 읽음.** 미읽음이 있을 때 testID: `notification-inbox-mark-all`("모두 읽음") → 점이 전부 사라지고 버튼도 사라진다. 실패면 testID: `notification-inbox-mark-all-error` "일부 알림을 읽음 처리하지 못했어요". 성공하고 뒤로 홈으로 돌아오면 종 배지(`home-dashboard-bell-badge`)가 사라졌는지 한 번 더 읽는다 — 돌아온 첫 화면에서 옛 숫자가 남는지는 `home.md` 의 TRIP-1783 미확인 줄.
 - **빈 얼굴.** (알림 0건 계정) testID: `notification-inbox-empty`·`notification-inbox-empty-box`, "아직 받은 알림이 없어요", "새로운 소식이 오면 여기에서 알려드릴게요". [모두 읽음] 없음.
 - **오류 얼굴.** (첫 조회 실패 — 네트워크 차단 등) testID: `notification-inbox-error` "알림을 불러올 수 없어요"·"잠시 후 다시 시도해 주세요", testID: `notification-inbox-retry`("다시 시도") → 재조회 중 비활성, 성공하면 목록.
 - **푸시 탭.** 홈에 있는 상태에서 `xcrun simctl push` 로 `{"actionType":"REFLECTION_DAILY","tripId":…,"dayDate":…}` 를 보내고 배너를 탭한다 → 회고 화면으로 바로 간다(알림함 아님). 앱을 끈 상태에서 탭하면 부팅·홈이 그려진 뒤 한 번 이동한다. 모르는 `actionType` 이면 이동 없음.
@@ -61,7 +61,7 @@ Preconditions:
 - 행 읽음 요청 실패는 안내 없이 삼킨다 — 재조회 뒤 점이 그대로 남는 것으로만 드러난다.
 - 푸시 탭 보류는 메모리 한 칸이다 — 로그인 전에 탭한 푸시는 로그인 뒤 홈이 그려지면 한 번 간다. 안드로이드 Activity 재생성 땐 사라진다. 실제 탭·이동 시점은 실화면으로만 확인된다. [실화면 전용]
 - 푸시 페이로드 데이터를 최상위 키에 두면 탭해도 이동이 없다(trippilot-sim-qa §2) — 이동 없음을 결함으로 판정하기 전에 페이로드 형식을 본다.
-- 홈 벨에는 미읽음 빨간 점이 없다(읽음 처리 미배선이라 뺐다) — 벨만 보고 미읽음 여부를 판정할 수 없다.
+- 홈 벨의 미읽음 표시는 빨간 점이 아니라 **숫자 배지**다(TRIP-1783 — 읽음 처리가 배선돼 점이 꺼질 수 있게 된 뒤 붙었다). 알림함의 행 미읽음 점(`notification-inbox-unread-dot`)은 점이고 홈 배지(`home-dashboard-bell-badge`)는 숫자라 모양이 다르다 — 둘을 같은 요소로 보지 않는다. 배지는 서버에 「안 읽은 것만 최대 100건」을 물어 센 값이라, 푸시가 도착하지 않는 동안에도 앱을 열 때와 내렸다 30초 넘겨 돌아올 때 새 알림이 숫자로 드러난다.
 - `/notifications` 는 HOME 가드 밖 라우트다 — 미인증 딥링크로도 틀이 열린다(데이터는 401 → 오류 얼굴).
 - [실화면] 2026-10-31 "첫 조회 중 빈 얼굴이 잠깐 보인다"(위 결함 후보)는 관찰되지 않았다 — 앱 재기동 직후 첫 진입을 화면 녹화(15fps)로 봤는데 전환 프레임부터 목록이 그려져 있었다(홈이 미리 받았거나 응답이 빨랐던 것으로 추정). 증거 `notifications/02-first-entry-frame.png`.
 - [실화면] 2026-10-31 행은 testID `notification-inbox-row` 대신 라벨(`<제목>, <본문>, <라벨> · <상대시각>`)로 잡히고 상대시각이 분마다 바뀐다 — 라벨 셀렉터보다 `snapshot -i` 의 ref 로 누른다. 목적지 없는 알림 행("회고를 만들지 못했어요")은 `[other]` 로 잡혀 눌리지 않는다. 메타는 "회고 · 어제"·"일정 · 2일 전" 꼴도 있다.

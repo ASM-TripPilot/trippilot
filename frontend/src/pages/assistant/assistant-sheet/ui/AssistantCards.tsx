@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 
 import type {
   ActionLogPayload,
@@ -90,7 +91,7 @@ function LinkLine({
 const ICON_CARD = 'flex-row items-start gap-[10px] px-[14px] py-md';
 const WARN = COLOR_TOKENS.primary;
 
-export function ReviewCard({
+function ReviewCard({
   payload,
   onPressAction,
 }: {
@@ -141,7 +142,7 @@ export function ReviewCard({
   );
 }
 
-export function CandidateCard({
+function CandidateCard({
   message,
   payload,
   onPick,
@@ -204,7 +205,7 @@ export function CandidateCard({
   );
 }
 
-export function InfoCard({ payload }: { payload: InfoPayload }): ReactElement {
+function InfoCard({ payload }: { payload: InfoPayload }): ReactElement {
   return (
     <OutlineCard testID="assistant-info-card" className="gap-sm px-lg py-md">
       <Text className="font-noto-bold text-card-title font-bold text-ink">
@@ -224,7 +225,7 @@ export function InfoCard({ payload }: { payload: InfoPayload }): ReactElement {
   );
 }
 
-export function ScopeCard({
+function ScopeCard({
   payload,
   otaAction,
   onPressAction,
@@ -267,11 +268,7 @@ export function ScopeCard({
   );
 }
 
-export function RefusalNotice({
-  payload,
-}: {
-  payload: RefusalPayload;
-}): ReactElement {
+function RefusalNotice({ payload }: { payload: RefusalPayload }): ReactElement {
   return (
     <OutlineCard testID="assistant-refusal" className={ICON_CARD}>
       <AssistantSheetInfoGlyph size={20} />
@@ -285,7 +282,7 @@ export function RefusalNotice({
   );
 }
 
-export function FallbackNotice({
+function FallbackNotice({
   payload,
   retryAction,
   continueAction,
@@ -309,17 +306,12 @@ export function FallbackNotice({
               </Text>
             ) : null}
             {retryAction ? (
-              <Pressable
+              <Button
                 testID="assistant-fallback-retry"
-                accessibilityRole="button"
                 onPress={() => onPressAction(retryAction)}
-                className="h-[52px] items-center justify-center rounded-button bg-primary"
               >
-                {/* 킷 Button: 높이 52 · 글자 Bold 16 — 토큰에 없는 값이라 브래킷(Figma 5027:4816) */}
-                <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-                  {retryAction.label}
-                </Text>
-              </Pressable>
+                {retryAction.label}
+              </Button>
             ) : null}
           </View>
         </OutlineCard>

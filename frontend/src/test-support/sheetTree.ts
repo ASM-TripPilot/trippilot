@@ -1,5 +1,5 @@
 import BottomSheet from '@gorhom/bottom-sheet';
-import { FlatList, ScrollView } from 'react-native';
+import { ScrollView } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
 import { fireEvent } from '@testing-library/react-native';
 
@@ -30,17 +30,6 @@ const SHEET_TYPE = BottomSheet as unknown;
 export function isInsideSheet(node: ReactTestInstance): boolean {
   return (
     closestAncestor(node, (candidate) => candidate.type === SHEET_TYPE) !== null
-  );
-}
-
-/** 가장 가까운 시트 본문 스크롤 컨테이너(list 경로 = FlatList, 기본 경로 = BottomSheetScrollView). */
-export function sheetScrollOf(
-  node: ReactTestInstance
-): ReactTestInstance | null {
-  return closestAncestor(
-    node,
-    (candidate) =>
-      candidate.type === (FlatList as unknown) || candidate.type === SHEET_TYPE
   );
 }
 

@@ -107,7 +107,7 @@ function keepTimesInPlace(
  * TRIP-1792 · 되돌리기 이력 한 장 — 편집 **직전** 모습(`days`·`dirty`)과 그 편집이 일어난 날짜. `id` 는 한 번 쓰면 다시
  * 안 쓰는 번호라 안내 바가 "내가 띄운 그 장"인지 확인하는 표다(길이 비교는 빼기→↶→순서 바꿈 뒤 같은 길이로 속는다).
  */
-export interface EditHistoryEntry {
+interface EditHistoryEntry {
   id: number;
   date: string;
   days: ItineraryDaysItem[];

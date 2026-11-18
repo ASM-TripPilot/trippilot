@@ -1,5 +1,6 @@
 import { useRef, type ReactElement } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CenterPinPicker, type MapCenter } from '@/shared/map';
@@ -57,16 +58,14 @@ export function CenterPointPicker({
               취소
             </Text>
           </Pressable>
-          <Pressable
+          <Button
             testID="itinerary-copick-center-point-confirm"
-            accessibilityRole="button"
+            size="md"
             onPress={() => onConfirm(picked.current)}
-            className="h-12 flex-1 items-center justify-center rounded-button bg-primary"
+            className="flex-1"
           >
-            <Text className="font-noto-bold text-[16px] font-bold text-on-primary">
-              여기로 찾기
-            </Text>
-          </Pressable>
+            여기로 찾기
+          </Button>
         </View>
       </SafeAreaView>
     </View>

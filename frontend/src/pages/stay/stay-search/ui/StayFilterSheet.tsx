@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Button } from '@/shared/ui/Button';
 
 import { SheetShell } from '@/shared/ui/SheetShell';
 
@@ -153,16 +154,9 @@ export function StayFilterSheet({
             {CLOSE_LABEL}
           </Text>
         </Pressable>
-        <Pressable
-          testID="stay-filter-apply"
-          accessibilityRole="button"
-          onPress={onApply}
-          className="flex-1 items-center justify-center rounded-button bg-primary py-md"
-        >
-          <Text className="font-noto-bold text-body font-bold text-on-primary">
-            {APPLY_LABEL}
-          </Text>
-        </Pressable>
+        <Button testID="stay-filter-apply" onPress={onApply} className="flex-1">
+          {APPLY_LABEL}
+        </Button>
       </View>
     </SheetShell>
   );

@@ -53,7 +53,7 @@ export interface EngineDeps {
   newId: () => string;
 }
 
-export type EngineReason =
+type EngineReason =
   ArmingReason | 'no-context' | 'native-register-failed' | 'consent-rejected';
 
 export interface EngineStatus {

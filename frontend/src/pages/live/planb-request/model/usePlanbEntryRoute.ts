@@ -22,7 +22,7 @@ import { entryRoute, type EntryLookup, type EntryRoute } from './entryRoute';
  *    굳은 뒤에는 두 조회를 끈다(쓸 데 없는 재조회 0). `gcTime: 0` — 다음 진입이 지난 진입의 캐시로 판정하지 않게.
  */
 
-export const ENTRY_WAIT_MS = 3_000;
+const ENTRY_WAIT_MS = 3_000;
 
 function lookupOf<T>(query: {
   data: T | undefined;

@@ -1,5 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import { expectTypeOnePhotoDelivered } from '@/test-support/poiPhotoProbe';
+
 import {
   buildMoveDayOptions,
   type MoveDayOption,
@@ -123,6 +125,7 @@ describe('MoveDaySheet — 일차 칩·확정·닫기 (TRIP-1793 AC-5·9)', () =
       initialDate?: string | null;
       move?: null;
       onPressRename?: jest.Mock;
+      photo?: Parameters<typeof MoveDaySheet>[0]['photo'];
     } = {}
   ): { onConfirm: jest.Mock; onClose: jest.Mock; onPressRename: jest.Mock } {
     const cb = {
@@ -133,6 +136,7 @@ describe('MoveDaySheet — 일차 칩·확정·닫기 (TRIP-1793 AC-5·9)', () =
     render(
       <MoveDaySheet
         name="부산시립미술관"
+        photo={over.photo}
         move={
           over.move === null
             ? null
@@ -151,7 +155,19 @@ describe('MoveDaySheet — 일차 칩·확정·닫기 (TRIP-1793 AC-5·9)', () =
   }
 
   it('SH1 · 열린 모양 — 장소 이름, 현재 날 칩은 비활성·미선택, 처음 칩만 선택, 확정 라벨·도움말이 선택 일차를 말한다', () => {
-    renderSheet();
+    renderSheet({
+      photo: {
+        imageUrl: 'https://img.example/move.jpg',
+        imageLicense: 'TYPE1',
+        poiId: 'poi-m',
+        category: '문화',
+      },
+    });
+    // TRIP-1740 AC-7(T16) — `photo.imageLicense`(TYPE1)가 시트 썸네일까지 간다(출처 글자는 이름 노드 밖 사진 칸 안).
+    expectTypeOnePhotoDelivered(
+      'editor-move-photo',
+      'https://img.example/move.jpg'
+    );
 
     expect(screen.getByTestId('editor-move-sheet')).toBeOnTheScreen();
     expect(screen.getByText('부산시립미술관')).toBeOnTheScreen();

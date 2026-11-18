@@ -25,7 +25,7 @@ export interface AutoQueueItem {
 }
 
 /** §12.1 AutoVisitEvent — 좌표 필드가 없다(INV-U10-2). */
-export interface AutoVisitEventBody {
+interface AutoVisitEventBody {
   eventId: string;
   kind: 'ARRIVE' | 'COMPLETE';
   slotKey: string;
@@ -52,7 +52,7 @@ export interface BatchItemResult {
 }
 
 /** 배치 1요청 항목 상한(§12.1 · SEC-U10-07). */
-export const MAX_BATCH_EVENTS = 50;
+const MAX_BATCH_EVENTS = 50;
 
 export function toQueueItem(
   emit: JudgeEmit,

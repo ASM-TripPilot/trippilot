@@ -137,6 +137,7 @@ const seedIds = () => store().mustVisits.map((one) => one.sourcePoiId);
 function seed(sourcePoiId: string): MustVisitSeedItem {
   // region 은 이 파일 단언과 무관(seedIds 매핑) — 필수 필드(TRIP-685) 컴파일 유지용 null.
   return {
+    imageLicense: null,
     sourcePoiId,
     name: `장소-${sourcePoiId}`,
     imageUrl: null,

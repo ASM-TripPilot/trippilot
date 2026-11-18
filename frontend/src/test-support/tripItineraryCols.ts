@@ -41,11 +41,6 @@ export function itineraryCols(
   };
 }
 
-/** 일정이 없으면(`null`) `NO_ITINERARY`, 있으면 `itineraryCols` — 여행별 대본을 한 줄로 목록 칸에 옮길 때. */
-export function colsOf(itinerary: Parameters<typeof itineraryCols>[0] | null) {
-  return itinerary === null ? NO_ITINERARY : itineraryCols(itinerary);
-}
-
 /**
  * `GET /trips` 쿼리에 관찰자를 하나 붙인다(React 없이) — 무효화가 "다시 받기"로 이어지는지 요청 수로 보려면 그 쿼리가 *활성*이어야 한다
  * (화면 밖 훅 테스트·mutation 테스트는 목록 관찰자가 없다). 돌려주는 함수가 관찰자를 뗀다.
@@ -59,7 +54,7 @@ export function watchTripsList(client: QueryClient): () => void {
  * 요청 로그(`createRequestLog(server).all()` 의 `METHOD /경로` 문자열들)에서 세는 도우미.
  * ⚠️ `log.hitsFor('GET', '/trips')` 는 부분 문자열이라 `/trips/x/itinerary` 까지 센다 — 목록 요청은 정확 일치로 센다.
  */
-export const TRIPS_LIST_HIT = 'GET /api/v1/trips';
+const TRIPS_LIST_HIT = 'GET /api/v1/trips';
 /** `GET /trips` 목록 요청 수. */
 export function listHits(all: readonly string[]): number {
   return all.filter((hit) => hit === TRIPS_LIST_HIT).length;

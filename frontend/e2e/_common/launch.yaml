@@ -1,0 +1,14 @@
+# 공통 준비: 앱을 다시 띄우고 홈 탭바가 보일 때까지 기다린다.
+# clearState·clearKeychain 금지 — run.mjs 가 넣은 토큰이 지워진다.
+# permissions: deny — OS 권한을 '결정됨'으로 둬 권한 안내 카드(permissions.md)가 홈을 가리지 않게 한다.
+appId: com.trippilot.travel
+---
+- launchApp:
+    permissions:
+      all: deny
+    stopApp: true
+- extendedWaitUntil:
+    visible:
+      id: 'shell-tabbar-root'
+    timeout: 60000
+- runFlow: dismiss-logbox.yaml

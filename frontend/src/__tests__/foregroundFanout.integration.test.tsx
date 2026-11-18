@@ -4,7 +4,14 @@ import {
   QueryClientProvider,
   type QueryClient,
 } from '@tanstack/react-query';
-import { act, render, screen, waitFor } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react-native';
 import { http, HttpResponse } from 'msw';
 
 import { createAppQueryClient } from '@/app/entrypoint/queryClient';
@@ -15,8 +22,9 @@ import { HomePage } from '@/pages/home';
 import { MyTripsListPage } from '@/pages/itinerary/itinerary-list';
 import { RecordsCalendarPage } from '@/pages/record/records-calendar';
 import { MyPage } from '@/pages/settings/my-page';
+import { NotificationInboxPage } from '@/pages/settings/notification-inbox';
 import { useGetPlacesPoiId } from '@/shared/api/index.hooks';
-import type { Place, Trip } from '@/shared/api/index.schemas';
+import type { Notification, Place, Trip } from '@/shared/api/index.schemas';
 import { clearAccessToken, setAccessToken } from '@/shared/api/tokenManager';
 import { BASE } from '@/test-support/apiBase';
 import { itinerary } from '@/test-support/itineraryFixtures';
@@ -77,8 +85,11 @@ jest.mock('expo-router', () => {
 });
 
 const MIN = 60_000;
-/** 부팅→홈 요청 수 상한 — 하네스 1회 실측값(AC9) — 여행 없음 10 = /bootstrap 1 + /trips 1 + /saved-places 1 + /saved-stays 1 + /places 6(TRIP-1807), 여행 중 6 = /places 1 + 지배 여행 일정 1. */
-const BOOT_BUDGET = { noTrip: 10, inTrip: 5 };
+/**
+ * 부팅→홈 요청 수 상한 — 하네스 1회 실측값(AC9). 여행 없음 11 = /bootstrap 1 + /trips 1 + /saved-places 1 + /saved-stays 1 + /places 6(TRIP-1807)
+ * + /me/notifications 1(TRIP-1783 홈 종 미읽음), 여행 중 6 = /bootstrap 1 + /trips 1 + /saved-places 1 + /saved-stays 1 + /places 1 + /me/notifications 1.
+ */
+const BOOT_BUDGET = { noTrip: 11, inTrip: 6 };
 const log = createHitLog(server);
 
 const trip = (over: Partial<Trip> & Pick<Trip, 'tripId'>): Trip =>
@@ -280,8 +291,10 @@ async function runReturn(
   return back;
 }
 
-// 후 열은 어느 얼굴·나이에서도 `/trips` 1 뿐이다 — TRIP-1677 부터 탭들은 일정 상태를 목록 칸에서 읽어 여행별 일정 GET 이 없다.
-const REFRESHED = { 'GET /trips': 1 };
+// 후 열은 어느 얼굴·나이에서도 `/trips` 1 + 홈 종 미읽음 `/me/notifications` 1 뿐이다 — TRIP-1677 부터 탭들은 일정 상태를 목록 칸에서 읽어 여행별 일정 GET 이 없다.
+// TRIP-1783: 알림 조회는 거부 목록에 *넣지 않았다* — 푸시가 아직 안 오는 동안 앱 복귀가 새 알림을 알 수 있는 사실상 유일한 시점이라 30초 넘게 낡았으면 1건 받는다.
+// 전 열(1714 이전 동작)도 같은 1건이다 — 거부 목록 경로가 아니므로 정책을 꺼도 켜도 갈리지 않는다.
+const REFRESHED = { 'GET /trips': 1, 'GET /me/notifications': 1 };
 // 거부 목록 경로 — "전" 열에서는 30초만 지나도 1건씩 나간다(`/places` 는 레인 신선 시간이 10분이라 11분 뒤부터).
 const DENIED_AT_5M = {
   'GET /saved-places': 1,
@@ -400,9 +413,84 @@ describe('TRIP-1714 · 부팅 → 홈 첫 레인까지 요청 예산 (AC9 · M-6
       const counts = byPath(log.all());
       expect(counts['GET /bootstrap']).toBe(1);
       expect(counts['GET /trips']).toBe(1);
+      // TRIP-1783 — 홈 종 미읽음 조회는 부팅에 정확히 1건(예산 칸을 다른 요청이 대신 채우지 못하게 이름으로 앵커).
+      expect(counts['GET /me/notifications']).toBe(1);
       expect(log.all().length).toBeLessThanOrEqual(budget);
       view.unmount();
       client.clear();
     }
   );
+});
+
+describe('TRIP-1783 · 읽음 처리 뒤 홈 종 숫자 — 실제 알림함과 한 클라이언트', () => {
+  const BADGE = 'home-dashboard-bell-badge';
+  const ids = ['n-1', 'n-2', 'n-3'];
+  /** 서버가 읽음으로 기억한 id. */
+  let readIds: Set<string>;
+
+  const item = (id: string): Notification => ({
+    notificationId: id,
+    kind: 'TRIP_PRE',
+    title: `알림 ${id}`,
+    body: '',
+    // 행을 누르면 이동 + 읽음 처리가 나가야 하므로 갈 곳(TRIP_ITINERARY)이 있는 알림이다.
+    actionType: 'TRIP_ITINERARY',
+    actionPayload: { tripId: 't1' },
+    occurredAt: new Date().toISOString(),
+    readAt: readIds.has(id) ? new Date().toISOString() : null,
+  });
+
+  beforeEach(() => {
+    readIds = new Set();
+    serve('noTrip');
+    // 상태를 기억하는 가짜 서버 — unreadOnly 는 안 읽은 것만, 읽음 요청은 204 로 기억한다.
+    server.use(
+      http.get(`${BASE}/me/notifications`, ({ request }) => {
+        const unreadOnly =
+          new URL(request.url).searchParams.get('unreadOnly') === 'true';
+        const all = ids.map(item);
+        return HttpResponse.json({
+          items: unreadOnly ? all.filter((n) => n.readAt === null) : all,
+        });
+      }),
+      http.post(`${BASE}/me/notifications/read-all`, () => {
+        ids.forEach((id) => readIds.add(id));
+        return new HttpResponse(null, { status: 204 });
+      }),
+      http.post(`${BASE}/me/notifications/:id/read`, ({ params }) => {
+        readIds.add(String(params.id));
+        return new HttpResponse(null, { status: 204 });
+      })
+    );
+  });
+
+  it('알림함에서 한 건을 읽으면 종 숫자가 3 → 2, 모두 읽음이면 배지가 사라진다', async () => {
+    // 준비 — 홈과 알림함이 한 클라이언트에 함께 올라 있다(탭 이동은 흉내 내지 않는다).
+    const client = newAppClient(true);
+    render(
+      <QueryClientProvider client={client}>
+        <HomePage />
+        <NotificationInboxPage />
+      </QueryClientProvider>
+    );
+    const badge = () =>
+      within(screen.getByTestId('home-dashboard-bell')).queryByTestId(BADGE, {
+        includeHiddenElements: true,
+      });
+    await waitFor(() => expect(badge()).toHaveTextContent('3'));
+    // 앵커 — 알림함도 같은 서버 3건을 그렸다.
+    const rows = await screen.findAllByTestId('notification-inbox-row');
+    expect(rows).toHaveLength(3);
+
+    // 실행·단언 1 — 알림 한 건을 눌러 읽는다: 읽음 요청 → 접두 키 무효화 → 홈의 unreadOnly 조회가 다시 나가 2.
+    fireEvent.press(rows[0]);
+    await waitFor(() => expect(badge()).toHaveTextContent('2'));
+
+    // 실행·단언 2 — 모두 읽음: read-all → 같은 무효화 → 0건이라 배지가 사라진다(앞 단언이 2 를 확인했으니 공허하지 않다).
+    fireEvent.press(screen.getByTestId('notification-inbox-mark-all'));
+    await waitFor(() => expect(badge()).toBeNull());
+    expect(readIds.size).toBe(3);
+
+    client.clear();
+  });
 });

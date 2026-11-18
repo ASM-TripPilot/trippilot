@@ -56,7 +56,7 @@ class Violation:
     `reason_code` 는 HC1 하위 코드(`HC1_REASON_CODES`) — 다른 HC 와 옛 직렬화본은 None 이다.
     """
 
-    code: str  # HC1 ~ HC4
+    code: str  # HC1 ~ HC4 · SLOT_ORDER(받은 일정의 화면 순서 어긋남 — api.wiring 의 validate 만 낸다)
     slot_ref: PoiId | None
     detail: str
     reason_code: str | None = None

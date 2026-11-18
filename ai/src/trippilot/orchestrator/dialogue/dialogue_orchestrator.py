@@ -92,6 +92,7 @@ from trippilot.orchestrator.dialogue.dialogue_handlers import (
     TurnSnapshot,
     edit_arguments,
     insert_day,
+    prefetch_unknown,
     validate_answer_shape,
     validate_answer_text,
 )
@@ -1172,6 +1173,7 @@ class DialogueOrchestrator:
         # 4 — 팬아웃 → Facts (순수 조립)
         results = self._fanout(inp, handler.plan(ctx))
         facts = handler.assemble(ctx, results)
+        self._prefetch(ctx, facts)
         # 5 — 답변 문장
         answer = self._compose(inp, frame.intent, facts, memory(), trip_summary)
         return TurnOutcome("ANSWER", (frame,), None, answer, cleared, 0, interp.reason)
@@ -1300,6 +1302,14 @@ class DialogueOrchestrator:
     def _failed_task(self, inp: TurnInput, name: str, status: str, reason: str) -> TaskResult:
         self._fallback(inp, "fanout", name, status, reason)
         return TaskResult.failed(name, status)
+
+    def _prefetch(self, ctx: TurnContext, facts: Facts) -> None:
+        """후보 답의 앞쪽 장소 빈 칸을 뒤에서 미리 찾는다(UnknownHandlingAgent, 2026-11-08) — 답에는 손대지 않는다. 미리 찾기는 빠져도
+        답이 같으므로 실패는 한 줄만 남긴다(INV-4 — 강등이 아니라 덧붙임이 빠진 것)."""
+        try:
+            prefetch_unknown(ctx, facts)
+        except Exception as e:  # noqa: BLE001
+            log.warning("dialogue prefetch_failed trace=%s error=%s", ctx.trace_id, type(e).__name__)
 
     # ── 5 답변 ───────────────────────────────────────────────────────────
 
@@ -1490,6 +1500,7 @@ class DialogueOrchestrator:
         results = self._fanout(inp, step_tasks([h.plan(ctx) for h, ctx in zip(handlers, ctxs, strict=True)]))
         facts = merge_facts([h.assemble(ctx, step_results(results, i, n))
                              for i, (h, ctx) in enumerate(zip(handlers, ctxs, strict=True))])
+        self._prefetch(ctxs[0], facts)  # 조회 이름의 지역은 장소 DB 에서 온다 — 어느 문맥이든 포트·날짜·추적만 쓴다
         answer = self._compose(inp, facts.intent, facts, memory(), trip_summary, closed=True)
         self._log_plan(inp, "TOOLS", calls=draft.calls, arg_keys=[sorted(ctx.arguments) for ctx in ctxs], primary=facts.intent,
                        plan_ms=plan_ms,

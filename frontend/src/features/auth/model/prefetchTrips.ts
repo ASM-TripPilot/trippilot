@@ -11,7 +11,8 @@ import { getGetTripsQueryOptions } from '@/shared/api/index.trips';
  * TRIP-1719 측정(Release 시뮬·dev-api, 쪽당 10회 A·B·A·B, `pnpm bench:startup --until homeTrips`) — 유지 근거:
  * 켜면 스플래시가 걷힐 때 홈 여행 데이터가 이미 있고, 끄면 걷힌 뒤 p50 175ms(p90 197) 동안 스켈레톤을 본다
  * (JS 진입→홈 데이터 p50: 켬 1402 / 끔 1588ms). 대신 켜면 /bootstrap 확정이 p50 약 67ms 늦게 측정됐다(두 요청이 같이 나가서로
- * 추정 — 원인은 안 쟀다). 지금은 SplashGate SPLASH_MIN_VISIBLE_MS 하한이 그 지연을 흡수하니, 하한을 내리면 다시 잰다.
+ * 추정 — 원인은 안 쟀다). 첫 실행은 SplashGate SPLASH_MIN_VISIBLE_MS 하한이 그 지연을 흡수하지만, TRIP-1831 부터 재방문은 하한이 없어
+ * 그 지연이 콜드 합계에 그대로 얹힌다(재방문 쪽은 다시 잰다).
  */
 export function prefetchTrips(client: QueryClient): void {
   void client.prefetchQuery({ ...getGetTripsQueryOptions(), retry: false });

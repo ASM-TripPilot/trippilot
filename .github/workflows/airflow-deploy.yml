@@ -1,0 +1,165 @@
+# Airflow 실 수집 DAG 의 운영 적용·해제 (TRIP-1725 2단계).
+#
+# 수동 실행만 — push·스케줄 없음. workflow_dispatch 는 **기본 브랜치(main)에 이 파일이 있어야** 실행 버튼·gh workflow run 이
+# 생긴다 — develop 머지 뒤 main 승격까지 해야 쓸 수 있고, 실행은 `gh workflow run airflow-deploy.yml --ref develop`(develop 판이 돈다).
+# environment dev 는 develop·main 브랜치만 허용하고 승인자는 없다 — 운영 클러스터에 설치·해제(메타 DB DROP)를 하는 워크플로라
+# 리포 쓰기 권한자 누구나 돌릴 수 있다는 뜻이다(앱 배포 aws-deploy 와 같은 수준). 수집 시간대(KST 04:00~05:00)엔 돌리지 않는다.
+# 대상은 운영 클러스터(trippilot-dev)의 trippilot-batch 네임스페이스, 메타 DB 는
+# 운영 RDS 장비의 airflow DB(앱 DB 와 별도). 순서:
+#   install   (이미지 빌드) → 메타 DB·시크릿(deploy/airflow/bootstrap.py) → helm upgrade --install → 파드 확인
+#   uninstall helm uninstall → 메타 DB·롤 삭제 → 네임스페이스 삭제 (인프라 종료 전 정리)
+#
+# 수집 키는 리포 시크릿에만 있고 다시 꺼낼 수 없다 — 이 워크플로가 그 값을 batch-collect k8s 시크릿으로 옮긴다
+# (사람 손·로그를 거치지 않는다). 실 수집 스위치 batch_live 는 Actions 수집 스케줄을 끈 뒤에만 true 로.
+name: airflow-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: install(설치·갱신) / uninstall(해제·정리)
+        type: choice
+        options: [install, uninstall]
+        default: install
+      build_image:
+        description: Airflow 이미지를 다시 빌드한다(deploy/airflow/Dockerfile 이 바뀌었거나 처음일 때)
+        type: boolean
+        default: false
+      batch_live:
+        description: 실 수집(BATCH_LIVE=1) — ai-poi-collect·ai-event-collect 스케줄을 끈 뒤에만
+        type: boolean
+        default: false
+
+concurrency:
+  group: airflow-deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-2
+  CLUSTER_NAME: trippilot-dev
+  NAMESPACE: trippilot-batch
+  CHART_VERSION: 1.22.0
+  IMAGE: ghcr.io/asm-trippilot/trippilot-airflow   # 소문자 고정 — docker 는 대문자 리포 이름을 거부한다(조직명 ASM-TripPilot). values.yaml 과 같은 값
+  IMAGE_TAG: 3.3.2-python3.12          # values.yaml images.airflow.tag 와 같게
+  # 운영 RDS — 식별자일 뿐 비밀이 아니다(값은 마스터 시크릿 안에 있다).
+  DB_HOST: trippilot-dev.cnaciyq4kjmx.ap-northeast-2.rds.amazonaws.com
+  DB_MASTER_SECRET_ARN: arn:aws:secretsmanager:ap-northeast-2:223767249602:secret:rds!db-67f5abad-5bb2-4adc-94f0-0a3f0ecd31bd-ttc2V7
+
+jobs:
+  image:
+    if: inputs.action == 'install' && inputs.build_image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./deploy/airflow
+          push: true
+          platforms: linux/amd64
+          tags: ${{ env.IMAGE }}:${{ env.IMAGE_TAG }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+  deploy:
+    needs: image
+    # 이미지 잡은 build_image=false 면 건너뛴다 — 건너뜀은 통과로, 실패는 멈춤으로.
+    if: ${{ !cancelled() && needs.image.result != 'failure' }}
+    runs-on: ubuntu-latest
+    environment: dev            # AWS_ROLE_ARN·AWS_ACCOUNT_ID 가 이 환경에 있다(develop·main 만 실행 가능)
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-session-name: trippilot-airflow-${{ github.run_id }}
+      - run: aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      # GHCR 은 처음 발행한 패키지를 비공개로 만든다 — 차트에 pull 시크릿이 없으므로 익명으로 받을 수 있어야 한다.
+      # 첫 빌드 뒤 한 번: GitHub → Packages → trippilot-airflow → Package settings → Change visibility → Public
+      # (리포가 공개이고 이미지에 비밀이 없다). 비공개면 파드가 ImagePullBackOff 로 20분을 기다리기 전에 여기서 멈춘다.
+      - name: 이미지를 익명으로 받을 수 있는지
+        if: inputs.action == 'install'
+        run: |
+          repo="${IMAGE#ghcr.io/}"
+          token=$(curl -fsS "https://ghcr.io/token?scope=repository:${repo}:pull" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' 2>/dev/null) || true
+          status=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${token}" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+            "https://ghcr.io/v2/${repo}/manifests/${IMAGE_TAG}")
+          if [ "$status" != 200 ]; then
+            echo "::error::${IMAGE}:${IMAGE_TAG} 를 익명으로 받을 수 없다(HTTP $status) — 패키지를 Public 으로 바꾸거나 build_image=true 로 먼저 빌드한다"
+            exit 1
+          fi
+
+      - name: 메타 DB·시크릿 준비
+        if: inputs.action == 'install'
+        env:
+          GH_TOKEN: ${{ secrets.BATCH_GH_TOKEN }}
+          TOUR_API_KEY: ${{ secrets.TOUR_API_KEY }}
+          TOUR_API_KEY2: ${{ secrets.TOUR_API_KEY2 }}
+          TOUR_API_KEY3: ${{ secrets.TOUR_API_KEY3 }}
+          NAVER_SEARCH_CLIENT_ID: ${{ secrets.NAVER_SEARCH_CLIENT_ID }}
+          NAVER_SEARCH_CLIENT_SECRET: ${{ secrets.NAVER_SEARCH_CLIENT_SECRET }}
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY_AI }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BATCH_LIVE: ${{ inputs.batch_live && '1' || '0' }}
+        run: >-
+          python3 deploy/airflow/bootstrap.py install --namespace "$NAMESPACE" --db-host "$DB_HOST"
+          --master-secret-arn "$DB_MASTER_SECRET_ARN" --region "$AWS_REGION" --run-id "${{ github.run_id }}"
+
+      - name: helm upgrade --install
+        if: inputs.action == 'install'
+        run: |
+          # 마이그레이션·관리자 Job 은 helm 훅이 아니라 일반 Job 이다(values.yaml) — Job 의 파드 템플릿은 바꿀 수 없어서
+          # 직전 실행의 Job 이 아직 남아 있으면(완료 뒤 5분 TTL) 이번 upgrade 가 'field is immutable' 로 실패한다. 먼저 지운다.
+          kubectl -n "$NAMESPACE" delete job airflow-run-airflow-migrations airflow-create-user --ignore-not-found --wait=true
+          helm repo add apache-airflow https://airflow.apache.org
+          # 관리자 비밀번호는 airflow-keys 에서 — 명령 인자·로그에 싣지 않고 0600 값 파일로 넘긴다.
+          umask 077
+          pw=$(kubectl -n "$NAMESPACE" get secret airflow-keys -o jsonpath='{.data.admin-password}' | base64 -d)
+          echo "::add-mask::$pw"
+          printf 'createUserJob:\n  defaultUser:\n    password: "%s"\n' "$pw" > "$RUNNER_TEMP/admin.yaml"
+          # 시크릿만 바뀐 재실행(batch_live 전환)도 파드가 새 값을 읽게 — envFrom 은 파드를 다시 띄워야 반영된다.
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          helm upgrade --install airflow apache-airflow/airflow --version "$CHART_VERSION" \
+            --namespace "$NAMESPACE" -f deploy/airflow/values.yaml -f "$RUNNER_TEMP/admin.yaml" \
+            --set-string "airflowPodAnnotations.trippilot/deployed-at=$stamp" \
+            --wait --timeout 20m
+          rm -f "$RUNNER_TEMP/admin.yaml"
+
+      - name: 상태
+        if: inputs.action == 'install'
+        run: |
+          kubectl -n "$NAMESPACE" get pods -o wide
+          live=$(kubectl -n "$NAMESPACE" get secret batch-collect -o jsonpath='{.data.BATCH_LIVE}' | base64 -d)
+          echo "### Airflow 적용 — BATCH_LIVE=$live" >> "$GITHUB_STEP_SUMMARY"
+          echo "UI: \`kubectl -n $NAMESPACE port-forward svc/airflow-api-server 8080:8080\` (admin / airflow-keys 의 admin-password)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 해제
+        if: inputs.action == 'uninstall'
+        run: |
+          helm uninstall airflow --namespace "$NAMESPACE" --wait --ignore-not-found
+          python3 deploy/airflow/bootstrap.py uninstall --namespace "$NAMESPACE" --db-host "$DB_HOST" \
+            --master-secret-arn "$DB_MASTER_SECRET_ARN" --region "$AWS_REGION" --run-id "${{ github.run_id }}"
+          kubectl delete namespace "$NAMESPACE" --ignore-not-found --wait=true --timeout=5m
+          {
+            echo "### Airflow 해제 끝"
+            echo "- 실 수집을 Airflow 로 옮겨 Actions 스케줄을 껐었다면 **ai-poi-collect·ai-event-collect 의 cron 을 main 에 되살린다** — 안 그러면 수집이 조용히 멈춘다"
+            echo "- 이 워크플로가 지우지 않는 것: GHCR 패키지 trippilot-airflow, BATCH_GH_TOKEN(PAT 와 리포 시크릿), chore/poi-data-sync 브랜치"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -31,7 +31,7 @@ paths:
 
 ## 하트 글리프 사본 분기 (6-b 시각 전용)
 
-- **e02 카드 하트와 e03·e04 하트가 서로 다른 모양이다** → e02(`StaySearchScreen`)는 `@/shared/ui/HeartGlyphs`(18-viewBox)를, e03(`StayDetailScreen`)·e04(`SavedStayListScreen` trailing)는 `features/stay/ui/StayGlyphs`(22-viewBox)를 쓴다. jest는 SVG path·viewBox를 원리적으로 못 봐 배선·testID·selected·press가 green이어도 실기에서 두 하트 모양이 섞여 보인다.
+- **e02 카드 하트와 e03·e04 하트가 서로 다른 모양이다** → e02(`StaySearchScreen`)는 `@/shared/ui/glyphs`(18-viewBox 하트)(18-viewBox)를, e03(`StayDetailScreen`)·e04(`SavedStayListScreen` trailing)는 `features/stay/ui/StayGlyphs`(22-viewBox)를 쓴다. jest는 SVG path·viewBox를 원리적으로 못 봐 배선·testID·selected·press가 green이어도 실기에서 두 하트 모양이 섞여 보인다.
 - **검색 카드는 명시적 testID 계약을 쓴다(접두사 주입 아님)** → `entities/stay/ui/StaySearchCard`는 `testIDPrefix` 하나로 하위 testID를 조립하지 않고 완성 문자열(root/photo/save/filled/outline)을 prop으로 받는다 — e02(`stay-card-save-{key}-filled`)와 d01(`explore-stay-heart-filled-{key}`)의 저장/글리프 testID 스킴이 서로 달라 단일 접두사로는 재현 불가했기 때문(개념 [[명시 testID 계약 — 소비처마다 스킴이 갈리면 접두 주입이 깨진다]]).
 
 ## stay 등록 (e05)

@@ -1,11 +1,16 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { MapPinGlyph } from '@/shared/ui/glyphs';
-import { PlacePhoto } from '@/shared/ui/PlacePhoto';
+import {
+  BackChevronWideGlyph,
+  ShareGlyph,
+  MapPinGlyph,
+  HeartFilledGlyph,
+  HeartOutlineGlyph,
+} from '@/shared/ui/glyphs';
+import { PoiPhoto } from '@/shared/ui/PoiPhoto';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { heartSaveLabel } from '@/shared/ui/HeartButton';
-import { HeartFilledGlyph, HeartOutlineGlyph } from '@/shared/ui/HeartGlyphs';
 import { MapView } from '@/shared/map';
 import { PlaceSubtitle } from '@/entities/place';
 import { normalizeOpeningHours } from '@/entities/itinerary-slot';
@@ -13,10 +18,8 @@ import type { Place } from '@/shared/api/index.schemas';
 
 import type { PlaceSaveNotice } from '@/features/save-place/index.view';
 import {
-  ExploreBackChevronGlyph,
   ExploreCopyGlyph,
   ExploreInfoGlyph,
-  ExploreShareGlyph,
 } from '@/features/explore/index.view';
 import { NoticeBanner } from '@/shared/ui/NoticeBanner';
 import { OpenNaverMapButton } from '@/shared/ui/OpenNaverMapButton';
@@ -143,18 +146,19 @@ export function PlaceDetailScreen({
   return (
     <View testID="explore-place-detail" className="flex-1 bg-canvas">
       <ScrollView className="flex-1" contentContainerClassName="pb-[48px]">
-        {/* 갤러리 hero(풀블리드) — imageUrl NULL 이면 카테고리 생성 이미지(PlacePhoto).
+        {/* 갤러리 hero(풀블리드) — imageUrl NULL 이면 카테고리 생성 이미지(PoiPhoto).
             원형 버튼 3개는 ScrollView 밖에 고정해 띄운다(full-bleed 이미지 immersive). */}
         <View
           testID="explore-place-hero"
-          className="h-[430px] w-full overflow-hidden bg-surface-strong"
+          className="h-[430px] w-full overflow-hidden"
         >
-          <PlacePhoto
+          <PoiPhoto
             testID="explore-place-hero-photo"
             imageUrl={place.imageUrl}
+            imageLicense={place.imageLicense}
+            surface="overlay"
             category={place.category}
             poiId={place.poiId}
-            contentFit="cover"
             cachePolicy="memory-disk"
             className="h-full w-full"
           />
@@ -308,7 +312,7 @@ export function PlaceDetailScreen({
           onPress={onPressBack}
           className="h-[38px] w-[38px] items-center justify-center rounded-pill bg-on-primary"
         >
-          <ExploreBackChevronGlyph size={20} />
+          <BackChevronWideGlyph size={20} />
         </Pressable>
         <View pointerEvents="none" className="flex-1" />
         <Pressable
@@ -318,7 +322,7 @@ export function PlaceDetailScreen({
           onPress={onPressShare}
           className="h-[38px] w-[38px] items-center justify-center rounded-pill bg-on-primary"
         >
-          <ExploreShareGlyph size={19} />
+          <ShareGlyph size={19} />
         </Pressable>
         <Pressable
           testID="explore-place-save"

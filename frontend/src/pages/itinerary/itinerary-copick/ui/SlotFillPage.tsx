@@ -53,6 +53,7 @@ import {
   usePutTripsTripIdItinerary,
 } from '@/shared/api/index.hooks';
 import { isNotFound } from '@/shared/api';
+import { guardPress, usePressLock } from '@/shared/lib/pressGuard';
 import { CoPickStepper, type CoPickStep } from './CoPickStepper';
 
 /**
@@ -77,7 +78,7 @@ import { CoPickStepper, type CoPickStep } from './CoPickStepper';
  * 중심은 이 컴포넌트의 상태(`centerSel`) 하나이고 후보를 묻는 모든 입구(컨셉·건너뛰기·반경 세그·넓히기/좁히기·0건
  * 버튼)가 `requestCandidates` 한 곳에서 같은 값을 읽는다 — 칸을 넘어가면 새로 마운트돼 자동으로 시작한다.
  *
- * 이중발사 방지 `firedRef`(useRef — 같은 틱 둘째 탭이 옛 값을 읽어 못 막는 useState 잠금 회피) ·
+ * 이중발사 방지 `firedLock`(usePressLock — 같은 틱 둘째 탭이 옛 값을 읽어 못 막는 useState 잠금 회피) ·
  * 콜드캐시 가드(itinerary GET 미도착 중 확정하면 `swapSlotPoi([], …)` 로 빈 days PUT = 일정 소실)는
  * `SlotCandidatePanelContainer`(h08) 동형 재사용이다.
  *
@@ -166,7 +167,7 @@ export function SlotFillPage({
   const [tappedPoiId, setTappedPoiId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
-  const firedRef = useRef(false);
+  const firedLock = usePressLock();
 
   const candidates = candidatesData?.candidates ?? [];
   const selectedPoiId = resolveCandidateSelection(candidates, tappedPoiId);
@@ -466,7 +467,7 @@ export function SlotFillPage({
   function handleConfirm(): void {
     // itinerary GET 미도착(data undefined)이면 조기 반환 — 빈 days 전체교체 PUT(일정 소실) 방지(E1).
     // 단 조회가 404 아닌 오류로 끝났으면 무반응 대신 사유를 알리고 한 번 다시 묻는다(INV-4). 로딩·404 는 그대로 무반응.
-    // firedRef 를 세우기 전에 돌려야 한 번 실패한 뒤에도 다음 [확정]이 영구 잠기지 않는다.
+    // firedLock 을 쥐기 전에 돌려야 한 번 실패한 뒤에도 다음 [확정]이 영구 잠기지 않는다.
     if (
       itinerary.data === undefined &&
       itinerary.isError &&
@@ -479,15 +480,14 @@ export function SlotFillPage({
     // generationState==='PARTIAL'(2단계 생성 중, day1 만 도착)이면 확정도 잠근다 — day1-only 전체교체
     // PUT 이 뒷날을 덮어쓰기 전에 막는다(TRIP-601 가드 b · 서버 409 의 클라 사본, 심층 방어).
     if (
-      firedRef.current ||
       selectedPoiId === null ||
       parsed.kind !== 'ok' ||
       itinerary.data === undefined ||
-      isConfirmLocked(itinerary.data.generationState)
+      isConfirmLocked(itinerary.data.generationState) ||
+      !firedLock.acquire()
     ) {
       return;
     }
-    firedRef.current = true;
     setErrorMessage(null);
     // ⚠️ 전진 계산은 **스왑 전** 원본 days·**원본 slotKey** 로 한다(01b ★11). 스왑 후 days 로 원본
     // 키를 찾으면 그 슬롯의 poiId 는 이미 X 라 못 찾는다. 콜드캐시 가드가 days 존재를 이미 보장.
@@ -524,7 +524,7 @@ export function SlotFillPage({
           });
         },
         onError: (error) => {
-          firedRef.current = false;
+          firedLock.release();
           setErrorMessage(resolveSlotSwapError(error).message);
         },
       }
@@ -655,14 +655,18 @@ export function SlotFillPage({
         stepperSlot={conceptStepper()}
         // 후보 응답의 이름·태그·사진을 카드까지 내린다(TRIP-1024, QA #070 "이름 준비 중"·회색 사진).
         candidateViews={Object.fromEntries(
-          candidates.map(({ poiId, nameKo, tags, imageUrl }) => [
+          candidates.map(({ poiId, nameKo, tags, imageUrl, imageLicense }) => [
             poiId,
-            { nameKo, tags, imageUrl },
+            { nameKo, tags, imageUrl, imageLicense },
           ])
         )}
         mapView={mapView}
         onSelectRadius={handleSelectRadius}
         onSelectRadio={setTappedPoiId}
+        // TRIP-1840 — 후보 사진·이름 → d06 장소 상세. push 라 돌아오면 고른 후보·반경·스크롤 그대로다.
+        onPressPlace={guardPress((poiId: string) =>
+          router.push(`/explore/places/${poiId}`)
+        )}
         onConfirm={handleConfirm}
         onExpandRadius={handleExpandRadius}
         onShrinkRadius={handleShrinkRadius}

@@ -3,7 +3,7 @@
  *  - `current`: 지금 있는 날, `duplicate`: 이미 같은 장소(poiId)가 있는 날(한 날에 같은 poiId 가 둘이면 슬롯 키가 겹친다).
  *  - 처음 선택: 현재 날 **뒤쪽에서 막히지 않은 가장 가까운 날** → 없으면 **앞쪽에서 가장 가까운 날** → 없으면 null.
  */
-export type MoveDayBlocked = 'current' | 'duplicate' | null;
+type MoveDayBlocked = 'current' | 'duplicate' | null;
 
 export interface MoveDayOption {
   /** 1부터 — 칩 라벨 `N일차`. */

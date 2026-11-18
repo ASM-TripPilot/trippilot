@@ -11,10 +11,14 @@ import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PlaceGridCard } from '@/entities/place';
-import { WarningTriangleGlyph, MapPinGlyph } from '@/shared/ui/glyphs';
+import {
+  BackChevronWideGlyph,
+  WarningTriangleGlyph,
+  MapPinGlyph,
+  HeartFilledGlyph,
+} from '@/shared/ui/glyphs';
 import type { Place } from '@/shared/api/index.schemas';
 import { PoiCategory } from '@/shared/api/index.schemas';
-import { HeartFilledGlyph } from '@/shared/ui/HeartGlyphs';
 import { Image } from '@/shared/ui/Image';
 import { StateNotice } from '@/shared/ui/StateNotice';
 import { Skeleton } from '@/shared/ui/Skeleton';
@@ -23,7 +27,6 @@ import type { PlaceListState } from '@/features/explore/index.view';
 import type { PlaceSaveNotice } from '@/features/save-place/index.view';
 import { formatRegionChipLabel } from '../model/regionChipLabel';
 import {
-  ExploreBackChevronGlyph,
   ExploreFilterSlidersGlyph,
   ExploreInfoGlyph,
   ExplorePlusGlyph,
@@ -147,7 +150,7 @@ function PlaceExploreAppBar({ onBack }: { onBack?: () => void }): ReactElement {
         accessibilityRole: 'button',
         onPress: onBack,
         className: 'h-10 w-10 items-center justify-center',
-        glyph: <ExploreBackChevronGlyph size={24} />,
+        glyph: <BackChevronWideGlyph size={24} />,
       }}
       title="장소 탐색"
       titleClassName="font-noto-bold text-[18px] font-bold text-ink"

@@ -17,7 +17,7 @@ import {
 } from '@/shared/api/index.hooks';
 import { isNotFound, isOfflineWaiting } from '@/shared/api';
 import { isLargeText } from '@/shared/lib/fontScale';
-import { guardPress } from '@/shared/lib/pressGuard';
+import { guardPress, usePressLock } from '@/shared/lib/pressGuard';
 import { useSeoulToday } from '@/shared/lib/useSeoulToday';
 import {
   readIdSet,
@@ -176,7 +176,7 @@ export function MyTripsListPage(): ReactElement {
   // 실패한 요청의 tripId — 대기 중 취소 뒤 다른 카드를 열면 앞 결과가 새 다이얼로그에 안 떨어지게 id 로 든다.
   const [deleteFailedId, setDeleteFailedId] = useState<string | null>(null);
   // 연타 잠금은 ref — isPending 은 늦게 알려져 같은 틱 두 번째 press 를 못 막는다(02a ★2).
-  const deletingRef = useRef(false);
+  const deletingLock = usePressLock();
 
   // TRIP-1122 · 정렬 — 사용자가 한 번 고르면 뒤늦게 도착한 저장값이 그 선택을 덮지 않게 ref 로 표시한다.
   const [sortKey, setSortKey] = useState<MyTripsSortKey>('recent');
@@ -326,8 +326,7 @@ export function MyTripsListPage(): ReactElement {
   };
 
   const onConfirmDelete = (): void => {
-    if (deleteTargetId === null || deletingRef.current) return;
-    deletingRef.current = true;
+    if (deleteTargetId === null || !deletingLock.acquire()) return;
     setDeleteFailedId(null);
     const tripId = deleteTargetId;
     // 목록은 항상 다시 받고(지워진 건 사실), 다이얼로그는 보낸 여행의 것일 때만 닫는다.
@@ -355,7 +354,7 @@ export function MyTripsListPage(): ReactElement {
         onError: (error) =>
           isNotFound(error) ? done() : setDeleteFailedId(tripId),
         onSettled: () => {
-          deletingRef.current = false;
+          deletingLock.release();
         },
       }
     );

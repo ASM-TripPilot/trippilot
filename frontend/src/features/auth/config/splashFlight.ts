@@ -3,7 +3,8 @@
 // 좌표·회전 함수는 reanimated UI 스레드(useAnimatedStyle)에서 불려 'worklet' 이다.
 
 /**
- * 비행 시간(ms) — 최소 노출 하한(SPLASH_MIN_VISIBLE_MS)과 같은 값이어야 비행이 끝까지 보인다.
+ * 비행 시간(ms) — 최소 노출 하한(SPLASH_MIN_VISIBLE_MS)과 같은 값이어야 비행이 끝까지 보인다. 하한은 TRIP-1831 부터 첫 실행에만 걸려
+ * (표식이 있는 재방문은 부트스트랩이 준비되는 즉시 걷힌다) 재방문은 비행이 중간에 끊긴다 — 수용한 결정이다.
  * TRIP-1720 실측(Release 시뮬 10회): 인앱 스플래시가 그려진 커밋부터 걷힐 때까지 p50 1321ms(최소 1309) — 비행이 쓸 수 있는 시간의
  * 상한이다. 비행은 '동작 줄이기' 답을 받은 뒤에야 시작하므로(SplashIllustration) 여유 9~21ms 로는 끝까지 못 갈 수 있고,
  * 아래 도착 파동(700ms)은 한 번도 보이지 않는다. 모션 조정은 M-52.
@@ -17,10 +18,8 @@ export const SPLASH_DOT_STAGGER_MS = 200;
 
 export type Point = { x: number; y: number };
 
-/** 항로 제어점 4개(고정값). */
+/** 항로 시작·끝점(고정값). 곡선 가운데 제어점 둘(138.333,103.333 · 230,81.6668)은 아래 `flightPoint`·`flightRotationDeg` 식에 숫자로 들어 있다(워크릿 안). */
 export const FLIGHT_P0: Point = { x: 55, y: 230 };
-export const FLIGHT_P1: Point = { x: 138.333, y: 103.333 };
-export const FLIGHT_P2: Point = { x: 230, y: 81.6668 };
 export const FLIGHT_P3: Point = { x: 330, y: 165 };
 
 /** 진행률 t(0~1)에서의 항로 위 좌표. */

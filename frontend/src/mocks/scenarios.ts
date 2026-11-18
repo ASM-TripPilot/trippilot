@@ -9,9 +9,9 @@ import type { SocialProvider } from '@/shared/api';
  * 이 모듈은 msw 를 import 하지 않는다(순수 상태) — flag 켠 유닛 테스트도 안전하게 참조한다.
  */
 
-export type AuthOutcome = 'success' | 'cancel' | 'dismiss';
+type AuthOutcome = 'success' | 'cancel' | 'dismiss';
 
-export type SocialServerBehavior =
+type SocialServerBehavior =
   | 'new-user' // 신규 → 연령확인 없는 첫 요청은 400 VALIDATION_ERROR, 동봉 재전송만 200
   | 'existing-user' // 기존(isNewUser=false) → success
   | 'auth-failed' // 401 SOCIAL_AUTH_FAILED
@@ -19,7 +19,7 @@ export type SocialServerBehavior =
   | 'rate-limited' // 429 RATE_LIMITED
   | 'age-restricted'; // 신규 → 연령확인 재전송 시 422 AGE_NOT_MET
 
-export type BootstrapBehavior =
+type BootstrapBehavior =
   | 'guest' // GUEST → LOGIN
   | 'authenticated' // AUTHENTICATED → HOME
   | 'onboarding' // ONBOARDING_INCOMPLETE → ONBOARDING
@@ -35,7 +35,7 @@ export interface MockScenario {
   existingProvider: SocialProvider | null;
 }
 
-export const SCENARIOS = {
+const SCENARIOS = {
   'login-success-existing': {
     key: 'login-success-existing',
     label: '로그인 성공(기존 계정)',

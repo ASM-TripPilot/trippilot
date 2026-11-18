@@ -15,6 +15,7 @@ import { useReplanGpsOrigin } from '../model/useReplanGpsOrigin';
 import { useStartReplan } from '@/features/request-replan';
 import { ReplanRequestSheet } from './ReplanRequestSheet';
 import type { ItineraryDaysItem } from '@/shared/api/index.schemas';
+import { usePressLock } from '@/shared/lib/pressGuard';
 
 /**
  * TRIP-750 · i04 배선판. 진입 초기화 → 감지 트리거 시드 → 폼 스토어 ↔ 시트 → 빌더 → POST → 라우터.
@@ -204,7 +205,7 @@ export function PlanbRequestPage(props: PlanbRequestPageProps): ReactElement {
   // GPS 를 기다리는 동안과 POST 응답을 기다리는 동안 재누름은 무시한다 — 읽기·POST 각 1회(AC-A5).
   // TRIP-1294: 서버는 새 POST 가 열린 세션을 CANCELED 로 닫는다(INV-U4-06) — 그래서 성공이면 화면을 떠날 때까지,
   // 실패면 onError 에서 풀 때까지 잠근다. 실패 뒤 재시도는 막지 않는다.
-  const submittingRef = useRef(false);
+  const submittingLock = usePressLock();
   // GPS 를 기다리는 사이 화면이 사라지면(스크림·안드로이드 뒤로) POST 하지 않는다. 본문에서 true 로
   // 다시 세워야 StrictMode 의 실행→정리→재실행 뒤에도 false 로 굳지 않는다.
   const mountedRef = useRef(false);
@@ -215,12 +216,12 @@ export function PlanbRequestPage(props: PlanbRequestPageProps): ReactElement {
     };
   }, []);
   async function handleSubmit(): Promise<void> {
-    if (submittingRef.current) return;
+    if (submittingLock.isHeld()) return;
     if (hasTargetDate && validTargetDate === undefined) {
       setErrorText(BAD_DATE_TEXT);
       return;
     }
-    submittingRef.current = true;
+    if (!submittingLock.acquire()) return;
     setErrorText(null);
     // 이벤트 시점의 최신값을 스토어에서 직접 읽는다(렌더 클로저 stale 회피).
     const form = useReplanFormStore.getState();
@@ -256,7 +257,7 @@ export function PlanbRequestPage(props: PlanbRequestPageProps): ReactElement {
       origin
     );
     if (!mountedRef.current) {
-      submittingRef.current = false;
+      submittingLock.release();
       return;
     }
     startReplan.mutate(
@@ -273,7 +274,7 @@ export function PlanbRequestPage(props: PlanbRequestPageProps): ReactElement {
         onError: (error) => {
           // 잠금은 실패에서만 푼다 — 성공 뒤엔 진행 화면으로 넘어가는 동안에도 잠가 둔다(5-b 경고-1: 전환 중
           // 재누름이 두 번째 POST 로 방금 연 세션을 CANCELED 로 닫는다, INV-U4-06).
-          submittingRef.current = false;
+          submittingLock.release();
           const conflict =
             isAxiosError(error) && error.response?.status === 409;
           setErrorText(
@@ -289,10 +290,10 @@ export function PlanbRequestPage(props: PlanbRequestPageProps): ReactElement {
   }
 
   // 닫기는 한 번만 — 닫힘 애니메이션 중 스크림 재탭·끌어 닫기가 겹쳐도 뒤로 두 칸 가지 않게.
-  const closingRef = useRef(false);
+  const closingLock = usePressLock();
   function handleClose(): void {
-    if (closingRef.current) return;
-    closingRef.current = true;
+    // 스크림 탭·끌어 닫기(gorhom onClose)도 여기로 온다 — 전환 중이라고 건너뛰면 시트만 사라지고 화면이 남는다.
+    if (!closingLock.acquire({ transition: 'ignore' })) return;
     goBackOr(router, `/trips/${tripId}/live`);
   }
 
