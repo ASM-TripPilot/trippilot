@@ -26,12 +26,14 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.UUID
 
 private class FakeAccounts : AccountRepository {
     override fun findActiveByEmail(email: String): Account? = null
+    override fun purgeDue(now: Instant, revocationGrace: Duration, limit: Int): List<AccountId> = emptyList()
     val stored = mutableMapOf<AccountId, Account>()
     override fun findById(id: AccountId) = stored[id]
     override fun save(account: Account) = account.also { stored[it.id] = it }

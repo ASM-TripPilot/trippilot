@@ -9,6 +9,7 @@ import com.trippilot.auth.domain.port.AccountRepository
 import com.trippilot.auth.domain.port.RefreshSessionRepository
 import com.trippilot.auth.domain.port.SocialIdentityRepository
 import org.springframework.stereotype.Repository
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -25,6 +26,9 @@ class JpaAccountRepository(
     }
 
     override fun findActiveByEmail(email: String): Account? = jpa.findActiveByEmail(email)?.toDomain()
+
+    override fun purgeDue(now: Instant, revocationGrace: Duration, limit: Int): List<AccountId> =
+        jpa.purgeDue(now, now.minus(revocationGrace), limit).map(::AccountId)
 }
 
 /** SocialIdentityRepository 포트의 JPA 구현. */

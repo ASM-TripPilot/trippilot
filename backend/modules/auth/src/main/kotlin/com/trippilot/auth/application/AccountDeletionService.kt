@@ -25,7 +25,7 @@ data class DeletionRequestResult(val purgeAt: Instant, val cascadeSummary: Casca
 /**
  * 계정 삭제 라이프사이클(TRIP-158). 요청 → DELETION_PENDING + 30일 유예 예약 + **즉시** 부수효과
  * (전 기기 세션 폐기 · GPS 발자취 파기), 철회 → ACTIVE 복원(GPS 미복원, INV-D2).
- * 실제 30일 파기 배치는 후속(스케줄러) — 여기선 예약·이벤트까지.
+ * 30일 뒤 실제 파기는 [AccountPurgeSweeper] — 여기선 예약·이벤트까지.
  */
 @Service
 class AccountDeletionService(
