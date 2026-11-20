@@ -21,10 +21,6 @@ on:
         type: choice
         options: [install, uninstall]
         default: install
-      build_image:
-        description: Airflow 이미지를 다시 빌드한다(deploy/airflow/Dockerfile 이 바뀌었거나 처음일 때)
-        type: boolean
-        default: false
       batch_live:
         description: 실 수집(BATCH_LIVE=1) — ai-poi-collect·ai-event-collect 스케줄을 끈 뒤에만
         type: boolean
@@ -39,38 +35,58 @@ env:
   CLUSTER_NAME: trippilot-dev
   NAMESPACE: trippilot-batch
   CHART_VERSION: 1.22.0
-  IMAGE: ghcr.io/asm-trippilot/trippilot-airflow   # 소문자 고정 — docker 는 대문자 리포 이름을 거부한다(조직명 ASM-TripPilot). values.yaml 과 같은 값
-  IMAGE_TAG: 3.3.2-python3.12          # values.yaml images.airflow.tag 와 같게
+  # 이미지는 ECR — 앱 이미지와 같은 곳이라 노드가 이미 받을 수 있다. GHCR 은 조직 정책이 공개 패키지를 막아(11-18)
+  # 차트에 pull 시크릿 없이 받을 수 없었다. 새 리포를 만들지 않고 기존 ai 리포에 `airflow-` 태그로 둔다(Terraform 밖 자원 0,
+  # 수명 정책은 태그 없는 이미지만 지운다). 리포가 IMMUTABLE 이라 태그는 Dockerfile 내용 해시 — 같은 Dockerfile 이면 다시 빌드하지 않는다.
+  ECR_REPOSITORY: trippilot-dev/ai
   # 운영 RDS — 식별자일 뿐 비밀이 아니다(값은 마스터 시크릿 안에 있다).
   DB_HOST: trippilot-dev.cnaciyq4kjmx.ap-northeast-2.rds.amazonaws.com
   DB_MASTER_SECRET_ARN: arn:aws:secretsmanager:ap-northeast-2:223767249602:secret:rds!db-67f5abad-5bb2-4adc-94f0-0a3f0ecd31bd-ttc2V7
 
 jobs:
   image:
-    if: inputs.action == 'install' && inputs.build_image
+    if: inputs.action == 'install'
     runs-on: ubuntu-latest
+    environment: dev            # ECR 푸시도 배포 역할(OIDC)로
     permissions:
       contents: read
-      packages: write
+      id-token: write
+    outputs:
+      image: ${{ steps.tag.outputs.image }}
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: aws-actions/configure-aws-credentials@v5
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-session-name: trippilot-airflow-image-${{ github.run_id }}
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+      - name: 태그 = Dockerfile 해시 · 이미 있으면 빌드 생략
+        id: tag
+        run: |
+          tag="airflow-$(sha256sum deploy/airflow/Dockerfile | cut -c1-12)"
+          echo "image=${{ steps.ecr.outputs.registry }}/$ECR_REPOSITORY" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids "imageTag=$tag" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$tag 이미 있음 — 빌드 생략"
+          fi
+      - uses: docker/setup-buildx-action@v3
+        if: steps.tag.outputs.exists != 'true'
       - uses: docker/build-push-action@v6
+        if: steps.tag.outputs.exists != 'true'
         with:
           context: ./deploy/airflow
           push: true
           platforms: linux/amd64
-          tags: ${{ env.IMAGE }}:${{ env.IMAGE_TAG }}
-          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          tags: ${{ steps.tag.outputs.image }}:${{ steps.tag.outputs.tag }}
 
   deploy:
     needs: image
-    # 이미지 잡은 build_image=false 면 건너뛴다 — 건너뜀은 통과로, 실패는 멈춤으로.
+    # 이미지 잡은 uninstall 이면 건너뛴다 — 건너뜀은 통과로, 실패는 멈춤으로.
     if: ${{ !cancelled() && needs.image.result != 'failure' }}
     runs-on: ubuntu-latest
     environment: dev            # AWS_ROLE_ARN·AWS_ACCOUNT_ID 가 이 환경에 있다(develop·main 만 실행 가능)
@@ -90,22 +106,6 @@ jobs:
       - uses: azure/setup-helm@v4
         with:
           version: v3.16.4
-
-      # GHCR 은 처음 발행한 패키지를 비공개로 만든다 — 차트에 pull 시크릿이 없으므로 익명으로 받을 수 있어야 한다.
-      # 첫 빌드 뒤 한 번: GitHub → Packages → trippilot-airflow → Package settings → Change visibility → Public
-      # (리포가 공개이고 이미지에 비밀이 없다). 비공개면 파드가 ImagePullBackOff 로 20분을 기다리기 전에 여기서 멈춘다.
-      - name: 이미지를 익명으로 받을 수 있는지
-        if: inputs.action == 'install'
-        run: |
-          repo="${IMAGE#ghcr.io/}"
-          token=$(curl -fsS "https://ghcr.io/token?scope=repository:${repo}:pull" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' 2>/dev/null) || true
-          status=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${token}" \
-            -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
-            "https://ghcr.io/v2/${repo}/manifests/${IMAGE_TAG}")
-          if [ "$status" != 200 ]; then
-            echo "::error::${IMAGE}:${IMAGE_TAG} 를 익명으로 받을 수 없다(HTTP $status) — 패키지를 Public 으로 바꾸거나 build_image=true 로 먼저 빌드한다"
-            exit 1
-          fi
 
       - name: 메타 DB·시크릿 준비
         if: inputs.action == 'install'
@@ -140,6 +140,8 @@ jobs:
           helm upgrade --install airflow apache-airflow/airflow --version "$CHART_VERSION" \
             --namespace "$NAMESPACE" -f deploy/airflow/values.yaml -f "$RUNNER_TEMP/admin.yaml" \
             --set-string "airflowPodAnnotations.trippilot/deployed-at=$stamp" \
+            --set-string "images.airflow.repository=${{ needs.image.outputs.image }}" \
+            --set-string "images.airflow.tag=${{ needs.image.outputs.tag }}" \
             --wait --timeout 20m
           rm -f "$RUNNER_TEMP/admin.yaml"
 
@@ -161,5 +163,5 @@ jobs:
           {
             echo "### Airflow 해제 끝"
             echo "- 실 수집을 Airflow 로 옮겨 Actions 스케줄을 껐었다면 **ai-poi-collect·ai-event-collect 의 cron 을 main 에 되살린다** — 안 그러면 수집이 조용히 멈춘다"
-            echo "- 이 워크플로가 지우지 않는 것: GHCR 패키지 trippilot-airflow, BATCH_GH_TOKEN(PAT 와 리포 시크릿), chore/poi-data-sync 브랜치"
+            echo "- 이 워크플로가 지우지 않는 것: ECR trippilot-dev/ai 의 airflow-* 태그(인프라 종료 때 함께 사라진다), BATCH_GH_TOKEN(PAT 와 리포 시크릿), chore/poi-data-sync 브랜치"
           } >> "$GITHUB_STEP_SUMMARY"

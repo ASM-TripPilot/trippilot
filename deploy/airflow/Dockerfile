@@ -1,6 +1,6 @@
 # 실 수집 DAG 용 Airflow 이미지 — 공식 3.3.2 + git·gh·uv (TRIP-1725 2단계).
 # 태스크가 실행마다 develop 을 복제하고(git) 공유본 PR 을 열고(gh) 수집기 의존성을 깐다(uv sync --locked).
-# 빌드·푸시는 airflow-deploy.yml(build_image=true). 태그는 values.yaml 의 images.airflow.tag 와 같게.
+# 빌드·푸시는 airflow-deploy.yml(install) — ECR trippilot-dev/ai 에 airflow-<이 파일 해시> 태그. 이 파일이 바뀌면 다음 install 이 새로 빌드한다.
 FROM apache/airflow:3.3.2-python3.12
 
 USER root

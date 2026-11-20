@@ -19,6 +19,33 @@ interface AccountJpaRepository : JpaRepository<AccountJpaEntity, UUID> {
             "and a.status in ('PENDING_VERIFICATION', 'ACTIVE', 'DELETION_PENDING')",
     )
     fun findActiveByEmail(@Param("email") email: String): AccountJpaEntity?
+
+    /**
+     * 파기 — 한 문장이라 상태 재확인과 삭제 사이에 틈이 없다. 같은 순간 재로그인 복구(cancelDeletion)가 커밋되면 account 행의
+     * 최신 판(ACTIVE)으로 조건을 다시 평가해 지우지 않는다(READ COMMITTED 의 갱신 재검사 — 조건의 status 가 대상 행에 있다).
+     * revoke 토큰이 남은 연결이 있으면 purge_at + 유예까지 미룬다.
+     * 상태 조건이 하위 질의에도 있는 이유: limit 이 상태를 보기 전에 걸리면 예약만 살아 있는 ACTIVE 계정(복구 중 엇갈린 행)이
+     * 자리를 차지해 진짜 대상이 영영 안 뽑힌다. 바깥 조건은 그 사이 복구된 행을 거르는 재확인이다.
+     */
+    @Transactional
+    @Query(
+        """
+        delete from account a
+        where a.account_id in (
+            select d.account_id from deletion_schedule d
+            join account p on p.account_id = d.account_id and p.status = 'DELETION_PENDING'
+            where d.cancelled_at is null and d.purge_at <= :now
+              and (d.purge_at <= :tokenDeadline
+                   or not exists (select 1 from social_identity si
+                                  where si.account_id = d.account_id and si.provider_refresh_token_enc is not null))
+            order by d.purge_at
+            limit :limit)
+          and a.status = 'DELETION_PENDING'
+        returning a.account_id
+        """,
+        nativeQuery = true,
+    )
+    fun purgeDue(@Param("now") now: Instant, @Param("tokenDeadline") tokenDeadline: Instant, @Param("limit") limit: Int): List<UUID>
 }
 
 /** Spring Data JPA — social_identity 테이블 CRUD + (provider, sub) 조회 + 계정별 연결 조회. */

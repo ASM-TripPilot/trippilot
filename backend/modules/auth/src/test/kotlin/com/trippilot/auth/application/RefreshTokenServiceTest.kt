@@ -30,6 +30,7 @@ class RefreshTokenServiceTest : StringSpec({
         override fun findById(id: AccountId): Account? = account.takeIf { it.id == id }
         override fun save(account: Account): Account = account
         override fun findActiveByEmail(email: String): Account? = null
+        override fun purgeDue(now: Instant, revocationGrace: Duration, limit: Int): List<AccountId> = emptyList()
     }
 
     fun serviceAt(instant: Instant, repo: FakeRefreshSessionRepository, accounts: AccountRepository = accountsOf()) =

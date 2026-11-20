@@ -21,9 +21,11 @@ executor: LocalExecutor   # 하루 DAG 2개·태스크 11개 — 스케줄러 �
 # 이미지: 공식 이미지 + git·gh·uv. 수집기(ai/)는 실행마다 develop 을 복제해 `uv sync --locked` 로 깐다.
 images:
   airflow:
-    repository: ghcr.io/asm-trippilot/trippilot-airflow   # deploy/airflow/Dockerfile — airflow-deploy.yml 이 빌드한다
-    tag: 3.3.2-python3.12
-    pullPolicy: Always   # 같은 태그로 다시 빌드한다 — 노드 캐시의 옛 이미지를 쓰지 않게
+    # 저장소·태그는 airflow-deploy.yml 이 넣는다 — ECR trippilot-dev/ai 의 airflow-<Dockerfile 해시>(deploy/airflow/Dockerfile).
+    # 아래는 helm template 용 자리값이다.
+    repository: 223767249602.dkr.ecr.ap-northeast-2.amazonaws.com/trippilot-dev/ai
+    tag: airflow-placeholder
+    pullPolicy: IfNotPresent   # 태그가 내용 해시라 같은 태그 = 같은 이미지
 
 # 메타 DB 는 기존 RDS — 차트의 내장 PostgreSQL 은 끈다.
 postgresql:
@@ -94,6 +96,10 @@ scheduler:
   resources:
     requests: {cpu: 250m, memory: 1280Mi}
     limits: {memory: 3Gi}
+  # Karpenter 노드 통합이 스케줄러를 옮기지 않게 — 태스크(LocalExecutor)가 이 파드 안에서 돌고 실행 폴더가 emptyDir 라,
+  # 옮기면 도는 수집이 끊기고 복제본이 사라진다(11-18 그림자에서 API 서버가 "Underutilized" 로 축출됐다). runtime_db Job 과 같은 표시.
+  podAnnotations:
+    karpenter.sh/do-not-disrupt: "true"
   # 수집 키·GH_TOKEN 은 태스크가 도는 스케줄러에만 — api-server·dag-processor·Job 에는 넣지 않는다(DAG 파일은 모듈 수준에서 env 를 읽지 않는다).
   env:
     - {name: GH_TOKEN, valueFrom: {secretKeyRef: {name: batch-collect, key: GH_TOKEN, optional: true}}}
