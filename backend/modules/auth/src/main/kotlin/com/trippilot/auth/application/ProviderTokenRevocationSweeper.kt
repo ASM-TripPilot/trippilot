@@ -19,9 +19,8 @@ import java.time.Clock
  * "아직 안 한 것" 목록이기 때문이다(아웃박스는 도메인 이벤트 배달용이라, 외부 호출 재시도를 싣자면
  * 이벤트 스키마·구독자를 새로 만들어야 하고 얻는 것이 같다).
  *
- * ⚠️ **실제 계정 파기 배치는 아직 없다**(AccountDeletionService 주석 "실제 30일 파기 배치는 후속").
- * 그 배치가 생기면 social_identity 가 CASCADE 로 지워지기 **전에** 이 스위프가 돌아야 revoke 기회가 있다
- * — 파기 배치 앞단에서 [sweep] 을 한 번 부르거나, 토큰이 남은 계정의 파기를 한 주기 늦추면 된다.
+ * 계정 파기([AccountPurgeSweeper])는 토큰이 남은 계정을 `purge_at` 뒤 7일까지 미룬다 — social_identity 가 CASCADE 로
+ * 지워지기 **전에** 이 스위프가 revoke 할 기회를 준다. 그 뒤에도 실패가 이어지면 파기가 우선한다.
  *
  * ShedLock 없음 — 두 인스턴스가 같은 토큰을 동시에 revoke 해도 Apple 쪽에서 멱등이다.
  */
