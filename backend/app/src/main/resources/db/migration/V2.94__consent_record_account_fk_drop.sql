@@ -1,0 +1,12 @@
+-- 계정 최종 파기(BR-U0-25)가 account 행을 지울 수 있게 — 동의 증적의 계정 FK 를 걷는다.
+--
+-- 왜: 30일 유예가 지난 계정은 파기 배치가 account 행을 지우고, 연관 데이터는 account 직결 FK 의 ON DELETE CASCADE 가
+-- 한 번에 지운다(CascadeSummary.purgeScheduled). 그런데 consent_record 는 "캐스케이드 없음: 법정 보존"으로 FK 를 걸어 둬서
+-- (V1.2) FK 의 기본 동작 NO ACTION 이 account 삭제 자체를 막는다 — 보존하려던 증적이 파기 전체를 막는 상태였다.
+-- app_user 는 이 테이블을 UPDATE·DELETE 할 수 없어(V1.7) 증적을 먼저 치울 방법도 없다(치워서도 안 된다).
+--
+-- 무엇: FK 제약만 지운다. account_id 컬럼·인덱스(ix_consent_fold)·데이터는 그대로다. location_legal_log 가 처음부터
+-- 같은 이유로 FK 를 두지 않았다("FK 미강제 — 파기 후 잔존", V1.3 · INV-LL2) — 같은 모양으로 맞춘다.
+-- 정본 이탈: U0 domain-entities 는 "계정 FK에 CASCADE 없음"으로 보존을 적었지만 FK 가 있으면 계정 삭제가 막힌다.
+-- 파기 뒤 남는 증적의 account_id 는 가리키는 행이 없는 식별자다(위치 법정 로그와 같다).
+ALTER TABLE consent_record DROP CONSTRAINT consent_record_account_id_fkey;

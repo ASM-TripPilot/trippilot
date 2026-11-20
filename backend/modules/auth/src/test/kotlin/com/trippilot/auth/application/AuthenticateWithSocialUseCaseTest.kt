@@ -42,6 +42,7 @@ private class FakeAccountRepository : AccountRepository {
     override fun save(account: Account) = account.also { stored[it.id] = it }
     override fun findActiveByEmail(email: String) =
         stored.values.firstOrNull { it.email?.lowercase() == email.lowercase() }
+    override fun purgeDue(now: Instant, revocationGrace: Duration, limit: Int): List<AccountId> = emptyList()
 }
 
 private class FakeSocialIdentityRepository : SocialIdentityRepository {

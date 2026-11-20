@@ -31,6 +31,7 @@
 - **입력 크기를 따라 늘어나는 컬렉션을 `IN (:list)` 한 문장에 통째로 싣지 말 것 → 1,000건씩 `chunked` 로 나눠 보낸다.** PostgreSQL JDBC 는 한 문장에 바인드 변수 65,535개까지만 받는다. 실측(2026-10-20): 공유본에 카페 9,105곳을 합쳐 69,587건이 되자 `PoiRepositoryAdapter.findBySourceRefs` 가 `PreparedStatement can have at most 65,535 parameters` 로 500 을 냈다(`PoiProposalRealDocumentIT`). 같은 파일의 `closeActive` 는 이미 나눠 보내고 있었는데 조회 쪽만 빠져 있었다 — 6만 건까지는 증상이 없어 지나쳤다. (#1457)
 - **마이그레이션은 반드시 실제 PostgreSQL에 V1→최신 전체 체인으로 적용해 검증할 것.** 파일 단독 문법 검사로는 FK cascade·권한·제약 상호작용 버그를 못 잡는다. Testcontainers 통합테스트(`SchemaMigrationIT`)나 로컬 docker DB로 실 적용. (TRIP-174)
 - **재시도가 정상 경로인 쓰기에 UNIQUE 만 걸어 두고 "DB 가 막는다"로 끝내지 말 것 → 같은 키면 있던 행을 돌려주고(`ON CONFLICT DO NOTHING` 뒤 재조회), 경합은 행 잠금 대기 테스트로 본다.** 방문 사진 메타는 `(방문, 기기, 자산)` UNIQUE 위반이 그대로 500 이었고(운영 10/20~11/03 1건), 계약은 409 라고 적었으며, IT 는 `DataIntegrityViolationException` 을 **기대값으로** 단언해 결함을 고정하고 있었다 — 앱은 응답을 못 받으면 같은 자산을 다시 보내 "실패" 카드가 영영 안 지워진다. (TRIP-1721)
+- **보존해야 할 행을 "CASCADE 없는 FK"로 표현하지 말 것 → 부모가 지워져도 남아야 하는 행(법정 증적)은 FK 를 두지 않고 식별자 컬럼·인덱스만 둔다(`location_legal_log` 모양).** FK 의 기본 동작(NO ACTION)은 "자식은 남긴다"가 아니라 "부모 삭제를 막는다"다. 실측(2026-11-20): `consent_record` 의 계정 FK(V1.2 "캐스케이드 없음: 법정 보존")가 계정 최종 파기를 통째로 막고 있었다 — 배치가 없어 아무도 몰랐고 운영에서 유예 지난 계정 2건이 18일 밀렸다. V2.94 로 FK 만 걷었고, 걷기 전에는 `AccountPurgeIT` 4건이 FK 위반으로 빨갰다.
 
 ## 설계 · 문서
 

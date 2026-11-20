@@ -6,6 +6,7 @@ import com.trippilot.auth.domain.AgeMethod
 import com.trippilot.auth.domain.port.AccountRepository
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -22,6 +23,7 @@ class AuthAccountStatusFacadeTest : StringSpec({
         override fun findById(id: AccountId) = stored[id]
         override fun save(account: Account) = account.also { stored[it.id] = it }
         override fun findActiveByEmail(email: String): Account? = null
+        override fun purgeDue(now: Instant, revocationGrace: Duration, limit: Int): List<AccountId> = emptyList()
     }
 
     "삭제를 요청하면 true, 철회하면 다시 false 다" {

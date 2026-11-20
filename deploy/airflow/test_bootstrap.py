@@ -84,7 +84,7 @@ class ShadowAndNamespaceTest(unittest.TestCase):
         with mock.patch.object(bootstrap, "command", cluster.command), mock.patch.object(bootstrap, "wait_job"), \
              mock.patch.dict(os.environ, {**keys, "BATCH_LIVE": "0"}, clear=True):
             bootstrap.install(args, MASTER)
-        self.assertNotIn("GH_TOKEN", cluster.secrets["batch-collect"])
+        self.assertEqual(cluster.secrets["batch-collect"]["GH_TOKEN"], "")   # 키는 남기고 값만 비운다(차트가 optional 을 떨어뜨린다)
 
     def test_실_수집은_GH_TOKEN_없으면_아무것도_건드리지_않고_멈춘다(self):
         cluster = FakeCluster()
@@ -132,7 +132,7 @@ class ShadowAndNamespaceTest(unittest.TestCase):
              mock.patch.dict(os.environ, {**keys, "BATCH_LIVE": "0"}, clear=True):
             bootstrap.install(args, MASTER)
         self.assertTrue(deleted)
-        self.assertNotIn("GH_TOKEN", cluster.secrets["batch-collect"])
+        self.assertEqual(cluster.secrets["batch-collect"]["GH_TOKEN"], "")   # 키는 남기고 값만 비운다(차트가 optional 을 떨어뜨린다)
 
 
 if __name__ == "__main__":
