@@ -215,8 +215,9 @@ class KmaWeatherAdapter:
         nx, ny = latlon_to_grid(coord.lat, coord.lng)
         base_date, base_time = base_datetime_for(self._now())
         key = (nx, ny, base_date, base_time)  # 응답은 격자로 정해진다 — 위경도로 잡으면 기기 위치처럼 턴마다 조금씩 다른 좌표가 매번 부른다
-        if self._last is not None and self._last[0] == key:
-            return self._last[1]
+        last = self._last  # 한 번만 읽는다 — 튜플 교체는 원자적이지만 세 번 읽으면 그 사이 다른 격자가 써서 섞인다(락 불필요)
+        if last is not None and last[0] == key:
+            return last[1]
         # `03 NO_DATA` 는 같은 요청을 다시 보내면 풀리는 일이 많다 — 발표 후 75분이 지난
         # 발표분에서도 좌표마다 무작위로 섞여 나왔다(2026-10-14 로컬 실측 15회 중 6회,
         # 다음 호출에서 정상). 0.2초 안에 오는 응답이라 몇 번 다시 불러도 싸다.

@@ -113,15 +113,19 @@ def intro_facts(detail: Mapping[str, object]) -> list[str]:
 
 
 def card_text(proposal: Mapping) -> str:
-    """공유본 항목 하나 → 카드 한 줄(≤ CARD_MAX_CHARS). 상세 사실이 없으면 빈 문자열 — 동네만으로는 문서라 할 것이 없다."""
+    """공유본 항목 하나 → 카드 한 줄(≤ CARD_MAX_CHARS). 상세 사실이 없으면 빈 문자열 — 동네만으로는 문서라 할 것이 없다.
+    덜어 낸 뒤에도 사실이 하나도 안 남거나(동네만 남은 카드) 남은 사실 하나가 그래도 상한을 넘으면(더 덜어 낼 것이 없다) 빈 문자열이다
+    — 전자는 동네만으로 문서라 할 것이 없다는 규칙 그대로고, 후자는 글자 중간을 잘라 만든 카드가 사실이 아니라서다(리뷰 1109)."""
     prov = proposal.get("provenance") or {}
     facts = intro_facts(prov.get("detail") or {})
     if not facts:
         return ""
     where = area(str(prov.get("address") or ""), str(proposal.get("region") or ""))
-    parts = [where, *facts] if where else facts
+    parts = [where, *facts] if where else list(facts)
+    n_facts = len(facts)
     text = ". ".join(parts) + "."
     while len(text) > CARD_MAX_CHARS and len(parts) > 1:
         parts.pop()  # 뒤쪽 덧붙임부터 덜어 낸다
+        n_facts -= 1
         text = ". ".join(parts) + "."
-    return text[:CARD_MAX_CHARS]
+    return "" if n_facts < 1 or len(text) > CARD_MAX_CHARS else text

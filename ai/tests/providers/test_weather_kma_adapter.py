@@ -316,6 +316,30 @@ def test_a_new_publication_slot_refetches() -> None:
     assert len(http.calls) == 2
 
 
+def test_a_write_from_another_grid_between_the_memory_checks_does_not_leak_into_this_request() -> None:
+    """공유 어댑터를 라우트 스레드풀이 같이 쓴다 — 기억 확인과 반환 사이에 다른 격자가 써도 요청 격자의 응답만 돌려준다.
+
+    종전엔 `self._last` 를 세 번 읽어, 키 비교 직후 다른 스레드가 쓰면 그 격자의 응답이 돌아갔다(리뷰 1109). 실제 스레드는
+    GIL 창이 좁아 결정론으로 재현되지 않으니, 끼어드는 쓰기를 대역 튜플의 `__getitem__` 부수효과로 흉내 낸다.
+    """
+    http = _FakeHttp(_body({"item": [_item("20260805", "POP", "30")]}))
+    adapter = _adapter(http)
+    assert adapter.daily_forecast(_COORD, (_D1,)) == {_D1: 30}
+    key, body = adapter._last
+    seoul_key = (*latlon_to_grid(37.5665, 126.9780), *key[2:])
+    seoul_body = _body({"item": [_item("20260805", "POP", "90")]})
+
+    class _Interleaved(tuple):
+        def __getitem__(self, i):
+            if i == 0:
+                adapter._last = (seoul_key, seoul_body)  # 키 비교 직후 다른 스레드의 쓰기
+            return tuple.__getitem__(self, i)
+
+    adapter._last = _Interleaved((key, body))
+    assert adapter.daily_forecast(_COORD, (_D1,)) == {_D1: 30}
+    assert len(http.calls) == 1
+
+
 def test_a_failed_call_is_not_remembered() -> None:
     """실패를 굳히면 프로세스를 재시작해야 풀린다 — 다음 호출은 다시 나간다."""
     http = _FakeHttp(error=urllib.error.URLError("boom"))

@@ -64,6 +64,15 @@ def test_card_never_carries_clock_times_prices_or_phones_and_respects_the_cap() 
     assert not re.search(r"\d{1,2}:\d{2}|\d{2,4}-\d{3,4}-\d{4}|\d[\d,]*원", text)
 
 
+def test_a_card_that_would_keep_only_the_area_or_cut_a_fact_mid_glyph_is_dropped() -> None:
+    """사실 한 줄이 상한을 넘으면 덜어 낸 뒤 동네만 남는다 — 동네만으로는 문서라 할 것이 없고(MIN_DOC_CHARS 는 통과해 카드로 실렸다),
+    동네가 없을 때 글자 중간을 자른 카드도 사실이 아니다(리뷰 1109). 항목은 서로 달라야 한다 — 같으면 `_items` 가 합친다."""
+    detail = {"treatmenu": "/".join(chr(0xAC00 + i) * 75 for i in range(3))}
+    assert len(intro_facts(detail)[0]) > CARD_MAX_CHARS
+    assert card_text(_p(detail=detail)) == ""
+    assert card_text(_p(detail=detail, address="", region="")) == ""
+
+
 @pytest.mark.parametrize(("address", "region", "want"), [
     ("제주특별자치도 서귀포시 산방로 141 원앤온리", "서귀포시", "제주 서귀포시"),  # 도로명 뒤 상호는 동네가 아니다
     ("인천광역시 연수구 인권로 26 하늘다리 한정식", "연수구", "인천 연수구"),
