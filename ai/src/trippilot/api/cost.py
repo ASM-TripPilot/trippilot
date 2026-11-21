@@ -78,6 +78,16 @@ def bind_trip(trace_id: str, trip_id: str) -> None:
             _TRIP_BY_TRACE.popitem(last=False)
 
 
+def unbind_trip(trace_id: str) -> None:
+    """요청 종료 시 1회 — `bind_trip` 이 남긴 항목을 지운다(TraceMiddleware 가 `finally` 로 호출).
+
+    인증·유량 제한보다 먼저 도는 TraceMiddleware 는 401 로 끝날 요청도 미리 묶으므로,
+    끝나면 지워야 미인증 요청이 LRU 를 채워 멀쩍한 trace 를 밀어내지 않는다.
+    """
+    with _TRIP_LOCK:
+        _TRIP_BY_TRACE.pop(trace_id, None)
+
+
 class PriceConfigError(ValueError):
     """단가 설정 형식 오류 — 데이터/설정 버그라 폴백 대상이 아니다(기동 실패)."""
 

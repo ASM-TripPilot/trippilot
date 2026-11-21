@@ -416,6 +416,62 @@ def test_violation_indices_computed_by_scanning_itinerary() -> None:
     )
 
 
+def test_violation_locates_correct_day_when_same_poi_spans_two_days() -> None:
+    """같은 POI 가 두 날에 있고 1일차만 위반이면 slot_start 로 그 날을 가리킨다(#1 — poi_id 만으로는 항상 0일차였다)."""
+    poi = PoiId("44444444-4444-4444-8444-444444444444")
+    itinerary = {
+        "days": [
+            {"date": "2026-08-10", "slots": [{"poi_id": str(poi), "start_at": "11:00", "end_at": "12:00"}]},
+            {"date": "2026-08-11", "slots": [{"poi_id": str(poi), "start_at": "22:00", "end_at": "23:00"}]},
+        ],
+        "solve_mode": "OR_TOOLS",
+    }
+    orchestrator = FakeOrchestrator(
+        make_outcome(),
+        violations=[Violation(
+            code="HC1", slot_ref=poi, detail="영업시간 밖: 1320~1380", reason_code="OUT_OF_HOURS",
+            slot_start=datetime(2026, 8, 11, 22, 0, tzinfo=KST),
+        )],
+    )
+    with client(orchestrator) as c:
+        body = c.post(
+            "/ai/v1/itinerary/validate",
+            json={"itinerary": itinerary, "request_meta": BACKEND_REQUEST["request_meta"]},
+        ).json()
+
+    violation = body["violations"][0]
+    assert (violation["day_index"], violation["slot_index"]) == (1, 0)
+
+
+def test_violation_locates_correct_slot_when_same_poi_twice_in_one_day() -> None:
+    """같은 날 같은 POI 가 두 번이고 둘째 슬롯만 위반이면 slot_start 로 그 슬롯을 가리킨다(#1 — poi_id 만으로는 항상 첫 슬롯이었다)."""
+    poi = PoiId("55555555-5555-4555-8555-555555555555")
+    itinerary = {
+        "days": [
+            {"date": "2026-08-10", "slots": [
+                {"poi_id": str(poi), "start_at": "11:00", "end_at": "12:00"},
+                {"poi_id": str(poi), "start_at": "22:00", "end_at": "23:00"},
+            ]},
+        ],
+        "solve_mode": "OR_TOOLS",
+    }
+    orchestrator = FakeOrchestrator(
+        make_outcome(),
+        violations=[Violation(
+            code="HC1", slot_ref=poi, detail="영업시간 밖: 1320~1380", reason_code="OUT_OF_HOURS",
+            slot_start=datetime(2026, 8, 10, 22, 0, tzinfo=KST),
+        )],
+    )
+    with client(orchestrator) as c:
+        body = c.post(
+            "/ai/v1/itinerary/validate",
+            json={"itinerary": itinerary, "request_meta": BACKEND_REQUEST["request_meta"]},
+        ).json()
+
+    violation = body["violations"][0]
+    assert (violation["day_index"], violation["slot_index"]) == (0, 1)
+
+
 def test_unplaced_violation_indices_are_null() -> None:
     """HC3 미배치 위반: 슬롯이 없어서 위반인 것 — 인덱스는 null이 정직한 값(지어내지 않는다)."""
     unplaced = "99999999-9999-4999-8999-999999999999"

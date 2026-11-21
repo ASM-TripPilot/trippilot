@@ -18,7 +18,7 @@ notification=TRIP-836 · replan=재계획 연동 설계(A-4).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date as date_type
+from datetime import date as date_type, datetime
 from typing import Callable, Sequence, TypeVar
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -184,9 +184,15 @@ def to_payload(outcome: ItineraryOutcome) -> ItineraryPayload:
 
 
 def locate_slot(
-    days: Sequence[DayScheduleSchema], slot_ref: PoiId | str | None
+    days: Sequence[DayScheduleSchema], slot_ref: PoiId | str | None,
+    slot_start: datetime | None = None,
 ) -> tuple[int | None, int | None]:
-    """일정에서 `slot.poi_id == slot_ref`인 **첫 위치**의 (day_index, slot_index).
+    """일정에서 슬롯 위치 (day_index, slot_index) 를 찾는다.
+
+    `slot_start` 가 있으면 날짜·시각까지 대조한다 — 같은 POI 가 두 날 또는 같은 날
+    두 번 있으면 poi_id 만으로는 항상 **첫 슬롯**을 가리켜 다른 슬롯의 위반이 엉뚱한
+    곳에 뜬다. `slot_start` 가 없으면(HC3 — 위반 자체가 "그 시각 슬롯이 없다"는
+    뜻이라 대조할 시각이 없다) 종전처럼 poi_id 만으로 첫 위치를 찾는다.
 
     못 찾으면 (None, None) — 예: HC3 미배치 위반은 슬롯이 없어서 위반인 것이므로
     null이 정직한 값이다(지어내지 않는다). 도메인 타입은 건드리지 않고
@@ -195,6 +201,14 @@ def locate_slot(
     if slot_ref is None:
         return (None, None)
     ref = str(slot_ref)
+    if slot_start is not None:
+        for day_index, day in enumerate(days):
+            if day.date != slot_start.date():
+                continue
+            for slot_index, slot in enumerate(day.slots):
+                if str(slot.poi_id) == ref and slot.start_at == slot_start.time():
+                    return (day_index, slot_index)
+        return (None, None)
     for day_index, day in enumerate(days):
         for slot_index, slot in enumerate(day.slots):
             if str(slot.poi_id) == ref:
@@ -220,7 +234,7 @@ def to_violation(
     if isinstance(violation, PlacedViolation):
         day_index, slot_index = violation.day_index, violation.slot_index
     else:
-        day_index, slot_index = locate_slot(days, violation.slot_ref)
+        day_index, slot_index = locate_slot(days, violation.slot_ref, violation.slot_start)
     return ViolationSchema(
         code=violation.code,
         slot_ref=str(violation.slot_ref) if violation.slot_ref is not None else None,
