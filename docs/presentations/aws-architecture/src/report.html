@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TripPilot AWS 인프라 — 구조와 설계 강점</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="deck.css">
+<style>
+  /* 이 덱에서만 쓰는 배치 */
+  .meta { display: flex; border-top: 1.5px solid rgba(247,244,238,.35); }
+  .meta > div { flex: 1; padding: 22px 28px 0 0; }
+  .meta .k { font: 600 15px/1 var(--font-mono); letter-spacing: .14em; color: rgba(247,244,238,.6); text-transform: uppercase; }
+  .meta .v { font-size: 24px; margin-top: 12px; line-height: 1.45; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 44px 48px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 36px; }
+  .bar { display: flex; align-items: center; gap: 28px; background: var(--ink); color: #F7F4EE; border-radius: 14px; padding: 24px 32px; }
+  .bar .no { font: 700 18px/1 var(--font-mono); color: var(--orange); letter-spacing: .12em; white-space: nowrap; }
+  .bar b { font-size: 28px; white-space: nowrap; }
+  .bar span { font-size: 23px; color: rgba(247,244,238,.8); line-height: 1.5; }
+  .layers { display: flex; flex-direction: column; gap: 10px; }
+  .layer { display: grid; grid-template-columns: 290px 1fr; align-items: center; border-radius: 12px; padding: 16px 26px; background: #fff; border: 1.5px solid var(--line); }
+  .layer .k { font-size: 25px; font-weight: 800; }
+  .layer .k small { display: block; font: 600 14px/1.3 var(--font-mono); color: var(--muted); letter-spacing: .08em; margin-top: 4px; }
+  .layer p { font-size: 23px; line-height: 1.5; color: var(--ink-2); }
+  .layer:nth-child(1) { border-left: 8px solid #F2B79B; }
+  .layer:nth-child(2) { margin-left: 30px; border-left: 8px solid #EE9A73; }
+  .layer:nth-child(3) { margin-left: 60px; border-left: 8px solid #E8622C; }
+  .layer:nth-child(4) { margin-left: 90px; border-left: 8px solid #3E9E97; }
+  .layer:nth-child(5) { margin-left: 120px; border-left: 8px solid #1F8A84; }
+  .layer:nth-child(6) { margin-left: 150px; border-left: 8px solid #14213D; }
+  table.t.compact td { padding: 17px 16px; font-size: 24px; }
+  table.t td.cfg { font: 500 18px/1.45 var(--font-mono); color: #4A5368; white-space: normal; }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; }
+  .chips span { font-size: 19px; padding: 7px 14px; border-radius: 8px; background: #fff; border: 1.5px solid var(--line); font-weight: 600; }
+  .chips.ext span { background: transparent; border-style: dashed; }
+  .gate { display: flex; align-items: stretch; }
+  .gate .st { flex: 1; background: #fff; border: 1.5px solid var(--line); border-radius: 12px; padding: 20px 16px; position: relative; }
+  .gate .st + .st { margin-left: 28px; }
+  .gate .st + .st::before { content: "→"; position: absolute; left: -23px; top: 50%; transform: translateY(-50%); font: 700 20px/1 var(--font-mono); color: var(--orange); }
+  .gate .st .no { font: 700 15px/1 var(--font-mono); color: var(--orange); }
+  .gate .st b { display: block; font-size: 24px; margin-top: 10px; line-height: 1.3; }
+  .gate .st span { display: block; font-size: 18.5px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+  .gate .st.lock { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .gate .st.lock span { color: rgba(255,255,255,.75); }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 36px; }
+  .stat .num { font-size: 84px; }
+  .case { background: #fff; border: 1.5px solid var(--line); border-left: 6px solid var(--orange); border-radius: 0 14px 14px 0; padding: 26px 30px; }
+  .case .k { font: 600 16px/1 var(--font-mono); letter-spacing: .12em; color: var(--orange); }
+  .case p { font-size: 24px; line-height: 1.6; color: var(--ink-2); margin-top: 12px; }
+  .ns2 { border: 2px dashed var(--orange); border-radius: 14px; padding: 22px 26px; background: #fff; }
+  .ns2 h3 { font-size: 29px; }
+  .ns2 p { font-size: 22px; color: var(--ink-2); margin-top: 6px; line-height: 1.5; }
+  .shell { border: 3px solid var(--ink); border-radius: 20px; padding: 36px 28px 24px; position: relative; }
+  .shell .lbl { position: absolute; top: -18px; left: 24px; background: #FBFAF7; padding: 0 12px; font: 700 17px/34px var(--font-mono); letter-spacing: .08em; }
+</style>
+</head>
+<body class="theme-report">
+<main class="deck" aria-label="TripPilot AWS 인프라 설계 강점">
+
+<!-- 1. 표지 -->
+<section class="slide dark">
+  <div class="fig fade-left" style="right:0;top:0;width:1200px;height:1080px;opacity:.45;mix-blend-mode:multiply"><img src="../assets/img/cover.webp" alt="" width="1600" height="900" style="object-position:80% 50%"></div>
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> 최종 보고 · 인프라</span><span class="count"></span></div>
+  <div class="pad" style="justify-content:center;bottom:250px">
+    <div class="kicker rv">AWS Infrastructure Architecture</div>
+    <h1 class="title rv d1" style="font-size:96px">AWS 인프라 구조와<br>설계 강점</h1>
+    <p class="lead rv d2">출시 서비스를 받치는 구조, 그리고 그 구조를 고른 이유</p>
+  </div>
+  <div class="meta rv d3" style="position:absolute;left:96px;right:96px;bottom:90px">
+    <div><div class="k">기준</div><div class="v">develop 브랜치 7ce2a53<br>2026-10-30</div></div>
+    <div><div class="k">정본</div><div class="v mono" style="font-size:20px">infra/terraform/stack<br>deploy/eks/chart</div></div>
+    <div><div class="k">배포 리전</div><div class="v">AWS 서울(ap-northeast-2)</div></div>
+    <div><div class="k">운영 형태</div><div class="v">EKS Auto Mode<br>Terraform + Helm</div></div>
+  </div>
+</section>
+
+<!-- 2. 요약 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> 최종 보고 · 인프라</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">Summary</div>
+    <h2 class="rv d1">작은 팀이 운영할 수 있는 규모로,<br>큰 서비스와 같은 원칙을 지킵니다</h2>
+    <div>
+      <div class="grid3 rv d2">
+        <div class="pt"><div class="no">01</div><h3>3계층 네트워크 격리</h3><p>DB·캐시 서브넷에는 인터넷으로 나가는 경로가 아예 없습니다.</p></div>
+        <div class="pt"><div class="no">02</div><h3>중단을 줄이는 이중화와 복구</h3><p>복제본 이중화, 계획된 교체 중 최소 개수 유지, 배포 실패 시 자동 롤백을 갖췄습니다.</p></div>
+        <div class="pt"><div class="no">03</div><h3>키 없는 권한 모델</h3><p>저장소와 파드 어디에도 오래 쓰는 AWS 키가 없습니다.</p></div>
+        <div class="pt"><div class="no">04</div><h3>보호가 기본인 데이터</h3><p>운영 DB는 암호화, 14일 시점 복구, 삭제 보호, 최종 스냅숏이 기본값입니다.</p></div>
+        <div class="pt"><div class="no">05</div><h3>코드형 인프라와 배포 게이트</h3><p>정기 릴리스는 개발 서버 배포에 성공한 코드만 운영에 나갑니다.</p></div>
+        <div class="pt"><div class="no">06</div><h3>조용한 실패까지 잡는 관측</h3><p>로그에서 이상 징후를 세어 Slack으로 바로 알립니다.</p></div>
+      </div>
+      <div class="bar mt-l rv d3"><span class="no">07</span><b>비용에 비례하는 설계</b><span>지금은 필요한 만큼만 쓰고, 운영 규모에 맞춘 3 AZ·Multi-AZ 설정을 미리 마련해 두었습니다.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. 전체 구조도 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> 최종 보고 · 인프라</span><span class="count"></span></div>
+  <div class="pad" style="top:118px;bottom:44px">
+    <div class="kicker rv">Architecture</div>
+    <h2 class="rv d1" style="font-size:48px;margin-bottom:20px">전체 구조도</h2>
+    <div class="row grow" style="gap:40px">
+      <div class="rv d2" style="width:1300px;height:780px;flex:none">
+        <img class="zoomable" data-zoom="" src="../assets/img/aws-architecture.webp" alt="TripPilot AWS 아키텍처 전체 구조도" width="1300" height="780" style="width:1300px;height:780px;border-radius:10px;border:1.5px solid var(--line);background:#fff">
+      </div>
+      <div class="col rv d3">
+        <p class="kicker" style="margin-bottom:14px">AWS 관리형 서비스</p>
+        <div class="chips">
+          <span>VPC</span><span>NLB</span><span>EKS</span><span>ECR</span><span>RDS</span><span>ElastiCache</span><span>Secrets Manager</span><span>IAM</span><span>ACM</span><span>CloudWatch</span><span>SNS</span><span>Chatbot</span><span>S3</span><span>CloudFormation</span><span>Bedrock</span><span>CloudFront</span>
+        </div>
+        <p class="kicker mt" style="margin-bottom:14px">외부 연동</p>
+        <div class="chips ext"><span>LLM</span><span>지도·경로</span><span>공공데이터</span><span>Expo Push</span><span>소셜 로그인</span></div>
+        <p class="small mt">그림을 누르면 원본 크기로 볼 수 있습니다.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 4. 강점 01 격리 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> 최종 보고 · 인프라</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">강점 01 · 다층 방어</div>
+    <h2 class="rv d1">여섯 겹의 통제로 데이터 계층을 지킵니다</h2>
+    <div class="row rv d2" style="gap:56px;align-items:center">
+      <div class="layers" style="flex:1.65">
+        <div class="layer"><div class="k">TLS 종단<small>NLB · ACM</small></div><p>앱으로 들어오는 입구는 HTTPS 443 하나입니다.</p></div>
+        <div class="layer"><div class="k">API 게이트웨이<small>nginx</small></div><p>/api와 상태 확인만 통과시키고 나머지는 404로 막습니다. IP마다 초당 10건(순간 60건)으로 속도를 제한합니다.</p></div>
+        <div class="layer"><div class="k">파드 간 허용 목록<small>NetworkPolicy</small></div><p>backend는 gateway·ai와 배포용 Job에서만, ai는 backend와 점검 Job에서만 연결을 받습니다.</p></div>
+        <div class="layer"><div class="k">컨테이너 잠금<small>securityContext</small></div><p>root 실행 금지, 읽기 전용 파일시스템, 권한 상승 차단, capability 전부 제거.</p></div>
+        <div class="layer"><div class="k">보안 그룹<small>Security Group</small></div><p>DB 5432와 캐시 6379는 EKS 노드에서 오는 연결만 받습니다.</p></div>
+        <div class="layer" style="background:var(--ink);color:#fff;border-color:var(--ink)"><div class="k">격리 서브넷<small style="color:rgba(255,255,255,.6)">Data subnet</small></div><p style="color:rgba(255,255,255,.85)">인터넷·NAT 기본 경로가 없습니다. DB는 SSL을, Redis는 TLS를 강제합니다.</p></div>
+      </div>
+      <div class="col">
+        <p style="font-size:27px">한 겹이 뚫리더라도 다음 겹이 막도록 쌓았습니다. 특히 <strong>데이터 계층의 라우팅 테이블에는 인터넷·NAT로 가는 기본 경로가 없습니다.</strong> 보안 그룹을 잘못 열어도 바깥과 곧바로 이어지지 않습니다.</p>
+        <p class="mt-s" style="font-size:25px;color:var(--ink-2)">서비스 토큰과 JWT 서명키가 없으면 앱이 아예 기동하지 않도록 해, 인증 설정이 빠진 채 운영되는 일도 막습니다.</p>
+        <div class="ev">network.tf · data.tf · gateway-config.yaml · network-policy.yaml · _helpers.tpl · backend.yaml</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 강점 02 무중단 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> 최종 보고 · 인프라</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">강점 02 · 이중화와 복구</div>
+    <h2 class="rv d1">장애 상황마다 대응 장치를 하나씩 정해 두었습니다</h2>
+    <div class="rv d2">
+      <table class="t compact">
+        <thead><tr><th style="width:290px">상황</th><th>대응</th><th style="width:540px">설정</th></tr></thead>
+        <tbody>
+          <tr><td>노드 교체·통합</td><td>복제본 2개와 PDB로 최소 1개를 남깁니다</td><td class="cfg">replicas: 2 · PDB minAvailable: 1</td></tr>
+          <tr><td>노드 장애</td><td>EKS Auto Mode가 노드를 교체하고, 복제본은 AZ·노드별로 나눠 배치되도록 우선합니다</td><td class="cfg">topologySpread: zone · hostname</td></tr>
+          <tr><td>트래픽 증가</td><td>AI 서버는 CPU 요청 대비 평균 사용률을 보고 2~3개 사이에서 늘고 줄어듭니다</td><td class="cfg">HPA 2~3 · 목표 70% · metrics-server</td></tr>
+          <tr><td>배포 실패</td><td>API 파드는 새 파드가 준비된 뒤 옛 파드를 내립니다. Helm 배포가 실패하면 이전 릴리스로 되돌립니다</td><td class="cfg">maxUnavailable: 0 · helm --atomic</td></tr>
+          <tr><td>긴 요청 중 종료</td><td>일정 생성처럼 오래 걸리는 요청이 마무리될 시간을 최대 660초 둡니다</td><td class="cfg">종료 유예 660초 · preStop drain</td></tr>
+          <tr><td>LLM 공급자 장애</td><td>규칙 기반 폴백으로 응답을 이어 가고 생성 시간에 상한을 둡니다</td><td class="cfg">AI 폴백(INV-4) · 데드라인 15초/60초</td></tr>
+        </tbody>
+      </table>
+      <div class="ev">values-dev.yaml · pdb.yaml · hpa.yaml · _helpers.tpl · .github/workflows/aws-deploy.yml</div>
+    </div>
+  </div>
+</section>
+
+<!-- 6. 강점 03 키 없는 권한 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> 최종 보고 · 인프라</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">강점 03 · 키 없는 권한 모델</div>
+    <h2 class="rv d1">오래 쓰는 AWS 키를 어디에도 두지 않습니다</h2>
+    <div>
+      <div class="grid4 rv d2">
+        <div class="pt"><div class="no">CI/CD</div><h3>GitHub OIDC</h3><p>배포 실행마다 단기 자격을 받습니다. 지정된 GitHub 환경의 실행만 역할을 맡을 수 있습니다.</p></div>
+        <div class="pt"><div class="no">CLUSTER</div><h3>EKS Access Entry</h3><p>API 인증 모드만 씁니다. 클러스터를 만든 사람에게 자동으로 붙는 관리자 권한도 껐습니다.</p></div>
+        <div class="pt"><div class="no">WORKLOAD</div><h3>Pod Identity</h3><p>AI 파드에는 Bedrock 자체 모델 호출 권한 하나만 줍니다. 로그 수집기도 역할을 따로 씁니다.</p></div>
+        <div class="pt"><div class="no">CHATOPS</div><h3>Chatbot 가드레일</h3><p>Slack에서 할 수 있는 일의 상한을 CloudWatch 읽기 권한으로 묶었습니다.</p></div>
+      </div>
+      <div class="bar mt-l rv d3" style="background:#fff;color:var(--ink);border:1.5px solid var(--line)">
+        <span class="no">SECRETS</span>
+        <span style="color:var(--ink-2)">비밀값은 Terraform state와 Helm values에 넣지 않고 Secrets Manager에서 Kubernetes Secret으로 동기화합니다. 비어 있는 값은 배포 도구가 생성합니다. RDS 관리자 암호는 앱 파드에 전달하지 않고 런타임과 마이그레이션 DB 계정을 나눴습니다.</span>
+      </div>
+      <div class="ev">infra/bootstrap/template.json · eks.tf · registry-secrets.tf · alerts.tf · deploy/eks/runtime_secrets.py</div>
+    </div>
+  </div>
+</section>
+
+<!-- 7. 강점 04 데이터 보호 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> 최종 보고 · 인프라</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">강점 04 · 데이터 보호</div>
+    <h2 class="rv d1">보호 장치는 '켜져 있는 것'이 기본값입니다</h2>
+    <div>
+      <div class="stats rv d2">
+        <div class="stat"><div class="num">14<small>일</small></div><div class="lbl">운영 DB를 특정 시점으로<br>되돌릴 수 있는 기간</div></div>
+        <div class="stat"><div class="num">30<small>일</small></div><div class="lbl">삭제한 운영 비밀값을<br>되살릴 수 있는 기간</div></div>
+        <div class="stat"><div class="num">2<small>중</small></div><div class="lbl">운영 DB를 지워도 남는<br>최종 스냅숏과 자동 백업</div></div>
+        <div class="stat"><div class="num">0<small>개</small></div><div class="lbl">데이터 서브넷의<br>인터넷·NAT 기본 경로</div></div>
+      </div>
+      <div class="row mt-l rv d3" style="gap:56px">
+        <div class="col">
+          <h3>빠뜨리면 보호가 켜지도록</h3>
+          <p class="mt-s" style="font-size:25px;color:var(--ink-2)">삭제 보호·백업 보존을 묶은 스위치의 기본값은 '켜짐'입니다. 설정을 잊으면 안전한 쪽으로 틀리게 했습니다.</p>
+        </div>
+        <div class="col">
+          <h3>지울 수 있어도 증거는 남도록</h3>
+          <p class="mt-s" style="font-size:25px;color:var(--ink-2)">스위치를 꺼서 DB를 지울 수 있게 되더라도 최종 스냅숏과 자동 백업은 반드시 남깁니다. DB와 캐시는 저장할 때도, 주고받을 때도 암호화합니다.</p>
+        </div>
+      </div>
+      <div class="ev">infra/terraform/stack/data.tf · variables.tf(data_protection_enabled) · registry-secrets.tf</div>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 강점 05 배포 게이트 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> 최종 보고 · 인프라</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">강점 05 · 코드형 인프라와 배포 게이트</div>
+    <h2 class="rv d1">인프라는 코드로 관리하고 운영 반영에는 관문을 둡니다</h2>
+    <div>
+      <div class="gate rv d2">
+        <div class="st lock"><div class="no">GATE</div><b>브랜치·환경 검사</b><span>main→운영<br>develop→개발</span></div>
+        <div class="st lock"><div class="no">GATE</div><b>개발 배포 확인</b><span>72시간 안 성공한 개발<br>배포와 코드가 같아야 통과</span></div>
+        <div class="st"><div class="no">03</div><b>plan → apply</b><span>저장한 plan만<br>적용</span></div>
+        <div class="st"><div class="no">04</div><b>이미지 발행</b><span>덮어쓰기 금지 태그<br>푸시 시 취약점 스캔</span></div>
+        <div class="st"><div class="no">05</div><b>비밀값·DB 준비</b><span>멱등 실행<br>관리자 자격 즉시 삭제</span></div>
+        <div class="st"><div class="no">06</div><b>Helm 배포</b><span>실패하면<br>자동 롤백</span></div>
+        <div class="st"><div class="no">07</div><b>연결 확인</b><span>클러스터 안에서<br>API·AI 점검</span></div>
+      </div>
+      <div class="grid3 mt-l rv d3">
+        <div class="pt"><h3>핵심 인프라는 코드로</h3><p>VPC부터 알람까지 Terraform, 권한·상태 버킷은 CloudFormation, 앱은 Helm 차트로 관리합니다. 웹 호스팅과 인증서만 최초 1회 따로 준비합니다.</p></div>
+        <div class="pt"><h3>상태 파일도 안전하게</h3><p>환경마다 상태 버킷을 따로 두고 버전 관리·암호화·잠금을 켰습니다. destroy 워크플로는 만들지 않았습니다.</p></div>
+        <div class="pt"><h3>사람이 누르는 서버 배포</h3><p>서버 인프라와 EKS 앱은 push로 바뀌지 않습니다. 누가 언제 실행했는지 기록이 남는 수동 실행으로만 반영합니다.</p></div>
+      </div>
+      <p class="small mt-s">개발 배포 확인은 정기 릴리스 기준입니다. 긴급 수정(hotfix)은 Jira 키와 사유를 기록한 뒤 이 확인을 건너뛰고 사후에 검증합니다.</p>
+      <div class="ev">.github/workflows/aws-deploy.yml · infra/scripts/deploy_gate.py · workflow_config.py · docs/guides/aws-eks-deployment.md</div>
+    </div>
+  </div>
+</section>
+
+<!-- 9. 강점 06 관측 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> 최종 보고 · 인프라</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">강점 06 · 관측과 알람</div>
+    <h2 class="rv d1">장애 징후를 로그와 지표에서 잡아 팀에 바로 알립니다</h2>
+    <div class="row rv d2" style="gap:56px">
+      <div style="flex:1.45">
+        <table class="t compact">
+          <thead><tr><th>알람</th><th>조건</th><th>잡아내는 것</th></tr></thead>
+          <tbody>
+            <tr><td>게이트웨이 5xx</td><td>5분 10건 이상</td><td>서버 오류 급증</td></tr>
+            <tr><td>리프레시 토큰 재사용</td><td>1건이라도</td><td>계정 탈취 신호</td></tr>
+            <tr><td>Claude·GPT 호출 실패</td><td>30분 5건 이상</td><td>폴백에 가려진 AI 품질 저하</td></tr>
+            <tr><td>파드 재시작 · 노드 장애</td><td>재시작 증가 · NotReady 10분</td><td>OOM·기동 실패·노드 불량</td></tr>
+            <tr><td>DB CPU · 저장공간 · 연결</td><td>80%(15분) · 여유 1GiB · 150</td><td>용량 한계와 연결 누수</td></tr>
+          </tbody>
+        </table>
+        <p class="small mt-s">컨테이너 로그는 CloudWatch에 90일 보관하고 알람은 SNS → AWS Chatbot → Slack으로 전달합니다.</p>
+      </div>
+      <div class="col">
+        <div class="case">
+          <div class="k">운영 사례 · 2026-10-28</div>
+          <p>외부 LLM 인증 오류로 하루 동안 호출 383건이 모두 실패했지만 폴백 덕분에 서비스는 정상 응답했고 알람도 울리지 않았습니다.</p>
+          <p>이 사례를 계기로 LLM 호출 실패를 직접 세는 알람을 추가했습니다. <strong>장애에서 배운 것을 규칙으로 남기는 것</strong>이 저희 운영 방식입니다.</p>
+        </div>
+        <div class="ev">infra/terraform/stack/alerts.tf</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 10. 강점 07 비용과 확장 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> 최종 보고 · 인프라</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">강점 07 · 비용에 비례하는 설계</div>
+    <h2 class="rv d1">지금은 필요한 만큼만 쓰고, 운영 규모 설정은 미리 마련했습니다</h2>
+    <div class="row rv d2" style="gap:64px">
+      <div class="col">
+        <h3>지금 아끼는 방법</h3>
+        <ul class="check mt-s">
+          <li>DB·캐시에 ARM 기반 Graviton(t4g) 인스턴스</li>
+          <li>개발 서버는 검증에 성공하면 0대로 축소</li>
+          <li>메모리 5GiB를 요청하는 임베딩은 필요할 때만 배포</li>
+          <li>알림 문구 모델은 Bedrock 서버리스, 유휴 시 추론 용량 0</li>
+          <li>실측으로 자원 요청값 조정(backend CPU 500m → 200m)</li>
+          <li>로그 보존 기한을 명시해 무기한 과금 방지</li>
+        </ul>
+      </div>
+      <div class="col" style="flex:1.1">
+        <h3>운영 규모로 올릴 때</h3>
+        <table class="t compact mt-s">
+          <thead><tr><th>항목</th><th>지금(dev)</th><th>prd 설정(준비 완료)</th></tr></thead>
+          <tbody>
+            <tr><td>가용 영역</td><td>2</td><td>3</td></tr>
+            <tr><td>NAT 게이트웨이</td><td>1개 공유</td><td>AZ마다 1개</td></tr>
+            <tr><td>PostgreSQL</td><td>단일 AZ · t4g.small</td><td>Multi-AZ · t4g.medium</td></tr>
+            <tr><td>Redis</td><td>1노드</td><td>3노드 · 자동 장애조치</td></tr>
+          </tbody>
+        </table>
+        <p class="small mt-s">prd에서 3 AZ와 AZ별 NAT를 빼먹으면 Terraform 변수 검증에서 실패하도록 막아 두었습니다.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 11. AI 워크로드 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> 최종 보고 · 인프라</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">AI 워크로드</div>
+    <h2 class="rv d1">AI 기능도 인프라 원칙 안에서 돌아갑니다</h2>
+    <div>
+      <div class="grid4 rv d2">
+        <div class="pt"><div class="no">분리 배포</div><h3>ai · embedding</h3><p>무거운 임베딩 모델(메모리 5GiB)을 따로 배포해 자원을 나누고, 임베딩이 멈추면 규칙 기반 추천으로 전환합니다.</p></div>
+        <div class="pt"><div class="no">자체 모델</div><h3>Bedrock Custom Model Import</h3><p>알림 문구는 직접 파인튜닝한 Qwen3-4B가 씁니다. 알림 문구 블라인드 비교에서 235B 교사 모델에 12:8로 앞섰습니다.</p></div>
+        <div class="pt"><div class="no">검증된 값만</div><h3>조립 엔진</h3><p>화면에 나가는 시간과 순서는 LLM이 아니라 최적화 엔진이 검증한 값입니다.</p></div>
+        <div class="pt"><div class="no">실패 대비</div><h3>폴백 + 알람</h3><p>Claude·GPT 호출이 실패하면 규칙 기반으로 응답하고, 실패 건수는 알람으로 따로 셉니다.</p></div>
+      </div>
+      <div class="ev mt">ai/docs/ai-models-for-clients.md · deploy/eks/chart/templates/{ai,embedding}.yaml · alerts.tf</div>
+    </div>
+  </div>
+</section>
+
+<!-- 12. 운영/개발 분리 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> 최종 보고 · 인프라</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">운영 · 개발 분리</div>
+    <h2 class="rv d1">클러스터 하나로 비용을 아끼고 섞이면 안 되는 것은 나눴습니다</h2>
+    <div class="row rv d2" style="gap:64px;align-items:center">
+      <div style="flex:1.15">
+        <div class="shell">
+          <div class="lbl">EKS 클러스터 · NAT · Redis 공유</div>
+          <div class="row" style="gap:22px">
+            <div class="col ns2"><h3>trippilot</h3><p>운영 서버</p><p>main 브랜치 배포</p><p>운영 RDS · 운영 시크릿</p></div>
+            <div class="col ns2" style="border-color:var(--teal)"><h3>trippilot-dev</h3><p>개발 서버</p><p>develop 브랜치 배포</p><p>별도 RDS · 별도 시크릿</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="col">
+        <ul class="check">
+          <li>개발 DB는 별도 인스턴스라 데이터 변경·마이그레이션·부하가 운영 DB로 번지지 않습니다</li>
+          <li>도메인·인증서·시크릿·Bedrock 권한 연결을 따로 둡니다</li>
+          <li>앱 로그·재시작 알람은 운영 네임스페이스만 셉니다</li>
+          <li>개발 배포는 공유 인프라를 바꾸지 않고, 실제 푸시 발송도 강제로 끕니다</li>
+          <li>개발 서버는 검증에 성공하면 0대로 내립니다</li>
+        </ul>
+        <div class="ev">variables.tf(dev_target_enabled) · values-dev-target.yaml · alerts.tf · workflow_config.py</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 13. 검증 체계 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> 최종 보고 · 인프라</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">검증 체계</div>
+    <h2 class="rv d1">인프라 코드도 테스트를 통과해야 AWS에 닿습니다</h2>
+    <div class="rv d2">
+      <table class="t compact">
+        <thead><tr><th style="width:420px">검증</th><th>지키는 것</th></tr></thead>
+        <tbody>
+          <tr><td class="mono" style="font-size:21px">terraform test</td><td>공인 IP 금지, DB 암호화·삭제 보호·백업 14일, 운영과 개발 자원 분리가 지켜지는지</td></tr>
+          <tr><td class="mono" style="font-size:21px">infra/tests</td><td>워크플로 계약, 운영 배포 게이트, 환경 변수 파일 검증</td></tr>
+          <tr><td class="mono" style="font-size:21px">infra/bootstrap/tests</td><td>IAM 역할·신뢰 정책 템플릿이 최소 권한을 지키는지</td></tr>
+          <tr><td class="mono" style="font-size:21px">deploy/eks/chart/tests</td><td>Helm 차트 렌더링 결과(PDB·HPA·NetworkPolicy 등)</td></tr>
+          <tr><td class="mono" style="font-size:21px">deploy/eks/tests</td><td>비밀값 동기화·DB 초기화·스모크 점검 도구</td></tr>
+        </tbody>
+      </table>
+      <p class="small mt">인프라를 건드리는 PR마다 <span class="mono">infra-validate</span> 워크플로가 Terraform 오프라인 검증, Helm 매니페스트 검증, 위 테스트를 자동으로 돌립니다.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 14. 정리 -->
+<section class="slide dark">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> 최종 보고 · 인프라</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">Conclusion</div>
+    <h2 class="rv d1">정리</h2>
+    <div class="row rv d2" style="gap:72px">
+      <div class="col" style="flex:1.3">
+        <ul class="check" style="color:#F7F4EE">
+          <li><strong>격리</strong> — 데이터 계층은 인터넷 경로가 없는 격리 서브넷에 있습니다</li>
+          <li><strong>회복</strong> — 이중화·PDB·자동 롤백으로 노드 교체와 배포 때의 중단을 줄입니다</li>
+          <li><strong>권한</strong> — 장기 키 없이 OIDC와 Pod Identity로 필요한 권한만 줍니다</li>
+          <li><strong>보호</strong> — 운영 DB는 백업·삭제 보호·최종 스냅숏이 기본값입니다</li>
+          <li><strong>재현</strong> — 핵심 인프라가 코드이고 운영 반영에는 검증 게이트가 있습니다</li>
+          <li><strong>관측</strong> — 조용한 실패까지 Slack으로 알립니다</li>
+          <li><strong>비용</strong> — 지금 규모에 맞춰 쓰고, 운영 규모 설정은 미리 마련했습니다</li>
+        </ul>
+      </div>
+      <div class="col">
+        <p class="kicker" style="margin-bottom:18px">다음 단계</p>
+        <div class="pt" style="border-color:rgba(247,244,238,.5)"><h3 style="color:#F7F4EE">prd 스택 분리</h3><p style="color:rgba(247,244,238,.78)">규모 설정은 준비돼 있어, 트래픽이 늘면 환경 준비와 데이터 전환 검증을 거쳐 적용합니다.</p></div>
+        <div class="pt mt" style="border-color:rgba(247,244,238,.5)"><h3 style="color:#F7F4EE">캐시 계층 활성화</h3><p style="color:rgba(247,244,238,.78)">TLS Redis는 이미 연결돼 있어 어댑터 구현과 함께 켭니다.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+<div class="progress" aria-hidden="true"><i></i></div>
+<div class="hint" aria-hidden="true">← → 이동 · F 전체 화면 · 구조도 클릭 시 확대</div>
+<div class="lightbox" tabindex="-1" role="dialog" aria-label="구조도 크게 보기"><img alt="TripPilot AWS 아키텍처 전체 구조도(확대)"></div>
+<script src="deck.js"></script>
+</body>
+</html>
