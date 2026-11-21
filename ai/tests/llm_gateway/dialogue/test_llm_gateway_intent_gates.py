@@ -25,7 +25,12 @@ from trippilot.llm_gateway.gates.dialogue.paraphrase import ParaphraseGate
 from trippilot.llm_gateway.gateway import GatewayFacade
 from trippilot.llm_gateway.prompts import PromptRegistry
 from trippilot.domain.common import TraceId
-from trippilot.domain.dialogue.dialogue import specs_of, tool_specs, tool_specs_json
+from trippilot.domain.dialogue.dialogue import (
+    missing_arguments,
+    specs_of,
+    tool_specs,
+    tool_specs_json,
+)
 from trippilot.domain.dialogue.intent import ROUTABLE_INTENTS, Intent, IntentDraft, MatchRoute
 from trippilot.domain.llm.llm import LlmFeature, ModelTier
 from trippilot.domain.observability import FallbackEvent, GateDropEvent, LlmCallRecord
@@ -182,9 +187,10 @@ def test_intent_gate_strips_code_fence() -> None:
         ('{"intent": "MAKE_COFFEE"}', "closed_set_violation"),  # INV-1 동형 — 라벨 오염
         ('{"intent": 3}', "closed_set_violation"),
         ('{"intent": "GET_WEATHER", "slots": []}', "slots가 객체가 아님"),
-        # 중첩으로 검사를 우회하지 못한다 (평면 강제)
-        ('{"intent": "GET_WEATHER", "slots": {"a": {"b": 1}}}', "평면 스칼라가 아님"),
-        ('{"intent": "GET_WEATHER", "slots": {"a": [1]}}', "평면 스칼라가 아님"),
+        # 중첩으로 검사를 우회하지 못한다 (평면 강제) — **표 안** 키(`date`)라야 한다.
+        # 표 밖 키였다면 #4 수정 뒤로는 그 키만 버려지고 의도가 산다(아래 §#4+r04 참고).
+        ('{"intent": "GET_WEATHER", "slots": {"date": {"b": 1}}}', "평면 스칼라가 아님"),
+        ('{"intent": "GET_WEATHER", "slots": {"date": [1]}}', "평면 스칼라가 아님"),
         ('{"intent": "GET_WEATHER", "confidence": "높음"}', "숫자가 아님"),
         ('{"intent": "GET_WEATHER", "confidence": true}', "숫자가 아님"),  # bool ⊂ int 차단
         ('{"intent": "GET_WEATHER", "confidence": 87}', "[0,1] 밖"),  # 백분율 오해 = 과신 방지
@@ -333,6 +339,36 @@ def test_argument_without_a_vocabulary_is_not_value_checked() -> None:
     outcome = _intent(json.dumps({
         "intent": "REPLAN", "slots": {"reason": ["날씨"], "free_text": "실내 위주로"}}))
     assert outcome.value.slots == {"reason": ("날씨",), "free_text": "실내 위주로"}
+
+
+# ── #4+r04: 표 밖 키 값 모양·빈 인자 — 사전 필터가 두 루프 앞에서 걷어낸다 ──────
+
+
+def test_out_of_table_key_with_list_value_drops_only_that_key_not_the_intent() -> None:
+    """표 밖 키(`extra`)의 값이 목록이어도 타입 검사가 먼저 터지지 않고 그 키만 버린다 —
+    종전엔 표 필터링 전에 모양 검사가 돌아 ValueError 로 의도 전체가 폴백했다."""
+    outcome = _intent(json.dumps({
+        "intent": "SHOW_SCHEDULE", "slots": {"date": "오늘", "extra": ["a", "b"]}}))
+    assert outcome.error is None
+    assert outcome.value.intent is Intent.SHOW_SCHEDULE
+    assert outcome.value.slots == {"date": "오늘"}
+
+
+def test_empty_string_required_argument_is_treated_as_missing_and_triggers_clarify() -> None:
+    """분류 LLM 이 필수 인자를 `""` 로 내도 "채워짐"으로 오판하지 않는다 — `missing_arguments`
+    가 잡아야 되묻기(ARGUMENT_CLARIFY)로 가고, 안 그러면 "조회 실패" 템플릿이 바로 나간다."""
+    outcome = _intent(json.dumps({"intent": "GET_DISTANCE", "slots": {"destination": ""}}))
+    assert outcome.error is None
+    assert outcome.value.slots == {}  # 빈 문자열은 "안 준 것"
+    assert missing_arguments(Intent.GET_DISTANCE, frozenset(outcome.value.slots)) == ("destination",)
+
+
+def test_in_table_key_with_malformed_list_still_drops_the_whole_response() -> None:
+    """표 안 키(`date`)에 모양이 깨진 목록이 오면 여전히 전량 드롭 — 의도 보존 선이 아니라
+    형식 자체가 깨진 경우다(바꾸지 않는다)."""
+    outcome = _intent(json.dumps({"intent": "SHOW_SCHEDULE", "slots": {"date": ["오늘"]}}))
+    assert outcome.error is not None and "평면 스칼라가 아님" in outcome.error
+    assert not outcome.value
 
 
 # ── PARAPHRASE 게이트 ───────────────────────────────────────────────────

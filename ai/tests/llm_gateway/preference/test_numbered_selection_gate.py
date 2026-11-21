@@ -10,12 +10,16 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
+import pytest
+
 from trippilot.domain.common import GeoPoint, PoiId, TraceId
 from trippilot.domain.llm.llm import CandidatePool, LlmFeature
 from trippilot.domain.poi.poi import DataQuality, Poi, PoiCategory, PoiSource
 from trippilot.domain.persona import PersonaSummary
 from trippilot.domain.common import BudgetLevel
-from trippilot.llm_gateway.gates.preference.numbered_selection import NumberedScoringGate, NumberedSelectionGate, numbered
+from trippilot.llm_gateway.gates.preference.numbered_selection import (
+    NumberedScoringGate, NumberedSelectionGate, _as_index, numbered,
+)
 from trippilot.llm_gateway.workers.preference.preference import build_prompt_vars
 
 _NOW = datetime(2026, 10, 21, tzinfo=timezone.utc)
@@ -59,6 +63,18 @@ def test_모양이_틀리면_종전과_같은_파싱_실패() -> None:
     out = NumberedSelectionGate().apply("not json", _pool(), feature=LlmFeature.REPLAN_COMPOSITION,
                                         trace_id=TraceId("t"), now=_NOW)
     assert out.value == () and out.error.startswith("parse_error")
+
+
+@pytest.mark.parametrize("value", ["①", "②", "③", "²", "Ⅳ"])
+def test_유니코드_숫자_문자는_isdigit_True_인데_int_가_못_읽어_None_이다(value: str) -> None:
+    """`"①".isdigit()` 는 True 인데 `int("①")` 는 ValueError — 예외 없이 None 이어야 한다."""
+    assert _as_index(value) is None
+
+
+def test_유니코드_숫자_번호는_그_항목만_버려지고_나머지는_산다() -> None:
+    out = _apply([{"no": "①", "reason": "x"}, {"no": 2, "reason": "y"}])
+    assert [str(p.poi_id) for p in out.value] == ["b-uuid-2"]
+    assert out.drop_event is not None and out.drop_event.dropped_count == 1
 
 
 # ── PREFERENCE_SCORING (프롬프트 0.4.0) — 같은 번호 규칙, 안쪽은 ClosedSetGate ──

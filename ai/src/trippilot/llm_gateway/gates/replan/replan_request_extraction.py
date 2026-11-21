@@ -120,7 +120,12 @@ class ReplanRequestExtractionGate:
         cats: dict[str, ExtractedCategory] = {}  # 같은 종류가 두 번 오면 앞의 것
         raw_cats = data.get("categories", [])
         for item in (raw_cats if isinstance(raw_cats, list) else [])[:_MAX_CATEGORIES]:
-            if not isinstance(item, dict) or item.get("category") not in _CATEGORIES:
+            if not isinstance(item, dict):
+                continue
+            category = item.get("category")
+            # `in frozenset` 는 해시 가능해야 한다 — list/dict 가 오면 그대로 쓰면 TypeError 로
+            # 전체(장소 포함)가 날아간다. 모양이 틀린 건 이 항목만 버린다(항목 격리 설계 그대로).
+            if not isinstance(category, str) or category not in _CATEGORIES:
                 continue
             count = item.get("count")
             if count is not None and not (type(count) is int and 1 <= count <= _MAX_COUNT):

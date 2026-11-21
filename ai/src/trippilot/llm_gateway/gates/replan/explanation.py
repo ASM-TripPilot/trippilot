@@ -8,11 +8,13 @@ from datetime import datetime
 from trippilot.llm_gateway.gates.base import (
     GateOutcome,
     has_contact_like,
+    has_injection_like,
     _load_json_object,
     empty_result_error,
 )
 from trippilot.domain.common import PoiId, TraceId
 from trippilot.llm_gateway.gates.content.reflection_template import _TIME_EXPR
+from trippilot.llm_gateway.gates.dialogue.dialogue_answer import clock_times
 from trippilot.domain.llm.llm import CandidatePool, LlmFeature, PoiExplanation
 from trippilot.domain.observability import GateDropEvent
 
@@ -101,7 +103,10 @@ class ExplanationGate:
             # 이어 붙인 태그 문자열에는 걸리지 않는다('#'이 표현을 끊는다).
             # 걸린 문장을 alternative_selection 처럼 `""` 로 남기지 않는다 — 그 게이트는 선택 자체가 값이라
             # 슬롯을 살려야 하지만, 여기 값은 문장뿐이라 빈 값은 호출측의 템플릿 문장만 덮는다.
-            if text and (_TIME_EXPR.search(text) or has_contact_like(text)):
+            if text and (
+                _TIME_EXPR.search(text) or any(clock_times(text))
+                or has_contact_like(text) or has_injection_like(text)
+            ):
                 text = ""
             if not text:
                 blank += 1
@@ -151,5 +156,7 @@ def _tag_ok(tag: str) -> bool:
     return (
         _HASHTAG.fullmatch(tag) is not None
         and not _TIME_EXPR.search(tag)
+        and not any(clock_times(tag))
         and not has_contact_like(tag)
+        and not has_injection_like(tag)
     )
