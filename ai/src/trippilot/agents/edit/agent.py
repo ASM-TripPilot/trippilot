@@ -335,8 +335,9 @@ class EditAgent:
 
         기준점 있는 추가의 여행 당일 규칙(지난 자리 거부·지금 이후 시작)은 여기 한 곳에 건다 — 번역이 기준점을 채워 온 추가도 같은 규칙을 탄다.
         여행 당일 편집은 무엇이든 지금 전에 시작한 슬롯을 그 시각에 두고 그 뒤만 지금 이후로 다시 흘린다(`_floor`)."""
+        # 대상 일자만 — 자연어 게이트(`current_slots`)와 같은 범위. 전 일자 합집합이면 구조화 명령만 다른 날 슬롯 id 로 검증을 지난다
         current_ids = frozenset(
-            s.poi_id for day in task.solution.days for s in day.slots)
+            s.poi_id for day in task.solution.days if day.date == task.target_date for s in day.slots)
         # 대상 일자의 예약(is_fixed) 슬롯 — 편집 대상 불가·재타이밍 닻 (TRIP-526)
         fixed_ids = frozenset(
             fb.poi_id for day in task.solution.days if day.date == task.target_date
