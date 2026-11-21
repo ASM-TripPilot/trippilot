@@ -215,7 +215,9 @@ def test_collect_region_glue(tmp_path) -> None:
 @pytest.mark.parametrize("fail_all", [False, True])
 def test_collect_region_skips_a_failing_query_but_stops_when_all_fail(tmp_path, fail_all: bool) -> None:
     """검색 하나의 일시 오류(타임아웃)는 그 쿼리만 건너뛴다 — 그날 배치 전체가 죽고 앞 지역 추출분까지 버려지던 것(2026-10-30
-    Codex 리뷰). 전부 실패면 일시 오류가 아니므로 종전처럼 올린다."""
+    Codex 리뷰). 전부 실패면 일시 오류가 아니지만, raise 로 올리면 main 의 CallBudgetExceeded 전용 except 를
+    지나쳐 store.save() 전에 종료돼 **앞 지역 upsert 결과까지 유실**된다(2026-11-09 리뷰) — stats 행(fallback)으로
+    돌려 정상 종료시킨다."""
     import sys
     from pathlib import Path as _P
     sys.path.insert(0, str(_P(__file__).resolve().parents[2] / "scripts" / "collect"))
@@ -244,8 +246,8 @@ def test_collect_region_skips_a_failing_query_but_stops_when_all_fail(tmp_path, 
     run = lambda: collect_region("부산", client=client, worker=_FakeWorker(),
                                  store=JsonEventStore(tmp_path / "events.json"), today=_TODAY, now=_NOW)
     if fail_all:
-        with pytest.raises(TimeoutError):
-            run()
+        stats = run()
+        assert stats["fallback"] and "검색" in stats["error"]
     else:
         assert run()["snippets"] == 1
 

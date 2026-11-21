@@ -14,7 +14,13 @@ from pathlib import Path
 # scripts/ 는 패키지가 아니다 — 스크립트와 같은 방식(동일 디렉토리 경로)으로 import
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "collect"))
 
-from collect_pois import _print_summary, write_seen_refs  # noqa: E402
+from collect_pois import (  # noqa: E402
+    _EXCLUDED_FILTERED,
+    _load_excluded,
+    _print_summary,
+    load_closed_refs,
+    write_seen_refs,
+)
 
 _NOW = datetime(2026, 10, 5, 19, 0, tzinfo=UTC)
 
@@ -51,3 +57,20 @@ def test_서머리는_옛_분류가_빈_레포츠_항목의_새_분류를_많은
     path.write_text(json.dumps({**doc, "stats": stats}, ensure_ascii=False), encoding="utf-8")
     assert _print_summary(str(path)) == 0
     assert "| 레포츠 옛 분류 빈 항목의 새 분류 | — |" in capsys.readouterr().out
+
+
+def test_근거_파일이_없거나_깨져도_수동_제외_목록은_들어있다(tmp_path) -> None:
+    """load_closed_refs 가 조기 반환하는 두 경로(파일 없음·깨짐)에서도 수동 제외 2종
+    (poi_excluded_manual·poi_excluded_filtered)까지 같이 비면 안 된다 — 폐업 근거가 없다고
+    사람이 손으로 적은 제외 목록까지 같이 사라지면 안 된다."""
+    manual = _load_excluded()
+    filtered = _load_excluded(_EXCLUDED_FILTERED)
+    assert manual and filtered, "실 제외 목록이 비어 있으면 이 테스트는 아무것도 보지 않는다"
+
+    missing = load_closed_refs(tmp_path / "없음.json")
+    broken = tmp_path / "깨짐.json"
+    broken.write_text("{not json", encoding="utf-8")
+    corrupt = load_closed_refs(broken)
+
+    assert manual <= missing and filtered <= missing
+    assert manual <= corrupt and filtered <= corrupt

@@ -192,6 +192,7 @@ def _wiki_corpus(proposals: Sequence[dict], *, sample: bool = False) -> int:
     print(f"  판정 대상 {len(by_title)}개 이름 (인허가 식당·체인 {len(proposals) - len(by_title)}건 제외)")
     titles = list(by_title)
     accepted: dict[str, str] = {}  # 조인 키 → 문서 제목 (한 장소에 문서 하나 — doc_id 가 유일하다)
+    judge_failed = 0  # 판정 묶음(이름 단위) 실패 — 본문 실패(failed)와 분모가 다르니 따로 센다
     cache = _Cache()
     for i in range(0, len(titles), _WIKI_BATCH):
         batch = titles[i : i + _WIKI_BATCH]
@@ -201,6 +202,7 @@ def _wiki_corpus(proposals: Sequence[dict], *, sample: bool = False) -> int:
             try:
                 pages = _retrying(_wiki_fetch_mapped, batch)
             except Exception as e:  # 한 묶음 실패가 전체를 죽이지 않는다
+                judge_failed += len(batch)
                 print(f"  ! 판정 묶음 {i // _WIKI_BATCH} 실패 — {type(e).__name__}: {e}")
                 continue
             cache.put(key, pages)
@@ -211,7 +213,16 @@ def _wiki_corpus(proposals: Sequence[dict], *, sample: bool = False) -> int:
         if (i // _WIKI_BATCH) % 25 == 0:
             print(f"  판정 {i + len(batch):6d}/{len(titles)} · 장소 문서 {len(accepted)}건")
 
+    # 판정 실패는 본문 실패(failed/len(accepted))와 분모가 다르다 — 판정에서 떨어진 이름은
+    # accepted 에 아예 안 들어가 그 가드를 비껴간다. 여기서 따로 len(titles) 대비로 막는다.
+    if titles and judge_failed / len(titles) > _MAX_FAIL_RATE:
+        raise SystemExit(f"판정 실패 {judge_failed}/{len(titles)} — {_MAX_FAIL_RATE:.0%} 초과, 코퍼스를 바꾸지 않았다")
+
     out_path = _SAMPLE if sample else _CORPUS
+    # 축소 가드(아래)의 BEFORE — out_path 를 아직 아무것도 건드리기 전에 읽는다. sample 모드는
+    # 일부러 작은 시험 산출물을 _SAMPLE 에 쓰므로 이 가드에서 제외한다.
+    before_count = (sum(1 for _ in gzip.open(out_path, "rt", encoding="utf-8"))
+                    if not sample and out_path.exists() else None)
     tmp = out_path.with_suffix(".tmp")
     rows, failed = 0, 0
     with gzip.open(tmp, "wt", encoding="utf-8") as out:
@@ -241,6 +252,11 @@ def _wiki_corpus(proposals: Sequence[dict], *, sample: bool = False) -> int:
     if accepted and failed / len(accepted) > _MAX_FAIL_RATE:
         tmp.unlink()
         raise SystemExit(f"본문 실패 {failed}/{len(accepted)} — {_MAX_FAIL_RATE:.0%} 초과, 코퍼스를 바꾸지 않았다")
+    # 축소 가드 — ai-poi-collect 의 "합본 < 공유본이면 실패"와 같은 사고방식. 판정·본문
+    # 실패율이 각자 상한 안이어도 겹쳐서 코퍼스가 통째로 쪼그라드는 조용한 유실을 막는다.
+    if before_count and (before_count - rows) / before_count > _MAX_FAIL_RATE:
+        tmp.unlink()
+        raise SystemExit(f"코퍼스 축소 {before_count} → {rows} — {_MAX_FAIL_RATE:.0%} 초과, 코퍼스를 바꾸지 않았다")
     tmp.replace(out_path)
     return rows
 

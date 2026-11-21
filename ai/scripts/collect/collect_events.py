@@ -289,7 +289,17 @@ def collect_region(
             if pair[0] and pair not in pairs:
                 pairs.append(pair)
     if errors and len(errors) == len(queries):
-        raise errors[-1]  # 전부 실패면 일시 오류가 아니다(키·네트워크) — 종전처럼 배치를 멈춰 드러낸다
+        # 전부 실패는 일시 오류가 아니다(키·네트워크) — 그런데 raise 로 올리면 main 의
+        # CallBudgetExceeded 전용 except 를 지나쳐 store.save() 전에 종료돼 **앞 지역에서
+        # 이미 upsert 한 결과까지 유실**된다(2026-11-09 리뷰). stats 행(LLM 폴백과 같은
+        # 모양 — fallback=True)으로 돌려 main 을 정상 종료시킨다. 포인터는 main 의
+        # completed 카운트가 그대로 전진시킨다 — 계속 실패하는 지역 하나가 로테이션
+        # 전체를 막으면 안 된다(339행 주석과 같은 이유).
+        msg = f"{type(errors[-1]).__name__}: {errors[-1]}"
+        print(f"::error::[events] {region} 검색 전부 실패({len(queries)}건) — {msg}", file=sys.stderr)
+        return {"region": region, "snippets": 0, "extracted": 0, "generic_dropped": 0,
+                "geocoded": 0, "added": 0, "backfilled": 0,
+                "fallback": True, "error": f"검색 전부 실패: {msg}"}
     raw_pairs = len(pairs)
     # **캡 안에 무엇을 넣을지**를 정한다. 도착 순서대로 자르면 뒤쪽 쿼리가 가져온
     # 결과가 통째로 버려지고, 그 80칸의 절반은 날짜 없는 스니펫이 차지한다(실측
