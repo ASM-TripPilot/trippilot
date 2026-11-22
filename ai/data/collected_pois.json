@@ -7,7 +7,7 @@
     "OVERTURE",
     "TOURAPI"
   ],
-  "collected_at": "2026-11-21T19:06:36.049508+00:00",
+  "collected_at": "2026-11-22T19:05:16.308764+00:00",
   "area_codes": [
     "1",
     "2",
@@ -36,96 +36,41 @@
   ],
   "stats": {
     "merged_runs": 2,
-    "unique_proposals": 108245,
-    "cpyrht_applied": 27395,
-    "retro_dropped_existing": 0,
-    "sido_quarantined": 10,
-    "sido_quarantined_refs": [
-      {
-        "source": "TOURAPI",
-        "content_id": "2614541",
-        "address": "닫기 경상북도 영덕군 영해면 대진리 222"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "4054732",
-        "address": "김제시 죽산면 죽산리 948-20"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "2929425",
-        "address": "전북특별자치시 군산시 미장안7길 9"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "4095257",
-        "address": "부산시 해운대구 해운대로 793 1층"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "129539",
-        "address": "전남광주 완도군 보길면 부황리 산60-5"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "2614777",
-        "address": "광주특별시 북구 금곡동 산2"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "127501",
-        "address": "전남광주 완도군 완도읍 장좌리 산16-289"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "3556679",
-        "address": "광주광역사 동구 충장로3가 43"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "128703",
-        "address": "전남광주통특별시 신안군 흑산면 홍도리 17"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "2714103",
-        "address": "전남광주 구례군 구례읍 원방리 1"
-      }
-    ],
-    "sido_restored_previous_refs": [
-      {
-        "source": "TOURAPI",
-        "content_id": "579081",
-        "address": "전남광주 고흥군 동일면 봉영리"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "3082730",
-        "address": "전라북도 정읍시 산내면 종성리 516"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "128084",
-        "address": "곡성군 곡성읍 신기리 산 190-1"
-      },
-      {
-        "source": "TOURAPI",
-        "content_id": "132064",
-        "address": "전남광주 무안군 무안읍 성내리 21-13"
-      }
-    ]
+    "unique_proposals": 108247,
+    "cpyrht_applied": 6152,
+    "retro_dropped_existing": 0
   },
   "merged_from": [
     {
-      "collected_at": "2026-11-21T01:15:13.501192+00:00",
-      "proposals": 108230,
+      "collected_at": "2026-11-21T19:06:36.049508+00:00",
+      "proposals": 108245,
       "stats": {
         "merged_runs": 2,
-        "unique_proposals": 108230,
-        "cpyrht_applied": 14749,
+        "unique_proposals": 108245,
+        "cpyrht_applied": 27395,
         "retro_dropped_existing": 0,
-        "sido_quarantined": 7,
+        "sido_quarantined": 10,
         "sido_quarantined_refs": [
+          {
+            "source": "TOURAPI",
+            "content_id": "2614541",
+            "address": "닫기 경상북도 영덕군 영해면 대진리 222"
+          },
+          {
+            "source": "TOURAPI",
+            "content_id": "4054732",
+            "address": "김제시 죽산면 죽산리 948-20"
+          },
+          {
+            "source": "TOURAPI",
+            "content_id": "2929425",
+            "address": "전북특별자치시 군산시 미장안7길 9"
+          },
+          {
+            "source": "TOURAPI",
+            "content_id": "4095257",
+            "address": "부산시 해운대구 해운대로 793 1층"
+          },
           {
             "source": "TOURAPI",
             "content_id": "129539",
@@ -155,11 +100,6 @@
             "source": "TOURAPI",
             "content_id": "2714103",
             "address": "전남광주 구례군 구례읍 원방리 1"
-          },
-          {
-            "source": "TOURAPI",
-            "content_id": "4095257",
-            "address": "부산시 해운대구 해운대로 793 1층"
           }
         ],
         "sido_restored_previous_refs": [
@@ -167,6 +107,11 @@
             "source": "TOURAPI",
             "content_id": "579081",
             "address": "전남광주 고흥군 동일면 봉영리"
+          },
+          {
+            "source": "TOURAPI",
+            "content_id": "3082730",
+            "address": "전라북도 정읍시 산내면 종성리 516"
           },
           {
             "source": "TOURAPI",
@@ -182,117 +127,113 @@
       }
     },
     {
-      "collected_at": "2026-11-21T19:06:36.049508+00:00",
-      "proposals": 439,
+      "collected_at": "2026-11-22T19:05:16.308764+00:00",
+      "proposals": 6,
       "stats": {
-        "http_calls": 2405,
-        "listed": 2262,
-        "page_failures": 0,
-        "detail_failures": 0,
-        "category_unmapped": 227,
-        "address_missing": 2,
+        "http_calls": 2191,
+        "listed": 2047,
+        "page_failures": 93,
+        "detail_failures": 1,
+        "category_unmapped": 46,
+        "address_missing": 1,
         "merged": 0,
-        "passed": 439,
-        "skipped_unchanged": 36986,
-        "rest_unparsed": 4,
+        "passed": 6,
+        "skipped_unchanged": 7340,
+        "rest_unparsed": 0,
         "raw_reparse_mismatch": 0,
         "gate_drops": {
-          "existence_out_of_service_region": 16,
-          "existence_closed_business": 69,
-          "policy_non_travel:franchise": 27,
-          "policy_non_travel:chain_store": 572,
-          "policy_non_travel:shop_in_mall": 710,
-          "policy_non_travel:dealership": 7,
-          "policy_non_travel:hypermarket": 137,
-          "policy_non_travel:convenience_store": 52,
-          "schema_missing_or_invalid_coord": 4
+          "existence_out_of_service_region": 9,
+          "existence_closed_business": 11,
+          "policy_non_travel:franchise": 2,
+          "policy_non_travel:chain_store": 710,
+          "policy_non_travel:shop_in_mall": 1148,
+          "policy_non_travel:hypermarket": 66,
+          "policy_non_travel:convenience_store": 48
         },
         "leports_lcls": {
-          "AC/AC05": 225,
-          "LS/LS01": 4,
-          "LS/LS02": 4
+          "AC/AC05": 46
         },
         "budget_exhausted": false,
         "per_area": {
           "1": {
-            "calls": 291,
-            "passed": 28,
-            "skipped": 3084
+            "calls": 799,
+            "passed": 2,
+            "skipped": 3699
           },
           "2": {
-            "calls": 257,
-            "passed": 41,
-            "skipped": 1611
+            "calls": 5,
+            "passed": 0,
+            "skipped": 0
           },
           "3": {
-            "calls": 22,
+            "calls": 5,
             "passed": 0,
-            "skipped": 789
+            "skipped": 0
           },
           "4": {
-            "calls": 28,
-            "passed": 2,
-            "skipped": 1133
+            "calls": 5,
+            "passed": 0,
+            "skipped": 0
           },
           "6": {
-            "calls": 214,
-            "passed": 1,
-            "skipped": 1844
+            "calls": 5,
+            "passed": 0,
+            "skipped": 0
           },
           "7": {
-            "calls": 21,
-            "passed": 5,
-            "skipped": 592
+            "calls": 5,
+            "passed": 0,
+            "skipped": 0
           },
           "8": {
-            "calls": 8,
-            "passed": 2,
-            "skipped": 188
+            "calls": 5,
+            "passed": 0,
+            "skipped": 0
           },
           "31": {
-            "calls": 845,
-            "passed": 66,
-            "skipped": 6731
+            "calls": 1322,
+            "passed": 4,
+            "skipped": 3641
           },
           "32": {
-            "calls": 103,
-            "passed": 10,
-            "skipped": 3983
+            "calls": 5,
+            "passed": 0,
+            "skipped": 0
           },
           "33": {
-            "calls": 69,
-            "passed": 29,
-            "skipped": 1700
+            "calls": 5,
+            "passed": 0,
+            "skipped": 0
           },
           "34": {
-            "calls": 91,
-            "passed": 49,
-            "skipped": 2086
+            "calls": 5,
+            "passed": 0,
+            "skipped": 0
           },
           "35": {
-            "calls": 126,
-            "passed": 81,
-            "skipped": 2664
+            "calls": 5,
+            "passed": 0,
+            "skipped": 0
           },
           "36": {
-            "calls": 130,
-            "passed": 65,
-            "skipped": 3395
+            "calls": 5,
+            "passed": 0,
+            "skipped": 0
           },
           "37": {
-            "calls": 73,
-            "passed": 38,
-            "skipped": 2047
+            "calls": 5,
+            "passed": 0,
+            "skipped": 0
           },
           "38": {
-            "calls": 71,
-            "passed": 22,
-            "skipped": 3311
+            "calls": 5,
+            "passed": 0,
+            "skipped": 0
           },
           "39": {
-            "calls": 56,
+            "calls": 5,
             "passed": 0,
-            "skipped": 1828
+            "skipped": 0
           }
         }
       }
@@ -4964,7 +4905,7 @@
     {"provisional_id":"tourapi-127806","source":"TOURAPI","poi":{"poi_id":"tourapi-127806","name":"명지산군립공원","category":"NATURE","coord":{"lat":37.943,"lng":127.4807},"open_hours":[{"day_of_week":0,"open_min":0,"close_min":1440},{"day_of_week":1,"open_min":0,"close_min":1440},{"day_of_week":2,"open_min":0,"close_min":1440},{"day_of_week":3,"open_min":0,"close_min":1440},{"day_of_week":4,"open_min":0,"close_min":1440},{"day_of_week":5,"open_min":0,"close_min":1440},{"day_of_week":6,"open_min":0,"close_min":1440}],"quality":"FULL","source":"PLACES_API"},"tags":["자연공원"],"region":"가평군","opening_hours_raw":"상시 개방\n휴무: 연중무휴","provenance":{"content_id":"127806","content_type_id":"12","address":"경기도 가평군 북면 도대리 일원","image_url":"https://tong.visitkorea.or.kr/cms/resource/63/4113263_image2_1.jpg","modified_time":"20260921105446","detail":{"parking":"가능","heritage1":"0","heritage2":"0","heritage3":"0","chkbabycarriage":"없음"},"detail_fetched_on":"2026-10-23","cpyrht_div_cd":"Type3"}},
     {"provisional_id":"tourapi-2397543","source":"TOURAPI","poi":{"poi_id":"tourapi-2397543","name":"모꼬지마을","category":"ACTIVITY","coord":{"lat":37.5172482123,"lng":127.6123662165},"open_hours":[{"day_of_week":0,"open_min":540,"close_min":1020},{"day_of_week":1,"open_min":540,"close_min":1020},{"day_of_week":2,"open_min":540,"close_min":1020},{"day_of_week":3,"open_min":540,"close_min":1020},{"day_of_week":4,"open_min":540,"close_min":1020},{"day_of_week":5,"open_min":540,"close_min":1020},{"day_of_week":6,"open_min":540,"close_min":1020}],"quality":"FULL","source":"PLACES_API"},"tags":["농산어촌 체험"],"region":"양평군","opening_hours_raw":"매일 09:00~17:00\n휴무: 연중무휴","provenance":{"content_id":"2397543","content_type_id":"12","address":"경기도 양평군 용문면 중원산로 76","image_url":"https://tong.visitkorea.or.kr/cms/resource/55/3392255_image2_1.jpg","modified_time":"20261109133515","detail":{"parking":"가능","heritage1":"0","heritage2":"0","heritage3":"0","chkbabycarriage":"없음"},"detail_fetched_on":"2026-11-10","cpyrht_div_cd":"Type3"}},
     {"provisional_id":"tourapi-2854739","source":"TOURAPI","poi":{"poi_id":"tourapi-2854739","name":"모담공원","category":"SIGHT","coord":{"lat":37.6486014852,"lng":126.6871887529},"open_hours":[{"day_of_week":0,"open_min":0,"close_min":1440},{"day_of_week":1,"open_min":0,"close_min":1440},{"day_of_week":2,"open_min":0,"close_min":1440},{"day_of_week":3,"open_min":0,"close_min":1440},{"day_of_week":4,"open_min":0,"close_min":1440},{"day_of_week":5,"open_min":0,"close_min":1440},{"day_of_week":6,"open_min":0,"close_min":1440}],"quality":"FULL","source":"PLACES_API"},"tags":["도시공원"],"region":"김포시","opening_hours_raw":"상시 개방\n휴무: 연중무휴","provenance":{"content_id":"2854739","content_type_id":"12","address":"경기도 김포시 전원로 43 (운양동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/31/4121031_image2_1.jpg","modified_time":"20261013144319","detail":{"parking":"가능","heritage1":"0","heritage2":"0","heritage3":"0"},"detail_fetched_on":"2026-10-23","cpyrht_div_cd":"Type1"}},
-    {"provisional_id":"tourapi-988016","source":"TOURAPI","poi":{"poi_id":"tourapi-988016","name":"모산목장","category":"ACTIVITY","coord":{"lat":37.8022913195,"lng":126.7240118307},"open_hours":[{"day_of_week":1,"open_min":600,"close_min":960},{"day_of_week":2,"open_min":600,"close_min":960},{"day_of_week":3,"open_min":600,"close_min":960},{"day_of_week":4,"open_min":600,"close_min":960},{"day_of_week":5,"open_min":600,"close_min":960},{"day_of_week":6,"open_min":600,"close_min":960}],"quality":"FULL","source":"PLACES_API"},"tags":["농산어촌 체험"],"region":"파주시","opening_hours_raw":"10:00~16:00\n휴무: 매주 월요일","provenance":{"content_id":"988016","content_type_id":"12","address":"경기도 파주시 탄현면 검산로519번길 6-36","image_url":"https://tong.visitkorea.or.kr/cms/resource/91/3382791_image2_1.JPG","modified_time":"20261112013002","detail":{"parking":"가능","heritage1":"0","heritage2":"0","heritage3":"0"},"detail_fetched_on":"2026-11-15","cpyrht_div_cd":"Type3"}},
+    {"provisional_id":"tourapi-988016","source":"TOURAPI","poi":{"poi_id":"tourapi-988016","name":"모산목장","category":"ACTIVITY","coord":{"lat":37.8022913195,"lng":126.7240118307},"open_hours":[{"day_of_week":1,"open_min":600,"close_min":960},{"day_of_week":2,"open_min":600,"close_min":960},{"day_of_week":3,"open_min":600,"close_min":960},{"day_of_week":4,"open_min":600,"close_min":960},{"day_of_week":5,"open_min":600,"close_min":960},{"day_of_week":6,"open_min":600,"close_min":960}],"quality":"FULL","source":"PLACES_API"},"tags":["농산어촌 체험"],"region":"파주시","opening_hours_raw":"10:00~16:00\n휴무: 매주 월요일","provenance":{"content_id":"988016","content_type_id":"12","address":"경기도 파주시 탄현면 검산로519번길 6-36","image_url":"https://tong.visitkorea.or.kr/cms/resource/91/3382791_image2_1.JPG","modified_time":"20261122013001","detail":{"parking":"가능","heritage1":"0","heritage2":"0","heritage3":"0"},"detail_fetched_on":"2026-11-22","cpyrht_div_cd":"Type3"}},
     {"provisional_id":"tourapi-3081466","source":"TOURAPI","poi":{"poi_id":"tourapi-3081466","name":"몬스터리움","category":"SIGHT","coord":{"lat":37.6428383517,"lng":126.5462853221},"open_hours":[{"day_of_week":0,"open_min":660,"close_min":1140},{"day_of_week":1,"open_min":660,"close_min":1140},{"day_of_week":2,"open_min":660,"close_min":1140},{"day_of_week":3,"open_min":660,"close_min":1140},{"day_of_week":4,"open_min":660,"close_min":1140},{"day_of_week":5,"open_min":600,"close_min":1140},{"day_of_week":6,"open_min":600,"close_min":1140}],"quality":"FULL","source":"PLACES_API"},"tags":["테마공원"],"region":"김포시","opening_hours_raw":"- 평일 11:00~19:00- 주말 및 공휴일 10:00~19:00\n휴무: 연중무휴","provenance":{"content_id":"3081466","content_type_id":"12","address":"경기도 김포시 대곶면 대명항1로 52","image_url":"https://tong.visitkorea.or.kr/cms/resource/58/3081458_image2_1.JPG","modified_time":"20261012083034","detail":{"parking":"가능","heritage1":"0","heritage2":"0","heritage3":"0"},"detail_fetched_on":"2026-10-23","cpyrht_div_cd":"Type3"}},
     {"provisional_id":"tourapi-2765241","source":"TOURAPI","poi":{"poi_id":"tourapi-2765241","name":"묘적사계곡","category":"NATURE","coord":{"lat":37.6184,"lng":127.2681},"open_hours":[{"day_of_week":0,"open_min":0,"close_min":1440},{"day_of_week":1,"open_min":0,"close_min":1440},{"day_of_week":2,"open_min":0,"close_min":1440},{"day_of_week":3,"open_min":0,"close_min":1440},{"day_of_week":4,"open_min":0,"close_min":1440},{"day_of_week":5,"open_min":0,"close_min":1440},{"day_of_week":6,"open_min":0,"close_min":1440}],"quality":"FULL","source":"PLACES_API"},"tags":["자연경관(산)"],"region":"남양주시","opening_hours_raw":"상시 개방\n휴무: 연중무휴","provenance":{"content_id":"2765241","content_type_id":"12","address":"경기도 남양주시 와부읍 월문리","image_url":"https://tong.visitkorea.or.kr/cms/resource/81/3500381_image2_1.jpg","modified_time":"20261016155345","detail":{"parking":"가능","heritage1":"0","heritage2":"0","heritage3":"0","chkbabycarriage":"없음"},"detail_fetched_on":"2026-10-23","cpyrht_div_cd":"Type3"}},
     {"provisional_id":"tourapi-2751258","source":"TOURAPI","poi":{"poi_id":"tourapi-2751258","name":"무갑리계곡","category":"NATURE","coord":{"lat":37.4162,"lng":127.3412},"open_hours":[{"day_of_week":0,"open_min":0,"close_min":1440},{"day_of_week":1,"open_min":0,"close_min":1440},{"day_of_week":2,"open_min":0,"close_min":1440},{"day_of_week":3,"open_min":0,"close_min":1440},{"day_of_week":4,"open_min":0,"close_min":1440},{"day_of_week":5,"open_min":0,"close_min":1440},{"day_of_week":6,"open_min":0,"close_min":1440}],"quality":"FULL","source":"PLACES_API"},"tags":["자연경관(산)"],"region":"광주시","opening_hours_raw":"상시 개방\n휴무: 연중무휴","provenance":{"content_id":"2751258","content_type_id":"12","address":"경기도 광주시 초월읍 무갑리","image_url":"https://tong.visitkorea.or.kr/cms/resource/11/3527311_image2_1.jpg","modified_time":"20261027114047","detail":{"parking":"가능","heritage1":"0","heritage2":"0","heritage3":"0"},"detail_fetched_on":"2026-10-31","cpyrht_div_cd":"Type1"}},
@@ -17194,7 +17135,7 @@
     {"provisional_id":"tourapi-2736402","source":"TOURAPI","poi":{"poi_id":"tourapi-2736402","name":"양키시장","category":"SHOPPING","coord":{"lat":37.9029386835,"lng":127.0520695133},"open_hours":[],"quality":"PARTIAL","source":"PLACES_API"},"tags":["시장"],"region":"동두천시","opening_hours_raw":"업소 별 상이\n휴무: 업소 별 상이","provenance":{"content_id":"2736402","content_type_id":"38","address":"경기도 동두천시 어수로83번길 6 (생연동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/92/4121092_image2_1.jpg","modified_time":"20261020162436","detail_fetched_on":"2026-11-01","cpyrht_div_cd":"Type1"}},
     {"provisional_id":"tourapi-131988","source":"TOURAPI","poi":{"poi_id":"tourapi-131988","name":"양평물맑은시장","category":"SHOPPING","coord":{"lat":37.489849539,"lng":127.4920793125},"open_hours":[{"day_of_week":0,"open_min":540,"close_min":1080},{"day_of_week":1,"open_min":540,"close_min":1080},{"day_of_week":2,"open_min":540,"close_min":1080},{"day_of_week":3,"open_min":540,"close_min":1080},{"day_of_week":4,"open_min":540,"close_min":1080},{"day_of_week":5,"open_min":540,"close_min":1080},{"day_of_week":6,"open_min":540,"close_min":1080}],"quality":"FULL","source":"PLACES_API"},"tags":["시장"],"region":"양평군","opening_hours_raw":"09:00~18:00 / 점포별 상이\n휴무: 점포별 상이","provenance":{"content_id":"131988","content_type_id":"38","address":"경기도 양평군 양평읍 양평시장길 11-1","image_url":"https://tong.visitkorea.or.kr/cms/resource/74/2364874_image2_1.jpg","modified_time":"20261111084802","detail":{"saleitem":"농산물 / 수산물 / 축산물 / 공산품 등","fairday":"3일 / 8일 / 13일 / 18일 / 23일 / 28일"},"detail_fetched_on":"2026-11-14","cpyrht_div_cd":"Type3"}},
     {"provisional_id":"tourapi-131989","source":"TOURAPI","poi":{"poi_id":"tourapi-131989","name":"여주장","category":"SHOPPING","coord":{"lat":37.2991274908,"lng":127.6308185257},"open_hours":[],"quality":"PARTIAL","source":"PLACES_API"},"tags":["시장"],"region":"여주시","opening_hours_raw":null,"provenance":{"content_id":"131989","content_type_id":"38","address":"경기도 여주시 여흥로11번길 53","image_url":"https://tong.visitkorea.or.kr/cms/resource/14/3382214_image2_1.jpg","modified_time":"20261111084802","detail":{"saleitem":"채소류 / 어류 / 그릇 / 신발 / 잡곡 / 잡화류","fairday":"5일 / 10일 / 15일 / 20일 / 25일 / 30일"},"detail_fetched_on":"2026-11-19","cpyrht_div_cd":"Type3"}},
-    {"provisional_id":"tourapi-1433294","source":"TOURAPI","poi":{"poi_id":"tourapi-1433294","name":"오산오색시장","category":"SHOPPING","coord":{"lat":37.1511151705,"lng":127.0710826085},"open_hours":[],"quality":"PARTIAL","source":"PLACES_API"},"tags":["쇼핑","상설시장"],"region":"오산시","opening_hours_raw":"점포별 상이\n휴무: 점포별 상이","provenance":{"content_id":"1433294","content_type_id":"38","address":"경기도 오산시 오산로272번길 22 (오산동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/38/3046838_image2_1.JPG","modified_time":"20250702130949","detail":{"saleitem":"농산물 / 수산물 / 축산물 / 공산품 등"},"detail_fetched_on":"2026-10-07","cpyrht_div_cd":"Type3"}},
+    {"provisional_id":"tourapi-1433294","source":"TOURAPI","poi":{"poi_id":"tourapi-1433294","name":"오산오색시장","category":"SHOPPING","coord":{"lat":37.1510641032,"lng":127.0710667739},"open_hours":[],"quality":"PARTIAL","source":"PLACES_API"},"tags":["시장"],"region":"오산시","opening_hours_raw":"점포별 상이\n휴무: 점포별 상이","provenance":{"content_id":"1433294","content_type_id":"38","address":"경기도 오산시 오산로272번길 22 (오산동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/38/3046838_image2_1.JPG","modified_time":"20261111084802","detail":{"saleitem":"농산물 / 수산물 / 축산물 / 공산품 등"},"detail_fetched_on":"2026-11-22","cpyrht_div_cd":"Type3"}},
     {"provisional_id":"tourapi-2751377","source":"TOURAPI","poi":{"poi_id":"tourapi-2751377","name":"오이도종합어시장","category":"SHOPPING","coord":{"lat":37.3447054125,"lng":126.6888980544},"open_hours":[],"quality":"PARTIAL","source":"PLACES_API"},"tags":["쇼핑","상설시장"],"region":"시흥시","opening_hours_raw":"점포별 상이함\n휴무: 점포별 상이함","provenance":{"content_id":"2751377","content_type_id":"38","address":"경기도 시흥시 오이도어시장로 8 (정왕동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/23/2763323_image2_1.JPG","modified_time":"20250609095144","detail":{"saleitem":"활어 / 어패류 / 젓갈 등"},"detail_fetched_on":"2026-10-09","cpyrht_div_cd":"Type3"}},
     {"provisional_id":"tourapi-131987","source":"TOURAPI","poi":{"poi_id":"tourapi-131987","name":"용문천년시장","category":"SHOPPING","coord":{"lat":37.4839632251,"lng":127.594755887},"open_hours":[{"day_of_week":0,"open_min":540,"close_min":1140},{"day_of_week":1,"open_min":540,"close_min":1140},{"day_of_week":2,"open_min":540,"close_min":1140},{"day_of_week":3,"open_min":540,"close_min":1140},{"day_of_week":4,"open_min":540,"close_min":1140},{"day_of_week":5,"open_min":540,"close_min":1140},{"day_of_week":6,"open_min":540,"close_min":1140}],"quality":"FULL","source":"PLACES_API"},"tags":["시장"],"region":"양평군","opening_hours_raw":"09:00~19:00 / 점포별 상이\n휴무: 점포별 상이","provenance":{"content_id":"131987","content_type_id":"38","address":"경기도 양평군 용문면 용문시장2길 11","image_url":"https://tong.visitkorea.or.kr/cms/resource/73/3077173_image2_1.jpg","modified_time":"20261111084802","detail":{"saleitem":"농산물 / 수산물 / 축산물 / 공산품 등","fairday":"5일 / 10일 / 15일 / 20일 / 25일 / 30일"},"detail_fetched_on":"2026-11-19","cpyrht_div_cd":"Type3"}},
     {"provisional_id":"tourapi-2734950","source":"TOURAPI","poi":{"poi_id":"tourapi-2734950","name":"용인중앙시장","category":"SHOPPING","coord":{"lat":37.2367143163,"lng":127.2078580401},"open_hours":[],"quality":"PARTIAL","source":"PLACES_API"},"tags":["시장"],"region":"용인시","opening_hours_raw":"점포별 상이\n휴무: 점포별 상이","provenance":{"content_id":"2734950","content_type_id":"38","address":"경기도 용인시 처인구 금령로107번길 13 (김량장동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/96/4130496_image2_1.jpg","modified_time":"20261111084802","detail":{"saleitem":"농산물 / 수산물 / 축산물 / 공산품 등"},"detail_fetched_on":"2026-11-19","cpyrht_div_cd":"Type1"}},
@@ -107238,7 +107179,7 @@
     {"provisional_id":"tourapi-132789","source":"TOURAPI","poi":{"poi_id":"tourapi-132789","name":"역곡상상시장","category":"SHOPPING","coord":{"lat":37.487151,"lng":126.812472},"open_hours":[{"day_of_week":0,"open_min":540,"close_min":1260},{"day_of_week":1,"open_min":540,"close_min":1260},{"day_of_week":2,"open_min":540,"close_min":1260},{"day_of_week":3,"open_min":540,"close_min":1260},{"day_of_week":4,"open_min":540,"close_min":1260},{"day_of_week":5,"open_min":540,"close_min":1260},{"day_of_week":6,"open_min":540,"close_min":1260}],"quality":"FULL","source":"PLACES_API"},"tags":["시장"],"region":"부천시","opening_hours_raw":"09:00~21:00\n휴무: 연중무휴","provenance":{"content_id":"132789","content_type_id":"38","address":"경기도 부천시 원미구 부일로749번길 31 (역곡동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/32/3490532_image2_1.JPG","modified_time":"20261111084802","detail":{"saleitem":"청과류 / 야채류 / 생선류 / 식료품 등"},"detail_fetched_on":"2026-11-19","cpyrht_div_cd":"Type3"}},
     {"provisional_id":"tourapi-131990","source":"TOURAPI","poi":{"poi_id":"tourapi-131990","name":"연천오일장 (2, 7일)","category":"SHOPPING","coord":{"lat":38.09968,"lng":127.075951},"open_hours":[{"day_of_week":0,"open_min":540,"close_min":1020},{"day_of_week":1,"open_min":540,"close_min":1020},{"day_of_week":2,"open_min":540,"close_min":1020},{"day_of_week":3,"open_min":540,"close_min":1020},{"day_of_week":4,"open_min":540,"close_min":1020},{"day_of_week":5,"open_min":540,"close_min":1020},{"day_of_week":6,"open_min":540,"close_min":1020}],"quality":"FULL","source":"PLACES_API"},"tags":["시장"],"region":"연천군","opening_hours_raw":"09:00~17:00","provenance":{"content_id":"131990","content_type_id":"38","address":"경기도 연천군 연천읍 차탄리 60-50","image_url":"https://tong.visitkorea.or.kr/cms/resource/47/3382347_image2_1.JPG","modified_time":"20260512141611","detail":{"saleitem":"의류 / 잡화류 / 콩(연천태) / 농산물","fairday":"2일 / 7일 / 12일 / 17일 / 22일 / 27일"},"detail_fetched_on":"2026-11-01","cpyrht_div_cd":"Type3"}},
     {"provisional_id":"tourapi-2761539","source":"TOURAPI","poi":{"poi_id":"tourapi-2761539","name":"오션시티종합어시장","category":"SHOPPING","coord":{"lat":37.2863544002,"lng":126.5738013184},"open_hours":[],"quality":"PARTIAL","source":"PLACES_API"},"tags":["시장"],"region":"안산시","opening_hours_raw":"점포별로 상이함\n휴무: 점포별로 상이함","provenance":{"content_id":"2761539","content_type_id":"38","address":"경기도 안산시 단원구 대부황금로 1478 (대부북동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/21/4093421_image2_1.jpg","modified_time":"20260728105424","detail":{"saleitem":"어패류 / 갑각류 / 해산물 등"},"detail_fetched_on":"2026-11-08","cpyrht_div_cd":"Type1"}},
-    {"provisional_id":"tourapi-2797014","source":"TOURAPI","poi":{"poi_id":"tourapi-2797014","name":"오이도전통수산시장","category":"SHOPPING","coord":{"lat":37.34588131411131,"lng":126.68820989264002},"open_hours":[],"quality":"PARTIAL","source":"PLACES_API"},"tags":["전문매장/상가"],"region":"시흥시","opening_hours_raw":null,"provenance":{"content_id":"2797014","content_type_id":"38","address":"경기도 시흥시 오이도로 167 (정왕동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/03/4065803_image2_1.jpg","modified_time":"20260519160359","cpyrht_div_cd":"Type1"}},
+    {"provisional_id":"tourapi-2797014","source":"TOURAPI","poi":{"poi_id":"tourapi-2797014","name":"오이도전통수산시장","category":"SHOPPING","coord":{"lat":37.34588131411131,"lng":126.68820989264002},"open_hours":[{"day_of_week":1,"open_min":540,"close_min":1260},{"day_of_week":2,"open_min":540,"close_min":1260},{"day_of_week":3,"open_min":540,"close_min":1260},{"day_of_week":4,"open_min":540,"close_min":1260},{"day_of_week":5,"open_min":480,"close_min":1320},{"day_of_week":6,"open_min":480,"close_min":1320}],"quality":"FULL","source":"PLACES_API"},"tags":["전문매장/상가"],"region":"시흥시","opening_hours_raw":"- 평일 09:00~21:00- 주말 08:00~22:00\n휴무: - A동 매월 둘째, 넷째 월요일- B동 매월 첫째, 셋째 월요일","provenance":{"content_id":"2797014","content_type_id":"38","address":"경기도 시흥시 오이도로 167 (정왕동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/03/4065803_image2_1.jpg","modified_time":"20260519160359","detail":{"saleitem":"활어 / 어패류 / 해산물 등"},"detail_fetched_on":"2026-11-22","cpyrht_div_cd":"Type1"}},
     {"provisional_id":"tourapi-2905937","source":"TOURAPI","poi":{"poi_id":"tourapi-2905937","name":"오프라벨 의정부점","category":"SHOPPING","coord":{"lat":37.7444367947086,"lng":127.0946496547},"open_hours":[{"day_of_week":0,"open_min":630,"close_min":1200},{"day_of_week":1,"open_min":630,"close_min":1200},{"day_of_week":2,"open_min":630,"close_min":1200},{"day_of_week":3,"open_min":630,"close_min":1200},{"day_of_week":4,"open_min":630,"close_min":1200},{"day_of_week":5,"open_min":630,"close_min":1200},{"day_of_week":6,"open_min":630,"close_min":1200}],"quality":"FULL","source":"PLACES_API"},"tags":["면세점"],"region":"의정부시","opening_hours_raw":"10:30~20:00\n휴무: 명절","provenance":{"content_id":"2905937","content_type_id":"38","address":"경기도 의정부시 용민로182번길 33 (민락동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/22/4045422_image2_1.jpg","modified_time":"20260327092150","detail":{"saleitem":"의류","fairday":"월-일요일"},"detail_fetched_on":"2026-11-08","cpyrht_div_cd":"Type3"}},
     {"provisional_id":"tourapi-4011658","source":"TOURAPI","poi":{"poi_id":"tourapi-4011658","name":"오프라벨 평촌점","category":"SHOPPING","coord":{"lat":37.4025331819159,"lng":126.956199244374},"open_hours":[{"day_of_week":0,"open_min":630,"close_min":1200},{"day_of_week":1,"open_min":630,"close_min":1200},{"day_of_week":2,"open_min":630,"close_min":1200},{"day_of_week":3,"open_min":630,"close_min":1200},{"day_of_week":4,"open_min":630,"close_min":1200},{"day_of_week":5,"open_min":630,"close_min":1200},{"day_of_week":6,"open_min":630,"close_min":1200}],"quality":"FULL","source":"PLACES_API"},"tags":["면세점"],"region":"안양시","opening_hours_raw":"10:30~20:00\n휴무: 명절","provenance":{"content_id":"4011658","content_type_id":"38","address":"경기도 안양시 동안구 관악대로 298 (관양동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/78/4043078_image2_1.JPG","modified_time":"20260327092150","detail":{"saleitem":"의류 , 신발류 , 가방류","fairday":"월-일요일"},"detail_fetched_on":"2026-11-08","cpyrht_div_cd":"Type3"}},
     {"provisional_id":"tourapi-2925017","source":"TOURAPI","poi":{"poi_id":"tourapi-2925017","name":"오휘 롯데안산","category":"SHOPPING","coord":{"lat":37.31800265019297,"lng":126.83450037346516},"open_hours":[{"day_of_week":0,"open_min":630,"close_min":1200},{"day_of_week":1,"open_min":630,"close_min":1200},{"day_of_week":2,"open_min":630,"close_min":1200},{"day_of_week":3,"open_min":630,"close_min":1200},{"day_of_week":4,"open_min":630,"close_min":1200},{"day_of_week":5,"open_min":630,"close_min":1200},{"day_of_week":6,"open_min":630,"close_min":1200}],"quality":"PARTIAL","source":"PLACES_API"},"tags":["면세점"],"region":"안산시","opening_hours_raw":"10:30~20:00","provenance":{"content_id":"2925017","content_type_id":"38","address":"경기도 안산시 단원구 고잔1길 12 (고잔동)","image_url":null,"modified_time":"20260330120515","detail":{"saleitem":"향수 및 화장품","fairday":"월-일요일"},"detail_fetched_on":"2026-11-08"}},
@@ -108307,7 +108248,7 @@
     {"provisional_id":"tourapi-2782622","source":"TOURAPI","poi":{"poi_id":"tourapi-2782622","name":"탄도어항수산물직판장","category":"SHOPPING","coord":{"lat":37.1916353941,"lng":126.6463055153},"open_hours":[{"day_of_week":0,"open_min":540,"close_min":1080},{"day_of_week":1,"open_min":540,"close_min":1080},{"day_of_week":3,"open_min":540,"close_min":1080},{"day_of_week":4,"open_min":540,"close_min":1080},{"day_of_week":5,"open_min":540,"close_min":1080},{"day_of_week":6,"open_min":540,"close_min":1080}],"quality":"FULL","source":"PLACES_API"},"tags":["전문매장/상가"],"region":"안산시","opening_hours_raw":"09:00~18:00\n휴무: 매주 수요일","provenance":{"content_id":"2782622","content_type_id":"38","address":"경기도 안산시 단원구 대부황금로 5-14 (선감동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/60/4079960_image2_1.jpg","modified_time":"20260629173744","detail":{"saleitem":"전어 / 쭈꾸미 / 산낙지 / 석화 등"},"detail_fetched_on":"2026-11-10","cpyrht_div_cd":"Type1"}},
     {"provisional_id":"tourapi-2923422","source":"TOURAPI","poi":{"poi_id":"tourapi-2923422","name":"탑텐밸런스 타임빌라스 수원점","category":"SHOPPING","coord":{"lat":37.264162726921,"lng":126.997385539043},"open_hours":[{"day_of_week":1,"open_min":630,"close_min":1200},{"day_of_week":2,"open_min":630,"close_min":1200},{"day_of_week":3,"open_min":630,"close_min":1200},{"day_of_week":4,"open_min":630,"close_min":1200},{"day_of_week":5,"open_min":630,"close_min":1200},{"day_of_week":6,"open_min":630,"close_min":1200}],"quality":"FULL","source":"PLACES_API"},"tags":["면세점"],"region":"수원시","opening_hours_raw":"10:30~20:00\n휴무: 명절, 월1회 월요일","provenance":{"content_id":"2923422","content_type_id":"38","address":"경기도 수원시 권선구 세화로 134 (서둔동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/11/4019211_image2_1.jpg","modified_time":"20260319094959","detail":{"saleitem":"의류","fairday":"월-일요일"},"detail_fetched_on":"2026-11-10","cpyrht_div_cd":"Type3"}},
     {"provisional_id":"tourapi-2925877","source":"TOURAPI","poi":{"poi_id":"tourapi-2925877","name":"탠디 타임빌라스 수원점","category":"SHOPPING","coord":{"lat":37.264162726921,"lng":126.997385539043},"open_hours":[{"day_of_week":0,"open_min":630,"close_min":1320},{"day_of_week":1,"open_min":630,"close_min":1320},{"day_of_week":2,"open_min":630,"close_min":1320},{"day_of_week":3,"open_min":630,"close_min":1320},{"day_of_week":4,"open_min":630,"close_min":1320},{"day_of_week":5,"open_min":630,"close_min":1320},{"day_of_week":6,"open_min":630,"close_min":1320}],"quality":"FULL","source":"PLACES_API"},"tags":["면세점"],"region":"수원시","opening_hours_raw":"10:30~22:00","provenance":{"content_id":"2925877","content_type_id":"38","address":"경기도 수원시 권선구 세화로 134 (서둔동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/72/4019172_image2_1.jpg","modified_time":"20260327092150","detail":{"saleitem":"신발류","fairday":"월-일요일"},"detail_fetched_on":"2026-11-10","cpyrht_div_cd":"Type3"}},
-    {"provisional_id":"tourapi-2930780","source":"TOURAPI","poi":{"poi_id":"tourapi-2930780","name":"현대프리미엄아울렛 김포점","category":"SHOPPING","coord":{"lat":37.5972368549658,"lng":126.785233626536},"open_hours":[],"quality":"PARTIAL","source":"PLACES_API"},"tags":["면세점"],"region":"김포시","opening_hours_raw":null,"provenance":{"content_id":"2930780","content_type_id":"38","address":"경기도 김포시 고촌읍 아라육로152번길 100","image_url":"https://tong.visitkorea.or.kr/cms/resource/02/4023402_image2_1.jpg","modified_time":"20260327092150","cpyrht_div_cd":"Type3"}},
+    {"provisional_id":"tourapi-2930780","source":"TOURAPI","poi":{"poi_id":"tourapi-2930780","name":"현대프리미엄아울렛 김포점","category":"SHOPPING","coord":{"lat":37.5972368549658,"lng":126.785233626536},"open_hours":[{"day_of_week":0,"open_min":620,"close_min":1260},{"day_of_week":1,"open_min":620,"close_min":1260},{"day_of_week":2,"open_min":620,"close_min":1260},{"day_of_week":3,"open_min":620,"close_min":1260},{"day_of_week":4,"open_min":620,"close_min":1260},{"day_of_week":5,"open_min":620,"close_min":1260},{"day_of_week":6,"open_min":620,"close_min":1260}],"quality":"FULL","source":"PLACES_API"},"tags":["면세점"],"region":"김포시","opening_hours_raw":"10:20~21:00\n휴무: 명절","provenance":{"content_id":"2930780","content_type_id":"38","address":"경기도 김포시 고촌읍 아라육로152번길 100","image_url":"https://tong.visitkorea.or.kr/cms/resource/02/4023402_image2_1.jpg","modified_time":"20260327092150","detail":{"saleitem":"기타 서비스","fairday":"월-일요일"},"detail_fetched_on":"2026-11-22","cpyrht_div_cd":"Type3"}},
     {"provisional_id":"tourapi-2616230","source":"TOURAPI","poi":{"poi_id":"tourapi-2616230","name":"파천 구상 화강암 (청송 국가지질공원)","category":"NATURE","coord":{"lat":36.4057,"lng":129.0159},"open_hours":[{"day_of_week":0,"open_min":0,"close_min":1440},{"day_of_week":1,"open_min":0,"close_min":1440},{"day_of_week":2,"open_min":0,"close_min":1440},{"day_of_week":3,"open_min":0,"close_min":1440},{"day_of_week":4,"open_min":0,"close_min":1440},{"day_of_week":5,"open_min":0,"close_min":1440},{"day_of_week":6,"open_min":0,"close_min":1440}],"quality":"FULL","source":"PLACES_API"},"tags":["자연공원"],"region":"청송군","opening_hours_raw":"상시 개방\n휴무: 연중무휴","provenance":{"content_id":"2616230","content_type_id":"12","address":"경상북도 청송군 파천면 양수상부길 186","image_url":"https://tong.visitkorea.or.kr/cms/resource/84/3536684_image2_1.jpg","modified_time":"20261109170448","detail":{"heritage1":"0","heritage2":"0","heritage3":"0"},"detail_fetched_on":"2026-11-10","cpyrht_div_cd":"Type3"}},
     {"provisional_id":"tourapi-2611568","source":"TOURAPI","poi":{"poi_id":"tourapi-2611568","name":"계남근린공원","category":"SIGHT","coord":{"lat":37.5093678747,"lng":126.8558425206},"open_hours":[{"day_of_week":0,"open_min":0,"close_min":1440},{"day_of_week":1,"open_min":0,"close_min":1440},{"day_of_week":2,"open_min":0,"close_min":1440},{"day_of_week":3,"open_min":0,"close_min":1440},{"day_of_week":4,"open_min":0,"close_min":1440},{"day_of_week":5,"open_min":0,"close_min":1440},{"day_of_week":6,"open_min":0,"close_min":1440}],"quality":"FULL","source":"PLACES_API"},"tags":["도시공원"],"region":"양천구","opening_hours_raw":"상시 개방\n휴무: 연중무휴","provenance":{"content_id":"2611568","content_type_id":"12","address":"서울특별시 양천구 중앙로17길 21 (신정동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/26/3568226_image2_1.jpg","modified_time":"20261109145716","detail":{"parking":"불가능","heritage1":"0","heritage2":"0","heritage3":"0"},"detail_fetched_on":"2026-11-10","cpyrht_div_cd":"Type1"}},
     {"provisional_id":"tourapi-3548614","source":"TOURAPI","poi":{"poi_id":"tourapi-3548614","name":"거안(GEOAN)","category":"SHOPPING","coord":{"lat":37.57425198901539,"lng":126.98485145131795},"open_hours":[{"day_of_week":0,"open_min":630,"close_min":1200},{"day_of_week":1,"open_min":630,"close_min":1200},{"day_of_week":2,"open_min":630,"close_min":1200},{"day_of_week":3,"open_min":630,"close_min":1200},{"day_of_week":4,"open_min":630,"close_min":1200},{"day_of_week":5,"open_min":630,"close_min":1200},{"day_of_week":6,"open_min":630,"close_min":1200}],"quality":"FULL","source":"PLACES_API"},"tags":["전문매장/상가"],"region":"종로구","opening_hours_raw":"10:30~20:00\n휴무: 연중무휴","provenance":{"content_id":"3548614","content_type_id":"38","address":"서울특별시 종로구 인사동길 44 (관훈동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/80/3548780_image2_1.jpg","modified_time":"20260427154325","detail":{"saleitem":"목공예 / 도자기 / 청자 / 옻칠 등"},"detail_fetched_on":"2026-11-10","cpyrht_div_cd":"Type3"}},
@@ -108543,6 +108484,8 @@
     {"provisional_id":"tourapi-4154980","source":"TOURAPI","poi":{"poi_id":"tourapi-4154980","name":"계림숲","category":"SIGHT","coord":{"lat":35.9937134248,"lng":129.2233894563},"open_hours":[],"quality":"PARTIAL","source":"PLACES_API"},"tags":["역사유적지"],"region":"경주시","opening_hours_raw":null,"provenance":{"content_id":"4154980","content_type_id":"12","address":"경상북도 경주시 교동","image_url":null,"modified_time":"20261118165911","detail":{"heritage1":"0","heritage2":"0","heritage3":"0"},"detail_fetched_on":"2026-11-21"}},
     {"provisional_id":"tourapi-2717329","source":"TOURAPI","poi":{"poi_id":"tourapi-2717329","name":"관사골작업실 협동조합","category":"ACTIVITY","coord":{"lat":36.8285862353,"lng":128.6187039788},"open_hours":[{"day_of_week":0,"open_min":600,"close_min":1140},{"day_of_week":1,"open_min":600,"close_min":1140},{"day_of_week":2,"open_min":600,"close_min":1140},{"day_of_week":3,"open_min":600,"close_min":1140},{"day_of_week":4,"open_min":600,"close_min":1140},{"day_of_week":5,"open_min":600,"close_min":1140}],"quality":"FULL","source":"PLACES_API"},"tags":["기타체험"],"region":"영주시","opening_hours_raw":"10:00~19:00\n휴무: 일요일 휴무","provenance":{"content_id":"2717329","content_type_id":"12","address":"경상북도 영주시 두서길19번길 10","image_url":"https://tong.visitkorea.or.kr/cms/resource/50/2820450_image2_1.jpg","modified_time":"20261118113755","detail":{"parking":"가능(3대)","heritage1":"0","heritage2":"0","heritage3":"0","chkbabycarriage":"없음","chkpet":"없음"},"detail_fetched_on":"2026-11-21","cpyrht_div_cd":"Type1"}},
     {"provisional_id":"tourapi-4153187","source":"TOURAPI","poi":{"poi_id":"tourapi-4153187","name":"국립경주박물관신라천년보고","category":"SIGHT","coord":{"lat":35.826215623,"lng":129.228807747},"open_hours":[],"quality":"PARTIAL","source":"PLACES_API"},"tags":["역사유물"],"region":"경주시","opening_hours_raw":null,"provenance":{"content_id":"4153187","content_type_id":"12","address":"경상북도 경주시 서라벌대로 54 (인왕동)","image_url":null,"modified_time":"20261118165025","detail":{"heritage1":"0","heritage2":"0","heritage3":"0"},"detail_fetched_on":"2026-11-21"}},
-    {"provisional_id":"tourapi-4152980","source":"TOURAPI","poi":{"poi_id":"tourapi-4152980","name":"문무대왕수중릉","category":"SIGHT","coord":{"lat":35.7405745231,"lng":129.4833249108},"open_hours":[],"quality":"PARTIAL","source":"PLACES_API"},"tags":["역사유적지"],"region":"경주시","opening_hours_raw":null,"provenance":{"content_id":"4152980","content_type_id":"12","address":"경상북도 경주시 문무대왕면 봉길해안길 41","image_url":null,"modified_time":"20261118165025","detail":{"heritage1":"0","heritage2":"0","heritage3":"0"},"detail_fetched_on":"2026-11-21"}}
+    {"provisional_id":"tourapi-4152980","source":"TOURAPI","poi":{"poi_id":"tourapi-4152980","name":"문무대왕수중릉","category":"SIGHT","coord":{"lat":35.7405745231,"lng":129.4833249108},"open_hours":[],"quality":"PARTIAL","source":"PLACES_API"},"tags":["역사유적지"],"region":"경주시","opening_hours_raw":null,"provenance":{"content_id":"4152980","content_type_id":"12","address":"경상북도 경주시 문무대왕면 봉길해안길 41","image_url":null,"modified_time":"20261118165025","detail":{"heritage1":"0","heritage2":"0","heritage3":"0"},"detail_fetched_on":"2026-11-21"}},
+    {"provisional_id":"tourapi-2900922","source":"TOURAPI","poi":{"poi_id":"tourapi-2900922","name":"카카오프렌즈 홍대플래그십 스토어","category":"SHOPPING","coord":{"lat":37.5564135550031,"lng":126.923881224788},"open_hours":[{"day_of_week":0,"open_min":630,"close_min":1320},{"day_of_week":1,"open_min":630,"close_min":1320},{"day_of_week":2,"open_min":630,"close_min":1320},{"day_of_week":3,"open_min":630,"close_min":1320},{"day_of_week":4,"open_min":630,"close_min":1320},{"day_of_week":5,"open_min":630,"close_min":1320},{"day_of_week":6,"open_min":630,"close_min":1320}],"quality":"FULL","source":"PLACES_API"},"tags":["면세점"],"region":"마포구","opening_hours_raw":"10:30~22:00","provenance":{"content_id":"2900922","content_type_id":"38","address":"서울특별시 마포구 양화로 162 (동교동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/71/4018471_image2_1.jpg","modified_time":"20260318101005","detail":{"saleitem":"문구/장난감/오락용품","fairday":"월-일요일"},"detail_fetched_on":"2026-11-22","cpyrht_div_cd":"Type3"}},
+    {"provisional_id":"tourapi-2907536","source":"TOURAPI","poi":{"poi_id":"tourapi-2907536","name":"행복한백화점","category":"SHOPPING","coord":{"lat":37.5292109947,"lng":126.875984665},"open_hours":[{"day_of_week":0,"open_min":630,"close_min":1200},{"day_of_week":1,"open_min":630,"close_min":1200},{"day_of_week":2,"open_min":630,"close_min":1200},{"day_of_week":3,"open_min":630,"close_min":1200},{"day_of_week":4,"open_min":630,"close_min":1200},{"day_of_week":5,"open_min":630,"close_min":1200},{"day_of_week":6,"open_min":630,"close_min":1200}],"quality":"FULL","source":"PLACES_API"},"tags":["면세점"],"region":"양천구","opening_hours_raw":"10:30-20:00\n휴무: 명절, 월 1회","provenance":{"content_id":"2907536","content_type_id":"38","address":"서울특별시 양천구 목동동로 309 (목동)","image_url":"https://tong.visitkorea.or.kr/cms/resource/38/4018238_image2_1.jpg","modified_time":"20260728103442","detail":{"saleitem":"의류 , 신발류 , 가방류 , 보석/액세서리 , 의약품/의료용 기기 , 문구/장난감/오락용품 , 복합쇼핑몰(백화점, 마트, 편의점, 아울렛 등)","fairday":"월-일요일"},"detail_fetched_on":"2026-11-22","cpyrht_div_cd":"Type3"}}
   ]
 }
