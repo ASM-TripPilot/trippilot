@@ -51,6 +51,8 @@ class RegionCodeCoverageTest : StringSpec({
         usesBigrams("10%") shouldBe false
         usesBigrams("a_b") shouldBe false
         usesBigrams("a\\b") shouldBe false
+        usesBigrams("😀") shouldBe false // 코드포인트 1개(UTF-16 2) — 조각이 없다
+        usesBigrams("😀카") shouldBe true
     }
 
     "덮이지 않는 혼합(다른 시도의 시군구 + 시도)은 그대로 둔다" {

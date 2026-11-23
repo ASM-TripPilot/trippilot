@@ -223,7 +223,8 @@ class PoiRepositoryAdapter(
      * 순서를 쓴다. 그러면 커서가 가리키는 지점이 정렬과 어긋나 행이 중복·누락된다.
      * (로컬·CI 의 alpine 은 musl 이라 로케일이 사실상 C 로 동작해 **이 차이가 안 드러난다** —
      * glibc 이미지나 관리형 DB 에서만 갈린다. 그래서 테스트로 잡히지 않는 종류다.)
-     * TRIP-1843 부터 정렬 키에 `collate "C"`(코드포인트)를 건다 — JVM 과 같은 순서가 되고, en_US 비교가 한글에서 느려
+     * TRIP-1843 부터 정렬 키에 `collate "C"`(코드포인트)를 건다 — BMP 안에서는 JVM(UTF-16) 비교와 같은 순서가 되고(보조평면 글자는
+     * 둘이 갈린다), en_US 비교가 한글에서 느려
      * 첫 장 정렬이 스캔보다 비쌌던 것(실측 27 ms / 1,985행)도 함께 푼다. en_US 는 한글을 가나다순으로 놓지도 않았다
      * (공원집 → 소공원 → 가야공원).
      *
@@ -252,8 +253,10 @@ class PoiRepositoryAdapter(
         fun page(len: Int, codes: List<String>): List<PoiEntity> = when {
             len == SIDO_LENGTH && bigrams -> jpa.findActiveInSidoByBigrams(codes, c, query, rank, key, id, limit, s)
             len == SIDO_LENGTH -> jpa.findActiveInSido(codes, c, query, rank, key, id, limit, s)
-            bigrams -> jpa.findActiveInSigunguByBigrams(codes, c, query, rank, key, id, limit, s)
-            else -> jpa.findActiveInSigungu(codes, c, query, rank, key, id, limit, s)
+            len == SIGUNGU_LENGTH && bigrams -> jpa.findActiveInSigunguByBigrams(codes, c, query, rank, key, id, limit, s)
+            len == SIGUNGU_LENGTH -> jpa.findActiveInSigungu(codes, c, query, rank, key, id, limit, s)
+            // 카탈로그 코드는 2·5자리뿐이다(region.region_code FK · regionCode 정규식). 다른 길이가 오면 등호 쿼리가 조용히 다른 지역을 잡는다.
+            else -> error("지역 코드는 2자리 또는 5자리여야 합니다: 길이 $len")
         }
         if (regionCodes.isEmpty()) {
             val rows = if (bigrams) jpa.findActiveByBigrams(c, query, rank, key, id, limit, s)
@@ -334,9 +337,12 @@ class PoiRepositoryAdapter(
  * 1글자는 조각이 없고(빈 배열 @> 은 전부 참이라 인덱스 전체를 훑는다), `%`·`_`·`\` 는 like 에서 와일드카드·이스케이프로
  * 읽혀(검색어를 이스케이프하지 않는다) 글자 그대로의 조각과 뜻이 달라진다 — 그때는 종전 쿼리(전체 스캔)로 같은 결과를 낸다.
  */
-internal fun usesBigrams(query: String): Boolean = query.length >= 2 && query.none { it == '%' || it == '_' || it == '\\' }
+internal fun usesBigrams(query: String): Boolean =
+    // 글자 수는 코드포인트로 센다 — 이모지·확장 한자 한 글자는 UTF-16 으로 2라 DB 쪽 조각이 빈 배열이 된다.
+    query.codePointCount(0, query.length) >= 2 && query.none { it == '%' || it == '_' || it == '\\' }
 
 private const val SIDO_LENGTH = 2
+private const val SIGUNGU_LENGTH = 5
 
 // ── 탐색 목록 네이티브 쿼리 조각(TRIP-1843) — 정렬·커서 식은 도메인 PoiSearchOrder 와 같아야 한다 ──
 private const val SEARCH_SELECT =
@@ -353,7 +359,7 @@ private const val SEARCH_PAGE =
     "and ($SEARCH_RANK, $SEARCH_KEY, p.poi_id) > (:afterRank, :afterKey, :afterId) order by $SEARCH_RANK, $SEARCH_KEY, p.poi_id limit :limit"
 
 /**
- * 더 짧은 코드가 접두로 덮는 코드를 뺀다(TRIP-1723). 조회가 `substring(region_code, 1, len) in (codes)` —
+ * 더 짧은 코드가 접두로 덮는 코드를 뺀다(TRIP-1723). 조회가 시도 `left(region_code, 2) in (codes)` —
  * 곧 "region_code 가 그 코드로 시작한다"라서, `50110` 으로 잡히는 행은 전부 `50` 으로도 잡힌다. 빼도 합집합이 같다.
  */
 internal fun dropCoveredCodes(codes: List<String>): List<String> {

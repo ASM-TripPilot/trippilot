@@ -1,6 +1,7 @@
 package com.trippilot.app.persistence
 
 import com.trippilot.placedata.application.PoiQueryService
+import com.trippilot.placedata.domain.PoiCategory
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
@@ -75,6 +76,20 @@ class PlacesSearchOrderIT : AbstractPostgresIntegrationTest() {
         names("지역IT", "26440") shouldBe listOf("지역IT해운대")
         names("I", "26").filter { it.startsWith("지역IT") } shouldBe listOf("지역IT동구", "지역IT해운대")
         names("지역IT", "11110") shouldBe listOf("지역IT종로")
+        names("I", "26440").filter { it.startsWith("지역IT") } shouldBe listOf("지역IT해운대") // 시군구 · 바이그램 아님
+    }
+
+    @Test
+    fun `카테고리를 함께 걸어도 여섯 경로가 같은 행을 준다`() {
+        insert("분류IT바다", "26440")
+
+        fun cat(q: String, code: String?) =
+            places.search(region = null, category = PoiCategory.명소, query = q, regionCode = code).items.map { it.nameKo }.filter { it.startsWith("분류IT") }
+        listOf(null, "26", "26440").forEach { code ->
+            cat("분류IT", code) shouldBe listOf("분류IT바다")
+            cat("I", code) shouldBe listOf("분류IT바다")
+        }
+        places.search(region = null, category = PoiCategory.맛집, query = "분류IT", regionCode = "26").items.size shouldBe 0
     }
 
     @Test
