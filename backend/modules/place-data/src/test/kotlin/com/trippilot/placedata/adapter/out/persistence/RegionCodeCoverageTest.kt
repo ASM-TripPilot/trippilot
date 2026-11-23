@@ -7,6 +7,7 @@ import io.kotest.property.arbitrary.element
 import io.kotest.property.arbitrary.list
 import io.kotest.property.arbitrary.arbitrary
 import io.kotest.property.checkAll
+import io.mockk.confirmVerified
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -14,7 +15,7 @@ import io.mockk.verify
 /**
  * 덮인 지역 코드 빼기(TRIP-1723).
  *
- * 조회의 매칭은 "region_code 가 그 코드로 시작한다"다(`substring(region_code, 1, len) in (codes)`).
+ * 조회의 매칭은 "region_code 가 그 코드로 시작한다"다(시도 `left(region_code, 2) in`, 시군구 `region_code in` — TRIP-1843).
  * 덮인 코드를 빼도 **매칭 집합이 같아야** 하고, `제주`([50, 50110])는 **한 쿼리**가 되어야 한다.
  */
 class RegionCodeCoverageTest : StringSpec({
@@ -34,12 +35,22 @@ class RegionCodeCoverageTest : StringSpec({
 
     "제주(50·50110)는 시도 한 쿼리로 끝난다 — 길이 혼합 병합 경로로 가지 않는다" {
         val jpa = mockk<PoiJpaRepository>()
-        every { jpa.findActiveByRegionPrefixes(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns emptyList()
+        every { jpa.findActiveInSido(any(), any(), any(), any(), any(), any(), any(), any()) } returns emptyList()
 
         PoiRepositoryAdapter(jpa).findActive(listOf("50", "50110"), null, "", null, 10)
 
-        verify(exactly = 1) { jpa.findActiveByRegionPrefixes(2, listOf("50"), null, "", -1, "", any(), 10, "") }
-        verify(exactly = 1) { jpa.findActiveByRegionPrefixes(any(), any(), any(), any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 1) { jpa.findActiveInSido(listOf("50"), null, "", -1, "", any(), 10, "") }
+        confirmVerified(jpa) // 시군구·병합 경로를 하나도 부르지 않았다
+    }
+
+    "바이그램 경로는 2글자 이상이고 LIKE 메타문자가 없을 때만 — 그 밖은 종전 쿼리(TRIP-1843)" {
+        usesBigrams("카페") shouldBe true
+        usesBigrams("박물관") shouldBe true
+        usesBigrams("") shouldBe false
+        usesBigrams("囍") shouldBe false
+        usesBigrams("10%") shouldBe false
+        usesBigrams("a_b") shouldBe false
+        usesBigrams("a\\b") shouldBe false
     }
 
     "덮이지 않는 혼합(다른 시도의 시군구 + 시도)은 그대로 둔다" {

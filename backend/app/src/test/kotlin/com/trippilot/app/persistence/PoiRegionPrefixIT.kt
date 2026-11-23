@@ -23,7 +23,7 @@ import java.util.UUID
 /**
  * `제주` 장소 검색(TRIP-1723) — 카탈로그가 시도(50)와 제주시(50110)를 함께 돌려주는 이름.
  *
- * 실 DB 에서만 드러나는 것: 조회가 `substring(region_code, 1, len)` 이라 덮임 판정이 그 의미와 같아야 결과가 같다.
+ * 실 DB 에서만 드러나는 것: 조회가 접두(시도 `left(region_code, 2)`)라 덮임 판정이 그 의미와 같아야 결과가 같다.
  * 커서로 끝까지 넘겨 받은 결과가 "region_code 가 50 으로 시작하는 ACTIVE" 전부와 같고, 중복이 없고,
  * 순서가 시도 한 쿼리([50])와 같아야 한다.
  */
@@ -87,13 +87,13 @@ class PoiRegionPrefixIT : AbstractPostgresIntegrationTest() {
         val q = ""
         val seed: String? = null
         val limit = 51
-        fun old() = listOf(2 to listOf("50"), 5 to listOf("50110"))
-            .flatMap { (len, codes) -> jpa.findActiveByRegionPrefixes(len, codes, null, q, -1, "", first, limit, seed ?: "") }
+        fun old() = (jpa.findActiveInSido(listOf("50"), null, q, -1, "", first, limit, seed ?: "") +
+            jpa.findActiveInSigungu(listOf("50110"), null, q, -1, "", first, limit, seed ?: ""))
             .distinctBy { it.poiId }
             .map { it.toDomain() }
             .sortedWith(compareBy({ PoiSearchOrder.rank(q, it.nameKo) }, { PoiSearchOrder.key(it.nameKo, it.poiId, seed) }, { it.poiId }))
             .take(limit)
-        fun new() = jpa.findActiveByRegionPrefixes(2, listOf("50"), null, q, -1, "", first, limit, seed ?: "").map { it.toDomain() }
+        fun new() = jpa.findActiveInSido(listOf("50"), null, q, -1, "", first, limit, seed ?: "").map { it.toDomain() }
         old().map { it.poiId } shouldBe new().map { it.poiId }   // 재연이 같은 답을 내야 비교가 의미 있다
         repeat(20) { old(); new() }   // 워밍업
         fun p50(f: () -> Any): Double = (1..100).map { val t = System.nanoTime(); f(); (System.nanoTime() - t) / 1e6 }.sorted()[50]
