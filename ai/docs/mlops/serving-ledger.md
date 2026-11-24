@@ -35,3 +35,4 @@
 | 2026-10-27 | 14 | bedrock | 23.4 | 5.6 | 1537 | 2.19 | 0.00 | 0.0933 | 0.0000 | HOLD | none | CostExplorer: AccessDeniedException; Bedrock $ 는 청구 규칙 계산(활성 창×CMU×단가); gpu_quota=no; zero_billing_verified=no; eks_p95_ms 미측정; EKS 비용 실측 없음 |
 | 2026-11-03 | 14 | bedrock | 53.5 | 16.1 | 1469 | 6.34 | 0.00 | 0.1184 | 0.0000 | HOLD | none | CostExplorer: AccessDeniedException; Bedrock $ 는 청구 규칙 계산(활성 창×CMU×단가); gpu_quota=no; zero_billing_verified=no; eks_p95_ms 미측정; EKS 비용 실측 없음 |
 | 2026-11-17 | 14 | bedrock | 73.9 | 18.4 | 1303 | 7.21 | 0.00 | 0.0976 | 0.0000 | HOLD | none | CostExplorer: AccessDeniedException; Bedrock $ 는 청구 규칙 계산(활성 창×CMU×단가); gpu_quota=no; zero_billing_verified=no; eks_p95_ms 미측정; EKS 비용 실측 없음 |
+| 2026-11-24 | 14 | bedrock | 91.3 | 26.5 | 1278 | 10.40 | 0.00 | 0.1139 | 0.0000 | HOLD | none | CostExplorer: AccessDeniedException; Bedrock $ 는 청구 규칙 계산(활성 창×CMU×단가); gpu_quota=no; zero_billing_verified=no; eks_p95_ms 미측정; EKS 비용 실측 없음 |
