@@ -73,15 +73,12 @@ interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
      * 커서가 가리키는 지점이 정렬 순서와 어긋나고, 행이 중복·누락된다.
      */
     // 정렬 = (관련도, 법인 접두를 뗀 이름 | seed 가 있으면 md5(seed || poi_id), id) — TRIP-1003 (A) · TRIP-1570. 식은 도메인 `PoiSearchOrder` 와
-    // **같아야 한다**(커서는 그쪽이 만든다). JPQL 엔 regexp 가 없어 네이티브다.
-    @Query(
-        nativeQuery = true,
-        value = "select p.* from poi p where p.data_status = 'ACTIVE' " +
-            "and (:category is null or p.category = :category) " +
-            "and lower(p.name_ko) like lower('%' || :q || '%') escape '\\' " +
-            "and ((case when :q = '' then 0 when lower(p.name_ko) = lower(:q) then 0 when lower(p.name_ko) like lower(:q) || '%' escape '\\' then 1 else 2 end), (case when :seed = '' then coalesce(nullif(regexp_replace(p.name_ko, '^\\s*(\\([^)]*\\)|（[^）]*）|[㈜㈔㈗㈐])\\s*', ''), ''), p.name_ko) else md5(:seed || cast(p.poi_id as text)) end), p.poi_id) > (:afterRank, :afterKey, :afterId) " +
-            "order by (case when :q = '' then 0 when lower(p.name_ko) = lower(:q) then 0 when lower(p.name_ko) like lower(:q) || '%' escape '\\' then 1 else 2 end), (case when :seed = '' then coalesce(nullif(regexp_replace(p.name_ko, '^\\s*(\\([^)]*\\)|（[^）]*）|[㈜㈔㈗㈐])\\s*', ''), ''), p.name_ko) else md5(:seed || cast(p.poi_id as text)) end), p.poi_id limit :limit",
-    )
+    // **같아야 한다**(커서는 그쪽이 만든다). JPQL 엔 regexp 가 없어 네이티브다. 조각은 파일 끝 상수(SEARCH_*)로 모았다 — 아래 여섯 쿼리가
+    // 같은 정렬·커서 식을 쓰고, 다른 것은 거르는 조건뿐이다(TRIP-1843).
+    //
+    // 왜 여섯인가(TRIP-1843): 인덱스를 타려면 조건 모양이 고정돼야 한다. 검색어 조건을 `(짧으면 통과 or 바이그램)` 처럼 한 문장에
+    // 섞으면 서버 준비문(generic plan)에서 플래너가 인덱스를 못 쓴다. 그래서 어댑터가 (검색어 바이그램 여부) × (지역 없음·시도·시군구)로 고른다.
+    @Query(nativeQuery = true, value = SEARCH_SELECT + SEARCH_NAME + SEARCH_PAGE)
     fun findActive(
         @Param("category") category: String?,
         @Param("q") q: String,
@@ -92,25 +89,67 @@ interface PoiJpaRepository : JpaRepository<PoiEntity, UUID> {
         @Param("seed") seed: String,
     ): List<PoiEntity>
 
+    @Query(nativeQuery = true, value = SEARCH_SELECT + SEARCH_BIGRAM + SEARCH_NAME + SEARCH_PAGE)
+    fun findActiveByBigrams(
+        @Param("category") category: String?,
+        @Param("q") q: String,
+        @Param("afterRank") afterRank: Int,
+        @Param("afterKey") afterKey: String,
+        @Param("afterId") afterId: UUID,
+        @Param("limit") limit: Int,
+        @Param("seed") seed: String,
+    ): List<PoiEntity>
+
     /**
-     * 지역 코드 **접두사** 매칭(TRIP-503). `26` → 부산 전체, `26440` → 강서구만.
+     * 지역 코드로 거른다(TRIP-503) — 시도(2자리)는 [findActiveInSido], 시군구(5자리)는 여기. `26` → 부산 전체, `26440` → 강서구만.
      *
      * 이름(`p.region`)으로 거르지 않는 이유: 시군구명은 **유일하지 않다**. `동구` 는 대전·대구·광주·부산에
      * 모두 있어 이름으로 거르면 네 도시가 한 목록에 섞인다(실측 118건). 광역명(`부산`)은 적재분에
      * 거의 없어 8건만 잡혔다(코드 기준 149건). 코드가 유일하고 접두사로 롤업까지 된다 —
      * 숙소(`StayEntity.findByRegionPrefix`)가 같은 방식이다.
+     *
+     * 종전 `substring(region_code, 1, :len) in (:codes)` 는 길이가 매개변수라 어떤 인덱스도 못 탔다(TRIP-1843).
+     * 시군구는 코드 전체가 같아야 하므로 등호 — 기존 ix_poi_region_active(V2.25)를 탄다.
      */
-    @Query(
-        nativeQuery = true,
-        value = "select p.* from poi p where p.data_status = 'ACTIVE' " +
-            "and (:category is null or p.category = :category) " +
-            "and substring(p.region_code, 1, :len) in (:codes) " +
-            "and lower(p.name_ko) like lower('%' || :q || '%') escape '\\' " +
-            "and ((case when :q = '' then 0 when lower(p.name_ko) = lower(:q) then 0 when lower(p.name_ko) like lower(:q) || '%' escape '\\' then 1 else 2 end), (case when :seed = '' then coalesce(nullif(regexp_replace(p.name_ko, '^\\s*(\\([^)]*\\)|（[^）]*）|[㈜㈔㈗㈐])\\s*', ''), ''), p.name_ko) else md5(:seed || cast(p.poi_id as text)) end), p.poi_id) > (:afterRank, :afterKey, :afterId) " +
-            "order by (case when :q = '' then 0 when lower(p.name_ko) = lower(:q) then 0 when lower(p.name_ko) like lower(:q) || '%' escape '\\' then 1 else 2 end), (case when :seed = '' then coalesce(nullif(regexp_replace(p.name_ko, '^\\s*(\\([^)]*\\)|（[^）]*）|[㈜㈔㈗㈐])\\s*', ''), ''), p.name_ko) else md5(:seed || cast(p.poi_id as text)) end), p.poi_id limit :limit",
-    )
-    fun findActiveByRegionPrefixes(
-        @Param("len") len: Int,
+    @Query(nativeQuery = true, value = SEARCH_SELECT + SEARCH_SIGUNGU + SEARCH_NAME + SEARCH_PAGE)
+    fun findActiveInSigungu(
+        @Param("codes") codes: Collection<String>,
+        @Param("category") category: String?,
+        @Param("q") q: String,
+        @Param("afterRank") afterRank: Int,
+        @Param("afterKey") afterKey: String,
+        @Param("afterId") afterId: UUID,
+        @Param("limit") limit: Int,
+        @Param("seed") seed: String,
+    ): List<PoiEntity>
+
+    @Query(nativeQuery = true, value = SEARCH_SELECT + SEARCH_SIGUNGU + SEARCH_BIGRAM + SEARCH_NAME + SEARCH_PAGE)
+    fun findActiveInSigunguByBigrams(
+        @Param("codes") codes: Collection<String>,
+        @Param("category") category: String?,
+        @Param("q") q: String,
+        @Param("afterRank") afterRank: Int,
+        @Param("afterKey") afterKey: String,
+        @Param("afterId") afterId: UUID,
+        @Param("limit") limit: Int,
+        @Param("seed") seed: String,
+    ): List<PoiEntity>
+
+    /** 시도(2자리 접두) — 표현식 인덱스 ix_poi_active_sido(V2.95)를 탄다. 식이 인덱스와 글자까지 같아야 한다(`left(region_code, 2)`). */
+    @Query(nativeQuery = true, value = SEARCH_SELECT + SEARCH_SIDO + SEARCH_NAME + SEARCH_PAGE)
+    fun findActiveInSido(
+        @Param("codes") codes: Collection<String>,
+        @Param("category") category: String?,
+        @Param("q") q: String,
+        @Param("afterRank") afterRank: Int,
+        @Param("afterKey") afterKey: String,
+        @Param("afterId") afterId: UUID,
+        @Param("limit") limit: Int,
+        @Param("seed") seed: String,
+    ): List<PoiEntity>
+
+    @Query(nativeQuery = true, value = SEARCH_SELECT + SEARCH_SIDO + SEARCH_BIGRAM + SEARCH_NAME + SEARCH_PAGE)
+    fun findActiveInSidoByBigrams(
         @Param("codes") codes: Collection<String>,
         @Param("category") category: String?,
         @Param("q") q: String,
@@ -180,16 +219,20 @@ class PoiRepositoryAdapter(
 
     /**
      * **정렬·커서 비교를 DB 한 곳에서만 한다.** 코드별로 나눠 조회하고 앱에서 합쳐 정렬하면 정렬
-     * 구현이 둘이 되는데, 그 둘은 같지 않다 — DB 는 콜레이션(`en_US.utf8`)을, JVM 은 코드포인트
+     * 구현이 둘이 되는데, 그 둘은 같지 않았다 — DB 는 콜레이션(`en_US.utf8`)을, JVM 은 코드포인트
      * 순서를 쓴다. 그러면 커서가 가리키는 지점이 정렬과 어긋나 행이 중복·누락된다.
      * (로컬·CI 의 alpine 은 musl 이라 로케일이 사실상 C 로 동작해 **이 차이가 안 드러난다** —
      * glibc 이미지나 관리형 DB 에서만 갈린다. 그래서 테스트로 잡히지 않는 종류다.)
+     * TRIP-1843 부터 정렬 키에 `collate "C"`(코드포인트)를 건다 — BMP 안에서는 JVM(UTF-16) 비교와 같은 순서가 되고(보조평면 글자는
+     * 둘이 갈린다), en_US 비교가 한글에서 느려
+     * 첫 장 정렬이 스캔보다 비쌌던 것(실측 27 ms / 1,985행)도 함께 푼다. en_US 는 한글을 가나다순으로 놓지도 않았다
+     * (공원집 → 소공원 → 가야공원).
      *
      * 한 이름이 가리키는 코드는 대개 같은 층이다(`동구` → 26170·27140). 하지만 **층이 섞이는 이름이 있다** —
      * `제주` 는 시도 별칭(50)이자 제주시 별칭(50110)이라 둘 다 온다(운영 14일 1,412회, TRIP-1723).
      * 50110 은 접두 50 안에 이미 들어 있으므로 [dropCoveredCodes] 로 빼면 한 쿼리가 되고, 정렬·커서도
      * DB 한 곳에 남는다. 덮이지 않는 혼합(다른 시도의 시군구 + 시도)만 아래 병합 경로로 간다.
-     * 길이로 묶는 이유는, 섞이면 `substring` 길이가 어긋나 **조용히 다른 지역을 잡기** 때문이다.
+     * 길이로 묶는 이유는, 시도(접두)와 시군구(등호)가 다른 쿼리이기 때문이다.
      */
     override fun findActive(
         regionCodes: List<String>,
@@ -205,20 +248,31 @@ class PoiRepositoryAdapter(
         val rank = after?.rank ?: -1
         val key = after?.sortKey ?: ""
         val id = after?.poiId ?: FIRST_ID
+        val c = category?.name
+        val bigrams = usesBigrams(query)
+        fun page(len: Int, codes: List<String>): List<PoiEntity> = when {
+            len == SIDO_LENGTH && bigrams -> jpa.findActiveInSidoByBigrams(codes, c, query, rank, key, id, limit, s)
+            len == SIDO_LENGTH -> jpa.findActiveInSido(codes, c, query, rank, key, id, limit, s)
+            len == SIGUNGU_LENGTH && bigrams -> jpa.findActiveInSigunguByBigrams(codes, c, query, rank, key, id, limit, s)
+            len == SIGUNGU_LENGTH -> jpa.findActiveInSigungu(codes, c, query, rank, key, id, limit, s)
+            // 카탈로그 코드는 2·5자리뿐이다(region.region_code FK · regionCode 정규식). 다른 길이가 오면 등호 쿼리가 조용히 다른 지역을 잡는다.
+            else -> error("지역 코드는 2자리 또는 5자리여야 합니다: 길이 $len")
+        }
         if (regionCodes.isEmpty()) {
-            return jpa.findActive(category?.name, query, rank, key, id, limit, s).map { it.toDomain() }
+            val rows = if (bigrams) jpa.findActiveByBigrams(c, query, rank, key, id, limit, s)
+            else jpa.findActive(c, query, rank, key, id, limit, s)
+            return rows.map { it.toDomain() }
         }
         val byLength = dropCoveredCodes(regionCodes).groupBy { it.length }
         if (byLength.size == 1) {
             val (len, codes) = byLength.entries.single()
-            return jpa.findActiveByRegionPrefixes(len, codes, category?.name, query, rank, key, id, limit, s)
-                .map { it.toDomain() }
+            return page(len, codes).map { it.toDomain() }
         }
         // 덮이지 않는 혼합만 남았다 — 현재 카탈로그에는 없다. 생기면 병합 정렬을 앱이 맡는다(도메인과 같은 식, 위 KDoc 의
         // 콜레이션 차이가 커서를 어긋낼 수 있다) — 로그로 드러낸다.
         log.warn("지역 코드 길이가 섞였습니다 — 병합 정렬을 앱에서 수행합니다. codes={}", regionCodes)
         return byLength.entries
-            .flatMap { (len, codes) -> jpa.findActiveByRegionPrefixes(len, codes, category?.name, query, rank, key, id, limit, s) }
+            .flatMap { (len, codes) -> page(len, codes) }
             .distinctBy { it.poiId }
             .map { it.toDomain() }
             .sortedWith(compareBy({ PoiSearchOrder.rank(query, it.nameKo) }, { PoiSearchOrder.key(it.nameKo, it.poiId, seed) }, { it.poiId }))
@@ -279,7 +333,33 @@ class PoiRepositoryAdapter(
 }
 
 /**
- * 더 짧은 코드가 접두로 덮는 코드를 뺀다(TRIP-1723). 조회가 `substring(region_code, 1, len) in (codes)` —
+ * 바이그램 인덱스(V2.95)로 좁혀도 되는 검색어인가(TRIP-1843) — 2글자 이상이고 LIKE 메타문자가 없어야 한다.
+ * 1글자는 조각이 없고(빈 배열 @> 은 전부 참이라 인덱스 전체를 훑는다), `%`·`_`·`\` 는 like 에서 와일드카드·이스케이프로
+ * 읽혀(검색어를 이스케이프하지 않는다) 글자 그대로의 조각과 뜻이 달라진다 — 그때는 종전 쿼리(전체 스캔)로 같은 결과를 낸다.
+ */
+internal fun usesBigrams(query: String): Boolean =
+    // 글자 수는 코드포인트로 센다 — 이모지·확장 한자 한 글자는 UTF-16 으로 2라 DB 쪽 조각이 빈 배열이 된다.
+    query.codePointCount(0, query.length) >= 2 && query.none { it == '%' || it == '_' || it == '\\' }
+
+private const val SIDO_LENGTH = 2
+private const val SIGUNGU_LENGTH = 5
+
+// ── 탐색 목록 네이티브 쿼리 조각(TRIP-1843) — 정렬·커서 식은 도메인 PoiSearchOrder 와 같아야 한다 ──
+private const val SEARCH_SELECT =
+    "select p.* from poi p where p.data_status = 'ACTIVE' and (:category is null or p.category = :category) "
+private const val SEARCH_BIGRAM = "and poi_name_bigrams(p.name_ko) @> poi_name_bigrams(:q) "
+private const val SEARCH_SIDO = "and left(p.region_code, 2) in (:codes) "
+private const val SEARCH_SIGUNGU = "and p.region_code in (:codes) "
+private const val SEARCH_NAME = "and lower(p.name_ko) like lower('%' || :q || '%') escape '\\' "
+private const val SEARCH_RANK =
+    "(case when :q = '' then 0 when lower(p.name_ko) = lower(:q) then 0 when lower(p.name_ko) like lower(:q) || '%' escape '\\' then 1 else 2 end)"
+private const val SEARCH_KEY =
+    "(case when :seed = '' then coalesce(nullif(regexp_replace(p.name_ko, '^\\s*(\\([^)]*\\)|（[^）]*）|[㈜㈔㈗㈐])\\s*', ''), ''), p.name_ko) else md5(:seed || cast(p.poi_id as text)) end) collate \"C\""
+private const val SEARCH_PAGE =
+    "and ($SEARCH_RANK, $SEARCH_KEY, p.poi_id) > (:afterRank, :afterKey, :afterId) order by $SEARCH_RANK, $SEARCH_KEY, p.poi_id limit :limit"
+
+/**
+ * 더 짧은 코드가 접두로 덮는 코드를 뺀다(TRIP-1723). 조회가 시도 `left(region_code, 2) in (codes)` —
  * 곧 "region_code 가 그 코드로 시작한다"라서, `50110` 으로 잡히는 행은 전부 `50` 으로도 잡힌다. 빼도 합집합이 같다.
  */
 internal fun dropCoveredCodes(codes: List<String>): List<String> {

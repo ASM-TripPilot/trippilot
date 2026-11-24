@@ -1,6 +1,7 @@
 package com.trippilot.app.persistence
 
 import com.trippilot.placedata.application.PoiQueryService
+import com.trippilot.placedata.domain.PoiCategory
 import com.trippilot.testsupport.AbstractPostgresIntegrationTest
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
@@ -21,16 +22,74 @@ class PlacesSearchOrderIT : AbstractPostgresIntegrationTest() {
     @Autowired private lateinit var places: PoiQueryService
     @Autowired private lateinit var jdbc: JdbcTemplate
 
-    private fun insert(name: String): String {
+    private fun insert(name: String, regionCode: String? = null): String {
         val id = UUID.randomUUID()
         jdbc.update(
             """
-            INSERT INTO poi (poi_id, name_ko, lat, lng, category, region, data_status, source, saved_count)
-            VALUES (?, ?, 37.5, 127.0, '명소', '서울-정렬IT', 'ACTIVE', 'MANUAL', 0)
+            INSERT INTO poi (poi_id, name_ko, lat, lng, category, region, region_code, data_status, source, saved_count)
+            VALUES (?, ?, 37.5, 127.0, '명소', '서울-정렬IT', ?, 'ACTIVE', 'MANUAL', 0)
             """.trimIndent(),
-            id, name,
+            id, name, regionCode,
         )
         return name
+    }
+
+    private fun names(query: String, regionCode: String? = null) =
+        places.search(region = null, category = null, query = query, regionCode = regionCode).items.map { it.nameKo }
+
+    // ── 인덱스 경로(TRIP-1843) ─────────────────────────────────────────────
+    // 2글자 이상 검색은 바이그램 조건이 먼저 후보를 좁힌다. 좁히는 조건이 like 보다 엄격하면 **조용히 덜 찾는다** —
+    // 화면에는 "없다"로만 보인다. 그래서 like 가 찾던 것을 그대로 찾는지 본다.
+
+    @Test
+    fun `2글자 이상 검색은 인덱스로 좁혀도 부분 일치·대소문자 무시·공백을 그대로 찾는다`() {
+        insert("바이그램IT숲길카페")
+        insert("BIGRAMit Forest")
+
+        names("숲길") shouldBe listOf("바이그램IT숲길카페")
+        names("bigramIT f") shouldBe listOf("BIGRAMit Forest")
+    }
+
+    @Test
+    fun `한 글자 검색은 조각이 없어도 찾는다`() {
+        insert("囍바이그램IT")
+
+        names("囍") shouldBe listOf("囍바이그램IT")
+    }
+
+    @Test
+    fun `이름순은 한글 가나다순이다 - 정렬 키를 코드포인트로 비교한다`() {
+        // en_US.utf8(운영 RDS) 에서는 "가야" 가 "소" 뒤로 갔다(로컬 glibc 실측). collate "C" 는 한글 음절을 가나다로 놓는다.
+        // CI 의 alpine(musl)은 원래 C 처럼 정렬해 이 단정만으로는 collate 를 빼도 통과한다 — 회귀 방지용이고, 근거는 실험 기록이다.
+        listOf("소가나다IT", "공원가나다IT", "가야가나다IT").forEach { insert(it) }
+
+        names("가나다IT") shouldBe listOf("가야가나다IT", "공원가나다IT", "소가나다IT")
+    }
+
+    @Test
+    fun `시도는 하위 시군구를 잡고 시군구는 자기만 잡는다 - 검색어가 있어도 없어도`() {
+        insert("지역IT해운대", "26440")
+        insert("지역IT동구", "26170")
+        insert("지역IT종로", "11110")
+
+        names("지역IT", "26") shouldBe listOf("지역IT동구", "지역IT해운대")
+        names("지역IT", "26440") shouldBe listOf("지역IT해운대")
+        names("I", "26").filter { it.startsWith("지역IT") } shouldBe listOf("지역IT동구", "지역IT해운대")
+        names("지역IT", "11110") shouldBe listOf("지역IT종로")
+        names("I", "26440").filter { it.startsWith("지역IT") } shouldBe listOf("지역IT해운대") // 시군구 · 바이그램 아님
+    }
+
+    @Test
+    fun `카테고리를 함께 걸어도 여섯 경로가 같은 행을 준다`() {
+        insert("분류IT바다", "26440")
+
+        fun cat(q: String, code: String?) =
+            places.search(region = null, category = PoiCategory.명소, query = q, regionCode = code).items.map { it.nameKo }.filter { it.startsWith("분류IT") }
+        listOf(null, "26", "26440").forEach { code ->
+            cat("분류IT", code) shouldBe listOf("분류IT바다")
+            cat("I", code) shouldBe listOf("분류IT바다")
+        }
+        places.search(region = null, category = PoiCategory.맛집, query = "분류IT", regionCode = "26").items.size shouldBe 0
     }
 
     @Test
