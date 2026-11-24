@@ -489,6 +489,15 @@ def test_reject_가_없으면_목록을_건드리지_않는다(tmp_path) -> None
     assert len(props) == 1
 
 
+def test_같은_번호의_TOURAPI_행은_지워지지_않는다(tmp_path) -> None:
+    """판정 파일은 Overture 비식당만 담는다 — content_id 만 보면 다른 출처의 같은 번호까지 지운다."""
+    props = (_keyed_doc("OVERTURE", "1")["proposals"]
+             + _keyed_doc("TOURAPI", "1")["proposals"])
+    path = _verdict_file(tmp_path, {"1": {"verdict": "reject", "prompt": "4"}})
+    assert drop_rejected_verdicts(props, path) == 1
+    assert [(p["source"], p["provenance"]["content_id"]) for p in props] == [("TOURAPI", "1")]
+
+
 # ── 클럽은 웹 큐레이션(KAKAO_LOCAL) 것만 (2026-10-18) ─────────────────────
 def _tagged(source: str, cid: str, tags: list[str]) -> dict:
     p = _keyed_doc(source, cid)["proposals"][0]

@@ -47,3 +47,42 @@ def test_지역은_주소_첫_낱말이다() -> None:
 def test_팝업은_쇼핑_도시_문화_취향에_가산점() -> None:
     assert event_affinity(EventType.POPUP, (TasteTag.SHOPPING,)) == 1.0
     assert event_affinity(EventType.POPUP, (TasteTag.NATURE,)) == 0.0
+
+
+def test_주소가_비어도_지역_판정이_터지지_않는다() -> None:
+    """region_of 가 split()[0] 로 바로 짚어 빈 주소면 IndexError 였다."""
+    blank = to_events(
+        [{"name": "빈주소팝업", "address": " ", "start": "2026-10-20", "end": "2026-12-31"}], _TODAY)
+    assert region_of(blank[0]) == ""
+
+
+def test_카카오_HTTP_오류가_나도_좌표_없이_싣고_정상_종료한다(tmp_path, monkeypatch) -> None:
+    """403 등 카카오 오류가 try 없이 새면 collect 스텝 전체가 비0 종료해 뒤 영속·artifact·--check 가
+    전부 건너뛰어졌다(코드 리뷰 지적) — 좌표만 포기하고 계속·정상 종료해야 한다."""
+    import io
+    import json
+    import urllib.error
+
+    import collect_curated_popups as m
+
+    # main 은 실제 dt.datetime.now() 로 끝난 팝업을 거른다 — _POPUPS 를 그대로 쓰면 그 안의
+    # "짱구 전시"(2027-01-24 종료)가 미래에 끝난 팝업으로 걸러져 이 테스트가 삭아 버린다.
+    seed = tmp_path / "seed.json"
+    seed.write_text(json.dumps({"popups": [
+        {"name": "먼미래팝업", "address": "서울 성동구 연무장5길 9-29",
+         "start": "2026-01-01", "end": "2099-12-31"},
+    ]}, ensure_ascii=False), encoding="utf-8")
+    store = tmp_path / "events.json"
+
+    class _Http403:
+        def get_json(self, url, headers, params):
+            raise urllib.error.HTTPError(url, 403, "Forbidden", {}, io.BytesIO(b""))
+
+    monkeypatch.setattr(m, "UrllibHttpClient", _Http403)
+    monkeypatch.setenv("KAKAO_REST_API_KEY", "fake-key")
+
+    rc = m.main(["--seed", str(seed), "--store", str(store)])
+    assert rc == 0
+
+    saved = json.loads(store.read_text(encoding="utf-8"))
+    assert saved["events"] and all(e["coord"] is None for e in saved["events"])
