@@ -95,7 +95,7 @@ class TmapRouteAdapter:
         self._keys = (app_key,) if isinstance(app_key, str) else tuple(app_key)
         if not self._keys:
             raise ValueError("app_key 가 하나도 없다")
-        # 순번은 수단별 — 한도가 상품(수단)별이라, 수단이 번갈아 들어와도 수단마다 키를 고르게 쓴다.
+        # 순번은 수단별 — 수단이 번갈아 들어와도 수단마다 키를 고르게 쓴다(403 이 상품별이듯 한도도 상품별로 센다고 본다).
         # next() 는 CPython 에서 원자적이라 스레드풀의 동시 호출이 같은 키로 몰리지 않는다
         self._turns = {mode: itertools.count() for mode in _ROUTE}
         self._clock = clock
@@ -156,8 +156,10 @@ class TmapRouteAdapter:
                     if attempt < len(live) - 1:
                         # 다음 키가 살리면 호출은 성공이라 체인 경고(travel_primary_failed)가 안 남는다 — 한도 소진은 이 줄로만
                         # 보인다. 깨어 있던 키가 쉬러 가는 순간에만 찍는다 — 스레드풀의 동시 호출이 같은 막힌 키를 만나도
-                        # 한 줄이다(넘김은 호출마다 한다). 키 값은 싣지 않는다(순번만). 칸 이름을 `key=` 로 두지 않는다 —
-                        # 로그 덤프의 자격 가림(`runtime_kb._CREDENTIAL`)이 `KEY…=값` 꼴을 지운다.
+                        # 한 줄이고, 막힌 채면 쉼이 끝날 때마다 다시 한 줄이다(넘김은 호출마다 한다). 넘길 키가 없으면 안 찍는다
+                        # — 전부 막힌 구간은 요청별 FallbackEvent(`distance_estimated … vendor=N/N`)로 본다. 키 값은 싣지
+                        # 않는다(순번만). 칸 이름을 `key=` 로 두지 않는다 — 로그 덤프의 자격 가림(`runtime_kb._CREDENTIAL`)이
+                        # `KEY…=값` 꼴을 지운다.
                         if newly:
                             _log.warning("tmap_key_failover slot=%d/%d mode=%s status=%s — 이 키는 %d분 쉬고 다음 키로",
                                          idx + 1, n, mode.name, status, _KEY_REST_S // 60)

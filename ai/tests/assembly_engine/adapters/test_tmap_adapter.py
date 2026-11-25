@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import re
 import threading
+import time
 import urllib.error
 
 import pytest
@@ -347,8 +348,8 @@ def test_three_keys_bench_each_failed_key_and_keep_the_rotation_order():
 
 
 def test_each_mode_rotates_its_own_turn():
-    """순번은 수단별이다 — 한도가 상품(수단)별이라, 자동차·보행이 번갈아 들어와도 수단마다 두 키를 고르게 쓴다.
-    순번을 수단이 같이 쓰면 자동차는 늘 한 키, 보행은 늘 다른 키로만 간다."""
+    """순번은 수단별이다 — 자동차·보행이 번갈아 들어와도 수단마다 두 키를 고르게 쓴다(403 이 상품별이듯 한도도 상품별로
+    센다고 본다). 순번을 수단이 같이 쓰면 자동차는 늘 한 키, 보행은 늘 다른 키로만 간다."""
     http = KeyedHttp()
     adapter = TmapRouteAdapter(http, ["a", "b"])
     used: dict[TransportMode, list[str]] = {TransportMode.CAR: [], TransportMode.WALK: []}
@@ -361,7 +362,7 @@ def test_each_mode_rotates_its_own_turn():
 
 def test_a_burst_that_finds_one_key_blocked_warns_once_and_still_measures_every_leg(caplog):
     """조립 뒤 거리는 스레드풀로 한꺼번에 나간다 — 막힌 키를 동시에 만난 호출이 여럿이어도 경고는 그 키가
-    쉬러 가는 순간 한 줄이다(줄 수가 한도 소진 횟수로 읽히게). 넘김은 호출마다 그대로라 구간은 전부 실측된다."""
+    쉬러 가는 순간 한 줄이다(막힌 채면 쉼이 끝날 때마다 한 줄씩 다시). 넘김은 호출마다 그대로라 구간은 전부 실측된다."""
     blocked = threading.Barrier(4, timeout=5)
 
     class BurstHttp(KeyedHttp):
@@ -385,3 +386,66 @@ def test_a_burst_that_finds_one_key_blocked_warns_once_and_still_measures_every_
     assert sources == ["tmap_car"] * 8
     assert http.keys.count("a") == 4
     assert len([r for r in caplog.records if "tmap_key_failover" in r.getMessage()]) == 1
+
+
+def _failovers(caplog) -> list[str]:
+    return [r.getMessage() for r in caplog.records if "tmap_key_failover" in r.getMessage()]
+
+
+def test_the_bench_transition_is_decided_under_the_lock(caplog):
+    """읽기(쉬는 중인가)와 쓰기(쉼 기록) 사이가 벌어져도 한 줄 — 잠금이 없으면 네 호출이 모두 '깨어 있다'를 본다."""
+    released = threading.Barrier(4, timeout=5)
+    failing = threading.Event()
+
+    class BurstHttp(KeyedHttp):
+        def post_json(self, url, headers, body):
+            if headers["appKey"] == "a":
+                released.wait()
+                failing.set()
+                raise _http_error(429)
+            return super().post_json(url, headers, body)
+
+    class SlowRead(dict):
+        def get(self, key, default=None):
+            value = super().get(key, default)
+            if failing.is_set():
+                time.sleep(0.02)  # 읽고 나서 쓰기 전에 양보한다
+            return value
+
+    adapter = TmapRouteAdapter(BurstHttp(), ["a", "b"], clock=lambda: 0.0)
+    adapter._resting = SlowRead()
+    done: list[str] = []
+    with caplog.at_level(logging.WARNING):
+        threads = [threading.Thread(target=lambda: done.append(adapter.measure(_FROM, _TO, TransportMode.CAR).source))
+                   for _ in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+    assert done == ["tmap_car"] * 8
+    assert len(_failovers(caplog)) == 1
+
+
+def test_a_key_still_blocked_after_its_rest_warns_again_on_the_next_probe(caplog):
+    """쉼이 끝난 뒤 다시 물어 또 막히면 그때 한 줄 더 — 넘겨서 살린 호출의 유일한 흔적이라, 첫 줄 뒤로 조용해지면 안 된다."""
+    now = [0.0]
+    http = KeyedHttp({("a", "/tmap/routes"): _http_error(429)})
+    adapter = TmapRouteAdapter(http, ["a", "b"], clock=lambda: now[0])
+    with caplog.at_level(logging.WARNING):
+        for _ in range(4):
+            adapter.measure(_FROM, _TO, TransportMode.CAR)
+        assert len(_failovers(caplog)) == 1
+        now[0] = _KEY_REST_S + 1
+        for _ in range(4):
+            adapter.measure(_FROM, _TO, TransportMode.CAR)
+    assert len(_failovers(caplog)) == 2 and http.keys.count("a") == 2
+
+
+def test_no_failover_line_when_there_is_no_next_key(caplog):
+    """넘길 키가 없으면(키 하나·마지막 시도) '다음 키로' 줄을 남기지 않는다 — 그 실패는 체인 경고·폴백 이벤트가 맡는다."""
+    http = KeyedHttp({("only", "/transit/routes"): _http_error(403)})
+    adapter = TmapRouteAdapter(http, "only", clock=lambda: 0.0)
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(TravelTimeError):
+            adapter.measure(_FROM, _TO, TransportMode.PUBLIC)
+    assert _failovers(caplog) == []

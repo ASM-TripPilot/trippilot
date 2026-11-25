@@ -390,8 +390,9 @@ def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None, dialog
         ai["TRIPPILOT_DIALOGUE_ORCHESTRATOR"] = dialogue_orchestrator
     # TMAP 추가 키 목록(번갈아 쓸 키)은 GitHub 시크릿 → 스텝 env 로 온다(공공데이터 키와 같은 길 — 입력은 실행 화면에 보인다).
     # 없거나 빈 값이면 저장값을 그대로 둔다 — 지우지 않는다. 쓴 것은 아래 `ai secret keys written` 줄에 이름만 남는다.
-    # 키를 빼려면 저장소 시크릿을 남길 목록으로 바꾼다. 전부 빼려면 저장소 시크릿을 지우고 Secrets Manager 값을 빈 문자열로
-    # 둔다 — 항목째 지우면 클러스터 Secret 에 옛 값이 남는다(apply 는 빠진 키를 지우지 않는다).
+    # 키를 빼려면 저장소 시크릿을 남길 목록으로 바꾼다. 전부 빼려면 저장소 시크릿을 `,` 로 바꿔 배포한다 — 앱이 추가 키
+    # 0개로 읽는다(손편집 없이). 시크릿을 지우기만 하면 저장값이 남고, Secrets Manager 에서 항목째 지우면 클러스터
+    # Secret 에 옛 값이 남는다(apply 는 빠진 키를 지우지 않는다).
     if (tmap_api_keys or "").strip():
         ai["TMAP_API_KEYS"] = tmap_api_keys.strip()
     if llm_feature_models:

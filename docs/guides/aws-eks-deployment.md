@@ -110,6 +110,8 @@ Terraform은 Secrets Manager **비밀값 저장소만** 만들고 비밀값은 T
 
 공공데이터포털 키 `PUBLIC_DATA_API_KEY`(기상특보·에어코리아·특일정보)의 정본은 GitHub 저장소 시크릿 `PUBLIC_DATA_API_KEY` 다 — 비밀값 동기화 단계가 매 배포 그 값을 backend·ai 저장소 둘 다에 쓴다(값이 다를 때만, Secrets Manager 손편집은 다음 배포에 덮인다). 시크릿이 비어 있으면 저장값을 그대로 둔다.
 
+TMAP 추가 키 목록 `TMAP_API_KEYS`(번갈아 쓸 키, 쉼표 목록)도 같은 길이다 — 정본은 GitHub 저장소 시크릿 `TMAP_API_KEYS` 이고 동기화 단계가 ai 저장소에만 쓴다(값이 다를 때만, Secrets Manager 손편집은 다음 배포에 덮인다). 닿았는지는 배포 로그의 `ai secret keys written by this deploy: TMAP_API_KEYS` 와 `ai-wiring:` 의 `실경로 배선 = … · TMAP 키 N개` 로 본다. 시크릿이 비었거나 지워져도 저장값은 남는다 — 키를 빼려면 시크릿을 남길 목록으로 바꾸고, 전부 빼려면 `,` 로 바꿔 배포한다. 첫 키 `TMAP_API_KEY` 는 Secrets Manager 에서 관리한다(같은 이름의 저장소 시크릿은 스모크 전용이라 서버에 배포되지 않는다). 이 키가 한 번 쓰인 대상에는 그 이름을 모르는 옛 커밋을 다시 배포할 수 없다(허용 목록 검증) — 되돌림은 `helm rollback`.
+
 DB 초기화 Job은 관리자 자격증명을 임시로 사용해 `app_migrate`, `app_user`, `app` 스키마 및 AI DB·pgvector 테이블을 준비한다. 런타임 SQL은 `app_user`, Flyway는 `app_migrate`로 동작한다. Job 종료 후 임시 관리자 Secret/Job을 삭제한다. 앱 Pod에는 RDS 관리자 암호를 전달하지 않는다. DB 초기화는 반복 실행할 수 있으며 DB/스키마를 삭제하지 않는다. SQL에는 원문 암호 대신 salt를 포함한 SCRAM-SHA-256 검증값을 전달한다. 사용자 지정 DB 암호는 출력 가능한 ASCII 문자열을 사용한다.
 
 `SERVICE_AUTH_REQUIRE_TOKEN`과 `JWT_REQUIRE_CONFIGURED_KEY`를 켜서 비밀값 누락 시 시작을 막는다. PRD의 여러 backend replica가 같은 JWT 키를 사용하므로 서로의 액세스 토큰을 검증할 수 있다. 비밀값을 수정한 뒤에는 수동 배포를 다시 실행해야 Pod에 반영된다. DB 암호를 바꾸는 경우 기존 연결에 영향을 줄 수 있으므로 계획된 배포로 수행한다.

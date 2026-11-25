@@ -299,6 +299,18 @@ def test_tmap_keys_split_on_commas_and_whitespace_in_either_variable(monkeypatch
     assert _tmap_keys(monkeypatch, tmap=tmap, tmap_more=tmap_more, odsay=None) == expected
 
 
+@pytest.mark.parametrize("tmap_more, expected", [
+    ("\ufefft2", ("t1", "t2")),         # 앞에 붙은 BOM — 파일로 시크릿을 넣을 때
+    ("“t2”", ("t1", "t2")),              # 둥근 따옴표 — 메신저·문서에서 복사한 키
+    ("t2，t3", ("t1", "t2", "t3")),      # 전각 쉼표
+    ("t2\u200b", ("t1", "t2")),         # 끝에 붙은 영폭 공백
+])
+def test_characters_that_cannot_be_in_an_app_key_only_separate(monkeypatch, tmap_more, expected):
+    """appKey 는 출력 가능한 ASCII 다 — 그 밖의 글자가 낀 키는 HTTP 를 보내기도 전에 헤더 인코딩에서 죽어 넘김도 쉼도
+    걸리지 않는다(그 키 차례마다 계속 추정인데 배선 줄은 정상처럼 보인다). 그런 글자는 구분자로만 읽는다."""
+    assert _tmap_keys(monkeypatch, tmap="t1", tmap_more=tmap_more, odsay=None) == expected
+
+
 def test_the_extra_keys_alone_also_wire_tmap(monkeypatch):
     assert _wired(monkeypatch, tmap=None, tmap_more="t2", odsay="o") == {
         TransportMode.CAR: "TmapRouteAdapter", TransportMode.WALK: "TmapRouteAdapter",

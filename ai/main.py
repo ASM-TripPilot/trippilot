@@ -343,13 +343,15 @@ def _backend_poi_db():
 def _tmap_api_keys() -> list[str]:
     """TMAP 키 목록 — 번갈아 쓸 순서대로, 같은 값은 한 번만.
 
-    `TMAP_API_KEY`(기존 단일 키) 다음에 `TMAP_API_KEYS`(더 받은 키를 여기에 잇는다, 2026-11-25). 쉼표·공백·줄바꿈
-    어느 것으로 나눠 적어도 되고 두 칸을 같은 식으로 읽는다 — 기존 칸에 쉼표로 이어 적은 값을 한 키로 읽으면 되던
-    키까지 403 이 되고, 줄바꿈이 낀 키는 헤더 오류라 다음 키로 넘기지도 못한다. 같은 값은 한 번만 센다 — 같은
-    키를 번갈아 써 봐야 한도는 그대로다(`_anthropic_api_keys` 와 같은 규칙). 값은 어디에도 찍지 않는다.
+    `TMAP_API_KEY`(기존 단일 키) 다음에 `TMAP_API_KEYS`(더 받은 키를 여기에 잇는다, 2026-11-25). 두 칸을 같은 식으로
+    읽는다: appKey 는 출력 가능한 ASCII 라 쉼표와 그 밖의 글자(공백·줄바꿈·BOM·영폭 공백·둥근 따옴표·전각 쉼표)는 전부
+    구분자다. 기존 칸에 쉼표로 이어 적은 값을 한 키로 읽으면 되던 키까지 403 이 되고, 그런 글자가 낀 키는 HTTP 를
+    보내기도 전에 헤더에서 죽어 다음 키로 넘기지도 못한다(그 키 차례마다 추정인데 배선 줄은 정상처럼 보인다).
+    같은 값은 한 번만 센다 — 같은 키를 번갈아 써 봐야 한도는 그대로다(`_anthropic_api_keys` 와 같은 규칙).
+    값은 어디에도 찍지 않는다.
     """
-    raw = f"{_env('TMAP_API_KEY') or ''},{_env('TMAP_API_KEYS') or ''}".replace(",", " ").split()
-    return list(dict.fromkeys(raw))
+    text = f"{_env('TMAP_API_KEY') or ''},{_env('TMAP_API_KEYS') or ''}"
+    return list(dict.fromkeys("".join(c if "!" <= c <= "~" and c != "," else " " for c in text).split()))
 
 
 def _travel_chain():

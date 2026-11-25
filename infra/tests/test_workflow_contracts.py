@@ -124,6 +124,8 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn('TMAP_API_KEYS', sync['run'])  # 셸 인자로 올리지 않는다 — runtime.py 가 env 에서 읽는다
         others = [s for s in job['steps'] if s is not sync]
         self.assertFalse(any('TMAP_API_KEYS' in str(s) for s in others))
+        # 워크플로 최상위 env 로 한 줄 더 실어도 위 검사는 통과한다 — 파일 전체에서 이 시크릿을 읽는 곳은 한 군데다
+        self.assertEqual((ROOT / '.github/workflows/aws-deploy.yml').read_text().count('secrets.TMAP_API_KEYS'), 1)
 
     def test_runtime_switches_reach_only_the_secret_sync_step(self):
         """상황 감지 스위치(KEY=VALUE;…)는 비어 있으면 아무것도 안 한다 — 기본값 배포가 켜고 끄지 않는다. 입력은 그 스텝 env 로만 받고
