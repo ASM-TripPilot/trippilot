@@ -239,8 +239,8 @@ def test_too_close_falls_back_to_haversine_and_the_warning_carries_the_code(capl
 # ── ⑤ 조립 ───────────────────────────────────────────────────────────
 
 
-def _wired(monkeypatch, *, tmap: str | None, odsay: str | None) -> dict:
-    for name, value in (("TMAP_API_KEY", tmap), ("ODSAY_API_KEY", odsay)):
+def _wired(monkeypatch, *, tmap: str | None, odsay: str | None, tmap_more: str | None = None) -> dict:
+    for name, value in (("TMAP_API_KEY", tmap), ("TMAP_API_KEYS", tmap_more), ("ODSAY_API_KEY", odsay)):
         if value is None:
             monkeypatch.delenv(name, raising=False)
         else:
@@ -267,3 +267,39 @@ def test_odsay_only_wires_public_alone(monkeypatch):
 
 def test_no_keys_means_no_chain(monkeypatch):
     assert _wired(monkeypatch, tmap=None, odsay=None) == {}
+
+
+# ── ⑥ TMAP 키 여러 개 (2026-11-25) ────────────────────────────────────
+
+
+def _tmap_keys(monkeypatch, **env) -> tuple[str, ...]:
+    _wired(monkeypatch, **env)
+    return main._travel_chain()._primary._by_mode[TransportMode.CAR]._keys
+
+
+def test_extra_tmap_keys_join_the_first_key_once_each(monkeypatch):
+    """`TMAP_API_KEY` 다음에 `TMAP_API_KEYS`(쉼표) — 같은 값은 한 번만(같은 키를 번갈아 써 봐야 한도는 그대로다)."""
+    assert _tmap_keys(monkeypatch, tmap="t1", tmap_more=" t2 ,t1,,t3", odsay=None) == ("t1", "t2", "t3")
+
+
+def test_a_single_tmap_key_stays_single(monkeypatch):
+    assert _tmap_keys(monkeypatch, tmap="t1", odsay=None) == ("t1",)
+
+
+def test_the_extra_keys_alone_also_wire_tmap(monkeypatch):
+    assert _wired(monkeypatch, tmap=None, tmap_more="t2", odsay="o") == {
+        TransportMode.CAR: "TmapRouteAdapter", TransportMode.WALK: "TmapRouteAdapter",
+        TransportMode.PUBLIC: "OdsayTransitAdapter"}
+
+
+def test_blank_extra_keys_do_not_wire_tmap(monkeypatch):
+    assert _wired(monkeypatch, tmap=None, tmap_more=" , ", odsay=None) == {}
+
+
+def test_wiring_line_tells_how_many_tmap_keys_arrived_without_their_values(monkeypatch, caplog):
+    """배포 smoke 의 `ai-wiring:` 이 이 줄을 끌어올린다 — 두 번째 키가 파드에 닿았는지 볼 유일한 자리다."""
+    with caplog.at_level(logging.INFO, logger="trippilot.main"):
+        _wired(monkeypatch, tmap="secret-1", tmap_more="secret-2", odsay="o")
+    [line] = [r.getMessage() for r in caplog.records if "실경로 배선" in r.getMessage()]
+    assert "TMAP 키 2개" in line and "PUBLIC:OdsayTransitAdapter" in line
+    assert "secret" not in line

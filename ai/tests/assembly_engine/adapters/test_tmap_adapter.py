@@ -7,13 +7,17 @@ metaData.plan.itineraries[]) — 실 응답 드리프트는 실키 첫 실행(sm
   ② 수단 라우팅 — CAR /tmap/routes, WALK /tmap/routes/pedestrian,
      PUBLIC /transit/routes 실측 (근사 제거, TRIP-405)
   ③ 실패 승격 — HTTP 예외·형식 오류는 TravelTimeError (침묵 금지, INV-4)
+  ④ 키 여러 개 — 번갈아 쓰기, 키 문제(401·403·429)만 다음 키로, 막힌 (키, 수단)은 쉼
 """
 
 from __future__ import annotations
 
+import logging
+import urllib.error
+
 import pytest
 
-from trippilot.assembly_engine.adapters.tmap import TmapRouteAdapter
+from trippilot.assembly_engine.adapters.tmap import _KEY_REST_S, TmapRouteAdapter
 from trippilot.domain.common import GeoPoint, TransportMode
 from trippilot.ports.travel_time_port import TravelTimeError
 
@@ -151,3 +155,160 @@ def test_malformed_payload_raises_travel_time_error(payload):
     adapter = TmapRouteAdapter(FakeHttp(payload), "k")
     with pytest.raises(TravelTimeError):
         adapter.measure(_FROM, _TO, TransportMode.WALK)
+
+
+# ── ④ 키 여러 개 번갈아 쓰기 (2026-11-25) ─────────────────────────────
+
+
+def _http_error(status: int) -> urllib.error.HTTPError:
+    """실 클라이언트(urllib)가 4xx·5xx 에 던지는 그 예외 — 어댑터는 `code` 로 키 문제를 가린다."""
+    return urllib.error.HTTPError("https://apis.openapi.sk.com/x", status, "x", None, None)
+
+
+class KeyedHttp:
+    """키·경로마다 다른 응답 — `fail[(appKey, 경로 끝)]` 이 있으면 그 예외, 없으면 정상 응답. 부른 키를 순서대로 적는다."""
+
+    def __init__(self, fail: dict[tuple[str, str], Exception] | None = None) -> None:
+        self.fail = dict(fail or {})
+        self.keys: list[str] = []
+
+    def post_json(self, url: str, headers, body) -> object:
+        key = headers["appKey"]
+        self.keys.append(key)
+        for (failing_key, path), error in self.fail.items():
+            if key == failing_key and url.endswith(path):
+                raise error
+        if url.endswith("/transit/routes"):
+            return _transit_payload([{"totalTime": 600, "totalDistance": 1000}])
+        return _payload(60, 1000)
+
+
+def test_single_key_string_still_works_as_before():
+    http = KeyedHttp()
+    TmapRouteAdapter(http, "only").measure(_FROM, _TO, TransportMode.CAR)
+    assert http.keys == ["only"]
+
+
+def test_keys_take_turns():
+    http = KeyedHttp()
+    adapter = TmapRouteAdapter(http, ["a", "b"])
+    for _ in range(4):
+        adapter.measure(_FROM, _TO, TransportMode.CAR)
+    assert http.keys == ["a", "b", "a", "b"]  # 호출마다 다음 키 — 한도를 고르게 나눠 쓴다
+
+
+def test_no_key_at_all_is_refused_at_construction():
+    with pytest.raises(ValueError):
+        TmapRouteAdapter(KeyedHttp(), [])
+
+
+@pytest.mark.parametrize("status", [401, 403, 429])
+def test_a_key_scoped_failure_falls_over_to_the_next_key_in_the_same_call(status):
+    """한도(429)·인증(401)·미구독/무효(403)는 그 키의 문제다 — 같은 호출 안에서 다음 키로 넘겨 실측을 살린다."""
+    http = KeyedHttp({("a", "/tmap/routes"): _http_error(status)})
+    adapter = TmapRouteAdapter(http, ["a", "b"], clock=lambda: 0.0)
+    for _ in range(4):
+        assert adapter.measure(_FROM, _TO, TransportMode.CAR).source == "tmap_car"
+    # 막힌 키는 첫 실패 뒤로 쉰다 — 차례마다 실패 한 번을 먼저 치르지 않는다
+    assert http.keys == ["a", "b", "b", "b", "b"]
+
+
+@pytest.mark.parametrize("error", [TimeoutError("timed out"), _http_error(500), _http_error(400)])
+def test_failures_that_are_not_about_the_key_do_not_fall_over(error):
+    """시한·5xx·요청 오류는 어느 키로 보내도 같다 — 넘기지 않고(호출 1건) 그 키를 쉬게 하지도 않는다."""
+    http = KeyedHttp({("a", "/tmap/routes"): error})
+    adapter = TmapRouteAdapter(http, ["a", "b"], clock=lambda: 0.0)
+    with pytest.raises(TravelTimeError) as exc:
+        adapter.measure(_FROM, _TO, TransportMode.CAR)
+    assert exc.value.__cause__ is error
+    assert http.keys == ["a"]
+    adapter.measure(_FROM, _TO, TransportMode.CAR)  # 다음 차례는 b
+    with pytest.raises(TravelTimeError):
+        adapter.measure(_FROM, _TO, TransportMode.CAR)  # 쉬지 않았으니 a 차례가 다시 온다
+    assert http.keys == ["a", "b", "a"]
+
+
+def test_a_resting_key_is_asked_again_once_its_rest_ends():
+    now = [0.0]
+    http = KeyedHttp({("a", "/tmap/routes"): _http_error(429)})
+    adapter = TmapRouteAdapter(http, ["a", "b"], clock=lambda: now[0])
+    for _ in range(3):
+        adapter.measure(_FROM, _TO, TransportMode.CAR)
+    assert http.keys.count("a") == 1
+    now[0] = _KEY_REST_S + 1
+    del http.fail[("a", "/tmap/routes")]  # 한도가 풀렸다
+    for _ in range(4):
+        adapter.measure(_FROM, _TO, TransportMode.CAR)
+    assert http.keys.count("a") == 3  # 쉼이 끝나 다시 번갈아 쓴다
+
+
+def test_rest_is_per_mode_so_an_unsubscribed_product_does_not_bench_the_key():
+    """403 은 상품(경로)별이다 — 대중교통 미구독 키도 자동차·보행은 된다(2026-11-25 두 키 실호출로 확인)."""
+    http = KeyedHttp({("a", "/transit/routes"): _http_error(403)})
+    adapter = TmapRouteAdapter(http, ["a", "b"], clock=lambda: 0.0)
+    assert adapter.measure(_FROM, _TO, TransportMode.PUBLIC).source == "tmap_transit"  # a 403 → b
+    http.keys.clear()
+    for _ in range(4):
+        adapter.measure(_FROM, _TO, TransportMode.CAR)
+    assert sorted(http.keys) == ["a", "a", "b", "b"]
+
+
+def test_when_every_key_fails_the_last_error_is_raised_with_its_cause():
+    last = _http_error(429)
+    http = KeyedHttp({("a", "/tmap/routes"): _http_error(403), ("b", "/tmap/routes"): last})
+    adapter = TmapRouteAdapter(http, ["a", "b"], clock=lambda: 0.0)
+    with pytest.raises(TravelTimeError) as exc:
+        adapter.measure(_FROM, _TO, TransportMode.CAR)
+    assert exc.value.__cause__ is last and http.keys == ["a", "b"]
+
+
+def test_while_every_key_rests_each_call_still_asks_exactly_one_key():
+    """두 키가 다 막혀도(한도 소진·미구독) 호출 1건 = HTTP 1건은 지킨다 — 실패할 호출을 키 수만큼 겹쳐 내지 않는다.
+    아예 안 부르지는 않는다: 한도가 풀렸는지·상품이 구독됐는지는 불러 봐야 안다(키 하나일 때의 종전 동작과 같다)."""
+    http = KeyedHttp({("a", "/transit/routes"): _http_error(403), ("b", "/transit/routes"): _http_error(403)})
+    adapter = TmapRouteAdapter(http, ["a", "b"], clock=lambda: 0.0)
+    with pytest.raises(TravelTimeError):
+        adapter.measure(_FROM, _TO, TransportMode.PUBLIC)
+    assert http.keys == ["a", "b"]  # 첫 호출만 두 키를 다 물었다
+    for _ in range(4):
+        with pytest.raises(TravelTimeError) as exc:
+            adapter.measure(_FROM, _TO, TransportMode.PUBLIC)
+        assert exc.value.__cause__.code == 403 and "403" in str(exc.value)  # 체인 경고·스모크가 읽는 자리
+    assert http.keys == ["a", "b", "b", "a", "b", "a"]  # 이후는 차례인 키 하나씩
+
+
+def test_a_resting_key_that_answers_again_is_live_at_once():
+    """다 쉬는 중에 물어본 키가 답하면 그 키는 바로 돌아온다 — 쉼이 끝날 때까지 죽은 키와 번갈아 실패하지 않는다."""
+    http = KeyedHttp({("a", "/tmap/routes"): _http_error(429), ("b", "/tmap/routes"): _http_error(429)})
+    adapter = TmapRouteAdapter(http, ["a", "b"], clock=lambda: 0.0)
+    with pytest.raises(TravelTimeError):
+        adapter.measure(_FROM, _TO, TransportMode.CAR)
+    del http.fail[("b", "/tmap/routes")]  # b 의 한도만 풀렸다
+    http.keys.clear()
+    for _ in range(4):
+        adapter.measure(_FROM, _TO, TransportMode.CAR)  # 첫 차례가 b — 답했으니 살아났고, a 는 계속 쉰다
+    assert http.keys == ["b", "b", "b", "b"]
+
+
+def test_a_single_key_makes_exactly_one_http_call_per_measure_as_before():
+    http = KeyedHttp({("only", "/transit/routes"): _http_error(403)})
+    adapter = TmapRouteAdapter(http, "only")
+    for _ in range(3):
+        with pytest.raises(TravelTimeError) as exc:
+            adapter.measure(_FROM, _TO, TransportMode.PUBLIC)
+        assert exc.value.__cause__.code == 403
+    assert http.keys == ["only"] * 3
+
+
+def test_falling_over_leaves_a_warning_without_the_key_value(caplog):
+    """다음 키가 살리면 호출은 성공이라 체인 경고가 안 남는다 — 넘어간 순간 이 한 줄이 한도 소진의 유일한 흔적이다."""
+    http = KeyedHttp({("secret-a", "/tmap/routes"): _http_error(429)})
+    adapter = TmapRouteAdapter(http, ["secret-a", "secret-b"], clock=lambda: 0.0)
+    with caplog.at_level(logging.WARNING):
+        for _ in range(3):
+            adapter.measure(_FROM, _TO, TransportMode.CAR)
+    [record] = [r for r in caplog.records if "tmap_key_failover" in r.getMessage()]
+    message = record.getMessage()
+    # 순번 칸 이름은 `key=` 가 아니다 — 로그 덤프(aws-dev-logs)의 자격 가림이 `KEY…=값` 꼴을 지워 몇 번째 키인지 못 보게 된다
+    assert "slot=1/2" in message and "mode=CAR" in message and "status=429" in message
+    assert "secret" not in message and "key=" not in message.lower()

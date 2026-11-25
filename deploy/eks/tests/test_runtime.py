@@ -161,6 +161,18 @@ class SecretTests(unittest.TestCase):
         # 공개(iOS) 클라이언트 시크릿을 싣지 않는 결정은 그대로다 — 웹 시크릿은 별개 키다.
         self.assertNotIn("GOOGLE_CLIENT_SECRET", listed)
 
+    def test_tmap_extra_keys_reach_both_the_allowlist_and_the_chart(self):
+        """TMAP 추가 키 목록(`TMAP_API_KEYS`, 2026-11-25 — 키를 번갈아 쓴다) ⊆ 허용목록 ∧ 차트가 ai 파드에 싣는 목록.
+        허용목록에서 빠지면 시크릿에 넣는 순간 배포 전체가 거부되고, 차트에서 빠지면 값이 파드에 **조용히** 안 닿아
+        키 하나로만 돈다(배포 로그 `ai-wiring:` 의 `TMAP 키 N개` 로 보인다)."""
+        chart = (Path(__file__).resolve().parents[1] / "chart" / "templates" / "ai.yaml").read_text()
+        line = next(text for text in chart.splitlines() if "range list" in text and '"TMAP_API_KEY"' in text)
+        listed = set(re.findall(r'"([A-Z0-9_]+)"', line))
+        for key in ("TMAP_API_KEY", "TMAP_API_KEYS"):
+            with self.subTest(key=key):
+                self.assertIn(key, runtime_secrets.AI_KEYS)
+                self.assertIn(key, listed)
+
     def test_web_client_keys_are_optional_and_wildcard_origin_is_refused(self):
         """키가 없거나 비어도 배포는 통과한다(해당 기능만 꺼짐). 웹 시크릿은 값이 차 있어도 막지 않는다 — iOS 쪽
         GOOGLE_CLIENT_SECRET 가드와 별개 키다. CORS 와일드카드는 백엔드가 기동을 거부하므로 배포 전에 막는다."""
