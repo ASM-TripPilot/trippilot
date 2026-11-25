@@ -289,6 +289,9 @@ jobs:
           # 공공데이터포털 키(기상특보·에어코리아·특일정보) — 입력이 아니라 저장소 시크릿이다(입력은 실행 화면에 보인다).
           # 이 스텝에만 싣는다. sync-secrets 가 backend·ai 시크릿에 쓰고, 비어 있으면 저장값을 그대로 둔다.
           PUBLIC_DATA_API_KEY: ${{ secrets.PUBLIC_DATA_API_KEY }}
+          # TMAP 추가 키 목록(번갈아 쓸 키, 쉼표) — 같은 길: 저장소 시크릿 → 이 스텝 env → sync-secrets 가 ai 시크릿에 쓴다.
+          # 비어 있으면 저장값을 그대로 둔다. 허용목록을 아는 커밋의 배포가 값을 쓰므로 시크릿 손편집·순서 맞추기가 필요 없다.
+          TMAP_API_KEYS: ${{ secrets.TMAP_API_KEYS }}
           # 상황 감지 스위치 입력 — 셸에 직접 끼우지 않고 이 스텝 env 로만 받는다. 형식·허용 키·값 검증은 sync-secrets 가 한다.
           RUNTIME_SWITCHES_INPUT: ${{ inputs.runtime_switches }}
         run: |

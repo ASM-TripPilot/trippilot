@@ -139,12 +139,13 @@ def main(argv=None):
     if args.action == "ensure-namespace":
         ensure_namespace(args.namespace, command)
     elif args.action == "sync-secrets":
-        # 공공데이터포털 키는 인자가 아니라 env 로 받는다 — argv 는 프로세스 목록에 보인다(워크플로가 이 스텝에만 싣는다).
+        # 공공데이터포털 키·TMAP 추가 키는 인자가 아니라 env 로 받는다 — argv 는 프로세스 목록에 보인다(워크플로가 이 스텝에만 싣는다).
         runtime_secrets.sync(outputs, args.namespace, args.embedding_enabled, command,
                              push_mode=args.push_mode, dialogue_orchestrator=args.dialogue_orchestrator,
                              llm_feature_models=args.llm_feature_models, target=args.target,
                              public_data_api_key=os.environ.get("PUBLIC_DATA_API_KEY"),
-                             runtime_switches=args.runtime_switches)
+                             runtime_switches=args.runtime_switches,
+                             tmap_api_keys=os.environ.get("TMAP_API_KEYS"))
     elif args.action == "bootstrap-db":
         runtime_db.bootstrap(outputs, args.namespace, args.run_id, command)
     elif args.action == "cleanup-db":

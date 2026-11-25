@@ -8,6 +8,7 @@
   ③ 수단별 1차 — PUBLIC 은 ODsay·CAR/WALK 는 TMAP, 미배선 수단은 TravelTimeError
   ④ 체인 합성 — ODsay -98(700m 이내) 은 하버사인 폴백 + 경고에 코드가 실린다
   ⑤ 조립 — main._travel_chain: 두 키·TMAP 만·ODsay 만·둘 다 없음
+  ⑥ TMAP 키 여러 개 — 합치기·중복 제거·구분자·추가 키만으로 배선·배선 줄의 키 수
 """
 
 from __future__ import annotations
@@ -282,14 +283,32 @@ def test_extra_tmap_keys_join_the_first_key_once_each(monkeypatch):
     assert _tmap_keys(monkeypatch, tmap="t1", tmap_more=" t2 ,t1,,t3", odsay=None) == ("t1", "t2", "t3")
 
 
-def test_a_single_tmap_key_stays_single(monkeypatch):
-    assert _tmap_keys(monkeypatch, tmap="t1", odsay=None) == ("t1",)
+def test_a_single_tmap_key_stays_single(monkeypatch, caplog):
+    with caplog.at_level(logging.INFO, logger="trippilot.main"):
+        assert _tmap_keys(monkeypatch, tmap="t1", odsay=None) == ("t1",)
+    # 두 번째 키가 파드에 안 닿았으면 배포 로그에 이렇게 보인다 — 키 하나일 때도 개수를 적는다
+    assert any("TMAP 키 1개" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize("tmap, tmap_more, expected", [
+    ("t1", "t2\nt3", ("t1", "t2", "t3")),      # 줄바꿈으로 나눠 적음 — 키 하나로 뭉치면 헤더 오류가 되고 넘김도 안 걸린다
+    ("t1", "t2 t3 ,\tt4", ("t1", "t2", "t3", "t4")),
+    ("t1,t2", None, ("t1", "t2")),              # 기존 칸에 쉼표로 이어 적음 — 한 키로 읽으면 되던 키까지 403 이 된다
+])
+def test_tmap_keys_split_on_commas_and_whitespace_in_either_variable(monkeypatch, tmap, tmap_more, expected):
+    assert _tmap_keys(monkeypatch, tmap=tmap, tmap_more=tmap_more, odsay=None) == expected
 
 
 def test_the_extra_keys_alone_also_wire_tmap(monkeypatch):
     assert _wired(monkeypatch, tmap=None, tmap_more="t2", odsay="o") == {
         TransportMode.CAR: "TmapRouteAdapter", TransportMode.WALK: "TmapRouteAdapter",
         TransportMode.PUBLIC: "OdsayTransitAdapter"}
+
+
+def test_the_extra_keys_alone_wire_tmap_even_without_odsay(monkeypatch):
+    assert _wired(monkeypatch, tmap=None, tmap_more="t2", odsay=None) == {
+        TransportMode.CAR: "TmapRouteAdapter", TransportMode.WALK: "TmapRouteAdapter",
+        TransportMode.PUBLIC: "TmapRouteAdapter"}
 
 
 def test_blank_extra_keys_do_not_wire_tmap(monkeypatch):

@@ -114,6 +114,17 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn('LLM_FEATURE_MODELS_INPUT', sync['run'])
         self.assertNotIn('inputs.', sync['run'])  # 입력을 셸에 직접 끼우지 않는다(주입 방지)
 
+    def test_tmap_extra_keys_secret_reaches_only_the_secret_sync_step(self):
+        """TMAP 추가 키(저장소 시크릿 `TMAP_API_KEYS`)는 sync-secrets 스텝 env 로만 간다 — 입력(실행 화면에 보인다)도 잡 env 도 아니다.
+        이 줄이 빠지면 sync-secrets 는 조용히 저장값만 유지해, 시크릿을 넣고도 서버는 키 하나로 돈다."""
+        job = workflow('aws-deploy.yml')['jobs']['deploy']
+        sync = next(s for s in job['steps'] if s.get('name') == 'Synchronize runtime secrets and render nonsecret Helm values')
+        self.assertEqual(sync['env']['TMAP_API_KEYS'], '${{ secrets.TMAP_API_KEYS }}')
+        self.assertNotIn('TMAP_API_KEYS', job['env'])
+        self.assertNotIn('TMAP_API_KEYS', sync['run'])  # 셸 인자로 올리지 않는다 — runtime.py 가 env 에서 읽는다
+        others = [s for s in job['steps'] if s is not sync]
+        self.assertFalse(any('TMAP_API_KEYS' in str(s) for s in others))
+
     def test_runtime_switches_reach_only_the_secret_sync_step(self):
         """상황 감지 스위치(KEY=VALUE;…)는 비어 있으면 아무것도 안 한다 — 기본값 배포가 켜고 끄지 않는다. 입력은 그 스텝 env 로만 받고
         (잡 env·GITHUB_ENV 를 거치지 않는다) 비어 있지 않을 때만 플래그로 넘긴다. 형식·허용 키·값 검증은 sync-secrets 한 곳이다."""

@@ -5,10 +5,13 @@ HTTP 클라이언트는 생성자 주입 — 테스트는 fake, 실행은 Urllib
 (일일 한도 아끼기 — TourApiAdapter 선례).
 
 **키 여러 개를 번갈아 쓴다** (2026-11-25 사용자 지시 — 팀원이 받은 두 번째 키). 키를 목록으로 주면
-호출마다 다음 키부터 시작하는 라운드로빈이라 키마다 따로인 일 한도를 고르게 나눠 쓴다. 그 키만의 문제
-(`_KEY_STATUS` — 401·403·429)로 실패하면 같은 호출 안에서 남은 키를 한 번씩 더 묻고(이때만 HTTP 가
-1건을 넘는다), 실패한 (키, 수단)은 `_KEY_REST_S` 동안 쉰다. 타임아웃·5xx·400 은 어느 키든 같아 넘기지
-않는다. 키 하나만 주면 종전과 같다(`AnthropicAdapter` 의 키 순환과 같은 규칙).
+수단마다 호출할 때 다음 키부터 시작하는 라운드로빈이다 — 다른 계정에서 받은 키면 일 한도가 따로라 그만큼
+더 잰다(같은 계정의 추가 키도 한도를 따로 받는지는 재지 않았다). 그 키만의 문제(`_KEY_STATUS` —
+401·403·429)로 실패하면 같은 호출 안에서 쉬지 않는 남은 키를 한 번씩 더 묻고(이때만 HTTP 가 1건을
+넘는다), 실패한 (키, 수단)은 `_KEY_REST_S` 동안 쉰다. 타임아웃·5xx·400 은 어느 키든 같아 넘기지 않는다.
+키 하나만 주면 종전과 같다. `AnthropicAdapter` 의 키 순환을 본떴지만 세 곳이 다르다 — 429 도 쉰다(TMAP 의
+429 는 분 단위 제한이 아니라 일 한도로 본다: 동시 24건에도 안 났다), 쉬는 키는 그 호출에서 건너뛴다(맨 뒤로
+돌려 끝까지 묻지 않는다), 쉼이 (키, 수단)별이다.
 
 응답 형태는 TMAP 문서 기준으로 고정했다 — POST, 헤더 `appKey`. 자동차·보행은
 `/tmap/routes[/pedestrian]` 응답 `features[].properties` 중 `totalTime`(초)·
@@ -28,6 +31,7 @@ from __future__ import annotations
 import itertools
 import json
 import logging
+import threading
 import time
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
@@ -91,10 +95,13 @@ class TmapRouteAdapter:
         self._keys = (app_key,) if isinstance(app_key, str) else tuple(app_key)
         if not self._keys:
             raise ValueError("app_key 가 하나도 없다")
-        self._turn = itertools.count()  # next() 는 CPython 에서 원자적 — 스레드풀의 동시 호출이 같은 키로 몰리지 않는다
+        # 순번은 수단별 — 한도가 상품(수단)별이라, 수단이 번갈아 들어와도 수단마다 키를 고르게 쓴다.
+        # next() 는 CPython 에서 원자적이라 스레드풀의 동시 호출이 같은 키로 몰리지 않는다
+        self._turns = {mode: itertools.count() for mode in _ROUTE}
         self._clock = clock
         # (키 순번, 수단) → 쉼이 끝나는 시각. 칸 하나 읽기·쓰기라 경합해도 실패 한 번 더일 뿐이다
         self._resting: dict[tuple[int, TransportMode], float] = {}
+        self._lock = threading.Lock()  # 쉬러 가는 순간(경고 한 줄)을 한 호출만 보게 — 조립 뒤 거리는 스레드풀에서 부른다
 
     def measure(
         self, from_: GeoPoint, to: GeoPoint, mode: TransportMode
@@ -128,10 +135,11 @@ class TmapRouteAdapter:
         """HTTP 1건 — 키 문제로 실패하면 쉬지 않는 남은 키로 같은 요청을 한 번씩 더.
 
         모든 키가 쉬는 중이어도 차례인 키 하나는 묻는다(호출 1건 = HTTP 1건, 키 하나일 때의 종전 동작).
-        한도가 풀렸는지·상품을 구독했는지는 불러 봐야 알고, 답한 키는 바로 쉼에서 돌아온다.
+        한도가 풀렸는지·상품을 구독했는지는 불러 봐야 알고, 답한 키는 바로 쉼에서 돌아온다. 쉼이 끝난 키는
+        다시 넘김 대상이라, 전부 막힌 채 쉼이 끝나면 그때 한 번은 키 수만큼 묻는다(10분마다 다시 확인하는 값).
         """
         n = len(self._keys)
-        first = next(self._turn) % n
+        first = next(self._turns[mode]) % n
         now = self._clock()
         order = [(first + k) % n for k in range(n)]
         live = [i for i in order if self._resting.get((i, mode), 0.0) <= now] or order[:1]
@@ -139,15 +147,20 @@ class TmapRouteAdapter:
             try:
                 payload = self._http.post_json(f"{_BASE}{path}", {"appKey": self._keys[idx]}, body)
             except Exception as e:  # urllib·JSON 파싱 등 — 원인 보존해 상위 로그로
-                status = getattr(e, "code", None)  # urllib HTTPError
-                if status in _KEY_STATUS:
-                    self._resting[(idx, mode)] = self._clock() + _KEY_REST_S
+                status = getattr(e, "code", None)  # urllib HTTPError — 다른 예외의 code(문자열 등)는 상태가 아니다
+                if isinstance(status, int) and status in _KEY_STATUS:
+                    failed_at = self._clock()
+                    with self._lock:
+                        newly = self._resting.get((idx, mode), 0.0) <= failed_at
+                        self._resting[(idx, mode)] = failed_at + _KEY_REST_S
                     if attempt < len(live) - 1:
                         # 다음 키가 살리면 호출은 성공이라 체인 경고(travel_primary_failed)가 안 남는다 — 한도 소진은 이 줄로만
-                        # 보인다. 쉼 때문에 (키, 수단)마다 10분에 한 번꼴이다. 키 값은 싣지 않는다(순번만). 칸 이름을 `key=` 로
-                        # 두지 않는다 — 로그 덤프의 자격 가림(`runtime_kb._CREDENTIAL`)이 `KEY…=값` 꼴을 지운다.
-                        _log.warning("tmap_key_failover slot=%d/%d mode=%s status=%s — 이 키는 %d분 쉬고 다음 키로",
-                                     idx + 1, n, mode.name, status, _KEY_REST_S // 60)
+                        # 보인다. 깨어 있던 키가 쉬러 가는 순간에만 찍는다 — 스레드풀의 동시 호출이 같은 막힌 키를 만나도
+                        # 한 줄이다(넘김은 호출마다 한다). 키 값은 싣지 않는다(순번만). 칸 이름을 `key=` 로 두지 않는다 —
+                        # 로그 덤프의 자격 가림(`runtime_kb._CREDENTIAL`)이 `KEY…=값` 꼴을 지운다.
+                        if newly:
+                            _log.warning("tmap_key_failover slot=%d/%d mode=%s status=%s — 이 키는 %d분 쉬고 다음 키로",
+                                         idx + 1, n, mode.name, status, _KEY_REST_S // 60)
                         continue
                 raise TravelTimeError(f"{path} 호출 실패: {type(e).__name__}: {e}") from e
             self._resting.pop((idx, mode), None)

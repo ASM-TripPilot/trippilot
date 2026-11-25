@@ -813,6 +813,40 @@ class RuntimeIntegrationTests(unittest.TestCase):
                         self.assertEqual(saved[arns[group]]["PUBLIC_DATA_API_KEY"], "stored")
                     self.assertNotIn("public data key written", " ".join(str(call.args[0]) for call in printed.call_args_list))
 
+    def test_sync_writes_the_tmap_extra_keys_to_ai_only_without_printing_them(self):
+        """TMAP 추가 키 목록도 GitHub 시크릿 → 배포 역할이 ai 그룹에 쓴다 — 로컬 AWS 자격도, 운영 시크릿 손편집도 없이.
+        허용목록을 아는 커밋의 배포가 값을 쓰므로 "이름 모르는 옛 커밋이 시크릿의 새 키를 만나 거부" 순서 함정이 없다.
+        값은 출력 어디에도 없다 — 쓴 키 이름만. 첫 키(`TMAP_API_KEY`)와 다른 그룹은 건드리지 않는다."""
+        arns = outputs()["app_secret_arns"]
+        saved, execute = self._saved_secrets({"TMAP_API_KEY": "first-key"})
+        printed = io.StringIO()
+        with patch("runtime_secrets.rsa_key", return_value="k"), patch("runtime_secrets.validate_rsa_key"):
+            with contextlib.redirect_stdout(io.StringIO()):
+                runtime_secrets.sync(outputs(), "trippilot", False, execute)  # 첫 배포 시드 — 아래 쓰기만 센다
+            self.writes.clear()
+            with contextlib.redirect_stdout(printed):
+                runtime_secrets.sync(outputs(), "trippilot", False, execute, tmap_api_keys=" second-key,third-key\n")
+        self.assertEqual(saved[arns["ai"]]["TMAP_API_KEYS"], "second-key,third-key")
+        self.assertEqual(saved[arns["ai"]]["TMAP_API_KEY"], "first-key")
+        self.assertNotIn("TMAP_API_KEYS", saved[arns["backend"]])
+        self.assertEqual([write for write in self.writes if write != "apply"], [arns["ai"]])
+        self.assertIn("ai secret keys written by this deploy: TMAP_API_KEYS", printed.getvalue())
+        self.assertNotIn("second-key", printed.getvalue())
+
+    def test_sync_keeps_the_stored_tmap_extra_keys_when_absent_or_unchanged(self):
+        """시크릿이 없거나 빈 런은 저장값을 지우지 않고, 같은 값이면 쓰지 않는다 — 다른 변경이 없으면 put 0회."""
+        arns = outputs()["app_secret_arns"]
+        saved, execute = self._saved_secrets({"TMAP_API_KEYS": "stored"})
+        with patch("runtime_secrets.rsa_key", return_value="k"), patch("runtime_secrets.validate_rsa_key"), \
+                patch("builtins.print"):
+            runtime_secrets.sync(outputs(), "trippilot", False, execute)  # 첫 배포 시드
+            for given in (None, "", "  \n", "stored", " stored\n"):
+                with self.subTest(given=given):
+                    self.writes.clear()
+                    runtime_secrets.sync(outputs(), "trippilot", False, execute, tmap_api_keys=given)
+                    self.assertEqual([write for write in self.writes if write != "apply"], [])
+                    self.assertEqual(saved[arns["ai"]]["TMAP_API_KEYS"], "stored")
+
     def test_sync_writes_runtime_switches_to_their_groups_and_prints_names_only(self):
         """상황 감지 스위치도 로컬 AWS 자격 없이 배포 입력으로 쓴다(push_mode·도우미 입력과 같은 길) — backend 4종·ai 1종을 제
         그룹에 쓰고, 출력은 키 이름뿐이다(카나리 계정 id 도 찍지 않는다). 같은 입력이면 쓰지 않고, 입력 없는 배포는 저장값을 둔다."""
@@ -995,6 +1029,20 @@ class RuntimeIntegrationTests(unittest.TestCase):
                 self.assertEqual(sync.call_args.kwargs["runtime_switches"], switches)
                 runtime.main(["sync-secrets", "--outputs", str(source)])
                 self.assertIsNone(sync.call_args.kwargs["runtime_switches"])
+
+    def test_sync_secrets_cli_reads_the_tmap_extra_keys_from_env_not_argv(self):
+        """TMAP 추가 키도 argv 에 올리지 않는다 — 워크플로가 그 스텝 env 로만 싣는다(공공데이터 키와 같은 길)."""
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "outputs.json"
+            source.write_text(json.dumps({key: {"value": value} for key, value in outputs().items()}))
+            with patch("runtime.runtime_secrets.sync") as sync, patch("builtins.print"):
+                with patch.dict(os.environ, {"TMAP_API_KEYS": "k2,k3"}):
+                    runtime.main(["sync-secrets", "--outputs", str(source)])
+                self.assertEqual(sync.call_args.kwargs["tmap_api_keys"], "k2,k3")
+                with patch.dict(os.environ):
+                    os.environ.pop("TMAP_API_KEYS", None)
+                    runtime.main(["sync-secrets", "--outputs", str(source)])
+                self.assertIsNone(sync.call_args.kwargs["tmap_api_keys"])
 
     def test_sync_secrets_cli_reads_the_public_data_key_from_env_not_argv(self):
         """비밀값은 argv 에 올리지 않는다(프로세스 목록·로그에 남는다) — 워크플로가 그 스텝 env 로만 싣는다."""

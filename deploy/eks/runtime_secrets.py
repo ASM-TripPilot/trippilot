@@ -375,7 +375,7 @@ def open_gaps(groups):
 
 
 def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None, dialogue_orchestrator=None,
-         llm_feature_models=None, target=None, public_data_api_key=None, runtime_switches=None):
+         llm_feature_models=None, target=None, public_data_api_key=None, runtime_switches=None, tmap_api_keys=None):
     # embedding_enabled 는 runtime.py CLI 계약으로 남는다 — DSN 합성은 더 이상 이 값을 보지 않는다(runtime_manifests).
     region = outputs["aws_region"]
     switches = parse_runtime_switches(runtime_switches)  # 형식 오류는 시크릿을 읽기도 전에 멈춘다
@@ -388,6 +388,12 @@ def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None, dialog
             ai[key] = value
     if dialogue_orchestrator is not None:
         ai["TRIPPILOT_DIALOGUE_ORCHESTRATOR"] = dialogue_orchestrator
+    # TMAP 추가 키 목록(번갈아 쓸 키)은 GitHub 시크릿 → 스텝 env 로 온다(공공데이터 키와 같은 길 — 입력은 실행 화면에 보인다).
+    # 없거나 빈 값이면 저장값을 그대로 둔다 — 지우지 않는다. 쓴 것은 아래 `ai secret keys written` 줄에 이름만 남는다.
+    # 키를 빼려면 저장소 시크릿을 남길 목록으로 바꾼다. 전부 빼려면 저장소 시크릿을 지우고 Secrets Manager 값을 빈 문자열로
+    # 둔다 — 항목째 지우면 클러스터 Secret 에 옛 값이 남는다(apply 는 빠진 키를 지우지 않는다).
+    if (tmap_api_keys or "").strip():
+        ai["TMAP_API_KEYS"] = tmap_api_keys.strip()
     if llm_feature_models:
         ai["TRIPPILOT_LLM_FEATURE_MODELS"] = merge_feature_models(
             ai.get("TRIPPILOT_LLM_FEATURE_MODELS", ""), llm_feature_models, known_llm_features(),

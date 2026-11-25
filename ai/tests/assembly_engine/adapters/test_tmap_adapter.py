@@ -13,6 +13,8 @@ metaData.plan.itineraries[]) — 실 응답 드리프트는 실키 첫 실행(sm
 from __future__ import annotations
 
 import logging
+import re
+import threading
 import urllib.error
 
 import pytest
@@ -213,9 +215,19 @@ def test_a_key_scoped_failure_falls_over_to_the_next_key_in_the_same_call(status
     assert http.keys == ["a", "b", "b", "b", "b"]
 
 
-@pytest.mark.parametrize("error", [TimeoutError("timed out"), _http_error(500), _http_error(400)])
+class _OddCode(Exception):
+    """`code` 가 HTTP 상태(int)가 아닌 예외 — 다른 클라이언트·라이브러리 예외가 이런 속성을 가질 수 있다."""
+
+    def __init__(self, code: object) -> None:
+        super().__init__("odd")
+        self.code = code
+
+
+@pytest.mark.parametrize("error", [TimeoutError("timed out"), _http_error(500), _http_error(400),
+                                   _OddCode("403"), _OddCode(["403"]), _OddCode(403.0)])
 def test_failures_that_are_not_about_the_key_do_not_fall_over(error):
-    """시한·5xx·요청 오류는 어느 키로 보내도 같다 — 넘기지 않고(호출 1건) 그 키를 쉬게 하지도 않는다."""
+    """시한·5xx·요청 오류는 어느 키로 보내도 같다 — 넘기지 않고(호출 1건) 그 키를 쉬게 하지도 않는다.
+    `code` 가 int 상태가 아닌 예외(문자열·해시 불가·실수)도 같다 — 어떤 예외든 TravelTimeError 로 감싸는 계약을 지킨다."""
     http = KeyedHttp({("a", "/tmap/routes"): error})
     adapter = TmapRouteAdapter(http, ["a", "b"], clock=lambda: 0.0)
     with pytest.raises(TravelTimeError) as exc:
@@ -235,6 +247,10 @@ def test_a_resting_key_is_asked_again_once_its_rest_ends():
     for _ in range(3):
         adapter.measure(_FROM, _TO, TransportMode.CAR)
     assert http.keys.count("a") == 1
+    now[0] = _KEY_REST_S - 1  # 쉼이 끝나기 직전 — 아직 묻지 않는다(쉼이 짧아지면 막힌 키 차례마다 실패를 다시 치른다)
+    for _ in range(4):
+        adapter.measure(_FROM, _TO, TransportMode.CAR)
+    assert http.keys.count("a") == 1
     now[0] = _KEY_REST_S + 1
     del http.fail[("a", "/tmap/routes")]  # 한도가 풀렸다
     for _ in range(4):
@@ -251,6 +267,10 @@ def test_rest_is_per_mode_so_an_unsubscribed_product_does_not_bench_the_key():
     for _ in range(4):
         adapter.measure(_FROM, _TO, TransportMode.CAR)
     assert sorted(http.keys) == ["a", "a", "b", "b"]
+    http.keys.clear()
+    for _ in range(4):
+        adapter.measure(_FROM, _TO, TransportMode.PUBLIC)
+    assert http.keys == ["b"] * 4  # a 의 자동차 성공이 a 의 대중교통 쉼을 풀지 않는다
 
 
 def test_when_every_key_fails_the_last_error_is_raised_with_its_cause():
@@ -263,8 +283,9 @@ def test_when_every_key_fails_the_last_error_is_raised_with_its_cause():
 
 
 def test_while_every_key_rests_each_call_still_asks_exactly_one_key():
-    """두 키가 다 막혀도(한도 소진·미구독) 호출 1건 = HTTP 1건은 지킨다 — 실패할 호출을 키 수만큼 겹쳐 내지 않는다.
-    아예 안 부르지는 않는다: 한도가 풀렸는지·상품이 구독됐는지는 불러 봐야 안다(키 하나일 때의 종전 동작과 같다)."""
+    """두 키가 다 막혀 쉬는 동안은(한도 소진·미구독) 호출 1건 = HTTP 1건이다 — 실패할 호출을 키 수만큼 겹쳐 내지 않는다.
+    아예 안 부르지는 않는다: 한도가 풀렸는지·상품이 구독됐는지는 불러 봐야 안다(키 하나일 때의 종전 동작과 같다).
+    쉼이 끝난 키는 다시 넘김 대상이라, 전부 막힌 채로 쉼이 끝나면 그때 한 번은 다시 두 키를 다 묻는다."""
     http = KeyedHttp({("a", "/transit/routes"): _http_error(403), ("b", "/transit/routes"): _http_error(403)})
     adapter = TmapRouteAdapter(http, ["a", "b"], clock=lambda: 0.0)
     with pytest.raises(TravelTimeError):
@@ -311,4 +332,56 @@ def test_falling_over_leaves_a_warning_without_the_key_value(caplog):
     message = record.getMessage()
     # 순번 칸 이름은 `key=` 가 아니다 — 로그 덤프(aws-dev-logs)의 자격 가림이 `KEY…=값` 꼴을 지워 몇 번째 키인지 못 보게 된다
     assert "slot=1/2" in message and "mode=CAR" in message and "status=429" in message
-    assert "secret" not in message and "key=" not in message.lower()
+    assert "secret" not in message
+    # deploy/eks/runtime_kb.py `_CREDENTIAL` 의 `KEY=값` 가지 그대로(ai 테스트는 deploy 패키지를 import 하지 못한다)
+    assert re.search(r"(?:KEY|TOKEN|SECRET|PASSWORD)[A-Z_]*=\S+", message, re.IGNORECASE) is None
+
+
+def test_three_keys_bench_each_failed_key_and_keep_the_rotation_order():
+    """쉬는 것은 그 호출의 차례 키가 아니라 **실패한 그 키**다 — 두 번째 시도에서 막힌 키도 쉰다. 넘김은 순번대로."""
+    http = KeyedHttp({("a", "/tmap/routes"): _http_error(429), ("b", "/tmap/routes"): _http_error(429)})
+    adapter = TmapRouteAdapter(http, ["a", "b", "c"], clock=lambda: 0.0)
+    for _ in range(4):
+        adapter.measure(_FROM, _TO, TransportMode.CAR)
+    assert http.keys == ["a", "b", "c", "c", "c", "c"]
+
+
+def test_each_mode_rotates_its_own_turn():
+    """순번은 수단별이다 — 한도가 상품(수단)별이라, 자동차·보행이 번갈아 들어와도 수단마다 두 키를 고르게 쓴다.
+    순번을 수단이 같이 쓰면 자동차는 늘 한 키, 보행은 늘 다른 키로만 간다."""
+    http = KeyedHttp()
+    adapter = TmapRouteAdapter(http, ["a", "b"])
+    used: dict[TransportMode, list[str]] = {TransportMode.CAR: [], TransportMode.WALK: []}
+    for _ in range(4):
+        for mode in (TransportMode.CAR, TransportMode.WALK):
+            adapter.measure(_FROM, _TO, mode)
+            used[mode].append(http.keys[-1])
+    assert used == {TransportMode.CAR: ["a", "b", "a", "b"], TransportMode.WALK: ["a", "b", "a", "b"]}
+
+
+def test_a_burst_that_finds_one_key_blocked_warns_once_and_still_measures_every_leg(caplog):
+    """조립 뒤 거리는 스레드풀로 한꺼번에 나간다 — 막힌 키를 동시에 만난 호출이 여럿이어도 경고는 그 키가
+    쉬러 가는 순간 한 줄이다(줄 수가 한도 소진 횟수로 읽히게). 넘김은 호출마다 그대로라 구간은 전부 실측된다."""
+    blocked = threading.Barrier(4, timeout=5)
+
+    class BurstHttp(KeyedHttp):
+        def post_json(self, url, headers, body):
+            if headers["appKey"] == "a":
+                self.keys.append("a")
+                blocked.wait()  # a 차례인 네 호출이 모두 출발한 뒤에야 실패가 돌아온다
+                raise _http_error(429)
+            return super().post_json(url, headers, body)
+
+    http = BurstHttp()
+    adapter = TmapRouteAdapter(http, ["a", "b"], clock=lambda: 0.0)
+    sources: list[str] = []
+    with caplog.at_level(logging.WARNING):
+        threads = [threading.Thread(target=lambda: sources.append(adapter.measure(_FROM, _TO, TransportMode.CAR).source))
+                   for _ in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+    assert sources == ["tmap_car"] * 8
+    assert http.keys.count("a") == 4
+    assert len([r for r in caplog.records if "tmap_key_failover" in r.getMessage()]) == 1

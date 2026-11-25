@@ -343,12 +343,13 @@ def _backend_poi_db():
 def _tmap_api_keys() -> list[str]:
     """TMAP 키 목록 — 번갈아 쓸 순서대로, 같은 값은 한 번만.
 
-    `TMAP_API_KEY`(기존 단일 키) 다음에 `TMAP_API_KEYS`(쉼표 목록 — 더 받은 키를 여기에 잇는다, 2026-11-25).
-    일 한도가 키마다 따로라 키가 늘면 실경로로 재는 구간이 그만큼 는다. 같은 값이 두 칸에 있어도 한 번만 센다 —
-    같은 키를 번갈아 써 봐야 한도는 그대로다(`_anthropic_api_keys` 와 같은 규칙). 값은 어디에도 찍지 않는다.
+    `TMAP_API_KEY`(기존 단일 키) 다음에 `TMAP_API_KEYS`(더 받은 키를 여기에 잇는다, 2026-11-25). 쉼표·공백·줄바꿈
+    어느 것으로 나눠 적어도 되고 두 칸을 같은 식으로 읽는다 — 기존 칸에 쉼표로 이어 적은 값을 한 키로 읽으면 되던
+    키까지 403 이 되고, 줄바꿈이 낀 키는 헤더 오류라 다음 키로 넘기지도 못한다. 같은 값은 한 번만 센다 — 같은
+    키를 번갈아 써 봐야 한도는 그대로다(`_anthropic_api_keys` 와 같은 규칙). 값은 어디에도 찍지 않는다.
     """
-    raw = [_env("TMAP_API_KEY") or "", *(_env("TMAP_API_KEYS") or "").split(",")]
-    return list(dict.fromkeys(k.strip() for k in raw if k.strip()))
+    raw = f"{_env('TMAP_API_KEY') or ''},{_env('TMAP_API_KEYS') or ''}".replace(",", " ").split()
+    return list(dict.fromkeys(raw))
 
 
 def _travel_chain():
