@@ -395,8 +395,9 @@ services:
       TRIPPILOT_BACKEND_BASE_URL: ${SERVICE_AUTH_TOKEN:+http://backend:8080}
       TRIPPILOT_SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:-}
       # TMAP 실경로 API(TRIP-432). 설정 시 ChainedTravelAdapter 활성화 —
-      # 미설정 = 기존 하버사인 추정 그대로.
+      # 미설정 = 기존 하버사인 추정 그대로. 키를 더 받았으면 TMAP_API_KEYS 에 쉼표로 — 번갈아 쓴다.
       TMAP_API_KEY: ${TMAP_API_KEY:-}
+      TMAP_API_KEYS: ${TMAP_API_KEYS:-}
       # ODsay 대중교통 길찾기 — 설정 시 대중교통 실측만 ODsay 가 맡는다(TMAP 대중교통 상품 미구독).
       ODSAY_API_KEY: ${ODSAY_API_KEY:-}
       # 행사 저장소(TRIP-421). 이미지가 data/ 를 통째로 담으므로 기본값만으로 배선된다 —

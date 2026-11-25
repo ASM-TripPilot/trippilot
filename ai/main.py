@@ -340,17 +340,32 @@ def _backend_poi_db():
     return BackendPoiDb(UrllibJsonClient(), base_url, token)
 
 
+def _tmap_api_keys() -> list[str]:
+    """TMAP 키 목록 — 번갈아 쓸 순서대로, 같은 값은 한 번만.
+
+    `TMAP_API_KEY`(기존 단일 키) 다음에 `TMAP_API_KEYS`(더 받은 키를 여기에 잇는다, 2026-11-25). 두 칸을 같은 식으로
+    읽는다: appKey 는 출력 가능한 ASCII 라 쉼표와 그 밖의 글자(공백·줄바꿈·BOM·영폭 공백·둥근 따옴표·전각 쉼표)는 전부
+    구분자다. 기존 칸에 쉼표로 이어 적은 값을 한 키로 읽으면 되던 키까지 403 이 되고, 그런 글자가 낀 키는 HTTP 를
+    보내기도 전에 헤더에서 죽어 다음 키로 넘기지도 못한다(그 키 차례마다 추정인데 배선 줄은 정상처럼 보인다).
+    같은 값은 한 번만 센다 — 같은 키를 번갈아 써 봐야 한도는 그대로다(`_anthropic_api_keys` 와 같은 규칙).
+    값은 어디에도 찍지 않는다.
+    """
+    text = f"{_env('TMAP_API_KEY') or ''},{_env('TMAP_API_KEYS') or ''}"
+    return list(dict.fromkeys("".join(c if "!" <= c <= "~" and c != "," else " " for c in text).split()))
+
+
 def _travel_chain():
     """`TMAP_API_KEY`(TRIP-432)·`ODSAY_API_KEY` 설정 시 ChainedTravelAdapter 조립.
 
     1차 실측은 수단별 — 자동차·보행 TMAP, 대중교통 ODsay(2026-10-14: TMAP 대중교통 상품이
     미구독 403 이라 대중교통만 ODsay 로 받는다. ODsay 키가 없으면 종전대로 TMAP 이 대중교통도
     맡아, 상품을 구독하는 순간 산다). 2차는 하버사인. 둘 다 미설정 = None (기존 TravelEstimator
-    그대로). 배선 결과는 INFO 한 줄 — 배포 smoke 의 `ai-wiring:` 이 끌어올린다.
+    그대로). 배선 결과는 INFO 한 줄 — 배포 smoke 의 `ai-wiring:` 이 끌어올린다. TMAP 키가 여럿이면
+    (`_tmap_api_keys`) 어댑터가 번갈아 쓰고, 그 줄 끝에 몇 개가 닿았는지 남는다.
     """
-    tmap_key, odsay_key = _env("TMAP_API_KEY"), _env("ODSAY_API_KEY")
+    tmap_keys, odsay_key = _tmap_api_keys(), _env("ODSAY_API_KEY")
     log = logging.getLogger("trippilot.main")
-    if tmap_key is None and odsay_key is None:
+    if not tmap_keys and odsay_key is None:
         log.info("실경로 미배선(TMAP_API_KEY·ODSAY_API_KEY 미설정) — 거리는 하버사인 추정")
         return None
     from trippilot.assembly_engine.adapters.chained_travel import (
@@ -364,10 +379,10 @@ def _travel_chain():
     # (느리게 흘러오는 응답·DNS 는 넘긴다). 조립 뒤 거리는 시한(≤1.5s) 안에 끝난 구간만 쓰고
     # 늦은 호출은 결과를 버린다(TRIP-1179). 조립 앞 TransitProvider 도 이 travel 을 쓴다.
     by_mode = {}
-    if tmap_key is not None:
+    if tmap_keys:
         from trippilot.assembly_engine.adapters.tmap import TmapRouteAdapter, UrllibHttpClient
 
-        tmap = TmapRouteAdapter(UrllibHttpClient(timeout_sec=2.0), tmap_key)
+        tmap = TmapRouteAdapter(UrllibHttpClient(timeout_sec=2.0), tmap_keys)
         by_mode.update({TransportMode.CAR: tmap, TransportMode.WALK: tmap,
                         TransportMode.PUBLIC: tmap})
     if odsay_key is not None:
@@ -375,8 +390,9 @@ def _travel_chain():
         from trippilot.poi_curation.sourcing.tourapi import UrllibHttpClient as UrllibGetJson
 
         by_mode[TransportMode.PUBLIC] = OdsayTransitAdapter(UrllibGetJson(timeout_sec=2.0), odsay_key)
-    log.info("실경로 배선 = %s", ", ".join(
-        f"{mode.name}:{type(adapter).__name__}" for mode, adapter in by_mode.items()))
+    log.info("실경로 배선 = %s%s", ", ".join(
+        f"{mode.name}:{type(adapter).__name__}" for mode, adapter in by_mode.items()),
+        f" · TMAP 키 {len(tmap_keys)}개" if tmap_keys else "")
     return ChainedTravelAdapter(primary=ByModeTravelTime(by_mode),
                                 fallback=TravelEstimator(AssemblyConfig()))
 

@@ -8,6 +8,7 @@
   ③ 수단별 1차 — PUBLIC 은 ODsay·CAR/WALK 는 TMAP, 미배선 수단은 TravelTimeError
   ④ 체인 합성 — ODsay -98(700m 이내) 은 하버사인 폴백 + 경고에 코드가 실린다
   ⑤ 조립 — main._travel_chain: 두 키·TMAP 만·ODsay 만·둘 다 없음
+  ⑥ TMAP 키 여러 개 — 합치기·중복 제거·구분자·추가 키만으로 배선·배선 줄의 키 수
 """
 
 from __future__ import annotations
@@ -239,8 +240,8 @@ def test_too_close_falls_back_to_haversine_and_the_warning_carries_the_code(capl
 # ── ⑤ 조립 ───────────────────────────────────────────────────────────
 
 
-def _wired(monkeypatch, *, tmap: str | None, odsay: str | None) -> dict:
-    for name, value in (("TMAP_API_KEY", tmap), ("ODSAY_API_KEY", odsay)):
+def _wired(monkeypatch, *, tmap: str | None, odsay: str | None, tmap_more: str | None = None) -> dict:
+    for name, value in (("TMAP_API_KEY", tmap), ("TMAP_API_KEYS", tmap_more), ("ODSAY_API_KEY", odsay)):
         if value is None:
             monkeypatch.delenv(name, raising=False)
         else:
@@ -267,3 +268,69 @@ def test_odsay_only_wires_public_alone(monkeypatch):
 
 def test_no_keys_means_no_chain(monkeypatch):
     assert _wired(monkeypatch, tmap=None, odsay=None) == {}
+
+
+# ── ⑥ TMAP 키 여러 개 (2026-11-25) ────────────────────────────────────
+
+
+def _tmap_keys(monkeypatch, **env) -> tuple[str, ...]:
+    _wired(monkeypatch, **env)
+    return main._travel_chain()._primary._by_mode[TransportMode.CAR]._keys
+
+
+def test_extra_tmap_keys_join_the_first_key_once_each(monkeypatch):
+    """`TMAP_API_KEY` 다음에 `TMAP_API_KEYS`(쉼표) — 같은 값은 한 번만(같은 키를 번갈아 써 봐야 한도는 그대로다)."""
+    assert _tmap_keys(monkeypatch, tmap="t1", tmap_more=" t2 ,t1,,t3", odsay=None) == ("t1", "t2", "t3")
+
+
+def test_a_single_tmap_key_stays_single(monkeypatch, caplog):
+    with caplog.at_level(logging.INFO, logger="trippilot.main"):
+        assert _tmap_keys(monkeypatch, tmap="t1", odsay=None) == ("t1",)
+    # 두 번째 키가 파드에 안 닿았으면 배포 로그에 이렇게 보인다 — 키 하나일 때도 개수를 적는다
+    assert any("TMAP 키 1개" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize("tmap, tmap_more, expected", [
+    ("t1", "t2\nt3", ("t1", "t2", "t3")),      # 줄바꿈으로 나눠 적음 — 키 하나로 뭉치면 헤더 오류가 되고 넘김도 안 걸린다
+    ("t1", "t2 t3 ,\tt4", ("t1", "t2", "t3", "t4")),
+    ("t1,t2", None, ("t1", "t2")),              # 기존 칸에 쉼표로 이어 적음 — 한 키로 읽으면 되던 키까지 403 이 된다
+])
+def test_tmap_keys_split_on_commas_and_whitespace_in_either_variable(monkeypatch, tmap, tmap_more, expected):
+    assert _tmap_keys(monkeypatch, tmap=tmap, tmap_more=tmap_more, odsay=None) == expected
+
+
+@pytest.mark.parametrize("tmap_more, expected", [
+    ("\ufefft2", ("t1", "t2")),         # 앞에 붙은 BOM — 파일로 시크릿을 넣을 때
+    ("“t2”", ("t1", "t2")),              # 둥근 따옴표 — 메신저·문서에서 복사한 키
+    ("t2，t3", ("t1", "t2", "t3")),      # 전각 쉼표
+    ("t2\u200b", ("t1", "t2")),         # 끝에 붙은 영폭 공백
+])
+def test_characters_that_cannot_be_in_an_app_key_only_separate(monkeypatch, tmap_more, expected):
+    """appKey 는 출력 가능한 ASCII 다 — 그 밖의 글자가 낀 키는 HTTP 를 보내기도 전에 헤더 인코딩에서 죽어 넘김도 쉼도
+    걸리지 않는다(그 키 차례마다 계속 추정인데 배선 줄은 정상처럼 보인다). 그런 글자는 구분자로만 읽는다."""
+    assert _tmap_keys(monkeypatch, tmap="t1", tmap_more=tmap_more, odsay=None) == expected
+
+
+def test_the_extra_keys_alone_also_wire_tmap(monkeypatch):
+    assert _wired(monkeypatch, tmap=None, tmap_more="t2", odsay="o") == {
+        TransportMode.CAR: "TmapRouteAdapter", TransportMode.WALK: "TmapRouteAdapter",
+        TransportMode.PUBLIC: "OdsayTransitAdapter"}
+
+
+def test_the_extra_keys_alone_wire_tmap_even_without_odsay(monkeypatch):
+    assert _wired(monkeypatch, tmap=None, tmap_more="t2", odsay=None) == {
+        TransportMode.CAR: "TmapRouteAdapter", TransportMode.WALK: "TmapRouteAdapter",
+        TransportMode.PUBLIC: "TmapRouteAdapter"}
+
+
+def test_blank_extra_keys_do_not_wire_tmap(monkeypatch):
+    assert _wired(monkeypatch, tmap=None, tmap_more=" , ", odsay=None) == {}
+
+
+def test_wiring_line_tells_how_many_tmap_keys_arrived_without_their_values(monkeypatch, caplog):
+    """배포 smoke 의 `ai-wiring:` 이 이 줄을 끌어올린다 — 두 번째 키가 파드에 닿았는지 볼 유일한 자리다."""
+    with caplog.at_level(logging.INFO, logger="trippilot.main"):
+        _wired(monkeypatch, tmap="secret-1", tmap_more="secret-2", odsay="o")
+    [line] = [r.getMessage() for r in caplog.records if "실경로 배선" in r.getMessage()]
+    assert "TMAP 키 2개" in line and "PUBLIC:OdsayTransitAdapter" in line
+    assert "secret" not in line

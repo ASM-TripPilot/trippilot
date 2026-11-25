@@ -29,7 +29,7 @@ AI_KEYS = frozenset("""
 TRIPPILOT_LLM_PROVIDER OPENAI_API_KEY OPENAI_BASE_URL OPENAI_MODEL OPENAI_API
 ANTHROPIC_API_KEY ANTHROPIC_API_KEYS ANTHROPIC_API_KEY_2 ANTHROPIC_API_KEY_3 ANTHROPIC_API_KEY_4 ANTHROPIC_API_KEY_5 ANTHROPIC_API_KEY_6 ANTHROPIC_API_KEY_7 ANTHROPIC_API_KEY_8 ANTHROPIC_API_KEY_9 ANTHROPIC_MODEL TRIPPILOT_LLM_FEATURE_MODELS TRIPPILOT_LLM_RETRY_MODELS
 TRIPPILOT_LOCAL_LLM_BASE_URL TRIPPILOT_LOCAL_LLM_API_KEY WEATHER_API WEATHER_API_BASE KAKAO_REST_API_KEY
-EXISTENCE_MAX_CALLS TMAP_API_KEY ODSAY_API_KEY TRIPPILOT_EMBEDDING_TIMEOUT_SEC TRIPPILOT_EMBEDDING_MODEL
+EXISTENCE_MAX_CALLS TMAP_API_KEY TMAP_API_KEYS ODSAY_API_KEY TRIPPILOT_EMBEDDING_TIMEOUT_SEC TRIPPILOT_EMBEDDING_MODEL
 TRIPPILOT_BEDROCK_MODEL_ARN TRIPPILOT_BEDROCK_REGION
 TRIPPILOT_DIALOGUE_ORCHESTRATOR TRIPPILOT_DIALOGUE_SHADOW_RATE PUBLIC_DATA_API_KEY
 HOLIDAY_CLOSURE_MODE TRIPPILOT_KB5_FALLBACK TRIPPILOT_KB5_OPEN_SEARCH
@@ -375,7 +375,7 @@ def open_gaps(groups):
 
 
 def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None, dialogue_orchestrator=None,
-         llm_feature_models=None, target=None, public_data_api_key=None, runtime_switches=None):
+         llm_feature_models=None, target=None, public_data_api_key=None, runtime_switches=None, tmap_api_keys=None):
     # embedding_enabled 는 runtime.py CLI 계약으로 남는다 — DSN 합성은 더 이상 이 값을 보지 않는다(runtime_manifests).
     region = outputs["aws_region"]
     switches = parse_runtime_switches(runtime_switches)  # 형식 오류는 시크릿을 읽기도 전에 멈춘다
@@ -388,6 +388,13 @@ def sync(outputs, namespace, embedding_enabled, shell, *, push_mode=None, dialog
             ai[key] = value
     if dialogue_orchestrator is not None:
         ai["TRIPPILOT_DIALOGUE_ORCHESTRATOR"] = dialogue_orchestrator
+    # TMAP 추가 키 목록(번갈아 쓸 키)은 GitHub 시크릿 → 스텝 env 로 온다(공공데이터 키와 같은 길 — 입력은 실행 화면에 보인다).
+    # 없거나 빈 값이면 저장값을 그대로 둔다 — 지우지 않는다. 쓴 것은 아래 `ai secret keys written` 줄에 이름만 남는다.
+    # 키를 빼려면 저장소 시크릿을 남길 목록으로 바꾼다. 전부 빼려면 저장소 시크릿을 `,` 로 바꿔 배포한다 — 앱이 추가 키
+    # 0개로 읽는다(손편집 없이). 시크릿을 지우기만 하면 저장값이 남고, Secrets Manager 에서 항목째 지우면 클러스터
+    # Secret 에 옛 값이 남는다(apply 는 빠진 키를 지우지 않는다).
+    if (tmap_api_keys or "").strip():
+        ai["TMAP_API_KEYS"] = tmap_api_keys.strip()
     if llm_feature_models:
         ai["TRIPPILOT_LLM_FEATURE_MODELS"] = merge_feature_models(
             ai.get("TRIPPILOT_LLM_FEATURE_MODELS", ""), llm_feature_models, known_llm_features(),
