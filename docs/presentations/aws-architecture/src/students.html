@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>여행 앱 하나가 돌아가려면 — TripPilot AWS 인프라 이야기</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="deck.css">
+<style>
+  /* 이 덱에서만 쓰는 배치 */
+  .cover-stub { position: absolute; left: 96px; bottom: 96px; display: flex; background: #FFFDF8; border-radius: 16px; box-shadow: 0 18px 40px -24px rgba(20,33,61,.4); }
+  .cover-stub > div { padding: 22px 34px; }
+  .cover-stub > div + div { border-left: 2px dashed rgba(20,33,61,.18); }
+  .cover-stub .k { font: 600 14px/1 var(--font-mono); letter-spacing: .14em; color: var(--muted); }
+  .cover-stub .v { font-size: 26px; font-weight: 760; margin-top: 10px; }
+  .route { display: grid; grid-template-columns: repeat(5, 1fr); gap: 64px 32px; }
+  .stop { border-top: 3px solid var(--ink); padding-top: 18px; }
+  .stop .no { font: 700 21px/1 var(--font-mono); color: var(--orange); letter-spacing: .1em; }
+  .stop .nm { font-size: 36px; font-weight: 780; margin-top: 14px; line-height: 1.3; }
+  .stop .ds { font-size: 24px; color: var(--muted); margin-top: 8px; line-height: 1.45; }
+  .map-row { display: grid; grid-template-columns: 170px 1fr; gap: 22px; padding: 22px 0; border-bottom: 1.5px solid var(--line); }
+  .map-row:last-child { border-bottom: 0; }
+  .map-row .k { font-size: 29px; font-weight: 800; color: var(--orange); }
+  .map-row .k small { display: block; font: 600 15px/1.3 var(--font-mono); color: var(--muted); letter-spacing: .06em; margin-top: 6px; }
+  .map-row p { font-size: 27px; line-height: 1.55; }
+  .map-row p b { font-weight: 780; }
+  .pipe { display: flex; align-items: stretch; }
+  .pipe .st { flex: 1; background: #FFFDF8; border: 1.5px solid var(--line); border-radius: 14px; padding: 22px 16px; position: relative; }
+  .pipe .st + .st { margin-left: 30px; }
+  .pipe .st + .st::before { content: "→"; position: absolute; left: -25px; top: 50%; transform: translateY(-50%); font: 700 22px/1 var(--font-mono); color: var(--orange); }
+  .pipe .st .no { font: 700 16px/1 var(--font-mono); color: var(--orange); }
+  .pipe .st b { display: block; font-size: 26px; margin-top: 10px; line-height: 1.3; }
+  .pipe .st span { display: block; font-size: 20px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+  .flow { display: flex; align-items: center; gap: 16px; }
+  .flow .box { background: #FFFDF8; border: 1.5px solid var(--line); border-radius: 12px; padding: 16px 22px; font-size: 25px; font-weight: 700; white-space: nowrap; }
+  .flow .box small { display: block; font-size: 18px; font-weight: 500; color: var(--muted); }
+  .flow .ar { font: 700 26px/1 var(--font-mono); color: var(--danger); }
+  .alarm { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 40px; }
+  .alarm div { font-size: 26px; line-height: 1.45; padding-left: 26px; position: relative; }
+  .alarm div::before { content: ""; position: absolute; left: 0; top: .5em; width: 12px; height: 12px; border-radius: 50%; background: var(--danger); }
+  .alarm div b { font-weight: 780; }
+  .house { border: 3px solid var(--ink); border-radius: 22px; padding: 34px 28px 26px; position: relative; }
+  .house .lbl { position: absolute; top: -19px; left: 26px; background: var(--paper); padding: 0 12px; font: 700 18px/36px var(--font-mono); letter-spacing: .08em; }
+  .ns { border: 2px dashed var(--orange); border-radius: 16px; padding: 22px 24px; background: #FFFDF8; }
+  .ns h3 { font-size: 32px; }
+  .ns p { font-size: 24px; color: var(--ink-2); margin-top: 8px; line-height: 1.5; }
+  .gloss { display: grid; grid-template-columns: 1fr 1fr; gap: 0 64px; }
+  .gloss div { display: grid; grid-template-columns: 250px 1fr; gap: 16px; padding: 17px 0; border-bottom: 1.5px solid var(--line); font-size: 25px; line-height: 1.45; }
+  .gloss div b { font-weight: 800; }
+  .gloss div span { color: var(--ink-2); }
+</style>
+</head>
+<body class="theme-ticket">
+<main class="deck" aria-label="TripPilot AWS 인프라 소개">
+
+<!-- 1. 표지 -->
+<section class="slide">
+  <div class="fig" style="inset:0"><img src="../assets/img/cover.webp" alt="" width="1600" height="900"></div>
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad" style="justify-content:center;right:auto;width:860px;bottom:240px">
+    <div class="kicker rv">대학생을 위한 클라우드 인프라 이야기</div>
+    <h1 class="title rv d1">여행 앱 하나가<br>돌아가려면</h1>
+    <p class="lead rv d2">TripPilot이 AWS 위에서 어떻게 돌아가는지<br>처음부터 하나씩 따라가 볼게요.</p>
+  </div>
+  <div class="cover-stub rv d3">
+    <div><div class="k">FROM</div><div class="v">내 스마트폰</div></div>
+    <div><div class="k">TO</div><div class="v">AWS 서울 리전</div></div>
+    <div><div class="k">GATE</div><div class="v mono">443</div></div>
+    <div><div class="k">기준</div><div class="v">develop · 2026.10</div></div>
+  </div>
+</section>
+
+<!-- 2. 오늘의 여정 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">Itinerary</div>
+    <h2 class="rv d1">오늘 둘러볼 곳은 열 군데예요</h2>
+    <div class="route mt-l rv d2">
+      <div class="stop"><div class="no">01</div><div class="nm">우리 앱은<br>뭘 하나</div><div class="ds">서버가 바쁜 이유</div></div>
+      <div class="stop"><div class="no">02</div><div class="nm">왜<br>클라우드인가</div><div class="ds">리전과 가용 영역</div></div>
+      <div class="stop"><div class="no">03</div><div class="nm">전체 지도</div><div class="ds">한 장짜리 구조도</div></div>
+      <div class="stop"><div class="no">04</div><div class="nm">건물로 보는<br>네트워크</div><div class="ds">VPC와 서브넷</div></div>
+      <div class="stop"><div class="no">05</div><div class="nm">요청 하나의<br>여행</div><div class="ds">버튼에서 DB까지</div></div>
+      <div class="stop"><div class="no">06</div><div class="nm">컨테이너와<br>쿠버네티스</div><div class="ds">EKS · 파드 · 자동 확장</div></div>
+      <div class="stop"><div class="no">07</div><div class="nm">데이터와 AI</div><div class="ds">RDS · Bedrock · LLM</div></div>
+      <div class="stop"><div class="no">08</div><div class="nm">배포와<br>비밀번호</div><div class="ds">Terraform · OIDC</div></div>
+      <div class="stop"><div class="no">09</div><div class="nm">장애를<br>알아채는 법</div><div class="ds">CloudWatch → Slack</div></div>
+      <div class="stop"><div class="no">10</div><div class="nm">돈 이야기</div><div class="ds">아낀 것과 감수한 것</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. 우리 앱은 뭘 하나 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">01 · 우리 앱은 뭘 하나</div>
+    <h2 class="rv d1">예약 다음부터를 책임지는 여행 앱이에요</h2>
+    <div class="row mt-l rv d2" style="gap:32px">
+      <div class="col ticket"><div class="tag">Before</div><div class="perf"></div><h3>둘러보고 저장</h3><p>가고 싶은 숙소와 장소를 모아 둬요.</p></div>
+      <div class="col ticket orange"><div class="tag">Plan</div><div class="perf"></div><h3>AI가 일정 짜기</h3><p>모아 둔 곳으로 날짜별 동선을 만들어 줘요.</p></div>
+      <div class="col ticket teal"><div class="tag">On trip</div><div class="perf"></div><h3>비 오면 Plan B</h3><p>날씨나 휴무 때문에 틀어지면 대안을 내밀어요.</p></div>
+      <div class="col ticket ink"><div class="tag">After</div><div class="perf"></div><h3>다녀와서 회고</h3><p>여행 기록을 정리하고 돌아보게 해 줘요.</p></div>
+    </div>
+    <p class="small mt rv d3">예약과 결제는 직접 하지 않아요. 제휴 여행사(OTA) 링크로 넘겨요.</p>
+    <div class="aside mt rv d4" style="max-width:1300px">
+      <div class="who">엔지니어 한마디</div>
+      <p>그래서 서버가 할 일이 생각보다 많아요. 일정을 짜고 날씨를 확인하고 알림까지 보내야 하거든요. 이걸 하루 종일 받아 줄 곳이 필요했어요.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 4. 왜 클라우드 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">02 · 왜 클라우드인가</div>
+    <h2 class="rv d1">내 노트북으로 서버를 돌리면 안 될까요?</h2>
+    <div class="row mt-l" style="gap:64px">
+      <div class="col rv d2">
+        <ul class="steps">
+          <li><span class="n">1</span><div><b>노트북을 덮으면 서비스도 멈춰요</b><span class="sub">서버는 24시간 켜져 있어야 해요.</span></div></li>
+          <li><span class="n">2</span><div><b>사용자가 몰리면 버티지 못해요</b><span class="sub">필요할 때 컴퓨터를 더 붙일 수 있어야 해요.</span></div></li>
+          <li><span class="n">3</span><div><b>고장 나면 고칠 때까지 끝이에요</b><span class="sub">망가진 장비를 바로 갈아 끼울 수 있어야 해요.</span></div></li>
+        </ul>
+      </div>
+      <div class="col rv d3">
+        <div class="ticket" style="height:100%">
+          <div class="tag">AWS를 한 줄로 말하면</div><div class="perf"></div>
+          <h3>컴퓨터·네트워크·DB를<br>쓴 만큼 빌려 쓰는 곳</h3>
+          <p class="mt"><strong>리전</strong>은 도시예요. 우리는 <em class="hl">서울 리전</em>을 써요.</p>
+          <p><strong>가용 영역(AZ)</strong>은 같은 도시 안에서 서로 떨어져 있는 데이터센터 묶음이에요. 한 곳에 정전이 나도 다른 곳은 살아 있게요. 지금은 <em class="hl">두 곳</em>에 나눠 둬요.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 전체 지도 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad" style="top:118px;bottom:44px">
+    <div class="kicker rv">03 · 전체 지도</div>
+    <h2 class="rv d1" style="font-size:52px;margin-bottom:20px">한 장으로 보면 이래요</h2>
+    <div class="row mt-s grow" style="gap:36px">
+      <div class="rv d2" style="width:1300px;height:780px;flex:none">
+        <img class="zoomable" data-zoom="" src="../assets/img/aws-architecture.webp" alt="TripPilot AWS 아키텍처 전체 구조도" width="1300" height="780" style="width:1300px;height:780px;border-radius:12px;box-shadow:0 20px 40px -24px rgba(20,33,61,.45);background:#fff">
+      </div>
+      <div class="col rv d3" style="padding-top:12px">
+        <p style="font-size:28px">겁먹을 필요 없어요. 오늘은 이 그림을 <strong>여섯 조각</strong>으로 나눠서 볼 거예요.</p>
+        <p class="mt-s" style="font-size:28px">주황색 번호 <strong style="color:var(--orange)">1~6</strong>은 사용자 요청이 지나가는 길이에요.</p>
+        <p class="mt-s" style="font-size:24px;font-weight:700">앱 → NLB → gateway → backend → ai · DB</p>
+        <p class="small mt">그림을 클릭하면 크게 볼 수 있어요.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 6. 건물 비유 -->
+<section class="slide">
+  <div class="fig soft" style="left:780px;top:250px;width:1140px;height:641px"><img src="../assets/img/building-metaphor.webp" alt="" width="1600" height="900"></div>
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad" style="right:auto;width:900px">
+    <div class="kicker rv">04 · 건물로 보는 네트워크</div>
+    <h2 class="rv d1">VPC는 우리 회사 건물이라고<br>생각하면 쉬워요</h2>
+    <div class="mt rv d2">
+      <div class="map-row"><div class="k">1층 로비<small>퍼블릭 서브넷</small></div><p>바깥 길과 맞닿은 유일한 층이에요. 손님이 들어오는 <b>정문(로드밸런서)</b>과 직원만 쓰는 <b>뒷문(NAT)</b>이 여기 있어요.</p></div>
+      <div class="map-row"><div class="k">사무실 층<small>프라이빗 서브넷</small></div><p>서버들이 실제로 일하는 곳이에요. 길에서 곧장 올라올 방법이 없어요.</p></div>
+      <div class="map-row"><div class="k">지하 금고<small>데이터 서브넷</small></div><p>DB가 있는 곳이에요. 인터넷으로 바로 나가는 문이 <b>아예 없어요</b>.</p></div>
+      <div class="map-row"><div class="k">출입 명부<small>보안 그룹</small></div><p>"사무실 층 사람만 금고에 들어갈 수 있다" 같은 규칙이에요.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 7. 요청 하나의 여행 -->
+<section class="slide">
+  <div class="fig fade-left" style="left:820px;top:40px;width:1100px;height:619px"><img src="../assets/img/request-journey.webp" alt="" width="1600" height="900" style="object-position:85% 50%"></div>
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad" style="right:auto;width:1000px">
+    <div class="kicker rv">05 · 요청 하나의 여행</div>
+    <h2 class="rv d1" style="font-size:54px">'일정 만들어 줘'를 누르면<br>생기는 일</h2>
+    <ul class="steps mt rv d2" style="gap:16px">
+      <li><span class="n">1</span><div><b>정문 통과</b> — 앱의 요청이 인터넷 게이트웨이로 AWS에 들어와요.</div></li>
+      <li><span class="n">2</span><div><b>로드밸런서(NLB)</b> — HTTPS 암호를 풀고 일할 서버로 나눠 보내요.<span class="sub">인증서는 ACM이 관리해요.</span></div></li>
+      <li><span class="n">3</span><div><b>안내 데스크(nginx)</b> — API 요청만 들여보내요.<span class="sub">API는 앱이 서버에 일을 부탁하는 창구예요. 같은 IP가 1초에 10번 넘게 계속 두드리면 속도를 늦춰요.</span></div></li>
+      <li><span class="n">4</span><div><b>backend(Spring Boot)</b> — 로그인 확인, 여행 정보 조회 같은 본업을 해요.</div></li>
+      <li><span class="n">5</span><div><b>ai(FastAPI)</b> — 일정 짜기를 맡아요.<span class="sub">취향 판단은 LLM(글을 이해하고 쓰는 AI 모델)이, 시간·순서 계산은 알고리즘이 해요.</span></div></li>
+      <li><span class="n">6</span><div><b>DB 저장</b> — 완성된 일정을 PostgreSQL에 넣고 앱으로 돌려줘요.</div></li>
+    </ul>
+  </div>
+</section>
+
+<!-- 8. 컨테이너와 쿠버네티스 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">06 · 컨테이너와 쿠버네티스</div>
+    <h2 class="rv d1">서버를 직접 깔지 않고 '컨테이너'로 띄워요</h2>
+    <div class="row mt-l" style="gap:56px">
+      <div class="col rv d2" style="flex:1.05">
+        <p><strong>컨테이너</strong>는 도시락이에요. 앱과 필요한 라이브러리를 한 통에 담아서 어느 서버에서 열어도 같은 재료가 들어 있어요.</p>
+        <p class="mt-s"><strong>쿠버네티스</strong>는 도시락 배달 관제실이에요. 도시락을 <strong>파드</strong>라는 단위로 묶어서 몇 개를 띄울지, 상하면 새로 띄울지, 어느 책상에 놓을지 정해요.</p>
+        <p class="mt-s"><strong>EKS</strong>는 그 관제실을 AWS가 대신 운영해 주는 서비스예요. 저희는 <em class="hl">Auto Mode</em>를 써서 책상(서버)을 고르고 바꾸는 일까지 맡겼어요.</p>
+      </div>
+      <div class="col rv d3">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:26px">
+          <div class="ticket"><div class="tag">gateway · ×2</div><div class="perf"></div><h3>nginx</h3><p>안내 데스크</p></div>
+          <div class="ticket"><div class="tag">backend · ×2</div><div class="perf"></div><h3>Spring Boot</h3><p>Kotlin 본업 서버</p></div>
+          <div class="ticket orange"><div class="tag">ai · ×2~3</div><div class="perf"></div><h3>FastAPI</h3><p>바쁘면 알아서 늘어나요</p></div>
+          <div class="ticket"><div class="tag">embedding · ×1</div><div class="perf"></div><h3>KURE-v1</h3><p>필요할 때만 켜요</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 9. 하나는 죽는다 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">06 · 망가져도 버티기</div>
+    <h2 class="rv d1">하나는 언제든 죽는다고 보고 만들어요</h2>
+    <div class="row mt-l rv d2" style="gap:28px">
+      <div class="col ticket"><div class="tag">Replicas</div><div class="perf"></div><h3>두 개씩 띄우기</h3><p>운영 서버의 gateway·backend·ai는 둘 이상 띄워 둬요.</p></div>
+      <div class="col ticket"><div class="tag">PDB</div><div class="perf"></div><h3>교체 중에도 하나는</h3><p>계획해서 서버를 갈아 끼울 때는 최소 하나를 남겨 둬요.</p></div>
+      <div class="col ticket"><div class="tag">HPA</div><div class="perf"></div><h3>바쁘면 늘리기</h3><p>ai는 평균 CPU 사용률 70%를 목표로 2~3대 사이에서 늘었다 줄었다 해요.</p></div>
+      <div class="col ticket"><div class="tag">Rolling</div><div class="perf"></div><h3>새 것 먼저 띄우기</h3><p>gateway·backend·ai는 새 버전이 준비된 걸 확인한 뒤에 옛 버전을 내려요.</p></div>
+    </div>
+    <div class="aside mt-l rv d3" style="max-width:1400px">
+      <div class="who">엔지니어 한마디</div>
+      <p>출시하고 보니 Auto Mode가 하루에 두 번이나 서버를 갈아 끼우더라고요. 파드가 하나뿐이면 그때마다 앱이 잠깐 멈춰요. 그래서 둘로 늘리고 교체 중에도 최소 하나는 남도록 규칙을 걸었어요. 물론 갑자기 터지는 장애까지 다 막아 주진 않아요.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 10. 데이터 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">07 · 데이터</div>
+    <h2 class="rv d1">데이터는 지하 금고에 둬요</h2>
+    <div class="row mt-l" style="gap:40px">
+      <div class="col rv d2" style="flex:1.1">
+        <div class="ticket">
+          <div class="tag">Amazon RDS · PostgreSQL 16 · 운영 DB</div><div class="perf"></div>
+          <h3>사용자·여행 데이터, AI 지식베이스까지</h3>
+          <div class="pills mt-s">
+            <span class="pill t">저장할 때 암호화</span><span class="pill t">주고받을 때도 암호화(SSL 강제)</span>
+            <span class="pill t">매일 백업, 14일 보관</span><span class="pill t">삭제 보호</span><span class="pill t">pgvector로 의미 검색</span>
+          </div>
+        </div>
+        <div class="ticket mt">
+          <div class="tag">Amazon ElastiCache · Redis</div><div class="perf"></div>
+          <h3>자주 찾는 걸 잠깐 기억해 두는 캐시</h3>
+          <p>솔직히 아직은 자리만 만들어 뒀어요. 연결 설정은 끝났고 코드에서 쓰기 시작하면 바로 켜져요.</p>
+        </div>
+      </div>
+      <div class="col rv d3">
+        <div class="aside">
+          <div class="who">엔지니어 한마디</div>
+          <p>DB에서 제일 무서운 건 해킹보다 실수예요.</p>
+          <p class="mt-s">그래서 운영 DB는 보호 스위치를 풀어도 마지막 스냅숏(DB 사진)과 자동 백업이 <strong>꼭</strong> 남도록 Terraform 코드에 박아 뒀어요. 제일 급한 순간에 제일 급한 사람이 복구 수단까지 날려 버리면 안 되니까요.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 11. AI -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">07 · AI</div>
+    <h2 class="rv d1">AI 혼자 다 하게 두지 않아요</h2>
+    <div class="row mt-l rv d2" style="gap:26px">
+      <div class="col ticket"><div class="tag">외부 LLM</div><div class="perf"></div><h3>Claude · GPT</h3><p>취향을 판단하고 이유를 설명해요. NAT를 거쳐 밖으로 불러요.</p></div>
+      <div class="col ticket ink"><div class="tag">조립 엔진</div><div class="perf"></div><h3>시간·순서는 계산으로</h3><p>LLM이 말한 시간은 그대로 믿지 않아요. 최적화 알고리즘이 검증한 값만 보여 줘요.</p></div>
+      <div class="col ticket"><div class="tag">임베딩</div><div class="perf"></div><h3>KURE-v1</h3><p>"강남 맛집"과 "서울 남부 음식점"처럼 뜻이 비슷한 문서를 찾아요. 메모리를 4GiB 넘게 먹어요.</p></div>
+      <div class="col ticket teal"><div class="tag">Amazon Bedrock</div><div class="perf"></div><h3>우리 전용 작은 모델</h3><p>Qwen3-4B를 우리 데이터로 다듬어 알림 문구 한 줄을 써요. 한동안 요청이 없으면 추론 용량이 0으로 줄어요.</p></div>
+    </div>
+    <div class="row mt-l rv d3" style="gap:40px;align-items:stretch">
+      <div class="aside col">
+        <div class="who">엔지니어 한마디</div>
+        <p>4B(매개변수 40억 개)짜리 작은 모델이 교사 역할을 한 235B 모델과 알림 문구 블라인드 비교에서 12:8로 이겼어요. 좁은 일에는 작은 전문가가 낫더라고요.</p>
+      </div>
+      <div class="col" style="display:flex;align-items:center"><p style="font-size:29px">LLM이 먹통이 돼도 앱은 멈추지 않아요. <strong>규칙 기반으로 바로 넘어가는 대체 경로</strong>가 늘 있거든요.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 12. 비밀번호 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">08 · 비밀번호 다루기</div>
+    <h2 class="rv d1">코드에 비밀번호를 한 줄도 적지 않아요</h2>
+    <div class="row mt-l rv d2" style="gap:30px">
+      <div class="col ticket"><div class="tag">GitHub → AWS</div><div class="perf"></div><h3>OIDC</h3><p>배포할 때마다 두 시간짜리 임시 출입증을 받아요. 저장소에는 AWS 키가 없어요.</p></div>
+      <div class="col ticket"><div class="tag">AI 파드 → Bedrock</div><div class="perf"></div><h3>Pod Identity</h3><p>AI 파드들에만 '모델 호출' 권한 딱 하나를 줘요. 키 파일도 없어요.</p></div>
+      <div class="col ticket"><div class="tag">API 키 · DB 암호</div><div class="perf"></div><h3>Secrets Manager</h3><p>인프라 기록 파일(state)에는 안 남겨요. 배포할 때 보관함에서 꺼내 쿠버네티스 Secret으로 넘겨요.</p></div>
+    </div>
+    <p class="lead mt-l rv d3">열쇠를 복사해서 나눠 주는 대신,<br>필요할 때마다 <em class="hl">기한이 정해진 출입증</em>을 끊어 준다고 생각하면 돼요.</p>
+  </div>
+</section>
+
+<!-- 13. 배포 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">08 · 배포</div>
+    <h2 class="rv d1">인프라도 코드로 짜고 서버 배포 버튼은 사람이 눌러요</h2>
+    <div class="pipe mt-l rv d2">
+      <div class="st"><div class="no">01</div><b>계획 보기</b><span>Terraform plan</span></div>
+      <div class="st"><div class="no">02</div><b>인프라 반영</b><span>Terraform apply</span></div>
+      <div class="st"><div class="no">03</div><b>이미지 빌드</b><span>커밋별 고유 태그</span></div>
+      <div class="st"><div class="no">04</div><b>ECR 업로드</b><span>덮어쓰기 금지</span></div>
+      <div class="st"><div class="no">05</div><b>비밀값 동기화</b><span>Secrets Manager</span></div>
+      <div class="st"><div class="no">06</div><b>DB 준비</b><span>계정·확장 설치</span></div>
+      <div class="st"><div class="no">07</div><b>Helm 배포</b><span>실패하면 앱 되돌림</span></div>
+      <div class="st"><div class="no">08</div><b>연결 확인</b><span>클러스터 안 점검</span></div>
+    </div>
+    <div class="row mt-l rv d3" style="gap:36px">
+      <div class="col ticket"><div class="tag">Terraform</div><div class="perf"></div><h3>네트워크부터 알람까지 코드로</h3><p>핵심 인프라는 콘솔에서 손으로 만들지 않아요. 바뀌는 내용을 코드 리뷰로 먼저 봐요.</p></div>
+      <div class="col ticket"><div class="tag">운영 반영 규칙</div><div class="perf"></div><h3>main 브랜치만 운영으로</h3><p>정기 배포는 최근 72시간 안에 개발 서버 배포에 성공한 코드와 같아야 나가요. 긴급 수정은 이슈 번호와 사유를 남겨요.</p></div>
+      <div class="col aside" style="align-self:stretch">
+        <div class="who">엔지니어 한마디</div>
+        <p>push하면 바로 배포되는 게 멋있어 보이죠. 서버는 일부러 안 했어요. 누가 언제 눌렀는지가 분명한 게 더 중요하거든요. 웹 화면 파일만 main에 합쳐지면 자동으로 나가요.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 14. 운영 서버와 개발 서버 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">08 · 운영과 개발</div>
+    <h2 class="rv d1">운영 서버와 개발 서버는 한 지붕 두 가족이에요</h2>
+    <div class="row mt-l" style="gap:56px">
+      <div class="col rv d2" style="flex:1.2">
+        <div class="house">
+          <div class="lbl">EKS 클러스터 하나</div>
+          <div class="row" style="gap:24px">
+            <div class="col ns"><h3>trippilot</h3><p>운영 서버 · 출시 앱이 보는 곳</p><p><strong>main</strong> 브랜치에서만 배포</p><p>DB · 비밀값 · 주소 따로</p></div>
+            <div class="col ns" style="border-color:var(--teal)"><h3>trippilot-dev</h3><p>개발 서버 · 새 기능 확인용</p><p><strong>develop</strong> 브랜치에서만 배포</p><p>작은 DB를 따로 둬요</p></div>
+          </div>
+          <p class="small mt-s">같이 쓰는 것: 클러스터 · NAT · Redis</p>
+        </div>
+      </div>
+      <div class="col rv d3">
+        <ul class="steps">
+          <li><span class="n">✓</span><div><b>같이 쓰는 건 같이</b><span class="sub">클러스터와 네트워크를 한 벌만 둬서 비용을 아껴요.</span></div></li>
+          <li><span class="n">✓</span><div><b>섞이면 안 되는 건 따로</b><span class="sub">개발 DB를 따로 둬서 개발 중 데이터 변경과 부하가 운영 DB로 번지지 않아요.</span></div></li>
+          <li><span class="n">✓</span><div><b>개발 서버는 평소 0대</b><span class="sub">검증에 성공하면 다시 재워요. DB는 그대로 둬요.</span></div></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 15. 장애 알기 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">09 · 장애를 알아채는 법</div>
+    <h2 class="rv d1">제일 무서운 건 '조용한' 실패예요</h2>
+    <div class="flow mt rv d2">
+      <div class="box">파드 로그<small>stdout</small></div><span class="ar">→</span>
+      <div class="box">CloudWatch<small>90일 보관</small></div><span class="ar">→</span>
+      <div class="box">알람<small>규칙에 걸리면</small></div><span class="ar">→</span>
+      <div class="box">SNS<small>알림 토픽</small></div><span class="ar">→</span>
+      <div class="box">AWS Chatbot<small>읽기 권한만</small></div><span class="ar">→</span>
+      <div class="box" style="background:var(--ink);color:#fff;border-color:var(--ink)">Slack<small style="color:rgba(255,255,255,.7)">운영 채널</small></div>
+    </div>
+    <div class="row mt-l" style="gap:56px">
+      <div class="col rv d3">
+        <div class="alarm">
+          <div><b>게이트웨이 5xx</b><br>5분에 10건 이상</div>
+          <div><b>로그인 토큰 재사용</b><br>계정 탈취 신호, 1건이라도</div>
+          <div><b>Claude·GPT 호출 실패</b><br>30분에 5건 이상</div>
+          <div><b>파드 재시작 · 노드 고장</b><br>재시작이 늘거나 노드가 10분 넘게 멈추면</div>
+          <div><b>DB 상태</b><br>CPU · 저장공간 · 연결 수</div>
+        </div>
+      </div>
+      <div class="col aside rv d4">
+        <div class="who">실제로 있었던 일</div>
+        <p>10월 28일, 외부 LLM 인증 키에 문제가 생겨서 하루 동안 AI 호출 383건이 전부 실패했어요. 그런데 울린 알람은 0건이었어요. 앱은 대체 경로로 멀쩡히 응답했거든요.</p>
+        <p class="mt-s">그래서 'LLM 호출 실패' 알람을 새로 만들었어요.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 16. 돈 이야기 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">10 · 돈 이야기</div>
+    <h2 class="rv d1">전부 두 벌씩 둘 수는 없었어요</h2>
+    <table class="t mt rv d2">
+      <thead><tr><th>항목</th><th>지금 상태</th><th>이렇게 한 이유</th><th>대신 감수한 것</th></tr></thead>
+      <tbody>
+        <tr><td>NAT 게이트웨이</td><td>1개를 같이 써요</td><td>개수만큼 시간당 요금이 붙어요</td><td>그 AZ가 멈추면 외부 API 호출도 끊겨요</td></tr>
+        <tr><td>DB</td><td>가용 영역 1곳</td><td>Multi-AZ는 비용이 거의 두 배예요</td><td>장애 때 복구가 더 걸려요(데이터는 백업이 지켜요)</td></tr>
+        <tr><td>개발 서버</td><td>평소엔 0대</td><td>임베딩 하나가 큰 서버를 통째로 잡아요</td><td>검증 전에 켜는 시간이 들어요</td></tr>
+        <tr><td>prd 스택</td><td>보류</td><td>지금 규모에선 과해요</td><td>규모 설정은 준비해 뒀어요. 옮길 땐 데이터 전환을 따로 준비해야 해요</td></tr>
+      </tbody>
+    </table>
+    <div class="aside mt rv d3" style="max-width:1400px">
+      <div class="who">엔지니어 한마디</div>
+      <p>자원도 감으로 잡지 않아요. 3일 치 실측을 보고 backend CPU 요청을 500m에서 200m로 줄였어요. prd 설정 파일에는 이미 AZ 3곳, AZ마다 NAT, Multi-AZ DB가 적혀 있어요.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 17. 가져갈 것 -->
+<section class="slide dark">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">Takeaways</div>
+    <h2 class="rv d1">오늘은 딱 다섯 가지만 기억해 주세요</h2>
+    <div class="row mt-l rv d2" style="gap:24px">
+      <div class="col ticket"><div class="tag">01</div><div class="perf"></div><h3>네트워크는 층으로 나눈다</h3></div>
+      <div class="col ticket"><div class="tag">02</div><div class="perf"></div><h3>하나는 언제든 죽는다</h3></div>
+      <div class="col ticket"><div class="tag">03</div><div class="perf"></div><h3>비밀은 코드에 두지 않는다</h3></div>
+      <div class="col ticket"><div class="tag">04</div><div class="perf"></div><h3>인프라도 코드로 리뷰한다</h3></div>
+      <div class="col ticket orange"><div class="tag">05</div><div class="perf"></div><h3>조용한 실패를 경계한다</h3></div>
+    </div>
+    <div class="mt-l rv d3">
+      <p class="kicker" style="margin-bottom:16px">직접 해 보기</p>
+      <p class="lead" style="margin-top:0">AWS 프리 티어로 VPC 하나 만들어 보기 · kind로 노트북에 쿠버네티스 띄워 보기 · Terraform 공식 튜토리얼 따라 하기</p>
+    </div>
+  </div>
+</section>
+
+<!-- 18. 용어 사전 -->
+<section class="slide">
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad">
+    <div class="kicker rv">Appendix</div>
+    <h2 class="rv d1" style="font-size:52px">오늘 나온 용어 한눈에</h2>
+    <div class="gloss mt rv d2">
+      <div><b>API</b><span>앱이 서버에 일을 부탁하는 창구</span></div>
+      <div><b>LLM</b><span>글을 이해하고 쓰는 대형 AI 모델</span></div>
+      <div><b>VPC</b><span>AWS 안의 우리 전용 네트워크(건물)</span></div>
+      <div><b>파드(Pod)</b><span>쿠버네티스가 띄우는 컨테이너 단위</span></div>
+      <div><b>서브넷</b><span>VPC를 나눈 구역(층)</span></div>
+      <div><b>HPA</b><span>바쁘면 파드 수를 늘리는 자동 확장</span></div>
+      <div><b>NAT 게이트웨이</b><span>안에서 밖으로만 나가는 뒷문</span></div>
+      <div><b>PDB</b><span>교체 중에도 최소 개수를 지키는 규칙</span></div>
+      <div><b>NLB</b><span>들어온 요청을 서버로 나눠 주는 정문</span></div>
+      <div><b>RDS</b><span>AWS가 관리해 주는 데이터베이스</span></div>
+      <div><b>EKS</b><span>AWS가 운영하는 쿠버네티스</span></div>
+      <div><b>ElastiCache</b><span>AWS가 관리해 주는 캐시(Redis)</span></div>
+      <div><b>IAM</b><span>누가 무엇을 할 수 있는지 정하는 권한</span></div>
+      <div><b>OIDC</b><span>키 없이 짧게 쓰는 임시 자격을 받는 방식</span></div>
+      <div><b>Secrets Manager</b><span>비밀번호·API 키 보관함</span></div>
+      <div><b>CloudWatch</b><span>로그·지표를 모으고 알람을 거는 곳</span></div>
+      <div><b>Terraform</b><span>인프라를 코드로 적는 설계도 도구</span></div>
+      <div><b>Helm</b><span>쿠버네티스 앱 설정을 묶어 배포하는 도구</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 19. 마무리 -->
+<section class="slide dark">
+  <div class="fig fade-left" style="right:0;top:0;width:1200px;height:1080px;opacity:.5;mix-blend-mode:multiply"><img src="../assets/img/cover.webp" alt="" width="1600" height="900" style="object-position:80% 50%"></div>
+  <div class="chrome"><span class="brand">TripPilot <b>·</b> Infra 101</span><span class="count"></span></div>
+  <div class="pad" style="justify-content:center">
+    <div class="kicker rv">Thank you</div>
+    <h1 class="title rv d1">궁금한 거<br>편하게 물어보세요</h1>
+    <p class="lead rv d2">구조도 원본과 설정 파일은 모두 저장소에 있어요.<br><span class="mono" style="font-size:24px">infra/terraform · deploy/eks/chart · .github/workflows</span></p>
+  </div>
+</section>
+
+</main>
+<div class="progress" aria-hidden="true"><i></i></div>
+<div class="hint" aria-hidden="true">← → 이동 · F 전체 화면 · 그림 클릭 시 확대</div>
+<div class="lightbox" tabindex="-1" role="dialog" aria-label="구조도 크게 보기"><img alt="TripPilot AWS 아키텍처 전체 구조도(확대)"></div>
+<script src="deck.js"></script>
+</body>
+</html>
