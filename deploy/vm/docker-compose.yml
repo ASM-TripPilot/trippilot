@@ -1,0 +1,143 @@
+# 운영 VM 한 대 구성 — EKS(trippilot 네임스페이스) + RDS 를 옮긴 것이다. 로컬 개발용 루트 docker-compose.yml 과 섞지 않는다
+# (그쪽 기본값은 fake·off 라 덮어쓰다 하나만 빠져도 운영 기능이 조용히 꺼진다).
+#
+# 고정 env 는 운영 Deployment(차트 templates/backend.yaml·ai.yaml)의 값을 그대로 옮겼다. 시크릿은 export_env.py 가
+# 만든 secrets/*.env 가 준다. 이미지·호스트명은 같은 폴더의 .env(env.example 참고)가 준다.
+# embedding(운영 실측 3.1GiB)은 docker-compose.embedding.yml 로 따로 켠다 — 8GB 장비에서만. 끄면 AI 는 벡터 DB 없이 뜬다
+# (KB 검색은 규칙 랭킹으로 강등, 도우미 기억·장소 확인 캐시는 프로세스 안에만 — 재시작하면 사라진다). 메모리 상한은 운영 파드
+# 실측(11-27) 정점 + 여유. 리허설 동안은 docker-compose.rehearsal.yml 을 같이 켠다(실사용자 푸시 중복 방지).
+name: trippilot
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "20m", max-file: "5" }
+
+services:
+  # 운영처럼 한 인스턴스에 trippilot · ai_kb 두 DB 를 둔다. pgvector 이미지라 ai_kb 의 vector 확장이 된다.
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    env_file: secrets/db.env          # POSTGRES_PASSWORD + bootstrap.sql 이 \getenv 로 읽는 롤 비밀번호
+    environment:
+      POSTGRES_DB: trippilot
+      TZ: UTC
+    command: [postgres, -c, shared_buffers=256MB, -c, max_connections=50]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d trippilot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 1g
+    logging: *logging
+
+  backend:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE 를 .env 에}
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    env_file: secrets/backend.env
+    environment:
+      # 운영은 75%(상한 2Gi). 여기 상한이 1.5g 라 75% 면 힙 밖(메타스페이스·스레드·OTEL 에이전트)이 384m 뿐이다 — 65% 로 둔다.
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=65.0
+      DEPLOY_ENV: dev                  # 운영 Deployment 값 그대로(운영이 dev 환경 이름으로 떠 있다)
+      DB_URL: jdbc:postgresql://db:5432/trippilot?currentSchema=app
+      DB_USER: app_user
+      DB_MIGRATE_USER: app_migrate
+      JWT_REQUIRE_CONFIGURED_KEY: "true"
+      SERVICE_AUTH_REQUIRE_TOKEN: "true"
+      AI_URL: http://ai:8000
+      TRIPPILOT_AI_SCHEDULE_MODE: http
+      TRIPPILOT_AI_SCHEDULE_BASE_URL: http://ai:8000
+      TRIPPILOT_AI_SCHEDULE_DEADLINE_ENFORCED: "true"
+      TRIPPILOT_AI_SCHEDULE_DEADLINE_DAY1_MS: "15000"
+      TRIPPILOT_AI_SCHEDULE_DEADLINE_TOTAL_MS: "60000"
+      TRIPPILOT_AI_REFLECTION_MODE: http
+      TRIPPILOT_AI_REFLECTION_BASE_URL: http://ai:8000
+      AI_OPPORTUNITY_MODE: http
+      STAY_CONTENT_MODE: db
+      SERVER_SHUTDOWN: graceful
+      # 운영은 630s(롤링 배포). 여기는 재시작이 곧 중단이라 짧게 — 생성 시한(60s)보다만 길면 된다.
+      SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE: 90s
+      TRIPPILOT_ASYNC_AWAIT_TERMINATION_SECONDS: "90"
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      OTEL_SDK_DISABLED: "true"
+      OTEL_METRICS_ENABLED: "false"
+      OTEL_METRICS_EXPORTER: none
+      OTEL_TRACES_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+    stop_grace_period: 100s
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 60s
+    mem_limit: 1536m                   # 운영 파드 0.9~1.2GiB
+    logging: *logging
+
+  ai:
+    image: ${AI_IMAGE:?AI_IMAGE 를 .env 에}
+    restart: unless-stopped
+    env_file: secrets/ai.env
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      XDG_CACHE_HOME: /tmp/cache
+      TRIPPILOT_BACKEND_BASE_URL: http://backend:8080
+      SERVICE_AUTH_REQUIRE_TOKEN: "true"
+      TRIPPILOT_LLM_PRICE_FILE: /app/config/llm-prices.json
+      EVENTS_STORE: /app/data/collected_events.json
+    # 워커는 운영과 같은 2. 4GB 장비(embedding 없음)는 1 로 — 벡터 DB 가 없으면 도우미 기억·장소 확인 캐시가 프로세스 안에
+    # 있어서 워커 둘이면 턴마다 다른 워커로 가 기억이 갈린다(메모리도 절반).
+    command: [/app/.venv/bin/uvicorn, "main:app", --host, 0.0.0.0, --port, "8000", --workers, "${AI_WORKERS:-2}",
+              --timeout-graceful-shutdown, "90", --timeout-worker-healthcheck, "30", --no-access-log]
+    stop_grace_period: 100s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+    mem_limit: 2g                      # 운영 파드(워커 2) 1.0~1.4GiB — 상한이라 합이 물리 메모리를 넘어도 된다(평소 합 3~3.3GiB)
+    logging: *logging
+
+  # 운영 gateway(nginx) 설정을 그대로 쓴다 — /api 만 열고 /internal·/actuator 를 닫고, X-Service-Token 을 지우고, 속도 제한을 건다.
+  gateway:
+    image: nginxinc/nginx-unprivileged:1.30.6-alpine-slim
+    restart: unless-stopped
+    depends_on: [backend]
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    mem_limit: 128m
+    logging: *logging
+
+  # TLS(Let's Encrypt 자동) + 호스트별 라우팅. 웹(SPA)과 썸네일은 디스크에서 바로 준다.
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on: [gateway]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      API_HOSTS: ${API_HOSTS:?API_HOSTS 를 .env 에}
+      WEB_HOST: ${WEB_HOST:?WEB_HOST 를 .env 에}
+      IMG_HOST: ${IMG_HOST:?IMG_HOST 를 .env 에}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL 을 .env 에}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./web:/srv/web:ro
+      - ./img:/srv/img:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    mem_limit: 128m
+    logging: *logging
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
