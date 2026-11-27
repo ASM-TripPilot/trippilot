@@ -18,6 +18,8 @@
 # 해시 자산은 SPA 대체를 하지 않는다: 없는 번들 주소에 index.html 을 immutable 로 주면 브라우저가 1년간 HTML 로 기억한다.
 {$WEB_HOST} {
 	root * /srv/web
+	# CloudFront 가 Compress=true 였다(11-27 확인) — 번들이 수 MB 라 압축이 없으면 첫 로딩이 몇 배 느리다. API 는 운영 nginx 도 압축 안 함.
+	encode zstd gzip
 	@hashed path /_expo/* /assets/*
 	handle @hashed {
 		@exists file
