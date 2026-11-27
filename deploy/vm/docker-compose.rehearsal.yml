@@ -1,0 +1,10 @@
+# 리허설(전환 전) 동안만 덧붙인다 — VM 이 운영 데이터 **사본**으로 운영과 동시에 돈다. 그대로 두면 리마인드 푸시가
+# 실사용자에게 두 번 가고 상황 감시가 두 번 돈다. 전환 때 .env 의 COMPOSE_FILE 에서 이 파일을 뺀다.
+# LLM 을 쓰는 다른 배치(여행 요약 등)는 끄는 스위치가 없다 — 검증이 끝나면 `docker compose stop backend ai` 로 멈춘다.
+services:
+  backend:
+    environment:
+      TRIPPILOT_PUSH_MODE: "off"
+      PLANB_SITUATION_SWEEP: "off"
+      PLANB_PREPARED_REPLAN: "off"
+      LOCATION_AUTOMATION_ENABLED: "false"

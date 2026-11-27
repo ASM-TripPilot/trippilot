@@ -76,6 +76,13 @@ def write_env(name, values):
     print(f"{path.relative_to(Path.cwd()) if path.is_relative_to(Path.cwd()) else path}: {len(values)}개 — {', '.join(sorted(values))}")
 
 
+def bedrock_features(ai):
+    """`local*` 모델이 배정된 기능 — VM 에는 AWS 자격이 없어 Bedrock 호출이 매번 실패하고 폴백한다(리마인드는 아래에서 끈다).
+    형식은 ai/src/trippilot/llm_gateway/feature_model_env.py: "FEATURE=model,FEATURE=model"."""
+    pairs = (p.split("=", 1) for p in ai.get("TRIPPILOT_LLM_FEATURE_MODELS", "").split(",") if "=" in p)
+    return sorted(f.strip() for f, m in pairs if m.strip().lower().startswith("local"))
+
+
 def build(deployments, secret_data, postgres_password):
     backend = resolve(secret_refs(deployments["backend"]), secret_data)
     backend.update(BACKEND_OVERRIDES)
@@ -104,6 +111,9 @@ def main():
     write_env("ai.env", ai)
     write_env("ai-vector.env", vector)
     write_env("db.env", db)
+    if features := bedrock_features(ai):
+        print(f"주의: local*(Bedrock) 모델 배정 {', '.join(features)} — VM 에서는 매번 폴백한다. 리마인드 외 기능이면 "
+              "secrets/ai.env 의 TRIPPILOT_LLM_FEATURE_MODELS 에서 그 기능을 claude 모델로 바꾼다.")
 
 
 if __name__ == "__main__":

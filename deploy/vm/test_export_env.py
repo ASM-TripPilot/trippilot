@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from export_env import build, env_line, to_local_db  # noqa: E402
+from export_env import bedrock_features, build, env_line, to_local_db  # noqa: E402
 
 DB = {"DB_PASSWORD": "a", "DB_MIGRATE_PASSWORD": "b", "AI_DB_PASSWORD": "c"}
 
@@ -43,6 +43,11 @@ class ExportEnvTests(unittest.TestCase):
     def test_env_line_escapes_for_compose(self):
         # 실제 compose(v5) 가 이 줄을 원문으로 되읽는 것은 로컬에서 확인했다(여러 줄 PEM · $ · 따옴표).
         self.assertEqual(env_line("K", 'a\nb"c\\d$e'), 'K="a\\nb\\"c\\\\d\\$e"\n')
+
+    def test_bedrock_features(self):
+        self.assertEqual(bedrock_features({"TRIPPILOT_LLM_FEATURE_MODELS": "REMINDER_COPY=local-qwen, INTENT=claude-haiku"}),
+                         ["REMINDER_COPY"])
+        self.assertEqual(bedrock_features({}), [])
 
     def test_to_local_db_without_port(self):
         self.assertEqual(to_local_db("postgresql://u:p@host/trippilot?sslmode=require"),

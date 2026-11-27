@@ -17,39 +17,69 @@ caddy(:443, Let's Encrypt) ─┬─ API_HOSTS → gateway(nginx, 운영 설정 
 | `migrate.sh dump\|restore\|assets` | 운영 DB 덤프 → VM 복원·행 수 대조 / 웹·썸네일 버킷 → VM | 맥 |
 | `restore_db.sh` | VM 쪽 복원(덮어쓰기 가드 · bootstrap.sql · 썸네일 주소 교체) | VM (migrate.sh 가 부름) |
 | `backup.sh` | 두 DB 논리 덤프 7일치 | VM cron |
+| `docker-compose.embedding.yml` | embedding + 벡터 DB 연결 (8GB 장비) | `.env` 의 `COMPOSE_FILE` |
+| `docker-compose.rehearsal.yml` | 리허설 동안 푸시·상황 감시 끄기 | `.env` 의 `COMPOSE_FILE`, 전환 때 뺀다 |
 
-운영과 다른 점은 셋이다: 재시작 유예가 630s → 90s(롤링 배포가 없다), 리마인드 문구는 `off`(Bedrock 이 대여 계정에 있다 —
-알림은 상수 문구로 나간다), 4GB 장비면 embedding 이 빠진다(KB 검색은 규칙 랭킹 강등, 도우미 장기 기억·장소 확인 캐시 꺼짐).
+## 운영과 다른 점
+
+- **종료 유예** 630s → 90s — 롤링 배포가 없어 재시작이 곧 중단이다.
+- **리마인드 문구** `off` — Bedrock 이 대여 계정에 있다. 알림은 상수 문구로 나간다. `export_env.py` 가 다른 기능에도
+  `local*`(Bedrock) 모델이 배정돼 있으면 경고한다.
+- **4GB 장비**는 embedding 이 빠진다 — KB 검색은 규칙 랭킹으로 강등, 도우미 기억·장소 확인 캐시는 프로세스 안에만 있어
+  재시작하면 사라진다(`AI_WORKERS=1` 로 워커 간 갈림을 막는다). 8GB 면 운영과 같다.
+- **감시가 없다** — CloudWatch 알람·Slack·Container Insights·`ai-llm-fallback-watch`·로그 90일이 전부 사라진다.
+  로그는 컨테이너당 20MB×5. 아래 "전환 뒤"의 외부 업타임 체크가 최소한이다.
+- **컨테이너 보안 설정**(non-root 강제·읽기 전용 루트·cap drop)은 운영 파드에만 있었다. 열린 포트는 80·443 뿐이고 DB 는 밖에 안 열린다.
 
 ## 리허설 (전환 전날)
 
 ```bash
 export AWS_PROFILE=myisb_IsbUsersPS-223767249602 AWS_REGION=ap-northeast-2 VM=ubuntu@<고정IP>
-ssh -i ~/.ssh/trippilot-prod.pem $VM 'bash -s' < deploy/vm/setup.sh
-python3 deploy/vm/export_env.py                 # 키 이름·개수만 찍힌다
-bash deploy/vm/ship.sh images embedding         # 4GB 장비면 embedding 빼고, VM .env 의 COMPOSE_FILE 줄도 지운다
-bash deploy/vm/migrate.sh dump                  # 운영 RDS 읽기
-bash deploy/vm/migrate.sh restore               # "행 수 일치" 두 줄이 나와야 한다
-bash deploy/vm/migrate.sh assets
 ```
 
-Cloudflare 에 `vm-api` · `vm-app` · `img` A 레코드(VM IP, DNS only)를 만들면 caddy 가 인증서를 받는다.
-`https://vm-api.trippilot.co.kr/api/v1/terms` 200, 앱 기능은 개발 빌드의 API 주소를 `vm-api` 로 바꿔 실기기로 본다.
+1. Lightsail 방화벽: IPv4·IPv6 둘 다 **HTTPS 443/TCP** 와 **443/UDP**(HTTP/3) 추가. 기본은 22·80 만 열려 있다.
+2. `ssh -i ~/.ssh/trippilot-prod.pem $VM 'bash -s' < deploy/vm/setup.sh`
+3. `python3 deploy/vm/export_env.py` — 키 이름·개수만 찍힌다. 경고가 나오면 읽는다.
+4. `bash deploy/vm/ship.sh images embedding` (4GB 면 `embedding` 빼고). 처음이면 `ACME_EMAIL` 이 비어 멈춘다 →
+   VM `~/trippilot/.env` 편집: `ACME_EMAIL`, 4GB 면 `COMPOSE_FILE` 에서 embedding 파일을 빼고 `AI_WORKERS=1` → `ship.sh` 다시.
+5. `bash deploy/vm/migrate.sh dump` → `bash deploy/vm/migrate.sh restore` — "행 수 일치" 두 줄. 다르면 멈춘다(exit 1).
+6. `bash deploy/vm/migrate.sh assets`
+7. Cloudflare 에 `vm-api` · `vm-app` · `img` **A 레코드**(VM IPv4, DNS only)를 만든다. AAAA 는 만들지 않는다 — IPv6 로 오면
+   docker-proxy 를 거쳐 모두 한 IP 로 보여 속도 제한(10r/s)을 같이 쓴다.
+8. `https://vm-api.trippilot.co.kr/api/v1/terms` 200, 앱 기능은 개발 빌드의 API 주소를 `vm-api` 로 바꿔 실기기로 본다.
+9. **끝나면 바로** `ssh $VM 'cd trippilot && docker compose stop backend ai'` — 리허설 파일이 푸시·상황 감시는 막지만
+   여행 요약 같은 LLM 배치는 끄는 스위치가 없다. 운영 사본으로 운영과 동시에 돌면 비용이 두 번 든다.
 
 ## 전환 (서비스 중단 30분~1시간)
 
-1. 점검 공지 → 운영 쓰기 멈춤: `kubectl -n trippilot scale deployment backend ai --replicas=0`
-2. `migrate.sh dump` → `FORCE=1 migrate.sh restore`(리허설 데이터를 덮는다) → 행 수 일치 확인 → `migrate.sh assets`
-3. VM `.env`: `API_HOSTS=api-dev.trippilot.co.kr, api.trippilot.co.kr` · `WEB_HOST=app.trippilot.co.kr`
-4. Cloudflare: `api-dev` · `api` · `app` 를 VM IP 의 A 레코드로(DNS only) → `ssh $VM 'cd trippilot && docker compose up -d caddy'`
-5. `curl https://api-dev.trippilot.co.kr/api/v1/terms` 200 · 실기기 로그인·일정 생성·푸시
+1. 점검 공지 → 운영 쓰기 멈춤. 파드는 종료 유예(630s) 동안 계속 쓰므로 **없어질 때까지 기다린다**:
+   ```bash
+   kubectl -n trippilot scale deployment backend ai --replicas=0
+   kubectl -n trippilot wait --for=delete pod -l app.kubernetes.io/component=backend --timeout=700s
+   kubectl -n trippilot wait --for=delete pod -l app.kubernetes.io/component=ai --timeout=700s
+   ```
+2. 리허설 뒤 운영 이미지가 바뀌었을 수 있다 → `bash deploy/vm/ship.sh images [embedding]`
+3. `bash deploy/vm/migrate.sh dump` → `FORCE=1 bash deploy/vm/migrate.sh restore`(리허설 데이터를 덮는다) → 행 수 일치 → `migrate.sh assets`
+4. VM `.env`: `COMPOSE_FILE` 에서 `docker-compose.rehearsal.yml` 을 빼고, `API_HOSTS=api-dev.trippilot.co.kr, api.trippilot.co.kr` ·
+   `WEB_HOST=app.trippilot.co.kr` → `bash deploy/vm/ship.sh`(설정 반영 + gateway·caddy 재시작)
+5. Cloudflare: `api-dev` · `api` · `app` 를 VM IPv4 의 A 레코드로(DNS only). caddy 가 인증서를 받는다 — 안 받으면
+   `ssh $VM 'cd trippilot && docker compose restart caddy'`
+6. `curl https://api-dev.trippilot.co.kr/api/v1/terms` 200 · 실기기 로그인·일정 생성·푸시
 
-**되돌리기**(5에서 막히면): Cloudflare 세 레코드를 원래 CNAME(NLB · CloudFront)으로, `kubectl … --replicas=2`.
+**되돌리기**(6에서 막히면) — 순서가 중요하다. VM 을 먼저 멈춰야 푸시가 두 번 안 간다:
+1. `ssh $VM 'cd trippilot && docker compose stop backend ai'`
+2. `kubectl -n trippilot scale deployment backend ai --replicas=2` → Ready 를 기다린다
+3. Cloudflare 세 레코드를 원래 CNAME(`api-dev`·`api` → 운영 NLB, `app` → `d19rbqomsljzat.cloudfront.net`)으로
+
 VM 에 그 사이 들어온 쓰기는 버려진다 — 그래서 되돌리기는 전환 직후에만 판단한다.
+전환 뒤 누가 `aws-deploy`(target=prod)를 돌리면 EKS backend 가 다시 떠서 VM 과 함께 푸시를 보낸다 — 전환 뒤에는 돌리지 않는다.
 
-## 전환 뒤 남는 것
+## 전환 뒤
 
+- **외부 업타임 체크**(UptimeRobot 등 무료)로 `https://api-dev.trippilot.co.kr/healthz` 를 본다 — VM 이 죽어도 알릴 것이 이것뿐이다.
 - **Lightsail 자동 스냅숏**을 콘솔에서 켠다 — `backup.sh` 덤프는 같은 디스크라 디스크째 잃으면 같이 잃는다.
+- **덤프 사본 지우기** — `deploy/vm/backups/migrate/`(맥)와 VM `~/trippilot/backups/migrate/` 는 운영 DB 전체 사본이다.
+  AWS 정리(RDS 스냅숏·자동 백업 삭제)와 같은 날 지운다.
 - 새 코드 배포: 지금 `ship.sh images` 는 운영 ECR 에서 가져온다(대여 계정이 살아 있는 동안만). 그 뒤에는 GHCR(`develop`·`sha-*`)
   이미지를 받도록 바꿔야 한다 — 조직이 공개 패키지를 막아 VM 에 `read:packages` 토큰 로그인이 필요하다.
 - 웹 배포(`frontend-web-deploy.yml`)는 S3 로 올린다 — 계정이 사라지면 실패한다. VM `web/` 으로 바꿔야 한다.

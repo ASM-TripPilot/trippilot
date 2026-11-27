@@ -22,11 +22,13 @@ if [ "${1:-}" = images ]; then
   done
 fi
 
-tar -C "$DIR" -cf - docker-compose.yml docker-compose.embedding.yml nginx.conf Caddyfile env.example counts.sql restore_db.sh backup.sh secrets \
+# COPYFILE_DISABLE: macOS tar 가 확장 속성을 ._* 파일로 같이 싣지 않게.
+COPYFILE_DISABLE=1 tar -C "$DIR" -cf - docker-compose.yml docker-compose.embedding.yml docker-compose.rehearsal.yml nginx.conf Caddyfile env.example counts.sql restore_db.sh backup.sh secrets \
   | ssh_vm 'mkdir -p trippilot && tar -C trippilot -xf - && chmod 700 trippilot/secrets && chmod 600 trippilot/secrets/*'
 # 운영 DB 를 아직 안 옮긴 VM 에서 backend 를 띄우면 Flyway 가 빈 DB 에 스키마를 새로 만든다 — 그러면 restore_db.sh 가
-# 덮어쓰기 가드에 걸린다. 그래서 app 스키마가 없으면 db 만 띄운다.
+# 덮어쓰기 가드에 걸린다. 그래서 app 스키마가 없으면 db 만 띄운다. nginx.conf·Caddyfile 은 파일 하나짜리 bind mount 라
+# 새로 덮어쓴 파일(새 inode)을 떠 있는 컨테이너가 못 본다 — 그래서 매번 gateway·caddy 를 재시작한다.
 ssh_vm 'cd trippilot && { [ -f .env ] || cp env.example .env; } && docker compose config -q && docker compose up -d --wait db \
   && if [ "$(docker compose exec -T db psql -U postgres -d trippilot -Atc "SELECT to_regnamespace('"'"'app'"'"') IS NOT NULL")" = t ]; then
-       docker compose up -d --wait --remove-orphans && docker compose ps --format "table {{.Service}}\t{{.Status}}";
+       docker compose up -d --wait --remove-orphans && docker compose restart gateway caddy >/dev/null && docker compose ps --format "table {{.Service}}\t{{.Status}}";
      else echo "DB 가 비어 있다 — db 만 띄웠다. 다음: migrate.sh restore"; fi'

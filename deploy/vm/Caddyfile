@@ -18,6 +18,11 @@
 {$WEB_HOST} {
 	root * /srv/web
 	try_files {path} /index.html
+	# frontend-web-deploy.yml 이 S3 에 붙이던 Cache-Control 과 같다 — 해시 자산 1년 immutable, 나머지 no-cache.
+	@hashed path /_expo/* /assets/*
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+	@entry not path /_expo/* /assets/*
+	header @entry Cache-Control "no-cache"
 	file_server
 }
 

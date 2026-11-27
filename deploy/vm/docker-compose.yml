@@ -4,7 +4,8 @@
 # 고정 env 는 운영 Deployment(차트 templates/backend.yaml·ai.yaml)의 값을 그대로 옮겼다. 시크릿은 export_env.py 가
 # 만든 secrets/*.env 가 준다. 이미지·호스트명은 같은 폴더의 .env(env.example 참고)가 준다.
 # embedding(운영 실측 3.1GiB)은 docker-compose.embedding.yml 로 따로 켠다 — 8GB 장비에서만. 끄면 AI 는 벡터 DB 없이 뜬다
-# (KB 검색은 규칙 랭킹으로 강등, 도우미 장기 기억·장소 확인 캐시 꺼짐). 메모리 상한은 운영 파드 실측(11-27) 정점 + 여유.
+# (KB 검색은 규칙 랭킹으로 강등, 도우미 기억·장소 확인 캐시는 프로세스 안에만 — 재시작하면 사라진다). 메모리 상한은 운영 파드
+# 실측(11-27) 정점 + 여유. 리허설 동안은 docker-compose.rehearsal.yml 을 같이 켠다(실사용자 푸시 중복 방지).
 name: trippilot
 
 x-logging: &logging
@@ -39,7 +40,8 @@ services:
       db: { condition: service_healthy }
     env_file: secrets/backend.env
     environment:
-      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75.0
+      # 운영은 75%(상한 2Gi). 여기 상한이 1.5g 라 75% 면 힙 밖(메타스페이스·스레드·OTEL 에이전트)이 384m 뿐이다 — 65% 로 둔다.
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=65.0
       DEPLOY_ENV: dev                  # 운영 Deployment 값 그대로(운영이 dev 환경 이름으로 떠 있다)
       DB_URL: jdbc:postgresql://db:5432/trippilot?currentSchema=app
       DB_USER: app_user
@@ -73,7 +75,7 @@ services:
       timeout: 3s
       retries: 30
       start_period: 60s
-    mem_limit: 1536m                   # 운영 파드 0.9~1.2GiB, 힙은 이 값의 75%
+    mem_limit: 1536m                   # 운영 파드 0.9~1.2GiB
     logging: *logging
 
   ai:
@@ -88,7 +90,9 @@ services:
       SERVICE_AUTH_REQUIRE_TOKEN: "true"
       TRIPPILOT_LLM_PRICE_FILE: /app/config/llm-prices.json
       EVENTS_STORE: /app/data/collected_events.json
-    command: [/app/.venv/bin/uvicorn, "main:app", --host, 0.0.0.0, --port, "8000", --workers, "2",
+    # 워커는 운영과 같은 2. 4GB 장비(embedding 없음)는 1 로 — 벡터 DB 가 없으면 도우미 기억·장소 확인 캐시가 프로세스 안에
+    # 있어서 워커 둘이면 턴마다 다른 워커로 가 기억이 갈린다(메모리도 절반).
+    command: [/app/.venv/bin/uvicorn, "main:app", --host, 0.0.0.0, --port, "8000", --workers, "${AI_WORKERS:-2}",
               --timeout-graceful-shutdown, "90", --timeout-worker-healthcheck, "30", --no-access-log]
     stop_grace_period: 100s
     healthcheck:
@@ -97,7 +101,7 @@ services:
       timeout: 3s
       retries: 12
       start_period: 20s
-    mem_limit: 2g                      # 운영 파드(워커 2) 1.0~1.4GiB
+    mem_limit: 2g                      # 운영 파드(워커 2) 1.0~1.4GiB — 상한이라 합이 물리 메모리를 넘어도 된다(평소 합 3~3.3GiB)
     logging: *logging
 
   # 운영 gateway(nginx) 설정을 그대로 쓴다 — /api 만 열고 /internal·/actuator 를 닫고, X-Service-Token 을 지우고, 속도 제한을 건다.
