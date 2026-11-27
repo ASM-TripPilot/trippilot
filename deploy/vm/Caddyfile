@@ -14,16 +14,22 @@
 	}
 }
 
-# 웹(Expo SPA). CloudFront 가 403/404 를 index.html 로 돌려주던 것과 같다.
+# 웹(Expo SPA). frontend-web-deploy.yml 이 S3 에 붙이던 Cache-Control 과 같다 — 해시 자산 1년 immutable, 나머지 no-cache.
+# 해시 자산은 SPA 대체를 하지 않는다: 없는 번들 주소에 index.html 을 immutable 로 주면 브라우저가 1년간 HTML 로 기억한다.
 {$WEB_HOST} {
 	root * /srv/web
-	try_files {path} /index.html
-	# frontend-web-deploy.yml 이 S3 에 붙이던 Cache-Control 과 같다 — 해시 자산 1년 immutable, 나머지 no-cache.
 	@hashed path /_expo/* /assets/*
-	header @hashed Cache-Control "public, max-age=31536000, immutable"
-	@entry not path /_expo/* /assets/*
-	header @entry Cache-Control "no-cache"
-	file_server
+	handle @hashed {
+		@exists file
+		header @exists Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+	handle {
+		# CloudFront 가 403/404 를 index.html 로 돌려주던 것과 같다.
+		try_files {path} /index.html
+		file_server
+		header Cache-Control "no-cache"
+	}
 }
 
 # POI 썸네일(S3 trippilot-img-prd 사본). 이름은 원본 주소 해시라 같은 이름에 다시 구운 파일이 올 수 있다 — 하루만 캐시

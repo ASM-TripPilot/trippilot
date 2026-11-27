@@ -29,6 +29,8 @@ caddy(:443, Let's Encrypt) ─┬─ API_HOSTS → gateway(nginx, 운영 설정 
   재시작하면 사라진다(`AI_WORKERS=1` 로 워커 간 갈림을 막는다). 8GB 면 운영과 같다.
 - **감시가 없다** — CloudWatch 알람·Slack·Container Insights·`ai-llm-fallback-watch`·로그 90일이 전부 사라진다.
   로그는 컨테이너당 20MB×5. 아래 "전환 뒤"의 외부 업타임 체크가 최소한이다.
+- **CPU 는 2 vCPU 버스트형**이다 — 일정 조립(CP-SAT)·JVM·embedding 이 겹치면 CPU 크레딧이 바닥나 느려질 수 있다.
+  Lightsail 콘솔의 CPU 사용률·버스트 용량 경보를 켜 둔다.
 - **컨테이너 보안 설정**(non-root 강제·읽기 전용 루트·cap drop)은 운영 파드에만 있었다. 열린 포트는 80·443 뿐이고 DB 는 밖에 안 열린다.
 
 ## 리허설 (전환 전날)
@@ -55,8 +57,9 @@ export AWS_PROFILE=myisb_IsbUsersPS-223767249602 AWS_REGION=ap-northeast-2 VM=ub
 1. 점검 공지 → 운영 쓰기 멈춤. 파드는 종료 유예(630s) 동안 계속 쓰므로 **없어질 때까지 기다린다**:
    ```bash
    kubectl -n trippilot scale deployment backend ai --replicas=0
-   kubectl -n trippilot wait --for=delete pod -l app.kubernetes.io/component=backend --timeout=700s
-   kubectl -n trippilot wait --for=delete pod -l app.kubernetes.io/component=ai --timeout=700s
+   kubectl -n trippilot wait --for=delete pod -l app.kubernetes.io/component=backend --timeout=700s || true
+   kubectl -n trippilot wait --for=delete pod -l app.kubernetes.io/component=ai --timeout=700s || true
+   kubectl -n trippilot get pods -l 'app.kubernetes.io/component in (backend,ai)'   # "No resources found" 여야 한다
    ```
 2. 리허설 뒤 운영 이미지가 바뀌었을 수 있다 → `bash deploy/vm/ship.sh images [embedding]`
 3. `bash deploy/vm/migrate.sh dump` → `FORCE=1 bash deploy/vm/migrate.sh restore`(리허설 데이터를 덮는다) → 행 수 일치 → `migrate.sh assets`
@@ -76,6 +79,7 @@ VM 에 그 사이 들어온 쓰기는 버려진다 — 그래서 되돌리기는
 
 ## 전환 뒤
 
+- `ship.sh` 는 매번 gateway·caddy 를 재시작한다(설정 파일 반영) — 진행 중인 요청(일정 생성 최대 60s)이 끊긴다. 운영 중에는 한가한 시간에.
 - **외부 업타임 체크**(UptimeRobot 등 무료)로 `https://api-dev.trippilot.co.kr/healthz` 를 본다 — VM 이 죽어도 알릴 것이 이것뿐이다.
 - **Lightsail 자동 스냅숏**을 콘솔에서 켠다 — `backup.sh` 덤프는 같은 디스크라 디스크째 잃으면 같이 잃는다.
 - **덤프 사본 지우기** — `deploy/vm/backups/migrate/`(맥)와 VM `~/trippilot/backups/migrate/` 는 운영 DB 전체 사본이다.

@@ -28,7 +28,11 @@ COPYFILE_DISABLE=1 tar -C "$DIR" -cf - docker-compose.yml docker-compose.embeddi
 # 운영 DB 를 아직 안 옮긴 VM 에서 backend 를 띄우면 Flyway 가 빈 DB 에 스키마를 새로 만든다 — 그러면 restore_db.sh 가
 # 덮어쓰기 가드에 걸린다. 그래서 app 스키마가 없으면 db 만 띄운다. nginx.conf·Caddyfile 은 파일 하나짜리 bind mount 라
 # 새로 덮어쓴 파일(새 inode)을 떠 있는 컨테이너가 못 본다 — 그래서 매번 gateway·caddy 를 재시작한다.
-ssh_vm 'cd trippilot && { [ -f .env ] || cp env.example .env; } && docker compose config -q && docker compose up -d --wait db \
+# 운영 이름으로 바꿨는데 리허설 파일이 남아 있으면 푸시가 조용히 꺼진 채 운영이 돈다 — 멈춘다.
+ssh_vm 'cd trippilot && { [ -f .env ] || cp env.example .env; } \
+  && if grep -q "^API_HOSTS=.*api-dev" .env && grep -q "^COMPOSE_FILE=.*rehearsal" .env; then
+       echo "API_HOSTS 가 운영 이름인데 COMPOSE_FILE 에 rehearsal 이 남아 있다 — 푸시가 꺼진다. .env 에서 빼고 다시." >&2; exit 1; fi \
+  && docker compose config -q && docker compose up -d --wait db \
   && if [ "$(docker compose exec -T db psql -U postgres -d trippilot -Atc "SELECT to_regnamespace('"'"'app'"'"') IS NOT NULL")" = t ]; then
        docker compose up -d --wait --remove-orphans && docker compose restart gateway caddy >/dev/null && docker compose ps --format "table {{.Service}}\t{{.Status}}";
      else echo "DB 가 비어 있다 — db 만 띄웠다. 다음: migrate.sh restore"; fi'
