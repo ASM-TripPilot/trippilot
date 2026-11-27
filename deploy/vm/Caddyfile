@@ -1,0 +1,30 @@
+# 호스트명은 .env 가 준다 — 전환 전 리허설은 임시 이름(vm-api.…)으로, 전환 때 운영 이름으로 바꾸고 caddy 만 재시작한다.
+# 인증서는 Let's Encrypt HTTP 검증이라 그 이름의 DNS 가 이 VM 을 가리킨 뒤에야 발급된다.
+{
+	email {$ACME_EMAIL}
+}
+
+{$API_HOSTS} {
+	reverse_proxy gateway:8080 {
+		# 일정 생성은 시한을 꺼도 620s 안에 끝난다(gateway 설정과 같은 값).
+		transport http {
+			read_timeout 620s
+			write_timeout 620s
+		}
+	}
+}
+
+# 웹(Expo SPA). CloudFront 가 403/404 를 index.html 로 돌려주던 것과 같다.
+{$WEB_HOST} {
+	root * /srv/web
+	try_files {path} /index.html
+	file_server
+}
+
+# POI 썸네일(S3 trippilot-img-prd 사본). 이름은 원본 주소 해시라 같은 이름에 다시 구운 파일이 올 수 있다 — 하루만 캐시
+# (CloudFront CachingOptimized 기본 TTL 과 같다).
+{$IMG_HOST} {
+	root * /srv/img
+	header Cache-Control "public, max-age=86400"
+	file_server
+}
