@@ -1,0 +1,93 @@
+name: vm-deploy
+run-name: vm-deploy ${{ inputs.ref }}
+
+# 운영 VM(Lightsail 한 대, deploy/vm)에 backend·ai 를 올린다 — 대여 계정 종료로 aws-deploy(EKS·ECR)를 대신한다(TRIP-1847).
+# 이미지는 이 잡이 ref 에서 직접 빌드해 GHCR 에 `vm-<sha12>` 로 올린다. develop push 의 GHCR 이미지(backend-ci·ai-ci)는
+# 경로 필터라 sha 마다 있지 않고, main 은 아예 안 올린다 — 그래서 배포할 ref 를 여기서 굽는다.
+# VM 쪽은 배포 전용 키가 `deploy.sh` 하나만 부를 수 있다(authorized_keys command=). GHCR 읽기는 이 잡의 GITHUB_TOKEN 을
+# 그 자리에서 넘긴다 — VM 에 오래 사는 토큰을 두지 않는다.
+# 설정·시크릿(compose·nginx·Caddyfile·secrets/*.env)은 여기서 안 바꾼다 — 맥에서 ship.sh(README).
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 배포할 ref(브랜치·태그·sha). 운영은 main.
+        required: true
+        default: main
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: vm-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      VM_HOST: ${{ vars.VM_HOST }}
+      VM_KNOWN_HOSTS: ${{ vars.VM_KNOWN_HOSTS }}
+      VM_DEPLOY_KEY: ${{ secrets.VM_DEPLOY_KEY }}
+    steps:
+      - name: require VM settings
+        run: |
+          missing=()
+          for name in VM_HOST VM_KNOWN_HOSTS VM_DEPLOY_KEY; do
+            value="${!name}"; [ -n "${value//[[:space:]]/}" ] || missing+=("$name")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error title=VM 설정 누락::리포 변수·시크릿이 비어 있다: ${missing[*]} (deploy/vm/README.md 배포 키)"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - id: sha
+        run: echo "sha=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # aws-deploy 의 ECR 빌드와 같은 컨텍스트·플랫폼이다.
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/asm-trippilot/trippilot-backend:vm-${{ steps.sha.outputs.sha }}
+          cache-from: type=gha,scope=vm-backend
+          cache-to: type=gha,mode=min,scope=vm-backend
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./ai
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/asm-trippilot/trippilot-ai:vm-${{ steps.sha.outputs.sha }}
+          cache-from: type=gha,scope=vm-ai
+          cache-to: type=gha,mode=min,scope=vm-ai
+      - name: deploy to VM
+        env:
+          SHA: ${{ steps.sha.outputs.sha }}
+          REF: ${{ inputs.ref }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VM_DEPLOY_KEY" > ~/.ssh/vm && chmod 600 ~/.ssh/vm
+          printf '%s\n' "$VM_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$GHCR_TOKEN" | ssh -i ~/.ssh/vm -o StrictHostKeyChecking=yes "ubuntu@$VM_HOST" "app $SHA"
+          echo "VM 배포 $REF = $SHA" >> "$GITHUB_STEP_SUMMARY"
+      # /healthz 는 gateway(nginx)가 직접 답한다 — backend·DB 까지 닿는 공개 경로로 본다.
+      - name: smoke
+        run: |
+          for _ in $(seq 12); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://api-dev.trippilot.co.kr/api/v1/terms || true)
+            [ "$code" = 200 ] && { echo "terms 200"; exit 0; }
+            sleep 5
+          done
+          echo "::error title=스모크 실패::https://api-dev.trippilot.co.kr/api/v1/terms 가 200 이 아니다(마지막 $code) — 되돌리기는 README"
+          exit 1
