@@ -115,6 +115,11 @@ jobs:
             echo "::error title=배포 설정 누락::리포 변수·시크릿이 비어 있다: ${missing[*]} (deploy/vm/README.md 배포 키)"
             exit 1
           fi
+      # 전환 전(app 이 아직 CloudFront)에 돌면 VM 만 바뀌고 사용자가 보는 웹은 그대로인데 성공으로 보인다.
+      - name: require app on the VM
+        run: |
+          resolved=$(getent ahostsv4 app.trippilot.co.kr | awk 'NR==1{print $1}')
+          [ "$resolved" = "$VM_HOST" ] || { echo "::error title=전환 전::app 이 $resolved — VM($VM_HOST)이 아니다"; exit 1; }
       - uses: actions/download-artifact@v7
         with:
           name: web-dist

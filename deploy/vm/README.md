@@ -114,7 +114,8 @@ VM 에 그 사이 들어온 쓰기는 버려진다 — 그래서 되돌리기는
   ```bash
   ssh-keygen -t ed25519 -N "" -C trippilot-vm-deploy -f ~/.ssh/trippilot-deploy
   pub=$(cat ~/.ssh/trippilot-deploy.pub)
-  ssh -i ~/.ssh/trippilot-prod.pem $VM "grep -qF '$pub' ~/.ssh/authorized_keys || echo 'command=\"/home/ubuntu/trippilot/deploy.sh\",restrict $pub' >> ~/.ssh/authorized_keys"
+  # 같은 키의 옛 줄(제한 없는 줄 포함)을 빼고 제한된 줄 하나만 남긴다 — sshd 는 먼저 맞는 줄을 쓴다.
+  ssh -i ~/.ssh/trippilot-prod.pem $VM "grep -vF '$pub' ~/.ssh/authorized_keys > ~/.ssh/ak.tmp; echo 'command=\"/home/ubuntu/trippilot/deploy.sh\",restrict $pub' >> ~/.ssh/ak.tmp && chmod 600 ~/.ssh/ak.tmp && mv ~/.ssh/ak.tmp ~/.ssh/authorized_keys"
   gh -R ASM-TripPilot/trippilot variable set VM_HOST --body <고정IP>
   gh -R ASM-TripPilot/trippilot variable set VM_KNOWN_HOSTS --body "$(ssh-keygen -F <고정IP> | grep -v '^#')"
   gh -R ASM-TripPilot/trippilot secret set VM_DEPLOY_KEY < ~/.ssh/trippilot-deploy

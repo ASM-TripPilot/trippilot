@@ -19,13 +19,15 @@ case "$mode" in
     docker login ghcr.io -u "$actor" --password-stdin <<<"$token" >/dev/null
     # 둘 다 받은 뒤에 태그를 바꾼다 — 하나만 바뀐 채 멈추면 다음 up 이 짝이 안 맞는 버전을 띄운다.
     for c in backend ai; do docker pull -q "ghcr.io/asm-trippilot/trippilot-$c:vm-$arg" >/dev/null; done
-    declare -A old
+    declare -A old new
     for c in backend ai; do
       old[$c]=$(docker image inspect -f '{{.Id}}' "trippilot/$c:current" 2>/dev/null || true)
-      docker tag "ghcr.io/asm-trippilot/trippilot-$c:vm-$arg" "trippilot/$c:current"
-      # ghcr 이름표는 뗀다 — 이름표가 남으면 prune 이 안 지워 배포마다 이미지가 디스크에 쌓인다.
-      docker rmi "ghcr.io/asm-trippilot/trippilot-$c:vm-$arg" >/dev/null
+      new[$c]=$(docker image inspect -f '{{.Id}}' "ghcr.io/asm-trippilot/trippilot-$c:vm-$arg")
     done
+    # 두 current 를 이미지 ID 로 한 번에 바꾼 뒤에 이름표를 뗀다 — 중간에 멈춰도 짝이 어긋난 current 가 남지 않게.
+    for c in backend ai; do docker tag "${new[$c]}" "trippilot/$c:current"; done
+    # ghcr 이름표는 뗀다 — 이름표가 남으면 prune 이 안 지워 배포마다 이미지가 디스크에 쌓인다.
+    for c in backend ai; do docker rmi "ghcr.io/asm-trippilot/trippilot-$c:vm-$arg" >/dev/null || true; done
     # 롤링이 없다 — 재시작 동안(약 1분) API 가 멈춘다.
     if ! docker compose up -d --wait backend ai; then
       echo "새 버전이 헬스를 못 올렸다 — 직전 이미지로 되돌린다" >&2
@@ -33,7 +35,10 @@ case "$mode" in
       docker compose up -d --wait backend ai || echo "되돌린 버전도 안 뜬다 — 사람이 본다" >&2
       exit 1
     fi
-    for c in backend ai; do [ -z "${old[$c]}" ] || docker tag "${old[$c]}" "trippilot/$c:previous"; done
+    # 같은 sha 를 다시 배포(재실행)하면 old == new 다 — 그때 previous 를 덮으면 진짜 직전 이미지가 prune 으로 사라진다.
+    for c in backend ai; do
+      if [ -n "${old[$c]}" ] && [ "${old[$c]}" != "${new[$c]}" ]; then docker tag "${old[$c]}" "trippilot/$c:previous"; fi
+    done
     docker image prune -f >/dev/null    # 이름표가 다 떨어진 그 전 previous 만 지워진다
     docker compose ps --format "table {{.Service}}\t{{.Image}}\t{{.Status}}"
     ;;
