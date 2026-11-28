@@ -71,7 +71,8 @@ resource "aws_lightsail_instance" "vm" {
 }
 
 resource "aws_lightsail_static_ip" "vm" {
-  name = "trippilot"
+  # Lightsail 은 리소스 종류가 달라도 이름이 겹치면 안 된다(인스턴스가 trippilot).
+  name = "trippilot-ip"
 }
 
 resource "aws_lightsail_static_ip_attachment" "vm" {

@@ -94,7 +94,7 @@ VM 에 그 사이 들어온 쓰기는 버려진다 — 그래서 되돌리기는
   `ssh $VM 'cd trippilot && docker compose up -d --wait'` →
   `terraform state rm aws_lightsail_instance.vm aws_lightsail_static_ip_attachment.vm aws_lightsail_instance_public_ports.vm` →
   main.tf 의 `name`·`bundle_id` 를 새 것으로 → `terraform import aws_lightsail_instance.vm <새 이름>` ·
-  `terraform import aws_lightsail_static_ip_attachment.vm trippilot` →
+  `terraform import aws_lightsail_static_ip_attachment.vm trippilot-ip` →
   `terraform plan` 에 **교체(-/+)가 없는지** 본 뒤 apply(방화벽·자동 스냅숏·네트워크 유형을 다시 맞춘다 — 스냅숏에서 만든 인스턴스는 443 이 닫혀 있을 수 있어
   **서비스 재개는 이 apply 뒤**다) → `curl https://api-dev.trippilot.co.kr/healthz` 200 → 옛 인스턴스는 콘솔에서 지운다.
 - **덤프 사본 지우기** — `deploy/vm/backups/migrate/`(맥)와 VM `~/trippilot/backups/migrate/` 는 운영 DB 전체 사본이다.
