@@ -6,3 +6,4 @@ img/
 terraform/.terraform/
 terraform/*.tfstate*
 terraform/terraform.tfvars
+terraform/tfplan
