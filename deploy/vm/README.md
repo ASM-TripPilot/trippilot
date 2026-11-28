@@ -88,11 +88,14 @@ VM 에 그 사이 들어온 쓰기는 버려진다 — 그래서 되돌리기는
 - **Lightsail 자동 스냅숏**은 terraform 이 켠다(매일 19:00 UTC, 7일치) — `backup.sh` 덤프는 같은 디스크라 디스크째 잃으면 같이 잃는다.
   콘솔에서 시각을 바꾸면 다음 apply 가 되돌린다.
 - **8GB 로 올리기** — `bundle_id` 만 바꿔 apply 하면 교체(디스크·스냅숏 삭제)라 `prevent_destroy` 가 막는다. 대신:
-  콘솔에서 수동 스냅숏 → 그 스냅숏으로 `large_3_0` 새 인스턴스(같은 AZ, 키 페어 `trippilot-vm`, IPv4 전용) →
-  고정 IP 를 새 인스턴스로 옮김 →
+  서비스가 10~20분 멈춘다(한가한 시간에). `ssh $VM 'cd trippilot && docker compose stop'` — 스냅숏 뒤의 쓰기가 옛 VM 에만
+  남지 않게, postgres 도 깨끗이 내린 디스크를 찍게 → 콘솔에서 수동 스냅숏 → 그 스냅숏으로 `large_3_0` 새 인스턴스
+  (같은 AZ, 키 페어 `trippilot-vm`; 네트워크 유형은 plan 이 IPv4 전용으로 맞춘다) → 고정 IP 를 새 인스턴스로 옮김 →
+  `ssh $VM 'cd trippilot && docker compose up -d --wait'` →
   `terraform state rm aws_lightsail_instance.vm aws_lightsail_static_ip_attachment.vm aws_lightsail_instance_public_ports.vm` →
-  main.tf 의 `name`·`bundle_id` 를 새 것으로 → `terraform import aws_lightsail_instance.vm <새 이름>` →
-  `terraform plan` 에 **교체(-/+)가 없는지** 본 뒤 apply(고정 IP 연결·방화벽·자동 스냅숏을 다시 맞춘다) → 옛 인스턴스는 콘솔에서 지운다.
+  main.tf 의 `name`·`bundle_id` 를 새 것으로 → `terraform import aws_lightsail_instance.vm <새 이름>` ·
+  `terraform import aws_lightsail_static_ip_attachment.vm trippilot` →
+  `terraform plan` 에 **교체(-/+)가 없는지** 본 뒤 apply(방화벽·자동 스냅숏·네트워크 유형을 다시 맞춘다) → 옛 인스턴스는 콘솔에서 지운다.
 - **덤프 사본 지우기** — `deploy/vm/backups/migrate/`(맥)와 VM `~/trippilot/backups/migrate/` 는 운영 DB 전체 사본이다.
   AWS 정리(RDS 스냅숏·자동 백업 삭제)와 같은 날 지운다.
 - 새 코드 배포: 지금 `ship.sh images` 는 운영 ECR 에서 가져온다(대여 계정이 살아 있는 동안만). 그 뒤에는 GHCR(`develop`·`sha-*`)
