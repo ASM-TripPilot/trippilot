@@ -57,7 +57,7 @@ JSON
 
 restore() {
   ssh_vm 'mkdir -p trippilot/backups/migrate && chmod 700 trippilot/backups/migrate'
-  COPYFILE_DISABLE=1 tar -C "$OUT" -cf - trippilot.dump ai_kb.dump -C "$DIR" counts.sql -C "$DIR/../eks" bootstrap.sql \
+  COPYFILE_DISABLE=1 tar --no-xattrs -C "$OUT" -cf - trippilot.dump ai_kb.dump -C "$DIR" counts.sql -C "$DIR/../eks" bootstrap.sql \
     | ssh_vm 'tar -C trippilot/backups/migrate -xf -'
   ssh_vm "FORCE=${FORCE:-} bash trippilot/restore_db.sh"
   local bad=0
@@ -77,7 +77,7 @@ assets() {
   aws s3 sync s3://trippilot-img-prd "$DIR/img" --delete --only-show-errors
   echo "web $(find "$DIR/web" -type f | wc -l | tr -d ' ')개 · img $(find "$DIR/img" -type f | wc -l | tr -d ' ')개 → VM"
   # 새 폴더에 풀고 바꿔 끼운다 — 버킷에서 지운 파일이 VM 에 남지 않게.
-  COPYFILE_DISABLE=1 tar -C "$DIR" -cf - web img | ssh_vm 'cd trippilot && rm -rf .incoming && mkdir .incoming && tar -C .incoming -xf - \
+  COPYFILE_DISABLE=1 tar --no-xattrs -C "$DIR" -cf - web img | ssh_vm 'cd trippilot && rm -rf .incoming && mkdir .incoming && tar -C .incoming -xf - \
     && rm -rf web img && mv .incoming/web .incoming/img . && rmdir .incoming \
     && { [ -z "$(docker compose ps -q caddy 2>/dev/null)" ] || docker compose restart caddy; }'
   # 바꿔 끼운 폴더는 새 inode 라 떠 있던 caddy 의 bind mount 가 옛 폴더를 본다 — 그래서 재시작.
