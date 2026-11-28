@@ -7,6 +7,8 @@ if ! command -v docker >/dev/null; then
   curl -fsSL https://get.docker.com | sudo sh
 fi
 sudo usermod -aG docker "$USER"
+# deploy.sh 의 웹 배포가 쓴다(Ubuntu 서버 이미지에는 보통 있다).
+command -v rsync >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq rsync >/dev/null; }
 # 4GB 장비에 JVM·uvicorn·postgres — 순간 정점에 OOM 킬러가 먼저 오지 않게.
 if ! swapon --show | grep -q /swapfile; then
   sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile >/dev/null && sudo swapon /swapfile

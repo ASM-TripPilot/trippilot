@@ -21,10 +21,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # 1) 빌드 — GitHub Environment `web` 의 변수 5개(공개값)로 번들을 만든다. AWS 권한이 없다.
-  #    빌드와 업로드를 잡으로 나누는 이유: 잡에 environment 를 걸면 OIDC 토큰의 sub 가 `environment:web` 이 되어
-  #    배포 역할 신뢰 정책(TRIP-1644 7단계 — `ref:refs/heads/main|develop`)과 맞지 않는다. 업로드 잡은 environment 없이
-  #    브랜치 sub 로 역할을 맡는다.
+  # 1) 빌드 — GitHub Environment `web` 의 변수 5개(공개값)로 번들을 만든다. 배포 키가 없다.
+  #    빌드와 업로드를 잡으로 나눠, 배포 키(VM_DEPLOY_KEY)는 업로드 잡에만 보인다.
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 20

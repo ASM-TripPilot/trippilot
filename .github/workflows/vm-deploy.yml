@@ -42,11 +42,23 @@ jobs:
             echo "::error title=VM 설정 누락::리포 변수·시크릿이 비어 있다: ${missing[*]} (deploy/vm/README.md 배포 키)"
             exit 1
           fi
+      # 전환 전(api-dev 가 아직 EKS)에 돌면 VM 을 바꾸고 스모크는 EKS 를 본다 — 운영 이름이 VM 을 가리킬 때만 간다.
+      - name: require api-dev on the VM
+        run: |
+          resolved=$(getent ahostsv4 api-dev.trippilot.co.kr | awk 'NR==1{print $1}')
+          [ "$resolved" = "$VM_HOST" ] || { echo "::error title=전환 전::api-dev 가 $resolved — VM($VM_HOST)이 아니다"; exit 1; }
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref }}
       - id: sha
         run: echo "sha=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+      # 운영에는 main 에 들어간 커밋만 — aws-deploy 의 release/hotfix 선언·검증 게이트를 대신하는 최소 장치다.
+      # 머지 안 된 브랜치를 운영에 바로 올리는 길을 닫는다(main 은 PR·CI 를 거쳐서만 바뀐다).
+      - name: require a commit on main
+        run: |
+          git fetch --no-tags --depth=200 origin main
+          git merge-base --is-ancestor HEAD FETCH_HEAD \
+            || { echo "::error title=main 밖의 커밋::${{ steps.sha.outputs.sha }} 가 main 에 없다 — main 에 머지한 뒤 배포한다"; exit 1; }
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -62,6 +74,16 @@ jobs:
           tags: ghcr.io/asm-trippilot/trippilot-backend:vm-${{ steps.sha.outputs.sha }}
           cache-from: type=gha,scope=vm-backend
           cache-to: type=gha,mode=min,scope=vm-backend
+      # aws-deploy 와 같다: 운영 AI 는 이미지 안 data/collected_events.json 을 읽는데 매일 수집은 collect-state 에만
+      # 쌓인다 — 빌드 직전에 정본으로 갈아 끼운다. 못 읽으면 동봉본을 굽고 경고만.
+      - name: Refresh the bundled events store from collect-state
+        run: |
+          if git fetch --depth=1 origin collect-state \
+            && git show FETCH_HEAD:collected_events.json > "$RUNNER_TEMP/collect-state-events.json"; then
+            python3 deploy/eks/refresh_events.py "$RUNNER_TEMP/collect-state-events.json" ai/data/collected_events.json
+          else
+            echo "::warning::collect-state 의 collected_events.json 을 못 받았다 — 동봉본을 그대로 굽는다"
+          fi
       - uses: docker/build-push-action@v6
         with:
           context: ./ai
@@ -79,7 +101,7 @@ jobs:
           install -m 700 -d ~/.ssh
           printf '%s\n' "$VM_DEPLOY_KEY" > ~/.ssh/vm && chmod 600 ~/.ssh/vm
           printf '%s\n' "$VM_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          printf '%s\n' "$GHCR_TOKEN" | ssh -i ~/.ssh/vm -o StrictHostKeyChecking=yes "ubuntu@$VM_HOST" "app $SHA"
+          printf '%s %s\n' "$GITHUB_ACTOR" "$GHCR_TOKEN" | ssh -i ~/.ssh/vm -o StrictHostKeyChecking=yes "ubuntu@$VM_HOST" "app $SHA"
           echo "VM 배포 $REF = $SHA" >> "$GITHUB_STEP_SUMMARY"
       # /healthz 는 gateway(nginx)가 직접 답한다 — backend·DB 까지 닿는 공개 경로로 본다.
       - name: smoke
