@@ -7,12 +7,13 @@ if ! command -v docker >/dev/null; then
   curl -fsSL https://get.docker.com | sudo sh
 fi
 sudo usermod -aG docker "$USER"
-# 4GB 장비에 JVM·uvicorn 2·postgres — 순간 정점에 OOM 킬러가 먼저 오지 않게.
+# 4GB 장비에 JVM·uvicorn·postgres — 순간 정점에 OOM 킬러가 먼저 오지 않게.
 if ! swapon --show | grep -q /swapfile; then
   sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile >/dev/null && sudo swapon /swapfile
   grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
 fi
 mkdir -p ~/trippilot/backups
-# 매일 03:30 KST(18:30 UTC). 디스크째 잃는 경우는 Lightsail 자동 스냅숏이 맡는다(콘솔에서 켠다).
-( crontab -l 2>/dev/null | grep -v trippilot/backup.sh; echo "30 18 * * * bash \$HOME/trippilot/backup.sh >> \$HOME/trippilot/backups/backup.log 2>&1" ) | crontab -
+# 매일 03:30 KST(18:30 UTC). 디스크째 잃는 경우는 Lightsail 자동 스냅숏(terraform/, 19:00 UTC)이 맡는다.
+# crontab 이 아직 없는 새 VM 에서 crontab -l·grep 이 실패해도(set -e·pipefail) 등록 줄까지 간다.
+( crontab -l 2>/dev/null | grep -v trippilot/backup.sh || true; echo "30 18 * * * bash \$HOME/trippilot/backup.sh >> \$HOME/trippilot/backups/backup.log 2>&1" ) | crontab -
 docker --version && docker compose version

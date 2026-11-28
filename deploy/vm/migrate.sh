@@ -44,20 +44,21 @@ JSON
   kubectl -n trippilot wait --for=condition=Ready "pod/$pod" --timeout=180s
   kubectl -n trippilot cp "$DIR/counts.sql" "$pod:/tmp/counts.sql"
   inpod() { kubectl -n trippilot exec -i "$pod" -- sh -c "read -r PGPASSWORD; export PGPASSWORD; $1" <<<"$pw"; }
-  for db in trippilot ai_kb; do
+  # 덤프 바로 뒤에 센다 — 운영이 살아 있으면(리허설) 그 사이 가입 한 건에도 행 수가 어긋난다. ai_kb 덤프(약 1분)를
+  # 사이에 두지 않으려고 DB 마다 덤프·세기를 붙인다. 전환 때는 쓰기를 멈춘 뒤라 정확히 같아야 한다.
+  for db in trippilot:app ai_kb:public; do
     # `a && b` 안의 실패는 set -e 를 안 건드린다 — 실패를 따로 받는다.
-    inpod "exec pg_dump -Fc -d $db" > "$OUT/$db.dump.tmp" || { echo "$db 덤프 실패" >&2; exit 1; }
-    mv "$OUT/$db.dump.tmp" "$OUT/$db.dump"
+    inpod "exec pg_dump -Fc -d ${db%%:*}" > "$OUT/${db%%:*}.dump.tmp" || { echo "${db%%:*} 덤프 실패" >&2; exit 1; }
+    mv "$OUT/${db%%:*}.dump.tmp" "$OUT/${db%%:*}.dump"
+    inpod "psql -d ${db%%:*} -At -v schema=${db#*:} -f /tmp/counts.sql" > "$OUT/counts.${db%%:*}.prd"
   done
-  inpod "psql -d trippilot -At -v schema=app -f /tmp/counts.sql" > "$OUT/counts.trippilot.prd"
-  inpod "psql -d ai_kb -At -v schema=public -f /tmp/counts.sql" > "$OUT/counts.ai_kb.prd"
   ls -lh "$OUT"/*.dump
   echo "운영 계정 $(awk '$1=="account"{print $2}' "$OUT/counts.trippilot.prd") · POI $(awk '$1=="poi"{print $2}' "$OUT/counts.trippilot.prd")"
 }
 
 restore() {
   ssh_vm 'mkdir -p trippilot/backups/migrate && chmod 700 trippilot/backups/migrate'
-  COPYFILE_DISABLE=1 tar -C "$OUT" -cf - trippilot.dump ai_kb.dump -C "$DIR" counts.sql -C "$DIR/../eks" bootstrap.sql \
+  COPYFILE_DISABLE=1 tar --no-xattrs -C "$OUT" -cf - trippilot.dump ai_kb.dump -C "$DIR" counts.sql -C "$DIR/../eks" bootstrap.sql \
     | ssh_vm 'tar -C trippilot/backups/migrate -xf -'
   ssh_vm "FORCE=${FORCE:-} bash trippilot/restore_db.sh"
   local bad=0
@@ -69,7 +70,8 @@ restore() {
       echo "$db: 행 수가 다르다 (운영 < > VM)"; diff "$OUT/counts.$db.prd" "$OUT/counts.$db.vm" || true; bad=1
     fi
   done
-  [ "$bad" = 0 ] || { echo "행 수 불일치 — 전환이면 DNS 를 바꾸지 말고 원인을 본다" >&2; exit 1; }
+  # 리허설(운영이 살아 있음)이면 가입·동의 같은 테이블이 운영 쪽만 몇 건 많을 수 있다 — 덤프와 세기 사이의 쓰기다.
+  [ "$bad" = 0 ] || { echo "행 수 불일치 — 전환이면 DNS 를 바꾸지 말고 원인을 본다(리허설이면 위 주석)" >&2; exit 1; }
 }
 
 assets() {
@@ -77,7 +79,7 @@ assets() {
   aws s3 sync s3://trippilot-img-prd "$DIR/img" --delete --only-show-errors
   echo "web $(find "$DIR/web" -type f | wc -l | tr -d ' ')개 · img $(find "$DIR/img" -type f | wc -l | tr -d ' ')개 → VM"
   # 새 폴더에 풀고 바꿔 끼운다 — 버킷에서 지운 파일이 VM 에 남지 않게.
-  COPYFILE_DISABLE=1 tar -C "$DIR" -cf - web img | ssh_vm 'cd trippilot && rm -rf .incoming && mkdir .incoming && tar -C .incoming -xf - \
+  COPYFILE_DISABLE=1 tar --no-xattrs -C "$DIR" -cf - web img | ssh_vm 'cd trippilot && rm -rf .incoming && mkdir .incoming && tar -C .incoming -xf - \
     && rm -rf web img && mv .incoming/web .incoming/img . && rmdir .incoming \
     && { [ -z "$(docker compose ps -q caddy 2>/dev/null)" ] || docker compose restart caddy; }'
   # 바꿔 끼운 폴더는 새 inode 라 떠 있던 caddy 의 bind mount 가 옛 폴더를 본다 — 그래서 재시작.

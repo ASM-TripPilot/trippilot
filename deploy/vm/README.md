@@ -11,6 +11,7 @@ caddy(:443, Let's Encrypt) ─┬─ API_HOSTS → gateway(nginx, 운영 설정 
 
 | 파일 | 하는 일 | 어디서 |
 |---|---|---|
+| `terraform/` | 개인 AWS 계정의 Lightsail VM · 고정 IP · 방화벽 · 자동 스냅숏 · 월 예산 알림 | 맥 (`trippilot-vm` 프로필) |
 | `export_env.py` | 운영 Deployment 의 secretKeyRef 그대로 시크릿을 `secrets/*.env` 로 | 맥 (운영 클러스터 읽기) |
 | `setup.sh` | Docker · 스왑 2G · 매일 DB 덤프 cron | VM 최초 1회 |
 | `ship.sh [images [embedding]]` | 설정·시크릿(+운영 ECR 이미지) → VM, 기동 | 맥 |
@@ -31,7 +32,7 @@ caddy(:443, Let's Encrypt) ─┬─ API_HOSTS → gateway(nginx, 운영 설정 
   로그는 컨테이너당 20MB×5. 아래 "전환 뒤"의 외부 업타임 체크가 최소한이다.
 - **CPU 는 2 vCPU 버스트형**이다 — 일정 조립(CP-SAT)·JVM·embedding 이 겹치면 CPU 크레딧이 바닥나 느려질 수 있다.
   Lightsail 콘솔의 CPU 사용률·버스트 용량 경보를 켜 둔다.
-- **컨테이너 보안 설정**(non-root 강제·읽기 전용 루트·cap drop)은 운영 파드에만 있었다. 열린 포트는 80·443 뿐이고 DB 는 밖에 안 열린다.
+- **컨테이너 보안 설정**(non-root 강제·읽기 전용 루트·cap drop)은 운영 파드에만 있었다. 열린 포트는 22·80·443(TCP)·443(UDP), IPv4 만이고 DB 는 밖에 안 열린다.
 
 ## 리허설 (전환 전날)
 
@@ -39,12 +40,17 @@ caddy(:443, Let's Encrypt) ─┬─ API_HOSTS → gateway(nginx, 운영 설정 
 export AWS_PROFILE=myisb_IsbUsersPS-223767249602 AWS_REGION=ap-northeast-2 VM=ubuntu@<고정IP>
 ```
 
-1. Lightsail 방화벽: IPv4·IPv6 둘 다 **HTTPS 443/TCP** 와 **443/UDP**(HTTP/3) 추가. 기본은 22·80 만 열려 있다.
+1. VM 만들기 — 개인 계정 IAM 키로 `aws configure --profile trippilot-vm`(위 export 와 상관없이 terraform 은 이 프로필을 쓴다).
+   키가 없으면 `ssh-keygen -t rsa -b 4096 -m PEM -N "" -f ~/.ssh/trippilot-prod.pem` 먼저.
+   `cd deploy/vm/terraform && terraform init && terraform apply -var budget_email=<메일>` → 출력된 `static_ip` 가 `<고정IP>`.
+   방화벽(22·80·443/TCP·443/UDP)도 여기서 열린다.
 2. `ssh -i ~/.ssh/trippilot-prod.pem $VM 'bash -s' < deploy/vm/setup.sh`
 3. `python3 deploy/vm/export_env.py` — 키 이름·개수만 찍힌다. 경고가 나오면 읽는다.
-4. `bash deploy/vm/ship.sh images embedding` (4GB 면 `embedding` 빼고). 처음이면 `ACME_EMAIL` 이 비어 멈춘다 →
-   VM `~/trippilot/.env` 편집: `ACME_EMAIL`, 4GB 면 `COMPOSE_FILE` 에서 embedding 파일을 빼고 `AI_WORKERS=1` → `ship.sh` 다시.
-5. `bash deploy/vm/migrate.sh dump` → `bash deploy/vm/migrate.sh restore` — "행 수 일치" 두 줄. 다르면 멈춘다(exit 1).
+4. `bash deploy/vm/ship.sh images` (8GB 면 `images embedding`). 처음이면 `ACME_EMAIL` 이 비어 멈춘다 →
+   VM `~/trippilot/.env` 편집: `ACME_EMAIL`, 8GB 면 `COMPOSE_FILE` 에 embedding 파일을 넣고 `AI_WORKERS=2` → `ship.sh` 다시.
+5. `bash deploy/vm/migrate.sh dump` → `bash deploy/vm/migrate.sh restore` — "행 수 일치" 두 줄. 다르면 멈춘다(exit 1) — 리허설은 운영이 살아 있어
+   가입·동의 테이블이 운영 쪽만 몇 건 많을 수 있다. diff 가 **전부 운영(<) 쪽이 몇 건 많은 줄**일 때만 넘기고
+   `migrate.sh assets` 로 간다 — VM(>) 쪽이 더 많거나 0건인 테이블이 있으면 복원 문제다. 전환 때는 정확히 같아야 한다.
 6. `bash deploy/vm/migrate.sh assets`
 7. Cloudflare 에 `vm-api` · `vm-app` · `img` **A 레코드**(VM IPv4, DNS only)를 만든다. AAAA 는 만들지 않는다 — IPv6 로 오면
    docker-proxy 를 거쳐 모두 한 IP 로 보여 속도 제한(10r/s)을 같이 쓴다.
@@ -81,7 +87,18 @@ VM 에 그 사이 들어온 쓰기는 버려진다 — 그래서 되돌리기는
 
 - `ship.sh` 는 매번 gateway·caddy 를 재시작한다(설정 파일 반영) — 진행 중인 요청(일정 생성 최대 60s)이 끊긴다. 운영 중에는 한가한 시간에.
 - **외부 업타임 체크**(UptimeRobot 등 무료)로 `https://api-dev.trippilot.co.kr/healthz` 를 본다 — VM 이 죽어도 알릴 것이 이것뿐이다.
-- **Lightsail 자동 스냅숏**을 콘솔에서 켠다 — `backup.sh` 덤프는 같은 디스크라 디스크째 잃으면 같이 잃는다.
+- **Lightsail 자동 스냅숏**은 terraform 이 켠다(매일 19:00 UTC, 7일치) — `backup.sh` 덤프는 같은 디스크라 디스크째 잃으면 같이 잃는다.
+  콘솔에서 시각을 바꾸면 다음 apply 가 되돌린다.
+- **8GB 로 올리기** — `bundle_id` 만 바꿔 apply 하면 교체(디스크·스냅숏 삭제)라 `prevent_destroy` 가 막는다. 대신:
+  서비스가 10~20분 멈춘다(한가한 시간에). `ssh $VM 'cd trippilot && docker compose stop'` — 스냅숏 뒤의 쓰기가 옛 VM 에만
+  남지 않게, postgres 도 깨끗이 내린 디스크를 찍게 → 콘솔에서 수동 스냅숏 → 그 스냅숏으로 `large_3_0` 새 인스턴스
+  (같은 AZ, 키 페어 `trippilot-vm`; 네트워크 유형은 plan 이 IPv4 전용으로 맞춘다) → 고정 IP 를 새 인스턴스로 옮김 →
+  `ssh $VM 'cd trippilot && docker compose up -d --wait'` →
+  `terraform state rm aws_lightsail_instance.vm aws_lightsail_static_ip_attachment.vm aws_lightsail_instance_public_ports.vm` →
+  main.tf 의 `name`·`bundle_id` 를 새 것으로 → `terraform import aws_lightsail_instance.vm <새 이름>` ·
+  `terraform import aws_lightsail_static_ip_attachment.vm trippilot-ip` →
+  `terraform plan` 에 **교체(-/+)가 없는지** 본 뒤 apply(방화벽·자동 스냅숏·네트워크 유형을 다시 맞춘다 — 스냅숏에서 만든 인스턴스는 443 이 닫혀 있을 수 있어
+  **서비스 재개는 이 apply 뒤**다) → `curl https://api-dev.trippilot.co.kr/healthz` 200 → 옛 인스턴스는 콘솔에서 지운다.
 - **덤프 사본 지우기** — `deploy/vm/backups/migrate/`(맥)와 VM `~/trippilot/backups/migrate/` 는 운영 DB 전체 사본이다.
   AWS 정리(RDS 스냅숏·자동 백업 삭제)와 같은 날 지운다.
 - 새 코드 배포: 지금 `ship.sh images` 는 운영 ECR 에서 가져온다(대여 계정이 살아 있는 동안만). 그 뒤에는 GHCR(`develop`·`sha-*`)
