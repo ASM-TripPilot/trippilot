@@ -35,10 +35,13 @@ case "$mode" in
       docker compose up -d --wait backend ai || echo "되돌린 버전도 안 뜬다 — 사람이 본다" >&2
       exit 1
     fi
-    # 같은 sha 를 다시 배포(재실행)하면 old == new 다 — 그때 previous 를 덮으면 진짜 직전 이미지가 prune 으로 사라진다.
-    for c in backend ai; do
-      if [ -n "${old[$c]}" ] && [ "${old[$c]}" != "${new[$c]}" ]; then docker tag "${old[$c]}" "trippilot/$c:previous"; fi
-    done
+    # previous 는 짝으로 돈다 — 한쪽만 바뀐 배포에서 그쪽만 돌리면 되돌릴 때 같이 뜬 적 없는 조합이 된다.
+    # 둘 다 같으면(같은 sha 재실행) 돌리지 않는다 — previous 를 current 로 덮으면 진짜 직전 이미지가 prune 으로 사라진다.
+    if [ "${old[backend]}${old[ai]}" != "${new[backend]}${new[ai]}" ]; then
+      for c in backend ai; do
+        if [ -n "${old[$c]}" ]; then docker tag "${old[$c]}" "trippilot/$c:previous"; fi
+      done
+    fi
     docker image prune -f >/dev/null    # 이름표가 다 떨어진 그 전 previous 만 지워진다
     docker compose ps --format "table {{.Service}}\t{{.Image}}\t{{.Status}}"
     ;;
