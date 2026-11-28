@@ -15,6 +15,7 @@ caddy(:443, Let's Encrypt) ─┬─ API_HOSTS → gateway(nginx, 운영 설정 
 | `export_env.py` | 운영 Deployment 의 secretKeyRef 그대로 시크릿을 `secrets/*.env` 로 | 맥 (운영 클러스터 읽기) |
 | `setup.sh` | Docker · 스왑 2G · 매일 DB 덤프 cron | VM 최초 1회 |
 | `ship.sh [images [embedding]]` | 설정·시크릿(+운영 ECR 이미지) → VM, 기동 | 맥 |
+| `deploy.sh` | GitHub Actions 배포의 VM 쪽 — `app <sha>`(GHCR 이미지 교체) · `web`(웹 산출물) 두 가지만 | VM (배포 키 command=) |
 | `migrate.sh dump\|restore\|assets` | 운영 DB 덤프 → VM 복원·행 수 대조 / 웹·썸네일 버킷 → VM | 맥 |
 | `restore_db.sh` | VM 쪽 복원(덮어쓰기 가드 · bootstrap.sql · 썸네일 주소 교체) | VM (migrate.sh 가 부름) |
 | `backup.sh` | 두 DB 논리 덤프 7일치 | VM cron |
@@ -81,7 +82,8 @@ export AWS_PROFILE=myisb_IsbUsersPS-223767249602 AWS_REGION=ap-northeast-2 VM=ub
 3. Cloudflare 세 레코드를 원래 CNAME(`api-dev`·`api` → 운영 NLB, `app` → `d19rbqomsljzat.cloudfront.net`)으로
 
 VM 에 그 사이 들어온 쓰기는 버려진다 — 그래서 되돌리기는 전환 직후에만 판단한다.
-전환 뒤 누가 `aws-deploy`(target=prod)를 돌리면 EKS backend 가 다시 떠서 VM 과 함께 푸시를 보낸다 — 전환 뒤에는 돌리지 않는다.
+전환 뒤 누가 `aws-deploy`(target=prod)를 돌리면 EKS backend 가 다시 떠서 VM 과 함께 푸시를 보낸다 — 전환 뒤에는 돌리지 않는다
+(배포는 `vm-deploy`).
 
 ## 전환 뒤
 
@@ -101,7 +103,24 @@ VM 에 그 사이 들어온 쓰기는 버려진다 — 그래서 되돌리기는
   **서비스 재개는 이 apply 뒤**다) → `curl https://api-dev.trippilot.co.kr/healthz` 200 → 옛 인스턴스는 콘솔에서 지운다.
 - **덤프 사본 지우기** — `deploy/vm/backups/migrate/`(맥)와 VM `~/trippilot/backups/migrate/` 는 운영 DB 전체 사본이다.
   AWS 정리(RDS 스냅숏·자동 백업 삭제)와 같은 날 지운다.
-- 새 코드 배포: 지금 `ship.sh images` 는 운영 ECR 에서 가져온다(대여 계정이 살아 있는 동안만). 그 뒤에는 GHCR(`develop`·`sha-*`)
-  이미지를 받도록 바꿔야 한다 — 조직이 공개 패키지를 막아 VM 에 `read:packages` 토큰 로그인이 필요하다.
-- 웹 배포(`frontend-web-deploy.yml`)는 S3 로 올린다 — 계정이 사라지면 실패한다. VM `web/` 으로 바꿔야 한다.
+- **새 코드 배포** = Actions `vm-deploy`(수동, 기본 ref `main`): ref 를 빌드해 GHCR `vm-<sha12>` 로 올리고 VM 이 받아
+  backend·ai 를 다시 띄운다(약 1분 중단). 헬스가 안 오르면 deploy.sh 가 직전 이미지로 스스로 되돌리고 실패한다.
+  main 에 있는 커밋만, `api-dev` 가 VM 을 가리킬 때만(전환 뒤) 간다. `ship.sh images`(운영 ECR)는 대여 계정이 닫히면 못 쓴다.
+  embedding(8GB 장비)은 이 경로가 없다 — 계속 ECR 에서 옮긴 이미지다(내용 해시 태그라 드물게만 바뀐다).
+  **되돌리기**: `ssh $VM 'cd trippilot && for c in backend ai; do docker tag trippilot/$c:previous trippilot/$c:current; done && docker compose up -d --wait backend ai'`
+- **웹 배포** = `frontend-web-deploy`(main push·수동)가 VM `web/` 에 올린다(`deploy.sh web`). S3·CloudFront 는 안 쓴다.
+- 두 워크플로는 workflow_dispatch·main push 라 **main 에 있어야 돈다** — develop 머지 뒤 main 승격이 필요하다.
+- **배포 키**(전환 뒤 1회, 사람이) — Actions 가 VM 에서 `deploy.sh` 말고는 아무것도 못 하게 묶은 전용 키다:
+  ```bash
+  ssh-keygen -t ed25519 -N "" -C trippilot-vm-deploy -f ~/.ssh/trippilot-deploy
+  pub=$(cat ~/.ssh/trippilot-deploy.pub)
+  # 같은 키의 옛 줄(제한 없는 줄 포함)을 빼고 제한된 줄 하나만 남긴다 — sshd 는 먼저 맞는 줄을 쓴다.
+  ssh -i ~/.ssh/trippilot-prod.pem $VM "grep -vF '$pub' ~/.ssh/authorized_keys > ~/.ssh/ak.tmp; echo 'command=\"/home/ubuntu/trippilot/deploy.sh\",restrict $pub' >> ~/.ssh/ak.tmp && chmod 600 ~/.ssh/ak.tmp && mv ~/.ssh/ak.tmp ~/.ssh/authorized_keys"
+  gh -R ASM-TripPilot/trippilot variable set VM_HOST --body <고정IP>
+  gh -R ASM-TripPilot/trippilot variable set VM_KNOWN_HOSTS --body "$(ssh-keygen -F <고정IP> | grep -v '^#')"
+  gh -R ASM-TripPilot/trippilot secret set VM_DEPLOY_KEY < ~/.ssh/trippilot-deploy
+  ```
+  `deploy.sh` 는 `ship.sh` 가 VM 에 올린다(전환 4단계에서 같이 간다).
+  확인: `ssh -o IdentitiesOnly=yes -i ~/.ssh/trippilot-deploy $VM ls` 가 "허용된 요청은…"으로 거절돼야 한다
+  (`IdentitiesOnly` 없이 돌리면 ssh-agent 의 관리 키로 붙어 거절 확인이 거짓이 된다).
 - 수집 배치(POI·행사)는 운영 DB 적재를 EKS 배포 단계(`deploy/eks/runtime_pois.py`)가 했다 — VM 에는 그 단계가 없다.

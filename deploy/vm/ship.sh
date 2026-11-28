@@ -23,7 +23,7 @@ if [ "${1:-}" = images ]; then
 fi
 
 # COPYFILE_DISABLE·--no-xattrs: macOS tar 가 확장 속성(._* 파일·provenance 헤더)을 싣지 않게 — VM 의 GNU tar 가 경고를 쏟는다.
-COPYFILE_DISABLE=1 tar --no-xattrs -C "$DIR" -cf - docker-compose.yml docker-compose.embedding.yml docker-compose.rehearsal.yml nginx.conf Caddyfile env.example counts.sql restore_db.sh backup.sh secrets \
+COPYFILE_DISABLE=1 tar --no-xattrs -C "$DIR" -cf - docker-compose.yml docker-compose.embedding.yml docker-compose.rehearsal.yml nginx.conf Caddyfile env.example counts.sql restore_db.sh backup.sh deploy.sh secrets \
   | ssh_vm 'mkdir -p trippilot && tar -C trippilot -xf - && chmod 700 trippilot/secrets && chmod 600 trippilot/secrets/*'
 # 운영 DB 를 아직 안 옮긴 VM 에서 backend 를 띄우면 Flyway 가 빈 DB 에 스키마를 새로 만든다 — 그러면 restore_db.sh 가
 # 덮어쓰기 가드에 걸린다. 그래서 app 스키마가 없으면 db 만 띄운다. nginx.conf·Caddyfile 은 파일 하나짜리 bind mount 라

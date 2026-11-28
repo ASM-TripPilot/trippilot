@@ -1,0 +1,115 @@
+name: vm-deploy
+run-name: vm-deploy ${{ inputs.ref }}
+
+# 운영 VM(Lightsail 한 대, deploy/vm)에 backend·ai 를 올린다 — 대여 계정 종료로 aws-deploy(EKS·ECR)를 대신한다(TRIP-1847).
+# 이미지는 이 잡이 ref 에서 직접 빌드해 GHCR 에 `vm-<sha12>` 로 올린다. develop push 의 GHCR 이미지(backend-ci·ai-ci)는
+# 경로 필터라 sha 마다 있지 않고, main 은 아예 안 올린다 — 그래서 배포할 ref 를 여기서 굽는다.
+# VM 쪽은 배포 전용 키가 `deploy.sh` 하나만 부를 수 있다(authorized_keys command=). GHCR 읽기는 이 잡의 GITHUB_TOKEN 을
+# 그 자리에서 넘긴다 — VM 에 오래 사는 토큰을 두지 않는다.
+# 설정·시크릿(compose·nginx·Caddyfile·secrets/*.env)은 여기서 안 바꾼다 — 맥에서 ship.sh(README).
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 배포할 ref(브랜치·태그·sha). 운영은 main.
+        required: true
+        default: main
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: vm-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      VM_HOST: ${{ vars.VM_HOST }}
+      VM_KNOWN_HOSTS: ${{ vars.VM_KNOWN_HOSTS }}
+      VM_DEPLOY_KEY: ${{ secrets.VM_DEPLOY_KEY }}
+    steps:
+      - name: require VM settings
+        run: |
+          missing=()
+          for name in VM_HOST VM_KNOWN_HOSTS VM_DEPLOY_KEY; do
+            value="${!name}"; [ -n "${value//[[:space:]]/}" ] || missing+=("$name")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error title=VM 설정 누락::리포 변수·시크릿이 비어 있다: ${missing[*]} (deploy/vm/README.md 배포 키)"
+            exit 1
+          fi
+      # 전환 전(api-dev 가 아직 EKS)에 돌면 VM 을 바꾸고 스모크는 EKS 를 본다 — 운영 이름이 VM 을 가리킬 때만 간다.
+      - name: require api-dev on the VM
+        run: |
+          resolved=$(getent ahostsv4 api-dev.trippilot.co.kr | awk 'NR==1{print $1}')
+          [ "$resolved" = "$VM_HOST" ] || { echo "::error title=전환 전::api-dev 가 $resolved — VM($VM_HOST)이 아니다"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - id: sha
+        run: echo "sha=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+      # 운영에는 main 에 들어간 커밋만 — aws-deploy 의 release/hotfix 선언·검증 게이트를 대신하는 최소 장치다.
+      # 머지 안 된 브랜치를 운영에 바로 올리는 길을 닫는다(main 은 PR·CI 를 거쳐서만 바뀐다).
+      - name: require a commit on main
+        run: |
+          git fetch --no-tags --depth=200 origin main
+          git merge-base --is-ancestor HEAD FETCH_HEAD \
+            || { echo "::error title=main 밖의 커밋::${{ steps.sha.outputs.sha }} 가 main 에 없다 — main 에 머지한 뒤 배포한다"; exit 1; }
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # aws-deploy 의 ECR 빌드와 같은 컨텍스트·플랫폼이다.
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/asm-trippilot/trippilot-backend:vm-${{ steps.sha.outputs.sha }}
+          cache-from: type=gha,scope=vm-backend
+          cache-to: type=gha,mode=min,scope=vm-backend
+      # aws-deploy 와 같다: 운영 AI 는 이미지 안 data/collected_events.json 을 읽는데 매일 수집은 collect-state 에만
+      # 쌓인다 — 빌드 직전에 정본으로 갈아 끼운다. 못 읽으면 동봉본을 굽고 경고만.
+      - name: Refresh the bundled events store from collect-state
+        run: |
+          if git fetch --depth=1 origin collect-state \
+            && git show FETCH_HEAD:collected_events.json > "$RUNNER_TEMP/collect-state-events.json"; then
+            python3 deploy/eks/refresh_events.py "$RUNNER_TEMP/collect-state-events.json" ai/data/collected_events.json
+          else
+            echo "::warning::collect-state 의 collected_events.json 을 못 받았다 — 동봉본을 그대로 굽는다"
+          fi
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./ai
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/asm-trippilot/trippilot-ai:vm-${{ steps.sha.outputs.sha }}
+          cache-from: type=gha,scope=vm-ai
+          cache-to: type=gha,mode=min,scope=vm-ai
+      - name: deploy to VM
+        env:
+          SHA: ${{ steps.sha.outputs.sha }}
+          REF: ${{ inputs.ref }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VM_DEPLOY_KEY" > ~/.ssh/vm && chmod 600 ~/.ssh/vm
+          printf '%s\n' "$VM_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s %s\n' "$GITHUB_ACTOR" "$GHCR_TOKEN" | ssh -i ~/.ssh/vm -o StrictHostKeyChecking=yes "ubuntu@$VM_HOST" "app $SHA"
+          echo "VM 배포 $REF = $SHA" >> "$GITHUB_STEP_SUMMARY"
+      # /healthz 는 gateway(nginx)가 직접 답한다 — backend·DB 까지 닿는 공개 경로로 본다.
+      - name: smoke
+        run: |
+          for _ in $(seq 12); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://api-dev.trippilot.co.kr/api/v1/terms || true)
+            [ "$code" = 200 ] && { echo "terms 200"; exit 0; }
+            sleep 5
+          done
+          echo "::error title=스모크 실패::https://api-dev.trippilot.co.kr/api/v1/terms 가 200 이 아니다(마지막 $code) — 되돌리기는 README"
+          exit 1
