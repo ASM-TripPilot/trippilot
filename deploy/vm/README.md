@@ -48,7 +48,8 @@ export AWS_PROFILE=myisb_IsbUsersPS-223767249602 AWS_REGION=ap-northeast-2 VM=ub
 3. `python3 deploy/vm/export_env.py` — 키 이름·개수만 찍힌다. 경고가 나오면 읽는다.
 4. `bash deploy/vm/ship.sh images` (8GB 면 `images embedding`). 처음이면 `ACME_EMAIL` 이 비어 멈춘다 →
    VM `~/trippilot/.env` 편집: `ACME_EMAIL`, 8GB 면 `COMPOSE_FILE` 에 embedding 파일을 넣고 `AI_WORKERS=2` → `ship.sh` 다시.
-5. `bash deploy/vm/migrate.sh dump` → `bash deploy/vm/migrate.sh restore` — "행 수 일치" 두 줄. 다르면 멈춘다(exit 1).
+5. `bash deploy/vm/migrate.sh dump` → `bash deploy/vm/migrate.sh restore` — "행 수 일치" 두 줄. 다르면 멈춘다(exit 1) — 리허설은 운영이 살아 있어
+   가입·동의 테이블이 운영 쪽만 몇 건 많을 수 있다(그러면 `migrate.sh assets` 를 이어서 돌린다). 전환 때는 정확히 같아야 한다.
 6. `bash deploy/vm/migrate.sh assets`
 7. Cloudflare 에 `vm-api` · `vm-app` · `img` **A 레코드**(VM IPv4, DNS only)를 만든다. AAAA 는 만들지 않는다 — IPv6 로 오면
    docker-proxy 를 거쳐 모두 한 IP 로 보여 속도 제한(10r/s)을 같이 쓴다.
