@@ -32,7 +32,7 @@ caddy(:443, Let's Encrypt) ─┬─ API_HOSTS → gateway(nginx, 운영 설정 
   로그는 컨테이너당 20MB×5. 아래 "전환 뒤"의 외부 업타임 체크가 최소한이다.
 - **CPU 는 2 vCPU 버스트형**이다 — 일정 조립(CP-SAT)·JVM·embedding 이 겹치면 CPU 크레딧이 바닥나 느려질 수 있다.
   Lightsail 콘솔의 CPU 사용률·버스트 용량 경보를 켜 둔다.
-- **컨테이너 보안 설정**(non-root 강제·읽기 전용 루트·cap drop)은 운영 파드에만 있었다. 열린 포트는 80·443 뿐이고 DB 는 밖에 안 열린다.
+- **컨테이너 보안 설정**(non-root 강제·읽기 전용 루트·cap drop)은 운영 파드에만 있었다. 열린 포트는 22·80·443(TCP)·443(UDP), IPv4 만이고 DB 는 밖에 안 열린다.
 
 ## 리허설 (전환 전날)
 
@@ -40,7 +40,8 @@ caddy(:443, Let's Encrypt) ─┬─ API_HOSTS → gateway(nginx, 운영 설정 
 export AWS_PROFILE=myisb_IsbUsersPS-223767249602 AWS_REGION=ap-northeast-2 VM=ubuntu@<고정IP>
 ```
 
-1. VM 만들기 — 키가 없으면 `ssh-keygen -t rsa -b 4096 -m PEM -N "" -f ~/.ssh/trippilot-prod.pem` 먼저.
+1. VM 만들기 — 개인 계정 IAM 키로 `aws configure --profile trippilot-vm`(위 export 와 상관없이 terraform 은 이 프로필을 쓴다).
+   키가 없으면 `ssh-keygen -t rsa -b 4096 -m PEM -N "" -f ~/.ssh/trippilot-prod.pem` 먼저.
    `cd deploy/vm/terraform && terraform init && terraform apply -var budget_email=<메일>` → 출력된 `static_ip` 가 `<고정IP>`.
    방화벽(22·80·443/TCP·443/UDP)도 여기서 열린다.
 2. `ssh -i ~/.ssh/trippilot-prod.pem $VM 'bash -s' < deploy/vm/setup.sh`
@@ -84,7 +85,14 @@ VM 에 그 사이 들어온 쓰기는 버려진다 — 그래서 되돌리기는
 
 - `ship.sh` 는 매번 gateway·caddy 를 재시작한다(설정 파일 반영) — 진행 중인 요청(일정 생성 최대 60s)이 끊긴다. 운영 중에는 한가한 시간에.
 - **외부 업타임 체크**(UptimeRobot 등 무료)로 `https://api-dev.trippilot.co.kr/healthz` 를 본다 — VM 이 죽어도 알릴 것이 이것뿐이다.
-- **Lightsail 자동 스냅숏**을 콘솔에서 켠다 — `backup.sh` 덤프는 같은 디스크라 디스크째 잃으면 같이 잃는다.
+- **Lightsail 자동 스냅숏**은 terraform 이 켠다(매일 19:00 UTC, 7일치) — `backup.sh` 덤프는 같은 디스크라 디스크째 잃으면 같이 잃는다.
+  콘솔에서 시각을 바꾸면 다음 apply 가 되돌린다.
+- **8GB 로 올리기** — `bundle_id` 만 바꿔 apply 하면 교체(디스크·스냅숏 삭제)라 `prevent_destroy` 가 막는다. 대신:
+  콘솔에서 수동 스냅숏 → 그 스냅숏으로 `large_3_0` 새 인스턴스(같은 AZ, 키 페어 `trippilot-vm`, IPv4 전용) →
+  고정 IP 를 새 인스턴스로 옮김 →
+  `terraform state rm aws_lightsail_instance.vm aws_lightsail_static_ip_attachment.vm aws_lightsail_instance_public_ports.vm` →
+  main.tf 의 `name`·`bundle_id` 를 새 것으로 → `terraform import aws_lightsail_instance.vm <새 이름>` →
+  `terraform plan` 에 **교체(-/+)가 없는지** 본 뒤 apply(고정 IP 연결·방화벽·자동 스냅숏을 다시 맞춘다) → 옛 인스턴스는 콘솔에서 지운다.
 - **덤프 사본 지우기** — `deploy/vm/backups/migrate/`(맥)와 VM `~/trippilot/backups/migrate/` 는 운영 DB 전체 사본이다.
   AWS 정리(RDS 스냅숏·자동 백업 삭제)와 같은 날 지운다.
 - 새 코드 배포: 지금 `ship.sh images` 는 운영 ECR 에서 가져온다(대여 계정이 살아 있는 동안만). 그 뒤에는 GHCR(`develop`·`sha-*`)

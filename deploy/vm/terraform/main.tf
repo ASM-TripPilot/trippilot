@@ -15,8 +15,8 @@ variable "aws_profile" {
   default = "trippilot-vm"
 }
 
-# 4GB($24). 운영 실측(11-28)으로 embedding 없이 3.3~3.6GB — 스왑을 계속 타면 large_3_0(8GB, $44)로.
-# 스냅숏에서 만든 인스턴스는 같거나 더 큰 번들만 되니, 올리는 건 쉽고 내리는 건 재구축이다.
+# 4GB($24). 운영 실측(11-28)으로 embedding 없이 3.3~3.6GB — 스왑을 계속 타면 8GB(large_3_0, $44)로 올린다.
+# ⚠️ 이 값을 바꿔 apply 하면 교체(디스크·자동 스냅숏 삭제)다 — prevent_destroy 가 막는다. 올리는 길은 README "전환 뒤".
 variable "bundle_id" {
   type    = string
   default = "medium_3_0"
@@ -54,12 +54,19 @@ resource "aws_lightsail_instance" "vm" {
   blueprint_id      = "ubuntu_24_04"
   bundle_id         = var.bundle_id
   key_pair_name     = aws_lightsail_key_pair.vm.name
+  # IPv6 로 오는 정상 트래픽이 없다(AAAA 를 안 만든다 — README) — 노출면만 는다.
+  ip_address_type = "ipv4"
 
   # backup.sh 덤프(18:30 UTC) 뒤에 디스크째 찍는다 — 덤프만으로는 디스크를 잃으면 같이 잃는다.
   add_on {
     type          = "AutoSnapshot"
     snapshot_time = "19:00"
     status        = "Enabled"
+  }
+
+  # bundle·blueprint·AZ·키 이름은 바꾸면 교체다. 삭제는 add-on 까지 지워 운영 DB 디스크와 스냅숏이 같이 사라진다.
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
@@ -79,16 +86,17 @@ resource "aws_lightsail_instance_public_ports" "vm" {
   dynamic "port_info" {
     for_each = [["tcp", 22], ["tcp", 80], ["tcp", 443], ["udp", 443]]
     content {
-      protocol   = port_info.value[0]
-      from_port  = port_info.value[1]
-      to_port    = port_info.value[1]
-      cidrs      = ["0.0.0.0/0"]
-      ipv6_cidrs = ["::/0"]
+      protocol  = port_info.value[0]
+      from_port = port_info.value[1]
+      to_port   = port_info.value[1]
+      # 22 도 전체 — 집 IP 가 바뀐다. Lightsail 기본 이미지는 키 인증만 받는다.
+      cidrs = ["0.0.0.0/0"]
     }
   }
 }
 
-# 개인 카드라 감시가 이것뿐이다 — 실제 80%·예상 100% 에서 메일.
+# 개인 카드라 감시가 이것뿐이다 — 실제·예상 100% 에서 메일. 세금 포함이라 정상 월 약 $28(4GB+VAT+스냅숏).
+# 예측(FORECASTED)은 비용 이력이 쌓이기 전 첫 몇 주는 안 울릴 수 있다 — 그동안은 실제 알림만.
 resource "aws_budgets_budget" "monthly" {
   name         = "trippilot-vm-monthly"
   budget_type  = "COST"
@@ -98,7 +106,7 @@ resource "aws_budgets_budget" "monthly" {
 
   notification {
     comparison_operator        = "GREATER_THAN"
-    threshold                  = 80
+    threshold                  = 100
     threshold_type             = "PERCENTAGE"
     notification_type          = "ACTUAL"
     subscriber_email_addresses = [var.budget_email]
