@@ -78,3 +78,9 @@ jobs:
           terraform init -backend=false -lockfile=readonly
           terraform validate
           terraform test
+      - name: Validate VM Terraform offline
+        working-directory: deploy/vm/terraform
+        run: |
+          terraform fmt -check
+          terraform init -backend=false -lockfile=readonly
+          terraform validate

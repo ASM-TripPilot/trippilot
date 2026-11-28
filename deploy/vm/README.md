@@ -11,6 +11,7 @@ caddy(:443, Let's Encrypt) ─┬─ API_HOSTS → gateway(nginx, 운영 설정 
 
 | 파일 | 하는 일 | 어디서 |
 |---|---|---|
+| `terraform/` | 개인 AWS 계정의 Lightsail VM · 고정 IP · 방화벽 · 자동 스냅숏 · 월 예산 알림 | 맥 (`trippilot-vm` 프로필) |
 | `export_env.py` | 운영 Deployment 의 secretKeyRef 그대로 시크릿을 `secrets/*.env` 로 | 맥 (운영 클러스터 읽기) |
 | `setup.sh` | Docker · 스왑 2G · 매일 DB 덤프 cron | VM 최초 1회 |
 | `ship.sh [images [embedding]]` | 설정·시크릿(+운영 ECR 이미지) → VM, 기동 | 맥 |
@@ -39,11 +40,13 @@ caddy(:443, Let's Encrypt) ─┬─ API_HOSTS → gateway(nginx, 운영 설정 
 export AWS_PROFILE=myisb_IsbUsersPS-223767249602 AWS_REGION=ap-northeast-2 VM=ubuntu@<고정IP>
 ```
 
-1. Lightsail 방화벽: IPv4·IPv6 둘 다 **HTTPS 443/TCP** 와 **443/UDP**(HTTP/3) 추가. 기본은 22·80 만 열려 있다.
+1. VM 만들기 — 키가 없으면 `ssh-keygen -t rsa -b 4096 -m PEM -N "" -f ~/.ssh/trippilot-prod.pem` 먼저.
+   `cd deploy/vm/terraform && terraform init && terraform apply -var budget_email=<메일>` → 출력된 `static_ip` 가 `<고정IP>`.
+   방화벽(22·80·443/TCP·443/UDP)도 여기서 열린다.
 2. `ssh -i ~/.ssh/trippilot-prod.pem $VM 'bash -s' < deploy/vm/setup.sh`
 3. `python3 deploy/vm/export_env.py` — 키 이름·개수만 찍힌다. 경고가 나오면 읽는다.
-4. `bash deploy/vm/ship.sh images embedding` (4GB 면 `embedding` 빼고). 처음이면 `ACME_EMAIL` 이 비어 멈춘다 →
-   VM `~/trippilot/.env` 편집: `ACME_EMAIL`, 4GB 면 `COMPOSE_FILE` 에서 embedding 파일을 빼고 `AI_WORKERS=1` → `ship.sh` 다시.
+4. `bash deploy/vm/ship.sh images` (8GB 면 `images embedding`). 처음이면 `ACME_EMAIL` 이 비어 멈춘다 →
+   VM `~/trippilot/.env` 편집: `ACME_EMAIL`, 8GB 면 `COMPOSE_FILE` 에 embedding 파일을 넣고 `AI_WORKERS=2` → `ship.sh` 다시.
 5. `bash deploy/vm/migrate.sh dump` → `bash deploy/vm/migrate.sh restore` — "행 수 일치" 두 줄. 다르면 멈춘다(exit 1).
 6. `bash deploy/vm/migrate.sh assets`
 7. Cloudflare 에 `vm-api` · `vm-app` · `img` **A 레코드**(VM IPv4, DNS only)를 만든다. AAAA 는 만들지 않는다 — IPv6 로 오면

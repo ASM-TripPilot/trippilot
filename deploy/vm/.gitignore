@@ -3,3 +3,6 @@ backups/
 web/
 img/
 .env
+terraform/.terraform/
+terraform/*.tfstate*
+terraform/terraform.tfvars
