@@ -14,5 +14,6 @@ if ! swapon --show | grep -q /swapfile; then
 fi
 mkdir -p ~/trippilot/backups
 # 매일 03:30 KST(18:30 UTC). 디스크째 잃는 경우는 Lightsail 자동 스냅숏(terraform/, 19:00 UTC)이 맡는다.
-( crontab -l 2>/dev/null | grep -v trippilot/backup.sh; echo "30 18 * * * bash \$HOME/trippilot/backup.sh >> \$HOME/trippilot/backups/backup.log 2>&1" ) | crontab -
+# crontab 이 아직 없는 새 VM 에서 crontab -l·grep 이 실패해도(set -e·pipefail) 등록 줄까지 간다.
+( crontab -l 2>/dev/null | grep -v trippilot/backup.sh || true; echo "30 18 * * * bash \$HOME/trippilot/backup.sh >> \$HOME/trippilot/backups/backup.log 2>&1" ) | crontab -
 docker --version && docker compose version
